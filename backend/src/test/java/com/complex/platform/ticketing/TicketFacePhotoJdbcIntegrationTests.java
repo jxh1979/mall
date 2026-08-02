@@ -154,7 +154,7 @@ class TicketFacePhotoJdbcIntegrationTests {
         String ticketTypeId = "tt_fp_" + suffix;
         repository.saveTicketType(new TicketTypeRecord(
                 ticketTypeId, "face-photo-tt", "flat", 5000L, 5000L, 5000L, false, "active",
-                1, 60, now, now, null, 0));
+                1, 60, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         String templateId = "tpl_fp_" + suffix;
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 templateId, "amusement-tpl", requireFacePhoto ? "amusement" : "bar_drink", 1, 5000L, "active",
@@ -165,7 +165,7 @@ class TicketFacePhotoJdbcIntegrationTests {
         String orderId = "ticket_order_fp_" + suffix;
         repository.saveTicketOrder(new TicketOrderRecord(
                 orderId, "TOFP" + suffix, null, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
-                5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, null));
+                5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, null, null, null));
         return new Fixture(ticketTypeId, orderId);
     }
 

@@ -34,17 +34,6 @@ public class TicketOfflinePackageService {
         this.offlineEntitlementsEnabled = offlineEntitlementsEnabled;
     }
 
-    public TicketOfflinePackageService(
-            TicketingRepository repository,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService) {
-        this(repository, auditEventService, authorizationService, false);
-    }
-
-    public TicketOfflinePackageService(TicketingRepository repository, AuditEventService auditEventService) {
-        this(repository, auditEventService, null, false);
-    }
-
     OfflinePackageResponse getOfflineEntitlements(String merchantId, String venueId, int limit) {
         try {
             if (!offlineEntitlementsEnabled) {

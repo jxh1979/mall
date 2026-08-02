@@ -77,39 +77,6 @@ public class TicketVerificationService {
     }
 
     /**
-     * 向后兼容构造：未注入 AmusementVerificationPort 时游乐权益不分流（=null），走通用逐次扣旧路。供既有单测构造。
-     */
-    public TicketVerificationService(
-            TicketingRepository repository,
-            ApplicationEventPublisher eventPublisher,
-            MdmService mdmService,
-            AuthorizationService authorizationService,
-            TicketCredentialSigner credentialSigner) {
-        this(repository, eventPublisher, mdmService, authorizationService, credentialSigner, null);
-    }
-
-    /**
-     * 向后兼容构造：未注入 MdmService/AuthorizationService/TicketCredentialSigner 时相应门控/签名为关（=null），
-     * 核销链路按原行为执行。供既有单测构造（不改既有用例）。生产环境由 Spring 走上方主构造注入。
-     */
-    public TicketVerificationService(
-            TicketingRepository repository,
-            ApplicationEventPublisher eventPublisher,
-            MdmService mdmService,
-            AuthorizationService authorizationService) {
-        this(repository, eventPublisher, mdmService, authorizationService, null, null);
-    }
-
-    public TicketVerificationService(
-            TicketingRepository repository, ApplicationEventPublisher eventPublisher, MdmService mdmService) {
-        this(repository, eventPublisher, mdmService, null, null);
-    }
-
-    public TicketVerificationService(TicketingRepository repository, ApplicationEventPublisher eventPublisher) {
-        this(repository, eventPublisher, null, null, null);
-    }
-
-    /**
      * P0 越权修复统一范式：取出记录后按调用者商户范围校验归属。
      * 平台管理员 scope 为空 → 放行（可见全部）；商户用户 → 必须等于记录 merchant_id，否则 CROSS_MERCHANT_FORBIDDEN。
      * authorizationService 为 null（旧构造/兼容测试）时不强制。

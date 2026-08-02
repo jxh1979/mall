@@ -47,56 +47,6 @@ public record IssuedEntitlementRecord(
         //   verifiedFull,折扣增量=max(0, verifiedFull−verified) 落 settlement_transactions.discount_amount_cent。
         Long componentFullPriceCent
 ) {
-    // ponytail: 向后兼容构造——批3-2 前的调用点(测试)不带 consumptionWindow，默认 null(=判定层走现状 per_use 逐次扣)。
-    //           避免为 1 个可空字段改 18 处既有构造点；未改的既有用例即"consumption_window 缺省"的回归证。
-    //           日后若默认语义要变（如强制显式），删本构造让编译逼出所有点。
-    public IssuedEntitlementRecord(
-            String id, String entitlementCode, String ticketTypeId, String orderId, String entitlementTemplateId,
-            String entitlementType, String merchantId, String venueId, String pointId, int totalTimes, int usedTimes,
-            Long valueAmountCent, String status, Instant validFrom, Instant validTo, Instant createdAt, Instant updatedAt,
-            int numPeople, Long allocatedRevenueCent, String entitlementKind, Long agreementPriceCent) {
-        this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
-                pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
-                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, null, null, null, 0, null, null);
-    }
-
-    // ponytail: 批3-4 前带 consumptionWindow 但不带 exclusiveMerchantId 的调用点默认 null(=非专属分池)。
-    public IssuedEntitlementRecord(
-            String id, String entitlementCode, String ticketTypeId, String orderId, String entitlementTemplateId,
-            String entitlementType, String merchantId, String venueId, String pointId, int totalTimes, int usedTimes,
-            Long valueAmountCent, String status, Instant validFrom, Instant validTo, Instant createdAt, Instant updatedAt,
-            int numPeople, Long allocatedRevenueCent, String entitlementKind, Long agreementPriceCent,
-            String consumptionWindow) {
-        this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
-                pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
-                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow, null, null, 0, null, null);
-    }
-
-    // ponytail: AUD-066 前带 exclusiveMerchantId 但不带 parent/slot 的调用点(测试)默认 parent=null、slot=0（无父票不分组）。
-    public IssuedEntitlementRecord(
-            String id, String entitlementCode, String ticketTypeId, String orderId, String entitlementTemplateId,
-            String entitlementType, String merchantId, String venueId, String pointId, int totalTimes, int usedTimes,
-            Long valueAmountCent, String status, Instant validFrom, Instant validTo, Instant createdAt, Instant updatedAt,
-            int numPeople, Long allocatedRevenueCent, String entitlementKind, Long agreementPriceCent,
-            String consumptionWindow, String exclusiveMerchantId) {
-        this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
-                pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
-                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow,
-                exclusiveMerchantId, null, 0, null, null);
-    }
-
-    // ponytail: AUD-076 前的 25 参全签名（含 parent/slot、无 barId）→ barId=null。供既有集成测试直造权益不改。
-    public IssuedEntitlementRecord(
-            String id, String entitlementCode, String ticketTypeId, String orderId, String entitlementTemplateId,
-            String entitlementType, String merchantId, String venueId, String pointId, int totalTimes, int usedTimes,
-            Long valueAmountCent, String status, Instant validFrom, Instant validTo, Instant createdAt, Instant updatedAt,
-            int numPeople, Long allocatedRevenueCent, String entitlementKind, Long agreementPriceCent,
-            String consumptionWindow, String exclusiveMerchantId, String parentTicketId, int slotIndex) {
-        this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
-                pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
-                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow,
-                exclusiveMerchantId, parentTicketId, slotIndex, null, null);
-    }
 
     public int remainingTimes() {
         return totalTimes - usedTimes;

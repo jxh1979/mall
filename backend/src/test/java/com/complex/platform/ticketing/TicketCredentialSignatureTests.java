@@ -39,7 +39,7 @@ class TicketCredentialSignatureTests {
                 ENTITLEMENT_ID, ENTITLEMENT_CODE, "tt_1", "order_1", "tpl_1", "ticket",
                 "merchant_1", "venue_1", "point_1", 2, 0, 9900L, "active",
                 null, null, now, now, 1, null,
-                null, null);
+                null, null, null, null, null, 0, null, null);
     }
 
     private VerificationRequest verifyRequest(String credentialPayload) {
@@ -89,7 +89,7 @@ class TicketCredentialSignatureTests {
         when(repository.saveTicketCredential(any())).thenAnswer(inv -> inv.getArgument(0));
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class), null, null, signer);
+                repository, mock(ApplicationEventPublisher.class), null, null, signer, null);
 
         service.refreshCredential(ENTITLEMENT_ID, null);
 
@@ -115,7 +115,7 @@ class TicketCredentialSignatureTests {
 
         // 兼容构造（signer=null）：不签名，沿用占位 NULL 语义。
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class));
+                repository, mock(ApplicationEventPublisher.class), null, null, null, null);
 
         service.refreshCredential(ENTITLEMENT_ID, null);
 
@@ -146,7 +146,7 @@ class TicketCredentialSignatureTests {
         when(repository.markTicketCredentialConsumed(any(), any())).thenReturn(1);
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class), null, null, signer);
+                repository, mock(ApplicationEventPublisher.class), null, null, signer, null);
 
         VerificationResponse response = service.createVerification(verifyRequest(TOKEN));
 
@@ -172,7 +172,7 @@ class TicketCredentialSignatureTests {
         when(repository.saveVerification(any())).thenAnswer(inv -> inv.getArgument(0));
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class), null, null, signer);
+                repository, mock(ApplicationEventPublisher.class), null, null, signer, null);
 
         VerificationResponse response = service.createVerification(verifyRequest(TOKEN));
 
@@ -199,7 +199,7 @@ class TicketCredentialSignatureTests {
         when(repository.saveVerification(any())).thenAnswer(inv -> inv.getArgument(0));
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class), null, null, signer);
+                repository, mock(ApplicationEventPublisher.class), null, null, signer, null);
 
         VerificationResponse response = service.createVerification(verifyRequest(TOKEN));
 

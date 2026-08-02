@@ -33,7 +33,7 @@ class TicketVerificationTransferGuardTests {
         return new IssuedEntitlementRecord(
                 "issued_1", ENTITLEMENT_CODE, "tt_1", "order_1", "tpl_1", "ticket",
                 "merchant_1", null, null, 1, 0, 100L, "active",
-                null, null, now, now, 1, null, null, null, null, null, PARENT_ID, 1);
+                null, null, now, now, 1, null, null, null, null, null, PARENT_ID, 1, null, null);
     }
 
     private TicketInstanceRecord activeParent() {
@@ -56,7 +56,7 @@ class TicketVerificationTransferGuardTests {
                 .thenReturn(Optional.of(entitlement.useOnce(Instant.now())));
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class));
+                repository, mock(ApplicationEventPublisher.class), null, null, null, null);
 
         assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
                 "guard-race-1", "qr", ENTITLEMENT_CODE, "dev_1", "gate_1", Map.of())))
@@ -76,7 +76,7 @@ class TicketVerificationTransferGuardTests {
         IssuedEntitlementRecord entitlement = new IssuedEntitlementRecord(
                 "issued_1", ENTITLEMENT_CODE, "tt_1", "order_1", "tpl_1", "ticket",
                 "merchant_1", null, null, 1, 0, 100L, "active",
-                null, null, now, now, 1, null, null, null);
+                null, null, now, now, 1, null, null, null, null, null, null, 0, null, null);
         TicketCredentialRecord credential = new TicketCredentialRecord(
                 "credential_1", "issued_1", "order_1", "cred_tok1", "nonce1", "hash1", "dynamic_qr",
                 now, now.plusSeconds(60), "active", 1, now, now, 60, now, null, null);
@@ -89,7 +89,7 @@ class TicketVerificationTransferGuardTests {
         when(repository.markTicketCredentialConsumed(eq("credential_1"), any())).thenReturn(0);
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class));
+                repository, mock(ApplicationEventPublisher.class), null, null, null, null);
 
         assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
                 "guard-cas-1", "dynamic_qr", "cred_tok1", "dev_1", "gate_1", Map.of())))

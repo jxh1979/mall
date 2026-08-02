@@ -46,16 +46,6 @@ public class AmusementSafetyService {
     // 可为 null（向后兼容/单测无 SecurityContext 环境）；接入为 fail-safe，不阻塞事件创建主链。
     private final RiskAlertService riskAlertService;
 
-    // 向后兼容构造器：未注入统一责任链服务（既有单测/无 SecurityContext 环境）。
-    public AmusementSafetyService(
-            AmusementSafetyRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService, null);
-    }
-
     @org.springframework.beans.factory.annotation.Autowired
     public AmusementSafetyService(
             AmusementSafetyRepository repository,

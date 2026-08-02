@@ -356,7 +356,7 @@ class AmusementSafetyServiceTests {
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                authorizationService);
+                authorizationService, null);
 
         AmusementIncidentRecord incident = noUnified.createIncident(incidentRequest("incident-null-unified"));
 

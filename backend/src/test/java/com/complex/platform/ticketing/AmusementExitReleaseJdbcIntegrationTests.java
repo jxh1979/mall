@@ -335,12 +335,12 @@ class AmusementExitReleaseJdbcIntegrationTests {
                 """, templateId, totalTimes, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
-                LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
+                LocalDate.parse("2026-06-18"), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "amusement_pass",
                 "merchant_a", null, null, totalTimes, 0, 5500L, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
-                "virtual", null));
+                "virtual", null, null, null, null, 0, null, null));
         return code;
     }
 }

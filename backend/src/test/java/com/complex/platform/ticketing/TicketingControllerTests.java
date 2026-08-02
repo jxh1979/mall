@@ -300,7 +300,7 @@ class TicketingControllerTests {
                 null,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        ));
+        , null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
 
         mockMvc.perform(post("/api/v1/ticketing/ticket-types")
                         .with(user("ops").roles("P0_SMOKE"))
@@ -337,14 +337,14 @@ class TicketingControllerTests {
                 LocalDate.parse("2026-06-20"),
                 "web",
                 "13800138000",
-                19800L,
+                19800L, null, 19800L, 0L,
                 "CNY",
                 "unpaid",
                 "not_issued",
                 "created",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        ));
+        , null, null, null));
 
         mockMvc.perform(post("/api/v1/ticketing/orders")
                         .with(user("ops").roles("P0_SMOKE"))

@@ -364,12 +364,12 @@ class GiftRedemptionEndToEndTests {
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
-                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "gift_drink",
                 merchantId, null, barId, 1, 0, 0L, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
-                null, null));
+                null, null, null, null, null, 0, null, null));
     }
 
     /**
@@ -468,7 +468,7 @@ class GiftRedemptionEndToEndTests {
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,
-                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code,        // id
                 code,                 // entitlementCode
@@ -489,6 +489,6 @@ class GiftRedemptionEndToEndTests {
                 now,                  // updatedAt
                 1,                    // numPeople
                 null,
-                null, null));               // allocatedRevenueCent
+                null, null, null, null, null, 0, null, null));               // allocatedRevenueCent
     }
 }

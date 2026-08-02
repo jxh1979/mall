@@ -96,7 +96,7 @@ class InventoryTransferLifecycleTests {
                 null,
                 null,
                 null,
-                financeRepository);
+                financeRepository, null, null, null);
     }
 
     @Test

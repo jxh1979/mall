@@ -48,11 +48,6 @@ public class BarGiftConsumer {
         this.receivableLedgerService = receivableLedgerService;
     }
 
-    /** 向后兼容构造（不注入结算）：既有单测零改动，通票赠饮平台↔酒吧结算关闭。 */
-    public BarGiftConsumer(BarRepository repository) {
-        this(repository, null);
-    }
-
     @EventListener
     public void onGiftVerified(GiftVerifiedEvent event) {
         String verificationId = trimToNull(event.verificationId());

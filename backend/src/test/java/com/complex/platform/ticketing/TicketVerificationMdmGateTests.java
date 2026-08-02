@@ -37,7 +37,7 @@ class TicketVerificationMdmGateTests {
                 "issued_1", ENTITLEMENT_CODE, "tt_1", "order_1", "tpl_1", "ticket",
                 "merchant_1", "venue_1", "point_1", 2, 0, 9900L, "active",
                 null, null, now, now, 1, null,
-                null, null);
+                null, null, null, null, null, 0, null, null);
     }
 
     private VerificationRequest verifyRequest() {
@@ -58,7 +58,7 @@ class TicketVerificationMdmGateTests {
                 .when(mdmService).requireManagedForHighRiskAction(eq(DEVICE_ID), eq("ticket.verify"));
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class), mdmService);
+                repository, mock(ApplicationEventPublisher.class), mdmService, null, null, null);
 
         assertThatThrownBy(() -> service.createVerification(verifyRequest()))
                 .isInstanceOf(ApiException.class)
@@ -85,7 +85,7 @@ class TicketVerificationMdmGateTests {
         when(repository.saveVerification(any())).thenAnswer(inv -> inv.getArgument(0));
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class), mdmService);
+                repository, mock(ApplicationEventPublisher.class), mdmService, null, null, null);
 
         VerificationResponse response = service.createVerification(verifyRequest());
 
@@ -110,7 +110,7 @@ class TicketVerificationMdmGateTests {
 
         // 兼容构造（mdmService=null）：门控未接，核销按原行为通过。
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class));
+                repository, mock(ApplicationEventPublisher.class), null, null, null, null);
 
         VerificationResponse response = service.createVerification(verifyRequest());
 
@@ -128,7 +128,7 @@ class TicketVerificationMdmGateTests {
         when(repository.terminalDeviceExists(any())).thenReturn(false);
 
         TicketVerificationService service = new TicketVerificationService(
-                repository, mock(ApplicationEventPublisher.class), mdmService);
+                repository, mock(ApplicationEventPublisher.class), mdmService, null, null, null);
 
         assertThatThrownBy(() -> service.createVerification(verifyRequest()))
                 .isInstanceOf(ApiException.class)

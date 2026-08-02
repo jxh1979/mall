@@ -104,69 +104,6 @@ public class InventoryService {
             "medium", "suspicious",
             "high", "high");
 
-    // 向后兼容旧 6 参构造器：未注入统一责任链服务（riskAlertService=null），双写短路、仅孤岛表权威。
-    public InventoryService(
-            InventoryRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService,
-            TerminalSwitchGuard terminalSwitchGuard,
-            TraceabilityService traceabilityService
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, null, null, null, null);
-    }
-
-    public InventoryService(
-            InventoryRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService,
-            TerminalSwitchGuard terminalSwitchGuard,
-            TraceabilityService traceabilityService,
-            RiskAlertService riskAlertService
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, riskAlertService, null, null, null);
-    }
-
-    // 向后兼容旧 10 参构造器：未注入经营日切分（businessDayResolver=null），成本汇总回落全局默认切分。
-    public InventoryService(
-            InventoryRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService,
-            TerminalSwitchGuard terminalSwitchGuard,
-            TraceabilityService traceabilityService,
-            RiskAlertService riskAlertService,
-            NotificationService notificationService,
-            CustomerRepository customerRepository,
-            com.complex.platform.finance.FinanceRepository financeRepository
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, riskAlertService, notificationService,
-                customerRepository, financeRepository, null);
-    }
-
-    // 向后兼容旧 11 参构造器：未注入高价值判定器与附件校验器（二者=null）。
-    public InventoryService(
-            InventoryRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService,
-            TerminalSwitchGuard terminalSwitchGuard,
-            TraceabilityService traceabilityService,
-            RiskAlertService riskAlertService,
-            NotificationService notificationService,
-            CustomerRepository customerRepository,
-            com.complex.platform.finance.FinanceRepository financeRepository,
-            com.complex.platform.common.BusinessDayResolver businessDayResolver
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, riskAlertService, notificationService,
-                customerRepository, financeRepository, businessDayResolver, null, null);
-    }
-
     @org.springframework.beans.factory.annotation.Autowired
     public InventoryService(
             InventoryRepository repository,

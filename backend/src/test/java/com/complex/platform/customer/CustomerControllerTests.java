@@ -120,14 +120,14 @@ class CustomerControllerTests {
                 LocalDate.parse("2026-06-20"),
                 "miniapp",
                 "13800138000",
-                9900L,
+                9900L, null, 9900L, 0L,
                 "CNY",
                 "unpaid",
                 "not_issued",
                 "created",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        ));
+        , null, null, null));
         when(service.listOrders("cust_token_1")).thenReturn(new PageResponse<>(List.of(new TicketOrderRecord(
                 "ticket_order_1",
                 "TO20260614000001",
@@ -138,14 +138,14 @@ class CustomerControllerTests {
                 LocalDate.parse("2026-06-20"),
                 "miniapp",
                 "13800138000",
-                9900L,
+                9900L, null, 9900L, 0L,
                 "CNY",
                 "unpaid",
                 "not_issued",
                 "created",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        )), 1, 50, 1));
+        , null, null, null)), 1, 50, 1));
         when(service.getTicketQr("cust_token_1", "ent_1")).thenReturn(new TicketCredentialResponse(
                 "credential_1",
                 "ent_1",

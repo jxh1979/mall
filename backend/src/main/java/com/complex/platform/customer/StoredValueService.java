@@ -78,13 +78,6 @@ public class StoredValueService {
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
     private String fundOwnershipDefault = FUND_MERCHANT_PREPAID;
 
-    public StoredValueService(CustomerRepository repository, FinanceService financeService,
-                              AuditEventService auditEventService,
-                              com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
-                              com.complex.platform.access.AuthorizationService authorizationService) {
-        this(repository, financeService, auditEventService, paymentGateway, authorizationService, null, Clock.systemUTC());
-    }
-
     @org.springframework.beans.factory.annotation.Autowired
     public StoredValueService(CustomerRepository repository, FinanceService financeService,
                               AuditEventService auditEventService,
@@ -96,13 +89,6 @@ public class StoredValueService {
     }
 
     StoredValueService(CustomerRepository repository, FinanceService financeService,
-                       AuditEventService auditEventService,
-                       com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
-                       com.complex.platform.access.AuthorizationService authorizationService, Clock clock) {
-        this(repository, financeService, auditEventService, paymentGateway, authorizationService, null, clock);
-    }
-
-    private StoredValueService(CustomerRepository repository, FinanceService financeService,
                                AuditEventService auditEventService,
                                com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
                                com.complex.platform.access.AuthorizationService authorizationService,
@@ -115,20 +101,6 @@ public class StoredValueService {
         this.authorizationService = authorizationService;
         this.notificationService = notificationService;
         this.clock = clock;
-    }
-
-    /** 向后兼容构造（无 authorizationService=不强制卡范围隔离）：供既有单测构造（带 gateway）。 */
-    StoredValueService(CustomerRepository repository, FinanceService financeService,
-                       AuditEventService auditEventService,
-                       com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway, Clock clock) {
-        this(repository, financeService, auditEventService, paymentGateway, null, clock);
-    }
-
-    /** 向后兼容构造：未提供支付渠道路由时用"开关关"占位路由（不调外部渠道）。供既有单测构造。 */
-    StoredValueService(CustomerRepository repository, FinanceService financeService,
-                       AuditEventService auditEventService, Clock clock) {
-        this(repository, financeService, auditEventService,
-                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, clock);
     }
 
     // ============================================================

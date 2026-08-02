@@ -277,10 +277,10 @@ class CustomerServiceTests {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         TicketTypeRecord pass = new TicketTypeRecord(
                 "tt_pass", "综合体通票", "weekday_weekend_holiday", 9900L, 9900L, 9900L,
-                false, "published", null, null, now, now);
+                false, "published", null, null, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT);
         TicketTypeRecord barA = new TicketTypeRecord(
                 "tt_bar_a", "周末单人票", "weekday_weekend_holiday", 9900L, 9900L, 9900L,
-                false, "published", null, null, now, now, null, 0, null, false, "mch_bar_a");
+                false, "published", null, null, now, now, null, 0, null, false, "mch_bar_a", TicketTypeRecord.NO_COMBO_DISCOUNT);
         when(ticketingService.listTicketTypes()).thenReturn(new PageResponse<>(List.of(pass, barA), 2, 50, 2));
         when(ticketingService.resolveBarName("mch_bar_a")).thenReturn("话梅酒馆");
 
@@ -309,7 +309,7 @@ class CustomerServiceTests {
                 null,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        )), 1, 50, 1));
+        , null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT)), 1, 50, 1));
 
         PageResponse<CustomerTicketProductResponse> response = service.listTicketProducts(null);
 
@@ -334,14 +334,14 @@ class CustomerServiceTests {
                 LocalDate.parse("2026-06-20"),
                 "miniapp",
                 "13800138000",
-                19800L,
+                19800L, null, 19800L, 0L,
                 "CNY",
                 "unpaid",
                 "not_issued",
                 "created",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        ));
+        , null, null, null));
 
         TicketOrderRecord response = service.createTicketOrder(
                 login.customerToken(),
@@ -435,9 +435,9 @@ class CustomerServiceTests {
     private TicketOrderRecord faceOrderRecord(CustomerLoginResponse login) {
         return new TicketOrderRecord(
                 "ticket_order_face", "TO20260614000009", login.customerId(), "ticket_type_1", null, 1,
-                LocalDate.parse("2026-06-20"), "miniapp", "13800138000", 9900L, "CNY", "unpaid",
+                LocalDate.parse("2026-06-20"), "miniapp", "13800138000", 9900L, null, 9900L, 0L, "CNY", "unpaid",
                 "not_issued", "created", Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z"));
+                Instant.parse("2026-06-14T00:00:00Z"), null, null, null);
     }
 
     @Test
@@ -453,14 +453,14 @@ class CustomerServiceTests {
                 LocalDate.parse("2026-06-20"),
                 "miniapp",
                 "13800138000",
-                9900L,
+                9900L, null, 9900L, 0L,
                 "CNY",
                 "paid",
                 "issued",
                 "created",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        )));
+        , null, null, null)));
         when(ticketingService.getCustomerTicketCredential("ent_customer", login.customerId())).thenReturn(new TicketCredentialResponse(
                 "credential_customer",
                 "ent_customer",

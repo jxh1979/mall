@@ -45,19 +45,6 @@ public record EntitlementTemplateRecord(
         // 目录价快照(只读,系统在设引用/目录转正时同步);改价一律回目录走草案复核,模板侧无任何改价入口。
         String catalogItemCode
 ) {
-    // ponytail: V380 前的构造点(既有代码/测试)不带目录引用,默认 null=未挂目录。
-    public EntitlementTemplateRecord(
-            String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status,
-            String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
-            String entitlementKind, Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId,
-            boolean requireFacePhoto,
-            java.time.Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy,
-            java.time.Instant deleteRequestedAt, String deleteReason) {
-        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
-                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow,
-                exclusiveMerchantId, requireFacePhoto, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
-                deleteRequestedAt, deleteReason, null);
-    }
 
     // ponytail: V253 前的构造点(既有代码/测试)不带存档/删除字段,默认未存档 + delete_status=none。
     //           避免为 6 个新字段改所有既有 17 参构造点;日后语义要变则删本构造让编译逼出所有点。
@@ -68,35 +55,7 @@ public record EntitlementTemplateRecord(
             boolean requireFacePhoto) {
         this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
                 barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow,
-                exclusiveMerchantId, requireFacePhoto, null, null, "none", null, null, null);
-    }
-    // ponytail: 向后兼容构造——批3-2 前的调用点(测试)不带 consumptionWindow，默认 null(=判定层走现状 per_use)。
-    //           避免为 1 个可空字段改既有构造点；日后默认语义要变则删本构造让编译逼出所有点。
-    public EntitlementTemplateRecord(
-            String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status,
-            String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
-            String entitlementKind, Long agreementPriceCent) {
-        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
-                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, null, null, false);
-    }
-
-    // ponytail: 批3-4 前带 consumptionWindow 但不带 exclusiveMerchantId 的调用点默认 null(=非专属分池)。
-    public EntitlementTemplateRecord(
-            String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status,
-            String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
-            String entitlementKind, Long agreementPriceCent, String consumptionWindow) {
-        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
-                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow, null, false);
-    }
-
-    // ponytail: 批3-6 前带 exclusiveMerchantId 但不带 requireFacePhoto 的调用点默认 false(=不要脸照)。
-    public EntitlementTemplateRecord(
-            String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status,
-            String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
-            String entitlementKind, Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId) {
-        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
-                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow,
-                exclusiveMerchantId, false);
+                exclusiveMerchantId, requireFacePhoto, null, null, "none", null, null, null, null);
     }
 
     // --- V253 存档/删除范式：不可变 record 的字段更新辅助（避免 24 参构造散落业务代码）。 ---

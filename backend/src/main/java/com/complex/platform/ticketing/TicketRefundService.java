@@ -64,24 +64,6 @@ public class TicketRefundService {
         this.refundAuthorizationService = refundAuthorizationService;
     }
 
-    /**
-     * 向后兼容构造：未注入分级授权引擎（功能标志关时不需要）。供既有单测构造。
-     */
-    public TicketRefundService(
-            TicketingRepository repository,
-            ApplicationEventPublisher eventPublisher,
-            AuthorizationService authorizationService) {
-        this(repository, eventPublisher, authorizationService, null);
-    }
-
-    /**
-     * 向后兼容构造：未注入 AuthorizationService 时跨商户守卫为关（=null），退款链路按原行为执行。
-     * 供既有单测构造（不改既有用例）。生产环境由 Spring 走上方主构造注入。
-     */
-    public TicketRefundService(TicketingRepository repository, ApplicationEventPublisher eventPublisher) {
-        this(repository, eventPublisher, null, null);
-    }
-
     /** 当前操作者 id；无 AuthorizationService（旧构造/兼容测试）时返回 null（→ classify 不享额度自助、落复核最安全）。 */
     private String currentActorId() {
         return authorizationService == null ? null : authorizationService.currentActor().id();

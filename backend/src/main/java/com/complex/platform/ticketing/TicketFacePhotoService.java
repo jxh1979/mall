@@ -66,12 +66,6 @@ public class TicketFacePhotoService {
         this.windowConfig = windowConfig;
     }
 
-    /** 测试便捷构造:留存天数回落默认 30。 */
-    public TicketFacePhotoService(TicketFacePhotoRepository repository, PiiCipher piiCipher,
-                                  AuthorizationService authorizationService, AuditEventService auditEventService) {
-        this(repository, piiCipher, authorizationService, auditEventService, new NotificationWindowConfig());
-    }
-
     /** 当前生效的人脸照留存天数(后台可配，缺配置 30)。 */
     int retentionDays() {
         return windowConfig.days(RETENTION_WINDOW_KEY, RETENTION_DAYS_AFTER_VALID_TO);

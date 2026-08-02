@@ -1026,7 +1026,7 @@ class AmusementServiceTests {
                 new AuditEventService(auditEventRepository),
                 authorizationService,
                 entitlementGateway,
-                safetyRepository);
+                safetyRepository, null);
         AmusementProjectRecord project = createProject("oc-null", createTemplate("oc-null-tpl").id(), "open", 1);
         submitPassingInspection(project, "oc-null");
         AmusementSessionRecord session = createSession("oc-null-session", project.id(), 100, "open");

@@ -453,7 +453,7 @@ class TicketTransferJdbcIntegrationTests {
             repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                     eid, "code_" + eid, "tt_tr", "ord_" + f.parent, "et_tr", "ticket", "m1", null, null,
                     1, 0, 100L, "active", now.minusSeconds(60), now.plusSeconds(86_400), now, now,
-                    1, null, null, null, null, null, f.parent, slot));
+                    1, null, null, null, null, null, f.parent, slot, null, null));
         }
         return f;
     }
