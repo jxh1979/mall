@@ -180,7 +180,7 @@ final class ProviderAdapterService {
         validateUpdateRequest(request);
         rejectSecretLikeCredentialRef(request.credentialSecretRef());
         ProviderAdapterRecord existing = repository.findProviderAdapterById(id)
-                .orElseThrow(() -> ApiException.notFound("PROVIDER_ADAPTER_NOT_FOUND", "provider adapter not found"));
+                .orElseThrow(() -> ApiException.notFound("PROVIDER_ADAPTER_NOT_FOUND", "渠道适配器不存在或已被删除"));
         ProviderAdapterRecord updated = new ProviderAdapterRecord(
                 existing.id(),
                 request.providerCode(),
@@ -219,7 +219,7 @@ final class ProviderAdapterService {
     private ProviderAdapterRecord markProductionReadyOnce(String id, StatusChangeRequest request) {
         validateStatusChange(request);
         ProviderAdapterRecord existing = repository.findProviderAdapterById(id)
-                .orElseThrow(() -> ApiException.notFound("PROVIDER_ADAPTER_NOT_FOUND", "provider adapter not found"));
+                .orElseThrow(() -> ApiException.notFound("PROVIDER_ADAPTER_NOT_FOUND", "渠道适配器不存在或已被删除"));
         ProviderAdapterRecord ready = new ProviderAdapterRecord(
                 existing.id(),
                 existing.providerCode(),
@@ -256,9 +256,9 @@ final class ProviderAdapterService {
     private AdapterTestRecord testProviderAdapterMockOnce(String id, ProviderAdapterTestRequest request) {
         validateTestRequest(request);
         ProviderAdapterRecord adapter = repository.findProviderAdapterById(id)
-                .orElseThrow(() -> ApiException.notFound("PROVIDER_ADAPTER_NOT_FOUND", "provider adapter not found"));
+                .orElseThrow(() -> ApiException.notFound("PROVIDER_ADAPTER_NOT_FOUND", "渠道适配器不存在或已被删除"));
         if (!adapter.providerCode().equals(request.providerCode()) || "disabled".equals(adapter.status())) {
-            throw new ApiException(HttpStatus.FAILED_DEPENDENCY, "PROVIDER_ADAPTER_NOT_TESTABLE", "provider adapter is not testable");
+            throw new ApiException(HttpStatus.FAILED_DEPENDENCY, "PROVIDER_ADAPTER_NOT_TESTABLE", "该渠道适配器不支持连通性测试");
         }
         Map<String, Object> mockPayload = safeMap(request.mockPayload());
         String testStatus = resolveMockTestStatus(request.scenario(), mockPayload);

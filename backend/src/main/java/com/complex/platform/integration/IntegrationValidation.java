@@ -42,7 +42,7 @@ final class IntegrationValidation {
 
     static void validateOpenSignatureRequest(OpenSignatureRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.appKey(), "app_key");
         if (request.timestamp() == null) {
@@ -54,7 +54,7 @@ final class IntegrationValidation {
 
     static void validateCreateRequest(ProviderAdapterRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.providerCode(), "provider_code");
         requireEnum(ADAPTER_TYPES, request.adapterType(), "adapter_type");
@@ -63,7 +63,7 @@ final class IntegrationValidation {
 
     static void validateUpdateRequest(ProviderAdapterUpdateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.providerCode(), "provider_code");
         if (request.capabilities() == null) {
@@ -75,14 +75,14 @@ final class IntegrationValidation {
 
     static void validateStatusChange(StatusChangeRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.reason(), "reason");
     }
 
     static void validateTestRequest(ProviderAdapterTestRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.providerCode(), "provider_code");
         requireEnum(TEST_SCENARIOS, request.scenario(), "scenario");
@@ -90,7 +90,7 @@ final class IntegrationValidation {
 
     static void validateOrderSyncRequest(IntegrationOrderSyncRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.providerCode(), "provider_code");
@@ -116,7 +116,7 @@ final class IntegrationValidation {
 
     static void validateChannelStoreMapRequest(IntegrationChannelStoreMapRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.providerCode(), "provider_code");
@@ -127,7 +127,7 @@ final class IntegrationValidation {
 
     static void validateChannelTicketTypeMapRequest(IntegrationChannelTicketTypeMapRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.providerCode(), "provider_code");
@@ -138,7 +138,7 @@ final class IntegrationValidation {
 
     static void validateTaskRequest(IntegrationTaskRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.providerCode(), "provider_code");
@@ -150,7 +150,7 @@ final class IntegrationValidation {
 
     static void validateTaskResolveRequest(IntegrationTaskResolveRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.operatorUserId(), "operator_user_id");
@@ -160,22 +160,22 @@ final class IntegrationValidation {
 
     static void validateReconciliationBatchRequest(ReconciliationBatchRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.providerCode(), "provider_code");
         requireEnum(BUSINESS_TYPES, request.businessType(), "business_type");
         if (request.periodStart() == null || request.periodEnd() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period_start and period_end are required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写期间开始与结束日期");
         }
         if (request.periodEnd().isBefore(request.periodStart())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period_end must be on or after period_start");
+            throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
         }
     }
 
     static void validateReconciliationDifferenceRequest(ReconciliationDifferenceRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.batchId(), "batch_id");
@@ -187,23 +187,23 @@ final class IntegrationValidation {
 
     static void validateChannelReconciliationRequest(ChannelReconciliationRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.providerCode(), "provider_code");
         requireEnum(BUSINESS_TYPES, request.businessType(), "business_type");
         channel(request.channel());
         if (request.periodStart() == null || request.periodEnd() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period_start and period_end are required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写期间开始与结束日期");
         }
         if (request.periodEnd().isBefore(request.periodStart())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period_end must be on or after period_start");
+            throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
         }
     }
 
     static void validateReconciliationDifferenceResolveRequest(ReconciliationDifferenceResolveRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.operatorUserId(), "operator_user_id");
@@ -218,7 +218,7 @@ final class IntegrationValidation {
                 || adapter.capabilities().isEmpty()
                 || adapter.credentialSecretRef() == null
                 || adapter.credentialSecretRef().isBlank()) {
-            throw ApiException.conflict("PROVIDER_ADAPTER_NOT_PRODUCTION_READY", "provider adapter is not production ready");
+            throw ApiException.conflict("PROVIDER_ADAPTER_NOT_PRODUCTION_READY", "该渠道适配器尚未具备生产可用条件");
         }
         rejectSecretLikeCredentialRef(adapter.credentialSecretRef());
     }
@@ -229,7 +229,7 @@ final class IntegrationValidation {
         }
         for (Pattern pattern : SECRET_PATTERNS) {
             if (pattern.matcher(credentialRef).matches()) {
-                throw ApiException.badRequest("SECRET_VALUE_REJECTED", "credential_secret_ref must be a reference, not a secret value");
+                throw ApiException.badRequest("SECRET_VALUE_REJECTED", "凭据字段只能填引用标识，不能填真实密钥");
             }
         }
     }
@@ -255,7 +255,7 @@ final class IntegrationValidation {
     static int nonNegative(Integer value, String fieldName) {
         int resolved = value == null ? 0 : value;
         if (resolved < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return resolved;
     }
@@ -263,7 +263,7 @@ final class IntegrationValidation {
     static long nonNegative(Long value, String fieldName) {
         long resolved = value == null ? 0L : value;
         if (resolved < 0L) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return resolved;
     }
@@ -271,7 +271,7 @@ final class IntegrationValidation {
     static String currency(String value) {
         String resolved = value == null || value.isBlank() ? "CNY" : value;
         if (!"CNY".equals(resolved)) {
-            throw ApiException.badRequest("UNSUPPORTED_CURRENCY", "only CNY is supported");
+            throw ApiException.badRequest("UNSUPPORTED_CURRENCY", "仅支持人民币（CNY）");
         }
         return resolved;
     }

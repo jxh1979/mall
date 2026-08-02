@@ -84,7 +84,7 @@ public class IntegrationService {
         try {
             OpenAppCredentialRecord credential = verifyOpenSignature(request, endpointKey, true);
             OpenApiEventRecord event = repository.findOpenEventById(endpointKey, eventId)
-                    .orElseThrow(() -> ApiException.notFound("OPEN_EVENT_NOT_FOUND", "open event not found"));
+                    .orElseThrow(() -> ApiException.notFound("OPEN_EVENT_NOT_FOUND", "开放平台事件不存在或已被删除"));
             auditEventService.recordSuccess(
                     "api_call.logged",
                     OPEN_PERMISSION,
@@ -132,9 +132,9 @@ public class IntegrationService {
             rejectStaleTimestamp(resolvedTimestamp);
             OpenEndpointConfigRecord endpoint = repository.findEndpointConfig(endpointKey)
                     .filter(config -> "active".equals(config.status()))
-                    .orElseThrow(() -> ApiException.unauthorized("OPEN_ENDPOINT_DISABLED", "open endpoint is disabled"));
+                    .orElseThrow(() -> ApiException.unauthorized("OPEN_ENDPOINT_DISABLED", "该开放平台接口已停用"));
             if (!provider.equals(endpoint.providerCode()) || !endpoint.webhookEnabled()) {
-                throw ApiException.unauthorized("OPEN_WEBHOOK_REJECTED", "open webhook endpoint is not enabled");
+                throw ApiException.unauthorized("OPEN_WEBHOOK_REJECTED", "开放平台回调接口未启用");
             }
             String payloadHash = openPlatformCrypto.payloadHash(payload);
             openPlatformCrypto.verifySignature(signature, openPlatformCrypto.webhookCanonical(
@@ -143,7 +143,7 @@ public class IntegrationService {
             // 签名通过后预留 nonce（以 endpoint_key 为命名空间）：同一传输（同 nonce）再发即拒，堵原报文重放。
             // 合法重试应换新 nonce + 复用 idempotency_key，下方幂等去重返回原结果。
             if (!repository.reserveOpenNonce(endpointKey, resolvedNonce, resolvedTimestamp)) {
-                throw ApiException.unauthorized("OPEN_WEBHOOK_NONCE_REPLAYED", "open webhook nonce was already used");
+                throw ApiException.unauthorized("OPEN_WEBHOOK_NONCE_REPLAYED", "开放平台回调随机数已被使用");
             }
 
             WebhookAcceptedResponse response = repository.findOpenEventByIdempotency(endpointKey, provider, resolvedIdempotencyKey)
@@ -324,7 +324,7 @@ public class IntegrationService {
 
     public IntegrationPollingCheckRecord recordPollingCheck(IntegrationPollingCheckRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.operatorNote(), "operator_note");
@@ -338,7 +338,7 @@ public class IntegrationService {
         int pendingCount = nonNegative(request.pendingCount(), "pending_count");
         int sourceCount = nonNegative(request.sourceCount(), "source_count");
         if (sourceCount < checkedEndpoints.size()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "source_count must cover checked_endpoints");
+            throw ApiException.badRequest("VALIDATION_FAILED", "数据源数量必须覆盖所有已检查的接口");
         }
         List<String> evidenceAttachmentIds = safeList(request.evidenceAttachmentIds());
         return operationSupport.executeWrite(
@@ -518,9 +518,9 @@ public class IntegrationService {
         validateOpenSignatureRequest(request);
         OpenAppCredentialRecord credential = repository.findOpenAppCredential(request.appKey())
                 .filter(found -> "active".equals(found.status()))
-                .orElseThrow(() -> ApiException.unauthorized("OPEN_APP_DISABLED", "open app is disabled"));
+                .orElseThrow(() -> ApiException.unauthorized("OPEN_APP_DISABLED", "该开放平台应用已停用"));
         if (endpointKey != null && !credential.allowedEndpointKeys().contains(endpointKey)) {
-            throw ApiException.forbidden("OPEN_ENDPOINT_FORBIDDEN", "open app cannot access endpoint");
+            throw ApiException.forbidden("OPEN_ENDPOINT_FORBIDDEN", "该开放平台应用无权访问此接口");
         }
         rejectStaleTimestamp(request.timestamp());
         openPlatformCrypto.verifySignature(
@@ -530,7 +530,7 @@ public class IntegrationService {
                 "OPEN_SIGNATURE_INVALID"
         );
         if (reserveNonce && !repository.reserveOpenNonce(request.appKey(), request.nonce(), request.timestamp())) {
-            throw ApiException.unauthorized("OPEN_NONCE_REPLAYED", "open nonce was already used");
+            throw ApiException.unauthorized("OPEN_NONCE_REPLAYED", "开放平台请求随机数已被使用");
         }
         return credential;
     }
@@ -538,13 +538,13 @@ public class IntegrationService {
     private void rejectStaleTimestamp(long timestamp) {
         long skew = Math.abs(clock.millis() - timestamp);
         if (skew > OPEN_SIGNATURE_TOLERANCE_MILLIS) {
-            throw ApiException.unauthorized("OPEN_TIMESTAMP_STALE", "open timestamp is stale");
+            throw ApiException.unauthorized("OPEN_TIMESTAMP_STALE", "开放平台请求时间戳已过期");
         }
     }
 
     private String resolveSecret(String secretRef) {
         if (secretRef == null || secretRef.isBlank()) {
-            throw ApiException.unauthorized("OPEN_SECRET_UNAVAILABLE", "open platform secret is unavailable");
+            throw ApiException.unauthorized("OPEN_SECRET_UNAVAILABLE", "开放平台密钥不可用，请联系管理员");
         }
         Optional<String> resolved;
         try {
@@ -552,11 +552,11 @@ public class IntegrationService {
         } catch (ApiException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            throw ApiException.unauthorized("OPEN_SECRET_UNAVAILABLE", "open platform secret is unavailable");
+            throw ApiException.unauthorized("OPEN_SECRET_UNAVAILABLE", "开放平台密钥不可用，请联系管理员");
         }
         return resolved
                 .filter(secret -> !secret.isBlank())
-                .orElseThrow(() -> ApiException.unauthorized("OPEN_SECRET_UNAVAILABLE", "open platform secret is unavailable"));
+                .orElseThrow(() -> ApiException.unauthorized("OPEN_SECRET_UNAVAILABLE", "开放平台密钥不可用，请联系管理员"));
     }
 
     private String eventId(Map<String, Object> payload) {
