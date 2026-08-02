@@ -46,7 +46,7 @@ class MerchantServiceServiceTests {
                 new AuditEventService(auditEventRepository),
                 authorizationService
         );
-        // Default: merchant user scoped to "mch_1"
+        // Default: merchant user scoped 流转到 "mch_1"
         when(authorizationService.currentActor())
                 .thenReturn(new AccessActor("user_test", "test", "merchant", null, "mch_1", "active"));
         when(authorizationService.currentMerchantScope())
@@ -101,7 +101,7 @@ class MerchantServiceServiceTests {
 
         MerchantWorkOrderRecord assigned = service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
                 "wo-assign",
-                "assign to property ops",
+                "assign 流转到 property ops",
                 List.of("att-assign"),
                 "property",
                 "staff_owner",
@@ -129,7 +129,7 @@ class MerchantServiceServiceTests {
 
         assertThatThrownBy(() -> service.addAction(created.id(), new MerchantWorkOrderActionRequest(
                 "wo-action-after-close",
-                "try to process closed order",
+                "try 流转到 process closed order",
                 List.of(),
                 "processing",
                 "staff_ops"
@@ -144,7 +144,7 @@ class MerchantServiceServiceTests {
         // created -> resolved skips assigned/processing and must be rejected
         assertThatThrownBy(() -> service.addAction(created.id(), new MerchantWorkOrderActionRequest(
                 "wo-skip-action",
-                "jump straight to resolved",
+                "jump straight 流转到 resolved",
                 List.of(),
                 "resolved",
                 "staff_ops"
@@ -165,7 +165,7 @@ class MerchantServiceServiceTests {
         // processing -> assigned is a regression and must be rejected
         assertThatThrownBy(() -> service.addAction(created.id(), new MerchantWorkOrderActionRequest(
                 "wo-regress-back",
-                "go back to assigned",
+                "go back 流转到 assigned",
                 List.of(),
                 "assigned",
                 "staff_ops"
@@ -422,10 +422,10 @@ class MerchantServiceServiceTests {
 
     @Test
     void assignWorkOrderCrossMerchantThrowsForbidden() {
-        // Work order belongs to mch_2
+        // Work order belongs 流转到 mch_2
         repository.saveWorkOrder(workOrderRecord("mswo_other", "mch_2", "created"));
 
-        // Caller is scoped to mch_1 (default mock)
+        // Caller is scoped 流转到 mch_1 (default mock)
         assertThatThrownBy(() -> service.assignWorkOrder("mswo_other", new MerchantWorkOrderAssignRequest(
                 "wo-cross-assign",
                 "assign",
@@ -498,7 +498,7 @@ class MerchantServiceServiceTests {
         // user_test creates with key "shared-key"
         MerchantWorkOrderRecord first = service.createWorkOrder(createRequest("shared-key"));
 
-        // Switch to a different user
+        // Switch 流转到 a different user
         when(authorizationService.currentActor())
                 .thenReturn(new AccessActor("user_other", "other", "merchant", null, "mch_1", "active"));
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("mch_1"));
@@ -517,7 +517,7 @@ class MerchantServiceServiceTests {
         MerchantWorkOrderRecord r1 = service.createWorkOrder(createRequest("key abc xyz"));
         MerchantWorkOrderRecord r2 = service.createWorkOrder(createRequest("key abc!xyz"));
 
-        // Both keys slug to "key_abc_xyz" under the old scheme; with UUIDs they must differ
+        // Both keys slug 流转到 "key_abc_xyz" under the old scheme; with UUIDs they must differ
         assertThat(r1.id()).isNotEqualTo(r2.id());
         assertThat(r1.id()).matches("mswo_[0-9a-f]{32}");
     }

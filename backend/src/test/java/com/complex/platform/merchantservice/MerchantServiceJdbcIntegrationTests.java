@@ -96,7 +96,7 @@ class MerchantServiceJdbcIntegrationTests {
                 "created",
                 "assigned",
                 "staff_manager",
-                "assign to property",
+                "assign 流转到 property",
                 List.of("att-assign"),
                 Instant.parse("2026-06-14T01:00:00Z")
         ));
