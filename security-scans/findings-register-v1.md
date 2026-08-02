@@ -4,7 +4,7 @@
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
 - OpenAPI operation count: 713
-- OpenAPI SHA-256: `7d1da64b1d8a9ab54334ab97e3cc3c8dc9ddc19f93143c2fc76330a1b96c77f1`
+- OpenAPI SHA-256: `fc8a971035d2ee297f26d472c7c8a2a021bee4d99b9574925e2f7016f94176ab`
 
 ## status-policy
 
