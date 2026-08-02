@@ -144,6 +144,12 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
 
     @Override
     public String reverseGiftSettlementPayable(String verificationId, String merchantId, long internalPriceCent) {
+        // S6 根因守卫：冲销一笔「从未挂出」的应付必须 no-op——原核销因商户让利型(cost_bearer=merchant_concession)、
+        //   自营吧等被跳过挂应付时,这里若照冲会凭空造一笔反向应收(商户平白欠平台一笔钱)。
+        //   查的是「当时到底挂没挂」的事实,不查当下配置 → 承担方中途被改也不会错冲。
+        if (!financeService.arApItemExistsBySource("payable", "pass_drink_settlement", verificationId)) {
+            return null;
+        }
         LocalDate today = LocalDate.now();
         // 赠饮冲正 → 对冲应收（同 source_id=verificationId、direction 不同 → 与原应付 V008 唯一索引不冲突且净额归零）。
         ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(

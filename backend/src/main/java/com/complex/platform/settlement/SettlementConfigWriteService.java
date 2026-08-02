@@ -14,6 +14,7 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionR
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTierInput;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
@@ -41,9 +42,9 @@ public class SettlementConfigWriteService {
     private static final String PERM = "settlement.config.manage";
     /** COALESCE 哨兵字面量:写面拒绝用户直接传入(否则与 NULL 种子同键但转正的 IS NOT DISTINCT FROM 删不掉致 500)。 */
     private static final Set<String> SCOPE_SENTINELS = Set.of("__DEFAULT__", "__ANY__", "__ALL__");
-    /** V340 全局默认种子行 id(禁止软删;见 {@link #rejectDefaultSeedArchive})。 */
+    /** V340 全局默认种子行 id(禁止软删;见 {@link #rejectDefaultSeedArchive})。V373:pgc_default(G 预扣全局默认)。 */
     private static final Set<String> DEFAULT_SEED_IDS =
-            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "hvt_default");
+            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "hvt_default", "pgc_default");
 
     private final JdbcSettlementConfigWriteRepository writeRepository;
     private final RevenueStreamAttributionRepository attributionRepository;
@@ -226,6 +227,54 @@ public class SettlementConfigWriteService {
     }
 
     /**
+     * S6(V373)赠送权益预扣规则落草案:项目 × 票种。两模式二选一(镜像 chk_pgc_amount):
+     * by_item 按件计=票面推导、不许带整额(带了也没人读=必然口径漂);by_ticket_amount 按票计=整额必填 ≥0
+     * (0=预扣关闭态,合法)。封顶可选 ≥0;差额处理规则三选一,留空=platform_absorb(S7 消费,本刀只落快照)。
+     */
+    public void savePassGiftCost(PassGiftCostRequest request, String actorId) {
+        PassGiftCostRequest req = requireRequest(request);
+        String idem = requireText(req.idempotencyKey(), "idempotency_key");
+        rejectSentinel(req.projectId(), "project_id");
+        rejectSentinel(req.ticketTypeId(), "ticket_type_id");
+        // 票种须真实存在(照 S2 综合服务费先例):坏 id 拦成中文 400,不落到 fk_pgc_ticket_type 抛 500。
+        String ticketTypeId = trimToNull(req.ticketTypeId());
+        if (ticketTypeId != null && !writeRepository.ticketTypeExists(ticketTypeId)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "票种不存在,请从票种下拉中选择:" + ticketTypeId);
+        }
+        String mode = requireOneOf(req.predeductMode(), "prededuct_mode", "by_item", "by_ticket_amount");
+        Long amount = req.ticketGiftAmountCent();
+        if ("by_item".equals(mode)) {
+            if (amount != null) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "按件计模式的预扣金额由票面(数量×内部结算价)推导,不接受手填整额;要按整额预扣请选按票计");
+            }
+        } else {
+            if (amount == null || amount < 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "按票计模式必须填该票种赠送部分的售价整额(分,可为 0=预扣关闭)");
+            }
+        }
+        Long cap = req.monthlyCapAmountCent();
+        if (cap != null) {
+            requireNonNegative(cap, "monthly_cap_amount_cent");
+        }
+        String variance = req.varianceHandling() == null || req.varianceHandling().isBlank()
+                ? "platform_absorb"
+                : requireOneOf(req.varianceHandling(), "variance_handling",
+                        "platform_absorb", "carry_forward", "true_up_pool");
+        String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(ticketTypeId);
+        String landedId = writeRepository.upsertPassGiftCostDraft(draftId("pgc_d_", scopeKey, idem),
+                req.projectId(), ticketTypeId, mode, amount, cap, variance, actorId);
+        audit("settlement.config.pass_gift_cost_configs.updated", "pass_gift_cost_configs", landedId, idem,
+                Map.of("project_scope", defaultScope(req.projectId()),
+                        "ticket_type_scope", anyScope(ticketTypeId),
+                        "prededuct_mode", mode,
+                        "ticket_gift_amount_cent", amount == null ? "-" : String.valueOf(amount),
+                        "monthly_cap_amount_cent", cap == null ? "-" : String.valueOf(cap),
+                        "variance_handling", variance));
+    }
+
+    /**
      * V350 全平台高价值判定阈值落草案：项目 × 商户，单位分（物品进货价高于本值即高价值）。
      * 出厂种子 500000（5000 元）；此处只写草案，复核转正后酒吧退酒判定才读到。
      * 阈值 0 = 所有已出品退酒都算高价值（全部先审后行），业务上合法故放行；负数拒绝。
@@ -380,7 +429,10 @@ public class SettlementConfigWriteService {
             // V340:提成费率 / 积分累计率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
             // V350:高价值判定阈值的商户级特例条目同理可下线(回落项目/全局默认);全局默认种子受守卫保护。
             // V346(P0-E):营业额抽成规则可下线(合同终止/换规则),下线后该合同回落"无抽成规则"=不产生抽成应收。
-            case "commission_rate", "points_accrual_rate", "high_value_threshold", "turnover_rent_rule" -> {
+            // S6(V373):赠送权益预扣规则的项目/票种特例条目可下线(回落上层默认);全局默认种子 pgc_default 受守卫保护
+            //   (种子被删 → findPassGiftCostConfig 对全部核销结算 fail-loud)。
+            case "commission_rate", "points_accrual_rate", "high_value_threshold", "turnover_rent_rule",
+                    "pass_gift_cost" -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 table = cfg.table();
                 rejectDefaultSeedArchive(targetId);

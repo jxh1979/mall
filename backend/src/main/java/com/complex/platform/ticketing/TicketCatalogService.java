@@ -523,6 +523,9 @@ public class TicketCatalogService {
                 positiveOrDefault(actual.numPeople(), 1, "num_people"),
                 // 待确认项#1 配置入口：分项标准单价/手动单价（可选，可空回退）。联合票各分项配单价以按比例拆分订单实付。
                 nonNegativeOrNull(actual.componentPriceCent(), "component_price_cent"),
+                // S6 配置入口(HTML:737「每个权益必须在票种配置里标明成本承担方」)：缺省 platform_funded=平台出资型
+                //   (改造前唯一行为)；merchant_concession=商户让利型(不进 G 预扣、核销不与商户结算)。坏值拒绝。
+                requireCostBearer(actual.costBearer()),
                 now,
                 now
         );
@@ -534,6 +537,20 @@ public class TicketCatalogService {
             repository.saveTicketType(ticketType.withStatus("draft", now));
         }
         return repository.saveTicketTypeEntitlement(binding);
+    }
+
+    /** S6：成本承担方取值校验（缺省 platform_funded；坏值中文 400，不落到 DB CHECK 抛 500）。 */
+    private String requireCostBearer(String costBearer) {
+        String value = trimToNull(costBearer);
+        if (value == null) {
+            return TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED;
+        }
+        if (!TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED.equals(value)
+                && !TicketTypeEntitlementRecord.COST_BEARER_MERCHANT_CONCESSION.equals(value)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "成本承担方仅支持 platform_funded(平台出资型) / merchant_concession(商户让利型)");
+        }
+        return value;
     }
 
     /** 该票种现有绑定 + 这条待写入的绑定（同 id 视为改这一条，不重复计）。 */

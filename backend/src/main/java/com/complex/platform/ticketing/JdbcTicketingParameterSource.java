@@ -88,6 +88,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("effective_rule", entitlement.effectiveRule())
                 .addValue("num_people", entitlement.numPeople())
                 .addValue("component_price_cent", entitlement.componentPriceCent())
+                .addValue("cost_bearer", entitlement.costBearer())
                 .addValue("created_at", timestampWithTimeZone(entitlement.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()));
     }

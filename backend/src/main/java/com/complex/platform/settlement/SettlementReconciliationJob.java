@@ -116,7 +116,8 @@ public class SettlementReconciliationJob {
                     discountIncrement,  // D6：重建行还原折扣（与在线一致）
                     0L, null,    // P6:重建行暂不还原综合服务费(fee=0/config=null;fee 特性未启用,重建为罕见修复路径)
                     null,        // V355 beneficiary_entity_id:重建行归商户,无主体受益方
-                    null));      // S3 父票锚点:重建行 fee 恒 0(见上),不参与「一张票一道」判定,置 null
+                    null,        // S3 父票锚点:重建行 fee 恒 0(见上),不参与「一张票一道」判定,置 null
+                    0L, null));  // S6:重建行暂不还原赠送权益预估成本(同 P6 fee 口径,重建为罕见修复路径)
             rebuilt++;
         }
         return rebuilt;

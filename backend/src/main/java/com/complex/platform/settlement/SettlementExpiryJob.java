@@ -105,7 +105,8 @@ public class SettlementExpiryJob {
                     0L,  // D6 discount_amount_cent：到期归项目非核销销售，无套票折扣
                     0L, null,   // P6:到期归项目非专属核销，无综合服务费(fee=0/config=null)
                     null,       // V355 beneficiary_entity_id:本刀未核销款仍归项目公司(口径改归娱乐平台公司/游乐公司在 S8 切换)
-                    null));     // S3 父票锚点:到期归项目不是核销、fee 恒 0,不参与「一张票一道」判定,置 null
+                    null,       // S3 父票锚点:到期归项目不是核销、fee 恒 0,不参与「一张票一道」判定,置 null
+                    0L, null)); // S6:到期归项目不是核销,无赠送权益预估成本(G=0/config=null)
             count++;
         }
         return count;

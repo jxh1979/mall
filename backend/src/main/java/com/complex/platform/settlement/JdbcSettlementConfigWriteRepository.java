@@ -44,7 +44,10 @@ public class JdbcSettlementConfigWriteRepository {
         // V346（P0-E）：营业额抽成规则收进配置中心草案闸。scope = 合同 × 商户
         //（同合同同商户的旧生效规则在转正时软替换；写面在 FinanceService.createTurnoverRentRule，本处只做转正/软删）。
         TURNOVER_RENT_RULE("turnover_rent_rules", "turnover_rent_rule",
-                List.of("contract_id", "merchant_id"));
+                List.of("contract_id", "merchant_id")),
+        // S6（V373）：赠送权益预扣规则按 项目 × 票种（留空=该层通用）。同 Path 2 草案/转正范式。
+        PASS_GIFT_COST("pass_gift_cost_configs", "pass_gift_cost",
+                List.of("project_id", "ticket_type_id"));
 
         private final String table;
         private final String configType;
@@ -225,6 +228,37 @@ public class JdbcSettlementConfigWriteRepository {
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
                 .addValue("amount_cent_per_point", amountCentPerPoint)
+                .addValue("updated_by", updatedBy), String.class);
+    }
+
+    /**
+     * S6(V373)赠送权益预扣规则落草案(项目 × 票种;两留空=平台默认)。两模式二选一:
+     * by_item 按件计(整额必 NULL,票面推导);by_ticket_amount 按票计(整额必填 ≥0)——服务层已校验,DB CHECK 兜底。
+     */
+    public String upsertPassGiftCostDraft(String id, String projectId, String ticketTypeId,
+                                          String predeductMode, Long ticketGiftAmountCent,
+                                          Long monthlyCapAmountCent, String varianceHandling, String updatedBy) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO pass_gift_cost_configs
+                    (id, project_id, ticket_type_id, prededuct_mode, ticket_gift_amount_cent,
+                     monthly_cap_amount_cent, variance_handling, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :ticket_type_id, :prededuct_mode, :ticket_gift_amount_cent,
+                     :monthly_cap_amount_cent, :variance_handling, 'active', TRUE, :updated_by, now())
+                ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(ticket_type_id, '__ANY__'),
+                             is_draft) WHERE status = 'active' DO UPDATE SET
+                    prededuct_mode = EXCLUDED.prededuct_mode,
+                    ticket_gift_amount_cent = EXCLUDED.ticket_gift_amount_cent,
+                    monthly_cap_amount_cent = EXCLUDED.monthly_cap_amount_cent,
+                    variance_handling = EXCLUDED.variance_handling,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                RETURNING id
+                """, new MapSqlParameterSource()
+                .addValue("id", id).addValue("project_id", projectId).addValue("ticket_type_id", ticketTypeId)
+                .addValue("prededuct_mode", predeductMode)
+                .addValue("ticket_gift_amount_cent", ticketGiftAmountCent)
+                .addValue("monthly_cap_amount_cent", monthlyCapAmountCent)
+                .addValue("variance_handling", varianceHandling)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -492,6 +526,19 @@ public class JdbcSettlementConfigWriteRepository {
                            rule_scope || ' / ' || revenue_source || ' · ' || attribution_mode || ' · ' || share_bps || 'bps',
                            updated_at
                       FROM merchant_revenue_attribution_rules WHERE is_draft = TRUE AND status = 'active'
+                    UNION ALL
+                    -- S6 赠送权益预扣规则草案:项目 × 票种。复核人要看得出两模式与金额,join 出票名。
+                    SELECT g.id, 'pass_gift_cost',
+                           'project=' || COALESCE(g.project_id, '__DEFAULT__')
+                               || ' 票种=' || COALESCE(tt.ticket_name, '__ANY__')
+                               || ' 模式=' || CASE g.prededuct_mode WHEN 'by_item' THEN '按件计' ELSE '按票计' END
+                               || COALESCE(' 整额' || g.ticket_gift_amount_cent || '分', '')
+                               || CASE WHEN g.monthly_cap_amount_cent IS NULL THEN ''
+                                       ELSE ' 封顶' || g.monthly_cap_amount_cent || '分' END,
+                           g.updated_at
+                      FROM pass_gift_cost_configs g
+                      LEFT JOIN ticket_types tt ON tt.id = g.ticket_type_id
+                     WHERE g.is_draft = TRUE AND g.status = 'active'
                     UNION ALL
                     -- V346（P0-E）营业额抽成规则草案：合同 × 商户，档位明细挂 turnover_rent_rule_tiers（随规则行整体转正）。
                     SELECT id, 'turnover_rent_rule',

@@ -109,6 +109,24 @@ class BarGiftConsumerTests {
     }
 
     @Test
+    void merchantConcessionGiftFulfillsButCreatesNoPayable() {
+        // S6(HTML:737)：商户让利型 = 商户为引流自行让利,平台不承担成本、不与商户结算——
+        //   履约(0 元单/扣库/出品)照常,但不挂 pass_drink_settlement 应付。
+        CapturingLedger ledger = new CapturingLedger();
+        BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
+
+        settlingConsumer.onGiftVerified(new GiftVerifiedEvent(
+                "ent_mc", "ver_mc", PRODUCT_ID, BAR_ID, null, "merchant_1", PRICE_CENT, "merchant_concession"));
+
+        assertThat(ledger.settledVerificationId).as("让利型不挂商户应付").isNull();
+        BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_mc").orElseThrow();
+        assertThat(redemption.status()).as("履约照常(酒照给客人)").isEqualTo("delivered");
+        assertThat(redemption.note()).contains("merchant concession");
+        assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity())
+                .as("库存照扣").isEqualTo(9);
+    }
+
+    @Test
     void giftWithoutInternalPriceThrowsFailClosed() {
         // S5：没有内部结算价 → 平台无从挂应付（商户白送/零补偿=资金漏），fail-closed 抛错。
         CapturingLedger ledger = new CapturingLedger();

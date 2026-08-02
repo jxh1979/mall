@@ -231,6 +231,19 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public boolean existsArApItemBySource(String direction, String sourceType, String sourceId) {
+        // S6：对齐 uq_ar_ap_items_direction_source 幂等键维度的存在性判断（冲销从未挂出的应付须 no-op）。
+        Boolean exists = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM ar_ap_items
+                                WHERE direction = :direction AND source_type = :source_type AND source_id = :source_id)
+                """, new MapSqlParameterSource()
+                .addValue("direction", direction)
+                .addValue("source_type", sourceType)
+                .addValue("source_id", sourceId), Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
     public Optional<ArApItemRecord> findReserveWithheldByStatementForUpdate(String statementId) {
         // V304：某计算单的待释放留存应付（唯一：uq(direction,source_type,source_id)），FOR UPDATE 行锁串行化并发释放。
         return jdbcTemplate.query("""

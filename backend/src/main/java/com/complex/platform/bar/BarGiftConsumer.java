@@ -173,6 +173,13 @@ public class BarGiftConsumer {
             // S5：自营吧无商户对手方 → 不挂应付，但成本已按内部结算价固化在本行，明记原因不留黑洞。
             note = note + "; platform-operated bar: cost borne by platform, no merchant payable";
         }
+        // S6 成本承担方(HTML:737)：商户让利型 = 商户为引流自行让利,平台不承担成本、不与商户结算 → 不挂应付。
+        //   履约(0 元单/出品/扣库)照常——酒照给客人,只是钱谁出的问题。冲正侧由 reverseGiftSettlementPayable
+        //   的「原应付存在性守卫」对称保护(从未挂出的应付冲正 no-op),此处无需再传信号。
+        boolean merchantConcession = "merchant_concession".equals(event.costBearer());
+        if (merchantConcession) {
+            note = note + "; merchant concession: cost borne by merchant, no platform payable";
+        }
 
         // 4) 出品 deliver 事件（回填 inventory_movement_id 关联库存流水）。
         repository.saveProductionTicketEvent(new BarProductionTicketEventRecord(
@@ -221,7 +228,8 @@ public class BarGiftConsumer {
         }
         // 通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b）：按票务侧固化的内部结算价向提供方酒吧挂应付。
         // 自营吧(merchantId=null)/未启用结算(receivableLedgerService=null) → 无对手方，不挂应付（成本已记在 note）。
-        if (receivableLedgerService != null && merchantId != null) {
+        // S6：商户让利型(merchant_concession)平台不承担成本 → 不挂应付（原因已记在 note）。
+        if (receivableLedgerService != null && merchantId != null && !merchantConcession) {
             receivableLedgerService.createPayableForGiftSettlement(verificationId, merchantId, settlementPriceCent);
         }
     }

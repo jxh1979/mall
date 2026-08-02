@@ -106,6 +106,17 @@ public final class SettlementConfigWriteRequests {
                                           Long highValueThresholdCent) {
     }
 
+    /**
+     * S6(V373)pass_gift_cost_configs:赠送权益预估成本预扣规则。范围=项目 × 票种(留空=该层通用)。
+     * predeductMode 二选一:by_item 按件计(票面各权益数量 × 内部结算价之和,ticketGiftAmountCent 必须留空)/
+     * by_ticket_amount 按票计(该票种赠送部分售价整额,ticketGiftAmountCent 必填 ≥0,0=预扣关闭态)。
+     * monthlyCapAmountCent 留空=不封顶;varianceHandling 留空=platform_absorb(差额留娱乐平台公司,S7 消费)。
+     */
+    public record PassGiftCostRequest(String idempotencyKey, String projectId, String ticketTypeId,
+                                      String predeductMode, Long ticketGiftAmountCent,
+                                      Long monthlyCapAmountCent, String varianceHandling) {
+    }
+
     /** 梯子整体转正 body(§3):projectId 可空=全局默认梯子。 */
     public record RankTiersActivateRequest(String projectId) {
     }

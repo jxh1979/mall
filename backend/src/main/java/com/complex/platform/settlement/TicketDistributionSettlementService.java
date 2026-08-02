@@ -55,6 +55,8 @@ public class TicketDistributionSettlementService {
     static final String REVENUE_STREAM_ALL_PASS_TICKET = "all_pass_ticket";
     // S4:门票综合服务费收入流(覆盖所有门票,不止通票)——收款主体由归属配置解析(V370 种子=娱乐平台公司)。
     static final String REVENUE_STREAM_TICKET_SERVICE_FEE = "ticket_service_fee";
+    // S6:赠送权益预估成本收入流——收款主体由归属配置解析(V372 种子=娱乐平台公司 be_ent_platform)。
+    static final String REVENUE_STREAM_PASS_GIFT_COST = "pass_gift_cost";
     // S11 业态词表(V348 merchants.merchant_type 五值封口)。酒吧业态即「娱乐平台公司」那一支。
     static final String FORMAT_BAR = "bar";
     private static final String BENEFICIARY_ENTITY = "entity";
@@ -124,17 +126,19 @@ public class TicketDistributionSettlementService {
         long ticketRevenue = 0L;
         long comboDiscountCent = 0L; // 本月项目公司实际承担的折扣入账(各业态 + 后续专属直付累加)。
         long pooledServiceFee = 0L;  // S4 门票综合服务费·池链支(F):Σ各业态当月逐笔计提,归娱乐平台公司。
+        long pooledGiftCost = 0L;    // S6 赠送权益预估成本(G):Σ各业态当月逐笔计提,归娱乐平台公司。
         for (var fr : formatRows) {
             long borne = platformBorneDiscount(discountCfg, fr.discountCent());
             formatShares.put(fr.businessFormat(),
                     new FormatShare(fr.businessFormat(), fr.revenueCent() + borne, borne, 0L,
-                            fr.compServiceFeeCent()));
+                            fr.compServiceFeeCent(), fr.giftCostCent()));
             ticketRevenue += fr.revenueCent() + borne;
             comboDiscountCent += borne;
             pooledServiceFee += fr.compServiceFeeCent();
+            pooledGiftCost += fr.giftCostCent();
         }
         // K20 不重不漏:业态汇总必须恰好覆盖同一批进池核销(分组条件写错/漏一个业态会在这里响亮停,
-        //   而不是悄悄少算一笔)。收入与综合服务费两个合计都核——费漏一个业态,娱乐平台公司就少收一笔。
+        //   而不是悄悄少算一笔)。收入/综合服务费/赠送权益预估成本三个合计都核——漏一个业态,娱乐平台公司就少收一笔。
         var pooledTotals = repository.sumPooledTotals(projectId, windowStart, windowEnd);
         if (ticketRevenue - comboDiscountCent != pooledTotals.revenueCent()) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
@@ -145,6 +149,11 @@ public class TicketDistributionSettlementService {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
                     "业态综合服务费汇总与进池计提总额不符:Σ各业态服务费 " + pooledServiceFee
                             + " ≠ 进池计提合计 " + pooledTotals.compServiceFeeCent());
+        }
+        if (pooledGiftCost != pooledTotals.giftCostCent()) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
+                    "业态赠送权益预估成本汇总与进池计提总额不符:Σ各业态 G " + pooledGiftCost
+                            + " ≠ 进池计提合计 " + pooledTotals.giftCostCent());
         }
 
         // ② 赠酒成本不在此扣(D5,2026-07-21 用户拍板删):通票免费酒水由 bar 域 BarGiftConsumer 每次核销按【内部结算价】
@@ -164,7 +173,10 @@ public class TicketDistributionSettlementService {
         // 渠道费按各业态毛额占比摊下去;分摊尾差归酒吧支(与「尾差归项目公司/平台兜底」同一范式,不摊给别家)。
         allocateChannelFee(formatShares, channelFee, ticketRevenue);
 
-        // ④⑤ 可分配池(唯一的池)= 【酒吧业态】净份额 = 酒吧毛额 − 摊到的渠道费 − 酒吧侧综合服务费(池链支)。
+        // ④⑤ 可分配池(唯一的池)= 【酒吧业态】净份额 = 酒吧毛额 − 摊到的渠道费 − 酒吧侧 G − 酒吧侧综合服务费(池链支)。
+        //    S6:P = R − C − G − F_pool(HTML:739/:742 瀑布顺序——先扣赠送权益预估成本,再扣门票综合服务费)。
+        //    G 按业态跟核销走(照 S4 的 F 同一范式):酒吧份额扣酒吧的 G,别的业态不替它埋单;
+        //    常态首笔核销=入场(酒吧业态)→G 全落酒吧行,与 HTML:742「酒吧份额再依次扣掉」一致。
         //    游乐/餐饮/零售的净份额各走自己的出口,不进这个池;各业态的综合服务费同样从各自净份额里扣。
         //    S4:池内【不再二次扣任何留存】(业务 HTML 明文)——原「池 × 20% 项目留存」与综合服务费是同一项,
         //    已由等价保值种子(V370)平移进综合服务费费率,金额逐分不变、名目与收款方按 HTML 正名。
@@ -240,7 +252,7 @@ public class TicketDistributionSettlementService {
         //   专属直付(exclusive_full)明细是「毛额 − 每笔实收服务费」的整数补数,不产生舍入 → 不进尾差口径。
         long roundingResidual = MoneyRounding.residual(pooled.exactTotal(), pooledDistributed);
         verifyConservation(pooled.exactTotal(), pooledDistributed, roundingResidual, pooled.items().size());
-        verifyFormatSplit(formatShares.values(), ticketRevenue, channelFee, pooledServiceFee);
+        verifyFormatSplit(formatShares.values(), ticketRevenue, channelFee, pooledServiceFee, pooledGiftCost);
         // 越池判定按【应分总额】(= Σ已舍入 + 尾差)而非 Σ已舍入:特批闸管的是「业务上分超了池」,
         //   不该被 ±n/2 分的舍入尾差触发(尾差本就由平台兜底,不需要为几分钱把整月单打回待特批)。
         //   无舍入(按客数/固定额/比例整除得尽)时应分总额 ≡ Σ已舍入 → 与改造前逐分同判(零行为变更)。
@@ -257,12 +269,16 @@ public class TicketDistributionSettlementService {
         //   财务对账时「这笔费归了谁」直接看单据,不用追当时配置长什么样。
         String feeBeneficiaryEntityId =
                 attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_TICKET_SERVICE_FEE);
+        // S6 G 收款主体快照:归娱乐平台公司(V372 种子;项目级可覆盖),月结时定格进单据。
+        String giftBeneficiaryEntityId =
+                attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_PASS_GIFT_COST);
 
         String billId = idFor(projectId, month);
         repository.upsertBill(new SettlementBillRecord(
                 billId, projectId, periodStart, periodEnd,
                 ticketRevenue, channelFee, availablePool, distributed,
                 pooledServiceFee, exclusiveServiceFee, feeBeneficiaryEntityId,
+                pooledGiftCost, giftBeneficiaryEntityId,
                 method, specialApprovalRef, status, attributedEntityId, comboDiscountCent,
                 roundingResidual));
 
@@ -280,7 +296,8 @@ public class TicketDistributionSettlementService {
                     : null;
             repository.upsertFormatShare(new SettlementBillFormatShareRecord(
                     actualBillId, share.format(), share.grossCent(), share.platformBorneCent(),
-                    share.channelFeeCent(), share.compServiceFeeCent(), share.netCent(), kind, entityId));
+                    share.channelFeeCent(), share.compServiceFeeCent(), share.giftCostCent(),
+                    share.netCent(), kind, entityId));
         }
         for (ItemCalc item : items) {
             // 专属直付明细 id 加 method 后缀,与该家池分账明细 id 区分(否则 PK/唯一键相撞被覆盖丢账)。
@@ -409,19 +426,21 @@ public class TicketDistributionSettlementService {
     }
 
     /**
-     * K20 业态份额拆分守恒（fail-loud）：{@code Σ各业态净份额 + 渠道费 + 综合服务费(池链支) ≡ 通票收入毛额}，
-     * 且 {@code Σ各业态渠道费 ≡ 整单渠道费}、{@code Σ各业态综合服务费 ≡ 池链支合计}。
+     * K20 业态份额拆分守恒（fail-loud）：{@code Σ各业态净份额 + 渠道费 + 赠送权益预估成本 + 综合服务费(池链支) ≡ 通票收入毛额}，
+     * 且 {@code Σ各业态渠道费 ≡ 整单渠道费}、{@code Σ各业态综合服务费 ≡ 池链支合计}、{@code Σ各业态 G ≡ G 合计}。
      * 分摊写错会让某个业态凭空多拿或少拿——这种错在月末对账时极难查（数字都「差不多对」），所以宁可当场拒绝出账。
      */
     private void verifyFormatSplit(java.util.Collection<FormatShare> shares, long ticketRevenue,
-                                   long channelFee, long pooledServiceFee) {
+                                   long channelFee, long pooledServiceFee, long pooledGiftCost) {
         long netTotal = 0L;
         long feeTotal = 0L;
         long svcFeeTotal = 0L;
+        long giftCostTotal = 0L;
         for (FormatShare s : shares) {
             netTotal += s.netCent();
             feeTotal += s.channelFeeCent();
             svcFeeTotal += s.compServiceFeeCent();
+            giftCostTotal += s.giftCostCent();
         }
         if (feeTotal != channelFee) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
@@ -432,9 +451,15 @@ public class TicketDistributionSettlementService {
                     "业态份额守恒校验失败(综合服务费):Σ各业态综合服务费 " + svcFeeTotal
                             + " ≠ 池链支合计 " + pooledServiceFee);
         }
-        if (netTotal + channelFee + pooledServiceFee != ticketRevenue) {
+        if (giftCostTotal != pooledGiftCost) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
+                    "业态份额守恒校验失败(赠送权益预估成本):Σ各业态 G " + giftCostTotal
+                            + " ≠ G 合计 " + pooledGiftCost);
+        }
+        if (netTotal + channelFee + pooledGiftCost + pooledServiceFee != ticketRevenue) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
                     "业态份额守恒校验失败(拆份额):Σ各业态净份额 " + netTotal + " + 渠道费 " + channelFee
+                            + " + 赠送权益预估成本 " + pooledGiftCost
                             + " + 综合服务费 " + pooledServiceFee + " ≠ 通票收入 " + ticketRevenue);
         }
     }
@@ -474,20 +499,21 @@ public class TicketDistributionSettlementService {
 
     /**
      * S11 某业态当月的份额（计算中间结果）：毛额 = 已核销净额 + 项目承担的折扣补回；
-     * S4:净份额 = 毛额 − 摊到的渠道费 − 本业态计提的门票综合服务费(池链支,归娱乐平台公司)。
+     * S4/S6:净份额 = 毛额 − 摊到的渠道费 − 本业态计提的赠送权益预估成本(G) − 本业态计提的门票综合服务费
+     * (池链支;G 与 F 都归娱乐平台公司,瀑布顺序照 HTML:739 先 G 后 F——减法交换律下金额同,列示按此序)。
      */
     private record FormatShare(String format, long grossCent, long platformBorneCent, long channelFeeCent,
-                               long compServiceFeeCent) {
+                               long compServiceFeeCent, long giftCostCent) {
         FormatShare(String format, long grossCent, long platformBorneCent) {
-            this(format, grossCent, platformBorneCent, 0L, 0L);
+            this(format, grossCent, platformBorneCent, 0L, 0L, 0L);
         }
 
         FormatShare withChannelFee(long fee) {
-            return new FormatShare(format, grossCent, platformBorneCent, fee, compServiceFeeCent);
+            return new FormatShare(format, grossCent, platformBorneCent, fee, compServiceFeeCent, giftCostCent);
         }
 
         long netCent() {
-            return grossCent - channelFeeCent - compServiceFeeCent;
+            return grossCent - channelFeeCent - giftCostCent - compServiceFeeCent;
         }
     }
 

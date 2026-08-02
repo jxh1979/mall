@@ -296,6 +296,16 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     }
 
     /**
+     * S6：按 (direction, source_type, source_id) 判断分录是否存在。
+     * 供 bar 域赠饮冲销前判断「原应付到底挂没挂出」——商户让利型/自营吧核销时不挂应付,
+     * 冲正若不查存在性会凭空造一笔反向分录(商户平白欠平台一笔钱)。
+     */
+    @Transactional(readOnly = true)
+    public boolean arApItemExistsBySource(String direction, String sourceType, String sourceId) {
+        return repository.existsArApItemBySource(direction, sourceType, sourceId);
+    }
+
+    /**
      * R5 T7 协同：判断某经营日是否已被锁定日结纳入（status='locked'）。
      * 供其他域（如 bar 反结）在改动结账后金额前校验，锁定则须走补录审批，不得直接冲减锁定日 net。
      */

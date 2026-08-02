@@ -95,7 +95,11 @@ public class SettlementReversedConsumer {
                 original.beneficiaryEntityId(),
                 // S3:父票锚点原样沿用被冲那行 —— 冲正把该票的综合服务费净额抵回 0,锚点复位,
                 //   这张票下一次核销可以重新收一道(否则冲掉首笔核销 = 这张票永远免这道费)。
-                original.parentTicketId()));
+                original.parentTicketId(),
+                // S6:赠送权益预估成本取原 ST-VS 行之反(<=0),config_id 沿用原行 → 本冲正行进「项目×规则」
+                //   月累计=天然释放封顶额度;该票 G 净额抵回 0 → 锚点复位,下一次核销可重新计提。
+                -original.giftCostCent(),
+                original.giftCostConfigId()));
     }
 
     /** 原核销所属月已过账 → 红冲落当月(now)；否则落原月(原核销时刻)由该月重算净掉。 */

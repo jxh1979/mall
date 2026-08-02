@@ -126,9 +126,13 @@ class SettlementEntityAttributionS1Tests {
     void missingAttributionReturnsNullAndDoesNotBlockWhenSwitchIsOff() {
         String pid = newProject();
         // 默认开关关(application.yml 不配该键)→ 现状行为:返空、只告警、不阻断。
-        assertThat(attributionRepository.resolveAttribution(pid, "pass_gift_cost")).isNull();
+        // S6/V372 起 pass_gift_cost 也有全局种子(HTML 明文归娱乐平台公司),改用无种子的 venue_rent 证「未配置返空」。
+        assertThat(attributionRepository.resolveAttribution(pid, "venue_rent")).isNull();
         // S4/V370:门票综合服务费归属已种全局默认(HTML 明文归娱乐平台公司)→ 项目未配也能回落解析到。
         assertThat(attributionRepository.resolveManagementEntity(pid, "ticket_service_fee"))
+                .isEqualTo("be_ent_platform");
+        // S6/V372:赠送权益预估成本归属同理已种全局默认(归娱乐平台公司)。
+        assertThat(attributionRepository.resolveManagementEntity(pid, "pass_gift_cost"))
                 .isEqualTo("be_ent_platform");
         // 归属为空也能正常结算(引擎不因此崩)
         seedVerified(pid, "bar_off", 1, 1, 1000L);

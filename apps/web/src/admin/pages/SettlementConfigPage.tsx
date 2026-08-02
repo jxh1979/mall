@@ -27,6 +27,7 @@ type EditKey =
   | "rank_tiers"
   | "merchant_rate"
   | "comprehensive_service_fee"
+  | "pass_gift_cost"
   | "combo_discount"
   | "channel_fee"
   | "revenue_stream_attribution"
@@ -41,6 +42,7 @@ const BLOCKS: BlockDef[] = [
   { key: "rank_tiers", title: "排名档位分账梯子", endpoint: "rank-tiers", note: "按销售排名分档分账；当前生效梯子按项目维护，改动落草案、复核转正后生效。" },
   { key: "merchant_rate", title: "商户每客单价 / 固定额", endpoint: "merchant-rate", note: "按「项目 × 商户」配置，改动落草案；可对草案「下线」。" },
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
+  { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后生效。" },
   { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态票面原价×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
   { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成率（万分比），改动落草案。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
@@ -79,6 +81,17 @@ const METHOD_OPTIONS: [string, string][] = [
 const TERM_UNIT_OPTIONS: [string, string][] = [
   ["day", "天"],
   ["month", "月"],
+];
+// S6：赠送权益预扣两模式（业务系统地图「通票收入分账全流程」原文口径）。
+const PREDEDUCT_MODE_OPTIONS: [string, string][] = [
+  ["by_ticket_amount", "按票计（该票种赠送部分的售价整额）"],
+  ["by_item", "按件计（票面各权益数量 × 内部结算价之和）"],
+];
+// S6：预扣与核销实付的差额处理规则（差额消费在后续批次，这里先定规则快照）。
+const VARIANCE_OPTIONS: [string, string][] = [
+  ["platform_absorb", "差额留娱乐平台公司（默认）"],
+  ["carry_forward", "结转下期"],
+  ["true_up_pool", "回补当期可分配池"],
 ];
 const BEARER_OPTIONS: [string, string][] = [
   ["platform_absorb", "平台承担"],
@@ -120,6 +133,7 @@ const GROUP_LABELS: Record<string, string> = {
   rank_tiers: "排名档位",
   merchant_rate: "商户每客/固定额",
   comprehensive_service_fee: "综合服务费",
+  pass_gift_cost: "赠送权益预估成本",
   combo_discount: "套票折扣归属",
   channel_fee: "渠道抽成",
   revenue_stream_attribution: "收入流归因",
@@ -135,6 +149,7 @@ const GROUP_LABELS: Record<string, string> = {
 // V340 提成/积分：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
 // V350 高价值判定阈值：商户级特例条目同理可下线（回落项目/全局默认），全局默认种子由后端守卫拦住。
 // V346 抽成规则：合同终止/换规则时须可下线，下线后该合同不再产生抽成应收。
+// S6 赠送权益预扣：项目/票种特例条目可下线（回落上层默认），全局默认种子由后端守卫拦住。
 const ARCHIVABLE = new Set([
   "merchant_rate",
   "revenue_stream_attribution",
@@ -142,6 +157,7 @@ const ARCHIVABLE = new Set([
   "points_accrual_rate",
   "high_value_threshold",
   "turnover_rent_rule",
+  "pass_gift_cost",
 ]);
 
 type TierRow = { rankFrom: string; rankTo: string; shareBps: string };
@@ -168,6 +184,10 @@ type Form = {
   roleType: string;
   rateBp: string;
   amountCentPerPoint: string;
+  // S6 赠送权益预估成本：预扣模式 + 按票计整额（元，提交时换算成分）+ 差额处理规则。
+  predeductMode: string;
+  ticketGiftAmountYuan: string;
+  varianceHandling: string;
 };
 const EMPTY_FORM: Form = {
   projectId: "", methodType: "by_venue_per_guest",
@@ -176,6 +196,7 @@ const EMPTY_FORM: Form = {
   discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
+  predeductMode: "by_ticket_amount", ticketGiftAmountYuan: "", varianceHandling: "platform_absorb",
 };
 
 function nextKey(prefix: string) {
@@ -562,6 +583,45 @@ function editSteps(
         <label>固定额（分，可留空；与费率二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label>
         <label>月度封顶（分，可留空 = 不封顶；比例/固定额都受此上限）<input data-testid="settlement-config-field-monthlyCapAmountCent" type="number" min={0} value={form.monthlyCapAmountCent} onChange={setField("monthlyCapAmountCent")} /></label></>);
       break;
+    case "pass_gift_cost":
+      content = (<>{projectField}
+        {canTicketTypeView ? (
+          <label>票种（留空 = 该范围内所有票种通用）
+            <select data-testid="settlement-config-field-ticketTypeId" value={form.ticketTypeId} onChange={setField("ticketTypeId")}>
+              <option value="">全部票种通用</option>
+              {ticketTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.ticketName ?? t.id}</option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label>票种 id（无票种查看权限，暂按 id 手填；留空 = 全部票种通用）
+            <input data-testid="settlement-config-field-ticketTypeId" value={form.ticketTypeId} onChange={setField("ticketTypeId")} />
+          </label>
+        )}
+        <label>预扣模式
+          <select data-testid="settlement-config-field-predeductMode" value={form.predeductMode} onChange={setField("predeductMode")}>
+            {PREDEDUCT_MODE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        {form.predeductMode === "by_ticket_amount" ? (
+          <label>该票种赠送部分的售价整额（元；0 = 预扣关闭）
+            <input data-testid="settlement-config-field-ticketGiftAmountYuan" type="number" min={0} step="0.01" value={form.ticketGiftAmountYuan} onChange={setField("ticketGiftAmountYuan")} />
+          </label>
+        ) : (
+          <div style={{ fontSize: 12 }} data-testid="settlement-config-by-item-hint">
+            按件计的预扣金额由票面推导（各赠送权益数量 × 提供方内部结算价之和），无需手填；商户让利型权益不进预扣。
+          </div>
+        )}
+        <label>每月封顶（分，可留空 = 不封顶）
+          <input data-testid="settlement-config-field-monthlyCapAmountCent" type="number" min={0} value={form.monthlyCapAmountCent} onChange={setField("monthlyCapAmountCent")} />
+        </label>
+        <label>预扣与实付差额处理规则
+          <select data-testid="settlement-config-field-varianceHandling" value={form.varianceHandling} onChange={setField("varianceHandling")}>
+            {VARIANCE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label></>);
+      break;
     case "combo_discount":
       content = (<>{projectField}
         <label>折扣归属
@@ -668,6 +728,11 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: Ti
     case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期", value: `${form.specialApprovalTermValue || "3"} ${form.specialApprovalTermUnit === "day" ? "天" : "个月"}` }];
     case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
+    case "pass_gift_cost": return [scope, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) },
+      { label: "预扣模式", value: PREDEDUCT_MODE_OPTIONS.find(([v]) => v === form.predeductMode)?.[1] ?? form.predeductMode },
+      { label: "按票计整额", value: form.predeductMode === "by_ticket_amount" ? `${form.ticketGiftAmountYuan || "0"} 元` : "由票面推导" },
+      { label: "每月封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" },
+      { label: "差额处理", value: VARIANCE_OPTIONS.find(([v]) => v === form.varianceHandling)?.[1] ?? form.varianceHandling }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }, { label: "通票凑整允许误差", value: `${form.roundingToleranceYuan || "0"} 元` }];
     case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
@@ -698,6 +763,16 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
       if (hasFixed && !isIntInRange(form.fixedAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "固定额需为不小于 0 的整数（分）。";
       if (hasFixed && Number(feeStr) !== 0) return "配固定额时费率万分比须为 0（两者二选一）。";
       if (orUndef(form.monthlyCapAmountCent) !== undefined && !isIntInRange(form.monthlyCapAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "月度封顶需为不小于 0 的整数（分），留空 = 不封顶。";
+      return null;
+    }
+    case "pass_gift_cost": {
+      if (form.predeductMode === "by_ticket_amount") {
+        const yuan = Number(form.ticketGiftAmountYuan);
+        if (form.ticketGiftAmountYuan.trim() === "" || !Number.isFinite(yuan) || yuan < 0) {
+          return "按票计模式必须填该票种赠送部分的售价整额（元，可为 0 = 预扣关闭）。";
+        }
+      }
+      if (orUndef(form.monthlyCapAmountCent) !== undefined && !isIntInRange(form.monthlyCapAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "每月封顶需为不小于 0 的整数（分），留空 = 不封顶。";
       return null;
     }
     case "combo_discount":
@@ -744,6 +819,16 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
         feeBps: form.feeBps.trim() === "" ? 0 : Number(form.feeBps),
         fixedAmountCent: orUndef(form.fixedAmountCent) === undefined ? null : Number(form.fixedAmountCent),
         monthlyCapAmountCent: orUndef(form.monthlyCapAmountCent) === undefined ? null : Number(form.monthlyCapAmountCent),
+      };
+    case "pass_gift_cost":
+      return {
+        idempotencyKey, projectId: project, ticketTypeId: orUndef(form.ticketTypeId),
+        predeductMode: form.predeductMode,
+        // 按件计不许带整额（后端与 DB CHECK 同锁）；按票计元→分。
+        ticketGiftAmountCent: form.predeductMode === "by_ticket_amount"
+          ? Math.round(Number(form.ticketGiftAmountYuan || "0") * 100) : null,
+        monthlyCapAmountCent: orUndef(form.monthlyCapAmountCent) === undefined ? null : Number(form.monthlyCapAmountCent),
+        varianceHandling: form.varianceHandling,
       };
     case "combo_discount":
       return { idempotencyKey, projectId: project, discountBearer: form.discountBearer, splitPlatformBps: Number(form.splitPlatformBps || "0"),

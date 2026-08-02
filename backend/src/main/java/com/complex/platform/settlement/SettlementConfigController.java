@@ -10,6 +10,7 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionR
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersActivateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
@@ -103,6 +104,13 @@ public class SettlementConfigController {
     @PostMapping("/high-value-threshold")
     public ApiResponse<Void> saveHighValueThreshold(@RequestBody HighValueThresholdRequest request) {
         writeService.saveHighValueThreshold(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /** S6(V373)：赠送权益预估成本预扣规则（项目 × 票种，两模式二选一）落草案。 */
+    @PostMapping("/pass-gift-cost")
+    public ApiResponse<Void> savePassGiftCost(@RequestBody PassGiftCostRequest request) {
+        writeService.savePassGiftCost(request, requireManageActor());
         return ApiResponse.ok(null);
     }
 

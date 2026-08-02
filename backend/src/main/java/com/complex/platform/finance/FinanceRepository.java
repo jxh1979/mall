@@ -227,6 +227,18 @@ public interface FinanceRepository {
         return 0;
     }
 
+    /**
+     * S6：按 (direction, source_type, source_id) 判断分录是否存在（对齐 uq_ar_ap_items_direction_source 幂等键维度）。
+     * 用途：冲销一笔「从未挂出」的应付必须 no-op——原应付因商户让利型/自营吧等被跳过时，冲正不得凭空造一笔反向分录。
+     * default 兜底内存 filter 供测试双子；真 Jdbc @Override 为 EXISTS 查询。
+     */
+    default boolean existsArApItemBySource(String direction, String sourceType, String sourceId) {
+        return listArApItems().stream()
+                .anyMatch(i -> direction.equals(i.direction())
+                        && sourceType.equals(i.sourceType())
+                        && sourceId.equals(i.sourceId()));
+    }
+
     ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment);
 
     Optional<ArApPaymentRecord> findArApPaymentById(String id);
