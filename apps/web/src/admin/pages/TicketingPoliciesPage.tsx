@@ -82,9 +82,17 @@ const BAR_ENTITLEMENT_KINDS = [
   { value: "admission", label: "入场资格" },
 ];
 
+// V376（2026-08-01 拍板）：赠送权益的成本承担方必选——漏标后端拒保存/拒发布，前端先拦。
+// 平台出资型=平台按内部结算价与提供商户结算（计入赠送权益预估成本）；商户让利型=平台不承担成本、不与商户结算。
+const COST_BEARER_OPTIONS = [
+  { value: "platform_funded", label: "平台出资型（平台按内部结算价与商户结算）" },
+  { value: "merchant_concession", label: "商户让利型（平台不结算）" },
+];
+
 // 组合表单里的酒吧权益行。
 // barItemRef：酒水兑换必填——指向该酒吧的商品，成本按这件商品的内部结算价与这家酒吧结算。
-type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string; barItemRef: string };
+// costBearer：酒水兑换为赠送（票面价 0）时必选——这杯酒的成本谁出（V376）。
+type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string; barItemRef: string; costBearer: string };
 // 提供方商品（下拉数据源：该酒吧自己的商品）。
 type BarProductRow = { id: string; barId: string; productName: string };
 // 票面赠酒清单行（按酒吧分组，售票时写明票面）。
@@ -99,7 +107,8 @@ type GiftCoverageRow = {
 // 餐饮权益行（用户2026-07-06 拍板）：选餐厅商户 + 价格(可0) + 折扣 + 内部结算价。
 //   结算按【内部结算价】全额归餐厅商户(exclusive_merchant_id + agreement_price_cent，走 §6.4 不分摊直付)；
 //   价格(面值,可0)与折扣仅为售卖/展示口径，不参与结算(核销结算价=内部结算价，不再把折扣当面值乱记)。
-type DiningLine = { merchantId: string; valueYuan: string; discount: string; internalYuan: string };
+// costBearer：价格 0（纯赠送）时必选——这份赠品的成本谁出（V376）。
+type DiningLine = { merchantId: string; valueYuan: string; discount: string; internalYuan: string; costBearer: string };
 
 function toRows<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -172,7 +181,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
   const [priceForm, setPriceForm] = React.useState({ templateId: "", priceYuan: "", reason: "" });
   // 区3 通票组装（票种绑权益）
-  const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "" });
+  const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "" });
   // 区4 派生价规则
   const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "0.8", fixedYuan: "" });
   // 批3 第三方券:把权益模板配成第三方券 + 对账文件核销回流导入。
@@ -480,6 +489,16 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setGlobalError("请选择票种与权益模板");
       return;
     }
+    // V376 前置拦：赠送权益（票面原价 0/未填 且 赠饮/实物类模板）必须标成本承担方，漏标后端也会拒。
+    //   模板列表拿不到「专属商户」信息的（如餐饮专属直付类），由后端兜底点名报错。
+    const boundTemplate = templates.find((t) => t.id === bindForm.templateId);
+    const looksLikeGift = boundTemplate
+      && (boundTemplate.entitlementType === "gift_drink" || boundTemplate.entitlementKind === "physical")
+      && !(Number(bindForm.componentPriceYuan) > 0);
+    if (looksLikeGift && !bindForm.costBearer) {
+      setGlobalError(`「${boundTemplate.name}」是赠送权益（票面原价 0），请选择成本承担方（商户让利型/平台出资型）。`);
+      return;
+    }
     await api.post(`/api/v1/ticketing/ticket-types/${bindForm.ticketTypeId}/entitlements`, {
       idempotency_key: crypto.randomUUID(),
       entitlement_template_id: bindForm.templateId,
@@ -491,6 +510,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       component_price_cent: bindForm.componentPriceYuan.trim() === ""
         ? null
         : Math.round(Number(bindForm.componentPriceYuan) * 100),
+      // V376：成本承担方（赠送权益必选；非赠送类可空）。
+      cost_bearer: bindForm.costBearer || null,
     });
     setActionResult({ action: "ticket_entitlement_bound", ticketTypeId: bindForm.ticketTypeId });
     reload();
@@ -599,11 +620,11 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
 
   function addBarLine() {
     const merchantId = merchants[0]?.id ?? "";
-    setBarLines([...barLines, { merchantId, kind: "gift_drink", totalTimes: "1", valueYuan: "", barItemRef: "" }]);
+    setBarLines([...barLines, { merchantId, kind: "gift_drink", totalTimes: "1", valueYuan: "", barItemRef: "", costBearer: "" }]);
     if (merchantId) void loadBarProducts(merchantId);
   }
   function addDiningLine() {
-    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", internalYuan: "" }]);
+    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", internalYuan: "", costBearer: "" }]);
   }
 
   // 创建单条权益模板并绑定到目标通票。merchantId 必填（后端强制）。
@@ -621,6 +642,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     // S11 票面原价（分）：这份权益在票面上值多少钱，决定客人这笔钱按什么比例分给它所属的业态。
     //   免费/赠送填 0（不分钱，成本另按内部结算价与提供方结算）。与内部结算价是两条价线，不可互相顶替。
     componentPriceCent: number;
+    // V376 成本承担方：赠送权益（票面价 0 的提供方兑付类）必填，漏标后端拒保存；非赠送类传 null。
+    costBearer?: string | null;
   }, ticketTypeId: string) {
     const tpl = await api.post<{ id: string }>("/api/v1/ticketing/entitlement-templates", {
       idempotency_key: crypto.randomUUID(),
@@ -641,6 +664,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       total_times: payload.totalTimes,
       num_people: 1,
       component_price_cent: payload.componentPriceCent,
+      // V376：赠送权益必须标成本承担方（商户让利型/平台出资型），漏标后端拒保存/拒发布。
+      cost_bearer: payload.costBearer ?? null,
     });
   }
 
@@ -665,6 +690,19 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setComboError(`${merchantName(missingProduct.merchantId)} 的酒水兑换请选择赠送的商品。`);
       return;
     }
+    // V376：赠送权益（票面价 0）必须标成本承担方——这杯酒/这份赠品的成本谁出，漏标后端也会拒。
+    const missingBarBearer = barLines.find((line) =>
+      line.merchantId && line.kind === "gift_drink" && !(Number(line.valueYuan) > 0) && !line.costBearer);
+    if (missingBarBearer) {
+      setComboError(`${merchantName(missingBarBearer.merchantId)} 的酒水兑换是赠送权益，请选择成本承担方（商户让利型/平台出资型）。`);
+      return;
+    }
+    const missingDiningBearer = diningLines.find((line) =>
+      line.merchantId && !(Number(line.valueYuan) > 0) && !line.costBearer);
+    if (missingDiningBearer) {
+      setComboError(`${merchantName(missingDiningBearer.merchantId)} 的餐饮项是纯赠送（价格 0），请选择成本承担方（商户让利型/平台出资型）。`);
+      return;
+    }
     setComboError("");
     setComboBusy(true);
     try {
@@ -681,6 +719,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           barItemRef: line.kind === "gift_drink" ? line.barItemRef : null,
           // 票面原价 = 这一行填的价格；赠送/免费的留空即 0（不参与分钱）。
           componentPriceCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
+          // V376：酒水兑换的成本承担方（赠送时必选，上方已前置拦）。入场资格无此概念。
+          costBearer: line.kind === "gift_drink" ? (line.costBearer || null) : null,
         }, comboTicketId);
       }
       // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
@@ -719,6 +759,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           exclusiveMerchantId: line.merchantId,
           // 票面原价 = 这一行填的价格（0=纯赠送，不参与分钱）。内部结算价是另一条线，不能拿来当票面原价。
           componentPriceCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
+          // V376：纯赠送（价格 0）的餐饮项必须标成本承担方（上方已前置拦）；有价格的选填。
+          costBearer: line.costBearer || null,
         }, comboTicketId);
       }
       setActionResult({
@@ -1026,7 +1068,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="combo-bar-table">
           <thead>
-            <tr><th>酒吧/商户</th><th>权益</th><th>赠送商品</th><th>次数</th><th>面值（元）</th><th>操作</th></tr>
+            <tr><th>酒吧/商户</th><th>权益</th><th>赠送商品</th><th>成本承担方</th><th>次数</th><th>面值（元）</th><th>操作</th></tr>
           </thead>
           <tbody>
             {barLines.map((line, index) => (
@@ -1049,6 +1091,14 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                       {(barProducts[line.merchantId] ?? []).map((product) => (
                         <option key={product.id} value={product.id}>{product.productName}</option>
                       ))}
+                    </select>
+                  ) : <span>—</span>}
+                </td>
+                <td>
+                  {line.kind === "gift_drink" ? (
+                    <select aria-label="成本承担方" data-testid={`combo-bar-cost-bearer-${index}`} value={line.costBearer} onChange={(event) => updateBarLine(index, { costBearer: event.target.value })}>
+                      <option value="">这杯酒的成本谁出（必选）</option>
+                      {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                     </select>
                   ) : <span>—</span>}
                 </td>
@@ -1111,7 +1161,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="combo-dining-table">
           <thead>
-            <tr><th>餐厅商户</th><th>价格（元，可 0）</th><th>折扣（如 8=八折，选填）</th><th>内部结算价（元）</th><th>操作</th></tr>
+            <tr><th>餐厅商户</th><th>价格（元，可 0）</th><th>折扣（如 8=八折，选填）</th><th>内部结算价（元）</th><th>成本承担方（价格 0 必选）</th><th>操作</th></tr>
           </thead>
           <tbody>
             {diningLines.map((line, index) => (
@@ -1130,6 +1180,12 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 </td>
                 <td>
                   <input aria-label="内部结算价（元）" type="number" min={0} step="0.01" value={line.internalYuan} placeholder="归餐厅的结算价" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, internalYuan: event.target.value } : l))} />
+                </td>
+                <td>
+                  <select aria-label="餐饮成本承担方" data-testid={`combo-dining-cost-bearer-${index}`} value={line.costBearer} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, costBearer: event.target.value } : l))}>
+                    <option value="">纯赠送时必选</option>
+                    {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                  </select>
                 </td>
                 <td><button type="button" className="admin-secondary-button" onClick={() => setDiningLines(diningLines.filter((_, i) => i !== index))}>移除</button></td>
               </tr>
@@ -1279,6 +1335,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <input aria-label="每份次数" type="number" min={1} value={bindForm.totalTimes} onChange={(event) => setBindForm({ ...bindForm, totalTimes: event.target.value })} placeholder="每份次数" />
         <input aria-label="每份核销人数" type="number" min={1} value={bindForm.numPeople} onChange={(event) => setBindForm({ ...bindForm, numPeople: event.target.value })} placeholder="每份人数（多人票>1）" />
         <input aria-label="票面原价（元）" type="number" min={0} step="0.01" value={bindForm.componentPriceYuan} onChange={(event) => setBindForm({ ...bindForm, componentPriceYuan: event.target.value })} placeholder="票面原价（元，免费填0）" data-testid="ticket-bind-component-price" />
+        <select aria-label="成本承担方" data-testid="ticket-bind-cost-bearer" value={bindForm.costBearer} onChange={(event) => setBindForm({ ...bindForm, costBearer: event.target.value })}>
+          <option value="">成本承担方（赠送权益必选）</option>
+          {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+        </select>
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-bind-submit" onClick={() => void bindEntitlement()}>
           绑定权益
         </PermissionButton>

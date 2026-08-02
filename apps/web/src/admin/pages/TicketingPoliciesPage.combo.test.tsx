@@ -58,6 +58,8 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
     // S5：酒水兑换选赠送的商品（成本按该商品内部结算价与这家吧结算）。
     await waitFor(() => expect(screen.getByTestId("combo-bar-product-0").querySelectorAll("option").length).toBe(2));
     fireEvent.change(screen.getByTestId("combo-bar-product-0"), { target: { value: "prod-1" } });
+    // V376：赠送权益（面值空=0）必选成本承担方。
+    fireEvent.change(screen.getByTestId("combo-bar-cost-bearer-0"), { target: { value: "platform_funded" } });
 
     // 勾选游乐设施 + 选游乐权益归属商户（否则 400 前置校验会拦下）。
     fireEvent.click(screen.getByTestId("combo-project-pj-1").querySelector("input")!);
@@ -82,6 +84,36 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
     // S5 回归守卫：酒水兑换模板必须带 bar_item_ref（此前前端根本不发，赠饮模板在后台建不出来）。
     const giftCall = templateCalls.find((c) => (c[1] as Record<string, unknown>).entitlement_type === "gift_drink");
     expect((giftCall?.[1] as Record<string, unknown>).bar_item_ref).toBe("prod-1");
+    // V376 回归守卫：赠送权益绑定必须带 cost_bearer（后端已改必填，不发就整条链拒保存）。
+    const bindCalls = postSpy.mock.calls.filter((c) => String(c[0]).includes("/ticketing/ticket-types/tt-1/entitlements"));
+    expect(bindCalls.some((c) => (c[1] as Record<string, unknown>).cost_bearer === "platform_funded")).toBe(true);
+  });
+
+  it("酒水兑换没选成本承担方：拦下报错，不发任何编排请求", async () => {
+    // V376：赠送权益漏标成本承担方，后端会拒保存——前端在配置阶段就点名拦下。
+    const postSpy = vi.fn(async () => ({}) as unknown);
+    renderPage(postSpy);
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+    fireEvent.click(screen.getByTestId("combo-add-bar"));
+    await waitFor(() => expect(screen.getByTestId("combo-bar-line-0")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("combo-bar-product-0").querySelectorAll("option").length).toBe(2));
+    fireEvent.change(screen.getByTestId("combo-bar-product-0"), { target: { value: "prod-1" } });
+    fireEvent.click(screen.getByTestId("combo-submit"));
+    await waitFor(() => expect(screen.getByTestId("combo-error").textContent).toContain("成本承担方"));
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it("纯赠送餐饮项(价格0)没选成本承担方：拦下报错，不发任何编排请求", async () => {
+    const postSpy = vi.fn(async () => ({}) as unknown);
+    renderPage(postSpy);
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+    fireEvent.click(screen.getByTestId("combo-add-dining"));
+    await waitFor(() => expect(screen.getByTestId("combo-dining-line-0")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("combo-submit"));
+    await waitFor(() => expect(screen.getByTestId("combo-error").textContent).toContain("成本承担方"));
+    expect(postSpy).not.toHaveBeenCalled();
   });
 
   it("酒水兑换没选赠送商品：拦下报错，不发任何编排请求", async () => {
@@ -123,6 +155,8 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
     const row = screen.getByTestId("combo-dining-line-0");
     fireEvent.change(row.querySelector('input[aria-label="内部结算价（元）"]')!, { target: { value: "50" } });
     fireEvent.change(row.querySelector('input[aria-label="折扣"]')!, { target: { value: "8" } });
+    // V376：价格 0=纯赠送，必选成本承担方（这里选商户让利型=平台不结算）。
+    fireEvent.change(screen.getByTestId("combo-dining-cost-bearer-0"), { target: { value: "merchant_concession" } });
 
     fireEvent.click(screen.getByTestId("combo-submit"));
 
@@ -136,6 +170,9 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
       expect(body.exclusive_merchant_id).toBe("mch-1");
       expect(body.merchant_id).toBe("mch-1");
       expect(body.default_value_cent).toBe(0);
+      // V376：纯赠送餐饮的绑定带上所选成本承担方。
+      const bindCalls = postSpy.mock.calls.filter((c) => String(c[0]).includes("/ticketing/ticket-types/tt-1/entitlements"));
+      expect((bindCalls[0]?.[1] as Record<string, unknown>).cost_bearer).toBe("merchant_concession");
     });
   });
 });
