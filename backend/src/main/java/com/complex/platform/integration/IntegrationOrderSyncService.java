@@ -4,6 +4,10 @@ import static com.complex.platform.integration.IntegrationValidation.*;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,82 +24,95 @@ final class IntegrationOrderSyncService {
 
     private final IntegrationRepository repository;
     private final Clock clock;
-    private final IntegrationOperationSupport support;
+    private final AuditedOperationExecutor executor;
+    // reconcileChannel 留痕含结果派生 metadata（dry_run/difference_count），executor 无法表达，保留手写直连。
+    private final IdempotencyService idempotencyService;
+    private final AuditEventService auditEventService;
     // 批6：ticket 回流能力开关（integration.ticket_channel.sync，V071 全局默认关）+ 本地出票端口。
     // 二者可空=未接线（旧构造/单测），ticket 回流 fail-closed 拒收，绝不静默跳过出票。
     private final com.complex.platform.gate.TerminalSwitchGuard switchGuard;
     private final ChannelTicketIssuePort ticketIssuePort;
 
-    IntegrationOrderSyncService(IntegrationRepository repository, Clock clock, IntegrationOperationSupport support) {
-        this(repository, clock, support, null, null);
-    }
-
-    IntegrationOrderSyncService(IntegrationRepository repository, Clock clock, IntegrationOperationSupport support,
+    IntegrationOrderSyncService(IntegrationRepository repository, Clock clock, AuditedOperationExecutor executor,
+                                IdempotencyService idempotencyService, AuditEventService auditEventService,
                                 com.complex.platform.gate.TerminalSwitchGuard switchGuard,
                                 ChannelTicketIssuePort ticketIssuePort) {
         this.repository = repository;
         this.clock = clock;
-        this.support = support;
+        this.executor = executor;
+        this.idempotencyService = idempotencyService;
+        this.auditEventService = auditEventService;
         this.switchGuard = switchGuard;
         this.ticketIssuePort = ticketIssuePort;
     }
 
     PageResponse<IntegrationOrderSyncRecord> listOrderSyncs() {
-        return support.readPage("integration.order_sync.viewed", "integration.order_sync.view_failed",
-                "integration.order_sync.view", "integration_order_sync", repository::listOrderSyncs);
+        return executor.readPage(AuditedOperation.of("integration.order_sync.viewed", "integration.order_sync.view_failed",
+                "integration.order_sync.view", "integration_order_sync"), repository::listOrderSyncs);
     }
 
     IntegrationOrderSyncRecord createOrderSync(IntegrationOrderSyncRequest request) {
-        return support.executeWrite(
+        return executor.executeWrite(
                 "createIntegrationOrderSync",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 IntegrationOrderSyncRecord.class,
-                "integration.order_sync.recorded",
-                "integration.order_sync.record_failed",
-                "integration.order_sync.manage",
-                "integration_order_sync",
-                () -> createOrderSyncOnce(request)
+                AuditedOperation.of(
+                        "integration.order_sync.recorded",
+                        "integration.order_sync.record_failed",
+                        "integration.order_sync.manage",
+                        "integration_order_sync"),
+                () -> createOrderSyncOnce(request),
+                saved -> ((IntegrationOrderSyncRecord) saved).id(),
+                Map.of("operation_id", "createIntegrationOrderSync")
         );
     }
 
     // 未归属回流运营视图：列 merchant_id IS NULL 的 order 行，供人工补渠道门店映射后重跑落商户。
     PageResponse<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
-        return support.readPage("integration.order_sync.unattributed_viewed", "integration.order_sync.unattributed_view_failed",
-                "integration.order_sync.view", "integration_order_sync", repository::listUnattributedOrderSyncs);
+        return executor.readPage(AuditedOperation.of("integration.order_sync.unattributed_viewed",
+                "integration.order_sync.unattributed_view_failed",
+                "integration.order_sync.view", "integration_order_sync"), repository::listUnattributedOrderSyncs);
     }
 
     PageResponse<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
-        return support.readPage("integration.channel_store_map.viewed", "integration.channel_store_map.view_failed",
-                "integration.channel_store_map.view", "integration_channel_store_map", repository::listChannelStoreMaps);
+        return executor.readPage(AuditedOperation.of("integration.channel_store_map.viewed", "integration.channel_store_map.view_failed",
+                "integration.channel_store_map.view", "integration_channel_store_map"), repository::listChannelStoreMaps);
     }
 
     IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRequest request) {
-        return support.executeWrite(
+        return executor.executeWrite(
                 "saveIntegrationChannelStoreMap",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 IntegrationChannelStoreMapRecord.class,
-                "integration.channel_store_map.saved",
-                "integration.channel_store_map.save_failed",
-                "integration.channel_store_map.manage",
-                "integration_channel_store_map",
-                () -> saveChannelStoreMapOnce(request)
+                AuditedOperation.of(
+                        "integration.channel_store_map.saved",
+                        "integration.channel_store_map.save_failed",
+                        "integration.channel_store_map.manage",
+                        "integration_channel_store_map"),
+                () -> saveChannelStoreMapOnce(request),
+                saved -> ((IntegrationChannelStoreMapRecord) saved).id(),
+                Map.of("operation_id", "saveIntegrationChannelStoreMap")
         );
     }
 
     IntegrationChannelStoreMapRecord archiveChannelStoreMap(String id, StatusChangeRequest request) {
         String mapId = requireTextValue(id, "id");
-        return support.executeWrite(
-                "archiveIntegrationChannelStoreMap:" + mapId,
+        String operationId = "archiveIntegrationChannelStoreMap:" + mapId;
+        return executor.executeWrite(
+                operationId,
                 request == null ? null : request.idempotencyKey(),
                 new ChannelStoreMapArchiveFingerprint(mapId, request),
                 IntegrationChannelStoreMapRecord.class,
-                "integration.channel_store_map.archived",
-                "integration.channel_store_map.archive_failed",
-                "integration.channel_store_map.manage",
-                "integration_channel_store_map",
-                () -> archiveChannelStoreMapOnce(mapId, request)
+                AuditedOperation.of(
+                        "integration.channel_store_map.archived",
+                        "integration.channel_store_map.archive_failed",
+                        "integration.channel_store_map.manage",
+                        "integration_channel_store_map"),
+                () -> archiveChannelStoreMapOnce(mapId, request),
+                saved -> ((IntegrationChannelStoreMapRecord) saved).id(),
+                Map.of("operation_id", operationId)
         );
     }
 
@@ -172,38 +189,45 @@ final class IntegrationOrderSyncService {
     // ── 批6 渠道票种映射维护（范式照渠道门店映射）──────────────────────────────
 
     PageResponse<IntegrationChannelTicketTypeMapRecord> listChannelTicketTypeMaps() {
-        return support.readPage("integration.channel_ticket_type_map.viewed",
+        return executor.readPage(AuditedOperation.of("integration.channel_ticket_type_map.viewed",
                 "integration.channel_ticket_type_map.view_failed",
-                "integration.channel_store_map.view", "integration_channel_ticket_type_map",
+                "integration.channel_store_map.view", "integration_channel_ticket_type_map"),
                 repository::listChannelTicketTypeMaps);
     }
 
     IntegrationChannelTicketTypeMapRecord saveChannelTicketTypeMap(IntegrationChannelTicketTypeMapRequest request) {
-        return support.executeWrite(
+        return executor.executeWrite(
                 "saveIntegrationChannelTicketTypeMap",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 IntegrationChannelTicketTypeMapRecord.class,
-                "integration.channel_ticket_type_map.saved",
-                "integration.channel_ticket_type_map.save_failed",
-                "integration.channel_store_map.manage",
-                "integration_channel_ticket_type_map",
-                () -> saveChannelTicketTypeMapOnce(request)
+                AuditedOperation.of(
+                        "integration.channel_ticket_type_map.saved",
+                        "integration.channel_ticket_type_map.save_failed",
+                        "integration.channel_store_map.manage",
+                        "integration_channel_ticket_type_map"),
+                () -> saveChannelTicketTypeMapOnce(request),
+                saved -> ((IntegrationChannelTicketTypeMapRecord) saved).id(),
+                Map.of("operation_id", "saveIntegrationChannelTicketTypeMap")
         );
     }
 
     IntegrationChannelTicketTypeMapRecord archiveChannelTicketTypeMap(String id, StatusChangeRequest request) {
         String mapId = requireTextValue(id, "id");
-        return support.executeWrite(
-                "archiveIntegrationChannelTicketTypeMap:" + mapId,
+        String operationId = "archiveIntegrationChannelTicketTypeMap:" + mapId;
+        return executor.executeWrite(
+                operationId,
                 request == null ? null : request.idempotencyKey(),
                 new ChannelTicketTypeMapArchiveFingerprint(mapId, request),
                 IntegrationChannelTicketTypeMapRecord.class,
-                "integration.channel_ticket_type_map.archived",
-                "integration.channel_ticket_type_map.archive_failed",
-                "integration.channel_store_map.manage",
-                "integration_channel_ticket_type_map",
-                () -> archiveChannelTicketTypeMapOnce(mapId, request)
+                AuditedOperation.of(
+                        "integration.channel_ticket_type_map.archived",
+                        "integration.channel_ticket_type_map.archive_failed",
+                        "integration.channel_store_map.manage",
+                        "integration_channel_ticket_type_map"),
+                () -> archiveChannelTicketTypeMapOnce(mapId, request),
+                saved -> ((IntegrationChannelTicketTypeMapRecord) saved).id(),
+                Map.of("operation_id", operationId)
         );
     }
 
@@ -256,70 +280,84 @@ final class IntegrationOrderSyncService {
     }
 
     PageResponse<IntegrationTaskRecord> listRetryTasks() {
-        return support.readPage("integration.retry_task.viewed", "integration.retry_task.view_failed",
-                "integration.retry.view", "integration_retry_task", repository::listRetryTasks);
+        return executor.readPage(AuditedOperation.of("integration.retry_task.viewed", "integration.retry_task.view_failed",
+                "integration.retry.view", "integration_retry_task"), repository::listRetryTasks);
     }
 
     IntegrationTaskRecord createRetryTask(IntegrationTaskRequest request) {
-        return support.executeWrite(
+        return executor.executeWrite(
                 "createIntegrationRetryTask",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 IntegrationTaskRecord.class,
-                "integration.retry_task.created",
-                "integration.retry_task.create_failed",
-                "integration.retry.manage",
-                "integration_retry_task",
-                () -> createTaskOnce("retry_task", request)
+                AuditedOperation.of(
+                        "integration.retry_task.created",
+                        "integration.retry_task.create_failed",
+                        "integration.retry.manage",
+                        "integration_retry_task"),
+                () -> createTaskOnce("retry_task", request),
+                saved -> ((IntegrationTaskRecord) saved).id(),
+                Map.of("operation_id", "createIntegrationRetryTask")
         );
     }
 
     IntegrationTaskRecord runRetryTaskNow(String id, StatusChangeRequest request) {
         String taskId = requireTextValue(id, "id");
-        return support.executeWrite(
-                "runIntegrationRetryTaskNow:" + taskId,
+        String operationId = "runIntegrationRetryTaskNow:" + taskId;
+        return executor.executeWrite(
+                operationId,
                 request == null ? null : request.idempotencyKey(),
                 new StatusChangeFingerprint(taskId, request),
                 IntegrationTaskRecord.class,
-                "integration.retry_task.run_now",
-                "integration.retry_task.run_now_failed",
-                "integration.retry.manage",
-                "integration_retry_task",
-                () -> runRetryTaskNowOnce(taskId, request)
+                AuditedOperation.of(
+                        "integration.retry_task.run_now",
+                        "integration.retry_task.run_now_failed",
+                        "integration.retry.manage",
+                        "integration_retry_task"),
+                () -> runRetryTaskNowOnce(taskId, request),
+                saved -> ((IntegrationTaskRecord) saved).id(),
+                Map.of("operation_id", operationId)
         );
     }
 
     PageResponse<IntegrationTaskRecord> listCompensationTasks() {
-        return support.readPage("integration.compensation_task.viewed", "integration.compensation_task.view_failed",
-                "integration.compensation.view", "integration_compensation_task", repository::listCompensationTasks);
+        return executor.readPage(AuditedOperation.of("integration.compensation_task.viewed", "integration.compensation_task.view_failed",
+                "integration.compensation.view", "integration_compensation_task"), repository::listCompensationTasks);
     }
 
     IntegrationTaskRecord createCompensationTask(IntegrationTaskRequest request) {
-        return support.executeWrite(
+        return executor.executeWrite(
                 "createIntegrationCompensationTask",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 IntegrationTaskRecord.class,
-                "integration.compensation_task.created",
-                "integration.compensation_task.create_failed",
-                "integration.compensation.manage",
-                "integration_compensation_task",
-                () -> createTaskOnce("compensation_task", request)
+                AuditedOperation.of(
+                        "integration.compensation_task.created",
+                        "integration.compensation_task.create_failed",
+                        "integration.compensation.manage",
+                        "integration_compensation_task"),
+                () -> createTaskOnce("compensation_task", request),
+                saved -> ((IntegrationTaskRecord) saved).id(),
+                Map.of("operation_id", "createIntegrationCompensationTask")
         );
     }
 
     IntegrationTaskRecord resolveCompensationTask(String id, IntegrationTaskResolveRequest request) {
         String taskId = requireTextValue(id, "id");
-        return support.executeWrite(
-                "resolveIntegrationCompensationTask:" + taskId,
+        String operationId = "resolveIntegrationCompensationTask:" + taskId;
+        return executor.executeWrite(
+                operationId,
                 request == null ? null : request.idempotencyKey(),
                 new ResolveTaskFingerprint(taskId, request),
                 IntegrationTaskRecord.class,
-                "integration.compensation_task.resolved",
-                "integration.compensation_task.resolve_failed",
-                "integration.compensation.manage",
-                "integration_compensation_task",
-                () -> resolveCompensationTaskOnce(taskId, request)
+                AuditedOperation.of(
+                        "integration.compensation_task.resolved",
+                        "integration.compensation_task.resolve_failed",
+                        "integration.compensation.manage",
+                        "integration_compensation_task"),
+                () -> resolveCompensationTaskOnce(taskId, request),
+                saved -> ((IntegrationTaskRecord) saved).id(),
+                Map.of("operation_id", operationId)
         );
     }
 
@@ -333,18 +371,19 @@ final class IntegrationOrderSyncService {
      */
     ChannelReconciliationResult reconcileChannel(ChannelReconciliationRequest request) {
         try {
-            ChannelReconciliationResult result = support.executeIdempotent(
+            ChannelReconciliationResult result = idempotencyService.execute(
                     "reconcileIntegrationChannel:" + (request == null ? "null" : request.providerCode()),
                     request == null ? null : request.idempotencyKey(),
                     request,
                     () -> reconcileChannelOnce(request),
                     ChannelReconciliationResult.class
             );
-            support.recordSuccess(
+            auditEventService.recordSuccess(
                     "integration.channel_reconciliation.completed",
                     "integration.reconciliation.manage",
                     "integration_reconciliation_batch",
                     result.batchId() == null ? "dry_run" : result.batchId(),
+                    requestId(),
                     request == null ? null : request.idempotencyKey(),
                     java.util.Map.of(
                             "dry_run", result.dryRun(),
@@ -352,16 +391,29 @@ final class IntegrationOrderSyncService {
             );
             return result;
         } catch (RuntimeException exception) {
-            support.recordFailure(
+            auditEventService.recordFailure(
                     "integration.channel_reconciliation.failed",
                     "integration.reconciliation.manage",
                     "integration_reconciliation_batch",
                     request == null ? "unknown" : request.providerCode(),
+                    requestId(),
                     request == null ? null : request.idempotencyKey(),
-                    support.errorCode(exception)
+                    errorCode(exception)
             );
             throw exception;
         }
+    }
+
+    /** 保持本方法既有留痕口径不变：req_ 随机 request_id / 非业务异常兜底 INTERNAL_ERROR。 */
+    private String requestId() {
+        return "req_" + UUID.randomUUID();
+    }
+
+    private String errorCode(RuntimeException exception) {
+        if (exception instanceof ApiException apiException) {
+            return apiException.code();
+        }
+        return "INTERNAL_ERROR";
     }
 
     private ChannelReconciliationResult reconcileChannelOnce(ChannelReconciliationRequest request) {

@@ -4,8 +4,11 @@ import static com.complex.platform.integration.IntegrationValidation.*;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 final class IntegrationReconciliationService {
@@ -19,49 +22,55 @@ final class IntegrationReconciliationService {
 
     private final IntegrationRepository repository;
     private final Clock clock;
-    private final IntegrationOperationSupport support;
+    private final AuditedOperationExecutor executor;
 
-    IntegrationReconciliationService(IntegrationRepository repository, Clock clock, IntegrationOperationSupport support) {
+    IntegrationReconciliationService(IntegrationRepository repository, Clock clock, AuditedOperationExecutor executor) {
         this.repository = repository;
         this.clock = clock;
-        this.support = support;
+        this.executor = executor;
     }
 
     PageResponse<ReconciliationBatchRecord> listReconciliationBatches() {
-        return support.readPage("integration.reconciliation_batch.viewed", "integration.reconciliation_batch.view_failed",
-                "integration.reconciliation.view", "integration_reconciliation_batch", repository::listReconciliationBatches);
+        return executor.readPage(AuditedOperation.of("integration.reconciliation_batch.viewed", "integration.reconciliation_batch.view_failed",
+                "integration.reconciliation.view", "integration_reconciliation_batch"), repository::listReconciliationBatches);
     }
 
     ReconciliationBatchRecord createReconciliationBatch(ReconciliationBatchRequest request) {
-        return support.executeWrite(
+        return executor.executeWrite(
                 "createIntegrationReconciliationBatch",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 ReconciliationBatchRecord.class,
-                "integration.reconciliation_batch.created",
-                "integration.reconciliation_batch.create_failed",
-                "integration.reconciliation.manage",
-                "integration_reconciliation_batch",
-                () -> createReconciliationBatchOnce(request)
+                AuditedOperation.of(
+                        "integration.reconciliation_batch.created",
+                        "integration.reconciliation_batch.create_failed",
+                        "integration.reconciliation.manage",
+                        "integration_reconciliation_batch"),
+                () -> createReconciliationBatchOnce(request),
+                saved -> ((ReconciliationBatchRecord) saved).id(),
+                Map.of("operation_id", "createIntegrationReconciliationBatch")
         );
     }
 
     PageResponse<ReconciliationDifferenceRecord> listReconciliationDifferences() {
-        return support.readPage("integration.reconciliation_difference.viewed", "integration.reconciliation_difference.view_failed",
-                "integration.reconciliation.view", "integration_reconciliation_difference", repository::listReconciliationDifferences);
+        return executor.readPage(AuditedOperation.of("integration.reconciliation_difference.viewed", "integration.reconciliation_difference.view_failed",
+                "integration.reconciliation.view", "integration_reconciliation_difference"), repository::listReconciliationDifferences);
     }
 
     ReconciliationDifferenceRecord createReconciliationDifference(ReconciliationDifferenceRequest request, String actorUserId) {
-        return support.executeWrite(
+        return executor.executeWrite(
                 "createIntegrationReconciliationDifference",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 ReconciliationDifferenceRecord.class,
-                "integration.reconciliation_difference.created",
-                "integration.reconciliation_difference.create_failed",
-                "integration.reconciliation.manage",
-                "integration_reconciliation_difference",
-                () -> createReconciliationDifferenceOnce(request, actorUserId)
+                AuditedOperation.of(
+                        "integration.reconciliation_difference.created",
+                        "integration.reconciliation_difference.create_failed",
+                        "integration.reconciliation.manage",
+                        "integration_reconciliation_difference"),
+                () -> createReconciliationDifferenceOnce(request, actorUserId),
+                saved -> ((ReconciliationDifferenceRecord) saved).id(),
+                Map.of("operation_id", "createIntegrationReconciliationDifference")
         );
     }
 
@@ -71,16 +80,20 @@ final class IntegrationReconciliationService {
             String actorUserId
     ) {
         String differenceId = requireTextValue(id, "id");
-        return support.executeWrite(
-                "resolveIntegrationReconciliationDifference:" + differenceId,
+        String operationId = "resolveIntegrationReconciliationDifference:" + differenceId;
+        return executor.executeWrite(
+                operationId,
                 request == null ? null : request.idempotencyKey(),
                 new ResolveDifferenceFingerprint(differenceId, request),
                 ReconciliationDifferenceRecord.class,
-                "integration.reconciliation_difference.resolved",
-                "integration.reconciliation_difference.resolve_failed",
-                "integration.reconciliation.resolve",
-                "integration_reconciliation_difference",
-                () -> resolveReconciliationDifferenceOnce(differenceId, request, actorUserId)
+                AuditedOperation.of(
+                        "integration.reconciliation_difference.resolved",
+                        "integration.reconciliation_difference.resolve_failed",
+                        "integration.reconciliation.resolve",
+                        "integration_reconciliation_difference"),
+                () -> resolveReconciliationDifferenceOnce(differenceId, request, actorUserId),
+                saved -> ((ReconciliationDifferenceRecord) saved).id(),
+                Map.of("operation_id", operationId)
         );
     }
 

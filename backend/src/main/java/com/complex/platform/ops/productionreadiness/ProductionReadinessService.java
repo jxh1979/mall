@@ -5,6 +5,8 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.ops.productionreadiness.dto.ProductionReadinessCheckRequest;
 import com.complex.platform.ops.productionreadiness.dto.ProductionReadinessCheckResponse;
 import com.complex.platform.ops.productionreadiness.dto.ProductionReadinessItemResponse;
@@ -45,6 +47,7 @@ public class ProductionReadinessService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor executor;
 
     public ProductionReadinessService(
             ProductionReadinessRepository repository,
@@ -56,36 +59,19 @@ public class ProductionReadinessService {
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.executor = new AuditedOperationExecutor(idempotencyService, auditEventService);
     }
 
     public PageResponse<ProductionReadinessItemResponse> listItems() {
-        try {
-            ensureDefaultItems();
-            List<ProductionReadinessItemResponse> items = repository.findAllItems().stream()
-                    .map(this::toResponse)
-                    .toList();
-            auditEventService.recordSuccess(
-                    "production_readiness.viewed",
-                    "ops.production_readiness.view",
-                    BUSINESS_TYPE,
-                    "all",
-                    requestId(),
-                    null,
-                    Map.of("count", items.size())
-            );
-            return new PageResponse<>(items, 1, 50, items.size());
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    "production_readiness.view_failed",
-                    "ops.production_readiness.view",
-                    BUSINESS_TYPE,
-                    "all",
-                    requestId(),
-                    null,
-                    errorCode(exception)
-            );
-            throw exception;
-        }
+        return executor.readPage(
+                AuditedOperation.of("production_readiness.viewed", "production_readiness.view_failed",
+                        "ops.production_readiness.view", BUSINESS_TYPE),
+                () -> {
+                    ensureDefaultItems();
+                    return repository.findAllItems().stream()
+                            .map(this::toResponse)
+                            .toList();
+                });
     }
 
     public ProductionReadinessItemResponse updateItem(String id, ProductionReadinessItemUpdateRequest request) {

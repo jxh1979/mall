@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
-import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
 
 @Service
 public class AuditedOperationExecutor {
@@ -176,11 +176,7 @@ public class AuditedOperationExecutor {
     }
 
     public String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
+        return Strings.requireText(value, fieldName);
     }
 
     private String codeOf(RuntimeException exception) {

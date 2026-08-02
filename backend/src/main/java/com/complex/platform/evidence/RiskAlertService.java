@@ -62,9 +62,8 @@ public class RiskAlertService {
     private static final Set<String> RISK_LEVELS = Set.of("normal", "suspicious", "high", "critical");
 
     private final RiskAlertRepository repository;
-    private final IdempotencyService idempotencyService;
-    private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor executor;
 
     public RiskAlertService(
             RiskAlertRepository repository,
@@ -73,9 +72,8 @@ public class RiskAlertService {
             AuthorizationService authorizationService
     ) {
         this.repository = repository;
-        this.idempotencyService = idempotencyService;
-        this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.executor = new AuditedOperationExecutor(idempotencyService, auditEventService);
     }
 
     // ── report：创建 open 状态预警 ──────────────────────────────────────────────
@@ -276,19 +274,10 @@ public class RiskAlertService {
         int safeLimit = limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
         String domain = sourceDomain == null ? null : requireDomain(sourceDomain);
         String merchantScope = authorizationService.currentMerchantScope().orElse(null);
-        try {
-            List<RiskAlertRecord> alerts = repository.search(
-                    domain, trimToNull(status), trimToNull(projectId), merchantScope, safeLimit);
-            auditEventService.recordSuccess(
-                    "exception.alerts_viewed", VIEW_PERMISSION, "risk_alert", "all",
-                    null, null, Map.of("count", alerts.size()));
-            return alerts;
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    "exception.alerts_view_failed", VIEW_PERMISSION, "risk_alert", "all",
-                    null, null, codeOf(exception));
-            throw exception;
-        }
+        return executor.readPage(
+                AuditedOperation.of("exception.alerts_viewed", "exception.alerts_view_failed", VIEW_PERMISSION, "risk_alert"),
+                () -> repository.search(domain, trimToNull(status), trimToNull(projectId), merchantScope, safeLimit))
+                .items();
     }
 
     public RiskAlertDetail getDetail(String alertId) {
@@ -363,31 +352,15 @@ public class RiskAlertService {
     ) {
         // P0: 幂等键按 actor 维度隔离，避免跨用户缓存串号。
         String actorId = authorizationService.currentActor().id();
-        String scopedOperationId = actorId + ":" + operationId;
-        try {
-            return idempotencyService.execute(
-                    scopedOperationId,
-                    idempotencyKey,
-                    request,
-                    () -> {
-                        T response = action.get();
-                        auditEventService.recordSuccess(
-                                successEvent,
-                                permissionCode,
-                                "risk_alert",
-                                businessId(response),
-                                null,
-                                idempotencyKey,
-                                Map.of());
-                        return response;
-                    },
-                    responseType
-            );
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent, permissionCode, "risk_alert", null, null, idempotencyKey, codeOf(exception));
-            throw exception;
-        }
+        return executor.executeWrite(
+                actorId + ":" + operationId,
+                idempotencyKey,
+                request,
+                responseType,
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, "risk_alert"),
+                action,
+                this::businessId,
+                Map.of());
     }
 
     private String businessId(Object response) {
@@ -439,12 +412,5 @@ public class RiskAlertService {
                 .replaceAll("^_+|_+$", "");
         String resolved = slug.isEmpty() ? UUID.randomUUID().toString().replace("-", "") : slug;
         return resolved.length() > 56 ? resolved.substring(0, 56) : resolved;
-    }
-
-    private String codeOf(RuntimeException exception) {
-        if (exception instanceof ApiException apiException) {
-            return apiException.code();
-        }
-        return exception.getClass().getSimpleName();
     }
 }
