@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 711 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 713 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -238,6 +238,8 @@
 | terminals | `GET` | `/api/v1/terminals/capability-switches` | `listCapabilitySwitches` | 查询端能力开关 | `-` | `terminal.switch.view` | `staff-token` | `project-device` | web | 否 | `terminal_switch.viewed` | `terminal_switch.view_failed` |
 | terminal | `GET` | `/api/v1/terminals/capability-switches/effective` | `listEffectiveDisabledTerminalSwitches` | 当前终端的已关闭开关行（前端菜单 gating 数据源） | `-` | `not_applicable` | `staff-token` | `platform` | web, miniapp, app, kiosk, tablet, staff_work_phone, staff_private_phone, merchant_portal, merchant_app, mobile_admin | 否 | `terminal_switch.effective_viewed` | `terminal_switch.effective_view_failed` |
 | terminals | `PUT` | `/api/v1/terminals/capability-switches/{id}` | `updateCapabilitySwitch` | 修改端能力开关 | `CapabilitySwitchRequest` | `terminal.switch.manage` | `staff-token` | `project-device` | web | 是 | `terminal_switch.changed` | `terminal_switch.change_failed` |
+| terminals | `GET` | `/api/v1/terminals/devices` | `listTerminalDevices` | 终端设备台账 | `-` | `terminal.switch.view` | `staff-token` | `project-device` | web | 否 | `terminal.device.viewed` | `terminal.device.view_failed` |
+| terminals | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | `updateTerminalDeviceMerchant` | 设备商户归属设置/更换/解除 | `object` | `terminal.device.lifecycle` | `staff-token` | `project-device` | web, mobile_admin | 是 | `terminal.device.merchant_changed` | `terminal.device.merchant_change_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/bind` | `bindDevice` | 设备绑定 | `DeviceBindRequest` | `terminal.device.bind` | `staff-token` | `project-device` | web, staff_work_phone, tablet, kiosk | 是 | `terminal.device.bound` | `terminal.device.bind_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/return` | `returnTerminalDevice` | 归还终端设备 | `DeviceReturnRequest` | `terminal.device.bind` | `staff-token` | `project` | staff_work_phone, tablet, kiosk, web | 是 | `terminal.device.returned` | `terminal.device.returned_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/unbind` | `unbindDevice` | 设备解绑 | `DeviceUnbindRequest` | `terminal.device.unbind` | `staff-token` | `project-device` | web | 是 | `terminal.device.unbound` | `terminal.device.unbind_failed` |
@@ -799,5 +801,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 711 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 713 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

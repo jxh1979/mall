@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 711 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 713 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 326 | 人工权限矩阵正文未覆盖 224 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1422 | 人工事件矩阵正文未覆盖 1380 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 711 | 人工任务映射正文未逐项覆盖 705 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 429 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1426 | 人工事件矩阵正文未覆盖 1384 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 713 | 人工任务映射正文未逐项覆盖 707 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 430 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -320,10 +320,10 @@
 | `staff.tax_bracket.manage` | staff-token | platform | 1 | upsertPayrollTaxBracket | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 4 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks | 已在权限矩阵正文出现 |
-| `terminal.device.lifecycle` | staff-token | - | 4 | markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap | OpenAPI 补充，以本附录为准 |
+| `terminal.device.lifecycle` | staff-token | -, project-device | 5 | updateTerminalDeviceMerchant, markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap | OpenAPI 补充，以本附录为准 |
 | `terminal.device.unbind` | staff-token | project-device | 1 | unbindDevice | 已在权限矩阵正文出现 |
 | `terminal.switch.manage` | staff-token | project-device | 4 | upsertTerminalCanaryRollout, addTerminalCanaryTarget, archiveTerminalCanaryTarget, updateCapabilitySwitch | 已在权限矩阵正文出现 |
-| `terminal.switch.view` | staff-token | project-device | 2 | listTerminalCanaryRollouts, listCapabilitySwitches | 已在权限矩阵正文出现 |
+| `terminal.switch.view` | staff-token | project-device | 3 | listTerminalCanaryRollouts, listCapabilitySwitches, listTerminalDevices | 已在权限矩阵正文出现 |
 | `ticket.credential.view` | staff-token | project-order-customer | 1 | getTicketCredential | 已在权限矩阵正文出现 |
 | `ticket.dynamic_pricing.manage` | staff-token | project-channel | 1 | createTicketDynamicPricingRule | OpenAPI 补充，以本附录为准 |
 | `ticket.dynamic_pricing.publish` | staff-token | project-channel | 1 | publishTicketDynamicPricingRule | OpenAPI 补充，以本附录为准 |
@@ -1638,6 +1638,8 @@
 | `terminal.device.found_failed` | failure | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.lost` | success | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.lost_failed` | failure | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.merchant_change_failed` | failure | `updateTerminalDeviceMerchant` | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.merchant_changed` | success | `updateTerminalDeviceMerchant` | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.repair` | success | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.repair_failed` | failure | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.returned` | success | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
@@ -1646,6 +1648,8 @@
 | `terminal.device.scrap_failed` | failure | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.unbind_failed` | failure | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | TERM-终端设备 | `terminal.device.unbind` | 接口级事件，以本附录为准 |
 | `terminal.device.unbound` | success | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | TERM-终端设备 | `terminal.device.unbind` | 接口级事件，以本附录为准 |
+| `terminal.device.view_failed` | failure | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
+| `terminal.device.viewed` | success | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_config_viewed` | success | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_heartbeat` | success | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_heartbeat_failed` | failure | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -2446,6 +2450,7 @@
 | TERM-终端设备 | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | 查询 MDM 设备违规留痕 | `mdm.violation.view` | `mdm.violation.viewed` / `mdm.violation.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | 查询 MDM 网站白名单 | `mdm.policy.manage` | `mdm.site_whitelist.viewed` / `mdm.site_whitelist.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `listTerminalCanaryRollouts` | `GET` | `/api/v1/terminals/canary-rollouts` | 查询终端开关灰度试点 | `terminal.switch.view` | `terminal_canary.viewed` / `terminal_canary.view_failed` | web | operation 级补充 |
+| TERM-终端设备 | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | 终端设备台账 | `terminal.switch.view` | `terminal.device.viewed` / `terminal.device.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | 标记设备找回 | `terminal.device.lifecycle` | `terminal.device.found` / `terminal.device.found_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | 标记设备挂失 | `terminal.device.lifecycle` | `terminal.device.lost` / `terminal.device.lost_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | 设备送修 | `terminal.device.lifecycle` | `terminal.device.repair` / `terminal.device.repair_failed` | web, mobile_admin | operation 级补充 |
@@ -2455,6 +2460,7 @@
 | TERM-终端设备 | `syncTerminalTasks` | `POST` | `/api/v1/terminals/sync-tasks` | 同步终端任务 | `terminal.device.bind` | `terminal.sync_task.accepted` / `terminal.sync_task.accepted_failed` | staff_work_phone, tablet, kiosk | operation 级补充 |
 | TERM-终端设备 | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | 设备解绑 | `terminal.device.unbind` | `terminal.device.unbound` / `terminal.device.unbind_failed` | web | operation 级补充 |
 | TERM-终端设备 | `updateCapabilitySwitch` | `PUT` | `/api/v1/terminals/capability-switches/{id}` | 修改端能力开关 | `terminal.switch.manage` | `terminal_switch.changed` / `terminal_switch.change_failed` | web | operation 级补充 |
+| TERM-终端设备 | `updateTerminalDeviceMerchant` | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | 设备商户归属设置/更换/解除 | `terminal.device.lifecycle` | `terminal.device.merchant_changed` / `terminal.device.merchant_change_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | 新增或更新 MDM 应用白名单 | `mdm.policy.manage` | `mdm.app_whitelist.changed` / `mdm.app_whitelist.change_failed` | web | operation 级补充 |
 | TERM-终端设备 | `upsertMdmSiteWhitelist` | `PUT` | `/api/v1/terminals/mdm/site-whitelist/{id}` | 新增或更新 MDM 网站白名单 | `mdm.policy.manage` | `mdm.site_whitelist.changed` / `mdm.site_whitelist.change_failed` | web | operation 级补充 |
 | TERM-终端设备 | `upsertTerminalCanaryRollout` | `PUT` | `/api/v1/terminals/canary-rollouts` | 开启或结束灰度试点 | `terminal.switch.manage` | `terminal_canary.rollout_changed` / `terminal_canary.rollout_change_failed` | web | operation 级补充 |

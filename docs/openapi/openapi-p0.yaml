@@ -7431,6 +7431,97 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/terminals/devices:
+    get:
+      tags:
+        - terminals
+      operationId: listTerminalDevices
+      summary: 终端设备台账
+      description: 平台后台设备台账（K16 改绑工作台数据源）：全量终端设备 + 商户归属列。设备未绑商户时，该设备上赠饮/餐饮类权益核销一律被 K16 fail-closed 拒绝。
+      x-auth-context: staff-token
+      x-permission: terminal.switch.view
+      x-data-scope: project-device
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: terminal.device.viewed
+      x-audit-event-failure: terminal.device.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/terminals/devices/{id}/merchant:
+    put:
+      tags:
+        - terminals
+      operationId: updateTerminalDeviceMerchant
+      summary: 设备商户归属设置/更换/解除
+      description: K16 核销上下文写入面：设备归属决定核销记谁的账（A 吧的机器核 B 吧赠饮，月底两家都对不平）。merchant_id 传目标商户=设置/更换（商户须存在且未归档）；传空=解除绑定（该设备上赠饮/餐饮类权益将无法核销，fail-closed）。理由必填留痕，审计明细带改绑前后商户；终态设备（scrapped/blocked）拒改。
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-data-scope: project-device
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.merchant_changed
+      x-audit-event-failure: terminal.device.merchant_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备记录 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                merchant_id:
+                  type: string
+                  description: 目标商户 ID；传空/缺省=解除归属（该设备上赠饮/餐饮类权益将无法核销）。目标商户必须存在且未归档。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 改绑理由（必填）；改的是核销记谁的账，必须留痕说清为什么。进入审计与设备状态事件。
+                  maxLength: 4000
+      responses:
+        "200":
+          description: 归属变更成功；data 对齐 DeviceBindingResponse（merchant_id 为变更后归属）。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DeviceBindingResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/devices/bind:
     post:
       tags:
@@ -28367,6 +28458,10 @@ components:
             - ticketing
             - service
           description: 仅 terminal_type=kiosk 时填写；ticketing=售票型一体机，service=非售票/服务型一体机
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 登记时可直接给定所属商户（K16 核销上下文，一步到位免二次改绑）；商户须存在且未归档。缺省时：新设备不绑商户，复领用保留既有归属。
           maxLength: 64
     DeviceBindingResponse:
       type: object
