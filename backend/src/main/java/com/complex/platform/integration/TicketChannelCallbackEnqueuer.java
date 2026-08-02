@@ -30,6 +30,7 @@ public class TicketChannelCallbackEnqueuer {
     private final IntegrationRepository repository;
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public TicketChannelCallbackEnqueuer(IntegrationRepository repository) {
         this(repository, Clock.systemUTC());
     }
@@ -40,6 +41,8 @@ public class TicketChannelCallbackEnqueuer {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void onVerified(SettlementSettledEvent event) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("verification_id", event.verificationId());
@@ -53,6 +56,8 @@ public class TicketChannelCallbackEnqueuer {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void onReversed(VerificationReversedEvent event) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("verification_id", event.verificationId());
