@@ -45,6 +45,11 @@ public record SettlementTransactionRecord(
         // S3(V367)父票锚点 issued_entitlements.parent_ticket_id:「门票综合服务费一张票只收一道」的判定键。
         //   核销行从权益带上;冲正行原样沿用被冲那行的值(否则该票净额抵不回 0、锚点复不了位)。
         //   到期归项目/重建行恒 null(这两条路 fee 恒 0,锚点无意义)。
-        String parentTicketId
+        String parentTicketId,
+        // S6(V372)赠送权益预估成本 G(分,归娱乐平台公司):该票【首笔进池核销】一次性计提(核销行 >=0),
+        //   冲正行取原行之反(<=0);settleMonth 线性求和,绝不月末重算。两模式见 pass_gift_cost_configs。
+        long giftCostCent,
+        // S6 本笔 G 解析到的 pass_gift_cost_configs 规则 id;供增量封顶按「项目×规则」查月内累计 + 冲正沿用。无 G=null。
+        String giftCostConfigId
 ) {
 }

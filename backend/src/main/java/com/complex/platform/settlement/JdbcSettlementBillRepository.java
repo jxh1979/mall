@@ -140,7 +140,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     public PooledTotals sumPooledTotals(String projectId, Instant monthStart, Instant nextMonthStart) {
         return jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(verified_amount_cent), 0)  AS revenue_cent,
-                       COALESCE(SUM(comp_service_fee_cent), 0) AS comp_service_fee_cent
+                       COALESCE(SUM(comp_service_fee_cent), 0) AS comp_service_fee_cent,
+                       COALESCE(SUM(gift_cost_cent), 0)        AS gift_cost_cent
                   FROM settlement_transactions
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND verification_id IS NOT NULL
@@ -148,7 +149,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                    AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                 """, monthWindow(projectId, monthStart, nextMonthStart),
-                (rs, i) -> new PooledTotals(rs.getLong("revenue_cent"), rs.getLong("comp_service_fee_cent")));
+                (rs, i) -> new PooledTotals(rs.getLong("revenue_cent"), rs.getLong("comp_service_fee_cent"),
+                        rs.getLong("gift_cost_cent")));
     }
 
     /**
@@ -165,11 +167,14 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     public List<FormatRevenue> aggregateFormatRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
         // S4:各业态行带上本业态计提的综合服务费——费跟着核销走,游乐/餐饮份额的费从各自净份额扣,
         //   不错扣进酒吧池;Σ各业态费 与 sumPooledTotals 的费合计由引擎 K20 运行期互核。
+        // S6:赠送权益预估成本(G)同一范式跟核销走——计提落在哪行核销上就扣在那行所属业态的份额里,
+        //   别的业态不替它埋单;常态首笔核销=入场(酒吧业态)→G 落酒吧行,与 HTML:742 瀑布顺序一致。
         return jdbcTemplate.query("""
                 SELECT COALESCE(m.merchant_type, 'bar')            AS business_format,
                        COALESCE(SUM(st.verified_amount_cent), 0)   AS revenue_cent,
                        COALESCE(SUM(st.discount_amount_cent), 0)   AS discount_cent,
-                       COALESCE(SUM(st.comp_service_fee_cent), 0)  AS comp_service_fee_cent
+                       COALESCE(SUM(st.comp_service_fee_cent), 0)  AS comp_service_fee_cent,
+                       COALESCE(SUM(st.gift_cost_cent), 0)         AS gift_cost_cent
                   FROM settlement_transactions st
                   LEFT JOIN merchants m ON m.id = st.merchant_id
                  WHERE st.transaction_type IN ('verification_settled','verification_reversed')
@@ -183,7 +188,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
                 new FormatRevenue(rs.getString("business_format"),
                         rs.getLong("revenue_cent"), rs.getLong("discount_cent"),
-                        rs.getLong("comp_service_fee_cent")));
+                        rs.getLong("comp_service_fee_cent"), rs.getLong("gift_cost_cent")));
     }
 
     /**
@@ -314,6 +319,46 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
         return sum == null ? 0L : sum;
     }
 
+    /**
+     * S6「一张票只计提一道赠送权益预估成本」判定:该父票<b>迄今</b>已落的 G 净额(核销正 + 冲正负)。
+     *
+     * <p>与 {@link #sumTicketServiceFeeCent} 同一范式:净额非零 = 这张票计提过了 → 后续核销不再计提;
+     * 冲正取原行之反把净额抵回 0 → 锚点自动复位,该票下一次核销可重新计提(票还在、成本该预扣)。
+     * 不切月窗:「一张票一道」是票的属性,不是月的属性。
+     */
+    public long sumTicketGiftCostCent(String parentTicketId) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(gift_cost_cent), 0)
+                  FROM settlement_transactions
+                 WHERE parent_ticket_id = :parent_ticket_id
+                   AND transaction_type IN ('verification_settled','verification_reversed')
+                """, new MapSqlParameterSource().addValue("parent_ticket_id", parentTicketId), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    /**
+     * S6 增量封顶:某「项目 × G 规则」在 [monthStart,nextMonthStart) 内已落的 G 累计
+     * (核销正 + 冲正负 → 冲正天然释放封顶额度)。与 {@link #sumMonthToDateServiceFee} 同范式,
+     * 分组键换「项目 × 规则」(V372 拍定):G 归娱乐平台公司,封顶管的是"这个项目这条规则当月最多预扣多少",
+     * 与商户无关。project NULL 对 NULL 配对(平台默认口径自成一桶)。
+     */
+    public long sumMonthToDateGiftCost(String projectId, String configId,
+                                       Instant monthStart, Instant nextMonthStart) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(gift_cost_cent), 0)
+                  FROM settlement_transactions
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND (project_id = :project_id OR (:project_id::text IS NULL AND project_id IS NULL))
+                   AND gift_cost_config_id = :config_id
+                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("config_id", configId)
+                .addValue("start", Timestamp.from(monthStart))
+                .addValue("end", Timestamp.from(nextMonthStart)), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
     private MapSqlParameterSource monthWindow(String projectId, Instant monthStart, Instant nextMonthStart) {
         return new MapSqlParameterSource()
                 .addValue("project_id", projectId)
@@ -356,6 +401,37 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                                         : rs.getLong("monthly_cap_amount_cent"))
                         : null);
         return requireConfigured(cfg, "comprehensive_service_fee_configs", projectId);
+    }
+
+    /**
+     * S6 赠送权益预扣规则(pass_gift_cost_configs):按【项目 × 票种】范围可配,两模式二选一
+     * (by_item 按件计=票面推导、无需配金额;by_ticket_amount 按票计=票种赠送部分售价整额)。
+     * 查询精度:项目+票种特例 &gt; 项目通用 &gt; 平台票种特例 &gt; 平台默认(ORDER 让更具体的优先);
+     * 读侧只认生效行(is_draft=FALSE)。无任何配置行 → {@link #requireConfigured} 响亮停
+     * (V373 种子 pgc_default=by_ticket_amount+0 恒在,正常不触发;种子被删=部署坏,该停)。
+     * 项目维度与 {@link #findComprehensiveServiceFee} 同口径用 IS NULL OR =(不用 COALESCE 哨兵,防跨租户读)。
+     */
+    public PassGiftCostConfig findPassGiftCostConfig(String projectId, String ticketTypeId) {
+        PassGiftCostConfig cfg = jdbcTemplate.query("""
+                SELECT id, prededuct_mode, ticket_gift_amount_cent, monthly_cap_amount_cent
+                  FROM pass_gift_cost_configs
+                 WHERE status = 'active' AND is_draft = FALSE
+                   AND (project_id IS NULL OR project_id = :project_id)
+                   AND (ticket_type_id IS NULL OR ticket_type_id = :ticket_type_id)
+                 ORDER BY (project_id IS NOT NULL) DESC,
+                          (ticket_type_id IS NOT NULL) DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("ticket_type_id", ticketTypeId),
+                rs -> rs.next()
+                        ? new PassGiftCostConfig(rs.getString("id"), rs.getString("prededuct_mode"),
+                                rs.getObject("ticket_gift_amount_cent") == null ? null
+                                        : rs.getLong("ticket_gift_amount_cent"),
+                                rs.getObject("monthly_cap_amount_cent") == null ? null
+                                        : rs.getLong("monthly_cap_amount_cent"))
+                        : null);
+        return requireConfigured(cfg, "pass_gift_cost_configs", projectId);
     }
 
     /**
@@ -417,6 +493,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("comp_service_fee_pooled_cent", bill.compServiceFeePooledCent())
                 .addValue("comp_service_fee_exclusive_cent", bill.compServiceFeeExclusiveCent())
                 .addValue("fee_beneficiary_entity_id", bill.feeBeneficiaryEntityId())
+                .addValue("gift_cost_cent", bill.giftCostCent())
+                .addValue("gift_beneficiary_entity_id", bill.giftBeneficiaryEntityId())
                 .addValue("distribution_method", bill.distributionMethod())
                 .addValue("special_approval_ref", bill.specialApprovalRef())
                 .addValue("status", bill.status())
@@ -428,6 +506,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     id, project_id, period_start, period_end, ticket_revenue_cent, channel_fee_cent,
                     available_pool_cent, distributed_cent,
                     comp_service_fee_pooled_cent, comp_service_fee_exclusive_cent, fee_beneficiary_entity_id,
+                    gift_cost_cent, gift_beneficiary_entity_id,
                     distribution_method, special_approval_ref, status,
                     attributed_entity_id, combo_discount_cent, rounding_residual_cent, updated_at
                 )
@@ -435,6 +514,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     :id, :project_id, :period_start, :period_end, :ticket_revenue_cent, :channel_fee_cent,
                     :available_pool_cent, :distributed_cent,
                     :comp_service_fee_pooled_cent, :comp_service_fee_exclusive_cent, :fee_beneficiary_entity_id,
+                    :gift_cost_cent, :gift_beneficiary_entity_id,
                     :distribution_method, :special_approval_ref, :status,
                     :attributed_entity_id, :combo_discount_cent, :rounding_residual_cent, now()
                 )
@@ -446,6 +526,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     comp_service_fee_pooled_cent    = EXCLUDED.comp_service_fee_pooled_cent,
                     comp_service_fee_exclusive_cent = EXCLUDED.comp_service_fee_exclusive_cent,
                     fee_beneficiary_entity_id       = EXCLUDED.fee_beneficiary_entity_id,
+                    gift_cost_cent                  = EXCLUDED.gift_cost_cent,
+                    gift_beneficiary_entity_id      = EXCLUDED.gift_beneficiary_entity_id,
                     distribution_method = EXCLUDED.distribution_method,
                     -- D7 防覆盖：已填的特批引用不被 settleMonth 重跑清 null（引擎恒写 null）；status 一旦特批过
                     --   （special_approval_ref 非空）就锁死不被重跑打回 draft，其余（未特批）单照常按引擎新算态覆盖。
@@ -487,20 +569,21 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 new MapSqlParameterSource().addValue("bill_id", billId));
     }
 
-    /** S11：写一行结算单 × 业态份额留痕（V366;S4 补本业态综合服务费列）。 */
+    /** S11：写一行结算单 × 业态份额留痕（V366;S4 补本业态综合服务费列;S6 补本业态赠送权益预估成本列）。 */
     public void upsertFormatShare(SettlementBillFormatShareRecord share) {
         jdbcTemplate.update("""
                 INSERT INTO settlement_bill_format_shares (
                     bill_id, business_format, gross_revenue_cent, platform_borne_discount_cent,
-                    channel_fee_cent, comp_service_fee_cent, net_revenue_cent,
+                    channel_fee_cent, comp_service_fee_cent, gift_cost_cent, net_revenue_cent,
                     beneficiary_kind, beneficiary_entity_id)
-                VALUES (:bill_id, :business_format, :gross, :discount, :channel_fee, :comp_service_fee, :net,
-                        :beneficiary_kind, :beneficiary_entity_id)
+                VALUES (:bill_id, :business_format, :gross, :discount, :channel_fee, :comp_service_fee,
+                        :gift_cost, :net, :beneficiary_kind, :beneficiary_entity_id)
                 ON CONFLICT (bill_id, business_format) DO UPDATE SET
                     gross_revenue_cent           = EXCLUDED.gross_revenue_cent,
                     platform_borne_discount_cent = EXCLUDED.platform_borne_discount_cent,
                     channel_fee_cent             = EXCLUDED.channel_fee_cent,
                     comp_service_fee_cent        = EXCLUDED.comp_service_fee_cent,
+                    gift_cost_cent               = EXCLUDED.gift_cost_cent,
                     net_revenue_cent             = EXCLUDED.net_revenue_cent,
                     beneficiary_kind             = EXCLUDED.beneficiary_kind,
                     beneficiary_entity_id        = EXCLUDED.beneficiary_entity_id,
@@ -512,6 +595,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("discount", share.platformBorneDiscountCent())
                 .addValue("channel_fee", share.channelFeeCent())
                 .addValue("comp_service_fee", share.compServiceFeeCent())
+                .addValue("gift_cost", share.giftCostCent())
                 .addValue("net", share.netRevenueCent())
                 .addValue("beneficiary_kind", share.beneficiaryKind())
                 .addValue("beneficiary_entity_id", share.beneficiaryEntityId()));
@@ -794,6 +878,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     /** V268 综合服务费配置读投影(§7.2):fixedAmountCent 非空=用固定额,否则用 feeBps 比例。
      *  V336 monthlyCapAmountCent:该费率规则当月封顶(绝对分值);非空则封顶。id=解析到的规则主键,
      *  供引擎按「商户×规则」聚合封顶(同一商户多票种落同一条规则时封顶按合计压,honor「商户级规则=该商户当月封顶」)。 */
+    /** S6 赠送权益预扣规则一行:predeductMode ∈ {by_item, by_ticket_amount};按票计必有整额、按件计恒 null(DB CHECK 锁死)。 */
+    public record PassGiftCostConfig(String id, String predeductMode, Long ticketGiftAmountCent,
+                                     Long monthlyCapAmountCent) {
+    }
+
     public record ServiceFeeConfig(String id, int feeBps, Long fixedAmountCent, Long monthlyCapAmountCent) {
     }
 
@@ -816,11 +905,12 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
 
     /** S11① 当月某业态的进池核销汇总：净额（客人实付拆到本业态的部分）+ 套票折扣额（供按承担方补回满额）
      *  + S4 本业态计提的门票综合服务费(池链支,从本业态净份额扣,归娱乐平台公司)。 */
-    public record FormatRevenue(String businessFormat, long revenueCent, long discountCent, long compServiceFeeCent) {
+    public record FormatRevenue(String businessFormat, long revenueCent, long discountCent, long compServiceFeeCent,
+                                long giftCostCent) {
     }
 
     /** S4 当月进池核销两项合计(同一条查询同一套过滤):收入(池基)+ 门票综合服务费池链支(F_pool)。 */
-    public record PooledTotals(long revenueCent, long compServiceFeeCent) {
+    public record PooledTotals(long revenueCent, long compServiceFeeCent, long giftCostCent) {
     }
 
     /** S11② 当月某销售渠道的进池核销实付额（渠道抽成整单前移的计费基数）。 */

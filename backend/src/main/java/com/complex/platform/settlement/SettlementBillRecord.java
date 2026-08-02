@@ -21,6 +21,10 @@ public record SettlementBillRecord(
         // S4 收款主体快照:两支综合服务费的收款方(business_entities.id,解析自
         //   revenue_stream_attribution 的 ticket_service_fee 流;月结时定格,后改配置不追溯已出单据)。
         String feeBeneficiaryEntityId,
+        // S6:当月赠送权益预估成本合计(G,进池核销逐笔计提的线性求和,归娱乐平台公司);冲正月可为负。
+        long giftCostCent,
+        // S6 收款主体快照:G 的收款方(解析自 revenue_stream_attribution 的 pass_gift_cost 流;月结时定格)。
+        String giftBeneficiaryEntityId,
         String distributionMethod,
         String specialApprovalRef,
         String status,

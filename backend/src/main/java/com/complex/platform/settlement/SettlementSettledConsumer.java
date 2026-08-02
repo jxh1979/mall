@@ -33,11 +33,19 @@ public class SettlementSettledConsumer {
     private final JdbcSettlementTransactionRepository repository;
     // P6:算每笔实收综合服务费需读费率/折扣配置 + 增量封顶月累计(项目 scope 取事件带下来的真值,与 settleMonth 同源)。
     private final JdbcSettlementBillRepository billRepository;
+    // S6:按件计 G 基数走 ticketing 的统一解析器(注入同一 bean=预扣与兑付同源同价)。
+    //   为什么注入而不是事件携带:①settlement→ticketing 依赖方向本就存在(事件类就在 ticketing 包);
+    //   ②两模式选择/首笔判定/增量封顶全在 settlement 侧,ticketing 无从判断要不要算——事件携带
+    //   会让每笔核销都白算一遍按件和(多数场景配的是按票计或非首笔,算了也不用);
+    //   ③解析器只此一处取价,配置改价后未计提的票用新价,与兑付侧天然一致。
+    private final com.complex.platform.ticketing.InternalSettlementPriceResolver priceResolver;
 
     public SettlementSettledConsumer(JdbcSettlementTransactionRepository repository,
-                                     JdbcSettlementBillRepository billRepository) {
+                                     JdbcSettlementBillRepository billRepository,
+                                     com.complex.platform.ticketing.InternalSettlementPriceResolver priceResolver) {
         this.repository = repository;
         this.billRepository = billRepository;
+        this.priceResolver = priceResolver;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -119,6 +127,44 @@ public class SettlementSettledConsumer {
             }
         }
 
+        // S6 赠送权益预估成本(G,归娱乐平台公司)。业务口径出自 system-map §「通票收入分账全流程」(:739):
+        //   「再扣掉赠送权益预估成本…预扣金额按票种配置——按件计＝票面各权益数量 × 内部结算价之和,
+        //    按票计＝该票种赠送部分的售价整额」。
+        //   ①【时点】该票【首笔进池核销】一次性计提(用户已拍板「首笔核销」;限进池行是因为 G 是池链扣项:
+        //     专属直付不进池、其净额上不扣 G,若把 G 落在专属行上,月结的进池聚合根本看不见这笔钱。
+        //     正常流首笔核销=入场(进池),此限制不改变计提时点)。锚点=parent_ticket_id,为空=不合规发放数据
+        //     → 不计提(与 S3 综合服务费同一态度,绝不退化成按核销笔数各收一道)。
+        //   ②【两模式】按票种配置(pass_gift_cost_configs,项目×票种):by_ticket_amount 直取配置整额;
+        //     by_item 走解析器按票面算(商户让利型/有票面价/非提供方兑付类不进和;任一进和权益缺内部价
+        //     → fail-closed 抛错,本笔结算事实缺失由重建任务补价后补建,绝不按 0 或票面价凑数)。
+        //   ③【一张票一道】该票 G 净额非零 → 本笔置 0;冲正取原行之反把净额抵回 0 → 锚点复位可再计提。
+        //   ④【增量封顶】按「项目×规则」月内累计,perTicket=min(perTicket, max(0, cap−mtd)),
+        //     绝不月末 clamp(会破坏 f(−x)=−f(x))。种子 by_ticket_amount+0 → G 恒 0 → 上线逐分不变。
+        long giftCostCent = 0L;
+        String giftCostConfigId = null;
+        if (event.parentTicketId() != null && event.exclusiveMerchantId() == null) {
+            var giftCfg = billRepository.findPassGiftCostConfig(event.projectId(), event.ticketTypeId());
+            long perTicket = "by_item".equals(giftCfg.predeductMode())
+                    ? priceResolver.byItemGiftCostCent(event.ticketTypeId())
+                    : giftCfg.ticketGiftAmountCent();
+            // ponytail: 与综合服务费同范式(读-算-写不加锁),同一张票并发首笔核销理论上可双计;真要互斥对父票行加锁,等真出现再上。
+            if (perTicket > 0L && billRepository.sumTicketGiftCostCent(event.parentTicketId()) != 0L) {
+                perTicket = 0L; // 这张票已经计提过 G 了
+            }
+            if (perTicket > 0L && giftCfg.monthlyCapAmountCent() != null) {
+                YearMonth m = YearMonth.from(event.verifiedAt().atZone(ZoneOffset.UTC));
+                long mtd = billRepository.sumMonthToDateGiftCost(
+                        event.projectId(), giftCfg.id(),
+                        m.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC),
+                        m.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+                perTicket = Math.min(perTicket, Math.max(0L, giftCfg.monthlyCapAmountCent() - mtd));
+            }
+            if (perTicket > 0L) {
+                giftCostCent = perTicket;
+                giftCostConfigId = giftCfg.id();
+            }
+        }
+
         repository.insertImmutableFact(new SettlementTransactionRecord(
                 "st_vs_" + event.verificationId(),
                 "ST-VS-" + event.verificationId(),
@@ -145,7 +191,9 @@ public class SettlementSettledConsumer {
                 compServiceFeeCent,      // P6 本笔实收综合服务费（>=0；增量封顶后）
                 compServiceFeeConfigId,  // P6 解析到的费率规则 id（供增量封顶月累计 + 冲正沿用）
                 null,                    // V355 beneficiary_entity_id：核销归商户，无主体受益方
-                event.parentTicketId()   // S3 父票锚点：「一张票只收一道综合服务费」的判定键
+                event.parentTicketId(),  // S3 父票锚点：「一张票只收一道综合服务费/一道 G」的判定键
+                giftCostCent,            // S6 本笔计提的赠送权益预估成本 G（>=0；首笔进池核销一次性,封顶后）
+                giftCostConfigId         // S6 解析到的 pass_gift_cost_configs 规则 id（供封顶月累计 + 冲正沿用）
         ));
     }
 }
