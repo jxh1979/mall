@@ -1,5 +1,6 @@
 package com.complex.platform.bar;
 
+import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -368,31 +369,6 @@ class FinanceBarReceivableLedgerServiceTests {
         @Override
         public ArApAdjustmentRecord updateArApAdjustment(ArApAdjustmentRecord adjustment) {
             return adjustment;
-        }
-    }
-
-    private static final class InMemoryIdempotencyRepository implements IdempotencyRepository {
-        private final Map<String, IdempotencyRecord> records = new LinkedHashMap<>();
-
-        @Override
-        public Optional<IdempotencyRecord> findByOperationIdAndIdempotencyKey(String operationId, String idempotencyKey) {
-            return Optional.ofNullable(records.get(operationId + ":" + idempotencyKey));
-        }
-
-        @Override
-        public boolean tryReserve(IdempotencyRecord record) {
-            String key = record.operationId() + ":" + record.idempotencyKey();
-            if (records.containsKey(key)) {
-                return false;
-            }
-            records.put(key, record);
-            return true;
-        }
-
-        @Override
-        public IdempotencyRecord complete(IdempotencyRecord record) {
-            records.put(record.operationId() + ":" + record.idempotencyKey(), record);
-            return record;
         }
     }
 

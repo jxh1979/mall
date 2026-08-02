@@ -1,5 +1,6 @@
 package com.complex.platform.dividend;
 
+import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -331,30 +332,6 @@ class DividendServiceTests {
     }
 
     /** 内存幂等仓储（MerchantExpenseServiceTests 同款）：载荷指纹与重放语义走真 IdempotencyService。 */
-    private static final class InMemoryIdempotencyRepository implements IdempotencyRepository {
-        private final Map<String, IdempotencyRecord> records = new LinkedHashMap<>();
-
-        @Override
-        public Optional<IdempotencyRecord> findByOperationIdAndIdempotencyKey(String operationId, String idempotencyKey) {
-            return Optional.ofNullable(records.get(operationId + ":" + idempotencyKey));
-        }
-
-        @Override
-        public boolean tryReserve(IdempotencyRecord record) {
-            String key = record.operationId() + ":" + record.idempotencyKey();
-            if (records.containsKey(key)) {
-                return false;
-            }
-            records.put(key, record);
-            return true;
-        }
-
-        @Override
-        public IdempotencyRecord complete(IdempotencyRecord record) {
-            records.put(record.operationId() + ":" + record.idempotencyKey(), record);
-            return record;
-        }
-    }
 
     private InMemoryRepo repository;
     private AuthorizationService authorizationService;
