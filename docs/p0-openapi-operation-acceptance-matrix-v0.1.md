@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 710 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 711 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -717,6 +717,7 @@
 | settlement | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | `settlementConfigArchive` | 软删结算配置(status→inactive) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.archived` | `settlement.config.archive_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | `settlementConfigActivateAttributionRuleAlias` | 复核转正:归因规则草案(弃用薄别名) | `-` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
 | settlement | `POST` | `/api/v1/settlement/bills/{id}/post` | `settlementPostBill` | 结算单过账(挂应付台账) | `-` | `settlement.bill.post` | `staff-token` | `platform` | web | 否 | `settlement.bill.posted` | `settlement.bill.post_failed` |
+| settlement | `POST` | `/api/v1/settlement/bills/{id}/special-approval` | `settlementSpecialApproveBill` | 超池结算单特批(平台负责人短期激励) | `object` | `settlement.bill.special_approve` | `staff-token` | `platform` | web | 否 | `settlement.bill.special_approved` | `settlement.bill.special_approve_failed` |
 | bar | `GET` | `/api/v1/bar/order-item-voids` | `listBarOrderItemVoids` | 退酒审批待审队列 | `-` | `bar.order_item.void` | `staff-token` | `project-bar-table` | tablet, web | 否 | `bar.order_item_void.viewed` | `bar.order_item_void.view_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/high-value-threshold` | `settlementConfigUpsertHighValueThreshold` | 维护高价值判定阈值(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.high_value_thresholds.updated` | `settlement.config.high_value_thresholds.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/pass-gift-cost` | `settlementConfigUpsertPassGiftCost` | 维护赠送权益预估成本预扣规则(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.pass_gift_cost_configs.updated` | `settlement.config.pass_gift_cost_configs.update_failed` |
@@ -798,5 +799,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 710 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 711 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 710 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 325 | 人工权限矩阵正文未覆盖 223 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1420 | 人工事件矩阵正文未覆盖 1378 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 710 | 人工任务映射正文未逐项覆盖 704 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 428 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 711 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 326 | 人工权限矩阵正文未覆盖 224 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1422 | 人工事件矩阵正文未覆盖 1380 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 711 | 人工任务映射正文未逐项覆盖 705 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 429 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -298,6 +298,7 @@
 | `service.order.create` | staff-token | platform | 7 | listServiceCatalog, createServiceOrder, completeServiceOrder, cancelServiceOrder, serviceOrderPaymentCode, markServiceOrderPaid, getServicePayConfig | OpenAPI 补充，以本附录为准 |
 | `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
+| `settlement.bill.special_approve` | staff-token | platform | 1 | settlementSpecialApproveBill | OpenAPI 补充，以本附录为准 |
 | `settlement.config.manage` | staff-token | platform | 16 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
 | `settlement.config.view` | staff-token | platform | 1 | settlementConfigOverview | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
@@ -1482,6 +1483,8 @@
 | `service.payment_code.viewed` | success | `myServicePaymentCode` | `GET` | `/api/v1/services/payment-code/mine` | P0-待归类 | `service.order.perform` | 接口级事件，以本附录为准 |
 | `settlement.bill.post_failed` | failure | `settlementPostBill` | `POST` | `/api/v1/settlement/bills/{id}/post` | P0-待归类 | `settlement.bill.post` | 接口级事件，以本附录为准 |
 | `settlement.bill.posted` | success | `settlementPostBill` | `POST` | `/api/v1/settlement/bills/{id}/post` | P0-待归类 | `settlement.bill.post` | 接口级事件，以本附录为准 |
+| `settlement.bill.special_approve_failed` | failure | `settlementSpecialApproveBill` | `POST` | `/api/v1/settlement/bills/{id}/special-approval` | P0-待归类 | `settlement.bill.special_approve` | 接口级事件，以本附录为准 |
+| `settlement.bill.special_approved` | success | `settlementSpecialApproveBill` | `POST` | `/api/v1/settlement/bills/{id}/special-approval` | P0-待归类 | `settlement.bill.special_approve` | 接口级事件，以本附录为准 |
 | `settlement.config.archive_failed` | failure | `settlementConfigArchive` | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.archived` | success | `settlementConfigArchive` | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.bar_commission_rate_configs.update_failed` | failure | `settlementConfigUpsertCommissionRate` | `POST` | `/api/v1/settlement/config/commission-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -2405,6 +2408,7 @@
 | P0-待归类 | `settlementConfigUpsertRevenueStreamAttribution` | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | 维护业态收入归属(草案) | `settlement.config.manage` | `settlement.config.revenue_stream_attribution.updated` / `settlement.config.revenue_stream_attribution.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | 开票清单按主体汇总 | `settlement.invoice.view` | `settlement.invoice.summary` / `settlement.invoice.summary_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementPostBill` | `POST` | `/api/v1/settlement/bills/{id}/post` | 结算单过账(挂应付台账) | `settlement.bill.post` | `settlement.bill.posted` / `settlement.bill.post_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementSpecialApproveBill` | `POST` | `/api/v1/settlement/bills/{id}/special-approval` | 超池结算单特批(平台负责人短期激励) | `settlement.bill.special_approve` | `settlement.bill.special_approved` / `settlement.bill.special_approve_failed` | web | operation 级补充 |
 | P0-待归类 | `signLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/sign` | 意向签约→转商户+喂入合同 draft | `leasing.convert` | `leasing.intent.signed` / `leasing.intent.sign_failed` | web | operation 级补充 |
 | P0-待归类 | `startFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/start` | 开始巡检任务 | `facility.inspection.manage` | `facility.inspection_task_started` / `facility.inspection_task_start_failed` | web | operation 级补充 |
 | P0-待归类 | `startFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/start` | 开始处理工单 | `facility.work_order.manage` | `facility.work_order_started` / `facility.work_order_start_failed` | web | operation 级补充 |

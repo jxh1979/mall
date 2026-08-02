@@ -34806,6 +34806,74 @@
         }
       }
     },
+    "/api/v1/settlement/bills/{id}/special-approval": {
+      "post": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "settlementSpecialApproveBill",
+        "summary": "超池结算单特批(平台负责人短期激励)",
+        "description": "把某「超池 draft」结算单填特批引用并置 confirmed(之后可走既有过账端点)。业务口径:各酒吧分得总额不得超过可分配池,突破上限仅限平台负责人特批的短期激励活动(期限后台可配,出厂默认不超过 3 个月),到期自动失效须重新特批。仅超池 draft 单可批:非超池/已 confirmed/settled 拒 409 BILL_NOT_OVERPOOL_DRAFT;特批引用留空拒 400 SPECIAL_APPROVAL_REF_REQUIRED(审计留痕必填)。响应 data 含 special_approval_ref 与 valid_until(本次特批的到期日)。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.bill.special_approve",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "settlement.bill.special_approved",
+        "x-audit-event-failure": "settlement.bill.special_approve_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "special_approval_ref": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "特批引用:平台负责人特批短期激励的凭据/理由,审计留痕必填。"
+                  }
+                },
+                "required": [
+                  "special_approval_ref"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/bar/order-item-voids": {
       "get": {
         "tags": [
