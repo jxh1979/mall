@@ -245,8 +245,10 @@ public class JdbcSettlementTransactionRepository {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
         return jdbcTemplate.query("""
                 SELECT e.id, e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
-                       e.total_times, e.used_times, e.allocated_revenue_cent, e.valid_to
+                       e.total_times, e.used_times, e.allocated_revenue_cent, e.valid_to,
+                       COALESCE(m.merchant_type, 'bar') AS business_format
                   FROM issued_entitlements e
+                  LEFT JOIN merchants m ON m.id = e.merchant_id
                  WHERE e.valid_to < :now
                    AND e.total_times > e.used_times
                    AND e.allocated_revenue_cent IS NOT NULL
@@ -268,7 +270,8 @@ public class JdbcSettlementTransactionRepository {
                         rs.getInt("total_times"),
                         rs.getInt("used_times"),
                         rs.getLong("allocated_revenue_cent"),
-                        rs.getTimestamp("valid_to").toInstant()));
+                        rs.getTimestamp("valid_to").toInstant(),
+                        rs.getString("business_format")));
     }
 
     /**
@@ -402,7 +405,10 @@ public class JdbcSettlementTransactionRepository {
             int totalTimes,
             int usedTimes,
             long allocatedRevenueCent,
-            Instant validTo
+            Instant validTo,
+            // S8 未核销款分流:提供该权益的商户业态(merchants.merchant_type,与 S11 池基过滤同一套判定源)。
+            // amusement → 未核销款归游乐公司;其余 → 归娱乐平台公司(业务 HTML「通票结算口径」)。
+            String businessFormat
     ) {
     }
 
