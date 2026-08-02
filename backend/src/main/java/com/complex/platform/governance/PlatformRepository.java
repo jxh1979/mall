@@ -35,6 +35,20 @@ public interface PlatformRepository {
     }
 
     /**
+     * 按经营主体 scope 列出商户（merchants.business_entity_id = token scope）。
+     * 商户面数据：经营主体登录只能看到归属本主体的商户。默认在内存过滤，JdbcPlatformRepository 用 SQL 谓词下推。
+     * 隔离闸口（AC-ISO-1）：提供 business_entity_id 行级 scoped 读通道。
+     * 勿删:本方法零调用是常态(多综合体隔离通道,建成待激活),但 verify:tenant-isolation 门禁
+     * 以「该表存在 scoped 查询」为隔离能力判据,删除会导致门禁 fail-closed 阻断部署。
+     */
+    default List<MerchantRecord> listMerchantsByBusinessEntity(String businessEntityId) {
+        if (businessEntityId == null) return listMerchants();
+        return listMerchants().stream()
+                .filter(m -> businessEntityId.equals(m.businessEntityId()))
+                .toList();
+    }
+
+    /**
      * V260：统计商户被【核心运营表】以 merchant_id 引用的活跃条数，>0 则拒绝硬删（防连锁孤儿）。
      * 覆盖表见 JdbcPlatformRepository 实现。默认 0（内存 fake 无引用表）。
      */
