@@ -63,6 +63,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-VND-003", label: "外包进场报备", module: "外包工作台", group: "vendor", route: "/admin/vendor/site-entries", requiredPermissions: ["facility.site_entry.view_assigned"], accountForms: ["vendor"] },
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", module: "第三方", group: "integration", route: "/admin/integrations/events", requiredPermissions: ["integration.retry.view", "integration.compensation.view", "integration.order_sync.view", "integration.reconciliation.view"] },
   { pageId: "ADM-INT-003", label: "第三方开关", module: "第三方", group: "integration", route: "/admin/integrations/switches", requiredPermissions: ["terminal.switch.view"] },
+  { pageId: "ADM-INT-005", label: "渠道映射维护", module: "第三方", group: "integration", route: "/admin/integrations/channel-maps", requiredPermissions: ["integration.channel_store_map.view"] },
   { pageId: "ADM-RISK-001", label: "风控预警", module: "风控", group: "risk", route: "/admin/risk/alerts", requiredPermissions: ["analytics.risk_alert.view"] },
   { pageId: "ADM-EVD-001", label: "审计事件", module: "审计", group: "audit", route: "/admin/audit/events", requiredPermissions: ["evidence.event.view"] },
   { pageId: "ADM-ANA-001", label: "经营分析", module: "分析", group: "overview", route: "/admin/analytics/business", requiredPermissions: ["analytics.dashboard.view"] },

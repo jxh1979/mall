@@ -266,6 +266,8 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/evidence/events": state.evidenceEvents,
     "/api/v1/integration/provider-adapters": state.providerAdapters,
     "/api/v1/integration/order-syncs": state.orderSyncs,
+    "/api/v1/integration/channel-ticket-type-maps": empty,
+    "/api/v1/integration/channel-store-maps": empty,
     "/api/v1/integration/voucher-verifications": state.voucherVerifications,
     "/api/v1/integration/retry-tasks": state.retryTasks,
     "/api/v1/integration/compensation-tasks": state.compensationTasks,
