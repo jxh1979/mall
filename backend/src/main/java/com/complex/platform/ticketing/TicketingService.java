@@ -69,23 +69,6 @@ public class TicketingService {
         this.transferService = transferService;
     }
 
-    // 兼容既有单元测试(InMemory repo,不需要转赠链)。
-    public TicketingService(
-            TicketingRepository repository,
-            TicketCatalogService catalogService,
-            TicketPricingService pricingService,
-            TicketOrderService orderService,
-            TicketRefundService refundService,
-            TicketVerificationService verificationService,
-            TicketCredentialService credentialService,
-            TicketOfflinePackageService offlinePackageService,
-            TicketingOperationExecutor operations,
-            AuthorizationService authorizationService
-    ) {
-        this(repository, catalogService, pricingService, orderService, refundService, verificationService,
-                credentialService, offlinePackageService, operations, authorizationService, null);
-    }
-
     /**
      * P1 越权修复：核销/权益列表按调用者商户范围过滤——商户用户仅见自身 merchant_id 数据，
      * 平台管理员/无商户范围者（empty）见全部。authorizationService 为 null（兼容测试）时不过滤。

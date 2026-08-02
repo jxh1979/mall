@@ -61,19 +61,6 @@ public class AmusementService implements AmusementVerificationPort {
     @org.springframework.beans.factory.annotation.Value("${amusement.device-registry.enforce.enabled:false}")
     boolean enforceDeviceRegistry;
 
-    // 向后兼容构造器：未注入统一责任链服务（既有单测/无 SecurityContext 环境）。
-    public AmusementService(
-            AmusementRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService,
-            AmusementEntitlementGateway entitlementGateway,
-            AmusementSafetyRepository safetyRepository
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService,
-                entitlementGateway, safetyRepository, null);
-    }
-
     @org.springframework.beans.factory.annotation.Autowired
     public AmusementService(
             AmusementRepository repository,

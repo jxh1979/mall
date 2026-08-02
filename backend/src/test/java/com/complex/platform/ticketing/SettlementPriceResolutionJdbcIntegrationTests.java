@@ -214,7 +214,7 @@ class SettlementPriceResolutionJdbcIntegrationTests {
                 "ent_" + code, code, "tt_" + siblingCode, "order_" + siblingCode, templateId, "entry",
                 "merchant_a", null, "point_" + suffix, 1, 0, valueAmount, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
-                kind, agreementPrice));
+                kind, agreementPrice, null, null, null, 0, null, null));
         return code;
     }
 
@@ -305,13 +305,13 @@ class SettlementPriceResolutionJdbcIntegrationTests {
                 """, templateId, barItemRef, kind, agreementPrice, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
-                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         // allocated=null（settlement 双写跳过，本类只验 settlement_price 落库，与批1 双写解耦）。
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "entry",
                 "merchant_a", null, "point_" + suffix, 1, 0, valueAmount, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
-                kind, agreementPrice));
+                kind, agreementPrice, null, null, null, 0, null, null));
         return code;
     }
 }

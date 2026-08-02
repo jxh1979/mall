@@ -1301,7 +1301,7 @@ class InventoryServiceTests {
                 new com.complex.platform.gate.TerminalSwitchGuard(
                         terminalDeviceRepository, new AuditEventService(auditEventRepository)),
                 new com.complex.platform.evidence.TraceabilityService(traceabilityRepository, authorizationService),
-                null);
+                null, null, null, null, null, null, null);
         InventoryItemRecord outItem = nullSafeService.createInventoryItem(new InventoryItemRequest(
                 "fs-out-item", null, List.of(), null, null, "FS Out", "spirit", "bottle", 0, "active", null));
         inventoryRepository.saveStockBalance(new StockBalanceRecord(

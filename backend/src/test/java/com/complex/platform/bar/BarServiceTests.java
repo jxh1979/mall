@@ -1,7 +1,5 @@
 package com.complex.platform.bar;
 
-import com.complex.platform.support.InMemoryAuditEventRepository;
-import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -25,6 +23,8 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.support.InMemoryAuditEventRepository;
+import com.complex.platform.support.InMemoryIdempotencyRepository;
 import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -142,7 +142,7 @@ class BarServiceTests {
                 new BarInvitationTokenSigner("test-bar-invitation-secret"));
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
-                receivableLedgerService);
+                receivableLedgerService, true);
         // V350：退酒高价值判定改走全平台唯一入口（物品进货价 vs 后台单一阈值）。默认低价值，
         // 需要高价值分支的用例各自把 highValueStub.highValue 置 true。
         highValueStub = new StubHighValueDecisionService();
@@ -286,7 +286,7 @@ class BarServiceTests {
                 "scan-table", "create", List.of(), "bar_1", "VIP 扫码", "card_seat", 50000L, 4, "active"));
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "scan-product", "create product", List.of(), "bar_1", "精酿", "beer",
-                3800L, null, null, "active", null, null, false));
+                3800L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         Instant now = Instant.now();
         barRepository.saveTableSession(new BarTableSessionRecord(
                 "session_scan", "bar_1", null, LocalDate.parse("2026-06-24"), table.id(), null, null,
@@ -357,7 +357,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("mincon", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-mincon", "create product", List.of(), "bar_1", "Soda", "spirit",
-                10000L, null, null, "active", null, null, false));
+                10000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-mincon", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)), "staff_sales", List.of(), "offline"));
@@ -376,13 +376,13 @@ class BarServiceTests {
         // （静默忽略会骗运营"以为配好了"）；无价商品照常可建（不参与结算/提成扣减）。
         assertThatThrownBy(() -> service.createProduct(new BarProductRequest(
                 "product-internal", "create", List.of(), "bar_1", "House Beer", "beer",
-                3800L, null, null, "active", null, null, false, null, null, null, 1500L)))
+                3800L, null, null, "active", null, null, false, null, null, null, 1500L, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("BAR_INTERNAL_PRICE_CATALOG_ONLY");
 
         BarProductRecord noPrice = service.createProduct(new BarProductRequest(
                 "product-no-internal", "create", List.of(), "bar_1", "House Beer", "beer",
-                3800L, null, null, "active", null, null, false));
+                3800L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         assertThat(noPrice.internalSettlementPriceCent()).isNull();
     }
 
@@ -524,7 +524,7 @@ class BarServiceTests {
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-cross-deliver", "create", List.of(), "bar_1", "Gin", "spirit", 8800L,
                 null, null, "active", null, null, false
-        ));
+        , null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-cross-deliver", "create", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"
@@ -551,7 +551,7 @@ class BarServiceTests {
         TestSecurityActors.asMerchantUser("merchant_a");
         BarProductRecord aProduct = service.createProduct(new BarProductRequest(
                 "product-own-a", "create", List.of(), "bar_1", "Gin A", "spirit", 8800L,
-                null, null, "active", null, null, false));
+                null, null, "active", null, null, false, null, null, null, null, null, null, null));
         assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
                 "order-cross-table", "create", List.of(), "bar_1", bTable.id(), null,
                 List.of(Map.of("product_id", aProduct.id(), "quantity", 1)), null, List.of(), "offline")))
@@ -564,7 +564,7 @@ class BarServiceTests {
         TestSecurityActors.asMerchantUser("merchant_b");
         BarProductRecord bProduct = service.createProduct(new BarProductRequest(
                 "product-cross-order-b", "create", List.of(), "bar_1", "Rum B", "spirit", 7700L,
-                null, null, "active", null, null, false));
+                null, null, "active", null, null, false, null, null, null, null, null, null, null));
 
         TestSecurityActors.asMerchantUser("merchant_a");
         BarTableRecord aTable = service.createTable(new BarTableRequest(
@@ -594,7 +594,7 @@ class BarServiceTests {
                     "table-scope", "create", List.of(), "bar_1", "范围桌", "card_seat", 50000L, 2, "active"));
             BarProductRecord spirit = service.createProduct(new BarProductRequest(
                     "product-scope-spirit", "create", List.of(), "bar_1", "金酒", "spirit", 8800L,
-                    null, null, "active", null, null, false));
+                    null, null, "active", null, null, false, null, null, null, null, null, null, null));
             assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
                     "order-scope-x", "create", List.of(), "bar_1", table.id(), null,
                     List.of(Map.of("product_id", spirit.id(), "quantity", 1)), null, List.of(), "offline")))
@@ -602,7 +602,7 @@ class BarServiceTests {
                             e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
             BarProductRecord beer = service.createProduct(new BarProductRequest(
                     "product-scope-beer", "create", List.of(), "bar_1", "精酿", "beer", 3800L,
-                    null, null, "active", null, null, false));
+                    null, null, "active", null, null, false, null, null, null, null, null, null, null));
             BarOrderRecord ok = service.createOrder(new BarOrderRequest(
                     "order-scope-ok", "create", List.of(), "bar_1", table.id(), null,
                     List.of(Map.of("product_id", beer.id(), "quantity", 1)), null, List.of(), "offline"));
@@ -617,7 +617,7 @@ class BarServiceTests {
         // I-2: 品类是合同范围拦截比对基准——新建商品词表外品类（自报绕过）→ 拒。
         assertThatThrownBy(() -> service.createProduct(new BarProductRequest(
                 "product-bad-cat", "create", List.of(), "bar_1", "私酿", "洋酒", 8800L,
-                null, null, "active", null, null, false)))
+                null, null, "active", null, null, false, null, null, null, null, null, null, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
     }
@@ -639,10 +639,10 @@ class BarServiceTests {
                     "table-scope-fb", "create", List.of(), "bar_1", "回退桌", "card_seat", 50000L, 2, "active"));
             BarProductRecord beer = service.createProduct(new BarProductRequest(
                     "product-scope-fb-beer", "create", List.of(), "bar_1", "精酿", "beer", 3800L,
-                    null, null, "active", null, null, false));
+                    null, null, "active", null, null, false, null, null, null, null, null, null, null));
             BarProductRecord spirit = service.createProduct(new BarProductRequest(
                     "product-scope-fb-spirit", "create", List.of(), "bar_1", "金酒", "spirit", 8800L,
-                    null, null, "active", null, null, false));
+                    null, null, "active", null, null, false, null, null, null, null, null, null, null));
             barOrderService.contractScopeGuard =
                     new com.complex.platform.contract.ContractScopeGuard(contractRepository);
             // 平台账号下单：订单商户为空，创建时按桌台归属商户比对（beer 在范围内 → 成单）。
@@ -936,7 +936,7 @@ class BarServiceTests {
                 null,
                 null,
                 false
-        ));
+        , null, null, null, null, null, null, null));
 
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-bill",
@@ -1149,12 +1149,12 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("gift-commission", "bar_1", 2);
         BarProductRecord sold = service.createProduct(new BarProductRequest(
                 "product-gift-sold", "create product", List.of(), "bar_1", "Whisky", "spirit",
-                100000L, null, null, "active", null, null, false));
+                100000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         // 赠送商品：售价 20000/份、内部结算价 8000/份。
         // 批10/E：内部价快照由系统写（目录转正传播）——测试直接落快照模拟收编后的状态（商品侧无直填入口）。
         BarProductRecord giftCreated = service.createProduct(new BarProductRequest(
                 "product-gift-comp", "create product", List.of(), "bar_1", "Fruit Plate", "beer",
-                20000L, null, null, "active", null, null, false));
+                20000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarProductRecord gift = new BarProductRecord(giftCreated.id(), giftCreated.barId(), giftCreated.merchantId(),
                 giftCreated.productName(), giftCreated.productType(), giftCreated.priceCent(), giftCreated.currency(),
                 giftCreated.inventoryItemId(), giftCreated.stockLocationId(), giftCreated.stockDeductionRequired(),
@@ -1283,7 +1283,7 @@ class BarServiceTests {
                 "inventory_champagne",
                 "bar_1",
                 true
-        ));
+        , null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-stock",
                 "create order",
@@ -1333,7 +1333,7 @@ class BarServiceTests {
                 "inventory_champagne_repeat",
                 "bar_1",
                 true
-        ));
+        , null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-repeat",
                 "inventory_champagne_repeat",
@@ -1404,7 +1404,7 @@ class BarServiceTests {
                 null,
                 null,
                 false
-        ));
+        , null, null, null, null, null, null, null));
         BarOrderRecord firstOrder = service.createOrder(new BarOrderRequest(
                 "order-scope-1",
                 "create first order",
@@ -1473,7 +1473,7 @@ class BarServiceTests {
                 "inventory_champagne_evidence",
                 "bar_1",
                 true
-        ));
+        , null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-evidence",
                 "inventory_champagne_evidence",
@@ -1520,7 +1520,7 @@ class BarServiceTests {
         // 标准 30ml/杯，损耗阈值 10ml；按杯销售配置（REQ-22）
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-loss", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
-                "active", null, null, false, 30, "ml", 10));
+                "active", null, null, false, 30, "ml", 10, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-loss", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
@@ -1548,7 +1548,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("reservation-pour-required", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-required", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
-                "active", null, null, false, 30, "ml", 10));
+                "active", null, null, false, 30, "ml", 10, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-required", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
@@ -1577,7 +1577,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("reservation-pour-fallback", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-fallback", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
-                "active", null, null, false, 30, "ml", 10));
+                "active", null, null, false, 30, "ml", 10, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-fallback", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
@@ -1603,7 +1603,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("reservation-non-by-glass", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-non-by-glass", "create", List.of(), "bar_1", "Bottle Beer", "beer", 2800L, null, null,
-                "active", null, null, false));
+                "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-non-by-glass", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
@@ -1636,7 +1636,7 @@ class BarServiceTests {
                 "inventory_champagne_partial",
                 "bar_1",
                 true
-        ));
+        , null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-partial",
                 "inventory_champagne_partial",
@@ -1749,7 +1749,7 @@ class BarServiceTests {
                 null,
                 null,
                 false
-        ));
+        , null, null, null, null, null, null, null));
         service.createOrder(new BarOrderRequest(
                 "production-flow",
                 "create order",
@@ -1839,7 +1839,7 @@ class BarServiceTests {
                 null,
                 null,
                 false
-        ));
+        , null, null, null, null, null, null, null));
         service.createOrder(new BarOrderRequest(
                 "production-exception",
                 "create order",
@@ -1891,7 +1891,7 @@ class BarServiceTests {
                 null,
                 null,
                 false
-        ));
+        , null, null, null, null, null, null, null));
         service.createOrder(new BarOrderRequest(
                 "production-invalid",
                 "create order",
@@ -1945,7 +1945,7 @@ class BarServiceTests {
                 null,
                 null,
                 false
-        ));
+        , null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "production-delivery",
                 "create order",
@@ -2778,7 +2778,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-pending", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-pending", "create product", List.of(), "bar_1", "Beer", "beer",
-                3000L, null, null, "active", null, null, false));
+                3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-pending", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
@@ -2801,7 +2801,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-return", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-return", "create product", List.of(), "bar_1", "Champagne", "spirit",
-                100000L, null, null, "active", "inventory_void_return", "bar_1", true));
+                100000L, null, null, "active", "inventory_void_return", "bar_1", true, null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-void-return", "inventory_void_return", "bar_1", 5, 0, 5, Instant.now()));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -2839,7 +2839,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-twice", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-twice", "create product", List.of(), "bar_1", "Beer", "beer",
-                3000L, null, null, "active", null, null, false));
+                3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-twice", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
@@ -2860,7 +2860,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-approve", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-approve", "create product", List.of(), "bar_1", "Beer", "beer",
-                3000L, null, null, "active", null, null, false));
+                3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-approve", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
@@ -2890,7 +2890,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-reject", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-reject", "create product", List.of(), "bar_1", "Beer", "beer",
-                3000L, null, null, "active", null, null, false));
+                3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-reject", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
@@ -2927,7 +2927,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-rej-reverse", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-rej-reverse", "create product", List.of(), "bar_1", "Champagne", "spirit",
-                100000L, null, null, "active", "inventory_void_rej_reverse", "bar_1", true));
+                100000L, null, null, "active", "inventory_void_rej_reverse", "bar_1", true, null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-void-rej-reverse", "inventory_void_rej_reverse", "bar_1", 5, 0, 5, Instant.now()));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -2977,7 +2977,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-appr-keep", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-appr-keep", "create product", List.of(), "bar_1", "Champagne", "spirit",
-                100000L, null, null, "active", "inventory_void_appr_keep", "bar_1", true));
+                100000L, null, null, "active", "inventory_void_appr_keep", "bar_1", true, null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-void-appr-keep", "inventory_void_appr_keep", "bar_1", 5, 0, 5, Instant.now()));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -3017,7 +3017,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-rej-idem", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-rej-idem", "create product", List.of(), "bar_1", "Champagne", "spirit",
-                100000L, null, null, "active", "inventory_void_rej_idem", "bar_1", true));
+                100000L, null, null, "active", "inventory_void_rej_idem", "bar_1", true, null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-void-rej-idem", "inventory_void_rej_idem", "bar_1", 5, 0, 5, Instant.now()));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -3066,7 +3066,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-rej-once", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-rej-once", "create product", List.of(), "bar_1", "Champagne", "spirit",
-                100000L, null, null, "active", "inventory_void_rej_once", "bar_1", true));
+                100000L, null, null, "active", "inventory_void_rej_once", "bar_1", true, null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-void-rej-once", "inventory_void_rej_once", "bar_1", 5, 0, 5, Instant.now()));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -3121,7 +3121,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation(key, "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-" + key, "create product", List.of(), "bar_1", "Vintage Champagne", "wine",
-                unitPriceCent, null, null, "active", "inventory_" + key, "bar_1", true));
+                unitPriceCent, null, null, "active", "inventory_" + key, "bar_1", true, null, null, null, null, null, null, null));
         barRepository.saveStockBalance(new StockBalanceSnapshot(
                 "balance-" + key, "inventory_" + key, "bar_1", 5, 0, 5, Instant.now()));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -3318,7 +3318,7 @@ class BarServiceTests {
         BarReservationRecord reservation = createReservation("void-cancel-highamount", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-cancel-highamount", "create product", List.of(), "bar_1", "Vintage", "wine",
-                800_000L, null, null, "active", null, null, false));
+                800_000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-cancel-highamount", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
@@ -3416,7 +3416,7 @@ class BarServiceTests {
                 barRepository, scopedAuth,
                 new AuditEventService(auditEventRepository),
                 new TraceabilityService(mock(TraceabilityRepository.class), scopedAuth),
-                receivableLedgerService);
+                receivableLedgerService, true);
 
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
@@ -3482,7 +3482,7 @@ class BarServiceTests {
     void soldOutProductIsRejectedOnOrderThenRestored() {
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-soldout", "create product", List.of(), "bar_1", "Limited Whisky", "spirit",
-                500000L, null, null, "active", null, null, false));
+                500000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarReservationRecord reservation = createReservation("soldout", "bar_1", 2);
 
         BarProductRecord soldOut = service.markProductSoldOut(product.id(), new BarProductSoldOutRequest(
@@ -3732,7 +3732,7 @@ class BarServiceTests {
     void barCounterTableOrderSkipsProductionTicketWhileCardSeatKeepsIt() {
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-dualdrive", "create product", List.of(), "bar_1", "Whisky dualdrive", "spirit",
-                12800L, null, null, "active", null, null, false));
+                12800L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         // 吧台位（bar_counter）=吧台直点：即点即取，不建出品票据；送达/退菜路径对无票已容错。
         BarTableRecord counter = service.createTable(new BarTableRequest(
                 "table-dualdrive-counter", "create table", List.of(), "bar_1", "吧台1号位", "bar_counter",
@@ -3764,7 +3764,7 @@ class BarServiceTests {
             BarProductRecord product = service.createProduct(new BarProductRequest(
                     // I-2 词表校验后品类须用规范值：独立餐饮判定看商户业态(merchantDirectory)非商品品类，snack 等价。
                     "product-fooddrive", "create product", List.of(), "bar_1", "小吃 fooddrive", "snack",
-                    3800L, null, null, "active", null, null, false));
+                    3800L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
             BarTableRecord table = service.createTable(new BarTableRequest(
                     "table-fooddrive", "create table", List.of(), "bar_1", "餐位1", "card_seat",
                     0L, 2, "active"));
@@ -3816,7 +3816,7 @@ class BarServiceTests {
                 null,
                 null,
                 false
-        ));
+        , null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-" + key,
                 "create order",

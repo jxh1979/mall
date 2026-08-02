@@ -259,7 +259,7 @@ class BarJdbcIntegrationTests {
                 30,
                 "ml",
                 10
-        ));
+        , false, null, null, null));
         repository.saveOrder(new BarOrderRecord(
                 "order_jdbc",
                 "bar_jdbc",

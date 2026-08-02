@@ -44,7 +44,7 @@ class BarGiftConsumerTests {
         repository.giftDrinkProduct = product(BAR_ID, "merchant_1", INVENTORY_ITEM_ID, true);
         repository.saveStockBalance(new StockBalanceSnapshot(
                 "balance_1", INVENTORY_ITEM_ID, LOCATION, 10, 0, 10, Instant.now()));
-        consumer = new BarGiftConsumer(repository);
+        consumer = new BarGiftConsumer(repository, null);
     }
 
     private static BarProductRecord product(String barId, String merchantId, String inventoryItemId,

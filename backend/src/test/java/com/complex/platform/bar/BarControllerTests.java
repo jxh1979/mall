@@ -374,7 +374,7 @@ class BarControllerTests {
 
     private BarProductRecord product(boolean stockManaged) {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarProductRecord("product_1", "bar_1", null, "Whisky", "spirit", 128800L, "CNY", stockManaged ? "inventory_1" : null, stockManaged ? "bar_1" : null, stockManaged, "active", now, now, null, null, null);
+        return new BarProductRecord("product_1", "bar_1", null, "Whisky", "spirit", 128800L, "CNY", stockManaged ? "inventory_1" : null, stockManaged ? "bar_1" : null, stockManaged, "active", now, now, null, null, null, false, null, null, null);
     }
 
     private BarOrderRecord order() {

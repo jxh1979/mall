@@ -90,10 +90,10 @@ class ContractScopeEnforcementJdbcIntegrationTests {
                 6, 2, 0L, "CNY", "active", now, now));
         barRepository.saveProduct(new BarProductRecord(
                 "product_scope_spirit", "bar_scope_jdbc", MERCHANT, "金酒", "spirit", 8800L,
-                "CNY", null, null, false, "active", now, now, null, null, null));
+                "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null));
         barRepository.saveProduct(new BarProductRecord(
                 "product_scope_beer", "bar_scope_jdbc", MERCHANT, "精酿", "beer", 3800L,
-                "CNY", null, null, false, "active", now, now, null, null, null));
+                "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null));
 
         // 越界品类 → 整单拒（CONTRACT_SCOPE_VIOLATION），bar_orders 零落库。
         assertThatThrownBy(() -> barService.createOrder(new BarOrderRequest(
@@ -125,7 +125,7 @@ class ContractScopeEnforcementJdbcIntegrationTests {
                 MERCHANT, "范围测试酒吧");
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_scope_jdbc", "范围测试单店票", "weekday_weekend_holiday", 9900L, 9900L, 9900L,
-                false, "published", null, null, now, now, 10, 0, null, false, MERCHANT));
+                false, "published", null, null, now, now, 10, 0, null, false, MERCHANT, TicketTypeRecord.NO_COMBO_DISCOUNT));
 
         assertThatThrownBy(() -> ticketingService.createTicketOrder(new TicketOrderRequest(
                 "scope-jdbc-ticket-x", null, List.of(), "tt_scope_jdbc", null, 1,

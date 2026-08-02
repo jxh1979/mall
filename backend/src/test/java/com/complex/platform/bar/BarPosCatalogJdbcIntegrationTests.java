@@ -41,7 +41,7 @@ class BarPosCatalogJdbcIntegrationTests {
     private BarProductRecord newProduct(String id, String barId, String name) {
         Instant now = Instant.now();
         return new BarProductRecord(id, barId, "merchant_pos_test", name, "spirit", 5000L, "CNY",
-                null, null, false, "active", now, now, null, null, null);
+                null, null, false, "active", now, now, null, null, null, false, null, null, null);
     }
 
     @Test
@@ -141,9 +141,9 @@ class BarPosCatalogJdbcIntegrationTests {
         Instant now = Instant.now();
         String bar = "bar_pos_combo";
         BarProductRecord skuA = new BarProductRecord("product_combo_a", bar, null, "金酒", "spirit",
-                3000L, "CNY", null, null, false, "active", now, now, null, null, null);
+                3000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null);
         BarProductRecord skuB = new BarProductRecord("product_combo_b", bar, null, "汤力水", "soft",
-                7000L, "CNY", null, null, false, "active", now, now, null, null, null);
+                7000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null);
         barRepository.saveProduct(skuA);
         barRepository.saveProduct(skuB);
         catalog.saveCombo(new BarComboRecord("barcombo_gt", bar, null, "金汤力套餐",
@@ -178,9 +178,9 @@ class BarPosCatalogJdbcIntegrationTests {
         Instant now = Instant.now();
         String bar = "bar_pos_combo_rem";
         BarProductRecord skuA = new BarProductRecord("product_rem_a", bar, null, "SKU甲", "spirit",
-                5000L, "CNY", null, null, false, "active", now, now, null, null, null);
+                5000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null);
         BarProductRecord skuB = new BarProductRecord("product_rem_b", bar, null, "SKU乙", "soft",
-                5000L, "CNY", null, null, false, "active", now, now, null, null, null);
+                5000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null);
         barRepository.saveProduct(skuA);
         barRepository.saveProduct(skuB);
         catalog.saveCombo(new BarComboRecord("barcombo_rem", bar, null, "等权不整除套餐",
@@ -471,7 +471,7 @@ class BarPosCatalogJdbcIntegrationTests {
             service.archiveCategory("barcat_cp", true, "测试存档理由");
             assertThatThrownBy(() -> barOrderService.createProduct(new BarProductRequest(
                     "cp-key-1", null, List.of(), "bar_cp", "新品", "spirit", 1000L, null, null,
-                    "active", null, null, false, null, null, null, null, "barcat_cp", null)))
+                    "active", null, null, false, null, null, null, null, "barcat_cp", null, null)))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                     .hasFieldOrPropertyWithValue("code", "BAR_CATEGORY_NOT_ASSIGNABLE");
         } finally {
@@ -525,7 +525,7 @@ class BarPosCatalogJdbcIntegrationTests {
         try {
             Instant now = Instant.now();
             barRepository.saveProduct(new BarProductRecord("product_ns", "bar_ns", null, "已存档酒", "spirit",
-                    3000L, "CNY", null, null, false, "active", now, now, null, null, null));
+                    3000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null));
             barRepository.saveTable(new BarTableRecord("bartable_ns", "bar_ns", null, "T-NS", "守卫桌",
                     "card_seat", 4, 0, 0L, "CNY", "active", now, now));
             service.archiveProduct("product_ns", true, "测试存档理由");
@@ -547,7 +547,7 @@ class BarPosCatalogJdbcIntegrationTests {
         try {
             Instant now = Instant.now();
             barRepository.saveProduct(new BarProductRecord("product_cns", "bar_cns", null, "套餐酒", "spirit",
-                    3000L, "CNY", null, null, false, "active", now, now, null, null, null));
+                    3000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null));
             catalog.saveCombo(new BarComboRecord("barcombo_ns", "bar_cns", null, "已存档套餐",
                     5000L, null, null, "active", now, now,
                     List.of(new BarComboItemRecord("bci_ns", "barcombo_ns", "product_cns", "套餐酒", 1))));

@@ -97,14 +97,6 @@ public class BarOrderService {
         this.pourCostStrictMode = pourCostStrictMode;
     }
 
-    /** 向后兼容构造器：默认拒绝模式（从严）。 */
-    public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
-            AuditEventService auditEventService, TraceabilityService traceabilityService,
-            BarReceivableLedgerService receivableLedgerService) {
-        this(repository, authorizationService, auditEventService, traceabilityService,
-                receivableLedgerService, true);
-    }
-
     BarProductRecord createProduct(BarProductRequest request) {
         BarProductRequest actual = requireRequest(request);
         // I-2: 品类是合同经营范围拦截的比对基准——新建商品强制 8 值词表（否则商户可自报任意品类绕过拦截）。

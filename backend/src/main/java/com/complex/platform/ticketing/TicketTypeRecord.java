@@ -44,19 +44,6 @@ public record TicketTypeRecord(
         // 不得超过后台可配的允许误差（见 TicketCatalogService#requirePriceWithinTolerance）。放末位便于既有构造点追加。
         BigDecimal comboDiscountRate
 ) {
-    /** 向后兼容构造：V369 前 23 参全签名（无 combo_discount_rate）→ 100=不打折（与建表默认一致）。 */
-    public TicketTypeRecord(
-            String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
-            Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status,
-            Integer validityDays, Integer refreshIntervalSeconds, Instant createdAt, Instant updatedAt,
-            Integer stockQuantity, int soldQuantity, String ticketCategory,
-            Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy,
-            Instant deleteRequestedAt, String deleteReason, boolean refundable, String barId) {
-        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
-                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, ticketCategory, archivedAt, archivedBy, deleteStatus,
-                deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId, NO_COMBO_DISCOUNT);
-    }
 
     /** 不打折（100%）——V369 前建的票种与未配折扣的票种一律按此，算出售价 = 各业态票面原价之和。 */
     public static final BigDecimal NO_COMBO_DISCOUNT = BigDecimal.valueOf(100);
@@ -78,42 +65,6 @@ public record TicketTypeRecord(
                 deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId, comboDiscountRate);
     }
 
-    /** 向后兼容构造：V286 前 21 参全签名（无 refundable）→ 默认 false（不可退，与建表默认一致）。 */
-    public TicketTypeRecord(
-            String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
-            Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status,
-            Integer validityDays, Integer refreshIntervalSeconds, Instant createdAt, Instant updatedAt,
-            Integer stockQuantity, int soldQuantity, String ticketCategory,
-            Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy,
-            Instant deleteRequestedAt, String deleteReason) {
-        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
-                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, ticketCategory, archivedAt, archivedBy, deleteStatus,
-                deleteRequestedBy, deleteRequestedAt, deleteReason, false, null);
-    }
-
-    /** 向后兼容构造：V260 前 15 参全签名 → 存档/删除字段取默认（未存档、none）、不可退。 */
-    public TicketTypeRecord(
-            String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
-            Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status,
-            Integer validityDays, Integer refreshIntervalSeconds, Instant createdAt, Instant updatedAt,
-            Integer stockQuantity, int soldQuantity, String ticketCategory) {
-        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
-                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, false, null);
-    }
-
-    /** 16 参构造（15 参 + refundable）：建/发布票种入口透传可退配置，其余存档/删除默认（bar 默认 null=通票）。 */
-    public TicketTypeRecord(
-            String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
-            Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status,
-            Integer validityDays, Integer refreshIntervalSeconds, Instant createdAt, Instant updatedAt,
-            Integer stockQuantity, int soldQuantity, String ticketCategory, boolean refundable) {
-        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
-                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, refundable, null);
-    }
-
     /** V369 18 参构造（17 参 + comboDiscountRate）：建票入口透传票种折扣，其余存档/删除默认。 */
     public TicketTypeRecord(
             String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
@@ -125,17 +76,6 @@ public record TicketTypeRecord(
                 stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, refundable, barId,
                 comboDiscountRate);
-    }
-
-    /** AUD-076 17 参构造（16 参 + barId）：建/发布单店票入口透传酒吧归属，其余存档/删除默认。 */
-    public TicketTypeRecord(
-            String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
-            Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status,
-            Integer validityDays, Integer refreshIntervalSeconds, Instant createdAt, Instant updatedAt,
-            Integer stockQuantity, int soldQuantity, String ticketCategory, boolean refundable, String barId) {
-        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
-                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, refundable, barId);
     }
 
     public TicketTypeRecord withArchive(Instant archivedAt, String archivedBy, Instant updatedAt) {
@@ -154,48 +94,5 @@ public record TicketTypeRecord(
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId,
                 comboDiscountRate);
     }
-    /**
-     * 向后兼容构造：旧 12 参签名（无库存/分类字段）→ 库存不限量、soldQuantity=0、分类 null（标准）。
-     * 供既有调用点/测试不改而仍编译；需设置库存/分类的路径使用全参构造器。
-     */
-    public TicketTypeRecord(
-            String id,
-            String ticketName,
-            String baseCalendarPriceMode,
-            Long weekdayPriceCent,
-            Long weekendPriceCent,
-            Long holidayPriceCent,
-            boolean stockRequired,
-            String status,
-            Integer validityDays,
-            Integer refreshIntervalSeconds,
-            Instant createdAt,
-            Instant updatedAt) {
-        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
-                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt, null, 0, null);
-    }
 
-    /**
-     * 向后兼容构造：14 参签名（含库存、无分类字段）→ 分类 null（标准）。
-     * 供批3及之前建/发布票种入口不改而仍编译；需设置分类的路径使用全参构造器。
-     */
-    public TicketTypeRecord(
-            String id,
-            String ticketName,
-            String baseCalendarPriceMode,
-            Long weekdayPriceCent,
-            Long weekendPriceCent,
-            Long holidayPriceCent,
-            boolean stockRequired,
-            String status,
-            Integer validityDays,
-            Integer refreshIntervalSeconds,
-            Instant createdAt,
-            Instant updatedAt,
-            Integer stockQuantity,
-            int soldQuantity) {
-        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
-                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, null);
-    }
 }

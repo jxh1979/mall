@@ -49,23 +49,12 @@ public class TicketTransferService {
             PiiCipher piiCipher,
             AuditEventService auditEventService,
             org.springframework.beans.factory.ObjectProvider<NotificationService> notificationServiceProvider) {
-        this(repository, blindIndex, piiCipher, auditEventService,
-                notificationServiceProvider.getIfAvailable(), Clock.systemUTC());
-    }
-
-    TicketTransferService(
-            TicketingRepository repository,
-            BlindIndex blindIndex,
-            PiiCipher piiCipher,
-            AuditEventService auditEventService,
-            NotificationService notificationService,
-            Clock clock) {
         this.repository = repository;
         this.blindIndex = blindIndex;
         this.piiCipher = piiCipher;
         this.auditEventService = auditEventService;
-        this.notificationService = notificationService;
-        this.clock = clock;
+        this.notificationService = notificationServiceProvider.getIfAvailable();
+        this.clock = Clock.systemUTC();
     }
 
     // ── 发起 ────────────────────────────────────────────────────────────────

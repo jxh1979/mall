@@ -57,11 +57,6 @@ public class TicketCatalogService {
         this.barDirectory = barDirectory;
     }
 
-    // ponytail: 向后兼容构造——既有单测(InMemory 仓库、无商户目录)不建单店票，不校验酒吧归属。
-    public TicketCatalogService(TicketingRepository repository) {
-        this(repository, null);
-    }
-
     TicketTypeRecord createTicketType(TicketTypeRequest request) {
         TicketTypeRequest actual = requireRequest(request);
         Instant now = Instant.now();

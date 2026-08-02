@@ -72,7 +72,7 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
         // 通票票种（平台售、published、有效 2 天、门市价 8800 分）。
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 ticketTypeId, "第三方回流测试通票", "fixed", 8800L, 8800L, 8800L,
-                false, "published", 2, null, now, now, null, 0, null));
+                false, "published", 2, null, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
                     default_value_cent, status, created_at, updated_at)

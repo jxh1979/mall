@@ -170,7 +170,7 @@ class TicketTransferConcurrencyJdbcIntegrationTests {
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 c.entitlementId, "code_" + c.entitlementId, "tt_tr", "ord_" + c.parent, "et_tr", "ticket",
                 "m1", null, null, 1, 0, 100L, "active", now.minusSeconds(60), now.plusSeconds(86_400),
-                now, now, 1, null, null, null, null, null, c.parent, 1));
+                now, now, 1, null, null, null, null, null, c.parent, 1, null, null));
         return c;
     }
 

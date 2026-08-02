@@ -87,27 +87,6 @@ public class AccessService {
             AccessRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService,
-                AccessCredentialProvisioner.noop(), null, false, 3, 3);
-    }
-
-    AccessService(
-            AccessRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
-            AuthorizationService authorizationService,
-            AccessCredentialProvisioner credentialProvisioner
-    ) {
-        this(repository, idempotencyService, auditEventService, authorizationService,
-                credentialProvisioner, null, false, 3, 3);
-    }
-
-    AccessService(
-            AccessRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
             AuthorizationService authorizationService,
             AccessCredentialProvisioner credentialProvisioner,
             SupervisorReviewService supervisorReviewService,

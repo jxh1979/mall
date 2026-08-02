@@ -35,10 +35,6 @@ public class PartnerVoucherService {
         this.settlementPort = settlementPort;
     }
 
-    public PartnerVoucherService(TicketingRepository repository) {
-        this(repository, null);
-    }
-
     /** 配置某票务权益模板为第三方券(通票包含该权益即附赠此券)。 */
     public PartnerVoucherConfigRecord createConfig(PartnerVoucherConfigRequest request) {
         PartnerVoucherConfigRequest actual = requireRequest(request);

@@ -66,21 +66,6 @@ public class TicketOrderService {
         this.barDirectory = barDirectory;
     }
 
-    // ponytail: 向后兼容构造——注入 facePhotoService 但无 barDirectory。
-    public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
-                              AuthorizationService authorizationService,
-                              ApplicationEventPublisher eventPublisher,
-                              TicketFacePhotoService facePhotoService) {
-        this(repository, pricingService, authorizationService, eventPublisher, facePhotoService, null);
-    }
-
-    // ponytail: 向后兼容构造——既有单测(InMemory 仓库、无 PiiCipher/DB)不注入 facePhotoService/barDirectory。
-    public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
-                              AuthorizationService authorizationService,
-                              ApplicationEventPublisher eventPublisher) {
-        this(repository, pricingService, authorizationService, eventPublisher, null);
-    }
-
     TicketOrderRecord createOrder(TicketOrderRequest request) {
         TicketOrderRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))

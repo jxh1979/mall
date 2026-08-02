@@ -74,11 +74,11 @@ class TicketExpiryAutoRefundJdbcIntegrationTests {
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 entActive, "code_" + entActive, typeId, orderId, "et_exp", "ticket", "m1", null, null,
                 1, 0, 9900L, "active", past.minusSeconds(60), past, now, now,
-                1, 9900L, null, null, null, null, instActive, 1));
+                1, 9900L, null, null, null, null, instActive, 1, null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 entPending, "code_" + entPending, typeId, orderId, "et_exp", "ticket", "m1", null, null,
                 1, 0, 9900L, "active", past.minusSeconds(60), past, now, now,
-                1, 9900L, null, null, null, null, instPending, 1));
+                1, 9900L, null, null, null, null, instPending, 1, null, null));
 
         int processed = ticketingService.processExpiredPaidEntitlements(now);
 

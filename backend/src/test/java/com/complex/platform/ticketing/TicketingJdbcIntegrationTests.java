@@ -101,7 +101,7 @@ class TicketingJdbcIntegrationTests {
                 "active",null,null,
                 now,
                 now
-        ));
+        , null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "template_jdbc",
                 "P0 JDBC Entry",
@@ -112,7 +112,7 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now
         ,
-        null, null));
+        null, null, null, null, false));
 
         assertThat(repository.listTicketTypes())
                 .extracting(
@@ -148,7 +148,7 @@ class TicketingJdbcIntegrationTests {
                 "active",null,null,
                 now,
                 now
-        ));
+        , null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "template_jdbc_issue",
                 "P0 JDBC Entry",
@@ -159,7 +159,7 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now
         ,
-        null, null));
+        null, null, null, null, false));
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "link_jdbc",
                 "ticket_type_jdbc_issue",
@@ -176,7 +176,7 @@ class TicketingJdbcIntegrationTests {
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         repository.saveTicketOrder(new TicketOrderRecord(
                 "order_jdbc", "ON-JDBC", "cust_jdbc", "ticket_type_jdbc_issue", null, 2,
-                java.time.LocalDate.parse("2099-06-14"), "web", null, 9900L, "CNY", "paid", "issued", "created", now, now));
+                java.time.LocalDate.parse("2099-06-14"), "web", null, 9900L, null, 9900L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_jdbc",
                 "P0-JDBC",
@@ -198,7 +198,7 @@ class TicketingJdbcIntegrationTests {
                 3,
                 null
         ,
-        null, null));
+        null, null, null, null, null, 0, null, null));
         // V159 起 ticket_verifications.device_id 外键引用 terminal_devices，先建父设备避免 FK 违反。
         seedTerminalDevice("dev_jdbc", now);
         repository.saveVerification(new VerificationRecord(
@@ -319,19 +319,19 @@ class TicketingJdbcIntegrationTests {
 
     private void seedIssuedEntitlementForStatusCheck(Instant now) {
         repository.saveTicketType(new TicketTypeRecord(
-                "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null,null, now, now));
+                "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null,null, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null,null, now, now,
-                null, null));
+                null, null, null, null, false));
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         repository.saveTicketOrder(new TicketOrderRecord(
                 "order_chk", "ON-CHK", "cust_chk", "ticket_type_chk", null, 4,
-                java.time.LocalDate.parse("2026-06-18"), "web", null, 9900L, "CNY", "paid", "issued", "created", now, now));
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 9900L, null, 9900L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
                 "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",
                 now, now.plusSeconds(86400), now, now, 4, null,
-                null, null));
+                null, null, null, null, null, 0, null, null));
         // V159 起 ticket_verifications.device_id 外键引用 terminal_devices，先建父设备避免 FK 违反。
         seedTerminalDevice("dev_chk", now);
     }
@@ -368,7 +368,7 @@ class TicketingJdbcIntegrationTests {
                 "published",null,null,
                 now,
                 now
-        ));
+        , null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         repository.savePriceRule(new TicketPriceRuleRecord(
                 "price_rule_jdbc",
                 "ticket_type_order_jdbc",
@@ -395,14 +395,14 @@ class TicketingJdbcIntegrationTests {
                 java.time.LocalDate.parse("2026-06-20"),
                 "miniapp",
                 "13800138000",
-                15800L,
+                15800L, null, 15800L, 0L,
                 "CNY",
                 "unpaid",
                 "not_issued",
                 "created",
                 now,
                 now
-        ));
+        , null, null, null));
         repository.saveTicketPaymentIntent(new TicketPaymentIntentRecord(
                 "pay_intent_jdbc",
                 "ticket_order",
@@ -424,7 +424,7 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now
         ,
-        null, null));
+        null, null, null, null, false));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_order_jdbc",
                 "P0-ORDER-JDBC",
@@ -446,7 +446,7 @@ class TicketingJdbcIntegrationTests {
                 1,
                 null
         ,
-        null, null));
+        null, null, null, null, null, 0, null, null));
         repository.saveTicketCredential(new TicketCredentialRecord(
                 "credential_jdbc",
                 "ent_order_jdbc",
@@ -538,14 +538,14 @@ class TicketingJdbcIntegrationTests {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveTicketType(new TicketTypeRecord(
                 "tt_share_live", "Share Pass", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, "published", null, null, now, now, null, 0, null, true));
+                9900L, 11900L, 12900L, false, "published", null, null, now, now, null, 0, null, true, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         repository.saveTicketOrder(new TicketOrderRecord(
                 "o_share_live", "TO-SHARE-LIVE", "customer_share_live", "tt_share_live", null,
                 2, java.time.LocalDate.parse("2026-06-20"), "miniapp", "13800138000",
-                19800L, "CNY", "paid", "issued", "created", now, now));
+                19800L, null, 19800L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_share_live", "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now,
-                null, null));
+                null, null, null, null, false));
         // 两张父票实例，各一条挂父票的权益。
         repository.saveTicketInstance(new TicketInstanceRecord(
                 "inst_share_a", "TN-A", "o_share_live", "tt_share_live", 1, 1, 1,
@@ -556,13 +556,13 @@ class TicketingJdbcIntegrationTests {
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_share_a", "SHARE-A", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
                 null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, 9900L,
-                null, null, null, null, "inst_share_a", 1));
+                null, null, null, null, "inst_share_a", 1, null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_share_b", "SHARE-B", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
                 null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, 9900L,
-                null, null, null, null, "inst_share_b", 2));
+                null, null, null, null, "inst_share_b", 2, null, null));
 
-        TicketRefundService refundService = new TicketRefundService(repository, event -> { });
+        TicketRefundService refundService = new TicketRefundService(repository, event -> { }, null, null);
 
         // 传金额≠整票额（选一张票传 19800）→ REFUND_AMOUNT_MISMATCH。
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> refundService.requestRefund(
@@ -601,7 +601,7 @@ class TicketingJdbcIntegrationTests {
                 "published",null,null,
                 now,
                 now
-        ));
+        , null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         TicketDynamicPricingRuleRecord draft = repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
                 "dynamic_rule_jdbc",
                 "ticket_type_dynamic_jdbc",
@@ -672,7 +672,7 @@ class TicketingJdbcIntegrationTests {
                 "published",null,null,
                 now,
                 now
-        ));
+        , null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         long baseAmountCent = 11900L;
         long dynamicAdjustmentCent = -2000L;
         long amountCent = baseAmountCent + dynamicAdjustmentCent;
@@ -717,7 +717,7 @@ class TicketingJdbcIntegrationTests {
                 "created",
                 now,
                 now
-        ));
+        , null, null, null));
 
         assertThat(repository.findTicketOrderById("ticket_order_trace_jdbc"))
                 .get()
@@ -757,12 +757,12 @@ class TicketingJdbcIntegrationTests {
         repository.saveTicketType(new TicketTypeRecord(
                 "ticket_type_cat_student", "学生票", "weekday_weekend_holiday",
                 4900L, 5900L, 6900L, false, "active", null, null,
-                now, now, null, 0, "student"));
+                now, now, null, 0, "student", false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         // 不带分类（14 参兼容构造）→ NULL（标准，回归）。
         repository.saveTicketType(new TicketTypeRecord(
                 "ticket_type_cat_default", "标准票", "weekday_weekend_holiday",
                 9900L, 11900L, 12900L, false, "active", null, null,
-                now, now, null, 0));
+                now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
 
         assertThat(repository.findTicketTypeById("ticket_type_cat_student"))
                 .get().extracting(TicketTypeRecord::ticketCategory).isEqualTo("student");
@@ -774,7 +774,7 @@ class TicketingJdbcIntegrationTests {
                 repository.saveTicketType(new TicketTypeRecord(
                         "ticket_type_cat_bad", "非法", "weekday_weekend_holiday",
                         1L, 1L, 1L, false, "active", null, null,
-                        now, now, null, 0, "vip")))
+                        now, now, null, 0, "vip", false, null, TicketTypeRecord.NO_COMBO_DISCOUNT)))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 

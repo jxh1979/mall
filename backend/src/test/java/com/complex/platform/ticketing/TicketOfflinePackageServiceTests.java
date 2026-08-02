@@ -21,7 +21,7 @@ class TicketOfflinePackageServiceTests {
         TicketingRepository repository = mock(TicketingRepository.class);
         when(repository.listOfflineEntitlements("merchant_request", "venue_1", 20)).thenReturn(List.of());
         TicketOfflinePackageService service = new TicketOfflinePackageService(
-                repository, new AuditEventService(event -> event));
+                repository, new AuditEventService(event -> event), null, false);
 
         assertThatThrownBy(() -> service.getOfflineEntitlements("merchant_request", "venue_1", 20))
                 .isInstanceOfSatisfying(ApiException.class, exception -> {

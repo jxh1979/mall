@@ -107,59 +107,6 @@ public record BarProductRecord(
                 soldOut, soldOutAt, soldOutReason, internalSettlementPriceCent, null, null);
     }
 
-    /** 向后兼容构造器（V152 内部结算价前签名）：既有调用方零改动，内部价默认 null（未录入）。 */
-    public BarProductRecord(
-            String id,
-            String barId,
-            String merchantId,
-            String productName,
-            String productType,
-            long priceCent,
-            String currency,
-            String inventoryItemId,
-            String stockLocationId,
-            boolean stockDeductionRequired,
-            String status,
-            Instant createdAt,
-            Instant updatedAt,
-            Integer standardPourVolume,
-            String pourVolumeUnit,
-            Integer lossThreshold,
-            boolean soldOut,
-            Instant soldOutAt,
-            String soldOutReason
-    ) {
-        this(id, barId, merchantId, productName, productType, priceCent, currency,
-                inventoryItemId, stockLocationId, stockDeductionRequired, status,
-                createdAt, updatedAt, standardPourVolume, pourVolumeUnit, lossThreshold,
-                soldOut, soldOutAt, soldOutReason, null, null, null);
-    }
-
-    /** 向后兼容构造器（V091 沽清前签名）：既有调用方零改动，新字段默认未沽清。 */
-    public BarProductRecord(
-            String id,
-            String barId,
-            String merchantId,
-            String productName,
-            String productType,
-            long priceCent,
-            String currency,
-            String inventoryItemId,
-            String stockLocationId,
-            boolean stockDeductionRequired,
-            String status,
-            Instant createdAt,
-            Instant updatedAt,
-            Integer standardPourVolume,
-            String pourVolumeUnit,
-            Integer lossThreshold
-    ) {
-        this(id, barId, merchantId, productName, productType, priceCent, currency,
-                inventoryItemId, stockLocationId, stockDeductionRequired, status,
-                createdAt, updatedAt, standardPourVolume, pourVolumeUnit, lossThreshold,
-                false, null, null, null, null, null);
-    }
-
     // --- V262 存档/删除范式：不可变 record 的字段更新辅助（避免 28 参构造散落业务代码）。 ---
     public BarProductRecord withArchive(Instant archivedAt, String archivedBy, Instant updatedAt) {
         return new BarProductRecord(id, barId, merchantId, productName, productType, priceCent, currency,
