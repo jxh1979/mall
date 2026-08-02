@@ -199,10 +199,10 @@ public class PurchaseRequestService {
 
     private PurchaseRequestRecord requireForUpdate(String id) {
         PurchaseRequestRecord record = repository.findPurchaseRequestByIdForUpdate(id)
-                .orElseThrow(() -> ApiException.notFound("PURCHASE_REQUEST_NOT_FOUND", "purchase request not found"));
+                .orElseThrow(() -> ApiException.notFound("PURCHASE_REQUEST_NOT_FOUND", "采购申请不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(record.merchantId())) {
-            throw ApiException.forbidden("PURCHASE_REQUEST_FORBIDDEN", "purchase request is out of merchant scope");
+            throw ApiException.forbidden("PURCHASE_REQUEST_FORBIDDEN", "该采购申请不在当前商户权限范围内");
         }
         return record;
     }
@@ -210,7 +210,7 @@ public class PurchaseRequestService {
     private void requireSourceStatus(PurchaseRequestRecord record, Set<String> allowed) {
         if (!allowed.contains(record.status())) {
             throw ApiException.conflict("INVALID_STATE",
-                    "purchase request status '" + record.status() + "' cannot transition; expected one of " + allowed);
+                    "采购申请状态「" + record.status() + "」不能流转，应为以下之一：" + allowed);
         }
     }
 
@@ -292,7 +292,7 @@ public class PurchaseRequestService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

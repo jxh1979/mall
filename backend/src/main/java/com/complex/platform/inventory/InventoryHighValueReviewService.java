@@ -185,18 +185,18 @@ public class InventoryHighValueReviewService {
                     String decision = normalizeAllowed(actual.decision(), DECISIONS, "decision");
                     InventoryHighValueReviewRecord current = repository.findHighValueReviewByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound(
-                                    "HIGH_VALUE_REVIEW_NOT_FOUND", "high value review not found"));
+                                    "HIGH_VALUE_REVIEW_NOT_FOUND", "高值复核不存在或已被删除"));
                     // C3：复核前校验归属——有商户 scope 时复核单必须归属本商户，否则 403（含 reject 分支，
                     // 此前 saved_bottle_void reject 不加载 subject 即无任何 scope 校验，B 可翻转 A 的复核单）。
                     authorizationService.currentMerchantScope().ifPresent(scope -> {
                         if (!scope.equals(current.merchantId())) {
                             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                    "high value review does not belong to your merchant");
+                                    "该高值复核不属于当前商户");
                         }
                     });
                     if (!"pending".equals(current.reviewStatus())) {
                         throw ApiException.conflict(
-                                "HIGH_VALUE_REVIEW_NOT_PENDING", "high value review is not pending");
+                                "HIGH_VALUE_REVIEW_NOT_PENDING", "该高值复核不在待处理状态");
                     }
                     String reviewer = authorizationService.currentActor().id();
                     Instant now = Instant.now();
@@ -241,7 +241,7 @@ public class InventoryHighValueReviewService {
                     adjustment.itemId(), adjustment.locationId(), adjustment.quantity(),
                     authorizationService.currentMerchantScope().orElse(null));
             if (affected == 0) {
-                throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
+                throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足");
             }
             // 2e：高价值复核 approve 扣减（报损/盘点差异）也 FEFO 逐批扣批次 quantity，与 stock-movement 出库口径一致。
             int remaining = adjustment.quantity();
@@ -293,11 +293,11 @@ public class InventoryHighValueReviewService {
 
     private SavedBottleRecord loadSavedBottleScoped(String subjectId) {
         SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(subjectId)
-                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(bottle.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "saved bottle does not belong to your merchant");
+                    "该存酒记录不属于当前商户");
         }
         return bottle;
     }
@@ -305,15 +305,15 @@ public class InventoryHighValueReviewService {
     private StockAdjustmentRecord loadAdjustmentPending(String subjectId) {
         StockAdjustmentRecord adjustment = repository.findStockAdjustmentByIdForUpdate(subjectId)
                 .orElseThrow(() -> ApiException.notFound(
-                        "STOCK_ADJUSTMENT_NOT_FOUND", "stock adjustment not found"));
+                        "STOCK_ADJUSTMENT_NOT_FOUND", "库存调整不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(adjustment.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "stock adjustment does not belong to your merchant");
+                    "该库存调整不属于当前商户");
         }
         if (!"pending_review".equals(adjustment.status())) {
             throw ApiException.conflict(
-                    "STOCK_ADJUSTMENT_NOT_PENDING", "stock adjustment is not pending review");
+                    "STOCK_ADJUSTMENT_NOT_PENDING", "该库存调整不在待审核状态");
         }
         return adjustment;
     }
@@ -384,7 +384,7 @@ public class InventoryHighValueReviewService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

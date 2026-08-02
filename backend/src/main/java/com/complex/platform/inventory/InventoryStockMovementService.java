@@ -84,7 +84,7 @@ final class InventoryStockMovementService {
                     // P1-4: 白名单校验
                     if (!ALLOWED_ADJUSTMENT_TYPES.contains(adjustmentType)) {
                         throw ApiException.badRequest("INVALID_ADJUSTMENT_TYPE",
-                                "adjustment_type '" + adjustmentType + "' is not allowed");
+                                "调整类型「" + adjustmentType + "」不允许");
                     }
                     String reason = requireText(actual.reason(), "reason");
                     Long unitCostCents = nonNegativeOrNull(actual.unitCostCents(), "unit_cost_cents");
@@ -175,8 +175,7 @@ final class InventoryStockMovementService {
                     if (java.util.Set.of("purchase", "procurement", "purchase_request", "purchase_inbound")
                             .contains(inboundSourceType.toLowerCase(java.util.Locale.ROOT))) {
                         throw ApiException.badRequest("STOCK_IN_PURCHASE_BYPASS_FORBIDDEN",
-                                "purchase inbound must go through the purchase request receive flow (supplier qualification gate);"
-                                        + " direct stock-in cannot use a purchase source_type");
+                                "采购入库必须走采购申请收货流程（供应商资质闸），" + "直接入库不能使用采购来源类型");
                     }
                     String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     StockMovementRecord last = null;
@@ -302,7 +301,7 @@ final class InventoryStockMovementService {
         // P1-2: 白名单校验，明确拒绝 "inbound" 绕过入库审计
         if (!ALLOWED_TYPED_MOVEMENT_TYPES.contains(type)) {
             throw ApiException.badRequest("INVALID_MOVEMENT_TYPE",
-                    "movement_type '" + type + "' is not allowed via this endpoint");
+                    "变动类型「" + type + "」不允许通过此接口操作");
         }
         return executeWrite(
                 "createTypedStockMovement:" + type,
@@ -421,7 +420,7 @@ final class InventoryStockMovementService {
         String merchantScope = authorizationService.currentMerchantScope().orElse(null);
         int affected = repository.atomicDecreaseStockBalance(itemId, locationId, quantity, merchantScope);
         if (affected == 0) {
-            throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
+            throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足");
         }
     }
 
@@ -456,11 +455,11 @@ final class InventoryStockMovementService {
         try {
             long value = Long.parseLong(raw.trim());
             if (value < 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "unit_cost_cent must be non-negative");
+                throw ApiException.badRequest("VALIDATION_FAILED", "单位成本不能为负数");
             }
             return value;
         } catch (NumberFormatException exception) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unit_cost_cent must be an integer (cents)");
+            throw ApiException.badRequest("VALIDATION_FAILED", "单位成本必须为整数（单位：分）");
         }
     }
 
@@ -508,7 +507,7 @@ final class InventoryStockMovementService {
     private void requireNoActiveStocktake(String warehouseOrLocationId) {
         if (warehouseOrLocationId != null && repository.hasActiveStocktakeForWarehouse(warehouseOrLocationId)) {
             throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED",
-                    "warehouse has an active stocktake; stock movements are frozen until it closes");
+                    "仓库正在盘点中，盘点结束前库存变动已冻结");
         }
     }
 
@@ -602,7 +601,7 @@ final class InventoryStockMovementService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -637,23 +636,23 @@ final class InventoryStockMovementService {
     private int requirePositiveItemQuantity(Map<String, Object> item, String fieldName) {
         String raw = textFromItem(item, fieldName);
         if (raw == null || !raw.matches("[0-9]+")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be a positive integer");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须为正整数");
         }
         try {
             int quantity = Integer.parseInt(raw);
             if (quantity <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+                throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
             }
             return quantity;
         } catch (NumberFormatException exception) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is out of range");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 超出允许范围");
         }
     }
 
     /** 可空非负长整：null 透传（如调整单价 null=不视高价值），非空须 >= 0。 */
     private Long nonNegativeOrNull(Long value, String fieldName) {
         if (value != null && value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return value;
     }
@@ -677,11 +676,11 @@ final class InventoryStockMovementService {
     private void requireItemOwnership(String itemId) {
         InventoryItemRecord item = repository.findInventoryItemById(itemId)
                 .orElseThrow(() -> ApiException.notFound(
-                        "INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
+                        "INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(item.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "inventory item does not belong to your merchant");
+                        "该库存商品不属于当前商户");
             }
         });
     }
