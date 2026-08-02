@@ -1,5 +1,6 @@
 package com.complex.platform.amusement;
 
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -3310,17 +3311,6 @@ class AmusementServiceTests {
         public Optional<IdempotencyRecord> findByOperationIdAndIdempotencyKey(String operationId, String idempotencyKey) {
             return Optional.ofNullable(records.get(operationId + ":" + idempotencyKey));
         }
-    }
-
-    private static final class InMemoryAuditEventRepository implements AuditEventRepository {
-        private final List<AuditEvent> events = new ArrayList<>();
-
-        @Override
-        public AuditEvent save(AuditEvent event) {
-            events.add(event);
-            return event;
-        }
-
     }
 
     /** 内存版游乐权益端口：按 credentialPayload 索引票务权益，支持消费/回补，用于核销校验测试。 */

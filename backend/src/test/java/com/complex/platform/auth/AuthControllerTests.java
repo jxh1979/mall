@@ -1,5 +1,6 @@
 package com.complex.platform.auth;
 
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -275,16 +276,6 @@ class AuthControllerTests {
         @Bean
         AuditEventRepository auditEventRepository() {
             return new InMemoryAuditEventRepository();
-        }
-    }
-
-    private static final class InMemoryAuditEventRepository implements AuditEventRepository {
-        private final List<AuditEvent> events = new ArrayList<>();
-
-        @Override
-        public AuditEvent save(AuditEvent event) {
-            events.add(event);
-            return event;
         }
     }
 

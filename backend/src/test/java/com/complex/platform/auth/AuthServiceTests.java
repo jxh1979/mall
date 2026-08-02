@@ -1,5 +1,6 @@
 package com.complex.platform.auth;
 
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -228,15 +229,5 @@ class AuthServiceTests {
                 "staff-phone-1",
                 "staff_work_phone"
         ));
-    }
-
-    private static final class InMemoryAuditEventRepository implements AuditEventRepository {
-        private final List<AuditEvent> events = new ArrayList<>();
-
-        @Override
-        public AuditEvent save(AuditEvent event) {
-            events.add(event);
-            return event;
-        }
     }
 }

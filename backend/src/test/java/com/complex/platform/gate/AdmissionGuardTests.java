@@ -1,5 +1,6 @@
 package com.complex.platform.gate;
 
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -394,15 +395,5 @@ class AdmissionGuardTests {
         return new SupervisorReviewDecisionRecord(
                 reviewId, "p", "act", "obj", "o1", true, "pending_review",
                 2, null, "blocked", null, List.of(), Instant.now(), "u1", "one_level_up", null);
-    }
-
-    private static final class InMemoryAuditEventRepository implements AuditEventRepository {
-        private final List<AuditEvent> events = new ArrayList<>();
-
-        @Override
-        public AuditEvent save(AuditEvent event) {
-            events.add(event);
-            return event;
-        }
     }
 }
