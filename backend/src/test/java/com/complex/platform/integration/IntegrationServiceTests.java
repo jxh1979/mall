@@ -43,6 +43,8 @@ class IntegrationServiceTests {
     private IntegrationService service;
     private Map<String, String> secrets;
     private com.complex.platform.terminal.TerminalDeviceRepository terminalDeviceRepository;
+    // 批6：假出票端口（记录出票指令；本地订单金额可配，供 amount_matched / 对账系统取数断言）。
+    private FakeChannelTicketIssuePort ticketIssuePort;
 
     @BeforeEach
     void setUp() {
@@ -62,13 +64,15 @@ class IntegrationServiceTests {
         com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard =
                 new com.complex.platform.gate.TerminalSwitchGuard(
                         terminalDeviceRepository, new AuditEventService(auditEventRepository));
+        ticketIssuePort = new FakeChannelTicketIssuePort();
         service = new IntegrationService(
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 secretRef -> Optional.ofNullable(secrets.get(secretRef)),
-                terminalSwitchGuard
+                terminalSwitchGuard,
+                ticketIssuePort
         );
         repository.appCredentials.put("p0-open-app", new OpenAppCredentialRecord(
                 "cred-p0",
@@ -898,6 +902,267 @@ class IntegrationServiceTests {
                 .extracting(IntegrationOrderSyncRecord::externalBusinessId)
                 .contains("ext-b-bogus")
                 .doesNotContain("ext-b-real");
+    }
+
+    // ─── 批6 第三方通票适配（TDD：出票链路动钱动票，先测后行）─────────────────────
+
+    private void seedTicketTypeMap(String externalProductId, String ticketTypeId, String priceRuleId) {
+        service.saveChannelTicketTypeMap(new IntegrationChannelTicketTypeMapRequest(
+                "map-" + externalProductId, "mock-provider", "meituan", externalProductId, ticketTypeId, priceRuleId));
+    }
+
+    private IntegrationOrderSyncRequest ticketOrderSyncRequest(
+            String idempotencyKey, String externalBusinessId, long amountCent, Map<String, Object> payload) {
+        return new IntegrationOrderSyncRequest(
+                idempotencyKey,
+                "ticket-test",
+                List.of(),
+                "mock-provider",
+                "ticket",
+                "order",
+                externalBusinessId,
+                "received",
+                amountCent,
+                "CNY",
+                "meituan",
+                "mt-" + externalBusinessId,
+                null,
+                payload);
+    }
+
+    private void closeTicketChannelSwitch() {
+        org.mockito.Mockito.when(terminalDeviceRepository.resolveEffectiveSwitch(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq("integration.ticket_channel.sync"),
+                org.mockito.ArgumentMatchers.anyMap())).thenReturn(Optional.of(
+                new com.complex.platform.terminal.TerminalCapabilitySwitchRecord(
+                        "tcs_int_ticket_chan_off", "*", "integration.ticket_channel.sync",
+                        "global", "global", false, "批6 默认关", NOW, NOW)));
+    }
+
+    @Test
+    void ticketReflowRejectedWhenChannelSwitchOff() {
+        // 开关关（V071 种子语义）→ 拒收：明确报「渠道未启用」，不落台账、不出票。
+        closeTicketChannelSwitch();
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+
+        assertThatThrownBy(() -> service.createOrderSync(ticketOrderSyncRequest(
+                "tk-off", "ext-tk-off", 8800L, Map.of("external_product_id", "mt-prod-1"))))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("INTEGRATION_TICKET_CHANNEL_DISABLED");
+                    assertThat(exception.getMessage()).contains("渠道未启用");
+                });
+        assertThat(ticketIssuePort.commands).isEmpty();
+        assertThat(repository.orderSyncs).isEmpty();
+    }
+
+    @Test
+    void ticketReflowRejectedWhenMappingMissing() {
+        // 票种映射缺失 → fail-closed 中文拒收，不落台账、不出票。
+        assertThatThrownBy(() -> service.createOrderSync(ticketOrderSyncRequest(
+                "tk-nomap", "ext-tk-nomap", 8800L, Map.of("external_product_id", "mt-prod-x"))))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("INTEGRATION_CHANNEL_TICKET_MAP_MISSING");
+                    assertThat(exception.getMessage()).contains("渠道票种映射缺失");
+                });
+        assertThat(ticketIssuePort.commands).isEmpty();
+        assertThat(repository.orderSyncs).isEmpty();
+    }
+
+    @Test
+    void ticketReflowRejectedWhenProductIdMissing() {
+        assertThatThrownBy(() -> service.createOrderSync(ticketOrderSyncRequest(
+                "tk-noprod", "ext-tk-noprod", 8800L, Map.of())))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("INTEGRATION_TICKET_PRODUCT_ID_REQUIRED"));
+        assertThat(ticketIssuePort.commands).isEmpty();
+    }
+
+    @Test
+    void ticketReflowIssuesLocalTicketThroughMappedTicketType() {
+        // 回流 → 映射解析 → 走出票主链（fake 端口）：记录 sales_channel=meituan（S11 渠道费按渠道解析的钥匙）。
+        seedTicketTypeMap("mt-prod-1", "tt_pass", "rule_groupbuy");
+        ticketIssuePort.amountCent = 8800L;
+
+        IntegrationOrderSyncRecord record = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-ok", "ext-tk-ok", 8800L,
+                Map.of("external_product_id", "mt-prod-1", "quantity", 2, "visit_date", "2026-06-15",
+                        "buyer_phone", "13800000000")));
+
+        assertThat(record.status()).isEqualTo("synced");
+        assertThat(record.providerPayload())
+                .containsKey("local_ticket_order_id")
+                .containsEntry("local_amount_cent", 8800L)
+                .containsEntry("issued_ticket_count", 2)
+                .containsEntry("amount_matched", true);
+        assertThat(ticketIssuePort.commands).hasSize(1);
+        ChannelTicketIssuePort.IssueCommand command = ticketIssuePort.commands.get(0);
+        assertThat(command.ticketTypeId()).isEqualTo("tt_pass");
+        assertThat(command.priceRuleId()).isEqualTo("rule_groupbuy");
+        assertThat(command.salesChannel()).isEqualTo("meituan");
+        assertThat(command.quantity()).isEqualTo(2);
+        assertThat(command.visitDate()).isEqualTo(LocalDate.parse("2026-06-15"));
+        assertThat(command.buyerPhone()).isEqualTo("13800000000");
+        assertThat(command.idempotencyBase()).startsWith("tpk");
+    }
+
+    @Test
+    void duplicateTicketReflowIssuesOnlyOnce() {
+        // 同渠道订单号重复回流（不同 idempotency_key）→ 只出一次票，返回既有台账行。
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        IntegrationOrderSyncRecord first = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-dup-1", "ext-tk-dup", 8800L, Map.of("external_product_id", "mt-prod-1")));
+        IntegrationOrderSyncRecord second = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-dup-2", "ext-tk-dup", 8800L, Map.of("external_product_id", "mt-prod-1")));
+
+        assertThat(ticketIssuePort.commands).hasSize(1);
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(repository.orderSyncs).hasSize(1);
+    }
+
+    @Test
+    void ticketReflowAmountMismatchFlaggedNotBlocked() {
+        // 渠道实收 9900 ≠ 本地口径 8800：客人已在渠道付讫，票照出，amount_matched=false 进对账吐差异。
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        ticketIssuePort.amountCent = 8800L;
+
+        IntegrationOrderSyncRecord record = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-mis", "ext-tk-mis", 9900L, Map.of("external_product_id", "mt-prod-1")));
+
+        assertThat(record.status()).isEqualTo("synced");
+        assertThat(record.providerPayload()).containsEntry("amount_matched", false);
+        assertThat(ticketIssuePort.commands).hasSize(1);
+    }
+
+    @Test
+    void ticketRefundReflowRecordedWithoutLocalAutoRefund() {
+        // 退款回流：首批只落台账进对账；本地退款必须走既有退款审批链（先审后行），绝不自动退。
+        IntegrationOrderSyncRecord record = service.createOrderSync(new IntegrationOrderSyncRequest(
+                "tk-refund", "ticket-test", List.of(), "mock-provider", "ticket", "refund",
+                "ext-tk-refund", "received", 8800L, "CNY", "meituan", "mt-ext-tk-refund", null, Map.of()));
+
+        assertThat(record.status()).isEqualTo("received");
+        assertThat(record.syncType()).isEqualTo("refund");
+        assertThat(ticketIssuePort.commands).isEmpty();
+    }
+
+    @Test
+    void channelTicketTypeMapUpsertsByNaturalKeyAndArchives() {
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        String firstId = repository.channelTicketTypeMaps.values().iterator().next().id();
+        // 重录同一渠道商品 → 复用既有 id 改绑票种（自然键 upsert，不长重复行）。
+        service.saveChannelTicketTypeMap(new IntegrationChannelTicketTypeMapRequest(
+                "map-rebind", "mock-provider", "meituan", "mt-prod-1", "tt_pass_v2", "rule_v2"));
+        assertThat(repository.channelTicketTypeMaps).hasSize(1);
+        IntegrationChannelTicketTypeMapRecord rebound = repository.channelTicketTypeMaps.get(firstId);
+        assertThat(rebound.ticketTypeId()).isEqualTo("tt_pass_v2");
+        assertThat(rebound.priceRuleId()).isEqualTo("rule_v2");
+        // 停用（软删）→ active 查询不再命中，回流拒收。
+        service.archiveChannelTicketTypeMap(firstId, new StatusChangeRequest("map-archive", null, "停用测试", List.of()));
+        assertThat(repository.findActiveChannelTicketTypeMap("mock-provider", "meituan", "mt-prod-1")).isEmpty();
+        assertThatThrownBy(() -> service.createOrderSync(ticketOrderSyncRequest(
+                "tk-after-archive", "ext-tk-arch", 8800L, Map.of("external_product_id", "mt-prod-1"))))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("INTEGRATION_CHANNEL_TICKET_MAP_MISSING"));
+    }
+
+    @Test
+    void ticketChannelAutoReconciliationDerivesExpectedFromLocalOrders() {
+        // ticket 自动对账系统取数：平台侧期望=本地票订单实收（经端口直读），金额一致 → matched 零差异。
+        repository.providerAdapters.put("tk-recon-adapter", adapter(
+                "tk-recon-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                true, true, "manual-ledger:p0", true));
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        ticketIssuePort.amountCent = 8800L;
+        service.createOrderSync(ticketOrderSyncRequest(
+                "tk-recon-1", "ext-tk-recon", 8800L, Map.of("external_product_id", "mt-prod-1")));
+
+        ChannelReconciliationResult matched = service.reconcileChannel(new ChannelReconciliationRequest(
+                "tk-recon-run-1", "mock-provider", "ticket", "meituan",
+                LocalDate.parse("2026-06-14"), LocalDate.parse("2026-06-14"), false, null));
+        assertThat(matched.dryRun()).isFalse();
+        assertThat(matched.differenceCount()).isZero();
+        assertThat(matched.expectedCount()).isEqualTo(1);
+        assertThat(matched.actualCount()).isEqualTo(1);
+    }
+
+    @Test
+    void ticketChannelAutoReconciliationFlagsAmountDifference() {
+        // 渠道实收 9900 ≠ 本地订单 8800 → amount 差异（source_domain=thirdparty 进异常复核）。
+        repository.providerAdapters.put("tk-recon-adapter", adapter(
+                "tk-recon-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                true, true, "manual-ledger:p0", true));
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        ticketIssuePort.amountCent = 8800L;
+        service.createOrderSync(ticketOrderSyncRequest(
+                "tk-recon-mis", "ext-tk-recon-mis", 9900L, Map.of("external_product_id", "mt-prod-1")));
+
+        ChannelReconciliationResult result = service.reconcileChannel(new ChannelReconciliationRequest(
+                "tk-recon-run-2", "mock-provider", "ticket", "meituan",
+                LocalDate.parse("2026-06-14"), LocalDate.parse("2026-06-14"), false, null));
+        assertThat(result.differences())
+                .extracting(ReconciliationDifferenceRecord::differenceType)
+                .containsExactly("amount");
+        assertThat(result.differences().get(0).internalAmountCent()).isEqualTo(8800L);
+        assertThat(result.differences().get(0).providerAmountCent()).isEqualTo(9900L);
+    }
+
+    @Test
+    void verificationCallbackEnqueuedOnlyForChannelTickets() {
+        // 渠道票核销 → 落回传队列（integration_retry_tasks，task_type=verification_callback，锚定核销 id 幂等）；
+        // 本地售出票（无回流行）→ 静默跳过。
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        IntegrationOrderSyncRecord record = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-cb", "ext-tk-cb", 8800L, Map.of("external_product_id", "mt-prod-1")));
+        String localOrderId = record.providerPayload().get("local_ticket_order_id").toString();
+
+        TicketChannelCallbackEnqueuer enqueuer = new TicketChannelCallbackEnqueuer(
+                repository, Clock.fixed(NOW, ZoneOffset.UTC));
+        com.complex.platform.ticketing.SettlementSettledEvent event =
+                new com.complex.platform.ticketing.SettlementSettledEvent(
+                        "ver_1", NOW, "ent_1", localOrderId, "tt_pass", "bar", null,
+                        2, 1, 1, 8800L, NOW.plusSeconds(86400), null, null, null, null, "tkt_parent_1");
+        enqueuer.onVerified(event);
+        enqueuer.onVerified(event); // 幂等：同核销 id 重复事件 → upsert 同一行不翻倍。
+        assertThat(repository.retryTasks).hasSize(1);
+        IntegrationTaskRecord task = repository.retryTasks.values().iterator().next();
+        assertThat(task.id()).isEqualTo("retry_vcb_ver_1");
+        assertThat(task.taskType()).isEqualTo("verification_callback");
+        assertThat(task.businessType()).isEqualTo("ticket");
+        assertThat(task.externalBusinessId()).isEqualTo("ext-tk-cb");
+        assertThat(task.payload()).containsEntry("channel", "meituan");
+
+        // 冲正 → 冲正回传任务。
+        enqueuer.onReversed(new com.complex.platform.ticketing.VerificationReversedEvent(
+                "ver_1", "ver_rev_1", "ent_1", localOrderId, null, 1));
+        assertThat(repository.retryTasks).containsKey("retry_vrb_ver_rev_1");
+
+        // 非渠道订单：查无回流行 → 不入队。
+        enqueuer.onVerified(new com.complex.platform.ticketing.SettlementSettledEvent(
+                "ver_2", NOW, "ent_2", "ticket_order_local_only", "tt_pass", "bar", null,
+                1, 1, 1, 100L, NOW.plusSeconds(86400), null, null, null, null, "tkt_parent_2"));
+        assertThat(repository.retryTasks).hasSize(2);
+    }
+
+    /** 批6 假出票端口：记录指令、按可配金额造本地订单（对账系统取数走 orderAmounts）。 */
+    private static final class FakeChannelTicketIssuePort implements ChannelTicketIssuePort {
+        final List<IssueCommand> commands = new ArrayList<>();
+        final Map<String, Long> orderAmounts = new LinkedHashMap<>();
+        long amountCent = 8800L;
+
+        @Override
+        public IssueResult issue(IssueCommand command) {
+            commands.add(command);
+            String orderId = "ticket_order_" + command.idempotencyBase() + "_order";
+            orderAmounts.put(orderId, amountCent);
+            return new IssueResult(orderId, "TO-TEST-" + command.idempotencyBase(), amountCent,
+                    command.quantity(), command.quantity());
+        }
+
+        @Override
+        public Optional<Long> findOrderAmountCent(String ticketOrderId) {
+            return Optional.ofNullable(orderAmounts.get(ticketOrderId));
+        }
     }
 
     private IntegrationOrderSyncRequest orderSyncRequest(
