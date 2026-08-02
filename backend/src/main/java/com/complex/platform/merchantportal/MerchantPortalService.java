@@ -99,7 +99,7 @@ public class MerchantPortalService {
     public ContractSettlementRecord submitSettlementDispute(String settlementId, MerchantSettlementDisputeRequest request) {
         authorizationService.requirePermission("merchant.portal.settlement.dispute");
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         String reason = trimToNull(request.reason());
         if (reason == null) {
@@ -107,17 +107,17 @@ public class MerchantPortalService {
         }
         ContractSettlementRecord settlement = contractRepository
                 .findSettlementById(requireText(settlementId, "settlement_id"))
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "settlement not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "结算单不存在或已被删除"));
         ContractRecord contract = contractRepository.findContractById(settlement.contractId())
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "合同不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(contract.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "access to another merchant's settlement is forbidden");
+                    "无权查看其他商户的结算单");
         }
         if (!DISPUTABLE_STATUSES.contains(settlement.status())) {
             throw ApiException.conflict("SETTLEMENT_NOT_DISPUTABLE",
-                    "settlement is not open for dispute: " + settlement.status());
+                    "结算单当前状态不可发起异议：" + settlement.status());
         }
         Instant now = Instant.now();
         ContractSettlementRecord disputed = contractRepository.saveSettlement(new ContractSettlementRecord(
