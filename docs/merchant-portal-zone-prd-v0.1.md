@@ -1,6 +1,8 @@
 # 商户专区产品口径 PRD v0.1（3.18）
 
-> 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 权威ER（商户数据边界=账户自带 merchant scope）+ 厘清 §5 分期与 §6 落地状态口径矛盾（P0 五能力实已全上线，§5 分期标注为历史规划）。
+> 权限边界：本 PRD 只提供产品细化；三份业务 HTML 拥有最终业务解释权。其他文档、配置、代码和数据结构均不得覆盖 HTML；HTML 未记载的新规则须经用户批准并写入 HTML 后方可生效。
+
+> 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（商户数据边界=账户自带 merchant scope）+ 厘清 §5 分期与 §6 落地状态口径矛盾；最终业务解释以三份业务 HTML 为准。
 >
 > 形态裁决（2026-07-02 用户拍板，方案 A）：商户门户 = **后台内商户专区**——商户账号登录现有完整后台，
 > 只见与自己相关的账单 / 工单 / 对账菜单；复用既有账号权限体系与终端开关（terminal_type=merchant_portal
@@ -11,13 +13,13 @@
 
 - 商户（租户 / 联营方 / 服务商）当前依赖平台侧人工传达账单与工单进展；已有 ADM-MER-002「商户授权工作台」
   承载平台给商户账号授权的一侧，商户自助的一侧缺正式口径。
-- 本专区定位：**商户自助查看与自助发起**，不改变任何资金 / 审批的平台侧权威流程。
+- 本专区定位：**商户自助查看与自助发起**，不改变三份业务 HTML 及已批准资金／审批流程确定的责任边界。
 
 ## 2. 商户账号与数据边界
 
 - 商户账号 = 既有员工账号体系中 `merchant` 归属账号（access_users.merchant_id），登录入口与平台员工相同。
 - 数据边界铁律：**只见本商户**——账单 / 工单 / 对账 / 合同均按账户自带 merchant scope（`access_users.merchant_id`）过滤（复用
-  currentMerchantScope 既有管道）；跨商户读一律拒绝并留审计。**scope 依据对齐权威ER**：商户隔离键 = `merchants.business_entity_id`（经营主体 scope）；「我的合同」= `contracts.merchant_id` 命中本商户，合同↔铺位经 `contract_spaces`，主体/铺位关系细节见 `merchant-space-contract-model-v0.1.md`。
+  currentMerchantScope 既有管道）；跨商户读一律拒绝并留审计。当前实现的商户隔离键为 `merchants.business_entity_id`；“我的合同”按 `contracts.merchant_id` 命中本商户，主体／铺位关系细节见 `merchant-space-contract-model-v0.1.md`。该实现模型不得覆盖三份业务 HTML。
 - 终端管控：受 `merchant_portal` 终端总开关与模块开关约束，关闭即不可用（前端隐藏 + 后端拒绝）。
 
 ## 3. P0 能力范围（本专区第一批）

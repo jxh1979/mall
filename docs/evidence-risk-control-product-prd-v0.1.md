@@ -1,5 +1,7 @@
 # 证据留痕与风控产品 PRD V0.1
 
+> 权限边界：本 PRD 只提供产品细化；三份业务 HTML 拥有最终业务解释权。其他文档、配置、代码和数据结构均不得覆盖 HTML；HTML 未记载的新规则须经用户批准并写入 HTML 后方可生效。
+
 > 2026-07-04 逻辑一致性修订：①§6 每条风控规则补齐「条件/时间窗/阈值/处置动作/是否后台可配」字段（新增 §6.3 规则字段与默认阈值示例表），消除「何为高频/时间窗/笔数」无定义的问题；②§11A.3 把「升级」术语分离——异常域用 `escalate`（状态 handling→escalated），工单域用「SLA 标记/升级标记」（仅打标 `sla_breached`、不改 status），并要求两者在 UI 分别展示、不混用同一「升级」字眼。
 
 ## 1. 文档定位
@@ -252,9 +254,9 @@ flowchart TD
 
 ## 11A. 统一异常责任链、企微违规命中与 SLA 升级口径澄清 `文档goalP1(2026-06-20)`
 
-> 本节为产品语言的能力描述 + 业务规则 + 验收口径要点；可开发 + 可验收的权威细节（迁移号、operationId、`x-permission`、事件常量、DB CHECK、G/W/T）以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准（本节对应该文第 6 项「统一异常责任链」、第 9 项「企微违规命中」、第 15 项「工单 SLA 自动升级」）。先经 grep 后端/迁移核实功能真实存在再写。
+> 本节是产品细化；迁移号、operationId、权限点、事件常量、数据库约束和验收证据等当前实现细节见 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`，不得覆盖三份业务 HTML。
 
-### 11A.1 统一异常责任链 risk_alerts（权威：spec §6，V103）
+### 11A.1 统一异常责任链 risk_alerts（实现依据：spec §6，V103）
 
 能力描述：把 §3「异常发现、第一处理、转派、升级和关闭」与 §7.3 异常关闭流程落到**跨域统一异常汇聚层**，把各业务域（票务/酒吧/游乐/库存/财务/企微/设备/三方/分析/平台共 10 域）的异常统一汇聚为一条可追责的责任链，append-only 留痕每一步动作。经 grep 实证落于 `RiskAlertService`（report/claim/transfer/escalate/resolve/dismiss）+ 迁移 `V103__unified_risk_alerts.sql`（`risk_alerts` + `risk_alert_actions` 两表）。
 
@@ -271,7 +273,7 @@ flowchart TD
 - escalated 告警 resolve 不传结论 → 被 DB CHECK 拒绝、无法置 resolved。
 - open → claim → transfer → escalate → resolve（带结论）→ 5 态依次流转、4 条 append-only 留痕对应。
 
-### 11A.2 企微违规命中 wecom_risk_hits（权威：spec §9，V106）
+### 11A.2 企微违规命中 wecom_risk_hits（实现依据：spec §9，V106）
 
 能力描述：把 §6「风控规则」与 §8.1「企业微信会话留存合规」中的"基础违规命中"落到**可配置规则码命中 + 复核队列衔接**，消除"命中无表承载"。经 grep 实证落于 `WecomConversationService`（同步会话 → 规则码命中 → 写命中 + 发事件）+ `ComplianceController`（命中查询 / 复核端点）+ 迁移 `V106__wecom_risk_hits_and_rules.sql`（`wecom_risk_hits` 表 + 5 条规则码 seed）。
 
@@ -298,8 +300,8 @@ flowchart TD
 | 工单域 SLA 升级（merchant_service 工单，非本 PRD 直管） | **定时任务自动升级**（默认关，需显式开启） | `MerchantWorkOrderSlaEscalationJob`（`@Scheduled`，开关 `merchant.service.sla-escalation.scheduled.enabled=true` 才注册），迁移 `V120`（`sla_breached` + `escalated_at`） | 不改 status，仅打标 sla_breached + escalated_at + 写 escalated 动作；命中后移出待扫描索引防重复升级 |
 
 业务规则：
-- 本 PRD「异常首响超时进入升级队列」= 把超时异常**呈现到升级队列**供人工 escalate，升级动作本身是人工触发（异常域无定时自动升级）；权威见 spec §6。
-- 工单域 V120 的 SLA 定时自动升级是 merchant_service 工单的独立机制（默认关），升级只打标 + 留痕、不改工单状态；权威见 spec §15。
+- 本 PRD“异常首响超时进入升级队列”是把超时异常呈现到升级队列供人工升级，当前实现细节见 spec §6。
+- 工单域 V120 的 SLA 定时自动升级是 merchant_service 工单的独立机制，当前实现细节见 spec §15。
 - **术语分离（2026-07-04）**：异常域用「升级」`escalate`——**改状态** handling→`escalated`、写 escalate 责任链流水；工单域一律不叫「升级状态」，改用「**SLA 标记 / 升级标记**」——**只打标** `sla_breached` + `escalated_at`、**status 不变**。两者是不同对象、不同触发方式、不同留痕，禁止共用同一「升级」字眼。
 - **UI 分别展示**：异常「升级队列/已升级」与工单「SLA 标记/超时预警」在前端分列不同入口与筛选，不并入同一「升级」视图，避免运营误判为同一机制。
 
@@ -322,4 +324,4 @@ flowchart TD
 | 2026-06-07 | 增 | §8.1 | 新增企业微信会话留存合规小节（合法性/告知同意/可配置留存/到期处置/查看审计） | C3/compliance §4/phone-2 |
 | 2026-06-07 | 增 | §9 | 补企微留存、退款人/免单人责任、风险等级验收项 | C3/trace-7/D6 |
 | 2026-06-07 | 增 | §6/§6.2 | 风控规则补"未成年售酒拦截/醉酒拒售/场所超容"三条及规则码与等级（BAR_UNDERAGE_BLOCKED=high、BAR_INTOXICATED_REFUSED=suspicious、VENUE_OVER_CAPACITY=critical），与 data-risk-ai §10.9 一字一致，并补超员预警口径 | compliance-land-6/C1 + compliance-land-5/critic-8/C8：合规要求的风控规则此前未落到本层第6章 |
-| 2026-06-20 `文档goalP1` | 增 | §11A | 新增「统一异常责任链、企微违规命中与 SLA 升级口径澄清」：①统一异常责任链 risk_alerts（V103，发现→第一处理→转派→升级→关闭 5 态，resolved 必须有结论 DB CHECK）②企微违规命中 wecom_risk_hits（V106，规则码命中→复核队列）③澄清「SLA 自动升级」实为人工 escalate（异常域）/工单域 V120 定时升级，区分两者。权威指向 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §6/§9/§15 | 文档goalP1；grep 实证 RiskAlertService+V103、WecomConversationService+V106、MerchantWorkOrderSlaEscalationJob+V120 |
+| 2026-06-20 `文档goalP1` | 增 | §11A | 新增统一异常责任链、企微违规命中与 SLA 升级口径澄清；当前实现细节见 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §6/§9/§15，不覆盖三份业务 HTML | 文档goalP1；实现证据见 RiskAlertService、V103、WecomConversationService、V106、MerchantWorkOrderSlaEscalationJob 和 V120 |

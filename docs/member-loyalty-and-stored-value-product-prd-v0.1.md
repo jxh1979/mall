@@ -8,7 +8,7 @@
 
 本文只负责储值卡、储值本金、赠送金、消费扣款、退款、注销和余额迁移边界。
 
-会员身份、成长值、等级、积分和虚拟券已移交以下权威文档：
+会员身份、成长值、等级、积分和虚拟券由以下 PRD 细化；三份业务 HTML 仍拥有最终解释权：
 
 - `docs/member-and-tier-product-prd-v1.0.md`
 - `docs/points-and-voucher-product-prd-v1.0.md`
