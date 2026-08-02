@@ -140,8 +140,7 @@ public class ProductionReadinessService {
         ProductionReadinessItem existing = repository.findItemById(id)
                 .orElseThrow(() -> ApiException.notFound(
                         "PRODUCTION_READINESS_ITEM_NOT_FOUND",
-                        "production readiness item not found"
-                ));
+                        "上线准备项不存在或已被删除"));
         rejectSecretLikeCredentialRef(request.credentialRef());
 
         ProductionReadinessItem saved = repository.saveItem(existing.updateFrom(request, Instant.now(), authorizationService.currentActor().id()));
@@ -191,7 +190,7 @@ public class ProductionReadinessService {
 
     private void validateUpdateRequest(ProductionReadinessItemUpdateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         if (request.status() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "status is required");
@@ -215,7 +214,7 @@ public class ProductionReadinessService {
 
     private void validateCheckRequest(ProductionReadinessCheckRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         if (request.checkScope() == null || !CHECK_SCOPES.contains(request.checkScope())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "check_scope is invalid");
@@ -228,7 +227,7 @@ public class ProductionReadinessService {
         }
         for (Pattern pattern : SECRET_PATTERNS) {
             if (pattern.matcher(credentialRef).matches()) {
-                throw ApiException.badRequest("SECRET_VALUE_REJECTED", "credential_ref must be a reference, not a secret value");
+                throw ApiException.badRequest("SECRET_VALUE_REJECTED", "凭据字段只能填引用标识，不能填真实密钥");
             }
         }
     }
