@@ -71,7 +71,7 @@ public class AuthService implements SessionIssuer {
 
         return usersByUsername.compute(command.username(), (username, existing) -> {
             if (existing != null) {
-                throw ApiException.conflict("USER_ALREADY_EXISTS", "user already exists");
+                throw ApiException.conflict("USER_ALREADY_EXISTS", "该账号已存在");
             }
             UserRecord user = new UserRecord(
                     "usr_" + UUID.randomUUID(),
@@ -118,13 +118,13 @@ public class AuthService implements SessionIssuer {
             requireText(request.password(), "password");
 
             UserRecord user = Optional.ofNullable(usersByUsername.get(request.loginName()))
-                    .orElseThrow(() -> ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password"));
+                    .orElseThrow(() -> ApiException.unauthorized("INVALID_CREDENTIALS", "账号或密码不正确"));
 
             if (!passwordEncoder.matches(request.password(), user.passwordHash())) {
-                throw ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password");
+                throw ApiException.unauthorized("INVALID_CREDENTIALS", "账号或密码不正确");
             }
             if (!"active".equals(user.status())) {
-                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
 
             SessionRecord session = createSession(user, request.deviceId(), request.terminalType());
@@ -163,21 +163,21 @@ public class AuthService implements SessionIssuer {
             String refreshSessionId = refreshTokensToSessionId.get(request.refreshToken());
             SessionRecord session = refreshSessionId == null ? null : sessionsById.get(refreshSessionId);
             if (session == null || !"active".equals(session.status())) {
-                throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "refresh token is invalid");
+                throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "登录状态已失效，请重新登录");
             }
 
             requireText(currentAccessToken, "access_token");
             String accessSessionId = accessTokensToSessionId.get(currentAccessToken);
             if (!session.id().equals(accessSessionId)) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "refresh token does not match current session");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "登录凭证与当前会话不匹配，请重新登录");
             }
             if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "device does not match current session");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "设备与当前会话不匹配，请重新登录");
             }
 
             UserRecord user = usersById.get(session.userId());
             if (user == null || !"active".equals(user.status())) {
-                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
 
             SessionRecord refreshed = rotateSessionTokens(session);
@@ -218,13 +218,13 @@ public class AuthService implements SessionIssuer {
             String accessSessionId = accessTokensToSessionId.get(currentAccessToken);
             SessionRecord session = accessSessionId == null ? null : sessionsById.get(accessSessionId);
             if (session == null || !"active".equals(session.status())) {
-                throw ApiException.unauthorized("ACCESS_TOKEN_INVALID", "access token is invalid");
+                throw ApiException.unauthorized("ACCESS_TOKEN_INVALID", "登录凭证无效，请重新登录");
             }
             if (!session.id().equals(request.sessionId())) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "session_id does not match current token");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "会话标识与当前登录凭证不匹配");
             }
             if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "device does not match current session");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "设备与当前会话不匹配，请重新登录");
             }
 
             accessTokensToSessionId.remove(session.accessToken());

@@ -56,7 +56,7 @@ public class MasterAuthorityService {
             auditEventService.recordFailure("master_auth." + action + "_rate_limited", "not_applicable",
                     "master_auth", "global", null, null, "MASTER_AUTH_RATE_LIMITED");
             throw ApiException.tooManyRequests("MASTER_AUTH_RATE_LIMITED",
-                    "too many master auth attempts, retry later");
+                    "主授权尝试次数过多，请稍后再试");
         }
     }
 
@@ -97,11 +97,11 @@ public class MasterAuthorityService {
         Instant expiry = challenge == null ? null : challenges.remove(challenge); // 一次性：取出即消费
         if (expiry == null || Instant.now().isAfter(expiry)) {
             fail("MASTER_CHALLENGE_INVALID", "challenge missing, expired or already used");
-            throw ApiException.unauthorized("MASTER_CHALLENGE_INVALID", "challenge missing, expired or already used");
+            throw ApiException.unauthorized("MASTER_CHALLENGE_INVALID", "授权挑战不存在、已过期或已被使用");
         }
         if (!verifySignature(challenge, signatureBase64)) {
             fail("MASTER_SIGNATURE_INVALID", "master signature verification failed");
-            throw ApiException.unauthorized("MASTER_SIGNATURE_INVALID", "master signature verification failed");
+            throw ApiException.unauthorized("MASTER_SIGNATURE_INVALID", "主授权签名校验未通过");
         }
         AuthService.LoginResponse response = sessionIssuer.issueMasterSession();
         auditEventService.recordSuccess("auth.master.login_succeeded", "auth.master", "auth-session",
@@ -111,7 +111,7 @@ public class MasterAuthorityService {
 
     private void requireEnabled() {
         if (!enabled()) {
-            throw ApiException.forbidden("MASTER_AUTHORITY_DISABLED", "master authority is not provisioned");
+            throw ApiException.forbidden("MASTER_AUTHORITY_DISABLED", "主授权尚未配置");
         }
     }
 
