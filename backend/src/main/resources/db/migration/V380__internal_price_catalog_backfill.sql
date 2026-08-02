@@ -30,10 +30,10 @@ CREATE INDEX IF NOT EXISTS idx_voucher_definitions_catalog_ref ON voucher_defini
 --    无从绑定商家、不入目录，其快照列维持原值、解析行为照旧 fail-closed/回退 value_amount）。
 --    商家须真实存在（FK 兜底：LEFT JOIN merchants 过滤悬挂引用的脏数据行，不让整个迁移炸掉）。
 
--- ②a 酒吧商品（V152）：品类沿用商品粗类别 8 词表。
+-- ②a 酒吧商品（V152）：品类沿用商品粗类别 8 词表（bar_products 的粗类别落在 product_type 列，I-2 词表校验同源）。
 INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name, price_cent,
                                     status, is_draft, updated_by, created_at, updated_at)
-SELECT 'sku_bp_' || p.id, 'sku_bp_' || p.id, p.bar_id, COALESCE(p.category, p.product_type), p.product_name,
+SELECT 'sku_bp_' || p.id, 'sku_bp_' || p.id, p.bar_id, p.product_type, p.product_name,
        p.internal_settlement_price_cent, 'active', FALSE, 'migration_v380', now(), now()
   FROM bar_products p
   JOIN merchants m ON m.id = p.bar_id

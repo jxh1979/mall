@@ -15,16 +15,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 
 /**
- * 结算重构批3-1(PRD §6.1) 端到端验收：核销成功后 resolveSettlementPrice 按权益结算类别判定结算价并落
- * ticket_verifications.settlement_price_cent。
+ * 结算重构批3-1(PRD §6.1) + 批10/E(V379/V380 内部结算 SKU 目录) 端到端验收：核销成功后
+ * resolveSettlementPrice 判定结算价并固化落 ticket_verifications.settlement_price_cent。
  *
- * <p>四场景（资金教训，断言真守着"取内部价/签约价"而非空转）：
- * <ol>
- *   <li>实物(physical) + bar_item_ref 指向内部价 5000 的 bar_product → settlement_price=5000（不是 value_amount 9999）。</li>
- *   <li>虚拟(virtual) + agreement_price=8000 → 8000（不是 value_amount 9999）。</li>
- *   <li>实物但 bar_product 内部价为 NULL → 回退 value_amount 7777。</li>
- *   <li>kind 为 NULL（旧数据）→ 回退 value_amount 6666。</li>
- * </ol>
+ * <p>批10/E 起提供方兑付类(实物等)取价统一收口目录：bar_product 须挂目录引用(catalog_item_code)、
+ * 价取目录生效行；没挂引用 = 没录内部价 → fail-closed 拒核销。非提供方兑付类(入场等虚拟)行为不变
+ * (发放快照/回退 value_amount)。
+ *
+ * <p>压轴用例 catalogPriceChangeDoesNotMoveAlreadyVerifiedMoney 是「历史不受改价影响」的资金证明：
+ * 草案不生效 → 他人复核转正 → 已核销一分不动 → 之后的核销按新目录价固化 → 快照被传播。
  *
  * <p>走 {@link TicketingService#createVerification}（真提交，与批1 端到端同范式）；@AfterEach 按 suffix 清理落地行。
  */
@@ -44,6 +43,12 @@ class SettlementPriceResolutionJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.settlement.SettlementConfigWriteService configWriteService;
+
+    @Autowired
+    private InternalSettlementPriceResolver priceResolver;
+
     private final List<String> seededCodes = new ArrayList<>();
     private final List<String> seededBarProducts = new ArrayList<>();
     private String deviceCode;
@@ -61,6 +66,7 @@ class SettlementPriceResolutionJdbcIntegrationTests {
         }
         for (String pid : seededBarProducts) {
             jdbcTemplate.update("DELETE FROM bar_products WHERE id = ?", pid);
+            jdbcTemplate.update("DELETE FROM internal_price_catalog WHERE item_code = ?", "sku_bp_" + pid);
         }
         if (deviceCode != null) {
             jdbcTemplate.update("DELETE FROM terminal_devices WHERE id = ?", deviceCode);
@@ -139,51 +145,67 @@ class SettlementPriceResolutionJdbcIntegrationTests {
     }
 
     /**
-     * 配置中心批5：改模板签约价，历史一分钱都不动。
+     * 批10/E「历史不受改价影响」资金证明（接替原批5 updateAgreementPrice 用例；该端点已随目录收编下线）。
      *
-     * <p>这条断言的是资金安全，不是接口通不通——签约价决定平台结算给商户多少钱，
-     * 若改价能倒着改已发生的账，运营改一次价就等于篡改历史结算。四步：
+     * <p>目录口径（业务 HTML「内部结算价目录」节）四步全链：
      * <ol>
-     *   <li>模板签约价 8000，从它发两张权益（A、B，快照各持 8000）。</li>
-     *   <li>先核销 A → ticket_verifications.settlement_price_cent = 8000（这笔已发生）。</li>
-     *   <li>把模板签约价改成 3000（真改成了，不是空转）。</li>
-     *   <li>断言：A 那条已核销记录仍是 8000；B（改价前已发放、改价后才核销）仍按 8000 结算。</li>
+     *   <li>目录生效价 8000 的商品权益 A、B 各发一张；核销 A → 固化 8000（这笔已发生）。</li>
+     *   <li>起草人把该条目改成 3000 —— <b>草案不生效</b>：解析器仍解析 8000；起草人自审转正 → 403。</li>
+     *   <li>他人复核转正 → 已核销的 A 仍是 8000（改价倒不动历史账）；商品快照列被传播成 3000；
+     *       旧生效行软替换留库 = 价格版本史。</li>
+     *   <li>此后核销 B → 按<b>当时的目录价 3000</b> 固化（改价对后续核销生效——目录口径「核销才是固化时点」
+     *       取代了旧「按发放时快照」口径）。</li>
      * </ol>
-     * 即改价只对**之后发放**的权益生效；已发放/已核销的按各自快照走。
      */
     @Test
-    void agreementPriceChangeDoesNotMoveAlreadyIssuedOrVerifiedSettlementMoney() {
+    void catalogPriceChangeDoesNotMoveAlreadyVerifiedMoney() {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
         seedDevice(suffix);
-        // 模板签约价 8000；权益 A 由 seedEntitlement 发出（快照 8000），value_amount=9999 作回退基准。
-        String codeA = seedEntitlement(suffix, "virtual", null, 8000L, 9999L);
+        String barProductId = seedBarProduct(suffix, 8000L); // 目录生效价 8000
+        String itemCode = "sku_bp_" + barProductId;
+        String codeA = seedEntitlement(suffix, "physical", barProductId, null, 9999L);
         String templateId = "et_" + codeA;
-        // 权益 B：同一模板、同一订单，改价前就已发放，快照同为 8000。
-        String codeB = seedSiblingEntitlement(suffix, codeA, templateId, 8000L, 9999L);
+        String codeB = seedSiblingEntitlement(suffix, codeA, templateId, "physical", null, 9999L);
 
-        // ① 改价前先核销 A —— 这笔钱已经发生。
+        // ① 改价前核销 A —— 固化 8000，这笔钱已经发生。
         verify(suffix + "-a", codeA);
         assertThat(settlementPrice(codeA)).isEqualTo(8000L);
 
-        // ② 把模板签约价从 8000 改到 3000。
-        ticketingService.updateEntitlementTemplateAgreementPrice(templateId,
-                new com.complex.platform.ticketing.dto.EntitlementAgreementPriceRequest(
-                        "idem-price-" + suffix, null, java.util.List.of(), 3000L, "签约价录入笔误更正"));
-        assertThat(ticketingRepository.findEntitlementTemplateById(templateId).orElseThrow().agreementPriceCent())
-                .isEqualTo(3000L); // 改价真落库了，否则下面的"没变"是假绿
+        // ② 起草改价 3000：落的是草案，不生效——解析器此刻仍是 8000。
+        configWriteService.saveInternalPriceItem(
+                new com.complex.platform.settlement.SettlementConfigWriteRequests.InternalPriceItemRequest(
+                        "idem-sku-" + suffix, itemCode, "merchant_a", "spirit", "SP Drink", 3000L),
+                "drafter_sp_it");
+        assertThat(priceResolver.require(barProductId, "merchant_a", null)).isEqualTo(8000L);
 
-        // ③ 已核销的 A：结算价仍是 8000，改价没有倒着改历史账。
-        assertThat(settlementPrice(codeA)).isEqualTo(8000L);
+        // ②b 起草人不得自审转正（差人守卫）。
+        String draftId = jdbcTemplate.queryForObject(
+                "SELECT id FROM internal_price_catalog WHERE item_code = ? AND is_draft = TRUE AND status = 'active'",
+                String.class, itemCode);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                configWriteService.activateDraft("internal_price_item", draftId, "drafter_sp_it"))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("SELF_ACTIVATION_FORBIDDEN"));
 
-        // ④ 改价前已发放、改价后才核销的 B：仍按发放当时的 8000 结算，不是新价 3000、也不是回退面值 9999。
+        // ③ 他人复核转正：目录换生效价 + 快照传播；已核销的 A 一分不动。
+        configWriteService.activateDraft("internal_price_item", draftId, "approver_sp_it");
+        assertThat(settlementPrice(codeA)).isEqualTo(8000L); // 已发生的不可改
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT internal_settlement_price_cent FROM bar_products WHERE id = ?", Long.class, barProductId))
+                .isEqualTo(3000L); // 快照传播（改一次，对后续生效）
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM internal_price_catalog WHERE item_code = ? AND status = 'inactive'",
+                Integer.class, itemCode)).isEqualTo(1); // 旧生效行软替换留库 = 价格版本史
+
+        // ④ 此后核销 B：按当时的目录价 3000 固化。
         verify(suffix + "-b", codeB);
-        assertThat(settlementPrice(codeB)).isEqualTo(8000L);
+        assertThat(settlementPrice(codeB)).isEqualTo(3000L);
     }
 
-    /** 在既有模板/订单下再发一张权益（改价前已发放，用于验证改价后核销仍按发放时快照）。 */
+    /** 在既有模板/订单下再发一张权益（改价前已发放，用于验证改价后核销按目录当时价固化）。 */
     private String seedSiblingEntitlement(String suffix, String siblingCode, String templateId,
-            Long agreementPrice, Long valueAmount) {
+            String kind, Long agreementPrice, Long valueAmount) {
         String code = "sp-code-b-" + suffix;
         // 插队首：B 复用 A 的订单/模板，必须先清 B 的权益行，否则清 A 时删 ticket_orders 撞 FK。
         seededCodes.add(0, code);
@@ -192,7 +214,7 @@ class SettlementPriceResolutionJdbcIntegrationTests {
                 "ent_" + code, code, "tt_" + siblingCode, "order_" + siblingCode, templateId, "entry",
                 "merchant_a", null, "point_" + suffix, 1, 0, valueAmount, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
-                "virtual", agreementPrice));
+                kind, agreementPrice));
         return code;
     }
 
@@ -223,17 +245,40 @@ class SettlementPriceResolutionJdbcIntegrationTests {
         return seedBarProduct(suffix, internalPrice, "merchant_a");
     }
 
-    /** S5：商品归属可指定——用于验证「商品不属于本提供方则不解析」。 */
+    /**
+     * S5：商品归属可指定——用于验证「商品不属于本提供方则不解析」。
+     * 批10/E：有内部价的商品按 V380 收编形态播种——目录生效条目(sku_bp_ + 商品id) + 商品挂引用 + 快照列同值；
+     * 无内部价 = 不挂引用（解析 fail-closed，与旧 NULL 内部价同语义）。
+     */
     private String seedBarProduct(String suffix, Long internalPrice, String barId) {
         String pid = "barprod_sp_" + suffix;
         seededBarProducts.add(pid);
         java.sql.Timestamp ts = java.sql.Timestamp.from(Instant.now());
+        String itemCode = internalPrice == null ? null : "sku_bp_" + pid;
         jdbcTemplate.update("""
                 INSERT INTO bar_products (id, bar_id, product_name, product_type, price_cent, currency,
-                    stock_deduction_required, status, internal_settlement_price_cent, created_at, updated_at)
-                VALUES (?, ?, 'SP Drink', 'drink', 12000, 'CNY', FALSE, 'active', ?, ?, ?)
-                """, pid, barId, internalPrice, ts, ts);
+                    stock_deduction_required, status, internal_settlement_price_cent, catalog_item_code,
+                    created_at, updated_at)
+                VALUES (?, ?, 'SP Drink', 'drink', 12000, 'CNY', FALSE, 'active', ?, ?, ?, ?)
+                """, pid, barId, internalPrice, itemCode, ts, ts);
+        if (itemCode != null) {
+            seedMerchant(barId);
+            jdbcTemplate.update("""
+                    INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name,
+                        price_cent, status, is_draft, updated_by, created_at, updated_at)
+                    VALUES (?, ?, ?, 'spirit', 'SP Drink', ?, 'active', FALSE, 'seed_sp_it', now(), now())
+                    """, itemCode, itemCode, barId, internalPrice);
+        }
         return pid;
+    }
+
+    /** 目录条目有 merchants FK：确保测试商户真实存在（共享 id，ON CONFLICT 幂等，不清理防撞他类 FK）。 */
+    private void seedMerchant(String merchantId) {
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (?, ?, 'bar', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """, merchantId, "SP测试商户-" + merchantId);
     }
 
     /**
