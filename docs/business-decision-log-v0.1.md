@@ -418,7 +418,7 @@
 
 | 2026-07-21 商户专区平台全量伪分页收尾（AUD-005 收尾·#187 复核残留） | 改 | `merchantportal/MerchantPortalService`（listMyContracts/listMySettlements）+ `MerchantPortalController` + `contract/ContractRepository`/`JdbcContractRepository`（新增 listAllSettlementsPaged） | 批D 只修了招商/合同/治理/员工四域，商户专区（商户专区一期 3.18）在四域之外被漏掉：**平台管理员**在商户专区看「全量合同/结算」时，合同回退分支走 `listContracts()`（SQL 固定 `LIMIT 500`）且服务层返回 `total=当前页条数`＝**伪分页**（第 501+ 条静默不可达、total 撒谎）；结算回退分支同样 `total=items.size()` 且无 LIMIT／OFFSET（无界全量装载、page/size 形同虚设）。改**真分页**：service 保留原无参签名（委派 page=1/size=500）+ 新增 page/size 重载；controller 接受受限 `page/size`（默认 page=1、size=500＝合同既有 LIMIT 上限，保留前端一次拉取契约不破反序列化）；平台全量合同走既有 `listContractsPaged`、结算走新增 `listAllSettlementsPaged`（同 scope 谓词的 `SELECT COUNT(*)` 取真 total + `LIMIT/OFFSET` 任意页可达 + 稳定排序 `created_at DESC, id`）。**商户自 scope 路径（listContractsByMerchant/listSettlementsByMerchant，无 LIMIT、谓词隔离）保持不变**，仅在服务层对其结果做内存切片（单商户天然有界）。范式沿用批D／finance getPaged。新增 `MerchantPortalJdbcIntegrationTests`（平台全量结算真 total＋第二页可达＋商户 scope 仍隔离），`MerchantPortalServiceTests` 平台分支桩改指 `listContractsPaged`；无迁移。 | 2026-07-19 #187 复核发现批D 遗漏商户专区平台全量分支（P2）：伪分页致平台侧历史合同/结算在商户专区不可达、total 少算 |
 | 2026-07-22 IR 提取轮补充口径 | 增/改 | §38 / 基准 D15 / 三份业务 HTML（10 处） / bar-design §5.2.2 / 8 处派生文档 | IR 铁律提取轮用户拍板 8 项：金额精度+分账尾差归平台、并发以先成功为准、考勤按所在位置当地时间（改"服务器时间"）、留痕永久+手动删入口、导出脱敏分级、导出加密码算法派生、金额变动短信提醒、最低消费绝对不按人数（删"原则上"）。同步三份最终解释权 HTML（sys 5+gov 4+enum 1）+ 基准 D15 + 8 处派生文档 sed 去"原则上" + bar-design `by_headcount` 扩展点废弃标注 | 用户 2026-07-22 IR 提取轮逐条拍板 |
-| 2026-07-28 通票分账瀑布与主体归属 | 增/改 | DEC-ORG-2026-07-28-01~07 / §35 赠酒成本行 / `terminology-canonical` §三·四·五·六 / `settlement-rebuild-prd` §2·4·5·附录 / `ticketing-entitlement-settlement-breakdown` §7.1 / `platform-governance-prd` §5 / `CONTEXT.md` / 看板·权限矩阵·验收·backlog·v7 计划 | 按业务 HTML `f19ea732`（10 组 28 处，用户逐条批准）同步 PRD 与台账：① 专名「娱乐运营平台」→「娱乐平台公司」；② 分账瀑布＝渠道抽成→赠送权益预估成本（娱乐平台公司）→门票综合服务费/留存（同一项只扣一次，归娱乐平台公司）→可分配池仅酒吧分、池内不再二次扣留存；③ 赠送权益每样独立、绑提供方、按内部结算价计成本，预扣按票种配「按件计／按票整额」；④ 赠酒每吧至少一杯、杯数写票面、不得跨吧核销；⑤ 兑付与差额归娱乐平台公司、成本按业态分记；⑥ 非散台服务费与订台低消/二次消费/额外酒水归各酒吧商户（⚠️可重议）、场地租金归长沙项目公司、向商户供货货款归中央餐饮公司；⑦ 资产公司即长沙项目公司、资产业态不单设主体；⑧ 组织主数据登记（平台公司占位名/长沙项目公司/四业态主体/10 家酒吧 A98–J98）。**代码尚未跟上，属待开发缺口** | 用户 2026-07-28 口头拍板；业务 HTML 逐条批准 commit `f19ea732` |
+| 2026-07-28 通票分账瀑布与主体归属 | 增/改 | DEC-ORG-2026-07-28-01~07 / §35 赠酒成本行 / `terminology-canonical` §三·四·五·六 / `settlement-rebuild-prd` §2·4·5·附录 / `ticketing-entitlement-settlement-breakdown` §7.1 / `platform-governance-prd` §5 / `CONTEXT.md` / 看板·权限矩阵·验收·backlog·v7 计划 | 按业务 HTML `f19ea732`（10 组 28 处，用户逐条批准）同步 PRD 与台账：① 专名「娱乐运营平台」→「娱乐平台公司」；② 分账瀑布＝渠道抽成→赠送权益预估成本（娱乐平台公司）→门票综合服务费/留存（同一项只扣一次，归娱乐平台公司）→可分配池仅酒吧分、池内不再二次扣留存；③ 赠送权益每样独立、绑提供方、按内部结算价计成本，预扣按票种配「按件计／按票整额」；④ 赠酒每吧至少一杯、杯数写票面、不得跨吧核销；⑤ 兑付与差额归娱乐平台公司、成本按业态分记；⑥ 非散台服务费与订台低消/二次消费/额外酒水归各酒吧商户（⚠️可重议）、场地租金归长沙项目公司、向商户供货货款归中央餐饮公司；⑦ 资产公司即长沙项目公司、资产业态不单设主体；⑧ 组织主数据登记（平台公司占位名/长沙项目公司/四业态主体/10 家酒吧 A98–J98）。**代码尚未跟上，属待开发缺口**（→ 2026-08-01 S10 收官：S1–S11 已全部落地，对照表见 `settlement-rebuild-prd-v1.0.md` §14.2；遗留=差额调账留痕/按业态分记/SKU 目录/渠道费固定额/cost_bearer 必填强校验） | 用户 2026-07-28 口头拍板；业务 HTML 逐条批准 commit `f19ea732` |
 
 ## BAR-VOID-A1（2026-07-27）高价值已出品退酒审批时机
 
@@ -714,7 +714,7 @@
 - **变更**：此前文档写「归项目公司留存 / 归项目公司」，**作废**。项目公司只在「未核销权益票款留存」处出现。
 - **理由**：娱乐平台公司是通票的发行、售票、结算与平台运营服务的实际提供方，综合服务费是其提供统一售票/结算/平台运营服务的对价，收入应与提供服务的主体一致；项目公司不提供该服务，不应确认该收入。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `f19ea732`）。
-- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0/§5.1/附录 A、`terminology-canonical-v1.0.md` §三/§五、`business-dashboard-metrics-product-prd-v0.1.md` 分账下钻、`dev-plan-v7-audit-20260722.md` R-3 门票综合服务费重建（代码待开发）。
+- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0/§5.1/附录 A、`terminology-canonical-v1.0.md` §三/§五、`business-dashboard-metrics-product-prd-v0.1.md` 分账下钻、`dev-plan-v7-audit-20260722.md` R-3 门票综合服务费重建。✅ **已落地（2026-08-01）**：S2/S3/S4（V365/V367/V370，PR #275/#281/#283），R-3 闭合。
 
 ## DEC-ORG-2026-07-28-02（2026-07-28）赠送权益预扣两种模式
 
@@ -728,7 +728,7 @@
 - **变更**：推翻 D5（2026-07-21）「赠酒成本不从池扣」。D5 删除的是「每杯 3 元」这一财务测算假设，**不是取消预扣**；现行口径预扣的是按内部结算价 / 售价整额算出的赠送权益预估成本，重复计问题由 DEC-ORG-2026-07-28-03 的「差额留娱乐平台公司」调平。
 - **理由**：赠送权益是娱乐平台公司卖票时承诺的成本，须在分给酒吧之前先从票款里留出，否则可分配池被高估、酒吧分账虚高；按提供方内部结算价计成本使「谁提供谁按成本收钱」可核对，按票整额模式则便于套餐型票种简化配置。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `f19ea732`）。
-- **影响**：结算引擎新增票种级预扣配置与预扣科目（**代码待开发**）；`settlement-rebuild-prd-v1.0.md` §5.0/§5.3/附录 A。
+- **影响**：结算引擎新增票种级预扣配置与预扣科目——✅ **已落地（2026-08-01）**：S6（V372/V373，PR #286，`pass_gift_cost_configs` 两模式）；`settlement-rebuild-prd-v1.0.md` §5.0/§5.3/附录 A。
 
 ## DEC-ORG-2026-07-28-03（2026-07-28）赠酒按酒吧分配、不得跨吧核销、杯数写明票面；兑付与差额归娱乐平台公司
 
@@ -742,7 +742,7 @@
   6. **预扣与核销实付的差额留在娱乐平台公司**，按可配规则调账留痕，不回流可分配池、不改已结酒吧分账。
 - **理由**：赠酒是给每家酒吧引流的手段，每吧至少一杯保证覆盖；写明票面让客人和商户对账口径一致、避免核销纠纷；限定本吧核销防止客人把杯数集中到单一酒吧、使成本与引流效果错配；兑付主体与预扣主体一致（都是娱乐平台公司），差额留在同一主体才能自洽平账。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `f19ea732`）。
-- **影响**：票种配置需支持按吧杯数并打印票面；核销侧需新增跨吧拒绝校验；结算侧需按业态分记成本与差额调账（**均为代码待开发**）。
+- **影响**：按吧杯数与票面清单、跨吧核销拒绝——✅ **已落地（2026-08-01）**：S5（PR #270，K16/K17 + gift-coverage 端点）；兑付成本按业态分记与差额调账留痕——⏳ **仍遗留**（原 S7 范围，见 `pending-development-backlog-v0.1.md`）。
 
 ## DEC-ORG-2026-07-28-04（2026-07-28）订台低消 / 二次消费 / 额外酒水归各酒吧商户 —— ⚠️ 可重议
 
@@ -789,7 +789,7 @@
 - **规则**：综合／联合通票**售价 =（游乐业态价 + 酒吧业态价 + 收费的餐饮/零售价）× 票种折扣**。**免费的（票面价为 0）不计入价值**——不进相加基数、不影响售价。折扣是票种级配置，禁写死；折扣归属沿用套票 `discount_bearer`。
 - **理由**：通票卖的是"把几个业态的东西打包便宜卖"，定价要让运营一眼看出这张票里各业态各值多少钱、折扣打在哪；免费的东西本来就没收钱，算进价值会把票面价值虚高、也会让后面的份额拆分把钱分给一个根本没产生收入的业态。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `e314c595`）。
-- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0c ①、§7.4；`ticketing-entitlement-settlement-breakdown.md` §3.1；`terminology-canonical-v1.0.md` §五。**代码未实现**（业态价合计与免费权益过滤均不存在）。
+- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0c ①、§7.4；`ticketing-entitlement-settlement-breakdown.md` §3.1；`terminology-canonical-v1.0.md` §五。✅ **已落地（2026-08-01）**：V369 凑整闸（PR #282，售价自动算 + 免费权益不计入相加基数 + 允许误差闸）。
 
 ## DEC-ORG-2026-07-28-09（2026-07-28）综合／联合通票的分账：先拆业态份额，两道扣项只作用在酒吧份额
 
@@ -805,7 +805,7 @@
 - **与既有口径的关系**：**不推翻** DEC-ORG-2026-07-28-01/02/03 —— 四道扣项的顺序、算法与归属主体一条没变，变的是**作用层级**：单业态通票整单走原瀑布，多业态票先拆份额、②③两道只作用在酒吧份额上。第 6 条与「每样赠品都是独立权益」（DEC-ORG-2026-07-28-02）**不矛盾**：后者说的是核销/绑定/成本层，第 6 条说的是业态份额拆分层，是两层。
 - **理由**：游乐、餐饮、零售的钱本来就该整份给对应主体，不该被酒吧那边的赠饮成本和平台服务费蹭掉一块——原来对整单扣，等于让游乐公司和餐厅替酒吧的赠酒买单，对账时这几家主体永远算不明白自己少了多少。拆到业态大分类为止而不拆到每个权益，是因为再往下拆就要为每一杯赠酒单独算一份收入，而这杯酒的钱本来就在酒吧那份票价里，拆了就是重复计。两个价分开，是因为"这张票里这项值多少钱"（对客、对分账）和"平台要为它付商户多少成本"（对内、对采购）是两码事，混用会让分给商户的钱和付给商户的成本互相污染。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `e314c595`）。
-- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0c、§6.1；`finance-settlement-product-prd-v0.1.md` §3A；`ticketing-entitlement-settlement-breakdown.md` §7.1；`terminology-canonical-v1.0.md` §五。**代码未实现**：业态大分类标签、业态票面原价合计、份额拆分层、两道扣项收敛到酒吧份额、票面原价独立字段——全部待开发。
+- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0c、§6.1；`finance-settlement-product-prd-v0.1.md` §3A；`ticketing-entitlement-settlement-breakdown.md` §7.1；`terminology-canonical-v1.0.md` §五。✅ **已落地（2026-08-01）**：S11（V366，PR #277，业态份额拆分 + 渠道费整单前移 + K20/K21）+ S4/S6（两道扣项按业态跟核销走）；票面原价 = `ticket_type_entitlements.component_price_cent`（0/NULL 语义收紧）。
 
 ## DEC-ORG-2026-07-28-10（2026-07-28）可分配池两段分配（替代原「三选一」）
 
@@ -819,7 +819,7 @@
 - **理由**：谈判现实就是有的酒吧要"每进一个客人给我几块钱"这种旱涝保收的确定数，有的酒吧愿意赌排名拿更多；原来写成"整个项目只能选一种"，等于逼所有酒吧接受同一套约定，跟实际一家一谈的合同对不上。改成两段之后：旱涝保收的先拿走确定的那笔，剩下多少由赌排名的按名次分尽——**池子不会分超、排名档位的酒吧月底能看清自己分的是哪个基数**，两种约定在一个池里能同时兑现。互斥是为了防一家酒吧既拿保底又参与排名分成，那样池子必然分穿。
 - **待确认边界（本轮 HTML 未逐条写死，按现有铁律推导，落地前建议向用户确认）**：① 第一段合计 ≥ 池 → 第二段为 0、排名档位酒吧当月分 0，第一段超池部分走特批；② 池内没有排名档位酒吧 → 余额留在娱乐平台公司，不倒回第一段追加；③ 池内只有排名档位酒吧 → 第一段为 0、第二段基数 = 全池。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `e314c595`）。
-- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0 ⑥、§5.1；`finance-settlement-product-prd-v0.1.md` §3A；`bar-business-operations-product-prd-v0.1.md` §7.2；`ticketing-entitlement-settlement-breakdown.md` §7.1；`terminology-canonical-v1.0.md` §五。**代码未实现**：引擎现按单一 `spv_distribution_method` 整池一次分完，`verifyConservation` 的池链恒等式需扩为两段式。
+- **影响**：`settlement-rebuild-prd-v1.0.md` §5.0 ⑥、§5.1；`finance-settlement-product-prd-v0.1.md` §3A；`bar-business-operations-product-prd-v0.1.md` §7.2；`ticketing-entitlement-settlement-breakdown.md` §7.1；`terminology-canonical-v1.0.md` §五。✅ **已落地（2026-08-01）**：S8（V374/V375，PR #285），守恒式已扩为 `池 = 第一段Σ + 第二段Σ + 尾差 + pool_undistributed`（K18）；`method_type` 收窄为第二段方式仅 `by_rank_tier`。
 
 ## DEC-ORG-2026-07-28-11（2026-07-28）免费权益成本承担分两类（推翻「0 元也按内部结算价结算」一刀切）
 
@@ -832,7 +832,7 @@
 - **变更**：**推翻** `D-20260706-2`（2026-07-06 通票餐饮结算口径）里「价格可为 0 的纯赠送/兑换**也**按内部结算价结算」的**一刀切**写法。餐饮核销后那笔钱归餐厅商户这条**不变**；变的只是"平台要不要为这 0 元权益向商户付一笔成本"。
 - **理由**：这两类在账上是完全相反的两件事，混成一条会让平台替商户的引流让利买单。商户为了把客人引进自家店，自愿白送一份东西搭进通票——这是商户的获客投入，平台不该再按内部结算价给它付一次钱；平台为做活动自己去商户那儿采购再免费送客人的，才是平台的成本。原口径见到票面价 0 就一律结算，等于把第一类也当成平台采购，平台白掏钱、商户白赚一笔，招商谈判时也说不清"我让利到底让给了谁"。配置里必须标明承担方，是为了让出错时能追到是谁配错的、由谁兜。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `88eba70c`）。
-- **影响**：`settlement-rebuild-prd-v1.0.md` §6.6（新增）；`finance-settlement-product-prd-v0.1.md` §3A；`bar-business-operations-product-prd-v0.1.md` §7.2；`ticketing-entitlement-settlement-breakdown.md` §7.1；`terminology-canonical-v1.0.md` §五。**代码未实现且现状与本口径冲突**：`entitlement_templates` 无成本承担方字段，`TicketVerificationService.resolveSettlementPrice` 对 0 元权益一律回退取价并结算 = 全按「平台出资型」处理，平台会为商户让利型权益多付成本。
+- **影响**：`settlement-rebuild-prd-v1.0.md` §6.6（新增）；`finance-settlement-product-prd-v0.1.md` §3A；`bar-business-operations-product-prd-v0.1.md` §7.2；`ticketing-entitlement-settlement-breakdown.md` §7.1；`terminology-canonical-v1.0.md` §五。🔶 **大部落地（2026-08-01）**：S5+S6——`ticket_type_entitlements.cost_bearer`（V372）、0=让利型合法/NULL=没配价拒核销（fail-closed）、让利型不进 G 预扣不挂商户应付。⚠️ **残留出入**：「未标明不得启用」必填强校验未做（写入面缺省 `platform_funded`），已单列报告与 backlog。
 
 ## DEC-ORG-2026-07-28-12（2026-07-28）内部结算 SKU 目录（项目范围已由 DEC-MPS-2026-07-28-15 重裁）
 

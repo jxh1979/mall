@@ -854,7 +854,7 @@
 
 同步落点：权威登记表 `docs/terminology-canonical-v1.0.md` §六；结算侧副本 `docs/settlement-rebuild-prd-v1.0.md` §2.3A。
 
-**实现状态如实标注**：以上 ①②③ 的池前预扣、差额调账、按吧配额与跨吧核销拒绝、以及综合服务费归属主体改娱乐平台公司，**代码均未实现**，属待开发缺口（见 `docs/dev-plan-v7-audit-20260722.md` R-1/R-3）。
+**实现状态（2026-08-01 S10 收官刷新）**：池前预扣 ✅ S6（V372/V373，PR #286）；按吧配额与跨吧核销拒绝 ✅ S5（PR #270，K16/K17）；综合服务费归属娱乐平台公司 ✅ S4（V370，PR #283，R-3 闭合）；**差额调账留痕与兑付成本按业态分记仍未实现**（原 S7 范围，见 `pending-development-backlog-v0.1.md`）。各刀对照表见 `settlement-rebuild-prd-v1.0.md` §14.2。
 
 
 +## 会员、积分与商户积分结算重构裁决台账（2026-07-28 用户逐项确认，2026-08-01 书面落档）
@@ -906,9 +906,9 @@
 
 同步落点：`docs/settlement-rebuild-prd-v1.0.md` 抬头横幅 5–9 / §5.0 ⑥ / **新增 §5.0c** / §5.1 两段分配 / §6.1 / **新增 §6.6** / §7.4 / **新增 §9.7**；`docs/finance-settlement-product-prd-v0.1.md` §3A + **新增 §3B（E 的现状-目标差距，权威）**；`docs/ticketing-entitlement-settlement-breakdown.md` §3.1/§7.1；`docs/terminology-canonical-v1.0.md` §五；`docs/bar-business-operations-product-prd-v0.1.md` §7.2；`docs/pending-development-backlog-v0.1.md` 批 10/11。
 
-**实现状态如实标注（本轮 5 条代码全部未跟上）**：
-1. 业态大分类标签、业态票面原价合计、**业态份额拆分层**（现引擎直接走单业态瀑布，对整单扣两道）——**未实现**
-2. **票面原价**独立字段与「两价不可混用」防护——**未实现**（现只有 `value` 与 `agreement_price_cent`）
-3. **可分配池两段分配**（现按单一 `spv_distribution_method` 整池一次分完）+ `verifyConservation` 池链恒等式两段化——**未实现**
-4. **免费权益成本承担方字段与核销侧分支**——**未实现，且现状与新口径冲突**：`resolveSettlementPrice` 对 0 元权益一律取价结算 = 全按「平台出资型」处理，平台会为商户让利型权益多付成本
-5. **内部结算 SKU 目录**——**完全不存在**（现状一价四存：V152 / V257 / V225 / V301）
+**实现状态（2026-08-01 S10 收官刷新；原「本轮 5 条代码全部未跟上」已过期）**：
+1. **业态份额拆分层** ✅ 已实现（S11，V366，PR #277：按商户业态归堆、只有酒吧份额进池、渠道费整单前移、守恒 K20）
+2. **票面原价独立字段与两价防护** ✅ 已实现（`ticket_type_entitlements.component_price_cent` + K21 价线防串；内部结算价的**存放**仍散四处，见第 5 条）
+3. **可分配池两段分配** ✅ 已实现（S8，V374/V375，PR #285；守恒式扩为 `池 = 第一段Σ + 第二段Σ + 尾差 + pool_undistributed`）
+4. **免费权益成本承担方** 🔶 大部实现（S5+S6：`cost_bearer`/fail-closed/让利型不进 G 不挂应付）；⚠️ **残留出入**：「未标明不得启用」必填强校验未做（缺省 `platform_funded`），已单列报告与 backlog
+5. **内部结算 SKU 目录**——**仍完全不存在**（批 10；现状一价四存：V152 / V257 / V225 / V301，S5 已把**取价**收敛为 `InternalSettlementPriceResolver` 一处）
