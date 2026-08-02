@@ -36,27 +36,27 @@ public class BarPosImageStorage {
     /** 存图，返回可写入 image_url 的相对路径。 */
     public String store(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "image file is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须上传图片文件");
         }
         if (file.getSize() > MAX_BYTES) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "image exceeds 5MB limit");
+            throw ApiException.badRequest("VALIDATION_FAILED", "图片超过 5MB 上限");
         }
         String ext = extensionOf(file.getOriginalFilename());
         if (!ALLOWED_EXT.contains(ext)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "only jpg/jpeg/png/webp images are allowed");
+            throw ApiException.badRequest("VALIDATION_FAILED", "仅支持 jpg/jpeg/png/webp 格式图片");
         }
         String name = UUID.randomUUID().toString().replace("-", "") + "." + ext;
         try {
             Files.createDirectories(baseDir);
             Path target = baseDir.resolve(name).normalize();
             if (!target.startsWith(baseDir)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "invalid image name");
+                throw ApiException.badRequest("VALIDATION_FAILED", "图片文件名不合法");
             }
             try (InputStream in = file.getInputStream()) {
                 Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            throw ApiException.badRequest("IMAGE_STORE_FAILED", "failed to store image");
+            throw ApiException.badRequest("IMAGE_STORE_FAILED", "图片保存失败，请重试");
         }
         return URL_PREFIX + name;
     }
@@ -64,11 +64,11 @@ public class BarPosImageStorage {
     /** 回读一张图（供受控 GET 端点流式返回）。name 只能是纯文件名，防目录穿越。 */
     public Path resolveForRead(String name) {
         if (name == null || name.isBlank() || name.contains("/") || name.contains("\\") || name.contains("..")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "invalid image name");
+            throw ApiException.badRequest("VALIDATION_FAILED", "图片文件名不合法");
         }
         Path target = baseDir.resolve(name).normalize();
         if (!target.startsWith(baseDir) || !Files.isRegularFile(target)) {
-            throw ApiException.notFound("IMAGE_NOT_FOUND", "image not found");
+            throw ApiException.notFound("IMAGE_NOT_FOUND", "图片不存在或已被删除");
         }
         return target;
     }

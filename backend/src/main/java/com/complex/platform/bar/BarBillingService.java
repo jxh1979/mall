@@ -69,20 +69,20 @@ public class BarBillingService {
     private void requireRefundTierAuthorized(String domain, long amountCent, String projectId) {
         if (refundAuthorizationService == null) {
             throw ApiException.forbidden("REFUND_AUTHORIZATION_UNAVAILABLE",
-                    "refund tiered authorization engine is unavailable; over-limit refunds cannot be self-processed");
+                    "退款分级授权引擎不可用，超限退款不能自助处理");
         }
         var actor = authorizationService.currentActor();
         if (refundAuthorizationService.classify(domain, amountCent, actor.id(), null, projectId)
                 == RefundAuthorizationService.RefundTier.REVIEW_REQUIRED) {
             throw ApiException.forbidden("REFUND_REVIEW_REQUIRED",
-                    "refund amount exceeds the self-service authorization limit; an authorized approver must process it");
+                    "退款金额超过自助授权限额，须由有权限的审批人处理");
         }
     }
 
     BarBillRecord createBill(String orderId, BarOrderBillCreateRequest request) {
         requireRequest(request);
         BarOrderRecord order = repository.findOrderById(orderId)
-                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
         checkMerchantOwnership(order.merchantId());
         long subtotal = repository.listOrderItems(order.id()).stream()
                 .mapToLong(BarOrderItemRecord::amountCent)
@@ -123,16 +123,16 @@ public class BarBillingService {
     PaymentIntentRecord createBillPayIntent(String billId, PaymentIntentRequest request) {
         PaymentIntentRequest actual = requireRequest(request);
         BarBillRecord bill = repository.findBillById(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         String businessOrderType = requireText(actual.businessOrderType(), "business_order_type");
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
         if (!"bar_bill".equals(businessOrderType) || !bill.id().equals(businessOrderId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "payment intent business order must match bar bill");
+            throw ApiException.badRequest("VALIDATION_FAILED", "支付意向的业务订单必须与账单一致");
         }
         long amountCent = positive(actual.amountCent(), "amount_cent");
         if (amountCent != bill.payableAmountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "payment intent amount must match bill payable amount");
+            throw ApiException.badRequest("VALIDATION_FAILED", "支付意向金额必须与账单应付金额一致");
         }
         Instant now = Instant.now();
         return repository.savePaymentIntent(new PaymentIntentRecord(
@@ -152,10 +152,10 @@ public class BarBillingService {
         BarBillSettleRequest actual = requireRequest(request);
         // 2c-2：行锁读取账单，序列化并发结算（配合 settled 守卫防 TOCTOU 重复结算）。
         BarBillRecord bill = repository.findBillByIdForUpdate(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         if ("settled".equals(bill.settlementStatus())) {
-            throw ApiException.conflict("BAR_BILL_ALREADY_SETTLED", "bar bill is already settled");
+            throw ApiException.conflict("BAR_BILL_ALREADY_SETTLED", "账单已结账，请勿重复操作");
         }
         // 2c-1 低消硬阻断（用户裁定 + PRD §617/716）：未满足最低消费不可结账。
         // 低消基数 = 实际消费 subtotal + 已补差 min_spend_top_up（运营补足低消的手段），不含 tip/deposit/service_fee。
@@ -168,7 +168,7 @@ public class BarBillingService {
                         .sum();
                 if (bill.subtotalAmountCent() + topUp < table.minConsumptionCent()) {
                     throw ApiException.conflict("BAR_MIN_CONSUMPTION_NOT_MET",
-                            "table minimum consumption not met; add consumption or apply min_spend_top_up before settle");
+                            "未达到订台最低消费，请先加购消费或补足低消差额再结账");
                 }
             }
         }
@@ -184,7 +184,7 @@ public class BarBillingService {
         if (remaining <= 0) {
             if (actual.settlementAmountCent() != null && actual.settlementAmountCent() != 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
-                        "settlement amount cannot exceed remaining unpaid amount");
+                        "结账金额不能超过剩余未付金额");
             }
             Instant closeNow = Instant.now();
             BarBillRecord closedBill = repository.saveBill(billWithAmounts(
@@ -212,10 +212,10 @@ public class BarBillingService {
                 ? remaining
                 : nonNegative(actual.settlementAmountCent(), "settlement_amount_cent");
         if (settlementAmount <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "settlement amount must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "结账金额必须大于 0");
         }
         if (settlementAmount > remaining) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "settlement amount cannot exceed remaining unpaid amount");
+            throw ApiException.badRequest("VALIDATION_FAILED", "结账金额不能超过剩余未付金额");
         }
         Instant now = Instant.now();
         // A2/A3：结算渠道（统一词表，与 finance 对账归并）+ 现金/POS 收款留痕 + D4 权威事件。
@@ -224,7 +224,7 @@ public class BarBillingService {
         // platform_collect 卡消费即逐笔挂应付商户，merchant_prepaid 卡无跨主体分录）。余额不足则整单结账失败（同事务回滚）。
         if ("stored_value".equals(channel)) {
             if (storedValueService == null) {
-                throw ApiException.conflict("STORED_VALUE_UNAVAILABLE", "stored-value payment is not available");
+                throw ApiException.conflict("STORED_VALUE_UNAVAILABLE", "储值支付当前不可用");
             }
             String svCustomerId = resolveBillCustomerId(bill);
             if (svCustomerId == null) {
@@ -291,17 +291,17 @@ public class BarBillingService {
     BarBillAdjustmentRecord applyBillAdjustment(String billId, BarBillAdjustmentRequest request) {
         BarBillAdjustmentRequest actual = requireRequest(request);
         BarBillRecord bill = repository.findBillById(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         String type = requireText(actual.adjustmentType(), "adjustment_type");
         boolean settled = "settled".equals(bill.settlementStatus());
         // refund（退款）是结账后操作，必须在已结算账单上执行；其余调整（加项/免单/挂账）只能在未结算前执行。
         if ("refund".equals(type)) {
             if (!settled) {
-                throw ApiException.conflict("BAR_BILL_NOT_REFUNDABLE", "only a settled bar bill can be refunded");
+                throw ApiException.conflict("BAR_BILL_NOT_REFUNDABLE", "只有已结账的账单才能退款");
             }
         } else if (settled) {
-            throw ApiException.conflict("BAR_BILL_NOT_ADJUSTABLE", "settled bar bill cannot be adjusted");
+            throw ApiException.conflict("BAR_BILL_NOT_ADJUSTABLE", "已结账的账单不能再调整");
         }
         String reason = requireText(actual.reason(), "reason");
         String requestedBy = authorizationService.currentActor().id();
@@ -319,7 +319,7 @@ public class BarBillingService {
             // 免单/减免：结账前减应付。后续结算金额本就更低 → 不作为独立 net 冲减（已体现在更低实收）。
             amount = positive(actual.amountCent(), "amount_cent");
             if (amount > beforePayable) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "waiver amount cannot exceed payable amount");
+                throw ApiException.badRequest("VALIDATION_FAILED", "减免金额不能超过应付金额");
             }
             afterPayable = beforePayable - amount;
         } else if ("refund".equals(type)) {
@@ -328,7 +328,7 @@ public class BarBillingService {
             // 记退款时点，聚合按 refunded_at 落经营日窗口冲减当日 net。
             amount = positive(actual.amountCent(), "amount_cent");
             if (amount > beforePayable) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "refund amount cannot exceed payable amount");
+                throw ApiException.badRequest("VALIDATION_FAILED", "退款金额不能超过应付金额");
             }
             // AUD-007 分级授权 fail-closed 常在：超额度退款须复核——单步退款无独立复核状态机，超额/无额度直接拒，由额度内授权人办理。
             // AUD-008 权威综合体：酒吧账单不自带 project，取操作者授权 scope（非请求体）；平台/无组织 → null=仅全局配置。
@@ -339,7 +339,7 @@ public class BarBillingService {
             // RC1①：退款过账到 finance ar_ap 台账（direction=payable, source_type=refund），表示"应退/已退"。
             // 同事务执行：过账失败抛出 → 回滚整个退款（账单减项 + 调整记录），保证财务台账强一致。
             BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
             String refundAdjustmentId =
                     "bill_adjustment_" + billSlug(bill.id() + ":" + type + ":" + actual.idempotencyKey());
             arApItemId = receivableLedgerService.createRefundPayable(
@@ -353,16 +353,16 @@ public class BarBillingService {
             );
         } else if ("on_account".equals(type)) {
             if (amount != 0L) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "on_account amount_cent must be zero");
+                throw ApiException.badRequest("VALIDATION_FAILED", "挂账操作的金额必须为 0");
             }
             afterPayable = beforePayable;
             paymentStatus = "on_account";
             settlementStatus = "receivable";
             if ("on_account".equals(bill.paymentStatus()) || "receivable".equals(bill.settlementStatus())) {
-                throw ApiException.conflict("BAR_BILL_ALREADY_ON_ACCOUNT", "bar bill is already on account");
+                throw ApiException.conflict("BAR_BILL_ALREADY_ON_ACCOUNT", "账单已挂账，请勿重复操作");
             }
             BarOrderRecord order = repository.findOrderById(bill.orderId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
             arApItemId = receivableLedgerService.createReceivableForOnAccountBill(
                     bill,
                     order,
@@ -371,7 +371,7 @@ public class BarBillingService {
                     safeList(actual.evidenceAttachmentIds())
             );
         } else {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unsupported bar bill adjustment type");
+            throw ApiException.badRequest("VALIDATION_FAILED", "不支持的账单调整类型");
         }
         Instant now = Instant.now();
         repository.saveBill(billWithAmounts(
@@ -408,12 +408,12 @@ public class BarBillingService {
     BarBillOperationRecord splitBill(String billId, BarBillSplitRequest request) {
         BarBillSplitRequest actual = requireRequest(request);
         BarBillRecord source = repository.findBillById(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(source.merchantId());
         requireBillMovable(source, "BAR_BILL_NOT_SPLITTABLE");
         long amount = positive(actual.splitAmountCent(), "split_amount_cent");
         if (amount >= source.payableAmountCent()) {
-            throw ApiException.conflict("BAR_BILL_SPLIT_AMOUNT_INVALID", "split amount must be less than payable amount");
+            throw ApiException.conflict("BAR_BILL_SPLIT_AMOUNT_INVALID", "拆单金额必须小于应付金额");
         }
         String reason = requireText(actual.reason(), "reason");
         String requestedBy = authorizationService.currentActor().id();
@@ -475,18 +475,18 @@ public class BarBillingService {
         BarBillMergeRequest actual = requireRequest(request);
         String secondaryBillId = requireText(actual.mergedBillId(), "merged_bill_id");
         if (billId.equals(secondaryBillId)) {
-            throw ApiException.conflict("BAR_BILL_MERGE_SAME_BILL", "cannot merge bill into itself");
+            throw ApiException.conflict("BAR_BILL_MERGE_SAME_BILL", "账单不能与自身合并");
         }
         BarBillRecord primary = repository.findBillById(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "primary bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "主账单不存在或已被删除"));
         checkMerchantOwnership(primary.merchantId());
         BarBillRecord secondary = repository.findBillById(secondaryBillId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "secondary bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "副账单不存在或已被删除"));
         checkMerchantOwnership(secondary.merchantId());
         requireBillMovable(primary, "BAR_BILL_NOT_MERGEABLE");
         requireBillMovable(secondary, "BAR_BILL_NOT_MERGEABLE");
         if (!primary.barId().equals(secondary.barId())) {
-            throw ApiException.conflict("BAR_BILL_MERGE_BAR_MISMATCH", "bills must belong to the same bar");
+            throw ApiException.conflict("BAR_BILL_MERGE_BAR_MISMATCH", "合并的账单必须属于同一家酒吧");
         }
         String reason = requireText(actual.reason(), "reason");
         String requestedBy = authorizationService.currentActor().id();
@@ -528,11 +528,11 @@ public class BarBillingService {
         CommissionCalculateRequest actual = requireRequest(request);
         String bodyBillId = trimToNull(actual.billId());
         if (bodyBillId != null && !billId.equals(bodyBillId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "bill_id must match path");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求体中的账单编号必须与路径一致");
         }
         // 2c-2：行锁读取账单，序列化并发计提。
         BarBillRecord bill = repository.findBillByIdForUpdate(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         // 2c-2 提成防重：同一账单已计提则返回已有（幂等），不重复建提成台账与 finance 应付，杜绝多幂等键刷提成。
         java.util.Optional<BarCommissionCalculationRecord> existingCommission = repository.findCommissionByBillId(bill.id());
@@ -652,10 +652,10 @@ public class BarBillingService {
     BarBillOperationRecord reopenBill(String billId, BarBillReopenRequest request) {
         BarBillReopenRequest actual = requireRequest(request);
         BarBillRecord bill = repository.findBillById(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         if (!"settled".equals(bill.settlementStatus())) {
-            throw ApiException.conflict("BAR_BILL_NOT_REOPENABLE", "only a settled bar bill can be reopened");
+            throw ApiException.conflict("BAR_BILL_NOT_REOPENABLE", "只有已结账的账单才能重新打开");
         }
         // 与 T7 日结锁定协同：若账单结算经营日已纳入锁定日结，反结改影响金额须走补录审批 → 硬拦截 DAY_CLOSE_LOCKED。
         BarBillSettlementRecord latestSettlement = repository.listBillSettlements(bill.id()).stream()
@@ -666,7 +666,7 @@ public class BarBillingService {
                 : LocalDate.now();
         if (receivableLedgerService.isBusinessDayLocked(settleDay)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "settlement business day " + settleDay + " is locked; use the backfill adjustment workflow");
+                    "结账营业日 " + settleDay + " 已锁定，请走补录调整流程");
         }
         String reason = requireText(actual.reason(), "reason");
         String requestedBy = authorizationService.currentActor().id();
@@ -702,10 +702,10 @@ public class BarBillingService {
     BarBillRecord addTip(String billId, BarBillTipRequest request) {
         BarBillTipRequest actual = requireRequest(request);
         BarBillRecord bill = repository.findBillById(billId)
-                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         if ("settled".equals(bill.settlementStatus()) || "merged".equals(bill.settlementStatus())) {
-            throw ApiException.conflict("BAR_BILL_NOT_TIPPABLE", "settled or merged bar bill cannot accept a tip");
+            throw ApiException.conflict("BAR_BILL_NOT_TIPPABLE", "已结账或已并单的账单不能再加小费");
         }
         long tip;
         if (actual.tipAmountCent() != null) {
@@ -713,15 +713,15 @@ public class BarBillingService {
         } else if (actual.tipRatioBps() != null) {
             int ratioBps = actual.tipRatioBps();
             if (ratioBps <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "tip_ratio_bps must be positive");
+                throw ApiException.badRequest("VALIDATION_FAILED", "小费比例必须大于 0");
             }
             // R-7:按比例小费四舍五入到分(旧整除截断)。
             tip = MoneyRounding.bpsOf(bill.payableAmountCent(), ratioBps);
             if (tip <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "computed tip must be positive");
+                throw ApiException.badRequest("VALIDATION_FAILED", "计算出的小费金额必须大于 0");
             }
         } else {
-            throw ApiException.badRequest("VALIDATION_FAILED", "tip_amount_cent or tip_ratio_bps is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "小费金额或小费比例必须至少填写一项");
         }
         Instant now = Instant.now();
         long newTip = bill.tipAmountCent() + tip;
@@ -743,7 +743,7 @@ public class BarBillingService {
     private void checkMerchantOwnership(String resourceMerchantId) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "access to another merchant's resource is not allowed");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
         }
     }
 

@@ -117,7 +117,7 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         assertThatThrownBy(() -> billingService.settleBill(billId, new BarBillSettleRequest(
                 "k3attack", null, null, "pay_svchain3", null, "stored_value")))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("idempotency key already used");
+                .hasMessageContaining("已被其他操作使用");
     }
 
     @Test
@@ -128,11 +128,11 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         assertThatThrownBy(() -> storedValueService.consume(customerId, PROJECT_ID, null,
                 100L, "reserved prefix probe", "sv_settle_pay_intent_squat"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("reserved internal prefix");
+                .hasMessageContaining("系统保留前缀");
         assertThatThrownBy(() -> storedValueService.refund(customerId, PROJECT_ID, null,
                 100L, "reserved prefix probe", false, "barsv_squat"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("reserved internal prefix");
+                .hasMessageContaining("系统保留前缀");
     }
 
     @Test
@@ -152,7 +152,7 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         assertThatThrownBy(() -> storedValueService.consume(customerId, PROJECT_ID, null,
                 999L, "same request retry", "retrykey_svchain5"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("idempotency key already used");
+                .hasMessageContaining("已被其他操作使用");
     }
 
     // ---------------- AUD-014 柜台确认充值即入账 ----------------
@@ -192,7 +192,7 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         assertThatThrownBy(() -> storedValueService.refund(customerId, null, "merchant_svchain7",
                 10000L, "online refund attempt", true, "refund_svchain7_online"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("refund in store");
+                .hasMessageContaining("到发卡商户门店办理");
 
         // 柜台路径必填兑付凭证。
         assertThatThrownBy(() -> storedValueService.counterRefund(customerId, null, "merchant_svchain7",

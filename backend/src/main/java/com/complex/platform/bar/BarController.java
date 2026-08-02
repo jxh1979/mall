@@ -98,7 +98,7 @@ public class BarController {
 
     private BarVoidReasonCodeRequest requireVoidReasonCodeRequest(BarVoidReasonCodeRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -367,7 +367,7 @@ public class BarController {
         if (request != null && request.catalogItemCode() != null
                 && !authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
             throw ApiException.forbidden("BAR_INTERNAL_PRICE_FORBIDDEN",
-                    "binding internal price catalog item requires bar.internal_settlement_price.view");
+                    "绑定内部结算价目录项需要内部结算价查看权限");
         }
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createProduct(request));

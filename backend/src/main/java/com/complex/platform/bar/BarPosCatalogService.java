@@ -58,11 +58,11 @@ public class BarPosCatalogService {
                     now, now));
         }
         BarProductCategoryRecord existing = repository.findCategory(r.id().trim())
-                .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "category not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "分类不存在或已被删除"));
         checkOwnership(scope, existing.merchantId());
         // 已存档分类不可编辑（存档=软下线，先取消存档再改）。
         if (existing.archivedAt() != null) {
-            throw ApiException.conflict("BAR_CATEGORY_ARCHIVED", "category is archived; unarchive before editing");
+            throw ApiException.conflict("BAR_CATEGORY_ARCHIVED", "分类已存档，请先取消存档再编辑");
         }
         return repository.saveCategory(new BarProductCategoryRecord(
                 existing.id(), existing.barId(), existing.merchantId(),
@@ -80,20 +80,20 @@ public class BarPosCatalogService {
     public BarProductRecord assignCategory(String productId, BarProductCategoryAssignRequest request) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductRecord product = repository.findProduct(requireText(productId, "product_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "product not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "商品不存在或已被删除"));
         checkOwnership(scope, product.merchantId());
         String categoryId = request == null ? null : trimToNull(request.categoryId());
         if (categoryId != null) {
             BarProductCategoryRecord category = repository.findCategory(categoryId)
-                    .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "category not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "分类不存在或已被删除"));
             checkOwnership(scope, category.merchantId());
             if (!category.barId().equals(product.barId())) {
-                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "category is not in this bar");
+                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "该分类不在本酒吧");
             }
             // 复核教训①：不可把商品分到已存档/待删分类（否则违背存档=软下线，且分类被引用后永远删不掉）。
             if (category.archivedAt() != null || !"none".equals(category.deleteStatus())) {
                 throw ApiException.conflict("BAR_CATEGORY_NOT_ASSIGNABLE",
-                        "cannot assign product to an archived or delete-pending category");
+                        "不能将商品归入已存档或待删除的分类");
             }
         }
         repository.updateProductCategory(product.id(), categoryId, Instant.now());
@@ -104,7 +104,7 @@ public class BarPosCatalogService {
     public BarProductRecord setProductImage(String productId, String imageUrl) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductRecord product = repository.findProduct(requireText(productId, "product_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "product not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "商品不存在或已被删除"));
         checkOwnership(scope, product.merchantId());
         repository.updateProductImage(product.id(), trimToNull(imageUrl), Instant.now());
         return repository.findProduct(product.id()).orElseThrow();
@@ -143,11 +143,11 @@ public class BarPosCatalogService {
             createdAt = now;
         } else {
             existing = repository.findCombo(r.id().trim())
-                    .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "combo not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "套餐不存在或已被删除"));
             checkOwnership(scope, existing.merchantId());
             // 已存档套餐不可编辑（存档=软下线，先取消存档再改）。
             if (existing.archivedAt() != null) {
-                throw ApiException.conflict("BAR_COMBO_ARCHIVED", "combo is archived; unarchive before editing");
+                throw ApiException.conflict("BAR_COMBO_ARCHIVED", "套餐已存档，请先取消存档再编辑");
             }
             comboId = existing.id();
             barId = existing.barId();
@@ -162,7 +162,7 @@ public class BarPosCatalogService {
         if (catalogItemCode != null) {
             if (!authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
                 throw ApiException.forbidden("BAR_INTERNAL_PRICE_FORBIDDEN",
-                        "binding internal price catalog item requires bar.internal_settlement_price.view");
+                        "绑定内部结算价目录项需要内部结算价查看权限");
             }
             String boundMerchant = repository.findCatalogItemMerchant(catalogItemCode)
                     .orElseThrow(() -> ApiException.badRequest("CATALOG_ITEM_NOT_FOUND",
@@ -177,24 +177,24 @@ public class BarPosCatalogService {
         }
         List<BarComboRequest.Item> reqItems = r.items() == null ? List.of() : r.items();
         if (reqItems.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "combo must contain at least one product");
+            throw ApiException.badRequest("VALIDATION_FAILED", "套餐至少需要包含一个商品");
         }
         List<BarComboItemRecord> items = reqItems.stream().map(it -> {
             String productId = requireText(it.productId(), "items[].productId");
             BarProductRecord product = repository.findProduct(productId)
-                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "combo product not found: " + productId));
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "套餐内商品不存在：" + productId));
             checkOwnership(scope, product.merchantId());
             if (!product.barId().equals(barId)) {
-                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "combo product is not in this bar: " + productId);
+                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "套餐内商品不在本酒吧：" + productId);
             }
             // 复核教训①：套餐不可含已存档/待删商品（否则商品被引用后永远删不掉，且卖出已下线 SKU）。
             if (product.archivedAt() != null || !"none".equals(product.deleteStatus())) {
                 throw ApiException.conflict("BAR_PRODUCT_NOT_ASSIGNABLE",
-                        "cannot include an archived or delete-pending product in a combo: " + productId);
+                        "套餐不能包含已存档或待删除的商品：" + productId);
             }
             int qty = it.quantity() == null ? 0 : it.quantity();
             if (qty <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "combo item quantity must be > 0");
+                throw ApiException.badRequest("VALIDATION_FAILED", "套餐明细数量必须大于 0");
             }
             return new BarComboItemRecord("barcomboitem_" + slug(), comboId, productId, product.productName(), qty);
         }).toList();
@@ -251,10 +251,10 @@ public class BarPosCatalogService {
         BarProductCategoryRecord c = requireCategory(id);
         checkOwnership(scope, c.merchantId());
         if (c.archivedAt() == null) {
-            throw ApiException.badRequest("BAR_CATEGORY_NOT_ARCHIVED", "category must be archived before requesting deletion");
+            throw ApiException.badRequest("BAR_CATEGORY_NOT_ARCHIVED", "分类须先存档才能申请删除");
         }
         if ("pending".equals(c.deleteStatus())) {
-            throw ApiException.conflict("BAR_CATEGORY_DELETE_ALREADY_PENDING", "a delete request is already pending");
+            throw ApiException.conflict("BAR_CATEGORY_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
         }
         Instant now = Instant.now();
         String reason = requireText(request == null ? null : request.reason(), "reason");
@@ -279,7 +279,7 @@ public class BarPosCatalogService {
         }
         long refs = repository.countCategoryReferences(id);
         if (refs > 0) {
-            throw ApiException.conflict("BAR_CATEGORY_IN_USE", "category is still referenced by " + refs + " products");
+            throw ApiException.conflict("BAR_CATEGORY_IN_USE", "该分类仍被 " + refs + " 个商品引用");
         }
         repository.deleteCategory(id);
         return new BarCatalogDeleteDecision(id, "approved", true);
@@ -312,10 +312,10 @@ public class BarPosCatalogService {
         BarProductRecord product = requireProduct(id);
         checkOwnership(scope, product.merchantId());
         if (product.archivedAt() == null) {
-            throw ApiException.badRequest("BAR_PRODUCT_NOT_ARCHIVED", "product must be archived before requesting deletion");
+            throw ApiException.badRequest("BAR_PRODUCT_NOT_ARCHIVED", "商品须先存档才能申请删除");
         }
         if ("pending".equals(product.deleteStatus())) {
-            throw ApiException.conflict("BAR_PRODUCT_DELETE_ALREADY_PENDING", "a delete request is already pending");
+            throw ApiException.conflict("BAR_PRODUCT_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
         }
         Instant now = Instant.now();
         String reason = requireText(request == null ? null : request.reason(), "reason");
@@ -342,7 +342,7 @@ public class BarPosCatalogService {
         long refs = repository.countProductReferences(id);
         if (refs > 0) {
             throw ApiException.conflict("BAR_PRODUCT_IN_USE",
-                    "product is still referenced by " + refs + " order items or combo items");
+                    "该商品仍被 " + refs + " 条订单明细或套餐明细引用");
         }
         repository.deleteProduct(id);
         return new BarCatalogDeleteDecision(id, "approved", true);
@@ -377,10 +377,10 @@ public class BarPosCatalogService {
         BarComboRecord combo = requireCombo(id);
         checkOwnership(scope, combo.merchantId());
         if (combo.archivedAt() == null) {
-            throw ApiException.badRequest("BAR_COMBO_NOT_ARCHIVED", "combo must be archived before requesting deletion");
+            throw ApiException.badRequest("BAR_COMBO_NOT_ARCHIVED", "套餐须先存档才能申请删除");
         }
         if ("pending".equals(combo.deleteStatus())) {
-            throw ApiException.conflict("BAR_COMBO_DELETE_ALREADY_PENDING", "a delete request is already pending");
+            throw ApiException.conflict("BAR_COMBO_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
         }
         Instant now = Instant.now();
         String reason = requireText(request == null ? null : request.reason(), "reason");
@@ -413,22 +413,22 @@ public class BarPosCatalogService {
 
     private BarProductCategoryRecord requireCategory(String id) {
         return repository.findCategory(requireText(id, "id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "category not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "分类不存在或已被删除"));
     }
 
     private BarProductRecord requireProduct(String id) {
         return repository.findProduct(requireText(id, "id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "product not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "商品不存在或已被删除"));
     }
 
     private BarComboRecord requireCombo(String id) {
         return repository.findCombo(requireText(id, "id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "combo not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "套餐不存在或已被删除"));
     }
 
     private static void requirePending(String deleteStatus, String code) {
         if (!"pending".equals(deleteStatus)) {
-            throw ApiException.badRequest(code, "no pending delete request");
+            throw ApiException.badRequest(code, "没有待审批的删除申请");
         }
     }
 
@@ -436,7 +436,7 @@ public class BarPosCatalogService {
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(java.util.Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         return decision;
     }
@@ -446,7 +446,7 @@ public class BarPosCatalogService {
         String actor = actorId();
         if (actor != null && actor.equals(requestedBy)) {
             throw ApiException.forbidden("BAR_CATALOG_SELF_APPROVE_FORBIDDEN",
-                    "the initiator of a delete request cannot approve it");
+                    "删除申请的发起人不能审批自己的申请");
         }
     }
 
@@ -461,20 +461,20 @@ public class BarPosCatalogService {
 
     private void checkOwnership(Optional<String> scope, String resourceMerchantId) {
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
-            throw ApiException.forbidden("BAR_MERCHANT_SCOPE", "resource belongs to another merchant");
+            throw ApiException.forbidden("BAR_MERCHANT_SCOPE", "该数据属于其他商户");
         }
     }
 
     private static <T> T require(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private static long nonNegative(Long value, String field) {
         if (value == null || value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be a non-negative number");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 不能为负数");
         }
         return value;
     }

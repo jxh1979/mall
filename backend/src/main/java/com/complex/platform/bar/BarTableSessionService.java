@@ -56,16 +56,16 @@ public class BarTableSessionService {
     BarTableRecord openTable(String tableId, OpenBarTableRequest request) {
         OpenBarTableRequest actual = requireRequest(request);
         BarTableRecord table = repository.findTableById(tableId)
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
         checkMerchantOwnership(table.merchantId());
         if (!"active".equals(table.status())) {
-            throw ApiException.conflict("BAR_TABLE_NOT_OPENABLE", "bar table is not active");
+            throw ApiException.conflict("BAR_TABLE_NOT_OPENABLE", "该台位未启用");
         }
         String reservationId = requireText(actual.reservationId(), "reservation_id");
         BarReservationRecord reservation = repository.findReservationById(reservationId)
-                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
         if (!table.id().equals(reservation.tableId())) {
-            throw ApiException.conflict("BAR_TABLE_RESERVATION_MISMATCH", "reservation is not for this table");
+            throw ApiException.conflict("BAR_TABLE_RESERVATION_MISMATCH", "该订台不是本台位的预订");
         }
         return repository.saveTable(tableWithStatus(table, "opened", Instant.now()));
     }
@@ -78,25 +78,25 @@ public class BarTableSessionService {
     BarTableSessionRecord createTableSession(BarTableSessionRequest request) {
         BarTableSessionRequest actual = requireRequest(request);
         BarTableRecord table = repository.findTableById(requireText(actual.tableId(), "table_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
         // 会话商户归属：优先调用方商户范围，其次桌台商户，平台直营（皆空）落 __platform__ 占位满足非空约束。
         String merchantId = authorizationService.currentMerchantScope()
                 .or(() -> Optional.ofNullable(trimToNull(table.merchantId())))
                 .orElse(PLATFORM_MERCHANT_PLACEHOLDER);
         String barId = requireText(actual.barId(), "bar_id");
         if (!barId.equals(table.barId())) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "table session must be opened in the table bar");
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "开台必须在台位所在的酒吧进行");
         }
         if (!"active".equals(table.status()) && !"opened".equals(table.status())) {
-            throw ApiException.conflict("BAR_TABLE_NOT_OPENABLE", "bar table is not openable");
+            throw ApiException.conflict("BAR_TABLE_NOT_OPENABLE", "该台位当前不可开台");
         }
         BarReservationRecord reservation = null;
         String reservationId = trimToNull(actual.reservationId());
         if (reservationId != null) {
             reservation = repository.findReservationById(reservationId)
-                    .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
             if (!barId.equals(reservation.barId()) || !table.id().equals(reservation.tableId())) {
-                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "reservation is not for this table session");
+                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "该订台不属于此台位会话");
             }
         }
         Instant now = Instant.now();
@@ -129,21 +129,21 @@ public class BarTableSessionService {
         String id = requireText(tableId, "table_id");
         String spaceId = requireText(actual.spaceId(), "space_id");
         BarTableRecord table = repository.findTableById(id)
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
         checkMerchantOwnership(table.merchantId());
         // 空间必须存在；且若属于某商户，必须与桌台同商户（不可指派到他商户空间，currentMerchantScope 隔离）。
         String spaceMerchant = repository.findSpaceMerchant(spaceId)
-                .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "space not found"));
+                .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "铺位不存在或已被删除"));
         if (!spaceMerchant.isBlank() && table.merchantId() != null && !spaceMerchant.equals(table.merchantId())) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该铺位属于其他商户");
         }
         // 再以调用方商户范围兜底校验（防止桌台 merchant_id 为空时被越权指派他商户空间）。
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !spaceMerchant.isBlank() && !scope.get().equals(spaceMerchant)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该铺位属于其他商户");
         }
         if (repository.assignTableSpace(id, spaceId) == 0) {
-            throw ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found");
+            throw ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除");
         }
         return new BarTableSpaceAssignmentRecord(id, spaceId, Instant.now());
     }
@@ -159,14 +159,14 @@ public class BarTableSessionService {
         requireSessionVersion(session, actual.sessionVersion());
         String requestedBy = authorizationService.currentActor().id();
         BarTableRecord sourceTable = repository.findTableById(session.tableId())
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "source bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "转出台位不存在或已被删除"));
         BarTableRecord targetTable = repository.findTableById(requireText(actual.targetTableId(), "target_table_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "target bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "转入台位不存在或已被删除"));
         if (!session.barId().equals(targetTable.barId())) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "table transfer cannot cross bar");
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "转台不能跨酒吧");
         }
         if (!"active".equals(targetTable.status())) {
-            throw ApiException.conflict("BAR_TABLE_NOT_TRANSFERABLE", "target bar table is not active");
+            throw ApiException.conflict("BAR_TABLE_NOT_TRANSFERABLE", "转入台位未启用");
         }
         Instant now = Instant.now();
         repository.saveTable(tableWithStatus(sourceTable, "pending_clear", now));
@@ -174,7 +174,7 @@ public class BarTableSessionService {
         // 2c-5：DB 级乐观锁 CAS（替代仅内存比对的 requireSessionVersion），防并发转台双重占用。
         BarTableSessionRecord updated = sessionMovedToTable(session, targetTable, now);
         if (!repository.updateTableSessionIfVersionMatches(updated, session.sessionVersion())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
         }
         return repository.saveTableSessionAdjustment(newAdjustment(
                 "transfer",
@@ -209,21 +209,21 @@ public class BarTableSessionService {
         if (!primary.barId().equals(merged.barId())
                 || !Objects.equals(primary.merchantId(), merged.merchantId())
                 || !primary.businessDate().equals(merged.businessDate())) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "table sessions can only merge within same bar, merchant and business date");
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "并台仅限同酒吧、同商户、同营业日的台位会话");
         }
         String requestedBy = authorizationService.currentActor().id();
         BarTableRecord primaryTable = repository.findTableById(primary.tableId())
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "primary bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "主台位不存在或已被删除"));
         BarTableRecord mergedTable = repository.findTableById(merged.tableId())
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "merged bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "被并台位不存在或已被删除"));
         Instant now = Instant.now();
         // 2c-5：两个 session 均走 DB 级乐观锁 CAS，防并发合台重复占用。
         BarTableSessionRecord updatedPrimary = sessionWithNextVersion(primary, now);
         if (!repository.updateTableSessionIfVersionMatches(updatedPrimary, primary.sessionVersion())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
         }
         if (!repository.updateTableSessionIfVersionMatches(sessionMergedInto(merged, primary.id(), now), merged.sessionVersion())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
         }
         repository.saveTable(tableWithStatus(mergedTable, "pending_clear", now));
         return repository.saveTableSessionAdjustment(newAdjustment(
@@ -257,7 +257,7 @@ public class BarTableSessionService {
         Instant renewedUntil = requireInstant(actual.renewedUntil(), "renewed_until");
         Instant now = Instant.now();
         if (!renewedUntil.isAfter(now)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "renewed_until must be in the future");
+            throw ApiException.badRequest("VALIDATION_FAILED", "续台截止时间必须晚于当前时间");
         }
         long additionalMinConsumption = nonNegative(actual.additionalMinConsumptionCent(), "additional_min_consumption_cent");
         long additionalDeposit = nonNegative(actual.additionalDepositAmountCent(), "additional_deposit_amount_cent");
@@ -265,7 +265,7 @@ public class BarTableSessionService {
         // 2c-5：DB 级乐观锁 CAS，防并发续台重复追加低消/押金。
         BarTableSessionRecord updated = sessionWithNextVersion(session, now);
         if (!repository.updateTableSessionIfVersionMatches(updated, session.sessionVersion())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
         }
         return repository.saveTableSessionAdjustment(newAdjustment(
                 "renew",
@@ -291,23 +291,23 @@ public class BarTableSessionService {
 
     private BarTableSessionRecord requireOpenTableSession(String sessionId) {
         BarTableSessionRecord session = repository.findTableSessionById(sessionId)
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "bar table session not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "台位就餐会话不存在或已结束"));
         if (!"open".equals(session.status())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_ACTIVE", "bar table session is not open");
+            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_ACTIVE", "台位会话不在开台状态");
         }
         return session;
     }
 
     private void requireSessionVersion(BarTableSessionRecord session, Long expectedVersion) {
         if (expectedVersion == null || expectedVersion != session.sessionVersion()) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session version changed");
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话版本已变化，请刷新后重试");
         }
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "access to another merchant's resource is not allowed");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
         }
     }
 

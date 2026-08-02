@@ -322,7 +322,7 @@ class JdbcBarPosCatalogRepository {
                     .addValue("created_at", timestampWithTimeZone(combo.updatedAt())));
         }
         return findCombo(combo.id()).orElseThrow(
-                () -> ApiException.conflict("BAR_COMBO_SAVE_FAILED", "combo not readable after save"));
+                () -> ApiException.conflict("BAR_COMBO_SAVE_FAILED", "套餐保存后读取失败，请重试"));
     }
 
     void deleteCombo(String id) {

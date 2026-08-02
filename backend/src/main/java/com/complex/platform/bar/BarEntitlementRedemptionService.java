@@ -57,10 +57,10 @@ public class BarEntitlementRedemptionService {
         BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification(verificationId)
                 .orElseThrow(() -> ApiException.notFound(
                         "BAR_GIFT_REDEMPTION_NOT_FOUND",
-                        "gift drink redemption is not available; verify the gift entitlement through ticketing first"));
+                        "赠酒兑付不可用，请先在票务侧核销赠酒权益"));
         checkMerchantOwnership(redemption.merchantId());
         if ("reversed".equals(redemption.status())) {
-            throw ApiException.conflict("BAR_GIFT_REDEMPTION_REVERSED", "gift drink redemption has been reversed");
+            throw ApiException.conflict("BAR_GIFT_REDEMPTION_REVERSED", "该赠酒兑付已被冲正");
         }
         return redemption;
     }
@@ -68,7 +68,7 @@ public class BarEntitlementRedemptionService {
     private void checkMerchantOwnership(String resourceMerchantId) {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(resourceMerchantId)) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "resource belongs to another merchant");
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该数据属于其他商户");
             }
         });
     }

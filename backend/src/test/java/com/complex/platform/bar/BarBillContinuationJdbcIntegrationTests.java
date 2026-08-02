@@ -96,8 +96,8 @@ class BarBillContinuationJdbcIntegrationTests {
                 // 败者两种合法拒绝:赢家已把账单结清(ALREADY_SETTLED),或行锁后重校验剩余为0(remaining)。
                 assertThat(((ApiException) loser).getMessage())
                         .satisfiesAnyOf(
-                                m -> assertThat(m).contains("remaining"),
-                                m -> assertThat(m).contains("already settled"));
+                                m -> assertThat(m).contains("剩余未付"),
+                                m -> assertThat(m).contains("已结账"));
             } finally {
                 pool.shutdownNow();
             }
