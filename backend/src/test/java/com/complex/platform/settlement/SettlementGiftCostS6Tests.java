@@ -77,6 +77,9 @@ class SettlementGiftCostS6Tests {
         for (String pid : projectIds) {
             com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate,
                     "DELETE FROM settlement_transactions WHERE project_id = ?", pid);
+            com.complex.platform.support.AppendOnlyTestBypass.updateOnTable(jdbcTemplate,
+                    "pass_gift_cost_variance_ledger", "trg_append_only_ud",
+                    "DELETE FROM pass_gift_cost_variance_ledger WHERE project_id = ?", pid);
             jdbcTemplate.update(
                     "DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)",
                     pid);
@@ -438,12 +441,14 @@ class SettlementGiftCostS6Tests {
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
                     verification_id, settlement_status, entitlement_valid_to, business_at, created_at, updated_at,
-                    comp_service_fee_cent, gift_cost_cent)
-                VALUES (?, ?, ?, ?, 'entry', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
+                    comp_service_fee_cent, gift_cost_cent, gift_cost_config_id)
+                VALUES (?, ?, ?, ?, 'entry', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, type, "ent_" + id, verifiedCount,
                 Math.max(Math.abs(verifiedCount), 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, "vf_" + id, ts, ts, ts, ts, compServiceFeeCent, giftCostCent);
+                merchantId, projectId, "vf_" + id, ts, ts, ts, ts, compServiceFeeCent, giftCostCent,
+                // S7 K12 接线守卫要求:G 非零的计提/冲正行必带规则 id(生产路径由消费者同写;夹具挂全局种子)。
+                giftCostCent == 0L ? null : "pgc_default");
     }
 
     private void setRankTier(String projectId, int rankFrom, int rankTo, int shareBps) {

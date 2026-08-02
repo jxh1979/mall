@@ -168,6 +168,14 @@ public class TicketDistributionSettlementService {
                             + " ≠ 进池计提合计 " + pooledTotals.giftCostCent());
         }
 
+        // ①b S7 赠付差额结算(HTML:962「预扣与核销实付的差额留在娱乐平台公司,按可配规则调账留痕」):
+        //    同一事务、同一月窗,按「项目 × 规则(pass_gift_cost_configs)」结出 差额 V = 预扣 G − 实付 A。
+        //    G = 本月进池计提净额(按计提行快照的规则 id 分组);A = ar_ap_items(pass_drink_settlement) 对冲净额
+        //    (月窗/项目/票种锚点取该核销的结算事实行,票种再走与计提同一个 findPassGiftCostConfig 归到规则)。
+        //    三种规则(V373 快照定义):platform_absorb 仅留痕/carry_forward 结转下期/true_up_pool 回补当期池。
+        GiftVarianceCalc giftVariance = settleGiftVariance(projectId, periodStart, windowStart, windowEnd,
+                pooledGiftCost);
+
         // ② 赠酒成本不在此扣(D5,2026-07-21 用户拍板删):通票免费酒水由 bar 域 BarGiftConsumer 每次核销按【内部结算价】
         //    给出品酒吧挂应付(pass_drink_settlement,幂等键 verificationId,可冲正)=唯一补偿口径;原「每杯 3 元池扣」
         //    是财务测算假设(PRD §3.7 假设不进系统)且与该内部结算价应付重复=对同一杯赠酒双重计,已删,不再从池扣减。
@@ -191,6 +199,17 @@ public class TicketDistributionSettlementService {
         // 渠道费按各业态毛额占比摊下去;分摊尾差归酒吧支(与「尾差归项目公司/平台兜底」同一范式,不摊给别家)。
         allocateChannelFee(formatShares, channelFee, ticketRevenue);
 
+        // ③b S7 兑付成本按【提供方业态】分记(HTML:962「成本按提供方的商户业态分开记账」):
+        //    A 按业态归堆落业态份额行 gift_actual_paid_cent。纯留痕不进净份额(兑付由娱乐平台公司承担,
+        //    不动各业态分账,K11 兑付与池无函数关系不变)。当月只有兑付没有核销份额的业态补零份额行,
+        //    「给餐厅/零售兑付了多少」不因该业态本月没进池收入而丢行。
+        for (var pf : giftVariance.paidByFormat().entrySet()) {
+            FormatShare cur = formatShares.get(pf.getKey());
+            formatShares.put(pf.getKey(), cur == null
+                    ? new FormatShare(pf.getKey(), 0L, 0L).withGiftPaid(pf.getValue())
+                    : cur.withGiftPaid(pf.getValue()));
+        }
+
         // ④⑤ 可分配池(唯一的池)= 【酒吧业态】净份额 = 酒吧毛额 − 摊到的渠道费 − 酒吧侧 G − 酒吧侧综合服务费(池链支)。
         //    S6:P = R − C − G − F_pool(HTML:739/:742 瀑布顺序——先扣赠送权益预估成本,再扣门票综合服务费)。
         //    G 按业态跟核销走(照 S4 的 F 同一范式):酒吧份额扣酒吧的 G,别的业态不替它埋单;
@@ -200,7 +219,8 @@ public class TicketDistributionSettlementService {
         //    已由等价保值种子(V370)平移进综合服务费费率,金额逐分不变、名目与收款方按 HTML 正名。
         //    带符号(R-3):冲正月酒吧净份额可为负 → 池为负 → 各家分账为负 = 向酒吧追回,不钳零不丢账。
         FormatShare barShare = formatShares.get(FORMAT_BAR);
-        long availablePool = barShare == null ? 0L : barShare.netCent();
+        // S7 true_up_pool 规则:差额回补当期可分配池(净份额公式不动,池在其后加回;platform_absorb/carry_forward 恒 +0)。
+        long availablePool = (barShare == null ? 0L : barShare.netCent()) + giftVariance.poolTrueUpTotal();
 
         // ⑥ 各酒吧当月统计(核销数降序)
         List<JdbcSettlementBillRepository.MerchantMonthlyStat> stats =
@@ -327,8 +347,12 @@ public class TicketDistributionSettlementService {
             repository.upsertFormatShare(new SettlementBillFormatShareRecord(
                     actualBillId, share.format(), share.grossCent(), share.platformBorneCent(),
                     share.channelFeeCent(), share.compServiceFeeCent(), share.giftCostCent(),
-                    share.netCent(), kind, entityId));
+                    share.giftPaidCent(), share.netCent(), kind, entityId));
         }
+        // S7 差额台账落痕(append-only):首结追加陈述行;幂等重算若结论有变,先冲正取反旧净额、再追加新陈述,
+        //   历史结论永在;结论没变不追加(重跑零膨胀)。收款主体快照与 G 同源(pass_gift_cost 归属流)。
+        writeGiftVarianceLedger(actualBillId, projectId, periodStart, periodEnd,
+                giftVariance, giftBeneficiaryEntityId);
         for (ItemCalc item : items) {
             // 专属直付明细 id 加 method 后缀,与该家池分账明细 id 区分(否则 PK/唯一键相撞被覆盖丢账)。
             String itemId = METHOD_EXCLUSIVE_FULL.equals(item.method())
@@ -548,6 +572,137 @@ public class TicketDistributionSettlementService {
         return "sb_" + (projectId == null ? "default" : projectId) + "_" + month;
     }
 
+    /** S7 三种差额处理规则(V373 快照定义;chk_pgc_variance/chk_pgcv_handling 同一词表)。 */
+    static final String VARIANCE_CARRY_FORWARD = "carry_forward";
+    static final String VARIANCE_TRUE_UP_POOL = "true_up_pool";
+
+    /**
+     * S7 赠付差额结算(HTML:962):按「项目 × 规则」结出 当期差额 V = 预扣 G − 实付 A,并按规则算出处理量。
+     *
+     * <p><b>G 按规则</b>:计提行落库时快照的 gift_cost_config_id 分组(冲正行沿用原行规则 id,净额天然正确);
+     * <b>A 按规则</b>:兑付行按其核销的票种走与计提<b>同一个</b> {@code findPassGiftCostConfig} 归到规则——
+     * 预扣关闭(整额 0,无计提行)时兑付照样归到该规则,差额为负 = 平台没预扣却真金白银付了出去,财务必须看见。
+     * <b>carried_in</b>:此前各期 carry_forward 结转、尚未处理的净额,本期一并按本期规则处理。
+     *
+     * <p>处理量 = V + carried_in:platform_absorb → 两处理列全 0(差额留娱乐平台公司,仅留痕);
+     * carry_forward → 全额结转下期;true_up_pool → 全额回补当期池(池 = 酒吧净份额 + Σ回补)。
+     * G/A/结转全为 0 的规则不出行(留痕表零膨胀;K9 逐分不变基线 = 不落任何行)。
+     *
+     * <p>K12 接线守卫(fail-loud):Σ各规则 G 必须 ≡ 进池 G 合计——G 计提行永远带规则 id(S6 落库同写),
+     * 若有 G 落库却没带规则 id,差额表会悄悄少一块,宁可当场拒绝出账。
+     */
+    private GiftVarianceCalc settleGiftVariance(String projectId, LocalDate periodStart,
+                                                Instant windowStart, Instant windowEnd, long pooledGiftCost) {
+        List<JdbcSettlementBillRepository.ConfigGiftCost> gRows =
+                repository.aggregateGiftCostByConfig(projectId, windowStart, windowEnd);
+        java.util.LinkedHashMap<String, Long> gByConfig = new java.util.LinkedHashMap<>();
+        long gSum = 0L;
+        for (var g : gRows) {
+            gByConfig.merge(g.configId(), g.giftCostCent(), Long::sum);
+            gSum += g.giftCostCent();
+        }
+        if (gSum != pooledGiftCost) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
+                    "赠付差额守恒校验失败(K12 接线):Σ各规则预扣 G " + gSum + " ≠ 进池计提合计 " + pooledGiftCost
+                            + "(存在未带规则 id 的 G 计提行)");
+        }
+        java.util.LinkedHashMap<String, Long> aByConfig = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Long> paidByFormat = new java.util.LinkedHashMap<>();
+        for (var p : repository.aggregateGiftPaid(projectId, windowStart, windowEnd)) {
+            paidByFormat.merge(p.businessFormat(), p.paidCent(), Long::sum);
+            aByConfig.merge(repository.findPassGiftCostConfig(projectId, p.ticketTypeId()).id(),
+                    p.paidCent(), Long::sum);
+        }
+        java.util.LinkedHashSet<String> configIds = new java.util.LinkedHashSet<>(gByConfig.keySet());
+        configIds.addAll(aByConfig.keySet());
+        List<VarianceTarget> targets = new ArrayList<>();
+        long poolTrueUpTotal = 0L;
+        for (String configId : configIds) {
+            long accrued = gByConfig.getOrDefault(configId, 0L);
+            long paid = aByConfig.getOrDefault(configId, 0L);
+            long carriedIn = repository.sumPriorCarry(projectId, configId, periodStart);
+            if (accrued == 0L && paid == 0L && carriedIn == 0L) {
+                continue; // 本期本规则无任何量,不出行。
+            }
+            String handling = repository.findVarianceHandling(configId);
+            long effective = (accrued - paid) + carriedIn; // 本期待处理量 = 当期差额 + 往期结转
+            long carriedForward = VARIANCE_CARRY_FORWARD.equals(handling) ? effective : 0L;
+            long poolTrueUp = VARIANCE_TRUE_UP_POOL.equals(handling) ? effective : 0L;
+            poolTrueUpTotal = Math.addExact(poolTrueUpTotal, poolTrueUp);
+            targets.add(new VarianceTarget(configId, handling, accrued, paid, carriedIn,
+                    carriedForward, poolTrueUp));
+        }
+        return new GiftVarianceCalc(targets, poolTrueUpTotal, paidByFormat);
+    }
+
+    /**
+     * S7 差额台账写入(append-only,冲正取反范式):
+     * 首结 → 每个有量的规则追加一行陈述;幂等重算 → 逐规则与台账现净额比对,结论没变不追加(零膨胀),
+     * 变了则先追加「现净额的全额取反」冲正行(reversal_of 指向被冲陈述行),再追加新陈述行——
+     * 历史结论永在,任何一行都满足 chk_pgcv_identity(V = G − A,取反后仍成立)。
+     */
+    private void writeGiftVarianceLedger(String billId, String projectId, LocalDate periodStart,
+                                         LocalDate periodEnd, GiftVarianceCalc calc, String beneficiaryEntityId) {
+        java.util.Map<String, JdbcSettlementBillRepository.VarianceNet> existing =
+                repository.findVarianceNetByBill(billId);
+        java.util.LinkedHashMap<String, VarianceTarget> targetByConfig = new java.util.LinkedHashMap<>();
+        for (VarianceTarget t : calc.targets()) {
+            targetByConfig.put(t.configId(), t);
+        }
+        java.util.LinkedHashSet<String> configIds = new java.util.LinkedHashSet<>(targetByConfig.keySet());
+        configIds.addAll(existing.keySet());
+        int seq = 0;
+        for (String configId : configIds) {
+            VarianceTarget target = targetByConfig.get(configId);
+            JdbcSettlementBillRepository.VarianceNet net = existing.get(configId);
+            boolean unchanged = target == null
+                    ? (net == null || net.isZero())
+                    : (net != null
+                        && net.accruedCostCent() == target.accruedCostCent()
+                        && net.actualPaidCent() == target.actualPaidCent()
+                        && net.carriedInCent() == target.carriedInCent()
+                        && net.carriedForwardCent() == target.carriedForwardCent()
+                        && net.poolTrueUpCent() == target.poolTrueUpCent());
+            if (unchanged) {
+                continue;
+            }
+            if (net != null && !net.isZero()) {
+                // 冲正行:现净额全额取反(处理规则按该规则现行快照取,与被冲行常同;规则中途改配亦如实留痕)。
+                repository.insertVarianceRow(new JdbcSettlementBillRepository.VarianceLedgerRow(
+                        varianceRowId(seq++), billId, projectId, periodStart, periodEnd, configId,
+                        repository.findVarianceHandling(configId),
+                        -net.accruedCostCent(), -net.actualPaidCent(), -net.varianceCent(),
+                        -net.carriedInCent(), -net.carriedForwardCent(), -net.poolTrueUpCent(),
+                        beneficiaryEntityId, net.latestStatementId()));
+            }
+            if (target != null) {
+                repository.insertVarianceRow(new JdbcSettlementBillRepository.VarianceLedgerRow(
+                        varianceRowId(seq++), billId, projectId, periodStart, periodEnd, configId,
+                        target.varianceHandling(),
+                        target.accruedCostCent(), target.actualPaidCent(),
+                        target.accruedCostCent() - target.actualPaidCent(),
+                        target.carriedInCent(), target.carriedForwardCent(), target.poolTrueUpCent(),
+                        beneficiaryEntityId, null));
+            }
+        }
+    }
+
+    /** S7 台账行 id:零填充纳秒前缀保证字典序≈时间序(冲正行可按 MAX(id) 找到最新陈述行)。 */
+    private String varianceRowId(int seq) {
+        return "pgv_" + String.format("%016x", System.nanoTime()) + "_" + seq;
+    }
+
+    /** S7 差额结算中间结果:各规则处理行 + 回补池合计(true_up_pool) + 兑付实付按业态归堆(落业态份额行)。 */
+    private record GiftVarianceCalc(List<VarianceTarget> targets, long poolTrueUpTotal,
+                                    java.util.Map<String, Long> paidByFormat) {
+    }
+
+    /** S7 某规则本期结论:G/A/往期结转 + 按规则算出的处理量(结转下期/回补当期池,platform_absorb 两者皆 0)。 */
+    private record VarianceTarget(String configId, String varianceHandling, long accruedCostCent,
+                                  long actualPaidCent, long carriedInCent, long carriedForwardCent,
+                                  long poolTrueUpCent) {
+    }
+
     /**
      * D6 套票折扣按归属拆出「项目公司承担」的部分(§7.4)：
      * platform_absorb → 项目全额承担(商户拿满额)；split_by_ratio → 项目按 split_platform_bps 承担；
@@ -571,15 +726,28 @@ public class TicketDistributionSettlementService {
      * S11 某业态当月的份额（计算中间结果）：毛额 = 已核销净额 + 项目承担的折扣补回；
      * S4/S6:净份额 = 毛额 − 摊到的渠道费 − 本业态计提的赠送权益预估成本(G) − 本业态计提的门票综合服务费
      * (池链支;G 与 F 都归娱乐平台公司,瀑布顺序照 HTML:739 先 G 后 F——减法交换律下金额同,列示按此序)。
+     * S7 giftPaidCent:本业态当月兑付实付(A,按提供方业态分记,HTML:962)——纯留痕<b>不进净份额</b>
+     * (兑付由娱乐平台公司承担,不动各业态分账)。
      */
     private record FormatShare(String format, long grossCent, long platformBorneCent, long channelFeeCent,
-                               long compServiceFeeCent, long giftCostCent) {
+                               long compServiceFeeCent, long giftCostCent, long giftPaidCent) {
         FormatShare(String format, long grossCent, long platformBorneCent) {
-            this(format, grossCent, platformBorneCent, 0L, 0L, 0L);
+            this(format, grossCent, platformBorneCent, 0L, 0L, 0L, 0L);
+        }
+
+        FormatShare(String format, long grossCent, long platformBorneCent, long channelFeeCent,
+                    long compServiceFeeCent, long giftCostCent) {
+            this(format, grossCent, platformBorneCent, channelFeeCent, compServiceFeeCent, giftCostCent, 0L);
         }
 
         FormatShare withChannelFee(long fee) {
-            return new FormatShare(format, grossCent, platformBorneCent, fee, compServiceFeeCent, giftCostCent);
+            return new FormatShare(format, grossCent, platformBorneCent, fee, compServiceFeeCent, giftCostCent,
+                    giftPaidCent);
+        }
+
+        FormatShare withGiftPaid(long paid) {
+            return new FormatShare(format, grossCent, platformBorneCent, channelFeeCent, compServiceFeeCent,
+                    giftCostCent, paid);
         }
 
         long netCent() {

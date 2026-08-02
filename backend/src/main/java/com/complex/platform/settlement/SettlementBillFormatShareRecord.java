@@ -17,6 +17,9 @@ package com.complex.platform.settlement;
  * @param compServiceFeeCent         S4:本业态当月进池核销计提的门票综合服务费（池链支，归娱乐平台公司）
  * @param giftCostCent               S6:本业态当月进池核销计提的赠送权益预估成本（G，跟核销走，归娱乐平台公司；
  *                                   常态首笔核销=入场→G 落酒吧行，即 HTML:742「酒吧份额再依次扣掉赠送权益预估成本」）
+ * @param giftActualPaidCent         S7:本业态当月赠送权益兑付实付（A，娱乐平台公司按内部结算价付给该业态
+ *                                   提供方商户的净额，含冲正对冲；HTML:962「成本按提供方的商户业态分开记账」）。
+ *                                   纯留痕不进净份额（兑付由娱乐平台公司承担，不动各业态分账）
  * @param netRevenueCent             净份额 = 毛额 − 渠道费 − 赠送权益预估成本 − 综合服务费；酒吧业态的净份额即可分配池
  * @param beneficiaryKind            entity=归某经营主体；per_merchant=归提供该权益的各商户自己
  * @param beneficiaryEntityId        beneficiary_kind=entity 时的 business_entities.id；归属未配置时为空
@@ -29,6 +32,7 @@ public record SettlementBillFormatShareRecord(
         long channelFeeCent,
         long compServiceFeeCent,
         long giftCostCent,
+        long giftActualPaidCent,
         long netRevenueCent,
         String beneficiaryKind,
         String beneficiaryEntityId

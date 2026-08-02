@@ -58,7 +58,29 @@ export type SettlementBillRow = {
   specialApprovalRef: string | null;
   specialApprovalValidUntil: string | null;
   pooledDistributedCent: number;
+  // S7 赠付差额(财务四问):这个月预扣了多少、实际付出去多少、差额留了多少、走的哪条规则。
+  giftCostCent: number;
+  giftActualPaidCent: number;
+  giftVarianceCent: number;
+  giftCarriedForwardCent: number;
+  giftPoolTrueUpCent: number;
+  giftVarianceHandling: string | null;
 };
+
+/** S7 差额处理规则中文名(V373 三值;多规则并列时逐个翻译)。 */
+const VARIANCE_HANDLING_LABELS: Record<string, string> = {
+  platform_absorb: "留娱乐平台公司",
+  carry_forward: "结转下期",
+  true_up_pool: "回补当期池",
+};
+
+function varianceHandlingLabel(handling: string | null): string {
+  if (!handling) return "—";
+  return handling
+    .split(",")
+    .map((value) => VARIANCE_HANDLING_LABELS[value] ?? value)
+    .join("、");
+}
 
 function centToYuan(cent: number | undefined | null): string {
   if (cent === undefined || cent === null || Number.isNaN(Number(cent))) return "—";
@@ -262,10 +284,11 @@ export function SettlementReviewPage({ api, setGlobalError, setActionResult, nav
             <p className="admin-muted-action">
               门票综合服务费＝娱乐平台公司留存／项目管理费，同一项只扣一次，分「池链」「专属」两支：池链支从可分配池前扣、专属支从专属商户直付前扣。可分配池＝酒吧份额扣完渠道费与池链服务费后的剩余，仅用于各酒吧分配，池内不再二次扣留存。金额为负＝该月冲正多于新核销，属向对方追回。
               各酒吧分得总额不得超过可分配池：超池的结算单停在「草稿」，仅限平台负责人特批的短期激励活动放行（有效期按后台配置，默认不超过 3 个月，到期自动失效须重新特批）。
+              赠付差额＝赠付预扣（分账时按票种规则预扣的赠送权益预估成本）减去赠付实付（客人核销后娱乐平台公司按内部结算价付给提供方商户的钱），核销一件付一件、没核销就不付；差额留在娱乐平台公司，按后台可配规则处理（留娱乐平台公司／结转下期／回补当期池），逐期在差额台账留痕。
             </p>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="settlement-review-bills-table">
-                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>渠道抽成（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>状态</th><th>超池（元）</th><th>超池特批</th></tr></thead>
+                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>渠道抽成（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>赠付预扣（元）</th><th>赠付实付（元）</th><th>赠付差额（元）</th><th>差额规则</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>状态</th><th>超池（元）</th><th>超池特批</th></tr></thead>
                 <tbody>{bills.map((bill) => (
                   <tr key={bill.id} data-testid={`settlement-review-bill-${bill.id}`}>
                     <td>{bill.periodStart?.slice(0, 7) ?? "—"}</td>
@@ -275,6 +298,10 @@ export function SettlementReviewPage({ api, setGlobalError, setActionResult, nav
                     <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.compServiceFeePooledCent)}</td>
                     <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.compServiceFeeExclusiveCent)}</td>
                     <td>{bill.feeBeneficiaryEntityName ?? bill.feeBeneficiaryEntityId ?? "归属未配置"}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-gift-cost-${bill.id}`}>{centToYuan(bill.giftCostCent)}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-gift-paid-${bill.id}`}>{centToYuan(bill.giftActualPaidCent)}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-gift-variance-${bill.id}`}>{centToYuan(bill.giftVarianceCent)}</td>
+                    <td data-testid={`settlement-bill-gift-handling-${bill.id}`}>{varianceHandlingLabel(bill.giftVarianceHandling)}</td>
                     <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.availablePoolCent)}</td>
                     <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.distributedCent)}</td>
                     <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.roundingResidualCent)}</td>
