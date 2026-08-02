@@ -100,6 +100,8 @@ class SettlementMergeRetentionS4Tests {
         expected.put("distributed_cent", 62400L);
         expected.put("comp_service_fee_exclusive_cent", 0L);
         expected.put("fee_beneficiary_entity_id", "be_ent_platform"); // 收款方正名:归娱乐平台公司(V370 归属种子)
+        expected.put("gift_cost_cent", 0L); // S6:未配非零 G 规则(种子 by_ticket_amount+0)恒 0=逐分不变
+        expected.put("gift_beneficiary_entity_id", "be_ent_platform"); // V372 归属种子:归娱乐平台公司
         expected.put("distribution_method", "by_rank_tier");
         expected.put("special_approval_ref", null);
         expected.put("special_approval_valid_until", null);
