@@ -84,10 +84,10 @@ class SettlementBatch1P345Tests {
         assertThat(variance).isEqualTo(0L);      // variance = old - new
     }
 
-    // ---- 第4步:未核销归项目 ----
+    // ---- 第4步:未核销款分流(S8:默认归娱乐平台公司,游乐业态归游乐公司)----
 
     @Test
-    void expireUnverifiedAllocatesUnverifiedPartToProject() {
+    void expireUnverifiedAllocatesUnverifiedPartToPlatformEntity() {
         String suffix = Long.toString(System.nanoTime());
         Instant now = Instant.now();
         // valid_to 已过、total=4/used=1 -> 未核销 3/4:unverified = 8000×3/4 = 6000,verified=2000。
@@ -101,7 +101,10 @@ class SettlementBatch1P345Tests {
         Map<String, Object> row = jdbcTemplate.queryForMap(
                 "SELECT * FROM settlement_transactions WHERE entitlement_id = ? AND transaction_type = 'unverified_expired'",
                 ent);
-        assertThat(row.get("beneficiary_type")).isEqualTo("project");
+        // S8(业务 HTML 逐字「没有被核销的权益,那部分钱归娱乐平台公司留存」):归主体而非项目公司;
+        //   提供方商户(merchant_a)无 merchants 行 → 业态兜底 bar → all_pass_ticket 流 → 娱乐平台公司。
+        assertThat(row.get("beneficiary_type")).isEqualTo("entity");
+        assertThat(row.get("beneficiary_entity_id")).isEqualTo("be_ent_platform");
         assertThat(row.get("settlement_status")).isEqualTo("confirmed");
         assertThat(row.get("transaction_no")).isEqualTo("ST-UE-" + ent);
         assertThat(row.get("verification_id")).isNull();
@@ -146,7 +149,63 @@ class SettlementBatch1P345Tests {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?",
                 Integer.class, ent);
-        assertThat(count).isEqualTo(0);   // 本次没把这张 direct 票归项目
+        assertThat(count).isEqualTo(0);   // 本次没把这张 direct 票归主体
+    }
+
+    /** S8 分流(业务 HTML 逐字「游乐通票的未核销权益款归游乐公司」):提供方是游乐业态商户 → be_amusement。 */
+    @Test
+    void expireUnverifiedRoutesAmusementProviderToAmusementEntity() {
+        String suffix = Long.toString(System.nanoTime());
+        Instant now = Instant.now();
+        String amuMerchant = "m_ue_amu_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (?, '游乐测试商户', 'amusement', 'active', now(), now())
+                ON CONFLICT (id) DO UPDATE SET merchant_type = EXCLUDED.merchant_type
+                """, amuMerchant);
+        try {
+            String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
+            jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ?, merchant_id = ? WHERE id = ?",
+                    java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)), amuMerchant, ent);
+
+            expiryJob.expireUnverified(now);
+
+            Map<String, Object> row = jdbcTemplate.queryForMap(
+                    "SELECT * FROM settlement_transactions WHERE entitlement_id = ?"
+                            + " AND transaction_type = 'unverified_expired'", ent);
+            // 业态判定源 = merchants.merchant_type(与 S11 池基过滤同一套),流 amusement_ticket → V375 种子。
+            assertThat(row.get("beneficiary_type")).isEqualTo("entity");
+            assertThat(row.get("beneficiary_entity_id")).isEqualTo("be_amusement");
+            assertThat(row.get("merchant_id")).as("溯源商户保留").isEqualTo(amuMerchant);
+        } finally {
+            cleanup(); // 先清引用该商户的流水/权益,再删商户(FK 顺序)
+            jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", amuMerchant);
+        }
+    }
+
+    /** S8 fail-loud:归属种子被删(有金额没有收款方=配置坏)→ 拒绝落账,零行落地,宁可阻断不出错账。 */
+    @Test
+    void expireUnverifiedFailsLoudWhenAttributionSeedMissing() {
+        String suffix = Long.toString(System.nanoTime());
+        Instant now = Instant.now();
+        String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
+        jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ? WHERE id = ?",
+                java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)), ent);
+        // 临时停用全局 all_pass_ticket 归属种子(模拟配置缺失);finally 还原,不泄漏给后续用例。
+        jdbcTemplate.update("UPDATE revenue_stream_attribution SET status = 'inactive'"
+                + " WHERE revenue_stream = 'all_pass_ticket' AND project_id IS NULL AND is_draft = FALSE");
+        try {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> expiryJob.expireUnverified(now))
+                    .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                    .hasMessageContaining("未核销权益款无法落账");
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?",
+                    Integer.class, ent);
+            assertThat(count).isZero(); // 事务整体回滚,一分钱没落
+        } finally {
+            jdbcTemplate.update("UPDATE revenue_stream_attribution SET status = 'active'"
+                    + " WHERE revenue_stream = 'all_pass_ticket' AND project_id IS NULL AND is_draft = FALSE");
+        }
     }
 
     // ---- seed helpers(直插业务表,不依赖 ticketing 服务) ----

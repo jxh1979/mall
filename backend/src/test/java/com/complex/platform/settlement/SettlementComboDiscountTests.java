@@ -252,7 +252,8 @@ class SettlementComboDiscountTests {
     @Test
     void noDiscountRowsBehaveExactlyAsBefore() {
         String pid = newProject();
-        // 无折扣（discount=0），默认 platform_absorb。池与各家分账须与改造前逐分一致(K9 口径)。
+        // 无折扣（discount=0），默认 platform_absorb。池须与改造前逐分一致(K9 口径);
+        // 各家金额按 S8 第二段归一化分尽口径(折扣域本身零行为变更)。
         seedPooled(pid, "top", "entry", 10, 0, 50000L, 0L, 10000L);
         seedPooled(pid, "mid", "entry", 6, 0, 30000L, 0L, 6000L);
         seedPooled(pid, "low", "entry", 2, 0, 20000L, 0L, 4000L);
@@ -263,10 +264,11 @@ class SettlementComboDiscountTests {
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(bill, "combo_discount_cent")).isZero();
         assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
-        // by_rank_tier 默认 16/12/9/6：rank1=12800，rank2/3 各 9600。
-        assertThat(itemAmount(pid, "top")).isEqualTo(12800L);
-        assertThat(itemAmount(pid, "mid")).isEqualTo(9600L);
-        assertThat(itemAmount(pid, "low")).isEqualTo(9600L);
+        // S8 归一化分尽:默认档位 16/12/9/6 只作相对权重,3 家命中 1600/1200/1200(Σ=4000)
+        //   → 80000×1600/4000=32000、80000×1200/4000=24000×2,池分光(无折扣口径不受两段化影响)。
+        assertThat(itemAmount(pid, "top")).isEqualTo(32000L);
+        assertThat(itemAmount(pid, "mid")).isEqualTo(24000L);
+        assertThat(itemAmount(pid, "low")).isEqualTo(24000L);
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────────

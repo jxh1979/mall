@@ -80,13 +80,15 @@ class SettlementBatch2EngineTests {
         assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
     }
 
-    // ---- ② by_rank_tier(默认档位 16/12/9/6)----
+    // ---- ② 第二段:排名档位归一化分尽(S8——档位只作相对权重,余额一次分光)----
 
     @Test
     void byRankTierDistributesByRankShareBps() {
         String pid = newProject();
-        // 默认方式=by_rank_tier;造 3 家不同核销数 → 排名 1/2/3。
-        // 收入 100000,每笔 20% 综合服务费 → 可分配池 80000。第1名 16%=12800,2-4名各 12%=9600。
+        // 默认方式=by_rank_tier;造 3 家不同核销数 → 排名 1/2/3。收入 100000,每笔 20% 综合服务费 → 池 80000。
+        // S8 分尽:默认档位 16/12/9/6 只作相对权重——3 家命中 1600/1200/1200(Σ=4000),
+        //   归一化把 80000 全部分光:top=80000×1600/4000=32000,mid/low 各 80000×1200/4000=24000。
+        //   (两段化前是绝对份额 12800/9600/9600、48000 静默沉淀在池里——正是用户否掉的隐式残值。)
         seedVerified(pid, "top", "entry", 10, 0, 50000L);   // rank1
         seedVerified(pid, "mid", "entry", 6, 0, 30000L);    // rank2
         seedVerified(pid, "low", "entry", 2, 0, 20000L);    // rank3
@@ -94,40 +96,45 @@ class SettlementBatch2EngineTests {
         service.settleMonth(pid, MONTH);
 
         assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(80000L);
-        assertThat(itemAmount(pid, "top")).isEqualTo(12800L); // 80000×16%
-        assertThat(itemAmount(pid, "mid")).isEqualTo(9600L);  // 80000×12%(rank2 in 2-4)
-        assertThat(itemAmount(pid, "low")).isEqualTo(9600L);  // 80000×12%(rank3 in 2-4)
+        assertThat(itemAmount(pid, "top")).isEqualTo(32000L); // 80000×1600/4000
+        assertThat(itemAmount(pid, "mid")).isEqualTo(24000L); // 80000×1200/4000
+        assertThat(itemAmount(pid, "low")).isEqualTo(24000L); // 80000×1200/4000
         assertThat(itemRank(pid, "top")).isEqualTo(1);
         assertThat(itemRank(pid, "mid")).isEqualTo(2);
         assertThat(itemRank(pid, "low")).isEqualTo(3);
-        // Σ=32000 ≤ 80000 → confirmed
+        // 分尽:Σ=80000=池 → confirmed,无未分余额。
         assertThat(bill(pid).get("status")).isEqualTo("confirmed");
+        assertThat(num(bill(pid), "distributed_cent")).isEqualTo(80000L);
+        assertThat(num(bill(pid), "pool_undistributed_cent")).isZero();
     }
 
-    // ---- ② by_venue_per_guest(客数 × 单价)----
+    // ---- ② 第一段:每客单价固定规则(S8——商户级规则,不再是项目级方式)----
 
     @Test
-    void byVenuePerGuestDistributesByGuestCount() {
+    void perGuestFixedRuleTakesAbsoluteAmountInPhaseOne() {
         String pid = newProject();
-        setMethod(pid, "by_venue_per_guest");
-        setMerchantRate(pid, "va", 500L, null);  // 每客 5 元
-        setMerchantRate(pid, "vb", 800L, null);  // 每客 8 元
+        setMerchantRate(pid, "va", 500L, null);  // 第一段固定规则:每客 5 元
+        setMerchantRate(pid, "vb", 800L, null);  // 第一段固定规则:每客 8 元
         // 客数由 num_people 聚合:va 客数 7,vb 客数 3。
         seedVerified(pid, "va", "entry", 5, 7, 50000L);
         seedVerified(pid, "vb", "entry", 4, 3, 50000L);
 
         service.settleMonth(pid, MONTH);
 
-        assertThat(itemAmount(pid, "va")).isEqualTo(3500L); // 7 × 500
+        assertThat(itemAmount(pid, "va")).isEqualTo(3500L); // 7 × 500,绝对额,不归一化
         assertThat(itemAmount(pid, "vb")).isEqualTo(2400L); // 3 × 800
+        // K18 ③:两家全走第一段 → 第二段无参与者,余额 80000−5900=74100 不静默沉淀,
+        //   显式归娱乐平台公司(V375 all_pass_ticket 全局种子)单列留痕。
+        assertThat(num(bill(pid), "pool_undistributed_cent")).isEqualTo(74100L);
+        assertThat(bill(pid).get("pool_undistributed_entity_id")).isEqualTo("be_ent_platform");
+        assertThat(bill(pid).get("status")).isEqualTo("confirmed"); // 5900 ≤ 80000
     }
 
-    // ---- ② by_fixed_amount(固定额)----
+    // ---- ② 第一段:固定额固定规则 ----
 
     @Test
-    void byFixedAmountDistributesFixed() {
+    void fixedAmountRuleTakesAbsoluteAmountInPhaseOne() {
         String pid = newProject();
-        setMethod(pid, "by_fixed_amount");
         setMerchantRate(pid, "fa", null, 6000L);
         setMerchantRate(pid, "fb", null, 4000L);
         seedVerified(pid, "fa", "entry", 5, 2, 50000L);
@@ -137,15 +144,58 @@ class SettlementBatch2EngineTests {
 
         assertThat(itemAmount(pid, "fa")).isEqualTo(6000L);
         assertThat(itemAmount(pid, "fb")).isEqualTo(4000L);
+        // K18 ③:第二段无参与者 → 余额 80000−10000=70000 显式归娱乐平台公司留痕。
+        assertThat(num(bill(pid), "pool_undistributed_cent")).isEqualTo(70000L);
+        assertThat(bill(pid).get("pool_undistributed_entity_id")).isEqualTo("be_ent_platform");
     }
 
-    // ---- ③ Σ分账 > 总池 → 待特批(draft,不确认)----
+    // ---- ②b S8 两段混跑:第一段绝对额先拿,其余按档位分尽余额,拿了第一段不占名次 ----
+
+    @Test
+    void twoPhaseMixedFixedAndTierBarsConserveWholePool() {
+        String pid = newProject();
+        // 第一段:fixedBar 固定 12000;pgBar 每客 300 × 10 客 = 3000 → Q = 15000。
+        setMerchantRate(pid, "fixedBar", null, 12000L);
+        setMerchantRate(pid, "pgBar", 300L, null);
+        // 第二段:项目档位 rank1=60% / rank2=40%(Σ=100%)。
+        setRankTier(pid, 1, 1, 6000);
+        setRankTier(pid, 2, 2, 4000);
+        // 核销数:fixedBar(20)/pgBar(15) 反而最高——但拿了第一段就不占第二段名次(K18 ⑤)。
+        seedVerified(pid, "fixedBar", "entry", 20, 5, 30000L);
+        seedVerified(pid, "pgBar", "entry", 15, 10, 20000L);
+        seedVerified(pid, "tierA", "entry", 8, 3, 30000L);
+        seedVerified(pid, "tierB", "entry", 2, 1, 20000L);
+        // 收入 100000,费 20000 → 池 80000;P2 = 80000 − 15000 = 65000。
+
+        service.settleMonth(pid, MONTH);
+
+        Map<String, Object> bill = bill(pid);
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
+        // 第一段:绝对额,rank 留空,方式按规则种类留痕。
+        assertThat(itemAmount(pid, "fixedBar")).isEqualTo(12000L);
+        assertThat(itemMethod(pid, "fixedBar")).isEqualTo("by_fixed_amount");
+        assertThat(itemRankOrNull(pid, "fixedBar")).isNull();
+        assertThat(itemAmount(pid, "pgBar")).isEqualTo(3000L);
+        assertThat(itemMethod(pid, "pgBar")).isEqualTo("by_venue_per_guest");
+        assertThat(itemRankOrNull(pid, "pgBar")).isNull();
+        // 第二段:排名只在第二段参与者内部编——tierA 核销数(8)低于两家第一段酒吧仍是 rank1。
+        assertThat(itemRank(pid, "tierA")).isEqualTo(1);
+        assertThat(itemRank(pid, "tierB")).isEqualTo(2);
+        assertThat(itemAmount(pid, "tierA")).isEqualTo(39000L); // 65000×6000/10000
+        assertThat(itemAmount(pid, "tierB")).isEqualTo(26000L); // 65000×4000/10000
+        // K18:Q + Σ第二段 + 尾差 ≡ 池(15000 + 65000 + 0 = 80000),无未分余额。
+        assertThat(num(bill, "distributed_cent")).isEqualTo(80000L);
+        assertThat(num(bill, "rounding_residual_cent")).isZero();
+        assertThat(num(bill, "pool_undistributed_cent")).isZero();
+        assertThat(bill.get("status")).isEqualTo("confirmed");
+    }
+
+    // ---- ③ Σ分账 > 总池 → 待特批(draft,不确认);S8:第一段 Q>P 不削、第二段为 0 ----
 
     @Test
     void overPoolKeepsDraftForSpecialApproval() {
         String pid = newProject();
-        setMethod(pid, "by_fixed_amount");
-        // 收入 100000,每笔 20% 综合服务费 → 可分配池 80000;两家固定额合计 200000 > 80000。
+        // 收入 100000,每笔 20% 综合服务费 → 可分配池 80000;两家第一段固定额合计 200000 > 80000。
         setMerchantRate(pid, "x", null, 100000L);
         setMerchantRate(pid, "y", null, 100000L);
         seedVerified(pid, "x", "entry", 5, 2, 50000L);
@@ -155,9 +205,92 @@ class SettlementBatch2EngineTests {
 
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
-        assertThat(num(bill, "distributed_cent")).isEqualTo(200000L);   // 超可分配池
+        assertThat(num(bill, "distributed_cent")).isEqualTo(200000L);   // 超可分配池:绝对承诺不削
         assertThat(bill.get("status")).isEqualTo("draft");             // 保持 draft 待特批
         assertThat(bill.get("special_approval_ref")).isNull();         // 待人工填
+        assertThat(num(bill, "pool_undistributed_cent")).isZero();     // P2=max(0,P−Q)=0,无余额可留
+    }
+
+    /** S8 边界①:Q &gt; P 且当月还有排名档位酒吧——第二段为 0(不削第一段),名次仍留痕,整月走特批。 */
+    @Test
+    void overPoolByPhaseOneLeavesZeroForTierBars() {
+        String pid = newProject();
+        setMerchantRate(pid, "big", null, 90000L);   // 第一段固定额 90000 > 池 80000
+        setRankTier(pid, 1, 9, 10000);
+        seedVerified(pid, "big", "entry", 10, 3, 50000L);
+        seedVerified(pid, "tb", "entry", 5, 2, 50000L);
+        // 收入 100000,费 20000 → 池 80000;Q=90000 > 80000 → P2=0。
+
+        service.settleMonth(pid, MONTH);
+
+        Map<String, Object> bill = bill(pid);
+        assertThat(itemAmount(pid, "big")).isEqualTo(90000L);   // 不削
+        assertThat(itemAmount(pid, "tb")).isZero();             // 第二段整段为 0
+        assertThat(itemRank(pid, "tb")).isEqualTo(1);           // 名次仍留痕(第二段内部 rank1)
+        assertThat(num(bill, "distributed_cent")).isEqualTo(90000L);
+        assertThat(bill.get("status")).isEqualTo("draft");      // 超池 → 待特批(既有路径)
+        assertThat(num(bill, "pool_undistributed_cent")).isZero();
+    }
+
+    // ---- ③b 逐分不变判据:无第一段酒吧 + 档位和恰 100% → 与两段化前整行逐分一致 ----
+
+    /**
+     * S8 验收判据(用户拍板):当期没有任何固定规则酒吧、且档位对在场名次的份额和恰为 100% 时,
+     * 归一化 prorate(P,w,10000) ≡ 旧绝对份额 bpsOf(P,w) —— 结算单<b>整行全列</b>与两段化前
+     * 手算值逐分一致,明细逐条一致(含 .5 进位样本:80001×50% = 40000.5 → 40001)。
+     */
+    @Test
+    void pennyInvariantWhenNoFixedSetAndTiersSumToFull() {
+        String pid = newProject();
+        setRankTier(pid, 1, 1, 5000);
+        setRankTier(pid, 2, 2, 3000);
+        setRankTier(pid, 3, 3, 2000);
+        seedVerified(pid, "t1", "entry", 10, 2, 40001L); // 费 8000(40001/5 整除截断,seed 口径)
+        seedVerified(pid, "t2", "entry", 6, 1, 30007L);  // 费 6001
+        seedVerified(pid, "t3", "entry", 2, 1, 29992L);  // 费 5998
+        // 收入 100000,费 19999 → 池 80001。
+
+        String billId = service.settleMonth(pid, MONTH);
+
+        // 旧引擎手算(bpsOf 绝对份额):t1=round(80001×0.5)=40001(.5 进位)、t2=round(24000.3)=24000、
+        //   t3=round(16000.2)=16000;Σ=80001=池;尾差 0。新引擎归一化同基数同权重 → 必须逐分相同。
+        Map<String, Object> expected = new java.util.LinkedHashMap<>();
+        expected.put("id", billId);
+        expected.put("project_id", pid);
+        expected.put("period_start", java.sql.Date.valueOf(MONTH.atDay(1)));
+        expected.put("period_end", java.sql.Date.valueOf(MONTH.atEndOfMonth()));
+        expected.put("ticket_revenue_cent", 100000L);
+        expected.put("channel_fee_cent", 0L);
+        expected.put("available_pool_cent", 80001L);
+        expected.put("distributed_cent", 80001L);
+        expected.put("comp_service_fee_pooled_cent", 19999L);
+        expected.put("comp_service_fee_exclusive_cent", 0L);
+        expected.put("fee_beneficiary_entity_id", "be_ent_platform"); // V370 全局种子
+        expected.put("gift_cost_cent", 0L);                            // S6:无赠送计提 → G 恒 0
+        expected.put("gift_beneficiary_entity_id", "be_ent_platform"); // V372 归属种子
+        expected.put("distribution_method", "by_rank_tier");
+        expected.put("special_approval_ref", null);
+        expected.put("special_approval_valid_until", null);
+        expected.put("status", "confirmed");
+        expected.put("confirmed_at", null);
+        expected.put("settled_at", null);
+        expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
+        expected.put("combo_discount_cent", 0L);
+        expected.put("rounding_residual_cent", 0L);
+        expected.put("pool_undistributed_cent", 0L);
+        expected.put("pool_undistributed_entity_id", null);
+
+        Map<String, Object> actual = new java.util.HashMap<>(bill(pid));
+        actual.remove("created_at");
+        actual.remove("updated_at");
+        assertThat(actual).as("无第一段 + 档位和=100% → 结算单每一列与两段化前逐分不变").isEqualTo(expected);
+
+        assertThat(itemAmount(pid, "t1")).isEqualTo(40001L);
+        assertThat(itemAmount(pid, "t2")).isEqualTo(24000L);
+        assertThat(itemAmount(pid, "t3")).isEqualTo(16000L);
+        assertThat(itemRank(pid, "t1")).isEqualTo(1);
+        assertThat(itemRank(pid, "t2")).isEqualTo(2);
+        assertThat(itemRank(pid, "t3")).isEqualTo(3);
     }
 
     // ---- ④ 幂等:重跑同月不重复、覆盖 ----
@@ -227,19 +360,22 @@ class SettlementBatch2EngineTests {
                 merchantId, projectId, "vf_" + id, ts, ts, ts, verifiedCent / 5);
     }
 
-    private void setMethod(String projectId, String method) {
-        jdbcTemplate.update("""
-                INSERT INTO ticket_distribution_configs (id, project_id, method_type, status, is_draft)
-                VALUES (?, ?, ?, 'active', FALSE)
-                """, "tdc_" + projectId, projectId, method);
-    }
-
+    /** S8/V374:第一段固定规则,rule_type 按「填了哪列」二选一(与写入口同推导)。 */
     private void setMerchantRate(String projectId, String merchantId, Long perGuest, Long fixed) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_distribution_merchant_rates (id, project_id, merchant_id,
-                    per_guest_cent, fixed_amount_cent, status, is_draft)
+                    rule_type, per_guest_cent, fixed_amount_cent, status, is_draft)
+                VALUES (?, ?, ?, ?, ?, ?, 'active', FALSE)
+                """, "tdmr_" + projectId + "_" + merchantId, projectId, merchantId,
+                perGuest != null ? "per_guest" : "fixed", perGuest, fixed);
+    }
+
+    private void setRankTier(String projectId, int rankFrom, int rankTo, int shareBps) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_distribution_rank_tiers (id, project_id, rank_from, rank_to, share_bps,
+                    status, is_draft)
                 VALUES (?, ?, ?, ?, ?, 'active', FALSE)
-                """, "tdmr_" + projectId + "_" + merchantId, projectId, merchantId, perGuest, fixed);
+                """, "trt_" + projectId + "_" + rankFrom, projectId, rankFrom, rankTo, shareBps);
     }
 
     private Map<String, Object> bill(String projectId) {
@@ -261,6 +397,23 @@ class SettlementBatch2EngineTests {
                   JOIN settlement_bills sb ON sb.id = si.bill_id
                  WHERE sb.project_id = ? AND si.merchant_id = ?
                 """, Integer.class, projectId, merchantId);
+    }
+
+    /** S8:第一段酒吧 rank 留空(不占第二段名次),需可空读取。 */
+    private Integer itemRankOrNull(String projectId, String merchantId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT si.rank_no FROM settlement_items si
+                  JOIN settlement_bills sb ON sb.id = si.bill_id
+                 WHERE sb.project_id = ? AND si.merchant_id = ?
+                """, Integer.class, projectId, merchantId);
+    }
+
+    private String itemMethod(String projectId, String merchantId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT si.distribution_method FROM settlement_items si
+                  JOIN settlement_bills sb ON sb.id = si.bill_id
+                 WHERE sb.project_id = ? AND si.merchant_id = ?
+                """, String.class, projectId, merchantId);
     }
 
     private static long num(Map<String, Object> row, String col) {

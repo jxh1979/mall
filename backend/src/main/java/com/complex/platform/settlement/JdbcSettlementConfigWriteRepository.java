@@ -104,13 +104,14 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("updated_by", updatedBy), String.class);
     }
 
-    public String upsertMerchantRateDraft(String id, String projectId, String merchantId,
+    public String upsertMerchantRateDraft(String id, String projectId, String merchantId, String ruleType,
                                           Long perGuestCent, Long fixedAmountCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO ticket_distribution_merchant_rates
-                    (id, project_id, merchant_id, per_guest_cent, fixed_amount_cent, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :merchant_id, :per_guest_cent, :fixed_amount_cent, 'active', TRUE, :updated_by, now())
+                    (id, project_id, merchant_id, rule_type, per_guest_cent, fixed_amount_cent, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :merchant_id, :rule_type, :per_guest_cent, :fixed_amount_cent, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), merchant_id, is_draft) WHERE status = 'active' DO UPDATE SET
+                    rule_type = EXCLUDED.rule_type,
                     per_guest_cent = EXCLUDED.per_guest_cent,
                     fixed_amount_cent = EXCLUDED.fixed_amount_cent,
                     updated_by = EXCLUDED.updated_by,
@@ -118,6 +119,7 @@ public class JdbcSettlementConfigWriteRepository {
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
+                .addValue("rule_type", ruleType)
                 .addValue("per_guest_cent", perGuestCent).addValue("fixed_amount_cent", fixedAmountCent)
                 .addValue("updated_by", updatedBy), String.class);
     }
@@ -463,7 +465,8 @@ public class JdbcSettlementConfigWriteRepository {
                     UNION ALL
                     SELECT id, 'merchant_rate',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || merchant_id
-                               || ' 每客/固定=' || COALESCE(per_guest_cent::text, '-') || '/' || COALESCE(fixed_amount_cent::text, '-'),
+                               || CASE rule_type WHEN 'per_guest' THEN ' 第一段固定规则=每客单价 ' || per_guest_cent || ' 分'
+                                                 ELSE ' 第一段固定规则=固定额 ' || fixed_amount_cent || ' 分' END,
                            updated_at
                       FROM ticket_distribution_merchant_rates WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

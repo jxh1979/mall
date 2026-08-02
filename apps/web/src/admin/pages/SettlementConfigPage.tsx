@@ -38,9 +38,9 @@ type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: strin
 
 // 各块：标题 + 当前生效值取自 overview.platformDefaults 的哪个 key（无则块内提示按域/按商户维护）。
 const BLOCKS: BlockDef[] = [
-  { key: "distribution_method", title: "各酒吧分配方式", defaultKey: "distribution_method", endpoint: "distribution-method" },
-  { key: "rank_tiers", title: "排名档位分账梯子", endpoint: "rank-tiers", note: "按销售排名分档分账；当前生效梯子按项目维护，改动落草案、复核转正后生效。" },
-  { key: "merchant_rate", title: "商户每客单价 / 固定额", endpoint: "merchant-rate", note: "按「项目 × 商户」配置，改动落草案；可对草案「下线」。" },
+  { key: "distribution_method", title: "各酒吧分配方式（第二段）", defaultKey: "distribution_method", endpoint: "distribution-method", note: "两段分配：配了「商户每客单价 / 固定额」固定规则的酒吧先按绝对金额拿第一段（拿了第一段不再参与第二段）；此处只配第二段——其余酒吧按排名档位把余额分尽。" },
+  { key: "rank_tiers", title: "排名档位分账梯子", endpoint: "rank-tiers", note: "第二段：未配固定规则的酒吧按销售排名分档、按档位比例把第二段余额分尽；当前生效梯子按项目维护，改动落草案、复核转正后生效。" },
+  { key: "merchant_rate", title: "商户每客单价 / 固定额（第一段固定规则）", endpoint: "merchant-rate", note: "按「项目 × 商户」配置，二选一：配了的酒吧走第一段按绝对金额先拿（每客单价 × 当月客数，或固定额），不再参与第二段排名档位；未配置的酒吧走第二段。改动落草案；可对草案「下线」。" },
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
   { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后生效。" },
   { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态票面原价×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
@@ -71,10 +71,11 @@ const ROLE_TYPE_OPTIONS: [string, string][] = [
   ["non_sales", "非销售人员"],
 ];
 
+// S8 两段分配（2026-07-28）：可分配池先由「商户每客单价 / 固定额」卡片里配了固定规则的酒吧按绝对金额拿第一段，
+//   余额由其余酒吧按排名档位分尽第二段——「按每客单价」「按固定额」已是商户级固定规则，不再是项目级方式选项，
+//   本下拉只剩第二段的分配方式。
 const METHOD_OPTIONS: [string, string][] = [
-  ["by_venue_per_guest", "按场地每客单价"],
-  ["by_rank_tier", "按销售排名档位"],
-  ["by_fixed_amount", "按固定额"],
+  ["by_rank_tier", "按销售排名档位（第二段余额分尽）"],
 ];
 // V368：超池特批有效期的单位。运营配「三天的短期激励」和「三个月的短期激励」是同一个动作——
 //   同一个输入框填数值，旁边选单位，不用心算 90 天。
@@ -190,7 +191,7 @@ type Form = {
   varianceHandling: string;
 };
 const EMPTY_FORM: Form = {
-  projectId: "", methodType: "by_venue_per_guest",
+  projectId: "", methodType: "by_rank_tier",
   specialApprovalTermValue: "3", specialApprovalTermUnit: "month", merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", revenueStream: "all_pass_ticket", managementEntityId: "",
@@ -559,8 +560,8 @@ function editSteps(
     case "merchant_rate":
       content = (<>{projectField}
         <label>商户 id<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
-        <label>每客单价（分，可留空）<input data-testid="settlement-config-field-perGuestCent" type="number" min={0} value={form.perGuestCent} onChange={setField("perGuestCent")} /></label>
-        <label>固定额（分，可留空）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label></>);
+        <label>每客单价（分，与固定额二选一）<input data-testid="settlement-config-field-perGuestCent" type="number" min={0} value={form.perGuestCent} onChange={setField("perGuestCent")} /></label>
+        <label>固定额（分，与每客单价二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label></>);
       break;
     case "comprehensive_service_fee":
       content = (<>{projectField}
@@ -752,7 +753,7 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
         ? null : "超池特批有效期需为不小于 1 的整数（按所选单位计，天或月）。";
     case "merchant_rate":
       if (orUndef(form.merchantId) === undefined) return "商户 id 必填。";
-      if (orUndef(form.perGuestCent) === undefined && orUndef(form.fixedAmountCent) === undefined) return "每客单价与固定额至少填一项。";
+      if ((orUndef(form.perGuestCent) === undefined) === (orUndef(form.fixedAmountCent) === undefined)) return "每客单价与固定额必须二选一：该酒吧按哪种固定规则拿第一段，只能配一种。";
       if (orUndef(form.perGuestCent) !== undefined && !isIntInRange(form.perGuestCent, 0, Number.MAX_SAFE_INTEGER)) return "每客单价需为不小于 0 的整数（分）。";
       if (orUndef(form.fixedAmountCent) !== undefined && !isIntInRange(form.fixedAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "固定额需为不小于 0 的整数（分）。";
       return null;

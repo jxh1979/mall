@@ -129,12 +129,14 @@ class SettlementConfigWriteJdbcIntegrationTests {
     void otherSingleRowTypesDraftThenActivate() {
         // S9:超池特批有效期与分配方式同表同草案闸——草案期读侧仍是全局默认 3 个月,转正后才切 6 天。
         //   V368:单位可配到「天」,这里顺带证伪「配 3 天不会被下限顶成 1 个月」。
+        //   S8 语义收窄(V374):method_type 仅指第二段方式,只剩 by_rank_tier 合法——Path 2 的
+        //   草案/转正切换观测点改由同表的特批有效期承担(3 个月 → 6 天)。
         writeService.saveDistributionMethod(
-                new DistributionMethodRequest("d1", PROJECT, "by_fixed_amount", 6, "day"), DRAFTER);
+                new DistributionMethodRequest("d1", PROJECT, "by_rank_tier", 6, "day"), DRAFTER);
         assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_rank_tier");
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("3 个月");
         writeService.activateDraft("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
-        assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_fixed_amount");
+        assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_rank_tier");
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("6 天");
 
         writeService.saveChannelFee(new ChannelFeeRequest("c1", PROJECT, null, 500), DRAFTER);
@@ -205,13 +207,32 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 .hasMessageContaining("票种不存在");
     }
 
-    /** merchant-rate:草案期 finder 返 null(项目未生效);转正后返配置值。 */
+    /** merchant-rate:草案期不入第一段名单(项目未生效);转正后带 rule_type 进名单(S8/V374)。 */
     @Test
     void merchantRateDraftThenActivate() {
         writeService.saveMerchantRate(new MerchantRateRequest("m1", PROJECT, MERCHANT, 500L, null), DRAFTER);
-        assertThat(billRepository.findMerchantRate(PROJECT, MERCHANT)).isNull();
+        assertThat(billRepository.findActiveMerchantRateRules(PROJECT).get(MERCHANT)).isNull();
         writeService.activateDraft("merchant_rate", draftRowId("ticket_distribution_merchant_rates"), APPROVER);
-        assertThat(billRepository.findMerchantRate(PROJECT, MERCHANT).perGuestCent()).isEqualTo(500L);
+        var rule = billRepository.findActiveMerchantRateRules(PROJECT).get(MERCHANT);
+        assertThat(rule.perGuestCent()).isEqualTo(500L);
+        // 写入口按「填了哪列」推导 rule_type(每客单价)——第一段固定规则显式二选一,配置页/引擎同一解释。
+        assertThat(rule.ruleType()).isEqualTo(JdbcSettlementBillRepository.RULE_PER_GUEST);
+        assertThat(rule.fixedAmountCent()).isNull();
+    }
+
+    /** S8 写入口收窄:①方式只剩 by_rank_tier(第二段);②每客单价/固定额严格二选一,双填双空均拒。 */
+    @Test
+    void s8NarrowedWriteGatesRejectLegacyMethodAndAmbiguousRate() {
+        // 旧项目级方式已由商户级固定规则取代 → 写入口 400。
+        assertValidationFailed(() -> writeService.saveDistributionMethod(
+                new DistributionMethodRequest("dx", PROJECT, "by_fixed_amount", null, null), DRAFTER));
+        assertValidationFailed(() -> writeService.saveDistributionMethod(
+                new DistributionMethodRequest("dy", PROJECT, "by_venue_per_guest", null, null), DRAFTER));
+        // 同行双值 = 无从消歧(两段化后无项目级 method 兜底)→ 拒;双空同拒。
+        assertValidationFailed(() -> writeService.saveMerchantRate(
+                new MerchantRateRequest("mx", PROJECT, MERCHANT, 500L, 6000L), DRAFTER));
+        assertValidationFailed(() -> writeService.saveMerchantRate(
+                new MerchantRateRequest("my", PROJECT, MERCHANT, null, null), DRAFTER));
     }
 
     /** 排名档位覆盖守卫:Σ≠10000 / 重叠 / 缺口 一律 400;连续无重叠无缺口且 Σ=10000 放行。 */

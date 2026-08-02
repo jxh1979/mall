@@ -98,10 +98,11 @@ class SettlementBatch34ExclusiveE2ETests {
         assertThat(num(bill, "available_pool_cent")).isEqualTo(availablePool); // ② 池不含专属那笔
 
         // ---- 池分账明细：各家按非专属排名命中档位（专属 80000 不抬 barX 排名、不稀释他家）----
-        long a1 = availablePool * 1600 / 10000; // bar1 rank1 16% = 19200
-        long a2 = availablePool * 1200 / 10000; // bar2 rank2 12% = 14400
-        long a3 = availablePool * 1200 / 10000; // barX 普通 rank3 12% = 14400
-        long a4 = availablePool * 1200 / 10000; // bar3 rank4 12% = 14400
+        // S8 第二段归一化分尽:档位命中 1600/1200/1200/1200(Σ=5200),各家 = round(120000×w/5200)。
+        long a1 = 36923L; // bar1 rank1 round(120000×1600/5200)
+        long a2 = 27692L; // bar2 rank2 round(120000×1200/5200)
+        long a3 = 27692L; // barX 普通 rank3
+        long a4 = 27692L; // bar3 rank4
         assertThat(pooledItemAmount(pid, "bar1")).isEqualTo(a1);
         assertThat(pooledItemAmount(pid, "bar2")).isEqualTo(a2);
         assertThat(pooledItemAmount(pid, "barX")).isEqualTo(a3); // barX 池分账只按其普通核销，不含专属
@@ -126,14 +127,16 @@ class SettlementBatch34ExclusiveE2ETests {
                 Long.class, pid);
         assertThat(barXItemCount).isEqualTo(2L);
 
-        // ---- ④ 非专属家回归：分额与「无专属」场景恒等（专属不干扰档位分额）----
-        assertThat(a1).isEqualTo(19200L);
-        assertThat(a2).isEqualTo(14400L);
-        assertThat(a4).isEqualTo(14400L);
+        // ---- ④ 非专属家回归：分额与「无专属」场景(SettlementBatch2E2ETests 四家用例)恒等（专属不干扰档位分额）----
+        assertThat(a1).isEqualTo(36923L);
+        assertThat(a2).isEqualTo(27692L);
+        assertThat(a4).isEqualTo(27692L);
 
-        // 专属 80000 只在 exclusive_full 一条体现，未混入池分账（Σ池分账 ≤ 可分配池）。
-        long pooledSum = a1 + a2 + a3 + a4; // 62400
+        // 专属 80000 只在 exclusive_full 一条体现，未混入池分账（S8 分尽:Σ池分账 = 池 − 尾差 1）。
+        long pooledSum = a1 + a2 + a3 + a4; // 119999
         assertThat(pooledSum).isLessThanOrEqualTo(availablePool);
+        assertThat(((Number) bill(pid).get("rounding_residual_cent")).longValue()).isEqualTo(1L);
+        assertThat(pooledSum + 1L).isEqualTo(availablePool);
         assertThat(bill.get("status")).isEqualTo("confirmed"); // 池分账未越池
         assertThat(billId).isNotBlank();
     }

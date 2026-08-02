@@ -87,12 +87,13 @@ class SettlementEntityAttributionS1Tests {
         seedVerified(pid, "bar_k2", 2, 1, 30007L);
         seedVerified(pid, "bar_k3", 1, 1, 29991L);
 
-        // (1) 归属未配置 —— 现状口径
-        assertThat(attributionRepository.resolveManagementEntity(pid, "all_pass_ticket")).isNull();
+        // (1) 项目未配置 —— S8/V375 起回落全局种子(HTML 明文:通票收入 → 娱乐平台公司),不再是 null
+        assertThat(attributionRepository.resolveManagementEntity(pid, "all_pass_ticket"))
+                .isEqualTo("be_ent_platform");
         settlementService.settleMonth(pid, MONTH);
         Map<String, Object> before = bill(pid);
         Map<String, Long> itemsBefore = itemAmounts(pid);
-        assertThat(before.get("attributed_entity_id")).isNull();
+        assertThat(before.get("attributed_entity_id")).isEqualTo("be_ent_platform");
         assertThat(itemsBefore).isNotEmpty();
         assertThat(itemsBefore.values().stream().mapToLong(Long::longValue).sum()).isPositive();
 

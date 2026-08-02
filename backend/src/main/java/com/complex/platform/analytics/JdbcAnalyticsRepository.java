@@ -1437,7 +1437,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   --   (对抗审计 2026-07-21 复核:若将来违反软删铁律清档,孤儿流水会被整条丢弃致静默少报,届时改 LEFT JOIN。)
                   JOIN issued_entitlements ie ON ie.id = st.entitlement_id
                  WHERE st.transaction_type = 'unverified_expired'
-                   AND st.beneficiary_type = 'project'
+                   -- S8:未核销款归属从「项目公司」切为「经营主体」(默认娱乐平台公司/游乐业态归游乐公司,entity);
+                   --   'project' 一并保留 = 切换前已落的旧行仍进报表(行是 append-only 事实,不回填不改写)。
+                   AND st.beneficiary_type IN ('project', 'entity')
                    AND COALESCE(st.business_at, st.created_at) >= :window_start
                    AND COALESCE(st.business_at, st.created_at) <  :window_end
                  GROUP BY 1, 2

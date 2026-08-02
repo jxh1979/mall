@@ -85,17 +85,35 @@ class SettlementRoundingResidualTests {
     @Test
     void rankTierShareCarriesUpWhereTruncationWouldLose() {
         String pid = newProject();
-        setRankTier(pid, 1, 9, 1255);             // 12.55%
-        seedVerified(pid, "c1", 3, 1, 100L);      // 总池 100 分
-        // 精确 = 100 × 12.55% = 12.55 分。旧整除截断 = 12(少给 1 分);新四舍五入 = 13。
+        // S8 归一化分尽:档位和=100% 时 prorate ≡ bpsOf,四舍五入进位样本仍然成立。
+        setRankTier(pid, 1, 1, 1255);             // rank1:12.55%
+        setRankTier(pid, 2, 2, 8745);             // rank2:87.45%(Σ=100%)
+        seedVerified(pid, "c1", 3, 1, 60L);
+        seedVerified(pid, "c2", 2, 1, 40L);       // 总池 100 分
+        // rank1 精确 = 100 × 12.55% = 12.55 分。旧整除截断 = 12(少给 1 分);新四舍五入 = 13。
         service.settleMonth(pid, MONTH);
 
         assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(100L);
         assertThat(100L * 1255L / 10000L).isEqualTo(12L);   // 证伪:旧整除截断给 12
         assertThat(itemAmount(pid, "c1")).isEqualTo(13L);   // 新:四舍五入给 13
-        // 应分总额 = round(12.55) = 13;Σ已舍入 = 13 → 尾差 0。
+        assertThat(itemAmount(pid, "c2")).isEqualTo(87L);   // round(87.45) = 87
+        // 应分总额 = 池 100(分尽);Σ已舍入 = 13+87 = 100 → 尾差 0。
         assertThat(num(bill(pid), "rounding_residual_cent")).isZero();
-        assertConserved(pid, 13L);     // 应分总额 = round(12.55) = 13
+        assertConserved(pid, 100L);
+    }
+
+    /** S8 分尽:单一档位酒吧独享第二段——档位 12.55% 只是相对权重,一家在场就拿走整池,不再留 87.45% 沉淀。 */
+    @Test
+    void singleTierBarTakesWholePoolUnderExhaustiveNormalization() {
+        String pid = newProject();
+        setRankTier(pid, 1, 9, 1255);             // 权重 1255,但只此一家 → 归一化 = 100%
+        seedVerified(pid, "solo", 3, 1, 100L);    // 总池 100 分
+        service.settleMonth(pid, MONTH);
+
+        assertThat(itemAmount(pid, "solo")).isEqualTo(100L);  // 两段化前 = 13,余 87 隐式沉淀;现分尽
+        assertThat(num(bill(pid), "rounding_residual_cent")).isZero();
+        assertThat(num(bill(pid), "pool_undistributed_cent")).isZero();
+        assertConserved(pid, 100L);
     }
 
     // ---- ② 池链综合服务费线性求和(S4 合并留存:原「留存四舍五入」随留存链删除) ----
@@ -114,6 +132,10 @@ class SettlementRoundingResidualTests {
         // 拆份额链守恒:收入 = 费 + 池(渠道费 0)
         assertThat(num(b, "comp_service_fee_pooled_cent") + num(b, "available_pool_cent"))
                 .isEqualTo(num(b, "ticket_revenue_cent"));
+        // S8/K18 ④:档位权重全 0 = 第二段无有效参与者 → 池余额 795 不静默沉淀,
+        //   显式归娱乐平台公司(V375 all_pass_ticket 全局种子)单列留痕 + 告警。
+        assertThat(num(b, "pool_undistributed_cent")).isEqualTo(795L);
+        assertThat(b.get("pool_undistributed_entity_id")).isEqualTo("be_ent_platform");
     }
 
     // ---- ③ 尾差单列留痕 + 守恒(核心) ----
@@ -128,22 +150,23 @@ class SettlementRoundingResidualTests {
 
         service.settleMonth(pid, MONTH);
 
-        // 各家精确 3333.0 分 → 舍入后各 3333;应分总额 = round(9999.0) = 9999 → 尾差 0(整除也刚好)。
+        // S8 归一化分尽:各家精确 = 10000×3333/9999 = 3333.33…→ 舍入各 3333(Σ=9999);
+        // 应分总额 = 池 10000(分尽) → 尾差 +1 单列归平台,不并入任一商户。
         assertThat(itemAmount(pid, "s1")).isEqualTo(3333L);
-        assertThat(num(bill(pid), "rounding_residual_cent")).isZero();
-        assertConserved(pid, 9999L);   // 应分总额 = 3333.0×3 = 9999(无舍入)
+        assertThat(num(bill(pid), "rounding_residual_cent")).isEqualTo(1L);
+        assertConserved(pid, 10000L);  // 应分总额 = 池(第二段一次归一化分光)
     }
 
     @Test
     void residualIsNegativeWhenEveryShareCarriesUp() {
         String pid = newProject();
-        setRankTier(pid, 1, 9, 5050);              // 两家各 50.5%
-        seedVerified(pid, "n1", 2, 1, 60L);
-        seedVerified(pid, "n2", 1, 1, 40L);        // 总池 100 分
+        setRankTier(pid, 1, 9, 5000);              // 两家各 50%(Σ=100%,S8 归一化下同权重)
+        seedVerified(pid, "n1", 2, 1, 61L);
+        seedVerified(pid, "n2", 1, 1, 40L);        // 总池 101 分
 
         service.settleMonth(pid, MONTH);
 
-        // 每家精确 50.5 → HALF_UP 各 51(Σ=102);应分总额 = round(101.0) = 101 → 尾差 −1(平台追回)。
+        // 每家精确 50.5 → HALF_UP 各 51(Σ=102);应分总额 = 池 101(分尽) → 尾差 −1(平台承担的追回)。
         assertThat(itemAmount(pid, "n1")).isEqualTo(51L);
         assertThat(itemAmount(pid, "n2")).isEqualTo(51L);
         assertThat(num(bill(pid), "rounding_residual_cent")).isEqualTo(-1L);
@@ -153,7 +176,7 @@ class SettlementRoundingResidualTests {
     @Test
     void residualIsZeroForNonRatioMethodsSoBehaviourIsUnchanged() {
         String pid = newProject();
-        setMethod(pid, "by_fixed_amount");
+        // S8:固定额已是商户级第一段规则(V374),不再是项目级方式——两家全走第一段,整数绝对额无舍入。
         setMerchantRate(pid, "f1", null, 777L);
         setMerchantRate(pid, "f2", null, 333L);
         seedVerified(pid, "f1", 2, 1, 5000L);
@@ -165,6 +188,9 @@ class SettlementRoundingResidualTests {
         assertThat(itemAmount(pid, "f2")).isEqualTo(333L);
         assertThat(num(bill(pid), "rounding_residual_cent")).isZero(); // 固定额无舍入 → 无尾差
         assertConserved(pid, 1110L);   // 应分总额 = 777 + 333
+        // K18 ③:第二段无参与者 → 池余额 10000 − 1110 = 8890 显式归娱乐平台公司留痕(非尾差,分列)。
+        assertThat(num(bill(pid), "pool_undistributed_cent")).isEqualTo(8890L);
+        assertThat(bill(pid).get("pool_undistributed_entity_id")).isEqualTo("be_ent_platform");
     }
 
     /**
@@ -231,19 +257,14 @@ class SettlementRoundingResidualTests {
                 """, "trt_" + projectId + "_" + rankFrom, projectId, rankFrom, rankTo, shareBps);
     }
 
-    private void setMethod(String projectId, String method) {
-        jdbcTemplate.update("""
-                INSERT INTO ticket_distribution_configs (id, project_id, method_type, status, is_draft)
-                VALUES (?, ?, ?, 'active', FALSE)
-                """, "tdc_" + projectId, projectId, method);
-    }
-
+    /** S8/V374:第一段固定规则,rule_type 按「填了哪列」二选一(与写入口同推导)。 */
     private void setMerchantRate(String projectId, String merchantId, Long perGuest, Long fixed) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_distribution_merchant_rates (id, project_id, merchant_id,
-                    per_guest_cent, fixed_amount_cent, status, is_draft)
-                VALUES (?, ?, ?, ?, ?, 'active', FALSE)
-                """, "tdmr_" + projectId + "_" + merchantId, projectId, merchantId, perGuest, fixed);
+                    rule_type, per_guest_cent, fixed_amount_cent, status, is_draft)
+                VALUES (?, ?, ?, ?, ?, ?, 'active', FALSE)
+                """, "tdmr_" + projectId + "_" + merchantId, projectId, merchantId,
+                perGuest != null ? "per_guest" : "fixed", perGuest, fixed);
     }
 
     private Map<String, Object> bill(String projectId) {

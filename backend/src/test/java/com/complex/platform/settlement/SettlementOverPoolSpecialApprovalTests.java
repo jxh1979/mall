@@ -27,8 +27,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * ③ 超额 C 口径——超池 bill 过账时对池明细两段拆（池内→ticket_distribution、超额→platform_incentive_subsidy），
  *    专属直付不拆，未超池零行为变更，两前缀各自幂等。
  *
- * <p>造超池：<b>项目级</b> by_fixed_amount 配置 + 商户固定额（更隔离，不碰全局默认）。可分配池=800、两家池分配
- * a=600+400=1000&gt;800 → overPool。S4:每笔核销带 20% 池链综合服务费(等价保值口径),池 = 收入 − 费。
+ * <p>造超池（S8 两段化）：项目级方式=by_rank_tier(唯一合法值,仅指第二段) + 商户级<b>第一段固定额规则</b>
+ * (V374 rule_type=fixed,更隔离,不碰全局默认)。可分配池=800、两家第一段 Q=600+400=1000&gt;800 → overPool
+ * (Q&gt;P 不削、第二段为 0,走既有特批路径)。S4:每笔核销带 20% 池链综合服务费(等价保值口径),池 = 收入 − 费。
  *
  * <p><b>S9 短期激励期限（V357）</b>四件套：④ 期限后台可配（项目配 2 月 → 到期日 = 特批日 + 2 月）；
  * ⑤ 到期回收·过账闸——过期特批的超池单过账 409 {@code SPECIAL_APPROVAL_EXPIRED} 且零应付落地；
@@ -378,7 +379,7 @@ class SettlementOverPoolSpecialApprovalTests {
         for (String col : List.of("ticket_revenue_cent", "channel_fee_cent",
                 "available_pool_cent", "distributed_cent",
                 "comp_service_fee_pooled_cent", "comp_service_fee_exclusive_cent",
-                "combo_discount_cent", "rounding_residual_cent")) {
+                "combo_discount_cent", "rounding_residual_cent", "pool_undistributed_cent")) {
             assertThat(num(bill(pidShort), col)).as(col).isEqualTo(num(bill(pidLong), col));
         }
         // ② 无特批 → 无生效期（列留空，CHECK 只在有特批引用时要求非空）。
@@ -410,7 +411,7 @@ class SettlementOverPoolSpecialApprovalTests {
         return s == null ? 0L : s;
     }
 
-    /** 越池项目：by_fixed_amount + m1 固定 600 / m2 固定 400，核销收入 1000、池链服务费 200 → 可分配池=800 < poolDistributed=1000。 */
+    /** 越池项目：第一段固定规则 m1 固定 600 / m2 固定 400，核销收入 1000、池链服务费 200 → 可分配池=800 < Q=1000。 */
     private String overPoolProject() {
         String pid = newProject();
         setProjectFixedMethod(pid);
@@ -421,7 +422,7 @@ class SettlementOverPoolSpecialApprovalTests {
         return pid;
     }
 
-    /** 未越池项目：by_fixed_amount + m1 固定 300 / m2 固定 200 → poolDistributed=500 ≤ 可分配池=800。 */
+    /** 未越池项目：第一段固定规则 m1 固定 300 / m2 固定 200 → Q=500 ≤ 可分配池=800(余额 300 显式归平台留痕)。 */
     private String nonOverPoolProject() {
         String pid = newProject();
         setProjectFixedMethod(pid);
@@ -438,18 +439,20 @@ class SettlementOverPoolSpecialApprovalTests {
         return pid;
     }
 
+    /** S8:项目级配置行只承载第二段方式(by_rank_tier,唯一合法值)+ 特批有效期;超池由商户级固定规则造。 */
     private void setProjectFixedMethod(String projectId) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_distribution_configs (id, project_id, method_type, status, is_draft)
-                VALUES (?, ?, 'by_fixed_amount', 'active', FALSE)
+                VALUES (?, ?, 'by_rank_tier', 'active', FALSE)
                 """, "tdc_d7_" + projectId, projectId);
     }
 
+    /** S8/V374:商户级第一段固定额规则(rule_type=fixed)。 */
     private void setMerchantFixed(String projectId, String merchantId, long fixedCent) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_distribution_merchant_rates (id, project_id, merchant_id,
-                    per_guest_cent, fixed_amount_cent, status, is_draft)
-                VALUES (?, ?, ?, NULL, ?, 'active', FALSE)
+                    rule_type, per_guest_cent, fixed_amount_cent, status, is_draft)
+                VALUES (?, ?, ?, 'fixed', NULL, ?, 'active', FALSE)
                 """, "tdmr_d7_" + projectId + "_" + merchantId, projectId, merchantId, fixedCent);
     }
 

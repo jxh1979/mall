@@ -110,21 +110,30 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 new RankTier(rs.getInt("rank_from"), rs.getInt("rank_to"), rs.getInt("share_bps")));
     }
 
-    /** 某商户的每客单价/固定额费率：项目特例优先，否则全局默认（同商户）。 */
-    public MerchantRate findMerchantRate(String projectId, String merchantId) {
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("project_id", projectId).addValue("merchant_id", merchantId);
-        return jdbcTemplate.query("""
-                SELECT per_guest_cent, fixed_amount_cent FROM ticket_distribution_merchant_rates
-                 WHERE status = 'active' AND is_draft = FALSE AND merchant_id = :merchant_id
+    /** V374 rule_type 值:第一段固定规则二选一(与 chk_tdmr_rule 一致)。 */
+    public static final String RULE_PER_GUEST = "per_guest";
+    public static final String RULE_FIXED = "fixed";
+
+    /**
+     * S8 两段分配·第一段名单:项目下全部生效的商户级固定规则(每商户一条,项目特例优先于全局默认)。
+     * <b>有行 = 该酒吧属第一段(FixedSet)</b>,按 rule_type 二选一取绝对额;无行 = 属第二段(排名档位)。
+     * 一次取全名单(引擎按月跑一次,商户数十级,DISTINCT ON 每商户取最优先一行)。
+     */
+    public java.util.Map<String, MerchantRateRule> findActiveMerchantRateRules(String projectId) {
+        java.util.Map<String, MerchantRateRule> out = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT DISTINCT ON (merchant_id) merchant_id, rule_type, per_guest_cent, fixed_amount_cent
+                  FROM ticket_distribution_merchant_rates
+                 WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
-                 ORDER BY (project_id IS NOT NULL) DESC
-                 LIMIT 1
-                """, params, rs -> rs.next()
-                ? new MerchantRate(
-                        rs.getObject("per_guest_cent") == null ? null : rs.getLong("per_guest_cent"),
-                        rs.getObject("fixed_amount_cent") == null ? null : rs.getLong("fixed_amount_cent"))
-                : null);
+                 ORDER BY merchant_id, (project_id IS NOT NULL) DESC
+                """, new MapSqlParameterSource().addValue("project_id", projectId), rs -> {
+            out.put(rs.getString("merchant_id"), new MerchantRateRule(
+                    rs.getString("rule_type"),
+                    rs.getObject("per_guest_cent") == null ? null : rs.getLong("per_guest_cent"),
+                    rs.getObject("fixed_amount_cent") == null ? null : rs.getLong("fixed_amount_cent")));
+        });
+        return out;
     }
 
     // ---- 读当月核销聚合（批1 settlement_transactions，verification_settled，按 created_at 落窗）----
@@ -466,7 +475,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * §4 回退常量收敛为 fail-loud:结算配置缺失(连 __DEFAULT__ 种子都没有=部署坏)时【响亮停】而非静默套硬编码默认。
      * 正常态 V223/V268/V327 恒建 __DEFAULT__ 行 + V326 已转正 is_draft=FALSE,故 5 个 finder 恒命中,本助手不触发,零行为变更;
      * null 只在种子被删/迁移未跑到位时出现——此时报错正是「零硬编码·无配置即响亮停」铁则要的。
-     * (findMerchantRate/findRankTiers 不收敛:前者合法返 null 引擎自处置,后者空梯子给 0 分。)
+     * (findActiveMerchantRateRules/findRankTiers 不收敛:前者空名单=无第一段酒吧合法,后者空梯子=第二段无人可分,均引擎自处置。)
      */
     private <T> T requireConfigured(T value, String key, String projectId) {
         if (value == null) {
@@ -500,7 +509,9 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("status", bill.status())
                 .addValue("attributed_entity_id", bill.attributedEntityId())
                 .addValue("combo_discount_cent", bill.comboDiscountCent())
-                .addValue("rounding_residual_cent", bill.roundingResidualCent());
+                .addValue("rounding_residual_cent", bill.roundingResidualCent())
+                .addValue("pool_undistributed_cent", bill.poolUndistributedCent())
+                .addValue("pool_undistributed_entity_id", bill.poolUndistributedEntityId());
         jdbcTemplate.update("""
                 INSERT INTO settlement_bills (
                     id, project_id, period_start, period_end, ticket_revenue_cent, channel_fee_cent,
@@ -508,7 +519,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     comp_service_fee_pooled_cent, comp_service_fee_exclusive_cent, fee_beneficiary_entity_id,
                     gift_cost_cent, gift_beneficiary_entity_id,
                     distribution_method, special_approval_ref, status,
-                    attributed_entity_id, combo_discount_cent, rounding_residual_cent, updated_at
+                    attributed_entity_id, combo_discount_cent, rounding_residual_cent,
+                    pool_undistributed_cent, pool_undistributed_entity_id, updated_at
                 )
                 VALUES (
                     :id, :project_id, :period_start, :period_end, :ticket_revenue_cent, :channel_fee_cent,
@@ -516,7 +528,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     :comp_service_fee_pooled_cent, :comp_service_fee_exclusive_cent, :fee_beneficiary_entity_id,
                     :gift_cost_cent, :gift_beneficiary_entity_id,
                     :distribution_method, :special_approval_ref, :status,
-                    :attributed_entity_id, :combo_discount_cent, :rounding_residual_cent, now()
+                    :attributed_entity_id, :combo_discount_cent, :rounding_residual_cent,
+                    :pool_undistributed_cent, :pool_undistributed_entity_id, now()
                 )
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), period_start, period_end) DO UPDATE SET
                     ticket_revenue_cent = EXCLUDED.ticket_revenue_cent,
@@ -540,6 +553,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     attributed_entity_id = EXCLUDED.attributed_entity_id,
                     combo_discount_cent = EXCLUDED.combo_discount_cent,
                     rounding_residual_cent = EXCLUDED.rounding_residual_cent,
+                    pool_undistributed_cent      = EXCLUDED.pool_undistributed_cent,
+                    pool_undistributed_entity_id = EXCLUDED.pool_undistributed_entity_id,
                     updated_at          = now()
                 """, params);
     }
@@ -889,7 +904,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     public record RankTier(int rankFrom, int rankTo, int shareBps) {
     }
 
-    public record MerchantRate(Long perGuestCent, Long fixedAmountCent) {
+    /** S8 第一段固定规则(V374 二选一):per_guest 时 perGuestCent 非空,fixed 时 fixedAmountCent 非空(DB CHECK 保证)。 */
+    public record MerchantRateRule(String ruleType, Long perGuestCent, Long fixedAmountCent) {
     }
 
     public record MerchantMonthlyStat(String merchantId, int verifiedCount, int guestCount) {
