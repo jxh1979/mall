@@ -82,4 +82,45 @@ public class InternalSettlementPriceResolver {
                 .orElseThrow(() -> ApiException.badRequest("ENTITLEMENT_PRICE_UNRESOLVED",
                         "该赠送权益未配置提供方的内部结算价，无法核销结算"));
     }
+
+    /**
+     * S6「按件计」预扣基数：该票种<b>票面</b>全部平台出资型赠送权益的
+     * {@code Σ(quantity × num_people × 内部结算价)}（HTML:739「按件计＝票面各权益数量 × 内部结算价之和」；
+     * 发放时每个 binding 恰好展开成 quantity × num_people 张独立权益，故这就是「票面数量」的真值）。
+     *
+     * <p>哪些 binding 进和（三条都要满足，判据与 S5/S11 同源、不另造）：
+     * <ol>
+     *   <li><b>票面原价为 0</b>（HTML:737「两类都因价格为 0 而不参与份额拆分」——有票面价的权益参与拆份额，
+     *       不是赠送；S11 起 NULL=0 读取，发布已拦未配价）；</li>
+     *   <li><b>成本承担方 = 平台出资型</b>（商户让利型平台不承担成本 → 不进 G 预扣，HTML:737）；</li>
+     *   <li><b>提供方兑付类</b>（{@link #providerRedeemed}——赠酒/实物/专属直付；入场等免费权益无内部成本概念）。</li>
+     * </ol>
+     *
+     * <p><b>fail-closed</b>：任一进和权益取不到内部结算价 → {@link #require} 抛
+     * {@code ENTITLEMENT_PRICE_UNRESOLVED}。调用方（settlement 消费者）失败即本笔结算事实缺失、
+     * 由重建任务在补价后按核销权威事实补建（AUD-017 既有语义）——绝不静默按 0 或票面价计提。
+     *
+     * <p>放在解析器上而不是 settlement 域：预扣（本方法）与兑付（{@link #require} 随
+     * {@code ticket.gift_verified} 事件下发）必须同一个 bean 同一套取价逻辑，月底「预扣了多少/实付了多少」才可比。
+     */
+    public long byItemGiftCostCent(String ticketTypeId) {
+        long total = 0L;
+        for (TicketTypeEntitlementRecord binding : repository.listTicketTypeEntitlements(ticketTypeId)) {
+            if (binding.componentPriceCent() != null && binding.componentPriceCent() != 0L) {
+                continue; // 有票面价 → 参与份额拆分的付费组成，不是赠送权益。
+            }
+            if (!TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED.equals(binding.costBearer())) {
+                continue; // 商户让利型：平台不承担成本、不进 G。
+            }
+            EntitlementTemplateRecord template =
+                    repository.findEntitlementTemplateById(binding.entitlementTemplateId()).orElse(null);
+            if (template == null || !providerRedeemed(
+                    template.entitlementType(), template.entitlementKind(), template.exclusiveMerchantId())) {
+                continue; // 非提供方兑付类（如免费入场资格）：无内部成本概念。
+            }
+            long price = require(template.barItemRef(), template.merchantId(), template.agreementPriceCent());
+            total += (long) binding.quantity() * Math.max(1, binding.numPeople()) * price;
+        }
+        return total;
+    }
 }

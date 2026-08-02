@@ -59,13 +59,14 @@ COMMENT ON COLUMN settlement_bills.gift_cost_cent IS
 COMMENT ON COLUMN settlement_bills.gift_beneficiary_entity_id IS
     'S6:赠送权益预估成本收款主体快照(business_entities.id,解析自 revenue_stream_attribution 的 pass_gift_cost 流;月结时定格,后改配置不追溯已出单据)';
 
--- 业态份额行:G 整额记在酒吧行上(与「渠道费分摊尾差归酒吧支」同一兜底范式)。
--- by_ticket_amount 是票种级整额、不可按业态拆(设计 §8.2);按业态分记的是【兑付成本 A】,属 S7 台账,不在本列。
+-- 业态份额行:G 按业态跟核销走(照 S4 综合服务费同一范式)——计提落在哪行核销上,就扣在那行核销所属业态的份额里,
+-- 别的业态不替它埋单。计提只落【进池】核销(专属直付不进池、不在其净额上扣 G),且正常流首笔核销=入场(酒吧业态)
+-- → 常态下 G 全落酒吧行,与 HTML:742「酒吧份额再依次扣掉赠送权益预估成本」一致;按业态分记的【兑付成本 A】属 S7 台账,不在本列。
 ALTER TABLE settlement_bill_format_shares
     ADD COLUMN IF NOT EXISTS gift_cost_cent BIGINT NOT NULL DEFAULT 0;
 
 COMMENT ON COLUMN settlement_bill_format_shares.gift_cost_cent IS
-    'S6:本业态承担的赠送权益预估成本(G)。整额记在酒吧业态行(HTML:742 瀑布顺序),其余业态恒 0;净份额 = 毛额 − 渠道费 − 综合服务费 − 本列';
+    'S6:本业态当月进池核销计提的赠送权益预估成本(G,跟核销走,照 S4 综合服务费范式;常态首笔核销=入场→G 落酒吧行,即 HTML:742 瀑布顺序),归娱乐平台公司;净份额 = 毛额 − 渠道费 − 本列 − 综合服务费';
 
 -- ==========================================================================
 -- ③ ticket_type_entitlements:成本承担方(HTML:737「每个权益必须在票种配置里标明成本承担方」)

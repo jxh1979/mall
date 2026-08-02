@@ -701,7 +701,10 @@ public class TicketVerificationService {
                     null,
                     updated.merchantId(),
                     // S5：本次内部结算价随事件带下游，兑付与预扣同源、不再由 bar 域另查一遍（口径不可能漂）。
-                    settlementPriceCent
+                    settlementPriceCent,
+                    // S6：成本承担方随事件带下游——商户让利型不挂商户应付（HTML:737「不与商户结算」），
+                    //   履约（0 元单/出品/扣库）照常。取自票面 binding 配置（发放来源的同一份配置）。
+                    costBearer(updated)
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());
@@ -995,6 +998,24 @@ public class TicketVerificationService {
      */
     private static String providerMerchantId(IssuedEntitlementRecord entitlement) {
         return entitlement.barId() != null ? entitlement.barId() : entitlement.merchantId();
+    }
+
+    /**
+     * S6：该权益的成本承担方——查它所属票种上同模板的 binding 配置（{@code ticket_type_entitlements.cost_bearer}）。
+     * 查不到 binding（direct 出票等无票面来源）回退 platform_funded（=改造前唯一行为）。
+     * ponytail: 读当下票面配置而非发放时快照——运营中途改承担方会影响未兑付赠品的结算口径，
+     * 需要「已发放不追溯」时把 cost_bearer 复制进 issued_entitlements 即可。
+     */
+    private String costBearer(IssuedEntitlementRecord entitlement) {
+        if (entitlement.ticketTypeId() == null) {
+            return TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED;
+        }
+        for (TicketTypeEntitlementRecord binding : repository.listTicketTypeEntitlements(entitlement.ticketTypeId())) {
+            if (binding.entitlementTemplateId().equals(entitlement.entitlementTemplateId())) {
+                return binding.costBearer();
+            }
+        }
+        return TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED;
     }
 
     /**
