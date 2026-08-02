@@ -72,6 +72,14 @@ class JdbcTraceabilityRepository implements TraceabilityRepository {
     }
 
     @Override
+    public List<TraceabilityProcessInstanceRecord> listProcessInstancesByProject(String projectId) {
+        // 综合体面 scoped 读通道：按 business_process_instances.project_id = token scope 过滤（AC-ISO-1，§4）。
+        return jdbcTemplate.query(
+                "SELECT * FROM business_process_instances WHERE project_id = :project_id ORDER BY started_at DESC, id",
+                Map.of("project_id", projectId), this::mapInstance);
+    }
+
+    @Override
     public TraceabilityStepRecord saveStep(TraceabilityStepRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO business_process_step_records (

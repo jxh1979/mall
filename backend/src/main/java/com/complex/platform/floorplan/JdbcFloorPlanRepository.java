@@ -49,6 +49,18 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
     }
 
     @Override
+    public List<FloorPlanRecord> findAllFloorPlansByProject(String projectId) {
+        // 综合体面 scoped 读通道：按 mall_floor_plans.project_id = token scope 过滤（AC-ISO-1，§4）。
+        return jdbcTemplate.query("""
+                SELECT id, project_id, building_code, floor_no, plan_name, image_url, image_width,
+                       image_height, version_no, status, created_at, updated_at, merchant_id
+                  FROM mall_floor_plans
+                 WHERE project_id = :project_id
+                 ORDER BY floor_no, version_no, id
+                """, Map.of("project_id", projectId), this::mapFloorPlan);
+    }
+
+    @Override
     public Optional<FloorPlanRecord> findFloorPlanById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, building_code, floor_no, plan_name, image_url, image_width,
