@@ -40,6 +40,9 @@ class GiftRedemptionEndToEndTests {
     private TicketVerificationService verificationService;
 
     @Autowired
+    private com.complex.platform.terminal.TerminalDeviceService terminalDeviceService;
+
+    @Autowired
     private JdbcTicketingRepository ticketingRepository;
 
     @Autowired
@@ -288,6 +291,59 @@ class GiftRedemptionEndToEndTests {
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + code)).isZero();
+    }
+
+    /**
+     * K16 归属跟着改绑走：设备绑在提供方 A 吧时核销放行；把设备改绑到 B 吧后，
+     * 同一台设备再核 A 吧的赠饮被拒（ENTITLEMENT_PROVIDER_MISMATCH）——
+     * 商户归属写入面（PUT /terminals/devices/{id}/merchant）改的就是 K16 的核销上下文。
+     */
+    @Test
+    void rebindingDeviceMerchantMovesK16VerificationContext() {
+        String suffix = Long.toString(System.nanoTime());
+        String providerBar = "bar_k16re_" + suffix;
+        String otherBar = "bar_k16re_b_" + suffix;
+        seedBarTable(providerBar);
+        String itemId = "item_k16re_" + suffix;
+        seedStockItem(itemId, 5);
+        String productId = "barprod_k16re_" + suffix;
+        seedBarProduct(productId, providerBar, itemId, 4200L);
+        String deviceId = seedDeviceForBar(providerBar); // 设备起初绑提供方 A 吧
+        String code1 = "gift-code-k16re-1-" + suffix;
+        String code2 = "gift-code-k16re-2-" + suffix;
+        seedGiftEntitlement(code1, providerBar, 1, productId);
+        seedGiftEntitlement(code2, providerBar, 1, productId);
+
+        // 改绑前：设备归属 = 提供方 → K16 放行，核销成功。
+        var response = verificationService.createVerification(new VerificationRequest(
+                "req-k16re-1-" + suffix, "qr", code1, deviceId, providerBar, Map.of()));
+        assertThat(response.status()).isEqualTo("success");
+
+        // 改绑：设备挪到 B 吧（目标商户须存在于 merchants 且未归档）。
+        Instant now = Instant.now();
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (?, ?, 'bar', 'active', ?, ?)
+                """, otherBar, "B吧" + suffix, ts, ts);
+        terminalDeviceService.updateDeviceMerchant(deviceId,
+                new com.complex.platform.terminal.dto.DeviceMerchantRequest(
+                        "dm-k16re-" + suffix, otherBar, "设备挪到 B 吧"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT merchant_id FROM terminal_devices WHERE id = ?", String.class, deviceId))
+                .isEqualTo(otherBar);
+
+        // 改绑后：同一设备核 A 吧赠饮 → K16 判定跟着新归属走，拒绝。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                verificationService.createVerification(new VerificationRequest(
+                        "req-k16re-2-" + suffix, "qr", code2, deviceId, providerBar, Map.of())))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("ENTITLEMENT_PROVIDER_MISMATCH"));
+
+        // 改绑留痕：append-only 状态事件一条（谁改的/为什么在审计事件，此处验事件与理由）。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM terminal_device_status_events WHERE device_id = ? AND event_type = 'terminal.device.merchant_changed'",
+                Integer.class, deviceId)).isEqualTo(1);
     }
 
     private void seedGiftEntitlementForMerchant(String code, String barId, String merchantId) {
