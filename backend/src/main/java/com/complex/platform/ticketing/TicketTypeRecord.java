@@ -43,7 +43,7 @@ public record TicketTypeRecord(
         // 系统算出售价 = Σ(各权益票面原价 × 份数) × 本折扣 ÷ 100（四舍五入到分）；运营填的售价与它的差额
         // 不得超过后台可配的允许误差（见 TicketCatalogService#requirePriceWithinTolerance）。放末位便于既有构造点追加。
         BigDecimal comboDiscountRate
-) {
+) implements ArchivableRecord<TicketTypeRecord> {
 
     /** 不打折（100%）——V369 前建的票种与未配折扣的票种一律按此，算出售价 = 各业态票面原价之和。 */
     public static final BigDecimal NO_COMBO_DISCOUNT = BigDecimal.valueOf(100);

@@ -44,7 +44,7 @@ public record EntitlementTemplateRecord(
         // 批10/E(V380):内部结算 SKU 目录引用(internal_price_catalog.item_code)。agreement_price_cent 自此为
         // 目录价快照(只读,系统在设引用/目录转正时同步);改价一律回目录走草案复核,模板侧无任何改价入口。
         String catalogItemCode
-) {
+) implements ArchivableRecord<EntitlementTemplateRecord> {
 
     // ponytail: V253 前的构造点(既有代码/测试)不带存档/删除字段,默认未存档 + delete_status=none。
     //           避免为 6 个新字段改所有既有 17 参构造点;日后语义要变则删本构造让编译逼出所有点。

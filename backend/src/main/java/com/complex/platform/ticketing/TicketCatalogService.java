@@ -16,6 +16,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.LongFunction;
+import java.util.function.Supplier;
+import java.util.function.ToLongFunction;
+import java.util.function.UnaryOperator;
 import org.springframework.stereotype.Service;
 import static com.complex.platform.common.Strings.trimToNull;
 import static com.complex.platform.common.Strings.requireText;
@@ -273,40 +279,22 @@ public class TicketCatalogService {
     // SKU 目录（草案 → 他人复核转正 → 快照传播），模板侧不再保留任何改价入口。「历史不受影响」不变且更强：
     // 核销固化（ticket_verifications.settlement_price_cent）照旧，改价只对转正之后的核销/结算生效。
 
-    // ================= V253 数据存档与审批后删除范式（试点） =================
+    // ================= V253/V260 数据存档与审批后删除范式（权益模板试点 → 镜像铺到票种/价格规则） =================
+    // 三套 archive/requestDelete/approveDelete 逐字同构（原 V260 段注释即自证「镜像上方权益模板」），公共骨架
+    // 收拢进下方三个泛型助手；各实体差异（错误码/中文文案/引用计数口径/物理删除）逐字留在各自接线处。
 
     /** 存档/取消存档权益模板（软标记，可逆；列表默认过滤已存档）。 */
     EntitlementTemplateRecord archiveEntitlementTemplate(String id, boolean archive, String reason, String actorId) {
-        EntitlementTemplateRecord tpl = requireTemplate(id);
-        Instant now = Instant.now();
-        if (archive) {
-            // 存档必填理由(业务HTML 2026-07-07)。行已存在,archive_reason 定向写入,顺序无关。
-            String r = requireText(reason, "reason");
-            EntitlementTemplateRecord saved = repository.saveEntitlementTemplate(tpl.withArchive(now, actorId, now));
-            repository.setEntitlementTemplateArchiveReason(id, r);
-            return saved;
-        }
-        // 取消存档:清空 archived_at/by + archive_reason,并把 pending 删除申请回退 none(复核§5)。
-        EntitlementTemplateRecord saved = repository.saveEntitlementTemplate(
-                tpl.withArchive(null, null, now).withDelete("none", null, null, null, now));
-        repository.setEntitlementTemplateArchiveReason(id, null);
-        return saved;
+        return archiveCatalogRecord(requireTemplate(id), id, archive, reason, actorId,
+                repository::saveEntitlementTemplate, repository::setEntitlementTemplateArchiveReason);
     }
 
     /** 发起删除申请：须先存档（防误删在用模板），记 requested_by/at/reason，状态置 pending。 */
     EntitlementTemplateRecord requestDeleteEntitlementTemplate(String id, EntitlementTemplateDeleteRequest request, String actorId) {
-        EntitlementTemplateRecord tpl = requireTemplate(id);
-        if (tpl.archivedAt() == null) {
-            throw ApiException.badRequest("ENTITLEMENT_TEMPLATE_NOT_ARCHIVED",
-                    "模板须先存档才能申请删除");
-        }
-        if ("pending".equals(tpl.deleteStatus())) {
-            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_DELETE_ALREADY_PENDING",
-                    "该模板已有待审批的删除申请");
-        }
-        Instant now = Instant.now();
-        String reason = requireText(request == null ? null : request.reason(), "reason");
-        return repository.saveEntitlementTemplate(tpl.withDelete("pending", actorId, now, reason, now));
+        return requestDeleteCatalogRecord(requireTemplate(id), request == null ? null : request.reason(), actorId,
+                repository::saveEntitlementTemplate,
+                () -> ApiException.badRequest("ENTITLEMENT_TEMPLATE_NOT_ARCHIVED", "模板须先存档才能申请删除"),
+                () -> ApiException.conflict("ENTITLEMENT_TEMPLATE_DELETE_ALREADY_PENDING", "该模板已有待审批的删除申请"));
     }
 
     /**
@@ -314,144 +302,123 @@ public class TicketCatalogService {
      * 禁自审：审批人不得为删除申请发起人（照 supervisor_review SUPERVISOR_SELF_REVIEW_FORBIDDEN 原则）。
      */
     EntitlementTemplateDeleteDecision approveDeleteEntitlementTemplate(String id, EntitlementTemplateDeleteApprovalRequest request, String actorId) {
-        EntitlementTemplateRecord tpl = requireTemplate(id);
-        if (!"pending".equals(tpl.deleteStatus())) {
-            throw ApiException.badRequest("ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING",
-                    "该模板没有待审批的删除申请");
+        boolean deleted = approveDeleteCatalogRecord(requireTemplate(id), id,
+                request == null ? null : request.decision(), actorId, repository::saveEntitlementTemplate,
+                repository::countTemplateReferences, repository::deleteEntitlementTemplate,
+                () -> ApiException.badRequest("ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING", "该模板没有待审批的删除申请"),
+                () -> ApiException.forbidden("ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN", "删除申请的发起人不能审批自己的申请"),
+                refs -> ApiException.conflict("ENTITLEMENT_TEMPLATE_IN_USE", "该模板仍被 " + refs + " 个票种绑定或已发放权益引用"));
+        return new EntitlementTemplateDeleteDecision(id, deleted ? "approved" : "rejected", deleted);
+    }
+
+    TicketTypeRecord archiveTicketType(String id, boolean archive, String reason, String actorId) {
+        return archiveCatalogRecord(requireTicketTypeRecord(id), id, archive, reason, actorId,
+                repository::saveTicketType, repository::setTicketTypeArchiveReason);
+    }
+
+    TicketTypeRecord requestDeleteTicketType(String id, TicketCatalogDeleteRequest request, String actorId) {
+        return requestDeleteCatalogRecord(requireTicketTypeRecord(id), request == null ? null : request.reason(), actorId,
+                repository::saveTicketType,
+                () -> ApiException.badRequest("TICKET_TYPE_NOT_ARCHIVED", "票种必须先存档才能申请删除"),
+                () -> ApiException.conflict("TICKET_TYPE_DELETE_ALREADY_PENDING", "该票种已有待审批的删除申请"));
+    }
+
+    TicketTypeDeleteDecision approveDeleteTicketType(String id, TicketCatalogDeleteApprovalRequest request, String actorId) {
+        boolean deleted = approveDeleteCatalogRecord(requireTicketTypeRecord(id), id,
+                request == null ? null : request.decision(), actorId, repository::saveTicketType,
+                repository::countTicketTypeReferences, repository::deleteTicketType,
+                () -> ApiException.badRequest("TICKET_TYPE_DELETE_NOT_PENDING", "该票种没有待审批的删除申请"),
+                () -> ApiException.forbidden("TICKET_TYPE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请"),
+                refs -> ApiException.conflict("TICKET_TYPE_IN_USE",
+                        "票种仍被 " + refs + " 条业务记录引用（订单/权益/价格规则/结算等），不可删除"));
+        return new TicketTypeDeleteDecision(id, deleted ? "approved" : "rejected", deleted);
+    }
+
+    TicketPriceRuleRecord archivePriceRule(String id, boolean archive, String reason, String actorId) {
+        return archiveCatalogRecord(requirePriceRuleRecord(id), id, archive, reason, actorId,
+                repository::savePriceRule, repository::setPriceRuleArchiveReason);
+    }
+
+    TicketPriceRuleRecord requestDeletePriceRule(String id, TicketCatalogDeleteRequest request, String actorId) {
+        return requestDeleteCatalogRecord(requirePriceRuleRecord(id), request == null ? null : request.reason(), actorId,
+                repository::savePriceRule,
+                () -> ApiException.badRequest("TICKET_PRICE_RULE_NOT_ARCHIVED", "价格规则必须先存档才能申请删除"),
+                () -> ApiException.conflict("TICKET_PRICE_RULE_DELETE_ALREADY_PENDING", "该价格规则已有待审批的删除申请"));
+    }
+
+    TicketPriceRuleDeleteDecision approveDeletePriceRule(String id, TicketCatalogDeleteApprovalRequest request, String actorId) {
+        boolean deleted = approveDeleteCatalogRecord(requirePriceRuleRecord(id), id,
+                request == null ? null : request.decision(), actorId, repository::savePriceRule,
+                repository::countPriceRuleReferences, repository::deletePriceRule,
+                () -> ApiException.badRequest("TICKET_PRICE_RULE_DELETE_NOT_PENDING", "该价格规则没有待审批的删除申请"),
+                () -> ApiException.forbidden("TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请"),
+                refs -> ApiException.conflict("TICKET_PRICE_RULE_IN_USE", "价格规则仍被 " + refs + " 条订单记录引用，不可删除"));
+        return new TicketPriceRuleDeleteDecision(id, deleted ? "approved" : "rejected", deleted);
+    }
+
+    /**
+     * 存档/取消存档公共骨架（{@link ArchivableRecord} 三实现共用）。
+     * 存档必填理由（业务 HTML 2026-07-07），行已存在、archive_reason 定向写入，顺序无关；
+     * 取消存档清空 archived_at/by + archive_reason，并把 pending 删除申请回退 none（复核§5）。
+     */
+    private <T extends ArchivableRecord<T>> T archiveCatalogRecord(T rec, String id, boolean archive,
+            String reason, String actorId, UnaryOperator<T> save, BiConsumer<String, String> setArchiveReason) {
+        Instant now = Instant.now();
+        if (archive) {
+            String r = requireText(reason, "reason");
+            T saved = save.apply(rec.withArchive(now, actorId, now));
+            setArchiveReason.accept(id, r);
+            return saved;
         }
-        String decision = request == null ? null : (request.decision() == null ? null : request.decision().trim().toLowerCase(Locale.ROOT));
+        T saved = save.apply(rec.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        setArchiveReason.accept(id, null);
+        return saved;
+    }
+
+    /** 发起删除申请公共骨架：须先存档（防误删在用记录），记 requested_by/at/reason，状态置 pending。 */
+    private <T extends ArchivableRecord<T>> T requestDeleteCatalogRecord(T rec, String reason, String actorId,
+            UnaryOperator<T> save, Supplier<ApiException> notArchived, Supplier<ApiException> alreadyPending) {
+        if (rec.archivedAt() == null) {
+            throw notArchived.get();
+        }
+        if ("pending".equals(rec.deleteStatus())) {
+            throw alreadyPending.get();
+        }
+        Instant now = Instant.now();
+        return save.apply(rec.withDelete("pending", actorId, now, requireText(reason, "reason"), now));
+    }
+
+    /**
+     * 审批删除申请公共骨架。approved 且无活引用 → 物理删除（返回 true）；rejected → 回 none（返回 false）。
+     * 禁自审：审批人不得为删除申请发起人（照 supervisor_review SUPERVISOR_SELF_REVIEW_FORBIDDEN 原则）。
+     */
+    private <T extends ArchivableRecord<T>> boolean approveDeleteCatalogRecord(T rec, String id,
+            String rawDecision, String actorId, UnaryOperator<T> save,
+            ToLongFunction<String> countReferences, Consumer<String> physicalDelete,
+            Supplier<ApiException> notPending, Supplier<ApiException> selfApprove,
+            LongFunction<ApiException> inUse) {
+        if (!"pending".equals(rec.deleteStatus())) {
+            throw notPending.get();
+        }
+        String decision = rawDecision == null ? null : rawDecision.trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         // 职责分离：删除申请发起人不能审批自己的申请。actorId 为 null（无鉴权上下文/测试）时跳过该闸。
-        if (actorId != null && actorId.equals(tpl.deleteRequestedBy())) {
-            throw ApiException.forbidden("ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN",
-                    "删除申请的发起人不能审批自己的申请");
+        if (actorId != null && actorId.equals(rec.deleteRequestedBy())) {
+            throw selfApprove.get();
         }
         if ("rejected".equals(decision)) {
-            Instant now = Instant.now();
-            repository.saveEntitlementTemplate(tpl.withDelete("none", null, null, null, now));
-            return new EntitlementTemplateDeleteDecision(id, "rejected", false);
+            save.apply(rec.withDelete("none", null, null, null, Instant.now()));
+            return false;
         }
-        // approved：先校验无活引用（票种绑定/已发放权益），有则拒绝硬删。
-        long refs = repository.countTemplateReferences(id);
+        // approved：先校验无活引用（票种绑定/已发放权益/订单等），有则拒绝硬删。
+        long refs = countReferences.applyAsLong(id);
         if (refs > 0) {
-            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_IN_USE",
-                    "该模板仍被 " + refs + " 个票种绑定或已发放权益引用");
+            throw inUse.apply(refs);
         }
-        repository.deleteEntitlementTemplate(id);
-        return new EntitlementTemplateDeleteDecision(id, "approved", true);
-    }
-
-    // ================= V260 存档/删除范式铺到票种/价格规则(镜像上方权益模板) =================
-
-    TicketTypeRecord archiveTicketType(String id, boolean archive, String reason, String actorId) {
-        TicketTypeRecord tt = requireTicketTypeRecord(id);
-        Instant now = Instant.now();
-        if (archive) {
-            String r = requireText(reason, "reason");
-            TicketTypeRecord saved = repository.saveTicketType(tt.withArchive(now, actorId, now));
-            repository.setTicketTypeArchiveReason(id, r);
-            return saved;
-        }
-        // 取消存档：清标记 + archive_reason 并把 pending 删除申请回退 none（同权益模板复核§5）。
-        TicketTypeRecord saved = repository.saveTicketType(
-                tt.withArchive(null, null, now).withDelete("none", null, null, null, now));
-        repository.setTicketTypeArchiveReason(id, null);
-        return saved;
-    }
-
-    TicketTypeRecord requestDeleteTicketType(String id, TicketCatalogDeleteRequest request, String actorId) {
-        TicketTypeRecord tt = requireTicketTypeRecord(id);
-        if (tt.archivedAt() == null) {
-            throw ApiException.badRequest("TICKET_TYPE_NOT_ARCHIVED", "票种必须先存档才能申请删除");
-        }
-        if ("pending".equals(tt.deleteStatus())) {
-            throw ApiException.conflict("TICKET_TYPE_DELETE_ALREADY_PENDING", "该票种已有待审批的删除申请");
-        }
-        Instant now = Instant.now();
-        String reason = requireText(request == null ? null : request.reason(), "reason");
-        return repository.saveTicketType(tt.withDelete("pending", actorId, now, reason, now));
-    }
-
-    TicketTypeDeleteDecision approveDeleteTicketType(String id, TicketCatalogDeleteApprovalRequest request, String actorId) {
-        TicketTypeRecord tt = requireTicketTypeRecord(id);
-        if (!"pending".equals(tt.deleteStatus())) {
-            throw ApiException.badRequest("TICKET_TYPE_DELETE_NOT_PENDING", "该票种没有待审批的删除申请");
-        }
-        String decision = request == null || request.decision() == null
-                ? null : request.decision().trim().toLowerCase(Locale.ROOT);
-        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
-        }
-        if (actorId != null && actorId.equals(tt.deleteRequestedBy())) {
-            throw ApiException.forbidden("TICKET_TYPE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
-        }
-        if ("rejected".equals(decision)) {
-            repository.saveTicketType(tt.withDelete("none", null, null, null, Instant.now()));
-            return new TicketTypeDeleteDecision(id, "rejected", false);
-        }
-        long refs = repository.countTicketTypeReferences(id);
-        if (refs > 0) {
-            throw ApiException.conflict("TICKET_TYPE_IN_USE",
-                    "票种仍被 " + refs + " 条业务记录引用（订单/权益/价格规则/结算等），不可删除");
-        }
-        repository.deleteTicketType(id);
-        return new TicketTypeDeleteDecision(id, "approved", true);
-    }
-
-    TicketPriceRuleRecord archivePriceRule(String id, boolean archive, String reason, String actorId) {
-        TicketPriceRuleRecord rule = requirePriceRuleRecord(id);
-        Instant now = Instant.now();
-        if (archive) {
-            String r = requireText(reason, "reason");
-            TicketPriceRuleRecord saved = repository.savePriceRule(rule.withArchive(now, actorId, now));
-            repository.setPriceRuleArchiveReason(id, r);
-            return saved;
-        }
-        TicketPriceRuleRecord saved = repository.savePriceRule(
-                rule.withArchive(null, null, now).withDelete("none", null, null, null, now));
-        repository.setPriceRuleArchiveReason(id, null);
-        return saved;
-    }
-
-    TicketPriceRuleRecord requestDeletePriceRule(String id, TicketCatalogDeleteRequest request, String actorId) {
-        TicketPriceRuleRecord rule = requirePriceRuleRecord(id);
-        if (rule.archivedAt() == null) {
-            throw ApiException.badRequest("TICKET_PRICE_RULE_NOT_ARCHIVED", "价格规则必须先存档才能申请删除");
-        }
-        if ("pending".equals(rule.deleteStatus())) {
-            throw ApiException.conflict("TICKET_PRICE_RULE_DELETE_ALREADY_PENDING", "该价格规则已有待审批的删除申请");
-        }
-        Instant now = Instant.now();
-        String reason = requireText(request == null ? null : request.reason(), "reason");
-        return repository.savePriceRule(rule.withDelete("pending", actorId, now, reason, now));
-    }
-
-    TicketPriceRuleDeleteDecision approveDeletePriceRule(String id, TicketCatalogDeleteApprovalRequest request, String actorId) {
-        TicketPriceRuleRecord rule = requirePriceRuleRecord(id);
-        if (!"pending".equals(rule.deleteStatus())) {
-            throw ApiException.badRequest("TICKET_PRICE_RULE_DELETE_NOT_PENDING", "该价格规则没有待审批的删除申请");
-        }
-        String decision = request == null || request.decision() == null
-                ? null : request.decision().trim().toLowerCase(Locale.ROOT);
-        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
-        }
-        if (actorId != null && actorId.equals(rule.deleteRequestedBy())) {
-            throw ApiException.forbidden("TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
-        }
-        if ("rejected".equals(decision)) {
-            repository.savePriceRule(rule.withDelete("none", null, null, null, Instant.now()));
-            return new TicketPriceRuleDeleteDecision(id, "rejected", false);
-        }
-        long refs = repository.countPriceRuleReferences(id);
-        if (refs > 0) {
-            throw ApiException.conflict("TICKET_PRICE_RULE_IN_USE",
-                    "价格规则仍被 " + refs + " 条订单记录引用，不可删除");
-        }
-        repository.deletePriceRule(id);
-        return new TicketPriceRuleDeleteDecision(id, "approved", true);
+        physicalDelete.accept(id);
+        return true;
     }
 
     private TicketTypeRecord requireTicketTypeRecord(String id) {
