@@ -33,6 +33,14 @@ public interface TerminalDeviceRepository {
         return List.of();
     }
 
+    /**
+     * 平台后台设备台账：全量列出终端设备（含商户归属列，K16 改绑工作台数据源）。
+     * ponytail: LIMIT 200 平铺无分页，设备量到数百台再补分页。
+     */
+    default List<TerminalDeviceRecord> listDevices() {
+        return List.of();
+    }
+
     Optional<DeviceCredentialRecord> findDeviceCredentialByDeviceId(String deviceId);
 
     DeviceCredentialRecord saveDeviceCredential(DeviceCredentialRecord record);

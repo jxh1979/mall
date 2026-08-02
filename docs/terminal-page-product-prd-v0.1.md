@@ -381,6 +381,23 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 - 默认部署：camera_scan / native_client / 平板端侧开关均为关，端侧走文本输入 / Web 代偿，不影响 P0 现场作业。
 - 后台开启对应开关 → 能力生效；关闭 → 端侧回落代偿路径。
 
+### 15A.4 设备商户归属管理（K16 核销上下文写入面，2026-08-01）
+
+能力描述：设备的「所属商户」决定**核销发生在哪家商户**的账上事实（结算域 K16 跨提供方核销守卫读 `terminal_devices.merchant_id`；设备未绑商户时，赠饮/餐饮类到店兑付权益在该设备上一律拒核销，fail-closed）。本节把这条归属从"只有守卫在读、没人能配"补成完整写入面：后台「终端设备」页（ADM-TER-002，`/admin/terminals/devices`）+ 归属设置/更换/解除端点。经 grep 实证落于 `TerminalDeviceService.updateDeviceMerchant` + `TerminalDeviceController`（`GET /api/v1/terminals/devices`、`PUT /api/v1/terminals/devices/{id}/merchant`）+ 前端 `TerminalDevicesPage`，零迁移（`merchant_id` 列 V007/V010 已存在）。
+
+业务规则：
+- **设备挪店是常规动作，但改的是"核销记谁的账"**：设置/更换/解除所属商户一律**理由必填**，审计事件带改绑前后商户与理由，`terminal_device_status_events`（append-only，V140 防篡改）同步留痕一条——谁改的、从谁改到谁、为什么，月底对不平时可回溯。
+- **目标商户校验**：必须存在且未归档（`MERCHANT_NOT_FOUND` / `MERCHANT_ARCHIVED` 拒绝），杜绝把核销账挂到退场商户头上。
+- **解除归属提示后果**：解除后该设备上赠饮/餐饮类权益无法核销（K16 fail-closed），后台二次确认文案明示；归属未变化拒重复提交（`DEVICE_MERCHANT_UNCHANGED`）。
+- **终态设备（报废/封禁）不可改归属**（`DEVICE_TERMINAL_STATUS`），与 §15A.1 生命周期终态口径一致。
+- **权限从严**：改绑影响资金核销路径，沿用设备治理权限 `terminal.device.lifecycle`（高危·需审批·仅平台管理员）；台账读沿用终端模块视图权限 `terminal.switch.view`。
+- **登记一步到位**：设备登记（bind）可直接携 `merchant_id`（同口径校验），免运营跑两趟；**归还后复领用不传商户时保留既有归属**——修复此前 bind upsert 把已配归属静默抹成 null 的缺陷。
+
+验收口径要点：
+- 设备绑 A 商户 → 核 A 商户赠饮放行；改绑到 B 商户 → 同一设备再核 A 商户赠饮被拒（`ENTITLEMENT_PROVIDER_MISMATCH`），改绑留痕各一条（审计 + 状态事件）。
+- 理由为空拒；商户不存在/已归档拒；报废/封禁设备拒；无 `terminal.device.lifecycle` 权限 403。
+- 归还再领用（不传商户）后归属不变。
+
 > 待业务确认（terminal）：①设备生命周期是否需把 repair/lost/found/scrapped/blocked 状态补入 §6「设备领用」页面与 §13 验收作为正式 P0 项；②集团多项目视图 group-overview 是否需补入 §4 管理后台 / §7 移动管理端页面清单；③三组端侧开关（摄像头扫码/原生客户端/平板）的默认关口径已据 V097/V098 实证，后续若任一能力转正式实现需回当前有效入口与 OpenAPI 契约确认。
 
 ## 16. 本版结论
@@ -389,6 +406,7 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 
 ## 17. 变更日志
 
+| 2026-08-01 | 增 | §15A.4 | 新增「设备商户归属管理（K16 核销上下文写入面）」：ADM-TER-002 终端设备页 + GET /terminals/devices + PUT /terminals/devices/{id}/merchant（理由必填留痕·商户存在且未归档·终态拒改·解除提示 K16 后果·权限 terminal.device.lifecycle 从严）；bind 可携初始归属、复领用不抹归属 | K16 守卫只有读没有写入面（bind 硬编码 null），设备归属无法配置即赠饮/餐饮权益全线拒核销 |
 | 2026-07-28 | 增 | §11.1 | 补 HTML 权威规则 BSM-0130/0132/0135/0142、PGM-0075/0077 可验收承接（docs-only deferred 清偿） |
 
 

@@ -4,9 +4,11 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.terminal.dto.CapabilitySwitchRequest;
 import com.complex.platform.terminal.dto.DeviceBindRequest;
 import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
+import com.complex.platform.terminal.dto.DeviceMerchantRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
@@ -34,6 +36,8 @@ public class TerminalDeviceService {
     private static final String BIND_PERMISSION = "terminal.device.bind";
     private static final String UNBIND_PERMISSION = "terminal.device.unbind";
     private static final String LIFECYCLE_PERMISSION = "terminal.device.lifecycle";
+    // 商户归属改绑影响资金核销路径（K16），从严沿用设备治理权限（高危·需审批·仅平台管理员）。
+    private static final String MERCHANT_PERMISSION = "terminal.device.lifecycle";
     // P0#9 设备生命周期：终态（不可再流转、拒绝任何业务动作/领用）。
     private static final Set<String> TERMINAL_STATUSES = Set.of("scrapped", "blocked");
     // P0#9：挂失/报废/送修/封禁设备拒绝领用（绑定）与高风险业务动作。
@@ -55,19 +59,22 @@ public class TerminalDeviceService {
     private final AuditEventService auditEventService;
     private final MdmService mdmService;
     private final DeviceSigningKeyStore deviceSigningKeyStore;
+    private final TerminalMerchantDirectory merchantDirectory;
 
     public TerminalDeviceService(
             TerminalDeviceRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             MdmService mdmService,
-            DeviceSigningKeyStore deviceSigningKeyStore
+            DeviceSigningKeyStore deviceSigningKeyStore,
+            TerminalMerchantDirectory merchantDirectory
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.mdmService = mdmService;
         this.deviceSigningKeyStore = deviceSigningKeyStore;
+        this.merchantDirectory = merchantDirectory;
     }
 
     /**
@@ -285,6 +292,152 @@ public class TerminalDeviceService {
         return toResponse(saved, null);
     }
 
+    /**
+     * 平台后台设备台账（K16 改绑工作台数据源）：全量设备 + 商户归属列。
+     * 读权限沿用终端模块视图权限 terminal.switch.view（与 ADM-TER-001 同闸）。
+     */
+    public PageResponse<TerminalDeviceRecord> listDevices() {
+        try {
+            List<TerminalDeviceRecord> records = repository.listDevices();
+            auditEventService.recordSuccess(
+                    "terminal.device.viewed",
+                    "terminal.switch.view",
+                    "terminal_device",
+                    "all",
+                    null,
+                    null,
+                    Map.of("count", records.size())
+            );
+            return new PageResponse<>(records, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, records.size());
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "terminal.device.view_failed",
+                    "terminal.switch.view",
+                    "terminal_device",
+                    "all",
+                    null,
+                    null,
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    /**
+     * 设备商户归属设置/更换/解除（K16 核销上下文写入面）。
+     * <p>业务口径：设备归属决定“核销发生在哪家”的账上事实——A 吧的机器核 B 吧赠饮月底两家都对不平，
+     * 所以改归属必须留痕（谁改的/从谁改到谁/为什么，理由必填），且目标商户必须存在且未归档；
+     * 解除绑定后该设备上赠饮/餐饮类权益一律被 K16 fail-closed 拒核销。
+     * 终态设备（scrapped/blocked）不可改归属。审计明细带 from/to，状态事件表（append-only）同步留痕。
+     */
+    @Transactional
+    public DeviceBindingResponse updateDeviceMerchant(String id, DeviceMerchantRequest request) {
+        String deviceRecordId = requireText(id, "id");
+        DeviceMerchantRequest actual = requireRequest(request);
+        String idempotencyKey = actual.idempotencyKey();
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
+        }
+        try {
+            String reason = requireText(actual.reason(), "reason");
+            return idempotencyService.execute(
+                    "updateTerminalDeviceMerchant:" + deviceRecordId,
+                    idempotencyKey,
+                    actual,
+                    () -> {
+                        TerminalDeviceRecord existing = repository.findById(deviceRecordId)
+                                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+                        if (TERMINAL_STATUSES.contains(existing.status())) {
+                            throw ApiException.conflict("DEVICE_TERMINAL_STATUS",
+                                    "device is in terminal status " + existing.status()
+                                            + " and cannot change merchant");
+                        }
+                        String target = resolveMerchantForWrite(trimToNull(actual.merchantId()));
+                        String from = existing.merchantId();
+                        if (java.util.Objects.equals(from, target)) {
+                            throw ApiException.conflict("DEVICE_MERCHANT_UNCHANGED",
+                                    "device merchant is unchanged");
+                        }
+                        Instant now = Instant.now();
+                        TerminalDeviceRecord updated = new TerminalDeviceRecord(
+                                existing.id(),
+                                existing.deviceId(),
+                                existing.deviceCode(),
+                                existing.terminalType(),
+                                existing.bindingScope(),
+                                existing.boundSpaceId(),
+                                existing.mdmDeviceRef(),
+                                existing.kioskMode(),
+                                target,
+                                existing.venueId(),
+                                existing.areaId(),
+                                existing.locationPointId(),
+                                existing.staffId(),
+                                existing.status(),
+                                existing.boundAt(),
+                                existing.returnedAt(),
+                                existing.unboundAt(),
+                                existing.returnReason(),
+                                existing.unbindReason(),
+                                existing.createdAt(),
+                                now
+                        );
+                        TerminalDeviceRecord saved = repository.save(updated);
+                        repository.saveStatusEvent(new TerminalDeviceStatusEventRecord(
+                                "dev_evt_" + UUID.randomUUID().toString().replace("-", ""),
+                                saved.id(),
+                                saved.deviceCode(),
+                                "terminal.device.merchant_changed",
+                                saved.status(),
+                                reason,
+                                saved.staffId(),
+                                now
+                        ));
+                        java.util.Map<String, Object> details = new java.util.LinkedHashMap<>();
+                        details.put("from_merchant_id", from == null ? "" : from);
+                        details.put("to_merchant_id", target == null ? "" : target);
+                        details.put("reason", reason);
+                        auditEventService.recordSuccess(
+                                "terminal.device.merchant_changed",
+                                MERCHANT_PERMISSION,
+                                "terminal_device",
+                                saved.id(),
+                                null,
+                                idempotencyKey,
+                                details);
+                        return toResponse(saved, null);
+                    },
+                    DeviceBindingResponse.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "terminal.device.merchant_change_failed",
+                    MERCHANT_PERMISSION,
+                    "terminal_device",
+                    deviceRecordId,
+                    null,
+                    idempotencyKey,
+                    codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /**
+     * K16 前置校验：设备商户归属决定核销记谁的账，绑定/改绑前先证目标商户存在且未归档。
+     * 传空返回空（= 不绑/解除，由调用方定语义）。
+     */
+    private String resolveMerchantForWrite(String merchantId) {
+        if (merchantId == null) {
+            return null;
+        }
+        MerchantRecord merchant = merchantDirectory.findMerchant(merchantId)
+                .orElseThrow(() -> ApiException.notFound(
+                        "MERCHANT_NOT_FOUND", "merchant not found: " + merchantId));
+        if (merchant.archivedAt() != null) {
+            throw ApiException.conflict("MERCHANT_ARCHIVED", "merchant is archived: " + merchantId);
+        }
+        return merchant.id();
+    }
+
     public PageResponse<TerminalCapabilitySwitchRecord> listCapabilitySwitches() {
         try {
             List<TerminalCapabilitySwitchRecord> records = repository.listCapabilitySwitches();
@@ -491,12 +644,19 @@ public class TerminalDeviceService {
         }
         // P0#9：挂失/报废/送修/封禁设备拒绝领用（重新绑定）——bind 走 device_id upsert，
         //       若不拦截，报废设备会被静默复活。
-        repository.findByDeviceId(deviceId).ifPresent(existing -> {
-            if (NON_OPERATIONAL_STATUSES.contains(existing.status())) {
-                throw ApiException.conflict("INVALID_DEVICE_STATUS",
-                        "device is " + existing.status() + " and cannot be bound");
-            }
-        });
+        TerminalDeviceRecord existingDevice = repository.findByDeviceId(deviceId).orElse(null);
+        if (existingDevice != null && NON_OPERATIONAL_STATUSES.contains(existingDevice.status())) {
+            throw ApiException.conflict("INVALID_DEVICE_STATUS",
+                    "device is " + existingDevice.status() + " and cannot be bound");
+        }
+
+        // K16 一步到位：登记时可直接给定所属商户（核销上下文）；校验同改绑口径（存在且未归档）。
+        // 不传商户 = 不动归属：bind 走 device_id upsert，若这里写 null，归还后再领用会把已配好的
+        // 归属静默抹掉 → 该设备上赠饮/餐饮权益核销全被 K16 fail-closed 拒绝。改归属只走 merchant 端点留痕。
+        String merchantId = resolveMerchantForWrite(trimToNull(actual.merchantId()));
+        if (merchantId == null && existingDevice != null) {
+            merchantId = existingDevice.merchantId();
+        }
 
         Instant now = Instant.now();
         TerminalDeviceRecord record = new TerminalDeviceRecord(
@@ -508,7 +668,7 @@ public class TerminalDeviceService {
                 trimToNull(actual.boundSpaceId()),
                 trimToNull(actual.mdmDeviceRef()),
                 kioskMode,
-                null,
+                merchantId,
                 null,
                 null,
                 trimToNull(actual.boundSpaceId()),

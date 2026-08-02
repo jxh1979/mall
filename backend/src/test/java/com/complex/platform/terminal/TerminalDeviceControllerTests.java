@@ -368,6 +368,92 @@ class TerminalDeviceControllerTests {
         verifyNoInteractions(authorizationService);
     }
 
+    // ── K16 设备商户归属写入面：权限/幂等闸 ─────────────────────────────────
+    @Test
+    void listDevicesUsesTerminalSwitchViewPermission() throws Exception {
+        when(service.listDevices()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+
+        mockMvc.perform(get("/api/v1/terminals/devices")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk());
+
+        verify(authorizationService).requirePermission("terminal.switch.view");
+    }
+
+    @Test
+    void listDevicesWithoutPermissionIsForbidden() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("terminal.switch.view");
+
+        mockMvc.perform(get("/api/v1/terminals/devices")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void updateDeviceMerchantUsesLifecyclePermission() throws Exception {
+        when(service.updateDeviceMerchant(eq("dev_1"), any(com.complex.platform.terminal.dto.DeviceMerchantRequest.class)))
+                .thenReturn(new DeviceBindingResponse(
+                        "dev_1", "staff_work_phone", "P0-ANDROID-1", null, null, "point_1",
+                        "merchant_a", null, null, "point_1", null, "bound",
+                        Instant.parse("2026-06-14T00:00:00Z"), null));
+
+        mockMvc.perform(put("/api/v1/terminals/devices/dev_1/merchant")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "dm-1",
+                                  "merchant_id": "merchant_a",
+                                  "reason": "设备划归 A 吧"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.merchant_id").value("merchant_a"));
+
+        verify(authorizationService).requirePermission("terminal.device.lifecycle");
+    }
+
+    @Test
+    void updateDeviceMerchantWithoutPermissionIsForbidden() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("terminal.device.lifecycle");
+
+        mockMvc.perform(put("/api/v1/terminals/devices/dev_1/merchant")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "dm-denied",
+                                  "merchant_id": "merchant_a",
+                                  "reason": "理由"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void updateDeviceMerchantMissingIdempotencyKeyReturnsValidationFailed() throws Exception {
+        mockMvc.perform(put("/api/v1/terminals/devices/dev_1/merchant")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "merchant_id": "merchant_a",
+                                  "reason": "理由"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+    }
+
     private String bindBody(String idempotencyKey) {
         return """
                 {

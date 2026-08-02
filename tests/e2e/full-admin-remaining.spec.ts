@@ -37,6 +37,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-STL-001", label: "结算配置中心", route: "/admin/settlement/config" },
   { pageId: "ADM-STL-002", label: "开票清单", route: "/admin/settlement/invoice-items" },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", route: "/admin/terminals/switch-matrix" },
+  { pageId: "ADM-TER-002", label: "终端设备", route: "/admin/terminals/devices" },
   { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", route: "/admin/ticketing/orders" },
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", route: "/admin/bar/orders" },
@@ -472,6 +473,13 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("terminal-master-switch-table")).toBeVisible();
         await expect(page.getByTestId("terminal-master-web")).toContainText("Web 前端");
         await expect(page.getByTestId("terminal-capability-group-tablet")).toContainText("camera.scan");
+        continue;
+      }
+      if (spec.pageId === "ADM-TER-002") {
+        // K16 设备商户归属工作台：台账表可见，含「所属商户」列与改绑入口。
+        await expect(page.getByTestId("terminal-devices-table")).toBeVisible();
+        await expect(page.getByTestId("terminal-devices-table")).toContainText("所属商户");
+        await expect(page.getByTestId("terminal-devices-table")).toContainText("改绑商户");
         continue;
       }
       if (spec.pageId === "ADM-FIN-002") {

@@ -13,6 +13,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.dto.CapabilitySwitchRequest;
 import com.complex.platform.terminal.dto.DeviceBindRequest;
 import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
+import com.complex.platform.terminal.dto.DeviceMerchantRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
@@ -34,6 +35,7 @@ class TerminalDeviceServiceTests {
     private InMemoryIdempotencyRepository idempotencyRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private TerminalDeviceService service;
+    private final Map<String, com.complex.platform.governance.MerchantRecord> merchants = new LinkedHashMap<>();
 
     @BeforeEach
     void setUp() {
@@ -51,12 +53,14 @@ class TerminalDeviceServiceTests {
                 deviceRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 auditEventService);
+        merchants.clear();
         service = new TerminalDeviceService(
                 deviceRepository,
                 new IdempotencyService(idempotencyRepository, new ObjectMapper()),
                 auditEventService,
                 mdmService,
-                org.mockito.Mockito.mock(DeviceSigningKeyStore.class)
+                org.mockito.Mockito.mock(DeviceSigningKeyStore.class),
+                id -> Optional.ofNullable(merchants.get(id))
         );
     }
 
@@ -638,6 +642,7 @@ class TerminalDeviceServiceTests {
                 "space",
                 "point_1",
                 "mdm-" + deviceId,
+                null,
                 null
         );
     }
@@ -656,7 +661,8 @@ class TerminalDeviceServiceTests {
                 "project",
                 "project_p0",
                 "mdm-" + deviceId,
-                "ticketing"
+                "ticketing",
+                null
         );
     }
 
@@ -737,6 +743,11 @@ class TerminalDeviceServiceTests {
         private final Map<String, TerminalKioskConfigRecord> kioskConfigs = new LinkedHashMap<>();
         private final Map<String, KioskHeartbeatRecord> heartbeats = new LinkedHashMap<>();
         private int deviceSaveCount;
+
+        @Override
+        public List<TerminalDeviceRecord> listDevices() {
+            return List.copyOf(devicesById.values());
+        }
 
         // 测试钩子：注入"读后写前"被并发改态的场景，复现真并发窗口。
         private java.util.function.Consumer<String> beforeCompareAndSet;
@@ -970,6 +981,197 @@ class TerminalDeviceServiceTests {
             events.add(event);
             return event;
         }
+    }
+
+    // ── K16 设备商户归属写入面 ───────────────────────────────────────────────
+    private void seedMerchant(String id, java.time.Instant archivedAt) {
+        java.time.Instant now = java.time.Instant.parse("2026-06-14T00:00:00Z");
+        com.complex.platform.governance.MerchantRecord merchant =
+                new com.complex.platform.governance.MerchantRecord(
+                        id, "商户" + id, "bar", null, null, null, null, null, null, null,
+                        null, null, null, null, null, null, "active", now, now);
+        merchants.put(id, archivedAt == null ? merchant : merchant.withArchive(archivedAt, "tester", now));
+    }
+
+    private DeviceMerchantRequest merchantRequest(String idempotencyKey, String merchantId, String reason) {
+        return new DeviceMerchantRequest(idempotencyKey, merchantId, reason);
+    }
+
+    @Test
+    void updateDeviceMerchantSetsMerchantAndLeavesFromToTrail() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+        seedMerchant("merchant_a", null);
+
+        DeviceBindingResponse response = service.updateDeviceMerchant(
+                "dev_P0-ANDROID-1", merchantRequest("dm-set-1", "merchant_a", "新店开业，设备划归 A 吧"));
+
+        assertThat(response.merchantId()).isEqualTo("merchant_a");
+        assertThat(deviceRepository.findById("dev_P0-ANDROID-1")).get()
+                .extracting(TerminalDeviceRecord::merchantId).isEqualTo("merchant_a");
+        // 留痕：审计事件带 from/to/reason 明细。
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "terminal.device.merchant_changed".equals(event.eventName()))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.metadata()).containsEntry("from_merchant_id", "");
+                    assertThat(event.metadata()).containsEntry("to_merchant_id", "merchant_a");
+                    assertThat(event.metadata()).containsEntry("reason", "新店开业，设备划归 A 吧");
+                });
+        // 留痕：append-only 状态事件一条。
+        assertThat(deviceRepository.statusEvents)
+                .filteredOn(event -> "terminal.device.merchant_changed".equals(event.eventType()))
+                .singleElement()
+                .satisfies(event -> assertThat(event.reason()).isEqualTo("新店开业，设备划归 A 吧"));
+    }
+
+    @Test
+    void updateDeviceMerchantRebindLeavesFromToTrail() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+        seedMerchant("merchant_a", null);
+        seedMerchant("merchant_b", null);
+        service.updateDeviceMerchant("dev_P0-ANDROID-1", merchantRequest("dm-a", "merchant_a", "划归 A"));
+
+        service.updateDeviceMerchant("dev_P0-ANDROID-1", merchantRequest("dm-b", "merchant_b", "设备挪到 B 吧"));
+
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "terminal.device.merchant_changed".equals(event.eventName()))
+                .hasSize(2)
+                .last()
+                .satisfies(event -> {
+                    assertThat(event.metadata()).containsEntry("from_merchant_id", "merchant_a");
+                    assertThat(event.metadata()).containsEntry("to_merchant_id", "merchant_b");
+                });
+    }
+
+    @Test
+    void clearDeviceMerchantLeavesTrailAndUnbindsAttribution() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+        seedMerchant("merchant_a", null);
+        service.updateDeviceMerchant("dev_P0-ANDROID-1", merchantRequest("dm-a", "merchant_a", "划归 A"));
+
+        DeviceBindingResponse response = service.updateDeviceMerchant(
+                "dev_P0-ANDROID-1", merchantRequest("dm-clear", null, "商户退场，解除归属"));
+
+        assertThat(response.merchantId()).isNull();
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "terminal.device.merchant_changed".equals(event.eventName()))
+                .last()
+                .satisfies(event -> {
+                    assertThat(event.metadata()).containsEntry("from_merchant_id", "merchant_a");
+                    assertThat(event.metadata()).containsEntry("to_merchant_id", "");
+                });
+    }
+
+    @Test
+    void updateDeviceMerchantRejectsBlankReason() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+        seedMerchant("merchant_a", null);
+
+        assertThatThrownBy(() -> service.updateDeviceMerchant(
+                "dev_P0-ANDROID-1", merchantRequest("dm-noreason", "merchant_a", " ")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(deviceRepository.findById("dev_P0-ANDROID-1")).get()
+                .extracting(TerminalDeviceRecord::merchantId).isNull();
+    }
+
+    @Test
+    void updateDeviceMerchantRejectsUnknownMerchant() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+
+        assertThatThrownBy(() -> service.updateDeviceMerchant(
+                "dev_P0-ANDROID-1", merchantRequest("dm-unknown", "no_such_merchant", "理由")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_NOT_FOUND"));
+    }
+
+    @Test
+    void updateDeviceMerchantRejectsArchivedMerchant() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+        seedMerchant("merchant_gone", java.time.Instant.parse("2026-06-01T00:00:00Z"));
+
+        assertThatThrownBy(() -> service.updateDeviceMerchant(
+                "dev_P0-ANDROID-1", merchantRequest("dm-archived", "merchant_gone", "理由")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_ARCHIVED"));
+    }
+
+    @Test
+    void updateDeviceMerchantRejectsTerminalStatusDevice() {
+        saveDevice("P0-ANDROID-1", "scrapped", "staff_work_phone", null);
+        seedMerchant("merchant_a", null);
+
+        assertThatThrownBy(() -> service.updateDeviceMerchant(
+                "dev_P0-ANDROID-1", merchantRequest("dm-scrapped", "merchant_a", "理由")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("DEVICE_TERMINAL_STATUS"));
+    }
+
+    @Test
+    void updateDeviceMerchantRejectsNoChange() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+        seedMerchant("merchant_a", null);
+        service.updateDeviceMerchant("dev_P0-ANDROID-1", merchantRequest("dm-a", "merchant_a", "划归 A"));
+
+        assertThatThrownBy(() -> service.updateDeviceMerchant(
+                "dev_P0-ANDROID-1", merchantRequest("dm-same", "merchant_a", "重复划归")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("DEVICE_MERCHANT_UNCHANGED"));
+    }
+
+    @Test
+    void updateDeviceMerchantIsIdempotent() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+        seedMerchant("merchant_a", null);
+        DeviceMerchantRequest request = merchantRequest("dm-idem", "merchant_a", "划归 A");
+
+        DeviceBindingResponse first = service.updateDeviceMerchant("dev_P0-ANDROID-1", request);
+        DeviceBindingResponse second = service.updateDeviceMerchant("dev_P0-ANDROID-1", request);
+
+        assertThat(second).isEqualTo(first);
+        assertThat(deviceRepository.statusEvents)
+                .filteredOn(event -> "terminal.device.merchant_changed".equals(event.eventType()))
+                .hasSize(1);
+    }
+
+    @Test
+    void bindWithInitialMerchantValidatesAndSetsAttribution() {
+        seedMerchant("merchant_a", null);
+        DeviceBindingResponse response = service.bindDevice(new DeviceBindRequest(
+                "bind-with-merchant", "bind", List.of(), "P0-ANDROID-9", "staff_work_phone",
+                "space", "point_1", "mdm-P0-ANDROID-9", null, "merchant_a"));
+
+        assertThat(response.merchantId()).isEqualTo("merchant_a");
+
+        assertThatThrownBy(() -> service.bindDevice(new DeviceBindRequest(
+                "bind-with-bad-merchant", "bind", List.of(), "P0-ANDROID-10", "staff_work_phone",
+                "space", "point_1", "mdm-P0-ANDROID-10", null, "no_such_merchant")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_NOT_FOUND"));
+    }
+
+    @Test
+    void rebindWithoutMerchantKeepsExistingAttribution() {
+        // 归还后再领用不传商户：既有归属保留，不被 upsert 抹成 null（否则 K16 直接 fail-closed）。
+        seedMerchant("merchant_a", null);
+        service.bindDevice(new DeviceBindRequest(
+                "bind-keep-1", "bind", List.of(), "P0-ANDROID-11", "staff_work_phone",
+                "space", "point_1", "mdm-P0-ANDROID-11", null, "merchant_a"));
+        service.returnDevice(new DeviceReturnRequest(
+                "return-keep-1", "note", List.of(), "P0-ANDROID-11", "staff_1", false, "shift done"));
+
+        DeviceBindingResponse rebound = service.bindDevice(bindRequest("bind-keep-2", "P0-ANDROID-11"));
+
+        assertThat(rebound.merchantId()).isEqualTo("merchant_a");
+    }
+
+    @Test
+    void listDevicesReturnsLedgerRows() {
+        saveDevice("P0-ANDROID-1", "bound", "staff_work_phone", null);
+
+        assertThat(service.listDevices().items())
+                .extracting(TerminalDeviceRecord::deviceCode)
+                .contains("P0-ANDROID-1");
     }
 
     @Test
