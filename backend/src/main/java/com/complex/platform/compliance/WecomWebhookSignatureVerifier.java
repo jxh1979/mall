@@ -76,32 +76,32 @@ public class WecomWebhookSignatureVerifier {
      */
     public void verify(String signature, Long timestamp, String nonce, WecomConversationSyncRequest request) {
         if (signature == null || signature.isBlank()) {
-            throw ApiException.unauthorized("WECOM_WEBHOOK_SIGNATURE_MISSING", "wecom webhook signature is required");
+            throw ApiException.unauthorized("WECOM_WEBHOOK_SIGNATURE_MISSING", "企微回调缺少签名");
         }
         if (timestamp == null) {
-            throw ApiException.unauthorized("WECOM_WEBHOOK_TIMESTAMP_MISSING", "wecom webhook timestamp is required");
+            throw ApiException.unauthorized("WECOM_WEBHOOK_TIMESTAMP_MISSING", "企微回调缺少时间戳");
         }
         if (nonce == null || nonce.isBlank()) {
-            throw ApiException.unauthorized("WECOM_WEBHOOK_NONCE_MISSING", "wecom webhook nonce is required");
+            throw ApiException.unauthorized("WECOM_WEBHOOK_NONCE_MISSING", "企微回调缺少随机数（nonce）");
         }
         long skewSeconds = Math.abs(clock.instant().getEpochSecond() - timestamp);
         if (skewSeconds > TOLERANCE_SECONDS) {
             throw ApiException.unauthorized("WECOM_WEBHOOK_TIMESTAMP_EXPIRED",
-                    "wecom webhook timestamp is outside the allowed window");
+                    "企微回调时间戳超出允许窗口");
         }
         // AUD-017：标识字段拒绝控制字符（自由文本 content 除外）——结构样式文本混进标识字段=篡改信号。
         validateIdentifierFields(request, nonce);
         String expected = sign(canonical(request, nonce, timestamp));
         if (!MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8))) {
-            throw ApiException.unauthorized("WECOM_WEBHOOK_SIGNATURE_INVALID", "wecom webhook signature is invalid");
+            throw ApiException.unauthorized("WECOM_WEBHOOK_SIGNATURE_INVALID", "企微回调签名校验未通过");
         }
         // AUD 复核 P1-2 + AUD-021：验签通过后原子登记 nonce+报文指纹。异指纹=nonce 被挪用于不同报文，判重放拒绝；
         // 同指纹=同一报文合法重投递，放行给业务幂等层精确重放——首次业务失败/响应丢失后的重试不再被 401 卡死。
         if (nonceStore != null
                 && nonceStore.registerFresh(nonce, bodyDigest(request), clock.instant(), TOLERANCE_SECONDS)
                         == WecomWebhookNonceStore.Registration.REPLAY) {
-            throw ApiException.unauthorized("WECOM_WEBHOOK_NONCE_REPLAY", "wecom webhook nonce was already used");
+            throw ApiException.unauthorized("WECOM_WEBHOOK_NONCE_REPLAY", "企微回调随机数已被使用");
         }
     }
 
@@ -191,7 +191,7 @@ public class WecomWebhookSignatureVerifier {
             char c = value.charAt(i);
             if (c < 0x20 || c == 0x7F) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
-                        field + " must not contain control characters");
+                        field + " 不能包含控制字符");
             }
         }
     }

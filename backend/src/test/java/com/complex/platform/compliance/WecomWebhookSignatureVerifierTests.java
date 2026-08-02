@@ -178,7 +178,7 @@ class WecomWebhookSignatureVerifierTests {
         long ts = NOW.getEpochSecond();
         assertThatThrownBy(() -> verifier.verify(validSignature(bad, ts), ts, "nonce-1", bad))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessage()).contains("control characters"));
+                        e -> assertThat(e.getMessage()).contains("控制字符"));
         WecomConversationSyncRequest freeTextOk = request("内容可以\n换行");
         assertThatCode(() -> verifier.verify(validSignature(freeTextOk, ts), ts, "nonce-1", freeTextOk))
                 .doesNotThrowAnyException();
