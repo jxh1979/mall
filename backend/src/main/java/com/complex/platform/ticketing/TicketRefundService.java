@@ -99,7 +99,7 @@ public class TicketRefundService {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(merchantId)) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's ticket order is not allowed");
+                        "CROSS_MERCHANT_FORBIDDEN", "无权查看其他商户的票务订单");
             }
         });
     }
@@ -108,28 +108,28 @@ public class TicketRefundService {
         TicketRefundRequest actual = requireRequest(request);
         String targetId = requireText(actual.targetId(), "target_id");
         TicketOrderRecord order = repository.findTicketOrderById(targetId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // F-TXN-01 越权修复：发起退款前按调用者商户范围校验原单归属，防商户A退商户B的票（跨租户 IDOR）。
         enforceMerchantScope(order.merchantId());
         // 仅已支付订单可退款：堵"未支付/已取消订单凭空发起退款"（无真实收款却触发退款冻结/积分冲减链）。
         if (!"paid".equals(order.payStatus())) {
-            throw ApiException.conflict("TICKET_ORDER_NOT_REFUNDABLE", "only paid ticket orders can be refunded");
+            throw ApiException.conflict("TICKET_ORDER_NOT_REFUNDABLE", "只有已支付的票务订单才能退款");
         }
         // AUD-006 退款单位=整张票（无兼容期）：旧入参 entitlement_ids 传入非空即拒。
         if (actual.entitlementIds() != null && !actual.entitlementIds().isEmpty()) {
             throw ApiException.badRequest("REFUND_UNIT_IS_TICKET",
-                    "refund unit is a whole ticket; select tickets by ticket_instance_ids, not entitlement_ids");
+                    "退款以整张票为单位，请按票实例选择，不能按权益选择");
         }
         // 规则2 可退配置：票种默认不可退；不可退则拒申请退（客人不能申请退）。
         TicketTypeRecord ticketType = repository.findTicketTypeById(order.ticketTypeId()).orElse(null);
         if (ticketType == null || !ticketType.refundable()) {
             throw ApiException.conflict("TICKET_TYPE_NOT_REFUNDABLE",
-                    "this ticket type is not refundable");
+                    "该票种不支持退款");
         }
         List<TicketInstanceRecord> allInstances = repository.listTicketInstancesByOrderId(targetId);
         if (allInstances.isEmpty()) {
             throw ApiException.conflict("TICKET_ORDER_NOT_REFUNDABLE",
-                    "ticket order has no ticket instances to refund");
+                    "该票务订单没有可退款的票");
         }
         Map<String, Long> shareByInstance = perInstanceShares(order, allInstances);
         Map<String, List<IssuedEntitlementRecord>> entByInstance =
@@ -139,28 +139,28 @@ public class TicketRefundService {
                 resolveRefundInstances(allInstances, entByInstance, actual.ticketInstanceIds());
         if (targets.isEmpty()) {
             throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
-                    "no fully-unused ticket instance in this order is refundable");
+                    "该订单没有完全未使用且可退款的票");
         }
         // 金额=服务端算定的所选实例分摊额合计；客户端不定价，若带 refund_amount_cent 必须相等。
         long amountCent = targets.stream().mapToLong(ti -> shareByInstance.getOrDefault(ti.id(), 0L)).sum();
         if (amountCent <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "selected ticket instances have zero refundable amount; void the ticket instead of refunding");
+                    "所选票的可退金额为 0，请作废票而不是退款");
         }
         if (actual.refundAmountCent() != null && actual.refundAmountCent() != amountCent) {
             throw ApiException.badRequest("REFUND_AMOUNT_MISMATCH",
-                    "refund_amount_cent must equal the server-computed whole-ticket amount");
+                    "退款金额必须等于系统计算的整票金额");
         }
         long alreadyRequested = repository.sumPendingRefundAmountByOrderId(targetId);
         if (alreadyRequested + amountCent > order.amountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "refund amount exceeds order amount");
+            throw ApiException.badRequest("VALIDATION_FAILED", "退款金额超过订单金额");
         }
         Instant now = Instant.now();
         // 申请即冻结：逐实例 CAS active→refund_pending；并发抢先者胜，命中 0 行=该票在途/已用/已退 → 整笔回滚拒。
         for (TicketInstanceRecord ti : targets) {
             if (repository.markTicketInstanceRefundPending(ti.id(), now) == 0) {
                 throw ApiException.conflict("TICKET_INSTANCE_REFUND_IN_PROGRESS",
-                        "ticket instance " + ti.id() + " cannot be frozen for refund in its current status");
+                        "票 " + ti.id() + " 当前状态不能冻结退款");
             }
         }
         String requestedBy = currentActorId();
@@ -198,7 +198,7 @@ public class TicketRefundService {
         StatusChangeRequest actual = requireRequest(request);
         requireText(actual.reason(), "reason");
         TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "ticket refund not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
         // F-TXN-01 越权修复：审批退款（冻结权益/积分冲减/库存回补皆为写）前，按调用者商户范围校验原单归属，
         // 防商户A审批通过商户B的退款。原单缺失时不做归属判定（交由下方既有 null 容错路径）。
         repository.findTicketOrderById(current.targetId())
@@ -208,7 +208,7 @@ public class TicketRefundService {
         String approver = currentActorId();
         if (approver != null && approver.equals(current.requestedBy())) {
             throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
-                    "the requester of a refund cannot approve it; a different approver is required");
+                    "退款申请人不能自行审批，须由其他审批人处理");
         }
         String approvedBy = approver;
         Instant now = Instant.now();
@@ -216,7 +216,7 @@ public class TicketRefundService {
         int approvedRows = repository.markTicketRefundApproved(current.id(), approvedBy, now);
         if (approvedRows == 0) {
             throw ApiException.conflict(
-                    "TICKET_REFUND_NOT_APPROVABLE", "ticket refund cannot be approved in current status");
+                    "TICKET_REFUND_NOT_APPROVABLE", "票务退款当前状态不可批准");
         }
         TicketRefundRecord approved = new TicketRefundRecord(
                 current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
@@ -233,21 +233,21 @@ public class TicketRefundService {
         StatusChangeRequest actual = requireRequest(request);
         requireText(actual.reason(), "reason");
         TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "ticket refund not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
         repository.findTicketOrderById(current.targetId())
                 .ifPresent(order -> enforceMerchantScope(order.merchantId()));
         // AUD-007 职责分离（SoD）+ 真实复核人留痕：不受功能标志控制——一律真实操作者、复核人不得为发起人；不退化为 "staff"。
         String reviewer = currentActorId();
         if (reviewer != null && reviewer.equals(current.requestedBy())) {
             throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
-                    "the requester of a refund cannot reject it; a different reviewer is required");
+                    "退款申请人不能自行驳回，须由其他审核人处理");
         }
         String decidedBy = reviewer;
         Instant now = Instant.now();
         int rejectedRows = repository.markTicketRefundRejected(current.id(), decidedBy, now);
         if (rejectedRows == 0) {
             throw ApiException.conflict(
-                    "TICKET_REFUND_NOT_REJECTABLE", "ticket refund cannot be rejected in current status");
+                    "TICKET_REFUND_NOT_REJECTABLE", "票务退款当前状态不可驳回");
         }
         // 行 requested→rejected + 收集本单实例解冻。
         Map<String, String> entToParent = entToParentMap(current.targetId());
@@ -291,7 +291,7 @@ public class TicketRefundService {
                 int frozen = repository.freezeEntitlementForRefund(line.entitlementId(), now);
                 if (frozen == 0) {
                     throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
-                            "ticket entitlement was verified after the refund request; refund rolled back");
+                            "退款申请后该票权益已被核销，退款已回退");
                 }
                 String parent = entToParent.get(line.entitlementId());
                 if (parent != null) {
@@ -473,12 +473,12 @@ public class TicketRefundService {
             Set<String> seen = new HashSet<>();
             for (String id : requestedIds) {
                 if (!seen.add(id)) {
-                    throw ApiException.badRequest("VALIDATION_FAILED", "ticket_instance_ids contains a duplicate id");
+                    throw ApiException.badRequest("VALIDATION_FAILED", "所选票实例存在重复");
                 }
                 TicketInstanceRecord ti = byId.get(id);
                 if (ti == null) {
                     throw ApiException.badRequest("TICKET_INSTANCE_NOT_IN_ORDER",
-                            "ticket_instance_ids contains an id that does not belong to this order");
+                            "所选票实例包含不属于此订单的票");
                 }
                 requireInstanceRefundable(ti, entByInstance.get(id));
                 targets.add(ti);
@@ -501,20 +501,20 @@ public class TicketRefundService {
         }
         if ("refund_pending".equals(ti.status()) || "transferring".equals(ti.status())) {
             throw ApiException.conflict("TICKET_INSTANCE_REFUND_IN_PROGRESS",
-                    "ticket instance " + ti.id() + " is already frozen (refund in progress or transferring)");
+                    "票 " + ti.id() + " 已被冻结（退款中或转赠中）");
         }
         if (!"active".equals(ti.status()) || ti.firstUsedAt() != null) {
             throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
-                    "ticket instance " + ti.id() + " has been verified or is not refundable; whole ticket is not refundable");
+                    "票 " + ti.id() + " 已核销或不可退款，整票不可退");
         }
         if (entitlements == null || entitlements.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "ticket instance " + ti.id() + " has no entitlements to refund");
+                    "票 " + ti.id() + " 没有可退款的权益");
         }
         for (IssuedEntitlementRecord e : entitlements) {
             if (e.usedTimes() > 0 || !"active".equals(e.status())) {
                 throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
-                        "ticket instance " + ti.id() + " has a verified or frozen entitlement; whole ticket is not refundable");
+                        "票 " + ti.id() + " 存在已核销或已冻结的权益，整票不可退");
             }
         }
     }
@@ -587,7 +587,7 @@ public class TicketRefundService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

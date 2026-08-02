@@ -44,13 +44,13 @@ public class PartnerVoucherService {
         PartnerVoucherConfigRequest actual = requireRequest(request);
         String templateId = requireText(actual.entitlementTemplateId(), "entitlement_template_id");
         repository.findEntitlementTemplateById(templateId)
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "权益模板不存在或已被删除"));
         String mode = requireEnum(actual.settlementMode(), MODES, "settlement_mode");
         String kind = requireEnum(actual.partnerKind(), KINDS, "partner_kind");
         String partnerId = requireText(actual.partnerId(), "partner_id");
         Long price = actual.internalPriceCent();
         if ("internal_purchased".equals(mode) && (price == null || price <= 0)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "internal_purchased requires internal_price_cent > 0");
+            throw ApiException.badRequest("VALIDATION_FAILED", "内部采购权益必须填写大于 0 的内部结算价");
         }
         return repository.savePartnerVoucherConfig(
                 new PartnerVoucherConfigRecord(templateId, mode, kind, partnerId, price, Instant.now()));
@@ -66,9 +66,9 @@ public class PartnerVoucherService {
         String code = requireText(actual.entitlementCode(), "entitlement_code");
         String externalRef = trimToNull(actual.externalRedemptionRef());
         IssuedEntitlementRecord issued = repository.findIssuedEntitlementByCode(code)
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "no entitlement for this voucher code"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "该券码没有对应的权益"));
         PartnerVoucherConfigRecord config = repository.findPartnerVoucherConfig(issued.entitlementTemplateId())
-                .orElseThrow(() -> ApiException.badRequest("NOT_PARTNER_VOUCHER", "this entitlement is not a partner voucher"));
+                .orElseThrow(() -> ApiException.badRequest("NOT_PARTNER_VOUCHER", "该权益不是合作方券"));
         if (externalRef != null) {
             Optional<PartnerVoucherRedemptionRecord> existing =
                     repository.findPartnerVoucherRedemptionByExternalRef(config.partnerId(), externalRef);
@@ -78,7 +78,7 @@ public class PartnerVoucherService {
         }
         Instant redeemedAt = actual.redeemedAt() == null ? Instant.now() : actual.redeemedAt();
         repository.atomicUseEntitlement(issued.id(), Instant.now())
-                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "voucher has no remaining times"));
+                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "该券剩余次数已用完"));
         String redemptionId = "pvr_" + UUID.randomUUID().toString().replace("-", "");
         Long settlementAmount = null;
         String arApItemId = null;
@@ -96,7 +96,7 @@ public class PartnerVoucherService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -104,7 +104,7 @@ public class PartnerVoucherService {
     private String requireEnum(String value, Set<String> allowed, String field) {
         String trimmed = requireText(value, field);
         if (!allowed.contains(trimmed)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be one of " + allowed);
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须为以下之一：" + allowed);
         }
         return trimmed;
     }

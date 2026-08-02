@@ -120,7 +120,7 @@ class AmusementVerifyRoutingJdbcIntegrationTests {
 
         assertThatThrownBy(() -> verify(suffix, code, pointId))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("capacity exhausted");
+                .hasMessageContaining("容量已满");
         assertThat(usedTimes(code)).isEqualTo(0);                       // 通票权益不扣(容量失败游乐侧已补偿回补)
         assertThat(successCount(code)).isEqualTo(0);                    // 不落 success 核销记录
         assertThat(amusementVerificationCount(projectId)).isEqualTo(0);// amusement_verifications 不新增
@@ -154,7 +154,7 @@ class AmusementVerifyRoutingJdbcIntegrationTests {
 
         assertThatThrownBy(() -> verify(suffix, code, pointId))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("no open amusement session");
+                .hasMessageContaining("没有开放中的游乐场次");
         assertThat(usedTimes(code)).isEqualTo(0);
         assertThat(successCount(code)).isEqualTo(0);
         assertThat(amusementVerificationCount(projectId)).isEqualTo(0);

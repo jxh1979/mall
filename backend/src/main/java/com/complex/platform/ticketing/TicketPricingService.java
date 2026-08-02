@@ -33,11 +33,11 @@ public class TicketPricingService {
         TicketDynamicPricingRuleRequest actual = requireRequest(request);
         String ticketTypeId = requireText(actual.ticketTypeId(), "ticket_type_id");
         repository.findTicketTypeById(ticketTypeId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         LocalDate effectiveFrom = actual.effectiveFrom() == null ? LocalDate.now() : actual.effectiveFrom();
         LocalDate effectiveTo = actual.effectiveTo() == null ? effectiveFrom : actual.effectiveTo();
         if (effectiveTo.isBefore(effectiveFrom)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "effective_to must be on or after effective_from");
+            throw ApiException.badRequest("VALIDATION_FAILED", "生效结束日期不能早于开始日期");
         }
         String adjustmentType = requireEnum(actual.adjustmentType(), DYNAMIC_ADJUSTMENT_TYPES, "adjustment_type");
         if ("percent_delta".equals(adjustmentType) && actual.adjustmentRate() == null) {
@@ -49,7 +49,7 @@ public class TicketPricingService {
         validateNonNegative(actual.minPriceCent(), "min_price_cent");
         validateNonNegative(actual.maxPriceCent(), "max_price_cent");
         if (actual.minPriceCent() != null && actual.maxPriceCent() != null && actual.minPriceCent() > actual.maxPriceCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "min_price_cent cannot exceed max_price_cent");
+            throw ApiException.badRequest("VALIDATION_FAILED", "最低价不能高于最高价");
         }
         Instant now = Instant.now();
         return repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
@@ -78,7 +78,7 @@ public class TicketPricingService {
         StatusChangeRequest actual = requireRequest(request);
         requireText(actual.reason(), "reason");
         TicketDynamicPricingRuleRecord existing = repository.findDynamicPricingRuleById(ruleId)
-                .orElseThrow(() -> ApiException.notFound("DYNAMIC_PRICING_RULE_NOT_FOUND", "dynamic pricing rule not found"));
+                .orElseThrow(() -> ApiException.notFound("DYNAMIC_PRICING_RULE_NOT_FOUND", "动态定价规则不存在或已被删除"));
         Instant now = Instant.now();
         return repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
                 existing.id(),
@@ -105,7 +105,7 @@ public class TicketPricingService {
     TicketDynamicPricingSimulationResponse simulateDynamicPricing(TicketDynamicPricingSimulationRequest request) {
         TicketDynamicPricingSimulationRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         LocalDate visitDate = actual.visitDate() == null ? LocalDate.now() : actual.visitDate();
         String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
         long basePrice = resolveUnitPrice(ticketType, null, visitDate);
@@ -149,7 +149,7 @@ public class TicketPricingService {
             default -> firstNonNull(ticketType.weekdayPriceCent(), ticketType.weekendPriceCent(), ticketType.holidayPriceCent());
         };
         if (base == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "ticket type base price is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "票种必须填写基础价格");
         }
         if (priceRule == null) {
             return base;
@@ -160,7 +160,7 @@ public class TicketPricingService {
         };
         if ("fixed_price".equals(priceRule.priceMode())) {
             if (fixed == null) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "fixed price is required");
+                throw ApiException.badRequest("VALIDATION_FAILED", "必须填写固定价格");
             }
             return fixed;
         }
@@ -254,7 +254,7 @@ public class TicketPricingService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -269,7 +269,7 @@ public class TicketPricingService {
 
     private void validateNonNegative(Long value, String field) {
         if (value != null && value < 0L) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 不能为负数");
         }
     }
 

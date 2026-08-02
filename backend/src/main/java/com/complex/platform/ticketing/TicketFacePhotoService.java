@@ -120,11 +120,11 @@ public class TicketFacePhotoService {
         }
         if (consentId == null || consentId.isBlank()) {
             throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED",
-                    "face photo requires a recorded customer consent");
+                    "上传人脸照片前须先留存客人同意记录");
         }
         if (photosBase64.size() > Math.max(1, quantity)) {
             throw ApiException.badRequest("FACE_PHOTO_COUNT_EXCEEDED",
-                    "face photo count must not exceed ticket quantity");
+                    "人脸照片数量不能超过购票数量");
         }
         LocalDate purgeAfter = LocalDate.now(ZoneOffset.UTC).plusDays(retentionDays());
         Instant now = Instant.now();
@@ -162,7 +162,7 @@ public class TicketFacePhotoService {
         // 授权：无 verification.view 权限抛 403(在 requirePermission 内)。
         authorizationService.requirePermission(VIEW_PERMISSION);
         TicketFacePhotoRepository.TicketFacePhotoRow row = repository.findByEntitlementId(entitlementId)
-                .orElseThrow(() -> ApiException.notFound("FACE_PHOTO_NOT_FOUND", "no face photo archived for this entitlement"));
+                .orElseThrow(() -> ApiException.notFound("FACE_PHOTO_NOT_FOUND", "该权益没有已存档的人脸照片"));
         // 审计：敏感生物识别每次查看留痕(actor 由 AuditEventService 从安全上下文取)。
         auditEventService.recordSuccess(
                 "ticket_face_photo.viewed",
@@ -186,15 +186,15 @@ public class TicketFacePhotoService {
         String payload = photoBase64 == null ? null : photoBase64.trim();
         if (payload == null || payload.isEmpty()) {
             // 防御：正常路径由 TicketOrderService 先拒 FACE_PHOTO_REQUIRED，不应到这。
-            throw ApiException.badRequest("FACE_PHOTO_REQUIRED", "face photo payload is required for this entitlement");
+            throw ApiException.badRequest("FACE_PHOTO_REQUIRED", "该权益必须上传人脸照片");
         }
         if (payload.length() > MAX_PHOTO_BASE64_CHARS) {
-            throw ApiException.badRequest("FACE_PHOTO_TOO_LARGE", "face photo payload exceeds the allowed size");
+            throw ApiException.badRequest("FACE_PHOTO_TOO_LARGE", "人脸照片超过允许大小");
         }
         try {
             Base64.getDecoder().decode(payload);
         } catch (IllegalArgumentException exception) {
-            throw ApiException.badRequest("FACE_PHOTO_INVALID", "face photo payload must be base64 encoded image data");
+            throw ApiException.badRequest("FACE_PHOTO_INVALID", "人脸照片必须为 base64 编码的图片数据");
         }
         return payload;
     }

@@ -121,7 +121,7 @@ public class TicketVerificationService {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(merchantId)) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's entitlement is not allowed");
+                        "CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的权益");
             }
         });
     }
@@ -135,13 +135,13 @@ public class TicketVerificationService {
         String deviceId = requireText(request == null ? null : request.deviceId(), "device_id");
         if (!repository.terminalDeviceExists(deviceId)) {
             throw ApiException.badRequest(
-                    "DEVICE_NOT_REGISTERED", "device is not registered: " + deviceId);
+                    "DEVICE_NOT_REGISTERED", "设备未登记：" + deviceId);
         }
     }
 
     TicketCredentialResponse refreshCredential(String ticketId, String customerId) {
         IssuedEntitlementRecord entitlement = repository.findIssuedEntitlementById(requireText(ticketId, "ticket_id"))
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
         if (customerId != null) {
             // AUD-077 取码授权按"当前持有人"(slot holder),非订单归属:转出后原持票人取码 403、受赠人可取。
             // 无 slot holder(存量/直发未分组)回退订单归属校验;新发放 holder 初始=购票人,故未转赠票行为不变。
@@ -152,13 +152,13 @@ public class TicketVerificationService {
                             .map(TicketSlotHolderRecord::holderCustomerId).orElse(null);
             if (holder != null) {
                 if (!customerId.equals(holder)) {
-                    throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "ticket does not belong to customer");
+                    throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "该票不属于当前客人");
                 }
             } else {
                 TicketOrderRecord order = repository.findTicketOrderById(entitlement.orderId())
-                        .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                        .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
                 if (!customerId.equals(order.customerId())) {
-                    throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "ticket does not belong to customer");
+                    throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "该票不属于当前客人");
                 }
             }
         } else {
@@ -246,7 +246,7 @@ public class TicketVerificationService {
         IssuedEntitlementRecord entitlement = credential == null
                 ? entitlementByCredential(request)
                 : repository.findIssuedEntitlementById(credential.entitlementId())
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
         // P0-2 越权修复：人工放行同样按调用者商户范围校验权益归属，禁止对他商户权益创建放行记录（平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(
@@ -288,14 +288,14 @@ public class TicketVerificationService {
         String id = requireText(verificationId, "verification_id");
         String reverseReason = requireText(reason, "reason");
         VerificationRecord original = repository.findVerificationById(id)
-                .orElseThrow(() -> ApiException.notFound("VERIFICATION_NOT_FOUND", "verification not found"));
+                .orElseThrow(() -> ApiException.notFound("VERIFICATION_NOT_FOUND", "核销记录不存在或已被删除"));
         // P0 越权修复：此前冲正全程不比对核销记录归属，可冲正他商户核销并回补其赠饮库存（跨租户 IDOR）。
         enforceMerchantScope(original.merchantId());
         if (!"success".equals(original.status())) {
-            throw ApiException.conflict("VERIFICATION_NOT_REVERSIBLE", "only successful verification can be reversed");
+            throw ApiException.conflict("VERIFICATION_NOT_REVERSIBLE", "只有核销成功的记录才能冲正");
         }
         if (original.reversedAt() != null) {
-            throw ApiException.conflict("VERIFICATION_ALREADY_REVERSED", "verification has already been reversed");
+            throw ApiException.conflict("VERIFICATION_ALREADY_REVERSED", "该核销记录已冲正，请勿重复操作");
         }
         Instant now = Instant.now();
         // F-TXN-04 并发双花修复：先以"原 success 记录 → reversed"的状态 CAS 作为并发唯一闸（markVerificationReversed
@@ -304,12 +304,12 @@ public class TicketVerificationService {
         // 必须置于 atomicReverseEntitlement 之前：此前先回滚再翻转，存在并发双方都已回滚 used_times 才到状态翻转的窗口。
         int reversedRows = repository.markVerificationReversed(original.id(), reversedBy, now);
         if (reversedRows == 0) {
-            throw ApiException.conflict("VERIFICATION_ALREADY_REVERSED", "verification has already been reversed");
+            throw ApiException.conflict("VERIFICATION_ALREADY_REVERSED", "该核销记录已冲正，请勿重复操作");
         }
         // 闸已得手（本路独占该核销的冲正权）→ 回滚权益核销次数（used_times-1，曾用满恢复 active）。
         // 原记录此前核销失败则无可回滚 → 拒绝（事务回滚，状态翻转一并撤销）。
         repository.atomicReverseEntitlement(original.entitlementId(), now)
-                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_REVERSE_FAILED", "no used times to reverse for entitlement"));
+                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_REVERSE_FAILED", "该权益没有已使用次数可冲正"));
         // 新建一条 status=reversed 的核销记录，reverses_verification_id 指向原记录，可追溯。
         VerificationRecord reversal = repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
@@ -441,7 +441,7 @@ public class TicketVerificationService {
         repository.findTicketInstanceById(parentId).ifPresent(parent -> {
             if (!"active".equals(parent.status())) {
                 throw ApiException.conflict("TICKET_INSTANCE_REFUND_IN_PROGRESS",
-                        "ticket instance is frozen (refund in progress, refunded, or transferring) and cannot be verified");
+                        "该票已被冻结（退款中、已退款或转赠中），不能核销");
             }
         });
     }
@@ -469,12 +469,12 @@ public class TicketVerificationService {
         // 保持既有「nonce/凭证已用」契约（CREDENTIAL_EXPIRED / "credential is expired"）。此处先于 window 判定拦截，
         // 避免重放被误并入「过刷新窗口」分支而静默落 failed。过窗口（active 但越窗）才记 failed/window_expired。
         if (credential != null && !"active".equals(credential.status())) {
-            throw ApiException.conflict("CREDENTIAL_EXPIRED", "credential is expired");
+            throw ApiException.conflict("CREDENTIAL_EXPIRED", "核销凭证已过期，请刷新后重试");
         }
         IssuedEntitlementRecord entitlement = credential == null
                 ? entitlementByCredential(request)
                 : repository.findIssuedEntitlementById(credential.entitlementId())
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
         // P0-2 越权修复：在线核销主链此前未做商户归属校验，A 商户核销端可凭票号/权益码核销 B 商户客人的票
         // （跨租户烧票 IDOR）。消费权益前按调用者商户范围校验归属（与 refresh/reverse 同范式；平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
@@ -553,7 +553,7 @@ public class TicketVerificationService {
         // 置于扣减前，确保被拒时不消费权益、不落 success 核销记录。
         requireManagedDeviceForVerification(request);
         if (!"active".equals(entitlement.status())) {
-            throw ApiException.conflict("ENTITLEMENT_NOT_ACTIVE", "entitlement is not active");
+            throw ApiException.conflict("ENTITLEMENT_NOT_ACTIVE", "该权益未生效");
         }
         // 方案2 申请即冻结：父票非 active（退款申请中 refund_pending / 已退 refunded / 转赠中 transferring）→ 拒核销。
         // 与方案3 转赠冻结共用同一守卫；单人票/无父票不约束（parent 为空跳过）。
@@ -561,10 +561,10 @@ public class TicketVerificationService {
         // 方案3 转赠冻结：该 slot 有 pending 转赠 → 拒核销(响亮非静默)。与 atomicUseEntitlement NOT EXISTS 双闸。
         requireSlotNotTransferring(entitlement);
         if (entitlement.validFrom() != null && now.isBefore(entitlement.validFrom())) {
-            throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID", "entitlement is not yet valid");
+            throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID", "该权益尚未到生效时间");
         }
         if (entitlement.validTo() != null && now.isAfter(entitlement.validTo())) {
-            throw ApiException.conflict("ENTITLEMENT_EXPIRED", "entitlement has expired");
+            throw ApiException.conflict("ENTITLEMENT_EXPIRED", "该权益已过期");
         }
         // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
         // 同场次内不同人可不同时间分别入场，但不能跨场次/日期。单人票/无父票不约束。
@@ -602,7 +602,7 @@ public class TicketVerificationService {
             }
         }
         IssuedEntitlementRecord updated = repository.atomicUseEntitlement(entitlement.id(), now)
-                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "entitlement has no remaining times"));
+                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "该权益剩余次数已用完"));
         // AUD-018 消费后复检(新语句=新快照):发起转赠持 FOR UPDATE 锁时,本 UPDATE 解锁续跑的
         // NOT EXISTS 可能仍用旧快照看不见刚提交的 pending → 此处复检,发现在途转赠即抛错回滚本次消费。
         requireSlotNotTransferring(updated);
@@ -680,7 +680,7 @@ public class TicketVerificationService {
             // AUD-012 凭证消费 CAS(仅 active→consumed):0 行=该凭证已被并发撤销(转赠领取撤销原持有人旧码)
             // 或已消费 → 响亮拒绝并回滚本次核销(本方法在 @Transactional 事务内,success 记录/扣减一并回滚)。
             if (repository.markTicketCredentialConsumed(credential.id(), now) == 0) {
-                throw ApiException.conflict("CREDENTIAL_EXPIRED", "credential is expired");
+                throw ApiException.conflict("CREDENTIAL_EXPIRED", "核销凭证已过期，请刷新后重试");
             }
         }
         // R5 T15：赠饮权益核销成功 → 发同步事件 ticket.gift_verified，bar 域据此生成 0 元单并扣库存。
@@ -874,7 +874,7 @@ public class TicketVerificationService {
             Instant now) {
         String sessionId = repository.resolveOpenSessionForVenue(entitlement.venueId(), now)
                 .orElseThrow(() -> ApiException.conflict(
-                        "VENUE_NOT_IN_SESSION", "venue is not currently in an open business session"));
+                        "VENUE_NOT_IN_SESSION", "场馆当前不在营业场次内"));
         // 本场次已入过场 → 放行不消耗（持续进出）。
         if (repository.hasEntitlementEntryInSession(entitlement.id(), sessionId)) {
             VerificationRecord reentry = repository.saveVerification(sessionVerificationRecord(
@@ -885,7 +885,7 @@ public class TicketVerificationService {
         // 曾在别的场次入过场 → 过了首入场场次，本场次作废拒绝。
         if (repository.hasEntitlementEntryInOtherSession(entitlement.id(), sessionId)) {
             throw ApiException.conflict(
-                    "ENTRY_PASS_PAST_SESSION_VOID", "entry pass voided: entered a previous session already");
+                    "ENTRY_PASS_PAST_SESSION_VOID", "入场凭证已失效：已在上一场次入场");
         }
         // 本场次首入（且从未入过任何场次）→ 建入场记录（并发唯一键：若并发另一路抢先插入本场次记录，本路得 false=改判二次入场放行）。
         if (!repository.recordEntitlementEntry(entitlement.id(), sessionId, now)) {
@@ -1121,7 +1121,7 @@ public class TicketVerificationService {
             // 查不到=设备未注册,抛干净业务错(避免下游 FK 违反污染事务)。
             String resolvedDeviceId = repository.resolveTerminalDeviceId(deviceCode)
                     .orElseThrow(() -> ApiException.badRequest(
-                            "DEVICE_NOT_REGISTERED", "device is not registered: " + deviceCode));
+                            "DEVICE_NOT_REGISTERED", "设备未登记：" + deviceCode));
             VerificationResponse verification = verifyEntitlement(
                     new VerificationRequest(
                             "sync-task-" + clientTaskId,
@@ -1170,12 +1170,12 @@ public class TicketVerificationService {
         String entitlementCode = requireText(request == null ? null : request.credentialPayload(), "credential_payload");
         if (entitlementCode.startsWith("cred_")) {
             TicketCredentialRecord credential = credentialByPayload(entitlementCode)
-                    .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND", "credential not found"));
+                    .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND", "核销凭证不存在或已失效"));
             return repository.findIssuedEntitlementById(credential.entitlementId())
-                    .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+                    .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
         }
         return repository.findIssuedEntitlementByCode(entitlementCode)
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
     }
 
     private Optional<TicketCredentialRecord> credentialByPayload(String credentialPayload) {
@@ -1184,9 +1184,9 @@ public class TicketVerificationService {
             return Optional.empty();
         }
         TicketCredentialRecord credential = repository.findTicketCredentialByToken(payload)
-                .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND", "credential not found"));
+                .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND", "核销凭证不存在或已失效"));
         if (!"active".equals(credential.status()) || credential.expiresAt().isBefore(Instant.now())) {
-            throw ApiException.conflict("CREDENTIAL_EXPIRED", "credential is expired");
+            throw ApiException.conflict("CREDENTIAL_EXPIRED", "核销凭证已过期，请刷新后重试");
         }
         return Optional.of(credential);
     }
@@ -1202,7 +1202,7 @@ public class TicketVerificationService {
             return Optional.empty();
         }
         return Optional.of(repository.findTicketCredentialByToken(payload)
-                .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND", "credential not found")));
+                .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND", "核销凭证不存在或已失效")));
     }
 
     /**

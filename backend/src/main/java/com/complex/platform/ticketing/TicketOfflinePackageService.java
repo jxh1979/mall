@@ -49,7 +49,7 @@ public class TicketOfflinePackageService {
         try {
             if (!offlineEntitlementsEnabled) {
                 throw ApiException.forbidden("OFFLINE_ENTITLEMENTS_DISABLED",
-                        "offline entitlement package is disabled for P0 online verification");
+                        "P0 在线核销模式下离线权益包已停用");
             }
             // P1 越权修复：商户用户强制按自身商户范围取数，忽略请求中的 merchant_id；平台管理员沿用请求过滤。
             String effectiveMerchantId = authorizationService == null

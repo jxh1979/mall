@@ -84,7 +84,7 @@ public class TicketOrderService {
     TicketOrderRecord createOrder(TicketOrderRequest request) {
         TicketOrderRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         // 复核§3(V260)：存档=软下线。前端列表虽已隐藏，终端/H5 直传 id 下单也必须拒——放库存扣减前，拒单不动库存。
         if (ticketType.archivedAt() != null || !"none".equals(ticketType.deleteStatus())) {
             throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", "该票种已下线（存档/待删除），不可下单");
@@ -104,16 +104,16 @@ public class TicketOrderService {
         // P0 修复（V133）：限量票种原子扣减库存，防止超卖（stock_quantity 为 null=不限量，仅计数）。
         // createTicketOrder 已由 executeWrite 幂等包裹，重放不会重复进入此处、不会双扣。
         if (!repository.atomicDeductTicketStock(ticketType.id(), quantity)) {
-            throw ApiException.conflict("TICKET_SOLD_OUT", "ticket type stock is insufficient");
+            throw ApiException.conflict("TICKET_SOLD_OUT", "票种库存不足");
         }
         LocalDate visitDate = actual.visitDate() == null ? LocalDate.now() : actual.visitDate();
         String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
         TicketPriceRuleRecord priceRule = null;
         if (trimToNull(actual.priceRuleId()) != null) {
             priceRule = repository.findPriceRuleById(actual.priceRuleId())
-                    .orElseThrow(() -> ApiException.notFound("PRICE_RULE_NOT_FOUND", "price rule not found"));
+                    .orElseThrow(() -> ApiException.notFound("PRICE_RULE_NOT_FOUND", "价格规则不存在或已被删除"));
             if (!ticketType.id().equals(priceRule.ticketTypeId())) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "price_rule_id does not match ticket_type_id");
+                throw ApiException.badRequest("VALIDATION_FAILED", "价格规则与票种不匹配");
             }
             if (priceRule.archivedAt() != null || !"none".equals(priceRule.deleteStatus())) {
                 throw ApiException.conflict("TICKET_PRICE_RULE_NOT_SELLABLE", "该价格规则已下线（存档/待删除），不可下单");
@@ -178,23 +178,23 @@ public class TicketOrderService {
     TicketPaymentIntentRecord createPaymentIntent(String orderId, PaymentIntentRequest request) {
         PaymentIntentRequest actual = requireRequest(request);
         TicketOrderRecord order = repository.findTicketOrderById(orderId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能对自身受理订单创建支付意图（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
         if (!orderId.equals(businessOrderId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "business_order_id must match path order_id");
+            throw ApiException.badRequest("VALIDATION_FAILED", "业务订单号必须与路径中的订单号一致");
         }
         if (!"ticket_order".equals(requireText(actual.businessOrderType(), "business_order_type"))) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "business_order_type must be ticket_order");
+            throw ApiException.badRequest("VALIDATION_FAILED", "业务订单类型必须为票务订单（ticket_order）");
         }
         long amountCent = requirePositiveLong(actual.amountCent(), "amount_cent");
         if (amountCent != order.amountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must equal ticket order amount");
+            throw ApiException.badRequest("VALIDATION_FAILED", "支付金额必须等于票务订单金额");
         }
         String currency = trimToDefault(actual.currency(), CURRENCY_CNY);
         if (!CURRENCY_CNY.equals(currency)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "currency must be CNY");
+            throw ApiException.badRequest("VALIDATION_FAILED", "币种必须为人民币（CNY）");
         }
         Instant now = Instant.now();
         return repository.saveTicketPaymentIntent(new TicketPaymentIntentRecord(
@@ -219,23 +219,23 @@ public class TicketOrderService {
     TicketOrderRecord confirmPayment(String orderId, ConfirmTicketOrderPaymentRequest request) {
         ConfirmTicketOrderPaymentRequest actual = requireRequest(request);
         TicketOrderRecord order = repository.findTicketOrderById(requireText(orderId, "order_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能确认自身受理订单的支付（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
         // 2a-5：已取消（超时释放/手动取消）的订单不可再确认支付，防止"取消已释放库存 → 又确认 paid"导致超卖。
         if ("cancelled".equals(order.status())) {
-            throw ApiException.conflict("ORDER_CANCELLED", "ticket order has been cancelled");
+            throw ApiException.conflict("ORDER_CANCELLED", "票务订单已取消");
         }
         String intentId = requireText(actual.paymentIntentId(), "payment_intent_id");
         TicketPaymentIntentRecord intent = repository.findTicketPaymentIntentById(intentId)
-                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "payment intent not found"));
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或已被删除"));
         // 归属校验：支付意图必须属于本订单，防止用他单意图把任意订单标记已付。
         if (!order.id().equals(intent.businessOrderId()) || !"ticket_order".equals(intent.businessOrderType())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "payment intent does not belong to this ticket order");
+            throw ApiException.badRequest("VALIDATION_FAILED", "该支付意向不属于此票务订单");
         }
         // 金额校验：意图金额必须等于订单金额，防止少付标记已付。
         if (intent.amountCent() != order.amountCent()) {
-            throw ApiException.conflict("PAYMENT_AMOUNT_MISMATCH", "payment intent amount does not equal ticket order amount");
+            throw ApiException.conflict("PAYMENT_AMOUNT_MISMATCH", "支付意向金额与票务订单金额不一致");
         }
         Instant now = Instant.now();
         // 支付意图置 succeeded（幂等：已 succeeded 跳过）。
@@ -267,7 +267,7 @@ public class TicketOrderService {
         // 杜绝"已置 cancelled 但 releaseTicketStock 未执行"导致 sold_quantity 永久虚高、限量票永久少卖。
         // 由 TicketingService（跨 bean）调用，Spring 事务代理生效。
         TicketOrderRecord order = repository.findTicketOrderById(requireText(orderId, "order_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能取消自身受理订单（跨商户 IDOR）；系统超时任务走 cancelExpiredUnpaidOrders（无 scope 放行）。
         enforceMerchantScope(order.merchantId());
         int cancelled = repository.atomicCancelUnpaidOrder(order.id(), Instant.now());
@@ -275,7 +275,7 @@ public class TicketOrderService {
             if ("cancelled".equals(order.status())) {
                 return order; // 幂等：已取消直接返回。
             }
-            throw ApiException.conflict("ORDER_NOT_CANCELLABLE", "only unpaid created orders can be cancelled");
+            throw ApiException.conflict("ORDER_NOT_CANCELLABLE", "只有未支付的新建订单才能取消");
         }
         repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
         return repository.findTicketOrderById(order.id()).orElse(order);
@@ -300,7 +300,7 @@ public class TicketOrderService {
         requireRequest(request);
         requireText(request.reason(), "reason");
         TicketOrderRecord order = repository.findTicketOrderById(orderId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能为自身受理订单出票（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
         List<IssuedEntitlementRecord> existing = repository.listIssuedEntitlementsByOrderId(orderId);
@@ -308,14 +308,14 @@ public class TicketOrderService {
             return toIssuedTicketResponse(existing);
         }
         if (!"paid".equals(order.payStatus()) && !"admin".equals(order.salesChannel())) {
-            throw ApiException.conflict("ORDER_NOT_PAID", "order must be paid before issuing");
+            throw ApiException.conflict("ORDER_NOT_PAID", "订单须支付完成后才能出票");
         }
         if (!repository.tryLockOrderForIssuance(orderId)) {
             List<IssuedEntitlementRecord> recheck = repository.listIssuedEntitlementsByOrderId(orderId);
             if (!recheck.isEmpty()) {
                 return toIssuedTicketResponse(recheck);
             }
-            throw ApiException.conflict("ORDER_ISSUANCE_IN_PROGRESS", "order issuance already in progress");
+            throw ApiException.conflict("ORDER_ISSUANCE_IN_PROGRESS", "该订单正在出票中，请勿重复操作");
         }
         IssuedTicketResponse issued = issueEntitlements(order.ticketTypeId(), new TicketIssueRequest(
                 request.idempotencyKey(),
@@ -420,11 +420,11 @@ public class TicketOrderService {
         int[] facePhotoCursor = {0};
         List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
         if (bindings.isEmpty()) {
-            throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED", "ticket type has no entitlement templates");
+            throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED", "该票种没有权益模板");
         }
         // R5 审计点②：加载票种以读取有效期天数（此前未加载，valid_to 恒为 now+1 天）。
         TicketTypeRecord ticketType = repository.findTicketTypeById(ticketTypeId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         Instant now = Instant.now();
         // R5 审计点②：有效期按票种 validity_days 计算；为空回退默认 1 天（向后兼容）。
         Instant validTo = ticketType.validityDays() != null
@@ -473,7 +473,7 @@ public class TicketOrderService {
             int allocationIndex = 0;
             for (TicketTypeEntitlementRecord binding : bindings) {
             EntitlementTemplateRecord template = repository.findEntitlementTemplateById(binding.entitlementTemplateId())
-                    .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+                    .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "权益模板不存在或已被删除"));
             // R5 审计点②：权益按各自模板归属（联合通票各模板可分属不同商户/场地/点位）。
             // 模板 merchant_id 为空时回退出票方，venue/point 直接取模板（可空）。
             // AUD-076 单店票回退：template.merchantId → 订单酒吧归属 → 出票方（单店票未配模板归属时核销归回酒吧）。
@@ -540,7 +540,7 @@ public class TicketOrderService {
                     if (Boolean.TRUE.equals(template.requireFacePhoto())) {
                         if (facePhotoCursor[0] >= facePhotos.size()) {
                             throw ApiException.badRequest("FACE_PHOTO_REQUIRED",
-                                    "face photo is required for entitlement " + template.id());
+                                    "该权益必须上传人脸照片：" + template.id());
                         }
                         facePhoto = facePhotos.get(facePhotoCursor[0]);
                         facePhotoCursor[0]++;
@@ -756,7 +756,7 @@ public class TicketOrderService {
         String scope = resolveMerchantId();
         if (scope != null && !scope.equals(merchantId)) {
             throw ApiException.forbidden(
-                    "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's ticket order is not allowed");
+                    "CROSS_MERCHANT_FORBIDDEN", "无权查看其他商户的票务订单");
         }
     }
 
@@ -768,7 +768,7 @@ public class TicketOrderService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -776,7 +776,7 @@ public class TicketOrderService {
     private int requirePositive(Integer value, String fieldName) {
         int resolved = value == null ? 0 : value;
         if (resolved <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return resolved;
     }
@@ -784,7 +784,7 @@ public class TicketOrderService {
     private long requirePositiveLong(Long value, String fieldName) {
         long resolved = value == null ? 0L : value;
         if (resolved <= 0L) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return resolved;
     }
