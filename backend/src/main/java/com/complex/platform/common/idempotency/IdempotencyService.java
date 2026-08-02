@@ -101,16 +101,14 @@ public class IdempotencyService {
                         .map(latest -> replay(latest, requestHash, responseType))
                         .orElseThrow(() -> ApiException.conflict(
                                 "IDEMPOTENCY_IN_PROGRESS",
-                                "idempotency request is still being processed"
-                        ));
+                                "请求正在处理中，请稍后刷新查看结果"));
             }
             return replay(record, requestHash, responseType);
         }
 
         throw ApiException.conflict(
                 "IDEMPOTENCY_IN_PROGRESS",
-                "idempotency request is still being processed"
-        );
+                "请求正在处理中，请稍后刷新查看结果");
     }
 
     private String scopedOperationId(String operationId) {
@@ -123,10 +121,10 @@ public class IdempotencyService {
 
     private <T> T replay(IdempotencyRecord existing, String requestHash, Class<T> responseType) {
         if (!existing.requestHash().equals(requestHash)) {
-            throw ApiException.conflict("IDEMPOTENCY_CONFLICT", "idempotency_key was already used with a different request");
+            throw ApiException.conflict("IDEMPOTENCY_CONFLICT", "该幂等键已被不同的请求使用，请刷新后重试");
         }
         if (RESPONSE_CODE_IN_PROGRESS.equals(existing.responseCode()) || existing.responseBody() == null) {
-            throw ApiException.conflict("IDEMPOTENCY_IN_PROGRESS", "idempotency request is still being processed");
+            throw ApiException.conflict("IDEMPOTENCY_IN_PROGRESS", "请求正在处理中，请稍后刷新查看结果");
         }
         try {
             return objectMapper.readValue(existing.responseBody(), responseType);
