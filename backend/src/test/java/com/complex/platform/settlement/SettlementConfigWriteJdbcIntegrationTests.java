@@ -13,6 +13,7 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscou
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTierInput;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
@@ -90,7 +91,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
         for (String table : List.of("ticket_distribution_rank_tiers",
                 "ticket_distribution_configs", "ticket_distribution_merchant_rates",
                 "comprehensive_service_fee_configs", "ticket_combo_discount_configs",
-                "channel_fee_configs", "revenue_stream_attribution")) {
+                "channel_fee_configs", "revenue_stream_attribution", "pass_gift_cost_configs")) {
             jdbcTemplate.update("DELETE FROM " + table + " WHERE project_id = ?", PROJECT);
         }
     }
@@ -345,6 +346,52 @@ class SettlementConfigWriteJdbcIntegrationTests {
         // 换人转正 → 生效为 gross(旧种子生效行软替换 inactive)
         writeService.activateDraft("attribution_rule", rowId, APPROVER);
         assertThat(analyticsRepository.findDefaultAttributionRule("ticket").attributionMode()).isEqualTo("gross");
+    }
+
+    /** S6(V373)赠送权益预扣规则:Path 2 保值(草案期读侧仍回落种子 by_ticket_amount+0)→ 差人转正 → 软删回落。 */
+    @Test
+    void passGiftCostPath2DraftThenActivateThenArchive() {
+        writeService.savePassGiftCost(
+                new PassGiftCostRequest("g1", PROJECT, null, "by_ticket_amount", 5900L, 8000L, null), DRAFTER);
+        // 草案不被读 → 回落全局种子(by_ticket_amount + 0 = 上线逐分不变保值)。
+        var effective = billRepository.findPassGiftCostConfig(PROJECT, null);
+        assertThat(effective.predeductMode()).isEqualTo("by_ticket_amount");
+        assertThat(effective.ticketGiftAmountCent()).isZero();
+
+        // 同人转正 → 403;换人转正 → 生效切 5900/封顶 8000。
+        String rowId = draftRowId("pass_gift_cost_configs");
+        assertForbidden(() -> writeService.activateDraft("pass_gift_cost", rowId, DRAFTER));
+        writeService.activateDraft("pass_gift_cost", rowId, APPROVER);
+        var activated = billRepository.findPassGiftCostConfig(PROJECT, null);
+        assertThat(activated.ticketGiftAmountCent()).isEqualTo(5900L);
+        assertThat(activated.monthlyCapAmountCent()).isEqualTo(8000L);
+
+        // 软删项目特例(差人)→ 回落全局种子;行留库 inactive + 理由。
+        writeService.archive("pass_gift_cost", rowId,
+                new ArchiveRequest("g1-arch", "项目特例下线,回落平台默认"), DRAFTER);
+        assertThat(billRepository.findPassGiftCostConfig(PROJECT, null).ticketGiftAmountCent()).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT archive_reason FROM pass_gift_cost_configs WHERE id = ?", String.class, rowId))
+                .isNotBlank();
+    }
+
+    /** S6 两模式二选一写面校验:按件计禁手填整额;按票计整额必填;全局默认种子 pgc_default 禁软删。 */
+    @Test
+    void passGiftCostModeGuardsAndSeedProtection() {
+        assertValidationFailed(() -> writeService.savePassGiftCost(
+                new PassGiftCostRequest("g2", PROJECT, null, "by_item", 5900L, null, null), DRAFTER));
+        assertValidationFailed(() -> writeService.savePassGiftCost(
+                new PassGiftCostRequest("g3", PROJECT, null, "by_ticket_amount", null, null, null), DRAFTER));
+        assertValidationFailed(() -> writeService.savePassGiftCost(
+                new PassGiftCostRequest("g4", PROJECT, "tt_missing_s6", "by_item", null, null, null), DRAFTER));
+        assertThatThrownBy(() -> writeService.archive("pass_gift_cost", "pgc_default",
+                new ArchiveRequest("g5", "试删种子"), DRAFTER))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("全局默认配置不可下线");
+        // 按件计合法落草案(票种维度用真实票种,整额留空)。
+        writeService.savePassGiftCost(
+                new PassGiftCostRequest("g6", PROJECT, TICKET_TYPE, "by_item", null, null, "carry_forward"), DRAFTER);
+        assertThat(draftRowId("pass_gift_cost_configs")).isNotNull();
     }
 
     /** §8:写面拒绝哨兵字面量 projectId → 400。 */
