@@ -266,6 +266,8 @@ class SettlementBatch2EngineTests {
         expected.put("comp_service_fee_pooled_cent", 19999L);
         expected.put("comp_service_fee_exclusive_cent", 0L);
         expected.put("fee_beneficiary_entity_id", "be_ent_platform"); // V370 全局种子
+        expected.put("gift_cost_cent", 0L);                            // S6:无赠送计提 → G 恒 0
+        expected.put("gift_beneficiary_entity_id", "be_ent_platform"); // V372 归属种子
         expected.put("distribution_method", "by_rank_tier");
         expected.put("special_approval_ref", null);
         expected.put("special_approval_valid_until", null);

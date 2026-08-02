@@ -129,7 +129,8 @@ class SettlementGiftCostS6Tests {
         expected.put("channel_fee_cent", 0L);
         expected.put("comp_service_fee_pooled_cent", 30000L);
         expected.put("available_pool_cent", 120000L);
-        expected.put("distributed_cent", 62400L);
+        // S8 第二段归一化分尽:档位 1600/1200×3(Σ=5200)对 120000 一次分光 → Σ=119999+尾差1。
+        expected.put("distributed_cent", 119999L);
         expected.put("comp_service_fee_exclusive_cent", 0L);
         expected.put("fee_beneficiary_entity_id", "be_ent_platform");
         // S6 新列:G 恒 0(逐分不变的全部含义——老列一分不动,新列只记 0 与收款方快照)。
@@ -141,9 +142,11 @@ class SettlementGiftCostS6Tests {
         expected.put("status", "confirmed");
         expected.put("confirmed_at", null);
         expected.put("settled_at", null);
-        expected.put("attributed_entity_id", null);
+        expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
-        expected.put("rounding_residual_cent", 0L);
+        expected.put("rounding_residual_cent", 1L);
+        expected.put("pool_undistributed_cent", 0L);        // S8:第二段有参与者 → 恒 0
+        expected.put("pool_undistributed_entity_id", null);
 
         Map<String, Object> actual = new HashMap<>(bill(pid));
         actual.remove("created_at");
