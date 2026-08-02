@@ -2,11 +2,6 @@ logging:
   level:
     root: INFO
     com.complex.platform: DEBUG
-    org.hibernate.SQL: WARN
-
-spring:
-  jpa:
-    show-sql: false
 
 complex:
   auth:
