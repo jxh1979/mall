@@ -62,13 +62,13 @@ public class LoyaltyService {
     public long earnPoints(String customerId, long basePoints, String sourceType, String sourceId,
                            String description, Integer validityDays) {
         if (basePoints <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "base_points must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "基础积分必须大于 0");
         }
         Instant now = now();
         CustomerRecord customer = requireCustomer(customerId);
         CustomerPointsAccountRecord account = loadOrCreateForUpdate(customerId, now);
         if ("frozen".equals(account.accountStatus())) {
-            throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
+            throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "积分账户已被冻结");
         }
         long levelMultiplier = levelMultiplierBasisPoints(account.level());
         long birthdayMultiplier = birthdayMultiplierBasisPoints(customer, now);
@@ -120,7 +120,7 @@ public class LoyaltyService {
     public long earnPointsPending(String customerId, long basePoints, String sourceDocType, String sourceDocId,
                                   String description, Integer validityDays) {
         if (basePoints <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "base_points must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "基础积分必须大于 0");
         }
         requireSourceDoc(sourceDocType, sourceDocId);
         CustomerPointsLedgerRecord existing = repository
@@ -133,7 +133,7 @@ public class LoyaltyService {
         CustomerRecord customer = requireCustomer(customerId);
         CustomerPointsAccountRecord account = loadOrCreateForUpdate(customerId, now);
         if ("frozen".equals(account.accountStatus())) {
-            throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
+            throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "积分账户已被冻结");
         }
         long levelMultiplier = levelMultiplierBasisPoints(account.level());
         long birthdayMultiplier = birthdayMultiplierBasisPoints(customer, now);
@@ -275,7 +275,7 @@ public class LoyaltyService {
         requireSourceDoc(sourceDocType, sourceDocId);
         requireSourceDoc(refundDocType, refundDocId);
         if (refundRatioBp <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "refund_ratio must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "退还比例必须大于 0");
         }
         CustomerPointsLedgerRecord existing = repository
                 .findPointsLedgerBySourceDoc(refundDocType, refundDocId, CustomerPointsLedgerRecord.CHANGE_DEDUCT)
@@ -328,12 +328,12 @@ public class LoyaltyService {
                 .stream().findFirst()
                 .map(CustomerPointsLedgerRecord::customerId)
                 .orElseThrow(() -> ApiException.notFound("POINTS_EARN_NOT_FOUND",
-                        "no earn ledger for source document"));
+                        "该来源单据没有积分获取记录"));
     }
 
     private void requireSourceDoc(String sourceDocType, String sourceDocId) {
         if (sourceDocType == null || sourceDocType.isBlank() || sourceDocId == null || sourceDocId.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "source_doc_type and source_doc_id are required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写来源单据类型与编号");
         }
     }
 
@@ -346,7 +346,7 @@ public class LoyaltyService {
     @GuardedAction(capability = "customer.loyalty.evaluate", permission = "customer.loyalty.evaluate")
     public CustomerPointsAccountRecord evaluateLevel(String customerId, Instant now) {
         CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId)
-                .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "points account not found"));
+                .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "积分账户不存在或已被删除"));
         return evaluateAccount(account, now);
     }
 
@@ -458,7 +458,7 @@ public class LoyaltyService {
     @Transactional
     public long expirePointsForCustomer(String customerId, Instant now) {
         CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId)
-                .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "points account not found"));
+                .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "积分账户不存在或已被删除"));
         return expireAccount(account, now);
     }
 
@@ -519,7 +519,7 @@ public class LoyaltyService {
         Instant now = now();
         CustomerPointsAccountRecord account = loadOrCreateForUpdate(customerId, now);
         if ("frozen".equals(account.accountStatus())) {
-            throw ApiException.conflict("POINTS_ACCOUNT_ALREADY_FROZEN", "points account already frozen");
+            throw ApiException.conflict("POINTS_ACCOUNT_ALREADY_FROZEN", "积分账户已是冻结状态");
         }
         CustomerPointsAccountRecord frozen = new CustomerPointsAccountRecord(
                 account.id(), account.customerId(), account.balance(), account.level(), account.recentSummary(),
@@ -537,9 +537,9 @@ public class LoyaltyService {
     public CustomerPointsAccountRecord unfreeze(String customerId, String reason) {
         Instant now = now();
         CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId)
-                .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "points account not found"));
+                .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "积分账户不存在或已被删除"));
         if (!"frozen".equals(account.accountStatus())) {
-            throw ApiException.conflict("POINTS_ACCOUNT_NOT_FROZEN", "points account is not frozen");
+            throw ApiException.conflict("POINTS_ACCOUNT_NOT_FROZEN", "积分账户不在冻结状态");
         }
         CustomerPointsAccountRecord active = new CustomerPointsAccountRecord(
                 account.id(), account.customerId(), account.balance(), account.level(), account.recentSummary(),
@@ -563,7 +563,7 @@ public class LoyaltyService {
         LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
         requireCustomer(customerId);
         if (repository.findCheckIn(customerId, today).isPresent()) {
-            throw ApiException.conflict("ALREADY_CHECKED_IN", "already checked in today");
+            throw ApiException.conflict("ALREADY_CHECKED_IN", "今天已签到，请勿重复签到");
         }
         CustomerPointsAccountRecord account = loadOrCreateForUpdate(customerId, now);
         int streak;
@@ -700,7 +700,7 @@ public class LoyaltyService {
 
     private CustomerRecord requireCustomer(String customerId) {
         return repository.findCustomerById(customerId)
-                .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
+                .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "客人不存在或已被删除"));
     }
 
     private Instant now() {

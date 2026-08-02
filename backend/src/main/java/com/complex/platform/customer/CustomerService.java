@@ -138,7 +138,7 @@ public class CustomerService {
         if (!decision.allowed()) {
             throw com.complex.platform.common.api.ApiException.tooManyRequests(
                     "CUSTOMER_OTP_RATE_LIMITED",
-                    "too many verification attempts, please retry later",
+                    "验证尝试次数过多，请稍后再试",
                     decision.retryAfterSeconds());
         }
     }
@@ -362,7 +362,7 @@ public class CustomerService {
         }
         if (!Boolean.TRUE.equals(faceConsent)) {
             throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED",
-                    "face photo requires the customer to accept the face photo notice");
+                    "上传人脸照片前须客人同意人脸照片告知书");
         }
         Instant now = Instant.now();
         // id 由幂等键派生：同一次下单重放不会多出第二条同意（saveConsent 按 id ON CONFLICT 覆盖）。
@@ -512,7 +512,7 @@ public class CustomerService {
                             requireText(actual.catalogItemId(), "catalog_item_id"), now);
                     int quantity = actual.quantity() == null ? 1 : actual.quantity();
                     if (quantity <= 0) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "quantity must be positive");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "数量必须大于 0");
                     }
                     long totalPoints = item.pointsCost() * quantity;
                     CustomerPointsAccountRecord account = loadOrCreatePointsAccountForUpdate(customer.id());
@@ -522,10 +522,10 @@ public class CustomerService {
                     // 且 createTypedStockMovement 经 IdempotencyService 的 TransactionTemplate（REQUIRED）并入本事务，
                     // 三者原子。兑换为即时履约（无 reserve→履约→取消释放 的时间分离），故无需两段式预占。
                     if (account.balance() < totalPoints) {
-                        throw ApiException.conflict("POINTS_INSUFFICIENT", "points balance is insufficient");
+                        throw ApiException.conflict("POINTS_INSUFFICIENT", "积分余额不足");
                     }
                     if ("frozen".equals(account.accountStatus())) {
-                        throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
+                        throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "积分账户已被冻结");
                     }
                     String redemptionId = "redemption_" + slug(key);
                     // 统一台账（V301 方案A，2026-07-18 拍板）：积分兑换兑出的是统一台账券实例
@@ -609,9 +609,9 @@ public class CustomerService {
                 () -> {
                     Instant now = Instant.now();
                     CustomerPointsRedemptionRecord voucher = repository.findPointsRedemptionById(id)
-                            .orElseThrow(() -> ApiException.notFound("REDEMPTION_NOT_FOUND", "redemption voucher not found"));
+                            .orElseThrow(() -> ApiException.notFound("REDEMPTION_NOT_FOUND", "兑换券不存在或已被删除"));
                     if (!"pending_pickup".equals(voucher.status())) {
-                        throw ApiException.conflict("REDEMPTION_NOT_PENDING", "voucher is not pending pickup");
+                        throw ApiException.conflict("REDEMPTION_NOT_PENDING", "该券不在待领取状态");
                     }
                     int available = inventoryService.availableStock(voucher.inventoryItemId(), voucher.stockLocationId());
                     String resultStatus;
@@ -690,8 +690,7 @@ public class CustomerService {
                 .filter(candidate -> redemptionItemIsActive(candidate, now))
                 .orElseThrow(() -> ApiException.notFound(
                         "REDEMPTION_ITEM_NOT_AVAILABLE",
-                        "redemption item is not available"
-                ));
+                        "该兑换商品当前不可兑换"));
     }
 
     private CustomerPointsAccountRecord loadOrCreatePointsAccountForUpdate(String customerId) {
@@ -752,13 +751,13 @@ public class CustomerService {
                     String tableId = requireText(actual.tableId(), "table_id");
                     String tableType = requireText(actual.tableType(), "table_type");
                     BarTableRecord table = repository.findActiveBarTableForReservation(barId, tableId, tableType)
-                            .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table reservation option not found"));
+                            .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "订台选项不存在或已被删除"));
                     int guestCount = actual.guestCount() == null ? 0 : actual.guestCount();
                     if (guestCount < 0) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "guest_count must be non-negative");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "客人数不能为负数");
                     }
                     if (table.capacity() > 0 && guestCount > table.capacity()) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "guest_count exceeds table capacity");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "客人数超过台位容量");
                     }
                     Instant now = Instant.now();
                     // P0#3 订台定金（V073 bar_deposit_rules，对齐 BarEntryService）：按 bar 读启用规则，
@@ -824,13 +823,13 @@ public class CustomerService {
                 () -> {
                     String token = requireText(actual.invitationToken(), "invitation_token");
                     BarReservationRecord reservation = barRepository.findReservationByInvitationToken(token)
-                            .orElseThrow(() -> ApiException.notFound("BAR_INVITATION_NOT_FOUND", "card-seat invitation not found"));
+                            .orElseThrow(() -> ApiException.notFound("BAR_INVITATION_NOT_FOUND", "卡座邀请不存在或已被删除"));
                     // T1.1 并发超员修复：按预订行 FOR UPDATE 加锁（本方法 @Transactional），序列化并发确认，
                     // 防"读已确认人数 → 判容量 → 插入"竞态击穿卡座可进人数上限。
                     reservation = barRepository.findReservationByIdForUpdate(reservation.id())
-                            .orElseThrow(() -> ApiException.notFound("BAR_INVITATION_NOT_FOUND", "card-seat invitation not found"));
+                            .orElseThrow(() -> ApiException.notFound("BAR_INVITATION_NOT_FOUND", "卡座邀请不存在或已被删除"));
                     if (!"active".equals(reservation.invitationStatus())) {
-                        throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "card-seat invitation is not active");
+                        throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "卡座邀请已失效");
                     }
                     String memberIdentifier = customer.id();
                     List<BarReservationInvitationMemberRecord> members = barRepository.listInvitationMembers(reservation.id());
@@ -843,7 +842,7 @@ public class CustomerService {
                     int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
                     long confirmed = members.stream().filter(member -> !"revoked".equals(member.status())).count();
                     if (confirmed >= capacity) {
-                        throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "card-seat capacity is exhausted");
+                        throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "卡座名额已满");
                     }
                     Instant now = Instant.now();
                     return barRepository.saveInvitationMember(new BarReservationInvitationMemberRecord(
@@ -862,9 +861,9 @@ public class CustomerService {
         CustomerRecord customer = requireCustomer(customerToken);
         String id = requireText(reservationId, "reservation_id");
         BarReservationRecord reservation = barRepository.findReservationById(id)
-                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
         if (!customer.id().equals(reservation.customerId())) {
-            throw ApiException.forbidden("CROSS_CUSTOMER_FORBIDDEN", "access to another customer's reservation is not allowed");
+            throw ApiException.forbidden("CROSS_CUSTOMER_FORBIDDEN", "无权查看其他客人的订台记录");
         }
         List<BarReservationInvitationMemberRecord> members = barRepository.listInvitationMembers(id);
         int confirmed = (int) members.stream().filter(member -> !"revoked".equals(member.status())).count();
@@ -930,9 +929,9 @@ public class CustomerService {
         requireCustomer(customerToken);
         String id = requireText(sessionId, "session_id");
         BarTableSessionRecord session = barRepository.findTableSessionById(id)
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "bar table session not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "台位就餐会话不存在或已结束"));
         if (!"open".equals(session.status())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "scan order requires an open table session");
+            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "扫码点单须在开台状态下进行");
         }
         List<CustomerBarMenuItemResponse> items = barRepository.listProducts(Optional.ofNullable(session.merchantId())).stream()
                 // V262：已存档/待删除商品不上扫码点单菜单（下单 API 另有 BAR_PRODUCT_NOT_SELLABLE 兜底）。
@@ -1051,15 +1050,15 @@ public class CustomerService {
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {
-            throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "customer token is required");
+            throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "缺少客人登录凭证，请重新登录");
         }
         CustomerSessionRecord session = repository.findSessionByToken(token)
-                .orElseThrow(() -> ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "customer token is invalid"));
+                .orElseThrow(() -> ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "客人登录凭证无效，请重新登录"));
         if (!"active".equals(session.status()) || session.expiresAt().isBefore(Instant.now())) {
-            throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "customer token is expired");
+            throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "客人登录已过期，请重新登录");
         }
         CustomerRecord customer = repository.findCustomerById(session.customerId())
-                .orElseThrow(() -> ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "customer is unavailable"));
+                .orElseThrow(() -> ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "该客人账号当前不可用"));
         // V194 需求：所有客人动作前过账号状态闸（黑名单/注销/未到期封禁拒；封禁到期 lazy 恢复）。
         return enforceUsableAccount(customer, clock.instant());
     }
@@ -1071,10 +1070,10 @@ public class CustomerService {
     private CustomerRecord enforceUsableAccount(CustomerRecord customer, Instant now) {
         String status = customer.status();
         if ("blacklisted".equals(status)) {
-            throw ApiException.forbidden("CUSTOMER_BLACKLISTED", "this account is permanently blocked");
+            throw ApiException.forbidden("CUSTOMER_BLACKLISTED", "该账号已被永久封禁");
         }
         if ("deregistered".equals(status)) {
-            throw ApiException.forbidden("CUSTOMER_DEREGISTERED", "this account has been deregistered");
+            throw ApiException.forbidden("CUSTOMER_DEREGISTERED", "该账号已注销");
         }
         if ("suspended".equals(status)) {
             Instant until = customer.suspendedUntil();
@@ -1084,7 +1083,7 @@ public class CustomerService {
                         customer.birthDate(), customer.lastLoginAt(), customer.createdAt(), now, null));
             }
             throw ApiException.forbidden("CUSTOMER_SUSPENDED",
-                    until == null ? "this account is suspended" : "this account is suspended until " + until);
+                    until == null ? "该账号已被暂停使用" : "该账号被暂停使用至 " + until);
         }
         return customer;
     }
@@ -1133,7 +1132,7 @@ public class CustomerService {
             String reason, String event, String failureEvent) {
         try {
             CustomerRecord existing = repository.findCustomerById(requireText(customerId, "customer_id"))
-                    .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
+                    .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "客人不存在或已被删除"));
             Instant now = clock.instant();
             CustomerRecord saved = repository.saveCustomer(new CustomerRecord(
                     existing.id(), existing.phone(), existing.maskedPhone(), status, existing.birthDate(),
@@ -1205,7 +1204,7 @@ public class CustomerService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

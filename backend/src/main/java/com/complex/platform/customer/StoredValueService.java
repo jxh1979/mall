@@ -145,7 +145,7 @@ public class StoredValueService {
     public PaymentIntentRecord topup(String customerId, String projectId, String merchantId, long amountCent,
                                      String channel, String idempotencyKey) {
         if (amountCent <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "金额必须大于 0");
         }
         requireClientIdempotencyKey(idempotencyKey);
         requireCustomer(customerId);
@@ -173,7 +173,7 @@ public class StoredValueService {
         // bind「冲突即校验一致」：同一支付意图已绑定的卡范围与本次不同 → 抛 409（不再 DO UPDATE 静默改绑）；完全一致才幂等放过。
         if (repository.bindStoredValueTopupIntent(intent.id(), customerId, projectId, merchantId, now()) == 0) {
             throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT",
-                    "payment intent already bound to a different card scope");
+                    "该支付意向已绑定到其他卡范围");
         }
         return intent;
     }
@@ -200,7 +200,7 @@ public class StoredValueService {
         OfflinePaymentConfirmationRecord confirmation = financeService.confirmOfflinePayment(paymentId, request);
         StoredValueTopupIntentScope bound = repository.findStoredValueTopupIntent(paymentId)
                 .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
-                        "payment intent does not belong to a stored-value top-up"));
+                        "该支付意向不属于储值充值"));
         settleTopupInternal(bound.customerId(), bound.projectId(), bound.merchantId(), paymentId);
         return confirmation;
     }
@@ -211,31 +211,31 @@ public class StoredValueService {
         Instant now = now();
         requireCustomer(customerId);
         PaymentIntentRecord intent = financeService.findPaymentIntent(paymentIntentId)
-                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "payment intent not found"));
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或已被删除"));
         if (!"succeeded".equals(intent.status())) {
-            throw ApiException.conflict("PAYMENT_NOT_SUCCEEDED", "payment intent is not succeeded");
+            throw ApiException.conflict("PAYMENT_NOT_SUCCEEDED", "该支付尚未成功");
         }
         // AUD-058：入账账户范围只认充值时绑定的卡范围（customer/project/merchant），请求体范围必须与之一致，
         // 否则=通用卡充值被指名入商户卡/跨商户/跨项目。绑定行由 topup 落库，按支付意图 id 读回校验。
         StoredValueTopupIntentScope bound = repository.findStoredValueTopupIntent(paymentIntentId)
                 .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
-                        "payment intent does not belong to this top-up"));
+                        "该支付意向不属于本次充值"));
         if (!customerId.equals(bound.customerId())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "payment intent does not belong to this top-up");
+            throw ApiException.badRequest("VALIDATION_FAILED", "该支付意向不属于本次充值");
         }
         if (!java.util.Objects.equals(projectId, bound.projectId())
                 || !java.util.Objects.equals(merchantId, bound.merchantId())) {
             throw ApiException.conflict("STORED_VALUE_SCOPE_MISMATCH",
-                    "settle card scope does not match the top-up card scope");
+                    "结算卡范围与充值卡范围不一致");
         }
         if (repository.storedValueTransactionExistsForPaymentIntent(paymentIntentId)) {
             return repository.findStoredValueTransactionByIdempotencyKey("sv_settle_" + paymentIntentId)
                     .orElseThrow(() -> ApiException.conflict("STORED_VALUE_ALREADY_SETTLED",
-                            "top-up already settled for this payment intent"));
+                            "该支付意向对应的充值已入账，请勿重复操作"));
         }
         CustomerStoredValueAccountRecord account = loadOrCreateAccountForUpdate(customerId, projectId, merchantId);
         if ("closed".equals(account.status())) {
-            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "stored-value account is closed");
+            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
         long balanceAfter = account.balanceCent() + intent.amountCent();
         repository.saveStoredValueAccount(withBalanceAndStatus(account, balanceAfter, account.status(), now));
@@ -286,7 +286,7 @@ public class StoredValueService {
             throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
         }
         if (amountCent <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "金额必须大于 0");
         }
         Instant now = now();
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
@@ -304,7 +304,7 @@ public class StoredValueService {
         requireMerchantScopeForCard(account);
         requireActive(account);
         if (account.balanceCent() < amountCent) {
-            throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "stored-value balance is insufficient");
+            throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "储值余额不足");
         }
         long balanceAfter = account.balanceCent() - amountCent;
         repository.saveStoredValueAccount(withBalanceAndStatus(account, balanceAfter, account.status(), now));
@@ -352,7 +352,7 @@ public class StoredValueService {
                                                               long amountCent, String reason, boolean closeAccount,
                                                               String redemptionVoucherNo, String idempotencyKey) {
         if (merchantId == null || merchantId.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "counter refund is only for merchant cards");
+            throw ApiException.badRequest("VALIDATION_FAILED", "柜台退款仅适用于商户卡");
         }
         String voucher = trimToNull(redemptionVoucherNo);
         if (voucher == null) {
@@ -360,7 +360,7 @@ public class StoredValueService {
         }
         requireClientIdempotencyKey(idempotencyKey);
         if (idempotencyKey != null && idempotencyKey.length() > 120) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is too long");
+            throw ApiException.badRequest("VALIDATION_FAILED", "幂等键长度超出限制");
         }
         // 柜台退款独立幂等命名空间：同一客户端键在线上/柜台两条路径各自幂等，互不重放（复核 Important 项）。
         String namespacedKey = idempotencyKey == null || idempotencyKey.isBlank()
@@ -377,7 +377,7 @@ public class StoredValueService {
             throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
         }
         if (amountCent <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "金额必须大于 0");
         }
         Instant now = now();
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
@@ -390,10 +390,10 @@ public class StoredValueService {
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         requireMerchantScopeForCard(account);
         if ("closed".equals(account.status())) {
-            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "stored-value account is closed");
+            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
         if (account.balanceCent() < amountCent) {
-            throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "refund exceeds remaining balance");
+            throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "退款金额超过剩余余额");
         }
         // B1d⑤ phase3 商户级卡退款规则：仅对商户卡（merchantId 非空）应用发卡商户自设规则。
         //   refund_allowed=false → 拒退；退款比例=实际退回客户的比例，余下为商户留存（手续费/违约金）。
@@ -404,13 +404,13 @@ public class StoredValueService {
             // AUD-003 柜台路径(counterMode)即「到店办理」本身——放行 merchant_prepaid，其余守卫全保留。
             if (!counterMode && FUND_MERCHANT_PREPAID.equals(account.fundOwnership())) {
                 throw ApiException.conflict("STORED_VALUE_MERCHANT_PREPAID_REFUND_IN_STORE",
-                        "merchant prepaid card cannot be refunded online; please refund in store at the issuing merchant");
+                        "商户预付卡不支持线上退款，请到发卡商户门店办理");
             }
             StoredValueMerchantRefundRuleRecord rule = repository.findStoredValueMerchantRefundRule(account.merchantId())
                     .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(account.merchantId()));
             if (!rule.refundAllowed()) {
                 throw ApiException.conflict("STORED_VALUE_REFUND_NOT_ALLOWED",
-                        "merchant card refund is not allowed by the issuing merchant");
+                        "发卡商户不允许该商户卡退款");
             }
             // R-7:退卡实退额按比例四舍五入到分(旧整除截断,客户恒少退、商户多留且不留痕)。
             payoutCent = MoneyRounding.bpsOf(amountCent, rule.refundRatioBps());
@@ -444,7 +444,7 @@ public class StoredValueService {
         // AUD-060：退款打款状态如实反映，不得一律记成功。
         //   FAILED（渠道明确失败）→ 整单回滚（@Transactional）：余额不扣、不写流水，避免"扣了余额没退钱还显示成功"。
         if (gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED) {
-            throw ApiException.conflict("STORED_VALUE_REFUND_FAILED", "refund payout failed at payment gateway");
+            throw ApiException.conflict("STORED_VALUE_REFUND_FAILED", "退款打款在支付网关失败，请稍后重试");
         }
         //   非 SUCCEEDED（RESERVED/NOT_CONFIGURED/PENDING=未真正兑付）→ 复用财务退款状态机登记一笔 requested 的
         //   退款台账（内部/手工确认打款），让实际打款成为可追踪待办而非仅留审计面包屑；SUCCEEDED（渠道已兑付）→ settled。
@@ -478,7 +478,7 @@ public class StoredValueService {
             throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id is required");
         }
         if (refundRatioBps < 0 || refundRatioBps > 10000) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "refund_ratio_bps must be within [0,10000]");
+            throw ApiException.badRequest("VALIDATION_FAILED", "退还比例必须在 0 到 10000 基点之间");
         }
         // phase4 卡范围隔离：商户范围员工只能配置本商户的退款规则。
         requireMerchantScopeForMerchant(merchantId.trim());
@@ -516,7 +516,7 @@ public class StoredValueService {
         String mode = fundOwnership == null || fundOwnership.isBlank() ? FUND_MERCHANT_PREPAID : fundOwnership.trim();
         if (!FUND_MERCHANT_PREPAID.equals(mode) && !FUND_PLATFORM_COLLECT.equals(mode)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "fund_ownership must be merchant_prepaid or platform_collect");
+                    "资金归属必须为商户预收（merchant_prepaid）或平台代收（platform_collect）");
         }
         // 仅平台可改：fail-closed 拒商户/外包 scope 调用方（authorizationService 为 null=旧构造/单测不强制）。
         if (authorizationService != null) {
@@ -540,7 +540,7 @@ public class StoredValueService {
                 .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId));
         if (!rule.cardIssuanceEnabled()) {
             throw ApiException.conflict("STORED_VALUE_CARD_ISSUANCE_DISABLED",
-                    "merchant card issuance is not enabled by the platform for this merchant");
+                    "平台未对该商户开通商户卡发卡");
         }
     }
 
@@ -573,10 +573,10 @@ public class StoredValueService {
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         requireMerchantScopeForCard(account);
         if ("closed".equals(account.status())) {
-            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "stored-value account is closed");
+            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
         if ("frozen".equals(account.status())) {
-            throw ApiException.conflict("STORED_VALUE_ALREADY_FROZEN", "stored-value account already frozen");
+            throw ApiException.conflict("STORED_VALUE_ALREADY_FROZEN", "储值账户已是冻结状态");
         }
         CustomerStoredValueAccountRecord frozen = withBalanceAndStatus(account, account.balanceCent(), "frozen", now);
         repository.saveStoredValueAccount(frozen);
@@ -592,7 +592,7 @@ public class StoredValueService {
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         requireMerchantScopeForCard(account);
         if (!"frozen".equals(account.status())) {
-            throw ApiException.conflict("STORED_VALUE_NOT_FROZEN", "stored-value account is not frozen");
+            throw ApiException.conflict("STORED_VALUE_NOT_FROZEN", "储值账户不在冻结状态");
         }
         CustomerStoredValueAccountRecord active = withBalanceAndStatus(account, account.balanceCent(), "active", now);
         repository.saveStoredValueAccount(active);
@@ -736,7 +736,7 @@ public class StoredValueService {
         }
         if (!fingerprintMatches) {
             throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT",
-                    "idempotency key already used by another operation");
+                    "该幂等键已被其他操作使用");
         }
         return existing;
     }
@@ -749,7 +749,7 @@ public class StoredValueService {
         for (String prefix : RESERVED_IDEMPOTENCY_PREFIXES) {
             if (idempotencyKey.startsWith(prefix)) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
-                        "idempotency_key uses a reserved internal prefix");
+                        "幂等键使用了系统保留前缀，请更换");
             }
         }
     }
@@ -766,10 +766,10 @@ public class StoredValueService {
 
     private void requireActive(CustomerStoredValueAccountRecord account) {
         if ("frozen".equals(account.status())) {
-            throw ApiException.conflict("STORED_VALUE_ACCOUNT_FROZEN", "stored-value account is frozen");
+            throw ApiException.conflict("STORED_VALUE_ACCOUNT_FROZEN", "储值账户已被冻结");
         }
         if ("closed".equals(account.status())) {
-            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "stored-value account is closed");
+            throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
     }
 
@@ -782,7 +782,7 @@ public class StoredValueService {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(account.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "stored-value card is out of the caller's merchant scope");
+                        "该储值卡不在当前商户权限范围内");
             }
         });
     }
@@ -794,7 +794,7 @@ public class StoredValueService {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(merchantId)) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "merchant refund rule is out of the caller's merchant scope");
+                        "该商户退款规则不在当前商户权限范围内");
             }
         });
     }
@@ -802,7 +802,7 @@ public class StoredValueService {
     private CustomerStoredValueAccountRecord requireAccountForUpdate(String customerId, String projectId, String merchantId) {
         return repository.findStoredValueAccountForUpdate(customerId, projectId, merchantId)
                 .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND",
-                        "stored-value account not found"));
+                        "储值账户不存在或已被删除"));
     }
 
     private CustomerStoredValueAccountRecord loadOrCreateAccountForUpdate(String customerId, String projectId, String merchantId) {
@@ -825,7 +825,7 @@ public class StoredValueService {
 
     private CustomerRecord requireCustomer(String customerId) {
         return repository.findCustomerById(customerId)
-                .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
+                .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "客人不存在或已被删除"));
     }
 
     private Instant now() {

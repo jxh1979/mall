@@ -799,7 +799,7 @@ class CustomerServiceTests {
                 new CustomerPointsRedemptionRequest(null, "gift_active", 1, "miniapp")
         ))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("points balance is insufficient");
+                .hasMessageContaining("积分余额不足");
 
         assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(50L);
         verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
@@ -849,7 +849,7 @@ class CustomerServiceTests {
                 new CustomerPointsRedemptionRequest(null, "gift_active", 1, "miniapp")
         ))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("points account is frozen");
+                .hasMessageContaining("积分账户已被冻结");
 
         // 库存零调用：冻结校验在扣库存之前把请求挡下。
         verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
@@ -918,7 +918,7 @@ class CustomerServiceTests {
                 new CustomerPointsRedemptionRequest(null, "gift_race_item", 1, "miniapp")
         ))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("points balance is insufficient");
+                .hasMessageContaining("积分余额不足");
 
         assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(0L);
     }
