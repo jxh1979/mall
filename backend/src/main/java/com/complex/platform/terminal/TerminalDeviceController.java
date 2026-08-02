@@ -8,6 +8,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.terminal.dto.CapabilitySwitchRequest;
 import com.complex.platform.terminal.dto.DeviceBindRequest;
 import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
+import com.complex.platform.terminal.dto.DeviceMerchantRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
@@ -50,6 +51,31 @@ public class TerminalDeviceController {
         requireIdempotencyKey(idempotencyKey);
         String status = service.registerSigningKey(id, publicKey == null ? null : publicKey.trim(), idempotencyKey);
         return ApiResponse.ok(java.util.Map.of("status", status));
+    }
+
+    /**
+     * 平台后台设备台账（K16 改绑工作台数据源）：全量设备 + 商户归属列。
+     * 读权限沿用终端模块视图权限（与 ADM-TER-001/002 页面同闸）。
+     */
+    @GetMapping("/devices")
+    public ApiResponse<PageResponse<TerminalDeviceRecord>> listDevices() {
+        authorizationService.requirePermission("terminal.switch.view");
+        return ApiResponse.ok(service.listDevices());
+    }
+
+    /**
+     * 设备商户归属设置/更换/解除（K16 核销上下文写入面）。merchant_id 传目标商户=设置/更换，
+     * 传空=解除（该设备上赠饮/餐饮类权益将无法核销）。理由必填留痕；目标商户须存在且未归档。
+     * 影响资金核销路径，从严沿用设备治理权限 terminal.device.lifecycle（高危·仅平台管理员）。
+     */
+    @PutMapping("/devices/{id}/merchant")
+    public ApiResponse<DeviceBindingResponse> updateDeviceMerchant(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid DeviceMerchantRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updateDeviceMerchant(id, request));
     }
 
     @PostMapping("/devices/return")
