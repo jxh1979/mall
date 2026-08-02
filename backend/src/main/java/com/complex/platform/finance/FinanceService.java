@@ -38,7 +38,7 @@ import static com.complex.platform.common.Strings.trimToNull;
 import static com.complex.platform.common.Strings.requireText;
 
 @Service
-public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort, TerminationSettlementPort {
+public class FinanceService implements TerminationSettlementPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -1570,7 +1570,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     }
 
     /** 提成端口实现:按合同查其生效提成规则,该商户该自然月回流营业额 × 规则阶梯 → 提成额(分)。合同无生效规则返 0。 */
-    @Override
     public long computePeriodTurnoverRent(String merchantId, String contractId, String period) {
         if (contractId == null || contractId.isBlank() || merchantId == null || period == null || !period.matches("\\d{4}-\\d{2}")) {
             return 0L;
@@ -1595,7 +1594,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
      * (payable, counterparty=主理人账户, source_type='dividend_payout', source_id=计算单 id——
      * (direction,source_type,source_id) 部分唯一索引防一单重挂；幂等键取计算单 id 使派生 id 确定)。
      */
-    @Override
     public String createDividendPayoutPayable(
             String principalUserId, String merchantId, long netAmountCent, String statementId) {
         ArApItemRecord item = persistDerivedArApItem(
@@ -1608,7 +1606,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
      * (payable, counterparty=主理人, source_type='dividend_reserve_withheld', source_id=计算单 id 一单一挂)。
      * 状态沿用 pending_payment（source_type 即待释放标识）；释放规则/端点/UI 为后续独立构建 R。
      */
-    @Override
     public String createDividendReserveWithholdingPayable(
             String principalUserId, String merchantId, long reserveCent, String statementId) {
         ArApItemRecord item = persistDerivedArApItem(
@@ -1623,7 +1620,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
      * 已释放（他线程先翻 / 无待释放应付）返回 empty，由分红侧抛 DIVIDEND_RESERVE_ALREADY_RELEASED。
      * released 应付走既有付款流程真正发放给主理人（不再被待释放支付守卫拦截）。
      */
-    @Override
     public java.util.Optional<DividendReserveReleaseRef> releaseDividendReserveWithholding(String statementId) {
         java.util.Optional<ArApItemRecord> withheld = repository.findReserveWithheldByStatementForUpdate(statementId);
         if (withheld.isEmpty()) {
@@ -1643,13 +1639,12 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
      * V303 欠款抵扣：该商户未清应收快照（direction=receivable, unpaid>0），按 created_at 升序=先欠先抵。
      * 供分红计算单冻结欠款抵扣额与逐项留痕（只读，不改台账）。
      */
-    @Override
-    public List<DividendPayoutPort.DividendArrearsItem> listOutstandingReceivables(String merchantId) {
+    public List<DividendArrearsItem> listOutstandingReceivables(String merchantId) {
         return repository.listArApItemsByMerchant(merchantId).stream()
                 .filter(i -> "receivable".equals(i.direction()) && i.unpaidAmountCent() > 0)
                 .sorted(java.util.Comparator.comparing(ArApItemRecord::createdAt)
                         .thenComparing(ArApItemRecord::id))
-                .map(i -> new DividendPayoutPort.DividendArrearsItem(i.id(), i.itemNo(), i.unpaidAmountCent()))
+                .map(i -> new DividendArrearsItem(i.id(), i.itemNo(), i.unpaidAmountCent()))
                 .toList();
     }
 
@@ -1658,13 +1653,12 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
      * 逐项复用 settleArApItem（FOR UPDATE 行锁 + 跨商户/项目校验 + 锁定拦截 + 登记收款 + 回写 paid/unpaid/status）。
      * 返回实际结算总额；调用方（DividendService.approve）在同一事务内断言 == 冻结抵扣额，不等则回滚并要求作废重算。
      */
-    @Override
     public long applyDividendOffsetToReceivables(String merchantId, long offsetCent, String statementId) {
         if (offsetCent <= 0) {
             return 0L;
         }
-        List<DividendPayoutPort.DividendArrearsItem> items = listOutstandingReceivables(merchantId);
-        long available = items.stream().mapToLong(DividendPayoutPort.DividendArrearsItem::unpaidCent).sum();
+        List<DividendArrearsItem> items = listOutstandingReceivables(merchantId);
+        long available = items.stream().mapToLong(DividendArrearsItem::unpaidCent).sum();
         // 原子性 by construction：当前未清应收不足冻结抵扣额（抵扣期间被并发清偿）时一分不结算，直接返回实况，
         // 由调用方抛 DIVIDEND_ARREARS_CHANGED 干净回退——不依赖事务回滚就不会留半结（executeWrite 非独立事务）。
         if (available < offsetCent) {
@@ -1673,7 +1667,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         Instant now = Instant.now();
         long remaining = offsetCent;
         long settled = 0L;
-        for (DividendPayoutPort.DividendArrearsItem item : items) {
+        for (DividendArrearsItem item : items) {
             if (remaining <= 0) {
                 break;
             }
@@ -1687,8 +1681,16 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return settled;
     }
 
+    // ponytail: 提成租金/第三方券结算/分红发放三个单实现端口接口已拆并入本类(one impl),嵌套 record 随迁。
+    /** 释放引用:被 re-tag 的应付项 id / 留存额(分)/ 主理人账户 / 归属商户。 */
+    public record DividendReserveReleaseRef(String arApItemId, long reserveCent, String principalUserId, String merchantId) {
+    }
+
+    /** 未清应收明细(供逐项留痕):台账项 id / 单号 / 未清额(分)。 */
+    public record DividendArrearsItem(String arApItemId, String itemNo, long unpaidCent) {
+    }
+
     /** 批3:内部价采购券核销回流 -> 按内部结算价给第三方挂应付(payable, counterparty=partnerId)。 */
-    @Override
     public String createPartnerVoucherPayable(String partnerId, long internalPriceCent, String idempotencyKey) {
         ArApItemRecord item = persistDerivedArApItem(
                 "payable", partnerId, "partner_voucher", idempotencyKey, internalPriceCent, idempotencyKey, null);

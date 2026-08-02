@@ -38,7 +38,7 @@ public class VoucherTransferService {
     private static final String CHANNEL_LINK = "link";
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final VoucherTransferRepository transfers;
+    private final JdbcVoucherTransferRepository transfers;
     private final VoucherRepository vouchers;
     private final BlindIndex blindIndex;
     private final PiiCipher piiCipher;
@@ -49,7 +49,7 @@ public class VoucherTransferService {
 
     @Autowired
     public VoucherTransferService(
-            VoucherTransferRepository transfers,
+            JdbcVoucherTransferRepository transfers,
             VoucherRepository vouchers,
             BlindIndex blindIndex,
             PiiCipher piiCipher,
@@ -60,7 +60,7 @@ public class VoucherTransferService {
     }
 
     VoucherTransferService(
-            VoucherTransferRepository transfers,
+            JdbcVoucherTransferRepository transfers,
             VoucherRepository vouchers,
             BlindIndex blindIndex,
             PiiCipher piiCipher,

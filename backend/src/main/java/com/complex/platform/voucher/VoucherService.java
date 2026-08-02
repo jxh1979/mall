@@ -6,7 +6,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.CustomerRedemptionCatalogItemRecord;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
-import com.complex.platform.finance.PartnerVoucherSettlementPort;
+import com.complex.platform.finance.FinanceService;
 import com.complex.platform.inventory.InventoryService;
 import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.voucher.dto.VoucherDefinitionRequest;
@@ -35,7 +35,7 @@ import static com.complex.platform.common.Strings.requireText;
  * {@link #overview} 读层聚合并入"全部券"。
  *
  * <p>三类核销×结算在核销路径真正建成：商户折扣券＝结账抵扣（不结算）；店内实物券＝核销时扣库存＋
- * 按内部结算价挂应付（复用 {@link PartnerVoucherSettlementPort} 内部价范式）；外部伙伴券仍走 V282
+ * 按内部结算价挂应付（复用 {@link FinanceService} 内部价范式）；外部伙伴券仍走 V282
  * 对账回流，本服务不发其实例。核销幂等＝executeWrite 载荷指纹＋实例 CAS＋核销记录实例级唯一索引三道闸；
  * 越权防＝定义绑定商户的券，商户 scope 账号只能核自家（checkMerchantOwnership 同款）。
  */
@@ -61,9 +61,9 @@ public class VoucherService implements VoucherIssuePort {
     private final AuditedOperationExecutor operations;
     private final InventoryService inventoryService;
     // finance 结算端口（PartnerVoucherService 同款：@Lazy 防环；null＝兼容单测不结算）。
-    private final PartnerVoucherSettlementPort settlementPort;
+    private final FinanceService settlementPort;
     // V313 转赠冻结：核销/作废时判该券是否有在途转赠（防"转赠中又核销"），并在作废时作废在途转赠。
-    private final VoucherTransferRepository transferRepository;
+    private final JdbcVoucherTransferRepository transferRepository;
 
     @Autowired
     public VoucherService(
@@ -71,8 +71,8 @@ public class VoucherService implements VoucherIssuePort {
             AuthorizationService authorizationService,
             AuditedOperationExecutor operations,
             InventoryService inventoryService,
-            @Lazy PartnerVoucherSettlementPort settlementPort,
-            VoucherTransferRepository transferRepository) {
+            @Lazy FinanceService settlementPort,
+            JdbcVoucherTransferRepository transferRepository) {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.operations = operations;
@@ -524,7 +524,7 @@ public class VoucherService implements VoucherIssuePort {
         Long settlementAmount = null;
         String arApItemId = null;
         if ("internal_price".equals(definition.settlementMode()) && definition.internalPriceCent() != null) {
-            // 内部结算：按内部结算价给券归属商户挂应付（PartnerVoucherSettlementPort 内部价范式复用）。
+            // 内部结算：按内部结算价给券归属商户挂应付（FinanceService 内部价范式复用）。
             settlementAmount = definition.internalPriceCent();
             if (settlementPort != null) {
                 arApItemId = settlementPort.createPartnerVoucherPayable(

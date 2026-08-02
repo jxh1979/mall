@@ -8,8 +8,9 @@ import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+// ponytail: 仓储直用实现类,无接口(one impl)。
 @Repository
-class JdbcAdmissionPolicyRepository implements AdmissionPolicyRepository {
+class JdbcAdmissionPolicyRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -17,7 +18,6 @@ class JdbcAdmissionPolicyRepository implements AdmissionPolicyRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @Override
     public Optional<AdmissionPolicyRecord> findEnabledPolicy(String actionType, String objectType) {
         return jdbcTemplate.query("""
                 SELECT policy_code, action_type, object_type, trigger_mode, outcome,
@@ -34,7 +34,6 @@ class JdbcAdmissionPolicyRepository implements AdmissionPolicyRepository {
         ), this::map).stream().findFirst();
     }
 
-    @Override
     public List<AdmissionPolicyRecord> listPolicies() {
         return jdbcTemplate.query("""
                 SELECT policy_code, action_type, object_type, trigger_mode, outcome,

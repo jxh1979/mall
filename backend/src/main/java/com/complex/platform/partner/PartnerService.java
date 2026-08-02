@@ -21,11 +21,11 @@ import static com.complex.platform.common.Strings.requireText;
 @Service
 public class PartnerService {
 
-    private final PartnerRepository repository;
+    private final JdbcPartnerRepository repository;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
 
-    public PartnerService(PartnerRepository repository, AuthorizationService authorizationService,
+    public PartnerService(JdbcPartnerRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService) {
         this.repository = repository;
         this.authorizationService = authorizationService;

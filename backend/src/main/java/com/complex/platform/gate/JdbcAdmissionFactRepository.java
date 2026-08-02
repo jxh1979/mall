@@ -9,14 +9,15 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
- * {@link AdmissionFactRepository} 的 JDBC 只读实现：查 contracts / compliance_expiry_items
+ * {@link JdbcAdmissionFactRepository} 的 JDBC 只读实现：查 contracts / compliance_expiry_items
  * （V010/V028 既有表）+ contracts.allowed_business_scope / contract_spaces（V080）。
  * 任一查询抛异常 → 向上抛出，由 {@link AdmissionGuard} 决定 fail-open（非越界类）或
  * <b>fail-closed 进复核</b>（over_contract_scope / over_space 越界类，P0）。
  * {@link #resolveSpaceId} 返回 empty 是"不可解析"的明确信号，上层据此对 over_space 保守进复核。
  */
+// ponytail: 仓储直用实现类,无接口(one impl)。
 @Repository
-class JdbcAdmissionFactRepository implements AdmissionFactRepository {
+public class JdbcAdmissionFactRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -24,7 +25,6 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @Override
     public boolean isContractExpiredForMerchant(String merchantId) {
         if (merchantId == null || merchantId.isBlank()) {
             return false;
@@ -42,7 +42,6 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
         return activeCount == null || activeCount == 0;
     }
 
-    @Override
     public boolean isQualificationAbnormalForMerchant(String merchantId) {
         if (merchantId == null || merchantId.isBlank()) {
             return false;
@@ -60,7 +59,6 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
         return expiredCount != null && expiredCount > 0;
     }
 
-    @Override
     public boolean isOverContractScopeForMerchant(String merchantId, String businessDomain) {
         if (merchantId == null || merchantId.isBlank() || businessDomain == null || businessDomain.isBlank()) {
             return false;
@@ -96,7 +94,6 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
         return scopeOkCount == null || scopeOkCount == 0;
     }
 
-    @Override
     public boolean isOverSpaceForMerchant(String merchantId, String spaceId) {
         if (merchantId == null || merchantId.isBlank() || spaceId == null || spaceId.isBlank()) {
             return false;
@@ -118,7 +115,6 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
         return leasedCount == null || leasedCount == 0;
     }
 
-    @Override
     public Optional<String> resolveSpaceId(String objectType, String objectId) {
         if (objectType == null || objectType.isBlank() || objectId == null || objectId.isBlank()) {
             return Optional.empty();

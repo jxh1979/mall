@@ -23,15 +23,15 @@ import static com.complex.platform.common.Strings.trimToNull;
 @Service
 public class ServiceOrderService {
 
-    private final ServiceOrderRepository repository;
+    private final JdbcServiceOrderRepository repository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
-    private final com.complex.platform.access.staff.StaffRepository staffRepository;
+    private final com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
     private final com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
 
-    public ServiceOrderService(ServiceOrderRepository repository, AuditEventService auditEventService,
+    public ServiceOrderService(JdbcServiceOrderRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService,
-            com.complex.platform.access.staff.StaffRepository staffRepository,
+            com.complex.platform.access.staff.JdbcStaffRepository staffRepository,
             com.complex.platform.common.idempotency.IdempotencyService idempotencyService) {
         this.repository = repository;
         this.auditEventService = auditEventService;

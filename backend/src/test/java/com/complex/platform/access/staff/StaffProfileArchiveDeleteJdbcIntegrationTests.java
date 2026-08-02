@@ -28,7 +28,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     @Autowired
     private StaffService service;
     @Autowired
-    private StaffRepository repository;
+    private JdbcStaffRepository repository;
     @Autowired
     private JdbcTemplate jdbcTemplate;
 

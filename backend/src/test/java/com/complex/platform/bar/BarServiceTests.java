@@ -50,7 +50,7 @@ class BarServiceTests {
     private BarBillingService billingService;
     private BarOrderService barOrderService;
     private StubCommissionRateConfigPort commissionRateStub;
-    private com.complex.platform.access.staff.StaffRepository staffRepositoryStub;
+    private com.complex.platform.access.staff.JdbcStaffRepository staffRepositoryStub;
     private StubHighValueDecisionService highValueStub;
     private com.complex.platform.evidence.EvidenceEventRepository evidenceRepositoryStub;
 
@@ -170,7 +170,7 @@ class BarServiceTests {
         //   staff_sales     = 员工档案里标了「销售岗」    → 按销售人员费率；
         //   staff_non_sales = 员工档案里没标销售岗        → 按非销售人员费率（改前这人挂上归属就拿 15%，方向是反的）；
         //   其余 id         = 档案里查无此人             → 「其余」→ 非销售人员费率。
-        staffRepositoryStub = mock(com.complex.platform.access.staff.StaffRepository.class);
+        staffRepositoryStub = mock(com.complex.platform.access.staff.JdbcStaffRepository.class);
         when(staffRepositoryStub.findProfileByUserId(anyString())).thenReturn(Optional.empty());
         when(staffRepositoryStub.findProfileByUserId("staff_sales"))
                 .thenReturn(Optional.of(staffProfile("staff_sales", true)));

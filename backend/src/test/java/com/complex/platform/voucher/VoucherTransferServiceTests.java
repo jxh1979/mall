@@ -29,7 +29,7 @@ class VoucherTransferServiceTests {
 
     private static final Instant T0 = Instant.parse("2026-07-19T00:00:00Z");
 
-    private VoucherTransferRepository transfers;
+    private JdbcVoucherTransferRepository transfers;
     private VoucherRepository vouchers;
     private BlindIndex blindIndex;
     private PiiCipher piiCipher;
@@ -37,7 +37,7 @@ class VoucherTransferServiceTests {
 
     @BeforeEach
     void setUp() {
-        transfers = mock(VoucherTransferRepository.class);
+        transfers = mock(JdbcVoucherTransferRepository.class);
         vouchers = mock(VoucherRepository.class);
         blindIndex = mock(BlindIndex.class);
         piiCipher = mock(PiiCipher.class);

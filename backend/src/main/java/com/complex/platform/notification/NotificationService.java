@@ -25,14 +25,14 @@ public class NotificationService {
     private static final Set<String> FINAL_SENDER_STATUSES = Set.of(STATUS_SENT, STATUS_FAILED, STATUS_THROTTLED);
     private static final String OPERATION_NOTIFY_SMS = "notification.sms.notify";
 
-    private final NotificationRepository notificationRepository;
+    private final JdbcNotificationRepository notificationRepository;
     private final NotificationSwitchResolver switchResolver;
     private final SmsSender smsSender;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
 
     public NotificationService(
-            NotificationRepository notificationRepository,
+            JdbcNotificationRepository notificationRepository,
             NotificationSwitchResolver switchResolver,
             SmsSender smsSender,
             IdempotencyService idempotencyService,

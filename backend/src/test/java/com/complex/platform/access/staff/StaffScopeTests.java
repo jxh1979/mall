@@ -21,11 +21,11 @@ import org.junit.jupiter.api.Test;
 /** 清单 P1(2026-07-03 审计):员工写/审批跨综合体隔离——项目A主管不得给项目B员工排班/批假/记薪。 */
 class StaffScopeTests {
 
-    private StaffRepository repo;
+    private JdbcStaffRepository repo;
     private AuthorizationService authz;
 
     private StaffService build() {
-        repo = mock(StaffRepository.class);
+        repo = mock(JdbcStaffRepository.class);
         AccessRepository access = mock(AccessRepository.class);
         IdempotencyService idem = mock(IdempotencyService.class);
         AuditEventService audit = mock(AuditEventService.class);

@@ -44,7 +44,7 @@ public class BarBillingService {
     // 字段注入免改构造点（同上三例）；生产由 Spring 恒注入 JdbcStaffRepository。
     // bar → access.staff 是既有的向下依赖（本类已依赖 access.AuthorizationService），无需再造端口。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    com.complex.platform.access.staff.StaffRepository staffRepository;
+    com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
 
     public BarBillingService(
             BarRepository repository,

@@ -35,13 +35,13 @@ class ServiceOrderJdbcIntegrationTests {
     private ServiceOrderService service;
 
     @Autowired
-    private ServiceOrderRepository repository;
+    private JdbcServiceOrderRepository repository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private com.complex.platform.access.staff.StaffRepository staffRepository;
+    private com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
 
     @BeforeEach
     void setUp() {

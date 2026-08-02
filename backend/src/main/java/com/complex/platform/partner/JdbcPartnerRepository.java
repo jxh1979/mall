@@ -10,8 +10,9 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+// ponytail: 仓储直用实现类,无接口(one impl)。
 @Repository
-class JdbcPartnerRepository implements PartnerRepository {
+class JdbcPartnerRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -36,7 +37,6 @@ class JdbcPartnerRepository implements PartnerRepository {
                 rs.getTimestamp("created_at").toInstant());
     }
 
-    @Override
     public ExternalPartnerOrgRecord saveOrg(ExternalPartnerOrgRecord o) {
         jdbcTemplate.update("""
                 INSERT INTO external_partner_orgs
@@ -57,7 +57,6 @@ class JdbcPartnerRepository implements PartnerRepository {
         return o;
     }
 
-    @Override
     public List<ExternalPartnerOrgRecord> listOrgs(String projectScope) {
         // 3.2 跨项目读隔离：项目员工只见本项目机构；null（平台管理员/全局平台员工）全量。
         return jdbcTemplate.query(
@@ -68,20 +67,17 @@ class JdbcPartnerRepository implements PartnerRepository {
                 this::mapOrg);
     }
 
-    @Override
     public Optional<ExternalPartnerOrgRecord> findOrgById(String id) {
         return jdbcTemplate.query("SELECT * FROM external_partner_orgs WHERE id = :id",
                 Map.of("id", id), this::mapOrg).stream().findFirst();
     }
 
-    @Override
     public Optional<String> findPartnerOrgIdForUser(String userId) {
         return jdbcTemplate.queryForList(
                 "SELECT partner_org_id FROM access_users WHERE id = :id AND partner_org_id IS NOT NULL",
                 Map.of("id", userId), String.class).stream().findFirst();
     }
 
-    @Override
     public java.util.Optional<String> findAccessUserAccountType(String userId) {
         return java.util.Optional.ofNullable(jdbcTemplate.query(
                 "SELECT account_type FROM access_users WHERE id = :id",
@@ -89,7 +85,6 @@ class JdbcPartnerRepository implements PartnerRepository {
                 rs -> rs.next() ? rs.getString(1) : null));
     }
 
-    @Override
     public int updateUserPartnerOrg(String userId, String partnerOrgId) {
         return jdbcTemplate.update(
                 "UPDATE access_users SET partner_org_id = :org WHERE id = :id",
@@ -98,7 +93,6 @@ class JdbcPartnerRepository implements PartnerRepository {
                         .addValue("id", userId));
     }
 
-    @Override
     public int unbindUserPartnerOrg(String userId, String partnerOrgId) {
         return jdbcTemplate.update(
                 "UPDATE access_users SET partner_org_id = NULL WHERE id = :id AND partner_org_id = :org",
@@ -107,7 +101,6 @@ class JdbcPartnerRepository implements PartnerRepository {
                         .addValue("org", partnerOrgId));
     }
 
-    @Override
     public List<PartnerSubordinateRecord> listSubordinates(String partnerOrgId) {
         return jdbcTemplate.query("""
                 SELECT id, username, partner_org_id, account_type, status, created_at
@@ -115,7 +108,6 @@ class JdbcPartnerRepository implements PartnerRepository {
                 """, Map.of("org", partnerOrgId), this::mapSub);
     }
 
-    @Override
     public Optional<PartnerSubordinateRecord> findSubordinate(String userId) {
         return jdbcTemplate.query("""
                 SELECT id, username, partner_org_id, account_type, status, created_at
@@ -123,7 +115,6 @@ class JdbcPartnerRepository implements PartnerRepository {
                 """, Map.of("id", userId), this::mapSub).stream().findFirst();
     }
 
-    @Override
     public long countActiveSubordinates(String partnerOrgId) {
         Long c = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM access_users WHERE partner_org_id = :org AND status = 'active'",
@@ -131,7 +122,6 @@ class JdbcPartnerRepository implements PartnerRepository {
         return c == null ? 0 : c;
     }
 
-    @Override
     public PartnerSubordinateRecord createSubordinate(PartnerSubordinateRecord s, String roleId) {
         jdbcTemplate.update("""
                 INSERT INTO access_users (id, username, account_type, status, created_at, partner_org_id)
@@ -146,12 +136,10 @@ class JdbcPartnerRepository implements PartnerRepository {
         return s;
     }
 
-    @Override
     public void disableSubordinate(String userId) {
         jdbcTemplate.update("UPDATE access_users SET status = 'disabled' WHERE id = :id", Map.of("id", userId));
     }
 
-    @Override
     public int disableExpiredOrgsAndSubordinates(Instant now) {
         var ts = timestampWithTimeZone(now);
         jdbcTemplate.update("UPDATE external_partner_orgs SET status = 'expired', updated_at = :now WHERE valid_until IS NOT NULL AND valid_until < :now AND status = 'active'",

@@ -17,7 +17,6 @@ import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.evidence.AuditedOperationExecutor;
-import com.complex.platform.finance.DividendPayoutPort;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.inventory.InventoryRepository;
@@ -71,7 +70,7 @@ class DividendJdbcIntegrationTests {
     private BusinessDayResolver businessDayResolver;
 
     @Autowired
-    private DividendPayoutPort payoutPort;
+    private FinanceService payoutPort;
 
     // V304 支付守卫端到端：真调 FinanceService.registerArApPayment 验证 withheld 拒付 / released 放行。
     @Autowired
