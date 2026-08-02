@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 713 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 714 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 326 | 人工权限矩阵正文未覆盖 224 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1426 | 人工事件矩阵正文未覆盖 1384 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 713 | 人工任务映射正文未逐项覆盖 707 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1428 | 人工事件矩阵正文未覆盖 1386 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 714 | 人工任务映射正文未逐项覆盖 708 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 430 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -299,8 +299,8 @@
 | `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.special_approve` | staff-token | platform | 1 | settlementSpecialApproveBill | OpenAPI 补充，以本附录为准 |
-| `settlement.config.manage` | staff-token | platform | 16 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
-| `settlement.config.view` | staff-token | platform | 1 | settlementConfigOverview | OpenAPI 补充，以本附录为准 |
+| `settlement.config.manage` | staff-token | platform | 17 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
+| `settlement.config.view` | staff-token | platform | 2 | settlementConfigOverview, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.view` | staff-token | platform | 2 | listSettlementInvoiceItems, settlementInvoiceSummary | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.punch` | staff-token | platform | 1 | punchStaffAttendance | OpenAPI 补充，以本附录为准 |
@@ -330,7 +330,7 @@
 | `ticket.dynamic_pricing.simulate` | staff-token | project-channel | 1 | simulateTicketDynamicPricing | OpenAPI 补充，以本附录为准 |
 | `ticket.dynamic_pricing.view` | staff-token | project-channel | 1 | listTicketDynamicPricingRules | OpenAPI 补充，以本附录为准 |
 | `ticket.entitlement.approve` | staff-token | project | 1 | approveDeleteEntitlementTemplate | OpenAPI 补充，以本附录为准 |
-| `ticket.entitlement.manage` | staff-token | project | 5 | createEntitlementTemplate, archiveEntitlementTemplate, updateEntitlementTemplateAgreementPrice, unarchiveEntitlementTemplate, requestDeleteEntitlementTemplate | 已在权限矩阵正文出现 |
+| `ticket.entitlement.manage` | staff-token | project | 4 | createEntitlementTemplate, archiveEntitlementTemplate, unarchiveEntitlementTemplate, requestDeleteEntitlementTemplate | 已在权限矩阵正文出现 |
 | `ticket.entitlement.view` | staff-token | project | 1 | listEntitlementTemplates | 已在权限矩阵正文出现 |
 | `ticket.order.create` | staff-token | platform, project-channel | 2 | createTicketOrder, cancelTicketOrder | 已在权限矩阵正文出现 |
 | `ticket.order.read` | staff-token | project | 1 | listTicketOrders | OpenAPI 补充，以本附录为准 |
@@ -1501,6 +1501,10 @@
 | `settlement.config.draft.activated` | success | `settlementConfigActivateRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.high_value_thresholds.update_failed` | failure | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.high_value_thresholds.updated` | success | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.internal_price_catalog.update_failed` | failure | `settlementConfigUpsertInternalPriceItem` | `POST` | `/api/v1/settlement/config/internal-price-item` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.internal_price_catalog.updated` | success | `settlementConfigUpsertInternalPriceItem` | `POST` | `/api/v1/settlement/config/internal-price-item` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.internal_price_catalog.view_failed` | failure | `settlementConfigListInternalPriceItems` | `GET` | `/api/v1/settlement/config/internal-price-items` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `settlement.config.internal_price_catalog.viewed` | success | `settlementConfigListInternalPriceItems` | `GET` | `/api/v1/settlement/config/internal-price-items` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `settlement.config.overview.view_failed` | failure | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `settlement.config.overview.viewed` | success | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `settlement.config.pass_gift_cost_configs.update_failed` | failure | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -1669,8 +1673,6 @@
 | `ticket_dynamic_pricing.simulated.success` | success | `simulateTicketDynamicPricing` | `POST` | `/api/v1/ticketing/dynamic-pricing/simulations` | TIC-票务权益 | `ticket.dynamic_pricing.simulate` | 接口级事件，以本附录为准 |
 | `ticket_dynamic_pricing.viewed.failure` | failure | `listTicketDynamicPricingRules` | `GET` | `/api/v1/ticketing/dynamic-pricing-rules` | TIC-票务权益 | `ticket.dynamic_pricing.view` | 接口级事件，以本附录为准 |
 | `ticket_dynamic_pricing.viewed.success` | success | `listTicketDynamicPricingRules` | `GET` | `/api/v1/ticketing/dynamic-pricing-rules` | TIC-票务权益 | `ticket.dynamic_pricing.view` | 接口级事件，以本附录为准 |
-| `ticket_entitlement_template.agreement_price_change_failed` | failure | `updateEntitlementTemplateAgreementPrice` | `PUT` | `/api/v1/ticketing/entitlement-templates/{id}/agreement-price` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
-| `ticket_entitlement_template.agreement_price_changed` | success | `updateEntitlementTemplateAgreementPrice` | `PUT` | `/api/v1/ticketing/entitlement-templates/{id}/agreement-price` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.archive_failed` | failure | `archiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/archive` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.archived` | success | `archiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/archive` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.changed` | success | `createEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
@@ -2397,6 +2399,7 @@
 | P0-待归类 | `settlementConfigActivateDraft` | `POST` | `/api/v1/settlement/config/{configType}/{id}/activate` | 复核转正:单行/归属/归因规则草案转正 | `settlement.config.manage` | `settlement.config.draft.activated` / `settlement.config.draft.activate_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigActivateRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | 复核转正:排名档位梯子整体换梯 | `settlement.config.manage` | `settlement.config.draft.activated` / `settlement.config.draft.activate_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigArchive` | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | 软删结算配置(status→inactive) | `settlement.config.manage` | `settlement.config.archived` / `settlement.config.archive_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigListInternalPriceItems` | `GET` | `/api/v1/settlement/config/internal-price-items` | 内部结算SKU目录三维筛选列表 | `settlement.config.view` | `settlement.config.internal_price_catalog.viewed` / `settlement.config.internal_price_catalog.view_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | 结算配置中心总览 | `settlement.config.view` | `settlement.config.overview.viewed` / `settlement.config.overview.view_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertChannelFee` | `POST` | `/api/v1/settlement/config/channel-fee` | 维护第三方渠道抽成率(草案) | `settlement.config.manage` | `settlement.config.channel_fee_configs.updated` / `settlement.config.channel_fee_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertComboDiscount` | `POST` | `/api/v1/settlement/config/combo-discount` | 维护套票折扣归属(草案) | `settlement.config.manage` | `settlement.config.ticket_combo_discount_configs.updated` / `settlement.config.ticket_combo_discount_configs.update_failed` | web | operation 级补充 |
@@ -2404,6 +2407,7 @@
 | P0-待归类 | `settlementConfigUpsertComprehensiveServiceFee` | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | 维护门票综合服务费(草案) | `settlement.config.manage` | `settlement.config.comprehensive_service_fee_configs.updated` / `settlement.config.comprehensive_service_fee_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertDistributionMethod` | `POST` | `/api/v1/settlement/config/distribution-method` | 维护通票分配方式(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_configs.updated` / `settlement.config.ticket_distribution_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | 维护高价值判定阈值(草案) | `settlement.config.manage` | `settlement.config.high_value_thresholds.updated` / `settlement.config.high_value_thresholds.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigUpsertInternalPriceItem` | `POST` | `/api/v1/settlement/config/internal-price-item` | 维护内部结算SKU目录条目(草案) | `settlement.config.manage` | `settlement.config.internal_price_catalog.updated` / `settlement.config.internal_price_catalog.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertMerchantRate` | `POST` | `/api/v1/settlement/config/merchant-rate` | 维护每客单价/固定额(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_merchant_rates.updated` / `settlement.config.ticket_distribution_merchant_rates.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | 维护赠送权益预估成本预扣规则(草案) | `settlement.config.manage` | `settlement.config.pass_gift_cost_configs.updated` / `settlement.config.pass_gift_cost_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | 维护积分累计率(草案) | `settlement.config.manage` | `settlement.config.points_accrual_rate_configs.updated` / `settlement.config.points_accrual_rate_configs.update_failed` | web | operation 级补充 |
@@ -2502,7 +2506,6 @@
 | TIC-票务权益 | `simulateTicketDynamicPricing` | `POST` | `/api/v1/ticketing/dynamic-pricing/simulations` | Simulate P2 ticket dynamic pricing without creating an order | `ticket.dynamic_pricing.simulate` | `ticket_dynamic_pricing.simulated.success` / `ticket_dynamic_pricing.simulated.failure` | web | operation 级补充 |
 | TIC-票务权益 | `ticketTypePriceCheck` | `GET` | `/api/v1/ticketing/ticket-types/{id}/price-check` | 票种定价核算（系统算出售价 vs 填的售价） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `unarchiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/unarchive` | 取消存档权益模板 | `ticket.entitlement.manage` | `ticket_entitlement_template.unarchived` / `ticket_entitlement_template.unarchive_failed` | web | operation 级补充 |
-| TIC-票务权益 | `updateEntitlementTemplateAgreementPrice` | `PUT` | `/api/v1/ticketing/entitlement-templates/{id}/agreement-price` | 改虚拟权益签约价 | `ticket.entitlement.manage` | `ticket_entitlement_template.agreement_price_changed` / `ticket_entitlement_template.agreement_price_change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `updateTicketQrRefreshConfig` | `PUT` | `/api/v1/ticketing/qr-refresh-config` | 改全场统一动态码刷新间隔 | `ticket.product.manage` | `ticket.qr_refresh_config.updated` / `ticket.qr_refresh_config.update_failed` | web | operation 级补充 |
 | TIC-票务权益 | `updateTicketTypePricing` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/pricing` | 改票种售价／折扣（凑整误差闸） | `ticket.product.manage` | `ticket_product.pricing_changed` / `ticket_product.pricing_change_failed` | web | operation 级补充 |
 
