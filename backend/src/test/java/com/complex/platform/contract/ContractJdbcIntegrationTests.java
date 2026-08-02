@@ -3,8 +3,10 @@ package com.complex.platform.contract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.support.MigrationVersions;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,9 @@ class ContractJdbcIntegrationTests {
 
     @Autowired
     private ContractExpiryJob expiryJob;
+
+    @Autowired
+    private ContractService contractService;
 
     @Test
     void listContractsPagedReturnsRealTotalAndReachesNextPage() {
@@ -238,6 +243,34 @@ class ContractJdbcIntegrationTests {
                 .isEqualTo("expired");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT lifecycle_status FROM contracts WHERE id='ctr_expjob_today'", String.class))
+                .isEqualTo("effective");
+    }
+
+    @Test
+    void expiryJobScheduledUsesBeijingCalendarDayNotUtc() {
+        // 所在地时间口径(2026-08-02 用户拍板):@Scheduled 包装取的判定基准日按北京日历日,不按 UTC。
+        // 固定时刻 = 北京 2026-08-03 02:00(= UTC 2026-08-02 18:00)。注入的 Clock 刻意带 UTC 时区,
+        // 证明基准日由作业自身的所在地口径决定,而非注入 Clock 的时区。
+        // 北京口径 asOf=08-03 -> expiry_date=08-02 的合同此刻已批转;
+        // 旧 UTC 口径 asOf=08-02 -> 08-02 < 08-02 为假,不会批转。此断言即本次改动的核心证据。
+        Instant now = Instant.parse("2026-08-01T00:00:00Z");
+        repository.saveContract(new ContractRecord("ctr_tz_0802", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-08-02"), Map.of("propertyFeeCent", 88800),
+                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                null, null, null, now, now));
+        repository.saveContract(new ContractRecord("ctr_tz_0803", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-08-03"), Map.of("propertyFeeCent", 88800),
+                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                null, null, null, now, now));
+        new ContractExpiryJob(contractService,
+                Clock.fixed(Instant.parse("2026-08-02T18:00:00Z"), ZoneOffset.UTC), true)
+                .scheduledExpireContracts();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT lifecycle_status FROM contracts WHERE id='ctr_tz_0802'", String.class))
+                .isEqualTo("expired");
+        // "到期当日不批转"的 SQL 语义在新口径下不变:北京 08-03 当日到期的合同仍生效中。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT lifecycle_status FROM contracts WHERE id='ctr_tz_0803'", String.class))
                 .isEqualTo("effective");
     }
 
