@@ -176,11 +176,17 @@ public class TicketDistributionSettlementService {
         //    渠道拿的是客人实付的那一整笔的抽成,不是只从酒吧那份里扣——旧实现把它记在池链上,
         //    等于让酒吧一家替全场的渠道费买单。改为按整单算出来,再按各业态份额占比分摊下去。
         //    费率按【订单销售渠道】解析(channel_fee_configs 可按项目×渠道配),官方直销/未配 → 默认率 0 → 逐分不变。
+        //    V381 两模式二选一(HTML「比例/金额后台可配」):比例=费率 × 该渠道当期实付额(HALF_UP);
+        //    固定金额=每张票固定金额 × 该渠道当期签名票数(票数按首笔核销锚点计,一张票多次核销只收一道,
+        //    冲正月票数为负 → 费为负=向渠道追回,与比例模式负收入同一带符号口径;整数乘法无舍入)。
         long channelFee = 0L;
         for (var cr : repository.aggregateChannelRevenue(projectId, windowStart, windowEnd)) {
             String channel = cr.salesChannel() == null || cr.salesChannel().isBlank() ? null : cr.salesChannel();
-            // R-7:四舍五入到分(旧整除截断少扣渠道费)。
-            channelFee += MoneyRounding.bpsOf(cr.revenueCent(), repository.findChannelFeeBps(projectId, channel));
+            var feeCfg = repository.findChannelFee(projectId, channel);
+            // R-7:比例模式四舍五入到分(旧整除截断少扣渠道费)。
+            channelFee += feeCfg.fixedAmountCent() != null
+                    ? feeCfg.fixedAmountCent() * cr.ticketCount()
+                    : MoneyRounding.bpsOf(cr.revenueCent(), feeCfg.feeBps());
         }
         // 渠道费按各业态毛额占比摊下去;分摊尾差归酒吧支(与「尾差归项目公司/平台兜底」同一范式,不摊给别家)。
         allocateChannelFee(formatShares, channelFee, ticketRevenue);

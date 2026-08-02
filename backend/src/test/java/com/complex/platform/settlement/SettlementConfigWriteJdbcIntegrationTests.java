@@ -140,9 +140,17 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("6 天");
 
         writeService.saveChannelFee(new ChannelFeeRequest("c1", PROJECT, null, 500), DRAFTER);
-        assertThat(billRepository.findChannelFeeBps(PROJECT)).isZero();
+        assertThat(billRepository.findChannelFee(PROJECT).feeBps()).isZero();
         writeService.activateDraft("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
-        assertThat(billRepository.findChannelFeeBps(PROJECT)).isEqualTo(500);
+        assertThat(billRepository.findChannelFee(PROJECT).feeBps()).isEqualTo(500);
+
+        // V381:渠道专属「每张票固定金额」草案期不生效(该渠道仍落回刚转正的通用 500bps),转正后切固定额。
+        writeService.saveChannelFee(new ChannelFeeRequest("c2", PROJECT, "meituan", 0, 700L), DRAFTER);
+        assertThat(billRepository.findChannelFee(PROJECT, "meituan").feeBps()).isEqualTo(500);
+        assertThat(billRepository.findChannelFee(PROJECT, "meituan").fixedAmountCent()).isNull();
+        writeService.activateDraft("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
+        assertThat(billRepository.findChannelFee(PROJECT, "meituan").fixedAmountCent()).isEqualTo(700L);
+        assertThat(billRepository.findChannelFee(PROJECT, "meituan").feeBps()).isZero();
 
         writeService.saveComprehensiveServiceFee(
                 new ComprehensiveServiceFeeRequest("s1", PROJECT, null, null, 250, null, null), DRAFTER);
@@ -195,6 +203,15 @@ class SettlementConfigWriteJdbcIntegrationTests {
         // 同项目同商户、换个票种 → 命中不到该规则,回落全局默认(2000,V370 等价保值种子)。
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, otherTicketType).feeBps())
                 .isEqualTo(2000);
+    }
+
+    /** V381:渠道费比例与每张票固定金额同请求双配 → 中文 400(写入面先拦,不让它撞 chk_cfc_fee_mode 变成 500)。 */
+    @Test
+    void channelFeeRejectsBothRateAndFixedAmount() {
+        assertThatThrownBy(() -> writeService.saveChannelFee(
+                new ChannelFeeRequest("cboth", PROJECT, null, 100, 100L), DRAFTER))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("二选一");
     }
 
     /** S2:票种填了个不存在的 id → 中文 400(不让它撞 FK 变成 500,业务人员看得懂哪里填错了)。 */
@@ -261,14 +278,14 @@ class SettlementConfigWriteJdbcIntegrationTests {
     /** 4 个收敛 finder(S4 起留存 finder 已删):有种子→值不变(保值);删光该表→抛 SETTLEMENT_CONFIG_MISSING(fail-loud)。 */
     @Test
     void convergedFindersFailLoudWhenSeedMissing() {
-        assertThat(billRepository.findChannelFeeBps(null)).isZero();
+        assertThat(billRepository.findChannelFee(null).feeBps()).isZero();
         assertThat(billRepository.findDistributionMethod(null)).isEqualTo("by_rank_tier");
         // V370 等价保值种子:全局默认综合服务费率 = 原留存率 2000。
         assertThat(billRepository.findComprehensiveServiceFee(null, null, null).feeBps()).isEqualTo(2000);
         assertThat(billRepository.findComboDiscountConfig(null).discountBearer()).isEqualTo("platform_absorb");
 
         jdbcTemplate.update("DELETE FROM channel_fee_configs");
-        assertMissing(() -> billRepository.findChannelFeeBps(null));
+        assertMissing(() -> billRepository.findChannelFee(null));
         jdbcTemplate.update("DELETE FROM ticket_distribution_configs");
         assertMissing(() -> billRepository.findDistributionMethod(null));
         jdbcTemplate.update("DELETE FROM comprehensive_service_fee_configs");

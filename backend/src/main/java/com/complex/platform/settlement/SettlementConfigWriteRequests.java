@@ -60,8 +60,17 @@ public final class SettlementConfigWriteRequests {
         }
     }
 
-    /** channel_fee_configs:渠道抽成万分比。批1 UI 只填 channel=null 通用率;feeBps∈[0,10000]。 */
-    public record ChannelFeeRequest(String idempotencyKey, String projectId, String channel, Integer feeBps) {
+    /**
+     * channel_fee_configs:渠道抽成。比例(feeBps∈[0,10000])或每张票固定金额(fixedAmountCent,分,≥0)二选一
+     * (V381 chk_cfc_fee_mode:配固定金额则 feeBps 必 0);批1 UI 只填 channel=null 通用配置。
+     */
+    public record ChannelFeeRequest(String idempotencyKey, String projectId, String channel, Integer feeBps,
+                                    Long fixedAmountCent) {
+
+        /** V381 前的 4 参签名(无 fixedAmountCent)→ null=比例模式。 */
+        public ChannelFeeRequest(String idempotencyKey, String projectId, String channel, Integer feeBps) {
+            this(idempotencyKey, projectId, channel, feeBps, null);
+        }
     }
 
     /** ticket_distribution_rank_tiers:by_rank_tier 排名档位梯子(整套替换草案)。 */
