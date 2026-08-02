@@ -408,7 +408,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       const ticket = await api.post<{ id: string }>("/api/v1/ticketing/ticket-types", {
         idempotency_key: createKey,
         ticket_name: ticketName.trim(),
-        base_calendar_price_mode: "calendar",
+        base_calendar_price_mode: "weekday_weekend_holiday",
         weekday_price_cent: Math.round(prices.平日价 * 100),
         weekend_price_cent: Math.round(prices.周末价 * 100),
         holiday_price_cent: Math.round(prices.节假日价 * 100),

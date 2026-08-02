@@ -3650,6 +3650,17 @@ class TicketingServiceTests {
                         e -> assertThat(e.getMessage()).contains("刷新间隔秒数"));
     }
 
+    // 2026-07-28：基础日历价模式收白名单——业务口径只有「平日/周末/节假日三类基础价」一种，
+    // 前端曾误传 "calendar"（openapi 枚举里根本没有），后端只 requireText 全盘放行 → 脏值入库。
+    @Test
+    void createTicketTypeRejectsUnknownBaseCalendarPriceMode() {
+        assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
+                "bcpm-bad", "create", List.of(), "坏日历价模式", "calendar",
+                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 1, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessage()).contains("base_calendar_price_mode"));
+    }
+
     // 2026-07-18 拍板：验证二维码默认 15 秒动态刷新，白名单放宽为 {10,15,30,60}（V300）。
     @Test
     void createTicketTypeAcceptsFifteenSecondRefresh() {
