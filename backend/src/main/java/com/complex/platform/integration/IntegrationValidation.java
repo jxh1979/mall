@@ -235,11 +235,10 @@ final class IntegrationValidation {
     }
 
     static void requireText(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
+        com.complex.platform.common.Strings.requireText(value, fieldName);
     }
 
+    /** 注意：返回原值不做 trim（与 Strings.requireText 返回 trim 值的语义不同），调用方依赖原样值。 */
     static String requireTextValue(String value, String fieldName) {
         requireText(value, fieldName);
         return value;

@@ -1,5 +1,7 @@
 package com.complex.platform.auth;
 
+import static com.complex.platform.common.Strings.requireText;
+
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
@@ -352,12 +354,6 @@ public class AuthService implements SessionIssuer {
 
     private String newRefreshToken() {
         return "p0_refresh_" + UUID.randomUUID();
-    }
-
-    private void requireText(String value, String fieldName) {
-        if (isBlank(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
     }
 
     private String blankToDefault(String value, String defaultValue) {

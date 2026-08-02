@@ -35,6 +35,7 @@ public class EvidenceEventService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor executor;
 
     /** 证据文件本地存储。字段注入免改既有构造点；单测未注入=null（上传端点报存储不可用）。 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -50,6 +51,7 @@ public class EvidenceEventService {
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.executor = new AuditedOperationExecutor(idempotencyService, auditEventService);
     }
 
     @Transactional
@@ -67,31 +69,9 @@ public class EvidenceEventService {
         int safeSize = size <= 0 ? DEFAULT_LIMIT : Math.min(size, MAX_LIMIT);
         int safePage = page < 1 ? 1 : page;
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
-        try {
-            com.complex.platform.common.api.PageResponse<EvidenceEventRecord> result =
-                    repository.listPage(safePage, safeSize, merchantId);
-            auditEventService.recordSuccess(
-                    "evidence.event_viewed",
-                    VIEW_PERMISSION,
-                    "evidence_event",
-                    "all",
-                    null,
-                    null,
-                    Map.of("count", result.items().size(), "total", result.total())
-            );
-            return result;
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    "evidence.event_view_failed",
-                    VIEW_PERMISSION,
-                    "evidence_event",
-                    "all",
-                    null,
-                    null,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return executor.readPageResult(
+                AuditedOperation.of("evidence.event_viewed", "evidence.event_view_failed", VIEW_PERMISSION, "evidence_event"),
+                () -> repository.listPage(safePage, safeSize, merchantId));
     }
 
     /**

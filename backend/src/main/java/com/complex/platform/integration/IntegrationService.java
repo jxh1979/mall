@@ -6,6 +6,8 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -26,7 +28,7 @@ public class IntegrationService {
     private final SecretResolver secretResolver;
     private final Clock clock;
     private final OpenPlatformCrypto openPlatformCrypto = new OpenPlatformCrypto();
-    private final IntegrationOperationSupport operationSupport;
+    private final AuditedOperationExecutor auditedExecutor;
     private final ProviderAdapterService providerAdapterService;
     private final IntegrationOrderSyncService orderSyncService;
     private final IntegrationReconciliationService reconciliationService;
@@ -70,11 +72,12 @@ public class IntegrationService {
         this.auditEventService = auditEventService;
         this.clock = clock;
         this.secretResolver = secretResolver;
-        this.operationSupport = new IntegrationOperationSupport(idempotencyService, auditEventService);
-        this.providerAdapterService = new ProviderAdapterService(repository, clock, operationSupport);
-        this.orderSyncService = new IntegrationOrderSyncService(
-                repository, clock, operationSupport, terminalSwitchGuard, channelTicketIssuePort);
-        this.reconciliationService = new IntegrationReconciliationService(repository, clock, operationSupport);
+        this.auditedExecutor = new AuditedOperationExecutor(idempotencyService, auditEventService);
+        this.providerAdapterService = new ProviderAdapterService(
+                repository, clock, auditedExecutor, idempotencyService, auditEventService);
+        this.orderSyncService = new IntegrationOrderSyncService(repository, clock, auditedExecutor,
+                idempotencyService, auditEventService, terminalSwitchGuard, channelTicketIssuePort);
+        this.reconciliationService = new IntegrationReconciliationService(repository, clock, auditedExecutor);
         this.thirdPartyService = new ThirdPartyScaffoldingService(
                 repository, clock, auditEventService, terminalSwitchGuard, openPlatformCrypto, secretResolver);
     }
@@ -341,15 +344,17 @@ public class IntegrationService {
             throw ApiException.badRequest("VALIDATION_FAILED", "数据源数量必须覆盖所有已检查的接口");
         }
         List<String> evidenceAttachmentIds = safeList(request.evidenceAttachmentIds());
-        return operationSupport.executeWrite(
-                "recordPollingCheck:" + String.join(",", checkedEndpoints),
+        String operationId = "recordPollingCheck:" + String.join(",", checkedEndpoints);
+        return auditedExecutor.executeWrite(
+                operationId,
                 request.idempotencyKey(),
                 request,
                 IntegrationPollingCheckRecord.class,
-                "integration.polling_check.recorded",
-                "integration.polling_check.record_failed",
-                "integration.retry.manage",
-                "integration_polling_check",
+                AuditedOperation.of(
+                        "integration.polling_check.recorded",
+                        "integration.polling_check.record_failed",
+                        "integration.retry.manage",
+                        "integration_polling_check"),
                 () -> new IntegrationPollingCheckRecord(
                         "polling_check_" + UUID.randomUUID().toString().replace("-", ""),
                         "recorded",
@@ -360,7 +365,9 @@ public class IntegrationService {
                         evidenceAttachmentIds,
                         clock.instant(),
                         "platform_task_status_only_not_supplier_execution"
-                )
+                ),
+                saved -> ((IntegrationPollingCheckRecord) saved).id(),
+                Map.of("operation_id", operationId)
         );
     }
 

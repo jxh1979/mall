@@ -1,4 +1,5 @@
 package com.complex.platform.auth;
+import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.access.AccessActor;
@@ -568,12 +569,6 @@ public class ProductionAuthService implements SessionIssuer {
 
     private String sha256Hex(String value) {
         return HexFormat.of().formatHex(MessageDigestHolder.digest(value));
-    }
-
-    private void requireText(String value, String fieldName) {
-        if (isBlank(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
     }
 
     private String blankToDefault(String value, String defaultValue) {

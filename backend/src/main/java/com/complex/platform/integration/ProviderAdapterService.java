@@ -4,6 +4,10 @@ import static com.complex.platform.integration.IntegrationValidation.*;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -14,42 +18,28 @@ final class ProviderAdapterService {
 
     private final IntegrationRepository repository;
     private final Clock clock;
-    private final IntegrationOperationSupport support;
+    private final AuditedOperationExecutor executor;
+    // 四个写路径失败留痕带业务对象号（providerCode/id），executor 失败侧固定 businessId=null 无法表达，保留手写直连。
+    private final IdempotencyService idempotencyService;
+    private final AuditEventService auditEventService;
 
-    ProviderAdapterService(IntegrationRepository repository, Clock clock, IntegrationOperationSupport support) {
+    ProviderAdapterService(IntegrationRepository repository, Clock clock, AuditedOperationExecutor executor,
+                           IdempotencyService idempotencyService, AuditEventService auditEventService) {
         this.repository = repository;
         this.clock = clock;
-        this.support = support;
+        this.executor = executor;
+        this.idempotencyService = idempotencyService;
+        this.auditEventService = auditEventService;
     }
 
     PageResponse<ProviderAdapterRecord> listProviderAdapters() {
-        try {
-            List<ProviderAdapterRecord> items = repository.listProviderAdapters();
-            support.recordSuccess(
-                    "provider_adapter.viewed",
-                    "integration.provider_adapter.view",
-                    "integration_provider_adapter",
-                    "all",
-                    null,
-                    Map.of("count", items.size())
-            );
-            return new PageResponse<>(items, 1, 50, items.size());
-        } catch (RuntimeException exception) {
-            support.recordFailure(
-                    "provider_adapter.view_failed",
-                    "integration.provider_adapter.view",
-                    "integration_provider_adapter",
-                    "all",
-                    null,
-                    support.errorCode(exception)
-            );
-            throw exception;
-        }
+        return executor.readPage(AuditedOperation.of("provider_adapter.viewed", "provider_adapter.view_failed",
+                "integration.provider_adapter.view", "integration_provider_adapter"), repository::listProviderAdapters);
     }
 
     ProviderAdapterRecord createProviderAdapter(ProviderAdapterRequest request) {
         try {
-            return support.executeIdempotent(
+            return idempotencyService.execute(
                     "createProviderAdapter",
                     request == null ? null : request.idempotencyKey(),
                     request,
@@ -57,13 +47,14 @@ final class ProviderAdapterService {
                     ProviderAdapterRecord.class
             );
         } catch (RuntimeException exception) {
-            support.recordFailure(
+            auditEventService.recordFailure(
                     "provider_adapter.create_failed",
                     "integration.provider_adapter.create",
                     "integration_provider_adapter",
                     request == null ? null : request.providerCode(),
+                    requestId(),
                     request == null ? null : request.idempotencyKey(),
-                    support.errorCode(exception)
+                    errorCode(exception)
             );
             throw exception;
         }
@@ -71,7 +62,7 @@ final class ProviderAdapterService {
 
     ProviderAdapterRecord updateProviderAdapter(String id, ProviderAdapterUpdateRequest request) {
         try {
-            return support.executeIdempotent(
+            return idempotencyService.execute(
                     "updateProviderAdapter",
                     request == null ? null : request.idempotencyKey(),
                     new UpdateProviderAdapterFingerprint(id, request),
@@ -79,13 +70,14 @@ final class ProviderAdapterService {
                     ProviderAdapterRecord.class
             );
         } catch (RuntimeException exception) {
-            support.recordFailure(
+            auditEventService.recordFailure(
                     "provider_adapter.update_failed",
                     "integration.provider_adapter.update",
                     "integration_provider_adapter",
                     id,
+                    requestId(),
                     request == null ? null : request.idempotencyKey(),
-                    support.errorCode(exception)
+                    errorCode(exception)
             );
             throw exception;
         }
@@ -93,7 +85,7 @@ final class ProviderAdapterService {
 
     ProviderAdapterRecord markProductionReady(String id, StatusChangeRequest request) {
         try {
-            return support.executeIdempotent(
+            return idempotencyService.execute(
                     "markProviderAdapterProductionReady",
                     request == null ? null : request.idempotencyKey(),
                     new StatusChangeFingerprint(id, request),
@@ -101,13 +93,14 @@ final class ProviderAdapterService {
                     ProviderAdapterRecord.class
             );
         } catch (RuntimeException exception) {
-            support.recordFailure(
+            auditEventService.recordFailure(
                     "provider_adapter.production_ready_failed",
                     "integration.provider_adapter.production_ready",
                     "integration_provider_adapter",
                     id,
+                    requestId(),
                     request == null ? null : request.idempotencyKey(),
-                    support.errorCode(exception)
+                    errorCode(exception)
             );
             throw exception;
         }
@@ -115,7 +108,7 @@ final class ProviderAdapterService {
 
     AdapterTestRecord testProviderAdapterMock(String id, ProviderAdapterTestRequest request) {
         try {
-            return support.executeIdempotent(
+            return idempotencyService.execute(
                     "testProviderAdapterMock",
                     request == null ? null : request.idempotencyKey(),
                     new ProviderAdapterTestFingerprint(id, request),
@@ -123,16 +116,29 @@ final class ProviderAdapterService {
                     AdapterTestRecord.class
             );
         } catch (RuntimeException exception) {
-            support.recordFailure(
+            auditEventService.recordFailure(
                     "provider_adapter.test_failed",
                     "integration.provider_adapter.test",
                     "integration_provider_adapter",
                     id,
+                    requestId(),
                     request == null ? null : request.idempotencyKey(),
-                    support.errorCode(exception)
+                    errorCode(exception)
             );
             throw exception;
         }
+    }
+
+    /** 保持本类既有留痕口径不变：req_ 随机 request_id / 非业务异常兜底 INTERNAL_ERROR。 */
+    private String requestId() {
+        return "req_" + UUID.randomUUID();
+    }
+
+    private String errorCode(RuntimeException exception) {
+        if (exception instanceof ApiException apiException) {
+            return apiException.code();
+        }
+        return "INTERNAL_ERROR";
     }
 
     private ProviderAdapterRecord createProviderAdapterOnce(ProviderAdapterRequest request) {
@@ -165,11 +171,12 @@ final class ProviderAdapterService {
             requireProductionReady(adapter);
         }
         ProviderAdapterRecord saved = repository.saveProviderAdapter(adapter);
-        support.recordSuccess(
+        auditEventService.recordSuccess(
                 "provider_adapter.created",
                 "integration.provider_adapter.create",
                 "integration_provider_adapter",
                 saved.id(),
+                requestId(),
                 request.idempotencyKey(),
                 Map.of("provider_code", saved.providerCode(), "mode", saved.mode())
         );
@@ -205,11 +212,12 @@ final class ProviderAdapterService {
             requireProductionReady(updated);
         }
         ProviderAdapterRecord saved = repository.saveProviderAdapter(updated);
-        support.recordSuccess(
+        auditEventService.recordSuccess(
                 "open_mapping.changed",
                 "integration.provider_adapter.update",
                 "integration_provider_adapter",
                 saved.id(),
+                requestId(),
                 request.idempotencyKey(),
                 Map.of("provider_code", saved.providerCode(), "status", saved.status())
         );
@@ -242,11 +250,12 @@ final class ProviderAdapterService {
         );
         requireProductionReady(ready);
         ProviderAdapterRecord saved = repository.saveProviderAdapter(ready);
-        support.recordSuccess(
+        auditEventService.recordSuccess(
                 "provider_adapter.production_ready_marked",
                 "integration.provider_adapter.production_ready",
                 "integration_provider_adapter",
                 saved.id(),
+                requestId(),
                 request.idempotencyKey(),
                 Map.of("reason", request.reason())
         );
@@ -284,11 +293,12 @@ final class ProviderAdapterService {
                 result,
                 clock.instant()
         ));
-        support.recordSuccess(
+        auditEventService.recordSuccess(
                 "provider_adapter.tested",
                 "integration.provider_adapter.test",
                 "integration_provider_adapter",
                 adapter.id(),
+                requestId(),
                 request.idempotencyKey(),
                 Map.of("scenario", request.scenario(), "status", saved.testStatus())
         );
