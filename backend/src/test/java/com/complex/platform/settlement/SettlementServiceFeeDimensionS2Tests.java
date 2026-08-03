@@ -24,7 +24,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>业务上这一刀回答三件事(口径出自 business-system-map §「门票综合服务费」):
  * <ol>
- *   <li><b>所有门票项目都要收一道</b> —— 原来只有「专属某商户」的核销才抽,通票本身一分不抽;</li>
+ *   <li><b>酒吧相关票务(含通票的酒吧份额)都要收一道</b> —— 原来只有「专属某商户」的核销才抽,
+ *       通票本身一分不抽;<b>纯游乐票/纯游乐通票/演出票不收</b>(2026-08-03 按 HTML 加经营域闸);</li>
  *   <li><b>费率按票种谈</b> —— 原来按权益类型(bar/amusement)配,一张通票里两类权益被按两套费率各抽一道,
  *       业务人员在结算单上回答不了「这张票收了多少服务费」;</li>
  *   <li><b>项目级费率能生效</b> —— 原来解析费率时项目维度写死 null,后台配了项目特例也永远命中不了。</li>
@@ -53,6 +54,7 @@ class SettlementServiceFeeDimensionS2Tests {
     private final List<String> feeConfigIds = new ArrayList<>();
     private final Set<String> ticketTypeIds = new LinkedHashSet<>();
     private final List<String> looseVerificationIds = new ArrayList<>();
+    private final List<String> merchantIds = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -81,10 +83,14 @@ class SettlementServiceFeeDimensionS2Tests {
         for (String id : ticketTypeIds) { // 票种在费率规则之后删(fk_csfc_ticket_type)
             jdbcTemplate.update("DELETE FROM ticket_types WHERE id = ?", id);
         }
+        for (String mid : merchantIds) { // 商户在引用它的流水之后删(FK 顺序)
+            jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", mid);
+        }
         projectIds.clear();
         feeConfigIds.clear();
         ticketTypeIds.clear();
         looseVerificationIds.clear();
+        merchantIds.clear();
     }
 
     // ─────────────────────────── ① 逐分不变(本刀的地基) ───────────────────────────
@@ -141,8 +147,8 @@ class SettlementServiceFeeDimensionS2Tests {
     // ─────────────────────────── ② 覆盖面:所有门票都收 ───────────────────────────
 
     /**
-     * 覆盖面:配上费率后,<b>非专属(进池)</b>的核销也开始计提综合服务费 —— 这正是
-     * 「所有门票项目都要收一道综合服务费」;改造前这类核销一分不抽。
+     * 覆盖面:配上费率后,<b>非专属(进池)</b>的酒吧核销也开始计提综合服务费 —— 这正是 HTML
+     * 「酒吧通票和跨域组合通票中的酒吧部分也可按生效规则收取」;改造前这类核销一分不抽。
      *
      * <p>S4 起进池那部分也进主链:池链支落 {@code comp_service_fee_pooled_cent} 并从可分配池扣;
      * 专属支落 {@code comp_service_fee_exclusive_cent}(两支是同一道费,都归娱乐平台公司)。
@@ -156,7 +162,7 @@ class SettlementServiceFeeDimensionS2Tests {
         settleViaConsumer(pid, "cov1", "barA", null, 100000L);   // 进池
         settleViaConsumer(pid, "cov2", "barB", "barB", 50000L);  // 专属
 
-        assertThat(feeOf("cov1")).as("进池核销也要计提(所有门票都收一道)").isEqualTo(10000L);
+        assertThat(feeOf("cov1")).as("进池的酒吧份额也要计提(酒吧通票/跨域组合通票的酒吧部分照收)").isEqualTo(10000L);
         assertThat(feeOf("cov2")).isEqualTo(5000L);
 
         settlementService.settleMonth(pid, MONTH);
@@ -213,22 +219,67 @@ class SettlementServiceFeeDimensionS2Tests {
     // ─────────────────────────── ⑤ 进池那部分的月度封顶也要管住 ───────────────────────────
 
     /**
-     * 覆盖面扩大后进池核销也计提,其「专属商户」为空;封顶的月累计若只按专属商户配对,
-     * 进池那部分就永远累计不到、封顶形同虚设(月内可无限收)。此处证明进池同样被封顶管住。
+     * <b>封顶只对单一酒吧门票</b>(2026-08-03 按 HTML 矫回)。原文:「单一酒吧门票…两种方式互斥,并可设置
+     * 月度封顶;<b>酒吧通票和跨域组合通票中的酒吧部分也可按生效规则收取,但不得封顶</b>。」
+     *
+     * <p>业务上封顶是给「一家酒吧一个月最多被平台抽多少」设的上限;通票的酒吧份额是平台自己在卖的票,
+     * 给它设上限等于平台自己给自己打折 —— 月底对账时通票越卖得多、平台反而收得越少,没人解释得了。
+     * 故进池(exclusive_merchant_id 为空)的核销一律不走封顶分支:三笔各 10% 全额计提,合计 3000 而非封顶 1200。
      */
     @Test
-    void monthlyCapAlsoAppliesToPooledAccrual() {
+    void monthlyCapDoesNotApplyToPooledBarShare() {
+        String pid = newProject();
+        seedFeeWithCap(pid, null, null, 1000, 1200L); // 10%,配了当月封顶 1200(对通票份额不生效)
+
+        settleViaConsumer(pid, "cap1", "barA", null, 10000L);
+        settleViaConsumer(pid, "cap2", "barB", null, 10000L);
+        settleViaConsumer(pid, "cap3", "barC", null, 10000L);
+
+        assertThat(feeOf("cap1")).isEqualTo(1000L);
+        assertThat(feeOf("cap2")).as("通票酒吧份额不得封顶,第二笔照收全额").isEqualTo(1000L);
+        assertThat(feeOf("cap3")).as("通票酒吧份额不得封顶,第三笔照收全额").isEqualTo(1000L);
+        assertThat(feeOf("cap1") + feeOf("cap2") + feeOf("cap3"))
+                .as("HTML「酒吧通票和跨域组合通票中的酒吧部分…不得封顶」").isEqualTo(3000L);
+    }
+
+    /** 单一酒吧门票(专属直付)仍可封顶:同一条规则、同月两笔专属核销,第二笔被压到剩余额度。 */
+    @Test
+    void monthlyCapStillAppliesToSingleBarTicket() {
         String pid = newProject();
         seedFeeWithCap(pid, null, null, 1000, 1200L); // 10%,当月封顶 1200
 
-        settleViaConsumer(pid, "cap1", "barA", null, 10000L); // 1000
-        settleViaConsumer(pid, "cap2", "barB", null, 10000L); // 剩余额度 200
-        settleViaConsumer(pid, "cap3", "barC", null, 10000L); // 已触顶 → 0
+        settleViaConsumer(pid, "xcap1", "barX", "barX", 10000L); // 1000
+        settleViaConsumer(pid, "xcap2", "barX", "barX", 10000L); // 剩余额度 200
 
-        assertThat(feeOf("cap1")).isEqualTo(1000L);
-        assertThat(feeOf("cap2")).isEqualTo(200L);
-        assertThat(feeOf("cap3")).isZero();
-        assertThat(feeOf("cap1") + feeOf("cap2") + feeOf("cap3")).isEqualTo(1200L);
+        assertThat(feeOf("xcap1")).isEqualTo(1000L);
+        assertThat(feeOf("xcap2")).as("单一酒吧门票可封顶,第二笔只收剩余额度").isEqualTo(200L);
+    }
+
+    // ─────── 经营域闸:只适用于酒吧相关票务 ───────
+
+    /**
+     * <b>经营域闸</b>(2026-08-03,HTML §「门票综合服务费」逐字):
+     * 「纯游乐票、纯游乐通票和演出票不向娱乐平台公司支付该费用。」
+     *
+     * <p>业务上这道费是娱乐平台公司提供酒吧票务服务的对价;游乐票是游乐公司自己在卖、演出票是传媒公司自己在卖,
+     * 娱乐平台公司没提供服务却抽一道,对账时游乐公司会直接问「这笔钱凭什么」。
+     * 判定源 = 提供方商户的业态(merchants.merchant_type),与拆业态份额同一列。
+     */
+    @Test
+    void serviceFeeAppliesToBarFormatOnly() {
+        String pid = newProject();
+        seedFee(pid, null, null, 1000); // 该项目全票种 10%
+        seedMerchant("m_s2_bar", "bar");
+        seedMerchant("m_s2_amu", "amusement");
+        seedMerchant("m_s2_cat", "catering");
+
+        settleViaConsumer(pid, "fmtbar", "m_s2_bar", null, 10000L);
+        settleViaConsumer(pid, "fmtamu", "m_s2_amu", null, 10000L);
+        settleViaConsumer(pid, "fmtcat", "m_s2_cat", null, 10000L);
+
+        assertThat(feeOf("fmtbar")).as("酒吧相关票务照收").isEqualTo(1000L);
+        assertThat(feeOf("fmtamu")).as("纯游乐票不向娱乐平台公司付这道费").isZero();
+        assertThat(feeOf("fmtcat")).as("餐饮权益不属酒吧域,不收这道费").isZero();
     }
 
     // ─────────────────────────── helpers ───────────────────────────
@@ -249,6 +300,15 @@ class SettlementServiceFeeDimensionS2Tests {
                         + " ON CONFLICT (id) DO NOTHING",
                 id, "S2测试票种-" + label);
         return id;
+    }
+
+    /** 建真商户行:经营域闸的判定源是 merchants.merchant_type,没有行就落回兼底 bar。 */
+    private void seedMerchant(String merchantId, String businessFormat) {
+        merchantIds.add(merchantId);
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                        + " VALUES (?, ?, ?, 'active', now(), now())"
+                        + " ON CONFLICT (id) DO UPDATE SET merchant_type = EXCLUDED.merchant_type",
+                merchantId, merchantId, businessFormat);
     }
 
     private void seedFee(String projectId, String merchantId, String ticketTypeId, int feeBps) {

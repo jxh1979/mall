@@ -73,13 +73,16 @@ public class AccessService {
             AuthorizationService authorizationService,
             ObjectProvider<AccessCredentialProvisioner> credentialProvisioner,
             ObjectProvider<SupervisorReviewService> supervisorReviewService,
-            @Value("${access.grant_approval.enabled:true}") boolean grantApprovalEnabled,
             @Value("${access.grant_approval.summary.position_threshold:3}") int summaryPositionThreshold,
             @Value("${access.grant_approval.summary.user_threshold:3}") int summaryUserThreshold
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
                 credentialProvisioner.getIfAvailable(AccessCredentialProvisioner::noop),
-                supervisorReviewService.getIfAvailable(), grantApprovalEnabled,
+                // 治理地图「四类高危权限授出前须先审批才生效」：生产不给全局逃生口——
+                // 原 @Value("${access.grant_approval.enabled:true}") 一票否决四个调用点，关闭时无审计、
+                // 无启动告警，静默失效（219 条 requires_approval=true 全押在它身上）。
+                // 该开关唯一实际用途是让测试少走审批，故只保留包级构造器的入参。
+                supervisorReviewService.getIfAvailable(), true,
                 summaryPositionThreshold, summaryUserThreshold);
     }
 

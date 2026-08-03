@@ -167,9 +167,9 @@ erDiagram
   - ✅ **已落地（2026-06-30）**：`TicketRefundService.requestRefund` 已改为**按票实例**判退——`resolveRefundTargets` 解析 `entitlement_ids`（不传=退订单全部未核销票、已核销不连坐；传入已核销票按票实例拒退 `TICKET_ENTITLEMENT_VERIFIED_NO_REFUND`），退款行只覆盖所选未核销票，积分冲减按退款额/原单额比例（=被退票实例份额）。
   - 注：积分「按核销次数精确计分」（多次/多人票按核销张数比例 confirm）**已完成（V151，F-TXN-03 收尾）**：`customer_points_ledger.confirmed_amount` 记已确认份额，`LoyaltyService.confirmPoints` 改 set-confirmed-to-target（`target=floor(总额×Σused/Σtotal)`），`TicketVerificationService` 核销与冲正两路均按订单 Σused/Σtotal 对齐确认份额（冲正一张按份回滚 1/Σtotal，取代原冲正全额 deduct）；单次票（1/1）口径与原「支付 pending → 核销 confirm」等价。
 - 门票到期生命周期（F-TXN-03，piece②）：系统定时任务 `TicketingService.processExpiredPaidEntitlements`（按权益 `valid_to < now` 实时判定，由 `TicketOrderExpiryJob` 触发、开关 `ticket.order.expiry.scheduled.enabled` 默认关）——
-  - **到期按票实例处理（2026-06-29 用户裁决，业务 HTML 到期处理行）**：到期未用的票按**每张** `issued_entitlements` 判定、不再看整单——`used_times=0` 的票逐张**原渠道自动退款**（`autoRefundExpiredUnusedOrder` 同款动作：建 approved 退款 + 权益 active→refunded + 回补库存 + 打款事件；系统动作跳过商户范围闸；未核销无已确认积分、不发 points deduct）；已有退款在途/完成则跳过。
-  - **已核销票作废、不连坐未核销票**：`used_times>0` 的到期票置 `forfeited`（`forfeitEntitlement`，不退款，与「核销后不可退」一致）；**同单其他完全未核销的票不受影响、仍按上一条逐张自动退款**（旧口径「同单有核销则其余未核销一律作废」已废止）。0 元 / 非 paid 的到期未用权益亦作废以止反复扫描。`issued_entitlements.status` 无 DB CHECK，新增 `forfeited` 值无需迁移。
-  - ✅ **已落地（2026-06-30）**：`processExpiredPaidEntitlements` 不再因同单有核销而连坐作废；到期未核销票经 `autoRefundExpiredUnusedTickets` **逐张原渠道自动退款**（份额合计、全覆盖则整单额、库存累计达全额回补一次），已核销票不受影响。69+142 测试绿。
+  - **到期一律作废、不退款（2026-08-03 纠偏，业务 HTML 为准）**：`business-enum-quick-reference-v0.1.html`「售票与退款原则」逐字——官方和第三方渠道门票售出后原则上不退款，**未到场、忘记使用或主动放弃都不是退款理由**；同文件「到期未核销款」与 `business-system-map-for-operations-v0.1.html`「到期处理」——到期未核销的票先且只扣一次第三方渠道费用、余额按票种经营域归属。**业务 HTML 从未授权「到期自动退」**。故 `processExpiredPaidEntitlements` 对到期未核销权益一律 `forfeitEntitlement` 置 `forfeited`：不建退款单、不冻结权益、不回补限量票名额。
+  - **~~到期按票实例自动退款（2026-06-29 口径）~~ 已废止（2026-08-03）**：该口径把「到期未用」当成了退款理由，与上面两条 HTML 原文直接冲突。`TicketRefundService.autoRefundExpiredWholeTickets` 已随之删除（删前全仓 grep 确认零调用点、`npm run verify:tenant-isolation` PASS）。票种 `refundable` 只表示「**客人可申请**整票退款」，勾选与否都不影响到期处置；客人仍走人工申请 → 审批 → 确认拨付的退款链。后台勾选框与 OpenAPI `refundable` 描述已同步去掉「到期未用自动退」。
+  - **人工退款在途的到期票不动 + 兜底作废**：父实例 `refund_pending`（申请即冻结）但子权益仍 `active` 的到期权益留给退款链处置——作废它会让审批冻结命中 0 行、退款单永远批不了。无订单（直接发放）/ 0 元 / 非 paid 的到期未用权益同样作废，以止反复扫描。`issued_entitlements.status` 无 DB CHECK，`forfeited` 值无需迁移。
 
 ### 4.3 票实例状态
 
@@ -218,12 +218,14 @@ erDiagram
 |---|---|---|
 | `requested` | 已申请 | 游客、客服或平台发起 |
 | `reviewing` | 审批中 | 需要人工审批 |
-| `approved` | 已通过 | 可以调用支付机构退款 |
+| `approved` | 已通过 | 已批准并已发起不可逆兑付（冻结权益、回补名额、发打款拨付事件）；**钱尚未确认到账，不计入「已退金额」**，财务/经营分析不按此扣减经营收入 |
 | `rejected` | 已驳回 | 退款结束 |
 | `processing` | 处理中 | 支付机构退款中 |
-| `success` | 成功 | 退款完成，权益更新，结算冲正 |
+| `success` | 成功 | **最终完成态**：财务确认实际打款成功（`POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`）后才置此态；只有「成功」的退款才计入「已退金额」并冲减经营净收入 |
 | `failed` | 失败 | 需要重试或人工处理 |
 | `cancelled` | 已取消 | 申请人取消 |
+
+> **兑付确认口径（2026-08-03，依据 `business-enum-quick-reference-v0.1.html`「退款单状态」行「退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”表示已批准并已发起不可逆兑付」+ `business-system-map-for-operations-v0.1.html`「退款授权与留痕」行「系统完整记录……原路退回结果」）**：退款审批通过（人工审批 / 额度内自助 / 系统批量，三条路径共用 `finalizeApprovedRefund`）一律停在 `approved`；财务实际打款成功后调 `POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`（权限 `ticket.refund.approve`，`reason` 填**原路退回结果**，审计事件 `ticket_refund.payout_confirmed`）做 CAS `approved→success`，重复确认命中 0 行拒（`TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE`）。此前审批通过在同一方法里内联置 `success`——钱一分没出账，当天经营净收入已被 `status='success'` 口径扣减。真实支付渠道适配器尚无厂商（`ReservedPaymentGateway` 接缝已留），`processing`/`failed` 待渠道回调接入后再落地。后台入口：ADM-TKT-003「出票与核销追踪」页的「退款待确认拨付」区（默认只列 `approved`，数据源 `GET /api/v1/ticketing/refunds`）。
 
 ### 4.7 结算单状态
 
@@ -426,8 +428,8 @@ sequenceDiagram
 2. 系统计算可退权益和不可退权益。
 3. 若涉及已核销权益，按规则判断是否禁止退款、允许冲正或需要审批。
 4. 冻结待退款权益，防止退款期间继续核销。
-5. 审批通过后调用支付机构退款。
-6. 退款成功后更新订单、票、权益状态。
+5. 审批通过（`approved`）= 已批准并已发起不可逆兑付：冻结权益、回补限量票名额、发打款拨付事件；此时**尚未**计入「已退金额」。
+6. 财务实际打款成功后走「确认拨付」（`POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`，`reason` 留痕原路退回结果）置 `success`；退款到此才是最终完成态，才更新订单/票/权益的对外「已退」口径并计入结算冲正。
 7. 对已生成结算明细做冲正。
 8. 写入退款、冲正、权益状态变化事件。
 
@@ -863,7 +865,9 @@ sequenceDiagram
 | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 客人端查询票二维码 |
 | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | 票务域查询票凭证 |
 | `POST` | `/api/v1/ticketing/refunds` | 申请退款 |
-| `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | 审批退款 |
+| `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | 审批退款（到 `approved`，尚未计入已退金额） |
+| `POST` | `/api/v1/ticketing/refunds/{refund_id}/confirm-payout` | 确认拨付（财务实际打款后 `approved→success`，`reason` 填原路退回结果） |
+| `GET` | `/api/v1/ticketing/refunds` | 查询退款单台账（后台「待确认拨付」看板数据源） |
 | 后续扩展 | OpenAPI 后续扩展字段/流程 | 申请改期 |
 
 说明：以上接口只服务官方 App/小程序的客人自助购票和订单查询，不提供工作人员平板代客购票入口。

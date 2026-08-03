@@ -114,6 +114,7 @@ class SettlementMergeRetentionS4Tests {
         expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
         expected.put("rounding_residual_cent", 1L);
+        expected.put("rounding_residual_entity_id", "be_ent_platform"); // V383 尾差责任主体
         expected.put("pool_undistributed_cent", 0L);
         expected.put("pool_undistributed_entity_id", null);
 

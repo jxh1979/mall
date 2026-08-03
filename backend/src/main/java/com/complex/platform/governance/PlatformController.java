@@ -54,7 +54,7 @@ public class PlatformController {
     @GetMapping("/merchants")
     public ApiResponse<PageResponse<MerchantRecord>> listMerchants(
             @org.springframework.web.bind.annotation.RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived,
-            // V348 按业态查询：merchantType=bar|catering|retail|amusement|other，缺省＝全部业态。
+            // V348+V384 按业态查询：merchantType=bar|catering|retail|amusement|media|other，缺省＝全部业态。
             @org.springframework.web.bind.annotation.RequestParam(name = "merchantType", required = false) String merchantType,
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {

@@ -569,14 +569,17 @@ public class TicketingService {
     }
 
     /**
-     * 系统定时任务入口（F-TXN-03 门票生命周期）：处理已过期、全未核销的权益——
-     * <ul>
-     *   <li>到期**未核销票逐张**原渠道自动退款（系统直批，{@code autoRefundExpiredUnusedTickets}），**不因同单有核销而连坐作废**；
-     *       0 元 / 非 paid / 已有退款在途 → 作废或交由退款链；</li>
-     *   <li>该单**已有核销** → 其余到期未用权益**作废**（forfeited、不退款，与"核销后不可退"一致）。</li>
-     * </ul>
-     * 无认证上下文，由 TicketOrderExpiryJob 触发；逐订单独立原子（autoRefund {@code @Transactional} / forfeit 单 UPDATE）。
-     * 返回处理的权益数。
+     * 系统定时任务入口（F-TXN-03 门票生命周期）：已过期、全未核销的权益**一律作废**（forfeited），**不产生任何退款**。
+     *
+     * <p>业务权威口径：{@code business-enum-quick-reference-v0.1.html}「售票与退款原则」行——门票售出后原则上不退款，
+     * <b>未到场、忘记使用或主动放弃都不是退款理由</b>；同文件「到期未核销款」行——到期未核销的票先且只扣一次第三方渠道费用，
+     * 余额按票种经营域归属。{@code business-system-map-for-operations-v0.1.html}「到期处理」行同义。
+     * 业务口径从未授权「到期自动退」，故此处只作废、不退款（旧实现对 refundable 票种调 autoRefundExpiredWholeTickets，已删）。</p>
+     *
+     * <p>票种 {@code refundable} 只表示「客人可申请整票退款」，与本作业无关：客人仍走人工申请 → 审批 → 确认拨付的退款链。
+     * 人工退款审批中（父实例 refund_pending、子权益仍 active）的权益留给退款链处置，本作业跳过。</p>
+     *
+     * <p>无认证上下文，由 TicketOrderExpiryJob 触发；forfeit 为单 UPDATE，逐条独立原子。返回处理的权益数。</p>
      */
     public int processExpiredPaidEntitlements(java.time.Instant now) {
         List<IssuedEntitlementRecord> expired = repository.listExpiredUnusedActiveEntitlements(now);
@@ -609,7 +612,6 @@ public class TicketingService {
             // 复核修正（P1-B）：人工退款「申请即冻结」只冻父实例（refund_pending），子权益要到审批才冻结——
             // 这里作废它会让审批冻结命中 0 行、退款单永远批不了（驳回后实例回 active 但权益已作废=死票）。
             // 该类权益留给退款链处置（批准→随整票冻结；驳回→回 active 后由下轮到期作业正常处置）。
-            TicketOrderRecord order = repository.findTicketOrderById(orderId).orElse(null);
             java.util.Set<String> refundPendingParents = repository.listTicketInstancesByOrderId(orderId).stream()
                     .filter(ti -> "refund_pending".equals(ti.status()))
                     .map(TicketInstanceRecord::id)
@@ -622,29 +624,11 @@ public class TicketingService {
                     continue;
                 }
             }
-            // 规则2 可退配置：票种默认不可退 → 到期直接作废不退（客人到期无退款）。
-            TicketTypeRecord ticketType = order == null
-                    ? null : repository.findTicketTypeById(order.ticketTypeId()).orElse(null);
-            boolean refundable = ticketType != null && ticketType.refundable();
-            if (!refundable) {
-                for (IssuedEntitlementRecord e : expiredUnused) {
-                    processed += repository.forfeitEntitlement(e.id(), now);
-                }
-                continue;
-            }
-            // 可退票整票口径（方案2）：完全未核销的父票实例整张自动退；部分使用实例的到期未核销权益 → 作废不退。
-            TicketRefundRecord refund = refundService.autoRefundExpiredWholeTickets(order, now);
-            java.util.Set<String> refundedEntIds = refund == null ? java.util.Set.of()
-                    : repository.listTicketRefundLines(refund.id()).stream()
-                            .map(TicketRefundLineRecord::entitlementId)
-                            .filter(java.util.Objects::nonNull)
-                            .collect(java.util.stream.Collectors.toSet());
+            // 到期一律作废、不退款（business-enum「售票与退款原则」：未到场/忘记使用/主动放弃都不是退款理由；
+            // 「到期未核销款」：到期票只扣一次渠道费、余额按经营域归属——业务口径从未授权「到期自动退」）。
+            // 票种 refundable 只管「客人可申请整票退款」，客人照旧走人工申请退款链，不受本作业影响。
             for (IssuedEntitlementRecord e : expiredUnused) {
-                if (refundedEntIds.contains(e.id())) {
-                    processed += 1; // 已随整票退款冻结，计入处理数。
-                    continue;
-                }
-                processed += repository.forfeitEntitlement(e.id(), now); // 部分使用实例的剩余到期票 → 作废不退。
+                processed += repository.forfeitEntitlement(e.id(), now);
             }
         }
         return processed;
@@ -861,6 +845,32 @@ public class TicketingService {
                 TicketRefundRecord.class,
                 TicketingWriteOperation.REJECT_TICKET_REFUND,
                 () -> refundService.rejectRefund(id, request)
+        );
+    }
+
+    /**
+     * 退款单台账（后台“待确认拨付”看板）：业务人员靠它看哪几笔已批准但钱还没打出去。
+     * 权限 ticket.refund.view；商户 scope 只见本商户受理的退款（V220 退款单直挂 merchant_id）。
+     */
+    public PageResponse<TicketRefundRecord> listTicketRefunds() {
+        return operations.readPage(
+                TicketingReadOperation.LIST_TICKET_REFUNDS,
+                () -> filterByMerchantScope(repository.listTicketRefunds(), TicketRefundRecord::merchantId)
+        );
+    }
+
+    /** 财务实际打款后确认拨付（approved→success），权限沿用 ticket.refund.approve。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.approve")
+    @Transactional
+    public TicketRefundRecord confirmTicketRefundPayout(String refundId, StatusChangeRequest request) {
+        String id = operations.requireText(refundId, "refund_id");
+        return operations.executeWrite(
+                "confirmTicketRefundPayout:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketRefundRecord.class,
+                TicketingWriteOperation.CONFIRM_TICKET_REFUND_PAYOUT,
+                () -> refundService.confirmPayout(id, request)
         );
     }
 

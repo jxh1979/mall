@@ -38,6 +38,11 @@ import org.springframework.web.util.WebUtils;
  * header deviceId 归属该员工（⑤）；kiosk/tablet→设备级签名公钥（{@code terminal_device_signing_keys}，②）。
  * 验签量含 body SHA-256（④）；nonce 由拦截器落库防重放（③）。
  *
+ * <p><b>2026-08-03 收口</b>：终端类型不再由自报的 {@code X-Terminal-Type} 决定入闸与否——带
+ * {@code X-Device-Id} 时一律先反查 {@code terminal_devices.terminal_type} 顶上，登记类型压过自报值。
+ * 旧实现在自报头为空/不在 DEVICE_BOUND_TYPES 时早退，客户端不发头或改报 web 即免签名写入，
+ * <b>把 enforce 翻开也没用</b>。反查复用验签本来就要做的那一次查询，不新增查库次数。
+ *
  * <p>web/app 资金旁路（①）：web enforce 下拒 {@code Authorization: Bearer} 自报（合法后台走 Cookie 会话）；
  * app enforce 下拒写（客人端无公司设备凭证；app 资金是否要客人侧证明属业务口径，见 PRD）。
  *
@@ -133,52 +138,55 @@ public class DeviceCredentialVerifier {
         String deviceId = trim(request.getHeader("X-Device-Id"));
         boolean write = isWrite(request.getMethod());
 
-        if ("web".equals(claimed)) {
-            if (write && hasBearer(request)) {
-                if (modeFor("web") == Mode.ENFORCE) {
-                    reject("web", deviceId, "web_requires_cookie_session");
-                }
-                audit("web", deviceId, "grace_bearer_self_reported_web", "success");
+        // 服务端反查优先：登记类型压过自报头（不发头 / 改报 web 都不能绕过设备绑定型验签）。
+        // 这一次查询下传 tryVerify 复用，不重复查库。
+        TerminalDeviceRecord device = deviceId == null ? null
+                : deviceRepository.findByDeviceId(deviceId).orElse(null);
+        String terminalType = device != null && device.terminalType() != null && !device.terminalType().isBlank()
+                ? device.terminalType().trim()
+                : claimed;
+
+        if (terminalType != null && DEVICE_BOUND_TYPES.contains(terminalType)) {
+            Mode mode = modeFor(terminalType);
+            if (mode == Mode.OFF) {
+                return new TerminalIdentityHolder.VerifiedTerminal(terminalType, deviceId, false);
             }
-            return new TerminalIdentityHolder.VerifiedTerminal(claimed, deviceId, false);
-        }
-        if ("app".equals(claimed)) {
-            if (write) {
-                if (modeFor("app") == Mode.ENFORCE) {
-                    reject("app", deviceId, "app_requires_customer_proof");
-                }
-                audit("app", deviceId, "grace_allow_app_write", "success");
-            }
-            return new TerminalIdentityHolder.VerifiedTerminal(claimed, deviceId, false);
-        }
-        if (claimed == null || !DEVICE_BOUND_TYPES.contains(claimed)) {
-            return new TerminalIdentityHolder.VerifiedTerminal(claimed, deviceId, false);
-        }
-        Mode mode = modeFor(claimed);
-        if (mode == Mode.OFF) {
-            return new TerminalIdentityHolder.VerifiedTerminal(claimed, deviceId, false);
-        }
-        Outcome outcome = tryVerify(request, claimed, deviceId);
-        switch (outcome.kind()) {
-            case VERIFIED:
-                return new TerminalIdentityHolder.VerifiedTerminal(outcome.derivedType(), deviceId, true);
-            case INVALID:
-                reject(claimed, deviceId, outcome.reason());
-                throw unreachable();
-            case NO_PROOF:
-            default:
-                if (mode == Mode.ENFORCE && write) {
-                    reject(claimed, deviceId, "credential_required");
+            Outcome outcome = tryVerify(request, claimed, terminalType, device, deviceId);
+            switch (outcome.kind()) {
+                case VERIFIED:
+                    return new TerminalIdentityHolder.VerifiedTerminal(outcome.derivedType(), deviceId, true);
+                case INVALID:
+                    reject(terminalType, deviceId, outcome.reason());
                     throw unreachable();
-                }
-                if (write) {
-                    audit(claimed, deviceId, "grace_allow_no_credential", "success");
-                }
-                return new TerminalIdentityHolder.VerifiedTerminal(claimed, deviceId, false);
+                case NO_PROOF:
+                default:
+                    if (mode == Mode.ENFORCE && write) {
+                        reject(terminalType, deviceId, "credential_required");
+                        throw unreachable();
+                    }
+                    if (write) {
+                        audit(terminalType, deviceId, "grace_allow_no_credential", "success");
+                    }
+                    return new TerminalIdentityHolder.VerifiedTerminal(terminalType, deviceId, false);
+            }
         }
+        if ("web".equals(terminalType) && write && hasBearer(request)) {
+            if (modeFor("web") == Mode.ENFORCE) {
+                reject("web", deviceId, "web_requires_cookie_session");
+            }
+            audit("web", deviceId, "grace_bearer_self_reported_web", "success");
+        }
+        if ("app".equals(terminalType) && write) {
+            if (modeFor("app") == Mode.ENFORCE) {
+                reject("app", deviceId, "app_requires_customer_proof");
+            }
+            audit("app", deviceId, "grace_allow_app_write", "success");
+        }
+        return new TerminalIdentityHolder.VerifiedTerminal(terminalType, deviceId, false);
     }
 
-    private Outcome tryVerify(HttpServletRequest request, String claimed, String deviceId) {
+    private Outcome tryVerify(HttpServletRequest request, String claimed, String terminalType,
+            TerminalDeviceRecord device, String deviceId) {
         String timestamp = trim(request.getHeader("X-Device-Timestamp"));
         String nonce = trim(request.getHeader("X-Device-Nonce"));
         String signature = trim(request.getHeader("X-Device-Signature"));
@@ -194,17 +202,20 @@ public class DeviceCredentialVerifier {
         if (Math.abs(clock.millis() - ts) > toleranceSeconds * 1000L) {
             return Outcome.invalid("stale_timestamp");
         }
-        TerminalDeviceRecord device = deviceRepository.findByDeviceId(deviceId).orElse(null);
         if (device == null) {
             return Outcome.noProof();
         }
         if (!"bound".equals(device.status())) {
             return Outcome.invalid("device_not_bound");
         }
-        if (device.terminalType() == null || !device.terminalType().equalsIgnoreCase(claimed)) {
+        // 自报头也报了设备绑定型、却与登记类型不符 → 篡改信号，仍按 type_mismatch 拒；
+        // 自报为空/web/app 时不视为不符（登记类型已顶上，由签名而非自报头决定放行）。
+        if (device.terminalType() == null
+                || (claimed != null && DEVICE_BOUND_TYPES.contains(claimed)
+                        && !device.terminalType().equalsIgnoreCase(claimed))) {
             return Outcome.invalid("type_mismatch");
         }
-        String publicKey = resolveSigningKey(claimed, device, deviceId);
+        String publicKey = resolveSigningKey(terminalType, device, deviceId);
         if (publicKey == null) {
             return Outcome.noProof();
         }
@@ -221,8 +232,8 @@ public class DeviceCredentialVerifier {
         return Outcome.verified(device.terminalType());
     }
 
-    private String resolveSigningKey(String claimed, TerminalDeviceRecord device, String deviceId) {
-        if (STAFF_WORK_PHONE.equals(claimed)) {
+    private String resolveSigningKey(String terminalType, TerminalDeviceRecord device, String deviceId) {
+        if (STAFF_WORK_PHONE.equals(terminalType)) {
             AccessActor actor = currentActorQuietly();
             if (actor == null || actor.id() == null) {
                 return null;
@@ -298,15 +309,15 @@ public class DeviceCredentialVerifier {
         }
     }
 
-    private void reject(String claimed, String deviceId, String reason) {
-        audit(claimed, deviceId, reason, "failure");
+    private void reject(String terminalType, String deviceId, String reason) {
+        audit(terminalType, deviceId, reason, "failure");
         throw ApiException.forbidden("DEVICE_CREDENTIAL_INVALID",
                 "设备凭据校验未通过：" + reason);
     }
 
-    private void audit(String claimed, String deviceId, String reason, String result) {
+    private void audit(String terminalType, String deviceId, String reason, String result) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("terminal_type", claimed == null ? "unknown" : claimed);
+        payload.put("terminal_type", terminalType == null ? "unknown" : terminalType);
         if (deviceId != null) {
             payload.put("device_id", deviceId);
         }
@@ -324,7 +335,8 @@ public class DeviceCredentialVerifier {
         return ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "设备凭据校验出现内部异常，请联系管理员");
     }
 
-    private static boolean isWrite(String method) {
+    /** 写请求判定（非 GET/HEAD/OPTIONS）。终端总开关拦截器复用同一判定，两道闸对"写"的口径必须一致。 */
+    static boolean isWrite(String method) {
         String m = method == null ? "" : method.toUpperCase(Locale.ROOT);
         return !("GET".equals(m) || "HEAD".equals(m) || "OPTIONS".equals(m));
     }

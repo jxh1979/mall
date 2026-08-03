@@ -37,11 +37,13 @@ public class PlatformService {
     private static final int LIST_MAX_PAGE_SIZE = 500;
 
     /**
-     * V348 商户业态五值（真源 HTML §商户管理：酒吧/餐饮/零售/游乐/其他，每个商户必归其一、招商录入必填）。
+     * V348 + V384 商户业态六值（真源 HTML §商户管理 + §收入归属：酒吧/餐饮/零售/游乐/传媒/其他，
+     * 每个商户必归其一、招商录入必填）。传媒＝演出提供方，其收入按「演出票 → 传媒公司」归传媒公司。
      * 业态＝通票分账按业态拆份额与分流结算的依据；业态主体「娱乐平台公司」即酒吧业态，不另设「娱乐」业态。
      * 与迁移 V348 的 chk_merchants_business_format 同词表：应用层给业务人员看得懂的报错，数据库兜底封口。
      */
-    public static final Set<String> MERCHANT_BUSINESS_FORMATS = Set.of("bar", "catering", "retail", "amusement", "other");
+    public static final Set<String> MERCHANT_BUSINESS_FORMATS =
+            Set.of("bar", "catering", "retail", "amusement", "media", "other");
 
     private final PlatformRepository repository;
     private final AuditedOperationExecutor operations;
@@ -136,7 +138,8 @@ public class PlatformService {
         String format = trimToNull(businessFormat);
         if (format != null && !MERCHANT_BUSINESS_FORMATS.contains(format)) {
             throw ApiException.badRequest("MERCHANT_BUSINESS_FORMAT_INVALID",
-                    "商户业态必须为 bar/catering/retail/amusement/other 之一");
+                    "商户业态必须为 酒吧/餐饮/零售/游乐/传媒/其他 之一"
+                            + "(bar/catering/retail/amusement/media/other)");
         }
         PageResponse<MerchantRecord> result = repository.listMerchantsPaged(includeArchived, format, page, size);
         auditEventService.recordSuccess(
@@ -582,12 +585,13 @@ public class PlatformService {
 
 
 
-    /** V348 业态必填且必须是五值之一；招商自动建档与后台手工建档同一入口、同一校验。 */
+    /** V348+V384 业态必填且必须是六值之一；招商自动建档与后台手工建档同一入口、同一校验。 */
     private static String requireBusinessFormat(String raw) {
         String value = requireText(raw, "merchant_type");
         if (!MERCHANT_BUSINESS_FORMATS.contains(value)) {
             throw ApiException.badRequest("MERCHANT_BUSINESS_FORMAT_INVALID",
-                    "商户业态必须为 bar/catering/retail/amusement/other 之一");
+                    "商户业态必须为 酒吧/餐饮/零售/游乐/传媒/其他 之一"
+                            + "(bar/catering/retail/amusement/media/other)");
         }
         return value;
     }

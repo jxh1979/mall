@@ -58,6 +58,10 @@ single-context 布局，词表在仓库根的 `CONTEXT.md`。详见 `docs/agents
 
 9. **数据库迁移 V 号串行生成，绝不并发。** 共享测试库 `complex_test` 已因并发迁移
    造成版本乱序漂移，翻过两次车。
+   机器闸门：`npm run verify:migration-version-order`（已进 `verify:delivery-gates`）——
+   本分支新增的迁移 V 号必须大于 `origin/main` 当前最大 V 号，否则红。
+   未挂 `verify:predeploy`：GitHub Actions 用 `actions/checkout` 默认浅克隆，
+   PR 分支上取不到 `origin/main` ref，挂上去会在 CI 里恒红。
 
 10. **跑测试只 export 三个 DB 环境变量**（`COMPLEX_DATABASE_URL` / `_USERNAME` /
     `_PASSWORD`），**不要 `source` 整个 env 文件**。测试库是 `complex_test`，
