@@ -60,11 +60,13 @@ class BarJdbcIntegrationTests {
         Instant from = businessDayResolver.startInstant(businessDate);
         Instant to = businessDayResolver.endInstant(businessDate);
 
-        // 窗口内退款（10:00）计入 refund_cent；窗口外退款（03:00，归前一经营日）不计入；waiver 永不计入。
+        // 日切按所在地（北京）时间：经营日 06-18 窗口 = 北京 [06-18 04:00, 06-19 04:00) = [06-17T20:00Z, 06-18T20:00Z)。
+        // 窗口内退款（北京 10:00 = 06-18T02:00Z）计入 refund_cent；窗口外退款（北京 03:00 = 06-17T19:00Z，未到日切归前一经营日）
+        // 不计入；waiver 永不计入。
         saveBarAdjustment("refund_in", "bill_refund_window_jdbc", "refund", 5000L,
-                Instant.parse("2026-06-18T10:00:00Z"));
+                Instant.parse("2026-06-18T02:00:00Z"));
         saveBarAdjustment("refund_out", "bill_refund_window_jdbc", "refund", 9999L,
-                Instant.parse("2026-06-18T03:00:00Z"));
+                Instant.parse("2026-06-17T19:00:00Z"));
         saveBarAdjustment("waiver_in", "bill_refund_window_jdbc", "waiver", 7000L, null);
 
         com.complex.platform.finance.FinanceRepository.DailyCloseSourceTotals totals =

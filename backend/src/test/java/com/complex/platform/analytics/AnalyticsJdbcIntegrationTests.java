@@ -661,8 +661,9 @@ class AnalyticsJdbcIntegrationTests {
                 "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='merchant'", java.util.Map.of(), Integer.class)).isEqualTo(10);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='platform'", java.util.Map.of(), Integer.class)).isEqualTo(4);
-        // 凌晨 05:00 的流水:酒吧域归前一经营日(06:00 切),平台基准归当日(04:00 切)。
-        java.time.Instant fiveAm = java.time.Instant.parse("2026-06-18T05:00:00Z");
+        // 北京凌晨 05:00 的流水（=2026-06-17T21:00Z；日切小时按所在地时间读）:酒吧域未到 06:00 日切归前一经营日 06-17,
+        // 平台基准已过 04:00 归当日 06-18。
+        java.time.Instant fiveAm = java.time.Instant.parse("2026-06-17T21:00:00Z");
         assertThat(businessDayResolver.businessDate("bar", fiveAm)).isEqualTo(java.time.LocalDate.parse("2026-06-17"));
         assertThat(businessDayResolver.businessDate(fiveAm)).isEqualTo(java.time.LocalDate.parse("2026-06-18"));
     }
