@@ -2,7 +2,6 @@ package com.complex.platform.common;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
@@ -14,9 +13,13 @@ import org.springframework.stereotype.Component;
 /**
  * 经营日（business day）切分助手。财务确认口径（2026-06-19）：经营日切时点可后台配置，默认 04:00。
  *
- * <p>一笔发生在 {@code instant} 的流水归属的经营日 = {@code instant.minusHours(cutoffHour).toLocalDate()}（UTC）。
- * 即切分时点之前的流水归前一经营日，切分时点及之后归当日。所有 T7 日结六源汇总与 T12 看板 ETL
- * 的"经营日"分桶统一走本助手。
+ * <p>一笔发生在 {@code instant} 的流水归属的经营日 = {@code instant.minusHours(cutoffHour)} 折成的
+ * <b>所在地（北京）日历日</b>（{@link LocalZone}）。即切分时点之前的流水归前一经营日，切分时点及之后归当日。
+ * 所有 T7 日结六源汇总与 T12 看板 ETL 的"经营日"分桶统一走本助手。
+ *
+ * <p><b>日切小时按所在地时间读（2026-08-02 用户拍板落码）</b>：酒吧 06:00 指北京早六点、不是 UTC 早六点
+ *（＝北京下午两点）。此前锚 UTC，一天从北京 12:00 起算，业务人员按北京日历日翻的"昨天营业额"
+ * 与系统分桶差 8 小时——北京早上开的单被记到前一营业日，酒吧当天账少一笔、前一天多一笔。
  *
  * <p><b>按业务域切分（2026-07-02 用户拍板，BI S0）</b>：不同业务的"一天"从不同时点切——
  * 酒吧 06:00（晚 6 点到次日早 6 点算一天）、零售/餐饮商户 10:00、其余 04:00；
@@ -77,7 +80,7 @@ public class BusinessDayResolver {
         return businessDate(cutoffHourFor(domain), instant);
     }
 
-    /** 经营日的起始时刻（含），= 经营日 00:00 UTC + cutoff 小时（全局切分）。 */
+    /** 经营日的起始时刻（含），= 经营日 00:00（北京）+ cutoff 小时（全局切分）。 */
     public Instant startInstant(LocalDate businessDate) {
         return startAt(cutoffHour, businessDate);
     }
@@ -87,7 +90,7 @@ public class BusinessDayResolver {
         return startAt(cutoffHourFor(domain), businessDate);
     }
 
-    /** 经营日的结束时刻（不含），= 次日 00:00 UTC + cutoff 小时（全局切分）。 */
+    /** 经营日的结束时刻（不含），= 次日 00:00（北京）+ cutoff 小时（全局切分）。 */
     public Instant endInstant(LocalDate businessDate) {
         return startAt(cutoffHour, businessDate.plusDays(1));
     }
@@ -99,12 +102,12 @@ public class BusinessDayResolver {
 
     private static LocalDate businessDate(int hour, Instant instant) {
         return instant.minusSeconds(hour * 3600L)
-                .atZone(ZoneOffset.UTC)
+                .atZone(LocalZone.ID)
                 .toLocalDate();
     }
 
     private static Instant startAt(int hour, LocalDate businessDate) {
-        return businessDate.atStartOfDay(ZoneOffset.UTC)
+        return businessDate.atStartOfDay(LocalZone.ID)
                 .plusHours(hour)
                 .toInstant();
     }

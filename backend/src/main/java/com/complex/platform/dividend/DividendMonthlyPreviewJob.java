@@ -1,8 +1,8 @@
 package com.complex.platform.dividend;
 
+import com.complex.platform.common.LocalZone;
 import java.time.Clock;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -50,7 +50,8 @@ public class DividendMonthlyPreviewJob {
         if (!scheduledEnabled) {
             return;
         }
-        YearMonth lastMonth = YearMonth.now(clock.withZone(ZoneOffset.UTC)).minusMonths(1);
+        // 预览归属月按所在地(北京)日历月,与分账归属月同口径(主理人看的"上月分红"是北京的上月)。
+        YearMonth lastMonth = YearMonth.now(clock.withZone(LocalZone.ID)).minusMonths(1);
         service.runScheduledMonthlyPreview(lastMonth);
     }
 }

@@ -24,6 +24,17 @@ class DividendReserveReleaseJobTests {
     }
 
     @Test
+    void releaseDayFollowsLocalCalendarDay() {
+        DividendService service = mock(DividendService.class);
+        // 北京 2026-04-16 04:00 = UTC 2026-04-15 20:00 → 到期判定日 = 4/16。
+        // 锚 UTC 时会拿 4/15 去判,当天该释放的留存要等下一轮才到主理人手里。
+        new DividendReserveReleaseJob(
+                service, Clock.fixed(Instant.parse("2026-04-15T20:00:00Z"), ZoneOffset.UTC), true)
+                .scheduledRelease();
+        verify(service).runScheduledReserveRelease(LocalDate.of(2026, 4, 16));
+    }
+
+    @Test
     void enabledFlagRunsReleaseForToday() {
         DividendService service = mock(DividendService.class);
         new DividendReserveReleaseJob(service, FIXED, true).scheduledRelease();

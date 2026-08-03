@@ -1,10 +1,10 @@
 package com.complex.platform.settlement;
 import org.springframework.beans.factory.annotation.Value;
 
+import com.complex.platform.common.LocalZone;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -62,7 +62,7 @@ public class SettlementReconciliationJob {
             return;
         }
         rebuildMissingSettlements(REBUILD_BATCH_LIMIT);
-        reconcile(LocalDate.now(clock).minusDays(1));
+        reconcile(LocalDate.now(clock.withZone(LocalZone.ID)).minusDays(1));
     }
 
     /**
@@ -124,12 +124,14 @@ public class SettlementReconciliationJob {
     }
 
     /**
-     * 对某一日算 old/new/variance 并 upsert。日窗 [date 00:00 UTC, date+1 00:00 UTC),
-     * 与 settlement_transactions.created_at DEFAULT now()(UTC)一致。
+     * 对某一日算 old/new/variance 并 upsert。日窗 = 该日的<b>所在地(北京)日历日</b>
+     * [date 00:00 北京, date+1 00:00 北京)——财务问"8 月 2 日的对账差异"要的就是北京 8/2 那 24 小时;
+     * 锚 UTC 时这一行覆盖的其实是北京 8/2 08:00~8/3 08:00,标的日期与实际窗口错开 8 小时。
+     *(created_at 仍是 UTC 存储的时刻,窗口按 Instant 比较,不受影响。)
      */
     public void reconcile(LocalDate reconciliationDate) {
-        Instant dayStart = reconciliationDate.atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant dayEnd = reconciliationDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant dayStart = reconciliationDate.atStartOfDay(LocalZone.ID).toInstant();
+        Instant dayEnd = reconciliationDate.plusDays(1).atStartOfDay(LocalZone.ID).toInstant();
         long oldCent = repository.sumOldTicketAllocatedCent(dayStart, dayEnd);
         long newCent = repository.sumNewSettlementCent(dayStart, dayEnd);
         repository.upsertReconciliationStatus(reconciliationDate, oldCent, newCent, oldCent - newCent);

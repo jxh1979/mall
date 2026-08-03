@@ -1,8 +1,8 @@
 package com.complex.platform.dividend;
 
+import com.complex.platform.common.LocalZone;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -50,6 +50,7 @@ public class DividendReserveReleaseJob {
         if (!scheduledEnabled) {
             return;
         }
-        service.runScheduledReserveRelease(LocalDate.now(clock.withZone(ZoneOffset.UTC)));
+        // 到期判定日按所在地(北京)日历日:释放规则算的是期末第几天,业务人员按北京日历数。
+        service.runScheduledReserveRelease(LocalDate.now(clock.withZone(LocalZone.ID)));
     }
 }

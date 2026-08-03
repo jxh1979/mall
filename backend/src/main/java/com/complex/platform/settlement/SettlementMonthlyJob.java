@@ -2,9 +2,9 @@ package com.complex.platform.settlement;
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.common.LocalZone;
 import java.time.Clock;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -95,7 +95,10 @@ public class SettlementMonthlyJob {
                     new UsernamePasswordAuthenticationToken(SCHEDULER_ACTOR, null, List.of()));
             SecurityContextHolder.setContext(systemContext);
 
-            YearMonth lastMonth = YearMonth.now(clock.withZone(ZoneOffset.UTC)).minusMonths(1);
+            // 归属月按所在地(北京)日历月:财务口径的"上月"是北京的上月。锚 UTC 时,作业若落在北京 1 号凌晨
+            //(=UTC 上月末)会把"上月"算成上上月、整月漏结(现 cron 恰在服务器凌晨跑才侥幸不错月)。
+            // 仅改归属月的时区锚——分账瀑布/守恒校验/金额精度/配置中心规则一概不动。
+            YearMonth lastMonth = YearMonth.now(clock.withZone(LocalZone.ID)).minusMonths(1);
             int window = Math.max(1, backfillMonths);
             for (int i = window - 1; i >= 0; i--) {
                 YearMonth month = lastMonth.minusMonths(i);

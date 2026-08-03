@@ -1,6 +1,7 @@
 package com.complex.platform.inventory;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -204,7 +205,8 @@ public class SupplierQualificationService {
             throw ApiException.conflict(
                     "SUPPLIER_QUALIFICATION_MISSING", "供应商没有生效中的资质，入库检查不通过");
         }
-        LocalDate today = LocalDate.now();
+        // 资质是否过期按所在地(北京)日历日判:证照写的到期日是北京日历日。
+        LocalDate today = LocalDate.now(LocalZone.ID);
         boolean anyExpired = qualifications.stream()
                 .anyMatch(q -> q.validTo() != null && q.validTo().isBefore(today));
         if (anyExpired) {

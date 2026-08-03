@@ -1,6 +1,7 @@
 package com.complex.platform.inventory;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
@@ -237,7 +238,9 @@ public class PurchaseRequestService {
 
     private PurchaseRequestRecord withStatus(PurchaseRequestRecord c, String toStatus, Instant now) {
         Instant orderedAt = "ordered".equals(toStatus) ? now : c.orderedAt();
-        LocalDate arrivalDate = "arrived".equals(toStatus) ? LocalDate.now() : c.actualArrivalDate();
+        // 实际到货日按所在地(北京)日历日:收货员按北京当天签收,裸 LocalDate.now() 取服务器时区(洛杉矶)会记成昨天。
+        LocalDate arrivalDate = "arrived".equals(toStatus)
+                ? LocalDate.now(LocalZone.ID) : c.actualArrivalDate();
         return new PurchaseRequestRecord(
                 c.id(), c.requestNo(), c.supplierId(), c.itemId(), c.quantity(), c.expectedArrivalDate(),
                 toStatus, c.evidenceAttachmentIds(), c.createdAt(), now, c.merchantId(),

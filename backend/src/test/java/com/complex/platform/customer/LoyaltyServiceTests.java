@@ -76,6 +76,36 @@ class LoyaltyServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ALREADY_CHECKED_IN"));
     }
 
+    // ---- 所在地(北京)日历日:签到「今天」与生日窗口 ----
+    @Test
+    void checkInUsesLocalCalendarDay() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        // T0 = 北京 2026-01-01 08:00,先签一次。
+        serviceAt(repo, audit, T0).checkIn("c1", "miniapp");
+        // 北京 2026-01-02 01:00(= UTC 2026-01-01 17:00)再签:是新的一天,连签累到 2。
+        // 锚 UTC 时这一刻还算 1/1,会被判「今天已签到」直接拒掉——会员凌晨签不了到、连签白断。
+        CustomerCheckInRecord next = serviceAt(repo, audit, Instant.parse("2026-01-01T17:00:00Z"))
+                .checkIn("c1", "miniapp");
+        assertThat(next.checkInDate()).isEqualTo(LocalDate.of(2026, 1, 2));
+        assertThat(next.streak()).isEqualTo(2);
+    }
+
+    @Test
+    void birthdayWindowUsesLocalCalendarDay() {
+        InMemoryLoyaltyRepository repo = new InMemoryLoyaltyRepository();
+        repo.saveCustomer(new CustomerRecord("c1", "138", "138", "active",
+                LocalDate.of(1990, 1, 2), T0, T0, T0));
+        repo.saveBirthdayRule(new CustomerBirthdayRuleRecord(
+                "br", null, "生日双倍", "birthday_day", 20000, "active", T0, T0));
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        // 北京 2026-01-02 01:00 = 会员生日当天凌晨消费 → 100 * 2.0 = 200。
+        // 锚 UTC 时还算 1/1,生日当天最热闹的那几小时反而拿不到生日倍率。
+        long awarded = serviceAt(repo, audit, Instant.parse("2026-01-01T17:00:00Z"))
+                .earnPoints("c1", 100, "consume_amount", "order1", "buy", 365);
+        assertThat(awarded).isEqualTo(200);
+    }
+
     // ---- 生日加倍倍率（叠加等级倍率）----
     @Test
     void earnPointsAppliesBirthdayMultiplierOnBirthday() {

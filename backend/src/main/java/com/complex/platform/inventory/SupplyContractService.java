@@ -1,6 +1,7 @@
 package com.complex.platform.inventory;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -187,7 +188,8 @@ public class SupplyContractService {
         if (!"active".equals(contract.status())) {
             throw ApiException.conflict("SUPPLY_CONTRACT_NOT_ACTIVE", "供货合同未生效");
         }
-        LocalDate today = LocalDate.now();
+        // 合同生效/过期按所在地(北京)日历日判:合同上写的生效日、到期日都是北京日历日。
+        LocalDate today = LocalDate.now(LocalZone.ID);
         if (contract.validFrom() != null && today.isBefore(contract.validFrom())) {
             throw ApiException.conflict("SUPPLY_CONTRACT_NOT_YET_VALID", "供货合同尚未到生效日期");
         }
