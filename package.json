@@ -28,6 +28,7 @@
     "verify:openapi-closure": "node tools/generate-openapi-contract-closure-appendix.mjs --check",
     "docs:security-baseline": "node tools/generate-formal-security-baseline.mjs",
     "docs:entry-baseline": "node tools/refresh-entry-doc-baseline.mjs",
+    "verify:html-ledger-sync": "node tools/verify-html-ledger-sync.mjs",
     "verify:entry-doc-baseline": "node tools/refresh-entry-doc-baseline.mjs --check",
     "verify:security-baseline": "npm run verify:prod-docs-access && node tools/verify-formal-security-baseline.mjs --strict",
     "verify:prod-docs-access": "node tools/verify-prod-docs-access-policy.mjs",
