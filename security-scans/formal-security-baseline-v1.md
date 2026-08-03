@@ -3,12 +3,12 @@
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 717
-- OpenAPI SHA-256: `8c6d12adfdfc2d9213c150b33e7c076e28d40afe21adcb84161408284d2f118d`
+- OpenAPI operation count: 718
+- OpenAPI SHA-256: `9fd32d3a1e806e028a18527f3df78d8feeb30fa7307b023dacbb213b139e66b6`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
-- Maven dependency count: 17
+- Maven dependency count: 16
 - Verification command: `npm run verify:security-baseline`
 
 ## scope-and-inputs
@@ -42,7 +42,7 @@
 | `device-credential` | 3 |
 | `open-app-credential` | 1 |
 | `public` | 5 |
-| `staff-token` | 665 |
+| `staff-token` | 666 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,8 +57,8 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 717 |
-| 写 operation | 432 |
+| 全部 operation | 718 |
+| 写 operation | 433 |
 | public operation | 5 |
 | open-app/webhook operation | 5 |
 
@@ -72,10 +72,10 @@
 | `mobile_admin` | 64 |
 | `provider-webhook` | 3 |
 | `server-to-server` | 2 |
-| `staff_private_phone` | 29 |
+| `staff_private_phone` | 30 |
 | `staff_work_phone` | 70 |
 | `tablet` | 103 |
-| `web` | 684 |
+| `web` | 685 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 
@@ -130,7 +130,7 @@
 
 | 依赖面 | 当前状态 | 后续动作 |
 |---|---|---|
-| Maven | `backend/pom.xml` 声明 17 个 dependency；Spring Boot `4.1.0` | 生成 CycloneDX 或等效 SBOM，并做漏洞处置/豁免 |
+| Maven | `backend/pom.xml` 声明 16 个 dependency；Spring Boot `4.1.0` | 生成 CycloneDX 或等效 SBOM，并做漏洞处置/豁免 |
 | npm/Web 工具链 | 根目录使用 lock 文件和 workspaces | 发布前执行 npm audit 或等效扫描 |
 | Android/Gradle | 完整 P0 验证脚本覆盖 Android env/build/smoke/APK | 发布前补 Android 依赖 SBOM |
 
