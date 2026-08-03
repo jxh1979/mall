@@ -218,12 +218,14 @@ erDiagram
 |---|---|---|
 | `requested` | 已申请 | 游客、客服或平台发起 |
 | `reviewing` | 审批中 | 需要人工审批 |
-| `approved` | 已通过 | 可以调用支付机构退款 |
+| `approved` | 已通过 | 已批准并已发起不可逆兑付（冻结权益、回补名额、发打款拨付事件）；**钱尚未确认到账，不计入「已退金额」**，财务/经营分析不按此扣减经营收入 |
 | `rejected` | 已驳回 | 退款结束 |
 | `processing` | 处理中 | 支付机构退款中 |
-| `success` | 成功 | 退款完成，权益更新，结算冲正 |
+| `success` | 成功 | **最终完成态**：财务确认实际打款成功（`POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`）后才置此态；只有「成功」的退款才计入「已退金额」并冲减经营净收入 |
 | `failed` | 失败 | 需要重试或人工处理 |
 | `cancelled` | 已取消 | 申请人取消 |
+
+> **兑付确认口径（2026-08-03，依据 `business-enum-quick-reference-v0.1.html`「退款单状态」行「退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”表示已批准并已发起不可逆兑付」+ `business-system-map-for-operations-v0.1.html`「退款授权与留痕」行「系统完整记录……原路退回结果」）**：退款审批通过（人工审批 / 额度内自助 / 系统批量，三条路径共用 `finalizeApprovedRefund`）一律停在 `approved`；财务实际打款成功后调 `POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`（权限 `ticket.refund.approve`，`reason` 填**原路退回结果**，审计事件 `ticket_refund.payout_confirmed`）做 CAS `approved→success`，重复确认命中 0 行拒（`TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE`）。此前审批通过在同一方法里内联置 `success`——钱一分没出账，当天经营净收入已被 `status='success'` 口径扣减。真实支付渠道适配器尚无厂商（`ReservedPaymentGateway` 接缝已留），`processing`/`failed` 待渠道回调接入后再落地。后台入口：ADM-TKT-003「出票与核销追踪」页的「退款待确认拨付」区（默认只列 `approved`，数据源 `GET /api/v1/ticketing/refunds`）。
 
 ### 4.7 结算单状态
 
@@ -426,8 +428,8 @@ sequenceDiagram
 2. 系统计算可退权益和不可退权益。
 3. 若涉及已核销权益，按规则判断是否禁止退款、允许冲正或需要审批。
 4. 冻结待退款权益，防止退款期间继续核销。
-5. 审批通过后调用支付机构退款。
-6. 退款成功后更新订单、票、权益状态。
+5. 审批通过（`approved`）= 已批准并已发起不可逆兑付：冻结权益、回补限量票名额、发打款拨付事件；此时**尚未**计入「已退金额」。
+6. 财务实际打款成功后走「确认拨付」（`POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`，`reason` 留痕原路退回结果）置 `success`；退款到此才是最终完成态，才更新订单/票/权益的对外「已退」口径并计入结算冲正。
 7. 对已生成结算明细做冲正。
 8. 写入退款、冲正、权益状态变化事件。
 
@@ -863,7 +865,9 @@ sequenceDiagram
 | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 客人端查询票二维码 |
 | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | 票务域查询票凭证 |
 | `POST` | `/api/v1/ticketing/refunds` | 申请退款 |
-| `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | 审批退款 |
+| `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | 审批退款（到 `approved`，尚未计入已退金额） |
+| `POST` | `/api/v1/ticketing/refunds/{refund_id}/confirm-payout` | 确认拨付（财务实际打款后 `approved→success`，`reason` 填原路退回结果） |
+| `GET` | `/api/v1/ticketing/refunds` | 查询退款单台账（后台「待确认拨付」看板数据源） |
 | 后续扩展 | OpenAPI 后续扩展字段/流程 | 申请改期 |
 
 说明：以上接口只服务官方 App/小程序的客人自助购票和订单查询，不提供工作人员平板代客购票入口。

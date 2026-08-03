@@ -179,6 +179,20 @@ export type TicketOrderRow = {
   paidAt?: string;
 };
 
+export type TicketRefundRow = {
+  id: string;
+  targetId?: string;
+  refundAmountCent?: number;
+  reason?: string;
+  refundChannel?: string;
+  status?: string;
+  requestedBy?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt?: string;
+  merchantId?: string;
+};
+
 export type TicketIssuedEntitlementRow = {
   id: string;
   entitlementCode?: string;

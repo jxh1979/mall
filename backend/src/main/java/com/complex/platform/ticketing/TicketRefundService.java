@@ -171,7 +171,7 @@ public class TicketRefundService {
         ));
         createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
         if (selfComplete) {
-            return finalizeApprovedRefund(refund, now, true); // 额度内自助：approved→success 收口
+            return finalizeApprovedRefund(refund, now, true); // 额度内自助：停在 approved，等财务确认拨付
         }
         return refund;
     }
@@ -204,7 +204,7 @@ public class TicketRefundService {
                 current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
                 "approved", current.requestedBy(), approvedBy, now, current.createdAt(), now, current.merchantId()
         );
-        return finalizeApprovedRefund(approved, now, true); // AUD-018：审批通过兑付 → success 终态
+        return finalizeApprovedRefund(approved, now, true); // 审批通过=已发起兑付，停在 approved；财务打款后 confirm-payout 才 success
     }
 
     /**
@@ -255,6 +255,31 @@ public class TicketRefundService {
     }
 
     /**
+     * 财务实际打款后确认拨付：approved→success（终态）。依据 business-enum-quick-reference-v0.1.html
+     * 「退款单状态」行：退款以“成功”为最终完成态，只有“成功”才计入“已退金额”；以及
+     * business-system-map-for-operations-v0.1.html「退款授权与留痕」行：系统完整记录“原路退回结果”
+     * （本方法的 reason 写入审计事件 ticket_refund.payout_confirmed 即为该结果留痕）。
+     * markTicketRefundSucceeded 本身是 WHERE status='approved' 的 CAS，天然幂等；命中 0 行=当前状态不可确认。
+     */
+    TicketRefundRecord confirmPayout(String refundId, StatusChangeRequest request) {
+        StatusChangeRequest actual = requireRequest(request);
+        requireText(actual.reason(), "reason");
+        TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
+        repository.findTicketOrderById(current.targetId())
+                .ifPresent(order -> enforceMerchantScope(order.merchantId()));
+        Instant now = Instant.now();
+        if (repository.markTicketRefundSucceeded(current.id(), now) == 0) {
+            throw ApiException.conflict("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE",
+                    "只有“已通过”的退款才能确认拨付，当前状态不可确认");
+        }
+        return new TicketRefundRecord(
+                current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
+                "success", current.requestedBy(), current.approvedBy(), current.approvedAt(),
+                current.createdAt(), now, current.merchantId());
+    }
+
+    /**
      * 退款审批生效后的统一兑付副作用（人工审批通过 / 额度内自助完成 / 到期自动退 共用）：
      * 退款行置 approved + 强 CAS 冻结对应权益（active∧used=0→refunded，失配整笔回滚）+ 父票 refund_pending→refunded
      * + 限量票按本笔退成功实例数回补名额（退一张放一个）+ 发打款事件；deductPoints=true 时按比例发积分冲减。
@@ -298,14 +323,11 @@ public class TicketRefundService {
             eventPublisher.publishEvent(new TicketRefundApprovedEvent(
                     order.id(), approved.id(), approved.refundAmountCent(), approved.refundChannel()));
         }
-        // AUD-018：兑付副作用已提交 → 退款迁终态 success + succeeded_at（有效退款生效时刻）。本存根系统打款同步完成，
-        //   故 approved→success 内联收口；财务/分析仅统计 status='success' 且按 succeeded_at 落窗（不再把 requested/rejected 当退款）。
-        //   CAS 仅当仍 approved 生效（幂等）。返回 success 记录供上游返回。
-        repository.markTicketRefundSucceeded(approved.id(), now);
-        return new TicketRefundRecord(
-                approved.id(), approved.targetId(), approved.refundAmountCent(), approved.reason(),
-                approved.refundChannel(), "success", approved.requestedBy(), approved.approvedBy(),
-                approved.approvedAt(), approved.createdAt(), now, approved.merchantId());
+        // 业务权威口径（business-enum-quick-reference-v0.1.html「退款单状态」行）：退款以“成功”为最终完成态，
+        //   只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。
+        //   故退款到此停在 approved（等兑付），由财务实际打完款后调 confirm-payout 确认才 approved→success。
+        //   此前在本方法内联置 success：钱一分没出账，当天经营净收入就已被扣（财务/分析按 status='success' 扣减）。
+        return approved;
     }
 
     /**
@@ -367,7 +389,7 @@ public class TicketRefundService {
                 now,
                 order.merchantId()));   // V220：自动退款受理商户=原订单 merchant_id
         createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
-        return finalizeApprovedRefund(refund, now, false); // 到期自动退：approved→success 收口
+        return finalizeApprovedRefund(refund, now, false); // 到期自动退：停在 approved，等财务确认拨付
     }
 
     /** 每票出票时定格的实付分摊额：复现方案1 出票均分（allocateEvenly 按实例数分订单实付，seq 定序，分到分不丢分）。 */

@@ -3,8 +3,8 @@
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 718
-- OpenAPI SHA-256: `9fd32d3a1e806e028a18527f3df78d8feeb30fa7307b023dacbb213b139e66b6`
+- OpenAPI operation count: 720
+- OpenAPI SHA-256: `4e19b1a33af2f0a26cb2b861c4d731063792acf7c85dde9ada601c73a750f6fc`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
@@ -42,7 +42,7 @@
 | `device-credential` | 3 |
 | `open-app-credential` | 1 |
 | `public` | 5 |
-| `staff-token` | 666 |
+| `staff-token` | 668 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,8 +57,8 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 718 |
-| 写 operation | 433 |
+| 全部 operation | 720 |
+| 写 operation | 434 |
 | public operation | 5 |
 | open-app/webhook operation | 5 |
 
@@ -67,7 +67,7 @@
 | `app` | 50 |
 | `kiosk` | 43 |
 | `merchant_app` | 1 |
-| `merchant_portal` | 20 |
+| `merchant_portal` | 21 |
 | `miniapp` | 50 |
 | `mobile_admin` | 64 |
 | `provider-webhook` | 3 |
@@ -75,7 +75,7 @@
 | `staff_private_phone` | 30 |
 | `staff_work_phone` | 70 |
 | `tablet` | 103 |
-| `web` | 685 |
+| `web` | 687 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 

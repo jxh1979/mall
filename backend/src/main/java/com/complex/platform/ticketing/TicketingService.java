@@ -864,6 +864,32 @@ public class TicketingService {
         );
     }
 
+    /**
+     * 退款单台账（后台“待确认拨付”看板）：业务人员靠它看哪几笔已批准但钱还没打出去。
+     * 权限 ticket.refund.view；商户 scope 只见本商户受理的退款（V220 退款单直挂 merchant_id）。
+     */
+    public PageResponse<TicketRefundRecord> listTicketRefunds() {
+        return operations.readPage(
+                TicketingReadOperation.LIST_TICKET_REFUNDS,
+                () -> filterByMerchantScope(repository.listTicketRefunds(), TicketRefundRecord::merchantId)
+        );
+    }
+
+    /** 财务实际打款后确认拨付（approved→success），权限沿用 ticket.refund.approve。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.approve")
+    @Transactional
+    public TicketRefundRecord confirmTicketRefundPayout(String refundId, StatusChangeRequest request) {
+        String id = operations.requireText(refundId, "refund_id");
+        return operations.executeWrite(
+                "confirmTicketRefundPayout:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketRefundRecord.class,
+                TicketingWriteOperation.CONFIRM_TICKET_REFUND_PAYOUT,
+                () -> refundService.confirmPayout(id, request)
+        );
+    }
+
     public PageResponse<TicketRefundLineRecord> listTicketRefundLines(String refundId) {
         String id = operations.requireText(refundId, "refund_id");
         // B1d.3 跨租户读隔离：退款行无 merchant_id，按其 order 的受理商户过滤；

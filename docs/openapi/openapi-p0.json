@@ -10355,6 +10355,35 @@
       }
     },
     "/api/v1/ticketing/refunds": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "listTicketRefunds",
+        "summary": "查询退款单列表",
+        "description": "后台退款台账；业务人员据此看哪几笔已“已通过”但钱还没实际打出去（待确认拨付）。商户范围只见本商户受理的退款。",
+        "x-auth-context": "staff-token",
+        "x-permission": "ticket.refund.view",
+        "x-data-scope": "project-order",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "ticket_refund.viewed",
+        "x-audit-event-failure": "ticket_refund.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
       "post": {
         "tags": [
           "ticketing"
@@ -10372,6 +10401,48 @@
         "x-audit-event-failure": "ticket_refund.request_failed",
         "requestBody": {
           "$ref": "#/components/requestBodies/RefundRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/refunds/{refund_id}/confirm-payout": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "confirmTicketRefundPayout",
+        "summary": "退款确认拨付",
+        "description": "财务实际打完款后确认兑付，退款单“已通过”→“成功”。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。",
+        "x-permission": "ticket.refund.approve",
+        "x-data-scope": "project-order",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_refund.payout_confirmed",
+        "x-audit-event-failure": "ticket_refund.payout_confirm_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RefundId",
+            "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StatusChange"
         },
         "responses": {
           "200": {

@@ -1735,12 +1735,46 @@ class TicketingServiceTests {
         assertThat(processed).isEqualTo(1);
         // 全未核销可退到期票 → 整票原渠道自动退款（approved/全额）、权益冻结 refunded、父票 refunded、名额回补。
         assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_auto".equals(r.targetId()) && "success".equals(r.status())
+                "o_auto".equals(r.targetId()) && "approved".equals(r.status())
                         && r.refundAmountCent() == 9900L && "original".equals(r.refundChannel()));
         assertThat(ticketingRepository.issuedEntitlements.get("e_auto").status()).isEqualTo("refunded");
         assertThat(ticketingRepository.findTicketInstanceById("inst_auto")).get()
                 .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
         assertThat(ticketingRepository.releasedStock).contains("tt_auto:1");
+    }
+
+    @Test
+    void refundBecomesSuccessOnlyAfterPayoutConfirmed() {
+        // 依据 business-enum-quick-reference-v0.1.html「退款单状态」：退款以“成功”为最终完成态，
+        // 只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。
+        IssuedEntitlementRecord entitlement = issueOrderEntitlement("payout");
+        TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
+
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "payout-request", "refund", List.of(), order.id(), order.amountCent(), "customer request", "original"));
+        TicketRefundRecord approved = service.approveTicketRefund(refund.id(), new StatusChangeRequest(
+                "payout-approve", "approve", "approved", List.of()));
+
+        // 审批通过只到“已通过”：钱还没打出去，经营净收入不得先被扣。
+        assertThat(approved.status()).isEqualTo("approved");
+        assertThat(ticketingRepository.findTicketRefundById(refund.id())).get()
+                .extracting(TicketRefundRecord::status).isEqualTo("approved");
+
+        // 财务实际打款后确认拨付 → success 终态（reason 即“原路退回结果”留痕）。
+        TicketRefundRecord confirmed = service.confirmTicketRefundPayout(refund.id(), new StatusChangeRequest(
+                "payout-confirm", "confirm_payout", "原路退回成功，支付流水 TESTPAY-1", List.of()));
+        assertThat(confirmed.status()).isEqualTo("success");
+        assertThat(ticketingRepository.findTicketRefundById(refund.id())).get()
+                .extracting(TicketRefundRecord::status).isEqualTo("success");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("ticket_refund.payout_confirmed");
+
+        // 防重复拨付：已 success 再确认 → CAS 命中 0 行 → 拒。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirmTicketRefundPayout(refund.id(),
+                        new StatusChangeRequest("payout-confirm-again", "confirm_payout", "重复确认", List.of())))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE"));
     }
 
     @Test
@@ -1956,7 +1990,8 @@ class TicketingServiceTests {
                 List.of()
         ));
 
-        assertThat(approved.status()).isEqualTo("success");
+        // business-enum「退款单状态」：审批通过=“已通过”（已批准并已发起兑付），钱未打出去前不得记“成功”。
+        assertThat(approved.status()).isEqualTo("approved");
         assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode())).isPresent();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
@@ -2151,7 +2186,8 @@ class TicketingServiceTests {
         actAsAdmin("op_big");
         TicketRefundRecord within = tiered.requestRefund(new TicketRefundRequest(
                 "tier-within-refund", "refund", List.of(), order1.id(), order1.amountCent(), "within limit", "original"));
-        assertThat(within.status()).isEqualTo("success");
+        // 额度内自助同样只到“已通过”：兑付确认前不计入已退金额。
+        assertThat(within.status()).isEqualTo("approved");
         assertThat(within.requestedBy()).isEqualTo("op_big");
         assertThat(within.approvedBy()).isEqualTo("op_big");
         assertThat(ticketingRepository.findIssuedEntitlementById(ent1.id()))
@@ -3787,7 +3823,7 @@ class TicketingServiceTests {
         // AUD-011:此前「订单已有退款」整单跳过——实例2永远既不退也不作废;现按实例处置,剩余整张未核销可退票自动退。
         assertThat(processed).isEqualTo(1);
         assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_part".equals(r.targetId()) && "success".equals(r.status())
+                "o_part".equals(r.targetId()) && "approved".equals(r.status())
                         && r.refundAmountCent() == 9900L && r.id().startsWith("ticket_refund_auto_expiry_"));
         assertThat(ticketingRepository.issuedEntitlements.get("e_p2").status()).isEqualTo("refunded");
         assertThat(ticketingRepository.findTicketInstanceById("inst_p2")).get()
@@ -4418,6 +4454,11 @@ class TicketingServiceTests {
                     r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(),
                     "success", r.requestedBy(), r.approvedBy(), r.approvedAt(), r.createdAt(), succeededAt, r.merchantId()));
             return 1;
+        }
+
+        @Override
+        public List<TicketRefundRecord> listTicketRefunds() {
+            return new java.util.ArrayList<>(refunds.values());
         }
 
         @Override

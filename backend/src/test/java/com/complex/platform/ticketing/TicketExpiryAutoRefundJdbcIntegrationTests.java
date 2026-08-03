@@ -84,7 +84,7 @@ class TicketExpiryAutoRefundJdbcIntegrationTests {
 
         // ① 完全未核销的 active 实例整张自动退：退款单真落库且 id ≤64（修复前此 INSERT 必「value too long」）。
         List<String> refundIds = jdbcTemplate.queryForList(
-                "SELECT id FROM ticket_refunds WHERE target_id = ? AND status = 'success'", String.class, orderId);
+                "SELECT id FROM ticket_refunds WHERE target_id = ? AND status = 'approved'", String.class, orderId);
         assertThat(refundIds).hasSize(1);
         assertThat(refundIds.getFirst()).startsWith("ticket_refund_auto_expiry_");
         assertThat(refundIds.getFirst().length()).isLessThanOrEqualTo(64);
