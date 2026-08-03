@@ -13,6 +13,12 @@
 >   - **设备签名密钥登记**：复用既有员工设备凭证绑定流程（`POST /api/v1/staff/device-credentials`，`bindCredential` 存 Keystore 公钥/指纹，经主管复核转 active）——无需新登记路径。
 >   - **🔴 部署决策（需用户拍板，别擅自硬强制）**：默认全类型 `grace`（含生产）。**各终端类型何时翻转 `enforce` 是部署决策**：前置条件=该类型的现网设备均已登记签名公钥且客户端已实现请求签名（安卓/一体机需发版支持）。建议顺序：先 `staff_work_phone`（资金主向量、已有 Keystore 凭证基建）→ `kiosk`（有设备令牌基建，需补非对称密钥或改 HMAC 通道）→ `tablet`（当前无每设备密钥基建，需先建登记）。**未翻转前对应类型仍处灰度（缺签名放行），伪造向量在该类型上仍开放**。
 >   - **现状残留/后续**：`tablet`/`kiosk` 暂无非对称签名密钥基建，其 `enforce` 翻转前需先落设备密钥登记（`kiosk` 可用其既有设备令牌走 HMAC 通道，本期未纳入，为控制单次改动的密码学面）；签名量绑定请求体为 enforce 前的加固项。
+>   - **（2026-08-03 收口 · 两道闸真正改用可信终端身份）**：AUD-010 建了 `TerminalIdentityHolder`，但**总开关拦截器与设备凭证验签自己没用它**，两处漏点已修：
+>     - ①`TerminalMasterSwitchInterceptor` 原先读自报 `X-Terminal-Type`、为空即 `return true` 放行——`checkTerminalEnabled()` 全仓仅此一个生产调用点，客户端删掉一个请求头就跳过整条 `terminal.enabled` 闸（含 fail-closed 兜底）。现改读 `TerminalIdentityHolder`，且按治理地图「开关拉取失败时按兜底关闭处理，**写操作一律拒绝**；前端隐藏只是辅助，**后端接口必须独立校验**」，**解析不出终端身份的非 GET/HEAD/OPTIONS 请求一律 403 `TERMINAL_NOT_ALLOWED`**；读请求维持放行（端停用开关不是鉴权边界）。
+>     - ②`DeviceCredentialVerifier` 原先以自报头判断是否进设备绑定型验签闸，自报为空或改报 `web` 即早退，**把 enforce 翻开也没用**。现在带 `X-Device-Id` 时一律先反查 `terminal_devices.terminal_type` 顶上，登记类型压过自报值，再做 `DEVICE_BOUND_TYPES` 与 `modeFor()` 判定；该次查询下传验签复用，不新增查库次数。自报头仍报设备绑定型却与登记类型不符 → 保持 `type_mismatch` 拒。
+>     - 连带：`DeviceCredentialBodyCachingFilter` 去掉「自报头属设备绑定型」前置条件（过滤器早于拦截器，拿不到派生结果；不去掉则不发头的签名请求拿不到缓存 body、必然摘要不符），改为「写 + 带 `X-Device-Signature`」；`GET /terminals/capability-switches/effective`（前端菜单 gating 数据源）与 `GateRequestContext` 的 device scope 一并改读可信身份，避免「菜单按自报类型显示、接口按真实类型拒绝」的错位。
+>     - **豁免前缀随之登记两条非终端通道**：`/api/open/`（第三方开放平台回调，自带签名，不是受管终端）与 `/api/v1/terminals/kiosks/`（一体机自助端点，`X-Device-Token` 认证，本就豁免于 `DeviceCredentialInterceptor`、拿不到可信身份）——不登记则第三方回调与一体机心跳会被新增的写请求 fail-closed 误杀。
+>     - **enforcement 取值不动**（仍全类型 `grace`）：本次只让 enforce 翻开时真的有效，何时翻仍是部署决策。
 >   - **（2026-07-20 补 · enforce 前置全套已做完）**：①web enforce 拒 Bearer 自报 web（合法后台 Cookie 会话，无客户端依赖可先翻）+ app enforce 拒 app 写（app 资金要客人侧证明属业务口径，待用户定）；②kiosk/tablet 设备级签名公钥 `terminal_device_signing_keys`（V325）+ 登记端点 `POST /devices/{id}/signing-key`，kiosk 自助端点豁免；③nonce 落库 `terminal_device_nonces`（V325）防重放；④body SHA-256 纳入签名量（`DeviceCredentialBodyCachingFilter` 仅包裹设备绑定型+写+带签名请求）；⑤deviceId↔密钥归属交叉校验。**服务端 ready-to-enforce；真正翻 enforce 仍依赖客户端实现签名+登记密钥（客户端侧，本 PR 不含）**，默认保持 grace。
 > - **⚠️ opt-out 纪律（2026-06-24 补，对齐平台治理地图「兜底关闭」）**：当前实现是"无显式开关行 = 默认开启(opt-out)"，仅"开关拉取失败/超时/不可解析"按 fail-closed（§5.6）。读取异常 fail-closed 与业务 HTML「拉取失败按兜底关闭」一致；但"受控能力无 seed 行即默认放行"与业务侧「白名单式默认关」心智仍有差。**硬约束**：每新增一类受控能力（终端/模块/第三方/MDM/人脸等）必须同批 seed 一条 `enabled=FALSE` 兜底行（参照 V146 `face.verification.enabled`=FALSE、V071/V093/V096/V097/V098 各受控前缀默认关），不得依赖默认开放；评审与门禁应核对"新增受控能力是否配套 FALSE seed"。
 >   - **✅ 2026-07-04 据实核对现状（ssh 核对迁移 seed）**：终端总开关 `terminal.enabled`（V197，10 端）与 Web 后台/商户专区模块开关（V198/V199）**按设计 seed=TRUE**——它们是**已发布、有意默认开**的可控能力（关闭=停用某端/模块，属运营动作，非「未受控放行」）。**全部受控/预留能力均已配套显式 `enabled=FALSE` 兜底行**：`payment.gateway.enabled`(V093)、`face.verification.enabled`(V146)、`terminal.camera_scan.enabled`/`customer.native_client.enabled`(V097)、`staff.device_keystore.enabled`/`terminal.tablet.enabled`(V098)、`wecom.ai_qc.enabled`(V096)、`integration.*.sync`(V071)、`managed_work_devices`(V088)、`sms_notification` 总开关(V177，域级子开关按 AND 语义)。**结论：不存在「受控能力无 seed 行→默认放行」的存量定时炸弹**；opt-out 仅对上述有意默认开的总/模块开关成立。**强制纪律照旧**：新增任一受控能力必须同批 seed FALSE + 对存量做一次回溯核对，评审/门禁核对「新增受控能力是否配套 FALSE seed」。
@@ -511,6 +517,7 @@ flowchart TD
 - **客人侧终端（App/小程序/Web）**：拉取失败时默认按"该端/该模块未开放"处理，启动页提示稍后重试，避免开关失效时业务被无差别放开。
 - **员工/管理侧终端**：拉取失败时允许在本地缓存的"最近一次成功开关快照"上以只读/受限方式运行，但**写操作类接口在后端仍按 fail-closed 拒绝并写 `terminal.access_rejected`（reject_reason=switch_fetch_failed）**，直至开关恢复。
 - 后端任何接口在无法确认开关为"打开"时一律拒绝，不得因开关服务异常而默认放行。
+- **（2026-08-03 补）"无法确认"包含"确认不了这是哪个端"**：终端类型以服务端派生的可信身份为准（`TerminalIdentityHolder`，见顶部横幅 AUD-010 收口条），解析不出终端身份的写请求按兜底关闭直接拒绝（403 `TERMINAL_NOT_ALLOWED`），不得因为客户端"没自报终端类型"就跳过整条开关闸。自救路径（登录、开关管理）与非终端通道（第三方开放平台回调、一体机自助端点）豁免。
 - 依据 finding switch-5。
 
 > 修订说明（2026-06-07 收口，critic-13）：一体机（kiosk）既是"客人侧终端"又是现场固定点位的自助设备（权益领取/订台/吧台买酒），若简单并入上面的"客人侧 fail-closed"，断网或开关拉取失败将导致**整机停摆**，与"现场连续运营"诉求冲突。本版对一体机断网/开关拉取失败的定位作如下显式协调（与 android §8 离线策略对齐）：
@@ -798,6 +805,7 @@ flowchart TD
 | 2026-06-10 产品审计 V0.6 | 增/改 | §4.1.3 | 明确事件中心 `event_name` 只写标准名；票务预检补 `verification.previewed`，签名失败/疑似变造/离线冲突等细分语义进入 `reason_code`/`event_subtype`，不再作为旧事件名消费 | 本轮 PM Critic V0.6 事件名漂移修复 |
 | 2026-06-07 | 改 | §6.3 terminal_type 表体 | 直接替换为 D5 10 个权威码，删除 guest_app/mini_program/... 别名兜底写法（权威字段不携带非权威码） | finding baseline-conf-3、structural-2、annotation-3、D5 |
 | 2026-06-07 | 增 | §5.6 fail-closed 兜底 | 明确一体机断网/开关拉取失败时为"按最近成功快照只读受限运营（现场连续运营），写操作 fail-closed"，非整机停摆 | finding critic-13 |
+| 2026-08-03 | 改 | 顶部横幅 AUD-010 / §5.6 | 终端总开关拦截器与设备凭证验签改用服务端可信终端身份（`TerminalIdentityHolder` / 按 `X-Device-Id` 反查登记类型），不再信自报 `X-Terminal-Type`；解析不出终端身份的写请求按兜底关闭 403 拒绝；豁免前缀登记 `/api/open/` 与 `/api/v1/terminals/kiosks/` 两条非终端通道 | 治理地图「关闭后…接口也要拒绝业务动作」「开关拉取失败时按兜底关闭处理，写操作一律拒绝；前端隐藏只是辅助，后端接口必须独立校验」 |
 | 2026-06-08 | 删 | §4.1 标准事件类型 | 删除聚合旧名 `member.points_changed`，会员积分变更统一由 §4.1.4 `points.earned/deducted/redeemed/expired` 细粒度事件承载，消除唯一字典内"聚合旧名+细粒度新名"双轨（data-risk §7.1、java-backend §14 同步只消费 points.*） | R3 / struct-annot-1/2、critic2-3、event-consumers-8 |
 | 2026-06-08 | 增 | §4.1 标准事件类型 | 就地说明 `reservation.created`（订台创建）/`reservation.deposit_paid`（客人付定金完成）/`reservation.deposit_settled`（定金最终结算：抵扣/退还/没收）三者各自触发点与载荷，消除"deposit_paid 与 deposit_settled 重复"误解，三者均保留 | R4 / event-consumers-5、critic2-5 |
 | 2026-06-08 | 改 | §4.1.4 会员/合规/容量域事件 | 删除 `points.earned`/`points.redeemed` 指向不存在名 `member.point_earned`/`member.point_redeemed` 的错误括注，改为"data-risk §7.1 消费本 points.* 事件" | R3 / event-consumers-8、struct-annot-2 |

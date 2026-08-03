@@ -312,6 +312,45 @@ class DeviceCredentialVerifierTests {
         assertThat(vt.verified()).isTrue();
     }
 
+    // ---- 2026-08-03 收口：自报 X-Terminal-Type 不再决定是否进设备绑定型验签闸 ----
+
+    /** 只带 X-Device-Id、不发终端类型头：服务端反查登记类型 kiosk，enforce 下缺签名的写请求仍被拒。 */
+    @Test
+    void omittedTerminalHeaderStillEntersDeviceBoundGate() {
+        when(deviceRepo.findByDeviceId(DEVICE)).thenReturn(Optional.of(device("kiosk", "bound")));
+        assertThatThrownBy(() -> verifier("enforce").verify(deviceIdOnly(null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+    }
+
+    /** 改报 web 想走非设备绑定型旁路：登记类型 kiosk 压过自报值，enforce 下照拒。 */
+    @Test
+    void selfReportedWebCannotEscapeDeviceBoundGate() {
+        when(deviceRepo.findByDeviceId(DEVICE)).thenReturn(Optional.of(device("kiosk", "bound")));
+        assertThatThrownBy(() -> verifier("enforce").verify(deviceIdOnly("web")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+    }
+
+    /** grace 下不硬拒，但派生出的可信终端类型是登记的 kiosk（不是自报的 web）——总开关据此判定。 */
+    @Test
+    void registeredTypeWinsOverSelfReportedUnderGrace() {
+        when(deviceRepo.findByDeviceId(DEVICE)).thenReturn(Optional.of(device("kiosk", "bound")));
+        TerminalIdentityHolder.VerifiedTerminal vt = verifier("grace").verify(deviceIdOnly("web"));
+        assertThat(vt.terminalType()).isEqualTo("kiosk");
+        assertThat(vt.verified()).isFalse();
+    }
+
+    private static MockHttpServletRequest deviceIdOnly(String claimedType) {
+        MockHttpServletRequest r = new MockHttpServletRequest("POST", URI);
+        r.setRequestURI(URI);
+        if (claimedType != null) {
+            r.addHeader("X-Terminal-Type", claimedType);
+        }
+        r.addHeader("X-Device-Id", DEVICE);
+        return r;
+    }
+
     private static StaffProfileRecord otherProfile() {
         Instant now = Instant.ofEpochMilli(NOW);
         return new StaffProfileRecord("spOther", "proj1", null, "u1", "Other", "ph", "id", "lvl1",
