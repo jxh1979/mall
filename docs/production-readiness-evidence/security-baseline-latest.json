@@ -1,13 +1,13 @@
 {
   "status": "passed",
   "evidence_type": "formal_security_baseline_v1",
-  "verified_at": "2026-08-01T00:00:00Z",
+  "verified_at": "2026-08-02T00:00:00Z",
   "verified_on_host": "192.168.88.160",
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 717,
+  "openapi_operation_count": 718,
   "security_baseline_version": "V1",
   "plaintext_secret_present": false,
-  "notes": "Re-synced to 717 operations: 批6 第三方通票适配 —— 新增 GET/POST /api/v1/integration/channel-ticket-type-maps 与 POST /api/v1/integration/channel-ticket-type-maps/{id}/archive (渠道票种映射登记/改绑/停用, 复用 integration.channel_store_map.view/manage 权限, 审计 integration.channel_ticket_type_map.saved/archived)。渠道售出的通票回流按映射落成本地票; 映射缺失 fail-closed 拒收; 能力开关 integration.ticket_channel.sync 默认关。"
+  "notes": "Re-synced to 718 operations: 按周批量排班 —— 新增 POST /api/v1/staff/shifts/batch (排班员选一批员工+起始日+天数/勾选星期几+每日起止时刻, 一次生成整周班次; 结束时刻不晚于开始时刻即跨零点班, 结束自动顺延次日; 复用 staff.shift.manage 权限, 逐条走既有 upsertShift 落库与审计 staff.shift.saved, 重排同一开始时刻为覆盖不新建)。"
 }
