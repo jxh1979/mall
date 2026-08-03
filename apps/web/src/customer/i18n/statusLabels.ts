@@ -190,6 +190,7 @@ const STATUS_LABELS: Record<string, string> = {
   tenant: "租赁商户",
   retail: "零售",
   catering: "餐饮",
+  media: "传媒",
   entertainment: "娱乐",
   // 业务域 / 退款域（refund_domain 等）
   ticket: "票务",

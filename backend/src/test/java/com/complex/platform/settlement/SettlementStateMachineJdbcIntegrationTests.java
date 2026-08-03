@@ -54,6 +54,9 @@ class SettlementStateMachineJdbcIntegrationTests {
             jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", e);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + e);
         }
+        if (!entIds.isEmpty()) { // 夹具建的提供方商户(在引用它的权益之后删,FK 顺序)
+            jdbcTemplate.update("DELETE FROM merchants WHERE id = 'mch_sm'");
+        }
         for (String p : projects) {
             com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", p);
             jdbcTemplate.update("DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)", p);
@@ -322,6 +325,11 @@ class SettlementStateMachineJdbcIntegrationTests {
     /** seed 已过期权益(+父实例)，可控 entitlement 状态与实例状态。 */
     private void seedExpiredEntitlement(String suffix, int total, int used, long allocated,
                                         Instant createdAt, String entStatus, String instanceStatus) {
+        // 2026-08-03:到期归属按提供方业态分流,查不到业态一律 fail-loud 阻断 → 夹具必须建真商户行。
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES ('mch_sm', 'mch_sm', 'bar', 'active', now(), now())
+                ON CONFLICT (id) DO UPDATE SET merchant_type = EXCLUDED.merchant_type""");
         String ent = "ent_" + suffix;
         entIds.add(ent);
         String typeId = "tt_" + suffix;

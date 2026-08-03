@@ -70,18 +70,24 @@ public class TicketDistributionSettlementService {
     static final String REVENUE_STREAM_TICKET_SERVICE_FEE = "ticket_service_fee";
     // S6:赠送权益预估成本收入流——收款主体由归属配置解析(V372 种子=娱乐平台公司 be_ent_platform)。
     static final String REVENUE_STREAM_PASS_GIFT_COST = "pass_gift_cost";
-    // S11 业态词表(V348 merchants.merchant_type 五值封口)。酒吧业态即「娱乐平台公司」那一支。
+    // S11 业态词表(V348 五值 + V384 加 media 共六值,merchants.merchant_type 封口)。酒吧业态即「娱乐平台公司」那一支。
     static final String FORMAT_BAR = "bar";
+    /** V384 传媒业态:演出票/演出权益的提供方,收入按 HTML「演出票 → 传媒公司」归 performance_ticket 流。 */
+    static final String FORMAT_MEDIA = "media";
     private static final String BENEFICIARY_ENTITY = "entity";
     private static final String BENEFICIARY_PER_MERCHANT = "per_merchant";
     /**
-     * S11④ 业态 → 收款方。酒吧份额与游乐份额各归一个经营主体（娱乐平台公司 / 游乐公司），
+     * S11④ 业态 → 收款方。酒吧/游乐/传媒份额各归一个经营主体（娱乐平台公司 / 游乐公司 / 传媒公司），
      * 主体是谁由 {@code revenue_stream_attribution} 后台可配，这里只定「查哪条收入流」；
      * 餐饮/零售/其他没有单一主体，钱归提供这份权益的商户自己（per_merchant）。
+     *
+     * <p>V384 补传媒一行：业务 HTML §「收入归属」明写「演出票 → 传媒公司」，
+     * 缺这一行时演出份额会被当成 per_merchant 归到商户自己，传媒公司在结算单上完全看不见自己的钱。
      */
     private static final java.util.Map<String, String> ENTITY_BENEFICIARY_FORMATS = java.util.Map.of(
             FORMAT_BAR, REVENUE_STREAM_ALL_PASS_TICKET,
-            "amusement", "amusement_ticket");
+            "amusement", "amusement_ticket",
+            FORMAT_MEDIA, "performance_ticket");
 
     private final JdbcSettlementBillRepository repository;
     private final RevenueStreamAttributionRepository attributionRepository;

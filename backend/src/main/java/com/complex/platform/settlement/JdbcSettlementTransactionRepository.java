@@ -240,13 +240,18 @@ public class JdbcSettlementTransactionRepository {
      *       尚未冻结权益的时间窗（此时权益仍 active 但实例已冻结）。</li>
      * </ul>
      * 退款失败驳回→实例恢复 active、权益仍 active → 重新可没收（下轮扫描并入）。仓库只取数，金额切分在 Job 内做。
+     *
+     * <p><b>business_format 不再 COALESCE 兜底 'bar'（2026-08-03）</b>：这一列是「未核销余额归谁」的判定源
+     * （HTML §「到期未核销款」：酒吧相关归娱乐平台公司、纯游乐归游乐公司、演出归传媒公司）。
+     * 兜底成酒吧＝有金额却定不出真正的收款方时默认记给娱乐平台公司，传媒/游乐公司的钱就这么悄悄没了。
+     * 现改为如实返回 NULL，由 {@code SettlementExpiryJob} fail-loud 阻断落账。
      */
     public java.util.List<ExpiredUnverifiedRow> findExpiredUnverifiedEntitlements(Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
         return jdbcTemplate.query("""
                 SELECT e.id, e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
                        e.total_times, e.used_times, e.allocated_revenue_cent, e.valid_to,
-                       COALESCE(m.merchant_type, 'bar') AS business_format
+                       m.merchant_type AS business_format
                   FROM issued_entitlements e
                   LEFT JOIN merchants m ON m.id = e.merchant_id
                  WHERE e.valid_to < :now
