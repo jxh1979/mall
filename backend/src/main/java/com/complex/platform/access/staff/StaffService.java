@@ -46,6 +46,10 @@ public class StaffService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> INTEGRITY_FAILURES =
             Set.of("root_detected", "debug_detected", "abnormal");
+    // 打卡拉候选班次的时间窗(打卡时刻 ±12 小时)。班次通常 8 小时,12h 足够覆盖早到/晚退,
+    // 又不至于把隔天的同名班拉进来。只影响「无班次覆盖」时的兜底匹配:区间覆盖的班必定在窗内,不受它影响。
+    // ponytail: 觉得兜底匹配太松(离班 11 小时还认)就把它调小,一个常量的事。
+    private static final long SHIFT_MATCH_WINDOW_SECONDS = 12 * 3600L;
 
     private final JdbcStaffRepository repository;
     private final AccessRepository accessRepository;
@@ -599,9 +603,11 @@ public class StaffService {
         return page(repository.listShiftsForUserBetween(actor.id(), today, today.plusDays(7)));
     }
 
-    /** E2(2026-07-02 拍板):打卡——打卡时刻取服务器(客户端不可篡改),但「当日」按所在地(北京)日历日折算
-     * (NEW-03,2026-08-02 落码):北京凌晨两点上班打卡认的是北京当天的排班;严格无宽限:上班晚于班次开始即迟到、
-     * 下班早于班次结束即早退;当日无班次记 no_shift;只记录不自动扣罚(处理归人事)。 */
+    /** E2(2026-07-02 拍板):打卡——打卡时刻取服务器(客户端不可篡改);严格无宽限:上班晚于班次开始即迟到、
+     * 下班早于班次结束即早退;匹配不到班次记 no_shift;只记录不自动扣罚(处理归人事)。
+     *
+     * <p>2026-08-02:配哪个班改按<b>时间区间</b>判定,不再折日历日——排班本来就存「几月几日几点→几月几日几点」,
+     * 跨零点班(8/2 22:00→8/3 06:00)的 work_date 是 8/2,按打卡当天查必然漏,员工凌晨下班被记「无排班」。 */
     public StaffAttendanceRecord punch(com.complex.platform.access.staff.dto.StaffAttendancePunchRequest request) {
         authorizationService.requirePermission("staff.attendance.punch");
         if (request == null || request.punchType() == null
@@ -614,8 +620,8 @@ public class StaffService {
         }
         var actor = authorizationService.currentActor();
         Instant now = clock.instant();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, LocalZone.ID);
-        java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserBetween(actor.id(), today, today);
+        java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserOverlapping(
+                actor.id(), now.minusSeconds(SHIFT_MATCH_WINDOW_SECONDS), now.plusSeconds(SHIFT_MATCH_WINDOW_SECONDS));
         StaffShiftRecord shift = pickShift(shifts, request.punchType(), now);
         String judgement;
         if (shift == null) {
@@ -635,7 +641,17 @@ public class StaffService {
         return saved;
     }
 
+    /** 配班两段优先级:先认「区间覆盖打卡时刻」的班(跨零点班照样命中);一个都没覆盖再退回「距起止最近」
+     * (保留早到/晚退也能匹配上的既有行为)。多个覆盖时仍取最近。 */
     private StaffShiftRecord pickShift(java.util.List<StaffShiftRecord> shifts, String punchType, Instant now) {
+        java.util.List<StaffShiftRecord> covering = shifts.stream()
+                .filter(shift -> !now.isBefore(shift.startAt()) && !now.isAfter(shift.endAt()))
+                .toList();
+        return nearestShift(covering.isEmpty() ? shifts : covering, punchType, now);
+    }
+
+    private static StaffShiftRecord nearestShift(java.util.List<StaffShiftRecord> shifts, String punchType,
+            Instant now) {
         return shifts.stream().min(java.util.Comparator.comparingLong(shift -> Math.abs(
                 (punchType.equals("check_in") ? shift.startAt() : shift.endAt()).toEpochMilli()
                         - now.toEpochMilli()))).orElse(null);

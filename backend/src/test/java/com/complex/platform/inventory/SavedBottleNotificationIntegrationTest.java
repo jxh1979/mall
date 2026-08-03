@@ -92,7 +92,10 @@ class SavedBottleNotificationIntegrationTest {
         assertThat(logValue("deposit", DEPOSIT_PHONE, "status")).isEqualTo("sent");
         assertThat(logParam("deposit", DEPOSIT_PHONE, "bottle")).isEqualTo("Deposit Merlot");
         assertThat(logParam("deposit", DEPOSIT_PHONE, "item")).isEqualTo(itemId);
-        assertThat(logParam("deposit", DEPOSIT_PHONE, "expireAt")).isEqualTo(expireAt.toString());
+        // 客人看到的是中文北京日期(如 2026年8月3日),不是 Instant.toString() 的 2026-08-02T18:00:00Z。
+        assertThat(logParam("deposit", DEPOSIT_PHONE, "expireAt")).isEqualTo(
+                java.time.format.DateTimeFormatter.ofPattern("yyyy年M月d日")
+                        .format(expireAt.atZone(com.complex.platform.common.LocalZone.ID)));
 
         jdbcTemplate.update("UPDATE customers SET phone = ?, masked_phone = ?, updated_at = now() WHERE id = ?",
                 piiCipher.encrypt(CLAIM_PHONE), maskPhone(CLAIM_PHONE), customerId);
