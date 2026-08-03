@@ -69,7 +69,7 @@ public class SecurityConfig {
                     UNAUTHORIZED_ENVELOPE_MAPPER.writeValue(response.getWriter(), ApiResponse.error(
                             "UNAUTHORIZED",
                             "AUTH_SESSION_INVALID",
-                            "authentication required: token is missing, invalid or expired"));
+                            "登录已过期，请重新登录"));
                 }))
                 .authorizeHttpRequests(authorize -> {
                     authorize.requestMatchers(publicApiPaths()).permitAll();

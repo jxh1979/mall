@@ -187,7 +187,7 @@ class AmusementControllerTests {
                         .content(bodyFor("/api/v1/amusement/projects/project_1/over-capacity-policy", false)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+                .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
     @ParameterizedTest
@@ -228,7 +228,7 @@ class AmusementControllerTests {
                         .content(bodyFor(path, false)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+                .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
     private String bodyFor(String path, boolean withIdempotencyKey) {

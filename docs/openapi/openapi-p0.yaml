@@ -27629,7 +27629,7 @@ components:
           maxLength: 128
         message:
           type: string
-          description: 错误提示文案；不得泄露密钥、身份证号、手机号等敏感信息。
+          description: 错误提示文案；一律中文业务话术（禁止出现英文字段键/英文句子，后台、客人端、设备端、安卓端共用同一条文案）；不得泄露密钥、身份证号、手机号等敏感信息。英文字段键属机读信息，只留服务端日志，由 GlobalExceptionHandler 出口翻译后再出网。
           maxLength: 255
         details:
           type: object

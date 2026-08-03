@@ -53,21 +53,24 @@ public class GlobalExceptionHandler {
         if (exception.retryAfterSeconds() != null) {
             builder.header("Retry-After", String.valueOf(exception.retryAfterSeconds()));
         }
+        // 展示文案一律中文（业务 HTML 铁律）：抛点保留英文字段键给日志排障，只在写响应体时翻译。
+        log.debug("api error: code={} raw_message={}", exception.code(), exception.getMessage());
         return builder.body(ApiResponse.error(
                 topLevelCode(exception.status(), exception.code()),
                 exception.code(),
-                exception.getMessage()));
+                FieldLabels.translate(exception.getMessage())));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException exception) {
         String message = exception.getBindingResult().getFieldErrors().stream()
-                .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .collect(Collectors.joining("; "));
+                .map(error -> FieldLabels.beanFieldError(error.getField(), error.getDefaultMessage()))
+                .distinct()
+                .collect(Collectors.joining("；"));
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED",
-                        message.isBlank() ? "validation failed" : message));
+                        message.isBlank() ? FieldLabels.FALLBACK : message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -76,14 +79,14 @@ public class GlobalExceptionHandler {
         log.warn("constraint violation: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED", "request validation failed"));
+                .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED", FieldLabels.FALLBACK));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(HttpMessageNotReadableException exception) {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("PARAM_INVALID", "REQUEST_BODY_INVALID", "request body is invalid"));
+                .body(ApiResponse.error("PARAM_INVALID", "REQUEST_BODY_INVALID", "请求内容格式不正确，请检查后重新提交"));
     }
 
     /**
@@ -98,7 +101,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED",
-                        "required parameter '" + exception.getParameterName() + "' is missing"));
+                        FieldLabels.translate(exception.getParameterName() + " is required")));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
@@ -106,7 +109,7 @@ public class GlobalExceptionHandler {
         log.warn("method not supported: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ApiResponse.error("PARAM_INVALID", "METHOD_NOT_ALLOWED", "http method is not allowed for this endpoint"));
+                .body(ApiResponse.error("PARAM_INVALID", "METHOD_NOT_ALLOWED", "该接口不支持此请求方式"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -115,7 +118,7 @@ public class GlobalExceptionHandler {
         log.warn("illegal argument: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("PARAM_INVALID", "BAD_REQUEST", "request is invalid"));
+                .body(ApiResponse.error("PARAM_INVALID", "BAD_REQUEST", "请求参数有误，请检查后重新提交"));
     }
 
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
@@ -123,7 +126,7 @@ public class GlobalExceptionHandler {
         log.warn("no resource found: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error("NOT_FOUND", "NOT_FOUND", "requested resource was not found"));
+                .body(ApiResponse.error("NOT_FOUND", "NOT_FOUND", "请求的内容不存在或已被删除"));
     }
 
     @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
@@ -131,7 +134,7 @@ public class GlobalExceptionHandler {
         log.warn("unsupported media type: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
-                .body(ApiResponse.error("PARAM_INVALID", "UNSUPPORTED_MEDIA_TYPE", "content type is not supported for this endpoint"));
+                .body(ApiResponse.error("PARAM_INVALID", "UNSUPPORTED_MEDIA_TYPE", "该接口不支持此内容格式"));
     }
 
     @ExceptionHandler(org.springframework.web.bind.MissingRequestHeaderException.class)
@@ -139,7 +142,7 @@ public class GlobalExceptionHandler {
         log.warn("missing request header: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED", "a required request header is missing"));
+                .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED", "请求缺少必需的信息，请刷新后重试"));
     }
 
     /**
@@ -153,7 +156,7 @@ public class GlobalExceptionHandler {
         log.warn("duplicate key violation: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error("STATE_CONFLICT", "DUPLICATE_KEY", "resource with the same unique key already exists"));
+                .body(ApiResponse.error("STATE_CONFLICT", "DUPLICATE_KEY", "已存在相同的记录，请勿重复提交"));
     }
 
     @ExceptionHandler(Exception.class)
@@ -161,6 +164,6 @@ public class GlobalExceptionHandler {
         log.error("Unhandled API exception", exception);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("INTERNAL_ERROR", "INTERNAL_ERROR", "internal server error"));
+                .body(ApiResponse.error("INTERNAL_ERROR", "INTERNAL_ERROR", "服务出现异常，请稍后重试"));
     }
 }

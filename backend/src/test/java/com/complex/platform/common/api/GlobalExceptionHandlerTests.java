@@ -23,7 +23,8 @@ class GlobalExceptionHandlerTests {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("PARAM_INVALID");
-        assertThat(response.getBody().message()).contains("ref_type");
+        // 展示文案全中文：字段键 ref_type 只留服务端日志，对外给业务话术。
+        assertThat(response.getBody().message()).isEqualTo("关联单据类型未填写");
     }
 
     @Test
@@ -35,7 +36,7 @@ class GlobalExceptionHandlerTests {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("INTERNAL_ERROR");
-        assertThat(response.getBody().message()).isEqualTo("internal server error");
+        assertThat(response.getBody().message()).isEqualTo("服务出现异常，请稍后重试");
         assertThat(output).contains("Unhandled API exception")
                 .contains("jdbc root cause");
     }

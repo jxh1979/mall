@@ -53,7 +53,7 @@ public class DoubleSubmitCsrfFilter extends OncePerRequestFilter {
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding("UTF-8");
             ENVELOPE_MAPPER.writeValue(response.getWriter(), ApiResponse.error(
-                    "FORBIDDEN", "CSRF_TOKEN_INVALID", "CSRF token is missing or invalid"));
+                    "FORBIDDEN", "CSRF_TOKEN_INVALID", "安全校验未通过，请刷新页面后重试"));
             return;
         }
         chain.doFilter(request, response);

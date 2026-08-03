@@ -16,7 +16,14 @@ public final class Strings {
         return (value == null || value.isBlank()) ? null : value.trim();
     }
 
-    /** 必填文本：trim 后为空则抛 VALIDATION_FAILED；否则返回 trim 后的值。 */
+    /**
+     * 必填文本：trim 后为空则抛 VALIDATION_FAILED；否则返回 trim 后的值。
+     *
+     * <p>消息里的英文字段键是<strong>机读</strong>信息（给服务端日志/排障用），不是展示文案：
+     * 写 HTTP 响应体时由 {@code GlobalExceptionHandler} 经 {@code FieldLabels.translate} 统一
+     * 换成中文业务名再出网。全仓 975 处调用 + 95 处手写字面量 + 各域本地校验助手都走同一出口，
+     * 所以这里不要再各自拼中文（会出现两套文案且盖不住手写抛点）。
+     */
     public static String requireText(String value, String field) {
         String trimmed = trimToNull(value);
         if (trimmed == null) {

@@ -21,11 +21,7 @@ final class BarValidation {
     }
 
     static String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
+        return com.complex.platform.common.Strings.requireText(value, fieldName);
     }
 
     static Instant requireInstant(Instant value, String fieldName) {

@@ -113,7 +113,7 @@ class TicketingControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+                .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
     @Test
@@ -131,7 +131,7 @@ class TicketingControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+                .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
     // R5 T5：核销冲正端点权限 ticket.verify.reverse + 幂等键必填 + 成功回包。
@@ -166,7 +166,7 @@ class TicketingControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+                .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
     @Test
@@ -233,7 +233,7 @@ class TicketingControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+                .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
     @Test

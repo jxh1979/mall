@@ -183,7 +183,7 @@ class BarControllerTests {
                         .content(bodyFor(path, false)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+                .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
 
