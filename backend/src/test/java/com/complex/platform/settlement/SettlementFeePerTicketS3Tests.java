@@ -22,7 +22,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * S3「门票综合服务费:一张票只收一道」验收(V367·K7)。
  *
  * <p>业务口径(business-system-map §「门票综合服务费」):该费与娱乐平台公司留存是<b>同一项、只扣一次</b>;
- * 所有门票项目都收<b>一道</b>。计提时点＝该票<b>首笔核销</b>时(用户已拍板)。
+ * <b>只适用于酒吧相关票务</b>(纯游乐票、纯游乐通票、演出票不收),酒吧相关票务收<b>一道</b>。
+ * 计提时点＝该票<b>首笔核销</b>时(用户已拍板)。
+ *
+ * <p>本类的商户在 {@code merchants} 表里没有行 → 业态判定与 {@code aggregateFormatRevenue} 同源兜底 bar,
+ * 故仍走酒吧支;经营域闸本身由 {@code SettlementServiceFeeDimensionS2Tests} 用真商户行覆盖。
  *
  * <p>改前的真 bug:固定额模式按【每笔核销】计提 —— 一张五次通票核销 5 次收 5 道,对账时一张票冒出
  * 5 条同名费,业务解释不了。本类四组断言:

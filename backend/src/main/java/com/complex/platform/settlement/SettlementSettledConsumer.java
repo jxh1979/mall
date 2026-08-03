@@ -78,13 +78,22 @@ public class SettlementSettledConsumer {
         // 综合服务费实收(每笔·增量封顶)。毛额=净收入+项目承担折扣(与 settleMonth 同口径),
         //   固定额/比例算本笔费,再按「商户×规则」当月增量封顶(月内 Σfee≤cap),落库作不可变实收事实供冲正精确取反。
         //
-        // S2(2026-07-28)本刀改三处,业务口径出自 system-map §「门票综合服务费」:
-        //   ①【覆盖面】原来只有【专属】核销才抽,非专属(含通票本身)一分不抽 —— 与「所有门票项目都要收一道
-        //      综合服务费」直接相反。去闸:只要本笔有已核销金额就计提。
+        // 【现行口径】2026-08-03 按业务 HTML 逐字矫回(business-enum-quick-reference §「门票综合服务费」
+        //   + business-system-map 同名条):「门票综合服务费只适用于酒吧相关票务,归娱乐平台公司。
+        //   单一酒吧门票…并可设置月度封顶;酒吧通票和跨域组合通票中的酒吧部分也可按生效规则收取,但不得封顶。
+        //   纯游乐票、纯游乐通票和演出票不向娱乐平台公司支付该费用。」
+        //   ①【经营域闸】只对【酒吧业态】的核销计提。判据源 = 提供方商户 merchants.merchant_type,
+        //      与 aggregateFormatRevenue 拆业态份额【同一列同一兜底】—— 两处不同源会出现「计提时算酒吧、
+        //      月结时归游乐」,K20 业态守恒当场炸。游乐/餐饮/零售/传媒(演出)一分不抽。
+        //      ⚠️ 本条推翻 S2(2026-07-28)旧注释里的「所有门票项目都要收一道」—— 那句在三份 HTML 里从来没有,
+        //      现行原文明写「只适用于酒吧相关票务」。
         //   ②【维度】费率按【票种】解析(event.ticketTypeId()),不再按权益类型。业务人员跟商户谈的是票种费率,
         //      一张通票里酒水/游乐两类权益按两套费率各抽一道,对账时根本对不上「这张票收了多少」。
         //   ③【项目】projectId 传事件带下来的真值(核销人 token 派生),不再硬编码 null —— 原先项目级费率特例
         //      永远解析不到,后台配了也不生效。同一个值同时用于解析费率与写 project_id 列,两处不再各写各的。
+        //   ④【封顶只对单一酒吧门票】HTML 原文:单一酒吧门票「可设置月度封顶」,酒吧通票/跨域组合通票的
+        //      酒吧部分「不得封顶」。代码判据 = exclusive_merchant_id 非空 ⇔ 该权益专属某一家酒吧直付
+        //      = 单一酒吧门票;为空 = 进池的通票酒吧份额 → 不走封顶分支。
         //   ⚠️ 本刀【不动引擎数值公式】:非专属那部分 fee 只落 settlement_transactions 作事实,
         //      settleMonth 仍只从专属聚合读 fee(F 进主链是 S4)。费率种子仍为 0 → 每笔费恒 0 → 分账逐分不变。
         //
@@ -98,7 +107,9 @@ public class SettlementSettledConsumer {
         //   ③【复位】冲正行取原行之反，该票净额抵回 0 → 锚点自动复位，下一次核销重新收一道（票还在、费该收）。
         long compServiceFeeCent = 0L;
         String compServiceFeeConfigId = null;
-        if (verified > 0L && event.parentTicketId() != null) {
+        if (verified > 0L && event.parentTicketId() != null
+                && TicketDistributionSettlementService.FORMAT_BAR.equals(
+                        billRepository.merchantBusinessFormat(event.merchantId()))) {
             var svcFee = billRepository.findComprehensiveServiceFee(
                     event.projectId(), event.exclusiveMerchantId(), event.ticketTypeId());
             long platformBorne = ComprehensiveServiceFee.platformBorneCent(
@@ -111,10 +122,11 @@ public class SettlementSettledConsumer {
                 perTicket = 0L; // 这张票已经收过这一道固定额了
             }
             if (perTicket > 0L) {
-                if (svcFee.monthlyCapAmountCent() != null) {
+                if (svcFee.monthlyCapAmountCent() != null && event.exclusiveMerchantId() != null) {
                     // 增量封顶:查月内同「商户×规则」已落 fee 累计(含冲正负→已释放额度),本笔 fee=min(perTicket, 剩余额度)。
-                    //   非专属核销无专属商户 → 归入该规则的「进池」这一桶(仓储层 NULL 对 NULL 配对),
-                    //   专属商户各自的桶逐分不变(用户 2026-07-21 拍板 A「按费率规则各自封、全局规则各商户各自封顶」不变)。
+                    //   只有专属(单一酒吧门票)走到这里,各商户各自一桶逐分不变
+                    //   (用户 2026-07-21 拍板 A「按费率规则各自封、全局规则各商户各自封顶」不变);
+                    //   进池的通票酒吧份额按 HTML「不得封顶」已在上面的条件里排除。
                     YearMonth m = YearMonth.from(event.verifiedAt().atZone(ZoneOffset.UTC));
                     long mtd = billRepository.sumMonthToDateServiceFee(
                             event.exclusiveMerchantId(), svcFee.id(),

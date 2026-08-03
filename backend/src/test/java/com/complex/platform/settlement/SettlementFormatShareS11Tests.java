@@ -26,7 +26,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <ol>
  *   <li><b>K9 逐分不变</b>：一张只有酒吧权益的通票（酒吧占比 100%），结算单<b>每一列</b>与改造前一模一样；</li>
  *   <li><b>K20 拆份额守恒</b>：Σ各业态净份额 + 整单渠道费 ≡ 通票收入；只有酒吧那份进池，
- *       游乐/餐饮的份额不进池、也不参与酒吧的排名与客数；</li>
+ *       游乐/餐饮的份额不进池、也不参与酒吧的排名与客数；门票综合服务费<b>只从酒吧那份扣</b>
+ *       （HTML §「门票综合服务费」：只适用于酒吧相关票务，纯游乐票／纯游乐通票／演出票不收）；</li>
  *   <li><b>渠道抽成整单前移</b>：渠道拿的是整笔售价的成，各业态按份额一起担，
  *       不再由酒吧一家替全场扛；费率 0（官方直销）时逐分不变；</li>
  *   <li><b>折扣补回口径扩到所有业态</b>：平台承担折扣时每个业态都按满额算，不是只补酒吧那一路。</li>
@@ -164,18 +165,20 @@ class SettlementFormatShareS11Tests {
         seedMerchant("m_fmt_bar2", "bar");
         seedMerchant("m_fmt_amu", "amusement");
         seedMerchant("m_fmt_cat", "catering");
-        // 综合服务费对所有门票核销一视同仁(每笔 20%):酒吧 12000+8000、游乐 6000、餐饮 2000。
+        // 综合服务费【只适用于酒吧相关票务】(HTML §「门票综合服务费」):酒吧 12000+8000;
+        //   游乐/餐饮那两份一分不抽(纯游乐票、演出票不向娱乐平台公司付这道费)。
         seedVerifiedWithFee(pid, "m_fmt_bar1", 6, 6, 60000L, 12000L);
         seedVerifiedWithFee(pid, "m_fmt_bar2", 4, 4, 40000L, 8000L);
-        seedVerifiedWithFee(pid, "m_fmt_amu", 9, 9, 30000L, 6000L);   // 核销数最多，从前会抢到第 1 名
-        seedVerifiedWithFee(pid, "m_fmt_cat", 8, 8, 10000L, 2000L);
+        seedVerifiedWithFee(pid, "m_fmt_amu", 9, 9, 30000L, 0L);   // 核销数最多，从前会抢到第 1 名
+        seedVerifiedWithFee(pid, "m_fmt_cat", 8, 8, 10000L, 0L);
 
         String billId = settlementService.settleMonth(pid, MONTH);
         Map<String, Object> b = bill(pid);
 
         // 通票收入是整张票的钱（各业态毛额之和），可分配池只拿酒吧那一份(扣完酒吧侧服务费)。
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(140000L);
-        assertThat(b.get("comp_service_fee_pooled_cent")).as("池链服务费 = 全部业态计提合计").isEqualTo(28000L);
+        assertThat(b.get("comp_service_fee_pooled_cent"))
+                .as("池链服务费 = 只有酒吧业态计提(游乐/餐饮不收这道费)").isEqualTo(20000L);
         assertThat(b.get("available_pool_cent")).as("池 = 酒吧份额 − 酒吧侧服务费,不含游乐/餐饮").isEqualTo(80000L);
 
         // 分池明细里只有两家酒吧，各 50%。
@@ -188,10 +191,12 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.keySet()).containsExactlyInAnyOrder("bar", "amusement", "catering");
         assertThat(shares.get("bar").get("comp_service_fee_cent")).isEqualTo(20000L);
         assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(80000L);
-        assertThat(shares.get("amusement").get("comp_service_fee_cent")).isEqualTo(6000L);
-        assertThat(shares.get("amusement").get("net_revenue_cent")).isEqualTo(24000L);
-        assertThat(shares.get("catering").get("comp_service_fee_cent")).isEqualTo(2000L);
-        assertThat(shares.get("catering").get("net_revenue_cent")).isEqualTo(8000L);
+        assertThat(shares.get("amusement").get("comp_service_fee_cent"))
+                .as("纯游乐份额不收门票综合服务费").isEqualTo(0L);
+        assertThat(shares.get("amusement").get("net_revenue_cent")).isEqualTo(30000L);
+        assertThat(shares.get("catering").get("comp_service_fee_cent"))
+                .as("餐饮份额不收门票综合服务费").isEqualTo(0L);
+        assertThat(shares.get("catering").get("net_revenue_cent")).isEqualTo(10000L);
         assertThat(shares.get("amusement").get("beneficiary_kind")).as("游乐份额归游乐公司这个主体").isEqualTo("entity");
         assertThat(shares.get("amusement").get("beneficiary_entity_id"))
                 .as("V375 全局种子:amusement_ticket 流 → 游乐公司").isEqualTo("be_amusement");
@@ -223,8 +228,8 @@ class SettlementFormatShareS11Tests {
         seedMerchant("m_ch_cat", "catering");
         seedVerifiedWithFee(pid, "m_ch_bar1", 6, 6, 60000L, 12000L);
         seedVerifiedWithFee(pid, "m_ch_bar2", 4, 4, 40000L, 8000L);
-        seedVerifiedWithFee(pid, "m_ch_amu", 3, 3, 30000L, 6000L);
-        seedVerifiedWithFee(pid, "m_ch_cat", 1, 1, 10000L, 2000L);
+        seedVerifiedWithFee(pid, "m_ch_amu", 3, 3, 30000L, 0L);  // 游乐份额不收综合服务费
+        seedVerifiedWithFee(pid, "m_ch_cat", 1, 1, 10000L, 0L);  // 餐饮份额不收综合服务费
 
         String billId = settlementService.settleMonth(pid, MONTH);
         Map<String, Object> b = bill(pid);

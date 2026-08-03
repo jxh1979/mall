@@ -205,6 +205,24 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /**
+     * 提供方商户的<b>经营业态</b>(HTML「门票综合服务费只适用于酒吧相关票务」的判定源)。
+     *
+     * <p><b>与 {@link #aggregateFormatRevenue} 同源</b>:同一张表同一列(merchants.merchant_type),
+     * 商户行缺失(无提供方/未建档)时同样兜底 {@code 'bar'} —— 两处判据若不同源,同一笔核销会出现
+     * 「计提时按酒吧收了费、月结时归到游乐份额」,K20 业态守恒当场炸,而账面数字看着还「差不多对」。
+     */
+    public String merchantBusinessFormat(String merchantId) {
+        if (merchantId == null) {
+            return TicketDistributionSettlementService.FORMAT_BAR;
+        }
+        String format = jdbcTemplate.query(
+                "SELECT merchant_type FROM merchants WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", merchantId),
+                rs -> rs.next() ? rs.getString(1) : null);
+        return format == null ? TicketDistributionSettlementService.FORMAT_BAR : format;
+    }
+
+    /**
      * S11②：当月<b>进池</b>核销按【销售渠道】汇总实付额（渠道抽成整单前移的计费基数）。
      * 渠道取自出票订单 {@code ticket_orders.sales_channel}；direct 出票无订单 → 空串（落通用率）。
      *
