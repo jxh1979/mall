@@ -129,6 +129,7 @@ class SettlementFormatShareS11Tests {
         expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
         expected.put("rounding_residual_cent", -1L);
+        expected.put("rounding_residual_entity_id", "be_ent_platform"); // V383 尾差责任主体=通票分账责任主体
         expected.put("pool_undistributed_cent", 0L);        // S8:第二段有参与者 → 恒 0
         expected.put("pool_undistributed_entity_id", null);
 
@@ -257,6 +258,47 @@ class SettlementFormatShareS11Tests {
         assertThat(billRepository.findChannelFee(pid, "miniapp").feeBps()).as("没单独配的渠道落回通用率").isEqualTo(200);
         assertThat(billRepository.findChannelFee(pid, null).feeBps()).isEqualTo(200);
         assertThat(billRepository.findChannelFee(null, "meituan").feeBps()).as("别的项目不受本项目费率影响").isZero();
+    }
+
+    /**
+     * <b>渠道费分摊尾差不再压给酒吧</b>（2026-08-03）。治理地图「全局原则 · 金额一律精确到分」：
+     * 尾差「必须单独记账留痕，并由该笔业务实际承担结算责任的主体承担…也不得悄悄并进任一参与方」。
+     *
+     * <p>三个业态毛额各 100 分（合计 300），渠道费率 3.33% → 整单渠道费 round(9.99)=10 分；
+     * 各家按占比 round(10×100/300)=3 分，Σ=9 → <b>分摊尾差 1 分</b>。
+     * 旧写法会让酒吧拿补数 4 分（替游乐和餐饮认了这 1 分、连留痕都没有）；
+     * 现在酒吧也只担自己那 3 分，那 1 分单列进 {@code rounding_residual_cent} 并挂责任主体。
+     */
+    @Test
+    void channelFeeAllocationRemainderIsLinedOutToResponsibleEntityNotBar() {
+        String pid = newProject();
+        setRankTier(pid, 1, 9, 10000);
+        setChannelFeeBps(pid, null, 333); // 3.33%
+        seedMerchant("m_cr_bar", "bar");
+        seedMerchant("m_cr_amu", "amusement");
+        seedMerchant("m_cr_cat", "catering");
+        seedVerified(pid, "m_cr_bar", 1, 1, 100L);
+        seedVerified(pid, "m_cr_amu", 1, 1, 100L);
+        seedVerified(pid, "m_cr_cat", 1, 1, 100L);
+
+        String billId = settlementService.settleMonth(pid, MONTH);
+        Map<String, Object> b = bill(pid);
+        Map<String, Map<String, Object>> shares = formatShares(billId);
+
+        assertThat(b.get("ticket_revenue_cent")).isEqualTo(300L);
+        assertThat(b.get("channel_fee_cent")).as("整单渠道费 round(300×3.33%)").isEqualTo(10L);
+        assertThat(shares.get("bar").get("channel_fee_cent")).as("酒吧只担自己那份，不拿补数").isEqualTo(3L);
+        assertThat(shares.get("amusement").get("channel_fee_cent")).isEqualTo(3L);
+        assertThat(shares.get("catering").get("channel_fee_cent")).isEqualTo(3L);
+        assertThat(sumOf(shares, "channel_fee_cent")).as("Σ各业态渠道费 = 9，差的 1 分不在任何一家头上").isEqualTo(9L);
+
+        assertThat(((Number) b.get("rounding_residual_cent")).longValue())
+                .as("渠道费分摊尾差 1 分单列留痕").isEqualTo(1L);
+        assertThat(b.get("rounding_residual_entity_id"))
+                .as("V383：尾差挂到实际承担结算责任的主体（通票分账=娱乐平台公司）").isEqualTo("be_ent_platform");
+        // 池 = 酒吧毛额 100 − 酒吧渠道费 3 = 97（不再被那 1 分尾差挪走）。
+        assertThat(b.get("available_pool_cent")).isEqualTo(97L);
+        assertThat(itemAmounts(pid).values()).containsExactly(97L);
     }
 
     // ---------------------------------------------------------------- ④ 折扣补回扩到所有业态

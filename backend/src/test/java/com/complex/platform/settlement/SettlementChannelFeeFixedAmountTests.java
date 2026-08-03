@@ -110,7 +110,11 @@ class SettlementChannelFeeFixedAmountTests {
 
     /**
      * 固定金额 500 分/张 × 2 张票 = 1000 分整单渠道费;一张票核销两次(酒吧+游乐)只收一道。
-     * 分摊按业态毛额占比:游乐 round(1000×30000/130000)=231,酒吧拿补数 769(尾差归酒吧支)。
+     * 分摊按业态毛额占比,<b>各家(含酒吧)一律按精确占比四舍五入</b>:
+     * 游乐 round(1000×30000/130000)=231、酒吧 round(1000×100000/130000)=769,合计恰 1000 → 分摊尾差 0。
+     *
+     * <p>2026-08-03 口径矫回:酒吧<b>不再拿补数</b> —— 治理地图「尾差…不得悄悄并进任一参与方」,
+     * 酒吧也是参与方。分摊尾差改为单列进 {@code rounding_residual_cent} 并挂责任主体(V383)。
      */
     @Test
     void fixedAmountChargesPerTicketAndAllocatesByFormatWithRemainderToBar() {
@@ -135,7 +139,11 @@ class SettlementChannelFeeFixedAmountTests {
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(130000L);
         assertThat(b.get("channel_fee_cent")).as("500 分/张 × 2 张,多次核销不重复收").isEqualTo(1000L);
         assertThat(shares.get("amusement").get("channel_fee_cent")).isEqualTo(231L);
-        assertThat(shares.get("bar").get("channel_fee_cent")).as("酒吧拿补数=尾差归酒吧支").isEqualTo(769L);
+        assertThat(shares.get("bar").get("channel_fee_cent"))
+                .as("酒吧按自己的精确占比四舍五入,不再替全场拿补数").isEqualTo(769L);
+        assertThat(((Number) b.get("rounding_residual_cent")).longValue())
+                .as("本例各家舍入后恰好分尽 → 渠道分摊尾差 0(池分账亦无尾差)").isZero();
+        assertThat(b.get("rounding_residual_entity_id")).as("尾差为 0 → 无责任主体").isNull();
         assertThat(b.get("available_pool_cent")).isEqualTo(99231L);
         assertThat(itemAmounts(pid).values()).containsExactly(99231L);
     }

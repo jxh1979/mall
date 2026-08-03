@@ -747,6 +747,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("attributed_entity_id", bill.attributedEntityId())
                 .addValue("combo_discount_cent", bill.comboDiscountCent())
                 .addValue("rounding_residual_cent", bill.roundingResidualCent())
+                .addValue("rounding_residual_entity_id", bill.roundingResidualEntityId())
                 .addValue("pool_undistributed_cent", bill.poolUndistributedCent())
                 .addValue("pool_undistributed_entity_id", bill.poolUndistributedEntityId());
         jdbcTemplate.update("""
@@ -757,6 +758,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     gift_cost_cent, gift_beneficiary_entity_id,
                     distribution_method, special_approval_ref, status,
                     attributed_entity_id, combo_discount_cent, rounding_residual_cent,
+                    rounding_residual_entity_id,
                     pool_undistributed_cent, pool_undistributed_entity_id, updated_at
                 )
                 VALUES (
@@ -766,6 +768,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     :gift_cost_cent, :gift_beneficiary_entity_id,
                     :distribution_method, :special_approval_ref, :status,
                     :attributed_entity_id, :combo_discount_cent, :rounding_residual_cent,
+                    :rounding_residual_entity_id,
                     :pool_undistributed_cent, :pool_undistributed_entity_id, now()
                 )
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), period_start, period_end) DO UPDATE SET
@@ -790,6 +793,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     attributed_entity_id = EXCLUDED.attributed_entity_id,
                     combo_discount_cent = EXCLUDED.combo_discount_cent,
                     rounding_residual_cent = EXCLUDED.rounding_residual_cent,
+                    rounding_residual_entity_id = EXCLUDED.rounding_residual_entity_id,
                     pool_undistributed_cent      = EXCLUDED.pool_undistributed_cent,
                     pool_undistributed_entity_id = EXCLUDED.pool_undistributed_entity_id,
                     updated_at          = now()
