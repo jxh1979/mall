@@ -29,7 +29,24 @@
 `LoyaltyService.evaluateLevels(now)`（`LoyaltyScheduledJob` 定时调）逐账户评估：
 1. **升级**：保级进度 `keep_threshold_progress` 达更高等级 `upgrade_threshold` 即时升级（不等周期末）。
 2. **保级/降级**：周期（`level_period_start`+`keep_period_days`）到期重算；未达 `keep_threshold` 进入宽限（`grace_until`），宽限内可补足；超期降级并留痕。
+   **降级落点（2026-08-03 修正）**：超宽限时用 `highestQualified(levels, keep_threshold_progress)` 按当前进度**重新定级**，
+   进度跌穿几级就一次落到对应等级；原实现取"比当前低一级的最高者"（已删的 `nextLower`），**恰好只降一级**，
+   与速查表§二"到期直接降到对应等级"、系统地图"等级与成长值"以及 `member-and-tier-product-prd-v1.0.md` §8.3
+   "会员可直接降至实际符合的等级，不要求逐级下降"相反。单测 `LoyaltyServiceTests.periodEndDowngradesDirectlyToQualifiedLevelAcrossTiers` 守这条。
 3. 单账户手动评估 `evaluateLevel(customerId)` 过权限闸 `customer.loyalty.evaluate`。
+
+### 2.1 待办：成长值口径尚未落地（HTML-05 未闭合，勿视为已完成）
+
+上面的降级落点修正只是**止血**，等级体系与业务 HTML 的口径差距仍在，本批**未做**，如实登记为待办：
+
+| 待办 | HTML 口径 | 代码现状 | 影响 |
+|---|---|---|---|
+| **成长值这本账在代码里根本不存在** | 速查表§二"成长值与可用积分是两套独立账，积分兑换不扣成长值" | 全仓 `成长值`/`growth_value`/`growthValue` 零命中；`LoyaltyService` 把**本次积分**直接累加进 `keep_threshold_progress`（`earnPoints`/`earnPointsPending`/确认路径三处），且该数值**已经吃过等级倍率和生日倍率** | 等级由"加了倍率的积分"决定，高等级会自我加速升级；PRD §9"等级倍率不得放大成长值"被违反 |
+| **保级窗口不是滚动十二个月** | 速查表§二/PRD §7"评估时点向前滚动最近 12 个月的有效成长值" | `keep_period_days` 固定周期 + 到期把 `keep_threshold_progress` **清零重攒**（`applyLevelChange(resetPeriod=true)`） | 同样的消费节奏，落在周期边界两侧结果不同；不是滚动窗口 |
+| **票务积分未按票种规则算** | 速查表§二"票务订单不读取商户业态规则，而按票种或票务产品已审批生效的积分规则、成长值规则分别计算" | `TicketOrderService` 走项目×受理商户的通用积分累计率 | 票种差异化积分/成长值无法配置 |
+| **降级提前三十天通知未实现** | 速查表§二"降级前提前三十天通知"、PRD §8.3 | 只有 `grace_until` 宽限期，无通知触发点 | 会员被静默降级 |
+
+修这几条要动成长值独立账本（新表/新列 + 明细带发生时间做滚动窗口）与票务规则读取，属独立批次，不在本次止血范围内。
 
 ## 3. 积分获取引擎（earn / confirm / deduct / 过期）
 
