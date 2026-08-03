@@ -225,14 +225,15 @@ class FinanceJdbcIntegrationTests {
 
     @Test
     void officialTicketRefundIsDeductedWithinBusinessDayCutoffWindow() {
-        // 经营日 2026-06-18，日切 04:00 → 窗口 [2026-06-18T04:00Z, 2026-06-19T04:00Z)。
+        // 经营日 2026-06-18，日切 04:00 按所在地（北京）时间读 →
+        // 窗口 = 北京 [06-18 04:00, 06-19 04:00) = [2026-06-17T20:00Z, 2026-06-18T20:00Z)。
         LocalDate businessDate = LocalDate.parse("2026-06-18");
-        Instant from = Instant.parse("2026-06-18T04:00:00Z");
-        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+        Instant from = Instant.parse("2026-06-17T20:00:00Z");
+        Instant to = Instant.parse("2026-06-18T20:00:00Z");
 
-        // 窗口内退款（10:00）计入；窗口外退款（03:00，归前一经营日）不计入。
-        insertTicketRefund("tr_in_window", 5000L, Instant.parse("2026-06-18T10:00:00Z"));
-        insertTicketRefund("tr_before_cutoff", 9999L, Instant.parse("2026-06-18T03:00:00Z"));
+        // 窗口内退款（北京 10:00 = 06-18T02:00Z）计入；窗口外退款（北京 03:00 = 06-17T19:00Z，归前一经营日）不计入。
+        insertTicketRefund("tr_in_window", 5000L, Instant.parse("2026-06-18T02:00:00Z"));
+        insertTicketRefund("tr_before_cutoff", 9999L, Instant.parse("2026-06-17T19:00:00Z"));
 
         FinanceRepository.DailyCloseSourceTotals totals =
                 repository.aggregateOfficialTicket(businessDate, from, to);
@@ -244,8 +245,8 @@ class FinanceJdbcIntegrationTests {
     void onlySuccessRefundsCountByEffectiveTimeNotRequestedRejectedFailedCancelled() {
         // AUD-018 门禁：八状态逐一插入，只有 success 且 succeeded_at 落窗冲减收入；其余一律不计。
         LocalDate businessDate = LocalDate.parse("2026-06-20");
-        Instant from = Instant.parse("2026-06-20T04:00:00Z");
-        Instant to = Instant.parse("2026-06-21T04:00:00Z");
+        Instant from = Instant.parse("2026-06-19T20:00:00Z");
+        Instant to = Instant.parse("2026-06-20T20:00:00Z");
         Instant inWindow = Instant.parse("2026-06-20T10:00:00Z");
         insertTicketRefund("tr_ok", 5000L, inWindow, "success");
         for (String st : java.util.List.of("requested", "review", "approved", "processing", "rejected", "failed", "cancelled")) {
@@ -258,8 +259,8 @@ class FinanceJdbcIntegrationTests {
     void thirdpartyReflowIsAggregatedSeparatelyAndNotFoldedIntoTicketOrBar() {
         // 财务确认：第三方回流单列，不进 revenue.net（净收入 = 售票 + 酒吧 − 退款，剔除第三方）。
         LocalDate businessDate = LocalDate.parse("2026-06-18");
-        Instant from = Instant.parse("2026-06-18T04:00:00Z");
-        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+        Instant from = Instant.parse("2026-06-17T20:00:00Z");
+        Instant to = Instant.parse("2026-06-18T20:00:00Z");
 
         insertThirdpartySync("ios_tp_1", 120000L, Instant.parse("2026-06-18T12:00:00Z"));
 
@@ -307,8 +308,8 @@ class FinanceJdbcIntegrationTests {
     @Test
     void aggregateOfficialTicketByMerchantScopeSumsOnlyThatMerchant() {
         LocalDate businessDate = LocalDate.parse("2026-06-18");
-        Instant from = Instant.parse("2026-06-18T04:00:00Z");
-        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+        Instant from = Instant.parse("2026-06-17T20:00:00Z");
+        Instant to = Instant.parse("2026-06-18T20:00:00Z");
         String tt = seedTicketType();
         insertTicketOrder("to_m_a", tt, "merchant_scope_a", 30000L, businessDate, "admin");
         insertTicketOrder("to_m_b", tt, "merchant_scope_b", 70000L, businessDate, "admin");
@@ -324,8 +325,8 @@ class FinanceJdbcIntegrationTests {
     void aggregateThirdpartyReflowByMerchantScopeIsZeroNotPlatformTotal() {
         // 第三方回流源无 merchant 维度:商户锁定日结时该源应归零(不属于任何单一商户),而非渗入全平台金额。
         LocalDate businessDate = LocalDate.parse("2026-06-18");
-        Instant from = Instant.parse("2026-06-18T04:00:00Z");
-        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+        Instant from = Instant.parse("2026-06-17T20:00:00Z");
+        Instant to = Instant.parse("2026-06-18T20:00:00Z");
         insertThirdpartySync("ios_scope_1", 120000L, Instant.parse("2026-06-18T12:00:00Z"));
 
         // 平台口径能看到 120000;商户口径必须归零。
