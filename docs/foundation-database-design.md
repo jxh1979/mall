@@ -516,13 +516,13 @@
 |---|---|
 | id | 权限ID |
 | permission_code | 权限编码 |
-| permission_name | 权限名称 |
+| permission_name | 权限名称，**必须中文**（权限模板页直接上屏给业务人员勾选，前端无翻译层） |
 | permission_type | menu、button、api、data、sensitive |
 | resource | 资源标识 |
 | action | view、create、update、delete、approve、export、unlock、call |
 | status | active、inactive |
 
-设计要求：权限点按单一功能最小颗粒度维护，一个单一功能对应一个权限点，例如 `ticket.verify.execute`、`bar.table_reservation.view`。角色权限用于批量授权，员工仍可通过用户角色、临时授权或直接授权扩展实现完全自定义配置。
+设计要求：权限点按单一功能最小颗粒度维护，一个单一功能对应一个权限点，例如 `ticket.verify.execute`、`bar.table_reservation.view`。新增权限点时 `permission_code` 用英文机读编码，`permission_name` 一律写中文业务说法（V385 已把历史遗留的 18 条英文名改中文，并在迁移末尾加了「不得再有纯 ASCII 展示名」的门禁）。角色权限用于批量授权，员工仍可通过用户角色、临时授权或直接授权扩展实现完全自定义配置。
 
 ### 3.5 role_permissions 角色权限表
 
