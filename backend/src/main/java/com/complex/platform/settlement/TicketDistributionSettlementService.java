@@ -30,8 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>金额精度与尾差（R-7 / D15.1，2026-07-22 用户拍板）</b>：一切按比例拆分一律
  * {@link MoneyRounding} <b>四舍五入到分（HALF_UP）</b>，不再用 {@code a*bps/10000} 整除截断
  * （旧写法系统性少给收费方且与「四舍五入」字面口径不符）。各家分别舍入后与「应分总额」的差额=<b>尾差</b>，
- * 归项目公司/平台兜底并<b>单列</b>落 {@code settlement_bills.rounding_residual_cent}（V343）留痕，
- * 绝不悄悄并进某一家、也不静默沉淀。守恒恒等式（{@link #verifyConservation} 运行期自检 + 集成测试断言）：
+ * <b>单列</b>落 {@code settlement_bills.rounding_residual_cent}（V343）留痕，并由该笔业务
+ * <b>实际承担结算责任的主体</b>承担（主体快照 {@code rounding_residual_entity_id}，V383）——
+ * 不得默认转给城市项目公司/顶层平台，绝不悄悄并进某一家、也不静默沉淀。守恒恒等式（{@link #verifyConservation} 运行期自检 + 集成测试断言）：
  * <ul>
  *   <li>{@code 通票收入 = 渠道费 + Σ各业态综合服务费 + Σ各业态净份额}（拆份额链无泄漏,{@link #verifyFormatSplit}）</li>
  *   <li>{@code Σ池分账明细 + 尾差 = 应分总额}（分账链尾差单列后严格相等）</li>
@@ -69,18 +70,24 @@ public class TicketDistributionSettlementService {
     static final String REVENUE_STREAM_TICKET_SERVICE_FEE = "ticket_service_fee";
     // S6:赠送权益预估成本收入流——收款主体由归属配置解析(V372 种子=娱乐平台公司 be_ent_platform)。
     static final String REVENUE_STREAM_PASS_GIFT_COST = "pass_gift_cost";
-    // S11 业态词表(V348 merchants.merchant_type 五值封口)。酒吧业态即「娱乐平台公司」那一支。
+    // S11 业态词表(V348 五值 + V384 加 media 共六值,merchants.merchant_type 封口)。酒吧业态即「娱乐平台公司」那一支。
     static final String FORMAT_BAR = "bar";
+    /** V384 传媒业态:演出票/演出权益的提供方,收入按 HTML「演出票 → 传媒公司」归 performance_ticket 流。 */
+    static final String FORMAT_MEDIA = "media";
     private static final String BENEFICIARY_ENTITY = "entity";
     private static final String BENEFICIARY_PER_MERCHANT = "per_merchant";
     /**
-     * S11④ 业态 → 收款方。酒吧份额与游乐份额各归一个经营主体（娱乐平台公司 / 游乐公司），
+     * S11④ 业态 → 收款方。酒吧/游乐/传媒份额各归一个经营主体（娱乐平台公司 / 游乐公司 / 传媒公司），
      * 主体是谁由 {@code revenue_stream_attribution} 后台可配，这里只定「查哪条收入流」；
      * 餐饮/零售/其他没有单一主体，钱归提供这份权益的商户自己（per_merchant）。
+     *
+     * <p>V384 补传媒一行：业务 HTML §「收入归属」明写「演出票 → 传媒公司」，
+     * 缺这一行时演出份额会被当成 per_merchant 归到商户自己，传媒公司在结算单上完全看不见自己的钱。
      */
     private static final java.util.Map<String, String> ENTITY_BENEFICIARY_FORMATS = java.util.Map.of(
             FORMAT_BAR, REVENUE_STREAM_ALL_PASS_TICKET,
-            "amusement", "amusement_ticket");
+            "amusement", "amusement_ticket",
+            FORMAT_MEDIA, "performance_ticket");
 
     private final JdbcSettlementBillRepository repository;
     private final RevenueStreamAttributionRepository attributionRepository;
@@ -196,8 +203,9 @@ public class TicketDistributionSettlementService {
                     ? feeCfg.fixedAmountCent() * cr.ticketCount()
                     : MoneyRounding.bpsOf(cr.revenueCent(), feeCfg.feeBps());
         }
-        // 渠道费按各业态毛额占比摊下去;分摊尾差归酒吧支(与「尾差归项目公司/平台兜底」同一范式,不摊给别家)。
-        allocateChannelFee(formatShares, channelFee, ticketRevenue);
+        // 渠道费按各业态毛额占比摊下去;分摊尾差【不再并进酒吧支】,而是单列到同一尾差口径
+        //   (治理地图「不得悄悄并进任一参与方」—— 酒吧也是参与方,不能替全场认这几分)。
+        long channelFeeResidual = allocateChannelFee(formatShares, channelFee, ticketRevenue);
 
         // ③b S7 兑付成本按【提供方业态】分记(HTML:962「成本按提供方的商户业态分开记账」):
         //    A 按业态归堆落业态份额行 gift_actual_paid_cent。纯留痕不进净份额(兑付由娱乐平台公司承担,
@@ -288,11 +296,13 @@ public class TicketDistributionSettlementService {
                 .filter(i -> !METHOD_EXCLUSIVE_FULL.equals(i.method()))
                 .mapToLong(ItemCalc::amount).sum();
         // R-7 尾差:应分总额(对各家精确份额合计只舍入一次) − Σ各家已舍入分账额。归项目公司/平台兜底,
-        //   单列落 bill.rounding_residual_cent 留痕(V343),不并进任何一家、也不静默沉淀在「总池 − Σ分账」里。
+        //   单列落 bill.rounding_residual_cent 留痕(V343),不并进任何一家、也不静默沉淀在「总池 − Σ分账」里;
+        //   责任主体见下方 roundingResidualEntityId(V383)。
         //   专属直付(exclusive_full)明细是「毛额 − 每笔实收服务费」的整数补数,不产生舍入 → 不进尾差口径。
         long roundingResidual = MoneyRounding.residual(pooled.exactTotal(), pooledDistributed);
         verifyConservation(pooled.exactTotal(), pooledDistributed, roundingResidual, pooled.items().size());
-        verifyFormatSplit(formatShares.values(), ticketRevenue, channelFee, pooledServiceFee, pooledGiftCost);
+        verifyFormatSplit(formatShares.values(), ticketRevenue, channelFee, channelFeeResidual,
+                pooledServiceFee, pooledGiftCost);
         // 越池判定按【应分总额】(= Σ已舍入 + 尾差)而非 Σ已舍入:特批闸管的是「业务上分超了池」,
         //   不该被 ±n/2 分的舍入尾差触发(尾差本就由平台兜底,不需要为几分钱把整月单打回待特批)。
         //   无舍入(按客数/固定额/比例整除得尽)时应分总额 ≡ Σ已舍入 → 与改造前逐分同判(零行为变更)。
@@ -319,6 +329,13 @@ public class TicketDistributionSettlementService {
         //   财务对账时「这笔费归了谁」直接看单据,不用追当时配置长什么样。
         String feeBeneficiaryEntityId =
                 attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_TICKET_SERVICE_FEE);
+        // V383 尾差责任主体(治理地图「全局原则 · 金额一律精确到分」2026-08-01 翻转后的现行口径):
+        //   池分账舍入尾差与渠道费分摊尾差同为「按比例拆分四舍五入」成因 → 合成一笔单列,
+        //   挂到【实际承担结算责任的主体】—— 通票分账这笔业务就是 all_pass_ticket 流的归属主体
+        //   (娱乐平台公司,后台可配、项目级可覆盖),与 attributedEntityId 同源解析不另写一套。
+        //   尾差为 0 → 主体置空(没有尾差就没有责任人),与 pool_undistributed_entity_id 同范式。
+        long totalRoundingResidual = roundingResidual + channelFeeResidual;
+        String roundingResidualEntityId = totalRoundingResidual == 0L ? null : attributedEntityId;
         // S6 G 收款主体快照:归娱乐平台公司(V372 种子;项目级可覆盖),月结时定格进单据。
         String giftBeneficiaryEntityId =
                 attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_PASS_GIFT_COST);
@@ -330,7 +347,8 @@ public class TicketDistributionSettlementService {
                 pooledServiceFee, exclusiveServiceFee, feeBeneficiaryEntityId,
                 pooledGiftCost, giftBeneficiaryEntityId,
                 method, specialApprovalRef, status, attributedEntityId, comboDiscountCent,
-                roundingResidual, poolUndistributed, poolUndistributedEntityId));
+                totalRoundingResidual, roundingResidualEntityId,
+                poolUndistributed, poolUndistributedEntityId));
 
         // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
         String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);
@@ -485,38 +503,34 @@ public class TicketDistributionSettlementService {
      * S11② 把<b>整单</b>算出来的渠道抽成按各业态毛额占比摊下去（就地替换 map 里的份额行）。
      *
      * <p>业务上：渠道抽的是客人实付那一整笔的成，谁分得多谁就多担一点，不该由酒吧一家全扛。
-     * 只舍入一次：各家按精确占比 HALF_UP，合计与整单渠道费的<b>分摊尾差归酒吧支</b>兜底
-     * （与「舍入尾差归项目公司/平台」同一范式，不摊给别家）。
+     * 只舍入一次：各家（<b>含酒吧</b>）按精确占比 HALF_UP。
      *
-     * <p>渠道费 0（官方直销 / 未配费率）→ 各家 +0 → 与改造前逐分一致。
+     * <p><b>分摊尾差不再并进酒吧支</b>（2026-08-03）：治理地图「全局原则 · 金额一律精确到分」
+     * 明写尾差「不得悄悄并进任一参与方」—— 酒吧也是参与方，旧写法让它拿补数就是让它替全场认这几分，
+     * 对账时连一行留痕都没有。改为<b>返回尾差</b>，由调用方合进单列的 {@code rounding_residual_cent}（V383），
+     * 挂到实际结算责任主体头上。
+     *
+     * <p>渠道费 0（官方直销 / 未配费率）→ 各家 +0、尾差 0 → 与改造前逐分一致。
+     *
+     * @return 分摊尾差（整单渠道费 − Σ各业态已舍入分摊额），调用方必须单列留痕
      */
-    private void allocateChannelFee(java.util.LinkedHashMap<String, FormatShare> shares,
+    private long allocateChannelFee(java.util.LinkedHashMap<String, FormatShare> shares,
                                     long channelFee, long totalGross) {
-        if (channelFee == 0L || shares.isEmpty()) {
-            return; // 各业态渠道费恒 0（默认口径）→ 净份额 = 毛额。
+        if (channelFee == 0L) {
+            return 0L; // 各业态渠道费恒 0（默认口径）→ 净份额 = 毛额。
         }
-        if (totalGross == 0L) {
-            // 毛额合计为 0（当月全额红冲）却仍有渠道费 → 无占比可依，整笔记在酒吧支，不静默丢。
-            shares.computeIfPresent(FORMAT_BAR, (k, s) -> s.withChannelFee(channelFee));
-            if (!shares.containsKey(FORMAT_BAR)) {
-                shares.put(FORMAT_BAR, new FormatShare(FORMAT_BAR, 0L, 0L).withChannelFee(channelFee));
-            }
-            return;
+        if (shares.isEmpty() || totalGross == 0L) {
+            // 无份额行 / 毛额合计为 0（当月全额红冲）却仍有渠道费 → 无占比可依：
+            // 整笔进尾差、由责任主体承担（旧写法整笔压给酒吧），不静默丢、也不压给任一参与方。
+            return channelFee;
         }
         long assigned = 0L;
         for (var e : shares.entrySet()) {
-            if (FORMAT_BAR.equals(e.getKey())) {
-                continue; // 酒吧支最后拿补数，承接分摊尾差。
-            }
             long fee = MoneyRounding.prorate(channelFee, e.getValue().grossCent(), totalGross);
             e.setValue(e.getValue().withChannelFee(fee));
             assigned += fee;
         }
-        long barFee = channelFee - assigned;
-        FormatShare bar = shares.get(FORMAT_BAR);
-        shares.put(FORMAT_BAR, bar == null
-                ? new FormatShare(FORMAT_BAR, 0L, 0L).withChannelFee(barFee)
-                : bar.withChannelFee(barFee));
+        return channelFee - assigned; // 分摊尾差：调用方单列留痕，不压给酒吧。
     }
 
     /**
@@ -525,7 +539,8 @@ public class TicketDistributionSettlementService {
      * 分摊写错会让某个业态凭空多拿或少拿——这种错在月末对账时极难查（数字都「差不多对」），所以宁可当场拒绝出账。
      */
     private void verifyFormatSplit(java.util.Collection<FormatShare> shares, long ticketRevenue,
-                                   long channelFee, long pooledServiceFee, long pooledGiftCost) {
+                                   long channelFee, long channelFeeResidual,
+                                   long pooledServiceFee, long pooledGiftCost) {
         long netTotal = 0L;
         long feeTotal = 0L;
         long svcFeeTotal = 0L;
@@ -536,9 +551,10 @@ public class TicketDistributionSettlementService {
             svcFeeTotal += s.compServiceFeeCent();
             giftCostTotal += s.giftCostCent();
         }
-        if (feeTotal != channelFee) {
+        if (feeTotal + channelFeeResidual != channelFee) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
-                    "业态份额守恒校验失败(渠道费分摊):Σ各业态渠道费 " + feeTotal + " ≠ 整单渠道费 " + channelFee);
+                    "业态份额守恒校验失败(渠道费分摊):Σ各业态渠道费 " + feeTotal
+                            + " + 分摊尾差 " + channelFeeResidual + " ≠ 整单渠道费 " + channelFee);
         }
         if (svcFeeTotal != pooledServiceFee) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
@@ -550,9 +566,12 @@ public class TicketDistributionSettlementService {
                     "业态份额守恒校验失败(赠送权益预估成本):Σ各业态 G " + giftCostTotal
                             + " ≠ G 合计 " + pooledGiftCost);
         }
-        if (netTotal + channelFee + pooledGiftCost + pooledServiceFee != ticketRevenue) {
+        // 拆份额链用【各业态已摊到的渠道费】而非整单渠道费:分摊尾差不减任何一家的净份额,
+        //   它单列到 rounding_residual_cent 由责任主体承担(V383)。
+        if (netTotal + feeTotal + pooledGiftCost + pooledServiceFee != ticketRevenue) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
-                    "业态份额守恒校验失败(拆份额):Σ各业态净份额 " + netTotal + " + 渠道费 " + channelFee
+                    "业态份额守恒校验失败(拆份额):Σ各业态净份额 " + netTotal
+                            + " + Σ各业态渠道费 " + feeTotal
                             + " + 赠送权益预估成本 " + pooledGiftCost
                             + " + 综合服务费 " + pooledServiceFee + " ≠ 通票收入 " + ticketRevenue);
         }

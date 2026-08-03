@@ -43,6 +43,7 @@ class SettlementBatch1P345Tests {
 
     private final List<String> entIds = new ArrayList<>();
     private final List<LocalDate> reconDates = new ArrayList<>();
+    private final List<String> providerMerchantIds = new ArrayList<>();
 
     @AfterEach
     void cleanup() {
@@ -55,6 +56,12 @@ class SettlementBatch1P345Tests {
             jdbcTemplate.update("DELETE FROM settlement_reconciliation_status WHERE reconciliation_date = ?",
                     java.sql.Date.valueOf(d));
         }
+        for (String mid : providerMerchantIds) { // 商户在引用它的权益/流水之后删(FK 顺序)
+            jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", mid);
+        }
+        entIds.clear();
+        reconDates.clear();
+        providerMerchantIds.clear();
     }
 
     // ---- 第3步:对账 ----
@@ -183,6 +190,58 @@ class SettlementBatch1P345Tests {
         }
     }
 
+    /**
+     * S8 分流(业务 HTML §「到期未核销款」逐字「演出归传媒公司」,2026-08-03 补齐):
+     * 提供方是<b>传媒业态</b>商户 → performance_ticket 流 → 传媒公司 be_media。
+     *
+     * <p>改前根本走不到这条路:V348 把 merchant_type 封死在五值、没有传媒业态,
+     * 演出提供方只能录成「其他」→ 落回 all_pass_ticket → 演出票款必然错归娱乐平台公司。
+     */
+    @Test
+    void expireUnverifiedRoutesMediaProviderToMediaEntity() {
+        String suffix = Long.toString(System.nanoTime());
+        Instant now = Instant.now();
+        String mediaMerchant = "m_ue_media_" + suffix;
+        String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
+        seedProviderMerchant(mediaMerchant, "media"); // V384 六值新增
+        jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ?, merchant_id = ? WHERE id = ?",
+                java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)), mediaMerchant, ent);
+
+        expiryJob.expireUnverified(now);
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT * FROM settlement_transactions WHERE entitlement_id = ?"
+                        + " AND transaction_type = 'unverified_expired'", ent);
+        assertThat(row.get("beneficiary_type")).isEqualTo("entity");
+        assertThat(row.get("beneficiary_entity_id"))
+                .as("HTML「演出归传媒公司」:V384 种子 performance_ticket → be_media").isEqualTo("be_media");
+        assertThat(row.get("merchant_id")).as("溯源商户保留").isEqualTo(mediaMerchant);
+    }
+
+    /**
+     * fail-loud:查不到提供方商户的业态(商户档案缺失/被删)→ <b>阻断</b>,而不是默认按酒吧归娱乐平台公司。
+     *
+     * <p>业务上:到期余额要按经营域归属,业态定不出来就说明这笔钱该归谁定不出来。
+     * 旧的 {@code COALESCE(merchant_type,'bar')} 会让它悄悄进娱乐平台公司的账,
+     * 传媒/游乐公司月底收不到钱而账面看着正常 —— 宁可停下来让人补商户档案。
+     */
+    @Test
+    void expireUnverifiedBlocksWhenProviderMerchantMissing() {
+        String suffix = Long.toString(System.nanoTime());
+        Instant now = Instant.now();
+        String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
+        // 提供方商户在档案里查不到(不建 merchants 行)。
+        jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ?, merchant_id = ? WHERE id = ?",
+                java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)), "m_ue_ghost_" + suffix, ent);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> expiryJob.expireUnverified(now))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("查不到提供方商户的经营业态");
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?", Integer.class, ent);
+        assertThat(count).as("事务整体回滚,一分钱没落").isZero();
+    }
+
     /** S8 fail-loud:归属种子被删(有金额没有收款方=配置坏)→ 拒绝落账,零行落地,宁可阻断不出错账。 */
     @Test
     void expireUnverifiedFailsLoudWhenAttributionSeedMissing() {
@@ -210,9 +269,23 @@ class SettlementBatch1P345Tests {
 
     // ---- seed helpers(直插业务表,不依赖 ticketing 服务) ----
 
+    /**
+     * 提供方商户(业态=酒吧)。2026-08-03 起「查不到提供方业态」一律 fail-loud 阻断落账
+     * (原 COALESCE 兜底 bar 会把演出票款静悄悄归给娱乐平台公司),故夹具必须建真商户行。
+     */
+    private void seedProviderMerchant(String merchantId, String businessFormat) {
+        providerMerchantIds.add(merchantId);
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (?, ?, ?, 'active', now(), now())
+                ON CONFLICT (id) DO UPDATE SET merchant_type = EXCLUDED.merchant_type
+                """, merchantId, merchantId, businessFormat);
+    }
+
     /** 直插 issued_entitlements 一行(created_at 可控,用于对账日窗)。返回 entitlement id。 */
     private String seedIssuedEntitlement(String suffix, int totalTimes, int usedTimes,
                                          Long allocatedCent, Instant createdAt) {
+        seedProviderMerchant("merchant_a", "bar");
         String ent = "ent_b1p345_" + suffix;
         entIds.add(ent);
         String typeId = "tt_b1p345_" + suffix;

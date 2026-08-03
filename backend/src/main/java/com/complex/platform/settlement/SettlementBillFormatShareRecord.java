@@ -10,7 +10,7 @@ package com.complex.platform.settlement;
  * <p>金额<b>带符号</b>：跨月红冲会让某业态当月份额为负＝向该业态追回。
  *
  * @param billId                     结算单 id
- * @param businessFormat             业态（bar/catering/retail/amusement/other，V348 五值）
+ * @param businessFormat             业态（bar/catering/retail/amusement/media/other，V348+V384 六值）
  * @param grossRevenueCent           本业态毛额 = 已核销净额 + 项目公司承担的套票折扣补回
  * @param platformBorneDiscountCent  其中项目公司承担的套票折扣（§20.4：口径对每个业态一致）
  * @param channelFeeCent             整单渠道抽成按份额占比分摊到本业态的部分

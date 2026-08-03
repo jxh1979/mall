@@ -26,7 +26,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <ol>
  *   <li><b>K9 逐分不变</b>：一张只有酒吧权益的通票（酒吧占比 100%），结算单<b>每一列</b>与改造前一模一样；</li>
  *   <li><b>K20 拆份额守恒</b>：Σ各业态净份额 + 整单渠道费 ≡ 通票收入；只有酒吧那份进池，
- *       游乐/餐饮的份额不进池、也不参与酒吧的排名与客数；</li>
+ *       游乐/餐饮的份额不进池、也不参与酒吧的排名与客数；门票综合服务费<b>只从酒吧那份扣</b>
+ *       （HTML §「门票综合服务费」：只适用于酒吧相关票务，纯游乐票／纯游乐通票／演出票不收）；</li>
  *   <li><b>渠道抽成整单前移</b>：渠道拿的是整笔售价的成，各业态按份额一起担，
  *       不再由酒吧一家替全场扛；费率 0（官方直销）时逐分不变；</li>
  *   <li><b>折扣补回口径扩到所有业态</b>：平台承担折扣时每个业态都按满额算，不是只补酒吧那一路。</li>
@@ -128,6 +129,7 @@ class SettlementFormatShareS11Tests {
         expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
         expected.put("rounding_residual_cent", -1L);
+        expected.put("rounding_residual_entity_id", "be_ent_platform"); // V383 尾差责任主体=通票分账责任主体
         expected.put("pool_undistributed_cent", 0L);        // S8:第二段有参与者 → 恒 0
         expected.put("pool_undistributed_entity_id", null);
 
@@ -164,18 +166,20 @@ class SettlementFormatShareS11Tests {
         seedMerchant("m_fmt_bar2", "bar");
         seedMerchant("m_fmt_amu", "amusement");
         seedMerchant("m_fmt_cat", "catering");
-        // 综合服务费对所有门票核销一视同仁(每笔 20%):酒吧 12000+8000、游乐 6000、餐饮 2000。
+        // 综合服务费【只适用于酒吧相关票务】(HTML §「门票综合服务费」):酒吧 12000+8000;
+        //   游乐/餐饮那两份一分不抽(纯游乐票、演出票不向娱乐平台公司付这道费)。
         seedVerifiedWithFee(pid, "m_fmt_bar1", 6, 6, 60000L, 12000L);
         seedVerifiedWithFee(pid, "m_fmt_bar2", 4, 4, 40000L, 8000L);
-        seedVerifiedWithFee(pid, "m_fmt_amu", 9, 9, 30000L, 6000L);   // 核销数最多，从前会抢到第 1 名
-        seedVerifiedWithFee(pid, "m_fmt_cat", 8, 8, 10000L, 2000L);
+        seedVerifiedWithFee(pid, "m_fmt_amu", 9, 9, 30000L, 0L);   // 核销数最多，从前会抢到第 1 名
+        seedVerifiedWithFee(pid, "m_fmt_cat", 8, 8, 10000L, 0L);
 
         String billId = settlementService.settleMonth(pid, MONTH);
         Map<String, Object> b = bill(pid);
 
         // 通票收入是整张票的钱（各业态毛额之和），可分配池只拿酒吧那一份(扣完酒吧侧服务费)。
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(140000L);
-        assertThat(b.get("comp_service_fee_pooled_cent")).as("池链服务费 = 全部业态计提合计").isEqualTo(28000L);
+        assertThat(b.get("comp_service_fee_pooled_cent"))
+                .as("池链服务费 = 只有酒吧业态计提(游乐/餐饮不收这道费)").isEqualTo(20000L);
         assertThat(b.get("available_pool_cent")).as("池 = 酒吧份额 − 酒吧侧服务费,不含游乐/餐饮").isEqualTo(80000L);
 
         // 分池明细里只有两家酒吧，各 50%。
@@ -188,10 +192,12 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.keySet()).containsExactlyInAnyOrder("bar", "amusement", "catering");
         assertThat(shares.get("bar").get("comp_service_fee_cent")).isEqualTo(20000L);
         assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(80000L);
-        assertThat(shares.get("amusement").get("comp_service_fee_cent")).isEqualTo(6000L);
-        assertThat(shares.get("amusement").get("net_revenue_cent")).isEqualTo(24000L);
-        assertThat(shares.get("catering").get("comp_service_fee_cent")).isEqualTo(2000L);
-        assertThat(shares.get("catering").get("net_revenue_cent")).isEqualTo(8000L);
+        assertThat(shares.get("amusement").get("comp_service_fee_cent"))
+                .as("纯游乐份额不收门票综合服务费").isEqualTo(0L);
+        assertThat(shares.get("amusement").get("net_revenue_cent")).isEqualTo(30000L);
+        assertThat(shares.get("catering").get("comp_service_fee_cent"))
+                .as("餐饮份额不收门票综合服务费").isEqualTo(0L);
+        assertThat(shares.get("catering").get("net_revenue_cent")).isEqualTo(10000L);
         assertThat(shares.get("amusement").get("beneficiary_kind")).as("游乐份额归游乐公司这个主体").isEqualTo("entity");
         assertThat(shares.get("amusement").get("beneficiary_entity_id"))
                 .as("V375 全局种子:amusement_ticket 流 → 游乐公司").isEqualTo("be_amusement");
@@ -223,8 +229,8 @@ class SettlementFormatShareS11Tests {
         seedMerchant("m_ch_cat", "catering");
         seedVerifiedWithFee(pid, "m_ch_bar1", 6, 6, 60000L, 12000L);
         seedVerifiedWithFee(pid, "m_ch_bar2", 4, 4, 40000L, 8000L);
-        seedVerifiedWithFee(pid, "m_ch_amu", 3, 3, 30000L, 6000L);
-        seedVerifiedWithFee(pid, "m_ch_cat", 1, 1, 10000L, 2000L);
+        seedVerifiedWithFee(pid, "m_ch_amu", 3, 3, 30000L, 0L);  // 游乐份额不收综合服务费
+        seedVerifiedWithFee(pid, "m_ch_cat", 1, 1, 10000L, 0L);  // 餐饮份额不收综合服务费
 
         String billId = settlementService.settleMonth(pid, MONTH);
         Map<String, Object> b = bill(pid);
@@ -252,6 +258,47 @@ class SettlementFormatShareS11Tests {
         assertThat(billRepository.findChannelFee(pid, "miniapp").feeBps()).as("没单独配的渠道落回通用率").isEqualTo(200);
         assertThat(billRepository.findChannelFee(pid, null).feeBps()).isEqualTo(200);
         assertThat(billRepository.findChannelFee(null, "meituan").feeBps()).as("别的项目不受本项目费率影响").isZero();
+    }
+
+    /**
+     * <b>渠道费分摊尾差不再压给酒吧</b>（2026-08-03）。治理地图「全局原则 · 金额一律精确到分」：
+     * 尾差「必须单独记账留痕，并由该笔业务实际承担结算责任的主体承担…也不得悄悄并进任一参与方」。
+     *
+     * <p>三个业态毛额各 100 分（合计 300），渠道费率 3.33% → 整单渠道费 round(9.99)=10 分；
+     * 各家按占比 round(10×100/300)=3 分，Σ=9 → <b>分摊尾差 1 分</b>。
+     * 旧写法会让酒吧拿补数 4 分（替游乐和餐饮认了这 1 分、连留痕都没有）；
+     * 现在酒吧也只担自己那 3 分，那 1 分单列进 {@code rounding_residual_cent} 并挂责任主体。
+     */
+    @Test
+    void channelFeeAllocationRemainderIsLinedOutToResponsibleEntityNotBar() {
+        String pid = newProject();
+        setRankTier(pid, 1, 9, 10000);
+        setChannelFeeBps(pid, null, 333); // 3.33%
+        seedMerchant("m_cr_bar", "bar");
+        seedMerchant("m_cr_amu", "amusement");
+        seedMerchant("m_cr_cat", "catering");
+        seedVerified(pid, "m_cr_bar", 1, 1, 100L);
+        seedVerified(pid, "m_cr_amu", 1, 1, 100L);
+        seedVerified(pid, "m_cr_cat", 1, 1, 100L);
+
+        String billId = settlementService.settleMonth(pid, MONTH);
+        Map<String, Object> b = bill(pid);
+        Map<String, Map<String, Object>> shares = formatShares(billId);
+
+        assertThat(b.get("ticket_revenue_cent")).isEqualTo(300L);
+        assertThat(b.get("channel_fee_cent")).as("整单渠道费 round(300×3.33%)").isEqualTo(10L);
+        assertThat(shares.get("bar").get("channel_fee_cent")).as("酒吧只担自己那份，不拿补数").isEqualTo(3L);
+        assertThat(shares.get("amusement").get("channel_fee_cent")).isEqualTo(3L);
+        assertThat(shares.get("catering").get("channel_fee_cent")).isEqualTo(3L);
+        assertThat(sumOf(shares, "channel_fee_cent")).as("Σ各业态渠道费 = 9，差的 1 分不在任何一家头上").isEqualTo(9L);
+
+        assertThat(((Number) b.get("rounding_residual_cent")).longValue())
+                .as("渠道费分摊尾差 1 分单列留痕").isEqualTo(1L);
+        assertThat(b.get("rounding_residual_entity_id"))
+                .as("V383：尾差挂到实际承担结算责任的主体（通票分账=娱乐平台公司）").isEqualTo("be_ent_platform");
+        // 池 = 酒吧毛额 100 − 酒吧渠道费 3 = 97（不再被那 1 分尾差挪走）。
+        assertThat(b.get("available_pool_cent")).isEqualTo(97L);
+        assertThat(itemAmounts(pid).values()).containsExactly(97L);
     }
 
     // ---------------------------------------------------------------- ④ 折扣补回扩到所有业态

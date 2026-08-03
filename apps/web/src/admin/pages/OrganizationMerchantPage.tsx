@@ -20,14 +20,15 @@ const TEXT = {
   boundary: "组织与商户档案只维护基础档案，不在本页替代四类主体绑定；运营主体、合同主体和结算主体必须在绑定和合同流程中统一留痕。",
   loadFailed: "组织与商户档案读取失败",
   merchantNameRequired: "商户名称不能为空。",
-  merchantTypeRequired: "必须选择商户业态（酒吧／餐饮／零售／游乐／其他）。",
+  merchantTypeRequired: "必须选择商户业态（酒吧／餐饮／零售／游乐／传媒／其他）。",
   contactPhoneInvalid: "联系电话必须是 11 位中国大陆手机号。",
   focusClear: "清除筛选，返回全部",
 };
 
-// V348 商户业态五值（真源 HTML §商户管理）：每个商户必须归入一个业态，招商录入时必填；
-// 业态是通票分账按业态拆份额与分流结算的依据。娱乐平台公司对应的即酒吧业态，不另设「娱乐」业态。
-const MERCHANT_TYPES = ["bar", "catering", "retail", "amusement", "other"];
+// V348+V384 商户业态六值（真源 HTML §商户管理 + §收入归属）：每个商户必须归入一个业态，招商录入时必填；
+// 业态是通票分账按业态拆份额与分流结算的依据。娱乐平台公司对应的即酒吧业态，不另设「娱乐」业态；
+// 传媒＝演出提供方（HTML「演出票 → 传媒公司」）。
+const MERCHANT_TYPES = ["bar", "catering", "retail", "amusement", "media", "other"];
 const COOPERATION_FORMS = ["fixed_rent_plus_commission", "revenue_share", "fixed_rent"];
 
 function display(value: unknown) {
