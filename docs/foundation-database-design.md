@@ -104,7 +104,7 @@
 | id | 商户ID |
 | project_id | 综合体项目ID |
 | organization_id | 关联组织ID |
-| merchant_type | bar（酒吧）、catering（餐饮）、retail（零售）、amusement（游乐）、other（其他）；V348 起 NOT NULL + CHECK 限这五值，每个商户必须且只能归一个业态，招商录入必填 |
+| merchant_type | bar（酒吧）、catering（餐饮）、retail（零售）、amusement（游乐）、**media（传媒，V384）**、other（其他）；V348 起 NOT NULL + CHECK，V384 放开为这六值，每个商户必须且只能归一个业态，招商录入必填。传媒＝演出提供方，其收入按业务 HTML「演出票 → 传媒公司」归传媒公司（结算分流据此判定） |
 | company_name | 公司名称 |
 | display_name | 对外展示名称 |
 | business_license_no | 统一社会信用代码 |
