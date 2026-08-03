@@ -35,6 +35,8 @@ enum TicketingWriteOperation implements AuditedOperation {
     REQUEST_TICKET_REFUND("ticket_refund.requested", "ticket_refund.request_failed", "ticket.refund.request", "ticket_refund"),
     APPROVE_TICKET_REFUND("ticket_refund.approved", "ticket_refund.approve_failed", "ticket.refund.approve", "ticket_refund"),
     REJECT_TICKET_REFUND("ticket_refund.rejected", "ticket_refund.reject_failed", "ticket.refund.approve", "ticket_refund"),
+    // 退款实际拨付确认（business-enum 退款单状态：只有“成功”才计入已退金额）：approved→success。
+    CONFIRM_TICKET_REFUND_PAYOUT("ticket_refund.payout_confirmed", "ticket_refund.payout_confirm_failed", "ticket.refund.approve", "ticket_refund"),
     PREVIEW_VERIFICATION("verification.previewed", "verification.failed", "verification.execute", "ticket_verification"),
     CREATE_VERIFICATION("verification.succeeded", "verification.failed", "verification.execute", "ticket_verification"),
     REVERSE_VERIFICATION("ticket.verification_reversed", "ticket.verification_reverse_failed", "ticket.verify.reverse", "ticket_verification"),

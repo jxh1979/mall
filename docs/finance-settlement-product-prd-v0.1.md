@@ -436,6 +436,7 @@ flowchart TD
 
 - **fail-closed（AUD-007）**：额度闸常在，不由任何功能标志控制、不对平台管理员隐式旁路；分级授权引擎缺失即拒（不放行）。酒吧/财务无独立复核状态机，超额/无额度退款直接拒（`REFUND_REVIEW_REQUIRED`）、须由额度内授权人办理；票务超额进真实二人复核。发起人/审批人/复核人一律真实留痕，审批人≠发起人（SoD），不再退化为字面量 `staff`。管理员如需更高额度，走同一 `(subject, refund_domain, project_id)` 显式额度配置 + 审计，不设隐性例外。
 - **综合体隔离（AUD-008）**：员工自助额度 `refund_authority_limits`、自动退规则 `refund_auto_rules` 均含 `project_id`。运行时使用由原订单、账单、支付单据或操作者授权范围推导的可信 `projectId`，绝不取自请求体；不得跨项目串用额度或规则。
+- **兑付确认才算完成（2026-08-03，依据业务枚举速查「退款单状态」行）**：三档授权只决定**能不能批**，不决定**钱到没到**。票务退款无论走哪一档（额度内自助 / 二人复核 / 系统批量），审批通过后一律停在 `approved`（已批准并已发起不可逆兑付），须财务实际打款成功后调 `POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout` 才转 `success`；只有 `success` 计入「已退金额」并冲减经营净收入。与 `FinanceService` 财务退款在渠道不可用时把状态留在 `requested` 的既有范式一致——退款状态跟随真实资金动作，不由审批动作代劳。
 - **生产交付门禁**：`refund.tiered_authorization.enabled` 在 prod profile 必须显式为 true（`RefundTieredAuthorizationProductionGuard` 启动断言），并须先按综合体配好额度/规则，杜绝生产无声落到最保守默认态。
 
 ---

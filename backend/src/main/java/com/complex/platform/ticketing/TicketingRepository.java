@@ -263,6 +263,9 @@ public interface TicketingRepository {
     /** AUD-018：退款兑付完成 CAS(status='approved'→'success' + succeeded_at)，仅当仍 approved 生效。返回受影响行数。 */
     int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt);
 
+    /** 退款单台账（后台“待确认拨付”看板的数据源）：按创建时间倒序。 */
+    List<TicketRefundRecord> listTicketRefunds();
+
     Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId);
 
     TerminalSyncTaskRecord saveTerminalSyncTask(TerminalSyncTaskRecord task);

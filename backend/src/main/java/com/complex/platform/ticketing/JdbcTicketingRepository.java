@@ -678,6 +678,16 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public List<TicketRefundRecord> listTicketRefunds() {
+        return jdbcTemplate.query("""
+                SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
+                       requested_by, approved_by, approved_at, created_at, updated_at, merchant_id
+                  FROM ticket_refunds
+                 ORDER BY created_at DESC, id
+                """, Map.of(), rowMapper::mapTicketRefund);
+    }
+
+    @Override
     public int markTicketRefundApproved(String refundId, String approvedBy, java.time.Instant approvedAt) {
         // F-TXN-04 并发双拨付修复：退款审批状态 CAS——仅当仍为 requested 才翻转 approved。
         // 此前 approveRefund 读检 status=='requested' 与 saveTicketRefund 间 TOCTOU：并发两路可同时过读检、

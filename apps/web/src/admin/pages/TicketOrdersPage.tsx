@@ -12,7 +12,7 @@ import { rowMatchesKeyword } from "../components/rowSearch";
 // 后端写权限码（TicketingController：/ticketing/orders/{order_id}/issue）
 const TICKET_ISSUE_PERMISSION = "ticket.ticket.issue";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketVerificationRow } from "../types";
+import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketRefundRow, TicketVerificationRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -21,7 +21,7 @@ import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailE
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
   description: "\u805a\u5408\u7968\u52a1\u8ba2\u5355\u3001\u652f\u4ed8\u72b6\u6001\u3001\u51fa\u7968\u72b6\u6001\u3001\u6743\u76ca\u548c\u6838\u9500\u9884\u68c0\uff0c\u7528\u4e8e\u5b9a\u4f4d\u672a\u51fa\u7968\u548c\u5f02\u5e38\u6838\u9500\u3002",
-  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview\uff1b\u53d6\u8d2d\u7968\u4eba\u8138\u7167 GET /api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo\u3002",
+  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview\uff1b\u53d6\u8d2d\u7968\u4eba\u8138\u7167 GET /api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo；读取 /api/v1/ticketing/refunds；确认拨付 POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout。",
   loadFailed: "\u7968\u52a1\u8ba2\u5355\u8ffd\u8e2a\u6570\u636e\u8bfb\u53d6\u5931\u8d25",
   actionFailed: "\u7968\u52a1\u8ba2\u5355\u64cd\u4f5c\u5931\u8d25",
   noOrder: "\u5f53\u524d\u6ca1\u6709\u53ef\u51fa\u7968\u8ba2\u5355\u3002",
@@ -62,6 +62,22 @@ const TEXT = {
   facePhotoHint: "\u6838\u9500\u524d\u8bf7\u8089\u773c\u6bd4\u5bf9\u773c\u524d\u7684\u4eba\u4e0e\u8fd9\u5f20\u8d2d\u7968\u65f6\u7559\u5b58\u7684\u7167\u7247\u662f\u5426\u4e3a\u540c\u4e00\u4eba\uff1b\u4e0d\u4e00\u81f4\u8bf7\u62d2\u7edd\u6838\u9500\u5e76\u6309\u73b0\u573a\u89c4\u5b9a\u5904\u7406\u3002\u7167\u7247\u5c5e\u4e2a\u4eba\u654f\u611f\u4fe1\u606f\uff0c\u4ec5\u4f9b\u672c\u6b21\u6bd4\u5bf9\uff0c\u770b\u5b8c\u8bf7\u70b9\u300c\u6e05\u9664\u7167\u7247\u300d\uff0c\u7981\u6b62\u7ffb\u62cd\u3001\u4e0b\u8f7d\u6216\u8f6c\u53d1\u3002",
   facePhotoMissing: "\u672c\u7968\u6ca1\u6709\u7559\u5b58\u8d2d\u7968\u4eba\u8138\u7167\uff08\u8be5\u7968\u79cd\u672a\u8981\u6c42\u62cd\u7167\uff0c\u6216\u7167\u7247\u5df2\u8fc7\u7559\u5b58\u671f\u81ea\u52a8\u9500\u6bc1\uff09\uff0c\u6309\u5e38\u89c4\u6d41\u7a0b\u6838\u9500\u3002",
   facePhotoClear: "\u6e05\u9664\u7167\u7247",
+  // 退款待确认拨付（业务口径：退款以“成功”为最终完成态，只有“成功”才计入已退金额；“已通过”只是已批准并已发起兑付）。
+  refundTitle: "退款待确认拨付",
+  refundHint: "“已通过”表示已批准并已发起原路退回，钱还没到客人账上；财务实际打款成功后在这里确认，退款才记“成功”并计入已退金额。",
+  refundOnlyPending: "只看待确认拨付",
+  refundResultLabel: "原路退回结果（打款流水号 / 回执号）",
+  refundResultRequired: "请先填写原路退回结果（打款流水号或回执号）再确认拨付。",
+  refundConfirm: "确认拨付",
+  refundEmpty: "当前没有待确认拨付的退款。",
+  refundPendingHelp: "已通过未拨付",
+  refundNo: "退款单号",
+  refundOrder: "原订单",
+  refundAmount: "退款金额",
+  refundChannel: "退款方式",
+  refundRequestedBy: "申请人",
+  refundApprovedBy: "审批人",
+  refundCreatedAt: "申请时间",
 };
 
 // KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
@@ -102,6 +118,11 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [verifications, setVerifications] = React.useState<TicketVerificationRow[]>([]);
   const [entitlementsNotice, setEntitlementsNotice] = React.useState<string | null>(null);
   const [verificationsNotice, setVerificationsNotice] = React.useState<string | null>(null);
+  // 退款台账：默认只显示 status='approved'（已批准、钱还没打出去）——业务人员此前只能翻审计事件才知道哪几笔欠拨付。
+  const [refunds, setRefunds] = React.useState<TicketRefundRow[]>([]);
+  const [refundsNotice, setRefundsNotice] = React.useState<string | null>(null);
+  const [onlyPendingPayout, setOnlyPendingPayout] = React.useState(true);
+  const [payoutResult, setPayoutResult] = React.useState("");
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [entitlementCode, setEntitlementCode] = React.useState("ENT-0001");
   const [formError, setFormError] = React.useState("");
@@ -141,19 +162,23 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
 
   // 无权限副资源不请求（根因修）：核销记录端点需 verification.view，页面基础权限 ticket.verify.view 不含之。
   const canVerificationView = hasPermissions(effectivePermissions, ["verification.view"]);
+  const canRefundView = hasPermissions(effectivePermissions, ["ticket.refund.view"]);
   const { loading, error, reload: reloadResource } = useAdminResource(
     async () => {
-      const [orderRows, entitlementRows, verificationRows] = await Promise.all([
+      const [orderRows, entitlementRows, verificationRows, refundRows] = await Promise.all([
         api.get<TicketOrderRow[]>("/api/v1/ticketing/orders"),
         // 权益/核销为副资源：403 或失败时降级（KPI 显「—」不静默归零），出票主表照常。
         loadSecondary(() => api.get<TicketIssuedEntitlementRow[]>("/api/v1/ticketing/issued-entitlements"), [] as TicketIssuedEntitlementRow[]),
         loadSecondaryIfPermitted(canVerificationView, () => api.get<TicketVerificationRow[]>("/api/v1/ticketing/verifications"), [] as TicketVerificationRow[]),
+        loadSecondaryIfPermitted(canRefundView, () => api.get<TicketRefundRow[]>("/api/v1/ticketing/refunds"), [] as TicketRefundRow[]),
       ]);
       setOrders(orderRows);
       setEntitlements(entitlementRows.data);
       setEntitlementsNotice(entitlementRows.notice);
       setVerifications(verificationRows.data);
       setVerificationsNotice(verificationRows.notice);
+      setRefunds(refundRows.data);
+      setRefundsNotice(refundRows.notice);
       setEntitlementCode((current) => current || entitlementRows.data[0]?.entitlementCode || "");
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
@@ -184,6 +209,9 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
     ? [focusedOrder, ...keywordOrders.filter((order) => order.id !== focusedOrder.id)]
     : keywordOrders;
   const paged = usePagedRows(filteredOrders, 10, query + "|" + (focusObjectId || "") + "|" + (kpiFocus?.target || ""));
+  // 待确认拨付=已通过但尚未确认实际打款的退款单（业务 enum：只有“成功”才计入已退金额）。
+  const pendingPayoutRefunds = refunds.filter((refund) => refund.status === "approved");
+  const visibleRefunds = onlyPendingPayout ? pendingPayoutRefunds : refunds;
 
   React.useEffect(() => {
     if (focusedOrder) setSelectedOrderId(focusedOrder.id);
@@ -260,6 +288,22 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
 
   function clearFacePhoto() {
     setFacePhoto(null);
+  }
+
+  // 财务实际打完款后确认拨付：approved→success。原路退回结果必填（业务 HTML 退款授权与留痕行要求留痕该结果）。
+  async function confirmRefundPayout(refund: TicketRefundRow) {
+    await runAction("ticket_refund_payout_confirmed", () => api.post(
+      `/api/v1/ticketing/refunds/${encodeURIComponent(refund.id)}/confirm-payout`,
+      { reason: payoutResult.trim() },
+    ));
+  }
+
+  function validatePayout() {
+    if (!payoutResult.trim()) {
+      setFormError(TEXT.refundResultRequired);
+      return false;
+    }
+    return true;
   }
 
   function openOrderDetail(order: TicketOrderRow) {
@@ -395,6 +439,73 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
           <TablePager testid="ticket-orders-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
         )}
+        <div className="admin-section" data-testid="ticket-refund-payout-panel">
+          <h3>{TEXT.refundTitle}（{pendingPayoutRefunds.length}）</h3>
+          <p className="admin-muted-action">{TEXT.refundHint}</p>
+          {refundsNotice ? (
+            <div className="admin-state" data-testid="ticket-refunds-degraded">{refundsNotice}</div>
+          ) : (
+            <>
+              <div className="admin-form-row" data-testid="ticket-refund-payout-filter">
+                <label>
+                  <input
+                    type="checkbox"
+                    data-testid="ticket-refund-only-pending"
+                    checked={onlyPendingPayout}
+                    onChange={(event) => setOnlyPendingPayout(event.target.checked)}
+                  />
+                  {TEXT.refundOnlyPending}
+                </label>
+                <input
+                  data-testid="ticket-refund-payout-result"
+                  value={payoutResult}
+                  onChange={(event) => setPayoutResult(event.target.value)}
+                  aria-label={TEXT.refundResultLabel}
+                  placeholder={TEXT.refundResultLabel}
+                />
+              </div>
+              {visibleRefunds.length === 0 ? (
+                <div className="admin-state admin-empty" data-testid="ticket-refunds-empty">{TEXT.refundEmpty}</div>
+              ) : (
+                <div className="admin-table-scroll">
+                  <table className="admin-table" data-testid="ticket-refunds-table">
+                    <thead>
+                      <tr><th>{TEXT.refundNo}</th><th>{TEXT.refundOrder}</th><th>{TEXT.refundAmount}</th><th>{TEXT.refundChannel}</th><th>{TEXT.status}</th><th>{TEXT.refundRequestedBy}</th><th>{TEXT.refundApprovedBy}</th><th>{TEXT.refundCreatedAt}</th><th>操作</th></tr>
+                    </thead>
+                    <tbody>
+                      {visibleRefunds.map((refund) => (
+                        <tr key={refund.id} data-testid={`ticket-refund-row-${refund.id}`}>
+                          <td>{refund.id}</td>
+                          <td>{refund.targetId ?? "-"}</td>
+                          <td>{formatAmount(refund.refundAmountCent)}</td>
+                          <td>{formatBusinessStatus(refund.refundChannel)}</td>
+                          <td>{formatBusinessStatus(refund.status)}</td>
+                          <td>{refund.requestedBy ?? "-"}</td>
+                          <td>{refund.approvedBy ?? "-"}</td>
+                          <td>{cnDate(refund.createdAt)}</td>
+                          <td>
+                            {refund.status === "approved" ? (
+                              <HighRiskConfirm
+                                label={TEXT.refundConfirm}
+                                impact="确认后该笔退款记为「成功」并计入已退金额、冲减当日经营净收入，请务必先确认钱已实际打给客人。"
+                                disabled={busyAction !== ""}
+                                precheck={validatePayout}
+                                onConfirm={() => void confirmRefundPayout(refund)}
+                                permissionsState={effectivePermissions}
+                                permissions={["ticket.refund.approve"]}
+                                data-testid={`ticket-refund-confirm-payout-${refund.id}`}
+                              />
+                            ) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
