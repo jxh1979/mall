@@ -1,6 +1,7 @@
 package com.complex.platform.facility;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.common.LocalZone;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
@@ -43,7 +44,8 @@ public class FacilityInspectionScheduleJob {
             systemContext.setAuthentication(
                     new UsernamePasswordAuthenticationToken(SCHEDULER_ACTOR, null, List.of()));
             SecurityContextHolder.setContext(systemContext);
-            service.generateScheduledTasks(LocalDate.now(clock));
+            // 巡检按业务人员排的北京日历日生成当日任务(作业跑在服务器凌晨,UTC/服务器本地取的"今天"会差一天)。
+            service.generateScheduledTasks(LocalDate.now(clock.withZone(LocalZone.ID)));
         } finally {
             if (previousAuthentication == null) {
                 SecurityContextHolder.clearContext();

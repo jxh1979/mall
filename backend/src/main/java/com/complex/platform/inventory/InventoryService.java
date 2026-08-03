@@ -1,6 +1,7 @@
 package com.complex.platform.inventory;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -234,7 +235,9 @@ public class InventoryService {
                             trimToNull(actual.supplierId()),
                             itemId,
                             quantity,
-                            actual.expectedArrivalDate() == null ? LocalDate.now() : actual.expectedArrivalDate(),
+                            // 预计到货日缺省取「今天」——按所在地(北京)日历日,裸 LocalDate.now() 取服务器时区(洛杉矶)差一天。
+                            actual.expectedArrivalDate() == null
+                                    ? LocalDate.now(LocalZone.ID) : actual.expectedArrivalDate(),
                             // R5 T6：起点保留 'created'（兼容既有写入/测试），视为 submitted 同义起点；
                             // 审批流转入口 approve 从 created/submitted 均可进入。
                             "created",
@@ -833,8 +836,9 @@ public class InventoryService {
                     com.complex.platform.inventory.dto.CreateStocktakeRequest actual = requireRequest(request);
                     String warehouseId = requireText(actual.warehouseId(), "warehouse_id");
                     String merchantId = authorizationService.currentMerchantScope().orElse(null);
-                    LocalDate businessDate =
-                            actual.businessDate() == null ? LocalDate.now() : actual.businessDate();
+                    // 盘点单经营日缺省取「今天」——按所在地(北京)日历日(仓管报的就是北京当天)。
+                    LocalDate businessDate = actual.businessDate() == null
+                            ? LocalDate.now(LocalZone.ID) : actual.businessDate();
                     Instant now = Instant.now();
                     String slug = slug(actual.idempotencyKey());
                     return repository.saveStocktake(new StocktakeRecord(
@@ -1727,7 +1731,7 @@ public class InventoryService {
                 itemId, "ARAP-TRF-" + o.id(), "payable",
                 o.fromOwnerId(), "inventory_transfer", o.id(),
                 amountCent, 0L, amountCent, "CNY",
-                java.time.LocalDate.now(java.time.ZoneOffset.UTC), null, "pending_payment",
+                LocalDate.now(LocalZone.ID), null, "pending_payment",
                 now, now, o.toOwnerId()));
         financeRepository.saveArApItemSource(new com.complex.platform.finance.ArApItemSourceRecord(
                 "arap_src_trf_" + o.id(), itemId, "inventory_transfer", o.id(), amountCent, now));

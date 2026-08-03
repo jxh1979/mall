@@ -1,12 +1,12 @@
 package com.complex.platform.customer;
 
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.GuardedAction;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -560,7 +560,8 @@ public class LoyaltyService {
     @Transactional
     public CustomerCheckInRecord checkIn(String customerId, String sourceTerminal) {
         Instant now = now();
-        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        // 签到「今天」按所在地(北京)日历日:会员北京 0 点后签到,UTC 口径算作昨天 → 判"今天已签到"直接拒绝。
+        LocalDate today = LocalDate.ofInstant(now, LocalZone.ID);
         requireCustomer(customerId);
         if (repository.findCheckIn(customerId, today).isPresent()) {
             throw ApiException.conflict("ALREADY_CHECKED_IN", "今天已签到，请勿重复签到");
@@ -626,7 +627,8 @@ public class LoyaltyService {
         if (customer.birthDate() == null) {
             return BASIS_POINTS_DENOMINATOR;
         }
-        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        // 生日窗口「今天」同按所在地(北京)日历日:会员北京生日当天 0~8 点消费,UTC 口径还算前一天、拿不到生日倍率。
+        LocalDate today = LocalDate.ofInstant(now, LocalZone.ID);
         LocalDate birth = customer.birthDate();
         long best = BASIS_POINTS_DENOMINATOR;
         for (CustomerBirthdayRuleRecord rule : repository.listActiveBirthdayRules(null)) {

@@ -23,6 +23,17 @@ class FacilityInspectionScheduleJobTests {
     }
 
     @Test
+    void inspectionDayFollowsLocalCalendarDay() {
+        FacilityInspectionService service = mock(FacilityInspectionService.class);
+        // 北京 2026-06-27 04:00 = UTC 2026-06-26 20:00 → 生成北京 6/27 的巡检任务。
+        // 锚 UTC 时会去生成 6/26 的,当天该巡的点位排不出来、前一天的重复排。
+        new FacilityInspectionScheduleJob(
+                service, Clock.fixed(Instant.parse("2026-06-26T20:00:00Z"), ZoneOffset.UTC))
+                .scheduledGenerateDueTasks();
+        verify(service).generateScheduledTasks(LocalDate.parse("2026-06-27"));
+    }
+
+    @Test
     void scheduledGenerateDueTasksRunsWithSystemPlatformActor() {
         FacilityInspectionService service = mock(FacilityInspectionService.class);
         LocalDate expectedDate = LocalDate.parse("2026-06-26");

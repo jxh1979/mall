@@ -24,6 +24,17 @@ class DividendMonthlyPreviewJobTests {
     }
 
     @Test
+    void previewMonthFollowsLocalCalendarMonth() {
+        DividendService service = mock(DividendService.class);
+        // 北京 2026-08-01 04:00 = UTC 2026-07-31 20:00 → 上月 = 2026-07。
+        // 锚 UTC 时这一刻还在 7/31,会出成 2026-06 的预览,主理人看到的"上月分红"少一个月。
+        new DividendMonthlyPreviewJob(
+                service, Clock.fixed(Instant.parse("2026-07-31T20:00:00Z"), ZoneOffset.UTC), true)
+                .scheduledPreview();
+        verify(service).runScheduledMonthlyPreview(YearMonth.of(2026, 7));
+    }
+
+    @Test
     void enabledFlagRunsPreviousMonthPreview() {
         DividendService service = mock(DividendService.class);
         new DividendMonthlyPreviewJob(service, FIXED, true).scheduledPreview();
