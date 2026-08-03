@@ -231,6 +231,49 @@ class SettlementFeePerTicketS3Tests {
                 .as("核销流水本身照落,只是不提这道费").isEqualTo(10000L);
     }
 
+    // ─────────── ⑤ 并发同父票核销仍只收一道 ───────────
+
+    /**
+     * 并发闸(2026-08-03):同一张票的两笔核销<b>同时</b>提交。
+     *
+     * <p>业务上:客人两部手机/两个闸机几乎同时扫同一张票时,平台不能因为「两边都读到还没收过」
+     * 就向酒吧收两道固定额综合服务费 —— 对账时一张票冒出两条同名费,而且多收的那道会真的进分账。
+     * 消费者开头对父票取事务级咨询锁 → 后到的那笔必然看到已收过 → 该票费净额恒 = 一道。
+     */
+    @Test
+    void concurrentVerificationsOfSameTicket_chargedExactlyOnce() throws Exception {
+        String merchant = merchant();
+        String ticket = "tkt_cc_" + Long.toHexString(System.nanoTime());
+        seedFixedFee(merchant, 300L);
+
+        java.util.concurrent.CyclicBarrier gate = new java.util.concurrent.CyclicBarrier(2);
+        java.util.List<Throwable> errors = java.util.Collections.synchronizedList(new ArrayList<>());
+        Thread t1 = new Thread(concurrentVerify(gate, errors, merchant, ticket, "vcc1_" + ticket));
+        Thread t2 = new Thread(concurrentVerify(gate, errors, merchant, ticket, "vcc2_" + ticket));
+        t1.start();
+        t2.start();
+        t1.join(30_000);
+        t2.join(30_000);
+
+        assertThat(errors).as("并发核销不得报错(锁超时/死锁都算失败)").isEmpty();
+        assertThat(ticketFeeNet(ticket)).as("并发同父票核销,这张票的费净额恒 = 一道").isEqualTo(300L);
+    }
+
+    private Runnable concurrentVerify(java.util.concurrent.CyclicBarrier gate, java.util.List<Throwable> errors,
+                                      String merchant, String ticket, String verificationId) {
+        return () -> {
+            try {
+                com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+                gate.await(20, java.util.concurrent.TimeUnit.SECONDS);
+                verifyTicket(merchant, ticket, verificationId, 1);
+            } catch (Throwable e) {
+                errors.add(e);
+            } finally {
+                com.complex.platform.support.TestSecurityActors.clear();
+            }
+        };
+    }
+
     // ─────────────────────────── helpers ───────────────────────────
 
     private String newProject() {
