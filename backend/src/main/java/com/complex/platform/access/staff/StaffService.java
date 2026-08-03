@@ -11,11 +11,13 @@ import com.complex.platform.access.staff.dto.StaffDeviceRebindDecisionRequest;
 import com.complex.platform.access.staff.dto.StaffDeviceRevokeRequest;
 import com.complex.platform.access.staff.dto.StaffRegistrationRequest;
 import com.complex.platform.access.staff.dto.StaffRegistrationReviewRequest;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.GuardedAction;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -51,6 +53,8 @@ public class StaffService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner;
+    // 打卡「当下」的来源。生产恒为 Clock.systemUTC()；单测注固定 Clock 对拍考勤日归属（见 StaffAttendanceLocalZoneTests）。
+    private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
     public StaffService(
@@ -73,6 +77,20 @@ public class StaffService {
             AuthorizationService authorizationService,
             com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner
     ) {
+        this(repository, accessRepository, idempotencyService, auditEventService, authorizationService,
+                credentialProvisioner, Clock.systemUTC());
+    }
+
+    StaffService(
+            JdbcStaffRepository repository,
+            AccessRepository accessRepository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner,
+            Clock clock
+    ) {
+        this.clock = clock;
         this.repository = repository;
         this.accessRepository = accessRepository;
         this.idempotencyService = idempotencyService;
@@ -577,11 +595,12 @@ public class StaffService {
     public PageResponse<StaffShiftRecord> listMyShifts() {
         authorizationService.requirePermission("staff.shift.view");
         var actor = authorizationService.currentActor();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(Instant.now(), java.time.ZoneOffset.UTC);
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(clock.instant(), LocalZone.ID);
         return page(repository.listShiftsForUserBetween(actor.id(), today, today.plusDays(7)));
     }
 
-    /** E2(2026-07-02 拍板):打卡——时间以服务器为准;严格无宽限:上班晚于班次开始即迟到、
+    /** E2(2026-07-02 拍板):打卡——打卡时刻取服务器(客户端不可篡改),但「当日」按所在地(北京)日历日折算
+     * (NEW-03,2026-08-02 落码):北京凌晨两点上班打卡认的是北京当天的排班;严格无宽限:上班晚于班次开始即迟到、
      * 下班早于班次结束即早退;当日无班次记 no_shift;只记录不自动扣罚(处理归人事)。 */
     public StaffAttendanceRecord punch(com.complex.platform.access.staff.dto.StaffAttendancePunchRequest request) {
         authorizationService.requirePermission("staff.attendance.punch");
@@ -594,8 +613,8 @@ public class StaffService {
             throw ApiException.badRequest("VALIDATION_FAILED", "打卡方式必须为 nfc/qr/manual 之一");
         }
         var actor = authorizationService.currentActor();
-        Instant now = Instant.now();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        Instant now = clock.instant();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, LocalZone.ID);
         java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserBetween(actor.id(), today, today);
         StaffShiftRecord shift = pickShift(shifts, request.punchType(), now);
         String judgement;
@@ -1146,8 +1165,8 @@ public class StaffService {
         }
         java.util.Set<java.time.LocalDate> leaveDays = repository.approvedLeaveDates(actor.id(), first, last);
         java.util.List<StaffAttendanceRecord> punches = repository.listAttendanceForUserBetween(actor.id(),
-                first.atStartOfDay().toInstant(java.time.ZoneOffset.UTC),
-                last.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC));
+                first.atStartOfDay(LocalZone.ID).toInstant(),
+                last.plusDays(1).atStartOfDay(LocalZone.ID).toInstant());
         java.util.List<StaffAttendanceDayRecord> out = new java.util.ArrayList<>();
         for (java.time.LocalDate day = first; !day.isAfter(last); day = day.plusDays(1)) {
             final java.time.LocalDate current = day;
@@ -1164,7 +1183,7 @@ public class StaffService {
             }
             java.util.List<StaffAttendanceRecord> dayPunches = punches.stream()
                     .filter(p -> shift.id().equals(p.shiftId())
-                            || java.time.LocalDate.ofInstant(p.punchedAt(), java.time.ZoneOffset.UTC).equals(current))
+                            || java.time.LocalDate.ofInstant(p.punchedAt(), LocalZone.ID).equals(current))
                     .toList();
             StaffAttendanceRecord checkIn = dayPunches.stream()
                     .filter(p -> p.punchType().equals("check_in")).findFirst().orElse(null);

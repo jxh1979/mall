@@ -1,6 +1,7 @@
 package com.complex.platform.contract;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.contract.dto.ContractActivateRequest;
@@ -24,7 +25,6 @@ import com.complex.platform.notification.NotificationService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -653,22 +653,23 @@ public class ContractService {
     /**
      * 商户费用续约短信提醒扫描入口。只追加通知 hook：不变更合同状态、不发起续约流程、不写业务表。
      * 由 ContractRenewalNotificationJob 薄 @Scheduled 包装调用，亦供单测直调对拍通知日志。
+     * asOf 必传（扫描基准日由调用方按所在地日历日给定）：给不出基准日就不该发这批短信，
+     * 与其静默回落到某个"今天"把提醒发错日子，不如当场炸出来。
      */
     public void processMerchantFeeRenewalNotifications(LocalDate asOf, int noticeDays) {
         if (notificationService == null) {
             return;
         }
-        LocalDate baseDate = asOf == null ? LocalDate.now(ZoneOffset.UTC) : asOf;
-        LocalDate untilDate = baseDate.plusDays(Math.max(0, noticeDays));
+        LocalDate untilDate = asOf.plusDays(Math.max(0, noticeDays));
         List<ContractRecord> contracts;
         try {
-            contracts = repository.listEffectiveContractsExpiringBetween(baseDate, untilDate);
+            contracts = repository.listEffectiveContractsExpiringBetween(asOf, untilDate);
         } catch (RuntimeException exception) {
             log.warn("failed to list contracts for merchant fee renewal notification", exception);
             return;
         }
         for (ContractRecord contract : contracts) {
-            notifyMerchantFeeRenewalAfterCommit(contract, baseDate);
+            notifyMerchantFeeRenewalAfterCommit(contract, asOf);
         }
     }
 
@@ -817,7 +818,7 @@ public class ContractService {
     /** 铺位平面图数据源：每铺租赁状态 + 套用着色分类（已租按距到期命中最紧一档→即将到期着该色）。 */
     public List<SpaceRentalStatusRecord> spaceRentalStatus(String projectId) {
         String pid = trimToNull(projectId);
-        LocalDate asOf = LocalDate.now(java.time.ZoneOffset.UTC);
+        LocalDate asOf = LocalDate.now(LocalZone.ID);
         List<SpaceExpiryColorRuleRecord> rules = repository.listColorRules(pid).stream()
                 .sorted((a, b) -> Integer.compare(a.thresholdDays(), b.thresholdDays())).toList();
         List<SpaceRentalStatusRecord> out = new ArrayList<>();

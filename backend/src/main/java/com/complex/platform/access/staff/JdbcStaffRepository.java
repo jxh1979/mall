@@ -2,6 +2,7 @@ package com.complex.platform.access.staff;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.LocalZone;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -251,8 +252,8 @@ public class JdbcStaffRepository {
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)";
         org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                        .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
-                        .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                        .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay(LocalZone.ID).toInstant()))
+                        .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay(LocalZone.ID).toInstant()))
                         .addValue("project_scope", projectScope);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_attendance_records " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
@@ -592,8 +593,8 @@ public class JdbcStaffRepository {
                  ORDER BY punched_at DESC
                  LIMIT 1000
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
-                .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay(LocalZone.ID).toInstant()))
+                .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay(LocalZone.ID).toInstant()))
                 .addValue("project_scope", projectScope),
                 this::mapAttendance);
     }
