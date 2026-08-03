@@ -429,9 +429,10 @@ public class LoyaltyService {
             }
             return account;
         }
-        CustomerMemberLevelRecord downgrade = nextLower(levels, current);
-        return applyLevelChange(account, downgrade == null ? current : downgrade,
-                downgrade == null ? "keep" : "downgrade", now, true);
+        // 速查表§二「到期直接降到对应等级」/系统地图同款：按当前进度重新定级，可一次跨多级下落，不是只降一级。
+        CustomerMemberLevelRecord target = highestQualified(levels, account.keepThresholdProgress());
+        boolean down = target != null && target.levelRank() < rankOf(current);
+        return applyLevelChange(account, down ? target : current, down ? "downgrade" : "keep", now, true);
     }
 
     private CustomerPointsAccountRecord applyLevelChange(CustomerPointsAccountRecord account,
@@ -657,16 +658,6 @@ public class LoyaltyService {
         CustomerMemberLevelRecord best = null;
         for (CustomerMemberLevelRecord level : levels) {
             if (progress >= level.upgradeThreshold() && (best == null || level.levelRank() > best.levelRank())) {
-                best = level;
-            }
-        }
-        return best;
-    }
-
-    private CustomerMemberLevelRecord nextLower(List<CustomerMemberLevelRecord> levels, CustomerMemberLevelRecord current) {
-        CustomerMemberLevelRecord best = null;
-        for (CustomerMemberLevelRecord level : levels) {
-            if (level.levelRank() < current.levelRank() && (best == null || level.levelRank() > best.levelRank())) {
                 best = level;
             }
         }

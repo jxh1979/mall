@@ -207,6 +207,24 @@ class LoyaltyServiceTests {
         assertThat(downgraded.level()).isEqualTo("base");
     }
 
+    // ---- 跨级降级：进度跌穿两级时直接降到对应等级，不是只降一级 ----
+    // 依据：业务枚举速查表§二「到期直接降到对应等级」、业务系统地图「等级与成长值」同款口径。
+    @Test
+    void periodEndDowngradesDirectlyToQualifiedLevelAcrossTiers() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        // 追加第三级：gold(rank2,升级3000,保级2000,周期30天,宽限7天)
+        repo.saveMemberLevel(new CustomerMemberLevelRecord(
+                "lv_gold", null, "gold", "黄金", 2, 3000, 2000, 30, 7, 20000, "active", T0, T0));
+        // 账户在 gold，进度只剩 100：既够不上 gold 保级(2000)，也够不上 silver 门槛(1000)。
+        repo.points.put("c1", new CustomerPointsAccountRecord(
+                "p1", "c1", 100, "gold", Map.of(), 0L, "active", T0, 100L, null, null, 0, T0, T0));
+
+        Instant afterGrace = T0.plusSeconds(days(40)); // 超过 周期30 + 宽限7
+        CustomerPointsAccountRecord downgraded = serviceAt(repo, audit, afterGrace).evaluateLevel("c1", afterGrace);
+        assertThat(downgraded.level()).isEqualTo("base"); // 直接落到 base，而非只降一级到 silver
+    }
+
     // ---- 周期末达标：保级（重置周期/进度）----
     @Test
     void periodEndMeetingKeepThresholdKeepsLevel() {
