@@ -167,9 +167,9 @@ erDiagram
   - ✅ **已落地（2026-06-30）**：`TicketRefundService.requestRefund` 已改为**按票实例**判退——`resolveRefundTargets` 解析 `entitlement_ids`（不传=退订单全部未核销票、已核销不连坐；传入已核销票按票实例拒退 `TICKET_ENTITLEMENT_VERIFIED_NO_REFUND`），退款行只覆盖所选未核销票，积分冲减按退款额/原单额比例（=被退票实例份额）。
   - 注：积分「按核销次数精确计分」（多次/多人票按核销张数比例 confirm）**已完成（V151，F-TXN-03 收尾）**：`customer_points_ledger.confirmed_amount` 记已确认份额，`LoyaltyService.confirmPoints` 改 set-confirmed-to-target（`target=floor(总额×Σused/Σtotal)`），`TicketVerificationService` 核销与冲正两路均按订单 Σused/Σtotal 对齐确认份额（冲正一张按份回滚 1/Σtotal，取代原冲正全额 deduct）；单次票（1/1）口径与原「支付 pending → 核销 confirm」等价。
 - 门票到期生命周期（F-TXN-03，piece②）：系统定时任务 `TicketingService.processExpiredPaidEntitlements`（按权益 `valid_to < now` 实时判定，由 `TicketOrderExpiryJob` 触发、开关 `ticket.order.expiry.scheduled.enabled` 默认关）——
-  - **到期按票实例处理（2026-06-29 用户裁决，业务 HTML 到期处理行）**：到期未用的票按**每张** `issued_entitlements` 判定、不再看整单——`used_times=0` 的票逐张**原渠道自动退款**（`autoRefundExpiredUnusedOrder` 同款动作：建 approved 退款 + 权益 active→refunded + 回补库存 + 打款事件；系统动作跳过商户范围闸；未核销无已确认积分、不发 points deduct）；已有退款在途/完成则跳过。
-  - **已核销票作废、不连坐未核销票**：`used_times>0` 的到期票置 `forfeited`（`forfeitEntitlement`，不退款，与「核销后不可退」一致）；**同单其他完全未核销的票不受影响、仍按上一条逐张自动退款**（旧口径「同单有核销则其余未核销一律作废」已废止）。0 元 / 非 paid 的到期未用权益亦作废以止反复扫描。`issued_entitlements.status` 无 DB CHECK，新增 `forfeited` 值无需迁移。
-  - ✅ **已落地（2026-06-30）**：`processExpiredPaidEntitlements` 不再因同单有核销而连坐作废；到期未核销票经 `autoRefundExpiredUnusedTickets` **逐张原渠道自动退款**（份额合计、全覆盖则整单额、库存累计达全额回补一次），已核销票不受影响。69+142 测试绿。
+  - **到期一律作废、不退款（2026-08-03 纠偏，业务 HTML 为准）**：`business-enum-quick-reference-v0.1.html`「售票与退款原则」逐字——官方和第三方渠道门票售出后原则上不退款，**未到场、忘记使用或主动放弃都不是退款理由**；同文件「到期未核销款」与 `business-system-map-for-operations-v0.1.html`「到期处理」——到期未核销的票先且只扣一次第三方渠道费用、余额按票种经营域归属。**业务 HTML 从未授权「到期自动退」**。故 `processExpiredPaidEntitlements` 对到期未核销权益一律 `forfeitEntitlement` 置 `forfeited`：不建退款单、不冻结权益、不回补限量票名额。
+  - **~~到期按票实例自动退款（2026-06-29 口径）~~ 已废止（2026-08-03）**：该口径把「到期未用」当成了退款理由，与上面两条 HTML 原文直接冲突。`TicketRefundService.autoRefundExpiredWholeTickets` 已随之删除（删前全仓 grep 确认零调用点、`npm run verify:tenant-isolation` PASS）。票种 `refundable` 只表示「**客人可申请**整票退款」，勾选与否都不影响到期处置；客人仍走人工申请 → 审批 → 确认拨付的退款链。后台勾选框与 OpenAPI `refundable` 描述已同步去掉「到期未用自动退」。
+  - **人工退款在途的到期票不动 + 兜底作废**：父实例 `refund_pending`（申请即冻结）但子权益仍 `active` 的到期权益留给退款链处置——作废它会让审批冻结命中 0 行、退款单永远批不了。无订单（直接发放）/ 0 元 / 非 paid 的到期未用权益同样作废，以止反复扫描。`issued_entitlements.status` 无 DB CHECK，`forfeited` 值无需迁移。
 
 ### 4.3 票实例状态
 

@@ -1718,7 +1718,7 @@ class TicketingServiceTests {
     }
 
     @Test
-    void expiredFullyUnusedPaidOrderIsAutoRefunded() {
+    void expiredFullyUnusedPaidTicketIsForfeitedNotRefunded() {
         java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
         // 可退票种 + 已付订单（9900 分，1 张）+ 1 张全未核销的父票实例（到期）。
@@ -1733,14 +1733,14 @@ class TicketingServiceTests {
         int processed = service.processExpiredPaidEntitlements(now);
 
         assertThat(processed).isEqualTo(1);
-        // 全未核销可退到期票 → 整票原渠道自动退款（approved/全额）、权益冻结 refunded、父票 refunded、名额回补。
-        assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_auto".equals(r.targetId()) && "approved".equals(r.status())
-                        && r.refundAmountCent() == 9900L && "original".equals(r.refundChannel()));
-        assertThat(ticketingRepository.issuedEntitlements.get("e_auto").status()).isEqualTo("refunded");
+        // business-enum-quick-reference-v0.1.html「售票与退款原则」：门票售出后原则上不退款，
+        // 未到场、忘记使用或主动放弃都不是退款理由；「到期未核销款」：到期票余额按票种经营域归属。
+        // 故即便票种 refundable=true（=客人可申请整票退款），到期也只作废、不产生退款单、不回补名额。
+        assertThat(ticketingRepository.refunds.values()).noneMatch(r -> "o_auto".equals(r.targetId()));
+        assertThat(ticketingRepository.issuedEntitlements.get("e_auto").status()).isEqualTo("forfeited");
         assertThat(ticketingRepository.findTicketInstanceById("inst_auto")).get()
-                .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
-        assertThat(ticketingRepository.releasedStock).contains("tt_auto:1");
+                .extracting(TicketInstanceRecord::status).isEqualTo("active");
+        assertThat(ticketingRepository.releasedStock).doesNotContain("tt_auto:1");
     }
 
     @Test
@@ -1800,7 +1800,8 @@ class TicketingServiceTests {
 
     @Test
     void expiredPartiallyUsedMultiPersonTicketIsForfeitedNotRefunded() {
-        // 到期整票口径：多人票任一权益已核销（整票已首用）→ 整张作废不退；同单完全未核销的票整张退。
+        // 到期整票口径（business-enum「售票与退款原则」）：到期一律作废、不产生退款单——
+        // 无论整票已首用（多人票核销过 1 人）还是完全未核销，都只作废，已核销权益不动。
         java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
         seedRefundableType("tt_mp");
@@ -1819,16 +1820,15 @@ class TicketingServiceTests {
 
         service.processExpiredPaidEntitlements(now);
 
-        // 完全未核销票 inst_free → 整张退款、权益冻结 refunded。
-        assertThat(ticketingRepository.issuedEntitlements.get("e_free").status()).isEqualTo("refunded");
+        // 完全未核销票 inst_free → 权益作废；父票实例不动（作废只落 issued_entitlements）。
+        assertThat(ticketingRepository.issuedEntitlements.get("e_free").status()).isEqualTo("forfeited");
         assertThat(ticketingRepository.findTicketInstanceById("inst_free")).get()
-                .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
+                .extracting(TicketInstanceRecord::status).isEqualTo("active");
         // 部分使用票 inst_part 的到期未核销权益 → 作废不退；已核销权益不动。
         assertThat(ticketingRepository.issuedEntitlements.get("e_part_free").status()).isEqualTo("forfeited");
         assertThat(ticketingRepository.issuedEntitlements.get("e_part_used").status()).isEqualTo("active");
-        // 退款金额只含未核销票 9900（不含部分使用票）。
-        assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_mp".equals(r.targetId()) && r.refundAmountCent() == 9900L);
+        // 全程不产生任何退款单。
+        assertThat(ticketingRepository.refunds.values()).noneMatch(r -> "o_mp".equals(r.targetId()));
     }
 
     @Test
@@ -3820,14 +3820,14 @@ class TicketingServiceTests {
 
         int processed = service.processExpiredPaidEntitlements(now);
 
-        // AUD-011:此前「订单已有退款」整单跳过——实例2永远既不退也不作废;现按实例处置,剩余整张未核销可退票自动退。
+        // AUD-011:此前「订单已有退款」整单跳过——实例2永远既不退也不作废;现按实例处置,剩余整张未核销票照旧被处理。
+        // 处置方式=作废(business-enum「售票与退款原则」不认「到期未用」为退款理由),不再产生到期自动退款单。
         assertThat(processed).isEqualTo(1);
-        assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_part".equals(r.targetId()) && "approved".equals(r.status())
-                        && r.refundAmountCent() == 9900L && r.id().startsWith("ticket_refund_auto_expiry_"));
-        assertThat(ticketingRepository.issuedEntitlements.get("e_p2").status()).isEqualTo("refunded");
+        assertThat(ticketingRepository.refunds.values())
+                .noneMatch(r -> r.id().startsWith("ticket_refund_auto_expiry_"));
+        assertThat(ticketingRepository.issuedEntitlements.get("e_p2").status()).isEqualTo("forfeited");
         assertThat(ticketingRepository.findTicketInstanceById("inst_p2")).get()
-                .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
+                .extracting(TicketInstanceRecord::status).isEqualTo("active");
     }
 
     @Test

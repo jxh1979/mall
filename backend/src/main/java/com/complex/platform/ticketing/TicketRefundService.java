@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
 
 /**
@@ -280,7 +279,7 @@ public class TicketRefundService {
     }
 
     /**
-     * 退款审批生效后的统一兑付副作用（人工审批通过 / 额度内自助完成 / 到期自动退 共用）：
+     * 退款审批生效后的统一兑付副作用（人工审批通过 / 额度内自助完成 共用）：
      * 退款行置 approved + 强 CAS 冻结对应权益（active∧used=0→refunded，失配整笔回滚）+ 父票 refund_pending→refunded
      * + 限量票按本笔退成功实例数回补名额（退一张放一个）+ 发打款事件；deductPoints=true 时按比例发积分冲减。
      */
@@ -328,68 +327,6 @@ public class TicketRefundService {
         //   故退款到此停在 approved（等兑付），由财务实际打完款后调 confirm-payout 确认才 approved→success。
         //   此前在本方法内联置 success：钱一分没出账，当天经营净收入就已被扣（财务/分析按 status='success' 扣减）。
         return approved;
-    }
-
-    /**
-     * 方案2 门票到期整票自动退款（系统发起，无 auth 上下文）：对该订单**完全未核销**的父票实例整张原渠道直批退款，
-     * 金额=这些实例出票时定格分摊额合计；任一权益已核销的实例（部分使用）不在此退（由调用方作废，规则2口径）。
-     * 直批生效（冻结权益 active→refunded、父票 refund_pending→refunded、按实例数回补名额、发打款事件）；
-     * 全未核销无已确认积分 → 不发 points deduct；跳过商户闸（系统动作）。
-     * 非 paid / 0 元 / 无完全未核销实例 → 返回 null（AUD-011 起幂等粒度=父票实例，不再按订单级退款金额跳过）。
-     * {@code @Transactional} 保多写原子；实例冻结 CAS 竞态时抛异常回滚整批，交下轮重试。
-     */
-    @Transactional
-    public TicketRefundRecord autoRefundExpiredWholeTickets(TicketOrderRecord order, Instant now) {
-        if (order == null || !"paid".equals(order.payStatus()) || order.amountCent() <= 0) {
-            return null;
-        }
-        // AUD-011：幂等改实例级——此前按订单级退款金额求和跳过，同单人工部分退款后其余完全未核销
-        // 到期票被整单跳过（既不退也不作废）。targets 只取 active 且完全未核销的实例
-        //（人工退款申请即冻结实例 refund_pending，天然被排除），实例级 CAS 兜并发。
-        List<TicketInstanceRecord> allInstances = repository.listTicketInstancesByOrderId(order.id());
-        if (allInstances.isEmpty()) {
-            return null;
-        }
-        Map<String, List<IssuedEntitlementRecord>> entByInstance =
-                groupByParent(repository.listIssuedEntitlementsByOrderId(order.id()));
-        List<TicketInstanceRecord> targets = allInstances.stream()
-                .filter(ti -> isFullyUnusedActive(ti, entByInstance.get(ti.id())))
-                .toList();
-        if (targets.isEmpty()) {
-            return null; // 无完全未核销实例（全部部分使用/已退）→ 交由调用方作废。
-        }
-        Map<String, Long> shareByInstance = perInstanceShares(order, allInstances);
-        long amountCent = targets.stream().mapToLong(ti -> shareByInstance.getOrDefault(ti.id(), 0L)).sum();
-        if (amountCent <= 0) {
-            return null;
-        }
-        // 申请即冻结（系统直批同样先置 refund_pending，复用 finalize 的 refund_pending→refunded CAS）。
-        // 复核修正（P2）：CAS 失败必须抛异常回滚整批——此前 return null 会把循环里已冻结成功的实例
-        // 连同事务一起提交，留下「refund_pending 且无退款单」的孤儿实例，任何路径都救不回。
-        for (TicketInstanceRecord ti : targets) {
-            if (repository.markTicketInstanceRefundPending(ti.id(), now) == 0) {
-                throw new IllegalStateException(
-                        "ticket instance freeze race during auto refund; batch rolled back for next run: " + ti.id());
-            }
-        }
-        TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
-                // AUD-011：同一订单可能分多轮自动退（前轮已退实例不同），id 掺入本轮首实例避免跨轮撞号。
-                // 复核修正：订单id+实例id 拼接超 slug 40 字截断上限，前缀26字+40=66 > id 列宽 varchar(64)，
-                // 每笔自动退款必「value too long」——改定长哈希后缀（26+32=58），与酒吧 boundedAdjustmentId 同款修法。
-                "ticket_refund_auto_expiry_" + boundedBatchSuffix(order.id() + "_" + targets.get(0).id()),
-                order.id(),
-                amountCent,
-                "ticket expired unused — system auto refund (whole ticket)",
-                "original",
-                "approved",
-                "system",
-                "system",
-                now,
-                now,
-                now,
-                order.merchantId()));   // V220：自动退款受理商户=原订单 merchant_id
-        createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
-        return finalizeApprovedRefund(refund, now, false); // 到期自动退：停在 approved，等财务确认拨付
     }
 
     /** 每票出票时定格的实付分摊额：复现方案1 出票均分（allocateEvenly 按实例数分订单实付，seq 定序，分到分不丢分）。 */
@@ -599,16 +536,6 @@ public class TicketRefundService {
     private String trimToDefault(String value, String defaultValue) {
         String trimmed = value == null ? "" : value.trim();
         return trimmed.isEmpty() ? defaultValue : trimmed;
-    }
-
-    /** 复核修正（P1-A）：批次后缀定长 32 位哈希，保证退款单 id 恒 ≤64 字符且同批次确定可幂等。 */
-    private static String boundedBatchSuffix(String seed) {
-        try {
-            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(seed.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 32);
-        } catch (java.security.NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 unavailable", exception);
-        }
     }
 
     private String slug(String value) {

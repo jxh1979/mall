@@ -914,7 +914,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 </label>
                 <label>
                   <input data-testid="ticket-refundable" type="checkbox" checked={refundable} onChange={(event) => setRefundable(event.target.checked)} aria-label="可退票" />
-                  可退票（客人可申请整票退款、到期未用自动退；不勾=不可退）
+                  可退票（勾选=客人可申请整票退款；不勾=不可退。到期未核销一律作废，任何票种都不自动退）
                 </label>
                 <label>单店票绑定酒吧（可空=通票）
                   <select data-testid="ticket-bar-select" aria-label="单店票绑定酒吧" value={barId} onChange={(event) => setBarId(event.target.value)}>
