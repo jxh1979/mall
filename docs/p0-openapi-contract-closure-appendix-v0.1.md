@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 717 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 718 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 328 | 人工权限矩阵正文未覆盖 226 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1434 | 人工事件矩阵正文未覆盖 1392 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 717 | 人工任务映射正文未逐项覆盖 711 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 432 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1436 | 人工事件矩阵正文未覆盖 1394 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 718 | 人工任务映射正文未逐项覆盖 712 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 433 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -317,7 +317,7 @@
 | `staff.profile.review` | staff-token | project | 2 | reviewStaffRegistration, setStaffSalesPosition | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 1 | submitStaffRegistration | OpenAPI 补充，以本附录为准 |
 | `staff.profile.view` | staff-token | project | 1 | listStaffProfiles | OpenAPI 补充，以本附录为准 |
-| `staff.shift.manage` | staff-token | platform | 4 | listStaffShifts, upsertStaffShift, listStaffLeaves, reviewStaffLeave | OpenAPI 补充，以本附录为准 |
+| `staff.shift.manage` | staff-token | platform | 5 | listStaffShifts, upsertStaffShift, batchUpsertStaffShifts, listStaffLeaves, reviewStaffLeave | OpenAPI 补充，以本附录为准 |
 | `staff.shift.view` | staff-token | platform | 3 | listMyStaffShifts, listMyStaffAttendance, myStaffAttendanceMonthView | OpenAPI 补充，以本附录为准 |
 | `staff.tax_bracket.manage` | staff-token | platform | 1 | upsertPayrollTaxBracket | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
@@ -1601,7 +1601,9 @@
 | `staff.review_failed` | failure | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `staff.shift_mine.view_failed` | failure | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | P0-待归类 | `staff.shift.view` | 接口级事件，以本附录为准 |
 | `staff.shift_mine.viewed` | success | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | P0-待归类 | `staff.shift.view` | 接口级事件，以本附录为准 |
+| `staff.shift.save_failed` | failure | `batchUpsertStaffShifts` | `POST` | `/api/v1/staff/shifts/batch` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `staff.shift.save_failed` | failure | `upsertStaffShift` | `POST` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `staff.shift.saved` | success | `batchUpsertStaffShifts` | `POST` | `/api/v1/staff/shifts/batch` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `staff.shift.saved` | success | `upsertStaffShift` | `POST` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `staff.shift.view_failed` | failure | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `staff.shift.viewed` | success | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
@@ -2275,6 +2277,7 @@
 | P0-待归类 | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | 工单派单 | `facility.work_order.manage` | `facility.work_order_assigned` / `facility.work_order_assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | 招商线索派单(主管手动指派) | `leasing.lead.manage` | `leasing.lead.assigned` / `leasing.lead.assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | Assign merchant service work order | `merchant.service_work_order.assign` | `merchant_service.assignMerchantServiceWorkOrder.succeeded` / `merchant_service.assignMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `batchUpsertStaffShifts` | `POST` | `/api/v1/staff/shifts/batch` | 按周批量排班(一次排一周) | `staff.shift.manage` | `staff.shift.saved` / `staff.shift.save_failed` | web, staff_private_phone | operation 级补充 |
 | P0-待归类 | `bindUserToPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/bind-user` | 账号绑定外部协作机构 | `partner.org.manage` | `partner.org.user_bound` / `partner.org.user_bind_failed` | web | operation 级补充 |
 | P0-待归类 | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | 品牌拉黑/解黑(高危需审批) | `leasing.brand.blacklist` | `leasing.brand.blacklist_changed` / `leasing.brand.blacklist_change_failed` | web | operation 级补充 |
 | P0-待归类 | `cancelServiceOrder` | `POST` | `/api/v1/services/orders/{id}/cancel` | 取消服务单(履约前;留原因) | `service.order.create` | `service.order.cancelled` / `service.order.cancel_failed` | staff_private_phone, web | operation 级补充 |

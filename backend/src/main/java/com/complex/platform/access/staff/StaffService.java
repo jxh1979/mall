@@ -51,6 +51,11 @@ public class StaffService {
     // ponytail: 觉得兜底匹配太松(离班 11 小时还认)就把它调小,一个常量的事。
     private static final long SHIFT_MATCH_WINDOW_SECONDS = 12 * 3600L;
 
+    // 一次批量排班最多生成多少个班次(员工数 × 天数)。一周 7 天 × 一个班组几十人绰绰有余,
+    // 又拦住「全选员工 × 31 天」手滑一次排出上万条把请求拖死。
+    // ponytail: 真有超大班组再往上调,一个常量的事。
+    private static final int MAX_BATCH_SHIFTS = 500;
+
     private final JdbcStaffRepository repository;
     private final AccessRepository accessRepository;
     private final IdempotencyService idempotencyService;
@@ -582,6 +587,99 @@ public class StaffService {
                 "staff_shift_schedule", saved.id(), null, request.idempotencyKey(),
                 java.util.Map.of("user_id", saved.userId(), "work_date", saved.workDate().toString()));
         return saved;
+    }
+
+    /**
+     * 按周批量排班（2026-08-02 用户拍板）：排班员一次排出一周的班，而不是一人一天点一次。
+     *
+     * <p>选一批员工 + 一个时段 + 勾哪几天 → 一次生成整周班次。日期窗口 = 起始日期起 {@code days} 天，
+     * {@code weekdays} 非空只排勾中的星期几。每天只填「几点到几点」：结束时刻不晚于开始时刻
+     * （如 22:00-06:00）即跨零点班，班次结束自动顺延到次日，排班员不用手动选日期。
+     * 日历日→时刻一律按 {@link LocalZone}（北京）折算，与考勤按 start_at/end_at 区间配班同一把尺子。
+     *
+     * <p>逐条走 {@link #upsertShift}：权限闸、项目隔离、审计留痕、幂等覆盖与单班排班同一条路，
+     * 唯一键 (user_id, start_at) 承接「重排同一开始时刻＝覆盖，不是新建」。
+     */
+    public com.complex.platform.access.staff.dto.StaffShiftBatchResult batchUpsertShifts(
+            com.complex.platform.access.staff.dto.StaffShiftBatchRequest request) {
+        authorizationService.requirePermission("staff.shift.manage");
+        if (request == null || request.startDate() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写排班起始日期");
+        }
+        List<String> userIds = request.userIds() == null ? List.of() : request.userIds().stream()
+                .map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct().toList();
+        if (userIds.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须选择至少一名员工");
+        }
+        int days = request.days() == null ? 7 : request.days();
+        if (days < 1 || days > 31) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "排班天数必须在 1 到 31 天之间");
+        }
+        java.util.Set<java.time.DayOfWeek> weekdays = parseWeekdays(request.weekdays());
+        java.time.LocalTime startTime = parseShiftTime(request.startTime(), "开始");
+        java.time.LocalTime endTime = parseShiftTime(request.endTime(), "结束");
+
+        List<java.time.LocalDate> dates = java.util.stream.IntStream.range(0, days)
+                .mapToObj(request.startDate()::plusDays)
+                .filter(date -> weekdays.isEmpty() || weekdays.contains(date.getDayOfWeek()))
+                .toList();
+        if (dates.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "所选日期范围内没有勾中的星期几，请至少勾一天");
+        }
+        long total = (long) dates.size() * userIds.size();
+        if (total > MAX_BATCH_SHIFTS) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "一次最多生成 " + MAX_BATCH_SHIFTS + " 个班次（本次 " + userIds.size() + " 名员工 × "
+                            + dates.size() + " 天 = " + total + " 个），请分批排");
+        }
+        List<String> points = request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds().stream()
+                .map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct().toList();
+
+        java.util.List<StaffShiftRecord> saved = new java.util.ArrayList<>();
+        int created = 0;
+        for (java.time.LocalDate date : dates) {
+            Instant startAt = date.atTime(startTime).atZone(LocalZone.ID).toInstant();
+            // 跨零点：结束时刻不晚于开始时刻 → 结束落在次日（22:00-06:00 排班员只填时段即可）。
+            java.time.LocalDate endDate = endTime.isAfter(startTime) ? date : date.plusDays(1);
+            Instant endAt = endDate.atTime(endTime).atZone(LocalZone.ID).toInstant();
+            for (String userId : userIds) {
+                StaffShiftRecord row = upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                        request.idempotencyKey(), userId, date, startAt, endAt, points, request.note()));
+                if (row.createdAt() != null && row.createdAt().equals(row.updatedAt())) {
+                    created++;
+                }
+                saved.add(row);
+            }
+        }
+        return new com.complex.platform.access.staff.dto.StaffShiftBatchResult(
+                created, saved.size() - created, List.copyOf(saved));
+    }
+
+    private static java.util.Set<java.time.DayOfWeek> parseWeekdays(List<Integer> weekdays) {
+        if (weekdays == null || weekdays.isEmpty()) {
+            return java.util.Set.of();
+        }
+        java.util.EnumSet<java.time.DayOfWeek> parsed = java.util.EnumSet.noneOf(java.time.DayOfWeek.class);
+        for (Integer weekday : weekdays) {
+            if (weekday == null || weekday < 1 || weekday > 7) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "星期几必须取 1（周一）到 7（周日）");
+            }
+            parsed.add(java.time.DayOfWeek.of(weekday));
+        }
+        return parsed;
+    }
+
+    private static java.time.LocalTime parseShiftTime(String value, String label) {
+        String text = trimToNull(value);
+        if (text == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写每日" + label + "时刻");
+        }
+        try {
+            return java.time.LocalTime.parse(text);
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "每日" + label + "时刻格式必须为 时:分（如 22:00），当前填的是「" + text + "」");
+        }
     }
 
     /** E1:后台/主管按日(可选按人)查排班。 */

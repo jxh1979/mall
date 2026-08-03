@@ -126,6 +126,15 @@ public class StaffController {
         return ApiResponse.ok(service.upsertShift(request));
     }
 
+    /** 按周批量排班（2026-08-02 拍板）：一批员工 × 勾中的星期几 × 每日同一时段，一次排完整周。 */
+    @PostMapping("/shifts/batch")
+    public ApiResponse<com.complex.platform.access.staff.dto.StaffShiftBatchResult> batchUpsertShifts(
+            @RequestBody @jakarta.validation.Valid
+            com.complex.platform.access.staff.dto.StaffShiftBatchRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.batchUpsertShifts(request));
+    }
+
     @GetMapping("/shifts")
     public ApiResponse<PageResponse<StaffShiftRecord>> listShifts(
             @org.springframework.web.bind.annotation.RequestParam(value = "date", required = false) String date,

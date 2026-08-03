@@ -127,6 +127,17 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | POST | /api/v1/staff/device-credentials/{id}/revoke | staff.device.revoke | 解绑/失效 |
 | GET | /api/v1/staff/notices | staff.notice.view | 通知/同意列表 |
 | POST | /api/v1/staff/notices/{id}/acknowledge | staff.notice.view | 确认/同意 |
+| POST | /api/v1/staff/shifts | staff.shift.manage | 主管排班（单个班次，同员工同开始时刻幂等覆盖）|
+| POST | /api/v1/staff/shifts/batch | staff.shift.manage | 按周批量排班（一批员工 × 勾中的星期几 × 每日同一时段，一次排完整周）|
+
+> **排班口径（2026-08-02 用户拍板）：一次排一周，跨零点班只填时段。**
+> 排班员的实际做法是一次性排出一周的班，而不是一人一天点一次，所以批量排班是主入口、单班保留作零星补改：
+> 一次提交 = **一批员工 + 一个日期窗口（起始日期起 N 天，N 默认 7、上限 31）+ 勾选星期几（不勾＝窗口内每天都排）+ 每日同一时段**。
+> **跨零点班（如 22:00-06:00）只填时段**：结束时刻不晚于开始时刻，系统即判定为跨零点，把班次结束自动顺延到次日，
+> 排班员不用手动选日期；`work_date` 记班次**开始那天**，与单班排班同一语义。日期与时刻的折算一律按所在地（北京）时区，
+> 与考勤按 `start_at`/`end_at` 区间配班用同一把尺子。重复排同一员工的同一开始时刻＝**覆盖修改**（唯一键 `(user_id, start_at)` 承接），
+> 不新增第二条；返回新建/覆盖条数与逐条明细，排班员提交后能直接看到本次排出了什么。
+> 一次生成上限 500 个班次（员工数 × 天数），拦「全选员工 × 31 天」的手滑。权限闸、项目隔离、审计留痕逐条复用单班排班同一条路径。
 
 > OpenAPI json + yaml 同步（注意工具 `tools/apply-openapi-p0-examples.mjs` 需 `yaml` 包；若缺，手工镜像 yaml 并 pyyaml 校验）。
 
@@ -165,3 +176,4 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | 2026-07-19 | 补 T1 缺口：审批通过分配"员工自助"角色 `role_staff_self`（V322，授自助权限点），修复真实员工（userType=staff）无 user_roles→BYOD 自助端点一律 403 | 既有缺口（非 Wave1 引入）；feature 分支 fix/byod-staff-self-service-role |
 | 2026-07-19 | 修 authz 缺陷:`listNotices`（GET /notices，待办消息中心列表）实现漏 `@GuardedAction` 守卫（与 §4 API 表「staff.notice.view」承诺不符），且该注解被误扣在 `upsertShift` 上致排班多余要求 notice.view；已将 `staff.notice.view` 守卫归位到 listNotices，代码追平 §4 | 主计划会话审计发现；随 PR#180 一并修 |
 | 2026-07-19 | 修 authz/PII 缺陷:`GET /staff/profiles` 实际调用的 `listProfiles(boolean)` 重载漏 `@GuardedAction`（守卫只加在无参重载、控制器未调它）→ 任何认证主体可列全员档案（含 phoneHash/idDocHash）；已给 boolean 重载补 `staff.profile.view` 守卫，代码追平 §4 | 主计划会话复核发现；随 PR#180 一并修 |
+| 2026-08-02 | 新增按周批量排班 `POST /api/v1/staff/shifts/batch`（一批员工 × 勾中的星期几 × 每日同一时段，一次排完整周），跨零点班只填时段、班次结束自动顺延次日；单班 `POST /shifts` 与后台单班表单原样保留。§4 补两行接口与排班口径小节 | 2026-08-02 用户拍板「排班一般一次性排出一周的班，写清楚几月几日几点到几月几日几点」；feature 分支 feat/weekly-shift-batch-20260802 |

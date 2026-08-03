@@ -22139,6 +22139,94 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/staff/shifts/batch:
+    post:
+      tags:
+        - staff
+      operationId: batchUpsertStaffShifts
+      summary: 按周批量排班(一次排一周)
+      description: 2026-08-02 用户拍板:排班员一次排出一周的班——选一批员工 + 一个时段 + 勾哪几天,一次生成整周班次。日期窗口=起始日期起 days 天;weekdays 非空时只排勾中的星期几(1=周一…7=周日)。跨零点班只填时段:结束时刻不晚于开始时刻(如 22:00-06:00)即自动把班次结束顺延到次日,排班员不用手动选日期。日历日按所在地(北京)时区折算;同员工同开始时刻重复提交=覆盖修改,不新增。
+      x-permission: staff.shift.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.shift.saved
+      x-audit-event-failure: staff.shift.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - user_ids
+                - start_date
+                - start_time
+                - end_time
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                user_ids:
+                  type: array
+                  description: 本次排班的员工账号 id 列表(至少一名)。
+                  items:
+                    type: string
+                    maxLength: 64
+                  minItems: 1
+                  maxItems: 200
+                start_date:
+                  type: string
+                  format: date
+                  description: 排班窗口的起始日期(所在地日历日)。
+                days:
+                  type: integer
+                  description: 排班窗口天数(自起始日期起算),不填按 7 天(一周)。
+                  minimum: 1
+                  maximum: 31
+                  default: 7
+                weekdays:
+                  type: array
+                  description: 只排勾中的星期几(1=周一…7=周日);留空=窗口内每天都排。
+                  items:
+                    type: integer
+                    minimum: 1
+                    maximum: 7
+                  maxItems: 7
+                start_time:
+                  type: string
+                  description: 每日班次开始时刻(时:分,如 22:00)。
+                  pattern: ^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$
+                end_time:
+                  type: string
+                  description: 每日班次结束时刻(时:分,如 06:00);不晚于开始时刻即视为跨零点,结束顺延次日。
+                  pattern: ^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$
+                point_space_ids:
+                  type: array
+                  description: 当班点位(空间/点位 id 列表,整批共用)。
+                  items:
+                    type: string
+                    maxLength: 64
+                  maxItems: 20
+                note:
+                  type: string
+                  description: 备注(整批共用)。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/staff/shifts/mine:
     get:
       tags:
