@@ -65,6 +65,10 @@ public class InventoryService {
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final String STORED_WINE_DOMAIN = "stored_wine";
+    // 短信里给客人看的到期日:所在地(北京)日历日 + 中文写法(「所有终端零英文全中文」铁律)。
+    // 旧写法直接塞 Instant.toString(),客人收到 2026-08-02T18:00:00Z——既是英文时间戳,又比北京日期早一天。
+    private static final java.time.format.DateTimeFormatter EXPIRE_DATE_TEXT =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy年M月d日");
     private static final String STORED_WINE_DEPOSIT_TEMPLATE = "sms.stored_wine.deposit";
     private static final String STORED_WINE_CLAIM_TEMPLATE = "sms.stored_wine.claim";
     private static final String STORED_WINE_EXPIRING_TEMPLATE = "sms.stored_wine.expiring";
@@ -496,7 +500,8 @@ public class InventoryService {
             putIfNotNull(params, "bottle_name", bottle.bottleName());
             putIfNotNull(params, "item", bottle.itemId());
             putIfNotNull(params, "item_id", bottle.itemId());
-            putIfNotNull(params, "expireAt", bottle.expireAt() == null ? null : bottle.expireAt().toString());
+            putIfNotNull(params, "expireAt", bottle.expireAt() == null ? null
+                    : EXPIRE_DATE_TEXT.format(bottle.expireAt().atZone(LocalZone.ID)));
             putIfNotNull(params, "remaining_quantity", bottle.remainingQuantity());
         }
         if (claim != null) {
