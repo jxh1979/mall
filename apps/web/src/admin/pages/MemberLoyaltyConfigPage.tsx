@@ -133,7 +133,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
       </div>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {/* ---- 会员等级 ---- */}
-        <h3>会员等级档位（按累计成长积分自动升级；保级/宽限期到期才可能下调）</h3>
+        <h3>会员等级档位（按累计成长值自动升级；保级/宽限期到期才可能下调）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="member-levels-table">
             <thead><tr><th>排序</th><th>代码</th><th>名称</th><th>升级门槛</th><th>保级门槛</th><th>考核周期(天)</th><th>宽限期(天)</th><th>积分倍率</th><th>状态</th><th>操作</th></tr></thead>
@@ -155,7 +155,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
           <label>代码<input aria-label="等级代码" placeholder="gold" value={levelForm.levelCode} onChange={(e) => setLevelForm({ ...levelForm, levelCode: e.target.value })} /></label>
           <label>名称<input aria-label="等级名称" placeholder="金卡" value={levelForm.levelName} onChange={(e) => setLevelForm({ ...levelForm, levelName: e.target.value })} /></label>
           <label>排序<input aria-label="等级排序" type="number" min="0" value={levelForm.levelRank} onChange={(e) => setLevelForm({ ...levelForm, levelRank: e.target.value })} /></label>
-          <label>升级门槛<input aria-label="升级门槛" type="number" min="0" placeholder="累计成长积分" value={levelForm.upgradeThreshold} onChange={(e) => setLevelForm({ ...levelForm, upgradeThreshold: e.target.value })} /></label>
+          <label>升级门槛<input aria-label="升级门槛" type="number" min="0" placeholder="累计成长值" value={levelForm.upgradeThreshold} onChange={(e) => setLevelForm({ ...levelForm, upgradeThreshold: e.target.value })} /></label>
           <label>保级门槛<input aria-label="保级门槛" type="number" min="0" value={levelForm.keepThreshold} onChange={(e) => setLevelForm({ ...levelForm, keepThreshold: e.target.value })} /></label>
           <label>考核周期(天)<input aria-label="考核周期天数" type="number" min="1" value={levelForm.keepPeriodDays} onChange={(e) => setLevelForm({ ...levelForm, keepPeriodDays: e.target.value })} /></label>
           <label>宽限期(天)<input aria-label="宽限期天数" type="number" min="0" value={levelForm.graceDays} onChange={(e) => setLevelForm({ ...levelForm, graceDays: e.target.value })} /></label>
