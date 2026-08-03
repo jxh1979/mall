@@ -25,6 +25,7 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 > - 核查基准：main = `4fb84be1`（2026-07-28）。核查报告：`.160:~/backlog-truth-sweep-20260728.md`。
 > - **迁移号已用到 V357**（原写 V232，差 125 个）。
 > - **2026-08-01 S10 增量刷新（仅动结算重建相关行）**：main = `ce76f1ad`，**迁移头 V375**；分账瀑布重建 S1–S11 全部合入（对照表见 `settlement-rebuild-prd-v1.0.md` §14.2），本表批 11 收口、新增「分账瀑布收官遗留」行。其余行维持 07-28 基准未复核。
+> - **2026-08-03 增量刷新（仅新增 I 节，未复核旧行）**：main = `e8f7fef7`，**迁移头 V385**；本轮为 Codex 双轨审计核验后的修复批，已修 14 项见 I 节下方「本轮实际动了什么」。
 > - 后台已注册页 **84 个**（`apps/web/src/admin/adminRoutes.ts`）——凡引用页号的待办，先核这张表里有没有这个页号，
 >   本轮就查出 3 个根本不存在的页号（见 A6）。
 
@@ -155,6 +156,37 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 | 批 7 | 清掉 3 份文档 12 处废弃名词；`authority-rule-ledger.csv` 5 行按现行 HTML 重抽（正文 + 行号校准） |
 | 本表 | 按 `.160:~/backlog-truth-sweep-20260728.md` 全量回写：**7 项消项**（批 6a 渠道费 / 批 7 / 批 8 / 批 9 / A'''1 / E1 / BYOD 二期）、**A6 整条作废**（3 个页号不存在）、**迁移号 V232→V357**、G1 条数 ~1210→1012 校正、库存调拨等 4 项并入 H 节 |
 | C3 | 未动——与并发代理的「批 5 三尾项」是同一项（同一文件 `TicketingPoliciesPage.tsx`），归批 5 一并做，避免重复实现 |
+
+
+### I. Codex 双轨审计核验后遗留（2026-08-03）
+
+> 来源：2026-08-03 对 Codex 只读双轨审计报告的逐条核验（20 条结论 → 13 条属实/部分属实、7 条证伪或降级）。
+> 已修 14 项见下方「本轮（2026-08-03）实际动了什么」；本表只登记**核验属实但本轮未做**的部分。判定与逐条证据见 PR #320~#324 正文。
+
+| 项 | 内容 | 状态 |
+|---|---|---|
+| I1 结算 fail-open 归错桶 | `JdbcSettlementBillRepository` 的 `aggregateFormatRevenue`(:186) 与 `aggregateMerchantStats`(:266) 仍是 `COALESCE(merchant_type,'bar')`：商户档案查不到的核销行会被归进酒吧桶、进可分配池分给各酒吧。需与计提闸判据**三处同时**改 fail-loud（只改其一会让判据分叉、K20 守恒立刻炸），并补 `SettlementFeePerTicketS3Tests` / `SettlementServiceFeeConservationTests` 夹具的真商户行 | ⬜ 用户 2026-08-03 拍板「回头修改，计入待办」 |
+| I2 成长值独立账（HTML-05 真缺口） | 全仓「成长值」零实现：成长值即积分本身（还吃了等级倍率与生日倍率）、保级窗口是固定周期清零重攒而非 HTML 要求的滚动十二个月、票务积分未按票种规则算、降级前三十天通知未实现。本轮只做了「降级一次落到位」止血（#320） | ⬜ 用户选定本轮范围外 |
+| I3 规则账本重建 + HTML 哈希门禁 | `docs/prd-audit/authority-rule-ledger.csv` 844 条仍按旧版 HTML 提取（其中 6 行标 AUTHORITATIVE 却引用旧行号，照读会得出与现行 HTML 相反的口径）；`tools/verify-delivery-gates.mjs` 不比对三份 HTML 的 sha256，文档门永远绿 | ⬜ 用户拍板：门禁等账本重建后再加（现在加会立刻挂红） |
+| I4 尾差责任主体只写不读 | V383 已落 `rounding_residual_entity_id`，但结算审阅查询与 `SettlementReviewPage.tsx` 只展示尾差金额、不展示责任主体——业务人员对账时看得到尾差、看不到谁认这笔 | ⬜ |
+| I5 父票到期终态缺失 | `forfeitEntitlement` 只更新 `issued_entitlements`，父票 `ticket_instances` 到期后状态仍停在 `active`，父票层面看不出已过期/已作废（既有行为，现已被 #323 的新断言显式固定） | ⬜ 待定口径 |
+| I6 V 号门禁未进 CI | `verify:migration-version-order`（#320）只挂在 `verify:delivery-gates` 本地跑；GitHub Actions 默认浅克隆取不到 `origin/main` ref，进 CI 需把 checkout 改 `fetch-depth: 0` | ⬜ |
+| I7 docs 残留废止别名 | `member-loyalty-and-stored-value-development-design-v0.1.md`(L13/18/23/56/81) 与 `business-html-source-of-truth-acceptance-spec-v0.1.md`(L22/58) 共 7 处仍写「成长积分」（CONTEXT.md 明列的禁止别名）；`docs/prd-audit/` 下另 15 处属审计历史留痕，**不得改** | ⬜ |
+
+### 本轮（2026-08-03）实际动了什么
+
+| 项 | 动作 |
+|---|---|
+| 综合服务费 | 计提闸加「提供方商户业态=酒吧」条件、封顶收窄到专属单一酒吧门票（#324；依据 HTML enum:47 / map:743,1495-1499） |
+| 并发 | 综合服务费与赠送成本的读-算-写加 `pg_advisory_xact_lock`；**未**加唯一索引（会堵死「冲正后该票可重收一道」的合法路径，且对跨票封顶桶无效） |
+| 尾差 | V383 加责任主体快照列；渠道费分摊尾差不再由酒吧份额静默吸收（依据 HTML gov:301 / map:1536，该口径 2026-08-01 已从「归项目公司/平台」翻转） |
+| 传媒业态 | V384 业态枚举加 `media`、演出票未核销款归传媒公司、业态解析不出时 fail-loud |
+| 退款 | 删掉「未实际兑付先记 success」，一处改三条路径（自助/人工/到期）同时生效；新增确认拨付端点、退款列表端点与后台「待确认拨付」面板（#323；依据 HTML enum:37） |
+| 到期票 | 到期一律作废、不再自动退款；UI 与 OpenAPI 去掉「到期未用自动退」（依据 HTML enum:39-40） |
+| 报错中文化 | 收口在 `GlobalExceptionHandler` 出口翻译（`FieldLabels` 405 键，覆盖 `Strings` 975 处调用 + 96 处字面量 + 7 份本地助手，安卓端零改动受益）；V385 权限展示名中文化 18 条（#322） |
+| 终端闸 | 终端总开关与设备凭证改用服务端可信身份、写请求解析不出身份即拒；连带修 `DeviceCredentialBodyCachingFilter`（原会让签名请求自己被挡）；高危授权审批全局逃生口封死（#321） |
+| 迁移治理 | 新增 `verify:migration-version-order` 门禁：本分支新增 V 号必须大于 `origin/main` 最大号（#320） |
+| **未采纳** | Codex 报告 STD-02（结算留痕物理删）/ STD-03（配置物理删）/ HTML-06（内部价目录未按项目独立）三条经核验**不属实**，未改：前两条删的是幂等重算的自身派生行与 `is_draft=TRUE` 草案槽（真留痕在 `fund_ledger` / `dividend_statement_lines` 的触发器 + REVOKE 双锁），照改等于给结算重算与配置表单塞四道无用审批闸；HTML-06 的 V379 是署名决策且约束比 HTML 更严，照改反而与 HTML:143「物理项目与运营公司多对多」冲突 |
 
 
 ---
