@@ -274,6 +274,7 @@ class SettlementBatch2EngineTests {
         expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
         expected.put("rounding_residual_cent", 0L);
+        expected.put("rounding_residual_entity_id", null); // V383 尾差为 0 → 没有责任人
         expected.put("pool_undistributed_cent", 0L);
         expected.put("pool_undistributed_entity_id", null);
 

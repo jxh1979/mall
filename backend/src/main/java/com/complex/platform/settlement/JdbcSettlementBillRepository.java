@@ -205,6 +205,43 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /**
+     * 计提串行门(2026-08-03):对某个「只能收一道」的口子取<b>事务级</b>咨询锁。
+     *
+     * <p>业务上解决的是:同一张票的两次核销几乎同时提交时,两边都读到「这张票还没收过」,
+     * 于是一张票收了两道综合服务费/预扣了两道赠送成本 —— 对账时一张票冒出两条同名费,
+     * 业务人员解释不了,而且多收的那一道会真的进分账。
+     *
+     * <p><b>为什么是咨询锁而不是唯一索引</b>:业务口径明写「冲正后该票可重新收一道」
+     * (见 {@link #sumTicketServiceFeeCent}),唯一索引会把这条合法重收永久堵死;且月度封顶桶是跨票的,
+     * 唯一索引对它无效。消费者本就是 REQUIRES_NEW 独立事务 → 事务级锁随提交/回滚自动释放,
+     * 零 schema 变更、无需显式解锁、进程崩也不会留死锁。
+     *
+     * <p><b>取锁顺序固定</b>「父票 → 费率规则 → G 规则」(调用方保证),不交叉取锁 → 不会死锁。
+     */
+    public void lockAccrualKey(String key) {
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(:key))",
+                new MapSqlParameterSource().addValue("key", key), rs -> null);
+    }
+
+    /**
+     * 提供方商户的<b>经营业态</b>(HTML「门票综合服务费只适用于酒吧相关票务」的判定源)。
+     *
+     * <p><b>与 {@link #aggregateFormatRevenue} 同源</b>:同一张表同一列(merchants.merchant_type),
+     * 商户行缺失(无提供方/未建档)时同样兜底 {@code 'bar'} —— 两处判据若不同源,同一笔核销会出现
+     * 「计提时按酒吧收了费、月结时归到游乐份额」,K20 业态守恒当场炸,而账面数字看着还「差不多对」。
+     */
+    public String merchantBusinessFormat(String merchantId) {
+        if (merchantId == null) {
+            return TicketDistributionSettlementService.FORMAT_BAR;
+        }
+        String format = jdbcTemplate.query(
+                "SELECT merchant_type FROM merchants WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", merchantId),
+                rs -> rs.next() ? rs.getString(1) : null);
+        return format == null ? TicketDistributionSettlementService.FORMAT_BAR : format;
+    }
+
+    /**
      * S11②：当月<b>进池</b>核销按【销售渠道】汇总实付额（渠道抽成整单前移的计费基数）。
      * 渠道取自出票订单 {@code ticket_orders.sales_channel}；direct 出票无订单 → 空串（落通用率）。
      *
@@ -710,6 +747,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("attributed_entity_id", bill.attributedEntityId())
                 .addValue("combo_discount_cent", bill.comboDiscountCent())
                 .addValue("rounding_residual_cent", bill.roundingResidualCent())
+                .addValue("rounding_residual_entity_id", bill.roundingResidualEntityId())
                 .addValue("pool_undistributed_cent", bill.poolUndistributedCent())
                 .addValue("pool_undistributed_entity_id", bill.poolUndistributedEntityId());
         jdbcTemplate.update("""
@@ -720,6 +758,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     gift_cost_cent, gift_beneficiary_entity_id,
                     distribution_method, special_approval_ref, status,
                     attributed_entity_id, combo_discount_cent, rounding_residual_cent,
+                    rounding_residual_entity_id,
                     pool_undistributed_cent, pool_undistributed_entity_id, updated_at
                 )
                 VALUES (
@@ -729,6 +768,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     :gift_cost_cent, :gift_beneficiary_entity_id,
                     :distribution_method, :special_approval_ref, :status,
                     :attributed_entity_id, :combo_discount_cent, :rounding_residual_cent,
+                    :rounding_residual_entity_id,
                     :pool_undistributed_cent, :pool_undistributed_entity_id, now()
                 )
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), period_start, period_end) DO UPDATE SET
@@ -753,6 +793,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     attributed_entity_id = EXCLUDED.attributed_entity_id,
                     combo_discount_cent = EXCLUDED.combo_discount_cent,
                     rounding_residual_cent = EXCLUDED.rounding_residual_cent,
+                    rounding_residual_entity_id = EXCLUDED.rounding_residual_entity_id,
                     pool_undistributed_cent      = EXCLUDED.pool_undistributed_cent,
                     pool_undistributed_entity_id = EXCLUDED.pool_undistributed_entity_id,
                     updated_at          = now()

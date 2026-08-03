@@ -14,7 +14,7 @@ package com.complex.platform.ticketing;
  * @param entitlementType        权益类型（entry/admission/gift_drink/...）
  * @param providerMerchantId     提供方商户 id（权益模板的归属商户）
  * @param providerMerchantName   提供方商户名称
- * @param providerMerchantType   提供方商户业态（bar/catering/retail/amusement/other，V348 五值封口）
+ * @param providerMerchantType   提供方商户业态（bar/catering/retail/amusement/media/other，V348+V384 六值封口）
  * @param quantity               该权益在票面上的份数
  * @param numPeople              每份的核销人数（多人票 &gt; 1）
  */

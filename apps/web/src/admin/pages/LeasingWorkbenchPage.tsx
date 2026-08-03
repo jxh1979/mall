@@ -75,8 +75,9 @@ const LEAD_STATUS_LABELS: Record<string, string> = { pending_follow_up: "待跟�
 const STAGE_LABELS: Record<string, string> = { requirement_confirmed: "需求确认", proposal_quoted: "方案报价", negotiation: "商务谈判", pending_signing: "待签约" };
 const BRAND_TYPE_LABELS: Record<string, string> = { intentional: "意向品牌", prospective: "潜在品牌", partner: "合作品牌", blacklist: "黑名单" };
 // V348 业态五值（真源 HTML §商户管理）：线索意向业态签约时直接带入商户业态，故与商户业态同一词表。
-const BUSINESS_TYPES = ["bar", "catering", "retail", "amusement", "other"];
-const BUSINESS_TYPE_LABELS: Record<string, string> = { bar: "酒吧", catering: "餐饮", retail: "零售", amusement: "游乐", other: "其他" };
+// V348+V384 六值：与 merchants.merchant_type 同词表（签约自动建档要落进那张表的 CHECK）。
+const BUSINESS_TYPES = ["bar", "catering", "retail", "amusement", "media", "other"];
+const BUSINESS_TYPE_LABELS: Record<string, string> = { bar: "酒吧", catering: "餐饮", retail: "零售", amusement: "游乐", media: "传媒", other: "其他" };
 const METHOD_LABELS: Record<string, string> = { phone: "电话", visit: "拜访", wechat: "微信" };
 const REF_TYPE_LABELS: Record<string, string> = { lead: "线索", intent: "意向" };
 function label(map: Record<string, string>, code: string | null | undefined): string {

@@ -17,10 +17,12 @@ import org.springframework.transaction.annotation.Transactional;
  * 写 unverified_expired 流水:每日营业后扫已过期(valid_to &lt; now)且存在未核销部分(total_times &gt; used_times)
  * 的权益,把未核销那部分金额归对应<b>经营主体</b>。
  *
- * <p><b>S8 未核销款分流(2026-07-28,业务 HTML「通票结算口径」逐字)</b>:
- * 「没有被核销的权益,那部分钱归娱乐平台公司留存;游乐通票的未核销权益款归游乐公司。」
+ * <p><b>S8 未核销款分流(业务 HTML §「到期未核销款」逐字)</b>:
+ * 「余额按票种经营域归属:酒吧相关归娱乐平台公司,纯游乐归游乐公司,<b>演出归传媒公司</b>。」
  * 按<b>提供该权益的商户业态</b>(merchants.merchant_type,与 S11 池基过滤同一套判定源)分流:
- * 游乐业态 → amusement_ticket 流 → 游乐公司;其余 → all_pass_ticket 流 → 娱乐平台公司。
+ * 游乐业态 → amusement_ticket 流 → 游乐公司;传媒业态(V384) → performance_ticket 流 → 传媒公司;
+ * 其余 → all_pass_ticket 流 → 娱乐平台公司。<b>业态查不到时一律 fail-loud 阻断</b>(2026-08-03),
+ * 不再 COALESCE 兜底成酒吧 —— 那会把演出票款静悄悄归给娱乐平台公司。
  * 主体由 {@code revenue_stream_attribution} 后台可配解析(V375 种全局默认 be_ent_platform / be_amusement),
  * 不在 Java 里写死权益类型清单;解析不到主体时<b>fail-loud</b>(有金额没有收款方=配置坏,宁可阻断不出错账)。
  * 落 beneficiary_type='entity' + beneficiary_entity_id(S1b/V355 主体列,chk_st_beneficiary 强制非空)。
@@ -97,7 +99,7 @@ public class SettlementExpiryJob {
             long unverified = total <= 0 ? allocated : MoneyRounding.prorate(allocated, total - used, total);
             unverified = Math.max(0L, Math.min(allocated, unverified));
             long verified = allocated - unverified;
-            String beneficiaryEntityId = resolveBeneficiaryEntity(entityByStream, row.businessFormat());
+            String beneficiaryEntityId = resolveBeneficiaryEntity(entityByStream, row);
 
             repository.insertImmutableFact(new SettlementTransactionRecord(
                     "st_ue_" + row.entitlementId(),
@@ -132,19 +134,41 @@ public class SettlementExpiryJob {
     }
 
     /**
-     * 提供方业态 → 收入流 → 主体(revenue_stream_attribution 可配,V375 种全局默认)。
-     * 解析不到主体 = 归属配置被删/未迁移到位:有金额没有收款方,fail-loud 拒绝落账(宁可阻断不出错账;
-     * 静默落 null 也过不了 chk_st_beneficiary 的 entity 非空 CHECK)。
+     * 提供方业态 → 收入流 → 主体(revenue_stream_attribution 可配,V375/V384 种全局默认)。
+     *
+     * <p>分流口径逐字出自 business-enum-quick-reference §「到期未核销款」:
+     * 「余额按票种经营域归属:<b>酒吧相关归娱乐平台公司,纯游乐归游乐公司,演出归传媒公司</b>」。
+     * 判定源 = 提供该权益的商户业态(merchants.merchant_type),不在 Java 里写死权益类型清单。
+     *
+     * <p><b>业态缺失一律阻断(fail-loud,2026-08-03)</b>:原实现 {@code COALESCE(merchant_type,'bar')}
+     * 把「查不到提供方商户」默认当成酒吧 → 演出票/无提供方的权益款静悄悄归给娱乐平台公司,
+     * 传媒公司/游乐公司月底收不到钱、账面还看着正常。有金额却定不出收款方就该停下来,
+     * 与本方法下半段「归属未配置」同一态度。
+     *
+     * <p>解析不到主体 = 归属配置被删/未迁移到位:有金额没有收款方,同样 fail-loud 拒绝落账
+     * (静默落 null 也过不了 chk_st_beneficiary 的 entity 非空 CHECK)。
      */
-    private String resolveBeneficiaryEntity(java.util.Map<String, String> cache, String businessFormat) {
-        String stream = FORMAT_AMUSEMENT.equals(businessFormat)
-                ? "amusement_ticket"
-                : TicketDistributionSettlementService.REVENUE_STREAM_ALL_PASS_TICKET;
+    private String resolveBeneficiaryEntity(java.util.Map<String, String> cache,
+                                            JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row) {
+        String businessFormat = row.businessFormat();
+        if (businessFormat == null) {
+            throw com.complex.platform.common.api.ApiException.conflict("MERCHANT_BUSINESS_FORMAT_MISSING",
+                    "未核销权益款无法落账:权益「" + row.entitlementId() + "」查不到提供方商户的经营业态"
+                            + "(商户:" + (row.merchantId() == null ? "未指定" : row.merchantId()) + ")。"
+                            + "到期余额要按票种经营域归属(酒吧相关归娱乐平台公司、纯游乐归游乐公司、演出归传媒公司),"
+                            + "业态缺失就定不出这笔钱该归谁;请先在商户档案补齐业态后重跑,"
+                            + "不得默认按酒吧归娱乐平台公司");
+        }
+        String stream = switch (businessFormat) {
+            case FORMAT_AMUSEMENT -> "amusement_ticket";
+            case TicketDistributionSettlementService.FORMAT_MEDIA -> "performance_ticket";
+            default -> TicketDistributionSettlementService.REVENUE_STREAM_ALL_PASS_TICKET;
+        };
         String entityId = cache.computeIfAbsent(stream,
                 s -> attributionRepository.resolveManagementEntity(null, s));
         if (entityId == null) {
             throw com.complex.platform.common.api.ApiException.conflict("REVENUE_STREAM_ATTRIBUTION_MISSING",
-                    "未核销权益款无法落账:收入流「" + stream + "」未配置归属主体(V375 默认种子被删或迁移未到位),"
+                    "未核销权益款无法落账:收入流「" + stream + "」未配置归属主体(V375/V384 默认种子被删或迁移未到位),"
                             + "请先在结算配置中心配置归属并复核转正");
         }
         return entityId;
