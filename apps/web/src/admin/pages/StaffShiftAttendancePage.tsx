@@ -21,6 +21,17 @@ const TEXT = {
 const JUDGE_LABELS: Record<string, string> = { normal: "正常", late: "迟到", early_leave: "早退", no_shift: "无班次" };
 const METHOD_LABELS: Record<string, string> = { nfc: "NFC", qr: "扫码", manual: "手动" };
 const TYPE_LABELS: Record<string, string> = { check_in: "上班", check_out: "下班" };
+const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+
+/** 员工/点位这类「一行填多个」的输入：中英文逗号、空白、换行都当分隔符（排班员从名单里粘一串进来也认）。 */
+function splitList(value: string) {
+  return value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+/** 结束时刻不晚于开始时刻 = 跨零点班，后端把班次结束顺延到次日；这里照同一口径提示排班员。 */
+function crossesMidnight(startTime: string, endTime: string) {
+  return Boolean(startTime && endTime && endTime <= startTime);
+}
 
 function localTime(value?: string) {
   return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
@@ -45,6 +56,25 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   const [shiftSaving, setShiftSaving] = React.useState(false);
   // 行明细抽屉：整行可点 → 该排班/考勤完整字段（枚举中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 按周批量排班（2026-08-02 用户拍板）：排班员一次排出一周的班，不再一人一天点一次。
+  const [batchOpen, setBatchOpen] = React.useState(false);
+  const [batchUsers, setBatchUsers] = React.useState("");
+  const [batchStartDate, setBatchStartDate] = React.useState(today);
+  const [batchDays, setBatchDays] = React.useState("7");
+  const [batchWeekdays, setBatchWeekdays] = React.useState<number[]>([]);
+  const [batchStartTime, setBatchStartTime] = React.useState("");
+  const [batchEndTime, setBatchEndTime] = React.useState("");
+  const [batchPoints, setBatchPoints] = React.useState("");
+  const [batchNote, setBatchNote] = React.useState("");
+  const [batchError, setBatchError] = React.useState("");
+  const [batchSaving, setBatchSaving] = React.useState(false);
+  const [batchSummary, setBatchSummary] = React.useState("");
+
+  const toggleWeekday = (weekday: number) => {
+    setBatchWeekdays((prev) => (prev.includes(weekday)
+      ? prev.filter((day) => day !== weekday)
+      : [...prev, weekday].sort((a, b) => a - b)));
+  };
 
   function openShiftDetail(row: ShiftRow) {
     setDetail({
@@ -121,6 +151,41 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
     } catch (e) { setShiftError((e as Error).message); } finally { setShiftSaving(false); }
   };
 
+  // 批量排班：一批员工 × 日期窗口内勾中的星期几 × 每日同一时段，一次生成。跨零点顺延在后端做
+  // （前端只提示），口径单点在服务端，避免两边各算一套。
+  const saveBatchShifts = async () => {
+    const userIds = splitList(batchUsers);
+    const days = Number(batchDays);
+    if (!userIds.length || !batchStartDate || !batchStartTime || !batchEndTime) {
+      setBatchError("请填全 员工/起始日期/每日开始与结束时刻");
+      return;
+    }
+    if (!Number.isInteger(days) || days < 1 || days > 31) {
+      setBatchError("排班天数必须是 1 到 31 之间的整数");
+      return;
+    }
+    setBatchSaving(true);
+    setBatchError("");
+    try {
+      const result = await api.post<{ createdCount?: number; updatedCount?: number }>("/api/v1/staff/shifts/batch", {
+        userIds,
+        startDate: batchStartDate,
+        days,
+        weekdays: batchWeekdays,
+        startTime: batchStartTime,
+        endTime: batchEndTime,
+        pointSpaceIds: splitList(batchPoints),
+        note: batchNote.trim() || null,
+      });
+      const created = result?.createdCount ?? 0;
+      const updated = result?.updatedCount ?? 0;
+      setBatchSummary(`本次批量排班:新建 ${created} 个班次、覆盖修改 ${updated} 个班次(共 ${created + updated} 个)。`);
+      setActionResult({ action: "staff_shift_batch_saved", userCount: userIds.length, createdCount: created, updatedCount: updated });
+      setBatchOpen(false);
+      await reload();
+    } catch (e) { setBatchError((e as Error).message); } finally { setBatchSaving(false); }
+  };
+
   // 第五批（人事域）KPI 接线：卡片数字=统一明细端点合计（与「排班/考勤」列表同谓词，平台口径）；
   // 端点失败/无权 → status=fallback，卡回退「—」并隐藏「完整明细」入口（fail-safe）。
   // 注：卡为平台口径聚合（requirePlatformScope 拦商户级/外包，放行项目级）；项目级主管看到平台口径数字（卡已标注），与其项目过滤列表口径不同=分析端点框架级边界。
@@ -143,7 +208,9 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
       <h3>排班(同员工同开始时刻重复保存=覆盖修改)</h3>
       <div className="admin-form-row" data-testid="shift-editor">
         <button type="button" data-testid="shift-create-open" onClick={() => { setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setShiftError(""); setShiftOpen(true); }}>＋ 新增排班</button>
+        <button type="button" data-testid="shift-batch-open" onClick={() => { setBatchError(""); setBatchSummary(""); setBatchOpen(true); }}>＋ 批量排班(按周)</button>
       </div>
+      {batchSummary ? <p data-testid="shift-batch-result">{batchSummary}</p> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="shift-table">
@@ -227,6 +294,68 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
           { label: "结束", value: end ? localTime(end) : "未填写" },
           { label: "点位", value: points.split(",").map((v) => v.trim()).filter(Boolean).join("、") || "未指定" },
           { label: "备注", value: note.trim() || "—" },
+        ]}
+      />
+      <GuidedFlowModal
+        open={batchOpen}
+        title="批量排班(一次排一周)"
+        testId="shift-batch-guided"
+        submitTestId="shift-batch-save"
+        submitLabel="生成班次"
+        submitting={batchSaving}
+        error={batchError || undefined}
+        onClose={() => setBatchOpen(false)}
+        onSubmit={() => void saveBatchShifts()}
+        steps={[
+          {
+            title: "员工与日期范围",
+            description: "一次排一周:填多名员工(逗号分隔)、起始日期与天数,再勾要排的星期几;不勾=范围内每天都排。",
+            validate: () => {
+              if (!splitList(batchUsers).length || !batchStartDate) return "请填 员工(逗号分隔) 与 起始日期";
+              const days = Number(batchDays);
+              return Number.isInteger(days) && days >= 1 && days <= 31 ? null : "排班天数必须是 1 到 31 之间的整数";
+            },
+            content: (
+              <>
+                <label>员工 user_id(逗号分隔,可多名)<input data-testid="shift-batch-users-input" value={batchUsers} onChange={(event) => setBatchUsers(event.target.value)} /></label>
+                <label>起始日期<CnDatePicker data-testid="shift-batch-start-date" value={batchStartDate} onChange={(v) => setBatchStartDate(v || today())} /></label>
+                <label>天数(自起始日期起算,默认一周 7 天)<input data-testid="shift-batch-days-input" type="number" min={1} max={31} value={batchDays} onChange={(event) => setBatchDays(event.target.value)} /></label>
+                <fieldset data-testid="shift-batch-weekdays">
+                  <legend>只排这几天(不勾=范围内每天都排)</legend>
+                  {WEEKDAY_LABELS.map((label, index) => (
+                    <label key={label}>
+                      <input type="checkbox" data-testid={`shift-batch-weekday-${index + 1}`} checked={batchWeekdays.includes(index + 1)} onChange={() => toggleWeekday(index + 1)} />
+                      {label}
+                    </label>
+                  ))}
+                </fieldset>
+              </>
+            ),
+          },
+          {
+            title: "每日时段与点位",
+            description: "每天同一个时段,只填几点到几点;结束时刻不晚于开始时刻=跨零点班,系统自动把结束顺延到次日,不用另选日期。",
+            validate: () => (batchStartTime && batchEndTime ? null : "请填全 每日开始与结束时刻"),
+            content: (
+              <>
+                <label>每日开始时刻<input data-testid="shift-batch-start-time" type="time" value={batchStartTime} onChange={(event) => setBatchStartTime(event.target.value)} /></label>
+                <label>每日结束时刻<input data-testid="shift-batch-end-time" type="time" value={batchEndTime} onChange={(event) => setBatchEndTime(event.target.value)} /></label>
+                {crossesMidnight(batchStartTime, batchEndTime)
+                  ? <p data-testid="shift-batch-overnight-hint">跨零点班:结束时间为<strong>次日 {batchEndTime}</strong>(系统自动顺延到第二天,排班员不用另选日期)。</p>
+                  : null}
+                <label>点位(space_id 逗号分隔,整批共用)<input data-testid="shift-batch-points-input" value={batchPoints} onChange={(event) => setBatchPoints(event.target.value)} /></label>
+                <label>备注(整批共用)<input data-testid="shift-batch-note-input" value={batchNote} onChange={(event) => setBatchNote(event.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "员工", value: splitList(batchUsers).length ? `${splitList(batchUsers).join("、")}(共 ${splitList(batchUsers).length} 名)` : "未填写" },
+          { label: "日期范围", value: `${batchStartDate} 起 ${batchDays || "—"} 天` },
+          { label: "只排", value: batchWeekdays.length ? batchWeekdays.map((day) => WEEKDAY_LABELS[day - 1]).join("、") : "范围内每天" },
+          { label: "每日时段", value: `${batchStartTime || "未填写"} 至 ${batchEndTime || "未填写"}${crossesMidnight(batchStartTime, batchEndTime) ? "(次日)" : ""}` },
+          { label: "点位", value: splitList(batchPoints).join("、") || "未指定" },
+          { label: "备注", value: batchNote.trim() || "—" },
         ]}
       />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />

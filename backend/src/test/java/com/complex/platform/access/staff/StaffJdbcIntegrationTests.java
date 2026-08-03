@@ -616,6 +616,74 @@ class StaffJdbcIntegrationTests {
                 Integer.class)).isGreaterThanOrEqualTo(1);
     }
 
+    @Test
+    void batchShiftsFillWholeWeekAndRollOvernightEndToNextDay() {
+        // 2026-08-02 用户拍板:排班员一次排出一周的班,而不是一人一天点一次;
+        // 跨零点班只填时段(22:00-06:00),系统看到结束早于开始就把 end_at 顺延到次日;
+        // 重复排同一开始时刻=覆盖不新增;天数上限拦手滑。
+        authenticateAsPlatformAdmin();
+        java.time.ZoneId zone = com.complex.platform.common.LocalZone.ID;
+        java.time.LocalDate monday = java.time.LocalDate.of(2026, 8, 3);   // 周一
+
+        com.complex.platform.access.staff.dto.StaffShiftBatchResult week = service.batchUpsertShifts(
+                new com.complex.platform.access.staff.dto.StaffShiftBatchRequest(
+                        key(), List.of("usr_admin"), monday, 7, List.of(),
+                        "22:00", "06:00", List.of("sp_point_1"), "夜班周排"));
+        assertThat(week.shifts()).hasSize(7);
+        assertThat(week.createdCount()).isEqualTo(7);
+        assertThat(week.updatedCount()).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_shift_schedules WHERE user_id='usr_admin' AND work_date BETWEEN ? AND ?",
+                Integer.class, java.sql.Date.valueOf(monday), java.sql.Date.valueOf(monday.plusDays(6)))).isEqualTo(7);
+
+        // 核心断言:22:00→06:00 跨零点——开始落当日 22:00,结束落「次日」06:00(所在地日历日)。
+        com.complex.platform.access.staff.StaffShiftRecord first = week.shifts().get(0);
+        assertThat(first.workDate()).isEqualTo(monday);                    // work_date=班次开始那天
+        assertThat(first.startAt()).isEqualTo(monday.atTime(22, 0).atZone(zone).toInstant());
+        assertThat(first.endAt()).isEqualTo(monday.plusDays(1).atTime(6, 0).atZone(zone).toInstant());
+        assertThat(java.time.LocalDate.ofInstant(first.endAt(), zone)).isEqualTo(monday.plusDays(1));
+        assertThat(week.shifts()).allSatisfy(shift ->
+                assertThat(java.time.LocalDate.ofInstant(shift.endAt(), zone))
+                        .isEqualTo(shift.workDate().plusDays(1)));
+
+        // 同一批再排一次 = 覆盖,不翻倍(唯一键 user_id+start_at 承接)。
+        com.complex.platform.access.staff.dto.StaffShiftBatchResult again = service.batchUpsertShifts(
+                new com.complex.platform.access.staff.dto.StaffShiftBatchRequest(
+                        key(), List.of("usr_admin"), monday, 7, List.of(),
+                        "22:00", "06:00", List.of("sp_point_2"), "夜班周排(改点位)"));
+        assertThat(again.createdCount()).isZero();
+        assertThat(again.updatedCount()).isEqualTo(7);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_shift_schedules WHERE user_id='usr_admin' AND work_date BETWEEN ? AND ?",
+                Integer.class, java.sql.Date.valueOf(monday), java.sql.Date.valueOf(monday.plusDays(6)))).isEqualTo(7);
+
+        // 只勾周一/周三/周五 → 只排 3 天;白班 09:00-18:00 不跨零点,结束当天。
+        com.complex.platform.access.staff.dto.StaffShiftBatchResult picked = service.batchUpsertShifts(
+                new com.complex.platform.access.staff.dto.StaffShiftBatchRequest(
+                        key(), List.of("usr_admin"), monday, 7, List.of(1, 3, 5),
+                        "09:00", "18:00", List.of(), "白班"));
+        assertThat(picked.shifts()).hasSize(3);
+        assertThat(picked.shifts().stream().map(shift -> shift.workDate().getDayOfWeek()).toList())
+                .containsExactly(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.FRIDAY);
+        assertThat(java.time.LocalDate.ofInstant(picked.shifts().get(0).endAt(), zone)).isEqualTo(monday);
+
+        // 天数上限:32 天被中文文案拒绝,不会手滑生成上万条。
+        assertThatThrownBy(() -> service.batchUpsertShifts(
+                new com.complex.platform.access.staff.dto.StaffShiftBatchRequest(
+                        key(), List.of("usr_admin"), monday, 32, List.of(),
+                        "09:00", "18:00", List.of(), null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("1 到 31");
+
+        // 员工列表为空同样拒绝(排班员没选人就点了生成)。
+        assertThatThrownBy(() -> service.batchUpsertShifts(
+                new com.complex.platform.access.staff.dto.StaffShiftBatchRequest(
+                        key(), List.of(" "), monday, 7, List.of(),
+                        "09:00", "18:00", List.of(), null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("至少一名员工");
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }
