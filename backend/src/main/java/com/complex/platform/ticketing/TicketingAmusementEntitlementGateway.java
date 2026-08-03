@@ -2,7 +2,6 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.amusement.AmusementEntitlementGateway;
 import com.complex.platform.amusement.AmusementEntitlementView;
-import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -68,9 +67,6 @@ public class TicketingAmusementEntitlementGateway implements AmusementEntitlemen
     }
 
     private String requireText(String value) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "entitlement_id is required");
-        }
-        return value.trim();
+        return com.complex.platform.common.Strings.requireText(value, "entitlement_id");
     }
 }
