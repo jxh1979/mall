@@ -2,6 +2,7 @@ package com.complex.platform.access.staff;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.LocalZone;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -251,8 +252,8 @@ public class JdbcStaffRepository {
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)";
         org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                        .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
-                        .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                        .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay(LocalZone.ID).toInstant()))
+                        .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay(LocalZone.ID).toInstant()))
                         .addValue("project_scope", projectScope);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_attendance_records " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
@@ -504,6 +505,26 @@ public class JdbcStaffRepository {
                 .addValue("project_scope", projectScope), this::mapShift);
     }
 
+    /**
+     * 打卡配班用：按时间区间重叠拉候选班次，不经 work_date。
+     *
+     * <p>排班本来就存「几月几日几点 → 几月几日几点」（start_at/end_at），跨零点班（8/2 22:00 → 8/3 06:00）
+     * 的 work_date 记的是开始那天，按 work_date 查「打卡当天」必然漏掉它——这是员工凌晨下班被记「无排班」的根因。
+     * work_date 列保留不动（列表页与索引还在用）。
+     */
+    public java.util.List<StaffShiftRecord> listShiftsForUserOverlapping(String userId,
+            java.time.Instant from, java.time.Instant to) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, work_date, start_at, end_at, point_space_ids, note, created_by, created_at, updated_at
+                  FROM staff_shift_schedules
+                 WHERE user_id = :user_id AND end_at >= :from AND start_at <= :to
+                 ORDER BY start_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("from", java.sql.Timestamp.from(from))
+                .addValue("to", java.sql.Timestamp.from(to)), this::mapShift);
+    }
+
     public java.util.List<StaffShiftRecord> listShiftsForUserBetween(String userId,
             java.time.LocalDate from, java.time.LocalDate to) {
         return jdbcTemplate.query("""
@@ -592,8 +613,8 @@ public class JdbcStaffRepository {
                  ORDER BY punched_at DESC
                  LIMIT 1000
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
-                .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay(LocalZone.ID).toInstant()))
+                .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay(LocalZone.ID).toInstant()))
                 .addValue("project_scope", projectScope),
                 this::mapAttendance);
     }

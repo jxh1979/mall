@@ -11,11 +11,13 @@ import com.complex.platform.access.staff.dto.StaffDeviceRebindDecisionRequest;
 import com.complex.platform.access.staff.dto.StaffDeviceRevokeRequest;
 import com.complex.platform.access.staff.dto.StaffRegistrationRequest;
 import com.complex.platform.access.staff.dto.StaffRegistrationReviewRequest;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.GuardedAction;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -44,6 +46,10 @@ public class StaffService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> INTEGRITY_FAILURES =
             Set.of("root_detected", "debug_detected", "abnormal");
+    // 打卡拉候选班次的时间窗(打卡时刻 ±12 小时)。班次通常 8 小时,12h 足够覆盖早到/晚退,
+    // 又不至于把隔天的同名班拉进来。只影响「无班次覆盖」时的兜底匹配:区间覆盖的班必定在窗内,不受它影响。
+    // ponytail: 觉得兜底匹配太松(离班 11 小时还认)就把它调小,一个常量的事。
+    private static final long SHIFT_MATCH_WINDOW_SECONDS = 12 * 3600L;
 
     private final JdbcStaffRepository repository;
     private final AccessRepository accessRepository;
@@ -51,6 +57,8 @@ public class StaffService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner;
+    // 打卡「当下」的来源。生产恒为 Clock.systemUTC()；单测注固定 Clock 对拍考勤日归属（见 StaffAttendanceLocalZoneTests）。
+    private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
     public StaffService(
@@ -73,6 +81,20 @@ public class StaffService {
             AuthorizationService authorizationService,
             com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner
     ) {
+        this(repository, accessRepository, idempotencyService, auditEventService, authorizationService,
+                credentialProvisioner, Clock.systemUTC());
+    }
+
+    StaffService(
+            JdbcStaffRepository repository,
+            AccessRepository accessRepository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner,
+            Clock clock
+    ) {
+        this.clock = clock;
         this.repository = repository;
         this.accessRepository = accessRepository;
         this.idempotencyService = idempotencyService;
@@ -577,12 +599,15 @@ public class StaffService {
     public PageResponse<StaffShiftRecord> listMyShifts() {
         authorizationService.requirePermission("staff.shift.view");
         var actor = authorizationService.currentActor();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(Instant.now(), java.time.ZoneOffset.UTC);
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(clock.instant(), LocalZone.ID);
         return page(repository.listShiftsForUserBetween(actor.id(), today, today.plusDays(7)));
     }
 
-    /** E2(2026-07-02 拍板):打卡——时间以服务器为准;严格无宽限:上班晚于班次开始即迟到、
-     * 下班早于班次结束即早退;当日无班次记 no_shift;只记录不自动扣罚(处理归人事)。 */
+    /** E2(2026-07-02 拍板):打卡——打卡时刻取服务器(客户端不可篡改);严格无宽限:上班晚于班次开始即迟到、
+     * 下班早于班次结束即早退;匹配不到班次记 no_shift;只记录不自动扣罚(处理归人事)。
+     *
+     * <p>2026-08-02:配哪个班改按<b>时间区间</b>判定,不再折日历日——排班本来就存「几月几日几点→几月几日几点」,
+     * 跨零点班(8/2 22:00→8/3 06:00)的 work_date 是 8/2,按打卡当天查必然漏,员工凌晨下班被记「无排班」。 */
     public StaffAttendanceRecord punch(com.complex.platform.access.staff.dto.StaffAttendancePunchRequest request) {
         authorizationService.requirePermission("staff.attendance.punch");
         if (request == null || request.punchType() == null
@@ -594,9 +619,9 @@ public class StaffService {
             throw ApiException.badRequest("VALIDATION_FAILED", "打卡方式必须为 nfc/qr/manual 之一");
         }
         var actor = authorizationService.currentActor();
-        Instant now = Instant.now();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
-        java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserBetween(actor.id(), today, today);
+        Instant now = clock.instant();
+        java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserOverlapping(
+                actor.id(), now.minusSeconds(SHIFT_MATCH_WINDOW_SECONDS), now.plusSeconds(SHIFT_MATCH_WINDOW_SECONDS));
         StaffShiftRecord shift = pickShift(shifts, request.punchType(), now);
         String judgement;
         if (shift == null) {
@@ -616,7 +641,17 @@ public class StaffService {
         return saved;
     }
 
+    /** 配班两段优先级:先认「区间覆盖打卡时刻」的班(跨零点班照样命中);一个都没覆盖再退回「距起止最近」
+     * (保留早到/晚退也能匹配上的既有行为)。多个覆盖时仍取最近。 */
     private StaffShiftRecord pickShift(java.util.List<StaffShiftRecord> shifts, String punchType, Instant now) {
+        java.util.List<StaffShiftRecord> covering = shifts.stream()
+                .filter(shift -> !now.isBefore(shift.startAt()) && !now.isAfter(shift.endAt()))
+                .toList();
+        return nearestShift(covering.isEmpty() ? shifts : covering, punchType, now);
+    }
+
+    private static StaffShiftRecord nearestShift(java.util.List<StaffShiftRecord> shifts, String punchType,
+            Instant now) {
         return shifts.stream().min(java.util.Comparator.comparingLong(shift -> Math.abs(
                 (punchType.equals("check_in") ? shift.startAt() : shift.endAt()).toEpochMilli()
                         - now.toEpochMilli()))).orElse(null);
@@ -1146,8 +1181,8 @@ public class StaffService {
         }
         java.util.Set<java.time.LocalDate> leaveDays = repository.approvedLeaveDates(actor.id(), first, last);
         java.util.List<StaffAttendanceRecord> punches = repository.listAttendanceForUserBetween(actor.id(),
-                first.atStartOfDay().toInstant(java.time.ZoneOffset.UTC),
-                last.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC));
+                first.atStartOfDay(LocalZone.ID).toInstant(),
+                last.plusDays(1).atStartOfDay(LocalZone.ID).toInstant());
         java.util.List<StaffAttendanceDayRecord> out = new java.util.ArrayList<>();
         for (java.time.LocalDate day = first; !day.isAfter(last); day = day.plusDays(1)) {
             final java.time.LocalDate current = day;
@@ -1164,7 +1199,7 @@ public class StaffService {
             }
             java.util.List<StaffAttendanceRecord> dayPunches = punches.stream()
                     .filter(p -> shift.id().equals(p.shiftId())
-                            || java.time.LocalDate.ofInstant(p.punchedAt(), java.time.ZoneOffset.UTC).equals(current))
+                            || java.time.LocalDate.ofInstant(p.punchedAt(), LocalZone.ID).equals(current))
                     .toList();
             StaffAttendanceRecord checkIn = dayPunches.stream()
                     .filter(p -> p.punchType().equals("check_in")).findFirst().orElse(null);

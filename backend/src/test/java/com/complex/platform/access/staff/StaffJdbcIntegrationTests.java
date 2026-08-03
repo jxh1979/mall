@@ -328,7 +328,7 @@ class StaffJdbcIntegrationTests {
                 Integer.class)).isEqualTo(4);
 
         Instant now = Instant.now();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, com.complex.platform.common.LocalZone.ID);
         // 排班:已开始 1 小时、还有 7 小时结束 → 现在打上班=迟到,打下班=早退。
         com.complex.platform.access.staff.StaffShiftRecord shift = service.upsertShift(
                 new com.complex.platform.access.staff.dto.StaffShiftRequest(
@@ -781,7 +781,7 @@ class StaffJdbcIntegrationTests {
         service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(key(), userB, 222000L));
         service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
         Instant now = Instant.now();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, com.complex.platform.common.LocalZone.ID);
         service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
                 key(), userA, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
         service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
@@ -831,7 +831,7 @@ class StaffJdbcIntegrationTests {
 
         authenticateAsStaff(mgr, null);
         Instant now = Instant.now();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, com.complex.platform.common.LocalZone.ID);
         // 有 shift.manage、无 notice.view → 不再被 notice.view 拦,排班成功。
         com.complex.platform.access.staff.StaffShiftRecord saved = service.upsertShift(
                 new com.complex.platform.access.staff.dto.StaffShiftRequest(
