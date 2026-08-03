@@ -37,7 +37,8 @@ final class GateRequestContext {
      */
     static Map<String, String> orderedScopes() {
         Map<String, String> scopes = new LinkedHashMap<>();
-        scopes.put("device", header("X-Device-Id"));
+        // 2026-08-03:device scope 与 deviceId() 收敛到同一条读取路径(优先服务端派生身份),不再另读原始头。
+        scopes.put("device", deviceId());
         scopes.put("version", header("X-Client-Version"));
         scopes.put("module", header("X-Module-Code"));
         scopes.put("business_system", header("X-Business-System"));
