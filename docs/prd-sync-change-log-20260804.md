@@ -1432,8 +1432,20 @@
     11. `docs/prd-sync-change-log-20260804.md` L1355-1359、L1386-1387、L1393；`docs/business-decision-log-v0.1.md` L406；`docs/prd-audit/business-decision-ledger.md` L836／L1158／L1218／L1230／L1235；`docs/platform-governance-prd-v0.1.md` L745；`docs/prd-audit/phases/03-governance-and-common.md` L60；`docs/prd-audit/backup-diff-by-file-2026-07-28/*`、`OTHER_15_FILES_FULL_SENTENCE_DIFF-2026-07-28.md`、`backup-vs-main-FULL-SENTENCE-DIFF-2026-07-28.md`：**历史记录／裁决日志／变更日志／备份差异快照，一律不动**（台账留痕纪律）
     12. `docs/platform-governance-prd-v0.1.md` L203、`docs/real-estate-full-chain-domain-prd-v0.1.md` L27／L40：CL-54 已按统一模型改写，**本批无需再改**
     13. `docs/settlement-rebuild-prd-v1.0.md` L702「分三阶段并行校验」、`docs/p2-ticket-dynamic-pricing-completion-audit-v0.1.md` L45「规则审批流的复杂多人会签（非目标）」：**与合同/付款审批口径无关**，未改
-- 遗留（超本批授权范围，报 Fable 5）：`docs/business-system-map-for-operations-v0.1.html` L636 招商租赁模块卡片摘要仍写「合同起草与**可配分组并行审批**」，与 CL-52 改后的 L1199 审批句不一致；本批铁律限定 HTML 只许改付款审批流一句，故**未动**，登记待下一批 HTML 收口
+- 遗留（超本批授权范围，报 Fable 5）：`docs/business-system-map-for-operations-v0.1.html` L636 招商租赁模块卡片摘要仍写「合同起草与**可配分组并行审批**」，与 CL-52 改后的 L1199 审批句不一致；本批铁律限定 HTML 只许改付款审批流一句，故**未动**，登记待下一批 HTML 收口——**2026-08-04 已闭环：本处已由 CL-57（R3b）按统一审批模型改写，遗留项关闭**
 - 修改依据：DEC-R5-2026-08-04-09；用户 2026-08-04 批准（②批准收口、①代码/迁移不动）
 - 来源：用户裁决 + 最新HTML（CL-52/CL-55 改后）
 - 修改原因：情况2（文档现行口径与统一审批模型冲突，按用户裁决收口）
+- 执行者：Opus 5（opus-implementer），验收：Fable 5
+
+### CL-57
+- 日期：2026-08-04
+- 任务：R3b-会签口径收口收尾（BSM 招商租赁模块卡片摘要对齐统一审批模型，闭环 CL-56 遗留项）
+- 文件与章节：docs/business-system-map-for-operations-v0.1.html 首页系统卡片区·招商租赁卡片摘要（改前 L636）
+- 修改前：「招商线索与品牌库、**合同起草与可配分组并行审批**、租金物业费能源费应收、合同变更与退租结算、铺位出租率。」
+- 修改后：「招商线索与品牌库、**合同起草与统一审批（主线＋平行相关部门线逐级补全）**、租金物业费能源费应收、合同变更与退租结算、铺位出租率。」——与本页招商租赁章正文审批句（CL-52 改后；本次改后位于 L1201）一致；上一行加 2026-08-04 会签口径收口（续）注释
+- 修改依据：DEC-R5-2026-08-04-09（台账该行同批补记「L636 卡片摘要已同批收口」）；用户 2026-08-04 B3 裁决（审批口径统一）与 ② 收口批准的同一范围
+- 来源：用户裁决 + CL-56 遗留登记
+- 修改原因：情况2（卡片摘要旧「可配分组并行审批」表述与统一审批模型冲突，按用户裁决收口）
+- 范围声明：本批**三份业务最终解释权 HTML 中仅此一处改动**（BSM L636 一行改写＋上方一行注释），BSM 其余内容与 PGM、ENUM 两份一字未动；BSM L1189 历史注释未动
 - 执行者：Opus 5（opus-implementer），验收：Fable 5
