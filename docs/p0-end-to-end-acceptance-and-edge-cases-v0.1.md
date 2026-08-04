@@ -435,9 +435,9 @@ And 关键阶段推进必须有主管确认；黑名单品牌不得转为新线�
 ### AC-CON-01 合同起草到生效
 
 Given 合同草稿已填写商户、空间、合同主体、结算主体、租金和收益规则
-When 提交审批并完成业务、财务、法务并行会签和终审
+When 提交审批（指定主线最终审批人，系统按组织层级逐级自动补全）并完成主线审批与业务、财务、法务各平行相关部门线的审批
 Then 合同才能生效，生效时必须固化收益规则快照并绑定铺位
-And 审批链未配置不可提交；并行会签未全过不可生效；同一铺位重复出租必须拒绝。
+And 审批链未配置不可提交；主线与各平行相关部门线未全部通过不可生效；同一铺位重复出租必须拒绝。
 
 ### AC-CON-02 合同变更、退租结算与账单
 
@@ -466,7 +466,7 @@ And 租金、物业费和能源费账单必须进入应收应付台账；争议�
 | AC-AUTH-05 | 最终权限计算与显式拒绝 | `GET /api/v1/access/users/{id}/effective-permissions` / `getUserEffectivePermissions`；`GET /api/v1/access/effective-permissions` / `getEffectivePermissions` | 显式拒绝优先于角色、模板、临时和单独授予权限 |
 | AC-AUTH-06 | 角色装配与高危授权审批 | `GET/POST /api/v1/access/position-role-templates` / `listPositionRoleTemplates`、`createPositionRoleTemplate`；`POST /api/v1/access/grant-requests` / `createAccessGrantRequest`；`POST /api/v1/access/grant-requests/{id}/review` / `reviewAccessGrantRequest` | 职位层级自动适配；高危授权审批通过前不生效；临时权限到期失效 |
 | AC-LEAS-01 | 招商线索到签约转商户 | `POST /api/v1/leasing/leads` / `createLeasingLead`；`POST /api/v1/leasing/intents` / `createLeasingIntent`；`POST /api/v1/leasing/intents/{intent_id}/advance` / `advanceLeasingIntent`；`POST /api/v1/leasing/intents/{intent_id}/sign` / `signLeasingIntent` | 签约后生成正式商户、四类主体默认绑定和合同草稿；重复签约幂等 |
-| AC-CON-01 | 合同起草到生效 | `POST /api/v1/contracts` / `createContractDraft`；`POST /api/v1/contracts/{contract_id}/submit` / `submitContract`；`POST /api/v1/contracts/{contract_id}/approve` / `approveContractStage`；`POST /api/v1/contracts/{contract_id}/activate` / `activateContract` | 会签全过后才可生效；生效固化收益规则并绑定铺位 |
+| AC-CON-01 | 合同起草到生效 | `POST /api/v1/contracts` / `createContractDraft`；`POST /api/v1/contracts/{contract_id}/submit` / `submitContract`；`POST /api/v1/contracts/{contract_id}/approve` / `approveContractStage`；`POST /api/v1/contracts/{contract_id}/activate` / `activateContract` | 主线与各平行相关部门线全部通过后才可生效；生效固化收益规则并绑定铺位 |
 | AC-CON-02 | 合同变更、退租结算与账单 | `POST /api/v1/contracts/{contract_id}/changes` / `raiseContractChange`；`POST /api/v1/contracts/changes/{change_id}/approve` / `approveContractChange`；`POST /api/v1/contracts/{contract_id}/settle` / `settleContract`；`POST /api/v1/contracts/settlements/{settlement_id}/advance` / `advanceContractSettlement`；`POST /api/v1/contracts/{contract_id}/period-bills` / `generateContractPeriodBills` | 变更走审批链；退租结算保留状态；账单进入应收应付台账 |
 | AC-OPEN-01 / AC-OPEN-03 | 双向开放与 Webhook + 轮询校验 | `POST /api/open/d/{endpoint_key}/webhooks/{provider}/{event}` / `receiveOpenWebhook` | Webhook 要验签、幂等、防重放；轮询用于校验关键状态和补偿差异 |
 | 生产前置-MDM | 设备纳管与终端限制 | `POST /api/v1/terminals/devices/bind` / `bindDevice`；`POST /api/v1/terminals/sync-tasks` / `syncTerminalTasks`；`PUT /api/v1/terminals/capability-switches/{id}` / `updateCapabilitySwitch` | 未纳管设备不得生产使用；高风险终端操作必须按设备凭证和能力开关拦截 |

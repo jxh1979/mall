@@ -21,7 +21,7 @@
 | 合同 | `contracts` | 商户↔铺位的租赁契约，携带四类主体（`*_subject_id`）、租金条款、8 业务态生命周期 | 综合体（`project_id`） |
 | 合同-空间关联 | `contract_spaces` | **合同 ↔ 铺位 多对多**（一合同多铺位、一铺位可被不同时段合同复用） | 综合体 |
 | 合同租金账单 | `contract_rent_bills` | 逐（合同,期）计费 → 联动 `ar_ap_items` 应收（UNIQUE 幂等） | 综合体 |
-| 合同审批链/变更/结算 | `contract_approval_flows`/`_steps`/`contract_approvals`/`contract_changes`/`contract_settlements`/`space_expiry_color_rules` | V162 重建的审批（分组并行会签）/6类变更/退租结算/铺位到期着色 | 综合体（配置表 project 可空=平台默认） |
+| 合同审批链/变更/结算 | `contract_approval_flows`/`_steps`/`contract_approvals`/`contract_changes`/`contract_settlements`/`space_expiry_color_rules` | V162 重建的审批（分组并行会签，旧阶段制实现；现行审批口径注见 §2.7）/6类变更/退租结算/铺位到期着色 | 综合体（配置表 project 可空=平台默认） |
 
 ---
 
@@ -62,7 +62,7 @@
 - **多对多**：一合同可租多铺位；一铺位可被不同时段/合同复用（选关联表而非 `spaces.contract_id` 即为此）。
 
 ### 2.7 V162 其余（审批/变更/结算/账单/着色）
-- `contract_approval_flows` + `_steps`：可配审批链；**同 `(flow,stage_seq)` 多行 = 一个并行会签阶段**；每综合体至多一条 active 链（NULL project=平台默认）。默认链：阶段①业务/财务/法务并行 → 阶段②总经理终审。
+- `contract_approval_flows` + `_steps`：可配审批链；**同 `(flow,stage_seq)` 多行 = 一个并行会签阶段**；每综合体至多一条 active 链（NULL project=平台默认）。默认链：阶段①业务/财务/法务并行 → 阶段②总经理终审。（注：2026-08-04 用户裁决审批口径改为统一模型——指定最终审批人+逐级自动补全+平行部门线；本表结构为旧阶段制实现，改造已登记待办。）
 - `contract_approvals`：审批实例留痕；`change_id` 空=新签、非空=变更走同一链。
 - `contract_changes`：**6 类变更 CHECK**（`renewal`/`move_out`/`area_change`/`rent_change`/`business_scope_change`/`early_termination`）——**无转租**（换租户须先退租再招商）。
 - `contract_settlements`：退租/到期结算，`trigger_type`∈(move_out/expiry/early_termination)，`status`∈(in_progress/disputed/settled)，`settlement_items` 逐例顺序执行。

@@ -46,7 +46,7 @@
 | 票务 | 退票/退款 | `ticket.refunded` / `refund.succeeded` | ✅ |
 | 票务 | 改期/变更 | `ticket.changed` | ✅ |
 | 票务 | 下单锁库/释放 | `ticket.inventory_locked` / `ticket.inventory_released` | ✅ |
-| 票务 | 核销预检/成功/失败/撤销/人工放行 | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
+| 票务 | 核销预检/成功/失败/撤销/人工放行（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
 | 酒吧 | 开台/转台/清台 | `bar.table.opened`/`transferred`/`cleared` | ✅ |
 | 酒吧 | 订台创建/定金支付/定金结算 | `reservation.created`/`reservation.deposit_paid`/`reservation.deposit_settled` | ✅ |
 | 酒吧 | 点单创建/送达/账单结清 | `bar.order_created`/`bar.order_delivered`/`bar.bill_settled` | ✅ |
@@ -56,7 +56,7 @@
 | 酒吧 | 退菜退酒审批决策 | `bar.order_item_void_decided` (V117/V124) | ✅ |
 | 酒吧 | 年龄/人脸核验预检/请求/通过/拒绝/阻断 | `bar.age_verification.*` | ✅（人脸能力默认关，见 R7） |
 | 酒吧 | **销售归属** | **记录型**：`service_responsibility_records.sales_staff_id`（`order.acquired`/`sales_attributed` 已作废） | 记录型 ✅ |
-| 游乐 | 核销成功/失败/人工放行 | `amusement.verification_succeeded`/`_failed`/`_overridden` | ✅ |
+| 游乐 | 核销成功/失败/人工放行（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） | `amusement.verification_succeeded`/`_failed`/`_overridden` | ✅ |
 | 游乐 | 设备/项目状态变化 | `amusement.device_status_changed` | ✅ |
 | 游乐 | 安全巡检提交 | `amusement.safety_inspection.submitted` | ✅ |
 | 游乐 | 超容落事件 | `amusement.incident.over_capacity` (V104) | ✅ |
@@ -110,6 +110,13 @@
 | 结果是什么 | 成功、失败、异常、待确认、被拒绝 |
 | 有没有证据 | 二维码、照片、视频、签名、接口原始报文、摄像头索引 |
 
+#### 2.1.1 留痕保存期限与手动清理（2026-08-04 对齐业务系统地图）
+
+- **留痕记录默认永久保存、不会自动到期删除。**
+- **手动清理留存数据属于最高权限动作**，必须由**最高权限本人**操作，且操作时必须**插入授权 U 盘密钥**，**无密钥一律不可执行**。
+- 每次清理**逐条填写理由**；清理前必须先**试运行预览**将清理的范围与条数；**清理动作本身**连同操作时间、理由和当次清理范围一并留痕。
+- **订单、核销、结算流水、账单这类钱账数据**出于税务和审计要求**永远不能删，不在可清理范围内**。
+
 ### 2.2 留痕设计原则
 
 留痕的设计目标不是让员工额外填很多表，而是让系统在业务动作发生时自动把痕留下来。
@@ -130,7 +137,7 @@
 | 订单获取 | 订单来源、渠道、销售人员、创建终端、创建时间、客人身份、关联卡座或项目 | App/小程序/第三方回调自动写入；销售工作台创建订台时自动记录销售账号 |
 | 销售归属 | 谁促成订台、谁维护客户、是否涉及提成或业绩归属 | **记录型留痕**（非事件型）：由 `TraceabilityService.recordResponsibility` 写 `service_responsibility_records`（`sales_staff_id`/`sales_staff_position_type_snapshot`/`commission_record_id`）承载；销售登录状态、岗位快照、客户归属、订台单创建人自动带入。`order.acquired`/`order.sales_attributed` 事件已作废（见 §4.1） |
 | 票务购买 | 购买渠道、票种、价格策略、优惠规则、支付结果、防伪码生成 | 官方端和第三方订单回流自动写事件，员工不能代买门票 |
-| 票务核销 | 谁核销、在哪个入口核销、核销设备、核销结果、失败原因、人工放行人 | 工作手机扫码自动带入员工、设备、点位和时间 |
+| 票务核销 | 谁核销、在哪个入口核销、核销设备、核销结果、失败原因、人工放行人（历史实现字段，核销域业务口径不提供人工放行，见 ENUM L38；2026-08-04 登记） | 工作手机扫码自动带入员工、设备、点位和时间 |
 | 会员积分 | 积分发放、扣减、兑换礼品、等级变化、规则命中 | 订单支付、核销、兑换动作自动触发 |
 | 订台和到店 | 订台入口、销售或设备来源、定金、到店确认、取消原因、转台 | App/小程序/一体机/销售工作台动作自动记录 |
 | 卡座服务 | 卡座当前责任服务员、协助服务员、开台、加单、送达、换人、清台 | 班次排班、桌台绑定、平板点单、扫码送达自动形成服务时间线 |
@@ -336,7 +343,7 @@ flowchart TD
 | `verification.succeeded` | ticket | 核销成功：权益、扣次、商户、点位、设备、员工 |
 | `verification.failed` | ticket | 核销失败：失败原因、票码哈希、设备、员工 |
 | `verification.reversed` | ticket | 核销撤销/冲正：原核销记录、原因、审批单、操作人、设备 |
-| `verification.manual_overridden` | ticket | 人工放行：原拒绝/异常记录、放行原因、证据、审批人、点位、设备 |
+| `verification.manual_overridden` | ticket | 人工放行：原拒绝/异常记录、放行原因、证据、审批人、点位、设备（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） |
 
 #### 4.1.3A 游乐、支付与财务补充事件（event_category=amusement / finance；对齐 data-risk §7.1 和 P0 留痕矩阵）
 
@@ -344,7 +351,7 @@ flowchart TD
 |---|---|---|
 | `amusement.verification_succeeded` | amusement | 游乐权益核销成功：项目、场次、权益、点位、设备、员工、容量快照 |
 | `amusement.verification_failed` | amusement | 游乐权益核销失败：项目、场次、失败原因、权益摘要、点位、设备、员工 |
-| `amusement.verification_overridden` | amusement | 游乐人工放行：项目、场次、原失败原因、审批人、证据、点位 |
+| `amusement.verification_overridden` | amusement | 游乐人工放行：项目、场次、原失败原因、审批人、证据、点位（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） |
 | `amusement.device_status_changed` | amusement | 游乐设备/项目状态变化：设备或项目、原状态、新状态、原因、责任人 |
 | `amusement.safety_inspection.submitted` | amusement | 游乐安全/巡检记录提交：项目、检查项、结果、照片/视频、提交人、点位 |
 | `payment.gateway_notified` | finance | 聚合支付/退款通道回调：通道、订单/退款单、金额（分）、原始报文摘要、签名校验、幂等键 |
@@ -444,6 +451,8 @@ flowchart TD
 
 终端开关不是权限的替代品，而是系统级、商户级、业务级和 SaaS 化配置能力。
 
+**营业时段变更禁令（2026-08-04 对齐平台治理地图）**：**开关服务、支付通路、核销与入场等营业必需的能力，不得在营业时段进行任何可能导致中断的变更、升级或维护**；所有此类操作**只能安排在非营业时段并事先报备**。（开关拉取失败时的兜底关闭口径见 §5.6；留痕是特殊写操作、不受兜底关闭影响。）
+
 ### 5.2 终端范围
 
 | 终端 | 开关用途 |
@@ -508,7 +517,14 @@ flowchart TD
 
 **维护与留痕**：后台「终端开关矩阵」页新增"灰度试点（最细一档）"区块，可开/关试点、增删白名单条目，权限复用 `terminal.switch.view` / `terminal.switch.manage` 且写口限平台级主体。开/关试点、加白名单、移出白名单全部写审计（`terminal_canary.rollout_changed` / `target_added` / `target_archived`），对齐业务 HTML「终端开关启用、停用、灰度开放和被拒绝访问」都要留痕。移出白名单遵守**删除=软删除**铁律：填存档理由、行保留、可恢复（注意方向：移出白名单是**收紧**，该对象随即被灰度关闭）。
 
-- 依据 finding switch-3（旧）+ v7 审计 R-10 用户裁决（现行）。落地见 §6.3A、迁移 V342。
+**⛔ 铁律：与钱有关的规则不得灰度（2026-08-04 对齐平台治理地图）**
+
+- **与钱有关的规则——分账比例、结算口径、综合服务费、租金与抽成规则——一律不得使用灰度**，也**不得按商户、按设备做部分开放**。
+- 这类规则**只能按综合体整体统一切换**；**切换日期由后台配置**（业务参数，按综合体统一可配），**切换前后各自适用完整的一套规则**。
+- 本条禁止的是**规则的整体切换**（换一套分账、结算、服务费或租金抽成规则）。**同一套规则之下的参数取值**，按各文件为该参数写明的粒度配置，**不属于灰度或部分开放**。
+- **灰度只用于不影响金额计算的功能开放。**
+
+- 依据 finding switch-3（旧）+ v7 审计 R-10 用户裁决（现行）+ 平台治理地图 L657（钱相关规则禁灰度）。落地见 §6.3A、迁移 V342。
 
 ### 5.6 开关拉取失败的兜底策略（fail-closed，修订说明 2026-06-07 新增，switch-5）
 
@@ -775,7 +791,7 @@ flowchart TD
 2. 酒水从库房出库、机器人或人工配送、后厨接收、服务员送达客人，全过程都要扫码或设备事件留痕。
 3. 酒水和可追责物品需要平台唯一二维码，可在入库时贴码，也可在出库时打印码，具体按物品类型配置。
 4. 订单核验人、出库核验人、后厨接收人、服务员送达人都必须留下员工、设备、时间、地点和结果。
-5. 订单获取、销售归属、卡座服务、异常首响、转派升级、复核关闭、现金/POS 收款、人工放行、补录和调账都必须留下责任链。
+5. 订单获取、销售归属、卡座服务、异常首响、转派升级、复核关闭、现金/POS 收款、人工放行（历史实现字段，核销域业务口径不提供人工放行，见 ENUM L38；2026-08-04 登记）、补录和调账都必须留下责任链。
 6. 留痕设计要优先依赖系统、终端、设备、支付、机器人、第三方回调和班次上下文自动生成，人工输入只作为原因、证据和复核补充。
 7. 视频监控前期不作为强依赖，但事件必须留下时间、点位和设备信息，为后续视频片段一一对应做准备。
 8. 所有端都必须有开关接口，关闭后该端或模块不可用，打开后仍受权限和数据范围控制。
@@ -789,6 +805,9 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-08-04 | 增 | §5.5 灰度层 | 补铁律：与钱有关的规则（分账比例、结算口径、综合服务费、租金与抽成规则）一律不得灰度、不得按商户/设备部分开放，只能按综合体整体统一切换（切换日期后台可配，按综合体统一可配），切换前后各自适用完整一套规则；灰度只用于不影响金额计算的功能开放 | PGM L657（CL-14） |
+| 2026-08-04 | 增 | §5.1 总原则 | 补：开关服务、支付通路、核销与入场等营业必需能力不得在营业时段做任何可能导致中断的变更、升级或维护，只能安排在非营业时段并事先报备 | PGM L658（CL-15） |
+| 2026-08-04 | 增 | §2.1.1 | 新增留痕保存期限与手动清理：默认永久保存不自动删除；手动清理属最高权限动作，须本人插入授权 U 盘密钥、逐条填理由、先试运行预览、清理动作本身留痕；订单/核销/结算流水/账单等钱账数据永不可清理 | BSM L1446（CL-16；行号 2026-08-04 返工更正，原记 L1449） |
 | 2026-06-07 | 改 | §1 文档定位 | 声明 4.1 节为全系统唯一权威事件字典，其他文档引用不另起命名 | 《统一口径基准》D4；finding tracewire-1/trace-2/devtech-6 |
 | 2026-06-07 | 改 | §6.4 业务过程实例 | process_type 补 `contract_admission`，与 foundation-database §6.10 对齐为 9 值 | finding trace-3 |
 | 2026-06-07 | 增 | §4.1 标准事件类型 | 补 `contract.blocked`/`contract.released` 合同准入事件 | finding trace-3 |
@@ -819,6 +838,7 @@ flowchart TD
 | 2026-07-04 | 改 | R7 横幅 opt-out 纪律 | 据实核对现状：终端总开关(V197)/Web·商户模块(V198/V199)按设计 seed=TRUE（有意默认开的已发布能力），全部受控/预留能力(V071/V088/V093/V096/V097/V098/V146/V177)均已显式 seed=FALSE，不存在「无 seed 行默认放行」定时炸弹；新增受控能力强制 seed FALSE+存量回溯照旧 | 逻辑一致性修订；ssh 核对迁移 seed |
 | 2026-07-04 | 增 | §1A | 新增「业务系 × 留痕动作 × 实现状态」矩阵，据实核对 §1「所有业务动作留痕」原则的覆盖面（票务/酒吧/游乐/财务/供应链/会员/合规/治理/异常/企微/第三方/设备/终端开关/视频） | 逻辑一致性修订：§1 vs §4.1 缺业务系×动作实现清单 |
 | 2026-06-20 `文档goalP1` | 增 | §4.1.6 V099–V124 新功能事件登记 | 新增小节登记本会话 V099–V124 新功能事件（均经 Grep 核对为代码真实发布名）：`exception.reported/claimed/transferred/escalated/resolved/dismissed`(V103)、`amusement.incident.over_capacity`(V104)、`points.earned/deducted`(V100)、`wecom.risk.hit_detected/hit_reviewed`(V106)、`terminal.device.repaired/lost/found/scrapped`+`mdm.violation.handled`(V107)、`merchant_service.work_order.escalated`(V120)、`bar.order_item_void_decided`(V117/V124)、`finance_cam.trued_up`(V121，注意下划线连写)、`integration.channel_reconciliation.completed/failed`(V109)；指向 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为新功能事件权威 | 权威事件字典漂移收口 + 新功能事件登记 |
+| 2026-08-04 终审返工 | 改 | §1A 留痕矩阵（票务/游乐核销行）、§2.3 票务核销留痕字段、§4.1.3/§4.1.3A 事件字典、§9 已确认规则第 5 条 | 「人工放行」全部落点加注与 ENUM L38「系统不提供人工放行」冲突、属**待改造缺口**（代码级下线待办）；`verification.manual_overridden`/`amusement.verification_overridden` 作为**既有实现**保留事件定义，不得反向定义业务规则 | ENUM L38（CL-45） |
 
 ## 附:按钮级开关禁用扫描结论(2026-07-02,修复计划 3.19 验收尾巴收口)
 
