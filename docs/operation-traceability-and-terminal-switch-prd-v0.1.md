@@ -46,7 +46,7 @@
 | 票务 | 退票/退款 | `ticket.refunded` / `refund.succeeded` | ✅ |
 | 票务 | 改期/变更 | `ticket.changed` | ✅ |
 | 票务 | 下单锁库/释放 | `ticket.inventory_locked` / `ticket.inventory_released` | ✅ |
-| 票务 | 核销预检/成功/失败/撤销/人工放行 | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
+| 票务 | 核销预检/成功/失败/撤销/人工放行（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
 | 酒吧 | 开台/转台/清台 | `bar.table.opened`/`transferred`/`cleared` | ✅ |
 | 酒吧 | 订台创建/定金支付/定金结算 | `reservation.created`/`reservation.deposit_paid`/`reservation.deposit_settled` | ✅ |
 | 酒吧 | 点单创建/送达/账单结清 | `bar.order_created`/`bar.order_delivered`/`bar.bill_settled` | ✅ |
@@ -56,7 +56,7 @@
 | 酒吧 | 退菜退酒审批决策 | `bar.order_item_void_decided` (V117/V124) | ✅ |
 | 酒吧 | 年龄/人脸核验预检/请求/通过/拒绝/阻断 | `bar.age_verification.*` | ✅（人脸能力默认关，见 R7） |
 | 酒吧 | **销售归属** | **记录型**：`service_responsibility_records.sales_staff_id`（`order.acquired`/`sales_attributed` 已作废） | 记录型 ✅ |
-| 游乐 | 核销成功/失败/人工放行 | `amusement.verification_succeeded`/`_failed`/`_overridden` | ✅ |
+| 游乐 | 核销成功/失败/人工放行（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） | `amusement.verification_succeeded`/`_failed`/`_overridden` | ✅ |
 | 游乐 | 设备/项目状态变化 | `amusement.device_status_changed` | ✅ |
 | 游乐 | 安全巡检提交 | `amusement.safety_inspection.submitted` | ✅ |
 | 游乐 | 超容落事件 | `amusement.incident.over_capacity` (V104) | ✅ |
@@ -137,7 +137,7 @@
 | 订单获取 | 订单来源、渠道、销售人员、创建终端、创建时间、客人身份、关联卡座或项目 | App/小程序/第三方回调自动写入；销售工作台创建订台时自动记录销售账号 |
 | 销售归属 | 谁促成订台、谁维护客户、是否涉及提成或业绩归属 | **记录型留痕**（非事件型）：由 `TraceabilityService.recordResponsibility` 写 `service_responsibility_records`（`sales_staff_id`/`sales_staff_position_type_snapshot`/`commission_record_id`）承载；销售登录状态、岗位快照、客户归属、订台单创建人自动带入。`order.acquired`/`order.sales_attributed` 事件已作废（见 §4.1） |
 | 票务购买 | 购买渠道、票种、价格策略、优惠规则、支付结果、防伪码生成 | 官方端和第三方订单回流自动写事件，员工不能代买门票 |
-| 票务核销 | 谁核销、在哪个入口核销、核销设备、核销结果、失败原因、人工放行人 | 工作手机扫码自动带入员工、设备、点位和时间 |
+| 票务核销 | 谁核销、在哪个入口核销、核销设备、核销结果、失败原因、人工放行人（历史实现字段，核销域业务口径不提供人工放行，见 ENUM L38；2026-08-04 登记） | 工作手机扫码自动带入员工、设备、点位和时间 |
 | 会员积分 | 积分发放、扣减、兑换礼品、等级变化、规则命中 | 订单支付、核销、兑换动作自动触发 |
 | 订台和到店 | 订台入口、销售或设备来源、定金、到店确认、取消原因、转台 | App/小程序/一体机/销售工作台动作自动记录 |
 | 卡座服务 | 卡座当前责任服务员、协助服务员、开台、加单、送达、换人、清台 | 班次排班、桌台绑定、平板点单、扫码送达自动形成服务时间线 |
@@ -343,7 +343,7 @@ flowchart TD
 | `verification.succeeded` | ticket | 核销成功：权益、扣次、商户、点位、设备、员工 |
 | `verification.failed` | ticket | 核销失败：失败原因、票码哈希、设备、员工 |
 | `verification.reversed` | ticket | 核销撤销/冲正：原核销记录、原因、审批单、操作人、设备 |
-| `verification.manual_overridden` | ticket | 人工放行：原拒绝/异常记录、放行原因、证据、审批人、点位、设备 |
+| `verification.manual_overridden` | ticket | 人工放行：原拒绝/异常记录、放行原因、证据、审批人、点位、设备（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） |
 
 #### 4.1.3A 游乐、支付与财务补充事件（event_category=amusement / finance；对齐 data-risk §7.1 和 P0 留痕矩阵）
 
@@ -351,7 +351,7 @@ flowchart TD
 |---|---|---|
 | `amusement.verification_succeeded` | amusement | 游乐权益核销成功：项目、场次、权益、点位、设备、员工、容量快照 |
 | `amusement.verification_failed` | amusement | 游乐权益核销失败：项目、场次、失败原因、权益摘要、点位、设备、员工 |
-| `amusement.verification_overridden` | amusement | 游乐人工放行：项目、场次、原失败原因、审批人、证据、点位 |
+| `amusement.verification_overridden` | amusement | 游乐人工放行：项目、场次、原失败原因、审批人、证据、点位（与 ENUM L38「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） |
 | `amusement.device_status_changed` | amusement | 游乐设备/项目状态变化：设备或项目、原状态、新状态、原因、责任人 |
 | `amusement.safety_inspection.submitted` | amusement | 游乐安全/巡检记录提交：项目、检查项、结果、照片/视频、提交人、点位 |
 | `payment.gateway_notified` | finance | 聚合支付/退款通道回调：通道、订单/退款单、金额（分）、原始报文摘要、签名校验、幂等键 |
@@ -791,7 +791,7 @@ flowchart TD
 2. 酒水从库房出库、机器人或人工配送、后厨接收、服务员送达客人，全过程都要扫码或设备事件留痕。
 3. 酒水和可追责物品需要平台唯一二维码，可在入库时贴码，也可在出库时打印码，具体按物品类型配置。
 4. 订单核验人、出库核验人、后厨接收人、服务员送达人都必须留下员工、设备、时间、地点和结果。
-5. 订单获取、销售归属、卡座服务、异常首响、转派升级、复核关闭、现金/POS 收款、人工放行、补录和调账都必须留下责任链。
+5. 订单获取、销售归属、卡座服务、异常首响、转派升级、复核关闭、现金/POS 收款、人工放行（历史实现字段，核销域业务口径不提供人工放行，见 ENUM L38；2026-08-04 登记）、补录和调账都必须留下责任链。
 6. 留痕设计要优先依赖系统、终端、设备、支付、机器人、第三方回调和班次上下文自动生成，人工输入只作为原因、证据和复核补充。
 7. 视频监控前期不作为强依赖，但事件必须留下时间、点位和设备信息，为后续视频片段一一对应做准备。
 8. 所有端都必须有开关接口，关闭后该端或模块不可用，打开后仍受权限和数据范围控制。
@@ -838,6 +838,7 @@ flowchart TD
 | 2026-07-04 | 改 | R7 横幅 opt-out 纪律 | 据实核对现状：终端总开关(V197)/Web·商户模块(V198/V199)按设计 seed=TRUE（有意默认开的已发布能力），全部受控/预留能力(V071/V088/V093/V096/V097/V098/V146/V177)均已显式 seed=FALSE，不存在「无 seed 行默认放行」定时炸弹；新增受控能力强制 seed FALSE+存量回溯照旧 | 逻辑一致性修订；ssh 核对迁移 seed |
 | 2026-07-04 | 增 | §1A | 新增「业务系 × 留痕动作 × 实现状态」矩阵，据实核对 §1「所有业务动作留痕」原则的覆盖面（票务/酒吧/游乐/财务/供应链/会员/合规/治理/异常/企微/第三方/设备/终端开关/视频） | 逻辑一致性修订：§1 vs §4.1 缺业务系×动作实现清单 |
 | 2026-06-20 `文档goalP1` | 增 | §4.1.6 V099–V124 新功能事件登记 | 新增小节登记本会话 V099–V124 新功能事件（均经 Grep 核对为代码真实发布名）：`exception.reported/claimed/transferred/escalated/resolved/dismissed`(V103)、`amusement.incident.over_capacity`(V104)、`points.earned/deducted`(V100)、`wecom.risk.hit_detected/hit_reviewed`(V106)、`terminal.device.repaired/lost/found/scrapped`+`mdm.violation.handled`(V107)、`merchant_service.work_order.escalated`(V120)、`bar.order_item_void_decided`(V117/V124)、`finance_cam.trued_up`(V121，注意下划线连写)、`integration.channel_reconciliation.completed/failed`(V109)；指向 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为新功能事件权威 | 权威事件字典漂移收口 + 新功能事件登记 |
+| 2026-08-04 终审返工 | 改 | §1A 留痕矩阵（票务/游乐核销行）、§2.3 票务核销留痕字段、§4.1.3/§4.1.3A 事件字典、§9 已确认规则第 5 条 | 「人工放行」全部落点加注与 ENUM L38「系统不提供人工放行」冲突、属**待改造缺口**（代码级下线待办）；`verification.manual_overridden`/`amusement.verification_overridden` 作为**既有实现**保留事件定义，不得反向定义业务规则 | ENUM L38（CL-45） |
 
 ## 附:按钮级开关禁用扫描结论(2026-07-02,修复计划 3.19 验收尾巴收口)
 
