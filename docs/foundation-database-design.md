@@ -2133,7 +2133,7 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 
 - **V160 综合体运营参数** `complex_operating_params`（scope=project_id）：项目级可配运营参数（着色阈值/审批阈值等）键值表。
 - **V161 招商前链** `leasing_leads`（scope=project_id：线索，来源/负责人/状态7态）、`leasing_intents`（意向，五阶段）、`leasing_brands`（品牌/客户库，意向/储备/合作/黑名单 + 品牌名去重）、`leasing_follow_ups`（跟进记录，inherited via ref_type/ref_id）。
-- **V162 合同生命周期** `contract_approval_flows`（scope=project_id：可配审批链）、`contract_approval_flow_steps`（inherited via flow_id：阶段步，同 stage_seq=并行会签）、`contract_approvals`（inherited via contract_id：审批实例留痕）、`contract_changes`（变更6类）、`contract_rent_bills`（租金/物业费/能源费周期应收，scope=project_id+merchant_id）、`contract_settlements`（退租结算5态）、`space_expiry_color_rules`（到期着色可配，scope=project_id）。
+- **V162 合同生命周期** `contract_approval_flows`（scope=project_id：可配审批链）、`contract_approval_flow_steps`（inherited via flow_id：阶段步，同 stage_seq=并行会签）、`contract_approvals`（inherited via contract_id：审批实例留痕）、`contract_changes`（变更6类）、`contract_rent_bills`（租金/物业费/能源费周期应收，scope=project_id+merchant_id）、`contract_settlements`（退租结算5态）、`space_expiry_color_rules`（到期着色可配，scope=project_id）。（注：2026-08-04 用户裁决审批口径改为统一模型——指定最终审批人+逐级自动补全+平行部门线；本表结构为旧阶段制实现，改造已登记待办。）
 - **V165 楼宇机电设备** `facility_equipment`（scope=project_id/merchant_id/space_id）：设备台账（电梯/暖通/配电/给排水/消防，状态6态 + 维保字段）。
 - **V166 设施工单** `facility_work_orders`（scope=project_id/merchant_id/space_id：设备告警/故障工单）、`facility_work_order_policy`（SLA 策略配置，single_complex_default）。
 - **V167 楼宇巡检** `facility_inspection_templates`（scope=project_id：巡检计划模板）、`facility_inspection_tasks`（scope=project_id/space_id：巡检任务）、`facility_inspection_records`（inherited via task_id：巡检记录）。

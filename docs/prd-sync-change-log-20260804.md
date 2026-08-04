@@ -1399,3 +1399,41 @@
 - 来源：最新HTML（本批改后）+ 用户裁决
 - 修改原因：情况2（冲突，HTML 覆盖）
 - 执行者：Opus 5（opus-implementer），验收：Fable 5
+
+### CL-55
+- 日期：2026-08-04
+- 任务：R3-会签口径收口 · ③（BSM 付款审批流句按统一审批模型改写）
+- 文件与章节：docs/business-system-map-for-operations-v0.1.html 商户分红与结算章「和谁有关」·付款确认条（改前 L1602）
+- 修改前：「连接财务对账，审批通过后的发放进入应付款项台账，走付款确认。**付款确认按付款审批流执行：发起人 → 其直属上级 → 部门上级 → 直至其授权的最高授权人，并经财务、法务及相关部门会签；具体流程按支付类型分别设定。**封账由财务部门执行……」
+- 修改后：「……走付款确认。**付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人（即其授权的最高授权人），系统按组织层级逐级自动补全从发起人到该最终审批人之间的全部直接上级节点并逐级审批；财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人并同样逐级自动补全至该部门预先设定的最低起点层级；主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。**封账由财务部门执行……」——**封账句与开票句逐字未动**；上一行加 2026-08-04 会签口径收口注释
+- 修改依据：DEC-R5-2026-08-04-08；用户 2026-08-04 批准（统一审批模型裁决原文见台账 DEC-R5-2026-08-04-06 下方）
+- 来源：用户裁决
+- 修改原因：情况2（旧「逐级+会签」表述与用户确认的统一审批模型冲突，按用户裁决收口）
+- 范围声明：本批**三份业务最终解释权 HTML 中仅此一处改动**，BSM 其余内容与 PGM、ENUM 两份一字未动
+- 执行者：Opus 5（opus-implementer），验收：Fable 5
+
+### CL-56
+- 日期：2026-08-04
+- 任务：R3-会签口径收口 · ②（验收规格／矩阵／数据模型文档对齐统一审批模型）
+- 文件与章节／逐处清单（grep `并行会签|同阶段并行|分组并行|并行审批|并行槽|会签` 全量命中后逐处判定）：
+  - **已改写（现行口径）**
+    1. `docs/full-admin-ui-acceptance-matrix-v0.1.md` L30 UI-ADM-GOV-004：「起草合同、提交审批、并行会签、生效……」→「起草合同、提交审批（指定主线最终审批人，系统逐级自动补全）、主线与平行相关部门线审批、生效……」；验收列「并行会签全过后才可生效」→「主线与各平行相关部门线全部通过后才可生效」；覆盖列「覆盖起草、提交、会签、生效……」→「覆盖起草、提交、主线与平行线审批、生效……」。其余列（防重复出租、原因与幂等键、应收台账、附件只显示引用）未动
+    2. `docs/requirement-traceability-matrix-v0.1.md` L251 REQ-116：标题「起草、并行会签、生效……」→「起草、统一审批模型审批（主线＋平行相关部门线）、生效……」；「验收底线：会签全过后才可生效」→「主线与各平行相关部门线全部通过后才可生效」。端点清单与覆盖状态未动
+    3. `docs/p0-end-to-end-acceptance-and-edge-cases-v0.1.md` L438／L440（AC-CON-01）：When「提交审批并完成业务、财务、法务并行会签和终审」→「提交审批（指定主线最终审批人，系统按组织层级逐级自动补全）并完成主线审批与业务、财务、法务各平行相关部门线的审批」；And「并行会签未全过不可生效」→「主线与各平行相关部门线未全部通过不可生效」（同一铺位重复出租必须拒绝一句未动）
+    4. 同上 L469（§8A AC-CON-01 行）：「会签全过后才可生效」→「主线与各平行相关部门线全部通过后才可生效」
+    5. `docs/business-html-source-of-truth-acceptance-spec-v0.1.md` L28 HTML-LEASE-01：「审批链可配分组并行，任一节点驳回退回起草」→「审批链按全平台统一审批模型执行（指定主线最终审批人＋逐级自动补全，业务/财务/法务为平行相关部门线各指定该部门最终审批人并补全至该部门预设的最低起点层级），主线与各平行线全部通过才生效，任一节点驳回退回起草」
+  - **保留原文＋加口径注（实现事实，非口径）**
+    6. `docs/foundation-database-design.md` L2136 §11.34 V162 行「同 stage_seq=并行会签」：**原文保留**，行尾加注「2026-08-04 用户裁决审批口径改为统一模型——指定最终审批人+逐级自动补全+平行部门线；本表结构为旧阶段制实现，改造已登记待办」
+    7. `docs/merchant-space-contract-model-v0.1.md` §2.7 L65「同 `(flow,stage_seq)` 多行 = 一个并行会签阶段……默认链：阶段①业务/财务/法务并行 → 阶段②总经理终审」：**原文保留**，行尾加同一口径注
+    8. 同上 §1 L24 表格「V162 重建的审批（分组并行会签）」：**原文保留**，就地标注「旧阶段制实现；现行审批口径注见 §2.7」
+    9. `docs/business-module-mature-system-gap-analysis.md` L406 实做期细化清单「审批层级与会签/或签规则」：**原文保留**，加注「审批层级已由 2026-08-04 统一审批模型定案，此处仅余或签规则待细化」
+  - **未改及理由**
+    10. `docs/p0-openapi-contract-closure-appendix-v0.1.md` L2280／L2404、`docs/p0-openapi-operation-acceptance-matrix-v0.1.md` L508／L520（「审批当前阶段并行槽(会签)」「配置审批链(分组并行,按综合体覆盖)」）：两份文档由 `tools/generate-openapi-contract-closure-appendix.mjs`／`tools/generate-openapi-operation-matrix.mjs` 从 `docs/openapi/openapi-p0.yaml|json` 的 operation summary **生成**，`verify:openapi-closure`／`verify:operation-matrix` 以 `--check` 比对，手改必判失败；本轮裁决①「代码/迁移/OpenAPI 一律不动」，故**未改**，随 `contract_approval_flows` 改造待办与 OpenAPI 一并处理
+    11. `docs/prd-sync-change-log-20260804.md` L1355-1359、L1386-1387、L1393；`docs/business-decision-log-v0.1.md` L406；`docs/prd-audit/business-decision-ledger.md` L836／L1158／L1218／L1230／L1235；`docs/platform-governance-prd-v0.1.md` L745；`docs/prd-audit/phases/03-governance-and-common.md` L60；`docs/prd-audit/backup-diff-by-file-2026-07-28/*`、`OTHER_15_FILES_FULL_SENTENCE_DIFF-2026-07-28.md`、`backup-vs-main-FULL-SENTENCE-DIFF-2026-07-28.md`：**历史记录／裁决日志／变更日志／备份差异快照，一律不动**（台账留痕纪律）
+    12. `docs/platform-governance-prd-v0.1.md` L203、`docs/real-estate-full-chain-domain-prd-v0.1.md` L27／L40：CL-54 已按统一模型改写，**本批无需再改**
+    13. `docs/settlement-rebuild-prd-v1.0.md` L702「分三阶段并行校验」、`docs/p2-ticket-dynamic-pricing-completion-audit-v0.1.md` L45「规则审批流的复杂多人会签（非目标）」：**与合同/付款审批口径无关**，未改
+- 遗留（超本批授权范围，报 Fable 5）：`docs/business-system-map-for-operations-v0.1.html` L636 招商租赁模块卡片摘要仍写「合同起草与**可配分组并行审批**」，与 CL-52 改后的 L1199 审批句不一致；本批铁律限定 HTML 只许改付款审批流一句，故**未动**，登记待下一批 HTML 收口
+- 修改依据：DEC-R5-2026-08-04-09；用户 2026-08-04 批准（②批准收口、①代码/迁移不动）
+- 来源：用户裁决 + 最新HTML（CL-52/CL-55 改后）
+- 修改原因：情况2（文档现行口径与统一审批模型冲突，按用户裁决收口）
+- 执行者：Opus 5（opus-implementer），验收：Fable 5
