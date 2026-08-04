@@ -166,7 +166,7 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 | 项 | 内容 | 状态 |
 |---|---|---|
 | I1 结算 fail-open 归错桶 | `JdbcSettlementBillRepository` 的 `aggregateFormatRevenue`(:186) 与 `aggregateMerchantStats`(:266) 仍是 `COALESCE(merchant_type,'bar')`：商户档案查不到的核销行会被归进酒吧桶、进可分配池分给各酒吧。需与计提闸判据**三处同时**改 fail-loud（只改其一会让判据分叉、K20 守恒立刻炸），并补 `SettlementFeePerTicketS3Tests` / `SettlementServiceFeeConservationTests` 夹具的真商户行 | ⬜ 用户 2026-08-03 拍板「回头修改，计入待办」 |
-| I2 成长值独立账（HTML-05 真缺口） | 全仓「成长值」零实现：成长值即积分本身（还吃了等级倍率与生日倍率）、保级窗口是固定周期清零重攒而非 HTML 要求的滚动十二个月、票务积分未按票种规则算、降级前三十天通知未实现。本轮只做了「降级一次落到位」止血（#320） | ⬜ 用户选定本轮范围外 |
+| I2 成长值独立账（HTML-05 真缺口） | 全仓「成长值」零实现：成长值即积分本身（还吃了等级倍率与生日倍率）、保级窗口是固定周期清零重攒而非 HTML 要求的滚动统计周期（按项目可配，出厂默认十二个月）、票务积分未按票种规则算、降级前按配置天数（按项目可配，出厂默认三十天）通知未实现。本轮只做了「降级一次落到位」止血（#320） | ⬜ 用户选定本轮范围外 |
 | I3 规则账本重建 + HTML 哈希门禁 | `docs/prd-audit/authority-rule-ledger.csv` 844 条仍按旧版 HTML 提取（其中 6 行标 AUTHORITATIVE 却引用旧行号，照读会得出与现行 HTML 相反的口径）；`tools/verify-delivery-gates.mjs` 不比对三份 HTML 的 sha256，文档门永远绿 | ⬜ 用户拍板：门禁等账本重建后再加（现在加会立刻挂红） |
 | I4 尾差责任主体只写不读 | V383 已落 `rounding_residual_entity_id`，但结算审阅查询与 `SettlementReviewPage.tsx` 只展示尾差金额、不展示责任主体——业务人员对账时看得到尾差、看不到谁认这笔 | ⬜ |
 | I5 父票到期终态缺失 | `forfeitEntitlement` 只更新 `issued_entitlements`，父票 `ticket_instances` 到期后状态仍停在 `active`，父票层面看不出已过期/已作废（既有行为，现已被 #323 的新断言显式固定） | ⬜ 待定口径 |
