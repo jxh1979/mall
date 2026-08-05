@@ -87,7 +87,9 @@
 >
 > - 数据库：`V014__p0_amusement_safety_session_verification.sql` 的 `CONSTRAINT chk_amusement_sessions_status CHECK (status IN ('scheduled', 'open', 'closed', 'cancelled'))` —— **只有 4 态**。
 > - 契约：`docs/openapi/openapi-p0.yaml` 场次 `status` `enum [scheduled, open, closed, cancelled]` —— **同为 4 态**。
-> - 因此 **`checkin_open` / `running` / `completed` 三个业务 code 在 DB 与 OpenAPI 均无对应取值**（现由 `open` / `closed` 粗粒度承接），`abnormal` 亦无。属**待改造缺口**；**是否补齐 7 态、还是按现行 4 态（scheduled/open/closed/cancelled）收口并把 checkin_open/running/completed 降为展示派生，待裁决**。实现现状不得反向覆盖业务口径。
+> - 因此 **`checkin_open` / `running` / `completed` 三个业务 code 在 DB 与 OpenAPI 均无对应取值**（现由 `open` / `closed` 粗粒度承接），`abnormal` 亦无。
+> - **已裁决补齐（2026-08-04 第三轮用户裁决 UD-10 / DEC-R6-27）**：按**补齐 7 态持久化**收口，不采用「降为展示派生」方案——本表列出的 `scheduled` / `checkin_open` / `open` / `running` / `completed` / `cancelled` / `abnormal` 均为**持久化业务状态**（「已满员」除外，其为项目侧只读派生展示态，见上一段与 DEC-R6-18）。
+> - **DB CHECK 扩展与 OpenAPI 枚举扩展列入排期**：`chk_amusement_sessions_status` 须由 4 值扩至 7 值、`docs/openapi/openapi-p0.yaml` 场次 `status` 枚举同步扩展，属**待改造缺口**（登记见修复台账 §7.4）。改造前实现现状不得反向覆盖业务口径。
 
 ## 7. P0 流程
 
@@ -128,11 +130,10 @@ flowchart TD
 
 放行后更新权益核销状态与该项目的实时在玩人数计数；拒绝一律记录原因码、判定项、员工、设备、点位与时间进留痕。
 
-> **待用户裁决登记（E-06，2026-08-04 F3）——游乐「当天无限」的「当天」怎么算**：上述第 2 步「权益有效期」在判定 `consumption_window = unlimited_in_day`（游乐当天无限，口径见 `settlement-rebuild-prd-v1.0.md` §6.3）时，需要一个「天」的边界。
+> **已裁决（原 E-06，2026-08-04 第三轮用户裁决 UD-09 / DEC-R6-10）——游乐「当天／每天」一律按营业日**：上述第 2 步「权益有效期」在判定 `consumption_window = unlimited_in_day`（游乐当天无限，口径见 `settlement-rebuild-prd-v1.0.md` §6.3）时，「天」的边界**定为营业日**。
 >
-> - **实现现状（实读 `backend/src/main/java/com/complex/platform/ticketing/TicketVerificationService.java` `verifyUnlimitedInDay`）**：`usageDate = now.atZone(ZoneId.systemDefault()).toLocalDate()`，即按 **JVM 默认时区的自然日** 取「当天」，跨自然日即视为新的一天再消耗一次。
-> - **冲突**：ENUM L120「运营营业日」规定全系统钱账按**营业日**归集（当日 10:00 至次日 10:00）。跨夜营业时，「自然日」在凌晨切日、「营业日」不切，两者对同一次核销给出不同的「当天」。
-> - **待用户裁决**：游乐「当天无限」的「当天」＝**营业日**还是**自然日**？裁决前不得由实现自行选定；若裁决为营业日，还须同时明确时区来源（不得继续依赖 JVM 默认时区）。实现现状不得反向定义业务规则。
+> - **定稿口径**：游乐域一切「当天／每天」表述**一律按营业日计**——当日 10:00 至次日 10:00，起止时点沿用营业日配置（**安全阈值**，按每个项目、每家酒吧可配，调整须最高权限审批并留痕）；**时区取项目所在地时间，禁止使用服务器／JVM 默认时区**。跨夜营业不在凌晨切日。已写入 ENUM 游乐运营章「游乐「当天／每天」口径」条与 BSM 票务权益章·一人多次票／通票行。
+> - **已裁决，实现改造列入排期（现用 JVM 自然日为缺口）**：实现现状 `backend/src/main/java/com/complex/platform/ticketing/TicketVerificationService.java` `verifyUnlimitedInDay` 取 `usageDate = now.atZone(ZoneId.systemDefault()).toLocalDate()`，即 **JVM 默认时区的自然日**，与本裁决口径不符，属**待改造缺口**（登记见修复台账 §7.4）。改造须同时替换为营业日窗口计算并显式传入项目所在地时区，**改造前实现现状不得反向定义业务规则**。
 
 
 ### 7.2A 多限制冲突与监护（DEC-ADM-PRIORITY-001，2026-07-28）
@@ -415,6 +416,8 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-08-04 | 改 | §7.2 | 第三轮裁决落地：游乐「当天／每天」口径定稿为**营业日 + 项目所在地时区**（10:00→次日 10:00，安全阈值按项目可配，禁用服务器默认时区）；原 E-06 待裁决标注改「已裁决，实现改造列入排期（现用 JVM 自然日为缺口）」 | 第三轮用户裁决 UD-09 / DEC-R6-10；ENUM 游乐运营章「游乐「当天／每天」口径」条、BSM 票务权益章·一人多次票／通票行（CL R6B-04） |
+| 2026-08-04 | 改 | §6 | 第三轮裁决落地：场次 7 态按裁决**补齐持久化**（不降为展示派生）；原「待裁决」标注改「已裁决补齐，DB CHECK + OpenAPI 枚举扩展列入排期」 | 第三轮用户裁决 UD-10 / DEC-R6-27；ENUM「场次状态」条（CL R6B-05） |
 | 2026-06-07 | 改 | §4 业务对象 | 容量对象补"三维度取最小可放行余量"口径 | amuse-1 |
 | 2026-06-07 | 改 | §5 项目状态 | 补中文↔英文 code 双列（unopened/preparing/open/paused/maintenance/closed/abnormal） | fielddb-5、基准 D7 |
 | 2026-06-07 | 改 | §6 场次状态 | 补英文 code 列，与开发设计场次状态机对齐 | 基准 D7 |
