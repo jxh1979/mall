@@ -2022,6 +2022,7 @@
 | **GAP-32** | R6-B（DEC-R6-10 / UD-09） | **游乐「当天」营业日修正** | `amusement-business-operations-product-prd-v0.1.md` §7.2 | `TicketVerificationService.verifyUnlimitedInDay` 现取 `now.atZone(ZoneId.systemDefault()).toLocalDate()`（JVM 默认时区自然日），须改为**营业日窗口**（10:00→次日 10:00，读营业日配置）并**显式传入项目所在地时区**，禁用服务器默认时区 |
 | **GAP-33** | R6-B（DEC-R6-11 / UD-08） | **异常预警页面零承载** | `evidence-risk-control-product-prd-v0.1.md` §8.2、`business-dashboard-metrics-product-prd-v0.1.md` §3A | 页面、两类异常（反复注销注册、高频出入场疑似借票）的计数与触发、查看／转办／处置留痕**均无承载**；`risk_alerts` 承接的是需处置的经营异常责任链，不宜直接复用。同批需承载「同一手机号一年内注销＋注册次数」计数与阈值配置 |
 | **GAP-34** | R6-B（DEC-R6-19 / HC-06） | **拆台／撤销转台／循环转台上限** | `bar-business-operations-product-prd-v0.1.md` §7.3A.5 | 三项均无承载：无拆台端点与按实际消费归位逻辑、无撤销转台的原路回退路径（现只能新建单据、被规则禁止）、无同一会话转台次数计数与上限配置（按酒吧可配、出厂默认 10 次、达上限须主管审批）|
+| **GAP-35** | R6-T4（DEC-R6-06/08/11/12/13/18/19/21） | **CSV 授权规则台账 rule_text 列残余陈旧** | `docs/prd-audit/authority-rule-ledger.csv` | 本轮仅同步 BSM-0100 / BEQ-0032 / BEQ-0048 三行，其余受上述裁决影响的 AUTHORITATIVE 行 `rule_text` **仍为改前文本**。高风险作废行点名：**BEQ-0107**（楼宇巡检五类含「能耗抄表」，与 DEC-R6-12 相反）、**BEQ-0009**（核销七态含「预检通过」与「人工放行」，与 DEC-R6-08 相反）。处置：**采纳该 CSV 前须逐行核对当前 HTML**；建议按条目名锚点整表重建，与 `anchor_or_line` 全表行号漂移一并另行立项 |
 
 ---
 
@@ -2207,6 +2208,6 @@ R6-A 在决策台账「本批未处理、留待下一批的事项」中登记了
 | **R6T-08** | 本台账 | §7.2 / §7.3 之前的【F3】待决清单 D-03·D-05 | §7.2 抬头改「HC-01~10 已全部裁决并回写」；HC-01~HC-10 十行末列各补「已裁决：<结论>（DEC-R6-xx）」；D-03 指向 DEC-R6-17、D-05 指向 DEC-R6-08 并标已关闭；**并删去 §7.2 表内 HC-10 前的空行**（与 §7.4 GAP-26 前空行同一类表结构缺陷，同批一并修表） | DEC-R6-15 ~ DEC-R6-24 |
 | **R6T-09** | 本台账 §7.4 / `prd-audit/authority-rule-ledger.csv` | §7.4 GAP 表；CSV 三行 | §7.4 删 GAP-26 前空行、GAP-25 移回 GAP-24 之后，恢复单表连续编号；CSV 的 BSM-0100 / BEQ-0032 / BEQ-0048 三行原文同步为裁决后 HTML 现行文本 | DEC-R6-05 / DEC-R6-17 |
 
-**说明（CSV 同步方式）**：`docs/prd-audit/authority-rule-ledger.csv` **无生成器脚本**（`grep -rn authority-rule tools/ scripts/` 零命中），三行为**手工同步**，取值逐字取自当前 `business-system-map-for-operations-v0.1.html`「订台定金状态」条与 `business-enum-quick-reference-v0.1.html`「订台定金状态」「团体/包场」两条。同批**未更新** CSV 的 `anchor_or_line` 列——该列全表行号自基线以来已整体漂移（如 BSM-0100 记 846、实为 865），属全表性问题，须另行立项按条目名锚点重建，不在本批范围。
+**说明（CSV 同步方式）**：`docs/prd-audit/authority-rule-ledger.csv` **无生成器脚本**（`grep -rn authority-rule tools/ scripts/` 零命中），三行为**手工同步**，取值逐字取自当前 `business-system-map-for-operations-v0.1.html`「订台定金状态」条与 `business-enum-quick-reference-v0.1.html`「订台定金状态」「团体/包场」两条。同批**未更新** CSV 的 `anchor_or_line` 列——该列全表行号自基线以来已整体漂移（如 BSM-0100 记 846、实为 865），属全表性问题，须另行立项按条目名锚点重建，不在本批范围。**未同步的其余 AUTHORITATIVE 行 `rule_text` 残余陈旧风险（含 BEQ-0107 / BEQ-0009 两条高风险作废行）已登记 §7.4 GAP-35。**
 
 **说明（D-05 的 DEC 归属）**：D-05 的两个待授权默认值（「预检通过」有效期、「待复核」时限与升级间隔）**均由 DEC-R6-08 一条裁决消解**；`DEC-R6-06`（高价值判定阈值出厂默认 5000 元）与 D-05 无关，故未在 D-05 行引用。
