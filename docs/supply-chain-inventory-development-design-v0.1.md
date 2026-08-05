@@ -584,9 +584,15 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `waste` | 废弃 | 过期/废弃扣减（库存调整 `adjustment_type` 之一） |
 | `gain` | 增加/报溢 | 盘盈/异常增加（库存调整 `adjustment_type` 之一） |
 | `count_correction` | 盘点纠正 | 盘点差异纠账（盘盈/盘亏，库存调整 `adjustment_type` 之一） |
+| `return_to_stock` | 回库 | 客人退品回到库房、客人存酒到期转为酒吧自有库存（增加方向；与采购入库 `inbound`、盘盈 `gain` 必须分开记）。2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造 |
+| `lend_out` | 借出 | 跨主体借调中**不可消费物品**交付给借入方（减少方向；只转移保管责任、**所有权不转移**，不得用 `transfer_out` 代记）。2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造 |
+| `lend_return` | 归还 | 借入方将借用物品归还借出方（增加方向；`lend_out` 的反向动作，保管责任回转）。2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造 |
 
 > 权威口径（2026-06-22 收口，以代码为准）：库存调整/盘点/报损报溢落账实际写入的 `movement_type` 取自服务白名单 `InventoryStockMovementService.ALLOWED_ADJUSTMENT_TYPES = {gain, loss, damage, waste, count_correction}`，与 `inventory_stock_adjustments.adjustment_type` 的 DB CHECK（V046 `chk_stock_adjustment_type IN ('gain','loss','damage','waste','count_correction')`）一致。注意 **`stock_movements.movement_type` 列本身无 DB CHECK 约束**（V012 仅 `movement_type VARCHAR(64) NOT NULL`），取值正确性由服务白名单/`adjustment_type` 保证，故枚举以代码白名单为准。此前文档列出的 `surplus`/`count_adjust`/`reverse` 在代码中并不存在（已分别对应到 `gain`/`count_correction`、冲正按增减方向取对应调整类型），本轮按代码事实修正。
 > 设计说明：`redeem_consume`/`gift_claim_consume`（pass-2）为本设计相对 bar-operations 的新增类型；`photo_refs`/`video_refs` 分列（supply-3），对高价值流水均置必填。`inbound/outbound/transfer_in/transfer_out/consume` 为出入库/调拨/正常消耗类流水类型（由各业务路径直接写入），不受上述调整白名单约束。
+> 新增三类（2026-08-05 DEC-R7-04，文档层）：`return_to_stock`（回库）/ `lend_out`（借出）/ `lend_return`（归还）依 ENUM「库存流水类型」条十二类口径补入本白名单，命名与 `docs/bar-operations-development-design.md` §6.16 **完全统一**；三类**代码与迁移尚未实现**（服务白名单 `InventoryStockMovementService`、DB 取值口径待 **GAP-38** 改造），补齐前不得据本表认为已实现。
+> 冲正口径（DEC-R7-04）：**冲正不新增 `movement_type`**，按流水 `status=reversed`（§4.5）标记并按相反方向的调整类型落账；ENUM 十二类中不含「冲正」，**不得自行新增第十三类**。
+> 命名口径登记（GAP-38）：既有命名体系两表不一致（`transfer` vs `transfer_in`/`transfer_out`、`count_adjust` vs `count_correction` 等），统一命名属 **GAP-38 代码改造范畴**，落库前须先定统一口径；本轮既有 code 一个未改名。
 
 ### 6.14 stock_balances 库存余额表（物化/视图）
 

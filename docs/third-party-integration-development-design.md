@@ -6,7 +6,7 @@
 
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
 > 以业务说明地图 #thirdparty 为基准核验真实代码（正面：开放平台鉴权 HMAC+nonce+token+审计为真落地）：
-> - **企微会话留存/脱敏/审计零落地**：后端无会话上传接口/留存表/到期归档销毁匿名化触发/脱敏专链/查看访问审计，仅 V015 一行 mock 种子。属 PIPL 合规暴露（另见 `compliance-...-requirements-v0.1.md` R5）。
+> - **企微会话留存/脱敏/审计零落地**：后端无会话上传接口/留存表/到期归档销毁匿名化触发/脱敏专链/查看访问审计，仅 V015 一行 mock 种子。属 PIPL 合规暴露（另见 `compliance-...-requirements-v0.1.md` R5）。　**【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】企微会话原文永久保存、不自动到期删除；本处销毁／留存期／到期处置规格不得实施；确需清理仅限最高权限本人插授权 U 盘密钥手动执行（逐条填写理由、先试运行预览、清理动作本身另行留痕）。原文保留仅作历史留痕。**
 > - **视频监控锚点零落点**：HTML 承诺"P0 先留点位+时间锚点"，但迁移/代码 grep anchor/retrieval/clip/点位/片段全空，无调阅审计表；视频仅 `integration_read_ledger` 一行(payload 仅 camera_id)。
 > - **POS/渠道回流不解析映射**：webhook 入站仅落信封(status=accepted)，无 mapPayload，无自动对账差异，全靠管理员手填；机器人仅只读端点**无写回调**（"到达=被动留痕"链缺）。
 > - **第三方团购**：~~复用通用 order_syncs，无美团/抖音渠道语义解析与 `external_order_no`~~ 已过期——V109 补渠道语义列（channel/external_channel_order_id+渠道级幂等），批6（V382）落通票 ticket 分支：渠道票种映射→既有出票主链出票、核销回传出站队列、channel-auto 对账系统取数；开关 integration.ticket_channel.sync 默认关。
@@ -1048,7 +1048,7 @@ flowchart LR
 | sender_type | varchar(32) | staff、customer、system |
 | sender_id | varchar(128) | 发送方ID |
 | msg_type | varchar(32) | text、image、voice、file、link |
-| content_text | text | 文本内容；企业微信工作会话不脱敏原文仅限最小授权 + 审批的取证/质检场景，普通展示按权限脱敏，查看受权限控制并强制写审计。**留存期限可配置（per 报告 A7），非无限期"永久"**：按合规文档 §4 C3 设 `retention_policy_code`/`retention_days`(或 permanent_with_basis)/`disposal_action`(archive/delete/anonymize)/`legal_basis`/`employee_notice_id`，到期归档/销毁/匿名化（修订说明 2026-06-07：finding third-6，原"永久保存"无合规依据，改可配置留存；2026-06-08 复核补充不脱敏原文的最小授权边界） |
+| content_text | text | 文本内容；企业微信工作会话不脱敏原文仅限最小授权 + 审批的取证/质检场景，普通展示按权限脱敏，查看受权限控制并强制写审计。**留存期限可配置（per 报告 A7），非无限期"永久"**：按合规文档 §4 C3 设 `retention_policy_code`/`retention_days`(或 permanent_with_basis)/`disposal_action`(archive/delete/anonymize)/`legal_basis`/`employee_notice_id`，到期归档/销毁/匿名化（修订说明 2026-06-07：finding third-6，原"永久保存"无合规依据，改可配置留存；2026-06-08 复核补充不脱敏原文的最小授权边界）  **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】企微会话永久保存、不自动到期删除；本行销毁／留存期规格不得实施；确需清理仅限最高权限 U 盘密钥手动路径** |
 | content_ref | text | 附件对象存储引用 |
 | sent_at | timestamptz | 发送时间 |
 | raw_payload_id | uuid | 原始数据 |
@@ -1426,7 +1426,7 @@ unique (device_id, event_seq)
 | 第三方服务是否允许平台主动拉取历史数据 | 已确认策略：Webhook + 定时轮询校验；如供应商支持历史拉取，则作为异常补偿和日终对账兜底 |
 | 对账以业务发生日还是结算日为准 | 已确认：经营分析主口径按业务发生日；财务结算主口径按结算/入账日；差异表同时保留两类日期 |
 | 原始 payload 保存周期 | 影响存储成本、合规和审计能力。**口径（2026-06-07）：按合规文档 §6 C5 个人信息分类留存表设定——含个人信息的 payload 取"成本/审计口径 ∩ PIPL 最短必要"取严，企微会话 payload 见 §14.15 可配置留存，视频证据见下行；不再作为悬空待决项，编码时按分类留存落地（finding third-6）** |
-| 企业微信会话留存期限与处置 | **口径（2026-06-07）：可配置 `retention_days`（非永久），到期归档/销毁/匿名化，离职/争议关闭后按处置策略降级；合法性基础与告知见合规文档 §4 C3、报告 A7（finding third-6）** |
+| 企业微信会话留存期限与处置 | **口径（2026-06-07）：可配置 `retention_days`（非永久），到期归档/销毁/匿名化，离职/争议关闭后按处置策略降级；合法性基础与告知见合规文档 §4 C3、报告 A7（finding third-6）**  **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】企微会话永久保存、不自动到期删除；本行销毁／留存期规格不得实施；确需清理仅限最高权限 U 盘密钥手动路径** |
 | 视频证据/截图/片段保存周期与调阅鉴权 | **口径（2026-06-07）：调阅必须经权限校验并强制写审计（调阅人/时间/关联事件，权限点 `integration.video.play`）；证据保存周期=事件关联期+取证期后删除（合规文档 §6 C5）；P0 不强制平台内播放，先保留证据索引/链接/附件，平台内直看按视频供应商能力进入 P1/P2。** |
 | 第三方接口失败锁定是否按应用、账号、IP分别锁定 | 已确认：P0 按应用 + 账号维度锁定，IP 维度用于风控限流和人工复核，避免误伤同出口网络 |
 

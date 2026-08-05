@@ -1425,7 +1425,7 @@
 
 > 修订说明（2026-06-07 收口）：新增。依据 finding critic-5/compliance-land-10 与合规 C5——third-party-integration §1194 已把「个人信息分类留存表」当作已存在对象引用，但任何 DB 中均无该表，C5 的「按数据类别设留存期限 + 到期处置」缺可编码主数据。本表为分类留存策略主数据，供到期删除/匿名化作业读取。
 >
-> 交叉引用（2026-06-08 收口）：本表与 `data-risk-ai-development-design §11.6.1` **为同一张表**（已统一表名 `pii_retention_policies`，避免重名冲突）；其**到期销毁/匿名化定时作业、撤回同意级联、作业留痕表 `data_retention_job_logs`** 的设计见 data-risk-ai §11.6，本处为 schema 权威落点。
+> 交叉引用（2026-06-08 收口）：本表与 `data-risk-ai-development-design §11.6.1` **为同一张表**（已统一表名 `pii_retention_policies`，避免重名冲突）；其**到期销毁/匿名化定时作业、撤回同意级联、作业留痕表 `data_retention_job_logs`** 的设计见 data-risk-ai §11.6，本处为 schema 权威落点。　**【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】企微会话原文永久保存、不自动到期删除；本处销毁／留存期／到期处置规格不得实施；确需清理仅限最高权限本人插授权 U 盘密钥手动执行（逐条填写理由、先试运行预览、清理动作本身另行留痕）。原文保留仅作历史留痕。**
 >
 > 修订说明（2026-06-08 三轮收口）：依据 finding critic2-2/project-id-2/struct-annot-5 与主控统一权威 R5——本表（§6B.4，schema 权威落点）的 `data_category`、`retention_basis`、状态列名 `status` 为**权威码表/列名集合**，data-risk §11.6.1 须对齐到此（data_category 合并 id_document+biometric_face→id_credential、payment_account→payment、consumption_record→consumption、wecom_conversation→wecom_session；状态列名统一为 `status` 而非 policy_status；retention_basis 已补 `consent_based`）。data-risk 侧的 relation_based/min_necessary_note/legal_basis 等差异项作为「作业视角附加字段」在 data-risk 保留并注明，不在本权威表并列。
 
@@ -1449,7 +1449,7 @@
 | 草稿 | draft |
 | 停用 | disabled |
 
-> 与企微会话留存口径对齐：企微会话留存以本表 `data_category=wecom_session` 行为准，与 data-risk-ai §11.5「可配置留存」一致；撤回同意（6B.2 withdrawn_at）触发对应类别记录的级联软删/匿名化。
+> 与企微会话留存口径对齐：企微会话留存以本表 `data_category=wecom_session` 行为准，与 data-risk-ai §11.5「可配置留存」一致；撤回同意（6B.2 withdrawn_at）触发对应类别记录的级联软删/匿名化。　**【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】企微会话原文永久保存、不自动到期删除；本处销毁／留存期／到期处置规格不得实施；确需清理仅限最高权限本人插授权 U 盘密钥手动执行（逐条填写理由、先试运行预览、清理动作本身另行留痕）。原文保留仅作历史留痕。**
 
 ### 6B.5 会员积分表组（critic-4 / pass-1 / critic-10）
 
