@@ -57,7 +57,7 @@
 - 高危权限配置：迁移清单只是当前实现初值。后台可以新增高危权限、提高风险等级或提高审批层级，但不得把 HTML 明确的强制项（四类 + 税费规则与税费调整）降级为无需审批，也不得移出强制范围。
 - 高危覆盖口径（四类 + 税费）：
   - 资金/核销/退款/调账：如 `finance.ar_ap.manage`、`finance.refund.create`、`finance.property_fee.manage`、`bar.bill.adjust`、`customer.stored_value.refund`、`inventory.stock.adjust`。**持股分红的方案配置、算单、审批和发放同属资金类高危动作，由最高权限审批，提交人不能审批自己的单据。**
-  - 提权或跨商户跨项目公司：如 `access.permission_template.manage/apply/revoke`、`access.role.manage`、`access.role.assign`、`access.temporary_grant.create/revoke`、`access.grant_request.review`、`governance.supervisor_review.approve`、`governance.project.manage`、`contract.approve.gm`。
+  - 提权或跨商户跨项目（综合体）：如 `access.permission_template.manage/apply/revoke`、`access.role.manage`、`access.role.assign`、`access.temporary_grant.create/revoke`、`access.grant_request.review`、`governance.supervisor_review.approve`、`governance.project.manage`、`contract.approve.gm`。
   - 敏感经营数据：不限于内部结算价和成本价，还包括采购价、毛利、分账底价、域内补贴缺口、供应链价格及其他被标记为敏感的数据。查看、导出和修改分别授权；普通用户、会员、前线员工和无相应权限的商户人员不得查看。系统自动使用某价格不代表当前操作人获得查看或修改权限。数据默认按项目隔离，只有项目之上的获授权岗位才能跨项目查看。
   - 高危业务：如 `bar.product.sold_out`、`bar.bill.reopen`、`bar.order_item.void`、`bar.saved_bottle.manage`、`ticket.verify.reverse`、`amusement.verification.override`、`amusement.over_capacity_policy.configure`。
   - **第 5 类 税费规则与税费调整（2026-08-04 对齐平台治理地图/枚举速查表）**：所有税费规则和税费调整均须经过**财务审核、税务审核、法务审核**，再由**顶层平台公司的老板最终确认后生效**；**任一环节驳回均不得生效**；**提交人不得审批自己提交的调整**；全部审批意见和时间必须留痕。**税率、税目不属于普通后台配置项**，不得按普通配置项直接改动。
@@ -101,5 +101,5 @@
 **迁移 / 表 / 权限**
 - 迁移：权限来自 `V115__analytics_group_overview_permission.sql`；职位授权闭环来自 V169；高危授权审批来自 V170
 - 表：`analytics_business_metric_snapshots`、`projects`、`merchants.business_entity_id`
-- 权限：`analytics.group.view`（`domain=analytics`、`risk_level=high`、`requires_approval=false`）
+- 权限：`analytics.group.view`（`domain=analytics`、`risk_level=high`、`requires_approval=false`）。**实现待对齐（2026-08-04 F1 登记）**：跨项目汇总下钻属 §3 强制闸门第 2 类「提权或跨商户跨项目（综合体）」，按该强制闸门 `requires_approval` **应为 `true`**；当前实现为 `false`，与 §3「不得把 HTML 明确的强制项降级为无需审批」直接冲突，**属实现缺口**。按事实源优先级不反向改写 PRD，留待实现批次补齐；在补齐前，§4 的 `requirePlatformScope()` 只收敛可见范围、不替代授权审批。
 - UI：`ADM-ANA-002` 集团总览；可通过 `ADM-ACC-003` 的职位模板授出或收回 `analytics.group.view`
