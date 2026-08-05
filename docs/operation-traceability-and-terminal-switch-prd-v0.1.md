@@ -20,7 +20,7 @@
 >     - **豁免前缀随之登记两条非终端通道**：`/api/open/`（第三方开放平台回调，自带签名，不是受管终端）与 `/api/v1/terminals/kiosks/`（一体机自助端点，`X-Device-Token` 认证，本就豁免于 `DeviceCredentialInterceptor`、拿不到可信身份）——不登记则第三方回调与一体机心跳会被新增的写请求 fail-closed 误杀。
 >     - **enforcement 取值不动**（仍全类型 `grace`）：本次只让 enforce 翻开时真的有效，何时翻仍是部署决策。
 >   - **（2026-07-20 补 · enforce 前置全套已做完）**：①web enforce 拒 Bearer 自报 web（合法后台 Cookie 会话，无客户端依赖可先翻）+ app enforce 拒 app 写（app 资金要客人侧证明属业务口径，待用户定）；②kiosk/tablet 设备级签名公钥 `terminal_device_signing_keys`（V325）+ 登记端点 `POST /devices/{id}/signing-key`，kiosk 自助端点豁免；③nonce 落库 `terminal_device_nonces`（V325）防重放；④body SHA-256 纳入签名量（`DeviceCredentialBodyCachingFilter` 仅包裹设备绑定型+写+带签名请求）；⑤deviceId↔密钥归属交叉校验。**服务端 ready-to-enforce；真正翻 enforce 仍依赖客户端实现签名+登记密钥（客户端侧，本 PR 不含）**，默认保持 grace。
-> - **⚠️ opt-out 纪律（2026-06-24 补，对齐平台治理地图「兜底关闭」）**：当前实现是"无显式开关行 = 默认开启(opt-out)"，仅"开关拉取失败/超时/不可解析"按 fail-closed（§5.6）。读取异常 fail-closed 与业务 HTML「拉取失败按兜底关闭」一致；但"受控能力无 seed 行即默认放行"与业务侧「白名单式默认关」心智仍有差。**硬约束**：每新增一类受控能力（终端/模块/第三方/MDM/人脸等）必须同批 seed 一条 `enabled=FALSE` 兜底行（参照 V146 `face.verification.enabled`=FALSE、V071/V093/V096/V097/V098 各受控前缀默认关），不得依赖默认开放；评审与门禁应核对"新增受控能力是否配套 FALSE seed"。
+> - **⚠️ opt-in 定稿（2026-08-04 第三轮用户裁决 UD-02 / DEC-R6-07）**：**业务口径已改为「无显式开关行 = 默认关闭(opt-in)」**，见 §5.7；本段以下为**改造前的实现现状留档**，不构成业务规则。原 opt-out 纪律（新增受控能力必须同批 seed `enabled=FALSE`）在改造完成前**继续有效**，改造完成后由 opt-in 默认值自然覆盖，届时改为「有意默认开的能力必须同批 seed `enabled=TRUE`」。**实现现状**："无显式开关行 = 默认开启(opt-out)"，仅"开关拉取失败/超时/不可解析"按 fail-closed（§5.6）。读取异常 fail-closed 与业务 HTML「拉取失败按兜底关闭」一致；但"受控能力无 seed 行即默认放行"与业务侧「白名单式默认关」心智仍有差。**硬约束**：每新增一类受控能力（终端/模块/第三方/MDM/人脸等）必须同批 seed 一条 `enabled=FALSE` 兜底行（参照 V146 `face.verification.enabled`=FALSE、V071/V093/V096/V097/V098 各受控前缀默认关），不得依赖默认开放；评审与门禁应核对"新增受控能力是否配套 FALSE seed"。
 >   - **✅ 2026-07-04 据实核对现状（ssh 核对迁移 seed）**：终端总开关 `terminal.enabled`（V197，10 端）与 Web 后台/商户专区模块开关（V198/V199）**按设计 seed=TRUE**——它们是**已发布、有意默认开**的可控能力（关闭=停用某端/模块，属运营动作，非「未受控放行」）。**全部受控/预留能力均已配套显式 `enabled=FALSE` 兜底行**：`payment.gateway.enabled`(V093)、`face.verification.enabled`(V146)、`terminal.camera_scan.enabled`/`customer.native_client.enabled`(V097)、`staff.device_keystore.enabled`/`terminal.tablet.enabled`(V098)、`wecom.ai_qc.enabled`(V096)、`integration.*.sync`(V071)、`managed_work_devices`(V088)、`sms_notification` 总开关(V177，域级子开关按 AND 语义)。**结论：不存在「受控能力无 seed 行→默认放行」的存量定时炸弹**；opt-out 仅对上述有意默认开的总/模块开关成立。**强制纪律照旧**：新增任一受控能力必须同批 seed FALSE + 对存量做一次回溯核对，评审/门禁核对「新增受控能力是否配套 FALSE seed」。
 > - **部分收口——异常责任链事件名漂移已对齐（`文档goalP1(2026-06-20)`）**：异常责任链 `risk_alerts`/`risk_alert_actions` 已由 V103 落地，代码真实事件名为 `exception.reported/claimed/transferred/escalated/resolved/dismissed`（`RiskAlertService`）；§4.1 已就地补"字典名→代码真实名"映射（`exception.first_handled`→`exception.claimed` 等），并新增 §4.1.6 登记 V099–V124 全部新功能真实事件名。**已收口（2026-07-04）**：销售归属/服务责任事件名 `order.acquired`/`order.sales_attributed` 代码零命中、无替代发布，本轮已裁定改为**记录型留痕**（`service_responsibility_records.sales_staff_id`，`TraceabilityService.recordResponsibility`），§4.1 两事件已作废、不再作为待接线占位。三层过程留痕(business_process_instances/step_records，V059 建表但未全面接线)见 `evidence-risk-layer-spec-v0.2.md`。
 > - **候选验收口径（已正式）**：关闭某端/模块后调用其业务接口被后端拒绝并写 `terminal.access_rejected`，前端隐藏仅作辅助。
@@ -562,11 +562,12 @@ flowchart TD
 > 低层打开压过高层关闭（安全方向反了，v7 审计 R-10 定 P0）。本次改为**取最严**：
 > - 一次取回本请求各层的显式行，**任一层 `enabled=false` → 最终关闭**；返回其中**最高层**的关闭行作为审计口径（告诉运营是哪一层把它关了）。
 > - 全部命中层都为开 → 仍返回**最具体**的那条开启行（保留调用方"默认值兜底"语义）。
-> - 无任何显式行 → 默认开启（opt-out，§5.6 的 fail-closed 只针对读取异常）。**（⚠ 待用户裁决：资金/核销/库存类新能力是否改 opt-in（无显式行时默认关闭）；本条当前行为不变，仅登记待裁决，2026-08-04 F1）**
+> - 无任何显式行 → **默认关闭（opt-in）**。**（2026-08-04 第三轮用户裁决 UD-02 / DEC-R6-07 定稿：全部能力，不限资金/核销/库存类）**——任何能力在后台**没有显式开关配置行时一律默认关闭**，要启用**必须有人显式打开**；**开关缺行不得视为开启**，也**不得由代码或部署脚本代为「视同打开」**。与 §5.6「拉取失败兜底关闭」是两件事：后者针对**运行时读不到配置**，本条针对**配置里压根没有这一行**。已写入 PGM 终端开关章·怎么控制与 BSM 已确认规则第 35 条。原「无显式行默认开启（opt-out）」口径**已作废**，待裁决标注一并删除。
 > - **同一层内**"专端行 > 跨端通配 `*` 行"的既有口径**保持不变**：通配/专端是另一坐标轴，不是"层级"，不纳入取最严
 >   （否则运营关了 `*` 之后就再也无法为单个端单独放开，与"分端停用/分端启用"的运营诉求冲突）。
 > - 第 8 档"灰度"按 §5.5 作为**独立最细级别**串在最后求值，同样只能收窄不能放宽。
 > - 组合矩阵证据：`TerminalSwitchStrictestAndCanaryMatrixTests` 用真实库跑满 8 层 × 开/关 = **256** 种组合，断言"任一层关闭 ⇔ 最终关闭"。
+> - **⚠ 实现待改造缺口（2026-08-04 登记）**：现行 `TerminalSwitchGuard.resolveEffectiveSwitch` 仍是 **opt-out**（无显式行返回默认开启），与上款 opt-in 定稿相反。改造须**两件事一起做**——① **默认值反转**：`resolveEffectiveSwitch` 无显式行时返回关闭；② **全量能力 seed 核查**：逐一核对**所有**受控能力（不只新增的）是否已有显式开关行，凡**有意默认开**的已发布能力（如 `terminal.enabled`（V197，10 端）、Web 后台／商户专区模块开关（V198/V199））必须**同批补 `enabled=TRUE` 的显式 seed 行**，否则反转当天这些端与模块会全部静默关停。两件事**不得分批上线**。改造前 opt-out 现状**不得反向定义业务规则**（缺口登记见 `docs/prd-audit-fix-change-log-20260804.md` §7.4）。
 
 裁决口径：
 
@@ -638,7 +639,7 @@ flowchart TD
 
 ### 6.3A 终端开关灰度层（V342，R-10）
 
-灰度是求值链**最细的一档**，落在独立两张表（不塞进 `terminal_capability_switches.scope_type`——灰度需要表达"白名单外一律关"，而开关表"无行=默认开"的 opt-out 语义表达不了这件事）。语义见 §5.5。
+灰度是求值链**最细的一档**，落在独立两张表（不塞进 `terminal_capability_switches.scope_type`——灰度需要表达"白名单外一律关"，而开关表当时"无行=默认开"的 opt-out 语义表达不了这件事；**opt-in 改造后两者默认值方向一致，但灰度仍保留独立两张表**——白名单试点的目标集合与开关的层级作用域是两个坐标轴，合表会丢掉"只能收窄不能放宽"的约束）。语义见 §5.5。
 
 **terminal_capability_canary_rollouts 灰度试点**
 
@@ -807,6 +808,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-08-04 | 改 | §5.7 / 顶部横幅 / §6.3A | 第三轮裁决落地：开关默认取值定稿为 **opt-in**——**全部能力**（不限资金/核销/库存类）无显式配置行时一律默认关闭，缺行不得视为开启、不得由代码或部署脚本代为「视同打开」；删待裁决标注；现行 opt-out 实现登记为待改造缺口（改造含 `resolveEffectiveSwitch` 默认值反转 + 全量能力 seed 核查，两件事不得分批上线） | 第三轮用户裁决 UD-02 / DEC-R6-07；PGM 终端开关章·怎么控制、BSM 已确认规则第 35 条（CL R6B-25） |
 | 2026-08-04 | 增 | §5.5 灰度层 | 补铁律：与钱有关的规则（分账比例、结算口径、综合服务费、租金与抽成规则）一律不得灰度、不得按商户/设备部分开放，只能按综合体整体统一切换（切换日期后台可配，按综合体统一可配），切换前后各自适用完整一套规则；灰度只用于不影响金额计算的功能开放 | PGM L670「与钱有关的规则一律不得使用灰度」（CL-14；行号 2026-08-04 F1 复核更正，原记 L657） |
 | 2026-08-04 | 增 | §5.1 总原则 | 补：开关服务、支付通路、核销与入场等营业必需能力不得在营业时段做任何可能导致中断的变更、升级或维护，只能安排在非营业时段并事先报备 | PGM L671「营业必需能力不得在营业时段变更」（CL-15；行号 2026-08-04 F1 复核更正，原记 L658） |
 | 2026-08-04 | 增 | §2.1.1 | 新增留痕保存期限与手动清理：默认永久保存不自动删除；手动清理属最高权限动作，须本人插入授权 U 盘密钥、逐条填理由、先试运行预览、清理动作本身留痕；订单/核销/结算流水/账单等钱账数据永不可清理 | BSM L1452「留痕记录默认永久保存、不会自动到期删除」（CL-16；行号 2026-08-04 F1 复核更正，原记 L1446；更早原记 L1449） |

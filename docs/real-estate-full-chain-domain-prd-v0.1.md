@@ -48,8 +48,8 @@
 
 - **授权依据**：业务系统地图 #property-service（BSM L1228-L1235「物业服务·主要功能」）、业务枚举速查表 §十（ENUM L189「物业工单类型」／L190「物业工单状态」／L193「工单时效」）；承接 `gap-analysis §7B.3`（已升正式条目，含 SLA/商户自助提单）。
 - **核心能力**：工单分类（报修/保洁/投诉/整改/巡检/其他）、商户自助提单、设备告警与巡检异常自动转工单、派单→处理→回访→验收→关闭、SLA 响应/处理时限与超时升级、满意度评价。
-- **工单主表口径（2026-08-04 跨文件统一，与 `building-operations-prd-v1.0.md` §1/§3、`merchant-portal-zone-prd-v0.1.md` §3/§6 同一口径）**：**商户服务工单的主表 = V166 `facility_work_orders`**，商户自助提单以 `source=merchant_self` 进入该表，与设备告警、巡检异常、平台发起的工单同表同闭环；**V022 `merchant_service_work_orders` / `merchant_service_work_order_actions` 为历史表，停止作为主写表**（保留数据，不在 V166 DROP）。
-- **现有承接（按上述统一口径）**：主表 V166 `facility_work_orders` + `facility_work_order_policy`（SLA「类型 × 优先级」+ 设备告警/巡检异常自动转工单，已接线）；历史表 `V022 merchant_service_work_orders` + `V120 SLA 升级` + `p1-merchant-service-work-order-api-contract` + 后台页 ADM-MER-001 保留但停止主写。**（实现待对齐）当前商户专区「我的工单」ADM-MER-004 仍走 `/api/v1/merchant-service/work-orders`（写 V022），向 V166 的收敛与端点切换尚未排期；`docs/full-admin-page-permission-field-matrix-v0.1.csv` 的 ADM-MER-001／ADM-MER-004 端点与状态机列仍为 V022 口径，台账 CSV 端点待同步**（本轮仅统一 PRD 口径，不改 CSV/代码/迁移）。
+- **工单分表口径（2026-08-04 第三轮用户裁决 UD-06 / DEC-R6-26 定稿，与 `building-operations-prd-v1.0.md` §0/§1/§3、`merchant-portal-zone-prd-v0.1.md` §3/§6 同一口径）**：**商户服务工单与设施工单彻底分表**——**商户服务工单主表 = V022 `merchant_service_work_orders` / `merchant_service_work_order_actions`**，采用 ENUM「商户服务工单状态」条的**独立七态状态链**（已提交/已派单/处理中/待商户确认/已处理待关闭/已关闭/已取消）；**设施工单主表 = V166 `facility_work_orders`**（设备告警、巡检异常、平台发起、现场工作人员报修，九态按 UD-05 / DEC-R6-13 分支适用）。两表各自独立状态机，看板按 ENUM「工单看板分行对照」**分行对照**展示。**本条撤销 2026-08-04 F2 批的「统一主表 = V166、V022 停止主写」口径**（该口径当时为待裁决登记项，现按用户裁决作废）。
+- **现有承接（按上述分表口径）**：设施工单主表 V166 `facility_work_orders` + `facility_work_order_policy`（SLA「类型 × 优先级」+ 设备告警/巡检异常自动转工单，已接线）；商户服务工单主表 `V022 merchant_service_work_orders` + `V120 SLA 升级` + `p1-merchant-service-work-order-api-contract` + 后台页 ADM-MER-001，**继续作为主写表**。商户专区「我的工单」ADM-MER-004 继续走 `/api/v1/merchant-service/work-orders`（写 V022），**不再要求向 V166 收敛**。**改造列入排期**：补齐 V022 独立七态 DB CHECK 与状态机；`docs/full-admin-page-permission-field-matrix-v0.1.csv` 的 ADM-MER-001／ADM-MER-004 端点与状态机列按**分表**口径同步（本轮仅改 PRD 口径，不改 CSV/代码/迁移）。
 - **待深挖**：SLA 时长口径、设备/消防异常自动生成工单规则、商户自助提单范围与权限。
 
 ## 4. 楼宇机电设备
@@ -69,7 +69,7 @@
 ## 6. 楼宇巡检
 
 - **授权依据**：平台治理地图 #building-ops「楼宇巡检」、业务枚举速查表 §十（楼宇巡检任务状态 / 类型）。
-- **核心能力**：巡检计划（安防/消防/设施/环境/能耗抄表分类）、任务分派、现场扫码/定位留痕、发现异常生成整改工单、主管确认闭环；与游乐设备安全巡检分开管理。
+- **核心能力**：巡检计划（**安防 / 消防 / 设施 / 环境四类**；**能耗抄表不属楼宇巡检分类**，走 §5「能耗计量」域的独立抄表与异常复核流程，两者不合并、不互相触发）、任务分派、现场扫码/定位留痕、发现异常生成整改工单、主管确认闭环；与游乐设备安全巡检分开管理。
 - **现有承接**：楼宇巡检已落地——V167 `facility_inspection_templates`/`facility_inspection_tasks`/`facility_inspection_records`（计划模板/任务/记录，异常转整改、主管确认闭环）；与游乐设备安全巡检分开。（2026-06-27 纠正：原「无独立巡检模型」已被 V167 覆盖。）
 - **待深挖**：巡检计划模板与排程、巡检点位与路线、异常分级与整改闭环、与物业工单/楼宇设备的联动。
 
@@ -79,7 +79,7 @@
 |---|---|---|
 | 招商获客 | V161 线索/品牌库/意向/跟进 + 招商工作台 + `/api/v1/leasing/*` | 跟进提醒阈值/分配规则细化 |
 | 租赁全周期 | 准入+到期 V028、合同空间 V080、铺位多边形 V023/V052、物业费 V150、**合同审批流+变更+退租结算+租金账单 V162（已落地）**、**租赁状态看板 ADM-LEASE-002（已落地：铺位状态+距到期天数+出租率+即将到期着色+铺位下钻，`GET /api/v1/contracts/space-rental-status`）** | 续租/退租/变更/账单已由 V162 落地、租赁状态看板已由 ADM-LEASE-002 落地（原列「待建」均为过期标注，2026-06-30／2026-08-04 回写）；本域本轮无新增待建项 |
-| 物业工单 | **主表 V166 `facility_work_orders` + `facility_work_order_policy`（SLA + 设备告警/巡检异常自动转工单，已落地）**；历史表 V022/V120 + 契约 + ADM-MER-001（保留、停止主写） | 商户专区提单端点由 V022 收敛到 V166（`source=merchant_self`）+ 台账 CSV 端点同步（实现待对齐，见 §3） |
+| 物业工单 | **分表（UD-06 / DEC-R6-26）**：设施工单主表 V166 `facility_work_orders` + `facility_work_order_policy`（SLA + 设备告警/巡检异常自动转工单，已落地）；**商户服务工单主表 V022/V120 + 契约 + ADM-MER-001（继续主写、独立七态）** | 补齐 V022 独立七态 DB CHECK 与状态机；看板分行对照；台账 CSV 端点与状态机列按分表口径同步；设施工单 `source` 扩 `customer`、九态按 DEC-R6-13 分支落地（见 §3 与 `building-operations-prd-v1.0.md` §6） |
 | 楼宇机电设备 | V165 设备 + V166 工单 + 设备告警事件 FacilityEquipmentAlarmedEvent + 告警→整改工单联动（已落地） | **IoT 自动接入（硬件门控：需真实 IoT 网关/设备，预留事件结构已就绪）** |
 | 能耗计量 | V168 表计/抄表/异常阈值 + 父子表差异 meterDifference + 抄表复核（已落地） | **远程表自动读（硬件门控：需支持远程读的真实表计）**；分摊算法在 meterDifference 基础上细化（增强项） |
 | 楼宇巡检 | V167 巡检计划/任务/记录 + 排程任务 FacilityInspectionScheduleJob + 巡检异常→自动整改工单（原子，已落地） | 路线排程/点位库细化（增强项） |
