@@ -92,7 +92,8 @@
 - Controller 同时校验 `analytics.group.view` 和 `requirePlatformScope()`；即使某商户用户误拿到权限，也会因 merchant scope 被拒绝。
 - 指标目录来自真实 ETL 快照：`revenue.net`、`revenue.ticket`、`revenue.bar`、`traffic.amusement`、`verify.done`、`risk.pending_review`；商户数由当日 merchant ETL 快照去重统计。
 - 优先读取 `analytics_business_metric_snapshots(segment_type='project')`；没有 project 口径快照时回退平台口径单行 `project_1/综合体（默认）`，不伪造多项目。
-- 对标红点阈值**后台可配，默认 `0.20`**（配置表 `analytics_ai_thresholds.benchmark_deviation`，V218 迁入；代码读不到时以 `0.20` 兜底）：项目/主体指标值低于集团均值的 `(1 - 阈值)` 倍（默认 80%，`value < average * (1 - deviation)`）时，返回 `belowBenchmarkMetrics` 并在前端显示红点。
+- 【**DEC-R7-P4**】2026-08-05 用户裁决：**提案已否决：阈值不写入 HTML，PRD 数值已删除**（DIFF-B-046②；PGM 集团下钻与 KPI 分层条 L446-L447 只写分层、未给对标偏离阈值）。
+- 对标红点阈值：**对标偏离阈值为业务参数，待用户裁决配置，配置前不标红**（配置表 `analytics_ai_thresholds.benchmark_deviation`，V218 迁入；**无出厂默认值**）。判定式：项目/主体指标值低于集团均值的 `(1 - 阈值)` 倍（`value < average * (1 - deviation)`）时，返回 `belowBenchmarkMetrics` 并在前端显示红点；**阈值未配置时不返回 `belowBenchmarkMetrics`、不标红**。**实现状态**：现实现在读不到配置时仍以 `0.20` 兜底，属**待改造实现残留**（应按本裁决改为「未配置即不标红」），**不得作为业务口径引用**。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/analytics/group-overview?groupBy=project`
