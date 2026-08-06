@@ -1376,3 +1376,17 @@
 - BSM 实测 **L1843** 与 ENUM 实测 **L253** 的解释权声明仍写「三份 HTML 之间若出现冲突，**不预设先后顺序，必须逐项重新裁决**」；本批只授权改 PGM L884。
 - 同源旧句还出现在 7 份 PRD 抬头权限边界声明：`bar-business-operations-product-prd-v0.1.md`、`finance-settlement-product-prd-v0.1.md`、`operation-traceability-and-terminal-switch-prd-v0.1.md`、`platform-governance-prd-v0.1.md`、`service-order-product-prd-v0.1.md`、`settlement-rebuild-prd-v1.0.md`、`ticketing-entitlement-checkin-product-prd-v0.1.md`。
 - **按 DEC-R7-32 自身规则处理**：PGM L884 的新句确认时间（2026-08-05）最晚，优先级最高，上列旧句在冲突时不生效；建议下一批按批准原文统一改写，以消除文本层面的不一致。
+
+## 2026-08-05 R7 尾批用户裁决（DEC-R7-39 ~ DEC-R7-41）
+
+| 编号 | 裁决日期 | 业务摘要 | 落点 | 批准方式 |
+|---|---|---|---|---|
+| DEC-R7-39 | 2026-08-05 | **时间线元规则旧句 9 处统一（收口 DEC-R7-32）**：把「三份 HTML 之间若出现冲突，**不预设先后顺序，必须逐项重新裁决**」旧句全部替换为 DEC-R7-32 的时间线口径「三份 HTML 之间若出现冲突，**按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**」——**规则本体不变，只消除文本层面不一致**；本条**关闭**第三批「本批未授权改写、登记留存的同源旧句（须下一批统一处置）」条所列全部落点。残留旧句仅存于各文档变更日志、`docs/prd-audit/` 审计报告与片段文件的历史引述，按「不改写历史记录」纪律不动。另有 **1 处非历史记录的同源旧句＝`docs/prd-resync-change-log-20260805.md` 抬头「事实源顺序」条（实测 L9）**，该行为该台账自身的现行元规则声明，自第三批 DEC-R7-32 起即与其引据 PGM L884 不符（非本批引入），**经编排器补充授权已同批改为时间线口径**（主台账属本轮自有产物文档、非事实源 HTML），括注补记 DEC-R7-32/39 双依据，故本批实际修改点为 **11 处**；至此现行有效口径文本中旧句为 **0** | **9 处**：BSM `p.footer-note` 解释权声明·实测 **L1846** ＋ ENUM `p.note` 解释权声明·实测 **L253**（PGM L884 第三批已改，本批不动）；7 份 PRD 抬头权限边界声明各 1 处——`bar-business-operations-product-prd-v0.1.md` L3、`finance-settlement-product-prd-v0.1.md` L5、`operation-traceability-and-terminal-switch-prd-v0.1.md` L3、`platform-governance-prd-v0.1.md` L3、`service-order-product-prd-v0.1.md` L3、`settlement-rebuild-prd-v1.0.md` L4、`ticketing-entitlement-checkin-product-prd-v0.1.md` L3（PRD 侧为加粗形态，加粗与原有括注结构一字未动）。逐处前后原文见 `docs/prd-resync-change-log-20260805.md` §1.6 | 用户逐项批准（按批准原文落地） |
+| DEC-R7-40 | 2026-08-05 | **高价值物品判定结果分句主语收口**：BSM「高价值物品」行结果分句「，**进货价**高于阈值即为高价值、低于即为低价值」改为「，**该到货价**高于阈值即为高价值、低于即为低价值」——与同句前半段 DEC-R7-31 已落地的「以该物品**最近一次实际到货价**（不使用滚动变化的当前平均进货价）……比较」对齐，消除同句自相矛盾、防止下游读成「用滚动平均进货价比阈值」。**判定基准、阈值层级（安全阈值，全平台统一可配，须最高权限审批并留痕）与出厂默认 5000 元均未变** | BSM「高价值物品」行·实测 **L1110** | 用户逐项批准（按批准原文落地） |
+| DEC-R7-41 | 2026-08-05 | **两项收尾登记**：① **新增 GAP-41**——DEC-R7-21「分红前置：借款清偿优先于分红」已落 HTML 与 PRD，但**实现侧零落点**：`DividendService.submit()` 的 `draft → pending_review` 只校验前态、无逾期借款拦截，且「**逾期未还借款**」的取数口径未定义（登记于哪张表、按哪个主体维度归集、「逾期」判定时点与到期本息口径均未定），`grep -rn 借款 backend/src apps` 与 `grep -rlni loan backend/src` 均零命中；R7 代码零改动，**只登记、不改**，实现前不得据现实现（无校验即可提交）反向定义业务规则。② **`tools/verify-html-param-tier.mjs` 对「51%」的 2 处警告经用户裁决接受**——51% 是**固定的持股判定门槛、不是可配业务参数**，故不补三层层级标注；该门禁只警告不阻断，**这 2 处警告长期存在、属已知状态**，后续批次不得据此再提改写，也不得为消警告给 51% 加「可配／出厂默认」等标注 | ① GAP-41 唯一登记处 `docs/prd-audit-fix-change-log-20260804.md` §7.4 GAP 表表尾（镜像说明见 `docs/prd-resync-change-log-20260805.md` §5.2）；来源 R7-C / DEC-R7-21。② 警告出处：BSM「新员工注册」`<li>`·实测 **L1299** 与 PGM 员工注册 `<li>`·实测 **L558**（均为 DEC-R7-27 落地句，**HTML 本批未因此改动**）；说明见 `docs/prd-resync-change-log-20260805.md` §六 | 用户裁决（① 登记 ② 接受现状） |
+
+**本批落地方式与自证**
+
+- 9 处旧句统一 ＋ BSM L1110 收口共 **10 处**，逐处以 `python3` 精确串替换、每处 `count == 1` 断言（并断言新句原不存在）后落地；改后逐处 `sed -n 'Np'` 回读核对。**无插行、无删行**，9 份被改文件行号与改前完全一致。
+- 本批**未改动 PGM**（`platform-governance-map-for-operations-v0.1.html`）、术语表 `docs/terminology-canonical-v1.0.md`、两份差异矩阵、三个片段文件、功能地图与 `docs/prd-audit/authority-rule-ledger.csv`。
+- 本批**未执行** `git commit` / `git push` / PR，**未切换分支**。

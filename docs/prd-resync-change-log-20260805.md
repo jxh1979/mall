@@ -6,7 +6,7 @@
 - **日期**：2026-08-05
 - **执行者**：**Fable 5 编排**；实施 `opus-implementer`（T-HTML 批 + T6a／T6b／T6c 三批 PRD 同步批 + T7 合并批）
 - **本文件性质**：R7 轮的**合并变更主台账**。第一章为已获用户逐项批准并已落 HTML 的修订；第二章为三批 PRD 变更片段的**逐字节原样合并**；第三至五章为待批、待确认与遗留登记。
-- **事实源顺序**：三份业务 HTML（BSM／PGM／ENUM）＞ `docs/prd-audit/business-decision-ledger.md` ＞ 各 PRD。**三份 HTML 之间若出现冲突，不预设先后顺序，必须逐项重新裁决**（依据 PGM「解释权声明」条·实测 L884）。
+- **事实源顺序**：三份业务 HTML（BSM／PGM／ENUM）＞ `docs/prd-audit/business-decision-ledger.md` ＞ 各 PRD。**三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**（依据 PGM「解释权声明」条·实测 L884，DEC-R7-32/39）。
 - **（2026-08-05 R7-C 更新）第三批 HTML 修订与下游同步已执行**（见 §1.5／§5.5）：三份 HTML、决策台账、7 份下游 PRD／开发设计文档已改动，并**经用户明确授权**执行 `git add` / `git commit` / `git push`（PR #337 自动更新，**不 merge**）。下一条「本文件未执行」的表述**仅适用于 T7 合并批当时的状态**。
 - **本文件未执行**：`git commit` / `git push` / PR；未切换分支；未修改三份 HTML、决策台账、任何 PRD、差异矩阵、功能地图与三个片段文件。
 
@@ -22,6 +22,7 @@
   - 1.3 落地自证（`git diff --stat` 与逐 hunk 归属）
   - 1.4 第二批 HTML 修订（DEC-R7 第二批：DEC-R7-09 ~ DEC-R7-16 与收款确认裁决 DEC-R7-11）
   - 1.5 第三批 HTML 修订（DEC-R7 第三批：DEC-R7-19 ~ DEC-R7-38）
+  - 1.6 尾批收口（R7-D：DEC-R7-39 ~ DEC-R7-41）
 - [二、PRD 变更（三批次合并，共 65 条）](#二prd-变更三批次合并共-65-条)
   - 2.0 合并说明与统一编号索引（M-001 ~ M-065）
   - 2.1 批次 T6a 片段全文（结算／票务批，26 条）
@@ -31,7 +32,7 @@
 - [四、用户待确认事项](#四用户待确认事项)
 - [五、遗留与登记](#五遗留与登记)
   - 5.1 GAP-25 与 GAP-26~35 状态复核
-  - 5.2 本轮新登记：GAP-36 / GAP-37 / GAP-38 / GAP-39 / GAP-40
+  - 5.2 本轮新登记：GAP-36 / GAP-37 / GAP-38 / GAP-39 / GAP-40 / GAP-41
   - 5.3 矩阵行号锚点勘误汇总
   - 5.4 矩阵行处置总表（DIFF-A-001~054 与 DIFF-B-001~046 共 100 行）
   - 5.5 镜像分歧处置状态表（第三批裁决后）
@@ -353,6 +354,38 @@ $ git diff 5da1d6ad --stat -- docs/business-system-map-for-operations-v0.1.html 
 
 - BSM 实测 L1843 与 ENUM 实测 L253 的解释权声明仍写「不预设先后顺序，必须逐项重新裁决」（本批只授权改 PGM L884）；同源旧句另见 7 份 PRD 抬头权限边界声明（bar／finance-settlement／operation-traceability／platform-governance／service-order／settlement-rebuild／ticketing）。按 DEC-R7-32 自身的时间线规则，PGM L884 新句确认时间最晚、优先级最高；建议下一批统一改写以消除文本层面不一致。
 - **任务包与实测的差异（已如实登记）**：Fable 5 任务包把「BSM L580 敏感数据查看与导出」锚点记在 `group-governance-rebuild-prd-v1.0.md`，实测该文件**全文无此引用**（无任何 `BSM L` 形式行号锚点）；该引用实际位于 `business-dashboard-metrics-product-prd-v0.1.md` L19／L115，故 DEC-R7-37 落在后者，`group-governance-rebuild-prd-v1.0.md` **本批未改动**。
+
+---
+
+### 1.6 尾批收口（R7-D：DEC-R7-39 ~ DEC-R7-41）
+
+> **新增于 2026-08-05（R7-D 尾批）**。取材：§1.5 与 `docs/prd-audit/business-decision-ledger.md`「本批未授权改写、登记留存的同源旧句」条所列**下一批统一处置项**，用户 2026-08-05 **逐项批准**；台账登记 **DEC-R7-39 ~ DEC-R7-41**。
+> **本批共 10 处文本修改点**：时间线元规则旧句统一 **9 处**（BSM／ENUM 解释权声明各 1 处 ＋ 7 份 PRD 抬头权限边界声明各 1 处）＋ BSM「高价值物品」行「该到货价」收口 **1 处**。**均按批准原文落地、一字未增删改**；PGM 无修改（其 L884 已于第三批按 DEC-R7-32 改写，本批为其余同源旧句的追平）。
+> 修改方式：`python3` 精确串替换（每处 `count == 1` 断言，并断言新句原不存在）＋每处 `sed -n 'Np'` 回读。**无插行、无删行**，故 9 份被改文件的行号与改前完全一致。
+> **替换串（两种形态，正文一字相同，仅加粗与句末标点随各处原有结构）**
+> - **形态 A（HTML 纯文本，句末带「。」）**：「三份 HTML 之间若出现冲突，不预设先后顺序，必须逐项重新裁决。」→「三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决。」
+> - **形态 B（PRD 抬头加粗，句末「。」在原有括注之后、不在加粗内）**：`**三份 HTML 之间若出现冲突，不预设先后顺序，必须逐项重新裁决**` → `**三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**`——**各文件原有的括注尾部（依据／日期／DIFF 编号）与加粗结构一字未动**。
+
+| 序 | 文件 | 位置（条目名 · 实测行号，改前＝改后） | 形态 | 修改前（原文摘录） | 修改后（原文摘录） | 决策编号 | 批准方式 |
+|---|---|---|---|---|---|---|---|
+| 1 | BSM | `p.footer-note` 解释权声明 · L1846 | A | 「……必须先逐项获得用户批准并补入相应 HTML。三份 HTML 之间若出现冲突，**不预设先后顺序，必须逐项重新裁决**。」 | 「……必须先逐项获得用户批准并补入相应 HTML。三份 HTML 之间若出现冲突，**按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**。」（加粗为本表标示，HTML 内为纯文本） | DEC-R7-39 | 用户逐项批准 |
+| 2 | ENUM | `p.note` 解释权声明 · L253 | A | 同上（同一句，且句前三段声明文本与 BSM 同源一致） | 同上 | DEC-R7-39 | 用户逐项批准 |
+| 3 | `bar-business-operations-product-prd-v0.1.md` | 抬头「权限边界」· L3 | B | 「……HTML 未记载的新规则须经用户批准并写入 HTML 后方可生效。」＋形态 B 旧加粗串＋「（2026-08-05 补，依据 PGM「解释权声明」条·实测 L884；DIFF-A-051）。」 | 同句，加粗串换为形态 B 新串；前置句与括注尾部未动 | DEC-R7-39 | 用户逐项批准 |
+| 4 | `finance-settlement-product-prd-v0.1.md` | 抬头「权限边界」· L5 | B | 形态 B 旧加粗串；括注尾部「（2026-08-05 R7 补，依据 DIFF-A-051、PGM「解释权声明」条）。」 | 同上（换新串，括注未动） | DEC-R7-39 | 用户逐项批准 |
+| 5 | `operation-traceability-and-terminal-switch-prd-v0.1.md` | 抬头「权限边界」· L3 | B | 形态 B 旧加粗串；括注尾部「（2026-08-05 补，依据 PGM「解释权声明」条·实测 L884；DIFF-A-051）。」 | 同上（换新串，括注未动） | DEC-R7-39 | 用户逐项批准 |
+| 6 | `platform-governance-prd-v0.1.md` | 抬头「权限边界」· L3 | B | 形态 B 旧加粗串；括注尾部「（2026-08-05 R7 补，依据 PGM「解释权声明」条 L884 / DIFF-A-051）。」 | 同上（换新串，括注未动） | DEC-R7-39 | 用户逐项批准 |
+| 7 | `service-order-product-prd-v0.1.md` | 抬头「权限边界」· L3 | B | 形态 B 旧加粗串；括注尾部「（依据 PGM「解释权声明」条·实测 L884；DIFF-A-051）。」 | 同上（换新串，括注未动） | DEC-R7-39 | 用户逐项批准 |
+| 8 | `settlement-rebuild-prd-v1.0.md` | 抬头「解释权边界」· L4 | B | 形态 B 旧加粗串；括注尾部「（2026-08-05 R7 补，依据 DIFF-A-051、PGM「解释权声明」条）。」 | 同上（换新串，括注未动） | DEC-R7-39 | 用户逐项批准 |
+| 9 | `ticketing-entitlement-checkin-product-prd-v0.1.md` | 抬头「权限边界」· L3 | B | 形态 B 旧加粗串；括注尾部「（2026-08-05 R7 补，依据 DIFF-A-051、PGM「解释权声明」条）。」 | 同上（换新串，括注未动） | DEC-R7-39 | 用户逐项批准 |
+| 10 | BSM | 「高价值物品」行 · 判定结果分句 · L1110 | — | 「……出厂默认 5000 元，须同时配置上下限），**进货价**高于阈值即为高价值、低于即为低价值；或被手工标记为高价值（限库房主管及以上岗位）。」 | 「……出厂默认 5000 元，须同时配置上下限），**该到货价**高于阈值即为高价值、低于即为低价值；或被手工标记为高价值（限库房主管及以上岗位）。」 | DEC-R7-40 | 用户逐项批准 |
+
+**本批文本一致性收口结论**
+
+- 三份 HTML 的解释权声明**已全部为时间线元规则口径**（PGM L884 第三批已改，BSM L1846／ENUM L253 本批改），三份互为镜像、无文本层面分歧。
+- 7 份 PRD 抬头**已与 HTML 同口径**；DEC-R7-32 落地后遗留的「文本层面不一致」（见 §1.5「本批未授权改写、登记留存」条与台账同名条）**至此关闭**。
+- **DEC-R7-40（该到货价）**：BSM「高价值物品」行前半句已于第三批（DEC-R7-31）改为「最近一次实际到货价（不使用滚动变化的当前平均进货价）」，但结果分句仍写「进货价高于阈值」，与前半句自相矛盾、且可能被下游读成「用滚动平均进货价比阈值」；本批把该分句主语收口为「该到货价」，**判定基准、阈值层级与阈值数值口径本身未变**。
+- **残留旧句归属**：全库 `grep -rn 不预设先后顺序 docs/` 剩余命中 **12 份文件**，**全部为历史记录或审计报告引述**（各 PRD 与台账的变更日志行、本文件 §1.5／§二 的批次记录与本节自身的替换串引用、`docs/prd-audit/` 下的轮次报告与差异矩阵、三个片段文件），按「不改写历史记录」纪律**一律不动**。**现行有效口径文本（三份 HTML、7 份 PRD 抬头、本台账抬头）中旧句为 0。**
+- **例外 1 处，已修正（第 11 处修改点）**：**本文件抬头「事实源顺序」条（实测 L9）**原写「三份 HTML 之间若出现冲突，**不预设先后顺序，必须逐项重新裁决**（依据 PGM「解释权声明」条·实测 L884）」——该行**不是历史记录，而是本台账自身的现行元规则声明**，且其引据 PGM L884 已于第三批按 **DEC-R7-32** 改为时间线口径，故自第三批起即与引据不符（**非本批新引入**）。原任务包授权范围为「9 处旧句 ＋ BSM L1110」、不含本文件抬头，经**编排器补充授权**（主台账为本轮自有产物文档、非事实源 HTML，按治理规则可自动修正）**已同批改为时间线口径**，括注补记 **DEC-R7-32/39** 双依据。**修改后（L9 现行原文）**：「- **事实源顺序**：三份业务 HTML（BSM／PGM／ENUM）＞ `docs/prd-audit/business-decision-ledger.md` ＞ 各 PRD。**三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**（依据 PGM「解释权声明」条·实测 L884，DEC-R7-32/39）。」
 
 ---
 
@@ -1430,9 +1463,9 @@ $ git diff 5da1d6ad --stat -- docs/business-system-map-for-operations-v0.1.html 
 | **GAP-34** | DEC-R6-19 / HC-06 | 拆台／撤销转台／循环转台上限三项均无承载 | **仍开放** |
 | **GAP-35** | DEC-R6-06/08/11/12/13/18/19/21 | CSV 授权规则台账 `authority-rule-ledger.csv` 的 `rule_text` 列残余陈旧（高风险作废行 BEQ-0107／BEQ-0009）；`anchor_or_line` 列全表行号漂移，须按条目名锚点整表重建 | **仍开放且加重**。R7 又改了 BSM／ENUM 共 8 处条目（DEC-R7-01~07），CSV **本轮未同步**，陈旧行进一步增加；行号漂移问题与本轮新登记的 **GAP-36 同方向**，建议合并为同一专项 |
 
-### 5.2 本轮新登记：GAP-36 / GAP-37 / GAP-38 / GAP-39 / GAP-40
+### 5.2 本轮新登记：GAP-36 / GAP-37 / GAP-38 / GAP-39 / GAP-40 / GAP-41
 
-> 五项已按格式追加登记到唯一登记处 `docs/prd-audit-fix-change-log-20260804.md` §7.4 GAP 表末尾（原表止于 GAP-35；**GAP-39 于 2026-08-05 T7-R2 依 Verifier B-4 追加，GAP-40 于 2026-08-05 T10 收尾追加**）。本节为同内容的镜像说明，**登记以该文件为准**；该文件一律「只追加、不改既有行」。
+> 六项已按格式追加登记到唯一登记处 `docs/prd-audit-fix-change-log-20260804.md` §7.4 GAP 表末尾（原表止于 GAP-35；**GAP-39 于 2026-08-05 T7-R2 依 Verifier B-4 追加，GAP-40 于 2026-08-05 T10 收尾追加，GAP-41 于 2026-08-05 R7-D 尾批追加**）。本节为同内容的镜像说明，**登记以该文件为准**；该文件一律「只追加、不改既有行」。
 
 | 编号 | 来源 | 缺口 | 位置 | 要点与处置 |
 |---|---|---|---|---|
@@ -1441,6 +1474,7 @@ $ git diff 5da1d6ad --stat -- docs/business-system-map-for-operations-v0.1.html 
 | **GAP-38** | R7（T6c / DEC-R7-04） | **库存流水扩十二类后，开发设计 `movement_type` 白名单缺三个 code** | `docs/supply-chain-inventory-development-design-v0.1.md` §6.13 `stock_movements`（`movement_type` 枚举表 L571–L590） | DEC-R7-04 已把 ENUM「库存流水类型」条（现行 L129）扩为十二类，新增**回库／借出／归还**；§6.13 枚举表现列 13 个 code（`inbound / outbound / transfer_out / transfer_in / consume / redeem_consume / gift_claim_consume / damage / loss / waste / gain / count_correction`），**回库／借出／归还三类无对应 code**。落库前须补齐（含 DB 取值口径与服务白名单），否则退品回库、跨主体借出与归还无法落流水。**同一缺口亦存在于 `docs/bar-operations-development-design.md` §6.16 `bar_stock_movements`（L900 区，10 个 code：`inbound/outbound/transfer/consume/count_adjust/surplus/damage/saved_bottle_store/saved_bottle_pickup/reverse`），同样缺回库／借出／归还三类；修复时两份开发设计须同批补齐。**（`docs/prd-audit-fix-change-log-20260804.md` 的 GAP-38 登记行按「只追加、不改既有行」纪律保持不动，本节镜像说明为其补充）。**【2026-08-05 更新（GAP-38 文档层）】状态＝文档层已补齐**：两份开发设计白名单各 **+3 code**，命名统一为 `return_to_stock`（回库）/ `lend_out`（借出）/ `lend_return`（归还）（`supply-chain-inventory-development-design-v0.1.md` §6.13 枚举表追加 3 行；`bar-operations-development-design.md` §6.16 `movement_type` 取值列同批追加并补新增枚举表），并同批注明「冲正不新增 `movement_type`、按 `status=reversed` 处理（DEC-R7-04）」；`supply-chain-inventory-product-prd-v0.1.md` §5.1 三处「待开发设计 §6.13 白名单补齐」占位已更新为实际 code。**剩余＝代码/迁移实现与既有命名统一**（`transfer` vs `transfer_in`/`transfer_out`、`count_adjust` vs `count_correction` 等命名分歧属代码改造范畴，落库前须先定统一口径；本轮既有 code 一个未改名）。 |
 | **GAP-39** | R7（T6c / DEC-R7-05；Verifier B-4） | **取消取票后，实现侧与入口文档仍残留「取票」能力** | `docs/android-device-terminal-development-design.md` **14 处**（端点 `POST /api/mobile/kiosk/tickets/pickup` 实测 L1256、事件 `kiosk.ticket.picked_up` 实测 L1324，另定位段 L34、点位与能力表 L47／L68／L95／L129／L151、交互流程 L218／L230、验收目标 L1371、能力清单 L1391／L1418、API 清单 L1488）；`docs/android-terminal-breakdown.md` **6 处**（L17／L98／L108／L444／L470／L488）；`docs/terminal-display-layer-spec-v0.2.md` **8 处**（L48／L177／L199／L593／L625／L780／L788／L866）；`docs/ticketing-pass-entitlement-development-design.md` **3 处**（L1168／L1174／L1420）；`docs/p0-operation-permission-matrix-v0.1.md` **2 处**（L57／L187）；`docs/00-current-effective-document-entry-v0.1.md` **1 处**（L123）；`docs/product-requirements-v0.1.md` **1 处**（L162）——**7 份文档共 35 处，每处均已 `sed -n` 回读确认为「在用能力表述」（非作废标注、非变更日志）** | DEC-R7-05 已把 BSM 定为「启用售票能力的一体机可由授权服务人员登录后辅助客人购票**和查询订单（门票为动态二维码，不提供取票功能）**」（BSM L930；能力矩阵 L1725 同批只补「订单查询」），PRD 侧已由 **T6c-14a／14b（M-058／M-059）** 删除「取票」；但**开发设计、终端拆解与「现行有效文档入口」仍写「购票/取票/订单查询」**，且存在取票端点与取票事件。处置＝**取票能力全面下线**（端点与事件下线或标注作废、能力表与验收口径同步删「取票」）**并同批更新入口文档**；下线前**不得据这些文档主张取票仍为 P0 能力**，也不得据其反推 BSM 授权。R7 为文档同步轮（零代码改动），开发设计与入口文档不在本轮授权范围，故**只登记、不改**。（唯一登记处为 `docs/prd-audit-fix-change-log-20260804.md` §7.4 表尾 GAP-39 行，本节为镜像说明）。**范围声明**：全库 `grep -rl 取票 docs/` 实测命中 **27 份**文件，扣除本行已点名的 7 份、事实源与审计产物 6 份（BSM HTML／决策台账／本文件／`changelog-t6c.fragment.md`／`diff-matrix-b.md`／`prd-resync-change-log-20260805.md`）、以及已由 T6c-14a／14b 同步为「不提供取票」的 2 份 PRD（`terminal-page-product-prd-v0.1.md`／`web-mobile-app-terminal-extension-product-prd-v0.1.md`，已回读确认），**其余 12 份含「取票」文档本轮未逐份判定**（`business-module-mature-system-gap-analysis.md`／`full-admin-ui-acceptance-matrix-v0.1.md`／`mdm-android-enterprise-implementation-plan-v0.1.md`／`p0-action-event-evidence-matrix-v0.1.md`／`p0-user-story-map-and-sprint-slices-v0.1.md`／`pm-critic-and-acceptance-criteria-20260610.md`／`product-documentation-index-v0.1.md`／`r5-spec-T4-ticket-anticounterfeit-dev-design-20260618.md`／`requirements-code-implementation-matrix-v0.1.csv`／`requirement-traceability-matrix-v0.1.md`／`third-party-integration-development-design.md`／`unified-standards-baseline-v0.1.md`），**同 GAP-25 口径另计、待取票下线专项统一清理** |
 | **GAP-40** | R7（R7-B / DEC-R7-18） | **P4 提案否决后，风控阈值与对标红点阈值的实现侧仍停留在「旧自设数值 / 出厂兜底」** | ① `docs/evidence-risk-control-product-prd-v0.1.md` §6.3 风控规则表（现行 L109 高频退款、L113 酒水交接缺失）＋实现侧 `analytics_risk_rules.rule_config_json`（V017 建表 L91–L102）；② `docs/group-governance-rebuild-prd-v1.0.md` §4 对标红点阈值（现行 L96）＋实现侧 `AnalyticsService.java` `DEFAULT_BENCHMARK_DEVIATION`＝`0.20`（L1167、兜底 L1176–L1178、使用点 L877）、`V218__analytics_ai_thresholds.sql`（列 `NOT NULL` L11、种子 `0.20` L19）、`tests/e2e/support/mock-api.ts` L307 | DEC-R7-18 否决 DEC-R7-P4 后产生的**实现落差**：① 三条风控规则的旧自设阈值（高频退款 1 小时 ≥5 笔／累计 ≥2000 元、服务责任缺失 开台后 10 分钟、酒水交接缺失 出库后 30 分钟）**不得再按此编码**，须改为「按项目可配、须配上下限、**无出厂默认**，**用户配置前不启用自动判定**」，销售归属缺失／服务责任缺失判定逻辑待业务重新定义（规则名目保留）；② 对标红点须改为「**未配置即不标红**」，删除 `0.20` 出厂兜底并放开列可空、E2E mock 同批更新。R7 代码零改动，**只登记、不改**。来源：R7-B / DEC-R7-18（`docs/prd-audit/business-decision-ledger.md`）。（唯一登记处为 `docs/prd-audit-fix-change-log-20260804.md` §7.4 表尾 GAP-40 行，本行为镜像说明） |
+| **GAP-41** | R7（R7-C / DEC-R7-21） | **分红前置「逾期未还借款优先偿还」落 PRD 后实现侧无落点** | ① `docs/dividend-engine-prd-v0.1.md` §6（现行 L230）＋实现侧 `DividendService.submit()`（`backend/src/main/java/com/complex/platform/dividend/DividendService.java` L646–L655）；② `docs/platform-governance-prd-v0.1.md` §12C（现行 L687／L688）＋实现侧借款登记载体（**不存在**） | DEC-R7-21 已按批准原文落 HTML（BSM 分红章新增 `<li>` L1607、ENUM「可选扣除项」条 L248）与 PRD（dividend §6、platform-governance §12C），实现侧两项缺口：① `submit()` 的 `draft → pending_review` 只校验前态（`requireStatus(statement, "draft", ...)`），**无逾期借款前置拦截**；② **「逾期未还借款」取数口径未定义**（登记于哪张表、按哪个主体维度归集、「逾期」判定时点与到期本息口径均未定），`grep -rn 借款 backend/src apps` 与 `grep -rlni loan backend/src` **均零命中**，无数据源可供校验。R7 代码零改动，**只登记、不改**；实现前不得据现实现（无校验即可提交）反向定义业务规则。（唯一登记处为 `docs/prd-audit-fix-change-log-20260804.md` §7.4 表尾 GAP-41 行，本行为镜像说明） |
 **GAP-39 尾巴：12 份含「取票」文档逐份判定结果表**（新增于 2026-08-05 T7-C，依 GAP-39「范围声明」所列 12 份未判定文档补齐）
 
 > **判定方法**：对 12 份文件逐份 `grep -n 取票`，再对**每一处**命中 `sed -n` 回读上下文段落与所属章节，按两类定性——**live** ＝现行有效、会被下游当作规格执行的能力表述；**历史记录** ＝变更日志／评审闭环记录／已作废段内的述及。另单列 **grep 假命中**（「取票」为跳词切分，非取票能力）。
@@ -1652,3 +1686,5 @@ $ git diff 5da1d6ad --stat -- docs/business-system-map-for-operations-v0.1.html 
 - 待用户处置事项：**无**。（**2026-08-05 第二批用户裁决**已逐项关闭原列的「第三章九项待批提案 DEC-R7-P1~P9」与「第四章 HTML 内部冲突 1 条」——批准七项与收款确认裁决已按批准原文写入 HTML／术语表，否决两项〔P3／P4〕HTML 未改、只更正 PRD；落地记录见 **§1.4**，台账见 `docs/prd-audit/business-decision-ledger.md` §「2026-08-05 R7 第二批用户裁决（DEC-R7-09 ~ DEC-R7-18）」。原列的「§5.3 DIFF-A-046 片段行号返工」已于 T7-R1 完成，不再属待处置项。）
 - **T10 收尾批（2026-08-05，经用户明确授权）共改动 3 个文件**：① `docs/settlement-rebuild-prd-v1.0.md` **L8** 通路费定性短语按 DEC-R6-01 统一为「由各域按分配份额自然共担」（前后原文见 **§1.4「收尾补正」**）；② `docs/prd-audit-fix-change-log-20260804.md` §7.4 GAP 表**表尾追加 GAP-40 一行**（既有行一字未改）；③ **本文件**（§1.4 末新增「收尾补正」块、§5.2 新增 **GAP-40** 镜像行并把小节标题与目录改为 GAP-36~40、本条与下一条边界声明）。**三份业务 HTML、`business-decision-ledger.md`、三个片段文件、两份差异矩阵、功能地图与 `authority-rule-ledger.csv` 均未改动。**
 - **T10 的 git 写操作（经用户明确授权）**：`git add` 仅限本轮 R7 产物、单个 `git commit`、`git push -u origin docs/prd-audit-r7-20260805` 与 `gh pr create`（**建 PR 不合并**，base = `main`）；**未执行** `git merge` / `git checkout` / `git reset` / `git restore` 等可能丢失改动的写操作，**未合并入 `main`**。提交后已实跑两道门禁 `tools/verify-html-ledger-sync.mjs` 与 `tools/verify-html-param-tier.mjs`（base = `5da1d6ad`）。
+- **R7-D 尾批（2026-08-05，经用户明确授权）共改动 12 个文件**：① 两份 HTML 解释权声明旧句统一为 DEC-R7-32 时间线元规则（`business-system-map-for-operations-v0.1.html` L1846、`business-enum-quick-reference-v0.1.html` L253）；② 7 份 PRD 抬头同源旧句同批追平（bar／finance-settlement／operation-traceability／platform-governance／service-order／settlement-rebuild／ticketing）；③ BSM「高价值物品」行 L1110 结果分句「进货价」→「**该到货价**」；④ `docs/prd-audit-fix-change-log-20260804.md` §7.4 GAP 表**表尾追加 GAP-41 一行**（既有行一字未改）；⑤ `docs/prd-audit/business-decision-ledger.md` 追加 **DEC-R7-39 ~ DEC-R7-41** 三行；⑥ **本文件**（抬头「事实源顺序」条 **L9** 旧句同批改为时间线口径并补记 DEC-R7-32/39 依据〔经编排器补充授权，主台账属本轮自有产物文档、非事实源 HTML〕、新增 §1.6 尾批收口、§5.2 新增 GAP-41 镜像行并把小节标题与目录改为 GAP-36~41、目录新增 1.6 行、本条与下一条边界声明）。**PGM、术语表、三个片段文件、两份差异矩阵、功能地图与 `authority-rule-ledger.csv` 均未改动。** 逐处前后原文见 **§1.6**。
+- **`tools/verify-html-param-tier.mjs` 对「51%」的 2 处警告经用户裁决接受**（BSM「新员工注册」`<li>`·实测 L1299 与 PGM 员工注册 `<li>`·实测 L558，均为 DEC-R7-27 落地句）：**51% 是固定的持股判定门槛，不是可配业务参数**，故**不补三层层级标注**；该门禁只警告不阻断，**这 2 处警告将长期存在，属已知状态**——后续批次不得据此再提改写，也不得为消警告给 51% 加「可配／出厂默认」等标注。（裁决记录：`docs/prd-audit/business-decision-ledger.md` DEC-R7-41）
