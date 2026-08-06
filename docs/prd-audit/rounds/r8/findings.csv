@@ -75,24 +75,24 @@ R8-F03,A,info,docs/prd-audit/html-prd-coverage.csv,BSM-0540,BSM L748,允许尾�
 R8-F04,A,info,docs/prd-audit/html-prd-coverage.csv,BSM-0541,BSM L1498,滚动取价窗口可配口径原无登记行，已补登记并挂 finding,fixed
 R8-F05,A,info,docs/prd-audit/html-prd-coverage.csv,BSM-0541,BSM L1498,窗口内无有效成交自动向前延长，原无登记行，已补登记,fixed
 R8-F06,A,info,docs/prd-audit/html-prd-coverage.csv,BEQ-0066,ENUM L160,统一原则「不伪造对账结果」PRD 原缺，已改 PARTIAL 并补正文,fixed
-R8-B-01,B,important,docs/prd-audit-fix-change-log-20260804.md,§7.4 L1990-L2014,GAP-01~GAP-24 登记表,GAP-01~24 共 24 条四轮无人复核；谁复核/何时/何优先级待用户拍板,pending-user
-R8-B-02,B,important,docs/data-risk-ai-development-design.md 等,多处,DEC-CFG-2026-08-03-10 / L-19,企微会话「永久保存」三个结构性缺口：旧留存口径未删、无机械门禁、合法性论证未了,pending-user
-R8-B-03,B,important,docs/prd-audit/authority-rule-ledger.csv;docs/*.md,全库,R8 实测旧账本 90% 行号已错,裸行号锚点制度是否存废（每改一次 HTML 全部锚点作废）待裁决,pending-user
-R8-B-04,B,blocking,跨文件（押金退还链条）,-,ENUM L202;BSM L1217;BSM L1506,C-04 押金退还 30 日等待期 × 三个付账日 × 异议期未届满顺延，串起来对不上,pending-user
+R8-B-01,B,important,docs/prd-audit-fix-change-log-20260804.md,§7.4 L1990-L2014,GAP-01~GAP-24 登记表,GAP-01~24 共 24 条四轮无人复核；已裁（DEC-R8-19）——分批立项、GAP-01/04/05/06/09 五条钱路先行、每条按「现状实证→目标口径→迁移方案→验证命令」推进、其余 19 条挂下一批，待实施,ruled-pending-implementation
+R8-B-02,B,important,docs/data-risk-ai-development-design.md 等,多处,DEC-CFG-2026-08-03-10 / L-19,企微会话「永久保存」三个结构性缺口：旧留存口径未删、无机械门禁、合法性论证未了,in-progress
+R8-B-03,B,important,docs/prd-audit/authority-rule-ledger.csv;docs/*.md,全库,R8 实测旧账本 90% 行号已错,裸行号锚点制度存废；已裁（DEC-R8-17）——废除裸行号、PRD 与账本一律改条目名主锚点、BSM/PGM 条目定稳定标识、行号只由脚本按条目名实时生成、配套锚点机检门禁随重构轮建设，待实施,ruled-pending-implementation
+R8-B-04,B,blocking,跨文件（押金退还链条）,-,ENUM L202;BSM L1217;BSM L1506,C-04 押金退还 30 日等待期 × 三个付账日 × 异议期未届满顺延，串起来对不上,resolved
 R8-B-05,B,important,跨文件（会员降级）,-,BSM L809,C-05 降级提前 30 天通知与滚动周期实时定级窗口不同，通知与实际定级必然错位,pending-user
-R8-B-06,B,blocking,跨文件（押金/清退）,-,BSM L1213;ENUM L202,C-07 押金收取月数与欠缴清退月数无交叉约束，合法配置即可让押金不足清偿,pending-user
-R8-B-07,B,important,跨文件（请假扣薪）,-,BSM L1316;BSM L1505;ENUM L138,C-10 跨月请假「只算落在当月的天数」未说明按自然日还是营业日，夜班跨日无解,pending-user
-R8-B-08,B,important,跨文件（分红预览）,-,BSM L1599;营业日 10:00 口径,C-06 分红预览作业若按自然月边界 1 日凌晨跑，读到未闭合的上月，违反最终快照铁律,pending-user
-R8-B-09,B,important,跨文件（第三方回流）,-,ENUM L162;DEC-R4-2026-08-04-43,回流结果状态「已忽略」是否同受 DEC-R4-43 约束（对账差异侧已删该终态）,pending-user
-R8-B-10,B,important,docs/prd-audit/html-prd-coverage.csv,-,重建后矩阵实测,储值卡域两份 PRD 承接重叠、其一零登记；另有三份 PRD 矩阵零登记,pending-user
-H-01,C,important,docs/business-enum-quick-reference-v0.1.html;business-system-map-for-operations-v0.1.html,-,ENUM L77;BSM L816/L1577,积分结算付款句「每月十五日」改为「异议期届满后的下一个付账日」（方向已裁）,draft-pending-approval
-H-02,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM 薪资扣除上限条,薪资扣除上限增列「请假扣薪不计入合计上限」（方向已裁 R8-C03）,draft-pending-approval
-H-03,C,important,docs/business-system-map-for-operations-v0.1.html;business-enum-quick-reference-v0.1.html,-,BSM 两句 vs ENUM L207/L150,公区能源费 BSM 两句与 ENUM 直接冲突（用户已裁 D-01，出建议）,draft-pending-approval
-H-04,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1162;PGM L478,章节标题与摘要句里的「场次容量」改为项目实时在玩人数（方向已裁 D-02）,draft-pending-approval
-H-05,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1021,服务费出账句「实际发放数」应为「月结定格时确定的应发数」,draft-pending-approval
-H-06,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1506,C-08「唯一的例外是账上资金不足」与同句并列的其他顺延矛盾,draft-pending-approval
-H-07,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1599,C-09 分红周期示例句量纲对不上,draft-pending-approval
-H-08,C,important,docs/business-enum-quick-reference-v0.1.html,-,ENUM L162,回流状态删除「已忽略」（依赖 B 类 R8-B-09 裁决）,draft-pending-approval
+R8-B-06,B,blocking,跨文件（押金/清退）,-,BSM L1213;ENUM L202,C-07 押金收取月数与欠缴清退月数无交叉约束，合法配置即可让押金不足清偿,resolved
+R8-B-07,B,important,跨文件（请假扣薪）,-,BSM L1316;BSM L1505;ENUM L138,C-10 跨月请假「只算落在当月的天数」未说明按自然日还是营业日，夜班跨日无解,resolved
+R8-B-08,B,important,跨文件（分红预览）,-,BSM L1599;营业日 10:00 口径,C-06 分红预览作业若按自然月边界 1 日凌晨跑，读到未闭合的上月，违反最终快照铁律,resolved
+R8-B-09,B,important,跨文件（第三方回流）,-,ENUM L162;DEC-R4-2026-08-04-43,回流结果状态「已忽略」是否同受 DEC-R4-43 约束（对账差异侧已删该终态）,resolved
+R8-B-10,B,important,docs/prd-audit/html-prd-coverage.csv,-,重建后矩阵实测,储值卡域两份 PRD 承接重叠、其一零登记；另有三份 PRD 矩阵零登记；已裁（DEC-R8-18）——每域只认一份正主 PRD、重叠文件或并入正主或加「已被 X 取代 不得据以开发」归档标注、零登记 PRD 逐份裁归属后补登记，待实施,ruled-pending-implementation
+H-01,C,important,docs/business-enum-quick-reference-v0.1.html;business-system-map-for-operations-v0.1.html,-,ENUM L77;BSM L816/L1577,积分结算付款句「每月十五日」改为「异议期届满后的下一个付账日」（方向已裁）,implemented
+H-02,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM 薪资扣除上限条,薪资扣除上限增列「请假扣薪不计入合计上限」（方向已裁 R8-C03）,implemented
+H-03,C,important,docs/business-system-map-for-operations-v0.1.html;business-enum-quick-reference-v0.1.html,-,BSM 两句 vs ENUM L207/L150,公区能源费 BSM 两句与 ENUM 直接冲突（用户已裁 D-01，出建议）,implemented
+H-04,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1162;PGM L478,章节标题与摘要句里的「场次容量」改为项目实时在玩人数（方向已裁 D-02）,implemented
+H-05,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1021,服务费出账句「实际发放数」应为「月结定格时确定的应发数」,implemented
+H-06,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1506,C-08「唯一的例外是账上资金不足」与同句并列的其他顺延矛盾,implemented
+H-07,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1599,C-09 分红周期示例句量纲对不上,implemented
+H-08,C,important,docs/business-enum-quick-reference-v0.1.html,-,ENUM L162,回流状态删除「已忽略」（依赖 B 类 R8-B-09 裁决）,implemented
 R-1,REWORK,blocking,docs/merchant-points-settlement-rules-v1.0.md,§16.1,ENUM L77;BSM L816/L1577;BSM L1496/L1506,恢复 HTML 现行付款时点「每月十五日」；撤销对该句的作废宣告（只保留净额作废）；5/15/25 付账日整段移入 R8-C01 待批块,fixed-in-rework
 R-2,REWORK,important,third-party-business-access;real-estate-full-chain-domain;merchant-portal-zone;platform-governance;supply-chain-inventory PRD,5 处 + 同源 2 处,BSM L1420/L1718/L1112/L1110 实测,锚点错行修正：给商户 L1418→L1420、L1417→L1420(x3)、可离场办理的事 L1715→L1718(x2)、客人存酒 L1110→L1112、沿革尾巴 L1108→L1110,fixed-in-rework
 R-3,REWORK,important,docs/service-order-product-prd-v0.1.md;docs/platform-governance-prd-v0.1.md,章导语/章区间,BSM L1035-L1059 实测,服务点单章导语 L1034→L1036、章区间 L1035–L1057→L1035–L1059、覆盖清单同步；员工手机端 L1293–L1326 实测复核无误、未改,fixed-in-rework
@@ -147,4 +147,12 @@ R8-U-02,RESIDUAL,advisory,三份业务 HTML,161 行,scripts/out/unregistered-lin
 R8-U-03,RESIDUAL,advisory,docs/prd-audit/html-prd-coverage.csv,9 行,*-MPS-000N 伪 rule_id,coverage 中 9 行伪 rule_id 在账本无对应（改前即存在），本轮未动,open
 R8-U-04,RESIDUAL,advisory,docs/prd-audit/html-prd-coverage.csv,45 行,phase=r8-rebuild 新增 PARTIAL,45 条新 PARTIAL 行只经机检、未逐句核验,open
 R8-U-05,RESIDUAL,advisory,docs/business-operations-layer-spec-v0.2.md,L81 等,同格中「开放、场次、容量」旧三维措辞,R8 返工只统一了「场次容量」词条；同格并列的口语化「场次、容量」未改，已由文首口径块覆盖,open
-H-09,C,important,docs/business-system-map-for-operations-v0.1.html,1421,BSM L1421「下列三类不在可关闭范围内」实列四项（商户应收应付变化/未核销票到期/客人金额变化/存酒到期）,不可关闭清单数量词与列举不符——HTML 修订草案应改「三类」为「四类」或合并列举,draft-pending-approval
+H-09,C,important,docs/business-system-map-for-operations-v0.1.html,1421,BSM L1421「下列三类不在可关闭范围内」实列四项（商户应收应付变化/未核销票到期/客人金额变化/存酒到期）,不可关闭清单数量词与列举不符——HTML 修订草案应改「三类」为「四类」或合并列举,implemented
+H-03b,C,important,docs/business-system-map-for-operations-v0.1.html,1213,BSM L1213 合同约定项仍列「公区能源费分摊方式（不分摊、按合同约定、按面积分摊、按用量比例）」,与已裁 D-01 及 DEC-R8-03 相抵；第一批草案 §H-03 影响范围漏扫；用户 2026-08-06 补批改为「；公区能源费统一含在物业费中，不在合同中另行约定分摊方式」（DEC-R8-11）,implemented
+H-04b,C,important,docs/business-system-map-for-operations-v0.1.html,1757,BSM L1757「游乐入口要判断客人能不能进、场次容量够不够」,与已裁 D-02 及 DEC-R8-04 相抵；第一批草案 §H-04 影响范围漏扫；用户 2026-08-06 补批改为「项目容量（实时在玩人数）」；三份 HTML「场次容量」已归零（DEC-R8-10）,implemented
+H-10,C,blocking,docs/business-system-map-for-operations-v0.1.html,1213,BSM L1213 押金支撑测算句,押金动态清退硬线：改按当前月均应缴费用随最新账单动态测算；欠费达「押金金额减去一个月当前月均应缴费用」即启动清退（硬约束·任何配置组合下均生效·不可关闭）；与「欠缴超过约定月数一律清退」两条取严先到先触发（DEC-R8-12 关闭 C-07 / R8-B-06）,implemented
+H-11,C,blocking,docs/business-enum-quick-reference-v0.1.html;docs/business-system-map-for-operations-v0.1.html,202,ENUM L202;BSM L1217,押金退还支付时点改为「退租结算算账完成」与「等待期届满」两者取晚；不受三个付账日与账单异议期约束；异议在退租审批流程中解决；顺延原因与预计时间在商户专区对商户可见（DEC-R8-13 关闭 C-04 / R8-B-04）,implemented
+H-12,C,important,docs/business-system-map-for-operations-v0.1.html,1316,BSM L1316「跨月请假只算落在当月的天数」,跨月班次归属：班次工时/考勤/请假一律归属班次结束时点所在月份·跨周同理；请假扣薪分母取归属月份当期总工时；已月结定格月份之后销假或撤销在当期薪资单冲正并注明来源·不回改已定格月份（DEC-R8-14 关闭 C-10 / R8-B-07）,implemented
+R8-U-06,RESIDUAL,advisory,docs/business-decision-log-v0.1.md,§8 L62-64,BSM L1123;PGM L478;ENUM L114,§8「游乐容量」仍写「按具体项目 + 具体场次/时段 + 点位/设备控制容量」与「具体核销放行以场次容量为主控口径」·全节无任何作废标注·与已裁 D-02 及 DEC-R8-04/DEC-R8-10 相抵；本轮只登记不改该文件,open
+R8-U-07,RESIDUAL,advisory,docs/requirement-traceability-matrix-v0.1.md,REQ-110 L245,ENUM L207;BSM L1213/L1227/L1283,REQ-110 需求项仍含「公区能源费分摊并写 AR」并引用业务 HTML「公区能源费分摊方式」·与已裁 D-01 及 DEC-R8-03/DEC-R8-11 相抵；本轮只登记不改该文件,open
+R8-U-08,RESIDUAL,important,docs/business-system-map-for-operations-v0.1.html,1213,BSM L1213 尾句「不缴即形成欠缴，超两个月清退」,该「超两个月」为硬编码，与同行「欠缴超过约定月数的一律清退（业务参数，按项目可配，出厂默认两个月，须同时配置上下限）」及 DEC-R8-12「两条触发条件取严、先到先触发」的计数冲突，属可配置原则残留；已列入第二批 HTML 修订草案（H-14g）待用户批准，本轮不改 HTML,open
