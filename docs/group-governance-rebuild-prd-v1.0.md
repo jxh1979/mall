@@ -1,5 +1,7 @@
 # 集团治理重建 PRD（V1.0·补断点）
 
+> **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
+
 > 2026-07-27 PRD 审计修订：①平台/集团级角色可按职位模板跨项目公司下钻，项目公司管理员限本项目，商户用户 fail-closed；②四类高危授权审批按治理 HTML 改为不可关闭的强制闸门，配置只能加严；③补授权申请人与审批人职责分离；④补岗位、职级、组织、商户或责任范围变化后立即重算并收回旧范围派生权限。当前实现若不满足这些规则，记为实现待对齐，不反向改写 PRD。
 
 > 生成：2026-06-27。业务规则以三份业务 HTML 为最终解释权；迁移、代码和接口只作为当前实现证据，不得反向改写业务规则。本文承接治理 HTML「综合体和集团 / 权限规则」及枚举 HTML §九，M1 需求、V169-V170 和当前代码仅用于说明追溯与实现状态。
@@ -92,7 +94,8 @@
 - Controller 同时校验 `analytics.group.view` 和 `requirePlatformScope()`；即使某商户用户误拿到权限，也会因 merchant scope 被拒绝。
 - 指标目录来自真实 ETL 快照：`revenue.net`、`revenue.ticket`、`revenue.bar`、`traffic.amusement`、`verify.done`、`risk.pending_review`；商户数由当日 merchant ETL 快照去重统计。
 - 优先读取 `analytics_business_metric_snapshots(segment_type='project')`；没有 project 口径快照时回退平台口径单行 `project_1/综合体（默认）`，不伪造多项目。
-- 对标红点阈值**后台可配，默认 `0.20`**（配置表 `analytics_ai_thresholds.benchmark_deviation`，V218 迁入；代码读不到时以 `0.20` 兜底）：项目/主体指标值低于集团均值的 `(1 - 阈值)` 倍（默认 80%，`value < average * (1 - deviation)`）时，返回 `belowBenchmarkMetrics` 并在前端显示红点。
+- 【**DEC-R7-P4**】2026-08-05 用户裁决：**提案已否决：阈值不写入 HTML，PRD 数值已删除**（DIFF-B-046②；PGM「集团下钻细则（已确认）」条·实测 L446 与「KPI 可见性分层」条·实测 L447 只写分层、未给对标偏离阈值）。
+- 对标红点阈值：**对标偏离阈值为业务参数，待用户裁决配置，配置前不标红**（配置表 `analytics_ai_thresholds.benchmark_deviation`，V218 迁入；**无出厂默认值**）。判定式：项目/主体指标值低于集团均值的 `(1 - 阈值)` 倍（`value < average * (1 - deviation)`）时，返回 `belowBenchmarkMetrics` 并在前端显示红点；**阈值未配置时不返回 `belowBenchmarkMetrics`、不标红**。**实现状态**：现实现在读不到配置时仍以 `0.20` 兜底，属**待改造实现残留**（应按本裁决改为「未配置即不标红」），**不得作为业务口径引用**。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/analytics/group-overview?groupBy=project`

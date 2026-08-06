@@ -897,7 +897,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `batch_id` | uuid | 批次，可为空 |
 | `from_location_id` | uuid | 来源位置 |
 | `to_location_id` | uuid | 目标位置 |
-| `movement_type` | varchar | `inbound/outbound/transfer/consume/count_adjust/surplus/damage/saved_bottle_store/saved_bottle_pickup/reverse` |
+| `movement_type` | varchar | `inbound/outbound/transfer/consume/count_adjust/surplus/damage/saved_bottle_store/saved_bottle_pickup/reverse/return_to_stock/lend_out/lend_return`（后三类见下方新增枚举表） |
 | `quantity` | numeric | 数量 |
 | `unit` | varchar | 单位 |
 | `actual_pour_volume` | numeric | 杯卖出品本次实际出酒量，`movement_type=consume` 且按杯出品时记录，可为空 |
@@ -913,6 +913,20 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 > 修订说明（2026-06-07）：
 > - 依 finding bar-2，新增 `actual_pour_volume`、`loss_volume` 记录按杯出品的单次实际出量与差异损耗。扣减规则：`loss_volume = actual_pour_volume - standard_pour_volume`（取自 §6.6 `bar_products`）；当 `loss_volume > loss_threshold` 时生成**损耗异常事件**（`inventory.loss_exception`，见 §9.4）进入异常核查。
 > - 依 finding supply-5，`movement_type` 新增 `surplus`（报溢/盘盈/异常增加）独立枚举，与 `count_adjust`（盘点调整）区分，使报溢可单独走审批+证据流程，并便于数据分析区分报损/报溢数量与金额。
+> - 新增（2026-08-05 DEC-R7-04）：`movement_type` 追加**回库／借出／归还**三类，命名与 `docs/supply-chain-inventory-development-design-v0.1.md` §6.13 **统一**，见下方新增枚举表。
+
+`movement_type` 新增枚举（2026-08-05 DEC-R7-04 文档层补齐；既有 code 一个未改名）：
+
+| code | 中文 | 语义 | 方向 | 备注 |
+|---|---|---|---|---|
+| `return_to_stock` | 回库 | 客人退品回到库房、客人存酒到期转为酒吧自有库存 | 增 | 2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造；与 `inbound`（采购入库）、`surplus`（盘盈）必须分开记 |
+| `lend_out` | 借出 | 跨主体借调中**不可消费物品**交付给借入方 | 减（保管责任转移，**所有权不转移**） | 2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造；不得用 `transfer` 代记，否则会错误地转移库存归属 |
+| `lend_return` | 归还 | 借入方将借用物品归还借出方 | 增（保管责任回转） | 2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造；`lend_out` 的反向动作 |
+
+> 同名提示：`bar_order_item_voids.return_to_stock`（§17.1 退菜退酒「是否回库」**布尔字段**）与本表 `movement_type=return_to_stock`（**流水类型取值**）同名但不同层，不得混用；退酒 `return_to_stock=true` 触发的库存回补流水，按本表取 `movement_type=return_to_stock`（GAP-38 代码改造时一并落地）。
+> 冲正口径（DEC-R7-04）：**冲正不新增 `movement_type`**，按流水 `status=reversed` 标记并按相反方向的调整类型落账；ENUM 十二类中不含「冲正」，**不得自行新增第十三类**。本表既有 `reverse` code 为历史取值，本轮**不改名**，其与「按 `status` 处理」口径的分歧一并归 **GAP-38** 代码改造。
+> 命名口径登记（GAP-38）：既有命名体系两表不一致（`transfer` vs `transfer_in`/`transfer_out`、`count_adjust` vs `count_correction` 等），统一命名属 **GAP-38 代码改造范畴**，落库前须先定统一口径。
+> 上述三类**代码与迁移尚未实现**，补齐前不得据本表认为已实现。
 
 ### 6.17 bar_recipes 配方表
 
