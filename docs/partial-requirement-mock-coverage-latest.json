@@ -1,6 +1,6 @@
 {
   "mock_coverage_version": "v0.1",
-  "status": "mock_coverage_gap",
+  "status": "mock_or_sandbox_acceptance_ready_but_production_evidence_pending",
   "generated_from": [
     "docs/requirements-code-implementation-matrix-v0.1.csv",
     "docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json"
@@ -54,8 +54,8 @@
           "path": "apps/web/src/admin/pages/BarCommissionsPage.tsx",
           "markers": [
             "bar-commissions-page",
-            "15%",
-            "10%"
+            "bar-commissions-kpi-sales",
+            "bar-commissions-kpi-non-sales"
           ]
         },
         {

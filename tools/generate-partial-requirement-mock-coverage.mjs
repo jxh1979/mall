@@ -12,7 +12,7 @@ const map = {
   "REQ-17": ["酒吧桌台/卡座/最低消费/点酒/赠饮/账单/异常/存酒 mock 验收闭环；真实支付、人脸、对象存储和供应商凭证仍按生产证据回填。", [
     ["admin_ui", "apps/web/src/admin/pages/BarOrdersPage.tsx", ["bar-orders-page", "deliveryPhotoAttachmentIds"]],
     ["admin_ui", "apps/web/src/admin/pages/StoredWinePage.tsx", ["stored-wine-page", "claim_items"]],
-    ["admin_ui", "apps/web/src/admin/pages/BarCommissionsPage.tsx", ["bar-commissions-page", "15%", "10%"]],
+    ["admin_ui", "apps/web/src/admin/pages/BarCommissionsPage.tsx", ["bar-commissions-page", "bar-commissions-kpi-sales", "bar-commissions-kpi-non-sales"]],
     ["ui_e2e", "tests/e2e/full-admin-remaining.spec.ts", ["ADM-BAR-002", "ADM-BAR-003", "ADM-BAR-004"]],
     ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset", "deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement"]],
     ["supplier_mock", "docs/t3b-supplier-sdk-mock-kit-v0.1.md", ["T3B_SUPPLIER_MOCK_KIT_READY", "NO_PRODUCTION_VENDOR_CONTROL"]],
