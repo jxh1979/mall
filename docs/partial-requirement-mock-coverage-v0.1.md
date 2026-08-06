@@ -50,7 +50,7 @@
 - mock/测试/页面文件：
   - admin_ui: `apps/web/src/admin/pages/BarOrdersPage.tsx`，markers=`bar-orders-page`, `deliveryPhotoAttachmentIds`
   - admin_ui: `apps/web/src/admin/pages/StoredWinePage.tsx`，markers=`stored-wine-page`, `claim_items`
-  - admin_ui: `apps/web/src/admin/pages/BarCommissionsPage.tsx`，markers=`bar-commissions-page`, `15%`, `10%`
+  - admin_ui: `apps/web/src/admin/pages/BarCommissionsPage.tsx`，markers=`bar-commissions-page`, `bar-commissions-kpi-sales`, `bar-commissions-kpi-non-sales`
   - ui_e2e: `tests/e2e/full-admin-remaining.spec.ts`，markers=`ADM-BAR-002`, `ADM-BAR-003`, `ADM-BAR-004`
   - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset`, `deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement`
   - supplier_mock: `docs/t3b-supplier-sdk-mock-kit-v0.1.md`，markers=`T3B_SUPPLIER_MOCK_KIT_READY`, `NO_PRODUCTION_VENDOR_CONTROL`
