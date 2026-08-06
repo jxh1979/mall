@@ -59,7 +59,7 @@
 - **处理期间照常结算**：**处理期间按原有效数值先行结算**；**结论生效后按差额补退**——不因异议挂起而暂停出账、也不因处理未决而重算历史账期。
 - **可异议范围不变**：酒吧商户同样只能就数字（漏算、少算、多算）提出异议，**不得对规则本身提出异议**；酒吧商户**不能自行决定酒吧通票域内分配方式**，只能提交价格资料、履约事实与异议。
 
-**异议期口径（2026-08-04 对齐 BSM「重要事项短信通知·给商户」条·实测 L1418）**
+**异议期口径（2026-08-04 对齐 BSM「重要事项短信通知·给商户」条·实测 L1420）**
 - **适用范围**：适用于**非积分类的商户账单**（房租、水电、物业、结算金额出账与调整、押金、违约金、分红）；**积分结算账单的账期与异议期由全国积分结算中心统一规定，两者互不包含**。
 - **起算**：异议期**自该账单在商户专区可查看之日的次日起算**；长度由后台配置（业务参数，按项目可配，**出厂默认 10 个工作日**）。
 - **提醒不影响起算**：**短信与商户手机应用推送均为提醒手段，发与不发、成功与否都不影响异议期的起算与届满**。
@@ -93,9 +93,9 @@ P0 五能力全部上线(后台「商户专区」菜单组,ADM-MER-003..007)，*
 | 我的对账 | ADM-MER-005 | 商户自助层 /api/v1/merchant-portal/settlements(+异议留言,平台裁决闭环不变) |
 | 我的合同 | ADM-MER-006 | 商户自助层 /api/v1/merchant-portal/contracts(关键信息最小披露) |
 | 费用通知 | ADM-MER-007 | 复用接收人配置(商户自助口径:强制本商户+登录主体) |
-| 我的分红 | ADM-MER-008 | 复用分红引擎商户视图 `GET /api/v1/finance/dividends/plans`、`GET /api/v1/finance/dividends/statements`、`GET /api/v1/finance/dividends/statements/{id}`（`finance.dividend.view`）：主理人**只读**——当前方案摘要 + 每期基数/比例/扣税/实发/状态 + 算式明细抽屉，月度预览可见（只看不发），**无任何写动作入口**；**本商户硬闸**同其余专区页（`currentMerchantScope`，跨商户读一律拒绝并留审计）；**对分红数字有异议的，与商户投诉并入同一通道、由客户关怀部统一受理**（BSM「商户提出的投诉与异议，与客人投诉并入同一通道」条·实测 L1187），异议成立由平台侧驳回重算落账（分红本身也在 BSM「重要事项短信通知·给商户」条·实测 L1418 的异议期适用范围内） |
+| 我的分红 | ADM-MER-008 | 复用分红引擎商户视图 `GET /api/v1/finance/dividends/plans`、`GET /api/v1/finance/dividends/statements`、`GET /api/v1/finance/dividends/statements/{id}`（`finance.dividend.view`）：主理人**只读**——当前方案摘要 + 每期基数/比例/扣税/实发/状态 + 算式明细抽屉，月度预览可见（只看不发），**无任何写动作入口**；**本商户硬闸**同其余专区页（`currentMerchantScope`，跨商户读一律拒绝并留审计）；**对分红数字有异议的，与商户投诉并入同一通道、由客户关怀部统一受理**（BSM「商户提出的投诉与异议，与客人投诉并入同一通道」条·实测 L1189），异议成立由平台侧驳回重算落账（分红本身也在 BSM「重要事项短信通知·给商户」条·实测 L1420 的异议期适用范围内） |
 
-> **联系人手机号 PII 加密（P0-A / ★GAP-07 / SEC-04，迁移 V339，2026-07-27）**：`merchant_fee_notification_recipient.recipient_phone` 落库为 AES-GCM 信封密文（`enc:v1:`），仓库层写时加密、读时解密，业务层拿到的仍是明文；数据库 `CHECK` 约束（`NOT VALID`）卡死任何明文新写入，仓库以外的手写 SQL / 批量导入绕不过；存量明文由启动期 `MultiPartyContactPhonePiiBackfill` 幂等回填就地加密（三层防二次加密）。读端按权限脱敏：持 `pii.contact_phone.view`（高危，默认仅平台管理员）才见明文，其余见掩码（前 3 后 4）。短信触达链路不受影响——发送侧（`MerchantFeeNotificationRecipientResolver`）经仓库读取，拿到的是解密后的明文。本域无按手机号的后端检索路径，加密不影响任何既有查询，也未建盲索引。统一口径见 `compliance-and-personal-information-protection-requirements-v0.1.md` §6.1。
+> **联系人手机号 PII 加密（P0-A / ★SEC-04，迁移 V339，2026-07-27）**：`merchant_fee_notification_recipient.recipient_phone` 落库为 AES-GCM 信封密文（`enc:v1:`），仓库层写时加密、读时解密，业务层拿到的仍是明文；数据库 `CHECK` 约束（`NOT VALID`）卡死任何明文新写入，仓库以外的手写 SQL / 批量导入绕不过；存量明文由启动期 `MultiPartyContactPhonePiiBackfill` 幂等回填就地加密（三层防二次加密）。读端按权限脱敏：持 `pii.contact_phone.view`（高危，默认仅平台管理员）才见明文，其余见掩码（前 3 后 4）。短信触达链路不受影响——发送侧（`MerchantFeeNotificationRecipientResolver`）经仓库读取，拿到的是解密后的明文。本域无按手机号的后端检索路径，加密不影响任何既有查询，也未建盲索引。统一口径见 `compliance-and-personal-information-protection-requirements-v0.1.md` §6.1。
 
 
 - 分页口径(AUD-005 收尾·#187):/settlements 与 /contracts 走真分页——`page`/`size`(默认 page=1、size=500),`total` 取同 scope 谓词的 `SELECT COUNT(*)` 真值、第 501+ 条经翻页可达(平台管理员全量口径下不再截断/撒谎 total);商户自 scope 仍无 LIMIT 谓词隔离、只见本商户。

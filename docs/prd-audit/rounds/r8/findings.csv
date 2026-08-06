@@ -1,0 +1,150 @@
+﻿finding_id,type,severity,file,line,html_evidence,disposition,status
+R8-A-01,A,info,third-party-business-access-product-prd-v0.1.md,§11#3(原L202),ENUM「售票与退款原则」条 L44;DEC-CFG-2026-08-03-12,退款理由删除「获授权特殊审批」，改为五种情形+U盘密钥逐笔放行,fixed
+R8-A-02,A,info,evidence-risk-control-product-prd-v0.1.md,§8.1#3(L271),BSM 企微会话条 L894;DEC-R6-23,企微长期保存合法性论证「未了义务」改为已了结并指向合规要求 §4.4,fixed
+R8-A-03,A,info,platform-governance-prd-v0.1.md,§15 企微质检行(L710),BSM L894;DEC-R6-23,同上（表格内联版）,fixed
+R8-A-04,A,info,terminal-page-product-prd-v0.1.md,§15#13(L354),BSM L894;DEC-R6-23,同上,fixed
+R8-A-05,A,info,third-party-business-access-product-prd-v0.1.md,§11#4(L211),BSM L894;DEC-R6-23,同上,fixed
+R8-A-06,A,info,00-current-effective-document-entry-v0.1.md,终端职责表 售票型一体机(L124),BSM「启用售票能力的一体机」条 L932;DEC-R7-05,删除「取票」职责，明确门票为动态二维码、不提供取票；不得售卖通票,fixed
+R8-A-07,A,info,00-current-effective-document-entry-v0.1.md,L552 要点②,DEC-R7-16,「票面原价」更名「各业态价格」,fixed
+R8-A-08,A,info,finance-settlement-product-prd-v0.1.md,§3A(L58),DEC-R7-16,「票面原价」更名「各业态价格」并标原称,fixed
+R8-A-09,A,info,member-loyalty-and-stored-value-development-design-v0.1.md,DEC-SV-SPEND-ORDER-001(L148),ENUM「储值卡类型与收款主体」条 L79;DEC-R3-2026-08-04-21/-24,扣款顺序由「可配·默认」改为写死先本金后赠送金（商户级卡例外）,fixed
+R8-A-10,A,info,member-loyalty-and-stored-value-development-design-v0.1.md,DEC-SV-REFUND-001(L149)/DEC-SV-CLOSE-001(L150),同上,退卡只退未消费本金、赠送金不退现/销户赠送金清零，去掉「默认」措辞,fixed
+R8-A-11,A,info,member-loyalty-and-stored-value-development-design-v0.1.md,实现缺口清单(L155),同上,「默认扣款/退现顺序」改为「写死的」,fixed
+R8-A-12,A,info,terminal-page-product-prd-v0.1.md,§9.2 Web 排除清单(L204),ENUM「核销记录状态」条 L41;DEC-CFG-2026-08-03-12,删除「人工放行」路径，明确系统不提供人工放行,fixed
+R8-A-13,A,info,operation-traceability-and-terminal-switch-prd-v0.1.md,§4.1.3 verification.previewed(L345),ENUM L41;DEC-R6-08,核销预检与 ENUM 六态冲突，登记为待改造缺口（不得反向定义业务规则）,fixed
+R8-A-14,A,info,operation-traceability-and-terminal-switch-prd-v0.1.md,P0 留痕矩阵 票务核销行(L51),同上,括注扩为两处冲突：人工放行 + 核销预检,fixed
+R8-A-15,A,info,terminal-page-product-prd-v0.1.md,L41/L55/L85/L174,BSM「容量控制」条 L1162;PGM L478;D-02,「场次容量」4 处改「项目实时在玩人数（单维容量）」,fixed
+R8-A-16,A,info,web-mobile-app-terminal-extension-product-prd-v0.1.md,L52,同上,「场次容量」改「项目实时在玩人数（单维容量）」,fixed
+R8-A-17,A,info,real-estate-full-chain-domain-prd-v0.1.md,§2 全生命周期变更(L30),ENUM「合同变更类型」条 L201;DEC-R7-15,合同变更类型由口语化六类改为 HTML 原文八类,fixed
+R8-A-18,A,info,platform-governance-prd-v0.1.md,§8A 帮客人订位(L313),BSM L1303;DEC-R6-15,锚点 L1301→L1303；「爬约/爽约」差异说明失效已删,fixed
+R8-A-19,A,info,terminal-page-product-prd-v0.1.md,L145/L159,同上,同源「爬约」差异说明 + 锚点改 L1303,fixed
+R8-A-20,A,info,web-mobile-app-terminal-extension-product-prd-v0.1.md,L194,同上,锚点 L1301→L1303,fixed
+R8-A-21,A,info,p0-end-to-end-acceptance-and-edge-cases-v0.1.md,AC-ENE-01(L328),ENUM L207/L150;DEC-R7-35;D-01,公区能源费四模式分摊作废，改为商户表计代收、公区只归集不分摊,fixed
+R8-A-22,A,info,full-admin-ui-acceptance-matrix-v0.1.md,UI-ADM-ENE-001(L57),同上,同上（UI 验收行）,fixed
+R8-A-23,A,info,pending-development-backlog-v0.1.md,楼宇运营深化行(L208),同上,by_area/by_usage 标注口径已作废、属待改造缺口,fixed
+R8-A-24,A,info,merchant-points-settlement-rules-v1.0.md,§16.1(L327),ENUM「积分结算账期」条 L77;DEC-R3-2026-08-04-19,异议期 5 个工作日改十个工作日,fixed
+R8-A-25,A,info,merchant-points-settlement-rules-v1.0.md,§6.4(L116),ENUM L77;DEC-R4-2026-08-04-91,净现金收付款作废，改各自总额分别收付不得轧差,fixed
+R8-A-26,A,info,merchant-points-settlement-rules-v1.0.md,§16.1(L328),BSM L1496/L1506;DEC-R4-35/-36/-40,付款时点段改写（本轮返工 R-1 已再修正，见 R-1）,fixed
+R8-A-27,A,info,merchant-points-settlement-rules-v1.0.md,§16.1 引用块,任务书 13f,登记 R8-C01 积分结算付款时点算术矛盾,fixed
+R8-A-28,A,info,merchant-points-settlement-rules-v1.0.md,§16.2(L337),ENUM L77,净现金收付款改为按各自总额分别列示、不得轧差,fixed
+R8-A-29,A,info,merchant-points-settlement-rules-v1.0.md,§8.3(L152/L154),BSM 零售参考价条 L1498;DEC-R3-31;DEC-CFG-03/-04,滚动 30 天改为后台配置滚动取价窗口（默认三十天，含上下限与无成交延长）,fixed
+R8-A-30,A,info,merchant-points-settlement-rules-v1.0.md,§3(L45)/§8.4(L163)/§18(L387),同上,同源「滚动 30 天」三处收敛,fixed
+R8-A-31,A,info,merchant-points-settlement-rules-v1.0.md,全文 21 处,ENUM「一律叫商品规格」;DEC-R3B-15,SKU 全部改「商品规格」（无机读标识被误改）,fixed
+R8-A-32,A,info,ticketing-entitlement-checkin-product-prd-v0.1.md,权益类型表 卡座预约入场名额(L160),ENUM「权益类型」条 L34,照抄 HTML：只授予该酒吧入场资格、不含赠酒权益,fixed
+R8-A-33,A,info,ticketing-entitlement-checkin-product-prd-v0.1.md,§8.3(L378 区),ENUM L34,新增「不存在免核销入场的情形」,fixed
+R8-A-34,A,info,customer-app-miniapp-product-prd-v0.1.md,§3B 订卡邀请函(L57),ENUM L34,补入场必须核销与名额边界,fixed
+R8-A-35,A,info,finance-settlement-product-prd-v0.1.md,§3A 凑整(L46),BSM「综合／联合通票的定价构成」条 L748,尾数 8/9/0 改为后台配置允许尾数集合（出厂默认 8、9、0）,fixed
+R8-A-36,A,info,settlement-rebuild-prd-v1.0.md,L158,同上,同上,fixed
+R8-A-37,A,info,third-party-business-access-product-prd-v0.1.md,§2(L17),ENUM「统一原则」条 L160,补「不伪造对账结果」，四款并列,fixed
+R8-A-38,A,info,ticketing-entitlement-checkin-product-prd-v0.1.md,§12#10(L502),BSM「权益转赠」条 L798;DEC-R4-88,补二维码多人打开、最先确认领取者取得、转发风险自负,fixed
+R8-A-39,A,info,finance-settlement-product-prd-v0.1.md,L809,BSM「服务费」条 L1021;决策台账 L1139,服务费出账口径由「实际发放数」改为「月结定格时确定的应发数」,fixed
+R8-A-40,A,info,real-estate-full-chain-domain-prd-v0.1.md,§2 出账时序1(L36),同上,同上,fixed
+R8-A-41,A,info,business-operations-layer-spec-v0.2.md,22 处,ENUM L41;DEC-CFG-2026-08-03-12,「人工放行」废止：文首口径块 + 逐处移除加注,fixed
+R8-A-42,A,info,data-analysis-layer-spec-v0.2.md,5 处,同上,同上（含 L460 指标整行停用）,fixed
+R8-A-43,A,info,evidence-risk-layer-spec-v0.2.md,4 处,同上,同上（含 L564 验收项停用）,fixed
+R8-A-44,A,info,terminal-display-layer-spec-v0.2.md,1 处,同上,核销工作台按钮清单移除并加注,fixed
+R8-A-45,A,info,business-operations-layer-spec-v0.2.md,状态枚举表 差异行(L991),DEC-R4-2026-08-04-43,对账差异「已忽略」删除，收为四态,fixed
+R8-A-46,A,info,third-party-access-layer-spec-v0.2.md,差异记录行(L394),同上,四态 + ignored 停用,fixed
+R8-A-47,A,info,third-party-access-layer-spec-v0.2.md,异常/差异字段字典 处理状态(L367),同上,移除「已忽略」并加注,fixed
+R8-A-48,A,info,leasing-acquisition-prd-v1.0.md,L84,GAP-07 编号归还 §7.4 高价值阈值,★GAP-07 / SEC-04 改为 ★SEC-04,fixed
+R8-A-49,A,info,merchant-portal-zone-prd-v0.1.md,L98,同上,同上,fixed
+R8-A-50,A,info,supply-chain-inventory-product-prd-v0.1.md,L126,同上,同上,fixed
+R8-A-51,A,info,terminal-page-product-prd-v0.1.md;web-mobile-app-terminal-extension-product-prd-v0.1.md,多处,BSM 售票能力条 实测 L932,锚点 L930→L932,fixed
+R8-A-52,A,info,supply-chain-inventory-product-prd-v0.1.md,L73/L90,BSM 库存流水行 实测 L1108,锚点 L1106→L1108（含正文 sed 回读命令）,fixed
+R8-A-53,A,info,supply-chain-inventory-product-prd-v0.1.md,L327/L337/L349,BSM 高价值物品条 实测 L1110,锚点 L1108→L1110,fixed
+R8-A-54,A,info,business-dashboard-metrics-product-prd-v0.1.md,L95,BSM 异常预警页面 实测 L1480,锚点 L1478→L1480,fixed
+R8-A-55,A,info,business-dashboard-metrics-product-prd-v0.1.md,L93,BSM 异常预警入口 实测 L1657,锚点 L1654→L1657,fixed
+R8-A-56,A,info,docs/*.md（全库抽验）,51 处,各条目名 实测行号,自动校正 51 处锚点（±6 行唯一候选才改）,fixed
+R8-A-57,A,info,docs/*.md（全库抽验）,11 处,各条目名 实测行号,手工校正 11 处锚点（含区间型）,fixed
+R8-A-58,A,info,amusement-business-operations-product-prd-v0.1.md;evidence-risk-control-product-prd-v0.1.md,L431/L405,各 PRD 文首「变更日志历史行号不改写」约定,有意回退 2 处,fixed
+R8-A-59,A,info,docs/*.md（全库抽验）,21 处,转述式条目名/多候选,未改 21 处（无法机械唯一判定）,fixed
+R8-A-60,A,info,platform-governance-prd-v0.1.md,§12B 扣薪与 20% 上限之间,任务书 23,登记 R8-C03 事假扣薪与 20% 上限矛盾及方向,fixed
+R8-M-01,A,info,docs/prd-audit/authority-rule-ledger.csv,768 行,三份 HTML 2026-08-05 实测,anchor_or_line 重锚（EXACT 665 + FUZZY 103）,fixed
+R8-M-02,A,info,docs/prd-audit/authority-rule-ledger.csv,76 行,无法定位,标 ORPHANED(旧记 NNN)，保留旧值不臆造,fixed
+R8-M-03,A,info,docs/prd-audit/authority-rule-ledger.csv,BEQ-0123~0167,ENUM 未登记条目,追加 45 行,fixed
+R8-M-04,A,info,docs/prd-audit/authority-rule-ledger.csv,BSM-0531~0541,BSM 新规则,追加 11 行,fixed
+R8-M-05,A,info,docs/prd-audit/authority-rule-ledger.csv,PGM-0193,PGM L478 游乐容量,追加 1 行,fixed
+R8-M-06,A,info,docs/prd-audit/html-prd-coverage.csv,BEQ-0004/BEQ-0066,ENUM L34 等,FULL→PARTIAL 并挂 finding,fixed
+R8-M-07,A,info,docs/prd-audit/html-prd-coverage.csv,BSM-0530/PGM-0192,service-order PRD L3,NOT_APPLICABLE→FULL,fixed
+R8-M-08,A,info,docs/prd-audit/html-prd-coverage.csv,11 行,service-order PRD,prd_path 改指（去 5 处指向决策日志的错配）,fixed
+R8-M-09,A,info,docs/prd-audit/html-prd-coverage.csv,+57 行,phase=r8-rebuild,追加新映射行（FULL 12 / PARTIAL 45）,fixed
+R8-M-10,A,info,docs/prd-audit-fix-change-log-20260804.md,§7.4A,41 条 GAP 登记,追加 GAP 状态总表 + 三条勘误注（仅追加、不改原行）,fixed
+R8-F01,A,info,docs/prd-audit/html-prd-coverage.csv,BEQ-0004,ENUM「权益类型」条 L34,卡座入场名额权益边界 PRD 覆盖不全，已改 PARTIAL 并由 A 类补正文,fixed
+R8-F02,A,info,docs/prd-audit/html-prd-coverage.csv,BEQ-0004,ENUM L34,「不存在免核销入场」PRD 原缺，已改 PARTIAL 并补正文,fixed
+R8-F03,A,info,docs/prd-audit/html-prd-coverage.csv,BSM-0540,BSM L748,允许尾数集合可配口径原无登记行，已补登记并挂 finding,fixed
+R8-F04,A,info,docs/prd-audit/html-prd-coverage.csv,BSM-0541,BSM L1498,滚动取价窗口可配口径原无登记行，已补登记并挂 finding,fixed
+R8-F05,A,info,docs/prd-audit/html-prd-coverage.csv,BSM-0541,BSM L1498,窗口内无有效成交自动向前延长，原无登记行，已补登记,fixed
+R8-F06,A,info,docs/prd-audit/html-prd-coverage.csv,BEQ-0066,ENUM L160,统一原则「不伪造对账结果」PRD 原缺，已改 PARTIAL 并补正文,fixed
+R8-B-01,B,important,docs/prd-audit-fix-change-log-20260804.md,§7.4 L1990-L2014,GAP-01~GAP-24 登记表,GAP-01~24 共 24 条四轮无人复核；谁复核/何时/何优先级待用户拍板,pending-user
+R8-B-02,B,important,docs/data-risk-ai-development-design.md 等,多处,DEC-CFG-2026-08-03-10 / L-19,企微会话「永久保存」三个结构性缺口：旧留存口径未删、无机械门禁、合法性论证未了,pending-user
+R8-B-03,B,important,docs/prd-audit/authority-rule-ledger.csv;docs/*.md,全库,R8 实测旧账本 90% 行号已错,裸行号锚点制度是否存废（每改一次 HTML 全部锚点作废）待裁决,pending-user
+R8-B-04,B,blocking,跨文件（押金退还链条）,-,ENUM L202;BSM L1217;BSM L1506,C-04 押金退还 30 日等待期 × 三个付账日 × 异议期未届满顺延，串起来对不上,pending-user
+R8-B-05,B,important,跨文件（会员降级）,-,BSM L809,C-05 降级提前 30 天通知与滚动周期实时定级窗口不同，通知与实际定级必然错位,pending-user
+R8-B-06,B,blocking,跨文件（押金/清退）,-,BSM L1213;ENUM L202,C-07 押金收取月数与欠缴清退月数无交叉约束，合法配置即可让押金不足清偿,pending-user
+R8-B-07,B,important,跨文件（请假扣薪）,-,BSM L1316;BSM L1505;ENUM L138,C-10 跨月请假「只算落在当月的天数」未说明按自然日还是营业日，夜班跨日无解,pending-user
+R8-B-08,B,important,跨文件（分红预览）,-,BSM L1599;营业日 10:00 口径,C-06 分红预览作业若按自然月边界 1 日凌晨跑，读到未闭合的上月，违反最终快照铁律,pending-user
+R8-B-09,B,important,跨文件（第三方回流）,-,ENUM L162;DEC-R4-2026-08-04-43,回流结果状态「已忽略」是否同受 DEC-R4-43 约束（对账差异侧已删该终态）,pending-user
+R8-B-10,B,important,docs/prd-audit/html-prd-coverage.csv,-,重建后矩阵实测,储值卡域两份 PRD 承接重叠、其一零登记；另有三份 PRD 矩阵零登记,pending-user
+H-01,C,important,docs/business-enum-quick-reference-v0.1.html;business-system-map-for-operations-v0.1.html,-,ENUM L77;BSM L816/L1577,积分结算付款句「每月十五日」改为「异议期届满后的下一个付账日」（方向已裁）,draft-pending-approval
+H-02,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM 薪资扣除上限条,薪资扣除上限增列「请假扣薪不计入合计上限」（方向已裁 R8-C03）,draft-pending-approval
+H-03,C,important,docs/business-system-map-for-operations-v0.1.html;business-enum-quick-reference-v0.1.html,-,BSM 两句 vs ENUM L207/L150,公区能源费 BSM 两句与 ENUM 直接冲突（用户已裁 D-01，出建议）,draft-pending-approval
+H-04,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1162;PGM L478,章节标题与摘要句里的「场次容量」改为项目实时在玩人数（方向已裁 D-02）,draft-pending-approval
+H-05,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1021,服务费出账句「实际发放数」应为「月结定格时确定的应发数」,draft-pending-approval
+H-06,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1506,C-08「唯一的例外是账上资金不足」与同句并列的其他顺延矛盾,draft-pending-approval
+H-07,C,important,docs/business-system-map-for-operations-v0.1.html,-,BSM L1599,C-09 分红周期示例句量纲对不上,draft-pending-approval
+H-08,C,important,docs/business-enum-quick-reference-v0.1.html,-,ENUM L162,回流状态删除「已忽略」（依赖 B 类 R8-B-09 裁决）,draft-pending-approval
+R-1,REWORK,blocking,docs/merchant-points-settlement-rules-v1.0.md,§16.1,ENUM L77;BSM L816/L1577;BSM L1496/L1506,恢复 HTML 现行付款时点「每月十五日」；撤销对该句的作废宣告（只保留净额作废）；5/15/25 付账日整段移入 R8-C01 待批块,fixed-in-rework
+R-2,REWORK,important,third-party-business-access;real-estate-full-chain-domain;merchant-portal-zone;platform-governance;supply-chain-inventory PRD,5 处 + 同源 2 处,BSM L1420/L1718/L1112/L1110 实测,锚点错行修正：给商户 L1418→L1420、L1417→L1420(x3)、可离场办理的事 L1715→L1718(x2)、客人存酒 L1110→L1112、沿革尾巴 L1108→L1110,fixed-in-rework
+R-3,REWORK,important,docs/service-order-product-prd-v0.1.md;docs/platform-governance-prd-v0.1.md,章导语/章区间,BSM L1035-L1059 实测,服务点单章导语 L1034→L1036、章区间 L1035–L1057→L1035–L1059、覆盖清单同步；员工手机端 L1293–L1326 实测复核无误、未改,fixed-in-rework
+R-4,REWORK,blocking,business-operations-layer-spec;evidence-risk-layer-spec;terminal-display-layer-spec,整文件行尾,HEAD 三份均为全 CRLF,被整文件转 LF 制造 7242 行噪声，已 LF→CRLF 还原，实质 diff 与修前一致,fixed-in-rework
+R-5,REWORK,important,多文件,见各条,BSM L1162;PGM L478;BSM L1498;ENUM L41;DEC-R7-16,第二向漏项收尾：场次容量 11 处、滚动 30 天与 SKU、GAP-07 去重、人工放行 3 处标注、票面原价残留 3 处,fixed-in-rework
+R-6,REWORK,important,docs/prd-audit/rounds/r8/findings.csv,-,本轮各来源,补产出 findings.csv（本文件）,fixed-in-rework
+R-7,REWORK,important,docs/prd-audit/authority-rule-ledger.csv,BSM-0033;BSM-0063,reanchor-manual-review.csv old_anchor 726/771,两条错锚 1809/731 改 ORPHANED(旧记 726)/ORPHANED(旧记 771),fixed-in-rework
+R-8,REWORK,blocking,docs/openapi/openapi-p0.json;docs/openapi/openapi-p0.yaml;docs/p0-openapi-operation-acceptance-matrix-v0.1.md;docs/p0-openapi-contract-closure-appendix-v0.1.md,upsertWecomRetentionPolicy,L-19 作废批注,乙方案：批注合入 openapi 源 description 并重生成生成物，修复 verify:predeploy,fixed-in-rework
+GAP-01,GAP,important,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,营业日配置全面不符｜挂起-无人复核(钱),open
+GAP-02,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,差异表状态词表不符｜挂起-无人复核,open
+GAP-03,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,超池仍为结算期出口｜挂起-无人复核,open
+GAP-04,GAP,important,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,池分配未逐票减除｜挂起-无人复核(钱),open
+GAP-05,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,恒等式改造顺序依赖｜挂起-无人复核,open
+GAP-06,GAP,important,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,收入流需扩第 10 类｜挂起-无人复核(钱),open
+GAP-07,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,高价值阈值五处不符｜挂起-无人复核,open
+GAP-08,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,多股东模型缺失｜挂起-无人复核,open
+GAP-09,GAP,important,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,发放保护线只进不出｜挂起-无人复核(钱),open
+GAP-10,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,分红收入取数口径过时｜挂起-无人复核,open
+GAP-11,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,库存流水 E-26(quantity>0)｜挂起-无人复核,open
+GAP-12,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,报损与仓库管控无实现｜挂起-无人复核,open
+GAP-13,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,服务费与小费无账单列｜挂起-无人复核,open
+GAP-14,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,最晚到店时间零承载｜挂起-无人复核,open
+GAP-15,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,转存能力零承载｜挂起-无人复核,open
+GAP-16,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,转让模型不一致｜挂起-无人复核,open
+GAP-17,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,账单三态未落地｜挂起-无人复核,open
+GAP-18,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,桌台生命周期无独立列｜挂起-无人复核,open
+GAP-19,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,手机号无条件唯一｜挂起-无人复核,open
+GAP-20,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,跨项目下钻未走审批｜挂起-无人复核,open
+GAP-21,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,页面权限字段矩阵未同步｜挂起-已登记(并入 GAP-28),open
+GAP-22,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,招商域页面 ID 前缀不一致｜挂起-无人复核,open
+GAP-23,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,UI 验收矩阵缺六行｜挂起-无人复核,open
+GAP-24,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,代码/迁移/OpenAPI 待改造｜挂起-无人复核,open
+GAP-25,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,企微旧留存口径域外残留｜已闭合(文档层),closed-doc-layer
+GAP-26,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,开关引擎 opt-out→opt-in｜挂起-已登记,open
+GAP-27,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,游乐场次 7 态持久化｜挂起-已登记,open
+GAP-28,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,商户服务工单分表独立七态｜挂起-已登记,open
+GAP-29,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,订台定金达标原路退回｜挂起-已登记,open
+GAP-30,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,退品低消保护判定缺失｜挂起-已登记,open
+GAP-31,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,核销「预检通过」态移除｜挂起-已登记,open
+GAP-32,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,游乐「当天」营业日修正｜挂起-已登记,open
+GAP-33,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,异常预警页面零承载｜挂起-已登记,open
+GAP-34,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,拆台/撤销转台/循环上限｜挂起-已登记,open
+GAP-35,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,CSV 台账正文残余陈旧｜挂起-已登记(R8 已量化 259 行),open
+GAP-36,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,PRD/台账行号锚点成批漂移｜已闭合(文档层)·制度性复发,closed-doc-layer
+GAP-37,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,收款/收入主体拆两列后实现仍单列｜挂起-已登记,open
+GAP-38,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,库存流水白名单缺三个 code｜挂起-已登记(文档两层已补齐),open
+GAP-39,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,取消取票后仍残留「取票」能力｜挂起-已登记(实测残留),open
+GAP-40,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,风控/对标阈值仍为旧自设值｜挂起-已登记(R8 已勘误锚点),open
+GAP-41,GAP,info,docs/prd-audit-fix-change-log-20260804.md,§7.4/§7.4A,见 §7.4A 状态依据列,分红前置借款清偿实现无落点｜挂起-已登记,open
+R8-U-01,RESIDUAL,advisory,docs/prd-audit/authority-rule-ledger.csv,259 行,183 漂移 + 76 ORPHANED,账本正文与当前 HTML 不一致，本轮未改写正文（GAP-35 仍开放）,open
+R8-U-02,RESIDUAL,advisory,三份业务 HTML,161 行,scripts/out/unregistered-lines.txt,重锚后仍有 161 行 HTML 内容无账本落点，本轮只补任务书点名部分,open
+R8-U-03,RESIDUAL,advisory,docs/prd-audit/html-prd-coverage.csv,9 行,*-MPS-000N 伪 rule_id,coverage 中 9 行伪 rule_id 在账本无对应（改前即存在），本轮未动,open
+R8-U-04,RESIDUAL,advisory,docs/prd-audit/html-prd-coverage.csv,45 行,phase=r8-rebuild 新增 PARTIAL,45 条新 PARTIAL 行只经机检、未逐句核验,open
+R8-U-05,RESIDUAL,advisory,docs/business-operations-layer-spec-v0.2.md,L81 等,同格中「开放、场次、容量」旧三维措辞,R8 返工只统一了「场次容量」词条；同格并列的口语化「场次、容量」未改，已由文首口径块覆盖,open
+H-09,C,important,docs/business-system-map-for-operations-v0.1.html,1421,BSM L1421「下列三类不在可关闭范围内」实列四项（商户应收应付变化/未核销票到期/客人金额变化/存酒到期）,不可关闭清单数量词与列举不符——HTML 修订草案应改「三类」为「四类」或合并列举,draft-pending-approval

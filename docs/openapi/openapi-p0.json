@@ -12703,8 +12703,8 @@
           "compliance"
         ],
         "operationId": "upsertWecomRetentionPolicy",
-        "summary": "配置企微留存策略（默认180天）",
-        "description": "R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一 upsert。需 wecom.retention.manage（高敏需审批）。",
+        "summary": "配置企微留存策略（默认180天） **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**",
+        "description": "R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一 upsert。需 wecom.retention.manage（高敏需审批）。 **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**",
         "x-permission": "wecom.retention.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
