@@ -49,11 +49,11 @@ R8-A-47,A,info,third-party-access-layer-spec-v0.2.md,异常/差异字段字典 �
 R8-A-48,A,info,leasing-acquisition-prd-v1.0.md,L84,GAP-07 编号归还 §7.4 高价值阈值,★GAP-07 / SEC-04 改为 ★SEC-04,fixed
 R8-A-49,A,info,merchant-portal-zone-prd-v0.1.md,L98,同上,同上,fixed
 R8-A-50,A,info,supply-chain-inventory-product-prd-v0.1.md,L126,同上,同上,fixed
-R8-A-51,A,info,terminal-page-product-prd-v0.1.md;web-mobile-app-terminal-extension-product-prd-v0.1.md,多处,BSM 售票能力条 实测 L932,锚点 L930→L932,fixed
-R8-A-52,A,info,supply-chain-inventory-product-prd-v0.1.md,L73/L90,BSM 库存流水行 实测 L1108,锚点 L1106→L1108（含正文 sed 回读命令）,fixed
-R8-A-53,A,info,supply-chain-inventory-product-prd-v0.1.md,L327/L337/L349,BSM 高价值物品条 实测 L1110,锚点 L1108→L1110,fixed
-R8-A-54,A,info,business-dashboard-metrics-product-prd-v0.1.md,L95,BSM 异常预警页面 实测 L1480,锚点 L1478→L1480,fixed
-R8-A-55,A,info,business-dashboard-metrics-product-prd-v0.1.md,L93,BSM 异常预警入口 实测 L1657,锚点 L1654→L1657,fixed
+R8-A-51,A,info,terminal-page-product-prd-v0.1.md;web-mobile-app-terminal-extension-product-prd-v0.1.md,多处,BSM 售票能力条 实测 L937,锚点 L930→L932,fixed
+R8-A-52,A,info,supply-chain-inventory-product-prd-v0.1.md,L73/L90,BSM 库存流水行 实测 L1113,锚点 L1106→L1108（含正文 sed 回读命令）,fixed
+R8-A-53,A,info,supply-chain-inventory-product-prd-v0.1.md,L327/L337/L349,BSM 高价值物品条 实测 L1115,锚点 L1108→L1110,fixed
+R8-A-54,A,info,business-dashboard-metrics-product-prd-v0.1.md,L95,BSM 异常预警页面 实测 L1485,锚点 L1478→L1480,fixed
+R8-A-55,A,info,business-dashboard-metrics-product-prd-v0.1.md,L93,BSM 异常预警入口 实测 L1663,锚点 L1654→L1657,fixed
 R8-A-56,A,info,docs/*.md（全库抽验）,51 处,各条目名 实测行号,自动校正 51 处锚点（±6 行唯一候选才改）,fixed
 R8-A-57,A,info,docs/*.md（全库抽验）,11 处,各条目名 实测行号,手工校正 11 处锚点（含区间型）,fixed
 R8-A-58,A,info,amusement-business-operations-product-prd-v0.1.md;evidence-risk-control-product-prd-v0.1.md,L431/L405,各 PRD 文首「变更日志历史行号不改写」约定,有意回退 2 处,fixed
@@ -79,7 +79,7 @@ R8-B-01,B,important,docs/prd-audit-fix-change-log-20260804.md,§7.4 L1990-L2014,
 R8-B-02,B,important,docs/data-risk-ai-development-design.md 等,多处,DEC-CFG-2026-08-03-10 / L-19,企微会话「永久保存」三个结构性缺口：旧留存口径未删、无机械门禁、合法性论证未了,in-progress
 R8-B-03,B,important,docs/prd-audit/authority-rule-ledger.csv;docs/*.md,全库,R8 实测旧账本 90% 行号已错,裸行号锚点制度存废；已裁（DEC-R8-17）——废除裸行号、PRD 与账本一律改条目名主锚点、BSM/PGM 条目定稳定标识、行号只由脚本按条目名实时生成、配套锚点机检门禁随重构轮建设，待实施,ruled-pending-implementation
 R8-B-04,B,blocking,跨文件（押金退还链条）,-,ENUM L202;BSM L1217;BSM L1506,C-04 押金退还 30 日等待期 × 三个付账日 × 异议期未届满顺延，串起来对不上,resolved
-R8-B-05,B,important,跨文件（会员降级）,-,BSM L809,C-05 降级提前 30 天通知与滚动周期实时定级窗口不同，通知与实际定级必然错位,pending-user
+R8-B-05,B,important,跨文件（会员降级）,-,BSM「等级与成长值」条·实测 L814；ENUM「等级与成长值」条·实测 L65,C-05 降级提前 30 天通知与滚动周期实时定级窗口不同，通知与实际定级必然错位；用户裁 B 版（正式编号 DEC-R8-28；草案临时编号为 DEC-R8-2A，两套编号对应表见 changelog-html-revision-b2.md §七）：提前通知改称「降级预警」、预警非降级决定、最终以保护期结束当日按届时滚动周期重算为准、预警后重新达标不降并发「已保级」通知、应降但此前未预警的降级后立即补发通知；2026-08-06 R8-H2 已落 BSM/ENUM 两处,resolved
 R8-B-06,B,blocking,跨文件（押金/清退）,-,BSM L1213;ENUM L202,C-07 押金收取月数与欠缴清退月数无交叉约束，合法配置即可让押金不足清偿,resolved
 R8-B-07,B,important,跨文件（请假扣薪）,-,BSM L1316;BSM L1505;ENUM L138,C-10 跨月请假「只算落在当月的天数」未说明按自然日还是营业日，夜班跨日无解,resolved
 R8-B-08,B,important,跨文件（分红预览）,-,BSM L1599;营业日 10:00 口径,C-06 分红预览作业若按自然月边界 1 日凌晨跑，读到未闭合的上月，违反最终快照铁律,resolved
@@ -155,4 +155,14 @@ H-11,C,blocking,docs/business-enum-quick-reference-v0.1.html;docs/business-syste
 H-12,C,important,docs/business-system-map-for-operations-v0.1.html,1316,BSM L1316「跨月请假只算落在当月的天数」,跨月班次归属：班次工时/考勤/请假一律归属班次结束时点所在月份·跨周同理；请假扣薪分母取归属月份当期总工时；已月结定格月份之后销假或撤销在当期薪资单冲正并注明来源·不回改已定格月份（DEC-R8-14 关闭 C-10 / R8-B-07）,implemented
 R8-U-06,RESIDUAL,advisory,docs/business-decision-log-v0.1.md,§8 L62-64,BSM L1123;PGM L478;ENUM L114,§8「游乐容量」仍写「按具体项目 + 具体场次/时段 + 点位/设备控制容量」与「具体核销放行以场次容量为主控口径」·全节无任何作废标注·与已裁 D-02 及 DEC-R8-04/DEC-R8-10 相抵；本轮只登记不改该文件,open
 R8-U-07,RESIDUAL,advisory,docs/requirement-traceability-matrix-v0.1.md,REQ-110 L245,ENUM L207;BSM L1213/L1227/L1283,REQ-110 需求项仍含「公区能源费分摊并写 AR」并引用业务 HTML「公区能源费分摊方式」·与已裁 D-01 及 DEC-R8-03/DEC-R8-11 相抵；本轮只登记不改该文件,open
-R8-U-08,RESIDUAL,important,docs/business-system-map-for-operations-v0.1.html,1213,BSM L1213 尾句「不缴即形成欠缴，超两个月清退」,该「超两个月」为硬编码，与同行「欠缴超过约定月数的一律清退（业务参数，按项目可配，出厂默认两个月，须同时配置上下限）」及 DEC-R8-12「两条触发条件取严、先到先触发」的计数冲突，属可配置原则残留；已列入第二批 HTML 修订草案（H-14g）待用户批准，本轮不改 HTML,open
+R8-U-08,RESIDUAL,important,docs/business-system-map-for-operations-v0.1.html,1213,BSM L1213 尾句「不缴即形成欠缴，超两个月清退」,该「超两个月」为硬编码，与同行「欠缴超过约定月数的一律清退（业务参数，按项目可配，出厂默认两个月，须同时配置上下限）」及 DEC-R8-12「两条触发条件取严、先到先触发」的计数冲突，属可配置原则残留；2026-08-06 R8-H2 第二批已按正式编号 DEC-R8-33（草案临时编号 DEC-R8-2E，对应表见 changelog-html-revision-b2.md §七）落地——尾句改为「不缴即形成欠缴；该笔欠缴与租金、物业费等其他欠费合并计算，清退与否一律按本条前述两条触发条件（押金余额硬线、欠缴超过约定月数）取严判定，不另设独立的清退月数」，三份 HTML 中「超两个月清退」归零，「两条触发条件」计数恢复自洽,fixed
+R8-B-11,B,important,跨文件（通票分账·第二段排名）,-,ENUM「酒吧通票可分配池」条·实测 L49；BSM「酒吧通票可分配池」条·实测 L751,排名并列无 tie-break 规则：动态百分比制按「本票覆盖集合内排名」取表，但两家酒吧核销数完全相同时归谁排前未定；以覆盖 5 家表为例，第 4 名 20%、第 5 名 15%，并列直接决定 5% 的钱归谁。新旧口径都缺此规则（旧的相对权重制同样按排名分档），非本轮改制引入，但动态百分比制下差额固定可算、争议更直接。待裁：并列时按什么二级排序（如营业额、开业时间、商户编号），或并列名次的百分比取平均后均分。本地票 11 号,pending-user
+R8-B-12,B,important,docs/business-system-map-for-operations-v0.1.html,803,BSM「权益转赠」条·实测 L803（本轮 DEC-R8-23 新增的转赠窗口句）,多人票转赠边界歧义：新增句「该票一经完成检票环节（刷码核销成功），其本人及其全部权益不得再行转赠」在多人票场景下未定「本人」的辖域——是仅该已入场的一人失去转赠资格（其余未入场人份仍可转），还是整张多人票即刻锁死。两解直接影响未入场同行人的权益能否转出。DEC-R8-22 只裁了「多人票每人各享一份完整全新票权益」，DEC-R8-23 只裁了「总入场后不得转赠」，二者交汇处用户未表态。本地票 12 号,pending-user
+H-13,HTML-REV,important,docs/business-system-map-for-operations-v0.1.html;docs/business-enum-quick-reference-v0.1.html,814;65,BSM「等级与成长值」条·实测 L814；ENUM「等级与成长值」条·实测 L65,会员降级通知改「降级预警」：预警非降级决定、最终以保护期结束当日按届时滚动周期重算为准、预警后达标不降并发「已保级」通知、应降但未预警的降级后立即补发；按 DEC-R8-28 逐字落地,implemented
+H-14a,HTML-REV,critical,docs/business-system-map-for-operations-v0.1.html;docs/business-enum-quick-reference-v0.1.html,751;49,BSM「酒吧通票可分配池」条·实测 L751；ENUM「酒吧通票可分配池」条·实测 L49,未核销减除额补写归属：按「域归属对照」条逐域归属（酒吧域即娱乐平台公司）、逐票单独立项留痕、不并入未分配池余额与金额尾差、三栏分列不得合并；按 DEC-R8-20 逐字落地,implemented
+H-14b,HTML-REV,critical,docs/business-system-map-for-operations-v0.1.html;docs/business-enum-quick-reference-v0.1.html,796;43,BSM「核销单位」条·实测 L796、「一人多次票/通票」条 L779、「权益转赠」条 L803、「到期处理」条 L801；ENUM「有效期类型」条 L43、「到期未核销款」条 L45,场次终结制七句落地：以完成检票环节（刷码核销成功）为进入核销状态的时点、绑定当场次不得开启另一场次、场内不限次数进出、权益仅限当场核销否则终结、多次票每次一份完整全新权益且剩余次数跨场保留、多人票各人同理但仍须同场次、两条既有例外保留；按 DEC-R8-21/22/23/30/31 逐字落地,implemented
+H-14c,HTML-REV,critical,docs/business-system-map-for-operations-v0.1.html;docs/business-enum-quick-reference-v0.1.html,751;49,BSM「酒吧通票可分配池」条·实测 L751；ENUM「酒吧通票可分配池」条·实测 L49（10 张覆盖家数档位表内嵌于 ENUM 一处）,档位改动态百分比制：不做归一化、各档合计恒为 100%、按覆盖家数取表、排名在覆盖集合内编列、覆盖家数与是否核销无关（核销才拿）、改表须提前通告且只对新售票适用、删「或权重为零」半句；按 DEC-R8-24/25/34 逐字落地,implemented
+H-14d,PRD-SYNC,important,docs/settlement-rebuild-prd-v1.0.md;docs/prd-audit-fix-change-log-20260804.md,289;1994,（配套项，不改 HTML）,PRD 位置清单落地：settlement-rebuild §5.1 共 13 处反向改写（L289 相对权重→动态百分比、L290 旧梯子降为覆盖 10 家行、L304 边界②/④、L305 未核销确认时点前移、L318 减除额归属、守恒式逐栏归属标注、L331 表行合计断言、L336 U-4 矛盾修正、新增 U-6~U-8 用例、L339 缺口扩四项、L991 附表 2 处）；GAP-04 明细行与汇总行状态改「已裁决待实施」,implemented
+H-14e,HTML-REV,critical,docs/business-enum-quick-reference-v0.1.html;docs/business-system-map-for-operations-v0.1.html,46;1545,ENUM 新增「域归属对照」条·实测 L46、「到期未核销款」L45、「游乐核销归属」L53、「主要收入归属」L181；BSM「到期处理」L801、「游乐收入归属」L752、收入归属表新增「通票未核销减除额」行 L1545,域归属对照总规则 + 收入归属总表列名目：四档归属（酒吧→娱乐平台公司/游乐→游乐公司/餐饮与零售→城市项目公司/演出传媒→传媒公司）、两类钱各自留痕不合并、各域具体条加「此为总规则在本票种上的适用」括注、顶层平台不因本条取得份额；按 DEC-R8-26/27/29 逐字落地,implemented
+H-14f,HTML-REV,critical,docs/business-enum-quick-reference-v0.1.html;docs/business-system-map-for-operations-v0.1.html;docs/platform-governance-map-for-operations-v0.1.html,41;543;580,ENUM「核销记录状态」L41 + 注释 L40、「年龄限制」L31、「接入的外部系统」L160；BSM 主流程新增「进场」一步 L543-L547、「年龄核验」L1024、设备统称 L661/L1339、第三方接入设备行 L1385-L1387、「核销单位」L796；PGM「设备清单」L580,入场三道环节全局对齐（HTML 侧 10 处 + PRD 侧 43 处：首批 18 处 + 编排层追加授权的补齐批 25 处/11 文件，含合规红线正文 9 处；另修 3 个生成器源文案并 regen 6 份生成物）：三道环节依次分开、逐道通过、前两道不产生核销记录、「一步完成」辖域限定在检票环节内部（DEC-R6-08 不推翻）、命名收四词且「总入场核销」不作独立名词；按 DEC-R8-31/32 逐字落地。face.verification.enabled 键名不改，登记待代码轮,implemented
+H-14g,HTML-REV,important,docs/business-system-map-for-operations-v0.1.html,1218,BSM「签约与合同」条·实测 L1218 尾句,删除写死的「超两个月清退」：改为罚款欠缴与其他欠费合并计算、一律按前述两条触发条件取严判定、不另设独立清退月数；按 DEC-R8-33 逐字落地。同时消解 R8-U-08,implemented

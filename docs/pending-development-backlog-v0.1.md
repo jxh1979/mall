@@ -205,7 +205,7 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 |---|---|---|
 | 全链下钻 P2 | 同上盘点 | ✅ 已完成（2026-07-05，main=43d9bae：项目/空间/处理人/商户门户+补 MerchantZoneBills） |
 | 招商租赁补充 | `real-estate-full-chain §7` | 租赁状态看板、招商跟进提醒阈值/分配规则细化 |
-| 楼宇运营深化（多数已落地，2026-06-30 核实回写） | `real-estate-full-chain §7` | 已落地：巡检异常→自动整改工单（原子）、工单回访/验收（satisfaction）、巡检排程任务、设备告警事件、抄表异常+父子表差异分摊。**剩余硬件门控**：IoT 自动接入（需网关/设备）、远程表自动读（需远程读表计）——预留事件/结构已就绪，等真实硬件。~~剩余增强项：能耗分摊算法细化、巡检路线排程/点位库细化~~ **已消项（2026-07-03 实读回写）**：能耗分摊三 basis 均已落地（`EnergyService.settleEnergyFee`：by_contract 固定额 / by_area 按面积占比 / by_usage 按用量占比分摊公区能源费，含幂等 + 异常检测 reverse/zero/surge）。**注（2026-08-05）：`by_area`/`by_usage` 所依据的「公区能耗向商户分摊」口径已作废**——公区能耗只归集做成本分析、不向商户分摊，公区公摊统一含在物业费中（ENUM「公区能源费」条·实测 L207、DEC-R7-35）；此处只记录代码现状，**属待改造缺口，不得反向定义业务规则**，收敛口径见 `building-operations-prd-v1.0.md` §5；巡检三排程模式均已落地（`FacilityInspectionService`：template 周期自动排程[`FacilityInspectionScheduleJob` 按 cycleDays 生成] / manual 手动 / route 路线+结构化 `route_points` 点位，route 模式点位强校验非空）。无低成本纯软件增强待做，无净新缺功能。 |
+| 楼宇运营深化（多数已落地，2026-06-30 核实回写） | `real-estate-full-chain §7` | 已落地：巡检异常→自动整改工单（原子）、工单回访/验收（satisfaction）、巡检排程任务、设备告警事件、抄表异常+父子表差异分摊。**剩余硬件门控**：IoT 自动接入（需网关/设备）、远程表自动读（需远程读表计）——预留事件/结构已就绪，等真实硬件。~~剩余增强项：能耗分摊算法细化、巡检路线排程/点位库细化~~ **已消项（2026-07-03 实读回写）**：能耗分摊三 basis 均已落地（`EnergyService.settleEnergyFee`：by_contract 固定额 / by_area 按面积占比 / by_usage 按用量占比分摊公区能源费，含幂等 + 异常检测 reverse/zero/surge）。**注（2026-08-05）：`by_area`/`by_usage` 所依据的「公区能耗向商户分摊」口径已作废**——公区能耗只归集做成本分析、不向商户分摊，公区公摊统一含在物业费中（ENUM「公区能源费」条·实测 L208、DEC-R7-35）；此处只记录代码现状，**属待改造缺口，不得反向定义业务规则**，收敛口径见 `building-operations-prd-v1.0.md` §5；巡检三排程模式均已落地（`FacilityInspectionService`：template 周期自动排程[`FacilityInspectionScheduleJob` 按 cycleDays 生成] / manual 手动 / route 路线+结构化 `route_points` 点位，route 模式点位强校验非空）。无低成本纯软件增强待做，无净新缺功能。 |
 | 酒吧域验收补强 | `bar-operations-development-design §...` | 退菜退酒/反结账 端到端 G/W/T 验收用例；pour_volume 缺采集兜底 + 补采集异常闭环 |
 
 ## 3. P3 — 收尾 / 装饰
@@ -218,7 +218,7 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 ## 4. 设计性 gating（**非"未完成"**，预留接口 + 开关默认关，开通即生效）
 
 - 第三方接入：聚合支付、视频监控、团购渠道、税务/电子发票开票、SMS 真实运营商适配器、webhook `mapPayload` 标准化+失败边界+测试锚点、运营商模板 ID 映射表
-- 能力开关：人脸入场闸、支付渠道、分级退款授权（已建）、酒吧扫码点酒
+- 能力开关：年龄核验环节（人脸扫描）、支付渠道、分级退款授权（已建）、酒吧扫码点酒
 
 ## 5. 已完成 / 文档过期需回写（消项）
 

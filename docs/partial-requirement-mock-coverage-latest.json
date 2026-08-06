@@ -1,6 +1,6 @@
 {
   "mock_coverage_version": "v0.1",
-  "status": "mock_or_sandbox_acceptance_ready_but_production_evidence_pending",
+  "status": "mock_coverage_gap",
   "generated_from": [
     "docs/requirements-code-implementation-matrix-v0.1.csv",
     "docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json"
@@ -162,7 +162,7 @@
       "acceptance": "酒吧入场/售酒年龄核验强制人脸或等效设备；供应商未定时只能 mock，生产不得正式通过",
       "current_status": "部分实现",
       "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
-      "mock_acceptance_scope": "年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由人脸入场闸统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。",
+      "mock_acceptance_scope": "年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由综合体入场的年龄核验环节统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。",
       "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
       "production_trace_status": "covered_by_disabled_integration_switches",
       "production_blocking": false,

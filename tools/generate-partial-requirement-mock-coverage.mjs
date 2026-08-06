@@ -24,7 +24,7 @@ const map = {
     ["supplier_mock", "docs/supplier-mock/t3b-webhook-envelope.example.json", ["payment.paid", "idempotency_key"]],
     ["openapi_contract", "docs/p0-openapi-operation-acceptance-matrix-v0.1.md", ["/api/v1/bar/bills/{bill_id}/pay-intents", "/api/v1/bar/bills/{bill_id}/settle"]],
   ]],
-  "REQ-23b": ["年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由人脸入场闸统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。", [
+  "REQ-23b": ["年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由综合体入场的年龄核验环节统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。", [
     ["service", "backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java", ["FaceVerificationRouter", "face.verification.enabled"]],
     ["backend_unit", "backend/src/test/java/com/complex/platform/entry/FaceVerificationGateTests.java", ["alwaysDisabledRouterReturnsReservedNonBlocking", "switchReadFailureFailsSafeToDisabled"]],
     ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["scanOrderBindsOpenSessionInheritsEntryGateAndSourcesApp"]],
