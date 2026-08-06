@@ -27,7 +27,7 @@
 | 设施设备 `facility_equipment` | `alarm_source` | `manual` / `iot` | 人工上报 / 远程或物联自动采集；仅告警时填写 |
 | 工单策略 `facility_work_order_policy`、工单 `facility_work_orders` | `work_order_type` | `repair` / `cleaning` / `complaint` / `rectification` / `inspection` / `other` | 报修 / 保洁 / 投诉 / 整改 / 巡检 / 其他服务请求 |
 | 工单策略/工单 | `priority` | `urgent` / `high` / `normal` | 用于匹配 SLA「类型 × 优先级」 |
-| 工单策略 | `acceptance_by` | `handler` / `supervisor` / `reporter` | 处理人完成即结 / 主管验收 / 提单方确认。**（2026-08-04 口径，对齐 BSM「运营细则（已确认）」条·实测 L1248）复杂类（大型设备报修）须「主管/物业验收**并且**提单方确认」双闸**——当前 3 值枚举**表达不了该组合，实现待对齐**（二选一：枚举扩展一个 `supervisor_and_reporter` 值，或在策略表加独立标志位 `require_reporter_confirm`）；本轮**不改 DB CHECK**，见 §3 默认策略与 §6 待建一览 |
+| 工单策略 | `acceptance_by` | `handler` / `supervisor` / `reporter` | 处理人完成即结 / 主管验收 / 提单方确认。**（2026-08-04 口径，对齐 BSM「运营细则（已确认）」条·实测 L1250）复杂类（大型设备报修）须「主管/物业验收**并且**提单方确认」双闸**——当前 3 值枚举**表达不了该组合，实现待对齐**（二选一：枚举扩展一个 `supervisor_and_reporter` 值，或在策略表加独立标志位 `require_reporter_confirm`）；本轮**不改 DB CHECK**，见 §3 默认策略与 §6 待建一览 |
 | 工单 `facility_work_orders` | `source` | `merchant_self` / `customer` / `platform` / `equipment_alarm` / `inspection` | 商户自助 / **客人（客人端投诉）** / 平台发起（含现场工作人员） / 设备告警 / 巡检异常。**（2026-08-04 第三轮用户裁决 UD-03 / DEC-R6-14 定稿）** 工单来源**补 `customer`**：客人投诉由客人自行在客人端提交，**客人即为提单方，关闭须其确认**（与 §1 `status` 行的分支语义、BSM 物业服务章·主要功能一致）。**DB CHECK 扩值列入排期**（现为 4 值、无 `customer`），属待改造缺口，见 §6 待建一览 |
 | 工单 `facility_work_orders` | `status` | `pending_assign` / `assigned` / `processing` / `pending_review` / `pending_acceptance` / `accepted` / `closed` / `suspended` / `overtime` | 待派单 / 已派单 / 处理中 / 待回访 / 待验收 / 已验收 / 已关闭 / 已挂起 / 已超时；`accepted` 为 DB 保留值，当前服务验收后直接写 `closed`。**（2026-08-04 第三轮用户裁决 UD-05 / DEC-R6-13 定稿）** 九态**按工单类型分支适用，不是全类顺序链**——①**保洁等无争议类**：处理人完成即结（`processing` → `closed`）；②**投诉类**：须**提单方确认**（`processing` → `pending_review` → `closed`），客人端投诉的提单方即客人；③**复杂类**（大型设备报修等）：须**主管验收 ＋ 提单方确认双闸**（`processing` → `pending_acceptance` → `accepted` → `pending_review` → `closed`），`accepted` 在复杂类分支下**可达**。原「待回访 → 待验收全类顺序链」读法作废。**`acceptance_by` 扩双闸取值与「复杂类」判定口径列入排期**，见 §6 待建一览 B 项 |
 | 巡检模板/任务 | `inspection_type` | `security` / `fire` / `facility` / `environment` | 安防 / 消防 / 设施设备 / 环境卫生；**能耗抄表不属巡检类型**，走能耗域独立抄表流程（2026-08-04 第三轮用户裁决 UD-04 / DEC-R6-12 定稿为四类，ENUM「楼宇巡检类型」条已同批改为四类，见 §0）。DB CHECK 4 值与裁决一致，无需改造 |
@@ -68,7 +68,7 @@
 ## 3. 维保工单（V166）
 **业务规则**
 - 工单类型 6 类、优先级 3 类；SLA 不硬编码在服务里，按 `facility_work_order_policy(work_order_type, priority)` 查响应时限和处理时限，唯一约束 `uq_fwop_type_priority`。
-- 默认策略（**2026-08-04 对齐 BSM「运营细则（已确认）」条·实测 L1248**）：保洁/巡检/其他按**处理人完成即结**（无争议类）；投诉按**提单方确认**（一律须提单方确认才能关闭）；**报修/整改按主管验收**，其中**复杂类（大型设备报修）须「主管/物业验收**并且**提单方确认」双闸——两者都通过才能关闭，缺任一不得关闭**。后台可通过 `POST /policies` 调整。
+- 默认策略（**2026-08-04 对齐 BSM「运营细则（已确认）」条·实测 L1250**）：保洁/巡检/其他按**处理人完成即结**（无争议类）；投诉按**提单方确认**（一律须提单方确认才能关闭）；**报修/整改按主管验收**，其中**复杂类（大型设备报修）须「主管/物业验收**并且**提单方确认」双闸——两者都通过才能关闭，缺任一不得关闭**。后台可通过 `POST /policies` 调整。
   - **（实现待对齐）** 当前 `acceptance_by` 为 `handler`/`supervisor`/`reporter` **三选一**，表达不了「主管验收 + 提单方确认」的与关系；落地二选一：**扩展枚举加 `supervisor_and_reporter`**，或**在 `facility_work_order_policy` 加独立标志位 `require_reporter_confirm`（与 `acceptance_by` 正交）**。本轮**不改 DB CHECK、不改服务分流**，只把口径与缺口写实（见 §1 `acceptance_by` 行、§6 待建一览）；「复杂类」的判定口径（按工单类型 × 设备大类，还是按策略行显式勾选）随该项一并定案。
 - 创建工单时根据策略写 `response_due_at`、`handle_due_at`；`mark-overdue` 扫描超期未关闭工单并置 `overtime=true`。
 - 商户自助提单只允许 `repair`、`cleaning`、`complaint`、`other`；`rectification` 与 `inspection` 由平台、设备告警或巡检异常发起。
@@ -77,12 +77,12 @@
 - 支持 `suspend` / `resume`；只有活动态可挂起，挂起后恢复为 `processing`。
 - 事件解耦：设备 `alarm/fault` 自动转 `repair/high`；巡检异常 `to_work_order` 自动转 `rectification/normal` 并把 `work_order_id` 回写巡检任务。
 
-**工单用料与费用承担方（2026-08-04 对齐 BSM「派单到具体人员或班组」条·实测 L1243）**
+**工单用料与费用承担方（2026-08-04 对齐 BSM「派单到具体人员或班组」条·实测 L1245）**
 - 工单**用料必须从指定库房出库**，并**按当前平均进货价计成本**（平均进货价口径：每次新进货后把新到的货与原有库存合并算出新的平均单价，出库即按该均价计成本）。
 - 工单上**必须标明费用承担方**：**公区设施与楼宇主体设备**的用料**由物业承担**；**商户自有设施、以及因商户责任导致损坏**的用料**由该商户承担，并自动生成一笔应收进入其费用账单**。
 - **承担方有争议的，工单挂起转上级判定**（复用既有 `suspend`/`resume`），**判定结果与依据留痕后才能结案**。
 
-**客诉闭环机制（2026-08-04 对齐 BSM「运营细则（已确认）」条·实测 L1248）**
+**客诉闭环机制（2026-08-04 对齐 BSM「运营细则（已确认）」条·实测 L1250）**
 - **工单由客户关怀部负责处理**；**响应时限与处理时限对商户公开**（即 `facility_work_order_policy` 的「类型 × 优先级」时限对商户侧可见）。
 - **投诉类一律须提单方确认才能关闭**；提单方在后台配置的时限内未确认的**视为默认关闭**（业务参数，按工单类型可配），但**单独统计为「未确认关闭」**，不与正常确认关闭混计。
 - **所有客诉必须有跟进、有记录、有结果，直至形成闭环**；**客诉须经客户关怀部确认后方可视为形成闭环**，未经其确认的一律不算闭环。
@@ -183,7 +183,7 @@
 | 编号 | 待建/待对齐项 | 现状 | 需要的动作 | 依据 |
 |---|---|---|---|---|
 | A | **电损费 / 水损费独立计收** | 无 `source_type`、无配置项、无独立发票标识、结算只出 `energy_fee` | 补计费对象/公式/配置项（固定金额或比例，按项目可配、须配上下限）＋独立 `power_loss_fee`/`water_loss_fee` 与独立发票标识（见 §5） | ENUM「能源费与损耗费」条·实测 L150、BSM「能耗抄表」条·实测 L1272、PGM「能耗运营细则（已确认）」条·实测 L763 |
-| B | **复杂类工单「主管验收 + 提单方确认」双闸** | `acceptance_by` 三选一，表达不了与关系 | 枚举扩 `supervisor_and_reporter` 或加独立标志位 `require_reporter_confirm`，并定「复杂类」判定口径（见 §1/§3） | BSM「运营细则（已确认）」条·实测 L1248 |
+| B | **复杂类工单「主管验收 + 提单方确认」双闸** | `acceptance_by` 三选一，表达不了与关系 | 枚举扩 `supervisor_and_reporter` 或加独立标志位 `require_reporter_confirm`，并定「复杂类」判定口径（见 §1/§3） | BSM「运营细则（已确认）」条·实测 L1250 |
 | C | **商户服务工单分表独立七态**（2026-08-04 裁决改向：原「收敛到 V166」已撤销） | V022 商户服务工单表现有状态取值未与 ENUM 独立七态逐值核对 | 补齐 V022 独立七态 DB CHECK 与状态机；看板按 ENUM「工单看板分行对照」分行；台账 CSV ADM-MER-001／004 端点与状态机列按**分表**口径同步（见 §0/§3） | 第三轮用户裁决 UD-06 / DEC-R6-26；ENUM「商户服务工单状态」「工单看板分行对照」条 |
 | D | **`energy_fee_basis` 收敛迁移** | DB CHECK 仍 4 值；新写入已按硬约束禁用 `by_area`/`by_usage` | **直接收敛 DB CHECK 为 `none`/`by_contract` 两值**（研发环境无存量数据，测试数据直接清理，不做历史迁移／回填立项） | 第三轮用户裁决 UD-07 / DEC-R6-28；ENUM「能源费与损耗费」条、PGM 能耗运营细则 |
 | E | **工单来源补 `customer`** | `facility_work_orders.source` CHECK 现 4 值、无 `customer` | CHECK 扩 `customer`；客人端投诉直接落工单、客人为提单方、关闭须其确认（见 §1 `source` 行） | 第三轮用户裁决 UD-03 / DEC-R6-14；BSM 物业服务章·主要功能 |

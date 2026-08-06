@@ -364,7 +364,7 @@
 | 平台口径 | 平台认为的结果 | 条件必填 | 差异判断 |
 | 第三方口径 | 第三方返回的结果 | 条件必填 | 差异判断 |
 | 责任人 | 当前处理人 | 是 | 待办 |
-| 处理状态 | 待处理、待复核、已关闭、已忽略 | 是 | 流程 |
+| 处理状态 | 待处理、待复核、已关闭（**差异类记录**原含「已忽略」，已按 DEC-R4-2026-08-04-43 收为四态；**接入异常/回流侧的「已忽略」是否同受该裁决约束待 R8-B-09 用户裁决**，在此之前该侧维持五态） | 是 | 流程 |
 | 处理结论 | 最终采用口径或说明 | 条件必填 | 关闭依据 |
 
 ### 7. 第三方类型专项字段
@@ -391,7 +391,7 @@
 | 回流记录 | 待接收、已接收、已匹配、待处理、已入账口径、已忽略、异常 | pending、received、matched、to_handle、accounted、ignored、abnormal |
 | 回流批次 | 处理中、完成、有异常、已归档 | processing、completed、has_error、archived |
 | 接入异常 | 待处理、处理中、待复核、已关闭、已忽略 | open、processing、pending_review、closed、ignored |
-| 差异记录 | 待识别、待处理、待复核、已关闭、已忽略 | to_identify、open、pending_review、closed、ignored |
+| 差异记录 | 待识别、待处理、待复核、已关闭（**四态**；原第五态「已忽略」**已删除**，依据 DEC-R4-2026-08-04-43——账目均为电子数据、实时出账，留此终态等于承认可以把查不平的钱吃掉） | to_identify、open、pending_review、closed（`ignored` 停用） |
 
 **接入关系业务状态 ↔ open_apps 鉴权状态映射（fielddb-9）：** 业务状态由本层维护，鉴权状态（draft/testing/active/suspended/locked/disabled/revoked，7 态 per D3）由开放平台维护、本层只读引用。映射明细见开发设计 §14.2。例：待接入→draft、联调中→testing、已启用→active、暂停→suspended、异常→locked、已停用→disabled、归档→revoked/disabled。
 

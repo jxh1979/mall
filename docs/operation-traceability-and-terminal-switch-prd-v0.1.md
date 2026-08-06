@@ -48,7 +48,7 @@
 | 票务 | 退票/退款 | `ticket.refunded` / `refund.succeeded` | ✅ |
 | 票务 | 改期/变更 | `ticket.changed` | ✅ |
 | 票务 | 下单锁库/释放 | `ticket.inventory_locked` / `ticket.inventory_released` | ✅ |
-| 票务 | 核销预检/成功/失败/撤销/人工放行（与 ENUM「核销记录状态」条（2026-08-05 实测 L41）「系统不提供人工放行」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；2026-08-04 登记） | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
+| 票务 | 核销预检/成功/失败/撤销/人工放行（与 ENUM「核销记录状态」条（2026-08-05 实测 L41）冲突**两处**，均属**待改造缺口**——代码级下线待办，不得反向定义业务规则：① **人工放行**——ENUM「系统不提供人工放行」，2026-08-04 登记；② **核销预检**——ENUM「核销无预检环节，共六态、不设『预检通过』态，扫码即核销一步完成」，DEC-R6-08，2026-08-05 登记） | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
 | 酒吧 | 开台/转台/清台 | `bar.table.opened`/`transferred`/`cleared` | ✅ |
 | 酒吧 | 订台创建/定金支付/定金结算 | `reservation.created`/`reservation.deposit_paid`/`reservation.deposit_settled` | ✅ |
 | 酒吧 | 点单创建/送达/账单结清 | `bar.order_created`/`bar.order_delivered`/`bar.bill_settled` | ✅ |
@@ -282,7 +282,7 @@ flowchart TD
 > - `reservation.created`（域=service，登记于 §4.1.2）：**订台创建**时触发（客人/员工提交订台、生成预订单），载荷=预订、来源、终端、订金（应付）、设备、点位。由后端在订台创建环节按权威名写入。
 > - `reservation.deposit_paid`（域=service，登记于本主表）：**客人支付定金完成**时触发（仅资金到账这一动作），载荷=预订、订金（分，实付）、支付渠道、支付流水、付款人。客人端付定金事件用此名（见 customer-app §4.3）。
 > - `reservation.deposit_settled`（域=service，登记于 §4.1.2）：**定金最终结算**时触发（**达标已原路退回**/退还/没收，酒吧侧闭环），载荷=预订、订金（分）、`deposit_status`（`deducted` → 语义为**达标已原路退回**/refunded/forfeited）、原因、审批人。
->   **（2026-08-05 补，依据 ENUM「订台定金状态」条·实测 L88、BSM「订台定金状态」条（2026-08-05 实测 L865）；DEC-R6-05 / DIFF-A-011）**：定金**不抵扣消费**——客人在该台位消费达到该台位适用的最低消费后，定金**原路退回**。因此本事件的 `deposit_status` 取值 `deducted` 的业务语义**一律读作「达标已原路退回」，不得再按「抵扣」消费**；下游分析域按本词表消费时须按「退回」处理，不得把该金额计入消费额、低消进度或提成基数。**实现侧枚举值本身（`deducted` 字面量）尚未改名，登记为待改造缺口——与 GAP-29（订台定金状态改值改义）同源，不重复立项，此处仅作标注**。
+>   **（2026-08-05 补，依据 ENUM「订台定金状态」条·实测 L88、BSM「订台定金状态」条（2026-08-05 实测 L867）；DEC-R6-05 / DIFF-A-011）**：定金**不抵扣消费**——客人在该台位消费达到该台位适用的最低消费后，定金**原路退回**。因此本事件的 `deposit_status` 取值 `deducted` 的业务语义**一律读作「达标已原路退回」，不得再按「抵扣」消费**；下游分析域按本词表消费时须按「退回」处理，不得把该金额计入消费额、低消进度或提成基数。**实现侧枚举值本身（`deducted` 字面量）尚未改名，登记为待改造缺口——与 GAP-29（订台定金状态改值改义）同源，不重复立项，此处仅作标注**。
 > 即：created=下单阶段、deposit_paid=客人付款阶段、deposit_settled=结算阶段，三者是订台-定金同一生命周期的不同节点而非同义重复。依据 R4、finding event-consumers-5、critic2-5。
 
 > 修订说明（2026-06-07 收口）：以下事件为本轮各业务域开发设计新增、但此前未登记进唯一权威字典的标准事件，现统一补登入本表，使供应链/酒吧/订台/票务/核销/退款/会员/合规/容量等域的事件名在权威字典有唯一落点（保持点+下划线风格）。补登后 `java-backend §14`、`foundation-database` 事件清单、`data-risk-ai §7.1` 引用一字对齐。依据 finding broken-ref-2/3/4、baseline-conf-5、annotation-1、《统一口径基准》D4。每条给出 `event_category`（对齐 `audit_events.event_category` / data-risk §7.1 分析域）与载荷要点。
@@ -342,7 +342,7 @@ flowchart TD
 | `ticket.changed` | ticket | 票务改期/变更：票号、原场次、新场次、原因 |
 | `ticket.inventory_locked` | ticket | 下单锁库存（对齐 critic-11，承载 ticketing `ticket.inventory.locked`）：产品ID、日期、数量、订单 |
 | `ticket.inventory_released` | ticket | 取消/退款释放库存（承载 ticketing `ticket.inventory.released`）：产品ID、日期、数量、原因 |
-| `verification.previewed` | ticket | 核销预检：权益摘要、点位、设备、风险提示、是否可核销；预检不扣次 |
+| `verification.previewed` | ticket | 核销预检：权益摘要、点位、设备、风险提示、是否可核销；预检不扣次（与 ENUM「核销记录状态」条（2026-08-05 实测 L41）「核销无预检环节，共六态、不设『预检通过』态，扫码即核销一步完成」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；DEC-R6-08，2026-08-05 登记） |
 | `verification.succeeded` | ticket | 核销成功：权益、扣次、商户、点位、设备、员工 |
 | `verification.failed` | ticket | 核销失败：失败原因、票码哈希、设备、员工 |
 | `verification.reversed` | ticket | 核销撤销/冲正：原核销记录、原因、审批单、操作人、设备 |

@@ -1,4 +1,4 @@
-rule_id,prd_path,prd_anchor_or_line,coverage_status,severity,finding_id,conflict_summary,recommended_change,decision_id,phase
+﻿rule_id,prd_path,prd_anchor_or_line,coverage_status,severity,finding_id,conflict_summary,recommended_change,decision_id,phase
 BSM-0001,docs/product-requirements-v0.1.md,§2-§14 产品总纲与已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0002,docs/product-requirements-v0.1.md,§2-§14 产品总纲与已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0003,docs/product-requirements-v0.1.md,§14 第 40-46 条通用规则,FULL,P1,GOV-004,RESOLVED: 决策日志曾把存档误写为需要最高权限审批。,APPLIED: 按当前 HTML 校正为存档不需审批、可恢复。,,03-governance-and-common
@@ -148,7 +148,7 @@ BSM-0526,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,
 BSM-0527,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0528,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0529,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
-BSM-0530,,,NOT_APPLICABLE,,,,,,03-governance-and-common
+BSM-0530,docs/service-order-product-prd-v0.1.md,docs/service-order-product-prd-v0.1.md L3（解释权声明逐字承接）,FULL,,,R8 实读复核：本行「解释权声明」段已被 PRD 抬头逐字承接（三份 HTML 最高解释权 + 未入 HTML 不生效 + 冲突按确认时间线判定），故由 NOT_APPLICABLE 改 FULL；同行的文档版本／更新日期属元数据，不属承接对象。,,,r8-rebuild
 PGM-0001,docs/product-requirements-v0.1.md,§14 已确认业务规则,FULL,P1,GOV-001,RESOLVED: 下游术语表和追溯矩阵曾允许代码或旧基准反向解释业务口径。,APPLIED: 明确三份业务 HTML 为业务最终解释权，实现材料只作承接证据。,,03-governance-and-common
 PGM-0002,docs/product-requirements-v0.1.md,§14 已确认业务规则,FULL,P1,GOV-007,RESOLVED: 产品总纲未明确承接全链可点击、可正查反查和无孤岛数据。,APPLIED: 在产品总纲和 HTML 验收规格补全局可追溯验收规则。,,03-governance-and-common
 PGM-0003,docs/product-requirements-v0.1.md,§14 已确认业务规则,FULL,P1,GOV-007,RESOLVED: 产品总纲未明确所有终端用户可见文字零英文。,APPLIED: 在产品总纲和 HTML 验收规格补全中文界面验收规则。,,03-governance-and-common
@@ -277,7 +277,7 @@ PGM-0188,docs/business-decision-log-v0.1.md,§23-§31 已确认治理规则,FULL
 PGM-0189,docs/business-decision-log-v0.1.md,§23-§31 已确认治理规则,FULL,,,,,,03-governance-and-common
 PGM-0190,docs/business-decision-log-v0.1.md,§23-§31 已确认治理规则,FULL,,,,,,03-governance-and-common
 PGM-0191,docs/business-decision-log-v0.1.md,§23-§31 已确认治理规则,FULL,,,,,,03-governance-and-common
-PGM-0192,,,NOT_APPLICABLE,,,,,,03-governance-and-common
+PGM-0192,docs/service-order-product-prd-v0.1.md,docs/service-order-product-prd-v0.1.md L3（解释权声明逐字承接）,FULL,,,R8 实读复核：本行「解释权声明」段已被 PRD 抬头逐字承接（三份 HTML 最高解释权 + 未入 HTML 不生效 + 冲突按确认时间线判定），故由 NOT_APPLICABLE 改 FULL；同行的文档版本／更新日期属元数据，不属承接对象。,,,r8-rebuild
 BEQ-0069,docs/evidence-risk-control-product-prd-v0.1.md,§4-§9 风控对象、状态与验收,FULL,,,,,,03-governance-and-common
 BEQ-0070,docs/evidence-risk-control-product-prd-v0.1.md,§4-§9 风控对象、状态与验收,FULL,,,,,,03-governance-and-common
 BEQ-0071,docs/evidence-risk-control-product-prd-v0.1.md,§4-§9 风控对象、状态与验收,FULL,,,,,,03-governance-and-common
@@ -459,12 +459,12 @@ BSM-0186,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,F
 BSM-0187,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0188,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0189,docs/bar-business-operations-product-prd-v0.1.md,10.1 成熟 POS 深度缺口规划（对照成熟酒吧/餐饮 POS）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0190,docs/bar-business-operations-product-prd-v0.1.md,10.1 成熟 POS 深度缺口规划（对照成熟酒吧/餐饮 POS）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0193,docs/settlement-rebuild-prd-v1.0.md,1.1 问题,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0190,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
+BSM-0193,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
 BSM-0194,docs/settlement-rebuild-prd-v1.0.md,1.1 问题,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0196,docs/settlement-rebuild-prd-v1.0.md,1.1 问题,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0198,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0199,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0196,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
+BSM-0198,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
+BSM-0199,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
 BSM-0255,docs/product-requirements-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0257,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0258,docs/finance-settlement-product-prd-v0.1.md,13.3 物业费固定计费（替代 CAM 公摊，F-OPS-08）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -541,7 +541,7 @@ PGM-0172,docs/finance-settlement-product-prd-v0.1.md,12.1 P1 深度能力,FULL,,
 BEQ-0001,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0002,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,10. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0003,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0004,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0004,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,R8-F01;R8-F02,R8 抽查证伪：PRD 未承接「卡座免通票入场名额不含任何赠酒或酒水权益；且不存在免核销入场」。,票务 PRD 需逐句补：①卡座名额不含任何赠酒或酒水权益、进其他酒吧须另购门票或通票；②任何入场资格（邀请函／通票／单张门票）一律须完成该店入场核销，不存在免核销入场。,,r8-rebuild
 BEQ-0005,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0006,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,5. 票务策略,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0007,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -590,8 +590,8 @@ BEQ-0061,docs/finance-settlement-product-prd-v0.1.md,13.3 物业费固定计费�
 BEQ-0062,docs/settlement-rebuild-prd-v1.0.md,"C. 税务配置(→ 税务配置表 `tax_config`,**全部后台可配** —— 2026-07-04 用户裁定)",FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0063,docs/finance-settlement-product-prd-v0.1.md,12.1 P1 深度能力,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0064,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0113,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0114,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0113,docs/service-order-product-prd-v0.1.md,服务点单 PRD §3.2/§5,FULL,,,,,,r8-rebuild
+BEQ-0114,docs/service-order-product-prd-v0.1.md,服务点单 PRD §3.2/§5,FULL,,,,,,r8-rebuild
 BEQ-0115,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0116,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0117,docs/dividend-engine-prd-v0.1.md,3. 分红方案（配置层，`dividend_plans`）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -737,10 +737,10 @@ BSM-0138,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-P
 BSM-0139,docs/terminal-page-product-prd-v0.1.md,2. 终端分层,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0143,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0145,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0191,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0192,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0195,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0197,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0191,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
+BSM-0192,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
+BSM-0195,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
+BSM-0197,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
 BSM-0231,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0232,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0233,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
@@ -840,7 +840,7 @@ BEQ-0046,docs/amusement-p0-safety-inspection-spec-v0.1.md,全文/综合条款,FU
 BEQ-0047,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BEQ-0048,docs/amusement-business-operations-product-prd-v0.1.md,11A.3 团体/包场：由「未做」更正为「已落地」`文档goalP1(2026-06-20)`,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BEQ-0065,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BEQ-0066,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0066,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,PARTIAL,P1,R8-F06,R8 抽查证伪：PRD 未承接「不得伪造对账结果」。,在第三方接入 PRD 对账章补「不得通过配置把未核销伪造成已核销／不得伪造对账结果」。,,r8-rebuild
 BEQ-0067,docs/third-party-business-access-product-prd-v0.1.md,5. 接入状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BEQ-0068,docs/third-party-business-access-product-prd-v0.1.md,6. 回流记录状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-MPS-0001,docs/member-and-tier-product-prd-v1.0.md,全文：会员身份与等级权威,PARTIAL,P0,MPS-HTML-PHASE4,业务系统地图中的会员等级相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-01~09,member-points-redesign-phase4-pending
@@ -852,3 +852,60 @@ PGM-MPS-0003,docs/merchant-points-settlement-rules-v1.0.md,全文：商户积分
 BEQ-MPS-0001,docs/member-and-tier-product-prd-v1.0.md,全文：会员身份与等级权威,PARTIAL,P0,MPS-HTML-PHASE4,业务枚举速查中的会员等级状态相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-01~09,member-points-redesign-phase4-pending
 BEQ-MPS-0002,docs/points-and-voucher-product-prd-v1.0.md,全文：积分与虚拟券权威,PARTIAL,P0,MPS-HTML-PHASE4,业务枚举速查中的积分和虚拟券状态相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-10~17,member-points-redesign-phase4-pending
 BEQ-MPS-0003,docs/merchant-points-settlement-rules-v1.0.md,全文：商户积分结算权威,PARTIAL,P0,MPS-HTML-PHASE4,业务枚举速查中的积分结算和账单状态相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-18~25,member-points-redesign-phase4-pending
+BEQ-0123,docs/settlement-rebuild-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0124,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0125,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BEQ-0126,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0127,docs/settlement-rebuild-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0128,docs/finance-settlement-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0129,docs/settlement-rebuild-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0130,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0131,docs/merchant-points-settlement-rules-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0132,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0133,docs/member-and-tier-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0134,docs/member-and-tier-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0135,docs/member-and-tier-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0136,docs/member-and-tier-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0137,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0138,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0139,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0140,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0141,docs/merchant-points-settlement-rules-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0142,docs/merchant-points-settlement-rules-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0143,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0144,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0145,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0146,docs/points-and-voucher-product-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0147,docs/merchant-points-settlement-rules-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0148,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0149,docs/customer-app-miniapp-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0150,docs/bar-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0151,docs/bar-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BEQ-0152,docs/bar-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BEQ-0153,docs/amusement-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0154,docs/amusement-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BEQ-0155,docs/amusement-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0156,docs/supply-chain-inventory-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BEQ-0157,docs/finance-settlement-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BEQ-0158,docs/finance-settlement-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0159,docs/platform-governance-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0160,docs/building-operations-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0161,docs/evidence-risk-control-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0162,docs/settlement-rebuild-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0163,docs/platform-governance-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0164,docs/settlement-rebuild-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0165,docs/settlement-rebuild-prd-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0166,docs/platform-governance-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BEQ-0167,docs/dividend-engine-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BSM-0531,docs/service-order-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BSM-0532,docs/service-order-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BSM-0533,docs/service-order-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BSM-0534,docs/service-order-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BSM-0535,docs/service-order-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BSM-0536,docs/service-order-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BSM-0537,docs/amusement-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BSM-0538,docs/amusement-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BSM-0539,docs/business-dashboard-metrics-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,FULL,,,,,,r8-rebuild
+BSM-0540,docs/finance-settlement-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,P1,R8-F03,R8 抽查证伪：结算 PRD 未承接「允许尾数集合为业务参数、可配」。,在结算 PRD 凑整章补「允许尾数集合为业务参数、全平台统一可配、出厂默认 8/9/0」。,,r8-rebuild
+BSM-0541,docs/merchant-points-settlement-rules-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,P1,R8-F04;R8-F05,R8 抽查证伪：积分结算规则未承接「滚动取价窗口须配上下限」与「空窗口自动向前延长」。,补「滚动取价窗口须同时配置上下限」与「窗口内无有效成交时自动向前延长至最近一笔有效成交」。,,r8-rebuild
+PGM-0193,docs/amusement-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
