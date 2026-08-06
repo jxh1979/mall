@@ -71,7 +71,7 @@
 ### REQ-23b 酒吧
 
 - 验收口径：酒吧入场/售酒年龄核验强制人脸或等效设备；供应商未定时只能 mock，生产不得正式通过
-- mock/沙箱覆盖：年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由人脸入场闸统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。
+- mock/沙箱覆盖：年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由综合体入场的年龄核验环节统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。
 - 生产边界：covered_by_disabled_integration_switches；仍阻塞生产声明=否
 - 生产证据 item：
 - mock/测试/页面文件：

@@ -39,14 +39,14 @@ export const capabilitySwitchDefinitions = [
   },
   {
     capability_id: "face.verification.enabled",
-    label: "全场入场刷脸闸（满 18 岁核验）",
+    label: "综合体入场·年龄核验环节（人脸扫描确认满 18 周岁；键名沿用历史，不随本次改名变动）",
     default_enabled: false,
     category: "face_age",
     evidence_item_ids: ["PRD-FACE-001"],
     credential_item_ids: ["PRD-CRED-3P-001"],
     security_finding_ids: ["SEC-P1-WEBHOOK-REPLAY-001"],
     requirement_ids: ["REQ-17", "REQ-23b"],
-    disabled_behavior: "关闭后不调用第三方人脸/年龄接口；全场入场按制度兜底（人工证件核验/人工复核/审计留痕），售酒环节继承入场核验、不逐单验年龄，不能宣称已完成自动人脸核验。",
+    disabled_behavior: "关闭后不调用第三方人脸/年龄接口；年龄核验环节按制度兜底（人工证件核验/人工复核/审计留痕），售酒环节继承入场核验、不逐单验年龄，不能宣称已完成自动人脸核验。",
     enabled_requirements: "开启后必须补齐供应商 SDK/API、成功/失败样例、错误码、合规材料、测试账号和 credential_ref。",
   },
   {

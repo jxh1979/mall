@@ -2049,16 +2049,16 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 
 - 无新表/新列（仅加触发器 + 角色 REVOKE）。
 
-### 11.26 人脸入场闸能力开关 seed（V146 → 不建表，seed `terminal_capability_switches` 一行，修复 X-02）
+### 11.26 年龄核验环节能力开关 seed（V146 → 不建表，seed `terminal_capability_switches` 一行，修复 X-02）
 
-> 本小节标注 `文档goalP1(2026-06-22)`，修复 X-02（访客 18+ 人脸入场闸完全缺失）。背景：业务 HTML（全场 18+，统一人脸入场核验闸保证场内皆 ≥18 周岁）要求入场处实名人脸闸判龄、fail-closed。本期按用户口径「第三方/人脸一律预留接口 + 能力开关默认关」落地脚手架（仿 V093 支付渠道 `payment.gateway.enabled`）：端口/路由/占位见 `com.complex.platform.entry` 包（`FaceVerificationPort` + `DisabledFaceVerificationGate`/`ReservedFaceVerificationGate`/`FaceVerificationRouter`）。真实判龄（按实名身份证出生日期 + 活体、fail-closed）待接供应商 + 建实名身份模型后启用——当前系统无访客实名/身份证模型（仅 `customers.birth_date` 自报，用于生日营销），故本期仅脚手架。
+> 本小节标注 `文档goalP1(2026-06-22)`，修复 X-02（访客 18+ 年龄核验环节完全缺失）。背景：业务 HTML（全场 18+，综合体入场三道环节中的年龄核验环节保证场内皆 ≥18 周岁）要求该环节人脸扫描判龄、fail-closed。本期按用户口径「第三方/人脸一律预留接口 + 能力开关默认关」落地脚手架（仿 V093 支付渠道 `payment.gateway.enabled`）：端口/路由/占位见 `com.complex.platform.entry` 包（`FaceVerificationPort` + `DisabledFaceVerificationGate`/`ReservedFaceVerificationGate`/`FaceVerificationRouter`）。真实判龄（按实名身份证出生日期 + 活体、fail-closed）待接供应商 + 建实名身份模型后启用——当前系统无访客实名/身份证模型（仅 `customers.birth_date` 自报，用于生日营销），故本期仅脚手架。
 
 **seed 能力开关 `face.verification.enabled` = FALSE（默认关）**：
 
 - 行 `tcs_face_verification_off`：`terminal_type='*'`（跨端通配）、`scope_type='global'`、`scope_id='global'`、`enabled=FALSE`，`ON CONFLICT (terminal_type, capability_code, scope_type, scope_id) DO NOTHING`。
 - 为何显式 seed false：T2 `resolveEffectiveSwitch` 语义为「无显式行=默认开启」（opt-out），人脸闸要求「默认关」，故必须显式插入 false 行；`FaceVerificationRouter` 另对「读不到开关」fail-safe→当作关（绝不误连厂商）。
-- **与 `integration.face_age.sync`（V071，T14 第三方脚手架）的区别**：后者语义=第三方人脸/年龄供应商的数据对账/同步（integration 域 `ThirdPartyScaffoldingService`）；`face.verification.enabled` 语义=入场闸实时年龄/人脸核验裁决（entry 域），bar 售酒年龄继承其结论。二者职责不同、独立开关（与 payment 域 `integration.payment.sync` vs `payment.gateway.enabled` 同范式）。
-- 关闭期业务口径（对齐 `integration-capability-switches` 验收 #6 + 修复 X-03）：bar 售酒年龄核验不再信客户端自报，改为继承入场闸结论——闸关 → `provider_code=entry_gate_exempt` 非阻塞放行（场内豁免、制度兜底，残留风险已知会），不展示「自动人脸已通过」；闸开真实接入后 fail-closed 判龄，bar 自动继承 PASSED/FAILED（`provider_code=face_inherited`）。
+- **与 `integration.face_age.sync`（V071，T14 第三方脚手架）的区别**：后者语义=第三方人脸/年龄供应商的数据对账/同步（integration 域 `ThirdPartyScaffoldingService`）；`face.verification.enabled` 语义=综合体入场·年龄核验环节的实时年龄/人脸核验裁决（entry 域；键名沿用历史，不随 DEC-R8-32 改名变动），bar 售酒年龄继承其结论。二者职责不同、独立开关（与 payment 域 `integration.payment.sync` vs `payment.gateway.enabled` 同范式）。
+- 关闭期业务口径（对齐 `integration-capability-switches` 验收 #6 + 修复 X-03）：bar 售酒年龄核验不再信客户端自报，改为继承年龄核验环节结论——该环节开关关时 → `provider_code=entry_gate_exempt` 非阻塞放行（场内豁免、制度兜底，残留风险已知会），不展示「自动人脸已通过」；闸开真实接入后 fail-closed 判龄，bar 自动继承 PASSED/FAILED（`provider_code=face_inherited`）。
 - 无新表/新列（仅 seed 一行开关）。开关由现有 `TerminalDeviceController.updateCapabilitySwitch`（`terminal.switch.manage`，平台权限）切换，无需新增权限。
 
 ### 11.27 商户负责人列（V147 → `merchants` 补 `owner_person`，修复 C-5）
