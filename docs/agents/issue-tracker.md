@@ -35,7 +35,7 @@ GitHub 的 issue 与 PR 共用一个编号空间，裸写 `#42` 两者皆可能�
 
 ## 本仓库的特别约定
 
-- **禁直推 main**：仓库装了 pre-push 钩子。一切改动走 feature 分支 + PR（`gh pr create` → `gh pr merge`）。
+- **禁直推 main**：仓库装了 pre-push 钩子。一切改动走 feature 分支 + PR（`ops/160/propose-change.sh` 开 PR → `ops/160/merge-pr.sh` 等 CI 绿再合，别手敲 `gh pr merge`）。
 - **必用 worktree**：主工作区 `~/complex-management` 由多会话共用，在里面提交会被别的会话 `reset --hard` 拨走。
   一律 `git worktree add` 开独立工作区再干活；需要跑构建时软链 `node_modules`。
 - **动手前先 fetch**：并发会话频繁推进 `origin/main`，开分支或审计前先核对 `HEAD == origin/main`。

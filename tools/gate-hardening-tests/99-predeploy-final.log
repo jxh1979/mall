@@ -1,0 +1,138 @@
+
+> entertainment-complex-management@0.1.0 verify:predeploy
+> npm run verify:html-ledger-sync && npm run verify:entry-anchors && npm run verify:html-param-tier && npm run verify:delivery-gates-docs && npm run verify:full-admin-matrix && npm run verify:domain-ownership-scope && npm run verify:matrix-vs-migration && npm run verify:data-isolation-spec && npm run verify:tenant-isolation && npm run verify:p0-contract && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:production-blockers && npm run verify:pii-encryption && npm run verify:test-db-isolation
+
+
+> entertainment-complex-management@0.1.0 verify:html-ledger-sync
+> node tools/verify-html-ledger-sync.mjs
+
+[html-ledger-sync] PASS: 本次未改动业务最终解释权 HTML。比对范围：提交区 origin/main...HEAD（工作区三份 HTML 无未提交改动）。
+
+> entertainment-complex-management@0.1.0 verify:entry-anchors
+> node tools/verify-entry-anchors.mjs
+
+[entry-anchors] 注册表 1210 行；账本 1225 行；承接矩阵 1234 行（同名 1225、账本中无此 rule_id 9）；被检 Markdown 341 份；条目名引用 1040 处（注册表原名 935 处，正文唯一定位 105 处）。
+[entry-anchors] PASS：条目名唯一、引用可唯一定位、正文无行号锚点、账本已登记条目正文与 HTML 现文一致（未登记条目不在保护范围，见 R8-U-02）、账本与承接矩阵一一对应。
+
+> entertainment-complex-management@0.1.0 verify:html-param-tier
+> node tools/verify-html-param-tier.mjs
+
+[html-param-tier] PASS: 本次未改动业务最终解释权 HTML。比对范围：提交区 origin/main...HEAD（工作区三份 HTML 无未提交改动）。
+
+> entertainment-complex-management@0.1.0 verify:delivery-gates-docs
+> node tools/verify-delivery-gates.mjs
+
+DELIVERY_GATES_DOCS_PASS
+
+> entertainment-complex-management@0.1.0 verify:full-admin-matrix
+> node tools/verify-full-admin-page-matrix.mjs
+
+完整后台页面矩阵校验通过：90 个页面均有路由、权限、UI 与测试覆盖
+
+> entertainment-complex-management@0.1.0 verify:domain-ownership-scope
+> node tools/generate-domain-ownership-scope-audit.mjs --check
+
+DOMAIN_OWNERSHIP_SCOPE_PASS: 325 tables classified
+
+> entertainment-complex-management@0.1.0 verify:matrix-vs-migration
+> node tools/verify-matrix-vs-migration.mjs
+
+matrix-vs-migration verification passed: 338 tables parsed; 142 present-claims confirmed, 6 absent-claims still-absent (tracked gaps).
+
+> entertainment-complex-management@0.1.0 verify:data-isolation-spec
+> node tools/generate-data-isolation-spec.mjs --check
+
+data isolation spec is in sync with Flyway migration scope baseline.
+
+> entertainment-complex-management@0.1.0 verify:tenant-isolation
+> node tools/verify-tenant-isolation.mjs
+
+[tenant-isolation] 扫描范围：
+  - 权威表清单（CSV）：325 表（direct=172，白名单豁免=78，inherited 为信息性盲区）
+  - Jdbc*Repository 源：53 个文件
+  - 本次扫出 finding：5（已登记 baseline：5，新增回归：0）
+[tenant-isolation] KNOWN-BLINDSPOT B1（inherited，仅信息性，不硬失败）：69 表
+    · amusement_incident_actions (scope_source: inspection/incident id)
+    · amusement_safety_actions (scope_source: inspection/incident id)
+    · analytics_ai_thresholds (scope_source: dimension/project/merchant)
+    · analytics_customer_intents (scope_source: dimension/project/merchant)
+    · analytics_metric_anomalies (scope_source: dimension/project/merchant)
+    · analytics_metric_definitions (scope_source: dimension/project/merchant)
+    · …其余 63 表略
+
+[tenant-isolation] PASS（棘轮）：无新增回归；5 条已知缺口在台账跟踪闭环中（见 findings-register-v1.md tenant-isolation 小节）。隔离面未劣化。
+
+> entertainment-complex-management@0.1.0 verify:p0-contract
+> npm run verify:no-legacy-api-prototype && npm run verify:openapi && npm run verify:openapi-examples && npm run verify:operation-matrix && npm run verify:openapi-closure && npm run verify:client-routes && npm run verify:client-openapi && npm run verify:client-payload
+
+
+> entertainment-complex-management@0.1.0 verify:no-legacy-api-prototype
+> node tools/verify-no-legacy-api-prototype.mjs
+
+NO_LEGACY_API_PROTOTYPE_PASS
+
+> entertainment-complex-management@0.1.0 verify:openapi
+> node tools/verify-openapi-contract.mjs
+
+OpenAPI contract verification passed.
+
+> entertainment-complex-management@0.1.0 verify:openapi-examples
+> node tools/verify-openapi-p0-examples.mjs
+
+OpenAPI P0 example verification passed: 8 request bodies and 3 responses checked.
+
+> entertainment-complex-management@0.1.0 verify:operation-matrix
+> node tools/generate-openapi-operation-matrix.mjs --check
+
+docs/p0-openapi-operation-acceptance-matrix-v0.1.md is in sync with docs/openapi/openapi-p0.json; 720 operations checked.
+
+> entertainment-complex-management@0.1.0 verify:openapi-closure
+> node tools/generate-openapi-contract-closure-appendix.mjs --check
+
+/home/james/wt-gates/docs/p0-openapi-contract-closure-appendix-v0.1.md is in sync with /home/james/wt-gates/docs/openapi/openapi-p0.json; 720 operations checked.
+
+> entertainment-complex-management@0.1.0 verify:client-routes
+> node tools/audit-client-api-routes.mjs --strict
+
+[client-api-route-audit] PASS: client code only references formal /api/v1 or /api/open paths.
+
+> entertainment-complex-management@0.1.0 verify:client-openapi
+> node tools/audit-client-openapi-coverage.mjs --strict
+
+[client-openapi-coverage] PASS: 59 client route template(s) are covered by OpenAPI; 59 method-specific call(s) match OpenAPI methods.
+
+> entertainment-complex-management@0.1.0 verify:client-payload
+> node tools/verify-client-payload-policy.mjs --strict
+
+[client-payload-policy] PASS: client payload normalization and OpenAPI request field casing are enforced.
+
+> entertainment-complex-management@0.1.0 verify:security-baseline
+> npm run verify:prod-docs-access && node tools/verify-formal-security-baseline.mjs --strict
+
+
+> entertainment-complex-management@0.1.0 verify:prod-docs-access
+> node tools/verify-prod-docs-access-policy.mjs
+
+production OpenAPI/Swagger docs access policy verification passed.
+Formal security baseline verification passed: security-scans/formal-security-baseline-v1.md and security-scans/findings-register-v1.md.
+
+> entertainment-complex-management@0.1.0 verify:production-readiness-evidence
+> node tools/verify-production-readiness-evidence.mjs
+
+PRODUCTION_READINESS_EVIDENCE_PASS
+
+> entertainment-complex-management@0.1.0 verify:production-blockers
+> node tools/generate-production-blocker-register.mjs --check
+
+PRODUCTION_BLOCKER_REGISTER_PASS
+
+> entertainment-complex-management@0.1.0 verify:pii-encryption
+> node tools/verify-pii-encryption.mjs
+
+PII_ENCRYPTION_PASS: 9 个 PII 列均经 piiCipher.encrypt 落库
+
+> entertainment-complex-management@0.1.0 verify:test-db-isolation
+> node tools/verify-test-db-isolation.mjs
+
+TEST_DB_ISOLATION_PASS: 测试源未引用生产库 complex（均用 complex_test）
+EXIT=0

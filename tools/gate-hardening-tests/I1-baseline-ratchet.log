@@ -1,0 +1,13 @@
+===== 测试 I-1：棘轮基线只许缩不许增（机检） =====
+对照基线 commit = 828796f5（含 tools/html-param-tier-baseline.json 9 条）
+--- I-1① 手工往本地基线追加一条 key → 预期红 exit 1 ---
+[html-param-tier] FAIL: 存量基线只许缩不许增，本次多出 1 条 key。
+  基线 HEAD@828796f5 有 9 条，本地 tools/html-param-tier-baseline.json 有 10 条。
+  + deadbeefdeadbeef docs/business-system-map-for-operations-v0.1.html
+      伪造条目：想靠补登记给新违规发通行证，上限 99 次。
+  新写的带数值业务句必须当场标层级或用 param-tier:ignore 豁免，不得补登记进基线。
+NEW-PARAM EXIT=1
+--- I-1② 手工从本地基线删掉一条 key（模拟补标草案落地）→ 预期绿 exit 0 ---
+删掉的是 02be773ab1346dba 所有商品可录入内部结算价（成本价口径）；销售赠送
+[html-param-tier] PASS: 本次未改动业务最终解释权 HTML。比对范围：提交区 HEAD...HEAD（工作区三份 HTML 无未提交改动）。
+NEW-PARAM EXIT=0
