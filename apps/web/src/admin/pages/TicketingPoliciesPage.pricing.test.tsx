@@ -53,7 +53,7 @@ async function selectPass() {
 describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it("选中通票即显示：票面原价合计、折扣、系统算出售价、允许误差、凑整建议", async () => {
+  it("选中通票即显示：各业态价格合计、折扣、系统算出售价、允许误差、凑整建议", async () => {
     renderPage(vi.fn());
     await selectPass();
 

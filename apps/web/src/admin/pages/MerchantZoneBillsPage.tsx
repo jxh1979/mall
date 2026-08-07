@@ -10,7 +10,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 
 const TEXT = {
   title: "我的账单",
-  description: "本商户的租金 / 物业费 / 能源费 / 保证金账单与账龄，只读。费用缴纳仍走平台既有收款流程，本页仅展示与提醒。",
+  description: "本商户的租金 / 物业费 / 能源费 / 押金账单与账龄，只读。费用缴纳仍走平台既有收款流程，本页仅展示与提醒。",
   loadFailed: "账单读取失败",
   focusClear: "清除筛选，返回全部",
 };
@@ -29,7 +29,7 @@ const FEE_TYPE_LABELS: Record<string, string> = {
   property_fee: "物业费",
   energy_fee: "能源费",
   cam: "公摊",
-  deposit: "保证金",
+  deposit: "押金",
   other: "其他",
   manual: "手工登记",
   contract: "合同",

@@ -477,7 +477,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       && (boundTemplate.entitlementType === "gift_drink" || boundTemplate.entitlementKind === "physical")
       && !(Number(bindForm.componentPriceYuan) > 0);
     if (looksLikeGift && !bindForm.costBearer) {
-      setGlobalError(`「${boundTemplate.name}」是赠送权益（票面原价 0），请选择成本承担方（商户让利型/平台出资型）。`);
+      setGlobalError(`「${boundTemplate.name}」是赠送权益（各业态价格 0），请选择成本承担方（商户让利型/平台出资型）。`);
       return;
     }
     await api.post(`/api/v1/ticketing/ticket-types/${bindForm.ticketTypeId}/entitlements`, {
@@ -985,9 +985,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
 
       <h4>定价核算（系统算出售价 vs 你填的售价）</h4>
       <div className="admin-preview">
-        通票的售价不用自己拍脑袋：各业态票面原价加起来、再按票种折扣打一下，系统就算出该卖多少。
+        通票的售价不用自己拍脑袋：各业态价格加起来、再按票种折扣打一下，系统就算出该卖多少。
         你可以在这个数上下调一点凑个好卖的整数（尾数 8/9/0），但差得太多就是填错了——超过后台配的允许误差，这张票不许开卖。
-        免费权益（票面原价 0）不计入价值。允许误差在「结算配置中心 → 通票分账」维护。
+        免费权益（各业态价格 0）不计入价值。允许误差在「结算配置中心 → 通票分账」维护。
       </div>
       {!comboTicketId ? (
         <div className="admin-preview" data-testid="combo-price-check-empty">请先选择要配置的通票。</div>
@@ -997,7 +997,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="combo-price-check-table">
             <tbody>
-              <tr><th>各业态票面原价合计</th><td data-testid="price-check-component-total">¥{yuan(priceCheck.componentTotalCent)}</td></tr>
+              <tr><th>各业态价格合计</th><td data-testid="price-check-component-total">¥{yuan(priceCheck.componentTotalCent)}</td></tr>
               <tr><th>票种折扣</th><td data-testid="price-check-discount">{String(priceCheck.comboDiscountRate ?? 100)}%</td></tr>
               <tr><th>系统算出售价</th><td data-testid="price-check-computed">¥{yuan(priceCheck.computedPriceCent)}</td></tr>
               <tr><th>当前填的售价（平日价）</th><td data-testid="price-check-filled">{priceCheck.filledPriceCent == null ? "还没填" : `¥${yuan(priceCheck.filledPriceCent)}`}</td></tr>
@@ -1128,7 +1128,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           </label>
         ))}
         <input aria-label="游乐次数" type="number" min={1} value={projectTimes} onChange={(event) => setProjectTimes(event.target.value)} placeholder="游乐次数（每设施）" />
-        <input aria-label="游乐票面原价（元）" type="number" min={0} step="0.01" value={amusementPriceYuan} data-testid="combo-amusement-price" onChange={(event) => setAmusementPriceYuan(event.target.value)} placeholder="游乐票面原价（元，每设施）" />
+        <input aria-label="游乐业态价格（元）" type="number" min={0} step="0.01" value={amusementPriceYuan} data-testid="combo-amusement-price" onChange={(event) => setAmusementPriceYuan(event.target.value)} placeholder="游乐业态价格（元，每设施）" />
         <select aria-label="游乐权益归属商户" data-testid="combo-amusement-merchant" value={amusementMerchantId} onChange={(event) => setAmusementMerchantId(event.target.value)}>
           <option value="">游乐权益归属商户</option>
           {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
@@ -1297,7 +1297,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <input aria-label="份数" type="number" min={1} value={bindForm.quantity} onChange={(event) => setBindForm({ ...bindForm, quantity: event.target.value })} placeholder="份数" />
         <input aria-label="每份次数" type="number" min={1} value={bindForm.totalTimes} onChange={(event) => setBindForm({ ...bindForm, totalTimes: event.target.value })} placeholder="每份次数" />
         <input aria-label="每份核销人数" type="number" min={1} value={bindForm.numPeople} onChange={(event) => setBindForm({ ...bindForm, numPeople: event.target.value })} placeholder="每份人数（多人票>1）" />
-        <input aria-label="票面原价（元）" type="number" min={0} step="0.01" value={bindForm.componentPriceYuan} onChange={(event) => setBindForm({ ...bindForm, componentPriceYuan: event.target.value })} placeholder="票面原价（元，免费填0）" data-testid="ticket-bind-component-price" />
+        <input aria-label="各业态价格（元）" type="number" min={0} step="0.01" value={bindForm.componentPriceYuan} onChange={(event) => setBindForm({ ...bindForm, componentPriceYuan: event.target.value })} placeholder="各业态价格（元，免费填0）" data-testid="ticket-bind-component-price" />
         <select aria-label="成本承担方" data-testid="ticket-bind-cost-bearer" value={bindForm.costBearer} onChange={(event) => setBindForm({ ...bindForm, costBearer: event.target.value })}>
           <option value="">成本承担方（赠送权益必选）</option>
           {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}

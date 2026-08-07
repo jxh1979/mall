@@ -680,13 +680,13 @@ public class TicketCatalogService {
         }
         if (check.filledPriceCent() == null) {
             throw ApiException.badRequest("TICKET_PRICE_REQUIRED",
-                    "这张票还没填平日售价，不能开卖。系统按各业态票面原价算出的售价是 "
+                    "这张票还没填平日售价，不能开卖。系统按各业态价格算出的售价是 "
                             + yuan(check.computedPriceCent()) + " 元");
         }
         long over = Math.abs(check.diffCent()) - check.toleranceCent();
         throw ApiException.badRequest("TICKET_PRICE_OUT_OF_TOLERANCE",
                 "填的售价和系统算出的售价差太多，票不能开卖：系统算出 " + yuan(check.computedPriceCent())
-                        + " 元（各业态票面原价合计 " + yuan(check.componentTotalCent()) + " 元 × "
+                        + " 元（各业态价格合计 " + yuan(check.componentTotalCent()) + " 元 × "
                         + check.comboDiscountRate().stripTrailingZeros().toPlainString() + "% 折扣），"
                         + "填的是 " + yuan(check.filledPriceCent()) + " 元，"
                         + (check.diffCent() > 0 ? "上调 " : "下调 ") + yuan(Math.abs(check.diffCent())) + " 元，"
@@ -775,7 +775,7 @@ public class TicketCatalogService {
                 .toList();
         if (!missing.isEmpty()) {
             throw ApiException.badRequest("TICKET_COMPONENT_PRICE_REQUIRED",
-                    "这些权益还没填票面原价，票不能开卖（免费的请填 0）：" + String.join("、", missing));
+                    "这些权益还没填各业态价格，票不能开卖（免费的请填 0）：" + String.join("、", missing));
         }
     }
 

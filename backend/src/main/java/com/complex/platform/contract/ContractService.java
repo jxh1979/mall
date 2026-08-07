@@ -1166,7 +1166,7 @@ public class ContractService {
             adj.put("direction", delta > 0 ? "collect" : "refund");   // 补/追加 vs 退差额
             adj.put("status", "pending");   // 走押金台账手动确认（退押金遵循运营手动确认才落账）
             adj.put("reason", "location_change".equals(change.changeType())
-                    ? "经营位置变更保证金调整" : "经营面积变更保证金调整");
+                    ? "经营位置变更押金调整" : "经营面积变更押金调整");
             childTerms.put("depositAdjustment", adj);
         }
         Instant now = Instant.now();

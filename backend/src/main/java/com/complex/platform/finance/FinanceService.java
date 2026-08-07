@@ -84,7 +84,7 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("manual", "手工录入"), Map.entry("settlement", "结算"), Map.entry("bar_bill", "酒吧账单"),
             Map.entry("employee_commission", "员工提成"), Map.entry("inventory_difference", "库存差异"),
             Map.entry("turnover_rent", "营业额抽成租金"), Map.entry("cam", "公共区域维护费"),
-            Map.entry("deposit", "保证金"), Map.entry("property_fee", "物业费"),
+            Map.entry("deposit", "押金"), Map.entry("property_fee", "物业费"),
             Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
             Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
             Map.entry("dividend_reserve_released", "分红留存已释放"),
