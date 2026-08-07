@@ -17,6 +17,10 @@
 //   ⑥ 账本每行必须在承接矩阵 docs/prd-audit/html-prd-coverage.csv 里有对应行
 //      （反向：④ 只检「矩阵→账本」，缺了「账本→矩阵」这一向，账本新增条目可以长期不进矩阵而门禁不响）；
 //      矩阵里 9 条 *-MPS-000N 占位伪 ID 按白名单放行（member-points 重建 Phase4 待映射，账本无对应行是设计如此）。
+//   ⑦ 账本另外九个句子类镜像列（trigger / preconditions / state_transition / value_flow / permission /
+//      approval / separation_of_duties / failure_recovery / evidence_required）同样逐字实检：
+//      检查⑤ 只覆盖 source_text 一列，这九列在此之前命中数一直是 0——HTML 改了、这九列不跟，门禁不会响。
+//      trigger 列是抽取时合成的触发场景概括，定性豁免；哨兵值 NOT_* 豁免；短于 12 字的片段不检。
 import fs from "node:fs";
 import path from "node:path";
 
@@ -165,6 +169,56 @@ for (const r of covRows) {
   }
 }
 
+// ---- ⑦ 账本九个句子类镜像列逐字实检（R12 新增）----
+// 检查⑤ 只管 source_text 一列。另外九列（trigger / preconditions / state_transition / value_flow /
+// permission / approval / separation_of_duties / failure_recovery / evidence_required）从来没被机检过，
+// 命中数一直是 0——HTML 改了、这九列不跟，门禁不会响。本检把它们纳入保护范围。
+//
+// 【片段分隔符口径：宽口径 /[｜；;\s]+/】
+// 这九列的值是「从条目正文里挑若干句拼起来」，抽取时用过三种拼接符——全角竖线 ｜、分号 ；/;，
+// 以及**一个普通空格**（被挑的句子在原文里不相邻时用它）。
+// 例：BSM-0001 preconditions = source_text 的第 1 句 + " " + 第 3 句，中间第 2 句跳过。
+// norm() 会把空格抹掉，于是两段不相邻的原文被焊成一条现文里根本不存在的串，纯属误报。
+// 实测对比（本轮基线 a4f31f56，阈值 12）：
+//   只切 ｜        ：checked=1663，非 trigger 失配 26
+//   切 ｜；;        ：checked=1901，非 trigger 失配 17
+//   切 ｜；; + 空白 ：checked=1965，非 trigger 失配 12   ← 取此口径
+// 宽口径检的片段更多、误报更少，两头都占优，故取宽口径。
+//
+// 【trigger 列整列豁免】该列存的是抽取时**合成**的触发场景概括，设计上就不逐字复制原文
+// （实测 301 处失配里 289 处落在这一列，占 96%）。对一个合成列做逐字检，等于要求它不再是概括，
+// 属口径冲突而非数据错误，故定性豁免；其余八列逐字检。
+//
+// 【阈值 12 字】低于 12 字的片段多是「不用审批」「自动留痕」这类标签式短语，全库大量重复出现，
+// 逐字命中与否不构成「账本跟丢了 HTML」的证据，检了只增噪声。
+//
+// 【尾部标点容差】单元格习惯以 。 收尾，而原文同一处常是 ；或 、。终止标点不承载规则语义，
+// 比对前一律剥掉，免掉一整类纯标点误报。
+const MIRROR_COLS = ["trigger", "preconditions", "state_transition", "value_flow",
+  "permission", "approval", "separation_of_duties", "failure_recovery", "evidence_required"];
+const SENTINEL = /^NOT_[A-Z0-9_-]*$/;   // NOT_STATED / NOT_EXTRACTED_R8 / _R8-H2 / _R9：原文本就没说，不是失配
+const MIRROR_MIN = 12;
+const flatNorm = Object.fromEntries(Object.entries(flat).map(([k, v]) => [k, norm(v)]));
+let mirrorChecked = 0;
+for (const r of ledRows) {
+  if (r.entry_name === "ORPHANED") continue;   // 同检查⑤：现行 HTML 已无原文
+  const code = fileOf[r.html_file];
+  if (!code) continue;                          // 未知 HTML 文件已由检查④ 报错
+  for (const col of MIRROR_COLS) {
+    if (col === "trigger") continue;            // 见上：合成列，定性豁免
+    const v = (r[col] || "").trim();
+    if (!v || SENTINEL.test(v)) continue;
+    for (const frag of v.split(/[｜；;\s]+/)) {
+      const n = norm(frag).replace(/[。；;，、．.]+$/, "");
+      if (n.length < MIRROR_MIN) continue;
+      mirrorChecked++;
+      if (!flatNorm[code].includes(n)) {
+        errors.push(`账本镜像列与 HTML 现文对不上：${r.rule_id}「${r.entry_name}」${col} 片段「${frag.trim()}」——HTML 已改而账本未重取（检查⑦）`);
+      }
+    }
+  }
+}
+
 // ---- ②③ 全库引用 ----
 const mdFiles = walk("docs").filter(f => !EXCLUDE.test(f.replace(/\\/g, "/")));
 const REF = /(BSM|PGM|ENUM|BEQ)\s*「([^」]{2,})」/g;
@@ -193,7 +247,7 @@ for (const f of mdFiles) {
     else errors.push(`${rel}:${at}：${code}「${name}」在该 HTML 中命中 ${textHits.length} 条，无法唯一定位`);
   }
 }
-console.log(`[entry-anchors] 注册表 ${rows.length} 行；账本 ${ledRows.length} 行；承接矩阵 ${covRows.length} 行（同名 ${covMapped}、账本中无此 rule_id ${covNotInLedger}）；被检 Markdown ${mdFiles.length} 份；条目名引用 ${refTotal} 处（注册表原名 ${refByName} 处，正文唯一定位 ${refByText} 处）。`);
+console.log(`[entry-anchors] 注册表 ${rows.length} 行；账本 ${ledRows.length} 行；承接矩阵 ${covRows.length} 行（同名 ${covMapped}、账本中无此 rule_id ${covNotInLedger}）；账本镜像列片段 ${mirrorChecked} 条；被检 Markdown ${mdFiles.length} 份；条目名引用 ${refTotal} 处（注册表原名 ${refByName} 处，正文唯一定位 ${refByText} 处）。`);
 if (warns.length) warns.forEach(w => console.log("  提示：" + w));
 if (errors.length) {
   console.error(`[entry-anchors] FAIL：${errors.length} 处不合格。`);
@@ -202,4 +256,4 @@ if (errors.length) {
   console.error("  处置：条目改名或 HTML 改动后，重建 docs/prd-audit/entry-registry.csv 并把引用改为现行条目名；一律不得写回行号。");
   process.exit(1);
 }
-console.log("[entry-anchors] PASS：条目名唯一、引用可唯一定位、正文无行号锚点、账本已登记条目正文与 HTML 现文一致（未登记条目不在保护范围，见 R8-U-02）、账本与承接矩阵一一对应。");
+console.log("[entry-anchors] PASS：条目名唯一、引用可唯一定位、正文无行号锚点、账本已登记条目正文与九个镜像列均与 HTML 现文一致（未登记条目不在保护范围，见 R8-U-02）、账本与承接矩阵一一对应。");

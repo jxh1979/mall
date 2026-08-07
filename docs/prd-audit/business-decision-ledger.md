@@ -718,7 +718,7 @@
 
 - 路径 B：先清偿高严重度 OPEN 文档债。
 - 本批闭合：终端 6 MISSING、BAR-VOID-A1 相关 10 PARTIAL、积分 ADV-TX-004 相关 3 PARTIAL（改挂 ACCRUAL-002）。
-- 仍 OPEN（待业务拍板后补 PRD）：ADV-TX-003 储值混退；ADV-TX-007 卡座转并续；ADV-TX-008/XD-006 营业日；ADV-ED-003 准入冲突；ADV-ED-008 数据新鲜度（及对抗表 ADV-ED-007 指标口径）。
+- 仍 OPEN（待业务拍板后补 PRD）：ADV-TX-003 储值混退；ADV-TX-007 卡座转并续；ADV-TX-008/XD-006 营业日；ADV-ED-003 准入冲突；ADV-ED-008 数据新鲜度（及对抗表 ADV-ED-007 指标口径）。　**【2026-08-07 R12 订正：本行「仍 OPEN」为写就时状态，非现行状态。**所列五项均已闭合**——`ADV-TX-003`（本文件 L727，`DEC-SV-LEDGER-001` 等五条，承接 `docs/member-loyalty-and-stored-value-product-prd-v0.1.md` §7）；`ADV-TX-007`（L743，`DEC-SEAT-TRANSFER-001`／`DEC-SEAT-MERGE-001`／`DEC-SEAT-NO-RENEW-001`，承接 `docs/bar-business-operations-product-prd-v0.1.md` §7.3A）；`ADV-ED-003` 准入冲突（L756，`DEC-ADM-PRIORITY-001` 闭合，用户选 2 ＝ ADM-PRIORITY-CHAIN，承接 `amusement-business-operations-product-prd-v0.1.md` §7.2A）；`ADV-ED-008` 数据新鲜度（L768，`DEC-DATA-FRESH-PRAGMATIC-001` 闭合；该条另于 L777 标「已废止（2026-07-28）：由 `DEC-DATA-BACKEND-ACCURATE-001` 取代」，即已闭合后再被重裁覆盖，两种情形均非 OPEN）；`ADV-TX-008`／`XD-006` 营业日（L782，`DEC-BIZDAY-001`／`DEC-TAX-CN-REFUND-001` 闭合，承接 `docs/finance-settlement-product-prd-v0.1.md` §4A）。营业日口径并已进业务 HTML：`docs/business-system-map-for-operations-v0.1.html` 与 `docs/business-enum-quick-reference-v0.1.html` 各 8 处命中「营业日」，BSM 现文「营业日（当日 10:00 至次日 10:00，起止时点沿用营业日配置）」（PGM 零命中，属正常，该口径不落 PGM）。**本行唯一仍无闭合证据的是括号内的 `ADV-ED-007`（对抗表指标口径）**——本台账全文仅本行一处命中，从未被任何裁决条闭合，**保留为 OPEN**；其原始登记见 `docs/prd-audit/phase6-adversarial-findings.csv`（P0、`PARTIAL`、处置 `DEFERRED-DOCS-FOLLOWUP`、缺口「缺去重；时间窗」）与 `docs/prd-audit/phases/06-amusement-terminal-thirdparty-data.md`，两处均非闭合裁决。原文一字保留只作留痕。】**
 - 仅文档；不改代码；不改三份权威 HTML。
 
 
@@ -1887,3 +1887,5 @@
    属代码轮范围，**未做**。
 3. 第 2 项即 `FINAL-19` 保持 `open` 的原因；全仓「四类→五类」扫尾面（活文件 11 个 18 处）
    超出 `FINAL-19` 的登记面，另见候选 `R11-C-070` 与 `docs/prd-audit/rounds/r11/worklog.md`。
+4. `docs/pending-development-backlog-v0.1.md` 的 **J3**（`face_verify_result` 落库核查）在 R11 落账时**与本块 (5) B-05 裁决相反**：仍写三档值域（成年/未成年/不确定）、仍保留「方向相反」定性、仍指示「已建则删列 + 迁移 + 数据清理」。**已于 R12-batch2 按 B-05／B-01 改写**为「保留字段 ＋ 补齐约束 ＋ 补缺条」与两档值域。
+   **⚠ 须人工盯**：`docs/prd-audit/rounds/r8/findings.csv` 的 `FINAL-26` 已标 `resolved`，本条**不再进入任何按未闭合缺口出的统计**；若 J3 再次漂移或代码轮误按旧文执行，**没有任何统计口径能把它捞出来**。任何一轮动 `FINAL-26` 或 J3 之前，必须先回读本条。

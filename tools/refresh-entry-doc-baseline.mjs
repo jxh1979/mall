@@ -97,9 +97,12 @@ if (blockMatch) {
 }
 
 const summary = `${operationCount} ops / ${latestMigrationTag}（${migrationCount} 迁移）${testCount ? ` / ${testCount} tests` : ""}`;
+// --check 只比数字不比日期：上面 A/C/D 三条替换会把 today 无条件戳进快照句，
+// 否则回填次日起必红（日历闹钟，不是漂移闸）。回填模式 norm 为恒等，日期照常刷新。
+const norm = (s) => (checkOnly ? s.replace(/[0-9]{4}-[0-9]{2}-[0-9]{2}/g, "") : s);
 const drifted = [];
-if (entryText !== entryBefore) drifted.push("docs/00-current-effective-document-entry-v0.1.md");
-if (readmeText !== readmeBefore) drifted.push("README.md");
+if (norm(entryText) !== norm(entryBefore)) drifted.push("docs/00-current-effective-document-entry-v0.1.md");
+if (norm(readmeText) !== norm(readmeBefore)) drifted.push("README.md");
 
 if (checkOnly) {
   if (drifted.length > 0) {
