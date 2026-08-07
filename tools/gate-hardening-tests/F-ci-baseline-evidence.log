@@ -1,0 +1,7 @@
+===== F：CI 侧 origin/main 可解析性取证（决定「无基线转 exit 1」会不会把 CI 变红） =====
+取证对象：最近一次 pull_request 事件 run 31145223559（docs/rule-registry-expansion）
+判据：若 CI 里取不到 origin/main，旧脚本会打印「无法比对基线 origin/main，跳过」；
+      实际打印的是「PASS: 本次未改动…」，说明基线在 CI 里取得到（actions/checkout fetch-depth: 0 生效）。
+predeploy	Run actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5	2026-08-07T03:43:47.4940554Z  * [new branch]        main                                     -> origin/main
+predeploy	verify:predeploy (governance gates)	2026-08-07T03:43:57.9172702Z [html-ledger-sync] PASS: 本次未改动业务最终解释权 HTML。
+predeploy	verify:predeploy (governance gates)	2026-08-07T03:43:59.9433767Z [html-param-tier] PASS: 本次未改动业务最终解释权 HTML。

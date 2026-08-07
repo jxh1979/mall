@@ -3,16 +3,17 @@
 ## 为什么改
 此前:AI 直推 main、部署只跑后端测试、治理门禁不 gate 部署 → 曾带着红门禁(scope 登记/安全基线/后台矩阵漂移)上生产。补三道真门禁。
 
-## 三道门禁
+## 四道门禁
 1. **部署门禁(硬阻断,.160)**:`complex-deploy-api.sh`/`complex-deploy-web.sh` 在构建前跑 `npm run verify:predeploy`(delivery-gates 快子集,静态无需 DB);红即 `exit 1` 不碰生产。
 2. **本地 pre-push 钩子(.160)**:禁止 `git push ...:main`;正道走 feature 分支 + PR。紧急覆盖 `ALLOW_MAIN_PUSH=1`(须在 PR/说明记录原因)。
 3. **GitHub Actions(独立、隔离,✅已激活 2026-07-06)**:模板在 `ops/ci/predeploy-gates.yml`——**已复制到 `.github/workflows/predeploy-gates.yml`(用户已授权 workflow scope),现于 PR/push 到 main 时在 GitHub ubuntu runner 上跑 `verify:predeploy`。即便激活,私有库免费版也无法设 required check,只是可见信号 + 独立复现;硬阻断由第 1、2 道承担。
+4. **合并前置检查(`ops/160/merge-pr.sh`,2026-08-07 门禁升级批 1 补)**:合并前取本分支 head commit 对应的 predeploy-gates run,`gh run watch --exit-status` 等到绿才 `gh pr merge`;非成功即中止并打印 run URL。补的正是第 3 道"只是可见信号"的缺口——把"人记得去看一眼"变成机器动作。逃生口 `SKIP_CI_WAIT=1`(打印醒目警告,**须在 PR 说明原因**)。
 
 ## 变更流程
 1. feature 分支上开发 + 提交。
 2. `ops/160/propose-change.sh "<标题>"` → 本地 predeploy 绿 → 推分支 → 开 PR。
 3. **独立复核**:把 PR diff 交由 **codex(不同模型)** 做对抗复核(本环境最接近"独立"的手段;非人工,须知悉此局限)。
-4. GitHub Actions predeploy 绿 + 复核通过 → `gh pr merge --squash`。
+4. 复核通过 → `ops/160/merge-pr.sh --squash`(自动等 GitHub Actions predeploy 绿再合;CI 故障时 `SKIP_CI_WAIT=1` 强合,须在 PR 说明原因)。
 5. 部署:`complex-deploy-api.sh`(自带 predeploy 硬闸)。
 
 ## 已知局限(诚实记录)

@@ -1,0 +1,5 @@
+===== 测试 E：裸豁免标记（不列数值）→ 整行豁免 + 提醒改成带数值豁免，不红 =====
+[html-param-tier] 提醒：docs/business-system-map-for-operations-v0.1.html 有一处整行豁免（该行 41 字，含 30天、3次），建议改成带数值豁免 <!-- param-tier:ignore 30天;3次 -->，否则这行以后新增的数值也一并被放过。
+[html-param-tier] 警告 6 处：已登记在册的存量未标层级句（tools/html-param-tier-baseline.json），本次放行。
+[html-param-tier] PASS: 改动了 1 份业务 HTML，全量重扫无基线外的未标层级句（存量 6 处已登记放行）。比对范围：工作区（含未提交改动）↔ 基线 origin/main@7da3aaa1；扫描口径：改动文件全文，已剥除 <style> 与注释。
+NEW-PARAM EXIT=0

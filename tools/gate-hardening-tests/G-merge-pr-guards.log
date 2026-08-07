@@ -1,0 +1,24 @@
+===== merge-pr.sh 守卫路径实测（全部在任何 mutating 动作之前中止；真合并未测，见报告） =====
+--- G1 非法合并方式 ---
+合并方式只能是 --squash|--merge|--rebase
+EXIT=1
+--- G2 在 main 上执行（借主工作区，只读） ---
+[merge] main 上没有待合并的 PR;请切到 feature 分支。
+EXIT=1
+--- G3 脏工作区（A-3 新增守卫；本工作区当前就是脏的） ---
+[merge] 工作区有未提交改动;CI 跑的是远端 commit,这些改动不在里面。
+        先提交并 push,或 stash 掉再合。
+ M AGENTS.md
+ M docs/agents/issue-tracker.md
+  （…省略 porcelain 清单…）
+--- G4 工作区干净但分支未 push（stash 掉全部改动后验证下一道守卫） ---
+[merge] origin 上没有 tools/gate-hardening-batch1;先跑 ops/160/propose-change.sh 推分支开 PR。
+EXIT=1
+  （改动已 stash pop 还原）
+--- G5 gh 查询语句实测（只读） ---
+commit=7da3aaa152181f8d89bdd5d1a42abdecf71d8627
+[{"conclusion":"success","databaseId":31145269210,"event":"push"}]
+gh EXIT=0
+--- G6 bash -n ---
+merge-pr.sh OK
+propose-change.sh OK

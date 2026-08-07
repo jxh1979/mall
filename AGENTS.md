@@ -27,7 +27,9 @@ single-context 布局，词表在仓库根的 `CONTEXT.md`。详见 `docs/agents
    ⚠️ `/implement` 的默认收尾动作是 "commit to the current branch" —— **必须先开好
    worktree 再让它跑**，否则直接提交到 main。
 
-2. **禁直推 main。** 一律 feature 分支 + `gh pr create` + `gh pr merge`。
+2. **禁直推 main。** 一律 feature 分支 + `ops/160/propose-change.sh`(推分支开 PR) +
+   `ops/160/merge-pr.sh`(等 predeploy-gates 对本 commit 变绿再合)。**不要手敲 `gh pr merge`**——
+   私有库免费版设不了 required check,红着也能合。CI 本身故障时可 `SKIP_CI_WAIT=1` 强合,须在 PR 说明原因。
    仓库装了 pre-push 钩子，直推会被拦，但提交已经落在 main 上了。
 
 3. **动手前先 `git fetch origin`**，核对 `HEAD == origin/main`。

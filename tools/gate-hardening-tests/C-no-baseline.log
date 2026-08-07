@@ -1,0 +1,39 @@
+===== 测试 C（返工后复跑）：取不到基线 =====
+--- C1 传入不存在的基线 ref ---
+fatal: ambiguous argument 'origin/no-such-base...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+[html-ledger-sync] 无法比对基线 origin/no-such-base，跳过（本地未 fetch 时属正常）
+OLD-LEDGER EXIT=0
+fatal: bad revision 'origin/no-such-base...HEAD'
+[html-param-tier] 无法比对基线 origin/no-such-base，跳过（本地未 fetch 时属正常）
+OLD-PARAM  EXIT=0
+fatal: Not a valid object name origin/no-such-base
+[html-ledger-sync] FAIL: 取不到基线 origin/no-such-base，无法判定本次改动范围。
+  无法判定不等于通过。请先 git fetch origin（CI 侧 actions/checkout 需 fetch-depth: 0）。
+  如需换基线：node tools/verify-html-ledger-sync.mjs <基线ref>
+NEW-LEDGER EXIT=1
+fatal: Not a valid object name origin/no-such-base
+[html-param-tier] FAIL: 取不到基线 origin/no-such-base，无法判定本次改动范围。
+  无法判定不等于通过。请先 git fetch origin（CI 侧 actions/checkout 需 fetch-depth: 0）。
+  如需换基线：node tools/verify-html-param-tier.mjs <基线ref>
+NEW-PARAM  EXIT=1
+--- C2 /tmp/nobase 无 origin 远端，默认基线 origin/main ---
+fatal: ambiguous argument 'origin/main...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+[html-ledger-sync] 无法比对基线 origin/main，跳过（本地未 fetch 时属正常）
+OLD-LEDGER EXIT=0
+fatal: bad revision 'origin/main...HEAD'
+[html-param-tier] 无法比对基线 origin/main，跳过（本地未 fetch 时属正常）
+OLD-PARAM  EXIT=0
+fatal: Not a valid object name origin/main
+[html-ledger-sync] FAIL: 取不到基线 origin/main，无法判定本次改动范围。
+  无法判定不等于通过。请先 git fetch origin（CI 侧 actions/checkout 需 fetch-depth: 0）。
+  如需换基线：node tools/verify-html-ledger-sync.mjs <基线ref>
+NEW-LEDGER EXIT=1
+fatal: Not a valid object name origin/main
+[html-param-tier] FAIL: 取不到基线 origin/main，无法判定本次改动范围。
+  无法判定不等于通过。请先 git fetch origin（CI 侧 actions/checkout 需 fetch-depth: 0）。
+  如需换基线：node tools/verify-html-param-tier.mjs <基线ref>
+NEW-PARAM  EXIT=1
