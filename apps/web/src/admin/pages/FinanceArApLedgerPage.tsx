@@ -26,7 +26,7 @@ function voucherNo(row: FinanceLedgerRow): string {
 
 // ar_ap 来源类型中文标签（含退租相关）；未知值原样回显不吞值。
 const SOURCE_TYPE_LABELS: Record<string, string> = {
-  termination_penalty: "退租违约金", deposit_refund: "退租押金退还", deposit: "保证金",
+  termination_penalty: "退租违约金", deposit_refund: "退租押金退还", deposit: "押金",
   contract_rent: "合同租金", contract_property_fee: "物业费", energy_fee: "能源费",
   turnover_rent: "营业额抽成租金", dividend_payout: "持股分红发放", bar_bill: "酒吧账单",
 };

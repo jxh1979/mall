@@ -10,7 +10,7 @@ import type { AdminPageProps, MerchantZoneContractRow } from "../types";
 
 const TEXT = {
   title: "我的合同",
-  description: "本商户合同的关键信息(租期 / 空间 / 状态 / 保证金)只读;改价、变更与审批仍走平台侧权威流程。",
+  description: "本商户合同的关键信息(租期 / 空间 / 状态 / 押金)只读;改价、变更与审批仍走平台侧权威流程。",
   loadFailed: "合同读取失败",
   focusClear: "清除筛选，返回全部",
 };
@@ -67,7 +67,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
             : "—",
         },
         { label: "状态", value: STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "—" },
-        { label: "保证金", value: money(row.depositCent) },
+        { label: "押金", value: money(row.depositCent) },
         {
           label: "续签自",
           value: row.renewedFromContractId
@@ -120,7 +120,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="merchant-zone-contracts-table">
         <thead>
-          <tr><th>合同</th><th>租期</th><th>空间</th><th>状态</th><th>保证金</th><th>续签自</th><th>详情</th></tr>
+          <tr><th>合同</th><th>租期</th><th>空间</th><th>状态</th><th>押金</th><th>续签自</th><th>详情</th></tr>
         </thead>
         <tbody>
           {paged.pageRows.map((row) => (

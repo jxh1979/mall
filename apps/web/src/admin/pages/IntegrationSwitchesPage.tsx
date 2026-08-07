@@ -19,10 +19,10 @@ type SwitchCatalogEntry = {
  */
 const THIRD_PARTY_SWITCH_CATALOG: Record<string, SwitchCatalogEntry> = {
   "face.verification.enabled": {
-    label: "人脸入场闸（实时年龄/人脸核验）",
+    label: "年龄核验环节（人脸扫描确认满 18 周岁）",
     category: "人脸/年龄合规",
-    disabledBehavior: "关闭：入场/售酒走人工证件核验 + 制度兜底，不展示「自动人脸已通过」；酒吧售酒继承入场闸豁免（非阻塞放行）。",
-    enabledRequirements: "开启需：第三方人脸/年龄 SDK/API + 成功/失败样例 + 错误码 + 合规材料 + 测试账号 + credential_ref；开启后入场闸 fail-closed 判龄。",
+    disabledBehavior: "关闭：入场/售酒走人工证件核验 + 制度兜底，不展示「自动人脸已通过」；酒吧售酒继承年龄核验环节结论（非阻塞放行）。",
+    enabledRequirements: "开启需：第三方人脸/年龄 SDK/API + 成功/失败样例 + 错误码 + 合规材料 + 测试账号 + credential_ref；开启后年龄核验环节 fail-closed 判龄。",
   },
   "integration.face_age.sync": {
     label: "人脸/年龄第三方对账同步",

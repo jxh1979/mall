@@ -33,7 +33,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   in_progress: "进行中",
   pending_settlement: "待结算",
-  deposit_offsetting: "保证金抵扣中",
+  deposit_offsetting: "押金抵扣中",
   arrears_collecting: "欠费追缴中",
   disputed: "有异议",
   settled: "已结清",

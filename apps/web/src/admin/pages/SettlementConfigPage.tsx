@@ -43,7 +43,7 @@ const BLOCKS: BlockDef[] = [
   { key: "merchant_rate", title: "商户每客单价 / 固定额（第一段固定规则）", endpoint: "merchant-rate", note: "按「项目 × 商户」配置，二选一：配了的酒吧走第一段按绝对金额先拿（每客单价 × 当月客数，或固定额），不再参与第二段排名档位；未配置的酒吧走第二段。改动落草案；可对草案「下线」。" },
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
   { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后生效。" },
-  { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态票面原价×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
+  { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态价格×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
   { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成：比例（万分比）或每张票固定金额（分）二选一，改动落草案。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
 ];

@@ -95,7 +95,7 @@ describe("MerchantZoneContractsPage 行明细抽屉（整行可点·日期中文
     window.history.replaceState({}, "", "/admin/merchant-zone/contracts");
   });
 
-  it("点合同行 -> 抽屉含租期中文日期+中文状态+保证金，合同下钻 TraceLink 保留", async () => {
+  it("点合同行 -> 抽屉含租期中文日期+中文状态+押金，合同下钻 TraceLink 保留", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111"));

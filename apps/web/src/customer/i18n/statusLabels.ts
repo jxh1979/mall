@@ -57,7 +57,7 @@ const STATUS_LABELS: Record<string, string> = {
   effective: "生效中",
   terminated: "已终止",
   pending_settlement: "待结算",
-  deposit_offsetting: "保证金抵扣中",
+  deposit_offsetting: "押金抵扣中",
   arrears_collecting: "欠费追缴中",
   disputed: "有争议",
   // 合同抽成模式 / 变更类型 / 结算触发

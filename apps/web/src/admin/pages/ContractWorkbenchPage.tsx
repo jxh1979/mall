@@ -440,7 +440,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
       if (key === "unpaid_receivable_summary") {
         fields.push({ label: "未清应收合计", value: `¥${yuan(it.amountCent)}（已在应收台账，不重复挂账）` });
       } else if (key === "deposit_disposal") {
-        fields.push({ label: "保证金", value: `¥${yuan(it.depositCent)}` });
+        fields.push({ label: "押金", value: `¥${yuan(it.depositCent)}` });
         fields.push({ label: "抵扣未清", value: `¥${yuan(it.offsetCent)}` });
         if (Number(it.netRefundCent ?? 0) > 0) {
           fields.push({ label: "应退押金净额", value: `¥${yuan(it.netRefundCent)}（挂应付给商户）` });
@@ -788,7 +788,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
           {(changeForm.changeType === "area_change" || changeForm.changeType === "location_change") ? (
             <div data-testid="contract-amendment-fields" style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", width: "100%", alignItems: "center" }}>
               <span style={{ fontWeight: 600 }}>变更子合同：基于原合同派生（继承主体/收费口径，原合同置已变更）</span>
-              <input aria-label="新保证金（元）" placeholder="新保证金（元，补/退差额走押金台账）" inputMode="decimal"
+              <input aria-label="新押金（元）" placeholder="新押金（元，补/退差额走押金台账）" inputMode="decimal"
                 value={changeForm.newDepositYuan} onChange={(e) => setChangeForm({ ...changeForm, newDepositYuan: e.target.value })} />
               {changeForm.changeType === "location_change" ? (
                 <input aria-label="新经营位置铺位" placeholder="新铺位ID（逗号分隔；不填=沿用原铺位）"

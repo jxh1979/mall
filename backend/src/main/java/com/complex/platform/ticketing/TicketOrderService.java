@@ -595,7 +595,7 @@ public class TicketOrderService {
             // 客人付了钱，票种却一条票面原价都没配 → 无从判断这笔钱该归哪个业态。
             // 绝不「平均分」蒙混（那会把钱分给错的商户且事后查不出来），当场拒绝出票。
             throw ApiException.conflict("TICKET_COMPONENT_PRICE_MISSING",
-                    "该票种未配置各权益的票面原价，无法按业态拆分账，请先在票种配置里补齐票面原价");
+                    "该票种未配置各权益的各业态价格，无法按业态拆分账，请先在票种配置里补齐各业态价格");
         }
         // 逐张整数分配 + 最大余数补尾，使 Σallocations == orderAmount。
         long assigned = 0;
