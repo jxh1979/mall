@@ -2,7 +2,7 @@
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
-> 2026-07-27 PRD 审计修订：①平台/集团级角色可按职位模板跨项目公司下钻，项目公司管理员限本项目，商户用户 fail-closed；②四类高危授权审批按治理 HTML 改为不可关闭的强制闸门，配置只能加严；③补授权申请人与审批人职责分离；④补岗位、职级、组织、商户或责任范围变化后立即重算并收回旧范围派生权限。当前实现若不满足这些规则，记为实现待对齐，不反向改写 PRD。
+> 2026-07-27 PRD 审计修订：①平台/集团级角色可按职位模板跨项目公司下钻，项目公司管理员限本项目，商户用户 fail-closed；②五类高危授权审批按治理 HTML 改为不可关闭的强制闸门，配置只能加严；③补授权申请人与审批人职责分离；④补岗位、职级、组织、商户或责任范围变化后立即重算并收回旧范围派生权限。当前实现若不满足这些规则，记为实现待对齐，不反向改写 PRD。
 
 > 生成：2026-06-27。业务规则以三份业务 HTML 为最终解释权；迁移、代码和接口只作为当前实现证据，不得反向改写业务规则。本文承接治理 HTML「综合体和集团 / 权限规则」及枚举 HTML §九，M1 需求、V169-V170 和当前代码仅用于说明追溯与实现状态。
 > 重建动因：补断点非绿地：现有 RBAC/SupervisorReview 地基不动，只重建 V169-170 的装配闭环+审批激活+下钻。现有权限模板、临时授权、有效权限计算、SupervisorReview 三档审批继续复用；本轮只补“职位 ↔ 模板 ↔ 角色自动适配”“高危授权先审批再生效”“集团按职位模板可见的下钻对标”三处断点。
@@ -20,7 +20,7 @@
 | 职位角色模板 `position_role_templates` | `status` | `active` / `inactive` | 活跃模板参与定岗匹配；同组织、职位、职级仅允许一个活跃模板 |
 | 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` | DB CHECK 预留 4 类；当前 `AccessService` 实际支持前三类，`role_permission` 服务层未开放 |
 | 授权申请 `access_grant_requests` | `status` | `pending` / `applied` / `rejected` | 待审批 / 已应用 / 已驳回 |
-| 权限定义 `permissions` | `requires_approval` | `true` / `false` | 实现字段；四类 HTML 强制高危权限必须为 `true`，后台只能新增高危项或提高审批等级，不能关闭强制项 |
+| 权限定义 `permissions` | `requires_approval` | `true` / `false` | 实现字段；五类 HTML 强制高危权限必须为 `true`，后台只能新增高危项或提高审批等级，不能关闭强制项 |
 | 权限定义 `permissions` | `risk_level` | 现有表无 CHECK；服务按 `critical` / `high` / 其他分档 | `critical` → l3 / 最高审批；`high` → l2 / 上两级；其他 → l1 / 上一级 |
 | 临时授权 `temporary_permission_grants` | `status` | 现有表无 CHECK；V170 默认写 `active` | 到期由有效权限查询按 `expires_at` 过滤；撤销写 `revoked_by/revoked_at`，单次授权写 `single_use/consumed/consumed_at` |
 | 集团总览 API 参数 | `groupBy` | `project` / `entity` | Controller/Service 校验；非法返回 `VALIDATION_FAILED` |
@@ -33,7 +33,7 @@
 - 给用户定岗 `assignUserPosition` 时，系统按目标用户组织、职位、职级查模板，写三类结果：`staff_level_assignments`、`user_position_assignments`、`user_roles`，并套用 `permission_templates`。
 - 跨组织闸保持原 RBAC 规则：非平台管理员不得给其他组织用户定岗；角色或模板若带组织归属，也必须与目标用户组织一致。
 - `access.role.assign` 独立为高危权限，V169 设为 `risk_level=high`、`requires_approval=true`，避免把“配角色”混在普通 `access.role.manage` 里。
-- 直接分配/取消角色同样复用 `requireActorCanGrant` 和跨组织闸；角色装配只要包含四类强制高危权限或其他 `requires_approval=true` 权限，就必须被审批闸拦截并走 §3 申请，不受可关闭总开关影响。
+- 直接分配/取消角色同样复用 `requireActorCanGrant` 和跨组织闸；角色装配只要包含五类强制高危权限或其他 `requires_approval=true` 权限，就必须被审批闸拦截并走 §3 申请，不受可关闭总开关影响。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/access/position-role-templates`
@@ -55,9 +55,9 @@
 
 ## 3. 高危授权审批（V170）
 **业务规则**
-- 审批闸门：资金/核销/退款/调账/分红发放、提权或跨商户跨综合体、敏感数据、高危业务四类，**加上税费规则与税费调整**（共“四类 + 税费”）——上述权限授出前必须先审批才生效。**（2026-08-03 已收口）** 原 `access.grant_approval.enabled` 配置项可一票关闭这四类强制审批（且关闭时无审计事件、无启动告警，静默失效），属本文此前登记的待对齐缺口；现已从 `AccessService` 移除，审批闸门在生产恒开、无任何配置可关，仅测试构造器保留入参。
-- 高危权限配置：迁移清单只是当前实现初值。后台可以新增高危权限、提高风险等级或提高审批层级，但不得把 HTML 明确的强制项（四类 + 税费规则与税费调整）降级为无需审批，也不得移出强制范围。
-- 高危覆盖口径（四类 + 税费）：
+- 审批闸门：资金/核销/退款/调账/分红发放、提权或跨商户跨综合体、敏感数据、高危业务、**税费规则与税费调整**（共“五类”）——上述权限授出前必须先审批才生效。**（2026-08-03 已收口）** 原 `access.grant_approval.enabled` 配置项可一票关闭这四类强制审批（且关闭时无审计事件、无启动告警，静默失效），属本文此前登记的待对齐缺口；现已从 `AccessService` 移除，审批闸门在生产恒开、无任何配置可关，仅测试构造器保留入参。
+- 高危权限配置：迁移清单只是当前实现初值。后台可以新增高危权限、提高风险等级或提高审批层级，但不得把 HTML 明确的强制项（五类）降级为无需审批，也不得移出强制范围。
+- 高危覆盖口径（五类）：
   - 资金/核销/退款/调账：如 `finance.ar_ap.manage`、`finance.refund.create`、`finance.property_fee.manage`、`bar.bill.adjust`、`customer.stored_value.refund`、`inventory.stock.adjust`。**持股分红的方案配置、算单、审批和发放同属资金类高危动作，由最高权限审批，提交人不能审批自己的单据。**
   - 提权或跨商户跨项目（综合体）：如 `access.permission_template.manage/apply/revoke`、`access.role.manage`、`access.role.assign`、`access.temporary_grant.create/revoke`、`access.grant_request.review`、`governance.supervisor_review.approve`、`governance.project.manage`、`contract.approve.gm`。
   - 敏感经营数据：不限于内部结算价和成本价，还包括采购价、毛利、分账底价、域内补贴缺口、供应链价格及其他被标记为敏感的数据。查看、导出和修改分别授权；普通用户、会员、前线员工和无相应权限的商户人员不得查看。系统自动使用某价格不代表当前操作人获得查看或修改权限。数据默认按项目隔离，只有项目之上的获授权岗位才能跨项目查看。

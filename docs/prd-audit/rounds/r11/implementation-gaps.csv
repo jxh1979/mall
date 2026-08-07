@@ -1,0 +1,74 @@
+finding_id,prd_evidence,implementation_evidence,affected_component,severity,status,target_round,canonical_findings_id
+GAP-01,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,important,open,code-round,GAP-01
+GAP-02,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-02
+GAP-03,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-03
+GAP-04,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,important,open,code-round,GAP-04
+GAP-05,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-05
+GAP-06,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,important,open,code-round,GAP-06
+GAP-07,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-07
+GAP-08,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-08
+GAP-09,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,important,open,code-round,GAP-09
+GAP-10,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-10
+GAP-11,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-11
+GAP-12,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-12
+GAP-13,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-13
+GAP-14,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-14
+GAP-15,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-15
+GAP-16,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-16
+GAP-17,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-17
+GAP-18,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-18
+GAP-19,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-19
+GAP-20,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-20
+GAP-21,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-21
+GAP-22,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-22
+GAP-24,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-24
+GAP-26,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-26
+GAP-27,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-27
+GAP-28,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-28
+GAP-29,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-29
+GAP-30,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-30
+GAP-31,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-31
+GAP-32,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-32
+GAP-33,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-33
+GAP-34,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-34
+GAP-37,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-37
+GAP-38,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-38
+GAP-39,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-39
+GAP-40,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-40
+GAP-41,见 §7.4A 状态依据列,docs/prd-audit-fix-change-log-20260804.md:§7.4/§7.4A,docs,info,open,code-round,GAP-41
+R10-O-01,ENUM「租金/账单类型」条（含能源费/电损费/水损费）,docs/requirement-traceability-matrix-v0.1.md:REQ-110,docs,important,open,code-round,R10-O-01
+R10-O-02,-,tools/generate-partial-requirement-mock-coverage.mjs:-,tools,advisory,open,code-round,R10-O-02
+R10-O-03,BSM「第三方接入」相关条,docs/third-party-integration-development-design.md:接入异常处置,docs,important,open,code-round,R10-O-03
+FINAL-01,BSM「影响结算的规则由各自责任主体在系统中配置、审批和版本化」条：月结定格→账单出账→异议期届满→付账日，后一环不得早于前一环,backend/src/main/java/com/complex/platform/settlement/SettlementPostingService.java:237,settlement,important,open,code-round,FINAL-01
+FINAL-02,BSM「域内通票不按经营域比例拆分」条：票务订单产生的积分发行成本，同样在域间拆分之前从整单扣除且只扣一次,backend（通票分账瀑布 S1~S11）:-,backend,important,open,code-round,FINAL-02
+FINAL-03,BSM「各域取得份额后，由对应域主管公司决定采用内部结算价」条与酒吧入场可分配池排名口径,backend（酒吧入场可分配池排名档位）:-,backend,important,open,code-round,FINAL-03
+FINAL-04,BSM「营业额＝该商户当期在本综合体内含税实收成交总额，减去当期已成功的退款金额，减去由该商户以外的出资方承担的赠送与补贴」条,backend/src/main/java/com/complex/platform/finance/JdbcFinanceRepository.java:1071,finance,important,open,code-round,FINAL-04
+FINAL-06,-,tools/verify-entry-anchors.mjs:检查⑤,tools,important,open,code-round,FINAL-06
+FINAL-10,"门禁检查③的正则为 `/实测s**{0,2}Ld+/g`，只覆盖「实测 L123」「实测 **L123**」写法；收官批 T3 清掉的是另一种写法「业务:1340」「治理:270、778」「业务:562-565」（文件代号中文简称 ＋ 冒号 ＋ 行号），该正则对其 0 命中。",tools/verify-entry-anchors.mjs:检查③ LINE_ANCHOR,tools,advisory,open,code-round,FINAL-10
+R11-P0-1,BSM:1501「月结定格 → 账单出账 → 异议期届满 → 付账日，后一环不得早于前一环」；BEQ:207「按开台或下单时点所属的营业日归属账期……不回改历史月份」,SettlementPostingService.java:169（dueDate=LocalDate.now().plusDays(30)）＋:219-237（accounting_period=YearMonth.from(dueDate)）｜账期数据已在 JdbcSettlementBillRepository 的 period_start/period_end（:559-571 / :755-774 / findBillId :804）但未接｜IMPLEMENTATION_ACTIVE（:184/:188/:195 三处主流程调用）,settlement,blocking-P0,open,code-round,FINAL-01
+R11-P0-2,BSM:899 / :1450 / :1838 与 PGM:570 / :868「永久保存、不自动到期删除……由最高权限本人插入授权 U 盘密钥后手动执行」,种子＝V087__wecom_compliance.sql:70-73（retention_days=180 / expiry_action=anonymize / enabled=true｜IMPLEMENTATION_ACTIVE）＋WecomConversationService.java:56（DEFAULT_RETENTION_DAYS=180）/:218（落库即写 retentionUntil）/:720（retentionDays 限 1..3650，「永久」无法表达）/:725-728（兜底同向）；销毁执行＝:433-457 ＋ WecomRetentionJob.java:44-51 ＋ application-prod.yml:26（双重关闭、无 REST 端点）｜IMPLEMENTATION_INERT,compliance-wecom,blocking-P0（销毁执行面降 INERT）,open,code-round,R8-B-02②
+R11-P0-3,ENUM:41「系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」（同条核销记录状态共六态，manual_overridden 不在其内）,链1 TicketingController.java:483-490 ＋ V270__ticket_manual_override_permission.sql:8-17（建权限并授 role_platform_admin）＋ V067__ticket_multiperson_reverse.sql:4-6（DB CHECK 纳入 manual_overridden）＋ TicketVerificationService.java:211-229（不跑任何核销规则校验直写）；链2 SupervisorReviewService.java:36（manual_release_l2 状态 active）＋ SupervisorReviewController.java:27/33/40 ＋ SupervisorReviewPage.tsx:255；链3 AmusementController.java:39/45 ＋ AmusementService.java:120（@GuardedAction amusement.verification.override）＋ V014__p0_amusement_safety_session_verification.sql:123/133｜IMPLEMENTATION_ACTIVE×3,ticketing+governance+amusement,blocking-P0,open,code-round,-
+R11-P0-4,BEQ:49（镜像 BSM:751）「档位为动态百分比，不是相对权重、不做归一化……这几家的各档合计恒为 100%……按本张票的第二段参与家数查「参与家数档位表」取对应一行」＋并列名次算术平均,TicketDistributionSettlementService.java:445-451（权重装配）/:460（MoneyRounding.prorate 归一化）/:581-588（脱档 return 0）/:388-398（javadoc 自述归一化）＋ JdbcSettlementBillRepository.java:1189 record RankTier(rankFrom rankTo shareBps)——无「参与家数」维度、findRankTiers 只按 projectId 取；并列名次未实现（:450 直接用 i+1 当名次）｜IMPLEMENTATION_ACTIVE,settlement,blocking-P0,open,code-round,FINAL-03
+R11-P0-5,PGM:672（镜像 BSM:1848）「任何能力在后台没有显式开关配置行时一律默认关闭（opt-in）……开关缺行不得视为开启，也不得由代码或部署脚本代为「视同打开」；这与拉取失败时的兜底关闭是两件事」,TerminalSwitchGuard.java:20（类 javadoc 自述「无任何显式行=默认开启（opt-out 语义）」）/:62-76（端总开关同模式）/:83-102（effective.isPresent() 与 !enabled 联合判定，Optional.empty() 直接放行）｜引证订正：终端开关 DDL 在 V010__p0_foundation_residual_platform_terminal_evidence.sql:64-70（enabled BOOLEAN NOT NULL，无 DEFAULT 子句，整表至 :75），不是 V068:46（该处属 supervisor_review_policies）｜IMPLEMENTATION_ACTIVE,gate,blocking-P0,open,code-round,FINAL-21
+R11-P0-6,BEQ:207（镜像 BSM:1218）「营业额＝……含税实收成交总额，减去当期已成功的退款金额……该账期发生商品退款的，在退款发生的当期生成冲正，不回改历史月份；冲正金额一律按该笔款项在其原账期实际计费时所适用的档位与费率原额冲回……多笔退款逐笔分别冲正，不合并折算」,JdbcFinanceRepository.java:1045-1071（aggregateMerchantReflowTurnover：SUM(order) 减 SUM(refund) 合并折算 ＋ Math.max(0L netTurnover) 钳零；注释 :1036-1037 自陈有意钳）＋ 调用点 FinanceService.java:1585 / :1764；integration_order_syncs 的 refund 行无 refund→原 order 关联列，「逐笔原档冲回」不具备实现基础｜IMPLEMENTATION_ACTIVE,finance,blocking-P0,open,code-round,FINAL-04
+EV-07c-01,ENUM:41「系统不提供人工放行」＋ R10 废词批 B（各开发设计文档文首横幅「待代码轮下线」）,apps/web/src/admin/pages/SupervisorReviewPage.tsx:255（主管复核页动作类型下拉的「人工放行」选项，用户可见串）,web-admin,P1,open,code-round,-
+EV-07c-02,同 EV-07c-01,apps/web/src/customer/i18n/statusLabels.ts:166（manual_release 标签「人工放行」）,web-customer,P1,open,code-round,-
+EV-07c-03,同 EV-07c-01,backend/src/main/resources/db/migration/V270__ticket_manual_override_permission.sql:10（permission_name「人工放行票务核销」，会在权限管理页展示）,db-migration,P1,open,code-round,-
+EV-07c-04,DEC-R6-08；docs/ticketing-pass-entitlement-development-design.md:212 / :883 / :929（preview_passed 与 POST .../verifications/preview 已废止·待代码轮下线）,apps/web/src/admin/pages/TicketOrdersPage.tsx:23/24/28/36/38/52（实测 6 处，转述只列 2 处；根因＝TEXT 常量块存 \uXXXX 转义、只按原文中文 grep 的盲区）,web-admin,P1,open,code-round,-
+EV-07c-05,同 EV-07c-04；docs/android-device-terminal-development-design.md:1213（接口废止）/ :1305（事件 verification.previewed 停用）,apps/android-terminal/.../terminal/MainActivity.kt:290/293/297/301/302/304（预检两步流按钮本体仍在端上）,android-terminal,P1,open,code-round,-
+EV-07c-06,docs/amusement-operations-development-design.md:5 / :17（BSM「容量控制」条：只按单个游乐项目的实时在玩人数控制容量，不再按场次）,apps/web/src/admin/pages/AmusementSessionsPage.tsx:25,web-admin,P1,open,code-round,-
+EV-07c-07,同 EV-07c-06,apps/web/src/admin/pages/AmusementVerificationRecordsPage.tsx:43-45（三维度整组标签，不止 :45 一行）,web-admin,P1,open,code-round,-
+EV-07c-08,同 EV-07c-06,backend/.../amusement/AmusementBookingService.java:272（面向用户报错「预留容量不能超过场次容量」）,amusement,P1,open,code-round,-
+EV-07c-09,同 EV-07c-06,backend/.../amusement/AmusementService.java:1339（错误码 SESSION_CAPACITY_EXHAUSTED ＋「受限维度」措辞）,amusement,P1,open,code-round,-
+EV-07c-10,同 EV-07c-06,backend/.../analytics/MetricRegistry.java:376 / :379（「游乐场次总容量」指标名与可加口径）＋ apps/web/src/admin/pages/MetricDetailPage.tsx:32（key amusement.session_capacity）；指标口径错直接导致 BI 数字含义错,analytics,P1,open,code-round,-
+EV-07c-11,DEC-R4-2026-08-04-43 / DEC-R8-08 / DEC-R8-46 三度裁定删「已忽略」（07c 原称「未检索到废止口径」经 Consolidator 实查推翻）,apps/web/src/customer/i18n/statusLabels.ts:235-240（ignored 与 dismissed 双键同渲染为「已忽略」）,web-customer,P2,open,code-round,R10-O-03
+EV-07c-12,-,tools/（git ls-tree 共 81 项；按 quote|cite|引文|引用|attribut 筛选命中 0，引文门禁从未立项）,tools,P1,open,code-round,-
+EV-07c-13,-,tools/verify-entry-anchors.mjs:7-18（脚本自述六项检查，作为保护面基准）,tools,P1,open,code-round,FINAL-06
+EV-07c-14,-,tools/verify-entry-anchors.mjs:170 / :180-193（检查②的 REF 正则只吃条名 m[2]；两条错误分支只有「定位不到」与「命中多条」，无「定位到了但转述内容相反」一类）,tools,P1,open,code-round,-
+EV-07c-15,-,.github/workflows/predeploy-gates.yml:23-24（全仓唯一 workflow，唯一 run 步骤是 npm run verify:predeploy）,ci,P1,open,code-round,-
+EV-07c-16,-,.github/（git grep delivery-gates 仅命中 predeploy-gates.yml:3 注释；无任何 run: 行引用 verify:delivery-gates）,ci,P1,open,code-round,-
+EV-07c-17,-,package.json:61（verify:delivery-gates 聚合 49 条子闸）与 :96（verify:predeploy 15 条）：交集 10、差集 39 条无任何自动执行者，含 verify:migration-version-order（AGENTS.md:63 自称机器闸门）,ci,P1,open,code-round,-
+EV-07c-18,-,package.json:107（verify:closed-loop-runtime 不在任何聚合闸口，只能人手敲；tools/verify-final-closed-loop-audit.mjs:122 / :160 只把它当字符串匹配验收文档正文）,ci,P1,open,code-round,-
+EV-07c-19,-,.github/workflows/predeploy-gates.yml:2-5（跑子集系有意）；但其点名的两个硬阻断承担者 ops/160/complex-deploy-api.sh 与 ops/160/complex-deploy-web.sh 经 git grep -l verify:predeploy 确认跑的是同一份 15 条子集,ci,P1,open,code-round,-
+GAP-1C-01,docs/compliance-and-personal-information-protection-requirements-v0.1.md:42（设备尚未安装或发生故障时进入人工抽查方式、客人继续进场；年龄核验没有开关）,tools/integration-capability-switches.mjs:49 disabled_behavior 仍写「年龄核验环节按制度兜底（人工证件核验/人工复核/审计留痕）」；该字符串是「制度兜底」在下游 docs 生成物里的唯一真源（经 grep 确认 3 个生成器消费该字段：generate-integration-capability-switches.mjs:52/:79、generate-production-blocker-register.mjs、generate-external-evidence-requirement-traceability.mjs）。R11 为文档轮、本轮不碰代码；改后须同跑 npm run docs:integration-capability-switches 与 npm run docs:production-blockers 重生成（另建议一并跑 npm run docs:external-evidence-requirement-traceability，该生成器同样读此字段）,tools/docs-gen,P1,open,code-round,-
+GAP-1C-02,docs/compliance-and-personal-information-protection-requirements-v0.1.md:42（一律人工抽查放行、客人继续进场；年龄核验没有开关）,backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java、backend/src/main/java/com/complex/platform/entry/DisabledFaceVerificationGate.java、backend/src/main/resources/db/migration/V146__face_verification_capability_switch.sql、apps/web/src/admin/pages/IntegrationSwitchesPage.tsx:24（disabledBehavior 文案「入场/售酒走人工证件核验 + 制度兜底」）仍是「开关关 → 制度兜底」语义，文档措辞已领先代码；R11 文档轮不碰代码，留待代码轮统一改口径,backend/web/migration,P1,open,code-round,-

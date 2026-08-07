@@ -1,0 +1,151 @@
+id,source_shard,ev_id,severity,disposition,one_line,landing
+R11-C-001,shard-01,EV-01-01,P1,A,承接矩阵13行MISSING中10行对应finding已resolved账实不符（总纲证据）,docs/prd-audit/html-prd-coverage.csv
+R11-C-002,shard-01,EV-01-01b,P2,C,根因定性：docfix批CSV欠账只补了findings.csv一张表漏了承接矩阵,docs/prd-audit/rounds/docfix/worklog.md:74
+R11-C-003,shard-01,EV-01-02,P1,A,918行PGM-0194 MISSING→FULL落点改§6.11关键配置变更留痕第5条,html-prd-coverage.csv:918
+R11-C-004,shard-01,EV-01-03,P1,A,919行PGM-0195 MISSING→FULL落点改§7.8数据隔离不提供关闭开关引用块,html-prd-coverage.csv:919
+R11-C-005,shard-01,EV-01-04,P1,A,921行BSM-0547 MISSING→FULL落点改§2A.6后台配置只能承载规则,html-prd-coverage.csv:921
+R11-C-006,shard-01,EV-01-05,P1,A,931行BSM-0555 MISSING→FULL两份PRD双落（ticketing§2+customer-app§3）,html-prd-coverage.csv:931
+R11-C-007,shard-01,EV-01-06,P1,A,940行BSM-0564 MISSING→FULL且prd_path由「无归口PRD」改gov §15E.1,html-prd-coverage.csv:940
+R11-C-008,shard-01,EV-01-07,P1,A,941行BSM-0565 MISSING→FULL且prd_path由「无归口PRD」改gov §15E.2,html-prd-coverage.csv:941
+R11-C-009,shard-01,EV-01-08,P1,A,1023行BSM-0647 MISSING→FULL且prd_path改指ticketing PRD §7.2,html-prd-coverage.csv:1023
+R11-C-010,shard-01,EV-01-09,P1,A,1080行BSM-0704 MISSING→FULL prd_path改bar PRD §11 5e并去掉行号锚L318,html-prd-coverage.csv:1080
+R11-C-011,shard-01,EV-01-10,P1,A,1084行BSM-0708 MISSING→FULL prd_path由「无归口PRD」改bar PRD §11 5f,html-prd-coverage.csv:1084
+R11-C-012,shard-01,EV-01-11,P1,A,1110行BSM-0734 MISSING→FULL prd_path改settlement-rebuild §2（非finding建议的MPS）,html-prd-coverage.csv:1110
+R11-C-013,shard-01,EV-01-12,P2,C,其余3行MISSING（REGX-11/12/15）对应finding仍open账实一致不改,html-prd-coverage.csv:1117/1118/1171
+R11-C-014,shard-01,EV-01-13,P2,C,「表演报酬」零承接与批量存档闸两条docfix建议新登记至今未落成finding行,docs/prd-audit/rounds/r8/findings.csv
+R11-C-015,shard-01,EV-01-14,P2,A,额外发现942行BSM-0566 PARTIAL→FULL残余缺口已被gov §15E.2消灭,html-prd-coverage.csv:942
+R11-C-016,shard-01,EV-01-15,P2,C,docfix批照抄时做了三处字形层规范化（半角空格/直角引号）不影响语义,html-prd-coverage.csv
+R11-C-017,shard-01,EV-01-16,P2,C,变更台账§7.4已宣告GAP-21「不再单独统计为未闭合缺口」（证据）,prd-audit-fix-change-log-20260804.md:2011
+R11-C-018,shard-01,EV-01-17,P2,C,GAP-28自身状态仍为「挂起-已登记/实现层未核查」并非已完成（证据）,prd-audit-fix-change-log-20260804.md:2253
+R11-C-019,shard-01,EV-01-18,P1,B,两张台账状态用词逐条对齐唯GAP-21未对齐与GAP-28重复计数,findings.csv GAP-21行
+R11-C-020,shard-01,EV-01-19,P0,A,GAP-21实质交付物（矩阵CSV两行status_flow）未同步不得标任何完成类状态,full-admin-page-permission-field-matrix-v0.1.csv:32/35
+R11-C-021,shard-01,EV-01-20,P1,B,findings.csv现有11个status取值无一能表达「已并入他条不再单独统计实施未完成」,findings.csv GAP-21行
+R11-C-022,shard-02,EV-02-01,P1,A,决策台账索引表第29节仍标NEEDS_DECISION但两个子问题均已结案,business-decision-ledger.md:47
+R11-C-023,shard-02,EV-02-02,P1/P2,A,台账:56硬拦路句与:62阶段陈述句滞后须同行加括注,business-decision-ledger.md:56/62
+R11-C-024,shard-02,EV-02-03,P1,A,:696有效但:697所引ACCRUAL-001已于:701废止单读会读反,business-decision-ledger.md:696-697
+R11-C-025,shard-02,EV-02-04,P0,A,活跃决策日志:551「不依赖核销才首次入账」与现行ACCRUAL-002逐字反向（钱路风险·任务书未点名）,business-decision-log-v0.1.md:551
+R11-C-026,shard-02,EV-02-05,P1,A,:701/:702为现行正确口径不改由追加块统一登记回指,business-decision-ledger.md:699-702
+R11-C-027,shard-02,EV-02-06,-,D,反向实证：R7历史索引H-24/H-27已正确记录两项结案（仅作依据）,rounds/r7/history-index.md:51/54
+R11-C-028,shard-02,EV-02-07,P1,A,任务书未点名的第五处滞后且带「必须先询问」拦路语义,prd-audit/phases/03-governance-and-common.md:87
+R11-C-029,shard-02,EV-02-08,P1,A,积分发行单价两处镜像缺「须同时配置上下限」半句（同文件已有标准句式）,merchant-points-settlement-rules-v1.0.md:123/182
+R11-C-030,shard-02,EV-02-09,-,D,编号实查：DEC-R8-*最大84无DEC-R9/R10/R11家族新裁应编DEC-R8-85,business-decision-ledger.md:1740/1752-1753
+R11-C-031,shard-02,EV-02-10,P1,A,R11积分裁决追加块草案（DEC-R8-85纯追加旧行一字不改）,business-decision-ledger.md 文件末尾
+R11-C-032,shard-02,EV-02-11,P1,A,台账:1036「仍未完成」与:1274/:1349结论相反且同日无法凭日期分辨先后,business-decision-ledger.md:1034-1036
+R11-C-033,shard-02,EV-02-12,-,D,DEC-R6-23第一手裁决行属实（证据）,business-decision-ledger.md:1274
+R11-C-034,shard-02,EV-02-13,-,D,DEC-R7-26第二手确认行属实并揭示「逐个补齐落后镜像」模式（证据）,business-decision-ledger.md:1349
+R11-C-035,shard-02,EV-02-14,-,D,合规文件三处一致已了结（:338措辞需订正为变更日志表述）,compliance-...-v0.1.md:81/101-105/338
+R11-C-036,shard-02,EV-02-15,P1,A,采纳候选③「:1036同行括注+文件末尾追加块」精确限定到第1条不波及同节其余3条,business-decision-ledger.md:1034-1036
+R11-C-037,shard-02,EV-02-16,-,D,第四处外部实证data-risk §11.5第3条已写论证了结（任务书未点名）,data-risk-ai-development-design.md:685
+R11-C-038,shard-02,EV-02-17,P2,A,R8-B-02 disposition三子缺口串一句下游无法分辨剩什么须就地改（status保持in-progress）,rounds/r8/findings.csv:79
+R11-C-039,shard-02,EV-02-18,-,C,登记转编排：FINAL-18与GAP-25同属企微域主题不同；R8-B-02门禁设计不在本shard范围,rounds/r8/findings.csv:226/128
+R11-C-040,shard-03,EV-03-01,P1,A,BSM「积分与成长值获取」条HTML原文含「须同时配置上下限」（基准）,business-system-map-for-operations-v0.1.html:815
+R11-C-041,shard-03,EV-03-02,P1,A,积分PRD §6.1现文未承接上下限（现状）,points-and-voucher-product-prd-v1.0.md:75-81
+R11-C-042,shard-03,EV-03-03,P1,A,P1参数表A项未承接上下限（现状）,member-points-p1-ops-parameter-tables-v0.1.md:28
+R11-C-043,shard-03,EV-03-04,P1,A,同文件另四个业务参数均已按同一句式承接属漏项非有意省略,points-and-voucher-product-prd-v1.0.md:249/259/260/421
+R11-C-044,shard-03,EV-03-01~04,P1,A,拟改A-5-1/A-5-2/A-5-3三处补「须同时配置上下限」不填任何数值,points-and-voucher §6.1 + member-points-p1-ops §3 A项
+R11-C-045,shard-03,EV-03-05,P2,A,BSM「影响结算的规则…」条含「结算目标为账期结束后一个月以内完成具体天数由后台配置」（基准）,business-system-map-for-operations-v0.1.html:1501
+R11-C-046,shard-03,EV-03-06,P2,A,points PRD §11A.1现文只承接触发机制未承接完成时限（现状）,points-and-voucher-product-prd-v1.0.md:371-379
+R11-C-047,shard-03,EV-03-07,P2,A,merchant §16.1已引本条HTML但引的是付账日内容属「有归口无承接」,merchant-points-settlement-rules-v1.0.md:322-332
+R11-C-048,shard-03,EV-03-08,P2,A,全PRD范围9式检索零命中MISSING判定成立,docs/**/*.md
+R11-C-049,shard-03,EV-03-05~08,P2,A,拟改A-7-1/A-7-2两处逐字镜像正主§11A.1镜像§16.1（含插入位置论证）,points §11A.1 + merchant §16.1
+R11-C-050,shard-03,EV-03-09,P2,B,算术检查：出账日晚于当月约10日则「一个月以内完成」任何月份都达不到；出账日无闸门,points §11A.1 / merchant §16.1
+R11-C-051,shard-04,EV-04-01,P1,A,BSM清账纪律目标句逐字（全角标点实测半角零命中）,business-system-map-for-operations-v0.1.html:1501
+R11-C-052,shard-04,EV-04-02,P1,A,finance §4B.4现仅两条bullet（现状）,finance-settlement-product-prd-v0.1.md:327-330
+R11-C-053,shard-04,EV-04-03,P1,A,BSM-0741账本行18列完整；value_flow=source_text逐字副本判定为假涉钱信号,authority-rule-ledger.csv:1108
+R11-C-054,shard-04,EV-04-04,P1,A,五个检索面证实REGX-11全库零承接且系无归口非归错口,全工作树（仅排除.git）
+R11-C-055,shard-04,EV-04-01~04,P1,A,拟改：finance §4B.4在L329后L330前插入1行bullet（HTML句序第3句）,finance-settlement-product-prd-v0.1.md §4B.4
+R11-C-056,shard-04,EV-04-05,P2,D,账本value_flow列176行为source_text逐字副本属账本级系统性填表问题（→见C-4修正）,authority-rule-ledger.csv 全表
+R11-C-057,shard-05,EV-05-01~04,P0,A,FINAL-12 RULE-BAR-AGE-01：H3已自洽残余仅spec侧「开关关闭期间制度兜底」STALE须回填人工抽查+PIPL四不保存,spec:50 四列
+R11-C-058,shard-05,EV-05-05~08,P1,A,FINAL-13 RULE-BAR-POUR-01：spec「拒单/异常留痕」HTML零命中CONFLICT须改为按设备有无二分,spec:51 三列
+R11-C-059,shard-05,EV-05-09~11,P1,A,FINAL-14 RULE-BAR-INVITE-01：「复制/篡改即无法入场」应为「无法接受」+缺开卡人移出与三动作留痕,spec:52 两列
+R11-C-060,shard-05,EV-05-12~16,P1,A,FINAL-15 RULE-BASE-CERT-01：缺宽限期三要素（可配时长/最高权限审批/每日提醒超期阻断不得再延）,spec:53 三列
+R11-C-061,shard-05,EV-05-17~18,P0,A,FINAL-16 RULE-FIN-SOURCE-01：缺原件凭证闸与三方取准顺序（涉钱·凭空录数找人点通过在现spec下合格）,spec:55 三列
+R11-C-062,shard-05,EV-05-19~22,P0,A,FINAL-17 RULE-SMS-01：缺「四类强制项不得按类或按条关闭」（实为GAP非STALE）,spec:56 两列
+R11-C-063,shard-05,EV-05-23~28,P0,A,FINAL-18 RULE-WECOM-01：「留存策略可配」为到期自动删除背书CONFLICT（证据灭失方向）,spec:57 四列
+R11-C-064,shard-05,EV-05-29~33,P2,A,FINAL-20 RULE-GOV-AUTH-01：删自创「且不可配置关闭」+四类应为五类+补税费三审链顶层终审禁自审,spec:59 两列
+R11-C-065,shard-05,EV-05-34~37,P0,A,FINAL-21 RULE-TERM-REJECT-01：缺opt-in缺行默认关闭/营业时段禁变更/留痕例外三项,spec:60 三列
+R11-C-066,shard-05,EV-05-38~43,P0,A,FINAL-22 RULE-TKT-TYPE-01：「学生证」应为「学信网核验」+票种清单缺通票/新人优惠/渠道优惠,spec:61 三列
+R11-C-067,shard-05,EV-05-44~46,P1,A,FINAL-23 RULE-COMMON-CONCURRENCY-01：缺红线⑤逐笔放行唯一例外（severity由advisory上调P1）,spec:65 三列
+R11-C-068,shard-05,EV-05-47~54,P2,A,FINAL-25：三条断言列残留技术口径（403/access_rejected/定位高亮/DOM本地存储）H3十八次检索全0,spec:46/49/60 断言列
+R11-C-069,shard-06,EV-06-01,-,C,PGM:621现文已是「五类」为下游比对权威基准本身无缺陷,platform-governance-map-for-operations-v0.1.html:621
+R11-C-070,shard-06,EV-06-02,P1,A,全仓盘点：高危授权语境「四类」活文件11个18处（FINAL-19登记5处漏6个活文件）,全仓tracked @1c5c0c7d
+R11-C-071,shard-06,EV-06-03,P1,A,A组13处逐处拟改（含CONTEXT.md×2/coverage csv×2/ledger×1/AccessService.java×1六处漏登记）,13处逐处
+R11-C-072,shard-06,EV-06-04,P2/P1,A,B组5处「四类+税费」与HTML「五类」数词冲突且group-governance自身:60与:64打架,platform-governance-prd:107/602 + group-governance:58/59/60
+R11-C-073,shard-06,EV-06-04#16②,P2,B,group-governance:58「一票关闭这四类」改「五类」会扩大历史事实陈述范围两种写法二选一,group-governance-rebuild-prd-v1.0.md:58
+R11-C-074,shard-06,EV-06-05,P1,A,三张台账两张已同步（ledger:620/registry:916）唯html-prd-coverage.csv:212未同步,html-prd-coverage.csv:212
+R11-C-075,shard-06,EV-06-06,P1,D,r9/ledger-source-refresh.csv:121快照存R9旧文若再跑refresh会静默回滚（差异远不止数词）,刷新流程/工装非文本
+R11-C-076,shard-06,EV-06-07,P1,A+B,第三处落点third-party-access-layer-spec §8.1.2比合规§2.2多两字段且表头引「点酒订单」已下线口径,third-party-access-layer-spec-v0.2.md:826-839
+R11-C-077,shard-06,EV-06-08,P1,A,四字段实测27次/11行/6文件（任务书「9处」对不上任何计数口径）；:315合规矩阵C1行漏登记,全仓双面检索
+R11-C-078,shard-06,EV-06-09a,P0,A,合规文档全文零处写「人工抽查期间三不保存」是漏写不是写反,compliance-...-v0.1.md §2.2
+R11-C-079,shard-06,EV-06-09b,P0,B,face_verify_result值域「成年/未成年/不确定」超出HTML授权的两档布尔（年龄核验语境零命中）,compliance-...-v0.1.md:46
+R11-C-080,shard-06,EV-06-09c,P0,B,§2.2「P0默认只保存」「不默认保存原始人脸图像」两个「默认」把禁止软化为可配置且HTML无依据,compliance-...-v0.1.md:46
+R11-C-081,shard-06,EV-06-09补正二,P1,A,PGM:638/641两条人脸强规定（导出强制脱敏不提供关闭开关/查看须审批留痕）两张字段表均未承接,compliance §2.2 + third-party-access-layer-spec §8.1.2
+R11-C-082,shard-06,EV-06-10,P0,B+A,第四处落点supplier-integration-kit:129同义改写字段名且自带两条与HTML相反口径,third-party-supplier-integration-kit-v0.1.md:129
+R11-C-083,shard-06,EV-06-11(2),P1,B,合规文档须补写「人工抽查期间三不保存」条（须补无争议措辞属PIPL须裁）,compliance-...-v0.1.md §2.2
+R11-C-084,shard-06,EV-06-11(3),P1,A,合规矩阵C1行(:315)把face_verify_result写成P0验收依据须随§2.2同步,compliance-...-v0.1.md:315
+R11-C-085,shard-06,EV-06-11(5),P1,A,third-party-access-layer-spec两处陈旧引用可直接落笔（删「/点酒订单」；「入场/售酒判定」改写）,third-party-access-layer-spec-v0.2.md:826/834
+R11-C-086,shard-06,EV-06-11(6),P0,B,降级路径两侧对不上：HTML「人工抽查放行」vs 两份spec+kit「阻断入场」现场无可执行答案,BSM:1024/BEQ:31 vs spec:845/906 + kit:129
+R11-C-087,shard-06,EV-06-11(7),P1,A,supplier-kit:129「写入酒吧入场判断」→「综合体入场年龄核验环节判断」（陈旧引用）,third-party-supplier-integration-kit-v0.1.md:129
+R11-C-088,shard-06,EV-06-11(1)①,P0,B,FINAL-26③「方向相反」定性经现文实测不成立J3「已建则删列」处置前提随之失效,rounds/r8/findings.csv:234 + pending-development-backlog J3
+R11-C-089,shard-06,EV-06-12,P0,B,DEC-CFG-2026-08-03-07（CONFIRMED明确不改）与DEC-R8-83对「年龄核验有无开关」措辞相反且后者未标前者取代,business-decision-ledger.md:929 vs :1752
+R11-C-090,shard-06,EV-06-12附,P1,A,台账§18小节标题「酒吧入场年龄核验」→「综合体入场年龄核验」（陈旧命名）,business-decision-ledger.md:350
+R11-C-091,shard-07a,EV-07a-01,-,A,implementation-gaps.csv草案46行（status=open且属代码类）字段逐行照抄未改写,rounds/r11/（草案·待编排定落点）
+R11-C-092,shard-07a,EV-07a-02,P2,D,5个finding的file/line不可解析（R10-O-02/FINAL-02/FINAL-03 line为-；FINAL-02/03 file为自然语言）,rounds/r8/findings.csv
+R11-C-093,shard-07b,EV-07b-01,P0,A,accounting_period取dueDate=LocalDate.now()+30所在月与结算单业务账期无关联记账期随过账日漂移,SettlementPostingService.java:169/219-237
+R11-C-094,shard-07b,EV-07b-02,P0,A,企微：迁移种子V087:70-73默认180天anonymize enabled=true+落库即盖到期戳；销毁执行面prod显式关应降INERT,V087__wecom_compliance.sql:70-73 + WecomConversationService.java:218/433-457/720
+R11-C-095,shard-07b,EV-07b-03,P0,A,人工放行实为三条链（票务/治理督导/游乐）而ENUM明写「系统不提供」；manual_overridden是六态外第七态,TicketingController:483 + SupervisorReviewService:36 + AmusementController:39/45
+R11-C-096,shard-07b,EV-07b-04,P0,A,分池归一化被HTML逐字禁止且根因是「参与家数档位表」维度缺失+并列名次未实现,TicketDistributionSettlementService.java:445-451/460/581-588
+R11-C-097,shard-07b,EV-07b-05,P0,A,终端开关opt-out成立但引证须订正：V068:46属supervisor_review_policies应改V010:64-75（无DEFAULT）,TerminalSwitchGuard.java:20/62-76/83-102
+R11-C-098,shard-07b,EV-07b-06,P0,A,抽成基数负额钳零丢弃冲正+合并折算+按当期档位重算（HTML逐字禁止后两者）实数差1.6万,JdbcFinanceRepository.java:1045-1071
+R11-C-099,shard-07c,EV-07c-01,P1,A,SupervisorReviewPage.tsx:255「人工放行」下拉项仍在（用户可见串）,apps/web/src/admin/pages/SupervisorReviewPage.tsx:255
+R11-C-100,shard-07c,EV-07c-02,P1,A,customer statusLabels.ts:166 manual_release:「人工放行」仍在,apps/web/src/customer/i18n/statusLabels.ts:166
+R11-C-101,shard-07c,EV-07c-03,P1,A,V270权限种子permission_name「人工放行票务核销」仍在（会在权限管理页展示）,db/migration/V270__*.sql:10
+R11-C-102,shard-07c,EV-07c-04,P1,A,TicketOrdersPage.tsx「核销预检」实为6处非转述的2处（\uXXXX转义grep盲区）,apps/web/src/admin/pages/TicketOrdersPage.tsx:23/24/28/36/38/52
+R11-C-103,shard-07c,EV-07c-05,P1,A,安卓端「预检」两步流按钮本体仍在6处,android-terminal MainActivity.kt:290/293/297/301/302/304
+R11-C-104,shard-07c,EV-07c-06,P1,A,AmusementSessionsPage.tsx:25「场次容量」仍在,apps/web/src/admin/pages/AmusementSessionsPage.tsx:25
+R11-C-105,shard-07c,EV-07c-07,P1,A,AmusementVerificationRecordsPage.tsx三维度整组标签仍在（不止:45一行）,apps/web/.../AmusementVerificationRecordsPage.tsx:43-45
+R11-C-106,shard-07c,EV-07c-08,P1,A,AmusementBookingService.java:272「预留容量不能超过场次容量」报错文案仍在,backend/.../AmusementBookingService.java:272
+R11-C-107,shard-07c,EV-07c-09,P1,A,AmusementService.java:1339 SESSION_CAPACITY_EXHAUSTED+「受限维度」措辞仍在,backend/.../AmusementService.java:1339
+R11-C-108,shard-07c,EV-07c-10,P1,A,MetricRegistry「游乐场次总容量」指标key+中文名+可加口径三处沿用废止口径（BI数字含义错）,MetricRegistry.java:376/379 + MetricDetailPage.tsx:32
+R11-C-109,shard-07c,EV-07c-11,P2,A,statusLabels ignored/dismissed双键同标签「已忽略」（→§9查证：ignored已三度裁定删除转代码轮）,apps/web/src/customer/i18n/statusLabels.ts:238/240
+R11-C-110,shard-07c,EV-07c-12,P1,A,tools/下81项无任何引文/条名内容校验脚本引文门禁从未立项,tools/
+R11-C-111,shard-07c,EV-07c-13,P1,A,verify-entry-anchors.mjs自述六项检查（基准）,tools/verify-entry-anchors.mjs:7-18
+R11-C-112,shard-07c,EV-07c-14,P1,A,检查②只吃m[2]条名两条错误分支无「内容相反」一类可构造当前就绿的反例,tools/verify-entry-anchors.mjs:170/180-193
+R11-C-113,shard-07c,EV-07c-15,P1,A,全仓仅1个workflow只跑npm run verify:predeploy,.github/workflows/predeploy-gates.yml
+R11-C-114,shard-07c,EV-07c-16,P1,A,verify:delivery-gates未被任何workflow引用（仅注释提到）,.github/
+R11-C-115,shard-07c,EV-07c-17,P1,A,delivery-gates 49条vs predeploy 15条交集10条差集39条无任何自动执行者（含migration-version-order）,package.json:61/96
+R11-C-116,shard-07c,EV-07c-18,P1,A,verify:closed-loop-runtime不在任何聚合闸口里只能人手敲,package.json:107
+R11-C-117,shard-07c,EV-07c-19,P1,A,跑子集是有意的但三个执行点跑同一份15条子集README仍称「交付总闸口约50子闸」,predeploy-gates.yml:2-5
+R11-C-118,shard-07c,R11-07c-A,P1,C,建议新建finding：引文门禁缺位（条名可定位≠转述属实）,tools/ 新建
+R11-C-119,shard-07c,R11-07c-B,P1,C,建议新建finding：delivery-gates独有39条子闸无自动执行者（文档承诺保护面≈实际3倍）,package.json/CI
+R11-C-120,shard-07c,R11-07c-C,P1,C,建议新建finding：废词核查漏\uXXXX转义串（方法论缺陷非单点）,核查方法/门禁
+R11-C-121,shard-08,EV-08-01,P1,A,G-1现状复核：784/668/116三数属实且116差额精确闭合（28 ORPHANED+87判无钱路+1 BSM-0099）,authority-rule-ledger.csv
+R11-C-122,shard-08,EV-08-01a,P1,A,sync1灵敏判定式无机读留存复现失败（重建式既非超集也非子集）不建议试图复现,rounds/sync1/worklog.md:139
+R11-C-123,shard-08,EV-08-01b,P0,A,BEQ-0117（分红代扣个税20%）从未被任何判定式扫过却是明确钱路陈述value_flow为NOT_STATED,authority-rule-ledger.csv BEQ-0117
+R11-C-124,shard-08,EV-08-01c,P1,A,BSM-0099由收官批T2置NOT_STATED是G-2病根产出G-1症状的实例（不在668/87/28任一内）,authority-rule-ledger.csv BSM-0099
+R11-C-125,shard-08,EV-08-01d,P1,A,FINAL-05登记应订正为669行且「未命中sync1灵敏判定式」改为「未经逐行人工判定」,rounds/r8/findings.csv:213
+R11-C-126,shard-08,EV-08-01e,P1,A,G-1执行方案：放弃复现判定式改全池人工判定按html_file×domain切五批B1-B5,authority-rule-ledger.csv value_flow列
+R11-C-127,shard-08,EV-08-02,P1,A,跨shard修正：441含35哨兵真有文字406副本率43.3%非39.9%；norm归一后204非176,authority-rule-ledger.csv
+R11-C-128,shard-08,EV-08-02a,P1,A,副本是全表9个镜像列通病合计771格且「9列全副本」行数=0说明是逐格懒惰非整行填充,authority-rule-ledger.csv 9列
+R11-C-129,shard-08,EV-08-02b,P1,B,建议新增台账禁令「不得据value_flow非空推断该条涉钱」+新增前置任务G-1-P0定填表口径,rounds/r8/findings.csv FINAL-05
+R11-C-130,shard-08,EV-08-03,P1,A,G-2现状：门禁⑤只检source_text（实测失配0）另9个句子类镜像列一个都没检,tools/verify-entry-anchors.mjs 检查⑤
+R11-C-131,shard-08,EV-08-03a,P1,A,失配几乎全在trigger一列（片段级87失败中82是trigger）非trigger仅5格,authority-rule-ledger.csv trigger列
+R11-C-132,shard-08,EV-08-03b,P1,A,PGM-0243实证：去空格改写打败替换脚本但打不败containment门禁→推荐路线①,tools/verify-entry-anchors.mjs
+R11-C-133,shard-08,EV-08-03c,P1,B,trigger列判为「合成描述不承诺逐字」属给账本schema补语义约定应走决策台账非agent自定,authority-rule-ledger.csv trigger列
+R11-C-134,shard-08,EV-08-04,P1,A,G-3纠正：phase=r8-rebuild PARTIAL实测47条非45；45是「anchor含14字滑窗」的更窄集合,html-prd-coverage.csv
+R11-C-135,shard-08,EV-08-04a,P0,A,机检算法四个结构性盲区：[:24]取样上限只看开头175字/无序袋装/步长重叠/尾部不取样,prd-audit-r8/scripts/find_prd.py
+R11-C-136,shard-08,EV-08-04b,P0,B,真实待核范围57行非45（+12条FULL）；12条中7条触取样上限5条超半数正文未参与判定且集中钱路,html-prd-coverage.csv 12条FULL
+R11-C-137,shard-08,EV-08-04c,P1,A,R8-U-04措辞需加限定词否则按字面查会查到47条,rounds/r8/findings.csv:148
+R11-C-138,shard-08,EV-08-04d,P1,B,建议新设UNVERIFIED/CONFLICT两个coverage状态（属schema变更需用户批准）,html-prd-coverage.csv 值域
+R11-C-139,shard-08,EV-08-05,-,D,交回编排者：code-round-input-money/nonmoney两份报告是否用过「value_flow非空⇒涉钱」筛选未核,rounds/final/code-round-input-*.md
+R11-C-140,shard-08,EV-08-06,P1,A,三项建议顺序G-2→G-1-P0→G-1主体→G-3合计约26个agent会话超单轮容量deferred正确,专项批
+R11-C-141,shard-08,EV-08-07,P0,B,三项里唯一建议本轮就动的：12条FULL降级或加注（绿标会主动误导本轮作业）,html-prd-coverage.csv 12条FULL
+R11-C-142,X-shard,C-1,P2,C,碰撞C-1处置：spec:59由shard-05 FINAL-20统改弃用shard-06 EV-06-03#9独立数词改,spec:59
+R11-C-143,X-shard,C-2,P0,C,碰撞C-2处置：spec:60由FINAL-21与FINAL-25合并一次落笔采用FINAL-21文本（已核对确认）,spec:60
+R11-C-144,X-shard,C-3,P1,C,碰撞C-3核对：finance §4B.4句序出结果→清账→账期沿用成立REGX-12不碰该节,finance-settlement-product-prd-v0.1.md §4B.4
+R11-C-145,X-shard,C-4,P1,C,碰撞C-4处置：value_flow副本率以shard-08为准43.3%/204格/全表9列771格,authority-rule-ledger.csv
+R11-C-146,X-shard,C-5,P1,C,碰撞C-5处置：企微三份（shard-02 A-4/shard-07b P0-2/shard-05 FINAL-18）合并成一条完整叙事,见collisions.md
+R11-C-147,X-shard,C-6,P0,C,碰撞C-6处置：人工放行07b三条链与07c三处词是同一问题两个层面合并,见collisions.md
+R11-C-148,X-shard,C-7,P1,C,新发现碰撞C-7：V270文件名两shard不一致（07b写verification_/07c写ticket_）须核实,db/migration/V270__*.sql
+R11-C-149,X-shard,C-8,P1,C,新发现碰撞C-8：shard-05 FINAL-20拟改同时覆盖FINAL-19的spec侧要求（两finding同行不同列）,spec:59
+R11-C-150,X-shard,C-9,P1,C,新发现碰撞C-9：shard-02 EV-02-18与shard-05 FINAL-18同指企微spec行前者登记范围外后者给全套拟改,spec:57
