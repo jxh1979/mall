@@ -913,7 +913,7 @@
 "PGM-E0176","platform-governance-map-for-operations-v0.1.html","entry","临时授权可设有效期或单次使用；权限的授予、收回、到期",617,"临时授权可设有效期或单次使用；权限的授予、收回、","权限和职级：每一个单一功能都可以单独授权","权限规则"
 "PGM-E0177","platform-governance-map-for-operations-v0.1.html","entry","角色装配（已确认）",619,"角色装配（已确认）：人力中心、财务中心与法务由整","权限和职级：每一个单一功能都可以单独授权","权限规则"
 "PGM-E0178","platform-governance-map-for-operations-v0.1.html","entry","临时权限（已确认）",620,"临时权限（已确认）：员工可申请临时权限，按层级对","权限和职级：每一个单一功能都可以单独授权","权限规则"
-"PGM-E0179","platform-governance-map-for-operations-v0.1.html","entry","高危授权审批（已确认）",621,"高危授权审批（已确认）：以下四类权限授出前须先审","权限和职级：每一个单一功能都可以单独授权","权限规则"
+"PGM-E0179","platform-governance-map-for-operations-v0.1.html","entry","高危授权审批（已确认）",621,"高危授权审批（已确认）：以下五类权限授出前须先审","权限和职级：每一个单一功能都可以单独授权","权限规则"
 "PGM-E0180","platform-governance-map-for-operations-v0.1.html","section","职级规则",625,"职级规则","权限和职级：每一个单一功能都可以单独授权",""
 "PGM-E0181","platform-governance-map-for-operations-v0.1.html","entry","职级可按 M1-M10 配置",627,"职级可按M1-M10配置。","权限和职级：每一个单一功能都可以单独授权","职级规则"
 "PGM-E0182","platform-governance-map-for-operations-v0.1.html","entry","每个职级可分上、中、下",628,"每个职级可分上、中、下。","权限和职级：每一个单一功能都可以单独授权","职级规则"

@@ -141,7 +141,7 @@
 `POST /api/v1/integration/reconciliation/differences`
 
 > **2026-07-28 v7 审计 P0-E 修订（对账旁路手填封堵）**：本端点由「录入差异」收窄为「**登记差异**」。
-> 依据业务 HTML 铁律 `RULE-FIN-SOURCE-01`（业务:1340「平台侧金额必须系统自动取数、不许手填」）与决议 `R6-D07`。
+> 依据业务 HTML 铁律 `RULE-FIN-SOURCE-01`（BSM「取数规则」：平台侧金额必须系统自动取数、不许手填）与决议 `R6-D07`。
 > 原契约允许请求体直接给 `internal_amount_cent`（平台侧）/ `provider_amount_cent`（第三方侧）/ `difference_amount_cent`，
 > 等于给了一条绕过系统取数、凭空造差异金额的后门；财务域同类接口（`POST /api/v1/finance/reconciliation/differences`）
 > 早已按 R6-D07 强制系统取数，两套口径不一致。现统一：
