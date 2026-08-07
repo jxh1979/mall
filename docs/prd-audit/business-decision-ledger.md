@@ -1639,3 +1639,27 @@
 | 编号 | 日期 | 裁决内容 | 落点 | 依据 |
 |---|---|---|---|---|
 | **DEC-R8-67** | 2026-08-06 | **openapi 三处 `deprecated: true` 留下、不回退**：R10 第四批的裁决原文为「**端点标 deprecated 归代码轮**」，而实施时已在 openapi 契约中对 `POST /api/v1/amusement/manual-overrides`、`GET /api/v1/amusement/manual-overrides`、`POST /api/v1/ticketing/verifications/preview` 三个操作标了 `deprecated: true`，属超出裁决字面范围的实施偏差。用户 2026-08-06 弹窗裁定**留下、不回退**，理由：**文档层的废止提示零破坏性、早标早止损**。**端点的真实下线（路由摘除、调用方迁移、返回 410／404）仍归代码轮，本轮不做**，本条不构成「端点已下线」的结论。 | `docs/openapi/openapi-p0.yaml` ／ `docs/openapi/openapi-p0.json` 三个 operation（`createAmusementManualOverride`／`listAmusementManualOverrides`／`previewTicketVerification`）；**三份 HTML 与账本 `source_text` 均未涉及** | 实施偏差 → 用户 2026-08-06 弹窗裁定保留；worklog **T9** 留正式偏差声明；findings 无对应行故未新增 |
+
+### R8-U-02 全量扩登记轮（regext）的追加裁决（2026-08-06）
+
+> 本条记录用户在账本全量扩登记轮执行期间的两次追加裁决，以及该轮的执行统计。**纯追加**，编号续于 DEC-R8-67 之后。**本轮未改三份最终解释权 HTML**（三份文件的 sha256 与 R10 收官记载逐位一致），不触发「改 HTML 必须同批同步台账」的同步义务，本条属执行留痕。
+
+| 编号 | 日期 | 裁决内容 | 落点 | 依据 |
+|---|---|---|---|---|
+| **DEC-R8-68** | 2026-08-06 | **扩登记轮两项追加裁决 ＋ 本轮执行统计**：<br>① **10 条一批、全部登完**——DEC-R8-65 原定「105+ 全量清单下轮再出」，用户本轮追加裁定按每批 10 条把差集**全部登完**，不再分批留尾；<br>② **允许多代理并行**——起草阶段可由多个代理并行分片起草，但**落盘阶段仍由单一代理串行写表**，每批落盘后须真跑条目锚点门禁、`EXIT=0` 才进下一批。<br>**本轮执行统计**：注册表差集 226 条未登记条目全部处置——判为规则 132 条、非规则 94 条（非规则逐条理由见 `docs/prd-audit/rounds/regext/non-rule-dispositions.csv`）；账本新增 **306** 行（`BSM-0552`～`BSM-0793` ／ `PGM-0198`～`PGM-0257` ／ `BEQ-0170`～`BEQ-0173`），承接矩阵同步新增 306 行，findings 新增 18 行（`REGX-01`～`REGX-18`），并对既有 `R10-U-03` 追注一处本轮实检结论。**三份 HTML 零改动、注册表零改动。** | `docs/prd-audit/authority-rule-ledger.csv` ／ `docs/prd-audit/html-prd-coverage.csv` ／ `docs/prd-audit/rounds/r8/findings.csv` ／ `docs/prd-audit/rounds/regext/`；**三份 HTML 与注册表均未涉及** | 用户 2026-08-06 两次追加裁决；过程与逐批门禁证据见 `docs/prd-audit/rounds/regext/worklog.md` |
+
+### 扩登记轮（regext）独立审查返工批（2026-08-06）
+
+> 本条记录扩登记轮 `TECHNICAL_VERDICT: NEEDS_FIX` 后的返工批处置。**纯追加**，编号续于 DEC-R8-68 之后；DEC-R8-68 内的统计数字为**当时事实**，不回改，以本条为准。**本轮同样未改三份最终解释权 HTML 与条目注册表**（四个 sha256 与 R10 收官记载逐位一致）。
+
+| 编号 | 日期 | 裁决内容 | 落点 | 依据 |
+|---|---|---|---|---|
+| **DEC-R8-69** | 2026-08-06 | **扩登记轮返工批五项处置**：<br>① **两条非规则改判为规则**——BSM「人工补录、主管复核」（新登 `BSM-0794`）与 BSM「客人 App/小程序」（新登 `BSM-0795`）。前者改判理由：该条落在「必须关注的动作」清单里，同清单相邻的「核销成功、失败、拒绝、撤销」（`BSM-0342`）与「退款、免单、账单调整」（`BSM-0344`）早已在账本，本条却被判非规则，同构条目处置自相矛盾；且本条含**主管复核**这一权限/审批/留痕要素（判据④），据此登记，承接为 `docs/evidence-risk-control-product-prd-v0.1.md` §7.2 补录规则六条 ＋ §11 第 1 条主管复核强制项，判 FULL。后者改判理由：入口一览表 7 行同构，其余 6 行（`BSM-0458`～`BSM-0463`）均已在账本，只余本行未登；**选「补登第 7 行」而非「改写 6 个兄弟行的处置」**——7 行统一进入门禁检查⑤的逐字保护面，成本最低、且不动既有已核验行。两条同时从 `non-rule-dispositions.csv` 移除（94 → 92 行）。<br>② **新增行 `value_flow` 涉钱回填**——本轮新增 306 行中，用涉钱判定式扫 `source_text` 实测命中 20 行，其中 19 行原填 `NOT_STATED` 属漏填，已回填 HTML **逐字原文摘句**（只动 `value_flow` 一列，`source_text` 与其余 16 列一字未动）；剩余 1 行 `BSM-0713`（取酒与人工例外）命中的是「找不到可承担确认责任的营销主管」的身份确认责任、并非钱路，**判为判定式假阳性，如实保留 `NOT_STATED`**。<br>③ **`REGX-13`／`REGX-14` 由「PRD 未对齐 HTML」改判为「HTML 内部口径冲突」**——同一份 BSM 内，收入归属章定服务点单收款主体为**酒吧商户**、服务点单章导语与 `BSM-0193` 却定**公司统一收款、全额进公司账**；PRD 与后一口径一致。**故不存在「PRD 单向未对齐」，须由用户裁决收款主体与管理费归属，裁决前 PRD 不得单向对齐**，两条 `status` 转 `pending-user`。<br>④ **`PGM-0196` 承接由 MISSING 收敛为 PARTIAL**（归口 `docs/product-requirements-v0.1.md` §14 第 40 条，与同源的 `BSM-0553` 同判），finding `R10-U-03` 同批由 `important` 收窄为 `advisory`：原则本体已有承接，残余缺口只剩**效力范围声明未承接 ＋ PGM 侧归口未指认**，非全缺。<br>**返工后统计**：注册表差集 226 条中判为规则 **134** 条、非规则 **92** 条；账本新增 **308** 行（`BSM-0552`～`BSM-0795` ／ `PGM-0198`～`PGM-0257` ／ `BEQ-0170`～`BEQ-0173`），账本合计 1225 行、承接矩阵合计 1234 行。 | `docs/prd-audit/authority-rule-ledger.csv` ／ `docs/prd-audit/html-prd-coverage.csv` ／ `docs/prd-audit/rounds/r8/findings.csv` ／ `docs/prd-audit/rounds/regext/non-rule-dispositions.csv`；**三份 HTML、条目注册表与任何 PRD 均未涉及** | 扩登记轮独立技术审查 `NEEDS_FIX` → 返工批五项修复；③ 待用户裁决，其余四项已落盘；证据见 `docs/prd-audit/rounds/regext/worklog.md` 返工节 |
+
+### 服务点单收款主体与管理费归属的裁决（2026-08-06）
+
+> 本条记录用户对扩登记轮返工批 `REGX-13`／`REGX-14` 的弹窗裁决。**纯追加**，编号续于 DEC-R8-69 之后。**本批未改三份最终解释权 HTML、未改任何 PRD**（四个 sha256 逐位不变）。
+
+| 编号 | 日期 | 裁决内容 | 落点 | 依据 |
+|---|---|---|---|---|
+| **DEC-R8-70** | 2026-08-06 | **服务点单的两处表述是同一主体、不构成矛盾（用户选甲）**：<br>① 服务点单章导语「所有服务费由公司统一收款、全额进公司账」中的**「公司」即该服务发生地酒吧的经营主体**；该表述的**对立面是服务人员个人私收**（写它是为了防钱不进账），不是要把收款主体定到平台或项目公司；<br>② 收入归属表把同一个「公司」**点名成该酒吧商户**，两处指同一主体，口径本就一致；<br>③ **管理费部分归该酒吧商户收入并计入其净利润基数**；<br>④ 据此，返工批一度登记的「HTML 内部口径冲突」不成立，`REGX-13`／`REGX-14` 转 `resolved`，**PRD 不需要单向对齐到「酒吧商户收款」**。<br>**遗留两项排下轮**：㈠ 三份 HTML 加**互认括注**（把「公司＝该服务发生地酒吧经营主体」写明），按 **C 类草案逐句批**；㈡ PRD 把「公司」点名到酒吧商户并补「计入净利润基数」句。**本批不改 HTML、不改 PRD。** | `docs/prd-audit/rounds/r8/findings.csv` 两行（`REGX-13`／`REGX-14`）；**遗留项落点（下轮）**：`docs/business-system-map-for-operations-v0.1.html` 服务点单章与收入归属章括注、`docs/service-order-product-prd-v0.1.md` §4.1／§8.1 | 用户 2026-08-06 弹窗裁决（甲）；返工批实检证据见 `docs/prd-audit/rounds/regext/worklog.md` §3.3、§3.8 |
