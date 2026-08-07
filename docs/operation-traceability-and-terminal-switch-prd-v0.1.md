@@ -1,5 +1,9 @@
 # 全链路操作留痕与终端开关 PRD V0.1
 
+> **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
+
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 > 权限边界：本 PRD 只提供产品细化；三份业务 HTML 拥有最终业务解释权。其他文档、配置、代码和数据结构均不得覆盖 HTML；HTML 未记载的新规则须经用户批准并写入 HTML 后方可生效。**三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**（2026-08-05 补，依据 PGM「解释权声明」条；DIFF-A-051）。
 
 > **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
@@ -16,7 +20,7 @@
 >   - **🔴 部署决策（需用户拍板，别擅自硬强制）**：默认全类型 `grace`（含生产）。**各终端类型何时翻转 `enforce` 是部署决策**：前置条件=该类型的现网设备均已登记签名公钥且客户端已实现请求签名（安卓/一体机需发版支持）。建议顺序：先 `staff_work_phone`（资金主向量、已有 Keystore 凭证基建）→ `kiosk`（有设备令牌基建，需补非对称密钥或改 HMAC 通道）→ `tablet`（当前无每设备密钥基建，需先建登记）。**未翻转前对应类型仍处灰度（缺签名放行），伪造向量在该类型上仍开放**。
 >   - **现状残留/后续**：`tablet`/`kiosk` 暂无非对称签名密钥基建，其 `enforce` 翻转前需先落设备密钥登记（`kiosk` 可用其既有设备令牌走 HMAC 通道，本期未纳入，为控制单次改动的密码学面）；签名量绑定请求体为 enforce 前的加固项。
 >   - **（2026-08-03 收口 · 两道闸真正改用可信终端身份）**：AUD-010 建了 `TerminalIdentityHolder`，但**总开关拦截器与设备凭证验签自己没用它**，两处漏点已修：
->     - ①`TerminalMasterSwitchInterceptor` 原先读自报 `X-Terminal-Type`、为空即 `return true` 放行——`checkTerminalEnabled()` 全仓仅此一个生产调用点，客户端删掉一个请求头就跳过整条 `terminal.enabled` 闸（含 fail-closed 兜底）。现改读 `TerminalIdentityHolder`，且按治理地图「开关拉取失败时按兜底关闭处理，**写操作一律拒绝**；前端隐藏只是辅助，**后端接口必须独立校验**」，**解析不出终端身份的非 GET/HEAD/OPTIONS 请求一律 403 `TERMINAL_NOT_ALLOWED`**；读请求维持放行（端停用开关不是鉴权边界）。
+>     - ①`TerminalMasterSwitchInterceptor` 原先读自报 `X-Terminal-Type`、为空即 `return true` 放行——`checkTerminalEnabled()` 全仓仅此一个生产调用点，客户端删掉一个请求头就跳过整条 `terminal.enabled` 闸（含 fail-closed 兜底）。现改读 `TerminalIdentityHolder`，且按PGM「开关拉取失败时按“兜底关闭”处理，写操作一律拒绝」条（同条另有「前端隐藏只是辅助，后端接口必须独立校验」一句），**解析不出终端身份的非 GET/HEAD/OPTIONS 请求一律 403 `TERMINAL_NOT_ALLOWED`**；读请求维持放行（端停用开关不是鉴权边界）。
 >     - ②`DeviceCredentialVerifier` 原先以自报头判断是否进设备绑定型验签闸，自报为空或改报 `web` 即早退，**把 enforce 翻开也没用**。现在带 `X-Device-Id` 时一律先反查 `terminal_devices.terminal_type` 顶上，登记类型压过自报值，再做 `DEVICE_BOUND_TYPES` 与 `modeFor()` 判定；该次查询下传验签复用，不新增查库次数。自报头仍报设备绑定型却与登记类型不符 → 保持 `type_mismatch` 拒。
 >     - 连带：`DeviceCredentialBodyCachingFilter` 去掉「自报头属设备绑定型」前置条件（过滤器早于拦截器，拿不到派生结果；不去掉则不发头的签名请求拿不到缓存 body、必然摘要不符），改为「写 + 带 `X-Device-Signature`」；`GET /terminals/capability-switches/effective`（前端菜单 gating 数据源）与 `GateRequestContext` 的 device scope 一并改读可信身份，避免「菜单按自报类型显示、接口按真实类型拒绝」的错位。
 >     - **豁免前缀随之登记两条非终端通道**：`/api/open/`（第三方开放平台回调，自带签名，不是受管终端）与 `/api/v1/terminals/kiosks/`（一体机自助端点，`X-Device-Token` 认证，本就豁免于 `DeviceCredentialInterceptor`、拿不到可信身份）——不登记则第三方回调与一体机心跳会被新增的写请求 fail-closed 误杀。
@@ -333,7 +337,7 @@ flowchart TD
 
 #### 4.1.3 票务/核销/退款域事件（event_category=ticket；依据 annotation-1，对齐 data-risk §7.1 与 ticketing §9）
 
-> 说明：本组登记的是事件中心 `event_name` 标准名。票务开发设计中的预检、签名失败、疑似变造、离线冲突等细分语义不得另起旧事件名写入事件中心，应放入 `reason_code`、`event_subtype` 或业务 payload；分析、风控和审计只消费下列标准名。
+> 说明：本组登记的是事件中心 `event_name` 标准名。票务开发设计中的预检（**已废止·见文首口径**）、签名失败、疑似变造、离线冲突等细分语义不得另起旧事件名写入事件中心，应放入 `reason_code`、`event_subtype` 或业务 payload；分析、风控和审计只消费下列标准名。
 
 | 事件类型 | event_category | 含义与载荷要点 |
 |---|---|---|
@@ -342,7 +346,7 @@ flowchart TD
 | `ticket.changed` | ticket | 票务改期/变更：票号、原场次、新场次、原因 |
 | `ticket.inventory_locked` | ticket | 下单锁库存（对齐 critic-11，承载 ticketing `ticket.inventory.locked`）：产品ID、日期、数量、订单 |
 | `ticket.inventory_released` | ticket | 取消/退款释放库存（承载 ticketing `ticket.inventory.released`）：产品ID、日期、数量、原因 |
-| `verification.previewed` | ticket | 核销预检：权益摘要、点位、设备、风险提示、是否可核销；预检不扣次（与 ENUM「核销记录状态」条「核销无预检环节，共六态、不设『预检通过』态，扫码即核销一步完成」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；DEC-R6-08，2026-08-05 登记） |
+| `verification.previewed`（**已废止·见文首口径**，该事件停用、待代码轮下线） | ticket | 核销预检（停用）：权益摘要、点位、设备、风险提示、是否可核销；预检不扣次（与 ENUM「核销记录状态」条「核销无预检环节，共六态、不设『预检通过』态，扫码即核销一步完成」冲突，属**待改造缺口**——代码级下线待办，不得反向定义业务规则；DEC-R6-08，2026-08-05 登记） |
 | `verification.succeeded` | ticket | 核销成功：权益、扣次、商户、点位、设备、员工 |
 | `verification.failed` | ticket | 核销失败：失败原因、票码哈希、设备、员工 |
 | `verification.reversed` | ticket | 核销撤销/冲正：原核销记录、原因、审批单、操作人、设备 |
@@ -489,7 +493,7 @@ flowchart TD
 
 > 修订说明（2026-06-07）：所有关闭场景**不得只靠前端隐藏/置灰**。前端隐藏只是体验层；任何被开关关闭的终端、商户、业务系统、模块、设备或版本，**后端接口都必须独立校验开关状态并拒绝请求**（返回明确的"已关闭/未开放"错误码），并写入 `terminal.access_rejected` 事件留痕（记录 scope_type、scope_id、terminal_type、business_system、module_code、actor、device、occurred_at、reject_reason），以便审计"谁在已关闭的端/模块上尝试了什么操作"。依据 finding switch-4。
 
-> 修订说明（2026-06-18，E2）：业务已确认 `apps/web/src/legacy-console` 为**正式 Web 前端**（terminal_type=`web`，见 §5.2）。Web 端写动作边界与本节"终端开关后端拒绝铁律"一致：按终端铁律，Web 前端 P0 只承载轻量业务确认 + 跳转，**不在 Web 直接执行门票/权益核销、人工放行、结账支付、存酒/取酒**等改变核销结果/资金/库存的现场作业动作，这些动作改为跳转到管理后台/现场端执行。Web 模块开关关闭后，**后端对应业务接口仍须独立校验并拒绝请求并写 `terminal.access_rejected`**（scope_type 含模块级），前端隐藏仅作辅助，不得因前端已隐藏而免除后端校验。Web 端动作边界、允许/禁止动作清单详见 `frontend-admin-development-design.md` §13A。
+> 修订说明（2026-06-18，E2）：业务已确认 `apps/web/src/legacy-console` 为**正式 Web 前端**（terminal_type=`web`，见 §5.2）。Web 端写动作边界与本节"终端开关后端拒绝铁律"一致：按终端铁律，Web 前端 P0 只承载轻量业务确认 + 跳转，**不在 Web 直接执行门票/权益核销、结账支付、存酒/取酒（原含「人工放行」，已废止·见文首口径）**等改变核销结果/资金/库存的现场作业动作，这些动作改为跳转到管理后台/现场端执行。Web 模块开关关闭后，**后端对应业务接口仍须独立校验并拒绝请求并写 `terminal.access_rejected`**（scope_type 含模块级），前端隐藏仅作辅助，不得因前端已隐藏而免除后端校验。Web 端动作边界、允许/禁止动作清单详见 `frontend-admin-development-design.md` §13A。
 
 | 场景 | 关闭表现 | 后端处置与留痕 |
 |---|---|---|
@@ -837,7 +841,7 @@ flowchart TD
 | 2026-06-10 产品审计 V0.6 | 增/改 | §4.1.3 | 明确事件中心 `event_name` 只写标准名；票务预检补 `verification.previewed`，签名失败/疑似变造/离线冲突等细分语义进入 `reason_code`/`event_subtype`，不再作为旧事件名消费 | 本轮 PM Critic V0.6 事件名漂移修复 |
 | 2026-06-07 | 改 | §6.3 terminal_type 表体 | 直接替换为 D5 10 个权威码，删除 guest_app/mini_program/... 别名兜底写法（权威字段不携带非权威码） | finding baseline-conf-3、structural-2、annotation-3、D5 |
 | 2026-06-07 | 增 | §5.6 fail-closed 兜底 | 明确一体机断网/开关拉取失败时为"按最近成功快照只读受限运营（现场连续运营），写操作 fail-closed"，非整机停摆 | finding critic-13 |
-| 2026-08-03 | 改 | 顶部横幅 AUD-010 / §5.6 | 终端总开关拦截器与设备凭证验签改用服务端可信终端身份（`TerminalIdentityHolder` / 按 `X-Device-Id` 反查登记类型），不再信自报 `X-Terminal-Type`；解析不出终端身份的写请求按兜底关闭 403 拒绝；豁免前缀登记 `/api/open/` 与 `/api/v1/terminals/kiosks/` 两条非终端通道 | 治理地图「关闭后…接口也要拒绝业务动作」「开关拉取失败时按兜底关闭处理，写操作一律拒绝；前端隐藏只是辅助，后端接口必须独立校验」 |
+| 2026-08-03 | 改 | 顶部横幅 AUD-010 / §5.6 | 终端总开关拦截器与设备凭证验签改用服务端可信终端身份（`TerminalIdentityHolder` / 按 `X-Device-Id` 反查登记类型），不再信自报 `X-Terminal-Type`；解析不出终端身份的写请求按兜底关闭 403 拒绝；豁免前缀登记 `/api/open/` 与 `/api/v1/terminals/kiosks/` 两条非终端通道 | PGM「关闭后…接口也要拒绝业务动作」「开关拉取失败时按兜底关闭处理，写操作一律拒绝；前端隐藏只是辅助，后端接口必须独立校验」 |
 | 2026-06-08 | 删 | §4.1 标准事件类型 | 删除聚合旧名 `member.points_changed`，会员积分变更统一由 §4.1.4 `points.earned/deducted/redeemed/expired` 细粒度事件承载，消除唯一字典内"聚合旧名+细粒度新名"双轨（data-risk §7.1、java-backend §14 同步只消费 points.*） | R3 / struct-annot-1/2、critic2-3、event-consumers-8 |
 | 2026-06-08 | 增 | §4.1 标准事件类型 | 就地说明 `reservation.created`（订台创建）/`reservation.deposit_paid`（客人付定金完成）/`reservation.deposit_settled`（定金最终结算：抵扣/退还/没收）三者各自触发点与载荷，消除"deposit_paid 与 deposit_settled 重复"误解，三者均保留 | R4 / event-consumers-5、critic2-5 |
 | 2026-06-08 | 改 | §4.1.4 会员/合规/容量域事件 | 删除 `points.earned`/`points.redeemed` 指向不存在名 `member.point_earned`/`member.point_redeemed` 的错误括注，改为"data-risk §7.1 消费本 points.* 事件" | R3 / event-consumers-8、struct-annot-2 |

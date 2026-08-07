@@ -1,5 +1,7 @@
 # P0 操作事件与证据留痕矩阵 V0.1
 
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 > 本文档用于回答“所有关键操作有没有留痕、留什么、谁能看、保存多久、如何复核”。开发、测试、运营和第三方供应商均应按本文设计事件与证据。
 
 ## 1. 总原则
@@ -26,7 +28,7 @@
 | `object_id` | 是 | 被操作对象 |
 | `before_snapshot` | 视情况 | 状态或关键字段变更前 |
 | `after_snapshot` | 视情况 | 状态或关键字段变更后 |
-| `reason_code` | 高风险必填 | 退款、撤销、人工放行、调账、报损等 |
+| `reason_code` | 高风险必填 | 退款、撤销、调账、报损等（原含「人工放行」，已废止·见文首口径） |
 | `evidence_refs` | 视情况 | 图片、视频、附件、签名、回执、第三方报文 |
 | `trace_id` | 是 | 串联请求链路 |
 | `idempotency_key` | 第三方/支付必填 | 防重复 |
@@ -51,7 +53,7 @@
 | 权益核销成功 | `verification.succeeded` | 核销码摘要、员工、终端、定位/设备 | 现场员工 | 异常抽检 |
 | 核销拒绝 | `verification.failed` | 拒绝原因、码摘要、终端 | 系统/员工 | 风控统计 |
 | 核销撤销 | `verification.reversed` | 原核销记录、原因、审批 | 现场主管 | 必须审批 |
-| 人工放行 | `verification.manual_overridden` | 原因、照片/附件、审批人 | 现场主管 | 必须审批 |
+| 人工放行（**已废止·见文首口径**） | `verification.manual_overridden`（停用，待代码轮下线） | 该动作不再提供 | — | — |
 | 酒吧年龄核验 | `bar.age_verification.requested` / `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 核验结果、方式、最小必要证明 | 酒吧门口员工/第三方 | 合规抽检 |
 | 酒吧人脸核验 | `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 第三方结果流水、活体/比对结果摘要 | 第三方适配器 | 供应商准入后启用 |
 | 卡座客人入场 | `bar.table_guest.checked_in` / `bar.table_guest.rejected` | 预订卡座、人数额度、入场人次、幂等键、剩余额度 | 酒吧门口员工 | 超额拒绝，并发只允许成功扣占一次 |
@@ -68,7 +70,7 @@
 | 游乐安全整改复检 | `amusement.safety_inspection.rectification_submitted` / `amusement.safety_inspection.rechecked` | 整改说明、责任人、整改证据、复检结果、复检证据 | 游乐运营/巡检员 | 复检失败继续暂停 |
 | 游乐恢复开放审批 | `amusement.safety_inspection.reopened` / `amusement.safety_inspection.reopen_rejected` | 审批人、审批结论、原因、关联复检记录 | 游乐主管/安全负责人 | 必须审批 |
 | 游乐核销 | `amusement.verification_succeeded` / `amusement.verification_failed` | 权益、场次、点位、员工 | 游乐员工 | 容量校验 |
-| 游乐人工放行 | `amusement.verification_overridden` | 原因、现场证据、审批 | 游乐主管 | 必须审批 |
+| 游乐人工放行（**已废止·见文首口径**） | `amusement.verification_overridden`（停用，待代码轮下线） | 该动作不再提供 | — | — |
 | 聚合支付回调 | `payment.gateway_notified` | 原始报文摘要、签名校验结果 | 支付适配器 | 幂等处理 |
 | 支付轮询校验 | `payment.poll_checked` | 查询结果摘要、差异状态 | 系统 | 定时对账 |
 | 应收应付生成 | `finance_ar_ap.created` | 来源单据、金额、主体绑定 | 财务/系统 | 日结检查 |
@@ -125,7 +127,7 @@
 ## 5. 验收标准
 
 1. 每个矩阵内事件均能在事件中心按 `event_name`、对象、人员、时间、终端查询。
-2. 任一退款、人工放行、库存调整、财务调账、敏感导出都必须能追溯到审批和证据。
+2. 任一退款、库存调整、财务调账、敏感导出都必须能追溯到审批和证据（原含「人工放行」，已废止·见文首口径）。
 3. 第三方回调重复发送时只生成一条有效业务结果，重复请求写幂等日志。
 4. 日结锁定后，任何影响金额的变更都不能直接覆盖原记录，只能追加补录/冲正事件。
 5. 敏感证据查看和导出必须二次授权并记录用途。

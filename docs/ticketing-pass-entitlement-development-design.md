@@ -1,5 +1,9 @@
 # 票务通票、权益、核销与结算开发设计
 
+> **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
+
+> **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
+
 > 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
@@ -205,7 +209,7 @@ erDiagram
 
 | 状态 | 中文 | 说明 |
 |---|---|---|
-| `preview_passed` | 预检通过 | 只做校验，不扣次 |
+| `preview_passed` | 预检通过（**已废止·见文首口径**，该取值停用、不得新写入，待代码轮下线） | 原只做校验、不扣次；现行不设「预检通过」态 |
 | `success` | 成功 | 已扣次、已写事件、已触发结算 |
 | `failed` | 失败 | 失败原因必须记录 |
 | `pending_sync` | 待同步 | 离线核销本地记录，等待上传（P1 预留，P0 不启用） |
@@ -346,7 +350,7 @@ sequenceDiagram
     participant R as 风控
     participant S as 结算
     participant E as 事件中心
-    D->>T: 核销预检
+    D->>T: 扫码核销（一次动作，原「核销预检」已废止）
     T->>T: 解析票码/NFC/券码
     T->>T: 查找权益实例
     T->>T: 校验状态、时间、次数、地点、商户、权限、容量
@@ -675,7 +679,7 @@ sequenceDiagram
 
 #### 6.2.3.1 `ticket_credential_verification_audits` 票码防伪核对表
 
-用于记录每一次票码展示、预检、核销、失败和事后核对结果。
+用于记录每一次票码展示、核销、失败和事后核对结果（原两步「预检 + 确认」流程，**已废止·见文首口径**）。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -845,7 +849,7 @@ sequenceDiagram
 | 方法 | 历史能力路径 | 说明 | 历史权限/能力参考 |
 |---|---|---|---|
 | `GET` | `/api/admin/ticket-credentials` | 查询票码凭证、防伪状态和绑定关系 | `ticket.credential.read` |
-| `GET` | `/api/admin/ticket-credentials/{id}/audit-trail` | 查看票码生成、刷新、展示、预检、核销和失败记录 | `ticket.credential.audit` |
+| `GET` | `/api/admin/ticket-credentials/{id}/audit-trail` | 查看票码生成、刷新、展示、核销和失败记录（原两步「预检 + 确认」流程，**已废止·见文首口径**） | `ticket.credential.audit` |
 | `POST` | `/api/admin/ticket-credentials/{id}/disable` | 禁用疑似被盗用或被变造的凭证 | `ticket.credential.disable` |
 | `POST` | `/api/admin/ticket-credentials/{id}/replace` | 更换二维码/NFC/卡凭证 | `ticket.credential.replace` |
 | `GET` | `/api/admin/ticket-credential-audits` | 事后核对报表，按订单、票号、员工、设备、点位、时间查询 | `ticket.credential.audit` |
@@ -876,7 +880,7 @@ sequenceDiagram
 
 | 方法 | 历史能力路径 | 说明 | 历史权限/能力参考 |
 |---|---|---|---|
-| `POST` | `/api/verifications/preview` | 核销预检 | `ticket.verify.preview` |
+| `POST` | `/api/verifications/preview`（**已废止·见文首口径**，待代码轮下线，不得新增调用） | 核销预检（停用） | `ticket.verify.preview`（停用） |
 | `POST` | `/api/verifications` | 执行核销 | `ticket.verify.execute` |
 | `POST` | `/api/verifications/{id}/reverse` | 核销冲正 | `ticket.verify.reverse` |
 | `GET` | `/api/verifications` | 查询核销记录 | `ticket.verify.read` |
@@ -922,7 +926,7 @@ sequenceDiagram
 | `POST` | `/api/open/d/{endpoint_key}/ticketing/orders` | 第三方创建订单 |
 | `POST` | `/api/open/d/{endpoint_key}/ticketing/orders/{externalOrderNo}/paid` | 第三方同步支付成功 |
 | `GET` | `/api/open/d/{endpoint_key}/ticketing/tickets/{code}/status` | 查询票或券状态 |
-| `POST` | `/api/open/d/{endpoint_key}/ticketing/verifications/preview` | 第三方核销预检 |
+| `POST` | `/api/open/d/{endpoint_key}/ticketing/verifications/preview`（**已废止·见文首口径**，待代码轮下线，不得新增调用） | 第三方核销预检（停用） |
 | `POST` | `/api/open/d/{endpoint_key}/ticketing/verifications` | 第三方执行核销 |
 | `POST` | `/api/open/d/{endpoint_key}/ticketing/verifications/callback` | 第三方回传核销结果 |
 | `POST` | `/api/open/d/{endpoint_key}/ticketing/refunds/callback` | 第三方回传退款结果 |
@@ -993,7 +997,7 @@ sequenceDiagram
 
 | 事件编码 | 触发点 | 关键载荷 |
 |---|---|---|
-| `verification.previewed` | 预检通过 | 权益、点位、设备；不扣次 |
+| `verification.previewed` | 预检通过（**已废止·见文首口径**，该事件停用、待代码轮下线） | 原记权益、点位、设备且不扣次；现行扫码即核销、不发该事件 |
 | `verification.failed` | 核销失败 | 原因、票码哈希、设备、员工；签名失败、疑似变造等进入 `reason_code/event_subtype` |
 | `verification.succeeded` | 核销成功 | 权益、扣次、商户、点位 |
 | `verification.reversed` | 核销冲正 | 原核销记录、冲正人、原因 |
@@ -1140,7 +1144,7 @@ sequenceDiagram
 | 多项目通玩 | `amusement_pass` 权益按项目扣次 |
 | 快速通道 | `fast_pass` 权益核销 |
 | 预约排队 | 票务校验权益，游乐系统管理预约和队列 |
-| 场次容量 | 票务引用游乐系统容量或场次 |
+| 项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径） | 票务引用游乐系统的项目实时在玩人数容量 |
 
 注意：
 
@@ -1173,7 +1177,7 @@ sequenceDiagram
 
 - 售票型一体机可售票产品、价格、库存、订单创建、支付二维码、出票和取票接口；服务端必须按一体机绑定点位过滤可售票种。
 - 今日可核销权益摘要。
-- 核销预检接口。
+- ~~核销预检接口~~（**已废止·见文首口径**，待代码轮下线，不得新增调用）。
 - 核销执行接口。
 - 离线权益缓存，P1 预留。
 - 离线核销上传，P1 预留；P0 不做离线核验。
@@ -1294,7 +1298,7 @@ sequenceDiagram
 
 > 背景：§4.5 核销记录状态已含 `reversed`（已冲正），但状态机迁移与冲正事件落点未在本子系统正文显式收口。本小节补 `ticket_verifications`（核销记录）reversed 状态机与冲正事件 `verification.reversed`，与退款流程（§5.6）联动。
 
-- **状态机**：`success → reversed`。冲正时原核销记录 `status: success → reversed`，新建一条 `status=reversed` 的冲正记录指向原记录 id（与顶部 R7 横幅 V067 冲正实现一致：回滚 `used_times`、原记录置 `reversed`、新记录指向原 id）。`failed`/`preview_passed` 不可冲正（无成功扣次，无需冲正）。
+- **状态机**：`success → reversed`。冲正时原核销记录 `status: success → reversed`，新建一条 `status=reversed` 的冲正记录指向原记录 id（与顶部 R7 横幅 V067 冲正实现一致：回滚 `used_times`、原记录置 `reversed`、新记录指向原 id）。`failed`/`preview_passed`（后者**已废止·见文首口径**）不可冲正（无成功扣次，无需冲正）。
 - **权益联动**：冲正回滚权益次数（§4.4 扣次规则"核销冲正：恢复次数…状态恢复为 unused 或 partially_used"），并生成结算冲正（§5.8）。
 - **冲正事件**：写 `verification.reversed`（核销冲正），载荷含原核销记录 id、冲正记录 id、`issued_entitlement_id`、回滚次数/人数、操作人、原因；同步进 `audit_events`（`event_category=ticketing`、`subject_type=verification`）。
 - **与退款联动（§5.6）**：退款涉及已核销权益且配置允许冲正时，退款流程触发核销冲正 → 写 `verification.reversed` → 回滚权益与结算 → 再走退款资金流；已核销权益默认不可退，仅在配置冲正+审批规则时联动（§5.6"已核销权益默认不可退，除非配置了冲正和审批规则"）。
@@ -1303,7 +1307,7 @@ sequenceDiagram
 **验收口径：**
 
 - 冲正一条 `success` 核销：原记录 → `reversed`、新建 `reversed` 冲正记录指向原 id、权益次数/人数回滚、结算冲正生成、写 `verification.reversed` 且进 `audit_events`。
-- 对 `failed`/`preview_passed`/已 `reversed` 记录发起冲正：拒绝并提示不可冲正。
+- 对 `failed`/`preview_passed`（后者**已废止·见文首口径**，不再产生新记录）/已 `reversed` 记录发起冲正：拒绝并提示不可冲正。
 - 退款联动：已核销权益按配置触发冲正后再退款，`verification.reversed` 与退款事件可在 `audit_events` 按 `source_doc_id` 串联。
 
 > **✅ 已实现修复（F-TXN-03，2026-06-22，已在 .160 编译通过）**：核销冲正 `reverseVerification` **发 `VerificationReversedEvent` → customer 域 `LoyaltyPointsConsumer` 冲减该订单已确认积分**，补齐冲正侧的积分回扣链路（与 §10A.2 退款 `deduct` 冲减、§10B.2 积分进 `audit_events` 同方向）：
@@ -1383,7 +1387,7 @@ com.complex.ticketing
 5. 官方 App/小程序创建订单并锁库存，第三方渠道订单支持回流预留。
 6. 模拟官方线上支付成功。
 7. 出票并拆权益。
-8. 二维码核销预检。
+8. 二维码扫码即核销（一次动作）（原两步「预检 + 确认」流程，**已废止·见文首口径**）。
 9. 二维码核销执行。
 10. 核销后生成结算明细。
 11. 生成商户结算单。

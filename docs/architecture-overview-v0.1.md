@@ -66,7 +66,7 @@ graph TB
     INV["inventory<br/>供应链/库存/盘点差异/追溯交接"]
     AMU["amusement<br/>项目/场次/容量/超容/安全巡检"]
     CUS["customer<br/>会员/钱包/积分/客人端"]
-    MB["merchantbilling<br/>商户账单/租金/保证金/物业费"]
+    MB["merchantbilling<br/>商户账单/租金/押金/物业费"]
     MS["merchantservice<br/>物业工单/SLA"]
   end
 

@@ -226,7 +226,7 @@ PGM-0102,Web 前端和移动管理端,docs/operation-traceability-and-terminal-s
 PGM-0103,工作人员平板 App,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
 PGM-0104,员工工作手机和员工私人手机 App,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
 PGM-0105,商户侧 App/Web,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
-PGM-0106,ORPHANED,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
+PGM-0106,触摸屏一体机,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
 PGM-0107,可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关（灰度是最细的一档,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
 PGM-0108,关闭后菜单不可见或不可点，接口也要拒绝业务动作,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
 PGM-0109,访问被拒绝也要留痕，便于排查是权限问题还是开关问题,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
@@ -497,7 +497,7 @@ BSM-0390,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日
 BSM-0391,订台低消 / 二次消费 / 额外酒水,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0392,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0393,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0394,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0394,演出票,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0395,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0396,系统 对 渠道,docs/finance-settlement-product-prd-v0.1.md,6C. 对账差异强制化（P0 收口）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0397,渠道 对 资金,docs/finance-settlement-product-prd-v0.1.md,12.1 P1 深度能力,FULL,,,,,,04-transaction-member-ticket-bar
@@ -715,7 +715,7 @@ BEQ-0087,招商线索状态,docs/leasing-acquisition-prd-v1.0.md,1. 业务对象
 BEQ-0088,招商意向阶段,docs/real-estate-full-chain-domain-prd-v0.1.md,1. 招商获客,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0089,品牌/客户库类型,docs/real-estate-full-chain-domain-prd-v0.1.md,1. 招商获客,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0090,合同变更类型,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
-BEQ-0091,退租结算状态,docs/finance-settlement-product-prd-v0.1.md,13.2 保证金 / 押金专项台账,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0091,退租结算状态,docs/finance-settlement-product-prd-v0.1.md,13.2 押金专项台账,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0092,合同审批链,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0093,租金/账单类型,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0094,营业额抽成模式,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
@@ -909,3 +909,19 @@ BSM-0539,异常预警入口,docs/business-dashboard-metrics-product-prd-v0.1.md,
 BSM-0540,综合／联合通票的定价构成,docs/finance-settlement-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,P1,R8-F03,R8 抽查证伪：结算 PRD 未承接「允许尾数集合为业务参数、可配」。,在结算 PRD 凑整章补「允许尾数集合为业务参数、全平台统一可配、出厂默认 8/9/0」。,,r8-rebuild
 BSM-0541,零售参考价是同一项目、同一商品在后台配置的滚动取价窗口内,docs/merchant-points-settlement-rules-v1.0.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,P1,R8-F04;R8-F05,R8 抽查证伪：积分结算规则未承接「滚动取价窗口须配上下限」与「空窗口自动向前延长」。,补「滚动取价窗口须同时配置上下限」与「窗口内无有效成交时自动向前延长至最近一笔有效成交」。,,r8-rebuild
 PGM-0193,游乐容量只按单个项目的实时在玩人数控制,docs/amusement-business-operations-product-prd-v0.1.md,R8 机检承接（14 字滑窗），未逐句核验,PARTIAL,,,,需逐句核验并补齐缺口口径。,,r8-rebuild
+BSM-0542,进场（综合体入场）,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,8.3 现场核销（综合体入场三道环节：安检→年龄核验→检票）,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0543,通票未核销减除额,docs/finance-settlement-product-prd-v0.1.md,3A 通票分账瀑布与收入归属 · 未实际取得权益的票款按「域归属对照」归属（四栏分列）,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0168,域归属对照,docs/finance-settlement-product-prd-v0.1.md,3A 通票分账瀑布与收入归属 · 未实际取得权益的票款按「域归属对照」归属（同一张对照表）,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0544,酒吧通票可分配池的池金额，是该票扣完第三方渠道费用,docs/settlement-rebuild-prd-v1.0.md,5.1 分账两问 · 可分配池两段分配与档位动态百分比,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0545,到期处理,docs/settlement-rebuild-prd-v1.0.md,3 核心设计原则 · 第 2 条「到期未核销按门票所属经营域归属」,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0546,等级与成长值,docs/member-and-tier-product-prd-v1.0.md,8.3 降级评估与通知（降级预警只是提醒 · 未预警照常降级并事后补通知）,FULL,,,,,,04-transaction-member-ticket-bar
+"PGM-0194","留痕与审计记录不属于可被开关关闭的模块","docs/platform-governance-prd-v0.1.md","§ 开关与留痕（待补齐承接章节）","MISSING","important","R10-U-01","PGM 该句为零承接：全库 PRD 无一处承接「开关变更四要素留痕」（变更人/变更时间/变更前后取值/影响范围）","在 platform-governance-prd 补一节，照抄 HTML 现文承接四要素留痕要求，不推断扩写","","03-governance-and-common"
+"PGM-0195","所有业务数据默认按项目隔离，普通岗位没有跨项目查看权","docs/platform-governance-prd-v0.1.md","§ 数据隔离（待补齐承接章节）","MISSING","important","R10-U-02","PGM「数据的项目与商户隔离不提供关闭开关」为零承接：PRD 有隔离规则、但无「不提供关闭开关」这一硬约束的承接","在 platform-governance-prd 隔离小节照抄补写「不提供关闭开关，与导出脱敏同例」","","03-governance-and-common"
+"PGM-0196","全局原则 · 数据可溯源、全链可点击（无孤岛数据）","无归口 PRD","无归口・零承接缺口（须先定归口，未定不得硬造）","MISSING","important","R10-U-03","全链可追溯全局原则现无归口 PRD；本轮按用户裁决「不许硬造归口」如实标注，待归口裁定后再补承接","先由用户/规划裁定归口 PRD，再照抄 HTML 现文补承接；本轮只登记不指派","","03-governance-and-common"
+"BSM-0547","会员身份、成长值、等级和积分分别按已批准规则计算","docs/platform-governance-prd-v0.1.md","§ 配置与口径边界（待补齐承接章节）","MISSING","important","R10-U-04","「后台配置只能承载规则，不能改变三份最高解释权 HTML 的业务口径」为零承接","在 platform-governance-prd 配置小节照抄补写该句","","03-governance-and-common"
+"PGM-0197","娱乐平台公司","docs/platform-governance-prd-v0.1.md","§2 治理对象与关系 · 域主管公司职责（本轮已补齐，照抄 HTML 现文）","FULL","","","","","","03-governance-and-common"
+"BSM-0548","平台内部各主体之间的应收应付，每月有三个付账日","docs/finance-settlement-product-prd-v0.1.md","§4B.1 三个付账日 · 顺延二","FULL","","","","","","03-governance-and-common"
+"BSM-0549","平台内部各主体之间的应收应付，每月有三个付账日","docs/finance-settlement-product-prd-v0.1.md","§4B.1 三个付账日 · 顺延三","FULL","","","","","","03-governance-and-common"
+"BSM-0550","平台内部各主体之间的应收应付，每月有三个付账日","docs/finance-settlement-product-prd-v0.1.md","§4B.1 三个付账日 · 顺延一律不另行通知、以待付状态可见代替逐笔通知","FULL","","","","","","03-governance-and-common"
+"BSM-0551","请假扣薪","docs/r5-spec-T1-staff-tables-dev-design-20260618.md","§4 跨月／跨周／跨年班次的归属口径","FULL","","","","","","03-governance-and-common"
+"BEQ-0169","营业额抽成模式","docs/finance-settlement-product-prd-v0.1.md","§13.1 营业额抽成 · 异议期长度与起算","FULL","","","","","","03-governance-and-common"

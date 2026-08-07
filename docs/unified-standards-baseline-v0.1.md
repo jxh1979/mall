@@ -1,5 +1,7 @@
 # 统一口径基准 V0.1（跨文档单一权威）
 
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 > **本文档为什么新增（定位）：** 两轮审计发现大量"同一口径在多份文档各写一套"的冲突（金额单位、事件命名、终端枚举、状态枚举、开放平台路径/权限编码、风险等级、能力层数、NFC 方案、门票资格 P0…）。逐文件重复修改极易再次发散。本文把这些跨文档共用口径**集中为唯一权威源**，其余文档**引用本文**而非各自定义。凡与本文冲突的旧表述以本文为准。
 >
 > **依据：** 《文档审查与完善报告 V0.1》系统性问题 S4/S8 + 决策项 A1–A9（部分 2026-06-07 已由用户拍板，下标 ✅）。
@@ -67,7 +69,7 @@
   - 商户：与 `merchants.status` 对齐；试运营使用 `trial` 或本地字段字典已确定 code；结算冻结用独立 `settlement_status`，不得塞进商户经营状态。
   - 桌台（6 态）：空闲/已预留/已开台/待清台/停用/异常 → idle/reserved/opened/pending_clear/disabled/abnormal；落 `bar_tables.business_status`，不得用点位 active/inactive 顶替。
   - 账单（6 态）：待结/部分支付/已结/部分退款/已退款/异常 → unpaid/partial_paid/settled/partial_refunded/refunded/abnormal；需建 `bar_bills` 表。
-  - 核销（6 态）：成功/拒绝/人工放行/已撤销/待复核/异常 → success/rejected/manual_override/reversed/pending_review/abnormal；统一"已撤销"用词。
+  - 核销（6 态）：成功/拒绝（规则不允许）/失败（设备或网络原因）/已冲正/待复核/异常 → success/rejected/failed/reversed/pending_review/abnormal（依 ENUM「核销记录状态」条）。原列「人工放行 manual_override」**已废止·见文首口径**，该取值停用、待代码轮下线；原「已撤销」中文态名统一改「已冲正」（机读值 `reversed` 不变）；不设「预检通过」态。
   - 游乐项目：补 unopened（未开放）、abnormal（异常）；maintenance 保留为长期停机检修中，临时停用/故障通过 paused/abnormal 与设备级 maintenance 表达。
   - 订单/权益：在 ticketing 迁移显式列 CHECK 取值并与字段字典 §11 对齐（含"已部分使用/已冻结/异常"）。
   - 供应商：新增 `suppliers` 表及含黑名单的 5 态，与开放平台 `service_providers`（技术服务商）区分。
@@ -126,11 +128,11 @@
 
 ### D14.1 综合体计费术语（turnover rent / deposit / CAM）
 - **turnover rent（营业额抽成）**：按商户营业额比例计提的租金，落账方向为应收（`direction=receivable`）；计费引擎产出计费台账行 `sourceType='turnover_rent'`。
-- **deposit（保证金四动作）**：保证金台账动作集 = **collect（收取）/ refund（退还）/ deduct（抵扣）/ forfeit（没收）**，单行记一个 action；金额按 D1 整数分。
+- **deposit（押金四动作）**：押金台账动作集 = **collect（收取）/ refund（退还）/ deduct（抵扣）/ forfeit（没收）**，单行记一个 action；金额按 D1 整数分。
 - **CAM（公摊费）**：~~公共区域分摊费用，按商户份额分摊计入应收。~~ **已废止（2026-06-22 F-OPS-08，V150）**：改为物业费「每平米固定单价 × 商户面积」按期计费、不退不补；`cam_allocations` 旧表只读历史、`allocateCam` 抛 `CAM_ALLOCATION_ABOLISHED`。本术语仅作旧口径历史参考，现行术语见「物业费固定计费」。
 - **CAM true-up（年度多退少补）**：~~年度对预收 CAM 与实际成本做差额清算；少收 → 补应收、多收 → 退应付。~~ **已废止（同 F-OPS-08）**：物业费不退不补、无年度 true-up 对账；`cam_trueup_*` 旧表只读、`trueUpCam` 抛 `CAM_TRUEUP_ABOLISHED`。仅作历史口径。
 - **库存差异入账科目方向（统一口径）**：盘亏/报损（内部损益对手方）→ **receivable**；盘盈（冲成本）→ **payable**；供应商责任（向供应商挂 AP 应付索赔）→ **payable**。差异行 `reason∈{damage/shortage/overage/supplier_fault}`，`varianceQty/varianceAmountCent` 带符号（负=盘亏/报损，正=盘盈）。
-- 实证：`FinanceServiceTests`（turnover_rent / 保证金四动作 / CamTrueUp under/over/exact）、`DepositLedgerRecord`（action=collect|refund|deduct|forfeit）、`InventoryVarianceRecord` + `InventoryVariancePostRequest`（盘亏/报损→损益对手方、供应商责任→供应商 AP）。权威细化见 spec（P1#14 综合体计费 + P2#④ CAM true-up）。
+- 实证：`FinanceServiceTests`（turnover_rent / 押金四动作 / CamTrueUp under/over/exact）、`DepositLedgerRecord`（action=collect|refund|deduct|forfeit）、`InventoryVarianceRecord` + `InventoryVariancePostRequest`（盘亏/报损→损益对手方、供应商责任→供应商 AP）。权威细化见 spec（P1#14 综合体计费 + P2#④ CAM true-up）。
 
 ### D14.2 游乐超容术语（硬上限 vs 软上限）
 - **硬上限（安全容量，hard cap）**：安全容量上限，达上限**一律阻断**核销（F-OPS-03：人身安全红线，处置模式 `block_hard`/`warn_only` 均**不可旁路**，SESSION_CAPACITY_EXHAUSTED 口径，并触发自动停运）。

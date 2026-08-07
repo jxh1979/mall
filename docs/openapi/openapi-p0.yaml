@@ -1466,7 +1466,9 @@ paths:
       tags:
         - amusement
       operationId: createAmusementManualOverride
-      summary: 游乐人工放行
+      summary: 游乐人工放行（已废止，不得新增调用）
+      deprecated: true
+      description: 已废止（DEC-CFG-2026-08-03-12 / DEC-R6-08），待代码轮下线，不得新增调用。系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过（ENUM「核销记录状态」条）。
       x-permission: amusement.verification.override
       x-data-scope: project-amusement-point
       x-terminal-allowed:
@@ -1490,7 +1492,8 @@ paths:
       tags:
         - amusement
       operationId: listAmusementManualOverrides
-      summary: 查询游乐人工放行
+      summary: 查询游乐人工放行（已废止，不得新增调用）
+      deprecated: true
       x-permission: amusement.verification.override
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1507,7 +1510,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询游乐人工放行。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 已废止（DEC-CFG-2026-08-03-12 / DEC-R6-08），待代码轮下线，不得新增调用。系统不提供人工放行（ENUM「核销记录状态」条）。原描述：用于查询游乐人工放行。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/amusement/maintenance-records:
     get:
       tags:
@@ -2145,7 +2148,7 @@ paths:
         - amusement
       operationId: createAmusementVerification
       summary: 游乐权益核销
-      description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用场次/点位设备/项目安全三维容量→留痕。多人票任一受控维度余量不足 N 时整单拒绝并回补权益。失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(场次容量耗尽，已消费权益回补)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
+      description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
       x-permission: amusement.verification.execute
       x-failure-codes:
         - TICKET_NOT_FOUND
@@ -8047,7 +8050,7 @@ paths:
         - ticketing
       operationId: getIssuedEntitlementFacePhoto
       summary: 取购票人脸照（核销比对本人）
-      description: 核销员在核销预检后按需调取该权益购票时留存的人脸照，肉眼比对是否本人（防转票）。照片为个人敏感信息：加密存库、限核销/运营权限、每次调取写审计；到留存期由清理作业硬删。
+      description: 核销员在核销时按需调取该权益购票时留存的人脸照（原写「核销预检后」，预检两步流已废止（DEC-R6-08），待代码轮下线，不得新增调用。），肉眼比对是否本人（防转票）。照片为个人敏感信息：加密存库、限核销/运营权限、每次调取写审计；到留存期由清理作业硬删。
       x-permission: verification.view
       x-data-scope: project
       x-terminal-allowed:
@@ -8449,7 +8452,7 @@ paths:
       operationId: ticketTypePriceCheck
       summary: 票种定价核算（系统算出售价 vs 填的售价）
       description: >-
-        综合／联合通票的售价由各业态票面原价相加后按票种折扣自动算出。本接口返回票面原价合计、折扣、系统算出售价、 运营现在填的售价、两者差额、后台可配的允许误差、是否超限，以及按「整元且尾数 8/9/0」建议的凑整售价。 建票／改票页据此实时提示，发布闸拒绝时报的是同一份计算。
+        综合／联合通票的售价由各业态价格（原称「票面原价」）相加后按票种折扣自动算出。本接口返回各业态价格合计、折扣、系统算出售价、 运营现在填的售价、两者差额、后台可配的允许误差、是否超限，以及按「整元且尾数 8/9/0」建议的凑整售价。 建票／改票页据此实时提示，发布闸拒绝时报的是同一份计算。
       x-permission: ticket.product.view
       x-data-scope: project
       x-terminal-allowed:
@@ -8477,7 +8480,7 @@ paths:
       operationId: updateTicketTypePricing
       summary: 改票种售价／折扣（凑整误差闸）
       description: >-
-        设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态票面原价×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。
+        设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态价格（原称「票面原价」）×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。
       x-permission: ticket.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -8711,7 +8714,9 @@ paths:
       tags:
         - ticketing
       operationId: previewTicketVerification
-      summary: 票务核销预览
+      summary: 票务核销预览（已废止，不得新增调用）
+      deprecated: true
+      description: 已废止（DEC-R6-08），待代码轮下线，不得新增调用。核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -11938,7 +11943,7 @@ paths:
       tags:
         - finance
       operationId: recordDepositAction
-      summary: 保证金台账动作（收取/退还/抵扣/没收）
+      summary: 押金台账动作（收取/退还/抵扣/没收）
       x-auth-context: staff-token
       x-permission: finance.deposit.manage
       x-data-scope: platform
@@ -11980,7 +11985,7 @@ paths:
                   maxLength: 64
                 action:
                   type: string
-                  description: 保证金动作。
+                  description: 押金动作。
                   enum:
                     - collect
                     - refund
@@ -18495,7 +18500,7 @@ paths:
       x-audit-event-success: contract.settlement_completed
       x-audit-event-failure: contract.settlement_complete_failed
       x-auth-context: staff-token
-      description: 待结算/保证金抵扣中/欠费追缴中 → 已结清(直推)，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。
+      description: 待结算/押金抵扣中/欠费追缴中 → 已结清(直推)，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。
       parameters:
         - name: settlement_id
           in: path
@@ -18571,7 +18576,7 @@ paths:
       x-audit-event-success: contract.settlement_advanced
       x-audit-event-failure: contract.settlement_advance_failed
       x-auth-context: staff-token
-      description: 待结算→保证金抵扣中→欠费追缴中→已结清，逐相推进(让中间态成真实驻留态);到已结清即终止/到期合同。
+      description: 待结算→押金抵扣中→欠费追缴中→已结清，逐相推进(让中间态成真实驻留态);到已结清即终止/到期合同。
       parameters:
         - name: settlement_id
           in: path
@@ -21302,7 +21307,7 @@ paths:
         - merchant-portal
       operationId: listMerchantPortalContracts
       summary: 商户专区·我的合同(只读关键信息)
-      description: 商户自助查看本商户合同关键信息(租期/空间/状态/保证金,最小披露); 平台管理员为全量监督口径。数据边界=currentMerchantScope,员工无商户归属 fail-closed。
+      description: 商户自助查看本商户合同关键信息(租期/空间/状态/押金,最小披露); 平台管理员为全量监督口径。数据边界=currentMerchantScope,员工无商户归属 fail-closed。
       x-auth-context: staff-token
       x-permission: contract.view
       x-data-scope: merchant
@@ -28202,7 +28207,7 @@ components:
         deposit_cent:
           type: integer
           format: int64
-          description: 保证金(分)。
+          description: 押金(分)。
           minimum: 0
         penalty_terms:
           type: object
@@ -29028,7 +29033,7 @@ components:
           type: number
           minimum: 0
           maximum: 100
-          description: 票种折扣（百分数，100=不打折，85=八五折）；系统算出售价 = 各业态票面原价合计 × 本折扣 ÷ 100。
+          description: 票种折扣（百分数，100=不打折，85=八五折）；系统算出售价 = 各业态价格（原称「票面原价」）合计 × 本折扣 ÷ 100。
         weekday_price_cent:
           type: integer
           minimum: 0
@@ -29096,7 +29101,7 @@ components:
           type: number
           minimum: 0
           maximum: 100
-          description: V369 票种折扣（百分数，100=不打折）；系统算出售价 = 各业态票面原价合计 × 本折扣 ÷ 100。
+          description: V369 票种折扣（百分数，100=不打折）；系统算出售价 = 各业态价格（原称「票面原价」）合计 × 本折扣 ÷ 100。
         stock_required:
           type: boolean
           description: 是否强制库存扣减；为 true 时售票必须锁定并扣减库存。
@@ -33691,7 +33696,7 @@ components:
           maxLength: 64
     AmusementCapacityConfigRequest:
       type: object
-      description: 请求载荷 `AmusementCapacityConfigRequest`（V083 点位/设备并发容量，三维容量第三维）；location_point_id 与 device_id 至少其一；max_concurrent 为该点位/设备并发在场上限。
+      description: 请求载荷 `AmusementCapacityConfigRequest`（V083 点位/设备并发容量，原为三维容量第三维——已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量）；location_point_id 与 device_id 至少其一；max_concurrent 为该点位/设备并发在场上限。
       additionalProperties: false
       required:
         - max_concurrent
@@ -33721,7 +33726,7 @@ components:
           maxLength: 128
         max_concurrent:
           type: integer
-          description: 该点位/设备并发在场上限（>=0）；核销三维度取最小可放行余量。
+          description: 该点位/设备并发在场上限（>=0）；原「核销三维度取最小可放行余量」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量。
           minimum: 0
           maximum: 999999
         effective_session_pattern:
@@ -33730,7 +33735,7 @@ components:
           maxLength: 64
         enabled:
           type: boolean
-          description: 是否启用（省略默认 true）；停用后该配置不再参与三维容量校验。
+          description: 是否启用（省略默认 true）；原「停用后该配置不再参与三维容量校验」——三维容量已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。
     AmusementDeviceRequest:
       type: object
       description: 请求载荷 `AmusementDeviceRequest`（游乐项目下游乐设备建档/维护）；登记设备编码、名称、所属点位与状态，作为容量配置 device_id 与安全巡检对象来源。
@@ -33775,7 +33780,7 @@ components:
             - disabled
         enabled:
           type: boolean
-          description: 是否启用（省略默认 true）；停用后该设备不再参与三维容量校验与核销放行。
+          description: 是否启用（省略默认 true）；原「停用后该设备不再参与三维容量校验与核销放行」——三维容量已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。
     BarTableSpaceAssignmentRequest:
       type: object
       description: "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space 对该桌台关联账单（bar_bill→table_id→space_id）真实生效。bar_tables 无可派生源，无法 SQL 自动回填，须运营录入。"

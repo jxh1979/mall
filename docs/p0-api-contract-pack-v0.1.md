@@ -1,5 +1,7 @@
 # P0 API Contract Pack V0.1
 
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 ## 1. 文档定位
 
 本文档是综合体管理系统 P0 阶段的接口契约基线，用于让后端、管理后台、Android 工作手机/平板、一体机、小程序/App/Web、第三方供应商和测试团队按同一套接口规则并行工作。
@@ -329,7 +331,7 @@
 | `GET/POST` | `/api/v1/amusement/projects` | 游乐项目管理 | `GET=amusement.session.view`；`POST=amusement.session.manage` |
 | `GET/POST` | `/api/v1/amusement/sessions` | 场次和容量 | `GET=amusement.session.view`；`POST=amusement.session.manage` |
 | `POST` | `/api/v1/amusement/verifications` | 游乐权益核销 | `amusement.verification.execute` |
-| `POST` | `/api/v1/amusement/manual-overrides` | 人工放行 | `amusement.verification.override` |
+| `POST` | `/api/v1/amusement/manual-overrides` | 人工放行（**已废止·见文首口径**，待代码轮下线，不得新增调用） | `amusement.verification.override`（停用） |
 | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | 查询项目/场次安全与容量准入 | `amusement.safety_inspection.view` |
 | `GET/POST` | `/api/v1/amusement/safety-templates` | 巡检模板查询/维护 | `GET=amusement.safety_template.view`；`POST=amusement.safety_template.manage` |
 | `GET/POST` | `/api/v1/amusement/safety-inspections` | 开放前安全巡检 | `GET=amusement.safety_inspection.view`；`POST=amusement.safety_inspection.create` |

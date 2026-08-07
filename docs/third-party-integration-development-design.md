@@ -1,5 +1,7 @@
 # 第三方集成开发设计：餐饮、零售、机器人、视频监控、企业微信、设备
 
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 > 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
@@ -868,7 +870,7 @@ unique (integration_app_id, external_verification_id)
 
 #### ① 视频点位时间锚点（P0）+ 调阅审计
 
-每个关键动作（核销、人工放行、安全阻断、事故、争议等）记录设备点位 + 时间锚点，写 `integration_video_anchors`（真实列：id、point_id、event_time 等，索引 `(point_id, event_time DESC)`），使后续视频对齐有据可依。调阅 `snapshot_url`/`clip_url`/`stream_url` 为**敏感操作**，必须经权限点 `integration.video.view`/`integration.video.play` 校验并写 `integration_video_access_audits`（调阅人、时间、关联 anchor/事件），即"按权限 + 留痕"。
+每个关键动作（核销、安全阻断、事故、争议等；原含「人工放行」，已废止·见文首口径）记录设备点位 + 时间锚点，写 `integration_video_anchors`（真实列：id、point_id、event_time 等，索引 `(point_id, event_time DESC)`），使后续视频对齐有据可依。调阅 `snapshot_url`/`clip_url`/`stream_url` 为**敏感操作**，必须经权限点 `integration.video.view`/`integration.video.play` 校验并写 `integration_video_access_audits`（调阅人、时间、关联 anchor/事件），即"按权限 + 留痕"。
 
 | 锚点字段（口径，真实列以 V071 为准） | 说明 |
 |---|---|

@@ -77,7 +77,7 @@ P0 可引入本地 AI 大模型做辅助分析判断：对合同文本、人工�
 | `contract_end` | P0 | 合同结束 |
 | `renewal_notice` | P0 | 续约/终止提前通知日 |
 | `rent_free_end` | P0 预留 | 免租期结束 |
-| `deposit_due` | P0 预留 | 押金/保证金缴纳或退还节点 |
+| `deposit_due` | P0 预留 | 押金缴纳或退还节点 |
 | `rent_escalation` | P1 | 阶梯涨租生效日 |
 | `settlement_cycle_change` | P1 | 结算周期变更 |
 | `custom` | P0 | 后台自定义关键日期 |

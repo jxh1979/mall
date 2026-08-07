@@ -1,5 +1,7 @@
 # 日结多源汇总 + 看板七类指标 聚合口径（已定稿，2026-06-19 财务确认）
 
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 > **状态：已定稿（2026-06-19 财务确认）。** 原 V0.1 草案中 §四 4 项口径已由财务确认并落代码（见 §四与 §六变更日志）。本文是 R5 backlog 任务 **T7（日结多源汇总）** 与 **T12（看板真实聚合）** 的口径附件，解除"聚合口径由谁定义"的阻塞。
 >
 > **口径来源**：业务说明地图 #finance（六源汇总/四类差异/结算依据）与 #analytics（七类指标）；数据源表名取自真实 Flyway 迁移（V001–V076，已 `grep CREATE TABLE` 核对）。
@@ -75,7 +77,7 @@
 | 核销数 | verify.done | count(status=success) | ticket_verifications+amusement_verifications |
 | 核销率 | verify.rate | 核销数 / 发放数 | 派生 |
 | 拒绝数 | verify.rejected | count(status=rejected/failed) | ticket_verifications |
-| 人工放行数 | verify.manual_override | count | amusement_manual_overrides +（票务 manual_overridden 状态，见 backlog C1）|
+| 人工放行数（**已废止·见文首口径**，该指标停用） | verify.manual_override（停用） | count | amusement_manual_overrides +（票务 manual_overridden 状态，见 backlog C1）|
 
 ### 2.4 会员
 | 指标 | metric_code | 聚合 | 源表 |
