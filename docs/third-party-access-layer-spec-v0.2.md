@@ -85,7 +85,7 @@
 | 回流标准模型 | webhook 原始 payload | 经 §2B.1 mapPayload 标准化为标准订单/券核销模型（映射失败 `parse_status=failed` 进异常） | 回流记录：received → matched / to_handle |
 | 对账批次 | 标准模型（按回流层级订单级/券核销级 + 渠道分流） | 平台侧 expected 由系统取数自动生成（**禁止人工手填**，R6-D07）；第三方侧取数；按批次归集 | 回流批次：processing → completed / has_error |
 | 四类差异识别 | 平台侧 expected vs 第三方侧 actual | 自动比对识别四类差异（见 §2B.6.2，引用集成开发设计 §12 强制枚举） | 差异记录：to_identify → open |
-| 差异进复核 | open 差异 | 进差异清单（§9）复核：确认平台口径/第三方口径/转财务 | 差异记录：open → pending_review → closed / ignored |
+| 差异进复核 | open 差异 | 进差异清单（§9）复核：确认平台口径/第三方口径/转财务 | 差异记录：open → pending_review → closed |
 | 结算 | 已关闭差异结论 | 按处理结论进入日结/对账/结算依据（财务子域） | 入账口径：accounted |
 
 #### 2B.6.2 四类差异（amount/count/status/missing，引用 F5 强制枚举）
@@ -364,7 +364,7 @@
 | 平台口径 | 平台认为的结果 | 条件必填 | 差异判断 |
 | 第三方口径 | 第三方返回的结果 | 条件必填 | 差异判断 |
 | 责任人 | 当前处理人 | 是 | 待办 |
-| 处理状态 | 待处理、待复核、已关闭（**差异类记录**原含「已忽略」，已按 DEC-R4-2026-08-04-43 收为四态；**回流侧的「已忽略」已裁（DEC-R8-08）：同规则，删除**——与本平台无关的回流记录一律进入「异常」，按异常状态的统一出口以「作废并冲正」处置；**接入异常侧的「已忽略」不在 DEC-R8-08 裁决范围内，仍维持五态、待后续裁决**） | 是 | 流程 |
+| 处理状态 | 待处理、待复核、已关闭（**差异类记录**原含「已忽略」，已按 DEC-R4-2026-08-04-43 收为四态；**回流侧的「已忽略」已裁（DEC-R8-08）：同规则，删除**——与本平台无关的回流记录一律进入「异常」，按异常状态的统一出口以「作废并冲正」处置；**接入异常侧的「已忽略」已于 2026-08-06 按 DEC-R8-08 同规则裁定删除，收为四态**） | 是 | 流程 |
 | 处理结论 | 最终采用口径或说明 | 条件必填 | 关闭依据 |
 
 ### 7. 第三方类型专项字段
@@ -390,7 +390,7 @@
 | 服务商 | 启用、暂停、停用、归档 | active、suspended、terminated、archived |
 | 回流记录 | 待接收、已接收、已匹配、待处理、已入账口径、异常（**六态**；原「已忽略」**已删除**，依据 DEC-R8-08——与本平台无关的回流记录一律进入「异常」，按异常状态的统一出口以「作废并冲正」处置，须填写原因并留痕，不设「忽略」类终态） | pending、received、matched、to_handle、accounted、abnormal（`ignored` 停用） |
 | 回流批次 | 处理中、完成、有异常、已归档 | processing、completed、has_error、archived |
-| 接入异常 | 待处理、处理中、待复核、已关闭、已忽略 | open、processing、pending_review、closed、ignored |
+| 接入异常 | 待处理、处理中、待复核、已关闭（**四态**；原第五态「已忽略」**已删除**，依据 DEC-R8-08 同规则——接入异常不设「忽略」类终态，确认与本平台无关或无需处理的，一律填写原因后关闭并留痕） | open、processing、pending_review、closed（`ignored` 停用） |
 | 差异记录 | 待识别、待处理、待复核、已关闭（**四态**；原第五态「已忽略」**已删除**，依据 DEC-R4-2026-08-04-43——账目均为电子数据、实时出账，留此终态等于承认可以把查不平的钱吃掉） | to_identify、open、pending_review、closed（`ignored` 停用） |
 
 **接入关系业务状态 ↔ open_apps 鉴权状态映射（fielddb-9）：** 业务状态由本层维护，鉴权状态（draft/testing/active/suspended/locked/disabled/revoked，7 态 per D3）由开放平台维护、本层只读引用。映射明细见开发设计 §14.2。例：待接入→draft、联调中→testing、已启用→active、暂停→suspended、异常→locked、已停用→disabled、归档→revoked/disabled。

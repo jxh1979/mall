@@ -289,7 +289,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 
 ## 14. 综合体计费 AR/AP 开发设计（P1）
 
-> 新增说明（R6 全闭环(2026-06-19)，市场标杆审计后回填，只读核验真实迁移/代码后追加，未改代码）：相对成熟商场/综合体系统，"营业额租金/扣点（turnover rent）、保证金专项台账、CAM 公摊分摊"在全库迁移/字段层**零命中**（`turnover_rent`/`deposit_ledger`/`cam_allocations`/`true-up` 在 migration 与 docs 表设计层均无 `CREATE TABLE`，仅 `business-module-mature-system-gap-analysis.md` 以市场标杆口径提及）；§4.1 `source_type` 枚举亦无 `turnover_rent`/`cam` 取值。存酒"已售未取"负债当前仅 §6D.7 标 P1，未入 AR/AP 实链。本节承接产品口径 `finance-settlement-product-prd-v0.1.md §13`，补三类综合体计费的 AR/AP 落库与计费引擎开发设计。全部为 P1（CAM true-up 为 P2）。科目方向（entry 方向）引用决议 `business-decision-log` R6-D08（科目方向）。
+> 新增说明（R6 全闭环(2026-06-19)，市场标杆审计后回填，只读核验真实迁移/代码后追加，未改代码）：相对成熟商场/综合体系统，"营业额租金/扣点（turnover rent）、押金专项台账、CAM 公摊分摊"在全库迁移/字段层**零命中**（`turnover_rent`/`deposit_ledger`/`cam_allocations`/`true-up` 在 migration 与 docs 表设计层均无 `CREATE TABLE`，仅 `business-module-mature-system-gap-analysis.md` 以市场标杆口径提及）；§4.1 `source_type` 枚举亦无 `turnover_rent`/`cam` 取值。存酒"已售未取"负债当前仅 §6D.7 标 P1，未入 AR/AP 实链。本节承接产品口径 `finance-settlement-product-prd-v0.1.md §13`，补三类综合体计费的 AR/AP 落库与计费引擎开发设计。全部为 P1（CAM true-up 为 P2）。科目方向（entry 方向）引用决议 `business-decision-log` R6-D08（科目方向）。
 
 ### 14.1 表设计建议（待落地）
 
@@ -310,7 +310,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `enabled` | boolean | 是 | 营业额回流开关，默认 `false`（第三方未接入前置灰，依决议日志 §2） |
 | 审计字段 | — | 是 | created_by/created_at/updated_by/updated_at/deleted_at |
 
-#### 14.1.2 `deposit_ledger` 保证金专项台账
+#### 14.1.2 `deposit_ledger` 押金专项台账
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
@@ -320,7 +320,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `merchant_id` | uuid | 是 | 关联商户 |
 | `action_type` | enum | 是 | `charge` 收取 / `refund` 退还 / `offset` 抵扣 / `forfeit` 没收 |
 | `amount_cent` | bigint | 是 | 动作金额，单位分（恒正，方向由 action_type 决定） |
-| `balance_after_cent` | bigint | 是 | 动作后保证金余额，单位分（系统算，不前端填） |
+| `balance_after_cent` | bigint | 是 | 动作后押金余额，单位分（系统算，不前端填） |
 | `linked_ar_ap_item_id` | uuid | 否 | offset 时指向被抵扣的租金应收 `ar_ap_items.id` |
 | `reason` | text | 否 | 退还/没收/抵扣原因 |
 | `approval_status` | enum | 是 | `pending`/`approved`/`rejected`（没收/抵扣须审批，承接 §13.2 默认值） |
@@ -358,7 +358,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 - 门控：`turnover_rent_rules.enabled=false`（开关 off / 接口未接入）时引擎不产出应收，仅试算草稿不入账。
 - 周期内回流增量重算走 `ar_ap_adjustments`（增减抽成），不直接改已确认/锁定台账。
 
-### 14.3 保证金专项台账（收/退/抵扣/没收 → ar_ap 联动）
+### 14.3 押金专项台账（收/退/抵扣/没收 → ar_ap 联动）
 
 - `charge`（收取）：登记 `deposit_ledger`，余额↑；不直接进损益，作平台对客负债/暂收口径（科目方向引用 R6-D08）。
 - `refund`（退还）：余额↓至 0；退还 ≤ 当前余额，存在欠费/未结抵扣时阻断或提示先抵扣。
@@ -387,7 +387,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 **事件**
 
 - `finance.turnover_rent.posted`：营业额抽成应收生成后发出（仅开关 on）。
-- `finance.deposit.action_posted`：保证金收/退/抵扣/没收动作完成后发出（含 action_type）。
+- `finance.deposit.action_posted`：押金收/退/抵扣/没收动作完成后发出（含 action_type）。
 - ~~`finance.cam.allocation_posted` / `finance.cam.trueup_posted`~~（**已废止**，V150 起不再发出）；改发 `finance_property_fee.billed`：物业费按期计费完成后发出。
 - `finance.saved_bottle_liability.posted` / `.released`：存酒负债登记 / 取酒核销冲减后发出。
 
@@ -395,7 +395,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 
 ```
 营业额回流(开关on) → 抽成试算(草稿) → 财务确认(应收, source_type=turnover_rent) → 周期锁定
-保证金: charge → (offset 联动租金应收 / forfeit 转收入, 均审批) → refund(余额→0)
+押金: charge → (offset 联动租金应收 / forfeit 转收入, 均审批) → refund(余额→0)
 物业费(V150): 项目费率(property_fee_rates) → 按期计费 round(单价×面积) → 应收(source_type=property_fee, 不退不补)  [旧 CAM 分摊/true-up 已废止]
 存酒负债: 售出→预收负债登记 → 取酒/核销→负债冲减(R6-D08 方向)
 ```
@@ -404,7 +404,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 
 - 高价值报损审批后入应付可查（承接 §6D.7）：`source_type=inventory_difference` 应付/调整分录可在台账查到，金额=差异金额。
 - 营业额抽成可对账：开关 on 时按规则生成 `source_type=turnover_rent` 应收，可关联合同/商户/周期，与回流营业额×扣率封顶保底口径一致；开关 off 不入账。
-- 保证金四动作余额自洽：余额=Σcharge−Σrefund−Σoffset−Σforfeit，offset 与被抵扣租金应收金额一致可对账。
+- 押金四动作余额自洽：余额=Σcharge−Σrefund−Σoffset−Σforfeit，offset 与被抵扣租金应收金额一致可对账。
 - 物业费可对账（V150）：`source_type=property_fee` 应收金额 = round(项目费率 × 商户面积)，按 (项目,期,商户) 幂等不重复挂账；~~原 CAM 分摊额之和=费用池总额 / P2 true-up 多退少补~~ 已废止。
 - 存酒已售未取负债登记后可查，取酒/核销后冲减至 0，entry 方向符合 R6-D08。
 
@@ -415,7 +415,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | 营业额扣率 / 保底 / 封顶取值 | 默认按合同摘要约定扣率；未约定则不启用抽成（只收固定租金） |
 | 抽成模式 `calc_mode` | 默认 `base_plus_turnover`（固定+抽成累加） |
 | 营业额口径 | 默认不含税净营业额、扣退款，对齐 `revenue.net` |
-| 保证金抵扣 / 没收触发 | 默认人工发起 + 财务/上级审批，不自动扣减 |
+| 押金抵扣 / 没收触发 | 默认人工发起 + 财务/上级审批，不自动扣减 |
 | ~~CAM 分摊权重~~ | **已废止（V150，F-OPS-08）**：CAM 权重分摊取消，改物业费每平米固定单价×面积、不退不补 |
 | ~~CAM true-up 周期~~ | **已废止（V150，F-OPS-08）**：年度 true-up 多退少补取消（物业费不退不补、无对账差额） |
 | 库存差异 / 存酒负债 entry 科目方向 | 引用 `business-decision-log` R6-D08（科目方向）；库存差异默认损益调整 vs 应付按 R6-D08 定，存酒按预收负债方向登记 |

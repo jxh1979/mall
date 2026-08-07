@@ -1,5 +1,7 @@
 # 剩余工作总清单 R4（2026-06-18）
 
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 > 定位：把四轮审计（R1 文档审计 / R2-R3 代码核实 / 修复阶段）累积的**全部剩余可做事项**汇成单一清单，供排期。已完成项见 `r3-confirmed-gap-priorities-and-fix-backlog-20260618.md` §5（全部 P0：职级/薪资 V055、审批层级 V057、按杯损耗 V058、留痕三层模型 V059、积分规则/礼物 V060；两护栏）。
 > 标记：可现做=自有系统现在即可编码+测试+过闸口；待外部=阻塞于供应商/IT 资料，现只能 mock；owner=非编码、需责任人回填。
 > 机器标记：R4_REMAINING_WORK_BACKLOG_READY。
@@ -27,7 +29,7 @@
 
 | 编号 | 项 | 来源 |
 |---|---|---|
-| C1 | 核销人工放行状态 | REQ-05, R1-LOOP-10：票务核销记录状态机增 `manual_overridden`，对齐事件 `verification.manual_overridden` |
+| C1（**已废止·见文首口径**，本条不再实施） | 核销人工放行状态 | REQ-05, R1-LOOP-10：票务核销记录状态机增 `manual_overridden`，对齐事件 `verification.manual_overridden` |
 | C2 | 二维码刷新周期字段 | REQ-08, R1-LOOP-11：`ticket_credentials` 增 `refresh_interval_seconds`（约束 {30,60}，默认 60，票种级可配） |
 | C3 | 多人票×容量交互 | REQ-46, R1-LOOP-12：定"全有或全无"——N 人一次核销，任一容量维度余量<N 整单拒绝 |
 | C4 | 餐饮券权益容量承接 | REQ-11, R3：餐饮/零售券权益容量维度承接（P3） |
@@ -102,7 +104,7 @@ NAS 自动挂载/定时备份/告警/恢复演练；生产凭证轮换台账；M
 
 ✅ **第三批完成（2026-06-18）**：
 - **A4 订台定金规则（V063）**：`bar_reservations` 补 `deposit_rule`，threaded 全部 7 个 record 构造点 + JDBC（含 BarReservationRequest 向后兼容构造器）。全套 **731 测试通过**、matrix-vs-migration PASS（158表/30present）、p0-contract EXIT0。
-- **C1/C3 评估后延后（需专门一轮）**：C1 核销 manual_overridden——`ticket_verifications.status` 无 CHECK 约束，"状态值"非阻塞，真实缺口是**无人工放行流程**（需新增 override service+端点+事件 verification.manual_overridden），属流程项；C3 多人票×容量——`num_people` 在票务代码零命中，是**跨域逻辑+前置建模**项。二者非"小项"，单列为流程/逻辑专项。
+- **C1/C3 评估后延后（需专门一轮）**：C1 核销 manual_overridden——`ticket_verifications.status` 无 CHECK 约束，"状态值"非阻塞，原判「真实缺口是无人工放行流程」**已废止·见文首口径**：系统不提供人工放行，该缺口取消、不再实施；C3 多人票×容量——`num_people` 在票务代码零命中，是**跨域逻辑+前置建模**项。二者非"小项"，单列为流程/逻辑专项。
 
 ✅ **第四批完成（2026-06-18）**：
 - **C2 二维码刷新周期（V064）**：`ticket_credentials` 补 `refresh_interval_seconds`（CHECK {30,60}，默认 60，票种级可配）。
@@ -113,7 +115,7 @@ NAS 自动挂载/定时备份/告警/恢复演练；生产凭证轮换台账；M
 - **F4 amusement 隔离索引（V065）**：amusement_safety_templates/projects/safety_notices/incidents 补 merchant_id 部分索引（ISO-GAP-03 闭）。
 - **A1 存酒作废接口**：`InventoryService.cancelSavedBottle`——高价值存酒作废强制照片+视频双证据（≥2 附件），状态→cancelled；仅 stored/pending_identity_review/disputed_frozen 可作废；含跨商户校验。
 - **B1 留痕接线（代表性）**：`BarOrderService.deliverOrder` 出品送达写 `service_responsibility_records`（经 TraceabilityService，merchant 由 token 注入）——V059 三层模型开始产生运行态数据。
-- **C1 人工放行**：`TicketingService.manualOverrideVerification`→记录 status=`manual_overridden` 核销（对齐 verification.manual_overridden 状态）。
+- **C1 人工放行（已废止·见文首口径，不再实施）**：原拟 `TicketingService.manualOverrideVerification`→记录 status=`manual_overridden`，现取消。
 - 全套 **734 测试通过**、p0-contract EXIT0、matrix-vs-migration 158表/31present、domain-ownership 158表 PASS。
 
 ## 仍待项与状态（可执行规格收口，按性质分类）

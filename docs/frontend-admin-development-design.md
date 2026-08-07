@@ -1,4 +1,8 @@
 # 前端后台开发设计：平台端、商户端、运营看板
+
+> **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
+
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
 > 2026-07-04 逻辑一致性修订：商户端「结算对账」标注：结算规则配置属产品/运营后台（结算配置中心 ADM-STL-001~009），商户端仅展示已生效规则
 
 > 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
@@ -206,7 +210,7 @@ flowchart TB
 | `/platform/bar/inventory` | 酒水库存 | 入库、出库、调拨、盘点、报损 | bar.inventory.view | P1 |
 | `/platform/amusement/projects` | 游乐项目 | 项目档案、容量、限制条件、状态 | amusement.session.view | P0 |
 | `/platform/amusement/sessions` | 开放时间/场次 | 日历、场次、临时关闭、容量 | amusement.session.view | P0 |
-| `/platform/amusement/verifications` | 游乐核销 | 项目核销、失败、人工放行 | amusement.verification.view | P0 |
+| `/platform/amusement/verifications` | 游乐核销 | 项目核销、失败（原含「人工放行」，已废止·见文首口径） | amusement.verification.view | P0 |
 | `/platform/amusement/safety-checks` | 安全巡检 | 巡检模板、开放前检查、整改复检、恢复审批 | amusement.safety_template.view / amusement.safety_inspection.view | P0 |
 | `/platform/open/apps` | 开放应用 | 应用、密钥、权限、状态、锁定 | open_app.view | P0 |
 | `/platform/open/api-resources` | API 目录 | API 分组、版本、状态、权限点 | api_resource.view | P0 |
@@ -239,8 +243,8 @@ flowchart TB
 | `/merchant/bar/saved-bottles` | 存酒 | 登记、取用、到期 | merchant.bar.saved_bottle.view | P1 |
 | `/merchant/bar/inventory` | 库存库房 | 入库、出库、调拨、盘点 | merchant.bar.inventory.view | P1 |
 | `/merchant/amusement/projects` | 游乐项目 | 项目档案、状态、容量 | amusement.session.view | P0 |
-| `/merchant/amusement/sessions` | 场次容量 | 开放计划、场次、临时关闭 | amusement.session.view | P0 |
-| `/merchant/amusement/verifications` | 项目核销 | 核销记录、失败、人工放行申请 | amusement.verification.view | P0 |
+| `/merchant/amusement/sessions` | 项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径） | 开放计划、场次、临时关闭 | amusement.session.view | P0 |
+| `/merchant/amusement/verifications` | 项目核销 | 核销记录、失败（原含「人工放行」，已废止·见文首口径） | amusement.verification.view | P0 |
 | `/merchant/amusement/safety-checks` | 安全巡检 | 巡检提交、整改复检、恢复审批状态 | amusement.safety_inspection.view | P0 |
 | `/merchant/open/apps` | 商户开放应用 | 应用状态、接口权限、回调地址 | merchant.open_app.view | P1 |
 | `/merchant/open/call-logs` | 商户调用日志 | 本商户第三方调用记录 | merchant.api_call_log.view | P1 |
@@ -358,7 +362,7 @@ flowchart TB
 | 停用/启用 | `merchant.status.update` | 显示状态操作，需二次确认 |
 | 发布 | `ticket.product.publish` | 发布票种，需展示影响范围 |
 | 核销撤销 | `verification.reverse` | 需填写原因，可能进入审批 |
-| 人工放行 | `verification.manual_override` | 需原因、证据、事件留痕 |
+| 人工放行（**已废止·见文首口径**） | `verification.manual_override`（停用，待代码轮下线） | 该动作不再提供，不得在任何终端提供入口 |
 | 解锁 | `open_app.unlock` | 需复核日志，二次确认 |
 | 导出 | `event.export` | 导出按钮受控，导出写事件 |
 | 查看敏感 | `evidence.video.view` | 打开前二次确认，查看写事件 |
@@ -392,7 +396,7 @@ P0 目标：支撑“可运营、可核销、可留痕、可部署”的最小�
 | 酒吧订单 | 平台端/商户端 | 桌台点单、吧台点单、账单 |
 | 游乐项目 | 平台端/商户端 | 项目档案、容量、状态、限制条件 |
 | 游乐场次 | 平台端/商户端 | 开放日历、场次、容量 |
-| 游乐核销 | 平台端/商户端 | 项目核销查询、失败、人工放行 |
+| 游乐核销 | 平台端/商户端 | 项目核销查询、失败（原含「人工放行」，已废止·见文首口径） |
 | 开放应用 | 平台端 | 创建应用、授权、状态、锁定 |
 | API 目录 | 平台端 | API 分组、版本、权限点 |
 | 接口文档中心 | 平台端 | 鉴权说明、错误码、示例 |
@@ -516,7 +520,7 @@ apps/web/src
 | `QrCodePanel` | 票务/核销 | 二维码展示、刷新、状态 |
 | `VerificationPreview` | 核销 | 核销前预览权益、客户、风险 |
 | `TableStatusBoard` | 酒吧 | 桌台状态网格 |
-| `SessionCapacityBoard` | 游乐 | 场次容量和剩余名额 |
+| `SessionCapacityBoard`（组件名待代码轮改名） | 游乐 | 项目容量（实时在玩人数）和剩余名额（原称「场次容量」，已废止·见文首口径） |
 
 ### 6.4 页面类型模板
 
@@ -666,9 +670,9 @@ apps/web/src
 | 游乐项目 | `POST /api/admin/amusement/projects` | 创建项目 | P0 |
 | 商户项目 | `GET /api/merchant/amusement/projects` | 商户查询项目 | P0 |
 | 商户项目 | `PATCH /api/merchant/amusement/projects/{id}/status` | 状态变更 | P0 |
-| 场次容量 | `GET /api/merchant/amusement/sessions` | 场次列表 | P0 |
-| 场次容量 | `POST /api/merchant/amusement/sessions` | 创建场次 | P0 |
-| 场次容量 | `PATCH /api/merchant/amusement/sessions/{id}/capacity` | 修改容量 | P0 |
+| 项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径） | `GET /api/merchant/amusement/sessions` | 场次列表 | P0 |
+| 项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径） | `POST /api/merchant/amusement/sessions` | 创建场次 | P0 |
+| 项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径） | `PATCH /api/merchant/amusement/sessions/{id}/capacity`（路径待代码轮下线） | 修改项目容量 | P0 |
 | 游乐核销 | `GET /api/merchant/amusement/verifications` | 项目核销记录 | P0 |
 | 游乐入场台 | `POST /api/verifications/preview` | 项目核销预览 | P0 |
 | 游乐入场台 | `POST /api/verifications` | 项目核销确认 | P0 |
@@ -832,7 +836,7 @@ apps/web/src
 | 发布票种 | 产品、价格、权益摘要 | `ticket.product.published` |
 | 核销 | 票码、权益、设备、点位 | `verification.succeeded` |
 | 核销失败 | 失败原因、设备、员工 | `verification.failed` |
-| 人工放行 | 原因、证据、主管确认 | `verification.manual_overridden` |
+| 人工放行（**已废止·见文首口径**） | 该动作不再提供 | `verification.manual_overridden`（停用，待代码轮下线） |
 | 酒吧开台 | 桌台、客户、员工、班次 | `bar.table.opened` |
 | 酒吧取消点单 | 原因、订单、员工 | `bar.order.cancelled` |
 | 存酒取用 | 客户确认、剩余量 | `bar.saved_bottle_picked_up` |
@@ -859,7 +863,7 @@ apps/web/src
 |---|---|
 | 核销台 | 支持扫码输入、手动票码、核销预览、确认核销、失败原因 |
 | 酒吧点单台 | 桌台/吧台模式、商品快捷键、账单摘要、取消原因 |
-| 游乐入场台 | 当前项目、场次容量、核销结果、人工放行入口 |
+| 游乐入场台 | 当前项目、项目容量（实时在玩人数）、核销结果（原含「人工放行入口」与「场次容量」，均已废止·见文首口径） |
 | 异常补录台 | 补录类型、文字说明、图片上传、签名、提交状态 |
 
 ### 10.3 与 Android 端边界
@@ -953,7 +957,7 @@ apps/web/src
 | 禁止动作 | 说明 | Web 端处置 |
 |---|---|---|
 | 门票/权益核销 | 改变核销结果 | 不在 Web 执行，跳转现场端/管理后台 |
-| 人工放行 | 改变核销结果、涉及责任归属 | 不在 Web 执行，跳转现场端/管理后台 |
+| 人工放行（**已废止·见文首口径**） | 该动作不再提供 | 任何终端都不得提供入口 |
 | 结账支付 | 改变资金事实 | 不在 Web 执行，跳转管理后台/现场端 |
 | 存酒/取酒 | 改变库存事实 | 不在 Web 执行，跳转现场端 |
 

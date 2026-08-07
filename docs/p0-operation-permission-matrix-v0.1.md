@@ -1,5 +1,9 @@
 # P0 操作权限矩阵 V0.1
 
+> **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
+
+> **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
+
 > 本文档用于把“谁能做什么”落成可开发、可测试、可审计的权限矩阵。它不是角色名称清单，而是权限点、模板、审批、留痕和端侧入口的执行标准。
 
 ## 1. 权威口径
@@ -26,7 +30,7 @@
 1. 模板必须有唯一编号、名称、类型、适用范围、创建人、审核人、启用时间、停用时间和状态。
 2. 模板复制时复制的是当时权限快照，不随源模板后续变化自动变化。
 3. 临时模板可设置 `valid_from`、`valid_to`、`single_use`，到期或单次使用后自动失效。
-4. 临时模板必须填写用途说明；涉及退款、人工放行、库存调整、财务调整、敏感数据导出时必须审批后生效。
+4. 临时模板必须填写用途说明；涉及退款、库存调整、财务调整、敏感数据导出时必须审批后生效（原含「人工放行」，已废止·见文首口径）。
 5. 员工最终权限 = 角色权限 + 基础模板授权 + 有效临时模板授权 + 员工单独授予 - 员工/模板显式拒绝。
 6. 显式拒绝优先级最高；同一权限存在授予和拒绝时，按拒绝处理，并在前端显示冲突原因。
 7. 每次模板创建、复制、修改、应用、撤销、到期、单次消耗都必须写入审计事件。
@@ -56,7 +60,7 @@
 | 退款审批 | `ticket.refund.approve` | 财务主管、运营主管 | 高 | 是 | `ticket_refund.approved` | 与支付通道/财务台账联动 |
 | 票/券/权益核销 | `verification.execute` | 工作手机、授权闸机/核销点设备、票务/酒吧/游乐员工 | 中 | 否 | `verification.succeeded` / `verification.failed` | 必须在线核验动态码；平板不作为门票核销设备；售票型一体机只允许授权服务人员辅助售票/取票/查单，默认不做核销 |
 | 核销撤销 | `verification.reverse` | 现场主管 | 高 | 是 | `verification.reversed` | 必须填写原因 |
-| 人工放行 | `verification.manual_override` | 现场主管、总控授权人 | 高 | 是 | `verification.manual_overridden` | 需证据附件 |
+| 人工放行（**已废止·见文首口径**） | `verification.manual_override`（停用，待代码轮下线） | — | — | — | `verification.manual_overridden`（停用） | 该动作不再提供，任何岗位、任何权限都不得放行不满足规则的核销 |
 | 酒吧入场年龄核验 | `bar.entry.age_verify` | 酒吧门口员工、现场主管 | 高 | 否 | `bar.age_verification.requested` / `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 酒吧售酒/入场合规前置 |
 | 酒吧人脸核验结果写入 | `bar.entry.face_result.write` | 第三方人脸服务适配器、授权设备 | 高 | 系统准入 | `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 供应商确定前仅保留接口和模拟数据；生产未配置不得标记通过 |
 | 卡座预订入场人数核销 | `bar.table.guest_checkin` | 酒吧门口员工、现场主管 | 中 | 否 | `bar.table_guest.checked_in` / `bar.table_guest.rejected` | 只允许进入预定卡座所在酒吧；需幂等和并发额度锁 |
@@ -69,9 +73,9 @@
 | 库存入库/出库 | `inventory.stock.move` | 仓库、吧台、主管 | 中 | 可配置 | `inventory.inbound_confirmed` / `inventory.outbound_verified` / `inventory.transferred` | P0 必须支持库存扣减闭环 |
 | 库存盘点差异确认 | `inventory.stock.adjust` | 仓库主管、财务复核 | 高 | 是 | `inventory.counted` / `inventory.damaged` / `inventory.surplus_recorded` / `inventory.reversed` | 高价值酒水需附件 |
 | 游乐项目/场次查看 | `amusement.session.view` | 游乐员工、游乐主管、平台管理员 | 低 | 否 | `amusement.session.viewed` | P0 基础项目、场次和容量查询 |
-| 游乐项目/场次维护 | `amusement.session.manage` | 游乐主管、平台管理员 | 中 | 可配置 | `amusement.session.changed` | P0 基础场次容量 |
-| 游乐核销记录查看 | `amusement.verification.view` | 游乐员工、游乐主管、平台管理员 | 低 | 否 | `amusement.verification.viewed` | 查询核销成功、失败、人工放行和安全拒绝原因 |
-| 游乐核销/人工放行 | `amusement.verification.execute` / `amusement.verification.override` | 游乐员工、主管 | 中/高 | 人工放行需审批 | `amusement.verification_succeeded` / `amusement.verification_failed` / `amusement.verification_overridden` | 与票务权益联动 |
+| 游乐项目/场次维护 | `amusement.session.manage` | 游乐主管、平台管理员 | 中 | 可配置 | `amusement.session.changed` | P0 基础项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径） |
+| 游乐核销记录查看 | `amusement.verification.view` | 游乐员工、游乐主管、平台管理员 | 低 | 否 | `amusement.verification.viewed` | 查询核销成功、失败和安全拒绝原因（原含「人工放行」，已废止·见文首口径） |
+| 游乐核销（原含「/人工放行」，已废止·见文首口径） | `amusement.verification.execute`（`amusement.verification.override` 停用，待代码轮下线） | 游乐员工、主管 | 中 | 否 | `amusement.verification_succeeded` / `amusement.verification_failed` / `amusement.verification_overridden` | 与票务权益联动 |
 | 游乐安全巡检模板查看/维护 | `amusement.safety_template.view` / `amusement.safety_template.manage` | 巡检员、游乐主管、平台管理员 | 高 | 模板维护可配置审批 | `amusement.safety_template.viewed` / `amusement.safety_template.changed` | P0 开放前、营业中抽检和阻断项模板 |
 | 游乐安全巡检任务查看/创建 | `amusement.safety_inspection.view` / `amusement.safety_inspection.create` | 巡检员、游乐主管、平台管理员 | 高 | 创建可配置审批 | `amusement.safety_inspection.viewed` / `amusement.safety_inspection.created` | P0 巡检任务、记录和整改复检查询 |
 | 游乐安全巡检提交 | `amusement.safety_inspection.submit` | 巡检员、游乐主管 | 高 | 否 | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | 开放前必检，阻断项自动暂停 |
@@ -131,7 +135,7 @@
 | 事件查询 | `evidence.event.view` | 运营主管、风控、法务、IT | 中 | 否 | `evidence.event_viewed` | 敏感字段按 `evidence.sensitive.view` 控制 |
 | 业务时间线查看 | `evidence.timeline.view` | 运营主管、风控、法务、客服主管 | 中 | 否 | `evidence.timeline_viewed` | 按业务对象授权 |
 | 证据附件创建/绑定 | `evidence.attachment.create` | 授权员工、现场主管、系统 | 中 | 否 | `evidence.attachment_bound` | 上传采用预签名三段式 |
-| 异常复核创建 | `evidence.review.create` | 风控、运营主管、法务 | 高 | 是 | `evidence.review_created` | 用于风险、退款、人工放行等复核 |
+| 异常复核创建 | `evidence.review.create` | 风控、运营主管、法务 | 高 | 是 | `evidence.review_created` | 用于风险、退款等复核（原含「人工放行」，已废止·见文首口径） |
 | P0 经营总览查看 | `analytics.dashboard.view` | 总控、运营主管、财务 | 中 | 否 | `analytics.dashboard_viewed` | 聚合数据不应暴露明细隐私 |
 | 风险预警查看 | `analytics.risk_alert.view` | 风控、运营主管、总控 | 高 | 否 | `risk_alert.viewed` | 明细证据另受敏感权限控制 |
 | 供应商适配器查看 | `integration.provider_adapter.view` | IT、平台管理员、采购 | 中 | 否 | `provider_adapter.viewed` | 供应商未定时可查看 mock adapter |
@@ -244,7 +248,7 @@
 | 卡座提成查看/复核 | `bar.table_commission.view` / `bar.table_commission.review` | 高/是 | 可用（普通销售仅看本人摘要，不得改基数） |
 | 入场年龄核验 | `bar.entry.age_verify` | 高/否 | 可用（售酒/入场合规前置） |
 | 票/券/权益核销 | `verification.execute` | 中/否 | 可用（在线核验动态码） |
-| 核销撤销 / 人工放行 | `verification.reverse` / `verification.manual_override` | 高/是 | 可用（现场主管/总控，须原因/证据） |
+| 核销撤销（原含「/ 人工放行」，已废止·见文首口径） | `verification.reverse`（`verification.manual_override` 停用） | 高/是 | 可用（现场主管/总控，须原因/证据） |
 | 员工：账号查看/维护 | `access.user.view` / `access.user.manage` | 中-高/高变更留痕 | 可用（限本商户范围内员工） |
 | 员工：角色/模板/临时授权 | `access.role.view` / `access.permission_template.view` / `access.temporary_grant.create` / `access.temporary_grant.revoke` | 中-高 | 可用（限本商户范围；员工级完全自定义按 §2.2 组合，DENY 优先） |
 | 对账：应收应付台账查看 | `finance.ar_ap.view` | 中/否 | 可用（按主体绑定/数据范围） |
@@ -259,10 +263,10 @@
 | 功能（逐一） | 权限编码 | 风险/审批沿用 §3 | 商户侧可用性 |
 |---|---|---|---|
 | 项目/场次查看 | `amusement.session.view` | 低/否 | 可用 |
-| 项目/场次维护 | `amusement.session.manage` | 中/可配置 | 可用（基础场次容量） |
+| 项目/场次维护 | `amusement.session.manage` | 中/可配置 | 可用（基础项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径）） |
 | 设备状态查看 | `amusement.device_status.view` | 中/否 | 可用 |
 | 核销记录查看 | `amusement.verification.view` | 低/否 | 可用 |
-| 核销执行 / 人工放行 | `amusement.verification.execute` / `amusement.verification.override` | 中-高/放行需审批 | 可用（与票务权益联动） |
+| 核销执行（原含「/ 人工放行」，已废止·见文首口径） | `amusement.verification.execute`（`amusement.verification.override` 停用） | 中/否 | 可用（与票务权益联动） |
 | 安全巡检模板查看/维护 | `amusement.safety_template.view` / `amusement.safety_template.manage` | 高/维护可配置审批 | 可用 |
 | 安全巡检任务查看/创建/提交 | `amusement.safety_inspection.view` / `.create` / `.submit` | 高 | 可用（开放前必检，阻断项自动暂停） |
 | 安全整改/复检 | `amusement.safety_inspection.rectify` / `.recheck` | 高/可配置 | 可用（严重项未复检通过不得恢复） |

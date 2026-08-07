@@ -14,6 +14,9 @@
 //   ⑤ **对已登记进账本的条目**逐字实检：账本每行 source_text 必须仍逐字存在于对应 HTML 现文里
 //      （指纹只看前 24 字，挡不住行中间改动，故另设此检）。**未登记进账本的 HTML 条目不在本检保护范围内**——
 //      改了这类条目本门禁不会红；账本扩登记是 R8-U-02 的待办。
+//   ⑥ 账本每行必须在承接矩阵 docs/prd-audit/html-prd-coverage.csv 里有对应行
+//      （反向：④ 只检「矩阵→账本」，缺了「账本→矩阵」这一向，账本新增条目可以长期不进矩阵而门禁不响）；
+//      矩阵里 9 条 *-MPS-000N 占位伪 ID 按白名单放行（member-points 重建 Phase4 待映射，账本无对应行是设计如此）。
 import fs from "node:fs";
 import path from "node:path";
 
@@ -143,6 +146,25 @@ for (const r of covRows) {
   covMapped++;
 }
 
+// ---- ⑥ 账本每行必须在承接矩阵里有对应行（R10 新增）----
+// 矩阵里的占位伪 ID：member-points 重建 Phase4 待映射，账本无对应行，按设计保留。
+const FAKE_COVERAGE_IDS = new Set([
+  "BSM-MPS-0001", "BSM-MPS-0002", "BSM-MPS-0003",
+  "PGM-MPS-0001", "PGM-MPS-0002", "PGM-MPS-0003",
+  "BEQ-MPS-0001", "BEQ-MPS-0002", "BEQ-MPS-0003",
+]);
+const covIdSet = new Set(covRows.map(r => r.rule_id));
+for (const r of ledRows) {
+  if (!covIdSet.has(r.rule_id)) {
+    errors.push(`账本行未登记进承接矩阵：${r.rule_id}「${r.entry_name}」——账本与承接矩阵须一一对应（检查⑥）`);
+  }
+}
+for (const r of covRows) {
+  if (ledName[r.rule_id] === undefined && !FAKE_COVERAGE_IDS.has(r.rule_id)) {
+    errors.push(`承接矩阵出现账本没有、又不在伪 ID 白名单里的 rule_id：${r.rule_id}（检查⑥）`);
+  }
+}
+
 // ---- ②③ 全库引用 ----
 const mdFiles = walk("docs").filter(f => !EXCLUDE.test(f.replace(/\\/g, "/")));
 const REF = /(BSM|PGM|ENUM|BEQ)\s*「([^」]{2,})」/g;
@@ -180,4 +202,4 @@ if (errors.length) {
   console.error("  处置：条目改名或 HTML 改动后，重建 docs/prd-audit/entry-registry.csv 并把引用改为现行条目名；一律不得写回行号。");
   process.exit(1);
 }
-console.log("[entry-anchors] PASS：条目名唯一、引用可唯一定位、正文无行号锚点、账本已登记条目正文与 HTML 现文一致（未登记条目不在保护范围，见 R8-U-02）。");
+console.log("[entry-anchors] PASS：条目名唯一、引用可唯一定位、正文无行号锚点、账本已登记条目正文与 HTML 现文一致（未登记条目不在保护范围，见 R8-U-02）、账本与承接矩阵一一对应。");

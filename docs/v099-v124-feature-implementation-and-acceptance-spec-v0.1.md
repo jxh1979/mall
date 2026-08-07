@@ -391,7 +391,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 
 ## 13. 综合体计费 + CAM true-up + refund_direction（V110 + V121）
 
-**需求/决策来源**：finance-ar-ap §14（营业额抽成 + 保证金台账 + CAM 分摊）；V121 审计补 CAM 年度 true-up + 统一退款方向维度。
+**需求/决策来源**：finance-ar-ap §14（营业额抽成 + 押金台账 + CAM 分摊）；V121 审计补 CAM 年度 true-up + 统一退款方向维度。
 
 **数据表**：
 - `turnover_rent_rules`（V110）：`rate_bps`(CHECK 0–10000)、`min/max_amount_cent`(保底/封顶 clamp)、`effective_from/to`、`status`(active/inactive)。
@@ -412,7 +412,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 
 **权限点**（V110/V121 seed）：`finance.turnover_rent.bill`、`finance.deposit.manage`、`finance.cam.allocate`、`finance.cam.trueup`（均 finance, high, requires_approval=TRUE）。
 
-**资金闭环**：营业额抽成（回流营业额来自 integration_order_syncs，只读）→ clamp 保底/封顶 → 应收；保证金四动作 + 运行余额；CAM 权重预收 → 年度 true-up 逐户差额（>0 补收应收 / <0 退还应付 / =0 不生成台账），生成 source_type=cam 的 ar_ap_items；退款统一 refund_direction 维度。
+**资金闭环**：营业额抽成（回流营业额来自 integration_order_syncs，只读）→ clamp 保底/封顶 → 应收；押金四动作 + 运行余额；CAM 权重预收 → 年度 true-up 逐户差额（>0 补收应收 / <0 退还应付 / =0 不生成台账），生成 source_type=cam 的 ar_ap_items；退款统一 refund_direction 维度。
 
 **G/W/T 验收**：
 - G: 商户配 rate_bps=500、min=10000、max=50000 cent；回流营业额 80000。W: billTurnoverRent。T: 抽成 4000 < min → clamp 至 10000，生成应收 ar_ap_items(source_type=turnover_rent)。

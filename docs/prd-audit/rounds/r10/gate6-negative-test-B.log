@@ -1,0 +1,4 @@
+[entry-anchors] 注册表 1210 行；账本 907 行；承接矩阵 917 行（同名 907、账本中无此 rule_id 10）；被检 Markdown 341 份；条目名引用 960 处（注册表原名 856 处，正文唯一定位 104 处）。
+[entry-anchors] FAIL：1 处不合格。
+  - 承接矩阵出现账本没有、又不在伪 ID 白名单里的 rule_id：BSM-FAKE-9999（检查⑥）
+  处置：条目改名或 HTML 改动后，重建 docs/prd-audit/entry-registry.csv 并把引用改为现行条目名；一律不得写回行号。

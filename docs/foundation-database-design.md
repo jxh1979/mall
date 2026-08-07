@@ -323,7 +323,7 @@
 | created_at | 创建时间 |
 | updated_at | 更新时间 |
 
-> P0 默认关键日期类型：合同开始、合同结束、续约/终止提前通知日、免租期结束、押金/保证金节点、自定义关键日期。阶梯涨租、复杂费用变更和自动账单联动进入 P1。
+> P0 默认关键日期类型：合同开始、合同结束、续约/终止提前通知日、免租期结束、押金节点、自定义关键日期。阶梯涨租、复杂费用变更和自动账单联动进入 P1。
 
 ### 2.11 merchant_bank_accounts 商户结算账户表
 
@@ -1914,7 +1914,7 @@ V105 给 V008 建表的 `finance_reconciliation_differences` 增列并纯化 CHE
 
 **新表 `turnover_rent_rules`（营业额抽成规则）**：`id` PK、`merchant_id` NOT NULL、`rule_name` NOT NULL、`rate_bps` INTEGER NOT NULL（基点，10000=100%）、`min_amount_cent`/`max_amount_cent` BIGINT（保底/封顶 clamp，可空）、`effective_from` DATE NOT NULL、`effective_to`、`status` DEFAULT `active`、时间戳。CHECK：`rate_bps` 0..10000、min/max ≥0 且 max≥min、status IN (active/inactive)。
 
-**新表 `deposit_ledger`（保证金台账四动作）**：`id` PK、`merchant_id` NOT NULL、`action` VARCHAR(32) NOT NULL、`amount_cent` BIGINT NOT NULL（恒正）、`balance_after_cent` BIGINT NOT NULL（≥0）、`ar_ap_item_id` FK → `ar_ap_items(id)`、`reason`、`created_at`。CHECK：`action` IN (collect/refund/deduct/forfeit)；`amount_cent>0`；`balance_after_cent>=0`。
+**新表 `deposit_ledger`（押金台账四动作）**：`id` PK、`merchant_id` NOT NULL、`action` VARCHAR(32) NOT NULL、`amount_cent` BIGINT NOT NULL（恒正）、`balance_after_cent` BIGINT NOT NULL（≥0）、`ar_ap_item_id` FK → `ar_ap_items(id)`、`reason`、`created_at`。CHECK：`action` IN (collect/refund/deduct/forfeit)；`amount_cent>0`；`balance_after_cent>=0`。
 
 **新表 `cam_allocations`（CAM 权重分摊）**：`id` PK、`allocation_batch_id` NOT NULL、`merchant_id` NOT NULL、`period` VARCHAR(32) NOT NULL、`total_amount_cent` BIGINT NOT NULL、`weight_bps` INTEGER NOT NULL（基点，批次内合计应 10000）、`allocated_amount_cent` BIGINT NOT NULL、`ar_ap_item_id` FK → `ar_ap_items(id)`、`created_at`。CHECK：`total_amount_cent>0`、`weight_bps` 0..10000、`allocated_amount_cent>=0`；唯一约束 `uq_cam_allocations_batch_merchant`(allocation_batch_id,merchant_id)。
 - 隔离键：三表均 `merchant_id`。生成 `ar_ap_items(source_type='turnover_rent'/'deposit'/'cam')`。seed 权限：`finance.turnover_rent.bill`/`finance.deposit.manage`/`finance.cam.allocate`。
@@ -2032,7 +2032,7 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 
 ### 11.25 资金权威台账不可篡改（V145 → `ar_ap_items` 纳入 append-only `delete_only`，修复 F-OPS-01）
 
-> 本小节标注 `文档goalP1(2026-06-22)`，修复 F-OPS-01（运行期资金权威主表可被物理删除，留痕可被抹除）。背景：V140 已对应付/应收域施加 append-only 防篡改保护，但**只覆盖了 `ar_ap_payments`（immutable，禁 INSERT 后的一切 UPDATE/DELETE）与 `ar_ap_item_sources`（delete_only，仅禁 DELETE）**，唯独运行期权威主表 `ar_ap_items`（被 §11.10 库存差异、§11.12 抽成/保证金/CAM、§11.21 CAM true-up 等多处生成应收/应付分录）被遗漏，仍可物理删除。V145 补齐该缺口。
+> 本小节标注 `文档goalP1(2026-06-22)`，修复 F-OPS-01（运行期资金权威主表可被物理删除，留痕可被抹除）。背景：V140 已对应付/应收域施加 append-only 防篡改保护，但**只覆盖了 `ar_ap_payments`（immutable，禁 INSERT 后的一切 UPDATE/DELETE）与 `ar_ap_item_sources`（delete_only，仅禁 DELETE）**，唯独运行期权威主表 `ar_ap_items`（被 §11.10 库存差异、§11.12 抽成/押金/CAM、§11.21 CAM true-up 等多处生成应收/应付分录）被遗漏，仍可物理删除。V145 补齐该缺口。
 
 **`ar_ap_items` 纳入 append-only 的 `delete_only` 类**：
 
@@ -2056,7 +2056,7 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 **seed 能力开关 `face.verification.enabled` = FALSE（默认关）**：
 
 - 行 `tcs_face_verification_off`：`terminal_type='*'`（跨端通配）、`scope_type='global'`、`scope_id='global'`、`enabled=FALSE`，`ON CONFLICT (terminal_type, capability_code, scope_type, scope_id) DO NOTHING`。
-- 为何显式 seed false：T2 `resolveEffectiveSwitch` 语义为「无显式行=默认开启」（opt-out），人脸闸要求「默认关」，故必须显式插入 false 行；`FaceVerificationRouter` 另对「读不到开关」fail-safe→当作关（绝不误连厂商）。
+- 为何显式 seed false：T2 `resolveEffectiveSwitch` 语义为「无显式行=默认开启」（opt-out），人脸闸（即综合体入场三道环节中的第二道「年龄核验环节」（人脸扫描确认满 18 周岁），DEC-R8-31/32）要求「默认关」，故必须显式插入 false 行；`FaceVerificationRouter` 另对「读不到开关」fail-safe→当作关（绝不误连厂商）。
 - **与 `integration.face_age.sync`（V071，T14 第三方脚手架）的区别**：后者语义=第三方人脸/年龄供应商的数据对账/同步（integration 域 `ThirdPartyScaffoldingService`）；`face.verification.enabled` 语义=综合体入场·年龄核验环节的实时年龄/人脸核验裁决（entry 域；键名沿用历史，不随 DEC-R8-32 改名变动），bar 售酒年龄继承其结论。二者职责不同、独立开关（与 payment 域 `integration.payment.sync` vs `payment.gateway.enabled` 同范式）。
 - 关闭期业务口径（对齐 `integration-capability-switches` 验收 #6 + 修复 X-03）：bar 售酒年龄核验不再信客户端自报，改为继承年龄核验环节结论——该环节开关关时 → `provider_code=entry_gate_exempt` 非阻塞放行（场内豁免、制度兜底，残留风险已知会），不展示「自动人脸已通过」；闸开真实接入后 fail-closed 判龄，bar 自动继承 PASSED/FAILED（`provider_code=face_inherited`）。
 - 无新表/新列（仅 seed 一行开关）。开关由现有 `TerminalDeviceController.updateCapabilitySwitch`（`terminal.switch.manage`，平台权限）切换，无需新增权限。
