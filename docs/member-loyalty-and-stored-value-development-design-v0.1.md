@@ -10,7 +10,7 @@
 
 ## 1. 积分两本账（核心模型）
 
-业务速查表 §二："成长积分（算等级，只增不减、仅到期清减、不受兑换影响）；可用积分（兑换消耗会扣减、不影响等级）"。**实现实证**：
+ENUM「等级与成长值」条现文：「成长值与可用积分是两套独立账，积分兑换不扣成长值」；等级按后台配置的滚动统计周期内的成长值计算，达到门槛立即升级、升级后享有保护期（同条）。**实现实证**（2026-08-07 引文订正：原引「成长积分（算等级，只增不减、仅到期清减、不受兑换影响）」为旧口径，现行 HTML 已改称「成长值」并改为滚动统计周期 + 保护期；代码侧尚无独立成长值账，沿用保级进度列，差距见下文待办表）：
 
 | 账 | 落点（`customer_points_accounts`） | 行为 |
 |---|---|---|
@@ -70,7 +70,7 @@
     且避免存量单派生值突然归零导致再来一次核销事件把整份积分二次入账。
 - `deductPoints`：兑换消耗扣 `balance`。
 - `change_type`：获取/扣减/兑换消耗/过期/调整（速查表 §二明细类型），每笔关联触发单据。
-- **过期清零** `expirePoints(now)` / `expirePointsForCustomer`：`customer_points_ledger` 的 `expire_at`/`remaining_points`/`expired`，按自然年或后台配置天数清减**成长积分**。
+- **过期清零** `expirePoints(now)` / `expirePointsForCustomer`：`customer_points_ledger` 的 `expire_at`/`remaining_points`/`expired`，**代码现状**按自然年或后台配置天数清减 `keep_threshold_progress`。**与现行 HTML 口径不符（2026-08-07 订正）**：ENUM「积分明细类型」条现文为「积分有效期为滚动有效：客人在设定的时间窗口内有过一次消费的，其名下积分即全部保持有效、不过期；窗口内没有任何消费的，积分过期」；等级另按 ENUM「等级与成长值」条的滚动统计周期 + 保护期计算，成长值与可用积分为两套独立账。差距已登记在上文待办表，本文不改代码。
 - 事件 `points.earned`/`points.deducted`（V101 `audit_events` 扩 category/subject）。
 
 ## 4. 连续签到
