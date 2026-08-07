@@ -313,7 +313,7 @@ BSM-0035,二维码必须带防伪标记、有效期，并能防止被复制或�
 BSM-0036,二维码按后台统一设置的刷新间隔自动刷新,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0037,现场核销时判断是否可用，并记录核销结果,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0038,事后可按票号、二维码、核销设备、员工、点位,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0039,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,STALE,P0,ADV-TX-004,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
+BSM-0039,多人票和多次票按人次计算票务积分与成长值,docs/points-and-voucher-product-prd-v1.0.md,§6.3 票务积分规则,FULL,P0,ADV-TX-004,2026-08-07 第六批恢复该旧口径（DEC-R8-76），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0040,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0041,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0042,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
@@ -343,12 +343,12 @@ BSM-0065,二维码,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文
 BSM-0066,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0067,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,2. P0 目标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0068,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
-BSM-0069,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,STALE,P0,ADV-TX-004,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
+BSM-0069,积分与成长值确认,docs/points-and-voucher-product-prd-v1.0.md,§6.3 票务积分规则,FULL,P0,ADV-TX-004,2026-08-07 第六批恢复该旧口径（DEC-R8-76），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0070,权益转赠,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,4. P0 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0071,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,STALE,P0,ADV-TX-004,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0072,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0073,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
-BSM-0074,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0074,积分与成长值获取,docs/points-and-voucher-product-prd-v1.0.md,§6.4 会员识别与积分获取渠道,FULL,,,2026-08-07 第六批恢复该旧口径（DEC-R8-77），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,,04-transaction-member-ticket-bar
 BSM-0075,明细类型,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0076,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0077,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
@@ -517,7 +517,7 @@ BSM-0410,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,"C. 税务配置(→ 税�
 BSM-0411,ORPHANED,docs/dividend-engine-prd-v0.1.md,§4A 跨周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0412,分红基数按「净利润」算,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0413,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
-BSM-0414,ORPHANED,docs/dividend-engine-prd-v0.1.md,2. 已拍板口径（2026-07-18 终稿）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0414,分红税务按发放时有效的中国税法、股东身份和交易实质处理,docs/dividend-engine-prd-v0.1.md,§2 第 2 条 主理人分个人/公司两类,FULL,,,2026-08-07 第六批恢复该旧口径（DEC-R8-78），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,,04-transaction-member-ticket-bar
 BSM-0415,分红原则上每半年分配一次,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BSM-0416,亏损结转,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0417,欠款抵扣,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -559,12 +559,12 @@ BEQ-0018,门票综合服务费,docs/settlement-rebuild-prd-v1.0.md,全文/综合
 BEQ-0019,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0020,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0021,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
-BEQ-0022,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0022,积分与成长值来源,docs/points-and-voucher-product-prd-v1.0.md,§6.4 会员识别与积分获取渠道,FULL,,,2026-08-07 第六批恢复该旧口径（DEC-R8-77），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,,04-transaction-member-ticket-bar
 BEQ-0023,积分明细类型,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0024,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0025,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0026,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
-BEQ-0027,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§5.1 券跨周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
+BEQ-0027,发券与核销结算,docs/points-and-voucher-product-prd-v1.0.md,§11.1 券种要求 · 履约通道三分类,FULL,P2,P2-DIM-CLOSE-001,2026-08-07 第六批恢复该旧口径（DEC-R8-79），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BEQ-0028,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0029,会员忠诚度扩展,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§7.2–7.6 DEC-SV-*,FULL,P0,ADV-TX-003,,,DEC-SV-LEDGER-001,04-transaction-member-ticket-bar
 BEQ-0030,桌台/卡座/吧台位状态,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -594,7 +594,7 @@ BEQ-0113,服务订单状态,docs/service-order-product-prd-v0.1.md,服务点单 
 BEQ-0114,管理费方式,docs/service-order-product-prd-v0.1.md,服务点单 PRD §3.2/§5,FULL,,,,,,r8-rebuild
 BEQ-0115,分红基数,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0116,分红比例,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0117,ORPHANED,docs/dividend-engine-prd-v0.1.md,3. 分红方案（配置层，`dividend_plans`）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0117,分红税务,docs/dividend-engine-prd-v0.1.md,§2 第 2 条 主理人分个人/公司两类,FULL,,,2026-08-07 第六批恢复该旧口径（DEC-R8-78），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,,04-transaction-member-ticket-bar
 BEQ-0118,分红周期,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BEQ-0119,分红单状态,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0120,可选扣除项,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,FULL,,,,,,04-transaction-member-ticket-bar
