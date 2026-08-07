@@ -1,0 +1,233 @@
+# docs/prd-audit/rounds/r11/value-flow-copy-baseline.txt
+# 用途：authority-rule-ledger.csv 硬约束「value_flow 不得等于同行 source_text（归一后）」的**存量基线**。
+# 依据：2026-08-07 用户裁决 B-09(a)（见 business-decision-ledger.md DEC-R8-85）＋编排层执行口径：
+#       按本项目既有 param-tier 棘轮范式落地——门禁只拦新增、不拦存量；本基线只缩不增。
+#       本轮**不清理**这些行，清理留 G-1 专项批。
+#
+# 归一函数（与 tools/verify-entry-anchors.mjs:68-70 的 norm() 同源，逐字复刻）：
+#       norm(s) = 去掉字符集 [「」『』“”"'‘’] 后，再删除全部空白字符
+# 判定式：value_flow 非空 且 value_flow 不在四个哨兵值内 且 norm(value_flow) == norm(source_text)
+# 四个哨兵值：NOT_STATED / NOT_EXTRACTED_R9 / NOT_EXTRACTED_R8 / NOT_EXTRACTED_R8-H2
+#
+# 实测口径（基线 1c5c0c7d，本轮 ~/wt-r11 重算，csv.DictReader 计数）：
+#   账本数据行总数                          = 1225
+#   value_flow != NOT_STATED                = 441
+#     其中哨兵（R9 35 / R8 57 / R8-H2 9）  = 101
+#     真有文字（四哨兵全剔除）              = 340
+#   逐字副本（原始串完全相同）              = 176
+#   归一后副本（本基线）                    = 204
+#
+# 分母三口径与占比（分母不同结论不同，故三个都列出，不取单一说法）：
+#   204 / 441（value_flow != NOT_STATED，含 101 个哨兵）= 46.3%
+#   204 / 406（shard-08 口径：只剔 NOT_EXTRACTED_R9）   = 50.2%
+#   204 / 340（本轮口径：四个哨兵全剔除）               = 60.0%
+#
+# ⚠ 订正 shard-08 G-1 附节：该节写「真正填了字的是 406 行、副本占比 43.3%」，
+#   其 406 只剔除了 NOT_EXTRACTED_R9 一种哨兵，遗漏 NOT_EXTRACTED_R8（57 行）与 NOT_EXTRACTED_R8-H2（9 行）；
+#   剔全四种后真有文字 = 340，副本占比 = 60.0%。副本行数 204 本身与 shard-08 一致，不受影响。
+#
+# 以下为基线 rule_id 清单，每行一个，按账本原序。共 204 行。
+BSM-0006
+BSM-0009
+BSM-0016
+BSM-0025
+BSM-0033
+BSM-0041
+BSM-0042
+BSM-0045
+BSM-0060
+BSM-0069
+BSM-0071
+BSM-0072
+BSM-0073
+BSM-0076
+BSM-0078
+BSM-0079
+BSM-0080
+BSM-0089
+BSM-0094
+BSM-0131
+BSM-0136
+BSM-0157
+BSM-0162
+BSM-0163
+BSM-0173
+BSM-0183
+BSM-0193
+BSM-0196
+BSM-0197
+BSM-0198
+BSM-0201
+BSM-0205
+BSM-0207
+BSM-0208
+BSM-0216
+BSM-0217
+BSM-0218
+BSM-0219
+BSM-0223
+BSM-0259
+BSM-0265
+BSM-0272
+BSM-0277
+BSM-0278
+BSM-0296
+BSM-0297
+BSM-0312
+BSM-0314
+BSM-0340
+BSM-0369
+BSM-0370
+BSM-0373
+BSM-0374
+BSM-0375
+BSM-0377
+BSM-0378
+BSM-0379
+BSM-0382
+BSM-0384
+BSM-0386
+BSM-0390
+BSM-0395
+BSM-0397
+BSM-0400
+BSM-0407
+BSM-0409
+BSM-0415
+BSM-0425
+BSM-0430
+BSM-0433
+BSM-0434
+BSM-0436
+BSM-0437
+BSM-0449
+BSM-0451
+BSM-0453
+BSM-0457
+BSM-0458
+BSM-0468
+BSM-0470
+BSM-0471
+BSM-0481
+BSM-0484
+BSM-0497
+BSM-0511
+BSM-0523
+PGM-0004
+PGM-0008
+PGM-0011
+PGM-0014
+PGM-0015
+PGM-0016
+PGM-0020
+PGM-0032
+PGM-0038
+PGM-0047
+PGM-0058
+PGM-0084
+PGM-0144
+PGM-0145
+PGM-0166
+PGM-0171
+PGM-0172
+PGM-0177
+BEQ-0014
+BEQ-0017
+BEQ-0019
+BEQ-0020
+BEQ-0021
+BEQ-0024
+BEQ-0026
+BEQ-0050
+BEQ-0055
+BEQ-0073
+BEQ-0091
+BEQ-0114
+BEQ-0118
+BEQ-0122
+BSM-0548
+BSM-0549
+BSM-0595
+BSM-0606
+BSM-0607
+BSM-0608
+BSM-0609
+BSM-0611
+BSM-0612
+BSM-0615
+BSM-0616
+BSM-0617
+BSM-0618
+BSM-0619
+BSM-0620
+BSM-0621
+BSM-0622
+BSM-0623
+BSM-0624
+BSM-0625
+BSM-0628
+BSM-0635
+BSM-0637
+BSM-0638
+BSM-0639
+BSM-0640
+BSM-0641
+BSM-0642
+BSM-0643
+BSM-0644
+BSM-0645
+BSM-0646
+BSM-0662
+BSM-0663
+BSM-0669
+BSM-0693
+BSM-0694
+BSM-0696
+BSM-0697
+BSM-0698
+BSM-0699
+BSM-0701
+BSM-0703
+BSM-0704
+BSM-0705
+BSM-0706
+BSM-0707
+BSM-0714
+BSM-0716
+BSM-0717
+BSM-0718
+BSM-0719
+BSM-0735
+BSM-0737
+BSM-0739
+BSM-0740
+BSM-0741
+BSM-0742
+BSM-0743
+BSM-0744
+BSM-0745
+BSM-0752
+BSM-0755
+BSM-0756
+BSM-0759
+BSM-0760
+BSM-0761
+BSM-0762
+BSM-0763
+BSM-0764
+BSM-0765
+BSM-0766
+BSM-0768
+BSM-0770
+BSM-0772
+BSM-0775
+BSM-0778
+BSM-0779
+BSM-0780
+BSM-0782
+BSM-0783
+BSM-0788
+BSM-0789
+PGM-0218
+PGM-0219
+PGM-0237

@@ -126,7 +126,7 @@ P0 供应商未确定时，不等待真实 SDK/API。以下样例包用于 mock 
 |---|---|---|---|---|
 | 聚合支付 | `provider_order_id`、`provider_transaction_id`、`amount_cent`、`currency`、`normalized_status`、`callback_event_id`、`raw_payload_hash` | `provider_order_id`、`transaction_id`、`pay_status`、`paid_at` | Webhook 入账 + 定时轮询状态一致 | 状态不一致进入支付差异队列，财务复核后补偿 |
 | 企业微信 | `provider_user_id`、`external_user_id`、`message_id`、`occurred_at`、`raw_payload_hash`、`normalized_status` | `userid`、`external_userid`、`msgid`、`msgtime` | 每日同步批次完成，上传状态可查 | 漏传或失败批次进入补跑任务 |
-| 人脸/年龄核验 | `provider_user_id`、`verification_id`、`age_result`、`face_result`、`normalized_status`、`raw_payload_hash` | `person_id`、`verify_id`、`age`、`liveness_score`、`result_code` | 年龄/人脸结果写入酒吧入场判断；供应商未配置不得生产通过 | 供应商不可用时阻断入场，进入人工复核但不自动放行 |
+| 人脸/年龄核验 | `provider_user_id`、`verification_id`、`age_result`、`face_result`、`normalized_status`、`raw_payload_hash` | `person_id`、`verify_id`、`age`、`liveness_score`、`result_code` | 年龄/人脸结果写入综合体入场年龄核验环节判断；供应商未配置不得生产通过 | 供应商不可用时进入人工抽查放行、客人继续进场（不要求逐人查验证件，但应当对明显疑似未成年的人员进行查验） |
 | 设备厂商 | `device_id`、`provider_status`、`callback_event_id`、`normalized_status`、`raw_payload_hash` | `sn`、`device_status`、`event_id`、`reported_at` | 设备状态、心跳或事件可进入终端开关和设备台账 | 心跳超时进入设备异常告警 |
 | 票务渠道 | `provider_order_id`、`provider_transaction_id`、`provider_status`、`voucher_code_hash`、`normalized_status`、`raw_payload_hash` | `order_id`、`voucher_code`、`deal_status`、`verify_status` | 渠道订单/券码回流后由平台核销，不绕过平台 | 渠道漏发通过轮询补齐，券码冲突进入异常复核 |
 
@@ -150,7 +150,7 @@ P0 供应商未确定时，不等待真实 SDK/API。以下样例包用于 mock 
 |---|---|---|---|
 | 聚合支付 | 支付、退款、回调、轮询、对账、异常补偿 | 不同时启用多套直连通道 | API 字段、签名、费率、结算单格式 |
 | 企业微信 | 组织/账号同步、消息通知、低管理成本自动配置 | 不做复杂自研 IM | 通讯录字段、回调事件、同步频率 |
-| 人脸/年龄核验 | 酒吧年龄强制核验结果接入 | 不默认保存原始人脸图像 | 活体字段、年龄结果、失败码、合规材料 |
+| 人脸/年龄核验 | 酒吧年龄强制核验结果接入 | 平台不自设原始人脸照片保留开关（原始人脸照片是否保留，取决于第三方人脸识别 SDK 允不允许——允许保留的按已满 18 岁／未满 18 岁两档分类保留，不允许保留的一律不保留；合规 §2.2） | 活体字段、年龄结果、失败码、合规材料 |
 | 机器人 | 指令下发、任务状态、异常回调 | 不自研机器人调度算法 | 设备 API、签名、回调、状态码 |
 | 视频平台 | 设备/通道、回放/取证链接、告警回调 | 不自研视频底层平台 | 取流/回放 API、告警字段、权限模型 |
 | 设备厂商 | 闸机/一体机/外设状态、指令和回调 | 不写死单一厂商协议 | 设备编号、指令集、回调格式 |
@@ -195,7 +195,7 @@ P0 供应商未确定时，不等待真实 SDK/API。以下样例包用于 mock 
 | 供应商状态未知 | 持续轮询，超过阈值告警 | 财务/IT 决策 |
 | 支付成功但平台失败 | 补建订单或退款，需审批 | 财务复核 |
 | 核销成功但库存失败 | 标记业务异常，补偿库存 | 运营/仓库复核 |
-| 人脸核验超时 | 不自动放行 | 酒吧主管异常流程 |
+| 人脸核验超时 | **进入人工抽查放行、客人继续进场**——不要求逐人查验证件，但应当对明显疑似未成年的人员进行查验，不得把疑似未成年人当作普通未抽查人员直接放行；落事件 + 异常记录 | 酒吧主管异常流程 |
 
 ## 8. 账号、密钥与轮换
 
