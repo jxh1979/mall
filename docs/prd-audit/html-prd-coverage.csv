@@ -26,13 +26,13 @@ BSM-0024,游乐要知道项目入口、场次和容量属于哪个点位,docs/pl
 BSM-0025,财务要知道商户合同和合作方式，才能做结算,docs/platform-governance-prd-v0.1.md,§5-§7 平台治理对象,FULL,,,,,,03-governance-and-common
 BSM-0026,用户权限要知道员工注册信息、设备绑定、私人手机,docs/platform-governance-prd-v0.1.md,§5-§7 平台治理对象,FULL,,,,,,03-governance-and-common
 BSM-0299,员工用自己的手机装同一个工作 App,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
-BSM-0300,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
+BSM-0300,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 BSM-0301,公司公告,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
 BSM-0302,我的工单,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
 BSM-0303,帮客人订位,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
 BSM-0304,主管排班,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
-BSM-0305,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
-BSM-0306,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
+BSM-0305,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+BSM-0306,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 BSM-0307,严格口径,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
 BSM-0308,考勤月历,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
 BSM-0309,请假,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
@@ -47,7 +47,7 @@ BSM-0339,订单从哪里来，是官方 App/小程序、第三方、销售人员
 BSM-0340,销售归属是谁，是否涉及订台、客户跟进、业绩或提成,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 BSM-0341,卡座或桌台由谁主责服务，谁协助服务，谁加单，谁送达,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 BSM-0342,核销成功、失败、拒绝、撤销,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
-BSM-0343,ORPHANED,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
+BSM-0343,ORPHANED,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 BSM-0344,退款、免单、账单调整,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 BSM-0345,游乐项目暂停、关闭、超容、巡检异常,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 BSM-0346,第三方回流失败、重复、延迟、差异,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
@@ -121,7 +121,7 @@ BSM-0499,订台入口包括 App、小程序、一体机和销售人员，订台�
 BSM-0500,吧台买酒优先线上支付，同时必须允许现金和 POS 机支付并进,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0501,供应合同分平台自用、商户自采、平台统一采购分销三种模式,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0502,客人存酒按瓶底标签数值、拍照、人工备注,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
-BSM-0503,ORPHANED,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
+BSM-0503,ORPHANED,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 BSM-0504,餐饮/零售第三方同时支持订单级和券核销级回流，并支持日,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0505,票务二维码按日票、周票、月票、年票等票种设置有效期,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0506,员工私人手机 App 绑定一个该手机专属的设备标识,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
@@ -129,7 +129,7 @@ BSM-0507,私人手机被破解、篡改或处于异常环境判为不可信并�
 BSM-0508,职级可按 M1-M10，并可分上中下；职级只给薪资大范围,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0509,工作手机预装软件清单和网站白名单由后台维护,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0510,Web 前端允许少量业务确认动作,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
-BSM-0511,ORPHANED,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
+BSM-0511,ORPHANED,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 BSM-0512,新人优惠、学生票、多人票由后台配置规则,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0513,酒吧最低消费按时间、卡座和位置配置，不按人数,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0514,供应链从酒类、吧台消耗、客人存酒和纸巾、色盅、色子,docs/business-decision-log-v0.1.md,§32-§38 已确认规则,FULL,,,,,,03-governance-and-common
@@ -155,16 +155,16 @@ PGM-0003,全局原则 · 界面全中文（所有终端零英文）,docs/product
 PGM-0004,全局原则 · 金额一律精确到分,docs/product-requirements-v0.1.md,§14 已确认业务规则,FULL,P0,GOV-007,RESOLVED: 产品总纲只写整数分，未完整承接显示两位小数及尾差由项目公司/平台单列承担。,APPLIED: 在产品总纲和 HTML 验收规格补金额精度与尾差规则。,,03-governance-and-common
 PGM-0005,全局原则 · 同时操作以先成功为准,docs/product-requirements-v0.1.md,§14 已确认业务规则,FULL,P0,GOV-007,RESOLVED: 产品总纲未完整承接并发先成功和重复提交只认一次。,APPLIED: 在产品总纲和 HTML 验收规格补并发与幂等规则。,,03-governance-and-common
 PGM-0006,当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0007,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0008,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0009,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0010,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0011,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0012,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
+PGM-0007,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+PGM-0008,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+PGM-0009,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+PGM-0010,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+PGM-0011,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+PGM-0012,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 PGM-0013,独立酒吧商户,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0014,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0015,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
-PGM-0016,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
+PGM-0014,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+PGM-0015,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+PGM-0016,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 PGM-0017,建立综合体项目档案,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
 PGM-0018,记录项目状态、负责人、地址和经营范围,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
 PGM-0019,为商户、空间、合同、员工、设备、票务和看板提供归属,docs/group-governance-rebuild-prd-v1.0.md,§4 集团下钻对标,FULL,,,,,,03-governance-and-common
@@ -190,7 +190,7 @@ PGM-0053,合同的新建、到期终止、变更三类各走各自的审批流�
 PGM-0054,管理合同全生命周期变更,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,P1,GOV-002,RESOLVED: 平台治理 PRD 把合同变更、续租和退租审批后置。,APPLIED: 补全生命周期变更审批、原因和版本快照。,,03-governance-and-common
 PGM-0056,合同运营细则（已确认）,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,P0,GOV-002,RESOLVED: 平台治理 PRD 的合同审批流与 HTML 已确认细则冲突。,APPLIED: 按可配置分组并行会签、任一驳回退回起草、总经理终审统一。,,03-governance-and-common
 PGM-0060,员工不是只建账号,docs/platform-governance-prd-v0.1.md,§6.7-§7.7 员工与设备,FULL,,,,,,03-governance-and-common
-PGM-0061,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.7 员工与设备,FULL,,,,,,03-governance-and-common
+PGM-0061,ORPHANED,docs/platform-governance-prd-v0.1.md,§6.7-§7.7 员工与设备,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 PGM-0062,私人手机 App 安装时生成并绑定一个该手机专属的设备标识,docs/platform-governance-prd-v0.1.md,§6.7-§7.7 员工与设备,FULL,,,,,,03-governance-and-common
 PGM-0063,员工换手机必须先解绑旧手机，再绑定新手机,docs/platform-governance-prd-v0.1.md,§6.7-§7.7 员工与设备,FULL,,,,,,03-governance-and-common
 PGM-0064,检测到手机被破解、篡改或处于异常环境时,docs/platform-governance-prd-v0.1.md,§6.7-§7.7 员工与设备,FULL,,,,,,03-governance-and-common
@@ -204,7 +204,7 @@ PGM-0080,权限按单一功能最小颗粒度配置,docs/group-governance-rebuil
 PGM-0081,支持角色级权限模板,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
 PGM-0082,支持员工级完全自定义配置,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
 PGM-0083,敏感动作可要求上一级、上两级或最高权限审批,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
-PGM-0084,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
+PGM-0084,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 PGM-0085,最终权限 = 角色权限 + 基础模板 + 有效临时模板 +,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
 PGM-0086,临时授权可设有效期或单次使用；权限的授予、收回、到期,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
 PGM-0087,角色装配（已确认）,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,P0,GOV-005,RESOLVED: 岗位、职级或组织变化后仅提示人工收权，可能残留旧范围权限。,APPLIED: 改为立即重算并使旧岗位/旧范围派生权限失效。,,03-governance-and-common
@@ -218,7 +218,7 @@ PGM-0094,外包/服务商人员（设备维保单位、安保与保洁,docs/grou
 PGM-0095,审计人员分两类,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
 PGM-0096,审计人员查看或导出敏感信息,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
 PGM-0097,经营报表同理,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
-PGM-0098,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
+PGM-0098,ORPHANED,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 PGM-0099,所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定,docs/group-governance-rebuild-prd-v1.0.md,§2-§3 角色装配与高危授权,FULL,,,,,,03-governance-and-common
 PGM-0100,所有端都要有后台开关,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
 PGM-0101,客人 App 和小程序,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§5 终端开关接口规则,FULL,,,,,,03-governance-and-common
@@ -256,7 +256,7 @@ PGM-0160,卡座或桌台的主责服务员、协助服务员、加单、送达�
 PGM-0161,异常发现、第一处理人接单、转派、升级、处理和关闭,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 PGM-0162,酒水或物品从库房、机器人、后厨、服务员到客人的交接,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 PGM-0163,查看企业微信会话原文、查看视频证据和查看财务敏感信息,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
-PGM-0164,ORPHANED,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
+PGM-0164,ORPHANED,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 PGM-0165,高价值酒水报损、盘点差异、存酒作废,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 PGM-0166,日结锁定后的影响金额补录,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
 PGM-0167,游乐设施检修后的恢复营业确认,docs/evidence-risk-control-product-prd-v0.1.md,§3-§9 证据与风控,FULL,,,,,,03-governance-and-common
@@ -283,8 +283,8 @@ BEQ-0070,事件状态,docs/evidence-risk-control-product-prd-v0.1.md,§4-§9 风
 BEQ-0071,主管复核强制项,docs/evidence-risk-control-product-prd-v0.1.md,§4-§9 风控对象、状态与验收,FULL,,,,,,03-governance-and-common
 BEQ-0072,经营异常处置状态,docs/evidence-risk-control-product-prd-v0.1.md,§4-§9 风控对象、状态与验收,FULL,,,,,,03-governance-and-common
 BEQ-0073,四类主体,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,FULL,,,,,,03-governance-and-common
-BEQ-0074,ORPHANED,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,FULL,,,,,,03-governance-and-common
-BEQ-0075,ORPHANED,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,FULL,,,,,,03-governance-and-common
+BEQ-0074,ORPHANED,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
+BEQ-0075,ORPHANED,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,03-governance-and-common
 BEQ-0076,九、平台治理·合作模式,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,FULL,,,,,,03-governance-and-common
 BEQ-0077,职级,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,FULL,,,,,,03-governance-and-common
 BEQ-0078,终端十端,docs/platform-governance-prd-v0.1.md,§5-§12 平台治理,FULL,,,,,,03-governance-and-common
@@ -307,19 +307,19 @@ BSM-0029,设置酒吧通票、游乐通票、酒吧加游乐联合通票,docs/ba
 BSM-0030,餐饮和零售由第三方承接，通票里只放优惠、折扣、券或权益,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0031,记录官方 App/小程序订单，以及美团、大众点评,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0032,客人可在自己手机上的综合体官方小程序或 App 自助购买该酒,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
-BSM-0033,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0033,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0034,生成票码、权益、验票二维码和对应的防伪标记,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0035,二维码必须带防伪标记、有效期，并能防止被复制或篡改,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0036,二维码按后台统一设置的刷新间隔自动刷新,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0037,现场核销时判断是否可用，并记录核销结果,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0038,事后可按票号、二维码、核销设备、员工、点位,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0039,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,FULL,P0,ADV-TX-004,,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
-BSM-0040,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0041,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
-BSM-0042,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
-BSM-0043,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0039,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,STALE,P0,ADV-TX-004,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
+BSM-0040,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0041,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0042,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
+BSM-0043,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0044,游乐收入归属,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0045,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B.5 服务费封顶跨月,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
+BSM-0045,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B.5 服务费封顶跨月,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0046,和客人端相连，客人通过 App 或小程序买票和查票,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0047,和第三方平台相连，外部渠道购票结果要回到平台,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0048,和员工工作手机相连，现场员工用工作手机扫码核销,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
@@ -335,23 +335,23 @@ BSM-0057,新人优惠,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全
 BSM-0058,价格派生,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0059,通票类型,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B.6 联合通票,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0060,权益类型,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
-BSM-0061,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0061,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0062,餐饮/零售券,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0063,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0063,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0064,核销单位,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,14. 变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0065,二维码,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0066,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0067,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0068,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0069,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,FULL,P0,ADV-TX-004,,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
+BSM-0066,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0067,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,2. P0 目标,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0068,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0069,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,STALE,P0,ADV-TX-004,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0070,权益转赠,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,4. P0 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0071,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,FULL,P0,ADV-TX-004,,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
-BSM-0072,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0073,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0074,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0071,ORPHANED,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,STALE,P0,ADV-TX-004,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
+BSM-0072,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0073,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0074,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0075,明细类型,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0076,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0077,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0076,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0077,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0078,会员与积分规则·客人端,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0079,连续签到,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0080,生日加倍,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
@@ -368,11 +368,11 @@ BSM-0090,我的券包,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全
 BSM-0091,展示验票二维码，供现场工作人员核销,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0092,订卡客人可在 App/小程序查看自己的订卡邀请函二维码,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0093,连接票务权益系统，拿到票、权益和二维码,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0094,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0094,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0095,连接游乐系统，展示可预定项目和场次,docs/business-decision-log-v0.1.md,36. R6 业务输入与确认决议（14 项已全部业务确认 2026-06-19）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0096,连接酒吧系统，展示酒吧规则和赠饮权益,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0097,连接员工工作手机核销，核销后客人能看到使用记录,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0098,ORPHANED,docs/business-decision-log-v0.1.md,36. R6 业务输入与确认决议（14 项已全部业务确认 2026-06-19）,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0098,ORPHANED,docs/business-decision-log-v0.1.md,36. R6 业务输入与确认决议（14 项已全部业务确认 2026-06-19）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0099,客人端包括 App 和小程序，两者同步建设,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0100,订台定金状态,docs/bar-business-operations-product-prd-v0.1.md,6. 账单状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0101,采集证件、人脸、支付账号,docs/settlement-rebuild-prd-v1.0.md,"6.5 游乐票购买人脸拍照存档(用户口径,2026-07-04 新增)",FULL,,,,,,04-transaction-member-ticket-bar
@@ -431,8 +431,8 @@ BSM-0158,支付优先使用线上支付,docs/bar-business-operations-product-prd
 BSM-0159,现场必须允许现金和 POS 机支付，但要进入账单、日结,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0160,核销票务赠送的酒水权益,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0161,核销顺序,docs/bar-business-operations-product-prd-v0.1.md,7.2 赠饮权益核销,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0162,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
-BSM-0163,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
+BSM-0162,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,STALE,P1,ADV-TX-007,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
+BSM-0163,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,STALE,P1,ADV-TX-007,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0164,所有商品可录入内部结算价（成本价口径）,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0165,支持订卡邀请函,docs/customer-app-miniapp-product-prd-v0.1.md,3. 主要功能,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0166,客人喝不完的酒可以转入存酒管理，登记手机号、姓名/昵称,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
@@ -452,7 +452,7 @@ BSM-0179,点酒方式,docs/bar-business-operations-product-prd-v0.1.md,全文/�
 BSM-0180,支付方式,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0181,退菜退酒,docs/bar-business-operations-product-prd-v0.1.md,10.2.1 退菜/退酒（出品后撤单）升 P0 `R6-D14`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0182,高危动作,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0183,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
+BSM-0183,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,STALE,P1,ADV-TX-007,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0184,存酒登记,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0185,年龄核验,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0186,小费,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
@@ -461,7 +461,7 @@ BSM-0188,出品票据（按场景）,docs/bar-business-operations-product-prd-v0
 BSM-0189,收银交班对账,docs/bar-business-operations-product-prd-v0.1.md,10.1 成熟 POS 深度缺口规划（对照成熟酒吧/餐饮 POS）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0190,客人在酒吧可以点专项服务（比如点舞）,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
 BSM-0193,客人扫公司统一收款码付款，钱直接进公司账户，财务可对账,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
-BSM-0194,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,1.1 问题,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0194,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,1.1 问题,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0196,服务完成后系统自动分账,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
 BSM-0198,已收款后客人取消,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
 BSM-0199,服务点单是独立单据，不并入客人桌台的酒水账单,docs/service-order-product-prd-v0.1.md,服务点单 PRD（R7 新建，承接 BSM 服务点单章）,FULL,,,,,,r8-rebuild
@@ -474,15 +474,15 @@ BSM-0262,商户提出的投诉与异议，与客人投诉并入同一通道,docs
 BSM-0265,连接财务对账，商户核对差异和结算依据,docs/finance-settlement-product-prd-v0.1.md,13.3 物业费固定计费（替代 CAM 公摊，F-OPS-08）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0369,财务对账不是只看收了多少钱,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0370,汇总官方 App/小程序、第三方渠道、酒吧、游乐,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0371,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0371,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0372,核对平台、支付渠道、商户、第三方结果是否一致,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0373,识别金额差异、数量差异、状态差异和缺失差异,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0374,按商户、合同、周期形成结算依据,docs/finance-settlement-product-prd-v0.1.md,12.1 P1 深度能力,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0375,核对采购入库、库存消耗、报损、盘点差异和高价值酒水异常,docs/finance-settlement-product-prd-v0.1.md,6C. 对账差异强制化（P0 收口）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0376,物业费按“每平米固定单价 × 商户计租面积”按自然月计费,docs/finance-settlement-product-prd-v0.1.md,13.3 物业费固定计费（替代 CAM 公摊，F-OPS-08）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0377,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0378,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0379,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0377,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0378,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0379,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0380,销售提成按可计提消费额计,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0381,把每家店每个月花的各项费用（能耗费、物业费,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0382,退租、合同到期、提前终止产生的押金处置、违约金,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -493,12 +493,12 @@ BSM-0386,连接供应链库存，拿采购、入库、出库、调拨、消耗,d
 BSM-0387,连接游乐，拿项目核销和容量执行结果,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0388,连接第三方，拿餐饮、零售、支付渠道回流结果,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0389,连接风控，差异调整必须有原因和复核结果,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0390,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0390,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0391,订台低消 / 二次消费 / 额外酒水,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0392,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0393,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0392,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0393,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0394,演出票,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0395,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0395,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0396,系统 对 渠道,docs/finance-settlement-product-prd-v0.1.md,6C. 对账差异强制化（P0 收口）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0397,渠道 对 资金,docs/finance-settlement-product-prd-v0.1.md,12.1 P1 深度能力,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0398,资金 对 系统,docs/finance-settlement-product-prd-v0.1.md,12.1 P1 深度能力,FULL,,,,,,04-transaction-member-ticket-bar
@@ -511,13 +511,13 @@ BSM-0404,退款资金流向,docs/finance-settlement-product-prd-v0.1.md,财务�
 BSM-0405,开票状态,docs/finance-settlement-product-prd-v0.1.md,6A.2 开票状态（税务 / 电子发票平台回传，中英映射 D7）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0406,应收应付台账,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0407,跨主体流转结算,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
-BSM-0408,ORPHANED,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0408,ORPHANED,docs/business-decision-log-v0.1.md,变更日志,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0409,物业费出账,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0410,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,"C. 税务配置(→ 税务配置表 `tax_config`,**全部后台可配** —— 2026-07-04 用户裁定)",FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0411,ORPHANED,docs/dividend-engine-prd-v0.1.md,§4A 跨周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
+BSM-0410,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,"C. 税务配置(→ 税务配置表 `tax_config`,**全部后台可配** —— 2026-07-04 用户裁定)",STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0411,ORPHANED,docs/dividend-engine-prd-v0.1.md,§4A 跨周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0412,分红基数按「净利润」算,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0413,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0414,ORPHANED,docs/dividend-engine-prd-v0.1.md,2. 已拍板口径（2026-07-18 终稿）,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0413,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BSM-0414,ORPHANED,docs/dividend-engine-prd-v0.1.md,2. 已拍板口径（2026-07-18 终稿）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0415,分红原则上每半年分配一次,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BSM-0416,亏损结转,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0417,欠款抵扣,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -539,7 +539,7 @@ PGM-0168,治理连接票务,docs/ticketing-entitlement-checkin-product-prd-v0.1.
 PGM-0169,治理连接酒吧,docs/bar-business-operations-product-prd-v0.1.md,11. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
 PGM-0172,治理连接财务,docs/finance-settlement-product-prd-v0.1.md,12.1 P1 深度能力,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0001,票种,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0002,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,10. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0002,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,10. P0 验收标准,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0003,通票类型,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0004,权益类型,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,R8-F01;R8-F02,R8 抽查证伪：PRD 未承接「卡座免通票入场名额不含任何赠酒或酒水权益；且不存在免核销入场」。,票务 PRD 需逐句补：①卡座名额不含任何赠酒或酒水权益、进其他酒吧须另购门票或通票；②任何入场资格（邀请函／通票／单张门票）一律须完成该店入场核销，不存在免核销入场。,,r8-rebuild
 BEQ-0005,餐饮/零售券两种用法,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -549,23 +549,23 @@ BEQ-0008,票/权益状态,docs/ticketing-entitlement-checkin-product-prd-v0.1.md
 BEQ-0009,核销记录状态,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0010,退款单状态,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0011,有效期类型,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0012,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,14. 变更日志,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0013,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0014,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
+BEQ-0012,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,14. 变更日志,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0013,ORPHANED,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0014,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BEQ-0015,核销顺序,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,14. 变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0016,游乐核销归属,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0017,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
+BEQ-0017,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BEQ-0018,门票综合服务费,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0019,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0020,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0021,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0022,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0019,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0020,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0021,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0022,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0023,积分明细类型,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0024,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0025,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0026,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0027,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§5.1 券跨周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
-BEQ-0028,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0024,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0025,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0026,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
+BEQ-0027,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§5.1 券跨周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
+BEQ-0028,ORPHANED,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0029,会员忠诚度扩展,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§7.2–7.6 DEC-SV-*,FULL,P0,ADV-TX-003,,,DEC-SV-LEDGER-001,04-transaction-member-ticket-bar
 BEQ-0030,桌台/卡座/吧台位状态,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0031,账单状态,docs/bar-business-operations-product-prd-v0.1.md,6. 账单状态,FULL,,,,,,04-transaction-member-ticket-bar
@@ -594,7 +594,7 @@ BEQ-0113,服务订单状态,docs/service-order-product-prd-v0.1.md,服务点单 
 BEQ-0114,管理费方式,docs/service-order-product-prd-v0.1.md,服务点单 PRD §3.2/§5,FULL,,,,,,r8-rebuild
 BEQ-0115,分红基数,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0116,分红比例,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0117,ORPHANED,docs/dividend-engine-prd-v0.1.md,3. 分红方案（配置层，`dividend_plans`）,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0117,ORPHANED,docs/dividend-engine-prd-v0.1.md,3. 分红方案（配置层，`dividend_plans`）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BEQ-0118,分红周期,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BEQ-0119,分红单状态,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0120,可选扣除项,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -647,7 +647,7 @@ BSM-0277,连接楼宇运营，商户能源费按抄表归集计费,docs/leasing-
 BSM-0278,连接经营看板，招商成交、铺位出租率,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0279,综合体不只是经营，还要做物业服务,docs/building-operations-prd-v1.0.md,0. 定位与边界,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0280,创建工单并分类,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0281,ORPHANED,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0281,ORPHANED,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,05-realestate-leasing-building-supply
 BSM-0282,派单到具体人员或班组，记录处理过程、用料和结果,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0283,处理后回访客人或商户，验收合格才关闭,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0284,按响应时限和处理时限统计时效，超时自动升级通知主管,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
@@ -670,7 +670,7 @@ PGM-0027,维护楼层、区域、点位、商铺、卡座、吧台位、游乐�
 PGM-0028,记录空间面积、用途、状态、负责人和所属商户,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0029,商场平面图网页导入,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0030,酒吧低消按时间、卡座和位置配置,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0031,ORPHANED,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0031,ORPHANED,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,05-realestate-leasing-building-supply
 PGM-0032,供应链库存要知道库房和库位,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0033,设备和员工班次要知道责任区域,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0046,合同核心摘要会变成系统规则,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
@@ -1134,7 +1134,7 @@ BSM-0546,等级与成长值,docs/member-and-tier-product-prd-v1.0.md,8.3 降级�
 "BSM-0758","跨域组合通票的第三方渠道费用在整单域间拆分前只扣一次","docs/finance-settlement-product-prd-v0.1.md","docs/finance-settlement-product-prd-v0.1.md §3A 跨域组合通票分支；docs/settlement-rebuild-prd-v1.0.md §5.0／§5.0c／§10.2D","FULL","","","","","","regext-expansion"
 "BSM-0759","跨域组合通票的第三方渠道费用在整单域间拆分前只扣一次","docs/finance-settlement-product-prd-v0.1.md","docs/finance-settlement-product-prd-v0.1.md §3A 分账边界与跨域组合通票分支；docs/settlement-rebuild-prd-v1.0.md 卷首现行结算边界与 §5.0","FULL","","","","","","regext-expansion"
 "BSM-0760","单一酒吧门票","docs/settlement-rebuild-prd-v1.0.md","docs/settlement-rebuild-prd-v1.0.md §4 收入类型与主体归属、§7.2 单一酒吧门票与门票综合服务费；docs/finance-settlement-product-prd-v0.1.md §3A 收入归属表","FULL","","","","","","regext-expansion"
-"BSM-0761","收入归属：哪类收入归哪个业态主体·服务点单","docs/service-order-product-prd-v0.1.md","§4.1 公司统一收款码与全额入账铁律","PARTIAL","important","REGX-13","PRD §4.1 只写「客人扫公司统一收款码付款，钱直接进公司账户」「所有服务费由公司统一收款、全额进公司账」，未把收款主体点名到「该服务发生地所属的酒吧商户」；全额入账与禁止账外收款已承接，主体口径未逐字落地。","涉钱口径差异（裁决⑤）：HTML 定服务点单点舞等专项服务的收款主体为「该服务发生地所属的酒吧商户」、服务费全额进该酒吧商户账户；docs/service-order-product-prd-v0.1.md §4.1 写「客人扫公司统一收款码付款，钱直接进公司账户」「所有服务费由公司统一收款、全额进公司账」，收款主体口径不一致。放宽口径复验：「该服务发生地所属的酒吧商户」「服务发生地」两短语在 docs/**/*.md（剔除 prd-audit／_archive）均 0 命中，确认 PRD 侧无该主体口径。三份 HTML 为最终解释权、PRD 须向其对齐；PRD 同步排下轮，本轮只登缺口，不改 PRD、不改 HTML。","","regext-expansion"
+"BSM-0761","收入归属：哪类收入归哪个业态主体·服务点单","docs/service-order-product-prd-v0.1.md","§4.1 公司统一收款码与全额入账铁律","FULL","important","REGX-13","已闭环（2026-08-06 sync1 轮）：BSM 服务点单章与收入归属表已加三处互认括注，docs/service-order-product-prd-v0.1.md §4.1／§8.1 已把「公司」点名为该服务发生地所属酒吧商户、并补「管理费计入其净利润基数」句；原判「主体口径未逐字落地」已不成立（finding REGX-13／REGX-14 的 BSM 侧遗留①与 PRD 遗留②同批销案；ENUM 第十二章两处互认括注仍待第六批草案批准，见 finding SYNC1-02）。","涉钱口径差异（裁决⑤）：HTML 定服务点单点舞等专项服务的收款主体为「该服务发生地所属的酒吧商户」、服务费全额进该酒吧商户账户；docs/service-order-product-prd-v0.1.md §4.1 写「客人扫公司统一收款码付款，钱直接进公司账户」「所有服务费由公司统一收款、全额进公司账」，收款主体口径不一致。放宽口径复验：「该服务发生地所属的酒吧商户」「服务发生地」两短语在 docs/**/*.md（剔除 prd-audit／_archive）均 0 命中，确认 PRD 侧无该主体口径。三份 HTML 为最终解释权、PRD 须向其对齐；PRD 同步排下轮，本轮只登缺口，不改 PRD、不改 HTML。","","regext-expansion"
 "BSM-0762","收入归属：哪类收入归哪个业态主体·服务点单","docs/service-order-product-prd-v0.1.md","§8.1 服务完成后系统自动分账、§8.2 月结按劳务报酬法定税率表代扣个税","PARTIAL","important","REGX-14","§8.1／§8.2 已承接「其余份额记服务提供人名下、月结进薪资提成、按劳务报酬税目代扣个税且不与工资薪金混算」；但管理费归属写作「留归公司收入」（§8.1 第2条）未点名酒吧商户，全文亦无「计入其净利润基数」的承接（分红净利润基数口径只在 bar PRD §10.3.1 就服务费扣留部分出现）。","涉钱口径差异（裁决⑤）：HTML 定管理费部分「归该酒吧商户收入并计入其净利润基数」；docs/service-order-product-prd-v0.1.md §8.1 第 2 条写管理费「留归公司收入」，未点名酒吧商户，全文亦无「计入其净利润基数」。放宽口径复验：「计入其净利润基数」0 命中；「净利润基数」命中 4 份，回读均为 bar PRD §10.3.1 服务费扣留部分与变更日志，非服务点单管理费。其余份额（记服务提供人名下、月结进薪资提成、按劳务报酬代扣个税）已由 §8.1／§8.2 承接。三份 HTML 为最终解释权、PRD 须向其对齐；PRD 同步排下轮。","","regext-expansion"
 "BSM-0763","顶层平台","docs/settlement-rebuild-prd-v1.0.md","§2 主体协作关系与职责、§4「平台侧收费必须先入 HTML 方可设立」","FULL","","","","","","regext-expansion"
 "BSM-0764","酒吧通票 / 跨域酒吧份额","docs/settlement-rebuild-prd-v1.0.md","docs/settlement-rebuild-prd-v1.0.md §4 收入类型与主体归属、§5.1、§7.2；docs/finance-settlement-product-prd-v0.1.md §3A 收入归属表","FULL","","","","","","regext-expansion"
