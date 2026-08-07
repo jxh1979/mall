@@ -191,6 +191,20 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 | **未采纳** | Codex 报告 STD-02（结算留痕物理删）/ STD-03（配置物理删）/ HTML-06（内部价目录未按项目独立）三条经核验**不属实**，未改：前两条删的是幂等重算的自身派生行与 `is_draft=TRUE` 草案槽（真留痕在 `fund_ledger` / `dividend_statement_lines` 的触发器 + REVOKE 双锁），照改等于给结算重算与配置表单塞四道无用审批闸；HTML-06 的 V379 是署名决策且约束比 HTML 更严，照改反而与 HTML:143「物理项目与运营公司多对多」冲突 |
 
 
+### J. 代码轮（2026-08-07 审计对话移交）
+
+> 来源：2026-08-07 PRD 真实性审计对话收官时移交的代码轮欠账。该对话为**纯文档轮，一行代码未改**；
+> 两份只读现状调查报告已随本次登记入库：`docs/prd-audit/rounds/final/code-round-input-money.md`（钱路 10 项 + 4 条新发现）
+> 与 `docs/prd-audit/rounds/final/code-round-input-nonmoney.md`（非钱路 50 条 + 2 条新发现）。
+> 逐条判定与证据见 `docs/prd-audit/rounds/r8/findings.csv`（finding_id 见各行「出处」）。
+
+| 项 | 内容 | 状态 |
+|---|---|---|
+| **J1 分账记账期修正（FINAL-01）** | `backend/src/main/java/com/complex/platform/settlement/SettlementPostingService.java:237` 把分账记账期 `accounting_period` 取为 `dueDate`（付账日 = 过账日 + 30 天）所在月，而非结算期 `period_start` 所在业务账期，记账期系统性后移约一个月（7 月分账落 9 月）；下游污染**分红净利润基数**与**租金挂接**。**过账管道 2026-07-21 起已开启**（`settlement.monthly.posting.enabled=true` 在 `~/.complex/complex.env`），属每月真实发生的涉钱偏差。改法：`accounting_period` 改取结算期 `period_start` 所在月。量级 **S**（零风险单点）。出处：findings `FINAL-01` + `code-round-input-money.md` §新发现 1 | ⬜ 待开发，**代码轮批 1 首位** |
+| **J2 尾差铁律裁定（FINAL-08）** | 验收规范 `docs/business-html-source-of-truth-acceptance-spec-v0.1.md` 铁律 `RULE-COMMON-MONEY-01` 写「多方拆分尾差由项目公司/平台承担并单列留痕」「尾差不进入任一参与方」，与 PGM「全局原则 · 金额一律精确到分」条**现文方向相反**——现文禁止「默认转给城市项目公司、顶层平台或其他无关主体」，尾差恰恰要进入该笔业务实际承担结算责任的主体（跨域组合通票即售票收款主体），且负尾差由同一主体退回（旧口径无负尾差退回这一档）。**顺序**：①用户裁定口径 → ②改铁律句 → ③顺查代码是否已有按旧口径实现的尾差记账（V383 `rounding_residual_entity_id` 已落列，需核实写入方向）。**裁定前不得据该铁律做尾差相关验收。** 出处：findings `FINAL-08` | ⬜ **待用户裁定**（先裁后改，不得先改代码） |
+| **J3 `face_verify_result` 落库核查（FINAL-26③）** | `docs/compliance-and-personal-information-protection-requirements-v0.1.md` §2.2 规定入场核验落 `face_provider_code` / `face_provider_result_id` / `face_verify_result`（成年/未成年/不确定）/ `face_verify_error_code`，与 BSM「年龄核验」条现文的**三不保存**（人工抽查期间不保存身份与证件信息、不保存个人查验结果、不保存抽查汇总数据）方向相反。动作：查迁移与代码是否已建这些列；**已建则删列 + 迁移 + 数据清理**，按 .160 数据最后全删的铁律**不做存量兼容/回填/退化设计**；未建则只改文档。出处：findings `FINAL-26`（关联 DEC-R8-83、FINAL-12） | ⬜ 待核查（合规文档本体需自己的对表轮，PIPL 措辞可能需用户裁定） |
+| **J4 代码轮批 0~4 分批方案（索引）** | 完整分批见两份输入报告，不在此重复：钱路 `code-round-input-money.md` §分批建议（**批 0** 待裁 5 问 / **批 1** 零风险 S / **批 2** 钱在错动 / **批 3** 单域 M / **批 4** 高危 L）；非钱路 `code-round-input-nonmoney.md` §代码轮建议分批（50 条 + 文档批 13 条）。**批 2 前置项四条并列**：①企微「到期销毁」路径下线（`WecomRetentionJob` + `applyRetention` 真删/真匿名，prod 库 `wrp_global_default`/180 天/anonymize/enabled=true 已在，违反永久保存裁决）②「人工放行」两条链下线（票务 `manual-override` 端点 + 治理 `manual_release_l2`，HTML 明写「系统不提供」而业务人员在后台点得动）③自营标注字段（`merchants` 无自营列；51% 旧实现本就不存在，无需拆除）④税率三审链（`tax_rate_bps` 仅 0~10000 校验、单权限一步可改，复用合同审批链） | ⬜ 索引条目，各批立项时再拆行 |
+
 ---
 
 ## 1. P1 — 净新待开发（有需求口径、代码未落地）【2026-07-05：本节三项均已完成，存档】
