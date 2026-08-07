@@ -35,7 +35,7 @@
 
 ## 审计状态
 
-覆盖状态固定为 `FULL`、`PARTIAL`、`CONFLICT`、`MISSING`、`AMBIGUOUS`、`STALE`、`NOT_APPLICABLE`。其中 `STALE` 自 2026-08-06 起另用于一种情形：条目对应的 HTML 原文已被后续裁决取代（账本 `entry_name=ORPHANED` 的 76 行），承接结论是按旧文作出的，整行只作历史留痕，不再代表现行口径。
+覆盖状态固定为 `FULL`、`PARTIAL`、`CONFLICT`、`MISSING`、`AMBIGUOUS`、`STALE`、`NOT_APPLICABLE`。其中 `STALE` 自 2026-08-06 起另用于一种情形：条目对应的 HTML 原文已被后续裁决取代（账本 `entry_name=ORPHANED` 的 69 行——原 76 行，第六批恢复四组旧口径后 7 行转回承接，见 DEC-R8-76~79 与第六批落地自证），承接结论是按旧文作出的，整行只作历史留痕，不再代表现行口径。
 
 规则账本 `authority-rule-ledger.csv` 的 `decision_status` 固定为两值：`AUTHORITATIVE`＝对应 HTML 原文仍在、该行口径现行有效；`SUPERSEDED`＝对应 HTML 原文已被裁决取代，整行冻结、只作历史留痕，不参与 value_flow 等口径回填，也不在条目锚点门禁的正文实检范围内（依据 DEC-R8-73）。
 

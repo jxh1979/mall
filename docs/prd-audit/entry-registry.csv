@@ -1081,7 +1081,7 @@
 "ENUM-E0037","business-enum-quick-reference-v0.1.html","entry","积分兑换定价",72,"积分兑换定价积分只兑换虚拟券。纯积分方案同时受项","二、会员与积分",""
 "ENUM-E0038","business-enum-quick-reference-v0.1.html","entry","商品规格",73,"商品规格商品名加上型号规格所构成的最小销售单元，","二、会员与积分",""
 "ENUM-E0039","business-enum-quick-reference-v0.1.html","entry","项目零售参考价",74,"项目零售参考价同一项目、同一商品在后台配置的滚动","二、会员与积分",""
-"ENUM-E0040","business-enum-quick-reference-v0.1.html","entry","发券与核销结算",75,"发券与核销结算发券时扣积分、锁定项目、价格、方案","二、会员与积分",""
+"ENUM-E0040","business-enum-quick-reference-v0.1.html","entry","发券与核销结算",75,"发券与核销结算会员积分兑换发放的虚拟券，按履约通","二、会员与积分",""
 "ENUM-E0041","business-enum-quick-reference-v0.1.html","entry","重复兑换与转赠",76,"重复兑换与转赠同一种兑换券允许同一会员多次兑换，","二、会员与积分",""
 "ENUM-E0042","business-enum-quick-reference-v0.1.html","entry","券包状态",77,"券包状态“我的券包”按可用、已核销（已使用）、已","二、会员与积分",""
 "ENUM-E0043","business-enum-quick-reference-v0.1.html","entry","积分结算账期",78,"积分结算账期全国积分结算中心统一配置、审批和版本","二、会员与积分",""
