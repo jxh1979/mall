@@ -367,17 +367,15 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 
 ### 15A.1 设备生命周期状态机（实现依据：spec §10，V107）
 
-能力描述：把 §6「设备领用/归还/异常上报」与 §11「设备管控/远程锁定」落到**设备全生命周期状态机**，补齐维修/挂失/找回/报废/锁定流转，消除"设备只有领用归还、异常无终态"。经 grep 实证落于 `TerminalDeviceService`（repair/lost/found/scrap）+ `MdmService`/`MdmController`（违规处置 device_blocked 联动）+ 迁移 `V107__device_lifecycle_and_mdm_disposition.sql`。
+能力描述：把 §6「设备领用/归还/异常上报」与 §11「设备管控」落到**设备全生命周期状态机**，补齐维修/挂失/报废流转，消除"设备只有领用归还、异常无终态"。经 grep 实证落于 `TerminalDeviceService`（repair/lost/scrap）+ 迁移 `V107__device_lifecycle_and_mdm_disposition.sql`。
 
 业务规则（设备状态机）：
-- **生命周期状态**：在 bound（已绑定/在用）/ returned（已归还）/ unbound / disabled 基础上补 **repair（维修中）/ lost（挂失）/ found（找回）/ scrapped（报废，终态）/ blocked（锁定/封禁，终态）**。
-- 流转：bound ⇄ repair（送修/修复）；bound → lost → found（找回后可再 bound）/ → scrapped（报废终态）；违规处置 device_blocked → blocked（终态，联动设备纳管状态 blocked + **撤销设备凭证**）。
+- **生命周期状态**：在 bound（已绑定/在用）/ returned（已归还）/ unbound / disabled 基础上补 **repair（维修中）/ lost（挂失）/ scrapped（报废，终态）**，对应 ENUM「设备状态」的维修中 / 挂失 / 报废。
+- 流转：bound ⇄ repair（送修/修复）；bound → lost；lost → scrapped（报废终态）。**挂失设备重新出现后的流转（是否可回到在用）本 PRD 不定义**——ENUM「设备状态」无对应状态，该清单须先经批准写入三份业务 HTML 后方可定义。
 - 命名映射（产品语言 ↔ 落地代码，以代码为准）：在用→bound、领出/归还→returned、报废→scrapped；纳管侧另有 retired（纳管退役，语义不同于设备报废 scrapped）。
-- MDM 违规处置闭环：服务端检测违规 → 处置（device_blocked = 封禁设备 + 撤销凭证 + 纳管状态 blocked；dismissed = 误报驳回），处置为高危需审批 + 留痕。
 
 验收口径要点（细化 G/W/T 见 spec §10）：
-- bound 设备送修 → repair；挂失设备找回 → found（可再 bound）。
-- 检出违规设备 → 处置 device_blocked → 设备纳管状态 blocked + 凭证撤销 + 留痕。
+- bound 设备送修 → repair；bound 设备挂失 → lost；lost 设备报废 → scrapped（终态）。
 
 ### 15A.2 集团多项目视图 group-overview（实现依据：spec §18，V115）
 
@@ -405,24 +403,24 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 - 默认部署：camera_scan / native_client / 平板端侧开关均为关，端侧走文本输入 / Web 代偿，不影响 P0 现场作业。
 - 后台开启对应开关 → 能力生效；关闭 → 端侧回落代偿路径。
 
-### 15A.4 设备商户归属管理（K16 核销上下文写入面，2026-08-01）
+### 15A.4 设备商户归属管理（设备台账归属写入面，2026-08-01）
 
-能力描述：设备的「所属商户」决定**核销发生在哪家商户**的账上事实（结算域 K16 跨提供方核销守卫读 `terminal_devices.merchant_id`；设备未绑商户时，赠饮/餐饮类到店兑付权益在该设备上一律拒核销，fail-closed）。本节把这条归属从"只有守卫在读、没人能配"补成完整写入面：后台「终端设备」页（ADM-TER-002，`/admin/terminals/devices`）+ 归属设置/更换/解除端点。经 grep 实证落于 `TerminalDeviceService.updateDeviceMerchant` + `TerminalDeviceController`（`GET /api/v1/terminals/devices`、`PUT /api/v1/terminals/devices/{id}/merchant`）+ 前端 `TerminalDevicesPage`，零迁移（`merchant_id` 列 V007/V010 已存在）。
+能力描述：设备的「所属商户」是**设备台账的管理属性**——记录这台设备当前放在哪家商户，用于台账查询、挪店留痕与设备盘点。**它不是核销归属的判定依据**：权益在哪家酒吧核销由权益本身的归属决定（ENUM「核销顺序」条 / BSM 同条：一张通票覆盖几家酒吧就为每一家各发一份独立的入场权益与赠酒权益，一家一份、互不占用，A 酒吧的赠酒只能在 A 酒吧核销）。本节把这条归属从"没人能配"补成完整写入面：后台「终端设备」页（ADM-TER-002，`/admin/terminals/devices`）+ 归属设置/更换/解除端点。经 grep 实证落于 `TerminalDeviceService.updateDeviceMerchant` + `TerminalDeviceController`（`GET /api/v1/terminals/devices`、`PUT /api/v1/terminals/devices/{id}/merchant`）+ 前端 `TerminalDevicesPage`，零迁移（`merchant_id` 列 V007/V010 已存在）。
 
 业务规则：
-- **设备挪店是常规动作，但改的是"核销记谁的账"**：设置/更换/解除所属商户一律**理由必填**，审计事件带改绑前后商户与理由，`terminal_device_status_events`（append-only，V140 防篡改）同步留痕一条——谁改的、从谁改到谁、为什么，月底对不平时可回溯。
-- **目标商户校验**：必须存在且未归档（`MERCHANT_NOT_FOUND` / `MERCHANT_ARCHIVED` 拒绝），杜绝把核销账挂到退场商户头上。
-- **解除归属提示后果**：解除后该设备上赠饮/餐饮类权益无法核销（K16 fail-closed），后台二次确认文案明示；归属未变化拒重复提交（`DEVICE_MERCHANT_UNCHANGED`）。
-- **终态设备（报废/封禁）不可改归属**（`DEVICE_TERMINAL_STATUS`），与 §15A.1 生命周期终态口径一致。
-- **权限从严**：改绑影响资金核销路径，沿用设备治理权限 `terminal.device.lifecycle`（高危·需审批·仅平台管理员）；台账读沿用终端模块视图权限 `terminal.switch.view`。
+- **设备挪店是常规动作，改的是设备台账上"这台设备现在在谁那里"**：设置/更换/解除所属商户一律**理由必填**，审计事件带改绑前后商户与理由，`terminal_device_status_events`（append-only，V140 防篡改）同步留痕一条——谁改的、从谁改到谁、为什么，盘点对不上时可回溯。
+- **目标商户校验**：必须存在且未归档（`MERCHANT_NOT_FOUND` / `MERCHANT_ARCHIVED` 拒绝），杜绝把设备挂到退场商户头上。
+- **解除归属**：解除后该设备在台账上不归属任何商户；归属未变化拒重复提交（`DEVICE_MERCHANT_UNCHANGED`）。
+- **终态设备（报废）不可改归属**（`DEVICE_TERMINAL_STATUS`），与 §15A.1 生命周期终态口径一致。
+- **权限从严**：沿用设备治理权限 `terminal.device.lifecycle`（高危·需审批·仅平台管理员）；台账读沿用终端模块视图权限 `terminal.switch.view`。
 - **登记一步到位**：设备登记（bind）可直接携 `merchant_id`（同口径校验），免运营跑两趟；**归还后复领用不传商户时保留既有归属**——修复此前 bind upsert 把已配归属静默抹成 null 的缺陷。
 
 验收口径要点：
-- 设备绑 A 商户 → 核 A 商户赠饮放行；改绑到 B 商户 → 同一设备再核 A 商户赠饮被拒（`ENTITLEMENT_PROVIDER_MISMATCH`），改绑留痕各一条（审计 + 状态事件）。
-- 理由为空拒；商户不存在/已归档拒；报废/封禁设备拒；无 `terminal.device.lifecycle` 权限 403。
+- 设备绑 A 商户 → 台账归属显示 A；改绑到 B 商户 → 台账归属显示 B，改绑留痕各一条（审计 + 状态事件）。
+- 理由为空拒；商户不存在/已归档拒；报废设备拒；无 `terminal.device.lifecycle` 权限 403。
 - 归还再领用（不传商户）后归属不变。
 
-> 待业务确认（terminal）：①设备生命周期是否需把 repair/lost/found/scrapped/blocked 状态补入 §6「设备领用」页面与 §13 验收作为正式 P0 项；②集团多项目视图 group-overview 是否需补入 §4 管理后台 / §7 移动管理端页面清单；③三组端侧开关（摄像头扫码/原生客户端/平板）的默认关口径已据 V097/V098 实证，后续若任一能力转正式实现需回当前有效入口与 OpenAPI 契约确认。
+> 待业务确认（terminal）：①设备生命周期是否需把 repair/lost/scrapped 状态补入 §6「设备领用」页面与 §13 验收作为正式 P0 项；②集团多项目视图 group-overview 是否需补入 §4 管理后台 / §7 移动管理端页面清单；③三组端侧开关（摄像头扫码/原生客户端/平板）的默认关口径已据 V097/V098 实证，后续若任一能力转正式实现需回当前有效入口与 OpenAPI 契约确认。
 
 ## 16. 本版结论
 
@@ -432,6 +430,7 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-08-09 | 删/改 | §15A.1 / §15A.4 / §15A 待业务确认① | 删除两处无 HTML 授权的自造机制：①「设备所属商户决定核销发生在哪家商户」这条判定依据与「设备未绑商户即一律拒核销」的 fail-closed 闸，及错误码 `ENTITLEMENT_PROVIDER_MISMATCH`——归属改标为设备台账管理属性，核销归属回到「权益属于哪一家酒吧」；②设备状态 `found`（找回）/`blocked`（锁定/封禁）两态与 `device_blocked` MDM 违规处置闭环（含撤销凭证、blocked 阻断改归属），保留 repair/lost/scrapped；挂失设备重新出现后的流转标为须先经批准写入三份 HTML 后方可定义 | 用户 2026-08-09 裁决「PRD 严格按 HTML 口径、自造的直接删」；ENUM「核销顺序」条 / BSM 同条「一家一份、互不占用，A 酒吧的赠酒只能在 A 酒吧核销」，「所属商户」在三份 HTML 仅 PGM 空间条一次且指空间（①）；PGM「记录设备领用、归还、维修、挂失和报废」条、ENUM「设备状态」条七态无 found/blocked，「找回/封禁/远程锁定/纳管/MDM/撤销凭证」三份 HTML 零命中（②） |
 | 2026-08-04 | 删 | §10.1、§15#12 | 第三轮裁决落地：删除「豁免最低消费」整行及其「暂缓生效」标注，表内三条处置改两条，表后两句去豁免；§15 第 12 条补「不足最低消费必须补足、不存在豁免路径」 | 第三轮用户裁决 UD-01 / DEC-R6-25（决策台账「第三轮裁决」节）；依据 ENUM「最低消费」条（CL R6B-01） |
 | 2026-08-04 | 改 | §8/§11/§13/§15 | 二维码刷新口径统一：原「30 秒或 60 秒刷新」等表述改为「由后台统一设置、以 5 秒为单位可调、最长 60 秒；截图无效、必须在线核验」 | BSM「凡是出示出来给人验证的二维码——客人出示的门票核销码」条/BSM「二维码按后台统一设置的刷新间隔自动刷新」条/BSM「票务二维码按日票、周票、月票、年票等票种设置有效期」条（CL-12；行号 2026-08-04 F1 复核更正，原记 L732/L1788） |
 | 2026-08-04 | 增 | §9/§15 | 补「使用 Web 端必须打开地理识别，没有打开地理识别的无法正常使用」 | BSM「Web 前端允许少量业务确认动作」条、L1800「已拍板·Web 前端地理识别」（CL-13；行号 2026-08-04 F1 复核更正，原记 L1669、L1793；更早原记 L1663） |
