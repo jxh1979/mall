@@ -487,10 +487,10 @@ BSM-0380,销售提成按可计提消费额计,docs/finance-settlement-product-pr
 BSM-0381,把每家店每个月花的各项费用（能耗费、物业费,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0382,退租、合同到期、提前终止产生的押金处置、违约金,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0383,连接票务，拿订单、退款和核销结果,docs/finance-settlement-product-prd-v0.1.md,§2 P0 目标·汇总各域经营结果 + §3 财务经营对象·经营流水,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0384,连接会员积分，确认哪些消费会产生积分和兑换扣减,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0384,连接会员积分，确认哪些消费会产生积分和兑换扣减,docs/points-and-voucher-product-prd-v1.0.md,§6 商户消费与票务积分获取规则 + §10.3 发券,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0385,连接酒吧，拿账单、赠饮、免单和关台结果,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0386,连接供应链库存，拿采购、入库、出库、调拨、消耗,docs/finance-settlement-product-prd-v0.1.md,6C. 对账差异强制化（P0 收口）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0387,连接游乐，拿项目核销和容量执行结果,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0387,连接游乐，拿项目核销和容量执行结果,docs/finance-settlement-product-prd-v0.1.md;docs/amusement-business-operations-product-prd-v0.1.md,§4 对账口径·按核销（docs/finance-settlement-product-prd-v0.1.md）；§4 业务对象·容量 + §7.2 游乐核销·容量上限阻断（docs/amusement-business-operations-product-prd-v0.1.md）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0388,连接第三方，拿餐饮、零售、支付渠道回流结果,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0389,连接风控，差异调整必须有原因和复核结果,docs/finance-settlement-product-prd-v0.1.md,§5.2 差异状态·转移表（结论与证据必填·他人复核关闭）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0390,ORPHANED,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
@@ -632,19 +632,19 @@ BSM-0228,贴码交接,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确
 BSM-0229,客人存酒,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0230,跨主体流转,docs/supply-chain-inventory-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0256,查看本商户基础资料、联系人、空间和合同摘要,docs/merchant-space-contract-model-v0.1.md,2.2 `merchants`（V005 + V042 + V147）,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0263,连接基础管理，商户身份、合同和经营范围先被定义,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0263,连接基础管理，商户身份、合同和经营范围先被定义,docs/platform-governance-prd-v0.1.md,§6.4 商户入驻 / §6.5 合同生命周期 / §6.6 商户经营范围绑定,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0267,综合体不只是经营现场，还要把“谁来租、签什么约、怎么收租,docs/leasing-acquisition-prd-v1.0.md,§6A 到期退出,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,05-realestate-leasing-building-supply
 BSM-0268,招商,docs/leasing-acquisition-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §10，重建须逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0269,签约与合同,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0270,审批,docs/leasing-acquisition-prd-v1.0.md,7. 权限点（最小颗粒，复用现有权限体系）,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0271,生效与履约,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0271,生效与履约,docs/real-estate-full-chain-domain-prd-v0.1.md,§2 租赁全生命周期·固化收益规则快照与周期性应收,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0272,变更与退租,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0273,变更子合同,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0274,铺位看板,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0275,连接基础管理，商户、空间、合同和经营范围先定义清楚,docs/leasing-acquisition-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0276,连接财务对账，租金、物业费、能源费、押金,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0277,连接楼宇运营，商户能源费按抄表归集计费,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0278,连接经营看板，招商成交、铺位出租率,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0277,连接楼宇运营，商户能源费按抄表归集计费,docs/building-operations-prd-v1.0.md,§5 能源费业务口径·独立表计实际用量代收不得加价,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0278,连接经营看板，招商成交、铺位出租率,docs/business-dashboard-metrics-product-prd-v0.1.md,§2A.2 出租率（地产类）·铺位出租率,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0279,综合体不只是经营，还要做物业服务,docs/building-operations-prd-v1.0.md,0. 定位与边界,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0280,创建工单并分类,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0281,ORPHANED,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,05-realestate-leasing-building-supply
@@ -656,7 +656,7 @@ BSM-0286,响应/处理时限按「工单类型×优先级」矩阵后台配置,d
 BSM-0287,连接商户管理，商户自助提单和查看本商户工单,docs/building-operations-prd-v1.0.md,§3 维保工单·商户自助提单可提类型,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0288,连接基础管理和楼宇运营，工单归属空间、点位、责任人,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0289,连接留痕与异常，派单、转派、升级、关闭都要留痕,docs/requirement-traceability-matrix-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0290,连接经营看板，管理层看工单量、时效和积压,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0290,连接经营看板，管理层看工单量、时效和积压,docs/business-dashboard-metrics-product-prd-v0.1.md,§2A.4 工单时效·积压,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0291,物业不只是处理报修工单，还要让楼宇的机电设备,docs/building-operations-prd-v1.0.md,§0 定位与边界·楼宇运营四域范围,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0292,机电设备,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0293,能耗抄表,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
@@ -664,29 +664,29 @@ BSM-0294,楼宇巡检,docs/building-operations-prd-v1.0.md,全文/综合条款,F
 BSM-0295,连接物业服务，设备告警与巡检异常自动生成物业工单，派单到人,docs/building-operations-prd-v1.0.md,§3 维保工单·事件解耦（告警与巡检异常自动转工单）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0296,连接招商租赁与合同履约，商户能源费按归集与抄表形成结算依据,docs/building-operations-prd-v1.0.md,§5 能耗抄表·能源费业务口径,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0297,连接财务对账，能耗与维保成本进入结算与经营复盘,docs/building-operations-prd-v1.0.md,§5 能耗抄表·能源费结算写 ar_ap_items + §3 工单用料成本承担方,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0298,连接经营看板，能耗与楼宇设备告警,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0026,空间不仅是楼层图,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0298,连接经营看板，能耗与楼宇设备告警,docs/business-dashboard-metrics-product-prd-v0.1.md,§2 指标分类·地产行（能耗与楼宇设备告警、物业工单时效）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0026,空间不仅是楼层图,docs/platform-governance-prd-v0.1.md,§6.2.1 空间业务名词与 space_type 枚举对照,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0027,维护楼层、区域、点位、商铺、卡座、吧台位、游乐入口,docs/product-requirements-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0028,记录空间面积、用途、状态、负责人和所属商户,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0029,商场平面图网页导入,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0030,酒吧低消按时间、卡座和位置配置,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0028,记录空间面积、用途、状态、负责人和所属商户,docs/platform-governance-prd-v0.1.md,§7.2 空间/楼层/区域/点位管理·关键字段（用途/容量/负责人/所属商户）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0029,商场平面图网页导入,docs/p2-floor-plan-import-api-contract-v0.1.md,§3.4 发布导入候选,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0030,酒吧低消按时间、卡座和位置配置,docs/bar-business-operations-product-prd-v0.1.md,§4 业务对象·最低消费规则（不按人数计） + §11 已确认规则第 5 条,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0031,ORPHANED,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,05-realestate-leasing-building-supply
-PGM-0032,供应链库存要知道库房和库位,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0033,设备和员工班次要知道责任区域,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0032,供应链库存要知道库房和库位,docs/supply-chain-inventory-product-prd-v0.1.md,§5 核心对象·库房/库位,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0033,设备和员工班次要知道责任区域,docs/platform-governance-prd-v0.1.md,§6.7 员工入职/分配岗位/排班 + §7.6 员工/岗位/班次管理·责任区域,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0046,合同核心摘要会变成系统规则,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0047,维护合同状态、期限、面积、空间、经营范围,docs/leasing-acquisition-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0048,把合同摘要转成准入规则,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0048,把合同摘要转成准入规则,docs/platform-governance-prd-v0.1.md,§6.5.1 第 6 步·合同核心条款摘要同步生成准入规则,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0049,超合同范围、超空间范围、过期、资质异常、权限不足时先阻断,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0050,合同里可勾选这家商户允许经营的品类,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0051,敏感动作可要求上一级、上两级或最高权限审批,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0050,合同里可勾选这家商户允许经营的品类,docs/real-estate-full-chain-domain-prd-v0.1.md,§2 经营范围拦截·超范围下单当场拦截与申请审批,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0051,敏感动作可要求上一级、上两级或最高权限审批,docs/platform-governance-prd-v0.1.md,§12 已确认规则第 9 条·升级放行层级可配置,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0052,管理证照、资质、保险和合同关键日期的到期预警与到期阻断,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0055,按合同租金规则（固定租金、每平米租金、营业额抽成、物业费,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0057,防止商户超范围经营,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0058,防止结算口径和合同不一致,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0059,让特殊情况可以审批放行，但必须留下原因和责任人,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0057,防止商户超范围经营,docs/real-estate-full-chain-domain-prd-v0.1.md,§2 经营范围拦截·避免商户超范围经营,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0058,防止结算口径和合同不一致,docs/platform-governance-prd-v0.1.md,§6.5.1 第 5、7 步·合同生效固化规则快照,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0059,让特殊情况可以审批放行，但必须留下原因和责任人,docs/platform-governance-prd-v0.1.md,§2A.4 七类红线·七类校验不设关闭开关 + §12 已确认规则第 9 条,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0127,除了员工工作设备和游乐设备，综合体的建筑本身还有电梯、暖通,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0128,建立楼宇机电设备台账,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
-PGM-0129,管理定期保养、例行巡检、故障维修、安全检测和部件更换,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0129,管理定期保养、例行巡检、故障维修、安全检测和部件更换,docs/real-estate-full-chain-domain-prd-v0.1.md,§4 楼宇机电设备·五类维保 + 维保单位复用供应商,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0130,设备告警和故障可自动生成物业工单，维修完成后回写状态,docs/building-operations-prd-v1.0.md,§2 设施设备台账·告警自动转工单 + §3 关闭时回写设备状态,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0131,设备状态,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0132,设备分电梯扶梯、暖通空调、配电供电、给排水消防四组台账,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
@@ -719,7 +719,7 @@ BEQ-0091,退租结算状态,docs/finance-settlement-product-prd-v0.1.md,13.2 押
 BEQ-0092,合同审批链,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0093,租金/账单类型,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0094,营业额抽成模式,docs/real-estate-full-chain-domain-prd-v0.1.md,§2 租赁全生命周期·营业额抽成口径（全平台统一）,FULL,,,,,,05-realestate-leasing-building-supply
-BEQ-0095,公区能源费,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0095,公区能源费,docs/building-operations-prd-v1.0.md,§5 能源费业务口径·公区能耗不向商户分摊,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0096,铺位租赁状态,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0097,物业工单类型,docs/real-estate-full-chain-domain-prd-v0.1.md,3. 物业服务工单,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0098,物业工单状态,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
@@ -781,7 +781,7 @@ BSM-0325,短信平台,docs/third-party-business-access-product-prd-v0.1.md,9. P0
 BSM-0326,微信/支付宝登录,docs/third-party-business-access-product-prd-v0.1.md,§3.1 入站回流矩阵·微信/支付宝登录行,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0327,机器人负责把酒水或物品从库房/吧台送到后厨、卡座或客人,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0328,机器人到达是被动留痕,docs/third-party-business-access-product-prd-v0.1.md,§3.1 入站回流矩阵·机器人行（任务状态回流）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0329,每一段交接仍以员工扫码为主动留痕,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0329,每一段交接仍以员工扫码为主动留痕,docs/bar-business-operations-product-prd-v0.1.md,§7.5 酒水后厨接收到送达·扫码接收/扫码取走/扫码确认送达,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0330,机器人上报与人工扫码出现缺口、重复或差异时进入留痕与异常复核,docs/third-party-business-access-product-prd-v0.1.md,§7.3 差异处理（缺口重复差异进异常复核）,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0331,当前没有真实监控平台接口资料，平台不自研完整监控平台,docs/third-party-business-access-product-prd-v0.1.md,§3.1 入站回流矩阵·视频监控行（平台不做完整监控平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0332,"留""点位 + 时间""锚点",docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
