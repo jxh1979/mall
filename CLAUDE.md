@@ -1,275 +1,85 @@
-# Fable 5 Planner / Opus 5 Implementer / Fable 5 Final Approver
+# complex-management 项目规则
 
-适用范围：`D:\AI\ccwork` 及其全部子项目。
+本文件是**本仓库**的规则。四角色流水线的完整契约不在这里，见下方 §1。
 
-## 1. 总体架构
+## 1. 这个仓不是编排工作区
 
-本工作流由 PowerShell 在外部编排多个相互独立的 Claude Code 进程。
+四角色闭环（Fable 规划 → Opus 实施 → Opus 技术审查 → Fable 最终验收）跑在 `~/ccwork`，不在本仓：
 
-固定流程：
+- 工作区宪法：`~/ccwork/CLAUDE.md`
+- 流水线唯一真身：`~/ccwork/workflow/pipeline.md`（v3.0 FINAL）
+- 机械边界：`~/ccwork/.claude/hooks/role-guard.mjs`，回归套件 `role-guard.tests.mjs`
 
-1. Fable 5 总设计师：调查、规划和制定验收标准。
-2. Opus 5 实施者：修改代码、运行测试、调试和修复。
-3. Opus 5 技术审查者：只读检查代码、测试和技术风险。
-4. Fable 5 最终验收者：判断实施结果是否符合用户目标和原始设计。
+**在本仓目录下直接开的 Claude Code 会话没有那套机械边界**——没有 role-guard hook、没有工作区写锁、没有 `policy.json` 白名单。要跑流水线：
 
-不得依赖一个父 Claude 会话中的权限继承实现该流程。
+```bash
+cd ~/ccwork && claude --agent fable-orchestrator
+```
 
-## 2. 固定角色
-
-### 2.1 Fable Planner
+本仓在流水线里的身份是**被审计与被修改的目标**，由实施子代理通过 worktree 操作，不是宿主。
 
-- Agent：`fable-orchestrator`
-- 模型：`claude-fable-5`
-- 权限：由启动脚本固定为 `plan`
-- 职责：调查、总体设计、任务拆分、依赖管理、风险分析和验收标准。
-- 不得修改业务代码。
-- 不得调用实施者直接开始工作。
-- 必须先输出完整计划供用户审批。
+## 2. worktree 铁律
 
-### 2.2 Opus Implementer
-
-- Agent：`opus-implementer`
-- 模型：`claude-opus-5`
-- 权限：由启动脚本固定为 `bypassPermissions`
-- 职责：严格按照批准计划实施、测试、调试和修复。
-- 不得擅自改变总体架构。
-- 不得扩大任务范围。
-- 不得把测试失败描述为测试通过。
-
-### 2.3 Opus Technical Verifier
-
-- Agent：`opus-verifier`
-- 模型：`claude-opus-5`
-- 权限：由启动脚本固定为 `plan`
-- 职责：独立进行只读技术审查。
-- 检查逻辑、类型、测试、安全、性能、并发、迁移、数据和兼容性问题。
-- 不得直接修改任何文件。
-- 必须输出：
-  - `TECHNICAL_VERDICT: PASS`
-  - 或 `TECHNICAL_VERDICT: NEEDS_FIX`
-
-### 2.4 Fable Final Approver
-
-- Agent：`fable-orchestrator`
-- 模型：`claude-fable-5`
-- 权限：由启动脚本固定为 `plan`
-- 职责：对照原始需求、原始计划、实施报告、技术审查和实际代码进行最终验收。
-- 不得直接修改任何文件。
-- 必须输出：
-  - `FINAL_VERDICT: PASS`
-  - 或 `FINAL_VERDICT: NEEDS_FIX`
+`~/complex-management` 是**多个会话共用的同一个主工作区**（`git worktree list` 常年 40+ 个 `~/wt-*`）。
 
-## 3. Fable 规划要求
+**任何要产出提交的活，一律先开 worktree：**
 
-Fable Planner 必须调查实际项目，不得仅根据用户描述猜测。
+```bash
+git worktree add -b <branch> /tmp/wt-<name> origin/main
+ln -s ~/complex-management/node_modules /tmp/wt-<name>/node_modules   # npm run verify:* 要它
+```
 
-计划至少包含：
+在主工作区里 `git checkout -b` + commit 会被并发会话踩掉：别的会话一句 `git reset --hard origin/main`，**连你正在用的分支 ref 一起拨走**，提交凭空消失。2026-07-28 实际发生过：提交 `5d4fcd72` push 成功，`gh pr create` 却报 `No commits between main and <branch>`，本地与远端分支都已被拨回。
 
-1. 目标和非目标。
-2. 已确认事实、假设和未知项。
-3. 当前项目状态。
-4. 总体技术方案。
-5. 重要备选方案及取舍。
-6. 受影响模块、接口和文件。
-7. 分阶段任务和依赖关系。
-8. 每项任务允许修改的范围。
-9. 每项任务禁止修改的范围。
-10. 边界条件和兼容性要求。
-11. 必须运行的验证命令。
-12. 明确的验收标准。
-13. 风险和回滚方案。
+push 后**必须回验远端真收到**，别只看 push 退出码：
 
-计划必须保存为：
+```bash
+git rev-list --left-right --count origin/main...origin/<branch>
+```
 
-`.claude/workflow/plan.md`
+收工 `git worktree remove --force`。
 
-计划获得用户明确批准前，不得启动实施阶段。
+## 3. 权威源
 
-## 4. Opus 实施要求
+三份 HTML 拥有最终解释权，**未经用户逐句批准禁止修改**：
 
-Opus Implementer 必须读取：
+- `docs/business-system-map-for-operations-v0.1.html`
+- `docs/platform-governance-map-for-operations-v0.1.html`
+- `docs/business-enum-quick-reference-v0.1.html`
 
-- `CLAUDE.md`
-- `.claude/workflow/request.md`
-- `.claude/workflow/plan.md`
-- 存在时读取上一轮技术审查和最终验收报告
+事实优先级：最新 HTML > HTML git 提交史 + 决策台账 > PRD > 其他文档。
 
-实施者必须：
+**绝对禁止因为代码这样写就把 PRD 改成代码的样子。** 代码证明实施现状，不能授权钱路或权责；HTML 规定业务规则，不能证明代码已实现。
 
-1. 严格按照批准计划工作。
-2. 检查计划依据的项目状态是否仍然成立。
-3. 修改代码和必要配置。
-4. 运行计划要求的测试、构建、类型检查和格式检查。
-5. 如实记录所有执行结果。
-6. 输出实施报告。
+机读真源在 `docs/prd-audit/`：`entry-registry.csv`、`authority-rule-ledger.csv`、`html-prd-coverage.csv`、`business-decision-ledger.md`（只追加，检索某编号必须读全文所有出现，只读原行会读反）。
 
-实施报告必须包含：
+## 4. 提交纪律
 
-- `IMPLEMENTATION_RESULT: SUCCESS`
-- `IMPLEMENTATION_RESULT: PARTIAL`
-- 或 `IMPLEMENTATION_RESULT: FAILED`
-- 修改的文件。
-- 每个文件的修改内容。
-- 实际执行的命令。
-- 测试、构建和检查结果。
-- 与原计划的偏差。
-- 遗留问题。
-- 建议重点审查的位置。
+- **禁直推 main**（有 pre-push 钩子）。一律 feature 分支 → PR → `gh pr merge`
+- `npm run verify:predeploy` 红即中止，**CI 红不强合**
+- 两道 HTML 门禁（`html-ledger-sync` / `html-param-tier`）比对 `origin/main...HEAD`，**未提交时空转假绿**——commit 之后 push 之前必须本地真跑一次留全文输出
+- 合并后按**内容哈希**回验，不比 SHA（squash 会改 commit SHA）
+- 管道吃退出码：`cmd | tail -N; echo $?` 取的是 `tail` 的码，永远 0。用 `${PIPESTATUS[0]}`
 
-## 5. Opus 技术审查要求
+## 5. 安全红线
 
-Opus Technical Verifier 必须读取：
+除非用户针对本次任务明确授权，不得：`git commit`、`git push`、创建 PR、发布或部署、修改生产环境、破坏性数据库操作、删除用户数据、输出密码 / Token / API Key / Cookie / 私钥、`git reset --hard`、`git clean -fd(x)`。
 
-- 原始用户任务；
-- Fable 批准计划；
-- Opus 实施报告；
-- `git status`；
-- 完整 `git diff`；
-- 所有实际修改文件；
-- 测试和构建结果。
+## 6. 证据
 
-技术审查必须检查：
+所有进度和完成声明必须能指向本次会话里的实际工具结果。测试失败就报失败并附输出；步骤跳过就说跳过；没验证的事实明确标为未验证。
 
-- 功能逻辑；
-- 错误处理；
-- 边界条件；
-- 类型问题；
-- 安全风险；
-- 数据风险；
-- 数据库迁移；
-- 并发和竞态；
-- 性能；
-- 向后兼容性；
-- 测试覆盖；
-- 是否出现范围外修改。
+三条红线：不把未执行的命令写成已执行，不把未运行的测试写成已通过，不把推测写成已确认事实。
 
-问题分为：
+## 7. 环境
 
-- Blocking
-- Important
-- Advisory
+- 部署：systemd 用户级 `systemctl --user complex-api` 接管 8080，别裸跑 `deploy-api.sh`
+- 测试库 `complex_test` 与生产库 `complex` 切开；只 export `COMPLEX_DATABASE_{URL,USERNAME,PASSWORD}` 三个变量，别 source 整个 env
+- 部署跑 `MAVEN_ARGS=-DskipTests`（全量 mvn 会撞 Spring `failure.threshold=1` 级联毒化）
+- 本库数据最后全删——**不为存量数据做兼容 / 回填 / 退化设计**
+- 展示文字一律中文，仅机读标识留原文；日期口径 Asia/Shanghai
+- 删除 = 软删除（存库 + 前台不显 + 可恢复 + 填理由 + 最高权限批准）
 
-存在 Blocking 问题时必须输出：
+## 8. 已裁决的不再问
 
-`TECHNICAL_VERDICT: NEEDS_FIX`
-
-没有阻塞性问题时输出：
-
-`TECHNICAL_VERDICT: PASS`
-
-技术审查者不得修改文件。
-
-## 6. Fable 最终验收要求
-
-技术审查通过后，必须由新的独立 Fable Plan 进程进行最终验收。
-
-Fable Final Approver 必须检查：
-
-1. 是否满足用户原始目标。
-2. 是否符合原始总体设计。
-3. 是否完整实现所有批准任务。
-4. 是否出现未经批准的架构变更。
-5. Opus 技术问题是否已经处理。
-6. 实际代码、diff 和测试证据是否支持完成结论。
-7. 是否仍有不可接受的业务、数据或兼容性风险。
-
-未通过时输出：
-
-`FINAL_VERDICT: NEEDS_FIX`
-
-通过时输出：
-
-`FINAL_VERDICT: PASS`
-
-Fable 是最终交付决策者。
-
-## 7. 返工流程
-
-出现以下任意情况时，重新调用 Opus Implementer：
-
-- `TECHNICAL_VERDICT: NEEDS_FIX`
-- `FINAL_VERDICT: NEEDS_FIX`
-
-返工任务必须明确包含：
-
-- 问题位置；
-- 问题原因；
-- 必须完成的修改；
-- 禁止扩大修改的范围；
-- 验证命令；
-- 验收标准。
-
-返工后必须重新执行：
-
-1. Opus 技术审查；
-2. Fable 最终验收。
-
-不得因为已经经过多轮修改而降低验收标准。
-
-## 8. 权限规则
-
-权限模式只由外部启动脚本设置：
-
-- Fable Planner：`plan`
-- Opus Implementer：`bypassPermissions`
-- Opus Technical Verifier：`plan`
-- Fable Final Approver：`plan`
-
-Agent 不得自行切换权限模式。
-
-`bypassPermissions` 只允许用于 Opus Implementer 独立进程。
-
-## 9. Git 和系统安全
-
-除非用户针对本次任务明确授权，任何 Agent 都不得：
-
-- 执行 `git commit`；
-- 执行 `git push`；
-- 创建 Pull Request；
-- 发布或部署；
-- 修改生产环境；
-- 执行破坏性数据库操作；
-- 删除用户数据；
-- 读取或输出密码、Token、API Key、Cookie 或私钥；
-- 执行 `git reset --hard`；
-- 执行 `git clean -fd` 或 `git clean -fdx`；
-- 删除整个项目目录；
-- 修改 `D:\AI\ccwork` 之外的文件。
-
-即使实施者处于 `bypassPermissions`，以上限制仍然有效。
-
-## 10. 证据要求
-
-不得：
-
-- 声称未执行的命令已经执行；
-- 声称未运行的测试已经通过；
-- 声称未读取的文件已经审查；
-- 把推测写成已确认事实；
-- 仅根据 Agent 的文字总结认定任务完成。
-
-最终结论必须以实际文件、实际 diff、实际命令输出和实际测试结果为依据。
-
-## 11. 最终报告
-
-Fable 最终报告必须包含：
-
-- 用户原始目标；
-- 批准的总体方案；
-- 实际完成内容；
-- 修改文件；
-- 实际运行的命令；
-- 测试和构建结果；
-- 返工过程；
-- Opus 技术审查结论；
-- Fable 最终验收结论；
-- 尚存限制与风险。
-
-## 12. Agent skills
-
-Matt Pocock 工程类 skill 在本项目的约定，按需读取：
-
-- **Issue 与 spec** 存 `.scratch/<feature-slug>/` markdown，不进 GitHub（本目录无 git remote）——`docs/agents/issue-tracker.md`
-- **Triage 状态**记在 issue 文件顶部 `Status:` 行，本项目无标签系统——`docs/agents/triage-labels.md`
-- **术语表 `CONTEXT.md` 真身在 .160** `~/complex-management/`，本地缺失时静默继续——`docs/agents/domain.md`
+向用户确认两可项之前，先查：项目记忆、本轮 `request.md`、`docs/prd-audit/business-decision-ledger.md`。命中已有有效裁决的直接引用落笔，不重复提问。
