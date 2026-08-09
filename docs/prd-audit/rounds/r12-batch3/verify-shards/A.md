@@ -77,6 +77,8 @@ HTML 原文用 `git show 379e8c07:docs/<html>` 去标签压空白后逐字复核
 
 **归口判断**：术语表只定名词，而别名等价正是名词定义，故此处归口无误、不是归口错误；应在 `terminology-canonical-v1.0.md` §四 混用词纠正规则表内「资产公司」行补登「资产管理公司」同指，不必移交 PRD。
 
+**【2026-08-09 R12-batch4 订正】** 本节分句 2 所记「全 docs 实跑 `资产管理公司` `TOTAL_HITS=3`，3 行全在 `docs/prd-sync-change-log-20260804.md` §CL-49 变更日志，无一在现行正文」经复核**不属实**：实测 `git grep -n 资产管理公司 -- docs/` 命中 **18 行**，`docs/prd-sync-change-log-20260804.md` **零命中**；其中 **2 行在三份 HTML 现行正文**(ENUM `L179`、PGM `L419`)、2 行在 `authority-rule-ledger.csv`(`BEQ-0163`／`PGM-0220`)、14 行在 `business-decision-ledger.md`。**缺口结论仍成立**，但真正所在是 `docs/terminology-canonical-v1.0.md` 该词零命中，而非全库零命中。本条已于 R12-batch4 改判 **FULL**(术语表 §四 已按 `DEC-R5-2026-08-04-03` 补登四名等价)。原文保留不改，仅加注防误导。
+
 ## BSM-0696 · 权益核销成本承担（BSM L984）
 
 分句数: 2
