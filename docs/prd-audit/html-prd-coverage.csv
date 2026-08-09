@@ -732,22 +732,22 @@ BEQ-0104,抄表状态,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗�
 BEQ-0105,能耗归集对象,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0106,楼宇巡检任务状态,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0107,楼宇巡检类型,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0137,查看游乐设施状态,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
-BSM-0138,工程师可在授权后填写游乐设施定期检修记录,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0137,查看游乐设施状态,docs/terminal-page-product-prd-v0.1.md,§11 员工工作手机与触摸屏一体机 P0·触摸屏一体机「游乐设施状态」行,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0138,工程师可在授权后填写游乐设施定期检修记录,docs/amusement-business-operations-product-prd-v0.1.md,§11 已确认规则第 3 条·一体机承接定期检修记录、检修单位复用供应链 suppliers 主数据,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0139,检修完成后必须由主管确认，设施才能恢复营业,docs/terminal-page-product-prd-v0.1.md,§15 已确认规则第 14 条·一体机游乐设施检修主管确认恢复营业,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0143,连接游乐管理，展示游乐设施开放状态、容量和异常,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0143,连接游乐管理，展示游乐设施开放状态、容量和异常,docs/terminal-page-product-prd-v0.1.md,§11 员工工作手机与触摸屏一体机 P0·触摸屏一体机「游乐设施状态」与「状态检查」两行 + §15 已确认规则第 14 条·一体机检修主管确认恢复营业,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0145,连接留痕与异常，一体机的下单、领取,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§2.3 必须留痕的业务过程清单·订台和到店 + 酒吧点单 + 游乐运营 三行(字段口径见 §2.1 总原则),FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0191,后台维护服务目录,docs/service-order-product-prd-v0.1.md,§3.1 目录项字段 + §3.2 管理费方式（三值）,FULL,,,,,,r8-rebuild
 BSM-0192,本章的「点单员」指帮客人下单、向客人出示收款码,docs/service-order-product-prd-v0.1.md,§2 角色分离·点单员与服务提供人定义表,FULL,,,,,,r8-rebuild
 BSM-0195,点单员代客下单、向客人出示收款码,docs/service-order-product-prd-v0.1.md,§4.4 终端限制·一律在公司工作手机上办理,FULL,,,,,,r8-rebuild
 BSM-0197,月结发放时，按劳务报酬的法定税率表代扣个人所得税,docs/service-order-product-prd-v0.1.md,§8.2 月结按劳务报酬法定税率表代扣个人所得税,FULL,,,,,,r8-rebuild
-BSM-0231,游乐管理的重点是,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
-BSM-0232,建立游乐项目和项目入口点位,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0231,游乐管理的重点是,docs/amusement-business-operations-product-prd-v0.1.md,§1 文档定位·四问 + §2 P0 目标·基础运营闭环六条,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0232,建立游乐项目和项目入口点位,docs/amusement-business-operations-product-prd-v0.1.md,§2 P0 目标·能建立游乐项目和入口点位 + §4 业务对象·游乐项目与项目入口 + §9 P0 验收标准·项目绑定空间点位与适用权益,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0233,设置开放日期、开放时间、场次和容量,docs/amusement-business-operations-product-prd-v0.1.md,§4 业务对象·容量与现场排队 + §11 已确认规则第 1–2 条·容量只按项目实时在玩人数、排队不占容量,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0234,绑定哪些票务权益可以使用这个项目,docs/amusement-business-operations-product-prd-v0.1.md,§9 P0 验收标准·项目绑定空间点位与适用权益 + §11 后续细化第 1 条·权益须绑定指定项目或可用项目集合,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0235,现场核销时判断权益是否可用、容量是否允许,docs/amusement-business-operations-product-prd-v0.1.md,§7.2 游乐核销·验证顺序与拒绝优先级(权益有效期→容量),FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0236,容量分两道,docs/amusement-business-operations-product-prd-v0.1.md,11A.1 游乐超容（over_capacity）软/硬阈值放行策略（权威：spec §7，V104）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0237,通过触摸屏一体机展示游乐设施开放、排队、容量、暂停,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0237,通过触摸屏一体机展示游乐设施开放、排队、容量、暂停,docs/terminal-page-product-prd-v0.1.md,§11 员工工作手机与触摸屏一体机 P0·触摸屏一体机「游乐设施状态」行,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0238,工程师可在一体机上填写定期检修记录，记录检修单位、检修人员,docs/business-decision-log-v0.1.md,§19 一体机游乐设施检修,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0239,主管确认检修通过后，设施才能恢复营业,docs/amusement-business-operations-product-prd-v0.1.md,§11 已确认规则第 4 条·检修后主管确认方可恢复营业(状态机硬约束),FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0240,每个游乐项目可以关联多台设备,docs/amusement-business-operations-product-prd-v0.1.md,§11B.1 设备分级与停机范围判定,FULL,,,,,,06-amusement-terminal-thirdparty-data
@@ -761,7 +761,7 @@ BSM-0247,连接经营看板，管理层看项目客流、容量和异常,docs/da
 BSM-0248,项目开放状态,docs/amusement-business-operations-product-prd-v0.1.md,§5 项目状态·七态表,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0249,场次状态,docs/amusement-business-operations-product-prd-v0.1.md,§6 场次状态·七态表(含「已满员」派生展示态),FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0250,容量控制,docs/amusement-business-operations-product-prd-v0.1.md,§11A.1 游乐超容·软/硬双阈值与处置方式两值 + §4 业务对象·容量,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0251,使用限制,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A 校验链·安全告知/身高/年龄/健康逐项校验 + §11 后续细化第 2 条·限制条件现场核验留痕,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0251,使用限制,docs/amusement-business-operations-product-prd-v0.1.md,§11 后续细化第 2 条·限制条件现场核验留痕,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0252,安全严重度,docs/amusement-p0-safety-inspection-spec-v0.1.md,§4 核心对象·严重度定义(四级) + §5.2 项目/场次/设备状态影响·无当日有效巡检或未复检阻断项拒绝核销,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0253,巡检检修,docs/amusement-business-operations-product-prd-v0.1.md,§11B.2 巡检细则,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0254,团体/包场,docs/amusement-business-operations-product-prd-v0.1.md,§11A.3 团体/包场·状态机与主管审批 + §11A.2 准入闸·越界先卡住逐级复核,FULL,,,,,,06-amusement-terminal-thirdparty-data
