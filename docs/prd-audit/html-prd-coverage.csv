@@ -1166,7 +1166,7 @@ BSM-0546,等级与成长值,docs/member-and-tier-product-prd-v1.0.md,8.3 降级�
 "BSM-0790","分红税务按发放时有效的中国税法、股东身份和交易实质处理","docs/dividend-engine-prd-v0.1.md","§2 第2条（主理人分个人／公司两类）、§3 配置项禁硬编码、§5 快照冻结、§6 支付主体与代扣义务人","FULL","","","","","","regext-expansion"
 "BSM-0791","分红前置","docs/dividend-engine-prd-v0.1.md","docs/dividend-engine-prd-v0.1.md §6 分红前置：借款清偿优先于分红；docs/platform-governance-prd-v0.1.md §12C 借款清偿优先于分红","FULL","","","","","","regext-expansion"
 "BSM-0792","票务、消费连会员积分","docs/points-and-voucher-product-prd-v1.0.md","docs/points-and-voucher-product-prd-v1.0.md §6.3 票务积分规则、§7.4 票务产品与商户消费规则边界；docs/product-requirements-v0.1.md §14 第3条","FULL","","","","","","regext-expansion"
-"BSM-0793","游乐容量只按单个项目的实时在玩人数控制，排队不占容量","docs/amusement-business-operations-product-prd-v0.1.md","§2 P0目标、§4 业务对象（容量）、§7.2 游乐核销第4步","FULL","","","","","","regext-expansion"
+"BSM-0793","游乐容量只按单个项目的实时在玩人数控制，排队不占容量","docs/amusement-business-operations-product-prd-v0.1.md","§2 P0目标、§4 业务对象（容量）、§7.2 游乐核销第3步","FULL","","","","","","regext-expansion"
 "PGM-0198","一句话理解","docs/platform-governance-prd-v0.1.md","§2.2 治理层边界原则·业务准入段 + §2A 章首上位原则声明","FULL","","","","","","regext-expansion"
 "PGM-0199","页面上每个名称、编号、金额、状态、人员","无归口 PRD","无归口 PRD（与账本 PGM-0196 同因）","MISSING","important","REGX-15","两种姿势均零命中可归口 PRD：条目名 见名可点 在 docs/**/*.md（剔除 prd-audit/rounds 审计工作产物）命中 0 行；正文关键短语 名称、编号、金额、状态、人员 命中 0 行；来源单据 命中 23 行但全部为数据库字段、接口清单与变更日志，无产品需求承接段。承接矩阵中同源的 PGM-0196 已标 MISSING / R10-U-03（无归口 PRD，不许硬造归口）。","与 PGM-0196 / R10-U-03 同因（全链可点击溯源全局原则至今无归口 PRD）；建议并入 R10-U-03 一并处置，由用户或规划裁定归口后照抄 HTML 现文补承接，本轮不硬造归口（R9 已废行号锚点，本行证据中的行号写法已去除）","","regext-expansion"
 "PGM-0200","页面上每个名称、编号、金额、状态、人员","docs/platform-governance-prd-v0.1.md","§15A.4 客人查询的唯一路径·单据点开客人条","FULL","","","","","","regext-expansion"
