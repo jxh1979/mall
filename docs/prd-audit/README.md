@@ -37,7 +37,7 @@
 
 覆盖状态固定为 `FULL`、`PARTIAL`、`CONFLICT`、`MISSING`、`AMBIGUOUS`、`STALE`、`NOT_APPLICABLE`。其中 `STALE` 自 2026-08-06 起另用于一种情形：条目对应的 HTML 原文已被后续裁决取代（账本 `entry_name=ORPHANED` 的 69 行——原 76 行，第六批恢复四组旧口径后 7 行转回承接，见 DEC-R8-76~79 与第六批落地自证），承接结论是按旧文作出的，整行只作历史留痕，不再代表现行口径。
 
-条目注册表 `entry-registry.csv` 的 `entry_name` 是锚点、不是引文：条目名一经登记即冻结，HTML 现文改动只重算 `first_sentence_fingerprint`、不改名（依据 DEC-R8-17，改名会牵动账本、承接矩阵与全库上千处引用）。已知一例：`BSM-E0318` 条目名为「客人扫公司统一收款码付款，钱直接进公司账户，财务可对账」，而 BSM 现文该句已插入括注「（即该服务发生地所属酒吧商户的账户）」，两者不再逐字一致——这是设计如此，重建注册表时不得据现文改名。
+条目注册表 `entry-registry.csv` 的 `entry_name` 是锚点、不是引文：条目名一经登记即冻结，HTML 现文改动只重算 `entry_body`、不改名（依据 DEC-R8-17，改名会牵动账本、承接矩阵与全库上千处引用）。`entry_body` 存的是该条目的**整条正文**（与 `tools/verify-entry-anchors.mjs` 的 `flatEntry()` 同源、去全部空白），条目锚点门禁的检查① 对它逐字实检；R12 之前该列是 `first_sentence_fingerprint`，只存正文前 24 字，条目中段被改动检不出。已知一例：`BSM-E0318` 条目名为「客人扫公司统一收款码付款，钱直接进公司账户，财务可对账」，而 BSM 现文该句已插入括注「（即该服务发生地所属酒吧商户的账户）」，两者不再逐字一致——这是设计如此，重建注册表时不得据现文改名。
 
 规则账本 `authority-rule-ledger.csv` 的 `decision_status` 固定为两值：`AUTHORITATIVE`＝对应 HTML 原文仍在、该行口径现行有效；`SUPERSEDED`＝对应 HTML 原文已被裁决取代，整行冻结、只作历史留痕，不参与 value_flow 等口径回填，也不在条目锚点门禁的正文实检范围内（依据 DEC-R8-73）。
 

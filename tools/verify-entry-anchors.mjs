@@ -6,14 +6,17 @@
 //
 // 检三件事：
 //   ① 注册表 docs/prd-audit/entry-registry.csv 内，条目名在同一份 HTML 内唯一；
-//      且每条的首句指纹能在对应 HTML 现文中命中（注册表没跟上 HTML 改动即红）。
+//      且每条的**整条正文**（entry_body 列，与本文件 flatEntry() 同源、去全部空白）逐字仍在
+//      对应 HTML 现文里（注册表没跟上 HTML 改动即红）。
+//      R12 之前该列存的是首句前 24 字指纹，条目中段被改动检不出，
+//      R8-U-02「HTML 内容无保护落点」的缺口即由此而来。换成整条正文后，注册表全部行
+//      （entry ＋ section）都进入逐字保护面，不再依赖该条目有没有账本行。
 //   ② 全库 Markdown（历史留痕文件除外）里的 文件代号「名」 引用，
 //      必须能在该 HTML 内唯一定位——要么等于注册表条目名，要么是恰好一条条目正文的子串。
 //   ③ 正文里不得再出现「实测 LNNN」式行号锚点；
 //   ④ 账本与承接矩阵两份机读台账的 entry_name 必须同名同源（矩阵是从账本抄过来的，抄错即红）；
-//   ⑤ **对已登记进账本的条目**逐字实检：账本每行 source_text 必须仍逐字存在于对应 HTML 现文里
-//      （指纹只看前 24 字，挡不住行中间改动，故另设此检）。**未登记进账本的 HTML 条目不在本检保护范围内**——
-//      改了这类条目本门禁不会红；账本扩登记是 R8-U-02 的待办。
+//   ⑤ 账本每行 source_text 必须仍逐字存在于对应 HTML 现文里——这是**账本侧**的逐字实检；
+//      **条目侧**的整条正文保护由检查① 承担，两者互补，不再有「未登记进账本就没人管」的条目。
 //   ⑥ 账本每行必须在承接矩阵 docs/prd-audit/html-prd-coverage.csv 里有对应行
 //      （反向：④ 只检「矩阵→账本」，缺了「账本→矩阵」这一向，账本新增条目可以长期不进矩阵而门禁不响）；
 //      矩阵里 9 条 *-MPS-000N 占位伪 ID 按白名单放行（member-points 重建 Phase4 待映射，账本无对应行是设计如此）。
@@ -94,9 +97,9 @@ for (const r of rows) {
   const key = code + "|" + r.entry_name;
   if (nameSeen[key]) errors.push(`条目名在同一份 HTML 内重复：${code}「${r.entry_name}」（${nameSeen[key]} 与 ${r.entry_id}）`);
   nameSeen[key] = r.entry_id;
-  const fp = (r.first_sentence_fingerprint || "").replace(/\s+/g, "");
-  if (fp && !flat[code].includes(fp)) {
-    errors.push(`注册表指纹在 HTML 现文中找不到：${r.entry_id} ${code}「${r.entry_name}」——HTML 已改而注册表未重建`);
+  const entryBody = (r.entry_body || "").replace(/\s+/g, "");
+  if (entryBody && !flat[code].includes(entryBody)) {
+    errors.push(`注册表条目正文在 HTML 现文中找不到：${r.entry_id} ${code}「${r.entry_name}」——HTML 已改而注册表未重建`);
   }
   byCode[code].push(r);
 }
@@ -129,7 +132,7 @@ for (const r of ledRows) {
     errors.push(`账本条目名不在注册表里：${r.rule_id} ${r.html_file}「${r.entry_name}」`);
     continue;
   }
-  // 指纹只看前 24 字，挡不住行中间的改动；这里逐行比 source_text 与 HTML 现文，才真正挡住「HTML 改了台账没跟上」
+  // 逐行比 source_text 与 HTML 现文，挡住「HTML 改了台账没跟上」
   const st = norm(r.source_text);
   if (st && !norm(flat[fileOf[r.html_file]]).includes(st)) {
     errors.push(`账本正文与 HTML 现文对不上：${r.rule_id}「${r.entry_name}」——HTML 已改而账本 source_text 未重取`);
@@ -256,4 +259,4 @@ if (errors.length) {
   console.error("  处置：条目改名或 HTML 改动后，重建 docs/prd-audit/entry-registry.csv 并把引用改为现行条目名；一律不得写回行号。");
   process.exit(1);
 }
-console.log("[entry-anchors] PASS：条目名唯一、引用可唯一定位、正文无行号锚点、账本已登记条目正文与九个镜像列均与 HTML 现文一致（未登记条目不在保护范围，见 R8-U-02）、账本与承接矩阵一一对应。");
+console.log("[entry-anchors] PASS：条目名唯一、注册表条目正文逐字与 HTML 现文一致、引用可唯一定位、正文无行号锚点、账本正文与九个镜像列均与 HTML 现文一致、账本与承接矩阵一一对应。");

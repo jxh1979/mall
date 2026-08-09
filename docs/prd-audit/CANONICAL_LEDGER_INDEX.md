@@ -17,7 +17,7 @@ CURRENT_CANONICAL_FINDINGS: docs/prd-audit/rounds/r8/findings.csv
 
 | 路径 | 数据行（基线 → 落地后） | 表头列 | 作用 |
 |---|---:|---|---|
-| `docs/prd-audit/entry-registry.csv` | **1210 → 1210**（本轮未改） | `entry_id,html_file,entry_kind,entry_name,line_now,first_sentence_fingerprint,section_h2,section_h3` | 三份 HTML 的条目注册表（`entry` 1059 + `section` 151，实测） |
+| `docs/prd-audit/entry-registry.csv` | **1210 → 1210**（本轮未改） | `entry_id,html_file,entry_kind,entry_name,line_now,entry_body,section_h2,section_h3` | 三份 HTML 的条目注册表（`entry` 1059 + `section` 151，实测） |
 | `docs/prd-audit/authority-rule-ledger.csv` | **1225 → 1225**（本轮未改） | `rule_id,html_file,entry_name,line_hint,source_text,domain,…,decision_status` | 权威规则账本（HTML 原文 + 18 列结构化抽取） |
 | `docs/prd-audit/html-prd-coverage.csv` | **1234 → 1234**（本轮不增删行） | `rule_id,entry_name,prd_path,prd_anchor_or_line,coverage_status,severity,finding_id,…,phase` | HTML→PRD 承接矩阵（四态实测 FULL **1078 → 1077** / PARTIAL **74 → 85** / STALE **69 → 69** / MISSING **13 → 3**；PARTIAL 差额对账见 `rounds/r11/worklog.md` B-10 计数冲销说明） |
 | `docs/prd-audit/rounds/r8/findings.csv` | **233 → 236** | `finding_id,type,severity,file,line,html_evidence,disposition,status` | **当前活动**缺口台账（实测 `status=open` **75 → 64** 行） |
