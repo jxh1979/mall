@@ -70,7 +70,7 @@
 - 授权申请人与审批人必须职责分离；同一人审批自己的授权申请时一律拒绝并留痕。
 - 流程：申请创建 `access_grant_requests(status=pending)` 并调用 `SupervisorReviewService.blockForAdmission` 生成 `review_id`；审批端调用 SupervisorReview `approve` 后，批准则应用角色/定岗/临时权限并写 `applied`，驳回写 `rejected`。
 - 临时权限必须有 `expires_at`；可带 `valid_from`、`single_use`。V170 扩展 `temporary_permission_grants` 的 `status`、`valid_from`、撤销、单次消耗字段；有效权限查询按有效期和消耗状态过滤。
-- 岗位、职级、所属组织、所属商户或责任范围变化时，立即按新归属重新计算有效权限；旧岗位和旧范围派生权限同步失效，员工单独授权若超出新范围则暂停并重新审批，不允许只提示人工收回。
+- 保存岗位、职责、所属组织或所属商户变更时，立即按变更后的岗位权限模板重新计算有效权限；旧岗位或旧范围派生权限同步失效；新模板范围内的权限无需审批并随保存立即生效，超出新模板范围的增权保持未生效，审批通过后方可生效。本规则不把仅职级变化或任意手工模板应用列为触发条件（DEC-R8-91）。
 - 智能总结：`grantSummary` 统计窗口内临时权限申请。某职位/层级/权限组合达到阈值时返回“建议转固定权限”；某用户频繁申请时返回异常总结供复核。
 
 **关键端点（实际 Controller）**

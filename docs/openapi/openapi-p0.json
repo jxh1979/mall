@@ -30753,7 +30753,7 @@
         ],
         "operationId": "upsertServiceCatalogItem",
         "summary": "维护服务目录项(固定参考价)",
-        "description": "G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。",
+        "description": "G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。DEC-R8-90:percent 模式 mgmt_fee_value 为 0..10000 bp;fixed 模式 mgmt_fee_value 必须为 0..price_cent。任一越界值复用本操作既有 400 Error 响应拒绝保存,不得静默截断、封顶或改写。",
         "x-permission": "service.catalog.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -30769,6 +30769,7 @@
               "schema": {
                 "type": "object",
                 "additionalProperties": false,
+                "description": "管理费跨字段约束:mgmt_fee_mode=percent 时 mgmt_fee_value 不得超过 10000 bp;mgmt_fee_mode=fixed 时 mgmt_fee_value 不得超过同一请求的 price_cent。违反约束返回本操作既有 400 Error。",
                 "required": [
                   "idempotency_key",
                   "name",
@@ -30815,10 +30816,32 @@
                   },
                   "mgmt_fee_value": {
                     "type": "integer",
-                    "description": "管理费值(percent=基点bp,如1000=10%;fixed=分)。",
+                    "description": "管理费值(percent=基点bp,如1000=10%,静态上限10000;fixed=分,动态上限为同请求 price_cent)。",
                     "minimum": 0
                   }
-                }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "mgmt_fee_mode",
+                        "mgmt_fee_value"
+                      ],
+                      "properties": {
+                        "mgmt_fee_mode": {
+                          "const": "percent"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "mgmt_fee_value": {
+                          "maximum": 10000
+                        }
+                      }
+                    }
+                  }
+                ]
               }
             }
           }
