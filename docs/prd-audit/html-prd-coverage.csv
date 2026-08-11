@@ -2,7 +2,7 @@
 BSM-0001,综合体里不是只有一个业务,docs/product-requirements-v0.1.md,§2-§14 产品总纲与已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0002,一条贯穿全局的原则,docs/product-requirements-v0.1.md,§2-§14 产品总纲与已确认规则,FULL,,,,,,03-governance-and-common
 BSM-0003,存档（先下线）,docs/product-requirements-v0.1.md,§14 第 40-46 条通用规则,FULL,P1,GOV-004,RESOLVED: 决策日志曾把存档误写为需要最高权限审批。,APPLIED: 按当前 HTML 校正为存档不需审批、可恢复。,,03-governance-and-common
-BSM-0004,删除（走审批·软删除）,docs/product-requirements-v0.1.md,§14 第 40-46 条通用规则,FULL,P0,GOV-004,RESOLVED: 决策日志把删除审批限定为最高权限，掩盖另一人审批与禁止自审的核心规则。,APPLIED: 校正为先存档、填理由、另一人审批且申请人不得自审。,,03-governance-and-common
+BSM-0004,删除（走审批·软删除）,docs/product-requirements-v0.1.md,§14 第 40-46 条通用规则,FULL,P0,GOV-004,RESOLVED: GOV-R13-010 已按 DEC-R3-2026-08-04-41 对齐现行 HTML：一般删除由具备最高权限的人审批且申请人不得自审；持授权 U 盘密钥的最高权限本人发起时免审批。原 GOV-004“另一人审批”历史结论已被该裁决覆盖，不得继续引用。,APPLIED: 先存档并填写删除理由；一般删除由具备最高权限的人审批且申请人不得自审；持授权 U 盘密钥的最高权限本人发起时无需审批；软删除、删前占用检查与全程留痕保持不变。,DEC-R3-2026-08-04-41,03-governance-and-common
 BSM-0005,删除只隐藏不抹除、按分类归纳,docs/product-requirements-v0.1.md,§14 第 40-46 条通用规则,FULL,P1,GOV-004,RESOLVED: 产品总纲未明确删除只隐藏、不物理抹除及分类归纳。,APPLIED: 在产品总纲和验收规格补软删除、查询、审计与恢复规则。,,03-governance-and-common
 BSM-0006,删前自动查占用,docs/product-requirements-v0.1.md,§14 第 40-46 条通用规则,FULL,P0,GOV-004,RESOLVED: 产品总纲未明确删除前检查业务占用。,APPLIED: 补合同、账单、结算、订单、权益和库存占用阻断。,,03-governance-and-common
 BSM-0007,下线就不能再用,docs/product-requirements-v0.1.md,§14 第 40-46 条通用规则,FULL,,,,,,03-governance-and-common
