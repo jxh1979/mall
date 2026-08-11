@@ -456,7 +456,7 @@ BSM-0183,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台
 BSM-0184,存酒登记,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0185,年龄核验,docs/bar-business-operations-product-prd-v0.1.md,§9 P0 验收标准·售酒年龄核验由综合体入场年龄核验环节承接（18+ / 设备故障转人工抽查 / 不逐单验龄；系统不自动判断醉酒、不自动拦截订单，现场工作人员仍可人工停止继续售酒并留痕）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0186,小费,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
-BSM-0187,拆单 / 合单,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0187,拆单 / 合单,docs/bar-business-operations-product-prd-v0.1.md;docs/customer-app-miniapp-product-prd-v0.1.md;docs/operation-traceability-and-terminal-switch-prd-v0.1.md,bar §7.3A.1～§7.3A.5/§9；customer §3B/§7；trace §1A/§2.3/§9,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0188,出品票据（按场景）,docs/bar-business-operations-product-prd-v0.1.md,§7.5A 出品票据与出酒量采集·四场景流转表,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0189,收银交班对账,docs/bar-business-operations-product-prd-v0.1.md,10.1 成熟 POS 深度缺口规划（对照成熟酒吧/餐饮 POS）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0190,客人在酒吧可以点专项服务（比如点舞）,docs/service-order-product-prd-v0.1.md,§1 背景与定位·业务场景（公司统一收款·全额进公司账）,FULL,,,,,,r8-rebuild
@@ -576,7 +576,7 @@ BEQ-0035,销售提成,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验
 BEQ-0036,退菜退酒,docs/bar-business-operations-product-prd-v0.1.md,10.2.1 退菜/退酒（出品后撤单）升 P0 `R6-D14`,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0037,高危动作（需审批/双证据）,docs/bar-business-operations-product-prd-v0.1.md,§11 已确认第 7 条·主管复核强制项六项 + 第 8 条·高价值报损与盘点差异与存酒作废双证据,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0038,出品票据状态,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0039,账单操作,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
+BEQ-0039,账单操作,docs/bar-business-operations-product-prd-v0.1.md;docs/customer-app-miniapp-product-prd-v0.1.md;docs/operation-traceability-and-terminal-switch-prd-v0.1.md,bar §7.3A.1～§7.3A.5/§9；customer §3B/§7；trace §1A/§2.3/§9,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0040,收银交班状态,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0041,小费,docs/bar-business-operations-product-prd-v0.1.md,§10.3.2 小费·归属主责服务提供人、四不计入、随薪资独立列全额发放,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0054,对账口径,docs/finance-settlement-product-prd-v0.1.md,§4 对账口径·五口径表,FULL,,,,,,04-transaction-member-ticket-bar

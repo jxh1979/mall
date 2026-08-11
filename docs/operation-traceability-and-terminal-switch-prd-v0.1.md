@@ -1,4 +1,4 @@
-# 全链路操作留痕与终端开关 PRD V0.1
+# 全链路操作留痕与终端开关 PRD V0.02
 
 > **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
 
@@ -28,7 +28,7 @@
 >   - **（2026-07-20 补 · enforce 前置全套已做完）**：①web enforce 拒 Bearer 自报 web（合法后台 Cookie 会话，无客户端依赖可先翻）+ app enforce 拒 app 写（app 资金要客人侧证明属业务口径，待用户定）；②kiosk/tablet 设备级签名公钥 `terminal_device_signing_keys`（V325）+ 登记端点 `POST /devices/{id}/signing-key`，kiosk 自助端点豁免；③nonce 落库 `terminal_device_nonces`（V325）防重放；④body SHA-256 纳入签名量（`DeviceCredentialBodyCachingFilter` 仅包裹设备绑定型+写+带签名请求）；⑤deviceId↔密钥归属交叉校验。**服务端 ready-to-enforce；真正翻 enforce 仍依赖客户端实现签名+登记密钥（客户端侧，本 PR 不含）**，默认保持 grace。
 > - **⚠️ opt-in 定稿（2026-08-04 第三轮用户裁决 UD-02 / DEC-R6-07）**：**业务口径已改为「无显式开关行 = 默认关闭(opt-in)」**，见 §5.7；本段以下为**改造前的实现现状留档**，不构成业务规则。原 opt-out 纪律（新增受控能力必须同批 seed `enabled=FALSE`）在改造完成前**继续有效**，改造完成后由 opt-in 默认值自然覆盖，届时改为「有意默认开的能力必须同批 seed `enabled=TRUE`」。**实现现状**："无显式开关行 = 默认开启(opt-out)"，仅"开关拉取失败/超时/不可解析"按 fail-closed（§5.6）。读取异常 fail-closed 与业务 HTML「拉取失败按兜底关闭」一致；但"受控能力无 seed 行即默认放行"与业务侧「白名单式默认关」心智仍有差。**硬约束**：每新增一类受控能力（终端/模块/第三方/MDM/人脸等）必须同批 seed 一条 `enabled=FALSE` 兜底行（参照 V146 `face.verification.enabled`=FALSE、V071/V093/V096/V097/V098 各受控前缀默认关），不得依赖默认开放；评审与门禁应核对"新增受控能力是否配套 FALSE seed"。
 >   - **✅ 2026-07-04 据实核对现状（ssh 核对迁移 seed）**：终端总开关 `terminal.enabled`（V197，10 端）与 Web 后台/商户专区模块开关（V198/V199）**按设计 seed=TRUE**——它们是**已发布、有意默认开**的可控能力（关闭=停用某端/模块，属运营动作，非「未受控放行」）。**全部受控/预留能力均已配套显式 `enabled=FALSE` 兜底行**：`payment.gateway.enabled`(V093)、`face.verification.enabled`(V146)、`terminal.camera_scan.enabled`/`customer.native_client.enabled`(V097)、`staff.device_keystore.enabled`/`terminal.tablet.enabled`(V098)、`wecom.ai_qc.enabled`(V096)、`integration.*.sync`(V071)、`managed_work_devices`(V088)、`sms_notification` 总开关(V177，域级子开关按 AND 语义)。**结论：不存在「受控能力无 seed 行→默认放行」的存量定时炸弹**；opt-out 仅对上述有意默认开的总/模块开关成立。**强制纪律照旧**：新增任一受控能力必须同批 seed FALSE + 对存量做一次回溯核对，评审/门禁核对「新增受控能力是否配套 FALSE seed」。
-> - **部分收口——异常责任链事件名漂移已对齐（`文档goalP1(2026-06-20)`）**：异常责任链 `risk_alerts`/`risk_alert_actions` 已由 V103 落地，代码真实事件名为 `exception.reported/claimed/transferred/escalated/resolved/dismissed`（`RiskAlertService`）；§4.1 已就地补"字典名→代码真实名"映射（`exception.first_handled`→`exception.claimed` 等），并新增 §4.1.6 登记 V099–V124 全部新功能真实事件名。**已收口（2026-07-04）**：销售归属/服务责任事件名 `order.acquired`/`order.sales_attributed` 代码零命中、无替代发布，本轮已裁定改为**记录型留痕**（`service_responsibility_records.sales_staff_id`，`TraceabilityService.recordResponsibility`），§4.1 两事件已作废、不再作为待接线占位。三层过程留痕(business_process_instances/step_records，V059 建表但未全面接线)见 `evidence-risk-layer-spec-v0.2.md`。
+> - **已收口——现行事件名统一（2026-08-11 / OPS-016）**：本 finding 只收口准入与异常责任链，不宣称穷举全仓全域事件。准入现行事件名为 `admission.blocked`、`admission.released`、`admission.warned`、`admission.escalated`、`admission.eval_failed_closed`、`admission.space_unresolved_closed`；异常责任链现行事件名为 `exception.reported`、`exception.claimed`、`exception.transferred`、`exception.escalated`、`exception.resolved`、`exception.dismissed`。§4.1、§4.1.6 与 §8 不再保留活动字典双轨；此前四个冲突旧名只允许存在于明确标注的历史说明和变更日志。`admission.review` 是权限码，不是事件名；已废止的 `admission.eval_skipped` 不得恢复。**已收口（2026-07-04）**：销售归属/服务责任事件名 `order.acquired`/`order.sales_attributed` 代码零命中、无替代发布，本轮已裁定改为**记录型留痕**（`service_responsibility_records.sales_staff_id`，`TraceabilityService.recordResponsibility`），§4.1 两事件已作废、不再作为待接线占位。三层过程留痕(business_process_instances/step_records，V059 建表但未全面接线)见 `evidence-risk-layer-spec-v0.2.md`。
 > - **候选验收口径（已正式）**：关闭某端/模块后调用其业务接口被后端拒绝并写 `terminal.access_rejected`，前端隐藏仅作辅助。
 
 > 2026-07-04 逻辑一致性修订：①销售归属留痕由「事件型」改为「记录型」口径——经核对代码 `order.acquired`/`order.sales_attributed` 两事件零命中且无替代发布，销售归属实际以 `service_responsibility_records.sales_staff_id`（`TraceabilityService.recordResponsibility`）记录型留痕承载，PRD 同步作废这两个事件名（§4.1）。②R7 opt-out 据实写现状：终端总开关（V197）与 Web/商户模块（V198/V199）按设计 seed=TRUE（已发布可控能力有意默认开），全部受控/预留能力（支付网关/人脸/摄像头扫码/原生客户端/平板/设备Keystore/企微AI质检/第三方同步/受管设备/短信总开关）均已显式 seed=FALSE，不存在「受控能力无 seed 行默认放行」的定时炸弹；新增受控能力强制同批 seed FALSE + 存量回溯。③补 §1A「业务系×留痕动作」矩阵。
@@ -54,6 +54,7 @@
 | 票务 | 下单锁库/释放 | `ticket.inventory_locked` / `ticket.inventory_released` | ✅ |
 | 票务 | 核销预检/成功/失败/撤销/人工放行（与 ENUM「核销记录状态」条冲突**两处**，均属**待改造缺口**——代码级下线待办，不得反向定义业务规则：① **人工放行**——ENUM「系统不提供人工放行」，2026-08-04 登记；② **核销预检**——ENUM「核销记录状态」，DEC-R6-08，2026-08-05 登记） | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
 | 酒吧 | 开台/转台/清台 | `bar.table.opened`/`transferred`/`cleared` | ✅ |
+| 酒吧 | 拆单、合单、转台、并台、拆台、撤销转台 | 记录型操作留痕；本轮不新增事件名、API 或字段 | 文档要求：完整操作前后快照与成功/阻断结果 |
 | 酒吧 | 订台创建/定金支付/定金结算 | `reservation.created`/`reservation.deposit_paid`/`reservation.deposit_settled` | ✅ |
 | 酒吧 | 点单创建/送达/账单结清 | `bar.order_created`/`bar.order_delivered`/`bar.bill_settled` | ✅ |
 | 酒吧 | 存酒登记/取酒/作废 | `bar.saved_bottle.created`/`saved_bottle_picked_up`/`saved_bottle.voided` | ✅ |
@@ -77,7 +78,7 @@
 | 会员 | 积分获取/扣减/兑换/到期 | `points.earned`/`deducted`/`redeemed`/`expired` | ✅ |
 | 合规 | 同意采集/撤回、个人信息销毁/匿名化 | `consent.recorded`/`withdrawn`、`personal_data.purged`/`anonymized` | ✅ |
 | 合规 | 场所超容 | `venue.over_capacity` | ✅ |
-| 治理/准入 | 准入卡住/放行/升级 | `admission.blocked`/`released`/`escalated`（字典旧名 `contract.blocked/released` 已映射） | ✅ |
+| 治理/准入 | 准入卡住/放行/升级 | `admission.blocked`/`admission.released`/`admission.escalated` | ✅ |
 | 异常责任链 | 上报/接单/转交/升级/关闭/驳回 | `exception.reported`/`claimed`/`transferred`/`escalated`/`resolved`/`dismissed` (V103) | ✅ |
 | 企微 | 会话入库/违规命中/复核/同步批次 | `wecom.message_received`/`wecom.risk.hit_detected`/`hit_reviewed`/`wecom.conversation_synced` | ✅ |
 | 第三方 | 订单同步/券核销/对账差异/渠道对账 | `catering.order_synced`/`retail.order_synced`/`voucher.verified_synced`/`reconciliation.diff_found`/`integration.channel_reconciliation.*` | ✅ |
@@ -149,6 +150,7 @@
 | 卡座服务 | 卡座当前责任服务员、协助服务员、开台、加单、送达、换人、清台 | 班次排班、桌台绑定、平板点单、扫码送达自动形成服务时间线 |
 | 卡座销售提成 | 卡座销售归属、销售人员/非销售人员岗位快照、可计提消费额、提成率、提成金额、复核和冲正 | 订台、开台、账单结清、日结锁定和财务复核自动生成 |
 | 酒吧点单 | 下单人、下单设备、卡座、最低消费校验、商品明细、支付方式、收款人 | 平板、一体机、支付回调、POS/现金收款确认自动记录 |
+| 台位与账单操作 | 拆单、合单、转台、并台、拆台、撤销转台的操作类型、原因、操作人、时间、涉及的原台和目标台，以及适用场景下的操作前后可邀请人数、最低消费额、邀请与成员归属、消费分配、操作前后快照和成功或阻断结果 | 操作发生或阻断时自动形成记录；人工只补原因、归属与必要证据，不新增事件名、API 或字段 |
 | 酒水履约 | 出库核验、配送、后厨接收、服务员取走、送达客人或卡座 | 物品码、订单码、机器人状态和工作手机扫码串联 |
 | 吧台按杯销售 | 标准出酒量、实际扣减、损耗、操作人、复核人 | 商品规则自动扣减，超阈值自动生成损耗异常 |
 | 存酒 | 存入、拍照、数量标记、取酒、转赠、作废、争议处理 | 标签码、照片、员工扫码和客人手机号/昵称绑定 |
@@ -268,15 +270,18 @@ flowchart TD
 | `bar.order_delivered` | 酒吧订单送达 |
 | `payment.cash_received` | 现金收款确认 |
 | `payment.pos_received` | POS 收款确认 |
-| `contract.blocked` | 合同或基础定义违规命中、准入流程被卡住（修订说明 2026-06-07 新增，trace-3）。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `contract.blocked` 代码**零命中**，准入卡住的代码真实事件名为 **`admission.blocked`**（`SupervisorReviewService.blockForAdmission`），另有 `admission.warned`/`admission.review`/`admission.eval_failed_closed`/`admission.space_unresolved_closed`（`AdmissionGuard`；**2026-06-23 C3：准入闸已统一 fail-closed，原非越界类 fail-open 的 `admission.eval_skipped` 不再发出，所有 trigger 求值异常一律落 `admission.eval_failed_closed`**）。映射：**`contract.blocked`（字典名）→ `admission.blocked`（代码名）**；准入超范围/超空间策略见 §11.1（V099）。 |
-| `contract.released` | 合同准入经上级审核放行（修订说明 2026-06-07 新增，trace-3）。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `contract.released` 代码**零命中**，复核放行的代码真实事件名为 **`admission.released`**（驳回为 `admission.escalated`，`SupervisorReviewService`）。映射：**`contract.released`（字典名）→ `admission.released`（代码名）**。 |
+| `admission.blocked` | 合同或基础定义违规命中、准入流程被卡住；由 `SupervisorReviewService.blockForAdmission` 发布，准入超范围/超空间策略见 §11.1（V099）。 |
+| `admission.released` | 准入复核通过并放行；由 `SupervisorReviewService` 发布。 |
+| `admission.warned` | 准入策略命中 warn 处置并记录提醒；由 `AdmissionGuard` 发布。 |
+| `admission.escalated` | 准入复核驳回后升级；由 `SupervisorReviewService` 发布。 |
+| `admission.eval_failed_closed` | 准入触发条件求值异常时按 fail-closed 进入复核；由 `AdmissionGuard` 发布。 |
+| `admission.space_unresolved_closed` | `over_space` 策略无法解析目标空间时按 fail-closed 进入复核；由 `AdmissionGuard` 发布。 |
 | `exception.reported` | 异常被发现或上报（代码命中：`RiskAlertService.report`，V103 统一异常责任链） |
-| `exception.first_handled` | 异常第一处理人接单。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `exception.first_handled` 代码**零命中**，认领接单的代码真实事件名为 **`exception.claimed`**（`RiskAlertService.claim`，V103）。映射：**`exception.first_handled`（字典名）→ `exception.claimed`（代码名）**。 |
+| `exception.claimed` | 异常第一处理人认领接单（`RiskAlertService.claim`，V103）。 |
 | `exception.transferred` | 异常转交（`文档goalP1(2026-06-20)` 新增；代码真实事件名 `exception.transferred`，`RiskAlertService.transfer`，V103） |
 | `exception.escalated` | 异常升级（代码命中：`RiskAlertService.escalate`，V103） |
 | `exception.resolved` | 异常处理完成（代码命中：`RiskAlertService.resolve`，V103；关闭必有结论，见 §11.5 `chk_risk_alerts_resolved_conclusion`） |
 | `exception.dismissed` | 异常误报驳回关闭（`文档goalP1(2026-06-20)` 新增；代码真实事件名 `exception.dismissed`，`RiskAlertService.dismiss`，V103） |
-| `exception.reviewed` | 异常复核完成 |
 | `video.candidate_matched` | 事件候选视频片段匹配 |
 | `terminal.access_rejected` | 终端/模块开关关闭或开关拉取失败兜底关闭时，后端拒绝访问并留痕（修订说明 2026-06-07 新增，switch-4/switch-5） |
 
@@ -406,14 +411,18 @@ flowchart TD
 
 #### 4.1.6 V099–V124 新功能事件登记（`文档goalP1(2026-06-20)`）
 
-> 本小节 `文档goalP1(2026-06-20)` 新增，登记本会话 V099–V124 新功能产生的标准事件，事件名均经 Grep `backend/src/main/java/` 核对为代码真实发布名（非臆造）。**新功能事件的权威定义以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准**（功能实现与验收口径），本节为事件名收口登记，分析/风控/审计消费下列真实名。带"映射"的为字典旧名→代码真实名收口。
+> 本小节 `文档goalP1(2026-06-20)` 新增，登记本会话 V099–V124 新功能产生的标准事件，事件名均经 Grep `backend/src/main/java/` 核对为代码真实发布名（非臆造）。**新功能事件的权威定义以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准**（功能实现与验收口径），本节为事件名收口登记，分析/风控/审计只消费下列现行真实名；2026-08-11 起不再保留活动字典双轨。
 
 | 事件类型（代码真实名） | event_category | 含义与载荷要点 / 来源 |
 |---|---|---|
-| `admission.blocked` | governance | 准入超合同范围/超空间被卡住（V099 over_*/over_space 策略命中 → supervisor_review）；映射：字典名 `contract.blocked`→`admission.blocked`。来源 `SupervisorReviewService` |
-| `admission.released` | governance | 准入复核放行（驳回为 `admission.escalated`）；映射：字典名 `contract.released`→`admission.released` |
+| `admission.blocked` | governance | 准入超合同范围/超空间被卡住（V099 over_*/over_space 策略命中 → supervisor_review）。来源 `SupervisorReviewService` |
+| `admission.released` | governance | 准入复核通过并放行。来源 `SupervisorReviewService` |
+| `admission.warned` | governance | 准入策略命中 warn 处置并记录提醒。来源 `AdmissionGuard` |
+| `admission.escalated` | governance | 准入复核驳回后升级。来源 `SupervisorReviewService` |
+| `admission.eval_failed_closed` | governance | 准入触发条件求值异常时按 fail-closed 进入复核。来源 `AdmissionGuard` |
+| `admission.space_unresolved_closed` | governance | `over_space` 策略无法解析目标空间时按 fail-closed 进入复核。来源 `AdmissionGuard` |
 | `exception.reported` | risk | 统一异常上报（V103 责任链：risk_alerts/risk_alert_actions）。`RiskAlertService.report` |
-| `exception.claimed` | risk | 异常认领接单；映射：字典名 `exception.first_handled`→`exception.claimed`。`RiskAlertService.claim` |
+| `exception.claimed` | risk | 异常认领接单。`RiskAlertService.claim` |
 | `exception.transferred` | risk | 异常转交。`RiskAlertService.transfer` |
 | `exception.escalated` | risk | 异常升级。`RiskAlertService.escalate` |
 | `exception.resolved` | risk | 异常处理完成（关闭必有结论）。`RiskAlertService.resolve` |
@@ -782,18 +791,18 @@ flowchart TD
 
 | 阶段 | 能力 |
 |---|---|
-| P0 | 统一事件中心、业务过程实例、订单获取和销售归属留痕、卡座服务责任留痕、**异常责任链（发现→第一处理→转派→升级→关闭）全链 P0 必做**、物品追踪码、入库贴码或出库打印码、扫码出库、扫码交接、后厨扫码收货、服务员扫码送达、终端开关表和启动查询接口 |
+| P0 | 统一事件中心、业务过程实例、订单获取和销售归属留痕、卡座服务责任留痕、拆单/合单/转台/并台/拆台/撤销转台的完整操作前后快照及成功或阻断结果、**异常责任链（发现→第一处理→转派→升级→关闭）全链 P0 必做**、物品追踪码、入库贴码或出库打印码、扫码出库、扫码交接、后厨扫码收货、服务员扫码送达、终端开关表和启动查询接口 |
 | P1 | 机器人真实状态回调、摄像头事件自动关联、服务质量复盘、端版本灰度、商户级 SaaS 套餐开关、更多物料类型追踪 |
 | P2 | IoT 自动感知、无感交接辅助校验、智能异常判断、跨综合体集团级终端策略、酒吧/乐园独立 SaaS 计费开关 |
 
-> 收口说明（2026-06-18 D7）：P0 异常责任链不是只读留痕，而是含写动作的完整责任链：**发现/上报、第一处理（接单）、转派、升级、关闭**。各写动作必须走正式 OpenAPI operationId（不得用 §7 历史 `/api/admin/exceptions/*`、`/exceptions/*`、`/api/mobile/*` 旧路径），并登记到 `p0-openapi-operation-acceptance-matrix-v0.1.md` 完成验收，对应留痕事件为 §4.1 `exception.reported`/`exception.first_handled`/`exception.escalated`/`exception.resolved`/`exception.reviewed`。各写动作建议 operationId（按现有 OpenAPI 命名约定推导，若与 `openapi-p0.yaml` 既有命名不一致以 OpenAPI 为准）：
+> 收口说明（2026-06-18 D7；2026-08-11 OPS-016 统一现行事件名）：P0 异常责任链不是只读留痕，而是含写动作的完整责任链：**发现/上报、第一处理（接单）、转派、升级、关闭**。各写动作必须走正式 OpenAPI operationId（不得用 §7 历史 `/api/admin/exceptions/*`、`/exceptions/*`、`/api/mobile/*` 旧路径），并登记到 `p0-openapi-operation-acceptance-matrix-v0.1.md` 完成验收。对应留痕事件为 §4.1 `exception.reported` / `exception.claimed` / `exception.transferred` / `exception.escalated` / `exception.resolved` / `exception.dismissed`；复核关闭只作为关闭动作语义或 `exception.resolved` 的载荷，不另设事件名。各写动作建议 operationId（按现有 OpenAPI 命名约定推导，若与 `openapi-p0.yaml` 既有命名不一致以 OpenAPI 为准）：
 >
 > | 责任链动作 | 留痕事件 | 建议 operationId |
 > |---|---|---|
-> | 第一处理（接单） | `exception.first_handled` | `firstHandleException`【待业务/技术确认:operationId 命名】 |
-> | 转派 | （转派语义，载于 `assigned_to`） | `transferException`【待业务/技术确认:operationId 命名】 |
+> | 第一处理（接单） | `exception.claimed` | `firstHandleException`【待业务/技术确认:operationId 命名】 |
+> | 转派 | `exception.transferred` | `transferException`【待业务/技术确认:operationId 命名】 |
 > | 升级 | `exception.escalated` | `escalateException`【待业务/技术确认:operationId 命名】 |
-> | 关闭 | `exception.resolved` / `exception.reviewed` | `closeException`【待业务/技术确认:operationId 命名】 |
+> | 关闭 | `exception.resolved` / `exception.dismissed` | `closeException`【待业务/技术确认:operationId 命名】 |
 >
 > 上述 operationId 须经 OpenAPI 与验收矩阵登记后定稿；未登记前不得据旧路径生成接口或用例。
 
@@ -808,6 +817,7 @@ flowchart TD
 7. 视频监控前期不作为强依赖，但事件必须留下时间、点位和设备信息，为后续视频片段一一对应做准备。
 8. 所有端都必须有开关接口，关闭后该端或模块不可用，打开后仍受权限和数据范围控制。
 9. 终端开关要支持未来酒吧系统和乐园系统独立 SaaS 化。
+10. 每次拆单、合单、转台、并台、拆台和撤销转台均须留痕。记录内容包括操作类型、原因、操作人、时间、涉及的原台和目标台，以及适用场景下的操作前后可邀请人数、最低消费额、邀请与成员归属、消费分配、操作前后快照和成功或阻断结果。
 
 ## 10. 本版结论
 
@@ -817,6 +827,8 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-08-11 | 增 | §1A / §2.3 / §8 / §9 | 增加拆单、合单、转台、并台、拆台、撤销转台的完整留痕覆盖，要求操作前后可邀请人数、最低消费额、邀请与成员归属、消费分配、完整前后快照及成功或阻断结果；不新增事件名、API 或字段 | OPS-MISS-005；DEC-R8-95；BSM“拆单 / 合单”；ENUM“账单操作” |
+| 2026-08-11 | 改 | 顶部收口 / §1A / §4.1 / §4.1.6 / §8 | 本 finding 的活动字典统一保留六个真实 `admission.*` 与六个真实 `exception.*` 现行名，只删除 `contract.blocked`、`contract.released`、`exception.first_handled`、`exception.reviewed` 双轨；`admission.review` 明确为权限码，`admission.eval_skipped` 保持废止；§6.4 不在修改白名单 | OPS-016；现行代码发布名；DEC-R8-95 |
 | 2026-08-05 R7 第三批 | 改 | §2 十类终端清单 | 「Web 前端」补限定「（业务人员，客人无网页端）」，与三份 HTML 同批改名一致（旧术语已全库清零，仅审计报告与变更日志保留引述） | 2026-08-05 用户裁决；PGM「受控的十类终端」条、ENUM「终端十端」条 |
 | 2026-08-05 | 改 | §4.1 修订说明块（`reservation.deposit_settled`）、§4.1.2 事件字典行 | 事件载荷词表 `deposit_status` 的 `deducted` 语义由「抵扣」改为「**达标已原路退回**」：定金不抵扣消费，达该台位低消后原路退回；下游分析域不得再按「抵扣」消费该值。**实现侧枚举字面量未改名，登记为待改造缺口——与 GAP-29 同源，不重复立项，仅作标注** | DIFF-A-011；DEC-R6-05；ENUM「订台定金状态」条、BSM「订台定金状态」条 |
 | 2026-08-05 | 改 | §5.3 开关层级、§5.7 优先级序 | 业务口径统一为**七档（版本与设备同为一档）**；实现层拆为 `version`/`device` 八层降格标注为**实现细节**（含「8 层 × 开/关 = 256 组合」测试，标注为实现层证据，不得据以解释业务档数）；业务权威以 ENUM 七档为准 | DIFF-A-010；ENUM「终端开关优先级」条、PGM「开关优先级」条 |
