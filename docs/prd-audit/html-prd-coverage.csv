@@ -454,7 +454,7 @@ BSM-0181,退菜退酒,docs/bar-business-operations-product-prd-v0.1.md,10.2.1 �
 BSM-0182,高危动作,docs/bar-business-operations-product-prd-v0.1.md,§11B 免单、打折、赠送与客诉当场处理·三情形与折扣下限与留痕 + §10.2.2 反结 + §10.2.3 沽清 86,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0183,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,STALE,P1,ADV-TX-007,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0184,存酒登记,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0185,年龄核验,docs/bar-business-operations-product-prd-v0.1.md,§9 P0 验收标准·售酒年龄核验由综合体入场年龄核验环节承接(18+ / 设备故障转人工抽查 / 不逐单验龄不醉酒拒售),FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0185,年龄核验,docs/bar-business-operations-product-prd-v0.1.md,§9 P0 验收标准·售酒年龄核验由综合体入场年龄核验环节承接（18+ / 设备故障转人工抽查 / 不逐单验龄；系统不自动判断醉酒、不自动拦截订单，现场工作人员仍可人工停止继续售酒并留痕）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0186,小费,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0187,拆单 / 合单,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0188,出品票据（按场景）,docs/bar-business-operations-product-prd-v0.1.md,§7.5A 出品票据与出酒量采集·四场景流转表,FULL,,,,,,04-transaction-member-ticket-bar
