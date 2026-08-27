@@ -243,7 +243,7 @@ npm run verify:production-evidence-crosslinks` |
 | 会员身份、成长值与等级 | `member-and-tier-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 积分获取、冻结、有效期、兑换与虚拟券 | `points-and-voucher-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 商户积分价格、费用、补偿、账单与税务边界 | `merchant-points-settlement-rules-v1.0.md` | 本轮只发布业务规则，技术承接另行审计 |
-| 储值（付费会员已退役） | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份新权威 PRD |
+| 储值（付费会员已退役） | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份领域 PRD（最终解释权仍为三份业务 HTML） |
 | 经营看板、8 类指标、下钻 | `business-dashboard-metrics-product-prd-v0.1.md` | `r5-spec-T12-dashboard-aggregation-dev-design-20260618.md` |
 | 客人端 App/小程序、订台定金、订卡邀请函 | `customer-app-miniapp-product-prd-v0.1.md` | `customer-app-miniapp-development-design-v0.1.md` |
 
@@ -458,6 +458,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-08-27 | V0.1 P2 M01 第二整轮 | 三份领域 PRD 不再称「新权威」；HTML 对全部业务口径拥有最终解释权，Phase 4 只读审计不得改写 HTML |
 | 2026-06-16 | V0.1 开发文档审计 | 新增开发文档完整性对抗式审计、全量文档地图 CSV、可开发规格草案，并补入口 UI 自动化和 gstack 交付审计；同步修正 P2 动态定价旧口径残留 |
 | 2026-06-10 | V0.1 | 新增当前有效文档入口、正式口径、阅读顺序、废止内容和 P0 开发准入条件 |
 | 2026-06-10 | V0.1 补充 | 标记 P0 任务映射表和游乐安全巡检规格已新增；审计结论改为第一批硬缺口已收口 |
@@ -530,8 +531,8 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 - 批准设计：`docs/superpowers/specs/2026-07-28-member-points-settlement-redesign-design.md`
 - 审计范围：`docs/prd-audit/member-points-rebuild-scope-2026-07-28.md`
 - 逐文件正式审计：`docs/prd-audit/member-points-related-doc-audit-2026-07-28.md`；以审计时 22 份现行 PRD 为基线，8 份精准同步、14 份无需修改。
-- HTML 覆盖关系：`docs/prd-audit/html-prd-coverage.csv` 已登记三份新权威与三个业务 HTML 的 9 组待逐条映射关系；具体替代文本由 Phase 4 只读审计产生。
-- HTML 边界：三个业务 HTML 中相关条款只读，须先完成逐条替代清单并获用户批准；未涉及业务仍由 HTML 最终解释。
+- HTML 覆盖关系：`docs/prd-audit/html-prd-coverage.csv` 已登记三份领域 PRD（最终解释权仍为三份业务 HTML）与三个业务 HTML 的 9 组映射关系。
+- HTML 边界：三份 HTML 对全部业务口径拥有最终解释权，Phase 4 只读审计的产出不得改写 HTML。
 
 
 ## 通票分账与组织主体口径入口（2026-07-28）
