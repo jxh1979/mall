@@ -1,4 +1,4 @@
-# 文档地图 V0.1
+# 文档地图 V0.02
 
 > 文档goal(2026-06-20)：本文档按类别列出 `docs/` 下**当前有效**文档（文件名 + 一句话用途 + 现行/部分过期/归档标注），作为第一入口 `docs/00-current-effective-document-entry-v0.1.md` 的导航补充。仅列**真实存在**的文件（经 `ls docs/` 实证）。会员、成长值、积分、兑换券和商户积分结算的产品细化见三份领域 PRD，最终解释权仍为三份业务 HTML；PRD、其他文档和后台配置均不得覆盖 HTML。其他冲突按 `00-current-effective-document-entry-v0.1.md` 的现行入口处理。
 >
@@ -85,7 +85,7 @@
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
-| `openapi/openapi-p0.yaml` / `openapi/openapi-p0.json` | P0 机器可读 OpenAPI 契约；operation 数以 `verify:operation-matrix` / `verify:openapi-closure` 为准，本轮核验 516 operations | 现行 |
+| `openapi/openapi-p0.yaml` / `openapi/openapi-p0.json` | P0 机器可读 OpenAPI 契约；operation 数以 `verify:operation-matrix` / `verify:openapi-closure` 为准，本轮核验 720 operations | 现行 |
 | `p0-api-contract-pack-v0.1.md` | P0 接口契约基线 | 现行 |
 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | operation 级开发完成定义/验收矩阵 | 现行 |
 | `p0-openapi-contract-closure-appendix-v0.1.md` | OpenAPI 反向生成权限/事件/任务追溯附录 | 现行 |
