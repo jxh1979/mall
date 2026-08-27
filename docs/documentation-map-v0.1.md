@@ -1,4 +1,4 @@
-# 文档地图 V0.02
+# 文档地图 V0.03
 
 > 文档goal(2026-06-20)：本文档按类别列出 `docs/` 下**当前有效**文档（文件名 + 一句话用途 + 现行/部分过期/归档标注），作为第一入口 `docs/00-current-effective-document-entry-v0.1.md` 的导航补充。仅列**真实存在**的文件（经 `ls docs/` 实证）。会员、成长值、积分、兑换券和商户积分结算的产品细化见三份领域 PRD，最终解释权仍为三份业务 HTML；PRD、其他文档和后台配置均不得覆盖 HTML。其他冲突按 `00-current-effective-document-entry-v0.1.md` 的现行入口处理。
 >
@@ -34,7 +34,7 @@
 | `amusement-business-operations-product-prd-v0.1.md` | 游乐业务运营 PRD | 现行 |
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
-| `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/季度+月预览/全可配） | 现行 |
+| `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/分红周期可配（月/季/半年/年，默认半年）+月度只读预览） | 现行 |
 | `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD（3.18，2026-07-02 拍板方案 A：后台内商户专区） | 现行 |
 | `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界；付费会员已废止 | 现行·边界文档 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
