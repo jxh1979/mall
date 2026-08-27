@@ -1,6 +1,6 @@
 # 文档地图 V0.1
 
-> 文档goal(2026-06-20)：本文档按类别列出 `docs/` 下**当前有效**文档（文件名 + 一句话用途 + 现行/部分过期/归档标注），作为第一入口 `docs/00-current-effective-document-entry-v0.1.md` 的导航补充。仅列**真实存在**的文件（经 `ls docs/` 实证）。会员、成长值、积分、兑换券和商户积分结算以三份新领域权威文档为准；其他冲突按 `00-current-effective-document-entry-v0.1.md` 的现行入口处理。
+> 文档goal(2026-06-20)：本文档按类别列出 `docs/` 下**当前有效**文档（文件名 + 一句话用途 + 现行/部分过期/归档标注），作为第一入口 `docs/00-current-effective-document-entry-v0.1.md` 的导航补充。仅列**真实存在**的文件（经 `ls docs/` 实证）。会员、成长值、积分、兑换券和商户积分结算的产品细化见三份领域 PRD，最终解释权仍为三份业务 HTML；PRD、其他文档和后台配置均不得覆盖 HTML。其他冲突按 `00-current-effective-document-entry-v0.1.md` 的现行入口处理。
 >
 > 标注含义：**现行** = 当前有效执行口径；**部分过期** = 仍有参考价值但含旧快照/旧口径，需对照入口文档；**归档** = 历史快照/已被替代，不得作为执行依据。
 
@@ -22,9 +22,9 @@
 |---|---|---|
 | `product-requirements-v0.1.md` | 产品总纲与业务边界 | 现行 |
 | `ticketing-entitlement-checkin-product-prd-v0.1.md` | 票务-权益-核销 PRD | 现行 |
-| `member-and-tier-product-prd-v1.0.md` | 会员身份、成长值、等级、升级、保护与降级唯一权威 | 现行·领域权威 |
-| `points-and-voucher-product-prd-v1.0.md` | 积分产生、冻结、退款、有效期、兑换与虚拟券唯一权威 | 现行·领域权威 |
-| `merchant-points-settlement-rules-v1.0.md` | 商户积分价格、费用、补偿、账单、冲正与税务边界唯一权威 | 现行·领域权威 |
+| `member-and-tier-product-prd-v1.0.md` | 会员身份、成长值、等级、升级、保护与降级的产品细化（最终解释权仍为三份业务 HTML） | 现行 |
+| `points-and-voucher-product-prd-v1.0.md` | 积分产生、冻结、退款、有效期、兑换与虚拟券的产品细化（最终解释权仍为三份业务 HTML） | 现行 |
+| `merchant-points-settlement-rules-v1.0.md` | 商户积分价格、费用、补偿、账单、冲正与税务边界的产品细化（最终解释权仍为三份业务 HTML） | 现行 |
 | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 储值卡、本金、赠送金、扣款、退款与注销 PRD；会员积分职责已拆分 | 现行·储值域 |
 | `member-points-tier-and-clearing-prd-v1.0.md` | 旧会员积分、等级与清算混合 PRD 的替代指针 | 已被替代·仅历史入口 |
 | `member-points-p1-ops-parameter-tables-v0.1.md` | 会员积分系统配置覆盖检查表，不是运行时参数真源 | 现行·检查表 |
@@ -225,9 +225,9 @@
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
-| `business-system-map-for-operations-v0.1.html` | 运营视角业务系统地图；会员积分相关旧条款等待逐条替代清单批准，其他领域保持最终解释权 | 现行·相关条款只读待审 |
-| `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图；会员积分相关旧条款等待逐条替代清单批准，其他领域保持最终解释权 | 现行·相关条款只读待审 |
-| `business-enum-quick-reference-v0.1.html` | 业务枚举速查表；会员积分相关旧条款等待逐条替代清单批准，其他领域保持最终解释权 | 现行·相关条款只读待审 |
+| `business-system-map-for-operations-v0.1.html` | 运营视角业务系统地图；与另外两份 HTML 共同组成最高业务解释权 | 现行 |
+| `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图；与另外两份 HTML 共同组成最高业务解释权 | 现行 |
+| `business-enum-quick-reference-v0.1.html` | 业务枚举速查表；与另外两份 HTML 共同组成最高业务解释权 | 现行 |
 | `business-html-source-of-truth-acceptance-spec-v0.1.md` | 三份业务 HTML 到下游文档和验收资料的最小映射索引；不替代 HTML | 现行 |
 | `pending-development-backlog-v0.1.md` | 待开发/未完成项登记（带 P1/P2/P3 优先级 + 设计性gating + 已完成消项），全仓盘点结果 | 现行 |
 
