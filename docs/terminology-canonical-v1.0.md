@@ -1,4 +1,4 @@
-# 组织实体与结算主体 术语权威表 V1.02
+# 组织实体与结算主体 术语权威表 V1.01
 
 > 结算重构批 0 产出。**业务术语与边界的最终解释权属于三份业务 HTML**：`business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html`。迁移、代码、数据模型和 PRD 只能说明当前实现或承接方式，不得反向改写业务术语。
 > 关联：`merchant-space-contract-model-v0.1.md`（数据模型承接）、`settlement-rebuild-prd-v1.0.md`（结算 PRD 承接）。
