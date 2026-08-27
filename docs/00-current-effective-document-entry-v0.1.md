@@ -24,7 +24,7 @@
 | 集团治理重建 PRD | `docs/group-governance-rebuild-prd-v1.0.md` |
 | 服务点单业务域 PRD | `docs/service-order-product-prd-v0.1.md`；承接域＝BSM 服务点单章（`section#service-order`）+ ENUM 第十二章「服务点单」；2026-08-05（R7）新建 |
 | P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-08-03）核验为 720 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
-| OpenAPI 与业务 HTML 覆盖核对（2026-06-30 复核更新，分辨四类，勿再笼统列缺口） | ① 商户档案/入驻=已覆盖（`/api/v1/platform/merchants` + `merchant.profile.view/manage`）；② 应收=已覆盖（AR/AP 域）；③ 楼栋/楼层/区块/铺位/公共区域=由扁平 `spaces` 的 `space_type`+`parent_space_id` 自套承载（非缺口，映射见 foundation-database-design）；④ 发票=税务/电子发票平台第三方对接、故意延后（预留接口+后台开关+不阻塞自研，真实资料到位再补契约，见 finance-settlement-product-prd §6A）；⑤ 操作审计日志查询/导出=**现状已覆盖 + 明确增强项**：审计事件页 ADM-EVD-001（AUDITOR，搜索/筛选/导出留痕）已实现、由 `/api/v1/evidence/events` 承载，按对象时间线已 UNION `audit_events`；**待增强（P1/P2 留档、非阻塞）**=跨对象批量搜索/导出全量 `audit_events` 操作日志（如“导出某月全部退款放行”），需另开 audit_events 专属查询/导出端点+页+测试，按审计实际需要再排。 |
+| OpenAPI 与业务 HTML 覆盖核对（2026-06-30 复核更新，分辨四类，勿再笼统列缺口） | ① 商户档案/入驻=已覆盖（`/api/v1/platform/merchants` + `merchant.profile.view/manage`）；② 应收=已覆盖（AR/AP 域）；③ 楼层/区域/点位/商铺/卡座/吧台位/游乐入口/库房/设备点位=由扁平 `spaces` 的 `space_type`+`parent_space_id` 自套承载（非缺口，映射见 foundation-database-design）；④ 发票=税务/电子发票平台第三方对接、故意延后（预留接口+后台开关+不阻塞自研，真实资料到位再补契约，见 finance-settlement-product-prd §6A）；⑤ 操作审计日志查询/导出=**现状已覆盖 + 明确增强项**：审计事件页 ADM-EVD-001（AUDITOR，搜索/筛选/导出留痕）已实现、由 `/api/v1/evidence/events` 承载，按对象时间线已 UNION `audit_events`；**待增强（P1/P2 留档、非阻塞）**=跨对象批量搜索/导出全量 `audit_events` 操作日志（如“导出某月全部退款放行”），需另开 audit_events 专属查询/导出端点+页+测试，按审计实际需要再排。 |
 | P0 operation 级验收矩阵 | `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` |
 | P0 OpenAPI 权限、事件、任务追溯附录 | `docs/p0-openapi-contract-closure-appendix-v0.1.md` |
 | P0 可编码入口包 | `docs/p0-coding-entry-pack-v0.1.md` |
@@ -541,7 +541,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 - **口径索引**：`docs/prd-audit/HTML-PASS-SETTLEMENT-WATERFALL-2026-07-28.md`（瀑布、赠送权益、收入归属、同步落点、实现缺口、HTML 哈希）。
 - **术语与组织主数据权威表**：`docs/terminology-canonical-v1.0.md` §三/§五/**§六 组织主数据登记**；结算侧副本 `docs/settlement-rebuild-prd-v1.0.md` §2.3A。
 - **业务裁决**：`docs/business-decision-log-v0.1.md` **DEC-ORG-2026-07-28-01~07**；审计侧同步 `docs/prd-audit/business-decision-ledger.md`「2026-07-28 新增业务裁决」节。
-- **要点**：① 专名「娱乐运营平台」废止 → **娱乐平台公司**；② 分账瀑布 = 通路费 → 销售渠道费（仅第三方渠道）→ 票务积分发行成本 → 按业态价格占比拆域 → 仅酒吧份额再扣赠送权益预估成本与门票综合服务费/留存（同一项只扣一次，**归娱乐平台公司**）→ 可分配池仅各酒吧分；③ 赠送权益每样独立、绑提供方、按内部结算价计成本，预扣按票种配「按件计／按票整额」；④ 赠酒每吧至少一杯、杯数写票面、**不得跨吧核销**；⑤ 订台低消/二次消费/额外酒水归**各酒吧商户**；非散台服务费由各酒吧商户代收，月结定格的应发部分作代收代付、不计商户收入，仅扣留部分计入商户收入；场地租金归**长沙项目公司**（= 资产公司），向商户供货货款归**中央餐饮公司**。
+- **要点**：① 专名「娱乐运营平台」废止 → **娱乐平台公司**；② 分账瀑布 = 通路费 → 销售渠道费（仅第三方渠道）→ 票务积分发行成本 → 按业态价格占比拆域 → 仅酒吧份额再扣赠送权益预估成本与门票综合服务费/留存（同一项只扣一次，**归娱乐平台公司**）→ 可分配池仅各酒吧分；③ 赠送权益每样独立、绑提供方、按内部结算价计成本，预扣按票种配「按件计／按票整额」；④ 赠酒杯数不得低于后台按票种配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限）、杯数写票面、**不得跨吧核销**；⑤ 订台低消/二次消费/额外酒水归**各酒吧商户**；非散台服务费由各酒吧商户代收，月结定格的应发部分作代收代付、不计商户收入，仅扣留部分计入商户收入；场地租金归**长沙项目公司**（= 资产公司），向商户供货货款归**中央餐饮公司**。
 - **准入提示**：以上 ②③④ 与「综合服务费归属主体」**代码尚未实现**，属待开发缺口（见 `docs/dev-plan-v7-audit-20260722.md` R-1/R-3）；本轮为**文档同步批次，未改代码、未新增端点**。
 
 ### 第二轮（2026-07-28）综合／联合通票 + 免费权益 + 内部结算 SKU 目录

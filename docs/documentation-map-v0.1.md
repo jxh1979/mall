@@ -34,7 +34,7 @@
 | `amusement-business-operations-product-prd-v0.1.md` | 游乐业务运营 PRD | 现行 |
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
-| `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/分红周期可配（月/季/半年/年，默认半年）+月度只读预览） | 现行 |
+| `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/分红周期可配（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限；月/季/半年/年，默认半年）+月度只读预览） | 现行 |
 | `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD（3.18，2026-07-02 拍板方案 A：后台内商户专区） | 现行 |
 | `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界；付费会员已废止 | 现行·边界文档 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
