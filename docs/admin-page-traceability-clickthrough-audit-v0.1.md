@@ -25,29 +25,7 @@
 - AdminApp 已有 `navigate(route)` + `history.pushState`（左侧导航用），但**不支持「带对象参数的深链」**（无法"点 merchant_id → 跳商户页并定位该商户"）。
 - 后端**承接能力已具备**：对象时间线 `GET /api/v1/evidence/timelines/{object_type}/{object_id}`（已 UNION audit_events，条目4 另有跨对象审计查询）、各域 list/detail 端点齐全——缺的是前端把引用渲染成可点链接 + 目标页按参定位。
 
-## 3. 整改清单（按被引用对象归类：谁该点到哪个来源）
-
-| 引用字段 | 出现页数 | 应可点到的来源 | 优先级 |
-|---|---|---|---|
-| `contract_id` | 3 | 合同生命周期工作台 ADM-CONT-001（定位该合同 + 审批/变更/结算链） | **P1**（资金/履约链） |
-| `order_id` | 3 | 出票与核销追踪 ADM-TKT-003 / 账单（定位订单 + 退款/核销/积分流水） | **P1** |
-| `merchant_id` | 9 | 商户档案/授权 ADM-GOV-002 / ADM-MER-002（商户主体 + 合同 + 工单） | **P1** |
-| audit/evidence 引用、actor/operator | 多页 | 审计事件页 ADM-EVD-001 / 对象时间线（正查下游、反查源头） | **P1**（审计链） |
-| `project_id` | 11 | 集团/综合体拓扑 ADM-GOV-001（综合体归属下钻） | P2 |
-| `space_id` | 7 | 拓扑空间点位 / 空间类型字典 ADM-GOV-007（空间归属与类型） | P2 |
-| `assignee_id`/`vendor_user_id`/`reporter_id` | 3+ | 员工/外包账号（处理人身份与所属机构） | P2 |
-| `equipment_id`/`ticket_type_id` 等域内引用 | 2 | 设施台账 / 票种（域内对象定位） | P3 |
-
-> 原则要求「**正查也可反查**」：不仅从源头能看到其下游记录（如合同→账单→收款），也要能从任一结果反查回源头（如审计事件→对象→合同）。当前两向都缺。
-
-## 4. 推荐统一实现路径（避免 44 × 各自为政）
-
-1. **导航扩展**：`AdminApp.navigate` 支持携带 `{ objectType, objectId }` 查询参数（URL query），目标页读参后过滤/高亮/打开详情；保留现有无参导航向后兼容。
-2. **统一 `<TraceLink>` 组件**：渲染一个可点击的对象引用（显示名/编号），点击即跳目标页 + 参数；无权限或无目标页时降级为纯文本（不破坏现有展示）。一处实现、各页替换纯文本单元格即可，**不需逐页重写**。
-3. **目标页按参定位**：各 list 页支持 `objectId` 入参做服务端/前端过滤（多数 list 端点已支持按 id 过滤或可加）。
-4. **反查入口**：对象详情/时间线统一走 `evidence/timelines/{type}/{id}`（已 UNION audit_events），审计跨对象走条目4 `audit/operation-events`。
-5. **验收纳入**：把「展示的对象引用必须可点击溯源」加入 `full-admin-ui-acceptance-matrix` 的逐页验收项与 Playwright（点击引用→落到目标页且定位），作为新页准入门槛。
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-16，本文不再重复记载。
 ## 5. 建议排期
 
 - **批次 P1（资金/履约/审计链）**：contract_id、order_id、merchant_id、audit/evidence/actor 下钻 + `<TraceLink>` 组件 + navigate 带参 + 反查时间线入口。先落这批，因为审计与对账最依赖「点得动、查得回」。

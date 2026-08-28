@@ -396,7 +396,7 @@ HTML 现文（PGM「开关默认取值」条，逐字全文）：
 
 EV-05-36 | html_text | docs/platform-governance-map-for-operations-v0.1.html:674 | @1c5c0c7d
 HTML 现文（PGM 营业必需能力条，逐字全文）：
-> 开关服务、支付通路、核销与入场等营业必需的能力，不得在营业时段进行任何可能导致中断的变更、升级或维护，所有此类操作只能安排在非营业时段并事先报备；开关拉取失败时按“兜底关闭”处理，写操作一律拒绝；只有留痕是例外——留痕是一种特殊的写操作，不受兜底关闭影响，开关拉不到期间发生过什么、谁被拒绝了，照样要记下来。前端隐藏只是辅助，后端接口必须独立校验。
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-35，本文不再重复记载。
 
 EV-05-37 | html_text | docs/platform-governance-map-for-operations-v0.1.html:667,668,669,670 | @1c5c0c7d
 HTML 现文（同段其余相关条，逐字）：

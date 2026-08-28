@@ -118,20 +118,7 @@
 | Android P0 构建、smoke 与 APK 验收 | 160 已通过 | 160 已具备 Java 21、Gradle/Android SDK 前置能力，并已通过 `verify:android-env`、`android:p0:build`、`android:p0:smoke` 和 `android:p0:apk`。Android smoke 使用专用种子测试账号，不使用真实生产管理员密码；后续真实业务域落地后仍需复跑同一脚本 |
 | 备份与密钥轮换 | 真实 NAS 演练已通过；密钥轮换生产证据待实施 | NAS 服务器为 `192.168.88.113`，SMB 共享 `bn`，UNC `//192.168.88.113/bn`，160 挂载 `/mnt/complex-nas-backup`，账号 `jxh1`，保留 30 天，容量上限 1TB；当前不启用备份归档加密，已完成读写删除测试、`.tar.gz` + `.sha256` 同步和从 NAS 恢复演练；生产账号、PostgreSQL、对象存储、JWT/Token、聚合支付、企业微信、第三方供应商、开放平台和 NAS SMB 凭证采用人工台账 + 到期提醒 + Runbook，执行入口为 `docs/production-credential-rotation-runbook-v0.1.md`；合并闸口为 `npm run verify:ops160-recovery` |
 
-## 4. 已确认规则
-
-- 域名 HTTPS 先不绑定。
-- 合同日期颗粒度采用通用事项台账 + 本地 AI 辅助识别，AI 结果必须人工确认。
-- 低消不允许用票务或卡座权益抵扣；票务和卡座独立。
-- 通票赠送权益成本由**娱乐平台公司**承担（2026-07-28 口径，原写「平台」）。
-- 酒吧合同中的“股东比例”只用于利润报表。
-- 商场平面图 P1 先做图片 + 多边形坐标，可扩展 CAD/SVG 标准化导入。
-- 合同审批 P0 只做审批流和附件归档。
-- Android P1 可支持策略摘要离线查看；高价值酒水核销保持在线。
-- 支付通道采用聚合支付优先，并保留直连接口抽象。
-- Webhook 与轮询采用“Webhook + 定时轮询校验”组合。
-- 告警渠道、160 脚本、财务结算主口径、B/C/D/E 类建议均按已收口默认方案执行。
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-04，本文不再重复记载。
 ## 5. 下一阶段建议
 
 1. 按 `p0-coding-completion-and-handoff-report-v0.1.md` 做 P0 编码交接：固定验证证据、已实现边界、生产前置约束和下一步责任人。

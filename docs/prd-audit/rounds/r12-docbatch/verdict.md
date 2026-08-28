@@ -55,7 +55,7 @@ Verifier 判 `TECHNICAL_VERDICT: PASS`,无 Blocking,两条 Important 已全部�
 - **R12-FIX-02**:`BEQ-0150` / `PGM-0193` 改判 FULL,`conflict_summary` 由现在时改写为
   过去时 + 落点(原文描述的缺口在库中已不存在)。
 - **R12-FIX-03**:`BEQ-0131` 计价时点冲突经溯源复核不成立,改判 PARTIAL(非 FULL ——
-  三处承接缺口实测为真,判 FULL 会把一道「未获批内部结算价不得开通权益或券」的
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-60，本文不再重复记载。
   开通闸抹成已承接);同批改写 `BEQ-0143` 中指向该已证伪结论的失效引用。
 
 ## FINAL_VERDICT: PASS

@@ -4,13 +4,7 @@
 
 Close the code-owned part of `SEC-P0-AUTH-PROD-001` by adding a formal production authentication provider that is separate from the local/dev/test smoke auth flow.
 
-## Scope
-
-- Keep the existing `AuthService`, `AuthController`, and `BearerAuthenticationFilter` for `local/dev/test`.
-- Add a production-profile JDBC auth provider for staff login, session refresh, logout, token revocation, failed-login lockout, and audit events.
-- Store password hashes with BCrypt and store only SHA-256 hashes of high-entropy access/refresh tokens.
-- Keep third-party SSO, enterprise identity, device MDM enrollment, payment merchant config, face/age supplier config, WeCom config, NAS drill, and credential rotation as production readiness tasks because they require external operational inputs.
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-27，本文不再重复记载。
 ## Files to modify
 
 - `backend/src/main/java/com/complex/platform/config/SecurityConfig.java`
@@ -55,16 +49,7 @@ Close the code-owned part of `SEC-P0-AUTH-PROD-001` by adding a formal productio
 6. Run targeted backend tests.
 7. Run security baseline verification and P0 verification on 160.
 
-## Acceptance criteria
-
-- With `prod` profile and seed admin properties, login returns access token, refresh token, session id, Bearer token type, and user object.
-- Raw access/refresh tokens are never stored in `auth_sessions`.
-- Refresh rotates both access and refresh tokens and rejects a reused refresh token.
-- Logout revokes the session and subsequent use of the old access token is denied.
-- Repeated invalid login attempts lock the account for the configured window.
-- Dev/test smoke auth remains unchanged and existing auth tests still pass.
-- `SEC-P0-AUTH-PROD-001` no longer remains open in the generated findings register.
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-28，本文不再重复记载。
 ## Risks and rollback
 
 - Risk: profile collision could register both smoke and production auth endpoints. Mitigation: production classes are `prod` only; smoke classes remain `local/dev/test`.

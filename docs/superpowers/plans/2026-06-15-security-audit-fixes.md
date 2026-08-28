@@ -18,7 +18,7 @@
 - Modify: `backend/src/main/java/com/complex/platform/customer/CustomerService.java`
 
 - [x] Write a failing test proving an invalid SMS code does not create a customer session.
-- [x] Add `CustomerOtpVerifier`; local/dev/test accepts only the configured fixed code, prod fails closed until a real provider is wired.
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-38，本文不再重复记载。
 
 ### Task 2: Customer Session Token Hash-Only Storage
 
@@ -29,7 +29,7 @@
 - Modify: JDBC migration version assertions.
 
 - [x] Write a failing JDBC assertion that `customer_sessions.customer_token` is null and lookup works through `customer_token_hash`.
-- [x] Add Flyway migration and repository hashing so new sessions store only SHA-256 token hashes and lookups hash caller-provided tokens.
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-39，本文不再重复记载。
 
 ### Task 3: Webhook Signature Payload Binding
 
@@ -38,7 +38,7 @@
 - Modify: `backend/src/main/java/com/complex/platform/integration/IntegrationService.java`
 
 - [x] Write a failing test proving a signature created for payload A cannot be reused with payload B.
-- [x] Add deterministic payload hashing to the webhook canonical string and include the hash in stored result metadata.
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-40，本文不再重复记载。
 
 ### Task 4: Ticket QR Credential Hash-Only Storage
 
@@ -48,7 +48,7 @@
 - Modify: `backend/src/main/resources/db/migration/V038__security_credential_hashing_and_webhook_payload_hash.sql`
 
 - [x] Write a failing JDBC assertion that `ticket_credentials.credential_token` is null, `credential_hash` equals SHA-256(raw token), and lookup still works by caller payload.
-- [x] Clear raw QR credential storage and query by hash only.
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-41，本文不再重复记载。
 
 ### Task 5: Dynamic QR Verification Ledger Payload Redaction
 
@@ -57,7 +57,7 @@
 - Modify: `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java`
 
 - [x] Write a failing test proving successful dynamic QR verification does not store raw `cred_` in `ticket_verifications.credential_payload`.
-- [x] Store `sha256:<hash>` for dynamic QR verification payloads while preserving ordinary entitlement-code audit values.
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-42，本文不再重复记载。
 
 ### Task 6: Terminal Sync Payload Redaction
 
@@ -69,7 +69,7 @@
 - Create: `backend/src/main/resources/db/migration/V039__security_terminal_sync_payload_redaction.sql`
 
 - [x] Write a failing test proving terminal offline sync task payload does not store raw dynamic QR `cred_` values.
-- [x] Redact dynamic QR values at service boundary and JDBC persistence boundary.
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-43，本文不再重复记载。
 - [x] Add V039 migration to scrub legacy terminal sync payload values without changing already-applied V038 checksum.
 
 ### Verification

@@ -11,26 +11,7 @@
 3. **mock ≠ 生产证据**：8 条 partial 需求可用 mock 联调/业务验收，但生产闭环仍按供应商资料与生产阻断台账回填。
 4. 供应商资料到位时：先建供应商专项计划 + 字段映射 → 再新增 OpenAPI operation/权限/事件/验签/失败回退/测试/Semgrep → 最后才改开关与准入门状态。
 
-## 2. 能力开关全表（15 项 = 既有 14 + 本轮补 SMS）
-
-| capability_id | 能力 | 默认 | 关闭后业务口径 | mock/stub 现状 | 失败场景要求 |
-|---|---|---|---|---|---|
-| `aggregate_payment` | 聚合支付 | off | 仅现金/线下 POS/人工收款 + 留痕 | 抽象层 + mock 支付 + 对账口径 | 超时/验签失败/对账差异 `PAY_*` |
-| `groupbuy_ticket_channel` | 团购/渠道售票 | off | 仅平台自出票 + 后台补录 | 渠道订单回流 mock | 券码核销失败/退款同步 |
-| `wecom` | 企业微信 | off | **员工后台手动录入**（默认入口）；质检仅平台内数据 | — | 同步失败告警 |
-| `face.verification.enabled` | 人脸/年龄核验 | off | 人工证件核验 + 复核 + 留痕，不得标自动通过 | adapter 结果 + 证据附件 mock（REQ-23b）| `FACE_TIMEOUT/LOW_LIVENESS/MANUAL_REVIEW` |
-| `managed_work_devices` | MDM 纳管 | off | 工作手机/平板/一体机**不得**执行高风险核销/出酒/支付 | 字段映射占位（v0.2 补）| `MDM_ENROLL_TIMEOUT/CMD_FAILED` |
-| `object_storage` | 对象存储 | off | 仅记外部证据编号/手工 evidence_link | 字段映射占位（v0.2 补）| `STORAGE_PRESIGN_EXPIRED/HASH_MISMATCH` |
-| `open_platform` | 开放平台接入 | off | 仅内部 adapter/mock | provider adapter mock（REQ-40）| 验签/防重放 |
-| `catering_pos` | 餐饮 POS | off | 后台手工登记或不启用 | — | 订单/退款/券核销 |
-| `retail_pos` | 零售 POS | off | 后台手工登记或不启用 | — | 同上 |
-| `robot_platform` | 机器人平台 | off | 人工配送交接留痕（REQ-44）| 任务事件 mock | `ROBOT_TASK_FAILED/DEVICE_OFFLINE` |
-| `video_platform` | 视频监控 | off | 仅人工 evidence_link，不内嵌播放 | mock 链接（REQ-41）| `VIDEO_STREAM_TIMEOUT/AUTH_FAILED` |
-| `gate_nfc_scan_device` | 闸机/NFC/扫码设备 | off | 后台/人工扫码录入 | mock 状态 | 离线队列/补偿 |
-| `local_ai_llm` | 160 本地 AI | **on** | 关闭则仅 Java 规则；开启=loopback-only 只读建议，**禁止自动决策** | T3-D1 已实现 | 超时/非法 JSON/置信<0.60 → 强制人工 |
-| `nas_smb_backup` | NAS 备份恢复 | **on(必需)** | 不建议关，关则须指定等效恢复目标 | 已演练过一次 | 容量/失败告警 + 周期演练 |
-| **`sms_notification`** | **短信/通知** | **off** | **登录验证码走 mock OTP（loopback，禁生产）；催缴/风险告警降级 manual/站内，不静默丢弃** | **v0.2 占位文档已定义，⚠️ 尚未并入主开关矩阵** | **`SMS_THROTTLED/TEMPLATE_NOT_FOUND/CODE_EXPIRED`** |
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-17，本文不再重复记载。
 ## 3. 本轮审计结论（mock 充分性）
 
 - **合格**：8 条 partial 需求（REQ-17/21/23b/25/32/40/41/44）均有 mock/adapter/页面/后端测试/E2E 替身，**足以支撑联调与业务验收**（`partial-requirement-mock-coverage-v0.1.md` 已逐条列证据文件）。

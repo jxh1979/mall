@@ -6,16 +6,7 @@
 > 标记：可现做=自有系统现在即可编码+测试+过闸口；待外部=阻塞于供应商/IT 资料，现只能 mock；owner=非编码、需责任人回填。
 > 机器标记：R4_REMAINING_WORK_BACKLOG_READY。
 
-## A. P1 业务代码缺口（可现做，自有系统）
-
-| 编号 | 项 | 来源 | 要点 |
-|---|---|---|---|
-| A1 | 存酒高价值/核身/手机号 | REQ-30/32, R2/R3, R1-SPEC-04 | `saved_bottles` 补 `is_high_value`/`high_value_threshold_cents`/`bottle_label_value`/`customer_name_or_nickname`/`registration_photo_refs`/`customer_phone`（可逆加密+哈希索引）；状态机增 `pending_identity_review`/`disputed_frozen`；`claimSavedBottle` 加姓名/标签比对→不一致落复核；新增作废接口 `cancelSavedBottle`（高价值强制 photo+video 双证据+主管复核） |
-| A2 | 现金/POS 收款留痕 | REQ-21, R2 | `bar_bills`/支付侧补 `cashier_staff_id`/`pos_transaction_no`；发事件 `payment.cash_received`/`payment.pos_received`（D4 权威名） |
-| A3 | 支付 channel 枚举+映射 | REQ-21/对账, R1-SPEC-02 | `finance_payment_intents.channel` 加枚举 CHECK；建 bar↔finance channel 映射表，支撑按 channel 对账归并 |
-| A4 | 订台定金规则 | REQ-26, R3 | `bar_reservations` 补 `deposit_rule`（金额/比例/退没收规则） |
-| A5 | 提成贯通 finance（可选增强）| REQ-26b, R1-SPEC-01 | 提成生成 `ar_ap_items`(source_type=`employee_commission`)；现 `bar_commission_calculations` 已满足 D13 P0，故为 P1 可选 |
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-08，本文不再重复记载。
 ## B. 留痕三层模型接线（可现做）—— 让 V059 产生运行态数据
 
 | 编号 | 项 | 要点 |
@@ -25,15 +16,7 @@
 | B3 | 留痕时间线读取 | 把三层表并入 `JdbcEvidenceEventRepository.listTimeline` 的 UNION，复用现有 `GET /api/v1/evidence/timelines/...`（无新端点） |
 | B4 | 三层表隔离登记 | 把 `business_process_instances`/`service_responsibility_records` 纳入 `domain-ownership-scope-audit-v0.1.csv` + 隔离规格 §3 + 补 AC-ISO-1/2 越权用例 |
 
-## C. 核销/票务边界小项（可现做）
-
-| 编号 | 项 | 来源 |
-|---|---|---|
-| C1（**已废止·见文首口径**，本条不再实施） | 核销人工放行状态 | REQ-05, R1-LOOP-10：票务核销记录状态机增 `manual_overridden`，对齐事件 `verification.manual_overridden` |
-| C2 | 二维码刷新周期字段 | REQ-08, R1-LOOP-11：`ticket_credentials` 增 `refresh_interval_seconds`（约束 {30,60}，默认 60，票种级可配） |
-| C3 | 多人票×容量交互 | REQ-46, R1-LOOP-12：定"全有或全无"——N 人一次核销，任一容量维度余量<N 整单拒绝 |
-| C4 | 餐饮券权益容量承接 | REQ-11, R3：餐饮/零售券权益容量维度承接（P3） |
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-09，本文不再重复记载。
 ## D. OpenAPI / 契约文档补齐（可现做）
 
 | 编号 | 项 | 要点 |

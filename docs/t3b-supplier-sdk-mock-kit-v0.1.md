@@ -12,37 +12,7 @@
 
 当前仍不接真实机器人、视频、设备、支付或人脸年龄核验供应商；不写真实密钥；不下发设备指令；不标记任何真实供应商生产就绪。
 
-## 2. 可用范围
-
-| 范围 | 本套件允许 | 本套件禁止 |
-|---|---|---|
-| 开放鉴权 | 生成 `/api/open/auth/token` 的 HMAC-SHA256 签名样例 | 在文档或代码中写入真实密钥 |
-| Webhook | 生成 `/api/open/d/{endpoint}/webhooks/{provider}/{event}` 的签名样例 | 伪造真实供应商生产回调成功 |
-| provider adapter | 使用 `/api/v1/integration/provider-adapters/{id}/test-mock` 做 mock 契约测试 | 标记真实供应商 production_ready |
-| SDK 示例 | 给 JavaScript/Node.js 签名辅助工具 | 生成真实厂商 SDK 或真实控制命令 |
-
-## 3. 签名 canonical
-
-开放鉴权 canonical：
-
-```text
-app_key=<app_key>
-nonce=<nonce>
-timestamp=<timestamp>
-```
-
-Webhook canonical：
-
-```text
-endpoint_key=<endpoint_key>
-event=<event>
-idempotency_key=<idempotency_key>
-payload_hash=<sha256(stable_json_payload)>
-provider=<provider>
-```
-
-签名算法为 HMAC-SHA256 hex。签名材料必须从环境变量或凭证管理读取，不允许出现在命令行、日志、示例文件或 Git 仓库。
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-23，本文不再重复记载。
 ## 4. 本地 mock 签名命令
 
 鉴权签名：

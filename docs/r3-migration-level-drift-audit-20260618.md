@@ -48,7 +48,7 @@
 
 ## 4. REQ-46/48 游乐（A/B 混合，单列）
 - REQ-46：声称的 `amusement_capacity_config`/`amusement_capacity_snapshot` 两表**不存在**（DRIFT）；容量仅场次级单维度（`amusement_sessions.capacity/used/locked`，`V014:55-56`），**非"项目+场次+点位/设备"三维度**；核销时安全状态+容量双校验**已实现**（`AmusementService.java:439-445`，PARTIAL）。
-- REQ-48：声称的 `amusement_maintenance_record` 表**不存在**（DRIFT）；但"严重项复检通过后主管审批恢复营业"逻辑**已实现**，落在 `amusement_safety_inspections.reopen_status` 状态机（`AmusementInspectionService.java:294-321`，PARTIAL）。
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-10，本文不再重复记载。
 
 ## 5. 抽查覆盖面汇总
 

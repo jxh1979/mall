@@ -53,7 +53,7 @@ coverage 总行数（累计）：**733** / ledger **844**
 | ADV-RE-005 | 应收应付主体与合同主体不一致 | P0 | COVERED |  |  |
 | ADV-RE-006 | 工单超时、升级、验收和满意度责任人缺失 | P1 | COVERED |  |  |
 | ADV-RE-007 | 采购部分收货、退货、调拨在途和盘盈盘亏导致库存不守恒 | P0 | COVERED |  |  |
-| ADV-RE-008 | 高价值物资复核人与经办人为同一人 | P0 | COVERED |  |  |
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-22，本文不再重复记载。
 | ADV-RE-009 | 跨项目或跨商户错误共享空间、库存或费用 | P0 | COVERED |  |  |
 
 ## 方法与局限
