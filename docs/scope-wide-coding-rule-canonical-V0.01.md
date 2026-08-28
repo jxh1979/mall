@@ -1,6 +1,6 @@
 # 开发规则唯一载体归口
 
-规则版本：V0.02
+规则版本：V0.03
 
 本文是范围收口后的开发阅读入口。以下内容均从指定 authority SHA 逐字迁入；原文中的“修改前”“修改后”“作废”“待裁”等状态标签继续有效，迁入不改变其状态。
 
@@ -2040,6 +2040,86 @@ authority L31：
 authority L121：
 
     运营漏标让利型时平台仍按出资型付成本
+
+### B-48 `PROGRESS.md` · 退租结算实现口径
+
+authority L4-L5、L8-L12：
+
+    合同退租变更（move_out/early_termination）终审通过 → 自动生成退租结算并落应收应付台账：
+    ①未清应收清算（只读汇总不重挂）②押金处置（净额>0 挂应付、≤0 只列示）③提前退租违约金挂应收 ④结算快照留痕 ⑤幂等防重 ⑥前端展示+source_type筛选 ⑦契约门禁 ⑧测试。
+
+    - 触发点：`ContractService.approveChange` 的 COMPLETED 分支，changeType∈{move_out,early_termination} → 调 `settleTerminationIfNeeded`。
+    - 结算快照落点：**复用既有 `contract_settlements` 表**（settlement_items JSONB），零迁移。逐项 arApItemId 回写留痕。
+    - 落台账：新 `TerminationSettlementPort`（finance 实现，@Lazy 反向注入 ContractService，抄 turnoverRentPort 范式）→ persistDerivedArApItem 挂 payable(押金退还)/receivable(违约金)。
+    - 幂等：结算单 id = "cst_"+deterministicSuffix(changeId)；已存在即跳过；端口幂等键取结算单 id（派生台账项 id 确定，ON CONFLICT DO NOTHING）。
+    - source_type 新增 `termination_penalty` + `deposit_refund` 进 FinanceService.SOURCE_TYPES + 中文标签（DB 层 ar_ap_items.source_type 无 CHECK，服务层枚举即可，抄 V110/V299 同款，**零迁移**）。
+
+### B-49 `docs/00-current-effective-document-entry-v0.1.md` · OpenAPI JSON/YAML 优先级
+
+authority L26：
+
+    | P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-08-03）核验为 720 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
+
+### B-50 `docs/final-open-decisions-and-owner-checklist-20260610.md` · 管理层看板默认排序
+
+authority L14：
+
+    | O-003 | 管理层看板默认排序 | 第一屏收入、客流、核销；第二屏商户表现、供应链库存、异常风险、结算差异、应收应付逾期 | 作为首版上线默认排序 | 影响首页体验 |
+
+### B-51 `docs/full-admin-mvp-coding-package-v0.1.md` · 高风险按钮审计提示
+
+authority L320：
+
+    | 高风险操作缺审计提示 | 运营不可追责 | 所有高风险按钮接 `HighRiskConfirm` 和 audit hint | 禁用高风险按钮直到审计事件补齐 |
+
+### B-52 `docs/production-readiness-implementation-ledger-template-v0.1.md` · 状态枚举与台账字段
+
+authority L9-L21、L23-L40：
+
+    ## 2. 状态枚举
+
+    | 状态 | 含义 |
+    |---|---|
+    | not_started | 未开始 |
+    | pending_info | 等待资料、账号、供应商或配置 |
+    | in_progress | 正在实施 |
+    | blocked | 被外部条件阻塞，必须写明阻塞范围 |
+    | ready_for_test | 配置完成，等待验收 |
+    | passed | 已验收通过 |
+    | failed | 验收失败，需整改 |
+    | waived | 已正式豁免，必须有审批证据 |
+    | not_applicable | 当前环境不适用，必须说明原因 |
+
+    ## 3. 台账字段
+
+    | 字段 | 必填 | 说明 |
+    |---|---|---|
+    | item_id | 是 | 前置项编号，如 PRD-MDM-001 |
+    | category | 是 | MDM、payment、face_age、nas、credential、wecom、third_party、ops160、security、domain |
+    | item_name | 是 | 前置项名称 |
+    | default_solution | 是 | 默认推荐方案 |
+    | owner_department | 是 | 责任部门，如 IT、采购、财务、运营、法务、安全 |
+    | owner_person | 否 | 具体责任人，实施前补齐 |
+    | supplier_name | 否 | 供应商名称，未定填 TBD |
+    | status | 是 | 使用本文状态枚举 |
+    | target_date | 否 | 目标完成日期 |
+    | evidence_link | 否 | 合同、截图、测试报告、验收记录、恢复演练记录等证据链接 |
+    | last_test_time | 否 | 最近一次测试或复验时间 |
+    | blocking_scope | 否 | 阻塞范围，如“仅阻塞公开生产，不阻塞开发联调” |
+    | fallback_mode | 否 | 临时方案或降级方案 |
+    | audit_event | 否 | 关联审计事件或操作记录 |
+
+### B-53 `docs/adversarial-audit-round3-findings-register-v0.1.md` · 设备验签规范串
+
+authority L18：
+
+    - **设备绑定型验签**（staff_work_phone/tablet/kiosk 写请求）：签名量 = `deviceId|ts|nonce|METHOD|path|sha256(body)`；
+
+### B-54 `docs/production-readiness-evidence/owner-execution-packets/*.md` · 实施与复核职责分离
+
+authority `finance.md` L78；同一句亦见 `operations-legal.md` L82、`procurement-supplier.md` L89、`technical-owner.md` L79：
+
+    - 不让同一人同时作为 owner_person 和 reviewer。
 
 ## C. M01 副审补正
 
