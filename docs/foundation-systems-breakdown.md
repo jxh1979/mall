@@ -1,4 +1,4 @@
-# 地基系统详细拆分 V0.01
+# 地基系统详细拆分
 
 > 2026-07-04 逻辑一致性修订：§1.3.5/§1.6.2 空间四级模型（综合体/楼栋/楼层/区域/点位固定表）加"已作废、真实扁平单表 spaces"标注；admission_audit 引用加"准入走 supervisor_review、admission_audits 从未建"标注；补名词四层脚注（组织=business_entities.entity_role，projects 表=业态场馆非项目公司）。
 
