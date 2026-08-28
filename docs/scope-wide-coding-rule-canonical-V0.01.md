@@ -1,6 +1,6 @@
 # 开发规则唯一载体归口
 
-规则版本：V0.01
+规则版本：V0.02
 
 本文是范围收口后的开发阅读入口。以下内容均从指定 authority SHA 逐字迁入；原文中的“修改前”“修改后”“作废”“待裁”等状态标签继续有效，迁入不改变其状态。
 
@@ -2012,6 +2012,34 @@ authority L60-L60：
 authority L72-L72：
 
     - [x] Redact dynamic QR values at service boundary and JDBC persistence boundary.
+
+### B-44 `docs/00-current-effective-document-entry-v0.1.md` · 游乐复检与本地模型边界
+
+authority L122：
+
+    整改复检后须主管确认才能恢复营业（禁止巡检员单人闭环）
+
+authority L120：
+
+    T3-D1 可使用 160 本地大模型提供脱敏后的只读质检建议，必须人工复核且不得自动决策
+
+### B-45 `docs/formal-security-baseline-generation-task-v0.1.md` · 未纳管设备生产阻断
+
+authority L33：
+
+    未纳管设备可生产核销高风险权益时不通过
+
+### B-46 `docs/r1-third-party-capability-switch-and-mock-strategy-20260618.md` · 供应商私有字段隔离
+
+authority L31：
+
+    替换前不得写死供应商私有字段进票务/酒吧/财务等业务主模型
+
+### B-47 `docs/prd-audit/HTML-PASS-SETTLEMENT-WATERFALL-2026-07-28.md` · 让利型漏标成本
+
+authority L121：
+
+    运营漏标让利型时平台仍按出资型付成本
 
 ## C. M01 副审补正
 
