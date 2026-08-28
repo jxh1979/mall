@@ -120,8 +120,8 @@ npm run verify:production-evidence-crosslinks` |
 | AI/规则处理 | P0 使用 Java 内置规则处理器；T3-D1 可使用 160 本地大模型提供脱敏后的只读质检建议，必须人工复核且不得自动决策；独立 Python AI 服务仍后置，未进入当前生产路径 |
 | 构建工具 | Maven 为唯一 P0 构建工具 |
 | 游乐安全 | P0 强制开放前阻断式安全巡检；安全严重度为提醒、警告、阻断、重大四档；当日无合格巡检或存在未复检的「阻断」项即拒绝核销；整改复检后须主管确认才能恢复营业（禁止巡检员单人闭环）；全程留痕 |
-| 一体机 | 统一终端码 `kiosk`，通过 `kiosk_mode=ticketing/service` 区分售票型和非售票型 |
-| 售票型一体机 | 承担授权服务人员辅助到店购票、订单查询职责（**门票为动态二维码，不提供取票功能**）；绑定酒吧门口/前台时只能售卖本酒吧单店门票，不得售卖综合体通票（依据 BSM「启用售票能力的一体机」条；DEC-R7-05） |
+| 一体机 | 统一终端码 `kiosk`；全体一体机统一具备权益展示、订台、吧台买酒、游乐状态和定期检修记录等基础能力，通过叠加式售票能力开关 `ticketing_enabled` 区分是否允许授权服务人员辅助到店客人购票 |
+| 启用售票能力的一体机 | 承担授权服务人员辅助到店购票、订单查询职责（**门票为动态二维码，不提供取票功能**）；绑定酒吧门口/前台时只能售卖本酒吧单店门票，不得售卖综合体通票（依据 BSM「启用售票能力的一体机」条；DEC-R7-05） |
 | 卡座提成 | 一张账单的提成只计一次、只归帮该客人预订的人；自来客不产生销售提成；协助服务、加单、送达等经手人只留痕不提成；存在预订归属时，按员工档案是否设有「销售岗」标识判定费率；费率可配（业务参数，按酒吧可配，出厂默认销售 15%、非销售 10%，须同时配置上下限），按可计提消费额计；不计提通票及票务权益整类（不论其中权益收费或免费、由谁出资）、卡座入场名额、赠送成本、退款、免单 |
 | 卡座续卡/续时 | 平台不提供续卡、续时类产品。拆单、合单、转台、并台、拆台和撤销转台按业务 HTML 留痕，不作为续卡或续时产品 |
 
@@ -255,7 +255,7 @@ npm run verify:production-evidence-crosslinks` |
 | Android 工作手机/平板 | `android-device-terminal-development-design.md` | 设备绑定、扫码、核销、MDM、在线策略 |
 | 终端枚举与页面边界 | `terminal-page-product-prd-v0.1.md` | 端类型、页面职责、开关 |
 | App/小程序/Web | `web-mobile-app-terminal-extension-product-prd-v0.1.md` | 客人购票、订单、权益、展示和自助入口 |
-| 一体机 | `terminal-display-layer-spec-v0.2.md` | 售票型/非售票型一体机边界和能力开关 |
+| 一体机 | `terminal-display-layer-spec-v0.2.md` | 一体机售票能力开关的边界 |
 
 ### 3.5 测试、审计、运营复核
 
@@ -356,7 +356,7 @@ npm run verify:production-evidence-crosslinks` |
 | 总控/产品负责人 | 本文档、`unified-standards-baseline-v0.1.md`、`business-decision-log-v0.1.md`、`p0-user-story-map-and-sprint-slices-v0.1.md`、`project-progress-dashboard.md` | 判断范围、优先级、版本边界、是否已收口和是否可进入编码 | 不得用历史审计报告或旧待决策清单反向打开已收口事项 |
 | 后端负责人 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`backend/README.md`、`java-backend-platform-foundation-development-design.md`、`foundation-database-design.md` | 按首批编码包和 operation 开发 Controller、Service、Flyway、权限、幂等、事件和接口测试 | 不得按旧 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或 TypeScript/SQLite 原型开发 |
 | Web/小程序/App 前端 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.json`、`frontend-admin-development-design.md`、`customer-app-miniapp-development-design-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`code-contract-difference-and-migration-audit-v0.1.md` | 对齐正式路径、请求字段、错误码、权限状态、支付/核销/权益闭环和页面验收 | 不得只把旧路径改前缀，也不得使用未进入 OpenAPI 的字段或状态 |
-| Android 工作手机/平板/一体机 | `android-device-terminal-development-design.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`apps/android-terminal/README.md`、`openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 区分工作手机、平板、售票型一体机、非售票型一体机能力；按设备绑定、终端限制、在线核销和留痕实现 | 不得把 `/api/mobile/*` 当作正式后端路径；未纳管设备不得生产使用 |
+| Android 工作手机/平板/一体机 | `android-device-terminal-development-design.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`apps/android-terminal/README.md`、`openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 区分工作手机、平板、触摸屏一体机能力，并区分一体机是否启用售票能力；按设备绑定、终端限制、在线核销和留痕实现 | 不得把 `/api/mobile/*` 当作正式后端路径；未纳管设备不得生产使用 |
 | 测试/审计 | `p0-first-coding-package-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-operation-permission-matrix-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`t3d-local-llm-ai-quality-v0.1.md` | 按业务闭环、首批编码包、operation、权限、事件、证据、安全基线、AI 脱敏、人审兜底和异常场景编写验收用例 | 不得只按页面路径或模块标题验收；不得把 AI 建议当成自动处罚、退款、核销、调价、绩效或合同状态依据 |
 | 运营/财务/门店管理 | `product-requirements-v0.1.md`、`bar-operations-development-design.md`、`ticketing-pass-entitlement-development-design.md`、`finance-ar-ap-ledger-development-design-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 验证通票、权益、酒水领取、存酒、卡座、最低消费、扫码支付、核销、应收应付和日结对账闭环 | 不得用口头流程替代系统留痕和财务主口径 |
 | 第三方供应商/集成开发 | `third-party-supplier-integration-kit-v0.1.md`、`open-platform-security-auth-development-design.md`、`third-party-integration-development-design.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-contract-closure-appendix-v0.1.md` | 明确平台调用供应商、供应商调用平台、签名、Webhook、轮询校验、字段映射和异常补偿边界 | 不得引用旧 `/api/integration/*` 作为正式联调路径 |
