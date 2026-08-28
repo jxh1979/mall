@@ -24,7 +24,7 @@
 | 集团治理重建 PRD | `docs/group-governance-rebuild-prd-v1.0.md` |
 | 服务点单业务域 PRD | `docs/service-order-product-prd-v0.1.md`；承接域＝BSM 服务点单章（`section#service-order`）+ ENUM 第十二章「服务点单」；2026-08-05（R7）新建 |
 | P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-08-03）核验为 720 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
-| OpenAPI 与业务 HTML 覆盖核对（2026-06-30 复核更新，分辨四类，勿再笼统列缺口） | ① 商户档案/入驻=已覆盖（`/api/v1/platform/merchants` + `merchant.profile.view/manage`）；② 应收=已覆盖（AR/AP 域）；③ 楼栋/楼层/区块/铺位/公共区域=由扁平 `spaces` 的 `space_type`+`parent_space_id` 自套承载（非缺口，映射见 foundation-database-design）；④ 发票=税务/电子发票平台第三方对接、故意延后（预留接口+后台开关+不阻塞自研，真实资料到位再补契约，见 finance-settlement-product-prd §6A）；⑤ 操作审计日志查询/导出=**现状已覆盖 + 明确增强项**：审计事件页 ADM-EVD-001（AUDITOR，搜索/筛选/导出留痕）已实现、由 `/api/v1/evidence/events` 承载，按对象时间线已 UNION `audit_events`；**待增强（P1/P2 留档、非阻塞）**=跨对象批量搜索/导出全量 `audit_events` 操作日志（如“导出某月全部退款放行”），需另开 audit_events 专属查询/导出端点+页+测试，按审计实际需要再排。 |
+| OpenAPI 与业务 HTML 覆盖核对（2026-06-30 复核更新，分辨四类，勿再笼统列缺口） | ① 商户档案/入驻=已覆盖（`/api/v1/platform/merchants` + `merchant.profile.view/manage`）；② 应收=已覆盖（AR/AP 域）；③ 楼层/区域/点位/商铺/卡座/吧台位/游乐入口/库房/设备点位=由扁平 `spaces` 的 `space_type`+`parent_space_id` 自套承载（非缺口，映射见 foundation-database-design）；④ 发票=税务/电子发票平台第三方对接、故意延后（预留接口+后台开关+不阻塞自研，真实资料到位再补契约，见 finance-settlement-product-prd §6A）；⑤ 操作审计日志查询/导出=**现状已覆盖 + 明确增强项**：审计事件页 ADM-EVD-001（AUDITOR，搜索/筛选/导出留痕）已实现、由 `/api/v1/evidence/events` 承载，按对象时间线已 UNION `audit_events`；**待增强（P1/P2 留档、非阻塞）**=跨对象批量搜索/导出全量 `audit_events` 操作日志（如“导出某月全部退款放行”），需另开 audit_events 专属查询/导出端点+页+测试，按审计实际需要再排。 |
 | P0 operation 级验收矩阵 | `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` |
 | P0 OpenAPI 权限、事件、任务追溯附录 | `docs/p0-openapi-contract-closure-appendix-v0.1.md` |
 | P0 可编码入口包 | `docs/p0-coding-entry-pack-v0.1.md` |
@@ -119,11 +119,11 @@ npm run verify:production-evidence-crosslinks` |
 | 生产凭证轮换 | 生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥采用人工台账 + 到期提醒 + Runbook；`npm run verify:ops160-recovery` 必须通过 |
 | AI/规则处理 | P0 使用 Java 内置规则处理器；T3-D1 可使用 160 本地大模型提供脱敏后的只读质检建议，必须人工复核且不得自动决策；独立 Python AI 服务仍后置，未进入当前生产路径 |
 | 构建工具 | Maven 为唯一 P0 构建工具 |
-| 游乐安全 | P0 强制开放前阻断式安全巡检、严重项暂停开放、主管恢复、全程留痕 |
-| 一体机 | 统一终端码 `kiosk`，通过 `kiosk_mode=ticketing/service` 区分售票型和非售票型 |
-| 售票型一体机 | 承担授权服务人员辅助到店购票、订单查询职责（**门票为动态二维码，不提供取票功能**）；绑定酒吧门口/前台时只能售卖本酒吧单店门票，不得售卖综合体通票（依据 BSM「启用售票能力的一体机」条；DEC-R7-05） |
-| 卡座提成 | 新增销售人员岗位；销售人员售卖卡座按可计提消费额 15%，非销售人员按 10%；不含通票和票务权益 |
-| 卡座转卡/合并/续卡 | 已纳入 P1 酒吧 SaaS/POS 增强：同酒吧、同商户、同营业日受控操作；保留账单、低消、入场名额、销售归属、服务责任链和事件留痕；不作为当前 P0 阻断 |
+| 游乐安全 | P0 强制开放前阻断式安全巡检；安全严重度为提醒、警告、阻断、重大四档；当日无合格巡检或存在未复检的「阻断」项即拒绝核销；整改复检后须主管确认才能恢复营业（禁止巡检员单人闭环）；全程留痕 |
+| 一体机 | 统一终端码 `kiosk`；全体一体机统一具备权益展示、订台、吧台买酒、游乐状态和定期检修记录五项基础能力，通过叠加式售票能力开关 `ticketing_enabled` 区分是否允许授权服务人员辅助到店客人购票 |
+| 启用售票能力的一体机 | 承担授权服务人员辅助到店购票、订单查询职责（**门票为动态二维码，不提供取票功能**）；绑定酒吧门口/前台时只能售卖本酒吧单店门票，不得售卖综合体通票（依据 BSM「启用售票能力的一体机」条；DEC-R7-05） |
+| 卡座提成 | 一张账单的提成只计一次、只归帮该客人预订的人；自来客不产生销售提成；协助服务、加单、送达等经手人只留痕不提成；存在预订归属时，按员工档案是否设有「销售岗」标识判定费率；费率可配（业务参数，按酒吧可配，出厂默认销售 15%、非销售 10%，须同时配置上下限），按可计提消费额计；不计提通票及票务权益整类（不论其中权益收费或免费、由谁出资）、卡座入场名额、赠送成本、退款、免单 |
+| 卡座续卡/续时 | 平台不提供续卡、续时类产品。拆单、合单、转台、并台、拆台和撤销转台按业务 HTML 留痕，不作为续卡或续时产品 |
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
@@ -243,7 +243,7 @@ npm run verify:production-evidence-crosslinks` |
 | 会员身份、成长值与等级 | `member-and-tier-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 积分获取、冻结、有效期、兑换与虚拟券 | `points-and-voucher-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 商户积分价格、费用、补偿、账单与税务边界 | `merchant-points-settlement-rules-v1.0.md` | 本轮只发布业务规则，技术承接另行审计 |
-| 储值（付费会员已退役） | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份新权威 PRD |
+| 储值（付费会员已退役） | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份领域 PRD（最终解释权仍为三份业务 HTML） |
 | 经营看板、8 类指标、下钻 | `business-dashboard-metrics-product-prd-v0.1.md` | `r5-spec-T12-dashboard-aggregation-dev-design-20260618.md` |
 | 客人端 App/小程序、订台定金、订卡邀请函 | `customer-app-miniapp-product-prd-v0.1.md` | `customer-app-miniapp-development-design-v0.1.md` |
 
@@ -255,7 +255,7 @@ npm run verify:production-evidence-crosslinks` |
 | Android 工作手机/平板 | `android-device-terminal-development-design.md` | 设备绑定、扫码、核销、MDM、在线策略 |
 | 终端枚举与页面边界 | `terminal-page-product-prd-v0.1.md` | 端类型、页面职责、开关 |
 | App/小程序/Web | `web-mobile-app-terminal-extension-product-prd-v0.1.md` | 客人购票、订单、权益、展示和自助入口 |
-| 一体机 | `terminal-display-layer-spec-v0.2.md` | 售票型/非售票型一体机边界和能力开关 |
+| 一体机 | `terminal-display-layer-spec-v0.2.md` | 一体机售票能力开关的边界 |
 
 ### 3.5 测试、审计、运营复核
 
@@ -356,7 +356,7 @@ npm run verify:production-evidence-crosslinks` |
 | 总控/产品负责人 | 本文档、`unified-standards-baseline-v0.1.md`、`business-decision-log-v0.1.md`、`p0-user-story-map-and-sprint-slices-v0.1.md`、`project-progress-dashboard.md` | 判断范围、优先级、版本边界、是否已收口和是否可进入编码 | 不得用历史审计报告或旧待决策清单反向打开已收口事项 |
 | 后端负责人 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`backend/README.md`、`java-backend-platform-foundation-development-design.md`、`foundation-database-design.md` | 按首批编码包和 operation 开发 Controller、Service、Flyway、权限、幂等、事件和接口测试 | 不得按旧 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或 TypeScript/SQLite 原型开发 |
 | Web/小程序/App 前端 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.json`、`frontend-admin-development-design.md`、`customer-app-miniapp-development-design-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`code-contract-difference-and-migration-audit-v0.1.md` | 对齐正式路径、请求字段、错误码、权限状态、支付/核销/权益闭环和页面验收 | 不得只把旧路径改前缀，也不得使用未进入 OpenAPI 的字段或状态 |
-| Android 工作手机/平板/一体机 | `android-device-terminal-development-design.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`apps/android-terminal/README.md`、`openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 区分工作手机、平板、售票型一体机、非售票型一体机能力；按设备绑定、终端限制、在线核销和留痕实现 | 不得把 `/api/mobile/*` 当作正式后端路径；未纳管设备不得生产使用 |
+| Android 工作手机/平板/一体机 | `android-device-terminal-development-design.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`apps/android-terminal/README.md`、`openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 区分工作手机、平板、触摸屏一体机能力，并区分一体机是否启用售票能力；按设备绑定、终端限制、在线核销和留痕实现 | 不得把 `/api/mobile/*` 当作正式后端路径；未纳管设备不得生产使用 |
 | 测试/审计 | `p0-first-coding-package-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-operation-permission-matrix-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`t3d-local-llm-ai-quality-v0.1.md` | 按业务闭环、首批编码包、operation、权限、事件、证据、安全基线、AI 脱敏、人审兜底和异常场景编写验收用例 | 不得只按页面路径或模块标题验收；不得把 AI 建议当成自动处罚、退款、核销、调价、绩效或合同状态依据 |
 | 运营/财务/门店管理 | `product-requirements-v0.1.md`、`bar-operations-development-design.md`、`ticketing-pass-entitlement-development-design.md`、`finance-ar-ap-ledger-development-design-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 验证通票、权益、酒水领取、存酒、卡座、最低消费、扫码支付、核销、应收应付和日结对账闭环 | 不得用口头流程替代系统留痕和财务主口径 |
 | 第三方供应商/集成开发 | `third-party-supplier-integration-kit-v0.1.md`、`open-platform-security-auth-development-design.md`、`third-party-integration-development-design.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-contract-closure-appendix-v0.1.md` | 明确平台调用供应商、供应商调用平台、签名、Webhook、轮询校验、字段映射和异常补偿边界 | 不得引用旧 `/api/integration/*` 作为正式联调路径 |
@@ -411,7 +411,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 160 API 部署/回滚/健康检查脚本 | 运维、预生产、生产验收 | 可按 Runbook 执行 Java jar 发布、回滚、健康检查和 BE-000 验收 | 不得启动旧 `apps/api` 或备份旧 SQLite 原型库作为正式资产 |
 | MDM 设备管控方案 | Android 工作手机、平板、一体机 | 可做模拟设备和测试环境 | 未纳管设备不得作为生产工作终端 |
 | 聚合支付商户号、密钥、回调和对账文件 | 支付、退款、日结、对账 | 可做支付抽象和 mock | 不得生产收款/退款上线 |
-| 酒吧年龄/人脸校验供应商或等效设备 | 酒吧强制年龄校验 | 可做接口占位和测试 mock | 不得标记生产正式通过 |
+| 综合体入场年龄核验设备（人脸扫描或等效） | 综合体入场三道环节的第二道「年龄核验环节」统一完成；售酒继承入场核验结果 | 可做接口占位和测试 mock | 不得把人工口头确认标记为生产正式通过；不得在酒吧入场或售酒再设一道验龄闸 |
 | NAS 备份与恢复演练 | 生产环境 | 真实 SMB 挂载、读写删除测试、NAS 同步备份和从 NAS 恢复演练已通过；最新证据为 `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 生产前仍需固化开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练 |
 | 生产前置资料实施台账 | 运维、IT、采购、财务、安全、供应商接入、生产准入 | 可按模板收集资料、账号、证据和阻塞范围 | 未建立 `production-readiness-implementation-ledger-template-v0.1.md` 对应台账，或 `npm run verify:ops160-recovery` 未通过前，不得用口头说明或零散截图替代上线前置证据 |
 | 正式安全基线 | 后端、OpenAPI、开放平台、支付、设备、第三方、160 运维、生产上线 | V1 已生成并可通过 `npm run verify:security-baseline` 与 `npm run verify:production-readiness-evidence` 复核 | 仍有 P0/P1 open findings 或生产前置 pending_info 时，不得进入公开生产安全准入 |
@@ -458,6 +458,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-08-27 | V0.1 P2 M01 第二整轮 | 三份领域 PRD 不再称「新权威」；HTML 对全部业务口径拥有最终解释权，Phase 4 只读审计不得改写 HTML |
 | 2026-06-16 | V0.1 开发文档审计 | 新增开发文档完整性对抗式审计、全量文档地图 CSV、可开发规格草案，并补入口 UI 自动化和 gstack 交付审计；同步修正 P2 动态定价旧口径残留 |
 | 2026-06-10 | V0.1 | 新增当前有效文档入口、正式口径、阅读顺序、废止内容和 P0 开发准入条件 |
 | 2026-06-10 | V0.1 补充 | 标记 P0 任务映射表和游乐安全巡检规格已新增；审计结论改为第一批硬缺口已收口 |
@@ -520,9 +521,9 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 ## 会员、积分与商户积分结算重构入口（2026-08-01）
 
-- 会员与等级唯一权威：`docs/member-and-tier-product-prd-v1.0.md`
-- 积分与虚拟券唯一权威：`docs/points-and-voucher-product-prd-v1.0.md`
-- 商户积分结算唯一权威：`docs/merchant-points-settlement-rules-v1.0.md`
+- 会员与等级产品细化（最终解释权仍为三份业务 HTML）：`docs/member-and-tier-product-prd-v1.0.md`
+- 积分与虚拟券产品细化（最终解释权仍为三份业务 HTML）：`docs/points-and-voucher-product-prd-v1.0.md`
+- 商户积分结算产品细化（最终解释权仍为三份业务 HTML）：`docs/merchant-points-settlement-rules-v1.0.md`
 - 储值现行职责：`docs/member-loyalty-and-stored-value-product-prd-v0.1.md`
 - 签到与生日边界：`docs/stored-value-membership-checkin-birthday-prd-v0.1.md`
 - 系统配置覆盖检查：`docs/member-points-p1-ops-parameter-tables-v0.1.md`，只检查系统是否承载，不是运行时配置真源。
@@ -530,24 +531,8 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 - 批准设计：`docs/superpowers/specs/2026-07-28-member-points-settlement-redesign-design.md`
 - 审计范围：`docs/prd-audit/member-points-rebuild-scope-2026-07-28.md`
 - 逐文件正式审计：`docs/prd-audit/member-points-related-doc-audit-2026-07-28.md`；以审计时 22 份现行 PRD 为基线，8 份精准同步、14 份无需修改。
-- HTML 覆盖关系：`docs/prd-audit/html-prd-coverage.csv` 已登记三份新权威与三个业务 HTML 的 9 组待逐条映射关系；具体替代文本由 Phase 4 只读审计产生。
-- HTML 边界：三个业务 HTML 中相关条款只读，须先完成逐条替代清单并获用户批准；未涉及业务仍由 HTML 最终解释。
+- HTML 覆盖关系：`docs/prd-audit/html-prd-coverage.csv` 已登记三份领域 PRD（最终解释权仍为三份业务 HTML）与三个业务 HTML 的 9 组映射关系。
+- HTML 边界：三份 HTML 对全部业务口径拥有最终解释权，Phase 4 只读审计的产出不得改写 HTML。
 
 
-## 通票分账与组织主体口径入口（2026-07-28）
-
-- **业务真源**：业务 HTML 提交 `f19ea732`（PR #250，10 组 28 处，用户逐条批准）——`business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html`。
-- **口径索引**：`docs/prd-audit/HTML-PASS-SETTLEMENT-WATERFALL-2026-07-28.md`（瀑布、赠送权益、收入归属、同步落点、实现缺口、HTML 哈希）。
-- **术语与组织主数据权威表**：`docs/terminology-canonical-v1.0.md` §三/§五/**§六 组织主数据登记**；结算侧副本 `docs/settlement-rebuild-prd-v1.0.md` §2.3A。
-- **业务裁决**：`docs/business-decision-log-v0.1.md` **DEC-ORG-2026-07-28-01~07**；审计侧同步 `docs/prd-audit/business-decision-ledger.md`「2026-07-28 新增业务裁决」节。
-- **要点**：① 专名「娱乐运营平台」废止 → **娱乐平台公司**；② 分账瀑布 = 渠道抽成 → 赠送权益预估成本（娱乐平台公司）→ 门票综合服务费/留存（同一项只扣一次，**归娱乐平台公司**）→ 可分配池仅各酒吧分；③ 赠送权益每样独立、绑提供方、按内部结算价计成本，预扣按票种配「按件计／按票整额」；④ 赠酒每吧至少一杯、杯数写票面、**不得跨吧核销**；⑤ 非散台服务费与订台低消/二次消费/额外酒水归**各酒吧商户**（⚠️可重议）、场地租金归**长沙项目公司**（= 资产公司）、向商户供货货款归**中央餐饮公司**。
-- **准入提示**：以上 ②③④ 与「综合服务费归属主体」**代码尚未实现**，属待开发缺口（见 `docs/dev-plan-v7-audit-20260722.md` R-1/R-3）；本轮为**文档同步批次，未改代码、未新增端点**。
-
-### 第二轮（2026-07-28）综合／联合通票 + 免费权益 + 内部结算 SKU 目录
-
-- **业务真源**：业务 HTML 提交 `e314c595`（PR #257，A/B/D）+ `88eba70c`（PR #260，C/E），用户逐条批准。
-- **口径索引**：`docs/prd-audit/HTML-PASS-SETTLEMENT-WATERFALL-2026-07-28.md` **§七**。
-- **业务裁决**：`docs/business-decision-log-v0.1.md` **DEC-ORG-2026-07-28-08~12**；审计侧同步 `docs/prd-audit/business-decision-ledger.md`「2026-07-28 新增业务裁决 · 第二轮」节。
-- **承接权威**：A/B → `settlement-rebuild-prd-v1.0.md` **§5.0c**；D → 同 PRD **§5.1 两段分配**；C → 同 PRD **§6.6**；E → `finance-settlement-product-prd-v0.1.md` **§3B**（现状-目标差距权威）+ 结算侧指针 §9.7。
-- **要点**：① **A** 综合／联合通票售价 =（游乐价 + 酒吧价 + 收费的餐饮/零售价）× 折扣，**免费的（票面价 0）不计入价值**；② **B** 整单先扣渠道抽成 → 按**各业态价格占比**拆份额 → 游乐/餐饮/零售各自归属 → **仅酒吧份额**再扣赠送权益预估成本与门票综合服务费 → 剩余进池；拆份额**只按业态大分类**，**依附加赠权益不作为业态层拆分对象**，**各业态价格与内部结算价不可混用**（「票面原价」为原称，2026-08-05 DEC-R7-16 更名）；③ **D** 可分配池**两段分配**（「每客单价/固定额」先拿绝对额、余额由「排名档位」按比例分尽、**拿了第一段的不再参与第二段**），**替代原「三选一」**；④ **C** 免费权益成本承担分**商户让利型 / 平台出资型**两类，两类**均不参与份额拆分**，原「0 元也按内部结算价结算」一刀切**作废**；⑤ **E** 🆕 **新需求·完全未开发** 内部结算 SKU 目录（唯一真源 / 唯一可编辑处 / 草案→他人复核转正 / 核销结算固化当时价只读），现状**一价四存**（V152 酒吧商品、V257 酒吧套餐、V225 权益模板、V301 券台账）。
-- **准入提示**：本轮 **A/B/C/D/E 五条代码全部未跟上**；其中 **C 的现状与新口径直接冲突**（核销侧对 0 元权益一律取价结算 = 全按平台出资型处理，平台会为商户让利型多付成本）。本轮为**文档同步批次，未改代码、未新增端点**。排期见 `docs/pending-development-backlog-v0.1.md` 批 10/11。
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-01，本文不再重复记载。

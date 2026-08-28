@@ -43,7 +43,7 @@
 | R14-DE-05 | ADVERSARIAL | P1 | A | §2#2 vs §4A#4 税率调整 | 「财务/税务/法务三审＋顶层平台公司最终确认」与「最高权限审批」两条互斥审批链并存 | EV-DE-16 |
 | R14-DE-06 | CONFORMANCE | P1 | C | ENUM「可选扣除项」L292 | 欠款抵扣债权人 ENUM 写「对平台」、BSM 2026-08-01 已改「对相应法律主体」，ENUM 未镜像 | EV-DE-17,18 |
 | R14-DE-07 | ADVERSARIAL | P1 | A | §5B 付账日 | 「每月 5 / 15 / 25 日」写成固定值，BSM L822 与 finance-settlement §4B.1 现文均为「业务参数，全平台统一可配，初始为…」 | EV-DE-19 |
-| R14-DE-08 | CONFORMANCE | P1 | B | §9 发放保护线「由大股东决定」 | HTML 把留存比例决定权给大股东；PRD 把含 `payout_floor_bps` 的全部方案变更路由到最高权限审批，「大股东」在 PRD 无定义、无落点 | EV-DE-20 |
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-51，本文不再重复记载。
 | R14-DE-09 | CONFORMANCE | P1 | A | §9 亏损结转·存量回填 | 「历史多期真累计不回溯——设计边界」与 BSM L1739「亏损一直累着」冲突，无 HTML/DEC 依据 | EV-DE-21 |
 | R14-DE-10 | CODE-FOLLOWUP | P1 | CODE-FOLLOWUP | §5A 生产禁用建议第 1 条 | `customDeductions` 写入口在基线上仍可达，越权能力未按 PRD 处置下线 | EV-DE-22 |
 | R14-DE-11 | ADVERSARIAL | P2 | A | §9 期间关账锁 | 命名的判定纯函数 `DividendPeriodLock` 在全树仅存于三份文档，`backend`/`apps` 零命中 | EV-DE-23 |
@@ -180,7 +180,7 @@ PGM L435（同句，并为 `platform-governance-prd-v0.1.md` §12C L736 逐字�
 §2#2 L51 末：「落地仍须走三份 HTML 明定的**财务／税务／法务三审 ＋ 顶层平台公司最终确认**。」
 §4A#4 L110：「**比例/税率及其他钱类方案调整**：必须新建草案版本，**由最高权限审批且提交人不得自审**，并指定生效起始日……」
 
-同一动作（改税率）两条不同的审批链，PRD 未说明二者是并列必经还是择一，也未在 §3 / §6 / §8 的任何流程中出现「三审」环节。HTML 侧（BSM L1735 / ENUM L289）明文只有三审 + 顶层平台公司最终确认这一条，且把税率层级标为**安全阈值**（`DEC-R8-82` ①）而非普通业务参数——安全阈值的审批要求高于普通方案版本审批。
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-51，本文不再重复记载。
 
 **应改成什么**：§4A#4 对**税率**这一项补例外指向 §2#2 的三审 + 顶层平台公司最终确认链，并在 §3 字段行、§6 审批流、§8 页面同步补该链；`tax_rate_bps` 的**上下限配置**同批补齐（§2#2 现文已自标为「待补项」，但 §3 字段清单里既无 `tax_rate_min_bps` 也无 `tax_rate_max_bps`）。
 

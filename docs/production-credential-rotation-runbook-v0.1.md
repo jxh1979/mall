@@ -17,72 +17,7 @@
 
 P0-A no-system-write boundary：Codex 只校验生产凭证台账结构、`credential_ref`、提醒字段、轮换步骤、回滚步骤、验证步骤和证据链接，不创建、不轮换、不停用任何真实生产账号或密钥。真实凭证发放、到期提醒任务配置和轮换执行必须由 IT/安全/财务在受控流程中完成。
 
-## 3. 台账字段
-
-| 字段 | 说明 |
-|---|---|
-| `credential_id` | 凭证编号 |
-| `credential_ref` | 凭证引用编号或保管位置编号，只写引用，不得写真实密钥 |
-| `credential_type` | 数据库、对象存储、支付、企业微信、供应商 API、服务器账号等 |
-| `environment` | `dev`、`test`、`staging`、`prod` |
-| `owner_department` | 责任部门 |
-| `owner_person` | 责任人 |
-| `system_scope` | 使用系统或模块 |
-| `supplier_name` | 第三方供应商名称，若无则为空 |
-| `created_at` | 创建时间 |
-| `expires_at` | 到期时间 |
-| `rotation_cycle_days` | 轮换周期 |
-| `reminder_days` | 到期提醒策略，P0 默认 `30,7,1` |
-| `last_rotated_at` | 最近轮换时间 |
-| `next_rotation_at` | 下次轮换时间 |
-| `rotation_status` | `not_started`、`pending_info`、`scheduled`、`rotated`、`failed`、`emergency_disabled` |
-| `secret_location` | 密钥保存位置描述，不记录明文 |
-| `runbook_link` | 轮换步骤链接 |
-| `verification_step` | 轮换后验证步骤 |
-| `rollback_step` | 轮换失败后的回滚或停用步骤 |
-| `rotation_evidence_link` | 轮换记录、截图、工单、供应商回执或测试报告 |
-| `emergency_disable_step` | 应急停用步骤 |
-| `audit_event` | 最近一次创建、查看、轮换或停用事件 |
-
-## 4. 轮换规则
-
-| 场景 | P0 规则 |
-|---|---|
-| 新增生产凭证 | 必须先登记台账，再发放给责任人 |
-| 到期前提醒 | 默认提前 30 天、7 天、1 天提醒 |
-| 责任人离职或调岗 | 必须立即轮换或停用相关凭证 |
-| 供应商变更 | 旧凭证停用，新凭证登记后再联调 |
-| 疑似泄露 | 立即停用、轮换、记录影响范围和复盘结论 |
-| 临时凭证 | 必须设置到期日，不允许长期有效 |
-
-## 4.1 P0 必登凭证类型
-
-| 凭证类型 | P0 登记要求 | 阻塞口径 |
-|---|---|---|
-| 生产服务器/运维账号 | 记录账号用途、负责人、授权范围、登录方式、停用步骤和审计证据 | 缺失时阻塞长期预生产和生产 |
-| PostgreSQL 生产库 | 记录应用账号、管理账号、备份账号的 `credential_ref`、到期日、轮换窗口和验证步骤 | 缺失时阻塞生产数据库接入 |
-| 对象存储 | 记录 MinIO 或等效对象存储 Access Key/Secret Key 的 `credential_ref`、桶范围、权限和回滚方式 | 缺失时阻塞生产附件、证据包和备份接入 |
-| JWT/Token 签名密钥 | 记录签名密钥引用、签名版本、过渡双签/双验窗口、旧 token 失效计划和回滚步骤 | 缺失时阻塞生产登录和开放接口签发 |
-| 聚合支付凭证 | 记录商户号、密钥引用、证书引用、回调验签资料、退款权限和财务责任人 | 缺失时阻塞生产收款、退款和日结 |
-| 企业微信凭证 | 记录 corp id、应用 secret 引用、会话存档密钥引用、回调 token/AES key 引用和同步负责人 | 缺失时阻塞企业微信 P0 同步能力 |
-| 第三方供应商 API 密钥 | 记录供应商、API/SDK、测试/生产环境、签名算法、回调密钥引用和异常停用方式 | 缺失时阻塞真实供应商联调或生产通过 |
-| 开放平台应用/回调签名密钥 | 记录外部应用、app key、secret ref、webhook secret ref、允许 endpoint 和轮换窗口 | 缺失时阻塞第三方双向开放生产接入 |
-| NAS SMB 凭证 / 备份加密口令预留 | 记录 SMB 用户、共享路径、挂载路径、`credential_ref`、保管责任、恢复演练使用方式和紧急替换步骤；当前备份归档不加密，备份加密口令仅为预留项 | 缺少 SMB 凭证和挂载证据时阻塞生产可恢复结论；当前不因未发放备份加密口令阻塞 |
-
-## 5. 验收标准
-
-Given 运维准备发放生产数据库密码，  
-When 台账中没有责任人、到期日或 Runbook，  
-Then 不得发放该凭证。
-
-Given 某聚合支付密钥距离到期不足 7 天，  
-When 系统执行到期检查，  
-Then 必须生成提醒任务并记录到期提醒事件。
-
-Given 某供应商 API 密钥疑似泄露，  
-When IT 执行应急停用，  
-Then 必须记录停用时间、影响系统、替换凭证、责任人和复盘链接。
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-12，本文不再重复记载。
 ## 6. 实施 Runbook
 
 1. 建立生产凭证台账模板。

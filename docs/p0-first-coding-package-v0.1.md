@@ -28,21 +28,7 @@
 - 权限矩阵：`p0-operation-permission-matrix-v0.1.md`；事件证据：`p0-action-event-evidence-matrix-v0.1.md`。
 - 数据隔离：`data-isolation-and-tenant-scope-security-spec-v0.1.md`（scope 注入只来自 token，越权必测）。
 
-## 3. 强制反模式（不得违反）
-
-- 不得按旧 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或 TypeScript/Fastify/Prisma/SQLite 原型开发（已由 `verify:no-legacy-api-prototype`、`prototype-deprecation-and-technology-baseline-v0.1.md` 阻断）。
-- 不得从请求参数读取 `merchant_id`/scope（见数据隔离规格 §2）。
-- 不得把 AI 建议当作自动处罚/退款/核销/调价/绩效/合同状态依据（须人审兜底）。
-- 不得把模板/本地 smoke 当作生产证据或生产就绪（可开发/联调 ≠ 生产上线）。
-- 新增接口必须先改 OpenAPI → 生成 operation matrix/closure → 跑 `verify:p0-contract` → `verify:delivery-gates`。
-
-## 4. 首批验收标准
-
-- `verify:p0-contract`、`verify:delivery-gates` 通过。
-- 后端单元/集成测试全绿；operation 矩阵与 OpenAPI 同步。
-- 每个写操作有幂等键 + 审计事件 + 权限校验 + 数据范围过滤。
-- 主体绑定唯一性、AR/AP 台账完整、生产前置台账区分 template/submitted/verified。
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-21，本文不再重复记载。
 ## 5. 首批实现当前态（实测，2026-06-18）
 
 - 后端测试：**673 / 0 失败 / 0 错误 / BUILD SUCCESS**。

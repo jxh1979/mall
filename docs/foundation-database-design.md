@@ -275,7 +275,7 @@
 | valid_from | 有效期开始 |
 | valid_to | 有效期结束 |
 | expiry_warning_days | 到期预警提前天数，如 30；剩余有效期≤该值进入 expiring 预警 nullable |
-| expiry_action | 到期处置：warn（仅预警）、block（到期阻断相关业务）；与合同准入联动 |
+| expiry_action | 到期处置状态，系统固定、只读派生：status=expiring 时为 warn（仅预警），status∈{expired,revoked} 时为 block（先阻断相关业务）；符合条件的升级审批另由 supervisor_review_decisions 记录，不作为可配值 |
 | approval_level_on_expired | 到期后允许升级放行时的审批层级 nullable |
 | is_required | 是否该业态必填（酒类业态 alcohol_license、餐饮业态 food_license 必填=true） |
 | required_reason | 必填原因 nullable |
@@ -290,7 +290,7 @@
 | waive_reason | 豁免/放行原因 nullable |
 | status | valid、expiring、expired、revoked、pending_review |
 
-> 业态必填规则：merchant_type=bar/catering（或经营含酒水/餐饮）时，alcohol_license（酒类）、food_license（食品）为必填资质，缺失或 status∈{expired,revoked} 时对应业务（点单/售酒/出餐）应阻断或进入升级审批（留痕写入 supervisor_review_decisions；admission_audits 已废止，见附录 Z）。`status=expiring` 由 valid_to 与 expiry_warning_days 派生，用于到期预警；`expiry_action=block` 且已 expired 时触发阻断。
+> 业态必填规则：merchant_type=bar/catering（或经营含酒水/餐饮）时，alcohol_license（酒类）、food_license（食品）为必填资质，缺失或 status∈{expired,revoked} 时对应业务（点单/售酒/出餐）应先阻断；未命中七类红线且非权限不足的事项才进入升级审批（留痕写入 supervisor_review_decisions；admission_audits 已废止，见附录 Z）。`status=expiring` 由 valid_to 与 expiry_warning_days 派生，用于到期预警；status∈{expired,revoked} 时，expiry_action 由系统派生为 block 并触发前述阻断。
 
 ### 2.10.1 contract_key_dates 合同关键日期表
 
@@ -1764,7 +1764,7 @@ erDiagram
 2. 平台能创建酒吧商户和游乐商户。
 3. 平台能为不同商户创建门店、项目、区域和点位。
 4. 平台能创建合同核心摘要和合同准入规则。
-5. 业务对象超出合同、空间、业态或有效期时，能写入准入审计并阻断或进入升级审批。
+5. 业务对象超出合同、空间、业态或有效期时，能写入准入审计并先阻断，未命中七类红线且非权限不足时才进入升级审批。
 6. 员工能通过私人手机注册、设备凭证绑定（设备公钥指纹，D8）和设备指纹进入后台审核。
 7. 审核通过后能生成员工账号、职级、权限，并建立私人手机、设备凭证、公司工作手机对应关系。
 8. 平台能创建平台管理员、酒吧管理员、游乐管理员。

@@ -1,6 +1,6 @@
-# 文档地图 V0.1
+# 文档地图 V0.02
 
-> 文档goal(2026-06-20)：本文档按类别列出 `docs/` 下**当前有效**文档（文件名 + 一句话用途 + 现行/部分过期/归档标注），作为第一入口 `docs/00-current-effective-document-entry-v0.1.md` 的导航补充。仅列**真实存在**的文件（经 `ls docs/` 实证）。会员、成长值、积分、兑换券和商户积分结算以三份新领域权威文档为准；其他冲突按 `00-current-effective-document-entry-v0.1.md` 的现行入口处理。
+> 文档goal(2026-06-20)：本文档按类别列出 `docs/` 下**当前有效**文档（文件名 + 一句话用途 + 现行/部分过期/归档标注），作为第一入口 `docs/00-current-effective-document-entry-v0.1.md` 的导航补充。仅列**真实存在**的文件（经 `ls docs/` 实证）。会员、成长值、积分、兑换券和商户积分结算的产品细化见三份领域 PRD，最终解释权仍为三份业务 HTML；PRD、其他文档和后台配置均不得覆盖 HTML。其他冲突按 `00-current-effective-document-entry-v0.1.md` 的现行入口处理。
 >
 > 标注含义：**现行** = 当前有效执行口径；**部分过期** = 仍有参考价值但含旧快照/旧口径，需对照入口文档；**归档** = 历史快照/已被替代，不得作为执行依据。
 
@@ -22,9 +22,9 @@
 |---|---|---|
 | `product-requirements-v0.1.md` | 产品总纲与业务边界 | 现行 |
 | `ticketing-entitlement-checkin-product-prd-v0.1.md` | 票务-权益-核销 PRD | 现行 |
-| `member-and-tier-product-prd-v1.0.md` | 会员身份、成长值、等级、升级、保护与降级唯一权威 | 现行·领域权威 |
-| `points-and-voucher-product-prd-v1.0.md` | 积分产生、冻结、退款、有效期、兑换与虚拟券唯一权威 | 现行·领域权威 |
-| `merchant-points-settlement-rules-v1.0.md` | 商户积分价格、费用、补偿、账单、冲正与税务边界唯一权威 | 现行·领域权威 |
+| `member-and-tier-product-prd-v1.0.md` | 会员身份、成长值、等级、升级、保护与降级的产品细化（最终解释权仍为三份业务 HTML） | 现行 |
+| `points-and-voucher-product-prd-v1.0.md` | 积分产生、冻结、退款、有效期、兑换与虚拟券的产品细化（最终解释权仍为三份业务 HTML） | 现行 |
+| `merchant-points-settlement-rules-v1.0.md` | 商户积分价格、费用、补偿、账单、冲正与税务边界的产品细化（最终解释权仍为三份业务 HTML） | 现行 |
 | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 储值卡、本金、赠送金、扣款、退款与注销 PRD；会员积分职责已拆分 | 现行·储值域 |
 | `member-points-tier-and-clearing-prd-v1.0.md` | 旧会员积分、等级与清算混合 PRD 的替代指针 | 已被替代·仅历史入口 |
 | `member-points-p1-ops-parameter-tables-v0.1.md` | 会员积分系统配置覆盖检查表，不是运行时参数真源 | 现行·检查表 |
@@ -34,7 +34,7 @@
 | `amusement-business-operations-product-prd-v0.1.md` | 游乐业务运营 PRD | 现行 |
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
-| `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/季度+月预览/全可配） | 现行 |
+| `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/分红周期可配（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限；月/季/半年/年，默认半年）+月度只读预览） | 现行 |
 | `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD（3.18，2026-07-02 拍板方案 A：后台内商户专区） | 现行 |
 | `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界；付费会员已废止 | 现行·边界文档 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
@@ -85,7 +85,7 @@
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
-| `openapi/openapi-p0.yaml` / `openapi/openapi-p0.json` | P0 机器可读 OpenAPI 契约；operation 数以 `verify:operation-matrix` / `verify:openapi-closure` 为准，本轮核验 516 operations | 现行 |
+| `openapi/openapi-p0.yaml` / `openapi/openapi-p0.json` | P0 机器可读 OpenAPI 契约；operation 数以 `verify:operation-matrix` / `verify:openapi-closure` 为准，本轮核验 720 operations | 现行 |
 | `p0-api-contract-pack-v0.1.md` | P0 接口契约基线 | 现行 |
 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | operation 级开发完成定义/验收矩阵 | 现行 |
 | `p0-openapi-contract-closure-appendix-v0.1.md` | OpenAPI 反向生成权限/事件/任务追溯附录 | 现行 |
@@ -205,7 +205,7 @@
 |---|---|---|
 | `prd-audit/member-points-rebuild-scope-2026-07-28.md` | 会员、积分与商户积分结算重构范围基线 | 现行·Phase 1 基线 |
 | `prd-audit/member-points-related-doc-audit-2026-07-28.md` | 全部现行 PRD 的逐文件顺从性与对抗性审计 | 现行·Phase 3 完成：22 份审计、8 份同步 |
-| `prd-audit/html-prd-coverage.csv` | 三份新权威与三个业务 HTML 的覆盖关系登记 | 现行·9 组关系登记、Phase 4 待逐条定位 |
+| `prd-audit/html-prd-coverage.csv` | 三份领域 PRD 与三个业务 HTML 的覆盖关系登记（最终解释权仍为三份业务 HTML） | 现行·9 组关系登记；三份 HTML 对全部业务口径拥有最终解释权，Phase 4 只读审计的产出不得改写 HTML |
 | `development-documentation-audit-v0.2.md` | 开发文档审计（取代 adversarial-audit-v0.1） | 现行 |
 | `development-documentation-audit-map-v0.1.csv` | 开发文档全量审计地图 | 现行 |
 | `development-documentation-adversarial-audit-v0.1.md` | 开发文档对抗式审计 | 归档（已被 v0.2 取代） |
@@ -225,9 +225,9 @@
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
-| `business-system-map-for-operations-v0.1.html` | 运营视角业务系统地图；会员积分相关旧条款等待逐条替代清单批准，其他领域保持最终解释权 | 现行·相关条款只读待审 |
-| `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图；会员积分相关旧条款等待逐条替代清单批准，其他领域保持最终解释权 | 现行·相关条款只读待审 |
-| `business-enum-quick-reference-v0.1.html` | 业务枚举速查表；会员积分相关旧条款等待逐条替代清单批准，其他领域保持最终解释权 | 现行·相关条款只读待审 |
+| `business-system-map-for-operations-v0.1.html` | 运营视角业务系统地图；与另外两份 HTML 共同组成最高业务解释权 | 现行 |
+| `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图；与另外两份 HTML 共同组成最高业务解释权 | 现行 |
+| `business-enum-quick-reference-v0.1.html` | 业务枚举速查表；与另外两份 HTML 共同组成最高业务解释权 | 现行 |
 | `business-html-source-of-truth-acceptance-spec-v0.1.md` | 三份业务 HTML 到下游文档和验收资料的最小映射索引；不替代 HTML | 现行 |
 | `pending-development-backlog-v0.1.md` | 待开发/未完成项登记（带 P1/P2/P3 优先级 + 设计性gating + 已完成消项），全仓盘点结果 | 现行 |
 

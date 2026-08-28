@@ -38,7 +38,7 @@ R14-b02 · Shard **TK**（`docs/ticketing-entitlement-checkin-product-prd-v0.1.m
 | R14-TK-01 | CONFORMANCE | P0 | A | ticketing:§7.4 核销记录状态前置块(:282)／§5.1 多人票行(:103) | BSM「核销单位」条「年龄核验环节按人逐一进行，多人票不得以一人核验代替全体」**全仓 PRD 零承接**，多人票一人代验的未成年人红线缺口 | EV-TK-09 |
 | R14-TK-02 | CONFORMANCE | P1 | A | ticketing:§5 人群策略(:70)／§5.1 学生票行(:102) | ENUM「年龄限制」条分句 5「学生票不等于成年，学生票客人同样受 18 岁限制」全仓零命中 | EV-TK-10 |
 | R14-TK-03 | CONFORMANCE | P1 | A | ticketing:§5.1a 退款原则(:120) | 「已核销部分不得**按未履约理由**退款」以理由限定收窄了 HTML 的无条件禁止，且与本文件 :424/:433 自相矛盾 | EV-TK-11 |
-| R14-TK-04 | CONFORMANCE | P1 | A | ticketing:§8.4.1 五种之外的放行(:431) | 缺 HTML 的「未核销票」限定与「最高权限逐笔放行**不解除**已开始核销后的退款禁止」，全仓零命中 | EV-TK-12 |
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-55，本文不再重复记载。
 | R14-TK-05 | CONFORMANCE | P1 | A | ticketing:§5 票种发布上架闸(:89-93) | 上架闸自述穷举（「下列任一条」）却只列 3 条，缺 ENUM「门票综合服务费」条的第 4 条上架闸 | EV-TK-13 |
 | R14-TK-06 | CONFORMANCE | P1 | A | ticketing:§8.3.2 营业兜底(:396-408) | 缺 BSM「核销单位」条「原票核销权按该两条规则延长，**不受本条场次终结的限制**」，与 §6:172／§8.3.1:390 场次终结制直接打架 | EV-TK-14 |
 | R14-TK-07 | CONFORMANCE | P1 | A | ticketing:§12A.2 业务规则第 3 条(:562) | ENUM「动态价与会员价」条要求存「全部命中**资格价**」「**最终选中价**」，PRD 只写「全部命中资格」「最终采用价格」，比价过程不可复算（承接 coverage BEQ-0132 PARTIAL） | EV-TK-15 |
@@ -51,7 +51,7 @@ R14-b02 · Shard **TK**（`docs/ticketing-entitlement-checkin-product-prd-v0.1.m
 | R14-TK-14 | ADVERSARIAL | P2 | A | ticketing:§12B.2 积分发行成本行(:596) | 保留「（基础积分与等级加成积分）」限定语——按裁决 15 广口径待删（TK-S1） | EV-TK-20、EV-TK-21 |
 | R14-TK-15 | ADVERSARIAL | P1 | A | ticketing:§12B.1 第 2/3 条(:578/:579) | 只以「有效期」作权益终止条件，未承接 2026-08-04/08-06 才确立的场次终结制，与 §6:172／§7.1:224／§8.3.1:390 三处口径冲突 | EV-TK-22 |
 | R14-TK-16 | ADVERSARIAL | P1 | B | ticketing:§12B.2(:596)／§10(:502) | 积分发行成本**取数时点缺失**：整单预扣 vs ENUM L69「按已核销的张（人次）计、未核销一律不计」不可能同时成立（本侧落点，引 `R14-FS-06`；裁决 5 已裁「预估扣＋差额冲正」，本文件沉默）（TK-S2） | EV-TK-08、EV-TK-21 |
-| R14-TK-17 | ADVERSARIAL | P1 | B | ticketing:§12B.2(:596) | 积分发行成本**收款方**在本文件全文零命中；裁决 6 已裁「全国积分结算中心（非独立公司时顶层平台）」，HTML 侧 C 类草案在 `R14-SR-09`，本文件待补落点（TK-S3） | EV-TK-08 |
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-55，本文不再重复记载。
 | R14-TK-18 | FIRST_PRINCIPLES | P2 | A | ticketing:§5.1a(:120)／§8.4.1(:430-433)／§12 已按 D9 确认第 2 条(:536) | 同一件事三处三份全文：退款穷举五种＋U 盘放行写了三遍，且 :120 已漂移（见 R14-TK-03）——收敛为单一真身＋引用 | EV-TK-11 |
 | R14-TK-19 | FIRST_PRINCIPLES | P2 | B | ticketing:§11 P1 表(:508)／§8.4 修订说明(:426) | 「复杂退款规则引擎」列 P1（2026-06-07 定），但 2026-08-04 收紧后退款只剩「五种穷举＋唯一例外＋U 盘逐笔」，该能力已无可规则化空间，business rationale 无出处 | EV-TK-23 |
 | R14-TK-20 | FIRST_PRINCIPLES | P2 | CODE-FOLLOWUP | docs/openapi/openapi-p0.yaml:29137-29142 | E-25：`TicketTypeRequest.refresh_interval_seconds` 仍为票种级 `enum [10,15,30,60]`，落后于全场统一「5 秒为单位、5–60」口径 | EV-TK-24 |
@@ -99,9 +99,9 @@ R14-b02 · Shard **TK**（`docs/ticketing-entitlement-checkin-product-prd-v0.1.m
 - **EV**：EV-TK-13。
 
 ### R14-TK-06（P1）§8.3.2 缺场次终结制豁免
-- **现行原文逐字（:401-402 节选）**：「- 受影响的该时间或该场次**比照游乐全园故障的补偿规则**处理……- **补偿通票不是独立的新票**。它**只是把原票／原次权益的核销权延长**到补偿有效期内使用…」
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-55，本文不再重复记载。
 - **问题**：§6:172、§7.1:224、§8.3.1:390 三处均把「场次结束即终结、不顺延、不折现」写成无例外。缺豁免句时，「延长到补偿有效期」与「场次结束即终结」在同一文件内互斥。
-- **应改成什么**：在 :407 后补「**大楼门票检查或权益核验系统损坏进入营业兜底的，以及游乐园整体故障触发补偿通票的，原票核销权按该两条规则延长，不受 §8.3.1 场次终结制的限制。**」并在 §8.3.1:390 末加「（例外见 §8.3.2）」。
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-55，本文不再重复记载。
 - **依据**：BSM「核销单位」条（BSM L796）末段原句逐字。
 - **EV**：EV-TK-14（`不受[^，。]{0,12}场次终结` 在 `docs/*.md` 仅命中审计产物，无任何 PRD 落点）。
 
@@ -173,7 +173,7 @@ R14-b02 · Shard **TK**（`docs/ticketing-entitlement-checkin-product-prd-v0.1.m
 - 落点建议（待 HTML 修订轮落地后补）：:596 后新增「收款方」子项。**不得在 HTML 落地前先写进 PRD。**
 
 ### R14-TK-19（P2，B）§11 P1「复杂退款规则引擎」
-- 两处查证零命中。决策面：五种穷举后是否仍存在需规则引擎的退款判定面。候选：甲＝删除；乙＝改写为「退款审批分级与额度规则引擎」（需先确认 BSM-0067 SUPERSEDED 后是否保留分级额度概念）。**可 B-DEFERRED，severity 不变。**
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §A-55，本文不再重复记载。
 
 ---
 

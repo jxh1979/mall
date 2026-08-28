@@ -46,32 +46,7 @@
 - `docs/p2-amusement-group-private-booking-api-contract-v0.1.md`
 - `docs/p2-amusement-group-private-booking-completion-audit-v0.1.md`
 
-## 4. 数据结构与接口变化
-
-- `amusement_sessions` 新增 `locked_capacity integer not null default 0`。
-- 新增 `amusement_group_bookings`，记录预订类型、客户信息、人数、锁定容量、状态、审批/释放信息和证据附件。
-- 新增权限：
-  - `amusement.group_booking.view`
-  - `amusement.group_booking.manage`
-  - `amusement.group_booking.approve`
-- 新增接口：
-  - `GET /api/v1/amusement/group-bookings`
-  - `POST /api/v1/amusement/group-bookings`
-  - `POST /api/v1/amusement/group-bookings/{id}/approve`
-  - `POST /api/v1/amusement/group-bookings/{id}/release`
-
-## 5. 测试点
-
-- 创建团体/包场预订后状态为 `pending_approval`。
-- 创建预订不占用 `locked_capacity`。
-- 审批时使用数据库锁和 CTE 原子校验容量。
-- 重复审批不会重复增加锁定容量。
-- 释放时归还容量。
-- 重复释放不会重复扣减锁定容量。
-- 普通核销使用 `used_capacity + locked_capacity < capacity` 进行容量判断。
-- 控制器接口使用精确权限并要求幂等键。
-- JDBC 集成测试覆盖迁移、权限和容量锁定字段。
-
+> 本段规则已归口至 `docs/scope-wide-coding-rule-canonical-V0.01.md` §B-29，本文不再重复记载。
 ## 6. 验收标准
 
 - `AmusementServiceTests`、`AmusementControllerTests`、`AmusementJdbcIntegrationTests` 通过。
