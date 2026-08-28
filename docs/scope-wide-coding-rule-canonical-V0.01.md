@@ -1,6 +1,6 @@
 # 开发规则唯一载体归口
 
-规则版本：V0.03
+规则版本：V0.04
 
 本文是范围收口后的开发阅读入口。以下内容均从指定 authority SHA 逐字迁入；原文中的“修改前”“修改后”“作废”“待裁”等状态标签继续有效，迁入不改变其状态。
 
@@ -2013,11 +2013,7 @@ authority L72-L72：
 
     - [x] Redact dynamic QR values at service boundary and JDBC persistence boundary.
 
-### B-44 `docs/00-current-effective-document-entry-v0.1.md` · 游乐复检与本地模型边界
-
-authority L122：
-
-    整改复检后须主管确认才能恢复营业（禁止巡检员单人闭环）
+### B-44 `docs/00-current-effective-document-entry-v0.1.md` · 本地模型边界
 
 authority L120：
 
