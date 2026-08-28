@@ -1,4 +1,4 @@
-# 平台治理产品规格 V0.04
+# 平台治理产品规格 V0.03
 > 2026-07-04 逻辑一致性修订：§9.6 准入落库口径收口为 supervisor_review + supervisor_review_decisions（admission_audits/contract_admission_rules 从未建）；§14A 终端开关职责边界脚注；补名词四层脚注
 
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
