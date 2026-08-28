@@ -1,6 +1,6 @@
 # 开发规则唯一载体归口
 
-规则版本：V0.04
+规则版本：V0.05
 
 本文是范围收口后的开发阅读入口。以下内容均从指定 authority SHA 逐字迁入；原文中的“修改前”“修改后”“作废”“待裁”等状态标签继续有效，迁入不改变其状态。
 
@@ -2116,6 +2116,12 @@ authority L18：
 authority `finance.md` L78；同一句亦见 `operations-legal.md` L82、`procurement-supplier.md` L89、`technical-owner.md` L79：
 
     - 不让同一人同时作为 owner_person 和 reviewer。
+
+### B-55 `docs/00-current-effective-document-entry-v0.1.md` · 一体机基础能力与售票叠加开关
+
+authority L123：
+
+    | 一体机 | 统一终端码 `kiosk`；全体一体机统一具备权益展示、订台、吧台买酒、游乐状态和定期检修记录五项基础能力，通过叠加式售票能力开关 `ticketing_enabled` 区分是否允许授权服务人员辅助到店客人购票 |
 
 ## C. M01 副审补正
 
