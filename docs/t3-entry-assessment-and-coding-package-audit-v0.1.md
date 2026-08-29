@@ -1,4 +1,4 @@
-﻿# T3 入口评估与编码包审计 V0.1
+# T3 入口评估与编码包审计 V0.1
 
 机器标记：T3_ENTRY_AUDIT_READY
 机器标记：decision=do_not_start_t3_control_or_python_ai_yet

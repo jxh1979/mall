@@ -1,4 +1,4 @@
-﻿export const switchSourcePath = "docs/integration-capability-switches-latest.json";
+export const switchSourcePath = "docs/integration-capability-switches-latest.json";
 
 export const capabilitySwitchDefinitions = [
   {
