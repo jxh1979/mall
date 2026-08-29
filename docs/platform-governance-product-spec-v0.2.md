@@ -2887,7 +2887,6 @@ P0 大多数页面采用“筛选区 + 列表 + 详情入口 + 批量/单项操�
 ### 来源：`docs/_archive/20260610-retention-audit/merged-layer-spec-sources/platform-governance-page-list-v0.1.md`
 
 > 本次逐字补录 70 条；该源其余 172 条已在本目标，0 条已在范围规范唯一载体。
-> 本块为归档逐字引文；如有冲突，以 `## 继续合并补录（2026-08-28）` 节首说明所指现行口径为准。
 
 ~~~~text
 | 商户合同 | 合同准入规则页 | P0 | 管理合同核心摘要、经营范围、阻断和升级审批规则 |
@@ -3034,7 +3033,6 @@ NFC 仅读取外部 NFC 腕带、标签、卡或设备中的权益标识。
 ### 来源：`docs/_archive/20260610-retention-audit/merged-layer-spec-sources/platform-governance-flow-diagrams-v0.1.md`
 
 > 本次逐字补录 110 条；该源其余 239 条已在本目标，2 条已在范围规范唯一载体。
-> 本块为归档逐字引文；如有冲突，以 `## 继续合并补录（2026-08-28）` 节首说明所指现行口径为准。
 
 ~~~~text
 C --> I["F9 角色权限与数据范围授权"]
@@ -3261,7 +3259,6 @@ D -- "是/全量" --> E["允许业务，仍受权限和数据范围控制"]
 ### 来源：`docs/_archive/20260610-retention-audit/merged-layer-spec-sources/platform-governance-field-dictionary-v0.1.md`
 
 > 本次逐字补录 141 条；该源其余 293 条已在本目标，6 条已在范围规范唯一载体。
-> 本块为归档逐字引文；如有冲突，以 `## 继续合并补录（2026-08-28）` 节首说明所指现行口径为准。
 
 ~~~~text
 以下字段在页面上应考虑脱敏展示、权限控制或操作留痕：
