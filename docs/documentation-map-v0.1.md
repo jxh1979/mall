@@ -29,14 +29,14 @@
 | `member-points-tier-and-clearing-prd-v1.0.md` | 旧会员积分、等级与清算混合 PRD 的替代指针 | 已被替代·仅历史入口 |
 | `member-points-p1-ops-parameter-tables-v0.1.md` | 会员积分系统配置覆盖检查表，不是运行时参数真源 | 现行·检查表 |
 | `customer-app-miniapp-product-prd-v0.1.md` | 客人端（App/小程序）PRD：两端一套口径/订台定金/订卡邀请函/隐私同意（2026-06-26 审计回填） | 现行 |
-| `business-dashboard-metrics-product-prd-v0.1.md` | 经营看板指标 PRD：8 类指标 + 下钻 + 角色可见范围（2026-06-26 审计回填，裁决#7） | 现行 |
+| `business-dashboard-metrics-product-prd-v0.1.md` | 经营看板指标 PRD | 现行 |
 | `bar-business-operations-product-prd-v0.1.md` | 酒吧业务运营 PRD | 现行 |
 | `amusement-business-operations-product-prd-v0.1.md` | 游乐业务运营 PRD | 现行 |
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
 | `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/分红周期可配（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限；月/季/半年/年，默认半年）+月度只读预览） | 现行 |
 | `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD。GOV：商户侧不是平台后台，也不是只读页面。【已废止/不得回灌】方案 A：后台内商户专区 | 现行 |
-| `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界。【待决/不取得效力】付费会员是否废止——三份 HTML 对「付费会员」零命中，本行不自行废止 | 现行·边界文档 |
+| `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界。 | 现行·边界文档 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
 | `platform-governance-prd-v0.1.md` / `platform-governance-product-spec-v0.2.md` | 平台治理 PRD / 产品规格 | 现行 |
 | `evidence-risk-control-product-prd-v0.1.md` | 证据留痕与风控 PRD | 现行 |
@@ -65,7 +65,7 @@
 | `frontend-admin-development-design.md` | 前端管理端开发设计 | 现行 |
 | `android-device-terminal-development-design.md` | Android 终端开发设计 | 现行 |
 | `customer-app-miniapp-development-design-v0.1.md` | 客户 App/小程序开发设计 | 现行 |
-| `member-loyalty-and-stored-value-development-design-v0.1.md` | 会员忠诚度/积分两本账/储值/付费会员订阅（付费会员已于 2026-07-18 废止，V290）/签到/生日 开发设计（2026-06-24 据现有实现 V025/V060/V089/V090/V100 回填） | 现行 |
+| `member-loyalty-and-stored-value-development-design-v0.1.md` | 会员忠诚度/积分两本账/储值/签到/生日 开发设计（2026-06-24 据现有实现 V025/V060/V089/V090/V100 回填） | 现行 |
 | `ticketing-pass-entitlement-development-design.md` | 票务-通票-权益开发设计 | 现行 |
 | `bar-operations-development-design.md` | 酒吧运营开发设计 | 现行 |
 | `amusement-operations-development-design.md` | 游乐运营开发设计 | 现行 |

@@ -1,13 +1,13 @@
 # 架构总览 / Architecture Overview V0.1
 
-> 文档goalP2(2026-06-20)：本文为综合体管理系统的架构总览与架构图集（Mermaid，GitHub 可渲染）。模块名以 `backend/src/main/java/com/complex/platform/*` 真实包、`apps/web/src/*` 真实壳、`docs/openapi/openapi-p0.*` 契约为准。新功能承接见 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`。
+> 文档goalP2(2026-06-20)：本文为综合体管理系统的架构总览与架构图集（Mermaid，GitHub 可渲染）。**业务名称、子系统入口与终端边界以三份 HTML（业务系统地图、平台治理地图、业务枚举速查表）中经用户批准的内容为准**；发生冲突时 PRD、其他文档、代码包名、OpenAPI 契约、后台配置、设计和实现均不得覆盖。下列 Java 包、前端壳与 `openapi-p0` 仅为实现分包与工程契约，不是覆盖 HTML 的业务总图。新功能承接见 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`。
 
 ## 1. 系统上下文（System Context）
 
 ```mermaid
 graph TB
   subgraph Users["使用者 / Actors"]
-    GUEST["客人 Guest<br/>(App/小程序/Web)"]
+    GUEST["客人 Guest<br/>(App/小程序，无网页端)"]
     STAFF["现场员工 Staff<br/>(工作手机/平板/一体机)"]
     ADMIN["管理/运营/财务 Admin"]
     MERCHANT["商户 Merchant"]
@@ -15,7 +15,7 @@ graph TB
   end
 
   subgraph Platform["综合体管理平台 Entertainment Complex Platform"]
-    WEB["前端 Web<br/>(admin / customer / legacy)"]
+    WEB["前端 Web<br/>(业务人员；客人无网页端)"]
     ANDROID["Android 终端<br/>(工作手机/平板/kiosk)"]
     API["后端 API<br/>Java 21 + Spring Boot 4"]
     DB[("PostgreSQL<br/>Flyway V001..V151")]
@@ -30,7 +30,6 @@ graph TB
     NAS["NAS 备份恢复 (160)"]
   end
 
-  GUEST --> WEB
   STAFF --> ANDROID
   ADMIN --> WEB
   MERCHANT --> WEB
@@ -46,9 +45,9 @@ graph TB
   SUPPLIER -. 动态鉴权读写 .-> API
 ```
 
-## 2. 后端域模块地图（Backend Domain Modules）
+## 2. 后端代码分包（实现细化，不覆盖业务总图）
 
-后端按业务域分包（`com.complex.platform.*`）。治理/网关为底座，业务域在其上，留痕/分析为横切。
+后端按代码包分包（`com.complex.platform.*`）。**下图英文包名是实现分包，不是与票务 / 酒吧并列的业务子系统闭集**，也不把 `merchantbilling` / `compliance` / `gate` 立成 HTML 子系统入口。业务总图以 MAP 子系统入口与 GOV 模块入口为准：基础管理、票务权益、客人端、酒吧平板/工作手机、触摸屏一体机、酒吧管理、供应链库存、游乐管理、商户管理、招商租赁、物业服务、楼宇运营、第三方接入、留痕与异常、财务对账、持股分红、经营看板、各类入口。平台治理层不是一个业务部门，而是所有业务的底座。
 
 ```mermaid
 graph TB
@@ -91,7 +90,7 @@ graph TB
   AMU --> TKT
 ```
 
-> 模块对应代码包（实证）：`access` / `amusement` / `analytics` / `auth` / `bar` / `common` / `compliance` / `customer` / `evidence` / `finance` / `floorplan` / `gate` / `governance` / `integration` / `inventory` / `merchantbilling` / `merchantservice` / `ops` / `system` / `terminal` / `ticketing`。
+> 下列为代码包实证（实现细化，**不是**业务子系统闭集，不得覆盖 MAP/GOV 入口）：`access` / `amusement` / `analytics` / `auth` / `bar` / `common` / `compliance` / `customer` / `evidence` / `finance` / `floorplan` / `gate` / `governance` / `integration` / `inventory` / `merchantbilling` / `merchantservice` / `ops` / `system` / `terminal` / `ticketing`。
 
 ## 3. 分层与数据流（Layering & Request Flow）
 
@@ -119,13 +118,13 @@ sequenceDiagram
   participant F as finance
   participant E as evidence
   G->>T: 下单购票 + 支付
-  T->>C: 积分入账 pending (V100/V101)
+  T->>C: 履约完成后产生积分和成长值（退款期内冻结）
   G->>W: 出示验票二维码(防伪刷新)
   W->>T: 核销 verify
-  T->>C: 积分转 confirmed
+  T->>C: 退款期结束后积分转为可用
   T->>F: 收入进日结/对账
   T->>E: 核销留痕 + 异常→risk_alerts
-  Note over T,F: 退款时积分按比例 deduct,<br/>核销冲正仅留痕(无独立财务对象)
+  Note over T,F: 退款/冲正形成反向结算，<br/>记录财务、积分、成长值和权益冲正
 ```
 
 ## 5. 前端与终端（Frontend & Terminals）
@@ -134,7 +133,7 @@ sequenceDiagram
 graph TB
   MAIN["main.tsx<br/>(路径前缀分流,默认 admin)"]
   MAIN --> ADM["AdminApp<br/>管理后台(33页,路由级 lazy 分包)"]
-  MAIN --> CUST["CustomerApp<br/>客人端(购票/订台/积分/验票)"]
+  CUST["客人购票/订台/积分在 App 或小程序<br/>（客人无网页端）"]
   ADM --> APIc["后端 REST"]
   CUST --> APIc
   ANDR["Android 终端<br/>(工作手机/平板/kiosk)"] --> APIc

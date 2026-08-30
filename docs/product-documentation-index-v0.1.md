@@ -46,7 +46,7 @@
 | `p0-action-event-evidence-matrix-v0.1.md` | P0 操作事件、证据、复核和敏感访问留痕矩阵 | 新增·留痕执行入口 |
 | `p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | P0 端到端验收标准与边界用例 | 新增·验收执行入口 |
 | `amusement-p0-safety-inspection-spec-v0.1.md` | 游乐 P0 开放前阻断式安全巡检、整改复检和主管恢复闭环 | 新增·游乐安全执行入口 |
-| `third-party-supplier-integration-kit-v0.1.md` | 第三方供应商未定前的双向开放、适配器、字段映射占位和补偿策略 | 新增·供应商接入预留包 |
+| `third-party-supplier-integration-kit-v0.1.md` | 第三方供应商未定前的双向开放、适配器、字段映射占位 | 新增·供应商接入预留包 |
 | `document-retention-merge-audit-20260610.md` | 全量文档收口、合并、归档和低价值文档审计 | 新增·文档治理入口 |
 | `server-160-runbook-v0.2.md` | 160 服务器部署、回滚、备份、监控和安全 Runbook | 新增·运维入口 |
 | `mdm-android-enterprise-implementation-plan-v0.1.md` | MDM / Android Enterprise 设备纳管、策略状态、终端拦截和生产前置验收 Runbook | 新增·运维前置入口 |
@@ -66,15 +66,15 @@
 - 当前先管理一个综合体，所有核心对象预留项目归属，未来可扩展多个综合体。
 - 合同核心摘要是后续业务准入依据；超出合同、空间、业态或有效期，以及资质异常时一律先阻断，阻断后未命中七类红线的事项才可按层级升级审批并留痕放行；操作人权限不足须换由具备相应权限的人办理，不设放行通道。
 - 公司自有员工由本人在私人手机 App 注册、提交资料后由所属公司后台审批；商户员工由商户代该员工提交注册申请，经对应域公司（按商户所属经营域为城市项目公司、娱乐平台公司或游乐公司）批准后账号生效；商户档案标注为自营的视同公司自有。员工设备凭证绑定后，与公司发放的工作手机建立一一对应关系；私人手机不做现场业务。
-- 门票和权益二维码须有防伪标记、有效期，并防复制/篡改。签名、随机串、哈希核对应属未立法实现证据，三份 HTML 未指定，不得升为必须机制。
+- 门票和权益二维码须有防伪标记、有效期，并防复制/篡改。
 - P0 要先建立基础档案、票/权益/核销、酒吧基础经营、游乐基础运营、第三方接入边界、事件留痕、业务过程留痕、基础结算和基础看板。
 - 餐饮、零售、机器人、视频监控、企业微信等成熟能力优先第三方接入。
 - 权限按“角色 + 基础模板 + 临时模板 + 员工级授予/拒绝”计算，临时模板支持有效期和单次有效。【已废止/不得回灌】模板可复制。详见 `p0-operation-permission-matrix-v0.1.md`。
 - 关键业务动作必须有事件、证据和复核路径，详见 `p0-action-event-evidence-matrix-v0.1.md`；P0 验收按 `p0-end-to-end-acceptance-and-edge-cases-v0.1.md` 执行。
-- 第三方供应商未确定时不写死供应商字段，先按 `third-party-supplier-integration-kit-v0.1.md` 固化接口、适配器、映射占位、Webhook+轮询校验和补偿策略。
+- 第三方供应商未确定时不写死供应商字段，先按 `third-party-supplier-integration-kit-v0.1.md` 固化接口、适配器、映射占位。
 - 业务功能拓扑图已把平台治理、业务经营、第三方接入、证据风控、财务经营、数据分析和终端展示串成运营人员可读的总图。
 - 业务人员版 HTML 已把复杂拓扑改成可点击的子系统说明页，便于完全不懂产品技术的人逐项理解。
-- 市场基准建议不自动改变 P0 范围；除 MDM/Android 设备管控、企业微信配置、合规留存、支付通道、权限初始化等上线前置项外，商业地产工单/费用、酒吧高级账单、游乐预约排队等成熟系统能力默认进入 P1/P2。
+- 市场基准建议不自动改变 P0 范围；除 MDM/Android 设备管控、企业微信配置、合规留存、支付通道、权限初始化等上线前置项外，商业地产工单/费用等成熟系统能力默认进入 P1/P2。
 
 ## 3. 平台治理层文档
 
@@ -122,7 +122,7 @@
 | 文档 | 定位 | 状态 |
 |---|---|---|
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入产品 PRD | 已完成 |
-| `third-party-supplier-integration-kit-v0.1.md` | 第三方供应商 SDK/API 未定前的接口预留、适配器、映射和补偿策略 | 新增·已收口 |
+| `third-party-supplier-integration-kit-v0.1.md` | 第三方供应商 SDK/API 未定前的接口预留、适配器、映射 | 新增·已收口 |
 | `evidence-risk-control-product-prd-v0.1.md` | 证据留痕与风控产品 PRD | 已完成 |
 | `finance-settlement-product-prd-v0.1.md` | 财务经营、日结与结算产品 PRD | 已完成 |
 | `terminal-page-product-prd-v0.1.md` | 终端与页面产品 PRD | 已完成 |

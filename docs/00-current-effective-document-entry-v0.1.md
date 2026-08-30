@@ -111,13 +111,10 @@ npm run verify:production-evidence-crosslinks` |
 | 金额单位 | 全局金额使用整数分 `bigint` |
 | 币种 | 【待决/不取得效力】实现侧曾写 P0 仅启用 CNY、保留 `currency=CNY`、不启用多币种和汇率换算——三份 HTML 对 CNY / 多币种 / 汇率换算零命中，未写入不取得效力，本行不得立法 |
 | 能力层 | 平台治理、业务经营、第三方接入、证据留痕与风控、数据分析、终端展示六层 |
-| 财务定位 | 财务经营是数据分析层下的财务/对账子域，P0 必须支持完整应收应付台账 |
 | 第三方接入 | 双向开放：平台提供统一 OpenAPI/Webhook，同时通过供应商 SDK/API 适配器接入外部成熟服务 |
-| Webhook/轮询 | P0 使用 Webhook + 定时轮询校验 |
 | 设备管控 | Android Enterprise / Android Management API + 商业 MDM 作为 P0 上线前置 |
 | 备份 | NAS 备份方案，NAS 服务器 `192.168.88.113`，共享 `bn`，UNC `//192.168.88.113/bn`，160 挂载 `/mnt/complex-nas-backup`，当前不启用备份归档加密；历史上已完成一次真实 NAS 同步和从 NAS 恢复演练；当前状态以 `docs/nas-current-state-drift-report-v0.1.md` 和 `docs/nas-diagnostic-report-v0.1.md` 为准，生产前仍需固化开机自动挂载、定时备份、容量告警和周期性恢复演练 |
 | 生产凭证轮换 | 生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥采用人工台账 + 到期提醒 + Runbook；`npm run verify:ops160-recovery` 必须通过 |
-| AI/规则处理 | P0 使用 Java 内置规则处理器；T3-D1 可使用 160 本地大模型提供脱敏后的只读质检建议，必须人工复核且不得自动决策；独立 Python AI 服务仍后置，未进入当前生产路径 |
 | 构建工具 | Maven 为唯一 P0 构建工具 |
 | 游乐安全 | P0 强制开放前阻断式安全巡检；安全严重度为提醒、警告、阻断、重大四档；当日无合格巡检或存在未复检的「阻断」项即拒绝核销；整改复检后须主管确认才能恢复营业（禁止巡检员单人闭环）；全程留痕 |
 | 一体机 | 统一终端码 `kiosk`；全体一体机统一具备权益展示、订台、吧台买酒、游乐状态和定期检修记录五项基础能力，通过叠加式售票能力开关 `ticketing_enabled` 区分是否允许授权服务人员辅助到店客人购票 |
@@ -243,8 +240,8 @@ npm run verify:production-evidence-crosslinks` |
 | 会员身份、成长值与等级 | `member-and-tier-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 积分获取、冻结、有效期、兑换与虚拟券 | `points-and-voucher-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 商户积分价格、费用、补偿、账单与税务边界 | `merchant-points-settlement-rules-v1.0.md` | 本轮只发布业务规则，技术承接另行审计 |
-| 储值 | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份领域 PRD（最终解释权仍为三份业务 HTML）。【待决/不取得效力】付费会员是否退役——三份 HTML 对「付费会员」零命中，本行不自行废止业务形态 |
-| 经营看板、8 类指标、下钻 | `business-dashboard-metrics-product-prd-v0.1.md` | `r5-spec-T12-dashboard-aggregation-dev-design-20260618.md` |
+| 储值 | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份领域 PRD（最终解释权仍为三份业务 HTML）。 |
+| 经营看板 | `business-dashboard-metrics-product-prd-v0.1.md` | `r5-spec-T12-dashboard-aggregation-dev-design-20260618.md` |
 | 客人端 App/小程序、订台定金、订卡邀请函 | `customer-app-miniapp-product-prd-v0.1.md` | `customer-app-miniapp-development-design-v0.1.md` |
 
 ### 3.4 前端、Android、平板、一体机、小程序/App/Web
@@ -283,7 +280,7 @@ npm run verify:production-evidence-crosslinks` |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入产品边界 |
 | `third-party-access-layer-spec-v0.2.md` | 第三方接入层页面、字段、流程和验收 |
 | `third-party-integration-development-design.md` | 第三方技术集成设计 |
-| `third-party-supplier-integration-kit-v0.1.md` | 供应商未确定前的统一接口、适配器、字段映射占位、Webhook/轮询和补偿策略 |
+| `third-party-supplier-integration-kit-v0.1.md` | 供应商未确定前的统一接口、适配器、字段映射占位 |
 | `openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 供应商 Adapter、开放平台 mock、Webhook/轮询验收的接口契约 |
 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 供应商 Adapter、Webhook、轮询、mock 和异常补偿的 operation 验收口径 |
 | `p0-openapi-contract-closure-appendix-v0.1.md` | 供应商联调时按 operationId 查权限、事件、终端、任务簇和样例准入；不得引用旧 `/api/integration/*` 作为正式路径 |
