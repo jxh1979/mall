@@ -9,7 +9,7 @@
 3. 产品、开发、测试、运营、第三方供应商应按什么顺序阅读。
 4. 哪些交付物完成前，不允许进入正式并行开发、联调或生产上线。
 
-本文档不替代 PRD、技术方案、接口文档和验收文档；它只负责做入口、裁决优先级和准入规则。凡本文档与旧文档冲突，先按本文档和 `unified-standards-baseline-v0.1.md` 执行，再回补修正文档；业务口径除外——三份业务 HTML 为最终解释权（见 §2 首行）。
+本文档不替代 PRD、技术方案、接口文档和验收文档；它只负责做入口、阅读优先级和准入导航，不裁决业务口径。凡本文档与旧文档冲突，先按本文档和 `unified-standards-baseline-v0.1.md` 导航到现行路径，再回补修正文档；业务口径除外——三份业务 HTML 为最终解释权（见 §2 首行）。本文档及任何非 HTML 均不得覆盖三份业务 HTML。
 
 ## 2. 当前唯一正式口径
 
@@ -109,7 +109,7 @@ npm run verify:production-evidence-crosslinks` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
 | 废止技术路线 | TypeScript / SQLite / Prisma / Fastify 后端仅可作为历史预研原型，不得作为正式开发、测试、部署、安全审计依据；`apps/api` 已于 2026-06-15 从 160 正式仓库物理移除，`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract`，用于阻断旧目录、旧脚本、旧依赖和旧 lockfile 标记回流 |
 | 金额单位 | 全局金额使用整数分 `bigint` |
-| 币种 | P0 仅启用 CNY，保留 `currency=CNY` 字段，不启用多币种和汇率换算 |
+| 币种 | 【待决/不取得效力】实现侧曾写 P0 仅启用 CNY、保留 `currency=CNY`、不启用多币种和汇率换算——三份 HTML 对 CNY / 多币种 / 汇率换算零命中，未写入不取得效力，本行不得立法 |
 | 能力层 | 平台治理、业务经营、第三方接入、证据留痕与风控、数据分析、终端展示六层 |
 | 财务定位 | 财务经营是数据分析层下的财务/对账子域，P0 必须支持完整应收应付台账 |
 | 第三方接入 | 双向开放：平台提供统一 OpenAPI/Webhook，同时通过供应商 SDK/API 适配器接入外部成熟服务 |
@@ -153,7 +153,7 @@ npm run verify:production-evidence-crosslinks` |
 | 供应链落地状态 | dev-design 顶部横幅"零落地/保持开放" vs claims"V085（供应合同三模式/采购周期/六类库房/高价值复核）、V094（高价值阈值）已落" | **以 claims/迁移为准：V085/V094 已落地**；横幅为更早快照 | dev-design 已就地追加 R5 收口说明（指向 V085/V094）；验收以最新 claims 为准 |
 | 班结/交班对账优先级 | bar PRD §10.1 标 P2（独立交班/班结对账 shift close / cash drawer） vs 代码 `V095__bar_shift_handover.sql` + `BarShiftService` 已落 | **以代码为准：已交付，PRD 口径需升级为 P0 已交付** | bar PRD §10.1 已就地追加收口说明（V095 落地 + 验收口径）；仍缺 G/W/T 验收 |
 | 游乐 incident 优先级 | 游乐 incident PRD 标 P0 vs 开发设计降为 P1 | **暂不裁定，待 F11 对齐** | 留待 F11 专项对齐 incident 口径，本次不改游乐文档 |
-| 商户级 revenue.net | 商户级 `revenue.net` REQ-81"保持开放" vs r5-aggregation"已落 V075/V078" | **待裁定，倾向以代码为准**（V075/V078 迁移已存在） | 留待裁定；倾向以 V075/V078 实际落地口径收口，需补对账硬约束确认 |
+| 商户级 revenue.net | 商户级 `revenue.net` REQ-81"保持开放" vs r5-aggregation"已落 V075/V078" | **待决：V075/V078 迁移已存在，属实现记录；未写入三份 HTML 不取得业务效力** | 只导航到实现记录；业务口径以三份 HTML 为准，不得以代码裁定 |
 | 核销表名 | `verification_records` vs `ticket_verifications` | **统一以实际迁移表名为权威**（以迁移中真实建表名为准，文档引用名需对齐） | 各引用文档对齐到实际迁移表名 |
 | 积分表名 | `points_*` vs `customer_points_*` | **统一以实际迁移表名为权威** | 各引用文档对齐到实际迁移表名 |
 | REQ-79 引用不建之表 | REQ-79 引用 `point_gifts`/`point_redemptions`（迁移未建） | **以实际迁移为权威：引用表不存在，需改引用为真实迁移表** | 修正 REQ-79 引用，去除对未建表的依赖 |
@@ -167,7 +167,7 @@ npm run verify:production-evidence-crosslinks` |
 
 | 批次 | 入口 | 状态 |
 |---|---|---|
-| R6 业务输入与确认决议（R6-D01..D14 共 14 项） | `docs/business-decision-log-v0.1.md` §36 | 14 项已于 2026-06-19 全部业务确认，"已确认决策"列为最终编码基线 |
+| R6 业务输入与确认决议（R6-D01..D14 共 14 项） | `docs/business-decision-log-v0.1.md` §36 | 14 项已于 2026-06-19 登记；决策日志只导航与留痕，不得列为最终编码基线或覆盖三份 HTML；未写入不取得效力 |
 | R7 决策批次 | —— | 截至 2026-06-20，`business-decision-log-v0.1.md` 最新业务决策批次为 §36（R6）；尚未设立独立 R7 章节。新批次产生时在 decision-log 追加 §37(R7) 并在此登记，避免悬挂引用 |
 
 ### 历史新功能已落地（迁移 V117/V120–V124；当前最新迁移以 `db/migration` 为准）
@@ -243,7 +243,7 @@ npm run verify:production-evidence-crosslinks` |
 | 会员身份、成长值与等级 | `member-and-tier-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 积分获取、冻结、有效期、兑换与虚拟券 | `points-and-voucher-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
 | 商户积分价格、费用、补偿、账单与税务边界 | `merchant-points-settlement-rules-v1.0.md` | 本轮只发布业务规则，技术承接另行审计 |
-| 储值（付费会员已退役） | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份领域 PRD（最终解释权仍为三份业务 HTML） |
+| 储值 | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份领域 PRD（最终解释权仍为三份业务 HTML）。【待决/不取得效力】付费会员是否退役——三份 HTML 对「付费会员」零命中，本行不自行废止业务形态 |
 | 经营看板、8 类指标、下钻 | `business-dashboard-metrics-product-prd-v0.1.md` | `r5-spec-T12-dashboard-aggregation-dev-design-20260618.md` |
 | 客人端 App/小程序、订台定金、订卡邀请函 | `customer-app-miniapp-product-prd-v0.1.md` | `customer-app-miniapp-development-design-v0.1.md` |
 
@@ -290,14 +290,14 @@ npm run verify:production-evidence-crosslinks` |
 
 ### 3.7 文档类型、事实源等级和适用对象矩阵
 
-事实源等级用于处理文档冲突：`S0` 为唯一裁决入口，`S1` 为可直接开发/验收的执行事实源，`S2` 为模块设计或产品拆解事实源，`S3` 为历史参考或市场增强材料。低等级文档不得反向覆盖高等级文档。
+事实源等级只用于非 HTML 文档之间的阅读与导航分层，不是业务裁决层：`S0` 为入口导航层，`S1` 为可直接开发/验收的执行入口，`S2` 为模块设计或产品拆解入口，`S3` 为历史参考或市场增强材料。低等级文档不得反向覆盖高等级文档。三份业务 HTML 共同组成最高业务解释权；PRD、其他文档（含 S0/S1）、后台配置、设计和实现均不得覆盖。未写入三份 HTML 的内容不因出现在本文档、S0/S1、PRD、配置或实现中而取得效力。
 
 | 文档 | 类型 | 事实源等级 | 适用对象 | 可编码入口 | 冲突时上游 |
 |---|---|---|---|---|---|
-| `00-current-effective-document-entry-v0.1.md` | 当前入口/裁决规则 | S0 | 总控、产品、开发、测试、供应商 | 是，作为准入裁决 | 本文档自身 |
-| `unified-standards-baseline-v0.1.md` | 统一口径基准 | S0 | 产品、开发、测试 | 是，作为跨域规则裁决 | 本文档 |
-| `business-decision-log-v0.1.md` | 决策日志 | S0 | 总控、产品、实施 | 是，作为业务决策证据 | 本文档、统一口径基准 |
-| `business-html-source-of-truth-acceptance-spec-v0.1.md` | 业务 HTML 事实源验收规格 | S0 | 产品、开发、测试、运营、供应商 | 是，作为三份业务 HTML 到下游文档的最小验收映射索引 | 三份业务 HTML、本文档 |
+| `00-current-effective-document-entry-v0.1.md` | 当前入口/导航 | S0 | 总控、产品、开发、测试、供应商 | 是，只导航不裁决 | 三份业务 HTML（业务口径）；本文档不得覆盖 HTML |
+| `unified-standards-baseline-v0.1.md` | 统一口径基准 | S0 | 产品、开发、测试 | 是，只导航不裁决 | 三份业务 HTML（业务口径）；本文档（仅导航） |
+| `business-decision-log-v0.1.md` | 决策日志 | S0 | 总控、产品、实施 | 是，只作导航与留痕，不作为覆盖 HTML 的业务决策证据 | 三份业务 HTML（业务口径）；本文档、统一口径基准（仅导航） |
+| `business-html-source-of-truth-acceptance-spec-v0.1.md` | 业务 HTML 事实源验收规格 | S0 | 产品、开发、测试、运营、供应商 | 是，作为三份业务 HTML 到下游文档的最小验收映射索引；不替代、不覆盖 HTML | 三份业务 HTML |
 | `p0-coding-entry-pack-v0.1.md` | P0 可编码入口包 | S1 | 后端、前端、Android、一体机、测试、供应商 | 是，作为编码和联调第一执行入口 | 本文档、OpenAPI、验收矩阵 |
 | `p0-first-coding-package-v0.1.md` | P0 首批编码包 | S1 | 后端、数据库、测试、项目管理 | 是，作为首批正式编码分派入口 | P0 编码入口包、任务清单、OpenAPI |
 | `p0-coding-completion-and-handoff-report-v0.1.md` | P0 编码完成交接报告 | S1 | 总控、产品、开发、测试、运维、安全 | 是，作为 P0 编码完成后的交接和验收证据入口 | P0 首批编码包、160 验证结果、生产前置台账 |
@@ -373,7 +373,7 @@ npm run verify:production-evidence-crosslinks` |
 | 旧线程索引、旧进度快照 | 已归档或应归档 | 当前进度看 `project-progress-dashboard.md` |
 | 写有历史未决措辞或 `pending_confirm` 类业务状态的旧文档 | 若事项已被本文档或 `unified-standards-baseline-v0.1.md` 收口，则不再作为开放产品问题 | 应回改为“已确认执行口径”或“实施前输入项” |
 
-说明：`pending_confirm`、`待复核`、`待支付`、`待核销` 等作为业务状态枚举时，不代表产品仍有开放问题；是否需要总控拍板只看本文档、`business-decision-log-v0.1.md` 和 `final-open-decisions-and-owner-checklist-20260610.md` 的当前口径。
+说明：`pending_confirm`、`待复核`、`待支付`、`待核销` 等作为业务状态枚举时，不代表产品仍有开放问题；业务口径是否需要拍板只看三份业务 HTML。本文档、`business-decision-log-v0.1.md` 和 `final-open-decisions-and-owner-checklist-20260610.md` 只导航、不裁决；未写入三份 HTML 不取得效力。
 
 历史能力表统一规则：所有旧文档中保留的 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*`、`/api/public/*`、相对路径或“能力路径”表格，只能作为历史能力清单和迁移参考。每一行能力在进入编码前必须能映射到 `openapi/openapi-p0.yaml/json` 的 exact path 或 operationId，并进入 `p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `p0-openapi-contract-closure-appendix-v0.1.md`；无法映射的能力一律视为“未进入 OpenAPI，不得开发”，不得生成 Java Controller、SDK/mock、接口自动化或供应商联调文档。
 
@@ -450,7 +450,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 ## 8. 进入下一章前的审计结论
 
-当前第一批 P0 硬缺口已经收口：原型废止声明已由 `prototype-deprecation-and-technology-baseline-v0.1.md`、`verify:no-legacy-api-prototype` 和 `code-contract-difference-and-migration-audit-v0.1.md` 承接，P0 可编码入口已由 `p0-coding-entry-pack-v0.1.md` 承接，首批正式编码范围已由 `p0-first-coding-package-v0.1.md` 承接，160 API 部署/回滚/健康检查/BE-000 验收脚本已由 `ops/160/*.sh` 和 `server-160-runbook-v0.2.md` 承接，生产前置资料已由 `production-readiness-implementation-ledger-template-v0.1.md` 承接，正式安全基线生成与维护任务已由 `formal-security-baseline-generation-task-v0.1.md`、`security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md` 和 `verify:production-readiness-evidence` 承接，接口契约已由 `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json`、`verify:p0-contract` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 承接，OpenAPI 权限、事件、任务追溯缺口已由 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure` 承接，Web 可构建性已由 `verify:p0-web` 承接，后端/Android 环境前置已由 `verify:p0-env` 承接，用户故事和迭代切片已由 `p0-user-story-map-and-sprint-slices-v0.1.md` 承接，任务-接口-权限-事件-验收映射已由 `p0-task-api-permission-event-acceptance-map-v0.1.md` 承接，游乐 P0 安全巡检闭环已由 `amusement-p0-safety-inspection-spec-v0.1.md` 承接。票务资格 P0 的 `ticket_eligibility_rules`、`student_credential_audits`、多人票 `num_people` 和核销放行人数留痕已收口为正式 Flyway 首批业务迁移必落项，不再作为开放待决策项。160 机器已按最新项目和脚本完成同步，并已通过环境、契约、Web 构建、运行配置预检、API/Web 启动、BE-000 运行态、整体健康检查和完整 `complex-verify-p0.sh`；当前使用 `~/.complex/complex.env` 用户级覆盖解决 `/etc/complex/complex.env` 暂无 sudo 写入权限的问题，不在文档或脚本中落真实密钥。注意：当前完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通，不代表平台、票务、权益、核销、证据、设备等业务域已完成生产级实现。
+当前第一批 P0 硬缺口已经收口：原型废止声明已由 `prototype-deprecation-and-technology-baseline-v0.1.md`、`verify:no-legacy-api-prototype` 和 `code-contract-difference-and-migration-audit-v0.1.md` 承接，P0 可编码入口已由 `p0-coding-entry-pack-v0.1.md` 承接，首批正式编码范围已由 `p0-first-coding-package-v0.1.md` 承接，160 API 部署/回滚/健康检查/BE-000 验收脚本已由 `ops/160/*.sh` 和 `server-160-runbook-v0.2.md` 承接，生产前置资料已由 `production-readiness-implementation-ledger-template-v0.1.md` 承接，正式安全基线生成与维护任务已由 `formal-security-baseline-generation-task-v0.1.md`、`security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md` 和 `verify:production-readiness-evidence` 承接，接口契约已由 `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json`、`verify:p0-contract` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 承接，OpenAPI 权限、事件、任务追溯缺口已由 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure` 承接，Web 可构建性已由 `verify:p0-web` 承接，后端/Android 环境前置已由 `verify:p0-env` 承接，用户故事和迭代切片已由 `p0-user-story-map-and-sprint-slices-v0.1.md` 承接，任务-接口-权限-事件-验收映射已由 `p0-task-api-permission-event-acceptance-map-v0.1.md` 承接，游乐 P0 安全巡检闭环已由 `amusement-p0-safety-inspection-spec-v0.1.md` 承接。票务资格 P0 的 `ticket_eligibility_rules`、`student_credential_audits`、多人票 `num_people` 和核销放行人数留痕属未立法实现证据（Flyway 迁移已存在），三份 HTML 零命中，不得升为业务必落项或已确认规则，未写入不取得效力。160 机器已按最新项目和脚本完成同步，并已通过环境、契约、Web 构建、运行配置预检、API/Web 启动、BE-000 运行态、整体健康检查和完整 `complex-verify-p0.sh`；当前使用 `~/.complex/complex.env` 用户级覆盖解决 `/etc/complex/complex.env` 暂无 sudo 写入权限的问题，不在文档或脚本中落真实密钥。注意：当前完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通，不代表平台、票务、权益、核销、证据、设备等业务域已完成生产级实现。
 
 下一步不再新增拍板问题；建议直接按 `p0-first-coding-package-v0.1.md` 进入首批编码包执行：先完成 BE-001/BE-002、Flyway 首批正式迁移、权限模板、事件审计、主体绑定、应收应付和生产前置台账，再把当前 `local/dev/test` 内存态 smoke 切片迁移为 PostgreSQL + Flyway + Service/Repository + 权限/事件/审计的正式业务实现，并要求每替换一个 smoke 接口都保持 `complex-verify-p0.sh` 继续通过。生产或长期预生产前，IT/运维仍需把用户级覆盖配置迁入 `/etc/complex/complex.env`，接入 systemd、账号密钥轮换、告警、生产前置台账，并关闭或正式豁免安全基线 findings 中的公开生产阻断项。
 
@@ -458,6 +458,8 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-08-29 | V0.1 M01 FIX 批次 9 / fix-006 | 代码/决策日志/拍板入口只导航；CNY 与付费会员废止未入 HTML 不取得效力；ticket_eligibility_rules 等降为未立法实现证据 |
+| 2026-08-29 | V0.1 M01 FIX 批次 5 | 后部 S0 只导航不裁决：去掉「唯一裁决入口」「冲突时上游：本文档自身」、baseline「跨域规则裁决」、决策日志「业务决策证据」；业务口径冲突只以三份 HTML 为准 |
 | 2026-08-27 | V0.1 P2 M01 第二整轮 | 三份领域 PRD 不再称「新权威」；HTML 对全部业务口径拥有最终解释权，Phase 4 只读审计不得改写 HTML |
 | 2026-06-16 | V0.1 开发文档审计 | 新增开发文档完整性对抗式审计、全量文档地图 CSV、可开发规格草案，并补入口 UI 自动化和 gstack 交付审计；同步修正 P2 动态定价旧口径残留 |
 | 2026-06-10 | V0.1 | 新增当前有效文档入口、正式口径、阅读顺序、废止内容和 P0 开发准入条件 |

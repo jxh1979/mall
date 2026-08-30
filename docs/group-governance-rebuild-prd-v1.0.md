@@ -9,13 +9,15 @@
 
 ## 0. 定位与边界
 - 不重写 RBAC：继续复用 `permissions`、`roles`、`role_permissions`、`user_roles`、`permission_templates`、`permission_template_items`、`permission_template_applications`、`temporary_permission_grants`。
-- 不重写主管复核：高危授权审批复用 `SupervisorReviewService` 与 `supervisor_review_decisions` 的三档审批能力，审批等级仍是 `one_level_up` / `two_levels_up` / `top_authority`。
+- 不重写主管复核：高危授权审批复用 `SupervisorReviewService` 与 `supervisor_review_decisions`。敏感动作可要求上一级、上两级或最高权限，这是敏感度要求，不是发起人可选档位，也不等于指定角色档或合同单级。发起单据时只需指定最终审批人，系统按组织层级自动补全。当前实现代码值 `one_level_up` / `two_levels_up` / `top_authority` 仅为实现证据，不取得业务效力。
 - 本轮新增的是治理闭环，不是新权限模型：平台管理员配置岗位模板，HR/平台按用户职位定岗，系统自动授予角色并套模板；高危权限授出前可被审批闸拦住。
 - 集团下钻与项目公司级隔离按角色分级共存，不冲突：**平台/集团级角色**（`requirePlatformScope()` 放行者）可跨项目公司汇总下钻；**项目公司管理员**只看本项目公司；**商户用户** scope 一律 fail-closed 403。`GET /api/v1/analytics/group-overview` 除校验 `analytics.group.view` 外，还调用 `requirePlatformScope()`，商户 scope 调用 fail-closed（返回 403）。即「集团下钻」只对平台/集团级角色开放，对项目公司/商户仍按其 scope 收敛。
 - 不做：多套审批流引擎、按业务线重造授权模型、把职位等同于权限。职位只驱动默认角色/模板，最终有效权限仍由 RBAC + 临时授权 + 显式拒绝计算。
 
-## 1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）
-| 对象 | 枚举/字段 | 取值（DB CHECK / 服务校验原值） | 业务说明 |
+## 1. 业务对象与状态枚举（当前实现证据；锚点为枚举 HTML §九平台治理，不是 ENUM §十地产运营）
+
+> 下表 `position_role_templates` / `access_grant_requests` 等为当前实现表名与校验取值，三份业务 HTML 零命中；未写入三份 HTML 的内容不因出现在本 PRD 或实现中而取得效力。不得称「逐字落 DB CHECK」或「逐字闭集」。ENUM §十为地产运营（招商 · 租赁 · 物业 · 设备 · 能耗 · 巡检），与本表无关。
+| 对象 | 枚举/字段 | 取值（当前实现 CHECK / 服务校验） | 业务说明 |
 |---|---|---|---|
 | 职位角色模板 `position_role_templates` | `status` | `active` / `inactive` | 活跃模板参与定岗匹配；同组织、职位、职级仅允许一个活跃模板 |
 | 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` | DB CHECK 预留 4 类；当前 `AccessService` 实际支持前三类，`role_permission` 服务层未开放 |
@@ -26,9 +28,9 @@
 | 集团总览 API 参数 | `groupBy` | `project` / `entity` | Controller/Service 校验；非法返回 `VALIDATION_FAILED` |
 
 ## 2. 角色装配（V169）
-**业务规则**
+**业务规则**（GOV「角色装配（已确认）」两支与五类高危以 HTML 为准。本节表名、唯一约束、接口取值与回退值为当前实现证据，三份业务 HTML 零命中，不取得效力。）
 - 平台管理员配置 `position_role_templates`：`position_code + staff_level_id` 绑定一个 `role_id` 与一个 `permission_template`。这对应业务口径“职位/层级对应哪个模板”。
-- 活跃模板唯一约束：`COALESCE(organization_id,'') + position_code + staff_level_id` 在 `status='active'` 下唯一，避免同岗位同层级多套默认授权。
+- 【实现证据/不取得效力】活跃模板唯一约束：`COALESCE(organization_id,'') + position_code + staff_level_id` 在 `status='active'` 下唯一——三份业务 HTML 零命中，不得立法。
 - 创建/更新职位模板必须是平台管理员，并且复用 `requireActorCanGrant`：模板里角色权限和权限模板条目都不能超出操作者自身有效权限，平台管理员 wildcard 例外。
 - 给用户定岗 `assignUserPosition` 时，系统按目标用户组织、职位、职级查模板，写三类结果：`staff_level_assignments`、`user_position_assignments`、`user_roles`，并套用 `permission_templates`。
 - 跨组织闸保持原 RBAC 规则：非平台管理员不得给其他组织用户定岗；角色或模板若带组织归属，也必须与目标用户组织一致。
@@ -54,7 +56,7 @@
 - UI：`ADM-ACC-003` 访问治理工作台
 
 ## 3. 高危授权审批（V170）
-**业务规则**
+**业务规则**（五类高危与角色装配两支以 GOV 为准。本节表名、status 流程、服务名为当前实现证据，三份业务 HTML 零命中，不取得效力。）
 - 审批闸门：资金/核销/退款/调账/分红发放、提权或跨商户跨综合体、敏感数据、高危业务、**税费规则与税费调整**（共“五类”）——上述权限授出前必须先审批才生效。**（2026-08-03 已收口）** 原 `access.grant_approval.enabled` 配置项可一票关闭这四类强制审批（且关闭时无审计事件、无启动告警，静默失效），属本文此前登记的待对齐缺口；现已从 `AccessService` 移除，审批闸门在生产恒开、无任何配置可关，仅测试构造器保留入参。
 - 高危权限配置：迁移清单只是当前实现初值。后台可以新增高危权限、提高风险等级或提高审批层级，但不得把 HTML 明确的强制项（五类）降级为无需审批，也不得移出强制范围。
 - 高危覆盖口径（五类）：
@@ -66,11 +68,11 @@
     - **实现待对齐（2026-08-04 登记）**：当前实现**无税费类 `requires_approval=true` 权限码**（全库 `*.sql`/`*.java` 检索无 `finance.tax` / `tax_rule` 命中），本条 HTML 口径在代码侧尚无对应权限码落点，**记为实现待对齐**，按事实源优先级**不反向改写 PRD**，留待实现批次补齐。
 - 申请类型当前服务支持三类：`user_role`、`user_position`、`temporary_permission`。DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支。
 - 申请时服务先解析目标授权会授出的权限码，只允许包含 `requires_approval=true` 的授权申请；若没有审批必需权限，返回 `GRANT_APPROVAL_NOT_REQUIRED`，应走直接授权。
-- 审批等级按风险等级派生：`critical` → `permission_grant_l3` / `top_authority` / `required_level=3`；`high` → `permission_grant_l2` / `two_levels_up` / `required_level=2`；其他 → `permission_grant_l1` / `one_level_up` / `required_level=1`。
+- 审批链不由发起人选择档位，也不按风险值自动映射成可选档或指定角色。发起单据时只需指定最终审批人，系统按组织层级自动补全。当前实现把 `critical`/`high`/其他 写成 `permission_grant_l3`/`l2`/`l1` 与 `top_authority`/`two_levels_up`/`one_level_up`，属实现证据，不是业务可选档。
 - 授权申请人与审批人必须职责分离；同一人审批自己的授权申请时一律拒绝并留痕。
-- 流程：申请创建 `access_grant_requests(status=pending)` 并调用 `SupervisorReviewService.blockForAdmission` 生成 `review_id`；审批端调用 SupervisorReview `approve` 后，批准则应用角色/定岗/临时权限并写 `applied`，驳回写 `rejected`。
+- 【实现证据/不取得效力】流程：申请创建 `access_grant_requests(status=pending)` 并调用 `SupervisorReviewService.blockForAdmission` 生成 `review_id`；审批端调用 SupervisorReview `approve` 后，批准则应用角色/定岗/临时权限并写 `applied`，驳回写 `rejected`——三份业务 HTML 零命中上述表名、状态流程与服务名，不得立法。
 - 临时权限必须有 `expires_at`；可带 `valid_from`、`single_use`。V170 扩展 `temporary_permission_grants` 的 `status`、`valid_from`、撤销、单次消耗字段；有效权限查询按有效期和消耗状态过滤。
-- 保存岗位、职责、所属组织或所属商户变更时，立即按变更后的岗位权限模板重新计算有效权限；旧岗位或旧范围派生权限同步失效；新模板范围内的权限无需审批并随保存立即生效，超出新模板范围的增权保持未生效，审批通过后方可生效。在上述四类变更触发重算时，需保留的员工单独授权必须重新校验新范围，超出新范围则暂停并重新审批；高危授权必须重新审批。本规则不把仅职级变化、责任范围变化或任意手工模板应用列为触发条件（DEC-R8-91）。
+- 角色装配按治理 HTML「角色装配（已确认）」两支执行。同商户同项目：保存岗位、职责或同一商户、同一项目范围内的所属组织变更时，系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效，同一商户、同一项目范围内的普通模板权限随保存立即生效。保存所属商户或发生跨项目变更时，旧岗位或旧范围派生权限立即失效，新范围权限每次均须先审批，审批通过后方可生效；属于既有高危权限的，不得因处于岗位模板内而免除授出前审批；超出新模板范围的增权保持未生效，审批通过后方可生效。在上述变更触发重算时，需保留的员工单独授权必须重新校验新范围，超出新范围则暂停并重新审批。本规则不把仅职级变化、责任范围变化或任意手工模板应用列为触发条件（DEC-R8-91）。
 - 智能总结：`grantSummary` 统计窗口内临时权限申请。某职位/层级/权限组合达到阈值时返回“建议转固定权限”；某用户频繁申请时返回异常总结供复核。
 
 **关键端点（实际 Controller）**
@@ -88,14 +90,14 @@
 - UI：`ADM-ACC-003` 访问治理工作台
 
 ## 4. 集团下钻对标
-**业务规则**
+**业务规则**（可见范围与平台/集团级角色以 GOV 为准。本节 `groupBy`、缺主体归并与快照回退值为当前实现证据，三份业务 HTML 零命中，不取得效力。）
 - 集团视图能看什么由职位模板最终授出的权限决定；只有拥有 `analytics.group.view` **且通过 `requirePlatformScope()`（平台/集团级角色）**的职位/角色/临时授权可见集团总览。项目公司管理员即便持有该权限，也因 scope 收敛到本项目、无法跨项目公司下钻；商户用户 fail-closed 403。
-- 端点 `GET /api/v1/analytics/group-overview` 接受 `groupBy=project|entity`。`project` 按综合体项目聚合；`entity` 通过 `projects` 关联 `merchants.business_entity_id` 派生，缺主体归 `entity_unassigned`。
+- 【实现证据/不取得效力】端点 `GET /api/v1/analytics/group-overview` 接受 `groupBy=project|entity`。`project` 按综合体项目聚合；`entity` 通过 `projects` 关联 `merchants.business_entity_id` 派生，缺主体归 `entity_unassigned`——三份业务 HTML 零命中 `groupBy` 与 `entity_unassigned`，不得立法。
 - Controller 同时校验 `analytics.group.view` 和 `requirePlatformScope()`；即使某商户用户误拿到权限，也会因 merchant scope 被拒绝。
 - 指标目录来自真实 ETL 快照：`revenue.net`、`revenue.ticket`、`revenue.bar`、`traffic.amusement`、`verify.done`、`risk.pending_review`；商户数由当日 merchant ETL 快照去重统计。
-- 优先读取 `analytics_business_metric_snapshots(segment_type='project')`；没有 project 口径快照时回退平台口径单行 `project_1/综合体（默认）`，不伪造多项目。
+- 【实现证据/不取得效力】优先读取 `analytics_business_metric_snapshots(segment_type='project')`；没有 project 口径快照时回退平台口径单行 `project_1/综合体（默认）`——三份业务 HTML 零命中该回退值，不得立法。
 - 【**DEC-R7-P4**】2026-08-05 用户裁决：**提案已否决：阈值不写入 HTML，PRD 数值已删除**（DIFF-B-046②；PGM「集团下钻细则（已确认）」条 与「KPI 可见性分层」条 只写分层、未给对标偏离阈值）。
-- 对标红点阈值：**对标偏离阈值为业务参数，待用户裁决配置，配置前不标红**（配置表 `analytics_ai_thresholds.benchmark_deviation`，V218 迁入；**无出厂默认值**）。判定式：项目/主体指标值低于集团均值的 `(1 - 阈值)` 倍（`value < average * (1 - deviation)`）时，返回 `belowBenchmarkMetrics` 并在前端显示红点；**阈值未配置时不返回 `belowBenchmarkMetrics`、不标红**。**实现状态**：现实现在读不到配置时仍以 `0.20` 兜底，属**待改造实现残留**（应按本裁决改为「未配置即不标红」），**不得作为业务口径引用**。
+- 【待决】对标是否标红及如何比较：三份业务 HTML 未写入阈值或公式。本 PRD 不定义业务参数、不给出比较公式。未入 HTML 不得先取得效力；实现不得按已删除公式或任何未入 HTML 的数值编码。现实现残留数值不得作为业务口径。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/analytics/group-overview?groupBy=project`

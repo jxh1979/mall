@@ -35,8 +35,8 @@
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
 | `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/分红周期可配（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限；月/季/半年/年，默认半年）+月度只读预览） | 现行 |
-| `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD（3.18，2026-07-02 拍板方案 A：后台内商户专区） | 现行 |
-| `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界；付费会员已废止 | 现行·边界文档 |
+| `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD。GOV：商户侧不是平台后台，也不是只读页面。【已废止/不得回灌】方案 A：后台内商户专区 | 现行 |
+| `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界。【待决/不取得效力】付费会员是否废止——三份 HTML 对「付费会员」零命中，本行不自行废止 | 现行·边界文档 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
 | `platform-governance-prd-v0.1.md` / `platform-governance-product-spec-v0.2.md` | 平台治理 PRD / 产品规格 | 现行 |
 | `evidence-risk-control-product-prd-v0.1.md` | 证据留痕与风控 PRD | 现行 |
