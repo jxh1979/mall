@@ -313,7 +313,7 @@ BSM-0035,二维码必须带防伪标记、有效期，并能防止被复制或�
 BSM-0036,二维码按后台统一设置的刷新间隔自动刷新,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12 已确认规则·第 6 条 动态码统一刷新间隔与在线核验,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0037,现场核销时判断是否可用，并记录核销结果,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§8.3 现场核销·权益可用性判断与核销结果记录,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0038,事后可按票号、二维码、核销设备、员工、点位,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§10 P0 验收标准·按订单/票号/员工/设备/点位/时间事后核对,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0039,多人票和多次票按人次计算票务积分与成长值,docs/points-and-voucher-product-prd-v1.0.md,§6.3 票务积分规则,FULL,P0,ADV-TX-004,2026-08-07 第六批恢复该旧口径（DEC-R8-76），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
+BSM-0039,多人票和多次票按人次处理,docs/points-and-voucher-product-prd-v1.0.md,§6.3 票务积分规则,FULL,P0,ADV-TX-004,2026-08-07 第六批恢复该旧口径（DEC-R8-76），source_text 已按落地后 HTML 现文逐字重取，本行由 STALE 转回承接,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0040,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,04-transaction-member-ticket-bar
 BSM-0041,ORPHANED,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,STALE,P0,ADV-TX-010,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0042,ORPHANED,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,STALE,P2,P2-DIM-CLOSE-001,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
@@ -978,7 +978,7 @@ BSM-0546,等级与成长值,docs/member-and-tier-product-prd-v1.0.md,8.3 降级�
 "BSM-0602","实名购票规则","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§5.2 配置项表「核验方式（real_name_verify_method）」行","FULL","","","","","","regext-expansion"
 "BSM-0603","实名购票规则","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§5.2 配置项表「失败处理（real_name_fail_action）」行","FULL","","","","","","regext-expansion"
 "BSM-0604","实名购票规则","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§5.2 配置项表「核验留痕」行与 P0 要求第 2 条","FULL","","","","","","regext-expansion"
-"BSM-0605","多人票和多次票按人次计算票务积分与成长值","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§12 结论第 7 条；同文件 §5.1 多人票/多次票口径","FULL","","","","","","regext-expansion"
+"BSM-0605","多人票和多次票按人次处理","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§12 结论第 7 条；同文件 §5.1 多人票/多次票口径","FULL","","","","","","regext-expansion"
 "BSM-0606","官方和第三方渠道门票售出后原则上不退款；未到场","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§8.4.1 退款情形穷举与例外放行；同文件 §12 结论第 2 条","FULL","","","","","","regext-expansion"
 "BSM-0607","官方和第三方渠道门票售出后原则上不退款；未到场","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§8.4.1「可退情形穷举五种」","FULL","","","","","","regext-expansion"
 "BSM-0608","官方和第三方渠道门票售出后原则上不退款；未到场","docs/ticketing-entitlement-checkin-product-prd-v0.1.md","§8.4.1「五种之外的放行」","FULL","","","","","","regext-expansion"

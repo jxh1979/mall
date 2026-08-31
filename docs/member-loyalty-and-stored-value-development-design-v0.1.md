@@ -1,9 +1,9 @@
-# 会员忠诚度 · 储值 · 付费会员 开发设计（V0.1）
+# 会员忠诚度 · 储值开发设计 V0.03（付费会员已废止）
 
-> 生成日期：2026-06-24。性质：**据现有实现回填（source-driven）**——会员忠诚度/储值/付费会员后端已在 `customer` 域完整落地（`LoyaltyService`/`MembershipService`/`StoredValueService` + 迁移 V025/V060/V089/V090/V100/V151），但此前无 PRD/开发设计承载，本文按代码实证补齐设计口径。业务口径以业务系统地图 #ticketing 会员规则、业务枚举速查表 §二（会员与积分）为最终解释权；本文与之对齐。
+> 生成日期：2026-06-24。性质：**据当前实现回填（source-driven）**——`LoyaltyService` 与 `StoredValueService` 已有部分后端能力，但与现行 HTML 仍有明确差距；`MembershipService` 已不存在，付费会员表已由 V290 删除。本文只记录当前代码事实和待改造差距，业务口径以三份 HTML 和现行会员、积分、储值 PRD 为准。
 
 > **[A2 / 业务口径覆盖 2026-07-28]** 储值**业务规则**以 MAIN `member-loyalty-and-stored-value-product-prd-v0.1.md` **§7** 与裁决 `DEC-SV-*` 为准，**覆盖**本文 2026-06-24 代码回填中的单一余额叙述。
-> 本文 §6 仍描述**当时实现结构**，实现迁移前不得用旧单科目模型对抗 MAIN。积分主规则见 `member-points-tier-and-clearing-prd-v1.0.md`。
+> 本文 §6 仍描述**当前实现结构**，实现迁移前不得用旧单科目模型对抗 MAIN。积分主规则见 `points-and-voucher-product-prd-v1.0.md`，会员与等级主规则见 `member-and-tier-product-prd-v1.0.md`。
 
 >
 > 字段/方法以 `backend/src/main/java/com/complex/platform/customer/` 与迁移为准；本文不冻结 OpenAPI（端点见 `docs/openapi/openapi-p0.yaml` `customer/*`、`loyalty/*` 段）。
@@ -15,12 +15,12 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 | 账 | 落点（`customer_points_accounts`） | 行为 |
 |---|---|---|
 | **可用积分** | `balance` (BIGINT) | 兑换/扣减消耗；获取时增加。`deductPoints` 扣此账。 |
-| **成长积分（保级进度）** | `keep_threshold_progress` (BIGINT，V089) | 获取时累加、只增不减、仅周期到期清减；**等级由它算**，兑换扣 `balance` 不影响。 |
+| **保级进度（代码列，不等同业务成长值）** | `keep_threshold_progress` (BIGINT，V089) | 当前实现把积分确认值累加到该列并用它算等级；兑换扣 `balance` 不影响。该列不是 HTML 要求的独立成长值账。 |
 | 冻结额 | `frozen_points` (V089) | 账户冻结时挂起。 |
 | 账户状态 | `account_status`（active/frozen） | `freeze`/`unfreeze`。 |
 | 保级周期 | `level_period_start` / `grace_until`（V089） | 等级评估窗口与宽限。 |
 
-**等级计算关键**：`LoyaltyService.evaluateAccount` 用 `highestQualified(levels, account.keepThresholdProgress())` 取等级——即等级看**成长积分（keep_threshold_progress）**，不看 `balance`。**故客人兑换礼物扣 `balance` 不会降低会员等级**，与速查表"可用积分扣减不影响等级"一致。
+**等级计算关键**：`LoyaltyService.evaluateAccount` 用 `highestQualified(levels, account.keepThresholdProgress())` 取等级，不看 `balance`。因此兑换扣 `balance` 不会直接降低等级；但 `keep_threshold_progress` 仍混入积分倍率、签到奖励等非成长值事实，不能据此声称成长值独立账已实现。
 
 ## 2. 会员等级（升级 / 保级 / 降级 / 宽限）
 
@@ -42,8 +42,12 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 | 待办 | HTML 口径 | 代码现状 | 影响 |
 |---|---|---|---|
 | **成长值这本账在代码里根本不存在** | 速查表§二"成长值与可用积分是两套独立账，积分兑换不扣成长值" | 全仓 `成长值`/`growth_value`/`growthValue` 零命中；`LoyaltyService` 把**本次积分**直接累加进 `keep_threshold_progress`（`earnPoints`/`earnPointsPending`/确认路径三处），且该数值**已经吃过等级倍率和生日倍率** | 等级由"加了倍率的积分"决定，高等级会自我加速升级；PRD §9"等级倍率不得放大成长值"被违反 |
-| **保级窗口不是滚动十二个月** | 速查表§二/PRD §7"评估时点向前滚动后台配置的统计周期（按项目可配，出厂默认 12 个月）内的有效成长值" | `keep_period_days` 固定周期 + 到期把 `keep_threshold_progress` **清零重攒**（`applyLevelChange(resetPeriod=true)`） | 同样的消费节奏，落在周期边界两侧结果不同；不是滚动窗口 |
+| **保级窗口不是滚动十二个月** | 速查表§二/PRD §7"评估时点向前滚动后台配置的统计周期（全平台统一可配，出厂默认 12 个月）内的有效成长值" | `keep_period_days` 固定周期 + 到期把 `keep_threshold_progress` **清零重攒**（`applyLevelChange(resetPeriod=true)`） | 同样的消费节奏，落在周期边界两侧结果不同；不是滚动窗口 |
 | **票务积分未按票种规则算** | 速查表§二"票务订单不读取商户业态规则，而按票种或票务产品已审批生效的积分规则、成长值规则分别计算" | `TicketOrderService` 走项目×受理商户的通用积分累计率 | 票种差异化积分/成长值无法配置 |
+| **票务积分确认与成长值确认未拆开** | 票务积分在退款期结束且对应票款未退款时确认，未使用或到期未用仍有积分；票务成长值只按实际核销人次确认 | 支付成功只写 `pending`；`LoyaltyPointsConsumer` 仍在核销事件上按 `verifiedUnits/totalUnits` 确认积分并同步增加 `keep_threshold_progress`；到期作废任务不终结未核销订单的 `pending` 积分 | 已支付未退款但未核销的票无法按期获得可用积分，核销又把积分值混入成长进度 |
+| **签到奖励错误进入保级进度** | 签到按连续天数阶梯奖励积分，不产生成长值 | `LoyaltyService.checkIn` 同时增加 `balance` 与 `keep_threshold_progress` | 签到会错误推动等级 |
+| **生日月仍可配置** | 生日加倍只限生日当天 | `birthdayMultiplierBasisPoints` 和后台配置仍接受 `birthday_month` | 非生日当天也可能命中生日倍率 |
+| **生日规则锁定缺失** | 生日倍率按支付成功时点锁定适用时点和规则版本 | 积分入账时读取当前生日规则，积分流水没有支付时点、适用时点和生日规则版本快照 | 后续配置变化可能改写订单应适用的倍率 |
 | **降级提前三十天通知未实现** | 速查表§二"降级前提前三十天通知"、PRD §8.3 | 只有 `grace_until` 宽限期，无通知触发点 | 会员被静默降级 |
 
 修这几条要动成长值独立账本（新表/新列 + 明细带发生时间做滚动窗口）与票务规则读取，属独立批次，不在本次止血范围内。
@@ -70,7 +74,7 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
     且避免存量单派生值突然归零导致再来一次核销事件把整份积分二次入账。
 - `deductPoints`：兑换消耗扣 `balance`。
 - `change_type`：获取/扣减/兑换消耗/过期/调整（速查表 §二明细类型），每笔关联触发单据。
-- **过期清零** `expirePoints(now)` / `expirePointsForCustomer`：`customer_points_ledger` 的 `expire_at`/`remaining_points`/`expired`，**代码现状**按自然年或后台配置天数清减 `keep_threshold_progress`。**与现行 HTML 口径不符（2026-08-07 订正）**：ENUM「积分明细类型」条现文为「积分有效期为滚动有效：客人在设定的时间窗口内有过一次消费的，其名下积分即全部保持有效、不过期；窗口内没有任何消费的，积分过期」；等级另按 ENUM「等级与成长值」条的滚动统计周期 + 保护期计算，成长值与可用积分为两套独立账。差距已登记在上文待办表，本文不改代码。
+- **过期清零** `expirePoints(now)` / `expirePointsForCustomer`：当前代码按积分批次 `expire_at` 以 FIFO 清减可用 `balance`，保持 `keep_threshold_progress` 不变；等级周期到期清零保级进度发生在等级周期处理，不在积分过期方法。该批次过期实现仍不符合 HTML 的账户滚动有效规则，属于待改造差距。
 - 事件 `points.earned`/`points.deducted`（V101 `audit_events` 扩 category/subject）。
 
 ## 4. 连续签到
@@ -81,8 +85,8 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 
 ## 5. 生日加倍
 
-落 `customers.birth_date`（V089）+ `customer_birthday_rules`（窗口 `birthday_day`/`birthday_month` + `multiplier_basis_points`）：
-- 获取积分时 `birthdayMultiplier`：命中生日窗口取最高倍率，`applyMultiplier(points, basisPoints)` 加倍。
+落 `customers.birth_date`（V089）+ `customer_birthday_rules`（当前代码仍允许窗口 `birthday_day`/`birthday_month` + `multiplier_basis_points`）：
+- 获取积分时 `birthdayMultiplier` 命中当前窗口后取最高倍率并乘算。`birthday_month` 与 HTML 只限生日当天冲突；支付时点、适用时点和规则版本快照也未落地，均见 §2.1 待办。
 
 ## 6. 储值预付卡
 
@@ -92,17 +96,14 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 - `refund`：退卡/退款。
 - `freeze`/`unfreeze`：账户冻结/解冻（速查表"账户可冻结/解冻"）。
 - 客人端端点 `customer/stored-value/{topup,settle,consume,account}`（MemberWalletController）。
+- 账户仍只有单一 `balance_cent`，没有本金/赠送金双科目；充值流水没有每笔支付成功时的支付通路费率与规则版本快照。
+- 商户级卡仍允许 `fundOwnership=platform_collect`，消费时形成平台应付商户；这与 HTML“平台不代收、不介入商户级卡资金归属”冲突，必须作为实现差距移除，不能提升为业务规则。
 
 ## 7. 付费会员订阅（已废止 2026-07-18）
 
-> **[已废止 2026-07-18]** 付费会员（客人付费购买年卡/权益包）已按权威业务地图（三份业务 HTML 对「付费会员」零命中）彻底废除：客人端/后台端点、`customer_memberships` / `customer_membership_plans` 两表、`MembershipService`、OpenAPI 六条 operation 全部下线（迁移 V290 DROP 两表并退役 `customer.membership.*` 三条权限）。本节仅存历史记录，非现行能力；免费会员忠诚度（成长积分/等级自动升级）与储值预付卡不受影响。
+> **[已废止 2026-07-18]** 付费会员（客人付费购买年卡/权益包）已按权威业务地图（三份业务 HTML 对「付费会员」零命中）彻底废除：客人端/后台端点、`customer_memberships` / `customer_membership_plans` 两表、`MembershipService`、OpenAPI 六条 operation 全部下线（迁移 V290 DROP 两表并退役 `customer.membership.*` 三条权限）。本节仅存历史记录，非现行能力；免费会员忠诚度（成长值／当前保级进度列与等级自动升级）与储值预付卡不受影响。
 
-落 `customer_membership_plans` / `customer_memberships`（V090）。`MembershipService`：
-- `subscribe`：返回支付意图，绑支付（速查表"开通绑定支付"）。
-- `activate`（支付成功后生效）/ `renew` / `autoRenewCharge`（自动续费，V290 已废止）/ `cancel` / `expireMemberships`（到期）。
-- `activeBenefits(customerId)`：当前生效会员权益。
-- `savePlan`：后台档位维护（权限 `customer.membership.manage`）。
-- 客人端 `customer/memberships{,/subscribe}`、`customer/membership-plans`、`customer/membership-benefits`。
+当前仓库没有 `MembershipService`、会员订阅端点或付费会员 OpenAPI；不得按 V090 的历史结构恢复已废止能力。
 
 ## 8. 账户冻结 / 解冻
 
@@ -112,29 +113,29 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 
 | 表 | 迁移 | 用途 |
 |---|---|---|
-| `customer_points_accounts`（+V089 扩列） | V009/V089 | 两本账（balance 可用 / keep_threshold_progress 成长）+ 冻结 + 保级周期 + 签到 |
+| `customer_points_accounts`（+V089 扩列） | V009/V089 | `balance` 可用积分、`keep_threshold_progress` 当前保级进度列（不等同成长值）+ 冻结 + 保级周期 + 签到 |
 | `customer_member_levels` | V089 | 等级配置（升级/保级门槛/周期/宽限/倍率） |
 | `customer_points_ledger` | V025/V100/V151/**V344** | 积分流水（获取/确认/扣减/过期，幂等）。**V344 起改追加**：已确认份额 = `change_type='confirm'` 分录的 `points_delta` 之和；事实列被触发器冻结，`confirmed_amount` 仅作历史列不再回写 |
 | `customer_points_rules` | V060 / **V352** | ~~积分获取规则~~ **已停用（2026-07-28）**：零读取方，后台页 ADM-CUS-003 同批下线；表留库不物删（全表 `archived_at` 存档） |
 | `customer_check_ins`（+ tiers） | V089 | 连续签到 + 阶梯 |
 | `customer_birthday_rules` / `customers.birth_date` | V089 | 生日加倍 |
 | `customer_stored_value_accounts` / `_transactions` | V090 | 储值预付卡 |
-| `customer_membership_plans` / `customer_memberships` | V090 | 付费会员订阅 |
+| `customer_membership_plans` / `customer_memberships` | V090 / V290 | 历史付费会员表；V290 已删除，非现行表 |
 | `customer_points_redemptions` | V025/V060 | 积分兑换发放 |
 
-> 注：`customer_points_transfers`/`customer_points_transfer_limits`（V090）为**已下线**的积分转赠遗留孤儿表（2026-06-24，业务"积分不支持会员间转赠"），待清理迁移统一删，不属本会员体系现行能力。
+> 注：`customer_points_transfers` / `customer_points_transfer_limits` 已由 V172 删除；积分余额不可转赠，不存在待清理的现行孤儿表。
 
 ## 10. 待补（缺口）
 
-- **UI 验收**：`full-admin-ui-acceptance-matrix` 与客人端 UI 验收矩阵均缺会员/储值/签到/订阅行（后端有、验收未单列）。
-- **客人端页面**：`customer-app-miniapp-development-design` 缺签到页、储值充值/余额页、付费会员开通/权益页的页面→API 映射（能力已在 OpenAPI `customer/*`）。
+- **UI 验收**：`full-admin-ui-acceptance-matrix` 与客人端 UI 验收矩阵须核对会员、储值和签到能力；付费会员已废止，不得列为待补页面。
+- **客人端页面**：须核对签到页、储值充值/余额页与现行 API 的映射；不得补回付费会员开通或权益页。
 - 积分获取规则（按金额/张数/签到/生日/活动）与等级升降的**产品规则文档**此前薄弱，本文已据实现回填核心口径；细则以各真身配置表为准——累计率 `points_accrual_rate_configs`（ADM-STL-001 结算配置中心）、等级 `customer_member_levels`、签到 `customer_check_in_tiers`、生日 `customer_birthday_rules`（均在 ADM-CUS-004）。原文此处写的 `customer_points_rules` 已于 2026-07-28 停用（V352）。
 
 
 ## 重构切片（2026-07-28）
 
 - 实现切片与差距矩阵：`docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`
-- 产品主 PRD：`docs/member-points-tier-and-clearing-prd-v1.0.md`
+- 产品主 PRD：`docs/points-and-voucher-product-prd-v1.0.md`、`docs/member-and-tier-product-prd-v1.0.md`
 - 注意：等级倍率乘算、batch 过期、账户级冻结等现网语义需按切片迁移，不得与新 PRD 长期双轨并行。
 
 
@@ -153,5 +154,8 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 实现缺口（相对 MAIN，不在本文假装已落地）：
 - 账户/流水需能拆本金与赠送金科目及活动来源；
 - `topup`/`consume`/`refund` 需按双科目与**写死的**扣款/退现顺序改造（先本金后赠送金，退现只退本金）；
+- 每笔充值支付成功时须固化收款主体、发行主体、实际支付通路费率和退款规则版本；合同换期不得改写已充值余额的费率；
+- 移除商户级卡 `platform_collect` 平台代收路径，资金归属只能由发卡商户承担；
+- 补齐客人端本金/赠送金和卡类型分列、充值/扣款/退款明细、不可关闭的储值金额短信、运营端三维储值台账与公共大屏隐私边界；
 - 禁止账户间迁移 API/后台入口。
 
