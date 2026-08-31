@@ -1,192 +1,154 @@
-# 四类主体唯一绑定开发设计 V0.1
+# 四类主体唯一绑定开发设计 V0.08
 
-> 2026-07-04 逻辑一致性修订：字段名对齐代码——`business_entities.entity_type` enum → `entity_role`（VARCHAR，无 CHECK）；`business_entity_bindings.business_object_id` → `merchant_id`（VARCHAR64，经营对象=merchant 自身）；唯一约束对齐真实 `uq_business_entity_bindings_active_merchant`（每商户至多一条 active）；`authorization_basis`/`authorization_attachment_id` 标注"移合同审批表、非绑定表核心字段"；补名词四层脚注。权威 ER 见 merchant-space-contract-model-v0.1 §2.1/§2.3。
-
-> 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
-> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
-> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+> 版本：V0.08 ｜ 最后更新：2026-08-31 ｜ 状态：现行开发设计
+> 业务最终解释权：`business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html`。代码、迁移和接口只说明当前实现，不得覆盖三份 HTML。
 
 文档类型：Implementation  
-适用范围：平台治理 P0、合同、结算、权限、看板、第三方接入。  
-目标：把“经营对象、运营主体、合同主体、结算主体可以不同名/不同公司，但必须唯一绑定并留痕”的总控口径落成统一数据模型。
+适用范围：商户档案、四类主体绑定，以及合同、结算、权限、看板和第三方接入对绑定的引用。
 
-## 1. 定义
+## 1. 业务定义
 
-> 名词四层脚注：四类主体（运营/合同/结算/经营对象）与「项目公司/管理公司·SPV/商户」四层，在业务上是概念分层（业务：平台 → 项目公司 → 管理公司·SPV → 商户）；DB 层**无 `organizations`/`org_type` 表**，工商主体统一落 `business_entities`，用 `entity_role`（文本，无 CHECK）区分角色。`projects` 表是**业态场馆**（venue_type），非「项目公司」。见 merchant-space-contract-model-v0.1 §5。
+| 名称 | 含义 |
+|---|---|
+| 经营对象 | 平台内部识别的商户经营单元 |
+| 运营主体 | 实际负责运营的人或公司 |
+| 合同主体 | 与平台签署合同的主体 |
+| 结算主体 | 实际收款、付款、开票或对账的主体 |
+| 四类主体绑定 | 上述四类主体在同一经营对象下的唯一生效组合 |
 
-| 名称 | 含义 | 示例 |
-|---|---|---|
-| 经营对象 | 平台内部识别的经营单元，可对应一个门店、酒吧、游乐项目组合或商户经营单元 | “A区酒吧经营对象” |
-| 运营主体 | 实际负责运营的人或公司 | “某运营管理有限公司” |
-| 合同主体 | 与平台签署合同的主体 | “某商业管理有限公司” |
-| 结算主体 | 实际收款/付款/开票/对账的主体 | “某财务结算有限公司” |
-| 主体绑定关系 | 上述四类主体在某一经营对象下的生效组合 | `BEB-20260610-0001` |
+业务关系遵循三条同时生效的规则：
 
-## 2. P0 原则
+1. 四类主体可分属不同公司，但同一经营对象下只能有一组生效绑定；合同、结算、权限、看板和第三方接入都引用同一组绑定。
+2. 物理项目与运营公司是多对多协作，不是固定的“平台→项目公司→域公司→商户”行政隶属链；一个运营公司可服务多个项目，一个项目也可由多家运营公司分域负责。
+3. 当前先落一个综合体，但主体及其他基础对象必须保留综合体项目归属，支持未来集团视图和跨项目汇总；项目归属不得被固定父级链替代。
 
-1. 同一经营对象同一时间只能有一个生效主体绑定关系。
-2. 合同、结算、权限、看板、第三方接入必须引用同一 `business_entity_binding_id`。
-3. 主体可不同名、不同公司，但必须记录统一社会信用代码、证照/附件、有效期和授权依据。
-4. 变更主体绑定不得覆盖历史；新业务使用新版本，历史业务保留旧版本。
-5. 主体绑定关系变更、合同生效/终止、结算主体变更必须进入复核。
+酒吧股权、牌照、场地和资金分别记录。牌照登记在实际经营法律主体名下，娱乐平台公司不会因持股自动成为牌照主体；场地和资金按真实合同、内部协议或借款关系分别留痕。
 
-## 3. 数据模型
+## 2. 业务原则
+
+1. 招商意向转商户时，四类主体默认可指向同一公司；后续需要拆分时，通过主体与权责配置形成新的生效关系。
+2. 公司级配置只管理财务、税务和管理权三类权责；其中财务权责包括销售主体、合同主体、收款主体、收入主体、成本主体和结算主体。收款方、结算方或收入归属方变更，只能通过公司主体与权责配置办理，不得由后台普通开关或运营操作改动。财税主体调整由平台财务、税务、法务并行审核；管理权调整由顶层平台公司终审；申请人不得审批自己提交的调整；紧急调整同样不能绕过审批。
+3. 调整只对生效时间之后的业务有效，不追溯改变历史合同、订单、票据和结算快照。历史迁移须另行完成移交、公司间资金结算和完整审批。
+4. 合同、结算、权限、看板和第三方接入不得各存一套相互漂移的主体文本；业务必须解析同一组四类主体绑定。
+5. 配置类主体档案支持存档、取消存档和审批后软删除。存档后从各处选择列表隐藏，不再被新业务选用，历史仍可查、可对账；后台“已存档内容”页展示全部已存档对象，支持按分类查阅和逐条恢复。存档或删除须填写理由；要删除须先存档，再申请删除。逐条存档属日常操作，不用审批；一次性存档超过后台配置条数，或整店、整类存档，须经审批后执行，该条数按综合体可配且须同时配置上下限。软删除不物理抹除；删前检查合同、账单、结算等占用；历史仍可查、可审计、可恢复。删除一般须由最高权限审批且申请人不得自审；持授权 U 盘密钥的最高权限本人发起时不再经过审批。
+
+## 3. 当前数据模型与差距
 
 ### 3.1 `business_entities`
 
-> ⚠️ 字段名对齐代码（V005）：主键为 `VARCHAR(64)`（迁移 retrofit，非原生 uuid）；下表 `entity_type` 应为 **`entity_role` VARCHAR(32)（无 CHECK / 无代码枚举校验）**，承载「项目公司 / 管理公司·SPV / 商户主体」等角色文本，非固定 enum。四层主体全落本表，无 `organizations` 表。
+当前迁移：V005 基表 + V318 `parent_entity_id` + V354 `archive_reason` 与 `entity_role` CHECK。
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `id` | uuid | 是 | 主键 |
-| `project_id` | uuid | 是 | 综合体项目 |
-| `entity_name` | varchar | 是 | 主体名称 |
-| `entity_role`（原文 `entity_type`） | varchar | 是 | 角色文本，无 CHECK；示例 `company`、`individual`、`platform_internal`、`other`（当前无 DB 枚举约束） |
-| `credit_code` | varchar | 条件必填 | 统一社会信用代码/证件号哈希 |
-| `legal_representative` | varchar | 否 | 法定代表人 |
-| `contact_phone` | varchar | 否 | 联系电话，展示脱敏 |
-| `license_attachment_id` | uuid | 否 | 证照附件 |
-| `status` | enum | 是 | `draft`、`active`、`suspended`、`terminated`、`archived` |
-| `created_at` | timestamp | 是 | 创建时间 |
-| `updated_at` | timestamp | 是 | 更新时间 |
+| 当前字段 | 类型/约束 | 用途 |
+|---|---|---|
+| `id` | `VARCHAR(64)` PK | 工商主体标识 |
+| `entity_name` | `VARCHAR(120)` NOT NULL | 主体名称 |
+| `entity_role` | `VARCHAR(32)` + CHECK | 当前代码角色 |
+| `parent_entity_id` | `VARCHAR(64)`，松引用 | 当前代码中的父级关系 |
+| `unified_social_credit_code` | `VARCHAR(128)` | 统一社会信用代码 |
+| `legal_representative` | `VARCHAR(255)` | 法定代表人 |
+| `bank_account_ref` | `TEXT` | 银行账户引用 |
+| `status` | `VARCHAR(32)` | 当前代码状态，尚无 DB CHECK |
+| `archive_reason` | `TEXT` | 存档/下线理由 |
+| `created_at/updated_at` | `TIMESTAMPTZ` | 时间留痕 |
+
+实现差距：
+
+- V318/V354 把 `parent_entity_id` 用作固定层级，且 V354 的角色白名单仍含 HTML 没有的代码值；业务读取不得据此推导固定行政隶属链，代码应按 HTML 的多对多协作关系收敛。
+- 当前表没有 `project_id`、主体联系电话、证照附件或证照有效期字段。证照、资质和保险由合规到期台账承载，不得在本文虚构这些现行列。
+- HTML 的商户/运营主体业务状态为待准入、正常、暂停、终止、归档、黑名单；试运营是商户自己的经营状态，系统不记录。暂停与列入黑名单由招商部门与运营部门决定。退出不立即生效，须进入按项目可配的缓冲期（上下限出厂为 30 至 60 天，出厂默认 30 天）；缓冲期内向该商户客人说明情况，并给出转到其他酒吧、客人自行取走或退款三种处理方式。当前 `status` 未实现该完整词表和缓冲期闭环。
 
 ### 3.2 `business_entity_bindings`
 
-> ⚠️ 字段名对齐代码（V002 基表 + V010 四方扩展）：「经营对象」= merchant 自身，`business_object_id` → **`merchant_id` VARCHAR(64)**；运营主体列代码名为 `operation_entity_id`（原文 `operator_entity_id`）。`authorization_basis`/`authorization_attachment_id` **非本表核心字段**：授权依据/附件走合同审批表（`contract_approval_flows`/合同附件），非绑定表列。
+当前迁移：V002 基表 + V010 四类主体扩展。
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `id` | uuid | 是 | 主键 |
-| `project_id` | uuid | 是 | 综合体项目 |
-| `binding_no` | varchar | 是 | 主体绑定关系编号 |
-| `merchant_id`（原文 `business_object_id`） | varchar(64) | 是 | 经营对象=当前占用商户（merchant 自身） |
-| `operation_entity_id`（原文 `operator_entity_id`） | uuid | 是 | 运营主体 |
-| `contract_entity_id` | uuid | 是 | 合同主体 |
-| `settlement_entity_id` | uuid | 是 | 结算主体 |
-| ~~`authorization_basis`~~ | enum | — | ⚠️ 移合同审批表，非绑定表核心字段 |
-| ~~`authorization_attachment_id`~~ | uuid | — | ⚠️ 移合同审批/附件，非绑定表核心字段 |
-| `valid_from` | date | 是 | 生效日 |
-| `valid_to` | date | 否 | 失效日 |
-| `status` | enum | 是 | `draft`、`pending_review`、`active`、`suspended`、`expired`、`terminated`、`rejected` |
-| `version` | int | 是 | 同一经营对象下版本号 |
-| `created_by` | uuid | 是 | 创建人 |
-| `reviewed_by` | uuid | 否 | 复核人 |
-| `reviewed_at` | timestamp | 否 | 复核时间 |
-
-唯一约束（对齐代码 `uq_business_entity_bindings_active_merchant`）：
-
-| 约束 | 说明 |
+| 当前字段 | 说明 |
 |---|---|
-| `project_id + binding_no` 唯一 | 编号唯一 |
-| `merchant_id + status=active` 唯一（代码：`uq_business_entity_bindings_active_merchant`，每商户至多一条 active） | 同一商户（经营对象）只能一个生效绑定；激活时命中已存在 active 则 `409 ACTIVE_BINDING_EXISTS` |
-| `merchant_id + version` 唯一 | 历史版本可追溯 |
+| `id` | UUID 主键 |
+| `source_entity_type/source_entity_id` | 通用来源对象；当前四方绑定写 `merchant`/商户 ID |
+| `target_entity_type/target_entity_id` | 通用目标对象；当前四方绑定写 `business_entity`/合同主体 ID |
+| `binding_type` | 当前四方绑定写 `four_party` |
+| `merchant_id` | 经营对象，即商户 |
+| `operation_entity_id` | 运营主体 |
+| `contract_entity_id` | 合同主体 |
+| `settlement_entity_id` | 结算主体 |
+| `effective_from/effective_to` | 生效/失效日期 |
+| `change_reason` | 变更原因 |
+| `status` | 当前服务只接受 `active/inactive/suspended` |
+| `created_at/updated_at` | 时间留痕 |
 
-### 3.3 `business_entity_binding_usages`
+唯一约束 `uq_business_entity_bindings_active_merchant` 保证每个商户至多一条 `active` 记录。
 
-用于追踪哪些对象引用了该绑定关系。
+当前没有 `project_id`、`binding_no`、`version`、`created_by`、`reviewed_by`、`reviewed_at`，也没有 `business_entity_binding_usages` 表。当前创建接口直接写 `active`，已有 active 时拒绝；状态变更接口只改启用、停用或暂停，尚未实现 HTML 要求的主体权责配置审批、新旧关系切换和下游统一引用闭环。
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `id` | uuid | 是 | 主键 |
-| `business_entity_binding_id` | uuid | 是 | 主体绑定 |
-| `usage_type` | enum | 是 | `contract`、`ar_ap_item`、`permission_scope`、`dashboard_scope`、`open_app`、`third_party_mapping` |
-| `usage_id` | uuid/varchar | 是 | 引用对象 |
-| `created_at` | timestamp | 是 | 创建时间 |
-
-## 4. 流程
+## 4. 目标流程与当前差距
 
 ### 4.1 首次绑定
 
-1. 平台运营创建经营对象。
-2. 录入运营主体、合同主体、结算主体。
-3. 上传合同或授权附件。
-4. 提交复核。
-5. 复核通过后生成生效绑定关系。
-6. 后续合同、结算、权限和第三方应用只能选择该生效绑定关系。
+1. 建立商户档案，并绑定空间、业态、合同和经营范围。
+2. 转商户时，经营对象、运营主体、合同主体、结算主体默认可指向同一公司。
+3. 经适用审批生效后，下游合同、结算、权限、看板和第三方接入引用同一绑定。
 
-### 4.2 绑定变更
+当前差距：`POST /api/v1/platform/business-entity-bindings` 直接创建 active 记录，没有草稿、审批和复核状态。
 
-1. 发起新版本绑定关系。
-2. 系统检查历史未结应收应付、未完成合同、未关闭差异和第三方接入。
-3. 复核通过后新版本生效。
-4. 新业务引用新版本，历史记录仍引用旧版本。
+### 4.2 主体或权责调整
 
-### 4.3 异常阻断
+1. 发起主体与权责配置调整，记录原因、生效时间和变更前后内容。
+2. 财务、税务和管理权按 HTML 约束配置；财务权责包括销售、合同、收款、收入、成本和结算主体，不得由后台普通开关或运营操作改变收款方、结算方或收入归属方。财税主体走财务、税务、法务并行审核；管理权走顶层平台公司终审；提交人不得自审，紧急调整同样不能绕过审批。
+3. 审批后只影响生效时间之后的新业务；历史合同、订单、票据、结算和快照保持原值。
+4. 下游新业务切到新绑定，历史引用继续可追溯。
 
-| 异常 | 系统动作 |
+当前差距：`POST /api/v1/platform/business-entity-bindings/{id}/change` 只改变现有记录状态，不能提交新的三主体组合，也没有上述审批链和历史版本切换。
+
+### 4.3 准入与引用
+
+| 场景 | HTML 业务动作 | 当前实现状态 |
+|---|---|---|
+| 无生效绑定 | 不得让合同、结算、权限、看板或第三方接入各自绕开统一绑定 | 尚无统一下游强制引用闭环 |
+| 合同主体与绑定不一致 | 业务必须引用同一组绑定 | 合同主体列与 active binding 无强制一致校验 |
+| 结算主体调整 | 走公司主体与权责配置审批，只影响未来业务 | 当前绑定状态接口不承载主体调整 |
+| 主体档案存档/删除 | 存档后不再出现在选择列表且不得用于新业务；“已存档内容”页按分类查阅并可逐条恢复；填理由；删除前先存档；逐条存档免审，超过可配条数或整店、整类存档须审批；占用检查、历史保留；删除一般须最高权限审批且申请人不得自审，持授权 U 盘密钥的最高权限本人发起时免审 | `business_entities` 有 `archive_reason`，完整存档/删除流程未在当前接口落地 |
+
+## 5. 当前 API
+
+| API | 方法 | 当前能力 |
+|---|---|---|
+| `/api/v1/platform/business-entities` | GET | 真分页查询主体档案 |
+| `/api/v1/platform/business-entities` | POST | 创建主体档案 |
+| `/api/v1/platform/business-entity-bindings` | GET | 真分页查询四类主体绑定 |
+| `/api/v1/platform/business-entity-bindings` | POST | 直接创建 active 绑定；已有 active 时返回 `ACTIVE_BINDING_EXISTS` |
+| `/api/v1/platform/business-entity-bindings/{id}/change` | POST | 将状态改为 active、inactive 或 suspended，并填写原因 |
+
+当前不存在 `/active?businessObjectId=` 和 `/{id}/usages` 两条接口，也不存在主体完整 CRUD。文档不得调用不存在的端点。
+
+## 6. 权限与留痕
+
+| 动作 | 当前权限 | 业务要求/差距 |
+|---|---|---|
+| 查看主体和绑定 | `entity.binding.view` | 只能在授权范围查看；敏感页及导出适用统一审批、暗纹和留痕规则 |
+| 创建主体或改变绑定状态 | `entity.binding.manage` | 当前权限为高风险且 requires approval，但服务未实现主体权责配置的完整业务审批链 |
+| 导出 | 统一导出授权 | 查看权不自动包含导出权；逐次留痕、文件加密码、页面及文件带暗纹 |
+
+## 7. 验收检查
+
+| 检查 | 通过条件 |
 |---|---|
-| 合同主体与绑定关系不一致 | 阻断合同生效 |
-| 结算主体与应收应付台账不一致 | 阻断台账确认 |
-| 第三方应用绑定主体与合同不一致 | 阻断上线或进入高级审批 |
-| 经营对象无生效绑定 | 阻断新增经营动作 |
-| 绑定关系已失效 | 不允许新业务引用 |
+| 唯一绑定 | 同一商户不能同时存在两条 active 绑定 |
+| 同源引用 | 合同、结算、权限、看板和第三方接入解析同一绑定，不接受各自覆盖主体 |
+| 默认与拆分 | 转商户时可默认同公司；拆分须走主体与权责配置审批 |
+| 项目归属 | 主体及其他基础对象保留综合体项目归属；运营公司与物理项目按多对多协作，不从固定父级链推断 |
+| 未来生效 | 调整不回写历史合同、订单、票据、结算和快照 |
+| 主体权责 | 公司级只配置财务、税务、管理权；财务六类主体完整，收款方、结算方、收入归属方不得由普通开关或运营操作改动 |
+| 审批分离 | 财税三线并审、管理权终审、申请人不得自审，紧急调整同样不能绕过审批 |
+| 存档删除 | 存档后从选择列表隐藏且不再用于新业务；“已存档内容”页可按分类查阅并逐条恢复；填理由；删除前先存档；逐条存档免审，超过后台可配条数或整店、整类存档须审批，条数按综合体可配并有上下限；先查占用、历史可查；删除不物理抹除，一般须最高权限审批且申请人不得自审；持授权 U 盘密钥的最高权限本人发起时免审 |
+| 退出缓冲 | 状态词表完整；退出缓冲按项目可配，默认与上下限准确，期间向客人说明并提供三种处理方式 |
+| 实现诚实 | 当前不存在的字段、状态、表、端点和审批链明确标为差距 |
 
-## 5. API 建议
+## 8. 依据
 
-| API | 方法 | 用途 |
-|---|---|---|
-| `/api/v1/platform/business-entities` | CRUD | 主体档案 |
-| `/api/v1/platform/business-entity-bindings` | GET/POST | 主体绑定草稿、创建和查询 |
-| `/api/v1/platform/business-entity-bindings/{id}/change` | POST | 提交变更、复核通过或驳回 |
-| `/api/v1/platform/business-entity-bindings/active?businessObjectId=` | GET | 查询经营对象当前生效绑定（经营对象=merchant，入参对应 `merchant_id`） |
-| `/api/v1/platform/business-entity-bindings/{id}/usages` | GET | 查询引用对象 |
-
-## 6. 权限
-
-| 动作 | 权限 | 说明 |
-|---|---|---|
-| 创建主体 | `entity.binding.manage` | 商户不可自行创建正式主体 |
-| 提交绑定 | `entity.binding.manage` | 需附件 |
-| 复核绑定 | `entity.binding.manage` | 高风险动作，必须留变更前后快照 |
-| 查看绑定 | `entity.binding.view` | 商户仅看自身授权范围 |
-| 导出绑定 | 平台治理导出 | 二次确认 + 审计 |
-
-## 7. 反模式
-
-| 不要这样做 | 应该这样做 | 原因 |
-|---|---|---|
-| 在合同、结算、第三方接入里各自存一套主体文本 | 统一引用 `business_entity_binding_id` | 防止主体漂移 |
-| 变更主体时覆盖旧记录 | 新增版本并保留旧引用 | 历史账务和合同必须可追溯 |
-| 允许无附件的正式绑定 | 必须上传合同/补充协议/授权文件 | 主体责任需要依据 |
-| 只校验商户 ID 不校验结算主体 | 结算必须校验 settlement entity | 避免收付款主体错误 |
-| 把“空间共享”默认视为主体共享 | 共享必须显式授权和绑定 | 防止越权经营 |
-
-## 8. 测试用例规格
-
-| 测试 ID | 场景 | 输入 | 期望 |
-|---|---|---|---|
-| GOV-BEB-UT-001 | 首次创建绑定 | 四类主体 + 附件 | 生成草稿绑定编号 |
-| GOV-BEB-UT-002 | 复核通过 | 待复核绑定 | 状态变 active，同经营对象无其他 active |
-| GOV-BEB-UT-003 | 重复生效阻断 | 同经营对象已有 active | 阻止第二个 active |
-| GOV-BEB-UT-004 | 合同主体不一致 | 合同选择不同主体 | 阻断合同生效 |
-| GOV-BEB-UT-005 | 变更新版本 | 原绑定 active，新绑定复核通过 | 新业务引用新版本，历史不改 |
-| GOV-BEB-IT-001 | 绑定到应收应付 | 合同费用生成台账 | 台账引用同一绑定关系 |
-| GOV-BEB-IT-002 | 绑定到开放应用 | 第三方应用上线 | 主体与合同一致才允许上线 |
-| GOV-BEB-IT-003 | 绑定失效 | 绑定 terminated | 新经营动作被阻断 |
-
-## 9. 错误处理矩阵
-
-| 错误 | 检测 | 响应 | 留痕 |
-|---|---|---|---|
-| 缺少附件 | 提交复核前校验 | 阻断提交 | 操作审计 |
-| 主体证照缺失 | 主体档案校验 | 标记待补充，不允许正式绑定 | 主体审计 |
-| 同经营对象重复 active | 唯一约束/业务校验 | 阻断 | 错误日志 + 审计 |
-| 引用已失效绑定 | 业务动作前校验 | 阻断或高级审批 | 准入事件 |
-| 第三方主体不一致 | 上线前校验 | 阻断上线 | 接入审计 |
-
-## 10. 验收标准
-
-采用 `pm-critic-and-acceptance-criteria-20260610.md §3.2` 的 Given/When/Then 作为 P0 验收门槛。补充两条：
-
-1. Given 商户存在多个业态，When 绑定关系生效，Then 系统必须按合同经营范围限制业态、空间和结算口径，不得默认全域开放。
-2. Given 绑定关系被终止，When 用户查看历史合同和历史台账，Then 历史记录仍显示终止前主体快照和绑定版本。
-
-## 11. 引用
-
-| 主题 | 文档 |
-|---|---|
-| 平台治理 PRD | `platform-governance-prd-v0.1.md §7.4-§7.5` |
-| 字段字典 | `platform-governance-product-spec-v0.2.md` |
-| 应收应付 | `finance-ar-ap-ledger-development-design-v0.1.md` |
-| PM critic 验收 | `pm-critic-and-acceptance-criteria-20260610.md §3.2` |
-| P0 任务清单 | `p0-implementation-task-list.md §18` |
+- PGM「物理项目与运营公司：多对多协作，不是固定隶属层级」
+- PGM「管理商户、运营主体、联系人、合作方式和业务范围」
+- `platform-governance-map-for-operations-v0.1.html` 商户档案段的四类主体唯一绑定与主体权责配置条款
+- PGM「酒吧股权、牌照、场地和资金必须分别记录」
+- BSM「配置数据可以存档、也可以删除（删除要审批）」
+- ENUM「四类主体」「经营主体关系」「商户/运营主体状态」
+- 当前实现：V002、V005、V010、V318、V354；`PlatformController`、`PlatformService`、`JdbcPlatformRepository`

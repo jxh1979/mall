@@ -1233,3 +1233,6 @@ BSM-0546,等级与成长值,docs/member-and-tier-product-prd-v1.0.md,8.3 降级�
 "BEQ-0173","解释权声明","docs/platform-governance-prd-v0.1.md","抬头·权限边界声明·第 4 句","FULL","","","","","","regext-expansion"
 "BSM-0794","人工补录、主管复核","docs/evidence-risk-control-product-prd-v0.1.md","docs/evidence-risk-control-product-prd-v0.1.md §7.2 人工补录（补录规则六条：补录时限、须附原始记录凭证并经审核、一律进主管复核队列、涉金额/归属/提成/责任的补录由被影响方之外的主管复核、并列展示并标明「人工补录」）；§11 第 1 条 主管复核强制项含「人工补录」","FULL","","","","","","regext-expansion"
 "BSM-0795","客人 App/小程序","docs/customer-app-miniapp-product-prd-v0.1.md","docs/customer-app-miniapp-product-prd-v0.1.md §3 主要功能（官方购票、预定/订台、查我的订单、查我的权益、会员积分摘要、展示验票二维码、礼物目录与自助兑换）","FULL","","","","","","regext-expansion"
+BSM-0796,合同到期、续约及其他合同所在地日期判断，以合同对应门店／点位,docs/merchant-space-contract-model-v0.1.md,§3.5 contracts 与 §6 验收检查,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0258,P0 可引入本地 AI 大模型做辅助分析判断,docs/contract-date-compliance-field-granularity-options-20260610.md,§1 业务目标与 §7 本地 AI 辅助边界,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0174,合同状态,docs/contract-date-compliance-field-granularity-options-20260610.md,§1 业务目标、§4.2 HTML 目标与当前差距、§9 验收检查,FULL,,,,,,05-realestate-leasing-building-supply

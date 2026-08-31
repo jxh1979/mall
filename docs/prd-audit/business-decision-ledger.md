@@ -1,9 +1,9 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.08
+文档版本：V0.10
 状态：进行中
 迁移日期：2026-07-27
-当前事实源：三份立法 HTML 以 `freeze_commit` `61f4fbb1be2fae9df8fcbb48f1cb2af9bb53ec68` 原始字节为基线，叠加 James 在 M03、M04 点名批准的精确新增句；M03、M04 当前字节见本文件末节。
+当前事实源：三份立法 HTML 以 `freeze_commit` `61f4fbb1be2fae9df8fcbb48f1cb2af9bb53ec68` 原始字节为基线，叠加 James 在 M03、M04、M05 点名批准的精确新增句；M03、M04、M05 当前字节见本文件末节。
 
 ## 当前使用规则
 
@@ -2424,3 +2424,16 @@
 | J04-008 | `积分退回流水继承原兑换所消耗积分的到期日，不因退回而延长有效期；原积分在退回时点已过期的，退回流水照建但直接落 EXPIRED（不可用），不得为其重设新的到期日、不得按当前时点重新计算有效期。` | 业务系统地图、业务枚举速查表 |
 
 **同步面边界（M04）**：本批业务 HTML 只改 `business-system-map-for-operations-v0.1.html` 与 `business-enum-quick-reference-v0.1.html` 中 James 点名原句；`platform-governance-map-for-operations-v0.1.html` 保持原字节。M04 的八份会员积分储值 PRD／开发文档承接上述原句及 HTML 现文；本台账作为 `verify:html-ledger-sync` 要求的门禁专用例外文件，只补裁决证据。
+
+---
+
+## M05 商户合同空间 HTML 点名原句同步（2026-08-31）
+
+本节只登记 James 在 M05 点名批准写入 HTML 的原句，不扩写、不改写，不新增业务规则。
+
+| 裁决 | 写入 HTML 的精确原句 | 落点 |
+|---|---|---|
+| James 亲口批准 | `P0 可引入本地 AI 大模型做辅助分析判断：对合同文本、人工录入摘要、证照/保险材料中的关键日期、责任主体、提醒建议、阻断风险和疑似缺失项给出提示；但 AI 结果只作为“待人工确认建议”，不得自动替代合同台账、审批、阻断或放行结论。` | 平台治理地图 |
+| James 重新裁决 U-1 后亲口批准 | `合同到期、续约及其他合同所在地日期判断，以合同对应门店／点位的当地时间为准，不使用服务器默认时区。` | 业务系统地图、业务枚举速查表 |
+
+**同步面边界（M05）**：本批先在 `platform-governance-map-for-operations-v0.1.html` 增加获批本地 AI 原句；James 重新裁决 U-1 后，再把获批合同当地时区原句写入 `business-system-map-for-operations-v0.1.html` 与 `business-enum-quick-reference-v0.1.html`。M05 的四份商户合同空间 PRD／开发文档承接上述原句及 HTML 现文；本台账作为 `verify:html-ledger-sync` 要求的机械镜像，只补裁决证据。
