@@ -1,113 +1,189 @@
-# 商户-铺位-合同 权威数据模型 ER（v0.1·以代码为准）
+# 商户、铺位与合同数据模型 V0.18
 
-> 生成：2026-07-04。**权威口径来源 = 现行迁移与代码**（`origin/main`，非任何单份 PRD）。本文用于消解「招商获客 / 地产全链 / 商户专区」三份 PRD 对同一数据模型各说各话的问题：三份 PRD 的关系模型段一律引用本文，本文与代码冲突时以代码为准、随迁移演进更新。
->
-> 采集范围：`V002/V005/V010`（基表）、`V042/V147`（商户扩展）、`V080`（合同-空间）、`V162`（合同域重建）、`V184/V203`（空间字典/状态）、`governance/PlatformService.java`、`contract/ContractService.java`。
->
-> 名词四层（本项目统一）：**平台 → 项目公司 → 管理公司/SPV → 商户**。注意：代码里没有名为 `organizations`/`org_type` 的表，四层主体统一落在 **`business_entities`（工商主体）** 一张表，用 `entity_role` 文本字段区分角色（当前**无 DB 枚举约束**，见 §5 待收口）。
+> 版本：V0.18 ｜ 最后更新：2026-08-31 ｜ 状态：现行开发模型
+> 业务最终解释权：三份业务 HTML。本文只把 HTML 业务关系映射到当前迁移和代码；HTML 与代码不一致时，业务按 HTML，代码列为实现差距。
 
----
+采集范围：V002、V005、V010、V080、V110、V162、V163、V164、V171、V184、V203、V281、V307、V314、V318、V346、V348、V354、V384，以及当前治理、合同、合规、财务和商户专区实现。
 
-## 1. 实体清单（以代码表为准）
+## 1. 业务关系
 
-| 业务名 | 表 | 关键作用 | 隔离维度 |
+### 1.1 项目、运营公司与商户
+
+- 物理项目是空间、价格、经营数据和权限隔离维度。
+- 物理项目与运营公司是多对多协作，不是固定的“平台→项目公司→域公司→商户”行政隶属链。
+- 单一经营域由对应域主管公司负责；跨域规则由项目之上的平台权限审批。
+- 每个商户必须归入一个业态：酒吧、餐饮、零售、游乐、演出传媒、其他。当前代码字段为 `merchants.merchant_type`，是单值六选一。酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司（中央餐饮供货部分仍由中央餐饮公司审批）；选择“其他”时，须在商户档案指定一家主管公司并说明理由，未指定不得开通任何结算与分账。
+
+### 1.2 四类主体
+
+- 每个经营对象绑定经营对象、运营主体、合同主体、结算主体；四类可分属不同公司，同一经营对象下唯一生效。
+- 意向转商户时，四类主体默认可指向同一公司；后续拆分走主体与权责配置。
+- 合同、结算、权限、看板、第三方接入都必须引用同一组绑定。
+- 主体调整只影响生效时间之后的业务，不追溯改写历史合同、订单、票据和结算快照。
+
+### 1.3 商户、合同与铺位
+
+- 一个商户可以有多份合同。
+- 一份合同可以关联多个铺位；铺位可在不同时间由不同合同使用，但不得在同一有效租期重复出租。
+- 合作模式分自营、租赁、联营、代运营、服务商接入、其他六类，各类不预设固定收费项，由平台合作模板依合同约定生成收费项与计费模板；准入不设统一否决标准，由运营人员判断，唯一硬性限制是违法的一律不得签约；选择“其他”须备注并写明理由，在合同生效前指定固定租金/物业费/能源费、销售分成、代运营服务费、供应商应付中的适用收费模板，未指定不得生效。
+- 合同勾选允许经营的品类；超合同范围、超空间范围、过期或资质异常时先阻断，再按 HTML 规定处理申请与审批。权限不足同样阻断，且不设放行通道，须换有权限人员办理。
+- 不支持转租；换租户须先退租再重新招商。
+- 合同准入依赖合同关键日期及证照、资质、保险到期台账；完整字段、提醒、一次宽限期和阻断模型见 `contract-date-compliance-field-granularity-options-20260610.md`，本文不另建第二套规则。
+
+### 1.4 合同费用、欠费与清退
+
+- 意向成交后起草合同，登记租赁面积、合作期限、经营范围、结算口径和核心条款。提起诉讼、停止营业、停止供水供电等商户欠费处置手段一律在合同中约定。
+- 商户押金收取月数全平台统一可配，出厂默认三个月并须同时配置上下限；下限不得低于三个月，配置校验拒绝更低值，不允许零押金或负押金。押金金额等于收取月数乘该商户签约时的月租金，只乘月租，不含物业费、水电能源费等其他费用；已收押金在合同期内固定，不随费用变动追补或退还。
+- 清退的押金余额硬线与欠缴月数线都以存在到期未缴款项为前提，取严并先到先触发。尚无到期应缴账单、各期账单均按自身期限缴清，或仅有罚款欠缴且尚无周期性费用逾期时，不启动清退测算；平时违规处罚先开缴费要求，未缴即形成欠费，罚款欠缴自出现周期性费用逾期起并入欠费总额。到期未缴以每张账单自身载明的缴费期限为准，不另设统一期限。
+- 押金余额硬线按最新账单动态形成的当前月均应缴费用计算，该费用包括房租、物业费、水电能源费等全部费用；出现到期未缴周期性费用时该月均应缴费用必然大于零，不另设除数估算口径。押金减当期欠费后的余额不足覆盖 30 天当前月均应缴费用即启动清退，任何配置组合下均不可关闭，月均应缴费用上调时即时重算。欠缴月数按“当期欠费总额 ÷ 当前月均应缴费用”折算，不按账龄或未结清账单张数计；折算结果超过约定月数即清退并以押金清偿，该月数按项目可配，出厂默认两个月并须同时配置上下限。押金不得日常抵扣欠费，只在清退时抵扣欠费与违约金。
+- 营业额口径全平台统一、不得逐户另议：营业额为该商户当期在本综合体内的含税实收成交总额，减当期已成功退款，减由商户以外出资方承担的赠送与补贴；不论平台或商户自有收款渠道、不论线上线下均计入，商户代收代付的第三方款项不计入，并按开台或下单时点所属营业日归属账期。商品退款在发生当期逐笔冲正，不回改历史月份，按原账期实际计费档位与费率原额冲回，不按冲正当期档位重算；原账期已定格的账单与档位不因冲正而重算；多笔退款逐笔分别冲正，不合并折算。已计收门票综合服务费的通票/券核销划归部分和单店门票票款不再进入抽成基数，同一笔钱不两头收费；未计收服务费的商户（餐饮、零售等），其通票或券核销划归本商户并已完成结算的部分计入。阶梯比例一律超额累进，每一档只对超出该档起点的部分适用该档费率；“保底与抽成取高”按自然月逐月比较、不跨月合并。第三方收银未按约定回流时，按合同保底额与参照期内最高月营业额孰高计租并计合同违约金；参照期按合同逐份可配，出厂默认近三个月并须同时配置上下限，所用参照期随合同版本固化在账单上。营业额抽成账单须在该账期的薪资月结完成、且该账期月结定格时确定的服务费应发数与扣留数定数后出账；账单一次出准，不使用预估数、不在下期补差。出账日与付账日按项目可配、须同时配置上下限且不预设具体日期；财务人员按业务系统地图的付账日归属规则指定付账日，指定日期不满足“月结定格 → 账单出账 → 异议期届满 → 付账日”顺序时，顺延至本账期下一个满足该顺序的付账日，本账期三个付账日均不满足时顺延至下一账期第一个满足该顺序的付账日。营业额抽成账单的异议期长度按项目可配并须同时配置上下限，自账单在商户专区可查看之日的次日起算；仅商户专区在项目时区一个完整自然日全天不可用时该日不计入，部分时段不可用不顺延。
+- 合同生效时固化收益口径并绑定铺位；履约期按期生成租金、物业费、能源费应收，进入财务应收应付台账。
+
+## 2. 当前实体清单
+
+| 业务对象 | 当前表 | 当前作用 | HTML 对齐状态 |
 |---|---|---|---|
-| 工商主体 | `business_entities` | 四层主体的统一载体（平台/项目公司/管理公司·SPV/商户对应的法人或经营主体），`entity_role` 区分角色 | 平台级主数据 |
-| 商户 | `merchants` | 综合体内一个经营租户/联营方/服务商的档案 | 经营主体 scope（`business_entity_id`） |
-| 商户-四类主体绑定 | `business_entity_bindings`（`binding_type='four_party'`） | **商户四类主体绑定的权威、可版本化载体**（每商户至多一条 active） | 按 merchant |
-| 场地/项目（业态单元） | `projects` | ⚠️**非「项目公司」**，是综合体内的**业态经营单元/场馆**（`venue_type`，如 bar/amusement/ticketing），可选挂 `merchant_id` | 综合体 |
-| 空间/铺位 | `spaces` | 楼栋→楼层→区块→**铺位**的层级空间树（`parent_space_id` 自引用），铺位是招商/租赁最小标的 | project + merchant |
-| 空间类型字典 | `space_type_dictionary` | `spaces.space_type` 的硬校验字典（building/floor/zone/**shop**/public_area/parking/booth/other） | 平台级 |
-| 合同 | `contracts` | 商户↔铺位的租赁契约，携带四类主体（`*_subject_id`）、租金条款、8 业务态生命周期 | 综合体（`project_id`） |
-| 合同-空间关联 | `contract_spaces` | **合同 ↔ 铺位 多对多**（一合同多铺位、一铺位可被不同时段合同复用） | 综合体 |
-| 合同租金账单 | `contract_rent_bills` | 逐（合同,期）计费 → 联动 `ar_ap_items` 应收（UNIQUE 幂等） | 综合体 |
-| 合同审批链/变更/结算 | `contract_approval_flows`/`_steps`/`contract_approvals`/`contract_changes`/`contract_settlements`/`space_expiry_color_rules` | V162 重建的审批（分组并行会签，旧阶段制实现；现行审批口径注见 §2.7）/6类变更/退租结算/铺位到期着色 | 综合体（配置表 project 可空=平台默认） |
+| 工商主体 | `business_entities` | 主体档案；当前含代码父级关系和角色 CHECK | 固定父级链不是业务真相，须按多对多关系收敛 |
+| 商户 | `merchants` | 商户档案、单一业态、联系人和主体快照 | 六业态单值已落；主体快照不能覆盖唯一绑定 |
+| 四类主体绑定 | `business_entity_bindings` | 每商户至多一条 active 四方绑定 | 唯一索引已落；审批与下游统一引用未闭环 |
+| 经营项目 | `projects` | 业态经营单元/场馆，不是“项目公司” | 当前单表语义需与物理项目隔离维度区分 |
+| 空间/铺位 | `spaces` | 空间树与当前占用关系 | DB 仅两态，HTML 铺位租赁六态未完整落地 |
+| 合同 | `contracts` | 合同主体、租期、经营范围、租金摘要和快照 | 主体一致、审批、到期终止和公区能源规则有差距 |
+| 合同-空间 | `contract_spaces` | 合同与铺位多对多 | 已落 |
+| 合同审批 | `contract_approval_flows/_steps`、`contract_approvals` | 当前旧阶段制审批 | 未对齐 HTML 统一审批模型 |
+| 合同变更 | `contract_changes` | 八类变更 | V314 已扩到八类 |
+| 退租结算 | `contract_settlements` | V163 已落 HTML 五个业务态；V307 另有内部去重态 `voided` | 五态已落；到期审批、等待期和部分手动确认路径仍有差距 |
+| 租金账单 | `contract_rent_bills` | 合同期账单与 AR/AP 关联 | 当前实现表 |
+| 营业额抽成规则 | `turnover_rent_rules` | 商户维度的费率、保底、生效期、草案和归档；V281 增加可空 `contract_id` | V346 已落草案与差人复核转正；创建入口没有强制合同非空或校验合同与商户一致，生效查询也没有按计费期间校验起止日期 |
+| 营业额抽成阶梯 | `turnover_rent_rule_tiers` | 按规则保存超额累进档位 | V281 已落阶梯；当前创建入口只接收至少一个阶梯，四模式选择另存于合同字段且没有强制映射 |
 
----
+## 3. 关键字段与实现差距
 
-## 2. 关键字段与外键（逐表）
+### 3.1 `business_entities`
 
-### 2.1 `business_entities`（V005）— 四层主体统一表
-- `id` PK / `entity_name` / **`entity_role` VARCHAR(32) NOT NULL**（角色，无 CHECK；应承载「项目公司 / 管理公司·SPV / 商户主体」等，见 §5）/ `unified_social_credit_code`（统一社会信用代码）/ `legal_representative` / `bank_account_ref` / `status`。
-- **无外键**指向自身层级；四层关系目前靠 `entity_role` 文本 + 绑定表表达，不是硬外键树。
+当前字段：`id`、`entity_name`、`entity_role`、`parent_entity_id`、`unified_social_credit_code`、`legal_representative`、`bank_account_ref`、`status`、`archive_reason`、`created_at/updated_at`。
 
-### 2.2 `merchants`（V005 + V042 + V147）
-- 主档：`id` PK / `merchant_name` / **`merchant_type`＝业态权威字段（V348 + V384：NOT NULL + CHECK `chk_merchants_business_format` 限六值 `bar`/`catering`/`retail`/`amusement`/`media`/`other`，索引 `idx_merchants_business_format` 供按业态查询；通票分账按业态拆份额与分流结算的依据）** / `status` / `owner_person`（负责人，V147）/ `contact_*`+`secondary_contact_*`（第一/第二联系人）。
-- **主体快照列**：`business_entity_id`（经营主体，隔离 scope 依据）、`contract_entity_id`（合同主体）、`settlement_entity_id`（结算主体）——均为 `VARCHAR(64)`，**无 DB 外键约束**指向 `business_entities`。
-- 租赁快照：`mall_block_code`、`area_square_meter`、`leased_area_square_meter`、`rent_per_square_meter`、`cooperation_form`（合作模式，无 CHECK）。
-- ⚠️ 这三列是**档案快照**；四类主体的**权威、可变更历史**在 `business_entity_bindings`（§2.3）。
+V318/V354 的 `parent_entity_id` 和角色白名单反映当前代码结构，不得用来覆盖 HTML 的多对多协作关系。当前代码白名单含 HTML 没有的角色值，这是实现差距，不是新增业务主体称谓。
 
-### 2.3 `business_entity_bindings`（V002 基表 + V010 扩展）— 四类主体权威绑定
-- 通用绑定基列：`id UUID` / `source_entity_type` / `source_entity_id` / `target_entity_type` / `target_entity_id` / `binding_type` / `status`。
-- 四方绑定扩展列（V010）：`merchant_id`、**`operation_entity_id`（运营主体）**、**`contract_entity_id`（合同主体）**、**`settlement_entity_id`（结算主体）**、`effective_from/to`、`change_reason`、`updated_at`。
-- **铁律**：`uq_business_entity_bindings_active_merchant` — **每商户至多一条 `status='active'` 绑定**。代码（`PlatformService.saveBusinessEntityBinding` / `changeBusinessEntityBinding`）落地为：新建/激活时校验已存在 active 绑定则 `409 ACTIVE_BINDING_EXISTS`；停用/挂起写 `effective_to`。
-- 语义：**这里是「四类主体后续可拆」的落点** —— 转商户初期四类可都指向同一 `business_entity`；后续拆分 = 换一条新的 active 绑定，指向不同 `operation/contract/settlement` 主体。**「经营对象」= merchant 自身**；运营/合同/结算三主体各一列。
+### 3.2 `merchants`
 
-### 2.4 `spaces`（V005 + V184 + V203）— 空间/铺位树
-- `id` PK / `project_id`（挂业态单元，可空）/ `merchant_id`（当前占用商户，可空）/ **`parent_space_id`（自引用，构成 楼栋→楼层→区块→铺位 层级）** / `space_name` / **`space_type`（硬校验 ∈ `space_type_dictionary` active，铺位=`shop`）** / `floor_no` / `area_square_meter` / `polygon_points`（平面图多边形）/ **`status` CHECK ∈ (`active`,`unavailable`)**（V203，仅 2 值）。
-- ⚠️ **代码里空间没有「空置/洽谈中/已租/即将到期/已退租」这类租赁状态枚举**（PRD §2 的「租赁状态着色看板」6 态是 PRD 愿景，未落 DB）。实际到期着色由 §2.7 `space_expiry_color_rules` 按「距到期天数」计算，不是 status 字段。
+- 主档：`id`、`merchant_name`、`merchant_type`、`status`、负责人和两组联系人。
+- `merchant_type` 经 V348/V384 限为 `bar/catering/retail/amusement/media/other`，对应 HTML 六业态，一个商户一个业态。
+- 当前 `merchants` 没有“其他”业态所需的主管公司和选择理由字段，因而尚不能落实“未指定主管公司不得开通任何结算与分账”的准入限制；这是实现差距，不得把缺字段理解为可以绕过限制。
+- `business_entity_id/contract_entity_id/settlement_entity_id` 是当前商户档案快照，不能代替 `business_entity_bindings` 的唯一生效关系。
+- `allowed_business_scope` 是合同允许经营品类范围，不等于商户主档同时属于多个业态。
 
-### 2.5 `contracts`（V010 基 + V080 + V162 扩展）
-- 基列（V010）：`id` PK / **`merchant_id` NOT NULL**（合同归属商户）/ **`contract_subject_id` NOT NULL（合同主体）** / `operation_subject_id`（运营主体，可空）/ **`settlement_subject_id` NOT NULL（结算主体）** / `effective_date` / `expiry_date` / `rent_terms` JSONB / `shareholder_ratio_for_report` / `lifecycle_status`。
-- V080：`allowed_business_scope` JSONB（准入闸经营范围）。
-- V162 扩展：`commission_mode`（抽成4模式）、`energy_fee_basis`（公区能耗分摊4模式）、`deposit_cent`、`penalty_terms`、`settlement_rules`、`snapshot`（生效固化快照）、`project_id`（综合体）、`terminated_at`/`termination_reason`、`renewed_from_contract_id`（续约链）。
-- **`lifecycle_status` CHECK 8 业务态**（V162）：`drafting`/`pending_confirmation`/`pending_effective`/`effective`/`renewing`/`expired`/`terminated`/`archived`。
-- **到期自动批转**（2026-08-02 接线）：日度作业将 `lifecycle_status='effective'` 且 `expiry_date` 早于当日的合同批转为 `expired`，留审计事件 `contract.expired_batch`（metadata 含批转条数 `count` 与判定基准日 `as_of`）。**到期当日仍算有效**（严格早于，非早于等于）；**`renewing` 不批转**（续约中不视为过期）。开关 `contract.expiry.scheduled.enabled`（代码默认关，prod 开）。
-- ⚠️ 此前该批转**一直没有调用方**（旧 governance `ContractExpiryJob` 删除后未补），过期合同长期停在 `effective`，而变更/结算/经营绑定等按 `effective` 判定的入口照常放行——2026-08-02 已补作业接线。
-- **判定基准日时区**（2026-08-02）：到期批转与续约提醒的基准日按**所在地（北京）时间的日历日**取，非 UTC——业务人员按北京日历日看到期日，UTC 判定会让批转比预期晚最多 8 小时（两作业为 `fixedDelay` 触发，时刻随应用启动漂移，会落进「UTC 与北京不同日」窗口）。⚠️ **全仓口径分两阶段统一**：第一阶段（2026-08-02）已把基准日收拢到单点 `common/LocalZone`（固定 `Asia/Shanghai`），并据此改齐：合同到期批转/续约提醒、铺位平面图「距到期天数」着色基准日、以及 2026-07-22 拍板的「考勤按所在地时间」（打卡当日班次归属、考勤月视图取数窗口与日行归属、后台按日查打卡的日窗）。第二阶段（2026-08-02）已收编其余日期作业：经营日助手 `BusinessDayResolver`（日切小时改按北京时间读，酒吧 06:00 / 零售餐饮 10:00 等按域切分语义不变，财务日结与看板经营日分桶随之跟随）、分账归属月与对账日窗、分红预览归属月与留存释放判定日、会员签到与生日窗口、巡检排程日，以及库存域的预计/实际到货日、盘点单经营日、供应商资质与供货合同有效期判定日、调拨应付台账到期日。打卡配哪个班另按**时间区间**判定（`start_at`/`end_at` 覆盖打卡时刻），不折日历日——跨零点夜班的 `work_date` 是开始那天，按日查必漏。遗留：基准 D15.3 / 决策 D-20260722-3 已于 2026-08-02 复议对齐为「全局所在地（北京）时间」，点位级时区配置留到真跨地区经营时再做（当前只在一地经营，两者无实际差异）；**三份业务 HTML 仍写「所在门店／点位当地时间」，待用户逐句批准后同步**。
-- ⚠️ 合同的三个 `*_subject_id` 是**合同各自携带的主体**，与商户当前 active 绑定（§2.3）**可不一致**（合同快照 vs 商户当前绑定），无外键强绑。
+### 3.3 `business_entity_bindings`
 
-### 2.6 `contract_spaces`（V080 + V162）— 合同↔铺位
-- `contract_id` FK→`contracts` / `space_id` FK→`spaces` / `project_id`（V162）/ PK(`contract_id`,`space_id`)。
-- **多对多**：一合同可租多铺位；一铺位可被不同时段/合同复用（选关联表而非 `spaces.contract_id` 即为此）。
+当前四方扩展字段：`merchant_id`、`operation_entity_id`、`contract_entity_id`、`settlement_entity_id`、`effective_from/effective_to`、`change_reason`、`status`、`created_at/updated_at`；唯一索引 `uq_business_entity_bindings_active_merchant` 保证每商户至多一条 active。
 
-### 2.7 V162 其余（审批/变更/结算/账单/着色）
-- `contract_approval_flows` + `_steps`：可配审批链；**同 `(flow,stage_seq)` 多行 = 一个并行会签阶段**；每综合体至多一条 active 链（NULL project=平台默认）。默认链：阶段①业务/财务/法务并行 → 阶段②总经理终审。（注：2026-08-04 用户裁决审批口径改为统一模型——指定最终审批人+逐级自动补全+平行部门线；本表结构为旧阶段制实现，改造已登记待办。）
-- `contract_approvals`：审批实例留痕；`change_id` 空=新签、非空=变更走同一链。
-- `contract_changes`：**6 类变更 CHECK**（`renewal`/`move_out`/`area_change`/`rent_change`/`business_scope_change`/`early_termination`）——**无转租**（换租户须先退租再招商）。
-- `contract_settlements`：退租/到期结算，`trigger_type`∈(move_out/expiry/early_termination)，`status`∈(in_progress/disputed/settled)，`settlement_items` 逐例顺序执行。
-- `contract_rent_bills`：逐(合同,期)计费，`ar_ap_item_id` FK→`ar_ap_items`，`uq_contract_rent_bills_contract_period` 幂等。
-- `space_expiry_color_rules`：可配到期着色（分类名+颜色+提前天数），默认「即将到期/30天/#F59E0B」。
+当前服务创建即 active，状态只支持 active/inactive/suspended；尚未实现 HTML 要求的主体权责配置审批、新旧绑定切换和下游统一引用闭环。
 
----
+### 3.4 `spaces` 与 `contract_spaces`
 
-## 3. 权威关系图（文字 ER）
+- `spaces` 当前含 `project_id`、`merchant_id`、`parent_space_id`、`space_type`、面积、平面图多边形和 `status`。
+- `space_type` 由字典校验；铺位代码值为 `shop`。
+- `spaces.status` 经 V203 仅允许 `active/unavailable`。
+- HTML 铺位租赁状态为：空置、洽谈中、已租、即将到期、已退租、不可租。该六态须随意向与合同联动并在平面图着色，其中不可租由人工标注；分类、颜色和提前天数按综合体后台可配，但六个状态分类属于业务定义，不允许后台增删。当前 DB 两态不能冒充六态已完成。
+- `contract_spaces` 以 `(contract_id, space_id)` 表达合同与铺位多对多。
 
-```
-business_entities (四层主体统一表, entity_role 区分)
-        ▲ (软引用, 无FK)                          ▲ (软引用, 无FK)
-        │                                          │
-   merchants.business_entity_id            contracts.contract_subject_id
-   merchants.contract_entity_id                     .operation_subject_id
-   merchants.settlement_entity_id                   .settlement_subject_id
-        │  (档案快照)                          (合同自带主体, 快照, 可!=商户当前绑定)
+### 3.5 `contracts`
+
+当前主要字段：
+
+- 归属与主体：`merchant_id`、`contract_subject_id`、`operation_subject_id`、`settlement_subject_id`。
+- 合作模式：HTML 要求合同维护六类合作模式及其收费模板；当前 `contracts` 没有明确合作模式、其他模式备注或适用收费模板字段，`merchants.cooperation_form` 只是无 CHECK 的商户字段，不能替代合同字段和生效校验。
+- 租期与范围：`effective_date`、`expiry_date`、`allowed_business_scope`、`project_id`、`contract_spaces`。
+- 费用摘要：`rent_terms`、`commission_mode`、`energy_fee_basis`、`deposit_cent`、`penalty_terms`、`settlement_rules`。营业额抽成模式为保底与抽成取高、固定比例、阶梯比例、保底加抽成叠加四类；V162 的 `commission_mode` CHECK 已承载四个代码值。
+- 快照与终止：`snapshot`、`terminated_at`、`termination_reason`、`renewed_from_contract_id`。合同生效时，`snapshot` 须固化租金规则、物业费/能源费口径、分成比例、押金/违约金条款四项供下游引用。当前 `ContractService.buildSnapshot()` 写入 `rentTerms`、`energyFeeBasis`、`commissionMode`、`depositCent`、`penaltyTerms` 和 `frozenAt`：租金、物业费金额、能源费金额目前混在 `rentTerms`，`energyFeeBasis` 仍是待收敛的公区分摊模式，`commissionMode` 只表示抽成模式而不是明确的分成比例；因此尚未按 HTML 完整、准确地固化四项口径。
+
+业务与代码差距：
+
+1. HTML 合同业务状态为草拟、待确认、待生效、已生效、续签中、已到期、已终止、归档八态。V314 另加代码态 `amended`，须作为实现内部差距处理，不能改写 HTML 枚举。
+2. 当前合同三个主体列与商户 active binding 没有强制一致校验；业务上仍必须引用同一组绑定。
+3. 当前日度作业会把到期的 effective 合同自动改为 expired；HTML 明确“到期不得无审批自动终止”，因此该自动批转是实现冲突，不得写成合规业务流程。
+4. `energy_fee_basis` 仍允许公区能耗四种分摊模式；HTML 明确公区能源及其他公区公摊统一含在物业费中，不向商户单独分摊；空调相关费用同样统一计入物业费，不作为独立费用项目向商户另行收费。商户自身能源费则按独立表计的实际用量与实际费用代收，一律不得加价，并记为代收代缴往来，不作为城市项目公司的物业费收入或普通经营收入。现有四种公区分摊模式是待收敛实现，不是现行业务选择。
+5. 合同到期、续约及其他合同所在地日期判断，以合同对应门店/点位的当地时间为准，不使用服务器默认时区。当前代码集中使用固定 `Asia/Shanghai`，只描述当前单地实现；未来跨地区前须消除差距。
+6. 当前合同只有 `deposit_cent` 及通用的 `rent_terms/commission_mode/settlement_rules`，没有独立表达押金月数与上下限、清退双触发、当前月均应缴费用、营业额完整口径和参照期固化的结构化字段与完整校验；不得仅凭押金金额列或四种抽成模式名宣称上述 HTML 规则已经落地。
+7. 当前 `ContractService` 在合同生效时按整租期预排租金和物业费应收并写入 AR/AP；商户自身能源费由能耗域按实际用量出账。实现验收须确认三类应收按期进入财务应收应付台账且不重复挂账，不能把当前分域承载误写成能源费可不出账。
+8. V281/V346 已建立营业额抽成规则、阶梯档位、草案和差人复核转正，但仍有以下实现差距：`contract_id` 可空，创建入口没有强制合同非空或校验合同与商户一致；生效查询只按 `contract_id/status/is_draft` 取最新行，没有按计费期间校验 `effective_from/effective_to`；`ContractService.resolveBillingRent()` 不读取 `contracts.commission_mode` 驱动四种业务模式，而是另读 `rent_terms.rentBillingMode` 的 `fixed_only/turnover_only/higher_of/sum`，二者没有统一映射与一致性校验；营业额只按 `integration_order_syncs.created_at` 汇总已同步订单减退款，尚未完整承载按开台或下单时点归账、外部出资赠补扣除、全渠道计入、门票服务费去重计基、退款按原档逐笔冲正、第三方未回流兜底和参照期固化；旧规则的 `max_amount_cent` 仍可被计费代码作为封顶使用；计费入口也未校验薪资月结、服务费应发数与扣留数定格、商户专区可查看、专门异议期及付账日顺序。
+
+## 4. 合同审批、变更与结算
+
+### 4.1 审批
+
+HTML 的新建、到期终止、变更三类合同流程分别配置模板，但都使用统一审批模型：主线指定最终审批人（默认总经理）并逐级自动补全；业务、财务、法务为平行部门线，各自指定该部门的最终审批人，并由系统向下自动补全至该部门预设的最低起点层级；主线与各平行线全部通过才生效，任一节点驳回则退回起草。各类的阶段数与审批岗位可以不同，并按综合体后台可配且须同时配置上下限。三类都不得录入即生效：新建未审批不生效，到期不得无审批自动终止，变更未审批不生效。审批节点时限按合同类型可配，出厂默认 3 个工作日并须同时配置上下限；超时自动提醒并升级到上一级，不得默认通过；起草人与各审批人可查看当前卡点并向处理人发送消息；升至最终审批节点仍超时的，按全平台审批通用时限的末端兜底规则处理，不另设合同兜底。
+
+当前 V162 仍是阶段制并行会签表结构，默认“业务/财务/法务并行→总经理终审”，未完整实现上述统一模型。
+
+### 4.2 八类变更
+
+HTML 与 V314 当前代码一致的八类为：
+
+1. 续租 `renewal`
+2. 退租 `move_out`
+3. 面积变更 `area_change`
+4. 租金调整 `rent_change`
+5. 经营范围变更 `business_scope_change`
+6. 提前终止 `early_termination`
+7. 经营范围授权 `scope_grant`
+8. 位置变更 `location_change`
+
+每次变更须留审批与原因，只对未来生效；不支持转租。
+
+同一商户只变更经营位置或经营面积时，须基于原合同建立有继承关系的变更子合同，押金随该次变更同步调整。当前 V314 以 `rent_terms.parentContractId/amendmentType/depositAdjustment` 细化该关系，并把被接替原合同置为内部代码态 `amended`；`amended` 不得扩成 HTML 第九个合同业务状态。
+
+### 4.3 退租结算
+
+HTML 五态：待结算、押金抵扣中、欠费追缴中、已结清、有争议。退租、提前终止、合同到期统一走多级审批，涉及财务、运营等多个部门共同审核；退租结算顺序按每份合同条款逐例处理；统一结算并一次算清押金处置、违约金和未结清欠费，统一进入财务应收应付台账，按合同归拢、去重，并可追溯到对应合同；审批通过后按结算清单自动落账，不再单设手动确认入口；同一合同只结算一次、不重复出账。押金退还不在审批通过时立即支付，而是以算账完成为准，且不得早于自最后一个审批完成日起算的等待期届满；等待期按项目可配，出厂默认 30 日，并须同时配置上下限。押金退还支付不受三个付账日与账单异议期约束；等待期用于让退租日之前按期出账的能耗费、物业费等全部形成应收并从押金结清；期间新出账费用自动并入同一次退租结算，不另立新单。商户对退租结算金额的异议在退租审批流程中提出并解决，不适用普通账单异议期；有争议时先由主管裁决，仍需诉讼或仲裁的保持“有争议”并无限期挂起，直至诉讼或仲裁有结果后再处理。算账晚于等待期完成的，顺延至算账完成日支付，顺延原因和预计时间须在商户专区对商户可见。
+
+当前 V163 已把 `contract_settlements.status` 扩为 `pending_settlement/deposit_offsetting/arrears_collecting/settled/disputed` 五态，`ContractService` 也支持逐相推进；V307 增加的 `voided` 仅用于并发或重复路径下作废悬挂单，不是第六个对外业务态。经审批的退租、提前终止变更已有自动落账路径，但到期批任务仍会无审批改合同状态，且手动结算路径仍保留独立的 `complete/advance` 确认步骤；审批后自动落账与等待期闭环仍未完整对齐 HTML。
+
+## 5. 关系图
+
+```text
+business_entities
+        ▲
+        │ 当前软引用
+business_entity_bindings（每商户至多一条 active）
+        │ merchant_id / operation_entity_id / contract_entity_id / settlement_entity_id
         │
-   business_entity_bindings  ──(每商户至多一条 active, 权威可版本化)
-        merchant_id / operation_entity_id / contract_entity_id / settlement_entity_id
-        │
-   merchants (1) ──< contracts (N)          [merchant_id, 一商户可多合同]
-        │                    │
-        │                    └──< contract_spaces >── spaces   [合同↔铺位 多对多]
-        │                                                │
-   spaces.merchant_id (当前占用)                     spaces.parent_space_id (自引用: 楼栋→层→区块→铺位)
-        │                                                │
-   projects (业态单元/场馆, venue_type)  ──(1:N)──  spaces.project_id
+merchants（一个业态）1 ── N contracts
+        │                       │
+        │                       └── contract_spaces ── spaces
+        │                                              │
+        └──────────────────────────── spaces.merchant_id
+
+物理项目 ↔ 运营公司：业务上多对多，不由固定 parent 链决定
 ```
 
-## 4. 三条「一个商户能否…」的权威回答（以代码为准）
+## 6. 验收检查
 
-| 问题 | 答案 | 依据 |
-|---|---|---|
-| 一个商户可否多铺位？ | **可**。商户通过合同占用铺位，`contract_spaces` 多对多；`spaces.merchant_id` 亦可直接标占用。 | `contract_spaces` PK 多对多 |
-| 一个商户可否多合同？ | **可**。`contracts.merchant_id` 一对多；含续约链 `renewed_from_contract_id`。 | `contracts` FK + 索引 `idx_contracts_merchant_status` |
-| 一个商户可否多业态？ | **可**。合同 `allowed_business_scope` 是数组；`projects.venue_type` 按业态单元建，商户可关联多个业态场地。 | `contracts.allowed_business_scope` JSONB / `projects` |
-| 结算主体如何绑定？ | 权威在 `business_entity_bindings.settlement_entity_id`（每商户 active 唯一）；`merchants.settlement_entity_id` 是档案快照；合同另带 `contracts.settlement_subject_id`（该合同结算主体，快照）。三处语义分层：商户当前绑定 / 商户档案快照 / 合同签署时快照。 | §2.2 / §2.3 / §2.5 |
+| 检查 | 通过条件 |
+|---|---|
+| 主体唯一 | 同一经营对象只有一组生效四类主体绑定 |
+| 下游一致 | 合同、结算、权限、看板、第三方接入不绕开绑定另存权威主体 |
+| 业态单值 | 商户主档只取六业态之一；合同经营品类不被误解成多个业态 |
+| 合作模式 | 六类合作模式完整；违法不得签约；其他模式须写明理由并在生效前指定适用收费模板，当前字段和校验差距已登记 |
+| 合同状态 | 对外业务只使用 HTML 八态，额外代码态明确标为实现差距 |
+| 生效快照 | 目标固化四项；当前快照键及其字段混用、旧能源口径和分成比例缺口均如实登记 |
+| 合同核心条款 | 租赁面积、合作期限、经营范围、结算口径、核心条款和欠费处置手段均写入合同 |
+| 押金与清退 | 押金月数全平台统一可配、默认三个月且下限不低于三个月；押金公式与期内固定准确；清退以前提、两条触发取严、30 天硬线、欠缴月数公式和默认两个月上下限执行；日常不得用押金抵欠费 |
+| 营业额抽成 | 含税实收减退款减外部出资赠补、全渠道计入、代收代付排除；退款当期按原档原费率逐笔分别冲正，原账单与档位不重算且多笔不合并折算；已收门票综合服务费的部分不再计基，同一笔钱不两头收费；阶梯每档只对超出该档起点部分适用该档费率；取高按自然月；第三方未回流按保底与参照期最高月孰高计租；薪资月结与服务费应发/扣留定格后一次出准、不用预估、不在下期补差；出账日和付账日按项目可配且须同时配置上下限，严格按月结定格、出账、异议期届满、付账日顺序执行；专门异议期从商户专区可查看次日起算，只有项目时区完整自然日全天不可用才不计入 |
+| 审批模型与时限 | 三类模板均不得录入即生效；主线默认总经理，业务、财务、法务平行线各指定最终审批人并补全至最低起点层级；阶段数与岗位按综合体可配且有上下限；节点时限按合同类型可配且有上下限，超时提醒升级、卡点可见可催办，最终节点按通用末端规则处理 |
+| 到期终止 | 合同到期必须走审批，不得由批任务无审批终止 |
+| 变更 | 八类齐全、留审批与原因、不支持转租 |
+| 变更子合同 | 位置或面积变化建立继承原合同的子合同，押金同步调整；`amended` 只作内部映射 |
+| 退租 | 五态；财务、运营等多部门共同参与多级审批；按每份合同条款逐例处理；一次算清押金处置/违约金/未结清欠费并进入财务应收应付台账，按合同归拢、去重、可追溯；审批后自动落账且不另设手动确认；同合同只算一次且不重复出账；等待期自最后一个审批完成日起算，按项目可配、出厂默认 30 日且须同时配置上下限，用于退租日前费用形成应收并从押金结清，期间新账并入同一次结算且不另立新单；押金退还支付不受三个付账日与账单异议期约束，金额异议在退租审批流程处理；算账晚时顺延支付，原因和预计时间在商户专区对商户可见 |
+| 周期性应收 | 合同生效并绑定铺位后，租金、物业费、能源费按期生成应收并进入财务应收应付台账，分域承载不得漏账或重复挂账 |
+| 公区能源 | 公区能耗及其他公区公摊含在物业费中，不生成单独分摊选择；空调相关费用计入物业费，不作为独立费用项目收费 |
+| 商户能源 | 独立表计、按实际费用代收、不加价，记代收代缴往来 |
+| 铺位状态 | 六态可见并随意向/合同联动，不可租由人工标注；DB 两态不冒充业务六态 |
+| 当地时间 | 合同到期、续约及其他合同所在地日期判断，按合同对应门店/点位当地时间执行，不使用服务器默认时区 |
 
-## 5. 与 PRD 表述的已知差异 / 待收口（供三份 PRD 对齐时标注）
+## 7. 依据
 
-1. **无 `organizations`/`org_type` 表**：四层主体全在 `business_entities`，用 `entity_role` 文本区分，且**该字段当前无 DB CHECK / 代码枚举校验**（`PlatformService.createBusinessEntity` 仅 requireText 非空）。名词四层是**业务概念分层**，DB 层是**一表多角色**。→ PRD 勿臆造独立「项目公司表/SPV 表」；如需收紧 `entity_role` 取值，标「后台可配 + 待补 CHECK」。
-2. **`projects` ≠ 项目公司**：它是**业态经营单元/场馆**（`venue_type`）。名词四层的「项目公司」是 `business_entities` 里的一个 `entity_role`，不是 `projects` 表。PRD 谈「综合体/项目级隔离」时的 `project_id` 是**综合体维度**，勿与 `projects` 表混为一谈。
-3. **空间租赁状态只有 2 值**（`active`/`unavailable`，V203）：PRD 的「空置/洽谈中/已租/即将到期/已退租/不可租」6 态着色看板**未落 DB status**；到期着色实由 `space_expiry_color_rules` 按天数算。→ PRD 应标该 6 态为「看板派生/待建」，非 DB 枚举。
-4. **四类主体拆分落点 = `business_entity_bindings`**（每商户 active 唯一），非在 `merchants` 三列改写。「后续可拆」= 新建 active 绑定替换。
-5. **合同主体 vs 商户绑定不强一致**：合同 `*_subject_id` 是签署时快照，与商户当前 active 绑定无外键强绑，可不同。PRD 勿声称「合同主体永远等于商户结算主体」。
-6. **无转租**：`contract_changes` 6 类不含转租；换租户 = 先退租再招商。
+- BSM「商户管理」「招商租赁与合同履约」「合同变更」「变更与退租」
+- `platform-governance-map-for-operations-v0.1.html` 的物理项目与运营公司、商户档案、合同生命周期和合同运营细则
+- ENUM「经营主体关系」「四类主体」「合作模式」「合同状态」「合同变更类型」「退租结算状态」「营业额抽成模式」「铺位租赁状态」「公区能源费」
+- 当前实现：V002/V005/V010/V080/V110/V162/V163/V164/V171/V184/V203/V281/V307/V314/V318/V346/V348/V354/V384
