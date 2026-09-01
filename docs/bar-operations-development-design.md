@@ -1,29 +1,34 @@
 # 酒吧经营：桌台、点单、库存、存酒开发设计
 
-> 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
-> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
-> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+> 版本：V0.08 ｜ 最后更新：2026-09-01 ｜ 当前迁移最高：V385 ｜ 状态：现行
+>
+> 权限边界：三份业务 HTML 定义业务目标；本设计只承接实现与差距，代码不能反向覆盖 HTML。下文表结构、API、事件和状态若未在“当前实现”中明确为已落地，均按目标设计理解。
 
-> **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
-> R5 横幅原标注的订台定金/赠饮扣库存缺口已在本会话 P0 实现并落库（V072/V073/V079），以下逐条上修；存酒转赠/争议入口与按杯损耗强制采集保持开放。
-> - **订台定金闭环已落地（V073）**：新建 `bar_deposit_rules`（固定额 `fixed` / 按最低消费比例 `min_consumption_ratio`，scope=bar/table_type/time_slot，取消免没收时限 `cancel_free_before_minutes` 后台可配）+ `bar_reservations` 定金结算字段，定金按规则计算入库、到店抵扣、取消按时限退/没收，不再硬编码 `deposit=0/not_required`。下方 R5-D11 小节的"现状空转"描述已被本次实现取代，仅"目标/验收"口径仍有效。
-> - **赠饮核销→扣库存已落地（V072）**：链路 ticketing 核销 `entitlement_type='gift_drink'` 成功 → 发 Spring 事件 `ticket.gift_verified` → `BarGiftConsumer` 监听 → 生成 0 元 `bar_order(order_type='gift')` + 出品 ticket → `deliver` 调 `atomicDecreaseStock(redeem_consume)` 扣库存 → 回填 `inventory_movement_id` 到出品事件与桥表 `bar_gift_redemptions`（`verification_id` 唯一键保证幂等，冲正联动 `status=reversed` + 回补库存）。赠饮→吧台 SKU 映射来源 `entitlement_templates.bar_item_ref`(V076)；0 元赠饮单不计商户收入但进账单/留痕。**通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b，2026-06-22）**：核销发放免费酒水后，平台按该酒水**内部结算价**（`bar_products.internal_settlement_price_cent`，V152；经 itemRef[库存物料]→bar_product 桥接 `findProductByInventoryItem`）向酒吧(merchant)挂应付（`ar_ap_items` direction=`payable`、source_type=`pass_drink_settlement`、source_id/幂等=verificationId）；赠饮冲正 → 对冲 `receivable`（同 source_id、净额归零）。仅商户吧(merchantId 非空) + 内部价>0 时结算；平台自营吧 / 无内部价跳过（向后兼容）。`BarGiftConsumer` 经 `BarReceivableLedgerService.createPayableForGiftSettlement`/`reverseGiftSettlementPayable` 实现，与核销主链同事务。
-> - **酒吧账单免单/退款已落地（V079）**：`chk_bar_bill_adjustment_type` 扩 `{waiver, refund}`，`refunded_at` 仅 refund 落值用于经营日聚合冲减当日 net（与 finance/analytics 退款口径联动）。
-> - **仍开放（P2 未做）**：退菜/退酒、反结、沽清 86、小费；存酒转赠(transfer) 无方法、争议仅枚举无入口；按杯损耗 pour cost **强制采集已落地（2026-06-30 回写，原标注过期）**：BarOrderService.resolvePourCost——strict 模式缺量抛 POUR_VOLUME_REQUIRED，兜底模式按 standard_pour_volume 计且落 inventory.loss_exception 标 needs_review（绝不静默 loss=0）；退菜退酒(voidOrderItem)/反结(reopenBill)均已实现且有验收测试；存酒侧高价值作废主管复核见供应链域 `inventory_high_value_reviews`。
-> - **验收口径（已正式）**：订台付定金可回查、到店抵扣、取消按规则退/没收；赠饮权益核销后吧台库存相应减少且可对账。
+### 当前实现与 HTML 目标差距
 
-#### R5-D11 订台定金现状与收口（2026-06-18 回填，未改代码）
+| 主题 | 当前代码事实 | HTML 目标 |
+|---|---|---|
+| 订台定金 | V073 仍为 `not_required/pending/paid/settled` 四态；V013 仍有 `deposit_deduct_amount_cent`，`BarEntryService` 仍记录 `bar.reservation_deposit_deducted`；无最晚到店字段与自动释放调度 | 定金不抵扣消费；达低消原路退回；七态；员工代订免收；最晚到店、自动释放、正确爽约责任与员工爽约率停权 |
+| 支付 | `BarBillingService` 与 V292 已支持 `stored_value` | 门店统一支付方式集合，含储值卡；同一门店有收银权人员使用同一集合 |
+| 出酒损耗 | `BarOrderService` 仍保留 `bar.pour-cost.strict-mode`；fallback 可记 `loss=0`；`loss_threshold` 仍在商品记录 | 按吧台有无物理采集设备二分；无设备也按标准损耗记账，不得记零损耗；阈值按酒吧配置 |
+| 存酒 | 现有迁移/接口仍以转赠终态和旧取酒核身为主，转存字段不完整 | 转让只换权益人；转存短信确认/员工代办复核；默认 30 天；同店取用、跨店只汇总查看 |
+| 出品后能力 | 退品、反结、沽清基础端点已存在；当前沽清和账单状态仍未完整承接 HTML | 两档沽清、正式挂起、拆合单/转并台、服务费月结四金额、小费、桌台隐私与券预占等按 HTML 完整落地 |
+| 服务员提成 | 当前代码未核验完整承载 | James 于 2026-09-01 批准写入三份 HTML：跟服务责任链和台位会话走，转台后记新台会话；并台保留各自记录、不合并、不重算 |
 
-R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"现状→目标→验收"三段式收敛，供开发期落地参照（设计目标仍以 §5.1.2、§6.3 订金规则为准，本小节不新增字段，仅明确收口口径与待补验收用例）。
+## 0. 现行 HTML 实现合同
 
-| 维度 | 内容 |
-|---|---|
-| 现状（代码实况） | `createReservation` 硬编码 `deposit_amount_cent=0` / `deposit_status=not_required`，**定金金额不入库**；§6.3 设计的 `deposit_amount`/`deposit_rule`/`deposit_status` 字段后端未真实写值；§13.1 第 11 项、§5.1.2 的到店抵扣与取消退/没收逻辑因定金恒为 0 **形同空转**，前端订台页即便展示定金也无后端承接。 |
-| 目标（P0） | **真实记录定金 + 到店抵扣 + 取消退/没收**：①创建订台时按 `deposit_rule`（固定额 / 按最低消费比例，二者后台可配）计算并落 `deposit_amount`，支付后 `deposit_status=paid`；②到店开台时订金转入账单抵扣项，`deposit_status=deducted`，写 `reservation.deposit_settled`；③主动取消按后台可配时限退（`refunded`）或没收（`forfeited`），写 `reservation.deposit_settled`（含原因/审批人）。退/没收时限作为后台可配项（2026-06-18 二轮业务裁决）。 |
-| 候选验收（粗） | 创建订台可付定金且 `deposit_amount`>0 可回查；到店开台定金按抵扣项进账单、`deposit_status=deducted` 可查；规则时限内取消可退、超时限/爽约没收，退没收均有 `reservation.deposit_settled` 事件可对账。 |
-| UI 验收用例需补 | 订台页定金展示与支付入口、到店抵扣在账单上的可视呈现、取消时退/没收提示与时限提示、定金状态（待付/已付/已抵扣/已退/已没收）在订台详情的可视回查——上述前端/一体机 UI 验收用例当前未编写，需在开发期补齐 UI 验收脚本。 |
+以下是本设计必须实现的业务约束，不以当前代码是否具备为前提：
 
-> 说明：本小节只收敛 R5 审计裁决与验收口径，不修改 §5.1.2/§6.3 既有设计；若与 §6.3 订金规则文字有出入，以 §6.3 字段定义 + 本小节"目标/验收"为准。
+1. **桌台与订台**：桌台经营六态为 `idle/reserved/opened/pending_clear/disabled/abnormal`；预订须排他锁台，冲突即拒绝；超过最晚到店时间自动释放。员工代订免收定金；客人自助订台须付定金；定金不抵扣消费，达低消原路退回，采用未支付、免收、已支付、达标已原路退回、已退还、已没收、已超时释放七态。员工代订爽约记经手员工，自助超时只没收定金、不记客人爽约；员工爽约率超按酒吧配置且有上下限的阈值时自动停用代订权限，店长复核后恢复。
+2. **低消与点单**：最低消费按本次下单后累计的折前订单消费额判断，不按人数；提交不足即拒绝，结账不足必须补足。非低消商品仍在同一账单结算，通过商品标志排除，不强制拆单。扫码点单只适用于散台、先付款后出品；非会员可浏览、点单和付款，使用会员权益时才登录或注册。
+3. **桌台与菜单**：一个业务会话只绑定一张有效桌台；员工可服务多桌，但提交前必须确认目标桌台。每桌同一时刻只允许一套已发布、带版本菜单生效。隐私桌台的查看、操作、经理紧急接管分权；无查看权时桌台及营业状态不可见；接管记事件、原因、桌台、接管人和有效期，到期自动撤权。
+4. **支付与优惠券**：支付方式集合按门店统一，对该店所有具备收银权限的角色与员工完全一致，含客人扫码、扫客人付款码、现金、POS、储值卡。套餐或交易赠券可限制门店、时段、桌台类型或区域，不得绑定具体桌号，换台须重校验。结账自动选择使本单实付最低的一张券，同额选最早到期；付款前可更换或取消。开始付款即预留券并锁定金额；付款成功与券核销同时生效，任一失败均不生效，失败或超时释放。
+5. **计时禁令**：桌台不显示运营计时，不建设计费倒计时、钟点房、按时长收费、续卡或续时产品。
+6. **账单操作**：拆单、合单与并台严格区分；转台、并台、拆台、撤销转台和循环转台按 ENUM「账单操作」完整规则执行，原台转台成功即释放。正式未付款订单采用已挂起待付款、已结清、取消审批中、已取消、待退款、坏账损耗处理中、已核销结案七态；正式下单即出品并扣库存，不等待付款。
+7. **提成、服务费与小费**：销售提成不计提类别按 HTML 固定清单执行，不做后台可配；仅费率是带上下限的配置。服务员提成跟服务责任链和台位会话走：转台后记到新台会话，销售提成仍按原归属不变；并台保留各服务员既有服务/提成记录，不合并到一人、不重算历史。服务费只对卡座收取，月结定格应发与扣留，不以实付动作判断归属，分别列收取额、月结应发额、月结扣留额、实际支付清偿额。小费按 HTML 归主责服务提供人并排除四类基数，严禁主动索取。
+8. **存酒**：默认有效期 30 天并配上下限；到期提醒、转存次数/期限均按 HTML 固化。转存须客人本人短信确认；员工代办还须当班营销主管复核；达到次数上限不设例外。转让只换权益人，出让人短信成功即生效，不进入等待领取/冻结/转赠终态。取酒用短信或已登录官方端动态码；仅手机号查询，姓名/昵称不得检索；人工例外同时满足四项条件。只能在存入酒吧取用，不跨店取酒或转移库存；客人端可跨店汇总查看并标明存入店。
+9. **出品、沽清与设备**：库存按实际出品、赠送、核销或销售触发扣减，不等待账单结清。沽清分临时本营业日与长期下架两档，置灰显示“已售完”且不隐藏，库存归零不自动沽清。出酒量按有无物理采集设备二分；无设备也按标准损耗记账。设备班前/班后检查、弱电错峰、照片视频上报、视频教学与文字逐项划钩分别留痕；故障分级/派单参数须有上下限。
+10. **现场收入**：订台低消、二次消费和额外酒水归实际发生业务的酒吧商户；服务费按代收规则处理。
 
 本文档用于指导【酒吧经营：桌台、点单、库存、存酒】子系统进入后端、前端、安卓端和数据分析开发。
 
@@ -39,7 +44,9 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 
 ## 1. 模块定位
 
-酒吧经营系统负责综合体内酒吧业态的独立运营管理。酒吧可以由平台自营，也可以出租给第三方酒吧公司运营。
+酒吧经营系统负责综合体内酒吧业态的独立运营管理。酒吧门店只能从已完成“招商租赁 → 合同 → 商户准入”的既有酒吧商户中选择并建立经营扩展，不单独凭空创建；合作模式固定为自营、租赁、联营、代运营、服务商接入、其他。
+
+股权、经营牌照、场地和资金由平台治理层分别记录，本模块只引用对应治理记录；经营牌照以实际经营法律主体为准，不得因持股自动推定牌照主体。
 
 本系统必须坚持以下原则：
 
@@ -47,7 +54,7 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 |---|---|
 | 酒吧和游乐独立 | 酒吧与游乐设施是不同经营主体，必须按 `merchant_id` 隔离 |
 | 票务只提供权益 | 酒吧入场、酒水兑换来自票务权益；卡座预约入场名额由酒吧预约/卡座系统控制；桌台、点单、库存、存酒由酒吧系统负责 |
-| 账单和库存分离 | 点单产生账单，账单完成后触发库存消耗；库存不直接依赖票务订单 |
+| 账单和库存分离 | 点单产生账单；库存按实际出品、赠送、核销或销售等对应业务触发点扣减，正式挂起订单正式下单后即出品并扣库存，不等待付款或账单结清；库存不直接依赖票务订单 |
 | 存酒独立建模 | 存酒属于已售未取客户资产，不等同于可售库存 |
 | 留痕优先自动化 | 订单来源、销售归属、开台服务、点单、出品、送达、结账、存取酒、出入库、报损、人工调整、异常首响、库房到后厨到客人的交接都必须写入事件中心 |
 | 支持第三方运营 | 商户后台只允许查看和操作本酒吧商户数据 |
@@ -58,17 +65,18 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 
 | 范围 | 说明 |
 |---|---|
-| 酒吧入场 | 酒吧通票、活动票、酒吧入场权益核销结果承接（年龄由综合体入场的年龄核验环节核验，售酒豁免逐单验龄/拒售，2026-06-24 改写，详见合规 §2） |
+| 酒吧入场 | 酒吧通票、活动票、酒吧入场权益核销结果承接（年龄由综合体入场第二道年龄核验环节统一核验，酒吧继承结论、不逐单重复验龄；系统不自动判断醉酒或拦截订单，现场工作人员仍可人工停止继续售酒并留痕） |
 | 桌台卡座 | 桌台档案、预订、开台、转台、并台、低消、清台 |
 | 点单 | 服务员点单、吧台点单、扫码点单入口预留、退单、赠送、折扣 |
 | 账单 | 桌台挂账、吧台即时结账、低消校验、服务费、支付记录 |
 | 商品 | 酒水、套餐、杯卖、瓶卖、简餐、服务费、活动商品 |
 | 吧台出品 | 接单、制作、出品、取消、异常 |
-| 存酒 | 存酒登记、取酒、剩余量、有效期、转赠、作废 |
+| 存酒 | 存酒登记、取酒、剩余量、有效期、转让、转存、作废 |
 | 库存 | 入库、出库、调拨、盘点、报损、库存余额 |
 | 物料 | 酒水、果料、冰块、杯具、耗材、简餐原料 |
 | 配方 BOM | 鸡尾酒、杯卖酒、简餐的物料消耗规则 |
 | 报表 | 桌台收入、酒水销量、低消达成、库存损耗、存酒余额 |
+| 终端接口 | 承接平板、工作手机和一体机产生的酒吧订单、支付、权益与设备/班次上下文，不在本模块重复建设终端管理 |
 
 ### 2.2 本模块不直接负责
 
@@ -81,6 +89,7 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 | 机器人调度算法 | 由第三方机器人系统负责，酒吧系统只创建配送需求和接收状态 |
 | 视频原始存储 | 由第三方监控系统负责，酒吧系统只关联视频证据索引 |
 | 完整会员体系 | 由会员系统负责，酒吧只引用客户和会员摘要 |
+| 商户准入与治理记录 | 招商租赁、合同、商户准入及酒吧股权、牌照、场地、资金由平台治理层负责；本模块不得凭空创建酒吧或推定牌照主体 |
 
 ## 3. 领域模型
 
@@ -92,6 +101,7 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 | 桌台会话聚合 | `BarTableSession`, `BarReservation` | 管理预订、开台、转台、并台、清台 |
 | 服务责任聚合 | `BarServiceResponsibility`, `BarServiceAction` | 管理销售归属、主责服务员、协助服务员、加单人、送达人和换人记录 |
 | 卡座提成聚合 | `BarTableCommission` | 管理卡座销售归属、消费额基数、提成率、提成金额、复核和冲正 |
+| 服务员提成归属聚合 | `BarServiceCommissionAttribution` | 只管理服务员提成与服务责任链、台位会话的归属关系及转台/并台历史，不定义费率、基数、结算或税务口径 |
 | 商品聚合 | `BarProduct`, `BarProductCategory`, `BarProductPrice` | 管理酒水、简餐、套餐、服务费 |
 | 点单聚合 | `BarOrder`, `BarOrderItem`, `BarProductionTicket` | 管理点单、出品、取消、赠送、退单 |
 | 账单聚合 | `BarBill`, `BarBillItem`, `BarBillPayment` | 管理挂账、低消、折扣、服务费、结账 |
@@ -111,6 +121,7 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 | `BarTableSession` | 开台会话 | `table_id`, `opened_by`, `customer_id`, `status` | 一次开台到结账清台的完整周期 |
 | `BarServiceResponsibility` | 服务责任 | `session_id`, `order_id`, `sales_staff_id`, `primary_service_staff_id`, `assist_staff_ids`, `status` | 一桌客人或一笔订单的销售和服务责任链 |
 | `BarServiceAction` | 服务动作 | `responsibility_id`, `action_type`, `staff_id`, `device_id`, `location_point_id`, `event_id` | 加单、送达、换人、异常处理等动作 |
+| `BarServiceCommissionAttribution` | 服务员提成归属 | `service_responsibility_id`, `table_session_id`, `service_staff_id`, `source_attribution_id` | 只承载服务员提成随转台/并台的归属关系和历史留痕，不承载未获批准的计算或发放口径 |
 | `BarProduct` | 酒吧商品 | `product_type`, `sale_unit`, `price`, `stock_deduct_mode` | 酒水、简餐、套餐、服务费 |
 | `BarOrder` | 点单 | `session_id`, `order_source`, `status`, `total_amount` | 一次点单动作 |
 | `BarOrderItem` | 点单明细 | `product_id`, `quantity`, `item_status` | 商品明细，支持退单和赠送 |
@@ -127,7 +138,7 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 
 ### 4.1 桌台状态
 
-> 修订说明（2026-06-07）：依《统一口径基准》D7「桌台 6 态权威集合」对齐 PRD §5 与本表，消除两文档状态命名/取值不一致（finding bar-5）。权威集合 = 空闲/已预留/已开台/待清台/停用/异常 → idle/reserved/opened/pending_clear/disabled/abnormal。原 `pending_payment` 为开台会话态（见 §4.2），不再在桌台态重复；原 `cleaning` 统一为 `pending_clear`（待清台）；原 `locked`（锁定/维修）并入 `disabled`（停用）；新增 `abnormal`（异常：争议或未结事项）。
+> HTML 目标：桌台经营六态为 `idle/reserved/opened/pending_clear/disabled/abnormal`。当前 V013 `bar_tables` 尚无 `business_status` 承载列，必须作为实现差距处理，不能用记录级 `status` 冒充已落地。预订对台位加排他锁；超时释放回 `idle`；关台仅在账单全部结清、坏账处理中或已核销结案后成立，成功后进入 `pending_clear`；超时未清台按酒吧配置且有上下限的时限提醒主管；异常处置完成须由当班主管确认，并恢复到进入异常之前的状态。
 
 | 状态 | 中文 | 说明 |
 |---|---|---|
@@ -136,7 +147,7 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 | `opened` | 已开台 | 客人已入座，可点单、加单、核销、结账 |
 | `pending_clear` | 待清台 | 已结账但现场未完成清理，不可再次开台 |
 | `disabled` | 停用 | 维修、包场、人工锁定等桌台暂不可用 |
-| `abnormal` | 异常 | 存在争议或未结事项，需要处理 |
+| `abnormal` | 异常 | 存在争议或未结事项；主管确认处置完成后回到进入异常前的状态 |
 
 ```mermaid
 stateDiagram-v2
@@ -144,13 +155,16 @@ stateDiagram-v2
     idle --> reserved: 创建预订
     reserved --> opened: 到店开台
     idle --> opened: 直接开台
-    opened --> pending_clear: 结账完成
+    opened --> pending_clear: 符合关台条件并关台成功
     pending_clear --> idle: 清台完成
     idle --> disabled: 停用/锁定
     reserved --> idle: 取消预订
     disabled --> idle: 解除停用
     opened --> abnormal: 争议或未结事项
-    abnormal --> idle: 异常处理完成
+    note right of abnormal
+      当班主管确认处置完成后
+      恢复进入异常前状态
+    end note
 ```
 
 ### 4.2 开台会话状态
@@ -176,9 +190,7 @@ stateDiagram-v2
 
 ### 4.4 账单状态
 
-> 修订说明（2026-06-07）：依《统一口径基准》D7「账单 6 态权威集合」对齐 PRD §6 与本表，消除退款/异常状态缺失与命名歧义（finding bar-5）。权威集合 = 待结/部分支付/已结/部分退款/已退款/异常 → unpaid/partial_paid/settled/partial_refunded/refunded/abnormal，**落 `bar_bills.business_status`**（业务 6 态承载列，见 §6.9）。原"进行中(open)/计算中(calculating)"属开台会话进行中阶段，不作为账单结算态：账单一经确认即处于 `unpaid`，低消/折扣/服务费计算为账单内部瞬态（计算完成仍为 `unpaid`），不单列状态；退款用 `partial_refunded/refunded` 表达，并与 `bar_bill_payments.status=refunded` 协同；原 `voided`（作废）并入 `abnormal`（异常）并以 `voided` 子原因标记。
->
-> 修订说明（2026-06-07 收口）：原措辞"落 `bar_bills.status`"更正为"落 `bar_bills.business_status`"——依 D7「6 态承载列=business_status，记录级 status 仅表 active/void」原则，6 态状态机必须落业务态列而非记录级 status 列，避免与软删除/作废的记录级状态混淆（依据 finding dup-tables-3/4、D7）。
+> HTML 目标：账单业务六态为 `unpaid/partial_paid/settled/partial_refunded/refunded/abnormal`，目标字段为 `bar_bills.business_status`；当前 V013 尚无该列，属于待改差距。记录级 `status` 仅表 `active/void`，不得冒充业务流转态。低消、折扣和服务费计算只是账单内部瞬态；退款用 `partial_refunded/refunded` 表达并与支付退款记录协同。账单进入异常后，主管必须选择“更正后恢复”并回到进入异常前状态，或选择“作废并冲正”；异常未处置完毕时所属日结不得确认锁定。
 
 | 状态 | 中文 | 说明 |
 |---|---|---|
@@ -187,7 +199,7 @@ stateDiagram-v2
 | `settled` | 已结 | 账单结清完成 |
 | `partial_refunded` | 部分退款 | 部分金额退款 |
 | `refunded` | 已退款 | 全额退款或账单冲销 |
-| `abnormal` | 异常 | 争议、免单、补录、支付差异或作废 |
+| `abnormal` | 异常 | 争议、免单、补录或支付差异；主管按“更正后恢复/作废并冲正”二选一处置 |
 
 ### 4.5 存酒状态
 
@@ -197,7 +209,6 @@ stateDiagram-v2
 | `partially_used` | 部分取用 | 剩余量大于 0 |
 | `finished` | 已取完 | 剩余量为 0 |
 | `expired` | 已过期 | 超过有效期 |
-| `transferred` | 已转赠 | 所有权转移 |
 | `disputed` | 争议 | 归属/数量争议冻结，待人工或主管处置后流转 <!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：补争议态 --> |
 | `voided` | 已作废 | 丢失、破损、异常处理 |
 
@@ -227,30 +238,35 @@ stateDiagram-v2
 
 #### 5.1.2 预订后开台
 
-1. 创建预订（记录来源/终端/责任人/设备/点位，见 §6.3），桌台状态变为 `reserved`；订金按 `deposit_rule` 计算并支付，`deposit_status = paid`。
-2. 到店后由员工执行开台，记录 `arrived_at`。
-3. 如果有订金，订金进入账单抵扣项，`deposit_status = deducted`，写入 `reservation.deposit_settled`。
-4. 预订状态变为 `arrived`。
-5. 进入直接开台后续流程。
-
-> 修订说明（2026-06-07）：依 finding kiosk-2，补订金支付、到店抵扣、`deposit_status` 流转与结算事件。取消/爽约退没收规则见 §6.3"订金规则"。
+1. 创建预订并填写最晚到店时间，记录来源、下单时间、终端、责任人、设备和点位；客人自助订台必须支付定金，员工代订免收定金。预订成功后以排他锁把桌台置为 `reserved`，冲突订单拒绝。
+2. 超过最晚到店时间仍未到店时自动释放桌台。自助订单没收定金但不记客人爽约；员工代订记经手员工爽约。员工爽约率超过按酒吧配置且有上下限的阈值时自动停用代订权限，由店长复核后恢复。
+3. 到店后由员工执行开台并记录 `arrived_at`。定金不抵扣消费；客人在该台位的消费达到适用最低消费后，定金原路退回；未达低消、爽约或超时取消时按规则没收。
+4. 预订状态变为 `arrived`，进入直接开台后续流程。定金支付成功时单独记录支付时间；员工代订无支付动作，支付时间为空。
 
 #### 5.1.3 转台
 
 1. 员工选择当前会话和目标空闲桌台。
 2. 校验目标桌台可用、同一酒吧商户、同一门店。
-3. 原桌台状态改为 `pending_clear` 或 `idle`。<!-- 改（2026-06-07）：finding bar-5，cleaning 统一为 D7 的 pending_clear -->
+3. 转台成功后原桌台立即改为 `idle` 并释放，可供其他客人预订或开台。
 4. 目标桌台状态改为 `opened`。
 5. 会话 `table_id` 更新为目标桌台。
 6. 写入 `bar.table.transferred` 事件。
 
 #### 5.1.4 清台
 
-1. 账单支付完成。
+1. 账单全部结清，或该台账单已进入坏账损耗处理中，或已核销结案；除此之外不得关台。
 2. 桌台进入 `pending_clear`。<!-- 改（2026-06-07）：finding bar-5，cleaning 统一为 D7 的 pending_clear -->
 3. 员工确认清洁完成。
 4. 桌台变为 `idle`，会话变为 `closed`。
 5. 写入 `bar.table.cleared` 事件。
+
+#### 5.1.5 账单操作与台位操作
+
+- **拆单/合单**：只处理未支付、未结算账单。拆单按金额生成子账单供分别付款；合单只允许把同一酒吧另一张未支付、未结算账单合入主账单。账单合单不等同于台位并台；销售提成和小费始终归主账单相关责任人，不随拆单分散。
+- **转台**：整张台转到目标台后，邀请人数与最低消费按目标台规则重新校验；原消费随台结转，不足继续消费、超出不退。未接受邀请继续有效且不占名额；已接受未入场与已入场人数合计超目标台容量时阻断，已入场成员不得移出。原台随转台成功立即释放。销售提成仍跟预订归属；服务员提成与服务责任链转到新台会话；小费归新台实际服务提供人。
+- **并台**：两侧可邀请人数、最低消费额和已发生消费分别相加；邀请保留原台来源，已接受与已入场成员进入新合并台。每次保留全部原台标识、并台层级、来源树和并台前快照；销售提成保持各自归属，服务员既有服务/提成记录分别保留且不合并、不重算，小费按各台实际服务提供人分别记录。
+- **拆台**：两台可直接拆回；三台以上可按最近并台层级拆、任选一张原台拆出或一次全部拆开。消费按实际订单归属重新汇总；不能确定时须先人工明确并留痕。邀请与成员先逐一分配并逐台校验容量，任一结果超额即整体阻断，不得自动移出成员或释放已占名额。拆后低消不足不阻断，但显示差额并继续消费或结账补足。
+- **撤销/循环转台**：仅当转台后没有新增邀请、邀请接受、成员变化、点单、付款、退款，也未再次转台、并台或拆台，且原台均未被新会话占用时，才可按最近一次完整快照原子撤销；否则必须按当前状态重新发起转台。循环转台次数按酒吧配置上限，出厂默认 10 次且须同时配置上下限，达到上限后须主管审批。每种操作均记录原因、人员、时间、对象、前后快照和成功或阻断结果。
 
 ### 5.2 点单与账单流程
 
@@ -285,11 +301,11 @@ sequenceDiagram
 | 桌台/卡座点酒必须绑定 `bar_table_session_id` | 否则不能提交点酒订单 |
 | 平板必须绑定酒吧和卡座/桌台/吧台位 | 用于确认消费位置、服务员责任和最低消费规则 |
 | 商品价格以下单快照为准 | 后续改价不影响历史订单 |
-| 提交前必须校验最低消费 | 当前点酒金额未达到最低消费时不能提交订单 |
+| 提交前必须校验最低消费 | 本次下单后累计的折前订单消费额未达到最低消费时不能提交订单 |
 | 取消点单必须填写原因 | 高价值商品取消需主管权限 |
 | 赠送必须有权限 | 赠饮、免单、折扣都要留痕 |
 | 酒水兑换权益不直接等于点单 | 先核销票务权益，再生成兑换类订单或账单抵扣 |
-| 售酒年龄继承年龄核验环节（售酒豁免） | 全部售酒点在综合体入场的年龄核验环节范围内 → 年龄核验环节核验年龄（满 18 岁），售酒环节继承入场结论、**不逐单验龄、不醉酒拒售**（2026-06-24 售酒豁免收口）。**年龄核验没有开关**——年龄核验环节的设备尚未安装或发生故障时进入人工抽查方式、客人继续进场，不要求工作人员逐人查验证件，但应当对明显疑似未成年的人员进行查验，不得把疑似未成年人当作普通未抽查人员直接放行（合规 §2.1 第 4 条）；第三方接口真实接入后 fail-closed 判龄。原 bar 侧 `BarAgeVerificationService`/`createAgeVerification`/`bar_age_verifications`/`refuse_*` 已移除，bar 不再独立验龄/拒售/记录（详见合规 §2） |
+| 售酒年龄继承年龄核验环节 | 全部售酒点在综合体入场年龄核验范围内，酒吧继承入场结论、**不逐单重复验龄**。系统不自动判断醉酒、不自动拦截订单；现场工作人员仍可依据现场情况人工停止继续向某位客人售酒，并记录原因、责任人和处置结果。**年龄核验没有开关**——年龄核验环节设备尚未安装或发生故障时进入人工抽查方式，不要求工作人员逐人查验证件，但明显疑似未成年人必须查验，不得直接放行。原 bar 侧 `BarAgeVerificationService`/`createAgeVerification`/`bar_age_verifications` 已移除；酒吧不建设独立验龄链路（详见合规 §2） |
 
 #### 5.2.2 低消计算
 
@@ -307,7 +323,7 @@ P0 规则：
 - **票务权益、通票、卡座预约入场名额一律不抵扣最低消费**：低消只按酒吧点酒/套餐/简餐等实际消费金额计算；票务与卡座预定只解决入场或预定资格，不参与低消金额抵扣。
 - **P0 低消一律不按人数计算**：最低消费只取桌台/卡座按时间/位置配置的 `min_spend_amount` 快照，`bar_table_sessions.guest_count` 仅作开台人数记录，不参与上述任一公式。<!-- 增（2026-06-07）：finding bar-6，明确 P0 不按人数、guest_count 仅记录，消除"原则上"歧义 -->
 - 未达到最低消费时，平板显示差额提示，不能提交点酒订单。
-- P0 不做“结账时自动补低消差额”；如运营需要补差，后续按 P1 账单规则单独设计。
+- 结账时累计消费不足最低消费的，必须补足；最低消费不作为独立收入类型入账。
 
 P1/P2 扩展：
 
@@ -335,6 +351,14 @@ P0 规则：
 3. 同一 `reservation_id + idempotencyKey` 重试必须返回第一次处理结果，不得重复扣占名额；同一可识别客人不得在同一预约下重复免通票入场。
 4. 成功写入 `bar.table_guest.checked_in`，拒绝写入 `bar.table_guest.rejected`，两者都要记录剩余额度、拒绝原因、设备、员工和点位。
 
+#### 5.2.4 正式挂起未付款订单
+
+1. 正式挂起订单是已正式下单、已出品并已扣库存但尚未付款的订单，采用 `hanging_unpaid/settled/cancel_pending_approval/cancelled/pending_refund/bad_debt_processing/written_off_closed` 七态，依次对应已挂起待付款、已结清、取消审批中、已取消、待退款、坏账损耗处理中、已核销结案；英码只作机读映射，不新增业务态。
+2. 收银员可直接挂起且不设额度，但必须记录原因、金额、桌台、责任人和完整日志；未结清时阻止交班和日结。
+3. 取消须经理审批；可回库商品继续执行退菜、退酒及高价值退品审批链。取消审批与付款成功互斥；取消后迟到到账进入待退款。
+4. 不可回库商品最终确认无法收款后进入坏账损耗处理；财务确认未收售价、库存成本和赔偿记录完成后转为已核销结案。员工赔偿规则在法务审查完成前只登记，不自动扣工资、绩效或提成。
+5. 挂起订单结清前不计入商户营业额、营业额抽成、销售提成或分红净利润；结清后按实际结清金额计入结清所在营业日。转坏账核销不产生销售提成且不计入分红净利润；核销结案后收回的款项按收回时点单独入账，不追溯重开提成。
+
 ### 5.3 存酒流程
 
 #### 5.3.1 存酒登记
@@ -342,30 +366,32 @@ P0 规则：
 1. 客人购买整瓶酒或使用套餐中的整瓶酒。
 2. 员工选择“存酒”。
 3. 系统校验订单已支付或权益已核销。
-4. 录入客户手机号/会员、酒品、规格、剩余量、有效期、存放位置。
-5. **必填采集取酒核身与举证三项：姓名/昵称（`customer_name_or_nickname`）、瓶底标签数值（`bottle_label_value`）、登记照片（`registration_photo_refs`）**；可选填人工备注（`manual_note`）。缺任一必填项不允许提交登记。<!-- 增（2026-06-07）：finding bar-4/supply-2，登记强制采集三项必填字段 -->
-   - **散客存酒**：`customer_id` 可空，散客（无会员）允许存酒；核身落 `customer_phone` + `customer_name_or_nickname` + `bottle_label_value`。登记必填字段与契约口径以票务设计 `ticketing-pass-entitlement-development-design.md` §10.4.1 为权威，本文不重复长篇。<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id 可空（散客存酒）、customer_phone 核身、口径指向文件1 -->
-6. 生成存酒编号和二维码。
-7. 库存从可售库存转为已售未取库存。
-8. 写入 `bar.saved_bottle.created` 和库存流水事件。
+4. 取得隐私同意后，录入客户手机号/会员、姓名或昵称、瓶底标签数值、登记照片、酒品、规格、剩余量、存放位置。
+5. 存酒有效期按项目配置，出厂默认 30 天且须同时配置上下限；登记时固化本次有效期、到期日和配置版本，后续改配置不追溯。
+6. **登记与举证三项必填：姓名/昵称（`customer_name_or_nickname`）、瓶底标签数值（`bottle_label_value`）、登记照片（`registration_photo_refs`）**；可选填人工备注（`manual_note`）。缺任一必填项不允许提交登记。
+   - **散客存酒**：`customer_id` 可空，散客（无会员）允许存酒；登记仍须落 `customer_phone`、`customer_name_or_nickname`、`bottle_label_value` 和照片。
+7. 生成存酒编号；客人端动态取酒码按统一动态码规则生成。
+8. 库存从可售库存转为已售未取库存。
+9. 写入 `bar.saved_bottle.created` 和库存流水事件，并向客人发送存酒成功短信。
 
 #### 5.3.2 取酒
 
-1. 客人提供手机号、会员码、存酒二维码或企业微信客户身份。
-2. 员工查询存酒记录。
-3. 系统校验状态、有效期、客户身份、当前酒吧门店；**核身必须比对登记的瓶底标签数值（`bottle_label_value`）且比对姓名/昵称（`customer_name_or_nickname`）同时通过方可放行，不止手机号 + 验证码**；任一不一致进入人工复核或可登记为 `disputed` 争议态。<!-- 增（2026-06-07）：finding bar-4，取酒核身纳入姓名/昵称与瓶底标签数值比对；修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：强表述"标签+昵称必须比对通过，不止手机号+验证码"，补争议入口，口径以文件1 §10.4.1 为权威 -->
-4. 录入本次取用量。
-5. 更新剩余量。
-6. 如果剩余量为 0，状态变为 `finished`；否则为 `partially_used`。
-7. 写入 `bar.saved_bottle_picked_up` 事件。
+1. 员工只能输入手机号检索存酒记录；姓名、昵称、卡座、订单号和存酒标签不得用于反查客人。
+2. 正常取酒必须核验当前客户短信验证码，或核验其已登录官方 App/小程序展示的动态取酒码；手机号本身不能作为放酒凭证。
+3. 系统校验状态、有效期和存入酒吧；存酒只能在存入酒吧取用，不得跨店取酒或转移库存。客人端可跨店汇总查看，但每条必须标明存入酒吧。
+4. 人工例外仅用于客户手机遗失、停机等无法取得验证码或动态码的情形，且必须同时满足：店长发起并由另一名主管复核；手机号满足按项目配置且有上下限的任一消费历史条件；对应营销人员或规定的替代主管确认；存酒客户本人到场，不得代领。
+5. 录入本次取用量，核对对应标签，更新剩余量；剩余量为 0 时状态变为 `finished`，否则为 `partially_used`。
+6. 写入 `bar.saved_bottle_picked_up`，留痕核验方式、标签、取用前后量、员工和时间，并向客人发送取酒成功短信。
 
-#### 5.3.3 转赠（`transferSavedBottle`）——已下线（2026-06-24）
+#### 5.3.3 转让与转存
 
-> 2026-06-24：存酒对他人转赠已下线（同积分转赠，HTML 未授权存酒对外转赠）。`transferSavedBottle` 领域方法、`POST /api/v1/inventory/saved-bottles/{id}/transfer` 端点及测试已移除；`saved_bottle_transfers` 表、`SavedBottleTransferRecord`/`SavedBottleTransferRequest`、repo `saveSavedBottleTransfer` 保留为孤儿待清理迁移统一删。**散客存酒登记（`createSavedBottle`，customer_id 可空）、取酒核身、争议处置（§5.3.3a）、作废均保留不变。**
+- **转让（换人）**：仅在有效期内办理，以单个存酒标签对应的整瓶为最小单位，不得拆分剩余量。由当前权益人短信验证码确认，验证成功即变更权益人；受让人无需确认领取，不设等待领取、领取前冻结或 `transferred` 终态。转让不限次数，不消耗转存次数、不改变到期日；受让人继承剩余有效期和已用转存次数。每次记录转让前后客户、时间和操作来源。**当前实现仍未对齐**：`InventoryController` 仍暴露 `/api/v1/inventory/saved-bottles/{id}/transfer`，`InventoryService.transferSavedBottle` 仍允许 `transferQuantity` 并生成 `status=transferred` 的旧转赠记录，V102 也保留 `transferred` 终态约束；这些都不是本段“整瓶只换权益人”的目标实现。
+- **转存（延期）**：只能在当前到期日前办理。每份存酒转存次数上限按项目配置，出厂默认 2 次且须同时配置上下限；每次从当前到期日起顺延酒吧当时配置的期限，出厂默认 30 天且须同时配置上下限。客人本人须短信确认；员工代办还须当班营销主管复核。记录配置版本、顺延天数、新到期日、累计次数、经办人和确认方式。达到上限后不再办理且不设例外。
+- **到期与跨店**：到期前按项目配置的提醒节点发送短信；到期后结束客户权益并转为存入酒吧自有库存资产，转库存时不确认收入。存酒只能在存入酒吧取用或转为该店库存，客人端仅做跨店汇总展示。
 
 #### 5.3.3a 争议处置（`disputed`）<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：补 disputed 争议态入口 -->
 
-存酒归属/数量发生争议（核身不通过、客户异议等）时，提供争议登记入口将记录置为 `disputed`（§4.5），冻结取酒/转赠，待人工或主管处置后流转回 `stored`/`partially_used` 或转 `voided`。口径以 `ticketing-pass-entitlement-development-design.md` §10.4.1 为权威。
+存酒归属/数量发生争议（核身不通过、客户异议等）时，提供争议登记入口将记录置为 `disputed`（§4.5），冻结取酒和转让，待人工或主管处置后流转回 `stored`/`partially_used` 或转 `voided`。
 
 #### 5.3.4 作废
 
@@ -379,7 +405,7 @@ P0 规则：
 
 作废必须填写原因、上传证据，必要时主管审批。**高价值存酒作废必须同时上传照片和视频双证据**（`evidence_ref` 区分 `photo_refs` 与 `video_refs`，高价值场景二者均必填）并主管复核。<!-- 增（2026-06-07）：finding supply-3，高价值作废双证据强制，消除"证据"泛化与"拍照/视频"二选一歧义 -->
 
-> **业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：散客（无 `customer_id`）存酒风控口径确认为**不限瓶数**（取消原 R6 默认"单手机号≤3 瓶"上限），仅按**存期默认 90 天（后台可配）+ 到期提醒 + 作废须主管复核**管控；口径与 `ticketing-pass-entitlement-development-design.md` §10.4.1 权威小节一致。
+> 散客（无 `customer_id`）存酒不限瓶数；存酒有效期按项目配置，出厂默认 30 天且须同时配置上下限。到期提醒、到期转库存和作废复核按本节执行。
 
 ### 5.4 库存出入库流程
 
@@ -474,6 +500,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `business_hours` | jsonb | 营业时间 |
 | `capacity` | int | 最大容量 |
 | `current_guest_count` | int | 当前在场人数 |
+| `pour_loss_rate_threshold`（目标） | numeric | 按酒吧配置的损耗率安全阈值；出厂默认 5%，须同时配置上下限；当前仍错误承载在单品 `loss_threshold` |
 | `status` | varchar | `preparing/open/paused/closed` |
 
 索引：
@@ -483,7 +510,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 ### 6.2 bar_tables 桌台表
 
-> 修订说明（2026-06-07 收口）：本表为 `bar_tables` 的**唯一权威定义**（承载酒吧实现），foundation-database §6A.1 不再重复建表、仅保留 6 态核对指针（依据 finding dup-tables-3/7）。本次补两项：(1) 新增 `business_status` 业务 6 态承载列，落 D7「桌台 6 态权威集合」（idle/reserved/opened/pending_clear/disabled/abnormal），与点位级 `status`（记录级 active/void/inactive，表桌台档案是否启用，**不承载业务流转态**）严格分离，消除"单一 status 顶替业务态"问题（finding dup-tables-3、D7）；(2) 预留 `project_id`（综合体归属，原始需求），与 foundation 其余主表对齐。
+> 目标定义：`business_status` 承载 HTML 桌台六态，记录级 `status` 只表示档案启用/作废。当前 V013 `bar_tables` 尚无 `business_status`，下表把该列标为目标字段；实现前须补迁移，不能宣称已落地。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -498,13 +525,13 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `capacity` | int | 可坐人数 |
 | `min_spend_amount` | bigint | 低消金额，单位分 |
 | `service_fee_rate` | numeric | 服务费比例 |
-| `business_status` | varchar | **业务桌台 6 态（D7 权威承载列）**：`idle`(空闲)/`reserved`(已预留)/`opened`(已开台)/`pending_clear`(待清台)/`disabled`(停用)/`abnormal`(异常)；CHECK 取值与 §4.1 逐项对应，不得用 `status` 顶替 |
+| `business_status`（目标，当前缺列） | varchar | **业务桌台 6 态**：`idle`(空闲)/`reserved`(已预留)/`opened`(已开台)/`pending_clear`(待清台)/`disabled`(停用)/`abnormal`(异常)；CHECK 取值与 §4.1 逐项对应，不得用 `status` 顶替 |
 | `status` | varchar | **记录级状态**（非业务态）：`active`(启用)/`void`(已删除/作废)；表桌台档案是否启用，配合软删除/审计字段 |
 
 约束：
 
 - 同一 `bar_venue_id + table_no` 唯一。
-- `business_status` 承载业务流转（见 §4.1 状态机），`status` 仅承载记录级启用/作废；二者分离，不得混用。
+- 目标态由 `business_status` 承载业务流转，`status` 仅承载记录级启用/作废；补迁移前按当前代码事实登记缺口，不得混用。
 
 ### 6.3 bar_reservations 预订表
 
@@ -519,6 +546,8 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `contact_name` | varchar | 联系人 |
 | `contact_phone` | varchar | 联系电话 |
 | `reserved_at` | timestamptz | 预订时间 |
+| `ordered_at` | timestamptz | 下单时间；预订提交时记录 |
+| `latest_arrival_at` | timestamptz | 最晚到店时间，每笔订台必填 |
 | `guest_count` | int | 人数 |
 | `order_source` | varchar | 来源渠道：`app/miniapp/kiosk/sales_staff` |
 | `created_terminal` | varchar | 创建终端类型，取基准 D5 十端枚举（如 `kiosk/app/miniapp/staff_work_phone`） |
@@ -526,29 +555,32 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `sales_staff_id` | uuid | 销售归属员工，可为空 |
 | `sales_staff_position_type_snapshot` | varchar | 销售归属员工岗位快照；`sales_person` 按销售人员提成率，其他岗位按非销售人员提成率 |
 | `sales_commission_rate_snapshot` | numeric | 销售提成率快照：销售人员默认 `0.15`，非销售人员默认 `0.10` |
+| `sales_commission_rate_config_version_snapshot`（目标） | varchar | 下单时锁定的订单实际发生酒吧费率配置版本；与费率值一并固化 |
 | `device_id` | uuid | 创建设备 |
 | `location_point_id` | uuid | 点位，可为空 |
 | `deposit_amount` | bigint | 订金金额，单位分；按 `deposit_rule` 计算落定值 |
-| `deposit_rule` | jsonb | 订金计算规则快照：`{mode: fixed/percent, value, configurable}`，平台/商户可配置 |
-| `deposit_status` | varchar | `unpaid/paid/deducted/refunded/forfeited` |
+| `deposit_rule` | jsonb | 订金规则快照：`{mode: fixed/percent, value, lower_bound, upper_bound, config_version}`；固定额或低消比例按项目可配且须同时配置上下限 |
+| `deposit_status` | varchar | 七态：`unpaid/exempt/paid/refunded_after_min_spend/refunded/forfeited/released_timeout`，对应未支付/免收/已支付/达标已原路退回/已退还/已没收/已超时释放 |
+| `deposit_paid_at` | timestamptz | 定金支付成功时间；员工代订免收时为空 |
 | `arrived_at` | timestamptz | 到店时间，可为空 |
 | `cancelled_at` | timestamptz | 取消时间，可为空 |
 | `cancel_reason` | text | 取消原因，可为空 |
 | `status` | varchar | `pending/confirmed/arrived/cancelled/no_show` |
 
-订金（定金）规则（P0，finding kiosk-2）：
+订金（定金）规则：
 
-- 订金金额支持**固定金额**或**按桌台低消比例**两种计算方式（`deposit_rule.mode = fixed/percent`），由平台配置默认、商户可申请调整（`deposit_rule.configurable`）。金额一律落整数分（基准 D1）。
-- 到店开台：订金转入账单抵扣项（见 §5.1.2），`deposit_status = deducted`。
-- 主动取消：按取消时点与营业规则决定退还或没收——到店前规定时限内取消可退（`refunded`），超时限或 `no_show` 爽约则没收（`forfeited`）；退款走 §7.3 退款审批与外部支付冲正。
-- 退/没收结果写入事件（见 §9.1 `reservation.deposit_settled`），便于对账与争议举证。
+- 客人自助订台必须支付定金；员工代订免收。金额支持固定金额或按桌台低消比例两种方式，按项目可配且须同时配置上下限，单据固化规则版本和整数分金额。
+- 定金不抵扣消费、不计入低消累计。客人在该台位的折前累计消费达到适用最低消费后原路退回；到店未达低消、爽约或超时取消时按规则没收。
+- 每笔订台必填最晚到店时间；超过该时点未到店即自动释放排他锁和桌台。自助订单仅没收定金，不记客人爽约；员工代订记经手员工爽约。员工爽约率超过按酒吧配置且有上下限的阈值时自动停用代订权限，由店长复核后恢复。
+- 下单时间与支付时间分别记录；员工代订无支付动作，支付时间为空。七态变化、原路退回和没收均写事件，便于对账与举证。
+- 当前 V073 仍为 `not_required/pending/paid/settled` 四态，V013 仍有 `deposit_deduct_amount_cent`，`BarEntryService` 仍记录 `bar.reservation_deposit_deducted`；这些均是待改实现差距，不是目标规则。
 - 卡座销售归属在创建订台或到店开台前确定；如后续变更 `sales_staff_id`，必须填写原因并写 `order.sales_attributed`，保留变更前后岗位和提成率快照。
 
 ### 6.3a 订卡邀请函（V155，扩展卡座预订，不另起独立实体）
 
 > 新增（2026-06-23，业主 2026-06-22 口述 + 2026-06-23 拍板「两步确认」+「连客人端全链」）：**订卡客人无需买通票、只进定卡酒吧**；持函人可把邀请函（二维码，注明酒吧/卡座/卡座可进人数）转发给朋友，朋友在客人端**确认接受**先占一个名额，到店再扫码核验入场；**「已确认 + 已入场」总人数 ≤ 卡座可进人数（capacity）**。本特性以预订列 + 子表承载，复用 `bar_tables.capacity`（V013）与既有入场核验机理，不另起独立实体。
 
-`bar_reservations` 增邀请函列（V155）：`invitation_token`（不可猜随机串，唯一索引，供 confirm/entry 反查）、`invitation_signature`（HMAC-SHA256 防伪，范式同门票 `TicketCredentialSigner`，绑定预订/酒吧/卡座/容量/token）、`invitation_capacity`（签发时 `bar_tables.capacity` 快照，作总人数上限）、`invitation_status`（`none`/`active`/`revoked`）、`invitation_issued_at`。
+`bar_reservations` 增邀请函列（V155）：`invitation_token`（不可猜随机串，唯一索引，供 confirm/entry 反查）、`invitation_signature`（HMAC-SHA256 防伪，范式同门票 `TicketCredentialSigner`，绑定预订/酒吧/卡座/容量/token）、`invitation_capacity`（签发时 `bar_tables.capacity` 快照，作总人数上限）、`invitation_status`（`none`/`active`）、`invitation_issued_at`。
 
 新子表 `bar_reservation_invitation_members`（预订子记录）：
 
@@ -566,8 +598,10 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 `UNIQUE(reservation_id, member_identifier)` 保证同一朋友确认幂等、不重复占名额。
 
+业务状态逐态映射：邀请函 `none`＝未签发、`active`＝已签发；成员 `confirmed`＝已确认接受、`entered`＝已入场、`revoked`＝已取消。成员确认接受即占用名额并绑定本人动态入场码；已经入场的成员不可再移出，已占名额不得释放。
+
 **两步流程**：
-1. **签发（staff，`bar.reservation.invitation.manage`）** `POST /bar/reservations/{id}/invitation`：capacity≤0 拒 `BAR_INVITATION_CAPACITY_REQUIRED`；生成 token+签名、`status=active`、持函人自动入一条 `is_holder=true` 成员（占一名额）；已 active 幂等返回（不重置 token，避免已转发二维码失效）。`GET .../invitation` 查视图（含容量/已确认/已入场计数与成员明细）；`POST .../invitation/revoke` 吊销。
+1. **签发（staff，`bar.reservation.invitation.manage`）** `POST /bar/reservations/{id}/invitation`：capacity≤0 拒 `BAR_INVITATION_CAPACITY_REQUIRED`；生成 token+签名、`status=active`、持函人自动入一条 `is_holder=true` 成员（占一名额）；已 active 幂等返回（不重置 token，避免已转发二维码失效）。`GET .../invitation` 查视图（含容量/已确认/已入场计数与成员明细）。
 2. **朋友确认（客人端自助，两步之第一步）** `POST /customer/bar-invitations/confirm`（X-Customer-Token 鉴权，能力 `not_applicable`，不经 requirePermission，对齐 `createBarReservation`）：按 token 反查预订→`active` 校验→`confirmed < capacity` 否则 `BAR_INVITATION_CAPACITY_EXHAUSTED`→落 `confirmed` 成员（`member_customer_id` = 确认人）；同一朋友重复确认幂等返回原成员。
 3. **入场核验（门口 staff/设备，复用 `bar.table.guest_checkin`）** `POST /bar/reservations/{id}/invitation/entry-verify`：先按权威预订字段（预订/酒吧/卡座/容量/token）重算规范串、常量时间比对 `invitation_signature`，失配（绕过签发改库篡改绑定）拒 `BAR_INVITATION_SIGNATURE_INVALID`；`credential_payload` = 成员标识；成员须 `confirmed`（否则 `BAR_INVITATION_MEMBER_NOT_CONFIRMED`），标 `entered`，**已入场 ≤ capacity**（否则 `BAR_INVITATION_CAPACITY_EXHAUSTED`），跨吧 `BAR_SCOPE_MISMATCH`。**持函免通票**：此入场路径仅校验「防伪签名 + 是否已确认成员 + 容量 + 同吧」，不校验通票——确认成员即可进定卡吧。
 
@@ -617,6 +651,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `category_id` | uuid | 分类 |
 | `product_code` | varchar | 商品编码 |
 | `name` | varchar | 商品名 |
+| `image_ref` | varchar | 后台上传并保存的商品图片引用 |
 | `product_type` | varchar | `bottle/cup/cocktail/package/snack/material/service` |
 | `sale_unit` | varchar | 销售单位 |
 | `price` | bigint | 售价，分 |
@@ -625,14 +660,14 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `counts_for_min_spend` | boolean | 是否计入低消 |
 | `standard_pour_volume` | numeric | 按杯销售每杯标准出酒量/容量，`product_type=cup` 时配置，可为空 |
 | `pour_volume_unit` | varchar | 出酒量单位：`ml/oz`，与 `standard_pour_volume` 配套 |
-| `loss_threshold` | numeric | 单次出酒损耗超标阈值（损耗严重阈值），超过则生成损耗异常事件，可为空 |
+| `loss_threshold`（当前遗留，目标停用） | numeric | 当前单品级损耗阈值；与 HTML“损耗率阈值按酒吧配置”冲突，目标改读 `bar_venues.pour_loss_rate_threshold`，不得继续作为业务取值 |
 | `status` | varchar | `active/inactive/sold_out` |
 
 约束：
 
 - 同一商户下 `product_code` 唯一。
 
-> 修订说明（2026-06-07）：依 finding bar-2，新增 `standard_pour_volume/pour_volume_unit/loss_threshold` 三字段承接 PRD §11 第 6 条"每杯标准出酒量/超标记损耗/损耗严重核查"已拍板规则。`loss_threshold` 区别于配方层 `bar_recipe_items.loss_rate`（后者为固定损耗率，无法表达"本次实际出量 vs 标准容量"的差异损耗）。单次实际出酒量与损耗量记录在出品扣减流水（见 §6.16）。
+> 修订说明（2026-09-01 订正）：`standard_pour_volume/pour_volume_unit` 继续承载商品标准出酒量；单次实际出酒量与损耗量记录在出品扣减流水（见 §6.16）。旧单品列 `loss_threshold` 只登记当前实现差距，目标阈值是按酒吧配置的损耗率安全阈值，不得继续按商品取值。
 
 > 物理列与内部结算价（2026-06-23，回写实现事实）：本节为逻辑设计，物理列以迁移为准——售价物理列为 `price_cent`（分），逻辑 `cost_price` 未单独落地。**V152 新增 `internal_settlement_price_cent BIGINT`（内部结算价，分；可空=未录入则不参与结算/提成扣减；非空 CHECK ≥0）**：作为 ① 通票免费酒水「平台↔酒吧结算」与 ② 吧台随单赠送项「按内部价 × 数量从销售提成基数扣除」（F-TXN-05，见 §6.9A.2）的统一成本价基。
 >
@@ -655,11 +690,11 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `total_amount` | bigint | 原价合计 |
 | `discount_amount` | bigint | 优惠 |
 | `payable_amount` | bigint | 应付 |
-| ~~`age_verified`/`age_verify_method`/`age_verify_by`/`age_verified_at`/`age_verify_point`/`refuse_reason`/`refuse_by`/`refuse_at`~~ | — | **已下线（2026-06-24 售酒豁免）**：点酒环节年龄二次复核/拒售整体移除，售酒继承综合体入场·年龄核验环节的结论、不逐单验龄/拒售。这些 V013 列保留为孤儿、待清理迁移统一删，新流程不再写入 |
+| ~~`age_verified`/`age_verify_method`/`age_verify_by`/`age_verified_at`/`age_verify_point`/`refuse_reason`/`refuse_by`/`refuse_at`~~ | — | **已下线**：酒吧点单环节不再独立验龄或写年龄拒绝结果，继承综合体入场第二道年龄核验结论。系统不自动判断醉酒或拦截订单；现场人工停止继续售酒只记订单操作原因、责任人和处置结果，不复用这些旧年龄字段。V013 旧列待清理，新流程不再写入 |
 | `status` | varchar | 点单状态 |
 | `cancel_reason` | text | 取消原因 |
 
-> 修订说明（2026-06-07 补字段；**2026-06-24 售酒豁免下线**）：原依合规 C1 补的点酒表年龄核验/拒售字段（`age_verified`/`age_verify_*`/`refuse_*`）已整体下线——售酒年龄核验由综合体入场的年龄核验环节 18+ 承接、售酒继承入场结论不逐单验龄/拒售（合规 §2 2026-06-24 改写）；`BarAgeVerificationService`、`bar_age_verifications` 表、`/api/v1/bar/age-verifications` 端点已移除，上述 V013 列保留为孤儿待清理迁移。
+> 修订说明：原点酒表年龄核验/年龄拒绝字段（`age_verified`/`age_verify_*`/`refuse_*`）已整体下线；年龄由综合体入场第二道环节统一核验，酒吧不逐单重复验龄。系统不自动判断醉酒或拦截订单，但现场工作人员仍可人工停止继续售酒并留痕；`BarAgeVerificationService`、`bar_age_verifications` 表、`/api/v1/bar/age-verifications` 端点已移除，上述 V013 列保留为孤儿待清理迁移。
 
 索引：
 
@@ -686,7 +721,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 ### 6.9 bar_bills 账单表
 
-> 修订说明（2026-06-07 收口）：本表为 `bar_bills` 的**唯一权威定义**（承载酒吧账单实现），foundation-database §6A.2 不再重复建表、仅保留 6 态核对指针（依据 finding dup-tables-4/7）。本次补三项：(1) 新增 `business_status` 业务 6 态承载列，落 D7「账单 6 态权威集合」（unpaid/partial_paid/settled/partial_refunded/refunded/abnormal），与点位级 `status`（记录级 active/void）严格分离，使部分退款/已退款态有承载（finding dup-tables-4、D7）；(2) 新增 `refunded_amount`（已退金额，单位分）承载退款态金额，与 `bar_bill_payments.status=refunded` 协同；(3) 预留 `project_id`（综合体归属，原始需求）。金额字段命名统一：本表沿用 `payable_amount`（应付）为权威口径，并补 `currency`（D1 口径：金额一律整数分，currency 默认 `CNY`）。
+> 目标定义：下表同时列 HTML 目标与当前字段。当前 V013 `bar_bills` 尚无 `business_status`；服务费月结四金额、小费和正式挂起七态也未完整承载，均须先补迁移与服务逻辑，不得把目标字段写成当前已落地。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -699,19 +734,25 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `table_id` | uuid | 桌台 |
 | `original_amount` | bigint | 原始消费，单位分 |
 | `discount_amount` | bigint | 优惠，单位分 |
-| `service_fee_amount` | bigint | 服务费，单位分 |
+| `service_fee_amount` | bigint | 服务费收取额，单位分 |
+| `service_fee_monthly_payable_amount`（目标） | bigint | 月结定格的服务提供人应发额，单位分 |
+| `service_fee_monthly_withheld_amount`（目标） | bigint | 月结定格的商户扣留额，单位分 |
+| `service_fee_paid_settlement_amount`（目标） | bigint | 实际支付清偿额，单位分；不改变已定格的应发与扣留 |
+| `tip_amount`（目标） | bigint | 小费，单位分；归实际主责服务提供人并与商户收入、低消、销售提成、分红基数分离 |
 | `min_spend_gap_amount` | bigint | 最低消费差额提示金额，单位分 |
 | `payable_amount` | bigint | 应付（权威金额口径），单位分 |
 | `paid_amount` | bigint | 已付，单位分 |
 | `refunded_amount` | bigint | 已退金额，单位分；承载部分退款/已退款态金额，与 `bar_bill_payments.status=refunded` 协同 |
 | `currency` | varchar | 币种，默认 `CNY`；金额一律整数分（基准 D1） |
-| `business_status` | varchar | **业务账单 6 态（D7 权威承载列）**：`unpaid`(待结)/`partial_paid`(部分支付)/`settled`(已结)/`partial_refunded`(部分退款)/`refunded`(已退款)/`abnormal`(异常)；CHECK 取值与 §4.4 逐项对应，不得用 `status` 顶替 |
+| `business_status`（目标，当前缺列） | varchar | **业务账单 6 态**：`unpaid`(待结)/`partial_paid`(部分支付)/`settled`(已结)/`partial_refunded`(部分退款)/`refunded`(已退款)/`abnormal`(异常)；CHECK 取值与 §4.4 逐项对应，不得用 `status` 顶替 |
+| `formal_hanging_status`（目标） | varchar | 正式未付款订单七态：`hanging_unpaid`（已挂起待付款）/`settled`（已结清）/`cancel_pending_approval`（取消审批中）/`cancelled`（已取消）/`pending_refund`（待退款）/`bad_debt_processing`（坏账损耗处理中）/`written_off_closed`（已核销结案）；英码只作机读映射 |
+| `formal_hanging_reason`（目标） | text | 挂起原因；正式挂起必须记录金额、桌台、责任人和完整日志 |
 | `status` | varchar | **记录级状态**（非业务态）：`active`(有效)/`void`(已删除/作废)；配合软删除/审计字段 |
 | `closed_at` | timestamptz | 结账时间 |
 
 ### 6.9A bar_table_commissions 卡座提成记录表
 
-> 新增说明（2026-06-10）：卡座销售提成是酒吧经营事实的一部分，但不等同票务通票分账，也不应直接写入账单金额。本表承接“销售人员售卖卡座按消费额 15%，非销售人员按 10%”的 P0 可复核台账。
+> 卡座销售提成是酒吧经营事实的一部分，但不等同票务通票分账，也不应直接写入账单金额。本表承接按销售归属员工岗位判档、按订单实际发生酒吧读取费率并在下单时锁定版本的 P0 可复核台账；销售岗/非销售岗出厂默认 15%/10%，两档须同时配置上下限。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -726,9 +767,10 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `sales_staff_id` | uuid | 销售归属员工 |
 | `sales_staff_position_type_snapshot` | varchar | 岗位快照：`sales_person` 或其他岗位 |
 | `commission_base_amount` | bigint | 可计提消费额，单位分 |
-| `commission_rate` | numeric | 提成率：销售人员 `0.15`，非销售人员 `0.10`（**出厂默认**；实际取值来自 V340 `bar_commission_rate_configs`，按项目公司 × 商户 × 角色档后台可配，见下方「提成率取数」）|
+| `commission_rate` | numeric | 下单时锁定的费率快照；按订单实际发生酒吧配置，销售岗/非销售岗出厂默认 15%/10%，须同时配置上下限 |
+| `commission_rate_config_version`（目标） | varchar | 下单时锁定的费率配置版本；重新月结只重算金额，不改该版本 |
 | `commission_amount` | bigint | 提成金额，单位分；= 四舍五入到分(提成基数 × 档位费率)，走公共入口 `MoneyRounding.bpsOf`（R-7/D15.1；原整除截断使员工恒少拿已修） |
-| `excluded_amount_snapshot` | jsonb | 排除金额快照：通票、票务权益、赠酒、退款、免单、抹零、不可计提调整等 |
+| `excluded_amount_snapshot` | jsonb | 固定排除金额快照：通票及票务权益、卡座预约入场名额、赠送成本、退款、免单、券抵扣金额和现场打折让利金额 |
 | `status` | varchar | `pending_review/confirmed/adjusted/reversed/cancelled` |
 | `reviewed_by` | uuid | 复核人 |
 | `reviewed_at` | timestamptz | 复核时间 |
@@ -737,17 +779,17 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 计算规则：
 
-1. `commission_base_amount = 卡座账单实收可计提消费额 - excluded_amount_snapshot 合计`。
-2. 通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单、抹零和不可计提调整不得进入提成基数。
-3. 销售归属员工岗位快照为 `sales_person` 时 `commission_rate = 0.15`；其他岗位归属销售时 `commission_rate = 0.10`。**这两个数字自 2026-07-28（P0-D/CFG-01，V340）起为「出厂默认」而非写死常量**——见下方「提成率取数」。
-4. 同一 `bill_id` 在同一结算周期只能生成一条主提成记录；复杂多人分摊、阶梯提成、活动倍率进入 P1。
+1. `commission_base_amount` 取订单最终保留收入中属于可计提卡座消费的折后实收金额；不得把已从实收扣除的优惠或券抵扣再次重复扣减。
+2. 通票及票务权益整类、卡座预约入场名额、赠送成本、退款、免单、券抵扣金额和现场打折让利金额不得进入提成基数；该类别清单固定，不做后台可增删。
+3. 销售岗与非销售岗费率按酒吧配置，出厂默认分别为 15% 与 10%，且须同时配置上下限。销售人员跨酒吧承接订单时，按订单实际发生酒吧的费率；单据在下单时锁定当时的费率版本，后续版本不追溯。
+4. 同一 `bill_id` 在同一结算周期只能生成一条主提成记录。
 5. 日结锁定后提成基数或销售归属变更，只能追加调整/冲正记录，不得覆盖原记录。
 
-> 已实现修复（finding F-TXN-05，2026-06-22，已在 160 编译通过）：`calculateCommission` 的提成基数 `commission_base` 此前仅按 `subtotal − discount` 计算，未扣除免单（waiver）与退款（refund），导致已免/已退金额仍被计提。现已改为在 `subtotal − discount` 基础上**额外扣除免单与退款净额**——按 `bar_bill_adjustments` 中处于 applied 态的调整净额计算，并对 `waiver_reversal`/`refund_reversal` 反向回加，使提成基数与账单实际可计提消费额一致。这与本表"通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单、抹零和不可计提调整不得进入提成基数"的口径对齐。
+> 已实现修复（finding F-TXN-05，2026-06-22，已在 160 编译通过）：`calculateCommission` 的提成基数 `commission_base` 此前仅按 `subtotal − discount` 计算，未扣除免单（waiver）与退款（refund），导致已免/已退金额仍被计提。现已改为在 `subtotal − discount` 基础上**额外扣除免单与退款净额**——按 `bar_bill_adjustments` 中处于 applied 态的调整净额计算，并对 `waiver_reversal`/`refund_reversal` 反向回加。券抵扣与其余固定排除项仍须按 HTML 补齐实现核验。
 >
-> 已实现（finding F-TXN-05，赠菜扣提成，2026-06-23，已在 160 编译通过）：**赠品（gift）按内部价从提成扣除**。新增 `bar_order_items.is_gift`（V153，§6.8 已登记的逻辑列之物理落地）承载随单赠送标记：下单/加菜时 `is_gift=true` 的明细对客 `amount_cent=0`（不计入账单 `subtotal`）、单价保留售价；出品/退菜撤单/撤单回滚等明细重建均透传该标记。`calculateCommission` 在 `subtotal − discount − 免退净额` 基础上**再按赠送项商品内部结算价（V152 `internal_settlement_price_cent`）× 数量扣除 `giftDeduction`**，即赠送项成本不计提成。商品未录内部价时该项不扣（`orElse 0`，向后兼容既有商品）。
+> 当前实现事实（finding F-TXN-05，2026-06-23）：**赠品（gift）按内部价从提成扣除**。新增 `bar_order_items.is_gift`（V153，§6.8 已登记的逻辑列之物理落地）承载随单赠送标记：下单/加菜时 `is_gift=true` 的明细对客 `amount_cent=0`（不计入账单 `subtotal`）、单价保留售价；出品/退菜撤单/撤单回滚等明细重建均透传该标记。`calculateCommission` 在 `subtotal − discount − 免退净额` 基础上**再按赠送项商品内部结算价（V152 `internal_settlement_price_cent`）× 数量扣除 `giftDeduction`**。商品未录内部结算价时当前代码以 `orElse 0` 不扣，该分支与“赠送成本不计提成”的目标仍有实现差距，不得作为目标规则。
 >
-> **提成率取数（P0-D/CFG-01，2026-07-28 实现）**：`calculateCommission` 不再写死 `rateBp = "sales".equals(roleType) ? 1500 : 1000`，
+> **当前实现事实（P0-D/CFG-01，2026-07-28）**：`calculateCommission` 不再写死 `rateBp = "sales".equals(roleType) ? 1500 : 1000`，
 > 改经 `BarCommissionRateConfigPort`（实现 `JdbcCommissionPointsConfigRepository`，结算配置中心侧）按
 > **项目公司 × 商户 × 角色档（sales/non_sales）** 读 **V340 `bar_commission_rate_configs`** 的正式生效行（`status='active' AND is_draft=FALSE`）。
 > - **作用域优先级**：项目 × 商户特例 > 项目通用 > 全平台默认；出厂种子 `bcrc_default_sales=1500` / `bcrc_default_non_sales=1000`
@@ -758,11 +800,32 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 >   **绝不回落硬编码常量**——回落常量正是本批要根除的东西（母铁律「业务策略一律可配」+ `DEC-CFG-ALL-NUMERIC-001`）。
 > - **维护入口**：后台「结算配置中心 → 提成与积分 → 卡座销售提成费率」，改动落草案、差人复核转正后生效；
 >   商户级特例可「下线」回落默认，全平台默认种子禁下线。
+> - **待核验差距**：验收必须证明取到的是订单实际发生酒吧的配置、上下限已生效且单据在下单时锁定费率版本；任一不满足时不得以 V340 存在宣称目标已完成。
 >
-> 口径澄清（经业主确认，无需代码处理）：
-> - **抹零**：经业主确认**无抹零业务**，提成基数无需处理抹零项。
+> 口径澄清：
 > - **低消补差**：低消是开台前提而非提成排除项，不从提成基数中扣除。
 > - **通票/票务权益赠饮**：在核销环节即为 0 元平台赠饮单、不进 `subtotal`（见 §7.2 赠饮核销闭环），无需在提成计算中额外扣除。
+
+### 6.9B bar_service_commission_attributions 服务员提成归属记录（目标）
+
+> 本表只承接 James 已批准写入 HTML 的归属关系，不定义服务员提成的费率、计算基数、收款主体、结算周期或税务口径。上述未定义内容不得由本设计补造。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | uuid | 主键 |
+| `project_id` | uuid | 综合体项目 |
+| `merchant_id` | uuid | 酒吧商户 |
+| `bar_venue_id` | uuid | 实际发生业务的酒吧 |
+| `service_responsibility_id` | uuid | 对应服务责任链记录 |
+| `table_session_id` | uuid | 当前归属的台位会话 |
+| `service_staff_id` | uuid | 该条既有服务/提成记录对应的服务员 |
+| `source_attribution_id` | uuid | 转台产生新归属时引用原归属记录；首次记录为空 |
+| `attribution_action` | varchar | `assigned/transferred/merge_preserved`，只表示归属动作，不表示计算或发放状态 |
+| `effective_at` | timestamptz | 归属动作生效时间 |
+| `status` | varchar | `active/historical`；历史记录只读保留，不覆盖、不重算 |
+
+- 转台成功时，为新台会话追加 `transferred` 归属记录并引用原记录；原记录转只读历史，不改销售提成归属。
+- 并台时，各服务员既有记录保持原服务员与原来源，不合并到一人；只追加 `merge_preserved` 关系留痕，不重算历史提成。
 
 ### 6.10 bar_bill_payments 账单支付表
 
@@ -772,7 +835,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 |---|---|---|
 | `id` | uuid | 主键 |
 | `bill_id` | uuid | 账单 |
-| `payment_method` | varchar | P0 全部支持：`customer_scan_qr/staff_scan_pay_code/cash/pos`（`pos` 即银行卡刷卡）；`manual`（手工记账）后置 |
+| `payment_method` | varchar | P0 支持：`customer_scan_qr/staff_scan_pay_code/cash/pos/stored_value`（`pos` 即银行卡刷卡）；`manual`（手工记账）后置 |
 | `amount` | bigint | 金额，单位分 |
 | `external_payment_no` | varchar | 外部流水（线上支付） |
 | `pos_transaction_no` | varchar | POS 机交易流水号，`payment_method=pos` 时必填 |
@@ -795,12 +858,12 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `saved_bottle_no` | varchar | 存酒编号 |
 | `merchant_id` | uuid | 商户 |
 | `bar_venue_id` | uuid | 酒吧 |
-| `customer_id` | uuid | 客户，散客可为空；外键指向 foundation `customers.id`（散客无会员时可空，核身用 `customer_phone`/`customer_name_or_nickname`） |
+| `customer_id` | uuid | 客户，散客可为空；外键指向 foundation `customers.id` |
 | `customer_phone` | varchar | 客户手机号脱敏或加密 |
-| `customer_name_or_nickname` | varchar | 客户姓名或昵称，登记必填（散客无会员时取酒核身依据） |
+| `customer_name_or_nickname` | varchar | 客户姓名或昵称，登记必填；不得作为检索客人的入口 |
 | `product_id` | uuid | 酒品 |
 | `product_name_snapshot` | varchar | 商品名快照 |
-| `bottle_label_value` | varchar | 瓶底标签数值（按标签显示数值记录剩余量，取酒核对依据），登记必填 |
+| `bottle_label_value` | varchar | 瓶底标签数值，登记必填，用于对应酒瓶与取用留痕；不得用于反查客人 |
 | `registration_photo_refs` | jsonb | 登记照片证据索引（拍照强制项），登记必填 |
 | `manual_note` | text | 人工备注（明确区别于通用 `remark` 基础列） |
 | `source_order_id` | uuid | 来源点单 |
@@ -812,9 +875,15 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `qr_code_hash` | varchar | 存酒二维码哈希 |
 | `stored_at` | timestamptz | 存酒时间 |
 | `expire_at` | timestamptz | 到期时间 |
+| `storage_term_config_version`（目标） | varchar | 登记时固化的有效期配置版本 |
+| `extension_count`（目标） | int | 已转存次数 |
+| `last_extension_days`（目标） | int | 最近一次顺延天数 |
+| `last_extension_confirm_method`（目标） | varchar | 客人短信确认方式 |
+| `last_extension_operator_id`（目标） | uuid | 最近一次转存经办人 |
+| `last_extension_supervisor_id`（目标） | uuid | 员工代办时的当班营销主管复核人 |
 | `status` | varchar | 存酒状态 |
 
-> 修订说明（2026-06-07）：依 finding bar-4 / supply-2，补 PRD §4/§9/§11 列为存酒登记必填的字段：`bottle_label_value`（瓶底标签数值）、`customer_name_or_nickname`（姓名/昵称，散客无 member 时落此）、`registration_photo_refs`（登记时刻照片证据，区别于 `saved_bottle_movements.evidence_ref` 仅记取酒/作废流水证据）、`manual_note`（人工备注，区别于通用 `remark`）。登记接口与 §5.3.1 设为必填，取酒核身（§5.3.2）纳入姓名/昵称与瓶底标签数值比对。
+> 登记须留姓名或昵称、瓶底标签数值和照片，但正常取酒身份验证只接受当前客户短信验证码或已登录官方 App/小程序动态取酒码。检索只能输入手机号；姓名、昵称、订单号和标签均不得用于反查客人。当前表尚缺转存配置版本、次数、确认与复核字段，以上标为目标字段。
 >
 > 修订说明（2026-06-08 三轮收口）：依 finding newtable-fk-5，为 §6.3 `bar_reservations`、§6.4 `bar_table_sessions`、§6.11 `saved_bottles` 三表的 `customer_id` 就地补「外键指向 foundation `customers.id`（散客无会员时可空，核身用 `customer_phone`/`customer_name_or_nickname`）」注释——foundation §6B.1 `customers` 主表建立后该指向已可解析，此前注释仅写「客户」未显式声明 FK 目标，给编码者留歧义；现与 amusement `maintenance_vendor_id` 显式标注 FK 目标的做法一致。
 
@@ -830,13 +899,20 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 |---|---|---|
 | `id` | uuid | 主键 |
 | `saved_bottle_id` | uuid | 存酒 |
-| `movement_type` | varchar | `store/pickup/transfer/expire/void/adjust` |
+| `movement_type` | varchar | `store/pickup/transfer/extend/expire/void/adjust`；`transfer` 只变更权益人，不进入终态 |
 | `before_volume` | numeric | 操作前 |
 | `change_volume` | numeric | 变化量 |
 | `after_volume` | numeric | 操作后 |
 | `operator_id` | uuid | 操作员工 |
 | `device_id` | uuid | 设备 |
 | `reason` | text | 原因 |
+| `from_customer_id` | uuid | 转让前权益人，可为空 |
+| `to_customer_id` | uuid | 转让后权益人，可为空 |
+| `customer_confirm_method` | varchar | 转让/转存的客人短信确认方式 |
+| `supervisor_id` | uuid | 员工代办转存的当班营销主管复核人，可为空 |
+| `config_version` | varchar | 转存使用的配置版本，可为空 |
+| `extension_days` | int | 本次顺延天数，可为空 |
+| `new_expire_at` | timestamptz | 转存后的到期日，可为空 |
 | `evidence_ref` | jsonb | 证据，结构区分 `{photo_refs:[], video_refs:[]}`；高价值存酒作废 `photo_refs` 与 `video_refs` 均必填 |
 
 ### 6.13 bar_inventory_items 物料表
@@ -850,13 +926,14 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `name` | varchar | 物料名 |
 | `item_type` | varchar | `alcohol/food/material/consumable/tool` |
 | `unit` | varchar | 基础单位 |
-| `cost_price` | bigint | 成本价 |
+| `cost_price` | bigint | 成本价，单位分 |
+| `last_actual_arrival_price` | bigint | 最近一次实际到货价；高价值自动判定只用该值，不用滚动平均进货价 |
 | `safety_stock` | numeric | 安全库存 |
 | `manual_high_value` | boolean | 物品档案**手工标记**为高价值；标了就恒为高价值（不看进货价），触发报损/盘点差异/作废/退酒的"照片+视频双证据+主管复核" |
-| ~~`high_value_threshold`~~ | ~~bigint~~ | **V350 已删**：按物料各设阈值与「全平台一个固定金额阈值」冲突。阈值统一落 `high_value_thresholds`，进货价取 `inventory_item_cost_state.avg_unit_cost_cent` |
+| ~~`high_value_threshold`~~ | ~~bigint~~ | **V350 已删**：按物料各设阈值与全平台唯一阈值冲突；阈值统一落 `high_value_thresholds`。当前若仍用 `inventory_item_cost_state.avg_unit_cost_cent` 判定，属于待改差距 |
 | `status` | varchar | 状态 |
 
-> 修订说明（2026-06-07）：依 finding supply-4，补 `is_high_value`（物品档案手工标记）与 `high_value_threshold` 字段，配合平台默认金额阈值，使"高价值→双证据+复核"规则（finding supply-3）可在报损/盘点/作废流程自动判定；高价值判定已按平台默认阈值 + `is_high_value` 手工标记双口径收口（见 §15.1）。
+> 高价值采用全平台唯一安全阈值与最近一次实际到货价比较，出厂默认 5000 元，须同时配置上下限，调整须最高权限审批并留痕；阈值未配置时一律按高价值拦下。库房主管及以上可手工标记或取消标记，均须填理由并留痕。当前实现若仍取滚动平均进货价，属于待改差距。
 
 ### 6.14 bar_inventory_locations 库存位置表
 
@@ -901,7 +978,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `quantity` | numeric | 数量 |
 | `unit` | varchar | 单位 |
 | `actual_pour_volume` | numeric | 杯卖出品本次实际出酒量，`movement_type=consume` 且按杯出品时记录，可为空 |
-| `loss_volume` | numeric | 本次损耗量 = 实际出酒量 - 标准出酒量（`actual_pour_volume - standard_pour_volume`），可为空 |
+| `loss_volume` | numeric | 有设备时为 `max(actual_pour_volume - standard_pour_volume, 0)`；无设备时按获批的标准损耗口径落值，绝不得用 `0` 兜底 |
 | `reason` | text | 原因 |
 | `source_type` | varchar | `order/saved_bottle/manual/robot/purchase/count` |
 | `source_id` | uuid | 来源对象 |
@@ -911,7 +988,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `status` | varchar | 库存流水状态 |
 
 > 修订说明（2026-06-07）：
-> - 依 finding bar-2，新增 `actual_pour_volume`、`loss_volume` 记录按杯出品的单次实际出量与差异损耗。扣减规则：`loss_volume = actual_pour_volume - standard_pour_volume`（取自 §6.6 `bar_products`）；当 `loss_volume > loss_threshold` 时生成**损耗异常事件**（`inventory.loss_exception`，见 §9.4）进入异常核查。
+> - `actual_pour_volume`、`loss_volume` 记录按杯出品的单次实际出量与损耗。有设备时只把实际超出标准的部分记为损耗；无设备时按标准量扣减并按获批标准损耗口径记账，不得落零损耗。核查条件为“当期损耗量 ÷ 标准出酒量”超过 `bar_venues.pour_loss_rate_threshold`，不再读取单品 `loss_threshold`。
 > - 依 finding supply-5，`movement_type` 新增 `surplus`（报溢/盘盈/异常增加）独立枚举，与 `count_adjust`（盘点调整）区分，使报溢可单独走审批+证据流程，并便于数据分析区分报损/报溢数量与金额。
 > - 新增（2026-08-05 DEC-R7-04）：`movement_type` 追加**回库／借出／归还**三类，命名与 `docs/supply-chain-inventory-development-design-v0.1.md` §6.13 **统一**，见下方新增枚举表。
 
@@ -923,7 +1000,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `lend_out` | 借出 | 跨主体借调中**不可消费物品**交付给借入方 | 减（保管责任转移，**所有权不转移**） | 2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造；不得用 `transfer` 代记，否则会错误地转移库存归属 |
 | `lend_return` | 归还 | 借入方将借用物品归还借出方 | 增（保管责任回转） | 2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造；`lend_out` 的反向动作 |
 
-> 同名提示：`bar_order_item_voids.return_to_stock`（§17.1 退菜退酒「是否回库」**布尔字段**）与本表 `movement_type=return_to_stock`（**流水类型取值**）同名但不同层，不得混用；退酒 `return_to_stock=true` 触发的库存回补流水，按本表取 `movement_type=return_to_stock`（GAP-38 代码改造时一并落地）。
+> 同名提示：`bar_order_item_voids.return_to_stock`（§16.1 退菜退酒「是否回库」**布尔字段**）与本表 `movement_type=return_to_stock`（**流水类型取值**）同名但不同层，不得混用；退酒 `return_to_stock=true` 触发的库存回补流水，按本表取 `movement_type=return_to_stock`（GAP-38 代码改造时一并落地）。
 > 冲正口径（DEC-R7-04）：**冲正不新增 `movement_type`**，按流水 `status=reversed` 标记并按相反方向的调整类型落账；ENUM 十二类中不含「冲正」，**不得自行新增第十三类**。本表既有 `reverse` code 为历史取值，本轮**不改名**，其与「按 `status` 处理」口径的分歧一并归 **GAP-38** 代码改造。
 > 命名口径登记（GAP-38）：既有命名体系两表不一致（`transfer` vs `transfer_in`/`transfer_out`、`count_adjust` vs `count_correction` 等），统一命名属 **GAP-38 代码改造范畴**，落库前须先定统一口径。
 > 上述三类**代码与迁移尚未实现**，补齐前不得据本表认为已实现。
@@ -970,7 +1047,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 内部接口统一放在 `/api/v1/bar/**`。开放给第三方的接口必须经过开放平台，放在 `/api/open/d/{endpoint_key}/bar/**` 或由第三方集成系统适配。
 
-> 执行口径：本章 API 表含 P0 基础闭环和 P1 酒吧 SaaS 增强能力。P0 编码必须以 `docs/openapi/openapi-p0.yaml`、`docs/openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md` 和 `p0-operation-permission-matrix-v0.1.md` 为准；表格中尚未进入权限矩阵和 OpenAPI 的拆单、合单、转台、挂账、服务费、低消差额补齐、配方成本、员工提成细项，作为 P1 细化项，开发前必须补精确 operation、字段 schema、权限码、事件和验收标准。
+> 执行口径：HTML 已规定的拆单、合单、转台、并台、拆台、撤销转台、循环转台、正式挂起、低消补足、服务费、小费、门店统一支付集合、桌台隐私与优惠券预占等均是目标合同，不得以“尚未进入旧 OpenAPI”为由降级或后置。当前正式后端路径仍以 `docs/openapi/openapi-p0.yaml/json` 及其验收矩阵为准；缺失 operation 必须先补 schema、权限码、事件和验收，再标记完成。
 
 ### 7.1 桌台与开台
 
@@ -983,6 +1060,9 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `POST` | `/api/v1/bar/tables/{id}/unlock` | 解锁桌台 | `bar.table.unlock` |
 | `POST` | `/api/v1/bar/table-sessions` | 开台 | `bar.session.open` |
 | `POST` | `/api/v1/bar/table-sessions/{id}/transfer` | 转台 | `bar.session.transfer` |
+| `POST` | `/api/v1/bar/table-sessions/{id}/undo-transfer` | 撤销最近一次仍满足阻断条件的转台 | `bar.session.transfer` |
+| `POST` | `/api/v1/bar/table-sessions/merge-tables` | 并台；保留来源树与并台前快照 | `bar.session.merge_table` |
+| `POST` | `/api/v1/bar/table-sessions/{id}/split-table` | 按层、任选一台或全部拆台 | `bar.session.split_table` |
 | `POST` | `/api/v1/bar/table-sessions/{id}/request-payment` | 申请结账 | `bar.bill.checkout` |
 | `POST` | `/api/v1/bar/table-sessions/{id}/clear` | 清台 | `bar.session.clear` |
 
@@ -1020,8 +1100,15 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `POST` | `/api/v1/bar/bills/{id}/discount` | 人工折扣 | `bar.bill.discount` |
 | `POST` | `/api/v1/bar/bills/{id}/payment-qr` | 生成客人扫码支付二维码 | `bar.bill.pay` |
 | `POST` | `/api/v1/bar/bills/{id}/scan-pay` | 平板扫描客人付款码支付 | `bar.bill.pay` |
-| `POST` | `/api/v1/bar/bills/{id}/pay` | 支付结果记录，P0 仅接收统一支付回调或扫码支付结果 | `bar.bill.pay` |
+| `POST` | `/api/v1/bar/bills/{id}/pay` | 支付结果记录；门店统一支持客人扫码、扫客人付款码、现金、POS、储值卡 | `bar.bill.pay` |
+| `POST` | `/api/v1/bar/bills/{id}/split` | 未支付未结算账单按金额拆单 | `bar.bill.split` |
+| `POST` | `/api/v1/bar/bills/{id}/merge` | 合入同一酒吧另一张未支付未结算账单；不等同并台 | `bar.bill.merge` |
+| `POST` | `/api/v1/bar/bills/{id}/formal-hang` | 正式挂起未付款订单；正式下单即出品并扣库存 | `bar.bill.hang` |
+| `POST` | `/api/v1/bar/bills/{id}/formal-hang/cancel` | 经理审批取消正式挂起订单 | `bar.bill.hang_cancel` |
+| `POST` | `/api/v1/bar/bills/{id}/formal-hang/write-off` | 完成财务核销与赔偿后结案 | `bar.bill.write_off` |
 | `POST` | `/api/v1/bar/bills/{id}/void` | 作废账单 | `bar.bill.void` |
+
+付款前的优惠券候选接口必须返回“本单实付最低”的单张券，同额选最早到期；客人可在付款前更换或取消。开始付款必须在同一事务边界预留券并锁定订单金额，支付成功与券核销同时生效；任一失败或超时均释放预留且两边都不生效。
 
 ### 7.4 商品与配方
 
@@ -1043,7 +1130,8 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `GET` | `/api/v1/bar/saved-bottles` | 查询存酒 | `bar.saved_bottle.read` |
 | `POST` | `/api/v1/bar/saved-bottles` | 存酒登记 | `bar.saved_bottle.create` |
 | `POST` | `/api/v1/bar/saved-bottles/{id}/pickup` | 取酒 | `bar.saved_bottle.pickup` |
-| `POST` | `/api/v1/bar/saved-bottles/{id}/transfer` | 转赠 | `bar.saved_bottle.transfer` |
+| `POST` | `/api/v1/bar/saved-bottles/{id}/transfer` | 转让权益人；出让人短信验证成功即生效 | `bar.saved_bottle.transfer` |
+| `POST` | `/api/v1/bar/saved-bottles/{id}/extend` | 转存延期；客人短信确认，员工代办须主管复核 | `bar.saved_bottle.extend` |
 | `POST` | `/api/v1/bar/saved-bottles/{id}/void` | 作废 | `bar.saved_bottle.void` |
 | `GET` | `/api/v1/bar/saved-bottles/{id}/movements` | 查询存酒流水 | `bar.saved_bottle.read` |
 
@@ -1072,6 +1160,8 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `POST` | `/api/v1/bar/service-responsibilities/{id}/actions` | 记录加单、送达、换人、异常处理等服务动作 | `bar.service_action.create` |
 | `GET` | `/api/v1/bar/service-responsibilities` | 查询订单、卡座或客户责任链 | `bar.service_responsibility.view` |
 | `GET` | `/api/v1/bar/service-responsibilities/{id}/timeline` | 查询服务责任时间线 | `bar.service_responsibility.view` |
+
+转台与并台接口须在同一事务中同步写 `bar_service_commission_attributions`：转台追加新台会话归属并保留原记录；并台只追加各自保留关系，不把他人记录并到一人，也不重算历史。该接线不定义服务员提成的计算或发放参数。
 
 ### 7.8 票务权益承接
 
@@ -1142,7 +1232,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `bar.table.transferred` | 转台 | 原桌台、目标桌台、原因 |
 | `bar.table.cleared` | 清台 | 桌台、会话、员工 |
 | `reservation.created` | 创建订台 | 预订、来源、终端、订金、设备、点位 |
-| `reservation.deposit_settled` | 订金结算（抵扣/退还/没收） | 预订、订金、`deposit_status`、原因、审批人 |
+| `reservation.deposit_settled` | 订金结果（达标原路退回/退还/没收/超时释放） | 预订、订金、`deposit_status`、原因、规则版本、操作人 |
 
 ### 9.2 点单账单事件
 
@@ -1157,6 +1247,9 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `payment.cash_received` | 现金进账 | 账单、金额、收款人、设备、点位 |
 | `payment.pos_received` | POS（银行卡）进账 | 账单、金额、POS 流水号、收款人 |
 | `bar.bill_voided` | 作废账单 | 原因、审批人 |
+| `bar.bill_formally_hung` | 正式挂起未付款订单 | 原因、金额、桌台、责任人、库存扣减结果 |
+| `bar.bill_hang_cancelled` | 正式挂起订单经经理审批取消 | 审批人、可回库与不可回库处理、待退款结果 |
+| `bar.bill_written_off` | 坏账完成财务核销与赔偿后结案 | 未收售价、库存成本、赔偿记录、核销人 |
 | `exception.first_handled` | 异常第一处理人留痕 | 异常对象、首响人、处理动作、时间 |
 
 > 修订说明（2026-06-07）：依基准 D4 把 `bar.order.delivered` 改为权威命名 `bar.order_delivered`；现金/POS 进账用 `payment.cash_received`/`payment.pos_received`（finding bar-3、D4），禁止使用不存在的 `payment.success`；异常首响用 `exception.first_handled`。
@@ -1175,7 +1268,8 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 |---|---|---|
 | `bar.saved_bottle.created` | 存酒登记 | 客户、酒品、数量、位置 |
 | `bar.saved_bottle_picked_up` | 取酒 | 取用量、剩余量、员工 |
-| `bar.saved_bottle.transferred` | 转赠 | 原客户、新客户、审批人 |
+| `bar.saved_bottle.transferred` | 转让权益人 | 原客户、新客户、出让人短信确认、时间、操作来源 |
+| `bar.saved_bottle.extended` | 转存延期 | 配置版本、顺延天数、新到期日、累计次数、经办人、客人确认方式、主管复核人 |
 | `bar.saved_bottle.expired` | 到期 | 存酒编号、到期时间 |
 | `bar.saved_bottle.voided` | 作废 | 原因、证据 |
 
@@ -1222,29 +1316,35 @@ source_system, result, risk_level, evidence_ref, trace_id, idempotency_key
 - 酒吧系统调用票务核销服务或订阅票务核销成功事件。
 - 酒水兑换导致的库存消耗由酒吧系统记录。
 
-> 入场年龄核验（2026-06-24 售酒豁免收口）：售酒年龄核验由综合体入场的**年龄核验环节**承接（满 18 岁），酒吧承接票务入场核销时**不再独立做门口年龄核验/点酒二次复核/醉酒拒售**；原 `age_verified`/`age_verify_*`/`refuse_*` 字段与 `BAR_UNDERAGE_BLOCKED`/`BAR_INTOXICATED_REFUSED` 规则码已下线（V013 列留孤儿待清理）。**年龄核验没有开关**——年龄核验环节的设备尚未安装或发生故障时进入人工抽查方式、客人继续进场，不要求工作人员逐人查验证件，但应当对明显疑似未成年的人员进行查验，不得把疑似未成年人当作普通未抽查人员直接放行（合规 §2.1 第 4 条）。酒类经营资质有效期在售酒前由平台级校验（保留）。
+> 入场年龄核验：年龄由综合体入场第二道环节统一核验（满 18 岁），酒吧不再独立做门口年龄核验或点酒二次复核；原 `age_verified`/`age_verify_*`/`refuse_*` 字段与年龄拒绝规则码已下线（V013 列留孤儿待清理）。系统不自动判断醉酒、不自动拦截订单；现场工作人员仍可依据现场情况人工停止继续向某位客人售酒并记录原因、责任人和处置结果。**年龄核验没有开关**——设备尚未安装或发生故障时进入人工抽查方式，明显疑似未成年人必须查验，不得直接放行。酒类经营资质有效期在售酒前由平台级校验（保留）。
 >
-> 生产阻断口径（2026-06-10 收口）：酒吧正式生产入场/售酒年龄核验必须接入第三方人脸/年龄核验接口或等效设备，供应商未确定前只实现适配器接口和 mock；测试环境可模拟通过，生产环境在未配置供应商/设备时不得把 `age_verified` 标记为正式通过。
+> 现行边界：年龄核验只在综合体入场第二道环节完成。酒吧只读取并继承该入场结论，不在酒吧门口或点酒环节再次核验，不建设酒吧侧供应商适配器，也不写酒吧侧 `age_verified` 结果。
 
 ### 10.2 与安卓端
 
-安卓端负责现场作业：
+终端主实现归 M12；本模块只冻结酒吧侧必须消费或产出的接口事实。安卓端现场作业和边界如下：
 
 | 作业 | 安卓能力 |
 |---|---|
 | 员工登录 | 企业设备、岗位、班次校验 |
 | 桌台开台 | 扫桌台二维码或选择桌台 |
-| 服务员点单 | 商品列表、购物车、挂账 |
+| 服务员点单 | 首次绑定所属酒吧且此后只服务该店；从桌台平面图选择台位，读取带图片分类菜单和套餐，购物车一次性提交并进入整桌账单 |
 | 吧台出品 | 出品列表、确认制作、确认交付 |
 | 存酒取酒 | 扫存酒码、客户手机号查询 |
 | 库存操作 | 入库、调拨、盘点、报损拍照 |
-| 离线能力 | P1 支持离线点单缓存，P2 支持离线库存盘点 |
+| 工作手机核销 | 扫描客人 App/小程序或第三方票码，承接门票、赠饮、礼物和其他领取资格的核销结果 |
+| 一体机承接 | 接收权益查询/领取、订台、吧台买酒、支付引导和现金/POS 记录；酒吧前台启用售票的一体机只允许授权人员售卖本酒吧单店门票，不得售卖综合体通票 |
 
 安卓请求必须携带：
 
 ```text
 staff_id, device_id, shift_id, merchant_id, venue_id, location_point_id, idempotency_key
 ```
+
+- 基础管理提供员工注册审核、设备绑定、角色、职级、班次、责任区域和权限；本模块只引用这些上下文。
+- 必须现场完成的点单、公司收款码、履约和扫码核销使用公司工作手机；员工私人手机不得承载现场动作。
+- 企业微信会话归档、质检和受管工作手机的软件/网站限制由对应外部系统负责，本模块只保留酒吧业务事件和核销结果引用。
+- 公共经营大屏只接收匿名、聚合或非个人经营数据，不得输出可识别个人的消费金额、储值余额、充值情况或个人排行榜。
 
 ### 10.3 与第三方机器人
 
@@ -1286,23 +1386,23 @@ staff_id, device_id, shift_id, merchant_id, venue_id, location_point_id, idempot
 | 页面 | P级 | 说明 |
 |---|---|---|
 | 酒吧门店配置 | P0 | 门店、容量、营业状态 |
-| 酒吧入场/年龄核验 | P0 | 门口年龄核验（人工+人脸识别）、入场记录、拒售/拒入场原因码、留痕 |
-| 订台管理 | P0 | 一体机/App/小程序/销售订台、订金支付与抵扣、取消爽约退没收、来源/终端/责任人/设备/点位 |
+| 综合体入场结论承接 | P0 | 只读承接综合体第二道年龄核验与第三道检票结果；酒吧门口、点酒环节不复核年龄 |
+| 订台管理 | P0 | 一体机/App/小程序/销售订台、定金支付或免收、不抵扣消费、达标原路退回、取消/爽约/超时释放、来源/终端/责任人/设备/点位 |
 | 桌台管理 | P0 | 桌台列表、状态、低消 |
 | 桌台实时看板 | P0 | 空闲、已开台、待清台、停用、异常 |
 | 开台/账单详情 | P0 | 会话、点单、账单、支付（含现金/POS 收款人与流水号） |
 | 商品管理 | P0 | 酒水、套餐、简餐基础档案 |
 | 点单记录 | P0 | 点单查询、取消、赠送 |
 | 账单记录 | P0 | 支付、作废、折扣 |
-| 存酒管理 | P0/P1 | P0 做基础登记、取酒、作废留痕；到期、转赠和复杂运营 P1 |
+| 存酒管理 | P0 | 登记、短信或动态码取酒、转让、转存、到期提醒与转库存、作废及跨店汇总展示；只能在存入酒吧取用 |
 | 库存物料 | P1 | 物料档案、批次、余额；P0 先做追踪码和交接留痕 |
 | 出入库流水 | P1 | 入库、调拨、盘点、报损；P0 先记录出库核验和交接事件 |
 | 配方 BOM | P2 | 配方版本和消耗明细 |
 | 机器人配送 | P0/P2 | P0 做人工或机器人交接留痕；真实机器人调度和状态联动 P2 |
-| 服务责任链 | P0 | 销售归属、主责服务员、协助服务员、送达、换人、异常首响 |
+| 服务责任链 | P0 | 销售归属、主责服务员、协助服务员、送达、换人、异常首响，以及服务员提成随转台/并台的归属留痕 |
 | 酒吧报表 | P2 | 销售、库存、存酒、桌台分析 |
 
-> 修订说明（2026-06-07）：新增"酒吧入场/年龄核验"（finding bar-1）与"订台管理"（finding kiosk-1/2/3）两个 P0 页面；桌台看板状态文案改为 D7 权威集合（空闲/已开台/待清台/停用/异常，finding bar-5）；开台/账单详情补现金/POS 收款人与流水号（finding bar-3）。
+> 酒吧端只提供综合体入场结果的只读承接，不提供门口人脸/年龄复核或年龄拒绝原因码。系统不自动判断醉酒或拦截订单；现场人工停止继续售酒使用订单操作留痕，不建设酒吧侧年龄核验链路。桌台看板与订台、账单、支付和存酒页面均须按本设计顶部 HTML 合同验收。
 
 ## 12. Java 后端包结构建议
 
@@ -1311,6 +1411,7 @@ com.complex.bar
   venue
   table
   session
+  service
   product
   order
   bill
@@ -1344,20 +1445,26 @@ com.complex.bar
 2. 商品分类和商品表。
 3. 开台会话。
 4. 服务员点单和吧台点单。
-5. 销售归属、主责服务员、协助服务员、送达确认和服务责任变更留痕。
+5. 销售归属、主责服务员、协助服务员、送达确认和服务责任变更留痕；服务员提成随转台记入新台会话，并台保留各自记录且不合并、不重算。
 6. 桌台账单和支付记录（扫码 + **现金/POS**，含收款人/POS 流水号，进日结对账）。<!-- 改（2026-06-07）：finding bar-3，现金/POS 纳入 P0 -->
 7. 最低消费提交前校验规则。
 8. 订单取消、赠送、折扣基础权限。
 9. 票务酒吧入场/酒水兑换结果承接；**赠饮/兑换核销→0 元兑换点单→吧台库存扣减**闭环。<!-- 改（2026-06-07）：finding bar-7 -->
 10. 酒水追踪码扫码交接：后厨接收、服务员取走、送达客人或卡座。
-11. **一体机订台 + 订金**：`bar_reservations`、订金计算/可配置、`deposit_status`、取消爽约退没收规则与来源/终端/设备/点位留痕。<!-- 增（2026-06-07）：finding kiosk-1/2/3，一体机订台+订金为 P0，与终端侧对齐 -->
-12. **门口年龄核验**（人工核验 + 人脸识别）与拒售/拒入场原因码留痕。<!-- 增（2026-06-07）：finding bar-1 + 合规 C1，售酒年龄核验 P0 -->
-13. 事件留痕。
-14. 后台基础页面和安卓现场作业接口。
+11. **一体机订台 + 定金**：固定额或低消比例按项目配置且有上下限；员工代订免收；定金不抵扣，达低消原路退回；七态、最晚到店、自动释放、正确爽约责任、员工爽约率停权及恢复均留痕。
+12. 承接综合体入场第二道年龄核验与第三道检票结果；酒吧门口和点酒环节不复核年龄。
+13. 散台扫码点单：非会员可浏览、点单和付款，先付款后出品；只有使用会员权益时才登录或注册。
+14. 正式挂起未付款订单、拆单/合单与转台/并台/拆台闭环。
+15. 事件留痕、后台基础页面和安卓现场作业接口。
+16. 存酒登记、取酒、转让、转存、提醒、到期转库存、作废及同店取用/跨店汇总边界。
+17. 高价值报损、盘点差异和存酒作废的照片+视频双证据与主管复核。
+18. 销售提成、服务员提成归属、服务费月结四金额与小费分别按 HTML 落库、留痕和验收。
+19. 桌台会话与菜单版本、隐私桌台分权、门店统一支付集合、计时产品禁令、自动选券和付款预占原子闭环。
+20. 临时沽清/长期下架两档、设备班前班后检查、弱电错峰、照片视频上报及教学逐项确认。
 
-P0 暂缓：
+P0 不得暂缓 HTML 已明确的扫码点单、账单操作、正式挂起、优惠券预占、菜单版本和桌台隐私规则。
 
-- 完整扫码点单。
+以下技术增强不属于 P0，后置：
 - BOM 自动扣料。
 - 复杂库存批次。
 - 真实机器人调度。
@@ -1367,14 +1474,14 @@ P0 暂缓：
 
 ### 13.2 P1：实际经营增强
 
-目标：支持真实酒吧管理中的存酒、库存、盘点、出品。
+目标：在 P0 已有存酒、出品扣减和高价值复核闭环之外，补库存台账与经营增强。
 
-1. 存酒登记、取酒、剩余量、到期。
+1. 存酒相关经营分析。
 2. 入库、出库、调拨、盘点、报损。
 3. 吧台出品任务。
 4. 简餐商品和厨房出品。
 5. 库存余额查询。
-6. 高价值酒水审批。
+6. 高价值酒水经营分析。
 7. 安卓库存盘点和拍照留痕。
 8. 酒吧基础报表。
 
@@ -1391,13 +1498,12 @@ P0 暂缓：
 5. 企业微信客户需求关联。
 6. 复杂套餐、会员价、动态低消。
 7. 毛利、损耗、桌台利用率分析。
-8. 存酒到期自动提醒。
 
 ## 14. 验收标准
 
 P0 完成时必须能演示：
 
-1. 平台创建酒吧商户和酒吧门店。
+1. 从已经完成“招商租赁 → 合同 → 商户准入”的酒吧商户中选择并建立酒吧经营扩展，不单独凭空创建酒吧；股权、牌照、场地和资金分别引用平台治理记录，且不得因持股推定牌照主体。
 2. 酒吧商户创建桌台和商品。
 3. 员工用安卓端或后台开台。
 4. 服务员给桌台点酒水。
@@ -1409,12 +1515,21 @@ P0 完成时必须能演示：
 10. 桌台进入待清台，清台后恢复空闲。
 11. 酒吧入场权益和酒水兑换权益可从票务核销结果承接；**赠饮/兑换核销后生成 0 元兑换点单并相应扣减吧台库存（可演示库存减少）**。<!-- 改（2026-06-07）：finding bar-7 -->
 12. 酒水或可追责物品从后厨接收、服务员取走到送达客人能扫码留痕。
-13. **售酒年龄核验由综合体入场的年龄核验环节 18+ 承接，售酒环节继承入场结论、不逐单验龄、不醉酒拒售（2026-06-24 售酒豁免，详见合规 §2）；年龄核验没有开关——设备尚未安装或发生故障时进入人工抽查方式、客人继续进场，不要求工作人员逐人查验证件，但应当对明显疑似未成年的人员进行查验。**<!-- 2026-06-24 售酒豁免：原 finding bar-1 + 合规 C1 门口验龄/拒售口径已下线 -->
-14. **一体机订台 + 订金可演示：创建预订、支付订金、到店抵扣、取消/爽约退或没收，并记录来源/终端/责任人/设备/点位。**<!-- 增（2026-06-07）：finding kiosk-1/2/3 -->
-15. **存酒登记强制采集姓名/昵称、瓶底标签数值、登记照片；取酒核身比对该三项。**<!-- 增（2026-06-07）：finding bar-4/supply-2 -->
+13. **售酒继承综合体入场第二道年龄核验结论、不逐单重复验龄；系统不自动判断醉酒或拦截订单，现场工作人员仍可人工停止继续售酒并记录原因、责任人和处置结果。年龄核验没有开关；设备尚未安装或发生故障时进入人工抽查方式，明显疑似未成年人必须查验。**
+14. **订台 + 定金可演示：自助支付或员工代订免收、定金不抵扣、达低消原路退回、取消/爽约/超时释放、最晚到店、七态、正确爽约责任及员工代订停权闭环，并分别记录下单时间和支付时间。**
+15. **存酒可演示登记、仅手机号检索、短信或官方动态码取酒、四条件人工例外、转让换人、转存、到期提醒与转库存；姓名/昵称不得用于检索。**
 16. **高价值报损、盘点差异、存酒作废可演示同时上传照片和视频双证据并主管复核。**<!-- 增（2026-06-07）：finding supply-3 -->
 17. 全流程写入事件中心（事件命名遵循基准 D4 权威命名）。
 18. 商户只能看自己的桌台、点单、账单。
+19. 转台后服务员提成归属写入新台会话，销售提成归属不变；并台时各服务员既有服务/提成记录分别保留，不合并到一人、不重算历史。
+20. 同一业务会话只绑定一张桌台及一套已发布菜单版本；隐私桌台查看、操作、经理紧急接管分权，接管到期自动撤权；桌台不显示运营计时，也没有计费倒计时、钟点房或按时长收费。
+21. 结账自动选择实付最低的单张优惠券，同额选最早到期；付款前可更换或取消；开始付款即预留券并锁定金额，支付与核销原子成功，失败或超时完整释放。
+22. 正式挂起订单七态可演示；正式下单即出品并扣库存，未结清阻止交班和日结，取消、坏账核销、结清后收入及事后收款分别按 HTML 留痕。
+23. 服务费可逐笔列出收取额、月结应发额、月结扣留额和实际支付清偿额，归属以月结定格为准；小费与服务费分账，且不进入 HTML 明定的四类基数。
+24. 临时沽清换营业日自动恢复，长期下架按主管审批解除，商品置灰显示“已售完”且库存归零不自动沽清；设备班前/班后检查、弱电错峰、照片视频上报和教学逐项确认均可回查。
+25. 平板首次绑定所属酒吧后只服务该店，可从桌台平面图选择台位、读取带图片分类菜单和后台套餐、购物车一次性提交并进入整桌账单；后台可维护分类、图片和套餐。
+26. 邀请函可逐态展示未签发、已签发、成员已确认接受、成员已入场、成员已取消；确认即占名额并绑定本人动态入场码，已入场成员不可移出。
+27. 工作手机与一体机产生的核销、订台、吧台买酒和支付结果可由酒吧侧承接；私人手机不承载现场动作，酒吧前台一体机不得售卖综合体通票，公开大屏不输出可识别个人的数据。
 
 ## 15. 已确认规则和后续排期
 
@@ -1424,33 +1539,33 @@ P0 完成时必须能演示：
 
 | 问题 | 已确认结论 | 依据 |
 |---|---|---|
-| 酒吧账单支付方式 | **P0 支持**客人扫码、平板扫客人付款码、**现金、POS（银行卡）**，均进入账单/日结/对账；现金/POS 记收款人，POS 记流水号（见 §6.10） | finding bar-3、PRD §2/§9/§11 |
+| 酒吧账单支付方式 | **P0 支持**客人扫码、平板扫客人付款码、**现金、POS（银行卡）、储值卡**，均进入账单/日结/对账；支付方式集合按门店统一配置，对该门店所有有收银权人员一致；现金/POS 记收款人，POS 记流水号（见 §6.10） | 三份业务 HTML；PRD §2/§9/§11 |
 | 酒水兑换权益是否自动生成 0 元点单 | **生成** 0 元兑换点单（`order_source=entitlement_redeem`）并触发 `inventory stock movement（movement_type=redeem_consume/order_consume）` 扣减吧台库存（见 §7.8） | finding bar-7 |
 | 视频证据是否强制 | **高价值**报损、盘点差异、存酒作废、账单作废**强制同时上传照片和视频**双证据（`photo_refs`+`video_refs`）；普通点单可选（见 §5.4.4/§5.4.5/§5.3.4/§8） | finding supply-3 |
-| 一体机订台 + 订金是否 P0 | **P0**：`bar_reservations` 与订金规则、`deposit_status`、来源/终端/责任人/设备/点位字段、退没收规则在 P0 落地（见 §6.3、§13.1） | finding kiosk-1/2/3 |
+| 一体机订台 + 定金是否 P0 | **P0**：自助支付、员工代订免收、定金不抵扣、达低消原路退回、七态、最晚到店、自动释放、爽约责任与员工代订停权闭环一并落地（见 §6.3、§13.1） | 三份业务 HTML |
 | 低消是否允许用票务卡座权益抵扣 | **不允许**：票务、通票和卡座预约入场名额不抵扣低消；低消只按酒吧实际点单/套餐/简餐等消费金额计算 | 2026-06-10 总控拍板 |
 | 卡座预约是否可免通票入场 | **允许但限范围**：卡座预定者可按卡座配置名额带客免通票进入预定卡座所在酒吧，不得进入其他酒吧；不参与低消抵扣和票务分账 | 2026-06-10 总控拍板 |
-| 卡座销售提成 | **P0 记录和复核**：新增销售人员岗位；销售人员售卖卡座按卡座消费额 15% 计提，非销售人员按 10% 计提；不含通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单和不可计提调整；实际薪资发放/个税后置 | 2026-06-10 用户新增规则 |
-| 酒吧年龄/人脸核验供应商 | **生产必须配置**：P0 先保留第三方人脸/年龄核验适配器和 mock，正式生产需采购/接入供应商或等效设备后才能标记正式通过 | 2026-06-10 总控拍板 |
+| 卡座销售提成 | **P0 记录和复核**：一张账单只计一次，只归帮客人预订的人；自来客或无销售归属不计销售提成。销售岗/非销售岗按订单实际发生酒吧的费率计提，出厂默认 15%/10%，须同时配置上下限并在下单时锁定版本；固定不计提项为通票及票务权益整类、卡座预约入场名额、赠送成本、退款、免单，券抵扣与现场打折让利金额也不计提 | 三份业务 HTML |
+| 年龄核验边界 | 年龄核验由综合体入场第二道完成；酒吧只继承结果，不在酒吧门口或点酒环节复核，不建设酒吧侧供应商适配器 | 三份业务 HTML |
 | P0 是否强制库存扣减 | **强制但限定范围**：整瓶、按杯标准量、赠饮/酒水兑换、积分兑换、存酒、报损、盘点差异等明确数量场景必须扣减或状态转移；复杂 BOM 后置 | 2026-06-10 库存扣减审计 |
-| 高价值酒水阈值由谁配置 | **已确认（2026-07-28 归一）**：全平台**一个固定金额阈值**在结算配置中心维护（`high_value_thresholds`，项目公司 × 商户），与**物品进货价**比较；物品档案支持 `manual_high_value` 手工标记；阈值或进货价缺失一律按高价值拦下走审批 | supply-chain-inventory PRD §10 / 业务HTML「高价值物品」 |
+| 高价值酒水阈值由谁配置 | 全平台唯一安全阈值，按全平台统一配置，出厂默认 5000 元且须同时配置上下限；与最近一次实际到货价比较，不使用滚动平均进货价。阈值未配置一律按高价值拦下；库房主管及以上可手工标记/取消并留痕 | 业务 HTML「高价值物品」 |
 
 ### 15.2 已确认执行口径
 
 | 问题 | 已确认口径 |
 |---|---|
-| P0 是否做存酒 | P0 做基础存酒登记、查询、取酒和作废留痕；复杂存酒营销、跨店存取和精细运营后置 |
+| P0 是否做存酒 | P0 完整承接登记、仅手机号检索、短信或官方动态码取酒、四条件人工例外、转让换人、转存、到期提醒、到期转库存、作废和跨店汇总展示；存酒只能在存入酒吧取用，不提供跨店取酒或跨店转移库存 |
 | 存酒剩余量按 ml、比例还是瓶数 | P0 支持 `ml/bottle/percent` 三种记录单位；默认优先使用 `bottle` 和 `percent`，高价值或散装场景可用 `ml` |
 | 机器人配送是否进入 P1 | P0 做机器人或人工配送的交接留痕；真实机器人调度和厂家联动进入 P1/P2，取决于厂商 API |
-| 扫码点单是否 P0 | 扫码点单进入 P1；P0 先做服务员点单、吧台点单和一体机/平板辅助下单 |
+| 扫码点单是否 P0 | 纳入可营业闭环：只适用于散台，先付款后出品；非会员可浏览、点单和付款，使用会员权益时才登录或注册 |
 
-## 17. 出品后异常／沽清／pour cost 强制采集／卡座责任链接线（开发设计）`R6 全闭环(2026-06-19)`
+## 16. 出品后异常／沽清／pour cost／卡座责任链接线（开发设计）
 
 > 说明（2026-06-19 新增，R6 全闭环）：本章承接 PRD §10.2 与 `business-decision-log-v0.1.md` R6-D14（退菜/退酒、反结、沽清 86 三项全升 P0；业务确认 2026-06-19 覆盖原"沽清 86 保持 P1"）、R6-D09（现金差异阈值），把"出品后异常/沽清/pour cost 强制采集/卡座责任链接线"四组能力收口为开发设计。
 >
-> **据实标注（核迁移+代码后回填，不重构既有内容）**：经核 `V091__bar_pos_depth.sql`、`BarController`、`BarService`，退菜退酒（`void-item`/`bar_order_item_voids`）、反结（`reopen`/`bar_bills.reopened*`）、沽清 86（`sold-out`/`bar_products`）已先行落库并暴露端点；故 17.1~17.3 为**优先级与状态/事件/验收口径正式收口**，并据实指出仍缺的验收用例与强制项。pour cost 强制采集（17.4）与卡座责任链接线（17.5）为**当前真实开放缺口**：字段/建表已存在但未形成强制/接线，本章给出落地设计。
+> 当前实现与 HTML 目标分列：V091 已提供退菜退酒、反结和单一 `sold-out` 基础端点；沽清两档与显示/触发规则仍缺。`BarOrderService.resolvePourCost` 仍保留 `bar.pour-cost.strict-mode` 与可写 `loss=0` 的 fallback，和 HTML 的物理设备二分相冲突；责任链表已建但 bar 域写入接线仍缺。
 
-### 17.1 退菜退酒（void/return item）`R6-D14`
+### 16.1 退菜退酒（void/return item）`R6-D14`
 
 - **API**：`POST /bars/{bar_id}/orders/{order_id}/void-item`（已暴露，权限 `bar.order_item.void`），对已出品/未出品明细发起撤单。请求含 `void_type`（cancel/return）、`reason`、`return_to_stock`、`idempotency_key`、证据附件。
 - **状态流转**：明细 `served`→`returned`（出品后退酒）；`pending`→`cancelled`（出品前撤单，不计损耗）。落 `bar_order_items.voided` + 流水表 `bar_order_item_voids`（`void_type`/`was_delivered`/`return_to_stock`/`inventory_movement_id`/`reason`/`requested_by_user_id`/`approval_required`）。
@@ -1463,7 +1578,7 @@ P0 完成时必须能演示：
 - **R6-D14 默认值**：`served/delivered` 默认 `return_to_stock=false`（计损耗，需显式勾选回库）；`approval_required` 默认 `true`。
 - **验收**：可对单项明细发起退菜/退酒并记录原因/责任人/是否已出品/是否回库；出品前撤单不计损耗、账单回退；出品后回库则库存回补、否则记损耗；退酒资金回退进账单/日结/对账。**仍缺：端到端 G/W/T 验收用例待补。**
 
-### 17.2 反结（reopenBarBill）`R6-D14`
+### 16.2 反结（reopenBarBill）`R6-D14`
 
 - **API**：`POST /bars/{bar_id}/bills/{bill_id}/reopen`（已暴露，权限 `bar.bill.reopen`），请求体 `BarBillReopenRequest`（`reason` 等）。
 - **状态流转**：账单 `settled`→`reopened`（→重结回 `unpaid`/`partial_paid` 或整单作废）。落 `bar_bills.reopened`/`reopened_by_user_id`/`reopened_at`/`reopen_reason`。
@@ -1473,34 +1588,28 @@ P0 完成时必须能演示：
 - **R6-D14 默认值**：`approval_required=true`（强制主管审批，不可免审批）；默认回退至 `unpaid`/`partial_paid`，整单作废须显式选择+单独审批。
 - **验收**：已结账单在授权+主管审批下可反结并重结/作废；原支付冲正、日结对账同步；全程留痕可举证。**仍缺：端到端 G/W/T 验收用例待补。**
 
-### 17.3 沽清 86（out_of_stock_86）`R6-D14`
+### 16.3 沽清（out_of_stock_86）
 
 - **API**：`POST /bars/{bar_id}/products/{product_id}/sold-out`（已暴露，权限 `bar.product.sold_out`）标记沽清；恢复供应解除。
-- **状态流转**：商品 `on_sale`→`out_of_stock_86`（沽清）→可恢复 `on_sale`。落 `bar_products` 沽清字段。
-- **下单拦截**：沽清后下单服务层拒 `PRODUCT_SOLD_OUT`，平板/下单端即时隐藏或禁选。
-- **事件**：沽清/解除留痕（操作人/时点/触发方式：手工 or 库存阈值）。
+- **两档状态**：临时沽清只在本营业日有效，营业日切换时自动恢复在售；长期下架须主管审批解除后才恢复。当前单一 `sold-out` 端点尚未完整承载两档，属于实现差距。
+- **下单拦截与展示**：沽清后服务层拒绝继续下单，平板/客人扫码菜单置灰显示“已售完”，不得隐藏；已下单未出品部分继续出品和结算。
+- **事件**：沽清与解除均记录档位、操作人、审批人、原因和时点。
 - **权限**：`bar.product.sold_out`（GuardedAction）。
-- **优先级**：~~保持 **P1**（非资金回退）~~ → **升 P0**（见下方业务确认）；手工标记优先，库存阈值自动沽清为配置项（阈值后台可配）。
+- **触发规则**：只允许现场按实际手工发起；库存归零不得自动沽清，也不提供库存阈值自动沽清配置。
 - **业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：沽清 86 **升 P0**（业务确认 R6-D14 三项全升 P0），与退菜退酒/反结同批 P0 交付，需补 G/W/T 验收（标记/解除/下单拦截/恢复全链路）。
-- **验收**：商品标记沽清→下单端禁选/隐藏（下单被 `PRODUCT_SOLD_OUT` 拒）→恢复可解除；标记/解除留痕。
+- **验收**：临时沽清在本营业日置灰显示“已售完”并阻断新单、换营业日自动恢复；长期下架经主管审批后生效并须审批解除；库存归零不自动沽清；全部动作留痕。
 
-### 17.4 pour cost 强制采集（消除"不传则 loss=0"）`R6-D14`
+### 16.4 pour cost 与出酒量
 
-> ✅ **已落地（2026-06-30 回写）**：`BarOrderService.resolvePourCost` 已实现——按杯出品缺 `actual_pour_volume` 时：strict 模式（功能标志）抛 `POUR_VOLUME_REQUIRED`；默认兜底模式按 `standard_pour_volume` 计、`loss=0` 但落 `inventory.loss_exception`（`reason=pour_volume_fallback`、`needs_review=true`）进异常核查，**绝不静默**。下方"真实开放缺口"措辞已失效。
+> 当前实现差距：`bar_products.standard_pour_volume`、`bar_order_items.actual_pour_volume/loss_volume` 已存在，但 `BarOrderService.resolvePourCost` 仍以 `bar.pour-cost.strict-mode` 在“拒绝”和 fallback 之间切换；fallback 可写 `loss=0`，`loss_threshold` 仍落单品。该实现不得作为业务规则。
 
-> **真实开放缺口**：`bar_products.standard_pour_volume`、`bar_order_items.actual_pour_volume`/`loss_volume` 字段均已存在（V091/§6.6/§6.16），但按杯出品当前**依赖请求传入 `actual_pour_volume`，不传则 `loss_volume=0`**（见本文 R7 横幅"仍开放"项与 `JdbcBarRepository`），等于按杯损耗可被静默绕过。R6-D14 要求按杯 pour cost **强制采集**。
+- **有物理采集设备**：实际出酒量必须由设备采集；按标准出酒量扣库存，超出标准的部分记损耗。
+- **无物理采集设备**：必须按标准出酒量配酒，并按该标准计算库存扣减与标准损耗，不得按零损耗记账。
+- **唯一分支条件**：只看该吧台是否配有物理采集设备，不提供 strict/fallback 业务开关，不按商品或请求是否传值选择模式。
+- **损耗阈值**：当期损耗量 ÷ 标准出酒量超过按酒吧配置的安全阈值即转核查工单；出厂默认 5%，须同时配置上下限。阈值从单品迁移到酒吧配置。
+- **验收**：有设备时数据来源为设备；无设备时按标准量扣减并计标准损耗；任一分支均不得生成零损耗兜底记录。
 
-- **状态/流转**：按杯出品明细（商品类型=杯卖 `cup`/by_glass）在**出品/送达确认**节点必须携带 `actual_pour_volume`。
-- **强制采集规则（二选一，后台可配）**：
-  - **拒绝模式**：按杯单未传 `actual_pour_volume` → 出品/送达接口直接拒绝（`POUR_VOLUME_REQUIRED`），不允许放行；
-  - **标准量兜底+异常标记模式**：缺采集时按 `standard_pour_volume` 兜底记账，但**标记 `pour_volume_pending=true`（待补）并生成补采集异常事件**，进入异常核查，禁止静默 `loss=0`。
-- **损耗计算**：`loss_volume = actual_pour_volume − standard_pour_volume`（超标准记损耗），超 `loss_threshold` 生成损耗异常事件（沿用 §6.6/§9 既有损耗异常口径）。
-- **权限**：兜底/待补补采集为受控动作，补采集修订须留痕操作人。
-- **事件**：按杯缺采集 → `bar.pour_volume_missing`（待补/兜底标记）；补采集完成 → 损耗重算并沿用既有损耗异常事件。
-- **R6-D14 默认值**：默认采用**拒绝模式**（从严，强制采集）；门店可配置切换为"标准量兜底+异常标记"，但不得回到"不传则 loss=0"的静默口径。
-- **验收**：按杯单缺 `actual_pour_volume` 被拒绝（`POUR_VOLUME_REQUIRED`）**或**强制走标准量兜底并打 `pour_volume_pending` 异常标记（二者其一，依配置）；任一路径都不得出现按杯单 `loss_volume=0` 且无标记的静默放行。
-
-### 17.5 卡座责任链接线（service_responsibility_records V059）`R6-D14`
+### 16.5 卡座责任链接线（service_responsibility_records V059）`R6-D14`
 
 > **真实开放缺口**：`service_responsibility_records`（V059）**建表已存在**（字段含 `primary_service_staff_id`/`assist_staff_ids`/`sales_staff_id`/`first_handler_staff_id`/`assigned_by`/`shift_assignment_id`/`assigned_event_id`/`status`），但当前仅被 evidence 域 `JdbcTraceabilityRepository` 引用，**bar 域无 Controller/Service 写入接入点**——开台绑定主责、加单人、送达人、换人等责任链动作未落表。本节补接线设计。
 
@@ -1512,14 +1621,22 @@ P0 完成时必须能演示：
   - **换人**：服务责任变更 → 旧记录 `status=changed`、新建责任记录，记 `assigned_by`。
 - **状态流转**：`active`→`changed`（换人）/`completed`（关台结束服务，落 `service_end_at`）/`cancelled`。
 - **权限**：责任指派/变更为受控动作（指派权限），换人须记 `assigned_by`/审批留痕。
-- **事件**：`table.service_assigned`（指派/主责绑定）、`table.service_transferred`（换人，与既有 §9.1 `table.service_changed` 口径对齐/衔接），与 F2 统一异常链（`first_handler_staff_id`/`exception_id`）衔接，异常首响落同一责任链。
+- **事件**：`table.service_assigned`（指派/主责绑定）、`table.service_changed`（换人），与 F2 统一异常链（`first_handler_staff_id`/`exception_id`）衔接，异常首响落同一责任链。
 - **R6-D14 默认值**：开台默认必须绑定主责服务员（无主责不允许进入服务态）；换人默认留旧记录 `changed` 不物理删除（留痕优先）。
 - **验收**：开台绑定主责写入 `service_responsibility_records` 可回查；加单/送达/换人在责任链留痕；换人后旧记录 `changed`、新记录 `active`；异常首响 `first_handler_staff_id` 与责任链/异常 `exception_id` 关联可查。
+- **服务员提成归属验收**：转台在同一事务内追加新台会话归属并保留原记录；并台可逐条回查各服务员原有服务/提成记录，任何记录都未被合并到他人名下、未被覆盖或重算。此验收只验证已批准的归属关系，不引入费率、基数、收款、结算或税务规则。
 
-## 16. 变更日志
+## 17. 变更日志
+
+> 本表仅记录文档演进，不是现行实现合同。凡旧条目与 §0—§16 或三份业务 HTML 冲突，均已被 2026-09-01 修订覆盖，不得继续作为开发或验收依据。
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-09-01 | 改/增 | §1-§2、§6.3a、§6.6、§10.2、§14、§17 | 版本升 V0.08；补商户准入与治理边界、邀请函五态、图形化 POS 和终端接口；按 James 裁决删除父邀请 `revoked` 状态、吊销接口和变更记录“/吊销”，并删除无出处离线能力整行 | BSM「酒吧平板/工作手机」「触摸屏一体机」「酒吧管理」及桌台菜单条；ENUM「订卡邀请函状态」「合作模式」；PGM 酒吧治理现文；James 2026-09-01 裁决 |
+| 2026-09-01 | 改 | 变更日志 | 版本升 V0.07；把上一条未进入入口注册表的条目名引用改为三份业务 HTML 现文引用，不改业务内容 | `verify:entry-anchors` |
+| 2026-09-01 | 改 | §0、§5.2.4、§6.9 | 版本升 V0.06；正式挂起订单七态恢复为 HTML 原文，并把英码明确为逐态机读映射，删除无出处的“待审批、部分结清、已逾期”状态 | 三份业务 HTML 现文；M06 Grok Build 修复切片审计 F-01 |
+| 2026-09-01 | 改 | §2.1、§3.1、§4.1、§5.2.1、§6.1、§6.3、§6.6、§6.7、§6.9A-§6.9B、§6.16、§7.7、§10.1、§11、§13-§16 | 版本升 V0.05；切片复核修净酒吧不逐单验龄与现场人工停止售酒边界；异常改为恢复进入异常前状态；补费率版本锁定字段；把损耗率阈值从单品目标迁至酒吧配置并修正损耗公式；为已批准的服务员提成增加仅限归属关系的最小技术承载与验收，不增加计算或发放规则 | 三份业务 HTML；James 2026-09-01 服务员提成原句 |
+| 2026-09-01 | 改 | 全文 | 版本升 V0.04；按 M06 双席审计修正定金、低消、桌台、存酒、支付、账单、提成、高价值、验龄、沽清、pour cost 与实现事实；James 批准的服务员提成转台/并台归属同步三份 HTML；切片自审清除旧提成排除项，统一存酒 P0、储值卡、高价值复核与到期提醒的优先级，并消除提成基数重复扣减歧义；按 James 裁决删除无出处的“复杂多人分摊、阶梯提成、活动倍率进入 P1”切片 | 三份业务 HTML；M06 审计与 James 裁决 |
 | 2026-06-07 | 改 | §2.1 | 酒吧入场补门口年龄核验与未成年/醉酒拒售拒入场 | finding bar-1、合规 C1 |
 | 2026-06-07 | 改 | §4.1 桌台状态 | 对齐 D7 权威 6 态（idle/reserved/opened/pending_clear/disabled/abnormal） | finding bar-5、基准 D7 |
 | 2026-06-07 | 改 | §4.4 账单状态 | 对齐 D7 权威 6 态（unpaid/partial_paid/settled/partial_refunded/refunded/abnormal） | finding bar-5、基准 D7 |
@@ -1554,7 +1671,7 @@ P0 完成时必须能演示：
 | 2026-06-08 三轮收口 | 改 | §9.1 桌台事件 | `bar.reservation.created`（三段）改为权威名 `reservation.created`（§4.1.2 已登记替代三段写法），并在 §9 命名统一说明补登该改名 | finding event-consumers-6、基准 D4 |
 | 2026-06-08 三轮收口 | 改 | §6.3/§6.4/§6.11 `customer_id` | 补"外键指向 foundation `customers.id`（散客无会员时可空，核身用 `customer_phone`/`customer_name_or_nickname`）"注释，显式声明 FK 目标 | finding newtable-fk-5 |
 | 2026-06-18 R5 回填 | 增 | R5 横幅后「R5-D11 订台定金现状与收口」 | 把订台定金按"现状（createReservation 硬编码 deposit=0/not_required，到店抵扣/退没收空转）→目标（P0 真实记录定金+到店抵扣+取消退没收，退没收时限后台可配）→候选验收"三段式收敛，并标注订台/定金 UI 验收用例需补 | R5-D11、2026-06-18 二轮业务裁决 |
-| 2026-06-19 `R6 全闭环` | 增 | §17 出品后异常/沽清/pour cost 强制采集/卡座责任链接线 | 承接 R6-D14/R6-D09：17.1 退菜退酒（served→returned、库存回库/损耗规则、bar.order.item_returned）、17.2 反结（settled→reopened、bar.bill_reopened、财务冲正联动）、17.3 沽清 86、17.4 pour cost 强制采集（缺 actual_pour_volume 拒绝或标准量兜底+异常标记，消除"不传则 loss=0"）、17.5 卡座责任链接线（service_responsibility_records V059 补 Controller/接入点，table.service_assigned/transferred，与 F2 异常链衔接）；据实标注 V091 退菜退酒/反结/沽清已先行落库，pour cost/责任链为真实开放缺口 | R6-D14、R6-D09（business-decision-log）、V059、V091 |
+| 2026-09-01 | 改 | §16 出品后异常/沽清/pour cost/卡座责任链接线 | 沽清改为临时/长期两档、置灰不隐藏且库存归零不自动触发；pour cost 取消 strict/fallback 业务开关，按物理设备二分且无设备不得记零损耗；责任链事件统一为 `table.service_changed` | 三份业务 HTML；M06 审计 |
 | 2026-06-19 R5业务HTML缺口审计 F4 | 增/改 | §4.5 / §5.3.1 / §5.3.2 / §5.3.3 / §5.3.3a | §4.5 状态表补 `disputed` 争议态；§5.3.1 补散客 `customer_id` 可空+`customer_phone` 核身；§5.3.2 取酒核身强表述"瓶底标签数值+姓名/昵称必须比对通过，不止手机号+验证码"；§5.3.3 补 `transferSavedBottle` 方法名；新增 §5.3.3a 争议处置入口；口径以 ticketing §10.4.1 为权威 | F4 存酒核身契约对齐，与文件1口径一致 |
 | 2026-06-23 F-TXN-05 赠菜扣提成 | 增/改 | §6.8 bar_order_items / §6.9A.2 提成计算 | `bar_order_items` 增 `is_gift`（V153，§6.8 既有逻辑列之物理落地）承载随单赠送标记：下单/加菜 `is_gift=true` 明细对客 `amount_cent=0`（不计 `subtotal`）、单价保留售价，出品/撤单/回滚等明细重建均透传；`calculateCommission` 在 `subtotal − discount − 免退净额` 基础上再按赠送项商品内部结算价（V152 `internal_settlement_price_cent`）× 数量扣除 `giftDeduction`，赠送项成本不计提成；未录内部价不扣（向后兼容）。解除 §6.9A.2 旧 BLOCKED 标注 | F-TXN-05（赠品按内部价从提成扣除；业主 2026-06-22 确认口径）；V152 内部结算价基 + V153 赠送标记 |
-| 2026-06-23 订卡邀请函 | 增 | §6.3a 订卡邀请函 / §6.3 bar_reservations / 新子表 bar_reservation_invitation_members | 扩展卡座预订（不另起独立实体）：`bar_reservations` 增 invitation_token/signature/capacity/status/issued_at（V155），新子表承载持函人 + 确认朋友成员（confirmed→entered，UNIQUE(reservation,identifier)）；两步=朋友客人端确认占名额（`POST /customer/bar-invitations/confirm`，token 鉴权）→门口扫码入场（`POST /bar/reservations/{id}/invitation/entry-verify`，复用 bar.table.guest_checkin），已确认+已入场≤卡座 capacity；签发/吊销 staff `bar.reservation.invitation.manage`；持函免通票仅进定卡吧；订卡消费正常计提成 | 业主 2026-06-22 口述 + 2026-06-23 拍板（两步确认 + 连客人端全链）；V155 |
+| 2026-06-23 订卡邀请函 | 增 | §6.3a 订卡邀请函 / §6.3 bar_reservations / 新子表 bar_reservation_invitation_members | 扩展卡座预订（不另起独立实体）：`bar_reservations` 增 invitation_token/signature/capacity/status/issued_at（V155），新子表承载持函人 + 确认朋友成员（confirmed→entered，UNIQUE(reservation,identifier)）；两步=朋友客人端确认占名额（`POST /customer/bar-invitations/confirm`，token 鉴权）→门口扫码入场（`POST /bar/reservations/{id}/invitation/entry-verify`，复用 bar.table.guest_checkin），已确认+已入场≤卡座 capacity；签发 staff `bar.reservation.invitation.manage`；持函免通票仅进定卡吧；订卡消费正常计提成 | 业主 2026-06-22 口述 + 2026-06-23 拍板（两步确认 + 连客人端全链）；V155 |
