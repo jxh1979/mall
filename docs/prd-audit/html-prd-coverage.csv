@@ -181,7 +181,7 @@ PGM-0037,绑定空间、业态、合同和经营范围,docs/platform-governance-
 PGM-0038,把一个商户的“经营对象、运营主体、合同主体,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,,,,,,03-governance-and-common
 PGM-0039,合作模式分六类,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,P1,GOV-002,RESOLVED: 平台治理 PRD 只列五种合作模式，缺少“其他”及备注要求。,APPLIED: 校正为自营、租赁、联营、代运营、服务商接入、其他六类。,,03-governance-and-common
 PGM-0040,招商获客前链,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,,,,,,03-governance-and-common
-PGM-0041,招商运营细则（已确认）,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,,,,,,03-governance-and-common
+PGM-0041,招商运营细则（已确认）,docs/platform-governance-prd-v0.1.md;docs/leasing-acquisition-prd-v1.0.md,§12A 突发事件/客户关怀/楼宇保安（docs/platform-governance-prd-v0.1.md）；§2-§6 线索/意向/品牌库/跟进/签约转商户（docs/leasing-acquisition-prd-v1.0.md）,FULL,,,,,,05-realestate-leasing-building-supply
 PGM-0042,支持酒吧和游乐/乐园商户未来作为独立系统对外使用,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,,,,,,03-governance-and-common
 PGM-0043,业务边界·商户侧在授权业务范围内全开放,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,,,,,,03-governance-and-common
 PGM-0044,商户的客人属于该商户，商户可以查看本商户客人的全部对接信息,docs/platform-governance-prd-v0.1.md,§5-§7 治理对象与合同准入,FULL,,,,,,03-governance-and-common
