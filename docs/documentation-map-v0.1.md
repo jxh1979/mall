@@ -1,4 +1,6 @@
-# 文档地图 V0.02
+# 文档地图 V0.03
+
+> 2026-09-01 M01 全量复审：补登当前正式集团治理重建 PRD；其余导航范围不变。
 
 > 文档goal(2026-06-20)：本文档按类别列出 `docs/` 下**当前有效**文档（文件名 + 一句话用途 + 现行/部分过期/归档标注），作为第一入口 `docs/00-current-effective-document-entry-v0.1.md` 的导航补充。仅列**真实存在**的文件（经 `ls docs/` 实证）。会员、成长值、积分、兑换券和商户积分结算的产品细化见三份领域 PRD，最终解释权仍为三份业务 HTML；PRD、其他文档和后台配置均不得覆盖 HTML。其他冲突按 `00-current-effective-document-entry-v0.1.md` 的现行入口处理。
 >
@@ -39,6 +41,7 @@
 | `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值入口、连续签到、生日营销权益边界。 | 现行·边界文档 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
 | `platform-governance-prd-v0.1.md` / `platform-governance-product-spec-v0.2.md` | 平台治理 PRD / 产品规格 | 现行 |
+| `group-governance-rebuild-prd-v1.0.md` | 集团视图、跨项目汇总下钻、职位角色装配与高危授权实现对齐 PRD | 现行 |
 | `evidence-risk-control-product-prd-v0.1.md` | 证据留痕与风控 PRD | 现行 |
 | `terminal-page-product-prd-v0.1.md` / `web-mobile-app-terminal-extension-product-prd-v0.1.md` | 终端页面 / Web-App-终端扩展 PRD | 现行 |
 | `operation-traceability-and-terminal-switch-prd-v0.1.md` | 操作留痕与终端开关 PRD | 现行 |

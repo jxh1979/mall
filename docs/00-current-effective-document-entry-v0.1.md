@@ -1,4 +1,4 @@
-# 当前有效文档入口与开发准入清单 V0.1
+# 当前有效文档入口与开发准入清单 V0.02
 
 ## 1. 文档定位
 
@@ -95,8 +95,7 @@
 | 生产证据回填优先级看板 | `docs/production-evidence-backfill-priority-v0.1.md`、`docs/production-readiness-evidence/production-evidence-backfill-priority-latest.json` |
 | 生产证据回填执行台账 | `docs/production-evidence-backfill-execution-ledger-v0.1.md`、`docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.json`、`docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.csv` |
 | 生产证据 P0 快速回填快照 | `docs/production-evidence-p0-quickstart-v0.1.md`、`docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.json`、`docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.csv`、`npm run verify:production-evidence-p0-quickstart` |
-| 生产证据责任组执行包 | `docs/production-evidence-owner-execution-packets-v0.1.md`、`docs/production-readiness-evidence/production-evidence-owner-execution-packets-latest.json`、`docs/production-readiness-evidence/owner-execution-packets/*.md`、`npm run verify:production-evidence-owner-execution-packets
-npm run verify:production-evidence-crosslinks` |
+| 生产证据责任组执行包 | `docs/production-evidence-owner-execution-packets-v0.1.md`、`docs/production-readiness-evidence/production-evidence-owner-execution-packets-latest.json`、`docs/production-readiness-evidence/owner-execution-packets/*.md`、`npm run verify:production-evidence-owner-execution-packets`、`npm run verify:production-evidence-crosslinks` |
 | 生产证据 manifest 草稿准备工具 | `tools/prepare-production-evidence-manifest-drafts.mjs`、`tools/verify-production-evidence-draft-prep-fixtures.mjs`、`npm run prepare:production-evidence-drafts`、`npm run verify:production-evidence-draft-prep`、`npm run verify:production-evidence-draft-prep-fixtures` |
 | 生产闭环缺口总报告 | `docs/production-evidence-closure-gap-report-v0.1.md`、`npm run docs:production-closure-gap-reports`、`npm run verify:production-closure-gap-reports` |
 | 当前暂存交接清单 | `docs/current-staged-handoff-manifest-v0.1.md`、`docs/current-staged-handoff-manifest-latest.json`、`npm run verify:staged-handoff-manifest` |
@@ -119,12 +118,12 @@ npm run verify:production-evidence-crosslinks` |
 | 游乐安全 | P0 强制开放前阻断式安全巡检；安全严重度为提醒、警告、阻断、重大四档；当日无合格巡检或存在未复检的「阻断」项即拒绝核销；整改复检后须主管确认才能恢复营业（禁止巡检员单人闭环）；全程留痕 |
 | 一体机 | 统一终端码 `kiosk`；全体一体机统一具备权益展示、订台、吧台买酒、游乐状态和定期检修记录五项基础能力，通过叠加式售票能力开关 `ticketing_enabled` 区分是否允许授权服务人员辅助到店客人购票 |
 | 启用售票能力的一体机 | 承担授权服务人员辅助到店购票、订单查询职责（**门票为动态二维码，不提供取票功能**）；绑定酒吧门口/前台时只能售卖本酒吧单店门票，不得售卖综合体通票（依据 BSM「启用售票能力的一体机」条；DEC-R7-05） |
-| 卡座提成 | 一张账单的提成只计一次、只归帮该客人预订的人；自来客不产生销售提成；协助服务、加单、送达等经手人只留痕不提成；存在预订归属时，按员工档案是否设有「销售岗」标识判定费率；费率可配（业务参数，按酒吧可配，出厂默认销售 15%、非销售 10%，须同时配置上下限），按可计提消费额计；不计提通票及票务权益整类（不论其中权益收费或免费、由谁出资）、卡座入场名额、赠送成本、退款、免单 |
+| 卡座提成 | 一张账单的销售提成只计一次、只归帮该客人预订的人；自来客不产生销售提成；协助服务、加单、送达等其他经手人只留责任痕迹、不产生销售提成；服务员提成跟服务责任链和台位会话走：转台后记到新台会话，销售提成仍按原归属不变；并台时各服务员既有服务/提成记录分别保留，不把他人提成合并到一人，也不重算历史提成；存在预订归属时，按员工档案是否设有「销售岗」标识判定销售提成费率；费率可配（业务参数，按酒吧可配，出厂默认销售 15%、非销售 10%，须同时配置上下限），按可计提消费额计；不计销售提成：通票及票务权益整类（不论其中权益收费或免费、由谁出资）、卡座入场名额、赠送成本、退款、免单 |
 | 卡座续卡/续时 | 平台不提供续卡、续时类产品。拆单、合单、转台、并台、拆台和撤销转台按业务 HTML 留痕，不作为续卡或续时产品 |
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
-本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 surefire 现有报告 862 tests / OpenAPI 720 operations / Flyway 最新 V385 / P0 契约与安全基线以 `npm run verify:*` 输出为准，2026-08-03 刷新）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。<!-- 文档goal(2026-06-30)：事实基线刷新为现有 surefire 报告 1606 tests、OpenAPI 516 ops、Flyway V182（179 个迁移）；不声明刚完成全量验证 -->
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-09-01 实测 OpenAPI 720 operations、Flyway 最新 V385；当前工作树无 `backend/target/surefire-reports`，故不声明当前测试数量。
 
 | 交付物 | 入口 |
 |---|---|
@@ -158,7 +157,7 @@ npm run verify:production-evidence-crosslinks` |
 <!-- 文档goal(2026-06-20)：新增 §2.3，登记 R6/R7 决策批次与本会话新功能落地，刷新事实基线 -->
 ## 2.3 R6/R7 决策批次与本会话新功能落地登记（2026-06-20）`文档goal(2026-06-20)`
 
-本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。事实基线刷新为：**本轮 2026-08-03 取证 Flyway 最新 V385、OpenAPI 720 operations、后端 surefire 现有报告 862 tests**；各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
+本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-09-01 取证为 Flyway 最新 V385、OpenAPI 720 operations；当前工作树无后端 surefire 报告，不声明当前测试数量。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
 
 ### 决策批次登记
 
@@ -455,6 +454,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-09-01 | V0.02 M01 全量复审修复 | 区分销售提成与服务员提成；修复生产证据表格裂行；删除互相冲突且当前不可复核的 surefire 硬编码快照，保留实时验证口径 |
 | 2026-08-29 | V0.1 M01 FIX 批次 9 / fix-006 | 代码/决策日志/拍板入口只导航；CNY 与付费会员废止未入 HTML 不取得效力；ticket_eligibility_rules 等降为未立法实现证据 |
 | 2026-08-29 | V0.1 M01 FIX 批次 5 | 后部 S0 只导航不裁决：去掉「唯一裁决入口」「冲突时上游：本文档自身」、baseline「跨域规则裁决」、决策日志「业务决策证据」；业务口径冲突只以三份 HTML 为准 |
 | 2026-08-27 | V0.1 P2 M01 第二整轮 | 三份领域 PRD 不再称「新权威」；HTML 对全部业务口径拥有最终解释权，Phase 4 只读审计不得改写 HTML |
