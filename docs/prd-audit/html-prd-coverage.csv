@@ -1242,3 +1242,4 @@ BEQ-0174,合同状态,docs/contract-date-compliance-field-granularity-options-20
 BSM-0798,后续增强能力,docs/amusement-business-operations-product-prd-v0.1.md,§10 P1/P2 与 James 2026-09-01 逐句批准边界,FULL,,,,,,06-amusement-terminal-thirdparty-data
 PGM-0260,上述能力必须按综合体、游乐公司、游乐商户、项目、员工与设备权限隔离数据,docs/amusement-operations-development-design.md,§14 P0/P1/P2 开发顺序与 James 2026-09-01 逐句批准边界,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BEQ-0176,游乐增强阶段,docs/amusement-p0-safety-inspection-spec-v0.1.md,§2 P0 范围边界·后续能力,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0799,大屏叫号,docs/business-systems-breakdown.md,§2.6 排队·大屏叫号,FULL,,,,,,06-amusement-terminal-thirdparty-data
