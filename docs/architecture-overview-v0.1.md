@@ -1,4 +1,4 @@
-# 架构总览 / Architecture Overview V0.1
+# 架构总览 / Architecture Overview V0.05
 
 > 文档goalP2(2026-06-20)：本文为综合体管理系统的架构总览与架构图集（Mermaid，GitHub 可渲染）。**业务名称、子系统入口与终端边界以三份 HTML（业务系统地图、平台治理地图、业务枚举速查表）中经用户批准的内容为准**；发生冲突时 PRD、其他文档、代码包名、OpenAPI 契约、后台配置、设计和实现均不得覆盖。下列 Java 包、前端壳与 `openapi-p0` 仅为实现分包与工程契约，不是覆盖 HTML 的业务总图。新功能承接见 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`。
 
@@ -18,7 +18,7 @@ graph TB
     WEB["前端 Web<br/>(业务人员；客人无网页端)"]
     ANDROID["Android 终端<br/>(工作手机/平板/kiosk)"]
     API["后端 API<br/>Java 21 + Spring Boot 4"]
-    DB[("PostgreSQL<br/>Flyway V001..V151")]
+    DB[("PostgreSQL<br/>Flyway 363 个迁移，最高 V385")]
   end
 
   subgraph External["外部依赖 (能力开关默认 off + mock)"]
@@ -60,11 +60,11 @@ graph TB
   end
 
   subgraph Biz["业务域 Business Domains"]
-    TKT["ticketing<br/>票务/权益/核销/积分引擎"]
+    TKT["ticketing<br/>票务/权益/核销/事实提交"]
     BAR["bar<br/>卡座/点酒/账单/存酒/班结/void冲销"]
     INV["inventory<br/>供应链/库存/盘点差异/追溯交接"]
     AMU["amusement<br/>项目/场次/容量/超容/安全巡检"]
-    CUS["customer<br/>会员/钱包/积分/客人端"]
+    CUS["customer<br/>会员/钱包/积分/成长值/客人端"]
     MB["merchantbilling<br/>商户账单/租金/押金/物业费"]
     MS["merchantservice<br/>物业工单/SLA"]
   end
@@ -90,19 +90,19 @@ graph TB
   AMU --> TKT
 ```
 
-> 下列为代码包实证（实现细化，**不是**业务子系统闭集，不得覆盖 MAP/GOV 入口）：`access` / `amusement` / `analytics` / `auth` / `bar` / `common` / `compliance` / `customer` / `evidence` / `finance` / `floorplan` / `gate` / `governance` / `integration` / `inventory` / `merchantbilling` / `merchantservice` / `ops` / `system` / `terminal` / `ticketing`。
+> 下列仅为部分代码包示例（实现细化，**非穷举**，不是业务子系统闭集，不得覆盖 MAP/GOV 入口）：`access` / `amusement` / `analytics` / `auth` / `bar` / `common` / `compliance` / `customer` / `evidence` / `finance` / `floorplan` / `gate` / `governance` / `integration` / `inventory` / `merchantbilling` / `merchantservice` / `ops` / `system` / `terminal` / `ticketing`。
 
 ## 3. 分层与数据流（Layering & Request Flow）
 
 ```mermaid
 graph LR
-  UI["前端/终端"] -->|"REST + Cookie(后台Web,HttpOnly)/Bearer(设备端)"| CTRL["Controller<br/>(29 个)"]
-  CTRL -->|"@GuardedAction<br/>权限+终端开关+准入闸"| SVC["Service<br/>(60 个)"]
+  UI["前端/终端"] -->|"REST + Cookie(后台Web,HttpOnly)/Bearer(设备端)"| CTRL["Controller<br/>(55 个)"]
+  CTRL -->|"@GuardedAction<br/>权限+终端开关+准入闸"| SVC["Service<br/>(95 个)"]
   SVC -->|"JdbcTemplate<br/>scope 注入"| REPO["Repository (JDBC)"]
   REPO --> PG[("PostgreSQL")]
   SVC -->|"事件"| AUD["audit_events / risk_alerts"]
   SVC -. "幂等键" .-> IDEM["IdempotencyService"]
-  CTRL -. "OpenAPI 契约" .-> OAS["openapi-p0 (413 op)"]
+  CTRL -. "OpenAPI 契约" .-> OAS["openapi-p0 (720 op)"]
 ```
 
 每个写动作经 `@GuardedAction`（权限点 + 终端开关 + 准入闸 AdmissionGuard）→ Service（业务+幂等+留痕）→ JDBC Repository（强制注入 merchant_id/project_id scope）→ PostgreSQL，并发布审计事件；异常进统一责任链 `risk_alerts`。
@@ -113,15 +113,20 @@ graph LR
 sequenceDiagram
   participant G as 客人(customer端)
   participant T as ticketing
-  participant C as customer(积分)
+  participant C as customer(积分/成长值)
   participant W as 工作手机
   participant F as finance
   participant E as evidence
   G->>T: 下单购票 + 支付
-  T->>C: 履约完成后产生积分和成长值（退款期内冻结）
+  T->>C: 提交支付成功事实
+  C->>C: 按票务积分规则计算并进入待确认
   G->>W: 出示验票二维码(防伪刷新)
   W->>T: 核销 verify
-  T->>C: 退款期结束后积分转为可用
+  T->>C: 提交实际核销事实
+  C->>C: 按票务成长值规则计算
+  T->>C: 提交退款期结束且对应票款未退款事实
+  C->>C: 积分转为可用
+  Note over T,C: 未使用或到期未用不影响积分确认，<br/>但不产生成长值
   T->>F: 收入进日结/对账
   T->>E: 核销留痕 + 异常→risk_alerts
   Note over T,F: 退款/冲正形成反向结算，<br/>记录财务、积分、成长值和权益冲正
@@ -132,7 +137,7 @@ sequenceDiagram
 ```mermaid
 graph TB
   MAIN["main.tsx<br/>(路径前缀分流,默认 admin)"]
-  MAIN --> ADM["AdminApp<br/>管理后台(33页,路由级 lazy 分包)"]
+  MAIN --> ADM["AdminApp<br/>管理后台(90页,路由级 lazy 分包)"]
   CUST["客人购票/订台/积分在 App 或小程序<br/>（客人无网页端）"]
   ADM --> APIc["后端 REST"]
   CUST --> APIc
@@ -141,9 +146,9 @@ graph TB
 
 ## 6. 交付闸口与验证（Delivery Gates）
 
-`verify:delivery-gates`（约 50 子闸聚合）+ `verify:p0-contract` + `verify:tenant-isolation --strict` + 后端 `mvn test`（1412）+ 前端 `e2e`（42）+ semgrep。生产上线由 `verify:production-blockers` 把关（外部依赖未到位即阻断）。
+`verify:delivery-gates`（约 50 子闸聚合）+ `verify:p0-contract` + `verify:tenant-isolation --strict` + 后端 `mvn test` + 前端 `e2e`（42）+ semgrep。生产上线由 `verify:production-blockers` 把关（外部依赖未到位即阻断）。
 
 > 📌 **前端测试路径口径**：前端单测采用 **colocated 范式**——测试文件与被测源码同目录（`apps/web/src/**/*.test.tsx`，如 `apps/web/src/admin/pages/*.test.tsx`），由 vitest 就地发现。**`apps/web/tests` 不是正式测试目录**（当前为空 0 文件）；任何按 `apps/web/tests` 路径找前端测试而得出"无测试"的审计结论均为路径误判，应改查 colocated 的 `src/**/*.test.tsx`。前端 `e2e`（Playwright）另见 `playwright*.config.ts`。
 
 ---
-版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 状态：现行 ｜ 配套：`README.md` / `README.en.md` / `docs/documentation-map-v0.1.md`
+版本：V0.05 ｜ 最后更新：2026-09-01 ｜ 状态：现行 ｜ 配套：`README.md` / `README.en.md` / `docs/documentation-map-v0.1.md`
