@@ -1,9 +1,9 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.14
+文档版本：V0.15
 状态：进行中
 迁移日期：2026-07-27
-当前事实源：三份立法 HTML 以 `freeze_commit` `61f4fbb1be2fae9df8fcbb48f1cb2af9bb53ec68` 原始字节为基线，叠加 James 在 M02 至 M07 点名批准的精确新增句；M02 至 M07 当前字节见本文件末节。
+当前事实源：三份立法 HTML 以 `freeze_commit` `61f4fbb1be2fae9df8fcbb48f1cb2af9bb53ec68` 原始字节为基线，叠加 James 在 M02 至 M08 点名批准的精确新增句；M02 至 M08 当前字节见本文件末节。
 
 ## 当前使用规则
 
@@ -2475,3 +2475,25 @@
 | James 亲口批准 | `大屏叫号` | 业务系统地图的游乐“主要功能” |
 
 **同步面边界（M02）**：本批只在 `business-system-map-for-operations-v0.1.html` 的游乐“主要功能”增加可见原句 `大屏叫号`，并把该 HTML 的文件版本注释递增为 V0.03；不扩写为电子排队号、远程取号、到场保留时间或过号机制，不改 `platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html` 及业务系统地图其他业务正文。`entry-registry.csv`、`authority-rule-ledger.csv`、`html-prd-coverage.csv` 只同步这一原句及其既有行号位移；本台账作为 `verify:html-ledger-sync` 要求的机械治理记录，只补裁决证据。
+
+---
+
+## M08 楼宇租赁房产 HTML 点名原句同步（2026-09-01）
+
+本节只登记 James 点名批准写入 HTML 的原句，不扩写、不改写，不新增业务规则。
+
+| 裁决 | 写入 HTML 的精确原句 | 落点 |
+|---|---|---|
+| James 亲口批准 | `，以及由拉黑前既有线索新建意向` | `docs/platform-governance-map-for-operations-v0.1.html` |
+| James 亲口批准 | `确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。` | `docs/platform-governance-map-for-operations-v0.1.html` |
+| James 亲口批准 | `招商线索在已签约前，可从待跟进、跟进中、已转意向或洽谈中转为已流失或已搁置；转换时必须填写原因，已签约后不得回退至未签约状态。` | `docs/platform-governance-map-for-operations-v0.1.html` |
+
+**同步面边界（M08）**：本批只把上述三条获批原句写入 `docs/platform-governance-map-for-operations-v0.1.html`，并机械同步同一 PGM 条目的入口注册表、规则账本和承接矩阵；不修改 A/B/C 的业务正文。
+
+### 2026-09-02 二次逐句裁决
+
+James 逐字批准的完整替换句：
+
+`黑名单品牌拦截同品牌新线索，以及由拉黑前既有线索新建意向。确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。`
+
+**同步面边界（M08 二次）**：只修改 `docs/platform-governance-map-for-operations-v0.1.html`，并机械同步 `docs/prd-audit/authority-rule-ledger.csv` 的 PGM-0041 `source_text` 与 `docs/prd-audit/entry-registry.csv` 的 PGM-E0118 `entry_body`；行锚保持 502，不修改承接矩阵及 A/B/C。
