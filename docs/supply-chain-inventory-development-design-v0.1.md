@@ -1,6 +1,6 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.04
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.05
 
-> 版本：V0.04 ｜ 最后更新：2026-09-03 ｜ 覆盖迁移基线：V385 ｜ 状态：现行
+> 版本：V0.05 ｜ 最后更新：2026-09-03 ｜ 覆盖迁移基线：V385 ｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -303,7 +303,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   A["库管创建盘点/报损/报溢单"] --> B["录入物品、批次、数量、原因"]
-  B --> C{"是否高价值？最近一次实际到货价 >= 全平台阈值 或 manual_high_value=true"}
+  B --> C{"是否高价值？最近一次实际到货价 > 全平台阈值 或 manual_high_value=true"}
   C -- 是 --> D["强制同时上传照片和视频(双证据)，建域内 inventory_high_value_reviews(pending)"]
   C -- 否 --> E["按普通流程，证据可选"]
   D --> D1["主管在库存域内复核 approve/reject（不走 supervisor_review）"]
