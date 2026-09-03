@@ -1,8 +1,10 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.1
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.05
 
-> 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 版本：V0.05 ｜ 最后更新：2026-09-03 ｜ 覆盖迁移基线：V385 ｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
+> **M09 现行口径（2026-09-03）：** 三份业务 HTML 是业务真源；本文细化但不得新增业务。迁移、Java、OpenAPI、页面和测试只证明当前实现事实，不得反向定义业务规则。下文带“建议”“任务”或未标已落地的结构/API 均为目标设计或缺口，不代表当前实现。R7/R5 横幅仅作历史留痕，现行实现以本轮逐项标注为准。
 
 > **⚠️ R7 复审标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > 本会话仅"扫码交接全链"已 P0 落库（V074），已上修；供应合同三模式/采购周期/结构化库房/高价值复核/唯一码主数据等 r5-spec-T6 项经核验**仍零命中**，保持开放。
@@ -17,11 +19,11 @@
 > - **候选验收口径**：采购全状态可流转；交接逐段可追责且缺口进复核（已可验）；三模式合同可配置并卡控可采购范围（待落地）。
 
 <!-- 修正(2026-06-19 R5业务HTML缺口审计 F1/F3)：依据 business-system-map-for-operations-v0.1.html #supply 与 matrix-migration-claims.json -->
-> **⚠️ R5 漂移收口说明（2026-06-19，单一权威源裁定，紧随上方更早快照追加，不删除原横幅）**
-> 上方"零落地/保持开放"横幅为 R7（2026-06-19 早段）只读核验时的快照，部分结论已被随后落地的迁移覆盖，**不再作为验收依据**。本文档口径以 `backend/src/main/resources/db/migration` 实际迁移 + `docs/matrix-migration-claims.json`（2026-06-19）为**单一权威源**：
+> **⚠️ R5 漂移历史说明（2026-06-19 快照，非现行业务权威）**
+> 上方"零落地/保持开放"横幅为历史快照，**不再作为验收依据**。迁移与 claims 只证明当时实现事实；业务口径始终以三份 HTML 为准：
 > - **V085 已落地（`V085__supply_chain_t6.sql`）**：`supply_contracts` 三模式（platform_self_use/merchant_self_purchase/platform_purchase_distribution）+ approval_status/status + 可采购范围 JSONB 卡控；采购周期完整状态机（created/submitted→approved/rejected→ordered→expected→arrived→received，每步写事件 + 合同范围卡控 + received 生成入库流水）；`warehouses` 六类库房（main/bar/bar_counter/consumable/gift/saved_bottle）+ 余额挂 warehouse_id；库存域内高价值复核表（双证据照片+视频）。
-> - **V094 已落地（`V094__inventory_item_high_value_threshold.sql`）**：物料 `high_value_threshold_cents`（整数分，可空，null=不视高价值），报损/盘点差异判定=数量×单价≥阈值，命中进复核。
-> - **结论**：上方横幅中"供应合同三模式/采购周期/六类库房/高价值复核/高价值阈值仍零命中"的措辞为更早快照，**已被 V085/V094 覆盖；验收以最新 claims 为准**。唯一码主数据 `inventory_trace_codes` **已由 V128 落地**（2026-06-24 复核：`V128__inventory_trace_codes.sql` 建码主数据表，trace_code 唯一 + 状态机 registered→printed→bound→consumed + merchant_id 直接归属 + 码 CRUD 权限点，REQ-39 收口；下方 §13B 表设计建议已实现）。原"零命中/待建"结论失效。
+> - **V094 历史实现、已由 V350 替代**：V350 已删除物料级 `high_value_threshold_cents`，改为 `manual_high_value` + `high_value_thresholds`。当前代码仍取移动加权价；HTML/PRD 要求最近一次实际到货价与全平台单一阈值，此差异是待改造缺口。
+> - **历史实现结论**：V085/V094 改变了上方快照，V128 后续实现了 `trace_code` 唯一约束、`registered→printed→bound→consumed` 状态机与 merchant 归属；其余字段/API 是否落地见 §13B 现行标注。claims 只作实现证据，验收不得覆盖 HTML。
 
 > **本文档为什么新增（定位）：** 依据 finding **supply-1**（HIGH/omission）——供应链是用户原始需求点名的 P0 域、三种供应合同模式被反复列为"已拍板"，但全部文档此前只在产品口径层面用散文描述，没有任何一份开发设计给出供应商表、供应合同表、采购周期表、库房/批次/流水表的字段与状态定义，P0 编码任务清单也无对应任务，处于"有 PRD 无开发设计"状态，开发无法据此编码。本文对标 `bar-operations-development-design.md` 结构，把供应链域落到可编码的数据结构、状态机、流程、API、事件与 P0 编码任务。
 >
@@ -30,7 +32,7 @@
 > **关联文档：**
 > - `docs/supply-chain-inventory-product-prd-v0.1.md`（本设计的产品口径来源）
 > - `docs/bar-operations-development-design.md`（酒吧库存/存酒已有落地，本文与之分工见 §1.2，避免重复建模）
-> - `docs/unified-standards-baseline-v0.1.md`（跨文档单一权威，凡冲突以它为准）
+> - `docs/unified-standards-baseline-v0.1.md`（历史基线；与三份 HTML 冲突时以 HTML 为准）
 > - `docs/compliance-and-personal-information-protection-requirements-v0.1.md`（C9 进货查验、资质必填）
 > - `docs/operation-traceability-and-terminal-switch-prd-v0.1.md`（物品追踪码、交接留痕、事件字典）
 
@@ -48,7 +50,7 @@
 | 三种供应合同显式建模 | 平台自用 / 商户自采 / 平台统一采购分销三种模式落 `contract_mode` 枚举（`platform_self_use`/`merchant_self_purchase`/`platform_purchase_distribution`），不靠散文区分。表名与枚举以真实迁移 + r5-spec-T6 为准 |
 | 金额一律整数分 | 所有金额字段单位为分（bigint），禁止 `numeric(18,2)` 元（D1） |
 | 进货查验合规先行 | 酒类/食品入库必须绑定供货方资质、票据、批次合格证明（C9，P0 合规阻断） |
-| 高价值自动判定 | 报损/作废/盘点据"平台默认阈值 + 物品 is_high_value"自动触发双证据（拍照和视频）+复核（supply-4） |
+| 高价值自动判定 | 业务目标按“最近一次实际到货价 + 全平台单一阈值”或手工标记触发双证据与复核；当前移动加权价实现待改造 |
 | 兑换消耗可追溯 | 积分兑换/礼物领取的库存消耗用独立流水类型，库存不足拒绝兑换（pass-2） |
 | 留痕优先自动化 | 入库、出库、调拨、盘点、报损、报溢、兑换消耗、人工调整、交接均写事件中心（D4 事件字典） |
 
@@ -59,11 +61,11 @@
 | 范围 | 归属 | 说明 |
 |---|---|---|
 | 供应商主数据、供应合同、采购申请、采购周期、进货查验 | 本系统 | 跨门店、跨商户的采购侧主数据，酒吧库存 `bar_stock_batches.supplier_id` 外键引用本系统 `inventory_suppliers` |
-| 平台级库房、库存批次、库存流水（含兑换消耗、报溢） | 本系统 | 总库/平台统一分销库/礼品库等平台侧库存台账 |
+| 平台级库房、库存批次、库存流水（含兑换消耗、报溢） | 本系统 | 总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区 |
 | 酒吧门店内的物料、批次、销售消耗、存酒 | 酒吧系统 | 门店现场作业，回写本系统库存或保持本地台账，二者通过 `item_id`/批次号对齐 |
-| 物品高价值标记 `is_high_value`/`high_value_threshold` | 本系统物品档案为权威 | 酒吧 `bar_inventory_items` 引用或同步本系统物品档案的高价值口径，避免两套阈值 |
+| 高价值判定 | HTML/PRD 为业务权威 | 当前物品档案仅保留 `manual_high_value`；阈值及价格基准差异按缺口改造 |
 
-> 设计说明：本系统的 `items`（物品档案）是平台级物品主数据；酒吧 `bar_inventory_items` 可视为门店级映射。高价值阈值口径以本系统为单一权威（supply-4），酒吧库存复用，防止"两套阈值"。
+> 设计说明：本系统物品档案是平台级主数据；高价值业务口径以 HTML 为单一权威，当前实现差异按缺口改造。
 
 ## 2. 业务边界
 
@@ -74,10 +76,10 @@
 | 供应商档案 | 供货主体、联系人、资质、结算方式、状态（含黑名单） |
 | 供应合同 | 平台自用/商户自采/平台统一采购分销三模式、供货范围、价格口径、账期、有效期、审批状态 |
 | 采购申请与采购周期 | 补货需求、审批、下单、到货计划、实际入库、结算依据 |
-| 库房与库位 | 总库、平台分销库、礼品库、消耗品库等管理空间与库位 |
+| 库房与库位 | 总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区 |
 | 物品档案 | 酒类、消耗品、礼品、其他物品的单位、成本口径、高价值标记 |
 | 进货查验 | 供货方资质、票据、批次合格证明绑入库批次（C9） |
-| 库存批次与流水 | 批次成本/保质期；入库、出库、调拨、销售消耗、兑换消耗、报损、报溢、盘点调整、冲正 |
+| 库存批次与流水 | 批次成本/保质期；按 HTML 十二类记录；冲正是原流水状态/反向处理，不新增第十三类 |
 | 积分兑换/礼物领取库存扣减 | 礼品库扣减、库存不足拒绝、领取确认回写（pass-2） |
 
 ### 2.2 本模块不直接负责
@@ -114,8 +116,8 @@
 | `SupplyContract` | 供应合同 | `contract_mode`, `supply_scope`, `purchasable_scope`, `price_mode`, `payment_terms`, `valid_from/valid_to`, `approval_status`, `status` | 三种供货模式与供货准入（审批 `draft/approved/rejected` 与生命周期 `active/suspended/expired` 分列，T6） |
 | `PurchaseRequest` | 采购申请 | `supplier_id`, `supply_contract_id`, `status` | 补货需求，状态机承载从申请到入库全流转（T6） |
 | `PurchaseRequestEvent` | 采购流转事件 | `request_id`, `from_status`, `to_status`, `operator_user_id` | 采购状态逐步留痕（T6：取代独立采购周期表） |
-| `Warehouse` | 库房 | `warehouse_type`, `merchant_id`, `status` | 总库、平台分销库、礼品库、消耗品库等 |
-| `Item` | 物品 | `item_type`, `unit`, `cost_price`, `is_high_value`, `high_value_threshold` | 平台级物品主数据，含高价值标记（supply-4） |
+| `Warehouse` | 库房 | `warehouse_type`, `merchant_id`, `status` | 总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区 |
+| `Item` | 物品 | `item_type`, `unit`, `cost_price`, `manual_high_value`, `trace_required` | 当前平台级物品主数据字段 |
 | `StockBatch` | 库存批次 | `item_id`, `warehouse_id`, `batch_no`, `quantity`, `cost_price`, `expire_at` | 某次入库形成的批次 |
 | `StockMovement` | 库存流水 | `movement_type`, `quantity`, `source_type`, `status` | 所有库存变化依据，含兑换消耗/报溢 |
 | `PurchaseInspection` | 进货查验记录 | `batch_id`, `supplier_qualification_refs`, `invoice_refs`, `quality_cert_refs` | 绑入库批次的法定查验台账（C9） |
@@ -180,6 +182,7 @@ stateDiagram-v2
 
 | code | 中文 | 说明 |
 |---|---|---|
+| `created` | 已创建 | 创建后的兼容起点；可进入审批 |
 | `submitted` | 已提交 | 采购申请提交待审批 |
 | `approved` | 已审批 | 审批通过，可下单 |
 | `rejected` | 已驳回 | 审批不通过 |
@@ -188,7 +191,7 @@ stateDiagram-v2
 | `arrived` | 已到货 | 货物到货待入库确认 |
 | `received` | 已入库 | 入库确认，生成入库 `inventory_stock_movements` 并落 warehouse/库位 |
 
-状态机：`submitted →(审批) approved/rejected → ordered → expected →(到货) arrived →(入库确认) received`；每步写 `inventory_purchase_request_events`（`from_status/to_status/operator_user_id/note`），非法跳步拒绝。
+状态机：`created/submitted →(审批) approved/rejected → ordered → expected →(到货) arrived →(入库确认) received`；每步写 `inventory_purchase_request_events`（`from_status/to_status/operator_user_id/note`），非法跳步拒绝。
 
 ### 4.4 库存批次状态
 
@@ -300,7 +303,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   A["库管创建盘点/报损/报溢单"] --> B["录入物品、批次、数量、原因"]
-  B --> C{"是否高价值？批次成本金额 >= 生效阈值 或 物品 is_high_value=true"}
+  B --> C{"是否高价值？最近一次实际到货价 > 全平台阈值 或 manual_high_value=true"}
   C -- 是 --> D["强制同时上传照片和视频(双证据)，建域内 inventory_high_value_reviews(pending)"]
   C -- 否 --> E["按普通流程，证据可选"]
   D --> D1["主管在库存域内复核 approve/reject（不走 supervisor_review）"]
@@ -313,11 +316,11 @@ flowchart TD
 
 判定与证据规则：
 
-- **高价值判定（supply-4）：** 生效阈值 = 物品 `high_value_threshold`（非空时）否则平台默认 `high_value_threshold`（单位：分）。满足"批次成本金额 ≥ 生效阈值"或物品 `is_high_value=true` 即判高价值。
+- **高价值判定（supply-4）：** 业务口径为最近一次实际到货价与全平台单一阈值比较，或 `manual_high_value=true`。当前 `HighValueDecisionService` 仍读取移动加权价，且阈值仓储支持项目/商户特例；两者均为待改造缺口，不得用当前代码覆盖 HTML。
 - **双证据（supply-3）：** 高价值场景报损/作废/盘点差异**必须同时**上传照片与视频（`photo_refs` 与 `video_refs` 均非空），并建域内复核记录由主管复核；非高价值证据可选。
 - **域内复核（T6）：** 高价值触发后建 `inventory_high_value_reviews`（`subject_type ∈ {damage_report, stock_variance, saved_bottle_void}`，`review_status ∈ {pending, approved, rejected}`），由 `InventoryHighValueReviewService` 在库存域内闭环，替换原"仅校验附件数≥2"且不接入 governance `SupervisorReviewService`。
 - **（2026-07-20 安全修复 AUD-020）能力闸 must ride the proxy：** `InventoryHighValueReviewService` 由 `InventoryService`/`PurchaseRequestService` 域内手工 `new`（非 Spring 代理），故其 `review()` 上的 `@GuardedAction(inventory.high_value.review)` 曾是死注解、`ActionGateAspect` 永不命中，能力开关关闭时复核仍可扣减库存。修复：能力闸上移到被 Spring 代理的对外入口 `InventoryService.reviewHighValue()`，Controller 调用即命中切面（关→`TERMINAL_DISABLED`、无库存变化）；新增架构测试 `GuardedActionProxyBypassArchTest` 阻止「主源码 `new` 一个带 @GuardedAction 的类」再次绕过代理。
-- **报溢（supply-5）：** 盘盈/异常增加落 `movement_type=gain` 流水（增加方向），单独走审批 + 证据，与盘亏/报损（`loss`/`damage`/`waste`）及盘点差异纠账（`count_correction`）区分方向。（注：取值以代码白名单为准，见 §6.13 权威口径；旧文档所称 `surplus`/`count_adjust` 在代码中不存在。）
+- **报溢（supply-5）：** 盘盈/异常增加的当前实现写 `movement_type=gain`，与盘亏/报损及盘点差异纠账区分方向。该值只记录实现事实；业务类型仍以 HTML 十二类为准。
 
 > 已实现修复（finding F-OPS-05，裁决#7「库存守恒账本」，2026-06-22，已在 160 编译通过）：此前以下三条落账路径只改写 `stock_balances` 库存余额、却未补写 `stock_movements` 流水，导致余额变更无对应流水、账本不守恒、无法逐位重建：
 > 1. **库存即时调整**（人工增减）；
@@ -361,7 +364,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 > 修订说明（2026-06-07 收口）：补 `project_id`（综合体归属）。依据 finding critic-2 + foundation-database §1「先支持当前一个综合体，所有核心对象预留 project_id」。`project_id` 取值规则：平台统一采购的共享供应商主数据可空（跨综合体复用），门店/商户自采的供应商必填以按项目隔离归属。`supplier_code` 平台内唯一不变（共享主数据需全局唯一）；多综合体扩展后若需按项目维度区分编码，再评估 `uq(project_id, supplier_code)`，当前保持全局唯一。与地基 `complex_projects` 对齐。
 > 设计说明：与开放平台 `service_providers`（技术服务商）是两类对象，必须区分（fielddb-10）。`supplier_category` 是 inventory_suppliers 的**唯一权威供货分类字段**（含 maintenance/service），不另设 `supplier_type`；`supplier_category=maintenance` 用于打通游乐检修单位（finding amuse-3），amusement 检修记录用 `maintenance_vendor_id` 外键引用本表并依赖该字段取值集合（dup-tables-2：本字段为唯一权威，foundation §6A.4 不再自定义 supplier_type 枚举，改为引用本表）。
 
-### 6.2 supplier_contacts 供应商联系人表
+### 6.2 supplier_contacts 供应商联系人表（目标设计，当前未建表）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -442,11 +445,11 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `received_at` | timestamptz | 入库确认时间（T6） |
 | `received_by` | uuid | 入库确认人（T6） |
 | `total_amount` | bigint | 预估金额，单位：分 |
-| `status` | varchar | 采购状态机 `submitted/approved/rejected/ordered/expected/arrived/received`（§4.3，CHECK 与之对应；以 r5-spec-T6 为准） |
+| `status` | varchar | 当前采购状态机 `created/submitted/approved/rejected/ordered/expected/arrived/received`（§4.3，CHECK 与之对应） |
 
 > 修订说明（2026-06-07 收口）：补 `project_id`（综合体归属，建索引 `idx_purchase_requests_project_id`）。依据 finding critic-2、foundation-database §1。平台统一采购可空，门店/商户自采必填；与地基 `complex_projects` 对齐。
 
-### 6.6 purchase_request_items 采购申请明细表
+### 6.6 purchase_request_items 采购申请明细表（目标设计，当前未建表）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -479,14 +482,14 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `id` | uuid | 主键 |
 | `warehouse_code` | varchar | 库房编码 |
 | `name` | varchar | 库房名 |
-| `warehouse_type` | varchar | `main/distribute/gift/consumable/bar/saved_bottle`（总库/平台分销库/礼品库/消耗品库/酒吧库/存酒区） |
+| `warehouse_type` | varchar | 当前 V085：`main/bar/bar_counter/consumable/gift/saved_bottle`（总库/酒吧库/吧台库存/消耗品库/礼品库/存酒区） |
 | `merchant_id` | uuid | 商户，可空（平台库为空） |
 | `location_point_id` | uuid | 关联点位 |
 | `status` | varchar | `active/inactive` |
 
 > 说明：`warehouse_type=gift` 礼品库是积分兑换/礼物领取扣减的固定来源（pass-2）。
 
-### 6.9 warehouse_locations 库位表
+### 6.9 warehouse_locations 库位表（目标设计，当前未建表）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -496,7 +499,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `name` | varchar | 库位名 |
 | `status` | varchar | `active/inactive` |
 
-### 6.10 item_categories 物品分类表
+### 6.10 item_categories 物品分类表（目标设计，当前未建表）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -516,14 +519,13 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `item_type` | varchar | `alcohol/consumable/gift/material/other`（酒类/消耗品/礼品/物料/其他） |
 | `unit` | varchar | 基础单位 |
 | `cost_price` | bigint | 成本价，单位：分 |
-| `is_high_value` | boolean | 是否高价值（手工强制标记，supply-4），默认 false |
-| `high_value_threshold` | bigint | 物品级高价值金额阈值，单位：分，可空（空则用平台默认值） |
-| `is_traceable` | boolean | 是否需平台唯一二维码 |
+| `manual_high_value` | boolean | 当前实现的手工高价值标记，默认 false |
+| `trace_required` | boolean | 当前实现的追溯要求标记 |
 | `status` | varchar | `active/inactive` |
 
 索引：`uq_items_item_code`（唯一）、`idx_items_item_type`。
 
-> 设计说明（supply-4）：`is_high_value` 与 `high_value_threshold` 落地高价值判定。生效阈值 = `high_value_threshold` 非空时取本字段，否则取平台治理全局配置 `inventory.high_value_threshold`（单位：分，商户可申请调整）。报损/作废/盘点据此自动触发双证据 + 复核。
+> 现行事实：V350 已删除物品级阈值字段。业务要求“最近一次实际到货价 + 全平台单一阈值”；当前移动加权价及多作用域阈值是待改造缺口。
 
 ### 6.12 stock_batches 库存批次表
 
@@ -588,7 +590,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `lend_out` | 借出 | 跨主体借调中**不可消费物品**交付给借入方（减少方向；只转移保管责任、**所有权不转移**，不得用 `transfer_out` 代记）。2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造 |
 | `lend_return` | 归还 | 借入方将借用物品归还借出方（增加方向；`lend_out` 的反向动作，保管责任回转）。2026-08-05 DEC-R7-04 扩入 ENUM「库存流水类型」条；代码实现待 GAP-38 改造 |
 
-> 权威口径（2026-06-22 收口，以代码为准）：库存调整/盘点/报损报溢落账实际写入的 `movement_type` 取自服务白名单 `InventoryStockMovementService.ALLOWED_ADJUSTMENT_TYPES = {gain, loss, damage, waste, count_correction}`，与 `inventory_stock_adjustments.adjustment_type` 的 DB CHECK（V046 `chk_stock_adjustment_type IN ('gain','loss','damage','waste','count_correction')`）一致。注意 **`stock_movements.movement_type` 列本身无 DB CHECK 约束**（V012 仅 `movement_type VARCHAR(64) NOT NULL`），取值正确性由服务白名单/`adjustment_type` 保证，故枚举以代码白名单为准。此前文档列出的 `surplus`/`count_adjust`/`reverse` 在代码中并不存在（已分别对应到 `gain`/`count_correction`、冲正按增减方向取对应调整类型），本轮按代码事实修正。
+> 当前实现事实：库存调整服务白名单为 `{gain, loss, damage, waste, count_correction}`，并与 V046 CHECK 一致；`stock_movements.movement_type` 本身无 DB CHECK。该白名单不构成 HTML 业务枚举，也不能覆盖上表目标口径；未实现项继续按 GAP-38 管理。
 > 设计说明：`redeem_consume`/`gift_claim_consume`（pass-2）为本设计相对 bar-operations 的新增类型；`photo_refs`/`video_refs` 分列（supply-3），对高价值流水均置必填。`inbound/outbound/transfer_in/transfer_out/consume` 为出入库/调拨/正常消耗类流水类型（由各业务路径直接写入），不受上述调整白名单约束。
 > 新增三类（2026-08-05 DEC-R7-04，文档层）：`return_to_stock`（回库）/ `lend_out`（借出）/ `lend_return`（归还）依 ENUM「库存流水类型」条十二类口径补入本白名单，命名与 `docs/bar-operations-development-design.md` §6.16 **完全统一**；三类**代码与迁移尚未实现**（服务白名单 `InventoryStockMovementService`、DB 取值口径待 **GAP-38** 改造），补齐前不得据本表认为已实现。
 > 冲正口径（DEC-R7-04）：**冲正不新增 `movement_type`**，按流水 `status=reversed`（§4.5）标记并按相反方向的调整类型落账；ENUM 十二类中不含「冲正」，**不得自行新增第十三类**。
@@ -607,7 +609,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 唯一约束：`uq_stock_balances_item_warehouse`（`item_id + warehouse_id`）。
 
-### 6.15 purchase_inspections 进货查验记录表（C9）
+### 6.15 purchase_inspections 进货查验记录表（C9，目标设计，当前未建表）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -626,7 +628,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 > 设计说明（C9）：酒类/食品入库必须有本记录并绑定 `stock_batches`，缺记录不得确认入库；支持按批次正向溯源与问题批次反向召回。
 > 修订说明（2026-06-07 收口）：补 `project_id`（综合体归属），随入库批次/采购周期所属项目落值，便于按项目维度做查验台账隔离与溯源。依据 finding critic-2、foundation-database §1。
 
-### 6.16 redemption_stock_deductions 兑换扣减表（pass-2）
+### 6.16 redemption_stock_deductions 兑换扣减表（pass-2，目标设计，当前未建表）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -661,11 +663,11 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 > 设计说明（T6）：由 `InventoryHighValueReviewService` 在库存域内闭环（建 pending → 主管 approve/reject）；approve 后动作（出库扣减/作废落账）生效，reject 回滚。不接入 governance 统一复核队列，与二轮裁决（2026-06-18）一致。
 
-## 7. API 接口设计
+## 7. 目标 API 接口设计（表内草案不得作为联调契约）
 
 内部接口统一放在 `/api/v1/inventory/**`。对外（第三方/会员积分系统）经开放平台动态业务路径 `/api/open/d/{endpoint_key}/inventory/...`（D3，不另定义鉴权端点）。权限编码统一 dot 风格 `domain.resource.action`（D3）。
 
-> 执行口径：本章历史权限列中的 `supply.*` 是供应链模块草案旧名。P0 编码必须使用 `docs/openapi/openapi-p0.yaml`、`docs/openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md` 和 `p0-operation-permission-matrix-v0.1.md` 中的 `inventory.*`、`bar.saved_bottle.manage` 等精确 operation、字段 schema、权限码、鉴权上下文、幂等和审计事件；未进入 OpenAPI 的供应商合同、复杂采购周期、礼品兑换扩展能力按 P1/P2 继续细化。
+> 执行口径：下表全部是历史目标草案，`supply.*` 权限均未进入现行 OpenAPI，不得用于联调；未进入 OpenAPI 的路径一律视为“目标/未落地”。现行接口只能以 `docs/openapi/openapi-p0.yaml`/JSON 中的准确 path 与 `inventory.*`、`bar.saved_bottle.manage` 权限验收。
 
 ### 7.1 供应商
 
@@ -707,7 +709,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `POST` | `/api/v1/inventory/warehouses` | 新建库房 | `supply.warehouse.create` |
 | `GET` | `/api/v1/inventory/items` | 查询物品档案 | `supply.item.read` |
 | `POST` | `/api/v1/inventory/items` | 新建物品 | `supply.item.create` |
-| `PUT` | `/api/v1/inventory/items/{id}` | 修改物品（含 is_high_value/high_value_threshold） | `supply.item.update` |
+| `PUT` | `/api/v1/inventory/items/{id}` | 目标：修改物品；当前字段与权限须以 OpenAPI/实现验收 | 当前 OpenAPI 的 `inventory.*` 权限 |
 
 ### 7.5 库存批次、流水与进货查验
 
@@ -717,7 +719,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `POST` | `/api/v1/inventory/stock-movements/inbound` | 入库（须带进货查验记录，C9） | `supply.stock.inbound` |
 | `POST` | `/api/v1/inventory/stock-movements/transfer` | 调拨 | `supply.stock.transfer` |
 | `POST` | `/api/v1/inventory/stock-movements/damage` | 报损（高价值自动校验双证据，supply-3/4） | `supply.stock.damage` |
-| `POST` | `/api/v1/inventory/stock-movements/surplus` | 报溢（supply-5） | `supply.stock.surplus` |
+| `POST` | `/api/v1/inventory/stock-adjustments` | 当前实现以 `adjustment_type=gain` 登记报溢 | `inventory.*`，精确权限以当前 OpenAPI 为准 |
 | `POST` | `/api/v1/inventory/stock-counts` | 创建盘点 | `supply.stock.count` |
 | `POST` | `/api/v1/inventory/stock-movements/{id}/approve` | 审批库存流水 | `supply.stock.approve` |
 | `POST` | `/api/v1/inventory/stock-movements/{id}/reverse` | 冲正库存流水 | `supply.stock.reverse` |
@@ -776,7 +778,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `inventory.redeem_reserved` | 兑换预占 | 兑换引用、礼品库、物品、数量（pass-2） |
 | `inventory.gift_claimed` | 礼物领取实扣 | 兑换引用、流水、数量（pass-2） |
 | `inventory.damaged` | 报损 | 物品、数量、原因、是否高价值、photo_refs、video_refs |
-| `inventory.surplus_recorded` | 报溢 | 物品、数量、原因、证据（supply-5） |
+| `inventory.gain_recorded` | 报溢目标事件名；当前是否发布须按实现验收 | 物品、数量、原因、证据（supply-5） |
 | `inventory.counted` | 盘点 | 账面、实盘、差异 |
 | `inventory.reversed` | 冲正 | 原流水、原因 |
 
@@ -804,7 +806,7 @@ source_system, result, risk_level, evidence_ref, trace_id, idempotency_key
 ## 11. Java 后端包结构建议
 
 ```text
-com.complex.supply
+com.complex.platform.inventory
   supplier
   contract
   purchase
@@ -826,7 +828,7 @@ com.complex.supply
 - `StockService` 负责批次、流水、余额，统一写流水。
 - `PurchaseInspectionService` 负责进货查验绑定批次（C9）。
 - `RedemptionStockService` 负责兑换预占/实扣/释放，幂等（pass-2）。
-- `HighValuePolicy` 负责高价值判定（生效阈值 = 物品阈值优先；未配置物品阈值时使用平台默认阈值，supply-4）。
+- 当前 `HighValueDecisionService` 负责高价值判定；其移动加权价与多作用域阈值实现不符合 HTML 目标，按缺口改造，不反向修改业务规则。
 - `InventoryHighValueReviewService` 负责库存域内高价值复核（建 pending → 主管 approve/reject），不接入 governance `SupervisorReviewService`（T6，2026-06-18 业务确认）。
 - `SupplyEventPublisher` 统一写事件中心（D4 命名）。
 
@@ -836,19 +838,19 @@ com.complex.supply
 
 1. **DB-S1** inventory_suppliers（含黑名单 5 态）、supplier_contacts、supplier_qualifications 表与 Flyway 迁移。
 2. **DB-S2** supply_contracts（contract_mode 三模式枚举 `platform_self_use/merchant_self_purchase/platform_purchase_distribution`、供货范围、`purchasable_scope`、价格口径、payment_terms、有效期、审批状态 `draft/approved/rejected` 与生命周期 `status` `active/suspended/expired` 分列，T6）表。
-3. **DB-S3** inventory_purchase_requests（扩 T6 采购状态机 `submitted/approved/rejected/ordered/expected/arrived/received` + 下单/到货/入库流转字段）、purchase_request_items、inventory_purchase_request_events 流转留痕表（T6：不建独立 purchase_cycles 表）。
-4. **DB-S4** warehouses（含 gift 礼品库类型）、warehouse_locations、item_categories、items（含 is_high_value/high_value_threshold）表。
-5. **DB-S5** stock_batches、stock_movements（含 redeem_consume/gift_claim_consume/surplus 类型、photo_refs/video_refs 分列）、stock_balances 表。
+3. **DB-S3** inventory_purchase_requests 当前状态机含 `created/submitted/approved/rejected/ordered/expected/arrived/received`；purchase_request_items 为未建表目标，不建独立 purchase_cycles 表。
+4. **DB-S4** 目标/缺口：补齐 warehouse_locations、item_categories；物品当前使用 `manual_high_value`，不得恢复物品级阈值。
+5. **DB-S5** 目标/缺口：库存流水与 HTML 十二类一一对应；当前报溢实现码为 `gain`，未实现项不得写成已落地。
 6. **DB-S6** purchase_inspections 进货查验表，绑定 stock_batches（C9）。
 7. **DB-S7** redemption_stock_deductions 兑换扣减表，唯一幂等键（pass-2）。
 8. **BE-S1** 供应商 CRUD 与黑名单/恢复，黑名单不可被合同/采购引用校验。
 9. **BE-S2** 供应合同 CRUD + 提交/审批（`draft→approved/rejected`）；生命周期 `active/suspended/expired` 维护；三模式约束（merchant_self_purchase 须 merchant_id）；按 `purchasable_scope` 卡控可采购范围（T6）。
 10. **BE-S3** 采购申请/审批/下单/到货/入库全流转（`submitted→approved/rejected→ordered→expected→arrived→received`），每步写 `inventory_purchase_request_events`，非法跳步拒绝（T6）。
 11. **BE-S4** 入库（强制进货查验记录绑批次，C9）+ 调拨 + 余额更新。
-12. **BE-S5** 报损/报溢/盘点：HighValuePolicy 自动判定 + 高价值强制双证据 + 库存域内 `inventory_high_value_reviews` 主管复核（`InventoryHighValueReviewService`，不走 governance `supervisor_review`，T6）（supply-3/4/5）。
+12. **BE-S5** 报损/报溢/盘点：由当前 `HighValueDecisionService` 承接判定并改造成 HTML 的最近一次实际到货价 + 全平台单一阈值；高价值强制双证据与域内复核。
 13. **BE-S6** 兑换预占/领取/释放接口，库存不足拒绝、幂等、领取回写（pass-2），与一体机领取流程对齐。
 14. **BE-S7** 库存事件统一发布（§9，D4 命名）。
-15. **CFG-S1** 平台治理增全局 `inventory.high_value_threshold` 配置项（单位：分），商户可申请调整（supply-4）。
+15. **CFG-S1** 按 HTML 维护全平台单一高价值安全阈值并设置上下限；不得派生物品级或商户级阈值。
 
 ### 12.2 P1/P2
 
@@ -865,7 +867,7 @@ P0 完成时必须能演示：
 4. 生成入库批次与 inbound 流水，库存余额增加。
 5. 总库调拨到礼品库/消耗品库，两侧流水与余额正确。
 6. 对高价值物品报损时，系统自动判定高价值并强制要求同时上传照片和视频，建库存域内 `inventory_high_value_reviews(pending)`、主管在库存域内 approve 后才扣减（不走 governance supervisor_review，T6/supply-3/4）。
-7. 报溢/盘盈用增加方向流水（`movement_type=gain`，以代码白名单为准，见 §6.13）并走审批（supply-5）。
+7. 报溢/盘盈业务类型遵循 HTML；当前实现用增加方向 `movement_type=gain` 并走审批，该 code 只记录实现事实。
 8. 会员/票务调用兑换预占：库存充足则预占礼品库、库存不足则拒绝兑换；领取确认后生成 redeem_consume/gift_claim_consume 流水并扣减余额，重复请求幂等（pass-2）。
 9. 全流程写入事件中心，事件命名符合 D4。
 
@@ -897,7 +899,7 @@ P0 完成时必须能演示：
 <!-- 修正(2026-06-19 R5业务HTML缺口审计 F1/F3)：依据 business-system-map-for-operations-v0.1.html #supply 与 matrix-migration-claims.json -->
 ## 13B. 平台唯一追溯码主数据（inventory_trace_codes）（F3，✅ 已由 V128 落地）
 
-> ✅ 收口（2026-06-24 复核）：`inventory_trace_codes` 已由 `V128__inventory_trace_codes.sql` 建表落地（trace_code 唯一 + 状态机 registered→printed→bound→consumed + merchant_id 直接归属 + 码 CRUD 权限点，REQ-39 收口），下方表设计建议已实现。原 F3 缺口关闭。
+> ✅ 部分落地：V128 已实现 `trace_code` 唯一约束、`registered→printed→bound→consumed` 状态机和 merchant 归属。下表其余建议字段以及 §13B.4 `/bind`、`/void` 路径未在当前实现/OpenAPI 落地，仍是目标设计。
 >
 > 历史现状（2026-06-19，已失效，留痕）：`inventory_trace_codes` 当时在全量迁移中**零命中**，`matrix-migration-claims.json` 标记 R4-G1 DRIFT；`items.is_traceable` 仅为布尔标记位，码—批次—物品三元溯源链未建模。本章原为收口 F3 给出表设计建议，V128 已据此落地。
 
@@ -910,16 +912,16 @@ P0 完成时必须能演示：
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | bigserial PK | 主键 |
-| code | varchar 唯一 | 平台唯一追溯码（二维码内容/编码），全局唯一约束 |
+| trace_code | varchar 唯一 | 平台唯一追溯码（二维码内容/编码），全局唯一约束 |
 | code_type | varchar | 码类型：`inbound_label`（入库贴码）/`outbound_print`（出库打印码） |
 | item_id | bigint FK items | 绑定物品（码—物品） |
 | batch_id | bigint FK stock_batches（可空） | 绑定批次（码—批次），出库打印码可在出库时绑定 |
-| status | varchar | 状态机：`generated`→`bound`→`handover`→`verified`/`voided` |
+| status | varchar | 当前 V128 状态机：`registered`→`printed`→`bound`→`consumed` |
 | project_id | bigint（可空） | 综合体归属，与全域 project_id 口径一致 |
 | merchant_id | bigint（可空） | 商户归属（商户自采/分销场景） |
 | created_at / bound_at / voided_at | timestamptz | 生成/绑定/作废时间留痕 |
 
-> 状态机说明：`generated`（已生成未绑定）→`bound`（已绑定物品/批次）→`handover`（进入交接流转）→`verified`（交接终验通过）或 `voided`（作废）。金额无关；CHECK 约束逐项对应枚举（D7）。
+> 当前状态机：`registered`（登记）→`printed`（已打印）→`bound`（已绑定）→`consumed`（已使用），CHECK 与 V128 一致。交接状态由 V074 交接表承载，不混入码主数据状态。
 
 ### 13B.3 与五段交接 `inventory_trace_handover_steps`（V074）的外键对齐
 
@@ -950,7 +952,7 @@ P0 完成时必须能演示：
 
 > 收口背景：进货查验合规（C9，§5.1）要求入库时绑定供货方资质，§6.3 `supplier_qualifications` 已承载资质类型/编号/有效期/附件；但结算方式当前仅以 `inventory_suppliers.settlement_method`（单值 `prepay/cod/credit`）+ `default_payment_terms`（单值默认账期）表达，**一个供应商对不同品类/合同存在多种结算方式与多档账期**时无法落库。本章在不改动 §6.3 既有 `supplier_qualifications` 结构、不动 R5（D5/F1/F3）既有内容的前提下，①明确 `supplier_qualifications` 作为资质子表的收口口径并补 `status` 在途态；②新增 `supplier_settlement_methods` 结算方式子表，把供应商主表的单值结算降维到可多档配置的子表，承接进货查验与合同账期合规。
 
-### 13C.1 supplier_qualifications 资质子表（收口，复用 §6.3，仅补状态）
+### 13C.1 supplier_qualifications 资质子表（目标细化；当前 V112 枚举另见实现事实）
 
 §6.3 已建表，本节仅做收口对齐，**不重复定义已有字段**（`id/project_id/supplier_id/qualification_type/cert_no/valid_from/valid_to/attachment_refs`）。补充约定：
 
@@ -961,7 +963,7 @@ P0 完成时必须能演示：
 
 > 说明：资质类型/编号/有效期/附件四要素 §6.3 已齐备，本期收口=补 `status` 在途态 + 明确与进货查验的强校验绑定，避免"资质过期仍可入库"的合规漏洞。
 
-### 13C.2 supplier_settlement_methods 结算方式子表（新增）
+### 13C.2 supplier_settlement_methods 结算方式子表（目标细化；当前 V112 枚举另见实现事实）
 
 把 `inventory_suppliers.settlement_method`（单值）降维到子表，支持一个供应商配置多档结算方式与账期。
 
