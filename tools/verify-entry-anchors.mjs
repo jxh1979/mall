@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 文件版本：V0.01
 // 门禁：三份业务最终解释权 HTML 的引用一律用「条目名」，不得再用行号。
 // 依据：DEC-R8-17（用户 2026-08-06 裁 A：彻底废行号、只留条目名）。
 // 病史：R8 两批 6 轮返工里有 3 轮因行号锚点漂移返工（760 行漂移 → 287 处重建 → +2 位移 19 处漏改）。
@@ -36,7 +37,7 @@ const REGISTRY = "docs/prd-audit/entry-registry.csv";
 const LEDGER = "docs/prd-audit/authority-rule-ledger.csv";
 const COVERAGE = "docs/prd-audit/html-prd-coverage.csv";
 // 历史留痕文件：记录的是「当时」的事实，一律不改、不检
-const EXCLUDE = /(changelog|change-log|-report|\.report\.|diff-matrix|anchor-rebuild|html-map|reanchor|html-mirror-scan|history-index|[\\/]rounds[\\/])/i;
+const EXCLUDE = /^docs\/audit-2026-09\/modules\/M\d{3}-b(?:1|4-r\d+|5-r\d+)-(?:self|grok)-raw\.md$|(changelog|change-log|-report|\.report\.|diff-matrix|anchor-rebuild|html-map|reanchor|html-mirror-scan|history-index|[\\/]rounds[\\/])/i;
 
 const errors = [];
 const warns = [];

@@ -1,12 +1,12 @@
-CRITERIA-LOCK-SHA256: 73ce1c4523de229a11552ca343f594e1506da3dc10e68d3dac216dd4ca232439
+CRITERIA-LOCK-SHA256: 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de
 LOCK-AMEND-COUNT: 0
 
-版本：V0.53
+版本：V0.72
 
 | 模块 | 状态 | B3执行次数 | 方案复核已修次数 | PASS证据 | 子代理失败重跑次数 | 备注 |
 |---|---|---:|---:|---|---:|---|
-| M001 `00-authority-html-01` | PASS | 2 | 2 | modules/M001-00-authority-html-01.md；B5-r2双PASS/四值一致 | 6 | V0.13；2340行/335判据；审计PASS，M001提交合并推送补办中 |
-| M002 `00-authority-html-02` | IN_PROGRESS | 0 | 2 | - | 0 | V0.13；B1已派且本方全文已读；暂不推进，先补M001提交合并推送 |
+| M001 `00-authority-html-01` | PASS | 2 | 2 | modules/M001-00-authority-html-01.md；B5-r2双PASS/四值一致 | 6 | V0.13；2340行/335判据；审计及发布PASS；PR #410已合并，160=origin/main=001878a |
+| M002 `00-authority-html-02` | PASS | 2 | 2 | modules/M002-00-authority-html-02.md；B5-r2双PASS/四值一致 | 0 | V0.17；979行/84判据；审计PASS；按已授权流程完成独立PR发布 |
 | M003 `01-root-config-and-guidance-01` | PENDING | 0 | 2 | - | 0 | - |
 | M004 `01-root-config-and-guidance-02` | PENDING | 0 | 2 | - | 0 | OVERSIZE-SINGLE-FILE |
 | M005 `01-root-config-and-guidance-03` | PENDING | 0 | 2 | - | 0 | - |
@@ -890,3 +890,108 @@ B2在V0.12下双PASS的候选/两席票/当前空队列保持；V0.13不改变�
 ## V0.53 操作员重申每模块提交合并推送
 
 操作员明确重申每个模块完成后都要提交、合并、推送。以此覆盖控制V0.13第556行“不合并、不推送”的旧口径；不改冻结业务判据、双席闸门或已完成M001结论。M001先补分支提交、propose-change.sh、predeploy-gates及merge-pr.sh，再同步160主工作区；禁止直推main与主工作区提交。发布工作区/home/james/wt/m001-authority-html-audit-release，分支codex/m001-authority-html-audit。M002当前B1不推进B2，已完成阅读和运行中的Grok证据保留；本PR不携带M002 raw。今后每模块审计PASS后先完成该交付流程再进入下一模块。
+
+
+## V0.54 M001发布交付完成，恢复M002整批归并
+
+操作员每模块提交合并推送指令已执行。M001分支codex/m001-authority-html-audit，分支HEAD 57e3f83c8a3d981a96b707c391431e8ba75f8803；PR https://github.com/jxh1979/mall/pull/410；本地verify:predeploy全部通过，GitHub predeploy-gates run 33950279355通过，ops/160/merge-pr.sh --squash于2026-09-05T06:37:10Z完成合并，mergeCommit 001878a11eeb6ea1fe79f5baac6f916cce68b555。Grok M002 B1退出后，160主目录以git merge --ff-only origin/main完成快进；HEAD=origin/main=该mergeCommit，25个交付文件与合并blob逐字一致，原有.scratch和两份M002 raw保留。无主目录提交、无直推main、无hard reset；M001审计与发布均闭环。
+
+三份HTML及判据锁仍是两席已审原字节。M002本方B1 V0.01 SHA256=36229226b9887a48dda4b58f9645c642c11ab33a97c6ce33d3c1f6d620154e84，Grok B1 V0.01 SHA256=68749ec4566dee52e794a62f1cca10c834edaefabd79300cb54ae45b270cb661，均全量979行/84判据。双方本次完整报告都落盘后才读取Grok；Grok退出0。B1后实算/sidecar/ledger/Grok四值全等73ce1c4523de229a11552ca343f594e1506da3dc10e68d3dac216dd4ca232439并已原样打印回执。本方B1 PASS，Grok B1 FAIL并列GR-01/GR-02，整批进入B2，不把B1认作模块PASS；B3=0。M001保持PASS，不重开。
+
+## V0.55 控制V0.15接续及M002申请20暂停
+
+读取操作员指定D:/AI/ccwork/160-audit-prompt.md现为V0.15，SHA256=36aae0ec0f2e30f11a259a389aca77ff39a8d9b1ae2d776a164c7f3764934d9f。与V0.13仅5行差异：版本、LOCK-AMEND③需携带完整lock diff校验登记、⑤定义或映射变更全部ID、登记先于③但顶部基准到④才改、排除COUNT检查完整变更集。未新增本轮判据/角色/产物；当前没有LOCK-AMEND，锁/sidecar/顶部两行未改。保留V0.13完成的两席M002 B1及M001审计/发布，后续按V0.15接续，不重新开工。
+
+准备派M002 B2时本机旧控制SHA防护报Control prompt changed，发生在SSH/Grok调用前；Grok本次NOT-CALLED，不计交付失败或重跑。没有新增B2 raw或B2票。接受Grok GR-01的日期同名声明问题后，按铁律4/5暂停并提出申请20，不能带着未批HTML继续B2外审或任何旁支。M002-002别名分类为候选、尚未Grok复核，不以Codex候选覆盖Grok原票。M001依旧已完成；M002保持BLOCKED-ASK，只有操作员实际答复才恢复，不能以等待时长替代答复。
+
+申请20（M002-001，技术性文字修改授权）：是否批准修改160:/home/james/complex-management/docs/platform-governance-map-for-operations-v0.1.html的以下两处？
+① 第2行，将“<!-- 文件版本：V0.07；更新日期：2026-09-02 -->”替换为“<!-- 文件版本：V0.08 -->”。
+② 第974行，仅删除“更新日期：2026-09-01。”，其后的“用途”及完整解释权声明保留。
+理由：同一文件出现两个不同的“更新日期”；删除两处日期，只保留递增版本，避免另猜一个日期，不改业务规则。
+M002两席979行/84判据的B1全量审计均已完成。本次只申请这两处修改；批准后还须完成整批B2双席复核，才能统一修复。未收到实际答复前全流程保持暂停。
+
+## V0.56 申请20拟稿内存检查补记
+
+拟稿仅改变治理HTML第2、974行，仍979行，业务规则和解释权正文不变。第974行在PGM-066冻结原文内，因此该获批修复将需要V0.15完整LOCK-AMEND；已查本ID最早映射M002，不重开M001。当前只是拟稿校验，未改源码/lock/sidecar/顶部两行、未增加COUNT。前一步脚本在检查“全部66引文不变”的断言处失败，证实该假设不成立；已修正候选说明，不伪造无锁影响结论。仍BLOCKED-ASK申请20，任何修复、锁同步及B2外审均等待实际答复。
+
+## V0.57 申请20实际答复后恢复
+
+操作员在申请20文字确认“是否批准《平台治理地图》删除第2行、第974行的两处更新日期，并将版本V0.07→V0.08，其余内容保留？”之后，实际答复原文：“可以”。此答复批准申请20两处精确拟稿，原先弹窗未显示不作为答复。本次检查questions目录全部已答（当前无文件）。先将M002从BLOCKED-ASK恢复IN_PROGRESS，B3=0，再继续本批B2。没有直接修复、没有跳过双席B2、没有重开M001。控制V0.15原文件SHA未变。
+
+## V0.58 M002 B2双席定稿
+
+同一findings V0.24的两席B2均PASS；当前V0.25仅记定稿证据，三项分类/队列不变。001待修；002终端别名与003页面壳均只登记。Grok真实退出0，B1原始20832字节前缀保留；本次不是失败重跑。下一步B3整批修001，包含两处获批HTML与既有文字镜像/批准台账必要同步；修完取after tree才增加B3次数。M001保持PASS并已发布。
+
+## V0.59 M002 B3-r1完成并进入B4
+
+本批仅001，治理HTML两处已获批，旧日期的两张镜像各1行及实际批准台账同步，共4文件。HTML V0.08 SHA256=9864216e609df2f319fa2cf7e51b61f06003ce45dff64a1a4098e71435865a68；before tree=bf400f2ebb21a7e112bfddfc8514b9d0cd4560ca；after tree=edc03163560e2373adb503a97cd22d76928d5ce0；未过滤完整binary diff SHA256=409889c17bfbc24392efbc7ee3cfc38e9bedb963bcb566d89c45c243f44247ac。取得after tree后B3计数0→1，尚未出队；必须B4双PASS才出队。
+
+B3脚本写完4文件后，html-ledger-sync通过；verify:entry-anchors失败1处：M002-b1-grok-raw.md:213的历史叙述被当成现行命名引用，未报告CSV镜像不匹配。脚本在此断言退出，before tree原已写Git对象但尚未打印。用临时索引以4文件经校验的HEAD前像复算before tree，证明所得tree已经存在于首次B3留下的不可达tree对象集中；其余路径与B3前哈希一致。随后冻结after tree，完整diff恰4文件，真实索引SHA256=040cc6a55775bb41014c00b6ebc2728983138f2bea8289e55263ff377684e9ad保持。没有重跑写操作、没有重复递增版本、没有删除或改写Grok原始报告。
+
+B3前后四值相同且已原样打印回执：73ce1c4523de229a11552ca343f594e1506da3dc10e68d3dac216dd4ca232439。当前锁仍V0.05，PGM-066引文待完整LOCK-AMEND，未伪称已同步。下面B4只审完整diff及实际验证证据；本次门禁失败不等于Grok调用失败，重跑计数不加；未对门禁源码或raw进行修复。
+
+## V0.60 控制V0.16接续
+
+提示词现V0.16，SHA256=34853567fb23a530833c8471e357b069302acad2d9c34ce5e928967cd4906a5c。与V0.15仅版本、信任锚边界表述、LOCK-AMEND③新增反向应用完整diff到/tmp现值副本并核对Grok自读ledger旧基准的完整性校验。此规则尚未触发，后续锁同步照此执行；不新增判据、不改锁/sidecar/基准、不重开M001或已完成B2/B3。B4第一次派发仍被本机旧SHA检查拦在实际Grok调用前，NOT-CALLED，不计失败重跑。现在同一B4范围改附新控制继续。
+
+## V0.61 M002 B4-r1整批收齐并回B2
+
+本方B4 V0.01 FAIL，Grok B4 V0.01 PASS/真实EXIT_CODE=0；完整报告路径及哈希见findings V0.26。两席均验证四文件日期修复正确且归因001，无越界。整体因本方FAIL回退；CX-01尚无ID，按统一路由先整批B2，新ID M002-004为技术性缺陷候选。保留Grok“门禁失败非四文件diff缺陷”的原意见，不改单席原报告或自行当双PASS；001仍是，002/003否，004候选是。源码检查器及测试尚未修改，PGM-066锁同步尚未执行。M001继续审计及发布PASS，不重开。
+
+派发前发现控制更新V0.17，SHA256=c93ddca061831828a5dcabb1c83fe18a4a6b7a2a6cd839e3baaef63c66ad6f21；相对V0.16仅版本与“只防无意识漂移、不防蓄意篡改”的边界表述变化，没有改变审计步骤或判据。已完成B4报告继续采信，下次B2附V0.17。锁基准及COUNT不变，四值报数沿用当前实算。
+
+## V0.62 M002 B4回退批B2双PASS定稿
+
+两席复核同一findings V0.26均PASS，Grok真实EXIT_CODE=0，本批两票各追加自身b1 raw V0.03、旧前缀保留、不新增独占锁哈希行。Grok保留B4关于四文件diff正确的PASS，另接受004技术缺陷/队列是，不重写旧结论。findings V0.27记录定稿，001/004是、002/003否。准备B3-r2，001只核实既有正确字节，004改既有EXCLUDE并落一项真实CLI回归；源码尚未修改，B3次数仍1。锁和COUNT保持原值，PGM-066后续完整LOCK-AMEND。操作员新“继续”已接续同一M002，没有新授权问题。
+
+## V0.63 M002 B3-r2整批执行完成
+
+取得before tree=0f29c275246b1e86a5e3843f11ba413ace34052f并先打印后才修改。001的4文件与上一批after tree逐字一致，不重复修改HTML。004先落tools/verify-entry-anchors.test.mjs V0.01并运行，真实CLI被历史raw拦住，ERR_ASSERTION actual1/expected0确认RED；随后仅给tools/verify-entry-anchors.mjs新增自身V0.01注释、给原EXCLUDE增加精确本轮raw路径，测试转GREEN。真实verify:entry-anchors、verify:html-ledger-sync、git diff --check全部退出0。无新依赖，没有改raw、锁或业务文字。
+
+after tree=9f235f47e026d7268cbcfc18dbd9ce5c8014fb24；完整未过滤diff SHA256=bc6ba3135dad818ff0693ca4395df9a531b77abe2d5d25e173bcc1cac8cec6b7，恰上述2文件，每一变更归004。取得after tree后B3次数1→2，真实索引SHA256=040cc6a55775bb41014c00b6ebc2728983138f2bea8289e55263ff377684e9ad保持。前后四值均73ce1c4523de229a11552ca343f594e1506da3dc10e68d3dac216dd4ca232439，取触发回退的B4-r1 Grok报告；COUNT0。001/004尚未出队，等待B4-r2双PASS；PGM-066完整LOCK-AMEND尚未执行。
+
+## V0.64 M002 B4-r2双PASS，001/004出队
+
+本方与Grok完整B4-r2均PASS，Grok真实EXIT_CODE=0；两份报告各V0.01，完整输入/输出与SHA见findings V0.28。两树diff全部2文件归004，回归与原门禁均通过；001上批4文件仍逐字正确。本批无新发现、无越界。按B4双PASS规则001/004出队，002/003原本否。B3=2不变，M002仍IN_PROGRESS，未执行B5、未声称模块PASS。下一步只执行申请20所引起PGM-066完整LOCK-AMEND，然后按最早映射M002重开B1；M001不受影响。
+
+## V0.65 LOCK-AMEND③前登记：申请20的PGM-066引文同步
+
+触发模块：M002。全部定义变更ID：PGM-066；全部映射变更ID：无。定义总数401、模块映射322，general18条全部未改；只改PGM-066原文中的页脚日期及lock自身文件版本V0.05→V0.06。最早引用模块M002，M001无PGM-066映射且没有general变更，保持已发布PASS。
+
+PGM-066的HTML出处：docs/platform-governance-map-for-operations-v0.1.html最后锚点“已拍板规则和待排期问题”下整段含第974行页脚。铁律4批准依据：申请20完整拟稿后操作员实际答复“可以”，批准第2行删除更新日期并V0.07→V0.08、第974行仅删除“更新日期：2026-09-01。”；本次锁引文只承接第974行删除，保留用途及解释权全文。全部变更ID均具HTML出处及此次逐条批准，没有通用工程判据变更；因此本次LOCK-AMEND-COUNT保持0。
+
+已按①写lock V0.06、②重算sidecar。完整前后diff仅2个hunk（自身版本与PGM-066页脚），附在本次复核调用和操作员回执中。③尚待本方与Grok独立复核：各自从ledger顶部读取旧基准，将现值复制到/tmp后反向应用完整diff，复算须等于旧基准，并核对全部定义/映射变更与本登记一致。当前顶部两行仍为旧基准及COUNT0；未执行④、⑤，不得进B1/B5。③双PASS后才更新基准、打印，然后仅把M002改PENDING从B1重开，B3=2累计保留。
+
+## V0.66 LOCK-AMEND③首份回执未采信
+
+Grok真实EXIT_CODE=0，sessionId=01a07097-06ba-7573-9368-3ef4b1c6172f，完整CLI返回已保留操作员工具回执，未落库。其text把过程说明直接拼到哈希前，第一行不是独占CRITERIA-LOCK-SHA256行。虽然正文声称完整性/一致性PASS且含反向旧哈希，不能截取内嵌PASS伪装合规报告；本票暂不采信，未执行④⑤，ledger顶部旧基准/COUNT0保持。没有运行失败或路径适配器四项交付失败，现有失败重跑计数不增；本次为回执交接重发，不把未采信折算成审计FAIL或PASS。
+
+仅补清交接措辞：面向CLI text只输出一次完整最终结论，不夹带任何过程文字，首字符起为独占哈希行；完整审计范围、diff、允许文件、模型/推理强度和其它运行参数保持。本方③实算PASS保留，Grok需重新实际复核同字节，不以抄写旧结果替代。V0.65的全部变更登记仍有效，顶部基准保持旧值。
+
+## V0.67 回执边界核实、更正与LOCK-AMEND④
+
+更正V0.66的回执格式判定：V0.17要求“报告”第一行独占哈希，并未要求把CLI聚合的全部过程消息视为单份报告。两次CLI均真实exit0；第二次sessionId=01a070a2-03e3-70f0-8d7f-d890df529000。通过既有只读grok export命令向stdout核对该原生任务的消息边界：共6条Assistant消息（5条过程、1条最终报告），依原顺序逐字拼接恰等于原始CLI JSON的text字段；最后完整消息逐字等于该text的完整尾段，首行为独占新锁哈希。不是按PASS字样剪取或改写模型结果；原JSON和两次返回仍完整保留工具回执，未落库、未修改原报告、未改审计参数/控制提示词、未新增审计产物或格式门槛。V0.66未采信记录保留其历史时态；本次基于原生消息边界确认第二份最终报告可采信。先前过严地把聚合text首行当报告首行，造成一次多余重发，归本方处理失误，不归Grok运行失败。
+
+③两席现已PASS：本方实际将现锁/tmp副本反向应用完整diff，结果等于自读旧基准；Grok第二份原生最终报告完整67行已输出IN-RECEIPT，也独立反向哈希核旧基准、比较401定义及322映射，恰PGM-066改动、映射/general不变，HTML951–979精确一致。两席现值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，反向旧值均73ce1c4523de229a11552ca343f594e1506da3dc10e68d3dac216dd4ca232439。全部变更ID均有申请20逐条HTML批准，COUNT保持0。此刻执行④：顶部基准更新为新实算值并回执打印；⑤尚未执行，M002仍IN_PROGRESS、B3=2，M001仍PASS。
+
+## V0.68 LOCK-AMEND⑤完成
+
+已按③双PASS、④新基准确认之后的顺序执行⑤。PGM-066最早引用模块为M002，M001不映射该ID，general及全部模块映射无变更；故只将当前M002 IN_PROGRESS改回PENDING。B3累计2次及既有报告均保留，不重开M001，不推进M003。下一步从M002 B1重新全量审979行及84冻结判据。
+
+## V0.69 M002新锁B1入口
+
+在LOCK-AMEND五步完成后，将M002从PENDING改为IN_PROGRESS并从B1整模块重开。两席重新读取当前治理HTML 979行、18GEN及66PGM；旧raw完整保留，B1各追加V0.04。本方未接触本次Grok报告，按先派Grok、独立完成self raw、再读Grok的顺序执行。B3累计2次，M001保持已发布PASS。
+
+## V0.70 M002新锁B1双席收齐并进入B2
+
+两席本次979行/84判据完整报告均PASS，无新临时缺陷；Grok真实EXIT_CODE=0，原43785字节完整前缀保留。四值相等并已逐一输出，现锁23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0。findings V0.29给出完整差集及001—004全否的当前候选；尚待本批B2双席，未进B5、未改源码。self报告确认块计数笔误已保留原文并在同次报告末尾V0.05更正为17，不增加轮次。M001继续已发布PASS。
+
+## V0.71 M002新锁B2双PASS，进入B5-r2
+
+两席对同一findings V0.29均PASS，Grok本批实际退出0；本方V0.06/GrokV0.05分别追加各自b1 raw，未新增哈希行，完整原始前缀保留。findings V0.30只记定稿、001—004仍全否。无修复队列，按§4跳过B3/B4，B3=2不变，直接B5-r2全量复审979行/84判据；保持IN_PROGRESS。M001审计及发布PASS不变。
+
+## V0.72 M002 B5-r2双PASS与模块审计收口
+
+两席当前B5完整报告均已落盘并逐字读完，Grok真实EXIT_CODE=0。Codex V0.01 SHA256=8b3d99fbd86976efe319a641f853ce8b316b2e9321c6765498a563d89914233c；Grok V0.01 SHA256=bd36f834f587c15ba2228e0fd54b9b1980a5ce2574cd2cc54607fe56ddf37f00。两席均重审979行/84判据，001/004无残留、002/003无新缺陷，4项队列全否，无未答问题。B5后实算/sidecar/ledger/本次Grok四值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，已分别原样打印操作员回执，COUNT0。
+
+现先将M002状态IN_PROGRESS改PASS，B3累计2不变，再写M002-00-authority-html-02.md收口文件。申请20的两处日期删除及四项辅助修复均有既有双席证据，6个源文件仍与B3-r2后像完全一致，没有新业务修改。按操作员每模块完成均提交/CI/合并/推送要求，下一步在独立发布worktree搬运已审字节，完成发布后再推进下一模块；不在主工作区提交。M001保持已发布PASS，其旧锁证据因本次无GEN/M001映射变更继续有效。
