@@ -1,7 +1,82 @@
 # 全量审计 Findings 台账
-版本：V0.41
+版本：V0.47
 
-## 当前状态：M001/M002已发布PASS；M003 B5-r2双PASS已收口，待提交合并推送
+## 当前状态：M001—M003已发布PASS；M004 B5-r1双PASS，六ID全出队，发布待执行
+
+## M004 B5-r1收口（V0.47当前）
+
+整3321行/220记录/18GEN两席PASS，Grok真实exit0，当前源SHA 65254915c5c85e3bf5b26659d0acd27b2bdfc94c6b5954d15e4db81a6877e6bc；四值全等原锁，COUNT0。001—006修复队列全否，待答0、新发现0。先写ledger PASS，再写modules/M004-01-root-config-and-guidance-02.md，按已有授权进入发布。两席完整raw及接收事实说明见模块收口；本次不修改源代码或业务HTML。
+
+## M004 B4-r1双PASS（V0.46历史接收）
+
+本方原独立完整报告前12083字节/SHA02e6d6ffd88c6f9b515ef2537d1192e0b40f8588d1cd1af2c98c4b16496a50ef为PASS；接收说明追加后V0.02全13880字节/SHAe8462d5b258fdf83619c829007635c570fbf468c673b4d07dbf44c8372c8af0d，不作为新自审票。
+首份Grok B4报告20152字节自述意外接触self正文，原PASS不采信。之后新进程独立重审相同before/after树，完整报告从20152字节后新锁哈希行至EOF，明确未读任何B4/B5 raw旧正文、未创建当前第三tree，审计PASS且越界PASS；真实EXIT_CODE=0。当前Grok raw V0.02全41272字节/SHA8d8ac42fcdab0a45b509026766ca72ff558815d50d581a5bd82517569b1fc80e，旧20152前缀完整保留，新段SHA 512af0048edaeade1c6bf27de3f2bb7f2c51407d010b3f662432a3f4e6b4412e。
+
+本方独立票与新外席独立票共同构成本次B4双PASS；未借受影响旧票放行。2259字节完整binary diff在新Grok报告逐字相等，5hunk归001/001/002/002/003；source保持65254915c5c85e3bf5b26659d0acd27b2bdfc94c6b5954d15e4db81a6877e6bc。四值相等，COUNT0；原001—003本批已修现出队为否，004—006继续否，当前六ID队列全否。B3仍1、运行失败重跑0，无添加项或HTML申请。
+
+接下来B5-r1对当前完整3321行/220记录/18GEN做三线全量复审，不只审差异。当前IN_PROGRESS，不是模块PASS。下方待修/候选/待外审均为当时时态，唯一队列表与本段为当前状态。
+
+## M004 B2双PASS定稿（V0.45当前）
+
+两席完整复核同一V0.44候选157999字节/SHA256 209fa3cc53db35726159760acfbd8e22f4c911e7afd83f105b1a13dc3df31fd2，均PASS。本方b1 raw追加V0.04后76213字节/SHA789448acf5ea1f33bab8ad340c94b873b97b0ee2873a8e6f521bd65686a62950；Grok追加V0.03后85017字节/SHAabbb09df87fd38e272738558f170171a8f30077be8755570c6390597613b7d21，真实EXIT_CODE=0。分别保留70453/66531旧前缀，本次B2未增加独占锁哈希行。本方完整自审先落盘才读对方本次报告。
+
+首批Grok FAIL保持历史原文。外席独立核实用户版本铁律、既有DEC-R8-96、npm10/11源码和真实往返，收回swKeyOrder为拒绝闭集的原依据，明确接受documentVersion V0.01为非协议的文件自身版本标记。没有用本方PASS覆盖外席FAIL，也没有让操作员重复批准。三包隔离验证双方均真实通过；其中负size空串特指nanoid/non-secure，不泛指默认CJS（默认CJS抛Wrong ID size）。
+
+当前六ID分类/队列和修复边界均与V0.44同：001—003是、004—006否；10个既有依赖字段加1行自身版本元数据，单文件。无添加项、HTML变更或待答问题。现在准入整批B3-r1，源码尚未写，B3=0。以下V0.44的待双PASS字样保留为候选历史，当前状态以本段为准。
+
+## M004 B1完整双席归并候选（V0.44当前，B2修订候选待双PASS）
+
+输入本方modules/M004-b1-self-raw.md V0.02，64989字节/SHA256=cde9d4c51416b2122e90051759c05c9be3a770d126102db64c28405e10be3f32；Grok modules/M004-b1-grok-raw.md V0.01，49550字节/SHA256=f1d03742777444c383fc857265779a4bd92f52209251ba2f462fb264e3c14adb，真实EXIT_CODE=0。本方先完整落盘后才读Grok，双方3320行/220记录/18GEN均完整。Grok B1 PASS、无GR；本方B1 FAIL/CX01—03。Grok明确未做漏洞库比对，因此本方安全发现为差集，保留其原PASS，不冒写为Grok同意修复，必须B2独立复核。
+
+B1后四值全等23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；COUNT0。当前B3=0，无源改动，无添加项/HTML申请或未答问题。下面六个正式ID覆盖三个工程问题及完整技术登记，不因同一包参与结构登记而复制安全finding。
+
+### M004唯一当前队列表（已双PASS定稿）
+
+| 正式ID | 全部来源 | 四分类 | 工程缺陷 | 修复队列 | 候选处置 |
+|---|---|---|---|---|---|
+| M004-001 | 本方CX-01；Grok无对应GR | 技术性 | 是 | 否 | nanoid锁3.3.12→同主版修补3.3.18及对应官方元数据 |
+| M004-002 | 本方CX-02；Grok无对应GR | 技术性 | 是 | 否 | postcss锁8.5.15→8.5.23及对应官方元数据/包内nanoid范围 |
+| M004-003 | 本方CX-03；Grok无对应GR | 技术性 | 是 | 否 | undici锁7.28.0→7.29.0及对应官方元数据 |
+| M004-004 | Grok T01—T04；本方顶层/根/web/link登记 | 技术性 | 否 | 否 | 只登记锁格式、两个清单镜像及工作区链接，不改应用版本或清单 |
+| M004-005 | Grok T05—T07、T09—T12；本方全部220记录的图/平台/peer/嵌套登记 | 技术性 | 否 | 否 | 只登记结构闭包与原生字段，无谓删包或扩平台不执行；三个安全版本问题只归001—003 |
+| M004-006 | Grok T08；本方217条SRI/216去重官方元数据核验 | 技术性 | 否 | 否 | 只登记信任来源与完整性，不因SRI匹配就推定没有漏洞 |
+
+### M004-001 nanoid开发依赖已知无限循环
+package-lock.json:1929—1947（version1930）；父postcss约束2070。GEN-010/012/013，类型2/3/4，中等严重度限定为开发工具链；不将上游high标签直接当本系统线上高危。nanoid/non-secure.nanoid(-1)、customAlphabet('abc',0)()实际1秒超时并终止；postcss真实调用nanoid(6)正常。本方audit返回两个GHSA，nanoid3.3.18在父^3.3.12（及修后postcss^3.3.16）范围内，官方registry版本/SRI已实际核对。无业务直接传入负size的已证路径，本项不声称生产可利用。
+无业务发明：固定已有软件的修补版本，无新接口、价格、流程或权限。最小修复仅本包version/resolved/integrity；不升主版或添加业务参数防护。
+
+### M004-002 PostCSS开发构建依赖已知map路径缺陷
+package-lock.json:2049—2077（version2050）；vite3062约束^8.5.15。GEN-004/010/013，类型2/3/4，中。实际8.5.15 postcss.parse读取测试临时目录合成绝对outside.map，命中AUDIT_SYNTHETIC_MARKER；未读真实秘密，临时目录已删除。官方postcss/postcss公告GHSA-fxqj-rqcc-2cmp修复8.5.23；当前更旧8.5.15只有扩展名检查。Vite主调用设置from，不把上游“未设置from”的条件直接等同项目漏洞。
+最小修复仅本包version/resolved/integrity，并按官方8.5.23元数据将该记录dependencies.nanoid从^3.3.12改^3.3.16；其他依赖字段相同，不升vite、不改业务CSS处理流程。
+
+### M004-003 undici开发测试依赖已知缓存头缺陷
+package-lock.json:3043—3052（version3044）；jsdom1592约束^7.25.0。GEN-004/009/010/013，类型2/3/4，中。实际调用当前7.28.0 parseCacheControlHeader：空private为数组空串，混合private与private=hdr触发TypeError output[key].concat is not a function。官方nodejs/undici GHSA-4cwx-7wf7-3272修复7.29.0；audit同次还返回4个该版修补公告。
+当前jsdom默认无cache interceptor，未证明本项目启用共享缓存或用户可利用。本项是锁引入已知库缺陷，不伪称线上跨用户泄漏。最小修复本包version/resolved/integrity，父范围与engines保持兼容，不升jsdom。
+
+三项共同证据：npm audit --package-lock-only --ignore-scripts --json实际exit1，high3；同锁--omit=dev实际exit0、告警0。实际可复现安全缺陷与已经存在的兼容修补版本支持最小更新；不是因未知CVE猜测而加安全门禁。若Grok对工程缺陷/处置有异议，须在本批B2明确指出，未双PASS不修。
+
+### M004-004—006 全部无缺陷技术登记
+004：顶层1—6/根7—20/web21—43/link1305—1308/闭合3319—3320，原生JSON无重键，根与web清单字段完全相等，link目标存在。类型3/4，GEN002/006/008/013/017/018。只安装元数据，无业务发明。
+005：两份raw全220记录覆盖表逐项保留；Grok438普通/optional依赖边、Codex582含peer解析边，口径不同非冲突；实际npm ls/ci dry-run均0，CodexArborist反例摘掉react检出50无效引用。optional平台/fsevents、peer、嵌套副本、engines和npm宿主差异如原始报告如实保留。无新增或删除包/业务能力的候选动作。类型3/4及内存解析2，GEN001/002/003/008/013/017/018。
+006：217 registry条目全HTTPS官方域且SRI格式通过；Grok实际下载217 tarball重算sha512全部一致，Codex逐216去重name/version官方dist字段比对一致。两种完整性证据不能当作安全无漏洞证明。类型3/4，GEN004/010/011/018。只软件来源，无业务发明。
+
+### 整批候选修复边界（未实施）
+唯一源文件package-lock.json：只更新上述三个现有包记录的version/resolved/integrity与postcss内部nanoid约束（10个已有值），其它217记录、应用name/version、workspace根镜像、父清单以及业务HTML不变。依赖仍满足现有父范围；不用无范围audit fix，不整体升级树、不新增依赖或overrides。
+
+版本处理（针对首批Grok B2 FAIL的修订论证，源仍未写）：本轮操作员直接提供的AGENTS.md instructions明确原文为：“版本铁律：所有版本号统一使用 Vx.xx 格式；任何对话中只要更新文件内容，该文件自身版本号末位必须前进一位（如 V0.02 → V0.03），发布日期或文件名不能代替版本号递增。”该要求未限定文档/HTML/JS；不是总调度新增的审计判据，也不能由本方自行豁免JSON文件。上位用户指令在本次会话已明确，不需要再次申请其已给出的要求。
+
+npm顶层version=0.1.0代表应用语义版本、lockfileVersion=3代表协议格式；二者均保留，不能冒作本文件自身Vx.xx版本。拟在本文件顶层增加documentVersion: V0.01，仅承担操作员要求的文件自身版本记录，归M004-001这次实际修改文件的版本维护。此字段不声称是npm标准协议字段，不用于依赖解析/业务接口，不新增审计门禁或产出物。把版本只写在findings/raw中不能满足“该文件自身版本号”的原文；改应用name/version或增副文件会更大且不满足。当前修复队列和10个既有依赖字段更新不变。
+
+已核事实：宿主npm11.19.0的Arborist loadVirtual/toJSON真实内存往返保留documentVersion，标准化后除该字段外全部对象deepEqual，582条边签名不变，220记录不变；原锁字节未写。另实际下载项目packageManager声明npm10.9.8官方tarball并核sha512，内存读其Arborist shrinkwrap.js:490—495的...data保留未知顶层字段、959—961只剔除旧dependencies。swKeyOrder是排序优先列表而非JSONschema拒绝闭集；未在npm文档列名仅说明扩展不参与安装，不能据此推断npm禁止该元数据。此兼容结论有源代码和真实运行支持，不把“允许保留”单独当必要性；必要性来自上述操作员原文。
+
+首批Grok的B2 FAIL及其六项接受均原样保留在modules/M004-b1-grok-raw.md V0.02（66531字节/SHA 888887e239ab1b3bfc75aa6158ed7755e9fdd48d41d7f7e696dfacde15568a7f）；本方首批PASS不覆盖它。本次重新交整批复核，须其针对用户原文、扩展字段与协议字段区别、实际兼容性给新PASS/FAIL；未双PASS不实施。Grok若仍否决，应给与这条现存用户要求同时相容的最小可执行处置或明确剩余矛盾，不能直接把该要求缩为“仅审计文档版本”。
+
+补充验证（仅候选隔离验证、不是B3或主工作区已修）：从官方registry实际下载三候选tgz逐个sha512匹配，在主工作区.scratch下自动删除的临时上下文加载真实包。nanoid3.3.18负size返回空串、customAlphabet零size返回空串、正常size6长度6；postcss8.5.23未读合成绝对outside.map（MAP null）；undici7.29.0空private与混合private均归private:true，不抛TypeError。三者exit0，临时上下文删除，主锁SHA保持0e468712d5240cb669b847ecb4250c03e35e38a52aaf11e3013eb8b717dec60d。官方候选元数据其他安装字段比对仅PostCSS内部nanoid约束变化，符合本批10值边界。
+
+修复验证只按实际内容：相同lock的npm原生解析/图/ci dry-run/全audit与生产audit；实际修后包验证上面库级反例，必要时用临时可丢弃上下文，不改主工作区node_modules或运行服务。新增测试/辅助代码只在确需且归已定稿ID时以最小形式处理，不新增强制门禁/计数器。B3前后全路径tree与全部binary diff、B4双审及B5整模块复审照旧。
+
+以上为修订候选，不是双席定稿；首批B2合取FAIL，下一调用重审整批V0.44。B3=0保持。
+
 
 ## M003 B5-r2双PASS，模块审计收口（V0.41当前）
 
