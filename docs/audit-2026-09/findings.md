@@ -1,9 +1,93 @@
 # 全量审计 Findings 台账
-版本：V0.47
+版本：V0.51
 
-## 当前状态：M001—M003已发布PASS；M004 B5-r1双PASS，六ID全出队，发布待执行
+## 当前状态：M001—M004已发布PASS；M005 B5-r1双PASS/四值全等，12项队列全否，进入发布
 
-## M004 B5-r1收口（V0.47当前）
+## M005 B5-r1收口（V0.51当前）
+
+两席全四文件232行、127脚本、9编译项、18GEN均PASS；Grok真实exit0，报告39052字节/416行/SHA cf0fdfa8f179392f93161e64afed533cea92fd84da79a5d1eda478a4451652a3；本方独立含补核前60471字节/SHA2dab6ab2974fa7dba20ee0e9246a3dfedd6376f69e4ca34dfdac5312cba21ec7，收后V0.03说明不作为新独立票。无新finding或待答，12ID队列全否；B3=1、运行失败0。四值原23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de全等、COUNT0。先写ledger PASS再模块收口，按已有授权进入发布。其他历史段以各自当时时态保留。
+
+## M005 B4-r1双PASS接收（V0.50当前）
+
+本方完整独立raw前17530字节/SHA2092d5f24b1b23cb86a7d22d967917fd35d53aac570ece461f2bcb649c9cdf2d为PASS，Grok完整raw32356字节/438行/SHA46f9501ac070309af410587efed1384e8919f502d9cc344e348affff4de10c52为PASS，真实exit0；两席越界均PASS。完整3529字节/8hunk/4路径diff逐字核验，six IDs 001—006均已修且统一出队为否；007—012继续否。B3=1、运行失败0、无添加/HTML申请/未答。四值原23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de全等，COUNT0。开始B5前保持源四文件和35scratch不变。本方raw末尾追加V0.02接收事实，原独立前缀不改。
+
+下文B2候选/待修/未实施语句是历史时间点，唯一当前队列表已同步；当前状态以本节及上方状态行为准。完整B5双PASS及四值复核前，不写模块PASS。
+
+## M005 B2整批定稿（V0.49；业务修复内容沿用已双PASS的V0.48候选）
+
+本批正式定稿：本方B2 V0.05 PASS（原前43563字节保持，全47896字节/SHA0ad9ec052aec7837ef6749549e977b4457016b3a965c76d6e84378c689f69817）；Grok B2 V0.03真实exit0/PASS（追加前69679字节保持，全83350字节/SHAedd292d2d78e58bd141fcfcf20c3bf1237145f89f5d7b56e4f5e106cc960bf08；本次追加13671字节/SHAf17bca44f886939db6c260989deaf2962f132872af8a65e62a920d386255faec，完整81行已读）。双方针对V0.48/SHA927eb2ced3766ac3c54f2bc944ba0da3f5578e300384777d52e7e3d1d5375e22全部12ID无分歧，六是六否，005/006实质问题本次复验并接受。无添加/HTML申请/未答。以下原候选细节作为定稿修复范围沿用；历史“候选”语句指当时状态，本段为当前状态。B3尚未执行。
+
+输入：本方原独立39710字节/V0.02/SHA44961cabea4ca790edf19d0960d001aa34161c7c47eb35aa1d27b028cbc1fca3（CX01/02），原票之后追加的接收补核不作为新盲审票。self当前V0.04/full SHA 552242925e80e266a7dd5b7aaf3c46eba2beb0d871edf50b30879bded93be783。Grok有效新完整报告从modules/M005-b1-grok-raw.md byte36359起，33320字节/SHAd30dab7380be95bfe1cdfe293a7e19f71c851825516a1da7937f075014c65ac7，FAIL/GR01/02；全69679字节/SHAbdcd2b52b3970093c2d1f4b5817e869f69ff7beae75521601b1603e63f52abc2。旧受影响Grok B1票不参与合取，但其实质疑点经本方收后验证并在本批005/006登记，不静默删除。B1后四值全等原23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；COUNT0。
+
+本模块4源223行、128根脚本、18GEN全部审完；B3=0、运行失败0、无未答问题。当前整批全技术性，无添加、无业务HTML修改申请。工程缺陷进入队列，只登记技术内容当场为否；以下仍是候选，两席B2双PASS后才可整批B3。
+
+### 正式ID与完整差集
+
+| ID | 来源 | 分类 | 工程缺陷 | 当前修复队列 | 命题 |
+|---|---|---|---|---|---|
+| M005-001 | 本方CX-01；新Grok GEN013只验证当前环境 | 技术性 | 是 | 否 | 根engines >=22宽于既定构建/测试依赖支持范围 |
+| M005-002 | 本方CX-02；新Grok将环境当操作员输入未判缺陷 | 技术性 | 是 | 否 | REAL_BACKEND_WEB_PORT未校验即进入shell命令 |
+| M005-003 | 新独立Grok GR-01 | 技术性 | 是 | 否 | 15条live-evidence在默认套件跳过，声明的real-backend入口又未收集 |
+| M005-004 | 新独立Grok GR-02；旧Grok GR-03；本方收后git grep核实 | 技术性 | 是 | 否 | smoke:p0-ops无已证调用的重复别名 |
+| M005-005 | 旧受影响Grok GR-01观察；本方收后实际隔离复现 | 技术性 | 是 | 否 | 不设REAL_BACKEND_E2E直接跑真实配置时全skip却exit0 |
+| M005-006 | 旧受影响Grok GR-02观察；本方源调用展开核实 | 技术性 | 是 | 否 | 默认E2E服务绑定所有接口，超出本地测试消费需求 |
+| M005-007 | 本方T01；Grok两报告根字段覆盖 | 技术性 | 否 | 否 | 包协议字段、工作区、private/type、应用semver；无业务发明 |
+| M005-008 | 本方T02；Grok全部128scripts覆盖 | 技术性 | 否 | 否 | 既有脚本/75node目标/108npm转发图；缺陷只归001—006 |
+| M005-009 | 本方T03；Grok依赖及packageManager覆盖 | 技术性 | 否 | 否 | 现有Playwright/yaml真实消费、声明npm版本，不无谓升级依赖 |
+| M005-010 | 本方T04；Grok mock配置覆盖 | 技术性 | 否 | 否 | mock测试超时/报告/globalSetup/Chromium/本地复用；003/006除外 |
+| M005-011 | 本方T05；Grok real配置覆盖 | 技术性 | 否 | 否 | 真实测试报告/超时/Chromium/proxy/strictPort与wrapper消费；002/003/005除外 |
+| M005-012 | 本方T06；Grok tsconfig全部覆盖 | 技术性 | 否 | 否 | 九个编译器选项及extends消费，实际类型正负验证；不改源 |
+
+### 001 — 根Node相容范围（P2；GEN002/013；类型4）
+
+位置package.json:140—141。根>=22放行22.0/22.12/23，现有jsdom要求^22.13.0或>=24（另支持20.19但根已>=22无需扩大支持），Vite等有22.12下界；实际npm checkEngine根通过而jsdom在22.0/23报EBADENGINE。逐锁记录相容统计22.0有26不相容、22.12有1、23有9，22.13/24均0。未声称跑过Node22/23二进制。
+
+候选最小修复：package.json engines.node改为“^22.13.0 || >=24.0.0”。package-lock.json的packages[""].engines.node同值同步，只同步该根镜像；此文件虽在M004已审，作为本ID必要直接镜像修改，不重开M004、不改任何依赖包版本/URL/SRI/其他字段，不改冻结模块映射。B4完整diff与B5该镜像一致性检查纳入本ID。两文件自身版本：package.json首次增加documentVersion V0.01；package-lock.json已documentVersion V0.01→V0.02。应用version0.1.0、lockfileVersion3保持。仅此同文件版本维护归001，不把全锁重生成为修复。
+
+### 002 — 端口输入与shell（P2；GEN004/009/010/013；类型4）
+
+位置playwright.real-backend.config.ts:4—5、26。当前真实WebServerPlugin先new URL，再shell:true执行命令；带“合法端口/; printf 无害标记; #”的端口值通过URL并执行标记。完整干净exit0探针在self V0.02，noop npm只避免启动业务进程，其余原命令实际执行；首次辅助器留存线程被精确终止未计PASS，随后干净验证已exit0。仅证明可控制本地/CI环境者的命令构造风险，未证明公网攻击路径。
+
+候选最小修复：const webPort = Number(process.env.REAL_BACKEND_WEB_PORT ?? "5174"); 在构造URL或命令前要求Number.isInteger(webPort)且1<=webPort<=65535，否则throw明确中文错误。后续模板插值使用已转换的number。用原生Number收敛输出，不增加库/通用shell框架；不额外要求字符串格式规则。同文件首次加“// 版本：V0.01”，只加一次。
+
+### 003 — 测试选择器对应现有真实用例（P2；GEN001/002/003/009；类型2/4）
+
+位置playwright.config.ts:4—5与playwright.real-backend.config.ts:8—9；package.json:82—86只是既有调用事实，不新增入口。已有customer-account-lifecycle-live-evidence 2条、leasing-contract-live-evidence 12条、order-tickets-live-evidence 1条，共15条默认因flag未设skip；现有real配置只收web-ui-real-backend 3条。新Grok实际无服务器15skip证明，默认47/9与真实3/1列表不等于都执行。
+
+候选最小修复：默认testIgnore改为["web-ui-real-backend.spec.ts", "*-live-evidence.spec.ts"]；真实testMatch改为同一数组。两数组仅匹配当前上述四个已存在文件，无新增业务用例、无新npm脚本、无改fixture业务断言。预期默认32条/6文件、真实18条/4文件，两个集合不交叉、联合等于现有50条/10文件。沿用既有REAL_BACKEND_E2E=1的npm/seeded入口；不把选择器修复宣称为18条业务用例已通过。默认配置首次加“// 版本：V0.01”。
+
+### 004 — 删除无用途别名（P3；GEN001；类型4）
+
+package.json:48精确删除"smoke:p0-ops": "npm run test:backend"这一项，保留smoke:p0/test:backend及backend README要求的防回流入口。新独立Grok与本方收后git grep（排除audit报告）均仅命中定义。本方最初对所有别名泛称便利性的说明收窄，不能把未证用途当保留理由。版本同001共享一次，不重复递增。
+
+### 005 — 真实配置缺标志时显式失败（P2；GEN002/003/009/011；类型2/4）
+
+对应首份报告的GR-01，与新GR-01的漏15条原因不同；保留来源区分。本方实际在scratch wrapper引用原real配置，仅隔离webServer/outputDir，不连后端，得到expected0/skipped3/exit0/last-run passed。公开的npm入口已设flag，不把它污为同样会skip；这里收窄到用户直接以--config调用真实配置的错误输入。
+
+候选修复：真实配置加载时若process.env.REAL_BACKEND_E2E !== "1"则throw中文错误，提示设置变量或用npm run verify:ui:real-backend；不自动打开真实后端动作。这样缺flag显式非0，官方npm/seeded仍传1；--list审计也必须显式传1。沿用既有flag，不新增开关/状态/参数。
+
+### 006 — 默认E2E只绑定loopback（P2；GEN004/010；类型2/4）
+
+playwright.config.ts:17当前npm run dev:web→apps/web dev→vite --host0.0.0.0 --port5173，消费者和就绪URL却只访问127.0.0.1。旧报告声称“默认口令”不足以证明后端越权，明确不采用该推论。新独立Grok在覆盖表亦列同一真实展开；将此现有配置事实作为最小绑定收窄，不添加网络业务规则。
+
+候选修复仅将webServer.command改为“npm --workspace apps/web run dev -- --host 127.0.0.1”，沿用workspace已有5173端口。实际Vite duplicate flag last-wins已经新Grok窄读实现确认；不顺带改变共享apps/web dev脚本、reuseExistingServer、超时或其他服务器参数。
+
+### 007—012逐条无业务发明及证据
+
+007：name/private/version/type/workspaces是npm协议字段；根/web路径与清单实际存在、JSON解析、镜像相符，不定义业务实体/权限。008：128scripts都是现有文件与命令的别名/组合；75node入口语法通过、134根/工作区脚本节点108npm边无悬空无环，不把tenant/pii等工具名字发明为业务流程。009：Playwright用于现有CLI、yaml由OpenAPI两个工具实际import；packageManager用于工具版本选择，本机npm11差异如实记，不自行加engines.npm或升级。010：默认测试报告/超时/Chromium/globalSetup存在且能加载，暖机只是辅助；不新增UI产品行为。011：真实reporter路径与wrapper读取一致，strictPort/proxy/timeout服务既有测试隔离；不以报告输出声称真实业务通过。012：九编译开关被apps/web extends消费，实际TypeScript正负诊断0 vs2322/7006，不发明业务枚举；tsconfig.base.json保持不改。
+
+### 整批修复边界与验证（候选）
+
+预计只改package.json、package-lock.json根镜像、playwright.config.ts、playwright.real-backend.config.ts；tsconfig.base.json、测试spec业务正文、三HTML、其他包记录和业务源码均保持。各hunk按001—006逐行归因，共享版本行按首次涉及本文件ID记账。B2通过前没有改源。
+
+实际修复后验证：严格JSON/版本字段及root-lock engine相等；所有现有包记录除根engine及顶层documentVersion外深相等；workspace-aware脚本引用/语法与删键结果；正常端口1/5174/65535、非法0/65536/NaN/分号路径等在原配置加载前拦截；缺真实flag非0、显式flag1可列18条；默认32与真实18集合不交且并为原50；TypeScript继承/正负验证及两配置逐字段/CLI解析。必要临时反例只在scratch自动清理，不启动生产/DB，不凭--list宣称用例业务绿。完整B3前后树差异双B4、整模块双B5之后才收口发布。
+
+新GrokB1误执行corepack --activate的环境操作已记录：当前/bin/npm11.19.0、corepack已知npm10.9.8，缺事前缓存值证据，不猜测回滚。该操作不是本模块业务源缺陷，不单独造ID/新状态/计数器；后续禁止激活/全局配置命令。
+
+
+
+
+## M004 B5-r1收口（V0.47历史）
 
 整3321行/220记录/18GEN两席PASS，Grok真实exit0，当前源SHA 65254915c5c85e3bf5b26659d0acd27b2bdfc94c6b5954d15e4db81a6877e6bc；四值全等原锁，COUNT0。001—006修复队列全否，待答0、新发现0。先写ledger PASS，再写modules/M004-01-root-config-and-guidance-02.md，按已有授权进入发布。两席完整raw及接收事实说明见模块收口；本次不修改源代码或业务HTML。
 

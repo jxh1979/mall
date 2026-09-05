@@ -2,6 +2,7 @@
   "name": "entertainment-complex-management",
   "private": true,
   "version": "0.1.0",
+  "documentVersion": "V0.01",
   "type": "module",
   "workspaces": [
     "apps/web"
@@ -45,7 +46,6 @@
     "build": "npm run build --workspace apps/web",
     "typecheck": "npm run typecheck --workspace apps/web",
     "smoke:p0": "npm run test:backend",
-    "smoke:p0-ops": "npm run test:backend",
     "verify:android-env": "node tools/run-android-gradle.mjs --check --require-android-sdk --project apps/android-terminal/android-app",
     "android:p0:build": "node tools/run-android-gradle.mjs --project apps/android-terminal clean build",
     "android:p0:smoke": "node tools/run-android-p0-smoke.mjs",
@@ -138,7 +138,7 @@
   },
   "packageManager": "npm@10.9.8",
   "engines": {
-    "node": ">=22"
+    "node": "^22.13.0 || >=24.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
