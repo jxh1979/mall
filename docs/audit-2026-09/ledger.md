@@ -1,14 +1,14 @@
 CRITERIA-LOCK-SHA256: 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de
 LOCK-AMEND-COUNT: 0
 
-版本：V0.85
+版本：V0.93
 
 | 模块 | 状态 | B3执行次数 | 方案复核已修次数 | PASS证据 | 子代理失败重跑次数 | 备注 |
 |---|---|---:|---:|---|---:|---|
 | M001 `00-authority-html-01` | PASS | 2 | 2 | modules/M001-00-authority-html-01.md；B5-r2双PASS/四值一致 | 6 | V0.13；2340行/335判据；审计及发布PASS；PR #410已合并，160=origin/main=001878a |
 | M002 `00-authority-html-02` | PASS | 2 | 2 | modules/M002-00-authority-html-02.md；B5-r2双PASS/四值一致 | 0 | V0.17；979行/84判据；审计及发布PASS；PR #411已合并，160=origin/main=df580198 |
-| M003 `01-root-config-and-guidance-01` | PASS | 2 | 2 | modules/M003-01-root-config-and-guidance-01.md；B5-r2双PASS/四值一致 | 0 | V0.17；8文件621行/18GEN；审计PASS，待逐模块提交合并推送 |
-| M004 `01-root-config-and-guidance-02` | PENDING | 0 | 2 | - | 0 | OVERSIZE-SINGLE-FILE |
+| M003 `01-root-config-and-guidance-01` | PASS | 2 | 2 | modules/M003-01-root-config-and-guidance-01.md；B5-r2双PASS/四值一致 | 0 | V0.17；8文件621行/18GEN；审计及发布PASS；PR #412已合并，160=origin/main=9f7955eb |
+| M004 `01-root-config-and-guidance-02` | PASS | 1 | 2 | modules/M004-01-root-config-and-guidance-02.md；B5-r1双PASS/四值一致 | 0 | V0.17；1文件3321行/220记录/18GEN；审计PASS，发布待执行 |
 | M005 `01-root-config-and-guidance-03` | PENDING | 0 | 2 | - | 0 | - |
 | M006 `10-backend-main-access-01` | PENDING | 0 | 2 | - | 0 | - |
 | M007 `10-backend-main-access-02` | PENDING | 0 | 2 | - | 0 | - |
@@ -1122,3 +1122,36 @@ Grok三项观察（重复STAFF节点、目录“管理端”、AOP）均明确�
 B5后实算/sidecar/ledger/Grok报告四值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，LOCK-AMEND-COUNT=0。源码与B3-r2后像8文件SHA逐项相同；三HTML未改。018/025/026无残留，023删除/024保留落实；019既有撤回理由不变。Grok宿主JAVA_HOME错误按环境失败保留，未称后端测试PASS；本方实际Spring环境绑定补核exit0，无新缺陷。
 
 B3累计2、运行失败重跑0。本批四值及完整双PASS成立后，先把ledger模块行IN_PROGRESS改PASS，再写modules/M003-01-root-config-and-guidance-01.md。当前审计完成，提交/PR/CI/合并/160同步尚待执行，不能将本段当发布完成证明。发布完成后方可进入M004。
+
+
+## V0.86 M003发布同步完成，串行进入M004 B1
+
+M003发布分支codex/m003-root-config-guidance-audit，独立worktree提交d8ed9c1a78511035795c73c5088e0d7ee0b20a70；propose-change.sh实际predeploy全部exit0并推送创建PR https://github.com/jxh1979/mall/pull/412；CI https://github.com/jxh1979/mall/actions/runs/33965233145 对同一HEAD success，merge-pr.sh --squash实际exit0，2026-09-05T12:09:52Z合并为9f7955ebc8816e4fec39b5fd2c9920ab79a29d9b。160 main已ff同步，21个发布文件逐一SHA匹配，35个原有scratch逐一SHA保持，真实暂存及tracked工作区干净后才进入下一模块。只暂存并丢弃本轮已验证同字节的发布恢复stash，未处理任何用户其它文件。M003 B3=2/retries0。
+
+按B1唯一入口先将M004 PENDING改IN_PROGRESS；本模块仅package-lock.json，计划3320行，OVERSIZE-SINGLE-FILE，范围不重切，B3=0/retries0。以下完整三线审计全部依赖锁内容；暂未读Grok报告，B1 Grok=NOT-CALLED，紧接派发固定CLI及适配器。M001/M002/M003不重开。全局lock仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0。无待答、无HTML修改。
+
+
+## V0.87 M004 B1完整报告齐，进入B2候选
+
+本方64989字节/SHA cde9d4c51416b2122e90051759c05c9be3a770d126102db64c28405e10be3f32 FAIL/CX3；Grok49550字节/SHA f1d03742777444c383fc857265779a4bd92f52209251ba2f462fb264e3c14adb PASS/GR0，真实exit0已在12:25:41之后检查收到。两份完整原始报告已全部读完，源3320行/220record，B1后四值全等原23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0。Grok未做漏洞数据库比对，本方3项作为整批差集交B2独立审，不擅改其原始PASS或声称双PASS。
+
+findings V0.43当前6ID/3是/3否，技术登记T01—T12完整映射，无添加/HTML申请。仅候选，待B2双PASS后才可B3，当前源锁SHA0e468712d5240cb669b847ecb4250c03e35e38a52aaf11e3013eb8b717dec60d/B3=0保持。后续每模块继续提交合并推送闭环。本入口B2 Grok=NOT-CALLED，紧接实际派发。
+
+调度实况保留：本次首个Grok状态检查距启动4分30秒，提前30秒；只收到仍运行，未读正文/未重跑/未判失败。随后检查已按前次结束起满5分钟（12:20:36、12:25:41以后）执行。后续按时间差断言再检查，不把该偏差写成符合约定。
+
+
+## M004 B3-r1整批记录
+
+版本：V0.90。B2 V0.44双PASS后唯一修复者整批执行001—003；before tree d4445654c7afca5232ec15f2fdd7ae3e39951756；after tree 42e9241c8bc8bf71565166e20885a005b741e50e；完整binary diff 2259字节/SHA 59384beb2fb6844714b818d17319992f11012b7737988e574b11dbbe8ab56563，5 hunk，唯一文件package-lock.json。三包10已有值与documentVersion V0.01按定稿边界写入，其他217记录及三HTML未变。前后四值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0，35个.scratch原文件SHA均保持。取得after tree后才把B3计数0→1；当前IN_PROGRESS，待B4全差异双审，无模块PASS。
+
+
+## M004 B4外席独立性处置
+
+版本：V0.91。首份Grok B4交付exit0、20152字节/SHA e7d294f98433e7dcd8153c9ec549c896be02dacb726d1d365a69e64514a4d143，自述读取当前临时tree差异时输出带出本次self正文。原PASS不纳入双席合取；原字节保留。不以“不引用”代替独立性。原本方12083字节独立报告保留，后追加接收说明不是新票。新Grok无继承调用重审相同B4树，禁止当前工作区全diff混入审计报告；只在同名r1 raw追加。B3仍1，队列仍三是三否，运行失败重跑0；无源修复、无新ID/状态/产物、无下一模块。
+
+
+## V0.93 M004 B5-r1完整收口
+
+B5本方独立PASS，原87159字节/SHA aec13af9f4be9998af84839dc7411e1dd2d058fd2d98da909d886863c2f3d43e；追加事实接收后V0.02 SHA babfcc9aa382b4d329e0dc5cafc16f6d874da5c0d5545c786c297b160510ed0e。Grok真实exit0、95358字节/SHA 31f7bd9586520ad2ab89fd4b3bbc5a95fa596d081b68a2a343ce60af5ced264f、429行完整已读、PASS/无GR。两席审完唯一源3321行/220记录/18GEN，六ID队列全否、未答0。四值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0，源SHA65254915c5c85e3bf5b26659d0acd27b2bdfc94c6b5954d15e4db81a6877e6bc。先写本ledger PASS，再写模块收口文件；B3仍1、运行失败重跑0。原B4受其他席正文曝光影响的第一次Grok票不参与通过；有效独立追加段与原本方独立票已B4双PASS。Grok B5关于安装原子性与客人端的两处表述不采信，详见self接收段，未发明源修复。
+
+审计通过后按操作员既有逐模块提交合并推送授权，开始发布；发布闭环前不进入M005。
