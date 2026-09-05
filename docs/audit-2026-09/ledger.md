@@ -1,15 +1,15 @@
 CRITERIA-LOCK-SHA256: 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de
 LOCK-AMEND-COUNT: 0
 
-版本：V0.93
+版本：V1.00
 
 | 模块 | 状态 | B3执行次数 | 方案复核已修次数 | PASS证据 | 子代理失败重跑次数 | 备注 |
 |---|---|---:|---:|---|---:|---|
 | M001 `00-authority-html-01` | PASS | 2 | 2 | modules/M001-00-authority-html-01.md；B5-r2双PASS/四值一致 | 6 | V0.13；2340行/335判据；审计及发布PASS；PR #410已合并，160=origin/main=001878a |
 | M002 `00-authority-html-02` | PASS | 2 | 2 | modules/M002-00-authority-html-02.md；B5-r2双PASS/四值一致 | 0 | V0.17；979行/84判据；审计及发布PASS；PR #411已合并，160=origin/main=df580198 |
 | M003 `01-root-config-and-guidance-01` | PASS | 2 | 2 | modules/M003-01-root-config-and-guidance-01.md；B5-r2双PASS/四值一致 | 0 | V0.17；8文件621行/18GEN；审计及发布PASS；PR #412已合并，160=origin/main=9f7955eb |
-| M004 `01-root-config-and-guidance-02` | PASS | 1 | 2 | modules/M004-01-root-config-and-guidance-02.md；B5-r1双PASS/四值一致 | 0 | V0.17；1文件3321行/220记录/18GEN；审计PASS，发布待执行 |
-| M005 `01-root-config-and-guidance-03` | PENDING | 0 | 2 | - | 0 | - |
+| M004 `01-root-config-and-guidance-02` | PASS | 1 | 2 | modules/M004-01-root-config-and-guidance-02.md；B5-r1双PASS/四值一致 | 0 | V0.17；1文件3321行/220记录/18GEN；审计及发布PASS；PR #413已合并，160=origin/main=134d75d1 |
+| M005 `01-root-config-and-guidance-03` | PASS | 1 | 2 | modules/M005-01-root-config-and-guidance-03.md；B5-r1双PASS/四值一致 | 0 | V0.17；4文件232行/127脚本/18GEN；审计PASS，进入逐模块发布 |
 | M006 `10-backend-main-access-01` | PENDING | 0 | 2 | - | 0 | - |
 | M007 `10-backend-main-access-02` | PENDING | 0 | 2 | - | 0 | - |
 | M008 `10-backend-main-access-03` | PENDING | 0 | 2 | - | 0 | - |
@@ -1155,3 +1155,30 @@ findings V0.43当前6ID/3是/3否，技术登记T01—T12完整映射，无添�
 B5本方独立PASS，原87159字节/SHA aec13af9f4be9998af84839dc7411e1dd2d058fd2d98da909d886863c2f3d43e；追加事实接收后V0.02 SHA babfcc9aa382b4d329e0dc5cafc16f6d874da5c0d5545c786c297b160510ed0e。Grok真实exit0、95358字节/SHA 31f7bd9586520ad2ab89fd4b3bbc5a95fa596d081b68a2a343ce60af5ced264f、429行完整已读、PASS/无GR。两席审完唯一源3321行/220记录/18GEN，六ID队列全否、未答0。四值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0，源SHA65254915c5c85e3bf5b26659d0acd27b2bdfc94c6b5954d15e4db81a6877e6bc。先写本ledger PASS，再写模块收口文件；B3仍1、运行失败重跑0。原B4受其他席正文曝光影响的第一次Grok票不参与通过；有效独立追加段与原本方独立票已B4双PASS。Grok B5关于安装原子性与客人端的两处表述不采信，详见self接收段，未发明源修复。
 
 审计通过后按操作员既有逐模块提交合并推送授权，开始发布；发布闭环前不进入M005。
+
+
+## V0.94 M004发布闭环与M005 B1入口
+
+M004 feature d169e539ccc3a8456528a104871f87f1bf53bd9b，PR https://github.com/jxh1979/mall/pull/413 于2026-09-05T13:58:31Z合并为134d75d158ca6ff1343f616cce47676ecfc83e02。propose-change.sh真实predeploy全部通过；CI https://github.com/jxh1979/mall/actions/runs/33970401257 在该feature SHA为success，merge-pr.sh真实exit0。160主main已ff同步，10个发布文件逐SHA相同、35个既有scratch文件逐SHA保留，发布后tracked clean。源和收口metadata diff --check通过；raw中68处原始行尾空白保留，未改写原报告。只在核实合并字节后删除本方临时同字节stash。
+
+发布闭环后才进入M005，4文件/package.json、playwright.config.ts、playwright.real-backend.config.ts、tsconfig.base.json，223行，B3=0，运行失败重跑0；尚无本模块结论。Grok先派、self完整落盘后再读对方，整批B2，未经B3不修源。
+
+
+## V0.95 M005 B1外席独立性恢复
+
+首份Grok B1交付真实exit0但L40/L450披露检索命中本方raw三行，原36359字节SHA7ee402a51c04c4493f78308f356875e6ac95244fb1863b81d97f982763a7671f保留、FAIL及GR01—03不改写，不作为独立票。当前只让新Grok进程完整重审本B1；本方原39710字节独立报告保留，追加接收不是新盲审票。禁止索引/语义/全库检索、按源白名单读取，旧raw只ab追加不读。B3=0、运行失败0、IN_PROGRESS不变，无源修复或B2定稿。
+
+
+## V0.96 M005有效B1齐备，进入整批B2
+
+Grok新独立完整报告从36359字节后起，33320字节/385行/SHAd30dab7380be95bfe1cdfe293a7e19f71c851825516a1da7937f075014c65ac7，真实exit0，FAIL/GR01—02。本方原独立39710字节FAIL/CX01—02保留，接收补核不作新票。新外席只见不含分析的ledger短备注，没有raw/分析曝光；首次受影响票不参与独立合取，旧观察收后核实作为本批005/006候选。B1后四值均原23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0，源223行/4文件SHA保持。findings V0.48为12ID/6是6否候选，全部技术性，无人闸。B3仍0，Grok运行失败重跑0，待整批B2双PASS再修。
+
+
+## V0.97 M005 B2整批双PASS定稿
+
+两席各自将全12ID复核结论追加本方b1 raw，历史完整保留、未新增独占锁哈希行。本方原候选V0.48接受PASS；Grok B2原生exit0，完整81行/13671字节追加已读，明确全12ID来源/分类/队列/最小范围均PASS。findings V0.49仅定稿接收元数据，不改变双方已审V0.48方案。001—006待修，007—012仅登记；源4文件223行及直接lock均未变，B3=0。后续先四值/完整临时树，再整批6ID修复，得到after tree才将B3加1。
+
+
+## V0.98 M005 B3-r1整批实施
+
+B2候选V0.48两席PASS后按V0.49定稿一次性执行001—006，未改仅登记项。before tree 4e82fa54f5fcf4589bf2c8ad526ab64c9d2c2a4e → after tree 214490504e59405a1c6ef5f83f172a6f8be373fe；全路径binary diff 3529字节/8hunk/4路径，SHA42a88e82d010599b68b2e30414b2e35d2731cc5e6c6b81931ea55f4312779c26。取得after tree后才将B3从0加1。四值前后均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0。35个既有scratch逐SHA保持，tsconfig.base及三HTML无变化，lock仅根engine及自身documentVersion变化，全部包记录保持。当前待B4全差异双审，不宣称模块通过。
