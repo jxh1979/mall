@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.16
+文档版本：V0.17
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准及本次全量审计 M001 的逐项批准；现行版本与字节哈希见本文件末节。
@@ -2528,3 +2528,7 @@ James 逐字批准的完整替换句：
 | docs/platform-governance-map-for-operations-v0.1.html | V0.07 | c63041a15599fbe4768b7131f78e9c6d6c0ffabe8b5ffc3a1151e24eac1c1dc0 |
 
 本台账本次仅作已批准裁决的机械登记，满足同PR同步门禁；旧历史裁决保持原文，新增版本V0.16。
+
+### M001 发布门禁机械镜像同步
+
+同步 entry-registry.csv 的15行entry_body，以及 authority-rule-ledger.csv 的15行source_text及同条目句子镜像列；只承接上节已批准的现行HTML文字。条目ID、条目名、行锚、CSV列结构、总行数及html-prd-coverage.csv均保持不变；后者不重写既有PRD覆盖结论。verify:entry-anchors全量通过（注册表1228行、账本1235行、矩阵1244行、1563个镜像片段）。两份机器镜像沿用既有CSV格式，其本次版本记录归于本节V0.17：entry-registry.csv SHA256=717a1a9d9292c78d12670083e8e7481b1604ac810596613a7be098fe7651640a；authority-rule-ledger.csv SHA256=3757cc8a3a4d3cfbe32f7d80e478998bee8a5eaa6a988d67454674cbd79d9436。
