@@ -1,13 +1,13 @@
 CRITERIA-LOCK-SHA256: 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de
 LOCK-AMEND-COUNT: 0
 
-版本：V0.72
+版本：V0.85
 
 | 模块 | 状态 | B3执行次数 | 方案复核已修次数 | PASS证据 | 子代理失败重跑次数 | 备注 |
 |---|---|---:|---:|---|---:|---|
 | M001 `00-authority-html-01` | PASS | 2 | 2 | modules/M001-00-authority-html-01.md；B5-r2双PASS/四值一致 | 6 | V0.13；2340行/335判据；审计及发布PASS；PR #410已合并，160=origin/main=001878a |
-| M002 `00-authority-html-02` | PASS | 2 | 2 | modules/M002-00-authority-html-02.md；B5-r2双PASS/四值一致 | 0 | V0.17；979行/84判据；审计PASS；按已授权流程完成独立PR发布 |
-| M003 `01-root-config-and-guidance-01` | PENDING | 0 | 2 | - | 0 | - |
+| M002 `00-authority-html-02` | PASS | 2 | 2 | modules/M002-00-authority-html-02.md；B5-r2双PASS/四值一致 | 0 | V0.17；979行/84判据；审计及发布PASS；PR #411已合并，160=origin/main=df580198 |
+| M003 `01-root-config-and-guidance-01` | PASS | 2 | 2 | modules/M003-01-root-config-and-guidance-01.md；B5-r2双PASS/四值一致 | 0 | V0.17；8文件621行/18GEN；审计PASS，待逐模块提交合并推送 |
 | M004 `01-root-config-and-guidance-02` | PENDING | 0 | 2 | - | 0 | OVERSIZE-SINGLE-FILE |
 | M005 `01-root-config-and-guidance-03` | PENDING | 0 | 2 | - | 0 | - |
 | M006 `10-backend-main-access-01` | PENDING | 0 | 2 | - | 0 | - |
@@ -995,3 +995,130 @@ Grok真实EXIT_CODE=0，sessionId=01a07097-06ba-7573-9368-3ef4b1c6172f，完整C
 两席当前B5完整报告均已落盘并逐字读完，Grok真实EXIT_CODE=0。Codex V0.01 SHA256=8b3d99fbd86976efe319a641f853ce8b316b2e9321c6765498a563d89914233c；Grok V0.01 SHA256=bd36f834f587c15ba2228e0fd54b9b1980a5ce2574cd2cc54607fe56ddf37f00。两席均重审979行/84判据，001/004无残留、002/003无新缺陷，4项队列全否，无未答问题。B5后实算/sidecar/ledger/本次Grok四值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，已分别原样打印操作员回执，COUNT0。
 
 现先将M002状态IN_PROGRESS改PASS，B3累计2不变，再写M002-00-authority-html-02.md收口文件。申请20的两处日期删除及四项辅助修复均有既有双席证据，6个源文件仍与B3-r2后像完全一致，没有新业务修改。按操作员每模块完成均提交/CI/合并/推送要求，下一步在独立发布worktree搬运已审字节，完成发布后再推进下一模块；不在主工作区提交。M001保持已发布PASS，其旧锁证据因本次无GEN/M001映射变更继续有效。
+
+## V0.73 M002发布闭环并进入M003 B1
+
+M002分支提交8e4a6727e2a1b6befe7383daf09bce2bc449921a，propose-change.sh全部verify:predeploy通过并推送创建PR https://github.com/jxh1979/mall/pull/411；predeploy-gates run33957296979成功；merge-pr.sh --squash实际合并于2026-09-05T09:13:26Z，mergeCommit df580198172b2c497ef3cb7e25d2e8e5dc058920。160主工作区先验证19文件已审字节，按精确路径临时保存后ff-only同步，再验证19文件与发布blob一致、35个.scratch原文件名称及SHA保持、tracked clean；只清理本次已验证恢复保存，无直推main或主目录提交。
+
+按既有322模块顺序将M003首次从PENDING改IN_PROGRESS，B3=0。当前模块为根配置/说明8文件，仅18GEN映射；完整三线审计后统一B2，不边审边修，不重开已发布M001/M002。控制实算V0.17及SHA c93ddca061831828a5dcabb1c83fe18a4a6b7a2a6cd839e3baaef63c66ad6f21未变。先派Grok只写指定b1 raw，本方完整raw落盘前不读Grok正文。NOT-CALLED为本入口写入时状态；下一调用单独打印。
+
+
+## V0.74 M003 B1收齐、B2整批归并后问答暂停
+
+两席完整B1覆盖8文件625行/18GEN，双方FAIL。Codex完整self raw先落盘，才读取Grok；真实Grok退出0，36585字节/SHA 1fe8db0cfdc990715545f383fccedeeedac66e4c03ef308dd628ff7256af2d3b，本方36557字节/SHA 7fc9d6901f4347f36fb8fd232c56fdb2cf5418387f5ac02b18d5aae0e6654995。四值全等顶部现锁，COUNT0；B3累计0、源码8文件SHA与B1完全一致、失败重跑0。
+
+findings V0.32归并全部CX19项/Grok16项及完整逐条登记，分配M003-001—024。18项候选待修，4项仅登记，023/024为Grok判添加待实际保留/删除；技术与业务分类分歧均保留，未单方宣称B2 PASS。GR-18“HTML无营销多主体/登记赞助/分别锁预算”的事实错误已由BSM1725原文反证；本方认为细化，将事实及建议保留完整列入024问题，不让操作员在错误前提下裁决。017扫描原exit0不能证实解析，现有直接AST反证及p/bash HTTP404/exit7如实登记。021/022只接受快照/历史时态澄清，不把未跑测试当失败或补造测试结果。
+
+已写questions/M003-023.md与M003-024.md各V0.01，操作员答复段真正为空；全文打印操作员回执。按§2.2/§4 B2①置BLOCKED-ASK并暂停全流程，B2 Grok=NOT-CALLED，不修任何源文件、不推进下一模块。实际答复首行保留/删除齐全后，把本模块恢复IN_PROGRESS，按同一整批B2双席复核，不重开。用户最新通知后的本地控制复核仍V0.17、SHA c93ddca061831828a5dcabb1c83fe18a4a6b7a2a6cd839e3baaef63c66ad6f21，沿用新提示词有效，不重置既有进度。M001/M002保持已发布PASS。
+
+
+## V0.75 M003-023收到实际删除答复，024继续等待
+
+操作员实际聊天答复为“删除（推荐）”，此标签对应023的推荐选项；随后明确“第二个没看到”。将questions/M003-023.md版本V0.01→V0.02，答复段首个非空行记录“删除”，保留原始答复及范围。findings V0.33仅将023候选队列改为是，并将当前批次统计更新为19待修/4登记/1待答；其余ID的分类/队列均不改，原始两席报告不改。
+
+questions/M003-024.md仍V0.01、答复空。M003保持BLOCKED-ASK、B3=0；收到024实际答复前不派B2、不修改源码、不进入下一模块。本步Grok=NOT-CALLED，锁与COUNT0保持原基准。操作员明确请求重发第二题，单独重发024，不重复询问已答023。
+
+
+## V0.76 M003两项答齐，从BLOCKED-ASK恢复同一B2
+
+操作员针对单独重发的024实际答复“保留”。questions/M003-024.md V0.02答复首个非空行为保留；023既有删除答复原文保留。questions下全部文件均已检查有效答复，无未答项。findings V0.34记录全部答复及19候选待修/5无待修，不自行改Grok原报告或宣称定稿。
+
+按§2.2第4步先把M003 BLOCKED-ASK恢复IN_PROGRESS；B3仍0、失败重跑0、控制V0.17、现锁及COUNT0保持。下一步只做本整批24ID的B2双席复核；双PASS前不修源文件、不重开B1、不进入M004。此记录时Grok=NOT-CALLED，实际派发另出回执。
+
+
+## V0.77 M003 B2候选精化完成，待派双席复核
+
+findings V0.35把024提议归细化（HTML1725直接明文），保留Grok原始添加主张，未代其定稿；021通过直接读生成器确认自动块会被重建，故候选修复收窄至表外解释，不改生成器或扩源范围。024保留、023删除实际答复均有效，当前19待修/5否、24ID无漏并。源码和B1原始报告保持，B3=0、IN_PROGRESS；本记录写入时B2 Grok仍NOT-CALLED，紧接按固定CLI/适配器派发同一整批。
+
+
+## V0.78 M003 B2首批双PASS定稿
+
+Grok B2真实退出0，本方/Grok分别在原b1 raw末尾追加V0.02 PASS，原始前缀保留且无新独占锁哈希行；两席审核同一findings V0.35 SHA 00de12e4e63c56e2f9460c70bd55ee36149bd78d97c81687ece69baa8a8e9a11。完整报告与SHA见findings V0.36定稿段，全部24ID/19CX/16GR及逐项登记无漏并。Grok独立接受017缺陷否和024细化，并撤回原错误事实；接受021表外说明与022历史时态处置。023删除/024保留实际答复齐全。
+
+现19项是、5项否，B3=0，M003保持IN_PROGRESS；准备第一批B3，先四值核对及全路径before tree，后统一修六个源文件中的全部19项。无HTML改动、无新判据，不重开旧模块。真实B2命令使用既有grok-4.6/xhigh参数与路径适配器，完整命令已在操作员工具回执；本次报告来源modules/M003-b1-grok-raw.md V0.02。
+
+
+## V0.79 M003 B3-r1整批执行完成
+
+B2 V0.35候选已获两席PASS并由findings V0.36定稿，19项是全部统一修复，5项否未动。before tree=a339075ff27c89319739c4ca4e9fb802b31f376c；after tree=18e0fe08e0b08eb55f1390c93ddd0f92d6625cc7；完整未过滤git diff --binary SHA256=c5d7661649fbabd3b003394242e2a4069d36251e994a9b5bc5b43255a4c92a55，19006字节，恰6个源文件：.env.example, AGENTS.md, CONTEXT.md, PROGRESS.md, README.en.md, README.md。两树均用临时不存在索引git add -A/git write-tree生成，真实索引SHA256=6a25d7b677e4dc3eb39c076f8e6a204799c1a92693734b773194a036ad59561b保持。先取得after tree后才将B3累计0→1。
+
+本批按ponytail已读技能和现有HTML实施删除/收窄：001/002环境样例，003/004 AGENTS，005—012/020/023 CONTEXT，013/015/021中文README，014/015英文README，022 PROGRESS历史时态；6文件原无自身版本，均建立V0.01。024营销词条、README生成基线块逐字保持；.gitignore/.semgrepignore及三份HTML不改。012禁止别名“存档审批”的移除为消除同一存档不审批绝对化根因，非新业务。每块完整diff归因在B4 raw记录。
+
+bash -n .env.example、entry-doc-baseline --check、verify:entry-anchors、verify:html-ledger-sync、git diff --check均实际exit0；UTF-8严格解码/替换字符检查通过。未改可执行程序逻辑，按控制文档/配置豁免不另造测试文件；PII默认行为在B1已有真实Spring及当前Java源码编译验证，后续B4复核修复内容及证据。前后四值仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0，均取本批触发b1 Grok raw；队列19项仍是，须B4双PASS才出队。M003保持IN_PROGRESS，下一步只做B4-r1两树全部diff独立审计。
+
+
+## V0.80 M003 B4-r1双PASS，19项出队并进入B5-r1
+
+两席本次完整B4均PASS，Grok真实exit0。self raw29510字节/SHA3c549c80f4142c54b6af82f80eb4fb435b5d72cf2ded94ff5696d612a2955440；Grok raw43627字节/SHAa4472cd9a0a97792387d356a78fd9b0dd48e4d8288d2379d4a9a854bec4e4f0d。两树全diff 19006字节、22hunk、6文件，无漏审/越界，新观察3项均明确非缺陷且关联原ID，不开新队列。Grok披露全仓grep命中self raw一行已共享diff，未读本方结论，该原始说明保留；下步精确源路径检索排除审计产物。
+
+按B4双PASS规则，将本批19已修ID队列是→否，findings V0.37当前24项均否。源文件不追加修改，B3累计1保持，024保留/023删除实际答复保持。现在进入B5-r1，先派Grok，再本方独立三线重审当前8文件621行/18GEN并落完整raw，之后才读Grok，严禁只看diff/边审边修。M003仍IN_PROGRESS，未声明模块PASS，本入口Grok B5=NOT-CALLED，下一调用实际派发。
+
+
+## V0.81 M003 B5-r1完整双FAIL，统一回B2
+
+## M003 B5-r1整批回B2候选（V0.38当前）
+
+完整输入为modules/M003-b5-r1-self-raw.md V0.02，27009字节，SHA256=c3553cb525c00c9afad9831546872598f6ec9cb7974d5b48c1fe7b96c1d8d611；modules/M003-b5-r1-grok-raw.md V0.01，26335字节，SHA256=69b40ae4e4185562ed753ea0f4cf9a128d4c43f24edf9740d40f7e326ee670d0，Grok真实EXIT_CODE=0。两席本次完整报告从最后一个独占哈希行至EOF均已读完，均FAIL；621行/18GEN审完才统一回退。B5后四值全等23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；COUNT0；源码本阶段无变化，B3仍1。未读Grok前本方完整self已落盘（含本方证据类型纠正），保持独立顺序。
+
+本批共CX-01/02/03和GR-01四个临时发现，全部归并如下；另保留两席完整逐项无缺陷登记，不遗漏任何来源。候选当前26ID，3项是、23项否；没有添加项、没有新HTML修改或待答问题。尚未双PASS，禁止B3。旧段保留其发生时态，唯一队列表及本段为当前候选。
+
+| 本次临时号 | 正式ID/分类 | 候选处理 | 差集及分歧 |
+|---|---|---|---|
+| CX-01 高危审批 | M003-019 / 细化 / 否 | 核实后撤回冲突判断 | PGM652本就允许上一级/上两级/最高层级；660禁止发起人选档且自动补链。CONTEXT119没有发起人选档或跳过中间审批的文字。本方原反例额外假定了选择界面，不能作已存在缺陷；接受Grok该反证。保留原raw与撤回事由，未改源码。 |
+| CX-02 客人Web | M003-026 / 冲突 / 是 | 删除客人Web关系与customer Web标签 | Grok认为C4图不代表十一端故未判冲突；本方保留分歧：这不是要求C4列齐十一端，而是图明确画Guest使用名为Web(admin/customer)的入口，与PGM739客人无网页端直接相反。CONTEXT正确不能让README错误角色连线变真。须Grok对这份具体原文反证独立复核，不能单方判定B2 PASS。 |
+| CX-03 Data JPA | M003-018 / 技术性 / 是 | 纠正组件事实 | 旧018已有技术栈登记、曾误称pom一致，沿用此ID，不分新技术栈ID。原self类型2/4已澄清只有4有效；当前完整pom声明starter-jdbc而无starter-data-jpa，精确rg无JPA使用。不是要求新增JPA或以版本号一致掩盖组件差异。 |
+| GR-01 中文例外 | M003-025 / 冲突 / 是 | 接受并限缩到HTML封闭四样 | Grok原文完整保留。PGM287/965明确只有单据号、设备编号、二维码内容、系统内部标识符四样；AGENTS把枚举值/字段名列作例外可能被执行成展示英文。可直接用上位封闭清单消除例外歧义，不增业务规则。 |
+
+编号说明：原018为其余工程入口/命令的技术性登记，明确技术版本和命令事实，但未给“客人使用Web”和“中文展示例外闭集”这两个独立业务冲突建立正式finding；025/026分别作为新的具体业务冲突创建，不重复复用已经修好的003/011。仅源行曾在整段覆盖范围内不等于该业务冲突已经有专属ID。CX03确属018已有技术栈命题，CX01确属019既有术语命题，沿用018/019；019撤回亦保留完整追溯。此编号与分类均交双席B2核对，若Grok认为需沿用别的既有ID，先改候选再复核，不直接修。
+
+### 本批最小修复边界（候选，未实施）
+
+018：README.md第18行Data JPA→JDBC；第19行starter-data-jpa + jdbc→starter-jdbc；README.en.md第16行Data JPA→JDBC。其余技术栈与POM字节不动。无业务发明：只陈述当前已经声明的框架组件，不定义业务角色、收费、状态或流程。
+
+025：AGENTS.md第55行“7. **所有展示文字全中文**，仅机读标识（枚举值、字段名、日志键）保留原文。”替换为“7. **所有展示文字全中文**，可以不用中文的只有单据号、设备编号、二维码内容、系统内部标识符四样。”第56行适用终端原文保留。业务上位PGM287/965，不修改HTML。
+
+026：README.md第135行GUEST→WEB(admin/customer)改为STAFF→WEB(业务人员)，保留下一行员工STAFF→ANDROID；英文README第90行同改STAFF→Web(staff)，第33行admin/customer web改admin web。图不再声明消费客人有Web端；不新增app节点、不改客户端代码或其它架构文件，保留其余图边/API/DB。先前Grok不认定冲突的理由与本方反证均保留。
+
+三个源文件目前均V0.01；实施整批B3时各仅递增一次V0.02，版本变更归对应该文件已定稿ID。CONTEXT、PROGRESS、.env、两ignore、三HTML及其它非模块文件均不在本批源修复范围。已答023删除/024保留保持，无需再次弹窗。下一步本整批B2双席PASS后，才统一执行B3-r2。
+
+本记录仅为整批候选及回退事实；Grok本批B2=NOT-CALLED，下一调用派发；B3保持1，未修改源文件。
+
+
+## V0.82 M003第二批B2双PASS，准备B3-r2
+
+## M003 B5-r1回退整批B2双PASS定稿（V0.39当前）
+
+两席实际审核同一V0.38候选，145293字节/SHA f205604867e66c6ee7ab5b605de9c6e01de111027f61031f628fc12e061a8e0f，均PASS。本方b1 raw追加V0.03后56657字节/SHA d141759f52582e517019922de2e4a11865b34aa6a28ee322fd273870d4b48d01；Grok b1 raw追加V0.03后79285字节/SHA b595810df2273dc8a57fd639e6a9de130f130966459d46848b656a568c076bea，真实EXIT_CODE=0。原44260/58006字节前缀均完整保留，B2追加没有新增独占锁哈希行。
+
+Grok直接读PGM739与图边后明确撤回其B5中“不升客人Web冲突”的判断，认可026；认可019撤回、018沿用及025新编。当前26ID分类、队列和最小范围与V0.38一致且已双PASS定稿，3项是/23项否，无待批问题。只准备整批B3-r2，未声明模块PASS。旧候选字样是历史时态，以下唯一队列表当前定稿生效。
+
+已git fetch origin，160 HEAD=origin/main=df580198172b2c497ef3cb7e25d2e8e5dc058920。源文件尚未写；先四值/全路径before tree，执行3项统一修复，再after tree并将B3累计1→2。COUNT0及原模块PASS保持。
+
+
+## V0.83 M003 B3-r2完成，待B4-r2
+
+本批B2已双PASS，findings V0.39队列018/025/026全部统一修复；before=6318ad55b33dc901d19038d1d643bbb483c72f7a；after=fbe3b6b9726663cd0ab40bcffd405ebd9c1e1110；完整未过滤diff SHA256=7c02b71c6fd9665ccbfbe2b6be7c2642e94f9be6c07fdbb180d66c7ba446420e，4996字节，文件仅AGENTS.md、README.md、README.en.md。10处精确替换包括3文件自身V0.01→V0.02；018改JPA/JDBC、025改展示中文例外为HTML四样、026删除Guest→Web关系及customer标签，改业务人员Web。所有候选否的源段保持，CONTEXT全文及保留营销词条、.env、PROGRESS、两ignore与三HTML不改，README自动块不改。
+
+两树均git add -A以临时不存在索引全路径生成，真实索引6a25d7b677e4dc3eb39c076f8e6a204799c1a92693734b773194a036ad59561b保持；after tree已取得后才将B3累计1→2。前后四值全等23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，触发报告为B5-r1 grok raw，COUNT0。entry-baseline --check、verify:entry-anchors、verify:html-ledger-sync、git diff --check均实际exit0，严格UTF8解码通过。文档精确修订不新造代码或测试；没有全后端/E2E通过声明。3项队列仍是，待B4-r2双PASS才出队；模块IN_PROGRESS，不是模块PASS。完整diff及逐块ID归因下一步写双席B4 raw。
+
+
+## V0.84 M003 B4-r2双PASS，进入B5-r2
+
+## M003 B4-r2双PASS（V0.40当前）
+
+本方raw V0.01，17126字节/SHA256=8c7e35e117ddfb390d7dd5ea5a936e60cd6410b1bc7a38336a3bad62aa888a30；Grok raw V0.01，25091字节/SHA256=23019239a89237433bee6bf94b94f6e9554be945fc80c9b40e86777f39180a75，真实EXIT_CODE=0。两席完整审4996字节/9hunk/3文件两树diff，B4及越界归因闸均PASS；Grok原raw中包含完整diff且字节一致。原018/025/026三项是现全改否，唯一队列表26项均否，B3累计2。
+
+Grok三项观察（重复STAFF节点、目录“管理端”、AOP）均明确非缺陷，不分新ID、不增修。重复节点是同ID同标签；“管理端”并不肯定客人网页端；AOP有aspectjweaver不必存在starter-aop。下一阶段B5仍逐项检查完整当前事实，不以B4 PASS替代。无互盲泄漏，无HTML改动，023删除/024保留实际答复保持。现在进B5-r2全量审621行/18GEN，尚非模块PASS。
+
+本入口B5 Grok=NOT-CALLED，下一步先派Grok，再本方完整独立审8文件621行及18GEN，写self后才读Grok，不边审边修。当前锁/COUNT0不变。
+
+
+## V0.85 M003 B5-r2双PASS先落PASS
+
+## M003 B5-r2双PASS，模块审计收口（V0.41当前）
+
+两席完整审当前8文件621行、18GEN与全部26ID，双PASS，无新发现/待修/未答问题。Grok真实EXIT_CODE=0，完整报告33190字节/SHA256=0fe035344280ae6e9450b1fe0f5bc7fd91a2861da156927ac407c4350c351818；本方独立报告49514字节先落盘后才读Grok，收到外审后追加环境事实补核V0.02，现51460字节/SHA256=4fdd804f891c5bc412064b98027cb27224c3e39ec50708485088ff3ac1d0059d。原前缀完整保留，非新的B5或第三票。
+
+B5后实算/sidecar/ledger/Grok报告四值均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，LOCK-AMEND-COUNT=0。源码与B3-r2后像8文件SHA逐项相同；三HTML未改。018/025/026无残留，023删除/024保留落实；019既有撤回理由不变。Grok宿主JAVA_HOME错误按环境失败保留，未称后端测试PASS；本方实际Spring环境绑定补核exit0，无新缺陷。
+
+B3累计2、运行失败重跑0。本批四值及完整双PASS成立后，先把ledger模块行IN_PROGRESS改PASS，再写modules/M003-01-root-config-and-guidance-01.md。当前审计完成，提交/PR/CI/合并/160同步尚待执行，不能将本段当发布完成证明。发布完成后方可进入M004。

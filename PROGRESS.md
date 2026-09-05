@@ -1,4 +1,6 @@
-# 退租结算落财务台账 — 建设进度台账（分支 feat/termination-settlement）
+# 退租结算落财务台账 — 历史建设进度台账（分支 feat/termination-settlement）
+
+版本：V0.01
 
 ## 目标
 合同退租变更（move_out/early_termination）终审通过 → 自动生成退租结算并落应收应付台账：
@@ -29,5 +31,6 @@
 operation-matrix→closure→security-baseline→latest.json→清 surefire→entry 基线；verify:predeploy。
 无迁移故跳 domain-ownership-scope/data-isolation-spec。
 
-## 状态
+## 当时状态
+以下为该分支当时的建设记录，测试数字不代表当前工作区的测试结果。
 完成。后端(单测32绿)+前端(vitest15绿+typecheck绿)+verify:predeploy全链绿。已 commit+push。
