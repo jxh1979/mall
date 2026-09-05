@@ -1,6 +1,8 @@
 # Entertainment Complex Management System
 
-> 文档goalP2(2026-06-20): English mirror of [`README.md`](./README.md). The Chinese `README.md` is authoritative; this file tracks it for international developers and third-party suppliers. All commands and numbers are evidence-backed (`ls` / `grep` / OpenAPI counts / Surefire reports / Playwright `--list`).
+Version: V0.02
+
+> English entry for international developers and third-party suppliers. See [`README.md`](./README.md) for the maintained baseline and verification commands.
 
 ## 1. What it is
 
@@ -11,7 +13,7 @@ A multi-domain management platform for offline entertainment complexes, covering
 | Layer | Technology | Evidence |
 |---|---|---|
 | Backend language | **Java 21** | `backend/pom.xml` |
-| Backend framework | **Spring Boot 4.1.0** (Web MVC / Data JPA / Security / Validation / Actuator / AOP) | `backend/pom.xml` |
+| Backend framework | **Spring Boot 4.1.0** (Web MVC / JDBC / Security / Validation / Actuator / AOP) | `backend/pom.xml` |
 | Database | **PostgreSQL** | `backend/pom.xml`, migration dir |
 | Migration | **Flyway** | `backend/src/main/resources/db/migration` |
 | Build | **Maven** (Maven Wrapper preferred, system Maven 3.9+ fallback) | `backend/README.md`, `tools/run-backend-maven.mjs` |
@@ -26,9 +28,9 @@ A multi-domain management platform for offline entertainment complexes, covering
 
 ```
 complex-management/
-├── backend/                # Java 21 + Spring Boot 4 backend (Maven, Flyway migrations V001..V124)
+├── backend/                # Java 21 + Spring Boot 4 backend (Maven, Flyway migrations)
 ├── apps/
-│   ├── web/                # React + Vite + antd admin/customer web
+│   ├── web/                # React + Vite + antd admin web
 │   └── android-terminal/   # Android terminals (Gradle)
 ├── docs/                   # all product/dev/contract/acceptance/ops docs (entry: docs/00-...)
 │   └── openapi/            # machine-readable P0 contract: openapi-p0.yaml / openapi-p0.json
@@ -75,14 +77,9 @@ npm run verify:ui:real-backend:seeded   # real-backend E2E (seeded)
 npm run verify:closed-loop-runtime      # closed-loop runtime acceptance (backend tests + frontend + UI)
 ```
 
-## 5. Current baseline (2026-06-20, evidence-backed)
+## 5. Current baseline
 
-| Metric | Value | Evidence |
-|---|---|---|
-| Latest Flyway migration | **V124** | `ls backend/src/main/resources/db/migration` |
-| OpenAPI operations | **386** | count HTTP methods in `docs/openapi/openapi-p0.yaml` |
-| Backend tests | **1251** passing | `backend/target/surefire-reports/*.txt` (2026-06-20) |
-| Frontend E2E | **42** (6 specs) | `npx playwright test --list` |
+See [`README.md`](./README.md) §5 for the generated baseline, its evidence sources and snapshot limits. Run `node tools/refresh-entry-doc-baseline.mjs --check` to check it and `npx playwright test --list` to list the current E2E tests.
 
 ## 6. Architecture
 
@@ -90,15 +87,15 @@ See **[`docs/architecture-overview-v0.1.md`](./docs/architecture-overview-v0.1.m
 
 ```mermaid
 graph LR
-  GUEST["Guest"] --> WEB["Web (admin/customer)"]
+  STAFF["Staff"] --> WEB["Web (staff)"]
   STAFF["Staff"] --> ANDROID["Android terminals"]
   WEB --> API["Backend API<br/>Java 21 + Spring Boot 4"]
   ANDROID --> API
-  API --> DB[("PostgreSQL<br/>Flyway V001..V124")]
+  API --> DB[("PostgreSQL<br/>Flyway migrations")]
   API -. "switch-gated + mock" .-> EXT["Third-party / Payment / WeCom / Robot / Video / MDM / NAS"]
 ```
 
-Each write action passes `@GuardedAction` (permission + terminal switch + AdmissionGuard) → Service (business + idempotency + traceability) → JDBC Repository (forced merchant_id/project_id scope) → PostgreSQL, emitting audit events; exceptions flow into the unified `risk_alerts` responsibility chain.
+A typical protected business write passes `@GuardedAction` (permission + terminal switch + AdmissionGuard) → Service (business + idempotency + traceability) → JDBC Repository (merchant/project scope) → PostgreSQL, emitting audit events; exceptions flow into the unified `risk_alerts` responsibility chain. Authentication endpoints such as login use their own handling logic.
 
 ## 7. Audience reading paths
 

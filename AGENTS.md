@@ -1,5 +1,7 @@
 # AGENTS.md
 
+版本：V0.02
+
 ## Agent skills
 
 ### Issue tracker
@@ -47,10 +49,10 @@ single-context 布局，词表在仓库根的 `CONTEXT.md`。详见 `docs/agents
 
    PRD、开发设计、接口、数据库、UI、测试和实现均不得反向改写其中定义。
 
-6. **删除一律软删除**：存库 + 前台不显 + 可恢复 + 分类 + 填理由 + `role_platform_admin`
-   批准。唯一例外是 PIPL 约束下的人脸照。
+6. **配置类主数据删除走审批、软删除**：先存档、填理由，由具备最高权限的人审批，申请人不得自审；存库、前台不显、可恢复、分类并留痕。
+   账户注销等个人信息删除按三份业务 HTML 的专项生命周期规则执行。
 
-7. **所有展示文字全中文**，仅机读标识（枚举值、字段名、日志键）保留原文。
+7. **所有展示文字全中文**，可以不用中文的只有单据号、设备编号、二维码内容、系统内部标识符四样。
    后台、客人端、设备端、安卓端一律适用。
 
 8. **不为存量数据做兼容、退化或回填设计。** 库里数据最后都要删光，
@@ -62,8 +64,7 @@ single-context 布局，词表在仓库根的 `CONTEXT.md`。详见 `docs/agents
    造成版本乱序漂移，翻过两次车。
    机器闸门：`npm run verify:migration-version-order`（已进 `verify:delivery-gates`）——
    本分支新增的迁移 V 号必须大于 `origin/main` 当前最大 V 号，否则红。
-   未挂 `verify:predeploy`：GitHub Actions 用 `actions/checkout` 默认浅克隆，
-   PR 分支上取不到 `origin/main` ref，挂上去会在 CI 里恒红。
+    未挂 `verify:predeploy`。
 
 10. **跑测试只 export 三个 DB 环境变量**（`COMPLEX_DATABASE_URL` / `_USERNAME` /
     `_PASSWORD`），**不要 `source` 整个 env 文件**。测试库是 `complex_test`，

@@ -1,5 +1,7 @@
 # 综合体管理系统（Entertainment Complex Management）
 
+版本：V0.02
+
 > 文档goal(2026-06-20)：本 README 为仓库第一入口，供产品、开发、测试、运营、第三方供应商快速理解项目并上手。所有命令与数字均经实证（`ls`/`grep`/OpenAPI 统计/Surefire 报告/Playwright `--list`），不臆造。
 >
 > 🌐 English: [`README.en.md`](./README.en.md) ｜ 🏗️ 架构图集：[`docs/architecture-overview-v0.1.md`](./docs/architecture-overview-v0.1.md)
@@ -13,8 +15,8 @@
 | 层 | 技术 | 实证来源 |
 |---|---|---|
 | 后端语言/平台 | **Java 21** | `backend/pom.xml`（`<java.version>21</java.version>`） |
-| 后端框架 | **Spring Boot 4.1.0**（spring-boot-starter-parent 4.1.0；Web MVC / Data JPA / Security / Validation / Actuator / AOP） | `backend/pom.xml` |
-| 数据库 | **PostgreSQL** | `backend/pom.xml`（starter-data-jpa + jdbc）、迁移目录 |
+| 后端框架 | **Spring Boot 4.1.0**（spring-boot-starter-parent 4.1.0；Web MVC / JDBC / Security / Validation / Actuator / AOP） | `backend/pom.xml` |
+| 数据库 | **PostgreSQL** | `backend/pom.xml`（starter-jdbc）、迁移目录 |
 | 迁移 | **Flyway**（`spring-boot-flyway`） | `backend/pom.xml`、`backend/src/main/resources/db/migration` |
 | 构建 | **Maven**（P0 唯一构建工具，优先 Maven Wrapper，回退系统 Maven 3.9+） | `backend/README.md`、`tools/run-backend-maven.mjs` |
 | API 文档 | **springdoc-openapi 3.0.3** | `backend/pom.xml`（`<springdoc.version>3.0.3</springdoc.version>`） |
@@ -35,13 +37,11 @@ complex-management/
 ├── apps/
 │   ├── web/                # React + Vite + antd 管理端（含 ticketing/bar/amusement 模块）
 │   └── android-terminal/   # Android 终端（android-app/，Gradle）
-├── database/
-│   └── migrations/         # 历史/参考迁移脚本（正式迁移以 backend/.../db/migration 为权威）
 ├── docs/                   # 全部产品/开发/契约/验收/运营文档（第一入口见 docs/00-...）
 │   └── openapi/            # 机器可读 P0 契约：openapi-p0.yaml / openapi-p0.json
 ├── ops/
 │   └── 160/                # 160 主机运维脚本（部署/回滚/健康检查/备份/NAS 挂载/恢复演练）
-├── tools/                  # 79 个 Node 校验/生成脚本（verify:* / docs:* 闸口实现）
+├── tools/                  # Node 校验/生成脚本（verify:* / docs:* 闸口实现）
 ├── tests/
 │   └── e2e/                # Playwright 端到端用例（mock 与真实后端）
 ├── security-scans/         # Semgrep 等安全扫描产物
@@ -96,6 +96,7 @@ npm run verify:closed-loop-runtime      # 闭环运行态总验收（后端测�
 ## 5. 当前基线（脚本自动回填，勿手改数字）
 
 本节数字由 `node tools/refresh-entry-doc-baseline.mjs` 从权威源（OpenAPI JSON、Flyway 迁移目录、surefire 报告）自动回填；`--check` 可校验漂移。
+表内“现有 surefire 报告”表示生成器保留的最近报告快照；无报告时，不代表当前工作区存在报告或本轮执行过测试。
 
 <!-- baseline:auto-begin（tools/refresh-entry-doc-baseline.mjs 生成，手改会被覆盖） -->
 | 指标 | 当前值 | 取证方式 |
@@ -131,7 +132,7 @@ npm run verify:closed-loop-runtime      # 闭环运行态总验收（后端测�
 
 ```mermaid
 graph LR
-  GUEST["客人 Guest"] --> WEB["前端 Web<br/>(admin/customer)"]
+  STAFF["员工 Staff"] --> WEB["前端 Web<br/>(业务人员)"]
   STAFF["员工 Staff"] --> ANDROID["Android 终端"]
   WEB --> API["后端 API<br/>Java 21 + Spring Boot 4"]
   ANDROID --> API
@@ -139,7 +140,7 @@ graph LR
   API -. "开关化 + mock" .-> EXT["第三方/支付/企微/机器人/视频/MDM/NAS"]
 ```
 
-每个写动作经 `@GuardedAction`（权限点 + 终端开关 + 准入闸 AdmissionGuard）→ Service（业务+幂等+留痕）→ JDBC Repository（强制注入 merchant_id/project_id scope）→ PostgreSQL，并发布审计事件；异常进统一责任链 `risk_alerts`。
+受保护业务写动作的典型路径为 `@GuardedAction`（权限点 + 终端开关 + 准入闸 AdmissionGuard）→ Service（业务+幂等+留痕）→ JDBC Repository（商户/项目数据范围）→ PostgreSQL，并发布审计事件；异常进统一责任链 `risk_alerts`。登录等认证入口按自身处理逻辑执行。
 
 ## 9. 边界声明
 
