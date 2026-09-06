@@ -885,7 +885,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 UPDATE supervisor_review_nodes
                    SET approver_id = :approver_id, status = :status, decided_by = :decided_by, decided_at = :decided_at,
                        forwarded_to = :forwarded_to, forwarded_by = :forwarded_by, escalation_count = :escalation_count
-                 WHERE node_id = :node_id
+                 WHERE node_id = :node_id AND status = 'pending'
                 """, chainNodeParameters(node)
                 .addValue("decided_by", node.decidedBy())
                 .addValue("decided_at", timestampWithTimeZone(node.decidedAt()))

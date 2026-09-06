@@ -636,6 +636,42 @@ class AccessServiceTests {
         assertThat(accessRepository.findUserPositionAssignment("usr_mover").get().merchantId()).isEqualTo("merchant_b");
     }
 
+    // M087-I2-01（PGM-1.10.1「新范围权限每次均须先审批，审批通过后方可生效；既有高危不得因处于岗位模板内而免除审批」）：
+    // 待审期间新范围岗位映射被改动（换角色/模板）→ 审批时 GRANT_SNAPSHOT_CHANGED，不按改宽后的映射落地。
+    @Test
+    void scopeChangeApprovalRejectsWhenTheNewScopePositionMappingChangedWhilePending() {
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_drift", new AccessUser(
+                "usr_drift", "drift", "staff", "seed-org", "merchant_a", "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"), null));
+        accessRepository.roles.put("role_wider", new RoleRecord(
+                "role_wider", "wider", "Wider", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check", "governance.supervisor_review.approve"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_check", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        PositionRoleTemplate mapping = service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-drift", null, "ops_clerk", "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active"));
+
+        AccessGrantRequestRecord pending = service.changeUserScope("usr_drift", new UserScopeChangeRequest(
+                "scope-drift", null, "seed-org", "merchant_b", "ops_clerk", "lvl_m1_lower", null, null, null, "调往 B 商户", null));
+        assertThat(pending.status()).isEqualTo("pending");
+        // 待审期间把新范围岗位映射改到更宽的角色
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "map-drift-widen", null, "ops_clerk", "lvl_m1_lower", "role_wider", "tpl_ops_check", "active"));
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThatThrownBy(() -> service.reviewGrant(pending.id(), new AccessGrantReviewRequest("review-drift", "approve", List.of(), "approve", "ok")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED"));
+        assertThat(accessRepository.positionRoles.get("usr_drift")).isNull(); // 未落地任何映射
+        assertThat(authorizationService.effectivePermissionsForUser("usr_drift").grants()).doesNotContain("governance.supervisor_review.approve");
+    }
+
     @Test
     void scopeChangeRejectsUnchangedScope() {
         service = newAccessService(true, supervisorReviewService(new InMemorySupervisorReviewRepository()));
@@ -1638,6 +1674,9 @@ class AccessServiceTests {
             }
             for (int i = 0; i < chain.size(); i++) {
                 if (chain.get(i).nodeId().equals(node.nodeId())) {
+                    if (!chain.get(i).pending()) {
+                        return false; // M087-I2-02：只允许改写待审节点（与 JDBC 的 status='pending' 条件一致）
+                    }
                     chain.set(i, node);
                     return true;
                 }

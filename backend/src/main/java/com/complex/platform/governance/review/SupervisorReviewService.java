@@ -201,8 +201,9 @@ public class SupervisorReviewService {
                     ApprovalChainNode node = resolveDecidableNode(pending, nodes, reviewerId, reviewerLevel);
                     requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
                     Instant now = Instant.now();
+                    // M087-I2-02（PGM-1.7.1「任一人审批即完成该节点」）：节点裁决为 status='pending' 的比较并交换，先到先得；后到者被拒。
                     if (!supervisorReviewRepository.updateChainNode(node.withStatus(decision, reviewerId, now))) {
-                        throw ApiException.conflict("SUPERVISOR_REVIEW_NOT_FOUND", "审批节点已不在待裁决状态");
+                        throw ApiException.conflict("APPROVAL_NODE_ALREADY_DECIDED", "该审批节点已被裁决，本次结论未生效");
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.node_decided",
@@ -215,11 +216,15 @@ public class SupervisorReviewService {
                                     "approver_kind", node.approverKind(), "decision", decision, "reviewer_level", reviewerLevel,
                                     "comment", request.comment() == null ? "" : request.comment())
                     );
+                    // M087-I2-02：整单终态由节点表归约，不用请求体里的结论：任一节点 rejected → 整单 rejected（退回起草）；
+                    // 全部 approved → approved；否则保持待审。
                     List<ApprovalChainNode> after = supervisorReviewRepository.listChainNodes(id);
-                    if ("approved".equals(decision) && !ApprovalChainService.allApproved(after)) {
+                    boolean anyRejected = after.stream().anyMatch(n -> ApprovalChainNode.REJECTED.equals(n.status()));
+                    if (!anyRejected && !ApprovalChainService.allApproved(after)) {
                         return pending; // 链上仍有节点待审：单据保持待审（PGM-1.7.1 逐级审批）
                     }
-                    if ("rejected".equals(decision)) {
+                    String outcome = anyRejected ? "rejected" : "approved";
+                    if (anyRejected) {
                         for (ApprovalChainNode other : after) {
                             if (other.pending()) {
                                 supervisorReviewRepository.updateChainNode(other.withStatus(ApprovalChainNode.CANCELLED, reviewerId, now));
@@ -234,10 +239,10 @@ public class SupervisorReviewService {
                             pending.objectType(),
                             pending.objectId(),
                             false,
-                            decision,
+                            outcome,
                             requiredLevel,
                             reviewerLevel,
-                            decision,
+                            outcome,
                             pending.reason(), // M007-F-11：保留评估时的「为什么」，审批意见进审计留痕
                             request.evidenceAttachmentIds() == null ? List.of() : List.copyOf(request.evidenceAttachmentIds()),
                             now,
@@ -253,18 +258,18 @@ public class SupervisorReviewService {
                             id,
                             null,
                             request.idempotencyKey(),
-                            Map.of("decision", decision, "reviewer_level", reviewerLevel,
+                            Map.of("decision", outcome, "node_decision", decision, "reviewer_level", reviewerLevel,
                                     "comment", request.comment() == null ? "" : request.comment())
                     );
                     // R5 T3 事件名收口：准入复核放行/驳回额外发 admission.released（替代零命中的 contract.released）。
                     auditEventService.recordSuccess(
-                            "approved".equals(decision) ? "admission.released" : "admission.escalated",
+                            "approved".equals(outcome) ? "admission.released" : "admission.escalated",
                             APPROVE_PERMISSION,
                             "supervisor_review",
                             id,
                             null,
                             request.idempotencyKey(),
-                            Map.of("decision", decision, "action_type", pending.actionType())
+                            Map.of("decision", outcome, "action_type", pending.actionType())
                     );
                     return result;
                 },

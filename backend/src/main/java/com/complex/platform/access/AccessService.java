@@ -1653,7 +1653,8 @@ public class AccessService {
                     .map(item -> java.util.Arrays.asList(item.permissionCode(), item.effect().name(),
                             item.dataScope(), item.sensitive())).toList());
         }
-        if (REQUEST_USER_POSITION.equals(request.requestType())) {
+        // M087-I2-01：范围变更申请与定岗申请一样钉住新范围的岗位映射（映射 id/角色/模板/状态），待审期间映射改动即 GRANT_SNAPSHOT_CHANGED。
+        if (REQUEST_USER_POSITION.equals(request.requestType()) || REQUEST_USER_SCOPE_CHANGE.equals(request.requestType())) {
             PositionRoleTemplate mapping = repository.findPositionRoleTemplate(
                     target.organizationId(), request.positionCode(), request.staffLevelId())
                     .orElseThrow(() -> ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "岗位配置已变化，请重新申请"));

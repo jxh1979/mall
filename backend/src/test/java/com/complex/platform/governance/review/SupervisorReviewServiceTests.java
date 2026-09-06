@@ -818,6 +818,49 @@ class SupervisorReviewServiceTests {
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.chain_regenerated");
     }
 
+    // M087-I2-02（PGM-1.7.1「任一人审批即完成该节点」「任一节点驳回则整单退回起草人」）：同一节点两名裁决人（原审批人与被转发人）
+    // 先到先得，后到的相反结论被拒，节点与整单终态一致。
+    @Test
+    void secondDecisionOnAnAlreadyDecidedNodeIsRejectedAndTheFirstOutcomeStands() {
+        reviewRepository.superiors.put("usr_supervisor_l1", "usr_reviewer_c");
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(evaluate("review-cas", "v", List.of(), "contract_violation", "contract", "c_cas", 0L, "violation"));
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        service.forward(pending.reviewId(), new SupervisorReviewForwardRequest("cas-forward", null, "usr_anyone", "handle"));
+        var rejected = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("cas-reject", "note", List.of(), 3, "rejected", "no"));
+        assertThat(rejected.reviewStatus()).isEqualTo("rejected");
+
+        // 被转发人随后提交「通过」：单据已终态 → 不可再裁决；节点仍为已驳回。
+        TestSecurityActors.asSupervisor("usr_anyone", 0);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("cas-approve-late", "note", List.of(), 0, "approved", "yes")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_REVIEW_NOT_FOUND"));
+        assertThat(reviewRepository.listChainNodes(pending.reviewId())).extracting(ApprovalChainNode::status).containsExactly("rejected");
+
+        // 节点级 CAS：仓储不允许改写已裁决节点（并发双写的后到者拿不到更新行）。
+        ApprovalChainNode decided = reviewRepository.listChainNodes(pending.reviewId()).get(0);
+        assertThat(reviewRepository.updateChainNode(decided.withStatus("approved", "usr_anyone", java.time.Instant.now()))).isFalse();
+        assertThat(reviewRepository.listChainNodes(pending.reviewId()).get(0).status()).isEqualTo("rejected");
+    }
+
+    // M087-I2-02：整单终态由节点表归约——任一节点 rejected 即整单 rejected，即使本次请求体是 approved。
+    @Test
+    void ticketOutcomeIsDerivedFromTheNodeTableNotFromTheRequestBody() {
+        chainL1();
+        reviewRepository.superiors.put("usr_fin_entry", "usr_fin_lead");
+        reviewRepository.lines.put("finance", new SupervisorReviewRepository.ApprovalLine("finance", "财务线", 1, "usr_fin_entry", "active"));
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest("review-outcome", "v", List.of(), "contract_violation", "contract", "c_outcome", 0L, "violation", "usr_reviewer_c",
+                List.of(new SupervisorReviewEvaluateRequest.ParallelLine("finance", "usr_fin_lead"))));
+        // 财务线起点人驳回（整单退回）后，主线审批人再提交通过：单据已 rejected，不得再裁决。
+        TestSecurityActors.asSupervisor("usr_fin_entry", 1);
+        assertThat(service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("o-fin-reject", "note", List.of(), 1, "rejected", "no")).reviewStatus()).isEqualTo("rejected");
+        assertThat(reviewRepository.listChainNodes(pending.reviewId())).extracting(ApprovalChainNode::status)
+                .containsExactly("cancelled", "cancelled", "rejected", "cancelled");
+        TestSecurityActors.asSupervisor("usr_reviewer_a", 3);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("o-main-late", "note", List.of(), 3, "approved", "yes")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_REVIEW_NOT_FOUND"));
+    }
+
     static final class InMemorySupervisorReviewRepository implements SupervisorReviewRepository {
         private final Map<String, SupervisorReviewDecisionRecord> reviews = new LinkedHashMap<>();
         int saveCount = 0;
@@ -939,6 +982,9 @@ class SupervisorReviewServiceTests {
             }
             for (int i = 0; i < chain.size(); i++) {
                 if (chain.get(i).nodeId().equals(node.nodeId())) {
+                    if (!chain.get(i).pending()) {
+                        return false; // M087-I2-02：只允许改写待审节点（与 JDBC 的 status='pending' 条件一致）
+                    }
                     chain.set(i, node);
                     return true;
                 }
