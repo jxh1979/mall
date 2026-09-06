@@ -87,6 +87,14 @@ public class AdmissionGuard {
         if (!isTriggered(policy, actionType, objectType, objectId)) {
             return; // 命中判定未触发=放行
         }
+        if ("block".equals(policy.outcome())) {
+            // M007-A-01（PGM-1.2 第 5 步、PGM-1.7.1 逐笔放行）：同对象已批准且未放行的复核单 → 消费一次并放行本次动作。
+            var actor = authorizationService.currentActor();
+            String actorId = actor == null ? null : actor.id();
+            if (supervisorReviewService.consumeApprovedRelease(actionType, objectType, objectId, actorId).isPresent()) {
+                return;
+            }
+        }
         switch (policy.outcome()) {
             case "allow" -> {
                 // 放行，无留痕（与无策略一致的轻量路径）。

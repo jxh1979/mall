@@ -720,6 +720,44 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 """, Map.of("review_id", reviewId), this::mapSupervisorReview).stream().findFirst();
     }
 
+    @Override
+    public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
+            String actionType, String objectType, String objectId, String initiatedBy) {
+        return jdbcTemplate.query("""
+                SELECT review_id, policy_code, action_type, object_type, object_id,
+                       blocked, review_status, required_level, reviewer_level, decision,
+                       reason, evidence_attachment_ids::text AS evidence_attachment_ids, evaluated_at,
+                       initiated_by, approval_level, required_approver_rank
+                  FROM supervisor_review_decisions
+                 WHERE action_type = :action_type
+                   AND object_type = :object_type
+                   AND object_id = :object_id
+                   AND initiated_by = :initiated_by
+                   AND review_status = 'approved'
+                   AND released_at IS NULL
+                 ORDER BY evaluated_at DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("action_type", actionType)
+                .addValue("object_type", objectType)
+                .addValue("object_id", objectId)
+                .addValue("initiated_by", initiatedBy), this::mapSupervisorReview).stream().findFirst();
+    }
+
+    @Override
+    public boolean markSupervisorReviewReleased(String reviewId, String releasedBy, java.time.Instant releasedAt) {
+        return jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions
+                   SET released_at = :released_at, released_by = :released_by
+                 WHERE review_id = :review_id
+                   AND review_status = 'approved'
+                   AND released_at IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("review_id", reviewId)
+                .addValue("released_by", releasedBy)
+                .addValue("released_at", timestampWithTimeZone(releasedAt))) == 1;
+    }
+
     private MapSqlParameterSource supervisorReviewParameters(SupervisorReviewDecisionRecord record) {
         return new MapSqlParameterSource()
                 .addValue("review_id", record.reviewId())

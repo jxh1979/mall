@@ -462,6 +462,25 @@ class SupervisorReviewServiceTests {
         assertThat(approved.reviewStatus()).isEqualTo("approved");
     }
 
+    // M007-A-01（PGM-1.2 第 5 步「放行结果都要记录」）：批准后同动作同对象同发起人可消费一次并留痕 admission.release_executed，再次消费为空。
+    @Test
+    void approvedReviewIsConsumedForReleaseExactlyOnce() {
+        TestSecurityActors.asSupervisor("usr_waiver_init", 1);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-release-eval", "waiver", List.of("att"), "bill_waiver", "bill", "bill_release", 0L, null));
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
+
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-release-approve", "note", List.of("att"), 3, "approved", "ok"));
+
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init"))
+                .map(SupervisorReviewDecisionRecord::reviewId).contains(pending.reviewId());
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_other")).isEmpty();
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("admission.release_executed");
+    }
+
     /** 构造一个 AuthorizationService 由 mock AccessRepository 提供指定用户的 level_rank 的 service。 */
     private SupervisorReviewService rankAwareService(Map<String, Integer> userRanks) {
         com.complex.platform.access.AccessRepository repo = levelAwareRepository(userRanks, null);
@@ -713,6 +732,23 @@ class SupervisorReviewServiceTests {
         public Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId) {
             return Optional.ofNullable(reviews.get(reviewId))
                     .filter(r -> "pending_review".equals(r.reviewStatus()));
+        }
+
+        final Map<String, String> released = new LinkedHashMap<>();
+
+        @Override
+        public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
+                String actionType, String objectType, String objectId, String initiatedBy) {
+            return reviews.values().stream()
+                    .filter(r -> "approved".equals(r.reviewStatus()) && !released.containsKey(r.reviewId()))
+                    .filter(r -> actionType.equals(r.actionType()) && objectType.equals(r.objectType())
+                            && objectId.equals(r.objectId()) && java.util.Objects.equals(initiatedBy, r.initiatedBy()))
+                    .findFirst();
+        }
+
+        @Override
+        public boolean markSupervisorReviewReleased(String reviewId, String releasedBy, java.time.Instant releasedAt) {
+            return released.putIfAbsent(reviewId, releasedBy) == null;
         }
     }
 }

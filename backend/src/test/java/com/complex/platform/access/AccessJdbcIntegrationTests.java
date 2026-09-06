@@ -673,6 +673,18 @@ class AccessJdbcIntegrationTests {
                 .isEmpty();
     }
 
+    // M007-F-05（PGM-1.10.1 五类权限授出前须先审批：资金/分红发放、敏感经营数据查看/导出）：字典分类不得为「日常」。
+    @Test
+    void moneyAndSensitiveExportPermissionsRequireApproval() {
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code FROM permissions
+                 WHERE requires_approval = FALSE
+                   AND permission_code IN ('finance.dividend.manage', 'finance.ar_ap.export',
+                                           'analytics.report.export', 'bar.internal_settlement_price.view')
+                 ORDER BY permission_code
+                """, String.class)).isEmpty();
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

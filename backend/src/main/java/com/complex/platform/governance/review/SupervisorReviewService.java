@@ -340,6 +340,31 @@ public class SupervisorReviewService {
         return approvalLevel.conservativeRequiredApproverRank(requiredLevel);
     }
 
+    /**
+     * M007-A-01（PGM-1.2 第 5 步「放行结果都要记录」、PGM-1.7.1「审批通过才生效」「逐笔放行」）：
+     * 准入闸在拦截前调用——同动作、同对象、同发起人且已批准未放行的复核单被消费一次并放行本次动作，
+     * 留痕 admission.release_executed；批准消费后再次执行须重新审批。
+     */
+    public Optional<SupervisorReviewDecisionRecord> consumeApprovedRelease(
+            String actionType, String objectType, String objectId, String actorId) {
+        String type = objectType == null || objectType.isBlank() ? actionType : objectType;
+        String id = objectId == null || objectId.isBlank() ? actionType : objectId;
+        Optional<SupervisorReviewDecisionRecord> released = supervisorReviewRepository
+                .findApprovedUnreleasedSupervisorReview(actionType, type, id, actorId)
+                .filter(record -> supervisorReviewRepository.markSupervisorReviewReleased(record.reviewId(), actorId, Instant.now()));
+        released.ifPresent(record -> auditEventService.recordSuccess(
+                "admission.release_executed",
+                MANAGE_PERMISSION,
+                "supervisor_review",
+                record.reviewId(),
+                null,
+                null,
+                Map.of("action_type", actionType, "object_type", type, "object_id", id,
+                        "released_by", actorId == null ? "" : actorId)
+        ));
+        return released;
+    }
+
     // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：三类与违规、人工放行一样恒进复核。
     private boolean isAlwaysBlocked(String actionType) {
         return actionType.contains("violation") || actionType.equals("manual_release")

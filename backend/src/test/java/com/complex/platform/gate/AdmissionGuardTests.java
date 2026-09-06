@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEvent;
@@ -82,6 +83,25 @@ class AdmissionGuardTests {
                     assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED");
                     assertThat(e.getMessage()).contains("review_x");
                 });
+        verify(reviewService).blockForAdmission("p_block", "bar.bill_waiver", "bar_bill", "b1", "one_level_up", 2);
+    }
+
+    // M007-A-01（PGM-1.2 第 5 步「放行结果都要记录」、PGM-1.7.1「审批通过才生效」逐笔放行）：
+    // 同动作、同对象、同发起人的已批准且未放行复核单被消费一次后放行本次动作；再次执行重新拦截。
+    @Test
+    void approvedReviewReleasesTheBlockedActionExactlyOnce() {
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(new AdmissionPolicyRecord(
+                "p_block", "bar.bill_waiver", "bar_bill", "always", "block", "one_level_up", 2, true)));
+        when(authz.currentActor()).thenReturn(new AccessActor("usr_1", "usr_1_user", "staff", "org_1", null, "active"));
+        when(reviewService.consumeApprovedRelease("bar.bill_waiver", "bar_bill", "b1", "usr_1"))
+                .thenReturn(Optional.of(decision("review_ok")), Optional.empty());
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt())).thenReturn(decision("review_again"));
+
+        assertThatCode(() -> guard.check("bar.bill_waiver", "bar_bill", "b1")).doesNotThrowAnyException(); // 消费批准，放行
+        verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
+
+        assertThatThrownBy(() -> guard.check("bar.bill_waiver", "bar_bill", "b1")) // 批准已消费，重新拦截
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
         verify(reviewService).blockForAdmission("p_block", "bar.bill_waiver", "bar_bill", "b1", "one_level_up", 2);
     }
 
