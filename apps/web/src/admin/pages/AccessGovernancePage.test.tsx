@@ -60,6 +60,7 @@ function renderPage() {
     effectivePermissions: ADMIN_PERMS,
   };
   render(<AccessGovernancePage {...fullProps} />);
+  return fullProps;
 }
 
 describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
@@ -71,6 +72,22 @@ describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
     expect(screen.getByTestId("access-position-role-template-prt-2").textContent).toContain("M5·中");
     expect(screen.getByTestId("access-position-role-template-prt-2").textContent).not.toContain("middle");
     expect(screen.getByTestId("access-position-role-template-prt-3").textContent).toContain("M9·上");
+  });
+
+  it("员工单独授予 / 显式拒绝有写入口：显式拒绝按目标用户提交（PGM-1.10.1）", async () => {
+    const props = renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-user-override-form")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("覆盖用户 id"), { target: { value: "u-1" } });
+    fireEvent.change(screen.getByLabelText("覆盖权限码"), { target: { value: "access.role.assign" } });
+    fireEvent.change(screen.getByLabelText("覆盖效果"), { target: { value: "deny" } });
+    fireEvent.click(screen.getByTestId("access-user-override-set"));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/v1/access/users/u-1/permission-overrides"))).toBe(true));
+    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/permission-overrides"));
+    const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
+    expect(body.effect).toBe("deny");
+    expect(body.permission_codes).toEqual(["access.role.assign"]);
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^已设置用户 u-1 的显式拒绝/)));
   });
 
   it("点岗位模板行 → 抽屉出现且含岗位/角色（角色中文名）", async () => {

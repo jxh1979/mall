@@ -636,6 +636,43 @@ class AccessJdbcIntegrationTests {
                 .isNotNull();
     }
 
+    // M006-G-08（PGM-1.18「界面全中文」）：治理页 / 模板页直接上屏的权限名、角色名、模板名不含拉丁字母
+    // （HTML 正文自身使用的「AI」除外；permission_code / id 是机读标识，不在此列）。
+    @Test
+    void seededDisplayNamesAreChinese() {
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code FROM permissions
+                 WHERE replace(permission_name, 'AI', '') ~ '[A-Za-z]'
+                 ORDER BY permission_code
+                """, String.class)).isEmpty();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT id FROM roles WHERE role_name ~ '[A-Za-z]' ORDER BY id", String.class)).isEmpty();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT id FROM permission_templates WHERE template_name ~ '[A-Za-z]' ORDER BY id", String.class)).isEmpty();
+    }
+
+    // M006-G-01（PGM-1.10.1「员工单独授予 − 显式拒绝」）：员工级覆盖在真实表上幂等覆盖、进入有效权限来源、可移除。
+    @Test
+    void userPermissionOverridesAreUpsertedReadAsEffectsAndRemovable() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_override", "jdbc-override", "staff", "org", "merchant", "active", Instant.parse("2026-06-14T00:00:00Z")));
+        repository.saveUserPermissionOverrides("usr_jdbc_override", List.of("ops.production_readiness.view"),
+                AccessRepository.Effect.DENY, "停权", "seed-admin");
+        repository.saveUserPermissionOverrides("usr_jdbc_override", List.of("ops.production_readiness.view"),
+                AccessRepository.Effect.DENY, "再次停权", "seed-admin");
+
+        assertThat(repository.findPermissionEffects("usr_jdbc_override", Instant.parse("2026-06-14T12:00:00Z")))
+                .filteredOn(effect -> effect.source() == AccessRepository.Source.USER_OVERRIDE)
+                .extracting(AccessRepository.PermissionEffect::permissionCode, AccessRepository.PermissionEffect::effect)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("ops.production_readiness.view", AccessRepository.Effect.DENY));
+
+        assertThat(repository.deleteUserPermissionOverrides("usr_jdbc_override", List.of("ops.production_readiness.view"),
+                AccessRepository.Effect.DENY)).isEqualTo(1);
+        assertThat(repository.findPermissionEffects("usr_jdbc_override", Instant.parse("2026-06-14T12:00:00Z")))
+                .filteredOn(effect -> effect.source() == AccessRepository.Source.USER_OVERRIDE)
+                .isEmpty();
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

@@ -930,6 +930,38 @@ class JdbcAccessRepository implements AccessRepository {
         }
     }
 
+    @Override
+    @Transactional
+    public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
+        for (String permissionCode : permissionCodes) {
+            jdbcTemplate.update("""
+                    INSERT INTO user_permission_overrides (user_id, permission_code, effect, reason, created_at, created_by)
+                    VALUES (:user_id, :permission_code, :effect, :reason, now(), :created_by)
+                    ON CONFLICT (user_id, permission_code, effect)
+                    DO UPDATE SET reason = EXCLUDED.reason, created_at = EXCLUDED.created_at, created_by = EXCLUDED.created_by
+                    """, new MapSqlParameterSource()
+                    .addValue("user_id", userId)
+                    .addValue("permission_code", permissionCode)
+                    .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                    .addValue("reason", reason)
+                    .addValue("created_by", createdBy));
+        }
+    }
+
+    @Override
+    @Transactional
+    public int deleteUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect) {
+        return jdbcTemplate.update("""
+                DELETE FROM user_permission_overrides
+                 WHERE user_id = :user_id
+                   AND effect = :effect
+                   AND permission_code IN (:permission_codes)
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                .addValue("permission_codes", permissionCodes));
+    }
+
     private void logExpiry(String applicationId, String userId, String permissionCode, String reason, Instant occurredAt) {
         jdbcTemplate.update("""
                 INSERT INTO permission_template_usage_logs (

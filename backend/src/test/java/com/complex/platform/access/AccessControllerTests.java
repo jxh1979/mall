@@ -159,6 +159,49 @@ class AccessControllerTests {
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
+    // M006-G-01：员工级覆盖写入口受 access.role.assign 门禁；缺幂等键拒绝；成功返回目标用户有效集。
+    @Test
+    void userPermissionOverrideEndpointGatesOnRoleAssignAndReturnsEffectivePermissions() throws Exception {
+        when(service.setUserPermissionOverrides(any(), any())).thenReturn(new EffectivePermissions(
+                "usr_target", List.of(), List.of("ops.production_readiness.view"), false,
+                java.time.Instant.parse("2026-09-06T08:30:00Z")));
+
+        mockMvc.perform(post("/api/v1/access/users/usr_target/permission-overrides")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "override-deny",
+                                  "permission_codes": ["ops.production_readiness.view"],
+                                  "effect": "deny",
+                                  "reason": "停权"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.denies[0]").value("ops.production_readiness.view"));
+
+        mockMvc.perform(post("/api/v1/access/users/usr_target/permission-overrides/remove")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"permission_codes": ["ops.production_readiness.view"], "effect": "deny"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("access.role.assign");
+        mockMvc.perform(post("/api/v1/access/users/usr_target/permission-overrides")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "override-denied", "permission_codes": ["ops.production_readiness.view"], "effect": "deny"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+    }
+
     @Test
     void listStaffLevelsReturnsApiResponsePageShape() throws Exception {
         when(service.listStaffLevels()).thenReturn(new PageResponse<>(
