@@ -432,7 +432,7 @@ class AccessJdbcIntegrationTests {
 
     @Test
     void saveTemplatePersistsGrantAndDenyItems() {
-        PermissionTemplate template = repository.saveTemplate(
+        PermissionTemplate template = repository.createTemplate(
                 template("tpl_jdbc_items", "jdbc-items", "source"),
                 List.of(
                         item("tpl_jdbc_items", "ops.production_readiness.view", AccessRepository.Effect.GRANT),
@@ -451,7 +451,7 @@ class AccessJdbcIntegrationTests {
 
     @Test
     void copyTemplateStoresSnapshotIndependentFromLaterSourceChanges() {
-        repository.saveTemplate(
+        repository.createTemplate(
                 template("tpl_source_snapshot", "source-snapshot", null),
                 List.of(item("tpl_source_snapshot", "ops.production_readiness.view", AccessRepository.Effect.GRANT))
         );
@@ -478,7 +478,7 @@ class AccessJdbcIntegrationTests {
                 "active",
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        repository.saveTemplate(
+        repository.createTemplate(
                 template("tpl_temporary_active", "temporary-active", null),
                 List.of(item("tpl_temporary_active", "ops.production_readiness.check", AccessRepository.Effect.GRANT))
         );

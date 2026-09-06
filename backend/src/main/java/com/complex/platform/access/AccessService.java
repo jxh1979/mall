@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -1065,18 +1065,28 @@ public class AccessService {
                         if (request.baseSalaryAmountCent() != null && request.baseSalaryAmountCent() < 0) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "基本工资不能为负数");
                         }
-                        StaffLevelAssignment assignment = new StaffLevelAssignment(
-                                userId,
-                                request.staffLevelId(),
-                                request.baseSalaryAmountCent(),
-                                currency,
-                                request.salaryDetail(),
-                                targetUser.organizationId(),
-                                targetUser.merchantId(),
-                                "access-api",
-                                Instant.now()
-                        );
-                        StaffLevelAssignment saved = repository.saveStaffLevelAssignment(assignment);
+                        // M006-G-02（PGM-1.10.1/1.10.2）：已定岗员工改职级 = 按新职级的岗位映射重算派生角色/模板，旧派生同步失效；
+                        // 走与定岗相同的路径（含高危审批闸），无映射时由 resolvePositionGrant 明确拒绝，不静默保留旧模板。
+                        UserPositionAssignment position = repository.findUserPositionAssignment(userId).orElse(null);
+                        StaffLevelAssignment saved;
+                        if (position != null && !request.staffLevelId().equals(position.staffLevelId())) {
+                            saved = assignUserPositionDirect(new UserPositionAssignmentRequest(
+                                    request.idempotencyKey(), request.operatorNote(), userId, position.positionCode(),
+                                    request.staffLevelId(), request.baseSalaryAmountCent(), currency, request.salaryDetail()), true)
+                                    .staffLevelAssignment();
+                        } else {
+                            saved = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                                    userId,
+                                    request.staffLevelId(),
+                                    request.baseSalaryAmountCent(),
+                                    currency,
+                                    request.salaryDetail(),
+                                    targetUser.organizationId(),
+                                    targetUser.merchantId(),
+                                    "access-api",
+                                    Instant.now()
+                            ));
+                        }
                         auditEventService.recordSuccess(
                                 "access.staff_level.assigned",
                                 "access.staff_level.manage",
