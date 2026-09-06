@@ -62,6 +62,8 @@ const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessions
 const AmusementVerificationRecordsPage = React.lazy(() => import("./pages/AmusementVerificationRecordsPage").then((m) => ({ default: m.AmusementVerificationRecordsPage })));
 const AmusementGroupBookingsPage = React.lazy(() => import("./pages/AmusementGroupBookingsPage").then((m) => ({ default: m.AmusementGroupBookingsPage })));
 const SupervisorReviewPage = React.lazy(() => import("./pages/SupervisorReviewPage").then((m) => ({ default: m.SupervisorReviewPage })));
+const ApprovalChainPage = React.lazy(() => import("./pages/ApprovalChainPage").then((m) => ({ default: m.ApprovalChainPage })));
+const OrgHierarchyPage = React.lazy(() => import("./pages/OrgHierarchyPage").then((m) => ({ default: m.OrgHierarchyPage })));
 const ContractWorkbenchPage = React.lazy(() => import("./pages/ContractWorkbenchPage").then((m) => ({ default: m.ContractWorkbenchPage })));
 const LeasingWorkbenchPage = React.lazy(() => import("./pages/LeasingWorkbenchPage").then((m) => ({ default: m.LeasingWorkbenchPage })));
 const FacilityWorkbenchPage = React.lazy(() => import("./pages/FacilityWorkbenchPage").then((m) => ({ default: m.FacilityWorkbenchPage })));
@@ -286,6 +288,10 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AmusementVerificationRecordsPage {...props} />;
     case "ADM-GOV-006":
       return <SupervisorReviewPage {...props} />;
+    case "ADM-GOV-009":
+      return <ApprovalChainPage {...props} />;
+    case "ADM-ACC-004":
+      return <OrgHierarchyPage {...props} />;
     case "ADM-GOV-003":
       return <SubjectBindingsPage {...props} />;
     case "ADM-CONT-001":

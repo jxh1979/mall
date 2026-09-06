@@ -111,6 +111,8 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   const [violationSummary, setViolationSummary] = React.useState("合同主体与基础定义不一致");
   const [reviewerLevel, setReviewerLevel] = React.useState("3");
   const [approvalComment, setApprovalComment] = React.useState("证据齐备，同意放行");
+  // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人」）：可空，空则按档位下限沿直接上级链生成。
+  const [finalApproverId, setFinalApproverId] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该复核策略完整字段（枚举中文·布尔中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -188,6 +190,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
       objectId,
       amountCent: Number(amountCent || 0),
       violationSummary,
+      finalApproverId: finalApproverId.trim() || undefined,
     };
     await runAction("supervisor_review_evaluated", request, () => api.post("/api/v1/platform/supervisor-review/evaluate", request));
   }
@@ -305,7 +308,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
                       <td>{formatBusinessStatus(row.decision.approvalLevel ?? "")}（主管级 {displayValue(row.decision.requiredLevel)}）</td>
                       <td>{row.schedule?.dueAt ? cnDate(row.schedule.dueAt) : "-"}</td>
                       <td>{(row.schedule?.escalationCount ?? 0) > 0 ? `已升级 ${row.schedule?.escalationCount} 次` : "待审"}{row.schedule?.forwardedTo ? `，已转交给 ${row.schedule.forwardedTo}` : ""}</td>
-                      <td><button type="button" data-testid={`supervisor-review-pending-select-${row.decision.reviewId}`} onClick={() => { setForwardReviewId(row.decision.reviewId); setLatestReviewId(row.decision.reviewId); }}>{TEXT.selectForForward}</button></td>
+                      <td><a data-testid={`supervisor-review-chain-link-${row.decision.reviewId}`} href={`/admin/governance/approval-chain?review_id=${encodeURIComponent(row.decision.reviewId)}`}>审批链</a> <button type="button" data-testid={`supervisor-review-pending-select-${row.decision.reviewId}`} onClick={() => { setForwardReviewId(row.decision.reviewId); setLatestReviewId(row.decision.reviewId); }}>{TEXT.selectForForward}</button></td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -323,6 +326,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
               <label>{TEXT.objectId}<input data-testid="supervisor-review-object-id" value={objectId} onChange={(event) => { setObjectId(event.target.value); resetPendingReview(); }} /></label>
               <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => { setAmountCent(event.target.value); resetPendingReview(); }} /></label>
               <label>{TEXT.violationSummary}<input data-testid="supervisor-review-violation-summary" value={violationSummary} onChange={(event) => { setViolationSummary(event.target.value); resetPendingReview(); }} /></label>
+              <label>主线最终审批人（可空）<input data-testid="supervisor-review-final-approver" value={finalApproverId} onChange={(event) => { setFinalApproverId(event.target.value); resetPendingReview(); }} /></label>
               <label>{TEXT.reviewerLevel}<input data-testid="supervisor-review-reviewer-level" type="number" value={reviewerLevel} onChange={(event) => setReviewerLevel(event.target.value)} /></label>
               <label>{TEXT.approvalComment}<input data-testid="supervisor-review-approval-comment" value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} /></label>
             </div>
