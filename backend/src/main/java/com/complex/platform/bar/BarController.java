@@ -1,4 +1,6 @@
 package com.complex.platform.bar;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -136,6 +138,15 @@ public class BarController {
         authorizationService.requirePermission("finance.payment_intent.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createBillPayIntent(billId, request));
+    }
+
+    @PostMapping("/bills/{bill_id}/stored-value/sms")
+    public ApiResponse<java.util.Map<String, String>> requestStoredValueCode(
+            @PathVariable("bill_id") String billId,
+            @RequestBody java.util.Map<String, String> request) {
+        authorizationService.requirePermission("finance.payment.register");
+        service.requestStoredValueCode(billId, request.get("phone"));
+        return ApiResponse.ok(java.util.Map.of("message", "验证码已发送"));
     }
 
     @PostMapping("/bills/{bill_id}/settle")

@@ -1,5 +1,7 @@
 package com.complex.platform.finance.gateway;
 
+// 文件版本：V0.01
+
 /**
  * 支付渠道结果（端口出参，厂商无关）。永不抛出受检异常以阻塞业务——
  * 开关关/无厂商均以状态码表达，由业务侧决定回退路径。
@@ -13,8 +15,14 @@ public record PaymentGatewayResult(
         Status status,
         String gatewayProvider,
         String gatewayRef,
-        String message
+        String message,
+        String paymentUrl,
+        PaymentGatewayRequest confirmedPayment
 ) {
+
+    public PaymentGatewayResult(Status status, String gatewayProvider, String gatewayRef, String message) {
+        this(status, gatewayProvider, gatewayRef, message, null, null);
+    }
 
     public enum Status {
         /** 开关关：能力预留未启用，业务回退现有内部/占位结算（不阻塞）。 */

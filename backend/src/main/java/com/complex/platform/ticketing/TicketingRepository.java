@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import java.util.List;
 import java.util.Optional;
 
@@ -298,6 +300,10 @@ public interface TicketingRepository {
     TicketOrderRecord saveTicketOrder(TicketOrderRecord order);
 
     Optional<TicketOrderRecord> findTicketOrderById(String id);
+
+    default Optional<TicketOrderRecord> findTicketOrderByIdForUpdate(String id) {
+        return findTicketOrderById(id);
+    }
 
     TicketOrderRecord updateTicketOrder(TicketOrderRecord order);
 

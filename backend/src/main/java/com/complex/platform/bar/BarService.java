@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
 import java.util.List;
@@ -623,6 +625,11 @@ public class BarService {
                 BarWriteOperation.CREATE_BILL_PAY_INTENT,
                 () -> billingService.createBillPayIntent(id, request)
         );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")
+    public void requestStoredValueCode(String billId, String phone) {
+        billingService.requestStoredValueCode(operations.requireText(billId, "bill_id"), phone);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")

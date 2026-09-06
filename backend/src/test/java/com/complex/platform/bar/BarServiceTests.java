@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -133,6 +135,15 @@ class BarServiceTests {
         receivableLedgerService = new CapturingBarReceivableLedgerService();
         AccessRepository accessRepository = mock(AccessRepository.class);
         when(accessRepository.permissionExists(anyString())).thenReturn(true);
+        when(accessRepository.listPermissions()).thenReturn(List.of(
+                new com.complex.platform.access.PermissionDefinition("bar.bill.refund", "退款", "bar", "high", false, "active"),
+                new com.complex.platform.access.PermissionDefinition("bar.order_item.void_decide", "退酒审批", "bar", "high", false, "active")));
+        when(accessRepository.findPermissionEffects(org.mockito.ArgumentMatchers.eq("usr_admin"), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(
+                        new AccessRepository.PermissionEffect("usr_admin", "bar.bill.refund", AccessRepository.Effect.GRANT,
+                                AccessRepository.Source.ROLE, "explicit_refund", null, null, false, false),
+                        new AccessRepository.PermissionEffect("usr_admin", "bar.order_item.void_decide", AccessRepository.Effect.GRANT,
+                                AccessRepository.Source.ROLE, "explicit_void_review", null, null, false, false)));
         authorizationService = new AuthorizationService(accessRepository);
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());

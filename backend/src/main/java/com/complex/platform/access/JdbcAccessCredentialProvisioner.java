@@ -1,7 +1,10 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.api.ApiException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import org.springframework.context.annotation.Profile;
@@ -28,10 +31,13 @@ class JdbcAccessCredentialProvisioner implements AccessCredentialProvisioner {
     @Transactional
     public void provisionCredential(String userId, String password, String status, Instant now) {
         if (isBlank(userId) || isBlank(password)) {
-            return;
+            throw ApiException.badRequest("VALIDATION_FAILED", "账号和初始密码不能为空");
         }
-        String credentialStatus = "disabled".equals(status) ? "disabled" : "active";
-        jdbcTemplate.update("""
+        if (!java.util.Set.of("active", "invited", "disabled").contains(status == null ? "" : status)) {
+            throw ApiException.badRequest("INVALID_ACCOUNT_STATUS", "无法识别的账号状态");
+        }
+        String credentialStatus = "active".equals(status) ? "active" : "disabled";
+        int affected = jdbcTemplate.update("""
                 INSERT INTO auth_credentials (
                     user_id, password_hash, password_algo, failed_attempt_count, locked_until,
                     password_changed_at, status, created_at, updated_at
@@ -52,6 +58,9 @@ class JdbcAccessCredentialProvisioner implements AccessCredentialProvisioner {
                 .addValue("password_hash", passwordEncoder.encode(password))
                 .addValue("status", credentialStatus)
                 .addValue("now", timestampWithTimeZone(now)));
+        if (affected != 1) {
+            throw ApiException.conflict("CREDENTIAL_PROVISION_FAILED", "登录凭证未能保存");
+        }
     }
 
     private boolean isBlank(String value) {

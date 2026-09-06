@@ -1,5 +1,7 @@
 package com.complex.platform.finance;
 
+// 文件版本：V0.01
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -256,6 +258,10 @@ public interface FinanceRepository {
     PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent);
 
     /** 按 id 查支付意图（储值充值/会员开通绑支付意图：入账前校验支付意图存在且已成功）。 */
+    default Optional<PaymentIntentRecord> findPaymentIntentByIdForUpdate(String id) {
+        return findPaymentIntentById(id);
+    }
+
     default Optional<PaymentIntentRecord> findPaymentIntentById(String id) {
         return Optional.empty();
     }

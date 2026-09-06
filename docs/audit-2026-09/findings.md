@@ -1,7 +1,678 @@
 # 全量审计 Findings 台账
-版本：V0.51
+版本：V0.73
 
-## 当前状态：M001—M004已发布PASS；M005 B5-r1双PASS/四值全等，12项队列全否，进入发布
+## 当前状态：M001—M005已发布PASS；M006 B5-r5双PASS、四值全等、ledger已记PASS、收口文件已写；发布进行中
+
+## M006 B5-r5 双席结论与收口（V0.73，2026-09-06T16:33:39Z）
+
+- 席乙 Grok：modules/M006-b5-r5-grok-raw.md，31051 字节 / 406 行，SHA256 da7fa5257660d431d8dce08fe1c16363a804f27d0955e2caf89d9bcbf3b37d1f；适配器回执 EXIT_CODE=0（16:17:26Z–16:31:47Z）。审计结论 PASS；14 文件、52 判据逐项；111 PASS / 0 FAIL（含 JDBC 12）；GEN-012 / GEN-009 特别核对满足；旧 001—036 不回退；无新 GR。
+- 席甲 Claude：modules/M006-b5-r5-self-raw.md，13014 字节，SHA256 d0cb18fa8681439003597d779ddd2702031c3a2982a5314ec3c1fb43ca2a3f4e，先于读取 Grok raw 落盘。审计结论 PASS；101 PASS / 0 FAIL；探针 G/H/S/T 全部满足。
+- 合取：B5-r5 PASS。B5 后四值（④=b5-r5 grok raw 最后一条）均为 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0；三份 HTML 与 HEAD 逐字相同。
+- 收口顺序：先 ledger M006 → PASS，再写 modules/M006-10-backend-main-access-01.md。
+- 登记（不入队）：单参 listGrantRequests、私有 slug()、wildcard 恒 false、注释漂移（Grok 补：currentProjectScopeQuietly 注释）、StaffService.java:363（M008）。
+- 下一步：按操作员既有逐模块发布授权，release worktree → propose-change.sh → merge-pr.sh → 160 ff 同步。
+
+## M006 B4-r5 双席结论（V0.72，2026-09-06T16:08:52Z）
+
+- 席乙 Grok：modules/M006-b4-r5-grok-raw.md，316372 字节 / 4587 行，SHA256 a118bc15df30b011e8c5f1ece56928d68a45dcaeaead378b81967beb91bbeee2；适配器回执 EXIT_CODE=0（15:54:35Z–16:08:10Z）。范围归因 PASS（业务 diff 每一行归 035/036；`.scratch/**` 与 docs/audit-2026-09/** 按 §1.2）；内容 PASS（独立红绿、copy 矩阵、查询计数）；本席 PASS。
+- 席甲 Claude：modules/M006-b4-r5-self-raw.md，304692 字节，SHA256 19cc4ca81cccceb5dd04d37e2e2b6b7dc69f2e71f802438ef6eece21991b34db，先于读取 Grok raw 落盘；内容 PASS、范围归因 PASS。
+- 双 PASS → M006-035、M006-036 修复队列改「否」；全 36 ID 当前均否。B3 保持 5。
+- B4 后四值（④=b4-r5 grok raw 最后一条）均为 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+- 下一步：B5-r5 全模块双审（先派 Grok，席甲报告在 Grok 退出后落盘）。
+
+## M006 B3 第 5 次执行记录（V0.71，2026-09-06T15:52:26Z）
+
+- 依据：操作员“恢复 M006，批准第 5 次修复”；B2 双 PASS 定稿 035/036。
+- 先红后绿：新增 `platformAdminEffectivePermissionsDoNotQueryDictionaryPerPermission`（M006-035）与 `orphanStaffCopyingOrganizationTemplateIsRejectedNotCrashed`（M006-036）于既有 M006SecurityRegressionTests（V0.20→V0.21），修复前 2 FAIL；修复后 2 PASS，全类 36 PASS / 0 FAIL。
+- 035 修复：AuthorizationService（V0.04→V0.05）新增私有 `dailyPermissions()` 惰性 Supplier，一次授权判定 / 有效集计算 / holdsPermissionViaRole 内只读一次权限字典；`isDailyPermission` 删除，`isExplicitOrDailyGrant` 改为接收 Supplier；判定语义不变，无缓存框架。
+- 036 修复：AccessService（V0.13→V0.14）copyPermissionTemplate 非平台管理员分支先 `requireProjectScope(actor)` 再比较归属（与 updatePermissionTemplate 同范式）。
+- before tree 4a10ba268b3408173639bc79dba3e52b935164a7（B2 定稿、测试追加前实算）；after tree 7e3d9e970fd7b01735a78089cbeb4921e122cf80；完整 `git diff --binary` 297255 字节，SHA256 bac943157098c1e9a11c65fc895f33950f6eb688cb5b2062252e20d71afa0102。首次执行因运行器路径错误中止于测试追加之后、修复之前，清理了误生成的 backend/.scratch 后续跑；源码修复只落一次。
+- B3 前后四值（④=b5-r4 grok raw 最后一条）均为 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。三份 HTML 未改。
+- B3 累计 4→5。下一步 B4-r5（两席审完整 diff，逐块归因 035/036）。
+
+## M006 B2 定稿（V0.70，2026-09-06T15:51:12Z）
+
+- 席乙 Grok B2：modules/M006-b1-grok-raw.md 追加 V0.08（全文 199985 字节，SHA256 c20b80b1150cff1b50211a560e33470d09e084adb9d231abcdbdd5b36cb1de55），适配器回执 EXIT_CODE=0（15:37:16Z–15:49:42Z）。全批结论 PASS：独立探针复现 201/1/0 与 orphan NPE（并以 update 入口 PROJECT_SCOPE_REQUIRED 对照）；035 技术性/缺陷是/队列是，036 细化/缺陷是/队列是；登记 6 项维持；旧 001—034 不重开；无添加、无 HTML 申请。
+- 席甲 Claude B2：modules/M006-b1-self-raw.md 追加，PASS。
+- 双 PASS → 定稿：M006-035、M006-036 修复队列「是」；其余 34 ID「否」。Grok 指出席甲 B5 raw §2 GEN-017 行“两条均为技术性”与 CX-B5-02 正文“细化”不一致，定稿以正文（细化）为准。
+- 第 5 次 B3 依操作员指令（“恢复 M006，批准第 5 次修复”）执行；先落最小失败测试（红），再最懒修复（绿）。
+
+## 操作员指令登记（V0.69，2026-09-06T15:46:10Z）
+
+操作员原话（2026-09-06）：“恢复 M006，批准第 5 次修复”。据此：解除 B3 三次上限对本模块的限制一次，允许在本批 B2 双 PASS 定稿后执行第 5 次整批 B3（修复队列为「是」的已定稿 ID），随后仍按 B4-r5 完整 diff 双审 → B5-r5 全模块双审；未经双 PASS 不称模块 PASS。不改控制提示词 V0.17 原文，不影响其他模块上限。B2 定稿前不写源码。
+
+## M006 B5-r4 双席结论与 B2 候选（V0.68）
+
+两席本次整个模块均审完后合取判定：**B5-r4 FAIL**（席甲 FAIL 2 条新意见；席乙 Grok PASS 0 条；任一 FAIL 即 FAIL，席甲不以对方 PASS 撤回自票）。
+- 席乙 Grok：modules/M006-b5-r4-grok-raw.md，27075 字节 / 372 行，SHA256 2e9767db6979830e1385e71938d5ff06f6994ccc4a490aab28ba315472efa8f8；适配器回执 EXIT_CODE=0（15:21:48Z–15:34:22Z）。审计结论 PASS；14 文件、52 判据逐项；109 PASS / 0 FAIL / 2 SKIP（含 M006JdbcRegressionTests 12 项，complex_test 库 TEMP 表）；HTTP/翻译探针 7 路全中文（“U 盘密钥”对齐 HTML 用词）；旧 34 ID 均不回退；无新 GR。
+- 席甲 Claude：modules/M006-b5-r4-self-raw.md，20933 字节，SHA256 73e12799fdb8bc193e2a046241098a66338aa72cb1fde4e0daf914496a4cdb9a，先于读取 Grok raw 落盘。审计结论 FAIL：CX-B5-01、CX-B5-02（探针证据见该 raw §4）；99 PASS / 0 FAIL（未跑 JDBC 类）。
+- B5 后四值（④=b5-r4 grok raw 最后一条）均为 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0；三份 HTML 与 HEAD 逐字相同。
+- 回退统一规则：本批两条依据均为“无 ID 新缺陷” → 整批回 B2 定稿分配 ID；不得直接进 B3。
+
+### M006-035 — 平台管理员有效权限计算对权限字典逐项重复查询（N+1）
+- 来源：席甲 CX-B5-01。分类：技术性（无业务发明、不与 HTML 冲突）；冻结判据 GEN-012；工程缺陷 是；候选修复队列 是。
+- 位置：backend/src/main/java/com/complex/platform/access/AuthorizationService.java:89-94（isDailyPermission 每次调用 accessRepository.listPermissions()）、141-168（computeEffectivePermissions wildcard 分支对字典每项调用 isDailyPermission）、96-101（isExplicitOrDailyGrant 对 role_platform_admin 效果逐条调用）；JdbcAccessRepository.java:49-56 listPermissions 为无缓存 SELECT。
+- 证据（类型 4，席甲 raw §4 探针 G）：字典 200 条、platform_admin 主体，一次 effectivePermissions() 触发 listPermissions() 201 次；requirePermission(一个日常码) 1 次；普通 staff 0 次。放大倍数 = 权限字典规模（当前约 219）。
+- 拟修边界（B2 定稿用，本轮不修）：在单次 computeEffectivePermissions / requirePermissions 内只取一次 listPermissions() 并复用日常权限码集合；不改判定语义、不引入缓存框架；补一条“单次调用 listPermissions 不超过 2 次”的可失败断言。
+- 溯源：由第 1 轮 B3（M006-001 修复引入 isDailyPermission）产生；非 034 回归；b4-r1 两席 diff 审未评估查询次数。
+
+### M006-036 — 无组织归属的非平台管理员复制模板时抛 NullPointerException
+- 来源：席甲 CX-B5-02。分类：细化（上位 BSM-114 / PGM-048 跨组织隔离）；冻结判据 GEN-009；工程缺陷 是；候选修复队列 是。
+- 位置：backend/src/main/java/com/complex/platform/access/AccessService.java:186-191（`!actor.organizationId().equals(source.ownerScopeId())` 在 organizationId 为 null 时 NPE，早于 L193 requireProjectScope）。
+- 证据（类型 4，席甲 raw §4 探针 H）：orphan staff（organizationId=null，M006-003 已承认的真实主体形态）复制 org 拥有的模板 → NullPointerException（经 GlobalExceptionHandler 为 500 INTERNAL_ERROR）；同组织 staff 对照正常。fail-closed、无越权，但错误不可定位、非 ApiException。
+- 拟修边界：L189 先 `authorizationService.requireProjectScope(actor)` 再比较（与 L146 updatePermissionTemplate 同范式）；补一条 orphan 主体得 ApiException 的可失败断言。
+
+### 登记（不入队，两席合并）
+- GEN-001：AccessService.listGrantRequests(Integer) 单参重载无生产调用方（席甲；Grok 亦列 `page(全量)`）。
+- GEN-001：AccessService.java:1898 私有 slug() 无调用方（Grok B5-r4 ponytail 指出；本席 grep 核实 0 处调用）。
+- EffectivePermissions.wildcard 恒为 false（computeEffectivePermissions 固定传 false），消费方 1 处（requireActorCanGrant 等）按 false 分支运行，行为正确（DENY 优先、权限已折入 grants）（Grok 指出）。
+- 文件版本头递增（AccessService V0.13→V0.14、测试 V0.20→V0.21）未随第 4 次 B3 落地（两席均指出）；下一批修复一并处理。
+- 模块外：StaffService.java:363 同类英文回显（M008）。
+- Grok 分类备忘：控制器/服务英文字段键文案经 FieldLabels.translate 全中文；`没有操作权限：<权限码>` 中权限码为 PGM-066 允许的系统内部标识符。席甲同意（探针一致）。
+
+### 本批 B2 流程
+① 本段为席甲候选台账（2026-09-06T15:36:19Z）。② 派 Grok 对两份 b5-r4 raw 与本候选做差集/分类/队列复核。③ 两席各自把 B2 PASS/FAIL 追加到自己的 b1 raw（不写锁哈希行）。④ 双 PASS 才定稿。
+轮次：B3 已执行 4 次，控制提示词 3 次上限已超；B2 双 PASS 定稿后第 5 次整批修复须操作员另行指令，本进程届时停在等人态并回执。
+
+## M006 B4-r4 双席结论（V0.67）
+
+- 席乙 Grok：modules/M006-b4-r4-grok-raw.md，198135 字节，SHA256 d2f552d871c6ca0d0293c5411000bb96f4618717548792d00c21e38efe9b8e52，适配器回执 EXIT_CODE=0（START 2026-09-06T15:06:23Z END 15:19:20Z）。内容 PASS、范围归因 PASS、本席 PASS；无新 finding。独立红绿：before 树 RED_ONE_EXIT 1，after 树 34 PASS / 0 FAIL。
+- 席甲 Claude：modules/M006-b4-r4-self-raw.md，189047 字节，SHA256 025fd66ce84a2f60a6fdd5c19b333cd7eb3b272cdc76547207b70029b9c35a6b，先于读取 Grok raw 落盘。内容 PASS、范围归因 PASS。
+- 双 PASS → M006-034 修复队列改「否」；全 34 ID 当前均否。B3 保持 4。
+- Grok 两点更正/观察（本方核实）：① StaffService.java 在 plan/modules.md 属 M008（V0.66 段误写 M007，路径归因不受影响）；② StaffService.java:363 另有同类“（approved）或驳回（rejected）”英文回显，不在本 diff、不在操作员②点名范围，属 M008 文件，本轮不作为 M006 finding，记入后续。③ 拟修写明的文件版本头递增（AccessService V0.13→V0.14、测试 V0.20→V0.21）未做；版本头非用户可见文案、非冻结判据，不影响本轮结论，留待下一批修复一并处理。
+- B3 前后四值（④=b5-r3 grok raw 最后一条）均为 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+- 下一步：B5-r4 全模块双审（先派 Grok，席甲报告在 Grok 退出后落盘）。记录时间 2026-09-06T15:21:11Z。
+
+## M006 B3第4次执行记录（V0.66，操作员例外）
+
+操作员指令原话（2026-09-06）：①“接手 M006 的 4 处文案修复”；②“StaffService 那两处也一起改了”；③“你和Grok按2方审计提示词中的要求做一个m006全量审计,只是把codex gpt 6要执行的全部内容换成 fable 5.1 extra”。
+据此：本批B3由Claude Fable 5.1执行；席甲（审计/修复/调度）本轮由Claude担任，Grok席乙不变；控制提示词V0.17其余规则不变。B3累计3→4（不抹旧三轮）。
+- 034 修复落地：`backend/src/main/java/com/complex/platform/access/AccessService.java` 515、1061、1491、1694 四处人读文案改为纯中文（“删除配置须由最高权限（U 盘密钥）审批”“薪资币种当前仅支持人民币，不支持所填币种”×2“审批结论必须为通过或驳回”）；错误码、允许值集合、权限与币种判断未改。
+- 操作员追加授权（指令②）：`backend/src/main/java/com/complex/platform/access/staff/StaffService.java` 247、1244 同类“（approve）或驳回（reject）”回显改为“审批结论必须为通过或驳回”。该文件属M007，本批diff中的这两块按操作员指令②归因034（同类文案缺陷、操作员点名扩展），不作为无ID越界。
+- 最小验证：`M006SecurityRegressionTests.java` 新增 `invalidDecisionMessageIsChinese`（反射调用 normalizeDecision，断言错误码 VALIDATION_FAILED 且消息不含拉丁字母）；同类34项在160上javac运行器全PASS；staff包13源javac编译exit0。
+- B3前树：c77d4453db7eb9b92388de630fdd5121cdef7959（第3轮after，源码此前未变）；B3后树：54999203b0587456b8d2f473b5ee0f5e3d67908b（含docs/audit-2026-09下第3轮raw与台账，均为§1.2排除的审计产物）。
+- 下一步：B4-r4（两席审完整diff，逐块归因034）→ B5-r4（两席全模块三线审计）。
+
+## M006 本次例外恢复及B2候选（V0.65）
+
+操作员本次明确指令：“仅限本次，你把经过3次修复后仍未通过的问题交给claude cli,调用fable 5.1 模型 high 模式看看能否修复”。
+仅本次授权解除M006的BLOCKED-3ROUNDS、把下一批修复执行者改为Claude CLI Fable 5.1/high；不改变控制提示词V0.17原文和后续模块默认角色/上限。保留真实B3累计3，实际新整批完成后记4，不抹掉旧三轮。新一批仍按B2整批定稿→委托修复→B4完整差异双审→B5全模块双审；未经后续验证不称模块PASS。没有重开M001—M005或全仓。
+已实测 /home/james/.local/bin/claude 2.1.261，内置模型ID claude-fable-5-1；以--model claude-fable-5-1 --effort high无工具连通检查真实exit0/is_error=false，返回modelUsage canonicalModel=claude-fable-5-1、provider=firstParty。没有使用默认opus/xhigh或fallback模型。先一次解析把JSON事件数组误当对象，CLI自身仍exit0；修正解析后完整读取以上实际结果，无文件改动。
+git fetch origin后HEAD=origin/main=395e6fbab027020da1c38237fad17e8edcd7a132。
+
+### M006-034 — 用户可见报错残留英文枚举与缩写
+- 整批输入：modules/M006-b5-r3-self-raw.md原V0.01独立票及接收追加V0.02；modules/M006-b5-r3-grok-raw.md完整V0.01。原票各1项，完整并集同类4处，无遗漏。
+- 候选：冲突；工程缺陷是；修复队列是。无添加业务、无HTML申请；旧001—033保持否。
+- 冻结判据PGM-001/PGM-066/GEN-002/GEN-015；依据为冻结全中文规则、真实当前代码和已落盘可运行错误响应探针。Grok4处完整范围保留，不缩成仅本方1694。
+- 来源位置：backend/src/main/java/com/complex/platform/access/AccessService.java:515、1061、1491、1694；错误最终通过GlobalExceptionHandler:49—61、FieldLabels:504—529传到message。
+- 拟修边界：该源文件4处人读报错文本、源文件版本V0.13→V0.14；在既有backend/src/test/java/com/complex/platform/access/M006SecurityRegressionTests.java补最小真实行为回归（V0.20→V0.21），覆盖4处错误出口及允许业务行为仍保持。需要的夹具可复用现有测试，不另加测试框架。
+- 参考最小文字：审批结论“审批结论必须为通过或驳回”；最高权限“删除配置须由持授权密钥的最高权限人员审批”；两处币种“薪资币种当前仅支持人民币”。最终只改显示文案，不改内部枚举、错误码、权限判断、币种允许值、账号/支付/存储逻辑或通用翻译器。
+- Claude仅为本次修复执行者，不能给自己代行Codex/Grok审计票；本次范围外内容发现后只报告。修复前B2仍待双PASS，不先行写源。
+
+
+## M006 B5-r3完整双席意见与三轮交付（V0.64）
+
+两席本次整个模块均审完后统一判定：**B5 FAIL；模块 BLOCKED-3ROUNDS；B3已执行3次**。
+Grok于2026-09-06 04:49:42 UTC检查取得真实EXIT_CODE=0，报告317行/21532字节，SHA06506fb252baac014c9ed4d1f89c546b92479e54aa84289255d6b78c3498b0bb，全文已读；交付成功不等于审计通过。
+本方独立原始完整报告34586字节，SHA72da471a14607a68d3c363a0a65c7ec426dfe7b2649da01da7f9b8f767f681a3，先于读取Grok封存。原票FAIL，原1条意见保留；后续接收记录仅追加，不覆盖原票。
+
+### 本批全部意见（终态待恢复；未做B2定稿）
+| 原始来源 | 问题及真实影响 | 位置 | 原分类/工程缺陷 | 当前处理 |
+|---|---|---|---|---|
+| self CX-B5-01 | 无效审批结论报错给用户显示approve/reject，实际Controller→Service→错误响应复现；不改变审批结果 | AccessService.java:1694，入口147—155/703—724 | 冲突/是，PGM-001/066、GEN-015，类型4 | 原始意见保留，待操作员恢复M006后整批B2 |
+| Grok GR-01（与上条同类，完整保留其更宽范围） | 同上；另有岗位模板删除审核拒绝提示USB，以及两处薪资币种错误提示CNY/输入币种 | AccessService.java:515、1061、1491、1694 | 冲突/是，PGM-001/066、GEN-002/015，类型1+4 | 原始意见保留，四处合为一类文案问题的归并建议，尚未正式ID |
+
+原始源：[本方完整报告](modules/M006-b5-r3-self-raw.md)、[Grok完整报告](modules/M006-b5-r3-grok-raw.md)。
+本方接收后核对四处当前源码及GlobalExceptionHandler:49—61/FieldLabels:504—529；中文中夹英文原样透传。Grok额外三处的运行探针证据归属Grok，本方不冒称重跑了其99项测试。
+旧M006-031与032在本轮两席各自测试中通过，保持旧33ID全部队列否；不得把这批新问题直接塞入已出队旧ID或无ID修复。没有遗漏另一类新意见、没有新增业务规则、没有HTML申请。
+潜在最小变更仅四处提示文本；保留内部代码、允许的decision/币种值、权限与业务判断。恢复后仍须先整批B2双PASS再修，不在本轮突破三次上限。
+验证：本方当前源98项回归全通过；独立真实审批响应反例1失败；Grok报告99项所选单元/JDBC测试通过及报错探针确认英文，明确省略2个StaffService测试（本方98项中已经实际执行），不把两组数字相加称197个不同测试。未跑真实支付厂商、全端浏览器/安卓、全库迁移或完整mvn test。
+
+### B5后四值与锁
+四值均为 `23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de`：①当前实算；②sidecar；③ledger顶部；④本次Grok raw最后一条独占哈希行。LOCK-AMEND-COUNT=0，校验实际命令/输出在本次操作员回执与本方raw接收追加段。
+没有因失败修改锁、scope、模块映射或当前源码，三HTML仍与HEAD逐字相同。
+
+### 三轮完整diff交付
+以下所有六份raw都含对应两树**完整未过滤**git diff --binary；本次逐字包含校验均true，不仅是stat或节选。源码仍等于第三轮after，未回滚已通过修复。
+| B3轮次 | before tree | after tree | 完整diff字节及SHA256 | 双席原始diff报告 |
+|---|---|---|---|---|
+| 1 | f49ef25cdadc0d4572f169d8c33b5e971c21f024 | e845764656fb7f9c166026371371b720f10fde2a | 384478 / f8caaf8d47ea2993a9ea1d4b8a43e0c4f47246618d327e1a5410428234f6f5cc | [self](modules/M006-b4-r1-self-raw.md) / [Grok](modules/M006-b4-r1-grok-raw.md) |
+| 2 | 7fecb8e739b6b04475755fffbb8e106fa0759713 | 2e346ad1b72a5df60d8e10eb1df9cc2b1add2cf9 | 17644 / cc2fc0f92106bd49386038da79b4b1e1b862cf447bc6bc753322417efd413a41 | [self](modules/M006-b4-r2-self-raw.md) / [Grok](modules/M006-b4-r2-grok-raw.md) |
+| 3 | 11319ccfc6c0a3b609bc1cfdd4579766a7118705 | c77d4453db7eb9b92388de630fdd5121cdef7959 | 14687 / a04dfea8324fd7a11d5b5cfebf3585fd93c9cb32ec3cd05fde2bb8b610956717 | [self](modules/M006-b4-r3-self-raw.md) / [Grok](modules/M006-b4-r3-grok-raw.md) |
+
+停止原因：控制提示词V0.17第4节“第3次B3后……该次B4或B5审完仍FAIL→……状态记BLOCKED-3ROUNDS……是否重启由操作员另行下指令”。当前B5完整结束、两席均FAIL，故不自动回B2/B3、不加第四轮、不开始M007、不提交合并推送M006。
+需要操作员：新指令恢复M006；恢复后保留现有修复/原始报告，先处理本批全部意见，而非重开M001或全仓。
+
+
+## M006 B4-r3整批出队（V0.63）
+2026-09-06 04:32:19 UTC取得Grok真实exit0，完整448行/30050字节/SHA945fa354e3a1c02ae01a553284187b30ec917460764cebe31e0b4217348604dd已读完。其内容PASS、范围PASS、无新finding；独立绿测33+9通过，并分别从before源码复现031公司/旧记录及032错误文案的3个失败。未把本方98测试和完整编译算作自己实跑。
+本方原B4 V0.01内容/范围PASS，原36492字节/SHAf65b1ae24f09b0b6238f9ae248fb0c759e9c87d4b82a076f400093d2e7e03553，现仅追加V0.02算术勘误（新键实际71字符而非报告误写67，代码/测试/原票未改）。双方raw所含完整diff均与两树实际14687字节逐字一致，6现源仍等于after。
+按B4双PASS规则统一将031/032当前队列改否；全33ID当前均否。不是模块收口，须继续B5-r3整模块三线双审。Grok关于长度前缀的可选缩短不属finding，不作无ID改动。
+
+## M006 B2定稿（V0.62）
+2026-09-06 04:11:34 UTC取得Grok真实exit0；完整读取新增V0.06的218行/18285字节，SHA a8fce223cd34d693da0b4689d7190b6128118b628fe74af9f6fb89e26ab33c64。旧147529字节前缀未改；整份165814字节/SHA4e0d7aa205a52b2f1b84cf040b4080033e5a621fb4330b88e09b51f8e44025a4。本方既有本批B2 V0.15 PASS已先落盘；Grok本批B2 PASS，全部3条差集为空，两席共同确认候选V0.61的当前33ID表、分类及范围。
+031、032队列是；033细化/工程缺陷否/队列否，Grok已独立接受当前完整源码构建证据，原B5意见保留；旧30项仍否。无添加项、无HTML修改申请。B3只修031/032，随后审完整diff并再次全模块复审。旧候选措辞保留为历史记录，以本段及当前队列表为现值。
+031将沿用现有主体/组织字段收窄共享范围，现有缓存表不改结构；新范围的键使用已有摘要能力适配operation_id的128字符容量。旧共享记录缺少可靠主体归属时，拒绝再次执行并提示先核实原操作，不能返回他人结果或重复写入；同主体的新记录重试仍返回原结果。032只改本地错误提示和响应断言。
+
+## M006 B5-r2整批归并候选（V0.61，待本批双席B2定稿）
+
+本次完整两席B5均FAIL：Codex self V0.01，36285字节/SHA7c947c128b3ec0a7a6b891a795b613bf900db78aed9002e3e1e8e01f844a7395；Grok本次V0.02追加18373字节/SHA1c8b6d43dad24c118bc3bf013487cd9488d1fd80d7c029b6150cef7bd037daae，整份45265字节/SHA0f7c1000403b9f254988c63041f3f4dc3a1cd12ada32741a01c5ba396b60e6c9。真实exit0，03:51:20 UTC按5分钟间隔取得；完整224行新增报告已读，旧26892字节前缀保持。输入路径固定 modules/M006-b5-r2-self-raw.md 与 modules/M006-b5-r2-grok-raw.md，本批只采信两份本次完整报告。旧Grok文件不当作成功票；本方未读Grok后倒改自己的独立B5票。
+
+共3条本批意见：CX-B5-01→031、GR-01→032、GR-02→033。当前候选共33ID，001—030继续队列否，031/032队列是，033队列否待外席复核。原30项分类、修复范围、历史票保持。B3=2，无HTML申请、无添加项待答；本批尚未定稿，不修复。B5后actual/sidecar/ledger/Grok末条哈希四值全为23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+
+### M006-031 — 不同公司组织使用相同请求编号时，创建角色结果串用
+
+- 来源：本次self CX-B5-01。分类：冲突；工程缺陷是；候选修复队列是。
+- 定位：AuthorizationService.java:199—218、AccessService.java:300—330；直接消费者IdempotencyService.java:72、JdbcIdempotencyRepository.java:23/37。
+- 依据类型1/2/4：冻结GEN-002/004/005/007/009/010、BSM-028/114、PGM-001。不同组织应按实际归属访问/创建自己的对象。真实controller+service+resolver+幂等服务执行，两个已授权组织员工各自合法首次请求company-first-role，同正文；二者scope=p，结果只创建org-a角色，org-b返回org-a角色id及内容。JSON组织字段因@JsonIgnore为空，不能据此称无串用。完整可复现命令及输出在本次self raw。
+- 边界：不假设随机UUID碰撞；接口允许任意非空幂等编号，服务端不能以单个前端randomUUID习惯代替主体隔离。公司组织与商户都沿用既有字段，不发明新业务身份。
+- 拟修：收窄现有幂等结果的主体范围，消除无merchant主体共享p导致的跨组织回放；保持实际认证上下文、同主体正常重试只生效一次，并核对旧记录重试，不能仅改范围前缀造成已有操作再次生效。修改限AuthorizationService、AccessService及其必要既有幂等直接实现与对应最小验证；不扩全仓业务功能、不新增策略/审批/HTML。
+- 最小验证：不同组织同编号结果各自隔离；同主体同编号重试仅产生一个角色；存量成功记录重试不重复写入；相关直接消费者保持原业务约束。
+
+### M006-032 — 非法账号类型错误提示夹带英文枚举
+
+- 来源：本次Grok GR-01，原票保留。分类：冲突；工程缺陷是；候选修复队列是。
+- 定位：AccessService.java:48—49、921—923；FieldLabels.java:529；GlobalExceptionHandler.java:49—61。
+- 冻结PGM-001/066、GEN-002/015；类型1原文“提示、报错…必须全部为中文”与类型4实际错误响应。
+- 本方接收核实：当前真实controller调用createAccessUser(accountType=platform_admin)，取得INVALID_ACCOUNT_TYPE，再送真实GlobalExceptionHandler；实际响应“账号类型「platform_admin」不允许，可选值：[staff, merchant, merchant_admin, outsourced_vendor, supervisor, sales]”，中文断言失败。详见下方命令。不是只因源码中存在英文字段就判错。
+- 拟修：只修改本模块账号类型错误分支，去除给用户显示的英文枚举/输入原值，使用准确的中文提示；保留错误码、账号类别和注册审批规则。避免通过重写全局FieldLabels扩大修改范围。补一个真实错误响应断言，其他历史测试保持。
+
+### M006-033 — 新增授权政策源码未跟踪的构建意见（待Grok核实，不直接视为BUG）
+
+- 原始Grok GR-02：技术性、工程缺陷是，理由是AccessGrantPolicy不在git ls-files与阶段A scope中；从classpath删其class且不提供现有源码后编译失败。原始FAIL不被本方覆盖。
+- 本方候选：细化、无本次可成立工程缺陷、修复队列否。其上位是BSM-001既有政策可配置及上下限；有明确上位时按2.1应先归细化。
+- 当前事实：该文件是已定稿M006-016在B3-r1生成的合法修复源，已完整包含在B3-r2 after tree 2e346ad1b72a5df60d8e10eb1df9cc2b1add2cf9中，和当前字节相同。B3工作区尚未提交并非遗漏交付，流程规定B3不提交而B4完整tree必须覆盖untracked；阶段A清单冻结且B阶段不允许手工扩表。不能要求为B3新增合法修复源另扩scope/模块映射，亦不触发阶段A未跟踪人闸。
+- 实测：复制既有target到自动清除临时目录，删除其中4个AccessGrantPolicy缓存class，再用当前完整必要源码45文件显式javac；退出0，新生成4个AccessGrantPolicy class。说明当前可构建并不依赖旧Policy class缓存。全部共享target不变，无源码改动。完整命令和输出见下。
+- 待Grok在本批B2独立裁定：当前working-tree全源检查与其“删去依赖后只编14文件”的检查对象不同。若接受本方证据，则只登记并在模块发布时随全批修复一起跟踪提交，不修业务、不扩锁；若不接受，整批仍留B2，不单方将其意见抹去。
+
+### 本批接收验证（不是回写本方独立B5票）
+
+#### 真实非法账号类型响应
+
+```powershell
+@'
+# V0.01 temporary B5 read-only verification
+from pathlib import Path
+import subprocess,tempfile
+probe="\n    @Test void b5InvalidAccountTypeResponseIsChinese() throws Exception {\n        when(repository.listPermissions()).thenReturn(List.of(\n            new PermissionDefinition(\"access.user.manage\", \"管理账号\", \"access\", \"medium\", false, \"active\")));\n        var controller = new AccessController(service, authorization);\n        ApiException failure = null;\n        try {\n            controller.createAccessUser(new AccessUserRequest(\"b5-invalid\", \"检查错误提示\", List.of(),\n                \"example\", \"password\", null, \"platform_admin\", \"org\", null, \"active\"));\n        } catch(ApiException e) { failure = e; }\n        assertThat(failure).isNotNull();\n        assertThat(failure.code()).isEqualTo(\"INVALID_ACCOUNT_TYPE\");\n        var handler = new com.complex.platform.common.api.GlobalExceptionHandler();\n        var method = handler.getClass().getDeclaredMethod(\"handleApiException\", ApiException.class);\n        method.setAccessible(true);\n        var response = (org.springframework.http.ResponseEntity<?>) method.invoke(handler, failure);\n        var body = (com.complex.platform.common.api.ApiResponse<?>) response.getBody();\n        System.out.println(\"B5_ERROR_RESPONSE=\"+body.message());\n        assertThat(body.message()).doesNotContain(\"platform_admin\", \"staff\", \"outsourced_vendor\");\n    }\n"
+runner="""package com.complex.platform.access;
+public class M006Runner {
+ public static void main(String[] args)throws Exception {
+ int passed=0,failed=0;
+ var c=M006SecurityRegressionTests.class;
+ for(var m:c.getDeclaredMethods())if(m.isAnnotationPresent(org.junit.jupiter.api.Test.class)&&m.getName().startsWith("b5Invalid")){
+ var t=c.getDeclaredConstructor().newInstance();
+ try {for(var b:c.getDeclaredMethods())if(b.isAnnotationPresent(org.junit.jupiter.api.BeforeEach.class)){b.setAccessible(true);b.invoke(t);}
+ m.setAccessible(true);m.invoke(t);passed++;System.out.println("PASS "+m.getName());
+ }catch(java.lang.reflect.InvocationTargetException e){failed++;System.out.println("FAIL "+m.getName()+": "+e.getCause());}
+ finally{for(var a:c.getDeclaredMethods())if(a.isAnnotationPresent(org.junit.jupiter.api.AfterEach.class)){a.setAccessible(true);a.invoke(t);}}
+ }
+ System.out.println("RESULT "+passed+" PASS / "+failed+" FAIL");if(failed>0)System.exit(1);
+ }
+}"""
+with tempfile.TemporaryDirectory(prefix="m006-b5-self-",dir=".scratch") as d:
+ root=Path(d).resolve();cpfile=root/"classpath"
+ r=subprocess.run(["mvn","-o","-q","-f","backend/pom.xml","dependency:build-classpath","-Dmdep.outputFile="+str(cpfile)],capture_output=True,text=True)
+ if r.returncode:print(r.stdout,r.stderr);raise SystemExit(r.returncode)
+ cp=str(Path("backend/target/classes").resolve())+":"+cpfile.read_text().strip()
+ original=Path("backend/src/test/java/com/complex/platform/access/M006SecurityRegressionTests.java").read_text()
+ test=root/"M006SecurityRegressionTests.java";test.write_text(original[:original.rfind("}")]+probe+"\n}\n",encoding="utf-8")
+ src=root/"M006Runner.java";src.write_text(runner,encoding="utf-8");out=root/"classes";out.mkdir()
+ base=Path("backend/src/main/java/com/complex/platform")
+ sources=list((base/"access").glob("*.java"))+list((base/"access/dto").glob("*.java"))
+ sources += [base/"common/api/FieldLabels.java",base/"common/api/GlobalExceptionHandler.java",base/"common/idempotency/IdempotencyService.java",base/"governance/review/SupervisorReviewService.java",base/"evidence/AuditEventService.java"]
+ sources += [Path("backend/src/test/java/com/complex/platform/support/InMemoryAuditEventRepository.java"),Path("backend/src/test/java/com/complex/platform/support/InMemoryIdempotencyRepository.java"),test,src]
+ r=subprocess.run(["javac","-encoding","UTF-8","--release","21","-cp",cp,"-d",str(out),*[str(p) for p in sources]],capture_output=True,text=True)
+ print("JAVAC_EXIT",r.returncode,"SOURCES",len(sources));print(r.stdout,r.stderr)
+ if r.returncode:raise SystemExit(r.returncode)
+ r=subprocess.run(["java","-cp",str(out)+":"+cp,"com.complex.platform.access.M006Runner"],capture_output=True,text=True)
+ print(r.stdout,r.stderr);raise SystemExit(r.returncode)
+
+'@ | ssh -o BatchMode=yes james@192.168.88.160 'cd /home/james/complex-management && python3 -'
+```
+
+exit_code=1
+
+```text
+JAVAC_EXIT 0 SOURCES 51
+ 
+B5_ERROR_RESPONSE=账号类型「platform_admin」不允许，可选值：[staff, merchant, merchant_admin, outsourced_vendor, supervisor, sales]
+FAIL b5InvalidAccountTypeResponseIsChinese: java.lang.AssertionError: 
+Expecting actual:
+  "账号类型「platform_admin」不允许，可选值：[staff, merchant, merchant_admin, outsourced_vendor, supervisor, sales]"
+not to contain:
+  ["platform_admin", "staff", "outsourced_vendor"]
+but found:
+  ["platform_admin", "staff", "outsourced_vendor"]
+
+RESULT 0 PASS / 1 FAIL
+ Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/home/james/.m2/repository/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+
+```
+
+#### 去除旧Policy缓存后编译当前必要全源
+
+```powershell
+@'
+# V0.01 isolated current-working-tree compilation check
+from pathlib import Path
+import subprocess,tempfile,shutil,hashlib
+policy=Path("backend/src/main/java/com/complex/platform/access/AccessGrantPolicy.java")
+snapshot=subprocess.check_output(["git","show","2e346ad1b72a5df60d8e10eb1df9cc2b1add2cf9:"+str(policy)])
+assert snapshot==policy.read_bytes()
+with tempfile.TemporaryDirectory(prefix="m006-b5-fullsource-",dir=".scratch") as d:
+ root=Path(d).resolve();cached=root/"cached";shutil.copytree("backend/target/classes",cached)
+ removed=list((cached/"com/complex/platform/access").glob("AccessGrantPolicy*.class"))
+ for p in removed:p.unlink()
+ cpfile=root/"classpath"
+ r=subprocess.run(["mvn","-o","-q","-f","backend/pom.xml","dependency:build-classpath","-Dmdep.outputFile="+str(cpfile)],capture_output=True,text=True)
+ if r.returncode:print(r.stdout,r.stderr);raise SystemExit(r.returncode)
+ cp=str(cached)+":"+cpfile.read_text().strip();out=root/"classes";out.mkdir()
+ base=Path("backend/src/main/java/com/complex/platform")
+ sources=list((base/"access").glob("*.java"))+list((base/"access/dto").glob("*.java"))
+ sources += [base/"common/idempotency/IdempotencyService.java",base/"governance/review/SupervisorReviewService.java",base/"evidence/AuditEventService.java"]
+ r=subprocess.run(["javac","-encoding","UTF-8","--release","21","-cp",cp,"-d",str(out),*[str(p) for p in sources]],capture_output=True,text=True)
+ print("REMOVED_CACHED_POLICY_CLASSES",len(removed))
+ print("CURRENT_POLICY_SOURCE_EQUALS_B3_AFTER",snapshot==policy.read_bytes())
+ print("CURRENT_SOURCE_FILES",len(sources),"JAVAC_EXIT",r.returncode)
+ print("GENERATED_POLICY_CLASSES",len(list((out/"com/complex/platform/access").glob("AccessGrantPolicy*.class"))))
+ print(r.stdout,r.stderr)
+ raise SystemExit(r.returncode)
+
+'@ | ssh -o BatchMode=yes james@192.168.88.160 'cd /home/james/complex-management && python3 -'
+```
+
+exit_code=0
+
+```text
+REMOVED_CACHED_POLICY_CLASSES 4
+CURRENT_POLICY_SOURCE_EQUALS_B3_AFTER True
+CURRENT_SOURCE_FILES 45 JAVAC_EXIT 0
+GENERATED_POLICY_CLASSES 4
+ 
+
+```
+
+
+
+## M006 B4-r2双PASS与统一出队（V0.60）
+本方完整报告70271字节/SHA9491d8b1492de2a500cf9dd7797c34159315379c1b59a8fa10d7e0f128298de4，审计PASS/越界PASS；Grok34061字节/SHAdcbddcaac3419cf121419635269e0c9c458dc23c8f6f21dce6ea05742ce615bf，真实exit0、审计PASS/越界PASS。双方本次完整5路径12hunk报告均已读完；Grok无新finding，不覆写其正文。
+r2沿用25项整批修复队列，22项保留r1已完成内容，补齐009/026/027；当前55个已修改源文件均与r2冻结after tree一致。依B4双PASS规则，001—018/024—030本次统一出队；19—23保持否；30项均为否、无待答。原证据与分类保留；下方r1/B2文字仅为历史。B4双PASS不是模块PASS，下一步B5-r2整模块三线双审。
+外席验证口径：触及两测试类23/23通过，含027旧版红/新版绿对照及真实TEMP迁移；披露尝试Maven编译失败（不按其意图声称未调用），后改隔离javac。其目标目录mtime不能证明所有构建产物未动，本方已核55源文件与冻结树逐字一致；未迁移共享库的独立证据见其报告。其摘要把BSM-035写作映射内不准确，实际M006映射未新增该ID；本项仍按已定稿GEN判据及锁内上位原文归因，不扩锁。
+
+## M006 B4-r1整批路由（V0.59）
+两席全部diff报告已完整落盘并读完：本方审计FAIL/越界PASS；Grok审计PASS/越界PASS（真实exit0）。依双席合取，本轮审计FAIL、越界PASS，保留既有修复，不回滚整份diff、不进B5。
+全部3项FAIL依据仅来自本方：CX-B4-01→009历史岗位授权未接续；CX-B4-02→026历史岗位占用漏算；CX-B4-03→027旧卡续充资金模式不一致。均有现存定稿ID且仍在当前修复队列；Grok无另加FAIL。整批直接回B3，沿用全部25项定稿队列，不分配新ID、不另开B2、不改变分类及拟修边界。B3已完成1次，r2尚未完成。
+输入：modules/M006-b4-r1-self-raw.md SHA0a74c28f85b4b02037b97661594f0b62dd74875cb47a34eb07c80d424a42e463；modules/M006-b4-r1-grok-raw.md SHA2e8c6e4918f6a76a3e8e3bc9f7d152473aca69af5be9b8ef44dfd02512b132b3。两份原文保留；以下原B2状态为历史，当前队列25是/5否不变。
+
+## M006 B2整批双PASS定稿（V0.58当前）
+
+同一候选V0.57（SHA f20a175d6024c22e51bebd7395554b68abff8c37771f9d4972d28a13ccfb9fe9）已获本方self V0.14 PASS及Grok V0.05 PASS。Grok真实exit0，完整追加27349字节/SHA3e0c3186a830319afb36d09e02e6c18dfdfdc0d69fad03183c3edc21bb9c037a；整份147529字节/SHA4595d291ca5b293690c8ca2e9642f3b95948901242cb744fa4af7ad89835f5f2。原始B1及旧票前缀逐字保留，本次完整报告已读。30项均接受，未拼接旧票。
+
+本V0.58仅将整批候选状态改为定稿，不改变任何条目分类、证据、拟修正文或队列：9冲突15细化6技术性，25是、019—023为否。027严格采用当前拟修边界；现场报本人手机号、短信验证码验证后按账单扣款，不生成储值付款二维码。三HTML、锁/映射及开关启用状态不修改，不重开M001。无需再次业务提问。
+
+B3统一处理全部25个队列是的ID；尚未实施，完成次数0。旧章节的候选/待复核语句仅为历史时间点，当前状态以本节及唯一当前队列表为准。B2 PASS不等于模块PASS，后续仍须完整B4/B5双审。
+
+## M006 补齐既有支付与短信接入边界（V0.57当前）
+
+Grok V0.04完整299行/27145字节，真实exit0，整体FAIL；已接受027细化分类/队列和其余29项，唯一FAIL-1为027拟修正文缺少HTML1480/枚举210的预留接口、默认关闭、不开启未配置渠道、不伪造成功和既有短信验证约束。本方此前只写进self/调用提示，未完整放入B3唯一归因来源的027拟修正文，现接受该否决并补齐。没有新增业务裁决、人闸或判据。
+
+本V0.57保持9冲突15细化6技术性、25是5否；唯一实质候选更新为027拟修边界，最新手机号/订单支付业务不变，三HTML/锁不改。当前027正文如下以各项明文约束实施，不以页首说明代替条目边界。全部30项仍须新双席复核，不拼接旧部分票，B3仍0。
+
+## M006 B2接收Grok唯一分类否决（V0.56当前）
+
+Grok V0.03完整302行/25137字节，真实exit0，整体FAIL；唯一FAIL-1为027应由添加改为细化。其明确撤回原B1 GR-07添加判断，接受最新线上充值/POS/已有订单余额支付/现场手机号短信验证范围及工程缺陷是、队列是；其他29项也全部接受。Codex根据HTML832、585、867现文核实后接受该分类更正，不以self V0.10 PASS覆盖外席FAIL，不把接受其余29项拼成全批PASS。
+
+本V0.56唯一实质候选改动为027分类添加→细化；队列仍25是5否，无添加项待问；原questions保留实际答复与历史，A/B旧HTML申请继续撤回。下一票仍审全部30项，B3未执行。分类统计现为9冲突、15细化、6技术性、0添加。
+
+接收事实纠错：本方先前接收说明误称交易表为stored_value_transactions，已回160实读JdbcCustomerRepository1181/1212/1223和V090建表确认实际为customer_stored_value_transactions；Grok原表名正确。本错误只在说明/提示中，未据此改源或建表。实现须复用真实既有表，原raw保留并由本方新追加纠错，不篡改Grok。
+
+## M006 手机号短信扣款：当前裁决（V0.55）
+
+最新原话：“那么出示二维码这个事情就不要这个，改成这个报手机号码，然后短信扣款。”。保留此前线上充值、POS、已有订单余额支付，只把现场二维码改为报本人手机号、短信验证码验证后按账单金额扣款。操作员并未取消充值或恢复钱包只读。
+
+当前范围：保留客人发起合法储值充值和按已有订单/现场账单支付的限定授权通路。客人在充值页选择金额并拉起微信、支付宝或银联线上支付，服务端核验对应渠道支付成功确认后按该笔真实充值金额入账，重复确认不得重复加余额；另保留POS刷卡充值。App已有订单（如门票）可选择指定储值卡余额支付。现场已有消费明细和总价的账单（如卡座），客人报本人手机号，经短信验证码验证通过后按该笔账单金额扣款；不生成储值付款二维码，不以收到短信通知代替验证码通过。取消钱包页脱离订单/账单随意填写金额扣款，保留本人余额及逐笔记录查询。沿用既有卡归属/适用商户/本金赠金/冻结/幂等以及HTML585储值支付短信验证边界，不将此解释为App订单余额支付可豁免已有短信验证，也不通过任意客人权限或任意商户放宽解决范围拒绝。新要求落在现有HTML832储值、585手机号短信验证、867余额记录和1065支付方式之内；三HTML与冻结判据不修改、不启用新的判据、不重开M001。本范围为整批B2候选，未双PASS前不得实施。
+
+两份旧HTML申请M006-027-A/B全部撤回，不等旧弹窗答复、不执行迟到的旧稿批准。A的储值扩写是可选同步，不是实现上述已明确HTML下位流程的必要条件；B的原文冲突随二维码撤回而消失。没有修改任何HTML、锁定义、映射、sidecar或全局基准，不触发LOCK-AMEND，不重开已发布M001—005。questions当前首答保留；其他实际答复仍合法。
+
+旧V0.53 B2 Grok在途调用的输入已过时，仅保留历史结果；V0.54亦未定稿。下一票必须对当前V0.55全部30ID整批复核，其他29项保持，仍25拟修5登记。本方原旧票草稿没有落盘PASS，无当前B2双PASS，B3=0。
+
+## 历史V0.54二维码方案及HTML申请（已撤回，以下待批/重审文字不再适用）
+
+操作员最新原话：**点击“充值”** 这个页面需要可以拉起微信、支付宝、银联付款，按对应金额线上支付，而不是通过柜台支付收款。然后我们收到支付宝银联或者微信的返回确认就可以把这笔钱进入到客人的储值账户了。当然也可以通过pos机刷卡充值。  客人消费储值金额有两种情况第一种情况是a p p上已经有的订单。比如说门票。比如说这个下单后的在线支付。那这个客人直接可以用余额直接支付用储值卡的余额。有一种情况是客人点了一系列的东西。然后最后有一个总价。那客人，比如说卡座的消费。那客人可以通过出示二维码的方式。然后扣款。当然会收到短信验证码。
+
+当前027答复规范化为保留，取消原V0.53“钱包只读/删除全部写通路”的方案；其他29ID证据与候选不变，整批仍30ID、25拟修5登记。保留并不消除现有工程缺陷，未经B2整批双PASS不得修。该项拟修范围：保留客人发起合法储值充值和按已有订单/现场账单支付的限定授权通路；撤回“钱包只读、关闭全部topup/settle/consume”的旧处理范围。充值界面拉起微信/支付宝/银联支付，服务端核验支付成功确认后按该笔充值真实金额入账，重复确认不得重复加余额；另保留POS刷卡充值。App已有订单可选指定储值卡余额支付；现场已形成明细和总价的账单走客人出示码、扫码关联该账单、短信验证码验证后按账单金额扣款。取消钱包页脱离订单/账单随意填写金额扣款，保留本人余额和逐笔记录查询。沿用既有卡归属/适用商户/本金赠金/冻结/幂等边界；不通过放宽为任意客人权限或任意商户解决当前范围拒绝。该范围为用户业务裁决下的待复核方案；受保护HTML两处精确修改待批准，不能提前将拟写文字当成冻结判据，不能在B2实施支付/UI/权限修复。
+
+旧V0.53 B2 Grok于2026-09-05 16:33:07 UTC派出，仍待真实退出；收到新说明后，该输入已过时，结果仅保留历史，无论PASS/FAIL均不能作为V0.54定稿票。本方旧V0.53审查草稿未落PASS，不将旧草稿移作新票。新B2不派发，先等HTML人闸答复；在途旧调用只每5分钟检查交付，不据此推进。
+
+文件：160:/home/james/complex-management/docs/business-system-map-for-operations-v0.1.html
+
+申请 M006-027-A（储值条款）：第832行仅替换以下开头片段。
+原文：预付卡 / 余额：客人可充值到余额、消费时扣余额；充值必须支付成功才入账、不凭空加余额，账户可冻结/解冻。
+替换为：预付卡 / 余额：客人点击“充值”后，可选择微信、支付宝或银联，按充值金额在线支付；系统收到对应支付渠道的支付成功确认后，才将该笔充值金额记入客人的储值账户，不凭空加余额；也支持通过 POS 机刷卡充值，充值必须支付成功才入账。客人使用储值余额消费分两种情况：①支付 App 中已有订单，例如门票订单，客人在订单支付时选择储值卡余额支付；②支付已形成消费明细和总价的现场账单，例如卡座消费，客人出示储值付款二维码，收款端扫码关联该笔账单，经手机号短信验证码验证通过后，按账单金额扣款。储值消费不通过在钱包页随意填写金额直接扣款。账户可冻结/解冻。
+理由：把操作员最新确认的线上充值、POS充值和两种余额消费写入储值正文；原卡种、资金归属、退款、时间记录等后文全部保留。
+同批将第2行“<!-- 文件版本：V0.08；更新日期：2026-09-01 -->”改为“<!-- 文件版本：V0.09；更新日期：2026-09-05 -->”，履行每次更新版本递增规则。
+批准状态：待操作员实际批准。
+
+申请 M006-027-B（二维码条款）：第585行仅替换末尾括号。
+原文：（说明：客人付款走第三方微信、支付宝，或用账户预存款经手机号加短信验证支付，系统自己不生成“付款出示码”，故不在本自动刷新范围内。）
+替换为：（说明：客人付款可走微信、支付宝、银联等第三方支付渠道，或使用账户预存款支付；账户预存款支付须经手机号短信验证码验证通过。卡座消费等已形成消费明细和总价的现场账单，客人可出示储值付款二维码，由收款端扫码关联账单，验证通过后按账单金额扣款；系统生成的储值付款二维码适用上述动态刷新规则。）
+理由：删除与本次储值付款二维码要求冲突的禁止句；沿用同段既有动态刷新规则，保留原账户预存款支付的短信验证要求，其余正文不变。
+批准状态：待操作员实际批准。
+
+流程影响：两处分别涉及已冻结 BSM-035、BSM-006，最早映射模块均M001。若批准并同步HTML，依V0.17 §5须完整LOCK-AMEND五步：先改定义和映射、再sidecar、双席复核、再更新ledger基准，最后M001至当前M006改PENDING并从M001 B1重审。原报告、原提交及批准历史保留；当前尚未改HTML/锁或重开。获批HTML出处同步不计LOCK-AMEND-COUNT，但仍必须双席复核。
+
+## M006 操作员裁决已录入（V0.53历史，已被最新说明替代）
+
+操作员原话：“客人不是只能看吗？他要操作什么东西呢？储值钱包他只能看这个交易记录和余额，他要操作什么。” 对027记删除：客人钱包只查本人余额和交易记录；删除客人充值、确认入账、自行扣款入口。上一版把“有储值业务”推成“客人钱包可发起交易”的解释撤回，Grok原添加意见保留。问题文件V0.02首个非空答复为删除且附原话，不再弹窗；没有改业务HTML。
+
+当前30ID完整队列表：25是、5否、待答0。027详细边界已更新，其他29项及两席分歧保留；本次只是B2候选，未双PASS，未执行B3。原V0.52中的待答/24项描述是历史，不代表当前状态。两席下一票必须审本V0.53全部30ID及原B1+接收补充证据，不仅审027。
+
+## M006 首次 B2 整批候选（V0.52；尚未双席定稿）
+
+M001—M005均已发布；当前仅M006（6/322，14文件2988行，52映射判据）。B1两席完整报告已读完并归并：本方CX-01—23、Grok GR-01—11，重合4项合并为30个正式ID；Grok未编号的兼容构造器删除建议也归入019。24项拟入队、5项仅登记、027待操作员答复。所有结论均为B2候选，不是双PASS；Grok原判及本方异议均保留，不得按候选先修。
+
+输入原始B1：modules/M006-b1-self-raw.md前73231字节/V0.05/SHA256 1ee77bccf61c3b418028f42866202a4655246349d7c55ef37d9e3f36def61ab4；modules/M006-b1-grok-raw.md全44940字节/714行/SHA256 96f0165d01b18753284b2556d2474c17623259bdb10ddca45cc80b7a0b5da071，真实exit0。两者均FAIL。self先完整封存再读Grok，接收后说明不算新独立票。Grok披露隔离target失败而写backend/target，故不称其验证完全隔离；未发现源文件或对方raw被其改读，本方独立验证使用临时classes，55/55通过及18个缺陷证据保持原有边界，未把该命令限制违例记为交付失败。B3=0，运行失败重跑=0。
+
+B1后四值复核：actual、sidecar、ledger基准、指定Grok B1最后哈希行均为23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。没有改锁/映射/三HTML/源码。BSM-004/005/007/035、PGM-029/041的已冻结HTML原文仅作为本模块既有GEN-005/006/017等判据下的上位证据，本候选不宣称它们新增进入M006映射；该解释亦交Grok B2审，不能单方扩大判据。
+
+### M006 当前队列表（唯一当前值；V0.61整批候选，待本批双PASS）
+
+| ID | 来源 | 候选分类 | 工程缺陷 | 修复队列归属 | 问题 |
+|---|---|---|---|---|---|
+| M006-001 | CX-01；GR-01 | 冲突 | 是 | 否 | 平台管理员无条件通配提前返回，绕过显式 DENY 和高危权限单独授予 |
+| M006-002 | CX-02 | 冲突 | 是 | 否 | 同组织被当成同商户，允许操作另一商户员工的权限或薪资 |
+| M006-003 | CX-03 | 细化 | 是 | 否 | 无组织的非管理员被当成全局主体，读全量或向任意组织建号 |
+| M006-004 | CX-04 | 细化 | 是 | 否 | 名称/幂等键slug生成全局主键，与upsert联用覆盖既有跨组织对象 |
+| M006-005 | CX-05 | 细化 | 是 | 否 | 修改已应用模板可直接给用户新增自己不持有的高危权限，绕过授权审批 |
+| M006-006 | CX-06 | 细化 | 是 | 否 | 审批使用申请时快照，实际执行却重新读取变动后的角色/岗位模板 |
+| M006-007 | CX-07 | 冲突 | 是 | 否 | 直接受益人可以审批发给自己的高危授权 |
+| M006-008 | CX-08 | 细化 | 是 | 否 | 两个不同幂等键并发审批同一申请都生效，生成两份临时授权 |
+| M006-009 | CX-09 | 冲突 | 是 | 否 | 岗位切换只追加新角色/模板，不使旧岗位派生权限失效 |
+| M006-010 | CX-10；GR-09 | 细化 | 是 | 否 | 正式可创建的主管账号和已分配管理职级无法被审批级别解析器识别 |
+| M006-011 | CX-11；GR-05 | 冲突 | 是 | 否 | 手工员工建号直接active及发密码，形成绕过两条注册审批路径的第三入口 |
+| M006-012 | CX-12 | 细化 | 是 | 否 | 按用户ID查询有效权限只认商户范围，合法公司人员连同组织自身也被拒绝 |
+| M006-013 | CX-13 | 细化 | 是 | 否 | 临时授权接受空权限集合和倒置时间窗，返回active但授权不存在或不可使用 |
+| M006-014 | CX-14 | 细化 | 是 | 否 | 一次合法操作检查两个权限时，第一个检查消耗整份单次模板，第二个检查拒绝 |
+| M006-015 | CX-15；GR-04 | 冲突 | 是 | 否 | 岗位建议和个人异常总结返回固定英文并被页面原样显示 |
+| M006-016 | CX-16 | 冲突 | 是 | 否 | 业务阈值/窗口及授权风险对应审批层级固化在代码或启动配置，缺后台配置边界 |
+| M006-017 | CX-17 | 细化 | 是 | 否 | 单次临时授权首次消费的留痕外键指错对象，报错后授权已被标记消耗 |
+| M006-018 | CX-18 | 细化 | 是 | 否 | 平台管理员修改组织模板时把原owner改成null，全局化并使原组织失去管理权 |
+| M006-019 | CX-19；Grok §6 AccessUser兼容构造器删除建议 | 技术性 | 否 | 否 | 记录容器防御复制和兼容构造器 |
+| M006-020 | CX-20 | 技术性 | 否 | 否 | 凭证接口、Spring注入和按运行profile选择实现 |
+| M006-021 | CX-21 | 技术性 | 否 | 否 | 密码BCrypt、UTF-8/SHA-256和JDBC时间参数转换 |
+| M006-022 | CX-22 | 技术性 | 否 | 否 | HTTP映射、响应包装和仓储接口默认失败机制 |
+| M006-023 | CX-23 | 细化 | 否 | 否 | 主体、权限集合和临时授权统计数据记录 |
+| M006-024 | GR-02 | 细化 | 是 | 否 | 账号状态未校验且非disabled一律发active凭证；员工五态等同账号状态的主张待B2裁定 |
+| M006-025 | GR-03 | 冲突 | 是 | 否 | 手工建号把手机号存为无密钥SHA-256并经AccessUser返回 |
+| M006-026 | GR-06 | 冲突 | 是 | 否 | 岗位角色模板直接物理删除，未经过留存与删除审批 |
+| M006-027 | GR-07；操作员最新说明 | 细化 | 是 | 否 | 保留线上充值和订单余额支付；现场按手机号及短信验证码支付账单 |
+| M006-028 | GR-08 | 技术性 | 是 | 否 | 未知或UserDetails认证主体被填成staff/active |
+| M006-029 | GR-10 | 技术性 | 是 | 否 | 手工建号空密码成功返回但无登录凭证 |
+| M006-030 | GR-11 | 细化 | 是 | 否 | 列表声称每页50却返回全量；授权申请缺默认时间过滤 |
+| M006-031 | B5-r2 CX-B5-01 | 冲突 | 是 | 否 | 不同组织使用相同请求编号时创建角色结果串用 |
+| M006-032 | B5-r2 GR-01 | 冲突 | 是 | 否 | 非法账号类型错误提示夹带英文枚举 |
+| M006-033 | B5-r2 GR-02（原票保留，B2已一致） | 细化 | 否 | 否 | B3新增政策源码未跟踪的构建意见；当前必要全源可编译，Grok确认只登记 |
+| M006-034 | B5-r3 CX-B5-01 + GR-01完整并集 | 冲突 | 是 | 否 | 授权复核、最高权限和两处薪资币种报错残留英文；第4次B3已修，B4-r4双PASS出队 |
+| M006-035 | B5-r4 CX-B5-01 | 技术性 | 是 | 否 | 平台管理员有效权限计算对权限字典逐项重复查询（N+1） |
+| M006-036 | B5-r4 CX-B5-02 | 细化 | 是 | 否 | 无组织归属的非平台管理员复制模板时抛NullPointerException |
+
+### 全部候选证据与拟修边界
+
+以下M006代码文件名无路径前缀时，均指backend/src/main/java/com/complex/platform/access/。仅为当前14文件调用链必要而窄读的DAO/审批/DTO/测试/HTML/UI不视为开启其它模块；确需联动的修复必须逐行归因当前定稿ID，完成后后续模块照常全审。任何HTML改动仍需逐句申请，本批没有HTML修改提案。
+
+#### M006-001 平台管理员无条件通配提前返回，绕过显式 DENY 和高危权限单独授予
+
+- 来源：CX-01；GR-01；P1；B2双PASS定稿。
+- 文件：AuthorizationService.java:33–46、189–196、444–446；AccessService.java:513–516。
+- 已冻结判据：GEN-005、GEN-010、GEN-017。
+- 证据与分类分歧：实跑 ADMIN_DENY_BYPASS=require=allowed; effective denies=[ops.production_readiness.manage]；ADMIN_HIGH_WITHOUT_EXPLICIT_GRANT=true。相同主体的有效集承认DENY，而实际执行和布尔鉴权均放行；授予检查也直接接受wildcard。业务地图588（锁内BSM-007原文）明确日常管理员不自动取得资金、敏感数据、删除、最终审批权限；GEN-005鉴权边界及GEN-017冲突分类直接适用。 Grok GR-01实跑finance.refund.create显式DENY仍被管理员放行；并指出currentSupervisorLevel对管理员直接返回3。后者与010共同修复，不因管理员身份自动取得最终审批资格，也不删除HTML明文要求的日常自动权限。
+- 拟修边界：删除不分日常/高危且先于DENY的通配旁路；日常权限和逐项授予一致计算；USB最高权限与日常管理员分别按既有身份事实处理。不得借修复新增业务类别。
+
+#### M006-002 同组织被当成同商户，允许操作另一商户员工的权限或薪资
+
+- 来源：CX-02；P1；B2双PASS定稿。
+- 文件：AccessService.java:201–210、365–371、559–568、969–972、1112–1120、1615–1623。
+- 已冻结判据：GEN-005、BSM-028、BSM-073、PGM-048。
+- 证据与分类分歧：实跑CROSS_MERCHANT_ROLE_ASSIGNED=RoleAssignmentRecord[userId=victim, roleId=role_low]，grantor在merchant_a、victim在merchant_b、同org_a，目标实际获得LOW权限。同一错误边界也出现在套模板、撤销临时授权、分配职级薪资、直接临时授权；通用requireSameOrganization只比较org。HTML要求商户只操作本商户。
+- 拟修边界：统一验证目标用户的组织及调用方商户范围；平台越域例外须遵守CX-01已确认边界。逐一覆盖同根调用，不只补角色入口。
+
+#### M006-003 无组织的非管理员被当成全局主体，读全量或向任意组织建号
+
+- 来源：CX-03；P1；B2双PASS定稿。
+- 文件：AccessService.java:111–114、283–286、399–402、807–816、843–848；AuthorizationService.java:430–441。
+- 已冻结判据：GEN-004、GEN-005、BSM-028、PGM-048。
+- 证据与分类分歧：实跑UNSCOPED_USER_LIST=[existing]（existing属org_b）；UNSCOPED_CREATE_OTHER_ORG=org_b。AccessRepository默认方法及JdbcAccessRepository的null参数明确代表无过滤，服务直接传actor.organizationId()；createAccessUser反而只在actor组织非空时比较。currentProjectScopeQuietly也把空组织转为空过滤；它未核对任何跨项目授权。
+- 拟修边界：非管理员缺必要归属时拒绝，不能把缺失身份事实解释成全量权限；已有获授权全局岗位须使用可核验的授权事实，不能仅靠null。
+
+#### M006-004 名称/幂等键slug生成全局主键，与upsert联用覆盖既有跨组织对象
+
+- 来源：CX-04；P1；B2双PASS定稿。
+- 文件：AccessService.java:138、188、312、865、1174、1214、1260、1746–1751。
+- 已冻结判据：GEN-004、GEN-005、GEN-006、GEN-008。
+- 证据与分类分歧：实跑USER_ID_OVERWRITE=usr_same_name moved org_b -> org_a（same-name与same.name）；ROLE_ID_OVERWRITE=role_cashier moved to org_a且原成员权限改变；TEMPLATE_ID_OVERWRITE=org_a（shared-key与shared_key）。JdbcAccessRepository95–131、159–193、360–397、675–714确认同ID无条件更新归属及内容；授权申请也使用同一有损slug。
+- 拟修边界：创建使用不碰撞的内部ID，区分创建与修改；创建不得通过任何ID碰撞覆盖既有账号/密码/角色/模板/授权申请。复用已有幂等结果处理，不将幂等键充当跨租户主键。
+
+#### M006-005 修改已应用模板可直接给用户新增自己不持有的高危权限，绕过授权审批
+
+- 来源：CX-05；P1；B2双PASS定稿。
+- 文件：AccessService.java:144–167、193–241、513–524。
+- 已冻结判据：GEN-005、GEN-006、BSM-120、PGM-066。
+- 证据与分类分歧：实跑TEMPLATE_UPDATE_UNAPPROVED_HIGH=authorized high without grant request; manager lacks high。模板先LOW应用到员工，再由无HIGH的同组织模板管理员update为requiresApproval=true的HIGH，员工requirePermission(HIGH)立即成功。JdbcAccessRepository769–780从实时模板items计算已应用权限，update既不核验授出能力也不走审批。
+- 拟修边界：关闭模板修改直接向既有应用增权的旁路；对当前模板变更、既有应用与新增授权形成一致的权限/审批边界，保留合法减少权限和经审批授权路径。
+
+#### M006-006 审批使用申请时快照，实际执行却重新读取变动后的角色/岗位模板
+
+- 来源：CX-06；P1；B2双PASS定稿。
+- 文件：AccessService.java:661–684、1165–1238、1287–1304、1321–1380。
+- 已冻结判据：GEN-005、GEN-006、GEN-011。
+- 证据与分类分歧：实跑APPROVAL_SNAPSHOT_DRIFT：snapshot=[HIGH]；applied=[HIGH,LOW]。pending保存permissionCodes/targetRoleId/templateId，但applyApprovedGrant重新resolve，未对照被审批对象及权限快照。岗位映射、模板权限或有效期在待审期间变化同样有此入口。
+- 拟修边界：生效前对照完整被审批授权事实；漂移则拒绝并重新申请，或严格执行原已批准快照，不能批准A执行B。
+
+#### M006-007 直接受益人可以审批发给自己的高危授权
+
+- 来源：CX-07；P1；B2双PASS定稿。
+- 文件：AccessService.java:653–685。
+- 已冻结判据：GEN-005、GEN-017。
+- 证据与分类分歧：实跑BENEFICIARY_SELF_REVIEW=applied。申请人requester，目标usr_admin，审批人usr_admin。下游SupervisorReviewService只禁止initiatedBy本人，没有识别AccessGrantRequestRecord.targetUserId。治理地图529（锁内PGM-029）明确申请人与直接受益人均不得审批自己的申请。
+- 拟修边界：在任何下游审批写入之前拒绝目标用户本人作为审批人，同时保留既有申请人自审禁止。
+
+#### M006-008 两个不同幂等键并发审批同一申请都生效，生成两份临时授权
+
+- 来源：CX-08；P1；B2双PASS定稿。
+- 文件：AccessService.java:652–685；AccessRepository.java:144–150。
+- 已冻结判据：GEN-006、GEN-007、PGM-001。
+- 证据与分类分歧：实际Java服务双线程：CONCURRENT_REVIEW=[applied, applied] temporary_grant_count=2。仓储替身仅在两个普通SELECT后同步，让两请求都观察pending；业务代码未改。JdbcAccessRepository718–727及JdbcPlatformRepository711–720均普通SELECT，最终upsert无pending条件，证实此交错与真实SQL契约一致。两个线程自己的幂等键不同，幂等服务不能替代对象级竞争控制。
+- 拟修边界：利用现有事务与数据库对同一申请串行锁定或CAS转态，只有首次成功审批应用授权；禁止以JVM全局锁代替数据库并发事实。
+
+#### M006-009 岗位切换只追加新角色/模板，不使旧岗位派生权限失效
+
+- 来源：CX-09；P1；B2双PASS定稿。
+- 文件：AccessService.java:1043–1101。
+- 已冻结判据：GEN-005、GEN-006、GEN-017、BSM-120。
+- 证据与分类分歧：实跑POSITION_CHANGE_OLD_PERMISSION_RETAINED=[HIGH,LOW]：old岗位只有LOW，new岗位只有HIGH，保存新岗位后员工仍有两者。旧角色和模板应用没有任何失效调用。治理地图658（锁内PGM-041）要求保存岗位/职责等变更时重算，旧岗位/旧范围派生权限同步失效。
+- 拟修边界：同一事务撤销旧岗位派生授权并装配新岗位；区分独立显式授权，不误撤销员工仍合法持有的其他来源；跨范围和高危授予保留审批要求。
+
+#### M006-010 正式可创建的主管账号和已分配管理职级无法被审批级别解析器识别
+
+- 来源：CX-10；GR-09；P2；B2双PASS定稿。
+- 文件：AuthorizationService.java:245–257；AccessService.java:52–53、838–841。
+- 已冻结判据：GEN-002、GEN-005、BSM-028。
+- 证据与分类分歧：实跑SUPERVISOR_RANK_LEVEL=30/0：已分配lvl_m10_upper，accountType=supervisor，currentSupervisorLevel仍0。解析器只识别supervisor_lN或platform_admin，而账户类型白名单不允许supervisor_lN；实际SupervisorReviewService145–151先以该0拒绝，尚未走rank检查。
+- 拟修边界：将审批身份解析与现有受控的角色/职级事实对齐；不得为了让测试通过而把任意staff、最高rank或未授权账号自动当审批人。
+
+#### M006-011 手工员工建号直接active及发密码，形成绕过两条注册审批路径的第三入口
+
+- 来源：CX-11；GR-05；P1；B2双PASS定稿。
+- 文件：AccessController.java:209–213；AccessService.java:829–889。
+- 已冻结判据：GEN-017、BSM-084、BSM-085、PGM-032、PGM-033。
+- 证据与分类分歧：实跑MANUAL_REGISTRATION=active/manual_admin/roles=0。该路径不读取员工申请/公司审批，未自动赋员工自助；对照StaffService178–223，既有审批路径在approved后才createUser并assign role_staff_self。HTML明确商户代申请后对应域公司批准、公司自有员工本人App申请后公司批准，自营归公司路径。 Grok GR-05原主张：后台建号是HTML允许的入口，生效员工必须有员工自助；Grok B1不接受将其视为注册两路径冲突。收后核实业务地图582确实列出“新建员工账号”，但它只描述分步表单，并未明文豁免1433注册审批。两席分歧完整保留，不以本方单票定稿。
+- 拟修边界：保留HTML582要求的后台引导式新建操作；封闭员工未经对应公司注册审批即激活并发放可用凭证的旁路，复用已有注册审批/批准后自动员工自助装配。后台可以辅助创建，不把“可新建”解释成“免审批”。只修员工路径；外部协作机构账号按其原有类别处理。GR-05要求的每位获批员工自动自助与本项共同验证，不用给未获批账号直接赋自助来掩盖审批问题。
+
+#### M006-012 按用户ID查询有效权限只认商户范围，合法公司人员连同组织自身也被拒绝
+
+- 来源：CX-12；P2；B2双PASS定稿。
+- 文件：AuthorizationService.java:86–102、347–356。
+- 已冻结判据：GEN-002、GEN-005、BSM-028。
+- 证据与分类分歧：实跑ORG_STAFF_OWN_PERMISSIONS=MERCHANT_SCOPE_REQUIRED。actor org_a且merchant=null，target为同一个org_a用户。此接口已经由Controller224校验access.user.view；之后无条件currentMerchantScope使组织级管理路径不可用。
+- 拟修边界：按实际公司/商户归属校验目标；无效归属拒绝，合法同组织管理请求可读，不能为修功能改成空scope全放行。
+
+#### M006-013 临时授权接受空权限集合和倒置时间窗，返回active但授权不存在或不可使用
+
+- 来源：CX-13；P2；B2双PASS定稿。
+- 文件：AccessService.java:1104–1142、1241–1253、1688–1709。
+- 已冻结判据：GEN-002、GEN-004、GEN-008。
+- 证据与分类分歧：实跑INVERTED_TEMPORARY_WINDOW_ACCEPTED=active，EMPTY_TEMPORARY_PERMISSION_ACCEPTED=active/0，员工有效集为空。JdbcAccessRepository612–635对空列表一次INSERT也不执行。模板和待审临时申请同样缺日期先后验证；DTO未声明约束，@Valid不能补足。
+- 拟修边界：在服务公共写边界校验非空有效权限、目标存在、有效期先后；非法输入拒绝，不能返回成功的空授权/永远无效授权。不擅自设置业务期限上限。
+
+#### M006-014 一次合法操作检查两个权限时，第一个检查消耗整份单次模板，第二个检查拒绝
+
+- 来源：CX-14；P1；B2双PASS定稿。
+- 文件：AuthorizationService.java:33–73；AccessController.java:137–139。
+- 已冻结判据：GEN-002、GEN-006、GEN-007。
+- 证据与分类分歧：实际调用AccessController.reviewGrant：SINGLE_USE_TWO_GUARDS=PERMISSION_DENIED consumed=[single_review_template]。同一份单次模板已含review及supervisor.approve，两权限起初均有效；业务服务未被执行，模板已消耗。仓储以模板应用为消耗单位；不是两次业务操作。
+- 拟修边界：同一业务请求的一组权限先完整核验，再按授权来源原子消耗一次；确保无法因重复检查提前烧掉唯一授权。保留并发第二消费者拒绝的现有语义。
+
+#### M006-015 岗位建议和个人异常总结返回固定英文并被页面原样显示
+
+- 来源：CX-15；GR-04；P2；B2双PASS定稿。
+- 文件：AccessService.java:759–774。
+- 已冻结判据：GEN-015、GEN-017、PGM-001、PGM-066。
+- 证据与分类分歧：实跑SUMMARY_USER_VISIBLE_TEXT为两句英文。AccessGovernancePage.tsx341、454–455直接渲染row.recommendation/row.summary；此为成功响应，GlobalExceptionHandler的错误翻译不参与，前端测试却以中文fixture掩盖实际返回。 Grok GR-04同时把源码中的valid_until is required等异常字符串列为英文展示问题。本方收后核实GlobalExceptionHandler48–61会经FieldLabels.translate翻译；源码英文≠对客英文，不做无依据全包替换。成功响应两句英文确实直接显示，仍为冲突/待修；异常分支以真实响应而非字符串搜索判定。
+- 拟修边界：将这两条用户可见业务说明改为中文；保留内部权限编码，禁止把与此无关的英文代码/标识批量替换。
+
+#### M006-016 业务阈值/窗口及授权风险对应审批层级固化在代码或启动配置，缺后台配置边界
+
+- 来源：CX-16；P2；B2双PASS定稿。
+- 文件：AccessService.java:76–77、107–108、729–733、1406–1419。
+- 已冻结判据：GEN-017、BSM-001。
+- 证据与分类分歧：汇总默认30天、阈值3，最小值被Math.max静默钳到1，任意请求可传Integer.MAX_VALUE使本来存在的异常总结消失；源码riskRank直接把critical/high映射到3/2层级。这里的“频繁”“审批层级”改变业务判断，不是线程数之类技术设置。BSM-001要求业务阈值/时长/次数/档位后台配置、上下限及超限拒绝。
+- 拟修边界：复用项目已有业务配置/审批策略承载对应政策值和边界；查询筛选与政策阈值分清，不由查询参数改写政策，不引入另一套配置体系或新业务分类。
+
+#### M006-017 单次临时授权首次消费的留痕外键指错对象，报错后授权已被标记消耗
+
+- 来源：CX-17；P1；B2双PASS定稿。
+- 文件：AuthorizationService.java:66–72；AccessRepository.java:178–182（实现依赖JdbcAccessRepository802–843）。
+- 已冻结判据：GEN-002、GEN-006、GEN-008、GEN-011。
+- 证据与分类分歧：真实PostgreSQL complex_test中仅建立3张连接级TEMP表，按V003现有外键结构调用当前源码JdbcAccessRepository：TEMPORARY_SINGLE_USE_LOG=23503，CONSUMED_AFTER_LOG_FAILURE=true。临时grant UUID被写入引用permission_template_applications的application_id；查询当前全部受控迁移，仅V003定义该外键，没有后续解除/替换。控制器调用鉴权发生在业务service事务之前，该仓储方法本身无事务。
+- 拟修边界：让临时授权留痕引用正确的授权来源，并使消耗与留痕同成同败；保留真实来源信息，不通过丢日志/吞异常/伪造模板应用解决。仅修依赖实现必需范围，后续所属模块仍完整审。
+
+#### M006-018 平台管理员修改组织模板时把原owner改成null，全局化并使原组织失去管理权
+
+- 来源：CX-18；P2；B2双PASS定稿。
+- 文件：AccessService.java:161–166。
+- 已冻结判据：GEN-005、GEN-006、GEN-016。
+- 证据与分类分歧：实跑ADMIN_UPDATE_OWNER=null：原org_a模板经管理员改内容后ownerScopeType变platform且ownerScopeId=null。注释写Preserve existing owner，代码却只按当前actor决定归属。
+- 拟修边界：读取并保留现有模板归属；内容编辑不隐含转移所有权，修改不存在的模板应明确报不存在。
+
+#### M006-019 记录容器防御复制和兼容构造器
+
+- 来源：CX-19；Grok §6 AccessUser兼容构造器删除建议；登记；B2双PASS定稿。
+- 文件：AccessGrantRequestRecord.java:32–34；AccessUser.java:20–22、24–34。
+- 已冻结判据：GEN-001、GEN-003、GEN-017。
+- 证据与分类分歧：仅List.copyOf防外部修改、null转空及已有构造调用兼容，不引入员工资格/计费/审批规则。全部记录字段仍按员工/授权上位需求归细化，此登记仅指Java容器与构造机制；48个当前源编译和55测试实跑覆盖调用。 Grok §6另建议删除7参构造器，但其B1未证明无调用；本方48源fresh javac及StaffService已证明既有调用。候选不做为删而删的全仓调用改写；该未编号建议已归并于本ID，待Grok复核。
+- 拟修边界：不删不问，不进修复队列。
+
+#### M006-020 凭证接口、Spring注入和按运行profile选择实现
+
+- 来源：CX-20；登记；B2双PASS定稿。
+- 文件：AccessCredentialProvisioner.java:5–11；DevAccessCredentialProvisioner.java:13–24；JdbcAccessCredentialProvisioner.java:15–24；AccessService.java:68–109。
+- 已冻结判据：GEN-001、GEN-003、GEN-013、GEN-017。
+- 证据与分类分歧：dev/local内存认证桥与prod JDBC凭证桥确有两个实现，接口并非为了未来扩展；无依赖时的noop用于轻量测试装配，prod有实际bean。Spring装配、包级测试开关不新增业务授权规则。生产Autowired路径grantApproval固定true；不能把测试构造器false当生产逃生开关。 GR-10空密码伪成功不归入本项通过，单列029。
+- 拟修边界：只登记工程装配，具体业务账户旁路按CX-11处理。
+
+#### M006-021 密码BCrypt、UTF-8/SHA-256和JDBC时间参数转换
+
+- 来源：CX-21；登记；B2双PASS定稿。
+- 文件：JdbcAccessCredentialProvisioner.java:3–13、24、50–58；AccessService.java:911–921。
+- 已冻结判据：GEN-001、GEN-010、GEN-017。
+- 证据与分类分歧：密码仅写BCrypt哈希；SecureRandom、UTF-8、摘要/时间转换为数据处理机制，不新增业务资格。手机号摘要本身不是已证明的匿名化或完整PII加密方案，不以此宣称全项目隐私合规通过。 Grok GR-03否定手机号哈希充当加密；其数据用途问题已单列025为待修，故本项仅登记BCrypt/标准库/UTF-8/JDBC适配机制，不再把手机号存储口径当作本项无缺陷放行。原CX-21全文保留于独立raw。
+- 拟修边界：不新增依赖、不改工作因子，不进修复队列；业务数据隐私按实际字段和用途继续由相应模块审。
+
+#### M006-022 HTTP映射、响应包装和仓储接口默认失败机制
+
+- 来源：CX-22；登记；B2双PASS定稿。
+- 文件：AccessController.java:19–39及各路由包装；AccessRepository.java:83–125等默认接口方法。
+- 已冻结判据：GEN-001、GEN-003、GEN-013、GEN-017。
+- 证据与分类分歧：MVC/ApiResponse/PageResponse仅承载现有权限/员工业务，不构成第四来源。UnsupportedOperationException使未实现写能力显式失败；源码构建证明当前Jdbc实现可装配编译，未声称所有默认方法都在生产使用。 Grok GR-11假分页具体问题单列030，本项对包装类型的技术分类不替代其行为审计。
+- 拟修边界：只登记包装/接口机制；权限边界、空成功及并发缺陷分别按已有CX处理。
+
+#### M006-023 主体、权限集合和临时授权统计数据记录
+
+- 来源：CX-23；登记；B2双PASS定稿。
+- 文件：AccessActor.java、AccessGrantPositionSummary.java、AccessGrantSummary.java、AccessGrantUserSummary.java、EffectivePermissions.java及其他记录字段。
+- 已冻结判据：GEN-001、GEN-017、BSM-028、BSM-120、PGM-066。
+- 证据与分类分歧：主体归属和单功能权限对应BSM-028/BSM-120；频繁临时授权汇总的原文位于治理地图659（锁内PGM-041），有明确上位需求，不能当业务添加删除或询问。纯记录对象无独立I/O副作用；具体计算错误已单列。
+- 拟修边界：只登记；不因Java record或内部英文标识删除既有业务数据结构。
+
+#### M006-024 账号状态未校验且非disabled一律发active凭证；员工五态等同账号状态的主张待B2裁定
+
+- 来源：GR-02；P2；B2双PASS定稿。
+- 文件：AccessService.java:870；JdbcAccessCredentialProvisioner.java:30–33；AuthorizationService.java:217–218、444–452。
+- 已冻结判据：GEN-004、GEN-008、GEN-017；Grok原引BEQR-157、PGM-001。
+- 证据与分类分歧：Grok原主张（冲突）：active/disabled发明英文，必须改成BEQR-157的待入职、在职、试岗、停岗、离职；非disabled即凭证active。收后核实AccessUsersPage339–342已有启用/待激活/禁用三种“账号”选项，177/280用formatBusinessStatus显示中文；AccessUser也承载merchant/outsourced_vendor，不能把所有账号都当五种雇佣状态。StaffProfileRecord另有registrationStatus和status，但本席未据此宣称员工五态完整实现。已证真实缺陷是未知状态不拒绝、invited等非active状态仍生成active凭证，前后账号/凭证口径不一致。ProductionAuthService还检查用户active，所以不能从凭证active单独宣称离职者已实际登录成功。原意见全量保留，细化分类和收窄提案须由Grok B2明确同意。
+- 拟修边界：在账号写入口校验现有账号状态集合，凭证与账号状态一致、非启用不能发可用凭证；保留已存在中文显示。员工是否已注册审批归011，不以将active改成中文在职解决。拒绝未知值的正常反例及active/invited/disabled正负路径必须验证。
+
+#### M006-025 手工建号把手机号存为无密钥SHA-256并经AccessUser返回
+
+- 来源：GR-03；P1；B2双PASS定稿。
+- 文件：AccessService.java:872、911–922；AccessUser.java:14；直接依赖JdbcAccessRepository.java:163–188、999及V131。
+- 已冻结判据：PGM-059、GEN-010、GEN-017。
+- 证据与分类分歧：Grok原文：治理地图870“客人和员工的手机号、身份信息等个人信息，在系统里一律加密存放。”当前phone_hash是无密钥不可逆SHA256，Python反例仅证明算法不是加密。收后核实AccessUser.phoneHash直接进API DTO，主代码范围内只发现存取和返回，没有按该字段查号的使用；UI310还宣传“后端仅留哈希”。不能将此当已证明匿名化，也不能谎称可从既有摘要还原手机号。现有common/crypto/PiiCipher使用AES-GCM、BlindIndex使用独立密钥HMAC，均为可复用实现事实，非新的业务权威。
+- 拟修边界：删除把无密钥手机号摘要当安全PII存储/对外返回的做法。优先收窄这个手工入口中没有真实消费用途的重复手机号采集/摘要暴露；确需继续保存的手机号复用既有PiiCipher加密存储，匹配用途复用BlindIndex，绝不把加密或HMAC说成原来的SHA。B3只改本入口及必要DAO/字段约束和对应测试，不扩成全仓个人信息整改、不臆造旧手机号回填、不在生产库做数据清理；具体最小方案须与B2口径一致。
+
+#### M006-026 岗位角色模板直接物理删除，未经过留存与删除审批
+
+- 来源：GR-06；P1；B2双PASS定稿。
+- 文件：AccessService.java:466–482；AccessController.java:176–180；直接依赖JdbcAccessRepository.java:519–524。
+- 已冻结判据：GEN-006、GEN-011、GEN-017、BSM-003。
+- 证据与分类分歧：Grok原判细化+完整性缺陷：直接DELETE、无占用检查、无幂等键；并拒绝用未映射BSM-004为冲突依据。收后实读业务地图563–578：“下面这几条…整套系统都遵守”；570–571要求先存档、审批、软删除且库内可恢复；572检查占用。该原文已经在冻结定义区，未新增判据/映射。本候选以映射GEN-006/017及BSM-003明确总原则举证，提议冲突分类，由Grok B2裁定，不改其原报告。
+- 拟修边界：删除直接物理DELETE旁路；复用项目已有存档/审批/留存机制承接岗位配置删除，核实占用、原因、审批身份及恢复可查。不能只把DELETE改成status=inactive就宣称删除审批已完成，不新建另一套审批体系。相关直接DAO/调用和最小验证归本ID，后续模块仍按计划全审。
+
+#### M006-027 保留线上充值和订单余额支付；现场按手机号及短信验证码支付账单
+
+- 来源：GR-07；P1；操作员保留限定能力；原HTML两申请已撤回；Grok V0.03已改判细化，Grok V0.04范围FAIL已接受并补齐条目正文；当前30项已获self V0.14/Grok V0.05整批双PASS定稿。
+- 文件：AuthorizationService.java:21–25、42–47、449–452；直接消费者apps/web/src/customer/pages/WalletPage.tsx:66–94、141–175及client/customerService.ts:139–146；MemberWalletController.java:56–85。
+- 判据与裁决：Grok原引BSM-114、GEN-005、GEN-017；最新保留裁决；已有冻结BSM-035储值及BSM-006手机号短信验证原文作为GEN-005/017上位证据，不扩模块映射。
+- 证据与分类分歧：Grok GR-07原添加意见作为历史保留；本席B2 V0.03明确撤回原添加判断，按既有HTML上位改判细化，本候选已据唯一FAIL-1同步。操作员先明确微信/支付宝/银联线上充值、支付成功确认后入账及POS刷卡充值；已有App订单可用余额支付，现场已有总价账单消费。其后最新逐字说明：“那么出示二维码这个事情就不要这个，改成这个报手机号码，然后短信扣款。”撤回出示二维码，采用报本人手机号和短信验证码验证后扣账单金额。原V0.53只读方案与V0.54二维码方案均不执行。现有WalletPage66—77仅创建充值意向并提示到柜台，79—94提交金额及固定reason=钱包消费；StoredValueConsumeRequest没有订单/账单/短信绑定，钱包页未见记录展示。真实消费还受currentMerchantScope拒绝风险，未实跑成功消费，不把界面有按钮当成交易已经成功。HTML585现有手机号+短信验证，832现有客人充值、支付成功入账、消费扣余额，867要求逐笔记录；取消二维码后不需改HTML。Grok已明确接受上位依据和拟修范围并要求分类细化；当前已改细化，不再按添加等待操作员。
+- 当前拟修边界：在HTML1480及枚举210既有“预留接口、后台开关默认关、不阻塞自研、不伪造结果”阶段内，保留客人合法充值和按订单/账单消费的限定权限桥，修复平台侧流程与结果衔接；不把本项当成开启未配置支付/短信能力或接通真实厂商的授权。充值页提供微信、支付宝、银联选择，经既有createPaymentIntent及PaymentGatewayPort申请支付；仅在真实渠道已配置且后台显式启用时使用真实拉起信息发起支付。开关关闭、RESERVED或NOT_CONFIGURED时应明确提示未启用/未配置，不能显示已支付、不能入账，不打开payment.gateway.enabled，不修改ReservedPaymentGateway来伪造SUCCEEDED，不拿测试期markPaymentIntentSucceeded或前端成功提示代替真实渠道回执。只有服务端核验对应渠道的真实支付成功确认、金额和已绑定本人卡范围后，才复用settleTopup/既有入账内核记入该笔充值；重复确认不得重复加余额，客户端不得自行宣称收款成功。POS刷卡充值复用confirmOfflineTopupAndSettle等既有柜台/线下确认链，不另造支付通道。App已有订单（如门票）由客人选择指定储值卡余额支付；现场已形成消费明细与总价的账单（如卡座）采用报本人手机号、短信验证码验证通过后按该笔账单金额扣款，不生成储值付款二维码。两类余额支付都绑定真实订单/账单与本人卡并执行HTML585的手机号短信验证，不豁免App订单。复用既有CustomerOtpVerifier等短信验证接口；短信能力未配置时拒绝验证/扣款，不以“已发短信”“已送达”或变动通知notifyStoredValueAfterCommit当作验证通过，不以本地测试固定码冒充生产短信验证。取消钱包页脱离订单/账单随意填写金额的consume入口及对应孤立调用，保留限定合法customer.stored_value.topup/consume通路，不仅删除权限桥，也不放宽任意客人/商户授权。保留本人余额和逐笔记录，查询复用真实既有customer_stored_value_transactions及现有卡/账务数据，不建平行台账。原有卡归属、适用商户、本金赠金、冻结与幂等边界保持。三HTML、锁定义、映射及开关启用状态不修改，不重开M001；整批B2双PASS前不实施。
+- 操作员答复规范化：保留；最新原话及两次修改的完整上下文在questions/M006-027.md V0.06。无待批HTML修改。
+
+#### M006-028 未知或UserDetails认证主体被填成staff/active
+
+- 来源：GR-08；P2；B2双PASS定稿。
+- 文件：AuthorizationService.java:127–150。
+- 已冻结判据：GEN-004、GEN-005、GEN-017。
+- 证据与分类分歧：Grok实际harness把UserDetails变成ID=ops、ACCOUNT_TYPE=staff、ORG=null、MERCHANT=null、STATUS=active。收后核实SecurityConfig81–82禁用basic/form，110–113的UserDetailsService始终抛不存在；两种员工Bearer过滤器分别供UserRecord/AccessActor，客人过滤器供AccessActor。因此不能夸大为已证生产网络攻击，但此默认身份补全会让未建立真实归属的主体进入业务函数，并与003空归属问题相连。无业务发明：框架principal到既有主体的身份适配，不新增业务角色。
+- 拟修边界：删除猜测staff/active的fallback，只有既有可信Actor/UserRecord正常进入，未知主体显式拒绝。必要测试改用真实认证主体，保留员工/客人合法路径；不创建第三种身份提供者。
+
+#### M006-029 手工建号空密码成功返回但无登录凭证
+
+- 来源：GR-10；P2；B2双PASS定稿。
+- 文件：AccessService.java:878–879；DevAccessCredentialProvisioner.java:27–28；JdbcAccessCredentialProvisioner.java:30–31。
+- 已冻结判据：GEN-004、GEN-009、GEN-017。
+- 证据与分类分歧：Grok记录生产源码空白password直接return，建号仍返回成功。收后核实AccessUsersPage90–92、301–302已经明确初始密码必填、手动建号需可登录；因此是后端未执行已有输入契约，不是新设业务密码要求。两适配器确实都支持此空返回，轻量测试默认noop不等于生产凭证成功。
+- 拟修边界：在真实建号/需发凭证的共同业务入口、任何写入前拒绝空初始密码，正常密码必须证实对应凭证已发；011未审批员工不得靠密码校验变成直接生效。适配器必要失败显式化，保留已有无需新凭证的合法调用，不做全仓认证重构。
+
+#### M006-030 列表声称每页50却返回全量；授权申请缺默认时间过滤
+
+- 来源：GR-11；P2；B2双PASS定稿。
+- 文件：AccessService.java:1733–1734、listGrantRequests相关方法；AccessController.java相关GET入口。
+- 已冻结判据：GEN-008、GEN-012、BSM-028。
+- 证据与分类分歧：Grok原分类技术性，原主张：page(items)一律page=1,pageSize=50,却无切片；windowDays=null无时间过滤。收后Controller读取证实多数GET没有page参数，而UI依赖全量选项。两类问题须区分：超过50项时元数据确实不实；不能简单截前50导致剩余角色/权限永远无法选到，也不能无证据把所有全量小字典称资源灾难。列表是权限管理既有上位需求的下位实现，提议细化，由B2双席复核。
+- 拟修边界：修正分页元数据与实际取数契约；如采用分页，接口须能访问后续记录，必要消费者同步，禁止无出口截断。按真实列表用途/负载限制授权申请查询及数据库取数，复用现有时间窗口/分页能力；不得把技术分页上限当成新的业务政策或任意设置频繁阈值。
+
+### B2 当前下一步
+
+M006 IN_PROGRESS，B2整批双PASS；按全部25个队列是的已定稿ID统一进入B3，完成after tree后才计B3第1次。无待答、无待批HTML、无LOCK-AMEND、M001不重开。
+
+---
 
 ## M005 B5-r1收口（V0.51当前）
 

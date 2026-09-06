@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.util.List;
 
@@ -11,7 +13,7 @@ public record AccessUser(
         String merchantId,
         String status,
         Instant createdAt,
-        String phoneHash,
+        @com.fasterxml.jackson.annotation.JsonIgnore String phoneHash,
         String createdVia,
         String consentReference,
         List<String> evidenceAttachmentIds,

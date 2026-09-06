@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.02
+
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarOrderRecord;
 import com.complex.platform.bar.BarOrderRequest;
@@ -141,6 +143,33 @@ public class CustomerService {
                     "验证尝试次数过多，请稍后再试",
                     decision.retryAfterSeconds());
         }
+    }
+
+    /** M006-027：仅核验储值付款人，不登录、不注册、不签发会话。 */
+    public CustomerRecord verifyStoredValueCustomer(String expectedCustomerId, String phone, String smsCode) {
+        String number = requireText(phone, "手机号");
+        String code = requireText(smsCode, "短信验证码");
+        enforceOtpRateLimit(number);
+        CustomerRecord customer = requireStoredValueCustomer(expectedCustomerId, number);
+        otpVerifier.verify(number, code, "customer.stored_value.consume");
+        return customer;
+    }
+
+    public void requestStoredValueCode(String expectedCustomerId, String phone) {
+        String number = requireText(phone, "手机号");
+        enforceOtpRateLimit(number);
+        requireStoredValueCustomer(expectedCustomerId, number);
+        otpVerifier.requestCode(number, "customer.stored_value.consume");
+    }
+
+    private CustomerRecord requireStoredValueCustomer(String expectedCustomerId, String number) {
+        CustomerRecord customer = repository.findCustomerByPhone(number)
+                .orElseThrow(() -> ApiException.unauthorized("CUSTOMER_OTP_INVALID", "手机号或短信验证码不正确"));
+        customer = enforceUsableAccount(customer, clock.instant());
+        if (expectedCustomerId != null && !expectedCustomerId.equals(customer.id())) {
+            throw ApiException.forbidden("STORED_VALUE_CUSTOMER_MISMATCH", "手机号与本次付款客人不一致");
+        }
+        return customer;
     }
 
     @Transactional

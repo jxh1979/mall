@@ -1,4 +1,5 @@
 package com.complex.platform.access;
+// 文件版本：V0.04
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -114,6 +115,19 @@ public class AccessController {
         return ApiResponse.ok(service.unassignUserRole(request));
     }
 
+    @GetMapping("/grant-policy")
+    public ApiResponse<AccessGrantPolicy> grantPolicy() {
+        authorizationService.requirePermission("access.grant_request.view");
+        return ApiResponse.ok(service.grantPolicy());
+    }
+
+    @PostMapping("/grant-policy")
+    public ApiResponse<AccessGrantPolicy> updateGrantPolicy(@RequestBody AccessGrantPolicy.Update request) {
+        authorizationService.requirePermission("admission.policy.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updateGrantPolicy(request));
+    }
+
     @PostMapping("/grant-requests")
     public ApiResponse<AccessGrantRequestRecord> applyGrant(@RequestBody @jakarta.validation.Valid AccessGrantApplyRequest request) {
         authorizationService.requirePermission("access.grant_request.apply");
@@ -123,10 +137,11 @@ public class AccessController {
 
     @GetMapping("/grant-requests")
     public ApiResponse<PageResponse<AccessGrantRequestRecord>> listGrantRequests(
-            @RequestParam(name = "window_days", required = false) Integer windowDays
+            @RequestParam(name = "window_days", required = false) Integer windowDays,
+            @RequestParam(name = "page", defaultValue = "1") int page
     ) {
         authorizationService.requirePermission("access.grant_request.view");
-        return ApiResponse.ok(service.listGrantRequests(windowDays));
+        return ApiResponse.ok(service.listGrantRequests(windowDays, page));
     }
 
     @PostMapping("/grant-requests/{id}/review")
@@ -134,8 +149,7 @@ public class AccessController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid AccessGrantReviewRequest request
     ) {
-        authorizationService.requirePermission("access.grant_request.review");
-        authorizationService.requirePermission("governance.supervisor_review.approve");
+        authorizationService.requirePermissions("access.grant_request.review", "governance.supervisor_review.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewGrant(id, request));
     }
@@ -151,9 +165,10 @@ public class AccessController {
     }
 
     @GetMapping("/position-role-templates")
-    public ApiResponse<PageResponse<PositionRoleTemplate>> listPositionRoleTemplates() {
+    public ApiResponse<PageResponse<PositionRoleTemplate>> listPositionRoleTemplates(
+            @RequestParam(name = "include_archived", defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("access.role.assign");
-        return ApiResponse.ok(service.listPositionRoleTemplates());
+        return ApiResponse.ok(service.listPositionRoleTemplates(includeArchived));
     }
 
     @PostMapping("/position-role-templates")
@@ -171,6 +186,18 @@ public class AccessController {
         authorizationService.requirePermission("access.role.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updatePositionRoleTemplate(id, request));
+    }
+
+    @PostMapping("/position-role-templates/{id}/lifecycle")
+    public ApiResponse<PositionRoleTemplate> changePositionTemplateLifecycle(
+            @PathVariable String id, @RequestBody StatusChangeRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        if ("approve_delete".equals(request.action()) || "reject_delete".equals(request.action())) {
+            authorizationService.requirePermissions("access.role.assign", "governance.supervisor_review.approve");
+        } else {
+            authorizationService.requirePermission("access.role.assign");
+        }
+        return ApiResponse.ok(service.changePositionTemplateLifecycle(id, request));
     }
 
     @DeleteMapping("/position-role-templates/{id}")

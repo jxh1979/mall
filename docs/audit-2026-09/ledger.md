@@ -1,7 +1,7 @@
 CRITERIA-LOCK-SHA256: 23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de
 LOCK-AMEND-COUNT: 0
 
-版本：V1.00
+版本：V1.33
 
 | 模块 | 状态 | B3执行次数 | 方案复核已修次数 | PASS证据 | 子代理失败重跑次数 | 备注 |
 |---|---|---:|---:|---|---:|---|
@@ -9,8 +9,8 @@ LOCK-AMEND-COUNT: 0
 | M002 `00-authority-html-02` | PASS | 2 | 2 | modules/M002-00-authority-html-02.md；B5-r2双PASS/四值一致 | 0 | V0.17；979行/84判据；审计及发布PASS；PR #411已合并，160=origin/main=df580198 |
 | M003 `01-root-config-and-guidance-01` | PASS | 2 | 2 | modules/M003-01-root-config-and-guidance-01.md；B5-r2双PASS/四值一致 | 0 | V0.17；8文件621行/18GEN；审计及发布PASS；PR #412已合并，160=origin/main=9f7955eb |
 | M004 `01-root-config-and-guidance-02` | PASS | 1 | 2 | modules/M004-01-root-config-and-guidance-02.md；B5-r1双PASS/四值一致 | 0 | V0.17；1文件3321行/220记录/18GEN；审计及发布PASS；PR #413已合并，160=origin/main=134d75d1 |
-| M005 `01-root-config-and-guidance-03` | PASS | 1 | 2 | modules/M005-01-root-config-and-guidance-03.md；B5-r1双PASS/四值一致 | 0 | V0.17；4文件232行/127脚本/18GEN；审计PASS，进入逐模块发布 |
-| M006 `10-backend-main-access-01` | PENDING | 0 | 2 | - | 0 | - |
+| M005 `01-root-config-and-guidance-03` | PASS | 1 | 2 | modules/M005-01-root-config-and-guidance-03.md；B5-r1双PASS/四值一致 | 0 | V0.17；4文件232行/127脚本/18GEN；审计及发布PASS；PR #414已合并，160=origin/main=395e6fba |
+| M006 `10-backend-main-access-01` | PASS | 5 | 2 | modules/M006-10-backend-main-access-01.md；B5-r5双PASS/四值一致 | 0 | V0.17；14文件3289行/52判据；36ID全部出队；第4–5轮席甲Claude Fable 5.1（操作员授权）；审计PASS，发布进行中 |
 | M007 `10-backend-main-access-02` | PENDING | 0 | 2 | - | 0 | - |
 | M008 `10-backend-main-access-03` | PENDING | 0 | 2 | - | 0 | - |
 | M009 `10-backend-main-access-04` | PENDING | 0 | 2 | - | 0 | - |
@@ -1182,3 +1182,237 @@ Grok新独立完整报告从36359字节后起，33320字节/385行/SHAd30dab7380
 ## V0.98 M005 B3-r1整批实施
 
 B2候选V0.48两席PASS后按V0.49定稿一次性执行001—006，未改仅登记项。before tree 4e82fa54f5fcf4589bf2c8ad526ab64c9d2c2a4e → after tree 214490504e59405a1c6ef5f83f172a6f8be373fe；全路径binary diff 3529字节/8hunk/4路径，SHA42a88e82d010599b68b2e30414b2e35d2731cc5e6c6b81931ea55f4312779c26。取得after tree后才将B3从0加1。四值前后均23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0。35个既有scratch逐SHA保持，tsconfig.base及三HTML无变化，lock仅根engine及自身documentVersion变化，全部包记录保持。当前待B4全差异双审，不宣称模块通过。
+
+
+## M006 首次B2等待实际答复（V1.03）
+
+UTC 2026-09-05T16:16:51.599564+00:00。两席B1全14文件2988行、52映射判据均已完整落盘并全部读取；两席FAIL。Grok真实exit0，44940字节/SHA96f0165d01b18753284b2556d2474c17623259bdb10ddca45cc80b7a0b5da071；本方原独立73231字节/SHA1ee77bccf61c3b418028f42866202a4655246349d7c55ef37d9e3f36def61ab4，收后V0.06保留原前缀。Grok披露写共享backend/target，限制违例已如实记入接收说明，不虚称隔离测试。
+
+findings V0.52整批30ID候选，24拟修、5登记、027待答；两席分歧明确保留，尚未B2定稿。027按Grok添加否决权走2.2，问题全文在questions/M006-027.md，操作员答复段真正空白。旧M003两答复已核合法，不挪用到本项。B3=0、planrepair=2、runtimefailure=0。源码14项和三HTML逐字对HEAD校验未变；四值均原23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+
+当前Grok B2 NOT-CALLED，无运行中Grok。全流程暂停，等待本项实际保留/删除答复；无自动默认、超时批准、旁支或下模块工作。恢复时先查所有questions答复首个非空行，并恢复M006 IN_PROGRESS，再派整批B2。
+
+
+## M006 从原BLOCKED-ASK恢复B2（V1.04）
+
+UTC 2026-09-05T16:32:09.636542+00:00。操作员原话：“客人不是只能看吗？他要操作什么东西呢？储值钱包他只能看这个交易记录和余额，他要操作什么。”。027的实际行为裁决记删除客人钱包写入、保留余额与交易记录查询；questions/M006-027.md V0.02首个非空答复删除并附逐字原话。没有要求重复点击、没有代用M003答复；原保留建议已撤回。
+
+先验所有questions当前答复有效，再把M006恢复IN_PROGRESS；保留B3=0、planrepair=2、runtimefailure=0。不重开B1、不重开M001—005。findings V0.53整体30候选（25是5否）、self接收说明V0.07；其他29项及Grok分歧不动。尚无B2双票，Grok本写入点NOT-CALLED，下一步继续整批B2；没有任何生产源码、HTML、锁定义或映射修改。
+
+CRITERIA-LOCK-SHA256基准仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT仍0。
+
+
+## M006 最新储值裁决触发HTML人闸（V1.05）
+
+UTC 2026-09-05T16:41:56.389663+00:00。操作员最新原话：**点击“充值”** 这个页面需要可以拉起微信、支付宝、银联付款，按对应金额线上支付，而不是通过柜台支付收款。然后我们收到支付宝银联或者微信的返回确认就可以把这笔钱进入到客人的储值账户了。当然也可以通过pos机刷卡充值。  客人消费储值金额有两种情况第一种情况是a p p上已经有的订单。比如说门票。比如说这个下单后的在线支付。那这个客人直接可以用余额直接支付用储值卡的余额。有一种情况是客人点了一系列的东西。然后最后有一个总价。那客人，比如说卡座的消费。那客人可以通过出示二维码的方式。然后扣款。当然会收到短信验证码。
+
+questions/M006-027.md V0.03当前首个非空答复保留，原删除答复完整保留在历史区。findings V0.54更正027范围，仍30ID/25拟修5登记，其他29ID不改；本方raw追加V0.08接收记录，无当前B2 PASS。旧钱包只读裁决不再执行。业务源文件及三HTML未改，B3=0/planrepair=2/runtimefailure=0。
+
+旧B2 Grok实际派发2026-09-05 16:33:07 UTC，命令为固定/home/james/.local/bin/grok -p <V0.53批次前缀及完整V0.17控制提示词> -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management，经既有内存回执适配器，报告目标docs/audit-2026-09/modules/M006-b1-grok-raw.md，仅追加。16:39:42 UTC之后一次状态检查仍运行，真实exit尚不可用。输入V0.53 SHA edce17bce74536bfd6f2c09688f283f1eeb58ce458e0c769b11739117d1faa5b已被新说明替代；不将其结果用作V0.54 B2通过。新B2调用NOT-CALLED。
+
+文件：160:/home/james/complex-management/docs/business-system-map-for-operations-v0.1.html
+
+申请 M006-027-A（储值条款）：第832行仅替换以下开头片段。
+原文：预付卡 / 余额：客人可充值到余额、消费时扣余额；充值必须支付成功才入账、不凭空加余额，账户可冻结/解冻。
+替换为：预付卡 / 余额：客人点击“充值”后，可选择微信、支付宝或银联，按充值金额在线支付；系统收到对应支付渠道的支付成功确认后，才将该笔充值金额记入客人的储值账户，不凭空加余额；也支持通过 POS 机刷卡充值，充值必须支付成功才入账。客人使用储值余额消费分两种情况：①支付 App 中已有订单，例如门票订单，客人在订单支付时选择储值卡余额支付；②支付已形成消费明细和总价的现场账单，例如卡座消费，客人出示储值付款二维码，收款端扫码关联该笔账单，经手机号短信验证码验证通过后，按账单金额扣款。储值消费不通过在钱包页随意填写金额直接扣款。账户可冻结/解冻。
+理由：把操作员最新确认的线上充值、POS充值和两种余额消费写入储值正文；原卡种、资金归属、退款、时间记录等后文全部保留。
+同批将第2行“<!-- 文件版本：V0.08；更新日期：2026-09-01 -->”改为“<!-- 文件版本：V0.09；更新日期：2026-09-05 -->”，履行每次更新版本递增规则。
+批准状态：待操作员实际批准。
+
+申请 M006-027-B（二维码条款）：第585行仅替换末尾括号。
+原文：（说明：客人付款走第三方微信、支付宝，或用账户预存款经手机号加短信验证支付，系统自己不生成“付款出示码”，故不在本自动刷新范围内。）
+替换为：（说明：客人付款可走微信、支付宝、银联等第三方支付渠道，或使用账户预存款支付；账户预存款支付须经手机号短信验证码验证通过。卡座消费等已形成消费明细和总价的现场账单，客人可出示储值付款二维码，由收款端扫码关联账单，验证通过后按账单金额扣款；系统生成的储值付款二维码适用上述动态刷新规则。）
+理由：删除与本次储值付款二维码要求冲突的禁止句；沿用同段既有动态刷新规则，保留原账户预存款支付的短信验证要求，其余正文不变。
+批准状态：待操作员实际批准。
+
+流程影响：两处分别涉及已冻结 BSM-035、BSM-006，最早映射模块均M001。若批准并同步HTML，依V0.17 §5须完整LOCK-AMEND五步：先改定义和映射、再sidecar、双席复核、再更新ledger基准，最后M001至当前M006改PENDING并从M001 B1重审。原报告、原提交及批准历史保留；当前尚未改HTML/锁或重开。获批HTML出处同步不计LOCK-AMEND-COUNT，但仍必须双席复核。
+
+M006当前BLOCKED-ASK，等待两处精确HTML稿实际批准；无超时/预选批准，未推进任何修复、LOCK-AMEND或下一模块。原M001—005状态与已发布证据目前保留，不把新要求当已完成实现。
+
+锁基准仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT仍0。
+
+
+## M006 取消二维码后恢复B2（V1.06）
+
+UTC 2026-09-05T16:44:28.920440+00:00。用户最新原话：“那么出示二维码这个事情就不要这个，改成这个报手机号码，然后短信扣款。”。线上充值/POS和已有订单余额支付保持，仅现场改报本人手机号及短信验证码验证后按该笔账单金额扣款，明细/总价是既有消费账单。
+
+questions V0.04首答保留，findings V0.55仍30ID/25拟修5登记，027范围更正，其他29项不动，self追加V0.09。HTML585已经规定账户预存款经手机号加短信验证支付，不再与用户要求冲突；832储值扩写不是必要变更。原两HTML申请A/B全部撤回，旧弹窗答复不触发执行，不再等待此闸；依用户最新指令恢复IN_PROGRESS。三HTML及冻结判据保持，LOCK-AMEND不启动，不重开M001—005。B3=0/planrepair=2/runtimefailure=0。
+
+V0.53旧在途Grok调用只保留历史证据，未取得真实退出则不称失败或通过，按5分钟间隔检查；结束后当前V0.55全部30项重新B2双审。未改任何生产源、SQL、HTML、锁/映射。锁基准仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT仍0。
+
+
+## M006 旧B2交付完成，准备当前批次复核（V1.07）
+
+UTC 2026-09-05T16:45:23.335602+00:00。16:44:58 UTC按5分钟间隔检查收到旧Grok B2真实exit0，指定modules/M006-b1-grok-raw.md为67898字节/SHA7a13ac5e95b2e1ea473e6287e64c64fa40ba8cb3b6d450c873cc8cd306853d75，新增22958字节/271行/SHA8e7eaae3e6821a8f1aff70ab5c5fa18832e57dc7ea9095a8439c8c9f8eccd383；原44940字节完整保留。本次完整追加已读，明确PASS，但仅针对旧V0.53只读钱包方案；最新业务已改变，所以不作为当前V0.55定稿票。本方旧草稿未落PASS，当前无B2双票。原Grok票不改写，运行失败仍0。
+
+其对其余29项的分歧接受留作历史依据；新调用仍需整批30项重审，不把旧29票拼成新批通过。Grok旧报告称customer_stored_value_transactions，实际源码台账名为stored_value_transactions；实现必须复用真实既有台账，不按误写表名建平行表。
+
+接下来固定CLI/模型grok-4.6/xhigh/回执适配器，对findings V0.55 SHA f8d033a33dce3ed64c34af0d478e01be97b658697e69d46294e521820c841c15整批复核；questions V0.04当前保留、现场手机号短信验证，两份HTML旧申请已撤回。只往同名grok raw追加V0.03，本方当前票稍后追加self，不修业务源。M006 IN_PROGRESS/B3=0；无待答人闸。锁基准23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+
+
+## M006 当前B2本席票落盘（V1.08）
+
+UTC 2026-09-05T16:50:23.363995+00:00。Grok已于2026-09-05 16:46:15 UTC实际派发V0.55完整30ID复核，固定CLI参数及回执适配器、指定modules/M006-b1-grok-raw.md追加V0.03；真实exit尚未取得，不写通过。此次输入self前89316字节/Grok前67898字节/findings V0.55 SHA f8d033a33dce3ed64c34af0d478e01be97b658697e69d46294e521820c841c15/questions V0.04，后续Grok须针对这一整批给票。
+
+本方重新核对全部30ID和最新手机号短信规则后，追加self V0.10，当前102097字节/SHA b1544896ea6a9d68d4a6997f4bd6e53a0b1eac335193bf76424dccb947c2c2f0，本席B2 PASS；旧V0.53本席草稿从未落票，不能冒称旧批双PASS。新Grok结论未读，当前仍缺外席票，不定稿/不执行B3。14源manifest SHA、三HTML对HEAD、两份B1原前缀及UTF-8严格校验通过。第三方原有预留接口/默认关闭规则保持，不冒称真实厂商已接通。
+
+M006 IN_PROGRESS，B3=0，25拟修5登记，运行失败0，无未答问题/待批HTML。锁实算及基准仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+
+
+## M006 B2分类FAIL接收（V1.09）
+
+UTC 2026-09-05T17:03:48.632857+00:00。17:02:53 UTC按5分钟间隔收到新Grok真实exit0，V0.03完整302行追加已读，整份93035字节/SHA489614955b1aa9a3c903a901720b795bbc9b1973fd4939db2a526b97ef35c501。唯一否决为027应归细化，已接受并写findings V0.56，原B1与Grok原票不改。本方已追加V0.11接收及交易表名纠错；实际表customer_stored_value_transactions，先前本方指正Grok是错误的，未产生源修改。
+
+Grok已确认最新手机号短信场景和保留范围、其他29项及无HTML修改/无LOCK-AMEND/不重开M001均合规；当前只有候选分类更正，不是全批双PASS。下一步整批30ID重新B2，Grok下一票NOT-CALLED于本写入点。M006 IN_PROGRESS/B3=0/planrepair=2/runtimefailure=0，25拟修5登记，0添加待答。锁基准仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT仍0。
+
+
+## M006 分类更正后再次整批B2（V1.10）
+
+UTC 2026-09-05T17:06:48.334580+00:00。当前V0.56整批30项已按固定CLI/grok-4.6/xhigh/既有回执适配器实际派出，指定同名grok raw在93035字节后追加V0.04；真实退出码尚未取得。输入findings V0.56 SHA668e4a199457bf464bc53cb263f64f05a15ff56a578defcad079db2a7ba7dfd6，question V0.05/self前103335/Grok前93035，原B1前缀均保持。
+
+本方已重新核对全部30项并追加self V0.12，113998字节/SHA09cd3ac024c55be06a6093886fda124b23aea8b313f30361f5af7ef3c0c1fdc6，本席B2 PASS；本批Grok未读，尚无双PASS。分类9冲突15细化6技术性0添加，25拟修5登记，0待答；旧表名错误已据源码纠正。M006 IN_PROGRESS/B3=0/planrepair=2/runtimefailure=0。锁基准23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+
+
+## M006 B2拟修边界FAIL接收（V1.11）
+
+UTC 2026-09-05T17:16:26.255150+00:00。17:15:13 UTC按5分钟间隔收到Grok V0.04真实exit0，完整299行追加已读；整体FAIL，唯一027拟修正文缺预留支付/短信约束。self V0.13已接收并说明本方将边界只写在self/提示而未落findings正文的遗漏。findings V0.57及questions V0.06现已补齐，不改用户手机号业务、不再次提问、不改HTML/锁/开关。其余29项及25是5否保持。
+
+Grok整份120180字节/SHA7c68d350332b25ad1a8610d791c0c60e41683f71fa94adf084cfaf23f4e78a4c；新追加27145字节/SHA5f9006f44b49c031058827c495223cdbea466dfabfd1a54f116d6f67d7f8aa1c。运行失败仍0，审计FAIL不记运行失败，不用self PASS覆盖。下一步再次全30项B2，新Grok于本写入点NOT-CALLED。M006 IN_PROGRESS/B3=0/planrepair=2，无待答人闸。锁基准仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+
+
+## M006 V0.57当前B2本席票（V1.12）
+
+UTC 2026-09-05T17:20:09.705899+00:00。Grok已于2026-09-05 17:17:57 UTC按固定grok-4.6/xhigh/既有回执适配器实际派发V0.57全30项复核，指定同名grok raw在120180字节后追加V0.05；真实exit尚不可用。输入findings V0.57 SHA f20a175d6024c22e51bebd7395554b68abff8c37771f9d4972d28a13ccfb9fe9/question V0.06/self前117360/Grok前120180，原始B1前缀保持。
+
+本方完成全30项复核并追加self V0.14，130069字节/SHA2dd31f1b32b0a98de3cfc288045742b1e543e315a456e88392265f14e1b96a26，本席B2 PASS。17个已有范围约束已在027条目正文核实，question当前范围逐字同源；14源manifest再次相同，不仅靠页首说明。Grok当前新票未读，无双PASS、B3未执行。9冲突15细化6技术性0添加，25是5否，0待答。M006 IN_PROGRESS/B3=0/planrepair=2/runtimefailure=0。锁基准23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；LOCK-AMEND-COUNT=0。
+
+## M006 B2全批双PASS定稿，进入B3（V1.13）
+
+UTC 2026-09-05T17:31:59.434569+00:00。Grok于17:29:51 UTC检查收到真实exit0；同名raw追加V0.05完整27349字节，整体PASS，30项全部接受，无否决。与本方self V0.14 PASS同审findings V0.57，原输入SHA f20a175d6024c22e51bebd7395554b68abff8c37771f9d4972d28a13ccfb9fe9。findings V0.58仅完成定稿标注，无分类/队列/范围实质变更。原始两席B1和各旧票前缀均保持。
+
+Grok整份147529字节/SHA4595d291ca5b293690c8ca2e9642f3b95948901242cb744fa4af7ad89835f5f2，追加SHA3e0c3186a830319afb36d09e02e6c18dfdfdc0d69fad03183c3edc21bb9c037a；本方独立self当前130069字节/SHA2dd31f1b32b0a98de3cfc288045742b1e543e315a456e88392265f14e1b96a26。退出码0不单独充当PASS，完整报告已核。
+
+本模块6/322，IN_PROGRESS，B3完成次数0、planrepair2、runtimefailure0；25个是统一修复，019—023五个否不改。phone/SMS现场按账单规则、线上支付预留默认关/POS既有确认链、本人记录均按027定稿正文；旧A/B撤回，无待答人闸。已重新git fetch origin，HEAD=origin/main=395e6fbab027020da1c38237fad17e8edcd7a132；14源SHA仍与B1 manifest相同。controller明确正本主工作区就地修复覆盖仓库默认worktree规则；发布仍按用户已授权逐模块feature/PR/CI/合并同步。
+
+锁基准仍23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，LOCK-AMEND-COUNT=0；B3前必须再次实算四值并取临时索引整树before。B3未完成前不加计次、不派B4。B2 PASS不是模块PASS。
+
+## M006 B3 before快照准备更正（V1.14）
+
+首次临时索引放在仓库.scratch下，git add -A把自身index.lock纳入tree 7ce60ec7632ca533c4f0191e6bdf421a2e0132fe；该快照不得使用。未改任何业务源码，B3仍0。临时目录已由TemporaryDirectory清除，仅清本次自身索引。按controller原意改用仓库外/tmp自动清理临时索引，重新取得完整before tree；不修改真实暂存区。Grok完成检查准确时间为17:29:51 UTC，前述17:29:43手填已更正。
+
+## M006 B3-r1整批完成（V1.15）
+
+本批按findings V0.58双PASS定稿一次修完001—018、024—030共25项；019—023登记项不动。完成次数由0递增1，生命周期IN_PROGRESS，等待B4双席完整diff复审；不是模块PASS。现场储值按本人手机号及短信验证扣真实账单，App现有订单绑定本人卡及短信；真实渠道未启用/未配置时失败关闭，未改变任何支付或短信启用状态。
+
+before tree=f49ef25cdadc0d4572f169d8c33b5e971c21f024；after tree=e845764656fb7f9c166026371371b720f10fde2a；完整git diff --binary字节=384478，SHA256=f8caaf8d47ea2993a9ea1d4b8a43e0c4f47246618d327e1a5410428234f6f5cc，55路径/280hunk。两树覆盖tracked/staged/untracked；临时索引置/tmp且自动清理，实际index SHA256=824f33c20ee9b3c04744aadfede5f7bdbb2303a35b0035b1f8496ad729cd0322前后相同。三HTML、audit目录、原35个.scratch历史文件均无diff；严格UTF8解码、变更文件版本、以cr-at-eol识别原CRLF的git diff --check全部通过。BarServiceTests保留原CRLF，未整文件改换行。
+
+验证：M006SecurityRegressionTests31、AccessServiceTests+AuthorizationServiceTests56、CustomerServiceTests+BarServiceTests+FinanceServiceTests247、MemberWalletServiceTests16、M006StoredValuePaymentTests10、M006StoredValueJdbcTests4、M006JdbcRegressionTests11，共375项通过；前端16文件45用例通过；全后端mvn -o -q -f backend/pom.xml test-compile -DskipTests与前端typecheck通过。数据库验证仅complex_test连接级TEMP表；V386在TEMP镜像执行，未迁移共享库。既有两项Spring集成类仅编译，不声称执行；真实微信/支付宝/银联/SMS未接入，保留已有RESERVED/OFF边界。POS真实Jdbc链三次确认只入账一次、失败订单更新回滚余额/流水、按本人分页查询均验证通过。
+
+B3前后四值均为23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de；本校验④固定取M006-b1-grok-raw.md最后独占哈希行。LOCK-AMEND-COUNT=0。所有当前队列值保持，只有B4双PASS才出队。B4将先派Grok，独立本方raw落齐前不读对方正文；运行期间每5分钟检查进程，不以运行时长判失败。
+
+## M006 B4-r1整批结束与B3-r2入场（V1.16）
+
+本方FAIL/越界PASS，Grok PASS/越界PASS，真实exit0。55路径280hunk已审完整；3条FAIL全部对应当前队列009/026/027，整批直接回B3；保留r1修复和全部证据，未出队、未进B5、B3计数仍1。B3-r2前四值全等；④固定取M006-b4-r1-grok-raw.md，两席本次完整报告均已落盘。全部25项沿用既有定稿，019—023不动，三HTML和开关状态不动。
+
+## M006 B3-r2整批完成（V1.17）
+
+沿用25项定稿队列，保留r1已完成修复；本次统一补009历史来源接续、026历史占用、027旧卡续充模式。before=7fecb8e739b6b04475755fffbb8e106fa0759713；after=2e346ad1b72a5df60d8e10eb1df9cc2b1add2cf9；完整未过滤diff=17644字节，SHA256=cc2fc0f92106bd49386038da79b4b1e1b862cf447bc6bc753322417efd413a41，5路径12hunk。真实暂存区未动，index SHA=824f33c20ee9b3c04744aadfede5f7bdbb2303a35b0035b1f8496ad729cd0322。三HTML、锁/映射、开关启用状态及旧证据未改。
+
+实际验证377项通过：31安全、56Access/Authorization、247Customer/Bar/Finance、16旧钱包、11新钱包、4钱包JDBC、12授权JDBC；全后端test-compile通过。新增反例先失败后通过。数据库只用complex_test连接TEMP表，迁移SQL没有在共享库执行。前端本轮无改动，沿用r1的45项通过，不冒称重跑。独立模板按既有access-api来源保留；角色依据既有成功岗位/显式授予事件及已有注册/引导来源接续，不凭时间接近推断。无成功岗位来源的旧数据不猜测授权归属；旧岗位配置使用计数仍按已有岗位/职级/组织字段保守计入。
+
+前后四值均为23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，④均取触发回退的M006-b4-r1-grok-raw.md；LOCK-AMEND-COUNT=0。B3已完成由1增至2；队列25是/5否保持，等待B4-r2双席，不是模块PASS。
+
+## M006 B4-r2双PASS（V1.18）
+
+本方完整报告70271字节/SHA9491d8b1492de2a500cf9dd7797c34159315379c1b59a8fa10d7e0f128298de4，审计PASS/越界PASS；Grok34061字节/SHAdcbddcaac3419cf121419635269e0c9c458dc23c8f6f21dce6ea05742ce615bf，真实exit0、审计PASS/越界PASS。双方本次完整5路径12hunk报告均已读完；Grok无新finding，不覆写其正文。
+r2沿用25项整批修复队列，22项保留r1已完成内容，补齐009/026/027；当前55个已修改源文件均与r2冻结after tree一致。依B4双PASS规则，001—018/024—030本次统一出队；19—23保持否；30项均为否、无待答。原证据与分类保留；下方r1/B2文字仅为历史。B4双PASS不是模块PASS，下一步B5-r2整模块三线双审。
+外席验证口径：触及两测试类23/23通过，含027旧版红/新版绿对照及真实TEMP迁移；披露尝试Maven编译失败（不按其意图声称未调用），后改隔离javac。其目标目录mtime不能证明所有构建产物未动，本方已核55源文件与冻结树逐字一致；未迁移共享库的独立证据见其报告。其摘要把BSM-035写作映射内不准确，实际M006映射未新增该ID；本项仍按已定稿GEN判据及锁内上位原文归因，不扩锁。
+
+B3完成次数仍2；生命周期IN_PROGRESS，尚未模块PASS/发布。B5先派Grok，本方完整raw落盘前不读其正文，继续每5分钟检查交付。
+
+
+## M006 B5-r2当前整模块复审（V1.19）
+
+通信恢复后旧session28812已无法取得真实退出码；其指定Grok raw存在26892字节/SHA52c17c3c1aac346d0ea12998b283f7a5b7956e90420d17f17bbafd397451f2a7，但没有据此称成功或失败，正文未读，原报告保留。操作员再次要求直接双席全量复审，03:35:45 UTC对同一14源/52判据按既有CLI发起新的完整B5-r2，只向同名raw追加，旧前缀保留，不重开模块、不增加B3次数。命令沿用 /home/james/.local/bin/grok -p <本次完整B5要求加V0.17原文> -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management，经既有进程内缓冲丢弃stdout/stderr适配器；本次真实exit尚未取得，按5分钟间隔检查。
+
+本方完整14文件3264行及52判据核对已完成，当前self raw V0.01为36285字节/SHA7c947c128b3ec0a7a6b891a795b613bf900db78aed9002e3e1e8e01f844a7395，完整落盘后才可读取本次Grok正文。本席FAIL，临时问题1项：不同组织请求编号相同时角色创建结果串用；正式ID与队列未定，不中途B2/B3。当前实际隔离编译及执行：31安全回归、56Access/Authorization回归通过，新增反例1失败；反例命令及真实输出全在self。55个已修源与r2 after tree完全相同，三HTML对HEAD一致，锁/映射及findings V0.60未改。
+
+当前仅为开发调试与质量复审，后续说明按操作员要求使用具体行为和业务影响表述。完整两席报告收齐后统一汇总，不逐项修复；B3=2，planrepair=2，运行失败计数0，无新待答人闸。
+
+
+## M006 B5-r2完整结束与整批B2（V1.20）
+
+03:51:20 UTC取得新Grok真实exit0，V0.02完整追加224行/18373字节，旧26892字节逐字保留；整份45265字节/SHA0f7c1000403b9f254988c63041f3f4dc3a1cd12ada32741a01c5ba396b60e6c9。本方完整self已先落盘且未改；两席均FAIL，本批全部3条意见整批处理。B5后四值全等23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de，COUNT0。
+
+当前findings V0.61：031跨组织结果串用、032英文错误提示候选待修；033保留Grok构建意见与本方实际全源编译证据，候选无缺陷只登记，须Grok B2复核，不单方推翻。001—030继续否，总33ID/2候选是；不修改任何业务源码、不扩锁/映射/HTML，B3仍2。依当前队列回退规则整批B2，下一次Grok本写入点NOT-CALLED。本方已核实GR-01真实响应；GR-02移除旧class但提供现有源后编译成功，详情及命令完整写findings。
+
+
+### V1.21 M006 B5-r2回退整批B2定稿
+本批两席B2均PASS：self V0.15与grok V0.06；Grok真实exit0于04:11:34 UTC取得并读完本次218行，旧前缀校验通过。031/032是、033否，旧30项否。findings V0.62记录定稿及最小范围，B3仍2，第三次整批修复尚未结束，故不加次数。无待问、无HTML申请、锁不变。
+
+
+### V1.22 M006 B3-r3完成，进入完整diff复审
+本批已定稿031/032整批修复完成，before 11319ccfc6c0a3b609bc1cfdd4579766a7118705，after c77d4453db7eb9b92388de630fdd5121cdef7959。完整未过滤diff 6路径/12块/14687字节，SHA a04dfea8324fd7a11d5b5cfebf3585fd93c9cb32ec3cd05fde2bb8b610956717。此刻才将B3次数2→3；队列仍031/032是，须本轮B4双PASS后出队。真实失败测试95通过/3失败，修复后98通过/0失败，60当前源码fresh javac退出0；全后端mvn -o -q -f backend/pom.xml test-compile -DskipTests实际退出0。未迁移共享数据库。B3前后四值都等于全局基准，真实索引SHA824f33c20ee9b3c04744aadfede5f7bdbb2303a35b0035b1f8496ad729cd0322未改。6文件严格UTF8/无替换符检查通过，业务HTML等于HEAD，控制提示词仍V0.17相同SHA。B4仍未得双票，不宣称模块通过。
+
+
+### V1.23 M006 B4-r3本方报告已封存
+本方完整B4 raw为modules/M006-b4-r3-self-raw.md，V0.01/36492字节/SHA f65b1ae24f09b0b6238f9ae248fb0c759e9c87d4b82a076f400093d2e7e03553；内容PASS、范围PASS，含完整6路径12块14687字节diff及逐块031/032归因、红绿测试和完整编译证据。另有两种主体表示/商户/无认证系统的4个实际断言通过。外席04:16:26 UTC派发，按5分钟检查；截至04:26检查未取得真实退出码，不作任何Grok结论。未读其当前B4正文。B3仍3，队列仍031/032是，后续仍须本批B4双PASS及B5全模块双PASS。
+
+
+### V1.24 M006 B4-r3双PASS，进入全模块B5
+04:32:19 UTC取得Grok exit0，当前448行完整报告已读。self原V0.01内容/范围PASS，Grok V0.01内容/范围PASS；完整diff逐字一致。findings V0.63将031/032整批出队，全33ID当前否；无新增意见。self仅追加V0.02纠正说明中键长为71的算术错误，原票不改。B3保持3，模块保持IN_PROGRESS，尚未B5通过、未发布。
+
+
+### V1.25 M006 B5-r3完整双FAIL，轮次上限终态
+## M006 B5-r3完整双席意见与三轮交付（V0.64）
+
+两席本次整个模块均审完后统一判定：**B5 FAIL；模块 BLOCKED-3ROUNDS；B3已执行3次**。
+Grok于2026-09-06 04:49:42 UTC检查取得真实EXIT_CODE=0，报告317行/21532字节，SHA06506fb252baac014c9ed4d1f89c546b92479e54aa84289255d6b78c3498b0bb，全文已读；交付成功不等于审计通过。
+本方独立原始完整报告34586字节，SHA72da471a14607a68d3c363a0a65c7ec426dfe7b2649da01da7f9b8f767f681a3，先于读取Grok封存。原票FAIL，原1条意见保留；后续接收记录仅追加，不覆盖原票。
+
+### 本批全部意见（终态待恢复；未做B2定稿）
+| 原始来源 | 问题及真实影响 | 位置 | 原分类/工程缺陷 | 当前处理 |
+|---|---|---|---|---|
+| self CX-B5-01 | 无效审批结论报错给用户显示approve/reject，实际Controller→Service→错误响应复现；不改变审批结果 | AccessService.java:1694，入口147—155/703—724 | 冲突/是，PGM-001/066、GEN-015，类型4 | 原始意见保留，待操作员恢复M006后整批B2 |
+| Grok GR-01（与上条同类，完整保留其更宽范围） | 同上；另有岗位模板删除审核拒绝提示USB，以及两处薪资币种错误提示CNY/输入币种 | AccessService.java:515、1061、1491、1694 | 冲突/是，PGM-001/066、GEN-002/015，类型1+4 | 原始意见保留，四处合为一类文案问题的归并建议，尚未正式ID |
+
+原始源：[本方完整报告](modules/M006-b5-r3-self-raw.md)、[Grok完整报告](modules/M006-b5-r3-grok-raw.md)。
+本方接收后核对四处当前源码及GlobalExceptionHandler:49—61/FieldLabels:504—529；中文中夹英文原样透传。Grok额外三处的运行探针证据归属Grok，本方不冒称重跑了其99项测试。
+旧M006-031与032在本轮两席各自测试中通过，保持旧33ID全部队列否；不得把这批新问题直接塞入已出队旧ID或无ID修复。没有遗漏另一类新意见、没有新增业务规则、没有HTML申请。
+潜在最小变更仅四处提示文本；保留内部代码、允许的decision/币种值、权限与业务判断。恢复后仍须先整批B2双PASS再修，不在本轮突破三次上限。
+验证：本方当前源98项回归全通过；独立真实审批响应反例1失败；Grok报告99项所选单元/JDBC测试通过及报错探针确认英文，明确省略2个StaffService测试（本方98项中已经实际执行），不把两组数字相加称197个不同测试。未跑真实支付厂商、全端浏览器/安卓、全库迁移或完整mvn test。
+
+### B5后四值与锁
+四值均为 `23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de`：①当前实算；②sidecar；③ledger顶部；④本次Grok raw最后一条独占哈希行。LOCK-AMEND-COUNT=0，校验实际命令/输出在本次操作员回执与本方raw接收追加段。
+没有因失败修改锁、scope、模块映射或当前源码，三HTML仍与HEAD逐字相同。
+
+### 三轮完整diff交付
+以下所有六份raw都含对应两树**完整未过滤**git diff --binary；本次逐字包含校验均true，不仅是stat或节选。源码仍等于第三轮after，未回滚已通过修复。
+| B3轮次 | before tree | after tree | 完整diff字节及SHA256 | 双席原始diff报告 |
+|---|---|---|---|---|
+| 1 | f49ef25cdadc0d4572f169d8c33b5e971c21f024 | e845764656fb7f9c166026371371b720f10fde2a | 384478 / f8caaf8d47ea2993a9ea1d4b8a43e0c4f47246618d327e1a5410428234f6f5cc | [self](modules/M006-b4-r1-self-raw.md) / [Grok](modules/M006-b4-r1-grok-raw.md) |
+| 2 | 7fecb8e739b6b04475755fffbb8e106fa0759713 | 2e346ad1b72a5df60d8e10eb1df9cc2b1add2cf9 | 17644 / cc2fc0f92106bd49386038da79b4b1e1b862cf447bc6bc753322417efd413a41 | [self](modules/M006-b4-r2-self-raw.md) / [Grok](modules/M006-b4-r2-grok-raw.md) |
+| 3 | 11319ccfc6c0a3b609bc1cfdd4579766a7118705 | c77d4453db7eb9b92388de630fdd5121cdef7959 | 14687 / a04dfea8324fd7a11d5b5cfebf3585fd93c9cb32ec3cd05fde2bb8b610956717 | [self](modules/M006-b4-r3-self-raw.md) / [Grok](modules/M006-b4-r3-grok-raw.md) |
+
+停止原因：控制提示词V0.17第4节“第3次B3后……该次B4或B5审完仍FAIL→……状态记BLOCKED-3ROUNDS……是否重启由操作员另行下指令”。当前B5完整结束、两席均FAIL，故不自动回B2/B3、不加第四轮、不开始M007、不提交合并推送M006。
+需要操作员：新指令恢复M006；恢复后保留现有修复/原始报告，先处理本批全部意见，而非重开M001或全仓。
+
+
+
+### V1.26 操作员一次性例外恢复M006
+## M006 本次例外恢复及B2候选（V0.65）
+
+操作员本次明确指令：“仅限本次，你把经过3次修复后仍未通过的问题交给claude cli,调用fable 5.1 模型 high 模式看看能否修复”。
+仅本次授权解除M006的BLOCKED-3ROUNDS、把下一批修复执行者改为Claude CLI Fable 5.1/high；不改变控制提示词V0.17原文和后续模块默认角色/上限。保留真实B3累计3，实际新整批完成后记4，不抹掉旧三轮。新一批仍按B2整批定稿→委托修复→B4完整差异双审→B5全模块双审；未经后续验证不称模块PASS。没有重开M001—M005或全仓。
+已实测 /home/james/.local/bin/claude 2.1.261，内置模型ID claude-fable-5-1；以--model claude-fable-5-1 --effort high无工具连通检查真实exit0/is_error=false，返回modelUsage canonicalModel=claude-fable-5-1、provider=firstParty。没有使用默认opus/xhigh或fallback模型。先一次解析把JSON事件数组误当对象，CLI自身仍exit0；修正解析后完整读取以上实际结果，无文件改动。
+git fetch origin后HEAD=origin/main=395e6fbab027020da1c38237fad17e8edcd7a132。
+
+### M006-034 — 用户可见报错残留英文枚举与缩写
+- 整批输入：modules/M006-b5-r3-self-raw.md原V0.01独立票及接收追加V0.02；modules/M006-b5-r3-grok-raw.md完整V0.01。原票各1项，完整并集同类4处，无遗漏。
+- 候选：冲突；工程缺陷是；修复队列是。无添加业务、无HTML申请；旧001—033保持否。
+- 冻结判据PGM-001/PGM-066/GEN-002/GEN-015；依据为冻结全中文规则、真实当前代码和已落盘可运行错误响应探针。Grok4处完整范围保留，不缩成仅本方1694。
+- 来源位置：backend/src/main/java/com/complex/platform/access/AccessService.java:515、1061、1491、1694；错误最终通过GlobalExceptionHandler:49—61、FieldLabels:504—529传到message。
+- 拟修边界：该源文件4处人读报错文本、源文件版本V0.13→V0.14；在既有backend/src/test/java/com/complex/platform/access/M006SecurityRegressionTests.java补最小真实行为回归（V0.20→V0.21），覆盖4处错误出口及允许业务行为仍保持。需要的夹具可复用现有测试，不另加测试框架。
+- 参考最小文字：审批结论“审批结论必须为通过或驳回”；最高权限“删除配置须由持授权密钥的最高权限人员审批”；两处币种“薪资币种当前仅支持人民币”。最终只改显示文案，不改内部枚举、错误码、权限判断、币种允许值、账号/支付/存储逻辑或通用翻译器。
+- Claude仅为本次修复执行者，不能给自己代行Codex/Grok审计票；本次范围外内容发现后只报告。修复前B2仍待双PASS，不先行写源。
+

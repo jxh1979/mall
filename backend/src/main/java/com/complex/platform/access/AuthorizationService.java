@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.05
+
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.CallerScopeResolver;
@@ -11,8 +13,9 @@ import java.util.Optional;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.complex.platform.auth.SessionIssuer;
 
 @Service
 @ConditionalOnBean(AccessRepository.class)
@@ -30,47 +33,100 @@ public class AuthorizationService implements CallerScopeResolver {
         this.accessRepository = accessRepository;
     }
 
+    @Transactional
     public void requirePermission(String permissionCode) {
+        requirePermissions(permissionCode);
+    }
+
+    /** 同一动作先核验所有权限，再按来源消费一次；任何失败由事务回滚。 */
+    @Transactional
+    public void requirePermissions(String... permissionCodes) {
         AccessActor actor = currentActor();
         Instant checkedAt = Instant.now();
-        if (!knownPermission(permissionCode)) {
-            deny(permissionCode);
-        }
-        if (isPlatformAdminBridge(actor)) {
-            return;
-        }
-        // #14 钱包双路径：客人自助桥——客人主体（CustomerTokenAuthenticationFilter 写入，accountType=customer）
-        // 对白名单内的自助权限直接放行（动作已由控制器按客人 token 绑定到本人账户）。员工代客路径主体为员工，
-        // 不走此桥，仍按 staff 权限正常校验并归属提成。非白名单权限的客人主体一律走下方常规校验（必然 deny）。
-        if (isCustomerSelfServiceBridge(actor) && CUSTOMER_SELF_SERVICE_PERMISSIONS.contains(permissionCode)) {
-            return;
-        }
-
         List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
-                .filter(effect -> permissionCode.equals(effect.permissionCode()))
-                .filter(effect -> isActive(effect, checkedAt))
-                .toList();
-
-        if (effects.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
-            deny(permissionCode);
-        }
-
-        AccessRepository.PermissionEffect grant = effects.stream()
-                .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
-                .min(Comparator.comparing(AccessRepository.PermissionEffect::sourceId, Comparator.nullsLast(String::compareTo)))
-                .orElse(null);
-        if (grant == null) {
-            deny(permissionCode);
-        }
-
-        if (grant.singleUse()) {
-            boolean consumed = accessRepository.markSingleUsePermissionConsumed(
-                    grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt);
-            if (!consumed) {
-                // Another concurrent request already consumed this single-use grant.
-                deny(permissionCode);
+                .filter(effect -> isActive(effect, checkedAt)).toList();
+        java.util.Map<String, AccessRepository.PermissionEffect> consume = new java.util.LinkedHashMap<>();
+        java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
+        for (String code : new java.util.LinkedHashSet<>(java.util.Arrays.asList(permissionCodes))) {
+            AccessRepository.PermissionEffect grant = permissionGrant(actor, code, effects, daily);
+            if (grant != null && grant.singleUse()) {
+                consume.putIfAbsent(grant.source() + ":" + grant.sourceId(), grant);
             }
         }
+        for (AccessRepository.PermissionEffect grant : consume.values()) {
+            if (!accessRepository.markSingleUsePermissionConsumed(
+                    grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt)) {
+                deny(grant.permissionCode());
+            }
+        }
+    }
+
+    private AccessRepository.PermissionEffect permissionGrant(
+            AccessActor actor, String code, List<AccessRepository.PermissionEffect> effects) {
+        return permissionGrant(actor, code, effects, dailyPermissions());
+    }
+
+    private AccessRepository.PermissionEffect permissionGrant(
+            AccessActor actor, String code, List<AccessRepository.PermissionEffect> effects,
+            java.util.function.Supplier<java.util.Set<String>> daily) {
+        if (!"active".equals(actor.status()) || !knownPermission(code)) {
+            deny(code);
+        }
+        List<AccessRepository.PermissionEffect> matching = effects.stream()
+                .filter(effect -> code.equals(effect.permissionCode())).toList();
+        if (matching.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
+            deny(code);
+        }
+        if (isMasterAuthority(actor)
+                || (isPlatformAdminBridge(actor) && daily.get().contains(code))
+                || (isCustomerSelfServiceBridge(actor) && CUSTOMER_SELF_SERVICE_PERMISSIONS.contains(code))) {
+            return null;
+        }
+        AccessRepository.PermissionEffect grant = matching.stream()
+                .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
+                .filter(effect -> isExplicitOrDailyGrant(effect, daily))
+                .min(Comparator.comparing(AccessRepository.PermissionEffect::sourceId,
+                        Comparator.nullsLast(String::compareTo))).orElse(null);
+        if (grant == null) {
+            deny(code);
+        }
+        return grant;
+    }
+
+    /**
+     * 日常权限码集合（active、无需审批、low/medium）。M006-035：一次授权判定或有效集计算内只读一次权限字典，
+     * 由调用方持有本 Supplier 复用；首次 get() 才查库，普通员工路径不触发。
+     */
+    private java.util.function.Supplier<java.util.Set<String>> dailyPermissions() {
+        return new java.util.function.Supplier<>() {
+            private java.util.Set<String> cached;
+
+            @Override
+            public java.util.Set<String> get() {
+                if (cached == null) {
+                    cached = accessRepository.listPermissions().stream()
+                            .filter(p -> "active".equals(p.status()) && !p.requiresApproval()
+                                    && java.util.Set.of("low", "medium").contains(normalize(p.riskLevel())))
+                            .map(PermissionDefinition::permissionCode)
+                            .collect(java.util.stream.Collectors.toSet());
+                }
+                return cached;
+            }
+        };
+    }
+
+    private boolean isExplicitOrDailyGrant(AccessRepository.PermissionEffect effect,
+                                           java.util.function.Supplier<java.util.Set<String>> daily) {
+        // 默认管理员角色随权限字典播种，不能把其高危条目当成逐项授权。
+        return effect.source() != AccessRepository.Source.ROLE
+                || !"role_platform_admin".equals(effect.sourceId())
+                || daily.get().contains(effect.permissionCode());
+    }
+
+    public boolean isMasterAuthority(AccessActor actor) {
+        return isPlatformAdminBridge(actor)
+                && SessionIssuer.MASTER_USER_ID.equals(actor.id())
+                && SessionIssuer.MASTER_USERNAME.equals(actor.username());
     }
 
     /**
@@ -84,26 +140,30 @@ public class AuthorizationService implements CallerScopeResolver {
 
     /** 指定用户的有效权限集（平台管理用；调用方须先校验 {@code access.user.view}）。 */
     public EffectivePermissions effectivePermissionsForUser(String userId) {
-        Optional<AccessUser> target = accessRepository.findUserById(userId);
-        // F-AUTHZ-01 跨租户读修复：平台管理员（无 merchant scope）放行可读任意用户；merchant-scoped 调用方
-        // （商户管理员）只能读同 merchant_id 的目标用户，否则按 enforceMerchantScope 范式抛 CROSS_MERCHANT_FORBIDDEN，
-        // 防"按 userId 读他商户/平台管理员的完整权限清单"。目标 user 不存在时不在此泄露归属，交由下方按 userId 计算（空集）。
-        currentMerchantScope().ifPresent(scope -> {
-            String targetMerchantId = target.map(AccessUser::merchantId).orElse(null);
-            if (!scope.equals(targetMerchantId)) {
-                throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的用户");
+        AccessActor actor = currentActor();
+        AccessUser user = accessRepository.findUserById(userId)
+                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在"));
+        if (!isPlatformAdmin(actor)) {
+            String organizationId = requireProjectScope(actor);
+            if (!organizationId.equals(user.organizationId())) {
+                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权查询其他组织的用户");
             }
-        });
+            if (actor.merchantId() != null && !actor.merchantId().isBlank()
+                    && !actor.merchantId().equals(user.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权查询其他商户的用户");
+            }
+        }
+        Optional<AccessUser> target = Optional.of(user);
         boolean wildcard = target
-                .map(user -> "active".equals(user.status())
-                        && "platform_admin".equals(normalize(user.accountType())))
+                .map(account -> "active".equals(account.status())
+                        && "platform_admin".equals(normalize(account.accountType())))
                 .orElse(false);
         return computeEffectivePermissions(userId, wildcard);
     }
 
     private EffectivePermissions computeEffectivePermissions(String userId, boolean wildcard) {
         Instant checkedAt = Instant.now();
+        java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
         List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
                 .filter(effect -> isActive(effect, checkedAt))
                 .toList();
@@ -116,12 +176,20 @@ public class AuthorizationService implements CallerScopeResolver {
         // 实现 A：grants 预扣 denies（DENY 优先），denies 仍单独返回供前端展示冲突来源。
         List<String> grants = active.stream()
                 .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
+                .filter(effect -> isExplicitOrDailyGrant(effect, daily))
                 .map(AccessRepository.PermissionEffect::permissionCode)
                 .filter(code -> !denies.contains(code))
                 .distinct()
                 .sorted()
                 .toList();
-        return new EffectivePermissions(userId, grants, denies, wildcard, checkedAt);
+        java.util.Set<String> effective = new java.util.TreeSet<>(grants);
+        if (wildcard) {
+            accessRepository.listPermissions().stream()
+                    .filter(p -> SessionIssuer.MASTER_USER_ID.equals(userId) || daily.get().contains(p.permissionCode()))
+                    .map(PermissionDefinition::permissionCode).forEach(effective::add);
+        }
+        effective.removeAll(denies);
+        return new EffectivePermissions(userId, List.copyOf(effective), denies, false, checkedAt);
     }
 
     public AccessActor currentActor() {
@@ -143,38 +211,33 @@ public class AuthorizationService implements CallerScopeResolver {
                     user.status()
             );
         }
-        if (principal instanceof UserDetails userDetails) {
-            return new AccessActor(authentication.getName(), userDetails.getUsername(), "staff", null, null, "active");
-        }
-        return new AccessActor(authentication.getName(), authentication.getName(), "staff", null, null, "active");
+        throw ApiException.unauthorized("UNAUTHENTICATED", "无法识别的认证主体");
     }
 
-    /**
-     * Returns the caller scope token for idempotency key isolation.
-     * "m:{merchantId}" for merchant users, "p" for platform admins/staff.
-     * Returns "" on any error so IdempotencyService falls back to unscoped (safe degradation).
-     */
+    /** 非商户请求按已有主体及组织隔离；商户与系统请求沿用原范围。 */
     @Override
     public String resolve() {
-        try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth == null || !auth.isAuthenticated()) {
-                return "";
-            }
-            Object principal = auth.getPrincipal();
-            String merchantId = null;
-            if (principal instanceof AccessActor actor) {
-                merchantId = actor.merchantId();
-            } else if (principal instanceof AuthService.UserRecord user) {
-                merchantId = user.merchantId();
-            }
-            if (merchantId != null && !merchantId.isBlank()) {
-                return "m:" + merchantId;
-            }
-            return "p";
-        } catch (Exception e) {
+        String legacy = legacyScope();
+        if (!"p".equals(legacy)) {
+            return legacy;
+        }
+        AccessActor actor = currentActor();
+        if (actor.id() == null || actor.id().isBlank()) {
+            throw ApiException.unauthorized("UNAUTHENTICATED", "无法识别的认证主体");
+        }
+        return "u:" + actor.id().length() + ":" + actor.id() + ":"
+                + java.util.Objects.toString(actor.organizationId(), "");
+    }
+
+    @Override
+    public String legacyScope() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
             return "";
         }
+        AccessActor actor = currentActor();
+        String merchantId = actor.merchantId();
+        return merchantId == null || merchantId.isBlank() ? "p" : "m:" + merchantId;
     }
 
     private boolean knownPermission(String permissionCode) {
@@ -188,23 +251,13 @@ public class AuthorizationService implements CallerScopeResolver {
     /** 当前主体是否持有某权限(布尔·不抛错):用于按权限脱敏字段(如内部结算价)。 */
     public boolean currentActorHasPermission(String permissionCode) {
         try {
-            if (!knownPermission(permissionCode)) {
-                return false;
-            }
-            AccessActor actor = currentActor();
-            if (isPlatformAdminBridge(actor)) {
-                return true;
-            }
             Instant checkedAt = Instant.now();
+            AccessActor actor = currentActor();
             List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
-                    .filter(effect -> permissionCode.equals(effect.permissionCode()))
-                    .filter(effect -> isActive(effect, checkedAt))
-                    .toList();
-            if (effects.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
-                return false;
-            }
-            return effects.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT);
-        } catch (RuntimeException ex) {
+                    .filter(effect -> isActive(effect, checkedAt)).toList();
+            permissionGrant(actor, permissionCode, effects);
+            return true;
+        } catch (RuntimeException exception) {
             return false;
         }
     }
@@ -237,24 +290,18 @@ public class AuthorizationService implements CallerScopeResolver {
         }
     }
 
-    /**
-     * Returns the verified supervisor level of the current caller from their account type.
-     * Platform admins always get level 3. Staff accounts with accountType "supervisor_lN" get level N.
-     * All other accounts return 0, which is insufficient for any supervisor review policy.
-     */
+    /** 审批身份须由明确角色权限及实际管理职级共同证明；USB 主授权独立识别。 */
     public int currentSupervisorLevel() {
         AccessActor actor = currentActor();
-        if (isPlatformAdmin(actor)) {
+        if (isMasterAuthority(actor)) {
             return 3;
         }
-        String accountType = actor.accountType() == null ? "" : actor.accountType();
-        if (accountType.startsWith("supervisor_l")) {
-            try {
-                return Integer.parseInt(accountType.substring("supervisor_l".length()));
-            } catch (NumberFormatException ignored) {
-            }
+        if (!"active".equals(actor.status())
+                || !holdsPermissionViaRole(actor.id(), "governance.supervisor_review.approve")) {
+            return 0;
         }
-        return 0;
+        int rank = currentActorLevelRank();
+        return rank > 0 ? (rank + 2) / 3 : 0;
     }
 
     /**
@@ -263,7 +310,8 @@ public class AuthorizationService implements CallerScopeResolver {
      */
     public int currentActorLevelRank() {
         try {
-            return levelRankOf(currentActor().id());
+            AccessActor actor = currentActor();
+            return isMasterAuthority(actor) ? 30 : levelRankOf(actor.id());
         } catch (RuntimeException exception) {
             return 0;
         }
@@ -297,7 +345,7 @@ public class AuthorizationService implements CallerScopeResolver {
      * （ROLE 来源，非临时授权/模板单发）持有某权限码，从而解析"指定角色"审批闸而非旁路。
      *
      * <p>语义对齐 {@link #computeEffectivePermissions}：DENY 优先（命中 DENY 即不持有）；GRANT 仅当来源为
-     * {@link AccessRepository.Source#ROLE} 且在有效期内才算"角色赋予"。平台管理员桥（wildcard）视为持有。
+     * {@link AccessRepository.Source#ROLE} 且在有效期内才算"角色赋予"。不因平台管理员身份补齐审批角色。
      * 仓储为空或查询异常时安全保守地返回 {@code false}（不放行）。
      */
     public boolean holdsPermissionViaRole(String userId, String permissionCode) {
@@ -313,9 +361,11 @@ public class AuthorizationService implements CallerScopeResolver {
             if (active.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
                 return false;
             }
+            java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
             return active.stream()
                     .anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT
-                            && effect.source() == AccessRepository.Source.ROLE);
+                            && effect.source() == AccessRepository.Source.ROLE
+                            && isExplicitOrDailyGrant(effect, daily));
         } catch (RuntimeException exception) {
             return false;
         }
@@ -437,8 +487,7 @@ public class AuthorizationService implements CallerScopeResolver {
         if (isPlatformAdminBridge(actor)) {
             return Optional.empty();
         }
-        String projectId = actor.organizationId();
-        return projectId == null || projectId.isBlank() ? Optional.empty() : Optional.of(projectId);
+        return Optional.of(requireProjectScope(actor));
     }
 
     private boolean isPlatformAdminBridge(AccessActor actor) {

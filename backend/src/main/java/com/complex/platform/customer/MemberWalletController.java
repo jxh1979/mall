@@ -1,8 +1,9 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.customer.dto.StoredValueConsumeRequest;
 import com.complex.platform.customer.dto.StoredValueSettleRequest;
 import com.complex.platform.customer.dto.StoredValueTopupRequest;
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -53,6 +54,27 @@ public class MemberWalletController {
 
     // ---- 储值 ----
 
+    @PostMapping("/orders/{order_id}/stored-value/pay")
+    public ApiResponse<com.complex.platform.ticketing.TicketOrderRecord> payTicketOrder(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("order_id") String orderId,
+            @Valid @RequestBody com.complex.platform.customer.dto.StoredValueConsumeRequest request) {
+        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        return ApiResponse.ok(storedValueService.payTicketOrder(
+                customerId, orderId, request.accountId(), request.phone(), request.smsCode()));
+    }
+
+    @PostMapping("/stored-value/sms")
+    public ApiResponse<java.util.Map<String, String>> requestStoredValueCode(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestBody java.util.Map<String, String> request) {
+        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        customerService.requestStoredValueCode(customerId, request.get("phone"));
+        return ApiResponse.ok(java.util.Map.of("message", "验证码已发送"));
+    }
+
     @PostMapping("/stored-value/topup")
     public ApiResponse<PaymentIntentRecord> topup(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
@@ -74,17 +96,6 @@ public class MemberWalletController {
         return ApiResponse.ok(storedValueService.settleTopup(customerId, request.projectId(), request.merchantId(), request.paymentIntentId()));
     }
 
-    @PostMapping("/stored-value/consume")
-    public ApiResponse<CustomerStoredValueTransactionRecord> consume(
-            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
-            @RequestHeader(name = "Authorization", required = false) String authorization,
-            @Valid @RequestBody StoredValueConsumeRequest request
-    ) {
-        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        return ApiResponse.ok(storedValueService.consume(customerId, request.projectId(), request.merchantId(),
-                request.amountCent() == null ? 0L : request.amountCent(), request.reason(), request.idempotencyKey()));
-    }
-
     @GetMapping("/stored-value/account")
     public ApiResponse<CustomerStoredValueAccountRecord> getAccount(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
@@ -95,6 +106,25 @@ public class MemberWalletController {
         // B1d⑤：merchant_id 非空=查商户级卡；为空=查综合体通用卡。
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
         return ApiResponse.ok(repository.findStoredValueAccount(customerId, projectId, merchantId).orElse(null));
+    }
+
+    @GetMapping("/stored-value/accounts/{account_id}/transactions")
+    public ApiResponse<List<CustomerStoredValueTransactionRecord>> transactions(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("account_id") String accountId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        if (page < 1 || size < 1 || size > 100) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "分页参数无效");
+        }
+        if (repository.listStoredValueAccountsByCustomer(customerId).stream()
+                .noneMatch(account -> accountId.equals(account.id()))) {
+            throw com.complex.platform.common.api.ApiException.notFound(
+                    "STORED_VALUE_ACCOUNT_NOT_FOUND", "储值卡不存在");
+        }
+        return ApiResponse.ok(repository.listStoredValueTransactions(customerId, accountId, page, size));
     }
 
     @GetMapping("/stored-value/accounts")

@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -284,9 +286,9 @@ class AuthorizationServiceTests {
     }
 
     @Test
-    void effectivePermissionsMarksWildcardForActivePlatformAdmin() {
+    void effectivePermissionsDoesNotGiveAdministratorAnUnboundedWildcard() {
         authenticate("usr_admin", "seed-admin", "platform_admin");
-        assertThat(service.effectivePermissions().wildcard()).isTrue();
+        assertThat(service.effectivePermissions().wildcard()).isFalse();
     }
 
     @Test

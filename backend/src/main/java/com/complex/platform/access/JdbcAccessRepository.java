@@ -1,4 +1,5 @@
 package com.complex.platform.access;
+// 文件版本：V0.11
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -33,6 +34,15 @@ class JdbcAccessRepository implements AccessRepository {
                    AND status = 'active'
                 """, Map.of("permission_code", permissionCode), Integer.class);
         return count != null && count > 0;
+    }
+
+    @Override
+    public void lockGrantAuthorizationFacts() {
+        // M006-006。ponytail: 审批期间暂停授权定义写入；出现配置写入争用时再改为逐定义版本锁。
+        jdbcTemplate.getJdbcTemplate().execute("""
+                LOCK TABLE access_users, roles, role_permissions, permissions, permission_templates,
+                           permission_template_items, position_role_templates, staff_levels IN SHARE MODE
+                """);
     }
 
     @Override
@@ -92,41 +102,35 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     @Transactional
-    public PermissionTemplate saveTemplate(PermissionTemplate template, List<PermissionTemplateItem> items) {
+    public PermissionTemplate createTemplate(PermissionTemplate template, List<PermissionTemplateItem> items) {
         jdbcTemplate.update("""
                 INSERT INTO permission_templates (
                     id, template_code, template_name, description, template_type, source_template_id,
                     owner_scope_type, owner_scope_id, usage_mode, valid_from, valid_to, single_use,
-                    status, reason, approved_by, approved_at, created_at, updated_at
-                )
+                    status, reason, approved_by, approved_at, created_at, updated_at)
                 VALUES (
                     :id, :template_code, :template_name, :description, :template_type, :source_template_id,
                     :owner_scope_type, :owner_scope_id, :usage_mode, :valid_from, :valid_to, :single_use,
-                    :status, :reason, :approved_by, :approved_at, :created_at, :updated_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    template_code = EXCLUDED.template_code,
-                    template_name = EXCLUDED.template_name,
-                    description = EXCLUDED.description,
-                    template_type = EXCLUDED.template_type,
-                    source_template_id = EXCLUDED.source_template_id,
-                    owner_scope_type = EXCLUDED.owner_scope_type,
-                    owner_scope_id = EXCLUDED.owner_scope_id,
-                    usage_mode = EXCLUDED.usage_mode,
-                    valid_from = EXCLUDED.valid_from,
-                    valid_to = EXCLUDED.valid_to,
-                    single_use = EXCLUDED.single_use,
-                    status = EXCLUDED.status,
-                    reason = EXCLUDED.reason,
-                    approved_by = EXCLUDED.approved_by,
-                    approved_at = EXCLUDED.approved_at,
-                    updated_at = EXCLUDED.updated_at
+                    :status, :reason, :approved_by, :approved_at, :created_at, :updated_at)
                 """, templateParameters(template));
+        insertTemplateItems(items);
+        return template;
+    }
 
-        jdbcTemplate.update("""
-                DELETE FROM permission_template_items
-                 WHERE template_id = :template_id
-                """, Map.of("template_id", template.id()));
+    @Override
+    @Transactional
+    public PermissionTemplate saveTemplate(PermissionTemplate template, List<PermissionTemplateItem> items) {
+        int changed = jdbcTemplate.update("""
+                UPDATE permission_templates
+                   SET template_name = :template_name, description = :description, template_type = :template_type,
+                       usage_mode = :usage_mode, valid_from = :valid_from, valid_to = :valid_to,
+                       single_use = :single_use, status = :status, reason = :reason,
+                       approved_by = :approved_by, approved_at = :approved_at, updated_at = :updated_at
+                 WHERE id = :id
+                """, templateParameters(template));
+        if (changed != 1) throw new IllegalStateException("待修改的权限模板不存在");
+        jdbcTemplate.update("DELETE FROM permission_template_items WHERE template_id = :template_id",
+                Map.of("template_id", template.id()));
         insertTemplateItems(items);
         return template;
     }
@@ -142,7 +146,7 @@ class JdbcAccessRepository implements AccessRepository {
                         item.sensitive()
                 ))
                 .toList();
-        return saveTemplate(copy, copiedItems);
+        return createTemplate(copy, copiedItems);
     }
 
     @Override
@@ -166,17 +170,6 @@ class JdbcAccessRepository implements AccessRepository {
                     :id, :username, :account_type, :organization_id, :merchant_id, :status, :created_at,
                     :phone_hash, :created_via, :consent_reference, :evidence_attachment_ids, :operator_note
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    username = EXCLUDED.username,
-                    account_type = EXCLUDED.account_type,
-                    organization_id = EXCLUDED.organization_id,
-                    merchant_id = EXCLUDED.merchant_id,
-                    status = EXCLUDED.status,
-                    phone_hash = EXCLUDED.phone_hash,
-                    created_via = EXCLUDED.created_via,
-                    consent_reference = EXCLUDED.consent_reference,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    operator_note = EXCLUDED.operator_note
                 """, new MapSqlParameterSource()
                 .addValue("id", user.id())
                 .addValue("username", user.username())
@@ -365,12 +358,6 @@ class JdbcAccessRepository implements AccessRepository {
                 VALUES (
                     :id, :role_name, :description, :data_scope, :status, :created_at, :organization_id
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    role_name = EXCLUDED.role_name,
-                    description = EXCLUDED.description,
-                    data_scope = EXCLUDED.data_scope,
-                    status = EXCLUDED.status,
-                    organization_id = EXCLUDED.organization_id
                 """, new MapSqlParameterSource()
                 .addValue("id", role.id())
                 .addValue("role_name", role.roleName())
@@ -431,14 +418,14 @@ class JdbcAccessRepository implements AccessRepository {
         if (organizationId == null) {
             return jdbcTemplate.query("""
                     SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                           status, created_by, created_at, updated_at
+                           status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
                       FROM position_role_templates
                      ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
                     """, this::mapPositionRoleTemplate);
         }
         return jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                       status, created_by, created_at, updated_at
+                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
                   FROM position_role_templates
                  WHERE organization_id IS NULL OR organization_id = :organization_id
                  ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
@@ -449,9 +436,9 @@ class JdbcAccessRepository implements AccessRepository {
     public Optional<PositionRoleTemplate> findPositionRoleTemplateById(String id) {
         List<PositionRoleTemplate> result = jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                       status, created_by, created_at, updated_at
+                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
                   FROM position_role_templates
-                 WHERE id = :id
+                 WHERE id = :id FOR UPDATE
                 """, Map.of("id", id), this::mapPositionRoleTemplate);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
@@ -468,9 +455,9 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("staff_level_id", staffLevelId);
         List<PositionRoleTemplate> result = jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                       status, created_by, created_at, updated_at
+                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
                   FROM position_role_templates
-                 WHERE status = 'active'
+                 WHERE status = 'active' AND archived_at IS NULL AND deleted_at IS NULL
                    AND position_code = :position_code
                    AND staff_level_id = :staff_level_id
                    AND (
@@ -478,7 +465,7 @@ class JdbcAccessRepository implements AccessRepository {
                         OR (:organization_id IS NOT NULL AND (organization_id = :organization_id OR organization_id IS NULL))
                    )
                  ORDER BY CASE WHEN organization_id = :organization_id THEN 0 ELSE 1 END
-                 LIMIT 1
+                 LIMIT 1 FOR SHARE
                 """, parameters, this::mapPositionRoleTemplate);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
@@ -518,10 +505,38 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public void deletePositionRoleTemplate(String id) {
-        jdbcTemplate.update("""
-                DELETE FROM position_role_templates
+        throw new IllegalStateException("岗位模板须经过存档及删除审批，禁止物理删除");
+    }
+
+    @Override
+    public long countPositionTemplateUsage(String id) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM user_position_assignments assignment
+                 WHERE assigned_position_template_id = :id
+                    OR (assigned_position_template_id IS NULL AND EXISTS (
+                        SELECT 1 FROM position_role_templates mapping
+                         WHERE mapping.id = :id AND mapping.position_code = assignment.position_code
+                           AND mapping.staff_level_id = assignment.staff_level_id
+                           AND (mapping.organization_id IS NULL
+                                OR mapping.organization_id = assignment.organization_id)))
+                """, Map.of("id", id), Long.class);
+    }
+
+    @Override
+    public void savePositionTemplateLifecycle(PositionRoleTemplate mapping, String actorId) {
+        int changed = jdbcTemplate.update("""
+                UPDATE position_role_templates
+                   SET status = 'inactive', archived_at = :archived_at, deleted_at = :deleted_at,
+                       delete_review_id = :review_id, delete_reason = :reason, updated_at = :updated_at,
+                       archived_by = CASE WHEN CAST(:archived_at AS timestamptz) IS NULL THEN NULL ELSE COALESCE(archived_by, :actor) END,
+                       deleted_by = CASE WHEN CAST(:deleted_at AS timestamptz) IS NULL THEN NULL ELSE :actor END
                  WHERE id = :id
-                """, Map.of("id", id));
+                """, new MapSqlParameterSource().addValue("id", mapping.id())
+                .addValue("archived_at", timestampWithTimeZone(mapping.archivedAt()), java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
+                .addValue("deleted_at", timestampWithTimeZone(mapping.deletedAt()), java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
+                .addValue("review_id", mapping.deleteReviewId()).addValue("reason", mapping.deleteReason())
+                .addValue("actor", actorId).addValue("updated_at", timestampWithTimeZone(mapping.updatedAt())));
+        if (changed != 1) throw new IllegalStateException("岗位模板不存在");
     }
 
     @Override
@@ -673,6 +688,15 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public AccessGrantRequestRecord saveGrantRequest(AccessGrantRequestRecord request) {
+        if (!"pending".equals(request.status())) {
+            int changed = jdbcTemplate.update("""
+                    UPDATE access_grant_requests
+                       SET status = :status, decided_by = :decided_by, decided_at = :decided_at, updated_at = :updated_at
+                     WHERE id = :id AND status = 'pending'
+                    """, grantRequestParameters(request));
+            if (changed != 1) throw new IllegalStateException("授权申请已处理或不存在");
+            return request;
+        }
         jdbcTemplate.update("""
                 INSERT INTO access_grant_requests (
                     id, request_type, target_user_id, target_role_id, template_id, position_code,
@@ -688,28 +712,6 @@ class JdbcAccessRepository implements AccessRepository {
                     :reason, :requested_by, :decided_by, :decided_at, :project_id, :merchant_id,
                     :created_at, :updated_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    request_type = EXCLUDED.request_type,
-                    target_user_id = EXCLUDED.target_user_id,
-                    target_role_id = EXCLUDED.target_role_id,
-                    template_id = EXCLUDED.template_id,
-                    position_code = EXCLUDED.position_code,
-                    staff_level_id = EXCLUDED.staff_level_id,
-                    base_salary_amount_cent = EXCLUDED.base_salary_amount_cent,
-                    salary_currency = EXCLUDED.salary_currency,
-                    salary_detail = EXCLUDED.salary_detail,
-                    permission_codes = EXCLUDED.permission_codes,
-                    valid_from = EXCLUDED.valid_from,
-                    expires_at = EXCLUDED.expires_at,
-                    single_use = EXCLUDED.single_use,
-                    status = EXCLUDED.status,
-                    review_id = EXCLUDED.review_id,
-                    reason = EXCLUDED.reason,
-                    decided_by = EXCLUDED.decided_by,
-                    decided_at = EXCLUDED.decided_at,
-                    project_id = EXCLUDED.project_id,
-                    merchant_id = EXCLUDED.merchant_id,
-                    updated_at = EXCLUDED.updated_at
                 """, grantRequestParameters(request));
         return request;
     }
@@ -724,8 +726,67 @@ class JdbcAccessRepository implements AccessRepository {
                        created_at, updated_at
                   FROM access_grant_requests
                  WHERE id = :id
+                   FOR UPDATE
                 """, Map.of("id", id), this::mapGrantRequest);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public void saveGrantFingerprint(String id, String fingerprint) {
+        int changed = jdbcTemplate.update("""
+                UPDATE access_grant_requests SET authorization_fingerprint = :fingerprint
+                 WHERE id = :id AND authorization_fingerprint IS NULL AND status = 'pending'
+                """, Map.of("id", id, "fingerprint", fingerprint));
+        if (changed != 1) {
+            throw new IllegalStateException("授权申请快照未能保存");
+        }
+    }
+
+    @Override
+    public Optional<String> findGrantFingerprint(String id) {
+        List<String> values = jdbcTemplate.query("SELECT authorization_fingerprint FROM access_grant_requests WHERE id = :id",
+                Map.of("id", id), (rs, row) -> rs.getString(1));
+        return values.isEmpty() ? Optional.empty() : Optional.ofNullable(values.get(0));
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<AccessGrantRequestRecord> pageGrantRequests(
+            Instant cutoff, String organizationId, String merchantId, int page, int size) {
+        var parameters = new MapSqlParameterSource()
+                .addValue("cutoff", timestampWithTimeZone(cutoff))
+                .addValue("organization_id", organizationId, java.sql.Types.VARCHAR)
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("size", size).addValue("offset", ((long) page - 1) * size);
+        String from = """
+                 FROM access_grant_requests request
+                 LEFT JOIN access_users target ON target.id = request.target_user_id
+                WHERE request.created_at >= :cutoff
+                  AND (:organization_id IS NULL OR
+                       (target.organization_id = :organization_id
+                        AND (request.project_id IS NULL OR request.project_id = :organization_id)))
+                  AND (:merchant_id IS NULL OR request.merchant_id = :merchant_id)
+                """;
+        long total = jdbcTemplate.queryForObject("SELECT count(*) " + from, parameters, Long.class);
+        List<AccessGrantRequestRecord> items = jdbcTemplate.query("SELECT request.* " + from
+                + " ORDER BY request.created_at DESC, request.id LIMIT :size OFFSET :offset", parameters, this::mapGrantRequest);
+        return new com.complex.platform.common.api.PageResponse<>(items, page, size, total);
+    }
+
+    @Override
+    public Optional<String> findGrantPolicy() {
+        return jdbcTemplate.query("""
+                SELECT parameters::text FROM supervisor_review_policies
+                 WHERE policy_code = 'access_grant' AND enabled = true
+                """, (rs, row) -> rs.getString(1)).stream().findFirst();
+    }
+
+    @Override
+    public void saveGrantPolicy(String policyJson) {
+        int changed = jdbcTemplate.update("""
+                UPDATE supervisor_review_policies SET parameters = CAST(:parameters AS jsonb), updated_at = now()
+                 WHERE policy_code = 'access_grant' AND enabled = true
+                """, Map.of("parameters", policyJson));
+        if (changed != 1) throw new IllegalStateException("授权政策未配置");
     }
 
     @Override
@@ -755,6 +816,31 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    @Transactional
+    public void replacePositionGrants(String userId, String roleId, String mappingId, List<String> applicationIds,
+                                      String actorId, Instant changedAt) {
+        var parameters = new MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("role_id", roleId).addValue("mapping_id", mappingId)
+                .addValue("application_ids", applicationIds.toArray(String[]::new), java.sql.Types.ARRAY)
+                .addValue("actor_id", actorId).addValue("changed_at", timestampWithTimeZone(changedAt));
+        jdbcTemplate.update("""
+                UPDATE permission_template_applications
+                   SET status = 'revoked', revoked_by = :actor_id, revoked_at = :changed_at
+                 WHERE target_id = :user_id AND status = 'active'
+                   AND id = ANY ((SELECT position_application_ids FROM user_position_assignments
+                                   WHERE user_id = :user_id)::varchar[])
+                """, parameters);
+        int changed = jdbcTemplate.update("""
+                UPDATE user_position_assignments
+                   SET assigned_role_id = :role_id, assigned_position_template_id = :mapping_id, position_application_ids = :application_ids
+                 WHERE user_id = :user_id
+                """, parameters);
+        if (changed != 1) {
+            throw new IllegalStateException("岗位派生授权未能保存");
+        }
+    }
+
+    @Override
     public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
         List<PermissionEffect> effects = new ArrayList<>();
         effects.addAll(jdbcTemplate.query("""
@@ -765,6 +851,15 @@ class JdbcAccessRepository implements AccessRepository {
                   JOIN roles r ON r.id = ur.role_id AND r.status = 'active'
                   JOIN role_permissions rp ON rp.role_id = r.id
                  WHERE ur.user_id = :user_id
+                """, Map.of("user_id", userId), this::mapPermissionEffect));
+        effects.addAll(jdbcTemplate.query("""
+                SELECT position.user_id, permission.permission_code, 'grant' AS effect, 'ROLE' AS source,
+                       role.id AS source_id, NULL::timestamptz AS valid_from, NULL::timestamptz AS valid_until,
+                       FALSE AS single_use, FALSE AS consumed
+                  FROM user_position_assignments position
+                  JOIN roles role ON role.id = position.assigned_role_id AND role.status = 'active'
+                  JOIN role_permissions permission ON permission.role_id = role.id
+                 WHERE position.user_id = :user_id
                 """, Map.of("user_id", userId), this::mapPermissionEffect));
         effects.addAll(jdbcTemplate.query("""
                 SELECT pta.target_id AS user_id, pti.permission_code, pti.effect, 'TEMPLATE_APPLICATION' AS source,
@@ -799,6 +894,7 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    @Transactional
     public boolean markSingleUsePermissionConsumed(
             String sourceId,
             String permissionCode,
@@ -814,31 +910,39 @@ class JdbcAccessRepository implements AccessRepository {
         // AND consumed = FALSE is the atomic guard against TOCTOU races.
         // If another concurrent request already consumed this grant, UPDATE returns 0 rows.
         int templateRows = jdbcTemplate.update("""
-                UPDATE permission_template_applications
+                UPDATE permission_template_applications AS application
                    SET consumed = TRUE,
                        consumed_at = :consumed_at
-                 WHERE id = :source_id
-                   AND target_id = :user_id
-                   AND single_use = TRUE
-                   AND consumed = FALSE
+                  FROM permission_templates AS template
+                 WHERE application.id = :source_id
+                   AND application.template_id = template.id
+                   AND application.target_id = :user_id
+                   AND (application.single_use OR template.single_use)
+                   AND application.status = 'active'
+                   AND application.consumed = FALSE
                 """, parameters);
-        int grantRows = jdbcTemplate.update("""
+        int grantRows = templateRows == 0 ? jdbcTemplate.update("""
                 UPDATE temporary_permission_grants
                    SET consumed = TRUE,
                        consumed_at = :consumed_at
                  WHERE id::text = :source_id
                    AND subject_id = :user_id
+                   AND permission_code = :permission_code
+                   AND status = 'active'
                    AND single_use = TRUE
                    AND consumed = FALSE
-                """, parameters);
+                """, parameters) : 0;
         boolean consumed = templateRows > 0 || grantRows > 0;
         if (consumed) {
+            parameters.addValue("application_id", templateRows > 0 ? sourceId : null)
+                    .addValue("reason", templateRows > 0 ? "single_use"
+                            : "single_use:temporary_grant:" + sourceId);
             jdbcTemplate.update("""
                     INSERT INTO permission_template_usage_logs (
                         id, application_id, user_id, permission_code, result, reason, occurred_at
                     )
                     VALUES (
-                        :usage_log_id, :source_id, :user_id, :permission_code, 'consumed', 'single_use', :consumed_at
+                        :usage_log_id, :application_id, :user_id, :permission_code, 'consumed', :reason, :consumed_at
                     )
                     """, parameters);
         }
@@ -1065,7 +1169,9 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getString("status"),
                 resultSet.getString("created_by"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                nullableInstant(resultSet, "archived_at"), nullableInstant(resultSet, "deleted_at"),
+                resultSet.getString("delete_review_id"), resultSet.getString("delete_reason")
         );
     }
 

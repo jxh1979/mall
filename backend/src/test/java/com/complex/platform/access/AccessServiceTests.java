@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.02
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,6 +60,14 @@ class AccessServiceTests {
         credentialProvisioner = new RecordingCredentialProvisioner();
         accessRepository.addPermission("ops.production_readiness.view", "medium", false);
         accessRepository.addPermission("ops.production_readiness.check", "high", false);
+        accessRepository.addPermission("governance.supervisor_review.view", "medium", false);
+        accessRepository.addPermission("governance.supervisor_review.approve", "high", false);
+        // M006-001/012：夹具明确逐项授予高危权限和审批角色，不依赖管理员隐式全权。
+        accessRepository.roles.put("explicit_admin_grants", new RoleRecord(
+                "explicit_admin_grants", "Explicit test grants", null, "global", "active", Instant.now(),
+                List.of("ops.production_readiness.check", "governance.supervisor_review.view",
+                        "governance.supervisor_review.approve", "finance.ar_ap.manage"), null));
+        accessRepository.assignUserRole("usr_admin", "explicit_admin_grants");
         authorizationService = new AuthorizationService(accessRepository);
         service = newAccessService(false, null);
         authenticateAsPlatformAdmin("seed-org");
@@ -70,7 +80,7 @@ class AccessServiceTests {
 
     @Test
     void copyPermissionTemplateKeepsSnapshotWhenSourceChangesAndWritesAuditEvent() {
-        service.createPermissionTemplate(new PermissionTemplateRequest(
+        PermissionTemplate source = service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-source",
                 "seed",
                 List.of(),
@@ -84,27 +94,27 @@ class AccessServiceTests {
                 true
         ));
 
-        PermissionTemplate copy = service.copyPermissionTemplate("tpl_create_source", new PermissionTemplateRequest(
+        PermissionTemplate copy = service.copyPermissionTemplate(source.id(), new PermissionTemplateRequest(
                 "copy-source",
                 "copy",
                 List.of(),
                 "Copied template",
                 "temporary",
-                "tpl_create_source",
+                source.id(),
                 List.of("ops.production_readiness.view"),
                 "project",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-15T00:00:00Z"),
                 true
         ));
-        service.updatePermissionTemplate("tpl_create_source", new PermissionTemplateRequest(
+        service.updatePermissionTemplate(source.id(), new PermissionTemplateRequest(
                 "update-source",
                 "update",
                 List.of(),
                 "Source template updated",
-                "temporary",
+                "base",
                 null,
-                List.of("ops.production_readiness.check"),
+                List.of("ops.production_readiness.view"),
                 "project",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-15T00:00:00Z"),
@@ -157,7 +167,9 @@ class AccessServiceTests {
 
     @Test
     void applyPermissionTemplateAppliesToManyUsersAndWritesAuditEvent() {
-        service.createPermissionTemplate(new PermissionTemplateRequest(
+        accessRepository.createUser(new AccessUser("usr_1", "one", "staff", "seed-org", null, "active", Instant.now()));
+        accessRepository.createUser(new AccessUser("usr_2", "two", "staff", "seed-org", null, "active", Instant.now()));
+        PermissionTemplate template = service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-apply",
                 "seed",
                 List.of(),
@@ -171,11 +183,11 @@ class AccessServiceTests {
                 true
         ));
 
-        PermissionTemplateApplyResult result = service.applyPermissionTemplate("tpl_create_apply", new PermissionTemplateApplyRequest(
+        PermissionTemplateApplyResult result = service.applyPermissionTemplate(template.id(), new PermissionTemplateApplyRequest(
                 "apply-many",
                 "apply",
                 List.of(),
-                "tpl_create_apply",
+                template.id(),
                 List.of("usr_1", "usr_2"),
                 "merge"
         ));
@@ -194,6 +206,7 @@ class AccessServiceTests {
 
     @Test
     void temporaryGrantCreateAndRevokeWriteAuditEvents() {
+        accessRepository.createUser(new AccessUser("usr_1", "one", "staff", "seed-org", null, "active", Instant.now()));
         TemporaryGrant grant = service.createTemporaryGrant(new TemporaryGrantRequest(
                 "grant-once",
                 "grant",
@@ -242,13 +255,13 @@ class AccessServiceTests {
 
     @Test
     void createAccessUserWithAllowedAccountTypeSucceeds() {
-        for (String type : List.of("staff", "merchant", "supervisor", "sales", "merchant_admin", "outsourced_vendor")) {
+        for (String type : List.of("outsourced_vendor")) {
             AccessUser user = service.createAccessUser(new AccessUserRequest(
                     "user-type-" + type,
                     null,
                     List.of(),
                     "user_" + type,
-                    null,
+                    "password",
                     null,
                     type,
                     "seed-org",
@@ -275,9 +288,9 @@ class AccessServiceTests {
                 null,
                 List.of(),
                 "cross_merchant_by_admin",
+                "password",
                 null,
-                null,
-                "merchant",
+                "outsourced_vendor",
                 "seed-org",
                 "merchant-other",
                 "active"
@@ -313,14 +326,14 @@ class AccessServiceTests {
                 "manual_evidence",
                 "change-me-123",
                 "13800000002",
-                "sales",
+                "outsourced_vendor",
                 "seed-org",
                 "merchant-1",
                 "active",
                 "consent_staff_manual_003"
         ));
 
-        assertThat(user.phoneHash()).hasSize(64).doesNotContain("13800000002");
+        assertThat(user.phoneHash()).isNull();
         assertThat(user.createdVia()).isEqualTo("manual_admin");
         assertThat(user.consentReference()).isEqualTo("consent_staff_manual_003");
         assertThat(user.evidenceAttachmentIds()).containsExactly("ev_consent_manual_003", "ev_hr_ticket_001");
@@ -361,8 +374,7 @@ class AccessServiceTests {
 
     @Test
     void assignStaffLevelSetsLevelAndDefaultsCurrencyToCny() {
-        service.createAccessUser(new AccessUserRequest(
-                "k-u-emp1", null, List.of(), "emp1", null, null, "staff", "seed-org", null, "active"));
+        accessRepository.createUser(new AccessUser("usr_emp1", "emp1", "staff", "seed-org", null, "active", Instant.now()));
         StaffLevelAssignment assignment = service.assignStaffLevel(new StaffLevelAssignmentRequest(
                 "k-a-emp1", null, "usr_emp1", "lvl_m10_upper", 1_500_000L, null, "月薪 15000"));
         assertThat(assignment.staffLevelId()).isEqualTo("lvl_m10_upper");
@@ -376,8 +388,7 @@ class AccessServiceTests {
 
     @Test
     void assignStaffLevelRejectsUnknownLevel() {
-        service.createAccessUser(new AccessUserRequest(
-                "k-u-emp2", null, List.of(), "emp2", null, null, "staff", "seed-org", null, "active"));
+        accessRepository.createUser(new AccessUser("usr_emp2", "emp2", "staff", "seed-org", null, "active", Instant.now()));
         assertThatThrownBy(() -> service.assignStaffLevel(new StaffLevelAssignmentRequest(
                 "k-a-emp2", null, "usr_emp2", "lvl_does_not_exist", null, null, null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
@@ -388,8 +399,7 @@ class AccessServiceTests {
 
     @Test
     void assignStaffLevelRejectsNonCnyCurrency() {
-        service.createAccessUser(new AccessUserRequest(
-                "k-u-emp3", null, List.of(), "emp3", null, null, "staff", "seed-org", null, "active"));
+        accessRepository.createUser(new AccessUser("usr_emp3", "emp3", "staff", "seed-org", null, "active", Instant.now()));
         assertThatThrownBy(() -> service.assignStaffLevel(new StaffLevelAssignmentRequest(
                 "k-a-emp3", null, "usr_emp3", "lvl_m1_lower", 100L, "USD", null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
@@ -477,7 +487,8 @@ class AccessServiceTests {
         assertThat(result.roleId()).isEqualTo("role_ops_check");
         assertThat(result.templateId()).isEqualTo("tpl_ops_check");
         assertThat(result.templateApplicationCount()).isEqualTo(1);
-        assertThat(accessRepository.userRoles.get("usr_position_target")).contains("role_ops_check");
+        assertThat(accessRepository.positionRoles.get("usr_position_target")).isEqualTo("role_ops_check");
+        assertThat(accessRepository.userRoles.getOrDefault("usr_position_target", Set.of())).doesNotContain("role_ops_check");
         assertThat(accessRepository.findUserPositionAssignment("usr_position_target")).get()
                 .extracting(UserPositionAssignment::positionCode, UserPositionAssignment::staffLevelId)
                 .containsExactly("ops_manager", "lvl_m1_lower");
@@ -567,6 +578,22 @@ class AccessServiceTests {
             assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL");
         });
         assertThat(accessRepository.findUserPositionAssignment("usr_position_high_risk")).isEmpty();
+    }
+
+
+    // M006-016：混合风险中有未配置等级时，不能忽略它并按另一个较低等级放行。
+    @Test void grantPolicyRejectsAnyUnclassifiedPermissionInTheRequestedRole() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        accessRepository.addPermission("future.permission", "unclassified", true);
+        service = newAccessService(true, supervisorReviewService(new InMemorySupervisorReviewRepository()));
+        accessRepository.createUser(new AccessUser("target", "target", "staff", "seed-org", null, "active", Instant.now()));
+        accessRepository.roles.put("mixed", new RoleRecord("mixed", "mixed", null, "project", "active", Instant.now(),
+                List.of("ops.production_readiness.check", "future.permission"), null));
+        assertThatThrownBy(() -> service.applyGrant(new AccessGrantApplyRequest(
+                "mixed-risk", null, List.of(), "user_role", "target", "mixed",
+                null, null, null, null, null, null, null, null, false, "reason")))
+                .isInstanceOf(ApiException.class);
+        assertThat(accessRepository.grantRequests).isEmpty();
     }
 
     @Test
@@ -715,7 +742,8 @@ class AccessServiceTests {
         accessRepository.grantRequests.put("agr_summary_2", temporaryGrantRequest(
                 "agr_summary_2", "usr_summary", "cashier", "lvl_m1_lower", "ops.production_readiness.check", now));
 
-        AccessGrantSummary summary = service.grantSummary(30, 2, 2);
+        accessRepository.policy = accessRepository.policy.replace("\"value\":3", "\"value\":2");
+        AccessGrantSummary summary = service.grantSummary(null, null, null);
 
         assertThat(summary.positionRecommendations())
                 .extracting(AccessGrantPositionSummary::positionCode,
@@ -727,13 +755,17 @@ class AccessServiceTests {
         assertThat(summary.userAnomalies())
                 .extracting(AccessGrantUserSummary::userId, AccessGrantUserSummary::requestCount)
                 .contains(org.assertj.core.groups.Tuple.tuple("usr_summary", 2L));
+        accessRepository.policy = accessRepository.policy.replace("\"value\":2", "\"value\":3");
+        AccessGrantSummary higherThreshold = service.grantSummary(null, null, null);
+        assertThat(higherThreshold.positionRecommendations()).isEmpty();
+        assertThat(higherThreshold.userAnomalies()).isEmpty();
     }
 
     // ── P1: applyPermissionTemplate 跨组织校验 ─────────────────────────────
 
     @Test
     void applyPermissionTemplateWithCrossOrgTargetUserThrowsForbidden() {
-        service.createPermissionTemplate(new PermissionTemplateRequest(
+        PermissionTemplate template = service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-cross-apply",
                 "seed",
                 List.of(),
@@ -754,12 +786,12 @@ class AccessServiceTests {
         // Switch to non-platform-admin actor in org_a
         authenticateAsOrgUser("usr_a", "user-a", "org_a");
 
-        assertThatThrownBy(() -> service.applyPermissionTemplate("tpl_create_cross_apply",
+        assertThatThrownBy(() -> service.applyPermissionTemplate(template.id(),
                 new PermissionTemplateApplyRequest(
                         "apply-cross",
                         "apply",
                         List.of(),
-                        "tpl_create_cross_apply",
+                        template.id(),
                         List.of("usr_cross_org"),
                         "merge"
                 ))).isInstanceOfSatisfying(ApiException.class, e -> {
@@ -859,7 +891,7 @@ class AccessServiceTests {
     void applyPlatformOwnedTemplateByOrgUserToSameOrgUserIsForbidden() {
         // A1-05：apply 必须校验模板归属——非平台管理员不得套用平台/他组织模板（即便目标用户同组织），
         // 否则可借平台模板把高权限项下发给本组织用户提权。
-        service.createPermissionTemplate(new PermissionTemplateRequest(
+        PermissionTemplate template = service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-platform-tpl", "seed", List.of(), "Platform Template", "temporary",
                 null, List.of("ops.production_readiness.check"), "project",
                 Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false));
@@ -867,9 +899,9 @@ class AccessServiceTests {
                 "usr_org_a_same", "org-a-same", "staff", "org_a", null, "active",
                 Instant.parse("2026-06-14T00:00:00Z")));
         authenticateAsOrgUser("usr_org_a_actor2", "org-a-actor2", "org_a");
-        assertThatThrownBy(() -> service.applyPermissionTemplate("tpl_create_platform_tpl",
+        assertThatThrownBy(() -> service.applyPermissionTemplate(template.id(),
                 new PermissionTemplateApplyRequest("apply-platform", "apply", List.of(),
-                        "tpl_create_platform_tpl", List.of("usr_org_a_same"), "merge")))
+                        template.id(), List.of("usr_org_a_same"), "merge")))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
             assertThat(e.status().value()).isEqualTo(403);
             assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN");
@@ -978,7 +1010,7 @@ class AccessServiceTests {
     void listGrantRequestsFiltersRowsStampedWithOtherProjects() {
         // 2026-07-18 收尾（多综合体前置）：授权申请行带 project_id 时，项目员工只见本项目行（currentProjectScopeQuietly
         // 谓词范式）；行无 project_id 时沿用目标账号同组织判定；平台管理员全量。
-        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        Instant now = Instant.now();
         accessRepository.users.put("usr_scope_target", new AccessUser(
                 "usr_scope_target", "scope-target", "staff", "org_a", null, "active", now));
         accessRepository.saveGrantRequest(grantRequestRow("agr_scope_a", "usr_scope_target", "org_a", now));
@@ -1044,6 +1076,17 @@ class AccessServiceTests {
 
     private static final class InMemoryAccessRepository implements AccessRepository {
         final Map<String, PermissionDefinition> permissions = new LinkedHashMap<>();
+        String policy = "{\"windowDays\":{\"value\":30,\"min\":1,\"max\":2147483647},\"positionThreshold\":{\"value\":3,\"min\":1,\"max\":2147483647},\"userThreshold\":{\"value\":3,\"min\":1,\"max\":2147483647},\"riskReviews\":{\"low\":{\"approvalLevel\":\"one_level_up\",\"requiredLevel\":1},\"medium\":{\"approvalLevel\":\"one_level_up\",\"requiredLevel\":1},\"high\":{\"approvalLevel\":\"two_levels_up\",\"requiredLevel\":2},\"critical\":{\"approvalLevel\":\"top_authority\",\"requiredLevel\":3}}}";
+        final Map<String, String> fingerprints = new LinkedHashMap<>();
+        final Map<String, String> positionRoles = new LinkedHashMap<>();
+        @Override public void lockGrantAuthorizationFacts() {} // 单线程内存夹具；真实锁在 M006JdbcRegressionTests 验证。
+        @Override public Optional<String> findGrantPolicy() { return Optional.of(policy); }
+        @Override public void saveGrantFingerprint(String id, String fingerprint) {
+            if (fingerprints.putIfAbsent(id, fingerprint) != null) throw new IllegalStateException("fingerprint already set");
+        }
+        @Override public Optional<String> findGrantFingerprint(String id) { return Optional.ofNullable(fingerprints.get(id)); }
+        @Override public void replacePositionGrants(String userId, String roleId, String mappingId,
+                List<String> applicationIds, String actorId, Instant at) { positionRoles.put(userId, roleId); }
         final Map<String, PermissionTemplate> templates = new LinkedHashMap<>();
         final Map<String, List<PermissionTemplateItem>> items = new LinkedHashMap<>();
         final Map<String, TemporaryGrant> temporaryGrants = new LinkedHashMap<>();

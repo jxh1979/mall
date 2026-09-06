@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.02
+
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AccessUser;
@@ -75,7 +77,7 @@ public class StaffService {
             org.springframework.beans.factory.ObjectProvider<com.complex.platform.access.AccessCredentialProvisioner> credentialProvisioner
     ) {
         this(repository, accessRepository, idempotencyService, auditEventService, authorizationService,
-                credentialProvisioner.getIfAvailable(com.complex.platform.access.AccessCredentialProvisioner::noop));
+                credentialProvisioner.getIfAvailable());
     }
 
     StaffService(
@@ -105,23 +107,15 @@ public class StaffService {
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
-        this.credentialProvisioner = credentialProvisioner == null
-                ? com.complex.platform.access.AccessCredentialProvisioner.noop() : credentialProvisioner;
+        this.credentialProvisioner = credentialProvisioner;
     }
 
     // ============================================================ 员工注册 / 审批
 
     @GuardedAction(permission = "staff.profile.submit")
+    @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord submitRegistration(StaffRegistrationRequest request) {
-        // F-AUTHZ-02 防跨商户越权注册：员工注册非裁决#2的治理写（merchant.profile/entity.binding/
-        // contract.draft/governance.space.manage），故用 merchant scope 守卫而非 requirePlatformScope——
-        // 平台管理员可为任意商户注册；merchant-scoped 调用者只能为本商户注册，允许商户自助管本商户员工。
-        authorizationService.currentMerchantScope().ifPresent(scope -> {
-            if (!scope.equals(trimToNull(request.merchantId()))) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "不能为其他商户登记员工");
-            }
-        });
+        requireRegistrationScope(request.projectId(), request.merchantId());
         try {
             return idempotencyService.execute(
                     "submitStaffRegistration",
@@ -143,7 +137,7 @@ public class StaffService {
                         }
                         Instant now = Instant.now();
                         StaffProfileRecord profile = new StaffProfileRecord(
-                                "staff_" + slug(request.idempotencyKey()),
+                                "staff_" + UUID.randomUUID(),
                                 projectId,
                                 trimToNull(request.merchantId()),
                                 null,
@@ -175,6 +169,7 @@ public class StaffService {
     }
 
     @GuardedAction(permission = "staff.profile.review")
+    @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord reviewRegistration(String id, StaffRegistrationReviewRequest request) {
         try {
             return idempotencyService.execute(
@@ -189,8 +184,14 @@ public class StaffService {
                         }
                         String decision = trimToNull(request.decision());
                         AccessActor actor = authorizationService.currentActor();
+                        if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) != null) {
+                            throw ApiException.forbidden("COMPANY_APPROVAL_REQUIRED", "员工注册须由对应公司审批，商户不能自行批准");
+                        }
                         Instant now = Instant.now();
                         if ("approve".equalsIgnoreCase(decision == null ? "" : decision)) {
+                            if (credentialProvisioner == null) {
+                                throw ApiException.conflict("CREDENTIAL_PROVIDER_UNAVAILABLE", "登录凭证服务未配置，不能开通员工账号");
+                            }
                             String initialPassword = trimToNull(request.initialPassword());
                             if (initialPassword == null) {
                                 throw ApiException.badRequest("VALIDATION_FAILED",
@@ -200,7 +201,7 @@ public class StaffService {
                                     "usr_" + profile.id(),
                                     "staff_" + profile.id(),
                                     "staff",
-                                    null,
+                                    profile.projectId(),
                                     profile.merchantId(),
                                     "active",
                                     now
@@ -243,7 +244,7 @@ public class StaffService {
                             return saved;
                         }
                         throw ApiException.badRequest("VALIDATION_FAILED",
-                                "审批结论必须为通过（approve）或驳回（reject）");
+                                "审批结论必须为通过或驳回");
                     },
                     StaffProfileRecord.class
             );
@@ -262,7 +263,14 @@ public class StaffService {
     /** V264：includeArchived=false（默认）排除已存档档案；true 供后台管理存档件。 */
     @GuardedAction(permission = "staff.profile.view")
     public PageResponse<StaffProfileRecord> listProfiles(boolean includeArchived) {
-        List<StaffProfileRecord> profiles = repository.listProfiles(merchantScopeOrNull(), includeArchived);
+        AccessActor actor = authorizationService.currentActor();
+        List<StaffProfileRecord> profiles;
+        if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) == null) {
+            profiles = repository.listProfilesByProject(authorizationService.requireProjectScope(actor)).stream()
+                    .filter(profile -> includeArchived || profile.archivedAt() == null).toList();
+        } else {
+            profiles = repository.listProfiles(merchantScopeOrNull(), includeArchived);
+        }
         auditEventService.recordSuccess("staff.profile.viewed", "staff.profile.view",
                 "staff_profile", "all", null, null, Map.of("count", profiles.size()));
         return page(profiles);
@@ -903,12 +911,19 @@ public class StaffService {
     private StaffProfileRecord requireProfileInScope(String id) {
         StaffProfileRecord profile = repository.findProfileById(id)
                 .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id));
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        if (scope.isPresent() && !scope.get().equals(profile.merchantId())) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "无权查看其他商户的员工档案");
-        }
+        requireRegistrationScope(profile.projectId(), profile.merchantId());
         return profile;
+    }
+
+    private void requireRegistrationScope(String projectId, String merchantId) {
+        AccessActor actor = authorizationService.currentActor();
+        if (authorizationService.isPlatformAdmin(actor)) return;
+        if (!authorizationService.requireProjectScope(actor).equals(projectId)) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能处理其他公司的员工登记");
+        }
+        if (trimToNull(actor.merchantId()) != null && !actor.merchantId().equals(trimToNull(merchantId))) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能处理其他商户的员工登记");
+        }
     }
 
     private StaffDeviceCredentialRecord requireCredentialInScope(String credId) {
@@ -1226,7 +1241,7 @@ public class StaffService {
             authorizationService.requirePermission("staff.shift.manage");
             if (request == null || request.decision() == null
                     || !java.util.Set.of("approve", "reject").contains(request.decision())) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approve）或驳回（reject）");
+                throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过或驳回");
             }
             StaffLeaveRequestRecord current = repository.findLeaveById(id)
                     .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));

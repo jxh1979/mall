@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -37,7 +39,7 @@ class MemberWalletServiceTests {
     void topupAddsBalanceOnlyAfterPaymentSucceeds() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
 
         // 发起充值：仅建支付意图（created），余额不变。
@@ -68,17 +70,17 @@ class MemberWalletServiceTests {
     void consumeRejectedWhenInsufficient() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         // 充值 5000 入账
         PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-2");
         finance.markPaymentIntentSucceeded(intent.id());
         service.settleTopup("c1", null, null, intent.id());
         // 消费 3000 OK
-        service.consume("c1", null, null, 3_000L, "buy", "consume-1");
+        service.consumeInternal("c1", null, null, 3_000L, "buy", "consume-1");
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(2_000L);
         // 消费 5000 不足拒
-        assertThatThrownBy(() -> service.consume("c1", null, null, 5_000L, "buy", "consume-2"))
+        assertThatThrownBy(() -> service.consumeInternal("c1", null, null, 5_000L, "buy", "consume-2"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_INSUFFICIENT"));
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(2_000L);
     }
@@ -87,7 +89,7 @@ class MemberWalletServiceTests {
     void freezeBlocksConsumeAndUnfreezeRestores() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-3");
         finance.markPaymentIntentSucceeded(intent.id());
@@ -95,12 +97,12 @@ class MemberWalletServiceTests {
 
         service.freeze("c1", null, null, "risk");
         assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("frozen");
-        assertThatThrownBy(() -> service.consume("c1", null, null, 1_000L, "buy", "c-frozen"))
+        assertThatThrownBy(() -> service.consumeInternal("c1", null, null, 1_000L, "buy", "c-frozen"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_ACCOUNT_FROZEN"));
 
         service.unfreeze("c1", null, null, "cleared");
         assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("active");
-        CustomerStoredValueTransactionRecord txn = service.consume("c1", null, null, 1_000L, "buy", "c-ok");
+        CustomerStoredValueTransactionRecord txn = service.consumeInternal("c1", null, null, 1_000L, "buy", "c-ok");
         assertThat(txn.balanceAfterCent()).isEqualTo(4_000L);
         // V231：消费非充值支付，paid_at 必须为 null（仅 topup 记支付时刻）。
         assertThat(txn.paidAt()).isNull();
@@ -110,7 +112,7 @@ class MemberWalletServiceTests {
     void refundReturnsBalanceAndClosesAccount() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-4");
         finance.markPaymentIntentSucceeded(intent.id());
@@ -128,7 +130,7 @@ class MemberWalletServiceTests {
         // AUD-058：入账只认充值时绑定的卡范围——指名商户卡/跨项目/他人 customerId 均拒，资金不入错卡。
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-scope");
         finance.markPaymentIntentSucceeded(intent.id());
@@ -155,6 +157,7 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         com.complex.platform.finance.gateway.PaymentGatewayRouter failing =
                 org.mockito.Mockito.mock(com.complex.platform.finance.gateway.PaymentGatewayRouter.class);
+        org.mockito.Mockito.when(failing.isGatewayEnabled()).thenReturn(true);
         org.mockito.Mockito.when(failing.refund(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new com.complex.platform.finance.gateway.PaymentGatewayResult(
                         com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED,
@@ -177,7 +180,7 @@ class MemberWalletServiceTests {
         // 指定 m1 消费只扣 m1 卡（只扣指定的那一张）；商户卡只能在该发卡商户消费（拿 m2 范围取不到 m1 卡，不误扣）。
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         PaymentIntentRecord p = service.topup("c1", null, null, 8_000L, "wechat", "tp-prj");
         finance.markPaymentIntentSucceeded(p.id());
@@ -191,12 +194,12 @@ class MemberWalletServiceTests {
         assertThat(repo.storedValue.get("c1|null|m1").balanceCent()).isEqualTo(3_000L);
 
         // 指定 m1 消费只扣 m1 卡，通用卡不动。
-        service.consume("c1", null, "m1", 1_000L, "buy at m1", "cs-m1");
+        service.consumeInternal("c1", null, "m1", 1_000L, "buy at m1", "cs-m1");
         assertThat(repo.storedValue.get("c1|null|m1").balanceCent()).isEqualTo(2_000L);
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(8_000L);
 
         // 商户卡只能在该商户消费：m2 范围取不到 m1 卡 → 账户不存在，不误扣 m1/通用卡。
-        assertThatThrownBy(() -> service.consume("c1", null, "m2", 500L, "buy at m2", "cs-m2"))
+        assertThatThrownBy(() -> service.consumeInternal("c1", null, "m2", 500L, "buy at m2", "cs-m2"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_ACCOUNT_NOT_FOUND"));
     }
 
@@ -205,7 +208,7 @@ class MemberWalletServiceTests {
         // B1d⑤ phase3：商户配置「不可退」→ 该商户卡退款被拒；配置「可退+比例」→ 退款放行（按比例打款，余额全额扣减）。
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         service.configureMerchantCard("m1", true, "platform_collect");
         PaymentIntentRecord m = service.topup("c1", null, "m1", 5_000L, "wechat", "tp-m1r");
@@ -246,7 +249,7 @@ class MemberWalletServiceTests {
                 org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
         org.mockito.Mockito.when(merchantAuth.currentMerchantScope()).thenReturn(Optional.of("m1"));
         StoredValueService m1Staff = new StoredValueService(repo, new FakeFinance(), audit(),
-                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), merchantAuth, null,
+                gatewayRouter(true), merchantAuth, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
 
         // 本商户卡 → 放行。
@@ -256,9 +259,9 @@ class MemberWalletServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
         // 清单 P1-1:consume 也须受卡范围约束——商户 m1 员工不得扣他商户(m2)卡或通用卡(越权扣款);
         // scope 校验在状态检查之前,越权即拒不泄露卡状态。
-        assertThatThrownBy(() -> m1Staff.consume("c1", null, "m2", 100L, "x", "sv-c-m2"))
+        assertThatThrownBy(() -> m1Staff.consumeInternal("c1", null, "m2", 100L, "x", "sv-c-m2"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
-        assertThatThrownBy(() -> m1Staff.consume("c1", null, null, 100L, "x", "sv-c-prj"))
+        assertThatThrownBy(() -> m1Staff.consumeInternal("c1", null, null, 100L, "x", "sv-c-prj"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
         // 综合体通用卡 → 拒（商户员工不得操作平台级卡）。
         assertThatThrownBy(() -> m1Staff.freeze("c1", null, null, "x"))
@@ -272,7 +275,7 @@ class MemberWalletServiceTests {
                 org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
         org.mockito.Mockito.when(platformAuth.currentMerchantScope()).thenReturn(Optional.empty());
         StoredValueService platform = new StoredValueService(repo, new FakeFinance(), audit(),
-                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), platformAuth, null,
+                gatewayRouter(true), platformAuth, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         assertThat(platform.freeze("c1", null, "m2", "ok").status()).isEqualTo("frozen");
     }
@@ -318,15 +321,15 @@ class MemberWalletServiceTests {
     void consumeRejectsBlankIdempotencyKey() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-b1b-c");
         finance.markPaymentIntentSucceeded(intent.id());
         service.settleTopup("c1", null, null, intent.id());
 
-        assertThatThrownBy(() -> service.consume("c1", null, null, 1_000L, "buy", null))
+        assertThatThrownBy(() -> service.consumeInternal("c1", null, null, 1_000L, "buy", null))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
-        assertThatThrownBy(() -> service.consume("c1", null, null, 1_000L, "buy", "   "))
+        assertThatThrownBy(() -> service.consumeInternal("c1", null, null, 1_000L, "buy", "   "))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
         // 余额未被扣减（空键被拒，未发生扣减）。
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(5_000L);
@@ -336,7 +339,7 @@ class MemberWalletServiceTests {
     void refundRejectsBlankIdempotencyKey() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-b1b-r");
         finance.markPaymentIntentSucceeded(intent.id());
@@ -358,7 +361,7 @@ class MemberWalletServiceTests {
     void merchantCardTopupRejectedWithoutIssuanceThenAllowedAfterPlatformEnables() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         assertThatThrownBy(() -> service.topup("c1", null, "mX", 5_000L, "wechat", "tp-noissue"))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -377,7 +380,7 @@ class MemberWalletServiceTests {
     void fundModeFrozenAtOpenAndPlatformOnly() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService platform = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService platform = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         platform.configureMerchantCard("mX", true, "platform_collect");
         PaymentIntentRecord m = platform.topup("c1", null, "mX", 5_000L, "wechat", "tp-frz");
@@ -394,7 +397,7 @@ class MemberWalletServiceTests {
         org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "x"))
                 .when(merchantAuth).requirePlatformScope();
         StoredValueService merchantSvc = new StoredValueService(repo, finance, audit(),
-                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), merchantAuth, null,
+                gatewayRouter(true), merchantAuth, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         assertThatThrownBy(() -> merchantSvc.configureMerchantCard("mX", true, "platform_collect"))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -405,20 +408,20 @@ class MemberWalletServiceTests {
     void platformCollectConsumeGeneratesMerchantPayableAndPrepaidDoesNot() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         service.configureMerchantCard("mPC", true, "platform_collect");
         PaymentIntentRecord m = service.topup("c1", null, "mPC", 5_000L, "wechat", "tp-pc");
         finance.markPaymentIntentSucceeded(m.id());
         service.settleTopup("c1", null, "mPC", m.id());
-        CustomerStoredValueTransactionRecord consumed = service.consume("c1", null, "mPC", 2_000L, "buy", "cs-pc");
+        CustomerStoredValueTransactionRecord consumed = service.consumeInternal("c1", null, "mPC", 2_000L, "buy", "cs-pc");
         assertThat(finance.merchantPayables).containsExactly("mPC|" + consumed.id() + "|2000");
 
         service.configureMerchantCard("mPP", true, "merchant_prepaid");
         PaymentIntentRecord m2 = service.topup("c1", null, "mPP", 5_000L, "wechat", "tp-pp");
         finance.markPaymentIntentSucceeded(m2.id());
         service.settleTopup("c1", null, "mPP", m2.id());
-        service.consume("c1", null, "mPP", 1_000L, "buy", "cs-pp");
+        service.consumeInternal("c1", null, "mPP", 1_000L, "buy", "cs-pp");
         assertThat(finance.merchantPayables).hasSize(1);
     }
 
@@ -426,7 +429,7 @@ class MemberWalletServiceTests {
     void merchantPrepaidCardRefundRejectedOnlineWhilePlatformCollectAllowed() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
-        StoredValueService service = new StoredValueService(repo, finance, audit(), com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, null,
+        StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
         service.configureMerchantCard("mPP", true, "merchant_prepaid");
         PaymentIntentRecord m = service.topup("c1", null, "mPP", 5_000L, "wechat", "tp-refuse");
@@ -458,7 +461,7 @@ class MemberWalletServiceTests {
         return repo;
     }
 
-    /** 测试用 finance：仅实现支付意图三方法，其余继承（不调用）。 */
+    /** 测试用 finance：模拟已确认渠道回执；真实渠道校验另由 M006StoredValuePaymentTests 覆盖。 */
     private static final class FakeFinance extends FinanceService {
         private final Map<String, PaymentIntentRecord> intents = new java.util.LinkedHashMap<>();
         private int seq = 0;
@@ -483,6 +486,20 @@ class MemberWalletServiceTests {
         @Override
         public Optional<PaymentIntentRecord> findPaymentIntent(String id) {
             return Optional.ofNullable(intents.get(id));
+        }
+
+        @Override
+        public Optional<PaymentIntentRecord> findPaymentIntentForUpdate(String id) {
+            return findPaymentIntent(id);
+        }
+
+        @Override
+        public PaymentIntentRecord confirmOnlinePaymentIntent(String id, String merchantId, String fundMode) {
+            PaymentIntentRecord intent = intents.get(id);
+            if (intent == null || !"succeeded".equals(intent.status())) {
+                throw ApiException.conflict("PAYMENT_NOT_SUCCEEDED", "该支付尚未成功");
+            }
+            return intent;
         }
 
         @Override

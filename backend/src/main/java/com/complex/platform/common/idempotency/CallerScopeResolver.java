@@ -1,12 +1,14 @@
 package com.complex.platform.common.idempotency;
 
-/**
- * Resolves the current caller's scope token for idempotency key isolation.
- * Returns "m:{merchantId}" for merchant callers, "p" for platform admins,
- * or "" (empty) when no scope is available (e.g., in tests).
- * An empty scope leaves the operationId unmodified (backward-compatible).
- */
+// 文件版本：V0.01
+
+/** Resolves the trusted caller scope used to isolate idempotent operations. */
 @FunctionalInterface
 public interface CallerScopeResolver {
     String resolve();
+
+    /** Existing scopes keep their keys; changed scopes must also check their old records. */
+    default String legacyScope() {
+        return resolve();
+    }
 }

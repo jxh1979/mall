@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -32,6 +33,7 @@ const MANAGE = ["staff.profile.review"];
 export function StaffProfilesPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<StaffProfileRow[]>([]);
   const [reason, setReason] = React.useState("");
+  const [initialPassword, setInitialPassword] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submittingId, setSubmittingId] = React.useState("");
 
@@ -42,6 +44,25 @@ export function StaffProfilesPage({ api, setActionResult, setGlobalError, effect
     },
     { onError: setGlobalError, fallbackMessage: "员工档案读取失败" },
   );
+
+  async function reviewRegistration(row: StaffProfileRow, decision: "approve" | "reject") {
+    if (decision === "approve" && !initialPassword.trim()) { setFormError("审批通过须填写初始密码。"); return; }
+    if (decision === "reject" && !reason.trim()) { setFormError("驳回须填写理由。"); return; }
+    setFormError("");
+    setSubmittingId(row.id);
+    try {
+      await api.post(`/api/v1/staff/registrations/${encodeURIComponent(row.id)}/review`, {
+        decision, initialPassword: decision === "approve" ? initialPassword : undefined,
+        rejectReason: decision === "reject" ? reason.trim() : undefined,
+        operatorNote: reason.trim() || "公司复核员工注册",
+      });
+      setActionResult({ action: decision === "approve" ? "员工注册审批通过" : "员工注册已驳回", staffProfileId: row.id });
+      setInitialPassword("");
+      reload();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "注册审批失败");
+    } finally { setSubmittingId(""); }
+  }
 
   async function toggleSalesPosition(row: StaffProfileRow) {
     const trimmedReason = reason.trim();
@@ -75,6 +96,9 @@ export function StaffProfilesPage({ api, setActionResult, setGlobalError, effect
       />
       <AuditTrailHint event="staff.profile.sales_position_changed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+        {rows.some((row) => row.registrationStatus === "submitted") ? <label>注册审批初始密码
+          <input type="password" data-testid="staff-registration-password" value={initialPassword} onChange={(event) => setInitialPassword(event.target.value)} />
+        </label> : null}
         <div className="admin-form-row" data-testid="staff-profiles-reason-row">
           <label>改动事由
             <input
@@ -103,6 +127,10 @@ export function StaffProfilesPage({ api, setActionResult, setGlobalError, effect
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td data-testid={`staff-profile-sales-position-${row.id}`}>{row.salesPosition ? "是" : "否"}</td>
                   <td>
+                    {row.registrationStatus === "submitted" ? <>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid={`staff-registration-approve-${row.id}`} disabled={submittingId === row.id} onClick={() => void reviewRegistration(row, "approve")}>批准注册</PermissionButton>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid={`staff-registration-reject-${row.id}`} disabled={submittingId === row.id} onClick={() => void reviewRegistration(row, "reject")}>驳回注册</PermissionButton>
+                    </> : null}
                     <PermissionButton
                       permissionsState={effectivePermissions}
                       permissions={MANAGE}

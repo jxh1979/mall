@@ -1,5 +1,7 @@
 package com.complex.platform.governance.review;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -146,6 +148,10 @@ public class SupervisorReviewService {
                     SupervisorReviewDecisionRecord pending = supervisorReviewRepository
                             .findPendingSupervisorReviewById(id)
                             .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
+                    if (ApprovalLevel.TOP_AUTHORITY.code().equals(pending.approvalLevel())
+                            && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须使用 USB 最高权限会话审批");
+                    }
                     int requiredLevel = pending.requiredLevel();
                     if (reviewerLevel < requiredLevel) {
                         throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
@@ -159,7 +165,7 @@ public class SupervisorReviewService {
                     // REQ-69 逐级上提：当本次复核记录有按 rank 计算的所需审批人 rank 时，
                     // 审批人的 level_rank 必须不低于该 rank（在主管级校验之上的管理职级门槛）。
                     if (pending.requiredApproverRank() != null) {
-                        int reviewerRank = authorizationService.levelRankOf(reviewerId);
+                        int reviewerRank = authorizationService.currentActorLevelRank();
                         if (reviewerRank < pending.requiredApproverRank()) {
                             throw ApiException.forbidden(
                                     "SUPERVISOR_RANK_TOO_LOW",

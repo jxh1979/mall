@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -26,7 +27,6 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [templateNotice, setTemplateNotice] = React.useState<string | null>(null);
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [phone, setPhone] = React.useState("");
   const [accountType, setAccountType] = React.useState("staff");
   const [consentReference, setConsentReference] = React.useState("");
   const [evidenceAttachmentIds, setEvidenceAttachmentIds] = React.useState("");
@@ -87,12 +87,8 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       setFormError("员工账号不能为空。");
       return false;
     }
-    if (!password.trim()) {
+    if (accountType === "outsourced_vendor" && !password.trim()) {
       setFormError("初始密码不能为空；后台手动建号必须能完成登录闭环。 ");
-      return false;
-    }
-    if (phone.trim() && !/^1\d{10}$/.test(phone.trim())) {
-      setFormError("手机号必须是 11 位大陆手机号；不实名场景可留空。 ");
       return false;
     }
     if (!organizationId.trim()) {
@@ -108,10 +104,21 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     setGlobalError(null);
     setSubmitting(true);
     try {
+      if (accountType !== "outsourced_vendor") {
+        const registration = await api.post<{ id: string }>("/api/v1/staff/registrations", {
+          name: username.trim(),
+          projectId: organizationId.trim(),
+          merchantId: merchantId.trim() || undefined,
+          operatorNote: "后台辅助员工登记，等待对应公司审批",
+        });
+        setActionResult({ action: "员工注册申请已提交", registrationId: registration.id, message: "在员工档案中完成公司审批后生成账号，并自动获得员工自助权限。" });
+        setUsername("");
+        setCreateOpen(false);
+        return;
+      }
       const created = await api.post<AccessUserRow>("/api/v1/access/users", {
         username: username.trim(),
         password: password.trim(),
-        phone: phone.trim() || undefined,
         accountType,
         status,
         organizationId: organizationId.trim(),
@@ -128,12 +135,11 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           operatorNote: "后台手动录入后应用权限模板",
         });
       }
-      const enriched = { ...created, phone: phone.trim() || created.phone, organizationId: organizationId.trim(), merchantId: merchantId.trim() || created.merchantId, status, accountType };
+      const enriched = { ...created, organizationId: organizationId.trim(), merchantId: merchantId.trim() || created.merchantId, status, accountType };
       setRows((current) => [...current, enriched]);
       setActionResult({ action: selectedTemplateId ? "创建员工并赋权" : "创建员工", username: created.username, accountType, templateId: selectedTemplateId || null, appliedTemplate });
       setUsername("");
       setPassword("");
-      setPhone("");
       setConsentReference("");
       setEvidenceAttachmentIds("");
       setCreateOpen(false);
@@ -170,7 +176,6 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       title: `员工账号 · ${row.username}`,
       fields: [
         { label: "员工账号", value: row.username },
-        { label: "手机号", value: row.phone ?? "—" },
         { label: "账号类型", value: formatBusinessStatus(row.accountType) },
         { label: "组织", value: orgDisplay(row.organizationId) },
         { label: "商户", value: merchantDisplay(row.merchantId) },
@@ -263,9 +268,9 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-users-table">
-            <thead><tr><th>员工账号</th><th>手机号</th><th>账号类型</th><th>组织</th><th>商户</th><th>状态</th><th>详情</th></tr></thead>
+            <thead><tr><th>员工账号</th><th>账号类型</th><th>组织</th><th>商户</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>{rows.length === 0 ? (
-              <tr><td colSpan={7} className="admin-muted-action">暂无员工账号，可通过上方表单手动录入并套用权限模板。</td></tr>
+              <tr><td colSpan={6} className="admin-muted-action">暂无员工账号，可通过上方表单提交注册申请。</td></tr>
             ) : rows.map((row) => (
               <tr key={row.id} data-testid={`access-user-row-${row.id}`}
                 className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`}
@@ -273,7 +278,6 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
                 onClick={() => openUserDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openUserDetail(row); } }}>
                 <td>{row.username}</td>
-                <td>{row.phone ?? "-"}</td>
                 <td>{formatBusinessStatus(row.accountType)}</td>
                 <td>{row.organizationId ? (orgNames[row.organizationId] ?? <span className="admin-id-cell" title={row.organizationId}>{shortId(row.organizationId)}</span>) : "-"}</td>
                 <td>{row.merchantId ? (merchantNames[row.merchantId] ?? <span className="admin-id-cell" title={row.merchantId}>{shortId(row.merchantId)}</span>) : "-"}</td>
@@ -288,7 +292,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         title="新建员工账号"
         testId="access-user-flow"
         submitTestId="access-user-create"
-        submitLabel="新增员工并赋权"
+        submitLabel={accountType === "outsourced_vendor" ? "新建外部协作账号" : "提交员工注册申请"}
         submitting={submitting}
         error={formError}
         onClose={() => setCreateOpen(false)}
@@ -296,46 +300,44 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         steps={[
           {
             title: "账号信息",
-            description: "填写登录账号、初始密码与账号类型。",
+            description: "员工填写姓名并提交注册申请；外部协作机构填写登录账号与初始密码。",
             validate: () => {
               if (!username.trim()) return "员工账号不能为空。";
-              if (!password.trim()) return "初始密码不能为空；后台手动建号必须能完成登录闭环。";
-              if (phone.trim() && !/^1\d{10}$/.test(phone.trim())) return "手机号必须是 11 位大陆手机号；不实名场景可留空。";
+              if (accountType === "outsourced_vendor" && !password.trim()) return "初始密码不能为空。";
               return null;
             },
             content: (
               <>
-                <label>员工账号<input data-testid="access-user-name" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="登录用账号名" /></label>
-                <label>初始密码<input data-testid="access-user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="首次登录使用" /></label>
-                <label>手机号<input data-testid="access-user-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="可选，后端仅留哈希" /></label>
+                <label>{accountType === "outsourced_vendor" ? "登录账号" : "员工姓名"}<input data-testid="access-user-name" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+                {accountType === "outsourced_vendor" ? <label>初始密码<input data-testid="access-user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="首次登录使用" /></label> : null}
                 <label>账号类型<select data-testid="access-user-account-type" value={accountType} onChange={(event) => setAccountType(event.target.value)}>
-                  <option value="staff">普通员工</option>
-                  <option value="sales">销售人员</option>
-                  <option value="supervisor">主管</option>
-                  <option value="merchant_admin">商户管理员</option>
-                  <option value="merchant">商户员工</option>
+                  <option value="staff">员工注册申请</option>
+                  <option value="outsourced_vendor">外部协作机构账号</option>
                 </select></label>
               </>
             ),
           },
           {
             title: "归属与授权",
-            description: "指定账号归属的组织/商户，并留存授权凭据。",
+            description: accountType === "outsourced_vendor" ? "指定账号归属的组织/商户，并留存授权凭据。" : "指定员工归属的组织与商户。",
             validate: () => (organizationId.trim() ? null : "组织 ID 不能为空，用于数据范围和留痕。"),
             content: (
               <>
                 <label>所属组织<input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织 ID" /></label>
                 <label>所属商户<select data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)}><option value="">不绑定 / 平台账号</option>{merchants.map((m) => <option key={m.id} value={m.id}>{(m.displayName ?? m.companyName ?? m.id)}（{shortId(m.id)}）</option>)}</select></label>
+                {accountType === "outsourced_vendor" ? <>
                 <label>授权凭据<input data-testid="access-user-consent" value={consentReference} onChange={(event) => setConsentReference(event.target.value)} placeholder="同意/授权凭据编号（可选）" /></label>
                 <label>证据附件<input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="附件 ID，逗号分隔（可选）" /></label>
+                </> : null}
               </>
             ),
           },
           {
             title: "状态与权限",
-            description: "设定初始状态，可同时套用权限模板完成赋权。",
+            description: "员工经对应公司审批后开通账号和员工自助权限，岗位授权在批准后分配。",
             content: (
               <>
+                {accountType !== "outsourced_vendor" ? <p>注册申请提交后，请在员工档案中完成公司审批；此处不提前生成可用账号或发放权限。</p> : <>
                 <label>初始状态<select data-testid="access-user-status" value={status} onChange={(event) => setStatus(event.target.value)}>
                   <option value="active">启用</option>
                   <option value="invited">待激活</option>
@@ -345,20 +347,22 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
                   <option value="">暂不赋权</option>
                   {templates.map((template) => <option key={template.id} value={template.id}>{templateLabel(template)}</option>)}
                 </select></label>
+                </>}
               </>
             ),
           },
         ]}
         summary={[
           { label: "员工账号", value: username },
-          { label: "手机号", value: phone.trim() || "未填写" },
           { label: "账号类型", value: formatBusinessStatus(accountType) },
           { label: "所属组织", value: orgDisplay(organizationId.trim() || null) },
           { label: "所属商户", value: merchantDisplay(merchantId.trim() || null) },
-          { label: "初始状态", value: formatBusinessStatus(status) },
-          { label: "权限模板", value: (() => { const template = templates.find((t) => t.id === selectedTemplateId); return template ? templateLabel(template) : "暂不赋权"; })() },
-          { label: "授权凭据", value: consentReference.trim() || "未填写" },
-          { label: "证据附件", value: evidenceAttachmentIds.trim() || "未填写" },
+          { label: "初始状态", value: accountType === "outsourced_vendor" ? formatBusinessStatus(status) : "等待注册审批" },
+          { label: "权限模板", value: accountType !== "outsourced_vendor" ? "审批后自动获得员工自助权限" : (() => { const template = templates.find((t) => t.id === selectedTemplateId); return template ? templateLabel(template) : "暂不赋权"; })() },
+          ...(accountType === "outsourced_vendor" ? [
+            { label: "授权凭据", value: consentReference.trim() || "未填写" },
+            { label: "证据附件", value: evidenceAttachmentIds.trim() || "未填写" },
+          ] : []),
         ]}
       />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />

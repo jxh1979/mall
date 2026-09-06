@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.04
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WalletPage } from "./WalletPage";
@@ -31,13 +32,13 @@ const merchantCard = {
 };
 
 describe("WalletPage", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.restoreAllMocks(); sessionStorage.removeItem("customer-pending-stored-value-topups"); });
 
   it("renders per-card balances for the general card and each merchant card", async () => {
     const service = {
       getStoredValueAccounts: vi.fn().mockResolvedValue([projectCard, merchantCard]),
       topupStoredValue: vi.fn(),
-      consumeStoredValue: vi.fn(),
+      getStoredValueTransactions: vi.fn().mockResolvedValue([]),
     } as unknown as CustomerService;
 
     render(<WalletPage service={service} />);
@@ -49,16 +50,57 @@ describe("WalletPage", () => {
     expect(screen.getByText("余额 ¥30.00")).toBeInTheDocument();
     // 商户卡资金模式标签（平台代收）。
     expect(screen.getByText("平台代收")).toBeInTheDocument();
-    // 充值/消费入口存在。
     expect(screen.getByTestId("wallet-topup")).toBeInTheDocument();
-    expect(screen.getByTestId("wallet-consume")).toBeInTheDocument();
+    expect(screen.queryByTestId("wallet-consume")).not.toBeInTheDocument();
+    expect(screen.getByText("交易记录")).toBeInTheDocument();
+  });
+
+  it("按选择的渠道发起线上充值，未配置时不报告到账或要求柜台收款", async () => {
+    const topup = vi.fn().mockResolvedValue({ id: "pay-1", gatewayStatus: "NOT_CONFIGURED" });
+    const service = {
+      getStoredValueAccounts: vi.fn().mockResolvedValue([merchantCard]),
+      getStoredValueTransactions: vi.fn().mockResolvedValue([]),
+      topupStoredValue: topup,
+    } as unknown as CustomerService;
+    render(<WalletPage service={service} />);
+    await screen.findAllByText(/商户卡（m1）/);
+    fireEvent.change(screen.getByLabelText("充值支付方式"), { target: { value: "alipay" } });
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "50" } });
+    fireEvent.click(screen.getByTestId("wallet-topup"));
+    await waitFor(() => expect(topup).toHaveBeenCalledWith(expect.objectContaining({ channel: "alipay", amountCent: 5000 })));
+    expect(await screen.findByText("支付渠道未配置，尚未扣款或充值到账")).toBeInTheDocument();
+    expect(screen.queryByText(/请到柜台完成支付/)).toBeNull();
+  });
+
+
+  it("返回钱包后仅按服务端确认结果刷新余额，失败充值继续保留供查询", async () => {
+    sessionStorage.setItem("customer-pending-stored-value-topups", JSON.stringify([
+      { paymentIntentId: "paid", merchantId: "m1" }, { paymentIntentId: "pending", merchantId: "m1" },
+    ]));
+    const settle = vi.fn().mockImplementation(({ paymentIntentId }) =>
+      paymentIntentId === "paid" ? Promise.resolve({ id: "actual-topup" }) : Promise.reject(new Error("支付尚未成功")));
+    const accounts = vi.fn().mockResolvedValue([merchantCard]);
+    const service = {
+      getStoredValueAccounts: accounts,
+      getStoredValueTransactions: vi.fn().mockResolvedValue([]),
+      settleStoredValueTopup: settle,
+    } as unknown as CustomerService;
+    render(<WalletPage service={service} />);
+    expect(await screen.findByText("支付尚未成功")).toBeInTheDocument();
+    expect(settle).toHaveBeenCalledWith({ paymentIntentId: "paid", merchantId: "m1" });
+    expect(settle).toHaveBeenCalledWith({ paymentIntentId: "pending", merchantId: "m1" });
+    expect(accounts).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(sessionStorage.getItem("customer-pending-stored-value-topups") ?? "[]"))
+      .toEqual([{ paymentIntentId: "pending", merchantId: "m1" }]);
+    expect(screen.queryByRole("button", { name: "查询充值到账 · paid" })).toBeNull();
+    expect(screen.getByRole("button", { name: "查询充值到账 · pending" })).toBeInTheDocument();
   });
 
   it("shows empty state when the customer has no stored-value cards", async () => {
     const service = {
       getStoredValueAccounts: vi.fn().mockResolvedValue([]),
       topupStoredValue: vi.fn(),
-      consumeStoredValue: vi.fn(),
+      getStoredValueTransactions: vi.fn().mockResolvedValue([]),
     } as unknown as CustomerService;
 
     render(<WalletPage service={service} />);

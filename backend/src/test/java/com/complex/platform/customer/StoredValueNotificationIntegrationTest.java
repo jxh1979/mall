@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.support.TestSecurityActors;
@@ -28,11 +30,17 @@ class StoredValueNotificationIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
     private com.complex.platform.common.crypto.PiiCipher piiCipher;
 
     @BeforeEach
     void setUp() {
-        TestSecurityActors.asPlatformAdmin();
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor("usr_master_authority", "master-authority",
+                                "platform_admin", "org_1", null, "active"), null, java.util.List.of()));
         cleanupNotificationData();
         setSwitch("sms_notification", true);
         setSwitch("sms.notify.stored_value", true);
@@ -85,7 +93,7 @@ class StoredValueNotificationIntegrationTest {
         insertCustomer(customerId, phone);
         settleTopup(customerId, 8_000L, prefix);
 
-        CustomerStoredValueTransactionRecord txn = storedValueService.consume(
+        CustomerStoredValueTransactionRecord txn = storedValueService.consumeInternal(
                 customerId,
                 PROJECT_ID,
                 null,
@@ -123,10 +131,13 @@ class StoredValueNotificationIntegrationTest {
             String prefix
     ) {
         String paymentIntentId = prefix + "_payment_intent";
-        insertSucceededPaymentIntent(paymentIntentId, customerId, amountCent);
+        insertCreatedPaymentIntent(paymentIntentId, customerId, amountCent);
         // AUD-058：settleTopup 只认充值时绑定的卡范围，夹具需同步落绑定行（等价 topup 落库动作）。
         insertTopupIntentBinding(paymentIntentId, customerId);
-        return storedValueService.settleTopup(customerId, PROJECT_ID, null, paymentIntentId);
+        storedValueService.confirmOfflineTopupAndSettle(paymentIntentId,
+                new com.complex.platform.finance.dto.OfflinePaymentConfirmRequest(
+                        prefix + "_pos_confirm", null, null, paymentIntentId, amountCent, "pos", java.time.Instant.now()));
+        return customerRepository.findStoredValueTransactionByIdempotencyKey("sv_settle_" + paymentIntentId).orElseThrow();
     }
 
     private void insertTopupIntentBinding(String paymentIntentId, String customerId) {
@@ -140,13 +151,13 @@ class StoredValueNotificationIntegrationTest {
                 """, paymentIntentId, customerId, PROJECT_ID);
     }
 
-    private void insertSucceededPaymentIntent(String id, String customerId, long amountCent) {
+    private void insertCreatedPaymentIntent(String id, String customerId, long amountCent) {
         jdbcTemplate.update("""
                 INSERT INTO finance_payment_intents (
                     id, business_order_type, business_order_id, amount_cent, currency, channel,
                     status, created_at, updated_at
                 )
-                VALUES (?, 'stored_value_topup', ?, ?, 'CNY', 'wechat', 'succeeded', now(), now())
+                VALUES (?, 'stored_value_topup', ?, ?, 'CNY', 'pos', 'created', now(), now())
                 ON CONFLICT (id) DO UPDATE SET
                     business_order_type = EXCLUDED.business_order_type,
                     business_order_id = EXCLUDED.business_order_id,

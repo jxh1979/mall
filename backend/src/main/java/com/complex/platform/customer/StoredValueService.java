@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.07
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
@@ -33,7 +35,7 @@ import com.complex.platform.common.Strings;
  *
  * <p><b>预付资金合规</b>：充值不凭空加余额——充值 {@link #topup} 先经 finance 创建支付意图，
  * 支付成功后调 {@link #settleTopup} 校验支付意图已 succeeded、金额一致、未重复入账，方才入账并写流水。
- * 消费 {@link #consume} 余额不足拒；退卡 {@link #refund} 退回余额（实际退款打款待支付渠道）；
+ * 消费 {@link #payTicketOrder} 余额不足拒；退卡 {@link #refund} 退回余额（实际退款打款待支付渠道）；
  * 冻结/解冻 {@link #freeze}/{@link #unfreeze} 阻断/恢复变动。所有余额变动写流水 + 事件。
  *
  * <p><b>B1d⑤ 储值卡分级</b>：每个操作带 {@code merchantId}——为空=综合体通用卡（综合体内各商户通用，按 project 隔离）；
@@ -63,7 +65,7 @@ public class StoredValueService {
     // svcr_ = 柜台退款命名空间（复核发现：与线上退款共享命名空间时，跨路径同键重放会把线上退款流水
     // 错当柜台退款成功返回——不落柜台审计/凭证还可能引发双重兑付）。
     private static final String[] RESERVED_IDEMPOTENCY_PREFIXES = {
-            "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_", "svcr_"};
+            "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_", "svcr_", "ticketsv_"};
 
     private final CustomerRepository repository;
     private final FinanceService financeService;
@@ -73,6 +75,10 @@ public class StoredValueService {
     private final com.complex.platform.access.AuthorizationService authorizationService;
     private final NotificationService notificationService;
     private final Clock clock;
+    @org.springframework.beans.factory.annotation.Autowired
+    private CustomerService customerService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.ticketing.TicketingRepository ticketingRepository;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
@@ -109,8 +115,8 @@ public class StoredValueService {
 
     /**
      * 发起充值：创建一笔 finance 支付意图（status=created），返回该支付意图。此时余额不变。
-     * 客户端完成支付后由支付渠道回调（测试期 {@code financeService.markPaymentIntentSucceeded}）置
-     * succeeded，再调 {@link #settleTopup} 入账。merchantId 非空=给商户级卡充值。
+     * 客户端按真实渠道拉起信息支付，再由 {@link #settleTopup} 向渠道核验成功回执并入账。
+     * merchantId 非空=给商户级卡充值；柜台 POS 确认仍由独立的线下确认入口办理。
      */
     @Transactional
     @GuardedAction(capability = "customer.stored_value.topup", permission = "customer.stored_value.topup")
@@ -124,7 +130,7 @@ public class StoredValueService {
         // 发卡资格门控（AUD-061）：商户卡充值前须平台已给该商户开通「发卡资格」，默认关→拒。通用卡不受限。
         requireCardIssuanceEnabled(merchantId);
         // 提前建账户（active），充值入账时复用（开卡即从商户配置定格资金模式）。
-        loadOrCreateAccountForUpdate(customerId, projectId, merchantId);
+        var card = loadOrCreateAccountForUpdate(customerId, projectId, merchantId);
         String key = idempotencyKey == null || idempotencyKey.isBlank()
                 ? "sv_topup_" + UUID.randomUUID() : idempotencyKey;
         // B1d⑤ 资金归属：商户卡走 stored_value_topup_merchant（finance 据此把预收记入发卡商户，按开关结算）；
@@ -140,7 +146,7 @@ public class StoredValueService {
         PaymentIntentRecord intent = financeService.createPaymentIntent(new PaymentIntentRequest(
                 scopedTopupKey, null, null, businessOrderType, customerId, amountCent, "CNY",
                 channel == null || channel.isBlank() ? "wechat" : channel, null,
-                merchantId, resolveMerchantFundOwnership(merchantId)));
+                merchantId, effectiveFundOwnership(card)));
         // AUD-058 + AUD 复核 P1-1②：把本次充值的卡范围（customer/project/merchant）绑定到支付意图，settle 只认此绑定范围入账。
         // bind「冲突即校验一致」：同一支付意图已绑定的卡范围与本次不同 → 抛 409（不再 DO UPDATE 静默改绑）；完全一致才幂等放过。
         if (repository.bindStoredValueTopupIntent(intent.id(), customerId, projectId, merchantId, now()) == 0) {
@@ -158,6 +164,22 @@ public class StoredValueService {
     @GuardedAction(capability = "customer.stored_value.topup", permission = "customer.stored_value.topup")
     public CustomerStoredValueTransactionRecord settleTopup(String customerId, String projectId, String merchantId,
                                                             String paymentIntentId) {
+        StoredValueTopupIntentScope bound = repository.findStoredValueTopupIntent(paymentIntentId)
+                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "该支付意向不属于储值充值"));
+        if (!customerId.equals(bound.customerId())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "该支付意向不属于本次充值");
+        }
+        if (!java.util.Objects.equals(projectId, bound.projectId())
+                || !java.util.Objects.equals(merchantId, bound.merchantId())) {
+            throw ApiException.conflict("STORED_VALUE_SCOPE_MISMATCH", "结算卡范围与充值卡范围不一致");
+        }
+        if (paymentGateway == null || !paymentGateway.isGatewayEnabled()) {
+            throw ApiException.conflict("PAYMENT_GATEWAY_UNAVAILABLE", "支付渠道未启用");
+        }
+        CustomerStoredValueAccountRecord card = repository.findStoredValueAccount(customerId, projectId, merchantId)
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值卡不存在"));
+        financeService.confirmOnlinePaymentIntent(paymentIntentId, merchantId,
+                merchantId == null ? null : effectiveFundOwnership(card));
         return settleTopupInternal(customerId, projectId, merchantId, paymentIntentId);
     }
 
@@ -182,7 +204,7 @@ public class StoredValueService {
                                                                      String merchantId, String paymentIntentId) {
         Instant now = now();
         requireCustomer(customerId);
-        PaymentIntentRecord intent = financeService.findPaymentIntent(paymentIntentId)
+        PaymentIntentRecord intent = financeService.findPaymentIntentForUpdate(paymentIntentId)
                 .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或已被删除"));
         if (!"succeeded".equals(intent.status())) {
             throw ApiException.conflict("PAYMENT_NOT_SUCCEEDED", "该支付尚未成功");
@@ -240,10 +262,51 @@ public class StoredValueService {
 
     @Transactional
     @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
-    public CustomerStoredValueTransactionRecord consume(String customerId, String projectId, String merchantId,
-                                                        long amountCent, String reason, String idempotencyKey) {
-        requireClientIdempotencyKey(idempotencyKey);
-        return consumeInternal(customerId, projectId, merchantId, amountCent, reason, idempotencyKey);
+    public com.complex.platform.ticketing.TicketOrderRecord payTicketOrder(
+            String customerId, String orderId, String accountId, String phone, String smsCode) {
+        if (authorizationService == null || customerService == null || ticketingRepository == null) {
+            throw ApiException.forbidden("STORED_VALUE_UNAVAILABLE", "储值订单支付当前不可用");
+        }
+        var actor = authorizationService.currentActor();
+        if (!"customer".equals(actor.accountType()) || !"active".equals(actor.status())
+                || !customerId.equals(actor.id())) {
+            throw ApiException.forbidden("STORED_VALUE_CUSTOMER_MISMATCH", "仅可支付本人订单");
+        }
+        var order = ticketingRepository.findTicketOrderByIdForUpdate(Strings.requireText(orderId, "订单编号"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "订单不存在"));
+        if (!customerId.equals(order.customerId())) {
+            throw ApiException.forbidden("STORED_VALUE_CUSTOMER_MISMATCH", "仅可支付本人订单");
+        }
+        if ("cancelled".equals(order.status())) {
+            throw ApiException.conflict("ORDER_CANCELLED", "订单已取消");
+        }
+        if ("paid".equals(order.payStatus())) return order;
+        if (!"created".equals(order.status()) || !"unpaid".equals(order.payStatus())) {
+            throw ApiException.conflict("ORDER_NOT_PAYABLE", "订单不在待支付状态");
+        }
+        CustomerStoredValueAccountRecord card = repository.listStoredValueAccountsByCustomer(customerId).stream()
+                .filter(a -> a.id().equals(accountId)).findFirst()
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值卡不存在"));
+        // 当前票务订单未携带项目范围，不将有限定项目的卡当成全局卡使用。
+        if (card.projectId() != null || (card.merchantId() != null && !card.merchantId().equals(order.barId()))) {
+            throw ApiException.conflict("STORED_VALUE_SCOPE_MISMATCH", "所选储值卡不适用于该订单范围");
+        }
+        if (!"CNY".equals(order.currency())) {
+            throw ApiException.conflict("PAYMENT_CURRENCY_MISMATCH", "订单币种与储值余额不一致");
+        }
+        customerService.verifyStoredValueCustomer(customerId, phone, smsCode);
+        CustomerStoredValueTransactionRecord debit = consumeBalance(customerId, card.projectId(), card.merchantId(), order.amountCent(),
+                "票务订单储值支付 " + order.id(), "ticketsv_" + order.id(), true);
+        Instant paidAt = now();
+        ticketingRepository.saveTicketPaymentIntent(new com.complex.platform.ticketing.TicketPaymentIntentRecord(
+                debit.id(), "ticket_order", order.id(), order.amountCent(), order.currency(),
+                "stored_value", "succeeded", paidAt, paidAt));
+        return ticketingRepository.updateTicketOrder(new com.complex.platform.ticketing.TicketOrderRecord(
+                order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
+                order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
+                order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
+                "paid", order.issueStatus(), order.status(), order.createdAt(), paidAt, order.merchantId(),
+                paidAt, order.barId()));
     }
 
     /**
@@ -254,6 +317,11 @@ public class StoredValueService {
     @Transactional
     public CustomerStoredValueTransactionRecord consumeInternal(String customerId, String projectId, String merchantId,
                                                         long amountCent, String reason, String idempotencyKey) {
+        return consumeBalance(customerId, projectId, merchantId, amountCent, reason, idempotencyKey, false);
+    }
+
+    private CustomerStoredValueTransactionRecord consumeBalance(String customerId, String projectId, String merchantId,
+            long amountCent, String reason, String idempotencyKey, boolean verifiedCustomerOrder) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
         }
@@ -273,7 +341,7 @@ public class StoredValueService {
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         // 清单 P1-1:与 refund/freeze/unfreeze 一致,消费须先过卡范围校验(他商户/通用卡越权即拒,
         // 且在状态检查之前——不向越权者泄露卡状态)。此前缺此行 → merchantId 请求体可控可跨商户扣款。
-        requireMerchantScopeForCard(account);
+        if (!verifiedCustomerOrder) requireMerchantScopeForCard(account);
         requireActive(account);
         if (account.balanceCent() < amountCent) {
             throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "储值余额不足");
