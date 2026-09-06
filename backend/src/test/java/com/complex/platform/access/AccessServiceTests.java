@@ -1011,6 +1011,65 @@ class AccessServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
     }
 
+    // M007-I3-F02（PGM-1.7.1 涉钱审批出厂默认 1 个工作日）：含资金/分红/退款/调账类权限的授权申请以 access.grant_request.money 进复核链。
+    @Test
+    void moneyPermissionApplicationsAreMarkedForTheShorterDeadline() {
+        accessRepository.markRequiresApproval("finance.dividend.manage", "high");
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        accessRepository.markRequiresApproval("inventory.stock.adjust", "high");
+        accessRepository.markRequiresApproval("bar.bill.adjust", "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_money_target", new AccessUser(
+                "usr_money_target", "money-target", "staff", "org_a", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_requester", "requester", "org_a");
+
+        AccessGrantRequestRecord money = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-money", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("finance.dividend.manage"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "payout"));
+        AccessGrantRequestRecord normal = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-normal", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("ops.production_readiness.check"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "check"));
+        assertThat(reviewRepository.reviews.get(money.reviewId()).actionType()).isEqualTo("access.grant_request.money");
+        assertThat(reviewRepository.reviews.get(normal.reviewId()).actionType()).isEqualTo("access.grant_request");
+        // M007-I4-A01：库存调整不是调账（PGM-1.10.1 调账指账单/往来调账），账单调账仍涉钱。
+        AccessGrantRequestRecord stock = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-stock", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("inventory.stock.adjust"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "count"));
+        AccessGrantRequestRecord bill = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-bill", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("bar.bill.adjust"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "adjust"));
+        assertThat(reviewRepository.reviews.get(stock.reviewId()).actionType()).isEqualTo("access.grant_request");
+        assertThat(reviewRepository.reviews.get(bill.reviewId()).actionType()).isEqualTo("access.grant_request.money");
+    }
+
+    // M007-F-04（PGM-1.10.1「员工可申请临时权限，按层级对应主管审批……到期自动失效」）：日常权限的临时申请也走主管链，
+    // 不再以 GRANT_APPROVAL_NOT_REQUIRED 拒绝；审批通过后落为有时限的临时授权。
+    @Test
+    void dailyTemporaryPermissionApplicationEntersSupervisorChain() {
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_daily_target", new AccessUser(
+                "usr_daily_target", "daily-target", "staff", "org_a", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                "usr_admin", "lvl_m10_upper", null, "CNY", null, "seed-org", null, "test", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_requester", "requester", "org_a");
+
+        AccessGrantRequestRecord pending = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-daily", "temporary", List.of(), "temporary_permission",
+                "usr_daily_target", null, null, null, null, null, null,
+                List.of("ops.production_readiness.view"),
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "cover shift"));
+        assertThat(pending.status()).isEqualTo("pending");
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).policyCode()).isEqualTo("permission_grant_l1");
+
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord applied = service.reviewGrant(pending.id(), new AccessGrantReviewRequest(
+                "review-temp-daily", "approve", List.of(), "approve", "ok"));
+        assertThat(applied.status()).isEqualTo("applied");
+        assertThat(accessRepository.temporaryGrants.values()).hasSize(1);
+    }
+
     private AccessService newAccessService(boolean grantApprovalEnabled, SupervisorReviewService supervisorReviewService) {
         return new AccessService(
                 accessRepository,

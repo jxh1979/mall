@@ -35,7 +35,7 @@ class SupervisorReviewServiceTests {
         auditEventRepository = new InMemoryAuditEventRepository();
         reviewRepository = new InMemorySupervisorReviewRepository();
         service = new SupervisorReviewService(
-                new AuthorizationService(null),
+                new AuthorizationService(levelAwareRepository(SHARED_RANKS, null)),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,
                 new AuditEventService(auditEventRepository)
@@ -162,7 +162,7 @@ class SupervisorReviewServiceTests {
 
     @Test
     void approveRecordsDecisionWhenReviewerLevelIsEnough() {
-        TestSecurityActors.asSupervisorLevel(3);
+        TestSecurityActors.asSupervisorLevel(1); // 发起人 L1（rank 3）→ two_levels_up 所需审批人 rank 9
         var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
                 "review-evaluate-approve",
                 "contract violation",
@@ -277,9 +277,8 @@ class SupervisorReviewServiceTests {
                 "review-approval-level-contract", "v", List.of(),
                 "contract_violation", "contract", "c1", 0L, "violation"));
         assertThat(contract.approvalLevel()).isEqualTo("two_levels_up");
-        // 无仓储的轻量上下文（AuthorizationService(null) → 职级不可解析）回退 level 闸，rank=null（向后兼容）。
-        // 真实可解析部署下"无职级配置不再静默降级"由 evaluateConservativeRankWhenInitiatorHasNoStaffLevel 覆盖。
-        assertThat(contract.requiredApproverRank()).isNull();
+        // 可解析职级的夹具：发起人 L1 → rank 3，two_levels_up → 所需审批人 rank 9。
+        assertThat(contract.requiredApproverRank()).isEqualTo(9);
 
         var baseDef = service.evaluate(new SupervisorReviewEvaluateRequest(
                 "review-approval-level-base", "v", List.of(),
@@ -289,14 +288,14 @@ class SupervisorReviewServiceTests {
 
     @Test
     void approveRejectsReviewerWhoseLevelRankIsBelowRequiredApproverRank() {
-        SupervisorReviewService rankService = rankAwareService(Map.of("usr_init", 19, "usr_low", 4));
+        SupervisorReviewService rankService = rankAwareService(Map.of("usr_init", 19, "usr_low", 22));
         TestSecurityActors.asSupervisor("usr_init", 3);
         var pending = rankService.evaluate(new SupervisorReviewEvaluateRequest(
                 "review-rank-reject", "v", List.of(),
                 "contract_violation", "contract", "c_rank", 0L, "violation"));
         assertThat(pending.requiredApproverRank()).isEqualTo(25); // two_levels_up from rank 19
 
-        TestSecurityActors.asSupervisor("usr_low", 3); // 主管级 3>=3 通过，但管理职级 rank 4 < 25
+        TestSecurityActors.asSupervisor("usr_low", 3); // rank 22 → 主管级 8>=3 通过，但管理职级 rank 22 < 25
         assertThatThrownBy(() -> rankService.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-rank-reject-approve", "approve", List.of(), 3, "approved", "low rank")))
                 .isInstanceOfSatisfying(ApiException.class, e ->
@@ -324,9 +323,9 @@ class SupervisorReviewServiceTests {
     // 不再回退仅主管级（rank=null），而是收口为安全保守 rank 下限；rank 不足的审批人被 SUPERVISOR_RANK_TOO_LOW 拒。
     @Test
     void evaluateConservativeRankWhenInitiatorHasNoStaffLevelAndRepoResolvable() {
+        // 发起人 rank 0 = 无职级配置；审批人 rank 9（主管级 3 达标）但低于保守下限 15。
         com.complex.platform.access.AccessRepository repo =
-                org.mockito.Mockito.mock(com.complex.platform.access.AccessRepository.class);
-        // 不 stub findStaffLevelAssignment → 默认空 Optional：发起人无职级配置。
+                levelAwareRepository(Map.of("usr_no_level", 0, "usr_reviewer_no_level", 9), null);
         SupervisorReviewService svc = new SupervisorReviewService(
                 new AuthorizationService(repo),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -340,7 +339,7 @@ class SupervisorReviewServiceTests {
         // two_levels_up + requiredLevel 3 → conservative floor(max(3,1)*3=9)+2*3 = 15（非 null，未静默降级）。
         assertThat(pending.requiredApproverRank()).isEqualTo(15);
 
-        // 另一个无职级（rank 0 < 15）的审批人被 rank 闸拒，而非旁路放行。
+        // 另一个 rank 9（< 15）的审批人被 rank 闸拒，而非旁路放行。
         TestSecurityActors.asSupervisor("usr_reviewer_no_level", 3);
         assertThatThrownBy(() -> svc.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-conservative-approve", "approve", List.of(), 3, "approved", "no rank")))
@@ -353,17 +352,11 @@ class SupervisorReviewServiceTests {
     @Test
     void approveSpecificRoleResolvesByRoleInsteadOfBypass() {
         String approvePerm = "governance.supervisor_review.approve";
-        com.complex.platform.access.AccessRepository repo =
-                org.mockito.Mockito.mock(com.complex.platform.access.AccessRepository.class);
-        // 授权审批人：经 ROLE 来源持有审批权限。
-        org.mockito.Mockito.when(repo.findPermissionEffects(org.mockito.ArgumentMatchers.eq("usr_role_ok"),
-                        org.mockito.ArgumentMatchers.any()))
-                .thenReturn(List.of(new com.complex.platform.access.AccessRepository.PermissionEffect(
-                        "usr_role_ok", approvePerm,
-                        com.complex.platform.access.AccessRepository.Effect.GRANT,
-                        com.complex.platform.access.AccessRepository.Source.ROLE,
-                        "role_supervisor", null, null, false, false)));
-        // 未授权审批人：findPermissionEffects 默认空 → 不经角色持有。
+        // 授权审批人 usr_role_ok 经 ROLE 来源持有审批权限（rank 6 → 主管级 2）；usr_role_missing 不持有。
+        com.complex.platform.access.AccessRepository repo = levelAwareRepository(
+                Map.of("usr_init_sr", 6, "usr_role_ok", 6, "usr_role_missing", 6),
+                java.util.Set.of("usr_init_sr", "usr_role_ok"));
+        assertThat(approvePerm).isEqualTo("governance.supervisor_review.approve");
         SupervisorReviewService svc = new SupervisorReviewService(
                 new AuthorizationService(repo),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -375,12 +368,12 @@ class SupervisorReviewServiceTests {
                 "review-sr", null, List.of("att"), "refund", "ticket", "r1", 100L, null));
         assertThat(pending.requiredApproverRank()).isNull(); // specific_role 不按 rank
 
-        // 无角色审批人被拒。
+        // 无角色审批人被拒：现口径下主管级本身由「经角色持有审批权限」推导，不持有即级别 0，在更早的级别闸被拒。
         TestSecurityActors.asSupervisor("usr_role_missing", 2);
         assertThatThrownBy(() -> svc.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-sr-deny", "approve", List.of("att"), 2, "approved", "no role")))
                 .isInstanceOfSatisfying(ApiException.class, e ->
-                        assertThat(e.code()).isEqualTo("SUPERVISOR_ROLE_NOT_AUTHORIZED"));
+                        assertThat(e.code()).isEqualTo("SUPERVISOR_LEVEL_TOO_LOW"));
 
         // 经角色持有审批权限的审批人放行。
         TestSecurityActors.asSupervisor("usr_role_ok", 2);
@@ -389,21 +382,263 @@ class SupervisorReviewServiceTests {
         assertThat(approved.reviewStatus()).isEqualTo("approved");
     }
 
-    /** 构造一个 AuthorizationService 由 mock AccessRepository 提供指定用户的 level_rank 的 service。 */
-    private SupervisorReviewService rankAwareService(Map<String, Integer> userRanks) {
+    /**
+     * M007-A-04：现口径下主管级 = 经角色持有 governance.supervisor_review.approve + 职级 rank 折算（(rank+2)/3）。
+     * 夹具用 mock 仓储：ranks 里显式给出的用户按其 rank（0 = 无职级配置），其余用户按当前安全上下文主体的账号类型
+     * supervisor_lN 折算 rank 3N；roleHolders 为 null 时全部用户经 ROLE 来源持有审批权限，否则只有集合内的用户持有。
+     */
+    private static com.complex.platform.access.AccessRepository levelAwareRepository(
+            Map<String, Integer> ranks, java.util.Set<String> roleHolders) {
         com.complex.platform.access.AccessRepository repo =
                 org.mockito.Mockito.mock(com.complex.platform.access.AccessRepository.class);
-        userRanks.forEach((userId, rank) -> {
-            String levelId = "lvl_" + userId;
-            org.mockito.Mockito.when(repo.findStaffLevelAssignment(userId)).thenReturn(java.util.Optional.of(
-                    new com.complex.platform.access.StaffLevelAssignment(
-                            userId, levelId, null, "CNY", null, null, null, "x",
-                            java.time.Instant.parse("2026-06-14T00:00:00Z"))));
-            org.mockito.Mockito.when(repo.findStaffLevelById(levelId)).thenReturn(java.util.Optional.of(
-                    new com.complex.platform.access.StaffLevelRecord(
-                            levelId, "M", "lower", rank, null, "active",
-                            java.time.Instant.parse("2026-06-14T00:00:00Z"))));
-        });
+        org.mockito.Mockito.when(repo.findPermissionEffects(org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    String userId = invocation.getArgument(0);
+                    if (roleHolders != null && !roleHolders.contains(userId)) {
+                        return List.of();
+                    }
+                    return List.of(new com.complex.platform.access.AccessRepository.PermissionEffect(
+                            userId, "governance.supervisor_review.approve",
+                            com.complex.platform.access.AccessRepository.Effect.GRANT,
+                            com.complex.platform.access.AccessRepository.Source.ROLE,
+                            "role_supervisor", null, null, false, false));
+                });
+        org.mockito.Mockito.when(repo.findStaffLevelAssignment(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> {
+                    String userId = invocation.getArgument(0);
+                    int rank = ranks.containsKey(userId) ? ranks.get(userId) : rankFromCurrentActor(userId);
+                    if (rank <= 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(new com.complex.platform.access.StaffLevelAssignment(
+                            userId, "lvl_rank_" + rank, null, "CNY", null, null, null, "x",
+                            java.time.Instant.parse("2026-06-14T00:00:00Z")));
+                });
+        org.mockito.Mockito.when(repo.findStaffLevelById(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> {
+                    String levelId = invocation.getArgument(0);
+                    int rank = Integer.parseInt(levelId.substring("lvl_rank_".length()));
+                    return Optional.of(new com.complex.platform.access.StaffLevelRecord(
+                            levelId, "M", "lower", rank, null, "active", java.time.Instant.parse("2026-06-14T00:00:00Z")));
+                });
+        return repo;
+    }
+
+    /** 共享 service 用到的审批人夹具 rank：a → 主管级 3、b → 主管级 2（用例断言从上下文取的级别）；其余为顶级 30。 */
+    private static final Map<String, Integer> SHARED_RANKS = Map.of(
+            "usr_reviewer_a", 9, "usr_reviewer_b", 6, "usr_reviewer_c", 30, "usr_reviewer_idem", 30, "usr_reviewer_decided", 30);
+
+    private static int rankFromCurrentActor(String userId) {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof com.complex.platform.access.AccessActor actor
+                && userId.equals(actor.id())) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("supervisor_l(\\d+)").matcher(actor.accountType());
+            if (matcher.find()) {
+                return Integer.parseInt(matcher.group(1)) * 3;
+            }
+        }
+        return 0;
+    }
+
+    // M007-F-09（PGM-1.16「谁发起、为什么、谁审批、结果是什么，都要能查到」）：策略声明的证据类型在审批时 fail-closed。
+    @Test
+    void approveRequiresPolicyDeclaredEvidence() {
+        TestSecurityActors.asSupervisor("usr_release_init", 3);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-evidence-eval", "manual release", List.of("att_eval"),
+                "manual_release", "ticket", "t_evidence", 0L, null));
+        assertThat(pending.blocked()).isTrue();
+
+        TestSecurityActors.asSupervisor("usr_release_reviewer", 3);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-evidence-no-attachment", "note", List.of(), 3, "approved", "ok")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-evidence-no-note", null, List.of("att_approve"), 3, "approved", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-evidence-ok", "note", List.of("att_approve"), 3, "approved", "evidence attached"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
+    }
+
+    // M007-A-01（PGM-1.2 第 5 步「放行结果都要记录」）：批准后同动作同对象同发起人可消费一次并留痕 admission.release_executed，再次消费为空。
+    @Test
+    void approvedReviewIsConsumedForReleaseExactlyOnce() {
+        TestSecurityActors.asSupervisor("usr_waiver_init", 1);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-release-eval", "waiver", List.of("att"), "bill_waiver", "bill", "bill_release", 0L, null));
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
+
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-release-approve", "note", List.of("att"), 3, "approved", "ok"));
+
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init"))
+                .map(SupervisorReviewDecisionRecord::reviewId).contains(pending.reviewId());
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_other")).isEmpty();
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("admission.release_executed");
+    }
+
+    // M007-A-02（PGM-1.7.1「不得转发给申请人本人，也不得转发给直接受益人」「可为任意人选」）：
+    // 转发人选校验；被转发人不受级别闸约束即可裁决；受益人不得自审。
+    @Test
+    void forwardedReviewerMayDecideButNeverInitiatorOrBeneficiary() {
+        TestSecurityActors.asSupervisor("usr_fwd_init", 1);
+        var pending = service.blockForAdmission("bill_waiver_l3", "bill_waiver", "bill", "bill_fwd",
+                "specific_role", 3, "usr_benef");
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).beneficiaryId()).isEqualTo("usr_benef");
+
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        assertThatThrownBy(() -> service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "fwd-init", null, "usr_fwd_init", "to initiator")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_FORWARD_TARGET_FORBIDDEN"));
+        assertThatThrownBy(() -> service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "fwd-benef", null, "usr_benef", "to beneficiary")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_FORWARD_TARGET_FORBIDDEN"));
+        var forwarded = service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "fwd-ok", null, "usr_anyone", "please handle"));
+        assertThat(forwarded.forwardedTo()).isEqualTo("usr_anyone");
+
+        // 受益人自审被拒（即使主管级达标）。
+        TestSecurityActors.asSupervisor("usr_benef", 3);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-benef", "note", List.of("att"), 3, "approved", "self")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
+
+        // 被转发人（无主管级）可裁决。
+        TestSecurityActors.asSupervisor("usr_anyone", 0);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-fwd", "note", List.of("att"), 0, "approved", "handled by forwarded reviewer"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("governance.supervisor_review.forwarded");
+    }
+
+    // M007-A-02（PGM-1.7.1「超时……自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝；到达最终节点仍超时保持待审」）
+    @Test
+    void overdueReviewEscalatesOneLevelThenOnlyRemindsAtTopAuthority() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-overdue", "v", List.of(), "contract_violation", "contract", "c_overdue", 0L, "violation"));
+        var schedule = reviewRepository.schedules.get(pending.reviewId());
+        assertThat(schedule.dueAt()).isAfter(java.time.Instant.now());
+        java.time.Instant later = schedule.dueAt().plusSeconds(60);
+
+        assertThat(service.escalateOverdue(later)).isEqualTo(1);
+        var escalated = reviewRepository.reviews.get(pending.reviewId());
+        assertThat(escalated.reviewStatus()).isEqualTo("pending_review");
+        assertThat(escalated.approvalLevel()).isEqualTo("top_authority");
+        assertThat(escalated.requiredApproverRank()).isEqualTo(30);
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).escalationCount()).isEqualTo(1);
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).dueAt()).isAfter(later);
+
+        java.time.Instant muchLater = reviewRepository.schedules.get(pending.reviewId()).dueAt().plusSeconds(60);
+        assertThat(service.escalateOverdue(muchLater)).isEqualTo(1);
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).reviewStatus()).isEqualTo("pending_review");
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).approvalLevel()).isEqualTo("top_authority");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("governance.supervisor_review.escalated", "governance.supervisor_review.reminded");
+    }
+
+    // M007-I4-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」）：低层级作出的转发不因超时升级
+    // 而成为最高权限节点上的有效转发——升级到 top_authority 时清除转发，被转发人须由主会话再逐单转发后方可裁决。
+    @Test
+    void forwardMadeBelowTopAuthorityDoesNotSurviveEscalationToTopAuthority() {
+        TestSecurityActors.asSupervisor("usr_esc_init", 1);
+        var pending = service.blockForAdmission("permission_grant_l2", "access.grant_request.money", "access_grant_request",
+                "agr_esc", "two_levels_up", 2, "usr_esc_benef");
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        assertThat(service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "esc-forward-below-top", null, "usr_anyone", "handle")).forwardedTo()).isEqualTo("usr_anyone");
+
+        java.time.Instant later = reviewRepository.schedules.get(pending.reviewId()).dueAt().plusSeconds(60);
+        assertThat(service.escalateOverdue(later)).isEqualTo(1);
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).approvalLevel()).isEqualTo("top_authority");
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).forwardedTo()).isNull();
+
+        TestSecurityActors.asSupervisor("usr_anyone", 0);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "esc-approve-stale-forwardee", "note", List.of("att"), 0, "approved", "stale forward")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).reviewStatus()).isEqualTo("pending_review");
+    }
+
+    // M007-I3-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」「被转发人同时获得审批权限」）：
+    // 未转发时 top_authority 单只能由 USB 主会话裁决；主会话转发后被转发人可裁决，申请人/受益人仍不得。
+    @Test
+    void topAuthorityReviewForwardedByMasterCanBeDecidedByForwardee() {
+        TestSecurityActors.asSupervisor("usr_top_init", 1);
+        var pending = service.blockForAdmission("base_definition_violation_l3", "base_definition_violation", "definition",
+                "d_top", "top_authority", 3, "usr_top_benef");
+
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "top-approve-non-master", "note", List.of("att"), 3, "approved", "not master")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
+        assertThatThrownBy(() -> service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "top-forward-non-master", null, "usr_anyone", "x")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
+
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                        "token", List.of()));
+        assertThat(service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "top-forward-master", null, "usr_anyone", "handle")).forwardedTo()).isEqualTo("usr_anyone");
+
+        TestSecurityActors.asSupervisor("usr_anyone", 0);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "top-approve-forwardee", "note", List.of("att"), 0, "approved", "handled"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
+    }
+
+    // M007-I3-F02（PGM-1.7.1 涉钱审批出厂默认 1 个工作日，本条适用于临时权限申请与高危授权）：授权申请按涉钱标记排期。
+    @Test
+    void moneyGrantApplicationsGetTheShorterDeadline() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var money = service.blockForAdmission("permission_grant_l2", "access.grant_request.money", "access_grant_request",
+                "agr_money", "two_levels_up", 2, "usr_m");
+        var normal = service.blockForAdmission("permission_grant_l2", "access.grant_request", "access_grant_request",
+                "agr_normal", "two_levels_up", 2, "usr_n");
+        assertThat(reviewRepository.schedules.get(normal.reviewId()).dueAt())
+                .isAfter(reviewRepository.schedules.get(money.reviewId()).dueAt());
+    }
+
+    // M007-F-11（PGM-1.16「为什么、谁审批、结果是什么，都要能查到」）：审批不得覆盖评估时的违规说明。
+    @Test
+    void approvalKeepsEvaluationReasonAndRecordsComment() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-reason", "v", List.of(), "contract_violation", "contract", "c_reason", 0L, "合同主体与经营主体不一致"));
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-reason-approve", "note", List.of("att"), 3, "approved", "证据齐备，同意"));
+        assertThat(approved.reason()).isEqualTo("合同主体与经营主体不一致");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.decided");
+    }
+
+    // M007-A-02（PGM-1.7.1 涉钱审批出厂默认 1 个工作日、其余 3 个工作日）：到期按工作日计算。
+    @Test
+    void deadlineIsShorterForMoneyActions() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var money = service.blockForAdmission("bar_bill_waiver_block", "bar.bill_waiver", "bar_bill", "b_money",
+                "one_level_up", 2, null);
+        var normal = service.blockForAdmission("amusement_reopen_block", "amusement.reopen", "amusement", "a_normal",
+                "two_levels_up", 3, null);
+        var moneyDue = reviewRepository.schedules.get(money.reviewId()).dueAt();
+        var normalDue = reviewRepository.schedules.get(normal.reviewId()).dueAt();
+        assertThat(moneyDue).isAfter(java.time.Instant.now());
+        assertThat(normalDue).isAfter(moneyDue);
+        assertThat(service.listPending(10).items()).extracting(item -> item.decision().reviewId())
+                .contains(money.reviewId(), normal.reviewId());
+    }
+
+    /** 构造一个 AuthorizationService 由 mock AccessRepository 提供指定用户的 level_rank 的 service。 */
+    private SupervisorReviewService rankAwareService(Map<String, Integer> userRanks) {
+        com.complex.platform.access.AccessRepository repo = levelAwareRepository(userRanks, null);
         return new SupervisorReviewService(
                 new AuthorizationService(repo),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -428,7 +663,7 @@ class SupervisorReviewServiceTests {
 
         // 创建新 service 实例（共享同一 reviewRepository，模拟重启后仍能读取）
         SupervisorReviewService newService = new SupervisorReviewService(
-                new AuthorizationService(null),
+                new AuthorizationService(levelAwareRepository(SHARED_RANKS, null)),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,  // 共享同一持久化存储
                 new AuditEventService(auditEventRepository)
@@ -473,7 +708,8 @@ class SupervisorReviewServiceTests {
     // §1.3-1 未命中分支：blocksByDefault 策略但金额未达阈值、无 violation、非 always-blocked，
     // 决策为 allowed、不落待审记录。bill_waiver(minAmount=1) 传 amount=0 即落入未命中。
     @Test
-    void evaluateReturnsAutoPassWhenNoPolicyMatches() {
+    // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：金额 0、无违规说明的免单也必须进复核。
+    void evaluateBlocksBillWaiverEvenAtZeroAmount() {
         TestSecurityActors.asSupervisorLevel(1);
         var decision = service.evaluate(new SupervisorReviewEvaluateRequest(
                 "review-autopass-1",
@@ -486,17 +722,17 @@ class SupervisorReviewServiceTests {
                 null   // 无 violationSummary → violationHit=false；bill_waiver 非 always-blocked
         ));
 
-        assertThat(decision.blocked()).isFalse();
-        assertThat(decision.reviewStatus()).isEqualTo("allowed");
-        assertThat(decision.decision()).isEqualTo("allowed");
+        assertThat(decision.blocked()).isTrue();
+        assertThat(decision.reviewStatus()).isEqualTo("pending_review");
+        assertThat(decision.decision()).isEqualTo("blocked");
         assertThat(decision.policyCode()).isEqualTo("bill_waiver_l3");
         assertThat(decision.actionType()).isEqualTo("bill_waiver");
         assertThat(decision.objectType()).isEqualTo("bill");
         assertThat(decision.objectId()).isEqualTo("bill_autopass");
         assertThat(decision.reviewId()).startsWith("review_");
         assertThat(decision.evaluatedAt()).isNotNull();
-        // 未命中不落待审记录
-        assertThat(reviewRepository.saveCount).isEqualTo(0);
+        // 常见复核恒落待审记录
+        assertThat(reviewRepository.saveCount).isEqualTo(1);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("governance.supervisor_review.evaluated");
@@ -651,6 +887,77 @@ class SupervisorReviewServiceTests {
         public Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId) {
             return Optional.ofNullable(reviews.get(reviewId))
                     .filter(r -> "pending_review".equals(r.reviewStatus()));
+        }
+
+        final Map<String, String> released = new LinkedHashMap<>();
+
+        @Override
+        public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
+                String actionType, String objectType, String objectId, String initiatedBy) {
+            return reviews.values().stream()
+                    .filter(r -> "approved".equals(r.reviewStatus()) && !released.containsKey(r.reviewId()))
+                    .filter(r -> actionType.equals(r.actionType()) && objectType.equals(r.objectType())
+                            && objectId.equals(r.objectId()) && java.util.Objects.equals(initiatedBy, r.initiatedBy()))
+                    .findFirst();
+        }
+
+        @Override
+        public boolean markSupervisorReviewReleased(String reviewId, String releasedBy, java.time.Instant releasedAt) {
+            return released.putIfAbsent(reviewId, releasedBy) == null;
+        }
+
+        final Map<String, ReviewSchedule> schedules = new LinkedHashMap<>();
+
+        @Override
+        public void scheduleSupervisorReview(String reviewId, String beneficiaryId, java.time.Instant dueAt) {
+            schedules.put(reviewId, new ReviewSchedule(reviewId, beneficiaryId, dueAt, 0, null, null));
+        }
+
+        @Override
+        public Optional<ReviewSchedule> findSupervisorReviewSchedule(String reviewId) {
+            return Optional.ofNullable(schedules.get(reviewId));
+        }
+
+        @Override
+        public boolean forwardSupervisorReview(String reviewId, String forwardedTo, String forwardedBy, java.time.Instant forwardedAt) {
+            ReviewSchedule current = schedules.get(reviewId);
+            if (current == null || findPendingSupervisorReviewById(reviewId).isEmpty()) {
+                return false;
+            }
+            schedules.put(reviewId, new ReviewSchedule(reviewId, current.beneficiaryId(), current.dueAt(),
+                    current.escalationCount(), current.escalatedAt(), forwardedTo));
+            return true;
+        }
+
+        @Override
+        public boolean escalateSupervisorReview(String reviewId, String approvalLevel, Integer requiredApproverRank,
+                                                java.time.Instant dueAt, java.time.Instant escalatedAt) {
+            SupervisorReviewDecisionRecord d = reviews.get(reviewId);
+            ReviewSchedule current = schedules.get(reviewId);
+            if (d == null || current == null || !"pending_review".equals(d.reviewStatus())) {
+                return false;
+            }
+            reviews.put(reviewId, new SupervisorReviewDecisionRecord(d.reviewId(), d.policyCode(), d.actionType(), d.objectType(),
+                    d.objectId(), d.blocked(), d.reviewStatus(), d.requiredLevel(), d.reviewerLevel(), d.decision(), d.reason(),
+                    d.evidenceAttachmentIds(), d.evaluatedAt(), d.initiatedBy(), approvalLevel, requiredApproverRank));
+            schedules.put(reviewId, new ReviewSchedule(reviewId, current.beneficiaryId(), dueAt,
+                    current.escalationCount() + 1, escalatedAt, current.forwardedTo()));
+            return true;
+        }
+
+        @Override
+        public List<PendingReview> listPendingSupervisorReviews(int limit) {
+            return reviews.values().stream()
+                    .filter(r -> "pending_review".equals(r.reviewStatus()))
+                    .map(r -> new PendingReview(r, schedules.get(r.reviewId())))
+                    .limit(limit).toList();
+        }
+
+        @Override
+        public List<PendingReview> listOverdueSupervisorReviews(java.time.Instant now, int limit) {
+            return listPendingSupervisorReviews(Integer.MAX_VALUE).stream()
+                    .filter(p -> p.schedule() != null && p.schedule().dueAt() != null && !p.schedule().dueAt().isAfter(now))
+                    .limit(limit).toList();
         }
     }
 }

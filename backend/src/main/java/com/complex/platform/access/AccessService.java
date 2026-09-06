@@ -658,20 +658,29 @@ public class AccessService {
                         repository.lockGrantAuthorizationFacts();
                         AccessGrantRequestRecord draft = buildGrantRequest(r);
                         List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(draft.permissionCodes());
-                        if (approvalRequired.isEmpty()) {
+                        // M007-F-04（PGM-1.10.1「员工可申请临时权限，按层级对应主管审批」）：临时权限申请不论日常/高危都走主管链；
+                        // 日常权限按一级主管（permission_grant_l1）审批。角色/岗位申请仍只接受含需审批权限的申请。
+                        boolean dailyTemporary = approvalRequired.isEmpty() && REQUEST_TEMPORARY_PERMISSION.equals(draft.requestType());
+                        if (approvalRequired.isEmpty() && !dailyTemporary) {
                             throw ApiException.badRequest("GRANT_APPROVAL_NOT_REQUIRED",
                                     "该授权不含需审批的权限，请直接分配");
                         }
-                        GrantReviewPolicy policy = grantReviewPolicy(approvalRequired.stream()
-                                .map(PermissionDefinition::permissionCode)
-                                .toList());
+                        GrantReviewPolicy policy = dailyTemporary
+                                ? new GrantReviewPolicy("permission_grant_l1", "one_level_up", 1)
+                                : grantReviewPolicy(approvalRequired.stream()
+                                        .map(PermissionDefinition::permissionCode)
+                                        .toList());
+                        // M007-A-02：被授权对象是直接受益人，不得审批也不得被转发。
+                        // M007-I3-F02（PGM-1.7.1 涉钱审批 1 个工作日）：含资金/分红/退款/调账类权限的申请以涉钱动作名进链。
+                        boolean moneyRelated = permissionDefinitions(draft.permissionCodes()).stream().anyMatch(AccessService::isMoneyPermission);
                         SupervisorReviewDecisionRecord review = requireSupervisorReviewService().blockForAdmission(
                                 policy.policyCode(),
-                                policy.policyCode(),
+                                moneyRelated ? "access.grant_request.money" : "access.grant_request",
                                 "access_grant_request",
                                 draft.id(),
                                 policy.approvalLevel(),
-                                policy.requiredLevel()
+                                policy.requiredLevel(),
+                                draft.targetUserId()
                         );
                         AccessGrantRequestRecord saved = repository.saveGrantRequest(withReview(draft, review.reviewId()));
                         repository.saveGrantFingerprint(saved.id(), authorizationFingerprint(saved));
@@ -1966,6 +1975,14 @@ public class AccessService {
                         false
                 ))
                 .toList();
+    }
+
+    /** PGM-1.10.1 五类中的资金/核销/退款/调账/分红发放与税费：按权限域或权限码判定「涉钱」（用于审批时限）；调账只认 bill.adjust（M007-I4-A01：库存调整不是调账）。 */
+    private static boolean isMoneyPermission(PermissionDefinition permission) {
+        String code = permission.permissionCode() == null ? "" : permission.permissionCode().toLowerCase(Locale.ROOT);
+        return "finance".equalsIgnoreCase(permission.domain() == null ? "" : permission.domain())
+                || java.util.stream.Stream.of("refund", "dividend", "payout", "deposit", "settle", "bill.adjust", "waiver", "tax",
+                        "verification", "payment").anyMatch(code::contains);
     }
 
     private void requireKnownPermissions(List<String> permissionCodes) {

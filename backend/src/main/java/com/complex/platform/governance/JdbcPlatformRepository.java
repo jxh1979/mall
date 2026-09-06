@@ -720,6 +720,160 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 """, Map.of("review_id", reviewId), this::mapSupervisorReview).stream().findFirst();
     }
 
+    @Override
+    public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
+            String actionType, String objectType, String objectId, String initiatedBy) {
+        return jdbcTemplate.query("""
+                SELECT review_id, policy_code, action_type, object_type, object_id,
+                       blocked, review_status, required_level, reviewer_level, decision,
+                       reason, evidence_attachment_ids::text AS evidence_attachment_ids, evaluated_at,
+                       initiated_by, approval_level, required_approver_rank
+                  FROM supervisor_review_decisions
+                 WHERE action_type = :action_type
+                   AND object_type = :object_type
+                   AND object_id = :object_id
+                   AND initiated_by = :initiated_by
+                   AND review_status = 'approved'
+                   AND released_at IS NULL
+                 ORDER BY evaluated_at DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("action_type", actionType)
+                .addValue("object_type", objectType)
+                .addValue("object_id", objectId)
+                .addValue("initiated_by", initiatedBy), this::mapSupervisorReview).stream().findFirst();
+    }
+
+    @Override
+    public boolean markSupervisorReviewReleased(String reviewId, String releasedBy, java.time.Instant releasedAt) {
+        return jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions
+                   SET released_at = :released_at, released_by = :released_by
+                 WHERE review_id = :review_id
+                   AND review_status = 'approved'
+                   AND released_at IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("review_id", reviewId)
+                .addValue("released_by", releasedBy)
+                .addValue("released_at", timestampWithTimeZone(releasedAt))) == 1;
+    }
+
+    private static final String PENDING_REVIEW_COLUMNS = """
+            SELECT review_id, policy_code, action_type, object_type, object_id,
+                   blocked, review_status, required_level, reviewer_level, decision,
+                   reason, evidence_attachment_ids::text AS evidence_attachment_ids, evaluated_at,
+                   initiated_by, approval_level, required_approver_rank,
+                   beneficiary_id, due_at, escalation_count, escalated_at, forwarded_to
+              FROM supervisor_review_decisions
+            """;
+
+    @Override
+    public void scheduleSupervisorReview(String reviewId, String beneficiaryId, java.time.Instant dueAt) {
+        jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions
+                   SET beneficiary_id = :beneficiary_id, due_at = :due_at
+                 WHERE review_id = :review_id
+                """, new MapSqlParameterSource()
+                .addValue("review_id", reviewId)
+                .addValue("beneficiary_id", beneficiaryId)
+                .addValue("due_at", timestampWithTimeZone(dueAt)));
+    }
+
+    @Override
+    public Optional<SupervisorReviewRepository.ReviewSchedule> findSupervisorReviewSchedule(String reviewId) {
+        return jdbcTemplate.query(PENDING_REVIEW_COLUMNS + " WHERE review_id = :review_id",
+                new MapSqlParameterSource().addValue("review_id", reviewId),
+                (rs, rowNumber) -> mapReviewSchedule(rs)).stream().findFirst();
+    }
+
+    @Override
+    public boolean forwardSupervisorReview(String reviewId, String forwardedTo, String forwardedBy, java.time.Instant forwardedAt) {
+        return jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions
+                   SET forwarded_to = :forwarded_to, forwarded_by = :forwarded_by, forwarded_at = :forwarded_at
+                 WHERE review_id = :review_id AND review_status = 'pending_review'
+                """, new MapSqlParameterSource()
+                .addValue("review_id", reviewId)
+                .addValue("forwarded_to", forwardedTo)
+                .addValue("forwarded_by", forwardedBy)
+                .addValue("forwarded_at", timestampWithTimeZone(forwardedAt))) == 1;
+    }
+
+    @Override
+    public boolean escalateSupervisorReview(String reviewId, String approvalLevel, Integer requiredApproverRank,
+                                            java.time.Instant dueAt, java.time.Instant escalatedAt) {
+        return jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions
+                   SET approval_level = :approval_level, required_approver_rank = :required_approver_rank,
+                       escalation_count = escalation_count + 1, escalated_at = :escalated_at, due_at = :due_at
+                 WHERE review_id = :review_id AND review_status = 'pending_review'
+                """, new MapSqlParameterSource()
+                .addValue("review_id", reviewId)
+                .addValue("approval_level", approvalLevel)
+                .addValue("required_approver_rank", requiredApproverRank)
+                .addValue("escalated_at", timestampWithTimeZone(escalatedAt))
+                .addValue("due_at", timestampWithTimeZone(dueAt))) == 1;
+    }
+
+    @Override
+    public List<SupervisorReviewRepository.PendingReview> listPendingSupervisorReviews(int limit) {
+        return jdbcTemplate.query(PENDING_REVIEW_COLUMNS + """
+                 WHERE review_status = 'pending_review'
+                 ORDER BY due_at NULLS LAST, evaluated_at
+                 LIMIT :limit
+                """, new MapSqlParameterSource().addValue("limit", limit),
+                (rs, rowNumber) -> new SupervisorReviewRepository.PendingReview(mapSupervisorReview(rs, rowNumber), mapReviewSchedule(rs)));
+    }
+
+    @Override
+    public List<SupervisorReviewRepository.PendingReview> listOverdueSupervisorReviews(java.time.Instant now, int limit) {
+        return jdbcTemplate.query(PENDING_REVIEW_COLUMNS + """
+                 WHERE review_status = 'pending_review' AND due_at IS NOT NULL AND due_at <= :now
+                 ORDER BY due_at
+                 LIMIT :limit
+                """, new MapSqlParameterSource().addValue("now", timestampWithTimeZone(now)).addValue("limit", limit),
+                (rs, rowNumber) -> new SupervisorReviewRepository.PendingReview(mapSupervisorReview(rs, rowNumber), mapReviewSchedule(rs)));
+    }
+
+    @Override
+    public Optional<Integer> findDeadlineWorkingDays(String policyCode) {
+        return jdbcTemplate.query("""
+                SELECT (parameters -> 'deadlineWorkingDays' ->> 'value')::int AS days
+                  FROM supervisor_review_policies
+                 WHERE policy_code = :policy_code
+                """, new MapSqlParameterSource().addValue("policy_code", policyCode),
+                (rs, rowNumber) -> integerValue(rs, "days")).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    @Override
+    public List<java.time.LocalDate> findHolidayDates(java.time.LocalDate from, java.time.LocalDate to) {
+        List<java.time.LocalDate> dates = new java.util.ArrayList<>();
+        jdbcTemplate.query("""
+                SELECT start_date, end_date FROM holiday_calendar
+                 WHERE end_date >= :from AND start_date <= :to
+                """, new MapSqlParameterSource().addValue("from", from).addValue("to", to), (rs, rowNumber) -> {
+            java.time.LocalDate day = rs.getDate("start_date").toLocalDate();
+            java.time.LocalDate end = rs.getDate("end_date").toLocalDate();
+            while (!day.isAfter(end)) {
+                dates.add(day);
+                day = day.plusDays(1);
+            }
+            return null;
+        });
+        return dates;
+    }
+
+    private SupervisorReviewRepository.ReviewSchedule mapReviewSchedule(ResultSet rs) throws SQLException {
+        return new SupervisorReviewRepository.ReviewSchedule(
+                rs.getString("review_id"),
+                rs.getString("beneficiary_id"),
+                nullableInstant(rs, "due_at"),
+                rs.getInt("escalation_count"),
+                nullableInstant(rs, "escalated_at"),
+                rs.getString("forwarded_to")
+        );
+    }
+
     private MapSqlParameterSource supervisorReviewParameters(SupervisorReviewDecisionRecord record) {
         return new MapSqlParameterSource()
                 .addValue("review_id", record.reviewId())

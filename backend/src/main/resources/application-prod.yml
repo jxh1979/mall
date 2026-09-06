@@ -29,6 +29,7 @@ settlement.expiry.scheduled.enabled: true
 settlement.reconciliation.scheduled.enabled: true
 settlement.monthly.scheduled.enabled: true
 customer.loyalty.scheduled.enabled: true
+governance.supervisor-review.escalation.scheduled.enabled: true
 ticket.face-photo.purge.scheduled.enabled: true
 analytics.dashboard-etl.scheduled.enabled: true
 amusement.inspection-task.scheduled.enabled: true
