@@ -48,8 +48,14 @@ function displayValue(value: unknown) {
   return String(value);
 }
 
-function makeResult(action: string, request: Record<string, unknown>, result: unknown) {
-  return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds, result };
+// M007-A-05（PGM-1.18）：主壳对对象型结果原样 JSON 上屏，这里只交中文句子（复核单号为内部标识）。
+function makeResult(action: string, _request: Record<string, unknown>, result: unknown) {
+  const reviewId = reviewIdFrom(result) || "未生成";
+  if (action === "supervisor_review_evaluated") {
+    const blocked = Boolean((result as { blocked?: unknown } | null)?.blocked);
+    return blocked ? `已生成待复核记录：${reviewId}` : `评估结果：允许，无需复核（${reviewId}）`;
+  }
+  return `复核单 ${reviewId} 已审批通过`;
 }
 
 function reviewIdFrom(result: unknown) {
@@ -58,6 +64,8 @@ function reviewIdFrom(result: unknown) {
 }
 
 const SUPERVISOR_REVIEW_PERMISSION = "governance.supervisor_review.manage";
+// M007-F-08（PGM-1.10 一个单一功能一个权限点）：评估用 manage，审批用 approve，与后端端点门禁一致。
+const SUPERVISOR_APPROVE_PERMISSION = "governance.supervisor_review.approve";
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染策略表对应子集。
 // URL 约定：?kpi=policies[&subset=blocked|active]。
@@ -252,7 +260,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
             </div>
 
             <div className="admin-form-grid" data-testid="supervisor-review-form">
-              <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => { setActionType(event.target.value); resetPendingReview(); }}><option value="contract_violation">合同违规</option><option value="base_definition_violation">基础定义违规</option><option value="billing_discount">账单折扣</option><option value="manual_release">人工放行</option></select></label>
+              <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => { setActionType(event.target.value); resetPendingReview(); }}><option value="contract_violation">合同违规</option><option value="base_definition_violation">基础定义违规</option><option value="bill_waiver">免单</option><option value="refund">退款</option><option value="ar_ap_adjustment">调账</option><option value="manual_release">人工放行</option></select></label>
               <label>{TEXT.objectType}<input data-testid="supervisor-review-object-type" value={objectType} onChange={(event) => { setObjectType(event.target.value); resetPendingReview(); }} /></label>
               <label>{TEXT.objectId}<input data-testid="supervisor-review-object-id" value={objectId} onChange={(event) => { setObjectId(event.target.value); resetPendingReview(); }} /></label>
               <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => { setAmountCent(event.target.value); resetPendingReview(); }} /></label>
@@ -270,12 +278,12 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
               >{TEXT.evaluate}</PermissionButton>
               <HighRiskConfirm
                 label={TEXT.approve}
-                impact={`将放行复核记录 ${latestReviewId || "未生成"}，被阻断的高风险动作随即生效并写入主管审批留痕。`}
+                impact={`将对复核单 ${latestReviewId || "未生成"} 记录审批通过结论并写入主管审批留痕。`}
                 disabled={busyAction !== "" || !hasPendingReview}
                 precheck={validateApprove}
                 onConfirm={() => void approveReview()}
                 permissionsState={effectivePermissions}
-                permissions={[SUPERVISOR_REVIEW_PERMISSION]}
+                permissions={[SUPERVISOR_APPROVE_PERMISSION]}
                 data-testid="supervisor-review-approve"
               />
             </div>

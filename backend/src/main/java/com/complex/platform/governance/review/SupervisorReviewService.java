@@ -198,6 +198,7 @@ public class SupervisorReviewService {
                             }
                         }
                     }
+                    requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
                     SupervisorReviewDecisionRecord result = new SupervisorReviewDecisionRecord(
                             id,
                             pending.policyCode(),
@@ -339,8 +340,27 @@ public class SupervisorReviewService {
         return approvalLevel.conservativeRequiredApproverRank(requiredLevel);
     }
 
+    // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：三类与违规、人工放行一样恒进复核。
     private boolean isAlwaysBlocked(String actionType) {
-        return actionType.contains("violation") || actionType.equals("manual_release");
+        return actionType.contains("violation") || actionType.equals("manual_release")
+                || actionType.equals("bill_waiver") || actionType.equals("refund") || actionType.equals("ar_ap_adjustment");
+    }
+
+    // M007-F-09（PGM-1.16「谁发起、为什么、谁审批、结果是什么，都要能查到」）：按策略声明的证据类型 fail-closed。
+    private void requireDecisionEvidence(SupervisorReviewPolicyRecord policy, SupervisorReviewApprovalRequest request) {
+        if (policy == null || policy.requiredEvidenceTypes() == null) {
+            return;
+        }
+        List<String> required = policy.requiredEvidenceTypes();
+        boolean hasAttachment = request.evidenceAttachmentIds() != null
+                && request.evidenceAttachmentIds().stream().anyMatch(this::textPresent);
+        if (required.contains("evidence_attachment") && !hasAttachment) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "该策略要求审批附带证据附件");
+        }
+        if ((required.contains("reason") || required.contains("operator_note"))
+                && !textPresent(request.comment()) && !textPresent(request.operatorNote())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "该策略要求填写审批意见");
+        }
     }
 
     private boolean textPresent(String value) {
