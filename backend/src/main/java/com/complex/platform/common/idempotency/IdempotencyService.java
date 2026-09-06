@@ -1,4 +1,7 @@
 package com.complex.platform.common.idempotency;
+
+// 文件版本：V0.01
+
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.common.api.ApiException;
@@ -70,7 +73,15 @@ public class IdempotencyService {
             Function<T, T> storedResponseTransformer
     ) {
         requireIdempotencyKey(idempotencyKey);
-        String scopedId = scopedOperationId(operationId);
+        String scope = callerScopeResolver.resolve();
+        String legacyScope = callerScopeResolver.legacyScope();
+        String legacyId = scopedOperationId(operationId, legacyScope);
+        boolean changedScope = !java.util.Objects.equals(scope, legacyScope);
+        String scopedId = changedScope ? "caller:" + hashJson(java.util.List.of(scope, operationId)) : legacyId;
+        // 旧共享记录没有可靠主体归属：保留结果，阻止串用或再次执行。
+        if (changedScope && repository.findByOperationIdAndIdempotencyKey(legacyId, idempotencyKey).isPresent()) {
+            throw ApiException.conflict("IDEMPOTENCY_CONFLICT", "该请求编号存在旧处理记录，请先核实原操作结果");
+        }
         String requestHash = hashJson(request);
         Instant now = Instant.now();
         IdempotencyRecord reservation = new IdempotencyRecord(
@@ -111,8 +122,7 @@ public class IdempotencyService {
                 "请求正在处理中，请稍后刷新查看结果");
     }
 
-    private String scopedOperationId(String operationId) {
-        String scope = callerScopeResolver.resolve();
+    private String scopedOperationId(String operationId, String scope) {
         if (scope == null || scope.isEmpty()) {
             return operationId;
         }

@@ -1,4 +1,6 @@
 package com.complex.platform.finance;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -368,6 +370,15 @@ class JdbcFinanceRepository implements FinanceRepository {
                        created_at, updated_at
                   FROM finance_payment_intents
                  WHERE id = :id
+                """, Map.of("id", id), this::mapPaymentIntent).stream().findFirst();
+    }
+
+    @Override
+    public Optional<PaymentIntentRecord> findPaymentIntentByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, business_order_type, business_order_id, amount_cent, currency,
+                       channel, status, gateway_provider, gateway_ref, gateway_status, created_at, updated_at
+                  FROM finance_payment_intents WHERE id = :id FOR UPDATE
                 """, Map.of("id", id), this::mapPaymentIntent).stream().findFirst();
     }
 

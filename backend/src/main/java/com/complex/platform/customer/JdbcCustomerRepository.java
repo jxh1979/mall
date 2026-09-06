@@ -1,4 +1,6 @@
 package com.complex.platform.customer;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1199,6 +1201,19 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("created_at", timestampWithTimeZone(txn.createdAt()))
                 .addValue("paid_at", timestampWithTimeZone(txn.paidAt())));
         return txn;
+    }
+
+    @Override
+    public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(
+            String customerId, String accountId, int page, int size) {
+        return jdbcTemplate.query("""
+                SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at
+                  FROM customer_stored_value_transactions
+                 WHERE customer_id = :customer AND account_id = :account
+                 ORDER BY created_at DESC, id DESC LIMIT :size OFFSET :offset
+                """, new MapSqlParameterSource().addValue("customer", customerId).addValue("account", accountId)
+                .addValue("size", size).addValue("offset", (long) (page - 1) * size), this::mapStoredValueTransaction);
     }
 
     @Override

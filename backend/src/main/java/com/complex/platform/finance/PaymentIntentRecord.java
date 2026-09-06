@@ -1,5 +1,7 @@
 package com.complex.platform.finance;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 
 /**
@@ -20,8 +22,17 @@ public record PaymentIntentRecord(
         String gatewayRef,
         String gatewayStatus,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String paymentUrl
 ) {
+    /** 拉起链接随本次响应返回，不作为支付成功凭据。 */
+    public PaymentIntentRecord(String id, String businessOrderType, String businessOrderId,
+            long amountCent, String currency, String channel, String status,
+            String gatewayProvider, String gatewayRef, String gatewayStatus, Instant createdAt, Instant updatedAt) {
+        this(id, businessOrderType, businessOrderId, amountCent, currency, channel, status,
+                gatewayProvider, gatewayRef, gatewayStatus, createdAt, updatedAt, null);
+    }
+
     /** 便捷构造：无渠道预留信息（占位/内部结算路径，向后兼容旧 9 参签名）。 */
     public PaymentIntentRecord(
             String id,

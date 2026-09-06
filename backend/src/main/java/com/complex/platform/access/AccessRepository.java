@@ -1,10 +1,16 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.07
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 public interface AccessRepository {
+
+    default void lockGrantAuthorizationFacts() {
+        throw new UnsupportedOperationException("授权仓储未实现事务内定义锁");
+    }
 
     List<PermissionDefinition> listPermissions();
 
@@ -23,6 +29,13 @@ public interface AccessRepository {
 
     default Optional<PermissionTemplate> findTemplateById(String id) {
         return listTemplates().stream().filter(t -> t.id().equals(id)).findFirst();
+    }
+
+    default PermissionTemplate createTemplate(PermissionTemplate template, List<PermissionTemplateItem> items) {
+        if (findTemplateById(template.id()).isPresent()) {
+            throw new IllegalStateException("权限模板已存在");
+        }
+        return saveTemplate(template, items);
     }
 
     PermissionTemplate saveTemplate(PermissionTemplate template, List<PermissionTemplateItem> items);
@@ -112,6 +125,14 @@ public interface AccessRepository {
         throw new UnsupportedOperationException("savePositionRoleTemplate not supported by this repository");
     }
 
+    default void savePositionTemplateLifecycle(PositionRoleTemplate mapping, String actorId) {
+        throw new UnsupportedOperationException("savePositionTemplateLifecycle not supported by this repository");
+    }
+
+    default long countPositionTemplateUsage(String id) {
+        throw new UnsupportedOperationException("countPositionTemplateUsage not supported by this repository");
+    }
+
     default void deletePositionRoleTemplate(String id) {
         throw new UnsupportedOperationException("deletePositionRoleTemplate not supported by this repository");
     }
@@ -122,6 +143,12 @@ public interface AccessRepository {
 
     default Optional<UserPositionAssignment> findUserPositionAssignment(String userId) {
         return Optional.empty();
+    }
+
+    /** 在当前岗位行上替换派生授权；独立 user_roles 与模板应用不受影响。 */
+    default void replacePositionGrants(String userId, String roleId, String mappingId, List<String> applicationIds,
+                                      String actorId, Instant changedAt) {
+        throw new UnsupportedOperationException("replacePositionGrants not supported by this repository");
     }
 
     List<PermissionTemplateApplication> applyTemplate(
@@ -147,6 +174,30 @@ public interface AccessRepository {
 
     default Optional<AccessGrantRequestRecord> findGrantRequestById(String id) {
         return Optional.empty();
+    }
+
+    /** 保存申请时的完整授权事实指纹，决策更新不得覆盖。 */
+    default void saveGrantFingerprint(String id, String fingerprint) {
+        throw new UnsupportedOperationException("saveGrantFingerprint not supported by this repository");
+    }
+
+    default Optional<String> findGrantFingerprint(String id) {
+        return Optional.empty();
+    }
+
+    default com.complex.platform.common.api.PageResponse<AccessGrantRequestRecord> pageGrantRequests(
+            Instant cutoff, String organizationId, String merchantId, int page, int size) {
+        List<AccessGrantRequestRecord> visible = listGrantRequests(cutoff).stream().filter(request ->
+                (organizationId == null || findUserById(request.targetUserId())
+                        .map(user -> organizationId.equals(user.organizationId())).orElse(false))
+                && (merchantId == null || merchantId.equals(request.merchantId()))).toList();
+        return com.complex.platform.common.api.PageResponse.of(visible, page, size);
+    }
+
+    default Optional<String> findGrantPolicy() { return Optional.empty(); }
+
+    default void saveGrantPolicy(String policyJson) {
+        throw new UnsupportedOperationException("saveGrantPolicy not supported by this repository");
     }
 
     default List<AccessGrantRequestRecord> listGrantRequests(Instant createdAtFrom) {

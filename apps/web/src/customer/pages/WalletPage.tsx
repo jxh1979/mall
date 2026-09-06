@@ -1,11 +1,21 @@
+// 文件版本：V0.02
 import { Alert, Button, Card, Empty, InputNumber, List, message, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
-import type { StoredValueAccount } from "../types";
+import type { StoredValueAccount, StoredValueTransaction } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph, Text } = Typography;
+type PendingTopup = { paymentIntentId: string; projectId?: string; merchantId?: string };
+const PENDING_TOPUPS = "customer-pending-stored-value-topups";
+
+function readPendingTopups(): PendingTopup[] {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PENDING_TOPUPS) ?? "[]") as unknown;
+    return Array.isArray(value) ? value.filter((item) => typeof item?.paymentIntentId === "string") : [];
+  } catch { return []; }
+}
 
 // 卡名：通用卡=综合体通用卡；商户卡=该发卡商户的卡。
 function cardLabel(acc: StoredValueAccount): string {
@@ -22,7 +32,7 @@ function yuan(cent: number): string {
   return `¥${(cent / 100).toFixed(2)}`;
 }
 
-// ⑦ 储值钱包（AUD-061）：多卡（通用卡 + 各商户卡）分卡余额展示 + 选卡充值/消费。3.17：error/loading/empty 分离可重试。
+// ⑦ 储值钱包（AUD-061）：多卡（通用卡 + 各商户卡）分卡余额展示 + 选卡充值与交易记录。3.17：error/loading/empty 分离可重试。
 export function WalletPage({ service }: { service: CustomerService }): React.ReactElement {
   const [accounts, setAccounts] = useState<StoredValueAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +40,26 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [amountYuan, setAmountYuan] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [channel, setChannel] = useState("wechat");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [pendingTopups, setPendingTopups] = useState<PendingTopup[]>(readPendingTopups);
+  const [transactions, setTransactions] = useState<StoredValueTransaction[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setTransactions([]);
+    setHistoryError(null);
+    if (!selectedId) return;
+    setHistoryLoading(true);
+    service.getStoredValueTransactions(selectedId, historyPage)
+      .then((rows) => { if (active) setTransactions(rows); })
+      .catch((err) => { if (active) setHistoryError(err instanceof Error ? err.message : "交易记录加载失败"); })
+      .finally(() => { if (active) setHistoryLoading(false); });
+    return () => { active = false; };
+  }, [service, selectedId, historyPage, accounts]);
 
   const load = useCallback(() => {
     let active = true;
@@ -63,35 +93,57 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
     merchantId: acc?.merchantId ?? undefined,
   });
 
-  const doTopup = (): void => {
+  async function checkTopup(pending: PendingTopup) {
+    setBusy(true);
+    setPaymentError(null);
+    try {
+      await service.settleStoredValueTopup(pending);
+      const remaining = readPendingTopups().filter((item) => item.paymentIntentId !== pending.paymentIntentId);
+      sessionStorage.setItem(PENDING_TOPUPS, JSON.stringify(remaining));
+      setPendingTopups(remaining);
+      load();
+      void message.success("充值已到账");
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "暂未确认到账，请稍后查询");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    // 从渠道回到钱包或刷新页面后，继续核验尚未确认的真实充值单。
+    void (async () => { for (const pending of readPendingTopups()) await checkTopup(pending); })();
+  }, [service]);
+
+  async function doTopup() {
     if (!selected || !amountYuan || amountYuan <= 0) {
       void message.warning("请选择储值卡并输入充值金额");
       return;
     }
     setBusy(true);
-    service
-      .topupStoredValue({ ...scopeOf(selected), amountCent: Math.round(amountYuan * 100) })
-      .then(() => void message.success("已发起充值，请到柜台完成支付收款后到账"))
-      .catch((e) => void message.error(e instanceof Error ? e.message : "充值发起失败"))
-      .finally(() => setBusy(false));
-  };
-
-  const doConsume = (): void => {
-    if (!selected || !amountYuan || amountYuan <= 0) {
-      void message.warning("请选择储值卡并输入消费金额");
-      return;
+    setPaymentError(null);
+    try {
+      const scope = scopeOf(selected);
+      const intent = await service.topupStoredValue({ ...scope, amountCent: Math.round(amountYuan * 100), channel });
+      if (intent.gatewayStatus === "RESERVED") throw new Error("支付渠道未启用，尚未扣款或充值到账");
+      if (intent.gatewayStatus === "NOT_CONFIGURED") throw new Error("支付渠道未配置，尚未扣款或充值到账");
+      if (!["PENDING", "SUCCEEDED"].includes(String(intent.gatewayStatus))
+          || typeof intent.paymentUrl !== "string" || !intent.id) {
+        throw new Error("支付渠道未返回有效支付页面，尚未确认收款");
+      }
+      const paymentUrl = new URL(intent.paymentUrl);
+      if (paymentUrl.protocol !== "https:") throw new Error("支付渠道返回的支付地址无效");
+      const pending = { paymentIntentId: intent.id, ...scope };
+      const next = [...readPendingTopups().filter((item) => item.paymentIntentId !== intent.id), pending];
+      sessionStorage.setItem(PENDING_TOPUPS, JSON.stringify(next));
+      setPendingTopups(next);
+      window.location.assign(paymentUrl.href);
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "充值发起失败");
+    } finally {
+      setBusy(false);
     }
-    setBusy(true);
-    service
-      .consumeStoredValue({ ...scopeOf(selected), amountCent: Math.round(amountYuan * 100), reason: "钱包消费" })
-      .then(() => {
-        void message.success("消费成功");
-        setAmountYuan(null);
-        load();
-      })
-      .catch((e) => void message.error(e instanceof Error ? e.message : "消费失败"))
-      .finally(() => setBusy(false));
-  };
+  }
 
   return (
     <div data-testid="wallet-page">
@@ -138,7 +190,8 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
         )}
       </Card>
 
-      <Card title="充值 / 消费" style={{ marginTop: 16 }}>
+      <Card title="充值" style={{ marginTop: 16 }}>
+        {paymentError ? <Alert type="error" message={paymentError} /> : null}
         {loading ? (
           <Spin />
         ) : (
@@ -147,10 +200,13 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
               data-testid="wallet-card-select"
               placeholder="选择储值卡"
               value={selectedId}
-              onChange={(v) => setSelectedId(v)}
+              onChange={(v) => { setSelectedId(v); setHistoryPage(1); }}
               style={{ width: "100%" }}
               options={accounts.map((a) => ({ value: a.id, label: `${cardLabel(a)} · 余额 ${yuan(a.balanceCent)}` }))}
             />
+            <label>充值支付方式<select aria-label="充值支付方式" value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="wechat">微信支付</option><option value="alipay">支付宝</option><option value="unionpay">银联</option>
+            </select></label>
             <InputNumber
               data-testid="wallet-amount"
               addonBefore="¥"
@@ -166,15 +222,29 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
               <Button type="primary" loading={busy} data-testid="wallet-topup" onClick={doTopup}>
                 充值
               </Button>
-              <Button loading={busy} data-testid="wallet-consume" onClick={doConsume}>
-                消费
-              </Button>
             </Space>
             <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              充值需到柜台完成支付收款后到账；储值消费即时扣本卡余额。商户预收卡退卡请到店办理。
+              在对应订单中选择储值余额支付；现场消费报手机号并验证短信后按账单扣款。商户预收卡退卡请到店办理。
             </Paragraph>
           </Space>
         )}
+      </Card>
+      {pendingTopups.map((pending) => <Button key={pending.paymentIntentId} disabled={busy} style={{ marginTop: 12 }} onClick={() => void checkTopup(pending)}>查询充值到账 · {pending.paymentIntentId}</Button>)}
+      <Card title="交易记录" style={{ marginTop: 16 }}>
+        {historyError ? <Alert type="error" message={historyError} /> : historyLoading ? <Spin /> :
+          <List dataSource={transactions} locale={{ emptyText: "暂无交易记录" }} renderItem={(txn) => (
+            <List.Item key={txn.id}>
+              <Space direction="vertical">
+                <Text>{({ topup: "充值", consume: "消费", refund: "退款" } as Record<string, string>)[txn.txnType] ?? "余额变动"} · {yuan(txn.amountCent)}</Text>
+                <Text type="secondary">余额 {yuan(txn.balanceAfterCent)} · {new Date(txn.createdAt).toLocaleString("zh-CN")}</Text>
+              </Space>
+            </List.Item>
+          )} />}
+        <Space>
+          <Button disabled={historyLoading || historyPage === 1} onClick={() => setHistoryPage((p) => p - 1)}>上一页</Button>
+          <Text>第 {historyPage} 页</Text>
+          <Button disabled={historyLoading || transactions.length < 20} onClick={() => setHistoryPage((p) => p + 1)}>下一页</Button>
+        </Space>
       </Card>
     </div>
   );

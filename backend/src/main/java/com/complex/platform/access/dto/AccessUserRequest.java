@@ -1,5 +1,7 @@
 package com.complex.platform.access.dto;
 
+// 文件版本：V0.01
+
 import com.fasterxml.jackson.annotation.JsonAlias;
 import java.util.List;
 
@@ -9,7 +11,7 @@ public record AccessUserRequest(
         @JsonAlias("evidence_attachment_ids") List<String> evidenceAttachmentIds,
         String username,
         String password,
-        String phone,
+        @com.fasterxml.jackson.annotation.JsonIgnore String phone,
         @JsonAlias("account_type") String accountType,
         @JsonAlias("organization_id") String organizationId,
         @JsonAlias("merchant_id") String merchantId,

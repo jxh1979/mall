@@ -1,5 +1,7 @@
 package com.complex.platform.common.idempotency;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -298,6 +300,38 @@ class IdempotencyServiceTests {
         assertThat(bActionRan).isTrue();
         assertThat(responseB).isEqualTo(new TestResponse("for-B"));
         assertThat(responseB).isNotEqualTo(new TestResponse("secret-A"));
+    }
+
+
+    // M006-031：范围变更不能重放归属不明的旧结果，也不能再次执行旧请求。
+    @Test
+    void changedCallerScopePreservesOldOperationsAndBoundsNewKeys() {
+        service.setCallerScopeResolver(new CallerScopeResolver() {
+            public String resolve() { return "u:" + "user".repeat(16) + ":" + "organization".repeat(6); }
+            public String legacyScope() { return "p"; }
+        });
+        TestRequest request = new TestRequest("same-payload");
+        AtomicInteger actions = new AtomicInteger();
+        for (String code : java.util.List.of("OK", "IN_PROGRESS", "FAILED_RETRYABLE")) {
+            IdempotencyRecord old = new IdempotencyRecord(UUID.randomUUID(), "p:operation", code,
+                    hashJson(request), code, code.equals("OK") ? "{\"value\":\"old-result\"}" : null,
+                    code.equals("OK") ? 200 : 202, Instant.now(), Instant.now().plusSeconds(86400));
+            repository.put(old);
+            assertThatThrownBy(() -> service.execute("operation", code, request,
+                    () -> { actions.incrementAndGet(); return new TestResponse("duplicate"); }, TestResponse.class))
+                    .isInstanceOfSatisfying(ApiException.class, failure ->
+                            assertThat(failure.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+            assertThat(repository.findByOperationIdAndIdempotencyKey("p:operation", code)).contains(old);
+        }
+        assertThat(actions).hasValue(0);
+        String operation = "createRole:" + "r".repeat(64);
+        TestResponse first = service.execute(operation, "fresh", request,
+                () -> { actions.incrementAndGet(); return new TestResponse("created"); }, TestResponse.class);
+        TestResponse retry = service.execute(operation, "fresh", request,
+                () -> { actions.incrementAndGet(); return new TestResponse("duplicate"); }, TestResponse.class);
+        assertThat(retry).isEqualTo(first);
+        assertThat(actions).hasValue(1);
+        assertThat(repository.records.values()).allMatch(record -> record.operationId().length() <= 128);
     }
 
     private String hashJson(Object value) {

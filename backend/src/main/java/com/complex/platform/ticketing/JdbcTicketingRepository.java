@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
@@ -928,6 +930,12 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + " WHERE id = :id", Map.of("id", id), rowMapper::mapTicketOrder)
                 .stream()
                 .findFirst();
+    }
+
+    @Override
+    public Optional<TicketOrderRecord> findTicketOrderByIdForUpdate(String id) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + " WHERE id = :id FOR UPDATE",
+                Map.of("id", id), rowMapper::mapTicketOrder).stream().findFirst();
     }
 
     @Override

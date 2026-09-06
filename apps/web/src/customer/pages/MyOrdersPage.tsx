@@ -1,9 +1,10 @@
-import { Alert, Button, Card, Empty, List, Modal, Space, Spin, Tag, Typography } from "antd";
+// 文件版本：V0.01
+import { Alert, Button, Card, Empty, Input, List, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 
 import { TicketQrView } from "../components/TicketQrView";
 import type { CustomerService } from "../client/customerService";
-import type { CustomerTicket, TicketOrder } from "../types";
+import type { CustomerTicket, StoredValueAccount, TicketOrder } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Text } = Typography;
@@ -19,6 +20,64 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketsError, setTicketsError] = useState<string | null>(null);
   const [qrTicketId, setQrTicketId] = useState<string | null>(null);
+  const [payOrder, setPayOrder] = useState<TicketOrder | null>(null);
+  const [cards, setCards] = useState<StoredValueAccount[]>([]);
+  const [cardId, setCardId] = useState<string>();
+  const [phone, setPhone] = useState("");
+  const [smsCode, setSmsCode] = useState("");
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  async function openStoredValuePayment(order: TicketOrder) {
+    setPayOrder(order);
+    setCards([]);
+    setCardId(undefined);
+    setPhone("");
+    setSmsCode("");
+    setPaymentError(null);
+    setPaymentBusy(true);
+    try {
+      const ownCards = await service.getStoredValueAccounts();
+      setCards(ownCards);
+      setCardId(ownCards.find((card) => card.status === "active" && card.projectId === null)?.id);
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "储值卡加载失败");
+    } finally {
+      setPaymentBusy(false);
+    }
+  }
+
+  async function submitStoredValuePayment() {
+    if (!payOrder || !cardId || !phone.trim() || !smsCode.trim()) return;
+    setPaymentBusy(true);
+    setPaymentError(null);
+    try {
+      const paid = await service.payTicketOrderWithStoredValue(payOrder.id, {
+        accountId: cardId, phone: phone.trim(), smsCode: smsCode.trim(),
+      });
+      setOrders((previous) => previous.map((order) => order.id === paid.id ? paid : order));
+      setPayOrder(null);
+      setSmsCode("");
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "余额支付失败");
+    } finally {
+      setPaymentBusy(false);
+    }
+  }
+
+  async function requestPaymentCode() {
+    if (!phone.trim()) { setPaymentError("请填写本人注册手机号"); return; }
+    setPaymentBusy(true);
+    setPaymentError(null);
+    try {
+      await service.requestStoredValueCode(phone.trim());
+      void message.success("验证码已发送");
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "验证码发送失败");
+    } finally {
+      setPaymentBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -116,6 +175,25 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
 
   return (
     <div data-testid="my-orders-page">
+      <Modal title="订单储值支付" open={payOrder !== null} onCancel={() => setPayOrder(null)}
+        closable={!paymentBusy} maskClosable={false} keyboard={!paymentBusy}
+        okText="确认余额支付" cancelText="取消" confirmLoading={paymentBusy}
+        okButtonProps={{ disabled: paymentBusy || !cardId || !phone.trim() || !smsCode.trim() }}
+        cancelButtonProps={{ disabled: paymentBusy }} onOk={() => void submitStoredValuePayment()}>
+        {paymentError ? <Alert type="error" message={paymentError} /> : null}
+        <Space direction="vertical" style={{ width: "100%" }}>
+          <Text>本订单应付 ¥{((payOrder?.amountCent ?? 0) / 100).toFixed(2)}</Text>
+          <Select aria-label="付款储值卡" value={cardId} onChange={setCardId} style={{ width: "100%" }}
+            options={cards.map((card) => ({ value: card.id,
+              disabled: card.status !== "active" || card.projectId !== null,
+              label: `${card.merchantId ? "商户卡（" + card.merchantId + "）" : "综合体通用卡"} · 余额 ¥${(card.balanceCent / 100).toFixed(2)}${card.projectId ? " · 该订单暂不支持此卡范围" : ""}` }))} />
+          <label htmlFor="order-payment-phone">付款手机号</label>
+          <Input id="order-payment-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Button disabled={paymentBusy} onClick={() => void requestPaymentCode()}>发送扣款验证码</Button>
+          <label htmlFor="order-payment-code">短信验证码</label>
+          <Input id="order-payment-code" autoComplete="one-time-code" inputMode="numeric" value={smsCode} onChange={(e) => setSmsCode(e.target.value)} />
+        </Space>
+      </Modal>
       <Card title="我的订单 / 我的票 / 我的权益">
         {error ? <Alert type="error" message="订单加载失败" description={error} style={{ marginBottom: 12 }} /> : null}
         {loading ? (
@@ -141,6 +219,9 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
                       <Text type="secondary">
                         {order.quantity} 张 · ¥{(order.amountCent / 100).toFixed(2)} · 游玩日 {order.visitDate ?? "—"}
                       </Text>
+                      {order.payStatus === "unpaid" && order.status === "created" ? (
+                        <Button onClick={() => void openStoredValuePayment(order)}>储值余额支付</Button>
+                      ) : null}
                       <Button size="small" onClick={() => void toggleTickets(order.id)} data-testid="order-tickets-toggle">
                         {expandedOrderId === order.id ? "收起票据" : "查看票 / 出码"}
                       </Button>

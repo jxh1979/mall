@@ -1,3 +1,4 @@
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -11,10 +12,14 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AccessUserRow, AdminPageProps } from "../types";
 
+type BoundedInt = { value: number; min: number; max: number };
+type GrantPolicy = { windowDays: BoundedInt; positionThreshold: BoundedInt; userThreshold: BoundedInt;
+  riskReviews: Record<"low" | "medium" | "high" | "critical", { approvalLevel: string; requiredLevel: number }> };
 type RoleRow = { id: string; roleName?: string | null; roleCode?: string | null; status?: string | null; permissionCodes?: string[] };
 type PositionRoleTemplateRow = {
   id: string; positionCode: string; staffLevelId: string; roleId?: string | null; templateId?: string | null;
   organizationId?: string | null; status?: string | null; createdBy?: string | null;
+  archivedAt?: string | null; deletedAt?: string | null; deleteReviewId?: string | null; deleteReason?: string | null;
 };
 type AccessGrantRequestRow = {
   id: string; requestType: string; targetUserId: string; targetRoleId?: string | null; templateId?: string | null;
@@ -83,11 +88,18 @@ function statusBadge(status?: string | null) {
   return <span className={`admin-badge ${kind}`}>{value ? formatBusinessStatus(value) : "—"}</span>;
 }
 
-export function AccessGovernancePage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function AccessGovernancePage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [users, setUsers] = React.useState<AccessUserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleRow[]>([]);
   const [positionTemplates, setPositionTemplates] = React.useState<PositionRoleTemplateRow[]>([]);
+  const [includeArchivedTemplates, setIncludeArchivedTemplates] = React.useState(false);
+  const [lifecycleReason, setLifecycleReason] = React.useState("");
   const [grantRequests, setGrantRequests] = React.useState<AccessGrantRequestRow[]>([]);
+  const [grantPage, setGrantPage] = React.useState(1);
+  const [grantTotal, setGrantTotal] = React.useState(0);
+  const [grantPageBusy, setGrantPageBusy] = React.useState(false);
+  const [grantPolicy, setGrantPolicy] = React.useState<GrantPolicy | null>(null);
+  const [grantPolicyReason, setGrantPolicyReason] = React.useState("");
   const [summary, setSummary] = React.useState<AccessGrantSummary | null>(null);
   const [summaryNotice, setSummaryNotice] = React.useState<string | null>(null);
   const [templateForm, setTemplateForm] = React.useState({ id: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", roleId: "", templateId: "", status: "active" });
@@ -120,15 +132,17 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
       const [userRows, roleRows, templateRows, requestRows, grantSummary] = await Promise.all([
         canUserView ? api.get<AccessUserRow[]>("/api/v1/access/users") : Promise.resolve([] as AccessUserRow[]),
         canRoleView ? api.get<RoleRow[]>("/api/v1/access/roles") : Promise.resolve([] as RoleRow[]),
-        api.get<PositionRoleTemplateRow[]>("/api/v1/access/position-role-templates"),
-        canGrantView ? api.get<AccessGrantRequestRow[]>("/api/v1/access/grant-requests?window_days=30") : Promise.resolve([] as AccessGrantRequestRow[]),
+        api.get<PositionRoleTemplateRow[]>(`/api/v1/access/position-role-templates?include_archived=${includeArchivedTemplates}`),
+        canGrantView ? api.getPaged<AccessGrantRequestRow>(`/api/v1/access/grant-requests?page=${grantPage}`) : Promise.resolve({ items: [] as AccessGrantRequestRow[], total: 0, page: 1, size: 50 }),
         // 智能总结=纯统计副资源（GRANT_VIEW 权限，无权账号可能 403）：单独降级，不拖垮角色装配/审批主流程。
-        loadSecondaryIfPermitted(canGrantView, () => api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary?window_days=30&position_threshold=2&user_threshold=2"), null as AccessGrantSummary | null),
+        loadSecondaryIfPermitted(canGrantView, () => api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary"), null as AccessGrantSummary | null),
       ]);
       setUsers(userRows ?? []);
       setRoles(roleRows ?? []);
       setPositionTemplates(templateRows ?? []);
-      setGrantRequests(requestRows ?? []);
+      setGrantRequests(requestRows.items);
+      setGrantPage(requestRows.page);
+      setGrantTotal(requestRows.total);
       setSummary(grantSummary.data);
       setSummaryNotice(grantSummary.notice);
     },
@@ -202,10 +216,47 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
     }
   }
 
-  async function deletePositionTemplate(id: string) {
-    await api.delete(`/api/v1/access/position-role-templates/${encodeURIComponent(id)}`);
-    setActionResult({ action: "access_position_role_template_deleted", templateId: id });
-    await reload();
+  async function loadGrantPage(page: number) {
+    setGrantPageBusy(true);
+    try {
+      const result = await api.getPaged<AccessGrantRequestRow>(`/api/v1/access/grant-requests?page=${page}`);
+      setGrantRequests(result.items); setGrantPage(result.page); setGrantTotal(result.total);
+    } catch (error) { setGlobalError(error instanceof Error ? error.message : "授权申请读取失败"); }
+    finally { setGrantPageBusy(false); }
+  }
+
+  async function loadGrantPolicy() {
+    try { setGrantPolicy(await api.get<GrantPolicy>("/api/v1/access/grant-policy")); }
+    catch (error) { setGlobalError(error instanceof Error ? error.message : "授权政策读取失败"); }
+  }
+
+  async function saveGrantPolicy() {
+    if (!grantPolicy || !grantPolicyReason.trim()) { setGlobalError("请读取政策并填写修改理由。"); return; }
+    try {
+      setGrantPolicy(await api.post<GrantPolicy>("/api/v1/access/grant-policy", {
+        policy: grantPolicy, operatorNote: grantPolicyReason.trim(),
+      }));
+      setActionResult({ action: "授权政策已保存" });
+      await reload();
+    } catch (error) { setGlobalError(error instanceof Error ? error.message : "授权政策保存失败"); }
+  }
+
+  async function changePositionLifecycle(id: string, action: string) {
+    if (!lifecycleReason.trim()) { setGlobalError("请填写存档、删除或恢复理由。"); return; }
+    try {
+      await api.post(`/api/v1/access/position-role-templates/${encodeURIComponent(id)}/lifecycle`, {
+        action, reason: lifecycleReason.trim(),
+      });
+      setActionResult({ action: "岗位模板状态已更新", templateId: id });
+      await reload();
+    } catch (error) { setGlobalError(error instanceof Error ? error.message : "岗位模板处理失败"); }
+  }
+
+  async function showArchivedTemplates(include: boolean) {
+    try {
+      const rows = await api.get<PositionRoleTemplateRow[]>(`/api/v1/access/position-role-templates?include_archived=${include}`);
+      setPositionTemplates(rows); setIncludeArchivedTemplates(include);
+    } catch (error) { setGlobalError(error instanceof Error ? error.message : "存档模板读取失败"); }
   }
 
   async function assignPosition() {
@@ -367,15 +418,23 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           items={[
             { key: "assign", label: "① 角色装配", forceRender: true, children: (<>
         <h3>职位 ↔ 模板映射</h3>
+        <label>存档、删除或恢复理由<input data-testid="access-position-template-reason" value={lifecycleReason} onChange={(event) => setLifecycleReason(event.target.value)} /></label>
+        <label><input type="checkbox" checked={includeArchivedTemplates} onChange={(event) => void showArchivedTemplates(event.target.checked)} />显示存档及已删除模板</label>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-position-role-templates-table">
             <thead><tr><th>编号</th><th>岗位</th><th>职级</th><th>角色</th><th>权限模板</th><th>组织</th><th>状态</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{positionTemplates.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-position-role-template-${row.id}`} onClick={() => openTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
-                <td>{row.id}</td><td>{zhPosition(row.positionCode)}</td><td>{zhLevel(row.staffLevelId)}</td><td>{row.roleId ?? "-"}</td><td>{row.templateId ?? "-"}</td><td>{row.organizationId ?? "-"}</td><td>{statusBadge(row.status)}</td>
+                <td>{row.id}</td><td>{zhPosition(row.positionCode)}</td><td>{zhLevel(row.staffLevelId)}</td><td>{row.roleId ?? "-"}</td><td>{row.templateId ?? "-"}</td><td>{row.organizationId ?? "-"}</td><td>{row.deletedAt ? "已删除（可恢复）" : row.archivedAt ? "已存档" : statusBadge(row.status)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
-                  <button type="button" data-testid={`access-position-role-template-select-${row.id}`} onClick={() => selectTemplate(row)}>选中</button>
-                  <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid={`access-position-role-template-delete-${row.id}`} onClick={() => void deletePositionTemplate(row.id)}>删除</PermissionButton>
+                  <button type="button" data-testid={`access-position-role-template-select-${row.id}`} disabled={Boolean(row.archivedAt)} onClick={() => selectTemplate(row)}>选中</button>
+                  {!row.archivedAt ? <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid={`access-position-role-template-archive-${row.id}`} onClick={() => void changePositionLifecycle(row.id, "archive")}>存档</PermissionButton> : <>
+                    {!row.deletedAt && !row.deleteReviewId ? <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} onClick={() => void changePositionLifecycle(row.id, "request_delete")}>{user.id === "usr_master_authority" && user.username === "master-authority" ? "最高权限直接删除" : "申请删除"}</PermissionButton> : null}
+                    {!row.deletedAt && row.deleteReviewId ? <>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["access.role.assign", "governance.supervisor_review.approve"]} onClick={() => void changePositionLifecycle(row.id, "approve_delete")}>最高权限批准删除</PermissionButton>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["access.role.assign", "governance.supervisor_review.approve"]} onClick={() => void changePositionLifecycle(row.id, "reject_delete")}>驳回删除</PermissionButton>
+                    </> : <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} onClick={() => void changePositionLifecycle(row.id, "restore")}>恢复为停用模板</PermissionButton>}
+                  </>}
                 </td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看岗位角色模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
@@ -414,6 +473,11 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           </>) },
           { key: "grant", label: "② 高危授权审批", forceRender: true, children: (<>
         <h3>高危授权审批</h3>
+        {canGrantView ? <div className="admin-form-row">
+          <span>第 {grantPage} 页，共 {grantTotal} 条</span>
+          <button type="button" disabled={grantPageBusy || grantPage <= 1} onClick={() => void loadGrantPage(grantPage - 1)}>上一页</button>
+          <button type="button" data-testid="access-grant-next-page" disabled={grantPageBusy || grantPage * 50 >= grantTotal} onClick={() => void loadGrantPage(grantPage + 1)}>下一页</button>
+        </div> : null}
         <div className="admin-form-row" data-testid="access-grant-request-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_APPLY} data-testid="access-grant-request-create-open"
             onClick={() => { setGrantError(""); setGrantOpen(true); }}>＋ 发起授权申请</PermissionButton>
@@ -445,6 +509,33 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           </>) },
           { key: "summary", label: "③ 智能总结", forceRender: true, children: (<>
         <h3>智能总结</h3>
+        <details>
+          <summary>授权政策配置</summary>
+          <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_VIEW} data-testid="access-grant-policy-load" onClick={() => void loadGrantPolicy()}>读取授权政策</PermissionButton>
+          {grantPolicy ? <>
+            {(["windowDays", "positionThreshold", "userThreshold"] as const).map((key) => <fieldset key={key}>
+              <legend>{{ windowDays: "统计时间窗（天）", positionThreshold: "岗位频繁申请阈值", userThreshold: "用户频繁申请阈值" }[key]}</legend>
+              {(["value", "min", "max"] as const).map((part) => <label key={part}>{{ value: "配置值", min: "下限", max: "上限" }[part]}
+                <input type="number" min={1} step={1} data-testid={`grant-policy-${key}-${part}`} value={grantPolicy[key][part]}
+                  onChange={(event) => setGrantPolicy({ ...grantPolicy, [key]: { ...grantPolicy[key], [part]: Number(event.target.value) } })} />
+              </label>)}
+            </fieldset>)}
+            {(["low", "medium", "high", "critical"] as const).map((risk) => <fieldset key={risk}>
+              <legend>{{ low: "低风险", medium: "中风险", high: "高风险", critical: "极高风险" }[risk]}权限审批</legend>
+              <label>审批层级<select value={grantPolicy.riskReviews[risk].approvalLevel}
+                onChange={(event) => setGrantPolicy({ ...grantPolicy, riskReviews: { ...grantPolicy.riskReviews,
+                  [risk]: { ...grantPolicy.riskReviews[risk], approvalLevel: event.target.value } } })}>
+                <option value="one_level_up">上一级</option><option value="two_levels_up">上两级</option><option value="top_authority">最高权限</option>
+              </select></label>
+              <label>主管级别<input type="number" min={1} max={3} step={1} value={grantPolicy.riskReviews[risk].requiredLevel}
+                onChange={(event) => setGrantPolicy({ ...grantPolicy, riskReviews: { ...grantPolicy.riskReviews,
+                  [risk]: { ...grantPolicy.riskReviews[risk], requiredLevel: Number(event.target.value) } } })} /></label>
+            </fieldset>)}
+            <label>修改理由<input data-testid="grant-policy-reason" value={grantPolicyReason} onChange={(event) => setGrantPolicyReason(event.target.value)} /></label>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["admission.policy.manage"]} data-testid="access-grant-policy-save" onClick={() => void saveGrantPolicy()}>保存授权政策</PermissionButton>
+          </> : null}
+        </details>
+
         <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_VIEW} data-testid="access-grant-summary-refresh" onClick={() => void reload()}>刷新总结</PermissionButton>
         {summaryNotice ? <div className="admin-state" data-testid="access-grant-summary-degraded">{summaryNotice}</div> : null}
         <div className="admin-table-scroll">

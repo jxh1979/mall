@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -56,12 +58,12 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    private com.complex.platform.common.crypto.PiiCipher piiCipher;
-
     @BeforeEach
     void setUpActor() {
-        TestSecurityActors.asPlatformAdmin();
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor("usr_master_authority", "master-authority",
+                                "platform_admin", "org_1", null, "active"), null, java.util.List.of()));
     }
 
     @AfterEach
@@ -78,7 +80,8 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         seedAccount(customerId, null, "merchant_svchain1", 8000L, null);
 
         BarBillRecord settled = billingService.settleBill(billId, new BarBillSettleRequest(
-                "svchain1key", null, null, "pay_svchain1", null, "stored_value"));
+                "svchain1key", null, null, "pay_svchain1", null, "stored_value", null, null,
+                customerRepository.findCustomerById(customerId).orElseThrow().phone(), "000000"));
 
         assertThat(settled.settlementStatus()).isEqualTo("settled");
         assertThat(settled.paidAmountCent()).isEqualTo(5000L);
@@ -115,7 +118,8 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         // 结账幂等键派生出同一个 barsv_k3attack——AUD-002 之前返回旧流水不扣本次应付仍标已支付；
         // 现在指纹(金额/事由)不符 → 409，整单回滚，不产生假已支付账单。
         assertThatThrownBy(() -> billingService.settleBill(billId, new BarBillSettleRequest(
-                "k3attack", null, null, "pay_svchain3", null, "stored_value")))
+                "k3attack", null, null, "pay_svchain3", null, "stored_value", null, null,
+                customerRepository.findCustomerById(customerId).orElseThrow().phone(), "000000")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("已被其他操作使用");
     }
@@ -125,8 +129,8 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         String customerId = seedCustomer("svchain4");
         seedAccount(customerId, PROJECT_ID, null, 5000L, null);
 
-        assertThatThrownBy(() -> storedValueService.consume(customerId, PROJECT_ID, null,
-                100L, "reserved prefix probe", "sv_settle_pay_intent_squat"))
+        assertThatThrownBy(() -> storedValueService.topup(customerId, PROJECT_ID, null,
+                100L, "wechat", "sv_settle_pay_intent_squat"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("系统保留前缀");
         assertThatThrownBy(() -> storedValueService.refund(customerId, PROJECT_ID, null,
@@ -140,16 +144,16 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         String customerId = seedCustomer("svchain5");
         seedAccount(customerId, PROJECT_ID, null, 5000L, null);
 
-        CustomerStoredValueTransactionRecord first = storedValueService.consume(customerId, PROJECT_ID, null,
+        CustomerStoredValueTransactionRecord first = storedValueService.consumeInternal(customerId, PROJECT_ID, null,
                 1200L, "same request retry", "retrykey_svchain5");
-        CustomerStoredValueTransactionRecord replay = storedValueService.consume(customerId, PROJECT_ID, null,
+        CustomerStoredValueTransactionRecord replay = storedValueService.consumeInternal(customerId, PROJECT_ID, null,
                 1200L, "same request retry", "retrykey_svchain5");
 
         assertThat(replay.id()).isEqualTo(first.id());
         assertThat(projectCardBalance(customerId, PROJECT_ID)).isEqualTo(3800L);
 
         // 同键改金额=指纹不符，拒绝而非错误重放。
-        assertThatThrownBy(() -> storedValueService.consume(customerId, PROJECT_ID, null,
+        assertThatThrownBy(() -> storedValueService.consumeInternal(customerId, PROJECT_ID, null,
                 999L, "same request retry", "retrykey_svchain5"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("已被其他操作使用");
@@ -238,11 +242,8 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     private String seedCustomer(String prefix) {
         String id = prefix + "_customer";
         String phone = "139" + String.format("%08d", Math.abs(prefix.hashCode()) % 100_000_000);
-        jdbcTemplate.update("""
-                INSERT INTO customers (id, phone, masked_phone, status, birth_date, last_login_at, created_at, updated_at)
-                VALUES (?, ?, ?, 'active', NULL, NULL, now(), now())
-                ON CONFLICT (id) DO UPDATE SET updated_at = now()
-                """, id, piiCipher.encrypt(phone), "139****" + phone.substring(7));
+        customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(
+                id, phone, "139****" + phone.substring(7), "active", null, null, Instant.now(), Instant.now()));
         return id;
     }
 

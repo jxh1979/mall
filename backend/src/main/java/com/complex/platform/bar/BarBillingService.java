@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.02
+
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -35,6 +37,8 @@ public class BarBillingService {
     // 字段注入（required=false）以免改构造点/单测；bar 依赖 customer 无构造环（StoredValueService 不依赖 bar bean）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.customer.StoredValueService storedValueService;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.customer.CustomerService customerService;
     // P0-D/CFG-01（V340）：卡座提成率改后台可配（消灭 15%/10% 写死）。字段注入免改构造点（同上两例）；
     // 生产由 Spring 恒注入 JdbcCommissionPointsConfigRepository。资金级 fail-closed：为 null 即拒绝计提
     // （见 requireCommissionRateBp），绝不静默回落硬编码常量——回落常量正是本批要根除的东西。
@@ -148,6 +152,19 @@ public class BarBillingService {
         ));
     }
 
+    void requestStoredValueCode(String billId, String phone) {
+        BarBillRecord bill = repository.findBillById(billId)
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
+        checkMerchantOwnership(bill.merchantId());
+        if ("settled".equals(bill.settlementStatus())) {
+            throw ApiException.conflict("BAR_BILL_ALREADY_SETTLED", "账单已结账，请勿重复操作");
+        }
+        if (customerService == null) {
+            throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信验证服务不可用");
+        }
+        customerService.requestStoredValueCode(resolveBillCustomerId(bill), phone);
+    }
+
     BarBillRecord settleBill(String billId, BarBillSettleRequest request) {
         BarBillSettleRequest actual = requireRequest(request);
         // 2c-2：行锁读取账单，序列化并发结算（配合 settled 守卫防 TOCTOU 重复结算）。
@@ -226,11 +243,11 @@ public class BarBillingService {
             if (storedValueService == null) {
                 throw ApiException.conflict("STORED_VALUE_UNAVAILABLE", "储值支付当前不可用");
             }
-            String svCustomerId = resolveBillCustomerId(bill);
-            if (svCustomerId == null) {
-                throw ApiException.badRequest("VALIDATION_FAILED",
-                        "储值支付需先绑定客人（账单未关联客人，无法扣储值卡）");
+            if (customerService == null) {
+                throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信验证服务不可用");
             }
+            String svCustomerId = customerService.verifyStoredValueCustomer(
+                    resolveBillCustomerId(bill), actual.phone(), actual.smsCode()).id();
             storedValueService.consumeInternal(svCustomerId, null, bill.merchantId(), settlementAmount,
                     "酒吧结账-储值支付 账单" + bill.id(), "barsv_" + slug(actual.idempotencyKey()));
         }

@@ -1,6 +1,9 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.01
+
 import com.complex.platform.auth.AuthService;
+import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -25,9 +28,14 @@ class DevAccessCredentialProvisioner implements AccessCredentialProvisioner {
     @Override
     public void provisionCredential(String userId, String password, String status, Instant now) {
         if (userId == null || userId.isBlank() || password == null || password.isBlank()) {
-            return;
+            throw ApiException.badRequest("VALIDATION_FAILED", "账号和初始密码不能为空");
         }
-        accessRepository.findUserById(userId).ifPresent(user -> authService.provisionUser(
+        if (!java.util.Set.of("active", "invited", "disabled").contains(status == null ? "" : status)) {
+            throw ApiException.badRequest("INVALID_ACCOUNT_STATUS", "无法识别的账号状态");
+        }
+        AccessUser user = accessRepository.findUserById(userId)
+                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在"));
+        authService.provisionUser(
                 user.id(),
                 user.username(),
                 password,
@@ -35,6 +43,6 @@ class DevAccessCredentialProvisioner implements AccessCredentialProvisioner {
                 user.organizationId(),
                 user.merchantId(),
                 status
-        ));
+        );
     }
 }

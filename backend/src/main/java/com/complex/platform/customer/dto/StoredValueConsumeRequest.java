@@ -1,15 +1,14 @@
 package com.complex.platform.customer.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
+// 文件版本：V0.01
 
-/** 储值消费请求（余额扣减，不足拒）。B5 边界校验：幂等键非空、金额正数（与 service 层 double-spend 守恒一致，前置拦截）。 */
+import jakarta.validation.constraints.NotBlank;
+
+/** 客人订单储值支付：指定本人卡，金额从路径中的真实订单读取。 */
 public record StoredValueConsumeRequest(
         @NotBlank String idempotencyKey,
-        String projectId,
-        String merchantId,
-        @NotNull @Positive Long amountCent,
-        String reason
+        @NotBlank String accountId,
+        @NotBlank String phone,
+        @NotBlank String smsCode
 ) {
 }

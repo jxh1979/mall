@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -61,7 +62,7 @@ describe("AccessUsersPage 行明细抽屉 + 零英文", () => {
     expect(drawer.textContent).toContain("主管");
     expect(drawer.textContent).toContain("总部主体");
     expect(drawer.textContent).toContain("商户甲");
-    expect(drawer.textContent).toContain("13800000001");
+    expect(drawer.textContent).not.toContain("13800000001");
   });
 
   it("Esc 关闭抽屉 + 点遮罩关闭", async () => {

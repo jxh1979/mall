@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -140,6 +141,8 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [paymentChannel, setPaymentChannel] = React.useState("aggregate_pay");
   const [cashierStaffId, setCashierStaffId] = React.useState("");
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
+  const [paymentPhone, setPaymentPhone] = React.useState("");
+  const [paymentSmsCode, setPaymentSmsCode] = React.useState("");
   // 行明细抽屉：整行可点 → 该订单完整字段（状态/提成口径中文·金额¥·下单/支付时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // V345（BAR-VOID-A1）退酒申请 + 待审队列。
@@ -276,6 +279,10 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       setFormError(TEXT.billRequired);
       return false;
     }
+    if (paymentChannel === "stored_value" && (!paymentPhone.trim() || !paymentSmsCode.trim())) {
+      setFormError("请填写付款手机号和短信验证码。");
+      return false;
+    }
     if (paymentChannel === "cash" && !cashierStaffId.trim()) {
       setFormError("现金结算需填现金收款人，供对账留痕。");
       return false;
@@ -287,6 +294,24 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
     return true;
   }
 
+  async function requestStoredValueCode() {
+    const billId = firstBillId(selectedOrder);
+    if (!billId || !paymentPhone.trim()) {
+      setFormError("请先选择账单并填写付款手机号。");
+      return;
+    }
+    setBusyAction("stored_value_sms");
+    setFormError("");
+    try {
+      await api.post(`/api/v1/bar/bills/${billId}/stored-value/sms`, { phone: paymentPhone.trim() });
+      setActionResult({ message: "验证码已发送，请由付款客人确认本账单扣款。" });
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "验证码发送失败");
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   async function settleBill() {
     const billId = firstBillId(selectedOrder);
     if (!billId) {
@@ -295,7 +320,8 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
     }
     await runOrderAction("bar_bill_settled", () => api.post(`/api/v1/bar/bills/${billId}/settle`, {
       paymentId: "payment-admin-web",
-      settlementAmountCent: selectedOrder?.totalAmountCent ?? selectedOrder?.totalAmount ?? 0,
+      ...(paymentChannel === "stored_value" ? { phone: paymentPhone.trim(), smsCode: paymentSmsCode.trim() }
+        : { settlementAmountCent: selectedOrder?.totalAmountCent ?? selectedOrder?.totalAmount ?? 0 }),
       paymentChannel,
       cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
@@ -454,11 +480,18 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         <div className="admin-form-grid" data-testid="bar-settle-payment-form">
           <label>结算方式<select data-testid="bar-settle-channel" value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
             <option value="aggregate_pay">聚合支付</option>
+            <option value="stored_value">储值余额（手机号验证）</option>
             <option value="cash">现金</option>
             <option value="pos">POS 刷卡</option>
             <option value="bank_transfer">银行转账</option>
             <option value="other">其他</option>
           </select></label>
+          {paymentChannel === "stored_value" ? <>
+            <label>付款手机号<input type="tel" autoComplete="off" value={paymentPhone} onChange={(e) => setPaymentPhone(e.target.value)} /></label>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["finance.payment.register"]} disabled={busyAction !== ""} onClick={() => void requestStoredValueCode()}>发送扣款验证码</PermissionButton>
+            <label>短信验证码<input inputMode="numeric" autoComplete="one-time-code" value={paymentSmsCode} onChange={(e) => setPaymentSmsCode(e.target.value)} /></label>
+            <p>从付款客人在本商户的储值卡扣除本账单剩余应付金额，短信验证通过后才会扣款。</p>
+          </> : null}
           {paymentChannel === "cash" ? (
             <label>现金收款人<input data-testid="bar-settle-cashier" value={cashierStaffId} onChange={(e) => setCashierStaffId(e.target.value)} placeholder="收款员工 ID" /></label>
           ) : null}

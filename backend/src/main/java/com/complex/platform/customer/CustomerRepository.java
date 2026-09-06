@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
@@ -221,6 +223,11 @@ public interface CustomerRepository {
 
     default CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         throw new UnsupportedOperationException("saveStoredValueAccount not supported by this repository");
+    }
+
+    default List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(
+            String customerId, String accountId, int page, int size) {
+        throw new UnsupportedOperationException("listStoredValueTransactions not supported");
     }
 
     default CustomerStoredValueTransactionRecord saveStoredValueTransaction(CustomerStoredValueTransactionRecord txn) {

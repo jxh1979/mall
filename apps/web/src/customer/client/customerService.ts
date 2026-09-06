@@ -1,3 +1,4 @@
+// 文件版本：V0.03
 // 客人端业务服务层：封装 P0 客旅用到的真实端点（全部 /api/v1/customer/* 与 finance/ticketing）
 // 所有接口均在 docs/openapi/openapi-p0.json 契约内；P1 能力（积分明细/礼物兑换）不在此暴露。
 
@@ -126,6 +127,14 @@ export class CustomerService {
     return this.api.get<TicketCredential>(`/api/v1/customer/tickets/${encodeURIComponent(ticketId)}/qr`);
   }
 
+  requestStoredValueCode(phone: string): Promise<unknown> {
+    return this.api.post("/api/v1/customer/stored-value/sms", { phone });
+  }
+
+  payTicketOrderWithStoredValue(orderId: string, payload: { accountId: string; phone: string; smsCode: string }): Promise<TicketOrder> {
+    return this.api.post<TicketOrder>(`/api/v1/customer/orders/${encodeURIComponent(orderId)}/stored-value/pay`, payload);
+  }
+
   // ⑦ 储值 / 会员（V090，可选展示）
   getStoredValueAccount(): Promise<StoredValueAccount | null> {
     return this.api.get<StoredValueAccount | null>("/api/v1/customer/stored-value/account");
@@ -136,14 +145,18 @@ export class CustomerService {
     return this.api.get<StoredValueAccount[]>("/api/v1/customer/stored-value/accounts");
   }
 
-  // AUD-061 充值（绑支付意图，待柜台确认收款到账）
+  // 线上充值返回真实渠道拉起信息；入账须由服务端核验渠道成功回执。
   topupStoredValue(payload: { projectId?: string; merchantId?: string; amountCent: number; channel?: string }): Promise<PaymentIntent> {
-    return this.api.post<PaymentIntent>("/api/v1/customer/stored-value/topup", { channel: "aggregate_pay", ...payload });
+    return this.api.post<PaymentIntent>("/api/v1/customer/stored-value/topup", { ...payload });
   }
 
-  // AUD-061 消费（即时扣本卡余额；platform_collect 卡消费逐笔挂应付商户）
-  consumeStoredValue(payload: { projectId?: string; merchantId?: string; amountCent: number; reason?: string }): Promise<StoredValueTransaction> {
-    return this.api.post<StoredValueTransaction>("/api/v1/customer/stored-value/consume", payload);
+  settleStoredValueTopup(payload: { paymentIntentId: string; projectId?: string; merchantId?: string }): Promise<StoredValueTransaction> {
+    return this.api.post<StoredValueTransaction>("/api/v1/customer/stored-value/settle", payload);
+  }
+
+  getStoredValueTransactions(accountId: string, page = 1): Promise<StoredValueTransaction[]> {
+    return this.api.get<StoredValueTransaction[]>(
+      `/api/v1/customer/stored-value/accounts/${encodeURIComponent(accountId)}/transactions?page=${page}&size=20`);
   }
 
   // ⑧ 扫码点单（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId -> 看菜单 / 自助下单（不重复核龄）

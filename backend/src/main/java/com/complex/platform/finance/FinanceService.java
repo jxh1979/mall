@@ -1,5 +1,7 @@
 package com.complex.platform.finance;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -349,6 +351,55 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance_payment_intent",
                 () -> createIntent(request)
         );
+    }
+
+    public Optional<PaymentIntentRecord> findPaymentIntentForUpdate(String paymentIntentId) {
+        return repository.findPaymentIntentByIdForUpdate(paymentIntentId);
+    }
+
+    /** M006-027：仅信任已启用渠道的服务端查询结果，不能用内部成功标志代替收款。 */
+    @Transactional
+    public PaymentIntentRecord confirmOnlinePaymentIntent(String paymentIntentId, String payeeMerchantId, String fundMode) {
+        if (paymentGateway == null || !paymentGateway.isGatewayEnabled()) {
+            throw ApiException.conflict("PAYMENT_GATEWAY_UNAVAILABLE", "支付渠道未启用");
+        }
+        PaymentIntentRecord intent = repository.findPaymentIntentByIdForUpdate(paymentIntentId)
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在"));
+        if (!Set.of("wechat", "alipay", "unionpay").contains(intent.channel())
+                || intent.gatewayRef() == null || intent.gatewayRef().isBlank()
+                || intent.gatewayProvider() == null || intent.gatewayProvider().isBlank()
+                || "reserved".equals(intent.gatewayProvider())) {
+            throw ApiException.conflict("PAYMENT_GATEWAY_UNAVAILABLE", "支付渠道尚未返回有效支付单");
+        }
+        var result = paymentGateway.queryStatus(intent.gatewayRef());
+        if (result == null || result.requiresInternalFallback()) {
+            throw ApiException.conflict("PAYMENT_GATEWAY_UNAVAILABLE", "支付渠道未配置");
+        }
+        if (result.status() != com.complex.platform.finance.gateway.PaymentGatewayResult.Status.SUCCEEDED) {
+            throw ApiException.conflict("PAYMENT_NOT_SUCCEEDED", "支付渠道尚未确认收款成功");
+        }
+        var confirmed = result.confirmedPayment();
+        if (confirmed == null
+                || !java.util.Objects.equals(intent.gatewayProvider(), result.gatewayProvider())
+                || !java.util.Objects.equals(intent.gatewayRef(), result.gatewayRef())
+                || !java.util.Objects.equals(intent.gatewayRef(), confirmed.gatewayRef())
+                || !intent.businessOrderType().equals(confirmed.businessOrderType())
+                || !intent.businessOrderId().equals(confirmed.businessOrderId())
+                || intent.amountCent() != confirmed.amountCent()
+                || !intent.currency().equals(confirmed.currency())
+                || !intent.channel().equals(confirmed.channel())
+                || !java.util.Objects.equals(payeeMerchantId, confirmed.payeeMerchantId())
+                || !java.util.Objects.equals(fundMode, confirmed.fundMode())) {
+            throw ApiException.conflict("PAYMENT_CONFIRMATION_MISMATCH", "支付渠道确认与本次充值单不一致");
+        }
+        if ("succeeded".equals(intent.status())) return intent;
+        if (!"created".equals(intent.status())) {
+            throw ApiException.conflict("PAYMENT_INTENT_NOT_PENDING", "支付意向不在待支付状态");
+        }
+        recordInternalAccountingRevenue(intent.id(), intent.businessOrderType(), intent.businessOrderId(), intent.amountCent());
+        return repository.savePaymentIntent(new PaymentIntentRecord(intent.id(), intent.businessOrderType(),
+                intent.businessOrderId(), intent.amountCent(), intent.currency(), intent.channel(), "succeeded",
+                result.gatewayProvider(), result.gatewayRef(), result.status().name(), intent.createdAt(), Instant.now()));
     }
 
     /** 按 id 查支付意图（储值充值/会员开通：入账前校验支付意图存在且已成功）。 */
@@ -1286,7 +1337,8 @@ public class FinanceService implements TerminationSettlementPort {
                 gw.gatewayRef(),
                 gw.status().name(),
                 now,
-                now
+                now,
+                gw.requiresInternalFallback() ? null : gw.paymentUrl()
         ));
     }
 

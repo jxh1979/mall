@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.14
+
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
@@ -19,15 +21,11 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
 import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
 import com.complex.platform.governance.review.SupervisorReviewService;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -38,7 +36,6 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -48,7 +45,6 @@ import static com.complex.platform.common.Strings.requireText;
 public class AccessService {
 
     private static final int DEFAULT_PAGE = 1;
-    private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> ALLOWED_ACCOUNT_TYPES = Set.of(
             "staff", "merchant", "merchant_admin", "supervisor", "sales", "outsourced_vendor");
     private static final String REQUEST_USER_ROLE = "user_role";
@@ -62,8 +58,6 @@ public class AccessService {
     private final AccessCredentialProvisioner credentialProvisioner;
     private final SupervisorReviewService supervisorReviewService;
     private final boolean grantApprovalEnabled;
-    private final int summaryPositionThreshold;
-    private final int summaryUserThreshold;
 
     @Autowired
     public AccessService(
@@ -72,18 +66,16 @@ public class AccessService {
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
             ObjectProvider<AccessCredentialProvisioner> credentialProvisioner,
-            ObjectProvider<SupervisorReviewService> supervisorReviewService,
-            @Value("${access.grant_approval.summary.position_threshold:3}") int summaryPositionThreshold,
-            @Value("${access.grant_approval.summary.user_threshold:3}") int summaryUserThreshold
+            ObjectProvider<SupervisorReviewService> supervisorReviewService
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                credentialProvisioner.getIfAvailable(AccessCredentialProvisioner::noop),
+                credentialProvisioner.getIfAvailable(),
                 // 治理地图「四类高危权限授出前须先审批才生效」：生产不给全局逃生口——
                 // 原 @Value("${access.grant_approval.enabled:true}") 一票否决四个调用点，关闭时无审计、
                 // 无启动告警，静默失效（219 条 requires_approval=true 全押在它身上）。
                 // 该开关唯一实际用途是让测试少走审批，故只保留包级构造器的入参。
                 supervisorReviewService.getIfAvailable(), true,
-                summaryPositionThreshold, summaryUserThreshold);
+                0, 0);
     }
 
     AccessService(
@@ -101,16 +93,14 @@ public class AccessService {
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
-        this.credentialProvisioner = credentialProvisioner == null ? AccessCredentialProvisioner.noop() : credentialProvisioner;
+        this.credentialProvisioner = credentialProvisioner;
         this.supervisorReviewService = supervisorReviewService;
         this.grantApprovalEnabled = grantApprovalEnabled;
-        this.summaryPositionThreshold = Math.max(1, summaryPositionThreshold);
-        this.summaryUserThreshold = Math.max(1, summaryUserThreshold);
     }
 
     public PageResponse<PermissionTemplate> listPermissionTemplates() {
         AccessActor actor = authorizationService.currentActor();
-        String orgId = authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId();
+        String orgId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
         List<PermissionTemplate> templates = repository.listTemplates(orgId);
         auditEventService.recordSuccess(
                 "permission_template.viewed",
@@ -126,7 +116,7 @@ public class AccessService {
 
     public PermissionTemplate createPermissionTemplate(PermissionTemplateRequest request) {
         AccessActor actor = authorizationService.currentActor();
-        String ownerScopeId = authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId();
+        String ownerScopeId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
         return executeTemplateWrite(
                 "createPermissionTemplate",
                 "permission_template.changed",
@@ -135,8 +125,8 @@ public class AccessService {
                 request,
                 () -> {
                     requireKnownPermissions(request.permissionCodes());
-                    PermissionTemplate template = templateFromRequest("tpl_" + slug(request.idempotencyKey()), request, null, ownerScopeId);
-                    return repository.saveTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
+                    PermissionTemplate template = templateFromRequest("tpl_" + UUID.randomUUID(), request, null, ownerScopeId);
+                    return repository.createTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
                 }
         );
     }
@@ -150,19 +140,35 @@ public class AccessService {
                 "access.permission_template.manage",
                 request,
                 () -> {
-                    if (!authorizationService.isPlatformAdmin(actor)) {
-                        PermissionTemplate existing = repository.findTemplateById(id)
-                                .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
-                        if (existing.ownerScopeId() == null || !actor.organizationId().equals(existing.ownerScopeId())) {
-                            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能修改其他组织的模板");
-                        }
+                    PermissionTemplate existing = repository.findTemplateById(id)
+                            .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
+                    if (!authorizationService.isPlatformAdmin(actor)
+                            && !authorizationService.requireProjectScope(actor).equals(existing.ownerScopeId())) {
+                        throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能修改其他组织的模板");
                     }
                     requireKnownPermissions(request.permissionCodes());
-                    // Preserve the existing owner when updating
-                    String ownerScopeId = authorizationService.isPlatformAdmin(actor)
-                            ? null
-                            : actor.organizationId();
-                    PermissionTemplate template = templateFromRequest(id, request, request.sourceTemplateId(), ownerScopeId);
+                    List<PermissionTemplateItem> previousItems = repository.findTemplateItems(id);
+                    boolean widensWindow = (existing.validFrom() != null
+                            && (request.validFrom() == null || request.validFrom().isBefore(existing.validFrom())))
+                            || (existing.validUntil() != null
+                            && (request.validUntil() == null || request.validUntil().isAfter(existing.validUntil())));
+                    boolean changesScope = previousItems.stream().anyMatch(item ->
+                            safeList(request.permissionCodes()).contains(item.permissionCode())
+                                    && !java.util.Objects.equals(item.dataScope(), trimToDefault(request.dataScope(), "project")));
+                    if (widensWindow || (existing.singleUse() && !Boolean.TRUE.equals(request.singleUse()))
+                            || changesScope || previousItems.stream().anyMatch(item -> item.effect() == AccessRepository.Effect.DENY)
+                            || !"active".equals(existing.status())) {
+                        throw ApiException.conflict("TEMPLATE_REAUTHORIZATION_REQUIRED",
+                                "有效期、一次性限制、数据范围或禁止规则变化须复制为新模板后重新授权");
+                    }
+                    Set<String> previousGrants = previousItems.stream()
+                            .filter(item -> item.effect() == AccessRepository.Effect.GRANT)
+                            .map(PermissionTemplateItem::permissionCode).collect(java.util.stream.Collectors.toSet());
+                    List<String> added = safeList(request.permissionCodes()).stream()
+                            .filter(code -> !previousGrants.contains(code)).toList();
+                    requireActorCanGrant(added);
+                    requireGrantApprovalIfNeeded(added);
+                    PermissionTemplate template = templateFromRequest(id, request, existing.sourceTemplateId(), existing.ownerScopeId());
                     return repository.saveTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
                 }
         );
@@ -178,14 +184,16 @@ public class AccessService {
                 request,
                 () -> {
                     if (!authorizationService.isPlatformAdmin(actor)) {
+                        // M006-036：先取项目范围（无组织主体在此得到 PROJECT_SCOPE_REQUIRED），再比较归属，不再对 null 调用 equals。
+                        String scope = authorizationService.requireProjectScope(actor);
                         PermissionTemplate source = repository.findTemplateById(id)
                                 .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
-                        if (source.ownerScopeId() != null && !actor.organizationId().equals(source.ownerScopeId())) {
+                        if (source.ownerScopeId() != null && !scope.equals(source.ownerScopeId())) {
                             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能复制其他组织的模板");
                         }
                     }
-                    String ownerScopeId = authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId();
-                    return repository.copyTemplate(id, templateFromRequest("tpl_" + slug(request.idempotencyKey()), request, id, ownerScopeId));
+                    String ownerScopeId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
+                    return repository.copyTemplate(id, templateFromRequest("tpl_" + UUID.randomUUID(), request, id, ownerScopeId));
                 }
         );
     }
@@ -198,16 +206,11 @@ public class AccessService {
                     request.idempotencyKey(),
                     request,
                     () -> {
-                        if (!authorizationService.isPlatformAdmin(actor)) {
-                            for (String userId : safeList(request.targetUserIds())) {
-                                AccessUser targetUser = repository.findUserById(userId)
-                                        .orElseThrow(() -> ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                                "目标用户不在当前组织内：" + userId));
-                                if (!actor.organizationId().equals(targetUser.organizationId())) {
-                                    throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                            "不能将模板应用到其他组织的用户：" + userId);
-                                }
-                            }
+                        if (safeList(request.targetUserIds()).isEmpty()) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "必须选择授权目标");
+                        }
+                        for (String userId : request.targetUserIds()) {
+                            requireSameOrganization(actor, requireTargetUser(requireText(userId, "user_id")));
                         }
                         PermissionTemplate template = repository.findTemplateById(id)
                                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND", "权限模板不存在：" + id));
@@ -282,7 +285,7 @@ public class AccessService {
 
     public PageResponse<RoleRecord> listRoles() {
         AccessActor actor = authorizationService.currentActor();
-        String orgId = authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId();
+        String orgId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
         List<RoleRecord> roles = repository.listRoles(orgId);
         auditEventService.recordSuccess(
                 "role.viewed",
@@ -298,7 +301,7 @@ public class AccessService {
 
     public RoleRecord createRole(RoleRequest request) {
         AccessActor actor = authorizationService.currentActor();
-        String orgId = authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId();
+        String orgId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
         try {
             return idempotencyService.execute(
                     "createRole",
@@ -309,7 +312,7 @@ public class AccessService {
                         // P0-1：角色不得包含超出创建人自身有效权限的权限码（提权防护）。
                         requireActorCanGrant(request.permissionCodes());
                         RoleRecord role = new RoleRecord(
-                                "role_" + slug(request.roleName()),
+                                "role_" + UUID.randomUUID(),
                                 trimToDefault(request.roleName(), "role"),
                                 request.description(),
                                 trimToDefault(request.dataScope(), "project"),
@@ -397,9 +400,14 @@ public class AccessService {
     }
 
     public PageResponse<PositionRoleTemplate> listPositionRoleTemplates() {
+        return listPositionRoleTemplates(false);
+    }
+
+    public PageResponse<PositionRoleTemplate> listPositionRoleTemplates(boolean includeArchived) {
         AccessActor actor = authorizationService.currentActor();
         List<PositionRoleTemplate> mappings = repository.listPositionRoleTemplates(
-                authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId());
+                authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor)).stream()
+                .filter(mapping -> includeArchived || (mapping.archivedAt() == null && mapping.deletedAt() == null)).toList();
         auditEventService.recordSuccess(
                 "access.position_role_template.viewed",
                 "access.role.assign",
@@ -420,7 +428,7 @@ public class AccessService {
                     r.idempotencyKey(),
                     r,
                     () -> savePositionRoleTemplate(
-                            "prt_" + slug(requireText(r.positionCode(), "position_code") + "_" + requireText(r.staffLevelId(), "staff_level_id")),
+                            "prt_" + UUID.randomUUID(),
                             r
                     ),
                     PositionRoleTemplate.class
@@ -464,21 +472,71 @@ public class AccessService {
     }
 
     public void deletePositionRoleTemplate(String id) {
-        AccessActor actor = authorizationService.currentActor();
-        requirePlatformAdmin(actor);
-        PositionRoleTemplate existing = repository.findPositionRoleTemplateById(id)
-                .orElseThrow(() -> ApiException.notFound("POSITION_ROLE_TEMPLATE_NOT_FOUND",
-                        "岗位角色模板不存在：" + id));
-        repository.deletePositionRoleTemplate(existing.id());
-        auditEventService.recordSuccess(
-                "access.position_role_template.deleted",
-                "access.role.assign",
-                "position_role_template",
-                existing.id(),
-                null,
-                null,
-                Map.of("position_code", existing.positionCode(), "staff_level_id", existing.staffLevelId())
-        );
+        throw ApiException.conflict("ARCHIVE_APPROVAL_REQUIRED", "岗位模板须先存档，填写理由申请删除，经最高权限审批后软删除");
+    }
+
+    @Transactional
+    public PositionRoleTemplate changePositionTemplateLifecycle(String id, StatusChangeRequest request) {
+        requireRequest(request);
+        requirePlatformAdmin(authorizationService.currentActor());
+        String action = requireText(request.action(), "action");
+        String reason = requireText(request.reason(), "reason");
+        return idempotencyService.execute("positionTemplateLifecycle:" + id, request.idempotencyKey(), request, () -> {
+            PositionRoleTemplate current = repository.findPositionRoleTemplateById(id)
+                    .orElseThrow(() -> ApiException.notFound("POSITION_ROLE_TEMPLATE_NOT_FOUND", "岗位模板不存在"));
+            Instant now = Instant.now();
+            PositionRoleTemplate updated;
+            switch (action) {
+                case "archive" -> {
+                    if (current.archivedAt() != null || current.deletedAt() != null) throw ApiException.conflict("INVALID_STATE", "模板已存档");
+                    updated = current.withLifecycle(now, null, null, null, now);
+                }
+                case "restore" -> {
+                    if (current.archivedAt() == null) throw ApiException.conflict("INVALID_STATE", "模板未存档");
+                    if (current.deleteReviewId() != null && current.deletedAt() == null) throw ApiException.conflict("DELETE_REVIEW_PENDING", "须先处理删除复核");
+                    updated = current.withLifecycle(null, null, null, null, now);
+                }
+                case "request_delete" -> {
+                    if (current.archivedAt() == null || current.deletedAt() != null || current.deleteReviewId() != null) {
+                        throw ApiException.conflict("INVALID_STATE", "须先存档且没有待处理删除申请");
+                    }
+                    requirePositionTemplateUnused(id);
+                    if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        updated = current.withLifecycle(current.archivedAt(), now, null, reason, now);
+                    } else {
+                        var review = requireSupervisorReviewService().blockForAdmission("position_role_template_delete",
+                                "access.position_role_template.delete", "position_role_template", id, "top_authority", 3);
+                        updated = current.withLifecycle(current.archivedAt(), null, review.reviewId(), reason, now);
+                    }
+                }
+                case "approve_delete", "reject_delete" -> {
+                    if (current.archivedAt() == null || current.deletedAt() != null || current.deleteReviewId() == null) {
+                        throw ApiException.conflict("INVALID_STATE", "模板没有待处理删除申请");
+                    }
+                    if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "删除配置须由最高权限（U 盘密钥）审批");
+                    }
+                    boolean approve = "approve_delete".equals(action);
+                    if (approve) requirePositionTemplateUnused(id);
+                    requireSupervisorReviewService().approve(current.deleteReviewId(), new SupervisorReviewApprovalRequest(
+                            request.idempotencyKey(), reason, request.evidenceAttachmentIds(), null,
+                            approve ? "approved" : "rejected", reason));
+                    updated = current.withLifecycle(current.archivedAt(), approve ? now : null,
+                            approve ? current.deleteReviewId() : null, current.deleteReason(), now);
+                }
+                default -> throw ApiException.badRequest("INVALID_ACTION", "不支持的岗位模板生命周期操作");
+            }
+            repository.savePositionTemplateLifecycle(updated, authorizationService.currentActor().id());
+            auditEventService.recordSuccess("access.position_role_template." + action, "access.role.assign",
+                    "position_role_template", id, null, request.idempotencyKey(), Map.of("reason", reason));
+            return updated;
+        }, PositionRoleTemplate.class);
+    }
+
+    private void requirePositionTemplateUnused(String id) {
+        if (repository.countPositionTemplateUsage(id) != 0) {
+            throw ApiException.conflict("POSITION_TEMPLATE_IN_USE", "岗位模板仍被员工岗位使用，不能删除");
+        }
     }
 
     @Transactional
@@ -508,7 +566,7 @@ public class AccessService {
 
     /**
      * P0-1 提权防护：发证/授权动作不得授予超出「授权人自身有效权限」的权限码。
-     * 平台管理员（wildcard）可授予任意权限；其余主体所授权限码必须 ⊆ 自身有效授予集（denies 已扣减）。
+     * USB 最高权限独立识别；日常管理员及其他主体所授权限码必须 ⊆ 自身有效授予集（denies 已扣减）。
      */
     private void requireActorCanGrant(List<String> permissionCodes) {
         EffectivePermissions self = authorizationService.effectivePermissions();
@@ -556,17 +614,9 @@ public class AccessService {
                     request.idempotencyKey(),
                     request,
                     () -> {
-                        if (!authorizationService.isPlatformAdmin(actor)) {
-                            TemporaryGrant grant = repository.findTemporaryGrantById(id)
-                                    .orElseThrow(() -> ApiException.notFound("TEMPORARY_GRANT_NOT_FOUND", "临时授权不存在：" + id));
-                            AccessUser targetUser = repository.findUserById(grant.targetUserId())
-                                    .orElseThrow(() -> ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                            "授权目标用户不在当前组织内"));
-                            if (!actor.organizationId().equals(targetUser.organizationId())) {
-                                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                        "不能撤销其他组织的授权");
-                            }
-                        }
+                        TemporaryGrant grant = repository.findTemporaryGrantById(id)
+                                .orElseThrow(() -> ApiException.notFound("TEMPORARY_GRANT_NOT_FOUND", "临时授权不存在"));
+                        requireSameOrganization(actor, requireTargetUser(grant.targetUserId()));
                         TemporaryGrant revoked = repository.revokeTemporaryGrant(id, "access-api", Instant.now());
                         auditEventService.recordSuccess(
                                 "permission_template.revoked",
@@ -604,6 +654,7 @@ public class AccessService {
                     r.idempotencyKey(),
                     r,
                     () -> {
+                        repository.lockGrantAuthorizationFacts();
                         AccessGrantRequestRecord draft = buildGrantRequest(r);
                         List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(draft.permissionCodes());
                         if (approvalRequired.isEmpty()) {
@@ -622,6 +673,7 @@ public class AccessService {
                                 policy.requiredLevel()
                         );
                         AccessGrantRequestRecord saved = repository.saveGrantRequest(withReview(draft, review.reviewId()));
+                        repository.saveGrantFingerprint(saved.id(), authorizationFingerprint(saved));
                         auditEventService.recordSuccess(
                                 "access.grant_request.applied",
                                 "access.grant_request.apply",
@@ -658,11 +710,23 @@ public class AccessService {
                     r.idempotencyKey(),
                     r,
                     () -> {
+                        repository.lockGrantAuthorizationFacts();
                         AccessGrantRequestRecord pending = repository.findGrantRequestById(requireText(id, "id"))
                                 .filter(grant -> "pending".equals(grant.status()))
                                 .orElseThrow(() -> ApiException.notFound("ACCESS_GRANT_REQUEST_NOT_FOUND",
                                         "授权申请不存在或已不在待审批状态：" + id));
+                        AccessActor reviewer = authorizationService.currentActor();
+                        if (reviewer.id().equals(pending.targetUserId())) {
+                            throw ApiException.forbidden("BENEFICIARY_SELF_REVIEW_FORBIDDEN", "授权受益人不能审批自己的授权");
+                        }
+                        if (reviewer.id().equals(pending.requestedBy())) {
+                            throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "申请人不能审批自己的授权");
+                        }
                         String decision = normalizeDecision(r.decision());
+                        if ("approve".equals(decision) && !repository.findGrantFingerprint(pending.id())
+                                .filter(saved -> saved.equals(authorizationFingerprint(pending))).isPresent()) {
+                            throw ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "授权内容或归属已变化，请重新申请");
+                        }
                         SupervisorReviewDecisionRecord review = requireSupervisorReviewService().approve(
                                 pending.reviewId(),
                                 new SupervisorReviewApprovalRequest(
@@ -710,9 +774,24 @@ public class AccessService {
         }
     }
 
+    public PageResponse<AccessGrantRequestRecord> listGrantRequests(Integer windowDays, int pageNumber) {
+        if (pageNumber < 1) throw ApiException.badRequest("INVALID_PAGE", "页码须大于零");
+        AccessGrantPolicy policy = grantPolicy();
+        int days = windowDays == null ? policy.windowDays().value() : policy.windowDays().checked(windowDays);
+        AccessActor actor = authorizationService.currentActor();
+        String org = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
+        String merchant = authorizationService.isPlatformAdmin(actor) ? null : trimToNull(actor.merchantId());
+        PageResponse<AccessGrantRequestRecord> result = repository.pageGrantRequests(
+                Instant.now().minus(Duration.ofDays(days)), org, merchant, pageNumber, 50);
+        auditEventService.recordSuccess("access.grant_request.viewed", "access.grant_request.view",
+                "access_grant_request", "all", null, null, Map.of("count", result.items().size(), "page", pageNumber));
+        return result;
+    }
+
     public PageResponse<AccessGrantRequestRecord> listGrantRequests(Integer windowDays) {
-        int days = windowDays == null ? 0 : Math.max(1, windowDays);
-        Instant cutoff = days == 0 ? null : Instant.now().minus(Duration.ofDays(days));
+        AccessGrantPolicy policy = grantPolicy();
+        int days = windowDays == null ? policy.windowDays().value() : policy.windowDays().checked(windowDays);
+        Instant cutoff = Instant.now().minus(Duration.ofDays(days));
         List<AccessGrantRequestRecord> requests = visibleGrantRequests(cutoff);
         auditEventService.recordSuccess(
                 "access.grant_request.viewed",
@@ -727,9 +806,14 @@ public class AccessService {
     }
 
     public AccessGrantSummary grantSummary(Integer windowDays, Integer positionThreshold, Integer userThreshold) {
-        int days = windowDays == null ? 30 : Math.max(1, windowDays);
-        int perPositionThreshold = positionThreshold == null ? summaryPositionThreshold : Math.max(1, positionThreshold);
-        int perUserThreshold = userThreshold == null ? summaryUserThreshold : Math.max(1, userThreshold);
+        AccessGrantPolicy policy = grantPolicy();
+        if (positionThreshold != null || userThreshold != null
+                || (windowDays != null && windowDays != policy.windowDays().value())) {
+            throw ApiException.badRequest("QUERY_POLICY_OVERRIDE_FORBIDDEN", "统计时间窗和频繁阈值由后台授权政策配置，查询不能覆盖");
+        }
+        int days = policy.windowDays().value();
+        int perPositionThreshold = policy.positionThreshold().value();
+        int perUserThreshold = policy.userThreshold().value();
         Instant cutoff = Instant.now().minus(Duration.ofDays(days));
         List<AccessGrantRequestRecord> temporaryRequests = visibleGrantRequests(cutoff).stream()
                 .filter(request -> REQUEST_TEMPORARY_PERMISSION.equals(request.requestType()))
@@ -761,7 +845,7 @@ public class AccessService {
                         entry.getKey().staffLevelId(),
                         entry.getKey().permissionCode(),
                         entry.getValue(),
-                        "frequent temporary grants; consider fixed permission"
+                        "频繁申请临时授权，建议评估配置固定权限"
                 ))
                 .toList();
         List<AccessGrantUserSummary> userAnomalies = byUser.entrySet().stream()
@@ -770,7 +854,7 @@ public class AccessService {
                 .map(entry -> new AccessGrantUserSummary(
                         entry.getKey(),
                         entry.getValue(),
-                        "frequent temporary permission requests; review abnormal pattern"
+                        "临时权限申请频繁，请核查异常情况"
                 ))
                 .toList();
         return new AccessGrantSummary(positionRecommendations, userAnomalies);
@@ -812,7 +896,7 @@ public class AccessService {
         } else if (!isBlank(actor.merchantId())) {
             users = repository.listUsersByMerchant(actor.merchantId());
         } else {
-            users = repository.listUsers(actor.organizationId());
+            users = repository.listUsers(authorizationService.requireProjectScope(actor));
         }
         auditEventService.recordSuccess(
                 "access.user.viewed",
@@ -838,12 +922,11 @@ public class AccessService {
                         String accountType = normalizeAccountType(trimToDefault(request.accountType(), "staff"));
                         if (!ALLOWED_ACCOUNT_TYPES.contains(accountType)) {
                             throw ApiException.badRequest("INVALID_ACCOUNT_TYPE",
-                                    "账号类型「" + accountType + "」不允许，可选值：" + ALLOWED_ACCOUNT_TYPES);
+                                    "账号类型不允许，请重新选择");
                         }
                         String organizationId = requireText(request.organizationId(), "organization_id");
                         if (!authorizationService.isPlatformAdmin(actor)
-                                && !isBlank(actor.organizationId())
-                                && !actor.organizationId().equals(organizationId)) {
+                                && !authorizationService.requireProjectScope(actor).equals(organizationId)) {
                             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
                                     "不能在其他组织下创建用户：" + organizationId);
                         }
@@ -860,16 +943,25 @@ public class AccessService {
                         if (requiresMerchantScope(accountType) && merchantId == null) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "商户级员工账号必须指定商户");
                         }
+                        if (!"outsourced_vendor".equals(accountType)) {
+                            throw ApiException.conflict("STAFF_REGISTRATION_REQUIRED",
+                                    "员工须先提交注册申请，由对应公司审批后生成账号和员工自助权限");
+                        }
+                        if (credentialProvisioner == null) {
+                            throw ApiException.conflict("CREDENTIAL_PROVIDER_UNAVAILABLE", "登录凭证服务未配置，不能创建账号");
+                        }
+                        requireText(request.password(), "password");
+                        String accountStatus = requireAccountStatus(request.status());
                         Instant now = Instant.now();
                         AccessUser user = new AccessUser(
-                                "usr_" + slug(username),
+                                "usr_" + UUID.randomUUID(),
                                 username,
                                 accountType,
                                 organizationId,
                                 merchantId,
-                                trimToDefault(request.status(), "active"),
+                                accountStatus,
                                 now,
-                                hashNullable(request.phone()),
+                                null,
                                 "manual_admin",
                                 trimToNull(request.consentReference()),
                                 safeList(request.evidenceAttachmentIds()),
@@ -908,18 +1000,12 @@ public class AccessService {
         return value == null || value.isBlank();
     }
 
-    private String hashNullable(String value) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            return null;
+    private String requireAccountStatus(String status) {
+        String actual = trimToDefault(status, "active");
+        if (!Set.of("active", "invited", "disabled").contains(actual)) {
+            throw ApiException.badRequest("INVALID_ACCOUNT_STATUS", "账号状态必须为启用、待激活或禁用");
         }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(trimmed.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 algorithm is required", exception);
-        }
+        return actual;
     }
 
     private Map<String, Object> accessUserAuditMetadata(AccessUser user, boolean credentialProvisioned) {
@@ -966,11 +1052,7 @@ public class AccessService {
                         }
                         AccessUser targetUser = repository.findUserById(userId)
                                 .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在：" + userId));
-                        if (!authorizationService.isPlatformAdmin(actor)
-                                && !actor.organizationId().equals(targetUser.organizationId())) {
-                            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                    "不能为其他组织的用户分配员工职级：" + userId);
-                        }
+                        requireSameOrganization(actor, targetUser);
                         if (repository.findStaffLevelById(request.staffLevelId()).isEmpty()) {
                             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
                                     "无法识别的员工职级：" + request.staffLevelId());
@@ -978,7 +1060,7 @@ public class AccessService {
                         String currency = trimToDefault(request.salaryCurrency(), "CNY");
                         if (!"CNY".equals(currency)) {
                             throw ApiException.badRequest("UNSUPPORTED_CURRENCY",
-                                    "薪资币种当前仅支持人民币（CNY），实际为：" + currency);
+                                    "薪资币种当前仅支持人民币，不支持所填币种");
                         }
                         if (request.baseSalaryAmountCent() != null && request.baseSalaryAmountCent() < 0) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "基本工资不能为负数");
@@ -1069,7 +1151,6 @@ public class AccessService {
                 context.actor().id(),
                 now
         ));
-        repository.assignUserRole(context.targetUser().id(), context.role().id());
         List<PermissionTemplateApplication> applications = repository.applyTemplate(
                 context.template().id(),
                 List.of(context.targetUser().id()),
@@ -1078,6 +1159,8 @@ public class AccessService {
                 context.template().singleUse(),
                 context.actor().id()
         );
+        repository.replacePositionGrants(context.targetUser().id(), context.role().id(), context.mappingId(),
+                applications.stream().map(PermissionTemplateApplication::id).toList(), context.actor().id(), now);
         auditEventService.recordSuccess(
                 "access.user_position.assigned",
                 "access.role.assign",
@@ -1107,17 +1190,13 @@ public class AccessService {
         if (request.validUntil() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "valid_until is required");
         }
-        // P0 A-01：临时授权必须校验目标用户租户归属，禁止跨组织/向平台用户越权授权
-        // （与 applyPermissionTemplate 同范式，fail-closed）。
-        if (!authorizationService.isPlatformAdmin(actor)) {
-            AccessUser targetUser = repository.findUserById(request.targetUserId())
-                    .orElseThrow(() -> ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                            "目标用户不在当前组织内：" + request.targetUserId()));
-            if (actor.organizationId() == null
-                    || !actor.organizationId().equals(targetUser.organizationId())) {
-                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                        "不能向其他组织的用户授权：" + request.targetUserId());
-            }
+        requireSameOrganization(actor, requireTargetUser(requireText(request.targetUserId(), "target_user_id")));
+        if (safeList(request.permissionCodes()).isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
+        }
+        Instant validFrom = request.validFrom() == null ? Instant.now() : request.validFrom();
+        if (!validFrom.isBefore(request.validUntil())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "授权失效时间必须晚于生效时间");
         }
         // P0-1：临时授权不得授予超出授权人自身有效权限的权限码（提权防护）。
         requireActorCanGrant(request.permissionCodes());
@@ -1128,7 +1207,7 @@ public class AccessService {
                 UUID.randomUUID().toString(),
                 request.targetUserId(),
                 safeList(request.permissionCodes()),
-                request.validFrom() == null ? Instant.now() : request.validFrom(),
+                validFrom,
                 request.validUntil(),
                 Boolean.TRUE.equals(request.singleUse()),
                 false,
@@ -1171,7 +1250,7 @@ public class AccessService {
         ), false);
         Instant now = Instant.now();
         return new AccessGrantRequestRecord(
-                "agr_" + slug(request.idempotencyKey()),
+                "agr_" + UUID.randomUUID(),
                 REQUEST_USER_ROLE,
                 context.targetUser().id(),
                 context.role().id(),
@@ -1211,7 +1290,7 @@ public class AccessService {
         ), false);
         Instant now = Instant.now();
         return new AccessGrantRequestRecord(
-                "agr_" + slug(request.idempotencyKey()),
+                "agr_" + UUID.randomUUID(),
                 REQUEST_USER_POSITION,
                 context.targetUser().id(),
                 context.role().id(),
@@ -1251,13 +1330,16 @@ public class AccessService {
         if (expiresAt == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "expires_at is required");
         }
+        if (request.validFrom() != null && !expiresAt.isAfter(request.validFrom())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "授权结束时间必须晚于开始时间");
+        }
         UserPositionAssignment position = repository.findUserPositionAssignment(targetUser.id()).orElse(null);
         String staffLevelId = position == null
                 ? repository.findStaffLevelAssignment(targetUser.id()).map(StaffLevelAssignment::staffLevelId).orElse(null)
                 : position.staffLevelId();
         Instant now = Instant.now();
         return new AccessGrantRequestRecord(
-                "agr_" + slug(request.idempotencyKey()),
+                "agr_" + UUID.randomUUID(),
                 REQUEST_TEMPORARY_PERMISSION,
                 targetUser.id(),
                 null,
@@ -1282,6 +1364,50 @@ public class AccessService {
                 now,
                 now
         );
+    }
+
+    private String authorizationFingerprint(AccessGrantRequestRecord request) {
+        AccessUser target = requireTargetUser(request.targetUserId());
+        List<Object> facts = new ArrayList<>();
+        facts.add(java.util.Arrays.asList(target.id(), target.accountType(), target.organizationId(),
+                target.merchantId(), target.status()));
+        facts.add(java.util.Arrays.asList(request.requestType(), request.targetRoleId(), request.templateId(),
+                request.positionCode(), request.staffLevelId(), request.baseSalaryAmountCent(), request.salaryCurrency(),
+                request.salaryDetail(), request.permissionCodes().stream().sorted().toList(),
+                String.valueOf(request.validFrom()), String.valueOf(request.expiresAt()), request.singleUse()));
+        if (request.targetRoleId() != null) {
+            RoleRecord role = requireRole(request.targetRoleId());
+            facts.add(java.util.Arrays.asList(role.id(), role.organizationId(), role.status(),
+                    role.dataScope(), role.permissionCodes().stream().sorted().toList()));
+        }
+        if (request.templateId() != null) {
+            PermissionTemplate template = repository.findTemplateById(request.templateId())
+                    .orElseThrow(() -> ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "权限模板已变化，请重新申请"));
+            facts.add(java.util.Arrays.asList(template.id(), template.ownerScopeType(), template.ownerScopeId(),
+                    template.status(), template.singleUse(), String.valueOf(template.validFrom()),
+                    String.valueOf(template.validUntil())));
+            facts.add(repository.findTemplateItems(template.id()).stream()
+                    .sorted(Comparator.comparing(PermissionTemplateItem::permissionCode)
+                            .thenComparing(item -> item.effect().name()))
+                    .map(item -> java.util.Arrays.asList(item.permissionCode(), item.effect().name(),
+                            item.dataScope(), item.sensitive())).toList());
+        }
+        if (REQUEST_USER_POSITION.equals(request.requestType())) {
+            PositionRoleTemplate mapping = repository.findPositionRoleTemplate(
+                    target.organizationId(), request.positionCode(), request.staffLevelId())
+                    .orElseThrow(() -> ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "岗位配置已变化，请重新申请"));
+            facts.add(java.util.Arrays.asList(mapping.id(), mapping.organizationId(), mapping.roleId(),
+                    mapping.templateId(), mapping.status()));
+        }
+        facts.add(permissionDefinitions(request.permissionCodes()).stream()
+                .sorted(Comparator.comparing(PermissionDefinition::permissionCode))
+                .map(p -> java.util.Arrays.asList(p.permissionCode(), p.riskLevel(), p.requiresApproval(), p.status())).toList());
+        try {
+            byte[] json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(facts);
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(json));
+        } catch (java.security.NoSuchAlgorithmException | com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("无法生成授权事实快照", exception);
+        }
     }
 
     private void applyApprovedGrant(AccessGrantRequestRecord request, String idempotencyKey) {
@@ -1364,7 +1490,7 @@ public class AccessService {
         String currency = trimToDefault(request.salaryCurrency(), "CNY");
         if (!"CNY".equals(currency)) {
             throw ApiException.badRequest("UNSUPPORTED_CURRENCY",
-                    "薪资币种当前仅支持人民币（CNY），实际为：" + currency);
+                    "薪资币种当前仅支持人民币，不支持所填币种");
         }
         if (request.baseSalaryAmountCent() != null && request.baseSalaryAmountCent() < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "基本工资不能为负数");
@@ -1376,6 +1502,7 @@ public class AccessService {
                 staffLevelId,
                 role,
                 template,
+                mapping.id(),
                 currency,
                 grantPermissionCodes(role.permissionCodes(), templatePermissionCodes)
         );
@@ -1404,19 +1531,48 @@ public class AccessService {
     }
 
     private GrantReviewPolicy grantReviewPolicy(List<String> permissionCodes) {
-        int risk = permissionDefinitions(permissionCodes).stream()
-                .filter(permission -> safeList(permissionCodes).contains(permission.permissionCode()))
-                .map(PermissionDefinition::riskLevel)
-                .mapToInt(this::riskRank)
-                .max()
-                .orElse(1);
-        if (risk >= 3) {
-            return new GrantReviewPolicy("permission_grant_l3", "top_authority", 3);
+        AccessGrantPolicy policy = grantPolicy();
+        AccessGrantPolicy.ReviewRule rule = permissionDefinitions(permissionCodes).stream()
+                .map(permission -> {
+                    AccessGrantPolicy.ReviewRule configured = permission.riskLevel() == null ? null
+                            : policy.riskReviews().get(permission.riskLevel().toLowerCase(Locale.ROOT));
+                    if (configured == null) {
+                        throw ApiException.badRequest("INVALID_GRANT_POLICY", "权限风险等级未配置审批策略：" + permission.permissionCode());
+                    }
+                    return configured;
+                })
+                .max(Comparator.comparingInt(AccessGrantPolicy.ReviewRule::requiredLevel)
+                        .thenComparingInt(value -> switch (value.approvalLevel()) {
+                            case "top_authority" -> 3; case "two_levels_up" -> 2; default -> 1;
+                        })).orElseThrow(() -> ApiException.badRequest("INVALID_GRANT_POLICY", "权限风险等级未配置审批策略"));
+        return new GrantReviewPolicy("permission_grant_l" + rule.requiredLevel(), rule.approvalLevel(), rule.requiredLevel());
+    }
+
+    public AccessGrantPolicy grantPolicy() {
+        String json = repository.findGrantPolicy()
+                .orElseThrow(() -> ApiException.conflict("GRANT_POLICY_NOT_CONFIGURED", "后台授权政策未配置"));
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, AccessGrantPolicy.class);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw ApiException.conflict("INVALID_GRANT_POLICY", "后台授权政策格式或上下限无效");
         }
-        if (risk == 2) {
-            return new GrantReviewPolicy("permission_grant_l2", "two_levels_up", 2);
-        }
-        return new GrantReviewPolicy("permission_grant_l1", "one_level_up", 1);
+    }
+
+    @Transactional
+    public AccessGrantPolicy updateGrantPolicy(AccessGrantPolicy.Update request) {
+        if (request == null || request.policy() == null) throw ApiException.badRequest("VALIDATION_FAILED", "授权政策不能为空");
+        requireText(request.operatorNote(), "operator_note");
+        return idempotencyService.execute("updateAccessGrantPolicy", request.idempotencyKey(), request, () -> {
+            try {
+                repository.saveGrantPolicy(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request.policy()));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+                throw new IllegalStateException("授权政策无法保存", exception);
+            }
+            auditEventService.recordSuccess("access.grant_policy.changed", "admission.policy.manage",
+                    "supervisor_review_policy", "access_grant", null, request.idempotencyKey(),
+                    Map.of("reason", request.operatorNote()));
+            return request.policy();
+        }, AccessGrantPolicy.class);
     }
 
     private List<PermissionDefinition> permissionDefinitions(Collection<String> permissionCodes) {
@@ -1427,14 +1583,6 @@ public class AccessService {
         return repository.listPermissions().stream()
                 .filter(permission -> codes.contains(permission.permissionCode()))
                 .toList();
-    }
-
-    private int riskRank(String riskLevel) {
-        return switch (riskLevel == null ? "" : riskLevel.toLowerCase(Locale.ROOT)) {
-            case "critical" -> 3;
-            case "high" -> 2;
-            default -> 1;
-        };
     }
 
     private List<String> grantPermissionCodes(List<String> rolePermissionCodes, List<String> templatePermissionCodes) {
@@ -1545,7 +1693,7 @@ public class AccessService {
         if (List.of("approve", "reject").contains(normalized)) {
             return normalized;
         }
-        throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approve）或驳回（reject）");
+        throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过或驳回");
     }
 
     private PositionRoleTemplate savePositionRoleTemplate(String id, PositionRoleTemplateRequest request) {
@@ -1571,6 +1719,9 @@ public class AccessService {
         }
         Instant now = Instant.now();
         PositionRoleTemplate existing = repository.findPositionRoleTemplateById(id).orElse(null);
+        if (existing != null && existing.archivedAt() != null) {
+            throw ApiException.conflict("POSITION_TEMPLATE_ARCHIVED", "存档或已删除模板须经恢复后再编辑");
+        }
         PositionRoleTemplate saved = repository.savePositionRoleTemplate(new PositionRoleTemplate(
                 id,
                 positionCode,
@@ -1616,9 +1767,12 @@ public class AccessService {
         if (authorizationService.isPlatformAdmin(actor)) {
             return;
         }
-        if (actor.organizationId() == null || !actor.organizationId().equals(targetUser.organizationId())) {
+        if (!authorizationService.requireProjectScope(actor).equals(targetUser.organizationId())) {
             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
                     "不能为其他组织的用户分配权限：" + targetUser.id());
+        }
+        if (!isBlank(actor.merchantId()) && !actor.merchantId().equals(targetUser.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能操作其他商户的用户");
         }
     }
 
@@ -1731,7 +1885,7 @@ public class AccessService {
     }
 
     private <T> PageResponse<T> page(List<T> items) {
-        return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
+        return new PageResponse<>(items, DEFAULT_PAGE, items.size(), items.size());
     }
 
     private <T> List<T> safeList(List<T> value) {
@@ -1765,6 +1919,7 @@ public class AccessService {
             String staffLevelId,
             RoleRecord role,
             PermissionTemplate template,
+            String mappingId,
             String salaryCurrency,
             List<String> permissionCodes
     ) {
