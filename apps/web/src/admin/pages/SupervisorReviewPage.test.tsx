@@ -17,6 +17,11 @@ function envelope(items: unknown[]): Response {
   );
 }
 
+const PENDING = [
+  { decision: { review_id: "review_p1", policy_code: "bar_bill_waiver_block", action_type: "bar.bill_waiver", object_type: "bar_bill", object_id: "b1", initiated_by: "u-9", approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
+    schedule: { review_id: "review_p1", beneficiary_id: null, due_at: "2026-09-07T02:00:00Z", escalation_count: 1, escalated_at: "2026-09-06T02:00:00Z", forwarded_to: null } },
+];
+
 function raw(data: unknown): Response {
   return new Response(
     JSON.stringify({ success: true, code: "OK", message: "success", data }),
@@ -29,6 +34,8 @@ function makeApi(): AdminApi {
     const url = String(input);
     if (url.includes("supervisor-review-policies")) return Promise.resolve(envelope(POLICIES));
     if (url.includes("supervisor-review/evaluate")) return Promise.resolve(raw({ review_id: "review_1", blocked: true, review_status: "pending_review", required_level: 3 }));
+    if (url.includes("supervisor-review/pending")) return Promise.resolve(envelope(PENDING));
+    if (url.includes("/forward")) return Promise.resolve(raw({ review_id: "review_p1", forwarded_to: "usr_x", due_at: "2026-09-09T02:00:00Z", escalation_count: 0 }));
     return Promise.resolve(envelope([]));
   }));
   return new AdminApi("test-token");
@@ -74,6 +81,23 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     renderPage(MANAGE_ONLY_PERMS);
     await evaluateOnce();
     expect((screen.getByTestId("supervisor-review-approve") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("待复核清单展示到期与升级次数；转交提交 forwarded_to 且结果为中文句子（PGM-1.7.1）", async () => {
+    const props = renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-review_p1")).toBeTruthy());
+    const row = screen.getByTestId("supervisor-review-pending-review_p1").textContent ?? "";
+    expect(row).toContain("review_p1");
+    expect(row).toContain("已升级 1 次");
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p1"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "usr_x" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/review_p1/forward"))).toBe(true));
+    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/forward"));
+    const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
+    expect(body.forwarded_to).toBe("usr_x");
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^复核单 review_p1 已转交给 usr_x/)));
   });
 
   it("动作类型选项与服务端策略一致：无「账单折扣」，有免单 / 退款 / 调账", async () => {

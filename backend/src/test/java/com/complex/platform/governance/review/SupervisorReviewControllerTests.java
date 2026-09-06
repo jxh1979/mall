@@ -6,12 +6,14 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.GlobalExceptionHandler;
@@ -191,6 +193,26 @@ class SupervisorReviewControllerTests {
                 .andExpect(jsonPath("$.data.review_status").value("approved"))
                 .andExpect(jsonPath("$.data.reviewer_level").value(3));
 
+        verify(authorizationService).requirePermission("governance.supervisor_review.approve");
+    }
+
+    // M007-A-02：待复核清单须 view 权限；转发须 approve 权限 + 幂等键。
+    @Test
+    void pendingListAndForwardEndpointsAreGated() throws Exception {
+        when(service.listPending(anyInt())).thenReturn(new PageResponse<>(List.of(), 1, 200, 0));
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/pending").with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(0));
+        verify(authorizationService).requirePermission("governance.supervisor_review.view");
+
+        mockMvc.perform(post("/api/v1/platform/supervisor-review/review_1/forward")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"forwarded_to": "usr_2", "comment": "no key"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
         verify(authorizationService).requirePermission("governance.supervisor_review.approve");
     }
 

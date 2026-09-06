@@ -1011,6 +1011,33 @@ class AccessServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
     }
 
+    // M007-F-04（PGM-1.10.1「员工可申请临时权限，按层级对应主管审批……到期自动失效」）：日常权限的临时申请也走主管链，
+    // 不再以 GRANT_APPROVAL_NOT_REQUIRED 拒绝；审批通过后落为有时限的临时授权。
+    @Test
+    void dailyTemporaryPermissionApplicationEntersSupervisorChain() {
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_daily_target", new AccessUser(
+                "usr_daily_target", "daily-target", "staff", "org_a", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                "usr_admin", "lvl_m10_upper", null, "CNY", null, "seed-org", null, "test", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_requester", "requester", "org_a");
+
+        AccessGrantRequestRecord pending = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-daily", "temporary", List.of(), "temporary_permission",
+                "usr_daily_target", null, null, null, null, null, null,
+                List.of("ops.production_readiness.view"),
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "cover shift"));
+        assertThat(pending.status()).isEqualTo("pending");
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).policyCode()).isEqualTo("permission_grant_l1");
+
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord applied = service.reviewGrant(pending.id(), new AccessGrantReviewRequest(
+                "review-temp-daily", "approve", List.of(), "approve", "ok"));
+        assertThat(applied.status()).isEqualTo("applied");
+        assertThat(accessRepository.temporaryGrants.values()).hasSize(1);
+    }
+
     private AccessService newAccessService(boolean grantApprovalEnabled, SupervisorReviewService supervisorReviewService) {
         return new AccessService(
                 accessRepository,

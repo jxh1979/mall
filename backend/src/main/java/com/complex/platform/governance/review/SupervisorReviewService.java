@@ -114,6 +114,7 @@ public class SupervisorReviewService {
                     );
                     if (blocked) {
                         supervisorReviewRepository.saveSupervisorReview(decision);
+                        scheduleDeadline(decision.reviewId(), null, actionType, policy.policyCode());
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.evaluated",
@@ -123,7 +124,8 @@ public class SupervisorReviewService {
                             null,
                             request.idempotencyKey(),
                             Map.of("action_type", actionType, "blocked", blocked, "required_level", policy.requiredLevel(),
-                                    "approval_level", policy.approvalLevel())
+                                    "approval_level", policy.approvalLevel(),
+                                    "violation_summary", request.violationSummary() == null ? "" : request.violationSummary())
                     );
                     return decision;
                 },
@@ -152,19 +154,27 @@ public class SupervisorReviewService {
                             && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
                         throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须使用 USB 最高权限会话审批");
                     }
+                    String reviewerId = authorizationService.currentActor().id();
+                    Optional<SupervisorReviewRepository.ReviewSchedule> schedule =
+                            supervisorReviewRepository.findSupervisorReviewSchedule(id);
+                    // M007-A-02（PGM-1.7.1「转发给指定人选（不限层级，可为任意人选）」）：被转发人免除级别/职级/角色/范围闸，
+                    // 仍受自审与直接受益人闸约束。
+                    boolean forwardedReviewer = schedule.map(s -> reviewerId != null && reviewerId.equals(s.forwardedTo())).orElse(false);
+                    if (schedule.map(s -> reviewerId != null && reviewerId.equals(s.beneficiaryId())).orElse(false)) {
+                        throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "直接受益人不能复核与自己相关的申请");
+                    }
                     int requiredLevel = pending.requiredLevel();
-                    if (reviewerLevel < requiredLevel) {
+                    if (!forwardedReviewer && reviewerLevel < requiredLevel) {
                         throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
                     }
                     // Segregation of duties: the supervisor who initiated the action cannot approve it.
-                    String reviewerId = authorizationService.currentActor().id();
                     if (reviewerId != null && reviewerId.equals(pending.initiatedBy())) {
                         throw ApiException.forbidden(
                                 "SUPERVISOR_SELF_REVIEW_FORBIDDEN", "操作发起人不能复核自己发起的操作");
                     }
                     // REQ-69 逐级上提：当本次复核记录有按 rank 计算的所需审批人 rank 时，
                     // 审批人的 level_rank 必须不低于该 rank（在主管级校验之上的管理职级门槛）。
-                    if (pending.requiredApproverRank() != null) {
+                    if (!forwardedReviewer && pending.requiredApproverRank() != null) {
                         int reviewerRank = authorizationService.currentActorLevelRank();
                         if (reviewerRank < pending.requiredApproverRank()) {
                             throw ApiException.forbidden(
@@ -173,7 +183,7 @@ public class SupervisorReviewService {
                         }
                     }
                     // 双轨收口的角色闸/范围闸仅在可解析角色与隔离键时强制；不可解析时回退既有 level 闸（向后兼容）。
-                    if (authorizationService.canResolveRoles()) {
+                    if (!forwardedReviewer && authorizationService.canResolveRoles()) {
                         SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
                         // §24.3 specific_role：rank 闸不适用（requiredApproverRank=null）时不旁路，
                         // 改按角色解析——审批人必须通过其角色（非临时授权）持有指定审批权限。
@@ -210,7 +220,7 @@ public class SupervisorReviewService {
                             requiredLevel,
                             reviewerLevel,
                             decision,
-                            request.comment(),
+                            pending.reason(), // M007-F-11：保留评估时的「为什么」，审批意见进审计留痕
                             request.evidenceAttachmentIds() == null ? List.of() : List.copyOf(request.evidenceAttachmentIds()),
                             Instant.now(),
                             pending.initiatedBy(),
@@ -225,7 +235,8 @@ public class SupervisorReviewService {
                             id,
                             null,
                             request.idempotencyKey(),
-                            Map.of("decision", decision, "reviewer_level", reviewerLevel)
+                            Map.of("decision", decision, "reviewer_level", reviewerLevel,
+                                    "comment", request.comment() == null ? "" : request.comment())
                     );
                     // R5 T3 事件名收口：准入复核放行/驳回额外发 admission.released（替代零命中的 contract.released）。
                     auditEventService.recordSuccess(
@@ -263,6 +274,19 @@ public class SupervisorReviewService {
             String approvalLevelCode,
             int requiredLevel
     ) {
+        return blockForAdmission(policyCode, actionType, objectType, objectId, approvalLevelCode, requiredLevel, null);
+    }
+
+    /** 带直接受益人的阻断（授权申请传被授权对象），受益人不得审批也不得被转发（PGM-1.7.1）。 */
+    public SupervisorReviewDecisionRecord blockForAdmission(
+            String policyCode,
+            String actionType,
+            String objectType,
+            String objectId,
+            String approvalLevelCode,
+            int requiredLevel,
+            String beneficiaryId
+    ) {
         String initiatedBy = authorizationService.currentActor().id();
         ApprovalLevel approvalLevel = ApprovalLevel.fromCode(approvalLevelCode);
         int initiatorRank = authorizationService.currentActorLevelRank();
@@ -286,6 +310,7 @@ public class SupervisorReviewService {
                 requiredApproverRank
         );
         supervisorReviewRepository.saveSupervisorReview(decision);
+        scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policyCode);
         auditEventService.recordSuccess(
                 "admission.blocked",
                 MANAGE_PERMISSION,
@@ -338,6 +363,135 @@ public class SupervisorReviewService {
             return null;
         }
         return approvalLevel.conservativeRequiredApproverRank(requiredLevel);
+    }
+
+    private static final int MONEY_DEADLINE_WORKING_DAYS = 1;
+    private static final int DEFAULT_DEADLINE_WORKING_DAYS = 3;
+
+    /**
+     * M007-A-02（PGM-1.7.1「全平台审批通用时限」）：按策略参数 deadlineWorkingDays（工作日，含上下限）计算到期；
+     * 未配置时涉钱 1 个工作日、其余 3 个工作日。工作日 = 周一至周五且不在 holiday_calendar 内。
+     */
+    private void scheduleDeadline(String reviewId, String beneficiaryId, String actionType, String policyCode) {
+        int days = supervisorReviewRepository.findDeadlineWorkingDays(policyCode)
+                .orElse(isMoneyAction(actionType) ? MONEY_DEADLINE_WORKING_DAYS : DEFAULT_DEADLINE_WORKING_DAYS);
+        supervisorReviewRepository.scheduleSupervisorReview(reviewId, beneficiaryId, addWorkingDays(Instant.now(), Math.max(days, 1)));
+    }
+
+    private static boolean isMoneyAction(String actionType) {
+        String type = actionType == null ? "" : actionType;
+        return type.startsWith("finance.") || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
+                "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
+    }
+
+    // ponytail: 调休上班的周末未建模（holiday_calendar 只记假期），需要时在日历表加 workday 类型即可。
+    Instant addWorkingDays(Instant from, int workingDays) {
+        java.time.ZonedDateTime at = from.atZone(com.complex.platform.common.LocalZone.ID);
+        java.time.LocalDate day = at.toLocalDate();
+        java.util.Set<java.time.LocalDate> holidays = new java.util.HashSet<>(
+                supervisorReviewRepository.findHolidayDates(day, day.plusDays(workingDays * 3L + 14)));
+        int remaining = workingDays;
+        while (remaining > 0) {
+            day = day.plusDays(1);
+            boolean weekend = day.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || day.getDayOfWeek() == java.time.DayOfWeek.SUNDAY;
+            if (!weekend && !holidays.contains(day)) {
+                remaining--;
+            }
+        }
+        return day.atTime(at.toLocalTime()).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+    }
+
+    /**
+     * M007-A-02（PGM-1.7.1「超时……自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝……到达最终审批节点后仍超时的，
+     * 单据保持待审」）：到期的待复核单升级一级（one_level_up → two_levels_up → top_authority），到顶后只提醒并顺延；
+     * 每次升级/提醒留痕。返回处理条数。
+     */
+    public int escalateOverdue(Instant now) {
+        int handled = 0;
+        for (SupervisorReviewRepository.PendingReview item : supervisorReviewRepository.listOverdueSupervisorReviews(now, 200)) {
+            SupervisorReviewDecisionRecord d = item.decision();
+            ApprovalLevel current = d.approvalLevel() == null ? null : ApprovalLevel.fromCode(d.approvalLevel());
+            ApprovalLevel next = current == ApprovalLevel.ONE_LEVEL_UP ? ApprovalLevel.TWO_LEVELS_UP
+                    : current == ApprovalLevel.TWO_LEVELS_UP ? ApprovalLevel.TOP_AUTHORITY : null;
+            int days = supervisorReviewRepository.findDeadlineWorkingDays(d.policyCode())
+                    .orElse(isMoneyAction(d.actionType()) ? MONEY_DEADLINE_WORKING_DAYS : DEFAULT_DEADLINE_WORKING_DAYS);
+            Instant nextDue = addWorkingDays(now, Math.max(days, 1));
+            boolean escalated = next != null;
+            String level = escalated ? next.code() : d.approvalLevel();
+            Integer rank = escalated
+                    ? resolveRequiredApproverRank(next, authorizationService.levelRankOf(d.initiatedBy()), d.requiredLevel())
+                    : d.requiredApproverRank();
+            if (!supervisorReviewRepository.escalateSupervisorReview(d.reviewId(), level, rank, nextDue, now)) {
+                continue;
+            }
+            handled++;
+            auditEventService.recordSuccess(
+                    escalated ? "governance.supervisor_review.escalated" : "governance.supervisor_review.reminded",
+                    APPROVE_PERMISSION,
+                    "supervisor_review",
+                    d.reviewId(),
+                    null,
+                    null,
+                    Map.of("action_type", d.actionType(), "from_level", d.approvalLevel() == null ? "" : d.approvalLevel(),
+                            "to_level", level == null ? "" : level, "due_at", nextDue.toString(),
+                            "escalation_count", item.schedule() == null ? 1 : item.schedule().escalationCount() + 1)
+            );
+        }
+        return handled;
+    }
+
+    /** M007-A-02（PGM-1.7.1 转发）：审批人（或已被转发人）把待复核单逐单转发；不得转给申请人本人或直接受益人。 */
+    public SupervisorReviewRepository.ReviewSchedule forward(String reviewId, SupervisorReviewForwardRequest request) {
+        String id = requireText(reviewId, "review_id");
+        requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
+        return idempotencyService.execute(
+                "supervisorReviewForward:" + id,
+                request.idempotencyKey(),
+                request,
+                () -> {
+                    SupervisorReviewDecisionRecord pending = supervisorReviewRepository
+                            .findPendingSupervisorReviewById(id)
+                            .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
+                    String actorId = authorizationService.currentActor().id();
+                    Optional<SupervisorReviewRepository.ReviewSchedule> schedule = supervisorReviewRepository.findSupervisorReviewSchedule(id);
+                    boolean forwardedReviewer = schedule.map(s -> actorId != null && actorId.equals(s.forwardedTo())).orElse(false);
+                    if (ApprovalLevel.TOP_AUTHORITY.code().equals(pending.approvalLevel())
+                            && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须由 USB 最高权限本人逐单转发");
+                    }
+                    if (!forwardedReviewer && authorizationService.currentSupervisorLevel() < pending.requiredLevel()) {
+                        throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
+                    }
+                    String target = requireText(request.forwardedTo(), "forwarded_to");
+                    if (target.equals(pending.initiatedBy())
+                            || schedule.map(s -> target.equals(s.beneficiaryId())).orElse(false)) {
+                        throw ApiException.forbidden("SUPERVISOR_FORWARD_TARGET_FORBIDDEN", "不得转发给申请人本人或直接受益人");
+                    }
+                    Instant now = Instant.now();
+                    if (!supervisorReviewRepository.forwardSupervisorReview(id, target, actorId, now)) {
+                        throw ApiException.conflict("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单已不在待复核状态");
+                    }
+                    auditEventService.recordSuccess(
+                            "governance.supervisor_review.forwarded",
+                            APPROVE_PERMISSION,
+                            "supervisor_review",
+                            id,
+                            null,
+                            request.idempotencyKey(),
+                            Map.of("forwarded_to", target, "forwarded_by", actorId == null ? "" : actorId,
+                                    "comment", request.comment() == null ? "" : request.comment())
+                    );
+                    return supervisorReviewRepository.findSupervisorReviewSchedule(id)
+                            .orElse(new SupervisorReviewRepository.ReviewSchedule(id, null, null, 0, null, target));
+                },
+                SupervisorReviewRepository.ReviewSchedule.class
+        );
+    }
+
+    /** M007-A-02：待复核清单（审批人可见卡在哪一节点、到期与升级、转发状态）。 */
+    public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
+        List<SupervisorReviewRepository.PendingReview> items = supervisorReviewRepository.listPendingSupervisorReviews(limit);
+        return new PageResponse<>(items, 1, limit, items.size());
     }
 
     /**

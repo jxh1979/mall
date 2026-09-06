@@ -481,6 +481,96 @@ class SupervisorReviewServiceTests {
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("admission.release_executed");
     }
 
+    // M007-A-02（PGM-1.7.1「不得转发给申请人本人，也不得转发给直接受益人」「可为任意人选」）：
+    // 转发人选校验；被转发人不受级别闸约束即可裁决；受益人不得自审。
+    @Test
+    void forwardedReviewerMayDecideButNeverInitiatorOrBeneficiary() {
+        TestSecurityActors.asSupervisor("usr_fwd_init", 1);
+        var pending = service.blockForAdmission("bill_waiver_l3", "bill_waiver", "bill", "bill_fwd",
+                "specific_role", 3, "usr_benef");
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).beneficiaryId()).isEqualTo("usr_benef");
+
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        assertThatThrownBy(() -> service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "fwd-init", null, "usr_fwd_init", "to initiator")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_FORWARD_TARGET_FORBIDDEN"));
+        assertThatThrownBy(() -> service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "fwd-benef", null, "usr_benef", "to beneficiary")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_FORWARD_TARGET_FORBIDDEN"));
+        var forwarded = service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "fwd-ok", null, "usr_anyone", "please handle"));
+        assertThat(forwarded.forwardedTo()).isEqualTo("usr_anyone");
+
+        // 受益人自审被拒（即使主管级达标）。
+        TestSecurityActors.asSupervisor("usr_benef", 3);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-benef", "note", List.of("att"), 3, "approved", "self")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
+
+        // 被转发人（无主管级）可裁决。
+        TestSecurityActors.asSupervisor("usr_anyone", 0);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-fwd", "note", List.of("att"), 0, "approved", "handled by forwarded reviewer"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("governance.supervisor_review.forwarded");
+    }
+
+    // M007-A-02（PGM-1.7.1「超时……自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝；到达最终节点仍超时保持待审」）
+    @Test
+    void overdueReviewEscalatesOneLevelThenOnlyRemindsAtTopAuthority() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-overdue", "v", List.of(), "contract_violation", "contract", "c_overdue", 0L, "violation"));
+        var schedule = reviewRepository.schedules.get(pending.reviewId());
+        assertThat(schedule.dueAt()).isAfter(java.time.Instant.now());
+        java.time.Instant later = schedule.dueAt().plusSeconds(60);
+
+        assertThat(service.escalateOverdue(later)).isEqualTo(1);
+        var escalated = reviewRepository.reviews.get(pending.reviewId());
+        assertThat(escalated.reviewStatus()).isEqualTo("pending_review");
+        assertThat(escalated.approvalLevel()).isEqualTo("top_authority");
+        assertThat(escalated.requiredApproverRank()).isEqualTo(30);
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).escalationCount()).isEqualTo(1);
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).dueAt()).isAfter(later);
+
+        java.time.Instant muchLater = reviewRepository.schedules.get(pending.reviewId()).dueAt().plusSeconds(60);
+        assertThat(service.escalateOverdue(muchLater)).isEqualTo(1);
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).reviewStatus()).isEqualTo("pending_review");
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).approvalLevel()).isEqualTo("top_authority");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("governance.supervisor_review.escalated", "governance.supervisor_review.reminded");
+    }
+
+    // M007-F-11（PGM-1.16「为什么、谁审批、结果是什么，都要能查到」）：审批不得覆盖评估时的违规说明。
+    @Test
+    void approvalKeepsEvaluationReasonAndRecordsComment() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-reason", "v", List.of(), "contract_violation", "contract", "c_reason", 0L, "合同主体与经营主体不一致"));
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-reason-approve", "note", List.of("att"), 3, "approved", "证据齐备，同意"));
+        assertThat(approved.reason()).isEqualTo("合同主体与经营主体不一致");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.decided");
+    }
+
+    // M007-A-02（PGM-1.7.1 涉钱审批出厂默认 1 个工作日、其余 3 个工作日）：到期按工作日计算。
+    @Test
+    void deadlineIsShorterForMoneyActions() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var money = service.blockForAdmission("bar_bill_waiver_block", "bar.bill_waiver", "bar_bill", "b_money",
+                "one_level_up", 2, null);
+        var normal = service.blockForAdmission("amusement_reopen_block", "amusement.reopen", "amusement", "a_normal",
+                "two_levels_up", 3, null);
+        var moneyDue = reviewRepository.schedules.get(money.reviewId()).dueAt();
+        var normalDue = reviewRepository.schedules.get(normal.reviewId()).dueAt();
+        assertThat(moneyDue).isAfter(java.time.Instant.now());
+        assertThat(normalDue).isAfter(moneyDue);
+        assertThat(service.listPending(10).items()).extracting(item -> item.decision().reviewId())
+                .contains(money.reviewId(), normal.reviewId());
+    }
+
     /** 构造一个 AuthorizationService 由 mock AccessRepository 提供指定用户的 level_rank 的 service。 */
     private SupervisorReviewService rankAwareService(Map<String, Integer> userRanks) {
         com.complex.platform.access.AccessRepository repo = levelAwareRepository(userRanks, null);
@@ -749,6 +839,60 @@ class SupervisorReviewServiceTests {
         @Override
         public boolean markSupervisorReviewReleased(String reviewId, String releasedBy, java.time.Instant releasedAt) {
             return released.putIfAbsent(reviewId, releasedBy) == null;
+        }
+
+        final Map<String, ReviewSchedule> schedules = new LinkedHashMap<>();
+
+        @Override
+        public void scheduleSupervisorReview(String reviewId, String beneficiaryId, java.time.Instant dueAt) {
+            schedules.put(reviewId, new ReviewSchedule(reviewId, beneficiaryId, dueAt, 0, null, null));
+        }
+
+        @Override
+        public Optional<ReviewSchedule> findSupervisorReviewSchedule(String reviewId) {
+            return Optional.ofNullable(schedules.get(reviewId));
+        }
+
+        @Override
+        public boolean forwardSupervisorReview(String reviewId, String forwardedTo, String forwardedBy, java.time.Instant forwardedAt) {
+            ReviewSchedule current = schedules.get(reviewId);
+            if (current == null || findPendingSupervisorReviewById(reviewId).isEmpty()) {
+                return false;
+            }
+            schedules.put(reviewId, new ReviewSchedule(reviewId, current.beneficiaryId(), current.dueAt(),
+                    current.escalationCount(), current.escalatedAt(), forwardedTo));
+            return true;
+        }
+
+        @Override
+        public boolean escalateSupervisorReview(String reviewId, String approvalLevel, Integer requiredApproverRank,
+                                                java.time.Instant dueAt, java.time.Instant escalatedAt) {
+            SupervisorReviewDecisionRecord d = reviews.get(reviewId);
+            ReviewSchedule current = schedules.get(reviewId);
+            if (d == null || current == null || !"pending_review".equals(d.reviewStatus())) {
+                return false;
+            }
+            reviews.put(reviewId, new SupervisorReviewDecisionRecord(d.reviewId(), d.policyCode(), d.actionType(), d.objectType(),
+                    d.objectId(), d.blocked(), d.reviewStatus(), d.requiredLevel(), d.reviewerLevel(), d.decision(), d.reason(),
+                    d.evidenceAttachmentIds(), d.evaluatedAt(), d.initiatedBy(), approvalLevel, requiredApproverRank));
+            schedules.put(reviewId, new ReviewSchedule(reviewId, current.beneficiaryId(), dueAt,
+                    current.escalationCount() + 1, escalatedAt, current.forwardedTo()));
+            return true;
+        }
+
+        @Override
+        public List<PendingReview> listPendingSupervisorReviews(int limit) {
+            return reviews.values().stream()
+                    .filter(r -> "pending_review".equals(r.reviewStatus()))
+                    .map(r -> new PendingReview(r, schedules.get(r.reviewId())))
+                    .limit(limit).toList();
+        }
+
+        @Override
+        public List<PendingReview> listOverdueSupervisorReviews(java.time.Instant now, int limit) {
+            return listPendingSupervisorReviews(Integer.MAX_VALUE).stream()
+                    .filter(p -> p.schedule() != null && p.schedule().dueAt() != null && !p.schedule().dueAt().isAfter(now))
+                    .limit(limit).toList();
         }
     }
 }

@@ -658,20 +658,27 @@ public class AccessService {
                         repository.lockGrantAuthorizationFacts();
                         AccessGrantRequestRecord draft = buildGrantRequest(r);
                         List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(draft.permissionCodes());
-                        if (approvalRequired.isEmpty()) {
+                        // M007-F-04（PGM-1.10.1「员工可申请临时权限，按层级对应主管审批」）：临时权限申请不论日常/高危都走主管链；
+                        // 日常权限按一级主管（permission_grant_l1）审批。角色/岗位申请仍只接受含需审批权限的申请。
+                        boolean dailyTemporary = approvalRequired.isEmpty() && REQUEST_TEMPORARY_PERMISSION.equals(draft.requestType());
+                        if (approvalRequired.isEmpty() && !dailyTemporary) {
                             throw ApiException.badRequest("GRANT_APPROVAL_NOT_REQUIRED",
                                     "该授权不含需审批的权限，请直接分配");
                         }
-                        GrantReviewPolicy policy = grantReviewPolicy(approvalRequired.stream()
-                                .map(PermissionDefinition::permissionCode)
-                                .toList());
+                        GrantReviewPolicy policy = dailyTemporary
+                                ? new GrantReviewPolicy("permission_grant_l1", "one_level_up", 1)
+                                : grantReviewPolicy(approvalRequired.stream()
+                                        .map(PermissionDefinition::permissionCode)
+                                        .toList());
+                        // M007-A-02：被授权对象是直接受益人，不得审批也不得被转发。
                         SupervisorReviewDecisionRecord review = requireSupervisorReviewService().blockForAdmission(
                                 policy.policyCode(),
                                 policy.policyCode(),
                                 "access_grant_request",
                                 draft.id(),
                                 policy.approvalLevel(),
-                                policy.requiredLevel()
+                                policy.requiredLevel(),
+                                draft.targetUserId()
                         );
                         AccessGrantRequestRecord saved = repository.saveGrantRequest(withReview(draft, review.reviewId()));
                         repository.saveGrantFingerprint(saved.id(), authorizationFingerprint(saved));
