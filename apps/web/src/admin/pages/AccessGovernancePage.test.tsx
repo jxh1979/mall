@@ -9,6 +9,8 @@ const USERS = [{ id: "u-1", username: "张三", account_type: "staff", status: "
 const ROLES = [{ id: "role-1", role_name: "运营经理", role_code: "ops", status: "active" }];
 const TEMPLATES = [
   { id: "prt-1", position_code: "ops_manager", staff_level_id: "lvl_m1", role_id: "role-1", template_id: "tpl-1", organization_id: "org-1", status: "active" },
+  { id: "prt-2", position_code: "ops_manager", staff_level_id: "lvl_m5_middle", role_id: "role-1", template_id: "tpl-1", organization_id: "org-1", status: "active" },
+  { id: "prt-3", position_code: "ops_manager", staff_level_id: "lvl_m9_upper", role_id: "role-1", template_id: "tpl-1", organization_id: "org-1", status: "active" },
 ];
 const GRANTS = [
   { id: "gr-1", request_type: "temporary_permission", target_user_id: "u-1", permission_codes: ["access.role.assign"], status: "pending", single_use: true, expires_at: "2026-08-01T10:00:00Z", reason: "临时救火", created_at: "2026-07-05T09:00:00Z" },
@@ -62,6 +64,14 @@ function renderPage() {
 
 describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("职级三十档：上 / 中 / 下三档在岗位模板表全部中文化（ENUM-1.9）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-position-role-template-prt-2")).toBeTruthy());
+    expect(screen.getByTestId("access-position-role-template-prt-2").textContent).toContain("M5·中");
+    expect(screen.getByTestId("access-position-role-template-prt-2").textContent).not.toContain("middle");
+    expect(screen.getByTestId("access-position-role-template-prt-3").textContent).toContain("M9·上");
+  });
 
   it("点岗位模板行 → 抽屉出现且含岗位/角色（角色中文名）", async () => {
     renderPage();

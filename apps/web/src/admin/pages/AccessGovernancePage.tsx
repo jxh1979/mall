@@ -53,8 +53,8 @@ function zhPosition(code?: string | null): string {
 }
 function zhLevel(code?: string | null): string {
   if (!code) return "—";
-  const m = /^lvl_m(\d+)(?:_(lower|upper))?$/.exec(code);
-  if (m) return m[2] ? `M${m[1]}·${m[2] === "lower" ? "初级" : "高级"}` : `M${m[1]}`;
+  const m = /^lvl_m(\d+)(?:_(lower|middle|upper))?$/.exec(code);
+  if (m) return m[2] ? `M${m[1]}·${m[2] === "upper" ? "上" : m[2] === "middle" ? "中" : "下"}` : `M${m[1]}`;
   return code;
 }
 const GRANT_APPLY = ["access.grant_request.apply"];

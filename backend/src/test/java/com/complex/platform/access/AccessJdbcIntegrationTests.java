@@ -34,6 +34,9 @@ class AccessJdbcIntegrationTests {
     @Autowired
     private AuthorizationService authorizationService;
 
+    @Autowired
+    private org.springframework.transaction.interceptor.TransactionAttributeSource transactionAttributeSource;
+
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
@@ -548,6 +551,89 @@ class AccessJdbcIntegrationTests {
         assertThat(repository.findPermissionEffects("usr_jdbc_group_revoke", Instant.parse("2026-06-14T12:31:00Z")))
                 .extracting(AccessRepository.PermissionEffect::permissionCode)
                 .doesNotContain("ops.production_readiness.view", "ops.production_readiness.check");
+    }
+
+    // M006-G-06（PGM-1.10.1「到期、单次消耗、失效全部留痕」）：到期的临时授权须置为 expired 并写用量日志，且幂等。
+    @Test
+    void lapsedTemporaryGrantIsExpiredAndLoggedWhenEffectsAreRead() {
+        repository.createTemporaryGrant(new TemporaryGrant(
+                "22222222-2222-2222-2222-222222222222",
+                "usr_jdbc_expiry",
+                List.of("ops.production_readiness.view"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-15T00:00:00Z"),
+                false,
+                false,
+                "active",
+                "break glass",
+                "seed-admin",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null,
+                null
+        ));
+
+        assertThat(repository.findPermissionEffects("usr_jdbc_expiry", Instant.parse("2026-06-15T00:00:00Z")))
+                .extracting(AccessRepository.PermissionEffect::permissionCode)
+                .doesNotContain("ops.production_readiness.view");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM temporary_permission_grants WHERE subject_id = ?", String.class, "usr_jdbc_expiry"))
+                .isEqualTo("expired");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT result FROM permission_template_usage_logs WHERE user_id = ?", String.class, "usr_jdbc_expiry"))
+                .containsExactly("expired");
+
+        repository.findPermissionEffects("usr_jdbc_expiry", Instant.parse("2026-06-16T00:00:00Z"));
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT result FROM permission_template_usage_logs WHERE user_id = ?", String.class, "usr_jdbc_expiry"))
+                .hasSize(1);
+    }
+
+    @Test
+    void lapsedTemplateApplicationIsExpiredAndLoggedWhenEffectsAreRead() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_tpl_expiry",
+                "jdbc-tpl-expiry",
+                "staff",
+                "org",
+                "merchant",
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.createTemplate(
+                template("tpl_temporary_lapsed", "temporary-lapsed", null),
+                List.of(item("tpl_temporary_lapsed", "ops.production_readiness.check", AccessRepository.Effect.GRANT))
+        );
+        String applicationId = repository.applyTemplate(
+                "tpl_temporary_lapsed",
+                List.of("usr_jdbc_tpl_expiry"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-15T00:00:00Z"),
+                false,
+                "seed-admin"
+        ).get(0).id();
+
+        assertThat(repository.findPermissionEffects("usr_jdbc_tpl_expiry", Instant.parse("2026-06-15T00:00:00Z")))
+                .extracting(AccessRepository.PermissionEffect::permissionCode)
+                .doesNotContain("ops.production_readiness.check");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permission_template_applications WHERE id = ?", String.class, applicationId))
+                .isEqualTo("expired");
+        assertThat(jdbcTemplate.queryForMap(
+                "SELECT application_id, result FROM permission_template_usage_logs WHERE user_id = ?", "usr_jdbc_tpl_expiry"))
+                .containsEntry("application_id", applicationId)
+                .containsEntry("result", "expired");
+    }
+
+    // M006-G-07（PGM-1.10.1「旧派生同步失效」）：已定岗改职级复用定岗的四步写入（职级、定岗、套模板、替换派生），
+    // 入口必须与 assignUserPosition 一样由 Spring 事务整体包住，否则套模板已提交、替换派生失败时新旧派生并存。
+    @Test
+    void staffLevelChangeRunsInOneTransactionLikePositionAssignment() throws NoSuchMethodException {
+        assertThat(transactionAttributeSource.getTransactionAttribute(AccessService.class.getMethod(
+                "assignUserPosition", com.complex.platform.access.dto.UserPositionAssignmentRequest.class), AccessService.class))
+                .isNotNull();
+        assertThat(transactionAttributeSource.getTransactionAttribute(AccessService.class.getMethod(
+                "assignStaffLevel", com.complex.platform.access.dto.StaffLevelAssignmentRequest.class), AccessService.class))
+                .isNotNull();
     }
 
     private String regclass(String tableName) {

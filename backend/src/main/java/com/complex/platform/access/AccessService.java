@@ -1038,6 +1038,7 @@ public class AccessService {
      * 为员工分配职级与具体薪资（REQ-60/61）。职级必须存在；币种 P0 仅 CNY（D12）；
      * 金额整数分非负（D1）；非平台管理员不得跨组织分配；幂等 + 审计留痕。
      */
+    @Transactional
     public StaffLevelAssignment assignStaffLevel(StaffLevelAssignmentRequest request) {
         AccessActor actor = authorizationService.currentActor();
         try {
