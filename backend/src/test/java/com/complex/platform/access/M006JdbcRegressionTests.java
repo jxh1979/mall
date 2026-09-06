@@ -137,8 +137,7 @@ class M006JdbcRegressionTests {
     // M006-006/009/016/026：执行完整迁移 SQL，仅作用于本连接临时表；验证政策可持久化修改。
     @Test void migrationAppliesAndGrantPolicyRoundTripsInPostgres() throws Exception {
         preparePositionMigrationTables();
-        jdbc.execute(java.nio.file.Files.readString(java.nio.file.Path.of(
-                "backend/src/main/resources/db/migration/V386__access_grant_authorization_fingerprint.sql")));
+        jdbc.execute(migrationSql());
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         var initial = mapper.readValue(repository.findGrantPolicy().orElseThrow(), AccessGrantPolicy.class);
         assertThat(initial.windowDays().value()).isEqualTo(30);
@@ -229,9 +228,9 @@ class M006JdbcRegressionTests {
         jdbc.execute("CREATE TEMP TABLE position_role_templates (LIKE public.position_role_templates INCLUDING ALL)");
         jdbc.execute("""
                 ALTER TABLE pg_temp.position_role_templates
-                    ADD COLUMN archived_at timestamptz, ADD COLUMN archived_by varchar,
-                    ADD COLUMN deleted_at timestamptz, ADD COLUMN deleted_by varchar,
-                    ADD COLUMN delete_review_id varchar, ADD COLUMN delete_reason text
+                    ADD COLUMN IF NOT EXISTS archived_at timestamptz, ADD COLUMN IF NOT EXISTS archived_by varchar,
+                    ADD COLUMN IF NOT EXISTS deleted_at timestamptz, ADD COLUMN IF NOT EXISTS deleted_by varchar,
+                    ADD COLUMN IF NOT EXISTS delete_review_id varchar, ADD COLUMN IF NOT EXISTS delete_reason text
                 """);
         var original = new PositionRoleTemplate("mapping", "position", "level", "role", "template",
                 null, "active", "creator", Instant.now(), Instant.now());
@@ -282,8 +281,7 @@ class M006JdbcRegressionTests {
                         '{"position_code":"prior-position","staff_level_id":"level","role_id":"prior-role","template_id":"prior-template"}'),
                        (?,now(),'access.role.assigned','success','user_role','explicit:old-role','{"role_id":"old-role"}')
                 """, UUID.randomUUID(), UUID.randomUUID());
-        jdbc.execute(java.nio.file.Files.readString(java.nio.file.Path.of(
-                "backend/src/main/resources/db/migration/V386__access_grant_authorization_fingerprint.sql")));
+        jdbc.execute(migrationSql());
         assertThat(repository.countPositionTemplateUsage("old-mapping")).isEqualTo(3);
         assertThat(repository.countPositionTemplateUsage("outside")).isZero();
         assertThat(jdbc.queryForObject("SELECT assigned_role_id FROM user_position_assignments WHERE user_id='legacy'", String.class)).isEqualTo("old-role");
@@ -301,6 +299,21 @@ class M006JdbcRegressionTests {
                 "user_position_assignments", "roles", "user_roles", "access_users", "audit_events")) {
             jdbc.execute("CREATE TEMP TABLE " + table + " (LIKE public." + table + " INCLUDING ALL)");
         }
+        // M006-F-02：LIKE 复制的是 complex_test 当前结构（库已迁到 V386 时含这些列），下面回放的 V386 会再次 ADD COLUMN；
+        // 先在临时表上去掉，使本测试与库的迁移水位无关。
+        jdbc.execute("ALTER TABLE pg_temp.supervisor_review_policies DROP COLUMN IF EXISTS parameters");
+        jdbc.execute("ALTER TABLE pg_temp.position_role_templates DROP COLUMN IF EXISTS archived_at, DROP COLUMN IF EXISTS archived_by, "
+                + "DROP COLUMN IF EXISTS deleted_at, DROP COLUMN IF EXISTS deleted_by, DROP COLUMN IF EXISTS delete_review_id, DROP COLUMN IF EXISTS delete_reason");
+        jdbc.execute("ALTER TABLE pg_temp.user_position_assignments DROP COLUMN IF EXISTS assigned_role_id, "
+                + "DROP COLUMN IF EXISTS assigned_position_template_id, DROP COLUMN IF EXISTS position_application_ids");
         jdbc.execute("ALTER TABLE pg_temp.permission_template_applications ADD COLUMN target_type varchar, ADD COLUMN applied_by varchar, ADD COLUMN applied_at timestamptz, ADD COLUMN revoked_by varchar, ADD COLUMN revoked_at timestamptz");
+    }
+
+    // M006-F-02：surefire 的 cwd 是 backend/，相对仓库根的路径必错；迁移文件在测试类路径上。
+    private static String migrationSql() throws java.io.IOException {
+        try (var in = M006JdbcRegressionTests.class.getResourceAsStream("/db/migration/V386__access_grant_authorization_fingerprint.sql")) {
+            if (in == null) throw new java.io.FileNotFoundException("V386 migration not on classpath");
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
     }
 }

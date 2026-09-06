@@ -232,6 +232,15 @@ public interface AccessRepository {
      */
     boolean markSingleUsePermissionConsumed(String sourceId, String permissionCode, String userId, Instant consumedAt);
 
+    /** M006-G-01（PGM-1.10.1 员工单独授予 − 显式拒绝）：员工级覆盖写路径；同一 (user, code, effect) 幂等覆盖。 */
+    default void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
+        throw new UnsupportedOperationException("saveUserPermissionOverrides");
+    }
+
+    default int deleteUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect) {
+        throw new UnsupportedOperationException("deleteUserPermissionOverrides");
+    }
+
     enum Effect {
         GRANT,
         DENY

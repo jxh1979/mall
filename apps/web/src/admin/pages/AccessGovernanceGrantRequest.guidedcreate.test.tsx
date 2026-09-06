@@ -97,7 +97,7 @@ describe("AccessGovernancePage 引导式新建授权申请(phase-11)", () => {
     expect((lastPostBody as { target_user_id: string }).target_user_id).toBe("u-1");
     expect((lastPostBody as { permission_codes: string[] }).permission_codes).toEqual(["access.role.assign", "finance.view"]);
     await waitFor(() => expect(screen.queryByTestId("access-grant-request-guided")).toBeNull());
-    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "access_grant_request_applied" }));
+    expect(setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^授权申请已提交/)); // PGM-1.18：结果提示全中文
   });
 
   it("步内校验拦截：临时权限缺权限码/过期时间则不进确认、不提交", async () => {

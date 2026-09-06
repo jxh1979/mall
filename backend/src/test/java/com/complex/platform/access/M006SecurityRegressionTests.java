@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -684,6 +684,44 @@ class M006SecurityRegressionTests {
         actor("orphan", "staff", null, null);
         assertThatThrownBy(() -> service.copyPermissionTemplate("tpl-org", template("copy-orphan", LOW)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PROJECT_SCOPE_REQUIRED"));
+    }
+
+
+    // M006-G-02（PGM-1.10.1/1.10.2）：已定岗员工改职级，须按新职级的岗位映射重算派生权限，旧派生失效。
+
+    @Test void staffLevelChangeRederivesPositionGrants() {
+        String other = "ops.production_readiness.check";
+        var definitions = new ArrayList<>(repository.listPermissions());
+        definitions.add(new PermissionDefinition(other, "检查", "ops", "medium", false, "active"));
+        when(repository.listPermissions()).thenReturn(definitions);
+        for (String level : List.of("l1", "l2")) when(repository.findStaffLevelById(level)).thenReturn(Optional.of(
+                new StaffLevelRecord(level, level.toUpperCase(Locale.ROOT), "lower", level.equals("l1") ? 1 : 4, "职级", "active", Instant.now())));
+        doAnswer(a -> a.getArgument(0)).when(repository).saveStaffLevelAssignment(any());
+        doAnswer(a -> a.getArgument(0)).when(repository).saveUserPositionAssignment(any());
+        Map<String, PositionRoleTemplate> byLevel = new HashMap<>();
+        doAnswer(a -> { PositionRoleTemplate mapping = a.getArgument(0); byLevel.put(mapping.staffLevelId(), mapping); return mapping; })
+                .when(repository).savePositionRoleTemplate(any());
+        when(repository.findPositionRoleTemplate(any(), anyString(), anyString()))
+                .thenAnswer(a -> Optional.ofNullable(byLevel.get(a.getArgument(2))));
+        when(repository.applyTemplate(anyString(), anyList(), any(), any(), anyBoolean(), anyString())).thenReturn(List.of());
+        var positions = new HashMap<String, UserPositionAssignment>();
+        doAnswer(a -> { UserPositionAssignment p = a.getArgument(0); positions.put(p.userId(), p); return p; })
+                .when(repository).saveUserPositionAssignment(any());
+        when(repository.findUserPositionAssignment(anyString())).thenAnswer(a -> Optional.ofNullable(positions.get(a.getArgument(0))));
+        roles.put("junior", new RoleRecord("junior", "初级", null, "project", "active", Instant.now(), List.of(LOW), "org"));
+        roles.put("senior", new RoleRecord("senior", "高级", null, "project", "active", Instant.now(), List.of(other), "org"));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org", null, "active"), "unused", List.of()));
+        PermissionTemplate template = service.createPermissionTemplate(template("empty"));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest("m-l1", "理由", "ops", "l1", "junior", template.id(), "active"));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest("m-l2", "理由", "ops", "l2", "senior", template.id(), "active"));
+        users.put("worker", user("worker", "org", null));
+        service.assignUserPosition(new UserPositionAssignmentRequest("pos", "理由", "worker", "ops", "l1", 0L, "CNY", null));
+        assertThat(repository.findPermissionEffects("worker", Instant.now())).extracting(AccessRepository.PermissionEffect::permissionCode).containsExactly(LOW);
+        service.assignStaffLevel(new StaffLevelAssignmentRequest("lvl", "晋升", "worker", "l2", 0L, "CNY", null));
+        assertThat(repository.findPermissionEffects("worker", Instant.now())).extracting(AccessRepository.PermissionEffect::permissionCode).containsExactly(other);
+        assertThat(positions.get("worker").staffLevelId()).isEqualTo("l2");
     }
 
 }

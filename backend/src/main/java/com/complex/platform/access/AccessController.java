@@ -13,6 +13,7 @@ import com.complex.platform.access.dto.RoleRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
+import com.complex.platform.access.dto.UserPermissionOverrideRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -295,5 +296,26 @@ public class AccessController {
                 request == null ? null : request.salaryDetail()
         );
         return ApiResponse.ok(service.assignUserPosition(withUser));
+    }
+
+    // M006-G-01（PGM-1.10.1「员工单独授予 − 显式拒绝」）：员工级覆盖写入口，与角色装配同一门禁。
+    @PostMapping("/users/{id}/permission-overrides")
+    public ApiResponse<EffectivePermissions> setUserPermissionOverrides(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid UserPermissionOverrideRequest request
+    ) {
+        authorizationService.requirePermission("access.role.assign");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.setUserPermissionOverrides(id, request));
+    }
+
+    @PostMapping("/users/{id}/permission-overrides/remove")
+    public ApiResponse<EffectivePermissions> removeUserPermissionOverrides(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid UserPermissionOverrideRequest request
+    ) {
+        authorizationService.requirePermission("access.role.assign");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.removeUserPermissionOverrides(id, request));
     }
 }

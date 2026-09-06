@@ -209,7 +209,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
         operatorNote: newType === "temporary" ? "后台权限模板临时授权配置" : "后台权限模板配置",
       };
       const saved = await api.post<PermissionTemplateRow>("/api/v1/access/permission-templates", body);
-      setActionResult({ action: "保存权限模板", templateId: saved.id, permissionCount: newPermissionCodes.length, singleUse: newSingleUse });
+      setActionResult(`保存权限模板：${saved.id}，${newPermissionCodes.length} 个权限点${newSingleUse ? "，单次有效" : ""}`);
       // 新建成功后选中该模板，方便随后复制/应用（复制/应用动作依赖选中态）。
       setMode("existing");
       setSelectedId(saved.id);
@@ -219,7 +219,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
       const message2 = actionError instanceof Error ? actionError.message : "保存权限模板失败";
       setCreateError(message2);
       setGlobalError(message2);
-      setActionResult({ action: "保存权限模板", status: "failed", message: message2 });
+      setActionResult(`保存权限模板失败：${message2}`);
     } finally {
       setCreateSaving(false);
     }
@@ -264,7 +264,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
         operatorNote: templateType === "temporary" ? "后台权限模板临时授权配置" : "后台权限模板配置",
       };
       const saved = await api.put<PermissionTemplateRow>(`/api/v1/access/permission-templates/${encodeURIComponent(selected.id)}`, body);
-      setActionResult({ action: "保存权限模板", templateId: saved.id, permissionCount: selectedPermissionCodes.length, singleUse });
+      setActionResult(`保存权限模板：${saved.id}，${selectedPermissionCodes.length} 个权限点${singleUse ? "，单次有效" : ""}`);
       setMode("existing");
       setSelectedId(saved.id);
       await reload();
@@ -272,7 +272,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
       const message = actionError instanceof Error ? actionError.message : "保存权限模板失败";
       setFormError(message);
       setGlobalError(message);
-      setActionResult({ action: "保存权限模板", status: "failed", message });
+      setActionResult(`保存权限模板失败：${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +295,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
         templateType: "copy",
         operatorNote: "后台复制权限模板",
       });
-      setActionResult({ action: "复制模板", sourceTemplateId: selected.id, copied });
+      setActionResult(`复制模板：${selected.id} → ${copied.id}`);
       setMode("existing");
       setSelectedId(copied.id);
       await reload();
@@ -323,18 +323,18 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
     if (!validateApply() || !selected?.id) return;
     setGlobalError(null);
     try {
-      const applied = await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selected.id)}/apply`, {
+      await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selected.id)}/apply`, {
         targetUserIds: parseTargetUsers(targetUsersText),
         mode: singleUse ? "single_use" : "append",
         operatorNote: singleUse ? "后台应用单次有效权限模板" : "后台应用权限模板",
       });
-      setActionResult({ action: singleUse ? "单次有效临时模板已应用" : "模板已应用", sourceTemplateId: selected.id, targetUserIds: parseTargetUsers(targetUsersText), applied });
+      setActionResult(`${singleUse ? "单次有效临时模板已应用" : "模板已应用"}：${selected.id}，目标账号 ${parseTargetUsers(targetUsersText).join("、")}`);
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "应用模板失败";
       setFormError(message);
       setGlobalError(message);
-      setActionResult({ action: "应用权限模板", status: "failed", message });
+      setActionResult(`应用权限模板失败：${message}`);
     }
   }
 

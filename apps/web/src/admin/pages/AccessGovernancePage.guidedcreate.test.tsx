@@ -97,7 +97,7 @@ describe("AccessGovernancePage 引导式新增岗位角色模板(phase-9)", () =
     expect((lastPostBody as { staff_level_id: string }).staff_level_id).toBe("lvl_p1");
     expect((lastPostBody as { role_id: string }).role_id).toBe("role-1");
     await waitFor(() => expect(screen.queryByTestId("access-position-role-template-guided")).toBeNull());
-    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "access_position_role_template_saved" }));
+    expect(setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^岗位模板已保存/)); // PGM-1.18：结果提示全中文
   });
 
   it("步内校验拦截：岗位清空则不进下一步、不提交", async () => {

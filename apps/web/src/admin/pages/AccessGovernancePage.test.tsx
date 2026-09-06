@@ -9,6 +9,8 @@ const USERS = [{ id: "u-1", username: "张三", account_type: "staff", status: "
 const ROLES = [{ id: "role-1", role_name: "运营经理", role_code: "ops", status: "active" }];
 const TEMPLATES = [
   { id: "prt-1", position_code: "ops_manager", staff_level_id: "lvl_m1", role_id: "role-1", template_id: "tpl-1", organization_id: "org-1", status: "active" },
+  { id: "prt-2", position_code: "ops_manager", staff_level_id: "lvl_m5_middle", role_id: "role-1", template_id: "tpl-1", organization_id: "org-1", status: "active" },
+  { id: "prt-3", position_code: "ops_manager", staff_level_id: "lvl_m9_upper", role_id: "role-1", template_id: "tpl-1", organization_id: "org-1", status: "active" },
 ];
 const GRANTS = [
   { id: "gr-1", request_type: "temporary_permission", target_user_id: "u-1", permission_codes: ["access.role.assign"], status: "pending", single_use: true, expires_at: "2026-08-01T10:00:00Z", reason: "临时救火", created_at: "2026-07-05T09:00:00Z" },
@@ -58,10 +60,53 @@ function renderPage() {
     effectivePermissions: ADMIN_PERMS,
   };
   render(<AccessGovernancePage {...fullProps} />);
+  return fullProps;
 }
+
+// M006-G-09（PGM-1.18「提示……必须全中文」）：主壳对对象型结果原样 JSON 上屏，本模块三个页面交出的结果只能是中文句子，
+// 不得交对象字面量，也不得含 snake_case 英文动作码（如 partner_org_user_bound）。
+describe("M006-G-09 结果提示全中文", () => {
+  it("治理页 / 账号页 / 权限模板页交给主壳的结果都是中文句子", () => {
+    // 用 Vite 的 ?raw 读取页面源码（web tsconfig 无 node 类型；vite/client 已声明 import.meta.glob）。
+    const sources = import.meta.glob<string>("./{AccessGovernancePage,AccessUsersPage,PermissionTemplatesPage}.tsx", { query: "?raw", import: "default", eager: true });
+    expect(Object.keys(sources)).toHaveLength(3);
+    for (const [page, source] of Object.entries(sources)) {
+      const calls = source.split("\n").filter((line: string) => line.includes("setActionResult("));
+      expect(calls.length, page).toBeGreaterThan(0);
+      for (const line of calls) {
+        expect(line, `${page}: ${line.trim()}`).not.toMatch(/setActionResult\(\{/);
+        expect(line, `${page}: ${line.trim()}`).not.toMatch(/"[a-z]+(?:_[a-z]+)+"/);
+      }
+    }
+  });
+});
 
 describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("职级三十档：上 / 中 / 下三档在岗位模板表全部中文化（ENUM-1.9）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-position-role-template-prt-2")).toBeTruthy());
+    expect(screen.getByTestId("access-position-role-template-prt-2").textContent).toContain("M5·中");
+    expect(screen.getByTestId("access-position-role-template-prt-2").textContent).not.toContain("middle");
+    expect(screen.getByTestId("access-position-role-template-prt-3").textContent).toContain("M9·上");
+  });
+
+  it("员工单独授予 / 显式拒绝有写入口：显式拒绝按目标用户提交（PGM-1.10.1）", async () => {
+    const props = renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-user-override-form")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("覆盖用户 id"), { target: { value: "u-1" } });
+    fireEvent.change(screen.getByLabelText("覆盖权限码"), { target: { value: "access.role.assign" } });
+    fireEvent.change(screen.getByLabelText("覆盖效果"), { target: { value: "deny" } });
+    fireEvent.click(screen.getByTestId("access-user-override-set"));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/v1/access/users/u-1/permission-overrides"))).toBe(true));
+    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/permission-overrides"));
+    const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
+    expect(body.effect).toBe("deny");
+    expect(body.permission_codes).toEqual(["access.role.assign"]);
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^已设置用户 u-1 的显式拒绝/)));
+  });
 
   it("点岗位模板行 → 抽屉出现且含岗位/角色（角色中文名）", async () => {
     renderPage();

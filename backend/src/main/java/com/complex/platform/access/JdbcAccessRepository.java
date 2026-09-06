@@ -841,7 +841,9 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    @Transactional
     public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
+        expireLapsedEffects(userId, checkedAt);
         List<PermissionEffect> effects = new ArrayList<>();
         effects.addAll(jdbcTemplate.query("""
                 SELECT ur.user_id, rp.permission_code, 'grant' AS effect, 'ROLE' AS source,
@@ -891,6 +893,88 @@ class JdbcAccessRepository implements AccessRepository {
                  WHERE user_id = :user_id
                 """, Map.of("user_id", userId), this::mapPermissionEffect));
         return effects;
+    }
+
+    // M006-G-06（PGM-1.10.1「到期、单次消耗、失效全部留痕」）：读取有效权限前，把本人已到期仍标 active 的
+    // 临时授权 / 模板应用置为 expired 并各写一条用量日志；UPDATE 只命中 active 行，重复读取不再写，幂等。
+    // ponytail: 读时顺带清理、只扫本人行；需要按时全量到期时改为定时任务复用本方法即可。
+    private void expireLapsedEffects(String userId, Instant checkedAt) {
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("checked_at", timestampWithTimeZone(checkedAt));
+        for (Map<String, Object> grant : jdbcTemplate.queryForList("""
+                UPDATE temporary_permission_grants
+                   SET status = 'expired'
+                 WHERE subject_type = 'user'
+                   AND subject_id = :user_id
+                   AND status = 'active'
+                   AND expires_at IS NOT NULL
+                   AND expires_at <= :checked_at
+             RETURNING id::text AS source_id, permission_code
+                """, parameters)) {
+            logExpiry(null, userId, (String) grant.get("permission_code"),
+                    "expired:temporary_grant:" + grant.get("source_id"), checkedAt);
+        }
+        for (Map<String, Object> application : jdbcTemplate.queryForList("""
+                UPDATE permission_template_applications AS application
+                   SET status = 'expired'
+                  FROM permission_templates AS template
+                 WHERE application.template_id = template.id
+                   AND application.target_type = 'user'
+                   AND application.target_id = :user_id
+                   AND application.status = 'active'
+                   AND COALESCE(application.valid_until, template.valid_to) <= :checked_at
+             RETURNING application.id AS source_id
+                """, parameters)) {
+            logExpiry((String) application.get("source_id"), userId, null, "expired", checkedAt);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
+        for (String permissionCode : permissionCodes) {
+            jdbcTemplate.update("""
+                    INSERT INTO user_permission_overrides (user_id, permission_code, effect, reason, created_at, created_by)
+                    VALUES (:user_id, :permission_code, :effect, :reason, now(), :created_by)
+                    ON CONFLICT (user_id, permission_code, effect)
+                    DO UPDATE SET reason = EXCLUDED.reason, created_at = EXCLUDED.created_at, created_by = EXCLUDED.created_by
+                    """, new MapSqlParameterSource()
+                    .addValue("user_id", userId)
+                    .addValue("permission_code", permissionCode)
+                    .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                    .addValue("reason", reason)
+                    .addValue("created_by", createdBy));
+        }
+    }
+
+    @Override
+    @Transactional
+    public int deleteUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect) {
+        return jdbcTemplate.update("""
+                DELETE FROM user_permission_overrides
+                 WHERE user_id = :user_id
+                   AND effect = :effect
+                   AND permission_code IN (:permission_codes)
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                .addValue("permission_codes", permissionCodes));
+    }
+
+    private void logExpiry(String applicationId, String userId, String permissionCode, String reason, Instant occurredAt) {
+        jdbcTemplate.update("""
+                INSERT INTO permission_template_usage_logs (
+                    id, application_id, user_id, permission_code, result, reason, occurred_at
+                )
+                VALUES (:id, :application_id, :user_id, :permission_code, 'expired', :reason, :occurred_at)
+                """, new MapSqlParameterSource()
+                .addValue("id", UUID.randomUUID())
+                .addValue("application_id", applicationId)
+                .addValue("user_id", userId)
+                .addValue("permission_code", permissionCode)
+                .addValue("reason", reason)
+                .addValue("occurred_at", timestampWithTimeZone(occurredAt)));
     }
 
     @Override

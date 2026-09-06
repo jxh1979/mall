@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -13,6 +13,7 @@ import com.complex.platform.access.dto.RoleRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
+import com.complex.platform.access.dto.UserPermissionOverrideRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -1038,6 +1039,7 @@ public class AccessService {
      * 为员工分配职级与具体薪资（REQ-60/61）。职级必须存在；币种 P0 仅 CNY（D12）；
      * 金额整数分非负（D1）；非平台管理员不得跨组织分配；幂等 + 审计留痕。
      */
+    @Transactional
     public StaffLevelAssignment assignStaffLevel(StaffLevelAssignmentRequest request) {
         AccessActor actor = authorizationService.currentActor();
         try {
@@ -1065,18 +1067,28 @@ public class AccessService {
                         if (request.baseSalaryAmountCent() != null && request.baseSalaryAmountCent() < 0) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "基本工资不能为负数");
                         }
-                        StaffLevelAssignment assignment = new StaffLevelAssignment(
-                                userId,
-                                request.staffLevelId(),
-                                request.baseSalaryAmountCent(),
-                                currency,
-                                request.salaryDetail(),
-                                targetUser.organizationId(),
-                                targetUser.merchantId(),
-                                "access-api",
-                                Instant.now()
-                        );
-                        StaffLevelAssignment saved = repository.saveStaffLevelAssignment(assignment);
+                        // M006-G-02（PGM-1.10.1/1.10.2）：已定岗员工改职级 = 按新职级的岗位映射重算派生角色/模板，旧派生同步失效；
+                        // 走与定岗相同的路径（含高危审批闸），无映射时由 resolvePositionGrant 明确拒绝，不静默保留旧模板。
+                        UserPositionAssignment position = repository.findUserPositionAssignment(userId).orElse(null);
+                        StaffLevelAssignment saved;
+                        if (position != null && !request.staffLevelId().equals(position.staffLevelId())) {
+                            saved = assignUserPositionDirect(new UserPositionAssignmentRequest(
+                                    request.idempotencyKey(), request.operatorNote(), userId, position.positionCode(),
+                                    request.staffLevelId(), request.baseSalaryAmountCent(), currency, request.salaryDetail()), true)
+                                    .staffLevelAssignment();
+                        } else {
+                            saved = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                                    userId,
+                                    request.staffLevelId(),
+                                    request.baseSalaryAmountCent(),
+                                    currency,
+                                    request.salaryDetail(),
+                                    targetUser.organizationId(),
+                                    targetUser.merchantId(),
+                                    "access-api",
+                                    Instant.now()
+                            ));
+                        }
                         auditEventService.recordSuccess(
                                 "access.staff_level.assigned",
                                 "access.staff_level.manage",
@@ -1120,6 +1132,86 @@ public class AccessService {
                 Map.of("role_id", context.role().id())
         );
         return saved;
+    }
+
+    /**
+     * M006-G-01（PGM-1.10.1「最终权限 = … + 员工单独授予 − 显式拒绝」「员工级完全自定义」）：员工级覆盖写路径。
+     * deny 只减权、不设审批；grant 与直接装配同口径（高危须走授权申请，且不得超出授权人自身有效集）。幂等 + 审计留痕。
+     */
+    @Transactional
+    public EffectivePermissions setUserPermissionOverrides(String userId, UserPermissionOverrideRequest request) {
+        return changeUserPermissionOverrides(userId, request, true);
+    }
+
+    @Transactional
+    public EffectivePermissions removeUserPermissionOverrides(String userId, UserPermissionOverrideRequest request) {
+        return changeUserPermissionOverrides(userId, request, false);
+    }
+
+    private EffectivePermissions changeUserPermissionOverrides(String userId, UserPermissionOverrideRequest request, boolean set) {
+        UserPermissionOverrideRequest r = requireRequest(request);
+        String action = set ? "set" : "remove";
+        try {
+            return idempotencyService.execute(
+                    "userPermissionOverride:" + action + ":" + trimToDefault(userId, ""),
+                    r.idempotencyKey(),
+                    r,
+                    () -> {
+                        AccessActor actor = authorizationService.currentActor();
+                        if (trimToDefault(userId, "").isEmpty()) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定用户");
+                        }
+                        AccessUser targetUser = requireTargetUser(userId.trim());
+                        requireSameOrganization(actor, targetUser);
+                        AccessRepository.Effect effect = switch (trimToDefault(r.effect(), "").toLowerCase(Locale.ROOT)) {
+                            case "grant" -> AccessRepository.Effect.GRANT;
+                            case "deny" -> AccessRepository.Effect.DENY;
+                            default -> throw ApiException.badRequest("VALIDATION_FAILED", "覆盖效果只能是授予或拒绝");
+                        };
+                        List<String> permissionCodes = safeList(r.permissionCodes()).stream().distinct().toList();
+                        if (permissionCodes.isEmpty()) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
+                        }
+                        requireKnownPermissions(permissionCodes);
+                        if (set && effect == AccessRepository.Effect.GRANT) {
+                            requireGrantApprovalIfNeeded(permissionCodes);
+                            requireActorCanGrant(permissionCodes);
+                        }
+                        if (set) {
+                            repository.saveUserPermissionOverrides(targetUser.id(), permissionCodes, effect,
+                                    trimToDefault(r.reason(), r.operatorNote()), actor.id());
+                        } else {
+                            repository.deleteUserPermissionOverrides(targetUser.id(), permissionCodes, effect);
+                        }
+                        auditEventService.recordSuccess(
+                                "access.user_permission_override." + action,
+                                "access.role.assign",
+                                "user_permission_override",
+                                targetUser.id(),
+                                null,
+                                r.idempotencyKey(),
+                                Map.of(
+                                        "effect", effect.name().toLowerCase(Locale.ROOT),
+                                        "permission_codes", String.join(",", permissionCodes),
+                                        "reason", trimToDefault(r.reason(), "")
+                                )
+                        );
+                        return authorizationService.effectivePermissionsForUser(targetUser.id());
+                    },
+                    EffectivePermissions.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.user_permission_override." + action + "_failed",
+                    "access.role.assign",
+                    "user_permission_override",
+                    userId,
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
     }
 
     private UserPositionAssignmentResult assignUserPositionDirect(

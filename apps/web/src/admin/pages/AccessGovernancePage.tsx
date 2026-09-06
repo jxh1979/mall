@@ -53,8 +53,8 @@ function zhPosition(code?: string | null): string {
 }
 function zhLevel(code?: string | null): string {
   if (!code) return "—";
-  const m = /^lvl_m(\d+)(?:_(lower|upper))?$/.exec(code);
-  if (m) return m[2] ? `M${m[1]}·${m[2] === "lower" ? "初级" : "高级"}` : `M${m[1]}`;
+  const m = /^lvl_m(\d+)(?:_(lower|middle|upper))?$/.exec(code);
+  if (m) return m[2] ? `M${m[1]}·${m[2] === "upper" ? "上" : m[2] === "middle" ? "中" : "下"}` : `M${m[1]}`;
   return code;
 }
 const GRANT_APPLY = ["access.grant_request.apply"];
@@ -105,6 +105,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
   const [templateForm, setTemplateForm] = React.useState({ id: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", roleId: "", templateId: "", status: "active" });
   const [positionForm, setPositionForm] = React.useState({ userId: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", baseSalaryYuan: "", salaryDetail: "", operatorNote: "" });
   const [roleForm, setRoleForm] = React.useState({ userId: "", roleId: "", operatorNote: "" });
+  const [overrideForm, setOverrideForm] = React.useState({ userId: "", permissionCodes: "", effect: "deny", reason: "" });
   const [grantForm, setGrantForm] = React.useState({
     requestType: "temporary_permission", targetUserId: "", roleId: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower",
     permissionCodes: "access.role.assign", expiresAt: "", singleUse: true, reason: "",
@@ -179,7 +180,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
     setTemplateOpen(true);
   }
 
-  const TEMPLATE_REQUIRED = "岗位模板需填写岗位、职级，并至少绑定 roleId 或 templateId";
+  const TEMPLATE_REQUIRED = "岗位模板需填写岗位、职级，并至少绑定角色或模板";
 
   async function savePositionTemplate() {
     if (!templateForm.positionCode.trim() || !templateForm.staffLevelId.trim() || (!templateForm.roleId.trim() && !templateForm.templateId.trim())) {
@@ -203,7 +204,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       const saved = templateForm.id
         ? await api.put<PositionRoleTemplateRow>(`/api/v1/access/position-role-templates/${encodeURIComponent(templateForm.id)}`, body)
         : await api.post<PositionRoleTemplateRow>("/api/v1/access/position-role-templates", body);
-      setActionResult({ action: "access_position_role_template_saved", templateId: saved.id });
+      setActionResult(`岗位模板已保存：${saved.id}`);
       setTemplateForm({ ...templateForm, id: "" });
       setTemplateOpen(false);
       await reload();
@@ -236,7 +237,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       setGrantPolicy(await api.post<GrantPolicy>("/api/v1/access/grant-policy", {
         policy: grantPolicy, operatorNote: grantPolicyReason.trim(),
       }));
-      setActionResult({ action: "授权政策已保存" });
+      setActionResult("授权政策已保存");
       await reload();
     } catch (error) { setGlobalError(error instanceof Error ? error.message : "授权政策保存失败"); }
   }
@@ -247,7 +248,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       await api.post(`/api/v1/access/position-role-templates/${encodeURIComponent(id)}/lifecycle`, {
         action, reason: lifecycleReason.trim(),
       });
-      setActionResult({ action: "岗位模板状态已更新", templateId: id });
+      setActionResult(`岗位模板状态已更新：${id}`);
       await reload();
     } catch (error) { setGlobalError(error instanceof Error ? error.message : "岗位模板处理失败"); }
   }
@@ -264,7 +265,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       setGlobalError("定职位需填写用户、岗位和职级");
       return;
     }
-    const result = await api.put(`/api/v1/access/users/${encodeURIComponent(positionForm.userId.trim())}/position`, {
+    await api.put(`/api/v1/access/users/${encodeURIComponent(positionForm.userId.trim())}/position`, {
       positionCode: positionForm.positionCode.trim(),
       staffLevelId: positionForm.staffLevelId.trim(),
       baseSalaryAmountCent: centFromYuan(positionForm.baseSalaryYuan),
@@ -272,22 +273,41 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       salaryDetail: positionForm.salaryDetail.trim() || undefined,
       operatorNote: positionForm.operatorNote.trim() || "后台定岗并按模板自动装配",
     });
-    setActionResult({ action: "access_user_position_assigned", userId: positionForm.userId.trim(), result });
+    setActionResult(`已为用户 ${positionForm.userId.trim()} 定岗并按岗位模板自动适配权限`);
     await reload();
   }
 
   async function roleAssignment(kind: "assign" | "unassign") {
     if (!roleForm.userId.trim() || !roleForm.roleId.trim()) {
-      setGlobalError("直接装配角色需填写用户 id 与角色 id");
+      setGlobalError("直接装配角色需选择用户与角色");
       return;
     }
     const path = kind === "assign" ? "/api/v1/access/role-assignments" : "/api/v1/access/role-assignments/unassign";
-    const result = await api.post(path, {
+    await api.post(path, {
       userId: roleForm.userId.trim(),
       roleId: roleForm.roleId.trim(),
       operatorNote: roleForm.operatorNote.trim() || `后台${kind === "assign" ? "装配" : "卸载"}角色`,
     });
-    setActionResult({ action: `access_role_${kind}`, userId: roleForm.userId.trim(), roleId: roleForm.roleId.trim(), result });
+    setActionResult(`已为用户 ${roleForm.userId.trim()} ${kind === "assign" ? "装配" : "卸载"}角色 ${roleForm.roleId.trim()}`);
+    await reload();
+  }
+
+  // M006-G-01（PGM-1.10.1「员工单独授予 − 显式拒绝」「员工级完全自定义」）：员工级覆盖写入口。
+  // 显式拒绝立即生效；单独授予与直接装配同口径（高危须走授权申请）。
+  async function userPermissionOverride(kind: "set" | "remove") {
+    const codes = splitTokens(overrideForm.permissionCodes);
+    if (!overrideForm.userId.trim() || codes.length === 0) {
+      setGlobalError("员工级覆盖需选择用户并填写权限码");
+      return;
+    }
+    const path = `/api/v1/access/users/${encodeURIComponent(overrideForm.userId.trim())}/permission-overrides${kind === "remove" ? "/remove" : ""}`;
+    await api.post(path, {
+      permissionCodes: codes,
+      effect: overrideForm.effect,
+      reason: overrideForm.reason.trim() || (overrideForm.effect === "deny" ? "后台显式拒绝" : "后台单独授予"),
+      operatorNote: overrideForm.reason.trim() || "后台员工级覆盖",
+    });
+    setActionResult(`已${kind === "set" ? "设置" : "移除"}用户 ${overrideForm.userId.trim()} 的${overrideForm.effect === "deny" ? "显式拒绝" : "单独授予"}：${codes.join("、")}`);
     await reload();
   }
 
@@ -320,7 +340,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
         reason: grantForm.reason.trim() || "后台高危授权申请",
         operatorNote: grantForm.reason.trim() || "后台高危授权申请",
       });
-      setActionResult({ action: "access_grant_request_applied", requestId: result.id, status: result.status });
+      setActionResult(`授权申请已提交：${result.id}（${formatBusinessStatus(result.status ?? "")}）`);
       setGrantOpen(false);
       await reload();
     } catch (actionError) {
@@ -339,7 +359,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       operatorNote: reviewForm.comment.trim() || decision,
       evidenceAttachmentIds: splitTokens(reviewForm.evidenceAttachmentIds),
     });
-    setActionResult({ action: `access_grant_request_${decision}`, requestId: row.id, status: result.status });
+    setActionResult(`授权申请 ${row.id} 已${decision === "approve" ? "通过" : "驳回"}（${formatBusinessStatus(result.status ?? "")}）`);
     await reload();
   }
 
@@ -468,6 +488,19 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           <input aria-label="装配备注" placeholder="操作备注" value={roleForm.operatorNote} onChange={(event) => setRoleForm({ ...roleForm, operatorNote: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-role-assign" onClick={() => void roleAssignment("assign")}>装配角色</PermissionButton>
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-role-unassign" onClick={() => void roleAssignment("unassign")}>卸载角色</PermissionButton>
+        </div>
+
+        <h3>员工单独授予 / 显式拒绝</h3>
+        <div className="admin-inline-form" data-testid="access-user-override-form">
+          <select aria-label="覆盖用户 id" value={overrideForm.userId} onChange={(event) => setOverrideForm({ ...overrideForm, userId: event.target.value })}><option value="">请选择用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          <input aria-label="覆盖权限码" placeholder="权限码，逗号分隔" value={overrideForm.permissionCodes} onChange={(event) => setOverrideForm({ ...overrideForm, permissionCodes: event.target.value })} />
+          <select aria-label="覆盖效果" value={overrideForm.effect} onChange={(event) => setOverrideForm({ ...overrideForm, effect: event.target.value })}>
+            <option value="deny">显式拒绝</option>
+            <option value="grant">单独授予</option>
+          </select>
+          <input aria-label="覆盖理由" placeholder="理由" value={overrideForm.reason} onChange={(event) => setOverrideForm({ ...overrideForm, reason: event.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-set" onClick={() => void userPermissionOverride("set")}>设置</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-remove" onClick={() => void userPermissionOverride("remove")}>移除</PermissionButton>
         </div>
 
           </>) },

@@ -25,6 +25,7 @@ import com.complex.platform.access.dto.RoleAssignmentRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
+import com.complex.platform.access.dto.UserPermissionOverrideRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
 import com.complex.platform.governance.review.SupervisorReviewRepository;
@@ -983,6 +984,33 @@ class AccessServiceTests {
         );
     }
 
+    // M006-G-01（PGM-1.10.1「员工单独授予 − 显式拒绝」「员工级完全自定义」）：员工级显式拒绝有写路径且立即扣减有效集；
+    // 移除后恢复；高危单独授予不得绕过审批。
+    @Test
+    void userPermissionOverrideDenyLandsRemovesAndHighRiskGrantNeedsApproval() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        service = newAccessService(true, supervisorReviewService(new InMemorySupervisorReviewRepository()));
+        accessRepository.createUser(new AccessUser("usr_override", "override", "staff", "seed-org", null, "active", Instant.now()));
+        accessRepository.roles.put("role_view", new RoleRecord("role_view", "查看", null, "project", "active", Instant.now(),
+                List.of("ops.production_readiness.view"), null));
+        accessRepository.assignUserRole("usr_override", "role_view");
+
+        EffectivePermissions denied = service.setUserPermissionOverrides("usr_override", new UserPermissionOverrideRequest(
+                "override-deny", "停权", List.of("ops.production_readiness.view"), "deny", "临时停权"));
+        assertThat(denied.denies()).contains("ops.production_readiness.view");
+        assertThat(denied.grants()).doesNotContain("ops.production_readiness.view");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("access.user_permission_override.set");
+
+        EffectivePermissions restored = service.removeUserPermissionOverrides("usr_override", new UserPermissionOverrideRequest(
+                "override-remove", "恢复", List.of("ops.production_readiness.view"), "deny", "恢复"));
+        assertThat(restored.denies()).doesNotContain("ops.production_readiness.view");
+        assertThat(restored.grants()).contains("ops.production_readiness.view");
+
+        assertThatThrownBy(() -> service.setUserPermissionOverrides("usr_override", new UserPermissionOverrideRequest(
+                "override-grant-high", null, List.of("ops.production_readiness.check"), "grant", "越权")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
+    }
+
     private AccessService newAccessService(boolean grantApprovalEnabled, SupervisorReviewService supervisorReviewService) {
         return new AccessService(
                 accessRepository,
@@ -1102,6 +1130,23 @@ class AccessServiceTests {
                 "lvl_m10_upper", new StaffLevelRecord("lvl_m10_upper", "M10", "upper", 30, "M10 薪资大范围", "active", Instant.parse("2026-06-14T00:00:00Z"))
         ));
         final Map<String, StaffLevelAssignment> staffLevelAssignments = new LinkedHashMap<>();
+        final List<PermissionEffect> overrides = new ArrayList<>();
+
+        @Override
+        public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
+            deleteUserPermissionOverrides(userId, permissionCodes, effect);
+            for (String code : permissionCodes) {
+                overrides.add(new PermissionEffect(userId, code, effect, Source.USER_OVERRIDE,
+                        userId + ":" + code + ":" + effect, null, null, false, false));
+            }
+        }
+
+        @Override
+        public int deleteUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect) {
+            int before = overrides.size();
+            overrides.removeIf(o -> o.userId().equals(userId) && o.effect() == effect && permissionCodes.contains(o.permissionCode()));
+            return before - overrides.size();
+        }
 
         @Override
         public List<StaffLevelRecord> listStaffLevels() {
@@ -1362,6 +1407,11 @@ class AccessServiceTests {
         @Override
         public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
             List<PermissionEffect> effects = new ArrayList<>();
+            for (PermissionEffect override : overrides) {
+                if (override.userId().equals(userId)) {
+                    effects.add(override);
+                }
+            }
             for (String roleId : userRoles.getOrDefault(userId, Set.of())) {
                 RoleRecord role = roles.get(roleId);
                 if (role == null || !"active".equals(role.status())) {
