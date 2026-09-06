@@ -25,6 +25,7 @@ import com.complex.platform.access.dto.RoleAssignmentRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
+import com.complex.platform.access.dto.UserScopeChangeRequest;
 import com.complex.platform.access.dto.UserPermissionOverrideRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
@@ -545,9 +546,11 @@ class AccessServiceTests {
     }
 
     @Test
-    void assignUserPositionRequiresApprovalWhenMappedRoleOrTemplateIsHighRisk() {
+    void assignUserPositionLandsNormalPartAndHoldsHighRiskPartUntilChainApproves() {
         accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
-        service = newAccessService(true, null);
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
         accessRepository.users.put("usr_position_high_risk", new AccessUser(
                 "usr_position_high_risk", "position-high-risk", "staff", "seed-org", null, "active",
                 Instant.parse("2026-06-14T00:00:00Z")));
@@ -572,13 +575,75 @@ class AccessServiceTests {
                 "map-high-risk-position", null, "ops_manager", "lvl_m1_lower",
                 "role_ops_check", "tpl_ops_check", "active"));
 
-        assertThatThrownBy(() -> service.assignUserPosition(new UserPositionAssignmentRequest(
-                "assign-high-risk-position", null, "usr_position_high_risk", "ops_manager", "lvl_m1_lower",
-                null, null, null))).isInstanceOfSatisfying(ApiException.class, e -> {
-            assertThat(e.status().value()).isEqualTo(403);
-            assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL");
-        });
-        assertThat(accessRepository.findUserPositionAssignment("usr_position_high_risk")).isEmpty();
+        // M087-F-06（PGM-1.10.1「同一商户、同一项目范围内的普通模板权限随保存立即生效」「既有高危不得因处于岗位模板内而免除审批」）
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-high-risk-position", null, "usr_position_high_risk", "ops_manager", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.findUserPositionAssignment("usr_position_high_risk")).isPresent();
+        assertThat(accessRepository.positionRoles.get("usr_position_high_risk")).isEqualTo("role_ops_check");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_position_high_risk").grants())
+                .doesNotContain("ops.production_readiness.check"); // 高危部分显式拒绝，待审
+        AccessGrantRequestRecord hold = accessRepository.grantRequests.values().stream()
+                .filter(g -> "position_high_risk_release".equals(g.requestType())).findFirst().orElseThrow();
+        assertThat(hold.status()).isEqualTo("pending");
+        assertThat(hold.permissionCodes()).containsExactly("ops.production_readiness.check");
+        assertThat(reviewRepository.reviews.get(hold.reviewId()).policyCode()).isEqualTo("permission_grant_l2");
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        AccessGrantRequestRecord released = service.reviewGrant(hold.id(), new AccessGrantReviewRequest(
+                "review-high-risk-release", "approve", List.of(), "approve", "ok"));
+        assertThat(released.status()).isEqualTo("applied");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_position_high_risk").grants())
+                .contains("ops.production_readiness.check");
+    }
+
+    // M087-A-04/F-M087-04（PGM-1.10.1「保存所属商户或发生跨项目变更时，旧岗位或旧范围派生权限立即失效，新范围权限每次均须先审批，
+    // 审批通过后方可生效」）：范围变更写路径。
+    @Test
+    void scopeChangeRevokesOldDerivedGrantsImmediatelyAndNewScopeWaitsForApproval() {
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_mover", new AccessUser(
+                "usr_mover", "mover", "staff", "seed-org", "merchant_a", "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_check", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-mover", null, "ops_clerk", "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-mover", null, "usr_mover", "ops_clerk", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.positionRoles.get("usr_mover")).isEqualTo("role_ops_check");
+
+        AccessGrantRequestRecord pending = service.changeUserScope("usr_mover", new UserScopeChangeRequest(
+                "scope-mover", null, "seed-org", "merchant_b", null, null, null, null, null, "调往 B 商户", null));
+        assertThat(pending.requestType()).isEqualTo("user_scope_change");
+        assertThat(pending.status()).isEqualTo("pending");
+        assertThat(pending.merchantId()).isEqualTo("merchant_b");
+        assertThat(accessRepository.positionRoles.get("usr_mover")).isNull(); // 旧派生立即失效
+        assertThat(accessRepository.users.get("usr_mover").merchantId()).isEqualTo("merchant_b");
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).actionType()).isEqualTo("access.scope_change");
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).policyCode()).isEqualTo("permission_grant_l1"); // 普通模板也须先审批
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        AccessGrantRequestRecord applied = service.reviewGrant(pending.id(), new AccessGrantReviewRequest(
+                "review-mover", "approve", List.of(), "approve", "ok"));
+        assertThat(applied.status()).isEqualTo("applied");
+        assertThat(accessRepository.positionRoles.get("usr_mover")).isEqualTo("role_ops_check");
+        assertThat(accessRepository.findUserPositionAssignment("usr_mover").get().merchantId()).isEqualTo("merchant_b");
+    }
+
+    @Test
+    void scopeChangeRejectsUnchangedScope() {
+        service = newAccessService(true, supervisorReviewService(new InMemorySupervisorReviewRepository()));
+        accessRepository.users.put("usr_stay", new AccessUser(
+                "usr_stay", "stay", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        assertThatThrownBy(() -> service.changeUserScope("usr_stay", new UserScopeChangeRequest(
+                "scope-stay", null, "seed-org", null, "ops_clerk", "lvl_m1_lower", null, null, null, "x", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SCOPE_UNCHANGED"));
     }
 
 
@@ -1287,6 +1352,15 @@ class AccessServiceTests {
         public AccessUser createUser(AccessUser user) {
             users.put(user.id(), user);
             return user;
+        }
+
+        @Override
+        public void updateUserScope(String userId, String organizationId, String merchantId, String actorId, Instant changedAt) {
+            AccessUser u = users.get(userId);
+            if (u != null) {
+                users.put(userId, new AccessUser(u.id(), u.username(), u.accountType(), organizationId, merchantId, u.status(),
+                        u.createdAt(), u.phoneHash(), u.createdVia(), u.consentReference(), u.evidenceAttachmentIds(), u.operatorNote()));
+            }
         }
 
         @Override

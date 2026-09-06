@@ -53,7 +53,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(9);
+        assertThat(page.total()).isEqualTo(10); // + 税费调整三审策略（M087-A-03）
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
@@ -777,6 +777,45 @@ class SupervisorReviewServiceTests {
                 "approve-crosstenant", "approve", List.of(), 3, "approved", "out-of-scope approval attempt")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("SUPERVISOR_NOT_CURRENT_APPROVER"));
+    }
+
+    // M087-A-03（PGM-1.10.1「税费规则与税费调整须经财务审核、税务审核、法务审核，再由顶层平台公司的老板最终确认后生效」）：
+    // 税费调整固定三条平行线 + 主线到主会话；发起时必须逐线指定最终审批人。
+    @Test
+    void taxRuleAdjustmentRequiresThreeParallelLinesAndTopAuthority() {
+        chainL1();
+        for (String code : List.of("finance_review", "tax_review", "legal_review")) {
+            reviewRepository.lines.put(code, new SupervisorReviewRepository.ApprovalLine(code, code, 1, null, "active"));
+        }
+        TestSecurityActors.asSupervisorLevel(1);
+        assertThatThrownBy(() -> service.evaluate(evaluate("tax-no-lines", "v", List.of(), "finance.tax_rule.adjust", "tax_rule", "t1", 0L, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_LINE_FINAL_APPROVER_REQUIRED"));
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest("tax-lines", "v", List.of(), "finance.tax_rule.adjust", "tax_rule", "t2", 0L, null, null,
+                List.of(new SupervisorReviewEvaluateRequest.ParallelLine("finance_review", "usr_fin"),
+                        new SupervisorReviewEvaluateRequest.ParallelLine("tax_review", "usr_tax"),
+                        new SupervisorReviewEvaluateRequest.ParallelLine("legal_review", "usr_legal"))));
+        assertThat(pending.blocked()).isTrue();
+        assertThat(pending.approvalLevel()).isEqualTo("top_authority");
+        assertThat(reviewRepository.listChainNodes(pending.reviewId())).extracting(ApprovalChainNode::lineCode)
+                .containsExactly("main", "main", "main", "finance_review", "tax_review", "legal_review");
+        assertThat(reviewRepository.listChainNodes(pending.reviewId()).get(2).approverKind()).isEqualTo("master");
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).dueAt())
+                .isBefore(java.time.Instant.now().plus(java.time.Duration.ofDays(4))); // finance.* 涉钱：1 个工作日
+    }
+
+    // M087：组织层级补齐后可为「链未生成」的待审单重新生成主线（fail-closed 的恢复路径）。
+    @Test
+    void unresolvedChainCanBeRegeneratedOnceTheHierarchyIsMaintained() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(evaluate("regen", "v", List.of(), "contract_violation", "contract", "c_regen", 0L, "violation"));
+        assertThat(reviewRepository.listChainNodes(pending.reviewId())).isEmpty();
+        assertThatThrownBy(() -> service.regenerateChain(pending.reviewId()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_CHAIN_UNRESOLVED"));
+        chainL1();
+        assertThat(service.regenerateChain(pending.reviewId())).extracting(ApprovalChainNode::approverId)
+                .containsExactly("usr_reviewer_a", "usr_reviewer_c");
+        assertThat(service.regenerateChain(pending.reviewId())).hasSize(2); // 已有节点不重生成
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.chain_regenerated");
     }
 
     static final class InMemorySupervisorReviewRepository implements SupervisorReviewRepository {

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -40,6 +40,10 @@ public class SupervisorReviewService {
     // 从而把 specific_role 落为"按角色解析"而非旁路。
     private static final String DEFAULT_SPECIFIC_ROLE_PERMISSION = APPROVE_PERMISSION;
 
+    // M087-A-03（PGM-1.10.1「税费规则与税费调整须经财务审核、税务审核、法务审核，再由顶层平台公司的老板最终确认后生效」）：
+    // 税费调整固定三条平行线 + 主线到最高权限（老板最终确认）；发起时须为每条线指定最终审批人。
+    static final String TAX_RULE_ADJUST_ACTION = "finance.tax_rule.adjust";
+
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
             new SupervisorReviewPolicyRecord("manual_release_l2", "manual_release", 0, 2, true, List.of("operator_note", "evidence_attachment"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
             new SupervisorReviewPolicyRecord("bill_waiver_l3", "bill_waiver", 1, 3, true, List.of("reason", "evidence_attachment"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
@@ -49,7 +53,9 @@ public class SupervisorReviewService {
             new SupervisorReviewPolicyRecord("base_definition_violation_l3", "base_definition_violation", 0, 3, true, List.of("violation_summary", "definition_snapshot"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("permission_grant_l1", "permission_grant_l1", 0, 1, true, List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("permission_grant_l2", "permission_grant_l2", 0, 2, true, List.of("reason"), "active", "two_levels_up"),
-            new SupervisorReviewPolicyRecord("permission_grant_l3", "permission_grant_l3", 0, 3, true, List.of("reason"), "active", "top_authority")
+            new SupervisorReviewPolicyRecord("permission_grant_l3", "permission_grant_l3", 0, 3, true, List.of("reason"), "active", "top_authority"),
+            new SupervisorReviewPolicyRecord("tax_rule_adjustment_l3", TAX_RULE_ADJUST_ACTION, 0, 3, true, List.of("reason", "before_after"), "active", "top_authority",
+                    null, List.of("finance_review", "tax_review", "legal_review"))
     );
 
     public SupervisorReviewService(
@@ -87,6 +93,8 @@ public class SupervisorReviewService {
                 () -> {
                     String actionType = normalize(requireText(request.actionType(), "action_type"));
                     SupervisorReviewPolicyRecord policy = findPolicy(actionType);
+                    List<ApprovalChainService.ParallelLine> lines = parallelLines(request.parallelLines());
+                    requireDefaultLines(policy, lines);
                     long amountCent = request.amountCent() == null ? 0 : request.amountCent();
                     boolean amountHit = amountCent >= policy.minAmountCent();
                     boolean violationHit = textPresent(request.violationSummary());
@@ -122,8 +130,7 @@ public class SupervisorReviewService {
                     if (blocked) {
                         supervisorReviewRepository.saveSupervisorReview(decision);
                         scheduleDeadline(decision.reviewId(), null, actionType, policy.policyCode());
-                        generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(),
-                                parallelLines(request.parallelLines()));
+                        generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(), lines);
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.evaluated",
@@ -140,6 +147,17 @@ public class SupervisorReviewService {
                 },
                 SupervisorReviewDecisionRecord.class
         );
+    }
+
+    /** 策略固定要求的平行线（如税费三审）必须由起草人逐线指定最终审批人，否则拒绝发起（fail-closed）。 */
+    private static void requireDefaultLines(SupervisorReviewPolicyRecord policy, List<ApprovalChainService.ParallelLine> lines) {
+        for (String code : policy.parallelLineCodes()) {
+            boolean given = lines.stream().anyMatch(line -> code.equals(line.lineCode()) && line.finalApproverId() != null
+                    && !line.finalApproverId().isBlank());
+            if (!given) {
+                throw ApiException.badRequest("APPROVAL_LINE_FINAL_APPROVER_REQUIRED", "本事项须为平行审批线指定最终审批人：" + code);
+            }
+        }
     }
 
     /**
@@ -346,7 +364,7 @@ public class SupervisorReviewService {
             String approvalLevelCode,
             int requiredLevel
     ) {
-        return blockForAdmission(policyCode, actionType, objectType, objectId, approvalLevelCode, requiredLevel, null);
+        return blockForAdmission(policyCode, actionType, objectType, objectId, approvalLevelCode, requiredLevel, null, null);
     }
 
     /** 带直接受益人的阻断（授权申请传被授权对象），受益人不得审批也不得被转发（PGM-1.7.1）。 */
@@ -358,6 +376,23 @@ public class SupervisorReviewService {
             String approvalLevelCode,
             int requiredLevel,
             String beneficiaryId
+    ) {
+        return blockForAdmission(policyCode, actionType, objectType, objectId, approvalLevelCode, requiredLevel, beneficiaryId, null);
+    }
+
+    /**
+     * M087（PGM-1.7.1「发起单据时只需指定该事项的最终审批人」）：带起草人指定的主线最终审批人的阻断；为空时按档位下限沿发起人
+     * 直接上级链生成主线。
+     */
+    public SupervisorReviewDecisionRecord blockForAdmission(
+            String policyCode,
+            String actionType,
+            String objectType,
+            String objectId,
+            String approvalLevelCode,
+            int requiredLevel,
+            String beneficiaryId,
+            String finalApproverId
     ) {
         String initiatedBy = authorizationService.currentActor().id();
         ApprovalLevel approvalLevel = ApprovalLevel.fromCode(approvalLevelCode);
@@ -383,8 +418,7 @@ public class SupervisorReviewService {
         );
         supervisorReviewRepository.saveSupervisorReview(decision);
         scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policyCode);
-        // M087：自动阻断单没有起草人指定的最终审批人，主线按档位下限沿发起人直接上级链生成。
-        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, null, List.of());
+        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, finalApproverId, List.of());
         auditEventService.recordSuccess(
                 "admission.blocked",
                 MANAGE_PERMISSION,
@@ -393,7 +427,8 @@ public class SupervisorReviewService {
                 null,
                 null,
                 Map.of("action_type", actionType, "object_type", objectType == null ? "" : objectType,
-                        "approval_level", approvalLevelCode, "required_level", requiredLevel)
+                        "approval_level", approvalLevelCode, "required_level", requiredLevel,
+                        "final_approver_id", finalApproverId == null ? "" : finalApproverId)
         );
         return decision;
     }
@@ -401,6 +436,38 @@ public class SupervisorReviewService {
     /** M087：复核单的审批链节点（主线 + 平行线，按线与序号）。 */
     public List<ApprovalChainNode> chain(String reviewId) {
         return supervisorReviewRepository.listChainNodes(requireText(reviewId, "review_id"));
+    }
+
+    /**
+     * M087：组织层级补齐后为「链未生成」的待审单重新生成主线（fail-closed 的恢复路径；平行线须重新发起）。
+     * 已有节点的单据不重生成（返回现有节点）。
+     */
+    public List<ApprovalChainNode> regenerateChain(String reviewId) {
+        String id = requireText(reviewId, "review_id");
+        SupervisorReviewDecisionRecord pending = supervisorReviewRepository
+                .findPendingSupervisorReviewById(id)
+                .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
+        List<ApprovalChainNode> existing = supervisorReviewRepository.listChainNodes(id);
+        if (!existing.isEmpty()) {
+            return existing;
+        }
+        String beneficiaryId = supervisorReviewRepository.findSupervisorReviewSchedule(id)
+                .map(SupervisorReviewRepository.ReviewSchedule::beneficiaryId).orElse(null);
+        List<ApprovalChainNode> nodes = generateChain(id, pending.initiatedBy(), beneficiaryId,
+                ApprovalLevel.fromCode(pending.approvalLevel()), null, List.of());
+        if (nodes.isEmpty()) {
+            throw ApiException.conflict("APPROVAL_CHAIN_UNRESOLVED", "发起人的直接上级仍未维护，审批链无法生成");
+        }
+        auditEventService.recordSuccess(
+                "governance.supervisor_review.chain_regenerated",
+                MANAGE_PERMISSION,
+                "supervisor_review",
+                id,
+                null,
+                null,
+                Map.of("node_count", nodes.size(), "regenerated_by", authorizationService.currentActor().id())
+        );
+        return nodes;
     }
 
     private List<ApprovalChainNode> generateChain(String reviewId, String initiatedBy, String beneficiaryId, ApprovalLevel level,
@@ -495,12 +562,13 @@ public class SupervisorReviewService {
         supervisorReviewRepository.scheduleSupervisorReview(reviewId, beneficiaryId, addWorkingDays(Instant.now(), Math.max(days, 1)));
     }
 
-    // M007-I3-F02：授权申请含资金/分红/退款/调账类权限时，AccessService 以 access.grant_request.money 作为动作名进链。
+    // M007-I3-F02：授权申请含资金/分红/退款/调账类权限时，AccessService 以 access.grant_request.money 作为动作名进链；
+    // M087：范围变更同理（access.scope_change.money）——凡以 .money 结尾的授权动作名均按涉钱时限。
     static final String MONEY_GRANT_REQUEST_ACTION = "access.grant_request.money";
 
     private static boolean isMoneyAction(String actionType) {
         String type = actionType == null ? "" : actionType;
-        return type.startsWith("finance.") || MONEY_GRANT_REQUEST_ACTION.equals(type)
+        return type.startsWith("finance.") || type.endsWith(".money")
                 || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
                 "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
     }
@@ -689,10 +757,12 @@ public class SupervisorReviewService {
         return released;
     }
 
-    // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：三类与违规、人工放行一样恒进复核。
+    // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：三类与违规、人工放行一样恒进复核；
+    // M087-A-03：税费规则与税费调整恒进三审 + 老板确认链。
     private boolean isAlwaysBlocked(String actionType) {
         return actionType.contains("violation") || actionType.equals("manual_release")
-                || actionType.equals("bill_waiver") || actionType.equals("refund") || actionType.equals("ar_ap_adjustment");
+                || actionType.equals("bill_waiver") || actionType.equals("refund") || actionType.equals("ar_ap_adjustment")
+                || actionType.equals(TAX_RULE_ADJUST_ACTION);
     }
 
     // M007-F-09（PGM-1.16「谁发起、为什么、谁审批、结果是什么，都要能查到」）：按策略声明的证据类型 fail-closed。

@@ -93,4 +93,22 @@ public interface SupervisorReviewRepository {
     default boolean updateChainNode(ApprovalChainNode node) {
         return false;
     }
+
+    /** M087-A-01：组织层级一行（org_hierarchy）。 */
+    record OrgSuperior(String userId, String superiorId, String lineCode, String updatedBy, Instant updatedAt) {
+    }
+
+    default void saveDirectSuperior(String userId, String superiorId, String lineCode, String updatedBy, Instant updatedAt) {
+    }
+
+    default List<OrgSuperior> listOrgHierarchy(int limit) {
+        return List.of();
+    }
+
+    default void saveApprovalLine(ApprovalLine line, String updatedBy, Instant updatedAt) {
+    }
+
+    default List<ApprovalLine> listApprovalLines() {
+        return List.of();
+    }
 }

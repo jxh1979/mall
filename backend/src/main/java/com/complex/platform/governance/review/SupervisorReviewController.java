@@ -5,6 +5,8 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.governance.chain.ApprovalChainNode;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -62,5 +64,18 @@ public class SupervisorReviewController {
         authorizationService.requirePermission("governance.supervisor_review.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.forward(reviewId, request));
+    }
+
+    // M087-A-02：审批链节点（主线 + 平行线）查看；组织层级补齐后重生成未生成的链（manage 门禁）。
+    @GetMapping("/supervisor-review/{review_id}/chain")
+    public ApiResponse<List<ApprovalChainNode>> chain(@PathVariable("review_id") String reviewId) {
+        authorizationService.requirePermission("governance.supervisor_review.view");
+        return ApiResponse.ok(service.chain(reviewId));
+    }
+
+    @PostMapping("/supervisor-review/{review_id}/chain/regenerate")
+    public ApiResponse<List<ApprovalChainNode>> regenerateChain(@PathVariable("review_id") String reviewId) {
+        authorizationService.requirePermission("governance.supervisor_review.manage");
+        return ApiResponse.ok(service.regenerateChain(reviewId));
     }
 }

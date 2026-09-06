@@ -932,6 +932,26 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     @Transactional
+    public void updateUserScope(String userId, String organizationId, String merchantId, String actorId, Instant changedAt) {
+        var parameters = new MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("organization_id", organizationId).addValue("merchant_id", merchantId)
+                .addValue("changed_at", timestampWithTimeZone(changedAt));
+        int changed = jdbcTemplate.update("""
+                UPDATE access_users SET organization_id = :organization_id, merchant_id = :merchant_id WHERE id = :user_id
+                """, parameters);
+        if (changed != 1) {
+            throw new IllegalStateException("账号归属未能保存");
+        }
+        // 员工档案同步：project_id = 综合体/组织归属，merchant_id = 所属商户（未关联档案的账号无行可更新）。
+        jdbcTemplate.update("""
+                UPDATE staff_profiles
+                   SET project_id = COALESCE(:organization_id, project_id), merchant_id = :merchant_id, updated_at = :changed_at
+                 WHERE user_id = :user_id
+                """, parameters);
+    }
+
+    @Override
+    @Transactional
     public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
         for (String permissionCode : permissionCodes) {
             jdbcTemplate.update("""
