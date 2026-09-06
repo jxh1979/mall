@@ -1,19 +1,23 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.chain.ApprovalChainNode;
+import com.complex.platform.governance.chain.ApprovalChainService;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import static com.complex.platform.common.Strings.requireText;
 
@@ -28,6 +32,8 @@ public class SupervisorReviewService {
     private final IdempotencyService idempotencyService;
     private final SupervisorReviewRepository supervisorReviewRepository;
     private final AuditEventService auditEventService;
+    // M087：审批链引擎（组织层级逐级节点链）。纯领域对象，随服务构造，不单独注入。
+    private final ApprovalChainService chainService;
 
     // specific_role 策略的"指定角色"以审批人须经角色持有的权限码表达（双轨收口 §24.3）。
     // 默认沿用督导复核审批权限 governance.supervisor_review.approve（须来自角色，非临时授权），
@@ -56,6 +62,7 @@ public class SupervisorReviewService {
         this.idempotencyService = idempotencyService;
         this.supervisorReviewRepository = supervisorReviewRepository;
         this.auditEventService = auditEventService;
+        this.chainService = new ApprovalChainService(supervisorReviewRepository, authorizationService);
     }
 
     public PageResponse<SupervisorReviewPolicyRecord> listPolicies() {
@@ -88,8 +95,8 @@ public class SupervisorReviewService {
                     // The operator who triggered the reviewed action is recorded so the approver
                     // can never be the same person (segregation of duties / no self-approval).
                     String initiatedBy = authorizationService.currentActor().id();
-                    // REQ-69 逐级上提 + 双轨收口（§24.3）：按发起人 level_rank 与策略升级类型计算所需审批人 rank。
-                    // 发起人无职级配置（rank=0）时不再静默降级为"仅主管级"，而是用安全保守 rank 下限收口。
+                    // REQ-69 逐级上提 + 双轨收口（§24.3）：按发起人 level_rank 与策略升级类型计算所需审批人 rank（留痕；M087 起
+                    // 审批人身份由组织层级节点决定，rank 只作为档位下限记录）。
                     ApprovalLevel approvalLevel = ApprovalLevel.fromCode(policy.approvalLevel());
                     int initiatorRank = authorizationService.currentActorLevelRank();
                     Integer requiredApproverRank = resolveRequiredApproverRank(
@@ -115,6 +122,8 @@ public class SupervisorReviewService {
                     if (blocked) {
                         supervisorReviewRepository.saveSupervisorReview(decision);
                         scheduleDeadline(decision.reviewId(), null, actionType, policy.policyCode());
+                        generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(),
+                                parallelLines(request.parallelLines()));
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.evaluated",
@@ -133,6 +142,11 @@ public class SupervisorReviewService {
         );
     }
 
+    /**
+     * M087-A-02（PGM-1.7.1「逐级审批」「任一节点驳回则整单退回起草人」「主线与各条平行线全部通过……才生效」）：
+     * 一次 approve = 裁决当前节点。全部节点通过才把复核单置为 approved；任一节点驳回即整单 rejected（退回起草），其余待审节点作废；
+     * 中间节点通过时复核单保持 pending_review 并原样返回。
+     */
     public SupervisorReviewDecisionRecord approve(String reviewId, SupervisorReviewApprovalRequest request) {
         String id = requireText(reviewId, "review_id");
         requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
@@ -153,64 +167,48 @@ public class SupervisorReviewService {
                     String reviewerId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule =
                             supervisorReviewRepository.findSupervisorReviewSchedule(id);
-                    // M007-A-02（PGM-1.7.1「转发给指定人选（不限层级，可为任意人选）」）：被转发人免除级别/职级/角色/范围闸，
-                    // 仍受自审与直接受益人闸约束。
-                    boolean forwardedReviewer = schedule.map(s -> reviewerId != null && reviewerId.equals(s.forwardedTo())).orElse(false);
-                    // M007-I3-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」「被转发人同时获得审批权限」）：
-                    // 未转发时 top_authority 单只能由 USB 主会话裁决；主会话转发后被转发人可裁决。
-                    if (!forwardedReviewer && ApprovalLevel.TOP_AUTHORITY.code().equals(pending.approvalLevel())
-                            && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
-                        throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须使用 USB 最高权限会话审批");
-                    }
+                    // PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」。
                     if (schedule.map(s -> reviewerId != null && reviewerId.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "直接受益人不能复核与自己相关的申请");
                     }
-                    int requiredLevel = pending.requiredLevel();
-                    if (!forwardedReviewer && reviewerLevel < requiredLevel) {
-                        throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
-                    }
-                    // Segregation of duties: the supervisor who initiated the action cannot approve it.
                     if (reviewerId != null && reviewerId.equals(pending.initiatedBy())) {
                         throw ApiException.forbidden(
                                 "SUPERVISOR_SELF_REVIEW_FORBIDDEN", "操作发起人不能复核自己发起的操作");
                     }
-                    // REQ-69 逐级上提：当本次复核记录有按 rank 计算的所需审批人 rank 时，
-                    // 审批人的 level_rank 必须不低于该 rank（在主管级校验之上的管理职级门槛）。
-                    if (!forwardedReviewer && pending.requiredApproverRank() != null) {
-                        int reviewerRank = authorizationService.currentActorLevelRank();
-                        if (reviewerRank < pending.requiredApproverRank()) {
-                            throw ApiException.forbidden(
-                                    "SUPERVISOR_RANK_TOO_LOW",
-                                    "复核人管理级别低于要求的审批级别");
-                        }
+                    List<ApprovalChainNode> nodes = supervisorReviewRepository.listChainNodes(id);
+                    if (nodes.isEmpty()) {
+                        throw ApiException.forbidden("APPROVAL_CHAIN_UNRESOLVED",
+                                "组织层级未维护，审批链未生成；请平台管理员维护发起人的直接上级后重新生成审批链");
                     }
-                    // 双轨收口的角色闸/范围闸仅在可解析角色与隔离键时强制；不可解析时回退既有 level 闸（向后兼容）。
-                    if (!forwardedReviewer && authorizationService.canResolveRoles()) {
-                        SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
-                        // §24.3 specific_role：rank 闸不适用（requiredApproverRank=null）时不旁路，
-                        // 改按角色解析——审批人必须通过其角色（非临时授权）持有指定审批权限。
-                        if (pending.requiredApproverRank() == null
-                                && policy != null
-                                && ApprovalLevel.SPECIFIC_ROLE.code().equals(policy.approvalLevel())
-                                && policy.requiredApproverPermission() != null
-                                && !authorizationService.holdsPermissionViaRole(reviewerId, policy.requiredApproverPermission())) {
-                            throw ApiException.forbidden(
-                                    "SUPERVISOR_ROLE_NOT_AUTHORIZED",
-                                    "复核人不具备该复核要求的审批角色");
-                        }
-                        // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（或平台管理员越权）。
-                        Optional<String> initiatorMerchant = authorizationService.merchantIdOf(pending.initiatedBy());
-                        if (initiatorMerchant.isPresent()
-                                && !authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
-                            Optional<String> reviewerMerchant = authorizationService.merchantIdOf(reviewerId);
-                            if (reviewerMerchant.isEmpty() || !reviewerMerchant.get().equals(initiatorMerchant.get())) {
-                                throw ApiException.forbidden(
-                                        "SUPERVISOR_MERCHANT_SCOPE_MISMATCH",
-                                        "复核人必须与发起人属于同一商户范围");
+                    ApprovalChainNode node = resolveDecidableNode(pending, nodes, reviewerId, reviewerLevel);
+                    requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
+                    Instant now = Instant.now();
+                    if (!supervisorReviewRepository.updateChainNode(node.withStatus(decision, reviewerId, now))) {
+                        throw ApiException.conflict("SUPERVISOR_REVIEW_NOT_FOUND", "审批节点已不在待裁决状态");
+                    }
+                    auditEventService.recordSuccess(
+                            "governance.supervisor_review.node_decided",
+                            APPROVE_PERMISSION,
+                            "supervisor_review",
+                            id,
+                            null,
+                            request.idempotencyKey(),
+                            Map.of("node_id", node.nodeId(), "line_code", node.lineCode(), "seq", node.seq(),
+                                    "approver_kind", node.approverKind(), "decision", decision, "reviewer_level", reviewerLevel,
+                                    "comment", request.comment() == null ? "" : request.comment())
+                    );
+                    List<ApprovalChainNode> after = supervisorReviewRepository.listChainNodes(id);
+                    if ("approved".equals(decision) && !ApprovalChainService.allApproved(after)) {
+                        return pending; // 链上仍有节点待审：单据保持待审（PGM-1.7.1 逐级审批）
+                    }
+                    if ("rejected".equals(decision)) {
+                        for (ApprovalChainNode other : after) {
+                            if (other.pending()) {
+                                supervisorReviewRepository.updateChainNode(other.withStatus(ApprovalChainNode.CANCELLED, reviewerId, now));
                             }
                         }
                     }
-                    requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
+                    int requiredLevel = pending.requiredLevel();
                     SupervisorReviewDecisionRecord result = new SupervisorReviewDecisionRecord(
                             id,
                             pending.policyCode(),
@@ -224,7 +222,7 @@ public class SupervisorReviewService {
                             decision,
                             pending.reason(), // M007-F-11：保留评估时的「为什么」，审批意见进审计留痕
                             request.evidenceAttachmentIds() == null ? List.of() : List.copyOf(request.evidenceAttachmentIds()),
-                            Instant.now(),
+                            now,
                             pending.initiatedBy(),
                             pending.approvalLevel(),
                             pending.requiredApproverRank()
@@ -254,6 +252,78 @@ public class SupervisorReviewService {
                 },
                 SupervisorReviewDecisionRecord.class
         );
+    }
+
+    /**
+     * 当前操作人可裁决的当前节点：user 节点须是该节点审批人（或被转发人）；master 节点须是 USB 主会话（或主会话转发的被转发人，
+     * M007-I3-F01）；role 节点沿用 M007 的级别 / 角色 / 同商户闸。都不满足时按原因给出错误码。
+     */
+    private ApprovalChainNode resolveDecidableNode(SupervisorReviewDecisionRecord pending, List<ApprovalChainNode> nodes,
+                                                   String reviewerId, int reviewerLevel) {
+        List<ApprovalChainNode> current = ApprovalChainService.currentNodes(nodes);
+        boolean master = authorizationService.isMasterAuthority(authorizationService.currentActor());
+        for (ApprovalChainNode node : current) {
+            // M007-A-02（PGM-1.7.1「被转发人同时获得审批权限」）：被转发人免除节点身份闸，仍受自审与直接受益人闸约束（上方已判）。
+            if (reviewerId != null && reviewerId.equals(node.forwardedTo())) {
+                return node;
+            }
+            switch (node.approverKind()) {
+                case ApprovalChainNode.KIND_USER -> {
+                    if (reviewerId != null && reviewerId.equals(node.approverId())) {
+                        return node;
+                    }
+                }
+                case ApprovalChainNode.KIND_MASTER -> {
+                    if (master) {
+                        return node;
+                    }
+                }
+                case ApprovalChainNode.KIND_ROLE -> {
+                    requireRoleNodeGates(pending, reviewerId, reviewerLevel);
+                    return node;
+                }
+                default -> {
+                }
+            }
+        }
+        if (current.stream().anyMatch(node -> ApprovalChainNode.KIND_MASTER.equals(node.approverKind()))) {
+            throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须使用 USB 最高权限会话审批");
+        }
+        boolean laterNode = nodes.stream().anyMatch(node -> node.pending() && reviewerId != null && reviewerId.equals(node.approverId()));
+        if (laterNode) {
+            throw ApiException.forbidden("APPROVAL_NODE_NOT_REACHED", "尚未轮到你所在的审批节点");
+        }
+        throw ApiException.forbidden("SUPERVISOR_NOT_CURRENT_APPROVER", "你不是该单据当前节点的审批人");
+    }
+
+    /** specific_role 节点：沿用 M007 的主管级别闸、角色闸与同商户范围闸（不满足即抛原错误码）。 */
+    private void requireRoleNodeGates(SupervisorReviewDecisionRecord pending, String reviewerId, int reviewerLevel) {
+        if (reviewerLevel < pending.requiredLevel()) {
+            throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
+        }
+        // 双轨收口的角色闸/范围闸仅在可解析角色与隔离键时强制；不可解析时回退既有 level 闸（向后兼容）。
+        if (authorizationService.canResolveRoles()) {
+            SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
+            // §24.3 specific_role：审批人必须通过其角色（非临时授权）持有指定审批权限。
+            if (policy != null
+                    && policy.requiredApproverPermission() != null
+                    && !authorizationService.holdsPermissionViaRole(reviewerId, policy.requiredApproverPermission())) {
+                throw ApiException.forbidden(
+                        "SUPERVISOR_ROLE_NOT_AUTHORIZED",
+                        "复核人不具备该复核要求的审批角色");
+            }
+            // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（或平台管理员越权）。
+            Optional<String> initiatorMerchant = authorizationService.merchantIdOf(pending.initiatedBy());
+            if (initiatorMerchant.isPresent()
+                    && !authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+                Optional<String> reviewerMerchant = authorizationService.merchantIdOf(reviewerId);
+                if (reviewerMerchant.isEmpty() || !reviewerMerchant.get().equals(initiatorMerchant.get())) {
+                    throw ApiException.forbidden(
+                            "SUPERVISOR_MERCHANT_SCOPE_MISMATCH",
+                            "复核人必须与发起人属于同一商户范围");
+                }
+            }
+        }
     }
 
     /**
@@ -313,6 +383,8 @@ public class SupervisorReviewService {
         );
         supervisorReviewRepository.saveSupervisorReview(decision);
         scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policyCode);
+        // M087：自动阻断单没有起草人指定的最终审批人，主线按档位下限沿发起人直接上级链生成。
+        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, null, List.of());
         auditEventService.recordSuccess(
                 "admission.blocked",
                 MANAGE_PERMISSION,
@@ -324,6 +396,49 @@ public class SupervisorReviewService {
                         "approval_level", approvalLevelCode, "required_level", requiredLevel)
         );
         return decision;
+    }
+
+    /** M087：复核单的审批链节点（主线 + 平行线，按线与序号）。 */
+    public List<ApprovalChainNode> chain(String reviewId) {
+        return supervisorReviewRepository.listChainNodes(requireText(reviewId, "review_id"));
+    }
+
+    private List<ApprovalChainNode> generateChain(String reviewId, String initiatedBy, String beneficiaryId, ApprovalLevel level,
+                                                  String finalApproverId, List<ApprovalChainService.ParallelLine> lines) {
+        List<ApprovalChainNode> nodes = chainService.generate(reviewId, initiatedBy, beneficiaryId, level, finalApproverId, lines);
+        if (nodes.isEmpty()) {
+            // fail-closed：组织层级未维护，链无法生成；单据留痕待审，无人可裁决，层级补齐后重生成。
+            auditEventService.recordSuccess(
+                    "governance.supervisor_review.chain_unresolved",
+                    MANAGE_PERMISSION,
+                    "supervisor_review",
+                    reviewId,
+                    null,
+                    null,
+                    Map.of("initiated_by", initiatedBy == null ? "" : initiatedBy, "approval_level", level.code())
+            );
+            return nodes;
+        }
+        supervisorReviewRepository.saveChainNodes(reviewId, nodes);
+        auditEventService.recordSuccess(
+                "governance.supervisor_review.chain_generated",
+                MANAGE_PERMISSION,
+                "supervisor_review",
+                reviewId,
+                null,
+                null,
+                Map.of("node_count", nodes.size(), "approval_level", level.code(),
+                        "lines", nodes.stream().map(ApprovalChainNode::lineCode).distinct().collect(Collectors.joining(",")),
+                        "approvers", nodes.stream().map(n -> n.approverId() == null ? n.approverKind() : n.approverId()).collect(Collectors.joining(",")))
+        );
+        return nodes;
+    }
+
+    private static List<ApprovalChainService.ParallelLine> parallelLines(List<SupervisorReviewEvaluateRequest.ParallelLine> lines) {
+        if (lines == null) {
+            return List.of();
+        }
+        return lines.stream().map(line -> new ApprovalChainService.ParallelLine(line.lineCode(), line.finalApproverId())).toList();
     }
 
     private SupervisorReviewPolicyRecord findPolicy(String actionType) {
@@ -345,7 +460,7 @@ public class SupervisorReviewService {
     }
 
     /**
-     * 双轨收口（§24.3）所需审批人 rank 计算：
+     * 双轨收口（§24.3）所需审批人 rank 计算（M087 起仅作档位下限留痕）：
      * <ul>
      *   <li>非按 rank（specific_role）→ {@code null}（由角色闸判定，不走 rank）；
      *   <li>按 rank 且发起人职级已知（rank&gt;0）→ 按逐级上提算出的 rank；
@@ -408,31 +523,37 @@ public class SupervisorReviewService {
     }
 
     /**
-     * M007-A-02（PGM-1.7.1「超时……自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝……到达最终审批节点后仍超时的，
-     * 单据保持待审」）：到期的待复核单升级一级（one_level_up → two_levels_up → top_authority），到顶后只提醒并顺延；
-     * 每次升级/提醒留痕。返回处理条数。
+     * M087-F-05（PGM-1.7.1「超时……自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝……到达最终审批节点后仍超时的，
+     * 单据保持待审」）：到期单据的每条线当前节点升级到该节点审批人的直接上级；无上级（组织顶端）、主会话节点与角色节点只提醒并顺延。
+     * M007-I4-F01 口径沿用：节点升级时清除该节点上低层级作出的转发（先清后升，fail-closed）。每次升级/提醒留痕。返回处理条数。
      */
     public int escalateOverdue(Instant now) {
         int handled = 0;
         for (SupervisorReviewRepository.PendingReview item : supervisorReviewRepository.listOverdueSupervisorReviews(now, 200)) {
             SupervisorReviewDecisionRecord d = item.decision();
-            ApprovalLevel current = d.approvalLevel() == null ? null : ApprovalLevel.fromCode(d.approvalLevel());
-            ApprovalLevel next = current == ApprovalLevel.ONE_LEVEL_UP ? ApprovalLevel.TWO_LEVELS_UP
-                    : current == ApprovalLevel.TWO_LEVELS_UP ? ApprovalLevel.TOP_AUTHORITY : null;
             int days = supervisorReviewRepository.findDeadlineWorkingDays(d.policyCode())
                     .orElse(isMoneyAction(d.actionType()) ? MONEY_DEADLINE_WORKING_DAYS : DEFAULT_DEADLINE_WORKING_DAYS);
             Instant nextDue = addWorkingDays(now, Math.max(days, 1));
-            boolean escalated = next != null;
-            String level = escalated ? next.code() : d.approvalLevel();
-            Integer rank = escalated
-                    ? resolveRequiredApproverRank(next, authorizationService.levelRankOf(d.initiatedBy()), d.requiredLevel())
-                    : d.requiredApproverRank();
-            // M007-I4-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」）：升级为最高权限节点前先清除
-            // 低层级作出的转发（先清后升，fail-closed）；该节点由主会话处理或由主会话再逐单转发。
-            if (next == ApprovalLevel.TOP_AUTHORITY) {
+            String beneficiaryId = item.schedule() == null ? null : item.schedule().beneficiaryId();
+            List<String> escalatedNodes = new ArrayList<>();
+            List<String> remindedNodes = new ArrayList<>();
+            for (ApprovalChainNode node : ApprovalChainService.currentNodes(supervisorReviewRepository.listChainNodes(d.reviewId()))) {
+                Optional<String> superior = ApprovalChainNode.KIND_USER.equals(node.approverKind()) && node.approverId() != null
+                        ? supervisorReviewRepository.findDirectSuperior(node.approverId())
+                        : Optional.empty();
+                if (superior.isPresent() && !superior.get().equals(d.initiatedBy()) && !superior.get().equals(beneficiaryId)) {
+                    supervisorReviewRepository.updateChainNode(
+                            node.withApprover(superior.get(), node.escalationCount() + 1).withForward(null, null));
+                    escalatedNodes.add(node.nodeId() + "->" + superior.get());
+                } else {
+                    remindedNodes.add(node.nodeId());
+                }
+            }
+            boolean escalated = !escalatedNodes.isEmpty();
+            if (escalated) {
                 supervisorReviewRepository.forwardSupervisorReview(d.reviewId(), null, null, null);
             }
-            if (!supervisorReviewRepository.escalateSupervisorReview(d.reviewId(), level, rank, nextDue, now)) {
+            if (!supervisorReviewRepository.escalateSupervisorReview(d.reviewId(), d.approvalLevel(), d.requiredApproverRank(), nextDue, now)) {
                 continue;
             }
             handled++;
@@ -443,15 +564,19 @@ public class SupervisorReviewService {
                     d.reviewId(),
                     null,
                     null,
-                    Map.of("action_type", d.actionType(), "from_level", d.approvalLevel() == null ? "" : d.approvalLevel(),
-                            "to_level", level == null ? "" : level, "due_at", nextDue.toString(),
+                    Map.of("action_type", d.actionType(), "approval_level", d.approvalLevel() == null ? "" : d.approvalLevel(),
+                            "escalated_nodes", String.join(",", escalatedNodes), "reminded_nodes", String.join(",", remindedNodes),
+                            "due_at", nextDue.toString(),
                             "escalation_count", item.schedule() == null ? 1 : item.schedule().escalationCount() + 1)
             );
         }
         return handled;
     }
 
-    /** M007-A-02（PGM-1.7.1 转发）：审批人（或已被转发人）把待复核单逐单转发；不得转给申请人本人或直接受益人。 */
+    /**
+     * M007-A-02（PGM-1.7.1 转发）：当前节点的审批人（或已被转发人）把该节点逐单转发；不得转给申请人本人或直接受益人。
+     * M007-I3-F01：主会话节点只能由 USB 最高权限本人转发。转发同时镜像到单据级 forwarded_to（待复核清单展示）。
+     */
     public SupervisorReviewRepository.ReviewSchedule forward(String reviewId, SupervisorReviewForwardRequest request) {
         String id = requireText(reviewId, "review_id");
         requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
@@ -465,23 +590,21 @@ public class SupervisorReviewService {
                             .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
                     String actorId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule = supervisorReviewRepository.findSupervisorReviewSchedule(id);
-                    boolean forwardedReviewer = schedule.map(s -> actorId != null && actorId.equals(s.forwardedTo())).orElse(false);
-                    if (ApprovalLevel.TOP_AUTHORITY.code().equals(pending.approvalLevel())
-                            && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
-                        throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须由 USB 最高权限本人逐单转发");
+                    List<ApprovalChainNode> nodes = supervisorReviewRepository.listChainNodes(id);
+                    if (nodes.isEmpty()) {
+                        throw ApiException.forbidden("APPROVAL_CHAIN_UNRESOLVED", "组织层级未维护，审批链未生成，无法转发");
                     }
-                    if (!forwardedReviewer && authorizationService.currentSupervisorLevel() < pending.requiredLevel()) {
-                        throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
-                    }
+                    ApprovalChainNode node = resolveForwardableNode(pending, nodes, actorId);
                     String target = requireText(request.forwardedTo(), "forwarded_to");
                     if (target.equals(pending.initiatedBy())
                             || schedule.map(s -> target.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_FORWARD_TARGET_FORBIDDEN", "不得转发给申请人本人或直接受益人");
                     }
                     Instant now = Instant.now();
-                    if (!supervisorReviewRepository.forwardSupervisorReview(id, target, actorId, now)) {
-                        throw ApiException.conflict("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单已不在待复核状态");
+                    if (!supervisorReviewRepository.updateChainNode(node.withForward(target, actorId))) {
+                        throw ApiException.conflict("SUPERVISOR_REVIEW_NOT_FOUND", "审批节点已不在待裁决状态");
                     }
+                    supervisorReviewRepository.forwardSupervisorReview(id, target, actorId, now);
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.forwarded",
                             APPROVE_PERMISSION,
@@ -489,7 +612,8 @@ public class SupervisorReviewService {
                             id,
                             null,
                             request.idempotencyKey(),
-                            Map.of("forwarded_to", target, "forwarded_by", actorId == null ? "" : actorId,
+                            Map.of("node_id", node.nodeId(), "line_code", node.lineCode(), "seq", node.seq(),
+                                    "forwarded_to", target, "forwarded_by", actorId == null ? "" : actorId,
                                     "comment", request.comment() == null ? "" : request.comment())
                     );
                     return supervisorReviewRepository.findSupervisorReviewSchedule(id)
@@ -497,6 +621,41 @@ public class SupervisorReviewService {
                 },
                 SupervisorReviewRepository.ReviewSchedule.class
         );
+    }
+
+    private ApprovalChainNode resolveForwardableNode(SupervisorReviewDecisionRecord pending, List<ApprovalChainNode> nodes, String actorId) {
+        List<ApprovalChainNode> current = ApprovalChainService.currentNodes(nodes);
+        boolean master = authorizationService.isMasterAuthority(authorizationService.currentActor());
+        for (ApprovalChainNode node : current) {
+            switch (node.approverKind()) {
+                case ApprovalChainNode.KIND_MASTER -> {
+                    // PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」：被转发人不得再转发。
+                    if (master) {
+                        return node;
+                    }
+                }
+                case ApprovalChainNode.KIND_USER -> {
+                    if (actorId != null && (actorId.equals(node.approverId()) || actorId.equals(node.forwardedTo()))) {
+                        return node;
+                    }
+                }
+                case ApprovalChainNode.KIND_ROLE -> {
+                    if (actorId != null && actorId.equals(node.forwardedTo())) {
+                        return node;
+                    }
+                    if (authorizationService.currentSupervisorLevel() < pending.requiredLevel()) {
+                        throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
+                    }
+                    return node;
+                }
+                default -> {
+                }
+            }
+        }
+        if (current.stream().anyMatch(node -> ApprovalChainNode.KIND_MASTER.equals(node.approverKind()))) {
+            throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须由 USB 最高权限本人逐单转发");
+        }
+        throw ApiException.forbidden("SUPERVISOR_NOT_CURRENT_APPROVER", "你不是该单据当前节点的审批人，不能转发");
     }
 
     /** M007-A-02：待复核清单（审批人可见卡在哪一节点、到期与升级、转发状态）。 */

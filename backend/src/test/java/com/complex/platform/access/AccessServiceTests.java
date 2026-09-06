@@ -1537,6 +1537,39 @@ class AccessServiceTests {
 
     private static final class InMemorySupervisorReviewRepository implements SupervisorReviewRepository {
         final Map<String, SupervisorReviewDecisionRecord> reviews = new LinkedHashMap<>();
+        // M087：直接上级表与审批链节点（申请人 usr_requester 的直接上级为 usr_admin，链上只有这一个节点）。
+        final Map<String, String> superiors = new LinkedHashMap<>(Map.of("usr_requester", "usr_admin"));
+        final Map<String, List<com.complex.platform.governance.chain.ApprovalChainNode>> nodes = new LinkedHashMap<>();
+
+        @Override
+        public Optional<String> findDirectSuperior(String userId) {
+            return Optional.ofNullable(superiors.get(userId));
+        }
+
+        @Override
+        public void saveChainNodes(String reviewId, List<com.complex.platform.governance.chain.ApprovalChainNode> chain) {
+            nodes.put(reviewId, new ArrayList<>(chain));
+        }
+
+        @Override
+        public List<com.complex.platform.governance.chain.ApprovalChainNode> listChainNodes(String reviewId) {
+            return List.copyOf(nodes.getOrDefault(reviewId, List.of()));
+        }
+
+        @Override
+        public boolean updateChainNode(com.complex.platform.governance.chain.ApprovalChainNode node) {
+            List<com.complex.platform.governance.chain.ApprovalChainNode> chain = nodes.get(node.reviewId());
+            if (chain == null) {
+                return false;
+            }
+            for (int i = 0; i < chain.size(); i++) {
+                if (chain.get(i).nodeId().equals(node.nodeId())) {
+                    chain.set(i, node);
+                    return true;
+                }
+            }
+            return false;
+        }
 
         @Override
         public SupervisorReviewDecisionRecord saveSupervisorReview(SupervisorReviewDecisionRecord record) {

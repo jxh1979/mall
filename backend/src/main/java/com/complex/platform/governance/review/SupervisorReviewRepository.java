@@ -1,5 +1,6 @@
 package com.complex.platform.governance.review;
 
+import com.complex.platform.governance.chain.ApprovalChainNode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -63,5 +64,33 @@ public interface SupervisorReviewRepository {
     /** holiday_calendar 中落在 [from, to] 的全部日期（含调休假期），用于按工作日计算到期。 */
     default List<LocalDate> findHolidayDates(LocalDate from, LocalDate to) {
         return List.of();
+    }
+
+    // ── M087 审批链引擎（PGM-1.7.1 / PGM-1.10.1）：组织层级、平行线设置、复核单节点 ──
+
+    /** M087-A-03：平行审批线设置——该线最低起点层级（level_rank）与起点人（approval_lines）。 */
+    record ApprovalLine(String lineCode, String lineName, int minStartRank, String entryUserId, String status) {
+    }
+
+    /** M087-A-01：直接上级（org_hierarchy）；未维护为空。 */
+    default Optional<String> findDirectSuperior(String userId) {
+        return Optional.empty();
+    }
+
+    default Optional<ApprovalLine> findApprovalLine(String lineCode) {
+        return Optional.empty();
+    }
+
+    /** M087-A-02：复核单生成时一次性写入全部节点。 */
+    default void saveChainNodes(String reviewId, List<ApprovalChainNode> nodes) {
+    }
+
+    default List<ApprovalChainNode> listChainNodes(String reviewId) {
+        return List.of();
+    }
+
+    /** 更新单个节点（裁决 / 转发 / 升级）；节点不存在返回 false。 */
+    default boolean updateChainNode(ApprovalChainNode node) {
+        return false;
     }
 }

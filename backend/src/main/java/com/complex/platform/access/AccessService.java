@@ -519,11 +519,15 @@ public class AccessService {
                     }
                     boolean approve = "approve_delete".equals(action);
                     if (approve) requirePositionTemplateUnused(id);
-                    requireSupervisorReviewService().approve(current.deleteReviewId(), new SupervisorReviewApprovalRequest(
+                    var deleteReview = requireSupervisorReviewService().approve(current.deleteReviewId(), new SupervisorReviewApprovalRequest(
                             request.idempotencyKey(), reason, request.evidenceAttachmentIds(), null,
                             approve ? "approved" : "rejected", reason));
-                    updated = current.withLifecycle(current.archivedAt(), approve ? now : null,
-                            approve ? current.deleteReviewId() : null, current.deleteReason(), now);
+                    if (approve && !"approved".equals(deleteReview.reviewStatus())) {
+                        updated = current; // M087：删除复核链尚有节点待审，模板状态不变
+                    } else {
+                        updated = current.withLifecycle(current.archivedAt(), approve ? now : null,
+                                approve ? current.deleteReviewId() : null, current.deleteReason(), now);
+                    }
                 }
                 default -> throw ApiException.badRequest("INVALID_ACTION", "不支持的岗位模板生命周期操作");
             }
@@ -748,6 +752,9 @@ public class AccessService {
                                         r.comment()
                                 )
                         );
+                        if ("approve".equals(decision) && !"approved".equals(review.reviewStatus())) {
+                            return pending; // M087：审批链尚有后续节点待审，本次只推进节点，授权不落地
+                        }
                         Instant now = Instant.now();
                         AccessActor actor = authorizationService.currentActor();
                         AccessGrantRequestRecord reviewed;
