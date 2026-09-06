@@ -1977,11 +1977,11 @@ public class AccessService {
                 .toList();
     }
 
-    /** PGM-1.10.1 五类中的资金/核销/退款/调账/分红发放与税费：按权限域或权限码判定「涉钱」（用于审批时限）。 */
+    /** PGM-1.10.1 五类中的资金/核销/退款/调账/分红发放与税费：按权限域或权限码判定「涉钱」（用于审批时限）；调账只认 bill.adjust（M007-I4-A01：库存调整不是调账）。 */
     private static boolean isMoneyPermission(PermissionDefinition permission) {
         String code = permission.permissionCode() == null ? "" : permission.permissionCode().toLowerCase(Locale.ROOT);
         return "finance".equalsIgnoreCase(permission.domain() == null ? "" : permission.domain())
-                || java.util.stream.Stream.of("refund", "dividend", "payout", "deposit", "settle", "adjust", "waiver", "tax",
+                || java.util.stream.Stream.of("refund", "dividend", "payout", "deposit", "settle", "bill.adjust", "waiver", "tax",
                         "verification", "payment").anyMatch(code::contains);
     }
 

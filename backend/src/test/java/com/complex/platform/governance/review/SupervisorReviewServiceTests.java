@@ -542,6 +542,29 @@ class SupervisorReviewServiceTests {
                 .contains("governance.supervisor_review.escalated", "governance.supervisor_review.reminded");
     }
 
+    // M007-I4-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」）：低层级作出的转发不因超时升级
+    // 而成为最高权限节点上的有效转发——升级到 top_authority 时清除转发，被转发人须由主会话再逐单转发后方可裁决。
+    @Test
+    void forwardMadeBelowTopAuthorityDoesNotSurviveEscalationToTopAuthority() {
+        TestSecurityActors.asSupervisor("usr_esc_init", 1);
+        var pending = service.blockForAdmission("permission_grant_l2", "access.grant_request.money", "access_grant_request",
+                "agr_esc", "two_levels_up", 2, "usr_esc_benef");
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        assertThat(service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "esc-forward-below-top", null, "usr_anyone", "handle")).forwardedTo()).isEqualTo("usr_anyone");
+
+        java.time.Instant later = reviewRepository.schedules.get(pending.reviewId()).dueAt().plusSeconds(60);
+        assertThat(service.escalateOverdue(later)).isEqualTo(1);
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).approvalLevel()).isEqualTo("top_authority");
+        assertThat(reviewRepository.schedules.get(pending.reviewId()).forwardedTo()).isNull();
+
+        TestSecurityActors.asSupervisor("usr_anyone", 0);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "esc-approve-stale-forwardee", "note", List.of("att"), 0, "approved", "stale forward")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).reviewStatus()).isEqualTo("pending_review");
+    }
+
     // M007-I3-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」「被转发人同时获得审批权限」）：
     // 未转发时 top_authority 单只能由 USB 主会话裁决；主会话转发后被转发人可裁决，申请人/受益人仍不得。
     @Test

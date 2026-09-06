@@ -1016,6 +1016,8 @@ class AccessServiceTests {
     void moneyPermissionApplicationsAreMarkedForTheShorterDeadline() {
         accessRepository.markRequiresApproval("finance.dividend.manage", "high");
         accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        accessRepository.markRequiresApproval("inventory.stock.adjust", "high");
+        accessRepository.markRequiresApproval("bar.bill.adjust", "high");
         InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
         service = newAccessService(true, supervisorReviewService(reviewRepository));
         accessRepository.users.put("usr_money_target", new AccessUser(
@@ -1030,6 +1032,15 @@ class AccessServiceTests {
                 List.of("ops.production_readiness.check"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "check"));
         assertThat(reviewRepository.reviews.get(money.reviewId()).actionType()).isEqualTo("access.grant_request.money");
         assertThat(reviewRepository.reviews.get(normal.reviewId()).actionType()).isEqualTo("access.grant_request");
+        // M007-I4-A01：库存调整不是调账（PGM-1.10.1 调账指账单/往来调账），账单调账仍涉钱。
+        AccessGrantRequestRecord stock = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-stock", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("inventory.stock.adjust"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "count"));
+        AccessGrantRequestRecord bill = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-bill", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("bar.bill.adjust"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "adjust"));
+        assertThat(reviewRepository.reviews.get(stock.reviewId()).actionType()).isEqualTo("access.grant_request");
+        assertThat(reviewRepository.reviews.get(bill.reviewId()).actionType()).isEqualTo("access.grant_request.money");
     }
 
     // M007-F-04（PGM-1.10.1「员工可申请临时权限，按层级对应主管审批……到期自动失效」）：日常权限的临时申请也走主管链，

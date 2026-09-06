@@ -427,6 +427,11 @@ public class SupervisorReviewService {
             Integer rank = escalated
                     ? resolveRequiredApproverRank(next, authorizationService.levelRankOf(d.initiatedBy()), d.requiredLevel())
                     : d.requiredApproverRank();
+            // M007-I4-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」）：升级为最高权限节点前先清除
+            // 低层级作出的转发（先清后升，fail-closed）；该节点由主会话处理或由主会话再逐单转发。
+            if (next == ApprovalLevel.TOP_AUTHORITY) {
+                supervisorReviewRepository.forwardSupervisorReview(d.reviewId(), null, null, null);
+            }
             if (!supervisorReviewRepository.escalateSupervisorReview(d.reviewId(), level, rank, nextDue, now)) {
                 continue;
             }
