@@ -150,16 +150,18 @@ public class SupervisorReviewService {
                     SupervisorReviewDecisionRecord pending = supervisorReviewRepository
                             .findPendingSupervisorReviewById(id)
                             .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
-                    if (ApprovalLevel.TOP_AUTHORITY.code().equals(pending.approvalLevel())
-                            && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
-                        throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须使用 USB 最高权限会话审批");
-                    }
                     String reviewerId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule =
                             supervisorReviewRepository.findSupervisorReviewSchedule(id);
                     // M007-A-02（PGM-1.7.1「转发给指定人选（不限层级，可为任意人选）」）：被转发人免除级别/职级/角色/范围闸，
                     // 仍受自审与直接受益人闸约束。
                     boolean forwardedReviewer = schedule.map(s -> reviewerId != null && reviewerId.equals(s.forwardedTo())).orElse(false);
+                    // M007-I3-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」「被转发人同时获得审批权限」）：
+                    // 未转发时 top_authority 单只能由 USB 主会话裁决；主会话转发后被转发人可裁决。
+                    if (!forwardedReviewer && ApprovalLevel.TOP_AUTHORITY.code().equals(pending.approvalLevel())
+                            && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED", "此项须使用 USB 最高权限会话审批");
+                    }
                     if (schedule.map(s -> reviewerId != null && reviewerId.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "直接受益人不能复核与自己相关的申请");
                     }
@@ -378,9 +380,13 @@ public class SupervisorReviewService {
         supervisorReviewRepository.scheduleSupervisorReview(reviewId, beneficiaryId, addWorkingDays(Instant.now(), Math.max(days, 1)));
     }
 
+    // M007-I3-F02：授权申请含资金/分红/退款/调账类权限时，AccessService 以 access.grant_request.money 作为动作名进链。
+    static final String MONEY_GRANT_REQUEST_ACTION = "access.grant_request.money";
+
     private static boolean isMoneyAction(String actionType) {
         String type = actionType == null ? "" : actionType;
-        return type.startsWith("finance.") || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
+        return type.startsWith("finance.") || MONEY_GRANT_REQUEST_ACTION.equals(type)
+                || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
                 "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
     }
 

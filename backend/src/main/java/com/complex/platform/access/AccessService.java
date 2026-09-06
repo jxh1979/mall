@@ -671,9 +671,11 @@ public class AccessService {
                                         .map(PermissionDefinition::permissionCode)
                                         .toList());
                         // M007-A-02：被授权对象是直接受益人，不得审批也不得被转发。
+                        // M007-I3-F02（PGM-1.7.1 涉钱审批 1 个工作日）：含资金/分红/退款/调账类权限的申请以涉钱动作名进链。
+                        boolean moneyRelated = permissionDefinitions(draft.permissionCodes()).stream().anyMatch(AccessService::isMoneyPermission);
                         SupervisorReviewDecisionRecord review = requireSupervisorReviewService().blockForAdmission(
                                 policy.policyCode(),
-                                policy.policyCode(),
+                                moneyRelated ? "access.grant_request.money" : "access.grant_request",
                                 "access_grant_request",
                                 draft.id(),
                                 policy.approvalLevel(),
@@ -1973,6 +1975,14 @@ public class AccessService {
                         false
                 ))
                 .toList();
+    }
+
+    /** PGM-1.10.1 五类中的资金/核销/退款/调账/分红发放与税费：按权限域或权限码判定「涉钱」（用于审批时限）。 */
+    private static boolean isMoneyPermission(PermissionDefinition permission) {
+        String code = permission.permissionCode() == null ? "" : permission.permissionCode().toLowerCase(Locale.ROOT);
+        return "finance".equalsIgnoreCase(permission.domain() == null ? "" : permission.domain())
+                || java.util.stream.Stream.of("refund", "dividend", "payout", "deposit", "settle", "adjust", "waiver", "tax",
+                        "verification", "payment").anyMatch(code::contains);
     }
 
     private void requireKnownPermissions(List<String> permissionCodes) {

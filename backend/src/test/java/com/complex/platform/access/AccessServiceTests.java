@@ -1011,6 +1011,27 @@ class AccessServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
     }
 
+    // M007-I3-F02（PGM-1.7.1 涉钱审批出厂默认 1 个工作日）：含资金/分红/退款/调账类权限的授权申请以 access.grant_request.money 进复核链。
+    @Test
+    void moneyPermissionApplicationsAreMarkedForTheShorterDeadline() {
+        accessRepository.markRequiresApproval("finance.dividend.manage", "high");
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_money_target", new AccessUser(
+                "usr_money_target", "money-target", "staff", "org_a", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_requester", "requester", "org_a");
+
+        AccessGrantRequestRecord money = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-money", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("finance.dividend.manage"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "payout"));
+        AccessGrantRequestRecord normal = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-normal", "temporary", List.of(), "temporary_permission", "usr_money_target", null, null, null, null, null, null,
+                List.of("ops.production_readiness.check"), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "check"));
+        assertThat(reviewRepository.reviews.get(money.reviewId()).actionType()).isEqualTo("access.grant_request.money");
+        assertThat(reviewRepository.reviews.get(normal.reviewId()).actionType()).isEqualTo("access.grant_request");
+    }
+
     // M007-F-04（PGM-1.10.1「员工可申请临时权限，按层级对应主管审批……到期自动失效」）：日常权限的临时申请也走主管链，
     // 不再以 GRANT_APPROVAL_NOT_REQUIRED 拒绝；审批通过后落为有时限的临时授权。
     @Test

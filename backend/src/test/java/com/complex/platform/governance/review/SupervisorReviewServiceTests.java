@@ -542,6 +542,48 @@ class SupervisorReviewServiceTests {
                 .contains("governance.supervisor_review.escalated", "governance.supervisor_review.reminded");
     }
 
+    // M007-I3-F01（PGM-1.7.1「明确要求由最高权限审批的事项，转发由最高权限本人逐单作出」「被转发人同时获得审批权限」）：
+    // 未转发时 top_authority 单只能由 USB 主会话裁决；主会话转发后被转发人可裁决，申请人/受益人仍不得。
+    @Test
+    void topAuthorityReviewForwardedByMasterCanBeDecidedByForwardee() {
+        TestSecurityActors.asSupervisor("usr_top_init", 1);
+        var pending = service.blockForAdmission("base_definition_violation_l3", "base_definition_violation", "definition",
+                "d_top", "top_authority", 3, "usr_top_benef");
+
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "top-approve-non-master", "note", List.of("att"), 3, "approved", "not master")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
+        assertThatThrownBy(() -> service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "top-forward-non-master", null, "usr_anyone", "x")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
+
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                        "token", List.of()));
+        assertThat(service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
+                "top-forward-master", null, "usr_anyone", "handle")).forwardedTo()).isEqualTo("usr_anyone");
+
+        TestSecurityActors.asSupervisor("usr_anyone", 0);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "top-approve-forwardee", "note", List.of("att"), 0, "approved", "handled"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
+    }
+
+    // M007-I3-F02（PGM-1.7.1 涉钱审批出厂默认 1 个工作日，本条适用于临时权限申请与高危授权）：授权申请按涉钱标记排期。
+    @Test
+    void moneyGrantApplicationsGetTheShorterDeadline() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var money = service.blockForAdmission("permission_grant_l2", "access.grant_request.money", "access_grant_request",
+                "agr_money", "two_levels_up", 2, "usr_m");
+        var normal = service.blockForAdmission("permission_grant_l2", "access.grant_request", "access_grant_request",
+                "agr_normal", "two_levels_up", 2, "usr_n");
+        assertThat(reviewRepository.schedules.get(normal.reviewId()).dueAt())
+                .isAfter(reviewRepository.schedules.get(money.reviewId()).dueAt());
+    }
+
     // M007-F-11（PGM-1.16「为什么、谁审批、结果是什么，都要能查到」）：审批不得覆盖评估时的违规说明。
     @Test
     void approvalKeepsEvaluationReasonAndRecordsComment() {
