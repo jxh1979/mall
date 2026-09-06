@@ -111,7 +111,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           merchantId: merchantId.trim() || undefined,
           operatorNote: "后台辅助员工登记，等待对应公司审批",
         });
-        setActionResult({ action: "员工注册申请已提交", registrationId: registration.id, message: "在员工档案中完成公司审批后生成账号，并自动获得员工自助权限。" });
+        setActionResult(`员工注册申请已提交：${registration.id}。在员工档案中完成公司审批后生成账号，并自动获得员工自助权限。`);
         setUsername("");
         setCreateOpen(false);
         return;
@@ -127,9 +127,8 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         evidenceAttachmentIds: evidenceAttachmentIds.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean),
         operatorNote: "后台手动录入工作人员",
       });
-      let appliedTemplate: unknown = null;
       if (selectedTemplateId) {
-        appliedTemplate = await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selectedTemplateId)}/apply`, {
+        await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selectedTemplateId)}/apply`, {
           targetUserIds: [created.id],
           mode: "append",
           operatorNote: "后台手动录入后应用权限模板",
@@ -137,7 +136,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       }
       const enriched = { ...created, organizationId: organizationId.trim(), merchantId: merchantId.trim() || created.merchantId, status, accountType };
       setRows((current) => [...current, enriched]);
-      setActionResult({ action: selectedTemplateId ? "创建员工并赋权" : "创建员工", username: created.username, accountType, templateId: selectedTemplateId || null, appliedTemplate });
+      setActionResult(`${selectedTemplateId ? "创建员工并赋权" : "创建员工"}：${created.username}（${formatBusinessStatus(accountType)}）${selectedTemplateId ? `，已应用权限模板 ${selectedTemplateId}` : ""}`);
       setUsername("");
       setPassword("");
       setConsentReference("");
@@ -147,7 +146,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       const message = actionError instanceof Error ? actionError.message : "创建员工失败";
       setFormError(message);
       setGlobalError(message);
-      setActionResult({ action: selectedTemplateId ? "创建员工并赋权" : "创建员工", status: "failed", message });
+      setActionResult(`${selectedTemplateId ? "创建员工并赋权" : "创建员工"}失败：${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -199,7 +198,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         idempotency_key: crypto.randomUUID(),
         user_id: bindUserId,
       });
-      setActionResult({ action: "partner_org_user_bound", userId: bindUserId, orgId: bindOrgId });
+      setActionResult(`已绑定外部协作机构：账号 ${bindUserId}，机构 ${bindOrgId}`);
       setBindUserId("");
       setBindOrgId("");
     } catch (bindError) {
@@ -222,7 +221,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         idempotency_key: crypto.randomUUID(),
         user_id: bindUserId,
       });
-      setActionResult({ action: "partner_org_user_unbound", userId: bindUserId, orgId: bindOrgId });
+      setActionResult(`已解绑外部协作机构：账号 ${bindUserId}，机构 ${bindOrgId}`);
       setBindUserId("");
       setBindOrgId("");
     } catch (unbindError) {

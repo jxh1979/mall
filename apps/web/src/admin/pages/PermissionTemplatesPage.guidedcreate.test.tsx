@@ -98,7 +98,7 @@ describe("PermissionTemplatesPage 引导式新建权限模板(phase-11)", () => 
     expect((lastPostBody as { template_name: string }).template_name).toBe("夜班主管");
     expect((lastPostBody as { permission_codes: string[] }).permission_codes).toContain("finance.view");
     await waitFor(() => expect(screen.queryByTestId("permission-template-create-guided")).toBeNull());
-    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "保存权限模板" }));
+    expect(setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^保存权限模板：/)); // PGM-1.18：结果提示全中文
   });
 
   it("步内校验拦截：未选任何权限则不进确认、不提交", async () => {

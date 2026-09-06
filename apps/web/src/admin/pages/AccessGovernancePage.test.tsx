@@ -63,6 +63,24 @@ function renderPage() {
   return fullProps;
 }
 
+// M006-G-09（PGM-1.18「提示……必须全中文」）：主壳对对象型结果原样 JSON 上屏，本模块三个页面交出的结果只能是中文句子，
+// 不得交对象字面量，也不得含 snake_case 英文动作码（如 partner_org_user_bound）。
+describe("M006-G-09 结果提示全中文", () => {
+  it("治理页 / 账号页 / 权限模板页交给主壳的结果都是中文句子", () => {
+    // 用 Vite 的 ?raw 读取页面源码（web tsconfig 无 node 类型；vite/client 已声明 import.meta.glob）。
+    const sources = import.meta.glob<string>("./{AccessGovernancePage,AccessUsersPage,PermissionTemplatesPage}.tsx", { query: "?raw", import: "default", eager: true });
+    expect(Object.keys(sources)).toHaveLength(3);
+    for (const [page, source] of Object.entries(sources)) {
+      const calls = source.split("\n").filter((line: string) => line.includes("setActionResult("));
+      expect(calls.length, page).toBeGreaterThan(0);
+      for (const line of calls) {
+        expect(line, `${page}: ${line.trim()}`).not.toMatch(/setActionResult\(\{/);
+        expect(line, `${page}: ${line.trim()}`).not.toMatch(/"[a-z]+(?:_[a-z]+)+"/);
+      }
+    }
+  });
+});
+
 describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
   afterEach(() => vi.unstubAllGlobals());
 

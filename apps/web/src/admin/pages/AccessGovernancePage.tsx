@@ -237,7 +237,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       setGrantPolicy(await api.post<GrantPolicy>("/api/v1/access/grant-policy", {
         policy: grantPolicy, operatorNote: grantPolicyReason.trim(),
       }));
-      setActionResult({ action: "授权政策已保存" });
+      setActionResult("授权政策已保存");
       await reload();
     } catch (error) { setGlobalError(error instanceof Error ? error.message : "授权政策保存失败"); }
   }
@@ -248,7 +248,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       await api.post(`/api/v1/access/position-role-templates/${encodeURIComponent(id)}/lifecycle`, {
         action, reason: lifecycleReason.trim(),
       });
-      setActionResult({ action: "岗位模板状态已更新", templateId: id });
+      setActionResult(`岗位模板状态已更新：${id}`);
       await reload();
     } catch (error) { setGlobalError(error instanceof Error ? error.message : "岗位模板处理失败"); }
   }
