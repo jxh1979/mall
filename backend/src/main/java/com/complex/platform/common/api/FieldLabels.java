@@ -362,6 +362,7 @@ public final class FieldLabels {
         p("resolution_conclusion", "处理结论");
         p("resolution_note", "处理说明");
         p("review_id", "复核单号");
+        p("forwarded_to", "转交对象");
         p("review_result", "复核结果");
         p("request_type", "申请类型");
         p("approval_note", "审批意见");

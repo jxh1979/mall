@@ -295,8 +295,8 @@ class M006SecurityRegressionTests {
                 "review", "permission_grant_l2", "permission_grant_l2", "access_grant_request",
                 "request", true, "approved", 2, 2, "approved", "理由", List.of(), Instant.now(), "requester",
                 "two_levels_up", 6);
-        when(reviews.blockForAdmission(anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()))
-                .thenReturn(result);
+        when(reviews.blockForAdmission(anyString(), anyString(), anyString(), anyString(), anyString(), anyInt(), any()))
+                .thenReturn(result); // M007-A-02：授权申请改走带受益人的 7 参重载
         when(reviews.approve(anyString(), any())).thenReturn(result);
         service = new AccessService(repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -366,7 +366,7 @@ class M006SecurityRegressionTests {
                 "temporary_permission", "target", null, null, null, null, null, null,
                 List.of(HIGH), Instant.now().plusSeconds(7200), Instant.now().plusSeconds(3600), false, "申请")))
                 .isInstanceOf(ApiException.class);
-        verify(reviews, never()).blockForAdmission(anyString(), anyString(), anyString(), anyString(), anyString(), anyInt());
+        verify(reviews, never()).blockForAdmission(anyString(), anyString(), anyString(), anyString(), anyString(), anyInt(), any());
     }
 
     // M006-001/010：最高职级普通管理员不能代替 USB 最高权限；真实 USB 会话可审批。
