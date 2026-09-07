@@ -70,6 +70,10 @@ public class ProductionAuthService implements SessionIssuer {
             return;
         }
         requireStrongSeedPassword(seedPassword);
+        if (SessionIssuer.MASTER_USERNAME.equals(seedUsername.trim())) {
+            // M008-G2-02：保留用户名只属于 U 盘破窗签发的保留超管，种子管理员不得占用。
+            throw new IllegalStateException("生产种子管理员不得使用保留用户名 master-authority（该身份只能凭 U 盘破窗签发）");
+        }
 
         Instant now = Instant.now();
         String userId = jdbcTemplate.queryForObject("""
@@ -307,7 +311,23 @@ public class ProductionAuthService implements SessionIssuer {
     @Transactional
     public AuthService.LoginResponse issueMasterSession() {
         // U 盘破窗：upsert 保留超管账号 + 凭证（密码不可用，只走 U 盘），不依赖已有账号；随后发最高权限会话。
+        // M008-G2-02（BSM-1.26.1「最高权限全平台只设一人」；R-001 通配只认 usr_master_authority + master-authority）：
+        // 按保留 id upsert 并强制用户名 / 类型 / 状态；他行若占用保留用户名，先改名并留痕——绝不把最高权限会话挂到他人账号、
+        // 也不提权他人。凭证每次轮换随机口令，保留超管永远不能凭口令登录。
         Instant now = Instant.now();
+        int displaced = jdbcTemplate.update("""
+                UPDATE access_users
+                   SET username = username || :suffix
+                 WHERE username = :username
+                   AND id <> :id
+                """, new MapSqlParameterSource()
+                .addValue("id", SessionIssuer.MASTER_USER_ID)
+                .addValue("username", SessionIssuer.MASTER_USERNAME)
+                .addValue("suffix", "-displaced-" + now.toEpochMilli()));
+        if (displaced > 0) {
+            auditEventService.recordSuccess("auth.master.reserved_username_displaced", "auth.master", "access_user",
+                    SessionIssuer.MASTER_USERNAME, null, null, Map.of("displaced_rows", String.valueOf(displaced)));
+        }
         String userId = jdbcTemplate.queryForObject("""
                 INSERT INTO access_users (
                     id, username, account_type, organization_id, merchant_id, status, created_at
@@ -315,7 +335,8 @@ public class ProductionAuthService implements SessionIssuer {
                 VALUES (
                     :id, :username, 'platform_admin', 'platform-company', NULL, 'active', :now
                 )
-                ON CONFLICT (username) DO UPDATE SET
+                ON CONFLICT (id) DO UPDATE SET
+                    username = EXCLUDED.username,
                     account_type = 'platform_admin',
                     organization_id = COALESCE(access_users.organization_id, 'platform-company'),
                     status = 'active'
@@ -334,6 +355,7 @@ public class ProductionAuthService implements SessionIssuer {
                     :user_id, :password_hash, 'bcrypt', 0, NULL, :now, 'active', :now, :now
                 )
                 ON CONFLICT (user_id) DO UPDATE SET
+                    password_hash = EXCLUDED.password_hash, password_changed_at = :now,
                     status = 'active', failed_attempt_count = 0, locked_until = NULL, updated_at = :now
                 """, new MapSqlParameterSource()
                 .addValue("user_id", userId)

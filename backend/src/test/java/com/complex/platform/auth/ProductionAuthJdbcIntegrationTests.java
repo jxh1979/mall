@@ -317,6 +317,59 @@ class ProductionAuthJdbcIntegrationTests {
         ProductionAuthService.requireStrongSeedPassword("p0_prod_test_password");
     }
 
+    // M008-G2-02（BSM-1.26.1「持有授权 U 盘密钥的人才是最高权限；最高权限全平台只设一人」；PGM-1.15.1 破窗恢复进入系统；
+    // R-001 通配只认 usr_master_authority + master-authority）：他人预占保留用户名时，破窗仍落到保留 id，
+    // 预占账号被改名留痕、不被提权，其口令不能以 master-authority 登录。
+    @Test
+    void breakGlassLandsOnTheReservedIdentityEvenWhenTheUsernameWasPreRegistered() throws Exception {
+        jdbcTemplate.update("""
+                INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)
+                VALUES ('usr_intruder', 'master-authority', 'staff', 'org-x', NULL, 'active', now())
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO auth_credentials (user_id, password_hash, password_algo, failed_attempt_count, locked_until,
+                                              password_changed_at, status, created_at, updated_at)
+                VALUES ('usr_intruder', ?, 'bcrypt', 0, NULL, now(), 'active', now(), now())
+                """, passwordEncoder.encode("intruder-password-1234"));
+
+        JsonNode breakGlass = breakGlassLogin();
+        assertThat(breakGlass.at("/data/user/id").asText()).isEqualTo("usr_master_authority");
+        assertThat(breakGlass.at("/data/user/username").asText()).isEqualTo("master-authority");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT username FROM access_users WHERE id = 'usr_master_authority'", String.class)).isEqualTo("master-authority");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT username FROM access_users WHERE id = 'usr_intruder'", String.class))
+                .isNotEqualTo("master-authority").startsWith("master-authority-displaced-");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT account_type FROM access_users WHERE id = 'usr_intruder'", String.class)).isEqualTo("staff");
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login_name": "master-authority",
+                                  "password": "intruder-password-1234"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized()); // 预占者的口令不再能以保留用户名登录
+    }
+
+    private JsonNode breakGlassLogin() throws Exception {
+        MvcResult challengeResult = mockMvc.perform(post("/api/v1/auth/master/challenge"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String challenge = objectMapper.readTree(challengeResult.getResponse().getContentAsString()).at("/data/challenge").asText();
+        java.security.Signature signer = java.security.Signature.getInstance("Ed25519");
+        signer.initSign(MASTER_KEY_PAIR.getPrivate());
+        signer.update(challenge.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String signature = java.util.Base64.getEncoder().encodeToString(signer.sign());
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/master/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of("challenge", challenge, "signature", signature))))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(loginResult.getResponse().getContentAsString());
+    }
+
     private JsonNode login(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

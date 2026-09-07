@@ -8,9 +8,13 @@ trap 'rm -rf "$TMP"' EXIT
 
 export COMPLEX_KEYVAULT_PASS="selftest-pass-nonsecret-0000"
 
-bash "$HERE/generate-keystore.sh" "$TMP/usb" >/dev/null
+GEN_OUT="$(bash "$HERE/generate-keystore.sh" "$TMP/usb" 2>&1)"
 [ -f "$TMP/usb/complex-keys/keystore.env.enc" ] || { echo "FAIL: keystore 未生成"; exit 1; }
 grep -qa 'Salted' "$TMP/usb/complex-keys/keystore.env.enc" || { echo "FAIL: 密文无 salt 头（可能未加密）"; exit 1; }
+# M008-G2-01（PGM-1.15.1「不预制备用钥匙，丢失即按本闭环重制」）：脚本输出不得教操作员预制备用 / 备份钥匙。
+if printf '%s' "$GEN_OUT" | grep -qE '备份|备用|复制一份'; then
+    echo "FAIL: generate-keystore 输出仍提示预制备用钥匙（PGM-1.15.1 不预制备用钥匙）"; exit 1
+fi
 
 bash "$HERE/provision-from-usb.sh" "$TMP/usb" "$TMP/secrets.env" >/dev/null
 bash "$HERE/verify-provisioned.sh" "$TMP/secrets.env" >/dev/null
@@ -38,4 +42,4 @@ if openssl pkeyutl -verify -pubin -inkey "$TMP/pub.pem" -rawin -in "$TMP/ch2.txt
     echo "FAIL: 篡改挑战竟通过验签"; exit 1
 fi
 
-echo "[keyvault selftest] 生成→provision→校验 往返 OK，密文加密、指纹一致，总钥匙 Ed25519 签验往返 OK"
+echo "[keyvault selftest] 生成→provision→校验 往返 OK，密文加密、指纹一致，总钥匙 Ed25519 签验往返 OK，生成输出不含预制备用钥匙提示"
