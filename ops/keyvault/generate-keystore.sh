@@ -48,4 +48,4 @@ printf '%s' "$PASS" | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass 
 openssl pkey -in "$MASTER_PRIV" -pubout -outform DER | base64 -w0 > "$DEST/master_authority.pub.b64"
 
 echo "[keyvault] 已写入 $DEST: keystore.env.enc + manifest.json + master_authority.key.enc + master_authority.pub.b64"
-echo "[keyvault] 请核对后妥善保管 U 盘，并离线复制一份备份（两地保险柜）。破窗私钥永不落服务器，只在 U 盘。"
+echo "[keyvault] 请核对后由指定负责人妥善保管 U 盘。不制作第二份可独立使用的密钥材料（PGM-1.15.1：丢失、损坏或保管人变动即按更换闭环作废重制）。破窗私钥永不落服务器，只在 U 盘。"
