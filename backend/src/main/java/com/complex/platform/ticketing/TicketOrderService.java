@@ -32,6 +32,8 @@ public class TicketOrderService {
     // 结算 S11 渠道费按 ticket_orders.sales_channel 解析（channel_fee_configs 渠道专属>通用）才拿得到该渠道费率。
     private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel",
             "meituan", "dianping", "douyin", "koubei", "eleme", "alipay", "wechat");
+    // D-024：柜台 / 一体机由工作人员现场录入人脸并提交客人现场确认的同意；其余渠道由客人本人在下单时露脸拍摄。
+    private static final Set<String> STAFF_CHANNELS = Set.of("admin", "kiosk");
 
     private final TicketingRepository repository;
     private final TicketPricingService pricingService;
@@ -87,6 +89,25 @@ public class TicketOrderService {
             contractScopeGuard.requireTicketSaleAllowed(orderBarId);
         }
         int quantity = requirePositive(actual.quantity(), "quantity");
+        // D-024（BSM-1.6.6 / BSM-1.7.3 / PGM-1.15.3）：需要人脸照的票种，购票时必须录入购票人人脸，拒绝的不能购票——
+        //   任何渠道下单即闸（置于库存扣减前，拒单零副作用）：每张票一张脸照（柜台由工作人员现场录入，客人端本人拍摄）；
+        //   同意二选一：已生效的同意 id（客人端由 CustomerService 同事务落账；柜台可用会员同意）或柜台 / 一体机现场确认
+        //   face_consent_accepted=true（成单时以本单为主体落散客同意，R-005）。无人脸照票种零影响。
+        boolean faceRequired = facePhotoService != null && ticketTypeRequiresFacePhoto(ticketType.id());
+        boolean staffChannel = STAFF_CHANNELS.contains(actual.salesChannel());
+        boolean walkInConsent = staffChannel && Boolean.TRUE.equals(actual.faceConsentAccepted());
+        if (faceRequired) {
+            int photos = actual.facePhotos() == null ? 0 : actual.facePhotos().size();
+            if (photos < quantity) {
+                throw ApiException.badRequest("FACE_PHOTO_REQUIRED", staffChannel
+                        ? "该票种购票须由工作人员现场录入购票人人脸（每张票一张），客人拒绝的不能购票"
+                        : "该票种购票须本人拍摄入场人脸照（每张票一张），拒绝的不能购票");
+            }
+            if (trimToNull(actual.faceConsentId()) == null && !walkInConsent) {
+                throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED",
+                        "拍摄人脸照前须先取得客人同意（客人端勾选同意；柜台由客人现场确认后由工作人员提交）");
+            }
+        }
         // P0 修复（V133）：限量票种原子扣减库存，防止超卖（stock_quantity 为 null=不限量，仅计数）。
         // createTicketOrder 已由 executeWrite 幂等包裹，重放不会重复进入此处、不会双扣。
         if (!repository.atomicDeductTicketStock(ticketType.id(), quantity)) {
@@ -150,7 +171,12 @@ public class TicketOrderService {
         //   facePhotoService 为 null(旧构造/无 PiiCipher 的单测)时不暂存；空表=该票种不要照，零影响。
         //   V368：同意闸在 stageForOrder 里（consentId 空即拒），有照没同意进不了库。
         if (facePhotoService != null) {
-            facePhotoService.stageForOrder(saved.id(), actual.facePhotos(), quantity, actual.faceConsentId());
+            String consentId = trimToNull(actual.faceConsentId());
+            if (consentId == null && walkInConsent) {
+                // D-024 / R-005：柜台现场确认的同意与订单同事务落账（以本单为主体），再把工作人员录入的照片暂存到本单。
+                consentId = facePhotoService.recordWalkInFaceConsent(saved.id(), actual.faceConsentSourceTerminal(), true).consentId();
+            }
+            facePhotoService.stageForOrder(saved.id(), actual.facePhotos(), quantity, consentId);
         }
         return saved;
     }
@@ -167,6 +193,8 @@ public class TicketOrderService {
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能对自身受理订单创建支付意图（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
+        // D-024：需要人脸照的票种，人脸采集先于收款（第二道闸）。
+        requireFaceCaptureBeforePayment(order);
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
         if (!orderId.equals(businessOrderId)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "业务订单号必须与路径中的订单号一致");
@@ -212,6 +240,8 @@ public class TicketOrderService {
         if ("cancelled".equals(order.status())) {
             throw ApiException.conflict("ORDER_CANCELLED", "票务订单已取消");
         }
+        // D-024：需要人脸照的票种，人脸采集先于收款（支付确认同样过闸，绕过支付意向也拦得住）。
+        requireFaceCaptureBeforePayment(order);
         String intentId = requireText(actual.paymentIntentId(), "payment_intent_id");
         TicketPaymentIntentRecord intent = repository.findTicketPaymentIntentById(intentId)
                 .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或已被删除"));
@@ -760,6 +790,34 @@ public class TicketOrderService {
      * 平台管理员/无上下文（scope 为空）→ 放行；商户用户 → 必须等于原单 merchant_id，否则 CROSS_MERCHANT_FORBIDDEN。
      * 复用本类既有防御式 resolveMerchantId()（无上下文返回 null、不抛），兼容内部确认/支付回调路径。
      */
+    /** D-024：票种是否需要人脸照（任一权益模板 require_face_photo=TRUE）。 */
+    private boolean ticketTypeRequiresFacePhoto(String ticketTypeId) {
+        for (TicketTypeEntitlementRecord binding : repository.listTicketTypeEntitlements(ticketTypeId)) {
+            boolean required = repository.findEntitlementTemplateById(binding.entitlementTemplateId())
+                    .map(template -> Boolean.TRUE.equals(template.requireFacePhoto())).orElse(false);
+            if (required) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * D-024（BSM-1.6.6 / BSM-1.7.3 / PGM-1.15.3）：需要人脸照的票种，购票时必须录入购票人人脸，拒绝的不能购票——
+     * 钱不能先于人脸：暂存照须已满张数，柜台 / 一体机另可凭该单已留存的散客同意（R-005），否则不建支付意向、不确认支付。
+     * 无人脸照票种零影响；facePhotoService 为 null 仅旧构造 / 兼容测试。
+     */
+    private void requireFaceCaptureBeforePayment(TicketOrderRecord order) {
+        if (facePhotoService == null || !ticketTypeRequiresFacePhoto(order.ticketTypeId())) {
+            return;
+        }
+        boolean staffChannel = STAFF_CHANNELS.contains(order.salesChannel());
+        if (!facePhotoService.faceCaptureReadyForPayment(order.id(), order.quantity(), staffChannel)) {
+            throw ApiException.badRequest("FACE_PHOTO_REQUIRED",
+                    "该票种购票须先录入购票人人脸（客人端本人拍摄；柜台由工作人员录入并留存同意），未录入不能收款");
+        }
+    }
+
     private void enforceMerchantScope(String merchantId) {
         String scope = resolveMerchantId();
         if (scope != null && !scope.equals(merchantId)) {

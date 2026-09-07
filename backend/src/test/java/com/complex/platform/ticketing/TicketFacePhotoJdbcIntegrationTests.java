@@ -8,7 +8,10 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
+import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
+import com.complex.platform.ticketing.dto.TicketOrderRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -320,6 +323,111 @@ class TicketFacePhotoJdbcIntegrationTests {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("MERCHANT_SCOPE_REQUIRED"));
         assertThat(auditCount()).isEqualTo(auditBefore);
+    }
+
+    // ---------- ⑲ D-024：客人端（miniapp）下单需要人脸照的票种而不带照片 → 下单即拒；带满张数 + 同意 → 成单 ----------
+    @Test
+    void customerChannelOrderForFaceTicketRequiresPhotosAtCreation() {
+        Fixture f = seed(true);
+        jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
+        assertThatThrownBy(() -> orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
+                LocalDate.now(), "miniapp", null, null, Map.of(), null, List.of(), null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_REQUIRED"));
+        String customerId = seedCustomer();
+        String consentId = seedAcceptedFaceConsentFor(customerId);
+        TicketOrderRecord created = orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
+                LocalDate.now(), "miniapp", null, customerId, Map.of(), null, List.of(PHOTO_BASE64), consentId));
+        assertThat(created.id()).isNotBlank();
+        assertThat(facePhotoService.stagedForOrder(created.id())).hasSize(1);
+    }
+
+    // ---------- ⑲b D-024：柜台（admin）下单需要人脸照的票种而不带照片 → 下单即拒，无订单、库存不扣 ----------
+    @Test
+    void counterOrderForFaceTicketRequiresPhotosAtCreation() {
+        Fixture f = seed(true);
+        jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
+        Integer soldBefore = jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id = ?", Integer.class, f.ticketTypeId);
+        Integer ordersBefore = jdbcTemplate.queryForObject("SELECT count(*) FROM ticket_orders WHERE ticket_type_id = ?", Integer.class, f.ticketTypeId);
+        assertThatThrownBy(() -> orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
+                LocalDate.now(), "admin", null, null, Map.of(), null, List.of(), null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id = ?", Integer.class, f.ticketTypeId)).isEqualTo(soldBefore);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ticket_orders WHERE ticket_type_id = ?", Integer.class, f.ticketTypeId)).isEqualTo(ordersBefore);
+    }
+
+    // ---------- ⑳ D-024：柜台（admin）订单未留存同意 → 不能收款（支付意向拒）；留存散客同意后 → 可收款 ----------
+    @Test
+    void counterOrderForFaceTicketCannotTakePaymentBeforeConsent() {
+        Fixture f = seed(true);
+        assertThatThrownBy(() -> orderService.createPaymentIntent(f.orderId, new PaymentIntentRequest(
+                key(), null, List.of(), "ticket_order", f.orderId, 5000L, "CNY", "cash")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_REQUIRED"));
+        facePhotoService.recordWalkInFaceConsent(f.orderId, "counter", true);
+        assertThat(orderService.createPaymentIntent(f.orderId, new PaymentIntentRequest(
+                key(), null, List.of(), "ticket_order", f.orderId, 5000L, "CNY", "cash")).status()).isEqualTo("created");
+    }
+
+    // ---------- ㉑ D-024：客人端订单收款前必须已暂存满张数人脸照；无人脸照票种零影响 ----------
+    @Test
+    void customerOrderForFaceTicketCannotTakePaymentBeforeStagedPhotos() {
+        Fixture f = seed(true);
+        jdbcTemplate.update("UPDATE ticket_orders SET sales_channel = 'miniapp' WHERE id = ?", f.orderId);
+        assertThatThrownBy(() -> orderService.createPaymentIntent(f.orderId, new PaymentIntentRequest(
+                key(), null, List.of(), "ticket_order", f.orderId, 5000L, "CNY", "wechat")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_REQUIRED"));
+        facePhotoService.stageForOrder(f.orderId, List.of(PHOTO_BASE64), 1, seedAcceptedFaceConsent());
+        assertThat(orderService.createPaymentIntent(f.orderId, new PaymentIntentRequest(
+                key(), null, List.of(), "ticket_order", f.orderId, 5000L, "CNY", "wechat")).status()).isEqualTo("created");
+        Fixture plain = seed(false);
+        assertThat(orderService.createPaymentIntent(plain.orderId, new PaymentIntentRequest(
+                key(), null, List.of(), "ticket_order", plain.orderId, 5000L, "CNY", "cash")).status()).isEqualTo("created");
+    }
+
+    // ---------- ㉒ D-024：支付确认同样过闸——绕过支付意向闸直接写意向行，确认支付仍拒 ----------
+    @Test
+    void confirmingPaymentForFaceTicketWithoutCaptureIsRejected() {
+        Fixture f = seed(true);
+        Instant now = Instant.now();
+        String intentId = "pay_intent_fp_" + key();
+        repository.saveTicketPaymentIntent(new TicketPaymentIntentRecord(intentId, "ticket_order", f.orderId, 5000L, "CNY", "cash",
+                "created", now, now));
+        assertThatThrownBy(() -> orderService.confirmPayment(f.orderId, new ConfirmTicketOrderPaymentRequest(key(), intentId, null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_REQUIRED"));
+    }
+
+    // ---------- ⑲c D-024 / R-005：柜台下单带满张数照片 + 客人现场确认同意 → 成单，同意以本单为主体落账，照片暂存到本单，可收款 ----------
+    @Test
+    void counterOrderWithPhotosAndOnSiteConsentCreatesOrderConsentAndStagedPhotos() {
+        Fixture f = seed(true);
+        jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
+        TicketOrderRecord created = orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
+                LocalDate.now(), "admin", null, null, Map.of(), null, List.of(PHOTO_BASE64), null, true, "counter"));
+        Map<String, Object> consent = jdbcTemplate.queryForMap(
+                "SELECT customer_id, accepted, source_terminal FROM customer_consents WHERE order_id = ?", created.id());
+        assertThat(consent.get("customer_id")).isNull();
+        assertThat(consent.get("accepted")).isEqualTo(true);
+        assertThat(consent.get("source_terminal")).isEqualTo("counter");
+        assertThat(facePhotoService.stagedForOrder(created.id())).hasSize(1);
+        assertThat(orderService.createPaymentIntent(created.id(), new PaymentIntentRequest(
+                key(), null, List.of(), "ticket_order", created.id(), created.amountCent(), "CNY", "cash")).status()).isEqualTo("created");
+    }
+
+    // ---------- ⑲d D-024：柜台带照片但客人未确认同意 → 拒单，同意台账不落行 ----------
+    @Test
+    void counterOrderWithPhotosButNoConsentIsRejected() {
+        Fixture f = seed(true);
+        jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
+        Integer consentsBefore = jdbcTemplate.queryForObject("SELECT count(*) FROM customer_consents WHERE consent_type = 'ticket_face_photo'", Integer.class);
+        assertThatThrownBy(() -> orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
+                LocalDate.now(), "admin", null, null, Map.of(), null, List.of(PHOTO_BASE64), null, false, "counter")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM customer_consents WHERE consent_type = 'ticket_face_photo'", Integer.class)).isEqualTo(consentsBefore);
     }
 
     // ================= 夹具 =================
