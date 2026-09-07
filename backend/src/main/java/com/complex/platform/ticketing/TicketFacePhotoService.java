@@ -86,18 +86,25 @@ public class TicketFacePhotoService {
     }
 
     /**
-     * 购买捕获：把发放请求带来的人脸照 base64 加密后存 ticket_face_photos，purge_after=valid_to+留存天数(后台可配)。
+     * 购买捕获：把发放链交来的人脸照 base64 加密后存 ticket_face_photos，purge_after=valid_to+留存天数(后台可配)。
      * 由 {@link TicketOrderService} 在 require_face_photo=TRUE 的权益发放后调用；photoBase64 缺失应在调用前已拒。
+     *
+     * <p>M009 A1-01（BSM-1.7.3 采集人脸前单独取得同意并留同意版本、时间和范围）：权益位与暂存位一样必须挂同意留痕 id——
+     * 客人端拍的照沿用暂存位那条同意（{@link #stagedForOrder}），出票请求自带的照由 {@link #requestPhotosWithConsent} 先验过；
+     * 这里是最后一道闸，没有同意 id 一律不落库，库上 chk_tfp_consent_present(V395) 再兜一道。
      */
-    void capture(String entitlementId, String photoBase64, String contentType, Instant capturedAt, Instant validTo) {
-        String payload = requireValidPhoto(photoBase64);
+    void capture(String entitlementId, FacePhotoInput input, String contentType, Instant capturedAt, Instant validTo) {
+        if (input == null || input.consentId() == null || input.consentId().isBlank()) {
+            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED", "存档人脸照片前须先留存客人同意记录");
+        }
+        String payload = requireValidPhoto(input.photoBase64());
         // 复用 PiiCipher(AES-GCM)：base64 图串 → 信封串 → UTF-8 字节存 BYTEA（禁明文存）。
         byte[] ciphertext = piiCipher.encrypt(payload).getBytes(StandardCharsets.UTF_8);
         LocalDate purgeAfter = (validTo == null ? Instant.now() : validTo)
                 .atOffset(ZoneOffset.UTC).toLocalDate().plusDays(retentionDays());
         repository.save("tfp_" + UUID.randomUUID().toString().replace("-", ""),
                 entitlementId, ciphertext, contentType == null ? "image/jpeg" : contentType,
-                capturedAt == null ? Instant.now() : capturedAt, purgeAfter);
+                capturedAt == null ? Instant.now() : capturedAt, purgeAfter, input.consentId().trim());
     }
 
     /**
@@ -131,14 +138,39 @@ public class TicketFacePhotoService {
     }
 
     /**
-     * V359 出票取用：取某订单的暂存照(解密回 base64，按拍摄顺序)。出票链把它们当作 facePhotos 逐张消费。
+     * V359 出票取用：取某订单的暂存照(解密回 base64，按拍摄顺序)，连同每张照挂着的同意留痕 id 一起交给出票链逐张消费。
      * 无暂存返回空表(=该单没拍照，走既有 FACE_PHOTO_REQUIRED 判定)。
+     * M009 A1-01：同意 id 必须跟着照片转绑到权益位，出票不能把「哪一版告知、何时同意」弄丢。
      */
-    List<String> stagedForOrder(String orderId) {
-        List<byte[]> rows = repository.listStagedCiphertexts(orderId);
-        List<String> photos = new ArrayList<>(rows.size());
-        for (byte[] ciphertext : rows) {
-            photos.add(piiCipher.decrypt(new String(ciphertext, StandardCharsets.UTF_8)));
+    List<FacePhotoInput> stagedForOrder(String orderId) {
+        List<TicketFacePhotoRepository.StagedRow> rows = repository.listStaged(orderId);
+        List<FacePhotoInput> photos = new ArrayList<>(rows.size());
+        for (TicketFacePhotoRepository.StagedRow row : rows) {
+            photos.add(new FacePhotoInput(
+                    piiCipher.decrypt(new String(row.ciphertext(), StandardCharsets.UTF_8)), row.consentId()));
+        }
+        return photos;
+    }
+
+    /**
+     * M009 A1-01：出票请求自带照片（柜台/后台入口，TicketIssueRequest.facePhotos）时的同意闸。
+     * 同意 id 来自请求方而非服务端同事务生成，所以必须回查同意台账：存在、类型为人脸照、已接受、未撤回，否则拒。
+     * 没带照片 → 空表，零影响。
+     */
+    List<FacePhotoInput> requestPhotosWithConsent(List<String> photosBase64, String consentId) {
+        if (photosBase64 == null || photosBase64.isEmpty()) {
+            return List.of();
+        }
+        if (consentId == null || consentId.isBlank()) {
+            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED", "上传人脸照片前须先留存客人同意记录");
+        }
+        String id = consentId.trim();
+        if (!repository.faceConsentAccepted(id)) {
+            throw ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不存在、未生效或已撤回");
+        }
+        List<FacePhotoInput> photos = new ArrayList<>(photosBase64.size());
+        for (String photo : photosBase64) {
+            photos.add(new FacePhotoInput(photo, id));
         }
         return photos;
     }
@@ -191,6 +223,10 @@ public class TicketFacePhotoService {
             throw ApiException.badRequest("FACE_PHOTO_INVALID", "人脸照片必须为 base64 编码的图片数据");
         }
         return payload;
+    }
+
+    /** 出票链交给存档的一张脸照：图 base64 + 这张脸对应的同意留痕 id(customer_consents.id)。 */
+    public record FacePhotoInput(String photoBase64, String consentId) {
     }
 
     /** 核销显示端点返回体：base64 图串 + content_type，前端拼 data URI 显示。 */

@@ -44,6 +44,7 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Autowired private TicketFacePhotoPurgeJob purgeJob;
     @Autowired private PiiCipher piiCipher;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private com.complex.platform.customer.CustomerRepository customerRepository;
 
     // 一张 1x1 像素的 PNG 图字节（原图），base64 后作为购买捕获的人脸照 payload。
     private static final byte[] RAW_IMAGE_BYTES = Base64.getDecoder().decode(
@@ -86,6 +87,10 @@ class TicketFacePhotoJdbcIntegrationTests {
         String decodedBase64 = piiCipher.decrypt(new String(stored, StandardCharsets.UTF_8));
         assertThat(decodedBase64).isEqualTo(PHOTO_BASE64);
         assertThat(Base64.getDecoder().decode(decodedBase64)).isEqualTo(RAW_IMAGE_BYTES);
+        // M009 A1-01：权益位脸照必须指回那条同意留痕（BSM-1.7.3 留同意版本、时间和范围）。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT consent_id FROM ticket_face_photos WHERE entitlement_id = ?", String.class, entitlementId))
+                .startsWith("consent_fp_");
     }
 
     // ---------- ③ require_face_photo=FALSE 不带照 → 正常发放、无照片行（回归） ----------
@@ -133,14 +138,47 @@ class TicketFacePhotoJdbcIntegrationTests {
         String expired = "ent_exp_" + key();
         String future = "ent_fut_" + key();
         facePhotoRepository.save("tfp_" + key(), expired, piiCipher.encrypt(PHOTO_BASE64).getBytes(StandardCharsets.UTF_8),
-                "image/jpeg", now, LocalDate.now().minusDays(1));   // 已过期
+                "image/jpeg", now, LocalDate.now().minusDays(1), "consent_purge_fixture");   // 已过期
         facePhotoRepository.save("tfp_" + key(), future, piiCipher.encrypt(PHOTO_BASE64).getBytes(StandardCharsets.UTF_8),
-                "image/jpeg", now, LocalDate.now().plusDays(1));    // 未到期
+                "image/jpeg", now, LocalDate.now().plusDays(1), "consent_purge_fixture");    // 未到期
 
         int deleted = purgeJob.purgeExpired(LocalDate.now());
         assertThat(deleted).isGreaterThanOrEqualTo(1);
         assertThat(facePhotoRepository.findByEntitlementId(expired)).isEmpty();
         assertThat(facePhotoRepository.findByEntitlementId(future)).isPresent();
+    }
+
+    // ---------- ⑥ M009 A1-01：出票请求自带照片（柜台/后台入口）没有同意留痕 → 拒，且不落照片行 ----------
+    @Test
+    void issuingWithRequestPhotoButNoConsentIsRejected() {
+        Fixture f = seed(true);
+        assertThatThrownBy(() -> orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64))))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_REQUIRED"));
+        assertThat(countPhotosForOrder(f.orderId)).isZero();
+    }
+
+    // ---------- ⑦ M009 A1-01：库上 CHECK 对权益位同样生效——绕过服务直接 INSERT 无同意的权益位脸照被拒 ----------
+    @Test
+    void entitlementPhotoRowWithoutConsentIsRejectedByDatabase() {
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO ticket_face_photos (id, entitlement_id, photo_ciphertext, content_type, captured_at, purge_after)"
+                        + " VALUES (?, ?, ?, 'image/jpeg', now(), CURRENT_DATE + 1)",
+                "tfp_no_consent_" + key(), "ent_no_consent_" + key(), "enc:v1:x".getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // ---------- ⑧ M009 A1-01：出票请求带的同意 id 必须对应一条已生效的人脸照同意，瞎填的拒 ----------
+    @Test
+    void issuingWithRequestPhotoAndUnknownConsentIsRejected() {
+        Fixture f = seed(true);
+        assertThatThrownBy(() -> orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64),
+                "consent_does_not_exist")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
+        assertThat(countPhotosForOrder(f.orderId)).isZero();
     }
 
     // ================= 夹具 =================
@@ -169,8 +207,25 @@ class TicketFacePhotoJdbcIntegrationTests {
         return new Fixture(ticketTypeId, orderId);
     }
 
+    /** 带照的出票请求必须带客人同意留痕 id（M009 A1-01）：按真实链路先落一位客人 + 一条已接受的人脸照同意。 */
     private TicketIssueRequest issueRequest(Fixture f, List<String> facePhotos) {
-        return new TicketIssueRequest(key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), facePhotos);
+        String consentId = facePhotos.isEmpty() ? null : seedAcceptedFaceConsent();
+        return new TicketIssueRequest(key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), facePhotos,
+                consentId);
+    }
+
+    private String seedAcceptedFaceConsent() {
+        Instant now = Instant.now();
+        String suffix = key();
+        String digits = (suffix.replaceAll("[^0-9]", "1") + "00000000").substring(0, 8);
+        String customerId = "cust_fp_" + suffix;
+        customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(
+                customerId, "139" + digits, "139****" + digits.substring(4), "active", null, null, now, now, null));
+        String consentId = "consent_fp_" + suffix;
+        customerRepository.saveConsent(new com.complex.platform.customer.CustomerConsentRecord(
+                consentId, customerId, "ticket_face_photo", true, facePhotoService.noticeVersion(), "counter",
+                now, null, now, now));
+        return consentId;
     }
 
     private String onlyEntitlementId(String orderId) {

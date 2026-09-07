@@ -35,10 +35,12 @@ class TicketFacePhotoRetentionTests {
         TicketFacePhotoService service = new TicketFacePhotoService(
                 repository, piiCipher, mock(AuthorizationService.class), mock(AuditEventService.class), windowConfig);
 
-        service.capture("ent_1", "Zm9v", "image/jpeg", Instant.parse("2026-07-01T00:00:00Z"), VALID_TO);
+        service.capture("ent_1", new TicketFacePhotoService.FacePhotoInput("Zm9v", "consent_1"), "image/jpeg",
+                Instant.parse("2026-07-01T00:00:00Z"), VALID_TO);
 
         ArgumentCaptor<LocalDate> purgeAfter = ArgumentCaptor.forClass(LocalDate.class);
-        verify(repository).save(anyString(), eq("ent_1"), any(), eq("image/jpeg"), any(), purgeAfter.capture());
+        verify(repository).save(anyString(), eq("ent_1"), any(), eq("image/jpeg"), any(), purgeAfter.capture(),
+                eq("consent_1"));
         return purgeAfter.getValue();
     }
 

@@ -76,7 +76,8 @@ class TicketFacePhotoOrderStagingTests {
         assertThat(staged).isNotEqualTo(RAW_IMAGE_BYTES);
         assertThat(staged).isNotEqualTo(PHOTO_BASE64.getBytes(StandardCharsets.UTF_8));
         assertThat(new String(staged, StandardCharsets.UTF_8)).startsWith("enc:v1:");
-        assertThat(facePhotoService.stagedForOrder(orderId)).containsExactly(PHOTO_BASE64);
+        assertThat(facePhotoService.stagedForOrder(orderId))
+                .extracting(TicketFacePhotoService.FacePhotoInput::photoBase64).containsExactly(PHOTO_BASE64);
 
         // 出票请求自己不带照片 —— 线上买票的客人不在柜台，运营手上没有他的脸。
         authenticateAs("platform_admin");
@@ -89,6 +90,10 @@ class TicketFacePhotoOrderStagingTests {
                 byte[].class, issued.get(0).id());
         assertThat(bound).isNotNull();
         assertThat(piiCipher.decrypt(new String(bound, StandardCharsets.UTF_8))).isEqualTo(PHOTO_BASE64);
+        // M009 A1-01（BSM-1.7.3 留同意版本、时间和范围）：转绑后权益位必须仍指回那条同意——出票不能把同意弄丢。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT consent_id FROM ticket_face_photos WHERE entitlement_id = ?",
+                String.class, issued.get(0).id())).isEqualTo(CONSENT_ID);
 
         // 转绑完成后暂存位必须空 —— 同一张脸不留两份。
         assertThat(stagedRowCount(orderId)).isZero();

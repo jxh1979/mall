@@ -98,7 +98,8 @@ class VoucherTransferJdbcIntegrationTests {
     void voidPendingForInstanceAndIncomingByReceiverHash() {
         String instanceId = seedIssuedInstance("void");
         transfers.save(new VoucherTransferRecord("vt_void_1", instanceId, "cust_from_void", "phone",
-                "enc-phone", "hash_recv_void", "138****8888", null, null, "pending", null, T0, null, null, null, T0));
+                // V396：receiver_phone 列有 enc:v1: 信封 CHECK，夹具密文也须为信封形态。
+                "enc:v1:phone-fixture", "hash_recv_void", "138****8888", null, null, "pending", null, T0, null, null, null, T0));
         assertThat(transfers.listPendingByReceiverPhoneHash("hash_recv_void"))
                 .extracting(VoucherTransferRecord::id).containsExactly("vt_void_1");
         // 券核销/作废/过期时按券实例作废在途转赠。
