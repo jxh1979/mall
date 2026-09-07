@@ -69,6 +69,7 @@ public class ProductionAuthService implements SessionIssuer {
         if (isBlank(seedUsername) || isBlank(seedPassword)) {
             return;
         }
+        requireStrongSeedPassword(seedPassword);
 
         Instant now = Instant.now();
         String userId = jdbcTemplate.queryForObject("""
@@ -108,6 +109,20 @@ public class ProductionAuthService implements SessionIssuer {
                  WHERE EXISTS (SELECT 1 FROM roles WHERE id = 'role_platform_admin')
                 ON CONFLICT (user_id, role_id) DO NOTHING
                 """, Map.of("user_id", userId));
+    }
+
+    /**
+     * M008-A1-03（BSM-1.26.1「上线生产必须换掉开发默认的弱口令」）：生产种子管理员口令拒绝开发默认（admin-pass / change-me /
+     * admin / password）与短于 12 位的值，启动即 fail-closed，与 SigningSecretGuard / ProductionDatabaseCredentialGuard 同范式。
+     */
+    static void requireStrongSeedPassword(String password) {
+        String value = password == null ? "" : password.trim();
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        if (value.length() < 12 || lower.contains("change-me") || lower.equals("admin-pass")
+                || lower.equals("admin") || lower.equals("password")) {
+            throw new IllegalStateException(
+                    "生产种子管理员口令过弱或为开发默认值：complex.auth.production.seed-admin.password 须为 12 位以上强口令");
+        }
     }
 
     @Transactional

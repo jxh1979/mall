@@ -1,6 +1,7 @@
 package com.complex.platform.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -228,6 +229,92 @@ class ProductionAuthJdbcIntegrationTests {
         expectAnonymousAccessProtected("/v3/api-docs");
         expectAnonymousAccessProtected("/swagger-ui/index.html");
         expectAnonymousAccessProtected("/docs/openapi");
+    }
+
+    private static final java.security.KeyPair MASTER_KEY_PAIR = generateMasterKeyPair();
+
+    /** 破窗验签公钥（R-004：服务器只留公钥；私钥只在测试进程内模拟 U 盘）。 */
+    @org.springframework.test.context.DynamicPropertySource
+    static void masterPublicKey(org.springframework.test.context.DynamicPropertyRegistry registry) {
+        registry.add("complex.auth.master.public-key",
+                () -> java.util.Base64.getEncoder().encodeToString(MASTER_KEY_PAIR.getPublic().getEncoded()));
+    }
+
+    private static java.security.KeyPair generateMasterKeyPair() {
+        try {
+            return java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    // M008-F-06 / F-04（PGM-1.15.1「万一管理员账号全部无法登录，走破窗应急通道恢复进入系统」「破窗一旦使用即全程留痕」；R-004 服务器只留验签公钥）：
+    // prod 真实链路：挑战 → U 盘私钥签名 → 签发保留超管会话，后台 Web 与日常登录同一 Cookie 通道（HttpOnly + CSRF）；
+    // 保留超管落库、会话只存哈希；挑战一次性；保留超管不能凭口令走 /login。
+    @Test
+    void breakGlassIssuesMasterSessionWithCookiesAndPasswordLoginStaysImpossible() throws Exception {
+        MvcResult challengeResult = mockMvc.perform(post("/api/v1/auth/master/challenge"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String challenge = objectMapper.readTree(challengeResult.getResponse().getContentAsString()).at("/data/challenge").asText();
+        java.security.Signature signer = java.security.Signature.getInstance("Ed25519");
+        signer.initSign(MASTER_KEY_PAIR.getPrivate());
+        signer.update(challenge.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String signature = java.util.Base64.getEncoder().encodeToString(signer.sign());
+        String body = objectMapper.writeValueAsString(java.util.Map.of("challenge", challenge, "signature", signature));
+
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/master/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.username").value("master-authority"))
+                .andExpect(jsonPath("$.data.user.account_type").value("platform_admin"))
+                .andReturn();
+        java.util.List<String> cookies = loginResult.getResponse().getHeaders("Set-Cookie");
+        assertThat(cookies).anyMatch(cookie -> cookie.startsWith("admin_access_token=") && cookie.contains("HttpOnly"));
+        assertThat(cookies).anyMatch(cookie -> cookie.startsWith("XSRF-TOKEN="));
+        JsonNode login = objectMapper.readTree(loginResult.getResponse().getContentAsString());
+        String accessToken = login.at("/data/access_token").asText();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM access_users WHERE id = 'usr_master_authority' AND username = 'master-authority' AND account_type = 'platform_admin'",
+                Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT device_id || '/' || terminal_type FROM auth_sessions WHERE user_id = 'usr_master_authority' AND status = 'active'",
+                String.class)).containsExactly("usb-master/recovery");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM auth_sessions WHERE user_id = 'usr_master_authority' AND access_token_hash = ?",
+                Integer.class, accessToken)).isZero(); // 会话只存哈希，不存明文令牌
+
+        mockMvc.perform(get("/api/v1/ops/production-readiness/items")
+                        .cookie(new jakarta.servlet.http.Cookie("admin_access_token", accessToken)))
+                .andExpect(status().isOk()); // Cookie 会话可进受保护后台读接口（与日常登录同通道）
+
+        mockMvc.perform(post("/api/v1/auth/master/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isUnauthorized()); // 挑战一次性：重放拒绝
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login_name": "master-authority",
+                                  "password": "any-password-at-all-1234"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized()); // 保留超管只能凭 U 盘，不能凭口令
+    }
+
+    // M008-A1-03（BSM-1.26.1「上线生产必须换掉开发默认的弱口令…必须换成强密码，这是上线生产的必做一步」）：
+    // 生产种子管理员口令拒绝开发默认与弱值，启动即 fail-closed；测试用强口令通过。
+    @Test
+    void weakOrDefaultSeedAdminPasswordIsRejectedInProduction() {
+        for (String weak : java.util.List.of("admin-pass", "admin", "password", "short-1", "prod-change-me-secret-key")) {
+            assertThatThrownBy(() -> ProductionAuthService.requireStrongSeedPassword(weak))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+        ProductionAuthService.requireStrongSeedPassword("p0_prod_test_password");
     }
 
     private JsonNode login(String username, String password) throws Exception {
