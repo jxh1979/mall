@@ -227,15 +227,46 @@ public class TicketFacePhotoService {
             throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED", "上传人脸照片前须先留存客人同意记录");
         }
         String id = consentId.trim();
-        String consentCustomer = repository.acceptedFaceConsentCustomer(id)
+        TicketFacePhotoRepository.FaceConsentSubject subject = repository.acceptedFaceConsent(id)
                 .orElseThrow(() -> ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不存在、未生效或已撤回"));
         if (orderId != null) {
-            String orderCustomer = repository.orderCustomerId(orderId).orElse(null);
-            if (orderCustomer != null && !orderCustomer.equals(consentCustomer)) {
-                throw ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不属于本单客人");
+            if (subject.customerId() != null) {
+                // 会员同意：订单已绑客人时必须是同一人；无客人的订单可用在场会员本人勾的同意。
+                String orderCustomer = repository.orderCustomerId(orderId).orElse(null);
+                if (orderCustomer != null && !orderCustomer.equals(subject.customerId())) {
+                    throw ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不属于本单客人");
+                }
+            } else if (!orderId.equals(subject.orderId())) {
+                // R-005 散客同意：只对落账时的那张订单有效。
+                throw ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不属于本单");
             }
         }
         return id;
+    }
+
+    /**
+     * R-005（操作员 2026-09-07）：柜台出票现场为无会员身份的散客留存人脸照同意。客人在柜台设备上看过告知并勾选同意后，
+     * 由出票人员提交；同意以订单为主体落 customer_consents（consent_type=ticket_face_photo，版本=当时那一版告知，
+     * 购票人手机号由订单 buyer_phone 承载），返回同意 id 供随后的出票请求 face_consent_id 使用。
+     * 未同意一律拒、不落任何行；订单不存在拒。审计与幂等由 TicketingWriteOperation.RECORD_FACE_PHOTO_CONSENT 承担。
+     */
+    public FaceConsentView recordWalkInFaceConsent(String orderId, String sourceTerminal, boolean accepted) {
+        if (!accepted) {
+            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED", "客人未同意拍摄人脸照片，不能拍照出票");
+        }
+        if (orderId == null || orderId.isBlank() || !repository.orderExists(orderId)) {
+            throw ApiException.notFound("TICKET_ORDER_NOT_FOUND", "订单不存在或已被删除");
+        }
+        String terminal = sourceTerminal == null || sourceTerminal.isBlank() ? "counter" : sourceTerminal.trim();
+        Instant now = Instant.now();
+        String consentId = "consent_walkin_" + UUID.randomUUID().toString().replace("-", "");
+        String version = noticeVersion();
+        repository.insertWalkInFaceConsent(consentId, orderId, version, terminal, now);
+        return new FaceConsentView(consentId, orderId, version, now);
+    }
+
+    /** 散客柜台同意落账结果：同意 id、主体订单、当时那一版告知、同意时刻。 */
+    public record FaceConsentView(String consentId, String orderId, String version, Instant acceptedAt) {
     }
 
     /** 出票链交给存档的一张脸照：图 base64 + 这张脸对应的同意留痕 id(customer_consents.id)。 */

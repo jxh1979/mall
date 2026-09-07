@@ -5,6 +5,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
+import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
@@ -279,6 +280,13 @@ public class TicketOrderService {
             }
         }
         return released;
+    }
+
+    /** R-005：柜台散客人脸照同意落到订单（出票前一步），见 {@link TicketFacePhotoService#recordWalkInFaceConsent}。 */
+    TicketFacePhotoService.FaceConsentView recordWalkInFaceConsent(String orderId, FacePhotoConsentRequest request) {
+        FacePhotoConsentRequest actual = requireRequest(request);
+        return facePhotoService.recordWalkInFaceConsent(requireText(orderId, "order_id"), actual.sourceTerminal(),
+                Boolean.TRUE.equals(actual.accepted()));
     }
 
     IssuedTicketResponse issueOrder(String orderId, StatusChangeRequest request) {

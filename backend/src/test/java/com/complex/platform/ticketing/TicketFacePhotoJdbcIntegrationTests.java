@@ -1,6 +1,7 @@
 package com.complex.platform.ticketing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.access.AccessActor;
@@ -192,6 +193,66 @@ class TicketFacePhotoJdbcIntegrationTests {
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
         assertThat(countPhotosForOrder(f.orderId)).isZero();
+    }
+
+    // ---------- ⑩ R-005：散客柜台同意以订单为主体落账——没有会员账号也能存一条同意（customer_id 空、order_id 非空） ----------
+    @Test
+    void walkInFaceConsentRowCanBeStoredWithOrderAsSubject() {
+        Fixture f = seed(true);
+        assertThatCode(() -> jdbcTemplate.update(
+                "INSERT INTO customer_consents (id, customer_id, consent_type, accepted, version, source_terminal,"
+                        + " accepted_at, created_at, updated_at, order_id)"
+                        + " VALUES (?, NULL, 'ticket_face_photo', TRUE, 'v', 'counter', now(), now(), now(), ?)",
+                "consent_walkin_" + key(), f.orderId)).doesNotThrowAnyException();
+    }
+
+    // ---------- ⑪ R-005：散客柜台流程——先落同意（以订单为主体）→ 出票请求带照 + 该同意 → 权益位指回它 ----------
+    @Test
+    void walkInConsentRecordedOnOrderIsAcceptedForThatOrdersIssue() {
+        Fixture f = seed(true);
+        TicketFacePhotoService.FaceConsentView consent = facePhotoService.recordWalkInFaceConsent(f.orderId, "counter", true);
+        assertThat(consent.consentId()).startsWith("consent_walkin_");
+        assertThat(consent.version()).isEqualTo(facePhotoService.noticeVersion());
+        orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64), consent.consentId()));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT consent_id FROM ticket_face_photos WHERE entitlement_id = ?", String.class, entitlementId))
+                .isEqualTo(consent.consentId());
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT customer_id, order_id, accepted, source_terminal FROM customer_consents WHERE id = ?", consent.consentId());
+        assertThat(row.get("customer_id")).isNull();
+        assertThat(row.get("order_id")).isEqualTo(f.orderId);
+        assertThat(row.get("accepted")).isEqualTo(true);
+        assertThat(row.get("source_terminal")).isEqualTo("counter");
+    }
+
+    // ---------- ⑫ R-005：散客同意只对落账时的那张订单有效——拿 A 单的同意给 B 单出票，拒 ----------
+    @Test
+    void walkInConsentOfAnotherOrderIsRejected() {
+        Fixture a = seed(true);
+        Fixture b = seed(true);
+        String consentForA = facePhotoService.recordWalkInFaceConsent(a.orderId, "counter", true).consentId();
+        assertThatThrownBy(() -> orderService.issueEntitlements(b.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), b.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64), consentForA)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
+        assertThat(countPhotosForOrder(b.orderId)).isZero();
+    }
+
+    // ---------- ⑬ R-005：客人不同意 → 不落任何同意行；订单不存在 → 拒 ----------
+    @Test
+    void walkInConsentRefusedOrUnknownOrderIsRejected() {
+        Fixture f = seed(true);
+        assertThatThrownBy(() -> facePhotoService.recordWalkInFaceConsent(f.orderId, "counter", false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_REQUIRED"));
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM customer_consents WHERE order_id = ?", Integer.class, f.orderId);
+        assertThat(rows).isZero();
+        assertThatThrownBy(() -> facePhotoService.recordWalkInFaceConsent("ticket_order_missing_" + key(), "counter", true))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("TICKET_ORDER_NOT_FOUND"));
     }
 
     // ================= 夹具 =================

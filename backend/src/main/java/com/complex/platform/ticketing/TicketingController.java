@@ -11,6 +11,7 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
+import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
@@ -357,6 +358,17 @@ public class TicketingController {
         authorizationService.requirePermission("ticket.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.cancelTicketOrder(orderId, request));
+    }
+
+    /** R-005：柜台散客出票前留存人脸照同意（客人在柜台设备勾选后由出票人员提交），返回同意 id 供出票请求 face_consent_id 使用。 */
+    @PostMapping("/ticketing/orders/{order_id}/face-photo-consent")
+    public ApiResponse<TicketFacePhotoService.FaceConsentView> recordFacePhotoConsent(
+            @PathVariable("order_id") String orderId,
+            @RequestBody @jakarta.validation.Valid FacePhotoConsentRequest request
+    ) {
+        authorizationService.requirePermission("ticket.ticket.issue");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.recordFacePhotoConsent(orderId, request));
     }
 
     @PostMapping("/ticketing/orders/{order_id}/issue")

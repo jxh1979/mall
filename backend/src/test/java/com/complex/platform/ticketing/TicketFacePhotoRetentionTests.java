@@ -34,7 +34,8 @@ class TicketFacePhotoRetentionTests {
         PiiCipher piiCipher = mock(PiiCipher.class);
         when(piiCipher.encrypt(anyString())).thenReturn("enc:payload");
         // F-05：capture 末闸回查台账，mock 一条已生效同意。
-        when(repository.acceptedFaceConsentCustomer("consent_1")).thenReturn(Optional.of("cust_1"));
+        when(repository.acceptedFaceConsent("consent_1"))
+                .thenReturn(Optional.of(new TicketFacePhotoRepository.FaceConsentSubject("cust_1", null)));
         TicketFacePhotoService service = new TicketFacePhotoService(
                 repository, piiCipher, mock(AuthorizationService.class), mock(AuditEventService.class), windowConfig);
 

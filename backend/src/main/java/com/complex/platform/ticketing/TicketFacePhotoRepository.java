@@ -114,14 +114,42 @@ class TicketFacePhotoRepository {
 
     /**
      * M009 A1-01 / F-05：同意 id 必须对应一条已生效的人脸照同意留痕(customer_consents：类型 ticket_face_photo、已接受、未撤回)。
-     * 返回该同意所属的客人 id，便于调用方比对「同意的人 = 被拍的人」；无此同意返回空。同意台账在 customer 域，这里只读不写。
+     * 返回该同意的主体（R-005：会员同意 customerId 非空；散客柜台同意 customerId 空、orderId 非空），便于调用方比对
+     * 「同意的人 = 被拍的人 / 同意的单 = 本单」；无此同意返回空。同意台账在 customer 域，这里只读会员行、只写散客行。
      */
-    Optional<String> acceptedFaceConsentCustomer(String consentId) {
+    Optional<FaceConsentSubject> acceptedFaceConsent(String consentId) {
         return jdbcTemplate.query("""
-                SELECT customer_id FROM customer_consents
+                SELECT customer_id, order_id FROM customer_consents
                  WHERE id = :id AND consent_type = 'ticket_face_photo' AND accepted AND withdrawn_at IS NULL
-                """, new MapSqlParameterSource("id", consentId), (rs, n) -> rs.getString("customer_id"))
+                """, new MapSqlParameterSource("id", consentId),
+                (rs, n) -> new FaceConsentSubject(rs.getString("customer_id"), rs.getString("order_id")))
                 .stream().findFirst();
+    }
+
+    boolean orderExists(String orderId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ticket_orders WHERE id = :id", new MapSqlParameterSource("id", orderId), Integer.class);
+        return count != null && count > 0;
+    }
+
+    /**
+     * R-005（操作员 2026-09-07）：以订单为主体落一条散客人脸照同意（customer_id 空、order_id 非空，
+     * 库上 chk_customer_consents_subject(V398) 兜底）。同一张台账、同一 consent_type，不另建第二套。
+     */
+    void insertWalkInFaceConsent(String id, String orderId, String version, String sourceTerminal, Instant acceptedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_consents (
+                    id, customer_id, consent_type, accepted, version, source_terminal,
+                    accepted_at, withdrawn_at, created_at, updated_at, order_id
+                )
+                VALUES (:id, NULL, 'ticket_face_photo', TRUE, :version, :source_terminal,
+                        :at, NULL, :at, :at, :order_id)
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("version", version)
+                .addValue("source_terminal", sourceTerminal)
+                .addValue("at", acceptedAt.atOffset(ZoneOffset.UTC))
+                .addValue("order_id", orderId));
     }
 
     /** M009 F-05：订单绑定的客人 id（散客/员工代下单可为空）。只读 ticket_orders 一列，用于同意主体比对。 */
@@ -147,6 +175,10 @@ class TicketFacePhotoRepository {
     }
 
     record TicketFacePhotoRow(String entitlementId, byte[] ciphertext, String contentType) {
+    }
+
+    /** R-005 同意主体：会员同意 customerId 非空；散客柜台同意 customerId 空、orderId 非空。 */
+    record FaceConsentSubject(String customerId, String orderId) {
     }
 
     /** 暂存位一行：密文字节 + 这张脸对应的同意留痕 id。 */

@@ -10,6 +10,7 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
+import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
@@ -632,6 +633,21 @@ public class TicketingService {
             }
         }
         return processed;
+    }
+
+    /** R-005：柜台散客人脸照同意落账（出票前一步），与出票同权限、同终端开关，走写操作留痕与幂等。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.ticket.issue")
+    @Transactional
+    public TicketFacePhotoService.FaceConsentView recordFacePhotoConsent(String orderId, FacePhotoConsentRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        return operations.executeWrite(
+                "recordFacePhotoConsent:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketFacePhotoService.FaceConsentView.class,
+                TicketingWriteOperation.RECORD_FACE_PHOTO_CONSENT,
+                () -> orderService.recordWalkInFaceConsent(id, request)
+        );
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.ticket.issue")
