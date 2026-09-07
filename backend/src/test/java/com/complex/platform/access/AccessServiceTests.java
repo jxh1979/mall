@@ -545,6 +545,42 @@ class AccessServiceTests {
                 .doesNotContain("role_ops_check");
     }
 
+    // M006-I9-02（PGM-1.10.1「同一商户、同一项目范围内的普通模板权限随保存立即生效」「属于既有高危权限的，不得因处于岗位模板内而免除授出前审批」；
+    // PGM-1.10.1 角色装配：HR 定每个人的层级/职位，系统自动适配）：配置岗位映射与定岗的人不必先持有模板内的高危业务码——
+    // 高危部分走挂起单审批，授权人只须持有随保存立即生效的普通码。
+    @Test
+    void positionMappingAndAssignmentDoNotRequireTheConfigurerToHoldTheHeldHighRiskCodes() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        accessRepository.unassignUserRole("usr_admin", "explicit_admin_grants");
+        assertThat(authorizationService.effectivePermissions().grants()).doesNotContain("ops.production_readiness.check");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_position_no_hold_grantor", new AccessUser(
+                "usr_position_no_hold_grantor", "position-no-hold-grantor", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check_only", new RoleRecord(
+                "role_ops_check_only", "ops_check_only", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_mixed", "tpl_ops_mixed", "Ops Mixed", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_mixed", "ops.production_readiness.view", AccessRepository.Effect.GRANT, "project", false),
+                        new PermissionTemplateItem("tpl_ops_mixed", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-no-hold-grantor", null, "ops_supervisor", "lvl_m1_lower", "role_ops_check_only", "tpl_ops_mixed", "active"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-no-hold-grantor", null, "usr_position_no_hold_grantor", "ops_supervisor", "lvl_m1_lower", null, null, null));
+
+        assertThat(authorizationService.effectivePermissionsForUser("usr_position_no_hold_grantor").grants())
+                .contains("ops.production_readiness.view").doesNotContain("ops.production_readiness.check");
+        AccessGrantRequestRecord hold = accessRepository.grantRequests.values().stream()
+                .filter(g -> "position_high_risk_release".equals(g.requestType())).findFirst().orElseThrow();
+        assertThat(hold.status()).isEqualTo("pending");
+        assertThat(hold.permissionCodes()).containsExactly("ops.production_readiness.check");
+    }
+
     @Test
     void assignUserPositionLandsNormalPartAndHoldsHighRiskPartUntilChainApproves() {
         accessRepository.markRequiresApproval("ops.production_readiness.check", "high");

@@ -765,6 +765,19 @@ class AccessJdbcIntegrationTests {
         assertThat(authorizationService.effectivePermissions().grants()).doesNotContainAnyElementsOf(sensitive);
     }
 
+    // M006-I9-01（BSM-1.3.4；PGM-1.10.1 角色装配）：真实字典 + role_platform_admin 种子下，平台管理员持有治理写码，不持有资金 / 敏感高危码。
+    @Test
+    void platformAdminRoleSeedYieldsGovernanceWriteCodesButNotBusinessHighRisk() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_admin_gov", "jdbc-admin-gov", "platform_admin", "org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        repository.assignUserRole("usr_jdbc_admin_gov", "role_platform_admin");
+        authenticate("usr_jdbc_admin_gov", "jdbc-admin-gov", "platform_admin", "org");
+        List<String> govern = List.of("access.role.assign", "access.permission_template.manage", "access.staff_level.manage");
+        assertThat(authorizationService.effectivePermissions().grants()).containsAll(govern)
+                .doesNotContain("finance.dividend.manage", "bar.internal_settlement_price.view", "access.grant_request.review");
+        govern.forEach(authorizationService::requirePermission);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
