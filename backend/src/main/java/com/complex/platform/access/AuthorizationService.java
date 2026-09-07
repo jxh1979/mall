@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -375,6 +375,18 @@ public class AuthorizationService implements CallerScopeResolver {
      * 返回指定用户的隔离键 merchant_id（用于同商户范围闸），无则空。绝不抛错（查询异常→空）。
      * 与 {@link #currentMerchantIdQuietly()} 对称，但面向"任意用户"（如审批记录的发起人）。
      */
+    /** M007-R6-02：指定用户所属项目（organization_id），用于待复核清单的项目隔离；无则空，绝不抛错。 */
+    public Optional<String> organizationIdOf(String userId) {
+        if (userId == null || accessRepository == null) {
+            return Optional.empty();
+        }
+        try {
+            return accessRepository.findUserById(userId).map(AccessUser::organizationId).filter(id -> id != null && !id.isBlank());
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
     public Optional<String> merchantIdOf(String userId) {
         if (userId == null || accessRepository == null) {
             return Optional.empty();

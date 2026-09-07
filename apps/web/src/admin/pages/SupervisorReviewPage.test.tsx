@@ -83,6 +83,27 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     expect((screen.getByTestId("supervisor-review-approve") as HTMLButtonElement).disabled).toBe(true);
   });
 
+  // M007-R6-03（PGM-1.7.1「任一节点驳回则整单退回起草人」）：本页可驳回，提交 decision=rejected，结果为中文句子；无 approve 权限时不可用。
+  it("驳回 → 提交 decision=rejected 且结果为中文句子", async () => {
+    const props = renderPage();
+    await evaluateOnce();
+    fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "证据不足，退回起草人" } });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("supervisor-review-reject"));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/review_1/approve"))).toBe(true));
+    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_1/approve"));
+    const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
+    expect(body.decision).toBe("rejected");
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^复核单 .* 已驳回，整单退回起草人/)));
+  });
+
+  it("只有 manage 没有 approve 权限 → 不能驳回", async () => {
+    renderPage(MANAGE_ONLY_PERMS);
+    await evaluateOnce();
+    expect((screen.getByTestId("supervisor-review-reject") as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("待复核清单展示到期与升级次数；转交提交 forwarded_to 且结果为中文句子（PGM-1.7.1）", async () => {
     const props = renderPage();
     await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-review_p1")).toBeTruthy());

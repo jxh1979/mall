@@ -1,7 +1,8 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -433,6 +434,10 @@ public class SupervisorReviewService {
     ) {
         String initiatedBy = authorizationService.currentActor().id();
         requireDesignatedRoleHolder(findPolicyByCode(policyCode), finalApproverId); // R-003 fail-closed
+        SupervisorReviewPolicyRecord blockPolicy = findPolicyByCode(policyCode);
+        if (blockPolicy != null) {
+            requireDefaultLines(blockPolicy, List.of()); // M007-R6-01：策略固定要求平行线（税费三审）的事项不能经无平行线的准入阻断路径发起（fail-closed）
+        }
         ApprovalLevel approvalLevel = ApprovalLevel.fromCode(approvalLevelCode);
         int initiatorRank = authorizationService.currentActorLevelRank();
         Integer requiredApproverRank = resolveRequiredApproverRank(approvalLevel, initiatorRank, requiredLevel);
@@ -777,9 +782,39 @@ public class SupervisorReviewService {
         return supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
     }
 
+    /**
+     * M007-R6-02（PGM-1.10.1「所有业务数据默认按项目隔离……不提供关闭开关」、PGM-1.7.1「④看不到别的商户和别的项目的数据」）：
+     * 待复核清单按当前操作人范围过滤——非平台管理员只看到发起人属本项目（有商户隔离键时同商户）的单据，或自己是当前节点审批人 / 被转发人
+     * 的单据；平台管理员跨范围查看留痕。
+     */
     public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
-        List<SupervisorReviewRepository.PendingReview> items = supervisorReviewRepository.listPendingSupervisorReviews(limit);
+        AccessActor actor = authorizationService.currentActor();
+        List<SupervisorReviewRepository.PendingReview> all = supervisorReviewRepository.listPendingSupervisorReviews(limit);
+        List<SupervisorReviewRepository.PendingReview> items;
+        if (authorizationService.isPlatformAdmin(actor)) {
+            items = all;
+            auditEventService.recordSuccess("governance.supervisor_review.pending_listed_cross_scope", VIEW_PERMISSION, "supervisor_review", "pending", null, null,
+                    Map.of("actor_id", actor.id(), "count", items.size()));
+        } else {
+            String projectId = authorizationService.requireProjectScope(actor);
+            String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
+            // ponytail: filters the <= limit rows already fetched; move the scope join into the query if pending volume grows
+            items = all.stream().filter(item -> visibleTo(actor, projectId, merchantId, item)).toList();
+        }
         return new PageResponse<>(items, 1, limit, items.size());
+    }
+
+    private boolean visibleTo(AccessActor actor, String projectId, String merchantId, SupervisorReviewRepository.PendingReview item) {
+        String reviewId = item.decision().reviewId();
+        boolean currentApprover = ApprovalChainService.currentNodes(supervisorReviewRepository.listChainNodes(reviewId)).stream()
+                .anyMatch(node -> actor.id().equals(node.approverId()) || actor.id().equals(node.forwardedTo()));
+        if (currentApprover || (item.schedule() != null && actor.id().equals(item.schedule().forwardedTo()))) {
+            return true;
+        }
+        String initiator = item.decision().initiatedBy();
+        boolean sameProject = authorizationService.organizationIdOf(initiator).map(projectId::equals).orElse(false);
+        boolean sameMerchant = merchantId.isEmpty() || authorizationService.merchantIdOf(initiator).map(merchantId::equals).orElse(false);
+        return sameProject && sameMerchant;
     }
 
     /**

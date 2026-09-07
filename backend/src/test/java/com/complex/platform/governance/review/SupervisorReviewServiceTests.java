@@ -408,6 +408,45 @@ class SupervisorReviewServiceTests {
         assertThat(reviewRepository.listChainNodes(orphan.reviewId())).isEmpty(); // 无组织层级：链不生成（fail-closed）
     }
 
+    // M007-R6-02（PGM-1.10.1「所有业务数据默认按项目隔离……不提供关闭开关」、PGM-1.7.1「④看不到别的商户和别的项目的数据」）：
+    // 待复核清单按当前操作人范围过滤——普通主管只见发起人属本项目的单据或自己是当前节点审批人的单据；平台管理员跨范围查看留痕。
+    @Test
+    void pendingListIsScopedToTheActorsProjectUnlessCurrentApproverOrPlatformAdmin() {
+        com.complex.platform.access.AccessRepository repo = levelAwareRepository(Map.of("usr_init_a", 3, "usr_init_b", 3), null);
+        org.mockito.Mockito.when(repo.findUserById("usr_init_a")).thenReturn(Optional.of(new com.complex.platform.access.AccessUser(
+                "usr_init_a", "a", "staff", "org_1", null, "active", java.time.Instant.parse("2026-06-14T00:00:00Z"))));
+        org.mockito.Mockito.when(repo.findUserById("usr_init_b")).thenReturn(Optional.of(new com.complex.platform.access.AccessUser(
+                "usr_init_b", "b", "staff", "org_2", null, "active", java.time.Instant.parse("2026-06-14T00:00:00Z"))));
+        SupervisorReviewService svc = new SupervisorReviewService(
+                new AuthorizationService(repo),
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository));
+        reviewRepository.superiors.put("usr_init_a", "usr_sup_a");
+        reviewRepository.superiors.put("usr_init_b", "usr_sup_b");
+        TestSecurityActors.asSupervisor("usr_init_a", 1);
+        var a = svc.evaluate(evaluate("scope-a", "v", List.of(), "contract_violation", "contract", "c_scope_a", 0L, "violation"));
+        TestSecurityActors.asSupervisor("usr_init_b", 1);
+        var b = svc.evaluate(evaluate("scope-b", "v", List.of(), "contract_violation", "contract", "c_scope_b", 0L, "violation"));
+
+        TestSecurityActors.asSupervisor("usr_viewer_org1", 1); // org_1 的普通主管：只见本项目发起的单据
+        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactly(a.reviewId());
+        TestSecurityActors.asSupervisor("usr_sup_b", 1); // org_1 账号，但是 b 单当前节点审批人：可见
+        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactlyInAnyOrder(a.reviewId(), b.reviewId());
+        TestSecurityActors.asPlatformAdmin("usr_admin_all");
+        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactlyInAnyOrder(a.reviewId(), b.reviewId());
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.pending_listed_cross_scope");
+    }
+
+    // M007-R6-01（PGM-1.10.1「税费规则与税费调整须经财务审核、税务审核、法务审核，再由老板最终确认后生效」）：策略固定要求平行线的事项
+    // 不能经无法指定平行线的准入阻断路径发起——与 evaluate 同一 fail-closed 口径。
+    @Test
+    void admissionBlockRefusesPoliciesThatRequireParallelLines() {
+        TestSecurityActors.asSupervisor("usr_tax_init", 3);
+        assertThatThrownBy(() -> service.blockForAdmission("tax_rule_adjustment_l3", "finance.tax_rule.adjust", "tax_rule", "t_block", "top_authority", 3, null))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_LINE_FINAL_APPROVER_REQUIRED"));
+    }
+
     /**
      * M007-A-04：现口径下主管级 = 经角色持有 governance.supervisor_review.approve + 职级 rank 折算（(rank+2)/3）。
      * 夹具用 mock 仓储：ranks 里显式给出的用户按其 rank（0 = 无职级配置），其余用户按当前安全上下文主体的账号类型
@@ -730,6 +769,7 @@ class SupervisorReviewServiceTests {
         var normalDue = reviewRepository.schedules.get(normal.reviewId()).dueAt();
         assertThat(moneyDue).isAfter(java.time.Instant.now());
         assertThat(normalDue).isAfter(moneyDue);
+        TestSecurityActors.asPlatformAdmin("usr_admin_deadline"); // M007-R6-02：清单按范围过滤，本用例只看时限，以平台管理员查看全量
         assertThat(service.listPending(10).items()).extracting(item -> item.decision().reviewId())
                 .contains(money.reviewId(), normal.reviewId());
     }
