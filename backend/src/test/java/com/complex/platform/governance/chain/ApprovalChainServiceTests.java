@@ -63,8 +63,13 @@ class ApprovalChainServiceTests {
         assertThat(chain.generate("r7", "usr_a", "usr_benef", ApprovalLevel.TWO_LEVELS_UP, null, List.of()))
                 .extracting(ApprovalChainNode::approverId).containsExactly("usr_c");
         assertThat(chain.generate("r8", "usr_orphan", null, ApprovalLevel.ONE_LEVEL_UP, null, List.of())).isEmpty();
-        assertThat(chain.generate("r9", "usr_x", null, ApprovalLevel.SPECIFIC_ROLE, null, List.of()))
-                .extracting(ApprovalChainNode::approverKind).containsExactly("role");
+        assertThat(chain.generate("r9", "usr_x", null, ApprovalLevel.SPECIFIC_ROLE, null, List.of())).isEmpty(); // R-003：角色审批事项无组织层级同样不生成
+        repository.superiors.putAll(Map.of("usr_x", "usr_y", "usr_y", "usr_z"));
+        assertThat(chain.generate("r9b", "usr_x", null, ApprovalLevel.SPECIFIC_ROLE, null, List.of()))
+                .extracting(ApprovalChainNode::approverKind, ApprovalChainNode::approverId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("user", "usr_y"), org.assertj.core.groups.Tuple.tuple("role", null)); // 直接上级 → 链尾角色节点
+        assertThat(chain.generate("r9c", "usr_x", null, ApprovalLevel.SPECIFIC_ROLE, "usr_z", List.of()))
+                .extracting(ApprovalChainNode::approverId).containsExactly("usr_y", "usr_z"); // 指定最终审批人：补全到该人，无独立角色节点
     }
 
     @Test

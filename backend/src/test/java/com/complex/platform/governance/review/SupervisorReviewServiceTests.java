@@ -225,14 +225,17 @@ class SupervisorReviewServiceTests {
 
     @Test
     void approveUsesRequiredLevelFromEvaluatedReview() {
+        reviewRepository.superiors.put("usr_supervisor_l2", "usr_reviewer_b"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisorLevel(2);
         var pending = service.evaluate(evaluate("review-evaluate-refund", "refund needs review", List.of("att_refund"),
                 "refund", "ticket_refund", "refund_1", 100L, null));
 
-        // specific_role 策略：单个按角色解析的节点，主管级别闸沿用。
+        // R-003：specific_role 策略 = 直接上级节点 + 链尾按角色解析的节点；主管级别闸沿用于角色节点。
         TestSecurityActors.asSupervisor("usr_reviewer_b", 2);
+        service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-approve-refund", "approve refund", List.of("att_refund"), 2, "approved", "superior checked"));
         var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
-                "review-approve-refund", "approve refund", List.of("att_refund"), 2, "approved", "refund evidence checked"));
+                "review-approve-refund-role", "approve refund", List.of("att_refund"), 2, "approved", "refund evidence checked"));
 
         assertThat(pending.requiredLevel()).isEqualTo(2);
         assertThat(approved.requiredLevel()).isEqualTo(2);
@@ -332,10 +335,13 @@ class SupervisorReviewServiceTests {
                 reviewRepository,
                 new AuditEventService(auditEventRepository));
 
+        reviewRepository.superiors.put("usr_init_sr", "usr_sr_sup"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_init_sr", 2);
         var pending = svc.evaluate(evaluate("review-sr", null, List.of("att"), "refund", "ticket", "r1", 100L, null));
         assertThat(pending.requiredApproverRank()).isNull(); // specific_role 不按 rank
-        assertThat(reviewRepository.listChainNodes(pending.reviewId())).extracting(ApprovalChainNode::approverKind).containsExactly("role");
+        assertThat(reviewRepository.listChainNodes(pending.reviewId())).extracting(ApprovalChainNode::approverKind).containsExactly("user", "role");
+        TestSecurityActors.asSupervisor("usr_sr_sup", 2);
+        svc.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("review-sr-sup", "approve", List.of("att"), 2, "approved", "superior")); // 直接上级节点
 
         // 无角色审批人被拒：现口径下主管级本身由「经角色持有审批权限」推导，不持有即级别 0，在级别闸被拒。
         TestSecurityActors.asSupervisor("usr_role_missing", 2);
@@ -349,6 +355,53 @@ class SupervisorReviewServiceTests {
         var approved = svc.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-sr-allow", "approve", List.of("att"), 2, "approved", "role ok"));
         assertThat(approved.reviewStatus()).isEqualTo("approved");
+    }
+
+    // R-003「退款等角色审批也走组织链」（PGM-1.7.1「只需指定该事项的最终审批人，系统按组织层级自动补全全部直接上级节点」）：
+    // 未指定最终审批人：直接上级 → 链尾角色节点；指定最终审批人：补全到该人、该人须经角色持有审批权限（发起即 fail-closed）；无组织层级则链不生成。
+    @Test
+    void specificRolePoliciesFollowTheOrgChainBeforeTheRoleGate() {
+        com.complex.platform.access.AccessRepository repo = levelAwareRepository(
+                Map.of("usr_rf_init", 6, "usr_rf_sup", 9, "usr_rf_boss", 12, "usr_rf_norole", 12),
+                java.util.Set.of("usr_rf_init", "usr_rf_sup", "usr_rf_boss"));
+        SupervisorReviewService svc = new SupervisorReviewService(
+                new AuthorizationService(repo),
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository));
+        reviewRepository.superiors.put("usr_rf_init", "usr_rf_sup");
+        reviewRepository.superiors.put("usr_rf_sup", "usr_rf_boss");
+        reviewRepository.superiors.put("usr_rf_boss", "usr_rf_norole");
+
+        TestSecurityActors.asSupervisor("usr_rf_init", 2);
+        var undesignated = svc.evaluate(evaluate("review-rf-1", null, List.of("att"), "refund", "ticket", "rf_1", 100L, null));
+        assertThat(reviewRepository.listChainNodes(undesignated.reviewId()))
+                .extracting(ApprovalChainNode::approverKind, ApprovalChainNode::approverId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("user", "usr_rf_sup"), org.assertj.core.groups.Tuple.tuple("role", null));
+        TestSecurityActors.asSupervisor("usr_rf_boss", 3);
+        assertThatThrownBy(() -> svc.approve(undesignated.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-rf-1-early", "n", List.of("att"), 3, "approved", "skip superior")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_NOT_CURRENT_APPROVER")); // 不得跳过直接上级
+        TestSecurityActors.asSupervisor("usr_rf_sup", 3);
+        assertThat(svc.approve(undesignated.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-rf-1-sup", "n", List.of("att"), 3, "approved", "sup")).reviewStatus()).isEqualTo("pending_review");
+        TestSecurityActors.asSupervisor("usr_rf_boss", 3);
+        assertThat(svc.approve(undesignated.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-rf-1-role", "n", List.of("att"), 3, "approved", "role")).reviewStatus()).isEqualTo("approved");
+
+        TestSecurityActors.asSupervisor("usr_rf_init", 2);
+        var designated = svc.evaluate(new SupervisorReviewEvaluateRequest("review-rf-2", null, List.of("att"),
+                "refund", "ticket", "rf_2", 100L, null, "usr_rf_boss", List.of()));
+        assertThat(reviewRepository.listChainNodes(designated.reviewId())).extracting(ApprovalChainNode::approverId)
+                .containsExactly("usr_rf_sup", "usr_rf_boss"); // 指定最终审批人：补全到该人，无独立角色节点
+        assertThatThrownBy(() -> svc.evaluate(new SupervisorReviewEvaluateRequest("review-rf-3", null, List.of("att"),
+                "refund", "ticket", "rf_3", 100L, null, "usr_rf_norole", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FINAL_APPROVER_LACKS_ROLE"));
+
+        reviewRepository.superiors.clear();
+        TestSecurityActors.asSupervisor("usr_rf_orphan", 2);
+        var orphan = svc.evaluate(evaluate("review-rf-4", null, List.of("att"), "refund", "ticket", "rf_4", 100L, null));
+        assertThat(reviewRepository.listChainNodes(orphan.reviewId())).isEmpty(); // 无组织层级：链不生成（fail-closed）
     }
 
     /**
@@ -424,6 +477,7 @@ class SupervisorReviewServiceTests {
     // M007-F-09（PGM-1.16「谁发起、为什么、谁审批、结果是什么，都要能查到」）：策略声明的证据类型在审批时 fail-closed。
     @Test
     void approveRequiresPolicyDeclaredEvidence() {
+        reviewRepository.superiors.put("usr_release_init", "usr_release_reviewer"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_release_init", 3);
         var pending = service.evaluate(evaluate("review-evidence-eval", "manual release", List.of("att_eval"),
                 "manual_release", "ticket", "t_evidence", 0L, null));
@@ -436,14 +490,17 @@ class SupervisorReviewServiceTests {
         assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-evidence-no-note", null, List.of("att_approve"), 3, "approved", null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
-        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+        service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-evidence-ok", "note", List.of("att_approve"), 3, "approved", "evidence attached"));
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-evidence-ok-role", "note", List.of("att_approve"), 3, "approved", "role node")); // R-003：链尾角色节点
         assertThat(approved.reviewStatus()).isEqualTo("approved");
     }
 
     // M007-A-01（PGM-1.2 第 5 步「放行结果都要记录」）：批准后同动作同对象同发起人可消费一次并留痕 admission.release_executed，再次消费为空。
     @Test
     void approvedReviewIsConsumedForReleaseExactlyOnce() {
+        reviewRepository.superiors.put("usr_waiver_init", "usr_reviewer_c"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_waiver_init", 1);
         var pending = service.evaluate(evaluate("review-release-eval", "waiver", List.of("att"), "bill_waiver", "bill", "bill_release", 0L, null));
         assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
@@ -451,6 +508,8 @@ class SupervisorReviewServiceTests {
         TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
         service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-release-approve", "note", List.of("att"), 3, "approved", "ok"));
+        service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-release-approve-role", "note", List.of("att"), 3, "approved", "role node")); // R-003：链尾角色节点
 
         assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init"))
                 .map(SupervisorReviewDecisionRecord::reviewId).contains(pending.reviewId());
@@ -463,6 +522,7 @@ class SupervisorReviewServiceTests {
     // 转发人选校验；被转发人不受级别闸约束即可裁决；受益人不得自审。
     @Test
     void forwardedReviewerMayDecideButNeverInitiatorOrBeneficiary() {
+        reviewRepository.superiors.put("usr_fwd_init", "usr_reviewer_c"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_fwd_init", 1);
         var pending = service.blockForAdmission("bill_waiver_l3", "bill_waiver", "bill", "bill_fwd",
                 "specific_role", 3, "usr_benef");
@@ -488,8 +548,12 @@ class SupervisorReviewServiceTests {
 
         // 被转发人（无主管级）可裁决。
         TestSecurityActors.asSupervisor("usr_anyone", 0);
-        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+        var forwardedDecision = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "approve-fwd", "note", List.of("att"), 0, "approved", "handled by forwarded reviewer"));
+        assertThat(forwardedDecision.reviewStatus()).isEqualTo("pending_review"); // R-003：链尾角色节点仍待审
+        TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-fwd-role", "note", List.of("att"), 3, "approved", "role node"));
         assertThat(approved.reviewStatus()).isEqualTo("approved");
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
                 .contains("governance.supervisor_review.forwarded");

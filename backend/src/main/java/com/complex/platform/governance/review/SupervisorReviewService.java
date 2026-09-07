@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -130,6 +130,7 @@ public class SupervisorReviewService {
                             requiredApproverRank
                     );
                     if (blocked) {
+                        requireDesignatedRoleHolder(policy, request.finalApproverId()); // R-003 fail-closed
                         supervisorReviewRepository.saveSupervisorReview(decision);
                         scheduleDeadline(decision.reviewId(), null, actionType, policy.policyCode());
                         generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(), lines);
@@ -297,6 +298,10 @@ public class SupervisorReviewService {
             switch (node.approverKind()) {
                 case ApprovalChainNode.KIND_USER -> {
                     if (reviewerId != null && reviewerId.equals(node.approverId())) {
+                        if (isFinalNodeOfRolePolicy(pending, nodes, node)) {
+                            // R-003：角色审批事项走组织链后角色闸作为链尾资格——指定最终审批人裁决末节点时须经角色持有审批权限。
+                            requireRoleNodeGates(pending, reviewerId, reviewerLevel);
+                        }
                         return node;
                     }
                 }
@@ -321,6 +326,26 @@ public class SupervisorReviewService {
             throw ApiException.forbidden("APPROVAL_NODE_NOT_REACHED", "尚未轮到你所在的审批节点");
         }
         throw ApiException.forbidden("SUPERVISOR_NOT_CURRENT_APPROVER", "你不是该单据当前节点的审批人");
+    }
+
+    /** R-003：specific_role 策略主线的最后一个 user 节点（指定最终审批人）承担角色闸；未指定时链尾是独立的 role 节点。 */
+    private boolean isFinalNodeOfRolePolicy(SupervisorReviewDecisionRecord pending, List<ApprovalChainNode> nodes, ApprovalChainNode node) {
+        SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
+        return policy != null && ApprovalLevel.SPECIFIC_ROLE.code().equals(policy.approvalLevel())
+                && ApprovalChainNode.MAIN_LINE.equals(node.lineCode())
+                && nodes.stream().noneMatch(n -> ApprovalChainNode.MAIN_LINE.equals(n.lineCode()) && n.seq() > node.seq());
+    }
+
+    /** R-003：指定最终审批人裁决角色审批事项的末节点须经角色持有该事项的审批权限；发起时即 fail-closed。 */
+    private void requireDesignatedRoleHolder(SupervisorReviewPolicyRecord policy, String finalApproverId) {
+        if (policy == null || finalApproverId == null || finalApproverId.isBlank()
+                || !ApprovalLevel.SPECIFIC_ROLE.code().equals(policy.approvalLevel())
+                || policy.requiredApproverPermission() == null || !authorizationService.canResolveRoles()) {
+            return;
+        }
+        if (!authorizationService.holdsPermissionViaRole(finalApproverId.trim(), policy.requiredApproverPermission())) {
+            throw ApiException.badRequest("FINAL_APPROVER_LACKS_ROLE", "指定的最终审批人未经角色持有该事项要求的审批权限");
+        }
     }
 
     /** specific_role 节点：沿用 M007 的主管级别闸、角色闸与同商户范围闸（不满足即抛原错误码）。 */
@@ -407,6 +432,7 @@ public class SupervisorReviewService {
             String finalApproverId
     ) {
         String initiatedBy = authorizationService.currentActor().id();
+        requireDesignatedRoleHolder(findPolicyByCode(policyCode), finalApproverId); // R-003 fail-closed
         ApprovalLevel approvalLevel = ApprovalLevel.fromCode(approvalLevelCode);
         int initiatorRank = authorizationService.currentActorLevelRank();
         Integer requiredApproverRank = resolveRequiredApproverRank(approvalLevel, initiatorRank, requiredLevel);

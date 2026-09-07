@@ -1,6 +1,6 @@
 package com.complex.platform.governance.chain;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -26,7 +26,9 @@ import static com.complex.platform.common.Strings.requireText;
  *   <li>主线节点 = 发起人的直接上级链；既有档位（上一级 / 上两级 / 最高权限）只作节点数下限，最高权限在链尾追加主会话节点；</li>
  *   <li>指定最终审批人时其必须在发起人上级链上且不低于档位下限，主线 = 发起人到该人之间的全部直接上级；</li>
  *   <li>平行线自该线预设起点人沿直接上级向上补全至该线最终审批人，低于该线最低起点层级（level_rank）的节点不生成；</li>
- *   <li>specific_role 策略为单个按角色解析的节点；申请人与直接受益人不得成为节点（PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请」）；</li>
+ *   <li>specific_role 策略（R-003「退款等角色审批也走组织链」）同样走直接上级链：未指定最终审批人时为直接上级 + 链尾按角色解析的节点，
+ *       指定时补全到该人（该人须经角色持有审批权限，由服务层在发起与末节点裁决时把关）；申请人与直接受益人不得成为节点
+ *       （PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请」）；</li>
  *   <li>组织层级不可解析（发起人无直接上级）时不生成节点：单据保持待审且无人可裁决（fail-closed），层级补齐后可重生成。</li>
  * </ul>
  */
@@ -50,7 +52,28 @@ public class ApprovalChainService {
                                             String finalApproverId, List<ParallelLine> parallelLines) {
         List<ApprovalChainNode> nodes = new ArrayList<>();
         if (level == ApprovalLevel.SPECIFIC_ROLE) {
-            nodes.add(node(reviewId, ApprovalChainNode.MAIN_LINE, 1, ApprovalChainNode.KIND_ROLE, null));
+            // R-003（PGM-1.7.1「只需指定该事项的最终审批人，系统按组织层级自动补全全部直接上级节点」）：角色审批事项也走组织链。
+            // 未指定最终审批人：直接上级 → 链尾角色节点（任一经角色持有审批权限者裁决）；指定：补全到该人，无独立角色节点；
+            // 无组织层级：不生成节点（fail-closed，与档位链一致）。
+            List<String> path = superiorPath(initiatedBy, initiatedBy, beneficiaryId);
+            boolean designated = finalApproverId != null && !finalApproverId.isBlank();
+            List<String> main;
+            if (designated) {
+                int index = path.indexOf(finalApproverId);
+                if (index < 0) {
+                    throw ApiException.badRequest("FINAL_APPROVER_NOT_IN_CHAIN", "指定的最终审批人不在发起人的直接上级链上");
+                }
+                main = path.subList(0, index + 1);
+            } else {
+                main = path.subList(0, Math.min(1, path.size()));
+            }
+            int seq = 1;
+            for (String approver : main) {
+                nodes.add(node(reviewId, ApprovalChainNode.MAIN_LINE, seq++, ApprovalChainNode.KIND_USER, approver));
+            }
+            if (!designated && !main.isEmpty()) {
+                nodes.add(node(reviewId, ApprovalChainNode.MAIN_LINE, seq, ApprovalChainNode.KIND_ROLE, null));
+            }
         } else {
             List<String> path = superiorPath(initiatedBy, initiatedBy, beneficiaryId);
             int floor = level == ApprovalLevel.ONE_LEVEL_UP ? 1 : level == ApprovalLevel.TWO_LEVELS_UP ? 2 : path.size();
