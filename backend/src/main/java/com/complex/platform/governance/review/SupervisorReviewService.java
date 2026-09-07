@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
 
 @Service
@@ -84,6 +85,7 @@ public class SupervisorReviewService {
         return new PageResponse<>(policies, 1, 50, policies.size());
     }
 
+    @Transactional
     public SupervisorReviewDecisionRecord evaluate(SupervisorReviewEvaluateRequest request) {
         requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
         return idempotencyService.execute(
@@ -165,6 +167,7 @@ public class SupervisorReviewService {
      * 一次 approve = 裁决当前节点。全部节点通过才把复核单置为 approved；任一节点驳回即整单 rejected（退回起草），其余待审节点作废；
      * 中间节点通过时复核单保持 pending_review 并原样返回。
      */
+    @Transactional
     public SupervisorReviewDecisionRecord approve(String reviewId, SupervisorReviewApprovalRequest request) {
         String id = requireText(reviewId, "review_id");
         requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
@@ -361,6 +364,7 @@ public class SupervisorReviewService {
      * @param approvalLevelCode 升级类型 one_level_up/two_levels_up/top_authority/specific_role
      * @param requiredLevel 主管复核所需 level
      */
+    @Transactional
     public SupervisorReviewDecisionRecord blockForAdmission(
             String policyCode,
             String actionType,
@@ -373,6 +377,7 @@ public class SupervisorReviewService {
     }
 
     /** 带直接受益人的阻断（授权申请传被授权对象），受益人不得审批也不得被转发（PGM-1.7.1）。 */
+    @Transactional
     public SupervisorReviewDecisionRecord blockForAdmission(
             String policyCode,
             String actionType,
@@ -389,6 +394,7 @@ public class SupervisorReviewService {
      * M087（PGM-1.7.1「发起单据时只需指定该事项的最终审批人」）：带起草人指定的主线最终审批人的阻断；为空时按档位下限沿发起人
      * 直接上级链生成主线。
      */
+    @Transactional
     public SupervisorReviewDecisionRecord blockForAdmission(
             String policyCode,
             String actionType,
@@ -447,6 +453,7 @@ public class SupervisorReviewService {
      * M087：组织层级补齐后为「链未生成」的待审单重新生成主线（fail-closed 的恢复路径；平行线须重新发起）。
      * 已有节点的单据不重生成（返回现有节点）。
      */
+    @Transactional
     public List<ApprovalChainNode> regenerateChain(String reviewId) {
         String id = requireText(reviewId, "review_id");
         SupervisorReviewDecisionRecord pending = supervisorReviewRepository
@@ -600,6 +607,7 @@ public class SupervisorReviewService {
      * 单据保持待审」）：到期单据的每条线当前节点升级到该节点审批人的直接上级；无上级（组织顶端）、主会话节点与角色节点只提醒并顺延。
      * M007-I4-F01 口径沿用：节点升级时清除该节点上低层级作出的转发（先清后升，fail-closed）。每次升级/提醒留痕。返回处理条数。
      */
+    @Transactional
     public int escalateOverdue(Instant now) {
         int handled = 0;
         for (SupervisorReviewRepository.PendingReview item : supervisorReviewRepository.listOverdueSupervisorReviews(now, 200)) {
@@ -650,6 +658,7 @@ public class SupervisorReviewService {
      * M007-A-02（PGM-1.7.1 转发）：当前节点的审批人（或已被转发人）把该节点逐单转发；不得转给申请人本人或直接受益人。
      * M007-I3-F01：主会话节点只能由 USB 最高权限本人转发。转发同时镜像到单据级 forwarded_to（待复核清单展示）。
      */
+    @Transactional
     public SupervisorReviewRepository.ReviewSchedule forward(String reviewId, SupervisorReviewForwardRequest request) {
         String id = requireText(reviewId, "review_id");
         requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");

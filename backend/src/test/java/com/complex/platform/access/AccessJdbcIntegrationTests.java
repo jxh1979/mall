@@ -685,6 +685,23 @@ class AccessJdbcIntegrationTests {
                 """, String.class)).isEmpty();
     }
 
+    // M087-I3-01（PGM-1.10.1 范围变更与模板内高危先审后生效）：两种新申请类型必须能在权威 schema 落库；未知类型仍被 CHECK 拒绝。
+    @Test
+    void scopeChangeAndHighRiskReleaseRequestTypesAreAcceptedByTheGrantRequestCheck() {
+        for (String type : List.of("user_scope_change", "position_high_risk_release")) {
+            jdbcTemplate.update("""
+                    INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
+                    VALUES (?, ?, 'usr_m087_target', 'pending', 'M087 schema check', 'usr_m087_admin', now(), now())
+                    """, "agr_m087_" + type, type);
+            assertThat(jdbcTemplate.queryForObject("SELECT request_type FROM access_grant_requests WHERE id = ?", String.class, "agr_m087_" + type))
+                    .isEqualTo(type);
+        }
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
+                VALUES ('agr_m087_unknown', 'user_scope_change_unknown', 'usr_m087_target', 'pending', 'x', 'usr_m087_admin', now(), now())
+                """)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
