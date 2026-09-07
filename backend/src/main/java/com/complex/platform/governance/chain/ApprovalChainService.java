@@ -1,6 +1,6 @@
 package com.complex.platform.governance.chain;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -26,7 +26,7 @@ import static com.complex.platform.common.Strings.requireText;
  *   <li>主线节点 = 发起人的直接上级链；既有档位（上一级 / 上两级 / 最高权限）只作节点数下限，最高权限在链尾追加主会话节点；</li>
  *   <li>指定最终审批人时其必须在发起人上级链上且不低于档位下限，主线 = 发起人到该人之间的全部直接上级；</li>
  *   <li>平行线自该线预设起点人沿直接上级向上补全至该线最终审批人，低于该线最低起点层级（level_rank）的节点不生成；</li>
- *   <li>specific_role 策略（R-003「退款等角色审批也走组织链」）同样走直接上级链：未指定最终审批人时为直接上级 + 链尾按角色解析的节点，
+ *   <li>specific_role 策略（R-003「退款等角色审批也走组织链」）同样走直接上级链：未指定最终审批人时为策略级别数（下限）的直接上级 + 链尾按角色解析的节点，
  *       指定时补全到该人（该人须经角色持有审批权限，由服务层在发起与末节点裁决时把关）；申请人与直接受益人不得成为节点
  *       （PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请」）；</li>
  *   <li>组织层级不可解析（发起人无直接上级）时不生成节点：单据保持待审且无人可裁决（fail-closed），层级补齐后可重生成。</li>
@@ -50,6 +50,12 @@ public class ApprovalChainService {
 
     public List<ApprovalChainNode> generate(String reviewId, String initiatedBy, String beneficiaryId, ApprovalLevel level,
                                             String finalApproverId, List<ParallelLine> parallelLines) {
+        return generate(reviewId, initiatedBy, beneficiaryId, level, finalApproverId, parallelLines, 1);
+    }
+
+    /** @param roleChainFloor specific_role 策略主线的直接上级节点数下限（策略 requiredLevel；I7-01，与档位链「档位只作下限」同一规则）。 */
+    public List<ApprovalChainNode> generate(String reviewId, String initiatedBy, String beneficiaryId, ApprovalLevel level,
+                                            String finalApproverId, List<ParallelLine> parallelLines, int roleChainFloor) {
         List<ApprovalChainNode> nodes = new ArrayList<>();
         if (level == ApprovalLevel.SPECIFIC_ROLE) {
             // R-003（PGM-1.7.1「只需指定该事项的最终审批人，系统按组织层级自动补全全部直接上级节点」）：角色审批事项也走组织链。
@@ -58,14 +64,18 @@ public class ApprovalChainService {
             List<String> path = superiorPath(initiatedBy, initiatedBy, beneficiaryId);
             boolean designated = finalApproverId != null && !finalApproverId.isBlank();
             List<String> main;
+            int floor = Math.max(1, roleChainFloor); // I7-01：策略级别作直接上级节点数下限（与档位链一致）
             if (designated) {
                 int index = path.indexOf(finalApproverId);
                 if (index < 0) {
                     throw ApiException.badRequest("FINAL_APPROVER_NOT_IN_CHAIN", "指定的最终审批人不在发起人的直接上级链上");
                 }
+                if (index + 1 < Math.min(floor, path.size())) {
+                    throw ApiException.badRequest("FINAL_APPROVER_BELOW_POLICY_MINIMUM", "指定的最终审批人低于该事项要求的审批层级下限");
+                }
                 main = path.subList(0, index + 1);
             } else {
-                main = path.subList(0, Math.min(1, path.size()));
+                main = path.subList(0, Math.min(floor, path.size()));
             }
             int seq = 1;
             for (String approver : main) {
@@ -83,7 +93,7 @@ public class ApprovalChainService {
                 if (index < 0) {
                     throw ApiException.badRequest("FINAL_APPROVER_NOT_IN_CHAIN", "指定的最终审批人不在发起人的直接上级链上");
                 }
-                if (level != ApprovalLevel.TOP_AUTHORITY && index + 1 < Math.min(floor, path.size())) {
+                if (index + 1 < Math.min(floor, path.size())) { // I7-03：最高权限事项亦不得用指定最终审批人缩短主线（下限 = 整条直接上级链）
                     throw ApiException.badRequest("FINAL_APPROVER_BELOW_POLICY_MINIMUM", "指定的最终审批人低于该事项要求的审批层级下限");
                 }
                 main = path.subList(0, index + 1);

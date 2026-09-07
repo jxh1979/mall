@@ -46,6 +46,10 @@ class ApprovalChainServiceTests {
                 .extracting(ApprovalChainNode::approverId).containsExactly("usr_b", "usr_c");
         var top = chain.generate("r4", "usr_a", null, ApprovalLevel.TOP_AUTHORITY, null, List.of());
         assertThat(top).extracting(ApprovalChainNode::approverKind).containsExactly("user", "user", "user", "master");
+        assertThatThrownBy(() -> chain.generate("r4b", "usr_a", null, ApprovalLevel.TOP_AUTHORITY, "usr_b", List.of()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FINAL_APPROVER_BELOW_POLICY_MINIMUM")); // I7-03：最高权限事项不得用指定最终审批人缩短主线
+        assertThat(chain.generate("r4c", "usr_a", null, ApprovalLevel.TOP_AUTHORITY, "usr_d", List.of()))
+                .extracting(ApprovalChainNode::approverKind).containsExactly("user", "user", "user", "master");
     }
 
     @Test
@@ -70,6 +74,10 @@ class ApprovalChainServiceTests {
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("user", "usr_y"), org.assertj.core.groups.Tuple.tuple("role", null)); // 直接上级 → 链尾角色节点
         assertThat(chain.generate("r9c", "usr_x", null, ApprovalLevel.SPECIFIC_ROLE, "usr_z", List.of()))
                 .extracting(ApprovalChainNode::approverId).containsExactly("usr_y", "usr_z"); // 指定最终审批人：补全到该人，无独立角色节点
+        assertThat(chain.generate("r9d", "usr_x", null, ApprovalLevel.SPECIFIC_ROLE, null, List.of(), 2))
+                .extracting(ApprovalChainNode::approverId).containsExactly("usr_y", "usr_z", null); // I7-01：策略 requiredLevel 作直接上级节点数下限（与档位链一致）
+        assertThatThrownBy(() -> chain.generate("r9e", "usr_x", null, ApprovalLevel.SPECIFIC_ROLE, "usr_y", List.of(), 2))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FINAL_APPROVER_BELOW_POLICY_MINIMUM"));
     }
 
     @Test

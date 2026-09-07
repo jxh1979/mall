@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -618,6 +618,40 @@ public class AccessService {
                             repository.saveGrantRequest(withDecision(held, "rejected", actor.id(), now));
                             cancelledHolds.add(held.id());
                         }
+                        // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效，审批通过后方可生效」）：旧范围下的非派生增权——直接装配角色、
+                        // 单独模板授予、临时授权、员工单独授予（显式 GRANT）——随范围变更一并撤销；新范围内的增权须重新申请并审批通过后才生效。显式拒绝保留。
+                        List<String> frozen = new ArrayList<>();
+                        Set<String> frozenRoles = new HashSet<>();
+                        Set<String> frozenApplications = new HashSet<>();
+                        Set<String> frozenTemporary = new HashSet<>();
+                        Set<String> frozenOverrides = new HashSet<>();
+                        for (AccessRepository.PermissionEffect effect : repository.findPermissionEffects(id, now)) {
+                            if (effect.effect() != AccessRepository.Effect.GRANT) {
+                                continue;
+                            }
+                            switch (effect.source()) {
+                                case ROLE -> frozenRoles.add(effect.sourceId());
+                                case TEMPLATE_APPLICATION -> frozenApplications.add(effect.sourceId());
+                                case TEMPORARY_GRANT -> frozenTemporary.add(effect.sourceId());
+                                case USER_OVERRIDE -> frozenOverrides.add(effect.permissionCode());
+                            }
+                        }
+                        for (String roleId : frozenRoles) {
+                            repository.unassignUserRole(id, roleId);
+                            frozen.add("role:" + roleId);
+                        }
+                        if (!frozenApplications.isEmpty()) {
+                            repository.revokeTemplateApplications(id, List.copyOf(frozenApplications), actor.id(), now);
+                            frozenApplications.forEach(applicationId -> frozen.add("template_application:" + applicationId));
+                        }
+                        for (String grantId : frozenTemporary) {
+                            repository.revokeTemporaryGrant(grantId, actor.id(), now);
+                            frozen.add("temporary_grant:" + grantId);
+                        }
+                        if (!frozenOverrides.isEmpty()) {
+                            repository.deleteUserPermissionOverrides(id, List.copyOf(frozenOverrides), AccessRepository.Effect.GRANT);
+                            frozenOverrides.forEach(code -> frozen.add("override:" + code));
+                        }
                         repository.updateUserScope(id, newOrganization, newMerchant, actor.id(), now);
                         PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(
                                 r.idempotencyKey(), r.operatorNote(), id, positionCode, staffLevelId,
@@ -644,7 +678,8 @@ public class AccessService {
                                 Map.of("old_organization_id", nz(target.organizationId()), "old_merchant_id", nz(target.merchantId()),
                                         "new_organization_id", nz(newOrganization), "new_merchant_id", nz(newMerchant),
                                         "old_position_revoked", revoked, "grant_request_id", saved.id(), "review_id", nz(saved.reviewId()),
-                                        "cancelled_high_risk_holds", String.join(",", cancelledHolds))
+                                        "cancelled_high_risk_holds", String.join(",", cancelledHolds),
+                                        "frozen_extra_grants", String.join(",", frozen))
                         );
                         return saved;
                     },

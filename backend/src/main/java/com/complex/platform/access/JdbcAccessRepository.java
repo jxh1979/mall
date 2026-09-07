@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -813,6 +813,22 @@ class JdbcAccessRepository implements AccessRepository {
                  ORDER BY created_at DESC, id
                 """, new MapSqlParameterSource()
                 .addValue("created_at_from", timestampWithTimeZone(createdAtFrom)), this::mapGrantRequest);
+    }
+
+    @Override
+    @Transactional
+    public int revokeTemplateApplications(String userId, List<String> applicationIds, String revokedBy, Instant revokedAt) {
+        if (applicationIds.isEmpty()) {
+            return 0;
+        }
+        return jdbcTemplate.update("""
+                UPDATE permission_template_applications
+                   SET status = 'revoked', revoked_by = :actor_id, revoked_at = :changed_at
+                 WHERE target_id = :user_id AND status = 'active'
+                   AND id = ANY (CAST(:application_ids AS varchar[]))
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("actor_id", revokedBy).addValue("changed_at", timestampWithTimeZone(revokedAt))
+                .addValue("application_ids", applicationIds.toArray(String[]::new), java.sql.Types.ARRAY));
     }
 
     @Override

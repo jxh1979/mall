@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.time.Instant;
 import java.util.List;
@@ -163,6 +163,11 @@ public interface AccessRepository {
     TemporaryGrant createTemporaryGrant(TemporaryGrant temporaryGrant);
 
     TemporaryGrant revokeTemporaryGrant(String id, String revokedBy, Instant revokedAt);
+
+    /** M087-I7-02：撤销某账号的若干仍生效的模板授予（范围变更时冻结旧范围下的单独模板授予）；返回撤销行数。 */
+    default int revokeTemplateApplications(String userId, List<String> applicationIds, String revokedBy, Instant revokedAt) {
+        throw new UnsupportedOperationException("revokeTemplateApplications not supported by this repository");
+    }
 
     default Optional<TemporaryGrant> findTemporaryGrantById(String id) {
         return Optional.empty();

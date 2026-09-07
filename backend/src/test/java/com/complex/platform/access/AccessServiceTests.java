@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -742,6 +742,51 @@ class AccessServiceTests {
         authenticateAsOrgUser("usr_boss", "boss", "seed-org");
         assertThatThrownBy(() -> service.reviewGrant(hold.id(), new AccessGrantReviewRequest("review-stale-hold", "approve", List.of(), "approve", "ok")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ACCESS_GRANT_REQUEST_NOT_FOUND"));
+    }
+
+    // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效，审批通过后方可生效」）：范围变更时旧范围下的非派生增权
+    // （直接装配角色、单独模板授予、临时授权、员工单独授予）随旧派生一并撤销；新范围内的增权须重新申请并审批通过后才生效。
+    @Test
+    void scopeChangeFreezesExtraGrantsBeyondTheNewTemplate() {
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_extra", new AccessUser(
+                "usr_extra", "extra", "staff", "seed-org", "merchant_a", "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"), null));
+        accessRepository.roles.put("role_view", new RoleRecord(
+                "role_view", "view", "Viewer", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.view"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_check", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_extra", "tpl_extra", "Extra", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_extra", "governance.supervisor_review.view", AccessRepository.Effect.GRANT, "project", false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-extra", null, "ops_clerk", "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active"));
+        accessRepository.userRoles.put("usr_extra", new java.util.LinkedHashSet<>(java.util.Set.of("role_view"))); // 直接装配角色
+        accessRepository.applyTemplate("tpl_extra", List.of("usr_extra"), null, null, false, "usr_admin"); // 单独模板授予
+        accessRepository.temporaryGrants.put("tg_extra", new TemporaryGrant("tg_extra", "usr_extra", List.of("governance.supervisor_review.approve"),
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2099-01-01T00:00:00Z"), false, false, "active", "r", "usr_admin",
+                Instant.parse("2026-06-14T00:00:00Z"), null, null)); // 临时授权
+        accessRepository.saveUserPermissionOverrides("usr_extra", List.of("ops.production_readiness.check"), AccessRepository.Effect.GRANT, "员工单独授予", "usr_admin");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_extra").grants())
+                .contains("ops.production_readiness.view", "governance.supervisor_review.view", "governance.supervisor_review.approve", "ops.production_readiness.check");
+
+        AccessGrantRequestRecord pending = service.changeUserScope("usr_extra", new UserScopeChangeRequest(
+                "scope-extra", null, "seed-org", "merchant_b", "ops_clerk", "lvl_m1_lower", null, null, null, "调往 B 商户", null));
+        assertThat(pending.status()).isEqualTo("pending");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_extra").grants())
+                .doesNotContain("ops.production_readiness.view", "governance.supervisor_review.view", "governance.supervisor_review.approve", "ops.production_readiness.check");
+        assertThat(accessRepository.userRoles.get("usr_extra")).isEmpty();
+        assertThat(accessRepository.temporaryGrants.get("tg_extra").status()).isEqualTo("revoked");
+        assertThat(accessRepository.templateApplications).filteredOn(a -> "usr_extra".equals(a.targetId())).isNotEmpty().allMatch(a -> "revoked".equals(a.status()));
+        assertThat(accessRepository.overrides).noneMatch(o -> o.userId().equals("usr_extra") && o.effect() == AccessRepository.Effect.GRANT);
     }
 
     @Test
@@ -1592,6 +1637,19 @@ class AccessServiceTests {
                     .toList();
             templateApplications.addAll(applications);
             return applications;
+        }
+
+        public int revokeTemplateApplications(String userId, List<String> applicationIds, String revokedBy, Instant revokedAt) {
+            int revoked = 0;
+            for (int i = 0; i < templateApplications.size(); i++) {
+                PermissionTemplateApplication a = templateApplications.get(i);
+                if (userId.equals(a.targetId()) && applicationIds.contains(a.id()) && "active".equals(a.status())) {
+                    templateApplications.set(i, new PermissionTemplateApplication(a.id(), a.templateId(), a.targetType(), a.targetId(),
+                            a.validFrom(), a.validUntil(), a.singleUse(), a.consumed(), "revoked", a.appliedBy(), a.appliedAt(), revokedBy, revokedAt));
+                    revoked++;
+                }
+            }
+            return revoked;
         }
 
         @Override

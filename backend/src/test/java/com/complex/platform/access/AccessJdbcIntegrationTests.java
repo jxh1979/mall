@@ -702,6 +702,25 @@ class AccessJdbcIntegrationTests {
                 """)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
+    // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效」）：范围变更冻结单独模板授予的仓储写路径在真实 schema 上可执行且幂等。
+    @Test
+    void revokeTemplateApplicationsMarksOnlyTheGivenActiveApplicationsRevoked() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_tpl_freeze", "jdbc-tpl-freeze", "staff", "org", "merchant", "active", Instant.parse("2026-06-14T00:00:00Z")));
+        repository.createTemplate(
+                template("tpl_freeze", "freeze", null),
+                List.of(item("tpl_freeze", "ops.production_readiness.check", AccessRepository.Effect.GRANT))
+        );
+        List<String> ids = repository.applyTemplate("tpl_freeze", List.of("usr_jdbc_tpl_freeze"), null, null, false, "seed-admin")
+                .stream().map(PermissionTemplateApplication::id).toList();
+        assertThat(repository.revokeTemplateApplications("usr_jdbc_tpl_freeze", ids, "seed-admin", Instant.parse("2026-06-16T00:00:00Z"))).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permission_template_applications WHERE id = ?", String.class, ids.get(0))).isEqualTo("revoked");
+        assertThat(repository.revokeTemplateApplications("usr_jdbc_tpl_freeze", ids, "seed-admin", Instant.parse("2026-06-16T00:00:00Z"))).isZero();
+        assertThat(repository.findPermissionEffects("usr_jdbc_tpl_freeze", Instant.parse("2026-06-16T00:00:00Z")))
+                .extracting(AccessRepository.PermissionEffect::permissionCode).doesNotContain("ops.production_readiness.check");
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

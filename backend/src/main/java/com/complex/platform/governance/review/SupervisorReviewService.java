@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -133,7 +133,7 @@ public class SupervisorReviewService {
                         requireDesignatedRoleHolder(policy, request.finalApproverId()); // R-003 fail-closed
                         supervisorReviewRepository.saveSupervisorReview(decision);
                         scheduleDeadline(decision.reviewId(), null, actionType, policy.policyCode());
-                        generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(), lines);
+                        generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.evaluated",
@@ -456,7 +456,7 @@ public class SupervisorReviewService {
         );
         supervisorReviewRepository.saveSupervisorReview(decision);
         scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policyCode);
-        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, finalApproverId, List.of());
+        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, finalApproverId, List.of(), requiredLevel);
         auditEventService.recordSuccess(
                 "admission.blocked",
                 MANAGE_PERMISSION,
@@ -493,7 +493,7 @@ public class SupervisorReviewService {
         String beneficiaryId = supervisorReviewRepository.findSupervisorReviewSchedule(id)
                 .map(SupervisorReviewRepository.ReviewSchedule::beneficiaryId).orElse(null);
         List<ApprovalChainNode> nodes = generateChain(id, pending.initiatedBy(), beneficiaryId,
-                ApprovalLevel.fromCode(pending.approvalLevel()), null, List.of());
+                ApprovalLevel.fromCode(pending.approvalLevel()), null, List.of(), pending.requiredLevel());
         if (nodes.isEmpty()) {
             throw ApiException.conflict("APPROVAL_CHAIN_UNRESOLVED", "发起人的直接上级仍未维护，审批链无法生成");
         }
@@ -510,8 +510,8 @@ public class SupervisorReviewService {
     }
 
     private List<ApprovalChainNode> generateChain(String reviewId, String initiatedBy, String beneficiaryId, ApprovalLevel level,
-                                                  String finalApproverId, List<ApprovalChainService.ParallelLine> lines) {
-        List<ApprovalChainNode> nodes = chainService.generate(reviewId, initiatedBy, beneficiaryId, level, finalApproverId, lines);
+                                                  String finalApproverId, List<ApprovalChainService.ParallelLine> lines, int requiredLevel) {
+        List<ApprovalChainNode> nodes = chainService.generate(reviewId, initiatedBy, beneficiaryId, level, finalApproverId, lines, requiredLevel);
         if (nodes.isEmpty()) {
             // fail-closed：组织层级未维护，链无法生成；单据留痕待审，无人可裁决，层级补齐后重生成。
             auditEventService.recordSuccess(

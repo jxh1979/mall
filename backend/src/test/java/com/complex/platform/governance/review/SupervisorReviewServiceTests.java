@@ -23,7 +23,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * M087 起：审批人身份由组织层级节点链决定（PGM-1.7.1 逐级审批），档位只作节点数下限；specific_role 策略仍为单个按角色解析的节点。
+ * M087 起：审批人身份由组织层级节点链决定（PGM-1.7.1 逐级审批），档位只作节点数下限；specific_role 策略自 R-003 起同样走直接上级链
+ * （策略级别作节点数下限，链尾角色节点 / 指定最终审批人）。
  * 夹具：{@link InMemorySupervisorReviewRepository#superiors} 为直接上级表（org_hierarchy），各用例按需配置。
  */
 class SupervisorReviewServiceTests {
@@ -377,15 +378,18 @@ class SupervisorReviewServiceTests {
         var undesignated = svc.evaluate(evaluate("review-rf-1", null, List.of("att"), "refund", "ticket", "rf_1", 100L, null));
         assertThat(reviewRepository.listChainNodes(undesignated.reviewId()))
                 .extracting(ApprovalChainNode::approverKind, ApprovalChainNode::approverId)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("user", "usr_rf_sup"), org.assertj.core.groups.Tuple.tuple("role", null));
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("user", "usr_rf_sup"), org.assertj.core.groups.Tuple.tuple("user", "usr_rf_boss"),
+                        org.assertj.core.groups.Tuple.tuple("role", null)); // I7-01：refund_l2 → 两级直接上级（策略级别作下限）+ 链尾角色节点
         TestSecurityActors.asSupervisor("usr_rf_boss", 3);
         assertThatThrownBy(() -> svc.approve(undesignated.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-rf-1-early", "n", List.of("att"), 3, "approved", "skip superior")))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_NOT_CURRENT_APPROVER")); // 不得跳过直接上级
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_NODE_NOT_REACHED")); // 不得跳过直接上级
         TestSecurityActors.asSupervisor("usr_rf_sup", 3);
         assertThat(svc.approve(undesignated.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-rf-1-sup", "n", List.of("att"), 3, "approved", "sup")).reviewStatus()).isEqualTo("pending_review");
         TestSecurityActors.asSupervisor("usr_rf_boss", 3);
+        assertThat(svc.approve(undesignated.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-rf-1-boss", "n", List.of("att"), 3, "approved", "boss")).reviewStatus()).isEqualTo("pending_review");
         assertThat(svc.approve(undesignated.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-rf-1-role", "n", List.of("att"), 3, "approved", "role")).reviewStatus()).isEqualTo("approved");
 
