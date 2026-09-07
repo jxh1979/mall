@@ -1,11 +1,13 @@
 package com.complex.platform.ticketing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.PiiCipher;
+import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -44,6 +46,7 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Autowired private TicketFacePhotoPurgeJob purgeJob;
     @Autowired private PiiCipher piiCipher;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private com.complex.platform.customer.CustomerRepository customerRepository;
 
     // 一张 1x1 像素的 PNG 图字节（原图），base64 后作为购买捕获的人脸照 payload。
     private static final byte[] RAW_IMAGE_BYTES = Base64.getDecoder().decode(
@@ -86,6 +89,10 @@ class TicketFacePhotoJdbcIntegrationTests {
         String decodedBase64 = piiCipher.decrypt(new String(stored, StandardCharsets.UTF_8));
         assertThat(decodedBase64).isEqualTo(PHOTO_BASE64);
         assertThat(Base64.getDecoder().decode(decodedBase64)).isEqualTo(RAW_IMAGE_BYTES);
+        // M009 A1-01：权益位脸照必须指回那条同意留痕（BSM-1.7.3 留同意版本、时间和范围）。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT consent_id FROM ticket_face_photos WHERE entitlement_id = ?", String.class, entitlementId))
+                .startsWith("consent_fp_");
     }
 
     // ---------- ③ require_face_photo=FALSE 不带照 → 正常发放、无照片行（回归） ----------
@@ -130,17 +137,189 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Test
     void purgeDeletesExpiredKeepsFuture() {
         Instant now = Instant.now();
+        String purgeConsent = seedAcceptedFaceConsent();
         String expired = "ent_exp_" + key();
         String future = "ent_fut_" + key();
         facePhotoRepository.save("tfp_" + key(), expired, piiCipher.encrypt(PHOTO_BASE64).getBytes(StandardCharsets.UTF_8),
-                "image/jpeg", now, LocalDate.now().minusDays(1));   // 已过期
+                "image/jpeg", now, LocalDate.now().minusDays(1), purgeConsent);   // 已过期
         facePhotoRepository.save("tfp_" + key(), future, piiCipher.encrypt(PHOTO_BASE64).getBytes(StandardCharsets.UTF_8),
-                "image/jpeg", now, LocalDate.now().plusDays(1));    // 未到期
+                "image/jpeg", now, LocalDate.now().plusDays(1), purgeConsent);    // 未到期
 
         int deleted = purgeJob.purgeExpired(LocalDate.now());
         assertThat(deleted).isGreaterThanOrEqualTo(1);
         assertThat(facePhotoRepository.findByEntitlementId(expired)).isEmpty();
         assertThat(facePhotoRepository.findByEntitlementId(future)).isPresent();
+    }
+
+    // ---------- ⑥ M009 A1-01：出票请求自带照片（柜台/后台入口）没有同意留痕 → 拒，且不落照片行 ----------
+    @Test
+    void issuingWithRequestPhotoButNoConsentIsRejected() {
+        Fixture f = seed(true);
+        assertThatThrownBy(() -> orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64))))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_REQUIRED"));
+        assertThat(countPhotosForOrder(f.orderId)).isZero();
+    }
+
+    // ---------- ⑦ M009 A1-01：库上 CHECK 对权益位同样生效——绕过服务直接 INSERT 无同意的权益位脸照被拒 ----------
+    @Test
+    void entitlementPhotoRowWithoutConsentIsRejectedByDatabase() {
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO ticket_face_photos (id, entitlement_id, photo_ciphertext, content_type, captured_at, purge_after)"
+                        + " VALUES (?, ?, ?, 'image/jpeg', now(), CURRENT_DATE + 1)",
+                "tfp_no_consent_" + key(), "ent_no_consent_" + key(), "enc:v1:x".getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // ---------- ⑧ M009 A1-01：出票请求带的同意 id 必须对应一条已生效的人脸照同意，瞎填的拒 ----------
+    @Test
+    void issuingWithRequestPhotoAndUnknownConsentIsRejected() {
+        Fixture f = seed(true);
+        assertThatThrownBy(() -> orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64),
+                "consent_does_not_exist")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
+        assertThat(countPhotosForOrder(f.orderId)).isZero();
+    }
+
+    // ---------- ⑨ M009 F-05：订单已绑客人时，出票请求带的同意必须属于该客人——拿别人的同意拍这位客人的脸，拒 ----------
+    @Test
+    void issuingWithRequestPhotoAndAnotherCustomersConsentIsRejected() {
+        Fixture f = seed(true, seedCustomer());
+        String othersConsent = seedAcceptedFaceConsentFor(seedCustomer());
+        assertThatThrownBy(() -> orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64), othersConsent)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
+        assertThat(countPhotosForOrder(f.orderId)).isZero();
+    }
+
+    // ---------- ⑩ R-005：散客柜台同意以订单为主体落账——没有会员账号也能存一条同意（customer_id 空、order_id 非空） ----------
+    @Test
+    void walkInFaceConsentRowCanBeStoredWithOrderAsSubject() {
+        Fixture f = seed(true);
+        assertThatCode(() -> jdbcTemplate.update(
+                "INSERT INTO customer_consents (id, customer_id, consent_type, accepted, version, source_terminal,"
+                        + " accepted_at, created_at, updated_at, order_id)"
+                        + " VALUES (?, NULL, 'ticket_face_photo', TRUE, 'v', 'counter', now(), now(), now(), ?)",
+                "consent_walkin_" + key(), f.orderId)).doesNotThrowAnyException();
+    }
+
+    // ---------- ⑪ R-005：散客柜台流程——先落同意（以订单为主体）→ 出票请求带照 + 该同意 → 权益位指回它 ----------
+    @Test
+    void walkInConsentRecordedOnOrderIsAcceptedForThatOrdersIssue() {
+        Fixture f = seed(true);
+        TicketFacePhotoService.FaceConsentView consent = facePhotoService.recordWalkInFaceConsent(f.orderId, "counter", true);
+        assertThat(consent.consentId()).startsWith("consent_walkin_");
+        assertThat(consent.version()).isEqualTo(facePhotoService.noticeVersion());
+        orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64), consent.consentId()));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT consent_id FROM ticket_face_photos WHERE entitlement_id = ?", String.class, entitlementId))
+                .isEqualTo(consent.consentId());
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT customer_id, order_id, accepted, source_terminal FROM customer_consents WHERE id = ?", consent.consentId());
+        assertThat(row.get("customer_id")).isNull();
+        assertThat(row.get("order_id")).isEqualTo(f.orderId);
+        assertThat(row.get("accepted")).isEqualTo(true);
+        assertThat(row.get("source_terminal")).isEqualTo("counter");
+    }
+
+    // ---------- ⑫ R-005：散客同意只对落账时的那张订单有效——拿 A 单的同意给 B 单出票，拒 ----------
+    @Test
+    void walkInConsentOfAnotherOrderIsRejected() {
+        Fixture a = seed(true);
+        Fixture b = seed(true);
+        String consentForA = facePhotoService.recordWalkInFaceConsent(a.orderId, "counter", true).consentId();
+        assertThatThrownBy(() -> orderService.issueEntitlements(b.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), b.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64), consentForA)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
+        assertThat(countPhotosForOrder(b.orderId)).isZero();
+    }
+
+    // ---------- ⑬ R-005：客人不同意 → 不落任何同意行；订单不存在 → 拒 ----------
+    @Test
+    void walkInConsentRefusedOrUnknownOrderIsRejected() {
+        Fixture f = seed(true);
+        assertThatThrownBy(() -> facePhotoService.recordWalkInFaceConsent(f.orderId, "counter", false))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_REQUIRED"));
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM customer_consents WHERE order_id = ?", Integer.class, f.orderId);
+        assertThat(rows).isZero();
+        assertThatThrownBy(() -> facePhotoService.recordWalkInFaceConsent("ticket_order_missing_" + key(), "counter", true))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("TICKET_ORDER_NOT_FOUND"));
+    }
+
+    // ---------- ⑭ F-06：商户员工（持 verification.view）取他商户权益的脸照 → CROSS_MERCHANT_FORBIDDEN、不写成功审计 ----------
+    @Test
+    void merchantStaffCannotViewAnotherMerchantsFacePhoto() {
+        Fixture f = seed(true, null, "merchant_a");
+        orderService.issueEntitlements(f.ticketTypeId, issueRequest(f, List.of(PHOTO_BASE64)));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        long auditBefore = auditCount();
+        authenticateAsMerchantStaffWithViewPermission("merchant_b");
+        assertThatThrownBy(() -> facePhotoService.getForVerification(entitlementId))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(auditCount()).isEqualTo(auditBefore);
+    }
+
+    // ---------- ⑮ F-06：同一商户员工取本商户权益的脸照 → 原图 + 审计 ----------
+    @Test
+    void merchantStaffCanViewOwnMerchantsFacePhoto() {
+        Fixture f = seed(true, null, "merchant_a");
+        orderService.issueEntitlements(f.ticketTypeId, issueRequest(f, List.of(PHOTO_BASE64)));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        long auditBefore = auditCount();
+        authenticateAsMerchantStaffWithViewPermission("merchant_a");
+        TicketFacePhotoService.FacePhotoView view = facePhotoService.getForVerification(entitlementId);
+        assertThat(view.photoBase64()).isEqualTo(PHOTO_BASE64);
+        assertThat(auditCount()).isEqualTo(auditBefore + 1);
+    }
+
+    // ---------- ⑯ F-07：商户用户给他商户订单落散客同意 → CROSS_MERCHANT_FORBIDDEN、不落行 ----------
+    @Test
+    void merchantUserCannotRecordWalkInConsentOnAnotherMerchantsOrder() {
+        Fixture f = seed(true, null, "merchant_b");
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_a");
+        assertThatThrownBy(() -> orderService.recordWalkInFaceConsent(f.orderId,
+                new FacePhotoConsentRequest(key(), true, "counter")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM customer_consents WHERE order_id = ?", Integer.class, f.orderId);
+        assertThat(rows).isZero();
+    }
+
+    // ---------- ⑰ F-07：商户用户给本商户订单落散客同意 → 成功 ----------
+    @Test
+    void merchantUserCanRecordWalkInConsentOnOwnMerchantsOrder() {
+        Fixture f = seed(true, null, "merchant_a");
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_a");
+        TicketFacePhotoService.FaceConsentView consent = orderService.recordWalkInFaceConsent(f.orderId,
+                new FacePhotoConsentRequest(key(), true, "counter"));
+        assertThat(consent.consentId()).startsWith("consent_walkin_");
+        assertThat(consent.orderId()).isEqualTo(f.orderId);
+    }
+
+    // ---------- ⑱ F-08：非平台、无商户绑定、却持 verification.view 的调用者 → MERCHANT_SCOPE_REQUIRED，不解密、审计不变 ----------
+    @Test
+    void staffWithoutMerchantBindingCannotViewFacePhotoEvenWithViewPermission() {
+        Fixture f = seed(true, null, "merchant_a");
+        orderService.issueEntitlements(f.ticketTypeId, issueRequest(f, List.of(PHOTO_BASE64)));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        long auditBefore = auditCount();
+        authenticateAsMerchantStaffWithViewPermission(null);
+        assertThatThrownBy(() -> facePhotoService.getForVerification(entitlementId))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("MERCHANT_SCOPE_REQUIRED"));
+        assertThat(auditCount()).isEqualTo(auditBefore);
     }
 
     // ================= 夹具 =================
@@ -149,6 +328,16 @@ class TicketFacePhotoJdbcIntegrationTests {
     }
 
     private Fixture seed(boolean requireFacePhoto) {
+        return seed(requireFacePhoto, null, null);
+    }
+
+    /** customerId 非空时订单绑定该客人（M009 F-05：同意行必须属于本单客人）。 */
+    private Fixture seed(boolean requireFacePhoto, String customerId) {
+        return seed(requireFacePhoto, customerId, null);
+    }
+
+    /** merchantId 非空时权益模板与订单都归该商户（F-06 / F-07：商户范围闸）。 */
+    private Fixture seed(boolean requireFacePhoto, String customerId, String merchantId) {
         Instant now = Instant.now();
         String suffix = key();
         String ticketTypeId = "tt_fp_" + suffix;
@@ -158,19 +347,46 @@ class TicketFacePhotoJdbcIntegrationTests {
         String templateId = "tpl_fp_" + suffix;
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 templateId, "amusement-tpl", requireFacePhoto ? "amusement" : "bar_drink", 1, 5000L, "active",
-                null, null, null, null, now, now, "virtual", null, "per_use", null, requireFacePhoto));
+                merchantId, null, null, null, now, now, "virtual", null, "per_use", null, requireFacePhoto));
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "bind_fp_" + suffix, ticketTypeId, templateId, 1, 1, 5000L, "default", 1, 5000L, now, now));
         // 一张真实订单：发放拆分基数 + 照片 purge_after 依赖 valid_to（票 validity 1 天）。
         String orderId = "ticket_order_fp_" + suffix;
         repository.saveTicketOrder(new TicketOrderRecord(
-                orderId, "TOFP" + suffix, null, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
-                5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, null, null, null));
+                orderId, "TOFP" + suffix, customerId, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
+                5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, merchantId, null, null));
         return new Fixture(ticketTypeId, orderId);
     }
 
+    /** 带照的出票请求必须带客人同意留痕 id（M009 A1-01）：按真实链路先落一位客人 + 一条已接受的人脸照同意。 */
     private TicketIssueRequest issueRequest(Fixture f, List<String> facePhotos) {
-        return new TicketIssueRequest(key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), facePhotos);
+        String consentId = facePhotos.isEmpty() ? null : seedAcceptedFaceConsent();
+        return new TicketIssueRequest(key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), facePhotos,
+                consentId);
+    }
+
+    private String seedAcceptedFaceConsent() {
+        return seedAcceptedFaceConsentFor(seedCustomer());
+    }
+
+    private String seedCustomer() {
+        Instant now = Instant.now();
+        String suffix = key();
+        String digits = (suffix.replaceAll("[^0-9]", "1") + "00000000").substring(0, 8);
+        String customerId = "cust_fp_" + suffix;
+        customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(
+                customerId, "139" + digits, "139****" + digits.substring(4), "active", null, null, now, now, null));
+        return customerId;
+    }
+
+    /** 给某位客人落一条已接受、未撤回的人脸照同意（真实台账行，可被外键与台账闸引用）。 */
+    private String seedAcceptedFaceConsentFor(String customerId) {
+        Instant now = Instant.now();
+        String consentId = "consent_fp_" + key();
+        customerRepository.saveConsent(new com.complex.platform.customer.CustomerConsentRecord(
+                consentId, customerId, "ticket_face_photo", true, facePhotoService.noticeVersion(), "counter",
+                now, null, now, now));
+        return consentId;
     }
 
     private String onlyEntitlementId(String orderId) {
@@ -200,6 +416,21 @@ class TicketFacePhotoJdbcIntegrationTests {
                  WHERE event_name = 'ticket_face_photo.viewed'
                  ORDER BY occurred_at DESC LIMIT 1
                 """, String.class);
+    }
+
+    /** F-06：持 verification.view 的商户员工——真实用户 / 角色 / 角色权限行（事务内，用例结束回滚）。 */
+    private void authenticateAsMerchantStaffWithViewPermission(String merchantId) {
+        String suffix = key();
+        String userId = "usr_fp_" + suffix;
+        String roleId = "role_fp_view_" + suffix;
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
+                + " VALUES (?, ?, 'staff', 'seed-org', ?, 'active', now())", userId, "u_" + suffix, merchantId);
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", roleId, "fp-view-" + suffix);
+        jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'verification.view')", roleId);
+        jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, roleId);
+        AccessActor actor = new AccessActor(userId, "u_" + suffix, "staff", "seed-org", merchantId, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
     }
 
     private void authenticateAs(String accountType) {

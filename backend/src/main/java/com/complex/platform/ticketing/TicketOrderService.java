@@ -5,6 +5,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
+import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
@@ -281,6 +282,17 @@ public class TicketOrderService {
         return released;
     }
 
+    /** R-005：柜台散客人脸照同意落到订单（出票前一步），见 {@link TicketFacePhotoService#recordWalkInFaceConsent}。 */
+    TicketFacePhotoService.FaceConsentView recordWalkInFaceConsent(String orderId, FacePhotoConsentRequest request) {
+        FacePhotoConsentRequest actual = requireRequest(request);
+        String id = requireText(orderId, "order_id");
+        TicketOrderRecord order = repository.findTicketOrderById(id)
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "订单不存在或已被删除"));
+        // F-07：与出票同一越权范式——商户用户只能给本商户订单落散客同意（平台 / 空 scope 放行）。
+        enforceMerchantScope(order.merchantId());
+        return facePhotoService.recordWalkInFaceConsent(id, actual.sourceTerminal(), Boolean.TRUE.equals(actual.accepted()));
+    }
+
     IssuedTicketResponse issueOrder(String orderId, StatusChangeRequest request) {
         requireRequest(request);
         requireText(request.reason(), "reason");
@@ -310,9 +322,10 @@ public class TicketOrderService {
                 order.salesChannel(),
                 List.of("dynamic_qr"),
                 // 批3-6：出票请求带来的人脸照转发进发放链，供 require_face_photo 权益捕获存档。
-                // V359：出票请求自己没带照片时，取客人下单时拍的暂存照——线上买票的客人不在柜台，
-                //   出票的运营人员手上没有客人的脸，唯一来源就是客人自己拍的那张。
-                resolveIssueFacePhotos(order.id(), request.facePhotos())
+                // V359：出票请求自己没带照片时，发放链取客人下单时拍的暂存照（见 resolveIssueFacePhotos）。
+                // M009 A1-01：请求自带照片必须同时带客人的同意留痕 id，发放链据此过同意闸。
+                request.facePhotos(),
+                request.faceConsentId()
         ));
         Instant issuedAt = Instant.now();
         repository.updateTicketOrder(new TicketOrderRecord(
@@ -365,10 +378,18 @@ public class TicketOrderService {
      * V359 出票取照：出票请求自带照片(柜台现场拍)优先；没带则取客人下单时的暂存照。
      * 两者都没有 → 空表，由发放链按 require_face_photo 决定放行还是拒 FACE_PHOTO_REQUIRED（判定口径不变）。
      */
-    private List<String> resolveIssueFacePhotos(String orderId, List<String> requestPhotos) {
+    private List<TicketFacePhotoService.FacePhotoInput> resolveIssueFacePhotos(String orderId, List<String> requestPhotos,
+            String requestConsentId) {
         if (requestPhotos != null && !requestPhotos.isEmpty()) {
-            return requestPhotos;
+            if (facePhotoService == null) {
+                // 旧构造/兼容测试：无存档服务时照片不会落库，原样透传保持既有判定口径。
+                return requestPhotos.stream()
+                        .map(p -> new TicketFacePhotoService.FacePhotoInput(p, requestConsentId)).toList();
+            }
+            // M009 A1-01（BSM-1.7.3）：请求自带照片须带已生效的同意 id，在建权益行之前就拒，不产生无同意的孤儿脸照。
+            return facePhotoService.requestPhotosWithConsent(orderId, requestPhotos, requestConsentId);
         }
+        // 暂存照沿用暂存位的同意 id。
         return facePhotoService == null ? List.of() : facePhotoService.stagedForOrder(orderId);
     }
 
@@ -400,8 +421,10 @@ public class TicketOrderService {
 
     IssuedTicketResponse issueEntitlements(String ticketTypeId, TicketIssueRequest request) {
         String orderId = requireText(request.orderId(), "order_id");
-        // 批3-6：按需拍脸照的权益按发放顺序逐张取用 request.facePhotos()；facePhotoCursor 记已消费张数。
-        List<String> facePhotos = request.facePhotos() == null ? List.of() : request.facePhotos();
+        // 批3-6：按需拍脸照的权益按发放顺序逐张取用；facePhotoCursor 记已消费张数。
+        // V359/M009：来源=请求自带照(须带同意 id)或客人下单暂存照(沿用其同意 id)，见 resolveIssueFacePhotos。
+        List<TicketFacePhotoService.FacePhotoInput> facePhotos =
+                resolveIssueFacePhotos(orderId, request.facePhotos(), request.faceConsentId());
         int[] facePhotoCursor = {0};
         List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
         if (bindings.isEmpty()) {
@@ -521,7 +544,7 @@ public class TicketOrderService {
                     );
                     // 批3-6：require_face_photo=TRUE 的权益必须带一张人脸照(base64)，逐张按发放顺序取用；
                     //   缺照 → 拒 FACE_PHOTO_REQUIRED(在建权益行之前拒，不产生无照的孤儿权益)。=FALSE 的票零影响。
-                    String facePhoto = null;
+                    TicketFacePhotoService.FacePhotoInput facePhoto = null;
                     if (Boolean.TRUE.equals(template.requireFacePhoto())) {
                         if (facePhotoCursor[0] >= facePhotos.size()) {
                             throw ApiException.badRequest("FACE_PHOTO_REQUIRED",

@@ -14,6 +14,7 @@ import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -32,13 +33,18 @@ class TicketFacePhotoRetentionTests {
         TicketFacePhotoRepository repository = mock(TicketFacePhotoRepository.class);
         PiiCipher piiCipher = mock(PiiCipher.class);
         when(piiCipher.encrypt(anyString())).thenReturn("enc:payload");
+        // F-05：capture 末闸回查台账，mock 一条已生效同意。
+        when(repository.acceptedFaceConsent("consent_1"))
+                .thenReturn(Optional.of(new TicketFacePhotoRepository.FaceConsentSubject("cust_1", null)));
         TicketFacePhotoService service = new TicketFacePhotoService(
                 repository, piiCipher, mock(AuthorizationService.class), mock(AuditEventService.class), windowConfig);
 
-        service.capture("ent_1", "Zm9v", "image/jpeg", Instant.parse("2026-07-01T00:00:00Z"), VALID_TO);
+        service.capture("ent_1", new TicketFacePhotoService.FacePhotoInput("Zm9v", "consent_1"), "image/jpeg",
+                Instant.parse("2026-07-01T00:00:00Z"), VALID_TO);
 
         ArgumentCaptor<LocalDate> purgeAfter = ArgumentCaptor.forClass(LocalDate.class);
-        verify(repository).save(anyString(), eq("ent_1"), any(), eq("image/jpeg"), any(), purgeAfter.capture());
+        verify(repository).save(anyString(), eq("ent_1"), any(), eq("image/jpeg"), any(), purgeAfter.capture(),
+                eq("consent_1"));
         return purgeAfter.getValue();
     }
 

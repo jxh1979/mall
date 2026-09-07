@@ -49,24 +49,25 @@ class TicketFacePhotoOrderStagingTests {
     @Autowired private TicketFacePhotoService facePhotoService;
     @Autowired private PiiCipher piiCipher;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private com.complex.platform.customer.CustomerRepository customerRepository;
 
     private static final byte[] RAW_IMAGE_BYTES = Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
     private static final String PHOTO_BASE64 = Base64.getEncoder().encodeToString(RAW_IMAGE_BYTES);
-    // V368：客人勾同意后落在同意台账里的那条留痕 id（真实链路由 CustomerService 生成，见 CustomerServiceTests）。
-    private static final String CONSENT_ID = "consent_face_stage_fixture";
+    // V368/F-05：客人勾同意后落在同意台账里的那条留痕 id——必须是真实台账行（外键 + 台账闸），由 seedPaidOrder 落。
+    private String consentId;
 
     // ---------- ① 暂存加密 + 出票自动取用转绑；② 转绑后暂存清空 ----------
     @Test
     void stagedOrderPhotoIsEncryptedThenTransferredToEntitlementOnIssue() {
         String orderId = seedPaidOrder();
 
-        facePhotoService.stageForOrder(orderId, List.of(PHOTO_BASE64), 1, CONSENT_ID);
+        facePhotoService.stageForOrder(orderId, List.of(PHOTO_BASE64), 1, consentId);
 
         // V368：每张暂存照都挂着那次拍照同意的留痕 id——「这张脸是谁、什么时候、按哪版告知同意拍的」查得到。
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT consent_id FROM ticket_face_photos WHERE order_id = ? AND slot_index = 0",
-                String.class, orderId)).isEqualTo(CONSENT_ID);
+                String.class, orderId)).isEqualTo(consentId);
 
         // 暂存位存的是密文，不是原图、也不是原图 base64 明文。
         byte[] staged = jdbcTemplate.queryForObject(
@@ -76,7 +77,8 @@ class TicketFacePhotoOrderStagingTests {
         assertThat(staged).isNotEqualTo(RAW_IMAGE_BYTES);
         assertThat(staged).isNotEqualTo(PHOTO_BASE64.getBytes(StandardCharsets.UTF_8));
         assertThat(new String(staged, StandardCharsets.UTF_8)).startsWith("enc:v1:");
-        assertThat(facePhotoService.stagedForOrder(orderId)).containsExactly(PHOTO_BASE64);
+        assertThat(facePhotoService.stagedForOrder(orderId))
+                .extracting(TicketFacePhotoService.FacePhotoInput::photoBase64).containsExactly(PHOTO_BASE64);
 
         // 出票请求自己不带照片 —— 线上买票的客人不在柜台，运营手上没有他的脸。
         authenticateAs("platform_admin");
@@ -89,6 +91,14 @@ class TicketFacePhotoOrderStagingTests {
                 byte[].class, issued.get(0).id());
         assertThat(bound).isNotNull();
         assertThat(piiCipher.decrypt(new String(bound, StandardCharsets.UTF_8))).isEqualTo(PHOTO_BASE64);
+        // M009 A1-01（BSM-1.7.3 留同意版本、时间和范围）：转绑后权益位必须仍指回那条同意——出票不能把同意弄丢。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT consent_id FROM ticket_face_photos WHERE entitlement_id = ?",
+                String.class, issued.get(0).id())).isEqualTo(consentId);
+        // F-05：从权益位能 JOIN 到台账里的版本与时间——「同意的是哪一版告知、何时同意」可举证。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT c.version FROM ticket_face_photos p JOIN customer_consents c ON c.id = p.consent_id WHERE p.entitlement_id = ?",
+                String.class, issued.get(0).id())).isEqualTo(facePhotoService.noticeVersion());
 
         // 转绑完成后暂存位必须空 —— 同一张脸不留两份。
         assertThat(stagedRowCount(orderId)).isZero();
@@ -100,7 +110,7 @@ class TicketFacePhotoOrderStagingTests {
     void stagingMorePhotosThanTicketQuantityIsRejected() {
         String orderId = seedPaidOrder();
         assertThatThrownBy(() ->
-                facePhotoService.stageForOrder(orderId, List.of(PHOTO_BASE64, PHOTO_BASE64), 1, CONSENT_ID))
+                facePhotoService.stageForOrder(orderId, List.of(PHOTO_BASE64, PHOTO_BASE64), 1, consentId))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_COUNT_EXCEEDED"));
         assertThat(stagedRowCount(orderId)).isZero();
@@ -111,12 +121,12 @@ class TicketFacePhotoOrderStagingTests {
     void stagingRejectsNonBase64AndOversizedPayload() {
         String orderId = seedPaidOrder();
 
-        assertThatThrownBy(() -> facePhotoService.stageForOrder(orderId, List.of("这不是 base64!!"), 1, CONSENT_ID))
+        assertThatThrownBy(() -> facePhotoService.stageForOrder(orderId, List.of("这不是 base64!!"), 1, consentId))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_INVALID"));
 
         String oversized = "A".repeat(4_000_004); // 超过单张 4,000,000 字符上限
-        assertThatThrownBy(() -> facePhotoService.stageForOrder(orderId, List.of(oversized), 1, CONSENT_ID))
+        assertThatThrownBy(() -> facePhotoService.stageForOrder(orderId, List.of(oversized), 1, consentId))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_TOO_LARGE"));
 
@@ -145,6 +155,27 @@ class TicketFacePhotoOrderStagingTests {
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
+    // ---------- ⑥ M009 F-05：同意 id 必须对应一条已生效的人脸照同意——瞎填的在暂存就拒，不进库 ----------
+    @Test
+    void stagingWithUnknownConsentIdIsRejected() {
+        String orderId = seedPaidOrder();
+        assertThatThrownBy(() -> facePhotoService.stageForOrder(orderId, List.of(PHOTO_BASE64), 1, "consent_does_not_exist"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
+        assertThat(stagedRowCount(orderId)).isZero();
+    }
+
+    // ---------- ⑦ M009 F-05：绕过服务直接 INSERT 一个台账里没有的 consent_id，库层拒（外键） ----------
+    @Test
+    void photoRowWithUnknownConsentIdIsRejectedByDatabase() {
+        String orderId = seedPaidOrder();
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO ticket_face_photos (id, order_id, slot_index, photo_ciphertext, content_type,"
+                        + " captured_at, purge_after, consent_id) VALUES (?, ?, 0, ?, 'image/jpeg', now(), CURRENT_DATE + 1, ?)",
+                "tfp_bad_consent_" + key(), orderId, "enc:v1:x".getBytes(StandardCharsets.UTF_8), "consent_missing_" + key()))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
     // ================= 夹具 =================
 
     /** 一张已支付、绑了「要脸照」权益模板的 admin 渠道订单（可直接出票）。 */
@@ -162,8 +193,17 @@ class TicketFacePhotoOrderStagingTests {
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "bind_stage_" + suffix, ticketTypeId, templateId, 1, 1, 5000L, "default", 1, 5000L, now, now));
         String orderId = "ticket_order_stage_" + suffix;
+        Instant consentAt = Instant.now();
+        String customerId = "cust_stage_" + suffix;
+        String digits = (suffix.replaceAll("[^0-9]", "1") + "00000000").substring(0, 8);
+        customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(
+                customerId, "138" + digits, "138****" + digits.substring(4), "active", null, null, consentAt, consentAt, null));
+        consentId = "consent_stage_" + suffix;
+        customerRepository.saveConsent(new com.complex.platform.customer.CustomerConsentRecord(
+                consentId, customerId, "ticket_face_photo", true, facePhotoService.noticeVersion(), "miniapp",
+                consentAt, null, consentAt, consentAt));
         repository.saveTicketOrder(new TicketOrderRecord(
-                orderId, "TOST" + suffix, null, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
+                orderId, "TOST" + suffix, customerId, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
                 5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, null, null, null));
         return orderId;
     }

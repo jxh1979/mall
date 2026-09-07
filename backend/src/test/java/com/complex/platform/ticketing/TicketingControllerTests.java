@@ -76,6 +76,48 @@ class TicketingControllerTests {
                 .andExpect(jsonPath("$.detail_code").value("AUTH_SESSION_INVALID"));
     }
 
+    // R-005：柜台散客人脸照同意落账端点与出票同权限；无 ticket.ticket.issue → 403。
+    @Test
+    void recordingFacePhotoConsentWithoutIssuePermissionReturnsPermissionDenied() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("ticket.ticket.issue");
+        mockMvc.perform(post("/api/v1/ticketing/orders/to_1/face-photo-consent")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "consent-denied",
+                                  "accepted": true,
+                                  "source_terminal": "counter"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void recordingFacePhotoConsentReturnsConsentIdEnvelope() throws Exception {
+        when(service.recordFacePhotoConsent(any(String.class),
+                any(com.complex.platform.ticketing.dto.FacePhotoConsentRequest.class)))
+                .thenReturn(new TicketFacePhotoService.FaceConsentView("consent_walkin_1", "to_1",
+                        "face_photo_notice_v1@retention_30d", java.time.Instant.parse("2026-09-07T12:00:00Z")));
+        mockMvc.perform(post("/api/v1/ticketing/orders/to_1/face-photo-consent")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "consent-ok",
+                                  "accepted": true,
+                                  "source_terminal": "counter"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.consent_id").value("consent_walkin_1"))
+                .andExpect(jsonPath("$.data.version").value("face_photo_notice_v1@retention_30d"));
+        verify(authorizationService).requirePermission("ticket.ticket.issue");
+    }
+
     @Test
     void creatingTicketTypeWithoutManagePermissionReturnsPermissionDenied() throws Exception {
         doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))

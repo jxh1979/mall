@@ -21,6 +21,12 @@ const REGISTRY = [
   { table: "leasing_leads", column: "contact_phone", writeFile: "backend/src/main/java/com/complex/platform/leasing/JdbcLeasingRepository.java" },
   { table: "merchant_fee_notification_recipient", column: "recipient_phone", writeFile: "backend/src/main/java/com/complex/platform/merchantbilling/JdbcMerchantFeeNotificationRecipientRepository.java" },
   { table: "site_entry_reports", column: "contact_phone", writeFile: "backend/src/main/java/com/complex/platform/facility/JdbcSiteEntryReportRepository.java" },
+  // ── 存酒侧(V061/V102；审计 20260902T183912Z M009 A1-02 补登记：写入点在仓储层，此前漏登记且无信封 CHECK)──
+  { table: "saved_bottles", column: "customer_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
+  { table: "saved_bottles", column: "transfer_to_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
+  { table: "saved_bottle_transfers", column: "to_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
+  // ticket_transfers.receiver_phone / voucher_transfers.receiver_phone 在服务层加密(TicketTransferService /
+  // VoucherTransferService)，仓储层 addValue 不带 piiCipher.encrypt，本登记表的正则守不住——由 V396 库上信封 CHECK 守。
 ];
 
 const failures = [];
