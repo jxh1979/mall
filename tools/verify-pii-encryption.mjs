@@ -25,6 +25,9 @@ const REGISTRY = [
   { table: "saved_bottles", column: "customer_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
   { table: "saved_bottles", column: "transfer_to_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
   { table: "saved_bottle_transfers", column: "to_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
+  // ── 幂等重放响应体(V399；审计 20260902T183912Z XM-013)：服务层返回对象原样序列化落库，含订单 / 预订 / 客人档案的手机号，
+  //    此前为 jsonb 明文且表无过期清理；现只存 enc:v1: 信封（库上 NOT VALID CHECK 守新写入，存量启动期回填）──
+  { table: "idempotency_records", column: "response_body", writeFile: "backend/src/main/java/com/complex/platform/common/idempotency/JdbcIdempotencyRepository.java" },
   // ticket_transfers.receiver_phone / voucher_transfers.receiver_phone 在服务层加密(TicketTransferService /
   // VoucherTransferService)，仓储层 addValue 不带 piiCipher.encrypt，本登记表的正则守不住——由 V396 库上信封 CHECK 守。
 ];
