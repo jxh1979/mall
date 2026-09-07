@@ -732,6 +732,39 @@ class AccessJdbcIntegrationTests {
         assertThat(authorizationService.effectivePermissions().grants()).doesNotContainAnyElementsOf(sensitive);
     }
 
+    // M006-I8-01 / F8-01（BSM-1.3.4「拥有系统里全部日常功能权限…定为日常功能的会自动同步给他，不会出现"管理员反而没权限"的情况」）：
+    // 字典只允许四个风险档（种子阶段即拒绝"半定类"）；按日常意图种下的只读/作业码与「申请高危授权」经平台管理员日常桥可见、可通过 requirePermission；
+    // PGM-1.10.1「员工可申请临时权限」：员工自助角色持有申请权限。
+    @Test
+    void dailyCodesReachThePlatformAdminBridgeAndRiskTiersAreTheFourGovernedOnes() {
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT permission_code FROM permissions WHERE risk_level NOT IN ('low', 'medium', 'high', 'critical') ORDER BY 1",
+                String.class)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_constraint WHERE conrelid = 'permissions'::regclass AND conname = 'chk_permissions_risk_level'",
+                Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT permission_code FROM role_permissions WHERE role_id = 'role_staff_self' AND permission_code = 'access.grant_request.apply'",
+                String.class)).hasSize(1);
+        List<String> daily = List.of("amusement.device.view", "inventory.stocktake.view", "inventory.trace_code.view", "access.grant_request.apply");
+        authenticate("usr_jdbc_admin_daily", "jdbc-admin-daily", "platform_admin", "org");
+        assertThat(authorizationService.effectivePermissions().grants()).containsAll(daily);
+        daily.forEach(authorizationService::requirePermission);
+    }
+
+    // M006-I8-02（PGM-1.10.1「以下五类权限授出前须先审批才生效——资金/核销/退款/调账/分红发放类…敏感经营数据的查看/导出/修改…」；
+    // BSM-1.3.4「敏感数据查看与导出（…企业微信会话原文、客人与员工个人信息）…不因"平台管理员"这个身份自动获得」）：
+    // 落在五类内的高危码须标记授出审批，且不进平台管理员日常桥。
+    @Test
+    void fiveCategoryHighRiskCodesRequireApprovalBeforeGrant() {
+        List<String> sensitive = List.of("analytics.group.view", "customer.voucher.manage", "finance.merchant_expense.manage",
+                "pii.contact_phone.view", "wecom.sync");
+        assertThat(repository.listPermissions()).filteredOn(p -> sensitive.contains(p.permissionCode()))
+                .hasSize(5).allMatch(PermissionDefinition::requiresApproval);
+        authenticate("usr_jdbc_admin_bridge2", "jdbc-admin-bridge2", "platform_admin", "org");
+        assertThat(authorizationService.effectivePermissions().grants()).doesNotContainAnyElementsOf(sensitive);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
