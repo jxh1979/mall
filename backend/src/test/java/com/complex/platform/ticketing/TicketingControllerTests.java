@@ -678,6 +678,46 @@ class TicketingControllerTests {
         verify(authorizationService, times(2)).requirePermission("ticket.dynamic_pricing.simulate");
     }
 
+    // ---------- XM-009（PGM-1.15.2.c2 / c3）：员工端订单列表与下单响应只出脱敏购票人手机号，不见明文 ----------
+    @Test
+    void listingTicketOrdersReturnsMaskedBuyerPhone() throws Exception {
+        when(service.listTicketOrders()).thenReturn(new PageResponse<>(List.of(sampleTicketOrder()), 1, 50, 1));
+
+        mockMvc.perform(get("/api/v1/ticketing/orders").with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value("ticket_order_1"))
+                .andExpect(jsonPath("$.data.items[0].buyer_phone").value("138****8000"));
+    }
+
+    @Test
+    void creatingTicketOrderReturnsMaskedBuyerPhone() throws Exception {
+        when(service.createTicketOrder(any(TicketOrderRequest.class))).thenReturn(sampleTicketOrder());
+
+        mockMvc.perform(post("/api/v1/ticketing/orders")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "ticket-order-mask",
+                                  "ticket_type_id": "ticket_type_1",
+                                  "quantity": 2,
+                                  "visit_date": "2026-06-20",
+                                  "sales_channel": "web",
+                                  "buyer_phone": "13800138000",
+                                  "customer_id": "customer_1"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("ticket_order_1"))
+                .andExpect(jsonPath("$.data.buyer_phone").value("138****8000"));
+    }
+
+    private static TicketOrderRecord sampleTicketOrder() {
+        return new TicketOrderRecord("ticket_order_1", "TO20260614000001", "customer_1", "ticket_type_1", null, 2,
+                LocalDate.parse("2026-06-20"), "web", "13800138000", 19800L, null, 19800L, 0L, "CNY", "unpaid", "not_issued",
+                "created", Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), null, null, null);
+    }
+
     @TestConfiguration
     static class TestBeans {
         @Bean

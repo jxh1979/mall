@@ -348,7 +348,7 @@ public class AmusementController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int size) {
         authorizationService.requirePermission("amusement.group_booking.view");
-        return ApiResponse.ok(service.listGroupBookings(page, size));
+        return ApiResponse.ok(maskContactPhones(service.listGroupBookings(page, size)));
     }
 
     @PostMapping("/group-bookings")
@@ -357,7 +357,7 @@ public class AmusementController {
     ) {
         authorizationService.requirePermission("amusement.group_booking.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createGroupBooking(request));
+        return ApiResponse.ok(maskContactPhone(service.createGroupBooking(request)));
     }
 
     @PostMapping("/group-bookings/{id}/approve")
@@ -367,7 +367,7 @@ public class AmusementController {
     ) {
         authorizationService.requirePermission("amusement.group_booking.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.approveGroupBooking(id, request));
+        return ApiResponse.ok(maskContactPhone(service.approveGroupBooking(id, request)));
     }
 
     @PostMapping("/group-bookings/{id}/release")
@@ -377,7 +377,7 @@ public class AmusementController {
     ) {
         authorizationService.requirePermission("amusement.group_booking.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.releaseGroupBooking(id, request));
+        return ApiResponse.ok(maskContactPhone(service.releaseGroupBooking(id, request)));
     }
 
     @GetMapping("/safety-inspections")
@@ -534,5 +534,20 @@ public class AmusementController {
         authorizationService.requirePermission("amusement.verification.execute");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.exitVerification(request));
+    }
+
+    // ── XM-009（PGM-1.15.2.c2 / c3）：团体预订读接口只出脱敏联系人手机号，不见明文、不设关闭开关（无 pii 明文权限分支）；
+    // 要看客人只能走手机号专门通道（CustomerAccountAdminController /lookup：先鉴权、留痕、仍只显示脱敏）。
+    // 脱敏放在 controller（service 外，服务层内部仍需明文回写密文），与 V339 多主体联系人展示脱敏同款范式。 ──
+    private static AmusementGroupBookingRecord maskContactPhone(AmusementGroupBookingRecord record) {
+        return record == null ? null : record.withMaskedPhone();
+    }
+
+    private static PageResponse<AmusementGroupBookingRecord> maskContactPhones(PageResponse<AmusementGroupBookingRecord> page) {
+        if (page == null) {
+            return null;
+        }
+        return new PageResponse<>(page.items().stream().map(AmusementGroupBookingRecord::withMaskedPhone).toList(),
+                page.page(), page.pageSize(), page.total());
     }
 }

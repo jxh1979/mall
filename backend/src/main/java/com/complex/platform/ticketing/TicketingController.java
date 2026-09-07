@@ -320,14 +320,14 @@ public class TicketingController {
     @GetMapping("/ticketing/orders")
     public ApiResponse<PageResponse<TicketOrderRecord>> listTicketOrders() {
         authorizationService.requirePermission("ticket.order.read");
-        return ApiResponse.ok(service.listTicketOrders());
+        return ApiResponse.ok(maskBuyerPhones(service.listTicketOrders()));
     }
 
     @PostMapping("/ticketing/orders")
     public ApiResponse<TicketOrderRecord> createTicketOrder(@RequestBody @jakarta.validation.Valid TicketOrderRequest request) {
         authorizationService.requirePermission("ticket.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createTicketOrder(request));
+        return ApiResponse.ok(maskBuyerPhone(service.createTicketOrder(request)));
     }
 
     @PostMapping("/ticketing/orders/{order_id}/pay-intents")
@@ -347,7 +347,7 @@ public class TicketingController {
     ) {
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.confirmTicketOrderPayment(orderId, request));
+        return ApiResponse.ok(maskBuyerPhone(service.confirmTicketOrderPayment(orderId, request)));
     }
 
     @PostMapping("/ticketing/orders/{order_id}/cancel")
@@ -357,7 +357,7 @@ public class TicketingController {
     ) {
         authorizationService.requirePermission("ticket.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.cancelTicketOrder(orderId, request));
+        return ApiResponse.ok(maskBuyerPhone(service.cancelTicketOrder(orderId, request)));
     }
 
     /** R-005：柜台散客出票前留存人脸照同意（客人在柜台设备勾选后由出票人员提交），返回同意 id 供出票请求 face_consent_id 使用。 */
@@ -526,5 +526,20 @@ public class TicketingController {
             return first;
         }
         return second == null || second.isBlank() ? null : second;
+    }
+
+    // ── XM-009（PGM-1.15.2.c2 / c3）：员工端订单读接口只出脱敏购票人手机号，不见明文、不设关闭开关（无 pii 明文权限分支）；
+    // 要看客人只能走手机号专门通道（CustomerAccountAdminController /lookup：先鉴权、留痕、仍只显示脱敏）。
+    // 脱敏放在 controller（service 外，服务层内部仍需明文回写密文），与 V339 多主体联系人展示脱敏同款范式。 ──
+    private static TicketOrderRecord maskBuyerPhone(TicketOrderRecord record) {
+        return record == null ? null : record.withMaskedPhone();
+    }
+
+    private static PageResponse<TicketOrderRecord> maskBuyerPhones(PageResponse<TicketOrderRecord> page) {
+        if (page == null) {
+            return null;
+        }
+        return new PageResponse<>(page.items().stream().map(TicketOrderRecord::withMaskedPhone).toList(),
+                page.page(), page.pageSize(), page.total());
     }
 }

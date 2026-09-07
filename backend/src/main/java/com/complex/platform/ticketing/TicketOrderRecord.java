@@ -31,4 +31,13 @@ public record TicketOrderRecord(
         String barId
 ) {
 
+    /**
+     * XM-009（PGM-1.15.2.c2「员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关」）：员工端读端只出掩码购票人手机号。
+     * 脱敏放在 controller（service 外）：服务层内部仍需明文（回写密文 / 转赠适配 / 储值扣款），与 V339 多主体联系人同款范式。
+     */
+    public TicketOrderRecord withMaskedPhone() {
+        return new TicketOrderRecord(id, orderNo, customerId, ticketTypeId, priceRuleId, quantity, visitDate, salesChannel,
+                com.complex.platform.common.PhoneMask.mask(buyerPhone), amountCent, dynamicPricingRuleId, baseAmountCent,
+                dynamicAdjustmentCent, currency, payStatus, issueStatus, status, createdAt, updatedAt, merchantId, paidAt, barId);
+    }
 }
