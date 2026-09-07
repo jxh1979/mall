@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -787,6 +787,107 @@ class AccessServiceTests {
         assertThat(accessRepository.temporaryGrants.get("tg_extra").status()).isEqualTo("revoked");
         assertThat(accessRepository.templateApplications).filteredOn(a -> "usr_extra".equals(a.targetId())).isNotEmpty().allMatch(a -> "revoked".equals(a.status()));
         assertThat(accessRepository.overrides).noneMatch(o -> o.userId().equals("usr_extra") && o.effect() == AccessRepository.Effect.GRANT);
+    }
+
+    // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」「既有高危不得因处于岗位模板内而免除授出前审批」）：岗位高危挂起写下的显式拒绝
+    // 不能经「移除覆盖」无审批解除——移除会使须审批的权限从既有 GRANT 来源生效，等同授出，须经挂起单审批释放。
+    @Test
+    void removingTheHighRiskHoldDenyRequiresApproval() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_hold_remove", new AccessUser(
+                "usr_hold_remove", "hold-remove", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_check", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-hold-remove", null, "ops_manager", "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-hold-remove", null, "usr_hold_remove", "ops_manager", "lvl_m1_lower", null, null, null));
+        assertThat(authorizationService.effectivePermissionsForUser("usr_hold_remove").grants()).doesNotContain("ops.production_readiness.check");
+
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides("usr_hold_remove", new UserPermissionOverrideRequest(
+                "remove-hold-deny", null, List.of("ops.production_readiness.check"), "deny", "试图解除挂起")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
+        assertThat(authorizationService.effectivePermissionsForUser("usr_hold_remove").grants()).doesNotContain("ops.production_readiness.check");
+
+        AccessGrantRequestRecord hold = accessRepository.grantRequests.values().stream()
+                .filter(g -> "position_high_risk_release".equals(g.requestType())).findFirst().orElseThrow();
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThat(service.reviewGrant(hold.id(), new AccessGrantReviewRequest("review-hold-remove", "approve", List.of(), "approve", "ok")).status()).isEqualTo("applied");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_hold_remove").grants()).contains("ops.production_readiness.check"); // 只能经挂起单审批释放
+    }
+
+    // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」）：员工已有的独立显式拒绝不被岗位高危挂起复用——不进释放单、作废 / 释放时不被删，
+    // 该码在拒绝解除（须审批）前始终不生效。
+    @Test
+    void preExistingExplicitDenyIsNotReusedByTheHighRiskHold() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_predeny", new AccessUser(
+                "usr_predeny", "predeny", "staff", "seed-org", "merchant_a", "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_check", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-predeny", null, "ops_manager", "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active"));
+        service.setUserPermissionOverrides("usr_predeny", new UserPermissionOverrideRequest(
+                "predeny-set", "停权", List.of("ops.production_readiness.check"), "deny", "独立显式拒绝"));
+
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-predeny", null, "usr_predeny", "ops_manager", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.grantRequests.values()).noneMatch(g -> "position_high_risk_release".equals(g.requestType())); // 已被独立拒绝的码不开挂起单
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("access.user_position.high_risk_already_denied");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_predeny").grants()).doesNotContain("ops.production_readiness.check");
+
+        service.changeUserScope("usr_predeny", new UserScopeChangeRequest(
+                "scope-predeny", null, "seed-org", "merchant_b", null, null, null, null, null, "调往 B 商户", null));
+        assertThat(accessRepository.overrides).anyMatch(o -> o.userId().equals("usr_predeny") && o.effect() == AccessRepository.Effect.DENY
+                && "ops.production_readiness.check".equals(o.permissionCode())); // 独立拒绝不随范围变更作废被删
+        assertThat(authorizationService.effectivePermissionsForUser("usr_predeny").grants()).doesNotContain("ops.production_readiness.check");
+    }
+
+    // M006-R6-03（PGM-1.18 后台报错全中文）：残留的英文校验文案改为中文。
+    @Test
+    void remainingValidationMessagesAreChinese() throws Exception {
+        service = newAccessService(true, supervisorReviewService(new InMemorySupervisorReviewRepository()));
+        accessRepository.users.put("usr_cn", new AccessUser("usr_cn", "cn", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_check", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+
+        assertThatThrownBy(() -> service.createTemporaryGrant(new TemporaryGrantRequest(
+                "tg-cn", null, List.of(), "usr_cn", List.of("ops.production_readiness.view"), Instant.parse("2026-06-14T00:00:00Z"), null, false, "r")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessage()).contains("失效时间").doesNotContainPattern("[A-Za-z]"));
+        assertThatThrownBy(() -> service.applyGrant(new AccessGrantApplyRequest(
+                "ag-cn", null, List.of(), "temporary_permission", "usr_cn", null, null, null, null, null, null,
+                List.of("ops.production_readiness.view"), Instant.parse("2026-06-14T00:00:00Z"), null, false, "r", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessage()).contains("到期时间").doesNotContainPattern("[A-Za-z]"));
+        assertThatThrownBy(() -> service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-cn", null, "ops_clerk", "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "bogus")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessage()).contains("状态").doesNotContainPattern("[A-Za-z]"));
+        java.lang.reflect.Method normalizeType = AccessService.class.getDeclaredMethod("normalizeGrantRequestType", String.class);
+        normalizeType.setAccessible(true);
+        assertThatThrownBy(() -> normalizeType.invoke(service, "bogus"))
+                .isInstanceOf(java.lang.reflect.InvocationTargetException.class)
+                .extracting(t -> ((java.lang.reflect.InvocationTargetException) t).getCause())
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessage()).contains("申请类型").doesNotContainPattern("[A-Za-z]"));
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -195,7 +195,7 @@ public class AuthorizationService implements CallerScopeResolver {
     public AccessActor currentActor() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw ApiException.unauthorized("UNAUTHENTICATED", "authentication is required");
+            throw ApiException.unauthorized("UNAUTHENTICATED", "需要登录后操作");
         }
         Object principal = authentication.getPrincipal();
         if (principal instanceof AccessActor actor) {
