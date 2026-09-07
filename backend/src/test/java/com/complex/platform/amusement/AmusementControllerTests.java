@@ -437,6 +437,26 @@ class AmusementControllerTests {
         return new AmusementGroupBookingRecord("group_booking_1", "project_1", "session_1", "group", "Company Team", "13800000000", 2, 2, "released", "ops approved", "customer changed plan", List.of("att_release"), now, now, now, now);
     }
 
+    // ---------- XM-009（PGM-1.15.2.c2 / c3）：团体预订列表 / 创建 / 审批 / 释放响应只出脱敏联系人手机号，不见明文 ----------
+    @org.junit.jupiter.api.Test
+    void groupBookingResponsesReturnMaskedContactPhone() throws Exception {
+        mockMvc.perform(get("/api/v1/amusement/group-bookings").with(user("amusement").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value("group_booking_1"))
+                .andExpect(jsonPath("$.data.items[0].contact_phone").value("138****0000"));
+        for (String path : List.of("/api/v1/amusement/group-bookings",
+                "/api/v1/amusement/group-bookings/group_booking_1/approve",
+                "/api/v1/amusement/group-bookings/group_booking_1/release")) {
+            mockMvc.perform(post(path)
+                            .with(user("amusement").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(bodyFor(path, true)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.id").value("group_booking_1"))
+                    .andExpect(jsonPath("$.data.contact_phone").value("138****0000"));
+        }
+    }
+
     @TestConfiguration
     static class TestBeans {
         @Bean

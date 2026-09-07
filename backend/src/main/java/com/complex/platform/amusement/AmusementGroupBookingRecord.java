@@ -46,4 +46,14 @@ public record AmusementGroupBookingRecord(
                 bookingStatus, approvalNote, operatorNote, evidenceAttachmentIds, approvedAt, releasedAt,
                 createdAt, updatedAt, null);
     }
+
+    /**
+     * XM-009（PGM-1.15.2.c2「员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关」）：员工端读端只出掩码联系人手机号。
+     * 脱敏放在 controller（service 外）：服务层内部仍需明文（回写密文），与 V339 多主体联系人同款范式。
+     */
+    public AmusementGroupBookingRecord withMaskedPhone() {
+        return new AmusementGroupBookingRecord(id, projectId, sessionId, bookingType, customerName,
+                com.complex.platform.common.PhoneMask.mask(contactPhone), partySize, reservedCapacity, bookingStatus,
+                approvalNote, operatorNote, evidenceAttachmentIds, approvedAt, releasedAt, createdAt, updatedAt, paidAt);
+    }
 }
