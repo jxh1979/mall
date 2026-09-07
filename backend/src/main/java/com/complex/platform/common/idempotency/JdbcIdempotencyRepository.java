@@ -1,6 +1,7 @@
 package com.complex.platform.common.idempotency;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
@@ -9,13 +10,20 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+/**
+ * XM-013（PGM-1.15.2「一律加密存放」）：response_body 是服务层返回对象的序列化（含票务订单 / 团体预订 / 客人档案的手机号），
+ * 自 V399 起列为 text、只存 PiiCipher 的 enc:v1: 信封（库上 CHECK 守新写入），读回解密后再交给 IdempotencyService 反序列化；
+ * 存量明文行由 IdempotencyResponseBodyPiiBackfill 启动期就地加密。与 V339 多主体联系人手机号同一范式。
+ */
 @Repository
 class JdbcIdempotencyRepository implements IdempotencyRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final PiiCipher piiCipher;
 
-    JdbcIdempotencyRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    JdbcIdempotencyRepository(NamedParameterJdbcTemplate jdbcTemplate, PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
+        this.piiCipher = piiCipher;
     }
 
     @Override
@@ -42,7 +50,7 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
                 )
                 VALUES (
                     :id, :operation_id, :idempotency_key, :request_hash, :response_code,
-                    CAST(:response_body AS jsonb), :http_status, :created_at, :expires_at
+                    :response_body, :http_status, :created_at, :expires_at
                 )
                 ON CONFLICT (operation_id, idempotency_key) DO NOTHING
                 """;
@@ -54,7 +62,7 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
         String sql = """
                 UPDATE idempotency_records
                    SET response_code = :response_code,
-                       response_body = CAST(:response_body AS jsonb),
+                       response_body = :response_body,
                        http_status = :http_status
                  WHERE operation_id = :operation_id
                    AND idempotency_key = :idempotency_key
@@ -71,7 +79,7 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
         String sql = """
                 UPDATE idempotency_records
                    SET response_code = :response_code,
-                       response_body = CAST(:response_body AS jsonb),
+                       response_body = :response_body,
                        http_status = :http_status
                  WHERE operation_id = :operation_id
                    AND idempotency_key = :idempotency_key
@@ -91,7 +99,7 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
                 .addValue("idempotency_key", record.idempotencyKey())
                 .addValue("request_hash", record.requestHash())
                 .addValue("response_code", record.responseCode())
-                .addValue("response_body", record.responseBody())
+                .addValue("response_body", piiCipher.encrypt(record.responseBody()))
                 .addValue("http_status", record.httpStatus())
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
                 .addValue("expires_at", timestampWithTimeZone(record.expiresAt()));
@@ -105,7 +113,7 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
                 resultSet.getString("idempotency_key"),
                 resultSet.getString("request_hash"),
                 resultSet.getString("response_code"),
-                resultSet.getString("response_body"),
+                piiCipher.decrypt(resultSet.getString("response_body")),
                 resultSet.getInt("http_status"),
                 resultSet.getTimestamp("created_at").toInstant(),
                 resultSet.getTimestamp("expires_at").toInstant()
