@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.07
+// 文件版本：V0.09
 
 import java.time.Instant;
 import java.util.List;
@@ -164,6 +164,11 @@ public interface AccessRepository {
 
     TemporaryGrant revokeTemporaryGrant(String id, String revokedBy, Instant revokedAt);
 
+    /** M087-I7-02：撤销某账号的若干仍生效的模板授予（范围变更时冻结旧范围下的单独模板授予）；返回撤销行数。 */
+    default int revokeTemplateApplications(String userId, List<String> applicationIds, String revokedBy, Instant revokedAt) {
+        throw new UnsupportedOperationException("revokeTemplateApplications not supported by this repository");
+    }
+
     default Optional<TemporaryGrant> findTemporaryGrantById(String id) {
         return Optional.empty();
     }
@@ -204,6 +209,15 @@ public interface AccessRepository {
         return List.of();
     }
 
+    /** M087-I5-03：某账号某类型的待审授权申请（范围变更时作废旧范围高危挂起）。 */
+    // ponytail: filters the full list; add a targeted query if access_grant_requests grows large
+    default List<AccessGrantRequestRecord> listPendingGrantRequests(String targetUserId, String requestType) {
+        return listGrantRequests(null).stream()
+                .filter(request -> targetUserId.equals(request.targetUserId()) && requestType.equals(request.requestType())
+                        && "pending".equals(request.status()))
+                .toList();
+    }
+
     /** 职级定义列表（参考数据，平台全局）。默认空，JdbcAccessRepository 覆盖。 */
     default List<StaffLevelRecord> listStaffLevels() {
         return List.of();
@@ -231,6 +245,11 @@ public interface AccessRepository {
      * Returns true if this call performed the consume; false if already consumed by a concurrent request.
      */
     boolean markSingleUsePermissionConsumed(String sourceId, String permissionCode, String userId, Instant consumedAt);
+
+    /** M087-A-04（PGM-1.10.1 所属商户/跨项目变更）：账号归属改为新范围（同步员工档案的综合体/商户归属）。 */
+    default void updateUserScope(String userId, String organizationId, String merchantId, String actorId, Instant changedAt) {
+        throw new UnsupportedOperationException("updateUserScope");
+    }
 
     /** M006-G-01（PGM-1.10.1 员工单独授予 − 显式拒绝）：员工级覆盖写路径；同一 (user, code, effect) 幂等覆盖。 */
     default void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {

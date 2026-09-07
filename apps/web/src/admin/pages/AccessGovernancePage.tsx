@@ -104,6 +104,8 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
   const [summaryNotice, setSummaryNotice] = React.useState<string | null>(null);
   const [templateForm, setTemplateForm] = React.useState({ id: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", roleId: "", templateId: "", status: "active" });
   const [positionForm, setPositionForm] = React.useState({ userId: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", baseSalaryYuan: "", salaryDetail: "", operatorNote: "" });
+  // M087-A-04：人员范围变更表单（所属商户 / 跨项目）。
+  const [scopeForm, setScopeForm] = React.useState({ userId: "", organizationId: "", merchantId: "", positionCode: "", staffLevelId: "", reason: "", finalApproverId: "" });
   const [roleForm, setRoleForm] = React.useState({ userId: "", roleId: "", operatorNote: "" });
   const [overrideForm, setOverrideForm] = React.useState({ userId: "", permissionCodes: "", effect: "deny", reason: "" });
   const [grantForm, setGrantForm] = React.useState({
@@ -274,6 +276,35 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       operatorNote: positionForm.operatorNote.trim() || "后台定岗并按模板自动装配",
     });
     setActionResult(`已为用户 ${positionForm.userId.trim()} 定岗并按岗位模板自动适配权限`);
+    await reload();
+  }
+
+  // M087-A-04（PGM-1.10.1「保存所属商户或发生跨项目变更时，旧岗位或旧范围派生权限立即失效，新范围权限每次均须先审批，审批通过后方可生效」）：
+  // 人员范围变更写入口——提交后旧派生立即失效，新范围岗位权限进主管链；可指定主线最终审批人（PGM-1.7.1）。
+  async function changeUserScope() {
+    const userId = (scopeForm.userId || positionForm.userId).trim();
+    if (!userId) {
+      setGlobalError("范围变更需选择用户");
+      return;
+    }
+    if (!scopeForm.organizationId.trim() && !scopeForm.merchantId.trim()) {
+      setGlobalError("范围变更需填写新的所属项目或商户");
+      return;
+    }
+    if (!scopeForm.reason.trim()) {
+      setGlobalError("范围变更需填写变更理由");
+      return;
+    }
+    const result = await api.put<{ id?: string; reviewId?: string | null }>(`/api/v1/access/users/${encodeURIComponent(userId)}/scope`, {
+      organizationId: scopeForm.organizationId.trim() || undefined,
+      merchantId: scopeForm.merchantId.trim() || undefined,
+      positionCode: scopeForm.positionCode.trim() || undefined,
+      staffLevelId: scopeForm.staffLevelId.trim() || undefined,
+      reason: scopeForm.reason.trim(),
+      finalApproverId: scopeForm.finalApproverId.trim() || undefined,
+      operatorNote: "后台人员范围变更",
+    });
+    setActionResult(`已提交用户 ${userId} 的范围变更：旧派生权限已失效，新范围待审批（复核单 ${result?.reviewId ?? "未生成"}）`);
     await reload();
   }
 
@@ -480,6 +511,19 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           <input aria-label="操作备注" placeholder="操作备注" value={positionForm.operatorNote} onChange={(event) => setPositionForm({ ...positionForm, operatorNote: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-position-assign" onClick={() => void assignPosition()}>定职位并适配</PermissionButton>
         </div>
+
+        <h3>人员范围变更（所属商户 / 跨项目）</h3>
+        <div className="admin-inline-form" data-testid="access-user-scope-form">
+          <select aria-label="变更用户 id" data-testid="access-user-scope-user" value={scopeForm.userId || positionForm.userId} onChange={(event) => setScopeForm({ ...scopeForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          <input aria-label="新所属项目 id" data-testid="access-user-scope-org" placeholder="新所属项目 id（不变可空）" value={scopeForm.organizationId} onChange={(event) => setScopeForm({ ...scopeForm, organizationId: event.target.value })} />
+          <input aria-label="新所属商户 id" data-testid="access-user-scope-merchant" placeholder="新所属商户 id（平台员工留空）" value={scopeForm.merchantId} onChange={(event) => setScopeForm({ ...scopeForm, merchantId: event.target.value })} />
+          <input aria-label="新范围岗位编码" data-testid="access-user-scope-position" placeholder="新范围岗位编码（沿用可空）" value={scopeForm.positionCode} onChange={(event) => setScopeForm({ ...scopeForm, positionCode: event.target.value })} />
+          <input aria-label="新范围职级 id" data-testid="access-user-scope-level" placeholder="新范围职级 id（沿用可空）" value={scopeForm.staffLevelId} onChange={(event) => setScopeForm({ ...scopeForm, staffLevelId: event.target.value })} />
+          <input aria-label="变更理由" data-testid="access-user-scope-reason" placeholder="变更理由" value={scopeForm.reason} onChange={(event) => setScopeForm({ ...scopeForm, reason: event.target.value })} />
+          <input aria-label="主线最终审批人" data-testid="access-user-scope-final-approver" placeholder="主线最终审批人账号（可空）" value={scopeForm.finalApproverId} onChange={(event) => setScopeForm({ ...scopeForm, finalApproverId: event.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-scope-change" onClick={() => void changeUserScope()}>提交范围变更（先审批后生效）</PermissionButton>
+        </div>
+        <div className="admin-muted-action" data-testid="access-user-scope-boundary">保存所属商户或跨项目变更时，旧岗位或旧范围派生权限立即失效；新范围权限每次均须先审批，审批通过后方可生效；模板内既有高危权限不因在模板内而免审。</div>
 
         <h3>直接装配角色</h3>
         <div className="admin-inline-form" data-testid="access-role-assignment-form">

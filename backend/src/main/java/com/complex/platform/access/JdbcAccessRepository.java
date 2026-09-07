@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -817,6 +817,22 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     @Transactional
+    public int revokeTemplateApplications(String userId, List<String> applicationIds, String revokedBy, Instant revokedAt) {
+        if (applicationIds.isEmpty()) {
+            return 0;
+        }
+        return jdbcTemplate.update("""
+                UPDATE permission_template_applications
+                   SET status = 'revoked', revoked_by = :actor_id, revoked_at = :changed_at
+                 WHERE target_id = :user_id AND status = 'active'
+                   AND id = ANY (CAST(:application_ids AS varchar[]))
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("actor_id", revokedBy).addValue("changed_at", timestampWithTimeZone(revokedAt))
+                .addValue("application_ids", applicationIds.toArray(String[]::new), java.sql.Types.ARRAY));
+    }
+
+    @Override
+    @Transactional
     public void replacePositionGrants(String userId, String roleId, String mappingId, List<String> applicationIds,
                                       String actorId, Instant changedAt) {
         var parameters = new MapSqlParameterSource()
@@ -928,6 +944,26 @@ class JdbcAccessRepository implements AccessRepository {
                 """, parameters)) {
             logExpiry((String) application.get("source_id"), userId, null, "expired", checkedAt);
         }
+    }
+
+    @Override
+    @Transactional
+    public void updateUserScope(String userId, String organizationId, String merchantId, String actorId, Instant changedAt) {
+        var parameters = new MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("organization_id", organizationId).addValue("merchant_id", merchantId)
+                .addValue("changed_at", timestampWithTimeZone(changedAt));
+        int changed = jdbcTemplate.update("""
+                UPDATE access_users SET organization_id = :organization_id, merchant_id = :merchant_id WHERE id = :user_id
+                """, parameters);
+        if (changed != 1) {
+            throw new IllegalStateException("账号归属未能保存");
+        }
+        // 员工档案同步：project_id = 综合体/组织归属，merchant_id = 所属商户（未关联档案的账号无行可更新）。
+        jdbcTemplate.update("""
+                UPDATE staff_profiles
+                   SET project_id = COALESCE(:organization_id, project_id), merchant_id = :merchant_id, updated_at = :changed_at
+                 WHERE user_id = :user_id
+                """, parameters);
     }
 
     @Override

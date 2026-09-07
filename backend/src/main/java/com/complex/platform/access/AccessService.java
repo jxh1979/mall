@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.15
+// 文件版本：V0.17
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -15,6 +15,7 @@ import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
 import com.complex.platform.access.dto.UserPermissionOverrideRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
+import com.complex.platform.access.dto.UserScopeChangeRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -51,6 +52,9 @@ public class AccessService {
     private static final String REQUEST_USER_ROLE = "user_role";
     private static final String REQUEST_USER_POSITION = "user_position";
     private static final String REQUEST_TEMPORARY_PERMISSION = "temporary_permission";
+    // M087：内部生成的申请类型（不接受外部 applyGrant 直接提交）。
+    static final String REQUEST_USER_SCOPE_CHANGE = "user_scope_change";
+    static final String REQUEST_POSITION_HIGH_RISK_RELEASE = "position_high_risk_release";
 
     private final AccessRepository repository;
     private final IdempotencyService idempotencyService;
@@ -519,11 +523,15 @@ public class AccessService {
                     }
                     boolean approve = "approve_delete".equals(action);
                     if (approve) requirePositionTemplateUnused(id);
-                    requireSupervisorReviewService().approve(current.deleteReviewId(), new SupervisorReviewApprovalRequest(
+                    var deleteReview = requireSupervisorReviewService().approve(current.deleteReviewId(), new SupervisorReviewApprovalRequest(
                             request.idempotencyKey(), reason, request.evidenceAttachmentIds(), null,
                             approve ? "approved" : "rejected", reason));
-                    updated = current.withLifecycle(current.archivedAt(), approve ? now : null,
-                            approve ? current.deleteReviewId() : null, current.deleteReason(), now);
+                    if (approve && !"approved".equals(deleteReview.reviewStatus())) {
+                        updated = current; // M087：删除复核链尚有节点待审，模板状态不变
+                    } else {
+                        updated = current.withLifecycle(current.archivedAt(), approve ? now : null,
+                                approve ? current.deleteReviewId() : null, current.deleteReason(), now);
+                    }
                 }
                 default -> throw ApiException.badRequest("INVALID_ACTION", "不支持的岗位模板生命周期操作");
             }
@@ -563,6 +571,199 @@ public class AccessService {
             );
             throw exception;
         }
+    }
+
+    /**
+     * M087-A-04/F-M087-04（PGM-1.10.1「保存所属商户或发生跨项目变更时，旧岗位或旧范围派生权限立即失效，新范围权限每次均须先审批，
+     * 审批通过后方可生效；属于既有高危权限的，不得因处于岗位模板内而免除授出前审批；超出新模板范围的增权保持未生效」）：
+     * 人员范围变更写路径——同一事务内：旧岗位派生（角色 + 模板应用）立即撤销 → 账号归属改为新范围 → 新范围岗位权限整单进主管链，
+     * 审批通过后由 {@link #applyApprovedGrant} 落地（只落地新岗位模板内的权限）。
+     */
+    @Transactional
+    public AccessGrantRequestRecord changeUserScope(String userId, UserScopeChangeRequest request) {
+        UserScopeChangeRequest r = requireRequest(request);
+        String id = requireText(userId, "user_id");
+        try {
+            return idempotencyService.execute(
+                    "accessUserScopeChange:" + id,
+                    r.idempotencyKey(),
+                    r,
+                    () -> {
+                        repository.lockGrantAuthorizationFacts();
+                        AccessActor actor = authorizationService.currentActor();
+                        AccessUser target = requireTargetUser(id);
+                        requireSameOrganization(actor, target);
+                        String newOrganization = trimToDefault(r.organizationId(), target.organizationId());
+                        String newMerchant = isBlank(r.merchantId()) ? null : r.merchantId().trim();
+                        if (java.util.Objects.equals(newOrganization, target.organizationId())
+                                && java.util.Objects.equals(newMerchant, target.merchantId())) {
+                            throw ApiException.badRequest("SCOPE_UNCHANGED", "所属商户与项目均未变化；同范围换岗请使用定岗入口");
+                        }
+                        UserPositionAssignment position = repository.findUserPositionAssignment(id).orElse(null);
+                        String positionCode = trimToDefault(r.positionCode(), position == null ? "" : position.positionCode());
+                        String staffLevelId = trimToDefault(r.staffLevelId(), position == null ? "" : position.staffLevelId());
+                        if (positionCode.isEmpty() || staffLevelId.isEmpty()) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "范围变更须指定新范围的岗位与职级");
+                        }
+                        Instant now = Instant.now();
+                        boolean revoked = position != null;
+                        if (revoked) {
+                            repository.replacePositionGrants(id, null, null, List.of(), actor.id(), now); // 旧派生立即失效
+                        }
+                        // M087-I5-03（PGM-1.10.1「旧岗位或旧范围派生权限立即失效」「显式拒绝优先级最高」）：旧范围岗位模板的高危挂起随旧派生作废——
+                        // 删除其显式拒绝、挂起单置 rejected；新范围高危只能随新范围审批重新授出，旧单不得在新范围解除拒绝。
+                        List<String> cancelledHolds = new ArrayList<>();
+                        for (AccessGrantRequestRecord held : repository.listPendingGrantRequests(id, REQUEST_POSITION_HIGH_RISK_RELEASE)) {
+                            repository.deleteUserPermissionOverrides(id, held.permissionCodes(), AccessRepository.Effect.DENY);
+                            repository.saveGrantRequest(withDecision(held, "rejected", actor.id(), now));
+                            cancelledHolds.add(held.id());
+                        }
+                        // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效，审批通过后方可生效」）：旧范围下的非派生增权——直接装配角色、
+                        // 单独模板授予、临时授权、员工单独授予（显式 GRANT）——随范围变更一并撤销；新范围内的增权须重新申请并审批通过后才生效。显式拒绝保留。
+                        List<String> frozen = new ArrayList<>();
+                        Set<String> frozenRoles = new HashSet<>();
+                        Set<String> frozenApplications = new HashSet<>();
+                        Set<String> frozenTemporary = new HashSet<>();
+                        Set<String> frozenOverrides = new HashSet<>();
+                        for (AccessRepository.PermissionEffect effect : repository.findPermissionEffects(id, now)) {
+                            if (effect.effect() != AccessRepository.Effect.GRANT) {
+                                continue;
+                            }
+                            switch (effect.source()) {
+                                case ROLE -> frozenRoles.add(effect.sourceId());
+                                case TEMPLATE_APPLICATION -> frozenApplications.add(effect.sourceId());
+                                case TEMPORARY_GRANT -> frozenTemporary.add(effect.sourceId());
+                                case USER_OVERRIDE -> frozenOverrides.add(effect.permissionCode());
+                            }
+                        }
+                        for (String roleId : frozenRoles) {
+                            repository.unassignUserRole(id, roleId);
+                            frozen.add("role:" + roleId);
+                        }
+                        if (!frozenApplications.isEmpty()) {
+                            repository.revokeTemplateApplications(id, List.copyOf(frozenApplications), actor.id(), now);
+                            frozenApplications.forEach(applicationId -> frozen.add("template_application:" + applicationId));
+                        }
+                        for (String grantId : frozenTemporary) {
+                            repository.revokeTemporaryGrant(grantId, actor.id(), now);
+                            frozen.add("temporary_grant:" + grantId);
+                        }
+                        if (!frozenOverrides.isEmpty()) {
+                            repository.deleteUserPermissionOverrides(id, List.copyOf(frozenOverrides), AccessRepository.Effect.GRANT);
+                            frozenOverrides.forEach(code -> frozen.add("override:" + code));
+                        }
+                        repository.updateUserScope(id, newOrganization, newMerchant, actor.id(), now);
+                        PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(
+                                r.idempotencyKey(), r.operatorNote(), id, positionCode, staffLevelId,
+                                r.baseSalaryAmountCent(), r.salaryCurrency(), r.salaryDetail()), false);
+                        GrantReviewPolicy policy = scopeChangeReviewPolicy(context.permissionCodes());
+                        boolean moneyRelated = permissionDefinitions(context.permissionCodes()).stream().anyMatch(AccessService::isMoneyPermission);
+                        String draftId = "agr_" + UUID.randomUUID();
+                        SupervisorReviewDecisionRecord review = blockGrantRequest(policy,
+                                moneyRelated ? "access.scope_change.money" : "access.scope_change", draftId, id, r.finalApproverId());
+                        AccessGrantRequestRecord draft = new AccessGrantRequestRecord(
+                                draftId, REQUEST_USER_SCOPE_CHANGE, id, context.role().id(), context.template().id(),
+                                context.positionCode(), context.staffLevelId(), r.baseSalaryAmountCent(), context.salaryCurrency(),
+                                r.salaryDetail(), context.permissionCodes(), null, null, false, "pending", review.reviewId(),
+                                trimToDefault(r.reason(), r.operatorNote()), actor.id(), null, null, newOrganization, newMerchant, now, now);
+                        AccessGrantRequestRecord saved = repository.saveGrantRequest(draft);
+                        repository.saveGrantFingerprint(saved.id(), authorizationFingerprint(saved));
+                        auditEventService.recordSuccess(
+                                "access.user_scope.changed",
+                                "access.role.assign",
+                                "access_user",
+                                id,
+                                null,
+                                r.idempotencyKey(),
+                                Map.of("old_organization_id", nz(target.organizationId()), "old_merchant_id", nz(target.merchantId()),
+                                        "new_organization_id", nz(newOrganization), "new_merchant_id", nz(newMerchant),
+                                        "old_position_revoked", revoked, "grant_request_id", saved.id(), "review_id", nz(saved.reviewId()),
+                                        "cancelled_high_risk_holds", String.join(",", cancelledHolds),
+                                        "frozen_extra_grants", String.join(",", frozen))
+                        );
+                        return saved;
+                    },
+                    AccessGrantRequestRecord.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.user_scope.change_failed",
+                    "access.role.assign",
+                    "access_user",
+                    userId,
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    /** 新范围权限每次均须先审批：按模板权限最高风险取档位；模板无需审批权限时也以一级主管为下限。 */
+    private GrantReviewPolicy scopeChangeReviewPolicy(List<String> permissionCodes) {
+        List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(permissionCodes);
+        if (approvalRequired.isEmpty()) {
+            return new GrantReviewPolicy("permission_grant_l1", "one_level_up", 1);
+        }
+        return grantReviewPolicy(approvalRequired.stream().map(PermissionDefinition::permissionCode).toList());
+    }
+
+    /** M087（PGM-1.7.1）：授权申请进主管链；起草人可指定主线最终审批人，未指定时按档位下限沿直接上级链生成。 */
+    private SupervisorReviewDecisionRecord blockGrantRequest(GrantReviewPolicy policy, String actionType, String objectId,
+                                                             String beneficiaryId, String finalApproverId) {
+        if (isBlank(finalApproverId)) {
+            return requireSupervisorReviewService().blockForAdmission(policy.policyCode(), actionType, "access_grant_request",
+                    objectId, policy.approvalLevel(), policy.requiredLevel(), beneficiaryId);
+        }
+        return requireSupervisorReviewService().blockForAdmission(policy.policyCode(), actionType, "access_grant_request",
+                objectId, policy.approvalLevel(), policy.requiredLevel(), beneficiaryId, finalApproverId.trim());
+    }
+
+    /** M087-F-06：岗位模板内的高危权限——显式拒绝 + 待审申请（position_high_risk_release），审批通过后解除拒绝。 */
+    private void holdHighRiskPositionPermissions(PositionGrantContext context, UserPositionAssignmentRequest request,
+                                                 List<PermissionDefinition> highRisk, Instant now) {
+        List<String> codes = highRisk.stream().map(PermissionDefinition::permissionCode).sorted().toList();
+        String userId = context.targetUser().id();
+        repository.saveUserPermissionOverrides(userId, codes, AccessRepository.Effect.DENY,
+                "岗位模板内高危权限待审批（PGM-1.10.1）", context.actor().id());
+        GrantReviewPolicy policy = grantReviewPolicy(codes);
+        boolean moneyRelated = highRisk.stream().anyMatch(AccessService::isMoneyPermission);
+        String draftId = "agr_" + UUID.randomUUID();
+        SupervisorReviewDecisionRecord review = blockGrantRequest(policy,
+                moneyRelated ? "access.grant_request.money" : "access.grant_request", draftId, userId, null);
+        AccessGrantRequestRecord release = new AccessGrantRequestRecord(
+                draftId, REQUEST_POSITION_HIGH_RISK_RELEASE, userId, context.role().id(), context.template().id(),
+                context.positionCode(), context.staffLevelId(), null, null, null, codes, null, null, false, "pending",
+                review.reviewId(), trimToDefault(request.operatorNote(), "岗位模板内高危权限授出审批"), context.actor().id(),
+                null, null, context.targetUser().organizationId(), context.targetUser().merchantId(), now, now);
+        repository.saveGrantRequest(release);
+        repository.saveGrantFingerprint(release.id(), authorizationFingerprint(release));
+        auditEventService.recordSuccess(
+                "access.user_position.high_risk_held",
+                "access.role.assign",
+                "user_position_assignment",
+                userId,
+                null,
+                request.idempotencyKey(),
+                Map.of("permission_codes", String.join(",", codes), "grant_request_id", release.id(), "review_id", nz(review.reviewId()))
+        );
+    }
+
+    private void releaseHeldPositionPermissions(AccessGrantRequestRecord request, String idempotencyKey) {
+        int removed = repository.deleteUserPermissionOverrides(request.targetUserId(), request.permissionCodes(), AccessRepository.Effect.DENY);
+        auditEventService.recordSuccess(
+                "access.user_position.high_risk_released",
+                "access.role.assign",
+                "user_position_assignment",
+                request.targetUserId(),
+                null,
+                idempotencyKey,
+                Map.of("permission_codes", String.join(",", request.permissionCodes()), "removed_denies", removed)
+        );
+    }
+
+    private static String nz(String value) {
+        return value == null ? "" : value;
     }
 
     /**
@@ -673,15 +874,9 @@ public class AccessService {
                         // M007-A-02：被授权对象是直接受益人，不得审批也不得被转发。
                         // M007-I3-F02（PGM-1.7.1 涉钱审批 1 个工作日）：含资金/分红/退款/调账类权限的申请以涉钱动作名进链。
                         boolean moneyRelated = permissionDefinitions(draft.permissionCodes()).stream().anyMatch(AccessService::isMoneyPermission);
-                        SupervisorReviewDecisionRecord review = requireSupervisorReviewService().blockForAdmission(
-                                policy.policyCode(),
+                        SupervisorReviewDecisionRecord review = blockGrantRequest(policy,
                                 moneyRelated ? "access.grant_request.money" : "access.grant_request",
-                                "access_grant_request",
-                                draft.id(),
-                                policy.approvalLevel(),
-                                policy.requiredLevel(),
-                                draft.targetUserId()
-                        );
+                                draft.id(), draft.targetUserId(), r.finalApproverId());
                         AccessGrantRequestRecord saved = repository.saveGrantRequest(withReview(draft, review.reviewId()));
                         repository.saveGrantFingerprint(saved.id(), authorizationFingerprint(saved));
                         auditEventService.recordSuccess(
@@ -748,6 +943,9 @@ public class AccessService {
                                         r.comment()
                                 )
                         );
+                        if ("approve".equals(decision) && !"approved".equals(review.reviewStatus())) {
+                            return pending; // M087：审批链尚有后续节点待审，本次只推进节点，授权不落地
+                        }
                         Instant now = Instant.now();
                         AccessActor actor = authorizationService.currentActor();
                         AccessGrantRequestRecord reviewed;
@@ -1126,7 +1324,7 @@ public class AccessService {
     }
 
     private RoleAssignmentRecord assignUserRoleDirect(RoleAssignmentRequest request, boolean enforceApproval) {
-        RoleGrantContext context = resolveRoleGrant(request, true);
+        RoleGrantContext context = resolveRoleGrant(request, enforceApproval); // M087：审批落地不按落地人自身权限限制
         if (enforceApproval) {
             requireGrantApprovalIfNeeded(context.role().permissionCodes());
         }
@@ -1227,10 +1425,11 @@ public class AccessService {
             UserPositionAssignmentRequest request,
             boolean enforceApproval
     ) {
-        PositionGrantContext context = resolvePositionGrant(request, true);
-        if (enforceApproval) {
-            requireGrantApprovalIfNeeded(context.permissionCodes());
-        }
+        PositionGrantContext context = resolvePositionGrant(request, enforceApproval); // M087：审批落地不按落地人自身权限限制
+        // M087-F-06（PGM-1.10.1「同一商户、同一项目范围内的普通模板权限随保存立即生效」「既有高危不得因处于岗位模板内而免除授出前审批」）：
+        // 岗位模板混有高危权限时不再整单拒绝——普通部分随保存生效，高危部分先显式拒绝、进审批链，审批通过后解除。
+        List<PermissionDefinition> highRisk = enforceApproval && grantApprovalEnabled
+                ? approvalRequiredPermissions(context.permissionCodes()) : List.of();
         Instant now = Instant.now();
         StaffLevelAssignment staffLevelAssignment = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
                 context.targetUser().id(),
@@ -1276,6 +1475,9 @@ public class AccessService {
                         "template_id", context.template().id()
                 )
         );
+        if (!highRisk.isEmpty()) {
+            holdHighRiskPositionPermissions(context, request, highRisk, now);
+        }
         return new UserPositionAssignmentResult(
                 assignment,
                 staffLevelAssignment,
@@ -1300,7 +1502,9 @@ public class AccessService {
             throw ApiException.badRequest("VALIDATION_FAILED", "授权失效时间必须晚于生效时间");
         }
         // P0-1：临时授权不得授予超出授权人自身有效权限的权限码（提权防护）。
-        requireActorCanGrant(request.permissionCodes());
+        if (enforceApproval) { // M087：审批落地不按落地人自身权限限制
+            requireActorCanGrant(request.permissionCodes());
+        }
         if (enforceApproval) {
             requireGrantApprovalIfNeeded(request.permissionCodes());
         }
@@ -1493,7 +1697,8 @@ public class AccessService {
                     .map(item -> java.util.Arrays.asList(item.permissionCode(), item.effect().name(),
                             item.dataScope(), item.sensitive())).toList());
         }
-        if (REQUEST_USER_POSITION.equals(request.requestType())) {
+        // M087-I2-01：范围变更申请与定岗申请一样钉住新范围的岗位映射（映射 id/角色/模板/状态），待审期间映射改动即 GRANT_SNAPSHOT_CHANGED。
+        if (REQUEST_USER_POSITION.equals(request.requestType()) || REQUEST_USER_SCOPE_CHANGE.equals(request.requestType())) {
             PositionRoleTemplate mapping = repository.findPositionRoleTemplate(
                     target.organizationId(), request.positionCode(), request.staffLevelId())
                     .orElseThrow(() -> ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "岗位配置已变化，请重新申请"));
@@ -1529,6 +1734,17 @@ public class AccessService {
                     request.salaryCurrency(),
                     request.salaryDetail()
             ), false);
+            case REQUEST_USER_SCOPE_CHANGE -> assignUserPositionDirect(new UserPositionAssignmentRequest(
+                    idempotencyKey,
+                    request.reason(),
+                    request.targetUserId(),
+                    request.positionCode(),
+                    request.staffLevelId(),
+                    request.baseSalaryAmountCent(),
+                    request.salaryCurrency(),
+                    request.salaryDetail()
+            ), false);
+            case REQUEST_POSITION_HIGH_RISK_RELEASE -> releaseHeldPositionPermissions(request, idempotencyKey);
             case REQUEST_TEMPORARY_PERMISSION -> createTemporaryGrantDirect(new TemporaryGrantRequest(
                     idempotencyKey,
                     request.reason(),
@@ -1566,7 +1782,11 @@ public class AccessService {
         String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
         String positionCode = requireText(request.positionCode(), "position_code");
         AccessUser targetUser = requireTargetUser(userId);
-        requireSameOrganization(actor, targetUser);
+        if (requireGrantorCanGrant) {
+            // M087-I5-02（PGM-1.10.1 跨项目变更审批通过后方可生效）：审批落地与范围变更发起不按当前操作人的组织闸——
+            // 授权来自审批链与申请指纹（目标范围已钉住）；直接定岗（enforceApproval）仍受同组织闸。
+            requireSameOrganization(actor, targetUser);
+        }
         if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
                     "无法识别的员工职级：" + staffLevelId);

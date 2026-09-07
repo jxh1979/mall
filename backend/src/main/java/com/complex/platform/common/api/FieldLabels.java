@@ -363,6 +363,12 @@ public final class FieldLabels {
         p("resolution_note", "处理说明");
         p("review_id", "复核单号");
         p("forwarded_to", "转交对象");
+        p("final_approver_id", "最终审批人");
+        p("line_code", "审批线");
+        p("line_name", "审批线名称");
+        p("min_start_rank", "最低起点层级");
+        p("entry_user_id", "起点人");
+        p("superior_id", "直接上级");
         p("review_result", "复核结果");
         p("request_type", "申请类型");
         p("approval_note", "审批意见");

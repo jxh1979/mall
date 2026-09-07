@@ -1,5 +1,6 @@
 package com.complex.platform.governance.review;
 
+import com.complex.platform.governance.chain.ApprovalChainNode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -10,6 +11,11 @@ public interface SupervisorReviewRepository {
     SupervisorReviewDecisionRecord saveSupervisorReview(SupervisorReviewDecisionRecord record);
 
     Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId);
+
+    /** M087-I5-01：任意状态的复核单（审批链页裁决授权申请类复核单后回读终态）。默认只回退到待复核查找。 */
+    default Optional<SupervisorReviewDecisionRecord> findSupervisorReviewById(String reviewId) {
+        return findPendingSupervisorReviewById(reviewId);
+    }
 
     /** M007-A-01：同动作、同对象、同发起人且已批准未放行的复核单（供准入闸消费）。 */
     default Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
@@ -62,6 +68,56 @@ public interface SupervisorReviewRepository {
 
     /** holiday_calendar 中落在 [from, to] 的全部日期（含调休假期），用于按工作日计算到期。 */
     default List<LocalDate> findHolidayDates(LocalDate from, LocalDate to) {
+        return List.of();
+    }
+
+    // ── M087 审批链引擎（PGM-1.7.1 / PGM-1.10.1）：组织层级、平行线设置、复核单节点 ──
+
+    /** M087-A-03：平行审批线设置——该线最低起点层级（level_rank）与起点人（approval_lines）。 */
+    record ApprovalLine(String lineCode, String lineName, int minStartRank, String entryUserId, String status) {
+    }
+
+    /** M087-A-01：直接上级（org_hierarchy）；未维护为空。 */
+    default Optional<String> findDirectSuperior(String userId) {
+        return Optional.empty();
+    }
+
+    default Optional<ApprovalLine> findApprovalLine(String lineCode) {
+        return Optional.empty();
+    }
+
+    /** M087-A-02：复核单生成时一次性写入全部节点。 */
+    default void saveChainNodes(String reviewId, List<ApprovalChainNode> nodes) {
+    }
+
+    default List<ApprovalChainNode> listChainNodes(String reviewId) {
+        return List.of();
+    }
+
+    /** 更新单个节点（裁决 / 转发 / 升级）；节点不存在返回 false。 */
+    default boolean updateChainNode(ApprovalChainNode node) {
+        return false;
+    }
+
+    /** M087-I5-06：同一复核单的节点裁决串行化（JDBC 实现为复核单行锁）；默认不加锁。 */
+    default void lockSupervisorReview(String reviewId) {
+    }
+
+    /** M087-A-01：组织层级一行（org_hierarchy）。 */
+    record OrgSuperior(String userId, String superiorId, String lineCode, String updatedBy, Instant updatedAt) {
+    }
+
+    default void saveDirectSuperior(String userId, String superiorId, String lineCode, String updatedBy, Instant updatedAt) {
+    }
+
+    default List<OrgSuperior> listOrgHierarchy(int limit) {
+        return List.of();
+    }
+
+    default void saveApprovalLine(ApprovalLine line, String updatedBy, Instant updatedAt) {
+    }
+
+    default List<ApprovalLine> listApprovalLines() {
         return List.of();
     }
 }

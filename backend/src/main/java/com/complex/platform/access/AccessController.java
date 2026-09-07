@@ -298,6 +298,17 @@ public class AccessController {
         return ApiResponse.ok(service.assignUserPosition(withUser));
     }
 
+    // M087-A-04（PGM-1.10.1「保存所属商户或发生跨项目变更」）：人员范围变更写入口，与定岗同一门禁。
+    @PutMapping("/users/{id}/scope")
+    public ApiResponse<AccessGrantRequestRecord> changeUserScope(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.dto.UserScopeChangeRequest request
+    ) {
+        authorizationService.requirePermission("access.role.assign");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.changeUserScope(id, request));
+    }
+
     // M006-G-01（PGM-1.10.1「员工单独授予 − 显式拒绝」）：员工级覆盖写入口，与角色装配同一门禁。
     @PostMapping("/users/{id}/permission-overrides")
     public ApiResponse<EffectivePermissions> setUserPermissionOverrides(

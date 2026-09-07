@@ -3,6 +3,7 @@ import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
+import com.complex.platform.governance.chain.ApprovalChainNode;
 import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
 import com.complex.platform.governance.review.SupervisorReviewRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -721,6 +722,26 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public Optional<SupervisorReviewDecisionRecord> findSupervisorReviewById(String reviewId) {
+        return jdbcTemplate.query("""
+                SELECT review_id, policy_code, action_type, object_type, object_id,
+                       blocked, review_status, required_level, reviewer_level, decision,
+                       reason, evidence_attachment_ids::text AS evidence_attachment_ids, evaluated_at,
+                       initiated_by, approval_level, required_approver_rank
+                  FROM supervisor_review_decisions
+                 WHERE review_id = :review_id
+                """, Map.of("review_id", reviewId), this::mapSupervisorReview).stream().findFirst();
+    }
+
+    // M087-I5-06（PGM-1.7.1「主线与各条平行线全部通过……才生效」）：同一复核单的节点裁决在复核单行锁下串行，
+    // 后到的末节点裁决必等先到者提交后再读整链归约，不会两边都读到对方「仍待审」而把单据卡死。
+    @Override
+    public void lockSupervisorReview(String reviewId) {
+        jdbcTemplate.query("SELECT review_id FROM supervisor_review_decisions WHERE review_id = :review_id FOR UPDATE",
+                Map.of("review_id", reviewId), (rs, rowNumber) -> rs.getString("review_id"));
+    }
+
+    @Override
     public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
             String actionType, String objectType, String objectId, String initiatedBy) {
         return jdbcTemplate.query("""
@@ -833,6 +854,130 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                  LIMIT :limit
                 """, new MapSqlParameterSource().addValue("now", timestampWithTimeZone(now)).addValue("limit", limit),
                 (rs, rowNumber) -> new SupervisorReviewRepository.PendingReview(mapSupervisorReview(rs, rowNumber), mapReviewSchedule(rs)));
+    }
+
+    // ── M087 审批链引擎：org_hierarchy / approval_lines / supervisor_review_nodes ──
+
+    @Override
+    public Optional<String> findDirectSuperior(String userId) {
+        return jdbcTemplate.query("SELECT superior_id FROM org_hierarchy WHERE user_id = :user_id AND superior_id IS NOT NULL",
+                new MapSqlParameterSource().addValue("user_id", userId), (rs, rowNumber) -> rs.getString("superior_id")).stream().findFirst();
+    }
+
+    @Override
+    public Optional<SupervisorReviewRepository.ApprovalLine> findApprovalLine(String lineCode) {
+        return jdbcTemplate.query("""
+                SELECT line_code, line_name, min_start_rank, entry_user_id, status
+                  FROM approval_lines
+                 WHERE line_code = :line_code
+                """, new MapSqlParameterSource().addValue("line_code", lineCode),
+                (rs, rowNumber) -> new SupervisorReviewRepository.ApprovalLine(rs.getString("line_code"), rs.getString("line_name"),
+                        rs.getInt("min_start_rank"), rs.getString("entry_user_id"), rs.getString("status"))).stream().findFirst();
+    }
+
+    @Override
+    public void saveChainNodes(String reviewId, List<ApprovalChainNode> nodes) {
+        for (ApprovalChainNode node : nodes) {
+            jdbcTemplate.update("""
+                    INSERT INTO supervisor_review_nodes (node_id, review_id, line_code, seq, approver_kind, approver_id, status, escalation_count)
+                    VALUES (:node_id, :review_id, :line_code, :seq, :approver_kind, :approver_id, :status, :escalation_count)
+                    """, chainNodeParameters(node));
+        }
+    }
+
+    @Override
+    public List<ApprovalChainNode> listChainNodes(String reviewId) {
+        return jdbcTemplate.query("""
+                SELECT node_id, review_id, line_code, seq, approver_kind, approver_id, status, decided_by, decided_at,
+                       forwarded_to, forwarded_by, escalation_count
+                  FROM supervisor_review_nodes
+                 WHERE review_id = :review_id
+                 ORDER BY line_code, seq
+                """, new MapSqlParameterSource().addValue("review_id", reviewId), (rs, rowNumber) -> new ApprovalChainNode(
+                rs.getString("node_id"), rs.getString("review_id"), rs.getString("line_code"), rs.getInt("seq"),
+                rs.getString("approver_kind"), rs.getString("approver_id"), rs.getString("status"), rs.getString("decided_by"),
+                nullableInstant(rs, "decided_at"), rs.getString("forwarded_to"), rs.getString("forwarded_by"), rs.getInt("escalation_count")));
+    }
+
+    @Override
+    public boolean updateChainNode(ApprovalChainNode node) {
+        return jdbcTemplate.update("""
+                UPDATE supervisor_review_nodes
+                   SET approver_id = :approver_id, status = :status, decided_by = :decided_by, decided_at = :decided_at,
+                       forwarded_to = :forwarded_to, forwarded_by = :forwarded_by, escalation_count = :escalation_count
+                 WHERE node_id = :node_id AND status = 'pending'
+                """, chainNodeParameters(node)
+                .addValue("decided_by", node.decidedBy())
+                .addValue("decided_at", timestampWithTimeZone(node.decidedAt()))
+                .addValue("forwarded_to", node.forwardedTo())
+                .addValue("forwarded_by", node.forwardedBy())) == 1;
+    }
+
+    @Override
+    public void saveDirectSuperior(String userId, String superiorId, String lineCode, String updatedBy, java.time.Instant updatedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by, updated_at)
+                VALUES (:user_id, :superior_id, :line_code, :updated_by, :updated_at)
+                ON CONFLICT (user_id) DO UPDATE SET superior_id = EXCLUDED.superior_id, line_code = EXCLUDED.line_code,
+                    updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("superior_id", superiorId)
+                .addValue("line_code", lineCode)
+                .addValue("updated_by", updatedBy)
+                .addValue("updated_at", timestampWithTimeZone(updatedAt)));
+    }
+
+    @Override
+    public List<SupervisorReviewRepository.OrgSuperior> listOrgHierarchy(int limit) {
+        return jdbcTemplate.query("""
+                SELECT user_id, superior_id, line_code, updated_by, updated_at
+                  FROM org_hierarchy
+                 ORDER BY user_id
+                 LIMIT :limit
+                """, new MapSqlParameterSource().addValue("limit", limit), (rs, rowNumber) -> new SupervisorReviewRepository.OrgSuperior(
+                rs.getString("user_id"), rs.getString("superior_id"), rs.getString("line_code"), rs.getString("updated_by"),
+                nullableInstant(rs, "updated_at")));
+    }
+
+    @Override
+    public void saveApprovalLine(SupervisorReviewRepository.ApprovalLine line, String updatedBy, java.time.Instant updatedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO approval_lines (line_code, line_name, min_start_rank, entry_user_id, status, updated_by, updated_at)
+                VALUES (:line_code, :line_name, :min_start_rank, :entry_user_id, :status, :updated_by, :updated_at)
+                ON CONFLICT (line_code) DO UPDATE SET line_name = EXCLUDED.line_name, min_start_rank = EXCLUDED.min_start_rank,
+                    entry_user_id = EXCLUDED.entry_user_id, status = EXCLUDED.status, updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("line_code", line.lineCode())
+                .addValue("line_name", line.lineName())
+                .addValue("min_start_rank", line.minStartRank())
+                .addValue("entry_user_id", line.entryUserId())
+                .addValue("status", line.status())
+                .addValue("updated_by", updatedBy)
+                .addValue("updated_at", timestampWithTimeZone(updatedAt)));
+    }
+
+    @Override
+    public List<SupervisorReviewRepository.ApprovalLine> listApprovalLines() {
+        return jdbcTemplate.query("""
+                SELECT line_code, line_name, min_start_rank, entry_user_id, status
+                  FROM approval_lines
+                 ORDER BY line_code
+                """, new MapSqlParameterSource(), (rs, rowNumber) -> new SupervisorReviewRepository.ApprovalLine(rs.getString("line_code"),
+                rs.getString("line_name"), rs.getInt("min_start_rank"), rs.getString("entry_user_id"), rs.getString("status")));
+    }
+
+    private MapSqlParameterSource chainNodeParameters(ApprovalChainNode node) {
+        return new MapSqlParameterSource()
+                .addValue("node_id", node.nodeId())
+                .addValue("review_id", node.reviewId())
+                .addValue("line_code", node.lineCode())
+                .addValue("seq", node.seq())
+                .addValue("approver_kind", node.approverKind())
+                .addValue("approver_id", node.approverId())
+                .addValue("status", node.status())
+                .addValue("escalation_count", node.escalationCount());
     }
 
     @Override

@@ -376,6 +376,11 @@ class M006SecurityRegressionTests {
                 "top", "permission_grant_l3", "permission_grant_l3", "access_grant_request", "request",
                 true, "pending", 3, 0, null, "理由", List.of(), Instant.now(), "requester", "top_authority", 30);
         when(reviewRepository.findPendingSupervisorReviewById("top")).thenReturn(Optional.of(pending));
+        // M087：最高权限事项的链末节点为主会话节点（可变持有，裁决后 listChainNodes 反映新状态）。
+        List<com.complex.platform.governance.chain.ApprovalChainNode> topChain = new ArrayList<>(List.of(
+                new com.complex.platform.governance.chain.ApprovalChainNode("n_top", "top", "main", 1, "master", null, "pending", null, null, null, null, 0)));
+        when(reviewRepository.listChainNodes("top")).thenAnswer(a -> List.copyOf(topChain));
+        when(reviewRepository.updateChainNode(any())).thenAnswer(a -> { topChain.set(0, a.getArgument(0)); return true; });
         when(reviewRepository.saveSupervisorReview(any())).thenAnswer(a -> a.getArgument(0));
         var reviews = new com.complex.platform.governance.review.SupervisorReviewService(authorization,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -539,6 +544,18 @@ class M006SecurityRegressionTests {
         });
         when(reviewRepository.findPendingSupervisorReviewById(anyString())).thenAnswer(a ->
                 Optional.ofNullable(decisions.get(a.getArgument(0))).filter(r -> "pending_review".equals(r.reviewStatus())));
+        // M087：审批链节点存取（申请人无直接上级 → 最高权限事项只有主会话节点）。
+        Map<String, List<com.complex.platform.governance.chain.ApprovalChainNode>> chains = new HashMap<>();
+        doAnswer(a -> { chains.put(a.getArgument(0), new ArrayList<>(a.getArgument(1))); return null; })
+                .when(reviewRepository).saveChainNodes(anyString(), any());
+        when(reviewRepository.listChainNodes(anyString())).thenAnswer(a -> chains.getOrDefault(a.getArgument(0), List.of()));
+        when(reviewRepository.updateChainNode(any())).thenAnswer(a -> {
+            com.complex.platform.governance.chain.ApprovalChainNode n = a.getArgument(0);
+            List<com.complex.platform.governance.chain.ApprovalChainNode> l = chains.get(n.reviewId());
+            if (l == null) return false;
+            for (int i = 0; i < l.size(); i++) if (l.get(i).nodeId().equals(n.nodeId())) l.set(i, n);
+            return true;
+        });
         var reviews = new com.complex.platform.governance.review.SupervisorReviewService(authorization,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository, new AuditEventService(new InMemoryAuditEventRepository()));

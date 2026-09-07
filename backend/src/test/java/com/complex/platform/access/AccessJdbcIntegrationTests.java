@@ -685,6 +685,42 @@ class AccessJdbcIntegrationTests {
                 """, String.class)).isEmpty();
     }
 
+    // M087-I3-01（PGM-1.10.1 范围变更与模板内高危先审后生效）：两种新申请类型必须能在权威 schema 落库；未知类型仍被 CHECK 拒绝。
+    @Test
+    void scopeChangeAndHighRiskReleaseRequestTypesAreAcceptedByTheGrantRequestCheck() {
+        for (String type : List.of("user_scope_change", "position_high_risk_release")) {
+            jdbcTemplate.update("""
+                    INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
+                    VALUES (?, ?, 'usr_m087_target', 'pending', 'M087 schema check', 'usr_m087_admin', now(), now())
+                    """, "agr_m087_" + type, type);
+            assertThat(jdbcTemplate.queryForObject("SELECT request_type FROM access_grant_requests WHERE id = ?", String.class, "agr_m087_" + type))
+                    .isEqualTo(type);
+        }
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
+                VALUES ('agr_m087_unknown', 'user_scope_change_unknown', 'usr_m087_target', 'pending', 'x', 'usr_m087_admin', now(), now())
+                """)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效」）：范围变更冻结单独模板授予的仓储写路径在真实 schema 上可执行且幂等。
+    @Test
+    void revokeTemplateApplicationsMarksOnlyTheGivenActiveApplicationsRevoked() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_tpl_freeze", "jdbc-tpl-freeze", "staff", "org", "merchant", "active", Instant.parse("2026-06-14T00:00:00Z")));
+        repository.createTemplate(
+                template("tpl_freeze", "freeze", null),
+                List.of(item("tpl_freeze", "ops.production_readiness.check", AccessRepository.Effect.GRANT))
+        );
+        List<String> ids = repository.applyTemplate("tpl_freeze", List.of("usr_jdbc_tpl_freeze"), null, null, false, "seed-admin")
+                .stream().map(PermissionTemplateApplication::id).toList();
+        assertThat(repository.revokeTemplateApplications("usr_jdbc_tpl_freeze", ids, "seed-admin", Instant.parse("2026-06-16T00:00:00Z"))).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permission_template_applications WHERE id = ?", String.class, ids.get(0))).isEqualTo("revoked");
+        assertThat(repository.revokeTemplateApplications("usr_jdbc_tpl_freeze", ids, "seed-admin", Instant.parse("2026-06-16T00:00:00Z"))).isZero();
+        assertThat(repository.findPermissionEffects("usr_jdbc_tpl_freeze", Instant.parse("2026-06-16T00:00:00Z")))
+                .extracting(AccessRepository.PermissionEffect::permissionCode).doesNotContain("ops.production_readiness.check");
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
