@@ -497,6 +497,28 @@ class SupervisorReviewServiceTests {
 
     // M087-F-05（PGM-1.7.1「超时……自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝；到达最终节点仍超时保持待审」）：
     // 当前节点审批人升为其直接上级；到组织顶端后只提醒；档位不再跳档。
+    // M087-I5-04（PGM-1.7.1「升级到达该单据的最终审批节点、不再有上一级可升后仍然超时的，单据保持待审」）：
+    // 指定最终审批人的节点是本线终点——超时只催办，不把其组织上级（链外）升级进来。
+    @Test
+    void overdueFinalApprovalNodeOnlyRemindsAndNeverEscalatesPastTheDesignatedFinalApprover() {
+        reviewRepository.superiors.put("usr_init", "usr_mid");
+        reviewRepository.superiors.put("usr_mid", "usr_high");
+        reviewRepository.superiors.put("usr_high", "usr_ceo");
+        TestSecurityActors.asSupervisor("usr_init", 3);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest("review-final-overdue", "v", List.of(),
+                "contract_violation", "contract", "c_final_overdue", 0L, "violation", "usr_high", List.of()));
+        TestSecurityActors.asSupervisor("usr_mid", 3);
+        service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("review-final-overdue-1", "approve", List.of(), 3, "approved", "mid"));
+
+        java.time.Instant later = reviewRepository.schedules.get(pending.reviewId()).dueAt().plusSeconds(60);
+        assertThat(service.escalateOverdue(later)).isEqualTo(1);
+        var finalNode = reviewRepository.listChainNodes(pending.reviewId()).get(1);
+        assertThat(finalNode.approverId()).isEqualTo("usr_high"); // 链外的 usr_ceo 不进链
+        assertThat(finalNode.escalationCount()).isZero();
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).reviewStatus()).isEqualTo("pending_review");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.reminded");
+    }
+
     @Test
     void overdueNodeEscalatesToTheApproversDirectSuperiorThenOnlyReminds() {
         chainL1();

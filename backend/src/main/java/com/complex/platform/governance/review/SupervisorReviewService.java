@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -176,6 +176,7 @@ public class SupervisorReviewService {
                 request.idempotencyKey(),
                 request,
                 () -> {
+                    supervisorReviewRepository.lockSupervisorReview(id); // M087-I5-06：同一复核单的节点裁决串行化，整单终态归约不受并发末节点影响
                     String decision = normalize(requireText(request.decision(), "decision"));
                     if (!List.of("approved", "rejected").contains(decision)) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
@@ -618,8 +619,12 @@ public class SupervisorReviewService {
             String beneficiaryId = item.schedule() == null ? null : item.schedule().beneficiaryId();
             List<String> escalatedNodes = new ArrayList<>();
             List<String> remindedNodes = new ArrayList<>();
-            for (ApprovalChainNode node : ApprovalChainService.currentNodes(supervisorReviewRepository.listChainNodes(d.reviewId()))) {
-                Optional<String> superior = ApprovalChainNode.KIND_USER.equals(node.approverKind()) && node.approverId() != null
+            List<ApprovalChainNode> chain = supervisorReviewRepository.listChainNodes(d.reviewId());
+            for (ApprovalChainNode node : ApprovalChainService.currentNodes(chain)) {
+                // M087-I5-04（PGM-1.7.1「升级到达该单据的最终审批节点、不再有上一级可升后仍然超时的，单据保持待审」）：
+                // 本线最后一个节点（指定最终审批人 / 顶端）是该单据的最终审批节点，只催办，不把链外的人升级进来。
+                boolean finalNode = chain.stream().noneMatch(n -> n.lineCode().equals(node.lineCode()) && n.seq() > node.seq());
+                Optional<String> superior = !finalNode && ApprovalChainNode.KIND_USER.equals(node.approverKind()) && node.approverId() != null
                         ? supervisorReviewRepository.findDirectSuperior(node.approverId())
                         : Optional.empty();
                 if (superior.isPresent() && !superior.get().equals(d.initiatedBy()) && !superior.get().equals(beneficiaryId)) {
@@ -741,6 +746,11 @@ public class SupervisorReviewService {
     }
 
     /** M007-A-02：待复核清单（审批人可见卡在哪一节点、到期与升级、转发状态）。 */
+    /** M087-I5-01：按编号读取复核单（任意状态），供审批链页把授权申请类复核单的裁决汇入授权申请落地路径。 */
+    public Optional<SupervisorReviewDecisionRecord> findReview(String reviewId) {
+        return supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
+    }
+
     public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
         List<SupervisorReviewRepository.PendingReview> items = supervisorReviewRepository.listPendingSupervisorReviews(limit);
         return new PageResponse<>(items, 1, limit, items.size());

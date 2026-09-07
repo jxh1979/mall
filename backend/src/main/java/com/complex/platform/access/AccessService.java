@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -610,6 +610,14 @@ public class AccessService {
                         if (revoked) {
                             repository.replacePositionGrants(id, null, null, List.of(), actor.id(), now); // 旧派生立即失效
                         }
+                        // M087-I5-03（PGM-1.10.1「旧岗位或旧范围派生权限立即失效」「显式拒绝优先级最高」）：旧范围岗位模板的高危挂起随旧派生作废——
+                        // 删除其显式拒绝、挂起单置 rejected；新范围高危只能随新范围审批重新授出，旧单不得在新范围解除拒绝。
+                        List<String> cancelledHolds = new ArrayList<>();
+                        for (AccessGrantRequestRecord held : repository.listPendingGrantRequests(id, REQUEST_POSITION_HIGH_RISK_RELEASE)) {
+                            repository.deleteUserPermissionOverrides(id, held.permissionCodes(), AccessRepository.Effect.DENY);
+                            repository.saveGrantRequest(withDecision(held, "rejected", actor.id(), now));
+                            cancelledHolds.add(held.id());
+                        }
                         repository.updateUserScope(id, newOrganization, newMerchant, actor.id(), now);
                         PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(
                                 r.idempotencyKey(), r.operatorNote(), id, positionCode, staffLevelId,
@@ -635,7 +643,8 @@ public class AccessService {
                                 r.idempotencyKey(),
                                 Map.of("old_organization_id", nz(target.organizationId()), "old_merchant_id", nz(target.merchantId()),
                                         "new_organization_id", nz(newOrganization), "new_merchant_id", nz(newMerchant),
-                                        "old_position_revoked", revoked, "grant_request_id", saved.id(), "review_id", nz(saved.reviewId()))
+                                        "old_position_revoked", revoked, "grant_request_id", saved.id(), "review_id", nz(saved.reviewId()),
+                                        "cancelled_high_risk_holds", String.join(",", cancelledHolds))
                         );
                         return saved;
                     },
@@ -1738,7 +1747,11 @@ public class AccessService {
         String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
         String positionCode = requireText(request.positionCode(), "position_code");
         AccessUser targetUser = requireTargetUser(userId);
-        requireSameOrganization(actor, targetUser);
+        if (requireGrantorCanGrant) {
+            // M087-I5-02（PGM-1.10.1 跨项目变更审批通过后方可生效）：审批落地与范围变更发起不按当前操作人的组织闸——
+            // 授权来自审批链与申请指纹（目标范围已钉住）；直接定岗（enforceApproval）仍受同组织闸。
+            requireSameOrganization(actor, targetUser);
+        }
         if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
                     "无法识别的员工职级：" + staffLevelId);

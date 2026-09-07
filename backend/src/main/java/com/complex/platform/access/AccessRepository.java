@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.time.Instant;
 import java.util.List;
@@ -202,6 +202,15 @@ public interface AccessRepository {
 
     default List<AccessGrantRequestRecord> listGrantRequests(Instant createdAtFrom) {
         return List.of();
+    }
+
+    /** M087-I5-03：某账号某类型的待审授权申请（范围变更时作废旧范围高危挂起）。 */
+    // ponytail: filters the full list; add a targeted query if access_grant_requests grows large
+    default List<AccessGrantRequestRecord> listPendingGrantRequests(String targetUserId, String requestType) {
+        return listGrantRequests(null).stream()
+                .filter(request -> targetUserId.equals(request.targetUserId()) && requestType.equals(request.requestType())
+                        && "pending".equals(request.status()))
+                .toList();
     }
 
     /** 职级定义列表（参考数据，平台全局）。默认空，JdbcAccessRepository 覆盖。 */

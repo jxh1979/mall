@@ -5,6 +5,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -12,7 +14,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.access.AccessService;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -53,9 +57,12 @@ class SupervisorReviewControllerTests {
     @Autowired
     private AuthorizationService authorizationService;
 
+    @Autowired
+    private AccessService accessService;
+
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(service, authorizationService);
+        Mockito.reset(service, authorizationService, accessService);
     }
 
     @Test
@@ -153,6 +160,40 @@ class SupervisorReviewControllerTests {
                 .andExpect(jsonPath("$.data.review_status").value("pending_review"));
 
         verify(authorizationService).requirePermission("governance.supervisor_review.manage");
+    }
+
+    // M087-I5-01（PGM-1.10.1「审批通过后方可生效」、PGM-1.7.1「任一节点驳回则整单退回起草人」）：授权申请类复核单从审批链页裁决时，
+    // 汇入授权申请的落地路径（reviewGrant），不在复核单侧单独判终态。
+    @Test
+    void approveOnAGrantRequestReviewDelegatesToTheGrantLandingPath() throws Exception {
+        SupervisorReviewDecisionRecord pending = new SupervisorReviewDecisionRecord("review_grant", "permission_grant_l1", "access.scope_change",
+                "access_grant_request", "agr_1", true, "pending_review", 1, null, null, "scope", List.of(),
+                Instant.parse("2026-06-16T00:00:00Z"), "usr_hr", "one_level_up", null);
+        SupervisorReviewDecisionRecord approved = new SupervisorReviewDecisionRecord("review_grant", "permission_grant_l1", "access.scope_change",
+                "access_grant_request", "agr_1", false, "approved", 1, 1, "approved", "scope", List.of(),
+                Instant.parse("2026-06-16T00:00:00Z"), "usr_hr", "one_level_up", null);
+        when(service.findReview("review_grant")).thenReturn(java.util.Optional.of(pending), java.util.Optional.of(approved));
+
+        mockMvc.perform(post("/api/v1/platform/supervisor-review/review_grant/approve")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "chain-approve-grant",
+                                  "operator_note": "approve",
+                                  "evidence_attachment_ids": ["att-approval-chain"],
+                                  "decision": "approved",
+                                  "comment": "ok"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+
+        org.mockito.ArgumentCaptor<AccessGrantReviewRequest> captor = org.mockito.ArgumentCaptor.forClass(AccessGrantReviewRequest.class);
+        verify(accessService).reviewGrant(eq("agr_1"), captor.capture());
+        assertThat(captor.getValue().decision()).isEqualTo("approve");
+        assertThat(captor.getValue().idempotencyKey()).isEqualTo("chain-approve-grant");
+        verify(service, never()).approve(any(), any());
     }
 
     @Test
@@ -280,6 +321,11 @@ class SupervisorReviewControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
+        }
+
+        @Bean
+        AccessService accessService() {
+            return Mockito.mock(AccessService.class);
         }
 
         @Bean

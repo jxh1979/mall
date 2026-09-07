@@ -722,6 +722,26 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public Optional<SupervisorReviewDecisionRecord> findSupervisorReviewById(String reviewId) {
+        return jdbcTemplate.query("""
+                SELECT review_id, policy_code, action_type, object_type, object_id,
+                       blocked, review_status, required_level, reviewer_level, decision,
+                       reason, evidence_attachment_ids::text AS evidence_attachment_ids, evaluated_at,
+                       initiated_by, approval_level, required_approver_rank
+                  FROM supervisor_review_decisions
+                 WHERE review_id = :review_id
+                """, Map.of("review_id", reviewId), this::mapSupervisorReview).stream().findFirst();
+    }
+
+    // M087-I5-06（PGM-1.7.1「主线与各条平行线全部通过……才生效」）：同一复核单的节点裁决在复核单行锁下串行，
+    // 后到的末节点裁决必等先到者提交后再读整链归约，不会两边都读到对方「仍待审」而把单据卡死。
+    @Override
+    public void lockSupervisorReview(String reviewId) {
+        jdbcTemplate.query("SELECT review_id FROM supervisor_review_decisions WHERE review_id = :review_id FOR UPDATE",
+                Map.of("review_id", reviewId), (rs, rowNumber) -> rs.getString("review_id"));
+    }
+
+    @Override
     public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
             String actionType, String objectType, String objectId, String initiatedBy) {
         return jdbcTemplate.query("""

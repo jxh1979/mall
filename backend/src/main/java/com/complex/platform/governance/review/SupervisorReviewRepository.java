@@ -12,6 +12,11 @@ public interface SupervisorReviewRepository {
 
     Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId);
 
+    /** M087-I5-01：任意状态的复核单（审批链页裁决授权申请类复核单后回读终态）。默认只回退到待复核查找。 */
+    default Optional<SupervisorReviewDecisionRecord> findSupervisorReviewById(String reviewId) {
+        return findPendingSupervisorReviewById(reviewId);
+    }
+
     /** M007-A-01：同动作、同对象、同发起人且已批准未放行的复核单（供准入闸消费）。 */
     default Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
             String actionType, String objectType, String objectId, String initiatedBy) {
@@ -92,6 +97,10 @@ public interface SupervisorReviewRepository {
     /** 更新单个节点（裁决 / 转发 / 升级）；节点不存在返回 false。 */
     default boolean updateChainNode(ApprovalChainNode node) {
         return false;
+    }
+
+    /** M087-I5-06：同一复核单的节点裁决串行化（JDBC 实现为复核单行锁）；默认不加锁。 */
+    default void lockSupervisorReview(String reviewId) {
     }
 
     /** M087-A-01：组织层级一行（org_hierarchy）。 */
