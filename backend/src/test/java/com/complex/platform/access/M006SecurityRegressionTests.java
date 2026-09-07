@@ -118,6 +118,22 @@ class M006SecurityRegressionTests {
         assertDenied(() -> authorization.requirePermission(HIGH));
     }
 
+    // M006-I9-01（BSM-1.3.4「拥有系统里全部日常功能权限…不会出现"管理员反而没权限"的情况」；PGM-1.10.1 角色装配：平台管理员配置岗位权限模板与职位/层级映射）：
+    // 治理本职码随默认管理员角色生效；资金等业务高危仍不因该角色获得；显式拒绝仍优先。
+    @Test void administratorHoldsGovernanceWritePermissionsFromDefaultRoleButNotBusinessHighRisk() {
+        String govern = "access.role.assign";
+        var definitions = new ArrayList<>(repository.listPermissions());
+        definitions.add(new PermissionDefinition(govern, "岗位装配", "access", "high", true, "active"));
+        when(repository.listPermissions()).thenReturn(definitions);
+        effect("admin", govern, AccessRepository.Effect.GRANT, "role_platform_admin", false);
+        effect("admin", HIGH, AccessRepository.Effect.GRANT, "role_platform_admin", false);
+        authorization.requirePermission(govern);
+        assertDenied(() -> authorization.requirePermission(HIGH));
+        assertThat(authorization.effectivePermissions().grants()).contains(govern).doesNotContain(HIGH);
+        effect("admin", govern, AccessRepository.Effect.DENY, "override", false);
+        assertDenied(() -> authorization.requirePermission(govern));
+    }
+
     // M006-028：Spring 的未知 principal 不能凭空变成启用员工。
     @Test void untrustedPrincipalIsRejected() {
         SecurityContextHolder.getContext().setAuthentication(

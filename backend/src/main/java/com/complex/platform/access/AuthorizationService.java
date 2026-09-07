@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -115,12 +115,25 @@ public class AuthorizationService implements CallerScopeResolver {
         };
     }
 
+    /**
+     * M006-I9-01：HTML 指派给平台管理员的权限治理本职（PGM-1.10.1 角色装配「平台管理员配置各岗位权限模板，并定职位/层级对应哪个模板」；
+     * BSM-1.3.4「拥有系统里全部日常功能权限…不会出现"管理员反而没权限"」）。这些码本身是「提权」类（授给他人须审批），
+     * 但管理员自己做本职不受授出审批限制：随默认管理员角色（role_platform_admin）生效。资金 / 敏感数据 / 删除 / 最终业务审批
+     * （如 access.grant_request.review）不在此列，仍须逐项授予并留痕。
+     */
+    static final java.util.Set<String> PLATFORM_ADMIN_GOVERNANCE_PERMISSIONS = java.util.Set.of(
+            "access.role.assign", "access.role.manage",
+            "access.permission_template.manage", "access.permission_template.apply", "access.permission_template.revoke",
+            "access.staff_level.manage", "access.user.manage",
+            "access.temporary_grant.create", "access.temporary_grant.revoke");
+
     private boolean isExplicitOrDailyGrant(AccessRepository.PermissionEffect effect,
                                            java.util.function.Supplier<java.util.Set<String>> daily) {
-        // 默认管理员角色随权限字典播种，不能把其高危条目当成逐项授权。
+        // 默认管理员角色随权限字典播种，不能把其高危条目当成逐项授权；治理本职码除外（M006-I9-01）。
         return effect.source() != AccessRepository.Source.ROLE
                 || !"role_platform_admin".equals(effect.sourceId())
-                || daily.get().contains(effect.permissionCode());
+                || daily.get().contains(effect.permissionCode())
+                || PLATFORM_ADMIN_GOVERNANCE_PERMISSIONS.contains(effect.permissionCode());
     }
 
     public boolean isMasterAuthority(AccessActor actor) {

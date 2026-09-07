@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -792,6 +792,18 @@ public class AccessService {
                         "不能授予自己不持有的权限：" + code);
             }
         }
+    }
+
+    /**
+     * M006-I9-02（PGM-1.10.1「普通模板权限随保存立即生效」「既有高危不得因处于岗位模板内而免除授出前审批」）：岗位映射 / 定岗时
+     * 授权人只须持有随保存立即生效的普通码；须审批的高危码由挂起单（position_high_risk_release）审批，不要求配置人先持有。
+     * 授出审批关闭时全部码立即生效，仍全部校验。
+     */
+    private void requireActorCanGrantImmediate(List<String> permissionCodes) {
+        Set<String> held = grantApprovalEnabled
+                ? approvalRequiredPermissions(permissionCodes).stream().map(PermissionDefinition::permissionCode).collect(java.util.stream.Collectors.toSet())
+                : Set.of();
+        requireActorCanGrant(safeList(permissionCodes).stream().filter(code -> !held.contains(code)).toList());
     }
 
     public TemporaryGrant createTemporaryGrant(TemporaryGrantRequest request) {
@@ -1827,8 +1839,8 @@ public class AccessService {
                 .map(PermissionTemplateItem::permissionCode)
                 .toList();
         if (requireGrantorCanGrant) {
-            requireActorCanGrant(role.permissionCodes());
-            requireActorCanGrant(templatePermissionCodes);
+            requireActorCanGrantImmediate(role.permissionCodes());
+            requireActorCanGrantImmediate(templatePermissionCodes);
         }
         String currency = trimToDefault(request.salaryCurrency(), "CNY");
         if (!"CNY".equals(currency)) {
@@ -2052,8 +2064,8 @@ public class AccessService {
         PermissionTemplate template = repository.findTemplateById(requireText(request.templateId(), "template_id"))
                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND",
                         "权限模板不存在：" + request.templateId()));
-        requireActorCanGrant(role.permissionCodes());
-        requireActorCanGrant(repository.findTemplateItems(template.id()).stream()
+        requireActorCanGrantImmediate(role.permissionCodes());
+        requireActorCanGrantImmediate(repository.findTemplateItems(template.id()).stream()
                 .map(PermissionTemplateItem::permissionCode)
                 .toList());
         String status = trimToDefault(request.status(), "active");
