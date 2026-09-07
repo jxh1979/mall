@@ -94,9 +94,8 @@ public class TicketFacePhotoService {
      * 这里是最后一道闸，没有同意 id 一律不落库，库上 chk_tfp_consent_present(V395) 再兜一道。
      */
     void capture(String entitlementId, FacePhotoInput input, String contentType, Instant capturedAt, Instant validTo) {
-        if (input == null || input.consentId() == null || input.consentId().isBlank()) {
-            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED", "存档人脸照片前须先留存客人同意记录");
-        }
+        // F-05：末闸同样回查台账（同意可能在暂存与出票之间被撤回）；主体比对已在暂存/出票入口完成。
+        String consentId = requireAcceptedConsent(input == null ? null : input.consentId(), null);
         String payload = requireValidPhoto(input.photoBase64());
         // 复用 PiiCipher(AES-GCM)：base64 图串 → 信封串 → UTF-8 字节存 BYTEA（禁明文存）。
         byte[] ciphertext = piiCipher.encrypt(payload).getBytes(StandardCharsets.UTF_8);
@@ -104,7 +103,7 @@ public class TicketFacePhotoService {
                 .atOffset(ZoneOffset.UTC).toLocalDate().plusDays(retentionDays());
         repository.save("tfp_" + UUID.randomUUID().toString().replace("-", ""),
                 entitlementId, ciphertext, contentType == null ? "image/jpeg" : contentType,
-                capturedAt == null ? Instant.now() : capturedAt, purgeAfter, input.consentId().trim());
+                capturedAt == null ? Instant.now() : capturedAt, purgeAfter, consentId);
     }
 
     /**
@@ -119,10 +118,8 @@ public class TicketFacePhotoService {
         if (photosBase64 == null || photosBase64.isEmpty()) {
             return;
         }
-        if (consentId == null || consentId.isBlank()) {
-            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED",
-                    "上传人脸照片前须先留存客人同意记录");
-        }
+        // F-05：同意 id 可能来自员工端 POST /ticketing/orders 的请求体，必须回查台账并比对本单客人，不能只看非空。
+        String acceptedConsentId = requireAcceptedConsent(consentId, orderId);
         if (photosBase64.size() > Math.max(1, quantity)) {
             throw ApiException.badRequest("FACE_PHOTO_COUNT_EXCEEDED",
                     "人脸照片数量不能超过购票数量");
@@ -133,7 +130,7 @@ public class TicketFacePhotoService {
             String payload = requireValidPhoto(photosBase64.get(slot));
             byte[] ciphertext = piiCipher.encrypt(payload).getBytes(StandardCharsets.UTF_8);
             repository.saveStaged("tfp_" + UUID.randomUUID().toString().replace("-", ""),
-                    orderId, slot, ciphertext, "image/jpeg", now, purgeAfter, consentId);
+                    orderId, slot, ciphertext, "image/jpeg", now, purgeAfter, acceptedConsentId);
         }
     }
 
@@ -154,20 +151,14 @@ public class TicketFacePhotoService {
 
     /**
      * M009 A1-01：出票请求自带照片（柜台/后台入口，TicketIssueRequest.facePhotos）时的同意闸。
-     * 同意 id 来自请求方而非服务端同事务生成，所以必须回查同意台账：存在、类型为人脸照、已接受、未撤回，否则拒。
-     * 没带照片 → 空表，零影响。
+     * 同意 id 来自请求方而非服务端同事务生成，所以必须回查同意台账：存在、类型为人脸照、已接受、未撤回，
+     * 且订单已绑客人时必须属于该客人（F-05），否则拒。没带照片 → 空表，零影响。
      */
-    List<FacePhotoInput> requestPhotosWithConsent(List<String> photosBase64, String consentId) {
+    List<FacePhotoInput> requestPhotosWithConsent(String orderId, List<String> photosBase64, String consentId) {
         if (photosBase64 == null || photosBase64.isEmpty()) {
             return List.of();
         }
-        if (consentId == null || consentId.isBlank()) {
-            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED", "上传人脸照片前须先留存客人同意记录");
-        }
-        String id = consentId.trim();
-        if (!repository.faceConsentAccepted(id)) {
-            throw ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不存在、未生效或已撤回");
-        }
+        String id = requireAcceptedConsent(consentId, orderId);
         List<FacePhotoInput> photos = new ArrayList<>(photosBase64.size());
         for (String photo : photosBase64) {
             photos.add(new FacePhotoInput(photo, id));
@@ -223,6 +214,28 @@ public class TicketFacePhotoService {
             throw ApiException.badRequest("FACE_PHOTO_INVALID", "人脸照片必须为 base64 编码的图片数据");
         }
         return payload;
+    }
+
+    /**
+     * M009 F-05 唯一同意闸：暂存、出票请求自带照片、末端捕获三条路径共用。
+     * 空 → FACE_PHOTO_CONSENT_REQUIRED；台账无此同意 / 非人脸照类型 / 未接受 / 已撤回 → FACE_PHOTO_CONSENT_INVALID；
+     * orderId 非空且订单已绑客人时，同意行必须属于该客人（拿别人的同意拍这位客人的脸 → INVALID）。
+     * 返回归一化后的同意 id。库上另有外键(V397)兜底：绕过服务也写不进台账里没有的 id。
+     */
+    private String requireAcceptedConsent(String consentId, String orderId) {
+        if (consentId == null || consentId.isBlank()) {
+            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED", "上传人脸照片前须先留存客人同意记录");
+        }
+        String id = consentId.trim();
+        String consentCustomer = repository.acceptedFaceConsentCustomer(id)
+                .orElseThrow(() -> ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不存在、未生效或已撤回"));
+        if (orderId != null) {
+            String orderCustomer = repository.orderCustomerId(orderId).orElse(null);
+            if (orderCustomer != null && !orderCustomer.equals(consentCustomer)) {
+                throw ApiException.badRequest("FACE_PHOTO_CONSENT_INVALID", "人脸照片同意记录不属于本单客人");
+            }
+        }
+        return id;
     }
 
     /** 出票链交给存档的一张脸照：图 base64 + 这张脸对应的同意留痕 id(customer_consents.id)。 */

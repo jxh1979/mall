@@ -135,12 +135,13 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Test
     void purgeDeletesExpiredKeepsFuture() {
         Instant now = Instant.now();
+        String purgeConsent = seedAcceptedFaceConsent();
         String expired = "ent_exp_" + key();
         String future = "ent_fut_" + key();
         facePhotoRepository.save("tfp_" + key(), expired, piiCipher.encrypt(PHOTO_BASE64).getBytes(StandardCharsets.UTF_8),
-                "image/jpeg", now, LocalDate.now().minusDays(1), "consent_purge_fixture");   // 已过期
+                "image/jpeg", now, LocalDate.now().minusDays(1), purgeConsent);   // 已过期
         facePhotoRepository.save("tfp_" + key(), future, piiCipher.encrypt(PHOTO_BASE64).getBytes(StandardCharsets.UTF_8),
-                "image/jpeg", now, LocalDate.now().plusDays(1), "consent_purge_fixture");    // 未到期
+                "image/jpeg", now, LocalDate.now().plusDays(1), purgeConsent);    // 未到期
 
         int deleted = purgeJob.purgeExpired(LocalDate.now());
         assertThat(deleted).isGreaterThanOrEqualTo(1);
@@ -181,12 +182,29 @@ class TicketFacePhotoJdbcIntegrationTests {
         assertThat(countPhotosForOrder(f.orderId)).isZero();
     }
 
+    // ---------- ⑨ M009 F-05：订单已绑客人时，出票请求带的同意必须属于该客人——拿别人的同意拍这位客人的脸，拒 ----------
+    @Test
+    void issuingWithRequestPhotoAndAnotherCustomersConsentIsRejected() {
+        Fixture f = seed(true, seedCustomer());
+        String othersConsent = seedAcceptedFaceConsentFor(seedCustomer());
+        assertThatThrownBy(() -> orderService.issueEntitlements(f.ticketTypeId, new TicketIssueRequest(
+                key(), "issue", List.of(), f.orderId, "admin", List.of("dynamic_qr"), List.of(PHOTO_BASE64), othersConsent)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_INVALID"));
+        assertThat(countPhotosForOrder(f.orderId)).isZero();
+    }
+
     // ================= 夹具 =================
 
     private record Fixture(String ticketTypeId, String orderId) {
     }
 
     private Fixture seed(boolean requireFacePhoto) {
+        return seed(requireFacePhoto, null);
+    }
+
+    /** customerId 非空时订单绑定该客人（M009 F-05：同意行必须属于本单客人）。 */
+    private Fixture seed(boolean requireFacePhoto, String customerId) {
         Instant now = Instant.now();
         String suffix = key();
         String ticketTypeId = "tt_fp_" + suffix;
@@ -202,7 +220,7 @@ class TicketFacePhotoJdbcIntegrationTests {
         // 一张真实订单：发放拆分基数 + 照片 purge_after 依赖 valid_to（票 validity 1 天）。
         String orderId = "ticket_order_fp_" + suffix;
         repository.saveTicketOrder(new TicketOrderRecord(
-                orderId, "TOFP" + suffix, null, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
+                orderId, "TOFP" + suffix, customerId, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
                 5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, null, null, null));
         return new Fixture(ticketTypeId, orderId);
     }
@@ -215,13 +233,23 @@ class TicketFacePhotoJdbcIntegrationTests {
     }
 
     private String seedAcceptedFaceConsent() {
+        return seedAcceptedFaceConsentFor(seedCustomer());
+    }
+
+    private String seedCustomer() {
         Instant now = Instant.now();
         String suffix = key();
         String digits = (suffix.replaceAll("[^0-9]", "1") + "00000000").substring(0, 8);
         String customerId = "cust_fp_" + suffix;
         customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(
                 customerId, "139" + digits, "139****" + digits.substring(4), "active", null, null, now, now, null));
-        String consentId = "consent_fp_" + suffix;
+        return customerId;
+    }
+
+    /** 给某位客人落一条已接受、未撤回的人脸照同意（真实台账行，可被外键与台账闸引用）。 */
+    private String seedAcceptedFaceConsentFor(String customerId) {
+        Instant now = Instant.now();
+        String consentId = "consent_fp_" + key();
         customerRepository.saveConsent(new com.complex.platform.customer.CustomerConsentRecord(
                 consentId, customerId, "ticket_face_photo", true, facePhotoService.noticeVersion(), "counter",
                 now, null, now, now));

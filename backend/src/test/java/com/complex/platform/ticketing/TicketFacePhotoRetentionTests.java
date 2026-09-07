@@ -14,6 +14,7 @@ import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -32,6 +33,8 @@ class TicketFacePhotoRetentionTests {
         TicketFacePhotoRepository repository = mock(TicketFacePhotoRepository.class);
         PiiCipher piiCipher = mock(PiiCipher.class);
         when(piiCipher.encrypt(anyString())).thenReturn("enc:payload");
+        // F-05：capture 末闸回查台账，mock 一条已生效同意。
+        when(repository.acceptedFaceConsentCustomer("consent_1")).thenReturn(Optional.of("cust_1"));
         TicketFacePhotoService service = new TicketFacePhotoService(
                 repository, piiCipher, mock(AuthorizationService.class), mock(AuditEventService.class), windowConfig);
 

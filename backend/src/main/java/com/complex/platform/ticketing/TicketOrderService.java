@@ -375,7 +375,7 @@ public class TicketOrderService {
                         .map(p -> new TicketFacePhotoService.FacePhotoInput(p, requestConsentId)).toList();
             }
             // M009 A1-01（BSM-1.7.3）：请求自带照片须带已生效的同意 id，在建权益行之前就拒，不产生无同意的孤儿脸照。
-            return facePhotoService.requestPhotosWithConsent(requestPhotos, requestConsentId);
+            return facePhotoService.requestPhotosWithConsent(orderId, requestPhotos, requestConsentId);
         }
         // 暂存照沿用暂存位的同意 id。
         return facePhotoService == null ? List.of() : facePhotoService.stagedForOrder(orderId);

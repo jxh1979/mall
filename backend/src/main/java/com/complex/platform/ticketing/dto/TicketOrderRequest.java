@@ -21,8 +21,9 @@ public record TicketOrderRequest(
         // V359 客人端下单拍脸照：本单每张票一张脸照(base64)，加密暂存到订单，后台出票时转绑到已发权益。
         //   仅 require_face_photo 票种要求；其余票种此表为空、零影响。张数上限=quantity。
         List<String> facePhotos,
-        // V368 人脸照同意留痕 id(customer_consents.id)：facePhotos 非空时必填，服务端生成、不接受客户端值。
-        //   照片落库时挂上它——库上 chk_tfp_consent_present 保证「订单暂存位有照必有同意」，谁都绕不过去。
+        // V368 人脸照同意留痕 id(customer_consents.id)：facePhotos 非空时必填。客人端由 CustomerService 同事务落账后生成；
+        //   员工端 POST /ticketing/orders 可传入，但服务闸回查台账（存在/人脸照类型/已接受/未撤回，且属于本单客人），
+        //   对不上即拒 FACE_PHOTO_CONSENT_INVALID（M009 F-05）；库上 chk_tfp_consent_present + fk_tfp_consent(V397) 兜底。
         String faceConsentId
 ) {
     // ponytail: V359 前带 barId 但不带 facePhotos 的调用点 → 空表(=不拍脸照)。

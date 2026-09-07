@@ -113,15 +113,23 @@ class TicketFacePhotoRepository {
     }
 
     /**
-     * M009 A1-01：出票请求自带照片时，请求方给的同意 id 必须对应一条已生效的人脸照同意留痕
-     * (customer_consents：类型 ticket_face_photo、已接受、未撤回)。同意台账在 customer 域，这里只读不写。
+     * M009 A1-01 / F-05：同意 id 必须对应一条已生效的人脸照同意留痕(customer_consents：类型 ticket_face_photo、已接受、未撤回)。
+     * 返回该同意所属的客人 id，便于调用方比对「同意的人 = 被拍的人」；无此同意返回空。同意台账在 customer 域，这里只读不写。
      */
-    boolean faceConsentAccepted(String consentId) {
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT count(*) FROM customer_consents
+    Optional<String> acceptedFaceConsentCustomer(String consentId) {
+        return jdbcTemplate.query("""
+                SELECT customer_id FROM customer_consents
                  WHERE id = :id AND consent_type = 'ticket_face_photo' AND accepted AND withdrawn_at IS NULL
-                """, new MapSqlParameterSource("id", consentId), Integer.class);
-        return count != null && count > 0;
+                """, new MapSqlParameterSource("id", consentId), (rs, n) -> rs.getString("customer_id"))
+                .stream().findFirst();
+    }
+
+    /** M009 F-05：订单绑定的客人 id（散客/员工代下单可为空）。只读 ticket_orders 一列，用于同意主体比对。 */
+    Optional<String> orderCustomerId(String orderId) {
+        return jdbcTemplate.query(
+                "SELECT customer_id FROM ticket_orders WHERE id = :id",
+                new MapSqlParameterSource("id", orderId), (rs, n) -> rs.getString("customer_id"))
+                .stream().filter(java.util.Objects::nonNull).findFirst();
     }
 
     /** V359：出票转绑完成后删掉订单位暂存照（生物识别数据不多留一秒）。返回删除行数。 */
