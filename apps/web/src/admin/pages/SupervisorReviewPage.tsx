@@ -30,6 +30,7 @@ const TEXT = {
   approvalComment: "审批意见",
   evaluate: "评估违规动作",
   approve: "主管审批放行",
+  reject: "主管驳回退回起草人",
   boundary: "违规动作必须先阻断并生成待复核记录；主管审批只能放行当前 review_id，不得绕过证据附件、幂等键和审计留痕。",
   policy: "策略",
   requiredEvidence: "所需证据",
@@ -63,6 +64,9 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   if (action === "supervisor_review_evaluated") {
     const blocked = Boolean((result as { blocked?: unknown } | null)?.blocked);
     return blocked ? `已生成待复核记录：${reviewId}` : `评估结果：允许，无需复核（${reviewId}）`;
+  }
+  if (action === "supervisor_review_rejected") {
+    return `复核单 ${reviewId} 已驳回，整单退回起草人`;
   }
   return `复核单 ${reviewId} 已审批通过`;
 }
@@ -236,6 +240,21 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
     };
     await runAction("supervisor_review_approved", request, () => api.post(`/api/v1/platform/supervisor-review/${latestReviewId}/approve`, request));
   }
+  // M007-R6-03（PGM-1.7.1「任一节点驳回则整单退回起草人」）：驳回当前节点，整单退回起草人。
+  async function rejectReview() {
+    if (!validateApprove()) {
+      return;
+    }
+    const request = {
+      idempotencyKey: nextKey("supervisor-review-reject"),
+      operatorNote: "完整后台主管驳回",
+      evidenceAttachmentIds: ["att-supervisor-review-reject"],
+      reviewerLevel: Number(reviewerLevel || 3),
+      decision: "rejected",
+      comment: approvalComment,
+    };
+    await runAction("supervisor_review_rejected", request, () => api.post(`/api/v1/platform/supervisor-review/${latestReviewId}/approve`, request));
+  }
 
   function openPolicyDetail(row: SupervisorReviewPolicyRow) {
     setDetail({
@@ -347,6 +366,16 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
                 permissionsState={effectivePermissions}
                 permissions={[SUPERVISOR_APPROVE_PERMISSION]}
                 data-testid="supervisor-review-approve"
+              />
+              <HighRiskConfirm
+                label={TEXT.reject}
+                impact={`将驳回复核单 ${latestReviewId || "未生成"} 当前节点，整单退回起草人并写入主管审批留痕。`}
+                disabled={busyAction !== "" || !hasPendingReview}
+                precheck={validateApprove}
+                onConfirm={() => void rejectReview()}
+                permissionsState={effectivePermissions}
+                permissions={[SUPERVISOR_APPROVE_PERMISSION]}
+                data-testid="supervisor-review-reject"
               />
             </div>
             <div className="admin-muted-action" data-testid="supervisor-review-current-review">当前待审批 review_id：{latestReviewId || "未生成"}</div>
