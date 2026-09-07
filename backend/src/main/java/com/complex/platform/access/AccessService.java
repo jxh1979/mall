@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -722,8 +722,18 @@ public class AccessService {
     /** M087-F-06：岗位模板内的高危权限——显式拒绝 + 待审申请（position_high_risk_release），审批通过后解除拒绝。 */
     private void holdHighRiskPositionPermissions(PositionGrantContext context, UserPositionAssignmentRequest request,
                                                  List<PermissionDefinition> highRisk, Instant now) {
-        List<String> codes = highRisk.stream().map(PermissionDefinition::permissionCode).sorted().toList();
         String userId = context.targetUser().id();
+        // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」）：已有独立显式拒绝的码不写挂起行、不进释放单——独立拒绝不被挂起复用，
+        // 作废 / 释放时也不会被删；该码在拒绝解除（须审批）前不会生效。
+        Set<String> preDenied = repository.findPermissionEffects(userId, now).stream()
+                .filter(effect -> effect.effect() == AccessRepository.Effect.DENY && effect.source() == AccessRepository.Source.USER_OVERRIDE)
+                .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
+        List<String> codes = highRisk.stream().map(PermissionDefinition::permissionCode).filter(code -> !preDenied.contains(code)).sorted().toList();
+        if (codes.isEmpty()) {
+            auditEventService.recordSuccess("access.user_position.high_risk_already_denied", "access.role.assign", "user_position_assignment",
+                    userId, null, request.idempotencyKey(), Map.of("permission_codes", String.join(",", preDenied)));
+            return;
+        }
         repository.saveUserPermissionOverrides(userId, codes, AccessRepository.Effect.DENY,
                 "岗位模板内高危权限待审批（PGM-1.10.1）", context.actor().id());
         GrantReviewPolicy policy = grantReviewPolicy(codes);
@@ -1384,6 +1394,18 @@ public class AccessService {
                             requireGrantApprovalIfNeeded(permissionCodes);
                             requireActorCanGrant(permissionCodes);
                         }
+                        if (!set && effect == AccessRepository.Effect.DENY && grantApprovalEnabled) {
+                            // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」「既有高危不得因处于岗位模板内而免除授出前审批」）：移除显式拒绝若使须审批的
+                            // 权限从既有 GRANT 来源生效，等同一次授出，须经授出审批；岗位高危挂起只能由挂起单（position_high_risk_release）审批释放。
+                            Set<String> granted = repository.findPermissionEffects(targetUser.id(), Instant.now()).stream()
+                                    .filter(effectRow -> effectRow.effect() == AccessRepository.Effect.GRANT)
+                                    .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
+                            List<String> exposed = approvalRequiredPermissions(permissionCodes).stream()
+                                    .map(PermissionDefinition::permissionCode).filter(granted::contains).sorted().toList();
+                            if (!exposed.isEmpty()) {
+                                throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL", "移除显式拒绝将使以下须审批的权限生效，须经授出审批：" + exposed);
+                            }
+                        }
                         if (set) {
                             repository.saveUserPermissionOverrides(targetUser.id(), permissionCodes, effect,
                                     trimToDefault(r.reason(), r.operatorNote()), actor.id());
@@ -1491,7 +1513,7 @@ public class AccessService {
         AccessActor actor = authorizationService.currentActor();
         requireKnownPermissions(request.permissionCodes());
         if (request.validUntil() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "valid_until is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写授权失效时间");
         }
         requireSameOrganization(actor, requireTargetUser(requireText(request.targetUserId(), "target_user_id")));
         if (safeList(request.permissionCodes()).isEmpty()) {
@@ -1633,7 +1655,7 @@ public class AccessService {
         requireKnownPermissions(permissionCodes);
         Instant expiresAt = request.expiresAt();
         if (expiresAt == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "expires_at is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写临时权限到期时间");
         }
         if (request.validFrom() != null && !expiresAt.isAfter(request.validFrom())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "授权结束时间必须晚于开始时间");
@@ -2006,7 +2028,7 @@ public class AccessService {
         if (List.of(REQUEST_USER_ROLE, REQUEST_USER_POSITION, REQUEST_TEMPORARY_PERMISSION).contains(normalized)) {
             return normalized;
         }
-        throw ApiException.badRequest("VALIDATION_FAILED", "request_type is invalid");
+        throw ApiException.badRequest("VALIDATION_FAILED", "不支持的申请类型");
     }
 
     private String normalizeDecision(String decision) {
@@ -2036,7 +2058,7 @@ public class AccessService {
                 .toList());
         String status = trimToDefault(request.status(), "active");
         if (!Set.of("active", "inactive").contains(status)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "status is invalid");
+            throw ApiException.badRequest("VALIDATION_FAILED", "岗位模板状态只能是启用或停用");
         }
         Instant now = Instant.now();
         PositionRoleTemplate existing = repository.findPositionRoleTemplateById(id).orElse(null);

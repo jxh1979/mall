@@ -721,6 +721,17 @@ class AccessJdbcIntegrationTests {
                 .extracting(AccessRepository.PermissionEffect::permissionCode).doesNotContain("ops.production_readiness.check");
     }
 
+    // M006-R6-01（PGM-1.10.1「敏感经营数据的查看 / 导出 / 修改」授出前审批、「查看内部结算价……不因平台管理员身份自动获得」；BSM-1.3.4）：
+    // 含内部结算价 / 成本价的四个权限码在权威 schema 上须为 requires_approval=TRUE，且不进入平台管理员（非主会话）的日常桥。
+    @Test
+    void sensitiveBusinessDataPermissionsRequireApprovalAndStayOutOfThePlatformAdminBridge() {
+        List<String> sensitive = List.of("bar.combo.view", "bar.combo.manage", "inventory.cost.view", "voucher.internal_price.view");
+        assertThat(repository.listPermissions()).filteredOn(p -> sensitive.contains(p.permissionCode()))
+                .hasSize(4).allMatch(PermissionDefinition::requiresApproval);
+        authenticate("usr_jdbc_admin_bridge", "jdbc-admin-bridge", "platform_admin", "org");
+        assertThat(authorizationService.effectivePermissions().grants()).doesNotContainAnyElementsOf(sensitive);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

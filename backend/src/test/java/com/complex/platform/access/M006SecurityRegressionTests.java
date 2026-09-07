@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -661,6 +661,31 @@ class M006SecurityRegressionTests {
 
 
     // M006-034：审批结论报错须为纯中文，不回显 approve/reject。
+
+    // M006-R6-03（PGM-1.18 后台报错全中文）：控制器层临时授权缺失效时间、未登录两条残留英文文案改为中文。
+    @Test void temporaryGrantMissingValidUntilAndUnauthenticatedMessagesAreChinese() {
+        var controller = new AccessController(service, mock(AuthorizationService.class)); // 门禁交由 mock 放行，只看校验文案
+        ApiException failure = null;
+        try {
+            controller.createTemporaryGrant(new TemporaryGrantRequest("b5-valid-until", "检查错误提示", List.of(), "u",
+                List.of(LOW), java.time.Instant.parse("2026-06-14T00:00:00Z"), null, false, "r"));
+        } catch(ApiException e) { failure = e; }
+        assertThat(failure).isNotNull();
+        assertThat(failure.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(failure.getMessage()).contains("失效时间").doesNotContainPattern("[A-Za-z]");
+
+        var saved = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        try {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+            ApiException unauthenticated = null;
+            try { authorization.currentActor(); } catch(ApiException e) { unauthenticated = e; }
+            assertThat(unauthenticated).isNotNull();
+            assertThat(unauthenticated.code()).isEqualTo("UNAUTHENTICATED");
+            assertThat(unauthenticated.getMessage()).contains("登录").doesNotContainPattern("[A-Za-z]");
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(saved);
+        }
+    }
 
     @Test void invalidDecisionMessageIsChinese() throws Exception {
         var method = AccessService.class.getDeclaredMethod("normalizeDecision", String.class);

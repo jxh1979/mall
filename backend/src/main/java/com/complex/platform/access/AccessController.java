@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -213,7 +213,7 @@ public class AccessController {
         authorizationService.requirePermission("access.temporary_grant.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         if (request.validUntil() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "valid_until is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写授权失效时间");
         }
         return ApiResponse.ok(service.createTemporaryGrant(request));
     }
