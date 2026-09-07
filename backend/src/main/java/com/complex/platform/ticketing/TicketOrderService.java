@@ -285,8 +285,12 @@ public class TicketOrderService {
     /** R-005：柜台散客人脸照同意落到订单（出票前一步），见 {@link TicketFacePhotoService#recordWalkInFaceConsent}。 */
     TicketFacePhotoService.FaceConsentView recordWalkInFaceConsent(String orderId, FacePhotoConsentRequest request) {
         FacePhotoConsentRequest actual = requireRequest(request);
-        return facePhotoService.recordWalkInFaceConsent(requireText(orderId, "order_id"), actual.sourceTerminal(),
-                Boolean.TRUE.equals(actual.accepted()));
+        String id = requireText(orderId, "order_id");
+        TicketOrderRecord order = repository.findTicketOrderById(id)
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "订单不存在或已被删除"));
+        // F-07：与出票同一越权范式——商户用户只能给本商户订单落散客同意（平台 / 空 scope 放行）。
+        enforceMerchantScope(order.merchantId());
+        return facePhotoService.recordWalkInFaceConsent(id, actual.sourceTerminal(), Boolean.TRUE.equals(actual.accepted()));
     }
 
     IssuedTicketResponse issueOrder(String orderId, StatusChangeRequest request) {

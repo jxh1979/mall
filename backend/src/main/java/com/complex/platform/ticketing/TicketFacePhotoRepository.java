@@ -60,14 +60,17 @@ class TicketFacePhotoRepository {
 
     Optional<TicketFacePhotoRow> findByEntitlementId(String entitlementId) {
         return jdbcTemplate.query("""
-                SELECT entitlement_id, photo_ciphertext, content_type
-                  FROM ticket_face_photos
-                 WHERE entitlement_id = :entitlement_id
+                SELECT p.entitlement_id, p.photo_ciphertext, p.content_type, e.merchant_id
+                  FROM ticket_face_photos p
+                  LEFT JOIN issued_entitlements e ON e.id = p.entitlement_id
+                 WHERE p.entitlement_id = :entitlement_id
                 """, new MapSqlParameterSource("entitlement_id", entitlementId), (rs, n) ->
                 new TicketFacePhotoRow(
                         rs.getString("entitlement_id"),
                         rs.getBytes("photo_ciphertext"),
-                        rs.getString("content_type")))
+                        rs.getString("content_type"),
+                        // F-06：权益归属商户，取照前按调用者商户范围校验。
+                        rs.getString("merchant_id")))
                 .stream().findFirst();
     }
 
@@ -174,7 +177,7 @@ class TicketFacePhotoRepository {
                 new MapSqlParameterSource("today", today));
     }
 
-    record TicketFacePhotoRow(String entitlementId, byte[] ciphertext, String contentType) {
+    record TicketFacePhotoRow(String entitlementId, byte[] ciphertext, String contentType, String merchantId) {
     }
 
     /** R-005 同意主体：会员同意 customerId 非空；散客柜台同意 customerId 空、orderId 非空。 */

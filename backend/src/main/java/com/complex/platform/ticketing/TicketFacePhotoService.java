@@ -180,6 +180,11 @@ public class TicketFacePhotoService {
         authorizationService.requirePermission(VIEW_PERMISSION);
         TicketFacePhotoRepository.TicketFacePhotoRow row = repository.findByEntitlementId(entitlementId)
                 .orElseThrow(() -> ApiException.notFound("FACE_PHOTO_NOT_FOUND", "该权益没有已存档的人脸照片"));
+        // F-06：与核销预览同一把尺子——平台/空 scope 可见全部；商户用户只能取本商户已发权益的脸照，否则不解密、不写成功审计。
+        String scope = currentMerchantScopeQuietly();
+        if (scope != null && !scope.equals(row.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权查看其他商户权益的人脸照片");
+        }
         // 审计：敏感生物识别每次查看留痕(actor 由 AuditEventService 从安全上下文取)。
         auditEventService.recordSuccess(
                 "ticket_face_photo.viewed",
@@ -193,6 +198,18 @@ public class TicketFacePhotoService {
         // 防御：确保返回值是合法 base64（PiiCipher 解密失败会先 GCM 抛错，这里只兜格式）。
         Base64.getDecoder().decode(base64);
         return new FacePhotoView(entitlementId, base64, row.contentType());
+    }
+
+    /** 调用者商户范围（防御式：无上下文 / 旧构造 / 无商户的员工不抛，返回 null = 不限制）；平台管理员为空。 */
+    private String currentMerchantScopeQuietly() {
+        if (authorizationService == null) {
+            return null;
+        }
+        try {
+            return authorizationService.currentMerchantScope().orElse(null);
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     /**

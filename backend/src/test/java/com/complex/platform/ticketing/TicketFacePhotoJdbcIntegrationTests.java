@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.PiiCipher;
+import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -255,17 +256,74 @@ class TicketFacePhotoJdbcIntegrationTests {
                 .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("TICKET_ORDER_NOT_FOUND"));
     }
 
+    // ---------- ⑭ F-06：商户员工（持 verification.view）取他商户权益的脸照 → CROSS_MERCHANT_FORBIDDEN、不写成功审计 ----------
+    @Test
+    void merchantStaffCannotViewAnotherMerchantsFacePhoto() {
+        Fixture f = seed(true, null, "merchant_a");
+        orderService.issueEntitlements(f.ticketTypeId, issueRequest(f, List.of(PHOTO_BASE64)));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        long auditBefore = auditCount();
+        authenticateAsMerchantStaffWithViewPermission("merchant_b");
+        assertThatThrownBy(() -> facePhotoService.getForVerification(entitlementId))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(auditCount()).isEqualTo(auditBefore);
+    }
+
+    // ---------- ⑮ F-06：同一商户员工取本商户权益的脸照 → 原图 + 审计 ----------
+    @Test
+    void merchantStaffCanViewOwnMerchantsFacePhoto() {
+        Fixture f = seed(true, null, "merchant_a");
+        orderService.issueEntitlements(f.ticketTypeId, issueRequest(f, List.of(PHOTO_BASE64)));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        long auditBefore = auditCount();
+        authenticateAsMerchantStaffWithViewPermission("merchant_a");
+        TicketFacePhotoService.FacePhotoView view = facePhotoService.getForVerification(entitlementId);
+        assertThat(view.photoBase64()).isEqualTo(PHOTO_BASE64);
+        assertThat(auditCount()).isEqualTo(auditBefore + 1);
+    }
+
+    // ---------- ⑯ F-07：商户用户给他商户订单落散客同意 → CROSS_MERCHANT_FORBIDDEN、不落行 ----------
+    @Test
+    void merchantUserCannotRecordWalkInConsentOnAnotherMerchantsOrder() {
+        Fixture f = seed(true, null, "merchant_b");
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_a");
+        assertThatThrownBy(() -> orderService.recordWalkInFaceConsent(f.orderId,
+                new FacePhotoConsentRequest(key(), true, "counter")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM customer_consents WHERE order_id = ?", Integer.class, f.orderId);
+        assertThat(rows).isZero();
+    }
+
+    // ---------- ⑰ F-07：商户用户给本商户订单落散客同意 → 成功 ----------
+    @Test
+    void merchantUserCanRecordWalkInConsentOnOwnMerchantsOrder() {
+        Fixture f = seed(true, null, "merchant_a");
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_a");
+        TicketFacePhotoService.FaceConsentView consent = orderService.recordWalkInFaceConsent(f.orderId,
+                new FacePhotoConsentRequest(key(), true, "counter"));
+        assertThat(consent.consentId()).startsWith("consent_walkin_");
+        assertThat(consent.orderId()).isEqualTo(f.orderId);
+    }
+
     // ================= 夹具 =================
 
     private record Fixture(String ticketTypeId, String orderId) {
     }
 
     private Fixture seed(boolean requireFacePhoto) {
-        return seed(requireFacePhoto, null);
+        return seed(requireFacePhoto, null, null);
     }
 
     /** customerId 非空时订单绑定该客人（M009 F-05：同意行必须属于本单客人）。 */
     private Fixture seed(boolean requireFacePhoto, String customerId) {
+        return seed(requireFacePhoto, customerId, null);
+    }
+
+    /** merchantId 非空时权益模板与订单都归该商户（F-06 / F-07：商户范围闸）。 */
+    private Fixture seed(boolean requireFacePhoto, String customerId, String merchantId) {
         Instant now = Instant.now();
         String suffix = key();
         String ticketTypeId = "tt_fp_" + suffix;
@@ -275,14 +333,14 @@ class TicketFacePhotoJdbcIntegrationTests {
         String templateId = "tpl_fp_" + suffix;
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 templateId, "amusement-tpl", requireFacePhoto ? "amusement" : "bar_drink", 1, 5000L, "active",
-                null, null, null, null, now, now, "virtual", null, "per_use", null, requireFacePhoto));
+                merchantId, null, null, null, now, now, "virtual", null, "per_use", null, requireFacePhoto));
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "bind_fp_" + suffix, ticketTypeId, templateId, 1, 1, 5000L, "default", 1, 5000L, now, now));
         // 一张真实订单：发放拆分基数 + 照片 purge_after 依赖 valid_to（票 validity 1 天）。
         String orderId = "ticket_order_fp_" + suffix;
         repository.saveTicketOrder(new TicketOrderRecord(
                 orderId, "TOFP" + suffix, customerId, ticketTypeId, null, 1, LocalDate.now(), "admin", null,
-                5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, null, null, null));
+                5000L, null, 5000L, 0L, "CNY", "paid", "not_issued", "created", now, now, merchantId, null, null));
         return new Fixture(ticketTypeId, orderId);
     }
 
@@ -344,6 +402,21 @@ class TicketFacePhotoJdbcIntegrationTests {
                  WHERE event_name = 'ticket_face_photo.viewed'
                  ORDER BY occurred_at DESC LIMIT 1
                 """, String.class);
+    }
+
+    /** F-06：持 verification.view 的商户员工——真实用户 / 角色 / 角色权限行（事务内，用例结束回滚）。 */
+    private void authenticateAsMerchantStaffWithViewPermission(String merchantId) {
+        String suffix = key();
+        String userId = "usr_fp_" + suffix;
+        String roleId = "role_fp_view_" + suffix;
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
+                + " VALUES (?, ?, 'staff', 'seed-org', ?, 'active', now())", userId, "u_" + suffix, merchantId);
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", roleId, "fp-view-" + suffix);
+        jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'verification.view')", roleId);
+        jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, roleId);
+        AccessActor actor = new AccessActor(userId, "u_" + suffix, "staff", "seed-org", merchantId, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
     }
 
     private void authenticateAs(String accountType) {
