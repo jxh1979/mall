@@ -184,6 +184,23 @@ class TicketFacePhotoRepository {
     record FaceConsentSubject(String customerId, String orderId) {
     }
 
+    /** D-024：某订单已暂存的人脸照张数（下单时拍的 / 柜台录入的）。 */
+    int countStaged(String orderId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ticket_face_photos WHERE order_id = :order_id",
+                new MapSqlParameterSource("order_id", orderId), Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    /** D-024 / R-005：该订单是否已留存一条已生效的散客人脸照同意（customer_consents.order_id = 本单）。 */
+    boolean hasAcceptedFaceConsentForOrder(String orderId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM customer_consents
+                 WHERE order_id = :order_id AND consent_type = 'ticket_face_photo' AND accepted AND withdrawn_at IS NULL
+                """, new MapSqlParameterSource("order_id", orderId), Integer.class);
+        return count != null && count > 0;
+    }
+
     /** 暂存位一行：密文字节 + 这张脸对应的同意留痕 id。 */
     record StagedRow(byte[] ciphertext, String consentId) {
     }

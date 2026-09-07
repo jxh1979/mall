@@ -277,6 +277,18 @@ public class TicketFacePhotoService {
     public record FaceConsentView(String consentId, String orderId, String version, Instant acceptedAt) {
     }
 
+    /**
+     * D-024（BSM-1.6.6 / BSM-1.7.3 / PGM-1.15.3）：需要人脸照的票种，收款前人脸采集必须已完成——
+     * 暂存照张数 = 票数（暂存位本身已挂同意；下单即闸后成单必有）；柜台 / 一体机（staffChannel）另可凭该单已留存的散客同意
+     * （R-005 端点，兼容本闸之前创建的柜台订单：照片随出票请求录入）。二者任一满足即可收款。
+     */
+    boolean faceCaptureReadyForPayment(String orderId, int quantity, boolean staffChannel) {
+        if (repository.countStaged(orderId) >= Math.max(1, quantity)) {
+            return true;
+        }
+        return staffChannel && repository.hasAcceptedFaceConsentForOrder(orderId);
+    }
+
     /** 出票链交给存档的一张脸照：图 base64 + 这张脸对应的同意留痕 id(customer_consents.id)。 */
     public record FacePhotoInput(String photoBase64, String consentId) {
     }
