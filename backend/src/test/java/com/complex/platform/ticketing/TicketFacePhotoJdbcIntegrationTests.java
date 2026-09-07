@@ -308,6 +308,20 @@ class TicketFacePhotoJdbcIntegrationTests {
         assertThat(consent.orderId()).isEqualTo(f.orderId);
     }
 
+    // ---------- ⑱ F-08：非平台、无商户绑定、却持 verification.view 的调用者 → MERCHANT_SCOPE_REQUIRED，不解密、审计不变 ----------
+    @Test
+    void staffWithoutMerchantBindingCannotViewFacePhotoEvenWithViewPermission() {
+        Fixture f = seed(true, null, "merchant_a");
+        orderService.issueEntitlements(f.ticketTypeId, issueRequest(f, List.of(PHOTO_BASE64)));
+        String entitlementId = onlyEntitlementId(f.orderId);
+        long auditBefore = auditCount();
+        authenticateAsMerchantStaffWithViewPermission(null);
+        assertThatThrownBy(() -> facePhotoService.getForVerification(entitlementId))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("MERCHANT_SCOPE_REQUIRED"));
+        assertThat(auditCount()).isEqualTo(auditBefore);
+    }
+
     // ================= 夹具 =================
 
     private record Fixture(String ticketTypeId, String orderId) {
