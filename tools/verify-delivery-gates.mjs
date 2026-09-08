@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import fs from "node:fs";
 import path from "node:path";
 
@@ -276,6 +277,24 @@ requireIncludes("docs/delivery-package-manifest-v0.1.md", [
   "docs/runtime-acceptance-evidence-v0.1.md",
   "docs/closed-loop-implementation-ui-acceptance-report-v0.1.md",
 ]);
+
+// CI 定义唯一：模板与生效 workflow 必须字节一致，且 checkout 带完整历史（fetch-depth: 0）——
+// 浅克隆会让 verify:html-ledger-sync / verify:html-param-tier 取不到基线（决策台账 2026-08-06 补注；M001 审计 2026-09-03）。
+const lf = (text) => text.replace(/\r\n/g, "\n");
+const liveWorkflow = lf(readText(".github/workflows/predeploy-gates.yml"));
+const templateWorkflow = lf(readText("ops/ci/predeploy-gates.yml"));
+if (liveWorkflow && templateWorkflow && liveWorkflow !== templateWorkflow) {
+  failures.push("ops/ci/predeploy-gates.yml must be byte-identical to .github/workflows/predeploy-gates.yml");
+}
+for (const workflow of [".github/workflows/predeploy-gates.yml", "ops/ci/predeploy-gates.yml"]) {
+  if (!readText(workflow).includes("fetch-depth: 0")) failures.push(`${workflow} must checkout with fetch-depth: 0`);
+}
+if (packageJson) {
+  const predeploy = packageJson.scripts?.["verify:predeploy"] ?? "";
+  for (const gate of ["verify:html-ledger-sync", "verify:entry-anchors", "verify:html-param-tier"]) {
+    if (!predeploy.includes(gate)) failures.push(`verify:predeploy must include ${gate}`);
+  }
+}
 
 if (failures.length > 0) {
   console.error("DELIVERY_GATES_DOCS_FAIL");
