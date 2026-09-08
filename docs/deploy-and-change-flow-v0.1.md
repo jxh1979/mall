@@ -1,12 +1,12 @@
-# 部署与变更流程 V0.03（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并）
+# 部署与变更流程 V0.06（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并）
 
 ## 为什么改
 此前:AI 直推 main、部署只跑后端测试、治理门禁不 gate 部署 → 曾带着红门禁(scope 登记/安全基线/后台矩阵漂移)上生产。补三道真门禁。
 
 ## 四道门禁
-1. **部署门禁(硬阻断,.160)**:`complex-deploy-api.sh`/`complex-deploy-web.sh` 在构建前跑 `npm run verify:predeploy`(delivery-gates 快子集,静态无需 DB);红即 `exit 1` 不碰生产。
+1. **部署门禁(硬阻断,.160)**:`complex-deploy-api.sh`/`complex-deploy-web.sh` 在构建前逐项执行固定的预部署门禁清单（含 HTML 台账、条目引用与参数分层三项）(delivery-gates 快子集,静态无需 DB);红即 `exit 1` 不碰生产。
 2. **本地 pre-push 钩子(.160)**:禁止 `git push ...:main`;正道走 feature 分支 + PR。紧急覆盖 `ALLOW_MAIN_PUSH=1`(须在 PR/说明记录原因)。
-3. **GitHub Actions(独立、隔离,✅已激活 2026-07-06)**:生效定义是 `.github/workflows/predeploy-gates.yml`,`ops/ci/predeploy-gates.yml` 是它的字节一致镜像(`verify:delivery-gates-docs` 机检两者一致且 checkout 带 `fetch-depth: 0`;浅克隆会让 html-ledger-sync/html-param-tier 取不到基线)。现于 PR/push 到 main 时在 GitHub ubuntu runner 上跑 `verify:predeploy`。即便激活,私有库免费版也无法设 required check,只是可见信号 + 独立复现;硬阻断由第 1、2 道承担。
+3. **GitHub Actions(独立、隔离,✅已激活 2026-07-06)**:生效定义是 `.github/workflows/predeploy-gates.yml`,`ops/ci/predeploy-gates.yml` 是它的字节一致镜像(`verify:delivery-gates-docs` 机检两者一致、checkout 实际字段为 `fetch-depth: 0`、事件基线及预部署执行步骤有效;浅克隆会让 html-ledger-sync/html-param-tier 取不到基线)。现于 PR/push 到 main 时在 GitHub ubuntu runner 上跑 `verify:predeploy`。即便激活,私有库免费版也无法设 required check,只是可见信号 + 独立复现;硬阻断由第 1、2 道承担。
 4. **合并前置检查(`ops/160/merge-pr.sh`,2026-08-07 门禁升级批 1 补;2026-09-03 M001 修订)**:合并前取本分支 head commit 对应的 predeploy-gates run,`gh run watch --exit-status` 等到绿后,再次核对远端分支与 PR head 仍是该 commit,并以 `gh pr merge --match-head-commit <已验 SHA>` 合并;等待期间分支被推新 commit 即中止。非成功即中止并打印 run URL。补的正是第 3 道"只是可见信号"的缺口——把"人记得去看一眼"变成机器动作。逃生口 `SKIP_CI_WAIT=1`(打印醒目警告,**须在 PR 说明原因**)。
 
 ## 变更流程
@@ -26,7 +26,7 @@
 ## GitHub Actions 门禁定义的维护(2026-07-06 已激活;2026-09-03 修订)
 生效定义只有一份:`.github/workflows/predeploy-gates.yml`。`ops/ci/predeploy-gates.yml` 必须与它字节一致,由 `verify:delivery-gates-docs`(在 `verify:predeploy` 链内)机检;改 workflow 时两份同改。历史激活步骤(用 `ops/ci` 模板复制到 `.github/workflows/`)已完成,不再重复执行——若需重新激活,复制方向同样必须保证复制后两份一致且含 `fetch-depth: 0`。
 
-CI 用 `HTML_GATES_BASE` 给两道 HTML 差异门禁传入事件基线：PR 使用目标分支的 base SHA，push 使用事件的 `before` SHA，检查整批提交。手动运行时可用第一个参数指定基线；没有参数或环境变量时沿用 `origin/main`。基线不存在必须失败。
+CI 用 `HTML_GATES_BASE` 给两道 HTML 差异门禁传入事件基线：PR 使用目标分支的 base SHA，push 使用事件的 `before` SHA，检查整批提交。手动运行时可用第一个参数指定基线；没有参数或环境变量时沿用 `origin/main`。基线不存在必须失败。部署脚本默认比较当前提交的第一父提交 `HEAD~1`，对应普通 PR 合并引入的整批改动，避免 main 更新后与自身比较；需要检查多个发布提交时显式提供 `HTML_GATES_BASE` 作为整批起点。
 
 参数门禁只豁免 `param-tier:ignore` 点名的数值；空标记和单独的“不可配”不能代替层级标注。条目引用门禁遇到 CSV 列数错误或损坏的引号记录时报告文件和记录位置并失败。可在可丢弃副本中运行 `node tools/gate-hardening-tests/m001-regression.mjs` 验证这些规则及合并期间提交变化的处理。
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.05
 // 实际运行治理脚本；输入和模拟合并均在临时目录，绝不操作真实 PR。
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -33,6 +33,8 @@ const expectExit = (name, result, expected) => {
   }
 };
 const run = (file, cwd, args = [], env = {}) => exec(process.execPath, [path.join(root, file), ...args], cwd, env);
+const bashPath = (file) => process.platform === "win32"
+  ? "/" + file.replaceAll("\\", "/").replace(":", "") : file;
 const html = [
   "docs/business-system-map-for-operations-v0.1.html",
   "docs/platform-governance-map-for-operations-v0.1.html",
@@ -90,6 +92,19 @@ try {
   expectExit("基线新增 key", run(paramGate, gates, [before]), 1);
   put(path.join(gates, baseline), '{"entries":[]}\n');
   expectExit("基线保持不变", run(paramGate, gates, [before]), 0);
+  git(gates, "add", ".");
+  git(gates, "commit", "-qm", "temporary deployment baseline");
+  put(path.join(gates, html[0]), "<p>临时期限 60 天。</p>\n");
+  git(gates, "add", ".");
+  git(gates, "commit", "-qm", "temporary deployment change");
+  git(gates, "update-ref", "refs/remotes/origin/main", git(gates, "rev-parse", "HEAD"));
+  for (const deploy of ["ops/160/complex-deploy-api.sh", "ops/160/complex-deploy-web.sh"]) {
+    const assignment = fs.readFileSync(path.join(root, deploy), "utf8").match(/^export HTML_GATES_BASE=.*$/m)?.[0] ?? ":";
+    for (const file of [ledgerGate, paramGate]) {
+      expectExit(`部署主线比较 ${deploy} ${file}`, exec("bash", ["--noprofile", "--norc", "-c",
+        assignment + '\nexec "$1" "$2"', "m001", bashPath(process.execPath), bashPath(path.join(root, file))], gates), 1);
+    }
+  }
 
   const csv = path.join(temp, "csv");
   for (const file of html) put(path.join(csv, file), "<p>临时条目正文,后续内容</p>\n");
@@ -117,6 +132,8 @@ try {
   const mirror = "ops/ci/predeploy-gates.yml";
   const validWorkflow = fs.readFileSync(path.join(root, workflow), "utf8");
   for (const file of [workflow, mirror]) put(path.join(delivery, file), validWorkflow);
+  const deployScripts = ["ops/160/complex-deploy-api.sh", "ops/160/complex-deploy-web.sh"];
+  for (const file of deployScripts) put(path.join(delivery, file), fs.readFileSync(path.join(root, file), "utf8"));
   const deliveryGate = "tools/verify-delivery-gates.mjs";
   expectExit("一致的 CI 定义", run(deliveryGate, delivery), 0);
   put(path.join(delivery, mirror), validWorkflow.replace("fetch-depth: 0", "fetch-depth: 1"));
@@ -124,6 +141,23 @@ try {
   put(path.join(delivery, workflow), validWorkflow.replace("fetch-depth: 0", "fetch-depth: 1"));
   expectExit("两份 CI 都缺完整历史", run(deliveryGate, delivery), 1);
   for (const file of [workflow, mirror]) put(path.join(delivery, file), validWorkflow);
+  for (const [name, broken] of [
+    ["CI 删除事件基线", validWorkflow.replace(/^.*HTML_GATES_BASE:.*\n/gm, "")],
+    ["CI 注释不能代替完整历史", validWorkflow.replace("fetch-depth: 0", "fetch-depth: 1 # was fetch-depth: 0")],
+    ["CI 未执行预部署检查", validWorkflow.replace("run: npm run verify:predeploy", "run: echo skipped")],
+  ]) {
+    for (const file of [workflow, mirror]) put(path.join(delivery, file), broken);
+    expectExit(name, run(deliveryGate, delivery), 1);
+  }
+  for (const file of [workflow, mirror]) put(path.join(delivery, file), validWorkflow);
+  for (const file of deployScripts) {
+    const validScript = fs.readFileSync(path.join(root, file), "utf8");
+    for (const gate of ["verify:html-ledger-sync", "verify:entry-anchors", "verify:html-param-tier"]) {
+      put(path.join(delivery, file), validScript.replace(gate, ""));
+      expectExit(`部署缺少 ${gate} ${file}`, run(deliveryGate, delivery), 1);
+    }
+    put(path.join(delivery, file), validScript);
+  }
   const pkg = JSON.parse(fs.readFileSync(path.join(delivery, "package.json"), "utf8"));
   pkg.scripts["verify:predeploy"] = "true";
   put(path.join(delivery, "package.json"), JSON.stringify(pkg));
@@ -161,8 +195,6 @@ esac
 exit 0
 `);
   for (const file of ["git", "gh"]) fs.chmodSync(path.join(bin, file), 0o755);
-  const bashPath = (file) => process.platform === "win32"
-    ? "/" + file.replaceAll("\\", "/").replace(":", "") : file;
   for (const [mode, expected] of [["stable", 0], ["watch", 1], ["late", 1]]) {
     for (const file of ["advanced", "merged"]) {
       const target = path.join(merge, file);
