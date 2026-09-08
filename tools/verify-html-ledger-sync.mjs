@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 文件版本：V0.01
 // 门禁：三份业务最终解释权 HTML 与决策台账必须同一批改动内同步。
 // 依据：用户 2026-08-03 拍板「台账保持完整，但改 HTML 必须在同一个 PR 内同步台账」。
 // 病史：2026-07-22~08-01 三份 HTML 被 12 笔提交改过、台账停在改之前，挖出 36 条「已拍板未落 HTML」；
@@ -25,7 +26,8 @@ const HTML = [
 ];
 const LEDGER = "docs/prd-audit/business-decision-ledger.md";
 
-const base = process.argv[2] || "origin/main";
+// CI 提供事件发生前的基线；push main 后 origin/main 已指向 HEAD。
+const base = process.argv[2] || process.env.HTML_GATES_BASE || "origin/main";
 // 基线取不到就必须红：本门禁唯一的作用就是判定「改没改 HTML」，判不了不等于没改。
 let mergeBase;
 try {

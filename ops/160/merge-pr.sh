@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 文件版本：V0.01
 # 合并前置检查(2026-08-07 门禁升级批 1,用户弹窗批立项):CI 绿灯才允许合并。
 # 病史:本仓是私有库免费版,设不了 required status check,.github/workflows/predeploy-gates.yml
 #      自己在注释里写明只是「可见信号」。也就是说 gh pr merge 对红灯毫无抵抗力,全靠人记得去看一眼。
@@ -61,5 +62,12 @@ else
   echo "[merge] CI 全绿($(echo $run_ids | wc -w) 个 run),继续合并。"
 fi
 
-gh pr merge "$branch" "$method"
-echo "[merge] 已合并 $branch($method)。"
+# 合并必须钉住刚才看绿的那个 commit:等待 CI 期间若分支被推了新 commit,按分支名合并会把未验的 tip 合进 main。
+remote_now="$(git ls-remote origin "refs/heads/$branch" | cut -f1)"
+pr_head="$(gh pr view "$branch" --json headRefOid -q .headRefOid)"
+if [[ "$remote_now" != "$head_sha" || "$pr_head" != "$head_sha" ]]; then
+  echo "[merge] 分支在等待 CI 期间被更新:已验 ${head_sha:0:8},远端 ${remote_now:0:8},PR head ${pr_head:0:8}。中止,请对新 commit 重跑本脚本。" >&2
+  exit 1
+fi
+gh pr merge "$branch" "$method" --match-head-commit "$head_sha"
+echo "[merge] 已合并 $branch($method),head ${head_sha:0:8}。"

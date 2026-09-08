@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 文件版本：V0.01
 // 门禁：三份业务最终解释权 HTML 里带具体数值的业务句，必须在原句里标出所属层级。
 // 依据：用户 2026-08-03 拍板——参数分三层（法定值不可配／安全阈值可配但须最高权限审批并留痕／
 //       其余业务参数一律可配），且三层一律在参数原句里字面标出，不设临场判定。
@@ -10,7 +11,8 @@
 //      基线只许缩不许增，且该约束由本脚本机检（拿基线 commit 里的同一份文件比 key 集合，多出来即红）——
 //      否则 --write-baseline 跑一遍就能给新违规发通行证，棘轮等于没上。
 //   ③ 行内豁免：<!-- param-tier:ignore 0 元;1 月 --> 只豁免标记里列出的数值，同行其余数值照检；
-//      不列数值的裸标记仍整行豁免，但会警告——整行豁免等于给这行以后新增的数值也预先发了通行证。
+//      不列数值的裸标记不再整行豁免（DEC-R8-81 豁免须带数值；2026-09-03 M001 审计改为阻断）——
+//      整行豁免等于给这行以后新增的数值也预先发了通行证。
 //   ④ 取不到基线一律红——无法判定不等于通过。
 //   ⑤ 改动了 HTML 就全量重扫这几份文件（不只看 diff 增行）：句子被就地改数值、被挪位置都逃不掉。
 import { execSync } from "node:child_process";
@@ -37,7 +39,7 @@ const BASELINE = "tools/html-param-tier-baseline.json";
 // 具体数值 + 单位：形如 30 天、10%、3 个工作日、2 次、100 分、0.7
 const VALUE = /(\d+(?:\.\d+)?)\s*(%|个工作日|工作日|个月|分钟|小时|天|月|年|次|杯|元|分)/g;
 // 层级标注词：出现任一即视为已标注
-const TIER = /(法定值|安全阈值|业务参数|可配|出厂默认)/;
+const TIER = /(法定值|安全阈值|业务参数|(?<!不)可配|出厂默认)/;
 // 行内豁免标记，可带数值清单：<!-- param-tier:ignore 0 元;1 月 -->
 const IGNORE = /param-tier:ignore([^>]*)/;
 
@@ -67,14 +69,15 @@ function scan(file) {
     if (mark) {
       const listed = valuesIn(mark[1]);
       if (!listed.length) {
-        console.warn(
-          `[html-param-tier] 提醒：${file} 有一处整行豁免（该行 ${text.length} 字，含 ${vals.join("、")}），` +
-          `建议改成带数值豁免 <!-- param-tier:ignore ${vals.join(";")} -->，否则这行以后新增的数值也一并被放过。`
+        // DEC-R8-81：豁免只能带数值。裸标记不再整行放行，按未标层级句处理（M001 审计 2026-09-03）。
+        console.error(
+          `[html-param-tier] ${file} 有一处裸豁免（不列数值，含 ${vals.join("、")}）：` +
+          `请改成带数值豁免 <!-- param-tier:ignore ${vals.join(";")} -->。`
         );
-        return;
+      } else {
+        vals = vals.filter((v) => !listed.includes(v));
+        if (!vals.length) return;
       }
-      vals = vals.filter((v) => !listed.includes(v));
-      if (!vals.length) return;
     }
     const key = keyOf(file, text);
     if (seen.has(key)) return;
@@ -115,7 +118,8 @@ if (process.argv.includes("--write-baseline")) {
   process.exit(0);
 }
 
-const base = process.argv[2] || "origin/main";
+// CI 提供事件发生前的基线；push main 后 origin/main 已指向 HEAD。
+const base = process.argv[2] || process.env.HTML_GATES_BASE || "origin/main";
 
 let mergeBase;
 try {
@@ -133,7 +137,8 @@ const local = readBaseline(fs.readFileSync(BASELINE, "utf8"), "本地");
 // 基线 commit 上没有这份文件 = 本批首次引入，放行。
 let prevJson = null;
 try {
-  prevJson = git(`show ${mergeBase}:${BASELINE} 2>/dev/null`);
+  // 用 stdio 选项而不是 shell 重定向：Windows 上 cmd 会把 2>/dev/null 当成路径而报错，导致棘轮比较被静默跳过。
+  prevJson = execSync(`git show ${mergeBase}:${BASELINE}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 } catch {
   prevJson = null;
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 文件版本：V0.03
 set -euo pipefail
 
 PROJECT_DIR="${COMPLEX_PROJECT_DIR:-$HOME/complex-management}"
@@ -191,7 +192,10 @@ cd "$PROJECT_DIR"
 # 部署门禁(2026-07-06,codex 复核后加固):部署脚本直接跑权威门禁列表,不解析/信任 package.json 里
 # 可被抽空或惰性化(如 verify:predeploy="true # 门禁名...")的脚本串——"改 package.json 让门禁空跑"这条路被堵死。
 # 仍非仓外强制:能改本部署脚本(需 .160 shell)或 tools/verify-*.mjs 者仍可绕过;真闭合需受保护 CI(见 docs/deploy-and-change-flow)。
+# 普通 PR 合并发布比较第一父提交；批量发布可沿用显式 HTML_GATES_BASE。
+export HTML_GATES_BASE="${HTML_GATES_BASE:-HEAD~1}"
 REQUIRED_GATES=(
+  verify:html-ledger-sync verify:entry-anchors verify:html-param-tier
   verify:delivery-gates-docs verify:full-admin-matrix verify:domain-ownership-scope
   verify:matrix-vs-migration verify:data-isolation-spec verify:tenant-isolation
   verify:p0-contract verify:security-baseline verify:production-readiness-evidence

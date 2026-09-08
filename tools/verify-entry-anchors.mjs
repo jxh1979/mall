@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 门禁：三份业务最终解释权 HTML 的引用一律用「条目名」，不得再用行号。
 // 依据：DEC-R8-17（用户 2026-08-06 裁 A：彻底废行号、只留条目名）。
 // 病史：R8 两批 6 轮返工里有 3 轮因行号锚点漂移返工（760 行漂移 → 287 处重建 → +2 位移 19 处漏改）。
@@ -46,20 +46,32 @@ function readCsv(file) {
   let t = fs.readFileSync(file, "utf8");
   if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
   const rows = [];
-  let row = [], cell = "", q = false;
+  let row = [], cell = "", q = false, closed = false;
   for (let i = 0; i < t.length; i++) {
     const c = t[i];
     if (q) {
-      if (c === '"') { if (t[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      if (c === '"') { if (t[i + 1] === '"') { cell += '"'; i++; } else { q = false; closed = true; } }
       else cell += c;
-    } else if (c === '"') q = true;
-    else if (c === ",") { row.push(cell); cell = ""; }
-    else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    } else if (closed && ![",", "\r", "\n"].includes(c)) {
+      throw new Error(`${file}: CSV 记录 ${rows.length + 1} 引号闭合后出现非分隔字符`);
+    } else if (c === '"') {
+      if (cell) throw new Error(`${file}: CSV 记录 ${rows.length + 1} 字段中出现未转义引号`);
+      q = true;
+    } else if (c === ",") { row.push(cell); cell = ""; closed = false; }
+    else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; closed = false; }
     else if (c !== "\r") cell += c;
   }
-  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  if (q) throw new Error(`${file}: CSV 记录 ${rows.length + 1} 引号未闭合`);
+  if (cell !== "" || row.length || closed) { row.push(cell); rows.push(row); }
   const head = rows.shift();
-  return rows.filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+  if (!head || head.some(h => !h.trim()) || new Set(head).size !== head.length) {
+    throw new Error(`${file}: CSV 表头为空或含重复列名`);
+  }
+  return rows.flatMap((r, i) => {
+    if (r.length === 1 && !r[0].trim()) return [];
+    if (r.length !== head.length) throw new Error(`${file}: CSV 记录 ${i + 2} 应有 ${head.length} 列，实际 ${r.length} 列`);
+    return [Object.fromEntries(head.map((h, j) => [h, r[j]]))];
+  });
 }
 
 function plainText(file) {

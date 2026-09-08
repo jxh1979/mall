@@ -1,5 +1,7 @@
+// 文件版本：V0.02
 import fs from "node:fs";
 import path from "node:path";
+import { parse } from "yaml";
 
 const repoRoot = process.cwd();
 const failures = [];
@@ -276,6 +278,43 @@ requireIncludes("docs/delivery-package-manifest-v0.1.md", [
   "docs/runtime-acceptance-evidence-v0.1.md",
   "docs/closed-loop-implementation-ui-acceptance-report-v0.1.md",
 ]);
+
+// CI 定义唯一：模板与生效 workflow 必须字节一致，且 checkout 带完整历史（fetch-depth: 0）——
+// 浅克隆会让 verify:html-ledger-sync / verify:html-param-tier 取不到基线（决策台账 2026-08-06 补注；M001 审计 2026-09-03）。
+const lf = (text) => text.replace(/\r\n/g, "\n");
+const liveWorkflow = lf(readText(".github/workflows/predeploy-gates.yml"));
+const templateWorkflow = lf(readText("ops/ci/predeploy-gates.yml"));
+if (liveWorkflow && templateWorkflow && liveWorkflow !== templateWorkflow) {
+  failures.push("ops/ci/predeploy-gates.yml must be byte-identical to .github/workflows/predeploy-gates.yml");
+}
+const htmlGates = ["verify:html-ledger-sync", "verify:entry-anchors", "verify:html-param-tier"];
+const eventBase = "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}";
+for (const workflow of [".github/workflows/predeploy-gates.yml", "ops/ci/predeploy-gates.yml"]) {
+  try {
+    const steps = parse(readText(workflow))?.jobs?.predeploy?.steps;
+    if (!Array.isArray(steps)) throw new Error("predeploy.steps must be an array");
+    const checkout = steps.find(step => step?.uses?.startsWith("actions/checkout@"));
+    if (String(checkout?.with?.["fetch-depth"]) !== "0") failures.push(`${workflow} must checkout with fetch-depth: 0`);
+    const verify = steps.find(step => step?.run?.trim() === "npm run verify:predeploy");
+    if (!verify) failures.push(`${workflow} must run npm run verify:predeploy`);
+    if (verify?.env?.HTML_GATES_BASE !== eventBase) failures.push(`${workflow} must supply the PR/push event base as HTML_GATES_BASE`);
+  } catch (error) {
+    failures.push(`${workflow} has invalid predeploy configuration: ${error.message}`);
+  }
+}
+for (const script of ["ops/160/complex-deploy-api.sh", "ops/160/complex-deploy-web.sh"]) {
+  const array = /^REQUIRED_GATES=\(([\s\S]*?)^\)/m.exec(readText(script))?.[1] ?? "";
+  const gates = new Set(array.replace(/#.*$/gm, "").match(/\bverify:[a-z0-9:-]+\b/g) ?? []);
+  for (const gate of htmlGates) {
+    if (!gates.has(gate)) failures.push(`${script} REQUIRED_GATES must include ${gate}`);
+  }
+}
+if (packageJson) {
+  const predeploy = packageJson.scripts?.["verify:predeploy"] ?? "";
+  for (const gate of htmlGates) {
+    if (!predeploy.includes(gate)) failures.push(`verify:predeploy must include ${gate}`);
+  }
+}
 
 if (failures.length > 0) {
   console.error("DELIVERY_GATES_DOCS_FAIL");
