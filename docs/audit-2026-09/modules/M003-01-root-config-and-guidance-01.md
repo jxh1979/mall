@@ -1,3 +1,44 @@
+# M003 — 治理门禁与 CI 基线／配置与工程入口／第1段
+版本：V0.02
+
+状态：PASS。当前471模块计划；控制V0.17、冻结锁V0.11。已先写ledger V1.63的M003 PASS，再写本收口。完成3/471模块；不代表全仓或发布门禁通过。
+
+## 当前范围与结果
+
+仅.gitignore（55行）与package.json（147行），共202行；GEN-001—GEN-018三线完整复审。当前B2定稿ID为M003-016、027—031，全为无缺陷/修复队列否；B5两席无新增finding、添加项或HTML自身问题。
+本轮没有源码修改，跳过B3/B4；历史B3累计2、方案修复2、交付失败0保持。旧322模块同号证据只作历史。
+
+| 文件 | SHA256 |
+|---|---|
+| .gitignore | 75861ded5d3859bcda593aafe3f3862e765470e7f8b6636a643bf59de9d7c51b |
+| package.json | 350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f |
+
+## 两席证据
+
+- 本次B1：Codex V0.04最初FAIL（冗余ignore），Grok V0.04 PASS。原始分歧保留；冗余不影响正常运行，不构成必须修复的工程缺陷，未删除规则。
+- 首批B2 findings V0.90：根PASS/Grok FAIL；收窄027处置后V0.91双PASS，V0.92仅定稿。B1 raw保留各批完整归并意见。
+- B5-r2 self V0.03（当前完整报告自L309起），82593字节，SHA256 327ab67716aa3a17351657cb4008328776a8a367c0a853e52b189428fb854586。
+- B5-r2 Grok V0.02（当前报告L460—893），64554字节，SHA256 965163dbbb2e5d3969e78a038663fded87287eca59d30e21afb20bd303ab782a；Grok真实exit0。根完整self落盘后才读取全部434行。
+- B5两席均PASS。技术性/细化措辞有部分差别，均无业务发明、缺陷或修复项；不宣称分类逐项一致，不覆盖已双PASS的B2定稿。
+
+B5后四值分别：
+实算：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+sidecar：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+ledger：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+当前Grok最后独占行：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+四值全等，LOCK-AMEND-COUNT=1。完整命令与输入、结果见M003-b1-self-raw.md收口回执和两份B5 raw。
+
+## 验证与限制
+
+根当前检查覆盖127条脚本语法、75个Node目标、工作区引用、依赖清单镜像、21个ignore样例与入口正负例；两个环境检查成功。UI仅列出32测试/6文件，真实后端配置仅列18测试/4文件；typecheck使用dry，仅验证构建图，不是类型检查或业务用例通过。
+verify:predeploy实际exit1，第一处html-ledger-sync失败；entry-anchors独立实跑exit1，6处BSM引用镜像错误（4处A回访概括、2处已批准页脚日期），归M425/M427。本模块未修这些文件，不能称全局发布已绿。
+没有全后端/数据库迁移/全UI/Android构建/部署验证，没有提交推送。三份需求HTML与锁未改，用户B/C原意确认继续有效。
+远程操作已使用直接SSH；没有把审计委派给Claude Agent，未修改全局MCP配置。
+
+## 历史 V0.01（旧322计划，完整原文保留）
+
+以下旧范围、旧hash、旧通过/发布安排不代表当前471计划状态。
+
 # M003 — 01-root-config-and-guidance-01
 版本：V0.01
 

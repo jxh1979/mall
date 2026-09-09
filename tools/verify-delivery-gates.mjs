@@ -1,7 +1,14 @@
-// 文件版本：V0.02
+// 文件版本：V0.04
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
+
+// ponytail: 识别本仓现有的 npm run && 链；引入其它 shell 语法时再使用专门解析器。
+function npmCommands(script = "") {
+  const parts = script.replace(/^[ \t\n]+|[ \t\n]+$/g, "").split(/[ \t]*&&[ \t\n]*/);
+  if (!parts.every(command => /^npm[ \t]+run[ \t]+[\w:-]+$/.test(command) && !command.includes("\n"))) return new Set();
+  return new Set(parts.map(command => command.split(/[ \t]+/)[2]));
+}
 
 const repoRoot = process.cwd();
 const failures = [];
@@ -151,8 +158,9 @@ if (packageJson) {
   if (!deliveryScript) {
     failures.push("package.json must expose verify:delivery-gates");
   } else {
+    const deliveryCommands = npmCommands(deliveryScript);
     for (const command of requiredDeliveryCommands) {
-      if (!deliveryScript.includes(command)) failures.push(`verify:delivery-gates must include ${command}`);
+      if (!deliveryCommands.has(command)) failures.push(`verify:delivery-gates must include ${command}`);
     }
     for (const forbidden of ["test:backend", "android:p0", "dev:backend", "dev:web"]) {
       if (deliveryScript.includes(forbidden)) failures.push(`verify:delivery-gates must stay lightweight and not include ${forbidden}`);
@@ -310,9 +318,9 @@ for (const script of ["ops/160/complex-deploy-api.sh", "ops/160/complex-deploy-w
   }
 }
 if (packageJson) {
-  const predeploy = packageJson.scripts?.["verify:predeploy"] ?? "";
+  const predeployCommands = npmCommands(packageJson.scripts?.["verify:predeploy"]);
   for (const gate of htmlGates) {
-    if (!predeploy.includes(gate)) failures.push(`verify:predeploy must include ${gate}`);
+    if (!predeployCommands.has(gate)) failures.push(`verify:predeploy must include ${gate}`);
   }
 }
 

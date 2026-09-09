@@ -1,4 +1,4 @@
-# 交付总闸口与上线准入验证 V0.1
+# 交付总闸口与上线准入验证 V0.12
 
 ## 1. 定位
 
@@ -60,49 +60,48 @@
 npm run verify:delivery-gates
 ```
 
-该命令应保持轻量，不直接包含后端完整测试、Web 构建、Android 构建或生产发布动作。它串联以下闸口：
+该命令应保持轻量，不直接包含后端完整测试、Web 构建、Android 构建或生产发布动作。主要闸口如下，完整清单与执行顺序以 `package.json` 的 `verify:delivery-gates` 脚本为准：
 
-| 顺序 | 命令 | 目的 |
-|---|---|---|
-| 1 | `npm run verify:delivery-gates-docs` | 校验本文档、入口文档、交付包清单和脚本是否互相引用 |
-| 2 | `npm run verify:coding-host-protection` | 确认正式代码只在 192.168.88.160 的标准仓库执行 |
-| 3 | `npm run verify:external-dependency-gates` | 阻断未确定供应商前的真实机器人、视频、设备控制和独立 Python AI 服务伪实现 |
-| 4 | `npm run verify:t3-coding-package` | 校验 T3 编码包、供应商闸口和只读/后置边界仍闭合 |
-| 5 | `npm run verify:t3b-supplier-mock-kit` | 校验供应商 mock kit 仍不包含真实密钥、生产控制或越权闭环 |
-| 6 | `npm run verify:t3d-local-llm-ai-quality` | 校验 160 本地大模型质检仍为 loopback-only、脱敏、人工复核建议 |
-| 7 | `npm run verify:p0-contract` | 校验 P0 OpenAPI、示例、operation 矩阵、闭环附录和客户端契约 |
-| 8 | `npm run verify:security-baseline` | 校验正式安全基线输入和生产文档访问策略 |
-| 9 | `npm run verify:production-readiness-evidence` | 校验生产前置证据、台账状态和安全基线 evidence 是否一致 |
-| 10 | `npm run verify:production-blockers` | 校验生产阻断清单与台账、findings register 同步 |
-| 11 | `npm run verify:production-owner-actions` | 校验生产阻断项已按责任人拆成可执行动作包，且动作包由阻断清单自动生成?requires OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS and manifest_paths |
-| 12 | `npm run verify:production-evidence-submission-kit` | 校验证据提交包由责任人动作包自动生成，且仍保持等待真实证据状态 |
-| 13 | `npm run verify:production-evidence-manifest-templates` | 校验 manifest 填写模板齐全，且默认 blocked、仅为模板不是真实证据 |
-| 14 | `npm run verify:production-evidence-owner-guides` | 校验责任组回填说明包齐全，且只做分派说明不关闭阻断 |
-| 15 | `npm run verify:production-evidence-submission-status` | 扫描实际 manifest 提交状态，缺失为 awaiting，格式错误或明文密钥为阻断 |
-| 16 | `npm run verify:production-evidence-submissions-guard` | 校验证据提交目录只允许 manifest 入库，原始证据必须外部留链 |
-| 17 | `npm run verify:production-evidence-negative-fixtures` | 使用临时负向 manifest 校验证据状态看板会拦截同人提交复核、本地路径、非生产 credential_ref、错绑 item、敏感 URL、明文密钥和非 passed 结果 |
-| 18 | `npm run verify:production-evidence-positive-fixtures` | 使用临时目录正向 manifest 证明合规生产证据提交会被识别为 valid_submission，且不污染真实 submissions |
-| 19 | `npm run verify:production-evidence-positive-propagation-fixtures` | 使用临时目录验证合规 manifest 能从提交状态传播到生产闭环缺口报告和闭环当前态，同时不误宣称生产上线就绪 |
-| 20 | `npm run verify:production-ready-no-go-fixtures` | 使用临时目录验证 40 份生产 manifest 全有效且 NAS 模拟 ready 时，外部证据 partial 需求仍必须阻断生产上线 ready 声明 |
-| 21 | `npm run verify:production-blocker-register-no-go-fixtures` | 使用临时目录验证当生产 manifest、NAS 和外部证据都模拟通过时，生产 blocker register 未清零仍必须阻断生产上线 ready 声明 |
-| 22 | `npm run verify:production-ready-positive-fixtures` | 使用临时目录验证当 40 份生产 manifest、NAS、外部证据和 blocker register 全部满足时，闭环当前态必须能判定生产 ready=true |
-| 23 | `npm run verify:production-evidence-backfill-priority` | 校验证据回填优先级看板齐全，按责任组和 P0 缺口排序且不关闭阻断 |
-| 24 | `npm run verify:production-evidence-backfill-execution-ledger` | 校验证据回填执行台账齐全，一行一个待补 manifest 且不关闭阻断 |
-| 25 | `npm run verify:production-evidence-p0-quickstart` | 校验 P0-only 生产证据快速回填快照齐全，31 个 P0 manifest 已按责任组和第一动作可派发 |
-| 26 | `npm run verify:production-evidence-owner-execution-packets
-npm run verify:production-evidence-crosslinks` | 校验按责任组生成的一站式生产证据执行包齐全，模板复制命令不覆盖已提交 manifest，且不包含明文密钥或原始证据 |
-| 27 | `npm run verify:production-evidence-draft-prep` | 校验生产证据 manifest 草稿准备器默认 dry-run、拒绝越界写入和覆盖已有 manifest，且不会关闭生产阻断 |
-| 28 | `npm run verify:production-evidence-draft-prep-fixtures` | 在临时目录实测草稿准备器 dry-run 不写文件、execute 复制模板、再次 execute 不覆盖已有 manifest，并拒绝无选择器的 broad execute |
-| 29 | `npm run docs:production-closure-gap-reports` + `npm run verify:production-closure-gap-reports` | 从当前运行态、Semgrep、NAS 当前状态、生产证据提交状态和外部证据追踪重新生成并校验生产闭环缺口总报告，防止旧报告或手改报告伪关闭生产证据 |
-| 33 | `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |
-| 33 | `npm run verify:nas-it-handoff` | 校验 NAS IT 受控挂载交接包、默认 dry-run 脚本、manifest 映射和无明文密钥边界 |
-| 33 | `npm run verify:nas-diagnostics` | 校验 NAS 只读诊断报告与当前网络、445 端口、CIFS 挂载和 preflight 根因一致，不关闭生产 manifest |
-| 33 | `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
-| 33 | `npm run verify:final-closed-loop-audit` | 校验最终闭环验收报告与需求矩阵、当前代码行数、Semgrep 摘要和生产证据状态一致，防止最终报告漂移 |
-| 33 | `npm run verify:closed-loop-current-state` | 校验闭环当前态快照已纳入需求矩阵、安全扫描、生产证据、NAS 和运行时验收证据 |
-| 33 | `npm run verify:runtime-acceptance-evidence` | 校验运行时验收证据快照齐全，覆盖后端测试、Web 构建、UI、真实后端 UI 和生产边界声明；并将证据绑定到生成时的源码指纹与生成时效——源码已变更或证据超期（默认 30 天，`RUNTIME_EVIDENCE_MAX_AGE_DAYS` 可调）即判为陈旧失败，杜绝陈旧证据自欺通过 |
-| 33 | `npm run verify:ui-experience-acceptance` | 校验前端体验验收报告由运行态证据、Playwright spec 和截图基线生成，防止旧报告漂移 |
-| 34 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
+| 命令 | 目的 |
+|---|---|
+| `npm run verify:delivery-gates-docs` | 校验本文档、入口文档、交付包清单和脚本是否互相引用 |
+| `npm run verify:coding-host-protection` | 确认正式代码只在 192.168.88.160 的标准仓库执行 |
+| `npm run verify:external-dependency-gates` | 阻断未确定供应商前的真实机器人、视频、设备控制和独立 Python AI 服务伪实现 |
+| `npm run verify:t3-coding-package` | 校验 T3 编码包、供应商闸口和只读/后置边界仍闭合 |
+| `npm run verify:t3b-supplier-mock-kit` | 校验供应商 mock kit 仍不包含真实密钥、生产控制或越权闭环 |
+| `npm run verify:t3d-local-llm-ai-quality` | 校验 160 本地大模型质检仍为 loopback-only、脱敏、人工复核建议 |
+| `npm run verify:p0-contract` | 校验 P0 OpenAPI、示例、operation 矩阵、闭环附录和客户端契约 |
+| `npm run verify:security-baseline` | 校验正式安全基线输入和生产文档访问策略 |
+| `npm run verify:production-readiness-evidence` | 校验生产前置证据、台账状态和安全基线 evidence 是否一致 |
+| `npm run verify:production-blockers` | 校验生产阻断清单与台账、findings register 同步 |
+| `npm run verify:production-owner-actions` | 校验生产阻断项已按责任人拆成可执行动作包，且动作包由阻断清单自动生成并关联证据 manifest 路径 |
+| `npm run verify:production-evidence-submission-kit` | 校验证据提交包由责任人动作包自动生成，且仍保持等待真实证据状态 |
+| `npm run verify:production-evidence-manifest-templates` | 校验 manifest 填写模板齐全，且默认 blocked、仅为模板不是真实证据 |
+| `npm run verify:production-evidence-owner-guides` | 校验责任组回填说明包齐全，且只做分派说明不关闭阻断 |
+| `npm run verify:production-evidence-submission-status` | 扫描实际 manifest 提交状态，缺失为 awaiting，格式错误或明文密钥为阻断 |
+| `npm run verify:production-evidence-submissions-guard` | 校验证据提交目录只允许 manifest 入库，原始证据必须外部留链 |
+| `npm run verify:production-evidence-negative-fixtures` | 使用临时负向 manifest 校验证据状态看板会拦截同人提交复核、本地路径、非生产 credential_ref、错绑 item、敏感 URL、明文密钥和非 passed 结果 |
+| `npm run verify:production-evidence-positive-fixtures` | 使用临时目录正向 manifest 证明合规生产证据提交会被识别为 valid_submission，且不污染真实 submissions |
+| `npm run verify:production-evidence-positive-propagation-fixtures` | 使用临时目录验证合规 manifest 能从提交状态传播到生产闭环缺口报告和闭环当前态，同时不误宣称生产上线就绪 |
+| `npm run verify:production-ready-no-go-fixtures` | 使用临时目录验证 当前全部生产 manifest 全有效且 NAS 模拟 ready 时，外部证据 partial 需求仍必须阻断生产上线 ready 声明 |
+| `npm run verify:production-blocker-register-no-go-fixtures` | 使用临时目录验证当生产 manifest、NAS 和外部证据都模拟通过时，生产 blocker register 未清零仍必须阻断生产上线 ready 声明 |
+| `npm run verify:production-ready-positive-fixtures` | 使用临时目录验证当 当前全部生产 manifest、NAS、外部证据和 blocker register 全部满足时，闭环当前态必须能判定生产 ready=true |
+| `npm run verify:production-evidence-backfill-priority` | 校验证据回填优先级看板齐全，按责任组和 P0 缺口排序且不关闭阻断 |
+| `npm run verify:production-evidence-backfill-execution-ledger` | 校验证据回填执行台账齐全，一行一个待补 manifest 且不关闭阻断 |
+| `npm run verify:production-evidence-p0-quickstart` | 校验 P0-only 生产证据快速回填快照齐全，当前 P0 manifest 已按责任组和第一动作可派发 |
+| `npm run verify:production-evidence-owner-execution-packets`、`npm run verify:production-evidence-crosslinks` | 校验按责任组生成的一站式生产证据执行包齐全、证据交叉引用一致，模板复制命令不覆盖已提交 manifest，且不包含明文密钥或原始证据 |
+| `npm run verify:production-evidence-draft-prep` | 校验生产证据 manifest 草稿准备器默认 dry-run、拒绝越界写入和覆盖已有 manifest，且不会关闭生产阻断 |
+| `npm run verify:production-evidence-draft-prep-fixtures` | 在临时目录实测草稿准备器 dry-run 不写文件、execute 复制模板、再次 execute 不覆盖已有 manifest，并拒绝无选择器的 broad execute |
+| `npm run verify:production-closure-gap-reports` | 从当前运行态、Semgrep、NAS 当前状态、生产证据提交状态和外部证据追踪校验生产闭环缺口总报告，防止旧报告或手改报告伪关闭生产证据 |
+| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求已追踪到责任组、证据 item_id、模板和目标 manifest 路径，或已记录对应接入开关关闭，防止 mock/沙箱被误判为生产闭环 |
+| `npm run verify:nas-it-handoff` | 校验 NAS IT 受控挂载交接包、默认 dry-run 脚本、manifest 映射和无明文密钥边界 |
+| `npm run verify:nas-diagnostics` | 校验 NAS 只读诊断报告与当前网络、445 端口、CIFS 挂载和 preflight 根因一致，不关闭生产 manifest |
+| `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
+| `npm run verify:final-closed-loop-audit` | 校验最终闭环验收报告与需求矩阵、当前代码行数、Semgrep 摘要和生产证据状态一致，防止最终报告漂移 |
+| `npm run verify:closed-loop-current-state` | 校验闭环当前态快照已纳入需求矩阵、安全扫描、生产证据、NAS 和运行时验收证据 |
+| `npm run verify:runtime-acceptance-evidence` | 校验运行时验收证据快照齐全，覆盖后端测试、Web 构建、UI、真实后端 UI 和生产边界声明；并将证据绑定到生成时的源码指纹与生成时效——源码已变更或证据超期（默认 30 天，`RUNTIME_EVIDENCE_MAX_AGE_DAYS` 可调）即判为陈旧失败，杜绝陈旧证据自欺通过 |
+| `npm run verify:ui-experience-acceptance` | 校验前端体验验收报告由运行态证据、Playwright spec 和截图基线生成，防止旧报告漂移 |
+| `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
 
 ## 3. 交付阻断规则
 
@@ -114,7 +113,7 @@ npm run verify:production-evidence-crosslinks` | 校验按责任组生成的一�
 
 ## 4. 与完整验证的关系
 
-`npm run verify:delivery-gates` 是交付准入，不是完整上线验收。正式上线仍需按场景补跑：
+`npm run verify:delivery-gates` 是交付准入，不是完整上线验收。正式上线还必须按业务系统地图“系统交付与上线”完成强密码更换、U 盘密钥托管及相关留痕，并交付能自动识别环境的安装包和业务语言教程；以下工程验证不能替代这些要求。按场景补跑：
 
 | 场景 | 追加验证 |
 |---|---|

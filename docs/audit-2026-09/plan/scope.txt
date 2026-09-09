@@ -87,6 +87,7 @@ apps/web/src/admin/pages/AbandonedEntitlementRevenuePage.tsx
 apps/web/src/admin/pages/AccessGovernanceGrantRequest.guidedcreate.test.tsx
 apps/web/src/admin/pages/AccessGovernancePage.degraded.test.tsx
 apps/web/src/admin/pages/AccessGovernancePage.guidedcreate.test.tsx
+apps/web/src/admin/pages/AccessGovernancePage.scopechange.test.tsx
 apps/web/src/admin/pages/AccessGovernancePage.test.tsx
 apps/web/src/admin/pages/AccessGovernancePage.tsx
 apps/web/src/admin/pages/AccessUsersPage.metricdetail.test.tsx
@@ -119,6 +120,8 @@ apps/web/src/admin/pages/AmusementVerificationRecordsPage.metricdetail.test.tsx
 apps/web/src/admin/pages/AmusementVerificationRecordsPage.robustness.test.tsx
 apps/web/src/admin/pages/AmusementVerificationRecordsPage.tsx
 apps/web/src/admin/pages/AnalyticsKpiFocus.test.tsx
+apps/web/src/admin/pages/ApprovalChainPage.test.tsx
+apps/web/src/admin/pages/ApprovalChainPage.tsx
 apps/web/src/admin/pages/AuditEventsPage.test.tsx
 apps/web/src/admin/pages/AuditEventsPage.tsx
 apps/web/src/admin/pages/BarCombosPage.test.tsx
@@ -210,6 +213,9 @@ apps/web/src/admin/pages/LeasingRentalStatusPage.tsx
 apps/web/src/admin/pages/LeasingWorkbenchPage.guidedcreate.test.tsx
 apps/web/src/admin/pages/LeasingWorkbenchPage.test.tsx
 apps/web/src/admin/pages/LeasingWorkbenchPage.tsx
+apps/web/src/admin/pages/M006AccessGovernance.test.tsx
+apps/web/src/admin/pages/M006AccessRegistration.test.tsx
+apps/web/src/admin/pages/M006BarStoredValue.test.tsx
 apps/web/src/admin/pages/MemberLoyaltyConfigPage.test.tsx
 apps/web/src/admin/pages/MemberLoyaltyConfigPage.tsx
 apps/web/src/admin/pages/MerchantScopePage.test.tsx
@@ -245,6 +251,8 @@ apps/web/src/admin/pages/OperatingParamsPage.guidedcreate.test.tsx
 apps/web/src/admin/pages/OperatingParamsPage.tsx
 apps/web/src/admin/pages/OpsReadinessPage.test.tsx
 apps/web/src/admin/pages/OpsReadinessPage.tsx
+apps/web/src/admin/pages/OrgHierarchyPage.test.tsx
+apps/web/src/admin/pages/OrgHierarchyPage.tsx
 apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx
 apps/web/src/admin/pages/OrganizationMerchantPage.tsx
 apps/web/src/admin/pages/OverviewPage.datepicker.test.tsx
@@ -305,6 +313,7 @@ apps/web/src/admin/pages/StoredWinePage.rowdetail.test.tsx
 apps/web/src/admin/pages/StoredWinePage.tsx
 apps/web/src/admin/pages/SubjectBindingsPage.test.tsx
 apps/web/src/admin/pages/SubjectBindingsPage.tsx
+apps/web/src/admin/pages/SupervisorReviewPage.chain.test.tsx
 apps/web/src/admin/pages/SupervisorReviewPage.test.tsx
 apps/web/src/admin/pages/SupervisorReviewPage.tsx
 apps/web/src/admin/pages/T3AReadonlyAnalyticsPage.rowdetail.test.tsx
@@ -371,6 +380,7 @@ apps/web/src/customer/pages/BuyTicketPage.facephoto.test.tsx
 apps/web/src/customer/pages/BuyTicketPage.tsx
 apps/web/src/customer/pages/HomePage.test.tsx
 apps/web/src/customer/pages/HomePage.tsx
+apps/web/src/customer/pages/M006OrderStoredValue.test.tsx
 apps/web/src/customer/pages/MyOrdersPage.tsx
 apps/web/src/customer/pages/PointsPage.degraded.test.tsx
 apps/web/src/customer/pages/PointsPage.test.tsx
@@ -397,6 +407,7 @@ backend/src/main/java/com/complex/platform/ComplexApiApplication.java
 backend/src/main/java/com/complex/platform/access/AccessActor.java
 backend/src/main/java/com/complex/platform/access/AccessController.java
 backend/src/main/java/com/complex/platform/access/AccessCredentialProvisioner.java
+backend/src/main/java/com/complex/platform/access/AccessGrantPolicy.java
 backend/src/main/java/com/complex/platform/access/AccessGrantPositionSummary.java
 backend/src/main/java/com/complex/platform/access/AccessGrantRequestRecord.java
 backend/src/main/java/com/complex/platform/access/AccessGrantSummary.java
@@ -433,7 +444,13 @@ backend/src/main/java/com/complex/platform/access/dto/RoleRequest.java
 backend/src/main/java/com/complex/platform/access/dto/StaffLevelAssignmentRequest.java
 backend/src/main/java/com/complex/platform/access/dto/StatusChangeRequest.java
 backend/src/main/java/com/complex/platform/access/dto/TemporaryGrantRequest.java
+backend/src/main/java/com/complex/platform/access/dto/UserPermissionOverrideRequest.java
 backend/src/main/java/com/complex/platform/access/dto/UserPositionAssignmentRequest.java
+backend/src/main/java/com/complex/platform/access/dto/UserScopeChangeRequest.java
+backend/src/main/java/com/complex/platform/access/org/ApprovalLineRequest.java
+backend/src/main/java/com/complex/platform/access/org/OrgHierarchyController.java
+backend/src/main/java/com/complex/platform/access/org/OrgHierarchyService.java
+backend/src/main/java/com/complex/platform/access/org/OrgSuperiorRequest.java
 backend/src/main/java/com/complex/platform/access/package-info.java
 backend/src/main/java/com/complex/platform/access/staff/EmployeeNoticeRecord.java
 backend/src/main/java/com/complex/platform/access/staff/JdbcStaffRepository.java
@@ -711,6 +728,7 @@ backend/src/main/java/com/complex/platform/common/crypto/SigningSecretGuard.java
 backend/src/main/java/com/complex/platform/common/idempotency/CallerScopeResolver.java
 backend/src/main/java/com/complex/platform/common/idempotency/IdempotencyRecord.java
 backend/src/main/java/com/complex/platform/common/idempotency/IdempotencyRepository.java
+backend/src/main/java/com/complex/platform/common/idempotency/IdempotencyResponseBodyPiiBackfill.java
 backend/src/main/java/com/complex/platform/common/idempotency/IdempotencyService.java
 backend/src/main/java/com/complex/platform/common/idempotency/JdbcIdempotencyRepository.java
 backend/src/main/java/com/complex/platform/common/jdbc/JdbcTimestamps.java
@@ -1081,6 +1099,8 @@ backend/src/main/java/com/complex/platform/governance/SpaceTypeRecord.java
 backend/src/main/java/com/complex/platform/governance/VenueBusinessHoursRecord.java
 backend/src/main/java/com/complex/platform/governance/VenueBusinessHoursRepository.java
 backend/src/main/java/com/complex/platform/governance/VenueBusinessHoursService.java
+backend/src/main/java/com/complex/platform/governance/chain/ApprovalChainNode.java
+backend/src/main/java/com/complex/platform/governance/chain/ApprovalChainService.java
 backend/src/main/java/com/complex/platform/governance/dto/BusinessEntityBindingRequest.java
 backend/src/main/java/com/complex/platform/governance/dto/BusinessEntityRequest.java
 backend/src/main/java/com/complex/platform/governance/dto/MerchantArchiveRequest.java
@@ -1097,7 +1117,9 @@ backend/src/main/java/com/complex/platform/governance/review/ApprovalLevel.java
 backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewApprovalRequest.java
 backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewController.java
 backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewDecisionRecord.java
+backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewEscalationJob.java
 backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewEvaluateRequest.java
+backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewForwardRequest.java
 backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewPolicyRecord.java
 backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewRepository.java
 backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewService.java
@@ -1528,6 +1550,7 @@ backend/src/main/java/com/complex/platform/ticketing/dto/EntitlementTemplateArch
 backend/src/main/java/com/complex/platform/ticketing/dto/EntitlementTemplateDeleteApprovalRequest.java
 backend/src/main/java/com/complex/platform/ticketing/dto/EntitlementTemplateDeleteRequest.java
 backend/src/main/java/com/complex/platform/ticketing/dto/EntitlementTemplateRequest.java
+backend/src/main/java/com/complex/platform/ticketing/dto/FacePhotoConsentRequest.java
 backend/src/main/java/com/complex/platform/ticketing/dto/PartnerVoucherConfigRequest.java
 backend/src/main/java/com/complex/platform/ticketing/dto/PartnerVoucherRedemptionImportRequest.java
 backend/src/main/java/com/complex/platform/ticketing/dto/QrRefreshConfigRequest.java
@@ -1933,10 +1956,27 @@ backend/src/main/resources/db/migration/V382__thirdparty_pass_ticket_channel.sql
 backend/src/main/resources/db/migration/V383__settlement_rounding_residual_entity.sql
 backend/src/main/resources/db/migration/V384__merchant_business_format_media.sql
 backend/src/main/resources/db/migration/V385__permission_names_chinese.sql
+backend/src/main/resources/db/migration/V386__access_grant_authorization_fingerprint.sql
+backend/src/main/resources/db/migration/V387__access_display_names_chinese.sql
+backend/src/main/resources/db/migration/V388__supervisor_review_release_and_approval_classification.sql
+backend/src/main/resources/db/migration/V389__supervisor_review_deadline_escalation_forward.sql
+backend/src/main/resources/db/migration/V390__approval_chain_org_hierarchy.sql
+backend/src/main/resources/db/migration/V391__approval_lines_seed.sql
+backend/src/main/resources/db/migration/V392__access_grant_request_types_m087.sql
+backend/src/main/resources/db/migration/V393__sensitive_business_data_permissions_require_approval.sql
+backend/src/main/resources/db/migration/V394__permission_risk_tiers_and_sensitive_codes_require_approval.sql
+backend/src/main/resources/db/migration/V395__pii_face_photo_consent_required.sql
+backend/src/main/resources/db/migration/V396__pii_phone_envelope_check_widen.sql
+backend/src/main/resources/db/migration/V397__pii_face_photo_consent_fk.sql
+backend/src/main/resources/db/migration/V398__pii_walkin_face_consent.sql
+backend/src/main/resources/db/migration/V399__pii_idempotency_response_body_envelope.sql
 backend/src/test/java/com/complex/platform/access/AccessControllerTests.java
 backend/src/test/java/com/complex/platform/access/AccessJdbcIntegrationTests.java
 backend/src/test/java/com/complex/platform/access/AccessServiceTests.java
 backend/src/test/java/com/complex/platform/access/AuthorizationServiceTests.java
+backend/src/test/java/com/complex/platform/access/M006JdbcRegressionTests.java
+backend/src/test/java/com/complex/platform/access/M006SecurityRegressionTests.java
+backend/src/test/java/com/complex/platform/access/org/OrgHierarchyServiceTests.java
 backend/src/test/java/com/complex/platform/access/staff/PayrollSafetyJdbcIntegrationTests.java
 backend/src/test/java/com/complex/platform/access/staff/StaffAttendanceLocalZoneTests.java
 backend/src/test/java/com/complex/platform/access/staff/StaffJdbcIntegrationTests.java
@@ -1985,6 +2025,7 @@ backend/src/test/java/com/complex/platform/common/api/FieldLabelsTests.java
 backend/src/test/java/com/complex/platform/common/api/GlobalExceptionHandlerTests.java
 backend/src/test/java/com/complex/platform/common/crypto/MultiPartyContactPhonePiiBackfillTests.java
 backend/src/test/java/com/complex/platform/common/crypto/PiiCipherTests.java
+backend/src/test/java/com/complex/platform/common/idempotency/IdempotencyJdbcIntegrationTests.java
 backend/src/test/java/com/complex/platform/common/idempotency/IdempotencyServiceTests.java
 backend/src/test/java/com/complex/platform/common/money/MoneyRoundingTests.java
 backend/src/test/java/com/complex/platform/common/ratelimit/RateLimitInterceptorTest.java
@@ -2011,6 +2052,8 @@ backend/src/test/java/com/complex/platform/customer/LoyaltyConfigAdminServiceTes
 backend/src/test/java/com/complex/platform/customer/LoyaltyConfigConflictAndReversibleTests.java
 backend/src/test/java/com/complex/platform/customer/LoyaltyConfirmConcurrencyIntegrationTests.java
 backend/src/test/java/com/complex/platform/customer/LoyaltyServiceTests.java
+backend/src/test/java/com/complex/platform/customer/M006StoredValueJdbcTests.java
+backend/src/test/java/com/complex/platform/customer/M006StoredValuePaymentTests.java
 backend/src/test/java/com/complex/platform/customer/MemberWalletServiceTests.java
 backend/src/test/java/com/complex/platform/customer/StoredValueNotificationIntegrationTest.java
 backend/src/test/java/com/complex/platform/dividend/DividendJdbcIntegrationTests.java
@@ -2070,6 +2113,8 @@ backend/src/test/java/com/complex/platform/governance/PlatformControllerTests.ja
 backend/src/test/java/com/complex/platform/governance/PlatformJdbcIntegrationTests.java
 backend/src/test/java/com/complex/platform/governance/PlatformServiceTests.java
 backend/src/test/java/com/complex/platform/governance/VenueBusinessHoursServiceTests.java
+backend/src/test/java/com/complex/platform/governance/chain/ApprovalChainNodeConcurrencyJdbcTests.java
+backend/src/test/java/com/complex/platform/governance/chain/ApprovalChainServiceTests.java
 backend/src/test/java/com/complex/platform/governance/review/ApprovalLevelTests.java
 backend/src/test/java/com/complex/platform/governance/review/SupervisorReviewControllerTests.java
 backend/src/test/java/com/complex/platform/governance/review/SupervisorReviewServiceTests.java
@@ -2644,8 +2689,8 @@ docs/production-readiness-evidence/submissions/.gitignore
 docs/production-readiness-evidence/submissions/README.md
 docs/production-readiness-implementation-ledger-template-v0.1.md
 docs/project-progress-dashboard.md
-"docs/proposals/\345\272\223\345\255\230\350\267\250\344\270\273\344\275\223\346\265\201\350\275\254-\345\271\263\345\217\260\344\276\233\350\264\247\345\200\237\350\260\203-\347\273\223\347\256\227\344\270\216\346\272\257\346\272\220-\350\256\276\350\256\241\350\215\211\346\241\210.md"
-"docs/proposals/\347\247\257\345\210\206\350\231\232\346\213\237\345\210\270-\345\210\270\346\240\270\351\224\200\351\242\206\345\217\226\344\270\216\347\273\223\347\256\227-\350\256\276\350\256\241\350\215\211\346\241\210.md"
+docs/proposals/库存跨主体流转-平台供货借调-结算与溯源-设计草案.md
+docs/proposals/积分虚拟券-券核销领取与结算-设计草案.md
 docs/prototype-deprecation-and-technology-baseline-v0.1.md
 docs/r1-documentation-map-20260618.md
 docs/r1-pending-supplier-information-backfill-checklist-20260618.md
@@ -2861,6 +2906,7 @@ tools/gate-hardening-tests/F-ci-baseline-evidence.log
 tools/gate-hardening-tests/G-merge-pr-guards.log
 tools/gate-hardening-tests/I1-baseline-ratchet.log
 tools/gate-hardening-tests/I2-ignore-granularity.log
+tools/gate-hardening-tests/m001-regression.mjs
 tools/generate-closed-loop-current-state.mjs
 tools/generate-data-isolation-spec.mjs
 tools/generate-domain-ownership-scope-audit.mjs
@@ -2901,6 +2947,7 @@ tools/verify-client-payload-policy.mjs
 tools/verify-coding-host-protection.mjs
 tools/verify-delivery-gates.mjs
 tools/verify-entry-anchors.mjs
+tools/verify-entry-anchors.test.mjs
 tools/verify-external-dependency-gates.mjs
 tools/verify-final-closed-loop-audit.mjs
 tools/verify-formal-security-baseline.mjs

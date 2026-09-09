@@ -1,4 +1,5 @@
 package com.complex.platform.governance;
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -25,8 +26,6 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     private static final TypeReference<List<Map<String, Object>>> POLYGON_POINTS_TYPE = new TypeReference<>() {
     };
-    private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE = new TypeReference<>() {
-    };
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
     };
 
@@ -46,17 +45,16 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public BusinessEntityRecord saveBusinessEntity(BusinessEntityRecord businessEntity) {
         jdbcTemplate.update("""
                 INSERT INTO business_entities (
-                    id, entity_name, entity_role, parent_entity_id, unified_social_credit_code, legal_representative,
+                    id, entity_name, entity_role, unified_social_credit_code, legal_representative,
                     bank_account_ref, status, created_at, updated_at
                 )
                 VALUES (
-                    :id, :entity_name, :entity_role, :parent_entity_id, :unified_social_credit_code, :legal_representative,
+                    :id, :entity_name, :entity_role, :unified_social_credit_code, :legal_representative,
                     :bank_account_ref, :status, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     entity_name = EXCLUDED.entity_name,
                     entity_role = EXCLUDED.entity_role,
-                    parent_entity_id = EXCLUDED.parent_entity_id,
                     unified_social_credit_code = EXCLUDED.unified_social_credit_code,
                     legal_representative = EXCLUDED.legal_representative,
                     bank_account_ref = EXCLUDED.bank_account_ref,
@@ -69,7 +67,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public List<BusinessEntityRecord> listBusinessEntities() {
         return jdbcTemplate.query("""
-                SELECT id, entity_name, entity_role, parent_entity_id, unified_social_credit_code, legal_representative,
+                SELECT id, entity_name, entity_role, unified_social_credit_code, legal_representative,
                        bank_account_ref, status, created_at, updated_at
                   FROM business_entities
                  ORDER BY created_at DESC, id
@@ -138,7 +136,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     @Override
     public List<MerchantRecord> listMerchants(boolean includeArchived) {
-        // V260：默认列表隐藏已存档 + 已审批删除；includeArchived=true 时全量（后台「显示已存档」开关）。
+        // V260：默认列表隐藏已存档 + 已审批删除；M009-010：includeArchived=true 时全量（含已审批删除行，可查可恢复）。
         return jdbcTemplate.query("""
                 SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
@@ -146,11 +144,35 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM merchants
-                 WHERE (:include_archived OR archived_at IS NULL)
-                   AND delete_status <> 'approved'
+                 WHERE (:include_archived OR (archived_at IS NULL AND delete_status <> 'approved'))
                  ORDER BY created_at DESC, id
                  LIMIT 500
                 """, Map.of("include_archived", includeArchived), this::mapMerchant);
+    }
+
+    @Override
+    public boolean businessEntityExists(String businessEntityId) {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM business_entities WHERE id = :id",
+                Map.of("id", businessEntityId), Long.class);
+        return count != null && count > 0;
+    }
+
+    @Override
+    public boolean projectExists(String projectId) {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM projects WHERE id = :id",
+                Map.of("id", projectId), Long.class);
+        return count != null && count > 0;
+    }
+
+    /** M009-027：空间存在性按主键查询，不受 listSpaces() 的 LIMIT 500 截断（上级空间 / 招商意向空间校验用）。 */
+    @Override
+    public Optional<SpaceRecord> findSpaceById(String spaceId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                  FROM spaces
+                 WHERE id = :id
+                """, Map.of("id", spaceId), this::mapSpace).stream().findFirst();
     }
 
     @Override
@@ -173,7 +195,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     @Override
     public long countMerchantReferences(String merchantId) {
-        // V259：商户被业务表以 merchant_id 引用的活条数，>0 拒硬删（防连锁孤儿/资金孤儿）。
+        // V259/M009-026：商户被业务表以 merchant_id 引用的活条数，>0 拒绝删除（软删除标记同样不允许，防连锁孤儿/资金孤儿）。
         // 元数据驱动：动态枚举所有带 merchant_id 列的基表并逐表 COUNT，避免硬编码清单随新表漂移
         // ——结算(settlement_transactions/items)、票单(ticket_orders/refunds)、储值(customer_stored_value_accounts)、
         //   公摊(cam_allocations)等资金承载表极易漏，漏则连锁孤儿/资金记录指向已删商户。
@@ -365,7 +387,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM business_entities", params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<BusinessEntityRecord> items = jdbcTemplate.query("""
-                SELECT id, entity_name, entity_role, parent_entity_id, unified_social_credit_code, legal_representative,
+                SELECT id, entity_name, entity_role, unified_social_credit_code, legal_representative,
                        bank_account_ref, status, created_at, updated_at
                   FROM business_entities
                  ORDER BY created_at DESC, id
@@ -382,7 +404,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("include_archived", includeArchived)
                 .addValue("business_format", businessFormat);
         // V348 按业态查询：business_format 为空＝不筛（走 idx_merchants_business_format）。
-        String where = " WHERE (:include_archived OR archived_at IS NULL) AND delete_status <> 'approved'"
+        String where = " WHERE (:include_archived OR (archived_at IS NULL AND delete_status <> 'approved'))"
                 + " AND (CAST(:business_format AS VARCHAR) IS NULL OR merchant_type = :business_format)";
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchants" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
@@ -491,7 +513,6 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("id", businessEntity.id())
                 .addValue("entity_name", businessEntity.entityName())
                 .addValue("entity_role", businessEntity.entityRole())
-                .addValue("parent_entity_id", businessEntity.parentEntityId())
                 .addValue("unified_social_credit_code", businessEntity.unifiedSocialCreditCode())
                 .addValue("legal_representative", businessEntity.legalRepresentative())
                 .addValue("bank_account_ref", businessEntity.bankAccountRef())
@@ -580,7 +601,6 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("id"),
                 resultSet.getString("entity_name"),
                 resultSet.getString("entity_role"),
-                resultSet.getString("parent_entity_id"),
                 resultSet.getString("unified_social_credit_code"),
                 resultSet.getString("legal_representative"),
                 resultSet.getString("bank_account_ref"),
@@ -1073,14 +1093,6 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             return value == null ? List.of() : objectMapper.readValue(value, POLYGON_POINTS_TYPE);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("space polygon_points is not readable", exception);
-        }
-    }
-
-    private Map<String, Object> readObjectMap(String value) {
-        try {
-            return value == null ? Map.of() : objectMapper.readValue(value, OBJECT_MAP_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("contract JSON object is not readable", exception);
         }
     }
 

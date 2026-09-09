@@ -1,4 +1,5 @@
 package com.complex.platform.governance;
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.Optional;
@@ -19,7 +20,8 @@ public interface PlatformRepository {
     }
 
     /**
-     * V260：列出商户，includeArchived=false 时排除已存档 + 已审批删除（默认列表）。
+     * V260：列出商户，includeArchived=false 时排除已存档 + 已审批删除（默认列表）；
+     * M009-010：includeArchived=true 返回全量（含已审批删除行，供「已存档内容」查阅与恢复，BSM-004）。
      * 默认返回全量（内存 fake 用）；JdbcPlatformRepository 用 SQL 谓词过滤。
      */
     default List<MerchantRecord> listMerchants(boolean includeArchived) {
@@ -29,7 +31,7 @@ public interface PlatformRepository {
                 .toList();
     }
 
-    /** V260：物理删除商户（仅经删除审批通过后调用）。默认不支持，Jdbc/内存 fake 覆写。 */
+    /** V260/M009-010：软删除商户——标记 delete_status='approved'，行保留可查可恢复（BSM-004）；仅经删除审批通过或最高权限直接执行时调用。默认不支持，Jdbc/内存 fake 覆写。 */
     default void deleteMerchant(String merchantId) {
         throw new UnsupportedOperationException("deleteMerchant not supported by this repository");
     }
@@ -49,7 +51,7 @@ public interface PlatformRepository {
     }
 
     /**
-     * V260：统计商户被【核心运营表】以 merchant_id 引用的活跃条数，>0 则拒绝硬删（防连锁孤儿）。
+     * V260：统计商户被【核心运营表】以 merchant_id 引用的活跃条数，>0 则拒绝删除（含软删除标记，M009-026；防连锁孤儿）。
      * 覆盖表见 JdbcPlatformRepository 实现。默认 0（内存 fake 无引用表）。
      */
     default long countMerchantReferences(String merchantId) {
@@ -63,6 +65,16 @@ public interface PlatformRepository {
     SpaceRecord saveSpace(SpaceRecord space);
 
     List<SpaceRecord> listSpaces();
+
+    /** M009-006：主体是否存在（绑定引用校验）。默认基于 listBusinessEntities；Jdbc 覆写按主键。 */
+    default boolean businessEntityExists(String businessEntityId) {
+        return listBusinessEntities().stream().anyMatch(entity -> entity.id().equals(businessEntityId));
+    }
+
+    /** M009-007：项目是否存在（空间归属校验）。默认基于 listProjects；Jdbc 覆写按主键。 */
+    default boolean projectExists(String projectId) {
+        return listProjects().stream().anyMatch(project -> project.id().equals(projectId));
+    }
 
     /** 3.13：按 id 查空间（存在性校验用）。默认基于 listSpaces 过滤（空间量级小）；Jdbc 可按需覆写。 */
     default Optional<SpaceRecord> findSpaceById(String spaceId) {

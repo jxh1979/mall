@@ -304,3 +304,363 @@ B5_AFTER_FOUR=["23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de
 SOURCE_WRITES=0; TEMP_HELPER_REMOVED
 
 Grok verify:backend-env因宿主JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64不存在而exit1，原失败完整保留；已安装Java在/usr/lib/jvm/temurin-21-jdk-amd64。没有修改宿主持久环境，没有将失败命令说成通过；后续若需Java仅为命令指定已安装路径。BEQR89免费会员明文为本方追加的类型1直接核验。追加检查无新缺陷，当前26项队列仍全否。
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+# M003 B5-r2 当前471计划完整独立自审
+版本：V0.03
+日期：2026-09-08
+本席：当前Codex；远程审计与文件写入：直接SSH。
+本席B5结论：PASS。
+阶段B5-r2；ledger V1.62，M003 IN_PROGRESS，B3累计2。B2队列空，本轮未执行B3/B4；PASS仅是本席完整模块结论，尚不能单方写ledger PASS。
+
+## 1. 完整范围与独立性
+当前模块“治理门禁与 CI 基线／配置与工程入口／第1段”，只审.gitignore全55行与package.json全147行，共202行。当前锁M003映射在6382行，完整GEN-001—018；旧322同号的其他文件不冒作当前范围。
+按串行互盲：先由Grok完成本次B5，适配器只返回指定REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md及EXIT_CODE=0。随后本席重新全读202行、锁general全文/M003映射和相关HTML原句，重新执行当前入口检查；本完整self报告保存前未读Grok本次B5任何正文或JSON。
+本次实际Git main HEAD 242f487233d028173cb9198eecd079f5d877405c；git status --porcelain -- .gitignore package.json无输出。
+- .gitignore：1199bytes，SHA256 75861ded5d3859bcda593aafe3f3862e765470e7f8b6636a643bf59de9d7c51b。
+- package.json：15583bytes，SHA256 350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f，documentVersion V0.01，应用SemVer0.1.0。
+- criteria-lock.md V0.11实算见首行，未改锁、sidecar或基准；LOCK-AMEND-COUNT 1。四值中Grok本次字段尚未读取，不能提前宣称B5四值完成。
+- 三HTML本次实算BSM a7f7b7a30ace54d2534a8cedbd8f3b6d20fdd7a89d3515b18e194d4878ad66fa；PGM c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c；BEQR 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66，保持授权后内容。
+旧self B5-r2为51460bytes、SHA256 4fdd804f891c5bc412064b98027cb27224c3e39ec50708485088ff3ac1d0059d，V0.02；本次V0.03全文追加保留旧前缀。
+
+## 2. 技能使用
+当前轮适用SKILL.md已在本席环境实际读取：using-superpowers、verification-before-completion、receiving-code-review、systematic-debugging、grilling、codebase-design、diagnosing-bugs、writing-for-agents和ponytail-review；可选batch-grill-me/ubiquitous-language按存在版本收窄使用。实际应用为完整问题追问、正常首跑反例、追直接入口、证据核对、必要性收窄，不只是列名。无源码变更，TDD不在本节点新写测试。无第三席、无技能外发/新文档/提交/人闸。没有Claude hooks已生效的证据，不伪称其运行。
+
+## 3. 第一性原理线
+### 3.1 为什么存在
+.gitignore承担构建/测试/本机配置/运行产物的版本控制边界。当前21个正负例实际证明：依赖、缓存、真实.env及运行附件匹配；.env.example、正式tools调试名、dated findings JSON、审计文档不被吞掉。忽略不是删除业务数据，也不替代保留/授权规则。
+package.json是127项命令及唯一apps/web工作区的根入口。当前全量命令图、75个Node目标和真实npm转发证明用途；开发/测试/检查工具有具体入口承载。删除全部入口会使npm调用失去声明；无须为npm语法硬造HTML业务规则。
+必要性仍逐项审视：四对忽略模式重叠，前项完整覆盖后项；真实匹配未发生错误/漏保护。这是可收窄观察，不是本轮必须修的工程故障，不为删除4行触发新的修复批次。命令别名也有用户/组合链入口用途，未因纯命名重叠机械全部删除。此判断依据当前源码、Git规范及当前行为，不依据旧PASS。
+### 3.2 声称行为是否执行
+本次重新运行127条shell语法、75Node目标node --check、workspace与根命令引用/循环检查；两个env入口；两套UI发现；嵌套npm参数转交；三个缺少任务/环境负例；21忽略样本与断言；predeploy真实首项失败传播；entry-anchors独立真实红灯。命令和输出见第6节。
+本次未运行全量业务UI、后端DB集成测试、Android构建/安装、生产部署、文档生成器写模式、依赖安装；不将--list/--dry/--check冒称它们通过。两文件不定义这些被调用工具的业务实现，该实现属于各自模块。
+### 3.3 哪些前提仍未全面验证
+Node当前v24.20.0满足声明；Java/Maven/Gradle/SDK由env实际核对。当前npm11.19.0与声明npm@10.9.8不同，未在所有npm/Node组合重建依赖，不因此捏造兼容性问题或新增版本门禁。根lock manifest镜像当前匹配；未把整个package-lock纳入本模块重新审完。
+业务与发布证据没有被默认视为干净：本次predeploy及entry-anchors仍按实际坏输入失败，详列限制。不通过改HTML/CSV/台账或忽略目录刷绿。
+
+## 4. 四分类与全行覆盖
+先冲突→细化→技术性→添加。没有发现两文件与三HTML明文冲突、新业务发明或新HTML自身问题。配置声明无业务参数/价格/状态/权限取值；命令名提及领域不自动等于创造业务。以下技术性项目均无业务发明、只服务工程运行；下列细化项目给出具体上位完整原句。
+
+| 文件与行 | 覆盖内容 | 分类/用途 |
+|---|---|---|
+| .gitignore1—9 | Node/Web/Java产物、.env、DB临时文件、覆盖率和Vite | 技术性 |
+| .gitignore10—21 | Gradle/Kotlin/build与安装产物、本地SDK路径；包括4对重叠观察 | 技术性；无当前行为故障 |
+| .gitignore22—27 | Playwright两套报告/test-results及空行 | 技术性 |
+| .gitignore28—32 | 本机Claude配置/TS增量缓存及注释 | 技术性 |
+| .gitignore33—39 | 扫描日志、滚动产物和归档日志；保留dated findings | 技术性 |
+| .gitignore40—43 | loop运行产物及空行 | 技术性 |
+| .gitignore44—51 | 仅仓库根探针名称匹配及说明 | 技术性 |
+| .gitignore52—55 | 空行、商品图片注释、运行图片/证据目录 | 53—55细化；不取消业务保留义务 |
+| package1—9 | 工程身份、private、应用/文档版本、ESM、workspace | 技术性 |
+| package10—138 | 127脚本及结构括号 | 下表逐项 |
+| package139—147 | npm声明、Node引擎、Playwright/yaml开发依赖、闭合结构 | 技术性 |
+
+| 原文位置 | 本次重新核读的完整业务原句 | 对应内容 |
+|---|---|---|
+| BSM959 | 商品分类、商品图片、套餐都在后台维护：分类可自定义、图片后台上传保存、套餐由后台从已有商品组合而成。 | .gitignore54运行商品图片 |
+| PGM893 | 平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。 | .gitignore55运行留痕证据 |
+| PGM907 | 查看企业微信会话原文、查看视频证据和查看财务敏感信息。 | 同上，忽略Git提交不取消授权 |
+| BEQR23 | 本表与《业务系统地图》《平台治理地图》共同组成三份最高业务解释权 HTML；只有经批准写入这三份 HTML 的内容才是最终业务口径，PRD、其他文档和后台配置均不得覆盖。 | package32—35解释权校验入口 |
+| PGM870 | 客人和员工的手机号、身份信息等个人信息，在系统里一律加密存放。 | package97核验入口 |
+| PGM447 | 集团下钻细则（已确认）：集团视图能看什么按职位配置模板决定——不同职位有不同可见范围（汇总、下钻各项目明细、跨项目对标）；数据隔离仍是综合体级，只有集团高层按其职位模板可跨综合体查看。职位配置模板只决定汇总与下钻到哪一层，不是可自定义的数据范围；数据范围没有后台设置项。 | package95/137隔离核验入口 |
+
+.env忽略本身不执行开关/加密/授权，技术性。所有输入引用只为验证当前2文件，不将跨文件目标扩为已审模块。没有添加项或三HTML修改申请。
+
+### package.json全部127脚本逐项登记
+每条当前命令都已重新机器解析目标/工作区/引号并逐条阅读；此表列的是声明分类，不谎称127项业务动作全部运行。
+| 行 | 脚本名 | 分类 |
+|---|---|---|
+| 11 | `dev` | 技术性（工程入口） |
+| 12 | `dev:backend` | 技术性（工程入口） |
+| 13 | `test:backend` | 技术性（工程入口） |
+| 14 | `verify:backend-env` | 技术性（工程入口） |
+| 15 | `dev:api` | 技术性（工程入口） |
+| 16 | `dev:web` | 技术性（工程入口） |
+| 17 | `verify:openapi` | 技术性（工程入口） |
+| 18 | `audit:client-routes` | 技术性（工程入口） |
+| 19 | `verify:client-routes` | 技术性（工程入口） |
+| 20 | `audit:client-openapi` | 技术性（工程入口） |
+| 21 | `verify:client-openapi` | 技术性（工程入口） |
+| 22 | `audit:client-payload` | 技术性（工程入口） |
+| 23 | `verify:client-payload` | 技术性（工程入口） |
+| 24 | `docs:openapi-examples` | 技术性（工程入口） |
+| 25 | `verify:openapi-examples` | 技术性（工程入口） |
+| 26 | `docs:operation-matrix` | 技术性（工程入口） |
+| 27 | `verify:operation-matrix` | 技术性（工程入口） |
+| 28 | `docs:openapi-closure` | 技术性（工程入口） |
+| 29 | `verify:openapi-closure` | 技术性（工程入口） |
+| 30 | `docs:security-baseline` | 技术性（工程入口） |
+| 31 | `docs:entry-baseline` | 技术性（工程入口） |
+| 32 | `verify:html-ledger-sync` | 细化（见原文表） |
+| 33 | `verify:entry-anchors` | 细化（见原文表） |
+| 34 | `verify:html-param-tier` | 细化（见原文表） |
+| 35 | `verify:entry-doc-baseline` | 细化（见原文表） |
+| 36 | `verify:security-baseline` | 技术性（工程入口） |
+| 37 | `verify:prod-docs-access` | 技术性（工程入口） |
+| 38 | `verify:ops160-execution-policy` | 技术性（工程入口） |
+| 39 | `verify:ops160-backup-restore` | 技术性（工程入口） |
+| 40 | `verify:production-credentials` | 技术性（工程入口） |
+| 41 | `verify:p0a-ops-hardening` | 技术性（工程入口） |
+| 42 | `verify:ops160-recovery` | 技术性（工程入口） |
+| 43 | `verify:p0-contract` | 技术性（工程入口） |
+| 44 | `verify:p0-web` | 技术性（工程入口） |
+| 45 | `verify:p0-env` | 技术性（工程入口） |
+| 46 | `build` | 技术性（工程入口） |
+| 47 | `typecheck` | 技术性（工程入口） |
+| 48 | `smoke:p0` | 技术性（工程入口） |
+| 49 | `verify:android-env` | 技术性（工程入口） |
+| 50 | `android:p0:build` | 技术性（工程入口） |
+| 51 | `android:p0:smoke` | 技术性（工程入口） |
+| 52 | `android:p0:apk` | 技术性（工程入口） |
+| 53 | `verify:p0` | 技术性（工程入口） |
+| 54 | `verify:no-legacy-api-prototype` | 技术性（工程入口） |
+| 55 | `verify:coding-host-protection` | 技术性（工程入口） |
+| 56 | `verify:t3-coding-package` | 技术性（工程入口） |
+| 57 | `verify:t3b-supplier-mock-kit` | 技术性（工程入口） |
+| 58 | `verify:t3d-local-llm-ai-quality` | 技术性（工程入口） |
+| 59 | `verify:external-dependency-gates` | 技术性（工程入口） |
+| 60 | `verify:delivery-gates-docs` | 技术性（工程入口） |
+| 61 | `verify:delivery-gates` | 技术性（工程入口） |
+| 62 | `verify:nas-smb-mount-evidence` | 技术性（工程入口） |
+| 63 | `verify:production-readiness-evidence` | 技术性（工程入口） |
+| 64 | `docs:production-blockers` | 技术性（工程入口） |
+| 65 | `verify:production-blockers` | 技术性（工程入口） |
+| 66 | `verify:production-evidence-intake` | 技术性（工程入口） |
+| 67 | `docs:production-owner-actions` | 技术性（工程入口） |
+| 68 | `verify:production-owner-actions` | 技术性（工程入口） |
+| 69 | `docs:production-evidence-submission-kit` | 技术性（工程入口） |
+| 70 | `verify:production-evidence-submission-kit` | 技术性（工程入口） |
+| 71 | `docs:production-evidence-submission-status` | 技术性（工程入口） |
+| 72 | `verify:production-evidence-submission-status` | 技术性（工程入口） |
+| 73 | `docs:production-evidence-manifest-templates` | 技术性（工程入口） |
+| 74 | `verify:production-evidence-manifest-templates` | 技术性（工程入口） |
+| 75 | `docs:production-evidence-owner-guides` | 技术性（工程入口） |
+| 76 | `verify:production-evidence-owner-guides` | 技术性（工程入口） |
+| 77 | `verify:production-evidence-submissions-guard` | 技术性（工程入口） |
+| 78 | `docs:production-evidence-backfill-priority` | 技术性（工程入口） |
+| 79 | `verify:production-evidence-backfill-priority` | 技术性（工程入口） |
+| 80 | `docs:production-evidence-backfill-execution-ledger` | 技术性（工程入口） |
+| 81 | `verify:production-evidence-backfill-execution-ledger` | 技术性（工程入口） |
+| 82 | `test:ui` | 技术性（工程入口） |
+| 83 | `verify:ui` | 技术性（工程入口） |
+| 84 | `test:ui:update` | 技术性（工程入口） |
+| 85 | `verify:ui:real-backend` | 技术性（工程入口） |
+| 86 | `verify:ui:real-backend:seeded` | 技术性（工程入口） |
+| 87 | `verify:android-p0-smoke-wrapper` | 技术性（工程入口） |
+| 88 | `verify:full-admin-matrix` | 技术性（工程入口） |
+| 89 | `test:unit` | 技术性（工程入口） |
+| 90 | `verify:unit` | 技术性（工程入口） |
+| 91 | `docs:domain-ownership-scope` | 技术性（工程入口） |
+| 92 | `verify:domain-ownership-scope` | 技术性（工程入口） |
+| 93 | `verify:matrix-vs-migration` | 技术性（工程入口） |
+| 94 | `verify:migration-version-order` | 技术性（工程入口） |
+| 95 | `verify:tenant-isolation` | 细化（见原文表） |
+| 96 | `verify:predeploy` | 技术性（工程入口） |
+| 97 | `verify:pii-encryption` | 细化（见原文表） |
+| 98 | `verify:test-db-isolation` | 技术性（工程入口） |
+| 99 | `docs:production-closure-gap-reports` | 技术性（工程入口） |
+| 100 | `verify:production-closure-gap-reports` | 技术性（工程入口） |
+| 101 | `verify:final-closed-loop-audit` | 技术性（工程入口） |
+| 102 | `verify:production-evidence-negative-fixtures` | 技术性（工程入口） |
+| 103 | `docs:nas-current-state-drift` | 技术性（工程入口） |
+| 104 | `verify:nas-current-state-drift` | 技术性（工程入口） |
+| 105 | `docs:closed-loop-current-state` | 技术性（工程入口） |
+| 106 | `verify:closed-loop-current-state` | 技术性（工程入口） |
+| 107 | `verify:closed-loop-runtime` | 技术性（工程入口） |
+| 108 | `verify:nas-it-handoff` | 技术性（工程入口） |
+| 109 | `docs:external-evidence-requirement-traceability` | 技术性（工程入口） |
+| 110 | `verify:external-evidence-requirement-traceability` | 技术性（工程入口） |
+| 111 | `docs:nas-diagnostics` | 技术性（工程入口） |
+| 112 | `verify:nas-diagnostics` | 技术性（工程入口） |
+| 113 | `docs:production-evidence-p0-quickstart` | 技术性（工程入口） |
+| 114 | `verify:production-evidence-p0-quickstart` | 技术性（工程入口） |
+| 115 | `docs:runtime-acceptance-evidence` | 技术性（工程入口） |
+| 116 | `verify:runtime-acceptance-evidence` | 技术性（工程入口） |
+| 117 | `docs:ui-experience-acceptance` | 技术性（工程入口） |
+| 118 | `verify:ui-experience-acceptance` | 技术性（工程入口） |
+| 119 | `docs:production-evidence-owner-execution-packets` | 技术性（工程入口） |
+| 120 | `verify:production-evidence-owner-execution-packets` | 技术性（工程入口） |
+| 121 | `prepare:production-evidence-drafts` | 技术性（工程入口） |
+| 122 | `verify:production-evidence-draft-prep` | 技术性（工程入口） |
+| 123 | `verify:production-evidence-draft-prep-fixtures` | 技术性（工程入口） |
+| 124 | `verify:production-evidence-positive-fixtures` | 技术性（工程入口） |
+| 125 | `verify:production-evidence-positive-propagation-fixtures` | 技术性（工程入口） |
+| 126 | `verify:production-ready-no-go-fixtures` | 技术性（工程入口） |
+| 127 | `verify:production-blocker-register-no-go-fixtures` | 技术性（工程入口） |
+| 128 | `verify:production-ready-positive-fixtures` | 技术性（工程入口） |
+| 129 | `verify:production-evidence-crosslinks` | 技术性（工程入口） |
+| 130 | `docs:partial-requirement-mock-coverage` | 技术性（工程入口） |
+| 131 | `verify:partial-requirement-mock-coverage` | 技术性（工程入口） |
+| 132 | `docs:production-no-go-command-center` | 技术性（工程入口） |
+| 133 | `verify:production-no-go-command-center` | 技术性（工程入口） |
+| 134 | `docs:integration-capability-switches` | 技术性（工程入口） |
+| 135 | `verify:integration-capability-switches` | 技术性（工程入口） |
+| 136 | `docs:data-isolation-spec` | 技术性（工程入口） |
+| 137 | `verify:data-isolation-spec` | 细化（见原文表） |
+
+## 5. 顺从式完整18GEN表
+| ID | 本席结论 | 具体证据/适用说明 |
+|---|---|---|
+| GEN-001 | PASS | 所有入口/忽略项用途逐项登记，当前图无不可达引用/循环。四条重叠是观察，当前匹配无错误；按正常首跑和最小动作范围不强制清理。未因HTML未写npm而删除构建配置。 |
+| GEN-002 | PASS | 127shell语法与75Node目标检查通过；真实env、npm工作区转发、Playwright两个配置选择成功；缺任务/环境负例返回1。未把工具内全部业务路径混入这两个入口文件。 |
+| GEN-003 | PASS | 本次断言检查入口成功/失败、发现非空套件、21路径的期望忽略布尔值及source状态。它们能在错误退出/匹配变化时失败；不以业务套件未跑谎称业务测试绿。 |
+| GEN-004 | PASS | 固定命令无用户文本拼接；真实后端env标记由入口固定；无标记负例显式拒绝。本两文件无网络/DB用户输入解析实现。 |
+| GEN-005 | PASS | private防误发布包；无业务授权端点、角色/权限新增。Git忽略不作为授权，未声称它可代替服务端校验。 |
+| GEN-006 | PASS | 本两文件无金额/状态事务。&&链首项真实失败后不继续，未运行写业务数据的生成/DB任务；未把编排当事务替代。 |
+| GEN-007 | PASS | 无业务消费者、锁或并发状态机；根脚本图无循环、组合顺序固定，无无界重试。此处不声称验证了其他模块幂等。 |
+| GEN-008 | PASS | 根/工作区命令目标全部可解析，lock的name/version/workspaces/engines/devDependencies镜像匹配；已有closed-loop --verify受目标支持。 |
+| GEN-009 | PASS | 缺Maven/Gradle任务、缺REAL_BACKEND_E2E、predeploy及entry-anchors坏输入均非0。未吞错/改输入伪成功；完整原因可定位。 |
+| GEN-010 | PASS | 两文件无秘密值；.env/.env.local、本机配置与运行附件被忽略；.env.example保留；实际已跟踪又被忽略清单空。没有外发凭据命令。 |
+| GEN-011 | PASS | 实跑输出给出入口/原因/退出码；扫描dated findings未被日志规则吞掉，审计文件不被根忽略隐藏。本报告区别“发现测试”和“执行测试”。 |
+| GEN-012 | PASS | 当前127固定脚本图无递归/无界循环；本两文件无连接池/线程/缓存数据实现；未为极端场景增加限流或守护脚本。 |
+| GEN-013 | PASS | Node满足当前引擎，Java/Maven/SDK真实存在，75目标语法有效，workspace目标和依赖镜像一致；如实记录npm版本差异及未覆盖环境。 |
+| GEN-014 | PASS | 本两文件无SQL或直接破坏性DB操作；迁移核验入口解析到真实工具。未在本模块执行DB迁移或凭入口存在宣布迁移通过。 |
+| GEN-015 | PASS | 本两文件无产品UI；CLI标识不是新增界面文案。两套UI发现验证选择器，不代替页面可访问性验收。 |
+| GEN-016 | PASS | 路径/脚本/版本均核当前源，无失实“全绿/已发布”声明；documentVersion与应用SemVer区别清楚。新报告有自身V0.03。 |
+| GEN-017 | PASS | 全部202行/127项依次分类；图片/证据/解释权/隔离/PII核验有准确HTML上位；其余为无业务发明的工程配置。无添加，B/C不重判。 |
+| GEN-018 | PASS | 结论来自重新读取现文、当前可复现命令、实际正负输出及Git规范；不以历史PASS或本次尚未读取的Grok意见作本席依据。 |
+
+## 6. 对抗式：本次重新执行的命令与输出
+全部命令在/home/james/complex-management，通过直接SSH执行，UTF-8；没有创建新试验库/安装依赖/新脚本文件。
+### E1 全量静态入口检查
+重新实际运行下列Python，真实exit0：
+```python
+from pathlib import Path
+import json,subprocess,shlex,re,hashlib
+r=Path("/home/james/complex-management")
+p=json.loads((r/"package.json").read_text()); w=json.loads((r/"apps/web/package.json").read_text()); l=json.loads((r/"package-lock.json").read_text())
+print("WORKSPACE_PACKAGE")
+print(json.dumps(w,ensure_ascii=False))
+print("ROOT_LOCK_MIRROR")
+print(json.dumps({k:l["packages"][""].get(k) for k in ["name","version","workspaces","engines","devDependencies"]},ensure_ascii=False))
+problems=[];targets=set();edges=[];envs=[]
+for name,command in p["scripts"].items():
+ result=subprocess.run(["sh","-n","-c",command],cwd=r,capture_output=True,text=True)
+ if result.returncode:problems.append([name,"shell",result.stderr])
+ for piece in command.split(" && "):
+  a=shlex.split(piece)
+  if a and "=" in a[0] and not a[0].startswith("-"):
+   envs.append([name,a.pop(0)])
+  if a[:2]==["npm","run"]:
+   target=a[2];wp="--workspace" in a
+   manifest=w if wp else p
+   if target not in manifest["scripts"]:problems.append([name,"missing script",target,wp])
+   edges.append([name,target,"apps/web" if wp else "root"])
+  elif a and a[0]=="node":
+   targets.add(a[1])
+   if not (r/a[1]).is_file():problems.append([name,"missing node target",a[1]])
+  elif a and a[0]=="playwright":
+   if not (r/"node_modules/.bin/playwright").exists():problems.append([name,"missing playwright binary"])
+  else:problems.append([name,"unhandled command",a])
+for target in sorted(targets):
+ c=subprocess.run(["node","--check",str(r/target)],cwd=r,capture_output=True,text=True)
+ if c.returncode:problems.append([target,"node syntax",c.stderr])
+seen=set();active=set()
+adj={k:[e[1] for e in edges if e[0]==k and e[2]=="root"] for k in p["scripts"]}
+def walk(n):
+ if n in active:problems.append([n,"script cycle"]);return
+ if n in seen:return
+ active.add(n)
+ for t in adj[n]:walk(t)
+ active.remove(n);seen.add(n)
+for n in adj:walk(n)
+print(json.dumps({"scripts":len(p["scripts"]),"node_targets":len(targets),"all_targets":sorted(targets),"forward_edges":edges,"environment_assignments":envs,"problems":problems},ensure_ascii=False))
+for args in [["node","--version"],["npm","--version"],["git","ls-files",".env*","**/.env*"]]:
+ c=subprocess.run(args,cwd=r,capture_output=True,text=True);print(json.dumps({"command":args,"exit":c.returncode,"stdout":c.stdout,"stderr":c.stderr},ensure_ascii=False))
+assert not problems
+
+```
+本次输出摘要：scripts127、node_targets75、problems[]；全部shell语法与75次node --check均0；所有根/工作区转发目标存在、根脚本图无环；唯一环境赋值REAL_BACKEND_E2E=1。根lock镜像与manifest字段一致。当前node v24.20.0、npm11.19.0；受控.env匹配清单仅.env.example。
+
+### E2 真实入口/负例/忽略断言
+本次实际运行下列完整Python，真实exit0，末行M003_B5_ENTRY_ASSERTIONS_PASS：
+```python
+from pathlib import Path
+import subprocess,json,hashlib,os,re
+r=Path('/home/james/complex-management')
+commands=[
+ (['npm','run','verify:backend-env'],0),
+ (['npm','run','verify:android-env'],0),
+ (['npm','run','verify:ui','--','--list','--reporter=list'],0),
+ (['npm','run','verify:ui:real-backend','--','--list','--reporter=list'],0),
+ (['npm','run','typecheck','--','--','--dry'],0),
+ (['node','tools/run-backend-maven.mjs'],1),
+ (['node','tools/run-android-gradle.mjs'],1),
+ (['node','node_modules/@playwright/test/cli.js','test','--config=playwright.real-backend.config.ts','--list','--reporter=list'],1),
+ (['npm','run','verify:predeploy'],1),
+ (['npm','run','verify:entry-anchors'],1)
+]
+for cmd,expected in commands:
+ env=os.environ.copy()
+ if cmd[0]=='node' and 'node_modules/@playwright/test/cli.js' in cmd:env.pop('REAL_BACKEND_E2E',None)
+ z=subprocess.run(cmd,cwd=r,capture_output=True,text=True,env=env)
+ if '--list' in cmd and expected==0:
+  summary=re.findall(r'^Total:.*$',z.stdout,re.M)
+  print(json.dumps({'command':cmd,'exit':z.returncode,'stdout_summary':summary,'stderr':z.stderr},ensure_ascii=False),flush=True)
+  assert summary
+ else:
+  print(json.dumps({'command':cmd,'exit':z.returncode,'stdout':z.stdout,'stderr':z.stderr},ensure_ascii=False),flush=True)
+ assert z.returncode==expected,(cmd,z.returncode)
+samples=['.env','apps/web/.env','apps/web/.env.local','.env.example','node_modules/x.js','apps/web/node_modules/x.js','backend/target/x.class','apps/android-terminal/.gradle/cache','apps/android-terminal/.kotlin/cache','apps/android-terminal/build/out.class','apps/android-terminal/local.properties','security-scans/dated/results.json','security-scans/dated/run.log','security-scans/semgrep-current/findings.json','docs/_archive/old/run.log','debug-one.mjs','tools/debug-one.mjs','probe-one.mjs','backend/data/bar-images/a.png','backend/data/evidence-files/a.pdf','docs/audit-2026-09/findings.md']
+unignored={'.env.example','security-scans/dated/results.json','tools/debug-one.mjs','docs/audit-2026-09/findings.md'}
+z=subprocess.run(['git','check-ignore','--no-index','--verbose','--non-matching','--stdin'],input='\n'.join(samples)+'\n',cwd=r,capture_output=True,text=True)
+print(json.dumps({'command':['git','check-ignore','--no-index','--verbose','--non-matching','--stdin'],'exit':z.returncode,'stdout':z.stdout,'stderr':z.stderr},ensure_ascii=False))
+assert z.returncode==0
+assert len(z.stdout.splitlines())==len(samples)==21
+for row in z.stdout.splitlines():
+ rule,path=row.split('\t',1);assert (rule=='::')==(path in unignored),(rule,path)
+for cmd in [['git','ls-files','-c','-i','--exclude-standard'],['git','status','--porcelain','--','.gitignore','package.json'],['git','rev-parse','HEAD']]:
+ z=subprocess.run(cmd,cwd=r,capture_output=True,text=True)
+ print(json.dumps({'command':cmd,'exit':z.returncode,'stdout':z.stdout,'stderr':z.stderr},ensure_ascii=False))
+ assert z.returncode==0
+ if cmd[-1]!='HEAD':assert not z.stdout
+for f in ['.gitignore','package.json','docs/audit-2026-09/plan/criteria-lock.md','docs/business-system-map-for-operations-v0.1.html','docs/platform-governance-map-for-operations-v0.1.html','docs/business-enum-quick-reference-v0.1.html']:
+ print('SHA256',f,hashlib.sha256((r/f).read_bytes()).hexdigest())
+print('M003_B5_ENTRY_ASSERTIONS_PASS')
+
+```
+输出逐命令摘要：
+| 本次命令 | 实际退出/关键输出 |
+|---|---|
+| npm run verify:backend-env | 0；后端环境前置校验通过；openjdk21.0.12.1、Maven3.9.11 |
+| npm run verify:android-env | 0；Android环境前置校验通过；SDK /home/james/android-sdk |
+| npm run verify:ui -- --list --reporter=list | 0；Total: 32 tests in 6 files |
+| npm run verify:ui:real-backend -- --list --reporter=list | 0；Total: 18 tests in 4 files |
+| npm run typecheck -- -- --dry | 0；tsc -b --noEmit --dry；2:19:33 PM - A non-dry build would build project '/home/james/complex-management/apps/web/tsconfig.json' |
+| node tools/run-backend-maven.mjs | 1；缺少Maven执行目标 |
+| node tools/run-android-gradle.mjs | 1；缺少Gradle执行任务 |
+| 删除REAL_BACKEND_E2E后直接node本地Playwright cli+real配置+--list | 1；“真实后端 E2E 须设置 REAL_BACKEND_E2E=1，请使用 npm run verify:ui:real-backend。” |
+| npm run verify:predeploy | 1；首项html-ledger-sync拒绝BSM已变更而决策台账未同步；后续链未运行 |
+| npm run verify:entry-anchors（独立调用） | 1；6处BSM CSV镜像不合格，完整分类如下 |
+| git check-ignore --no-index --verbose --non-matching --stdin | 0；21/21输出，4个预期不忽略均“::”，其余17个按声明规则匹配；每项布尔断言通过 |
+| git ls-files -c -i --exclude-standard | 0，输出空 |
+| git status --porcelain -- .gitignore package.json | 0，输出空 |
+
+对抗问答：
+1. 已存在入口会不会把坏输入当成功？三个负例和真实门禁均1；链首停止，不伪造后半链通过。
+2. npm多层转发有没有把--dry交错层？本次明确两个分隔层，实际tsc命令带--dry；不沿用B1初次错误写法。
+3. mock入口是否错误包含真实后端用例？实际发现mock32/6，real18/4，配置文件/目标不同；未启动业务测试。
+4. ignore会否吞掉示例或正式工具？当前.env.example、dated results.json、tools/debug-one.mjs、audit findings4负例均不忽略，根debug-one被忽略；真实输出与声明范围一致。
+5. 后置递归模式是否增加保护？按[Git官方gitignore模式规范](https://git-scm.com/docs/gitignore#_pattern_format)是前项子集或等价，当前样本无错；没有因此证明工程故障，保持观察，不为清理而改文件。
+
+### E3 全局红灯完整范围
+本次predeploy首项输出：
+```text
+[html-ledger-sync] FAIL: 改动了业务最终解释权 HTML，但决策台账未同步。比对范围：工作区（含未提交改动）↔ 基线 origin/main@242f4872。
+  已改动的 HTML：
+    - docs/business-system-map-for-operations-v0.1.html
+  必须在同一批改动内一并更新：docs/prd-audit/business-decision-ledger.md
+```
+本次独立entry-anchors输出6项：
+- BSM-E0433 注册表回访概括在现HTML找不到。
+- BSM-E0736 注册表“文档版本”镜像对不上。
+- BSM-0283账本source_text回访概括对不上。
+- BSM-0530账本“文档版本”镜像对不上。
+- BSM-0283 preconditions仍含旧回访句。
+- BSM-0283 state_transition仍含旧回访句。
+这仍是4处A回访概括、2处此前M001-012页脚日期镜像（非D版本注释），对应CSV属于M425/M427。没有新HTML自身问题；此处只确认调用正确暴露问题，不把外部坏数据定成package入口缺陷，不修这些文件，不扩M003范围。用户B/C原句就是其原意，保持不判缺陷。
+
+## 7. 完整本席结论
+三线全部完成；202/202行、127/127脚本、18/18冻结GEN已覆盖。当前无新增工程缺陷、无冲突、无业务添加、无新HTML自身问题；全部内容按技术性/细化正常审计而非因HTML沉默删除。当前重复观察不会作为“有缺陷拒修”残留。
+本席B5 PASS。未看本次Grok正文，不能以本席PASS宣布双PASS或模块收口。下一步保存此完整报告后读Grok本次完整报告，核验实算/sidecar/ledger/Grok四值；两席确实PASS才能先写ledger PASS再写模块收口文件。未修改源码或增加B3次数。

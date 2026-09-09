@@ -2472,3 +2472,494 @@ JAVA_EXIT=0
 - 0 添加、待答 0。不存在有条件通过。候选台账无需按本席意见改写。
 - 本票只定本批 B2 候选复核；不进入 B3、不写源代码。B3 已 4 次，第 5 次修复须操作员另行指令。
 - 实际修复尚未开始。本席 FAIL 否决权未动用。双 PASS 仍须席甲本批 B2 自票合取。
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M006 B1 独立审计报告（Grok 席乙）V0.09
+
+- 步骤：B1；模块 M006；B3=0；方案修复=2；交付失败=0
+- 范围（plan/modules.md FILES）：`docs/delivery-readiness-gates-v0.1.md`（159行）+ `docs/deploy-and-change-flow-v0.1.md`（48行）= 207行 NORMAL
+- 禁止继承：旧同号后端 M006 / 旧 322 模块 PASS 不作为本次结论
+- 生命周期：IN_PROGRESS（本席不得改 ledger）
+- 审计结论：**FAIL**
+- 锁实算：`sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（不接收期望值；sidecar 同行仅作观察）
+- 三业务 HTML：只读，未改
+
+## 0. 技能预检（V0.17 收窄，实读本机）
+
+| 技能 | 路径 | 本节点用法 |
+|---|---|---|
+| using-superpowers | 已装并实读 | 开工技能门 |
+| grilling / grill-me | 已装并实读 | 只借追问结构；不等操作员、不派子代理 |
+| codebase-design | 已装并实读 | 删除测试：闸口文档若删，机检失锚 |
+| verification-before-completion | 已装并实读 | 声称前先跑命令 |
+| ponytail-review | 已装并实读 | 只找可删的损坏表/残留模板，不改码 |
+| receiving-code-review | 已装并实读 | 本席产出 findings；B1 禁止修复 |
+| batch-grill-me | **缺口** | 本机 mattpocock productivity 下无此技能，未冒充调用 |
+| git-guardrails-claude-code | 可选存在 | B1 无 git 写，未调用 |
+
+未使用子代理、未用 MCP。搜索限定：两文档、三 HTML、冻结 plan 映射定义、package.json 脚本、直接消费 `tools/verify-delivery-gates.mjs` / 部署与 hook / workflow / CODEOWNERS / 三条 application*.yml。
+
+## 1. 文件覆盖
+
+| 文件 | 行 | 全文 | SHA256 |
+|---|---|---|---|
+| docs/delivery-readiness-gates-v0.1.md | 159 | 是 | （wc -l 159；全文已读 L1–159） |
+| docs/deploy-and-change-flow-v0.1.md | 48 | 是 | （wc -l 48；全文已读 L1–48） |
+
+`git ls-files` 两路径均受控。未审 M007/M008 整模块，只读本模块声称的直接消费者源码。
+
+## 2. 第一性原理
+
+### 2.1 为何存在 / 删除影响
+
+1. **delivery-readiness-gates**：自称把分散验证收口为交付总闸口。删除后 `tools/verify-delivery-gates.mjs` 的 `requireIncludes("docs/delivery-readiness-gates-v0.1.md", …)` 会失败（源码 L163–229），`npm run verify:delivery-gates-docs` 与 `verify:predeploy` / 部署 `REQUIRED_GATES` 均包含该命令。HTML 上位是 BSM-116「系统交付与上线要专门把关」+ PGM-066「第三方资料未定，先自有系统」。**删掉会失去机检锚点，但不等于已覆盖 HTML 上线必做。**
+2. **deploy-and-change-flow**：记录四道仓内门禁与已知仓外缺口。删除后流程说明与 `verify:delivery-gates-docs` 对 workflow 字节一致 / `REQUIRED_GATES` 含 HTML 三闸的交叉叙述会失去人读契约；脚本本身仍在 M007。HTML 无「feature 分支 + PR」原文，属技术性变更流程。
+
+### 2.2 声称是否实际执行
+
+| 声称 | 验证 | 结果 |
+|---|---|---|
+| `npm run verify:delivery-gates` 串联文内表格闸口且保持轻量、不含后端完整测试/Web 构建/Android | 解析 `package.json` scripts：链 **49** 项，以 docs→full-admin-matrix→…→unit→coding-host→… 排序；`verify:unit`=`npm run test:unit --workspace apps/web`；不含 `test:backend`/`android:p0`/`build` | **表≠链**。轻量/顺序/完整性声称不成立；「不含后端完整测试/Android/Web 构建」对这三项字面成立 |
+| `verify:delivery-gates-docs` 校验本文档与脚本互相引用 | 源码只做 marker/`includes` 子串，**不解析 Markdown 表**。实跑 `npm run verify:delivery-gates-docs` → `DELIVERY_GATES_DOCS_PASS` exit 0 | 机检绿 **不能**证明表正确（GEN-003） |
+| 正式编码只在 192.168.88.160 | `hostname`=`y9000p-ai`；`ip` 含 `192.168.88.160/24`；`npm run verify:coding-host-protection` → `CODING_HOST_PROTECTION_PASS` exit 0（脚本无写盘） | 本机成立 |
+| 部署脚本硬编码门禁、不解析 `verify:predeploy` 串 | `ops/160/complex-deploy-{api,web}.sh` `REQUIRED_GATES=(…)` 后 `npm run "$gate"`；注释写明不信任 package.json 串。`HTML_GATES_BASE="${HTML_GATES_BASE:-HEAD~1}"` | 源码与文档一致 |
+| 两份 workflow 字节一致、`fetch-depth: 0`、事件基线 | `sha256sum` 两文件均为 `4c20c029b7c5b0786d56164f2657444a9b9ee3d3694c18013f2e50c1e966049d`；`cmp` 0；yaml L18 `fetch-depth: 0`；L26 `HTML_GATES_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha \|\| github.event.before }}` | 成立 |
+| pre-push 禁直推 main；`ALLOW_MAIN_PUSH=1` | `ops/160/hooks/pre-push` L8–14 | 成立 |
+| `merge-pr.sh` 等本 commit 的 predeploy-gates、`gh run watch --exit-status`、再核 remote/PR head、`gh pr merge --match-head-commit`；`SKIP_CI_WAIT=1` | `ops/160/merge-pr.sh` L35–72 | 源码一致。**未真实合并** |
+| `propose-change.sh` 本地 `verify:predeploy` 后推分支开 PR | `ops/160/propose-change.sh` L11–20 | 源码一致。**未真实推送** |
+| GitHub Actions 已激活；私有免费版 required check 403 | `gh api .../actions/workflows/predeploy-gates.yml` → `state=active`；近 5 次 run `conclusion=success`；`gh api .../branches/main/protection` → HTTP 403「Upgrade to GitHub Pro or make this repository public」；`private: true` | 当前激活与 403 成立。「2026-07-06 首跑 SUCCESS」未取到当日原始 run，**不把历史首跑当已证** |
+| HTML 基线：无参则 `origin/main`，取不到必须失败 | `tools/verify-html-ledger-sync.mjs` L30–40 | 成立 |
+| `param-tier:ignore` 只豁免点名数值 | `tools/verify-html-param-tier.mjs` L13,43–44,75 | 成立 |
+| 「对抗自测证实」抽空 `verify:predeploy` 对部署无效 | `m001-regression.mjs` L153–164 测的是 **docs 机检**在脚本缺 HTML 闸 / package.json 抽空时 exit 1，**不是**跑部署脚本。部署不解析该串由 sh 源码证明。本席 **未执行** 该回归（会写临时副本） | 源码可证硬编码；「对抗自测已跑通」本次未复跑 |
+| 文内引用 NAS/partial/handoff 路径 | `git ls-files` 均存在 | 路径存在。**未跑**会写报告的 `docs:*` / 全链 `verify:delivery-gates` |
+| complex_test 与生产同实例同账号 | `application.yml` 默认 `jdbc:postgresql://127.0.0.1:5432/complex` 用户 `complex`；prod profile 默认同用户。`verify:test-db-isolation.mjs` 只静态扫测试源 URL，不连库 | **未对运行中 PostgreSQL 做实例/权限取证**，该句不得当已证现场事实 |
+
+未跑：`verify:delivery-gates` 全链、真实部署/合并/push、m001-regression、任何 `docs:production-*` 生成器。
+
+### 2.3 未验证就当真的前提
+
+- 文内表格 = 实际 `verify:delivery-gates` 链（已被 package.json 49 项证伪）。
+- `verify:delivery-gates-docs` PASS = 表格正确（机检不解析表）。
+- 标题「上线准入」= 已覆盖 BSM-117/118 弱口令、U 盘托管、安装包+教程（§4 追加表亦无这些项）。
+- MDM / 对象存储 / NAS 生产 ready 是 HTML 外部系统闭集的成员（枚举「接入的外部系统」无此三项）。
+- 「AI 不得自动处罚/调价/影响绩效」已写在三 HTML（PGM 仅合同辅助建议，不得自动替代台账/审批/阻断/放行）。
+
+## 3. 顺从式 — 映射 ID 全覆盖（79）
+
+映射原文：`criteria-lock.md` `M006 → [BEQR-085…096,118,146,155,160–181, BSM-020,028,081–083,111–119, GEN-001–018, PGM-015,018,026,039,052–056,066]`。
+
+作用边界：本模块只定义**仓库交付/变更门禁文档**，不实现游乐/招商/楼宇/看板/商户档案。不适用 = 文档未述该枚举且无冲突无发明。不能因「技术文档」免审与 HTML 冲突或发明。
+
+### 3.1 GEN-001–018
+
+| ID | 结果 | 证据 |
+|---|---|---|
+| GEN-001 | 部分 FAIL | 闸口文档有机检锚点用途；命令表损坏/重复序号降低最小性 |
+| GEN-002 | FAIL | 声称的串联表与 package.json 主路径不一致 |
+| GEN-003 | FAIL | 现有 docs 机检不能在表损坏时失败 |
+| GEN-004 | 适用/无新缺陷 | 门禁吃环境/git/gh；部署脚本不信 `verify:predeploy` 串 |
+| GEN-005 | N/A 边界 | 无业务授权实现；`SKIP_CI_WAIT`/`ALLOW_MAIN_PUSH` 已写明非安全边界 |
+| GEN-006 | N/A | 无状态/金额写入 |
+| GEN-007 | 适用 deploy 文档 | `merge-pr.sh` 等待后再比 remote/PR head，防等待窗口换 SHA（源码 L65–71） |
+| GEN-008 | FAIL | 文档表、marker 列表、package.json 链、机检 required 数组四套不完全同构 |
+| GEN-009 | FAIL | 表损坏时 docs 机检仍 PASS（伪成功） |
+| GEN-010 | 适用/无新缺陷 | 文禁明文密钥进仓；未在本两文件发现密钥正文 |
+| GEN-011 | 适用 | 机检 PASS/FAIL 行是证据；表本身不可作证据 |
+| GEN-012 | N/A | 无运行时循环资源 |
+| GEN-013 | 适用/无新缺陷（deploy 文） | 脚本名均在 package.json；workflow pin SHA |
+| GEN-014 | N/A | 无迁移。链中 `verify:migration-version-order` **未写入交付文档表**（见 GR-02） |
+| GEN-015 | N/A | 非用户界面。PGM-066 全中文约束的是后台/客人端/设备/安卓展示，不是本工程 md |
+| GEN-016 | FAIL | 路径/部分命令可复现；表顺序/完整性/上线必做/添加项不可当当前事实 |
+| GEN-017 | FAIL | 见四分类；有添加项未在 HTML |
+| GEN-018 | 本席遵守 | 依据 HTML 原文、脚本行为、官方 gh 403、命令输出 |
+
+### 3.2 BEQR（37）
+
+HTML 原文已按 lock 对照 `business-enum-quick-reference-v0.1.html` 对应 `td.k`（抽查 L140 项目开放状态、L208 接入的外部系统，与 lock 一致）。
+
+| ID | 锚点 | 覆盖 |
+|---|---|---|
+| BEQR-085…096 | 游乐状态/容量/设备/补偿/巡检/包场/P2 | **不适用**：两文档无这些枚举、无冲突无发明 |
+| BEQR-118 | 运营营业日 | **不适用** |
+| BEQR-146 | 运营公司职责 | **不适用** |
+| BEQR-155 | 商户/运营主体状态 | **不适用** |
+| BEQR-160…181 | 招商/合同/物业/楼宇机电/能耗/巡检 | **不适用**（NAS≠楼宇机电台账） |
+
+### 3.3 BSM（14）
+
+| ID | 覆盖 |
+|---|---|
+| BSM-020,081,082,083 | 楼宇运营 **不适用** |
+| BSM-028 | 基础管理主要功能 **不适用**（未发明六类合作/红线） |
+| BSM-111,112,113 | 经营看板 **不适用** |
+| BSM-114 | 各类入口 **不适用**（160 主机是工程门禁，不是入口表） |
+| BSM-115 | 子系统必须连接 **不适用** |
+| BSM-116 | **适用 FAIL** GR-01：文档以「上线准入」自居，§4 追加表仍无 HTML 上线必做 |
+| BSM-117 | **适用 FAIL** GR-01：弱口令→强密码、U 盘密钥托管、破窗留痕 未出现 |
+| BSM-118 | **适用 FAIL** GR-01：自动识别环境安装包 + 业务教程 未出现 |
+| BSM-119 | **适用/边界**：「和谁有关」要求上线动作进留痕；本文只把 Semgrep/人工 review 放在§4，未接 U 盘插盘留痕。并入 GR-01 |
+
+BSM-116 原文（`business-system-map-for-operations-v0.1.html:1928`）：「系统从打包测试环境正式上线为生产环境，是一次要专门把关的动作。上线不是把测试那套原样搬过去，而是要完成一批只在生产环境才做的安全加固；同时，交付给现场的安装要让不懂技术的人也能照着装、照着用。」
+
+### 3.4 PGM（10）
+
+| ID | 覆盖 |
+|---|---|
+| PGM-015,052–056 | 楼宇 **不适用** |
+| PGM-018 | 多对多主体 **不适用** |
+| PGM-026 | 商户主要功能 **不适用** |
+| PGM-039 | **细化/无新缺陷**：HTML「独立立项批准前不定义设备动作」。交付文 L67/L112 阻断真实设备控制伪实现，与「先自有接口、后接资料」同向 |
+| PGM-066 | **部分 FAIL**：第三方未定→先自有/mock 与文 L3–4、L110–113 同向（细化）。「接入的外部系统」闭集无 MDM/对象存储（添加 GR-03）。界面全中文不约束本 md |
+
+PGM-066 原文（`platform-governance-map-for-operations-v0.1.html:959`）：「已拍板：第三方接口资料当前未确定，先做自有系统和对外对接接口示例，后续再接第三方对接。」
+
+合同 AI 原文不在 M006 映射（属 PGM-029），分类仍用三 HTML：`platform-governance-map-for-operations-v0.1.html:532`「P0 可引入本地 AI 大模型做辅助分析判断……AI 结果只作为“待人工确认建议”，不得自动替代合同台账、审批、阻断或放行结论。」交付文另发明处罚/调价/绩效自动禁止 → 添加。
+
+## 4. 对抗式（grilling 结构，自答事实）
+
+Q1 表格损坏时操作员会不会漏跑闸口？会。L92–105 多条序号均为 33；L92 两命令挤进一行。实际链 49 项且前缀含 matrix/unit 等表中没有的项。
+Q2 机检会不会拦住？不会。`verify-delivery-gates.mjs` 不 parse 表；本次 PASS。
+Q3 把 `verify:predeploy` 改成 `true` 能否骗过部署？骗不过部署脚本硬编码列表；仍骗得过只看该串的人。docs 机检会因 predeploy 串缺 HTML 三闸而红（regression 源码）。
+Q4 `--no-verify` / 不装钩子 / Web 合并能否绕过 pre-push？文档 L20–24 已承认。protection API 403 证实无仓外强制。
+Q5 `SKIP_CI_WAIT=1` 能否合红灯？能，源码 L35–39。文档要求写 PR 原因，**机器不读 PR 正文**。
+Q6 生产 ready=true 夹具是否等于 HTML 上线完成？文 L87 用 40 份 manifest+NAS+blocker 判定 ready，**不含** U 盘/弱口令/安装包。
+Q7 并发推送在 merge 等待窗口？脚本再核 SHA 后拒绝。未实跑合并。
+Q8 金额精度？本模块无。
+
+ponytail-review：`L75: delete: 残留 "?requires OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS and manifest_paths"。删掉残留。` `L92-105: shrink: 七个「33」+断行单元格。改成与 package.json 49 项同序的合法表。` net: 表可短且可变可执行。
+
+## 5. 四分类（冲突→细化→技术性→添加）
+
+无 **冲突**（未发现与 HTML 明文相反的规则；AI 多写的禁止是加严不是反向）。
+
+逐段：
+
+**delivery-readiness-gates-v0.1.md**
+- L1–7 定位：细化 BSM-116/PGM-066（要有交付把关、禁伪实现）。标题「上线准入」相对 BSM-117/118 过宽 → GR-01。
+- L9–53 机器标记：技术性。无业务发明。消费方 `requireIncludes`。无结构缺陷。
+- L55–105 §2 表：技术性 CI 编排。工程缺陷 GR-02。
+- L107–113 §3：L110–112 细化 PGM-066/第三方表（机器人/视频/设备/支付/企微/人脸）。L111 **MDM** 添加。L113 T3-D2/独立 Python AI 技术性（禁伪服务）+ L113 处罚/调价/绩效 添加。
+- L115–127 §4：细化「不是完整上线」但追加表仍遗漏 BSM-117/118 → GR-01。
+- L129–140 §5：技术性失败手册。命令名存在于 package.json。
+- L142–151 Partial：细化「先 mock 不关生产 blocker」；L151 **对象存储** 添加。
+- L153–159 附录：技术性指挥板；路径/脚本存在。
+
+**deploy-and-change-flow-v0.1.md**
+- L1–3 病史：技术性。
+- L5–10 四道门禁：技术性。源码/gh/cmp 支持。文件名 v0.1 vs 标题 V0.06 为版本标签漂移，不单独升 finding（未当完成声明）。
+- L12–18 变更流程：技术性。独立复核是指令不是机器闸，文 L21 已承认。
+- L19–24 局限：技术性诚实记录；403 已证。
+- L26–31 workflow 维护：技术性；与 verifier + 工具源码一致。
+- L33–48 已做/仓外：技术性。部署硬编码与 CODEOWNERS 存在；「同实例同账号」未现场证。
+
+技术性无业务发明理由：CI/钩子/workflow/CODEOWNERS/主机 IP/证据夹具不引入票务枚举、价格、角色权限或新合作模式。**有工程缺陷的技术性仍进修复队列（B2 定稿后）。**
+
+## 6. Findings
+
+### GR-01
+- 文件:行：`docs/delivery-readiness-gates-v0.1.md:1,4,107-127`
+- 锁内判据：BSM-116, BSM-117, BSM-118, BSM-119, GEN-016
+- 四分类：**细化**（上位：系统交付与上线必须专门安全加固+现场安装）
+- 2.3：类型 1（HTML 原文）+ 类型 4（全文检索两文档无「U 盘」「弱口令」「安装包」）
+- 原文：见上 BSM-116/117/118 HTML。本文 L4 只回答 160 编码/外部伪实现/P0/安全基线；§4 追加验证表列为后端测试、运行态、Web 构建、Android、OpenAPI、NAS 运维、Semgrep，**没有**换强密码、U 盘托管、自动识别环境安装包、业务语言教程。
+- 工程缺陷：**是**（映射模块文档以「上线准入」为题却遗漏 HTML 上线必做，且未在追加表列为缺口）
+
+### GR-02
+- 文件:行：`docs/delivery-readiness-gates-v0.1.md:61-105`（L75, L92-105）
+- 锁内判据：GEN-002, GEN-003, GEN-008, GEN-009, GEN-016
+- 四分类：**技术性**（命令索引；无业务发明）
+- 2.3：类型 4
+- 复现：
+  - 表解析仅得 26 行；L26 单元格在 `verify:production-evidence-owner-execution-packets` 处断行，后续序号七个 `33` 然后 `34`。
+  - L75 残留 `?requires OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS and manifest_paths`。
+  - `package.json` `verify:delivery-gates` **49** 项，前 8 项含 `verify:full-admin-matrix`、`verify:domain-ownership-scope`、`verify:matrix-vs-migration`、`verify:migration-version-order`、`verify:data-isolation-spec`、`verify:tenant-isolation`、`verify:unit`，表中皆无。
+  - `npm run verify:delivery-gates-docs` → `DELIVERY_GATES_DOCS_PASS` exit 0。
+- 工程缺陷：**是**（声称的入口表不可执行对照；机检伪成功）
+
+### GR-03
+- 文件:行：`docs/delivery-readiness-gates-v0.1.md:111,113,151`
+- 锁内判据：GEN-017；分类对照 PGM-066 / 枚举「接入的外部系统」`business-enum-quick-reference-v0.1.html:208` / PGM HTML L532（lock 内 PGM-029 原文，非本模块映射，仅作 HTML 出处）
+- 四分类：**添加**
+- 2.3：类型 1
+- HTML：「接入的外部系统」= 团购/企微/POS/聚合支付/机器人/视频/X 光/人脸/短信/微信支付宝登录/税务发票。**无 MDM、无对象存储、无 NAS。** AI 只允许合同材料建议，不得自动替代台账/审批/阻断/放行。
+- 添加了：把 **MDM** 列为 pending_info 外部能力；生产边界写 **对象存储** 必须回填 manifest；禁止 AI **自动处罚、自动调价、自动影响绩效**（HTML 无这些 AI 业务动作）。
+- NAS 挂载/诊断本身登记为技术性运维（下节），不进本添加条。
+- 工程缺陷：分类为添加，**B1 不修复、不代批**；B2 按 2.2 询问。
+- 代价（供 B2）：留下则生产闭环依赖 HTML 没有的系统；删除则需从阻断清单/夹具文案拿掉这些名词，下游 evidence 工具可能仍引用（属后续模块）。
+
+## 7. 技术性逐段登记（无缺陷者）
+
+| 段 | 分类依据 | 无业务发明 | 消费证据 | 缺陷 |
+|---|---|---|---|---|
+| 交付文 L9–53 markers | 机检字符串 | 仅 READY 标记 | verify-delivery-gates.mjs L163+ | 否 |
+| 交付文 §5 失败步骤 | 操作手册 | 无新实体 | 所列 `npm run` 均在 package.json | 否 |
+| 交付文附录 no-go 命令 | 证据看板 | 无新枚举 | git ls-files 脚本存在 | 否 |
+| NAS 交接/诊断/漂移命令与路径 | 运维基础设施 | 非票务/商户实体 | 路径存在；未跑会写文件的 generate | 否（命令存在性） |
+| deploy 文四道门禁/流程/局限/维护 | CI/部署 | 无业务发明 | sh/yml/CODEOWNERS/gh 如上 | 否 |
+| CODEOWNERS 意图记录 | 技术所有权 | 文+文件均写免费版不强制 | `.github/CODEOWNERS` L1–12 | 否 |
+| 主机保护 | 工程约束 | IP/路径 | CODING_HOST_PROTECTION_PASS | 否 |
+| test-db-isolation 列为静态 | 配置扫描 | 不连库 | tools/verify-test-db-isolation.mjs 只读 walk | 否 |
+
+## 8. 对抗未变成 finding 的项
+
+- pre-push 可绕过、无 required check、门禁与代码同信任域：文档已写，与 403/源码一致，不另开缺陷。
+- 「首跑 SUCCESS」：当前 workflow active 且近 run 绿；历史首跑不证。
+- 同实例同账号：默认配置旁证，未连库，不包装 PASS 也不单开未证 finding。
+- 未跑全链 delivery-gates：类型 4 对文档用 docs 机检+脚本解析已足够暴露 GR-02；全链会跑测试/可能写快照，本席不跑。
+
+## 9. 结论
+
+- 审计结论：**FAIL**（GR-01 细化缺陷、GR-02 技术性缺陷、GR-03 添加项；有未答添加，不得 PASS）
+- 模块状态：**IN_PROGRESS**
+- 无 HTML 修改申请；B1 不发问、不修复
+- 本席独立；未读既有 raw/findings/收口正文
+
+
+## M006 当前471两文档 B2 整批复核票
+版本：V0.10
+
+本席B2：**PASS**。此票只判断候选 V1.01「当前 M006 B2 整批候选」相对两份当前完整 B1 的全批差集、GEN-017 四分类、修复队列与最小修法。不是独立 B1 PASS，不是模块 PASS，不是源已修。必须另有 Codex 本批 B2 PASS 才能定稿。不覆盖上方 V0.09 B1 FAIL 原文。不写独占 `CRITERIA-LOCK-SHA256:` 行。
+
+B1 期间本席判 GR-03 为添加；本票按三 HTML 原文独立复核后，044/045/046 改判细化。这是 B2 分类裁定，不是无答复把添加当保留。本批没有任何仍属添加的项，不走 2.2。
+
+### 本批输入（只读指定区间 + 候选顶部至下一 M005 标题）
+
+- 候选：`docs/audit-2026-09/findings.md` 版本 V1.01，全文件 347084 bytes，SHA256 `61ef49863e438bd7cce2bd484843b39c8ae79ef63fb1f2b5a743264cd04da676`。完整读取最上「当前 M006 B2 整批候选（471计划两文档；待双PASS）」至「## 当前 M005 B4-r2双PASS，014已修出队」为止；下方历史 001–036 原文未改写。
+- Grok B1：本文件 `modules/M006-b1-grok-raw.md` V0.09，指定区间 199985 bytes 之后至当时全文 220702 bytes。当时整文件 SHA256 `5ece6d5d6aed52123bb0d909dbc6060a9c3fdd39bdd5c466240eadeb92c7e39e`。本票追加前前缀 220702 bytes 实算同值。该区间即上方完整 B1，结论 FAIL，临时项 GR-01/02/03。
+- Codex B1：`modules/M006-b1-self-raw.md` V0.17，指定区间 135518 bytes 之后至当时全文 163026 bytes，当时整文件 SHA256 `c167c78a1245e74b7e4996eb9b9bddc72e23470349cb3032c3aabe0c90bfb75b`。该区间含 SELF-01/02/03/04，结论 FAIL。本席只采该 B1 区间；不以旧同号后端报告为当前缺陷。
+- 范围：`plan/modules.md` M006 两文件 207 行 NORMAL：`docs/delivery-readiness-gates-v0.1.md` 159 行 + `docs/deploy-and-change-flow-v0.1.md` 48 行。生命周期 IN_PROGRESS，本范围 B3=0。未扩后续整模块、未跟踪排除目录。
+- 锁观察（正文记录，非独占行）：`sha256sum plan/criteria-lock.md` = `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`；sidecar 文件内容同行；ledger `LOCK-AMEND-COUNT: 1`。未改锁。
+- 三业务 HTML 只读未改。未修源、未改 findings/ledger、未部署/合并/向 GitHub 发 PUT。
+
+### 技能（V0.17 收窄，本节点实读）
+
+| 技能 | 用法 |
+|---|---|
+| using-superpowers / receiving-code-review | 先核实再接受或反驳；禁止表演性同意；B2 不修复 |
+| grilling | 只借追问结构，事实自查；不等操作员、不派子代理 |
+| verification-before-completion | 声称前先跑命令 |
+| ponytail-review | 接受 039 收窄为索引、不复制 49 行；不新增 checker 测试 |
+| batch-grill-me | 缺口，未冒充调用 |
+
+未用 MCP，未派子代理。
+
+### 完整差集
+
+Codex 当前临时项：SELF-01/02/03/04。Grok 当前临时项：GR-01/02/03。两席无缺陷技术/细化段分别进 037/038。旧 001–036 不复用、不改历史处置。漏并：无。
+
+| 正式ID | 全部本次来源 | 四分类 | 工程缺陷 | 修复队列 | 差集结论 |
+|---|---|---|---|---|---|
+| M006-037 | 两席 delivery 无缺陷段（markers、§5、附录、NAS 运维、PGM-066/039 边界中除 044–046 外） | 细化（交付定位/外部资料未定）+ 技术性（机器标记/npm/失败手册） | 否 | 否 | 全并。037 不吞 044–046 |
+| M006-038 | 两席 deploy 无缺陷段（四道门禁、流程、局限、维护、仓外限制） | 技术性 | 否 | 否 | 全并。L36/L45 缺陷独立 042/041 |
+| M006-039 | SELF-01 全部 + GR-02 全部（含残留字样、断行、顺序声称、机检不解析表） | 技术性 | 是 | 是 | 全并。修法收窄已记录与 GR-02 原文差异 |
+| M006-040 | SELF-02 | 技术性 | 是 | 是 | 全并。删除易漂移 40/31 字面 |
+| M006-041 | SELF-03 | 技术性 | 是 | 是 | 全并。仅改文档 gh 示例类型 |
+| M006-042 | SELF-04 | 技术性 | 是 | 是 | 全并。L36 收窄为固定数组入口 |
+| M006-043 | GR-01 | 细化 | 是 | 是 | 全并。只扩现有 L117，不新增 gate/文件 |
+| M006-044 | GR-03 中 MDM（源 L111） | 细化 | 否 | 否 | 全并。B1 添加原意见保留为差异 |
+| M006-045 | GR-03 中对象存储（源 L151） | 细化 | 否 | 否 | 全并。B1 添加原意见保留为差异 |
+| M006-046 | GR-03 中 AI 自动业务决策限制（源 L113） | 细化 | 否 | 否 | 全并。范围差别已核，仍非添加 |
+
+无冲突项。无待询添加。T3-D2 独立 Python AI 阻断半句为技术性，挂 046 同一源行，不另开 ID。
+
+### 044/045/046 分类特别复核（依 GEN-017 + 三 HTML 原文）
+
+判定顺序：冲突 → 细化 → 技术性 → 添加。能指到 HTML 具体条目则先细化，不因词面未出现「MDM / 对象存储 / 处罚」就判添加，也不把业务发明伪装成技术性。不靠代码、旧 PASS 或他席意见当业务来源。Codex 异议带了 HTML 原文，本席逐字核过；此前不得视为已获本席同意。
+
+#### 044 MDM — 细化（推翻本席 B1「添加」，保留原意见为差异）
+
+B1 原判：BEQR「接入的外部系统」闭集无 MDM，故添加。该闭集原文（`business-enum-quick-reference-v0.1.html:208`）是团购/企微/POS/聚合支付/机器人/视频/X 光/人脸/短信/微信支付宝登录/税务发票，管的是客人侧与第三方业务接入，不是工作手机管控手段。拿它当 MDM 上位是错锚。
+
+直接上位（本席现读）：
+
+> `platform-governance-map-for-operations-v0.1.html:619–620`（锁内 PGM-037 设备管理主要功能）：「工作手机预装软件清单和网站白名单由后台维护。」「通过企业级手机统一管控手段阻止违规访问并留痕。」
+
+同文还见于 `business-system-map-for-operations-v0.1.html:949`：「正式发放的受管工作手机不允许安装除预装软件之外的任何软件，只允许访问白名单网站；清单由后台维护，通过企业级手机统一管控手段拦截违规访问。」以及同文件 :1978 已拍板句。
+
+源 L111 只把未落实的手机统一管控列为 `pending_info` 外部能力举例，未新增手机使用权、设备类别、对接业务或权限。MDM 是该 HTML 手段的下位实现名称。工程缺陷否，队列否。不改源。
+
+#### 045 对象存储 — 细化（同上，B1 添加为错锚）
+
+B1 原判同样绑在「接入的外部系统」无「对象存储」四字。词面沉默不是添加证据。
+
+直接上位（本席现读，候选「BEQR:164 / BSM:1195 / PGM:592 / PGM:958」是 **HTML 行号**，不是锁 ID）：
+
+- `platform-governance-map-for-operations-v0.1.html:592`（PGM-034）：「平台使用企业微信已有会话能力，统一同步、存储、质检和审计。」
+- 同文件 :958（PGM-066）：「企业微信使用已有会话能力，平台负责统一同步、永久存储（不自动到期删除，清理按留痕清理的同一规则执行）、质检和审计。」
+- `business-enum-quick-reference-v0.1.html:164` 是 **高价值判定** 行（锁 ID **BEQR-101**，不是映射里的 BEQR-164 退租结算状态）：「录像与分析结果长期保存（业务参数，按项目可配，出厂默认至少五年，须同时配置下限）」。
+- `business-system-map-for-operations-v0.1.html:1195`（BSM-063 高价值物品）同口径长期保存。
+- 同文件 :1613 / :1615（BSM-096）：「必要时关联视频、企业微信会话、附件或备注作为证据。」「留痕记录默认永久保存、不会自动到期删除。」
+
+源 L151 只要求真实存储证据回填 manifest，没有新业务存储实体、保留期、清理权限、供应商或状态机。对象存储是既有留存/附件证据的工程载体。工程缺陷否，队列否。不改源。B3 不得去改 BEQR-164 锁映射。
+
+#### 046 AI — 细化（范围差别真实，仍非添加）
+
+B1 原判：PGM 仅合同辅助建议，交付文另写处罚/调价/绩效自动禁止 → 添加。本席现读完整句与上位。
+
+上位 `platform-governance-map-for-operations-v0.1.html:532`（PGM-029 合同主要功能）：「P0 可引入本地 AI 大模型做辅助分析判断：对合同文本、人工录入摘要、证照/保险材料中的关键日期、责任主体、提醒建议、阻断风险和疑似缺失项给出提示；但 AI 结果只作为“待人工确认建议”，不得自动替代合同台账、审批、阻断或放行结论。」
+
+源 L113 完整句：「独立 Python AI 服务在 T3-D2 前继续阻断；当前允许的是 160 本地大模型只读建议能力，不允许 AI 自动处罚、自动退款、自动调价、自动核销或自动影响绩效。」同文件 L72 已写该本地模型为 loopback-only、脱敏、人工复核建议。
+
+范围差别（必须写明，不得假装没有）：HTML:532 的引入场景是合同文本/证照材料；L113 把「只读建议、不自动产生业务结论」写到当前允许的 160 本地模型，并枚举处罚/退款/调价/核销/绩效作为自动替代审批/阻断/放行的副作用例子。这不是把合同 AI 条款改写成全平台新业务产品。
+
+为何仍非添加（完整业务增量不成立）：L113 没有定义处罚、调价、绩效的业务实体、枚举、价格、角色或流程；没有禁止非 AI 的既有确定性规则自动运行；主语是当前只读建议能力不得直接决策。若把它读成「新增全平台 AI 自动处罚/调价/绩效禁令」才是业务发明——原文不是那样。T3-D2 前阻断独立 Python AI 服务是编码包技术边界，无业务发明。
+
+工程缺陷否，队列否。不改源。不走 2.2。
+
+### 037–043 逐 ID 意见
+
+**037/038** 技术性无业务发明：CI 标记、npm 入口、失败手册、NAS 挂载/诊断、feature+PR、workflow 镜像、CODEOWNERS 记录、主机保护、静态 test-db 说明，不引入票务枚举/价格/权限。交付定位与外部资料未定优先细化 BSM-116/117/118（HTML:1928–1943）和 PGM-039/066。无缺陷只登记。队列否。同意。
+
+**039（GR-02+SELF-01）** 技术性缺陷是、队列是。本席复现：`markdown_it` CommonMark+table 第一张表 40 行；顺序 26 的命令单元格在 `verify:production-evidence-owner-execution-packets` 处断开，下一行命令进序号列；随后七个序号为 33 再 34。`package.json` `verify:delivery-gates` 实拆 **49** 项，前 8 项含 matrix/unit/migration-version-order 等表中没有的项；`docs:production-closure-gap-reports` **不在**父链，`verify:production-closure-gap-reports` 在。L77 残留 `?requires OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS and manifest_paths`。
+
+与 GR-02 原文差异（已记录、接受）：原文 ponytail 曾写「改成与 package.json 49 项同序的合法表」。候选改为主要闸口索引、删除顺序列、修断行与残留、父链只保留 verify、**不复制 49 行**。原意是文档不得把损坏表/错误顺序/docs 生成当成父命令事实；收窄后不再维护第二套完整编排，差异成立且更小。不要求 doc checker 新增测试，不改尚未轮到的工具模块。文档变更证据类型 4。同意。
+
+**040（SELF-02）** 技术性缺陷是、队列是。本席实算：`production-evidence-submission-kit-latest.json` `counts.submission_templates=15`、`p0_submission_templates=13`，`len(submissions)=15`；`production-evidence-p0-quickstart-latest.json` `expected_submissions=15`、`p0_expected=13`。当前源 L86/L88「40 份」、L91「31 个」（含空格）。删除字面值不取消既有证据要求、不升级为业务默认值。同意。
+
+**041（SELF-03）** 技术性缺陷是、队列是。`gh api --help`：`-f/--raw-field` 静态字符串，`-F/--field` 对 true/false/null/整数做类型转换。本席 loopback：127.0.0.1 随机端口 HTTPServer，`GH_TOKEN=local-fixture-only`，只替换 endpoint 为本地 URL，**未向 GitHub 发 PUT**。原 L45 `-f` 捕获 payload=`{"enforce_admins":"true","required_pull_request_reviews":{"required_approving_review_count":"1"},"required_status_checks":{"contexts":["predeploy"],"strict":"true"},"restrictions":""}`，`API_SCHEMA_TYPES_VALID=False`。按候选改 `-F` 与 `restrictions=null` 后同法捕获 `enforce_admins=bool true`、`strict=bool true`、`required_approving_review_count=int 1`、`restrictions=null`，`API_SCHEMA_TYPES_VALID=True`。contexts 保持 `-f` 字符串数组。仅修文档命令。同意。
+
+**042（SELF-04）** 技术性缺陷是、队列是。deploy L36「构建前跑 verify:predeploy」与 L7/L37「固定数组、不解析父串」不一致。`complex-deploy-api.sh:197–210` 与 `complex-deploy-web.sh:24–37` 的 `REQUIRED_GATES` 均为 15 项循环 `npm run "$gate"`，不调用父 `verify:predeploy`。L36 收窄执行动词即可，不改 shell/hooks/workflow。同意。
+
+**043（GR-01）** 细化缺陷是、队列是。上位 BSM-116/117/118 HTML:1928–1943：上线必须换强密码、U 盘密钥托管并留痕，并交付能自动识别环境的安装包和业务语言教程。现有 L117：「`npm run verify:delivery-gates` 是交付准入，不是完整上线验收。正式上线仍需按场景补跑：」候选只把既有必做写进这一句，不新增 gate、脚本、追加表行或声称已完成。与 GR-01 原文差异：原文指出 §4 追加表仍无这些项；候选不改表、只补指向。原意（不得用「上线准入」标题让 HTML 必做消失）保留。同意。
+
+### 版本与验证边界
+
+同意：只改上述两文档；delivery 标题旧 V0.1 先规范为 V0.10 再递增 V0.11，归属 039；deploy V0.06→V0.07，归属 041；文件名 v0.1 与其它报告 V0.1 不替换。无新测试文件。B3 后用真实 Markdown 解析表、父链与 package.json 对照、确认无旧 40/31、loopback 假 token 断言 gh 类型、`npm run verify:delivery-gates-docs`、临时 index before/after 逐行归因 039–043。不跑父串全链当本模块验证目标。
+
+### 必要纠错（不构成 B2 FAIL，定稿/B3 必须按此）
+
+1. 候选 045 的 `BEQR:164` 是 HTML 行号（高价值判定 / 锁 ID BEQR-101），**不是** M006 映射里的 BEQR-164（退租结算状态，HTML:252）。`BSM:1195` 同为行号（BSM-063），不是 BSM-119。分类已按 HTML 原文成立；B3 不得去改锁映射。
+2. 修复定位以源字符串为准，当前文件行号与候选一致：残留 L77，两处「40 份」L86/L88，「31 个」L91，断行 L92–93，043 扩 L117，041 L45，042 L36。
+3. 不新增表格机检、不改 M007/M008 工具；GEN-003/008/009 对当前 checker 不解析表的局限只记录，本批只修文档。
+4. 044/045/046 保持不改源；本席 B1 的添加原判写在本票差异里，不再当正式分类。
+
+### 队列与添加
+
+当前候选队列：039/040/041/042/043 是；037/038/044/045/046 否。本席同意。无添加项，不生成 questions，不能无答复定稿的闸未触发。冲突无。HTML 自身无上报暂停项。
+
+### 结论
+
+全批差集成立，分类按上表，修复队列按上表。GR-01/02/03 原意保留并记录了收窄/拆分/改判差异，未源修。本席 B2 **PASS**。须 Codex 本批 B2 PASS 后才能定稿并一次修复 039–043；未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M006 IN_PROGRESS，B3=0。
+
+## M006 B5-r1回退 B2 整批复核票
+版本：V0.11
+席位：Grok（审计席乙）
+步骤：B2（由 B5-r1 回退的整批归并/分类/队列复核）
+模块：M006 — 治理门禁与 CI 基线／文档与接口定义／第1段
+计划：当前 471 模块计划
+生命周期：IN_PROGRESS（本席不改 ledger / findings / HTML / 源）
+B3 已执行次数：1（本票不增加）
+控制提示词：160-audit-prompt.md V0.17
+runbook：docs/audit-2026-09/plan/runbook.md V0.02
+本席B2：**PASS**
+
+此票只判断 findings.md 顶部 V1.04「当前 M006 B5-r1回退 B2 整批候选」相对触发回退的两份 B5-r1 完整 raw 的全批差集、GEN-017 四分类、修复队列与最小修法。不是独立 B1/B5 PASS，不是模块 PASS，不是源已修。必须另有 Codex 本批 B2 PASS 才能定稿。不覆盖上方 V0.09 B1 FAIL、V0.10 B2 PASS，也**不改写**本席 `modules/M006-b5-r1-grok-raw.md` V0.01 的 B5 **PASS** 原文。本追加段不写独占锁哈希行。
+
+本票依据只落到：三份 HTML 逐字原文、当前两文档现文、生成器源码实际分支、现有 JSON 快照、只读命令输出。不把本席原 B5 PASS、Codex 已投 PASS、生成器注释/自述或席位意见当正确性证明。
+
+### 本批输入（完整指定文件，不是旧 b1 代替）
+
+- 候选：`docs/audit-2026-09/findings.md` 版本 V1.04，全文件 354612 bytes，SHA256 `7690bb9301098a9cf8649391842be643f807b77560cec70085368123ee6efb90`。完整读取最上「当前 M006 B5-r1回退 B2 整批候选（待双PASS）」至「## 当前 M006 B4-r1双PASS，039–043已修出队」为止；下方历史 001–036 及他模块原文未改写。
+- Codex B5-r1：`modules/M006-b5-r1-self-raw.md` V0.01，28440 bytes，SHA256 `e2d2dad27f657ae4cd8a5ed1431f2b669bc043079a011037d5348700b42231f7`，结论 FAIL，唯一新临时项 CX-01。全文已读。
+- Grok B5-r1：`modules/M006-b5-r1-grok-raw.md` V0.01，25637 bytes，SHA256 `610de7573e1cdcb85dffa615821b3e42aa50b400c58dc7b2c338e19cef874084`，结论 PASS，无新 GR。全文已读。本票追加前本文件前缀 236140 bytes 实算 SHA256 `46e24d0f620703f4afb8da4fe0bf78c4b82a680dbc8e70657c87dcf458368754`，该前缀保留。
+- 当前源（未执行候选修改）：`docs/delivery-readiness-gates-v0.1.md` 标题 V0.11、158 行、15715 bytes、SHA256 `7c120e8ed537189c8e4abf898be075d81ff3d3c6bc6a245b46380f0e54f37089`；`docs/deploy-and-change-flow-v0.1.md` 标题 V0.07、48 行、7117 bytes、SHA256 `543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1`。HEAD=`origin/main`=`242f487233d028173cb9198eecd079f5d877405c`。
+- 锁观察（正文记录，非独占行）：`sha256sum plan/criteria-lock.md` = `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`；sidecar 文件内容同行；ledger `LOCK-AMEND-COUNT: 1`。未改锁。
+- 三业务 HTML 只读未改。未修源、未改 findings/ledger、未跑 docs 生成器、未部署/合并/向 GitHub 发 PUT、未派子代理、未用 MCP。
+
+### 技能（V0.17 §6 收窄，本节点实读）
+
+| 技能 | 用法 |
+|---|---|
+| using-superpowers / receiving-code-review | 先核实再接受或反驳；禁止表演性同意；B2 不修复 |
+| grilling | 只借追问结构，事实自查；不等操作员、不派子代理（本体「dispatch a sub-agent / 等用户回答」作废） |
+| verification-before-completion | 声称前先跑只读命令 |
+| diagnosing-bugs | 只借读错→复现→数据流：238 实际 continue vs 330 生成散文 |
+| ponytail-review | 接受只收窄 L96 + 标题版本；不扩修生成器/快照/HTML/后续工具模块 |
+| batch-grill-me / ubiquitous-language | 缺口，未冒充调用 |
+
+未用 MCP，未派子代理。TDD 本体落测试作废（B2 不修；文档类型 4）。
+
+### 完整差集
+
+Codex 本次临时项：CX-01（唯一）。Grok 本次临时项：空集。两席无缺陷段不另开新 ID。旧 001–036 不复用、不改历史处置。漏并：无。Grok B5 见到同一空 mapped/owners/paths 事实但判无缺陷，这是同一事实的相反裁定，不是第二条 finding。
+
+| 正式ID | 全部本次来源 | 四分类 | 工程缺陷 | 修复队列 | 差集结论 |
+|---|---|---|---|---|---|
+| M006-047 | CX-01；`docs/delivery-readiness-gates-v0.1.md:96` | 细化（工程验证说明） | 是 | 是 | 全并。本席独立核源后接受该新 ID；见下节裁定 |
+| M006-037/038 | 两席 B5 整文件无缺陷段 | 原定技术性/细化 | 否 | 否 | 全并。CX-01 具体例外另列 047，不用粗登记掩盖 |
+| M006-039–043 | 前批 B4 双 PASS 已修；两席 B5 均核修后仍成立 | 原定分类 | 历史是、现已修 | 否 | 不重新修、不重复计数 |
+| M006-044–046 | MDM/对象存储/AI；两席 B5 各自核实 | 已定细化 | 否 | 否 | 本批 raw 无新事实，不重开、不改源 |
+| 旧 001–036 | 历史 | 原处置 | 原处置 | 原处置 | 编号不复用 |
+
+无冲突项。无待询添加。无 HTML 自身问题，不生成 questions。本批两 raw 无其它新 finding。
+
+### 计数口径（不影响唯一 047，不升为源缺陷）
+
+本席现算 delivery 两张表：T1 管道行 40 = 表头 1 + 分隔 1 + 数据 38，列宽 2，空单元格 0；T2 管道行 9 = 表头 1 + 分隔 1 + 数据 7，列宽 2，空单元格 0。若计「表头+数据、不含分隔」则 39+8=47，与 Codex「47 行均 2 列」同口径；若只计数据行则 38+7，与本席原 B5「T1 38×2、T2 7×2」同口径。表头/分隔是否计入，不是源损坏。
+
+npm：delivery 现文 `npm run <name>` 出现 94 次、不重复名 67，67 名均在 `package.json.scripts`；`prepare:production-evidence-drafts` 脚本存在，L136 带参数的调用不是缺脚本。本席原 B5 写 102 处引用，是出现次数口径，与 Codex「67 个独立 npm 引用」不同。口径差不构成 047 以外的源缺陷，也不回写原 B5。
+
+### 047 独立裁定（核源码/当前快照/原文，不沿用原 B5 PASS）
+
+**本席 B5-r1 原文保留：**当时已见到 8 条 `traceable_partial_requirements=8` 且 `mapped_item_ids`/`owner_groups`/`target_manifest_paths` 全空、走 `switch_disabled_item_ids`；生成器 238 在 mapped 空且 disabled 非空时 `continue`，267 policy 为 `owner_manifest_or_disabled_switch`；当时认为 L96 与生成器自述同口径，且 L149–150 禁止把 mock 当生产闭环，故无新 GR、结论 PASS。该 PASS 原文不改。
+
+**本票要裁定的不是「当时有没有看见空字段」，而是：L96 那句命令保证是否被当前正常路径证伪。**
+
+精确现文 L96（全文唯一 1 处；候选拟改尚未写入；文件仍 V0.11）：
+
+> `| \`npm run verify:external-evidence-requirement-traceability\` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |`
+
+生成器实际分支（`tools/generate-external-evidence-requirement-traceability.mjs`，本席现读）：
+
+- 166–205：`mapped_item_ids` = 去掉 disabled 后的 `effectiveItemIds`；`owner_groups`/`target_manifest_paths` 来自这些有效 item 的台账行；全 disabled 时三者皆空，`production_trace_status=covered_by_disabled_integration_switches`。
+- 237–241：`mapped_item_ids.length === 0 && switch_disabled_item_ids.length > 0` 则 **continue**，跳过「无台账行 / 缺 item / 无 target manifest 路径」三项失败。
+- 246：`traceable` =（有台账行且无 missing）**或**（mapped 空且 disabled 非空）。
+- 267：`partial_requirement_must_map_to_owner_manifest_or_disabled_switch: true`。
+- 330：生成报告散文写「本文只证明每条 partial 需求已经挂到责任组、证据 item_id、模板和目标 manifest 路径」。这是生成物自述，**不是** 238 的实际判定，也不是业务来源。
+- 408–421：`--check` 只比对已有产物并要求 `partial_requirements === traceable_partial_requirements`；当前走 disabled 时该等式仍成立并打印 PASS。check 块内 `writeFileSync=0`。
+
+当前快照 `docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json`：`partial_requirements=8`、`traceable_partial_requirements=8`、`mapped_evidence_items=0`、`mapped_ledger_rows=0`；REQ-17/21/23b/25/32/40/41/44 的 mapped/owners/paths 全为 `[]`，disabled 数 5/2/2/2/4/4/3/5，状态均为 `covered_by_disabled_integration_switches`。`npm run verify:external-evidence-requirement-traceability` 本席现跑 exit 0，输出 `EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS`。这是当前正常路径，不是要两三件不巧才成立的极端猜测。
+
+因此 L96「8 条**均已**追踪到责任组、证据 item_id、模板和目标 manifest 路径」被当前 PASS 证伪：命令绿只证明 8 条都被算作 traceable，其中当前全部是「已记录接入开关关闭」，并没有分派责任组/item/模板/目标 manifest。
+
+对原 B5 两条理由的事实反驳（不改写原报告）：
+
+1. 「L96 与生成器自述同口径」——330 与 L96 犯的是同一句过强保证；330 不能替代 238/246/267 的实际分支。GEN-002 要求文档声称与可执行行为一致，不是与另一段过强散文一致。
+2. 「邻段禁止伪生产闭环」——L149–150 写的是「不能宣称生产闭环 / 不关闭 blocker / mock 不是生产证据」。那是另一命题。邻段不宣称生产闭环，不等于已经追踪到责任组/item/模板/路径。GEN-016 禁止把未发生的完成声明写成当前事实。
+
+grilling 自问：Q1 当前第一次正常跑是否撞上？是，现快照即反例。Q2 是否要把生成器 330/JSON `status=all_mapped_external_evidence_valid` 一并扩进本模块？否。那些字在后续生成产物/工具里，不在 M006 两文件；铁律 6 且不得为已通过项新加闸或扩大到工具整模块。Q3 是否添加？否，见分类。Q4 是否因 Codex 已投 PASS 而同意？否，以上为现读源码与命令。
+
+**分类（冲突 → 细化 → 技术性 → 添加）：** 无与三 HTML 明文矛盾。直接上位：
+
+- `business-enum-quick-reference-v0.1.html:210`「统一原则」原文：「预留接口 + 后台开关默认关 + 不阻塞自研 + 不伪造对账结果」。此 HTML 行号对应锁 ID **BEQR-135**，**不是** 同号 lockID，M006 映射里没有 BEQR-135；此处只作 GEN-017 分类指认，不改冻结映射、不走 LOCK-AMEND。
+- 本模块已映射的 **PGM-066**（HTML `platform-governance-map-for-operations-v0.1.html:951` 起）：「第三方接口资料当前未确定，先做自有系统和对外对接接口示例」；「所有端都必须有后台开关」。
+
+该命令是上述「开关默认关 / 资料未定不得伪造闭环」的工程证据追踪说明，未新创业务实体、枚举、状态、审批、价格或生产放行。按 2.1，能指到 HTML 具体条目则**先归细化**，不进技术性通道。与技术性的具体差异：责任组 / item_id / 模板 / manifest 路径这些字段名本身无 HTML 字面，是该上位原则的工程载体；若把整句只看成 CI 脚本说明书，会落技术性，但那会跳过已有 HTML 上位，违反判定顺序。故接受候选「细化」。无业务发明，不走 2.2。
+
+**缺陷判据：** GEN-002（声称的校验保证大于 238 实际分支）、GEN-016（「均已追踪到…路径」不可从当前快照复现）、GEN-018（类型 4 命令+快照；类型 1 仅用于分类）。工程缺陷是，修复队列是。
+
+**最小修法：** 接受候选精确拟改，只去「均」、加「或已记录对应接入开关关闭」，保留「8 条」与后半「防止 mock/沙箱被误判为生产闭环」：
+
+> `| \`npm run verify:external-evidence-requirement-traceability\` | 校验 8 条外部证据型 partial 需求已追踪到责任组、证据 item_id、模板和目标 manifest 路径，或已记录对应接入开关关闭，防止 mock/沙箱被误判为生产闭环 |`
+
+标题 V0.11→V0.12 同归 047。deploy 保持 V0.07。不修生成器、产物、开关、HTML、主 index。不是关闭证据义务，也不把 disabled 说成生产证据已回填。映射分支仍写责任组/item/模板/路径：当前第一次正常跑撞上的是 disabled 分支被「均已」一口咬死；映射分支的台账行检查（239–241）现未走，不为假设字段空再扩修生成器。保留「8 条」：当前 mappings 与快照均为 8，与 040 已证伪的「40 份/31 个」不同，不机械把准确现数当漂移缺陷。
+
+### 037–046 本批意见
+
+**037/038** 无缺陷登记成立。delivery 其余命令表/标记/失败节/附录与 deploy 全文，两席 B5 均未再报新缺陷。047 是 L96 这一句的具体例外，不回写 037。队列否。同意。
+
+**039–043** B4 双 PASS 已修出队。本席 B5 已用现文复核不回退。本批 raw 无「未修好」证据。队列否。同意。
+
+**044/045/046** 本席 B5 已按三 HTML 原文裁定细化、缺陷否、队列否。本批两 raw 无针对这三句的新事实。不因缩写未出现改判添加，也不用技术性掩盖。原句不改。同意。
+
+### 版本与验证边界（仅双 PASS 后 B3-r2）
+
+同意：一次只改 delivery 标题一行与 L96 一行，完整 before/after 树 diff 仅该两行且归 047。先断言现 L96 原句唯一（本席已得 count=1），再断言拟改与 238/246 两分支一致。验证：`npm run verify:delivery-gates-docs`、`npm run verify:external-evidence-requirement-traceability`（均为 --check/只读；本席本票已跑，exit 0 / `DELIVERY_GATES_DOCS_PASS` 与 `EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS`，这只证明**现文机检仍绿**，不能证明 L96 字义已修）。已有 Markdown 解析/全部 npm 名保持。源为说明性 Markdown，不新造测试文件，不改 generator 或 HTML，不跑父串全链，不审 M007/M008 整模块。B4 双 PASS 才出队，随后 B5 整模块双审。未通过前不写模块 PASS。B3 累计本票保持 1；定稿后的整批修复才记 r2。
+
+### 队列与添加
+
+当前候选队列：047 是；037/038/044/045/046 否；039–043 历史缺陷是、已修、否。本席同意。无添加项，不生成 questions。冲突无。HTML 自身无上报暂停项。
+
+### 结论
+
+全批差集成立：唯一新正式 ID 为 047，分类细化、工程缺陷是、修复队列是；其余 ID 处置按上表。原 B5 PASS 原文保留为历史裁定；本票按 238 实际分支与当前快照独立接受候选，不是沿用 Codex 票，也不是改写本席 B5。本席 B2 **PASS**。须 Codex 本批 B2 PASS 后才能定稿并一次修复 047 的标题+L96；未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M006 IN_PROGRESS，B3=1。

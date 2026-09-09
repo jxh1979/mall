@@ -1,4 +1,27 @@
 # M004 — 01-root-config-and-guidance-02
+版本：V0.02
+
+当前471计划状态：PASS。2026-09-08按160-audit-prompt V0.17在160正本main重新完成B1、B2、B5，未继承旧322同号通过。B5双PASS及四值相等后先写ledger V1.66的M004 PASS，随后才写本收口。
+
+范围：package-lock.json全3321行/114258字节/220条、GEN001—018。源documentVersion V0.02，SHA d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef；HEAD=origin/main=242f487233d028173cb9198eecd079f5d877405c。本次源零改动；历史B3累计1、方案修复2、交付失败0保持。
+
+B1当前两席完整三线PASS。B2同一候选V0.93 SHA2b1e47a4b23bc40a0c90dcd31ede7784fe9d775fa04c72f814147dcfc011be78经两席PASS后定稿findings V0.94，SHAc7fcaaee7d1efc9a3137c2c380defecf2487c56572a42e49a9f80585dc14f1b5；001—007均技术性、当前修复队列否。001—003旧缺陷/已修史保留。007是同一Vitest公告涉及两包，真实audit exit1/moderate2；当前jsdom/react配置无公开mock插件入口，按铁律6仅登记。未宣称公告误报或npm audit全绿。
+
+本次跳B3/B4，完整B5-r1仍重新执行。先Grok实际exit0，根独立完整保存后才读外席。两席B5 PASS，无新增finding/添加/HTML问题/未答闸。
+- modules/M004-b1-self-raw.md 当前V0.07，SHA d6f1742dd5cb128728802b072a7c875c4d5e65b2b2c1cc786eb018feb719824a。
+- modules/M004-b1-grok-raw.md 当前V0.05，SHA c3cf6898805d515b7bfcb49f106d996e056b0b78ed8e51220fa1edec3012a3b1。
+- modules/M004-b5-r1-self-raw.md 当前V0.03，SHA e83796801539f549ac86afcbc236014f70b45104da8a4c4a58aaa267759e46c8；本次独立完整段以旧89089字节后的新增内容及保存时全SHA bc8c0d5beb4b67b5d86900bdd8c7521e94d4afe0f1d8cc2a91310c00eb1ff2ba定位。新增段误沿用历史V0.02，已追加V0.03更正登记，原独立内容与旧前缀不覆盖。
+- modules/M004-b5-r1-grok-raw.md 当前V0.02，SHA 951be0608835cd8ed9df191bee4646cb5aeafcc97dd07b96ec1514116f97ffd1；本次追加L430—935全506行已读，旧95358字节保留。
+
+B5后四值actual/sidecar/ledger/Grok当前最后独占字段均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT=1，锁V0.11未动。统计展示限制（Grok563/582、三元数据行SRI标签、yaml闭合行）均在self接收段标明，不硬称两席每个数字一致，不改写外席原文。
+
+验证：本次原生220条/582边、必需边无invalid、无extraneous/unreachable；根/web镜像一致；116engine相容；28平台约束均optional；217个完整SRI格式和错payload拒绝；ci离线dry-run0，真实未安装；缺react/错版本反例有效。外席另做原生ci副本负例并明确loadVirtual/dry-run的证明边界。当前源与三HTML hash不变。
+未做：真实npm安装、全前后端/数据库/设备/业务UI验证或部署；未下载全部tarball；未用npm10.9.8实跑。全局BSM镜像门禁仍红，不代表全仓/发布已通过。没有提交、推送、发布动作。下一模块M005按当前计划串行开工。
+
+以下完整保留V0.01旧322计划历史收口。其旧版本/旧源SHA/旧公告结果/发布描述均为历史，不覆盖本次结论或授权。
+
+
+# M004 — 01-root-config-and-guidance-02
 版本：V0.01
 
 状态：PASS。首轮全仓审计M004/322；控制V0.17、锁V0.06。B5-r1双席完整报告与四值相等成立后，先写ledger PASS，再写本文件。

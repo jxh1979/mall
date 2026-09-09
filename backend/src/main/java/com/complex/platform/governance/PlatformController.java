@@ -1,4 +1,5 @@
 package com.complex.platform.governance;
+// 文件版本：V0.01
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -41,6 +42,8 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("entity.binding.view");
+        // M009-015：治理读端与写端同法 fail-closed（BSM-072/BSM-074/PGM-027：商户不能看平台全局和其他商户数据）。
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listBusinessEntities(page, size));
     }
 
@@ -59,6 +62,7 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("merchant.profile.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(maskPhonesForUnauthorized(service.listMerchants(includeArchived, merchantType, page, size)));
     }
 
@@ -122,6 +126,7 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("governance.project.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listProjects(page, size));
     }
 
@@ -137,12 +142,14 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("governance.space.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listSpaces(page, size));
     }
 
     @GetMapping("/space-types")
     public ApiResponse<PageResponse<SpaceTypeRecord>> listSpaceTypes() {
         authorizationService.requirePermission("governance.space.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listSpaceTypes());
     }
 
@@ -165,6 +172,7 @@ public class PlatformController {
     @GetMapping("/venue-business-hours")
     public ApiResponse<PageResponse<VenueBusinessHoursRecord>> listVenueBusinessHours() {
         authorizationService.requirePermission("governance.space.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(PageResponse.of(venueBusinessHoursService.list(), 1, 500));
     }
 
@@ -182,6 +190,7 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("entity.binding.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listBusinessEntityBindings(page, size));
     }
 

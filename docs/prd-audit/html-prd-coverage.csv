@@ -649,7 +649,7 @@ BSM-0279,综合体不只是经营，还要做物业服务,docs/building-operatio
 BSM-0280,创建工单并分类,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0281,ORPHANED,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,STALE,,,HTML 原文已被裁决取代，承接结论按旧文作出，仅作历史留痕,,,05-realestate-leasing-building-supply
 BSM-0282,派单到具体人员或班组，记录处理过程、用料和结果,docs/building-operations-prd-v1.0.md,§3 维保工单·工单用料与费用承担方,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0283,处理后回访客人或商户，验收合格才关闭,docs/building-operations-prd-v1.0.md,§3 维保工单·完成按 acceptance_by 分流与验收关闭,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0283,处理后的回访、验收和关闭，按下述已确认的工单类型分支规则执行,docs/building-operations-prd-v1.0.md,§3 维保工单·完成按 acceptance_by 分流与验收关闭,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0284,按响应时限和处理时限统计时效，超时自动升级通知主管,docs/building-operations-prd-v1.0.md,§3 维保工单·SLA 时限策略与超期标记,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0285,记录满意度评价，作为服务质量和商户表现的依据,docs/building-operations-prd-v1.0.md,§3 维保工单·满意度评价 satisfaction 1-5,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0286,响应/处理时限按「工单类型×优先级」矩阵后台配置,docs/building-operations-prd-v1.0.md,3. 维保工单（V166）,FULL,,,,,,05-realestate-leasing-building-supply

@@ -1,5 +1,9 @@
 # 审计执行说明
 
+版本：V0.02
+
+本次唯一审核标准为操作员指定的 `160-audit-prompt.md V0.17`。本轮复核模块归属，同时审查操作员明确纳入的未发布员工材料；历史 87 模块合同及 Claude/Fable 流程只作历史记录。
+
 ## 1. 固定边界
 
 - 正本与唯一写入工作区：`/home/james/complex-management` 的 `main` 主工作区。
@@ -15,7 +19,7 @@ Codex 已在开工前按实际目录核验：
 - superpowers：`using-superpowers`、`brainstorming`、`writing-plans`、`systematic-debugging`、`test-driven-development`、`requesting-code-review`、`receiving-code-review`、`verification-before-completion` 均存在于 `C:\Users\jxh1\.codex\plugins\cache\claude-plugins-official\superpowers\6.3.0\skills\`。
 - mattpocock：`grilling`、`grill-me`、`codebase-design`、`diagnosing-bugs`、`tdd`、`resolving-merge-conflicts`、`writing-for-agents` 均存在于 `C:\Users\jxh1\.agents\skills\`；可选的 `git-guardrails-claude-code`、`batch-grill-me`、`ubiquitous-language` 也存在。
 - ponytail：`ponytail` 与 `ponytail-review` 均存在于 `C:\Users\jxh1\.codex\plugins\cache\ponytail\ponytail\4.9.0\skills\`；`i-have-adhd` 与 `ponytail` 输出/实现模式由当前会话规则启用。
-- 每到对应节点，Codex 先重新读取该技能实际 `SKILL.md` 全文，再按提示词 §6 的收窄口径使用。Grok 在方案复核时独立自检技能并把缺口写进结论；不得用未核实技能名充数。
+- 首次使用对应技能时，Codex 先读取其实际 `SKILL.md` 全文，再按提示词 §6 的收窄口径使用。Grok 在方案复核时独立自检技能并把缺口写进结论；不得用未核实技能名充数。
 
 明确不用的技能及原因以提示词 §6 为唯一说明，不在本文件另造替代流程。
 
@@ -41,7 +45,7 @@ Codex 已在开工前按实际目录核验：
 
 按固定顺序判定：冲突 → 细化 → 技术性 → 添加。
 
-每条临时 finding 必含：席位临时编号、`文件:行号`、复现命令及输出或 HTML 原文、2.1 分类、2.3 依据类型、引用的冻结判据 ID、工程缺陷是否成立。技术性项另写“无业务发明”的理由；添加项立即走 `questions/<ID>.md` 人闸。
+每条临时 finding 必含：席位临时编号、`文件:行号`、复现命令及输出或 HTML 原文、2.1 分类、2.3 依据类型、引用的冻结判据 ID、工程缺陷是否成立。技术性项另写“无业务发明”的理由；添加项在 B1/B4/B5 的整批完整报告收齐后进入 B2，再按提示词 2.2 写 `questions/<ID>.md` 并等待实际答复；不在审计中途停止去修复。
 
 只有 `criteria-lock.md` 中 HTML 派生 ID 或 `general` ID 可支撑 finding。锁外主张不进队列，必须走 `LOCK-AMEND` 五步。
 
@@ -53,7 +57,7 @@ Codex 已在开工前按实际目录核验：
 - 配置、CI、脚本与 OpenAPI：先用原生解析器/现有仓库门禁，再在可丢弃或无副作用上下文运行真实入口；不得部署生产环境。
 - `OVERSIZE-SINGLE-FILE`：允许按结构段分批阅读和执行检查，但 raw 必须列出全文件覆盖表，不能只抽样后宣称整文件 PASS。
 
-任何命令因环境失败时，原命令原样重跑并累计“子代理失败重跑次数”；失败本身不是 finding 或 PASS。
+只有 Grok 交付失败才原样重跑同一条调用命令，并累计“子代理失败重跑次数”；适配器故障先修适配器。普通验证命令失败记录真实原因、exit code 与输出，不混入 Grok 重跑次数，也不折算为业务 finding 或 PASS。
 
 ## 6. Grok 无头调用
 
@@ -67,27 +71,31 @@ Grok 角色只读业务代码与计划；除提示词指定的 `*-grok-raw.md` �
 
 `CRITERIA-LOCK-SHA256: <64 位小写 hex>`
 
-A2/LOCK-AMEND 的 Grok 回执保留结论全文；B1/B4/B5 的 Grok 回执只保留落盘路径与 exit code，findings 正文只在双方各自 raw 落盘后读取。
+A2/LOCK-AMEND 直接读取 CLI JSON，操作员回执附结论全文、独算哈希及 exit code；原始 JSON 不落审计产物。B1/B2/B4/B5 经提示词 §0 的适配器只返回指定报告路径与真实 exit code，原始 stdout/stderr 只在进程内缓冲丢弃。B1/B4/B5 的 Grok 正文只在双方本次完整 raw 落盘后读取，Codex self raw 第一行同样写独算哈希。Grok 运行期间每 5 分钟检查一次交付，不设运行时长上限。
 
 ## 7. 双席独立落盘
 
-B1、B4、B5 固定顺序：
+B1、B4、B5 固定顺序：每席必须把本次全部范围审完、全部问题收齐再结束本阶段；两席本次完整报告落齐后才统一判断，禁止发现一条就停下来修复。
 
-1. 先启动 Grok；要求写指定 grok raw，stdout 仅路径与 exit code。
+1. 先启动 Grok；要求写指定 grok raw，只向 Codex 暴露适配后的路径与 exit code。
 2. Grok 完成后，Codex 在不读取该 raw 的前提下独立审计并写 self raw。
 3. 两份都存在且非空后，Codex 才读取 Grok raw并做合取判定。
 
-B2 候选台账由 Codex 先写，Grok 对两份触发 raw 与候选台账做差集；两席分别把 B2 PASS/FAIL 追加到自己的 B1 raw。任一席 FAIL 都不得定稿或前进。
+B2 候选台账由 Codex 先写，Grok 对两份触发 raw 与候选台账做差集；两席分别把 B2 PASS/FAIL 及本批输入 raw 路径追加到自己的 B1 raw；B2 追加段不得写 `CRITERIA-LOCK-SHA256:` 行。任一席 FAIL 都不得定稿或前进。
 
 ## 8. B1–B5 与回退
 
 - B1：首次把模块从 `PENDING` 改为 `IN_PROGRESS`，两席三线全审；B1 后做四值哈希校验。
 - B2：分配永久 ID、完成四分类与修复队列归属；有添加项立即 `BLOCKED-ASK`。修复队列为空时跳过 B3/B4，仍须 B5。
-- B3：只修当前仍归属“是”的定稿 ID；先写最小失败验证，再作最懒可行修复。B3 前后各冻结 tree id、全量 binary diff并做四值校验。
+- B3：只修当前仍归属“是”的定稿 ID；可执行行为变更先写归属该 ID 的最小失败测试；文档、配置、纯 SQL、HTML 内容修复不强制造测试，采用提示词 2.3 类型 4 的最小命令举证；再作最小修复。B3 前后各冻结 tree id、全量 binary diff并做四值校验。
 - B4：两席只审 before/after tree diff，每块逐行绑定 finding ID；任一无 ID 行使整轮 FAIL 并回滚。
 - B5：两席重审整个模块。双 PASS 且 B5 后四值全等时，先把 ledger 状态改 `PASS`，再写模块收口文件。
 
-B4/B5 出现旧 finding 未修好时回 B3；新缺陷先回 B2 定稿并分配 ID。每模块最多执行 B3 三次。
+B4/B5 收齐本次整批两席意见后统一路由：只要有一条没有定稿 ID 或不在修复队列，整批先回 B2；全部已有 ID 且仍属修复队列时才整批回 B3，禁止拆批先修。每模块最多执行 B3 三次；第 3 次后仍完成对应 B4/B5，仍 FAIL 则记录 `BLOCKED-3ROUNDS` 并停止，等待操作员新指令。
+
+B3 前后树 ID 使用独立临时索引：`GIT_INDEX_FILE="$(mktemp -d)/index"`，在同一环境下执行 `git add -A && git write-tree`，不得把 mktemp 已建空文件当索引。临时索引不替换主索引；完整 binary diff 按两树取得。
+
+B4/B5 文件名包含 B3 轮次；跳过 B3 时 B5 使用 r0；同轮重新审查追加本次完整报告，不覆盖旧报告。阶段 A 初始方案修复上限 3，第三次修复后仍未双 PASS 则记 `BLOCKED-PLAN-ROUNDS` 并停止；阶段 B 触发的 LOCK-AMEND 按提示词 §5 单独累计，不能混用这两个既有计数。
 
 ## 9. PASS / FAIL 口径
 
@@ -100,3 +108,9 @@ B4/B5 出现旧 finding 未修好时回 B3；新缺陷先回 B2 定稿并分配 
 B1 后、B5 后及每轮 B3 前后，按提示词 §5 闸 1 比较实算、sidecar、ledger、当前精确 Grok raw 四值并把四值写进操作员回执。任意不等立即 `BLOCKED-GLOBAL-CLOSE`，不得自行重算对齐。
 
 全部模块 PASS 后复跑三条 `comm`、四值哈希、ledger 全绿、findings 无待修、questions 全部精确答复；任一失败即 `BLOCKED-GLOBAL-CLOSE`。
+
+## 11. 本轮计划恢复与未发布输入
+
+正式 main 模块与旧编号的完整文件交叉索引见 `plan/modules.md`。模块号必须连同计划、名称和文件列表识别；不能按同号继承旧 87 模块的 PASS。未发布员工材料按同文件末尾分段表完整审查，版本和路径须写入对应原始报告，不能把这些输入副本冒称 main 源码或已发布修复。
+
+本次冻结摘录与映射修订严格走提示词 §5 闸 2 的 LOCK-AMEND：先在 ledger 登记全部变更 ID 并保留旧哈希；修改定义与映射、生成 sidecar；两席复核完整 diff，Grok 反向应用 diff 的旧副本必须与 ledger 旧基准相等；双 PASS 后才更新 ledger 基准及计数，并按原规则重开最早受影响模块。阶段 A 的历史方案修复次数保留，不用于替代 LOCK-AMEND 计数。

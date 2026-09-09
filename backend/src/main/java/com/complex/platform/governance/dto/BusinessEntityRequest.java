@@ -1,4 +1,5 @@
 package com.complex.platform.governance.dto;
+// 文件版本：V0.01
 
 import java.util.List;
 
@@ -8,7 +9,6 @@ public record BusinessEntityRequest(
         List<String> evidenceAttachmentIds,
         String entityName,
         String entityRole,
-        String parentEntityId,
         String unifiedSocialCreditCode,
         String legalRepresentative,
         String bankAccountRef,

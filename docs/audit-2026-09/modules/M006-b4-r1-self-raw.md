@@ -6847,3 +6847,209 @@ with tempfile.TemporaryDirectory(prefix="m006-b3-check-",dir=".scratch") as d:
   "output": "JAVAC_EXIT 0 SOURCES 69\n Note: backend/src/main/java/com/complex/platform/access/staff/StaffService.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\nCARD_FROZEN_MODE=merchant_prepaid GATEWAY_REQUEST_MODE=platform_collect\nFAIL b4RechargeAfterMerchantConfigChangeMustUseTheCardsFrozenFundMode: org.opentest4j.AssertionFailedError: \nexpected: \"merchant_prepaid\"\n but was: \"platform_collect\"\nRESULT 0 PASS / 1 FAIL\n Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3\nWARNING: A Java agent has been loaded dynamically (/home/james/.m2/repository/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar)\nWARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning\nWARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information\nWARNING: Dynamic loading of agents will be disallowed by default in a future release\nOpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended\n\n"
 }
 ```
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+## V0.02 — 当前471计划 M006 B4-r1 Codex完整独立复审
+
+步骤B4，M006/471，IN_PROGRESS，B3已执行1次。Grok本次B4已真实exit0，仅见适配器路径；写本次完整self前未读本次Grok报告、CLI输出或工具过程。旧同号B4只以bytes/hash保留，不采旧结论。
+唯一输入diff：git diff --no-ext-diff a8e87c21885edee2d43cc7dc23dc9a89a0eaea4c df950e5c62f91766133763dfd0660ff41ebf9fdb；先取不带pathspec完整diff和name-only。范围实际只有两文档，没有以HEAD空diff代替。
+唯一归因来源：findings.md V1.02的当前M006 B2双PASS定稿与候选；当前归属是039/040/041/042/043，否037/038/044/045/046。两席B2已落齐；本复审不借旧B1 PASS替代。
+技能沿用已实读requesting-code-review/receiving-code-review、verification-before-completion、grilling与ponytail-review的V0.17收窄方法；只Grok外审，不派子代理、不加文件/测试框架。
+
+### 完整逐行归因
+
+| 文件/完整diff块 | 归属ID | 实际审计结论 |
+|---|---|---|
+| delivery标题V0.1→V0.11 | 039 | 按B2双PASS版本规范化后递增，仅自身标题 |
+| delivery原L63及首表全部顺序列/序号删除、断行两命令合并、父链docs生成声称去除、L77混语残留更正 | 039 | 删除第二套错误编排，保留主要索引及原npm入口；每个被改表行的列删除都归039 |
+| 首表原L86/L88两处40份、原L91的31个 | 040（同表列删亦039） | 改当前全部/当前P0，实际kit15/P0 13，不发明业务数量 |
+| delivery原L117→现L116的上线要求句 | 043 | 直接重述BSM116–119既有强密码/U盘托管留痕/自动环境安装包和业务教程，未声称已完成 |
+| deploy标题V0.06→V0.07和L45的gh字段 | 041 | 各bool/int用-F，restrictions=null，contexts字符串保持；只改说明命令 |
+| deploy L36执行动词 | 042 | 与固定15项数组直接执行一致，不再误称调用父串 |
+
+不存在无法归因的行。证明不仅是人工表：对before-tree两文件在内存按这五个ID的完整限定替换重建after，实算结果分别与after-tree blob和当前工作区全文相等；全diff路径集合也恰等于两文件。044/045/046及其他源行未修改。三HTML、main索引SHA均与B3前一致，分支main。审计报告更新不在已固化B3 before/after两个tree差异中。
+
+### 修复正确性与三线核查
+
+- 第一性原理：去掉错误表序号/数量和错误命令类型后，维护人员得到可复核入口；不重建49行第二套流程。生产要求直接来自三HTML，不增加闸口/角色/判据。
+- 顺从式：039–043逐项核定稿边界及GEN-001/002/008/011/013/016/018、BSM116–119；其余GEN适用工程正确性/敏感数据/失败可见边界无本diff新缺陷。044–046已B2独立裁定细化且保持原句；不把其B1旧添加意见当待答。
+- 对抗式：真实Markdown解析两张表47行（含表头）均2列且无空格单元，旧npm引用无丢失，所有引用在package scripts；两条command可分别解析。现文件不含旧40份/31个。真实gh程序仅替endpoint到127.0.0.1并设置假token，捕获bool/int/null正确，无向GitHub发PUT。现有docs校验重新exit0；不以其PASS单独证明表格正确。
+- 源代码未执行新业务、未建新schema/权限/状态，无需为文档新增TDD文件。未运行父交付全链/部署/合并/push，未修改其它模块工具。表格取证和官方gh/REST类型已直接核过；以下是本次Grok真实结束后重新执行的独立输出。
+- 当前两文档共206行（158+48），冻结计划207是审前159+48；一处断行修正少1行，不改冻结scope/lock。
+
+### 本次独立实测原输出（含完整未过滤diff）
+
+```text
+FULL_CHANGED_PATHS docs/delivery-readiness-gates-v0.1.md
+docs/deploy-and-change-flow-v0.1.md
+
+FULL_UNFILTERED_DIFF
+diff --git a/docs/delivery-readiness-gates-v0.1.md b/docs/delivery-readiness-gates-v0.1.md
+index 0fbd20a0..88a00e9a 100644
+--- a/docs/delivery-readiness-gates-v0.1.md
++++ b/docs/delivery-readiness-gates-v0.1.md
+@@ -1,4 +1,4 @@
+-# 交付总闸口与上线准入验证 V0.1
++# 交付总闸口与上线准入验证 V0.11
+ 
+ ## 1. 定位
+ 
+@@ -60,49 +60,48 @@
+ npm run verify:delivery-gates
+ ```
+ 
+-该命令应保持轻量，不直接包含后端完整测试、Web 构建、Android 构建或生产发布动作。它串联以下闸口：
+-
+-| 顺序 | 命令 | 目的 |
+-|---|---|---|
+-| 1 | `npm run verify:delivery-gates-docs` | 校验本文档、入口文档、交付包清单和脚本是否互相引用 |
+-| 2 | `npm run verify:coding-host-protection` | 确认正式代码只在 192.168.88.160 的标准仓库执行 |
+-| 3 | `npm run verify:external-dependency-gates` | 阻断未确定供应商前的真实机器人、视频、设备控制和独立 Python AI 服务伪实现 |
+-| 4 | `npm run verify:t3-coding-package` | 校验 T3 编码包、供应商闸口和只读/后置边界仍闭合 |
+-| 5 | `npm run verify:t3b-supplier-mock-kit` | 校验供应商 mock kit 仍不包含真实密钥、生产控制或越权闭环 |
+-| 6 | `npm run verify:t3d-local-llm-ai-quality` | 校验 160 本地大模型质检仍为 loopback-only、脱敏、人工复核建议 |
+-| 7 | `npm run verify:p0-contract` | 校验 P0 OpenAPI、示例、operation 矩阵、闭环附录和客户端契约 |
+-| 8 | `npm run verify:security-baseline` | 校验正式安全基线输入和生产文档访问策略 |
+-| 9 | `npm run verify:production-readiness-evidence` | 校验生产前置证据、台账状态和安全基线 evidence 是否一致 |
+-| 10 | `npm run verify:production-blockers` | 校验生产阻断清单与台账、findings register 同步 |
+-| 11 | `npm run verify:production-owner-actions` | 校验生产阻断项已按责任人拆成可执行动作包，且动作包由阻断清单自动生成?requires OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS and manifest_paths |
+-| 12 | `npm run verify:production-evidence-submission-kit` | 校验证据提交包由责任人动作包自动生成，且仍保持等待真实证据状态 |
+-| 13 | `npm run verify:production-evidence-manifest-templates` | 校验 manifest 填写模板齐全，且默认 blocked、仅为模板不是真实证据 |
+-| 14 | `npm run verify:production-evidence-owner-guides` | 校验责任组回填说明包齐全，且只做分派说明不关闭阻断 |
+-| 15 | `npm run verify:production-evidence-submission-status` | 扫描实际 manifest 提交状态，缺失为 awaiting，格式错误或明文密钥为阻断 |
+-| 16 | `npm run verify:production-evidence-submissions-guard` | 校验证据提交目录只允许 manifest 入库，原始证据必须外部留链 |
+-| 17 | `npm run verify:production-evidence-negative-fixtures` | 使用临时负向 manifest 校验证据状态看板会拦截同人提交复核、本地路径、非生产 credential_ref、错绑 item、敏感 URL、明文密钥和非 passed 结果 |
+-| 18 | `npm run verify:production-evidence-positive-fixtures` | 使用临时目录正向 manifest 证明合规生产证据提交会被识别为 valid_submission，且不污染真实 submissions |
+-| 19 | `npm run verify:production-evidence-positive-propagation-fixtures` | 使用临时目录验证合规 manifest 能从提交状态传播到生产闭环缺口报告和闭环当前态，同时不误宣称生产上线就绪 |
+-| 20 | `npm run verify:production-ready-no-go-fixtures` | 使用临时目录验证 40 份生产 manifest 全有效且 NAS 模拟 ready 时，外部证据 partial 需求仍必须阻断生产上线 ready 声明 |
+-| 21 | `npm run verify:production-blocker-register-no-go-fixtures` | 使用临时目录验证当生产 manifest、NAS 和外部证据都模拟通过时，生产 blocker register 未清零仍必须阻断生产上线 ready 声明 |
+-| 22 | `npm run verify:production-ready-positive-fixtures` | 使用临时目录验证当 40 份生产 manifest、NAS、外部证据和 blocker register 全部满足时，闭环当前态必须能判定生产 ready=true |
+-| 23 | `npm run verify:production-evidence-backfill-priority` | 校验证据回填优先级看板齐全，按责任组和 P0 缺口排序且不关闭阻断 |
+-| 24 | `npm run verify:production-evidence-backfill-execution-ledger` | 校验证据回填执行台账齐全，一行一个待补 manifest 且不关闭阻断 |
+-| 25 | `npm run verify:production-evidence-p0-quickstart` | 校验 P0-only 生产证据快速回填快照齐全，31 个 P0 manifest 已按责任组和第一动作可派发 |
+-| 26 | `npm run verify:production-evidence-owner-execution-packets
+-npm run verify:production-evidence-crosslinks` | 校验按责任组生成的一站式生产证据执行包齐全，模板复制命令不覆盖已提交 manifest，且不包含明文密钥或原始证据 |
+-| 27 | `npm run verify:production-evidence-draft-prep` | 校验生产证据 manifest 草稿准备器默认 dry-run、拒绝越界写入和覆盖已有 manifest，且不会关闭生产阻断 |
+-| 28 | `npm run verify:production-evidence-draft-prep-fixtures` | 在临时目录实测草稿准备器 dry-run 不写文件、execute 复制模板、再次 execute 不覆盖已有 manifest，并拒绝无选择器的 broad execute |
+-| 29 | `npm run docs:production-closure-gap-reports` + `npm run verify:production-closure-gap-reports` | 从当前运行态、Semgrep、NAS 当前状态、生产证据提交状态和外部证据追踪重新生成并校验生产闭环缺口总报告，防止旧报告或手改报告伪关闭生产证据 |
+-| 33 | `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |
+-| 33 | `npm run verify:nas-it-handoff` | 校验 NAS IT 受控挂载交接包、默认 dry-run 脚本、manifest 映射和无明文密钥边界 |
+-| 33 | `npm run verify:nas-diagnostics` | 校验 NAS 只读诊断报告与当前网络、445 端口、CIFS 挂载和 preflight 根因一致，不关闭生产 manifest |
+-| 33 | `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
+-| 33 | `npm run verify:final-closed-loop-audit` | 校验最终闭环验收报告与需求矩阵、当前代码行数、Semgrep 摘要和生产证据状态一致，防止最终报告漂移 |
+-| 33 | `npm run verify:closed-loop-current-state` | 校验闭环当前态快照已纳入需求矩阵、安全扫描、生产证据、NAS 和运行时验收证据 |
+-| 33 | `npm run verify:runtime-acceptance-evidence` | 校验运行时验收证据快照齐全，覆盖后端测试、Web 构建、UI、真实后端 UI 和生产边界声明；并将证据绑定到生成时的源码指纹与生成时效——源码已变更或证据超期（默认 30 天，`RUNTIME_EVIDENCE_MAX_AGE_DAYS` 可调）即判为陈旧失败，杜绝陈旧证据自欺通过 |
+-| 33 | `npm run verify:ui-experience-acceptance` | 校验前端体验验收报告由运行态证据、Playwright spec 和截图基线生成，防止旧报告漂移 |
+-| 34 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
++该命令应保持轻量，不直接包含后端完整测试、Web 构建、Android 构建或生产发布动作。主要闸口如下，完整清单与执行顺序以 `package.json` 的 `verify:delivery-gates` 脚本为准：
++
++| 命令 | 目的 |
++|---|---|
++| `npm run verify:delivery-gates-docs` | 校验本文档、入口文档、交付包清单和脚本是否互相引用 |
++| `npm run verify:coding-host-protection` | 确认正式代码只在 192.168.88.160 的标准仓库执行 |
++| `npm run verify:external-dependency-gates` | 阻断未确定供应商前的真实机器人、视频、设备控制和独立 Python AI 服务伪实现 |
++| `npm run verify:t3-coding-package` | 校验 T3 编码包、供应商闸口和只读/后置边界仍闭合 |
++| `npm run verify:t3b-supplier-mock-kit` | 校验供应商 mock kit 仍不包含真实密钥、生产控制或越权闭环 |
++| `npm run verify:t3d-local-llm-ai-quality` | 校验 160 本地大模型质检仍为 loopback-only、脱敏、人工复核建议 |
++| `npm run verify:p0-contract` | 校验 P0 OpenAPI、示例、operation 矩阵、闭环附录和客户端契约 |
++| `npm run verify:security-baseline` | 校验正式安全基线输入和生产文档访问策略 |
++| `npm run verify:production-readiness-evidence` | 校验生产前置证据、台账状态和安全基线 evidence 是否一致 |
++| `npm run verify:production-blockers` | 校验生产阻断清单与台账、findings register 同步 |
++| `npm run verify:production-owner-actions` | 校验生产阻断项已按责任人拆成可执行动作包，且动作包由阻断清单自动生成并关联证据 manifest 路径 |
++| `npm run verify:production-evidence-submission-kit` | 校验证据提交包由责任人动作包自动生成，且仍保持等待真实证据状态 |
++| `npm run verify:production-evidence-manifest-templates` | 校验 manifest 填写模板齐全，且默认 blocked、仅为模板不是真实证据 |
++| `npm run verify:production-evidence-owner-guides` | 校验责任组回填说明包齐全，且只做分派说明不关闭阻断 |
++| `npm run verify:production-evidence-submission-status` | 扫描实际 manifest 提交状态，缺失为 awaiting，格式错误或明文密钥为阻断 |
++| `npm run verify:production-evidence-submissions-guard` | 校验证据提交目录只允许 manifest 入库，原始证据必须外部留链 |
++| `npm run verify:production-evidence-negative-fixtures` | 使用临时负向 manifest 校验证据状态看板会拦截同人提交复核、本地路径、非生产 credential_ref、错绑 item、敏感 URL、明文密钥和非 passed 结果 |
++| `npm run verify:production-evidence-positive-fixtures` | 使用临时目录正向 manifest 证明合规生产证据提交会被识别为 valid_submission，且不污染真实 submissions |
++| `npm run verify:production-evidence-positive-propagation-fixtures` | 使用临时目录验证合规 manifest 能从提交状态传播到生产闭环缺口报告和闭环当前态，同时不误宣称生产上线就绪 |
++| `npm run verify:production-ready-no-go-fixtures` | 使用临时目录验证 当前全部生产 manifest 全有效且 NAS 模拟 ready 时，外部证据 partial 需求仍必须阻断生产上线 ready 声明 |
++| `npm run verify:production-blocker-register-no-go-fixtures` | 使用临时目录验证当生产 manifest、NAS 和外部证据都模拟通过时，生产 blocker register 未清零仍必须阻断生产上线 ready 声明 |
++| `npm run verify:production-ready-positive-fixtures` | 使用临时目录验证当 当前全部生产 manifest、NAS、外部证据和 blocker register 全部满足时，闭环当前态必须能判定生产 ready=true |
++| `npm run verify:production-evidence-backfill-priority` | 校验证据回填优先级看板齐全，按责任组和 P0 缺口排序且不关闭阻断 |
++| `npm run verify:production-evidence-backfill-execution-ledger` | 校验证据回填执行台账齐全，一行一个待补 manifest 且不关闭阻断 |
++| `npm run verify:production-evidence-p0-quickstart` | 校验 P0-only 生产证据快速回填快照齐全，当前 P0 manifest 已按责任组和第一动作可派发 |
++| `npm run verify:production-evidence-owner-execution-packets`、`npm run verify:production-evidence-crosslinks` | 校验按责任组生成的一站式生产证据执行包齐全、证据交叉引用一致，模板复制命令不覆盖已提交 manifest，且不包含明文密钥或原始证据 |
++| `npm run verify:production-evidence-draft-prep` | 校验生产证据 manifest 草稿准备器默认 dry-run、拒绝越界写入和覆盖已有 manifest，且不会关闭生产阻断 |
++| `npm run verify:production-evidence-draft-prep-fixtures` | 在临时目录实测草稿准备器 dry-run 不写文件、execute 复制模板、再次 execute 不覆盖已有 manifest，并拒绝无选择器的 broad execute |
++| `npm run verify:production-closure-gap-reports` | 从当前运行态、Semgrep、NAS 当前状态、生产证据提交状态和外部证据追踪校验生产闭环缺口总报告，防止旧报告或手改报告伪关闭生产证据 |
++| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |
++| `npm run verify:nas-it-handoff` | 校验 NAS IT 受控挂载交接包、默认 dry-run 脚本、manifest 映射和无明文密钥边界 |
++| `npm run verify:nas-diagnostics` | 校验 NAS 只读诊断报告与当前网络、445 端口、CIFS 挂载和 preflight 根因一致，不关闭生产 manifest |
++| `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
++| `npm run verify:final-closed-loop-audit` | 校验最终闭环验收报告与需求矩阵、当前代码行数、Semgrep 摘要和生产证据状态一致，防止最终报告漂移 |
++| `npm run verify:closed-loop-current-state` | 校验闭环当前态快照已纳入需求矩阵、安全扫描、生产证据、NAS 和运行时验收证据 |
++| `npm run verify:runtime-acceptance-evidence` | 校验运行时验收证据快照齐全，覆盖后端测试、Web 构建、UI、真实后端 UI 和生产边界声明；并将证据绑定到生成时的源码指纹与生成时效——源码已变更或证据超期（默认 30 天，`RUNTIME_EVIDENCE_MAX_AGE_DAYS` 可调）即判为陈旧失败，杜绝陈旧证据自欺通过 |
++| `npm run verify:ui-experience-acceptance` | 校验前端体验验收报告由运行态证据、Playwright spec 和截图基线生成，防止旧报告漂移 |
++| `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
+ 
+ ## 3. 交付阻断规则
+ 
+@@ -114,7 +113,7 @@ npm run verify:production-evidence-crosslinks` | 校验按责任组生成的一
+ 
+ ## 4. 与完整验证的关系
+ 
+-`npm run verify:delivery-gates` 是交付准入，不是完整上线验收。正式上线仍需按场景补跑：
++`npm run verify:delivery-gates` 是交付准入，不是完整上线验收。正式上线还必须按业务系统地图“系统交付与上线”完成强密码更换、U 盘密钥托管及相关留痕，并交付能自动识别环境的安装包和业务语言教程；以下工程验证不能替代这些要求。按场景补跑：
+ 
+ | 场景 | 追加验证 |
+ |---|---|
+diff --git a/docs/deploy-and-change-flow-v0.1.md b/docs/deploy-and-change-flow-v0.1.md
+index c57db457..febbed4b 100644
+--- a/docs/deploy-and-change-flow-v0.1.md
++++ b/docs/deploy-and-change-flow-v0.1.md
+@@ -1,4 +1,4 @@
+-# 部署与变更流程 V0.06（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并）
++# 部署与变更流程 V0.07（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并）
+ 
+ ## 为什么改
+ 此前:AI 直推 main、部署只跑后端测试、治理门禁不 gate 部署 → 曾带着红门禁(scope 登记/安全基线/后台矩阵漂移)上生产。补三道真门禁。
+@@ -33,7 +33,7 @@ CI 用 `HTML_GATES_BASE` 给两道 HTML 差异门禁传入事件基线：PR 使
+ ## 直推 main / 无门禁部署 —— 已做到哪、还差你做什么(2026-07-06 更新)
+ 
+ **已在仓内做实的(我能做的)**:
+-1. 部署硬闸:`complex-deploy-api/web.sh` 构建前跑 `verify:predeploy`,红即 exit 1。
++1. 部署硬闸:`complex-deploy-api/web.sh` 构建前逐项执行固定的预部署门禁清单,红即 exit 1。
+ 2. **部署脚本直接跑权威门禁数组**(codex 复核后从"解析 package.json"改为此):部署脚本内硬编码必需门禁列表并逐个 `npm run`,**不解析也不信任 package.json 的 verify:predeploy 串**。因此"把 verify:predeploy 抽空/设 `true`/惰性化(如 `\"true # 门禁名...\"`)"对部署无效——对抗自测证实:篡改后部署仍跑全部门禁。**仍非仓外强制**:能改本部署脚本(需 .160 shell)或 `tools/verify-*.mjs`(让门禁真跑但断言变 no-op)者仍可绕过。
+ 3. pre-push 钩子禁直推 main;`.github/CODEOWNERS` 标记强制点文件。
+ 4. GitHub Actions 门禁(`.github/workflows/predeploy-gates.yml`,✅已激活):PR 到 main 时 GitHub 侧独立跑 verify:predeploy,首跑已 SUCCESS。因私有免费版无法设 required check,当前为可见信号(非硬阻断合并)。
+@@ -42,7 +42,7 @@ CI 用 `HTML_GATES_BASE` 给两道 HTML 差异门禁传入事件基线：PR 使
+ - ~~激活 GitHub Actions 门禁~~(2026-07-06 已完成;定义维护见上节,不再用 `ops/ci` 模板覆盖生效 workflow)。
+ - **启用受保护分支 + required status check**(这才是"仓外强制",能真正挡直推/未过门禁的合并):
+   需 GitHub Pro 或把仓库设为 Public(私有免费版 `branches/*/protection` 返回 403)。开通后:
+-  `gh api -X PUT repos/jxh1979/mall/branches/main/protection -f required_status_checks[strict]=true -f required_status_checks[contexts][]=predeploy -f enforce_admins=true -f required_pull_request_reviews[required_approving_review_count]=1 -f restrictions=`(按需调参)。
++  `gh api -X PUT repos/jxh1979/mall/branches/main/protection -F 'required_status_checks[strict]=true' -f 'required_status_checks[contexts][]=predeploy' -F enforce_admins=true -F 'required_pull_request_reviews[required_approving_review_count]=1' -F restrictions=null`(按需调参)。
+ - **独立 DB 账号/实例隔离**:当前 complex_test 与生产同实例同账号;真隔离需另建只连 complex_test、对生产 complex 无权限的账号(需 DB 管理权)。
+ 
+ **诚实结论**:仓内我把篡改门槛尽量抬高了,但"能改 .160 部署脚本 / 能合 main 的主体仍能绕过"这一层,只有上面三条(受保护 CI、独立权限、人类审批)能真正闭合——它们都在仓外、需你出面。
+
+EXACT_APPROVED_RECONSTRUCTION docs/delivery-readiness-gates-v0.1.md 15715 7c120e8ed537189c8e4abf898be075d81ff3d3c6bc6a245b46380f0e54f37089
+TABLE_ROWS 47 WIDTHS [2]
+NPM_REFERENCE_CHECKS PASS
+EXACT_APPROVED_RECONSTRUCTION docs/deploy-and-change-flow-v0.1.md 7117 543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1
+DOC_GATE_EXIT 0 
+> entertainment-complex-management@0.1.0 verify:delivery-gates-docs
+> node tools/verify-delivery-gates.mjs
+
+DELIVERY_GATES_DOCS_PASS
+ 
+LOOPBACK_ONLY_GH_EXAMPLE_EXIT 0 STDOUT {} STDERR 
+CAPTURED_PAYLOAD [{"enforce_admins": true, "required_pull_request_reviews": {"required_approving_review_count": 1}, "required_status_checks": {"contexts": ["predeploy"], "strict": true}, "restrictions": null}]
+API_SCHEMA_TYPES_VALID True
+CURRENT_SHA docs/business-enum-quick-reference-v0.1.html 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66
+CURRENT_SHA docs/business-system-map-for-operations-v0.1.html a7f7b7a30ace54d2534a8cedbd8f3b6d20fdd7a89d3515b18e194d4878ad66fa
+CURRENT_SHA docs/platform-governance-map-for-operations-v0.1.html c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c
+CURRENT_SHA docs/audit-2026-09/plan/criteria-lock.md b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+CURRENT_BRANCH main
+MAIN_INDEX_SHA ae1dfbf11bec123e6a662097d16de9bb7088fe8bc50d1e9ae4a78da24e90022c
+
+```
+
+B4_SELF_REPAIR_VERDICT: PASS
+B4_SELF_SCOPE_VERDICT: PASS
+B4_SELF_VERDICT: PASS
+
+无本次新finding。只有本席票，未读取乙席前不宣称B4双PASS；即使B4双PASS仍须B5整模块。修复次数保持1，尚未模块PASS。

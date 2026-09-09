@@ -461,3 +461,178 @@ ALL_EXIT=0
 - 无待补项、无未答复 questions、无 HTML 改动、无 LOCK-AMEND。
 - 不启动 B5。本席不修复。
 
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M006 B4-r2 完整修复 diff 复审（Grok 席乙）V0.02
+
+席位：Grok（审计席乙，独立）
+步骤：B4-r2（§4 修复内容审计 + §5 闸 3 逐行归因）
+模块：M006 — 治理门禁与 CI 基线／文档与接口定义／第1段（当前 471 模块计划；两文件 `docs/delivery-readiness-gates-v0.1.md`、`docs/deploy-and-change-flow-v0.1.md`）
+控制：160-audit-prompt.md V0.17；runbook V0.02；criteria-lock V0.11
+生命周期观察（本席不改 ledger/findings/HTML/源）：M006 `IN_PROGRESS`；B3 已执行 2（本票不增加）；LOCK-AMEND-COUNT=1
+本席角色：只审本轮 before/after 完整树差。不修源、不改三份业务 HTML、不改台账/方案、不用 MCP、不派子代理。源为说明性 Markdown（2.3 类型 4），不新造测试，不把最小修法扩大到 M414 生成器。
+
+旧同名 raw 前缀 34061 bytes / SHA256 `dcbddcaac3419cf121419635269e0c9c458dc23c8f6f21dce6ea05742ce615bf` 完整保留，不覆盖；该前缀不是本轮 scope 结论。本段为本次完整报告。未读本次 B4 self、未读根未完报告、不以历史同名 raw 或同号 backend 旧模块当本次依据。
+
+## 0. 技能自检（§6 收窄，实读 SKILL.md）
+
+| 技能 | 本节点 |
+|---|---|
+| using-superpowers | 已读；按提示词/用户指令优先于技能本体 |
+| requesting-code-review | 已读；本体 `HEAD~1` 与派子代理作废。本席即乙席，基线为冻结 tree id，不是提交 |
+| verification-before-completion | 已读；PASS 前实跑只读命令 |
+| grilling / grill-me | 已读；只借追问结构，事实自查；本体「等用户回答 / dispatch sub-agent」作废 |
+| diagnosing-bugs | 已读；用 238 `continue` vs L96 声称作反馈环，不改源 |
+| tdd | 已读；文档/配置类不强制落测试（与 superpowers TDD 豁免一致） |
+| ponytail-review | 已读；本 diff 已是两行最小，无可再删 |
+| codebase-design | 已读；不把文档句扩成生成器模块接口 |
+| writing-for-agents | 已读；本 raw 为下游合取输入 |
+| resolving-merge-conflicts | 存在；本轮无冲突 |
+| batch-grill-me / ubiquitous-language | 缺口，未冒充调用 |
+| git-guardrails-claude-code | 本席路径未核到，记缺口 |
+
+未用 MCP。未派子代理。未跑 docs 生成器、父链 `verify:delivery-gates` 全仓、生产发布、GitHub PUT、提交/推送。
+
+## 1. 冻结输入
+
+- findings 定稿 V1.05：356016 bytes，SHA256 `f91c81990dbb37c3a70d9e38b917b230c6525e4f856607a427a7d5014f4e4565`。顶部本批双 PASS：047 细化、工程缺陷是、修复队列是；仅 delivery 标题 V0.11→V0.12 与 L96 按候选精确原/拟句；037/038/044–046 队列否；039–043 已修出队。
+- B2 两票：b1 self V0.19，167061 bytes，SHA256 `c7c6bf4adc326d5d2024ec9ad9efbad52c50b5a421fb6a0e801627bb1a2e96f4`；b1 grok V0.11，250969 bytes，SHA256 `b135ef908122b81e3ce12aa4c0363e985d63e8f4282f7de1de202a40fc490c42`。本席 V0.11 已接受精确拟改。
+- 判据（不新造）：GEN-002 / GEN-016 / GEN-018；四分类 GEN-017。分类指认 HTML `business-enum-quick-reference-v0.1.html:210`（锁 ID BEQR-135，**不在** M006 映射，仅供分类）及已映射 PGM-066（`platform-governance-map-for-operations-v0.1.html:951` 起：第三方接口资料未定先自研/接口示例；所有端都必须有后台开关）。
+- 本席独立实算：`sha256sum docs/audit-2026-09/plan/criteria-lock.md` = `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`。sidecar 同行。ledger 顶部同行。未改锁。
+- 唯一当前待修 ID：M006-047。
+
+精确原句（候选）：
+`| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |`
+
+精确拟改（候选）：
+`| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求已追踪到责任组、证据 item_id、模板和目标 manifest 路径，或已记录对应接入开关关闭，防止 mock/沙箱被误判为生产闭环 |`
+
+标题：`# 交付总闸口与上线准入验证 V0.11` → `V0.12`，同归 047。deploy 保持 V0.07。
+
+## 2. Tree 与全文无筛选 diff
+
+本席自行执行（无 pathspec）：
+
+```
+git cat-file -t b50b33c1f1c61ab9a1c87f6cf79ea97ffa593ccd   # tree
+git cat-file -t ece59cbd0b81d612f3cc6844d389415cb9394d31   # tree
+git diff --binary b50b33c1f1c61ab9a1c87f6cf79ea97ffa593ccd ece59cbd0b81d612f3cc6844d389415cb9394d31
+```
+
+- before-tree = `b50b33c1f1c61ab9a1c87f6cf79ea97ffa593ccd`
+- after-tree  = `ece59cbd0b81d612f3cc6844d389415cb9394d31`
+- `--name-status`：仅 `M	docs/delivery-readiness-gates-v0.1.md`
+- `--numstat`：`2	2	docs/delivery-readiness-gates-v0.1.md`
+- `--stat`：`1 file changed, 2 insertions(+), 2 deletions(-)`
+- 派发所附 diff 与本席实跑全文逐字节一致（2006 bytes）。
+
+### 全文无筛选 binary diff
+
+```
+diff --git a/docs/delivery-readiness-gates-v0.1.md b/docs/delivery-readiness-gates-v0.1.md
+index 88a00e9a..d262d35e 100644
+--- a/docs/delivery-readiness-gates-v0.1.md
++++ b/docs/delivery-readiness-gates-v0.1.md
+@@ -1,4 +1,4 @@
+-# 交付总闸口与上线准入验证 V0.11
++# 交付总闸口与上线准入验证 V0.12
+ 
+ ## 1. 定位
+ 
+@@ -93,7 +93,7 @@ npm run verify:delivery-gates
+ | `npm run verify:production-evidence-draft-prep` | 校验生产证据 manifest 草稿准备器默认 dry-run、拒绝越界写入和覆盖已有 manifest，且不会关闭生产阻断 |
+ | `npm run verify:production-evidence-draft-prep-fixtures` | 在临时目录实测草稿准备器 dry-run 不写文件、execute 复制模板、再次 execute 不覆盖已有 manifest，并拒绝无选择器的 broad execute |
+ | `npm run verify:production-closure-gap-reports` | 从当前运行态、Semgrep、NAS 当前状态、生产证据提交状态和外部证据追踪校验生产闭环缺口总报告，防止旧报告或手改报告伪关闭生产证据 |
+-| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |
++| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求已追踪到责任组、证据 item_id、模板和目标 manifest 路径，或已记录对应接入开关关闭，防止 mock/沙箱被误判为生产闭环 |
+ | `npm run verify:nas-it-handoff` | 校验 NAS IT 受控挂载交接包、默认 dry-run 脚本、manifest 映射和无明文密钥边界 |
+ | `npm run verify:nas-diagnostics` | 校验 NAS 只读诊断报告与当前网络、445 端口、CIFS 挂载和 preflight 根因一致，不关闭生产 manifest |
+ | `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
+```
+
+Blob：before `88a00e9a004e25656cf1b294fa48efc56aada458`（15715 bytes，SHA256 `7c120e8ed537189c8e4abf898be075d81ff3d3c6bc6a245b46380f0e54f37089`）；after `d262d35e81cdb56cde8cd11c995b9eaf9a373f7b`（15751 bytes，SHA256 `0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09`）。工作区 delivery 字节 == after。无 CRLF。158 行不变，仅 L1 与 L96 两行不同。原句在 before 出现 1 次、after 0 次；拟句在 before 0 次、after 1 次。`均已` before 1 / after 0。`或已记录对应接入开关关闭` before 0 / after 1。`8 条外部证据型` 与 `防止 mock/沙箱被误判为生产闭环` 前后各 1。标题 `V0.11` 仅 before，`V0.12` 仅 after。
+
+deploy 两树 blob 相同 `febbed4b0387288609fdd801a634e13404a910f7`，7117 bytes，SHA256 `543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1`，首行仍 `V0.07`。三份业务 HTML 两树 blob 相同。生成器 / 快照 / `package.json` 两树 blob 相同。
+
+独立临时 index `git add -A && git write-tree` 得当前树 `cd30ba1a5b0fec95ea20c15f7cab27e81de7ae1c`；相对 after 仅 `docs/audit-2026-09/ledger.md`（V1.80→V1.81，B3 次数入账）。该路径按 §1.2 排除，不是本轮源修复。主 index SHA256 仍 `ae1dfbf11bec123e6a662097d16de9bb7088fe8bc50d1e9ae4a78da24e90022c`，本席未改暂存区。HEAD=`origin/main`=`242f487233d028173cb9198eecd079f5d877405c`。
+
+## 3. §5 闸 3 逐行归因
+
+归因对象：`findings.md` 当前已定稿且修复队列为「是」的 ID。本轮仅 047。
+
+| 文件 | 行 | 删除 | 新增 | 归属 |
+|---|---|---|---|---|
+| docs/delivery-readiness-gates-v0.1.md | 1 | `# 交付总闸口与上线准入验证 V0.11` | `# 交付总闸口与上线准入验证 V0.12` | M006-047 |
+| docs/delivery-readiness-gates-v0.1.md | 96 | `…需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环` | `…需求已追踪到责任组、证据 item_id、模板和目标 manifest 路径，或已记录对应接入开关关闭，防止 mock/沙箱被误判为生产闭环` | M006-047 |
+
+全部 diff 行（2 删 + 2 增）均可归 047。无无 ID 行。037/038/044–046 未改。039–043 未重开。未改 HTML、deploy、主 index、生成器、快照、测试文件。
+
+## 4. 三线（只针对本 diff）
+
+### 4.1 第一性原理
+
+1. 这两行为什么必须存在：L96 是对已有命令 `npm run verify:external-evidence-requirement-traceability` 的目的句。删掉「或已记录对应接入开关关闭」、保留「均已追踪到责任组/item/模板/路径」，则当前正常绿路径与文档声称矛盾（GEN-002/016）。标题版本随该文件本批缺陷递增，归同一 ID。删掉整句命令行则父表缺入口，与 package.json 脚本及 docs gate 标记要求冲突。
+2. 声称是否被执行验证：见 §5。类型 4 命令 + 类型 1 HTML 仅用于既有分类，不新造标准。
+3. 未经验证就当真的前提：无。关闭分支以生成器源码 238/246/267 与当前快照为准，不以生成器 :330 自述或邻段「不宣称生产闭环」代替。
+
+### 4.2 顺从式
+
+假定 B3 按候选最小修。核对：拟句与 findings V1.04/V1.05 及本席 B2 V0.11 精确拟改逐字相同（只去「均」、加「或已记录对应接入开关关闭」）；「8 条」保留；防伪后半句保留；命令单元格未改；机器标记未改（`verify:delivery-gates-docs` 仍绿）；L149–150 生产边界句 before==after；deploy V0.07 不变。符合。
+
+### 4.3 对抗式（grilling 自问，不等操作员）
+
+- Q1 是否比候选多改了字（「当前」等）？否。L1/L96 与候选逐字相等。
+- Q2 是否漏改标题或漏去「均」？否。before `均已` count=1，after=0；V0.12 仅 after。
+- Q3 新句是否仍被当前正常路径证伪？否。当前 8/8 走 disabled：mapped/owners/paths 全空，`switch_disabled_item_ids` 均非空，状态均为 `covered_by_disabled_integration_switches`。OR 第二支与 238 `continue`、246 第二析取、267 `owner_manifest_or_disabled_switch` 一致。映射支（239–241 台账行/缺 item/无 target path）现未走，文档第一支仍描述该支；不为假设空字段扩修生成器。
+- Q4 「8」是否像 040 的「40/31」一样漂移？否。快照 `partial_requirements=8`，行 ID 恰为 REQ-17/21/23b/25/32/40/41/44，disabled 数 5/2/2/2/4/4/3/5。命令 `--check` 要求 `partial_requirements === traceable_partial_requirements`。保留「8」与候选一致。
+- Q5 是否把 disabled 说成生产证据已回填、或关闭证据义务？否。后半「防止 mock/沙箱被误判为生产闭环」保留。L150「本文不关闭任何生产 blocker…」未改。快照 policy `no_fake_external_evidence_closure` / `mock_or_sandbox_is_not_production_evidence` / `this_report_does_not_close_blockers` 仍为 true。`--check` 不写文件（check 分支无 `writeFileSync`；本席跑后快照 SHA 仍 `458471c1b12e1b98d13387e3d2e5e6a0df639f0483e484d10464fb470f001fe5`，mtime 2026-07-21）。
+- Q6 生成器 :330「本文只证明每条…已经挂到责任组…路径」是否本轮新缺陷？否。该句不在本 diff、不在 M006 两文件。B2/铁律 6 禁止扩到 M414。本席不把它升级为本轮 FAIL。
+- Q7 是否漏出范围（测试、HTML、deploy、主 index、workflow）？否。完整无 pathspec diff 仅一文件两行。
+- Q8 是否添加/冲突/HTML 自身问题？否。分类仍为细化；不走 2.2；三 HTML blob 未变。
+
+ponytail-review：`Lean already. Ship.` 无可再删。
+
+## 5. 验证证据（类型 4；声称前实跑）
+
+消费者源 `tools/generate-external-evidence-requirement-traceability.mjs`（本席现读，两树 blob 未变）：
+
+- 170–205：有效 item 去掉 disabled 后才进 `mapped_item_ids` / `owner_groups` / `target_manifest_paths`；全 disabled 时三者空，`production_trace_status=covered_by_disabled_integration_switches`。
+- 238：`mapped_item_ids.length === 0 && switch_disabled_item_ids.length > 0` 则 `continue`，跳过无台账行 / 缺 item / 无 target path 三项失败。
+- 246：`traceable` =（有台账行且无 missing）**或**（mapped 空且 disabled 非空）。
+- 267：`partial_requirement_must_map_to_owner_manifest_or_disabled_switch: true`。
+- 408–421：`--check` 只比对已有产物并要求 8===traceable；check 内不写文件。
+
+当前快照 `docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json`：10912 bytes，SHA256 `458471c1b12e1b98d13387e3d2e5e6a0df639f0483e484d10464fb470f001fe5`。`partial_requirements=8`，`traceable_partial_requirements=8`，`mapped_evidence_items=0`，`mapped_ledger_rows=0`；8 行 mapped/owners/paths 全 `[]`，状态全 `covered_by_disabled_integration_switches`。
+
+命令（只读，未跑 docs 生成器 / 父链全仓）：
+
+```
+npm run verify:delivery-gates-docs
+# > node tools/verify-delivery-gates.mjs
+# DELIVERY_GATES_DOCS_PASS
+# exit 0
+
+npm run verify:external-evidence-requirement-traceability
+# > node tools/generate-external-evidence-requirement-traceability.mjs --check
+# EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS
+# exit 0
+```
+
+Markdown：python-markdown 3.10.3 `extensions=['tables']` 解析 after：2 表，T1 39 行×2 列（含表头，空单元格 0，表头 命令/目的），T2 8 行×2 列（场景/追加验证），合计 47 行均 2 列。管道行口径 T1 40 / T2 9，与 before 结构相等。仓库无 `markdown-it` 包，未假称已用。
+
+npm：delivery 现文 `npm run <name>` 94 次、不重复 67；before 集合 == after 集合；67 名均在 `package.json.scripts`。`verify:external-evidence-requirement-traceability` = `node tools/generate-external-evidence-requirement-traceability.mjs --check`。`verify:delivery-gates.mjs` 只要求文档包含命令名与机器标记，不锁定旧「均已」字面。
+
+HTML:210 原文「预留接口 + 后台开关默认关 + 不阻塞自研 + 不伪造对账结果」。PGM:959「第三方接口资料当前未确定，先做自有系统和对外对接接口示例」；PGM:963「所有端都必须有后台开关」。关闭分支得到准确描述；8 与防伪生产边界保持。
+
+## 6. 修复内容
+
+PASS
+
+## 7. 范围（§5 闸 3）
+
+PASS
+
+## 8. 结论
+
+PASS

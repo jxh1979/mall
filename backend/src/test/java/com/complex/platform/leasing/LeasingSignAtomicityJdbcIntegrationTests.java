@@ -1,4 +1,5 @@
 package com.complex.platform.leasing;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -51,6 +52,7 @@ class LeasingSignAtomicityJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM contracts WHERE contract_subject_id = ?", subject);
         jdbcTemplate.update("DELETE FROM business_entity_bindings WHERE contract_entity_id = ?", subject);
         jdbcTemplate.update("DELETE FROM merchants WHERE contract_entity_id = ?", subject);
+        jdbcTemplate.update("DELETE FROM business_entities WHERE id = ?", subject); // M009-006 夹具主体
         jdbcTemplate.update("DELETE FROM leasing_intents WHERE id = ?", intentId);
         jdbcTemplate.update("DELETE FROM leasing_leads WHERE id = ?", leadId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "%" + suffix + "%");
@@ -114,6 +116,9 @@ class LeasingSignAtomicityJdbcIntegrationTests {
     private void seed(String intendedSpaceId) {
         TestSecurityActors.asPlatformAdmin();
         Instant now = Instant.now();
+        // M009-006：四类主体绑定要求主体真实存在（BEQR-143/PGM-026），合同主体须先在 business_entities 建档。
+        jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at) "
+                + "VALUES (?, ?, 'management_company', 'active', now(), now())", subject, "签约测试合同主体");
         leasingRepository.saveLead(new LeasingLeadRecord(leadId, "签约测试联系人", "13800002222", "referral",
                 "retail", intendedSpaceId, null, null, "usr_sales", "negotiating", null, null, null, now, now));
         leasingRepository.saveIntent(new LeasingIntentRecord(intentId, leadId, "pending_signing", intendedSpaceId,

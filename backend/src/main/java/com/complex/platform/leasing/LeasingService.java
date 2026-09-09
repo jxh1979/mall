@@ -1,4 +1,5 @@
 package com.complex.platform.leasing;
+// 文件版本：V0.01
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -287,7 +288,8 @@ public class LeasingService {
                 contractSubjectId, contractSubjectId, contractSubjectId,
                 contactName, contactPhone, contactName,
                 spaceCode, area, area,
-                null, null, null, "leasing_auto", "active"));
+                // M009-003：合作方式只能是 HTML 六类之一，签约阶段未定＝空，不发明「leasing_auto」值。
+                null, null, null, null, "active"));
         return merchant.id();
     }
 

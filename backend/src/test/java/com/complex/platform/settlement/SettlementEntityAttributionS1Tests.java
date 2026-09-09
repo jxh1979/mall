@@ -1,4 +1,5 @@
 package com.complex.platform.settlement;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -221,19 +222,13 @@ class SettlementEntityAttributionS1Tests {
                 "be_central_catering", "management_company",
                 "be_amusement", "management_company",
                 "be_media", "management_company");
-        Map<String, String> expectedParent = Map.of(
-                "be_proj_changsha", "be_platform",
-                "be_ent_platform", "be_proj_changsha",
-                "be_central_catering", "be_proj_changsha",
-                "be_amusement", "be_proj_changsha",
-                "be_media", "be_proj_changsha");
-
         for (Map.Entry<String, String> e : expectedRole.entrySet()) {
             Map<String, Object> row = jdbcTemplate.queryForMap(
                     "SELECT * FROM business_entities WHERE id = ?", e.getKey());
             assertThat(row.get("entity_role")).as("%s 的主体角色", e.getKey()).isEqualTo(e.getValue());
             assertThat(row.get("status")).isEqualTo("active");
-            assertThat(row.get("parent_entity_id")).isEqualTo(expectedParent.get(e.getKey()));
+            // M010-001：固定父链列已删除（BEQR-144/PGM-018 多对多协作），骨架只保留稳定 id/名称/角色。
+            assertThat(row).doesNotContainKey("parent_entity_id");
             // 工商信息不得由代码编造,一律留空由运营在后台补。
             assertThat(row.get("unified_social_credit_code")).as("%s 不得预置统一社会信用代码", e.getKey()).isNull();
             assertThat(row.get("legal_representative")).isNull();

@@ -456,3 +456,438 @@ Grok 不把上表改判为添加。
 条件核对：整模块 621 行覆盖；18 GEN 逐项；三线完整；26 ID 重验无残留；无新 GR FAIL；无未答 questions；证据为类型 1 或 4（环境失败的 Maven 未当 PASS）；未把未运行的后端/UI/semgrep 测试写成通过。
 
 B5 步骤结论 = PASS。模块生命周期仍由 Codex 在双席合取且四值校验后写入 ledger；本席不改 ledger、不写收口文件。
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M003 B5-r2 Grok 独立全量审计（471 计划整模块重审）
+
+版本：V0.02  
+席位：Grok（乙），只读外审  
+步骤：B5-r2（本轮跳过 B3/B4；历史 B3 累计 = 2，不能清零）  
+模块：M003 `治理门禁与 CI 基线／配置与工程入口／第1段` / 共 471  
+控制：160-audit-prompt.md V0.17  
+正本：`/home/james/complex-management` `main` = `origin/main` = `242f487233d028173cb9198eecd079f5d877405c`  
+范围文件：`.gitignore` 55 行 + `package.json` 147 行 = 202 行（`git ls-files -z -- .gitignore package.json | xargs -0 cat | wc -l` = 202）  
+映射：`criteria-lock.md` L6382 `M003 → [GEN-001 … GEN-018]`，完整 18 GEN，无 HTML 派生 ID  
+ledger（只读顶部基准 + 本模块行）：顶部 `LOCK-AMEND-COUNT: 1`；M003 `IN_PROGRESS`，B3=2，方案复核已修 2，失败重跑 0  
+B2：操作员声明已双 PASS、修复队列空；本席不读 findings 正文，不继承旧同号 PASS  
+旧 raw：本文件原 33190 字节、版本 V0.01（322 计划 8 文件）仅取元数据用于追加；旧报告其他文件不在本次范围  
+结论：**PASS**  
+临时 GR 缺陷：**无**  
+未答 questions：无（`questions/M003-023.md` 答复首行=`删除`、`M003-024.md` 答复首行=`保留`，均属旧 322 的 CONTEXT.md 添加项，不是本轮两文件的新发明）  
+新 HTML 自身问题：**无**（不申请改三 HTML；铁律 4 未触发）  
+本席未读任何 self raw、本轮 B5 根报告、findings 正文、其他模块报告/收口，未派第三席，未改源码/HTML/依赖/lock/ledger/findings/questions，未提交推送部署，未装依赖，未新建 worktree/试验库/脚本。
+
+---
+
+## 0. 技能预检（本环境实核；V0.17 §6 收窄）
+
+按意图执行：先读实际 `SKILL.md`，技能不派子代理、不新增产物、不问操作员、不自动修。
+
+| 技能 | 本环境 | 本节点用法 |
+|---|---|---|
+| using-superpowers | 已读 `/home/james/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 开工技能自检 |
+| grilling / grill-me | 已读 grilling 全文；grill-me 为转发 `/grilling` 的薄封装 | 对抗式自问自答，不等操作员 |
+| codebase-design | 已读 | 只用冻结 GEN-001 删除测试/深度口径，不新设计 |
+| diagnosing-bugs / systematic-debugging | 已读 | 只读源复现红灯：建可失败命令、看 exit/输出；不改代码、不加探针 |
+| ponytail-review | 已读 | 只列可删；不改文件 |
+| verification-before-completion | 已读 | 凡声称均附本席本轮命令与输出 |
+| ubiquitous-language | 已读 `/home/james/.qwen/skills/ubiquitous-language/SKILL.md` | 只借术语对齐 CONTEXT.md / 三 HTML；**不写** `UBIQUITOUS_LANGUAGE.md` |
+| batch-grill-me | **缺口**：本环境技能树无独立 `SKILL.md` | 不冒充已调用 |
+| git-guardrails-claude-code | 技能存在，本体要装 hook 并问人 | 不安装、不问；等价约束已由仓库 pre-push / 本席写禁承担 |
+| tdd / writing-for-agents / resolving-merge-conflicts | 存在 | B5 只审不修，未触发 |
+
+划掉技能（executing-plans、dispatching-parallel-agents、research、ponytail-audit 等）一律不用。
+
+---
+
+## 1. 范围、哈希、不继承
+
+- 独立实算 `sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（6850 行）。sidecar 同行；ledger 顶部同行。正文不再重复该独占字段。
+- general 全文已读 L10–100（GEN-001…018）。映射位置先实核：`## 模块映射` 在 L6379，M003 在 **L6382**，18 个 GEN ID 齐全。
+- `plan/modules.md` 当前 M003：2 文件、202 行、NORMAL。`scope.txt` / `module-union.txt` 含 `.gitignore` 与 `package.json`。
+- 旧 322 同号 raw（V0.01）覆盖 `.env.example` / `.semgrepignore` / `AGENTS.md` / `CONTEXT.md` / `PROGRESS.md` / `README*.md` 等，**不在本次范围**，其 PASS **不继承**。两源相对旧 322 若未改，也不是免审理由；本轮对 202 行整模块重审。
+- 允许只读以核对本模块声明：`apps/web/package.json`（工作区清单）、`package-lock.json` 根 `packages[""]`（lock 镜像，不审 M004）、75 个 `tools/*.mjs` 入口头/参数、`.github/workflows/predeploy-gates.yml` L27 与 `ops/ci/predeploy-gates.yml` L27、`ops/160/propose-change.sh` L12。未把这些文件扩成完整外模块审计。
+
+---
+
+## 2. 第一性原理（三问，逐文件）
+
+### 2.1 `.gitignore`（L1–55）
+
+**为什么必须存在？** 删掉它，三份 HTML 没有任何一条会少一句业务规则。它不承载票务/酒吧/商户流程。它防止把依赖树、构建物、本机密钥、运行态上传二进制提交进 git。答不上 HTML 条目 ≠ 该删 → 2.1 分类为**技术性**（无业务发明），其中 `backend/data/bar-images/` 能指到 HTML 上位，见 §4.4。
+
+**声称行为有没有被实际执行？** 有。本席用 `git check-ignore -v --no-index` 做 43 条应忽略 + 20 条不应忽略 + 2 条 `*.db-journal`，全部与模式一致；`git ls-files -z | git check-ignore --stdin --no-index` 命中 **0** 个已跟踪文件。仓库根现存 `debug8.mjs` / `probe-admin.mjs` / `smoke-group2.mjs` / `btn-iso.mjs` / `eng-check.mjs` / `verify-fe.mjs` / `bizflow-audit.mjs` 均被对应根锚规则忽略，且不出现在 `git status --porcelain`。
+
+**哪个前提未经验证就当真？** 未在本机制造真实 `.apk` 提交事故；未把忽略目录当「业务上传功能已实现」。忽略路径存在 ≠ 上传/POS 功能已交付（那些实现属后续模块）。
+
+### 2.2 `package.json`（L1–147，127 个 scripts）
+
+**为什么必须存在？** 它是 npm 工作区根与 CI/本地门禁的**唯一脚本接口**。删掉它：`.github/workflows/predeploy-gates.yml` 与 `ops/ci/predeploy-gates.yml` 的 `npm run verify:predeploy`、`ops/160/propose-change.sh` L12 同一入口会失去声明。三 HTML 仍不直接要求 npm。整体 **技术性**；其中 HTML 核验入口见 §4.4 **细化**。
+
+**声称行为有没有被实际执行？** 分层取证，不把 `--check`/`--help` 写成全套业务测试通过：
+
+| 声称 | 本轮实跑 | 边界 |
+|---|---|---|
+| JSON 合法、127 键、无重复、无 `\|\|`/`;`/`\|` | `json.loads` + `object_pairs_hook`；`npm run` 列出 127 | 语法与清单，不是业务 |
+| 75 个 `node tools/*.mjs` 入口存在且可解析 | 75/75 `node --check` exit 0；缺失 0 | 语法，不是工具功能 PASS |
+| 10 条 `&&` 链转发名均存在 | 全员 `npm run <name>` 键命中；workspace 形态脚本在 `apps/web` 有对应键 | 解析，不是 49 链跑完 |
+| 工作区 `apps/web` | `npm run --workspace apps/web` 列出 `dev/build/typecheck/test:unit/...`；`npm pkg get` 与根转发名一致 | 未跑 vite/tsc/vitest |
+| 坏输入失败 | 不存在工作区 exit 1；不存在脚本名 exit 1 | 负例 |
+| `&&` 错误传播 | `npm run verify:html-ledger-sync && echo SHOULD_NOT_REACH` 未打印后半；`npm run verify:predeploy` 停在第一闸，未进 `verify:entry-anchors` | 真实 npm 11 脚本壳 |
+| HTML 三闸 | ledger-sync exit 1；entry-anchors exit 1（6 处）；param-tier exit 0 | 见 §4.3，**正确拒绝 ≠ 本文件缺陷** |
+| 引擎/依赖 | node v24.20.0 满足 `^22.13.0 \|\| >=24.0.0`；`node_modules/yaml` 可 `import`；`playwright --version` = 1.61.0 | 未跑 UI 套件 |
+| `--check` 环境 | `verify:backend-env` exit 0；`verify:android-env` exit 0 | 只声明环境，不是 Maven test / Gradle build / APK |
+
+**哪个前提未经验证就当真？** 未跑：`spring-boot:run`、`test:backend`、Playwright E2E、`android:p0:*` 构建、任一 `docs:*` 生成器（会写文件）、`verify:delivery-gates` 49 链、`verify:p0`、`verify:closed-loop-runtime`、`verify:pii-encryption`、`verify:test-db-isolation`、`verify:tenant-isolation`。这些实现与测试在别的模块。本席只核到「入口字符串 → 现存文件/工作区键/&& 短路」。
+
+---
+
+## 3. 顺从式：18 GEN 逐项（完整，不抽查）
+
+适用口径：映射仅 18 GEN。每条写适用 / 不适用、证据、是否缺陷。
+
+| ID | 适用 | 本模块证据 | 缺陷 |
+|---|---|---|---|
+| GEN-001 必要性与最小性 | 适用 | 删除测试：删 `package.json` 则 CI/`propose-change.sh` 失去 `verify:predeploy`；删 `.gitignore` 则 node_modules/密钥/运行态图会入库。127 脚本是门禁/构建/生成器入口，不是未引用死代码。别名 `dev`/`dev:api`→`dev:backend`、`smoke:p0`→`test:backend`、`test:ui`=`verify:ui`、`test:unit`=`verify:unit` 为一行具名入口，不是无需求抽象。ponytail：不因假设场景新增忽略规则（`.scratch/` 按 V0.17 §1.2 故意不忽略）。 | 无 |
+| GEN-002 可执行正确性 | 适用 | JSON 合法；127/127 `npm run` 可列出；75/75 工具 `node --check`；工作区键对齐；坏工作区/坏脚本名 exit 1；三闸与 `--check` 环境入口实跑。长驻/全量测试未跑，不写成已通过。 | 无 |
+| GEN-003 测试有效性 | 不适用本文件测试集 | 本模块无测试文件。`test:*`/`verify:unit`/`playwright test` 是转发，测试体在 M004 之后的模块。不得把未跑套件写成 package.json 通过。 | 无 |
+| GEN-004 信任边界 | 弱适用 | 脚本字符串静态，无把未校验用户输入拼进 shell。工具对 git/HTML/CSV 的校验在工具模块。`.env` 忽略避免把秘密当源码。`engine-strict` 默认 false 是 npm 缺省，文件已声明 engines；首跑本机 node 24 匹配，不为假设的 node 18 新增字段。 | 无 |
+| GEN-005 授权与最小权限 | 不适用 | 两文件无主体/对象/动作授权面。 | 无 |
+| GEN-006 数据完整性 | 不适用 | 无事务/金额/状态机。 | 无 |
+| GEN-007 并发与幂等 | 不适用 | 无重试投递窗口。脚本链是进程内 `&&`。 | 无 |
+| GEN-008 接口与模式一致性 | 适用（工程接口） | 根 `workspaces: ["apps/web"]` 与 lock 镜像、`apps/web/package.json` 的 `dev/build/typecheck/test:unit` 同名。`engines.node` 与 lock 根块一致。CI 调 `npm run verify:predeploy` 与根脚本同名。`documentVersion`（本文件 V0.01）与 lock 文件自己的版本字段不是同一文件，不把 M004 当本模块缺陷。脚本名是系统内部标识符，允许英文。 | 无 |
+| GEN-009 错误处理与恢复 | 适用 | 全库脚本无 `\|\|` / `;` 吞错。10 条 `&&` 链。实跑：ledger-sync 失败后 `SHOULD_NOT_REACH` 未出现；`verify:predeploy` 未进入第二闸。缺失脚本/工作区显式 npm error + 非 0。 | 无 |
+| GEN-010 安全与敏感信息 | 适用 | `.env` / `.env.local` / `local.properties` / `*.apk` 忽略。`package.json` 无明文秘密。`.env.example` **不被** `.env` 误伤（负例）。根 debug 脚本忽略，避免把探针提交。 | 无 |
+| GEN-011 可观测与审计证据 | 弱适用 | 门禁脚本失败时 stdout/stderr 给出范围与文件名（ledger-sync / entry-anchors 实输出见 §8）。本文件本身不是日志系统。 | 无 |
+| GEN-012 资源与性能边界 | 弱适用 | 本文件无循环/连接池。49 链与 E2E 的资源边界在被调模块；本席未跑那些链。 | 无 |
+| GEN-013 构建配置与依赖 | 适用 | `packageManager: npm@10.9.8` 已声明；本机实际 `npm 11.19.0` + corepack 存在但未切换——这是**本机状态**，脚本在 npm 11 下仍按 `&&` 失败显式，不构成 package.json 假声明。`devDependencies`：`yaml` 被 `verify-openapi-contract.mjs` / `apply-openapi-p0-examples.mjs` / `verify-delivery-gates.mjs` import；`@playwright/test@1.61.0` 与锁/二进制一致。Java 21 / Maven 3.9.11 / Android SDK 由 `--check` 包装器检查，不塞进 npm `engines`（npm engines 表达不了 JDK）。CI 调 `npm ci --ignore-scripts` 属工作流文件（M005），此处只核脚本名。 | 无 |
+| GEN-014 数据库迁移正确性 | 不适用本文件迁移 | `verify:migration-version-order` 仅入口存在+语法；未跑迁移、未连 `complex_test`。 | 无 |
+| GEN-015 界面可用性 | 不适用 | 无 UI。脚本名属内部标识符。gitignore 注释为中文。 | 无 |
+| GEN-016 文档可验证性 | 适用（注释/字段） | gitignore 注释与实际匹配：security-scans 只忽略 `**/*.log` 与 `semgrep-current/`，json/md 负例通过；根锚 `/debug*.mjs` 不忽略 `tools/debug-foo.mjs`。`documentVersion` 只声明本 JSON 文件版本，未把计划写成现状。 | 无 |
+| GEN-017 业务来源分类 | 适用 | 冲突→细化→技术性→添加 已逐项走。无冲突。细化仅限能摘 HTML 原句的核验入口与 POS 图片目录。其余包/构建/Git 规则技术性。不因 `tenant`/`evidence`/`bar` 等词判添加。无新添加项。 | 无 |
+| GEN-018 第一性原理证据 | 适用 | 本报告结论落到：HTML 原句（类型 1）、可复现命令输出（类型 4）、入口语法/存在性（类型 4）。不引用旧 322 PASS、不引用另一席意见。 | 无 |
+
+18/18 已核对。
+
+---
+
+## 4. 对抗式（grilling 自问自答；假定实现错误）
+
+Frontier 一次问完，事实自读。
+
+**Q1 入口是否存在/语法烂掉？** 推荐：JSON 解析失败或缺文件即缺陷。  
+事实：解析成功、无重复键、无 BOM、尾随换行；75 工具 `node --check` 全过。
+
+**Q2 npm 工作区与参数是否骗人？** 根只声明 `apps/web`。`npm run dev --workspace apps/web` 等 6 处与 `apps/web` 的 `dev/build/typecheck/test:unit` 对齐。`npm run build --workspace apps/does-not-exist` → `No workspaces found` exit 1。未使用 `npm exec -w apps/web -- node` / `npx`。
+
+**Q3 `&&` 会不会在失败后继续？** 失败的 ledger-sync 后无 `SHOULD_NOT_REACH`；`verify:predeploy` 输出只出现第一闸，没有 entry-anchors 横幅。
+
+**Q4 Git 忽略正负匹配是否只写在文件里？** 见 §8 矩阵：应忽略 45（含 db-journal）全中；不应忽略 20 全过，包括 `.env.example`、`.scratch/foo`、`docs/audit-2026-09/ledger.md`、三 HTML、`tools/debug-foo.mjs`。已跟踪文件匹配忽略规则 = 0。
+
+**Q5 依赖/引擎/本机配置？** node 24 匹配 engines；playwright 1.61.0；yaml 可 import。`verify:backend-env` / `verify:android-env` 本机 `--check` 绿（Java 21、Maven 3.9.11、Gradle wrapper/系统 Gradle、SDK `/home/james/android-sdk`）。这只证明**检查器认为环境在**；不是 APK/单测通过。
+
+**Q6 业务来源是否夹带发明？** 见 §4.4。无添加。
+
+**Q7 全局红灯是不是 package.json 的错？** 见 §4.3。入口正确拒绝脏 HTML。不修 CSV/HTML、不改排除范围刷绿。
+
+**Q8 两源未改能否免审？** 否。本轮仍逐行覆盖 202 行。
+
+**Q9 要不要为 `.scratch/` 或 `docs/audit-2026-09/` 新增忽略？** 否。V0.17 故意不忽略 `.scratch/`；审计产物目录按路径排除出 scope，不是 gitignore 缺陷。不为假设误提交加规则。
+
+**Q10 `type: "module"` 会不会弄坏根 CJS？** 仓根无受控 `.js/.cjs`；仅有已被忽略的调试 `.mjs`。
+
+**Q11 `dev` 只启后端是否欺诈？** 脚本体是 `npm run dev:backend`，另有 `dev:web`。名称是别名不是全栈声称。
+
+**Q12 越权/金额/状态跳转？** 两文件无这些面。
+
+### 4.3 全局红灯（本席独立核实，区分范围）
+
+工作区：`docs/business-system-map-for-operations-v0.1.html` 相对 `origin/main` **未提交** 8 行（4+/4-）。`docs/prd-audit/business-decision-ledger.md` **未**出现在同一脏集。PGM / BEQR 工作区干净。
+
+`npm run verify:html-ledger-sync` exit **1**：
+
+```
+[html-ledger-sync] FAIL: 改动了业务最终解释权 HTML，但决策台账未同步。比对范围：工作区（含未提交改动）↔ 基线 origin/main@242f4872。
+  已改动的 HTML：
+    - docs/business-system-map-for-operations-v0.1.html
+  必须在同一批改动内一并更新：docs/prd-audit/business-decision-ledger.md
+```
+
+这是门禁设计行为：HTML 相对基线有改、台账未同步 → 拒绝。 **不是 package.json 缺陷。** 不重开 M001。BSM 工作区 diff 含：页脚日期 2026-09-01→2026-09-08、回访句改写、导航标题、以及 HTML 注释 `<!-- 文件版本：V0.11 → V0.13 -->`。注释按工具 `plainText()` 会剥掉。
+
+`npm run verify:entry-anchors` exit **1**，**6** 处（本席原文）：
+
+1. 注册表 BSM-E0433「处理后回访客人或商户，验收合格才关闭」——HTML 已改而注册表未重建  
+2. 注册表 BSM-E0736「文档版本」——HTML 已改而注册表未重建  
+3. 账本 BSM-0283 source_text 同上回访句  
+4. 账本 BSM-0530「文档版本」  
+5. 账本 BSM-0283 preconditions 回访句片段  
+6. 账本 BSM-0283 state_transition 回访句片段  
+
+计数：回访句 4 处 +「文档版本」2 处。工具未把 D 注释 `<!-- 文件版本 -->` 列入（与「不是 D 注释」一致）。「文档版本」条目对应页脚/版本镜像，不是本模块脚本写错。 **不是 package.json 缺陷。** 禁止靠改 CSV/HTML 刷绿。
+
+`npm run verify:html-param-tier` exit **0**：改动了 1 份业务 HTML，全量重扫无基线外未标层级句。
+
+`npm run verify:predeploy` exit **1**，停在第一闸，未跑后续（含 test-db / pii）。证明 CI 入口接线与 `&&` 短路，**不**证明后 14 步通过。
+
+### 4.4 四分类（冲突 → 细化 → 技术性 → 添加）
+
+**冲突：** 无。不重判 BSM 来源可配 / 打折原因分类（用户已声明 B/C 原文即原意）。
+
+**细化（先摘 HTML 原句）：**
+
+1. **核验入口 `verify:html-ledger-sync` / `verify:entry-anchors` / `docs:entry-baseline` / `verify:entry-doc-baseline`**  
+   HTML 原句（BSM 工作区页脚，`docs/business-system-map-for-operations-v0.1.html` 约 L2003；PGM L974、BEQR L306 同构）：  
+   > 本《业务系统地图》与《平台治理地图》《业务枚举速查表》共同组成三份最高业务解释权 HTML。发生冲突时，只以这三份 HTML 中经用户批准的内容为准；PRD、其他文档、后台配置、设计和实现均不得覆盖。某项业务内容若尚未写入三份 HTML，不因出现在 PRD、配置或实现中而取得效力，必须先逐项获得用户批准并补入相应 HTML。三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（**以决策台账记录的裁决时间为准**）；无法确定确认时间先后的，仍须逐项重新裁决。  
+   下位实现：同 PR 同步决策台账、按条目名而非行号保护 HTML 正文。无新业务实体。
+
+2. **运行态目录 `.gitignore` L53–54 `backend/data/bar-images/`**  
+   HTML 原句（BSM `平板图形点单（POS）`，约 L953–959）：  
+   > 进入带商品图片的分类菜单，按酒水、饮品、小食等分类挑选；也可以直接选后台配好的套餐。  
+   > 商品分类、商品图片、套餐都在后台维护：分类可自定义、**图片后台上传保存**、套餐由后台从已有商品组合而成。  
+   下位实现：运行态生成的本地图片目录不入库。不发明新 POS 流程。
+
+**技术性（无业务发明）：**
+
+- `.gitignore` 其余规则：依赖/构建/缓存/密钥/测试报告/根探针脚本。`backend/data/evidence-files/`：只忽略运行态生成文件，不新增证据类型、审批链或状态；不凭「证据」一词强拉工单/退酒/抄表等 HTML 锚点。  
+- `package.json` 的 name/private/version/type/workspaces/engines/packageManager/devDependencies 与除上列外的脚本：构建、测试转发、OpenAPI/生产证据生成器、Android/Maven 包装。`verify:html-param-tier` 是对 HTML 数值层级标注的静态棘轮，三 HTML 无「必须在原句标注层级」独立业务条目，不凭 PGM「法定>证据>可配置」仲裁顺序强拉；无新域名词。  
+- `verify:tenant-isolation` 等名称含业务词，本文件只提供 npm 入口字符串，业务规则在被调模块。
+
+**添加：** 无。不为假设场景新增规则、文件或流程。
+
+### 4.5 ponytail-review / codebase-design
+
+- `package.json:L11,L15,L38,L72-73,L79-80`：yagni 候选为具名别名，各 1 行，保留入口稳定。Replacement：不删。  
+- `.gitignore`：无死规则（本轮每条都有正例或设计负例）。  
+**Lean already. Ship. net: 0 lines possible.**
+
+删除测试：package.json 是深模块（小接口、127 行为）；复杂度会回到 CI 与开发者命令。gitignore 同理。
+
+---
+
+## 5. 202 行覆盖
+
+### 5.1 `.gitignore` 1–55
+
+| 行 | 内容 | 三线 | 分类 | 证据 |
+|---:|---|---|---|---|
+| 1 | `node_modules` | 已 | 技术性 | 忽略 `node_modules/foo`、`apps/web/node_modules/bar` |
+| 2 | `dist` | 已 | 技术性 | `dist/index.js`、`apps/web/dist/x` |
+| 3 | `backend/target` | 已 | 技术性 | `backend/target/classes` |
+| 4 | `.env` | 已 | 技术性 | `.env`、`foo/.env`；`.env.example` 不忽略 |
+| 5 | `.env.local` | 已 | 技术性 | 命中 |
+| 6 | `*.db` | 已 | 技术性 | `data.db` |
+| 7 | `*.db-journal` | 已 | 技术性 | `foo.db-journal` |
+| 8 | `coverage` | 已 | 技术性 | `coverage/lcov.info` |
+| 9 | `.vite` | 已 | 技术性 | 命中 |
+| 10–11 | `.gradle` / `**/.gradle/` | 已 | 技术性 | 根与 android-app |
+| 12–13 | `.kotlin` / `**/.kotlin/` | 已 | 技术性 | 同上 |
+| 14–15 | `build` / `**/build/` | 已 | 技术性 | `build`、`apps/android-terminal/android-app/build/x`；已跟踪匹配 0 |
+| 16–19 | `*.class/*.dex/*.apk/*.aab` | 已 | 技术性 | 正例命中 |
+| 20–21 | `local.properties` / `**/local.properties` | 已 | 技术性 | 根与 android-app |
+| 22 | 空行 | 已 | 技术性 | 分隔 |
+| 23 | `playwright-report` | 已 | 技术性 | 命中 |
+| 24 | 空行 | 已 | 技术性 | 分隔 |
+| 25–26 | `test-results` / `playwright-report-real-backend` | 已 | 技术性 | 命中 |
+| 27 | 空行 | 已 | 技术性 | 分隔 |
+| 28–30 | Claude 本机 settings 注释+两路径 | 已 | 技术性 | 命中；注释中文 |
+| 31–32 | tsbuildinfo 注释+模式 | 已 | 技术性 | 根与 `apps/web/foo.tsbuildinfo` |
+| 33–36 | security-scans 日志/滚动产物 | 已 | 技术性 | `*.log` 忽略；`findings-register-v1.md`、dated json **不**忽略 |
+| 37 | 空行 | 已 | 技术性 | |
+| 38–39 | `docs/_archive/**/*.log` | 已 | 技术性 | 只日志；`docs/_archive/readme.md` 不忽略。归档路径本身按 §1.2 排除出审计 scope |
+| 40 | 空行 | 已 | 技术性 | |
+| 41–42 | `.loop-engineering/` | 已 | 技术性 | 命中 |
+| 43 | 空行 | 已 | 技术性 | |
+| 44–51 | 根探针脚本 | 已 | 技术性 | `/debug*.mjs` 等；真实 `debug8.mjs` 等被忽略；`tools/debug-foo.mjs`、`apps/web/debug-foo.mjs` 不忽略 |
+| 52 | 空行 | 已 | 技术性 | |
+| 53–54 | `backend/data/bar-images/` + 注释 | 已 | **细化** | 正例命中；HTML 原句见 §4.4 |
+| 55 | `backend/data/evidence-files/` | 已 | 技术性 | 正例命中；无业务发明 |
+
+55/55。
+
+### 5.2 `package.json` 1–147
+
+| 行 | 内容 | 三线 | 分类 |
+|---:|---|---|---|
+| 1,147 | `{` `}` | 已 | 技术性 |
+| 2 | `name` | 已 | 技术性（内部标识符，非展示文案） |
+| 3 | `private: true` | 已 | 技术性 |
+| 4 | `version: 0.1.0` | 已 | 技术性 |
+| 5 | `documentVersion: V0.01` | 已 | 技术性（本文件版本） |
+| 6 | `type: module` | 已 | 技术性 |
+| 7–9 | `workspaces: ["apps/web"]` | 已 | 技术性；工作区清单/lock 镜像一致 |
+| 10,138 | `scripts` 开合 | 已 | 技术性 |
+| 11–137 | 127 个脚本，一行一个 | 已 | 见 §6；L21–25 中 4 个 HTML 相关为细化，其余技术性 |
+| 139 | `packageManager: npm@10.9.8` | 已 | 技术性 |
+| 140–142 | `engines.node` | 已 | 技术性；本机 v24.20.0 匹配 |
+| 143–146 | `devDependencies` playwright + yaml | 已 | 技术性；均被声明入口使用 |
+
+147/147。合计 202/202。无抽样宣称整模块。
+
+---
+
+## 6. 全脚本分类（127/127）
+
+图例：实跑=本轮执行该 npm 脚本；语法=仅 `node --check` 目标；链名=仅核 `&&` 成员存在；转发=核工作区/别名键；**未跑全量测试**。
+
+| # | 脚本 | 分类 | 本轮边界 |
+|---:|---|---|---|
+| 1 | dev | 技术性 | 转发 `dev:backend`；未启服务器 |
+| 2 | dev:backend | 技术性 | 读包装器：非 `--check` 会 `spring-boot:run`；未跑 |
+| 3 | test:backend | 技术性 | 会跑 Maven test；未跑 |
+| 4 | verify:backend-env | 技术性 | **实跑 --check exit 0** |
+| 5 | dev:api | 技术性 | 别名 |
+| 6 | dev:web | 技术性 | 工作区键存在；未跑 vite |
+| 7–13 | verify/audit openapi·routes·payload | 技术性 | 目标存在+语法 |
+| 14–20 | docs:openapi/security 生成器 | 技术性 | 会写文件；未跑 |
+| 21 | docs:entry-baseline | 细化 | 会写；未跑 |
+| 22 | verify:html-ledger-sync | 细化 | **实跑 exit 1（正确拒绝）** |
+| 23 | verify:entry-anchors | 细化 | **实跑 exit 1（6 处 CSV/HTML 镜像，非本文件错）** |
+| 24 | verify:html-param-tier | 技术性 | **实跑 exit 0** |
+| 25 | verify:entry-doc-baseline | 细化 | `--check`；未跑（避免与生成器混淆） |
+| 26–31 | security/ops160 单闸 | 技术性 | 目标+语法 |
+| 32–35 | ops160-recovery / p0-contract / p0-web / p0-env | 技术性 | 链名齐全；p0-env 的两成员 `--check` 已分跑 |
+| 36–37 | build / typecheck | 技术性 | 工作区键存在；未跑 tsc/vite（会写 tsbuildinfo） |
+| 38 | smoke:p0 | 技术性 | 等于 test:backend；未跑 |
+| 39 | verify:android-env | 技术性 | **实跑 --check exit 0** |
+| 40–42 | android:p0:build/smoke/apk | 技术性 | 工程目录与 gradle 文件存在；未构建 |
+| 43 | verify:p0 | 技术性 | 10 段链名齐全；未跑 |
+| 44–50 | no-legacy / coding-host / t3* / external / delivery-gates-docs | 技术性 | 目标+语法 |
+| 51 | verify:delivery-gates | 技术性 | 49 段链名齐全；**未跑** |
+| 52–71 | 生产证据/阻断 docs+verify | 技术性 | 目标+语法；docs 未跑 |
+| 72–76 | playwright / real-backend | 技术性 | 配置文件存在；cli `--version` 1.61.0；**未跑测试**；未 `--update-snapshots` |
+| 77–80 | android-smoke-wrapper / admin-matrix / unit | 技术性 | 工作区 `test:unit` 键存在；未跑 vitest |
+| 81–85 | domain-ownership / matrix-vs-migration / migration-version-order / tenant-isolation | 技术性 | 目标+语法；tenant 名称不构成添加 |
+| 86 | verify:predeploy | 技术性（成员含细化闸） | **实跑，第一闸 exit 1 短路** |
+| 87–88 | pii-encryption / test-db-isolation | 技术性 | 未跑（可能触 DB/密钥；读入口即止） |
+| 89–127 | 其余 closed-loop / nas / production-evidence / data-isolation 等 | 技术性 | 目标+语法；`docs:*`/`prepare:*` 未跑；`--check` 未当作业务 PASS |
+
+冲突 0；细化 4（#21–23、#25）；技术性 123；添加 0。
+
+---
+
+## 7. 三线执行记录
+
+| 线 | 状态 |
+|---|---|
+| 第一性原理 | §2 两文件三问均落类型 1/4 证据 |
+| 顺从式 | §3 十八 GEN 逐项 |
+| 对抗式 | §4 入口/工作区/&&/忽略正负/依赖引擎/分类/红灯范围 |
+
+---
+
+## 8. 命令与真实输出（摘录）
+
+本席实算锁哈希：`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`。
+
+```
+git rev-parse HEAD
+242f487233d028173cb9198eecd079f5d877405c
+git rev-parse origin/main
+242f487233d028173cb9198eecd079f5d877405c
+git ls-files -z -- .gitignore package.json | xargs -0 cat | wc -l
+202
+```
+
+```
+node -v    → v24.20.0
+npm -v     → 11.19.0
+java -version → openjdk 21.0.12.1 LTS
+mvn -version → Apache Maven 3.9.11
+```
+
+`npm run` 列出 **127** 个脚本。  
+`npm run --workspace apps/web` exit 0，含 `dev/build/typecheck/preview/test:unit/test:unit:watch`。  
+`npm run build --workspace apps/does-not-exist` exit 1 `No workspaces found`。  
+`npm run this-script-does-not-exist` exit 1 `Missing script`。
+
+`node --check`：75/75 OK。
+
+gitignore 摘要：positive_ok=43 + db-journal 2；negative_ok=20；tracked matching ignore=0。
+
+```
+> npm run verify:html-ledger-sync
+[html-ledger-sync] FAIL: 改动了业务最终解释权 HTML，但决策台账未同步。… origin/main@242f4872
+EXIT_LEDGER:1
+```
+
+`&& echo SHOULD_NOT_REACH`：后半未出现；AND_EXIT=1。
+
+```
+> npm run verify:predeploy
+（只执行到 verify:html-ledger-sync 后失败）
+EXIT_PREDEPLOY:1
+```
+
+```
+> npm run verify:entry-anchors
+[entry-anchors] FAIL：6 处不合格。
+（六条原文见 §4.3）
+EXIT_ANCHORS:1
+```
+
+```
+> npm run verify:html-param-tier
+[html-param-tier] PASS: 改动了 1 份业务 HTML，全量重扫无基线外的未标层级句…
+EXIT_PARAM_TIER:0
+```
+
+```
+> npm run verify:backend-env
+[backend-env] 后端环境前置校验通过。
+- Picked up JAVA_TOOL_OPTIONS:  -Djava.net.preferIPv4Stack=true
+- system Maven: Apache Maven 3.9.11 …
+EXIT_BE:0
+```
+
+```
+> npm run verify:android-env
+[android-env] Android P0 环境前置校验通过。
+- … Java 21 …
+- system Gradle: ------------------------------------------------------------
+- Android SDK: /home/james/android-sdk
+EXIT_AND:0
+```
+
+`node node_modules/@playwright/test/cli.js --version` → `Version 1.61.0`。
+
+---
+
+## 9. 执行边界（诚实）
+
+**做了：** 读两源全文；解析 JSON；列脚本；工作区正负例；75 文件语法；gitignore 正负与真实根探针文件；三份 HTML 门禁实跑；predeploy 短路；两个 `--check` 环境入口；playwright/yaml 本机包探测；CI/propose-change 调用点。
+
+**明确没做、因此不能声称：**
+
+- 任何 Maven `test` / `spring-boot:run`（长驻、连库风险）  
+- Playwright 用例、`--update-snapshots`  
+- `npm run build/typecheck/test:unit --workspace apps/web`（会写 tsbuildinfo / 全量编译）  
+- Android `clean build` / `assembleDebug` / p0 smoke  
+- 全部 `docs:*` / `prepare:*`（写业务资料或生成物）  
+- `verify:delivery-gates` 49 步、`verify:p0`、`verify:closed-loop-runtime`  
+- `verify:pii-encryption`、`verify:test-db-isolation`、`verify:tenant-isolation` 的业务断言  
+- `npm ci` / `npx` / `npm exec -w apps/web -- node`  
+- 未读、会写、会删、会外发的命令  
+
+临时检查未改仓库文件。npm 对缺失脚本写了 `~/.npm/_logs/`（仓外）。
+
+---
+
+## 10. Findings（临时 GR）
+
+**空集。** 不分配 GR-01 起的号。
+
+范围外已知红灯（登记，不进本模块修复队列）：html-ledger-sync / entry-anchors 因 BSM 工作区相对 origin/main 变更且 CSV/台账未同步而正确失败；归 HTML/台账镜像（计划中其他模块），不归 `.gitignore`/`package.json` 接线错误。
+
+无添加项待 B2。无新 HTML 自身问题，不走铁律 4 申请。
+
+---
+
+## 11. 结论
+
+单席 B5 步骤结论 = **PASS**。
+
+核对：202 行覆盖；127 脚本分类；忽略规则全表；18 GEN 逐项；三线完整；声称均有类型 1 或 4 证据；无未答 questions；无未定稿本模块缺陷；未把未运行的后端/UI/Android/49 链写成通过；未继承 V0.01/322 PASS。
+
+模块生命周期仍由 Codex 在双席合取且 B5 后四值校验后写入 ledger；本席不改 ledger、不写收口文件。
