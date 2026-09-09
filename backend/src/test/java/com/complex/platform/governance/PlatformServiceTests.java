@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
@@ -318,9 +318,9 @@ class PlatformServiceTests {
         assertThat(page.pageSize()).isEqualTo(500);
     }
 
-    // V348 商户业态标准字段：五值之外的业态一律拒收（业态错＝通票分账份额拆给错的业态）。
+    // V348/V384 商户业态标准字段：六值（酒吧/餐饮/零售/游乐/传媒/其他）之外的业态一律拒收（业态错＝通票分账份额拆给错的业态）。M011-005
     @Test
-    void createMerchantRejectsBusinessFormatOutsideFiveValues() {
+    void createMerchantRejectsBusinessFormatOutsideSixValues() {
         assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
                 "bad-format", "seed", List.of(), "业态错的商户", "tenant", "be_1",
                 null, null, "Jane", "18800000011",
@@ -359,7 +359,7 @@ class PlatformServiceTests {
     }
 
     @Test
-    void approveDeleteRemovesArchivedMerchantWhenNoReferences() {
+    void approveDeleteSoftDeletesArchivedMerchantWhenNoReferences() {
         MerchantRecord merchant = seedMerchant("seed-delete");
         service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-2", "测试存档理由"));
         service.requestDeleteMerchant(merchant.id(),
@@ -371,8 +371,58 @@ class PlatformServiceTests {
                 new MerchantDeleteApprovalRequest("delete-approve", "approved", null));
 
         assertThat(decision.deleted()).isTrue();
-        assertThat(service.listMerchants(true).items())
+        // M011-001：审批删除＝软删除标记（BSM-004「不是真从数据库里抹掉…可查、可审计、可恢复」）：
+        // 默认列表不见；已存档列表仍可查且 delete_status=approved——与 JdbcPlatformRepository 同口径。
+        assertThat(service.listMerchants(false).items())
                 .noneMatch(m -> m.id().equals(merchant.id()));
+        assertThat(service.listMerchants(true).items())
+                .anyMatch(m -> m.id().equals(merchant.id()) && "approved".equals(m.deleteStatus()));
+    }
+
+    // M011-003：BSM-004「想恢复点“取消存档”即可」——存档后默认列表不可见，取消存档后默认列表重新可见、待审批删除回退 none。
+    @Test
+    void unarchiveMerchantRestoresDefaultListVisibility() {
+        MerchantRecord merchant = seedMerchant("seed-unarchive");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-u1", "测试存档理由"));
+        assertThat(service.listMerchants(false).items()).noneMatch(m -> m.id().equals(merchant.id()));
+
+        service.unarchiveMerchant(merchant.id(), new MerchantArchiveRequest("unarchive-u1", null));
+
+        assertThat(service.listMerchants(false).items())
+                .anyMatch(m -> m.id().equals(merchant.id()) && m.archivedAt() == null && "none".equals(m.deleteStatus()));
+    }
+
+    // M011-003：驳回删除申请——商户回到 none 态、仍在已存档列表可查（BSM-004「可恢复」）；删除理由随申请落到记录（BSM-004「存档及删除都需要填写理由」）。
+    @Test
+    void rejectingDeleteRequestKeepsMerchantAndResetsDeleteStatus() {
+        MerchantRecord merchant = seedMerchant("seed-reject");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-r1", "测试存档理由"));
+        service.requestDeleteMerchant(merchant.id(), new MerchantDeleteRequest("delete-req-r1", "录入错误，申请删除"));
+        assertThat(service.listMerchants(true).items())
+                .anyMatch(m -> m.id().equals(merchant.id()) && "pending".equals(m.deleteStatus())
+                        && "录入错误，申请删除".equals(m.deleteReason()));
+
+        asMasterAuthority();
+        MerchantDeleteDecision decision = service.approveDeleteMerchant(merchant.id(),
+                new MerchantDeleteApprovalRequest("delete-reject-r1", "rejected", null));
+
+        assertThat(decision.deleted()).isFalse();
+        assertThat(decision.decision()).isEqualTo("rejected");
+        assertThat(service.listMerchants(true).items())
+                .anyMatch(m -> m.id().equals(merchant.id()) && "none".equals(m.deleteStatus()) && m.archivedAt() != null);
+    }
+
+    // M011-004：BSM-072/074「商户不能看平台全局和其他商户数据」——商户账号打治理写路径在服务层首行即被
+    // requirePlatformScope 拒绝（F-AUTHZ-02），不依赖控制器。
+    @Test
+    void merchantActorIsRejectedByPlatformScopeOnGovernanceWrite() {
+        TestSecurityActors.asMerchantUser("mch_scope_1");
+        assertThatThrownBy(() -> seedMerchant("scope-write"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+        assertThatThrownBy(() -> service.archiveMerchant("mch_any", new MerchantArchiveRequest("archive-scope", "理由")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
     }
 
     @Test
@@ -703,7 +753,7 @@ class PlatformServiceTests {
             return new ArrayList<>(businessEntities.values());
         }
 
-        // V260 测试用：模拟商户被核心运营表引用的活条数（>0 拒硬删）。
+        // V260 测试用：模拟商户被核心运营表引用的活条数（>0 拒绝审批删除；删除本身为软删除标记，M011-001）。
         private long merchantReferenceCount;
 
         @Override
@@ -719,7 +769,12 @@ class PlatformServiceTests {
 
         @Override
         public void deleteMerchant(String merchantId) {
-            merchants.remove(merchantId);
+            // M011-001：与 JdbcPlatformRepository.deleteMerchant 同语义——软删除标记，行保留可查可恢复（BSM-004）。
+            MerchantRecord merchant = merchants.get(merchantId);
+            if (merchant != null) {
+                merchants.put(merchantId, merchant.withDelete("approved", merchant.deleteRequestedBy(),
+                        merchant.deleteRequestedAt(), merchant.deleteReason(), Instant.now()));
+            }
         }
 
         @Override

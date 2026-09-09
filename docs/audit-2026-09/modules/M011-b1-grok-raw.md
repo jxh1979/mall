@@ -627,3 +627,178 @@ B2-r2 正确口径（本批不得按候选 005 定稿）：
 ### 结论
 
 全批差集无漏并。001–004、006、007 逐 ID 票 PASS。005 并入 CX-04 缺键并改为入队，改写本席 GR-005 原意且重复已有缺键闸，本席 **FAIL**。无添加项。未源修、未改 findings/ledger。本席 B2 **FAIL**。须 B2-r2 按本票拆分 005 后再票；未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M011 IN_PROGRESS，B3=0。
+
+## M011 B2-r2 整批归并复核（Grok 乙席）
+
+- 文件自身版本：V0.03（本段追加；上方 V0.01 B1 43085 字节 + V0.02 B2-r1 追加，全文 61599 字节原样保留，不改写 B1 锁段起点，本段不写独占锁哈希字段行）
+- 席位：Grok（固定外审席乙，独立）。步骤：B2-r2 整批候选复核，不是 B1 重审、不是修复、不是模块 PASS、不是 B3。
+- 控制：160-audit-prompt.md V0.17；runbook V0.02；criteria-lock V0.11；modules.md V0.04（471 模块，FILES 3 / 判据 87）
+- 正本：`/home/james/complex-management`。用户给定审计基线 `origin/main=242f487233d028173cb9198eecd079f5d877405c`。本席 `rev-parse`：当前检出分支 `audit/20260909/M001-M010-checkpoint` = `2e812adf3692205d5bf7395c4c0c644edc335693`，`origin/main` 与 merge-base 仍为 `242f4872…`。三测试文件指纹与 B1 覆盖表逐文件全等，不构成候选改写。ledger V2.30 IN_PROGRESS；B3=0；无源修复。
+- 席甲：Claude Fable 5.1（操作员 2026-09-09 接替指令），作者自审票；本席 FAIL 具否决权。本票不照抄席甲 B2-r1 PASS，只核 r2 候选是否落实本席 B2-r1。
+- 本席 B2-r2：**PASS**（001–007 逐 ID 均 PASS；r1 唯一否决点 005 已闭合）
+- 本追加段不写独占锁哈希字段行。正文实算：`sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`；sidecar `plan/criteria-lock.sha256` 与 ledger 顶行同值；`LOCK-AMEND-COUNT: 1`。未改锁/sidecar/ledger/findings/questions/HTML/源/主索引。
+- 无 MCP、无子代理、无第三席、不问操作员。未 commit/push/PR/merge/部署。未在主仓 cwd 写除本指定路径外的任何文件。未重跑 57 用例（三文件指纹与 B1 表全等，B2 只核差集与 r1 意见落实）。
+
+此票只判断 findings.md 顶部 V1.35「当前 M011 B2-r1 合取FAIL…B2-r2 修订候选」相对本次两份完整 B1 raw（含各自 B2-r1 追加段）的全批差集、GEN-017 四分类、工程缺陷、修复队列与最小修法，并核对该候选是否准确落实本席 B2-r1（V0.02）否决与收窄意见、有无新的改写或遗漏。必须另有席甲本批 B2 PASS 且本席亦 PASS 才能定稿。不覆盖上方 V0.01 B1 **FAIL**、V0.02 B2-r1 **FAIL** 原文。
+
+### 本批输入（完整指定文件，本席实算）
+
+| 路径 | 版本 | bytes | SHA256 |
+|---|---|---:|---|
+| `docs/audit-2026-09/modules/M011-b1-grok-raw.md` 前缀（本席 B1+B2-r1，本段追加前） | V0.02 | 61599 | `b72bf605c43128ab443c1c1bd98a4163d039d6e87d4edfdff06ab682b8c9f748` |
+| 其中 B1 前缀 | V0.01 | 43085 | `ce463f1f601d4bad08eb2d535b7aa2c5df1bdf905b5ee5d2142db9759997871c` |
+| `docs/audit-2026-09/modules/M011-b1-self-raw.md`（席甲 B1+B2-r1） | V0.02 | 17188 | `84980b2d44d95d0e2e2dceff66fa18616324ecd2e0980d214616929d5389b208` |
+| 其中席甲 B1 前缀 | V0.01 | 13404 | `4ea215f5605d66177c036e113d3032b2d2587cd4b5a66dd2c02a609c0eff4313` |
+| `docs/audit-2026-09/findings.md` | V1.35 | 511341 | `c9ab33717d04ba79b9475485d9812c6c52b8691b8d2c3ad41846acc70dceae88` |
+
+ledger 只读：V2.30，433098 bytes，SHA256 `235684e210f265b3bafb712207fe2782545a732dc32792d469a6d4e0e8465a37`；M011 IN_PROGRESS、B3=0。三测试文件指纹与 B1 覆盖表逐文件全等（Controller 351/15915/`cbaec207…feeb78`；JDBC 495/23380/`247409ab…9dd738`；Service 810/39637/`8775e50a…1c3448`）。映射行 `M011 → [BEQR-063 … PGM-066]` COUNT=87 unique=87 MISSING=[]。本文件独占锁哈希字段行仍仅文首一处，本段未新增。
+
+候选形态：V1.35 顶部为 r2 **条目覆盖段**（非整表重写）；其下「当前 M011 B2-r1 整批候选」001–007 原表保留。未改条目（001/002/004）沿用 r1 表七列；修订条目（003/005/006/007）以顶部四条为准覆盖对应单元格。本席按此读取，不把 r1 表残留「两处补断言 / fake 实现 setMerchantArchiveReason / 工程缺陷是（属 M009）」当作本批有效处置。
+
+### 技能（V0.17 §6 收窄，本节点实读）
+
+| 技能 | 本节点用法 |
+|---|---|
+| using-superpowers | 先核技能；用户/提示词覆盖技能本体 |
+| receiving-code-review | 先核源/命令再接受或反驳；禁止表演性同意；B2 不修复 |
+| grilling | 只借追问结构自查：005 是否仍并入缺键、003 是否仍逼 fake、006 是否仍写缺陷是、有无新改写 |
+| verification-before-completion | 声称前先跑只读哈希/行号核对；本票不声称 57 用例本轮新绿 |
+| systematic-debugging / diagnosing-bugs | 只借读错→复现→数据流；不改生产代码 |
+| codebase-design | 删除测试：003 深度落在 withArchive/withDelete + listMerchants(false/true)，不落 archiveReason 旁路 |
+| ponytail-review | 只评最小删除/收窄，不落地。005 缺键两条仍 = yagni |
+| writing-for-agents | 报告结构；未改 AGENTS.md |
+| requesting-code-review | 本体要派同会话子代理 → 第四席；**未用** |
+| tdd / test-driven-development / ponytail | B2 禁止修复，未落测试、未改源 |
+| git-guardrails-claude-code | 存在；本席未改 git |
+| resolving-merge-conflicts | 本节点无合并 |
+| batch-grill-me / ubiquitous-language | **缺口：本环境未找到**；未冒充调用 |
+| Arc audit | 会派子代理并另写 `docs/arc/audits/`，与双席冲突；**未用** |
+
+### r1 意见 → r2 候选对照（本席 B2-r1 原文，不采信席甲转述）
+
+本席 B2-r1：**FAIL**。唯一否决点 005 把席甲 CX-M011-04 两条缺幂等键请求并入并列为必修。另提出 003 处置收窄（不为 archive_reason 造 fake、不给 MerchantRecord 加字段）与 006 缺陷口径（按 M009-022 为否）。001/002/004 票 PASS，口径不变。
+
+| 本席 r1 要求 | r2 候选（V1.35 顶部） | 落实？ |
+|---|---|---|
+| 005 技术性／缺陷是／队列是（随批）：**只**改 FiveValues→六值；TDD 用该用例自身非法值断言，不新写测试 | 「只把 `createMerchantRejectsBusinessFormatOutsideFiveValues` 方法名/注释改为六值……TDD以该用例自身已能失败的非法值断言为准，不新写测试」 | 是 |
+| CX-04 两条缺键：**禁止**各补一次请求；归 007 否 | 005「不补缺键请求」；007「两条绑定用例缺幂等键未断言……按铁律6不按verb各补」 | 是 |
+| 可选随 005 把两条绑定方法名去掉 Idempotency 字样 | 005 写成必做改名（GEN-016 名称与断言一致） | 是（r1 允许的随批改名收为必做，仍仅改名、无新测试） |
+| 003：unarchive 后默认列表重新可见（存档时不可见）；rejected 后 deleteStatus=none；requestDelete 后 deleteReason 非空（withDelete）；控制器一条 archive 或 delete-approve；不为 archive_reason 造 fake、不加字段、不为四条 HTTP 各写一条 | 三条服务断言 + 控制器一条；明确「不为 archive_reason 新增 fake 能力、不给 MerchantRecord 加字段、不为四条 HTTP 各写一条」。rejected 另写「且商户仍在已存档列表」 | 是（加严见下，不构成新改写） |
+| 006 工程缺陷按 M009-022 为否；队列否；M009 不重开 | 「否（按 M009-022 定稿：IdempotencyService.execute 仍必填，仅控制器未显式调用）」，跨模块观察登记、M009不重开 | 是 |
+| 007 补入 CX-04 缺键事实 + 席甲 OBS-02/03/04/05 | 顶部 007 条逐项写入；队列仍否 | 是 |
+| 001/002/004 口径不变 | 「其余001/002/004口径不变」；r1 表三行七列未改写 | 是 |
+
+**r1 裁定未被误读。** 无把「005 仅改名」读成仍补缺键、无把「003 收窄」读成仍实现 archive_reason fake、无把「006 缺陷否」读成重开 M009、无把「CX-04 归 007 否」读成删除事实。无新永久 ID、无锁外判据、无 HTML 修改申请、无添加项、不进 BLOCKED-ASK。
+
+### 完整差集（GR-001…005、OBS-01…12、席甲 CX-01…05、席甲 OBS-01…06）
+
+漏并：无。两席 B1 全部临时 ID 仍落在 001–007。003 仍按本席 GR-003 收入，不是席甲发明。
+
+| 正式ID | 本次来源（不改写原意） | r2 分类/缺陷/队列 | 本席票 |
+|---|---|---|---|
+| M011-001 | GR-M011-001 + 席甲 CX-01/05（+M009-010/026） | 冲突/是/是 | **PASS（冲突/是/是）** |
+| M011-002 | GR-M011-002 + 席甲 CX-02（+M009-003/005） | 细化/是/是 | **PASS（细化/是/是）** |
+| M011-003 | GR-M011-003（席甲 B1 未列） | 细化/是/是（处置已收窄） | **PASS（细化/是/是）** |
+| M011-004 | GR-M011-004 + 席甲 CX-03 | 细化/是/是 | **PASS（细化/是/是）** |
+| M011-005 | GR-M011-005；席甲 CX-04 **改名半边**（缺键半边改归 007） | 技术性/是/是（随批，仅改名） | **PASS（技术性/是/是；仅改名）** |
+| M011-006 | GR OBS-09（跨模块） | 技术性（跨模块观察）/否（M009-022）/否 | **PASS（否/否）** |
+| M011-007 | GR OBS-02/03/04/05/06/07/08/10/11/12 + 席甲 OBS-01…06 + CX-04 缺键事实 | 技术性/正向 /否/否 | **PASS（否/否）** |
+
+冲突 1（001）。细化入队 3（002、003、004）。技术性入队 1（005，仅改名）。否 2（006、007）。添加 0。
+
+### 001 独立裁定（冲突／是；口径与 r1 同，未改）
+
+r1 表单元格未改。核源仍成立：`PlatformServiceTests.java:721-723` `merchants.remove`；`:362-376` 对 `listMerchants(true)` 断言 `noneMatch`；`:706`「拒硬删」；对照 JDBC `:342-355` 与 `JdbcPlatformRepository` `UPDATE delete_status='approved'`；HTML BSM-004 `:571`「不是真从数据库里抹掉」。四分类冲突。最小处置仍：先改断言见红，再改 fake `withDelete("approved")` 留行，注释改软删；不改 M009 源码。票：**PASS**。
+
+### 002 独立裁定（细化／是；口径与 r1 同，未改）
+
+r1 表仍含 JDBC `:69-72/:142-143/:164/:201/:393/:415`（含更新路径 `revenue_share`）与 Controller `:133/:157/:169`。服务负例 `:165/:180` 必须保留。项目状态 `draft` 与主键 `be_operation_*` 不动。最小处置仍：夹具改 `lease`（或六类之一）+ `active`/`pending_admission`，`:164/:201` 一并改，不新增库 CHECK。票：**PASS**。
+
+### 003 修订核实（细化／是；r1 收窄已落地）
+
+本席 r1：「不要为 archive_reason 新增 fake、不要给 MerchantRecord 加字段」；服务三条 + 控制器一条；不为四条 HTTP 各写一条。
+
+本批类型 4 核源（只读，不采信转述）：
+
+- `MerchantRecord.java` 字段止于 `deleteReason`，**无** `archiveReason`。`archive_reason` 只经 Jdbc 写库列。
+- fake `:685` `setMerchantArchiveReason` 仍空实现。r2 **禁止**为实现它而造旁路。
+- `unarchiveMerchant:220-241`：`withArchive(null,null,now).withDelete("none",…)`，默认接口 `listMerchants(false)` 按 `archivedAt==null && deleteStatus≠approved` 过滤；存档后默认列表不可见、取消存档后重新可见，现有 `saveMerchant`/`withArchive` 足够。
+- `requestDeleteMerchant:259-261` 未存档则 `MERCHANT_NOT_ARCHIVED`；非最高权限走 `withDelete("pending", … reason …)`。`approveDelete` rejected 分支 `:323-326` 只 `withDelete("none")`，**不**清 `archivedAt`。故「rejected 后仍在已存档列表」是同一条用例的加严，不是第二条测试，也不发明恢复页。
+- 既有 `asMasterAuthority()`（`:120-125`）已把申请发起人与审批人分开，驳回断言可走与 `approveDeleteRemovesArchivedMerchantWhenNoReferences` 同构的换人，不改被测源码。
+- 控制器 archive/delete-approve `:88-121` 均有 `requireIdempotencyKey` + 权限码；本模块仍无对应 HTTP 用例。r2 仍只要求 **一条** archive 或 delete-approve，不是四条。
+
+「仍在已存档列表」相对 r1 原文多一句，但是 `MERCHANT_NOT_ARCHIVED` 闸 + rejected 不清档的直接推论，锁的是「驳回 ≠ 抹除」，与 001 同缝、不增 fake。不构成新改写，不因此 FAIL。
+
+「`findMerchantById`/列表记录的 deleteReason」：默认列表不含已存档行，列表须为 `listMerchants(true)` 或 `findMerchantById`。定稿措辞见下，不改队列。
+
+票：**PASS**。
+
+### 004 独立裁定（细化／是；口径与 r1 同，未改）
+
+r1 表未改：服务一条 `asMerchantUser` 调 `createMerchant`/`listMerchants` 期望 `PLATFORM_SCOPE_REQUIRED`；控制器一条参数化负例扩到其余五个治理 GET；不为每个 verb 各写一条。核源：`@BeforeEach` 仍一律 `asPlatformAdmin()`；`asMerchantUser` 存在；七个 GET 生产侧均有 `requirePlatformScope`，本模块负例仍只打 `/merchants`。票：**PASS**。
+
+### 005 修订核实（r1 唯一否决点；已闭合）
+
+本席 r1 FAIL 理由：(1) 并入 CX-04 缺键改写 GR-005 原意；(2) 缺键闸已有 `creatingMerchantWithoutIdempotencyKeyReturnsValidationFailed`（`:100-112`，POST `/merchants` 无键 → 400 `VALIDATION_FAILED`），再按 verb 补两条违反「不为每个 verb 各写一条」；(3) 003 已覆盖真正未测的 archive/delete-approve HTTP 面。
+
+r2：
+
+- 分类技术性、缺陷是、队列是（随批）——仅就改名而言，与 r1「001–004 已进 B3 则可顺手改名」相容。
+- 处置删除「两条用例各补一次缺键请求断言」。
+- 绑定两条方法名去掉 Idempotency：r1 写可选，r2 收为必做；仍是 GEN-016 名称与断言对齐，**零新请求**。
+- TDD：该用例以 `tenant` 断言 `MERCHANT_BUSINESS_FORMAT_INVALID`，自身已能失败；不新写测试。
+
+核源：`:321-329` 方法名/注释仍「五值」；`:258-292`/`:295-325` 请求体**带**键且 200，只 verify `entity.binding.manage`。r2 禁止补缺键后，这两条成功路径保持，只改名。
+
+票：**PASS**。r1 否决点闭合。
+
+### 006 修订核实（跨模块观察／否；缺陷口径已收）
+
+`PlatformController.createSpaceType` `:157-160` 仍无 `requireIdempotencyKey`，其余写入口有。M009-022 定稿：技术性、缺陷否、队列否（`IdempotencyService.execute` 仍必填，仅控制器风格）。r2 工程缺陷改为「否（按 M009-022…）」，M009 不重开，本模块不修源码、不为其写测试。队列否。票：**PASS（否）**。
+
+### 007 修订核实（其余观察／否；r1 事实补全已落地）
+
+r1 不构成 FAIL 的措辞缺口：CX-04 缺键应归本 ID 否；席甲 OBS-02（401/403）、OBS-03（空密钥）、OBS-04（`@Transactional`/文件 V0.03）、OBS-05（`seedMerchant` 以 `be_1` 作三列）应写入事实栏。r2 顶部均写入，并写明共享闸已由 `creatingMerchantWithoutIdempotencyKeyReturnsValidationFailed` 覆盖、按铁律 6 不按 verb 各补。本席 OBS-02…12 无一条被改写成缺陷入队。席甲 OBS-01/06 原已在 r1 表 007。改名归因 005，不把 007 队列改是。票：**PASS（否）**。
+
+### 残留措辞（不构成新改写，不因此 FAIL）
+
+r1 表 003 处置仍写「fake 实现 `setMerchantArchiveReason` 并断言理由落到记录」；005 仍写「一行改名+两处补断言」「各补一次缺键请求」；006 仍写「工程缺陷是（属 M009 源码）」。这是未改条目沿用原表的历史单元格，**不是**本批有效口径。定稿后须以 V1.35 顶部 r2 四条覆盖这三行；B3 若按 r1 表 005 补缺键请求，即违反本席本票。
+
+003「列表记录」未写死 `includeArchived=true`。定稿写明：deleteReason 断言走 `findMerchantById` 或 `listMerchants(true)`，不得拿默认列表（已存档行本就不在其中）。
+
+005 把 r1「可选」去 Idempotency 字样收为必做，可接受。
+
+三个测试文件自身版本递增（Controller 现 V0.01、JDBC/Service 现 V0.03）r2 顶部未重述，沿用 r1 边界，定稿补一句即可。
+
+### 分类 / 队列 / 允许的最小修复边界
+
+本批可定稿（仍须席甲本批 B2-r2 PASS 合取）。队列是=001、002、003、004、005（005 仅改名）；否=006、007（007 含 CX-04 缺键事实）。一次 B3-r1 只改本模块 3 个测试文件，不改 M009 源码、三 HTML、锁、迁移、权限种子。可执行行为先写归属该 ID 的最小失败测试（GEN-003）：
+
+- 001：先改断言见红，再改 fake `withDelete("approved")` 见绿；`:706` 注释随改。
+- 002：夹具/断言改 `lease`+`active`/`pending_admission`，含 `:164/:201` `revenue_share`；服务非法值负例保留。
+- 003：`unarchiveMerchant` 后默认列表重新可见（存档时不可见）；`approveDelete(decision=rejected)` 后 `deleteStatus=none` 且仍在 `listMerchants(true)`；`requestDeleteMerchant` 后 `findMerchantById`/`listMerchants(true)` 的 `deleteReason` 非空（走既有 `withDelete`）；控制器一条 archive **或** delete-approve 的权限/幂等。不为 archive_reason 新增 fake、不给 MerchantRecord 加字段、不为四条 HTTP 各写一条。驳回用例换人沿用既有 `asMasterAuthority()`。
+- 004：服务一条 `asMerchantUser`；控制器一条参数化五 GET。不为每个 verb 各写一条。
+- 005：方法名/注释 SixValues；两条绑定用例方法名去掉 Idempotency 字样；不加缺键请求；不新写测试。
+
+禁止：按 r1 表 005 给绑定两条补缺键 400；改 Jdbc/`PlatformService`/`MerchantRecord`；为 003 给 record 加 `archiveReason` 或实现 `setMerchantArchiveReason` fake；新增库 CHECK；把 006 当 M009 重开；每个 HTTP verb 各写作用域或幂等负例。
+
+改动文件自身版本递增。
+
+### 本席实跑（B2-r2，只读；无写模式）
+
+- 锁文件 hashlib / sha256sum：`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（与 sidecar、ledger 顶行、本文件既有文首独占行同值）
+- 输入三文件字节与 SHA：上表全等
+- 三测试文件指纹：与 B1 表全等
+- 点读：MerchantRecord 无 archiveReason；fake `:685` 空实现；unarchive/rejected/requestDelete 行号如上；`creatingMerchantWithoutIdempotencyKeyReturnsValidationFailed` `:100-112`；两条绑定用例带键 200；FiveValues `:323`；createSpaceType `:157-160` 无 `requireIdempotencyKey`；`asMasterAuthority()` `:120-125` 已存在
+- 未跑：主仓测试、psql 写、部署、修复
+- 未改 findings/ledger/锁/源/HTML/主索引
+
+### 结论
+
+候选按本席 B2-r1 意见修订：005 拆出 CX-04 缺键、仅改名入队；003 收窄为三条服务断言 + 一条控制器、禁止 archive_reason fake；006 缺陷按 M009-022 为否；007 补入缺键事实与席甲 OBS-02…05。001/002/004 口径未改。全量差集无漏并、无新 ID、无新判据、无本批添加项。r1 任一裁定均未被误读。r1 表残留单元格不改变已裁定的队列/分类。
+
+本席队列：**001、002、003、004、005 是（5 项，005 仅改名）；006、007 否（2 项）**。
+
+本席 B2-r2：**PASS**
+
+未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M011 `IN_PROGRESS`，B3=0。不覆盖上方 B1 FAIL 与 B2-r1 FAIL 原文。

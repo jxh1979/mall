@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,6 +21,7 @@ import com.complex.platform.common.api.GlobalExceptionHandler;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.config.SecurityConfig;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
+import com.complex.platform.governance.dto.MerchantArchiveRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
 import java.math.BigDecimal;
@@ -111,6 +112,7 @@ class PlatformControllerTests {
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
+    // M011-002：mock 的合作方式取 HTML 六类之一（BEQR-148 lease），不再把已退役收费模板码当 API 形状。
     @Test
     void listingMerchantsReturnsApiResponsePageShape() throws Exception {
         when(service.listMerchants(eq(false), any(), anyInt(), anyInt())).thenReturn(new PageResponse<>(
@@ -130,7 +132,7 @@ class PlatformControllerTests {
                         "Jack",
                         "18800000013",
                         BigDecimal.valueOf(12.30),
-                        "fixed_rent_plus_commission",
+                        "lease",
                         "active",
                         Instant.parse("2026-06-14T00:00:00Z"),
                         Instant.parse("2026-06-14T00:00:00Z")
@@ -154,7 +156,7 @@ class PlatformControllerTests {
                 .andExpect(jsonPath("$.data.items[0].contact_phone").value("188****0011"))
                 .andExpect(jsonPath("$.data.items[0].secondary_contact_phone").value("188****0013"))
                 .andExpect(jsonPath("$.data.items[0].rent_per_square_meter").value(12.30))
-                .andExpect(jsonPath("$.data.items[0].cooperation_form").value("fixed_rent_plus_commission"))
+                .andExpect(jsonPath("$.data.items[0].cooperation_form").value("lease"))
                 .andExpect(jsonPath("$.data.total").value(1));
     }
 
@@ -166,7 +168,7 @@ class PlatformControllerTests {
                 List.of(new MerchantRecord(
                         "mch_1", "P0 Merchant", "other", "be_1", null, null, "Jane", "18800000011",
                         "Owner Wang", "1F-A", BigDecimal.valueOf(128.50), BigDecimal.valueOf(120.00),
-                        "Jack", "18800000013", BigDecimal.valueOf(12.30), "fixed_rent_plus_commission", "active",
+                        "Jack", "18800000013", BigDecimal.valueOf(12.30), "lease", "active",
                         Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")
                 )), 1, 50, 1));
 
@@ -208,6 +210,44 @@ class PlatformControllerTests {
                 .andExpect(jsonPath("$.data.id").value("sp_1"));
 
         verify(authorizationService).requirePermission("governance.space.manage");
+    }
+
+    // M011-003：存档/删除 HTTP 面（BSM-004）：存档须 merchant.profile.manage + 幂等键；缺键 400 且不进服务层。
+    @Test
+    void archivingMerchantRequiresManagePermissionAndIdempotencyKey() throws Exception {
+        when(service.archiveMerchant(eq("mch_1"), any(MerchantArchiveRequest.class)))
+                .thenReturn(new MerchantRecord(
+                        "mch_1", "P0 Merchant", "other", "be_1", null, null, "Jane", "18800000011",
+                        "Owner Wang", "1F-A", BigDecimal.valueOf(128.50), BigDecimal.valueOf(120.00),
+                        "Jack", "18800000013", BigDecimal.valueOf(12.30), "lease", "active",
+                        Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")
+                ).withArchive(Instant.parse("2026-06-15T00:00:00Z"), "ops", Instant.parse("2026-06-15T00:00:00Z")));
+
+        mockMvc.perform(post("/api/v1/platform/merchants/mch_1/archive")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "archive-1",
+                                  "reason": "退场清理"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("mch_1"))
+                .andExpect(jsonPath("$.data.archived_at").isNotEmpty());
+        verify(authorizationService).requirePermission("merchant.profile.manage");
+
+        mockMvc.perform(post("/api/v1/platform/merchants/mch_1/archive")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reason": "缺幂等键"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        verify(service, Mockito.times(1)).archiveMerchant(eq("mch_1"), any(MerchantArchiveRequest.class));
     }
 
     @Test
@@ -254,8 +294,25 @@ class PlatformControllerTests {
                 .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"));
     }
 
+    // M011-004：其余五个治理读端同法 fail-closed（BSM-072/BSM-074/PGM-027）；任一读端退回只 requirePermission 即红。
     @Test
-    void createBusinessEntityBindingRequiresIdempotencyAndManagePermission() throws Exception {
+    void otherGovernanceReadEndpointsRequirePlatformScope() throws Exception {
+        doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "商户账号无权查看平台级经营分析"))
+                .when(authorizationService)
+                .requirePlatformScope();
+
+        for (String path : List.of("/api/v1/platform/business-entities", "/api/v1/platform/projects",
+                "/api/v1/platform/spaces", "/api/v1/platform/space-types", "/api/v1/platform/venue-business-hours")) {
+            mockMvc.perform(get(path)
+                            .with(user("ops").roles("P0_SMOKE")))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"));
+        }
+    }
+
+    @Test
+    // M011-005：方法名与断言一致——本用例只验证 entity.binding.manage 权限码；缺幂等键的共享闸见 creatingMerchantWithoutIdempotencyKeyReturnsValidationFailed。
+    void createBusinessEntityBindingRequiresManagePermission() throws Exception {
         when(service.createBusinessEntityBinding(any(BusinessEntityBindingRequest.class)))
                 .thenReturn(new BusinessEntityBindingRecord(
                         "beb_created",
@@ -292,7 +349,7 @@ class PlatformControllerTests {
     }
 
     @Test
-    void changeBusinessEntityBindingRequiresIdempotencyAndManagePermission() throws Exception {
+    void changeBusinessEntityBindingRequiresManagePermission() throws Exception {
         when(service.changeBusinessEntityBinding(eq("beb_1"), any(StatusChangeRequest.class)))
                 .thenReturn(new BusinessEntityBindingRecord(
                         "beb_1",
