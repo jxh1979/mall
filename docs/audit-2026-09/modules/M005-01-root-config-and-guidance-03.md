@@ -1,37 +1,22 @@
-# M005 — 根运行与测试配置审计收口
-版本：V0.01
+# M005 治理门禁与 CI 基线／配置与工程入口／第3段
+版本：V0.02
 
-审计结论：PASS。M005/322，4个模块文件232行、127根scripts、9个基础编译选项，冻结GEN-001—GEN-018全部完成三线双审。B3执行1次，方案复核已修2次沿用，运行失败重跑0。控制V0.17；源工作区160:/home/james/complex-management/main。先完成B5后四值全等并写ledger PASS，再创建本文件。
+结论：PASS。以当前471模块计划为准，本文件替代旧计划同编号收口；旧raw全部保留，不继承旧范围PASS。正本/home/james/complex-management，main，HEAD=origin/main=242f487233d028173cb9198eecd079f5d877405c。
 
-## 修复及证据
+| 当前范围 | 行数 | SHA256 |
+|---|---|---|
+| tsconfig.base.json | 13 | 13d49b947d918bf064b5f98ceaa049e1c954f88eafe736c438cd4372b44696db |
+| .github/CODEOWNERS | 12 | b8b7a9f196172ca7a6220ab31b1d2909a773b5cdf796913b56c8722927ccef3d |
+| .github/workflows/predeploy-gates.yml V0.02 | 27 | 4c20c029b7c5b0786d56164f2657444a9b9ee3d3694c18013f2e50c1e966049d |
 
-本批M005-001—006：Node引擎支持范围与既定依赖一致并同步lock根；真实端口先数值化并限制合法整数范围；mock/real选择器覆盖已有32/18条；删除smoke:p0-ops死别名；缺真实标志立即失败；默认E2E服务只监听loopback。其余007—012为技术登记，全部12ID当前队列否，无添加/HTML申请或待答。
+全部52行、GEN-001—018，第一性原理/顺从式/对抗式均已执行。技术性012/013只登记；014将CI职责误述修正，生效YAML及ops/ci镜像各只改L6说明和L1自身版本，B4双PASS后出队。镜像为直接依赖同步，不代表提前审完M007。
 
-修复前同一回归检查8个失败，修复后0；当前B5重新验证12断言全通过。133脚本节点/107npm边无悬空无环、75node入口语法过；TypeScript正反例0 vs2322/7006；实际npm/Vite参数解析确认127.0.0.1:5173；原生引擎矩阵与root-lock深一致。UI仅验证列表收集，未宣称50条业务断言执行通过。未在B5安装依赖、激活corepack或启动生产/数据库。
+- B2：本方b1 raw V0.09、Grok b1 raw V0.07对候选findings V0.97双PASS，V0.98定稿。
+- B3累计2；本次两树f6390b5328ba446786d04408d3780ef68c269425→7abf713d9c735c93b3c27ff5af5d6e9ff4c6f5d0，完整diff保存在两份[M005-b4-r2-self-raw.md](M005-b4-r2-self-raw.md)/[M005-b4-r2-grok-raw.md](M005-b4-r2-grok-raw.md)，两席范围/归因均PASS。
+- B5：[本方完整报告](M005-b5-r2-self-raw.md) V0.01，30126bytes，SHAb922fb74fdc36f994c603e22def06541d510f42a48a776fa116ccb9efee6a14c；[Grok完整报告](M005-b5-r2-grok-raw.md) V0.01，16689bytes，SHA0bd729eebbd18bb266a9137f1170e367af347a2e023c93f047682004ef1b8271；双PASS。
+- B5后实算/sidecar/ledger/Grok四值全为b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；COUNT1。核对后ledger V1.73先记PASS，再写本收口。
+- 当前无待修/添加/未答项；方案修复累计2、Grok交付失败0。三份业务HTML与TS/CODEOWNERS未改。
 
-| 环节 | 原始证据 |
-|---|---|
-| B1全量/B2整批归并 | M005-b1-self-raw.md；M005-b1-grok-raw.md（首份外席B1因索引泄漏不采票，保留；新独立B1从byte36359起，整批B2最终双PASS） |
-| B4-r1 | M005-b4-r1-self-raw.md；M005-b4-r1-grok-raw.md；两席审计/越界PASS |
-| B5-r1 | M005-b5-r1-self-raw.md；M005-b5-r1-grok-raw.md；两席全模块PASS |
+验证：真实TS353输入配置与正负诊断、9条CODEOWNERS规则及反例、YAML/镜像、hook三probe0/1/0、现有verify:delivery-gates-docs exit0；根另查当前GitHub owner/token/action/保护API。Grok未查API的限制保留，不冒称双方都查过。报告中“16闸”计数已实算纠正为15，三个入口列表逐项相同，未改其原raw。
 
-B3 before=4e82fa54f5fcf4589bf2c8ad526ab64c9d2c2a4e，after=214490504e59405a1c6ef5f83f172a6f8be373fe；完整未过滤binary diff3529字节/8hunk/4路径/SHA42a88e82d010599b68b2e30414b2e35d2731cc5e6c6b81931ea55f4312779c26，原文及逐块ID归因在两席B4raw。
-
-Grok B5真实exit0（15:39:23 UTC接收），39052字节/416行/SHAcf0fdfa8f179392f93161e64afed533cea92fd84da79a5d1eda478a4451652a3；本方读取前独立含补核60471字节/SHA2dab6ab2974fa7dba20ee0e9246a3dfedd6376f69e4ca34dfdac5312cba21ec7，追加接收说明不改原前缀、不作新盲审票。
-
-## 四值与源快照
-
-actual=sidecar=ledger=当前B5 Grok最后哈希：
-23a86b8fabc3f14001def51f17a13af53be3384b7cea5ab5b3c8d57b699072de
-LOCK-AMEND-COUNT: 0
-
-- package.json：350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f
-- package-lock.json：d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef
-- playwright.config.ts：c1c72998765d8aa42b83f11c557a1e8ea886eb1c557207aab1ded8d5d5bd4700
-- playwright.real-backend.config.ts：956e9484517c7620833962e3ec45d63e940e8de452a201ab9a9fd148e5355132
-
-另tsconfig.base.json为13d49b947d918bf064b5f98ceaa049e1c954f88eafe736c438cd4372b44696db。package-lock只做本ID必要根镜像及文件版本，不重开M004；三业务HTML及35既有scratch保持。
-
-## 后续执行
-
-按操作员已授权的逐模块发布顺序，基于本次已审字节创建release worktree，提交、走propose-change.sh实际predeploy后推送/PR、走merge-pr.sh等待对应HEAD的CI通过后合并，再ff同步160。发布以实际PR/CI/merge回执证明，未完成前不开始M006。禁止借本收口文件声称发布已经完成。
+当前verify:predeploy因既有BSM/业务决策台账不同步在第一闸exit1，后续按所属模块处理；本PASS仅M005，不是全仓或发布通过。原始无效/失败报告保留为历史；本次使用新独立B1、B2、B4、B5链收口。下一模块M006按当前plan/modules.md继续。

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 门禁：三份业务最终解释权 HTML 里带具体数值的业务句，必须在原句里标出所属层级。
 // 依据：用户 2026-08-03 拍板——参数分三层（法定值不可配／安全阈值可配但须最高权限审批并留痕／
 //       其余业务参数一律可配），且三层一律在参数原句里字面标出，不设临场判定。
@@ -15,15 +15,15 @@
 //      整行豁免等于给这行以后新增的数值也预先发了通行证。
 //   ④ 取不到基线一律红——无法判定不等于通过。
 //   ⑤ 改动了 HTML 就全量重扫这几份文件（不只看 diff 增行）：句子被就地改数值、被挪位置都逃不掉。
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import crypto from "node:crypto";
 
-const git = (cmd) => execSync(`git ${cmd}`, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+const git = (...args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
 
 // 一律切到仓根再干活：在子目录里跑时相对路径读不到文件、git 也只看当前目录，会静默变绿。
 try {
-  process.chdir(git("rev-parse --show-toplevel").trim());
+  process.chdir(git("rev-parse", "--show-toplevel").trim());
 } catch {
   console.error("[html-param-tier] FAIL: 当前目录不在 git 仓库内，无法定位仓根。");
   process.exit(1);
@@ -53,19 +53,20 @@ const keyOf = (file, text) =>
 // （DEC-R8-17 已废行号锚点，基线用行号必然随改动漂移）。
 function scan(file) {
   const raw = fs.readFileSync(file, "utf8");
-  // <style> 块与 HTML 注释整块屏蔽成等量空白：行号、行数都不变，行内豁免标记仍从原文取。
+  // 屏蔽成等量空白保留偏移，豁免标记从同一逻辑块的原文取。
   const masked = raw
     .replace(/<style[\s\S]*?<\/style>/gi, (m) => m.replace(/[^\n]/g, " "))
     .replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, " "));
-  const rawLines = raw.split("\n");
+  // ponytail: 按本仓段落/列表项/表格行/容器/标题分块；复杂嵌套需求再采用 HTML 解析器。
+  const starts = [0, ...Array.from(masked.matchAll(/<(?:p|li|tr|div|h[1-6])(?:\s|>)/gi), m => m.index), masked.length];
   const seen = new Set();
   const hits = [];
-  masked.split("\n").forEach((line, i) => {
-    const text = norm(line);
+  starts.slice(0, -1).forEach((start, i) => {
+    const text = norm(masked.slice(start, starts[i + 1]));
     if (!text || TIER.test(text)) return;
     let vals = valuesIn(text);
     if (!vals.length) return;
-    const mark = IGNORE.exec(rawLines[i] || "");
+    const mark = IGNORE.exec(raw.slice(start, starts[i + 1]));
     if (mark) {
       const listed = valuesIn(mark[1]);
       if (!listed.length) {
@@ -123,7 +124,7 @@ const base = process.argv[2] || process.env.HTML_GATES_BASE || "origin/main";
 
 let mergeBase;
 try {
-  mergeBase = git(`merge-base ${base} HEAD`).trim();
+  mergeBase = git("merge-base", base, "HEAD").trim();
 } catch {
   console.error(`[html-param-tier] FAIL: 取不到基线 ${base}，无法判定本次改动范围。`);
   console.error("  无法判定不等于通过。请先 git fetch origin（CI 侧 actions/checkout 需 fetch-depth: 0）。");
@@ -138,7 +139,7 @@ const local = readBaseline(fs.readFileSync(BASELINE, "utf8"), "本地");
 let prevJson = null;
 try {
   // 用 stdio 选项而不是 shell 重定向：Windows 上 cmd 会把 2>/dev/null 当成路径而报错，导致棘轮比较被静默跳过。
-  prevJson = execSync(`git show ${mergeBase}:${BASELINE}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  prevJson = execFileSync("git", ["show", `${mergeBase}:${BASELINE}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 } catch {
   prevJson = null;
 }
@@ -154,13 +155,13 @@ if (prevJson !== null) {
   }
 }
 
-const dirty = git(`status --porcelain -- ${HTML.join(" ")}`).trim() !== "";
+const dirty = git("status", "--porcelain", "--", ...HTML).trim() !== "";
 const range = dirty ? mergeBase : `${base}...HEAD`;
 const scope = dirty
   ? `工作区（含未提交改动）↔ 基线 ${base}@${mergeBase.slice(0, 8)}`
   : `提交区 ${base}...HEAD（工作区三份 HTML 无未提交改动）`;
 
-const changed = git(`diff --name-only ${range}`)
+const changed = git("diff", "--name-only", range)
   .split("\n").map((s) => s.trim()).filter(Boolean);
 const touched = HTML.filter((f) => changed.includes(f));
 
@@ -193,6 +194,6 @@ console.error(`[html-param-tier] FAIL: ${fresh.length} 处带具体数值的语�
 console.error(`  比对范围：${scope}；扫描口径：改动文件全文，已剥除 <style> 与注释。`);
 console.error("  三层写法：（法定值，不可配）／（安全阈值，按X可配，调整须最高权限审批并留痕）／（业务参数，按X可配，出厂默认 N）");
 fresh.forEach((h) => console.error(show(h)));
-console.error("  确为法条编号、举例日期等非参数表述：在该行内加 <!-- param-tier:ignore 数值1;数值2 --> 只豁免这些数值。");
+console.error("  确为法条编号、举例日期等非参数表述：在该段内或紧随段尾加 <!-- param-tier:ignore 数值1;数值2 --> 只豁免这些数值。");
 console.error(`  存量待补标的老句子在 ${BASELINE}——那份只许缩不许增，新句子不得往里补登记。`);
 process.exit(1);

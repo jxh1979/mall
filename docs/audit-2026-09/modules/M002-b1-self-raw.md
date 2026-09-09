@@ -542,3 +542,375 @@ B2 PASS。输入是modules/M002-b1-self-raw.md本次V0.04加同次计数校正V0
 差集：无漏并、无新ID、无新添加项。技术性页面壳归已有003，源文导航/结构无经营发明；002同十一端别称为细化且Grok本人此前撤回冲突、本次也未再提。001日期修复与申请20匹配、PGM-066锁五步完成，004门禁修复经已记录B4-r2双PASS和本次真实CLI复查；两者已出队。没有用旧报告意见代替现文复核，没有把Grok原文改写为不同结论。B1 self中21个确认块的笔误已实际统计17并追加更正，全部951—979行覆盖事实不变；Grok本次也实算17，候选准确记录该修正。
 
 本批无未答问题；所有旧批准/拒绝/暂挂文字只作历史，当前两份B1均无新闸。当前候选分类、工程缺陷与队列一致，B2本席PASS。仍待Grok本批B2实际交付并确认；双PASS后队列为空，跳B3/B4进入B5-r2，B3累计2次不变，模块仍IN_PROGRESS，不提前写PASS。
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M002 B1 当前471模块计划完整独立审计（Codex）
+版本：V0.07
+日期：2026-09-08。阶段B1，M002/471，ledger V1.59 IN_PROGRESS；B3历史累计2，本轮0。当前唯一范围：docs/platform-governance-map-for-operations-v0.1.html，自身V0.11，979个换行/979物理内容行，SHA256 c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c。
+正本/home/james/complex-management main；开工前fetch origin成功，HEAD与origin/main均242f487233d028173cb9198eecd079f5d877405c。无源码/HTML/锁修改，无提交推送部署。操作员“继续”授权按既定计划恢复下一未完成模块；M001保持PASS，B/C原意澄清持续有效。本报告不继承旧同号PASS。
+
+## 独立性与技能实际使用
+已先派Grok同模块B1，无头适配器只返回指定路径与真实EXIT_CODE=0。Grok运行约15分钟后交付，期间按300秒进程等待，无运行超时上限。Codex仅看交付元数据，在外席结束后才开始本次独立全审；到本报告完整落盘前，未读本次Grok报告、任何其finding或原始JSON。以下本席结论不受本次外席票影响。
+本席实际读取using-superpowers及codex-tools参考、verification-before-completion、receiving-code-review、systematic-debugging，路径C:/Users/jxh1/.codex/plugins/cache/openai-curated-remote/superpowers/6.3.0/skills/；实际读取C:/Users/jxh1/.agents/skills/中的grilling、codebase-design、diagnosing-bugs、writing-for-agents、可选batch-grill-me、ubiquitous-language和git-guardrails-claude-code；ponytail-review实际读取于ponytail/4.9.0/skills。
+应用：grilling三线自问自答、batch结构一次审完整批；codebase-design只看文档接口/职责能否承载当前GEN；diagnosing-bugs与systematic-debugging只用原文/可复现命令核假设，没有试改源码；writing-for-agents将证据与规则并置；ubiquitous-language核主体/终端/权限/状态词义，不另造词表；ponytail-review核冗余，不做业务删除；verification-before-completion先跑后给票；receiving-code-review待本席落盘后才接收外席。tdd与resolving-merge-conflicts实际目录存在，但本节点没有可执行行为修复或合并冲突，不冒称使用。Codex宿主不执行Claude hook，读取git-guardrails后沿用不push、不hard reset、不clean等既定约束，没有安装或改持久配置。所有技能按提示词V0.17 §6收窄，不派第三席、不扩判据、不增加流程门槛/文件；阶段A技能不重复执行。
+
+## 整文件覆盖
+| 源行 | 内容 | 本席核对 |
+|---|---|---|
+| 1—218 | 文档版本、UTF-8、CSS、响应式布局 | 全读，结构/资源/语言/可用性检查 |
+| 219—307 | 页首、18导航、全局治理原则 | 全读，归属/溯源/例外/金额/仲裁 |
+| 308—410 | 五步治理、13领域入口卡片 | 全读，链接逐个核对 |
+| 411—514 | 主体职责、空间、商户、招商与突发事件 | 全读，四分类及权责/流程交叉 |
+| 515—608 | 合同审批、经销、员工手机与薪酬 | 全读，红线完整但书、审批/职责分离 |
+| 609—745 | 设备、权限、个人信息导出、十一端开关 | 全读，接口边界、实时撤权、缺配置关闭和留痕 |
+| 746—853 | 商户侧、开放接口、楼宇设备能耗巡检 | 全读，时点/角色/异常/独立计费 |
+| 854—950 | 密钥、客人隐私、会员、留痕、挂单及连接 | 全读，最低权限/生命周期/核销退款/历史证据 |
+| 951—979 | 17确认块、页脚解释权、结束标签 | 全读，业务确认与待实施区分、权威优先 |
+
+Read初次751—末尾输出被截断，本席随后分751—860、861—920、921—979完整补读，未以截断替代全读。HTML派生66项的原文按冻结来源行与当前正本逐字比较全等，66个h2/h3位置一一相等；定义区共同判据全文为“映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。”
+
+## 第一性原理线
+1. 为什么存在：PGM256—305明确其是归属、资格、责任的共同治理源；415—438将空间项目与经营公司/财税权责拆清；528—539把准入审批与七红线区分；647—707落权限、隔离和单据职责；728—741落终端开关；868—888落客人与员工保护。删除这些权威条款会丢失对应已确认业务规则。导航/CSS不能据业务不可缺少硬凑理由，单独归技术性CX-01，只服务读取该文档。
+2. 声称行为实际验证：本产物为静态HTML说明，未含任何script/form/input，18原生锚点均指向存在的唯一section；全标记闭合、UTF-8严格解码、外部依赖0，坏链接变异被检测。业务规则以当前逐字原文和明示算例验证相容性；金额/权限/预算算例实际Python执行，但不是系统后端/数据库运行证据。无Maven/数据库业务实现测试的适用产物，本节点按runbook文档豁免。
+3. 前提如何核实：不从“集团视图”“第三方接入”等需求声明推断已上线；不从旧审计PASS推断当前通过；不把法定要求逐字转述当成本席法律有效性鉴定；不凭“密码反推”假设其算法禁止索引映射。对集团归属、十一终端、权限公式、合作主体、挂单流程、红线与员工注册分别回读另外两份当前HTML相关完整段。三份文件SHA均实算保持本次基线；B/C原句仍在，按操作员原意不冲突。
+
+## 顺从式：84项完整映射覆盖
+以下PGM行号均为docs/platform-governance-map-for-operations-v0.1.html的实际来源行。表中PASS是本席该判据的文档审计票，不代表系统已完成对应业务功能。
+
+| 判据 | 原文行 | 锚点 | 逐项核对与边界 | 本席 |
+|---|---:|---|---|---|
+| PGM-001 | 256 | 整体定位：平台治理层不是一个业务部门，而是所有业务的底座 | 全局归属/权限/责任、链式溯源及安检例外、中文、涉税精度例外、尾差承担与先成功原则整体核对；以特别规则读概括，没有另造开关例外。 | PASS |
+| PGM-002 | 308 | 治理顺序：一件业务能不能做，要先经过这些判断 | 五步对象→合同→人员→设备→留痕是治理判断次序；没有把独立权限或审计简化为单一开关。 | PASS |
+| PGM-003 | 339 | 模块入口：平台治理层包含哪些管理模块 | 模块卡片总览提供文档导航；与后续13个领域章节的入口相接，结构检查无死链接。 | PASS |
+| PGM-004 | 342 | 综合体和集团 | 综合体/集团卡片指向project，说明当前单体与未来集团，未声称集团已全部实现。 | PASS |
+| PGM-005 | 347 | 空间和点位 | 空间/点位卡片指向space，覆盖楼层/卡座/吧台/游乐/库房/设备位置。 | PASS |
+| PGM-006 | 352 | 商户和主体 | 商户/主体卡片指向merchant，经营主体和合作方式不等同财税主体收入自动归属。 | PASS |
+| PGM-007 | 357 | 合同和准入 | 合同/准入卡片指向contract；合同归档与流程准入职责同时保留。 | PASS |
+| PGM-008 | 362 | 员工和手机 | 员工/手机卡片指向staff；私人设备绑定与公司工作设备不同用途。 | PASS |
+| PGM-009 | 367 | 权限和职级 | 权限/职级卡片指向permission；单功能权限与角色模板并存。 | PASS |
+| PGM-010 | 372 | 终端开关 | 终端卡片指向terminal-switch；实际十一类终端与BEQR233同集合。 | PASS |
+| PGM-011 | 378 | 设备管理 | 设备卡片指向device；台账/领还/状态为受管设备本身，不扩成业务授权。 | PASS |
+| PGM-012 | 383 | 商户侧 | 商户侧卡片指向merchant-side，明确授权内开放和商户隔离。 | PASS |
+| PGM-013 | 388 | 开放接口 | 开放接口卡片指向open-platform；自有接口先行，外部接入以身份和授权为前提。 | PASS |
+| PGM-014 | 393 | 留痕复核 | 留痕卡片指向audit，记录发起/审批/复核/放行责任。 | PASS |
+| PGM-015 | 399 | 楼宇运营 | 楼宇运营卡片指向building-ops，和员工设备/游乐设备分别描述。 | PASS |
+| PGM-016 | 404 | 应急与隐私 | 应急与隐私卡片指向recovery-privacy；U盘治理与个人信息保护有正文承接。 | PASS |
+| PGM-017 | 412 | 综合体和集团：当前一个项目，未来能看集团 | 当前一个物理综合体与未来集团汇总是阶段和数据归属说明，不强制创建不存在的集团业务。 | PASS |
+| PGM-018 | 415 | 物理项目与运营公司：多对多协作，不是固定隶属层级 | 多对多经营域职责和城市项目公司边界与BEQR227—229、BSM702—704一致；通用储值付款是明示限定职责，不取得域定价管理权。 | PASS |
+| PGM-019 | 424 | 各主体具体负责什么 | 六主体职责、收款和收入、内部结算、借款清偿与股权分别记录；默认80/20不是实际工商股权；内部场地协议须最高审批且双边入账。 | PASS |
+| PGM-020 | 440 | 主要功能 | 项目档案、归属、集团职位下钻和KPI可见层级共同成立；职位模板不提供可任意改数据隔离的后台设置。 | PASS |
+| PGM-021 | 452 | 业务意义 | 业务意义说明防串项目和集团总览预留，不把尚未落地的集团大屏冒称当前完成。 | PASS |
+| PGM-022 | 463 | 空间和点位：所有业务都要知道“发生在哪” | 空间是合同/低消/容量/库存/责任的位置维度，不按空间重复发明容量限制。 | PASS |
+| PGM-023 | 467 | 主要功能 | 平面图导入候选经人工复核发布，二次确认与保留证据明确；非静默覆盖。 | PASS |
+| PGM-024 | 476 | 影响业务 | 游乐仅按项目实时在玩人数限流，和BEQR142—144的场次显示、营业日口径相容。 | PASS |
+| PGM-025 | 488 | 商户和主体：谁在这里经营，经营什么 | 商户档案承载经营范围、位置、联系人、合作及开放范围；不等同向全部商户开放。 | PASS |
+| PGM-026 | 492 | 主要功能 | 六类合作、四主体唯一绑定、其他模板、公司权责审批及历史快照、招商前链与突发事件分级全文核对；不把运营判断改成新强制否决条件。 | PASS |
+| PGM-027 | 507 | 业务边界 | 授权业务内开放、客人归属、对接规则随第三方资料、合同/范围/权限联合作用；不是跨商户权限。 | PASS |
+| PGM-028 | 518 | 合同和准入：违反规则先卡住，再按层级放行 | 合同摘要用于拦截不符规则业务；后文区分无权限不放行与超范围申请。 | PASS |
+| PGM-029 | 522 | 主要功能 | 七红线连同密钥逐笔但书、权限不足无放行、审批转发与自审禁止、证照宽限、人工AI建议及合同三模板一起读；与BSM707全段一致。 | PASS |
+| PGM-030 | 544 | 业务意义 | 本段是合同管控意义摘要；红线⑥等密钥特殊权限取前段明示条款，普通上级审批不是密钥授权，不认作独立冲突。 | PASS |
+| PGM-031 | 555 | 外部经销商主体、合同价格与资金治理 | 经销企业准入、价格快照、货款到账前不出库、库存预留、退款与红冲、职责分离都有明确边界；第三方税务从有效法规专业结果。 | PASS |
+| PGM-032 | 572 | 员工和手机：人、私人手机、工作手机要能对应起来 | 员工/私人手机/工作手机对应关系为治理目标，不把公司设备策略强加私人硬件读取。 | PASS |
+| PGM-033 | 576 | 主要功能 | 注册双路径与自营例外和BSM1433一致；专属安装标识而非读取手机硬件ID，换机先解绑，异常失效复核，柜子扫码记录。 | PASS |
+| PGM-034 | 586 | 工作手机和企业微信 | 企微工作会话永久保留与授权取证最小原文/普通展示隐敏并存；既有历史修订注释不替代当前正文。 | PASS |
+| PGM-035 | 599 | 提成发放和人员服务治理 | 提成工资月结依法代扣、任务营销不混考勤、禁止人员陪场服务商品化，合法教练另专题；均为权威条款而非文档新增业务。 | PASS |
+| PGM-036 | 611 | 设备管理：谁领了什么设备，设备能不能用 | 工作/现场三环节设备有明确分工；安检只记录设备端不因总体台账自动建按人记录。 | PASS |
+| PGM-037 | 615 | 主要功能 | 设备编号状态、领用维修挂失、软件白名单为设备管理，不替代人员功能权限。 | PASS |
+| PGM-038 | 624 | 和现场业务的关系 | 工作手机核销与交接、平板仅点酒、一体机授权售票范围分别界定，不将终端开启当可售全部票。 | PASS |
+| PGM-039 | 636 | 智能设备场景联动范围 | 设备动作/延时编排明确后续独立立项前不定义，不据此反向要求当前实现定时计费。 | PASS |
+| PGM-040 | 643 | 权限和职级：每一个单一功能都可以单独授权 | 单功能权限、角色装配、单人增减为不同组合层，不等同固定岗位全权。 | PASS |
+| PGM-041 | 647 | 权限规则 | 最终权限集合含显式拒绝最高；高危授出前审批，跨商户/项目保存先失效旧权且新权审批；资金/税务/数据权限及逐单转发不形成常设代理。 | PASS |
+| PGM-042 | 664 | 职级规则 | M1—M10与上中下与BEQR232的30档一致；只绑定工资大范围，具体薪资单填，不取代功能权限。 | PASS |
+| PGM-043 | 673 | 外包人员与审计人员（2026-06-29 新增） | 外包机构范围与人数、只读审计、查看/导出分权、封闭PII清单及员工/本商户客人例外、逐次导出/敏感页留痕全文核对；密码暗纹反查未限定无索引算法，不虚构其数学不可实现。 | PASS |
+| PGM-044 | 688 | 桌台、挂单与经销业务权限 | 桌台/挂单/经销功能与单据审批分开；优惠券预留和付款核销原子相容BEQR130—135，转并台保留历史提成，跨范围先审批。 | PASS |
+| PGM-045 | 712 | 终端开关：哪些端能打开，后台说了算 | 终端开关只是允许访问前提，仍看权限、商户和设备；不可关审计和七红线。 | PASS |
+| PGM-046 | 716 | 能控制哪些端 | 十一终端列表中的合并展示拆为实际十一类，与后文及BEQR233逐类对应。 | PASS |
+| PGM-047 | 728 | 怎么控制 | 七档开关优先级、无行默认关、营业维护限制、读配置失败与审计例外均明确；整套金额规则统一切换与既定粒度参数取值有明确区分。 | PASS |
+| PGM-048 | 749 | 商户侧：在授权业务范围内全开放 | 商户侧按自身经营范围开放；游乐场次安排不等于另一套容量计数，未授权其他商户/项目数据禁止。 | PASS |
+| PGM-049 | 781 | 开放接口：先做好自己的开放能力，再接第三方资料 | 无真实第三方资料的当前边界明示；后续供应商接入不是自有系统阻塞，也不是伪造已联调。 | PASS |
+| PGM-050 | 785 | 平台开放给第三方 | 第三方先验身份再看授权；门店ID映射由招商登记，缺映射挂差异不自动入账，调用全审计。 | PASS |
+| PGM-051 | 794 | 第三方接入平台 | 供应商回传/格式/对账随真实资料接入，未在此虚构外部服务频次和返回成功。 | PASS |
+| PGM-052 | 806 | 楼宇运营：管好建筑本身的设备、能耗和巡检 | 楼宇设备/水电/安防消防本体治理与物业合同财务相连，不与员工设备及游乐巡检混同。 | PASS |
+| PGM-053 | 810 | 楼宇机电设备 | 四组机电设备、六状态、维保周期、人工及物联网告警为具体楼宇运营范围。 | PASS |
+| PGM-054 | 821 | 能耗计量 | 能耗异常二人复核+主管确认前缓出账催缴，原读数保留；独立用量代收和独立损耗服务费区分；总分表摘要与BEQR199扣除设备回路的具体口径共同执行，未声明不扣回路。 | PASS |
+| PGM-055 | 832 | 楼宇巡检 | 四类巡检，与独立能耗抄表分开；轻异常/重整改两模式和全工单模式均含复检主管确认。 | PASS |
+| PGM-056 | 844 | 和谁有关 | 物业/财务/供应链/审计为同对象关联，不另造业务记录源。 | PASS |
+| PGM-057 | 857 | 应急恢复和客人隐私：最坏情况有后路，个人信息看不到明文 | 应急和隐私标题为功能总览，以随后客人与员工具体例外控制明文。 | PASS |
+| PGM-058 | 860 | 紧急恢复（破窗机制） | 钥匙更换先作废旧钥匙、最高权限本人加见证、逐动作验证和交接留痕；无预制备用，不从正常登录必须钥匙推导应急无解。 | PASS |
+| PGM-059 | 868 | 客人与员工的个人信息保护 | 手机号唯一客人定位和单据点击同专门鉴权留痕通道共同成立；不设独立卡号；职员/商户明确脱敏例外仍按前文细则。 | PASS |
+| PGM-060 | 879 | 会员身份、营销与生物信息治理 | 本人手机号验证注册、预算方程、公开资格发券、无长期客情绑定、生物信息仅用途所需；验龄服务与购票持票核验是各自明文用途，不假设同一回传人脸滥用。 | PASS |
+| PGM-061 | 892 | 留痕和复核：重要动作不能只靠口头说明 | 统一追溯发起、销售、服务、异常第一人及审批结果，未以口头说明代替记录。 | PASS |
+| PGM-062 | 896 | 必须留痕的动作 | 十类关键动作覆盖账号设备合同开关订单交接及敏感查看；与安检设备端例外共同适用。 | PASS |
+| PGM-063 | 911 | 常见复核 | 退款调账、报损盘差作废、金额补录、游乐恢复均须复核；短表不豁免完整审批规则。 | PASS |
+| PGM-064 | 923 | 正式挂起订单审计与结案 | 正式挂单已出品扣库且不结清不交班日结，取消/支付互斥、迟款退款、不可回库走坏账及法务前不自动扣款，与BEQR132—135一致。 | PASS |
+| PGM-065 | 935 | 连接关系：平台治理层怎么连接所有业务 | 七连接是治理职责对应业务入口，均保持归属/合同/权限/复核，未把接口调用审计代替实际授权。 | PASS |
+| PGM-066 | 951 | 已拍板规则和待排期问题 | 17项已确认内容及集团/第三方待实施排期含义相容；无日期失配声称。页脚明示三HTML同级权威和后确认优先，不能以下位文档或配置扩展业务。 | PASS |
+
+| 通用判据 | 当前适用证据/边界 | 本席 |
+|---|---|---|
+| GEN-001 | 技术性页面壳、目录与入口卡片服务阅读定位；不存在可确认的无用途业务模块，CX-01登记。 | PASS |
+| GEN-002 | 无script/form/input、无构建入口或外部依赖；静态DOM闭合、18原生锚点有效，文档型按runbook豁免业务运行测试。 | PASS |
+| GEN-003 | 坏链接替换反例被检测；尾差正负算例与错误预算总额可失败断言均实跑，不宣称后端测试通过。 | PASS |
+| GEN-004 | 本文无外部输入执行器；业务说明明确人工导入复核、第三方身份及范围、手机号专门查询，不把说明当服务端已实现。 | PASS |
+| GEN-005 | PGM029/041/043/044明确单功能最小权限、自审禁止、显式拒绝及跨域审批；源HTML不是授权程序。 | PASS |
+| GEN-006 | PGM001/031/044/060/064记录快照/预算/付款券核销互斥与金额尾差；仅验证规则相容和算例，数据库实现留对应模块。 | PASS |
+| GEN-007 | PGM001先成功/同操作不重复，PGM031/064取消支付互斥，结合逐笔密钥例外，不把文档推测当并发运行证明。 | PASS |
+| GEN-008 | 十一终端、角色权限公式、主体关系、挂单状态对照另外两份当前权威原文；本文件没有DTO/OpenAPI/数据库模式定义。 | PASS |
+| GEN-009 | 无运行入口错误处理代码；治理规则定义配置失败拒绝、缺映射挂差异、超时保持待审与催办，未声明伪成功。 | PASS |
+| GEN-010 | HTML无脚本输入、外链、明文真实秘密；密钥/密码要求是业务描述；PII原文例外限定场景而非全员权限。 | PASS |
+| GEN-011 | PGM047/058/061—064逐次留痕、永久导出证据、身份对象时间设备关联俱全；不得把该规则误当实际日志已查。 | PASS |
+| GEN-012 | 页面固定979行静态内容，无循环请求/无限查询/缓存线程；侧栏max-height与overflow、窄屏单列现有CSS。 | PASS |
+| GEN-013 | 独立UTF-8文档无外部脚本或样式依赖；无后端构建和迁移产物，本模块不运行Maven/数据库。 | PASS |
+| GEN-014 | N/A：本模块无迁移SQL或数据库写入；不凭HTML断言数据库迁移已验证。 | PASS |
+| GEN-015 | lang=zh-CN、UTF-8、meta viewport，原生a导航、h1/h2/h3层级、响应式单列且未取消焦点；产品全中文要求和文档中的终端称谓/反例不混作新业务豁免。 | PASS |
+| GEN-016 | 自身版本V0.11、979行和18导航可复算；未指定重复页脚日期，旧修订注释属历史；未声称后台实现全绿。 | PASS |
+| GEN-017 | 逐序四分类：当前业务原文均为冻结PGM条目权威来源，无添加；非业务呈现CX-01技术性且无发明。 | PASS |
+| GEN-018 | 全部声称落到当前源原文、机械命令和算例输出；不使用旧PASS、习惯或另一席意见作证。 | PASS |
+
+## 对抗式：同模块完整批次核查
+| 假设或反例 | 原文/实际结果 | 结论 |
+|---|---|---|
+| 一级开关打开就能越过高层关闭或审计关闭 | PGM730—738分别写优先级、缺行关、审计不随关，七红线PGM528也不设关闭档 | 不成立；不能把纯摘要当豁免 |
+| 同一权限从四种来源授予可击穿显式拒绝 | PGM655公式与BEQR234同句；集合算例对退款/导出显式拒绝，最终仅查询/调账 | 不成立，依据类型1+4 |
+| 每方四舍五入后必然守恒，尾差可随便并入任一方 | 0.10分3方各0.03、单列+0.01；0.03分2方各0.02、单列-0.01；PGM303明确承担主体和负差退回 | 原文已规定，算例相容，不是实际财务系统验证 |
+| 积分预算回收符号反了/预算可超发 | PGM882明示总额=可用+预占+已发-已回收；100=60+20+30-10，错误总额99被断言区分 | 未找到文档算术冲突 |
+| 普通审批能绕过全部红线/无人审批可自动通过 | PGM528逐类密钥但书与529超时末端逐单转发、自审/受益人禁止同时适用；BSM707同义完整原文 | 摘要不另成相反权限，不能要求每个短表重写但书 |
+| 公司/私人设备同一App所以必须开放相同能力 | PGM741明示按设备类型能力；员工注册与安装专属标识见578—581，和BSM1433相容 | 不成立 |
+| 所有明文均禁，因此本商户客户和员工管理线例外冲突 | PGM680明确对象/场景例外，870—872通用查看与专门查询共同读 | 专项细则控制具体场景，不改原意 |
+| 第三方验龄与持票本人核验导致同一人脸强制滥用 | PGM886同段分别限定验龄服务结果及购票人脸持票核验，未声称对外共享原始模板 | 没有原文或实际行为证明冲突，不凭假设立项 |
+| 所有已确认卡片意味着集团/第三方已经实现 | PGM782/796明确无资料后续接入，413/449/965保留未来集团；待排期与已确认规则可并存 | 不把排期标题误读为未批准业务 |
+| 任意HTML导航链接都可跳到不存在的章节 | 原文31个链接中18目录项及卡片均有目标；把#overview变为不存在目标的反例被检测 | 当前通过；变异可见失败信号 |
+| 总表/分表摘要可另向商户收费公区能耗 | PGM825/827明确公区不分摊，BEQR198—199给独立设备回路扣除细节；损耗独立服务费不同于公区能源费应收 | 摘要须结合闭集原文，不发明另一计费公式 |
+| 坏账挂单可以经理审批后直接从工资扣 | PGM924—927及BEQR132—135均规定法务前只登记、未结清拦交班日结 | 不成立 |
+
+## 本席临时finding（完整当前批）
+CX-01：技术性页面呈现，工程缺陷否。
+位置：PGM1—218（doctype/lang/meta/CSS），229—251（原生导航），339—409（入口卡片），974—979（文档闭合）。
+分类顺序：未与业务原文冲突；这些呈现构件本身不定义业务动作、角色、金额、枚举或权限，没有可独立认作业务下位实现的输入输出规则；故技术性、无业务发明，不是添加。它们只使文档能显示、窄屏可读和定位已有说明，不删不问。
+依据：GEN-001/002/012/015/016/017/018；类型4结构/链接实跑与类型1页首“点击查看”“按业务人员理解顺序排列”。坏链接反例有效。修复队列建议否。按ponytail-review，已核范围内无可证明应删除的无用途代码，net: 0 lines possible。
+当前业务冲突0；添加0；工程缺陷0；新HTML问题0。仅上述技术性登记1项，正式ID归并留B2。未读取findings或外席当前意见来预选ID。
+
+## 实际机械核验命令与输出
+命令一（复用上一模块已执行的HTMLParser与摘录核验方法，限定PGM路径和M002映射，删去不适用的JS分支；无落盘脚本）：
+~~~bash
+python3 - <<'PY'
+from pathlib import Path
+from html.parser import HTMLParser
+from collections import Counter
+import hashlib,json,re,subprocess
+root=Path('/home/james/complex-management')
+paths=['docs/platform-governance-map-for-operations-v0.1.html']
+lock=(root/'docs/audit-2026-09/plan/criteria-lock.md').read_text(encoding='utf-8')
+h=hashlib.sha256((root/'docs/audit-2026-09/plan/criteria-lock.md').read_bytes()).hexdigest()
+blocks=re.split(r'(?m)^### ',lock)[1:]
+coverage=[]
+for block in blocks:
+ m=re.match(r'(PGM-\d{3}) — (.*)',block)
+ if not m: continue
+ src=re.search(r'- 来源：`([^`]+):(\d+)`',block)
+ raw=re.search(r'````html\n([\s\S]*?)\n````',block)
+ assert src and raw,m[1]
+ source=(root/src[1]).read_text(encoding='utf-8')
+ piece=raw[1].splitlines();start=int(src[2])-1
+ assert source.splitlines()[start:start+len(piece)]==piece,m[1]
+ coverage.append({'id':m[1],'title':m[2],'file':src[1],'line':int(src[2])})
+assert len(coverage)==66,len(coverage)
+class AuditHTML(HTMLParser):
+ def __init__(self):
+  super().__init__();self.ids=[];self.links=[];self.navlinks=[];self.stack=[];self.nav=False;self.errors=[];self.tags=Counter();self.lang=None;self.charset=None
+ def handle_starttag(self,tag,attrs):
+  a=dict(attrs);self.tags[tag]+=1
+  if 'id' in a:self.ids.append(a['id'])
+  if tag=='html':self.lang=a.get('lang')
+  if tag=='meta' and 'charset' in a:self.charset=a['charset']
+  if tag=='nav' or 'nav' in a.get('class','').split():self.nav=True
+  if tag=='a' and 'href' in a:
+   self.links.append(a['href'])
+   if self.nav:self.navlinks.append(a['href'])
+  if tag not in {'area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'}:self.stack.append(tag)
+ def handle_endtag(self,tag):
+  if tag=='nav':self.nav=False
+  if self.stack and self.stack[-1]==tag:self.stack.pop()
+  else:self.errors.append([self.getpos()[0],tag,self.stack[-3:]])
+checks=[]
+for path in paths:
+ b=(root/path).read_bytes();s=b.decode('utf-8',errors='strict');p=AuditHTML();p.feed(s)
+ assert not b.startswith(b'\xef\xbb\xbf') and '\ufffd' not in s,path
+ duplicate=[x for x,n in Counter(p.ids).items() if n>1]
+ broken=[x for x in p.links if x.startswith('#') and x[1:] not in p.ids]
+ missing=[x for x in p.links if x and not x.startswith(('#','http:','https:','mailto:','javascript:')) and not (root/path).parent.joinpath(x.split('#')[0]).exists()]
+ assert not (duplicate or broken or missing or p.errors or p.stack),(path,duplicate,broken,missing,p.errors,p.stack)
+ assert p.lang and p.charset.lower()=='utf-8'
+ checks.append({'path':path,'sha256':hashlib.sha256(b).hexdigest(),'wc_l':b.count(b'\n'),'actual_lines':len(s.splitlines()),'ids':len(p.ids),'navlinks':len(p.navlinks),'broken_links':len(broken)+len(missing),'stack_errors':len(p.errors),'utf8':'PASS'})
+print(json.dumps({'lock_sha256':h,'criteria_coverage':len(coverage),'checks':checks},ensure_ascii=False))
+print('COVERAGE_COUNT='+str(len(coverage)))
+mapping=next(x for x in lock.splitlines() if x.startswith('M002 → ['))
+ids=[x.strip() for x in mapping.split('[',1)[1].rsplit(']',1)[0].split(',')]
+assert set(ids)=={f'PGM-{i:03d}' for i in range(1,67)}|{f'GEN-{i:03d}' for i in range(1,19)} and len(ids)==84
+assert p.tags['h2']==18 and p.tags['h3']==48
+assert p.tags['script']==0 and p.tags['form']==0 and p.tags['input']==0
+assert len(p.navlinks)==18 and set(p.navlinks)=={'#'+v for v in p.ids}
+positions=[i for i,line in enumerate(s.splitlines(),1) for _ in re.finditer(r'<h[23](?:>|\s)',line)]
+assert positions==[item['line'] for item in coverage]
+policies=sorted(set(re.search(r'^- 判据：(.*)$',b,re.M)[1] for b in blocks if re.match(r'PGM-\d{3} — ',b)))
+negative=AuditHTML();negative.feed(s.replace('href="#overview"','href="#does-not-exist"',1))
+assert any(x.startswith('#') and x[1:] not in negative.ids for x in negative.links)
+print(json.dumps({'mapping_exact':84,'source_excerpts_exact':66,'native_navigation_targets':18,'heading_positions_exact':66,'scripts':0,'external_dependencies':p.tags['script']+p.tags['link'],'broken_link_mutation_rejected':True,'policies':policies,'coverage':coverage},ensure_ascii=False))
+PY
+~~~
+实际输出：
+~~~text
+{"lock_sha256": "b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a", "criteria_coverage": 66, "checks": [{"path": "docs/platform-governance-map-for-operations-v0.1.html", "sha256": "c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c", "wc_l": 979, "actual_lines": 979, "ids": 18, "navlinks": 18, "broken_links": 0, "stack_errors": 0, "utf8": "PASS"}]}
+COVERAGE_COUNT=66
+{"mapping_exact": 84, "source_excerpts_exact": 66, "native_navigation_targets": 18, "heading_positions_exact": 66, "scripts": 0, "external_dependencies": 0, "broken_link_mutation_rejected": true, "policies": ["映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。"], "coverage": [{"id": "PGM-001", "title": "整体定位：平台治理层不是一个业务部门，而是所有业务的底座", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 256}, {"id": "PGM-002", "title": "治理顺序：一件业务能不能做，要先经过这些判断", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 308}, {"id": "PGM-003", "title": "模块入口：平台治理层包含哪些管理模块", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 339}, {"id": "PGM-004", "title": "综合体和集团", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 342}, {"id": "PGM-005", "title": "空间和点位", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 347}, {"id": "PGM-006", "title": "商户和主体", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 352}, {"id": "PGM-007", "title": "合同和准入", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 357}, {"id": "PGM-008", "title": "员工和手机", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 362}, {"id": "PGM-009", "title": "权限和职级", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 367}, {"id": "PGM-010", "title": "终端开关", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 372}, {"id": "PGM-011", "title": "设备管理", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 378}, {"id": "PGM-012", "title": "商户侧", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 383}, {"id": "PGM-013", "title": "开放接口", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 388}, {"id": "PGM-014", "title": "留痕复核", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 393}, {"id": "PGM-015", "title": "楼宇运营", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 399}, {"id": "PGM-016", "title": "应急与隐私", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 404}, {"id": "PGM-017", "title": "综合体和集团：当前一个项目，未来能看集团", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 412}, {"id": "PGM-018", "title": "物理项目与运营公司：多对多协作，不是固定隶属层级", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 415}, {"id": "PGM-019", "title": "各主体具体负责什么", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 424}, {"id": "PGM-020", "title": "主要功能", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 440}, {"id": "PGM-021", "title": "业务意义", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 452}, {"id": "PGM-022", "title": "空间和点位：所有业务都要知道“发生在哪”", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 463}, {"id": "PGM-023", "title": "主要功能", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 467}, {"id": "PGM-024", "title": "影响业务", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 476}, {"id": "PGM-025", "title": "商户和主体：谁在这里经营，经营什么", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 488}, {"id": "PGM-026", "title": "主要功能", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 492}, {"id": "PGM-027", "title": "业务边界", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 507}, {"id": "PGM-028", "title": "合同和准入：违反规则先卡住，再按层级放行", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 518}, {"id": "PGM-029", "title": "主要功能", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 522}, {"id": "PGM-030", "title": "业务意义", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 544}, {"id": "PGM-031", "title": "外部经销商主体、合同价格与资金治理", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 555}, {"id": "PGM-032", "title": "员工和手机：人、私人手机、工作手机要能对应起来", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 572}, {"id": "PGM-033", "title": "主要功能", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 576}, {"id": "PGM-034", "title": "工作手机和企业微信", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 586}, {"id": "PGM-035", "title": "提成发放和人员服务治理", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 599}, {"id": "PGM-036", "title": "设备管理：谁领了什么设备，设备能不能用", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 611}, {"id": "PGM-037", "title": "主要功能", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 615}, {"id": "PGM-038", "title": "和现场业务的关系", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 624}, {"id": "PGM-039", "title": "智能设备场景联动范围", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 636}, {"id": "PGM-040", "title": "权限和职级：每一个单一功能都可以单独授权", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 643}, {"id": "PGM-041", "title": "权限规则", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 647}, {"id": "PGM-042", "title": "职级规则", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 664}, {"id": "PGM-043", "title": "外包人员与审计人员（2026-06-29 新增）", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 673}, {"id": "PGM-044", "title": "桌台、挂单与经销业务权限", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 688}, {"id": "PGM-045", "title": "终端开关：哪些端能打开，后台说了算", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 712}, {"id": "PGM-046", "title": "能控制哪些端", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 716}, {"id": "PGM-047", "title": "怎么控制", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 728}, {"id": "PGM-048", "title": "商户侧：在授权业务范围内全开放", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 749}, {"id": "PGM-049", "title": "开放接口：先做好自己的开放能力，再接第三方资料", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 781}, {"id": "PGM-050", "title": "平台开放给第三方", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 785}, {"id": "PGM-051", "title": "第三方接入平台", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 794}, {"id": "PGM-052", "title": "楼宇运营：管好建筑本身的设备、能耗和巡检", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 806}, {"id": "PGM-053", "title": "楼宇机电设备", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 810}, {"id": "PGM-054", "title": "能耗计量", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 821}, {"id": "PGM-055", "title": "楼宇巡检", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 832}, {"id": "PGM-056", "title": "和谁有关", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 844}, {"id": "PGM-057", "title": "应急恢复和客人隐私：最坏情况有后路，个人信息看不到明文", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 857}, {"id": "PGM-058", "title": "紧急恢复（破窗机制）", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 860}, {"id": "PGM-059", "title": "客人与员工的个人信息保护", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 868}, {"id": "PGM-060", "title": "会员身份、营销与生物信息治理", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 879}, {"id": "PGM-061", "title": "留痕和复核：重要动作不能只靠口头说明", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 892}, {"id": "PGM-062", "title": "必须留痕的动作", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 896}, {"id": "PGM-063", "title": "常见复核", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 911}, {"id": "PGM-064", "title": "正式挂起订单审计与结案", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 923}, {"id": "PGM-065", "title": "连接关系：平台治理层怎么连接所有业务", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 935}, {"id": "PGM-066", "title": "已拍板规则和待排期问题", "file": "docs/platform-governance-map-for-operations-v0.1.html", "line": 951}]}
+~~~
+命令二（当前跨HTML字面、终端集合和说明性算例；明确不是后端执行）：
+~~~bash
+python3 - <<'PY'
+from pathlib import Path
+from decimal import Decimal,ROUND_HALF_UP
+from html import unescape
+import re,json,hashlib
+r=Path('/home/james/complex-management')
+p=(r/'docs/platform-governance-map-for-operations-v0.1.html').read_text(encoding='utf-8')
+e=(r/'docs/business-enum-quick-reference-v0.1.html').read_text(encoding='utf-8')
+b=(r/'docs/business-system-map-for-operations-v0.1.html').read_text(encoding='utf-8')
+plain=lambda s:unescape(re.sub(r'<[^>]*>','',s))
+pline=p.splitlines()
+checks={}
+terminals=['客人手机应用','客人小程序','Web 前端（业务人员，客人无网页端）','工作人员平板','员工工作手机','员工私人手机','商户网页门户','商户手机应用','触摸屏一体机','移动管理端','独立经销商 Web 门户']
+prow=next(x for x in pline if '受控的十一类终端：' in x)
+erow=next(x for x in e.splitlines() if '<td class="k">终端十一端</td>' in x)
+assert all(x in prow and x in erow for x in terminals)
+checks['terminal_categories_11_same']=True
+for word in ['同一笔操作重复提交不重复生效','持授权 U 盘密钥的最高权限可以逐笔开放','第①②③类','不解除已开始核销后的退款禁止','上述七类校验不设关闭开关']:
+ assert word in p and word in b,word
+checks['redline_summary_with_explicit_provisos']=True
+assert '角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝' in p and '角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝' in e
+effective=({'查询','退款'}|{'查询'}|{'导出'}|{'调账'})-{'退款','导出'}
+assert effective=={'查询','调账'}
+checks['deny_precedence_example']=sorted(effective)
+quant=lambda v:Decimal(v).quantize(Decimal('.01'),rounding=ROUND_HALF_UP)
+examples=[]
+for total,n in [('0.10',3),('0.03',2)]:
+ shares=[quant(Decimal(total)/n)]*n
+ remainder=Decimal(total)-sum(shares)
+ assert sum(shares)+remainder==Decimal(total)
+ examples.append({'total':total,'shares':[str(x) for x in shares],'separate_remainder':str(remainder)})
+assert examples[0]['separate_remainder']=='0.01' and examples[1]['separate_remainder']=='-0.01'
+assert quant('1.005')==Decimal('1.01') and quant('-1.005')==Decimal('-1.01')
+checks['non_tax_rounding_examples_not_backend_execution']=examples
+assert '预算总额必须等于可用余额加已预占、加已发放、减已回收' in p
+assert 100==60+20+30-10 and 99!=60+20+30-10
+checks['budget_equation_and_wrong_total_rejected']=True
+assert '每一次导出——不论脱敏与否' in p and '导出记录本身永久保存、不在任何清理范围内' in p
+assert '凡要定位到具体某一位客人' in p and '从订单、账单、订台单、存酒单等任何单据上点开' in p and '同样先鉴权、同样留痕' in p
+assert '不设独立卡号体系' in p and '经最高权限审批后发放' in p
+checks['privacy_exception_context_present']=True
+assert '权限不足属于操作员本人没有该项权限' in p and '不设放行通道' in p
+assert '留痕与审计记录不属于可被开关关闭的模块' in p and '开关缺行不得视为开启' in p
+assert '显式拒绝优先级最高' in p and '申请人不得审批自己提交的调整' in p
+checks['permissions_switches_separation_context']=True
+assert '法务审查通过前只登记，不得自动扣减工资、绩效或提成' in e and '审查通过前只登记，不得自动扣减工资、绩效或提成' in p
+assert '已签约后不得回退至未签约状态' in p and '新建未审批不生效，到期不得无审批自动终止，变更未审批不生效' in p
+checks['state_and_compensation_context']=True
+assert '来源枚举项为业务参数，按项目可配。' in b and '其他（枚举项业务参数，按项目可配）' in b
+checks['BC_originals_unchanged']=True
+checks['source_hashes']={x:hashlib.sha256((r/'docs'/x).read_bytes()).hexdigest() for x in ['platform-governance-map-for-operations-v0.1.html','business-enum-quick-reference-v0.1.html','business-system-map-for-operations-v0.1.html']}
+print(json.dumps(checks,ensure_ascii=False))
+PY
+~~~
+实际输出：
+~~~text
+{"terminal_categories_11_same": true, "redline_summary_with_explicit_provisos": true, "deny_precedence_example": ["查询", "调账"], "non_tax_rounding_examples_not_backend_execution": [{"total": "0.10", "shares": ["0.03", "0.03", "0.03"], "separate_remainder": "0.01"}, {"total": "0.03", "shares": ["0.02", "0.02"], "separate_remainder": "-0.01"}], "budget_equation_and_wrong_total_rejected": true, "privacy_exception_context_present": true, "permissions_switches_separation_context": true, "state_and_compensation_context": true, "BC_originals_unchanged": true, "source_hashes": {"platform-governance-map-for-operations-v0.1.html": "c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c", "business-enum-quick-reference-v0.1.html": "4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66", "business-system-map-for-operations-v0.1.html": "a7f7b7a30ace54d2534a8cedbd8f3b6d20fdd7a89d3515b18e194d4878ad66fa"}}
+~~~
+两次执行均正常完成，stderr为空，所有断言通过。业务文件与锁未改；questions目录3个既有答复首个非空行均为保留/删除，无未答人闸。本节点尚未执行B1后四值检查，须在本席完整报告落盘后读本次Grok报告，取其本席首行再合取，不能预称四值通过。
+
+## 本席B1结论
+PASS。本次979行、66PGM+18GEN、三线均完整完成。只有CX-01技术性无缺陷登记，无需修复、无新的HTML修改申请。
+本票仅Codex B1独立结论，尚未接收当前Grok正文、未B2定稿、未B5，不是模块PASS。M002保持IN_PROGRESS，B3累计2不变；下一步读Grok本次完整段并做B1后四值校验，再按整批规则推进或依铁律4暂停。
+
+
+## 当前M002整批B2独立归并票（Codex）
+版本：V0.08
+日期：2026-09-08；候选findings.md V0.88，SHA256=26afccad7390469169e276b0a91fd15a76d06d700785780a8077fb899614f1d1。V0.87候选的002引文被本席在派Grok前实读PGM739发现误转述，立即以V0.88逐字校正；未交付旧候选、未改源，也没有把误转述作为业务依据。现实际原文包含移动管理端、独立经销商Web门户，不能把门禁/核销终端编成十一端原文。
+
+输入一：modules/M002-b1-self-raw.md，本次完整B1 V0.07 L547—833；输入二：modules/M002-b1-grok-raw.md，本次完整B1 V0.06 L997—1364。两份原B1 SHA分别8fa480b11f43555d69783b6938436c6566581b459e867551a6ce960d998d19bd、3a5910aa32b576f3847dc65145008eb7608a2fbbc26f39494b4f455b3fbaf846。已先本席完整保存，再完整读取外席368行；两席均PASS、979行/84项/三线齐全。
+B1后四值实际均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，见本次实跑接收证据；不是只比根可写的三项。
+
+全部差集：当前Codex CX-01沿用已有M002-003，Grok当前finding空集；无新永久ID。旧001是已修日期冲突，现PGM仅V0.11无旧日期；002细化无缺陷，以PGM739完整十一端及718—724/741完整场景共同解释；003技术性无缺陷，HTML/CSS/18目标目录只呈现既有规则，无实体、枚举、状态、权限、价格、流程或业务默认值；004技术性旧raw范围修复保持。004不得用历史B4 PASS冒充当前门禁通过。四项当前队列全部否；无添加、无HTML自身问题或未答人闸。
+
+### 当前实际额外命令与失败边界
+命令1：node --test tools/verify-entry-anchors.test.mjs
+真实exit1，AssertionError位于tools/verify-entry-anchors.test.mjs:28，expected0/actual1；源码L19—26先复制三HTML及3CSV，L27基线run；断言尚未到L29—48历史raw和当前引用正反例，因此本次不声称这些回归已通过。
+命令2：npm run verify:entry-anchors
+真实exit1：
+~~~text
+[entry-anchors] 注册表 1228 行；账本 1235 行；承接矩阵 1244 行（同名 1235、账本中无此 rule_id 9）；账本镜像列片段 1565 条；被检 Markdown 358 份；条目名引用 1517 处（注册表原名 1358 处，正文唯一定位 159 处）。
+[entry-anchors] FAIL：6 处不合格。
+- 注册表条目正文在 HTML 现文中找不到：BSM-E0433（处理后回访客人或商户，验收合格才关闭）——HTML 已改而注册表未重建
+- 注册表条目正文在 HTML 现文中找不到：BSM-E0736（文档版本）——HTML 已改而注册表未重建
+- 账本正文与 HTML 现文对不上：BSM-0283（处理后回访客人或商户，验收合格才关闭）——HTML 已改而账本 source_text 未重取
+- 账本正文与 HTML 现文对不上：BSM-0530（文档版本）——HTML 已改而账本 source_text 未重取
+- 账本镜像列与 HTML 现文对不上：BSM-0283 preconditions 片段“处理后回访客人或商户，验收合格才关闭。”
+- 账本镜像列与 HTML 现文对不上：BSM-0283 state_transition 片段“处理后回访客人或商户，验收合格才关闭。”
+~~~
+以上为保持当前文档不制造失效BSM书名式引用而改排标点的完整6项错误文本；原命令可复现。没有PGM错误。实际Read测试源码完整52行，确认失败早于004要验证的raw范围；未执行修复，临时副本由测试finally清理。
+plan/modules.md L6904—6914把authority-rule-ledger.csv归M425；L6927—6937把entry-registry.csv归M427。当前M002只审PGM，不在本次无发布流程中扩入两CSV，也不能重开M001再消耗未经批准的第5次修复。该事实保留候选供Grok独立核对；不将范围外事实埋掉、不声称未来模块通过、不把镜像错误归成HTML自身问题。后续按现有计划处理所属模块，不新增分支任务。
+
+### 本席B2结论
+PASS：对V0.88同一候选，全部差集、四分类和四项队列接受。无当前PGM工程缺陷；额外全局门禁失败已准确标注范围和未通过状态，旧004没有已证同一缺陷复发。若Grok认为范围/队列不同，本票不能单方定稿。
+只有Grok本批B2也PASS后定稿；队列为空跳B3/B4，进入累计2对应的B5-r2，须重新完整双审才可模块PASS。B3累计2、交付失败0不变；HTML/源/锁无修改。
+
+
+## M002 B2双PASS接收与事实纠正
+版本：V0.09
+Grok B2 V0.07完整168行已读，真实exit0，原B1前缀保留；其文件SHA256=8644bfc4a91552aca204536fddc80613aad1a9486abe822da0c6b92e81df1d4f。本席B2 V0.08 SHA256=2486ad7bc86c88f2f1d510d90449d1ae7fc4748451021a7ea305074acb5e0e60。两席对同一findings V0.88 SHA256=26afccad7390469169e276b0a91fd15a76d06d700785780a8077fb899614f1d1均PASS。
+接受Grok准确纠正：CSV E0736/BSM0530正文来源明确L2003，旧“更新日期：2026-09-01。”对现BSM2003“更新日期：2026-09-08。”，源自此前M001-012页脚修订，不是D的L2版本注释。根实际用csv.DictReader读取两行全列并读BSM2003已证，不照抄结论；先前候选/本席B2原因标签错误保留历史，当前按此纠正。其余4处是A的回访概括镜像未同步。六处仍全属M425/M427，不是M002或004复发，不改变四行队列。
+findings V0.89记录双PASS并仅纠正该原因；不新增ID/业务/锁判据。M002 IN_PROGRESS、B3=2；跳过B3/B4，下一步先派Grok B5-r2，等待完整落盘后本席独立重新全审979行/84项、保存后才读取Grok。全仓门禁仍失败；不声明CSV或全仓PASS，无提交推送部署。
+
+
+## M002 当前471计划完整操作员回执
+版本：V0.10
+1. 当前步骤：M002/471已完成B1、B2、B5-r2双PASS并收口。本轮跳过B3/B4；B3历史累计2、交付失败重跑0，未清零。ledger V1.61 M002 PASS、M001 PASS，其余469 PENDING。下一模块M003。
+2. 判据：V0.11，实际锁哈希b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；LOCK-AMEND-COUNT1。B1后四值：实算=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；sidecar=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；ledger=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；Grok B1当前首行=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。B5后四值逐项亦均同上，各值已实际独立读取并比较。
+3. Grok运行：B1、B2、B5均真实exit0，经路径适配器进程内缓冲丢弃原始stdout/stderr，无Grok原始JSON落入仓库/审计报告。B1/B2路径modules/M002-b1-grok-raw.md；B5路径modules/M002-b5-r2-grok-raw.md。模型/参数为 /home/james/.local/bin/grok -p <下附各次完整提示词> -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management；按300秒持续检查真实进程，无次数/时间上限，无重复派发。
+4. 完整证据：本模块979行/84项三线，两席最终B5 PASS；根V0.02 SHA256=fe6e5079b972b0c2fbaefdd8fea4b5f56d59a4441ee7d2c2fc5cee31039f0abb；GrokV0.02 SHA256=73af16a82408c9a07b66dac2fa8c92d56ae0c0b30976e83d97ac854de865aba9。两份旧B5前缀保留；Grok当前311行均读完。先四值通过再ledger PASS，再模块收口V0.02。
+5. BLOCKED：无。无新的HTML问题/添加/未答questions；无需操作员答复。仅已知全局门禁6处BSM CSV镜像仍失败，归M425/M427；原因为A回访概括+此前M001-012页脚日期，不是D版本注释；本模块不扩范围、不修这些文件、不冒称全仓完成。
+6. 操作员当前问“之前m零零二不是查过吗，是pass的，为什么这次又发现问题了”：已查现行plan/modules.md V0.04 L9规定新471编号不继承旧同号状态，因此按PENDING重审；不是发现M002缺陷才重开。旧322 M002已PASS保留历史；本次M002 B1/B2/B5也均双PASS，未新增修复。6条是范围外全局校验事实，已说明并纠正原因标签，不翻转M002结论。用户未取消继续任务，按V0.17进入下一模块，无提交推送部署。
+
+### 本次Grok B1完整提示词
+~~~text
+执行160-audit-prompt V0.17流程的M002 B1修复前完整独立审计。仅本模块、不得派子代理。操作员在M001完整双PASS收口后回复“继续”。唯一正本/home/james/complex-management main；当前471模块计划，M002为“业务需求正本／需求HTML／第2段”，文件仅docs/platform-governance-map-for-operations-v0.1.html，共979行。完整审全部文件，不沿用旧322计划的同号PASS或旧票。先自行读取plan/modules.md本模块、plan/runbook.md、criteria-lock.md定义及M002映射。必须逐条覆盖18个GEN+66个PGM全部84项，不抽样、不只复核旧finding。
+只读三份权威HTML与计划，不读任何self raw、其他模块raw或旧模块收口结论，不读findings；本次自己既有raw若需版本/追加仅读取元数据和自身版本，不借旧结论代替当前审计。ledger最多看M002状态行与顶部元数据；不要读其中其他席位结论。M002当前IN_PROGRESS、B3历史累计2，计划修复2、交付失败0；不能清零。不得修改任何HTML、代码、计划、ledger、findings、questions或其他文件，不提交不推送不部署、不新建worktree。
+使用并自核提示词§6当前节点技能，实际读取存在的SKILL.md；缺口如实写报告。using-superpowers；grilling/grill-me（含可选batch-grill-me）只借自问自答第一性原理/对抗结构，不问用户、不派第三席；codebase-design只支撑已冻结通用判据；diagnosing-bugs/systematic-debugging只做可复现命令读源验证，不添加诊断修改；ponytail-review找无必要内容仅提证据；ubiquitous-language如存在只核术语并写当前raw，不另造词表文件；verification-before-completion用实际当前命令举证。禁止通过任何技能新增审计判据、门槛、计数器、文件或审批流程。
+三线各自覆盖完整模块：（1）第一性原理逐答为何存在/实际执行证据/未验证前提；（2）顺从式逐条核对84冻结判据与完整业务原文；（3）对抗式自行构造正常首次运行会触发的反例、金额/权限/配置/删除/版本/导航等实际适用边界。HTML是业务规则说明，不伪称其后端已实现；文档说明用原文及可复现结构/链接检查，若含可执行脚本则实际运行验证其声明功能。不为需数件不巧事同时发生的极端组合新增要求。每个疑点先完整上下文核实；摘要与专项规则一起读，不自行制造处处重复条款要求。
+业务来源只有三份HTML，平级最终权威；可读另外两份相关完整条款作上下文，但不重开M001或审其他模块。用户明确最新原意：“b c两项原文不冲突。就是我的原意。”这里B是BSM L1020“来源枚举项为业务参数，按项目可配。”；C是BSM L1068现有打折原因分类可配。这两处按用户原意保留，无新HTML修改授权。不得把实现文件/惯例/旧报告当业务依据。
+四分类严格依序冲突→细化→技术性→添加；技术性须说明无业务发明，细化须给具体HTML上位原文。每个finding含本席临时ID、准确文件行号、足够长完整上下文原文或可复现命令及输出、分类、工程缺陷是否、冻结ID及2.3证据类型。依据只许HTML逐字原文/可执行产物实际行为/外部规范原文/可复现命令输出，旧票和注释不是依据。缺陷发现后仍完整审完本模块，不在中途修复或改写权限。HTML自身问题只在完整报告中明确上报，根按铁律4处置，不在报告里假定已批。报告必须完整84项覆盖、全979行覆盖及三线、所有当前findings、明确本席B1 PASS或FAIL、是否有新增HTML问题；不能把本席PASS冒称模块PASS。
+唯一可写报告路径/home/james/complex-management/docs/audit-2026-09/modules/M002-b1-grok-raw.md。现有文件则完整报告追加末尾，保留原所有字节，文件自身版本Vx.xx末位递增；不得覆盖旧票。先独立跑sha256sum docs/audit-2026-09/plan/criteria-lock.md并把本次报告第一行严格写CRITERIA-LOCK-SHA256: <你实算64位小写hex>，正文其他地方不再出现独占字段行；本派发不提供预期哈希。只在完整报告落盘后结束，不要求stdout任何机器标记。
+~~~
+### 本次Grok B2完整提示词
+~~~text
+执行160-audit-prompt V0.17当前M002 B2整批归并独立复核，不是B1重跑。唯一正本/home/james/complex-management main；M002/471，范围仅docs/platform-governance-map-for-operations-v0.1.html。M002 IN_PROGRESS，B3累计2，失败0；M001已闭合，B/C原意澄清保持。只能你一个Grok席，禁止子代理/第三席，禁止改HTML/源码/计划/锁/ledger/findings/questions；仅可追加指定自己的raw。没有提交推送发布授权。
+输入：findings.md当前V0.88，预期候选SHA256=26afccad7390469169e276b0a91fd15a76d06d700785780a8077fb899614f1d1，先实读核对；根B1完整报告modules/M002-b1-self-raw.md V0.07 L547—833及随后本批B2独立票V0.08；你本次B1完整报告modules/M002-b1-grok-raw.md V0.06 L997—1364。其余旧报告仅查永久ID历史，不能把旧票当当前证据。本B2允许读取双方raw和候选；逐项做完整差集、是否漏并、是否改写你finding、依序冲突→细化→技术性→添加分类、工程缺陷和队列归属检查。根本次CX-01拟沿用M002-003，你本次finding空集，001—004当前候选全否，须你自己判断。技术性必须逐项给无业务发明理由；细化引用当前HTML准确原文。候选V0.87错误转述的十一端已在派发前校正为V0.88准确PGM739，不沿用旧转述。
+特别复核新取得的当前事实：根复跑node --test tools/verify-entry-anchors.test.mjs及npm run verify:entry-anchors均exit1，6处BSM A/D对应的CSV镜像未同步，无PGM项；测试在L28基线失败，不能冒称旧004回归本次通过。plan把这两CSV归M425/M427，当前无发布，不在M002扩范围/修CSV/改HTML/重开M001，也不分未来模块ID；候选已保留完整事实供其后所属模块处理。请实核后独立评判该归属和旧004是否同一缺陷复发，不能盲目接受根结论，也不能引入锁外“每个模块必须所有全局门禁绿”的判据。若不同意明确FAIL和最小候选修订理由；不能替根改候选。用户此前A/D只额外授权一次且已用完，B/C原文为用户明确原意，绝不重判B/C为冲突/缺陷。
+读取与使用当前节点适用SKILL.md（receiving-code-review、verification-before-completion；如需其它按V0.17收窄，只审不修、不额外问人、不加门槛/状态/产物）。当前完整B2报告必须逐条差集、永久ID、分类、工程缺陷、队列、额外命令失败归属、明确本席B2 PASS/FAIL、候选V0.88及其SHA、两份输入raw路径，不能把本席PASS当模块PASS。只读判据不扩锁，不需要另列84全审表，这是B2而非B5。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M002-b1-grok-raw.md；已有全部内容原字节保留，把本次完整B2附录追加末尾，文件自身版本V0.06→V0.07。B2附录不得写任何独占CRITERIA-LOCK-SHA256字段行，以免干扰当前B1边界；不要改变旧报告。完整落盘后结束，不要求stdout任何机器可读标记。
+~~~
+### 本次Grok B5完整提示词
+~~~text
+执行160-audit-prompt V0.17的M002 B5-r2修复后全量独立审计；本次B2队列为空故跳过B3/B4，但仍必须整模块重审，不继承B1/B2/旧B5 PASS。唯一正本/home/james/complex-management main；当前471模块计划。M002仅docs/platform-governance-map-for-operations-v0.1.html，全979行，当前V0.11；必须全读并逐项覆盖18GEN+66PGM共84条冻结判据，三线各审完整模块。M002 ledger IN_PROGRESS，历史B3累计2，本轮没有B3；最终报告仍用r2，不重置/增加计数。
+先自读plan/modules.md本模块、plan/runbook.md、criteria-lock.md的general/PGM定义及M002映射。可读findings.md最上方当前M002 B2定稿V0.89和自己报告版本元数据，以知001—004现行队列全否；不读任何self raw、本次或旧B5正文、其他模块审计报告或收口结论；不从ledger其它席位叙述获意见，ledger仅读头部元数据/M002状态行。B5必须独立发现全部当前问题，不能用B2结论代替。
+严格双席边界：你为唯一外审Grok，不派子代理，不用第三审，不修改任何HTML/源码/锁/sidecar/ledger/findings/questions/计划。只可往指定自己的B5 raw追加完整报告，保留旧全部字节。无提交/推送/部署/安装/新worktree。本阶段运行真实必要命令，只读源码，不新增测试/探针/新审计产物。
+实际使用并读取适用SKILL.md，依V0.17§6收窄：using-superpowers、grilling/grill-me自问自答，codebase-design支撑已冻结general，diagnosing-bugs/systematic-debugging只读源与复现，ponytail-review只提证据不改，verification-before-completion实际命令。可选batch-grill-me/ubiquitous-language存在则收窄使用，不存在实报。技能不得要求人闸/第三席/改文件/加判据，不能以安装过代替读取。
+三线：（1）第一性原理，逐答为何存在、实际执行证据、未验证前提；（2）顺从式，所有84冻结ID逐条判定完整业务上下文；（3）对抗式，自行构造正常首次使用可遇到的原文矛盾、权限/金额/参数/删除/切换/导航适用边界及可复现正负例，不发明极端多前提组合。不仅看旧修复；979行完整读，所有问题找齐后报告，不能中途回退或修复。
+三权威HTML平级最终解释，其他两份可读相关完整上下文，但不重开M001。用户明确B/C原文就是其本意：BSM1020来源枚举按项目可配、BSM1068打折原因分类可配，不是冲突或缺陷。没有新HTML修改授权。总结性表述与专项但书一起读，不设每个短摘要必须重复完整例外的锁外要求；说明页App/Web自然语言别名不自动等同新增机器端类。凡细化须给准确HTML上位原文；技术性须逐项说明无业务发明。先冲突→细化→技术性→添加；每个finding含本席临时ID、足够长原文/真实命令输出、准确行号、冻结ID、2.3证据类型、是否工程缺陷、建议队列。HTML自身问题完整报告明确上报，不假设已批。
+当前B2已披露的范围外事实可实核，但不是本轮预置PASS：全局verify:entry-anchors及其回归测试在基线失败，6处BSM镜像（A的回访概括+此前M001-012的L2003页脚日期，不是D的L2注释）；CSV计划归M425/M427，工具归M008/M415，M002只含PGM，无本模块发布。不得冒称这些命令绿，不把范围外问题误塞进M002/旧004，也不得盲从归属；按冻结范围与实据独立判定。可对现PGM使用原生HTML结构/锚点/引用/UTF8与最小规则例子举证，不能凭静态文本声称后端交易/设备/合规已验证。
+完整报告要求：首行是你独立实算的锁SHA（派发不提供预期值），979行+84项全覆盖表，三线全部证据，技能实用/缺口，全部本次findings（可空），明确本席B5 PASS/FAIL、是否新HTML问题、命令及真实输出/退出码、边界。不得以本席票冒称模块PASS。
+唯一可写路径/home/james/complex-management/docs/audit-2026-09/modules/M002-b5-r2-grok-raw.md。现有V0.01报告全部原字节保留，本次完整报告追加到末尾，自身版本V0.02。追加报告第一行严格CRITERIA-LOCK-SHA256: <你对plan/criteria-lock.md实际sha256sum的64位小写hex>，正文不另写独占同字段行。完整报告落盘后结束，不要求stdout任何机器标记。
+~~~
+
+
+

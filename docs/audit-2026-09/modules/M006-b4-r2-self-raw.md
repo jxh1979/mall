@@ -563,3 +563,389 @@ index 51e84045..c1bb8b39 100644
 +    }
  }
 ```
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# 当前471计划 M006 B4-r2 Codex 独立完整差异复审
+版本：V0.02
+
+修复内容结论：PASS。
+范围归因结论：PASS。
+综合结论：PASS。没有新finding。M006仍IN_PROGRESS；B3累计2。本票不是整模块B5或模块PASS。
+
+## 独立性与范围
+Grok B4-r2真实exit0且回执路径正确；本席尚未读本次Grok正文/日志，现按顺序重新审完本轮完整差异，先保存本席完整raw。未以B3运行结果替代B4。本raw原70271bytes保留，旧V0.01属于历史报告，本次独立V0.02起完整有效。
+本批findings V1.05双B2已定稿，047为唯一仍在队列的ID；039–043已修出队、037/038/044–046不动。读取两树不按路径过滤，tracked/staged/untracked全部受diff覆盖，不用HEAD~1或旧backend模块替代。
+before-tree=b50b33c1f1c61ab9a1c87f6cf79ea97ffa593ccd
+after-tree=ece59cbd0b81d612f3cc6844d389415cb9394d31
+全diff仅docs/delivery-readiness-gates-v0.1.md，2增2删；当前文件字节等于after-tree。全文差异随实际输出附于下方。
+
+## 逐行归因与修复内容
+| 改动 | 正式ID | 核验 |
+|---|---|---|
+| L1 V0.11→V0.12 | M006-047 | 同一文件内容变化必须递增自身版本；精确只变标题版本 |
+| L96去“均”，加“或已记录对应接入开关关闭” | M006-047 | 与定稿候选完全一致；保留8、npm入口、映射分支字段、后半防伪生产边界 |
+
+本席从before-tree原文按批准的两个精确字符串变换重建预期，实算expected==after-tree==当前源；变化行号只有1、96，所有npm引用逐项相等。没有未登记行、没有额外文件、没有移动/删除；不存在越界需回滚项。
+GEN-002/016/018：当前真实正常路径中8项traceability都走disabled分支，但原句保证“均有责任/manifest”，现句明确容纳该分支。重新读取生成器166–206、227–268、408–421：238允许全关闭时跳过manifest要求，246算traceable，267policy明确OR；两分支被说明覆盖。不是将disabled变成生产证据，policy仍mock_or_sandbox_is_not_production_evidence，L96后半保持。无需改M414生成器/快照/开关。
+GEN-017：B2已双核细化，有PGM066第三方未定/各端开关及BEQR HTML:210原文上位；无新业务规则、角色、状态、价格或审批。B4仅修字义，没扩大业务权限，不改锁/HTML。
+GEN-001：选择收窄原一句，未增加脚本、测试文件、门禁或重复说明。Markdown类型4，不额外造测试。
+
+## 本次新鲜验证
+在Grok真实结束后，本席直接SSH重新读取两树完整diff、当前两源与三HTML SHA；重新实跑verify:delivery-gates-docs、verify:external-evidence-requirement-traceability，均exit0。真实Markdown解析47行均2列、无空格单元，npm引用完全保持。
+首个通用打印小脚本尝试requirements/rows字段得到空数组，仅是调试辅助字段选择错误，不作为快照为空的证据；随后读顶层keys确定实际字段requirement_traceability，完整读出8行，当前mapped_item_ids/owner_groups/target_manifest_paths全空，switch_disabled非空，状态全covered_by_disabled_integration_switches。实际输出两段均保留，避免把[]冒充业务事实。无需改任何项目文件。
+delivery现V0.12/15751bytes/SHA0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09；deploy仍V0.07/7117bytes/SHA543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1。三HTML SHA与冻结来源不变，详下。
+未执行父链49项、真实GitHubPUT/部署/推送；文档型最小验证不声称生产上线或其它工具全模块通过。既有源码非本次diff没有被“顺手修复”。本次无待答questions/HTML自身问题/新判据。
+两席本次完整raw落齐后再读Grok作合取；仅双PASS可将047出队并启动B5-r2。
+
+## 完整diff与新鲜命令输出
+
+````text
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+TREE_BEFORE b50b33c1f1c61ab9a1c87f6cf79ea97ffa593ccd TREE_AFTER ece59cbd0b81d612f3cc6844d389415cb9394d31 ALL_PATHS ["docs/delivery-readiness-gates-v0.1.md"]
+FULL_UNFILTERED_DIFF
+diff --git a/docs/delivery-readiness-gates-v0.1.md b/docs/delivery-readiness-gates-v0.1.md
+index 88a00e9a..d262d35e 100644
+--- a/docs/delivery-readiness-gates-v0.1.md
++++ b/docs/delivery-readiness-gates-v0.1.md
+@@ -1,4 +1,4 @@
+-# 交付总闸口与上线准入验证 V0.11
++# 交付总闸口与上线准入验证 V0.12
+ 
+ ## 1. 定位
+ 
+@@ -93,7 +93,7 @@ npm run verify:delivery-gates
+ | `npm run verify:production-evidence-draft-prep` | 校验生产证据 manifest 草稿准备器默认 dry-run、拒绝越界写入和覆盖已有 manifest，且不会关闭生产阻断 |
+ | `npm run verify:production-evidence-draft-prep-fixtures` | 在临时目录实测草稿准备器 dry-run 不写文件、execute 复制模板、再次 execute 不覆盖已有 manifest，并拒绝无选择器的 broad execute |
+ | `npm run verify:production-closure-gap-reports` | 从当前运行态、Semgrep、NAS 当前状态、生产证据提交状态和外部证据追踪校验生产闭环缺口总报告，防止旧报告或手改报告伪关闭生产证据 |
+-| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |
++| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求已追踪到责任组、证据 item_id、模板和目标 manifest 路径，或已记录对应接入开关关闭，防止 mock/沙箱被误判为生产闭环 |
+ | `npm run verify:nas-it-handoff` | 校验 NAS IT 受控挂载交接包、默认 dry-run 脚本、manifest 映射和无明文密钥边界 |
+ | `npm run verify:nas-diagnostics` | 校验 NAS 只读诊断报告与当前网络、445 端口、CIFS 挂载和 preflight 根因一致，不关闭生产 manifest |
+ | `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
+
+EXACT_APPROVED_TRANSFORM true; both changed lines belong M006-047
+CHANGED_LINES [1, 96]
+MARKDOWN 47 rows all2cols noempty; NPM REFERENCES IDENTICAL
+CMD npm run verify:delivery-gates-docs EXIT 0
+
+> entertainment-complex-management@0.1.0 verify:delivery-gates-docs
+> node tools/verify-delivery-gates.mjs
+
+DELIVERY_GATES_DOCS_PASS
+ 
+CMD npm run verify:external-evidence-requirement-traceability EXIT 0
+
+> entertainment-complex-management@0.1.0 verify:external-evidence-requirement-traceability
+> node tools/generate-external-evidence-requirement-traceability.mjs --check
+
+EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS
+ 
+TRACE_COUNTS {"partial_requirements": 8, "traceable_partial_requirements": 8, "mapped_evidence_items": 0, "mapped_ledger_rows": 0, "p0_evidence_rows": 0, "awaiting_evidence_rows": 0, "invalid_evidence_rows": 0, "valid_evidence_rows": 0, "production_blocking_requirements": 0}
+POLICY {"no_fake_external_evidence_closure": true, "mock_or_sandbox_is_not_production_evidence": true, "partial_requirement_must_map_to_owner_manifest_or_disabled_switch": true, "integration_capability_switches_applied": true, "raw_evidence_stays_external": true, "credential_ref_only_no_plaintext_secret": true, "this_report_does_not_close_blockers": true}
+TRACE_ROWS []
+CURRENT_SOURCE docs/delivery-readiness-gates-v0.1.md 15751 0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09
+CURRENT_SOURCE docs/deploy-and-change-flow-v0.1.md 7117 543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1
+CURRENT_SOURCE docs/business-enum-quick-reference-v0.1.html 133961 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66
+CURRENT_SOURCE docs/business-system-map-for-operations-v0.1.html 304482 a7f7b7a30ace54d2534a8cedbd8f3b6d20fdd7a89d3515b18e194d4878ad66fa
+CURRENT_SOURCE docs/platform-governance-map-for-operations-v0.1.html 103015 c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c
+B4_REPAIR_PASS SCOPE_PASS NO_NEW_FINDINGS
+
+SNAPSHOT_KEYS ['traceability_version', 'status', 'generated_from', 'policy', 'submission_status_counts', 'counts', 'requirement_traceability']
+ACTUAL_ROW_KEY requirement_traceability COUNT 8
+[{"requirement_id": "REQ-17", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-PAY-001", "PRD-PAY-002", "PRD-FACE-001", "PRD-CRED-3P-001", "PRD-CRED-OBJ-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-21", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-PAY-001", "PRD-PAY-002"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-23b", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-FACE-001", "PRD-CRED-3P-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-25", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-PAY-001", "PRD-PAY-002"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-32", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-CRED-OBJ-001", "PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-40", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-3P-001", "PRD-CRED-OPEN-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-41", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-44", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001", "PRD-MDM-001", "SEC-P0-MDM-DEVICE-001"], "production_trace_status": "covered_by_disabled_integration_switches"}]
+DIRECT_SOURCE tools/generate-external-evidence-requirement-traceability.mjs
+166:const traceRows = partialRequirements.map((requirement) => {
+167:  const requirementId = requirement["需求编号"];
+168:  const mapping = evidenceMappings[requirementId];
+169:  const rawItemIds = mapping?.evidence_item_ids ?? [];
+170:  const effectiveItemIds = rawItemIds.filter((itemId) => !disabledEvidenceItemIds.has(itemId) && !disabledSecurityFindingIds.has(itemId));
+171:  const switchDisabledItemIds = rawItemIds.filter((itemId) => !effectiveItemIds.includes(itemId));
+172:  const evidenceRows = effectiveItemIds.flatMap((itemId) => ledgerByItemId.get(itemId) ?? []);
+173:  const missingItemIds = effectiveItemIds.filter((itemId) => !ledgerByItemId.has(itemId));
+174:  const awaiting = evidenceRows.filter((row) => row.current_status === "awaiting_submission").length;
+175:  const invalid = evidenceRows.filter((row) => row.current_status === "invalid_submission").length;
+176:  const valid = evidenceRows.filter((row) => row.current_status === "valid_submission").length;
+177:  const p0Rows = evidenceRows.filter((row) => row.priority === "P0");
+178:  const ownerGroups = [...new Set(evidenceRows.map((row) => row.owner_group))].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+179:  const productionBlocking = effectiveItemIds.length > 0 && p0Rows.some((row) => row.current_status !== "valid_submission");
+180:  return {
+181:    requirement_id: requirementId,
+182:    module: requirement["业务模块"],
+183:    acceptance: requirement["验收标准"],
+184:    current_status: requirement["当前实现状态"],
+185:    matrix_gap: requirement["缺口"],
+186:    evidence_mapping_reason: mapping?.reason ?? "",
+187:    mapped_item_ids: effectiveItemIds,
+188:    switch_disabled_item_ids: switchDisabledItemIds,
+189:    owner_groups: ownerGroups,
+190:    evidence_rows_total: evidenceRows.length,
+191:    p0_evidence_rows: p0Rows.length,
+192:    awaiting_evidence_rows: awaiting,
+193:    invalid_evidence_rows: invalid,
+194:    valid_evidence_rows: valid,
+195:    missing_item_ids: missingItemIds,
+196:    production_blocking: productionBlocking,
+197:    production_trace_status: effectiveItemIds.length === 0
+198:      ? "covered_by_disabled_integration_switches"
+199:      : missingItemIds.length > 0
+200:        ? "traceability_missing_manifest"
+201:        : invalid > 0
+202:          ? "invalid_evidence_manifest_blocks"
+203:          : awaiting > 0
+204:            ? "awaiting_real_external_evidence"
+205:            : "all_mapped_evidence_valid",
+206:    target_manifest_paths: [...new Set(evidenceRows.map((row) => row.target_manifest_path).filter(Boolean))],
+227:const failures = [];
+228:for (const requirement of partialRequirements) {
+229:  if (!evidenceMappings[requirement["需求编号"]]) failures.push(`${requirement["需求编号"]} is partial but has no external evidence mapping`);
+230:}
+231:for (const [requirementId, mapping] of Object.entries(evidenceMappings)) {
+232:  if (!requirementRows.some((row) => row["需求编号"] === requirementId)) failures.push(`${requirementId} mapping does not exist in ${matrixPath}`);
+233:  for (const itemId of mapping.evidence_item_ids.filter((id) => !disabledEvidenceItemIds.has(id) && !disabledSecurityFindingIds.has(id))) {
+234:    if (!ledgerByItemId.has(itemId)) failures.push(`${requirementId} maps to ${itemId}, but ${itemId} is missing from ${ledgerPath}`);
+235:  }
+236:}
+237:for (const row of traceRows) {
+238:  if (row.mapped_item_ids.length === 0 && row.switch_disabled_item_ids.length > 0) continue;
+239:  if (row.evidence_rows_total === 0) failures.push(`${row.requirement_id} has no evidence ledger rows`);
+240:  if (row.missing_item_ids.length > 0) failures.push(`${row.requirement_id} has missing item ids: ${row.missing_item_ids.join(", ")}`);
+241:  if (row.target_manifest_paths.length === 0) failures.push(`${row.requirement_id} has no target manifest paths`);
+242:}
+243:
+244:const counts = {
+245:  partial_requirements: partialRequirements.length,
+246:  traceable_partial_requirements: traceRows.filter((row) => (row.evidence_rows_total > 0 && row.missing_item_ids.length === 0) || (row.mapped_item_ids.length === 0 && row.switch_disabled_item_ids.length > 0)).length,
+247:  mapped_evidence_items: new Set(traceRows.flatMap((row) => row.mapped_item_ids)).size,
+248:  mapped_ledger_rows: traceRows.reduce((sum, row) => sum + row.evidence_rows_total, 0),
+249:  p0_evidence_rows: traceRows.reduce((sum, row) => sum + row.p0_evidence_rows, 0),
+250:  awaiting_evidence_rows: traceRows.reduce((sum, row) => sum + row.awaiting_evidence_rows, 0),
+251:  invalid_evidence_rows: traceRows.reduce((sum, row) => sum + row.invalid_evidence_rows, 0),
+252:  valid_evidence_rows: traceRows.reduce((sum, row) => sum + row.valid_evidence_rows, 0),
+253:  production_blocking_requirements: traceRows.filter((row) => row.production_blocking).length,
+254:};
+255:
+256:const output = {
+257:  traceability_version: "v0.1",
+258:  status: failures.length > 0
+259:    ? "traceability_gap"
+260:    : counts.production_blocking_requirements > 0
+261:      ? "traceable_but_awaiting_real_external_evidence"
+262:      : "all_mapped_external_evidence_valid",
+263:  generated_from: [matrixPath, ledgerPath, statusPath],
+264:  policy: {
+265:    no_fake_external_evidence_closure: true,
+266:    mock_or_sandbox_is_not_production_evidence: true,
+267:    partial_requirement_must_map_to_owner_manifest_or_disabled_switch: true,
+268:    integration_capability_switches_applied: true,
+408:if (checkMode) {
+409:  const checkFailures = [...failures];
+410:  for (const relativePath of [jsonPath, csvPath, mdPath]) {
+411:    if (!fs.existsSync(absolute(relativePath))) checkFailures.push(`${relativePath} is missing; run npm run docs:external-evidence-requirement-traceability`);
+412:  }
+413:  if (checkFailures.length === 0) {
+414:    if (normalize(readText(jsonPath)) !== json) checkFailures.push(`${jsonPath} is not in sync`);
+415:    if (fs.readFileSync(absolute(csvPath), "utf8").replace(/\r\n/g, "\n") !== csv) checkFailures.push(`${csvPath} is not in sync`);
+416:    if (normalize(readText(mdPath)) !== md) checkFailures.push(`${mdPath} is not in sync`);
+417:  }
+418:  if (counts.partial_requirements !== counts.traceable_partial_requirements) checkFailures.push("not every partial requirement is traceable to owner manifests");
+419:  if (counts.partial_requirements === 0) checkFailures.push("expected at least one external evidence partial requirement while production evidence is open");
+420:  if (checkFailures.length > 0) failWith(checkFailures);
+421:  console.log("EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS");
+
+````
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# 当前471计划 M006 B4-r2 Codex 独立完整差异复审
+版本：V0.03
+
+修复内容结论：PASS。
+范围归因结论：PASS。
+综合结论：PASS。没有新finding。M006仍IN_PROGRESS；B3累计2。本票不是整模块B5或模块PASS。
+
+本次V0.03完整重附：V0.02原始命令输出含同名独占锁行，会被“最后一个锁行”规则误切报告边界；现仅将证据内该打印标签改为CHECK_ACTUAL_LOCK_SHA，原哈希数值、全部证据与结论不变，旧V0.02完整保留。此为本席报告格式恢复，不是源修或Grok交付失败。
+
+## 独立性与范围
+Grok B4-r2真实exit0且回执路径正确；本席尚未读本次Grok正文/日志，现按顺序重新审完本轮完整差异，先保存本席完整raw。未以B3运行结果替代B4。本raw原70271bytes保留，旧V0.01属于历史报告，本次独立V0.03起完整有效。
+本批findings V1.05双B2已定稿，047为唯一仍在队列的ID；039–043已修出队、037/038/044–046不动。读取两树不按路径过滤，tracked/staged/untracked全部受diff覆盖，不用HEAD~1或旧backend模块替代。
+before-tree=b50b33c1f1c61ab9a1c87f6cf79ea97ffa593ccd
+after-tree=ece59cbd0b81d612f3cc6844d389415cb9394d31
+全diff仅docs/delivery-readiness-gates-v0.1.md，2增2删；当前文件字节等于after-tree。全文差异随实际输出附于下方。
+
+## 逐行归因与修复内容
+| 改动 | 正式ID | 核验 |
+|---|---|---|
+| L1 V0.11→V0.12 | M006-047 | 同一文件内容变化必须递增自身版本；精确只变标题版本 |
+| L96去“均”，加“或已记录对应接入开关关闭” | M006-047 | 与定稿候选完全一致；保留8、npm入口、映射分支字段、后半防伪生产边界 |
+
+本席从before-tree原文按批准的两个精确字符串变换重建预期，实算expected==after-tree==当前源；变化行号只有1、96，所有npm引用逐项相等。没有未登记行、没有额外文件、没有移动/删除；不存在越界需回滚项。
+GEN-002/016/018：当前真实正常路径中8项traceability都走disabled分支，但原句保证“均有责任/manifest”，现句明确容纳该分支。重新读取生成器166–206、227–268、408–421：238允许全关闭时跳过manifest要求，246算traceable，267policy明确OR；两分支被说明覆盖。不是将disabled变成生产证据，policy仍mock_or_sandbox_is_not_production_evidence，L96后半保持。无需改M414生成器/快照/开关。
+GEN-017：B2已双核细化，有PGM066第三方未定/各端开关及BEQR HTML:210原文上位；无新业务规则、角色、状态、价格或审批。B4仅修字义，没扩大业务权限，不改锁/HTML。
+GEN-001：选择收窄原一句，未增加脚本、测试文件、门禁或重复说明。Markdown类型4，不额外造测试。
+
+## 本次新鲜验证
+在Grok真实结束后，本席直接SSH重新读取两树完整diff、当前两源与三HTML SHA；重新实跑verify:delivery-gates-docs、verify:external-evidence-requirement-traceability，均exit0。真实Markdown解析47行均2列、无空格单元，npm引用完全保持。
+首个通用打印小脚本尝试requirements/rows字段得到空数组，仅是调试辅助字段选择错误，不作为快照为空的证据；随后读顶层keys确定实际字段requirement_traceability，完整读出8行，当前mapped_item_ids/owner_groups/target_manifest_paths全空，switch_disabled非空，状态全covered_by_disabled_integration_switches。实际输出两段均保留，避免把[]冒充业务事实。无需改任何项目文件。
+delivery现V0.12/15751bytes/SHA0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09；deploy仍V0.07/7117bytes/SHA543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1。三HTML SHA与冻结来源不变，详下。
+未执行父链49项、真实GitHubPUT/部署/推送；文档型最小验证不声称生产上线或其它工具全模块通过。既有源码非本次diff没有被“顺手修复”。本次无待答questions/HTML自身问题/新判据。
+两席本次完整raw落齐后再读Grok作合取；仅双PASS可将047出队并启动B5-r2。
+
+## 完整diff与新鲜命令输出
+
+````text
+CHECK_ACTUAL_LOCK_SHA: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+TREE_BEFORE b50b33c1f1c61ab9a1c87f6cf79ea97ffa593ccd TREE_AFTER ece59cbd0b81d612f3cc6844d389415cb9394d31 ALL_PATHS ["docs/delivery-readiness-gates-v0.1.md"]
+FULL_UNFILTERED_DIFF
+diff --git a/docs/delivery-readiness-gates-v0.1.md b/docs/delivery-readiness-gates-v0.1.md
+index 88a00e9a..d262d35e 100644
+--- a/docs/delivery-readiness-gates-v0.1.md
++++ b/docs/delivery-readiness-gates-v0.1.md
+@@ -1,4 +1,4 @@
+-# 交付总闸口与上线准入验证 V0.11
++# 交付总闸口与上线准入验证 V0.12
+ 
+ ## 1. 定位
+ 
+@@ -93,7 +93,7 @@ npm run verify:delivery-gates
+ | `npm run verify:production-evidence-draft-prep` | 校验生产证据 manifest 草稿准备器默认 dry-run、拒绝越界写入和覆盖已有 manifest，且不会关闭生产阻断 |
+ | `npm run verify:production-evidence-draft-prep-fixtures` | 在临时目录实测草稿准备器 dry-run 不写文件、execute 复制模板、再次 execute 不覆盖已有 manifest，并拒绝无选择器的 broad execute |
+ | `npm run verify:production-closure-gap-reports` | 从当前运行态、Semgrep、NAS 当前状态、生产证据提交状态和外部证据追踪校验生产闭环缺口总报告，防止旧报告或手改报告伪关闭生产证据 |
+-| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求均已追踪到责任组、证据 item_id、模板和目标 manifest 路径，防止 mock/沙箱被误判为生产闭环 |
++| `npm run verify:external-evidence-requirement-traceability` | 校验 8 条外部证据型 partial 需求已追踪到责任组、证据 item_id、模板和目标 manifest 路径，或已记录对应接入开关关闭，防止 mock/沙箱被误判为生产闭环 |
+ | `npm run verify:nas-it-handoff` | 校验 NAS IT 受控挂载交接包、默认 dry-run 脚本、manifest 映射和无明文密钥边界 |
+ | `npm run verify:nas-diagnostics` | 校验 NAS 只读诊断报告与当前网络、445 端口、CIFS 挂载和 preflight 根因一致，不关闭生产 manifest |
+ | `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
+
+EXACT_APPROVED_TRANSFORM true; both changed lines belong M006-047
+CHANGED_LINES [1, 96]
+MARKDOWN 47 rows all2cols noempty; NPM REFERENCES IDENTICAL
+CMD npm run verify:delivery-gates-docs EXIT 0
+
+> entertainment-complex-management@0.1.0 verify:delivery-gates-docs
+> node tools/verify-delivery-gates.mjs
+
+DELIVERY_GATES_DOCS_PASS
+ 
+CMD npm run verify:external-evidence-requirement-traceability EXIT 0
+
+> entertainment-complex-management@0.1.0 verify:external-evidence-requirement-traceability
+> node tools/generate-external-evidence-requirement-traceability.mjs --check
+
+EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS
+ 
+TRACE_COUNTS {"partial_requirements": 8, "traceable_partial_requirements": 8, "mapped_evidence_items": 0, "mapped_ledger_rows": 0, "p0_evidence_rows": 0, "awaiting_evidence_rows": 0, "invalid_evidence_rows": 0, "valid_evidence_rows": 0, "production_blocking_requirements": 0}
+POLICY {"no_fake_external_evidence_closure": true, "mock_or_sandbox_is_not_production_evidence": true, "partial_requirement_must_map_to_owner_manifest_or_disabled_switch": true, "integration_capability_switches_applied": true, "raw_evidence_stays_external": true, "credential_ref_only_no_plaintext_secret": true, "this_report_does_not_close_blockers": true}
+TRACE_ROWS []
+CURRENT_SOURCE docs/delivery-readiness-gates-v0.1.md 15751 0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09
+CURRENT_SOURCE docs/deploy-and-change-flow-v0.1.md 7117 543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1
+CURRENT_SOURCE docs/business-enum-quick-reference-v0.1.html 133961 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66
+CURRENT_SOURCE docs/business-system-map-for-operations-v0.1.html 304482 a7f7b7a30ace54d2534a8cedbd8f3b6d20fdd7a89d3515b18e194d4878ad66fa
+CURRENT_SOURCE docs/platform-governance-map-for-operations-v0.1.html 103015 c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c
+B4_REPAIR_PASS SCOPE_PASS NO_NEW_FINDINGS
+
+SNAPSHOT_KEYS ['traceability_version', 'status', 'generated_from', 'policy', 'submission_status_counts', 'counts', 'requirement_traceability']
+ACTUAL_ROW_KEY requirement_traceability COUNT 8
+[{"requirement_id": "REQ-17", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-PAY-001", "PRD-PAY-002", "PRD-FACE-001", "PRD-CRED-3P-001", "PRD-CRED-OBJ-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-21", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-PAY-001", "PRD-PAY-002"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-23b", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-FACE-001", "PRD-CRED-3P-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-25", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-PAY-001", "PRD-PAY-002"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-32", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-CRED-OBJ-001", "PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-40", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-3P-001", "PRD-CRED-OPEN-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-41", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"], "production_trace_status": "covered_by_disabled_integration_switches"}, {"requirement_id": "REQ-44", "mapped_item_ids": [], "owner_groups": [], "target_manifest_paths": [], "switch_disabled_item_ids": ["PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001", "PRD-MDM-001", "SEC-P0-MDM-DEVICE-001"], "production_trace_status": "covered_by_disabled_integration_switches"}]
+DIRECT_SOURCE tools/generate-external-evidence-requirement-traceability.mjs
+166:const traceRows = partialRequirements.map((requirement) => {
+167:  const requirementId = requirement["需求编号"];
+168:  const mapping = evidenceMappings[requirementId];
+169:  const rawItemIds = mapping?.evidence_item_ids ?? [];
+170:  const effectiveItemIds = rawItemIds.filter((itemId) => !disabledEvidenceItemIds.has(itemId) && !disabledSecurityFindingIds.has(itemId));
+171:  const switchDisabledItemIds = rawItemIds.filter((itemId) => !effectiveItemIds.includes(itemId));
+172:  const evidenceRows = effectiveItemIds.flatMap((itemId) => ledgerByItemId.get(itemId) ?? []);
+173:  const missingItemIds = effectiveItemIds.filter((itemId) => !ledgerByItemId.has(itemId));
+174:  const awaiting = evidenceRows.filter((row) => row.current_status === "awaiting_submission").length;
+175:  const invalid = evidenceRows.filter((row) => row.current_status === "invalid_submission").length;
+176:  const valid = evidenceRows.filter((row) => row.current_status === "valid_submission").length;
+177:  const p0Rows = evidenceRows.filter((row) => row.priority === "P0");
+178:  const ownerGroups = [...new Set(evidenceRows.map((row) => row.owner_group))].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+179:  const productionBlocking = effectiveItemIds.length > 0 && p0Rows.some((row) => row.current_status !== "valid_submission");
+180:  return {
+181:    requirement_id: requirementId,
+182:    module: requirement["业务模块"],
+183:    acceptance: requirement["验收标准"],
+184:    current_status: requirement["当前实现状态"],
+185:    matrix_gap: requirement["缺口"],
+186:    evidence_mapping_reason: mapping?.reason ?? "",
+187:    mapped_item_ids: effectiveItemIds,
+188:    switch_disabled_item_ids: switchDisabledItemIds,
+189:    owner_groups: ownerGroups,
+190:    evidence_rows_total: evidenceRows.length,
+191:    p0_evidence_rows: p0Rows.length,
+192:    awaiting_evidence_rows: awaiting,
+193:    invalid_evidence_rows: invalid,
+194:    valid_evidence_rows: valid,
+195:    missing_item_ids: missingItemIds,
+196:    production_blocking: productionBlocking,
+197:    production_trace_status: effectiveItemIds.length === 0
+198:      ? "covered_by_disabled_integration_switches"
+199:      : missingItemIds.length > 0
+200:        ? "traceability_missing_manifest"
+201:        : invalid > 0
+202:          ? "invalid_evidence_manifest_blocks"
+203:          : awaiting > 0
+204:            ? "awaiting_real_external_evidence"
+205:            : "all_mapped_evidence_valid",
+206:    target_manifest_paths: [...new Set(evidenceRows.map((row) => row.target_manifest_path).filter(Boolean))],
+227:const failures = [];
+228:for (const requirement of partialRequirements) {
+229:  if (!evidenceMappings[requirement["需求编号"]]) failures.push(`${requirement["需求编号"]} is partial but has no external evidence mapping`);
+230:}
+231:for (const [requirementId, mapping] of Object.entries(evidenceMappings)) {
+232:  if (!requirementRows.some((row) => row["需求编号"] === requirementId)) failures.push(`${requirementId} mapping does not exist in ${matrixPath}`);
+233:  for (const itemId of mapping.evidence_item_ids.filter((id) => !disabledEvidenceItemIds.has(id) && !disabledSecurityFindingIds.has(id))) {
+234:    if (!ledgerByItemId.has(itemId)) failures.push(`${requirementId} maps to ${itemId}, but ${itemId} is missing from ${ledgerPath}`);
+235:  }
+236:}
+237:for (const row of traceRows) {
+238:  if (row.mapped_item_ids.length === 0 && row.switch_disabled_item_ids.length > 0) continue;
+239:  if (row.evidence_rows_total === 0) failures.push(`${row.requirement_id} has no evidence ledger rows`);
+240:  if (row.missing_item_ids.length > 0) failures.push(`${row.requirement_id} has missing item ids: ${row.missing_item_ids.join(", ")}`);
+241:  if (row.target_manifest_paths.length === 0) failures.push(`${row.requirement_id} has no target manifest paths`);
+242:}
+243:
+244:const counts = {
+245:  partial_requirements: partialRequirements.length,
+246:  traceable_partial_requirements: traceRows.filter((row) => (row.evidence_rows_total > 0 && row.missing_item_ids.length === 0) || (row.mapped_item_ids.length === 0 && row.switch_disabled_item_ids.length > 0)).length,
+247:  mapped_evidence_items: new Set(traceRows.flatMap((row) => row.mapped_item_ids)).size,
+248:  mapped_ledger_rows: traceRows.reduce((sum, row) => sum + row.evidence_rows_total, 0),
+249:  p0_evidence_rows: traceRows.reduce((sum, row) => sum + row.p0_evidence_rows, 0),
+250:  awaiting_evidence_rows: traceRows.reduce((sum, row) => sum + row.awaiting_evidence_rows, 0),
+251:  invalid_evidence_rows: traceRows.reduce((sum, row) => sum + row.invalid_evidence_rows, 0),
+252:  valid_evidence_rows: traceRows.reduce((sum, row) => sum + row.valid_evidence_rows, 0),
+253:  production_blocking_requirements: traceRows.filter((row) => row.production_blocking).length,
+254:};
+255:
+256:const output = {
+257:  traceability_version: "v0.1",
+258:  status: failures.length > 0
+259:    ? "traceability_gap"
+260:    : counts.production_blocking_requirements > 0
+261:      ? "traceable_but_awaiting_real_external_evidence"
+262:      : "all_mapped_external_evidence_valid",
+263:  generated_from: [matrixPath, ledgerPath, statusPath],
+264:  policy: {
+265:    no_fake_external_evidence_closure: true,
+266:    mock_or_sandbox_is_not_production_evidence: true,
+267:    partial_requirement_must_map_to_owner_manifest_or_disabled_switch: true,
+268:    integration_capability_switches_applied: true,
+408:if (checkMode) {
+409:  const checkFailures = [...failures];
+410:  for (const relativePath of [jsonPath, csvPath, mdPath]) {
+411:    if (!fs.existsSync(absolute(relativePath))) checkFailures.push(`${relativePath} is missing; run npm run docs:external-evidence-requirement-traceability`);
+412:  }
+413:  if (checkFailures.length === 0) {
+414:    if (normalize(readText(jsonPath)) !== json) checkFailures.push(`${jsonPath} is not in sync`);
+415:    if (fs.readFileSync(absolute(csvPath), "utf8").replace(/\r\n/g, "\n") !== csv) checkFailures.push(`${csvPath} is not in sync`);
+416:    if (normalize(readText(mdPath)) !== md) checkFailures.push(`${mdPath} is not in sync`);
+417:  }
+418:  if (counts.partial_requirements !== counts.traceable_partial_requirements) checkFailures.push("not every partial requirement is traceable to owner manifests");
+419:  if (counts.partial_requirements === 0) checkFailures.push("expected at least one external evidence partial requirement while production evidence is open");
+420:  if (checkFailures.length > 0) failWith(checkFailures);
+421:  console.log("EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS");
+
+````

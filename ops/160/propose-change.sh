@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 文件版本：V0.01
 # 变更提议流程(2026-07-05 起替代直推 main):
 #   推 feature 分支 → 开/更新 PR → (调用方另跑独立复核) → predeploy 门禁绿 → ops/160/merge-pr.sh。
 #   合并动作一律走 merge-pr.sh(它会等 CI 绿),不要手敲 gh pr merge;CI 故障需 SKIP_CI_WAIT=1 时须在 PR 说明原因。
@@ -7,6 +8,11 @@ set -euo pipefail
 title="${1:?需要 PR 标题}"; body="${2:-}"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$branch" == "main" ]] && { echo "不要在 main 上提议;先切 feature 分支。" >&2; exit 1; }
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "[propose] 工作区有未提交改动;请先提交或 stash,再运行本地检查并推送。" >&2
+  exit 1
+fi
 
 echo "[propose] 本地跑 predeploy 门禁(红则不推)..."
 npm run verify:predeploy

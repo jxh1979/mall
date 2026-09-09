@@ -1,4 +1,5 @@
 package com.complex.platform.governance;
+// 文件版本：V0.02
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -23,7 +24,7 @@ public record MerchantRecord(
         String status,
         Instant createdAt,
         Instant updatedAt,
-        // V260 数据存档与审批后删除范式(照 V255 权益模板试点)。存档=软标记可恢复;删除=硬删走审批。
+        // V260 数据存档与审批后删除范式(照 V255 权益模板试点)。存档=软标记可恢复;删除=审批后软删除标记(delete_status=approved,行保留可查可恢复,BSM-004/M009-026)。
         // archivedAt 非空=已存档;deleteStatus none|pending|approved。放末位便于既有构造点追加。
         Instant archivedAt,
         String archivedBy,
@@ -65,6 +66,16 @@ public record MerchantRecord(
                 ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter, secondaryContactName,
                 com.complex.platform.common.PhoneMask.mask(secondaryContactPhone), rentPerSquareMeter,
                 cooperationForm, status, createdAt, updatedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+    }
+
+    /** M009-008：三个主体列以生效的四类主体绑定为准（PGM-026），绑定激活时由 PlatformService 同步投影。 */
+    public MerchantRecord withEntities(String businessEntityId, String contractEntityId, String settlementEntityId,
+            Instant updatedAt) {
+        return new MerchantRecord(id, merchantName, merchantType, businessEntityId, contractEntityId,
+                settlementEntityId, contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter,
+                leasedAreaSquareMeter, secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm,
+                status, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
     }
 

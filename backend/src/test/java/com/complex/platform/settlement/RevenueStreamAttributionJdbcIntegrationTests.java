@@ -1,4 +1,5 @@
 package com.complex.platform.settlement;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,7 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <ol>
  *   <li>解析优先级:项目特例 > 平台默认 > 未配置(null);</li>
  *   <li>通票 settleMonth 把归属主体标注进 settlement_bills.attributed_entity_id;</li>
- *   <li>business_entities.parent_entity_id 层级落库可读回(L3→L2 父链)。</li>
+ *   <li>（M010-001：原第三条「parent_entity_id 层级落库可读回」随固定父链列删除而移除；BEQR-144/PGM-018 多对多协作。）</li>
  * </ol>
  * 走真实 Flyway 迁移库(complex_test);须主会话串行跑(勿与其它 Flyway 集成测试并发)。
  */
@@ -114,23 +115,5 @@ class RevenueStreamAttributionJdbcIntegrationTests {
         String attributed = jdbcTemplate.queryForObject(
                 "SELECT attributed_entity_id FROM settlement_bills WHERE project_id = ?", String.class, PROJECT);
         assertThat(attributed).isEqualTo(ENT_PROJECT);
-    }
-
-    @Test
-    void businessEntityParentLayerPersists() {
-        Instant now = Instant.now();
-        // L2 项目公司(父=某平台),L3 管理公司(父=该项目公司)
-        jdbcTemplate.update("""
-                INSERT INTO business_entities (id, entity_name, entity_role, parent_entity_id, status, created_at, updated_at)
-                VALUES (?, ?, 'project_company', NULL, 'active', ?, ?)
-                """, ENT_DEFAULT, "项目公司X", java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
-        jdbcTemplate.update("""
-                INSERT INTO business_entities (id, entity_name, entity_role, parent_entity_id, status, created_at, updated_at)
-                VALUES (?, ?, 'management_company', ?, 'active', ?, ?)
-                """, ENT_PROJECT, "娱乐平台公司X", ENT_DEFAULT, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
-
-        String parent = jdbcTemplate.queryForObject(
-                "SELECT parent_entity_id FROM business_entities WHERE id = ?", String.class, ENT_PROJECT);
-        assertThat(parent).isEqualTo(ENT_DEFAULT);
     }
 }

@@ -1,4 +1,4 @@
-# 部署与变更流程 V0.06（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并）
+# 部署与变更流程 V0.07（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并）
 
 ## 为什么改
 此前:AI 直推 main、部署只跑后端测试、治理门禁不 gate 部署 → 曾带着红门禁(scope 登记/安全基线/后台矩阵漂移)上生产。补三道真门禁。
@@ -33,7 +33,7 @@ CI 用 `HTML_GATES_BASE` 给两道 HTML 差异门禁传入事件基线：PR 使�
 ## 直推 main / 无门禁部署 —— 已做到哪、还差你做什么(2026-07-06 更新)
 
 **已在仓内做实的(我能做的)**:
-1. 部署硬闸:`complex-deploy-api/web.sh` 构建前跑 `verify:predeploy`,红即 exit 1。
+1. 部署硬闸:`complex-deploy-api/web.sh` 构建前逐项执行固定的预部署门禁清单,红即 exit 1。
 2. **部署脚本直接跑权威门禁数组**(codex 复核后从"解析 package.json"改为此):部署脚本内硬编码必需门禁列表并逐个 `npm run`,**不解析也不信任 package.json 的 verify:predeploy 串**。因此"把 verify:predeploy 抽空/设 `true`/惰性化(如 `\"true # 门禁名...\"`)"对部署无效——对抗自测证实:篡改后部署仍跑全部门禁。**仍非仓外强制**:能改本部署脚本(需 .160 shell)或 `tools/verify-*.mjs`(让门禁真跑但断言变 no-op)者仍可绕过。
 3. pre-push 钩子禁直推 main;`.github/CODEOWNERS` 标记强制点文件。
 4. GitHub Actions 门禁(`.github/workflows/predeploy-gates.yml`,✅已激活):PR 到 main 时 GitHub 侧独立跑 verify:predeploy,首跑已 SUCCESS。因私有免费版无法设 required check,当前为可见信号(非硬阻断合并)。
@@ -42,7 +42,7 @@ CI 用 `HTML_GATES_BASE` 给两道 HTML 差异门禁传入事件基线：PR 使�
 - ~~激活 GitHub Actions 门禁~~(2026-07-06 已完成;定义维护见上节,不再用 `ops/ci` 模板覆盖生效 workflow)。
 - **启用受保护分支 + required status check**(这才是"仓外强制",能真正挡直推/未过门禁的合并):
   需 GitHub Pro 或把仓库设为 Public(私有免费版 `branches/*/protection` 返回 403)。开通后:
-  `gh api -X PUT repos/jxh1979/mall/branches/main/protection -f required_status_checks[strict]=true -f required_status_checks[contexts][]=predeploy -f enforce_admins=true -f required_pull_request_reviews[required_approving_review_count]=1 -f restrictions=`(按需调参)。
+  `gh api -X PUT repos/jxh1979/mall/branches/main/protection -F 'required_status_checks[strict]=true' -f 'required_status_checks[contexts][]=predeploy' -F enforce_admins=true -F 'required_pull_request_reviews[required_approving_review_count]=1' -F restrictions=null`(按需调参)。
 - **独立 DB 账号/实例隔离**:当前 complex_test 与生产同实例同账号;真隔离需另建只连 complex_test、对生产 complex 无权限的账号(需 DB 管理权)。
 
 **诚实结论**:仓内我把篡改门槛尽量抬高了,但"能改 .160 部署脚本 / 能合 main 的主体仍能绕过"这一层,只有上面三条(受保护 CI、独立权限、人类审批)能真正闭合——它们都在仓外、需你出面。

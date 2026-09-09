@@ -1,4 +1,5 @@
 package com.complex.platform.analytics;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -474,7 +475,8 @@ class AnalyticsJdbcIntegrationTests {
         jdbcTemplate.update("""
                 INSERT INTO business_entities (id, entity_name, entity_role, unified_social_credit_code,
                         legal_representative, bank_account_ref, status, created_at, updated_at)
-                VALUES ('org_m4', 'M4主体', 'operation', 'm4-code', 'M4', 'vault://m4', 'active', now(), now())
+                VALUES ('org_m4', 'M4主体', 'management_company', 'm4-code', 'M4', 'vault://m4', 'active', now(), now())
+                -- M010-012：entity_role 白名单已收为 HTML 三角色（V410），夹具不再直写退役码 operation
                 ON CONFLICT (id) DO NOTHING
                 """, java.util.Map.of());
         jdbcTemplate.update("""

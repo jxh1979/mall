@@ -505,3 +505,666 @@ PGM:965:             <div class="question confirmed">已拍板：界面全中文
 ## 定稿门槛与边界
 
 本方对同候选V0.38给PASS，允许Grok独立推翻分类/队列/ID。未读取其本次B2新增票，未指示其跟随。本阶段不写源码，不把本方PASS当双PASS；两席实际双PASS后整批修改AGENTS/两README并各V0.01→V0.02，绝不先修其中“共识”项。B3累计仍1，未提前取after tree或加次数。
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+# M003 B1 完整独立自审（当前471模块计划）
+版本：V0.04
+日期：2026-09-08
+审计席：当前 Codex（唯一修复者）；远程工具通道：直接 SSH，未再使用 MCP_Cloud_160。
+阶段：B1；ledger V1.62，M003 IN_PROGRESS，B3累计2，方案修复2，交付失败重跑0。
+结论：FAIL。1项低严重度工程最小性问题，待B2整批归并；没有新HTML自身问题，没有业务添加项。此结论不是B2定稿或修复授权落地，也不是模块收口。
+
+## 1. 范围、独立性与证据基准
+当前模块：治理门禁与 CI 基线／配置与工程入口／第1段。只审.gitignore 1—55、package.json 1—147，共2文件202行，全量逐行读取。当前锁M003映射完整18项GEN-001至GEN-018，无HTML派生ID。旧322模块同号的AGENTS/README报告只保留字节，不继承旧结论。
+Grok实际先执行完毕，适配器真实返回REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md、EXIT_CODE=0；本自审完成落盘之前没有读取其本次报告正文、findings或原始JSON。只读取其元数据确认交付。后续才能核验Grok本次内容和B1四值。
+Git main HEAD 242f487233d028173cb9198eecd079f5d877405c；git diff --numstat -- .gitignore package.json 输出为空。
+- .gitignore：1199 bytes，SHA256 75861ded5d3859bcda593aafe3f3862e765470e7f8b6636a643bf59de9d7c51b。
+- package.json：15583 bytes，SHA256 350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f，documentVersion V0.01；应用SemVer 0.1.0不混作审计版本。
+- criteria-lock.md：889020 bytes，实算值见报告首行；sidecar/ledger同值，LOCK-AMEND-COUNT 1。本时点未读Grok正文，不冒称已完成四值。
+- 旧self raw：56657 bytes，SHA256 d141759f52582e517019922de2e4a11865b34aa6a28ee322fd273870d4b48d01，507行；本次追加保留该前缀。
+只读引用目标用于核实本模块入口：根lock的manifest镜像、apps/web/package.json、后端/Android直接wrapper、Playwright两个配置、closed-loop生成器参数、CI和受控调用者。没有把这些关联读取冒称为其他模块已审完。
+
+## 2. 技能实际使用与范围
+本轮已实际读过的适用SKILL.md按当前V0.17 §6收窄使用：using-superpowers及Codex工具对照、verification-before-completion、receiving-code-review、systematic-debugging；grilling、codebase-design、diagnosing-bugs、writing-for-agents；可选batch-grill-me、ubiquitous-language、git guardrails及ponytail-review。使用其追问、追调用链、复现错误、必要性删除审视和证据复核方法。没有派第三席，没有技能额外产物、提问闸、提交或全仓扩审。纯配置B1不调用TDD写测试；本阶段未修复文件。当前宿主无Claude Code hook运行证据，不声称hook已生效。
+
+## 3. 第一性原理线：三问与全量用途
+### 为什么存在
+.gitignore所有规则只控制本地生成物/会话配置是否意外纳入Git，没有声明价格、状态、权限或新业务流程；即使目录名包含bar-images/evidence-files，也只是已有运行态文件存储路径的忽略声明。先排查冲突，再寻找上位业务细化，未出现须以HTML业务原句解释的新规则，归技术性；不因HTML未写Git命令而删除全部文件。
+package.json提供npm workspace入口、命令编排和依赖声明，127脚本均只启动已有工具或构建测试任务。删除全部入口将失去这些可执行命令；该用途由真实执行输出和图解析证明，不靠“历史如此”。脚本名称提及生产证据、NAS、凭证等不等于该字符串创建业务角色/默认值；该模块只编排已有工具，工具内业务判据由其所属模块审计。
+必要性审视不是一律接受：.gitignore四条递归模式已被前条无斜线同名规则覆盖，列S-001。其余有具体作用的忽略项不因未命中当前受控文件而删除。
+### 声称行为是否执行过
+已执行：127命令shell语法、75独立Node目标语法及存在性、workspace目标/根脚本引用和无循环；后端/Android环境入口；mock/真实后端UI测试发现；两层npm参数转交；真实后端未授权环境入口负例；两个wrapper缺少任务负例；21个Git忽略样本；predeploy真实失败传递。
+未执行：127脚本逐个业务运行、后端集成测试、真实UI业务操作、部署、生成业务文档、安装依赖、升级npm。测试发现不等于50项测试通过；tsc --dry不等于完整类型检查；node --check不等于业务运行正确。
+### 未验证前提
+160当前Node v24.20.0满足根声明^22.13.0 || >=24.0.0；当前npm 11.19.0与packageManager声明npm@10.9.8不同，只说明实际宿主工具版本差异，不据此伪造包不兼容结论。本次没有重建全部npm依赖、逐一验证所有支持Node版本；已核实当前根lock的name/version/workspaces/engines/devDependencies镜像与根manifest一致。
+未把Java/Maven/Gradle/SDK“应当已装”当真，实际env检查通过。生产证据和HTML镜像不假定干净：predeploy真实拒绝现有输入；相关限制下文如实列明。
+## 4. 顺从式：逐项技术性分类与覆盖
+分类顺序对下列每项均为冲突→细化→技术性→添加；均未发现本模块声明与三HTML明文矛盾或新增业务发明。以下T表示技术性、继续按GEN正常审计；S-001不是业务冲突或添加。
+
+| 位置 | 分类 | 本模块具体用途与覆盖 |
+|---|---|---|
+| .gitignore 1—9 | T | Node/Web/Java产物、实际.env、数据库临时文件、覆盖率；.env.example不匹配，示例仍可跟踪 |
+| .gitignore 10—21 | T | Android/Gradle/Kotlin缓存、编译安装包、本地SDK配置；11/13/15/21见S-001 |
+| .gitignore 22—27 | T | 空行分组及两种Playwright报告、测试产物 |
+| .gitignore 28—32 | T | 本机Claude配置路径和TypeScript增量缓存；无密钥正文 |
+| .gitignore 33—39 | T | security扫描日志、滚动扫描与归档日志；dated findings json仍不忽略 |
+| .gitignore 40—43 | T | loop工具运行产物、说明及空行 |
+| .gitignore 44—51 | T | 只匹配仓库根临时探针名称，tools/debug-one.mjs不匹配 |
+| .gitignore 52—55 | T | 运行态商品图片/证据文件，不新增业务规则 |
+| package.json 1—9 | T | 私有ESM工程身份及唯一apps/web workspace |
+| package.json 138—147 | T | 结构闭合、npm版本声明、Node范围、Playwright和yaml开发依赖 |
+| package.json 11 `dev` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 12 `dev:backend` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 13 `test:backend` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 14 `verify:backend-env` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 15 `dev:api` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 16 `dev:web` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 17 `verify:openapi` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 18 `audit:client-routes` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 19 `verify:client-routes` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 20 `audit:client-openapi` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 21 `verify:client-openapi` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 22 `audit:client-payload` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 23 `verify:client-payload` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 24 `docs:openapi-examples` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 25 `verify:openapi-examples` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 26 `docs:operation-matrix` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 27 `verify:operation-matrix` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 28 `docs:openapi-closure` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 29 `verify:openapi-closure` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 30 `docs:security-baseline` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 31 `docs:entry-baseline` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 32 `verify:html-ledger-sync` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 33 `verify:entry-anchors` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 34 `verify:html-param-tier` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 35 `verify:entry-doc-baseline` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 36 `verify:security-baseline` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 37 `verify:prod-docs-access` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 38 `verify:ops160-execution-policy` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 39 `verify:ops160-backup-restore` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 40 `verify:production-credentials` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 41 `verify:p0a-ops-hardening` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 42 `verify:ops160-recovery` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 43 `verify:p0-contract` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 44 `verify:p0-web` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 45 `verify:p0-env` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 46 `build` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 47 `typecheck` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 48 `smoke:p0` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 49 `verify:android-env` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 50 `android:p0:build` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 51 `android:p0:smoke` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 52 `android:p0:apk` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 53 `verify:p0` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 54 `verify:no-legacy-api-prototype` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 55 `verify:coding-host-protection` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 56 `verify:t3-coding-package` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 57 `verify:t3b-supplier-mock-kit` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 58 `verify:t3d-local-llm-ai-quality` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 59 `verify:external-dependency-gates` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 60 `verify:delivery-gates-docs` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 61 `verify:delivery-gates` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 62 `verify:nas-smb-mount-evidence` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 63 `verify:production-readiness-evidence` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 64 `docs:production-blockers` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 65 `verify:production-blockers` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 66 `verify:production-evidence-intake` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 67 `docs:production-owner-actions` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 68 `verify:production-owner-actions` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 69 `docs:production-evidence-submission-kit` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 70 `verify:production-evidence-submission-kit` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 71 `docs:production-evidence-submission-status` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 72 `verify:production-evidence-submission-status` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 73 `docs:production-evidence-manifest-templates` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 74 `verify:production-evidence-manifest-templates` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 75 `docs:production-evidence-owner-guides` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 76 `verify:production-evidence-owner-guides` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 77 `verify:production-evidence-submissions-guard` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 78 `docs:production-evidence-backfill-priority` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 79 `verify:production-evidence-backfill-priority` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 80 `docs:production-evidence-backfill-execution-ledger` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 81 `verify:production-evidence-backfill-execution-ledger` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 82 `test:ui` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 83 `verify:ui` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 84 `test:ui:update` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 85 `verify:ui:real-backend` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 86 `verify:ui:real-backend:seeded` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 87 `verify:android-p0-smoke-wrapper` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 88 `verify:full-admin-matrix` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 89 `test:unit` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 90 `verify:unit` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 91 `docs:domain-ownership-scope` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 92 `verify:domain-ownership-scope` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 93 `verify:matrix-vs-migration` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 94 `verify:migration-version-order` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 95 `verify:tenant-isolation` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 96 `verify:predeploy` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 97 `verify:pii-encryption` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 98 `verify:test-db-isolation` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 99 `docs:production-closure-gap-reports` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 100 `verify:production-closure-gap-reports` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 101 `verify:final-closed-loop-audit` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 102 `verify:production-evidence-negative-fixtures` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 103 `docs:nas-current-state-drift` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 104 `verify:nas-current-state-drift` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 105 `docs:closed-loop-current-state` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 106 `verify:closed-loop-current-state` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 107 `verify:closed-loop-runtime` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 108 `verify:nas-it-handoff` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 109 `docs:external-evidence-requirement-traceability` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 110 `verify:external-evidence-requirement-traceability` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 111 `docs:nas-diagnostics` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 112 `verify:nas-diagnostics` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 113 `docs:production-evidence-p0-quickstart` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 114 `verify:production-evidence-p0-quickstart` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 115 `docs:runtime-acceptance-evidence` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 116 `verify:runtime-acceptance-evidence` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 117 `docs:ui-experience-acceptance` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 118 `verify:ui-experience-acceptance` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 119 `docs:production-evidence-owner-execution-packets` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 120 `verify:production-evidence-owner-execution-packets` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 121 `prepare:production-evidence-drafts` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 122 `verify:production-evidence-draft-prep` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 123 `verify:production-evidence-draft-prep-fixtures` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 124 `verify:production-evidence-positive-fixtures` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 125 `verify:production-evidence-positive-propagation-fixtures` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 126 `verify:production-ready-no-go-fixtures` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 127 `verify:production-blocker-register-no-go-fixtures` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 128 `verify:production-ready-positive-fixtures` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 129 `verify:production-evidence-crosslinks` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 130 `docs:partial-requirement-mock-coverage` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 131 `verify:partial-requirement-mock-coverage` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 132 `docs:production-no-go-command-center` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 133 `verify:production-no-go-command-center` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 134 `docs:integration-capability-switches` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 135 `verify:integration-capability-switches` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 136 `docs:data-isolation-spec` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+| package.json 137 `verify:data-isolation-spec` | T | 已逐项解析实际命令，目标/工作区/依赖引用存在；具体执行边界见第5节 |
+
+| 冻结判据 | 本席结论 | 证据及适用范围 |
+|---|---|---|
+| GEN-001 必要性与最小性 | FAIL | S-001四条忽略模式覆盖重复。dev:api不是旧原型：实际指向dev:backend，再到Java wrapper；backend/README当前66行引用该稳定入口。test/verify同目标是外部命令命名接口；无证据证明删除这些已声明测试入口不会破坏调用，不泛化删除全部转发脚本。 |
+| GEN-002 可执行正确性 | PASS | 127条shell语法、75Node目标解析通过；两个env入口通过；UI配置成功发现目标套件；wrapper缺目标及缺REAL_BACKEND_E2E均返回1。 |
+| GEN-003 测试有效性 | PASS | 针对本模块“入口选择/参数/错误退出/忽略匹配”的正负行为已实际执行；没有把--list或--dry当业务测试通过。本文件不定义业务测试断言。 |
+| GEN-004 信任边界校验 | PASS | 本模块命令字符串固定，未拼入用户文本；运行时环境标记由脚本固定，缺失标记的真实配置负例拒绝。业务文件/网络输入校验不由该两文件实现。 |
+| GEN-005 授权与最小权限 | PASS | private true禁误发布包；本模块没有服务端授权实现或新增角色。未执行生产操作，未声称npm编排能代替服务端授权。 |
+| GEN-006 数据完整性 | PASS | 本模块没有业务状态/金额写入或事务实现。命令组合用&&失败即停，实测predeploy首门禁1退出后未启动后续步骤；未运行生成器写数据。 |
+| GEN-007 并发与幂等 | PASS | 本模块无锁/消费者/重试或并发状态机，组合脚本顺序执行；未将构建入口本身当作业务幂等保障。 |
+| GEN-008 接口与模式一致性 | PASS | npm根/工作区命令名解析全部一致；根lock manifest镜像匹配；closed-loop --verify在目标第7行被支持，并非未知参数。 |
+| GEN-009 错误处理与恢复 | PASS | 缺任务/环境标记负例以及真实predeploy红灯均非0，不吞错。read-only检查没有把失败转绿。 |
+| GEN-010 安全与敏感信息 | PASS | .gitignore实际排除各层.env/.env.local和本机配置，package无密钥值/外发命令；唯一REAL_BACKEND_E2E=1是选择标记。git ls-files .env* **/.env*仅.env.example；未读取秘密文件内容。 |
+| GEN-011 可观测与审计证据 | PASS | 入口给出工具名、错误原因/退出码；本报告保留实际输出及范围。dated findings不被*.log规则吞掉；本轮audit目录不被忽略规则隐藏。 |
+| GEN-012 资源与性能边界 | PASS | 脚本图无根脚本循环，固定串行链；本模块没有无界批量、连接或缓存实现；未因可能极端输入新增限流器。 |
+| GEN-013 构建配置与依赖 | PASS | 75目标存在、Node语法有效，Playwright本地bin存在，workspace唯一且目标完备；160Node符合声明，env工具实查。npm当前版本差异如实保留，不冒称重装已验证。 |
+| GEN-014 数据库迁移正确性 | PASS | 本模块没有SQL迁移内容或直接破坏性DB命令；migration-version-order入口引用真实工具；未在该模块执行数据库迁移。 |
+| GEN-015 界面可用性与可访问性 | PASS | 无产品界面；测试发现证明两套配置选择正确，不等于实际页面可访问性验收。 |
+| GEN-016 文档可验证性 | PASS | 两文件路径/命令可复现；全局门禁失败明确报告，不宣称全局可发布。package documentVersion与应用SemVer区分，未修改源故未越权补版本。 |
+| GEN-017 业务来源分类 | PASS | 全部忽略/元信息/127命令逐项T；没有把业务发明隐藏成技术性；无需添加项问卷。 |
+| GEN-018 第一性原理证据 | PASS | 依据当前可执行产物、可复现命令和直接读取的Git官方规范。S-001不用旧报告或Grok意见作依据。 |
+
+## 5. 对抗式及可复现命令
+所有审计命令经当前Codex直接SSH在/home/james/complex-management执行；使用UTF-8。以下示例均从该目录运行。
+
+### E1 全量入口图及语法
+实际执行以下Python（可直接python3 -运行）：
+```python
+from pathlib import Path
+import json,subprocess,shlex,re,hashlib
+r=Path("/home/james/complex-management")
+p=json.loads((r/"package.json").read_text()); w=json.loads((r/"apps/web/package.json").read_text()); l=json.loads((r/"package-lock.json").read_text())
+print("WORKSPACE_PACKAGE")
+print(json.dumps(w,ensure_ascii=False))
+print("ROOT_LOCK_MIRROR")
+print(json.dumps({k:l["packages"][""].get(k) for k in ["name","version","workspaces","engines","devDependencies"]},ensure_ascii=False))
+problems=[];targets=set();edges=[];envs=[]
+for name,command in p["scripts"].items():
+ result=subprocess.run(["sh","-n","-c",command],cwd=r,capture_output=True,text=True)
+ if result.returncode:problems.append([name,"shell",result.stderr])
+ for piece in command.split(" && "):
+  a=shlex.split(piece)
+  if a and "=" in a[0] and not a[0].startswith("-"):
+   envs.append([name,a.pop(0)])
+  if a[:2]==["npm","run"]:
+   target=a[2];wp="--workspace" in a
+   manifest=w if wp else p
+   if target not in manifest["scripts"]:problems.append([name,"missing script",target,wp])
+   edges.append([name,target,"apps/web" if wp else "root"])
+  elif a and a[0]=="node":
+   targets.add(a[1])
+   if not (r/a[1]).is_file():problems.append([name,"missing node target",a[1]])
+  elif a and a[0]=="playwright":
+   if not (r/"node_modules/.bin/playwright").exists():problems.append([name,"missing playwright binary"])
+  else:problems.append([name,"unhandled command",a])
+for target in sorted(targets):
+ c=subprocess.run(["node","--check",str(r/target)],cwd=r,capture_output=True,text=True)
+ if c.returncode:problems.append([target,"node syntax",c.stderr])
+seen=set();active=set()
+adj={k:[e[1] for e in edges if e[0]==k and e[2]=="root"] for k in p["scripts"]}
+def walk(n):
+ if n in active:problems.append([n,"script cycle"]);return
+ if n in seen:return
+ active.add(n)
+ for t in adj[n]:walk(t)
+ active.remove(n);seen.add(n)
+for n in adj:walk(n)
+print(json.dumps({"scripts":len(p["scripts"]),"node_targets":len(targets),"all_targets":sorted(targets),"forward_edges":edges,"environment_assignments":envs,"problems":problems},ensure_ascii=False))
+for args in [["node","--version"],["npm","--version"],["git","ls-files",".env*","**/.env*"]]:
+ c=subprocess.run(args,cwd=r,capture_output=True,text=True);print(json.dumps({"command":args,"exit":c.returncode,"stdout":c.stdout,"stderr":c.stderr},ensure_ascii=False))
+assert not problems
+
+```
+实际核心输出：scripts=127；node_targets=75；problems=[]；workspace-aware所有转发目标存在，根脚本图无环；唯一内联环境赋值[verify:ui:real-backend, REAL_BACKEND_E2E=1]；node v24.20.0，npm 11.19.0。真实总命令exit0。镜像字段name/version/workspaces/engines/devDependencies与根manifest相同，75个Node目标均独立node --check返回0。
+### E2 正向入口
+```text
+npm run verify:backend-env
+exit=0
+[backend-env] 后端环境前置校验通过。
+- openjdk version "21.0.12.1" 2026-08-18 LTS
+- system Maven: Apache Maven 3.9.11 (3e54c93a704957b63ee3494413a2b544fd3d825b)
+
+npm run verify:android-env
+exit=0
+[android-env] Android P0 环境前置校验通过。
+- openjdk version "21.0.12.1" 2026-08-18 LTS
+- system Gradle: ------------------------------------------------------------
+- Android SDK: /home/james/android-sdk
+
+npm run verify:ui -- --list --reporter=list
+exit=0，实际展开playwright test --list --reporter=list
+Total: 32 tests in 6 files
+
+npm run verify:ui:real-backend -- --list --reporter=list
+exit=0，实际展开REAL_BACKEND_E2E=1 playwright test --config=playwright.real-backend.config.ts --list --reporter=list
+Total: 18 tests in 4 files
+
+npm run typecheck -- -- --dry
+exit=0
+> npm run typecheck --workspace apps/web -- --dry
+> tsc -b --noEmit --dry
+1:35:38 PM - A non-dry build would build project '/home/james/complex-management/apps/web/tsconfig.json'
+```
+测试发现覆盖mock 6文件与real 4文件，不启动业务测试/数据库。tsc只做dry-run。初次尝试npm run typecheck -- --dry被内层npm将--dry扩为--dry-run并告警；这不是tsc dry-run证据。已按嵌套npm实际参数规则补第二个--，上面是修正后有效输出。未改源代码或把自己的命令失误列为项目缺陷。
+### E3 能失败的负例
+```text
+node tools/run-backend-maven.mjs
+exit=1
+[backend-env] 缺少 Maven 执行目标。
+- 示例：npm run test:backend 或 npm run dev:backend。
+- 直接调用示例：node tools/run-backend-maven.mjs test。
+
+node tools/run-android-gradle.mjs
+exit=1
+[android-env] 缺少 Gradle 执行任务。
+- 示例：npm run android:p0:build、npm run android:p0:smoke 或 npm run android:p0:apk。
+
+env -u REAL_BACKEND_E2E npm exec -- playwright test --config=playwright.real-backend.config.ts --list --reporter=list
+exit=1
+Error: 真实后端 E2E 须设置 REAL_BACKEND_E2E=1，请使用 npm run verify:ui:real-backend。
+at playwright.real-backend.config.ts:5:9
+```
+第三项实际用Python env字典pop REAL_BACKEND_E2E后调用等价argv，未打印完整环境变量。
+### E4 Git真实匹配
+将下列21相对路径换行送入git check-ignore --no-index --verbose --non-matching --stdin，真实exit0。
+```text
+.gitignore:4:.env                 .env
+.gitignore:4:.env                 apps/web/.env
+.gitignore:5:.env.local           apps/web/.env.local
+::                               .env.example
+.gitignore:1:node_modules         node_modules/x.js
+.gitignore:1:node_modules         apps/web/node_modules/x.js
+.gitignore:3:backend/target       backend/target/x.class
+.gitignore:11:**/.gradle/         apps/android-terminal/.gradle/cache
+.gitignore:13:**/.kotlin/         apps/android-terminal/.kotlin/cache
+.gitignore:15:**/build/           apps/android-terminal/build/out.class
+.gitignore:21:**/local.properties apps/android-terminal/local.properties
+::                               security-scans/dated/results.json
+.gitignore:34:security-scans/**/*.log security-scans/dated/run.log
+.gitignore:36:security-scans/semgrep-current/ security-scans/semgrep-current/findings.json
+.gitignore:39:docs/_archive/**/*.log docs/_archive/old/run.log
+.gitignore:45:/debug*.mjs         debug-one.mjs
+::                               tools/debug-one.mjs
+.gitignore:46:/probe-*.mjs        probe-one.mjs
+.gitignore:54:backend/data/bar-images/ backend/data/bar-images/a.png
+.gitignore:55:backend/data/evidence-files/ backend/data/evidence-files/a.pdf
+::                               docs/audit-2026-09/findings.md
+```
+初次样本误含绝对路径/debug-one.mjs，Git明确exit128拒绝仓库外路径；删除错误样本并补齐相对路径后完整重跑成功。没有创造这些样本文件。
+### E5 真实门禁失败传递
+```text
+npm run verify:predeploy
+exit=1
+> npm run verify:html-ledger-sync && npm run verify:entry-anchors && ... （完整链在package.json:96）
+> node tools/verify-html-ledger-sync.mjs
+[html-ledger-sync] FAIL: 改动了业务最终解释权 HTML，但决策台账未同步。比对范围：工作区（含未提交改动）↔ 基线 origin/main@242f4872。
+  已改动的 HTML：
+    - docs/business-system-map-for-operations-v0.1.html
+  必须在同一批改动内一并更新：docs/prd-audit/business-decision-ledger.md
+```
+这是首个门禁真实阻断，后续verify:entry-anchors没有在该组合调用中执行。既有entry-anchors 6个BSM CSV镜像错误另有前阶段实际证据；不把该次predeploy退出原因错误写成6项CSV错误。当前M003入口按&&正确停止，HTML/CSV/决策台账源问题不在这2文件修复范围，不改它们来刷绿，不重开M001/M002、不虚报全局PASS。B/C仍是用户确认的原意。
+
+## 6. 全部当前Finding（仅本席临时号）
+### S-001：四条递归忽略模式没有新增匹配用途
+- 严重度：低；冻结判据GEN-001；四分类：技术性；工程缺陷：是（重复配置）；建议B2队列：是，删除4条被覆盖模式。无HTML问题、无业务添加。
+- 精确位置及上下文：
+```text
+.gitignore:10 .gradle
+.gitignore:11 **/.gradle/
+.gitignore:12 .kotlin
+.gitignore:13 **/.kotlin/
+.gitignore:14 build
+.gitignore:15 **/build/
+.gitignore:20 local.properties
+.gitignore:21 **/local.properties
+```
+- 第一性原理依据类型3+4：已直接读取Git官方[gitignore模式规范](https://git-scm.com/docs/gitignore#_pattern_format)，其规则说明无前导/中间斜线的名称可在任意下级匹配；前导**/同样匹配任意目录；末尾/仅限制为目录。因此10覆盖11全部目录及后代，12覆盖13，14覆盖15，20与21等效。中间无!否定项，4条后者均不增加覆盖能力。E4实证目标匹配当前后置规则，并与规范覆盖关系组成证据；不谎称已经删除并执行过对照。
+- 原文短引（23英文词以内）：“Otherwise the pattern may also match at any level below the .gitignore level.” 其余按规范意译，未扩用版权原文。
+- 最小处置：只删除11/13/15/21；保留前面的名称规则及其实际忽略语义。若进入B3，依用户版本铁律为原无版本的.gitignore建立自身V0.01注释，归本finding的合规版本维护；package.json不因该项而改。删除后用同21样本及Git规则重新校验，不新建抽象或测试框架。
+- 为何不是极端情况：四条覆盖重复在每次读取当前.gitignore时即存在，不依赖巧合；修复也不扩大保护范围。没有声称它导致用户业务故障。
+其余怀疑已核实不入队：dev:api当前实际指向Java入口且backend/README:66有现用契约；closed-loop --verify由目标实际接受；REAL_BACKEND_E2E赋值在目标Linux shell成功且负例有效；npm版本差异未产生可复现入口错误；测试发现/干跑的局限如实披露。
+
+## 7. 本席完整结论与下一步
+第一性原理、顺从式、对抗式三线均已完成；2文件202行、127脚本和18GEN完整覆盖。本席B1 FAIL，仅S-001。不能以该低严重度问题替代其他GEN检查，也不把已知全局门禁红灯藏掉。
+当前只向本self raw追加完整报告；未修.gitignore/package.json/HTML/CSV/业务决策台账/冻结计划，未读当前Grok结论，未分配正式ID或开始B3。接着先读Grok本次完整报告、核验四值，再对两席全部发现一起B2归并；累计B3仍2。
+
+
+## M003 B2 本席整批候选复核
+版本：V0.05
+日期：2026-09-08
+步骤：B2；M003 IN_PROGRESS，B3累计2。结论：PASS（针对候选归并、分类与队列；不是B1或模块收口PASS）。
+
+输入：
+- modules/M003-b1-self-raw.md V0.04完整B1，从L510至本附录前，97151bytes，SHA256 946e0fd255f7ca207c2dbedc182c26b5dd5cb0e8292b84f536ab07b408eca268。
+- modules/M003-b1-grok-raw.md V0.04，L1109—1529全部421行，111023bytes，SHA256 a06c894debfb16699c2be581730ce34f85cf59ad26d822a8af2a236ec7b7e95e，真实exit0。
+- findings.md V0.90，301010bytes，SHA256 2bc36a0805672ecd5b7801417baeefa0615516350163ae3f3a17de9899ce3c7d。
+B1后四值实际/sidecar/ledger/本次Grok报告逐一相等，均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；LOCK-AMEND-COUNT 1。本B2不另写独占锁字段行，不使B1取段偏移。
+
+### 全部差集及本席裁决
+| 本次来源 | 正式ID | 本席核对 |
+|---|---|---|
+| 根S-001 | M003-027 | 新的重复模式工程问题，与旧016的用途登记不同；低严重度、技术性、有工程缺陷、queue是为候选正确值 |
+| Grok GR-01/02 | M003-016 | 沿用同.gitignore既有登记；缓存等1—51技术性，53—55有明确HTML上位的运行态产物细化；工程缺陷否/queue否，重复例外仅027 |
+| Grok GR-03 | M003-028 | 根manifest元信息登记，技术性无业务发明，queue否 |
+| Grok GR-04 | M003-029 | 根127脚本实际入口登记，技术性，实跑范围和未跑部分写清，queue否 |
+| Grok GR-05 | M003-030 | HTML解释权校验入口有BEQR23完整上位句，细化且入口正确失败，queue否 |
+| Grok GR-06及§4子项 | M003-031 | 普通交付/迁移聚合技术性；个人信息和隔离子项按PGM870/447细化。每个子项分类有明确边界，无新业务值，queue否 |
+
+原001—026全部永久保留、不复用ID；018实指AGENTS/README说明，不挪给package.json。旧模块“已修”事实不冒充当前重审事实；M001/M002当前定稿正文完整保留。GR全部意见及根S-001均有去向；Grok B1的“无缺陷”和其对重叠模式只观察不强删的意见仍在原raw及候选中，不伪写其赞成027。
+
+### 分类修正与依据
+本席B1原将两文件全部分类技术性过粗。现直接读取BSM959、PGM893/907、BEQR23、PGM447/448和870完整原文后接受Grok对上传保存、证据留痕、解释权校验、隔离/个人信息核验这些具体子项按“细化先于技术性”的划分；对应完整句已入候选。此为B2公开修正，不回写旧B1原票。
+Grok将.env忽略泛关联“开关不得视同打开”或“个人信息加密”的段落不足以直接证明.env模式实现该业务条款。.env是本机环境配置的Git排除声明，不实施开关/加密，按其GR-01与全量表自身的技术性保持合理。本候选对此逐字标明待Grok确认，没有静默更改另一席原始报告。
+
+### 为什么本席保持027队列是
+直接读取Git官方gitignore规范可得严格包含关系：无斜线同名模式覆盖任意层文件/目录；后置**/模式并未增加任何位置，尾斜线只限制目录。因此四条冗余均被前条完整覆盖。冻结GEN-001明确处理重复配置，不能把“未造成业务失败”自动当作该判据的豁免。当前每次加载配置重复关系都存在，删除4行不依赖假设失败路径，也未提出任何新规则、锁、状态或依赖。
+候选仅建议删除4条及遵守用户版本铁律的自身V0.01注释，原无版本第一次建立，从此递增；.gitignore语法允许#注释。业务源码与package.json都不受此修复影响。未把它说成高严重度或业务故障。
+但这仍是根自审意见：Grok可基于规范/冻结判据给FAIL否决候选。没有B2双PASS不得B3，不能按根候选单方改文件。
+
+### 全局限制和验证
+根已实跑npm run verify:predeploy，第一门禁html-ledger-sync因BSM已改而决策台账未同步exit1；entry-anchors6红是独立既有CSV镜像事实，不误写为本次链实际执行。两项不是package入口吞错，不为刷绿改HTML/CSV/台账，不重开M001/M002，不重判B/C。
+当前真实Node/npm/Java/Maven/SDK、127脚本图、75节点、工作区参数、环境正负例、21忽略样本已有本席命令输出。未运行任何实际部署、业务DB、全套UI或文档生成。Grok曾npm exec触发可能安装警告，只按已知事实记，不冒称缓存未改变，也不再次使用该命令。
+
+本席PASS仅认可这份完整候选可交Grok独立复核，允许其否决027或纠正分类/队列。当前不修改源码、不增加B3次数、不把自己的PASS写成双PASS。Grok本批命令已通过既有路径型适配器、直接SSH派发；真实退出码仍待进程结束。
+
+
+## M003 B2 修订候选完整本席票
+版本：V0.06
+日期：2026-09-08
+步骤：B2；M003 IN_PROGRESS，B3累计2；本席结论：PASS（仅当前V0.91候选归并/分类/队列）。
+
+### 三份输入及上批否决
+B1证据仍为modules/M003-b1-self-raw.md V0.04完整原97151bytes SHA256 946e0fd255f7ca207c2dbedc182c26b5dd5cb0e8292b84f536ab07b408eca268；modules/M003-b1-grok-raw.md V0.04 L1109—1529原111023bytes SHA256 a06c894debfb16699c2be581730ce34f85cf59ad26d822a8af2a236ec7b7e95e。后来B2附录不作独立B1证据。
+当前findings.md V0.91：308685bytes，SHA256 ce0ade9e7aeeb22897bf4873e9e1b8681f8dc1abb1820c592a4dc4019fe128c5。
+上批Grok V0.05 B2：L1531—1726完整读完，真实exit0，追加后129530bytes SHA256 565f858e9e2f8df6868e31e9f9ba50385fc337f0d5d00fe0909617247a50f9c3，FAIL；我的V0.05 PASS未使上批定稿。唯一否决为027的缺陷/队列，其余5行和全部分类认可。
+
+### 本席重新判断而非机械服从
+Git规范与实跑匹配证明重叠/可删，但没有证明忽略规则存在会引起错误。根V0.04把文本每次出现等同于V0.17“第一次正常跑会撞上”的失败路径，范围过宽。按用户明确的正常运行和最小动作要求，本轮保持源码即可；不为4行无行为差异触发一次B3、版本注释及后续修复diff流程。GEN-001的必要性审视已做且结论完整保留，不以这次收窄新增永久豁免或新判据。
+接受Grok本批证据及门槛解释，将027同时改缺陷否和队列否，保留其ID为重叠观察；不是“有缺陷但拒绝修复”。原B1 FAIL及上批根B2 PASS、GrokFAIL都原样保留，不回写历史票。
+
+### 完整并集与四分类
+| 全部来源 | 当前正式ID | 分类与队列 |
+|---|---|---|
+| 原CX16、GR01/GR02、根ignore全表 | 016 | 1—51技术性，53—55细化；无工程缺陷、否 |
+| 根S001、Grok重叠观察及本批否决 | 027 | 技术性重叠观察；无工程缺陷、否；不改源不补版本 |
+| GR03、根元信息表 | 028 | 技术性；无工程缺陷、否 |
+| GR04、根127脚本登记 | 029 | 技术性；无工程缺陷、否 |
+| GR05、根HTML门禁子项 | 030 | 细化；无工程缺陷、否 |
+| GR06及§4隔离/PII、根相关入口 | 031 | 普通聚合技术性，隔离/PII细化；无工程缺陷、否 |
+
+根与Grok全部当前来源都有去向，无遗漏、无新增正式ID。旧001—026保留，016复用同ignore用途，018不冒充package实体。027—031仍为既已分配号。原023删除/024保留、M001/M002当前结论、用户B/C原意都不改。
+细化原句仍使用已直接核实的BSM959、PGM893/907、BEQR23、PGM870、PGM447完整业务句；其余构建/环境/包/脚本声明无业务发明。.env忽略不等于开关或加密实现，仍技术性，Grok V0.05对此明确赞同。没有添加项、人闸或锁外新判据。
+
+### 相同源码与执行限制
+两源在本批均未修改：.gitignore1199bytes SHA256 75861ded5d3859bcda593aafe3f3862e765470e7f8b6636a643bf59de9d7c51b；package15583bytes SHA256 350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f。本候选只修改已授权审计文件；没有为观察项改业务文件。
+127条入口/75Node目标、工作区参数、环境正负例、测试发现和21忽略样本的原真实输出仍是本批证据，不额外重复整个测试套件；没有伪称UI业务测试或全局门禁通过。全局html-ledger-sync首红和BSM6处CSV镜像问题仍在当前候选写清，不刷绿、不扩修范围。
+当前源码无改，.gitignore不补版本；若B2本批双PASS则队列空、跳过B3/B4，B3累计仍2，必须B5-r2两席全量审计后才可模块PASS。本席PASS不能预支Grok本批PASS；外审当前仍在运行。使用当前Codex直接SSH完成审计文档写入，没有MCP_Cloud_160调用。
+
+
+## M003 B1/B2 操作员回执与工具通道核验
+版本：V0.07
+日期：2026-09-08
+当前步骤：M003 / 471，B5-r2已派发、仍在运行；ledger V1.62当前M003 IN_PROGRESS，B3累计2、方案修复2、交付失败重跑0。B1与B2已完成；本段不是B5结论。
+
+### 工具选择说明（对应操作员当场追问）
+操作员问“你为什么会使用MCP_Cloud_160”。原因：当前Codex先看到Read/Bash/Edit就把它用作160文件操作通道，没有先核对提供者。选用不是提示词要求，也不是SSH不可用。现已停止在本任务调用该服务，当前Codex直接SSH操作160；未改全局MCP配置、未把停用说成卸载。
+2026-09-08再次直接读取本机C:/Users/jxh1/.codex/config.toml，当前290—292行为：
+```toml
+[mcp_servers.MCP_Cloud_160]
+command = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
+args = [ "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "james@192.168.88.160", "/home/james/.local/bin/claude", "mcp", "serve" ]
+```
+294—296行MCP_Codex_160启动同机/home/james/.local/bin/codex mcp-server。后者会提供Codex会话工具，不能把它默认当普通文件读写来增加一个审计席。此前根使用Cloud服务的文件/命令工具，不是指派Claude Agent审计；本段不声称工具名可代替具体调用证据。之后本模块审计命令、报告和findings写入全部使用本机OpenSSH直接连接james@192.168.88.160。Grok调用也始终由直接SSH的既有适配器执行，固定grok-4.6/xhigh/只读外审，无第三席。
+
+### 基准与流程
+- 当前锁实算：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；LOCK-AMEND-COUNT 1。
+- B1后四值实算/sidecar/ledger/Grok当前完整B1首行逐字相等，均为上述值。
+- B1：根V0.04 FAIL（唯一S001重叠主张）；GrokV0.04 PASS。根完整B1保存后，才读GrokV0.04全部421行。
+- B2候选V0.90：根V0.05 PASS；GrokV0.05 FAIL，否决把无行为故障的重叠观察列入修复。不是交付失败，失败重跑计数不加。
+- B2修订V0.91：根V0.06 PASS；GrokV0.06 PASS，全部202行B1来源已完整归并；findingsV0.92只记录双PASS定稿。当前六项016、027—031均无工程缺陷、queue否，027是观察，不是“有缺陷拒修”。
+- 本批无B3/B4，源码未改，B3累计仍2。必须B5-r2双PASS才能收口。
+- 无BLOCKED状态、无铁律5人闸、无未答新questions；不要求操作员追加授权。
+全局红灯保留：predeploy实际首项html-ledger-sync因BSM已改而业务决策台账未同步exit1；entry-anchors另有6处BSM CSV镜像不匹配。未刷绿，未扩大M003，未重开M001/M002，B/C保持用户原意。
+
+### Grok真实命令与交付
+下列为本机PowerShell调用原文，每条的既有适配器在进程内缓冲Grok JSON并丢弃，只返回路径和真实退出码；未把JSON写仓库或发给根。各报告追加旧前缀均经SHA验证保留。
+B1真实exit0；结论出处modules/M003-b1-grok-raw.md V0.04，源码两文件相同：
+```powershell
+$remoteScript = @'
+cd /home/james/complex-management && python3 - <<'PY'
+from pathlib import Path
+import subprocess,sys,stat
+target=Path('/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md')
+def meta():
+ if not target.exists(): return None
+ s=target.stat()
+ return (s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_ino)
+before=meta()
+prompt="执行160-audit-prompt V0.17当前471模块计划的M003 B1完整独立审计。唯一正本/home/james/complex-management main；M003名称“治理门禁与 CI 基线／配置与工程入口／第1段”，唯一受审文件.gitignore（55行）和package.json（147行），合计202行。旧322计划同号报告审的文件不同，仅保留历史；不得继承旧同号PASS。ledger M001/M002已闭合PASS，M003 IN_PROGRESS、历史B3累计2、计划修复2、失败重跑0，不能清零。\n先自读plan/modules.md当前M003文件清单、plan/runbook.md、criteria-lock.md general全文和M003映射，完整18GEN逐项覆盖。所有文件全读、三线各完整审。允许为核实脚本声明只读其实际引用目标/直接包装器/所需package-lock或工作区清单/CI调用位置；这是验证本模块入口，不意味着审完其他模块，不扩大当前文件清单。业务事实仅三份权威HTML；可读对应完整原文，不能把实现或旧报告当新业务依据。\n严格互盲：不读任何self raw、不读findings、不读其他模块报告/收口或本模块旧审计正文；自己的旧raw只读元数据/版本以便追加，不沿用旧结论。ledger仅顶部元数据和M003状态行，不读其它席位叙述。你是唯一外审Grok，无子代理/第三席。只能写指定自己的raw，不能改HTML/代码/依赖/锁文件/计划/ledger/findings/questions/配置。禁提交、推送、部署、安装依赖、新worktree、新测试/探针/产物。测试/构建产生的必要临时输出仅临时目录，勿把生成物写业务源。不得执行未看清目标的脚本或任何有部署/删除业务数据/外发作用的入口；对这类入口读实际调用链和无副作用参数验证，说明实跑范围，不伪称已执行部署。\nB1三线：（1）第一性原理：每项脚本/忽略规则/依赖/配置为何存在、实际用途、未验证前提；（2）顺从式：完整18GEN和涉及的三HTML约束，不只抽样；（3）对抗式：实际正常首跑边界（入口存在性、shell引用/环境变量、npm工作区转发、失败传递、git忽略匹配、引擎/包管理器/依赖版本兼容、运行时配置是否误转为新业务规则）。使用可复现命令/实际执行有效断言，不把grep文件存在或dry-run当全部行为PASS。不要因想到极端组合新增门禁、状态、计数器、文件或假设业务需求。配置版本必须按用户版本铁律解释：现有文件本次未改不强制为旧文件补版本；不要擅改应用SemVer/协议版本。\n按V0.17§6先实际读取适用SKILL.md：using-superpowers，grilling/grill-me只自问自答，codebase-design只已冻结general，diagnosing-bugs/systematic-debugging只读源/复现，ponytail-review只报告无需内容，verification-before-completion实际证据；可选batch-grill-me/ubiquitous-language实查有则收窄，无则记缺口。若纯配置不适用TDD，不新增测试。技能不能派第三席/改源/问人/创建其它产物。\n四分类依序冲突→细化→技术性→添加。技术性逐项说明无业务发明（脚本/构建/依赖/忽略规则不是自动发现了业务需求）；细化给三HTML的准确文件行号与完整上位原文；任何真正业务发明不能藏进脚本fixture等。每个finding含本席临时号、准确文件:行号、长原文或完整可复现命令+真实输出、已冻结GEN ID/2.3证据类型、分类/是否工程缺陷/建议队列。全模块审完再汇报全部问题，中途不修不问。\n已知可实核事实不是预置裁决：全局verify:entry-anchors及其测试红6项BSM CSV镜像（A回访概括+此前M001-012 L2003页脚日期，非D版本注释）；相关CSV属于M425/M427。门禁如正确拒绝现有坏输入，不自动构成package.json入口错误；若有真实入口缺陷仍须自己举证。不得冒称这些门禁全绿，也不得为通过而改CSV/HTML/忽略范围。用户明确B/C原文就是其原意：BSM1020来源枚举按项目可配，BSM1068打折原因分类可配；不重判这两处为冲突/缺陷。不重开M001/M002。发现新HTML自身问题只能完整报告上报，不能擅改或假设获批。\n完整报告：202行全覆盖、18GEN逐项表、三线完整、命令与真实输出及执行边界、全部当前findings、明确本席B1 PASS或FAIL和是否HTML问题。先独立实算plan/criteria-lock.md SHA，本次报告第一行严格CRITERIA-LOCK-SHA256: <你实算64位小写hex>，本派发不提供预期值；正文其它位置不另写独占字段行。\n唯一报告路径/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md。已有全部字节保留，本次完整报告追加到末尾，自身版本V0.03→V0.04；不得覆盖旧报告。完整落盘后结束，不要求stdout任何机器标记。"
+cmd=['/home/james/.local/bin/grok','-p',prompt,'-m','grok-4.6','--reasoning-effort','xhigh','--output-format','json','--permission-mode','bypassPermissions','--no-subagents','--disable-web-search','--cwd','/home/james/complex-management']
+proc=subprocess.Popen(cmd,cwd='/home/james/complex-management',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+while True:
+ try:
+  output,error=proc.communicate(timeout=300)
+  break
+ except subprocess.TimeoutExpired: pass
+output=error=None
+after=meta()
+code='GROK_EXIT' if proc.returncode else ('REPORT_MISSING' if after is None else ('PATH_MISMATCH' if not target.is_file() or target.resolve()!=target else ('REPORT_EMPTY' if after[0]==0 else ('REPORT_STALE' if after==before else None))))
+if code:
+ print('ADAPTER_ERROR='+code)
+ print('EXIT_CODE='+str(proc.returncode))
+ sys.exit(proc.returncode or 1)
+print('REPORT_PATH='+str(target))
+print('EXIT_CODE=0')
+PY
+'@
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -o BatchMode=yes james@192.168.88.160 $remoteScript
+```
+B2首次真实exit0、报告结论FAIL；出处同b1-grok raw V0.05：
+```powershell
+$remoteScript = @'
+cd /home/james/complex-management && python3 - <<'PY'
+from pathlib import Path
+import subprocess,sys,stat
+target=Path('/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md')
+def meta():
+ if not target.exists(): return None
+ s=target.stat()
+ return (s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_ino)
+before=meta()
+prompt="执行当前471模块M003 B2整批归并复核，只读正本/home/james/complex-management main。控制为160-audit-prompt V0.17；你是唯一外审Grok，无子代理/第三席。唯一可写输出为/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md，在现有全部字节后追加本批完整B2结论，报告自身V0.04→V0.05；不写独占CRITERIA-LOCK-SHA256行，不覆盖历史。不要执行npm exec尝试安装node，不安装任何依赖、不写源码/HTML/计划/ledger/findings/配置，不创建新产物。\n输入1：modules/M003-b1-self-raw.md当前B1 V0.04始于L510最后独占锁哈希行，初始97151bytes、SHA256=946e0fd255f7ca207c2dbedc182c26b5dd5cb0e8292b84f536ab07b408eca268；若附加本席B2票，输入B1只取V0.04完整段，后续B2票不是独立B1证据。输入2：你自己modules/M003-b1-grok-raw.md V0.04 L1109—1529，当前111023bytes、SHA256=a06c894debfb16699c2be581730ce34f85cf59ad26d822a8af2a236ec7b7e95e。输入3：findings.md V0.90候选，301010bytes，SHA256=2bc36a0805672ecd5b7801417baeefa0615516350163ae3f3a17de9899ce3c7d。请核实相同候选bytes，核对本次完整两个B1全部差集。B1你PASS/根FAIL均原样留存，不应预设B2结果。\n当前M003仅.gitignore55行+package147行；累计B3=2不清零。候选当前ID016、027—031：旧016复用ignore登记，027根唯一S-001，028—031 package新登记。旧018是AGENTS/README文字，不误复用成package实体。原001—026历史完整保留。\n重点独立裁决而非按根结论通过：（1）根027以冻结GEN-001认为.gitignore11/13/15/21被10/12/14/20完全覆盖，建议只删除4条及版本注释；你的B1认为仅重叠观察无强制修复。直接核Git规则、完整源、冻结GEN-001和V0.17首次正常运行/最小修复口径。候选工程缺陷是、queue是是否成立？若不同意，给清楚依据并FAIL候选，不能为迎合根改票。（2）全部GR01—06是否完整合并、没有改写你原始意见，细化技术性分段是否精确，尤其.env忽略与开关/加密的宽泛关联候选退回技术性是否正确。（3）所有HTML原句定位与引用完整性、没有业务添加或遗漏人闸。（4）无缺陷登记queue否、真正缺陷queue是；旧IDs不复用；若仅027修复，.gitignore此前无自身版本首次建立V0.01是否符合用户版本铁律。你可独立指出更小合规处置，不在B2修复。\n已知全局html-ledger-sync首门禁失败与entry-anchors6个BSM CSV镜像错误准确保留，不靠修改它们刷绿，不重开M001/M002、不重判用户确认B/C原意。Grok B1提到npm exec安装node警告，本次只记实际可证范围，不要求你伪证未下载；不要再次执行此命令。\n先读取适用receiving-code-review/verification-before-completion及§6收窄技能，完整复核本批全部差集、ID、四分类、工程缺陷和queue，输出明确B2 PASS或FAIL及每一分歧依据，注明3输入路径、候选版本和SHA。本次文件只追加完整B2报告不带独占锁哈希；不新增文件，不要求stdout机器标记。"
+cmd=['/home/james/.local/bin/grok','-p',prompt,'-m','grok-4.6','--reasoning-effort','xhigh','--output-format','json','--permission-mode','bypassPermissions','--no-subagents','--disable-web-search','--cwd','/home/james/complex-management']
+proc=subprocess.Popen(cmd,cwd='/home/james/complex-management',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+while True:
+ try:
+  output,error=proc.communicate(timeout=300)
+  break
+ except subprocess.TimeoutExpired: pass
+output=error=None
+after=meta()
+code='GROK_EXIT' if proc.returncode else ('REPORT_MISSING' if after is None else ('PATH_MISMATCH' if not target.is_file() or target.resolve()!=target else ('REPORT_EMPTY' if after[0]==0 else ('REPORT_STALE' if after==before else None))))
+if code:
+ print('ADAPTER_ERROR='+code)
+ print('EXIT_CODE='+str(proc.returncode))
+ sys.exit(proc.returncode or 1)
+print('REPORT_PATH='+str(target))
+print('EXIT_CODE=0')
+PY
+'@
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -o BatchMode=yes james@192.168.88.160 $remoteScript
+```
+B2修订真实exit0、报告结论PASS；出处同b1-grok raw V0.06。复核同一findings V0.91 SHA256 ce0ade9e7aeeb22897bf4873e9e1b8681f8dc1abb1820c592a4dc4019fe128c5：
+```powershell
+$remoteScript = @'
+cd /home/james/complex-management && python3 - <<'PY'
+from pathlib import Path
+import subprocess,sys,stat
+target=Path('/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md')
+def meta():
+ if not target.exists(): return None
+ s=target.stat()
+ return (s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_ino)
+before=meta()
+prompt="复核当前471模块M003 B2修订候选，控制160-audit-prompt V0.17，正本/home/james/complex-management main。只有你Grok一个外审，无子代理/第三席；只读源和候选，不修代码/HTML/台账/锁/配置、不安装依赖/不运行npm exec，不创建新产物。报告唯一追加/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md，自身V0.05→V0.06，保留全部旧字节，不写独占CRITERIA-LOCK-SHA256行。\n本次候选findings.md V0.91，308685bytes、SHA256=ce0ade9e7aeeb22897bf4873e9e1b8681f8dc1abb1820c592a4dc4019fe128c5。最上方“当前M003 B2整批修订候选”是当前唯一队列，下方V0.90是已被你否决的历史候选；不要把历史待修当现队列。变更仅接受你V0.05唯一否决：M003-027改工程缺陷否/queue否，保留重叠观察，撤回强制删除和补版本，不改.gitignore。016、028—031分类/原句/无缺陷queue否保持；仍无添加、新HTML问题、新ID；B3仍2。\n输入B1仍用两份V0.04完整段：self原97151bytes SHA256=946e0fd255f7ca207c2dbedc182c26b5dd5cb0e8292b84f536ab07b408eca268（L510起）；grok原111023bytes SHA256=a06c894debfb16699c2be581730ce34f85cf59ad26d822a8af2a236ec7b7e95e（L1109—1529）。你上一批B2 V0.05完整L1531—1726，当前文件129530bytes SHA256=565f858e9e2f8df6868e31e9f9ba50385fc337f0d5d00fe0909617247a50f9c3。根B2附录是根当前票，不作独立B1证据。\n请完整差集复核根S001和GR01—06均有去向、旧ID不复用、具体细化原句/技术性分类、工程缺陷和queue当前值，确认027以无缺陷登记而非有缺陷拒修。不得预支PASS；有遗漏或错误仍明确FAIL。沿用已冻结GEN和§6实际适用技能、只按必要无副作用事实核验，既有相同源和已验原句无需整仓重复扩审。两源SHA仍gitignore75861ded5d3859bcda593aafe3f3862e765470e7f8b6636a643bf59de9d7c51b/package350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f。\n全局html-ledger-sync及BSM6项CSV红灯如实保留，不改输入刷绿、不重开M001/M002、不重判用户B/C。本次无操作员闸。输出完整本批B2 PASS/FAIL、当前candidate版本/SHA、所有差集/分类/queue以及上批唯一否决如何处理。完整报告只追加指定raw、不要求stdout任何机器标记。"
+cmd=['/home/james/.local/bin/grok','-p',prompt,'-m','grok-4.6','--reasoning-effort','xhigh','--output-format','json','--permission-mode','bypassPermissions','--no-subagents','--disable-web-search','--cwd','/home/james/complex-management']
+proc=subprocess.Popen(cmd,cwd='/home/james/complex-management',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+while True:
+ try:
+  output,error=proc.communicate(timeout=300)
+  break
+ except subprocess.TimeoutExpired: pass
+output=error=None
+after=meta()
+code='GROK_EXIT' if proc.returncode else ('REPORT_MISSING' if after is None else ('PATH_MISMATCH' if not target.is_file() or target.resolve()!=target else ('REPORT_EMPTY' if after[0]==0 else ('REPORT_STALE' if after==before else None))))
+if code:
+ print('ADAPTER_ERROR='+code)
+ print('EXIT_CODE='+str(proc.returncode))
+ sys.exit(proc.returncode or 1)
+print('REPORT_PATH='+str(target))
+print('EXIT_CODE=0')
+PY
+'@
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -o BatchMode=yes james@192.168.88.160 $remoteScript
+```
+B5-r2已经以同适配器派发，真实退出码尚未获得；指定出处modules/M003-b5-r2-grok-raw.md（新完整报告应V0.02）。当前不读其正文、不写本席B5，待其结束后再独立完整审计并保存self，之后才读Grok结论。B5命令及结束回执将在该节点完成后记录，当前绝不宣称已交付或PASS。
+
+### 当前只读本机交付
+本机D:/AI/codex/outputs/160-M003-20260908保存当前审计镜像。镜像不是正本修复目标；有更新时按160真实文件重新复制并校验SHA/严格UTF-8。源码.gitignore SHA256 75861ded5d3859bcda593aafe3f3862e765470e7f8b6636a643bf59de9d7c51b，package SHA256 350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f保持；本段追加报告自身版本前进，不触碰业务源。
+
+
+## M003 B5-r2 派发回执（运行中）
+版本：V0.08
+当前步骤：B5-r2；模块M003 / 471；ledger V1.62当前IN_PROGRESS，B3已执行2次、方案修复2次、交付失败重跑0。
+本轮实算criteria-lock.md哈希：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；LOCK-AMEND-COUNT 1。
+Grok调用状态：运行中（尚无真实exit code）；结论指定出处：/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md。本次尚未读正文。以下补齐V0.07派发段未展开的完整命令，不预先写交付成功/报告PASS。
+本轮不是BLOCKED，无需操作员动作；没有触发铁律5三道闸，无新问题全文。
+```powershell
+$remoteScript = @'
+cd /home/james/complex-management && python3 - <<'PY'
+from pathlib import Path
+import subprocess,sys,stat
+target=Path('/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md')
+def meta():
+ if not target.exists(): return None
+ s=target.stat()
+ return (s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_ino)
+before=meta()
+prompt="执行160-audit-prompt V0.17当前471计划M003 B5-r2整模块完整独立审计。唯一正本/home/james/complex-management main；当前M003“治理门禁与 CI 基线／配置与工程入口／第1段”，只有.gitignore55行和package.json147行，共202行。当前B2已实际双PASS、修复队列空，本轮跳过B3/B4，历史B3累计2不能清零。B5是全模块重审，不是只看差异/只复用B1。两源未改不是免审理由，旧322同号报告的其他文件不在本次范围。\n先读plan/modules.md当前M003定义、plan/runbook.md审法、criteria-lock.md general全文（当前L10—100）和M003映射（当前L6382，先实核位置）。映射完整18GEN，不能只抽查部分。按§6在自己实际环境读取/应用适用技能：using-superpowers、grilling/grill-me自问自答、codebase-design已冻结判据、diagnosing-bugs/systematic-debugging只读源复现、ponytail-review最小动作、verification-before-completion；可选batch-grill-me/ubiquitous-language有则用无则记录。技能不派第三席、不新增产物、不问操作员、不自动修。当前任务只你Grok一个外审。\n严格互盲：不读任何self raw，不读本轮B5根报告、findings、其他模块报告/收口或本模块旧raw正文。自己的目标旧raw只取元数据/版本用于追加；不得继承旧同号PASS。ledger仅顶部基准和M003状态计数。可以只读当前入口真实引用目标、workspace manifest/root lock镜像/直接包装器/必要CI调用位置，以验证本模块声明，但不扩到完整审其他模块。\n三线全部完成：（1）第一性原理每条用途、真实运行行为、未验证前提三问；（2）順从式18GEN逐项；（3）对抗式完整入口存在/语法、npm工作区和参数、&&错误传播、实际Git忽略正负匹配、依赖/引擎/本机配置、业务来源分类等正常首跑边界。不要只靠grep存在或dry-run给全行为PASS。对不能独立运行配置用2.3类型4可复现命令；已安全可执行的入口做必要实际行为验证；明确哪些只是test discovery/--help/--check/--dry，不当全套业务测试通过。\n禁止写正本源码/HTML/依赖/lock/ledger/findings/questions/配置、提交/推送/部署/安装依赖/new worktree/新试验库/新增脚本；唯一写目标是本raw。不要执行npm exec -w apps/web -- node或npx自动安装任何包；需要工作区转发用现有npm run --workspace入口。不要执行未读目标、会写业务资料/起真实业务DB/有删除或外发效果的命令。必要临时检查不要改现有文件。不能跑的长驻/业务测试入口请读实际调用链与无副作用验证，诚实说明边界。\n四分类严格冲突→细化→技术性→添加。对明确能指到三HTML上位条目的核验入口/运行态上传证据目录，应先给完整HTML原句再细化；一般包/构建/依赖/Git规则无业务发明可以技术性。不因名称含业务词就判添加，也不凭宽泛相似强拉HTML锚点。逐项登记全部202行/127script，映射每个GEN适用情况与证据。必要性审视按冻结GEN001及V0.17最小动作/正常首跑范围，用真实缺陷证据裁定，不为假设场景新增任何规则、文件或流程。\n全局现有红灯需自己核实且如实区分范围：html-ledger-sync因当前BSM相对origin/main有变更而业务决策台账未同步拒绝；entry-anchors有6个BSM CSV镜像不匹配（4处A回访句、2处此前M001-012页脚日期，不是D注释）。这是已知事实，不预设结论：入口若正确拒绝坏输入，不自动成为package.json缺陷；若发现真正本模块错误仍须全量记录。不得通过修CSV/HTML/调整排除范围刷绿。不重开M001/M002；用户明确B/C原文就是其原意，不重判BSM1020来源可配/1068打折原因分类可配为冲突。\n全部发现一次性完整写报告，中途不修不问。新HTML自身问题只完整报告上报并说明铁律4，不能改或默认获批；真正添加项只记录待B2处理。报告含18GEN完整逐项表、202行覆盖、全脚本/忽略规则分类、三线、命令与真实输出、执行边界、全部findings（临时GR号）、明确B5 PASS或FAIL/是否新HTML问题。\n独立实算criteria-lock.md SHA，本次完整报告第一行严格CRITERIA-LOCK-SHA256: <你实算64位小写hex>；派发不提供预期值，正文不要再写独占该字段。唯一报告路径/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md。原有33190bytes全部保留，本次完整报告追加至末尾，自身版本V0.01→V0.02，不覆盖旧报告。落盘后结束，不要求stdout任何机器标记。"
+cmd=['/home/james/.local/bin/grok','-p',prompt,'-m','grok-4.6','--reasoning-effort','xhigh','--output-format','json','--permission-mode','bypassPermissions','--no-subagents','--disable-web-search','--cwd','/home/james/complex-management']
+proc=subprocess.Popen(cmd,cwd='/home/james/complex-management',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+while True:
+ try:
+  output,error=proc.communicate(timeout=300)
+  break
+ except subprocess.TimeoutExpired: pass
+output=error=None
+after=meta()
+code='GROK_EXIT' if proc.returncode else ('REPORT_MISSING' if after is None else ('PATH_MISMATCH' if not target.is_file() or target.resolve()!=target else ('REPORT_EMPTY' if after[0]==0 else ('REPORT_STALE' if after==before else None))))
+if code:
+ print('ADAPTER_ERROR='+code)
+ print('EXIT_CODE='+str(proc.returncode))
+ sys.exit(proc.returncode or 1)
+print('REPORT_PATH='+str(target))
+print('EXIT_CODE=0')
+PY
+'@
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -o BatchMode=yes james@192.168.88.160 $remoteScript
+```
+当前Codex等待该进程真实结束；结束后独立全量审计并写M003-b5-r2-self-raw.md完整V0.03，之后才读Grok完整V0.02和核对四值。未改变任何源码、冻结判据或B3次数。
+
+
+## M003 当前471计划 B5及收口回执
+版本：V0.09
+
+当前步骤：B5完成/收口；模块M003/471；历史B3累计2。ledger V1.63状态PASS；本轮没有B3，不清零历史。M001/M002保持PASS，总计3PASS/468PENDING。
+
+本轮实算锁SHA256：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；LOCK-AMEND-COUNT=1。
+B5后四值：实算、sidecar、ledger、指定modules/M003-b5-r2-grok-raw.md本次最后独占行，分别均为b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。
+
+Grok本轮实际调用完整命令（提示词、模型和参数原样）：
+```powershell
+$remoteScript = @'
+cd /home/james/complex-management && python3 - <<'PY'
+from pathlib import Path
+import subprocess,sys,stat
+target=Path('/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md')
+def meta():
+ if not target.exists(): return None
+ s=target.stat()
+ return (s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_ino)
+before=meta()
+prompt="执行160-audit-prompt V0.17当前471计划M003 B5-r2整模块完整独立审计。唯一正本/home/james/complex-management main；当前M003“治理门禁与 CI 基线／配置与工程入口／第1段”，只有.gitignore55行和package.json147行，共202行。当前B2已实际双PASS、修复队列空，本轮跳过B3/B4，历史B3累计2不能清零。B5是全模块重审，不是只看差异/只复用B1。两源未改不是免审理由，旧322同号报告的其他文件不在本次范围。\n先读plan/modules.md当前M003定义、plan/runbook.md审法、criteria-lock.md general全文（当前L10—100）和M003映射（当前L6382，先实核位置）。映射完整18GEN，不能只抽查部分。按§6在自己实际环境读取/应用适用技能：using-superpowers、grilling/grill-me自问自答、codebase-design已冻结判据、diagnosing-bugs/systematic-debugging只读源复现、ponytail-review最小动作、verification-before-completion；可选batch-grill-me/ubiquitous-language有则用无则记录。技能不派第三席、不新增产物、不问操作员、不自动修。当前任务只你Grok一个外审。\n严格互盲：不读任何self raw，不读本轮B5根报告、findings、其他模块报告/收口或本模块旧raw正文。自己的目标旧raw只取元数据/版本用于追加；不得继承旧同号PASS。ledger仅顶部基准和M003状态计数。可以只读当前入口真实引用目标、workspace manifest/root lock镜像/直接包装器/必要CI调用位置，以验证本模块声明，但不扩到完整审其他模块。\n三线全部完成：（1）第一性原理每条用途、真实运行行为、未验证前提三问；（2）順从式18GEN逐项；（3）对抗式完整入口存在/语法、npm工作区和参数、&&错误传播、实际Git忽略正负匹配、依赖/引擎/本机配置、业务来源分类等正常首跑边界。不要只靠grep存在或dry-run给全行为PASS。对不能独立运行配置用2.3类型4可复现命令；已安全可执行的入口做必要实际行为验证；明确哪些只是test discovery/--help/--check/--dry，不当全套业务测试通过。\n禁止写正本源码/HTML/依赖/lock/ledger/findings/questions/配置、提交/推送/部署/安装依赖/new worktree/新试验库/新增脚本；唯一写目标是本raw。不要执行npm exec -w apps/web -- node或npx自动安装任何包；需要工作区转发用现有npm run --workspace入口。不要执行未读目标、会写业务资料/起真实业务DB/有删除或外发效果的命令。必要临时检查不要改现有文件。不能跑的长驻/业务测试入口请读实际调用链与无副作用验证，诚实说明边界。\n四分类严格冲突→细化→技术性→添加。对明确能指到三HTML上位条目的核验入口/运行态上传证据目录，应先给完整HTML原句再细化；一般包/构建/依赖/Git规则无业务发明可以技术性。不因名称含业务词就判添加，也不凭宽泛相似强拉HTML锚点。逐项登记全部202行/127script，映射每个GEN适用情况与证据。必要性审视按冻结GEN001及V0.17最小动作/正常首跑范围，用真实缺陷证据裁定，不为假设场景新增任何规则、文件或流程。\n全局现有红灯需自己核实且如实区分范围：html-ledger-sync因当前BSM相对origin/main有变更而业务决策台账未同步拒绝；entry-anchors有6个BSM CSV镜像不匹配（4处A回访句、2处此前M001-012页脚日期，不是D注释）。这是已知事实，不预设结论：入口若正确拒绝坏输入，不自动成为package.json缺陷；若发现真正本模块错误仍须全量记录。不得通过修CSV/HTML/调整排除范围刷绿。不重开M001/M002；用户明确B/C原文就是其原意，不重判BSM1020来源可配/1068打折原因分类可配为冲突。\n全部发现一次性完整写报告，中途不修不问。新HTML自身问题只完整报告上报并说明铁律4，不能改或默认获批；真正添加项只记录待B2处理。报告含18GEN完整逐项表、202行覆盖、全脚本/忽略规则分类、三线、命令与真实输出、执行边界、全部findings（临时GR号）、明确B5 PASS或FAIL/是否新HTML问题。\n独立实算criteria-lock.md SHA，本次完整报告第一行严格CRITERIA-LOCK-SHA256: <你实算64位小写hex>；派发不提供预期值，正文不要再写独占该字段。唯一报告路径/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md。原有33190bytes全部保留，本次完整报告追加至末尾，自身版本V0.01→V0.02，不覆盖旧报告。落盘后结束，不要求stdout任何机器标记。"
+cmd=['/home/james/.local/bin/grok','-p',prompt,'-m','grok-4.6','--reasoning-effort','xhigh','--output-format','json','--permission-mode','bypassPermissions','--no-subagents','--disable-web-search','--cwd','/home/james/complex-management']
+proc=subprocess.Popen(cmd,cwd='/home/james/complex-management',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+while True:
+ try:
+  output,error=proc.communicate(timeout=300)
+  break
+ except subprocess.TimeoutExpired: pass
+output=error=None
+after=meta()
+code='GROK_EXIT' if proc.returncode else ('REPORT_MISSING' if after is None else ('PATH_MISMATCH' if not target.is_file() or target.resolve()!=target else ('REPORT_EMPTY' if after[0]==0 else ('REPORT_STALE' if after==before else None))))
+if code:
+ print('ADAPTER_ERROR='+code)
+ print('EXIT_CODE='+str(proc.returncode))
+ sys.exit(proc.returncode or 1)
+print('REPORT_PATH='+str(target))
+print('EXIT_CODE=0')
+PY
+'@
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -o BatchMode=yes james@192.168.88.160 $remoteScript
+```
+适配器实际结果：
+```text
+REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md
+EXIT_CODE=0
+```
+真实进程结束后根再执行全部202行/18GEN三线独立审查，完整self V0.03落盘后才读取Grok当前完整434行（L460—893）；未提前读取本次外席结论。两份B5 raw旧前缀保留。
+根B5 SHA256=327ab67716aa3a17351657cb4008328776a8a367c0a853e52b189428fb854586，82593字节；GrokB5 SHA256=965163dbbb2e5d3969e78a038663fded87287eca59d30e21afb20bd303ab782a，64554字节。两席均PASS，无新finding、添加项或HTML自身问题。
+B2既有findings V0.92，SHA256=6f102e273c97b00f0ae52a85acf53cc46d6d7814461e9fb3d09e09b684358638；6当前ID全部无缺陷、队列否。保留根B1原FAIL及第一次B2 Grok FAIL，不把分歧改写为从来双PASS。
+B5两席部分脚本技术性/细化分类措辞不同，但都无业务发明、缺陷或修复项；没有宣称各行分类相同，不修改既有B2双PASS定稿。
+
+收口顺序实际为先ledger V1.63 PASS（SHA256=25614f920eed1963431b405a31891251147ad0e8feda601a6fc81214d69c0ded），再modules/M003-01-root-config-and-guidance-01.md V0.02（SHA256=9313fbad3e9769e7f5a82dbeadc935cc40e81d80a2319de78ec5248e7c5b9e80，7279字节），旧V0.01全部保留。
+源.gitignore SHA256=75861ded5d3859bcda593aafe3f3862e765470e7f8b6636a643bf59de9d7c51b；package.json SHA256=350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f；本轮未改源码、三HTML或锁。
+验证：127脚本静态语法、75Node目标语法、21ignore样例、工作区/脚本图和入口正负例；UI只列测试，tsc只dry。全局predeploy首步html-ledger-sync失败、entry-anchors仍6处BSM镜像失败，按M425/M427归属保留。没有全后端/数据库/完整UI/Android构建/部署结论。
+当前无BLOCKED，无铁律5人闸问题。下一步M004仅package-lock.json按当前计划B1，禁止继承旧322同号PASS。工具通道已改为直接SSH；不再调用MCP_Cloud_160，不通过MCP_Codex_160另起模型会话，未改全局MCP配置。原因为先前便利性选用了Claude MCP文件工具，非Claude Agent审计。

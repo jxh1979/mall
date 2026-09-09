@@ -1,5 +1,8 @@
 package com.complex.platform.governance;
+// 文件版本：V0.03
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,6 +28,7 @@ import com.complex.platform.governance.dto.StatusChangeRequest;
 import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,6 +38,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 class PlatformServiceTests {
 
@@ -104,6 +110,214 @@ class PlatformServiceTests {
                 null, null, null, null, null, null, null, null, "active"));
     }
 
+    /** M009-006：绑定引用的主体须真实存在——直接落一条主体行（不经服务，避免干扰幂等计数断言）。 */
+    private void seedEntity(String id) {
+        platformRepository.saveBusinessEntity(new BusinessEntityRecord(
+                id, id, "management_company", null, null, null, "active", Instant.EPOCH, Instant.EPOCH));
+    }
+
+    /** M009-009：最高权限（持授权 U 盘密钥者）身份——isMasterAuthority 要求 platform_admin + 固定 id/用户名（BSM-004/007）。 */
+    private static void asMasterAuthority() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                "platform_admin", "org_1", null, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
+    }
+
+    // ---- M009-001/002：更新商户不得擦除存档/删除申请状态；更新不存在的商户须 404 ----
+    @Test
+    void updateMerchantKeepsArchiveAndPendingDeleteState() {
+        MerchantRecord merchant = seedMerchant("seed-keep-state");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("keep-archive", "测试存档理由"));
+        service.requestDeleteMerchant(merchant.id(), new MerchantDeleteRequest("keep-delete-req", "清理"));
+
+        MerchantRecord updated = service.updateMerchant(merchant.id(), new MerchantProfileRequest(
+                "keep-update", "rename", List.of(), "改名后的商户", "other", "be_other",
+                "be_contract_x", "be_settlement_x", "Jane", "18800000011",
+                null, null, null, null, null, null, null, null, "active"));
+
+        assertThat(updated.merchantName()).isEqualTo("改名后的商户");
+        assertThat(updated.archivedAt()).isNotNull();
+        assertThat(updated.deleteStatus()).isEqualTo("pending");
+        assertThat(updated.deleteRequestedBy()).isEqualTo("usr_admin");
+        assertThat(updated.createdAt()).isEqualTo(merchant.createdAt());
+        // M009-008：三个主体列以生效绑定为准，档案更新不覆盖。
+        assertThat(updated.businessEntityId()).isEqualTo("be_1");
+        assertThat(updated.contractEntityId()).isNull();
+        assertThat(service.listMerchants(false).items()).noneMatch(m -> m.id().equals(merchant.id()));
+    }
+
+    @Test
+    void updateMerchantRejectsUnknownMerchant() {
+        assertThatThrownBy(() -> service.updateMerchant("mch_missing", new MerchantProfileRequest(
+                "update-missing", "update", List.of(), "幽灵商户", "other", null,
+                null, null, null, null, null, null, null, null, null, null, null, null, "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_NOT_FOUND"));
+        assertThat(platformRepository.listMerchants()).noneMatch(m -> m.id().equals("mch_missing"));
+    }
+
+    // ---- M009-003：合作方式六类（BEQR-148）；空＝未定 ----
+    @Test
+    void createMerchantRejectsCooperationFormOutsideSixModes() {
+        assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
+                "coop-bad", "seed", List.of(), "合作方式错的商户", "other", null,
+                null, null, null, null, null, null, null, null, null, null, null, "fixed_rent_plus_commission", "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_COOPERATION_FORM_INVALID"));
+        MerchantRecord lease = service.createMerchant(new MerchantProfileRequest(
+                "coop-lease", "seed", List.of(), "租赁商户", "other", null,
+                null, null, null, null, null, null, null, null, null, null, null, "lease", "active"));
+        assertThat(lease.cooperationForm()).isEqualTo("lease");
+        assertThat(seedMerchant("coop-null").cooperationForm()).isNull();
+    }
+
+    // ---- M009-004：商户/主体/项目状态只认速查表六态（BEQR-154/155） ----
+    @Test
+    void createMerchantRejectsStatusOutsideEnumeratedStates() {
+        assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
+                "status-bad", "seed", List.of(), "状态错的商户", "other", null,
+                null, null, null, null, null, null, null, null, null, null, null, null, "draft")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(service.createMerchant(new MerchantProfileRequest(
+                "status-pending", "seed", List.of(), "待准入商户", "other", null,
+                null, null, null, null, null, null, null, null, null, null, null, null, "pending_admission")).status())
+                .isEqualTo("pending_admission");
+    }
+
+    @Test
+    void createProjectRejectsUnknownStatusOrMerchant() {
+        assertThatThrownBy(() -> service.createProject(new ProjectRequest(
+                "project-bad-status", "create", List.of(), null, "bar", "P0 Bar", null, null, null, "zzz")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+        // M009-007：merchantId 非空时必须存在。
+        assertThatThrownBy(() -> service.createProject(new ProjectRequest(
+                "project-bad-merchant", "create", List.of(), "mch_missing", "bar", "P0 Bar", null, null, null, "draft")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_NOT_FOUND"));
+    }
+
+    // ---- M009-005：主体角色白名单（PGM-018/019） ----
+    @Test
+    void createBusinessEntityRejectsRoleOutsideWhitelist() {
+        assertThatThrownBy(() -> service.createBusinessEntity(new BusinessEntityRequest(
+                "entity-spv", "create", List.of(), "SPV 主体", "spv", null, null, null, "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    // ---- M009-006：绑定的经营对象与三个主体须存在 ----
+    @Test
+    void createBusinessEntityBindingRejectsMissingMerchantOrEntity() {
+        assertThatThrownBy(() -> service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
+                "binding-ghost-merchant", "ghost", List.of(), "mch_missing", "be_x", "be_x", "be_x", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_NOT_FOUND"));
+        MerchantRecord merchant = seedMerchant("seed-ghost-entity");
+        assertThatThrownBy(() -> service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
+                "binding-ghost-entity", "ghost", List.of(), merchant.id(), "be_missing", "be_missing", "be_missing", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("BUSINESS_ENTITY_NOT_FOUND"));
+        assertThat(platformRepository.listBusinessEntityBindings()).isEmpty();
+    }
+
+    // ---- M009-007：空间归属链须存在 ----
+    @Test
+    void createSpaceRejectsUnknownProjectMerchantOrParent() {
+        assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-bad-prj", "create", List.of(), "prj_missing", null, null, "A", "shop", null, null, null, "active")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("PROJECT_NOT_FOUND"));
+        assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-bad-mch", "create", List.of(), null, "mch_missing", null, "A", "shop", null, null, null, "active")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("MERCHANT_NOT_FOUND"));
+        assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-bad-parent", "create", List.of(), null, null, "sp_missing", "A", "shop", null, null, null, "active")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("SPACE_NOT_FOUND"));
+    }
+
+    // ---- M009-028：已存档/已批删商户不能再被新项目、空间、绑定引用（BSM-004「下线就不能再用」） ----
+    @Test
+    void archivedMerchantCannotBeReferencedByNewProjectSpaceOrBinding() {
+        MerchantRecord merchant = seedMerchant("seed-archived-ref");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-ref", "测试存档理由"));
+        seedEntity("be_ref_1");
+        assertThatThrownBy(() -> service.createProject(new ProjectRequest(
+                "project-archived-mch", "create", List.of(), merchant.id(), "bar", "P0 Bar", null, null, null, "draft")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("MERCHANT_ARCHIVED"));
+        assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-archived-mch", "create", List.of(), null, merchant.id(), null, "A", "shop", null, null, null, "active")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("MERCHANT_ARCHIVED"));
+        assertThatThrownBy(() -> service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
+                "binding-archived-mch", "ref", List.of(), merchant.id(), "be_ref_1", "be_ref_1", "be_ref_1", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("MERCHANT_ARCHIVED"));
+        assertThat(platformRepository.listProjects()).noneMatch(p -> merchant.id().equals(p.merchantId()));
+        assertThat(platformRepository.listBusinessEntityBindings()).isEmpty();
+    }
+
+    // ---- M009-036：空间状态须在已发布 CHECK（V203：active/unavailable）内，非法值 400 而非落库 500 ----
+    @Test
+    void createSpaceRejectsStatusOutsideCheckSet() {
+        assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-bad-status", "create", List.of(), null, null, null, "A", "shop", null, null, null, "zzz")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(platformRepository.listSpaces()).noneMatch(s -> "zzz".equals(s.status()));
+        assertThat(service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-unavailable", "create", List.of(), null, null, null, "B", "shop", null, null, null, "unavailable")).status())
+                .isEqualTo("unavailable");
+    }
+
+    // ---- M009-008：生效绑定同步商户三个主体列（PGM-026「引用同一组绑定」） ----
+    @Test
+    void createBusinessEntityBindingSyncsMerchantEntityColumns() {
+        MerchantRecord merchant = seedMerchant("seed-sync");
+        seedEntity("be_op_sync");
+        seedEntity("be_ct_sync");
+        seedEntity("be_st_sync");
+        service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
+                "binding-sync", "sync", List.of(), merchant.id(), "be_op_sync", "be_ct_sync", "be_st_sync", null, null));
+        MerchantRecord synced = platformRepository.findMerchantById(merchant.id()).orElseThrow();
+        assertThat(synced.businessEntityId()).isEqualTo("be_op_sync");
+        assertThat(synced.contractEntityId()).isEqualTo("be_ct_sync");
+        assertThat(synced.settlementEntityId()).isEqualTo("be_st_sync");
+    }
+
+    // ---- M009-009：删除审批只认最高权限；最高权限本人发起免审批直接执行（BSM-004/007） ----
+    @Test
+    void approveDeleteByNonMasterIsForbidden() {
+        MerchantRecord merchant = seedMerchant("seed-nonmaster");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-nm", "测试存档理由"));
+        service.requestDeleteMerchant(merchant.id(), new MerchantDeleteRequest("delete-req-nm", "清理"));
+        TestSecurityActors.asPlatformAdmin("usr_admin2");
+        assertThatThrownBy(() -> service.approveDeleteMerchant(merchant.id(),
+                new MerchantDeleteApprovalRequest("delete-approve-nm", "approved", null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_DELETE_APPROVER_NOT_MASTER"));
+        assertThat(platformRepository.findMerchantById(merchant.id()).orElseThrow().deleteStatus()).isEqualTo("pending");
+    }
+
+    @Test
+    void requestDeleteByMasterAuthorityExecutesWithoutApproval() {
+        MerchantRecord merchant = seedMerchant("seed-master");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-master", "测试存档理由"));
+        platformRepository.merchantReferenceCount = 0;
+        asMasterAuthority();
+        MerchantRecord deleted = service.requestDeleteMerchant(merchant.id(),
+                new MerchantDeleteRequest("delete-req-master", "最高权限直接清理"));
+        assertThat(deleted.deleteStatus()).isEqualTo("approved");
+        assertThat(deleted.deleteRequestedBy()).isEqualTo(SessionIssuer.MASTER_USER_ID);
+        assertThat(service.listMerchants(false).items()).noneMatch(m -> m.id().equals(merchant.id()));
+    }
+
+    // ---- M009-014：字典分页元数据须覆盖全部条目 ----
+    @Test
+    void listSpaceTypesPageSizeCoversAllItems() {
+        var page = service.listSpaceTypes();
+        assertThat(page.pageSize()).isGreaterThanOrEqualTo(page.items().size());
+        assertThat(page.pageSize()).isEqualTo(500);
+    }
+
     // V348 商户业态标准字段：五值之外的业态一律拒收（业态错＝通票分账份额拆给错的业态）。
     @Test
     void createMerchantRejectsBusinessFormatOutsideFiveValues() {
@@ -152,7 +366,7 @@ class PlatformServiceTests {
                 new MerchantDeleteRequest("delete-req", "录入错误，退场清理"));
 
         platformRepository.merchantReferenceCount = 0;
-        TestSecurityActors.asPlatformAdmin("usr_admin2"); // 禁自审:审批人≠申请发起人
+        asMasterAuthority(); // M009-009：删除只能由最高权限审批（BSM-004），且≠申请发起人
         MerchantDeleteDecision decision = service.approveDeleteMerchant(merchant.id(),
                 new MerchantDeleteApprovalRequest("delete-approve", "approved", null));
 
@@ -169,7 +383,7 @@ class PlatformServiceTests {
                 new MerchantDeleteRequest("delete-req-2", "尝试删除仍在用商户"));
 
         platformRepository.merchantReferenceCount = 3; // 模拟仍被酒吧商品/合同等引用
-        TestSecurityActors.asPlatformAdmin("usr_admin2"); // 禁自审:审批人≠申请发起人
+        asMasterAuthority(); // M009-009：删除只能由最高权限审批（BSM-004），且≠申请发起人
 
         assertThatThrownBy(() -> service.approveDeleteMerchant(merchant.id(),
                 new MerchantDeleteApprovalRequest("delete-approve-2", "approved", null)))
@@ -187,8 +401,7 @@ class PlatformServiceTests {
                 "create entity",
                 List.of("att_1"),
                 " P0 Entity ",
-                "operation",
-                null,
+                "management_company",
                 "91310000MA1P0",
                 "Jane Ops",
                 "vault://entity/bank",
@@ -209,11 +422,12 @@ class PlatformServiceTests {
 
     @Test
     void createProjectUsesOpenApiAuditEventNames() {
+        MerchantRecord owner = seedMerchant("seed-project-owner"); // M009-007：merchantId 须存在
         ProjectRecord created = service.createProject(new ProjectRequest(
                 "project-create",
                 "create project",
                 List.of(),
-                "mch_1",
+                owner.id(),
                 "bar",
                 "P0 Bar",
                 "BAR-01",
@@ -231,7 +445,8 @@ class PlatformServiceTests {
 
     @Test
     void updateMerchantWritesAuditAndPreservesId() {
-        MerchantRecord updated = service.updateMerchant("mch_existing", new MerchantProfileRequest(
+        MerchantRecord existing = seedMerchant("seed-existing"); // M009-002：更新须命中已有商户
+        MerchantRecord updated = service.updateMerchant(existing.id(), new MerchantProfileRequest(
                 "merchant-update",
                 "update merchant",
                 List.of(),
@@ -249,11 +464,11 @@ class PlatformServiceTests {
                 "Jack Contact",
                 "18800000013",
                 BigDecimal.valueOf(12.30),
-                "fixed_rent_plus_commission",
+                "lease",
                 "active"
         ));
 
-        assertThat(updated.id()).isEqualTo("mch_existing");
+        assertThat(updated.id()).isEqualTo(existing.id());
         assertThat(updated.merchantName()).isEqualTo("P0 Merchant");
         assertThat(updated.mallBlockCode()).isEqualTo("1F-A");
         assertThat(updated.ownerPerson()).isEqualTo("Owner Li");
@@ -262,7 +477,10 @@ class PlatformServiceTests {
         assertThat(updated.secondaryContactName()).isEqualTo("Jack Contact");
         assertThat(updated.secondaryContactPhone()).isEqualTo("18800000013");
         assertThat(updated.rentPerSquareMeter()).isEqualByComparingTo("12.30");
-        assertThat(updated.cooperationForm()).isEqualTo("fixed_rent_plus_commission");
+        assertThat(updated.cooperationForm()).isEqualTo("lease");
+        // M009-008：三个主体列以生效绑定为准，档案更新不覆盖（seed 时 businessEntityId=be_1、其余空）。
+        assertThat(updated.businessEntityId()).isEqualTo("be_1");
+        assertThat(updated.contractEntityId()).isNull();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("merchant.updated");
@@ -296,11 +514,16 @@ class PlatformServiceTests {
 
     @Test
     void createBusinessEntityBindingAllowsOnlyOneActiveBindingPerMerchant() {
+        MerchantRecord merchant = seedMerchant("seed-binding"); // M009-006：经营对象与主体须存在
+        for (String id : List.of("be_operation_1", "be_contract_1", "be_settlement_1",
+                "be_operation_2", "be_contract_2", "be_settlement_2")) {
+            seedEntity(id);
+        }
         BusinessEntityBindingRequest first = new BusinessEntityBindingRequest(
                 "binding-first",
                 "first binding",
                 List.of("att_1"),
-                "mch_binding",
+                merchant.id(),
                 "be_operation_1",
                 "be_contract_1",
                 "be_settlement_1",
@@ -311,12 +534,12 @@ class PlatformServiceTests {
         BusinessEntityBindingRecord created = service.createBusinessEntityBinding(first);
 
         assertThat(created.status()).isEqualTo("active");
-        assertThat(created.merchantId()).isEqualTo("mch_binding");
+        assertThat(created.merchantId()).isEqualTo(merchant.id());
         assertThatThrownBy(() -> service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
                 "binding-second",
                 "second binding",
                 List.of(),
-                "mch_binding",
+                merchant.id(),
                 "be_operation_2",
                 "be_contract_2",
                 "be_settlement_2",
@@ -333,11 +556,16 @@ class PlatformServiceTests {
 
     @Test
     void changeBusinessEntityBindingRecordsStatusHistoryAndFreesActiveUniqueness() {
+        MerchantRecord merchant = seedMerchant("seed-change"); // M009-006
+        for (String id : List.of("be_operation", "be_contract", "be_settlement",
+                "be_operation_new", "be_contract_new", "be_settlement_new")) {
+            seedEntity(id);
+        }
         BusinessEntityBindingRecord created = service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
                 "binding-change-create",
                 "create binding",
                 List.of(),
-                "mch_change",
+                merchant.id(),
                 "be_operation",
                 "be_contract",
                 "be_settlement",
@@ -353,7 +581,7 @@ class PlatformServiceTests {
                 "binding-change-replacement",
                 "replacement binding",
                 List.of(),
-                "mch_change",
+                merchant.id(),
                 "be_operation_new",
                 "be_contract_new",
                 "be_settlement_new",
@@ -371,11 +599,15 @@ class PlatformServiceTests {
     // P1-4 red→green: action 字段拒绝非法枚举值
     @Test
     void changeBusinessEntityBindingRejectsInvalidAction() {
+        MerchantRecord merchant = seedMerchant("seed-enum"); // M009-006
+        for (String id : List.of("be_op", "be_ctr", "be_stl")) {
+            seedEntity(id);
+        }
         BusinessEntityBindingRecord created = service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
                 "binding-enum-create",
                 "create",
                 List.of(),
-                "mch_enum",
+                merchant.id(),
                 "be_op",
                 "be_ctr",
                 "be_stl",
@@ -397,8 +629,7 @@ class PlatformServiceTests {
                 "entity corp-A",
                 List.of(),
                 "Corp A",
-                "operation",
-                null,
+                "management_company",
                 null,
                 null,
                 null,
@@ -409,8 +640,7 @@ class PlatformServiceTests {
                 "entity corp_A",
                 List.of(),
                 "Corp B",
-                "operation",
-                null,
+                "management_company",
                 null,
                 null,
                 null,
@@ -431,7 +661,7 @@ class PlatformServiceTests {
         assertThat(service.listSpaceTypes().items()).extracting(SpaceTypeRecord::typeCode).contains("kiosk", "shop");
         // 新录入类型立即可用于 createSpace 硬校验。
         SpaceRecord space = service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
-                "sp-kiosk", "create", List.of(), "prj1", "mch1", null, "K1", "kiosk", null, null, null, "active"));
+                "sp-kiosk", "create", List.of(), null, null, null, "K1", "kiosk", null, null, null, "active")); // M009-007：归属为空或须存在
         assertThat(space.spaceType()).isEqualTo("kiosk");
     }
 
@@ -439,7 +669,7 @@ class PlatformServiceTests {
     void createSpaceRejectsUnknownSpaceType() {
         // 条目3 硬校验：不在字典内的 space_type → VALIDATION_FAILED。
         assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
-                        "sp-bad", "create", List.of(), "prj1", "mch1", null, "Bad", "no_such_type", null, null, null, "active")))
+                        "sp-bad", "create", List.of(), null, null, null, "Bad", "no_such_type", null, null, null, "active")))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
                         assertThat(ex.code()).isEqualTo("VALIDATION_FAILED"));
     }
@@ -447,7 +677,7 @@ class PlatformServiceTests {
     @Test
     void createSpaceAcceptsDictionarySpaceType() {
         SpaceRecord saved = service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
-                "sp-ok", "create", List.of(), "prj1", "mch1", null, "Shop A", "shop", "1", null, null, "active"));
+                "sp-ok", "create", List.of(), null, null, null, "Shop A", "shop", "1", null, null, "active"));
         assertThat(saved.spaceType()).isEqualTo("shop");
     }
 

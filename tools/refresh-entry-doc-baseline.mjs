@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 // 00-entry + README 事实基线快照自动回填（审计 P2-4 建议"计数由工具自动回填"的落地，根治手工刷反复过期）。
 // 权威来源：openapi-p0.json（operation 数）/ db/migration（最新迁移+迁移数）/ surefire-reports（测试数）。
 // 用法：node tools/refresh-entry-doc-baseline.mjs        —— 回填快照（写文件）
@@ -63,8 +64,11 @@ entryText = entryText.replace(
     /(以 `npm run verify:\*` 输出为准，)\d{4}-\d{2}-\d{2}( 刷新）)/g,
     `$1${today}$2`);
 entryText = entryText.replace(
-    /本轮 \d{4}-\d{2}-\d{2} 取证 Flyway 最新 V\d+、OpenAPI \d+ operations、后端 surefire 现有报告 (\d+) tests/g,
-    (m, oldTests) => `本轮 ${today} 取证 Flyway 最新 ${latestMigrationTag}、OpenAPI ${operationCount} operations、后端 surefire 现有报告 ${testCount ?? oldTests} tests`);
+    /本轮 \d{4}-\d{2}-\d{2} 实测 OpenAPI \d+ operations、Flyway 最新 V\d+；(当前工作树无 `backend\/target\/surefire-reports`，故不声明当前测试数量|后端 surefire 现有报告 \d+ tests)。/g,
+    (m, oldStatus) => `本轮 ${today} 实测 OpenAPI ${operationCount} operations、Flyway 最新 ${latestMigrationTag}；${testCount === null ? oldStatus : `后端 surefire 现有报告 ${testCount} tests`}。`);
+entryText = entryText.replace(
+    /本轮 \d{4}-\d{2}-\d{2} 取证为 Flyway 最新 V\d+、OpenAPI \d+ operations；(当前工作树无后端 surefire 报告，不声明当前测试数量|后端 surefire 现有报告 \d+ tests)。/g,
+    (m, oldStatus) => `本轮 ${today} 取证为 Flyway 最新 ${latestMigrationTag}、OpenAPI ${operationCount} operations；${testCount === null ? oldStatus : `后端 surefire 现有报告 ${testCount} tests`}。`);
 entryText = entryText.replace(/查看本轮核验 \d+ 个 operation/g,
     `查看本轮核验 ${operationCount} 个 operation`);
 entryText = entryText.replace(/本轮核验 \d+ 个 OpenAPI operation/g,

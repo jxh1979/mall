@@ -1,5 +1,38 @@
-# M001 — 00-authority-html-01
-版本：V0.03
+# M001 — 业务需求正本／需求HTML／第1段
+版本：V0.04
+
+## 当前收口：471模块计划 / 160-audit-prompt V0.17
+
+状态：PASS。2026-09-08，B5-r4两席完整报告均已落盘并完整读取，B5后四值校验全等；已先将ledger V1.58的M001记PASS，现更新本收口文件。以下旧V0.03内容作为历史原样保留，不继承其旧锁或322模块结论。
+
+本轮按操作员“授权仅为 A、D 再执行 1 次修复”，实际仅执行一次B3（累计3→4），只改BSM的L1380概括句与L2版本号；两树完整diff只1文件、2增2删。A现为“处理后的回访、验收和关闭，按下述已确认的工单类型分支规则执行。”；D由V0.12递增为V0.13，日期仍2026-09-08。
+操作员随后明确：“b c两项原文不冲突。就是我的原意。”B（L1020客人来源）和C（L1068打折原因）按该原意保留。两席已撤销冲突/工程缺陷判断，014/015现为细化、无缺陷、无需修复；不是容忍已确认缺陷，也不是改完了。Grok曾新提的红线概述、票名/有效期、补录短表、合作模式两行及越权程序疑点，经其独立完整原文复核均撤销，旧票保留历史。
+
+| 当前文件 | 版本 | 行数 | SHA256 |
+|---|---|---:|---|
+| docs/business-enum-quick-reference-v0.1.html | V0.07 | 308 | 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66 |
+| docs/business-system-map-for-operations-v0.1.html | V0.13 | 2032 | a7f7b7a30ace54d2534a8cedbd8f3b6d20fdd7a89d3515b18e194d4878ad66fa |
+
+两席覆盖两份HTML共2340行、335映射判据（197BEQR+120BSM+18GEN）、第一性原理/顺从式/对抗式三线。317摘录按来源行逐字一致，结构与27导航原脚本检查、金额正反例通过。未运行产品后端交易、浏览器或读屏器验收；结论仅覆盖该文档模块，未把76未发布文件作为代码PASS证据。
+
+| 阶段 | 当前有效证据 |
+|---|---|
+| B3-r4 | before 4263c8c1338031a38d977741ffb111a0752b7092；after 7d6c4f7544de2957faec09e04aa2a262ba4aad86；未过滤binary diff 2013字节，SHA256 57e3f181e0415c093f50322a26c826eb26623484992492499e30eadd65d0be46 |
+| B4-r4 | self/grok均V0.01、双PASS，完整diff各自留存；self SHA70245a3b39f5de88e4d59c9887e4ab1a86f437894dfb3bd2b94d1121ca2e997c；grok SHAb4766eddfc1ea4e8789c4769d33e722abb1031c2a0e5d168304d7f88103e0c9e |
+| LOCK-AMEND | BSM079获批出处同步；双PASS、反向旧hash与401定义/383摘录/471映射实核，完整五步已完成。锁V0.11，COUNT保持1。Grok完整IN-RECEIPT见ledger与self回执 |
+| 新锁B1与B2 | self V0.36/Grok V0.17当前B1双PASS；self V0.38/Grok V0.18 B2双PASS；findings V0.86定稿16行、队列空，跳过新的B3/B4 |
+| B5-r4 | modules/M001-b5-r4-self-raw.md V0.01，SHAb98a83bd01295decdbeb20021e80773e072da15e03603353050ad9b522e917dc；modules/M001-b5-r4-grok-raw.md V0.01，SHA1334b1e26cd7d4c99ee942534ad6e44eab5ae5c99676cd020fd1ea992c68bbad；双PASS，Grok真实exit0 |
+
+B5后四值实核：
+- 实算：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+- sidecar：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+- ledger：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+- Grok B5：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+当前main HEAD=242f487233d028173cb9198eecd079f5d877405c，未提交、推送、部署。B3累计4、额外额度用尽；计划修复2、历史调用失败6保持。471模块当前1个PASS、470个PENDING，本轮不启动M002；不是全仓审计完成。全部实际Grok命令及退出状态见M001-b1-self-raw.md末尾本轮回执，所有历史原票保留。
+
+## 历史V0.03收口与发布记录（旧322模块计划，非当前基准）
+
 
 状态：PASS。首轮全仓审计，M001/322；控制提示词V0.13；锁V0.05。
 B5-r2两席报告全部落盘并完整读取后，四值校验通过，先将ledger标记PASS，再写本文件。

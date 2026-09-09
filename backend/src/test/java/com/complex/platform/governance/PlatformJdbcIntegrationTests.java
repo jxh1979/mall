@@ -1,4 +1,5 @@
 package com.complex.platform.governance;
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -62,7 +63,7 @@ class PlatformJdbcIntegrationTests {
         // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET(含 include_archived + delete_status 谓词), 第二页可达首页之后的商户。
         Instant t = Instant.now();
         repository.saveBusinessEntity(new BusinessEntityRecord(
-                "be_pg", "PG Entity", "operation", null, null, null, null, "active", t, t));
+                "be_pg", "PG Entity", "management_company", null, null, null, "active", t, t)); // M009-012：主体记录不再带 parent 链；M010-003：operation 已出白名单
         repository.saveMerchant(new MerchantRecord("mch_pg_1", "PG A", "other", "be_pg", "be_pg", "be_pg",
                 "C1", "18800000001", "Owner", "1F-A", new java.math.BigDecimal("10.00"), new java.math.BigDecimal("9.00"),
                 null, null, new java.math.BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
@@ -90,8 +91,7 @@ class PlatformJdbcIntegrationTests {
         BusinessEntityRecord saved = repository.saveBusinessEntity(new BusinessEntityRecord(
                 "be_jdbc_formal",
                 "  P0 Platform Entity  ",
-                "operation",
-                null,
+                "management_company",
                 "91310000MA1P0",
                 "Jane Ops",
                 "vault://bank/entity",
@@ -113,7 +113,7 @@ class PlatformJdbcIntegrationTests {
                 .contains(tuple(
                         "be_jdbc_formal",
                         "  P0 Platform Entity  ",
-                        "operation",
+                        "management_company",
                         "91310000MA1P0",
                         "vault://bank/entity",
                         "active"
@@ -339,6 +339,37 @@ class PlatformJdbcIntegrationTests {
     }
 
 
+    // M009-010：软删除行保留可查（includeArchived=true 含已审批删除行），默认列表不显示（BSM-004）。
+    @Test
+    void approvedDeletedMerchantStaysQueryableWithIncludeArchived() {
+        Instant t = Instant.now();
+        repository.saveMerchant(new MerchantRecord("mch_soft_del", "软删商户", "other", null, null, null,
+                null, null, null, null, null, null, null, null, null, null, "active", t, t));
+        repository.deleteMerchant("mch_soft_del");
+
+        assertThat(repository.findMerchantById("mch_soft_del")).isPresent()
+                .get().extracting(MerchantRecord::deleteStatus).isEqualTo("approved");
+        assertThat(repository.listMerchants(true)).extracting(MerchantRecord::id).contains("mch_soft_del");
+        assertThat(repository.listMerchantsPaged(true, null, 1, 500).items()).extracting(MerchantRecord::id).contains("mch_soft_del");
+        assertThat(repository.listMerchants(false)).extracting(MerchantRecord::id).doesNotContain("mch_soft_del");
+        assertThat(repository.listMerchantsPaged(false, null, 1, 500).items()).extracting(MerchantRecord::id).doesNotContain("mch_soft_del");
+        // M009-006：主体存在性查询按主键。
+        assertThat(repository.businessEntityExists("be_definitely_missing")).isFalse();
+    }
+
+    // M009-027：空间存在性按主键查询，不受 listSpaces() LIMIT 500 截断（上级空间/招商意向空间校验）。
+    @Test
+    void findSpaceByIdIsNotTruncatedByListLimit() {
+        Instant base = Instant.parse("2026-01-01T00:00:00Z");
+        for (int i = 0; i < 501; i++) {
+            Instant t = base.plusSeconds(i);
+            repository.saveSpace(new SpaceRecord("sp_limit_" + i, null, null, null, "空间" + i, "shop", "1F",
+                    null, List.of(), "active", t, t));
+        }
+        assertThat(repository.listSpaces()).hasSize(500);
+        assertThat(repository.findSpaceById("sp_limit_0")).isPresent();
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
@@ -356,7 +387,7 @@ class PlatformJdbcIntegrationTests {
     void merchantContactPhonesArePersistedAsCiphertextAndReadBackAsPlaintext() {
         Instant t = Instant.now();
         repository.saveBusinessEntity(new BusinessEntityRecord(
-                "be_pii", "PII Entity", "operation", null, null, null, null, "active", t, t));
+                "be_pii", "PII Entity", "management_company", null, null, null, "active", t, t));
         repository.saveMerchant(new MerchantRecord("mch_pii_1", "PII 商户", "other", "be_pii", "be_pii", "be_pii",
                 "第一联系人", "18800000021", "负责人", "1F-P", new BigDecimal("10.00"), new BigDecimal("9.00"),
                 "第二联系人", "18800000022", new BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
@@ -378,7 +409,7 @@ class PlatformJdbcIntegrationTests {
         // 防二次加密：把读回来的（明文）记录原样再存一次，落库仍是可解密的单层密文。
         Instant t = Instant.now();
         repository.saveBusinessEntity(new BusinessEntityRecord(
-                "be_pii2", "PII Entity 2", "operation", null, null, null, null, "active", t, t));
+                "be_pii2", "PII Entity 2", "management_company", null, null, null, "active", t, t));
         repository.saveMerchant(new MerchantRecord("mch_pii_2", "PII 商户2", "other", "be_pii2", "be_pii2", "be_pii2",
                 "联系人", "18800000023", "负责人", "1F-Q", new BigDecimal("10.00"), new BigDecimal("9.00"),
                 null, null, new BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
@@ -392,7 +423,7 @@ class PlatformJdbcIntegrationTests {
         // DB 级边界（V249 思路）：任何绕开仓库的手写 SQL / 批量导入写明文，数据库直接拒。
         Instant t = Instant.now();
         repository.saveBusinessEntity(new BusinessEntityRecord(
-                "be_pii3", "PII Entity 3", "operation", null, null, null, null, "active", t, t));
+                "be_pii3", "PII Entity 3", "management_company", null, null, null, "active", t, t));
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "INSERT INTO merchants (id, merchant_name, merchant_type, contact_phone, status, created_at, updated_at) "
                         + "VALUES ('mch_pii_plain', 'X', 'other', '18800000024', 'draft', now(), now())"))
@@ -403,6 +434,44 @@ class PlatformJdbcIntegrationTests {
     void v339SeedsContactPhonePlaintextViewPermission() {
         assertThat(permissionCodes()).contains("pii.contact_phone.view");
         assertThat(platformAdminPermissionCodes()).contains("pii.contact_phone.view");
+    }
+
+    // ---- M010-001：V318 固定父链列已删除（BEQR-144/PGM-018 多对多协作，不是隶属链）。
+    @Test
+    void parentEntityColumnIsRemovedFromBusinessEntities() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = 'business_entities' AND column_name = 'parent_entity_id'",
+                Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_indexes WHERE tablename = 'business_entities' AND indexname = 'idx_business_entities_parent'",
+                Integer.class)).isZero();
+    }
+
+    // ---- M010-002/003：entity_role 白名单只剩 HTML 三角色，spv/operation 被库层拒绝（操作员 2.2 答「删除」）。
+    @Test
+    void entityRoleCheckRejectsSpvAndOperation() {
+        // 约束定义本身只剩 HTML 三角色（同一事务内只能放一条违例语句，PostgreSQL 违例后事务即中止）。
+        String definition = jdbcTemplate.queryForObject(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'business_entities'::regclass AND conname = 'chk_be_entity_role'",
+                String.class);
+        assertThat(definition).contains("'platform'", "'project_company'", "'management_company'")
+                .doesNotContain("'spv'", "'operation'");
+        assertThat(jdbcTemplate.update(
+                "INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at) VALUES ('be_role_ok', '角色探针', 'management_company', 'active', now(), now())"))
+                .isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at) VALUES ('be_role_spv', '角色探针', 'spv', 'active', now(), now())"))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // ---- M010-004：V048 组织隔离配套——不同组织可同名角色，同组织/全局同名仍唯一。
+    @Test
+    void organizationScopedRolesMayShareNameAcrossOrganizations() {
+        String insert = "INSERT INTO roles (id, role_name, description, data_scope, status, created_at, organization_id) VALUES (?, ?, NULL, 'project', 'active', now(), ?)";
+        assertThat(jdbcTemplate.update(insert, "role_m010_a", "店长（M010探针）", "org_m010_a")).isEqualTo(1);
+        assertThat(jdbcTemplate.update(insert, "role_m010_b", "店长（M010探针）", "org_m010_b")).isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, "role_m010_a2", "店长（M010探针）", "org_m010_a"))
+                .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
     }
 
     private List<String> platformAdminPermissionCodes() {

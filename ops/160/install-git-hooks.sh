@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+# 文件版本：V0.01
 # 安装仓库 git 钩子到生效的 hooks 目录(worktree 共用)。新克隆/新机首次须跑一次。
 # 注意:若仓库/全局设了 core.hooksPath,Git 只认该路径——装到别处会静默失效,故在此显式处理。
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-custom="$(git config --get core.hooksPath || true)"
+custom="$(git config --path --get core.hooksPath || true)"
 if [[ -n "$custom" ]]; then
   dest="$custom"
   echo "[install-hooks] 检测到 core.hooksPath=$custom,安装到该路径(否则钩子不生效)。"

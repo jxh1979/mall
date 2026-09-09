@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -164,7 +165,10 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(typeText).not.toContain("catering");
     // 单屏模式：经营与租赁（合作形式下拉）与基本信息同屏，无需步进。
     const coopText = screen.getByTestId("organization-merchant-cooperation").textContent ?? "";
-    expect(coopText).toContain("固定租金");
+    // M009-003：合作形式下拉只提供 HTML 六类（自营/租赁/联营/代运营/服务商接入/其他），不再是收费模板码。
+    expect(coopText).toContain("租赁");
+    expect(coopText).toContain("服务商接入");
+    expect(coopText).not.toContain("固定租金");
     expect(coopText).not.toContain("fixed_rent");
     expect(coopText).not.toContain("revenue_share");
   });

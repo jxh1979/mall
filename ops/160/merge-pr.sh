@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件版本：V0.01
+# 文件版本：V0.02
 # 合并前置检查(2026-08-07 门禁升级批 1,用户弹窗批立项):CI 绿灯才允许合并。
 # 病史:本仓是私有库免费版,设不了 required status check,.github/workflows/predeploy-gates.yml
 #      自己在注释里写明只是「可见信号」。也就是说 gh pr merge 对红灯毫无抵抗力,全靠人记得去看一眼。
@@ -41,7 +41,7 @@ else
   echo "[merge] 等 predeploy-gates 对 ${head_sha:0:8} 的 CI 结果..."
   run_ids=""
   for i in $(seq 1 30); do
-    run_ids="$(gh run list --commit "$head_sha" --workflow predeploy-gates.yml --limit 10 --json databaseId -q '.[].databaseId' 2>/dev/null || true)"
+    run_ids="$(gh run list --commit "$head_sha" --workflow predeploy-gates.yml --limit 10 --json databaseId -q '.[].databaseId' )"
     [[ -n "$run_ids" ]] && break
     echo "[merge]   还没有 run(第 $i/30 次),10s 后重试..."
     sleep 10

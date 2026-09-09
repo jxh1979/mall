@@ -535,3 +535,829 @@ MAIN_LOCK_UNCHANGED True 0e468712d5240cb669b847ecb4250c03e35e38a52aaf11e3013eb8b
 ### 本席结论
 
 整批V0.44的六项来源、分类、三是三否、最小源边界、用户版本约束及补充证据均可核，故本席PASS；Grok新票待交付。M004仍IN_PROGRESS，B3=0，重跑0，判据未改；当前没有人闸问题。修订候选B2不是运行失败重试，不增加失败重跑计数。
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M004 B1 — 当前471计划 Codex独立完整报告
+版本：V0.05
+
+本席步骤结论：PASS。当前模块生命周期仍IN_PROGRESS；B3历史累计1、方案修复2、Grok交付失败0。不能将本席PASS或Grok交付exit0写成模块PASS。
+本轮先Grok实际结束（exit0），本席才独立审计；写本段时未读当前Grok报告正文、findings或旧M004审计结论。旧self前76213字节原样保留，旧322同号PASS不继承。
+
+## 1. 当前输入与完整覆盖
+
+正本/home/james/complex-management，main。M004仅package-lock.json；计划标记OVERSIZE-SINGLE-FILE，3321行/114258字节，自身documentVersion V0.02，SHA256 d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef。
+当前冻结锁V0.11；M004映射GEN-001—GEN-018共18项，无HTML派生ID。已读general完整18条、当前映射、runbook V0.02与本模块范围。实际读取root package.json、apps/web/package.json及两个直接消费方.github/workflows/predeploy-gates.yml和tools/verify-no-legacy-api-prototype.mjs；这些只用于验证锁，不宣布其模块审完。
+结构阅读覆盖：L1—7全部顶层键；L8—3319全部220个包条目（逐条范围见表）；L3320—3321闭合括号。全部字段集合21种，无未知业务字段。217个完整integrity原值由Python逐值严格解码并校验64字节，再由npm ssri严格解析；展示阅读时省去重复摘要字串，未假称下载远端tarball验证。其余元数据与所有依赖/peer/optional关系按220条全部读取，不用抽样替代。
+root manifest SHA256 350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f；workspace manifest SHA256 b8017d9782b4c00eac1c992204dad2b009e23db7c4c804737bdf8fcbc90b8f1f。root与workspace的name/version/dependencies/devDependencies/optionalDependencies/engines/workspaces原生deepEqual全部成立。
+L2项目名、L3应用版本0.1.0、L4 npm锁协议3、L5用户文件版本V0.02、L6 requires及L7容器均为技术性元数据。documentVersion不是应用版本或lockfileVersion；本次文件未改，不补版本、不改协议。
+
+## 2. 四分类与逐条登记
+
+依序检查冲突→细化→技术性→添加。此文件只锁定既有工程依赖树，没有业务实体、状态、枚举、权限、金额规则或业务默认值；UI/二维码/颜色等依赖包名仅为库标识，不等于新业务概念。没有明文HTML冲突，没有需要HTML上位解释的新增行为；按提示词明确的“依赖声明”技术性通道登记。三HTML哈希已核对保持，没有把其静默当删包理由或发现新HTML问题。
+每个包条目与顶层键均归技术性、无工程缺陷、建议修复队列否。软件库的“颜色/金额小数/日期/二维码”能力不自动产生项目定价、支付或门禁规则；实际调用中的业务参数由后续所属模块按HTML审计。
+“npm下载源”均为registry.npmjs.org的HTTPS tarball路径，217/217没有用户信息、query或fragment。这里只证明本文件值的来源形态和摘要语法，不保证外部registry可达或供应商产物全部安全。
+
+| 源行 | 条目 | 锁定版本 | 分类 | 无业务发明及用途 |
+|---|---|---|---|---|
+| 1—7 | 顶层元数据及packages容器 | lock协议3 / 文档V0.02 | 技术性 | 构建安装元数据；不引入业务规则 |
+| 8—21 | (root) | 0.1.0 | 技术性 | 根清单镜像及工作区选择；不引入业务规则 |
+| 22—44 | apps/web | 0.1.0 | 技术性 | Web清单镜像；不引入业务规则 |
+| 45—51 | apps/web/node_modules/@rolldown/pluginutils | 1.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 52—77 | apps/web/node_modules/@vitejs/plugin-react | 6.0.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 78—84 | node_modules/@adobe/css-tools | 4.5.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 85—93 | node_modules/@ant-design/colors | 7.2.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 94—112 | node_modules/@ant-design/cssinjs | 1.24.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 113—127 | node_modules/@ant-design/cssinjs-utils | 1.1.3 | 技术性 | UI运行依赖；不引入业务规则 |
+| 128—139 | node_modules/@ant-design/fast-color | 2.0.6 | 技术性 | UI运行依赖；不引入业务规则 |
+| 140—159 | node_modules/@ant-design/icons | 5.6.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 160—165 | node_modules/@ant-design/icons-svg | 4.4.2 | 技术性 | UI运行依赖；不引入业务规则 |
+| 166—181 | node_modules/@ant-design/react-slick | 1.1.2 | 技术性 | UI运行依赖；不引入业务规则 |
+| 182—198 | node_modules/@asamuzakjp/css-color | 5.1.11 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 199—215 | node_modules/@asamuzakjp/dom-selector | 7.1.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 216—225 | node_modules/@asamuzakjp/generational-cache | 1.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 226—232 | node_modules/@asamuzakjp/nwsapi | 2.3.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 233—248 | node_modules/@babel/code-frame | 7.29.7 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 249—259 | node_modules/@babel/helper-validator-identifier | 7.29.7 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 260—268 | node_modules/@babel/runtime | 7.29.7 | 技术性 | UI运行依赖；不引入业务规则 |
+| 269—281 | node_modules/@bramus/specificity | 2.4.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 282—301 | node_modules/@csstools/color-helpers | 6.0.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 302—325 | node_modules/@csstools/css-calc | 3.2.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 326—353 | node_modules/@csstools/css-color-parser | 4.1.7 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 354—376 | node_modules/@csstools/css-parser-algorithms | 4.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 377—401 | node_modules/@csstools/css-syntax-patches-for-csstree | 1.1.5 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 402—421 | node_modules/@csstools/css-tokenizer | 4.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 422—433 | node_modules/@emnapi/core | 1.10.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 434—444 | node_modules/@emnapi/runtime | 1.10.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 445—455 | node_modules/@emnapi/wasi-threads | 1.2.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 456—461 | node_modules/@emotion/hash | 0.8.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 462—467 | node_modules/@emotion/unitless | 0.7.5 | 技术性 | UI运行依赖；不引入业务规则 |
+| 468—485 | node_modules/@exodus/bytes | 1.15.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 486—492 | node_modules/@jridgewell/sourcemap-codec | 1.5.5 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 493—511 | node_modules/@napi-rs/wasm-runtime | 1.1.5 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 512—521 | node_modules/@oxc-project/types | 0.133.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 522—537 | node_modules/@playwright/test | 1.61.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 538—549 | node_modules/@rc-component/async-validator | 5.1.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 550—565 | node_modules/@rc-component/color-picker | 2.0.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 566—579 | node_modules/@rc-component/context | 1.4.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 580—591 | node_modules/@rc-component/mini-decimal | 1.1.3 | 技术性 | UI运行依赖；不引入业务规则 |
+| 592—609 | node_modules/@rc-component/mutate-observer | 1.1.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 610—627 | node_modules/@rc-component/portal | 1.1.2 | 技术性 | UI运行依赖；不引入业务规则 |
+| 628—643 | node_modules/@rc-component/qrcode | 1.1.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 644—663 | node_modules/@rc-component/tour | 1.15.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 664—684 | node_modules/@rc-component/trigger | 2.3.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 685—701 | node_modules/@rolldown/binding-android-arm64 | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 702—718 | node_modules/@rolldown/binding-darwin-arm64 | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 719—735 | node_modules/@rolldown/binding-darwin-x64 | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 736—752 | node_modules/@rolldown/binding-freebsd-x64 | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 753—769 | node_modules/@rolldown/binding-linux-arm-gnueabihf | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 770—786 | node_modules/@rolldown/binding-linux-arm64-gnu | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 787—803 | node_modules/@rolldown/binding-linux-arm64-musl | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 804—820 | node_modules/@rolldown/binding-linux-ppc64-gnu | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 821—837 | node_modules/@rolldown/binding-linux-s390x-gnu | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 838—854 | node_modules/@rolldown/binding-linux-x64-gnu | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 855—871 | node_modules/@rolldown/binding-linux-x64-musl | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 872—888 | node_modules/@rolldown/binding-openharmony-arm64 | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 889—907 | node_modules/@rolldown/binding-wasm32-wasi | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 908—924 | node_modules/@rolldown/binding-win32-arm64-msvc | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 925—941 | node_modules/@rolldown/binding-win32-x64-msvc | 1.0.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 942—948 | node_modules/@standard-schema/spec | 1.1.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 949—969 | node_modules/@testing-library/dom | 10.4.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 970—989 | node_modules/@testing-library/jest-dom | 6.9.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 990—996 | node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api | 0.6.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 997—1024 | node_modules/@testing-library/react | 16.3.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1025—1038 | node_modules/@testing-library/user-event | 14.6.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1039—1049 | node_modules/@tybys/wasm-util | 0.10.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1050—1057 | node_modules/@types/aria-query | 5.0.4 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1058—1068 | node_modules/@types/chai | 5.2.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1069—1075 | node_modules/@types/deep-eql | 4.0.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1076—1082 | node_modules/@types/estree | 1.0.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1083—1092 | node_modules/@types/react | 19.2.16 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1093—1102 | node_modules/@types/react-dom | 19.2.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1103—1120 | node_modules/@vitest/expect | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1121—1147 | node_modules/@vitest/mocker | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1148—1160 | node_modules/@vitest/pretty-format | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1161—1174 | node_modules/@vitest/runner | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1175—1190 | node_modules/@vitest/snapshot | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1191—1200 | node_modules/@vitest/spy | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1201—1215 | node_modules/@vitest/utils | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1216—1226 | node_modules/ansi-regex | 5.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1227—1240 | node_modules/ansi-styles | 5.2.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1241—1305 | node_modules/antd | 5.29.3 | 技术性 | UI运行依赖；不引入业务规则 |
+| 1306—1309 | node_modules/apps-web | 链接 | 技术性 | 工作区符号链接；不引入业务规则 |
+| 1310—1319 | node_modules/aria-query | 5.3.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1320—1329 | node_modules/assertion-error | 2.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1330—1339 | node_modules/bidi-js | 1.0.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1340—1349 | node_modules/chai | 6.2.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1350—1355 | node_modules/classnames | 2.5.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 1356—1361 | node_modules/compute-scroll-into-view | 3.1.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 1362—1368 | node_modules/convert-source-map | 2.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1369—1377 | node_modules/copy-to-clipboard | 3.3.3 | 技术性 | UI运行依赖；不引入业务规则 |
+| 1378—1391 | node_modules/css-tree | 3.2.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1392—1398 | node_modules/css.escape | 1.5.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1399—1404 | node_modules/csstype | 3.2.3 | 技术性 | UI运行依赖；不引入业务规则 |
+| 1405—1418 | node_modules/data-urls | 7.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1419—1424 | node_modules/dayjs | 1.11.21 | 技术性 | UI运行依赖；不引入业务规则 |
+| 1425—1431 | node_modules/decimal.js | 10.6.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1432—1441 | node_modules/dequal | 2.0.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1442—1451 | node_modules/detect-libc | 2.1.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1452—1459 | node_modules/dom-accessibility-api | 0.5.16 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1460—1472 | node_modules/entities | 8.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1473—1479 | node_modules/es-module-lexer | 2.1.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1480—1489 | node_modules/estree-walker | 3.0.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1490—1499 | node_modules/expect-type | 1.3.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1500—1517 | node_modules/fdir | 6.5.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1518—1532 | node_modules/fsevents | 2.3.3 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1533—1545 | node_modules/html-encoding-sniffer | 6.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1546—1555 | node_modules/indent-string | 4.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1556—1562 | node_modules/is-potential-custom-element-name | 1.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1563—1570 | node_modules/js-tokens | 4.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1571—1611 | node_modules/jsdom | 29.1.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1612—1620 | node_modules/json2mq | 0.2.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 1621—1650 | node_modules/lightningcss | 1.32.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1651—1671 | node_modules/lightningcss-android-arm64 | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1672—1692 | node_modules/lightningcss-darwin-arm64 | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1693—1713 | node_modules/lightningcss-darwin-x64 | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1714—1734 | node_modules/lightningcss-freebsd-x64 | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1735—1755 | node_modules/lightningcss-linux-arm-gnueabihf | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1756—1776 | node_modules/lightningcss-linux-arm64-gnu | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1777—1797 | node_modules/lightningcss-linux-arm64-musl | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1798—1818 | node_modules/lightningcss-linux-x64-gnu | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1819—1839 | node_modules/lightningcss-linux-x64-musl | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1840—1860 | node_modules/lightningcss-win32-arm64-msvc | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1861—1881 | node_modules/lightningcss-win32-x64-msvc | 1.32.0 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 1882—1891 | node_modules/lru-cache | 11.5.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1892—1902 | node_modules/lz-string | 1.5.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1903—1912 | node_modules/magic-string | 0.30.21 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1913—1919 | node_modules/mdn-data | 2.27.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1920—1929 | node_modules/min-indent | 1.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1930—1948 | node_modules/nanoid | 3.3.18 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1949—1962 | node_modules/obug | 2.1.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1963—1975 | node_modules/parse5 | 8.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1976—1982 | node_modules/pathe | 2.0.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1983—1989 | node_modules/picocolors | 1.1.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 1990—2002 | node_modules/picomatch | 4.0.4 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2003—2021 | node_modules/playwright | 1.61.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2022—2034 | node_modules/playwright-core | 1.61.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2035—2049 | node_modules/playwright/node_modules/fsevents | 2.3.2 | 技术性 | 跨平台可选依赖；不引入业务规则 |
+| 2050—2078 | node_modules/postcss | 8.5.23 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2079—2094 | node_modules/pretty-format | 27.5.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2095—2102 | node_modules/pretty-format/node_modules/react-is | 17.0.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2103—2112 | node_modules/punycode | 2.3.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2113—2121 | node_modules/qrcode.react | 4.2.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2122—2138 | node_modules/rc-cascader | 3.34.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2139—2153 | node_modules/rc-checkbox | 3.5.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2154—2169 | node_modules/rc-collapse | 3.9.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2170—2186 | node_modules/rc-dialog | 9.6.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2187—2203 | node_modules/rc-drawer | 7.3.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2204—2219 | node_modules/rc-dropdown | 4.2.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2220—2237 | node_modules/rc-field-form | 2.7.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2238—2255 | node_modules/rc-image | 7.12.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2256—2270 | node_modules/rc-input | 1.8.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2271—2287 | node_modules/rc-input-number | 9.5.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2288—2306 | node_modules/rc-mentions | 2.20.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2307—2324 | node_modules/rc-menu | 9.16.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2325—2339 | node_modules/rc-motion | 2.9.5 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2340—2358 | node_modules/rc-notification | 5.6.4 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2359—2374 | node_modules/rc-overflow | 1.5.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2375—2389 | node_modules/rc-pagination | 5.1.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2390—2428 | node_modules/rc-picker | 4.11.3 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2429—2443 | node_modules/rc-progress | 4.0.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2444—2461 | node_modules/rc-rate | 2.13.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2462—2477 | node_modules/rc-resize-observer | 1.4.3 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2478—2493 | node_modules/rc-segmented | 2.7.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2494—2515 | node_modules/rc-select | 14.16.8 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2516—2533 | node_modules/rc-slider | 11.1.9 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2534—2551 | node_modules/rc-steps | 6.0.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2552—2566 | node_modules/rc-switch | 4.1.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2567—2587 | node_modules/rc-table | 7.54.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2588—2609 | node_modules/rc-tabs | 15.7.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2610—2626 | node_modules/rc-textarea | 1.10.2 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2627—2642 | node_modules/rc-tooltip | 6.4.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2643—2662 | node_modules/rc-tree | 5.13.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2663—2679 | node_modules/rc-tree-select | 5.27.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2680—2694 | node_modules/rc-upload | 4.11.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2695—2708 | node_modules/rc-util | 5.44.4 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2709—2727 | node_modules/rc-virtual-list | 3.19.2 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2728—2736 | node_modules/react | 19.2.7 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2737—2748 | node_modules/react-dom | 19.2.7 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2749—2754 | node_modules/react-is | 18.3.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2755—2768 | node_modules/redent | 3.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2769—2778 | node_modules/require-from-string | 2.0.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2779—2784 | node_modules/resize-observer-polyfill | 1.5.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2785—2818 | node_modules/rolldown | 1.0.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2819—2825 | node_modules/rolldown/node_modules/@rolldown/pluginutils | 1.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2826—2838 | node_modules/saxes | 6.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2839—2844 | node_modules/scheduler | 0.27.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2845—2853 | node_modules/scroll-into-view-if-needed | 3.1.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2854—2860 | node_modules/siginfo | 2.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2861—2870 | node_modules/source-map-js | 1.2.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2871—2877 | node_modules/stackback | 0.0.2 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2878—2884 | node_modules/std-env | 4.1.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2885—2890 | node_modules/string-convert | 0.2.1 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2891—2903 | node_modules/strip-indent | 3.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2904—2909 | node_modules/stylis | 4.4.0 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2910—2916 | node_modules/symbol-tree | 3.2.4 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2917—2925 | node_modules/throttle-debounce | 5.0.2 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2926—2932 | node_modules/tinybench | 2.9.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2933—2942 | node_modules/tinyexec | 1.2.4 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2943—2959 | node_modules/tinyglobby | 0.2.17 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2960—2969 | node_modules/tinyrainbow | 3.1.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2970—2982 | node_modules/tldts | 7.4.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2983—2989 | node_modules/tldts-core | 7.4.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 2990—2995 | node_modules/toggle-selection | 1.0.6 | 技术性 | UI运行依赖；不引入业务规则 |
+| 2996—3008 | node_modules/tough-cookie | 6.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3009—3021 | node_modules/tr46 | 6.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3022—3029 | node_modules/tslib | 2.8.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3030—3043 | node_modules/typescript | 5.9.3 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3044—3053 | node_modules/undici | 7.29.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3054—3131 | node_modules/vite | 8.0.16 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3132—3221 | node_modules/vitest | 4.1.9 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3222—3234 | node_modules/w3c-xmlserializer | 5.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3235—3244 | node_modules/webidl-conversions | 8.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3245—3254 | node_modules/whatwg-mimetype | 5.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3255—3269 | node_modules/whatwg-url | 16.0.1 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3270—3286 | node_modules/why-is-node-running | 2.3.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3287—3296 | node_modules/xml-name-validator | 5.0.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3297—3303 | node_modules/xmlchars | 2.2.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+| 3304—3319 | node_modules/yaml | 2.9.0 | 技术性 | 开发/构建/测试间接或直接依赖；不引入业务规则 |
+
+| 3320—3321 | JSON闭合结构 | — | 技术性 | 序列化结构；不引入业务规则 |
+
+## 3. 第一性原理线
+
+1. 为什么有此文件：CI真实入口.github/workflows/predeploy-gates.yml:23执行npm ci --ignore-scripts。npm本机ci.js实际loadVirtual→buildIdealTree→validateLockfile，缺失或不匹配时报错，因此锁是可复现安装的直接输入。全部220条原生inventory可从root/link/workspace边遍历到，extraneous和unreachable均空；没有仅凭注释保留的孤立条目。
+2. 是否存在可删除重复：两处@rolldown/pluginutils 1.0.1是现有树的不同解析位置，两个fsevents为2.3.3与2.3.2不同声明；react-is 18.3.1和pretty-format内部17.0.2分别满足不同消费者。可选平台包用于跨平台树，不因当前Linux用不到就删除。正常ci能重建；未发现必须手删/收窄的缺陷。进一步去重是安装工具重排优化，不是本轮正常首跑故障。
+3. 未验证前提：已验证本机Node v24.20.0/npm11.19.0实际解析、当前所有116个node engine及root允许范围均兼容；并没有实际运行packageManager标注的npm10.9.8，也没在所有平台安装。原生协议3与规范支持范围可核，但未将规范替代实际全平台安装成功。
+4. 安装是否真的执行：仅npm ci --dry-run --ignore-scripts --offline --no-audit --no-fund --json；exit0，计划add188/remove186/change0/audited0。没有安装、没有运行安装脚本或npm audit；root/workspace清单与lock字节及两个node_modules目录mtime前后相等。npm源代码确认dryRun绕过删除分支，save:false不保存清单。
+5. 声称与实际是否一致：现有node_modules含自指node_modules符号链接，且既有undici/postcss/nanoid等版本与锁不同；预演所列remove/add反映当前安装上下文。该目录排除，不审其业务、不修改，不把旧安装运行结果冒称为当前锁完整安装验证。锁内图本身可达且一致，ci正确提出重建，不构成当前锁缺陷。
+
+## 4. 顺从式18项冻结判据
+
+| ID | 本模块核查与证据 | 本席结论 |
+|---|---|---|
+| GEN-001 | 220条全部可达，无extraneous；重复版本/平台分支按真实依赖用途核实，不人为删锁节点 | PASS |
+| GEN-002 | JSON严格全解析；npm Arborist真实loadVirtual和ci预演成功；原生validator缺包/错版本负例准确报错 | PASS |
+| GEN-003 | 配置无新执行逻辑或测试文件；217错误payload被ssri拒绝，缺失react/错版本及engine下界反例都有assert，非只grep | PASS |
+| GEN-004 | JSON无重复key；源URL无凭据、仅HTTPS官方registry；217 SRI格式和原生校验行为；范围引用交给原生解析器全检 | PASS |
+| GEN-005 | 本文件没有主体、对象或服务端授权实现；依赖声明未引入新权限规则。不能据此宣布服务端授权已审 | PASS（本文件无该行为） |
+| GEN-006 | 根/workspace镜像与582条依赖边一致；无坏引用。无数据库事务/金额状态写入 | PASS |
+| GEN-007 | 静态锁文件无请求重试或并发写逻辑；禁止把库名等同业务幂等实现，未增锁或门禁 | PASS（本文件无该行为） |
+| GEN-008 | npm锁协议3、SemVer、documentVersion分工明确；root/workspace清单字段逐个deepEqual；单一workspace链接正确 | PASS |
+| GEN-009 | npm真实validator缺包/错版返回具体错误；ci dry-run正确无改动，未把退出0当下载/构建完成 | PASS |
+| GEN-010 | 没有明文秘密或含凭据URL；包路径/HTTPS/SRI检查全覆盖。没有声称做远端tarball/全依赖漏洞审计 | PASS |
+| GEN-011 | 命令、真实exit、hash、完整220行表及运行边界均记录；未沿用旧PASS | PASS |
+| GEN-012 | 静态有限220条/582边，遍历用seen终止；本文件无业务资源循环或外部操作，不新增并发资源规则 | PASS |
+| GEN-013 | 实际Arborist220条、582边均有效；root范围涵盖116个engine；28受平台限制包均optional；29个缺失peerOptional被原生机制允许；ci预演通过 | PASS |
+| GEN-014 | 无数据库或迁移内容，未运行数据库操作 | PASS（本文件无该行为） |
+| GEN-015 | 仅UI依赖元数据，无界面控件/文案/焦点行为；不据依赖存在推导产品可访问性通过 | PASS（本文件无该行为） |
+| GEN-016 | 当前行数/版本/hash/CI调用可复核，明确未全安装构建；未修改文件，不触发其版本递增 | PASS |
+| GEN-017 | 顶层与220条全部顺序分类为技术性，理由逐条登记；没有新增业务规则或HTML改动 | PASS |
+| GEN-018 | 结论依据本机npm实现、规范原文、完整当前配置、可复现命令与负例；旧报告与席位意见不是依据 | PASS |
+
+## 5. 对抗式线
+
+| 质疑/反例 | 实际核查 | 判断 |
+|---|---|---|
+| JSON隐藏同名键让不同解析器取不同值 | Python object_pairs_hook对全部层级逐键断言唯一，220条定位与packages顺序全等 | 未发现 |
+| root或workspace声明漂移 | name/version/依赖三类/engines/workspaces与两份实际manifest逐字段deepEqual | 未发现 |
+| 缺包会被吞掉 | 对当前原生inventory的内存副本删react，调用npm原生validate-lockfile | 返回Missing: react@19.2.7 from lock file |
+| 错版被当成满足声明 | 内存副本react版本置0.0.0，同一个原生validator | 返回Invalid: lock file's react@0.0.0 does not satisfy react@19.2.7 |
+| peer缺失全部算坏边 | 实际29条peerOptional没有目标；原生valid允许，真正invalid为空 | 不误判为必须新增依赖 |
+| 同名嵌套包是无用重复 | 220条全部从root可达；不同解析位置/版本服务实际边 | 不直接手删 |
+| 非Linux包导致本机安装拒绝 | 28个有os/cpu约束条目均optional，原生ci离线预演0 | 当前Linux预演成立，不宣称跨平台实装 |
+| root声明22.13却依赖要求更高 | semver.subset逐116条成立；22.12不满足root、22.13满足 | 下界真实验证 |
+| SRI只是看起来像摘要 | ssri strict解析217/217；同一错误payload对217条全部返回false | 拒绝错内容行为成立；真实tarball未验证 |
+| lock文档版本覆盖npm协议/应用版本 | 分别documentVersion V0.02 / lockfileVersion3 / version0.1.0；原生loadVirtual/ci读取成功 | 未发现冲突 |
+| npm ci预演偷偷删依赖 | 先读实际ci.js的!dryRun分支，命令带dry-run/ignore-scripts，检查manifest及目录mtime未变 | 无实际安装删除证据 |
+| 当前node_modules可运行证明锁可安装 | 安装上下文存在旧版本与自指链接；明确不作此推论 | 限制已登记 |
+| 全局HTML门禁红是锁问题 | 锁消费方原型遗留检查0；先前html-ledger-sync/entry-anchors红灯有独立BSM镜像原因 | 不扩模块、不修CSV/HTML、不报全局绿 |
+
+## 6. 实际命令、输出与可复现性
+
+所有远程命令均经直接SSH，在/home/james/complex-management执行；无MCP_Cloud_160，无第三席。启动时8个已读适用SKILL.md路径存在性再次确认。using-superpowers用于节点核验；grilling用于上述反例；codebase-design核对最小依赖图；systematic-debugging/diagnosing-bugs追ci原生消费路径；ponytail-review核对重复可删除性；verification-before-completion按实际命令及hash；writing-for-agents用于本报告可追溯结构。沿用本会话此前实际全文读取的技能，不伪称本模块重新读取了全部技能正文。纯配置未改，不新增TDD文件。
+
+原生图/负例实际完整脚本（node -，exit0）：
+```javascript
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {createRequire}=require('node:module');
+const nr=createRequire('/usr/lib/node_modules/npm/package.json');
+const Arborist=nr('@npmcli/arborist'),semver=nr('semver'),ssri=nr('ssri');
+const validate=nr('./lib/utils/validate-lockfile.js');
+(async()=>{
+const root=process.cwd(),lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+const manifests=['','apps/web'].map(p=>[p,JSON.parse(fs.readFileSync(path.join(p,'package.json'),'utf8'))]);
+for(const [p,m] of manifests) for(const field of ['name','version','dependencies','devDependencies','optionalDependencies','engines','workspaces']){
+ assert.deepEqual(lock.packages[p][field],m[field],(p||'root')+' '+field);
+}
+const npmVersion=nr('./package.json').version;
+const integrity=[],engine=[],platform=[];
+for(const [loc,p] of Object.entries(lock.packages)){
+ if(p.integrity){const sri=ssri.parse(p.integrity,{strict:true});assert(sri?.sha512?.length===1,loc);assert.equal(ssri.checkData(Buffer.from('M004-negative-not-package-tarball'),p.integrity),false);integrity.push(loc);}
+ if(p.engines?.node){assert(semver.satisfies(process.versions.node,p.engines.node),loc);assert(semver.subset(manifests[0][1].engines.node,p.engines.node),loc+' root range mismatch');engine.push(loc);}
+ if(p.engines?.npm)assert(semver.satisfies(npmVersion,p.engines.npm),loc+' npm engine');
+ if(p.os||p.cpu){assert.equal(p.optional,true,loc);platform.push(loc);}
+ if(p.link){assert(loc.startsWith('node_modules/'));assert(lock.packages[p.resolved],loc);assert.equal(manifests.find(([mp])=>mp===p.resolved)[1].name,loc.substring('node_modules/'.length));}
+}
+const arb=new Arborist({path:root,offline:true,audit:false,ignoreScripts:true,save:false});
+const tree=await arb.loadVirtual();
+const invalid=[],missingOptional=[],extra=[];let edges=0;
+for(const n of tree.inventory.values()){
+ if(n.extraneous)extra.push(n.location);
+ for(const e of n.edgesOut.values()){edges++;if(e.optional&&!e.to)missingOptional.push({from:n.location,name:e.name,type:e.type});if(!e.valid&&!(e.optional&&!e.to))invalid.push({from:n.location,name:e.name,spec:e.spec,type:e.type,error:e.error,to:e.to?.location});}
+}
+assert.deepEqual(invalid,[]);assert.deepEqual(extra,[]);
+const expected=new Map(tree.inventory);
+assert.deepEqual(validate(new Map(expected),expected),[]);
+const victim='node_modules/react';assert(expected.has(victim));
+const deleted=new Map(expected);deleted.delete(victim);const miss=validate(deleted,expected);assert(miss.some(x=>x.startsWith('Missing: react@')));
+const changed=new Map(expected);changed.set(victim,{...expected.get(victim),version:'0.0.0'});
+const bad=validate(changed,expected);assert(bad.some(x=>x.includes("react@0.0.0")));
+assert.equal(semver.satisfies('22.12.0',manifests[0][1].engines.node),false);
+assert.equal(semver.satisfies('22.13.0',manifests[0][1].engines.node),true);
+const seen=new Set(),stack=[tree];while(stack.length){const n=stack.pop();if(seen.has(n))continue;seen.add(n);if(n.isLink)stack.push(n.target);for(const e of n.edgesOut.values())if(e.to)stack.push(e.to);}
+const unreachable=[...tree.inventory.values()].filter(n=>!seen.has(n)).map(n=>n.location);assert.deepEqual(unreachable,[]);
+console.log(JSON.stringify({node:process.version,npm:npmVersion,lockEntries:Object.keys(lock.packages).length,inventory:tree.inventory.size,edges,invalid,extra,unreachable,missingOptional,integrityFormatPass:integrity.length,wrongPayloadRejected:integrity.length,engineRangesPass:engine.length,platformOptional:platform.length,manifestsMatch:manifests.map(([p])=>p||'root'),negativeMissing:miss,negativeVersion:bad},null,2));
+console.log('M004_NATIVE_LOCK_GRAPH_ASSERTIONS_PASS');
+})().catch(e=>{console.error(e);process.exit(1)});
+```
+本次最终原生输出和ci预演摘要：
+```text
+NATIVE_GRAPH_FINAL EXIT 0
+{
+  "node": "v24.20.0",
+  "npm": "11.19.0",
+  "lockEntries": 220,
+  "inventory": 220,
+  "edges": 582,
+  "invalid": [],
+  "extra": [],
+  "unreachable": [],
+  "missingOptional": [
+    {
+      "from": "apps/web/node_modules/@vitejs/plugin-react",
+      "name": "@rolldown/plugin-babel",
+      "type": "peerOptional"
+    },
+    {
+      "from": "apps/web/node_modules/@vitejs/plugin-react",
+      "name": "babel-plugin-react-compiler",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/@exodus/bytes",
+      "name": "@noble/hashes",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/@vitest/mocker",
+      "name": "msw",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/jsdom",
+      "name": "canvas",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/rc-picker",
+      "name": "date-fns",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/rc-picker",
+      "name": "luxon",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/rc-picker",
+      "name": "moment",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "@types/node",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "@vitejs/devtools",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "esbuild",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "jiti",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "less",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "sass",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "sass-embedded",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "stylus",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "sugarss",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "terser",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vite",
+      "name": "tsx",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@edge-runtime/vm",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@opentelemetry/api",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@types/node",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@vitest/browser-playwright",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@vitest/browser-preview",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@vitest/browser-webdriverio",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@vitest/coverage-istanbul",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@vitest/coverage-v8",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "@vitest/ui",
+      "type": "peerOptional"
+    },
+    {
+      "from": "node_modules/vitest",
+      "name": "happy-dom",
+      "type": "peerOptional"
+    }
+  ],
+  "integrityFormatPass": 217,
+  "wrongPayloadRejected": 217,
+  "engineRangesPass": 116,
+  "platformOptional": 28,
+  "manifestsMatch": [
+    "root",
+    "apps/web"
+  ],
+  "negativeMissing": [
+    "Missing: react@19.2.7 from lock file"
+  ],
+  "negativeVersion": [
+    "Invalid: lock file's react@0.0.0 does not satisfy react@19.2.7"
+  ]
+}
+M004_NATIVE_LOCK_GRAPH_ASSERTIONS_PASS
+
+CI_DRY_COMMAND ["npm", "ci", "--dry-run", "--ignore-scripts", "--offline", "--no-audit", "--no-fund", "--json"] EXIT 0
+CI_DRY_SUMMARY {"add": 188, "added": 188, "audited": 0, "change": 0, "changed": 0, "funding": 0, "remove": 186, "removed": 186}
+STDERR 
+CONSUMER_CONTEXT {"path": "node_modules", "exists": true, "symlink": false, "link_target": null}
+CONSUMER_CONTEXT {"path": "node_modules/node_modules", "exists": true, "symlink": true, "link_target": "/home/james/complex-management/node_modules"}
+CONSUMER_CONTEXT {"path": "apps/web/node_modules", "exists": true, "symlink": false, "link_target": null}
+CONSUMER_CONTEXT {"path": "npm-shrinkwrap.json", "exists": false, "symlink": false, "link_target": null}
+MANIFEST_BYTES_AND_NODE_MODULES_DIR_MTIMES_UNCHANGED
+LOCK_SHA d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef
+
+```
+另实际执行node tools/verify-no-legacy-api-prototype.mjs → exit0 / NO_LEGACY_API_PROTOTYPE_PASS。
+git status --porcelain -- package-lock.json → exit0/空；git diff --check -- package-lock.json → exit0/空。
+完整Python读取/验证步骤：Path.read_text UTF8→json.loads(object_pairs_hook逐键唯一)→全部220条定位与字典顺序相同→对全部217完整integrity base64.b64decode(validate=True)且64字节→urlparse全部resolved必须HTTPS、无username/password/query/fragment→逐条展示全部元数据、依赖/peer/optional/平台字段；全部执行exit0。完整字段集合21种，root顶层6键（含packages）均读取。
+调度层有两次JavaScript模板字面量语法错误，均在远程命令执行前失败；修正嵌套反引号后才执行，不是源文件错误或Grok交付失败。首次原生图把missingOptional限制在invalid条件内，字段空集只证明无无效缺失项；最终脚本已改为完整列出29条缺失peerOptional并重跑。首次ci输出2290行被工具截断，保留其执行事实；为完整取到关键信息又执行同一无副作用预演，并按JSON结构打印add188/remove186/change0，未将丢失部分冒称已逐行读取。
+
+一次落盘前的条目定位断言因调度脚本正则转义失败，未发生文件写入；改为按该JSON实际四空格键行定位后重跑，不修改源文件。
+
+规范依据（仅解释配置协议，不增冻结判据）：
+- https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json/ ：锁描述确定依赖树；packages键为位置；版本3属npm9及以上使用的格式；link/optional/integrity是安装元数据。
+- https://docs.npmjs.com/cli/v11/commands/npm-ci/ ：ci检查manifest与锁一致性，dry-run仅报告拟动作；实际安全性同时用本机ci.js的分支核实。文档显示v11.19.1，本机npm11.19.0，版本差异明确，不用网页替代本机执行。
+
+## 7. Grok实际派发与阶段边界
+
+实际派发命令（模型grok-4.6、xhigh及其它参数不变；完整提示保留）：
+```powershell
+$remoteScript = @'
+cd /home/james/complex-management && python3 - <<'PY'
+from pathlib import Path
+import subprocess,sys,stat
+target=Path('/home/james/complex-management/docs/audit-2026-09/modules/M004-b1-grok-raw.md')
+def meta():
+ if not target.exists(): return None
+ s=target.stat()
+ return (s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_ino)
+before=meta()
+prompt="执行160-audit-prompt V0.17当前471计划M004 B1完整独立审计。唯一正本/home/james/complex-management main；模块名“治理门禁与 CI 基线／配置与工程入口／第2段”；唯一受审文件package-lock.json（3321行，OVERSIZE-SINGLE-FILE），当前documentVersion V0.02。ledger M001/M002/M003已PASS，M004 IN_PROGRESS、历史B3累计1、方案修复2、交付失败0，不清零。旧322同号报告只作历史，不继承旧PASS。\n先自读docs/audit-2026-09/plan/modules.md当前M004完整范围、runbook.md、criteria-lock.md general全文与M004映射；完整18项GEN逐一覆盖。全3321行按结构分段完整阅读，不只抽样。为核实锁文件允许只读root/workspace package.json、node/npm当前环境、既有npm解析器/依赖工具/CI中锁入口；属于验证直接依赖，不扩大其他模块审计。仅三权威HTML为业务来源，需时读准确上位全文。\n严格互盲：不读任何self raw/findings/其他模块报告收口/本模块旧报告正文；自己的旧raw仅版本元数据以便追加。ledger仅顶部基准和M004状态行。只允许Grok此一外审，不派任何subagent，不用MCP_Codex_160或MCP_Cloud_160。只能写指定grok raw，禁止改依赖/代码/HTML/配置/计划/锁/ledger/findings/questions，禁提交推送部署、安装依赖、新worktree、新测试或额外产物。禁npm install/npm ci实装/npx/npm exec自动下载；命令预演须先核实无安装无源码改动，必要纯计算副本仅/tmp并说明。不要跑未读懂或可能外发、删数据的命令。\n三线完整：（1）第一性原理：锁文件为什么存在、每类元数据/包条目用途、无效重复和未经验证前提；（2）顺从式：18GEN、root/workspaces声明一致性、版本/引擎/依赖解析/完整性/平台可选分支/链接是否满足真实消费方；（3）对抗式：正常首次安装/构建可能触发的解析错误、清单漂移、缺失引用/错版本/工作区链接/peer/optional/engines/本机平台差异/下载源与完整性字段。用当前已安装工具和无副作用可复现断言验证，不能把JSON parse、节点数、仅grep、dry-run当依赖下载/全构建/业务测试PASS。不要为极端组合或仅可设想场景新增门禁/计数/文件。若不联网则明确没有证明registry可达/远端tarball字节；不要伪称npm audit或全安装完成。现有文件本次不改不强制补版本；不要改应用SemVer/lockfileVersion/documentVersion。\n按V0.17§6技能先实查并读取适用SKILL.md：using-superpowers、grilling/grill-me自行追问、codebase-design只冻结general、diagnosing-bugs/systematic-debugging只读复现、ponytail-review删除价值、verification-before-completion证据；可选batch-grill-me/ubiquitous-language有则收窄使用，无则记缺口。技能本体第三席/向人提问/写额外产物条款不适用。纯锁配置无行为改动不新增TDD文件。\n四分类严格冲突→细化→技术性→添加。锁的纯依赖/构建元数据不是业务发明；每类/每包有完整技术性登记及无业务发明理由，不得用包名就推断新业务需求。若指向HTML上位就给准确文件行号+完整原文，不把有上位的内容跳归技术性。真正业务发明不能隐藏。每个finding含临时GR编号、准确路径行号、完整依据/命令与输出、冻结GEN ID/2.3类型、分类、工程缺陷是/否、队列建议。全模块审完再收齐报告，不中途修或问。\n已知上下文：全局html-ledger-sync/entry-anchors因BSM工作区与CSV镜像不一致而红，镜像属M425/M427；本模块不要为刷绿改HTML/CSV或重开M001—003。如发现锁文件自身可复现缺陷仍独立举证。用户已确认BSM1020来源枚举按项目可配、1068打折原因分类可配就是原意，不再判为冲突。任何新HTML自身问题只完整报告，不能擅改。\n完整报告要有全3321行连续覆盖表、每包/条目技术性分类、18GEN逐项、三线完整证据、命令真实exit/输出/运行边界、所有新finding、本席B1 PASS或FAIL和是否HTML问题。先独立实算criteria-lock.md SHA，本次报告第一行严格CRITERIA-LOCK-SHA256: <独立实算64位小写hex>，不提供预期值，正文别再写独占字段行。\n唯一报告路径/home/james/complex-management/docs/audit-2026-09/modules/M004-b1-grok-raw.md。已有全部字节保留，在末尾追加本次完整报告；自身版本V0.03→V0.04。完整落盘后结束，不要求stdout任何机器标记。"
+cmd=['/home/james/.local/bin/grok','-p',prompt,'-m','grok-4.6','--reasoning-effort','xhigh','--output-format','json','--permission-mode','bypassPermissions','--no-subagents','--disable-web-search','--cwd','/home/james/complex-management']
+proc=subprocess.Popen(cmd,cwd='/home/james/complex-management',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+while True:
+ try:
+  output,error=proc.communicate(timeout=300)
+  break
+ except subprocess.TimeoutExpired: pass
+output=error=None
+after=meta()
+code='GROK_EXIT' if proc.returncode else ('REPORT_MISSING' if after is None else ('PATH_MISMATCH' if not target.is_file() or target.resolve()!=target else ('REPORT_EMPTY' if after[0]==0 else ('REPORT_STALE' if after==before else None))))
+if code:
+ print('ADAPTER_ERROR='+code)
+ print('EXIT_CODE='+str(proc.returncode))
+ sys.exit(proc.returncode or 1)
+print('REPORT_PATH='+str(target))
+print('EXIT_CODE=0')
+PY
+'@
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -o BatchMode=yes james@192.168.88.160 $remoteScript
+```
+适配器实际结果：
+```text
+REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M004-b1-grok-raw.md
+EXIT_CODE=0
+```
+进程真实结束，本席仍未读该raw正文。本段写完以后才允许根读取当前Grok完整追加报告并做B1后四值校验。本席写入时实算/sidecar/ledger三个已知值相等；未冒称已取本次Grok字段或双PASS。
+
+## 8. 当前发现与结论
+
+新finding：空集。无工程缺陷、无冲突、无添加项，无新HTML自身问题或需操作员答复事项。本席B1 = PASS。接下来收齐Grok本次报告、四值校验、B2整批归并；不省略B2/B5，不提前标模块PASS。
+未修改package-lock.json、root/workspace manifest、三HTML、冻结锁。三HTML当前SHA分别BSM a7f7b7a30ace54d2534a8cedbd8f3b6d20fdd7a89d3515b18e194d4878ad66fa、BEQR 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66、PGM c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c，保持现基准。用户B/C原意与M001 A/D一次授权边界保留，不重开M001—003。
+没有全依赖下载安装、远端tarball字节校验、npm audit、全前端/后端/Android构建、数据库迁移、业务UI或生产部署结论。全局已知BSM镜像门禁红灯仍保留，不作为本模块锁文件自动缺陷。
+
+
+## M004 当前471计划 B2补核与整批归并票
+版本：V0.06
+
+本席B2结论：PASS。该票是对findings V0.93整批候选的归并及处置复核，不是新的独立B1，不是模块PASS，也不是npm audit通过。
+候选316366字节，SHA256=2b1e47a4b23bc40a0c90dcd31ede7784fe9d775fa04c72f814147dcfc011be78。当前7ID，队列候选全否；M004 IN_PROGRESS/B3累计1，尚待Grok独立B2票。
+
+### 完整输入及B1四值
+当前B1 self V0.05完整文件前132363字节、SHA256 079da8b31892d00232e26f4097fac609b270df926149d4fc15fd872f20e66a4f，报告实际L540—1129。上次落盘工具元数据将起行写539；按实际独占行核实应为540，此处纠正定位，不改原报告。
+当前B1 Grok V0.04完整145659字节、SHA256 d2707c6c5aa9e4a6e585f079f88aa1f6a0615f2f196525b514c79b6db4160607，报告L873—1536。全部665追加行含首空行已读；两席本次B1均PASS/当时finding空集。两份旧322前缀保留，不继承旧结论。
+B1后四值：实算=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；sidecar=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；ledger=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；指定M004-b1-grok-raw本次最后独占行=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。四值全等，COUNT1不变。
+
+### B2新增核查CX-B2-01与原票边界
+收齐B1后按原001—003已知库问题核对当前记录，本席额外执行npm公告查询。原V0.05所述“未npm audit”是当时事实，没有改成当时已跑；不能把B1双PASS冒写为Grok同意本B2新观察。
+实际完整输出：
+```text
+COMMAND ["npm", "audit", "--package-lock-only", "--ignore-scripts", "--json"] EXIT 1
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@vitest/mocker": {
+      "name": "@vitest/mocker",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1193684,
+          "name": "@vitest/mocker",
+          "dependency": "@vitest/mocker",
+          "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
+          "url": "https://github.com/advisories/GHSA-82fw-gwwq-j7x9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=2.1.0 <4.1.11"
+        }
+      ],
+      "effects": [
+        "vitest"
+      ],
+      "range": "2.1.0 - 4.1.10",
+      "nodes": [
+        "node_modules/@vitest/mocker"
+      ],
+      "fixAvailable": true
+    },
+    "vitest": {
+      "name": "vitest",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@vitest/mocker",
+        {
+          "source": 1193683,
+          "name": "vitest",
+          "dependency": "vitest",
+          "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
+          "url": "https://github.com/advisories/GHSA-82fw-gwwq-j7x9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=2.1.0 <4.1.11"
+        }
+      ],
+      "effects": [],
+      "range": "2.1.0-beta.1 - 4.1.10",
+      "nodes": [
+        "node_modules/vitest"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 2,
+      "high": 0,
+      "critical": 0,
+      "total": 2
+    },
+    "dependencies": {
+      "prod": 74,
+      "dev": 146,
+      "optional": 34,
+      "peer": 11,
+      "peerOptional": 0,
+      "total": 219
+    }
+  }
+}
+
+STDERR 
+PROTECTED_UNCHANGED {"package-lock.json": "d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef", "package.json": "350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f", "apps/web/package.json": "b8017d9782b4c00eac1c992204dad2b009e23db7c4c804737bdf8fcbc90b8f1f"}
+
+```
+npm audit --package-lock-only --ignore-scripts --json真实exit1；两个moderate条目来自同一个GHSA-82fw-gwwq-j7x9，归新正式M004-007。没有执行audit fix。父Python脚本exit0仅表示检查与字节保护断言完成，不能覆盖子命令exit1。
+
+本次主来源：https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9 。已完整读公告：当前4.1.9命中，4.1.11为修补版；公开插件和Vitest浏览器模式注册路径有不同前提。当前配置不启用公告所述通道，不能仅凭npm两个条目就宣称本项目已出现同一文件读取行为。
+直接调用上下文完整原文与检索输出：
+```text
+CONFIG_FILES EXIT 0
+apps/web/vite.config.ts
+apps/web/vitest.config.ts
+
+FILE apps/web/vite.config.ts
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:8080";
+
+export default defineConfig(({ mode }) => ({
+  // 子路径部署：构建产物落在 /complex/ 前缀下（门户 portal.py 把 /complex/ 代理到 preview）；
+  // dev（mode!=='serve'）仍在根路径，方便本地直接调试。
+  base: "/",
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/api": {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    // 真实分包已完成关键优化：admin 32 个页面经 React.lazy 路由级切分，
+    // AdminApp 从 ~224kB 降到 ~19kB，首屏不再一次性加载全部页面代码。
+    // 剩余最大单块 vendor-antd（antd 框架本体）约 586kB，是框架固有体积；
+    // 实测在 rolldown 的 manualChunks 下进一步剥离 rc-*/dayjs 会触发反向合并、
+    // 生成更大的单块（~1MB），属退化，故不强拆。
+    // 阈值设为 650kB：覆盖 antd 框架块、消除噪音警告，又能在未来出现新的
+    // 真实回归（如某业务块异常膨胀）时仍然报警。
+    chunkSizeWarningLimit: 650,
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        ticketing: "ticketing/index.html",
+        bar: "bar/index.html",
+        amusement: "amusement/index.html",
+      },
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) return "vendor-react";
+          if (id.includes("node_modules/@ant-design/icons")) return "vendor-antd-icons";
+          if (id.includes("node_modules/antd") || id.includes("node_modules/@ant-design")) return "vendor-antd";
+          if (id.includes("node_modules")) return "vendor";
+        },
+      },
+    },
+  },
+}));
+
+FILE apps/web/vitest.config.ts
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    globals: false,
+    restoreMocks: true,
+  },
+});
+
+CALLER_SEARCH ["rg", "-n", "@vitest/(mocker|browser)|mockerPlugin|interceptorPlugin", "apps/web", "--glob", "!node_modules/**", "--glob", "!package-lock.json"] EXIT 1
+
+
+```
+未读写真实秘密、未启动公开测试服务、未制作攻击请求。以上是既有路径核实，三份HTML不是软件协议规范；未据上游描述发明业务要求。公开dev host不等于已注册mockerPlugin；jsdom不等于Vitest浏览器模式。
+
+### 整批差集与分类
+- 001—003沿用历史永久ID，原缺陷/修复史保留；当前nanoid3.3.18、postcss8.5.23及^3.3.16、undici7.29.0均已在本次逐字段读取和原生图中确认，公告当前也未列它们。不用旧整体SHA宣称现字节完全相同：把当前documentVersion在内存改回V0.01得f637ce6cf83b9c580c04bcfee0b668851a2b1d29a595bda9dec8b5435bf04db4，不等于旧65254915…；该试算没有写文件，当前按本次完整审查判断。
+- 004/005/006覆盖两席全220条无业务发明登记，root/清单/link、依赖图/平台/peer、来源/SRI分别沿用既有ID。没有把同一个问题复制到结构登记中。
+- 新007准确来自本席B2 CX-B2-01，GEN004/010/013，证据3/4；上游缺陷命中事实保留。按V0.17铁律6当前正常入口不具备注册条件，候选当前工程缺陷否、队列否；没有宣称库无缺陷、公告误报或永不触发。这个处置尚未Grok认可，须其本批独立审查。
+- 无冲突/添加或HTML自身问题；当前没有人闸。全部7项均候选技术性/队列否，但任一B2 FAIL就继续整批归并，不能用本席票覆盖Grok。
+- 若双PASS，空队列跳B3/B4进入完整B5-r1；本轮没有修复，没有增加B3次数。当前全局HTML镜像红灯及npm audit两个moderate均公开保留，不能写全仓门禁绿。
+
+### 本轮回执
+步骤M004 B2/471；ledger V1.64 IN_PROGRESS；B3累计1、方案修复2、交付失败0。实算锁hash如上，锁V0.11/COUNT1保持。B1 Grok命令与exit0已完整在V0.05保存，B2 Grok在本段写入时NOT-CALLED，将立即按同一适配器派发；不调用MCP_Cloud_160/Claude Agent，不新增第三席或改全局MCP配置。
+
+## M004 B2 双席收齐与定稿回执
+版本：V0.07
+本追加只记录本批收齐/定稿，不改写本席V0.06 PASS或前V0.05独立B1。当前M004/471，B2 PASS；ledger IN_PROGRESS，历史B3=1/方案修复2/失败重跑0。输入及全部7项判定见前V0.06和findings V0.94当前定稿表。
+Grok本次实际命令：
+```powershell
+$remoteScript = @'
+cd /home/james/complex-management && python3 - <<'PY'
+from pathlib import Path
+import subprocess,sys,stat
+target=Path('/home/james/complex-management/docs/audit-2026-09/modules/M004-b1-grok-raw.md')
+def meta():
+ if not target.exists(): return None
+ s=target.stat()
+ return (s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_ino)
+before=meta()
+prompt="执行160-audit-prompt V0.17当前471计划M004 B2整批归并独立复核。只读/home/james/complex-management main；模块仅package-lock.json3321行/220条/18GEN，历史B3=1、计划修复2、失败重跑0，ledger IN_PROGRESS。源SHA d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef，documentVersion V0.02；M001—M003保持PASS。全程直接已有shell/SSH工具，不用MCP_Cloud_160、MCP_Codex_160或任何子代理。\n审核同一findings V0.93候选：docs/audit-2026-09/findings.md，316366bytes，SHA256 2b1e47a4b23bc40a0c90dcd31ede7784fe9d775fa04c72f814147dcfc011be78。只本文件最上方当前M004 B2候选及相关旧M004历史ID；其它模块不变，不重新审findings本身。\n本批完整输入：modules/M004-b1-self-raw.md 当前V0.06，141623bytes，SHA256 460c7f02e679e5631cf30d410af8e6b3d2f90f3ab5959c391bf3235a3ad068f3。本次独立B1为其原前132363bytes、SHA079da8b31892d00232e26f4097fac609b270df926149d4fc15fd872f20e66a4f，L540—1129；其后V0.06是B2补核和本席票，不假称独立B1。你的当前B1 V0.04已在modules/M004-b1-grok-raw.md，145659bytes、SHA d2707c6c5aa9e4a6e585f079f88aa1f6a0615f2f196525b514c79b6db4160607，本次报告L873—1536。两席本次B1完整三线PASS，当时finding空；先你结束、根独立保存后才读你全文。B1后四值已相等，但B2禁止追加独占锁行。\n须完整核对全部7个ID、差集、分类、工程缺陷、队列，不能只看新增项。001—003旧nanoid/postcss/undici工程缺陷/修复史完整保留，当前版本3.3.18/8.5.23及内部nanoid^3.3.16/7.29.0，当前队列否；004—006为元数据、完整220条图、HTTPS/SRI技术登记，继续否。旧322 PASS不继承，当前全量B1/原生解析证据与旧整体源SHA不同的限制均须准确。\n新增007来自根B2 CX-B2-01：按历史修复核对补跑npm audit --package-lock-only --ignore-scripts --json，真实exit1，moderate2/high0/critical0；两个包vitest和@vitest/mocker4.1.9对应同一GHSA-82fw-gwwq-j7x9，合并1个ID不分两项。上游公告 https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9 可直接读取，若不用联网按来源明确的全文与当前原文验证；不能把版本命中否定。根V0.06附真实完整audit输出及两配置全文。当前vitest.config.ts使用jsdom、plugins仅react；vite.config.ts插件仅react；精确rg @vitest/(mocker|browser)|mockerPlugin|interceptorPlugin在apps/web无匹配。dev有host0.0.0.0不等于注册mockerPlugin，jsdom不等于browser模式。候选按V0.17铁律6的正常首跑边界判007技术性/当前工程缺陷否/队列否，只登记上游公告，不升级。这个判断尚未外席认可，你须独立确认或明确否决；不要因为Codex PASS就跟随。\n若你认为007应修，须按冻结GEN004/010/013说明当前可观察事实如何支持，而非凭CVE标题/两包计数自动排队；若认同仅登记，明确保留npm audit非0与告警事实，不写audit全绿、不写公告误报或永远不可触发。不向人提问，不借上游公告新增业务要求/门禁/判据/技能/文件，不在B2修改依赖或任何源文件。\n按V0.17§6使用已核实技能 receiving-code-review、grilling、systematic-debugging/diagnosing-bugs、codebase-design、verification-before-completion及适用ponytail-review；沿用本会话实际方法，缺口如实记。只读直接对照配置以验证锁，不宣布其他模块审完。不安装依赖、不npm audit fix、不提交推送部署、不新worktree、不写其它产物。\n结论必须完整给出两份当前raw输入、逐ID差集与归属、007事实和边界、是否遗漏/分歧/需人闸、明确B2 PASS或FAIL及整批下一步。root候选认为7项队列全否则跳B3/B4但必须完整B5-r1，不能现在标模块PASS。任一FAIL不定稿不修，原票保留；禁止你代改findings或self。\n唯一报告路径/home/james/complex-management/docs/audit-2026-09/modules/M004-b1-grok-raw.md。已有所有字节保留，把本次完整B2归并结论追加到末尾，自身版本V0.04→V0.05。B2追加段不得出现任何独占CRITERIA-LOCK-SHA256:行；不另建b2文件。完整落盘后结束，不要求stdout机器标记。"
+cmd=['/home/james/.local/bin/grok','-p',prompt,'-m','grok-4.6','--reasoning-effort','xhigh','--output-format','json','--permission-mode','bypassPermissions','--no-subagents','--disable-web-search','--cwd','/home/james/complex-management']
+proc=subprocess.Popen(cmd,cwd='/home/james/complex-management',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+while True:
+ try:
+  output,error=proc.communicate(timeout=300)
+  break
+ except subprocess.TimeoutExpired: pass
+output=error=None
+after=meta()
+code='GROK_EXIT' if proc.returncode else ('REPORT_MISSING' if after is None else ('PATH_MISMATCH' if not target.is_file() or target.resolve()!=target else ('REPORT_EMPTY' if after[0]==0 else ('REPORT_STALE' if after==before else None))))
+if code:
+ print('ADAPTER_ERROR='+code)
+ print('EXIT_CODE='+str(proc.returncode))
+ sys.exit(proc.returncode or 1)
+print('REPORT_PATH='+str(target))
+print('EXIT_CODE=0')
+PY
+'@
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -o BatchMode=yes james@192.168.88.160 $remoteScript
+```
+实际适配器返回REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M004-b1-grok-raw.md、EXIT_CODE=0。真实进程结束后才读取其本次完整215追加行；当前完整文件163323bytes，SHA c3cf6898805d515b7bfcb49f106d996e056b0b78ed8e51220fa1edec3012a3b1，V0.05，B2 PASS，旧145659bytes SHA d2707c6c5aa9e4a6e585f079f88aa1f6a0615f2f196525b514c79b6db4160607保持。无新独占锁行。
+两席对全部001—007分类/队列一致，无漏并无改写，无人闸。根V0.06与GrokV0.05共同批准的候选V0.93 SHA2b1e47a4b23bc40a0c90dcd31ede7784fe9d775fa04c72f814147dcfc011be78已标为V0.94定稿；未改变其实质。007只登记，保留npm audit exit1和版本命中，不改锁、不称全绿。
+本次实算锁/sidecar/ledger基准/当前B1 Grok最后独占字段仍均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，COUNT1。B2段不写独占锁字段；这不是未来B5后四值检查。
+B3/B4跳过，B3计数保持1。下一步先Grok完整B5-r1→真实结束→根独立全量审计保存→读取Grok→B5后四值。现在不能标模块PASS。全局6处BSM镜像红灯保持；无HTML问题或添加人闸。通道直接SSH，无MCP_Cloud_160/第三席。

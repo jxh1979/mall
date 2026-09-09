@@ -1,4 +1,5 @@
 package com.complex.platform.governance;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -237,6 +238,20 @@ class PlatformControllerTests {
                 .andExpect(jsonPath("$.data.items[0].merchant_id").value("mch_1"));
 
         verify(authorizationService).requirePermission("entity.binding.view");
+        verify(authorizationService).requirePlatformScope(); // M009-015：读端与写端同法 fail-closed
+    }
+
+    // M009-015：治理读端必须带平台作用域守卫（BSM-072/BSM-074/PGM-027），不能只靠权限码。
+    @Test
+    void listingMerchantsRequiresPlatformScope() throws Exception {
+        doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "商户账号无权查看平台级经营分析"))
+                .when(authorizationService)
+                .requirePlatformScope();
+
+        mockMvc.perform(get("/api/v1/platform/merchants")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"));
     }
 
     @Test

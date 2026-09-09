@@ -427,3 +427,509 @@ B5 未发现新的工程缺陷，无新临时 GR。
 无其他席曝光：未读 self/b4 raw、未读其他席本次分析、未把适配器缓冲当输入。
 
 本席 B5 结束，不进入修复、发布或下一模块。
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M004 B5-r1 外席全量审计报告（Grok）
+
+版本：V0.02  
+模块：M004 `治理门禁与 CI 基线／配置与工程入口／第2段`（`plan/modules.md` 实切）  
+步骤：B5-r1（整模块重审；本批 B2 定稿后修复队列空，跳过 B3/B4，历史 B3=1 不变）  
+模块生命周期（只读 ledger）：`IN_PROGRESS`；方案修复累计 2；交付失败 0  
+范围文件：仅 `package-lock.json`（3321 行 / 220 条 / OVERSIZE-SINGLE-FILE / `documentVersion` V0.02）  
+本席结论：**PASS**
+
+旧 raw 元数据（只取版本/大小/hash，不采信旧正文结论）：V0.01、95358 字节、SHA256 `31f7bd9586520ad2ab89fd4b3bbc5a95fa596d081b68a2a343ce60af5ced264f`。本次完整报告追加于后，不覆盖。
+
+---
+
+## 1. 角色、技能、独立性
+
+本席 = Grok（审计席乙）。只审不修；不派子代理；不调用 MCP_Codex_160 / MCP_Cloud_160；不改依赖/代码/HTML/计划/锁/ledger/findings/questions；不提交、不推送、不部署、不开 worktree、不 `npm audit fix`、不安装依赖。
+
+正本：`/home/james/complex-management` `main`，`HEAD == origin/main` = `242f487233d028173cb9198eecd079f5d877405c`。
+
+### 1.1 §6 技能实核
+
+已读并按收窄口径使用：
+
+| 技能 | 路径 | 本席用法 |
+|---|---|---|
+| using-superpowers | superpowers/6.3.0 | 开工前技能清单 |
+| grilling / grill-me | mattpocock grilling + grill-me | 席内自问，不向人发问、不派第三席 |
+| codebase-design | mattpocock codebase-design | 锁作为 npm ci 的深模块接口 |
+| diagnosing-bugs / systematic-debugging | mattpocock + superpowers | 只读追 GHSA 到 interceptorPlugin.load，不改代码 |
+| ponytail-review | ponytail 4.9.0 | 找可删；锁内无首跑失败的多余包可删 |
+| verification-before-completion | superpowers | PASS 前实跑命令 |
+| i-have-adhd | marketplace 存在 | 输出模式；本报告第一行仍服从独占哈希格式 |
+| git-guardrails-claude-code | 可选存在 | **不调用**（会写钩子并问人） |
+| tdd / test-driven-development | 存在 | 无源行为变更，不新增测试文件 |
+| writing-for-agents / resolving-merge-conflicts / ponytail 修复模式 | 存在 | 本步不适用 |
+
+缺口（不冒充已调用）：`batch-grill-me`、`ubiquitous-language` 无独立 SKILL.md。`domain-modeling` 存在但提示词划掉（会改 CONTEXT.md/ADR）。
+
+### 1.2 独立性
+
+未读本次或历史 self raw、其他模块审计/收口、本模块旧 B5 正文结论（仅 head 取 V0.01/大小/hash）。findings 只取当前 M004 定稿 ID 与队列值，不凭旧 322 同号 PASS、B1 或 B2 票替代本次 B5。对照读取限于根/`apps/web` 清单、npm 原生消费、CI 锁入口、vite/vitest 配置及公告调用路径。
+
+---
+
+## 2. 范围与冻结映射
+
+`plan/modules.md`：文件数 1，有效行 3321，标记 OVERSIZE-SINGLE-FILE，唯一路径 `package-lock.json`。
+
+`criteria-lock.md` 映射：`M004 → [GEN-001 … GEN-018]` 全部 18 条。无 HTML 派生 ID 映射到本模块。三份业务 HTML 检索 `package-lock`/`npm`：无命中。用户 B/C「就是我的原意」不重判冲突。
+
+判据锁独立实算：`sha256sum docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'` → `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（本报告第一行）。判据未扩锁、未静默对齐。
+
+当前 findings V0.94 七项（均技术性、工程缺陷否、修复队列否）：M004-001 … M004-007。队列空故跳过 B3/B4。本席不把「队列否」自动写成模块 PASS。
+
+---
+
+## 3. 第一性原理
+
+### 3.1 为何必须存在
+
+`package-lock.json` 是 npm lockfile v3 的安装闭包。删掉它：CI `npm ci --ignore-scripts`（`.github/workflows/predeploy-gates.yml:23` 与 `ops/ci/predeploy-gates.yml:23`）与本地可复现安装会失去钉扎的 version/resolved/integrity。三份 HTML 没有「必须有锁文件」的业务句；归技术性（构建/安装/测试），不是添加。
+
+最小用途（按字段，对照 npm Arborist 9.9.1 / lockfile v3）：
+
+| 字段 | 最小用途 | 本文件事实 |
+|---|---|---|
+| name / version | 应用名与应用语义版本，不是文件自身版本 | `entertainment-complex-management` / `0.1.0` |
+| lockfileVersion | 协议 | `3` |
+| documentVersion | 非 npm 协议；文件自身版本 | `V0.02`；Arborist `loadVirtual` 与 `npm ci --dry-run` 仍消费该文件 |
+| requires | v3 兼容旗标 | `true` |
+| packages[""] | 根清单镜像 | name/version/workspaces/devDependencies/engines 与根 `package.json` 对应字段 `deepEqual` |
+| packages["apps/web"] | 工作区清单镜像 | name/version/dependencies/devDependencies 与 `apps/web/package.json` 对应字段 `deepEqual` |
+| packages["node_modules/apps-web"] | 工作区链接 | `{resolved:"apps/web", link:true}`，无 integrity |
+| 其余 packages[*] | 钉扎 tarball | 均 `https://registry.npmjs.org/` + `sha512-` |
+
+### 3.2 声称行为是否实际执行
+
+| 命令 | 真实 exit | 关键输出 | 不得等同 |
+|---|---|---|---|
+| `npm ls --package-lock-only --depth=0` | 0 | 根 `@playwright/test@1.61.0`、`yaml@2.9.0`、`apps-web@0.1.0 -> ./apps/web`、web 直依含 `vitest@4.1.9` | 不等于已安装树等于锁 |
+| `npm ls --package-lock-only --all --omit=optional` | 0 | 仅 UNMET OPTIONAL peer（canvas、msw、browser 包等），无 invalid/extraneous | 可选 peer 缺失不是硬缺陷 |
+| Arborist `loadVirtual` | 成功 | inventory=220，invalid=0，extraneous=0，missing=0，edgesOut=563 | 不验证 SRI 字节、不验证远端 |
+| `npm ci --dry-run --ignore-scripts --offline` | 0 | `added 188 packages, and removed 186 packages` | **不是**安装/构建/测试通过；证明计划可算且当前 `node_modules` ≠ 锁 |
+| `npm ci --dry-run --ignore-scripts` | 0 | 同上 added 188 / removed 186 | 同上 |
+| `npm audit --package-lock-only --ignore-scripts --json` | **1** | moderate=2 high=0 critical=0；仅 `@vitest/mocker` 与 `vitest`，同一 GHSA-82fw-gwwq-j7x9 | 不是 audit 绿 |
+| `npm audit --package-lock-only --ignore-scripts --omit=dev --json` | 0 | total=0 | 只说明公告在 dev 闭包 |
+| `ssri.parse` × 217 | 全部可解析 | 算法全为 sha512 | 未下载 tarball，不声称供应链已验证 |
+| `ssri.checkData(dummy, vitest.integrity)` | matched=false | 错误字节不匹配 | 正向 tarball 核验未做 |
+
+既有 `node_modules` 对照（排除范围，仅消费上下文，不等于锁）：vitest/@vitest/mocker/vite/jsdom 与锁同为 4.1.9/8.0.16/29.1.1；**nanoid 已装 3.3.12 vs 锁 3.3.18；postcss 已装 8.5.15 vs 锁 8.5.23；undici 已装 7.28.0 vs 锁 7.29.0**。
+
+### 3.3 未验证就当真的前提
+
+- 未跑真实 `npm ci`（会写盘安装）。
+- 未跑 `vite build` / `vitest run` / 全量门禁（会扩到他模块并依赖陈旧 node_modules）。
+- 未对 217 个 tarball 做下载后 SRI 比对。
+- 本机 `npm 11.19.0` vs 根清单 `packageManager: npm@10.9.8`：属本机状态，锁协议 v3 仍被 npm 11 消费；不把本机工具链差写成锁缺陷，也不新造「必须 packageManager 一致」门禁。
+- CI `node-version: "22"` 是否精确 ≥22.13.0：属 M005 工作流，本模块只核锁根 `engines.node` = `^22.13.0 \|\| >=24.0.0` 与根清单逐字相等。当前审计进程 node v24.20.0 落在声明内。
+
+---
+
+## 4. 顺从式：18 GEN 逐项
+
+| ID | 适用 | 本次证据 | 新缺陷 |
+|---|---|---|---|
+| GEN-001 必要性与最小性 | 适用 | 锁是 npm ci 钉扎闭包；无重复 packages 键（分词器 DUP_KEYS=0）；嵌套 `@rolldown/pluginutils` 两处同版 1.0.1 是 npm 合法嵌套，Arborist 无 extraneous。ponytail：不删可选平台包或嵌套位。 | 无 |
+| GEN-002 可执行正确性 | 适用 | `npm ls --package-lock-only` exit 0；`npm ci --dry-run` 能出计划 exit 0。删 vitest 条目后 `npm ci --dry-run --offline` **exit 1** `EUSAGE`「Missing: vitest@4.1.10 from lock file」。 | 无 |
+| GEN-003 测试有效性 | 适用（本文件无测试） | 模块内无测试文件。用 npm 原生 ci/ls/audit/ssri 作可失败断言。不新增 TDD 文件。测试通过本身不替代锁证据。 | 无 |
+| GEN-004 信任边界 | 适用 | 217 resolved 全 HTTPS npmjs；无 git/file/http。GHSA 信任边界见 §6：公开 mocker WS 未在当前入口注册。 | 无新队列项 |
+| GEN-005 授权与最小权限 | 弱适用 | 锁不含主体/对象授权。`hasInstallScript` 仅 darwin `fsevents`；CI 已 `--ignore-scripts`。 | 无 |
+| GEN-006 数据完整性 | 适用 | 217 sha512 可 parse；工作区链接无 SRI 符合 v3。根/web 清单镜像一致。 | 无 |
+| GEN-007 并发与幂等 | 弱适用 | 静态 JSON。npm ci 是按锁重装，不是业务幂等。 | 无 |
+| GEN-008 接口与模式一致性 | 适用 | 根/web 清单与锁镜像字段一致。应用 version 0.1.0 ≠ documentVersion V0.02。无第二套 lock。 | 无 |
+| GEN-009 错误处理 | 适用 | 缺条目/错版本：npm ci EUSAGE exit 1。清单多 lodash：offline `ENOTCACHED` exit 1。失败显式。 | 无 |
+| GEN-010 安全与敏感信息 | 适用 | 无明文秘密。当前 audit 仅 GHSA-82fw-gwwq-j7x9（CWE-22，medium，CVE-2026-84373）。nanoid/postcss/undici **不在**本次 audit 结果。锁内无 `apps/api`/`fastify`/`prisma`/`sqlite`。见 §6。 | 登记于既有 M004-007，不新开队列 |
+| GEN-011 可观测 | 适用 | audit JSON、ls、Arborist 输出可复核。不把 dry-run 写成已安装。 | 无 |
+| GEN-012 资源边界 | 适用 | 34 optional、28 带 os/cpu；本机 linux x64 glibc，锁含 `lightningcss-linux-x64-gnu` 与 `@rolldown/binding-linux-x64-gnu`。无 libc 字段。 | 无 |
+| GEN-013 构建配置与依赖 | 主适用 | 锁可被 npm ci 计划；版本与直依范围 semver.satisfies（naive 解析曾误报 pluginutils，Arborist 与 `apps/web/node_modules/@rolldown/pluginutils@1.0.1` 证明边有效）。 | 无 |
+| GEN-014 数据库迁移 | 不适用 | 无 SQL/迁移。 | 无 |
+| GEN-015 界面可用性 | 不适用 | 无 UI 文案。antd/react 只作为依赖名。 | 无 |
+| GEN-016 文档可验证性 | 适用 | `documentVersion` V0.02、3321 行、SHA `d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef` 与 findings 当前源 SHA 一致。不把计划或旧 322 PASS 写成当前事实。 | 无 |
+| GEN-017 业务来源分类 | 适用 | 全文件走冲突→细化→技术性→添加：三 HTML 无 npm 锁句且无矛盾 → 非冲突；无 HTML 上位条目 → 非细化；无业务实体/枚举/权限发明 → **技术性**。 | 无 |
+| GEN-018 第一性原理证据 | 适用 | 结论落到命令输出、npm 规范行为、GHSA 原文。不引用旧席结论当依据。 | 无 |
+
+---
+
+## 5. 对抗式（grilling 自问 + 原生反例）
+
+席内问题与答案：
+
+1. 是否用 B1/B2 PASS 代替 B5？否。本席重读锁、重跑 audit/ls/ci-dry/Arborist/ssri，并独立取 GHSA。
+2. 是否宣称 audit 绿/公告误报/永不可触发？否。audit exit 1 属实；公告版本命中 4.1.9 属实。
+3. 是否凭标题自造「必须升级才 PASS」门禁？否。铁律 6：首跑是否撞上。
+4. `vite --host 0.0.0.0` 是否单独等于触发通道？否。缺 mockerPlugin/interceptorPlugin 注册。
+5. `node_modules` 旧 nanoid/postcss/undici 是否证明锁坏？否。那是已装树漂移，排除范围。
+
+构造反例（`/tmp/m004-adv-run` 副本，正本未改）：
+
+| 反例 | 工具 | 结果 |
+|---|---|---|
+| 删除 `packages["node_modules/vitest"]` | `npm ci --dry-run --offline` | exit 1，`EUSAGE`，`Missing: vitest@4.1.10 from lock file`（npm 按 `^4.1.9` 解析到 4.1.10 后发现锁不同步） |
+| 将 vitest.version 改为 `0.0.0` | 同上 | exit 1（同样走 EUSAGE 同步失败） |
+| `apps/web/package.json` 增加 `lodash` | 同上 | exit 1，`ENOTCACHED` 请求 registry.npmjs.org/lodash |
+| 仅改锁内 `packages["apps/web"].dependencies.react` 为 `^18.0.0`（package.json 仍 ^19） | 同上 | **dry-run exit 0**。说明 npm ci 同步检查看的是清单与锁能否解出同一树，不是只比对该字符串；当前 `node_modules/react` 仍为 19.2.7。不把 dry-run 写成「范围字符串已校验」 |
+| dummy 字节 vs vitest SRI | `ssri.checkData` | matched=false |
+| `ssri.parse("not-an-sri")` | ssri 13.0.1 | 返回 null，不抛。不能只 parse  junk 当验证 |
+| Arborist loadVirtual 对错版本/缺 SRI/http resolved | loadVirtual | **不标 invalid**。虚拟加载不是完整性门禁；完整性靠 ci 抽取与 ssri |
+
+当前 vitest 发行包 `node_modules/vitest/dist/**/*.js` 对 `interceptorPlugin`/`mockerPlugin` **零引用**；只从 `@vitest/mocker/node` 引入 `hoistMocksPlugin`/`automockPlugin`。`apps/web` 源码对 `@vitest/mocker`、`mockerPlugin`、`interceptorPlugin`、browser 配置 **rg 无匹配**。`vite.config.ts` / `vitest.config.ts` 插件均为 `react()`，environment=`jsdom`。
+
+---
+
+## 6. GHSA-82fw-gwwq-j7x9 独立判断（GEN-004/010/013 + 铁律 6）
+
+主来源已获取（HTTP 200）：
+
+- HTML：`https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9` 标题「Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock」
+- API：`https://api.github.com/advisories/GHSA-82fw-gwwq-j7x9` → GHSA-82fw-gwwq-j7x9，CVE-2026-84373，severity medium，CVSS 5.9 `AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N`，CWE-22
+- 受影响：`@vitest/mocker` 与 `vitest` `>=2.1.0 <4.1.11`（另有 5.x 预发布区间）。修补 4.1.11
+- 锁内版本：`node_modules/@vitest/mocker` 4.1.9（L1121–1147）、`node_modules/vitest` 4.1.9（L3132–3221）**命中**
+- 公告原文要点：`interceptorPlugin` 的 `load` 对 `mock.type==='redirect'` 执行 `readFile(mock.redirect)`；公开 `mockerPlugin`/`interceptorPlugin` 把处理函数挂在 **未认证** Vite HMR WebSocket `vitest:interceptor:register`。Vitest browser 模式走 token RPC。开发服务器默认 localhost；需 `server.host`/`0.0.0.0` 才网络可达。这是开发服务器问题。
+
+本仓库当前入口：
+
+- `apps/web/package.json` `dev` = `vite --host 0.0.0.0 --port 5173`（会暴露 Vite，但插件只有 react）
+- `test:unit` = `vitest run`（jsdom，无 browser）
+- 测试用 `vi.mocked`，无 redirect mock 注册
+- 已装 4.1.9 的 `node.js` 含公告所述 `readFile(mock.redirect)` 与 `server.ws.on("vitest:interceptor:register")`，但 **vitest CLI 未装配该插件**
+
+铁律 6：首次正常跑会撞上吗？`npm ci`、`vitest run`、`vite --host 0.0.0.0`（现配置）都不会挂上该 WS 注册通道。要触发需再注册公开 mocker 插件或打开 browser 模式——不是首跑必撞。因此 **不把「必须升级到 4.1.11」写成工程缺陷=是/修复队列=是**。
+
+同时：不能写 npm audit 全绿；不能写公告误报；不能写永远不可触发；将来若接线 mockerPlugin/browser，不在本次批准范围。与定稿 M004-007 处置一致，但是 **本次独立证据**，不是抄 B2。
+
+`fixAvailable: true` 不构成必须本轮升级。升级会改锁内 vitest 家族多个包，属修复动作，B5 禁止。
+
+---
+
+## 7. 四分类
+
+顺序：冲突 → 细化 → 技术性 → 添加。
+
+- **冲突**：三 HTML 无 npm/锁表述，锁也未发明票种/权限/枚举。无冲突。用户 B/C 原意不重判。
+- **细化**：无具体 HTML 上位条目。
+- **技术性**：全 220 条均为安装/构建/测试/运行闭包，无业务发明。理由见覆盖表末列。不要求每行 HTML 锚点。
+- **添加**：无。
+
+全局 html-ledger-sync/entry-anchors 红属 M425/M427 等，不证明本锁坏，也不因本模块 PASS 称全仓/发布绿。本模块不为刷绿改 CSV/HTML，不重开 M001–M003。
+
+---
+
+## 8. 连续 3321 行覆盖
+
+`wc -l` = 3321；`git ls-files -z -- package-lock.json | xargs -0 cat | wc -l` = 3321；文件以换行结束。SHA256 `d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef`，114258 字节。
+
+| 行号 | 内容 |
+|---|---|
+| 1–6 | `{` / name / version / lockfileVersion 3 / documentVersion V0.02 / requires |
+| 7 | `"packages": {` |
+| 8–21 | 根 `""` |
+| 22–44 | `apps/web` |
+| 45–3319 | 其余 218 条 packages（见下表起止） |
+| 3320 | `packages` 闭 `}` |
+| 3321 | 根闭 `}` |
+
+下表 yaml 行曾把 3320–3321 划进末条止行（分词器「下一起始-1」），**yaml 正文实际 3304–3319**。全文件无未覆盖行。无重复键。顶层键仅 `name,version,lockfileVersion,documentVersion,requires,packages`。无顶层旧式 `dependencies` 树。
+
+结构段已通读：头、根与 web 镜像、嵌套 plugin-react、rolldown 平台 optional、vitest/mocker、nanoid 3.3.18、postcss 8.5.23、undici 7.29.0、antd/react、jsdom、lightningcss 平台包、rc-*、收尾 yaml。其余条目由 JSON 全字段遍历 + 行号表覆盖，不是只计数。
+
+---
+
+## 9. 全部 220 条技术分类覆盖表
+
+列：起、止、行数、类、路径、版本、标志、平台、许可证、声明边数、完整性、字段、技术性理由。  
+完整性：217 个 tarball 为 sha512 可解析；ROOT/WORKSPACE_PACKAGE/WORKSPACE_LINK 协议不要求 SRI（链接行 resolved=`apps/web`）。  
+类计数：ROOT 1 + WORKSPACE_PACKAGE 1 + WORKSPACE_LINK 1 + NESTED 6 + HOISTED 211 = 220。
+
+| 起 | 止 | 行数 | 类 | 路径 | 版本 | 标志 | 平台 | 许可证 | 边 | 完整性 | 字段 | 技术性理由 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|8|21|14|ROOT|(root)|0.1.0|-|-|-|2|SRI|name\|version\|workspaces\|devDependencies\|engines|npm 工作区根安装元数据镜像，供 npm ci 对齐根 package.json|
+|22|44|23|WORKSPACE_PACKAGE|apps/web|0.1.0|-|-|-|15|SRI|name\|version\|dependencies\|devDependencies|apps/web 工作区清单镜像，供 npm ci 对齐 web package.json|
+|45|51|7|NESTED|apps/web/node_modules/@rolldown/pluginutils|1.0.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|嵌套安装位，避免版本冲突；安装/构建/测试闭包所需|
+|52|77|26|NESTED|apps/web/node_modules/@vitejs/plugin-react|6.0.2|dev|-|MIT|4|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines\|peerDependencies\|peerDependenciesMeta|嵌套安装位，避免版本冲突；安装/构建/测试闭包所需|
+|78|84|7|HOISTED|node_modules/@adobe/css-tools|4.5.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|85|93|9|HOISTED|node_modules/@ant-design/colors|7.2.1|-|-|MIT|1|SRI|version\|resolved\|integrity\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|94|112|19|HOISTED|node_modules/@ant-design/cssinjs|1.24.0|-|-|MIT|9|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|113|127|15|HOISTED|node_modules/@ant-design/cssinjs-utils|1.1.3|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|128|139|12|HOISTED|node_modules/@ant-design/fast-color|2.0.6|-|-|MIT|1|SRI|version\|resolved\|integrity\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|140|159|20|HOISTED|node_modules/@ant-design/icons|5.6.1|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|160|165|6|HOISTED|node_modules/@ant-design/icons-svg|4.4.2|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|166|181|16|HOISTED|node_modules/@ant-design/react-slick|1.1.2|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|182|198|17|HOISTED|node_modules/@asamuzakjp/css-color|5.1.11|dev|-|MIT|5|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|199|215|17|HOISTED|node_modules/@asamuzakjp/dom-selector|7.1.1|dev|-|MIT|5|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|216|225|10|HOISTED|node_modules/@asamuzakjp/generational-cache|1.0.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|226|232|7|HOISTED|node_modules/@asamuzakjp/nwsapi|2.3.9|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|233|248|16|HOISTED|node_modules/@babel/code-frame|7.29.7|dev,peer|-|MIT|3|SRI|version\|resolved\|integrity\|dev\|license\|peer\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|249|259|11|HOISTED|node_modules/@babel/helper-validator-identifier|7.29.7|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|260|268|9|HOISTED|node_modules/@babel/runtime|7.29.7|-|-|MIT|0|SRI|version\|resolved\|integrity\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|269|281|13|HOISTED|node_modules/@bramus/specificity|2.4.2|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|282|301|20|HOISTED|node_modules/@csstools/color-helpers|6.0.2|dev|-|MIT-0|0|SRI|version\|resolved\|integrity\|dev\|funding\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|302|325|24|HOISTED|node_modules/@csstools/css-calc|3.2.1|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|funding\|license\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|326|353|28|HOISTED|node_modules/@csstools/css-color-parser|4.1.7|dev|-|MIT|4|SRI|version\|resolved\|integrity\|dev\|funding\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|354|376|23|HOISTED|node_modules/@csstools/css-parser-algorithms|4.0.0|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|funding\|license\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|377|401|25|HOISTED|node_modules/@csstools/css-syntax-patches-for-csstree|1.1.5|dev|-|MIT-0|1|SRI|version\|resolved\|integrity\|dev\|funding\|license\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|402|421|20|HOISTED|node_modules/@csstools/css-tokenizer|4.0.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|funding\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|422|433|12|HOISTED|node_modules/@emnapi/core|1.10.0|dev,opt|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|optional\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|434|444|11|HOISTED|node_modules/@emnapi/runtime|1.10.0|dev,opt|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|optional\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|445|455|11|HOISTED|node_modules/@emnapi/wasi-threads|1.2.1|dev,opt|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|optional\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|456|461|6|HOISTED|node_modules/@emotion/hash|0.8.0|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|462|467|6|HOISTED|node_modules/@emotion/unitless|0.7.5|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|468|485|18|HOISTED|node_modules/@exodus/bytes|1.15.1|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|engines\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|486|492|7|HOISTED|node_modules/@jridgewell/sourcemap-codec|1.5.5|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|493|511|19|HOISTED|node_modules/@napi-rs/wasm-runtime|1.1.5|dev,opt|-|MIT|3|SRI|version\|resolved\|integrity\|dev\|license\|optional\|dependencies\|funding\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|512|521|10|HOISTED|node_modules/@oxc-project/types|0.133.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|522|537|16|HOISTED|node_modules/@playwright/test|1.61.0|dev|-|Apache-2.0|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|538|549|12|HOISTED|node_modules/@rc-component/async-validator|5.1.0|-|-|MIT|1|SRI|version\|resolved\|integrity\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|550|565|16|HOISTED|node_modules/@rc-component/color-picker|2.0.1|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|566|579|14|HOISTED|node_modules/@rc-component/context|1.4.0|-|-|MIT|4|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|580|591|12|HOISTED|node_modules/@rc-component/mini-decimal|1.1.3|-|-|MIT|1|SRI|version\|resolved\|integrity\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|592|609|18|HOISTED|node_modules/@rc-component/mutate-observer|1.1.0|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|610|627|18|HOISTED|node_modules/@rc-component/portal|1.1.2|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|628|643|16|HOISTED|node_modules/@rc-component/qrcode|1.1.1|-|-|MIT|3|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|644|663|20|HOISTED|node_modules/@rc-component/tour|1.15.1|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|664|684|21|HOISTED|node_modules/@rc-component/trigger|2.3.1|-|-|MIT|8|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|685|701|17|HOISTED|node_modules/@rolldown/binding-android-arm64|1.0.3|dev,opt|os=android;cpu=arm64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|702|718|17|HOISTED|node_modules/@rolldown/binding-darwin-arm64|1.0.3|dev,opt|os=darwin;cpu=arm64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|719|735|17|HOISTED|node_modules/@rolldown/binding-darwin-x64|1.0.3|dev,opt|os=darwin;cpu=x64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|736|752|17|HOISTED|node_modules/@rolldown/binding-freebsd-x64|1.0.3|dev,opt|os=freebsd;cpu=x64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|753|769|17|HOISTED|node_modules/@rolldown/binding-linux-arm-gnueabihf|1.0.3|dev,opt|os=linux;cpu=arm|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|770|786|17|HOISTED|node_modules/@rolldown/binding-linux-arm64-gnu|1.0.3|dev,opt|os=linux;cpu=arm64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|787|803|17|HOISTED|node_modules/@rolldown/binding-linux-arm64-musl|1.0.3|dev,opt|os=linux;cpu=arm64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|804|820|17|HOISTED|node_modules/@rolldown/binding-linux-ppc64-gnu|1.0.3|dev,opt|os=linux;cpu=ppc64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|821|837|17|HOISTED|node_modules/@rolldown/binding-linux-s390x-gnu|1.0.3|dev,opt|os=linux;cpu=s390x|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|838|854|17|HOISTED|node_modules/@rolldown/binding-linux-x64-gnu|1.0.3|dev,opt|os=linux;cpu=x64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|855|871|17|HOISTED|node_modules/@rolldown/binding-linux-x64-musl|1.0.3|dev,opt|os=linux;cpu=x64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|872|888|17|HOISTED|node_modules/@rolldown/binding-openharmony-arm64|1.0.3|dev,opt|os=openharmony;cpu=arm64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|889|907|19|HOISTED|node_modules/@rolldown/binding-wasm32-wasi|1.0.3|dev,opt|cpu=wasm32|MIT|3|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|908|924|17|HOISTED|node_modules/@rolldown/binding-win32-arm64-msvc|1.0.3|dev,opt|os=win32;cpu=arm64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|925|941|17|HOISTED|node_modules/@rolldown/binding-win32-x64-msvc|1.0.3|dev,opt|os=win32;cpu=x64|MIT|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|942|948|7|HOISTED|node_modules/@standard-schema/spec|1.1.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|949|969|21|HOISTED|node_modules/@testing-library/dom|10.4.1|dev,peer|-|MIT|8|SRI|version\|resolved\|integrity\|dev\|license\|peer\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|970|989|20|HOISTED|node_modules/@testing-library/jest-dom|6.9.1|dev|-|MIT|6|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|990|996|7|NESTED|node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api|0.6.3|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|嵌套安装位，避免版本冲突；安装/构建/测试闭包所需|
+|997|1024|28|HOISTED|node_modules/@testing-library/react|16.3.2|dev|-|MIT|6|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1025|1038|14|HOISTED|node_modules/@testing-library/user-event|14.6.1|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1039|1049|11|HOISTED|node_modules/@tybys/wasm-util|0.10.2|dev,opt|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|optional\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1050|1057|8|HOISTED|node_modules/@types/aria-query|5.0.4|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1058|1068|11|HOISTED|node_modules/@types/chai|5.2.3|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1069|1075|7|HOISTED|node_modules/@types/deep-eql|4.0.2|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1076|1082|7|HOISTED|node_modules/@types/estree|1.0.9|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1083|1092|10|HOISTED|node_modules/@types/react|19.2.16|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1093|1102|10|HOISTED|node_modules/@types/react-dom|19.2.3|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1103|1120|18|HOISTED|node_modules/@vitest/expect|4.1.9|dev|-|MIT|6|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1121|1147|27|HOISTED|node_modules/@vitest/mocker|4.1.9|dev|-|MIT|5|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|funding\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1148|1160|13|HOISTED|node_modules/@vitest/pretty-format|4.1.9|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1161|1174|14|HOISTED|node_modules/@vitest/runner|4.1.9|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1175|1190|16|HOISTED|node_modules/@vitest/snapshot|4.1.9|dev|-|MIT|4|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1191|1200|10|HOISTED|node_modules/@vitest/spy|4.1.9|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1201|1215|15|HOISTED|node_modules/@vitest/utils|4.1.9|dev|-|MIT|3|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1216|1226|11|HOISTED|node_modules/ansi-regex|5.0.1|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1227|1240|14|HOISTED|node_modules/ansi-styles|5.2.0|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1241|1305|65|HOISTED|node_modules/antd|5.29.3|-|-|MIT|51|SRI|version\|resolved\|integrity\|license\|dependencies\|funding\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1306|1309|4|WORKSPACE_LINK|node_modules/apps-web|-|link|-|-|0|SRI|resolved\|link|npm 工作区符号链接记录，无 tarball/SRI 属 lockfile v3 协议|
+|1310|1319|10|HOISTED|node_modules/aria-query|5.3.0|dev|-|Apache-2.0|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1320|1329|10|HOISTED|node_modules/assertion-error|2.0.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1330|1339|10|HOISTED|node_modules/bidi-js|1.0.3|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1340|1349|10|HOISTED|node_modules/chai|6.2.2|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1350|1355|6|HOISTED|node_modules/classnames|2.5.1|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1356|1361|6|HOISTED|node_modules/compute-scroll-into-view|3.1.1|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1362|1368|7|HOISTED|node_modules/convert-source-map|2.0.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1369|1377|9|HOISTED|node_modules/copy-to-clipboard|3.3.3|-|-|MIT|1|SRI|version\|resolved\|integrity\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1378|1391|14|HOISTED|node_modules/css-tree|3.2.1|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1392|1398|7|HOISTED|node_modules/css.escape|1.5.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1399|1404|6|HOISTED|node_modules/csstype|3.2.3|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1405|1418|14|HOISTED|node_modules/data-urls|7.0.0|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1419|1424|6|HOISTED|node_modules/dayjs|1.11.21|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1425|1431|7|HOISTED|node_modules/decimal.js|10.6.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1432|1441|10|HOISTED|node_modules/dequal|2.0.3|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1442|1451|10|HOISTED|node_modules/detect-libc|2.1.2|dev|-|Apache-2.0|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1452|1459|8|HOISTED|node_modules/dom-accessibility-api|0.5.16|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1460|1472|13|HOISTED|node_modules/entities|8.0.0|dev|-|BSD-2-Clause|0|SRI|version\|resolved\|integrity\|dev\|license\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1473|1479|7|HOISTED|node_modules/es-module-lexer|2.1.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1480|1489|10|HOISTED|node_modules/estree-walker|3.0.3|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1490|1499|10|HOISTED|node_modules/expect-type|1.3.0|dev|-|Apache-2.0|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1500|1517|18|HOISTED|node_modules/fdir|6.5.0|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|engines\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1518|1532|15|HOISTED|node_modules/fsevents|2.3.3|dev,opt,install|os=darwin|MIT|0|SRI|version\|resolved\|integrity\|dev\|hasInstallScript\|license\|optional\|os\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1533|1545|13|HOISTED|node_modules/html-encoding-sniffer|6.0.0|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1546|1555|10|HOISTED|node_modules/indent-string|4.0.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1556|1562|7|HOISTED|node_modules/is-potential-custom-element-name|1.0.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1563|1570|8|HOISTED|node_modules/js-tokens|4.0.0|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1571|1611|41|HOISTED|node_modules/jsdom|29.1.1|dev|-|MIT|22|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1612|1620|9|HOISTED|node_modules/json2mq|0.2.0|-|-|MIT|1|SRI|version\|resolved\|integrity\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1621|1650|30|HOISTED|node_modules/lightningcss|1.32.0|dev|-|MPL-2.0|12|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines\|funding\|optionalDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1651|1671|21|HOISTED|node_modules/lightningcss-android-arm64|1.32.0|dev,opt|os=android;cpu=arm64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1672|1692|21|HOISTED|node_modules/lightningcss-darwin-arm64|1.32.0|dev,opt|os=darwin;cpu=arm64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1693|1713|21|HOISTED|node_modules/lightningcss-darwin-x64|1.32.0|dev,opt|os=darwin;cpu=x64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1714|1734|21|HOISTED|node_modules/lightningcss-freebsd-x64|1.32.0|dev,opt|os=freebsd;cpu=x64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1735|1755|21|HOISTED|node_modules/lightningcss-linux-arm-gnueabihf|1.32.0|dev,opt|os=linux;cpu=arm|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1756|1776|21|HOISTED|node_modules/lightningcss-linux-arm64-gnu|1.32.0|dev,opt|os=linux;cpu=arm64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1777|1797|21|HOISTED|node_modules/lightningcss-linux-arm64-musl|1.32.0|dev,opt|os=linux;cpu=arm64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1798|1818|21|HOISTED|node_modules/lightningcss-linux-x64-gnu|1.32.0|dev,opt|os=linux;cpu=x64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1819|1839|21|HOISTED|node_modules/lightningcss-linux-x64-musl|1.32.0|dev,opt|os=linux;cpu=x64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1840|1860|21|HOISTED|node_modules/lightningcss-win32-arm64-msvc|1.32.0|dev,opt|os=win32;cpu=arm64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1861|1881|21|HOISTED|node_modules/lightningcss-win32-x64-msvc|1.32.0|dev,opt|os=win32;cpu=x64|MPL-2.0|0|SRI|version\|resolved\|integrity\|cpu\|dev\|license\|optional\|os\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1882|1891|10|HOISTED|node_modules/lru-cache|11.5.1|dev|-|BlueOak-1.0.0|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1892|1902|11|HOISTED|node_modules/lz-string|1.5.0|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer\|bin|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1903|1912|10|HOISTED|node_modules/magic-string|0.30.21|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1913|1919|7|HOISTED|node_modules/mdn-data|2.27.1|dev|-|CC0-1.0|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1920|1929|10|HOISTED|node_modules/min-indent|1.0.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1930|1948|19|HOISTED|node_modules/nanoid|3.3.18|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|funding\|license\|bin\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1949|1962|14|HOISTED|node_modules/obug|2.1.3|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|funding\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1963|1975|13|HOISTED|node_modules/parse5|8.0.1|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1976|1982|7|HOISTED|node_modules/pathe|2.0.3|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1983|1989|7|HOISTED|node_modules/picocolors|1.1.1|dev|-|ISC|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|1990|2002|13|HOISTED|node_modules/picomatch|4.0.4|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2003|2021|19|HOISTED|node_modules/playwright|1.61.0|dev|-|Apache-2.0|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin\|engines\|optionalDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2022|2034|13|HOISTED|node_modules/playwright-core|1.61.0|dev|-|Apache-2.0|0|SRI|version\|resolved\|integrity\|dev\|license\|bin\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2035|2049|15|NESTED|node_modules/playwright/node_modules/fsevents|2.3.2|dev,opt,install|os=darwin|MIT|0|SRI|version\|resolved\|integrity\|dev\|hasInstallScript\|license\|optional\|os\|engines|嵌套安装位，避免版本冲突；安装/构建/测试闭包所需|
+|2050|2078|29|HOISTED|node_modules/postcss|8.5.23|dev|-|MIT|3|SRI|version\|resolved\|integrity\|dev\|funding\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2079|2094|16|HOISTED|node_modules/pretty-format|27.5.1|dev,peer|-|MIT|3|SRI|version\|resolved\|integrity\|dev\|license\|peer\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2095|2102|8|NESTED|node_modules/pretty-format/node_modules/react-is|17.0.2|dev,peer|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|peer|嵌套安装位，避免版本冲突；安装/构建/测试闭包所需|
+|2103|2112|10|HOISTED|node_modules/punycode|2.3.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2113|2121|9|HOISTED|node_modules/qrcode.react|4.2.0|-|-|ISC|1|SRI|version\|resolved\|integrity\|license\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2122|2138|17|HOISTED|node_modules/rc-cascader|3.34.0|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2139|2153|15|HOISTED|node_modules/rc-checkbox|3.5.0|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2154|2169|16|HOISTED|node_modules/rc-collapse|3.9.0|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2170|2186|17|HOISTED|node_modules/rc-dialog|9.6.0|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2187|2203|17|HOISTED|node_modules/rc-drawer|7.3.0|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2204|2219|16|HOISTED|node_modules/rc-dropdown|4.2.1|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2220|2237|18|HOISTED|node_modules/rc-field-form|2.7.1|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2238|2255|18|HOISTED|node_modules/rc-image|7.12.0|-|-|MIT|8|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2256|2270|15|HOISTED|node_modules/rc-input|1.8.0|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2271|2287|17|HOISTED|node_modules/rc-input-number|9.5.0|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2288|2306|19|HOISTED|node_modules/rc-mentions|2.20.0|-|-|MIT|9|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2307|2324|18|HOISTED|node_modules/rc-menu|9.16.1|-|-|MIT|8|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2325|2339|15|HOISTED|node_modules/rc-motion|2.9.5|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2340|2358|19|HOISTED|node_modules/rc-notification|5.6.4|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2359|2374|16|HOISTED|node_modules/rc-overflow|1.5.0|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2375|2389|15|HOISTED|node_modules/rc-pagination|5.1.0|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2390|2428|39|HOISTED|node_modules/rc-picker|4.11.3|-|-|MIT|12|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2429|2443|15|HOISTED|node_modules/rc-progress|4.0.0|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2444|2461|18|HOISTED|node_modules/rc-rate|2.13.1|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2462|2477|16|HOISTED|node_modules/rc-resize-observer|1.4.3|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2478|2493|16|HOISTED|node_modules/rc-segmented|2.7.1|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2494|2515|22|HOISTED|node_modules/rc-select|14.16.8|-|-|MIT|9|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2516|2533|18|HOISTED|node_modules/rc-slider|11.1.9|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2534|2551|18|HOISTED|node_modules/rc-steps|6.0.1|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2552|2566|15|HOISTED|node_modules/rc-switch|4.1.0|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2567|2587|21|HOISTED|node_modules/rc-table|7.54.0|-|-|MIT|8|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2588|2609|22|HOISTED|node_modules/rc-tabs|15.7.0|-|-|MIT|9|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2610|2626|17|HOISTED|node_modules/rc-textarea|1.10.2|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2627|2642|16|HOISTED|node_modules/rc-tooltip|6.4.0|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2643|2662|20|HOISTED|node_modules/rc-tree|5.13.1|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2663|2679|17|HOISTED|node_modules/rc-tree-select|5.27.0|-|-|MIT|7|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2680|2694|15|HOISTED|node_modules/rc-upload|4.11.0|-|-|MIT|5|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2695|2708|14|HOISTED|node_modules/rc-util|5.44.4|-|-|MIT|4|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2709|2727|19|HOISTED|node_modules/rc-virtual-list|3.19.2|-|-|MIT|6|SRI|version\|resolved\|integrity\|license\|dependencies\|engines\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2728|2736|9|HOISTED|node_modules/react|19.2.7|-|-|MIT|0|SRI|version\|resolved\|integrity\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2737|2748|12|HOISTED|node_modules/react-dom|19.2.7|-|-|MIT|2|SRI|version\|resolved\|integrity\|license\|dependencies\|peerDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2749|2754|6|HOISTED|node_modules/react-is|18.3.1|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2755|2768|14|HOISTED|node_modules/redent|3.0.0|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2769|2778|10|HOISTED|node_modules/require-from-string|2.0.2|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2779|2784|6|HOISTED|node_modules/resize-observer-polyfill|1.5.1|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2785|2818|34|HOISTED|node_modules/rolldown|1.0.3|dev|-|MIT|17|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin\|engines\|optionalDependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2819|2825|7|NESTED|node_modules/rolldown/node_modules/@rolldown/pluginutils|1.0.1|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|嵌套安装位，避免版本冲突；安装/构建/测试闭包所需|
+|2826|2838|13|HOISTED|node_modules/saxes|6.0.0|dev|-|ISC|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2839|2844|6|HOISTED|node_modules/scheduler|0.27.0|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2845|2853|9|HOISTED|node_modules/scroll-into-view-if-needed|3.1.0|-|-|MIT|1|SRI|version\|resolved\|integrity\|license\|dependencies|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2854|2860|7|HOISTED|node_modules/siginfo|2.0.0|dev|-|ISC|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2861|2870|10|HOISTED|node_modules/source-map-js|1.2.1|dev|-|BSD-3-Clause|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2871|2877|7|HOISTED|node_modules/stackback|0.0.2|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2878|2884|7|HOISTED|node_modules/std-env|4.1.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2885|2890|6|HOISTED|node_modules/string-convert|0.2.1|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2891|2903|13|HOISTED|node_modules/strip-indent|3.0.0|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2904|2909|6|HOISTED|node_modules/stylis|4.4.0|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2910|2916|7|HOISTED|node_modules/symbol-tree|3.2.4|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2917|2925|9|HOISTED|node_modules/throttle-debounce|5.0.2|-|-|MIT|0|SRI|version\|resolved\|integrity\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2926|2932|7|HOISTED|node_modules/tinybench|2.9.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2933|2942|10|HOISTED|node_modules/tinyexec|1.2.4|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2943|2959|17|HOISTED|node_modules/tinyglobby|0.2.17|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2960|2969|10|HOISTED|node_modules/tinyrainbow|3.1.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2970|2982|13|HOISTED|node_modules/tldts|7.4.3|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2983|2989|7|HOISTED|node_modules/tldts-core|7.4.3|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2990|2995|6|HOISTED|node_modules/toggle-selection|1.0.6|-|-|MIT|0|SRI|version\|resolved\|integrity\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|2996|3008|13|HOISTED|node_modules/tough-cookie|6.0.1|dev|-|BSD-3-Clause|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3009|3021|13|HOISTED|node_modules/tr46|6.0.0|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3022|3029|8|HOISTED|node_modules/tslib|2.8.1|dev,opt|-|0BSD|0|SRI|version\|resolved\|integrity\|dev\|license\|optional|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3030|3043|14|HOISTED|node_modules/typescript|5.9.3|dev|-|Apache-2.0|0|SRI|version\|resolved\|integrity\|dev\|license\|bin\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3044|3053|10|HOISTED|node_modules/undici|7.29.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3054|3131|78|HOISTED|node_modules/vite|8.0.16|dev|-|MIT|18|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin\|engines\|funding\|optionalDependencies\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3132|3221|90|HOISTED|node_modules/vitest|4.1.9|dev|-|MIT|32|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin\|engines\|funding\|peerDependencies\|peerDependenciesMeta|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3222|3234|13|HOISTED|node_modules/w3c-xmlserializer|5.0.0|dev|-|MIT|1|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3235|3244|10|HOISTED|node_modules/webidl-conversions|8.0.1|dev|-|BSD-2-Clause|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3245|3254|10|HOISTED|node_modules/whatwg-mimetype|5.0.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3255|3269|15|HOISTED|node_modules/whatwg-url|16.0.1|dev|-|MIT|3|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3270|3286|17|HOISTED|node_modules/why-is-node-running|2.3.0|dev|-|MIT|2|SRI|version\|resolved\|integrity\|dev\|license\|dependencies\|bin\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3287|3296|10|HOISTED|node_modules/xml-name-validator|5.0.0|dev|-|Apache-2.0|0|SRI|version\|resolved\|integrity\|dev\|license\|engines|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3297|3303|7|HOISTED|node_modules/xmlchars|2.2.0|dev|-|MIT|0|SRI|version\|resolved\|integrity\|dev\|license|registry 提升安装位，安装/构建/测试/运行闭包所需|
+|3304|3321|18|HOISTED|node_modules/yaml|2.9.0|dev|-|ISC|0|SRI|version\|resolved\|integrity\|dev\|license\|bin\|engines\|funding|registry 提升安装位，安装/构建/测试/运行闭包所需|
+
+### 9.1 图与边（独立计数）
+
+声明边合计 **582** = dependencies 398 + optionalDependencies 28 + peerDependencies 144 + devDependencies 12。  
+peer 中 `peerDependenciesMeta.optional=true`：**37** 条（含 vitest browser/coverage/ui、vite 预处理器、rc-picker 日期库、canvas、msw 等）。其中 jsdom/vite/yaml/dayjs/`@types/react` 等由直依或他边满足；npm ls 仍列出 UNMET OPTIONAL，属有效图而非 37 项缺陷。  
+optional 包 34：28 带 os/cpu；6 不带（`@emnapi/core|runtime|wasi-threads`、`@napi-rs/wasm-runtime`、`@tybys/wasm-util`、`tslib`）服务 wasm 可选链。  
+`hasInstallScript`：仅 `fsevents` 与 `playwright/node_modules/fsevents`（os=darwin）。  
+Arborist inventory 220 / invalid 0 / missing 0。
+
+### 9.2 清单镜像
+
+根：name/version/workspaces/devDependencies/engines 一致。根 `documentVersion` V0.01 不进 `packages[""]`；锁顶层 `documentVersion` V0.02。  
+web：name/version/dependencies/devDependencies 一致。
+
+---
+
+## 10. 既有定稿 ID 对照（不凭票通过）
+
+| ID | 本席当场核到的事实 | 工程缺陷 | 队列 |
+|---|---|---|---|
+| M004-001 | nanoid L1930–1948 = 3.3.18；本次 audit 不含 nanoid | 否（当前锁） | 否 |
+| M004-002 | postcss L2050–2078 = 8.5.23，内部 nanoid `^3.3.16`；audit 不含 postcss | 否 | 否 |
+| M004-003 | undici L3044–3053 = 7.29.0；audit 不含 undici | 否 | 否 |
+| M004-004 | 顶层/根/web/link 与清单一致；documentVersion V0.02 | 否 | 否 |
+| M004-005 | 220 条、582 边、116 engines、28 平台约束；Arborist 无 invalid | 否 | 否 |
+| M004-006 | 217 HTTPS+sha512 parse；未下载 tarball | 否 | 否 |
+| M004-007 | audit exit1 moderate2，同一 GHSA；见 §6 | 否（铁律 6） | 否 |
+
+历史 001–003 曾是缺陷并已修出队：本席不改写为「从未存在」。
+
+---
+
+## 11. 本席新 finding
+
+**空集。** 无新 GR 临时号。无未定稿缺陷。无添加项。无 HTML 自身问题需上报暂停。无未答 questions（`questions/` 无 M004 文件）。
+
+不把 GHSA 另开新 ID：与 M004-007 同一公告、同一两包、同一判据。
+
+---
+
+## 12. 实际检查边界 / 未做
+
+已做：锁全字段遍历、行覆盖、清单对照、Arborist loadVirtual、npm ls --package-lock-only、npm ci dry-run（含 offline）、npm audit --package-lock-only、ssri parse/checkData、GHSA HTML+API、vite/vitest 配置与 mocker 发行代码只读、CI yml 锁入口只读、`verify-no-legacy-api-prototype.mjs` 锁消费模式只读。
+
+未做（明确）：真实 `npm ci` 写盘安装；`vite build`/`vitest run`/Maven/Playwright；217 tarball 下载验字节；用 npm 10.9.8 重放（本机 11.19.0）；生产部署。dry-run ≠ 安装/构建/测试通过。
+
+---
+
+## 13. HTML 问题 / 人闸
+
+三 HTML 只读，本模块无 HTML 自身问题，无人闸（无添加询问、无 HTML 改申请、阶段 B 不跑 1.3 未跟踪闸）。
+
+---
+
+## 14. 源前后不变
+
+开工与收工 `package-lock.json` SHA256 均为 `d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef`。根/`apps/web` package.json SHA 亦不变。对抗只在 `/tmp/m004-adv-run`。本席未改仓库源。
+
+---
+
+## 15. 结论
+
+单席 B5：**PASS**。
+
+条件核对：本模块唯一文件有覆盖记录；18 GEN 已逐项核对；三线均执行；声称有命令/原文证据；无未答 questions；无未定稿缺陷；本报告第一行哈希为独立实算。不存在有条件通过。本结论不是模块生命周期 PASS，也不等于全仓/发布绿。

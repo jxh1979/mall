@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文件版本：V0.02
+// 文件版本：V0.03
 // 门禁：三份业务最终解释权 HTML 的引用一律用「条目名」，不得再用行号。
 // 依据：DEC-R8-17（用户 2026-08-06 裁 A：彻底废行号、只留条目名）。
 // 病史：R8 两批 6 轮返工里有 3 轮因行号锚点漂移返工（760 行漂移 → 287 处重建 → +2 位移 19 处漏改）。
@@ -111,7 +111,7 @@ for (const r of rows) {
   if (nameSeen[key]) errors.push(`条目名在同一份 HTML 内重复：${code}「${r.entry_name}」（${nameSeen[key]} 与 ${r.entry_id}）`);
   nameSeen[key] = r.entry_id;
   const entryBody = (r.entry_body || "").replace(/\s+/g, "");
-  if (entryBody && !flat[code].includes(entryBody)) {
+  if (!entryBody || !flat[code].includes(entryBody)) {
     errors.push(`注册表条目正文在 HTML 现文中找不到：${r.entry_id} ${code}「${r.entry_name}」——HTML 已改而注册表未重建`);
   }
   byCode[code].push(r);

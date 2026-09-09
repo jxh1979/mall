@@ -1,9 +1,9 @@
-# 文件版本：V0.01
+# 文件版本：V0.02
 name: predeploy-gates
 # 独立治理门禁(GitHub 侧,与 .160 部署机隔离):PR 到 main 与 push 到 main 时静态跑
 # delivery-gates 快子集(scope 登记/安全基线/后台矩阵/契约/阻断台账),catch 治理漂移。
 # 无需数据库(全静态分析)。因私有库免费版无法设 required status check,此为可见信号 + 独立复现,
-# 硬阻断由 .160 部署脚本的 verify:predeploy 与本地 pre-push 钩子承担。
+# 部署前硬阻断由 .160 部署脚本执行治理门禁；本地 pre-push 仅拦截直接推送 main。
 on:
   pull_request:
     branches: [main]

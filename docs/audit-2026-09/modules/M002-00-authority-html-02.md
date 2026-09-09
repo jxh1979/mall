@@ -1,3 +1,28 @@
+# M002 — 业务需求正本／需求HTML／第2段
+版本：V0.02
+
+当前状态：PASS。当前471模块计划、控制V0.17；M001保持PASS。两席完整B5-r2均PASS，根读取Grok完整311行并校验四值相等后，已先将ledger V1.61的M002置PASS，再写本文件；下方旧322模块收口仅保留历史。
+
+## 当前范围与结果
+唯一范围：docs/platform-governance-map-for-operations-v0.1.html V0.11，全979行、103015字节，SHA256=c4238afda7385693dc3c9b3e71b26edc05a1cbba1e713a4d1fe830f17bb0e71c。当前main基线242f487233d028173cb9198eecd079f5d877405c。
+18GEN+66PGM共84条，两席三线重新全审，未继承旧同号PASS。当前无新缺陷、添加或HTML修改申请；findings V0.89中M002-001—004队列全否。B1与B2均双PASS后跳B3/B4，本轮无业务文件修改；B3历史累计2、交付失败0保持。
+
+## 当前证据
+| 阶段 | 两席完整证据 |
+|---|---|
+| B1 | self V0.07 L547—833；grok V0.06 L997—1364；979行/84项均PASS，四值全等 |
+| B2 | self V0.08（V0.09接收纠正）、grok V0.07；同一findings V0.88候选SHA256=26afccad7390469169e276b0a91fd15a76d06d700785780a8077fb899614f1d1均PASS；V0.89只记定稿与Grok已实核原因纠正 |
+| B5-r2 self | modules/M002-b5-r2-self-raw.md V0.02，本次L250—529，SHA256=fe6e5079b972b0c2fbaefdd8fea4b5f56d59a4441ee7d2c2fc5cee31039f0abb |
+| B5-r2 grok | modules/M002-b5-r2-grok-raw.md V0.02，本次L281—591，SHA256=73af16a82408c9a07b66dac2fa8c92d56ae0c0b30976e83d97ac854de865aba9；真实exit0 |
+
+B5后四值：实算、sidecar、ledger、Grok本次首行分别均为b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。锁V0.11、LOCK-AMEND-COUNT1未改。旧两份B5前缀完整保留。
+
+## 验证及边界
+根重新全读979行；当前66PGM摘录逐字匹配、84映射无缺无重、66标题来源位置匹配；18导航+13卡片31链接无失效、全部标签闭合、UTF8严格通过、无脚本表单外部依赖。内存坏链接反例可失败；十一端/权限拒绝优先/正负尾差/预算/隐私与状态规则例子实跑通过。金额例子不是后端交易运行，未验证实际数据库、设备、支付或法律合规。
+全局verify:entry-anchors及其回归测试仍exit1，6处全为BSM镜像：A的回访概括与此前M001-012页脚日期（非D的L2注释）；不是PGM问题或旧004复发。两CSV归M425/M427，工具归M008/M415，按计划后续模块处理；本结论不代表全仓门禁绿、全仓审完或已发布。业务HTML、B/C原意、代码、锁均未改，无提交推送部署。
+
+## 历史收口（旧322计划，原文保留）
+
 # M002 — 00-authority-html-02
 版本：V0.01
 

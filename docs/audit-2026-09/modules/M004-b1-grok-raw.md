@@ -869,3 +869,883 @@ T01—T12 逐条落入与首批 B2 相同：004←T01–T04；005←T05–T07、
 修复边界接受：三包官方元数据 + postcss 内 nanoid 范围，以及顶层 `documentVersion: V0.01`（非 npm 协议字段；`version`/`lockfileVersion` 不动）。隔离反例已核，不等于已修。禁止 B3 前再扩队列。未双席定稿前不得实施。
 
 B2 结束。不修复。
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M004 B1 Grok 独立审计报告（当前 471 计划）
+
+- 报告版本：V0.04（本文件既有 V0.01–V0.03 全部字节保留，本次完整 B1 报告追加；自身版本 V0.03→V0.04）
+- 席位：Grok（唯一外审）。不派 subagent，不用 MCP_Codex_160 / MCP_Cloud_160。
+- 步骤：B1 修复前全量审计。本席不修代码、不改方案、不写 findings/ledger/计划/锁/HTML。
+- 模块：M004 — 治理门禁与 CI 基线／配置与工程入口／第2段
+- 控制：160-audit-prompt.md V0.17；runbook V0.02；criteria-lock V0.11；modules.md 当前切分
+- 唯一正本：`/home/james/complex-management` `main`
+- 唯一受审文件：`package-lock.json`（3321 行 / 114258 字节 / OVERSIZE-SINGLE-FILE / 自身 `documentVersion` V0.02）
+- 冻结映射：`criteria-lock.md` L6383 `M004 → [GEN-001 … GEN-018]`，无 HTML 派生 ID
+- ledger 本模块行（只读顶部基准与该行）：`IN_PROGRESS`；历史 B3 累计 1、方案修复 2、交付失败 0，不清零
+- 旧 322 同号报告与本文件 V0.01–V0.03 只作历史，**不继承旧 PASS**
+- 互盲：未读 `M004-b1-self-raw.md`、findings、其他模块收口、本模块旧报告正文；旧 raw 仅取版本元数据以便追加
+- HEAD / origin/main：`242f487233d028173cb9198eecd079f5d877405c`；锁文件 git 干净
+- 锁 SHA256：`d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef`
+
+## 0. 技能预检（V0.17 §6，收窄口径）
+
+| 技能 | 本环境 | 本次用法 |
+|---|---|---|
+| `using-superpowers` | 已读 SKILL.md | 开工技能自检 |
+| `grilling` / `grill-me` | 已读 | 自问自答追问结构；不等操作员、不派子代理（本体提问/第三席条款作废） |
+| `batch-grill-me` | **缺口**：本机 `.claude`/`.agents`/`.codex`/`.grok` 未找到该技能目录 | 记缺口，未冒充调用 |
+| `ubiquitous-language` | 存在（如 `~/.qwen/skills/ubiquitous-language`） | 只收窄术语：锁/packages/integrity/link/optional；**不写** `UBIQUITOUS_LANGUAGE.md` |
+| `codebase-design` | 已读 | 只冻结 general 词表（模块/接口/缝），不改架构、不写额外设计文件 |
+| `diagnosing-bugs` / `systematic-debugging` | 已读 | 只读复现：解析→虚拟树→边有效性；不改代码、不加 instrumentation |
+| `ponytail-review` | 已读 | 只评可删除价值，不实施 |
+| `verification-before-completion` | 已读 | PASS 前只采本轮实跑命令 |
+| `tdd` / `test-driven-development` | 已读 | 纯锁配置、无行为改动，不新增测试文件 |
+| `git-guardrails-claude-code` | 存在 | 本步无 git 写，未启用 |
+| `resolving-merge-conflicts` | 必核清单中 | 无合并冲突，未用 |
+
+明确未用（提示词划掉或本步不适用）：brainstorming/writing-plans（阶段 A）、subagent 类、worktree、research、domain-modeling、ponytail-audit/debt/gain。
+
+## 1. 范围与只读对照（不扩大审计）
+
+`plan/modules.md` L47–56：本模块文件列表仅 `package-lock.json`，有效内容 3321 行，标记 OVERSIZE-SINGLE-FILE。
+为核实锁，只读对照（验证直接依赖，不当作其他模块审计）：
+
+- 根 `package.json`（工作区/引擎/devDependencies/name/version）
+- `apps/web/package.json`（工作区包声明）
+- 本机 `node v24.20.0` / `npm 11.19.0` / linux x64 / glibc 2.39
+- 宿主 Arborist：`/usr/lib/node_modules/npm/node_modules/@npmcli/arborist`（`npm help package-lock-json` + `shrinkwrap.js`）
+- CI 锁入口（只确认消费方式）：`.github/workflows/predeploy-gates.yml` L23 与 `ops/ci/predeploy-gates.yml` L23 `npm ci --ignore-scripts`（文件属 M005/M007，**不审那些文件**）
+- 既有锁扫描工具：`tools/verify-no-legacy-api-prototype.mjs`（读锁文本）
+
+未改任何受审或对照文件。未 `npm install` / `npm ci` 实装 / `npx` / `npm exec`。`npm ls --package-lock-only --offline` 与 Arborist `loadVirtual` 经帮助文本确认只读锁、不写盘；运行前后 `package-lock.json` inode/size/mtime 不变。计算副本仅 `/tmp/m004-lock-analysis.txt`、`/tmp/m004-arborist.txt`、`/tmp/m004-npm-ls.json`。
+
+三份权威 HTML 中「依赖」出现处均为设备依赖/拆分部署/密钥托管等业务语义，**不是 npm 锁**。未能把本文件锚到某一 `td.k`/`h2`/`h3` 作为上位需求，故整文件按 2.1 落到**技术性**（无业务发明 + 无 HTML 冲突）。不把包名推断成新业务需求。已知 BSM1020/1068 原意澄清与本锁无关。全局 html-ledger-sync/entry-anchors 红灯归 M425/M427，本模块不为刷绿改 HTML/CSV，不重开 M001–M003。
+
+## 2. 第一性原理
+
+### 2.1 锁为什么必须存在
+
+`npm help package-lock-json`（类型 3）原文要点：锁是清单的显现；描述恰好生成的树，使同事、部署与 CI 安装同一组依赖；避免把 `node_modules` 提交进库；npm v7+ 的 `packages` 含完整树信息。
+
+删掉本文件：
+
+- 三份 HTML 没有任何一条「必须有 package-lock.json」的明文，因此**答不上 HTML 哪一条会做不到**。
+- 按 2.1 不因此删除：它承载前端工作区的可复现安装（GEN-013），属构建/依赖元数据，无票种/角色/价格/审批等业务发明。
+- CI 已写 `npm ci --ignore-scripts`，无锁则该入口按 npm 文档会失败。这是工程消费事实，不是 HTML 发明。
+
+### 2.2 每类元数据 / 包条目用途
+
+| 字段/类 | 用途（规范原文 + 本文件） | 无效重复？ | 未验证前提 |
+|---|---|---|---|
+| `name` / `version` | 与根 `package.json` 对齐的包标识与应用 SemVer `0.1.0` | 否 | 无 |
+| `lockfileVersion: 3` | npm v9+ 格式，仅 `packages`、无遗留顶层 `dependencies` | 否 | 无 |
+| `documentVersion: V0.02` | **非 npm 协议字段**；本文件自身 Vx.xx。Arborist `this.data = { ...data, ...}` 加载保留；`toJSON` 在 lfv≥3 剔除的是 `dependencies` 不是未知键 | 否 | 不声称它参与安装解析 |
+| `requires: true` | 锁格式兼容字段，Arborist 加载时写回 | 否 | 无 |
+| `packages[""]` / `packages["apps/web"]` | 根与工作区清单镜像（workspaces/engines/deps） | 否 | 无 |
+| `packages["node_modules/apps-web"]` | `link: true` + `resolved: "apps/web"`；规范：link 记录无其它字段 | 否 | 无 |
+| 217 个 registry 记录 | `version` + `resolved`（https://registry.npmjs.org/…tgz）+ `integrity` sha512-SRI | 同名嵌套 4 组是不同路径/版本的合法树，不是无效重复 | **未下载 tarball，未证明远端字节等于 SRI** |
+| `dev` / `optional` / `peer` / `os` / `cpu` | 树角色与平台可选分支 | 否 | 本机未安装非 linux-x64 的 optional，属预期 |
+| `hasInstallScript`（两处 fsevents） | 规范字段；CI 使用 `--ignore-scripts` | 否 | 未在 darwin 实跑安装脚本 |
+
+### 2.3 声称行为是否被执行验证
+
+锁声称：给定此文件，npm 能得到确定虚拟树。
+
+- **已验证（类型 3+4）**：JSON 可解析；lfv=3；220 `packages` 键与源文件分段一一对应；根/工作区声明与两份 `package.json` 全等；Arborist `loadVirtual` 库存 220、出边 582、无 required missing、无 invalid；内存 `toJSON` 仍 220 包且保留 `documentVersion=V0.02`；`npm ls --package-lock-only --offline --all` exit 0、582 节点、`problems=null`；声明范围 semver.satisfies 全通过（根/工作区 17 条直依 + 锁内 438 条 deps/optional/devDep 边）。
+- **未验证、不得伪称**：registry 可达、远端 tarball 字节、`npm ci`/`npm install` 全安装、`npm audit`、Vite/业务测试、`verify:predeploy` 全绿。
+
+### 2.4 未经验证就当真的前提（明示）
+
+1. 安装时 registry.npmjs.org 可返回与 `resolved` 相同的对象 — **本次无网络证明**。
+2. 对象字节的 sha512 等于 `integrity` — **未取回 tarball，只验证了 SRI 语法与 64 字节解码长度（217/217）**。
+3. 磁盘 `node_modules` 等于锁 — **明确不等于**：本机缺 darwin/win/android 等 optional 属正常；另有 `.vite` 缓存与 hidden lock，不作为本锁缺陷。
+4. 未跑构建，不能把虚拟树 PASS 写成构建 PASS。
+
+## 3. 顺从式（18 GEN 逐项）
+
+判据全文以 `criteria-lock.md` L10–100 `## general` 为准。
+
+| ID | 对本锁的适用 | 证据 | 结论 |
+|---|---|---|---|
+| GEN-001 必要性与最小性 | 适用 | 见 §2.1；平台 optional 是 rolldown/lightningcss/fsevents 的声明分支，不是为假设场景另造抽象。ponytail：生成锁无可删业务层；嵌套同版 `@rolldown/pluginutils` 是 workspace 隔离，删会破边 | 满足 |
+| GEN-002 可执行正确性 | 配置类：验证解析与虚拟树，不强制全构建 | Arborist loadVirtual 25ms exit 0；npm ls lock-only exit 0；与 package.json 无漂移 | 满足（边界：非构建） |
+| GEN-003 测试有效性 | 锁无测试面；不新造 TDD 文件 | 既有消费断言 `node tools/verify-no-legacy-api-prototype.mjs` → `NO_LEGACY_API_PROTOTYPE_PASS` exit 0。该命令不是安装/构建 PASS | 适用为消费扫描，无缺口 |
+| GEN-004 信任边界 | 适用到完整性字段 | 217 registry 均有 sha512 SRI；无 http resolved；无 git/file 除 workspace link。**未验证远端字节** | 字段满足；字节未证 |
+| GEN-005 授权与最小权限 | 基本不适用 | 锁不含账号/权限模型；无秘密（「token」11 处均为 css-tokenizer/js-tokens 包名） | 不适用/无缺陷 |
+| GEN-006 数据完整性 | 适用到引用完整性 | 依赖边 426 条均可在树内解析；required peer 0 缺失；link 仅指向 `apps/web` | 满足 |
+| GEN-007 并发与幂等 | 锁为静态快照 | npm ci 语义是冻结安装；文件本身无竞态逻辑 | 不适用/无缺陷 |
+| GEN-008 接口与模式一致性 | 适用到清单↔锁 | name/version/workspaces/engines/devDependencies 与根清单一致；apps/web 的 dependencies/devDependencies 与工作区清单一致；lfv3 无遗留 `dependencies` 块 | 满足 |
+| GEN-009 错误处理与恢复 | 锁不实现错误路径 | 清单漂移本应让 `npm ci` 失败；本轮直依与锁一致，**未实跑 npm ci**，故未演示失败路径，只证明当前不构成漂移失败输入 | 无缺陷 |
+| GEN-010 安全与敏感信息 | 适用 | 无私钥/口令；integrity 全在；hasInstallScript 仅 darwin fsevents；CI 忽略脚本。不把「无 GHSA」做成新判据，**未跑 npm audit** | 满足（边界：无 audit） |
+| GEN-011 可观测与审计证据 | 锁即树的结构化证据 | 220 记录、SRI、resolved 可复核；本报告命令可复现 | 满足 |
+| GEN-012 资源与性能边界 | 适用到树规模 | 220 包、34 optional，有界；无锁内循环放大 | 满足 |
+| GEN-013 构建配置与依赖 | **主判据** | 见 §2–§4：可复现虚拟树、版本相容（当前 node 24.20.0 满足根 `^22.13.0 \|\| >=24.0.0` 及锁内 116 条 engines）、失败显式依赖 npm 实现而非本文件逻辑。`packageManager: npm@10.9.8` 在根 package.json（他模块），锁以 lfv3 自描述，npm 10/11 均读 lfv3 | 满足 |
+| GEN-014 数据库迁移 | 不适用 | 无 SQL | 不适用 |
+| GEN-015 界面可用性 | 不适用 | 无 UI。包名/协议字段属系统内部标识符，不与「展示全中文」冲突 | 不适用 |
+| GEN-016 文档可验证性 | 弱适用 | 本文件不是说明文档；`documentVersion` V0.02 与派发声称一致，可用 JSON 读出 | 满足 |
+| GEN-017 业务来源分类 | 适用 | 冲突→细化→技术性→添加：无 HTML 冲突；不能指向上位锚点故非细化；无业务发明故非添加；整文件与每包为技术性并登记理由 T-* | 满足 |
+| GEN-018 第一性原理证据 | 适用 | 结论落到规范原文、可复现命令、结构解析；不引用旧席意见或「历史 PASS」 | 满足 |
+
+## 4. 对抗式（grilling 自问，事实已自读）
+
+❓ Q1 首次 `npm ci` 会因锁解析失败吗？
+➡️ 虚拟树与清单一致、无缺边/错版本/坏 SRI 语法。解析层未见会在「正常首次安装」立刻炸掉的输入。**未实装，不能声称 ci 已绿。** registry 不可达是环境，不是本文件已证缺陷。
+
+❓ Q2 清单漂移？
+➡️ 根与 `apps/web` 的 name/version/workspaces/engines/deps 与锁镜像逐字段相等。`private`/`scripts`/`packageManager`/`type` 按规范不必写入 packages 记录。
+
+❓ Q3 工作区链接错了吗？
+➡️ 唯一 link：`node_modules/apps-web` → `apps/web`，无多余字段。工作区键 `apps/web` 存在。
+
+❓ Q4 required peer 缺失？
+➡️ 0。29 个缺失 peer 全部 `peerDependenciesMeta.optional=true`（canvas/esbuild/sass/msw/@types/node 等），属可选未装，不是安装错误。`yaml` 因根 devDependency 已满足 Vite 的 optional peer。
+
+❓ Q5 本机 linux-x64 缺原生绑定？
+➡️ 锁内同时有 `@rolldown/binding-linux-x64-gnu|musl` 与 `lightningcss-linux-x64-gnu|musl`。本机 glibc 2.39。磁盘缺 fsevents/win/android/darwin 等 optional 与锁声明一致。
+
+❓ Q6 engines 与当前 Node 冲突？
+➡️ `semver.satisfies("24.20.0", range)` 对锁内全部 engines.node 为真，含 `>=v12.22.7` 与 `20 \|\| >=22`。CI 的 `node-version: "22"` 在 M005 工作流，不把那份 YAML 扩进本模块缺陷。
+
+❓ Q7 `documentVersion` 会让 npm 拒读吗？
+➡️ `Shrinkwrap.load` + `toJSON` 保留该键；inventory 仍 220。不改应用 SemVer、不改 lockfileVersion、不强制补/删该字段。
+
+❓ Q8 要把漏洞库当缺陷吗？
+➡️ 否。禁止为极端或可设想场景新增门禁。未跑 npm audit。
+
+❓ Q9 嵌套重复能否 ponytail 删？
+➡️ 四组同名：`@rolldown/pluginutils@1.0.1`（两路径）、`dom-accessibility-api` 0.6.3/0.5.16、`fsevents` 2.3.3/2.3.2、`react-is` 18.3.1/17.0.2。均为 npm 嵌套合法树。`net: -0 lines possible.` Lean already. Ship.
+
+❓ Q10 本机 hidden lock / 旧 node_modules 是否证明锁坏？
+➡️ 否。hidden lock 97528 字节 ≠ 受审文件 114258 字节。磁盘树缺 optional 平台包是安装结果，不是锁缺记录。
+
+## 5. 连续覆盖表（3321 行，0 行缺口）
+
+分段阅读：L1–900、L901–1800、L1801–2700、L2701–3321 均完整读过，不是抽样。源文件扫描 220 键 = JSON `packages` 220 键；行覆盖 3321/3321。
+
+| 行 | 条目 | 结构 | 分类理由 |
+|---|---|---|---|
+| 1–7 | 文件头 | name / version / lockfileVersion / documentVersion / requires / packages 开括号 | T-HDR + T-DOCVER |
+| 8–21 | (root `""`) | workspace（14 行） | T-WS |
+| 22–44 | `apps/web` | workspace（23 行） | T-WS |
+| 45–51 | `apps/web/node_modules/@rolldown/pluginutils` | dev-registry（7 行） | T-DEV |
+| 52–77 | `apps/web/node_modules/@vitejs/plugin-react` | dev-registry（26 行） | T-DEV |
+| 78–84 | `node_modules/@adobe/css-tools` | dev-registry（7 行） | T-DEV |
+| 85–93 | `node_modules/@ant-design/colors` | prod-registry（9 行） | T-PROD |
+| 94–112 | `node_modules/@ant-design/cssinjs` | prod-registry（19 行） | T-PROD |
+| 113–127 | `node_modules/@ant-design/cssinjs-utils` | prod-registry（15 行） | T-PROD |
+| 128–139 | `node_modules/@ant-design/fast-color` | prod-registry（12 行） | T-PROD |
+| 140–159 | `node_modules/@ant-design/icons` | prod-registry（20 行） | T-PROD |
+| 160–165 | `node_modules/@ant-design/icons-svg` | prod-registry（6 行） | T-PROD |
+| 166–181 | `node_modules/@ant-design/react-slick` | prod-registry（16 行） | T-PROD |
+| 182–198 | `node_modules/@asamuzakjp/css-color` | dev-registry（17 行） | T-DEV |
+| 199–215 | `node_modules/@asamuzakjp/dom-selector` | dev-registry（17 行） | T-DEV |
+| 216–225 | `node_modules/@asamuzakjp/generational-cache` | dev-registry（10 行） | T-DEV |
+| 226–232 | `node_modules/@asamuzakjp/nwsapi` | dev-registry（7 行） | T-DEV |
+| 233–248 | `node_modules/@babel/code-frame` | peer-registry（16 行） | T-PEER |
+| 249–259 | `node_modules/@babel/helper-validator-identifier` | peer-registry（11 行） | T-PEER |
+| 260–268 | `node_modules/@babel/runtime` | prod-registry（9 行） | T-PROD |
+| 269–281 | `node_modules/@bramus/specificity` | dev-registry（13 行） | T-DEV |
+| 282–301 | `node_modules/@csstools/color-helpers` | dev-registry（20 行） | T-DEV |
+| 302–325 | `node_modules/@csstools/css-calc` | dev-registry（24 行） | T-DEV |
+| 326–353 | `node_modules/@csstools/css-color-parser` | dev-registry（28 行） | T-DEV |
+| 354–376 | `node_modules/@csstools/css-parser-algorithms` | dev-registry（23 行） | T-DEV |
+| 377–401 | `node_modules/@csstools/css-syntax-patches-for-csstree` | dev-registry（25 行） | T-DEV |
+| 402–421 | `node_modules/@csstools/css-tokenizer` | dev-registry（20 行） | T-DEV |
+| 422–433 | `node_modules/@emnapi/core` | optional-registry（12 行） | T-OPT |
+| 434–444 | `node_modules/@emnapi/runtime` | optional-registry（11 行） | T-OPT |
+| 445–455 | `node_modules/@emnapi/wasi-threads` | optional-registry（11 行） | T-OPT |
+| 456–461 | `node_modules/@emotion/hash` | prod-registry（6 行） | T-PROD |
+| 462–467 | `node_modules/@emotion/unitless` | prod-registry（6 行） | T-PROD |
+| 468–485 | `node_modules/@exodus/bytes` | dev-registry（18 行） | T-DEV |
+| 486–492 | `node_modules/@jridgewell/sourcemap-codec` | dev-registry（7 行） | T-DEV |
+| 493–511 | `node_modules/@napi-rs/wasm-runtime` | optional-registry（19 行） | T-OPT |
+| 512–521 | `node_modules/@oxc-project/types` | dev-registry（10 行） | T-DEV |
+| 522–537 | `node_modules/@playwright/test` | dev-registry（16 行） | T-DEV |
+| 538–549 | `node_modules/@rc-component/async-validator` | prod-registry（12 行） | T-PROD |
+| 550–565 | `node_modules/@rc-component/color-picker` | prod-registry（16 行） | T-PROD |
+| 566–579 | `node_modules/@rc-component/context` | prod-registry（14 行） | T-PROD |
+| 580–591 | `node_modules/@rc-component/mini-decimal` | prod-registry（12 行） | T-PROD |
+| 592–609 | `node_modules/@rc-component/mutate-observer` | prod-registry（18 行） | T-PROD |
+| 610–627 | `node_modules/@rc-component/portal` | prod-registry（18 行） | T-PROD |
+| 628–643 | `node_modules/@rc-component/qrcode` | prod-registry（16 行） | T-PROD |
+| 644–663 | `node_modules/@rc-component/tour` | prod-registry（20 行） | T-PROD |
+| 664–684 | `node_modules/@rc-component/trigger` | prod-registry（21 行） | T-PROD |
+| 685–701 | `node_modules/@rolldown/binding-android-arm64` | optional-registry（17 行） | T-OPT |
+| 702–718 | `node_modules/@rolldown/binding-darwin-arm64` | optional-registry（17 行） | T-OPT |
+| 719–735 | `node_modules/@rolldown/binding-darwin-x64` | optional-registry（17 行） | T-OPT |
+| 736–752 | `node_modules/@rolldown/binding-freebsd-x64` | optional-registry（17 行） | T-OPT |
+| 753–769 | `node_modules/@rolldown/binding-linux-arm-gnueabihf` | optional-registry（17 行） | T-OPT |
+| 770–786 | `node_modules/@rolldown/binding-linux-arm64-gnu` | optional-registry（17 行） | T-OPT |
+| 787–803 | `node_modules/@rolldown/binding-linux-arm64-musl` | optional-registry（17 行） | T-OPT |
+| 804–820 | `node_modules/@rolldown/binding-linux-ppc64-gnu` | optional-registry（17 行） | T-OPT |
+| 821–837 | `node_modules/@rolldown/binding-linux-s390x-gnu` | optional-registry（17 行） | T-OPT |
+| 838–854 | `node_modules/@rolldown/binding-linux-x64-gnu` | optional-registry（17 行） | T-OPT |
+| 855–871 | `node_modules/@rolldown/binding-linux-x64-musl` | optional-registry（17 行） | T-OPT |
+| 872–888 | `node_modules/@rolldown/binding-openharmony-arm64` | optional-registry（17 行） | T-OPT |
+| 889–907 | `node_modules/@rolldown/binding-wasm32-wasi` | optional-registry（19 行） | T-OPT |
+| 908–924 | `node_modules/@rolldown/binding-win32-arm64-msvc` | optional-registry（17 行） | T-OPT |
+| 925–941 | `node_modules/@rolldown/binding-win32-x64-msvc` | optional-registry（17 行） | T-OPT |
+| 942–948 | `node_modules/@standard-schema/spec` | dev-registry（7 行） | T-DEV |
+| 949–969 | `node_modules/@testing-library/dom` | peer-registry（21 行） | T-PEER |
+| 970–989 | `node_modules/@testing-library/jest-dom` | dev-registry（20 行） | T-DEV |
+| 990–996 | `node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api` | dev-registry（7 行） | T-DEV |
+| 997–1024 | `node_modules/@testing-library/react` | dev-registry（28 行） | T-DEV |
+| 1025–1038 | `node_modules/@testing-library/user-event` | dev-registry（14 行） | T-DEV |
+| 1039–1049 | `node_modules/@tybys/wasm-util` | optional-registry（11 行） | T-OPT |
+| 1050–1057 | `node_modules/@types/aria-query` | peer-registry（8 行） | T-PEER |
+| 1058–1068 | `node_modules/@types/chai` | dev-registry（11 行） | T-DEV |
+| 1069–1075 | `node_modules/@types/deep-eql` | dev-registry（7 行） | T-DEV |
+| 1076–1082 | `node_modules/@types/estree` | dev-registry（7 行） | T-DEV |
+| 1083–1092 | `node_modules/@types/react` | dev-registry（10 行） | T-DEV |
+| 1093–1102 | `node_modules/@types/react-dom` | dev-registry（10 行） | T-DEV |
+| 1103–1120 | `node_modules/@vitest/expect` | dev-registry（18 行） | T-DEV |
+| 1121–1147 | `node_modules/@vitest/mocker` | dev-registry（27 行） | T-DEV |
+| 1148–1160 | `node_modules/@vitest/pretty-format` | dev-registry（13 行） | T-DEV |
+| 1161–1174 | `node_modules/@vitest/runner` | dev-registry（14 行） | T-DEV |
+| 1175–1190 | `node_modules/@vitest/snapshot` | dev-registry（16 行） | T-DEV |
+| 1191–1200 | `node_modules/@vitest/spy` | dev-registry（10 行） | T-DEV |
+| 1201–1215 | `node_modules/@vitest/utils` | dev-registry（15 行） | T-DEV |
+| 1216–1226 | `node_modules/ansi-regex` | peer-registry（11 行） | T-PEER |
+| 1227–1240 | `node_modules/ansi-styles` | peer-registry（14 行） | T-PEER |
+| 1241–1305 | `node_modules/antd` | prod-registry（65 行） | T-PROD |
+| 1306–1309 | `node_modules/apps-web` | link（4 行） | T-LINK |
+| 1310–1319 | `node_modules/aria-query` | dev-registry（10 行） | T-DEV |
+| 1320–1329 | `node_modules/assertion-error` | dev-registry（10 行） | T-DEV |
+| 1330–1339 | `node_modules/bidi-js` | dev-registry（10 行） | T-DEV |
+| 1340–1349 | `node_modules/chai` | dev-registry（10 行） | T-DEV |
+| 1350–1355 | `node_modules/classnames` | prod-registry（6 行） | T-PROD |
+| 1356–1361 | `node_modules/compute-scroll-into-view` | prod-registry（6 行） | T-PROD |
+| 1362–1368 | `node_modules/convert-source-map` | dev-registry（7 行） | T-DEV |
+| 1369–1377 | `node_modules/copy-to-clipboard` | prod-registry（9 行） | T-PROD |
+| 1378–1391 | `node_modules/css-tree` | dev-registry（14 行） | T-DEV |
+| 1392–1398 | `node_modules/css.escape` | dev-registry（7 行） | T-DEV |
+| 1399–1404 | `node_modules/csstype` | prod-registry（6 行） | T-PROD |
+| 1405–1418 | `node_modules/data-urls` | dev-registry（14 行） | T-DEV |
+| 1419–1424 | `node_modules/dayjs` | prod-registry（6 行） | T-PROD |
+| 1425–1431 | `node_modules/decimal.js` | dev-registry（7 行） | T-DEV |
+| 1432–1441 | `node_modules/dequal` | dev-registry（10 行） | T-DEV |
+| 1442–1451 | `node_modules/detect-libc` | dev-registry（10 行） | T-DEV |
+| 1452–1459 | `node_modules/dom-accessibility-api` | peer-registry（8 行） | T-PEER |
+| 1460–1472 | `node_modules/entities` | dev-registry（13 行） | T-DEV |
+| 1473–1479 | `node_modules/es-module-lexer` | dev-registry（7 行） | T-DEV |
+| 1480–1489 | `node_modules/estree-walker` | dev-registry（10 行） | T-DEV |
+| 1490–1499 | `node_modules/expect-type` | dev-registry（10 行） | T-DEV |
+| 1500–1517 | `node_modules/fdir` | dev-registry（18 行） | T-DEV |
+| 1518–1532 | `node_modules/fsevents` | optional-registry（15 行） | T-OPT |
+| 1533–1545 | `node_modules/html-encoding-sniffer` | dev-registry（13 行） | T-DEV |
+| 1546–1555 | `node_modules/indent-string` | dev-registry（10 行） | T-DEV |
+| 1556–1562 | `node_modules/is-potential-custom-element-name` | dev-registry（7 行） | T-DEV |
+| 1563–1570 | `node_modules/js-tokens` | peer-registry（8 行） | T-PEER |
+| 1571–1611 | `node_modules/jsdom` | dev-registry（41 行） | T-DEV |
+| 1612–1620 | `node_modules/json2mq` | prod-registry（9 行） | T-PROD |
+| 1621–1650 | `node_modules/lightningcss` | dev-registry（30 行） | T-DEV |
+| 1651–1671 | `node_modules/lightningcss-android-arm64` | optional-registry（21 行） | T-OPT |
+| 1672–1692 | `node_modules/lightningcss-darwin-arm64` | optional-registry（21 行） | T-OPT |
+| 1693–1713 | `node_modules/lightningcss-darwin-x64` | optional-registry（21 行） | T-OPT |
+| 1714–1734 | `node_modules/lightningcss-freebsd-x64` | optional-registry（21 行） | T-OPT |
+| 1735–1755 | `node_modules/lightningcss-linux-arm-gnueabihf` | optional-registry（21 行） | T-OPT |
+| 1756–1776 | `node_modules/lightningcss-linux-arm64-gnu` | optional-registry（21 行） | T-OPT |
+| 1777–1797 | `node_modules/lightningcss-linux-arm64-musl` | optional-registry（21 行） | T-OPT |
+| 1798–1818 | `node_modules/lightningcss-linux-x64-gnu` | optional-registry（21 行） | T-OPT |
+| 1819–1839 | `node_modules/lightningcss-linux-x64-musl` | optional-registry（21 行） | T-OPT |
+| 1840–1860 | `node_modules/lightningcss-win32-arm64-msvc` | optional-registry（21 行） | T-OPT |
+| 1861–1881 | `node_modules/lightningcss-win32-x64-msvc` | optional-registry（21 行） | T-OPT |
+| 1882–1891 | `node_modules/lru-cache` | dev-registry（10 行） | T-DEV |
+| 1892–1902 | `node_modules/lz-string` | peer-registry（11 行） | T-PEER |
+| 1903–1912 | `node_modules/magic-string` | dev-registry（10 行） | T-DEV |
+| 1913–1919 | `node_modules/mdn-data` | dev-registry（7 行） | T-DEV |
+| 1920–1929 | `node_modules/min-indent` | dev-registry（10 行） | T-DEV |
+| 1930–1948 | `node_modules/nanoid` | dev-registry（19 行） | T-DEV |
+| 1949–1962 | `node_modules/obug` | dev-registry（14 行） | T-DEV |
+| 1963–1975 | `node_modules/parse5` | dev-registry（13 行） | T-DEV |
+| 1976–1982 | `node_modules/pathe` | dev-registry（7 行） | T-DEV |
+| 1983–1989 | `node_modules/picocolors` | dev-registry（7 行） | T-DEV |
+| 1990–2002 | `node_modules/picomatch` | dev-registry（13 行） | T-DEV |
+| 2003–2021 | `node_modules/playwright` | dev-registry（19 行） | T-DEV |
+| 2022–2034 | `node_modules/playwright-core` | dev-registry（13 行） | T-DEV |
+| 2035–2049 | `node_modules/playwright/node_modules/fsevents` | optional-registry（15 行） | T-OPT |
+| 2050–2078 | `node_modules/postcss` | dev-registry（29 行） | T-DEV |
+| 2079–2094 | `node_modules/pretty-format` | peer-registry（16 行） | T-PEER |
+| 2095–2102 | `node_modules/pretty-format/node_modules/react-is` | peer-registry（8 行） | T-PEER |
+| 2103–2112 | `node_modules/punycode` | dev-registry（10 行） | T-DEV |
+| 2113–2121 | `node_modules/qrcode.react` | prod-registry（9 行） | T-PROD |
+| 2122–2138 | `node_modules/rc-cascader` | prod-registry（17 行） | T-PROD |
+| 2139–2153 | `node_modules/rc-checkbox` | prod-registry（15 行） | T-PROD |
+| 2154–2169 | `node_modules/rc-collapse` | prod-registry（16 行） | T-PROD |
+| 2170–2186 | `node_modules/rc-dialog` | prod-registry（17 行） | T-PROD |
+| 2187–2203 | `node_modules/rc-drawer` | prod-registry（17 行） | T-PROD |
+| 2204–2219 | `node_modules/rc-dropdown` | prod-registry（16 行） | T-PROD |
+| 2220–2237 | `node_modules/rc-field-form` | prod-registry（18 行） | T-PROD |
+| 2238–2255 | `node_modules/rc-image` | prod-registry（18 行） | T-PROD |
+| 2256–2270 | `node_modules/rc-input` | prod-registry（15 行） | T-PROD |
+| 2271–2287 | `node_modules/rc-input-number` | prod-registry（17 行） | T-PROD |
+| 2288–2306 | `node_modules/rc-mentions` | prod-registry（19 行） | T-PROD |
+| 2307–2324 | `node_modules/rc-menu` | prod-registry（18 行） | T-PROD |
+| 2325–2339 | `node_modules/rc-motion` | prod-registry（15 行） | T-PROD |
+| 2340–2358 | `node_modules/rc-notification` | prod-registry（19 行） | T-PROD |
+| 2359–2374 | `node_modules/rc-overflow` | prod-registry（16 行） | T-PROD |
+| 2375–2389 | `node_modules/rc-pagination` | prod-registry（15 行） | T-PROD |
+| 2390–2428 | `node_modules/rc-picker` | prod-registry（39 行） | T-PROD |
+| 2429–2443 | `node_modules/rc-progress` | prod-registry（15 行） | T-PROD |
+| 2444–2461 | `node_modules/rc-rate` | prod-registry（18 行） | T-PROD |
+| 2462–2477 | `node_modules/rc-resize-observer` | prod-registry（16 行） | T-PROD |
+| 2478–2493 | `node_modules/rc-segmented` | prod-registry（16 行） | T-PROD |
+| 2494–2515 | `node_modules/rc-select` | prod-registry（22 行） | T-PROD |
+| 2516–2533 | `node_modules/rc-slider` | prod-registry（18 行） | T-PROD |
+| 2534–2551 | `node_modules/rc-steps` | prod-registry（18 行） | T-PROD |
+| 2552–2566 | `node_modules/rc-switch` | prod-registry（15 行） | T-PROD |
+| 2567–2587 | `node_modules/rc-table` | prod-registry（21 行） | T-PROD |
+| 2588–2609 | `node_modules/rc-tabs` | prod-registry（22 行） | T-PROD |
+| 2610–2626 | `node_modules/rc-textarea` | prod-registry（17 行） | T-PROD |
+| 2627–2642 | `node_modules/rc-tooltip` | prod-registry（16 行） | T-PROD |
+| 2643–2662 | `node_modules/rc-tree` | prod-registry（20 行） | T-PROD |
+| 2663–2679 | `node_modules/rc-tree-select` | prod-registry（17 行） | T-PROD |
+| 2680–2694 | `node_modules/rc-upload` | prod-registry（15 行） | T-PROD |
+| 2695–2708 | `node_modules/rc-util` | prod-registry（14 行） | T-PROD |
+| 2709–2727 | `node_modules/rc-virtual-list` | prod-registry（19 行） | T-PROD |
+| 2728–2736 | `node_modules/react` | prod-registry（9 行） | T-PROD |
+| 2737–2748 | `node_modules/react-dom` | prod-registry（12 行） | T-PROD |
+| 2749–2754 | `node_modules/react-is` | prod-registry（6 行） | T-PROD |
+| 2755–2768 | `node_modules/redent` | dev-registry（14 行） | T-DEV |
+| 2769–2778 | `node_modules/require-from-string` | dev-registry（10 行） | T-DEV |
+| 2779–2784 | `node_modules/resize-observer-polyfill` | prod-registry（6 行） | T-PROD |
+| 2785–2818 | `node_modules/rolldown` | dev-registry（34 行） | T-DEV |
+| 2819–2825 | `node_modules/rolldown/node_modules/@rolldown/pluginutils` | dev-registry（7 行） | T-DEV |
+| 2826–2838 | `node_modules/saxes` | dev-registry（13 行） | T-DEV |
+| 2839–2844 | `node_modules/scheduler` | prod-registry（6 行） | T-PROD |
+| 2845–2853 | `node_modules/scroll-into-view-if-needed` | prod-registry（9 行） | T-PROD |
+| 2854–2860 | `node_modules/siginfo` | dev-registry（7 行） | T-DEV |
+| 2861–2870 | `node_modules/source-map-js` | dev-registry（10 行） | T-DEV |
+| 2871–2877 | `node_modules/stackback` | dev-registry（7 行） | T-DEV |
+| 2878–2884 | `node_modules/std-env` | dev-registry（7 行） | T-DEV |
+| 2885–2890 | `node_modules/string-convert` | prod-registry（6 行） | T-PROD |
+| 2891–2903 | `node_modules/strip-indent` | dev-registry（13 行） | T-DEV |
+| 2904–2909 | `node_modules/stylis` | prod-registry（6 行） | T-PROD |
+| 2910–2916 | `node_modules/symbol-tree` | dev-registry（7 行） | T-DEV |
+| 2917–2925 | `node_modules/throttle-debounce` | prod-registry（9 行） | T-PROD |
+| 2926–2932 | `node_modules/tinybench` | dev-registry（7 行） | T-DEV |
+| 2933–2942 | `node_modules/tinyexec` | dev-registry（10 行） | T-DEV |
+| 2943–2959 | `node_modules/tinyglobby` | dev-registry（17 行） | T-DEV |
+| 2960–2969 | `node_modules/tinyrainbow` | dev-registry（10 行） | T-DEV |
+| 2970–2982 | `node_modules/tldts` | dev-registry（13 行） | T-DEV |
+| 2983–2989 | `node_modules/tldts-core` | dev-registry（7 行） | T-DEV |
+| 2990–2995 | `node_modules/toggle-selection` | prod-registry（6 行） | T-PROD |
+| 2996–3008 | `node_modules/tough-cookie` | dev-registry（13 行） | T-DEV |
+| 3009–3021 | `node_modules/tr46` | dev-registry（13 行） | T-DEV |
+| 3022–3029 | `node_modules/tslib` | optional-registry（8 行） | T-OPT |
+| 3030–3043 | `node_modules/typescript` | dev-registry（14 行） | T-DEV |
+| 3044–3053 | `node_modules/undici` | dev-registry（10 行） | T-DEV |
+| 3054–3131 | `node_modules/vite` | dev-registry（78 行） | T-DEV |
+| 3132–3221 | `node_modules/vitest` | dev-registry（90 行） | T-DEV |
+| 3222–3234 | `node_modules/w3c-xmlserializer` | dev-registry（13 行） | T-DEV |
+| 3235–3244 | `node_modules/webidl-conversions` | dev-registry（10 行） | T-DEV |
+| 3245–3254 | `node_modules/whatwg-mimetype` | dev-registry（10 行） | T-DEV |
+| 3255–3269 | `node_modules/whatwg-url` | dev-registry（15 行） | T-DEV |
+| 3270–3286 | `node_modules/why-is-node-running` | dev-registry（17 行） | T-DEV |
+| 3287–3296 | `node_modules/xml-name-validator` | dev-registry（10 行） | T-DEV |
+| 3297–3303 | `node_modules/xmlchars` | dev-registry（7 行） | T-DEV |
+| 3304–3319 | `node_modules/yaml` | dev-registry（16 行） | T-DEV |
+| 3320–3321 | 文件尾 | packages 闭括号 + JSON 闭括号 | T-HDR |
+
+行 7（`"packages": {`）计入 1–7 文件头。包记录 L8–3319 连续无重叠。
+
+## 6. 每包 / 条目技术性分类
+
+四分类顺序：冲突 → 细化 → 技术性 → 添加。
+
+- **冲突**：锁内容与三份 HTML 明文无矛盾（HTML「依赖」不是 npm）。
+- **细化**：不能指向具体锚点原文作为上位，故不归细化。
+- **添加**：无业务实体/枚举/状态/角色/价格/流程发明。
+- **技术性**：无业务发明 + 无 HTML 冲突。
+
+理由库（每包引用其一，避免用包名发明业务）：
+
+- **T-HDR**：npm lockfileVersion 3 协议元数据，只服务安装器读取。
+- **T-DOCVER**：文件自身 Vx.xx 元数据扩展，不参与解析算法；不是业务规则。
+- **T-WS**：工作区清单在锁内的镜像，使 `npm ci` 不必猜 package.json 之外的树。
+- **T-LINK**：规范要求的 symbolic link 记录，无其它字段。
+- **T-PROD**：工作区运行时依赖及其传递闭包（React/antd 等 UI 库），是前端能构建运行的技术依赖，不引入 HTML 未写的票务/商户规则。
+- **T-DEV**：测试/构建工具链（vite/vitest/playwright/jsdom/typescript）。
+- **T-OPT**：`optionalDependencies`/`os`/`cpu` 平台可选工件，安装器按本机选择。
+- **T-PEER**：已安装的 peer 记录（如 `@testing-library/dom`），不是新业务权限模型。
+
+种类计数：workspace 2、link 1、prod-registry 71、dev-registry 101、optional-registry 34、peer-registry 11，合计 220。
+
+| 行 | 路径 | 版本 | 种类 | 标志 | 2.1 | 理由 |
+|---|---|---|---|---|---|---|
+| 8–21 | (root `""`) | 0.1.0 | workspace | — | 技术性 | T-WS |
+| 22–44 | `apps/web` | 0.1.0 | workspace | — | 技术性 | T-WS |
+| 45–51 | `apps/web/node_modules/@rolldown/pluginutils` | 1.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 52–77 | `apps/web/node_modules/@vitejs/plugin-react` | 6.0.2 | dev-registry | dev | 技术性 | T-DEV |
+| 78–84 | `node_modules/@adobe/css-tools` | 4.5.0 | dev-registry | dev | 技术性 | T-DEV |
+| 85–93 | `node_modules/@ant-design/colors` | 7.2.1 | prod-registry | — | 技术性 | T-PROD |
+| 94–112 | `node_modules/@ant-design/cssinjs` | 1.24.0 | prod-registry | — | 技术性 | T-PROD |
+| 113–127 | `node_modules/@ant-design/cssinjs-utils` | 1.1.3 | prod-registry | — | 技术性 | T-PROD |
+| 128–139 | `node_modules/@ant-design/fast-color` | 2.0.6 | prod-registry | — | 技术性 | T-PROD |
+| 140–159 | `node_modules/@ant-design/icons` | 5.6.1 | prod-registry | — | 技术性 | T-PROD |
+| 160–165 | `node_modules/@ant-design/icons-svg` | 4.4.2 | prod-registry | — | 技术性 | T-PROD |
+| 166–181 | `node_modules/@ant-design/react-slick` | 1.1.2 | prod-registry | — | 技术性 | T-PROD |
+| 182–198 | `node_modules/@asamuzakjp/css-color` | 5.1.11 | dev-registry | dev | 技术性 | T-DEV |
+| 199–215 | `node_modules/@asamuzakjp/dom-selector` | 7.1.1 | dev-registry | dev | 技术性 | T-DEV |
+| 216–225 | `node_modules/@asamuzakjp/generational-cache` | 1.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 226–232 | `node_modules/@asamuzakjp/nwsapi` | 2.3.9 | dev-registry | dev | 技术性 | T-DEV |
+| 233–248 | `node_modules/@babel/code-frame` | 7.29.7 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 249–259 | `node_modules/@babel/helper-validator-identifier` | 7.29.7 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 260–268 | `node_modules/@babel/runtime` | 7.29.7 | prod-registry | — | 技术性 | T-PROD |
+| 269–281 | `node_modules/@bramus/specificity` | 2.4.2 | dev-registry | dev | 技术性 | T-DEV |
+| 282–301 | `node_modules/@csstools/color-helpers` | 6.0.2 | dev-registry | dev | 技术性 | T-DEV |
+| 302–325 | `node_modules/@csstools/css-calc` | 3.2.1 | dev-registry | dev | 技术性 | T-DEV |
+| 326–353 | `node_modules/@csstools/css-color-parser` | 4.1.7 | dev-registry | dev | 技术性 | T-DEV |
+| 354–376 | `node_modules/@csstools/css-parser-algorithms` | 4.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 377–401 | `node_modules/@csstools/css-syntax-patches-for-csstree` | 1.1.5 | dev-registry | dev | 技术性 | T-DEV |
+| 402–421 | `node_modules/@csstools/css-tokenizer` | 4.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 422–433 | `node_modules/@emnapi/core` | 1.10.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 434–444 | `node_modules/@emnapi/runtime` | 1.10.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 445–455 | `node_modules/@emnapi/wasi-threads` | 1.2.1 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 456–461 | `node_modules/@emotion/hash` | 0.8.0 | prod-registry | — | 技术性 | T-PROD |
+| 462–467 | `node_modules/@emotion/unitless` | 0.7.5 | prod-registry | — | 技术性 | T-PROD |
+| 468–485 | `node_modules/@exodus/bytes` | 1.15.1 | dev-registry | dev | 技术性 | T-DEV |
+| 486–492 | `node_modules/@jridgewell/sourcemap-codec` | 1.5.5 | dev-registry | dev | 技术性 | T-DEV |
+| 493–511 | `node_modules/@napi-rs/wasm-runtime` | 1.1.5 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 512–521 | `node_modules/@oxc-project/types` | 0.133.0 | dev-registry | dev | 技术性 | T-DEV |
+| 522–537 | `node_modules/@playwright/test` | 1.61.0 | dev-registry | dev | 技术性 | T-DEV |
+| 538–549 | `node_modules/@rc-component/async-validator` | 5.1.0 | prod-registry | — | 技术性 | T-PROD |
+| 550–565 | `node_modules/@rc-component/color-picker` | 2.0.1 | prod-registry | — | 技术性 | T-PROD |
+| 566–579 | `node_modules/@rc-component/context` | 1.4.0 | prod-registry | — | 技术性 | T-PROD |
+| 580–591 | `node_modules/@rc-component/mini-decimal` | 1.1.3 | prod-registry | — | 技术性 | T-PROD |
+| 592–609 | `node_modules/@rc-component/mutate-observer` | 1.1.0 | prod-registry | — | 技术性 | T-PROD |
+| 610–627 | `node_modules/@rc-component/portal` | 1.1.2 | prod-registry | — | 技术性 | T-PROD |
+| 628–643 | `node_modules/@rc-component/qrcode` | 1.1.1 | prod-registry | — | 技术性 | T-PROD |
+| 644–663 | `node_modules/@rc-component/tour` | 1.15.1 | prod-registry | — | 技术性 | T-PROD |
+| 664–684 | `node_modules/@rc-component/trigger` | 2.3.1 | prod-registry | — | 技术性 | T-PROD |
+| 685–701 | `node_modules/@rolldown/binding-android-arm64` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 702–718 | `node_modules/@rolldown/binding-darwin-arm64` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 719–735 | `node_modules/@rolldown/binding-darwin-x64` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 736–752 | `node_modules/@rolldown/binding-freebsd-x64` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 753–769 | `node_modules/@rolldown/binding-linux-arm-gnueabihf` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 770–786 | `node_modules/@rolldown/binding-linux-arm64-gnu` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 787–803 | `node_modules/@rolldown/binding-linux-arm64-musl` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 804–820 | `node_modules/@rolldown/binding-linux-ppc64-gnu` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 821–837 | `node_modules/@rolldown/binding-linux-s390x-gnu` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 838–854 | `node_modules/@rolldown/binding-linux-x64-gnu` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 855–871 | `node_modules/@rolldown/binding-linux-x64-musl` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 872–888 | `node_modules/@rolldown/binding-openharmony-arm64` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 889–907 | `node_modules/@rolldown/binding-wasm32-wasi` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 908–924 | `node_modules/@rolldown/binding-win32-arm64-msvc` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 925–941 | `node_modules/@rolldown/binding-win32-x64-msvc` | 1.0.3 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 942–948 | `node_modules/@standard-schema/spec` | 1.1.0 | dev-registry | dev | 技术性 | T-DEV |
+| 949–969 | `node_modules/@testing-library/dom` | 10.4.1 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 970–989 | `node_modules/@testing-library/jest-dom` | 6.9.1 | dev-registry | dev | 技术性 | T-DEV |
+| 990–996 | `node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api` | 0.6.3 | dev-registry | dev | 技术性 | T-DEV |
+| 997–1024 | `node_modules/@testing-library/react` | 16.3.2 | dev-registry | dev | 技术性 | T-DEV |
+| 1025–1038 | `node_modules/@testing-library/user-event` | 14.6.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1039–1049 | `node_modules/@tybys/wasm-util` | 0.10.2 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1050–1057 | `node_modules/@types/aria-query` | 5.0.4 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 1058–1068 | `node_modules/@types/chai` | 5.2.3 | dev-registry | dev | 技术性 | T-DEV |
+| 1069–1075 | `node_modules/@types/deep-eql` | 4.0.2 | dev-registry | dev | 技术性 | T-DEV |
+| 1076–1082 | `node_modules/@types/estree` | 1.0.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1083–1092 | `node_modules/@types/react` | 19.2.16 | dev-registry | dev | 技术性 | T-DEV |
+| 1093–1102 | `node_modules/@types/react-dom` | 19.2.3 | dev-registry | dev | 技术性 | T-DEV |
+| 1103–1120 | `node_modules/@vitest/expect` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1121–1147 | `node_modules/@vitest/mocker` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1148–1160 | `node_modules/@vitest/pretty-format` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1161–1174 | `node_modules/@vitest/runner` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1175–1190 | `node_modules/@vitest/snapshot` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1191–1200 | `node_modules/@vitest/spy` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1201–1215 | `node_modules/@vitest/utils` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 1216–1226 | `node_modules/ansi-regex` | 5.0.1 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 1227–1240 | `node_modules/ansi-styles` | 5.2.0 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 1241–1305 | `node_modules/antd` | 5.29.3 | prod-registry | — | 技术性 | T-PROD |
+| 1306–1309 | `node_modules/apps-web` | link→apps/web | link | — | 技术性 | T-LINK |
+| 1310–1319 | `node_modules/aria-query` | 5.3.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1320–1329 | `node_modules/assertion-error` | 2.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1330–1339 | `node_modules/bidi-js` | 1.0.3 | dev-registry | dev | 技术性 | T-DEV |
+| 1340–1349 | `node_modules/chai` | 6.2.2 | dev-registry | dev | 技术性 | T-DEV |
+| 1350–1355 | `node_modules/classnames` | 2.5.1 | prod-registry | — | 技术性 | T-PROD |
+| 1356–1361 | `node_modules/compute-scroll-into-view` | 3.1.1 | prod-registry | — | 技术性 | T-PROD |
+| 1362–1368 | `node_modules/convert-source-map` | 2.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1369–1377 | `node_modules/copy-to-clipboard` | 3.3.3 | prod-registry | — | 技术性 | T-PROD |
+| 1378–1391 | `node_modules/css-tree` | 3.2.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1392–1398 | `node_modules/css.escape` | 1.5.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1399–1404 | `node_modules/csstype` | 3.2.3 | prod-registry | — | 技术性 | T-PROD |
+| 1405–1418 | `node_modules/data-urls` | 7.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1419–1424 | `node_modules/dayjs` | 1.11.21 | prod-registry | — | 技术性 | T-PROD |
+| 1425–1431 | `node_modules/decimal.js` | 10.6.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1432–1441 | `node_modules/dequal` | 2.0.3 | dev-registry | dev | 技术性 | T-DEV |
+| 1442–1451 | `node_modules/detect-libc` | 2.1.2 | dev-registry | dev | 技术性 | T-DEV |
+| 1452–1459 | `node_modules/dom-accessibility-api` | 0.5.16 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 1460–1472 | `node_modules/entities` | 8.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1473–1479 | `node_modules/es-module-lexer` | 2.1.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1480–1489 | `node_modules/estree-walker` | 3.0.3 | dev-registry | dev | 技术性 | T-DEV |
+| 1490–1499 | `node_modules/expect-type` | 1.3.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1500–1517 | `node_modules/fdir` | 6.5.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1518–1532 | `node_modules/fsevents` | 2.3.3 | optional-registry | dev,optional,hasInstallScript | 技术性 | T-OPT |
+| 1533–1545 | `node_modules/html-encoding-sniffer` | 6.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1546–1555 | `node_modules/indent-string` | 4.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1556–1562 | `node_modules/is-potential-custom-element-name` | 1.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1563–1570 | `node_modules/js-tokens` | 4.0.0 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 1571–1611 | `node_modules/jsdom` | 29.1.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1612–1620 | `node_modules/json2mq` | 0.2.0 | prod-registry | — | 技术性 | T-PROD |
+| 1621–1650 | `node_modules/lightningcss` | 1.32.0 | dev-registry | dev | 技术性 | T-DEV |
+| 1651–1671 | `node_modules/lightningcss-android-arm64` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1672–1692 | `node_modules/lightningcss-darwin-arm64` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1693–1713 | `node_modules/lightningcss-darwin-x64` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1714–1734 | `node_modules/lightningcss-freebsd-x64` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1735–1755 | `node_modules/lightningcss-linux-arm-gnueabihf` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1756–1776 | `node_modules/lightningcss-linux-arm64-gnu` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1777–1797 | `node_modules/lightningcss-linux-arm64-musl` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1798–1818 | `node_modules/lightningcss-linux-x64-gnu` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1819–1839 | `node_modules/lightningcss-linux-x64-musl` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1840–1860 | `node_modules/lightningcss-win32-arm64-msvc` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1861–1881 | `node_modules/lightningcss-win32-x64-msvc` | 1.32.0 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 1882–1891 | `node_modules/lru-cache` | 11.5.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1892–1902 | `node_modules/lz-string` | 1.5.0 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 1903–1912 | `node_modules/magic-string` | 0.30.21 | dev-registry | dev | 技术性 | T-DEV |
+| 1913–1919 | `node_modules/mdn-data` | 2.27.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1920–1929 | `node_modules/min-indent` | 1.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1930–1948 | `node_modules/nanoid` | 3.3.18 | dev-registry | dev | 技术性 | T-DEV |
+| 1949–1962 | `node_modules/obug` | 2.1.3 | dev-registry | dev | 技术性 | T-DEV |
+| 1963–1975 | `node_modules/parse5` | 8.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1976–1982 | `node_modules/pathe` | 2.0.3 | dev-registry | dev | 技术性 | T-DEV |
+| 1983–1989 | `node_modules/picocolors` | 1.1.1 | dev-registry | dev | 技术性 | T-DEV |
+| 1990–2002 | `node_modules/picomatch` | 4.0.4 | dev-registry | dev | 技术性 | T-DEV |
+| 2003–2021 | `node_modules/playwright` | 1.61.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2022–2034 | `node_modules/playwright-core` | 1.61.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2035–2049 | `node_modules/playwright/node_modules/fsevents` | 2.3.2 | optional-registry | dev,optional,hasInstallScript | 技术性 | T-OPT |
+| 2050–2078 | `node_modules/postcss` | 8.5.23 | dev-registry | dev | 技术性 | T-DEV |
+| 2079–2094 | `node_modules/pretty-format` | 27.5.1 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 2095–2102 | `node_modules/pretty-format/node_modules/react-is` | 17.0.2 | peer-registry | dev,peer | 技术性 | T-PEER |
+| 2103–2112 | `node_modules/punycode` | 2.3.1 | dev-registry | dev | 技术性 | T-DEV |
+| 2113–2121 | `node_modules/qrcode.react` | 4.2.0 | prod-registry | — | 技术性 | T-PROD |
+| 2122–2138 | `node_modules/rc-cascader` | 3.34.0 | prod-registry | — | 技术性 | T-PROD |
+| 2139–2153 | `node_modules/rc-checkbox` | 3.5.0 | prod-registry | — | 技术性 | T-PROD |
+| 2154–2169 | `node_modules/rc-collapse` | 3.9.0 | prod-registry | — | 技术性 | T-PROD |
+| 2170–2186 | `node_modules/rc-dialog` | 9.6.0 | prod-registry | — | 技术性 | T-PROD |
+| 2187–2203 | `node_modules/rc-drawer` | 7.3.0 | prod-registry | — | 技术性 | T-PROD |
+| 2204–2219 | `node_modules/rc-dropdown` | 4.2.1 | prod-registry | — | 技术性 | T-PROD |
+| 2220–2237 | `node_modules/rc-field-form` | 2.7.1 | prod-registry | — | 技术性 | T-PROD |
+| 2238–2255 | `node_modules/rc-image` | 7.12.0 | prod-registry | — | 技术性 | T-PROD |
+| 2256–2270 | `node_modules/rc-input` | 1.8.0 | prod-registry | — | 技术性 | T-PROD |
+| 2271–2287 | `node_modules/rc-input-number` | 9.5.0 | prod-registry | — | 技术性 | T-PROD |
+| 2288–2306 | `node_modules/rc-mentions` | 2.20.0 | prod-registry | — | 技术性 | T-PROD |
+| 2307–2324 | `node_modules/rc-menu` | 9.16.1 | prod-registry | — | 技术性 | T-PROD |
+| 2325–2339 | `node_modules/rc-motion` | 2.9.5 | prod-registry | — | 技术性 | T-PROD |
+| 2340–2358 | `node_modules/rc-notification` | 5.6.4 | prod-registry | — | 技术性 | T-PROD |
+| 2359–2374 | `node_modules/rc-overflow` | 1.5.0 | prod-registry | — | 技术性 | T-PROD |
+| 2375–2389 | `node_modules/rc-pagination` | 5.1.0 | prod-registry | — | 技术性 | T-PROD |
+| 2390–2428 | `node_modules/rc-picker` | 4.11.3 | prod-registry | — | 技术性 | T-PROD |
+| 2429–2443 | `node_modules/rc-progress` | 4.0.0 | prod-registry | — | 技术性 | T-PROD |
+| 2444–2461 | `node_modules/rc-rate` | 2.13.1 | prod-registry | — | 技术性 | T-PROD |
+| 2462–2477 | `node_modules/rc-resize-observer` | 1.4.3 | prod-registry | — | 技术性 | T-PROD |
+| 2478–2493 | `node_modules/rc-segmented` | 2.7.1 | prod-registry | — | 技术性 | T-PROD |
+| 2494–2515 | `node_modules/rc-select` | 14.16.8 | prod-registry | — | 技术性 | T-PROD |
+| 2516–2533 | `node_modules/rc-slider` | 11.1.9 | prod-registry | — | 技术性 | T-PROD |
+| 2534–2551 | `node_modules/rc-steps` | 6.0.1 | prod-registry | — | 技术性 | T-PROD |
+| 2552–2566 | `node_modules/rc-switch` | 4.1.0 | prod-registry | — | 技术性 | T-PROD |
+| 2567–2587 | `node_modules/rc-table` | 7.54.0 | prod-registry | — | 技术性 | T-PROD |
+| 2588–2609 | `node_modules/rc-tabs` | 15.7.0 | prod-registry | — | 技术性 | T-PROD |
+| 2610–2626 | `node_modules/rc-textarea` | 1.10.2 | prod-registry | — | 技术性 | T-PROD |
+| 2627–2642 | `node_modules/rc-tooltip` | 6.4.0 | prod-registry | — | 技术性 | T-PROD |
+| 2643–2662 | `node_modules/rc-tree` | 5.13.1 | prod-registry | — | 技术性 | T-PROD |
+| 2663–2679 | `node_modules/rc-tree-select` | 5.27.0 | prod-registry | — | 技术性 | T-PROD |
+| 2680–2694 | `node_modules/rc-upload` | 4.11.0 | prod-registry | — | 技术性 | T-PROD |
+| 2695–2708 | `node_modules/rc-util` | 5.44.4 | prod-registry | — | 技术性 | T-PROD |
+| 2709–2727 | `node_modules/rc-virtual-list` | 3.19.2 | prod-registry | — | 技术性 | T-PROD |
+| 2728–2736 | `node_modules/react` | 19.2.7 | prod-registry | — | 技术性 | T-PROD |
+| 2737–2748 | `node_modules/react-dom` | 19.2.7 | prod-registry | — | 技术性 | T-PROD |
+| 2749–2754 | `node_modules/react-is` | 18.3.1 | prod-registry | — | 技术性 | T-PROD |
+| 2755–2768 | `node_modules/redent` | 3.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2769–2778 | `node_modules/require-from-string` | 2.0.2 | dev-registry | dev | 技术性 | T-DEV |
+| 2779–2784 | `node_modules/resize-observer-polyfill` | 1.5.1 | prod-registry | — | 技术性 | T-PROD |
+| 2785–2818 | `node_modules/rolldown` | 1.0.3 | dev-registry | dev | 技术性 | T-DEV |
+| 2819–2825 | `node_modules/rolldown/node_modules/@rolldown/pluginutils` | 1.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 2826–2838 | `node_modules/saxes` | 6.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2839–2844 | `node_modules/scheduler` | 0.27.0 | prod-registry | — | 技术性 | T-PROD |
+| 2845–2853 | `node_modules/scroll-into-view-if-needed` | 3.1.0 | prod-registry | — | 技术性 | T-PROD |
+| 2854–2860 | `node_modules/siginfo` | 2.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2861–2870 | `node_modules/source-map-js` | 1.2.1 | dev-registry | dev | 技术性 | T-DEV |
+| 2871–2877 | `node_modules/stackback` | 0.0.2 | dev-registry | dev | 技术性 | T-DEV |
+| 2878–2884 | `node_modules/std-env` | 4.1.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2885–2890 | `node_modules/string-convert` | 0.2.1 | prod-registry | — | 技术性 | T-PROD |
+| 2891–2903 | `node_modules/strip-indent` | 3.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2904–2909 | `node_modules/stylis` | 4.4.0 | prod-registry | — | 技术性 | T-PROD |
+| 2910–2916 | `node_modules/symbol-tree` | 3.2.4 | dev-registry | dev | 技术性 | T-DEV |
+| 2917–2925 | `node_modules/throttle-debounce` | 5.0.2 | prod-registry | — | 技术性 | T-PROD |
+| 2926–2932 | `node_modules/tinybench` | 2.9.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2933–2942 | `node_modules/tinyexec` | 1.2.4 | dev-registry | dev | 技术性 | T-DEV |
+| 2943–2959 | `node_modules/tinyglobby` | 0.2.17 | dev-registry | dev | 技术性 | T-DEV |
+| 2960–2969 | `node_modules/tinyrainbow` | 3.1.0 | dev-registry | dev | 技术性 | T-DEV |
+| 2970–2982 | `node_modules/tldts` | 7.4.3 | dev-registry | dev | 技术性 | T-DEV |
+| 2983–2989 | `node_modules/tldts-core` | 7.4.3 | dev-registry | dev | 技术性 | T-DEV |
+| 2990–2995 | `node_modules/toggle-selection` | 1.0.6 | prod-registry | — | 技术性 | T-PROD |
+| 2996–3008 | `node_modules/tough-cookie` | 6.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 3009–3021 | `node_modules/tr46` | 6.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 3022–3029 | `node_modules/tslib` | 2.8.1 | optional-registry | dev,optional | 技术性 | T-OPT |
+| 3030–3043 | `node_modules/typescript` | 5.9.3 | dev-registry | dev | 技术性 | T-DEV |
+| 3044–3053 | `node_modules/undici` | 7.29.0 | dev-registry | dev | 技术性 | T-DEV |
+| 3054–3131 | `node_modules/vite` | 8.0.16 | dev-registry | dev | 技术性 | T-DEV |
+| 3132–3221 | `node_modules/vitest` | 4.1.9 | dev-registry | dev | 技术性 | T-DEV |
+| 3222–3234 | `node_modules/w3c-xmlserializer` | 5.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 3235–3244 | `node_modules/webidl-conversions` | 8.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 3245–3254 | `node_modules/whatwg-mimetype` | 5.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 3255–3269 | `node_modules/whatwg-url` | 16.0.1 | dev-registry | dev | 技术性 | T-DEV |
+| 3270–3286 | `node_modules/why-is-node-running` | 2.3.0 | dev-registry | dev | 技术性 | T-DEV |
+| 3287–3296 | `node_modules/xml-name-validator` | 5.0.0 | dev-registry | dev | 技术性 | T-DEV |
+| 3297–3303 | `node_modules/xmlchars` | 2.2.0 | dev-registry | dev | 技术性 | T-DEV |
+| 3304–3319 | `node_modules/yaml` | 2.9.0 | dev-registry | dev | 技术性 | T-DEV |
+
+顶层键单独登记：`name`/`version`/`lockfileVersion`/`requires`/`packages` → T-HDR；`documentVersion` → T-DOCVER。均技术性、无业务发明、无工程缺陷、本次不改。
+
+## 7. 命令、exit、输出边界（本轮实跑）
+
+所有命令在 `/home/james/complex-management`；未 source 全量 env；未改源码。
+
+| # | 命令 | exit | 关键输出 | 边界 |
+|---|---|---|---|---|
+| C1 | `python3` / `openssl dgst -sha256` / `sha256sum` 独立哈希 `criteria-lock.md` | 0 | `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（889020 字节） | 三工具同值；**正文不再重复独占字段行** |
+| C2 | `wc -l package-lock.json` + SHA256 | 0 | 3321 行；`d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef` | 与派发一致 |
+| C3 | `git rev-parse HEAD origin/main` | 0 | 二者 `242f487233d028173cb9198eecd079f5d877405c` | 正本 main |
+| C4 | `npm help package-lock-json` | 0 | File Format：name/version/lockfileVersion/packages；link 无其它字段；integrity 为 SRI | 类型 3 |
+| C5 | JSON 解析 + 分段覆盖 + SRI 长度 + 边解析（python，stdout `/tmp/m004-lock-analysis.txt`） | 0 | 220 包；SRI 217 ok；缺 integrity/resolved 0；坏 SRI 0；http resolved 0；依赖边 426 全找到；required peer 缺失 0；legacy 标记 0 | 非下载 |
+| C6 | Arborist `loadVirtual` + Shrinkwrap.load + semver（node，`/tmp/m004-arborist.txt`） | 0 | inventory 220；edges 582；MISSING_REQUIRED []；INVALID_EDGES []；RANGE_FAIL []；ENGINE_FAIL []；URL_MISMATCHES []；toJSON 保留 documentVersion V0.02；锁文件 mtime/inode 不变 | 未 reify、未写盘 |
+| C7 | `npm ls --package-lock-only --offline --all --json` | 0 | name/version 匹配；dep 节点 582；problems/error 空；锁未写 | 不是安装；`--offline` 不证明 registry |
+| C8 | `node tools/verify-no-legacy-api-prototype.mjs` | 0 | `NO_LEGACY_API_PROTOTYPE_PASS` | 文本扫描，非构建 |
+| C9 | `node -v` / `npm -v` / `getconf GNU_LIBC_VERSION` | 0 | v24.20.0 / 11.19.0 / glibc 2.39 | 环境 |
+
+明确未跑：`npm ci`、`npm install`、`npm audit`、`npx`、`npm exec`、Vite build、Playwright、`verify:predeploy`。
+
+## 8. 新 findings
+
+**空集。** 无 GR 临时编号。无工程缺陷。无添加项。无 HTML 自身问题需上报暂停。
+
+不把下列观察写成缺陷或新闸：磁盘 optional 未装、hidden lock 并存、根 package.json `documentVersion` V0.01 与锁 V0.02 为**不同文件**自身版本、`packageManager` 不在锁内、CI Node 22 写在他模块工作流、未做 tarball 字节校对、未做 audit。
+
+## 9. 本席结论
+
+- 本模块全部 3321 行有覆盖记录。
+- 映射 18 项 GEN 已逐项核对。
+- 三线均执行并落证据。
+- 声称均落到类型 3/4（及 HTML 无上位的类型 1 反证）。
+- 无未答 questions。无未定稿缺陷。
+- **本席 B1：PASS**
+- **是否 HTML 问题：否**
+- 不是模块生命周期 PASS（须 B5 双席 + 四值）。不是有条件通过。
+- 历史 B3=1 / 方案修复=2 / 交付失败=0 保持。不继承旧 322 PASS。
+
+B1 结束。不修复、不提问、不改锁。
+
+## 当前 M004 整批 B2 独立复核（Grok）
+
+版本：V0.05（本文件既有 V0.01–V0.04 全部字节保留，本次完整 B2 归并结论追加；自身版本 V0.04→V0.05）
+
+席位：Grok（唯一外审）。节点：160-audit-prompt.md V0.17 阶段 B / M004 / B2（整批归并独立复核，不是 B1 重跑）。计划 471 模块；本模块仅 `package-lock.json`（3321 行 / 220 条目 / 18 GEN / OVERSIZE-SINGLE-FILE）。ledger 现值：M004 `IN_PROGRESS`，历史 B3 累计 1、方案修复 2、失败重跑 0；M001—M003 保持 PASS，本席不重审它们。本席不修依赖/源码/HTML/计划/锁/ledger/findings/questions，不派子代理，不用 MCP_Codex_160 / MCP_Cloud_160，不提交、不推送、不部署、不新 worktree、不另建 b2 文件。本追加段不写独占 `CRITERIA-LOCK-SHA256:` 字段行。
+
+**本席 B2：PASS。不是模块 PASS。不是有条件通过。**
+
+审核同一 findings 候选 V0.93：`docs/audit-2026-09/findings.md` 316366 字节，SHA256 `2b1e47a4b23bc40a0c90dcd31ede7784fe9d775fa04c72f814147dcfc011be78`。只审该文件最上方当前 M004 B2 候选及相关旧 M004 历史 ID；其它模块段落不变，不重新审 findings 本身。
+
+### 0. 技能（本节点实核；V0.17 §6 收窄：只审不修、不额外问人、不加门槛/状态/产物）
+
+| 技能 | 本节点用法 |
+|---|---|
+| `receiving-code-review` | 先对照两席本次 B1、现锁/配置/公告/audit 输出再接受或反驳候选；禁止因根席 PASS 而表演性同意；本体「逐条 IMPLEMENT / 条目不清就问人」作废 |
+| `grilling` / `grill-me` | 差集/分类/007 边界自问自答；不等操作员、不派子代理（本体提问条款作废） |
+| `systematic-debugging` / `diagnosing-bugs` | 只借「读错误→复现→追数据流」核 audit exit1 与公告通道；不改代码、不加探针 |
+| `codebase-design` | 锁接口=npm ci 输入；删除测试：删锁则确定安装入口做不到；不新造缝 |
+| `verification-before-completion` | 任何 PASS/FAIL 前用本追加内本次命令输出 |
+| `ponytail-review` | 只查重复永久 ID / 凭 CVE 标题自动入队的膨胀；不修 |
+
+缺口，不得冒充已调用：`batch-grill-me` 本机技能目录未找到。`tdd` / `resolving-merge-conflicts` / `ponytail` 本体本节点无对应动作。控制已划掉的技能未调用。grilling 的「向人发问」与 receiving-code-review 的 IMPLEMENT 均按 §6 作废。
+
+未安装依赖、未 `npm audit fix`、未改任何源文件。对照路径仅用于核实锁的直接消费（root/`apps/web` 的 `package.json`、`apps/web/vite.config.ts`、`apps/web/vitest.config.ts`）；不宣布这些文件所属其它模块已审完。
+
+### 1. 两份当前 raw 输入（完整读取后实算）
+
+均在写入本追加前独立计算。根随后的 self V0.06 是 B2 补核与根席票，**不是**独立 B1 证据。
+
+| 对象 | 派发声称 | 本席实算 |
+|---|---|---|
+| 候选 `docs/audit-2026-09/findings.md` | V0.93，316366 字节，SHA256=`2b1e47a4b23bc40a0c90dcd31ede7784fe9d775fa04c72f814147dcfc011be78` | `sha256sum` 同值；版本行 `V0.93`；最上方唯一当前 M004 队列表七行 001—007 |
+| 输入一 根独立 B1 | `modules/M004-b1-self-raw.md` 当时 V0.05，L540—1129，完整文件 132363 字节、SHA256=`079da8b31892d00232e26f4097fac609b270df926149d4fc15fd872f20e66a4f` | 当前全文 141623 字节 / SHA256=`460c7f02e679e5631cf30d410af8e6b3d2f90f3ab5959c391bf3235a3ad068f3`。**前 132363 字节** SHA256=`079da8b31892d00232e26f4097fac609b270df926149d4fc15fd872f20e66a4f`，与独立 B1 声称相等。L540 为本次 B1 独占锁行，L1129 为 B1 结论空行。L1132 起 V0.06 为 B2 补核，不采信为独立 B1 |
+| 输入二 本席独立 B1 | `modules/M004-b1-grok-raw.md` V0.04，L873—1536，完整文件 145659 字节、SHA256=`d2707c6c5aa9e4a6e585f079f88aa1f6a0615f2f196525b514c79b6db4160607` | 本追加前全文同值。L873 为本席本次 B1 独占锁行，L1536 为 B1 结束句。旧 322 前缀 V0.01–V0.03 完整保留，不继承旧 PASS |
+
+两席本次 B1 均为完整三线 PASS，当时 finding 空集。派发顺序：先本席结束、根独立保存后才读本席全文。B1 后四值已相等（实算 / sidecar / ledger 顶行 / 本席当时最后独占字段行均为 `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`，锁 V0.11 / COUNT 1）。本 B2 段不再写独占字段行。
+
+源文件：`package-lock.json` 3321 行 / 114258 字节 / 220 `packages` / `documentVersion` V0.02 / SHA256=`d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef`。HEAD=`origin/main`=`242f487233d028173cb9198eecd079f5d877405c`。冻结映射：`criteria-lock.md` L6383 `M004 → [GEN-001 … GEN-018]`，无 HTML 派生 ID。
+
+### 2. 全部差集（本次临时号 → 永久 ID）
+
+本次临时号：
+
+- 本席 V0.04 B1 §8：finding **空集**。明确未跑 `npm audit`。未把磁盘 optional 未装、hidden lock、未下载 tarball、未做 audit 写成缺陷。
+- 根独立 B1 V0.05（前 132363 字节）：finding **空集**。同样记录当时未跑 `npm audit`。
+- 根 B2 V0.06 / 候选 CX-B2-01：新增 **一条** 观察，两包同一 GHSA，归 **M004-007**。
+
+| 本次信号 | 候选归并 | 漏并？ | 改写本席 finding？ |
+|---|---|---|---|
+| 本席 B1 空集 | 无新 GR 行 | 否 | 否。未把空集改写成缺陷，也未把本席原「未跑 audit」回写成当时已跑 |
+| 根 B1 空集 | 无新 CX 行进入 001—006 的当前缺陷栏 | 否 | 否 |
+| 根 B2 CX-B2-01（audit 一条公告，两包） | 新正式 **M004-007**，不拆两项 | 否 | 否。本席 B1 没有公告查询，**不把原 B1 PASS 冒称已同意 007** |
+| 历史 nanoid / postcss / undici | 继续 **M004-001 / 002 / 003** | 否 | 否。旧工程缺陷与已修记录保留；当前缺陷/队列为否，不改写为「从未存在」 |
+| 元数据 / 220 条图 / HTTPS+SRI | 继续 **M004-004 / 005 / 006** | 否 | 否。本席 T-HDR/T-DOCVER/T-WS/T-LINK、全 220 T-PROD/DEV/OPT/PEER、T 完整性登记分别落入三 ID，不复制 220 个新 ID |
+
+无添加项。无铁律 4 新 HTML 申请。无未答 questions。旧 322 整体源 SHA `65254915c5c85e3bf5b26659d0acd27b2bdfc94c6b5954d15e4db81a6877e6bc` 与当前 `d3676e89…` 不同，**不继承旧整体 PASS**。
+
+### 3. 依序分类、工程缺陷、队列（冲突 → 细化 → 技术性 → 添加）
+
+唯一当前 M004 表七行，本席逐项独立判断。三份 HTML 无 npm 锁上位锚点，整文件及各 ID 停不住冲突/细化，无业务发明，故均为 **技术性**。
+
+#### M004-001
+
+- 当前来源：旧 CX-01；本次两席完整锁/版本核对；根 B2 公告查询未再列入
+- 分类：**技术性**
+- 当前工程缺陷：**否**
+- 修复队列：**否**
+- 现锁：`package-lock.json` L1930—1948，`node_modules/nanoid` **3.3.18**。历史缺陷（3.3.12 无限循环）及已修出队记录保留在 findings 旧段。本席本次 `npm audit --package-lock-only --ignore-scripts --json` 结果不含 nanoid。不称所有未来公告为空
+- 判定：同意队列否
+
+#### M004-002
+
+- 当前来源：旧 CX-02；本次两席完整锁/版本核对；根 B2 公告查询未再列入
+- 分类：**技术性**
+- 当前工程缺陷：**否**
+- 修复队列：**否**
+- 现锁：L2050—2078，`node_modules/postcss` **8.5.23**，内部 `dependencies.nanoid` **^3.3.16**。历史 map 路径缺陷及已修记录保留。当前 audit 不含 postcss
+- 判定：同意队列否
+
+#### M004-003
+
+- 当前来源：旧 CX-03；本次两席完整锁/版本核对；根 B2 公告查询未再列入
+- 分类：**技术性**
+- 当前工程缺陷：**否**
+- 修复队列：**否**
+- 现锁：L3044—3053，`node_modules/undici` **7.29.0**。历史缓存头缺陷及已修记录保留。当前 audit 不含 undici
+- 判定：同意队列否
+
+#### M004-004
+
+- 当前来源：根顶层/根/web/link 表；本席 T-HDR / T-DOCVER / T-WS / T-LINK
+- 分类：**技术性**
+- 当前工程缺陷：**否**
+- 修复队列：**否**
+- 现核：顶层 `name`/`version`/`lockfileVersion:3`/`documentVersion:V0.02`/`requires`/`packages`；唯一 link `node_modules/apps-web` → `apps/web`；根与 `apps/web` 记录存在。不改应用 SemVer、锁协议或文件自身版本
+- 判定：同意队列否
+
+#### M004-005
+
+- 当前来源：根 220 条 / 582 边 / 116 engines / 28 平台约束；本席全 220 条 T-PROD/DEV/OPT/PEER
+- 分类：**技术性**
+- 当前工程缺陷：**否**
+- 修复队列：**否**
+- 现核：`packages` 220；optional 34，其中带 `os`/`cpu` 28、不带 6（`@emnapi/core|runtime|wasi-threads`、`@napi-rs/wasm-runtime`、`@tybys/wasm-util`、`tslib`）；含 `engines` 记录 116。根 582 边与本席普通 426 / 含其它字段 438 / 含 peer 582 为不同统计口径，不是冲突。可选缺失、嵌套同版属于有效依赖图。不为去重重排锁
+- 判定：同意队列否
+
+#### M004-006
+
+- 当前来源：两席 217 条 HTTPS/SRI；根 ssri 错 payload 反例
+- 分类：**技术性**
+- 当前工程缺陷：**否**
+- 修复队列：**否**
+- 现核：217 条 `resolved` 为 HTTPS、217 条 `integrity` 为 sha512。本次 B2 **未下载**远端 tarball，不借旧下载记录称本次已验证全部供应链或无漏洞
+- 判定：同意队列否
+
+#### M004-007
+
+见下一节。本席独立结论：分类 **技术性**；当前工程缺陷 **否**；修复队列 **否**。不是跟随根席 PASS。
+
+### 4. M004-007 事实、通道与铁律 6 边界
+
+#### 4.1 本席独立复跑（类型 4）
+
+命令：`npm audit --package-lock-only --ignore-scripts --json`（工作目录 `/home/james/complex-management`）。
+
+- 真实 **exit 1**
+- `metadata.vulnerabilities`：info 0 / low 0 / **moderate 2** / high 0 / critical 0 / total 2
+- 仅 `@vitest/mocker` 与 `vitest` 两条；via 均为同一 URL `https://github.com/advisories/GHSA-82fw-gwwq-j7x9`；标题同一；range `>=2.1.0 <4.1.11`
+- nanoid / postcss / undici **未列入**本次结果
+- 未执行 `npm audit fix`。audit 前后三份 SHA 仍为：锁 `d3676e89…`、根清单 `350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f`、web 清单 `b8017d9782b4c00eac1c992204dad2b009e23db7c4c804737bdf8fcbc90b8f1f`
+
+两包同一 GHSA，归 **一个** 正式 ID，不分两项。不能把版本命中否定：现锁 `@vitest/mocker` L1121—1147 **4.1.9**，`vitest` L3132—3221 **4.1.9**，均在受影响范围。修补版公告为 4.1.11。
+
+#### 4.2 上游公告（类型 3，本席直接读取）
+
+主来源：`https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9`（本席 `curl` HTML exit 0；GitHub API `https://api.github.com/advisories/GHSA-82fw-gwwq-j7x9` exit 0）。GHSA-82fw-gwwq-j7x9；CVE-2026-84373；severity medium；CVSS 5.9 `AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N`。
+
+公告原文要点（不另造判据）：
+
+- 缺陷在 `@vitest/mocker` 对 redirect mock 目标路径未按 dev server 文件服务 allowlist 校验；`load` 钩子对 `mock.type === 'redirect'` 执行 `readFile(mock.redirect)`。
+- **无认证可利用**仅通过公开导出的 `mockerPlugin` / 独立 `interceptorPlugin`（给第三方 dev server 用），它们把处理函数挂到 Vite 未做 token 校验的 HMR WebSocket。
+- Vitest **自身 browser 模式**走带 per-run token 的 RPC，默认不是远程无认证可达。
+- 这是 **development-server** 问题。默认绑 localhost；暴露到网络需要 `server.host` / `0.0.0.0` 等。host 暴露是可达性前提，不是「已经注册了公开 mock 插件」。
+- 受影响：`@vitest/mocker` >= 2.1.0 至 4.1.x；**Fixed: 4.1.11**。4.1.9 命中属实。
+
+公告只解释该软件行为。本席不借它新增业务要求、门禁、判据、技能或文件。
+
+#### 4.3 当前项目接线（类型 4，只读对照配置）
+
+已读全文：
+
+- `apps/web/vite.config.ts`：`plugins: [react()]` only；无 mocker/interceptor/browser。
+- `apps/web/vitest.config.ts`：`plugins: [react()]`；`test.environment: "jsdom"`；无 `browser` 配置。
+- `apps/web/package.json`：`test:unit`=`vitest run`；`test:unit:watch`=`vitest`；`dev`/`preview` 为 `vite --host 0.0.0.0 --port 5173`（及 preview 同 host）。
+- 精确检索：`rg -n --glob '!node_modules/**' --glob '!package-lock.json' '@vitest/(mocker|browser)|mockerPlugin|interceptorPlugin' apps/web` **exit 1、无匹配**。
+- 锁内无 `@vitest/browser*` 记录。vitest 的 `@vitest/browser-playwright|preview|webdriverio` 为 optional peer，当前树未装。
+
+已安装副本（只读，未改、未升级）进一步核对默认路径：
+
+- `node_modules/vitest` **4.1.9** 源码检索 `mockerPlugin` / `interceptorPlugin` / `vitest:interceptor:register` **0 处**。
+- vitest 实际从 `@vitest/mocker/node` 引入的是 `hoistMocksPlugin` 与 `automockPlugin`，不是公开 `mockerPlugin`/`interceptorPlugin`。
+- `@vitest/mocker/dist/node.js` 确有 `interceptorPlugin`：`configureServer` 注册 `server.ws.on("vitest:interceptor:register", …)`，redirect 分支 `readFile(mock.redirect)`，与公告一致。该函数是公开导出，**当前 vite/vitest 配置未调用它**。
+
+`dev` 的 host `0.0.0.0` ≠ 注册 `mockerPlugin`。`jsdom` ≠ Vitest browser 模式。`vitest run` / 默认 watch 走 jsdom 单元测试，不是公告的无认证 HMR 注册通道。
+
+#### 4.4 GEN-004 / 010 / 013 与铁律 6（为何不入队）
+
+grilling 自问，本席自答：
+
+❓ Q1 仅凭 CVE 标题或 npm 两个 moderate 包计数，是否必须把当前工程缺陷/队列打成「是」？
+➡️ 否。冻结 GEN 要求可观察引入与首次可信使用；V0.17 铁律 6 要求「第一次正常跑就会撞上」才修。两包计数是同一公告的依赖闭包，不是两个独立缺陷。
+
+❓ Q2 001—003 曾以「锁携带已知库缺陷 + 同主版修补」入队，007 是否必须同样入队？
+➡️ 否，口径不同。001—003 的库级反例在调用该包**自身公开 API** 时即可复现，不需要项目再注册一条对外通道。007 的 sink 按公告与当前 4.1.9 源码，需公开插件注册（或 browser 模式那条已鉴权 RPC）。当前配置与 vitest 默认 jsdom 路径都未注册该通道。不能把「包在树里」自动等同「通道已开」。
+
+❓ Q3 GEN-010（路径穿越）是否已被当前配置引入？
+➡️ 依赖版本命中属实，公告描述的穿越 sink 存在于 `@vitest/mocker` 公开插件实现中。当前可观察入口（`vitest run` / jsdom、`vite --host 0.0.0.0` 且 plugins 仅 react）**没有**把该 sink 接到首次正常跑的输入面。GEN-010 不把「树里有受影响版本」单独升级成必须立刻改锁。
+
+❓ Q4 GEN-004（信任边界）？
+➡️ 缺校验发生在未接线的 interceptor 注册路径。本项目当前配置未把该 WebSocket 事件当成输入面。不在 B2 发明新校验门禁。
+
+❓ Q5 GEN-013（依赖须可复现、失败显式）？
+➡️ 锁仍可被原生解析；`npm audit` **非 0** 是显式告警，必须保留。audit 非 0 ≠ 安装/构建入口在首次正常跑失败，也不等于当前工程缺陷成立。不把 audit 当新强制门禁。
+
+❓ Q6 铁律 6：这条路径第一次正常跑就会撞上吗？
+➡️ 不会。要撞上无认证读取，至少还要：把 `mockerPlugin`/`interceptorPlugin` 挂进实际 Vite server，或改走 Vitest browser 模式，再加上可达的 HMR/RPC 与构造好的 redirect 注册。这是「两三件不巧同时发生」，按铁律 6 **不修**，只登记。host `0.0.0.0` 只满足公告里的可达性前提之一，单独不够。
+
+❓ Q7 应否升级到 4.1.11？
+➡️ 本席认为 **不应**在本批入队升级。支持入队的可观察事实不足：当前入口未启用公告注册通道。凭标题/两包计数自动排队会违反铁律 6，并扩大 vitest 闭包（不「偷偷升级整套」）。将来若接线改动，不在本次批准范围。
+
+本席因此 **认同仅登记**：007 技术性 / 当前工程缺陷否 / 队列否。明确保留：
+
+- `npm audit --package-lock-only --ignore-scripts --json` **exit 1**
+- moderate **2** / high 0 / critical 0
+- 4.1.9 **命中** GHSA-82fw-gwwq-j7x9，修补在 4.1.11
+
+**不写**：audit 全绿；公告误报；该 sink 永远不可触发。
+
+ponytail：不把 007 拆成两个 ID，不因「看起来专业」升级整套 vitest。`net: -0 lines possible.` Lean already. Ship.（仅针对本批队列膨胀，不是声称锁无告警。）
+
+### 5. 遗漏 / 分歧 / 人闸
+
+- **遗漏**：无。七个 ID 均复核；001—006 历史与当前版本/队列均核对；007 为 B2 差集唯一新增。
+- **分歧**：无。本席独立同意候选七行的分类/当前缺陷/队列。本席 B1 空集与 007 并存：007 是 B1 之后按历史修复核对补跑 audit 的新观察，不是改写 B1。
+- **人闸**：无添加项，无 HTML 自身问题，无未答 questions。不向人提问。
+- 全局 html-ledger-sync / entry-anchors 红灯仍按既定归属保留，不是本模块锁缺陷，本席不宣布其它模块审完。
+
+### 6. 整批结论与下一步
+
+**B2 PASS。** 七项当前修复队列全部为否。按 V0.17 §4：跳过 B3/B4（B3 次数保持 1，不增加），**必须完整 B5-r1**（跳过 B3 时文件名仍用历史 B3=1 的 r1 口径，由调度按既有命名执行；本席不改 ledger）。**现在不得标模块 PASS。**
+
+未双席定稿前不得实施任何升级或改锁。本席不代改 findings 或 self。任一 FAIL 则整批继续归并、不定稿、不修，原票保留。
+
+B2 结束。不修复。
