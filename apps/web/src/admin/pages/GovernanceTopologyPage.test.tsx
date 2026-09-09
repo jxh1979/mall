@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -6,13 +7,15 @@ import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 // mock 走真实 AdminApi（stub fetch）→ unwrap 转 camelCase → 组件。platform 域 snake_case 响应。
-const ENTITIES = [{ id: "org-1", entity_name: "平台经营主体", unified_social_credit_code: "ORG-1", entity_role: "operation", status: "active" }];
+// M012-005：夹具只用现行闭集——主体角色 platform/project_company/management_company（V410），空间类型走 V184 字典 8 码。
+const ENTITIES = [{ id: "org-1", entity_name: "平台经营主体", unified_social_credit_code: "ORG-1", entity_role: "management_company", status: "active" }];
 const MERCHANTS = [
   { id: "m-1", business_entity_id: "org-1", merchant_name: "商户甲", status: "active" },
   { id: "m-2", business_entity_id: "org-1", merchant_name: "商户乙", status: "suspended" },
 ];
 const PROJECTS = [{ id: "p-1", name: "项目一", code: "PJ-1", merchant_id: "m-1", venue_type: "bar", status: "active" }];
-const SPACES = [{ id: "s-1", space_name: "空间甲", project_id: "p-1", floor_no: "L1", area_square_meter: 120, space_type: "hall", status: "active" }];
+// M012-003：后台 SpaceRecord 以 project_id 挂接项目（无 venue_id）。
+const SPACES = [{ id: "s-1", space_name: "空间甲", project_id: "p-1", floor_no: "L1", area_square_meter: 120, space_type: "shop", status: "active" }];
 
 function envelope(items: unknown[]): Response {
   return new Response(
@@ -105,13 +108,40 @@ describe("GovernanceTopologyPage KPI 聚焦视图", () => {
   });
 });
 
+describe("GovernanceTopologyPage 真实字段与全中文（M012-003/004）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/topology");
+  });
+
+  it("项目业态与空间类型渲染为中文，不直出 bar/shop 英文码（PGM-001）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("governance-topology-table")).toBeTruthy());
+    const topology = screen.getByTestId("governance-topology-table").textContent ?? "";
+    expect(topology).toContain("酒吧");
+    expect(topology).not.toMatch(/\bbar\b/);
+    const spaces = screen.getByTestId("governance-topology-spaces-table").textContent ?? "";
+    expect(spaces).toContain("商铺/铺位");
+    expect(spaces).not.toMatch(/\bshop\b/);
+    // M012-004：空间状态闭集 active/unavailable 页内映射「可用/不可用」（M009-036 口径）。
+    expect(spaces).toContain("可用");
+  });
+
+  it("「已挂接」按后台 project_id 计数（读臆造 venue_id 时恒为 0，本用例必红）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("governance-topology-summary")).toBeTruthy());
+    expect(screen.getByTestId("governance-topology-summary").textContent).toContain("1 个已挂接");
+  });
+
+});
+
 describe("GovernanceTopologyPage 行明细抽屉（拓扑表 / 空间表整行可点）", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/admin/governance/topology");
   });
 
-  it("点拓扑关系行 → 抽屉含主体/商户/项目与中文状态", async () => {
+  it("点拓扑关系行 → 抽屉含主体/商户/项目与中文状态、中文业态", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("governance-topology-row-m-1-p-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("governance-topology-row-m-1-p-1"));
@@ -120,10 +150,11 @@ describe("GovernanceTopologyPage 行明细抽屉（拓扑表 / 空间表整行�
     expect(drawer.textContent).toContain("商户甲");
     expect(drawer.textContent).toContain("项目一");
     expect(drawer.textContent).toContain("有效");
+    expect(drawer.textContent).toContain("酒吧");
     expect(drawer.textContent).not.toContain("active");
   });
 
-  it("点空间点位行 → 抽屉含空间名/所属项目/面积", async () => {
+  it("点空间点位行 → 抽屉含空间名/所属项目/面积/中文空间类型", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("governance-space-row-s-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("governance-space-row-s-1"));
@@ -131,6 +162,7 @@ describe("GovernanceTopologyPage 行明细抽屉（拓扑表 / 空间表整行�
     expect(drawer.textContent).toContain("空间甲");
     expect(drawer.textContent).toContain("项目一");
     expect(drawer.textContent).toContain("120");
+    expect(drawer.textContent).toContain("商铺/铺位");
   });
 
   it("Esc 关闭抽屉 + 点遮罩关闭", async () => {

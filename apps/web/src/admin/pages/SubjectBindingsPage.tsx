@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -6,9 +7,30 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
-import type { AdminPageProps, SubjectBindingRow } from "../types";
+import type { AdminPageProps } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+
+// M012-001：按后台 BusinessEntityBindingRecord 真实字段读取（AdminApi 已把 snake_case 转 camelCase）；
+// types.ts 的 SubjectBindingRow 七个臆造字段（businessObjectId/operatorSubject/…）后端不存在，本页不再读取。
+type BindingRow = {
+  id: string;
+  merchantId?: string;
+  operationEntityId?: string;
+  contractEntityId?: string;
+  settlementEntityId?: string;
+  status?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  changeReason?: string;
+};
+
+// M012-002：后台 changeBusinessEntityBinding 必填 action，闭集 active/inactive/suspended（PlatformService 白名单，OpenAPI required）。
+const BINDING_ACTIONS: ReadonlyArray<{ code: string; label: string }> = [
+  { code: "active", label: "启用" },
+  { code: "inactive", label: "停用" },
+  { code: "suspended", label: "暂停" },
+];
 
 // 后端写权限码（PlatformController：/business-entity-bindings/{id}/change）
 const BINDING_MANAGE_PERMISSION = "entity.binding.manage";
@@ -23,6 +45,8 @@ const TEXT = {
   submitChange: "提交绑定变更",
   select: "选择",
   focusClear: "清除筛选，返回全部",
+  selectAction: "请选择变更后状态",
+  actionRequired: "请选择变更后的绑定状态（启用/停用/暂停）。",
 };
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=bindings[&status=active]；点 KPI 数字=带参重进本页只渲染绑定表（对应子集）。
@@ -43,27 +67,29 @@ function display(value: unknown) {
 }
 
 export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
-  const [bindings, setBindings] = React.useState<SubjectBindingRow[]>([]);
+  const [bindings, setBindings] = React.useState<BindingRow[]>([]);
   const { setSelectedId, selected } = useSelectedRow(bindings);
-  const [reason, setReason] = React.useState("完整后台验收变更");
+  // M012-006：原因不预填验收句，由用户填写；M012-002：变更后状态由用户选择。
+  const [reason, setReason] = React.useState("");
+  const [action, setAction] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该主体绑定完整字段（状态中文·四类主体展开·留痕证据）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
-  function openBindingDetail(row: SubjectBindingRow) {
+  function openBindingDetail(row: BindingRow) {
     setDetail({
-      title: `主体绑定明细 · ${display(row.businessObjectId)}`,
+      title: `主体绑定明细 · ${display(row.merchantId)}`,
       fields: [
-        { label: "业务对象", value: display(row.businessObjectId) },
-        { label: "运营主体", value: display(row.operatorSubject) },
-        { label: "合同主体", value: display(row.contractSubject) },
-        { label: "合同主体编号", value: display(row.contractSubjectId) },
-        { label: "结算主体", value: display(row.settlementSubject) },
-        { label: "结算主体编号", value: display(row.settlementSubjectId) },
+        { label: "商户编号", value: display(row.merchantId) },
+        { label: "运营主体编号", value: display(row.operationEntityId) },
+        { label: "合同主体编号", value: display(row.contractEntityId) },
+        { label: "结算主体编号", value: display(row.settlementEntityId) },
         { label: "状态", value: formatBusinessStatus(row.status) },
-        { label: "留痕证据", value: display(row.auditEvidenceRef) },
+        { label: "生效起", value: display(row.effectiveFrom) },
+        { label: "生效止", value: display(row.effectiveTo) },
+        { label: "变更原因", value: display(row.changeReason) },
         { label: "绑定编号", value: display(row.id) },
       ],
     });
@@ -97,13 +123,13 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      setBindings(await api.get<SubjectBindingRow[]>("/api/v1/platform/business-entity-bindings"));
+      setBindings(await api.get<BindingRow[]>("/api/v1/platform/business-entity-bindings"));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
 
   const activeCount = bindings.filter((row) => row.status === "active").length;
-  const uniqueObjects = new Set(bindings.map((row) => row.businessObjectId).filter(Boolean)).size;
+  const uniqueObjects = new Set(bindings.map((row) => row.merchantId).filter(Boolean)).size;
   // 聚焦时按状态子集过滤内存数组；无子集=全量。
   const visibleBindings = kpiFocus?.status ? bindings.filter((row) => row.status === kpiFocus.status) : bindings;
   const focusTitle = kpiFocus?.status === "active" ? "生效绑定" : "主体绑定";
@@ -111,6 +137,10 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
   function validateChange() {
     if (!selected?.id) {
       setFormError("请先在表格中选择要变更的主体绑定记录。");
+      return false;
+    }
+    if (!action) {
+      setFormError(TEXT.actionRequired);
       return false;
     }
     if (!reason.trim()) {
@@ -129,14 +159,15 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
     setFormError("");
     setGlobalError(null);
     setSubmitting(true);
+    // M012-002：请求体带后台必填的 action；M012-006：不再提交假证据附件号（证据附件上传能力属既有功能缺口，登记，不在本页发明）。
     const body = {
+      action,
       reason,
       idempotencyKey: `full-admin-subject-binding-change-${selected.id}-${Date.now()}`,
-      evidenceAttachmentIds: ["evidence-full-admin"],
     };
     try {
       const result = await api.post<unknown>(`/api/v1/platform/business-entity-bindings/${encodeURIComponent(selected.id)}/change`, body);
-      setActionResult({ action: "subject_binding_change_submitted", bindingId: selected.id, result, ...body });
+      setActionResult({ action: "subject_binding_change_submitted", bindingId: selected.id, bindingAction: body.action, reason: body.reason, idempotencyKey: body.idempotencyKey, result });
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "主体绑定变更失败";
@@ -167,11 +198,12 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
                 <div className="admin-kpi-grid" data-testid="subject-bindings-summary">
                   <div className="admin-kpi-card admin-kpi-card--clickable"><span>唯一绑定对象</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-unique" onClick={() => enterKpiFocus()}>{uniqueObjects}</button><small>唯一绑定</small></div>
                   <div className="admin-kpi-card admin-kpi-card--clickable"><span>生效绑定</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-active" onClick={() => enterKpiFocus("active")}>{activeCount}</button><small>生效中</small></div>
-                  <div className="admin-kpi-card"><span>合同主体</span><strong>{bindings.filter((row) => row.contractSubject).length}</strong><small>合同口径</small></div>
-                  <div className="admin-kpi-card"><span>选中绑定</span><strong className="admin-kpi-value--text" title={selected?.businessObjectId ?? "-"}>{selected?.businessObjectId ?? "-"}</strong><small>{selected?.status ? formatBusinessStatus(selected.status) : "-"}</small></div>
+                  <div className="admin-kpi-card"><span>合同主体</span><strong>{bindings.filter((row) => row.contractEntityId).length}</strong><small>合同口径</small></div>
+                  <div className="admin-kpi-card"><span>选中绑定</span><strong className="admin-kpi-value--text" title={selected?.merchantId ?? "-"}>{selected?.merchantId ?? "-"}</strong><small>{selected?.status ? formatBusinessStatus(selected.status) : "-"}</small></div>
                 </div>
 
                 <div className="admin-form-grid">
+                  <label>变更后状态<select data-testid="subject-bindings-change-action" value={action} onChange={(event) => setAction(event.target.value)}><option value="">{TEXT.selectAction}</option>{BINDING_ACTIONS.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></label>
                   <label>变更原因<input data-testid="subject-bindings-change-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
                 </div>
                 <div className="admin-form-row">
@@ -193,20 +225,19 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="subject-bindings-table">
-                <thead><tr><th>{TEXT.select}</th><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>合同主体 ID</th><th>结算主体</th><th>结算主体 ID</th><th>状态</th><th>留痕证据</th><th>详情</th></tr></thead>
+                <thead><tr><th>{TEXT.select}</th><th>商户编号</th><th>运营主体编号</th><th>合同主体编号</th><th>结算主体编号</th><th>状态</th><th>生效起</th><th>变更原因</th><th>详情</th></tr></thead>
                 <tbody>{visibleBindings.map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`subject-bindings-row-${row.id}`}
                     onClick={() => openBindingDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}>
                     <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此主体绑定 ${row.id}`} data-testid={`subject-bindings-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
-                    <td>{display(row.businessObjectId)}</td>
-                    <td>{display(row.operatorSubject)}</td>
-                    <td>{display(row.contractSubject)}</td>
-                    <td>{display(row.contractSubjectId)}</td>
-                    <td>{display(row.settlementSubject)}</td>
-                    <td>{display(row.settlementSubjectId)}</td>
+                    <td>{display(row.merchantId)}</td>
+                    <td>{display(row.operationEntityId)}</td>
+                    <td>{display(row.contractEntityId)}</td>
+                    <td>{display(row.settlementEntityId)}</td>
                     <td>{formatBusinessStatus(row.status)}</td>
-                    <td>{display(row.auditEvidenceRef)}</td>
+                    <td>{display(row.effectiveFrom)}</td>
+                    <td>{display(row.changeReason)}</td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看主体绑定详情" onClick={(event) => { event.stopPropagation(); openBindingDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>
               </table>

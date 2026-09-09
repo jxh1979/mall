@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -9,6 +10,17 @@ import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, Governanc
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+
+// M012-004：空间类型字典 8 码（V184 space_type_dictionary 种子，type_name 中文）；PGM-001 零英文，页面不直出 type_code。
+const SPACE_TYPE_LABELS: Record<string, string> = { building: "楼栋", floor: "楼层", zone: "区块/区域", shop: "商铺/铺位", public_area: "公共区域", parking: "车位/车库", booth: "摊位/展位", other: "其他" };
+function formatSpaceType(code: string | null | undefined) {
+  return code ? SPACE_TYPE_LABELS[code] ?? formatBusinessStatus(code) : "—";
+}
+// M012-004：空间状态闭集 active/unavailable（M009-036）页内映射「可用/不可用」，不直出英文。
+const SPACE_STATUS_LABELS: Record<string, string> = { active: "可用", unavailable: "不可用" };
+function formatSpaceStatus(code: string | null | undefined) {
+  return code ? SPACE_STATUS_LABELS[code] ?? formatBusinessStatus(code) : "—";
+}
 
 const TEXT = {
   title: "集团/综合体拓扑",
@@ -95,7 +107,8 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
   );
 
   const projectIds = new Set(projects.map((project) => project.id));
-  const attachedSpaces = spaces.filter((space) => space.venueId && projectIds.has(space.venueId)).length;
+  // M012-003：后台 SpaceRecord 以 projectId 挂接项目（无 venueId；types.ts 的 venueId 为旧臆造字段）。
+  const attachedSpaces = spaces.filter((space) => space.projectId && projectIds.has(space.projectId)).length;
 
   // 下钻定位:从别的页点商户/综合体进来(?focus=id)→ 滚动到拓扑中对应节点行(商户或项目)并高亮;无 focus 时不动。
   React.useEffect(() => {
@@ -122,7 +135,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
         { label: "商户", value: merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName) },
         { label: "项目", value: display(project?.name) },
         { label: "项目编码", value: display(project?.code) },
-        { label: "业态", value: display(project?.venueType) },
+        { label: "业态", value: formatBusinessStatus(project?.venueType) },
         { label: "状态", value: formatBusinessStatus(project?.status ?? merchant.status) },
       ],
     });
@@ -136,8 +149,8 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
         { label: "所属项目", value: display(project?.name ?? space.projectId) },
         { label: "楼层", value: display(space.floorNo) },
         { label: "面积(㎡)", value: display(space.areaSquareMeter) },
-        { label: "空间类型", value: formatBusinessStatus(space.spaceType) },
-        { label: "状态", value: formatBusinessStatus(space.status) },
+        { label: "空间类型", value: formatSpaceType(space.spaceType) },
+        { label: "状态", value: formatSpaceStatus(space.status) },
       ],
     });
   }
@@ -165,7 +178,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
                 <td onClick={(event) => event.stopPropagation()}>{merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName)}</td>
                 <td>{display(project?.name)}</td>
                 <td>{display(project?.code)}</td>
-                <td>{display(project?.venueType)}</td>
+                <td>{formatBusinessStatus(project?.venueType)}</td>
                 <td>{formatBusinessStatus(project?.status ?? merchant.status)}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看拓扑关系详情" onClick={(event) => { event.stopPropagation(); openTopologyDetail(entity, merchant, project); }}>查看详情</button></td></tr>
             ));
@@ -184,7 +197,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
           <tbody>{spaces.map((space) => {
             const project = projects.find((item) => item.id === space.projectId);
             const spaceFocused = !!focusObjectId && (focusObjectId === space.id || focusObjectId === space.projectId);
-            return <tr key={space.id} data-testid={`governance-space-row-${space.id}`} className={`admin-row-clickable${spaceFocused ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openSpaceDetail(space, project)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSpaceDetail(space, project); } }}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatBusinessStatus(space.spaceType)}</td><td>{formatBusinessStatus(space.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看空间点位详情" onClick={(event) => { event.stopPropagation(); openSpaceDetail(space, project); }}>查看详情</button></td></tr>;
+            return <tr key={space.id} data-testid={`governance-space-row-${space.id}`} className={`admin-row-clickable${spaceFocused ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openSpaceDetail(space, project)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSpaceDetail(space, project); } }}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatSpaceType(space.spaceType)}</td><td>{formatSpaceStatus(space.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看空间点位详情" onClick={(event) => { event.stopPropagation(); openSpaceDetail(space, project); }}>查看详情</button></td></tr>;
           })}</tbody>
         </table>
       </div>

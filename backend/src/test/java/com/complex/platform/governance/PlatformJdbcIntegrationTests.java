@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,10 +66,10 @@ class PlatformJdbcIntegrationTests {
                 "be_pg", "PG Entity", "management_company", null, null, null, "active", t, t)); // M009-012：主体记录不再带 parent 链；M010-003：operation 已出白名单
         repository.saveMerchant(new MerchantRecord("mch_pg_1", "PG A", "other", "be_pg", "be_pg", "be_pg",
                 "C1", "18800000001", "Owner", "1F-A", new java.math.BigDecimal("10.00"), new java.math.BigDecimal("9.00"),
-                null, null, new java.math.BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
+                null, null, new java.math.BigDecimal("1.00"), "lease", "active", t, t));
         repository.saveMerchant(new MerchantRecord("mch_pg_2", "PG B", "other", "be_pg", "be_pg", "be_pg",
                 "C2", "18800000002", "Owner", "1F-B", new java.math.BigDecimal("10.00"), new java.math.BigDecimal("9.00"),
-                null, null, new java.math.BigDecimal("1.00"), "fixed_rent_plus_commission", "draft",
+                null, null, new java.math.BigDecimal("1.00"), "lease", "active",
                 t.plusSeconds(1), t.plusSeconds(1)));
         var page1 = repository.listMerchantsPaged(true, null, 1, 1);
         var page2 = repository.listMerchantsPaged(true, null, 2, 1);
@@ -120,6 +120,7 @@ class PlatformJdbcIntegrationTests {
                 ));
     }
 
+    // M011-002：夹具只用服务层白名单内的合作方式/商户状态（BEQR-148 六类、BEQR-155），更新路径 lease→joint_operation 证明列可改。
     @Test
     void createUpdateAndListMerchantPersistsFormalFields() {
         Instant createdAt = Instant.parse("2026-06-14T02:00:00Z");
@@ -139,8 +140,8 @@ class PlatformJdbcIntegrationTests {
                 "Jack Contact",
                 "18800000013",
                 new BigDecimal("12.30"),
-                "fixed_rent_plus_commission",
-                "draft",
+                "lease",
+                "active",
                 createdAt,
                 createdAt
         ));
@@ -161,7 +162,7 @@ class PlatformJdbcIntegrationTests {
                 "Jill Contact",
                 "18800000014",
                 new BigDecimal("15.80"),
-                "revenue_share",
+                "joint_operation",
                 "active",
                 createdAt,
                 Instant.parse("2026-06-14T03:00:00Z")
@@ -198,7 +199,7 @@ class PlatformJdbcIntegrationTests {
                         "Jill Contact",
                         "18800000014",
                         new BigDecimal("15.80"),
-                        "revenue_share",
+                        "joint_operation",
                         "active"
                 ));
     }
@@ -390,7 +391,7 @@ class PlatformJdbcIntegrationTests {
                 "be_pii", "PII Entity", "management_company", null, null, null, "active", t, t));
         repository.saveMerchant(new MerchantRecord("mch_pii_1", "PII 商户", "other", "be_pii", "be_pii", "be_pii",
                 "第一联系人", "18800000021", "负责人", "1F-P", new BigDecimal("10.00"), new BigDecimal("9.00"),
-                "第二联系人", "18800000022", new BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
+                "第二联系人", "18800000022", new BigDecimal("1.00"), "lease", "active", t, t));
 
         Map<String, Object> raw = jdbcTemplate.queryForMap(
                 "SELECT contact_phone, secondary_contact_phone FROM merchants WHERE id = 'mch_pii_1'");
@@ -412,7 +413,7 @@ class PlatformJdbcIntegrationTests {
                 "be_pii2", "PII Entity 2", "management_company", null, null, null, "active", t, t));
         repository.saveMerchant(new MerchantRecord("mch_pii_2", "PII 商户2", "other", "be_pii2", "be_pii2", "be_pii2",
                 "联系人", "18800000023", "负责人", "1F-Q", new BigDecimal("10.00"), new BigDecimal("9.00"),
-                null, null, new BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
+                null, null, new BigDecimal("1.00"), "lease", "active", t, t));
         repository.saveMerchant(repository.findMerchantById("mch_pii_2").orElseThrow());
 
         assertThat(repository.findMerchantById("mch_pii_2").orElseThrow().contactPhone()).isEqualTo("18800000023");

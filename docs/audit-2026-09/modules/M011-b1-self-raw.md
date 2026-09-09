@@ -149,3 +149,23 @@ END=2026-09-09T15:25:37Z
 | 007 | PASS（否） | 与 B1 两席观察一致，无本模块可修缺陷 |
 
 本席 B2-r1 票：**PASS**（队列是＝001、002、003、004、005；否＝006、007）。B3-r1 边界：只改 `PlatformServiceTests` / `PlatformJdbcIntegrationTests` / `PlatformControllerTests` 三个测试文件（各加版本头），不改被测 M009 源码、三份 HTML、锁、迁移、权限种子；TDD：001 先改断言见红再改 fake 见绿，003/004/005 新断言先红（对照被测行为为真则以「删掉被测行为的等价物」的方式证明可失败，见 B3 记录）。不以本席票覆盖外审；外审 FAIL 则按其意见修订为 r2 候选。
+
+## M011 B2-r2 修订候选复核（席甲票）
+版本：V0.03（本文件自身；V0.01 B1 正文与 V0.02 B2-r1 追加段原字节保留，本段追加）
+
+- 输入：`modules/M011-b1-grok-raw.md` V0.02 前缀 61599 bytes SHA256 b72bf605c43128ab443c1c1bd98a4163d039d6e87d4edfdff06ab682b8c9f748（Grok B1 FAIL + B2-r1 FAIL：唯一否决点 005 并入；003/006/007 修正意见）；本文件 V0.02 前缀 17188 bytes SHA256 84980b2d44d95d0e2e2dceff66fa18616324ecd2e0980d214616929d5389b208；修订候选 `findings.md` V1.35 511341 bytes SHA256 c9ab33717d04ba79b9475485d9812c6c52b8691b8d2c3ad41846acc70dceae88「B2-r2 修订候选」。
+- 本段不写独占锁行（B2 规约）；锁实算仍为 b012328f…6695a。
+- 席位：Claude Fable 5.1（席甲，作者自审票）。本段在 Grok B2-r2 真实退出后、读取其追加段之前落盘。
+- 按 `receiving-code-review` 逐条核实 Grok B2-r1 意见后的处理：(1) 005 并入 CX-04 缺键请求——核实 `requireIdempotencyKey` 为控制器共享闸且 `creatingMerchantWithoutIdempotencyKeyReturnsValidationFailed` 已锁 400 VALIDATION_FAILED，再按 verb 各补一条与 004「不为每个 verb 各写一条」及铁律 6 相悖：接受，撤回并入；改为两条绑定用例方法名去掉 Idempotency 字样（GEN-016），缺键事实归 007。(2) 003 不为 archive_reason 造 fake——核实 `MerchantRecord` 无 archiveReason 字段、`JdbcPlatformRepository.setMerchantArchiveReason` 只写库列不映射回记录：接受，改为 deleteReason 断言（走既有 `withDelete`）。(3) 006 缺陷口径按 M009-022 为否：接受。(4) 007 补席甲 OBS-02…05 事实：接受。
+
+| ID | 本席票 | 理由 |
+|---|---|---|
+| 001 | PASS（冲突／是） | 口径不变 |
+| 002 | PASS（细化／是） | 口径不变，含 :164/:201 revenue_share |
+| 003 | PASS（细化／是，处置已收窄） | 三条服务断言 + 一条 HTTP 用例；不扩 fake、不改 record |
+| 004 | PASS（细化／是） | 口径不变 |
+| 005 | PASS（技术性／是，仅改名） | SixValues + 去 Idempotency 字样；不新写测试 |
+| 006 | PASS（跨模块观察／否，缺陷否） | 按 M009-022 |
+| 007 | PASS（否） | 含 CX-04 缺键与席甲 OBS-02…05 |
+
+本席 B2-r2 票：**PASS**（队列是＝001、002、003、004、005；否＝006、007）。B3-r1 边界：只改三个测试文件（各版本递增）；TDD：001 先改断言见红再改 fake 见绿；003/004 新增用例首跑即绿属覆盖补齐，其断言指向真实行为（回退被测行为即红）；005 只改名。不以本席票覆盖外审。

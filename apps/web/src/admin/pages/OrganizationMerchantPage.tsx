@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -22,7 +22,8 @@ const TEXT = {
   loadFailed: "组织与商户档案读取失败",
   merchantNameRequired: "商户名称不能为空。",
   merchantTypeRequired: "必须选择商户业态（酒吧／餐饮／零售／游乐／传媒／其他）。",
-  contactPhoneInvalid: "联系电话必须是 11 位中国大陆手机号。",
+  contactPhoneRequired: "联系电话不能为空。",
+  cooperationPlaceholder: "请选择合作形式",
   focusClear: "清除筛选，返回全部",
 };
 
@@ -76,12 +77,13 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
-  const [merchantName, setMerchantName] = React.useState("二期测试商户");
+  // M012-006：不预填验收默认值；商户名/联系人/电话/合作形式均由用户填写或选择。
+  const [merchantName, setMerchantName] = React.useState("");
   // 业态必填 → 不预选，逼招商自己选；选错＝通票分账份额拆给错的业态。
   const [merchantType, setMerchantType] = React.useState("");
-  const [contactName, setContactName] = React.useState("运营联系人");
-  const [contactPhone, setContactPhone] = React.useState("13800000000");
-  const [cooperationForm, setCooperationForm] = React.useState("lease");
+  const [contactName, setContactName] = React.useState("");
+  const [contactPhone, setContactPhone] = React.useState("");
+  const [cooperationForm, setCooperationForm] = React.useState("");
   const [formError, setFormError] = React.useState("");
   // 引导式创建流（一期范式）：主按钮 → 分步弹窗 → 确认创建。
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -161,36 +163,27 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       setFormError(TEXT.merchantTypeRequired);
       return;
     }
-    if (!/^1[3-9]\d{9}$/.test(contactPhone.trim())) {
-      setFormError(TEXT.contactPhoneInvalid);
+    // M012-007：三份 HTML 无联系电话格式规则，只做非空校验（操作员 2.2 答删除前端 11 位大陆手机号正则）。
+    if (!contactPhone.trim()) {
+      setFormError(TEXT.contactPhoneRequired);
       return;
     }
     setFormError("");
     setGlobalError(null);
+    // M012-006：只提交用户填写的档案字段；经营/合同/结算主体由四类主体绑定流程承接（页内边界文案「不在本页替代四类主体绑定」），
+    // 不再静默提交主体 id/区块/面积/备用联系人/租金/状态/验收备注/证据附件（后台对这些均可空，状态缺省由后台决定）。
     const request = {
       idempotencyKey: `merchant-profile-create-${Date.now()}`,
-      operatorNote: "完整后台组织与商户档案验收创建",
-      evidenceAttachmentIds: ["att-merchant-profile-create"],
       merchantName,
       merchantType,
-      businessEntityId: entities[0]?.id ?? "org-1",
-      contractEntityId: "contract-subject-1",
-      settlementEntityId: "settlement-subject-1",
       contactName,
       contactPhone: contactPhone.trim(),
-      mallBlockCode: "1F-A",
-      areaSquareMeter: 128.5,
-      leasedAreaSquareMeter: 120,
-      secondaryContactName: "备用联系人",
-      secondaryContactPhone: "13900000000",
-      rentPerSquareMeter: 12.3,
-      cooperationForm,
-      status: "active",
+      ...(cooperationForm ? { cooperationForm } : {}),
     };
     // 范式约定（引导式流程）：提交失败 = 弹窗留开 + error prop 在弹窗内显错，不静默。
     try {
       const result = await api.post<unknown>("/api/v1/platform/merchants", request);
-      setActionResult({ action: "merchant_profile_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      setActionResult({ action: "merchant_profile_created", request, result });
       setCreateOpen(false);
       await reload();
     } catch (submitError) {
@@ -209,6 +202,13 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showArchived, typeFilter]);
 
+  // M012-008：存档/删除写路径失败须可见（与创建流一致），不成未处理拒绝。
+  function reportWriteFailure(error: unknown, fallback: string) {
+    const message = error instanceof Error ? error.message : fallback;
+    setGlobalError(message);
+    setActionResult({ action: "merchant_write_failed", status: "failed", message });
+  }
+
   async function archiveMerchant(id: string, archive: boolean) {
     setGlobalError(null);
     let reason: string | undefined;
@@ -218,34 +218,46 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       if (!r.trim()) { setGlobalError("存档理由必填"); return; }
       reason = r.trim();
     }
-    await api.post(`/api/v1/platform/merchants/${id}/${archive ? "archive" : "unarchive"}`, {
-      idempotencyKey: `merchant-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
-      ...(reason ? { reason } : {}),
-    });
-    setActionResult({ action: archive ? "merchant_archived" : "merchant_unarchived", id });
-    await reload();
+    try {
+      await api.post(`/api/v1/platform/merchants/${id}/${archive ? "archive" : "unarchive"}`, {
+        idempotencyKey: `merchant-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
+        ...(reason ? { reason } : {}),
+      });
+      setActionResult({ action: archive ? "merchant_archived" : "merchant_unarchived", id });
+      await reload();
+    } catch (actionError) {
+      reportWriteFailure(actionError, archive ? "商户存档失败" : "取消存档失败");
+    }
   }
 
   async function requestDeleteMerchant(id: string) {
     const reason = window.prompt("删除理由（提交后需上级审批）：");
     if (reason === null || !reason.trim()) { setGlobalError("删除理由必填"); return; }
     setGlobalError(null);
-    await api.post(`/api/v1/platform/merchants/${id}/delete-request`, {
-      idempotencyKey: `merchant-delete-request-${id}-${Date.now()}`,
-      reason,
-    });
-    setActionResult({ action: "merchant_delete_requested", id });
-    await reload();
+    try {
+      await api.post(`/api/v1/platform/merchants/${id}/delete-request`, {
+        idempotencyKey: `merchant-delete-request-${id}-${Date.now()}`,
+        reason,
+      });
+      setActionResult({ action: "merchant_delete_requested", id });
+      await reload();
+    } catch (actionError) {
+      reportWriteFailure(actionError, "商户删除申请失败");
+    }
   }
 
   async function approveDeleteMerchant(id: string, decision: "approved" | "rejected") {
     setGlobalError(null);
-    const decided = await api.post<{ deleted?: boolean }>(`/api/v1/platform/merchants/${id}/delete-approve`, {
-      idempotencyKey: `merchant-delete-approve-${id}-${decision}-${Date.now()}`,
-      decision,
-    });
-    setActionResult({ action: `merchant_delete_${decision}`, id, deleted: decided?.deleted ?? false });
-    await reload();
+    try {
+      const decided = await api.post<{ deleted?: boolean }>(`/api/v1/platform/merchants/${id}/delete-approve`, {
+        idempotencyKey: `merchant-delete-approve-${id}-${decision}-${Date.now()}`,
+        decision,
+      });
+      setActionResult({ action: `merchant_delete_${decision}`, id, deleted: decided?.deleted ?? false });
+      await reload();
+    } catch (actionError) {
+      reportWriteFailure(actionError, "商户删除审批失败");
+    }
   }
 
   // 状态子集 KPI（正常商户）聚焦时对商户表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
@@ -289,7 +301,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         { label: "项目", value: display(row.name) },
         { label: "编码", value: display(row.code) },
         { label: "商户", value: row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId) },
-        { label: "业态", value: display(row.venueType) },
+        { label: "业态", value: formatBusinessStatus(row.venueType) },
         { label: "状态", value: formatBusinessStatus(row.status) },
       ],
     });
@@ -360,7 +372,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       <div className="admin-table-scroll" data-testid="organization-projects-section">
         <table className="admin-table" data-testid="organization-projects-table">
           <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th><th>详情</th></tr></thead>
-          <tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`organization-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.name)}</td><td>{display(row.code)}</td><td onClick={(event) => event.stopPropagation()}>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目档案详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`organization-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.name)}</td><td>{display(row.code)}</td><td onClick={(event) => event.stopPropagation()}>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{formatBusinessStatus(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目档案详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>
@@ -450,7 +462,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
           {
             title: "联系人",
             description: "填写商户对接联系人及电话。",
-            validate: () => (/^1[3-9]\d{9}$/.test(contactPhone.trim()) ? null : TEXT.contactPhoneInvalid),
+            validate: () => (contactPhone.trim() ? null : TEXT.contactPhoneRequired),
             content: (
               <>
                 <label>联系人<input data-testid="organization-merchant-contact-name" value={contactName} onChange={(event) => setContactName(event.target.value)} /></label>
@@ -462,7 +474,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             title: "经营与租赁",
             description: "选择与商户约定的合作形式。",
             content: (
-              <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}>{COOPERATION_FORMS.map((form) => <option key={form.code} value={form.code}>{form.label}</option>)}</select></label>
+              <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}><option value="">{TEXT.cooperationPlaceholder}</option>{COOPERATION_FORMS.map((form) => <option key={form.code} value={form.code}>{form.label}</option>)}</select></label>
             ),
           },
         ]}
@@ -471,7 +483,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
           { label: "业态", value: merchantType ? formatBusinessStatus(merchantType) : "未选择" },
           { label: "联系人", value: contactName },
           { label: "联系电话", value: contactPhone },
-          { label: "合作形式", value: cooperationLabel(cooperationForm) },
+          { label: "合作形式", value: cooperationForm ? cooperationLabel(cooperationForm) : "未选择" },
         ]}
       />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
