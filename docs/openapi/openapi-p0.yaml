@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: 0.1.0
-  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
+  version: V0.14
+  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
+    springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
   - url: /
     description: 同域部署或由网关转发
@@ -31,902 +32,6 @@ tags:
   - name: compliance
     description: 合规域（含 R5 T8 企微会话合规链）
 paths:
-  /api/v1/bar/void-reason-codes:
-    get:
-      tags:
-        - bar
-      operationId: listBarVoidReasonCodes
-      summary: 列退酒原因（中文下拉数据源）
-      description: 退酒原因码字典：店员退酒时从中文清单里选，不手打英文短码。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-      x-permission: bar.order_item.void
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-        - tablet
-      x-idempotency-required: false
-      x-audit-event-success: bar.void_reason_code.viewed
-      x-audit-event-failure: bar.void_reason_code.view_failed
-      x-auth-context: staff-token
-      parameters:
-        - name: include_inactive
-          in: query
-          required: false
-          schema:
-            type: boolean
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-    post:
-      tags:
-        - bar
-      operationId: saveBarVoidReasonCode
-      summary: 新增或修改退酒原因
-      description: 按原因标识覆盖中文名与排序；已下线的原因重新保存即恢复可选。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-      x-permission: bar.order_item.void_decide
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-        - tablet
-      x-idempotency-required: true
-      x-audit-event-success: bar.void_reason_code.saved
-      x-audit-event-failure: bar.void_reason_code.save_failed
-      x-auth-context: staff-token
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                code:
-                  type: string
-                label_zh:
-                  type: string
-                sort_order:
-                  type: integer
-              required:
-                - idempotency_key
-                - code
-                - label_zh
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/bar/void-reason-codes/{code}/archive:
-    post:
-      tags:
-        - bar
-      operationId: archiveBarVoidReasonCode
-      summary: 下线退酒原因（软删留理由）
-      description: 软删铁律：置为不可选并留下线理由，不物理删——历史退酒单仍引用该原因。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-      x-permission: bar.order_item.void_decide
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-        - tablet
-      x-idempotency-required: true
-      x-audit-event-success: bar.void_reason_code.archived
-      x-audit-event-failure: bar.void_reason_code.archive_failed
-      x-auth-context: staff-token
-      parameters:
-        - name: code
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                archive_reason:
-                  type: string
-              required:
-                - idempotency_key
-                - archive_reason
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/evidence/attachments/upload:
-    post:
-      tags:
-        - evidence
-      operationId: uploadEvidenceAttachment
-      summary: 上传证据照片/视频
-      description: 证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-      x-permission: evidence.attachment.create
-      x-data-scope: merchant
-      x-terminal-allowed:
-        - web
-        - tablet
-        - staff_work_phone
-      x-idempotency-required: false
-      x-audit-event-success: evidence.attachment_uploaded
-      x-audit-event-failure: evidence.attachment_uploaded_failed
-      x-auth-context: staff-token
-      parameters:
-        - name: business_type
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: business_id
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: attachment_role
-          in: query
-          required: false
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-              required:
-                - file
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/evidence/attachments/{attachment_id}/file:
-    get:
-      tags:
-        - evidence
-      operationId: readEvidenceAttachmentFile
-      summary: 回读证据文件
-      description: 主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-      x-permission: evidence.timeline.view
-      x-data-scope: merchant
-      x-terminal-allowed:
-        - web
-        - tablet
-      x-idempotency-required: false
-      x-audit-event-success: evidence.attachment_file_viewed
-      x-audit-event-failure: evidence.attachment_file_view_failed
-      x-auth-context: staff-token
-      parameters:
-        - name: attachment_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/settlement/config/overview:
-    get:
-      tags:
-        - settlement
-      operationId: settlementConfigOverview
-      summary: 结算配置中心总览
-      description: 平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。
-      x-auth-context: staff-token
-      x-permission: settlement.config.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-audit-event-success: settlement.config.overview.viewed
-      x-audit-event-failure: settlement.config.overview.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/settlement/config/retention:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertRetention
-      summary: 维护项目公司留存比例(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.platform_retention_rules.updated
-      x-audit-event-failure: settlement.config.platform_retention_rules.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                retention_bps:
-                  type: integer
-              required:
-                - idempotency_key
-                - retention_bps
-      responses: &a1
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/settlement/config/distribution-method:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertDistributionMethod
-      summary: 维护通票分配方式(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.ticket_distribution_configs.updated
-      x-audit-event-failure: settlement.config.ticket_distribution_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                method_type:
-                  type: string
-              required:
-                - idempotency_key
-                - method_type
-      responses: *a1
-  /api/v1/settlement/config/merchant-rate:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertMerchantRate
-      summary: 维护每客单价/固定额(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.ticket_distribution_merchant_rates.updated
-      x-audit-event-failure: settlement.config.ticket_distribution_merchant_rates.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                merchant_id:
-                  type: string
-                per_guest_cent:
-                  type: integer
-                  format: int64
-                fixed_amount_cent:
-                  type: integer
-                  format: int64
-              required:
-                - idempotency_key
-                - merchant_id
-      responses: *a1
-  /api/v1/settlement/config/comprehensive-service-fee:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertComprehensiveServiceFee
-      summary: 维护门票综合服务费(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.comprehensive_service_fee_configs.updated
-      x-audit-event-failure: settlement.config.comprehensive_service_fee_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                merchant_id:
-                  type: string
-                entitlement_type:
-                  type: string
-                fee_bps:
-                  type: integer
-                fixed_amount_cent:
-                  type: integer
-                  format: int64
-              required:
-                - idempotency_key
-                - fee_bps
-      responses: *a1
-  /api/v1/settlement/config/combo-discount:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertComboDiscount
-      summary: 维护套票折扣归属(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.ticket_combo_discount_configs.updated
-      x-audit-event-failure: settlement.config.ticket_combo_discount_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                discount_bearer:
-                  type: string
-                split_platform_bps:
-                  type: integer
-              required:
-                - idempotency_key
-                - discount_bearer
-                - split_platform_bps
-      responses: *a1
-  /api/v1/settlement/config/channel-fee:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertChannelFee
-      summary: 维护第三方渠道抽成率(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。V381:比例(fee_bps)或每张票固定金额(fixed_amount_cent,分)二选一,配固定金额则 fee_bps 必须为 0。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.channel_fee_configs.updated
-      x-audit-event-failure: settlement.config.channel_fee_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                channel:
-                  type: string
-                fee_bps:
-                  type: integer
-                fixed_amount_cent:
-                  type: integer
-                  format: int64
-              required:
-                - idempotency_key
-                - fee_bps
-      responses: *a1
-  /api/v1/settlement/config/commission-rate:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertCommissionRate
-      summary: 维护卡座销售提成费率(草案)
-      description: 结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 × 角色档 配置提成率万分比;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.bar_commission_rate_configs.updated
-      x-audit-event-failure: settlement.config.bar_commission_rate_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                merchant_id:
-                  type: string
-                role_type:
-                  type: string
-                rate_bp:
-                  type: integer
-              required:
-                - idempotency_key
-                - role_type
-                - rate_bp
-      responses: *a1
-  /api/v1/settlement/config/high-value-threshold:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertHighValueThreshold
-      summary: 维护高价值判定阈值(草案)
-      description: 结算配置中心 V350：按 项目公司 × 商户 配置全平台唯一的「高价值判定阈值(分)」——物品进货价高于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.high_value_thresholds.updated
-      x-audit-event-failure: settlement.config.high_value_thresholds.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                merchant_id:
-                  type: string
-                high_value_threshold_cent:
-                  type: integer
-              required:
-                - idempotency_key
-                - high_value_threshold_cent
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/settlement/config/pass-gift-cost:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertPassGiftCost
-      summary: 维护赠送权益预估成本预扣规则(草案)
-      description: 结算配置中心 S6(V373)：按 项目公司 × 票种 配置通票分账池前预扣的「赠送权益预估成本」(归娱乐平台公司)。两模式二选一：by_item 按件计＝票面各权益数量 × 提供方内部结算价之和(金额由票面推导,不接受手填整额)；by_ticket_amount 按票计＝该票种赠送部分的售价整额(必填,0=预扣关闭)。可选每月封顶与差额处理规则。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.pass_gift_cost_configs.updated
-      x-audit-event-failure: settlement.config.pass_gift_cost_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                ticket_type_id:
-                  type: string
-                prededuct_mode:
-                  type: string
-                  enum:
-                    - by_item
-                    - by_ticket_amount
-                ticket_gift_amount_cent:
-                  type: integer
-                monthly_cap_amount_cent:
-                  type: integer
-                variance_handling:
-                  type: string
-                  enum:
-                    - platform_absorb
-                    - carry_forward
-                    - true_up_pool
-              required:
-                - idempotency_key
-                - prededuct_mode
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/settlement/config/points-accrual-rate:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertPointsAccrualRate
-      summary: 维护积分累计率(草案)
-      description: 结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 配置「每积 1 基础分所需消费金额(分)」;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.points_accrual_rate_configs.updated
-      x-audit-event-failure: settlement.config.points_accrual_rate_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                merchant_id:
-                  type: string
-                amount_cent_per_point:
-                  type: integer
-              required:
-                - idempotency_key
-                - amount_cent_per_point
-      responses: *a1
-  /api/v1/settlement/config/rank-tiers:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertRankTiers
-      summary: 维护排名档位梯子(草案·整套替换)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.ticket_distribution_rank_tiers.updated
-      x-audit-event-failure: settlement.config.ticket_distribution_rank_tiers.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                tiers:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      rank_from:
-                        type: integer
-                      rank_to:
-                        type: integer
-                      share_bps:
-                        type: integer
-              required:
-                - idempotency_key
-                - tiers
-      responses: *a1
-  /api/v1/settlement/config/revenue-stream-attribution:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertRevenueStreamAttribution
-      summary: 维护业态收入归属(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。V355:收入流扩到 9 类;beneficiary_kind=entity 时须填 management_entity_id,=per_merchant(归各商户自己)时不得填。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.revenue_stream_attribution.updated
-      x-audit-event-failure: settlement.config.revenue_stream_attribution.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                revenue_stream:
-                  type: string
-                management_entity_id:
-                  type: string
-                beneficiary_kind:
-                  type: string
-                  enum:
-                    - entity
-                    - per_merchant
-              required:
-                - idempotency_key
-                - revenue_stream
-      responses: *a1
-  /api/v1/settlement/config/rank-tiers/activate:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigActivateRankTiers
-      summary: 复核转正:排名档位梯子整体换梯
-      description: 差人复核(执行人≠起草人否则403)+转正前区间覆盖复校。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: settlement.config.draft.activated
-      x-audit-event-failure: settlement.config.draft.activate_failed
-      responses: *a1
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                project_id:
-                  type: string
-  /api/v1/settlement/config/{configType}/{id}/activate:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigActivateDraft
-      summary: 复核转正:单行/归属/归因规则草案转正
-      description: 差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: settlement.config.draft.activated
-      x-audit-event-failure: settlement.config.draft.activate_failed
-      responses: *a1
-      parameters:
-        - name: configType
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-  /api/v1/settlement/config/{configType}/{id}/archive:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigArchive
-      summary: 软删结算配置(status→inactive)
-      description: 仅 merchant_rate / revenue_stream_attribution;差人复核(执行人≠起草人否则403);不物理删。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: settlement.config.archived
-      x-audit-event-failure: settlement.config.archive_failed
-      parameters:
-        - name: configType
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                archive_reason:
-                  type: string
-              required:
-                - archive_reason
-      responses: *a1
-  /api/v1/settlement/config/attribution-rules/{id}/activate:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigActivateAttributionRuleAlias
-      summary: 复核转正:归因规则草案(弃用薄别名)
-      description: 弃用别名,内部转调 {configType}/{id}/activate(configType=attribution_rule)。差人复核。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: settlement.config.draft.activated
-      x-audit-event-failure: settlement.config.draft.activate_failed
-      responses: *a1
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      deprecated: true
-
-  /api/v1/settlement/bills/{id}/post:
-    post:
-      tags:
-        - settlement
-      operationId: settlementPostBill
-      summary: 结算单过账(挂应付台账)
-      description: 把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);超池 draft 单特批 confirmed 后由此人工过账。返回本次过账明细笔数。
-      x-auth-context: staff-token
-      x-permission: settlement.bill.post
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: settlement.bill.posted
-      x-audit-event-failure: settlement.bill.post_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-
-  /api/v1/settlement/bills/{id}/special-approval:
-    post:
-      tags:
-        - settlement
-      operationId: settlementSpecialApproveBill
-      summary: 超池结算单特批(平台负责人短期激励)
-      description: 把某「超池 draft」结算单填特批引用并置 confirmed(之后可走既有过账端点)。业务口径:各酒吧分得总额不得超过可分配池,突破上限仅限平台负责人特批的短期激励活动(期限后台可配,出厂默认不超过 3 个月),到期自动失效须重新特批。仅超池 draft 单可批:非超池/已 confirmed/settled 拒 409 BILL_NOT_OVERPOOL_DRAFT;特批引用留空拒 400 SPECIAL_APPROVAL_REF_REQUIRED(审计留痕必填)。响应 data 含 special_approval_ref 与 valid_until(本次特批的到期日)。
-      x-auth-context: staff-token
-      x-permission: settlement.bill.special_approve
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: settlement.bill.special_approved
-      x-audit-event-failure: settlement.bill.special_approve_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                special_approval_ref:
-                  type: string
-                  maxLength: 128
-                  description: 特批引用:平台负责人特批短期激励的凭据/理由,审计留痕必填。
-              required:
-                - special_approval_ref
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-
   /api/open/d/{endpoint_key}/events/{event_id}:
     get:
       tags:
@@ -1287,7 +392,8 @@ paths:
         "200":
           $ref: "#/components/responses/Page"
         "403":
-          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope 仅可读取本商户账号，越界查询拒绝）。
+          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope
+            仅可读取本商户账号，越界查询拒绝）。
           content:
             application/json:
               schema:
@@ -1350,7 +456,8 @@ paths:
         - amusement
       operationId: listAmusementGroupBookings
       summary: List P2 amusement group and private bookings
-      description: List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: amusement.group_booking.view
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1371,7 +478,8 @@ paths:
         - amusement
       operationId: createAmusementGroupBooking
       summary: Create P2 amusement group or private booking request
-      description: Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data
+        scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1401,7 +509,8 @@ paths:
         - amusement
       operationId: approveAmusementGroupBooking
       summary: Approve P2 amusement group booking and lock capacity
-      description: Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data
+        scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.approve
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1434,7 +543,8 @@ paths:
         - amusement
       operationId: releaseAmusementGroupBooking
       summary: Release P2 amusement group booking and free locked capacity
-      description: Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission,
+        data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1468,7 +578,8 @@ paths:
       operationId: createAmusementManualOverride
       summary: 游乐人工放行（已废止，不得新增调用）
       deprecated: true
-      description: 已废止（DEC-CFG-2026-08-03-12 / DEC-R6-08），待代码轮下线，不得新增调用。系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过（ENUM「核销记录状态」条）。
+      description: 已废止（DEC-CFG-2026-08-03-12 /
+        DEC-R6-08），待代码轮下线，不得新增调用。系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过（ENUM「核销记录状态」条）。
       x-permission: amusement.verification.override
       x-data-scope: project-amusement-point
       x-terminal-allowed:
@@ -1510,7 +621,8 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 已废止（DEC-CFG-2026-08-03-12 / DEC-R6-08），待代码轮下线，不得新增调用。系统不提供人工放行（ENUM「核销记录状态」条）。原描述：用于查询游乐人工放行。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 已废止（DEC-CFG-2026-08-03-12 / DEC-R6-08），待代码轮下线，不得新增调用。系统不提供人工放行（ENUM「核销记录状态」条）。原描述：用于查询游乐人工放行。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/amusement/maintenance-records:
     get:
       tags:
@@ -2148,7 +1260,10 @@ paths:
         - amusement
       operationId: createAmusementVerification
       summary: 游乐权益核销
-      description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
+      description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople
+        整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决
+        D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04
+        / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
       x-permission: amusement.verification.execute
       x-failure-codes:
         - TICKET_NOT_FOUND
@@ -2210,7 +1325,9 @@ paths:
         - analytics
       operationId: generateLocalLlmAiQualitySuggestion
       summary: Generate local LLM AI quality suggestion
-      description: T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result writes only AI quality task and result records and never changes payment, verification, refund, punishment, commission, contract, inventory, or device state.
+      description: T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result
+        writes only AI quality task and result records and never changes payment, verification, refund, punishment,
+        commission, contract, inventory, or device state.
       x-permission: analytics.risk_alert.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -2282,7 +1399,8 @@ paths:
         - analytics
       operationId: listBusinessMetricSnapshots
       summary: List P2 business metric snapshots for operational analytics
-      description: List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission,
+        data scope, idempotency and audit event requirements.
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -2481,7 +1599,8 @@ paths:
         - analytics
       operationId: listMetricAnomalyTimeline
       summary: 查询指标异常处置历史时间线
-      description: 用于查询某指标异常的完整处置历史时间线(append-only:谁/何时/从什么状态到什么状态/处置说明/转告警时生成的告警号),供处置闭环回溯。历史只增不改(读 audit_events 的 disposition_recorded 事件)。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询某指标异常的完整处置历史时间线(append-only:谁/何时/从什么状态到什么状态/处置说明/转告警时生成的告警号),供处置闭环回溯。历史只增不改(读 audit_events 的
+        disposition_recorded 事件)。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -2528,7 +1647,12 @@ paths:
         - analytics
       operationId: getMetricDetail
       summary: KPI统一指标明细(指标登记簿)
-      description: "统一明细端点(2026-07-18 拍板方案A): 按代码内指标登记簿(MetricRegistry)返回分页明细行+合计校验值+口径说明+数据截至时间, 保证「页面数字=明细合计」同源。口径铁律: 可加=区间求和; 比率=分子/分母(part 两页签); 余额=区间末值(取 to, from 不参与)。除本操作 x-permission 外, 服务端按登记项权限码二次校验(首批: revenue.ticket=analytics.dashboard.view; finance.recon_diff_count=finance.reconciliation.view; energy.total_electricity 与 energy.electricity_per_sqm=energy.reading.manage; finance.ar_balance=finance.ar_ap.view)。project_id/merchant_id 为预留维度参数, 首批平台口径指标不支持, 传入即 VALIDATION_FAILED。未登记 metric 亦为 VALIDATION_FAILED(fail-closed)。"
+      description: "统一明细端点(2026-07-18 拍板方案A): 按代码内指标登记簿(MetricRegistry)返回分页明细行+合计校验值+口径说明+数据截至时间, 保证「页面数字=明细合计」同源。口径铁律:
+        可加=区间求和; 比率=分子/分母(part 两页签); 余额=区间末值(取 to, from 不参与)。除本操作 x-permission 外, 服务端按登记项权限码二次校验(首批:
+        revenue.ticket=analytics.dashboard.view; finance.recon_diff_count=finance.reconciliation.view;
+        energy.total_electricity 与 energy.electricity_per_sqm=energy.reading.manage;
+        finance.ar_balance=finance.ar_ap.view)。project_id/merchant_id 为预留维度参数, 首批平台口径指标不支持, 传入即 VALIDATION_FAILED。未登记
+        metric 亦为 VALIDATION_FAILED(fail-closed)。"
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -2698,7 +1822,8 @@ paths:
         - analytics
       operationId: createReviewLock
       summary: 锁定经营复盘快照
-      description: 用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
+        深度能力不得反向扩大 P0 范围。
       x-permission: analytics.review.lock
       x-data-scope: project
       x-terminal-allowed:
@@ -5155,7 +4280,8 @@ paths:
         - integration
       operationId: reportIntegrationRobotTaskEvent
       summary: 机器人任务事件上报（被动留痕）
-      description: R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。
+      description: R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17
+        交接。真实回流闭环待厂商资料 + 开关开启后交付。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -5182,7 +4308,8 @@ paths:
         - integration
       operationId: listIntegrationVideoAnchors
       summary: 调阅视频点位时间锚点（敏感，写调阅审计）
-      description: R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer + approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。
+      description: R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer +
+        approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。
       x-permission: integration.video.view
       x-data-scope: project
       x-terminal-allowed:
@@ -5212,7 +4339,10 @@ paths:
         - integration
       operationId: receiveIntegrationTypedWebhook
       summary: 第三方统一 webhook 入口（开关门控）
-      description: R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。
+      description: R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook
+        入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用
+        TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping
+        占位空、process_status=accepted），不伪造对账。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -6109,7 +5239,8 @@ paths:
         - inventory
       operationId: createStockAdjustment
       summary: 盘点差异、报损、报溢
-      description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review 调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
+      description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review
+        调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
       x-permission: inventory.stock.adjust
       x-data-scope: project-warehouse
       x-terminal-allowed:
@@ -6633,7 +5764,8 @@ paths:
         - merchant-service
       operationId: listMerchantServiceWorkOrders
       summary: List merchant service work orders
-      description: List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
+      description: List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -6656,7 +5788,8 @@ paths:
         - merchant-service
       operationId: createMerchantServiceWorkOrder
       summary: Create merchant service work order
-      description: Create merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
+      description: Create merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.create
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -6686,7 +5819,8 @@ paths:
         - merchant-service
       operationId: addMerchantServiceWorkOrderAction
       summary: Append merchant service work order action
-      description: Append merchant service work order action. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
+      description: Append merchant service work order action. This P1 merchant service workflow must enforce server-side
+        permissions, idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.process
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -6726,7 +5860,8 @@ paths:
         - merchant-service
       operationId: assignMerchantServiceWorkOrder
       summary: Assign merchant service work order
-      description: Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
+      description: Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.assign
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -6766,7 +5901,8 @@ paths:
         - merchant-service
       operationId: closeMerchantServiceWorkOrder
       summary: Close merchant service work order
-      description: Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
+      description: Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.close
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -7166,6 +6302,53 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/platform/venue-business-hours:
+    get:
+      tags:
+        - platform
+      operationId: listVenueBusinessHours
+      summary: 查询场地营业时间
+      description: 按场地和星期几查询开业、歇业时刻。场次按此表自动划分（开业开场、歇业关场），入场资格与当天无限权益的核销都依赖它。
+      x-permission: governance.space.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: venue_business_hours.viewed
+      x-audit-event-failure: venue_business_hours.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - platform
+      operationId: saveVenueBusinessHours
+      summary: 配置场地营业时间
+      description: 按场地和星期几配置开业、歇业时刻，保存即刻生效。歇业时刻早于开业时刻表示营业到次日凌晨。停用表示该日不营业，配置行保留可随时恢复。
+      x-permission: governance.space.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: venue_business_hours.updated
+      x-audit-event-failure: venue_business_hours.update_failed
+      requestBody:
+        $ref: "#/components/requestBodies/VenueBusinessHoursRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/system/health:
     get:
       tags:
@@ -7231,15 +6414,17 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Page"
-        "403": &a1
+        "403":
           $ref: "#/components/responses/Error"
-        "500": *a1
+        "500":
+          $ref: "#/components/responses/Error"
     put:
       tags:
         - terminals
       operationId: upsertTerminalCanaryRollout
       summary: 开启或结束灰度试点
-      description: 开启后该「端 × 能力」进入试点期：白名单内的对象照常，白名单外一律关闭；上面任一层开关关闭仍然压倒灰度白名单。按 (terminal_type, capability_code) 唯一，重复提交即覆盖（天然幂等，不需幂等键）。写口限平台级主体。
+      description: 开启后该「端 × 能力」进入试点期：白名单内的对象照常，白名单外一律关闭；上面任一层开关关闭仍然压倒灰度白名单。按 (terminal_type, capability_code)
+        唯一，重复提交即覆盖（天然幂等，不需幂等键）。写口限平台级主体。
       x-permission: terminal.switch.manage
       x-data-scope: project-device
       x-terminal-allowed:
@@ -7253,9 +6438,12 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
-        "400": *a1
-        "403": *a1
-        "500": *a1
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/canary-rollouts/{id}/targets:
     post:
       tags:
@@ -7278,10 +6466,14 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
-        "400": *a1
-        "403": *a1
-        "404": *a1
-        "500": *a1
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/canary-targets/{id}/archive:
     post:
       tags:
@@ -7304,10 +6496,14 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
-        "400": *a1
-        "403": *a1
-        "404": *a1
-        "500": *a1
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/capability-switches:
     get:
       tags:
@@ -7335,7 +6531,8 @@ paths:
         - terminal
       operationId: listEffectiveDisabledTerminalSwitches
       summary: 当前终端的已关闭开关行（前端菜单 gating 数据源）
-      description: 3.19 二期：各端启动时拉取"本端哪些模块/能力被关"——只回 enabled=false 的行；terminal_type 取 X-Terminal-Type 头（缺省 web）。功能可用性非机密，任何已登录主体可读（普通员工菜单也要按开关隐藏）；拉取失败端侧兜底关。
+      description: 3.19 二期：各端启动时拉取"本端哪些模块/能力被关"——只回 enabled=false 的行；terminal_type 取 X-Terminal-Type 头（缺省
+        web）。功能可用性非机密，任何已登录主体可读（普通员工菜单也要按开关隐藏）；拉取失败端侧兜底关。
       x-permission: not_applicable
       x-data-scope: platform
       x-terminal-allowed:
@@ -7374,7 +6571,9 @@ paths:
         - terminals
       operationId: updateCapabilitySwitch
       summary: 修改端能力开关
-      description: 后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如 payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位 NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。
+      description: 后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如
+        payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位
+        NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。
       x-permission: terminal.switch.manage
       x-data-scope: project-device
       x-terminal-allowed:
@@ -7425,7 +6624,8 @@ paths:
         - terminals
       operationId: updateTerminalDeviceMerchant
       summary: 设备商户归属设置/更换/解除
-      description: K16 核销上下文写入面：设备归属决定核销记谁的账（A 吧的机器核 B 吧赠饮，月底两家都对不平）。merchant_id 传目标商户=设置/更换（商户须存在且未归档）；传空=解除绑定（该设备上赠饮/餐饮类权益将无法核销，fail-closed）。理由必填留痕，审计明细带改绑前后商户；终态设备（scrapped/blocked）拒改。
+      description: K16 核销上下文写入面：设备归属决定核销记谁的账（A 吧的机器核 B 吧赠饮，月底两家都对不平）。merchant_id
+        传目标商户=设置/更换（商户须存在且未归档）；传空=解除绑定（该设备上赠饮/餐饮类权益将无法核销，fail-closed）。理由必填留痕，审计明细带改绑前后商户；终态设备（scrapped/blocked）拒改。
       x-auth-context: staff-token
       x-permission: terminal.device.lifecycle
       x-data-scope: project-device
@@ -7713,7 +6913,8 @@ paths:
         - ticketing
       operationId: listTicketDynamicPricingRules
       summary: List P2 ticket dynamic pricing rules
-      description: List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.view
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -7734,7 +6935,8 @@ paths:
         - ticketing
       operationId: createTicketDynamicPricingRule
       summary: Create P2 ticket dynamic pricing rule draft
-      description: Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.manage
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -7762,7 +6964,8 @@ paths:
         - ticketing
       operationId: publishTicketDynamicPricingRule
       summary: Publish P2 ticket dynamic pricing rule
-      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.publish
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -7795,7 +6998,8 @@ paths:
         - ticketing
       operationId: simulateTicketDynamicPricing
       summary: Simulate P2 ticket dynamic pricing without creating an order
-      description: Simulate P2 ticket dynamic pricing. Simulation may include draft and published rules, but does not create orders or receivables.
+      description: Simulate P2 ticket dynamic pricing. Simulation may include draft and published rules, but does not create
+        orders or receivables.
       x-permission: ticket.dynamic_pricing.simulate
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -8006,7 +7210,8 @@ paths:
         - ticketing
       operationId: listTicketInstances
       summary: 查询父票实例
-      description: 用于查询父票实例（订单每买 1 张票 = 1 条父票实例，多人票内每人一个权益组 slot；方案2 整票退款/方案3 转赠锚点）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询父票实例（订单每买 1 张票 = 1 条父票实例，多人票内每人一个权益组 slot；方案2 整票退款/方案3 转赠锚点）。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: ticket.verify.view
       x-data-scope: project
       x-terminal-allowed:
@@ -8122,7 +7327,10 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。
+      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date,
+        sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted.
+        Draft rules only participate in simulation. 当 sales_channel=kiosk
+        时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。
   /api/v1/ticketing/orders/{order_id}/issue:
     post:
       tags:
@@ -8445,68 +7653,6 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-  /api/v1/ticketing/ticket-types/{id}/price-check:
-    get:
-      tags:
-        - ticketing
-      operationId: ticketTypePriceCheck
-      summary: 票种定价核算（系统算出售价 vs 填的售价）
-      description: >-
-        综合／联合通票的售价由各业态价格（原称「票面原价」）相加后按票种折扣自动算出。本接口返回各业态价格合计、折扣、系统算出售价、 运营现在填的售价、两者差额、后台可配的允许误差、是否超限，以及按「整元且尾数 8/9/0」建议的凑整售价。 建票／改票页据此实时提示，发布闸拒绝时报的是同一份计算。
-      x-permission: ticket.product.view
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: ticket_product.viewed
-      x-audit-event-failure: ticket_product.view_failed
-      parameters:
-        - $ref: "#/components/parameters/Id"
-          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/ticketing/ticket-types/{id}/pricing:
-    put:
-      tags:
-        - ticketing
-      operationId: updateTicketTypePricing
-      summary: 改票种售价／折扣（凑整误差闸）
-      description: >-
-        设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态价格（原称「票面原价」）×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。
-      x-permission: ticket.product.manage
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: ticket_product.pricing_changed
-      x-audit-event-failure: ticket_product.pricing_change_failed
-      parameters:
-        - $ref: "#/components/parameters/Id"
-          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-      requestBody:
-        $ref: "#/components/requestBodies/TicketTypePricingRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/ticketing/ticket-types/{id}/gift-coverage:
     get:
       tags:
@@ -8744,7 +7890,8 @@ paths:
         - merchant-billing
       operationId: listMerchantBills
       summary: List merchant bills
-      description: List merchant bills for merchant portal and admin read-only scope checks. This P1/P2 merchant billing workflow must enforce server-side permissions, project-merchant data scope, and audit evidence.
+      description: List merchant bills for merchant portal and admin read-only scope checks. This P1/P2 merchant billing
+        workflow must enforce server-side permissions, project-merchant data scope, and audit evidence.
       x-permission: merchant.billing.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -8843,53 +7990,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/platform/venue-business-hours:
-    get:
-      tags:
-        - platform
-      operationId: listVenueBusinessHours
-      summary: 查询场地营业时间
-      description: 按场地和星期几查询开业、歇业时刻。场次按此表自动划分（开业开场、歇业关场），入场资格与当天无限权益的核销都依赖它。
-      x-permission: governance.space.view
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: venue_business_hours.viewed
-      x-audit-event-failure: venue_business_hours.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    post:
-      tags:
-        - platform
-      operationId: saveVenueBusinessHours
-      summary: 配置场地营业时间
-      description: 按场地和星期几配置开业、歇业时刻，保存即刻生效。歇业时刻早于开业时刻表示营业到次日凌晨。停用表示该日不营业，配置行保留可随时恢复。
-      x-permission: governance.space.manage
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: venue_business_hours.updated
-      x-audit-event-failure: venue_business_hours.update_failed
-      requestBody:
-        $ref: "#/components/requestBodies/VenueBusinessHoursRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/platform/supervisor-review-policies:
     get:
       tags:
@@ -9001,7 +8101,8 @@ paths:
         - access
       operationId: getEffectivePermissions
       summary: 查询当前账号有效权限集
-      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先 + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
+      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先
+        + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
       x-permission: authenticated
       x-data-scope: self
       x-terminal-allowed:
@@ -9039,7 +8140,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
-          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope 不得查看其他商户账号的有效权限集）。
+          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope
+            不得查看其他商户账号的有效权限集）。
           content:
             application/json:
               schema:
@@ -9055,7 +8157,8 @@ paths:
         - access
       operationId: assignStaffLevel
       summary: 分配员工职级与薪资
-      description: 用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
+        深度能力不得反向扩大 P0 范围。
       x-permission: access.staff_level.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -9565,13 +8668,15 @@ paths:
       tags:
         - access
       operationId: submitStaffRegistration
-      summary: 员工自助注册
-      description: 员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建 staff_profiles(submitted)，待后台审批。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      summary: 商户代员工提交注册
+      description: 项目和商户编号必填；后端按经营主体公司层级解析对应域公司审批。自营商户员工使用本人注册入口。个人资料加密存放，日常响应脱敏。
       x-permission: staff.profile.submit
       x-data-scope: project
       x-terminal-allowed:
-        - staff_private_phone
         - web
+        - merchant_app
+        - merchant_portal
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: staff.registered
       x-audit-event-failure: staff.register_failed
@@ -9597,7 +8702,7 @@ paths:
         - access
       operationId: reviewStaffRegistration
       summary: 审批员工注册
-      description: 后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带 reject_reason。仅 submitted 状态可审批；商户角色仅可审批本 merchant 范围。
+      description: 所属公司或平台授权管理者审核，提交人不得自审；批准后建立账号、员工自助角色和已选职级，保留其他档案资料。商户本身不能审批员工注册。
       x-permission: staff.profile.review
       x-data-scope: project
       x-terminal-allowed:
@@ -9697,7 +8802,7 @@ paths:
         - access
       operationId: bindStaffDeviceCredential
       summary: 绑定/换机申请员工设备凭证
-      description: 员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证 pending_review + supersedes 指向旧 active。与 kiosk 的 terminal_device_credentials 两套实体互不串值。
+      description: 仅本人可以绑定私人手机。首次无历史凭证时直接生效，换机或异常后重新绑定仍须复核。私人手机密钥与工作手机设备级密钥分别登记。
       x-permission: staff.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -9730,7 +8835,8 @@ paths:
         - access
       operationId: approveStaffDeviceRebind
       summary: 审批换机生效
-      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证 uq_staff_device_credentials_one_active 始终成立。
+      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证
+        uq_staff_device_credentials_one_active 始终成立。
       x-permission: staff.device.review
       x-data-scope: project
       x-terminal-allowed:
@@ -9766,7 +8872,8 @@ paths:
         - access
       operationId: reportStaffDeviceIntegrity
       summary: 端侧完整性上报
-      description: 端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发 staff_device.integrity_failed + 通知复核。由端侧鉴权调用。
+      description: 端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发
+        staff_device.integrity_failed + 通知复核。由端侧鉴权调用。
       x-permission: staff.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -9895,7 +9002,9 @@ paths:
         - compliance
       operationId: syncWecomConversation
       summary: 企微会话同步入站（PIPL 合规，开关门控）
-      description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调 PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until 按生效留存策略（默认180天）推算。
+      description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调
+        PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until
+        按生效留存策略（默认180天）推算。
       x-permission: wecom.sync
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -9957,7 +9066,9 @@ paths:
         - compliance
       operationId: viewWecomConversationMessages
       summary: 分级查看企微会话消息（脱敏/原文，原文需审批+审计）
-      description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 + approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件 wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
+      description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 +
+        approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件
+        wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
       x-permission: wecom.view_raw
       x-data-scope: project
       x-terminal-allowed:
@@ -10024,8 +9135,11 @@ paths:
       tags:
         - compliance
       operationId: upsertWecomRetentionPolicy
-      summary: "配置企微留存策略（默认180天） **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**"
-      description: "R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一 upsert。需 wecom.retention.manage（高敏需审批）。 **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**"
+      summary: 配置企微留存策略（默认180天） **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180
+        天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**
+      description: R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一
+        upsert。需 wecom.retention.manage（高敏需审批）。 **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180
+        天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**
       x-permission: wecom.retention.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -11256,7 +10370,8 @@ paths:
         - bar
       operationId: assignBarTableSpace
       summary: 卡座/桌台空间指派（回填）
-      description: "处理清单 #8：设 bar_tables.space_id（运营录入/回填）。bar_tables 无可派生源，无法 SQL 自动回填；over_space 判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
+      description: "处理清单 #8：设 bar_tables.space_id（运营录入/回填）。bar_tables 无可派生源，无法 SQL 自动回填；over_space
+        判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
       x-permission: bar.table.manage
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -11310,7 +10425,8 @@ paths:
         - amusement
       operationId: assignAmusementProjectSpace
       summary: 游乐项目空间指派（回填）
-      description: "处理清单 #8：设 amusement_projects.space_id（运营录入/回填）。amusement_projects 无可派生源，无法 SQL 自动回填；over_space 判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
+      description: "处理清单 #8：设 amusement_projects.space_id（运营录入/回填）。amusement_projects 无可派生源，无法 SQL 自动回填；over_space
+        判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
       x-permission: amusement.session.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -13244,49 +12360,6 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/bar/order-item-voids:
-    get:
-      tags:
-        - bar
-      operationId: listBarOrderItemVoids
-      summary: 退酒审批待审队列
-      description: V345（BAR-VOID-A1）：按状态列出退菜退酒申请，缺省 status=pending（待审队列）；order_id 非空则只看该订单。商户 scope 非空时只可见本商户申请。
-      x-auth-context: staff-token
-      x-permission: bar.order_item.void
-      x-data-scope: project-bar-table
-      x-terminal-allowed:
-        - tablet
-        - web
-      x-audit-event-success: bar.order_item_void.viewed
-      x-audit-event-failure: bar.order_item_void.view_failed
-      parameters:
-        - name: order_id
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 64
-          description: 订单 ID；非空则只列该订单的退菜退酒申请。
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - pending
-              - approved
-              - rejected
-              - applied
-          description: 申请状态；缺省 pending（待审队列）。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -16221,7 +15294,8 @@ paths:
         - bar
       operationId: redeemBarDrinkEntitlement
       summary: 酒水权益兑换承接
-      description: 承接已完成票务核销的赠饮权益领取结果。调用方必须先通过 /api/v1/ticketing/verifications 完成权益核销；本接口只按 verification_id 返回对应 bar_gift_redemptions，并记录酒吧侧领取审计。
+      description: 承接已完成票务核销的赠饮权益领取结果。调用方必须先通过 /api/v1/ticketing/verifications 完成权益核销；本接口只按 verification_id 返回对应
+        bar_gift_redemptions，并记录酒吧侧领取审计。
       x-auth-context: staff-token
       x-permission: bar.entitlement.redeem
       x-data-scope: project-bar
@@ -18060,7 +17134,8 @@ paths:
       x-audit-event-success: contract.scope_request_raised
       x-audit-event-failure: contract.scope_request_raise_failed
       x-auth-context: staff-token
-      description: 下单被合同经营范围拦下后,就某品类提交申请(须填原因),进 contract_changes(type=scope_grant) 走既有分组并行会签链;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。
+      description: 下单被合同经营范围拦下后,就某品类提交申请(须填原因),进 contract_changes(type=scope_grant)
+        走既有分组并行会签链;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。
       parameters:
         - name: contract_id
           in: path
@@ -18462,7 +17537,8 @@ paths:
       x-audit-event-success: contract.rent_billed
       x-audit-event-failure: contract.rent_bill_failed
       x-auth-context: staff-token
-      description: 生效合同按 ContractRentMath 算该期租金应收 → 联动 ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。
+      description: 生效合同按 ContractRentMath 算该期租金应收 → 联动
+        ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。
       parameters:
         - name: contract_id
           in: path
@@ -21353,7 +20429,8 @@ paths:
         - merchant-portal
       operationId: submitMerchantPortalSettlementDispute
       summary: 商户专区·结算单异议留言
-      description: 商户对未结清结算单提交异议,结算单挂起为「有争议」; 平台按既有裁决流(contract.settlement.dispute.resolve)闭环,资金权威流程不变。 跨商户拒绝(CROSS_MERCHANT_FORBIDDEN),已结清/已有争议拒绝(SETTLEMENT_NOT_DISPUTABLE)。
+      description: 商户对未结清结算单提交异议,结算单挂起为「有争议」; 平台按既有裁决流(contract.settlement.dispute.resolve)闭环,资金权威流程不变。
+        跨商户拒绝(CROSS_MERCHANT_FORBIDDEN),已结清/已有争议拒绝(SETTLEMENT_NOT_DISPUTABLE)。
       x-auth-context: staff-token
       x-permission: merchant.portal.settlement.dispute
       x-data-scope: merchant
@@ -21480,7 +20557,8 @@ paths:
         - analytics
       operationId: listArOverdueDebtors
       summary: 欠费商户明细排行(账龄钻取)
-      description: BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤 a0_30/a31_60/a61_90/a90p。
+      description: BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤
+        a0_30/a31_60/a61_90/a90p。
       x-permission: finance.ar_ap.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -21600,7 +20678,8 @@ paths:
         - analytics
       operationId: listOverdueWorkOrders
       summary: 超时工单明细(时效钻取)
-      description: BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单 (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。
+      description: BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单
+        (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -21708,7 +20787,8 @@ paths:
         - analytics
       operationId: exportMonthlyReport
       summary: 月度经营报表导出(分权)
-      description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批); 数据与月度对比同一份组装(图表=导出,单一口径)。
+      description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批);
+        数据与月度对比同一份组装(图表=导出,单一口径)。
       x-permission: analytics.report.export
       x-data-scope: platform
       x-terminal-allowed:
@@ -21779,7 +20859,9 @@ paths:
         - analytics
       operationId: getRentToSales
       summary: 店级/业态级/平台级租售比
-      description: P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。
+      description: P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以
+        第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用
+        merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。
       x-permission: contract.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -21971,7 +21053,8 @@ paths:
         - analytics
       operationId: fetchHolidayCalendar
       summary: 从 URL 抓取节假日日历
-      description: H1(2026-07-02 拍板):支持 holiday-cn JSON 格式({days:[{name,date,isOffDay}]}); 抓取失败(内网不通/格式不符)不动既有日历,提示手动录入兜底;审计记录 URL 与导入数。
+      description: H1(2026-07-02 拍板):支持 holiday-cn JSON 格式({days:[{name,date,isOffDay}]}); 抓取失败(内网不通/格式不符)不动既有日历,提示手动录入兜底;审计记录
+        URL 与导入数。
       x-permission: analytics.operating_params.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22097,14 +21180,14 @@ paths:
         - staff
       operationId: upsertStaffShift
       summary: 主管排班(双端)
-      description: BYOD E批(2026-07-02 拍板):主管排班到分钟+指定点位;后台页与主管 App 同套规则; 同员工同开始时刻幂等覆盖;审计留痕。
+      description: 完整校验后生成整批待审草稿，由主管的上一级批准后统一发布。班次开始前仅原排班负责人可带原因修改，每次重新审批；修改前后时间追加保留。开始后不能改写。响应包含review_id和publication_status=pending_review。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
         - web
         - staff_private_phone
       x-idempotency-required: true
-      x-audit-event-success: staff.shift.saved
+      x-audit-event-success: staff.shift.submitted
       x-audit-event-failure: staff.shift.save_failed
       requestBody:
         required: true
@@ -22149,8 +21232,12 @@ paths:
                   maxItems: 20
                 note:
                   type: string
-                  description: 备注。
+                  description: 新增备注；修改时必须填写原因
                   maxLength: 255
+                shift_id:
+                  type: string
+                  description: 修改时原班次编号；不填则按同员工同开始时间定位
+                  maxLength: 80
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -22201,14 +21288,14 @@ paths:
         - staff
       operationId: batchUpsertStaffShifts
       summary: 按周批量排班(一次排一周)
-      description: 2026-08-02 用户拍板:排班员一次排出一周的班——选一批员工 + 一个时段 + 勾哪几天,一次生成整周班次。日期窗口=起始日期起 days 天;weekdays 非空时只排勾中的星期几(1=周一…7=周日)。跨零点班只填时段:结束时刻不晚于开始时刻(如 22:00-06:00)即自动把班次结束顺延到次日,排班员不用手动选日期。日历日按所在地(北京)时区折算;同员工同开始时刻重复提交=覆盖修改,不新增。
+      description: 完整校验后生成整批待审草稿，由主管的上一级批准后统一发布。班次开始前仅原排班负责人可带原因修改，每次重新审批；修改前后时间追加保留。开始后不能改写。响应包含review_id和publication_status=pending_review。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
         - web
         - staff_private_phone
       x-idempotency-required: true
-      x-audit-event-success: staff.shift.saved
+      x-audit-event-success: staff.shift.submitted
       x-audit-event-failure: staff.shift.save_failed
       requestBody:
         required: true
@@ -22289,7 +21376,7 @@ paths:
         - staff
       operationId: listMyStaffShifts
       summary: 我的班次与点位(员工手机)
-      description: 今天起 7 天;时间到分钟;含当班点位。
+      description: 返回本人在经营主体配置的可见天数内已发布排班，出厂包含今天在内七天。
       x-permission: staff.shift.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -22312,12 +21399,11 @@ paths:
         - staff
       operationId: punchStaffAttendance
       summary: 考勤打卡(NFC/扫码)
-      description: BYOD E批(2026-07-02 拍板):时间以服务器为准;严格无宽限——上班晚于班次开始即迟到、 下班早于班次结束即早退,当日无班次记 no_shift;只记录不自动扣罚;点位标签原文与设备指纹留痕。
+      description: 只接受属于本人的已验证工作手机。NFC、扫码、取离充电设施合并同次领取，以最早到达服务器的记录为准，重复不新增。NFC和充电断开仅支持上班，NFC或扫码必须提供标签。考勤按锁定班次时间判定。
       x-permission: staff.attendance.punch
       x-data-scope: platform
       x-terminal-allowed:
-        - staff_private_phone
-        - web
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: staff.attendance.punched
       x-audit-event-failure: staff.attendance.punch_failed
@@ -22331,6 +21417,7 @@ paths:
               required:
                 - idempotency_key
                 - punch_type
+                - method
               properties:
                 idempotency_key:
                   type: string
@@ -22344,11 +21431,11 @@ paths:
                     - check_out
                 method:
                   type: string
-                  description: 打卡方式(NFC 碰标签/扫点位二维码/手动)。
+                  description: 工作手机领取方式，下班仅扫码
                   enum:
                     - nfc
                     - qr
-                    - manual
+                    - charging_disconnect
                 tag_ref:
                   type: string
                   description: 点位标签原文(NDEF 文本或标签 UID/二维码载荷),留痕防代打。
@@ -22359,7 +21446,7 @@ paths:
                   maxLength: 64
                 device_fingerprint:
                   type: string
-                  description: 设备指纹(AndroidKeyStore 派生),留痕防代打。
+                  description: 可不填；实际设备编号来自已验证设备身份，不采用此字段
                   maxLength: 128
       responses:
         "200":
@@ -22887,7 +21974,7 @@ paths:
         - staff
       operationId: myStaffAttendanceMonthView
       summary: 考勤月视图(员工手机,逐日六态)
-      description: F批(2026-07-02 拍板口径):出勤/缺勤(有排班无上班卡)/迟到/早退/未打下班卡/ 请假(approved 覆盖);无排班=休;同日多问题并列。
+      description: 按班次结束月份和自然日归属；打卡须属于具体班次，同日其他班次打卡不能抵消缺勤。
       x-permission: staff.shift.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -22943,7 +22030,8 @@ paths:
         - service
       operationId: upsertServiceCatalogItem
       summary: 维护服务目录项(固定参考价)
-      description: G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。DEC-R8-90:percent 模式 mgmt_fee_value 为 0..10000 bp;fixed 模式 mgmt_fee_value 必须为 0..price_cent。任一越界值复用本操作既有 400 Error 响应拒绝保存,不得静默截断、封顶或改写。
+      description: G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。DEC-R8-90:percent 模式 mgmt_fee_value 为 0..10000
+        bp;fixed 模式 mgmt_fee_value 必须为 0..price_cent。任一越界值复用本操作既有 400 Error 响应拒绝保存,不得静默截断、封顶或改写。
       x-permission: service.catalog.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22958,7 +22046,8 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              description: 管理费跨字段约束:mgmt_fee_mode=percent 时 mgmt_fee_value 不得超过 10000 bp;mgmt_fee_mode=fixed 时 mgmt_fee_value 不得超过同一请求的 price_cent。违反约束返回本操作既有 400 Error。
+              description: 管理费跨字段约束:mgmt_fee_mode=percent 时 mgmt_fee_value 不得超过 10000 bp;mgmt_fee_mode=fixed 时 mgmt_fee_value
+                不得超过同一请求的 price_cent。违反约束返回本操作既有 400 Error。
               required:
                 - idempotency_key
                 - name
@@ -23654,7 +22743,8 @@ paths:
         - bar
       operationId: listBarProductsByCategory
       summary: 按分类查询酒吧商品
-      description: 图形化点单 POS 拉菜单（按 bar_id + category_id 归组，category_id 空=未分类商品）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 图形化点单 POS 拉菜单（按 bar_id + category_id 归组，category_id 空=未分类商品）。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.product.view
       x-data-scope: project
       x-terminal-allowed:
@@ -23740,7 +22830,8 @@ paths:
         - bar
       operationId: uploadBarCatalogImage
       summary: 上传酒吧商品/套餐图片
-      description: 图形化点单 POS 图片本地存储（同 image_url 先例，不上云）；product_id 非空时同时写回商品图片。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 图形化点单 POS 图片本地存储（同 image_url 先例，不上云）；product_id 非空时同时写回商品图片。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -24196,7 +23287,10 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: V296 成本台账：库存流水含移动加权成本列（unit_cost_cent/total_cost_cent，整数分；NULL=无成本基准，存量库存未录进货价不编造数字）。成本=内部口径：要求独立高危权限 inventory.cost.view（沿用内部结算价拍板范式，店员端/终端不可见；通用流水端点对无此权限的调用方把成本列脱敏置 null）。查询参数 page/size 分页、item_id 可选按物料过滤；租户口径与库存流水一致（商户员工看本商户，项目员工看本项目，平台管理员看全量）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: V296 成本台账：库存流水含移动加权成本列（unit_cost_cent/total_cost_cent，整数分；NULL=无成本基准，存量库存未录进货价不编造数字）。成本=内部口径：要求独立高危权限
+        inventory.cost.view（沿用内部结算价拍板范式，店员端/终端不可见；通用流水端点对无此权限的调用方把成本列脱敏置 null）。查询参数 page/size 分页、item_id
+        可选按物料过滤；租户口径与库存流水一致（商户员工看本商户，项目员工看本项目，平台管理员看全量）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0
+        范围。
   /api/v1/inventory/cost-summary:
     get:
       tags:
@@ -24222,7 +23316,10 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: V296 成本台账：按商户+期间返回出库成本合计（持股分红净利润制的成本侧取数点）。成本=内部口径：要求独立高危权限 inventory.cost.view（仅授权后台可见）。查询参数 period_start/period_end 必填（yyyy-MM-dd，窗口=[period_start 经营日起, period_end+1 经营日起)，与财务日结同切分基准）；merchant_id 可选，仅对平台/项目管理员生效，商户员工强制按自身商户。返回 outbound_total_cost_cent 出库成本合计、outbound_movement_count 出库笔数、no_cost_basis_count 无成本基准笔数（提示合计存在低估）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: V296 成本台账：按商户+期间返回出库成本合计（持股分红净利润制的成本侧取数点）。成本=内部口径：要求独立高危权限 inventory.cost.view（仅授权后台可见）。查询参数
+        period_start/period_end 必填（yyyy-MM-dd，窗口=[period_start 经营日起, period_end+1 经营日起)，与财务日结同切分基准）；merchant_id
+        可选，仅对平台/项目管理员生效，商户员工强制按自身商户。返回 outbound_total_cost_cent 出库成本合计、outbound_movement_count 出库笔数、no_cost_basis_count
+        无成本基准笔数（提示合计存在低估）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/finance/dividends/plans:
     get:
       tags:
@@ -25321,6 +24418,1080 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+  /api/v1/settlement/config/overview:
+    get:
+      tags:
+        - settlement
+      operationId: settlementConfigOverview
+      summary: 结算配置中心总览
+      description: 平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。
+      x-auth-context: staff-token
+      x-permission: settlement.config.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-audit-event-success: settlement.config.overview.viewed
+      x-audit-event-failure: settlement.config.overview.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/retention:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertRetention
+      summary: 维护项目公司留存比例(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.platform_retention_rules.updated
+      x-audit-event-failure: settlement.config.platform_retention_rules.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                retention_bps:
+                  type: integer
+              required:
+                - idempotency_key
+                - retention_bps
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/distribution-method:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertDistributionMethod
+      summary: 维护通票分配方式(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_distribution_configs.updated
+      x-audit-event-failure: settlement.config.ticket_distribution_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                method_type:
+                  type: string
+              required:
+                - idempotency_key
+                - method_type
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/merchant-rate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertMerchantRate
+      summary: 维护每客单价/固定额(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_distribution_merchant_rates.updated
+      x-audit-event-failure: settlement.config.ticket_distribution_merchant_rates.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                merchant_id:
+                  type: string
+                per_guest_cent:
+                  type: integer
+                  format: int64
+                fixed_amount_cent:
+                  type: integer
+                  format: int64
+              required:
+                - idempotency_key
+                - merchant_id
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/comprehensive-service-fee:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertComprehensiveServiceFee
+      summary: 维护门票综合服务费(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.comprehensive_service_fee_configs.updated
+      x-audit-event-failure: settlement.config.comprehensive_service_fee_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                merchant_id:
+                  type: string
+                entitlement_type:
+                  type: string
+                fee_bps:
+                  type: integer
+                fixed_amount_cent:
+                  type: integer
+                  format: int64
+              required:
+                - idempotency_key
+                - fee_bps
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/combo-discount:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertComboDiscount
+      summary: 维护套票折扣归属(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_combo_discount_configs.updated
+      x-audit-event-failure: settlement.config.ticket_combo_discount_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                discount_bearer:
+                  type: string
+                split_platform_bps:
+                  type: integer
+              required:
+                - idempotency_key
+                - discount_bearer
+                - split_platform_bps
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/channel-fee:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertChannelFee
+      summary: 维护第三方渠道抽成率(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。V381:比例(fee_bps)或每张票固定金额(fixed_amount_cent,分)二选一,配固定金额则
+        fee_bps 必须为 0。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.channel_fee_configs.updated
+      x-audit-event-failure: settlement.config.channel_fee_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                channel:
+                  type: string
+                fee_bps:
+                  type: integer
+                fixed_amount_cent:
+                  type: integer
+                  format: int64
+              required:
+                - idempotency_key
+                - fee_bps
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/commission-rate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertCommissionRate
+      summary: 维护卡座销售提成费率(草案)
+      description: 结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 × 角色档 配置提成率万分比;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.bar_commission_rate_configs.updated
+      x-audit-event-failure: settlement.config.bar_commission_rate_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                merchant_id:
+                  type: string
+                role_type:
+                  type: string
+                rate_bp:
+                  type: integer
+              required:
+                - idempotency_key
+                - role_type
+                - rate_bp
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/points-accrual-rate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertPointsAccrualRate
+      summary: 维护积分累计率(草案)
+      description: 结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 配置「每积 1 基础分所需消费金额(分)」;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.points_accrual_rate_configs.updated
+      x-audit-event-failure: settlement.config.points_accrual_rate_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                merchant_id:
+                  type: string
+                amount_cent_per_point:
+                  type: integer
+              required:
+                - idempotency_key
+                - amount_cent_per_point
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/rank-tiers:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertRankTiers
+      summary: 维护排名档位梯子(草案·整套替换)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_distribution_rank_tiers.updated
+      x-audit-event-failure: settlement.config.ticket_distribution_rank_tiers.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                tiers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      rank_from:
+                        type: integer
+                      rank_to:
+                        type: integer
+                      share_bps:
+                        type: integer
+              required:
+                - idempotency_key
+                - tiers
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/revenue-stream-attribution:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertRevenueStreamAttribution
+      summary: 维护业态收入归属(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。V355:收入流扩到 9 类;beneficiary_kind=entity 时须填
+        management_entity_id,=per_merchant(归各商户自己)时不得填。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.revenue_stream_attribution.updated
+      x-audit-event-failure: settlement.config.revenue_stream_attribution.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                revenue_stream:
+                  type: string
+                management_entity_id:
+                  type: string
+                beneficiary_kind:
+                  type: string
+                  enum:
+                    - entity
+                    - per_merchant
+              required:
+                - idempotency_key
+                - revenue_stream
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/rank-tiers/activate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigActivateRankTiers
+      summary: 复核转正:排名档位梯子整体换梯
+      description: 差人复核(执行人≠起草人否则403)+转正前区间覆盖复校。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.draft.activated
+      x-audit-event-failure: settlement.config.draft.activate_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: string
+  /api/v1/settlement/config/{configType}/{id}/activate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigActivateDraft
+      summary: 复核转正:单行/归属/归因规则草案转正
+      description: 差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.draft.activated
+      x-audit-event-failure: settlement.config.draft.activate_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: configType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/config/{configType}/{id}/archive:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigArchive
+      summary: 软删结算配置(status→inactive)
+      description: 仅 merchant_rate / revenue_stream_attribution;差人复核(执行人≠起草人否则403);不物理删。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.archived
+      x-audit-event-failure: settlement.config.archive_failed
+      parameters:
+        - name: configType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                archive_reason:
+                  type: string
+              required:
+                - archive_reason
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/attribution-rules/{id}/activate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigActivateAttributionRuleAlias
+      summary: 复核转正:归因规则草案(弃用薄别名)
+      description: 弃用别名,内部转调 {configType}/{id}/activate(configType=attribution_rule)。差人复核。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.draft.activated
+      x-audit-event-failure: settlement.config.draft.activate_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      deprecated: true
+  /api/v1/settlement/bills/{id}/post:
+    post:
+      tags:
+        - settlement
+      operationId: settlementPostBill
+      summary: 结算单过账(挂应付台账)
+      description: 把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);超池 draft 单特批 confirmed 后由此人工过账。返回本次过账明细笔数。
+      x-auth-context: staff-token
+      x-permission: settlement.bill.post
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.bill.posted
+      x-audit-event-failure: settlement.bill.post_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/bills/{id}/special-approval:
+    post:
+      tags:
+        - settlement
+      operationId: settlementSpecialApproveBill
+      summary: 超池结算单特批(平台负责人短期激励)
+      description: 把某「超池 draft」结算单填特批引用并置 confirmed(之后可走既有过账端点)。业务口径:各酒吧分得总额不得超过可分配池,突破上限仅限平台负责人特批的短期激励活动(期限后台可配,出厂默认不超过 3
+        个月),到期自动失效须重新特批。仅超池 draft 单可批:非超池/已 confirmed/settled 拒 409 BILL_NOT_OVERPOOL_DRAFT;特批引用留空拒 400
+        SPECIAL_APPROVAL_REF_REQUIRED(审计留痕必填)。响应 data 含 special_approval_ref 与 valid_until(本次特批的到期日)。
+      x-auth-context: staff-token
+      x-permission: settlement.bill.special_approve
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.bill.special_approved
+      x-audit-event-failure: settlement.bill.special_approve_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                special_approval_ref:
+                  type: string
+                  maxLength: 128
+                  description: 特批引用:平台负责人特批短期激励的凭据/理由,审计留痕必填。
+              required:
+                - special_approval_ref
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/order-item-voids:
+    get:
+      tags:
+        - bar
+      operationId: listBarOrderItemVoids
+      summary: 退酒审批待审队列
+      description: V345（BAR-VOID-A1）：按状态列出退菜退酒申请，缺省 status=pending（待审队列）；order_id 非空则只看该订单。商户 scope 非空时只可见本商户申请。
+      x-auth-context: staff-token
+      x-permission: bar.order_item.void
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-audit-event-success: bar.order_item_void.viewed
+      x-audit-event-failure: bar.order_item_void.view_failed
+      parameters:
+        - name: order_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 订单 ID；非空则只列该订单的退菜退酒申请。
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+              - applied
+          description: 申请状态；缺省 pending（待审队列）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/high-value-threshold:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertHighValueThreshold
+      summary: 维护高价值判定阈值(草案)
+      description: 结算配置中心 V350：按 项目公司 × 商户
+        配置全平台唯一的「高价值判定阈值(分)」——物品进货价高于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.high_value_thresholds.updated
+      x-audit-event-failure: settlement.config.high_value_thresholds.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                merchant_id:
+                  type: string
+                high_value_threshold_cent:
+                  type: integer
+              required:
+                - idempotency_key
+                - high_value_threshold_cent
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/pass-gift-cost:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertPassGiftCost
+      summary: 维护赠送权益预估成本预扣规则(草案)
+      description: 结算配置中心 S6(V373)：按 项目公司 × 票种 配置通票分账池前预扣的「赠送权益预估成本」(归娱乐平台公司)。两模式二选一：by_item 按件计＝票面各权益数量 ×
+        提供方内部结算价之和(金额由票面推导,不接受手填整额)；by_ticket_amount
+        按票计＝该票种赠送部分的售价整额(必填,0=预扣关闭)。可选每月封顶与差额处理规则。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.pass_gift_cost_configs.updated
+      x-audit-event-failure: settlement.config.pass_gift_cost_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                ticket_type_id:
+                  type: string
+                prededuct_mode:
+                  type: string
+                  enum:
+                    - by_item
+                    - by_ticket_amount
+                ticket_gift_amount_cent:
+                  type: integer
+                monthly_cap_amount_cent:
+                  type: integer
+                variance_handling:
+                  type: string
+                  enum:
+                    - platform_absorb
+                    - carry_forward
+                    - true_up_pool
+              required:
+                - idempotency_key
+                - prededuct_mode
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/void-reason-codes:
+    get:
+      tags:
+        - bar
+      operationId: listBarVoidReasonCodes
+      summary: 列退酒原因（中文下拉数据源）
+      description: 退酒原因码字典：店员退酒时从中文清单里选，不手打英文短码。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.order_item.void
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: bar.void_reason_code.viewed
+      x-audit-event-failure: bar.void_reason_code.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: include_inactive
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - bar
+      operationId: saveBarVoidReasonCode
+      summary: 新增或修改退酒原因
+      description: 按原因标识覆盖中文名与排序；已下线的原因重新保存即恢复可选。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.order_item.void_decide
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: true
+      x-audit-event-success: bar.void_reason_code.saved
+      x-audit-event-failure: bar.void_reason_code.save_failed
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                code:
+                  type: string
+                label_zh:
+                  type: string
+                sort_order:
+                  type: integer
+              required:
+                - idempotency_key
+                - code
+                - label_zh
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/void-reason-codes/{code}/archive:
+    post:
+      tags:
+        - bar
+      operationId: archiveBarVoidReasonCode
+      summary: 下线退酒原因（软删留理由）
+      description: 软删铁律：置为不可选并留下线理由，不物理删——历史退酒单仍引用该原因。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.order_item.void_decide
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: true
+      x-audit-event-success: bar.void_reason_code.archived
+      x-audit-event-failure: bar.void_reason_code.archive_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                archive_reason:
+                  type: string
+              required:
+                - idempotency_key
+                - archive_reason
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/evidence/attachments/upload:
+    post:
+      tags:
+        - evidence
+      operationId: uploadEvidenceAttachment
+      summary: 上传证据照片/视频
+      description: 证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
+        深度能力不得反向扩大 P0 范围。
+      x-permission: evidence.attachment.create
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - tablet
+        - staff_work_phone
+      x-idempotency-required: false
+      x-audit-event-success: evidence.attachment_uploaded
+      x-audit-event-failure: evidence.attachment_uploaded_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: business_type
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: business_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: attachment_role
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/evidence/attachments/{attachment_id}/file:
+    get:
+      tags:
+        - evidence
+      operationId: readEvidenceAttachmentFile
+      summary: 回读证据文件
+      description: 主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: evidence.timeline.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: evidence.attachment_file_viewed
+      x-audit-event-failure: evidence.attachment_file_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: attachment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/settlement/invoice-items:
     get:
       tags:
@@ -25515,13 +25686,76 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/ticketing/ticket-types/{id}/price-check:
+    get:
+      tags:
+        - ticketing
+      operationId: ticketTypePriceCheck
+      summary: 票种定价核算（系统算出售价 vs 填的售价）
+      description: 综合／联合通票的售价由各业态价格（原称「票面原价」）相加后按票种折扣自动算出。本接口返回各业态价格合计、折扣、系统算出售价、 运营现在填的售价、两者差额、后台可配的允许误差、是否超限，以及按「整元且尾数
+        8/9/0」建议的凑整售价。 建票／改票页据此实时提示，发布闸拒绝时报的是同一份计算。
+      x-permission: ticket.product.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket_product.viewed
+      x-audit-event-failure: ticket_product.view_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/ticket-types/{id}/pricing:
+    put:
+      tags:
+        - ticketing
+      operationId: updateTicketTypePricing
+      summary: 改票种售价／折扣（凑整误差闸）
+      description: 设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态价格（原称「票面原价」）×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。
+      x-permission: ticket.product.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_product.pricing_changed
+      x-audit-event-failure: ticket_product.pricing_change_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/TicketTypePricingRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/settlement/config/internal-price-item:
     post:
       tags:
         - settlement
       operationId: settlementConfigUpsertInternalPriceItem
       summary: 维护内部结算SKU目录条目(草案)
-      description: 批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code 留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格 0 为商户让利型合法价。
+      description: 批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code
+        留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格
+        0 为商户让利型合法价。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -25571,7 +25805,8 @@ paths:
         - settlement
       operationId: settlementConfigListInternalPriceItems
       summary: 内部结算SKU目录三维筛选列表
-      description: 批10/E：按 商家/业态(随商家带出)/品类 三维筛选目录条目；include_drafts 含草案(目录页草案队列)、include_archived 含归档档。内部结算价属敏感信息,仅授权后台可见(settlement.config.view 或 V279/V301 内部价读脱敏点任一);商户 scope 操作者强制只看本商户条目。
+      description: 批10/E：按 商家/业态(随商家带出)/品类 三维筛选目录条目；include_drafts 含草案(目录页草案队列)、include_archived
+        含归档档。内部结算价属敏感信息,仅授权后台可见(settlement.config.view 或 V279/V301 内部价读脱敏点任一);商户 scope 操作者强制只看本商户条目。
       x-auth-context: staff-token
       x-permission: settlement.config.view
       x-data-scope: platform
@@ -25617,7 +25852,7 @@ paths:
   /api/v1/integration/channel-ticket-type-maps:
     get:
       tags:
-      - integration
+        - integration
       operationId: listIntegrationChannelTicketTypeMaps
       summary: 查询渠道票种映射
       description: 批6 第三方通票适配：第三方渠道商品 id → 本地票种映射列表（渠道售出的通票回流按此落成本地票）。
@@ -25625,20 +25860,20 @@ paths:
       x-permission: integration.channel_store_map.view
       x-data-scope: platform
       x-terminal-allowed:
-      - web
+        - web
       x-idempotency-required: false
       x-audit-event-success: integration.channel_ticket_type_map.viewed
       x-audit-event-failure: integration.channel_ticket_type_map.view_failed
       responses:
-        '200':
-          $ref: '#/components/responses/Page'
-        '403':
-          $ref: '#/components/responses/Error'
-        '500':
-          $ref: '#/components/responses/Error'
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
-      - integration
+        - integration
       operationId: saveIntegrationChannelTicketTypeMap
       summary: 登记/改绑渠道票种映射
       description: 自然键(provider_code,channel,external_product_id)幂等 upsert；映射缺失时该渠道通票回流拒收（fail-closed）。
@@ -25646,7 +25881,7 @@ paths:
       x-permission: integration.channel_store_map.manage
       x-data-scope: platform
       x-terminal-allowed:
-      - web
+        - web
       x-idempotency-required: true
       x-audit-event-success: integration.channel_ticket_type_map.saved
       x-audit-event-failure: integration.channel_ticket_type_map.save_failed
@@ -25658,11 +25893,11 @@ paths:
               type: object
               additionalProperties: true
               required:
-              - idempotency_key
-              - provider_code
-              - channel
-              - external_product_id
-              - ticket_type_id
+                - idempotency_key
+                - provider_code
+                - channel
+                - external_product_id
+                - ticket_type_id
               properties:
                 idempotency_key:
                   type: string
@@ -25689,16 +25924,16 @@ paths:
                   description: 价格规则 id（选填=渠道团购价；空=按票种门市价出票）。
                   maxLength: 64
       responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '403':
-          $ref: '#/components/responses/Error'
-        '500':
-          $ref: '#/components/responses/Error'
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/channel-ticket-type-maps/{id}/archive:
     post:
       tags:
-      - integration
+        - integration
       operationId: archiveIntegrationChannelTicketTypeMap
       summary: 停用渠道票种映射
       description: 软删（status=inactive）；停用后该渠道商品回流按未配置处理（拒收），可重录复活。
@@ -25706,7 +25941,7 @@ paths:
       x-permission: integration.channel_store_map.manage
       x-data-scope: platform
       x-terminal-allowed:
-      - web
+        - web
       x-idempotency-required: true
       x-audit-event-success: integration.channel_ticket_type_map.archived
       x-audit-event-failure: integration.channel_ticket_type_map.archive_failed
@@ -25718,8 +25953,8 @@ paths:
               type: object
               additionalProperties: true
               required:
-              - idempotency_key
-              - reason
+                - idempotency_key
+                - reason
               properties:
                 idempotency_key:
                   type: string
@@ -25730,12 +25965,654 @@ paths:
                   description: 停用理由；进入审计。
                   maxLength: 500
       responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '403':
-          $ref: '#/components/responses/Error'
-        '500':
-          $ref: '#/components/responses/Error'
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/staff/registration-companies:
+    get:
+      tags:
+        - staff
+      operationId: listStaffRegistrationCompanies
+      summary: 获取可注册公司
+      description: 只返回有效公司的编号和名称，供公司员工本人注册时选择。（公开匿名发现列表；来源校验与频控见 U07-004，不能作为无设备绑定注册的前置。）
+      x-permission: public
+      x-data-scope: self
+      x-auth-context: public
+      x-terminal-allowed:
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.registration_companies_viewed
+      x-audit-event-failure: staff.registration_companies_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      security: []
+  /api/v1/staff/self-registrations:
+    post:
+      tags:
+        - staff
+      operationId: submitStaffSelfRegistration
+      summary: 公司员工本人注册
+      description: 公司员工在私人手机 App 安装时生成的设备公钥/指纹随本人注册提交并绑定本人（PGM L579/BSM
+        L935）；缺失、不符或该指纹已绑他人即拒。仅生成待审申请，批准前不发账号；合作方式为「自营」的商户须属于所选公司。响应只返回 id 和 registration_status，不返回个人资料。公开入口按认证类频控。
+      x-permission: public
+      x-data-scope: self
+      x-auth-context: public
+      x-terminal-allowed:
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.self_registered
+      x-audit-event-failure: staff.self_register_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 同一请求重试必须复用幂等键
+                  maxLength: 128
+                company_id:
+                  type: string
+                  description: 所属公司编号
+                  maxLength: 80
+                merchant_id:
+                  type: string
+                  description: 公司自营商户编号，可不填
+                  maxLength: 80
+                name:
+                  type: string
+                  description: 本人姓名
+                  maxLength: 128
+                phone:
+                  type: string
+                  description: 手机号原值，后端加密
+                  maxLength: 64
+                id_doc:
+                  type: string
+                  description: 证件原值，后端加密
+                  maxLength: 128
+                device_public_key:
+                  type: string
+                  description: 私人手机 Keystore 设备公钥（Base64 X.509 DER），安装时生成，不读硬件识别码
+                  maxLength: 4096
+                device_fingerprint_hash:
+                  type: string
+                  description: 设备指纹 = SHA-256(公钥 DER) 十六进制；服务端校验与公钥一致且未绑定他人
+                  maxLength: 64
+              required:
+                - idempotency_key
+                - company_id
+                - name
+                - device_public_key
+                - device_fingerprint_hash
+      security: []
+  /api/v1/staff/profiles/{id}/employment-status:
+    post:
+      tags:
+        - staff
+      operationId: setStaffEmploymentStatus
+      summary: 更新员工任职状态
+      description: 在当前公司或商户范围内调整任职状态，保留注册、存档及其他资料。
+      x-permission: staff.profile.review
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.profile.employment_status_changed
+      x-audit-event-failure: staff.profile.employment_status_change_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 同一请求重试必须复用幂等键
+                  maxLength: 128
+                employment_status:
+                  type: string
+                  enum:
+                    - pending_entry
+                    - employed
+                    - trial
+                    - suspended
+                    - departed
+                reason:
+                  type: string
+                  description: 填写改动缘由
+                  maxLength: 1000
+              required:
+                - idempotency_key
+                - employment_status
+                - reason
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 记录编号
+            maxLength: 80
+  /api/v1/staff/settings/shift-visible-days:
+    get:
+      tags:
+        - staff
+      operationId: getStaffShiftVisibility
+      summary: 读取排班可见天数
+      description: 按当前经营主体读取；经营主体无自有行时回落到全局出厂行（出厂 7 天，上下限 1..31 为操作员裁定的上线配置）；无出厂行则拒绝（POLICY_NOT_CONFIGURED），不返回空上下限。
+      x-permission: staff.shift.manage
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.shift.visibility_viewed
+      x-audit-event-failure: staff.shift.visibility_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - staff
+      operationId: setStaffShiftVisibility
+      summary: 设置排班可见天数
+      description: 须同时填写正数天数、上下限和缘由；商户独立设置，只影响当前经营主体。
+      x-permission: staff.shift.manage
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.shift.visibility_changed
+      x-audit-event-failure: staff.shift.visibility_change_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 同一请求重试必须复用幂等键
+                  maxLength: 128
+                value:
+                  type: integer
+                  description: 参数值
+                min_value:
+                  type: integer
+                  description: 下限
+                max_value:
+                  type: integer
+                  description: 上限
+                reason:
+                  type: string
+                  description: 填写改动缘由
+                  maxLength: 1000
+              required:
+                - idempotency_key
+                - value
+                - min_value
+                - max_value
+                - reason
+  /api/v1/staff/settings/payroll-penalty-cap:
+    get:
+      tags:
+        - staff
+      operationId: getStaffPenaltyCap
+      summary: 读取普通扣除上限
+      description: 万分比整数，默认2000表示20%；普通处罚合计封顶，提成不入分母，事假另算。
+      x-permission: staff.payroll.manage
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.payroll.penalty_cap_viewed
+      x-audit-event-failure: staff.payroll.penalty_cap_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - staff
+      operationId: requestStaffPenaltyCap
+      summary: 申请调整普通扣除上限
+      description: 人事、财务、法务三条线均批准后，由最高权限最终批准；批准前原参数不变，已月结月份保留上限快照。
+      x-permission: staff.payroll.manage
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.payroll.penalty_cap_requested
+      x-audit-event-failure: staff.payroll.penalty_cap_request_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                value:
+                  type: integer
+                  description: 参数值
+                min_value:
+                  type: integer
+                  description: 下限
+                max_value:
+                  type: integer
+                  description: 上限
+                reason:
+                  type: string
+                  description: 填写改动缘由
+                  maxLength: 1000
+                idempotency_key:
+                  type: string
+                  description: 同一请求重试必须复用幂等键
+                  maxLength: 128
+                parallel_lines:
+                  type: array
+                  minItems: 3
+                  maxItems: 3
+                  items:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      line_code:
+                        type: string
+                        enum:
+                          - hr_review
+                          - finance_review
+                          - legal_review
+                      final_approver_id:
+                        type: string
+                        description: 该线最终审批人员工账号
+                        maxLength: 80
+                    required:
+                      - line_code
+                      - final_approver_id
+              required:
+                - value
+                - min_value
+                - max_value
+                - reason
+                - idempotency_key
+                - parallel_lines
+  /api/v1/staff/shifts/{id}/history:
+    get:
+      tags:
+        - staff
+      operationId: listStaffShiftHistory
+      summary: 查看排班修改历史
+      description: 当前管理范围内每次修改的前后快照、审批编号、生效时间均追加保留。
+      x-permission: staff.shift.manage
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.shift.history_viewed
+      x-audit-event-failure: staff.shift.history_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 记录编号
+            maxLength: 80
+  /api/v1/terminals/kiosks/{device_id}/locker-events:
+    post:
+      tags:
+        - staff
+      operationId: recordStaffLockerScan
+      summary: 柜机上报寄存柜扫码存取
+      description: 已登记 kiosk 柜机以设备令牌（X-Device-Token）单端上报扫码完成事件；员工身份只由本人手机会话申请的一次性短时扫码凭证（scan_token）承载并由服务端换回，不要求同一请求带员工会话（PGM
+        L582/BSM L938 由柜子自动记录）。记录格口和服务器存取时间；取空后可供其他人使用，无手工登记入口。厂商开锁和扫码身份适配须按实际协议联调，此接口不代表物理柜锁已接通。
+      security:
+        - DeviceCredential: []
+      x-permission: not_applicable
+      x-data-scope: project-device
+      x-auth-context: device-credential
+      x-terminal-allowed:
+        - kiosk
+      x-idempotency-required: true
+      x-audit-event-success: staff.locker.recorded
+      x-audit-event-failure: staff.locker.record_failed
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+          description: 柜机设备编号；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 同一请求重试必须复用幂等键
+                  maxLength: 128
+                slot_ref:
+                  type: string
+                  description: 柜机实际格口编号
+                  maxLength: 128
+                action:
+                  type: string
+                  enum:
+                    - store
+                    - retrieve
+                scan_token:
+                  type: string
+                  description: 员工手机出示的一次性扫码凭证（POST /api/v1/staff/lockers/scan-token 签发，120 秒内有效）
+                  maxLength: 128
+              required:
+                - idempotency_key
+                - slot_ref
+                - action
+                - scan_token
+  /api/v1/staff/lockers/scan-token:
+    post:
+      tags:
+        - staff
+      operationId: issueStaffLockerScanToken
+      summary: 申请寄存柜扫码凭证
+      description: 员工本人会话申请一次性短时扫码凭证（120 秒内有效），手机端展示为二维码供柜机扫入；柜机上报时由服务端换回员工身份。
+      x-permission: staff.profile.self
+      x-data-scope: self
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - staff_private_phone
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.locker.scan_token_issued
+      x-audit-event-failure: staff.locker.scan_token_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 同一请求重试必须复用幂等键
+                  maxLength: 128
+              required:
+                - idempotency_key
+  /api/v1/staff/shifts/{id}/cover:
+    post:
+      tags:
+        - staff
+      operationId: coverStaffShift
+      summary: 记录临时顶班
+      description: 已开始班次不能改写（SHIFT_STARTED）；临时顶班由领班直接安排并在此记录（顶班员工、原班次、事由），只追加、不改写原班次、不走上一级排班审批（BSM L1443）。
+      x-permission: staff.shift.manage
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.shift.covered
+      x-audit-event-failure: staff.shift.cover_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 记录编号
+            maxLength: 80
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 同一请求重试必须复用幂等键
+                  maxLength: 128
+                cover_user_id:
+                  type: string
+                  description: 顶班员工 user_id，不能是原班次员工
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 顶班事由
+                  maxLength: 1000
+              required:
+                - idempotency_key
+                - cover_user_id
+                - reason
+  /api/v1/staff/shifts/{id}/covers:
+    get:
+      tags:
+        - staff
+      operationId: listStaffShiftCovers
+      summary: 查看班次顶班记录
+      description: 当前管理范围内该班次的顶班记录，按时间追加保留。
+      x-permission: staff.shift.manage
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.shift.covers_viewed
+      x-audit-event-failure: staff.shift.covers_view_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 记录编号
+            maxLength: 80
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     BearerAuth:
@@ -25955,15 +26832,6 @@ components:
         maxLength: 64
       description: ProjectId 路径参数；必须引用当前数据范围内存在且归属本商户的游乐项目。
   requestBodies:
-    StaffSalesPositionRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StaffSalesPositionRequest"
-          example:
-            sales_position: true
-            reason: 转岗销售，2026-07 起承接卡座销售
     StatusChange:
       required: true
       content:
@@ -26127,18 +26995,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/DeviceBindRequest"
-    CanaryRolloutRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/CanaryRolloutRequest"
-    CanaryTargetRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/CanaryTargetRequest"
     CapabilitySwitchRequest:
       required: true
       content:
@@ -26169,12 +27025,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TicketTypeRequest"
-    TicketTypePricingRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TicketTypePricingRequest"
     TicketPriceRuleRequest:
       required: true
       content:
@@ -26233,8 +27083,8 @@ components:
           example:
             venue_id: sp_bar_main_hall
             day_of_week: 5
-            open_time: "20:00"
-            close_time: "02:00"
+            open_time: 20:00
+            close_time: 02:00
             disabled: false
     CustomerBarReservationRequest:
       required: true
@@ -26783,10 +27633,10 @@ components:
           example:
             idempotency_key: staff_reg_20260618_000001
             project_id: project_main
-            merchant_id: null
+            merchant_id: merchant_example_001
             name: 张三
-            phone_hash: sha256:phone_hash_placeholder
             staff_level_id: lvl_m1_lower
+            phone: "13800000000"
     StaffRegistrationReviewRequest:
       required: true
       content:
@@ -27448,6 +28298,33 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/VoucherRedeemRequest"
+    CanaryRolloutRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CanaryRolloutRequest"
+    CanaryTargetRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CanaryTargetRequest"
+    StaffSalesPositionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffSalesPositionRequest"
+          example:
+            sales_position: true
+            reason: 转岗销售，2026-07 起承接卡座销售
+    TicketTypePricingRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TicketTypePricingRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -27499,21 +28376,6 @@ components:
             meta:
               server_time: 2026-06-12T12:00:00Z
   schemas:
-    StaffSalesPositionRequest:
-      type: object
-      description: 员工「销售岗」标识维护请求体。sales_position=是否销售岗（true=该员工卖出的卡座按销售人员费率计提提成，false=按非销售人员费率）；reason=改动事由（必填，直接影响提成计提档，须留审计可回溯）。
-      additionalProperties: false
-      required:
-        - sales_position
-        - reason
-      properties:
-        sales_position:
-          type: boolean
-          description: 是否销售岗。true=按销售人员费率计提卡座提成；false=按非销售人员费率。
-        reason:
-          type: string
-          description: 改动事由（必填）。
-          maxLength: 1000
     SuccessResponse:
       type: object
       required:
@@ -27647,7 +28509,8 @@ components:
           maxLength: 128
         message:
           type: string
-          description: 错误提示文案；一律中文业务话术（禁止出现英文字段键/英文句子，后台、客人端、设备端、安卓端共用同一条文案）；不得泄露密钥、身份证号、手机号等敏感信息。英文字段键属机读信息，只留服务端日志，由 GlobalExceptionHandler 出口翻译后再出网。
+          description: 错误提示文案；一律中文业务话术（禁止出现英文字段键/英文句子，后台、客人端、设备端、安卓端共用同一条文案）；不得泄露密钥、身份证号、手机号等敏感信息。英文字段键属机读信息，只留服务端日志，由
+            GlobalExceptionHandler 出口翻译后再出网。
           maxLength: 255
         details:
           type: object
@@ -28253,7 +29116,8 @@ components:
           description: 3.13 意向空间（可选）。传了则起草即校验空间存在并与生效合同租期重叠早拒，同时预绑定；提交审批时复检。
         allowed_categories:
           type: array
-          description: 经营范围(结构化,可空)：取值=既有业务类目规范值(域级 bar/ticketing/amusement + 商户业态 catering/retail/service/entertainment + 酒吧商品粗类别 8 类)，存 rent_terms.allowedCategories；配置后下单侧(酒吧/票务)拦超范围经营(CONTRACT_SCOPE_VIOLATION)，空/缺省=不拦截(存量合同兼容)。
+          description: 经营范围(结构化,可空)：取值=既有业务类目规范值(域级 bar/ticketing/amusement + 商户业态 catering/retail/service/entertainment + 酒吧商品粗类别
+            8 类)，存 rent_terms.allowedCategories；配置后下单侧(酒吧/票务)拦超范围经营(CONTRACT_SCOPE_VIOLATION)，空/缺省=不拦截(存量合同兼容)。
           items:
             type: string
             enum:
@@ -28691,6 +29555,10 @@ components:
           type: string
           description: 登记时可直接给定所属商户（K16 核销上下文，一步到位免二次改绑）；商户须存在且未归档。缺省时：新设备不绑商户，复领用保留既有归属。
           maxLength: 64
+        staff_id:
+          type: string
+          description: 持有员工档案编号；terminal_type=staff_work_phone 时必填（领用即绑定，验签按该员工收口 U07-001）；平板/一体机按点位或商户绑定可空
+          maxLength: 64
     DeviceBindingResponse:
       type: object
       description: 设备绑定响应；kiosk 新建绑定时 device_token 仅在本响应一次性返回，服务端只保存 SHA-256 哈希。
@@ -28774,56 +29642,6 @@ components:
           nullable: true
           description: 仅 terminal_type=kiosk 的新建绑定响应返回明文；不得落库明文、不得放入 metadata、不得通过 config/heartbeat 回显。
           maxLength: 255
-    CanaryRolloutRequest:
-      type: object
-      description: 请求载荷 `CanaryRolloutRequest`；开/关某「端 × 能力」的灰度试点（按 端×能力 唯一，重复提交即覆盖）。
-      additionalProperties: false
-      required:
-        - terminal_type
-        - capability_code
-        - active
-        - reason
-      properties:
-        terminal_type:
-          type: string
-          description: 调用终端类型；只能使用统一口径 D5 的终端码，或跨端通配 `*`。
-          maxLength: 64
-        capability_code:
-          type: string
-          description: 受灰度控制的能力码；与 terminal_capability_switches.capability_code 同一取值面。
-          maxLength: 128
-        active:
-          type: boolean
-          description: 灰度试点是否生效；true=进入试点期（白名单外一律关闭），false=不做灰度（灰度层弃权）。
-        reason:
-          type: string
-          description: 开/关灰度试点的理由；必填，进入审计留痕。
-          maxLength: 1000
-    CanaryTargetRequest:
-      type: object
-      description: 请求载荷 `CanaryTargetRequest`；加入灰度白名单（target_type+target_id+reason）或移出白名单（仅 reason，软删除存档理由）。
-      additionalProperties: false
-      required:
-        - reason
-      properties:
-        target_type:
-          type: string
-          description: 试点维度；不含 global（放 global 等于全量放开）。
-          enum:
-            - project
-            - merchant
-            - business_system
-            - module
-            - version
-            - device
-        target_id:
-          type: string
-          description: 试点对象唯一标识；与该维度在请求上下文中的取值逐字比较。
-          maxLength: 64
-        reason:
-          type: string
-          description: 加入或移出白名单的理由；必填，进入审计留痕。
-          maxLength: 1000
     CapabilitySwitchRequest:
       type: object
       description: 请求载荷 `CapabilitySwitchRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -29027,41 +29845,6 @@ components:
           type: string
           description: 检查备注；用于记录本次检查目的、范围或例外说明。
           maxLength: 1000
-    TicketTypePricingRequest:
-      type: object
-      description: 改票种售价／折扣请求载荷；保存当场比对凑整允许误差，超出即拒。
-      additionalProperties: false
-      required:
-        - reason
-      properties:
-        idempotency_key:
-          type: string
-          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-          maxLength: 128
-        reason:
-          type: string
-          description: 改价理由（必填）；进入审计留痕，事后能查是谁为什么把价改成这个数。
-          maxLength: 1000
-        combo_discount_rate:
-          type: number
-          minimum: 0
-          maximum: 100
-          description: 票种折扣（百分数，100=不打折，85=八五折）；系统算出售价 = 各业态价格（原称「票面原价」）合计 × 本折扣 ÷ 100。
-        weekday_price_cent:
-          type: integer
-          minimum: 0
-          maximum: 999999999999
-          description: 平日售价（分）＝这张票的基准售价；凑整误差闸比的就是它与系统算出售价的差额。
-        weekend_price_cent:
-          type: integer
-          minimum: 0
-          maximum: 999999999999
-          description: 周末售价（分，可空）；周末加价按日历规则走，不在误差闸内。
-        holiday_price_cent:
-          type: integer
-          minimum: 0
-          maximum: 999999999999
-          description: 节假日售价（分，可空）；节假日加价按日历规则走，不在误差闸内。
     TicketTypeRequest:
       type: object
       description: 请求载荷 `TicketTypeRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -29110,11 +29893,6 @@ components:
           description: 节假日票价，单位分；派生票价可基于该值折扣或覆盖固定价。
           minimum: 0
           maximum: 999999999999
-        combo_discount_rate:
-          type: number
-          minimum: 0
-          maximum: 100
-          description: V369 票种折扣（百分数，100=不打折）；系统算出售价 = 各业态价格（原称「票面原价」）合计 × 本折扣 ÷ 100。
         stock_required:
           type: boolean
           description: 是否强制库存扣减；为 true 时售票必须锁定并扣减库存。
@@ -29157,6 +29935,11 @@ components:
             - new_person
             - student
           description: 资格/定价档分类标签（可空=标准）。仅分类/报表用，不碰定价。
+        combo_discount_rate:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: V369 票种折扣（百分数，100=不打折）；系统算出售价 = 各业态价格（原称「票面原价」）合计 × 本折扣 ÷ 100。
     TicketPriceRuleRequest:
       type: object
       description: 请求载荷 `TicketPriceRuleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -29232,7 +30015,8 @@ components:
           description: TicketPriceRuleRequest.eligibility_rule 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
     TicketOrderRequest:
       type: object
-      description: Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount; draft rules remain simulation-only. sales_channel=kiosk 仅表示授权服务人员在售票一体机上辅助到店购票。
+      description: Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount;
+        draft rules remain simulation-only. sales_channel=kiosk 仅表示授权服务人员在售票一体机上辅助到店购票。
       additionalProperties: false
       required:
         - ticket_type_id
@@ -29293,7 +30077,8 @@ components:
           maxLength: 64
         dynamic_pricing_context:
           type: object
-          description: Optional matching context for published dynamic pricing rules. Missing context only matches rules without conditions.
+          description: Optional matching context for published dynamic pricing rules. Missing context only matches rules without
+            conditions.
           additionalProperties: true
     TicketIssueRequest:
       type: object
@@ -29386,7 +30171,8 @@ components:
           deprecated: true
         ticket_instance_ids:
           type: array
-          description: 方案2 整票退款：要退该订单下哪几张父票实例（ticket_instances ID）；不传/空=退该订单全部“完全未核销”的票实例。金额按各实例出票定格的实付分摊额算定；父票任一权益已核销则整张不可退（TICKET_INSTANCE_VERIFIED_NO_REFUND）。
+          description: 方案2 整票退款：要退该订单下哪几张父票实例（ticket_instances
+            ID）；不传/空=退该订单全部“完全未核销”的票实例。金额按各实例出票定格的实付分摊额算定；父票任一权益已核销则整张不可退（TICKET_INSTANCE_VERIFIED_NO_REFUND）。
           items:
             type: string
             maxLength: 64
@@ -29815,7 +30601,8 @@ components:
                 minimum: 1
               actual_pour_volume:
                 type: integer
-                description: 按杯出品实际出酒量（毫升）；按杯出品项（配置了 standard_pour_volume）在严格模式（bar.pour-cost.strict-mode=true，默认）下必填，缺失拒单 POUR_VOLUME_REQUIRED；实际量>标准量记损耗，超阈值落 inventory.loss_exception 核查留痕。非按杯出品项忽略。
+                description: 按杯出品实际出酒量（毫升）；按杯出品项（配置了 standard_pour_volume）在严格模式（bar.pour-cost.strict-mode=true，默认）下必填，缺失拒单
+                  POUR_VOLUME_REQUIRED；实际量>标准量记损耗，超阈值落 inventory.loss_exception 核查留痕。非按杯出品项忽略。
                 minimum: 0
           maxItems: 200
         delivered_by_user_id:
@@ -30058,7 +30845,8 @@ components:
           maxLength: 128
     SavedBottleRequest:
       type: object
-      description: 请求载荷 `SavedBottleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id 改为可空（散客存酒），登记必填补 bottle_label_value/registration_photo_refs/customer_name_or_nickname。
+      description: 请求载荷 `SavedBottleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id
+        改为可空（散客存酒），登记必填补 bottle_label_value/registration_photo_refs/customer_name_or_nickname。
       additionalProperties: false
       required:
         - bar_id
@@ -31828,7 +32616,8 @@ components:
             $ref: "#/components/schemas/TerminalEventItem"
     TicketDynamicPricingRuleRequest:
       type: object
-      description: P2 ticket dynamic pricing rule write request. Draft rules are simulation-only; published matching rules may affect formal ticket order settlement and must retain price trace evidence.
+      description: P2 ticket dynamic pricing rule write request. Draft rules are simulation-only; published matching rules may
+        affect formal ticket order settlement and must retain price trace evidence.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -31917,7 +32706,8 @@ components:
           additionalProperties: true
     TicketDynamicPricingSimulationRequest:
       type: object
-      description: P2 ticket dynamic pricing simulation request. The response is for operational preview and must not create ticket orders or receivables.
+      description: P2 ticket dynamic pricing simulation request. The response is for operational preview and must not create
+        ticket orders or receivables.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -31952,7 +32742,8 @@ components:
           additionalProperties: true
     AmusementGroupBookingRequest:
       type: object
-      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend display cannot decide capacity success.
+      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend
+        display cannot decide capacity success.
       additionalProperties: false
       required:
         - project_id
@@ -32034,7 +32825,8 @@ components:
           maxItems: 50
     AmusementGroupBookingReleaseRequest:
       type: object
-      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave audit evidence.
+      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave
+        audit evidence.
       additionalProperties: false
       required:
         - idempotency_key
@@ -32057,7 +32849,8 @@ components:
           maxItems: 50
     AiQualitySuggestionRequest:
       type: object
-      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and truncate before model invocation.
+      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and
+        truncate before model invocation.
       additionalProperties: false
       required:
         - idempotency_key
@@ -32802,12 +33595,13 @@ components:
           maximum: 100000000
     StaffRegistrationRequest:
       type: object
-      description: 员工自助注册请求体。个人信息只传不可逆哈希（PIPL）。project_id 必填（隔离），merchant_id 可空（NULL=平台员工）。
+      description: 商户代提交员工注册，项目和商户编号必填；公司员工自助注册走独立公开入口。
       additionalProperties: false
       required:
         - idempotency_key
         - project_id
         - name
+        - merchant_id
       properties:
         idempotency_key:
           type: string
@@ -32823,19 +33617,19 @@ components:
           maxLength: 64
         merchant_id:
           type: string
-          description: 商户归属；空=平台员工。
+          description: 代员工提交的商户编号，必填
           maxLength: 64
         name:
           type: string
           description: 员工姓名，必填。
           maxLength: 128
-        phone_hash:
+        phone:
           type: string
-          description: 手机号不可逆哈希（PIPL，不存明文）。
+          description: 手机号原值；后端加密存放，日常界面只返回脱敏值。
           maxLength: 64
-        id_doc_hash:
+        id_doc:
           type: string
-          description: 证件不可逆哈希（可选）。
+          description: 证件原值（可选）；后端加密存放，日常界面不返回明文。
           maxLength: 64
         staff_level_id:
           type: string
@@ -33709,7 +34503,8 @@ components:
           maxLength: 64
     AmusementCapacityConfigRequest:
       type: object
-      description: 请求载荷 `AmusementCapacityConfigRequest`（V083 点位/设备并发容量，原为三维容量第三维——已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量）；location_point_id 与 device_id 至少其一；max_concurrent 为该点位/设备并发在场上限。
+      description: 请求载荷 `AmusementCapacityConfigRequest`（V083 点位/设备并发容量，原为三维容量第三维——已废止（DEC-R5-2026-08-04-04 / R8 用户裁决
+        D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量）；location_point_id 与 device_id 至少其一；max_concurrent 为该点位/设备并发在场上限。
       additionalProperties: false
       required:
         - max_concurrent
@@ -33796,7 +34591,8 @@ components:
           description: 是否启用（省略默认 true）；原「停用后该设备不再参与三维容量校验与核销放行」——三维容量已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。
     BarTableSpaceAssignmentRequest:
       type: object
-      description: "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space 对该桌台关联账单（bar_bill→table_id→space_id）真实生效。bar_tables 无可派生源，无法 SQL 自动回填，须运营录入。"
+      description: "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space
+        对该桌台关联账单（bar_bill→table_id→space_id）真实生效。bar_tables 无可派生源，无法 SQL 自动回填，须运营录入。"
       additionalProperties: false
       required:
         - space_id
@@ -33822,7 +34618,9 @@ components:
           maxLength: 64
     AmusementProjectSpaceAssignmentRequest:
       type: object
-      description: "请求载荷 `AmusementProjectSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 amusement_projects.space_id。录入后 AdmissionGuard over_space 对该项目相关受控对象（inspection/maintenance_record/incident/group_booking 经 project_id→space_id）真实生效。amusement_projects 无可派生源，无法 SQL 自动回填，须运营录入。"
+      description: "请求载荷 `AmusementProjectSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 amusement_projects.space_id。录入后
+        AdmissionGuard over_space 对该项目相关受控对象（inspection/maintenance_record/incident/group_booking 经
+        project_id→space_id）真实生效。amusement_projects 无可派生源，无法 SQL 自动回填，须运营录入。"
       additionalProperties: false
       required:
         - space_id
@@ -33848,7 +34646,8 @@ components:
           maxLength: 64
     BarShiftOpenRequest:
       type: object
-      description: 请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省 0）、现金差异复核阈值（cash_diff_threshold_cent，默认 0=任何差异即复核）；同一吧台同一收银员仅允许一个 open 班次。
+      description: 请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省
+        0）、现金差异复核阈值（cash_diff_threshold_cent，默认 0=任何差异即复核）；同一吧台同一收银员仅允许一个 open 班次。
       additionalProperties: false
       required:
         - bar_id
@@ -33886,7 +34685,9 @@ components:
           maxLength: 1000
     BarShiftCloseRequest:
       type: object
-      description: 请求载荷 `BarShiftCloseRequest`（V095 班结对账）；录入实点现金 declared_cash_cent，可选交接下一班收银员（handover_to_user_id）。系统应收（各支付方式/退款/小费）按班次时间窗口聚合，无需客户端传入；现金差异 = 实点 -（备用金 + 系统现金应收），超阈值进复核。
+      description: 请求载荷 `BarShiftCloseRequest`（V095 班结对账）；录入实点现金
+        declared_cash_cent，可选交接下一班收银员（handover_to_user_id）。系统应收（各支付方式/退款/小费）按班次时间窗口聚合，无需客户端传入；现金差异 = 实点 -（备用金 +
+        系统现金应收），超阈值进复核。
       additionalProperties: false
       required:
         - declared_cash_cent
@@ -33933,7 +34734,9 @@ components:
           maxLength: 255
     RecordVarianceRequest:
       type: object
-      description: 请求载荷 `RecordVarianceRequest`（V108 库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按 variance_qty×unit_cost_cents 成本估算。
+      description: 请求载荷 `RecordVarianceRequest`（V108
+        库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按
+        variance_qty×unit_cost_cents 成本估算。
       additionalProperties: false
       required:
         - item_id
@@ -33980,7 +34783,8 @@ components:
           minimum: 0
     ReviewVarianceRequest:
       type: object
-      description: 请求载荷 `ReviewVarianceRequest`（V108 库存差异复核）；decision=approved/rejected，pending→终态，幂等，重复/非 pending 拒绝。approved 是解锁 finance postInventoryVariance 入账的关键。
+      description: 请求载荷 `ReviewVarianceRequest`（V108 库存差异复核）；decision=approved/rejected，pending→终态，幂等，重复/非 pending 拒绝。approved
+        是解锁 finance postInventoryVariance 入账的关键。
       additionalProperties: false
       required:
         - decision
@@ -34001,7 +34805,8 @@ components:
           maxLength: 1000
     ConfigureOverCapacityPolicyRequest:
       type: object
-      description: 请求载荷 `ConfigureOverCapacityPolicyRequest`（V104 amusement_over_capacity_policy 写入侧，按 project_id 幂等 upsert）；operating_capacity 为运营容量（软上限，>=0），disposal_mode 决定超容处置（block_hard 硬阻断+软告警 / warn_only 仅告警留痕不阻断）。
+      description: 请求载荷 `ConfigureOverCapacityPolicyRequest`（V104 amusement_over_capacity_policy 写入侧，按 project_id 幂等
+        upsert）；operating_capacity 为运营容量（软上限，>=0），disposal_mode 决定超容处置（block_hard 硬阻断+软告警 / warn_only 仅告警留痕不阻断）。
       additionalProperties: false
       required:
         - disposal_mode
@@ -34037,7 +34842,8 @@ components:
           description: 是否启用该策略（省略默认 true）；停用后退化为仅硬上限阻断、无软上限告警。
     RegisterTraceCodeRequest:
       type: object
-      description: 请求载荷 `RegisterTraceCodeRequest`（V128/REQ-39 溯源码贴码登记，入库）；status=registered，merchant_id 强制取自认证上下文不由请求体传入。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。
+      description: 请求载荷 `RegisterTraceCodeRequest`（V128/REQ-39 溯源码贴码登记，入库）；status=registered，merchant_id
+        强制取自认证上下文不由请求体传入。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。
       additionalProperties: false
       required:
         - item_id
@@ -34060,7 +34866,8 @@ components:
           maxLength: 128
     PrintTraceCodeRequest:
       type: object
-      description: 请求载荷 `PrintTraceCodeRequest`（V128/REQ-39 溯源码出库打印）；status registered→printed，记 printed_at，条件 UPDATE 防重复打印（非 registered 拒绝）。
+      description: 请求载荷 `PrintTraceCodeRequest`（V128/REQ-39 溯源码出库打印）；status registered→printed，记 printed_at，条件 UPDATE 防重复打印（非
+        registered 拒绝）。
       additionalProperties: false
       properties:
         idempotency_key:
@@ -34069,7 +34876,8 @@ components:
           maxLength: 128
     InitiateEntitlementSessionRequest:
       type: object
-      description: 请求载荷 `InitiateEntitlementSessionRequest`（V129/REQ-53 工作手机扫附赠权益码发起会话）；status=initiated，merchant_id 强制取自认证上下文不由请求体传入。entitlement_ref 为被扫权益引用（发放 id 或权益码，跨域通用字符串，不强加 FK）。
+      description: 请求载荷 `InitiateEntitlementSessionRequest`（V129/REQ-53 工作手机扫附赠权益码发起会话）；status=initiated，merchant_id
+        强制取自认证上下文不由请求体传入。entitlement_ref 为被扫权益引用（发放 id 或权益码，跨域通用字符串，不强加 FK）。
       additionalProperties: false
       required:
         - entitlement_ref
@@ -34097,7 +34905,8 @@ components:
           maxLength: 64
     ClaimEntitlementSessionRequest:
       type: object
-      description: 请求载荷 `ClaimEntitlementSessionRequest`（V129/REQ-53 一体机领取核销）；防错领由服务端条件 UPDATE 保证（仅 initiated/displayed 且未过期可领，→claimed），过期 / 已领 / 重复领 / 已取消均拒。
+      description: 请求载荷 `ClaimEntitlementSessionRequest`（V129/REQ-53 一体机领取核销）；防错领由服务端条件 UPDATE 保证（仅 initiated/displayed
+        且未过期可领，→claimed），过期 / 已领 / 重复领 / 已取消均拒。
       additionalProperties: false
       properties:
         idempotency_key:
@@ -34243,7 +35052,8 @@ components:
       description: 酒吧预约entryallowance核销record请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
     ConfirmTicketOrderPaymentRequest:
       type: object
-      description: 请求载荷 `ConfirmTicketOrderPaymentRequest`（2a-2 票务支付回写闭环）；payment_intent_id 必填，服务端据其校验归属（须属本订单）与金额（须等于订单金额）后置支付意图 succeeded 并回写订单 pay_status=paid。内部确认与真实回调共用本入口。
+      description: 请求载荷 `ConfirmTicketOrderPaymentRequest`（2a-2 票务支付回写闭环）；payment_intent_id
+        必填，服务端据其校验归属（须属本订单）与金额（须等于订单金额）后置支付意图 succeeded 并回写订单 pay_status=paid。内部确认与真实回调共用本入口。
       additionalProperties: false
       required:
         - payment_intent_id
@@ -34262,7 +35072,8 @@ components:
           maxLength: 128
     PropertyFeeRateRequest:
       type: object
-      description: 请求载荷 `PropertyFeeRateRequest`（F-OPS-08 物业费费率维护，upsert）；effective_period 为空=设为该项目默认费率（精确期未命中时回退）。rate_per_square_meter_cent 为每平米单价（分/㎡/期，>=0）。替代已废止的 CAM 权重分摊。
+      description: 请求载荷 `PropertyFeeRateRequest`（F-OPS-08 物业费费率维护，upsert）；effective_period
+        为空=设为该项目默认费率（精确期未命中时回退）。rate_per_square_meter_cent 为每平米单价（分/㎡/期，>=0）。替代已废止的 CAM 权重分摊。
       additionalProperties: false
       required:
         - project_id
@@ -34293,7 +35104,8 @@ components:
             - inactive
     PropertyFeeBillRequest:
       type: object
-      description: 请求载荷 `PropertyFeeBillRequest`（F-OPS-08 物业费按期计费）；对 project_id 下运营提供的 merchant_ids 按「每平米固定单价 × 商户面积」逐户生成应收，不退不补、按 (项目,期,商户) 幂等。merchants 无 project_id，故商户名单由运营显式提供。
+      description: 请求载荷 `PropertyFeeBillRequest`（F-OPS-08 物业费按期计费）；对 project_id 下运营提供的 merchant_ids 按「每平米固定单价 ×
+        商户面积」逐户生成应收，不退不补、按 (项目,期,商户) 幂等。merchants 无 project_id，故商户名单由运营显式提供。
       additionalProperties: false
       required:
         - project_id
@@ -34388,7 +35200,9 @@ components:
           maxLength: 1000
     MerchantExpenseSyncRequest:
       type: object
-      description: 请求载荷 `MerchantExpenseSyncRequest`（自动挂接触发）：把 period（如 2026-07）已出账的能耗费应收（ar_ap_items source_type=energy_fee）、物业费账单（property_fee_bills + 合同计费 contract_property_fee 双路径）与租金（ar_ap_items source_type ∈ contract_rent/turnover_rent，2026-07-18 拍板计入分红基数）汇入费用台账，幂等可重跑。
+      description: 请求载荷 `MerchantExpenseSyncRequest`（自动挂接触发）：把 period（如 2026-07）已出账的能耗费应收（ar_ap_items
+        source_type=energy_fee）、物业费账单（property_fee_bills + 合同计费 contract_property_fee 双路径）与租金（ar_ap_items source_type ∈
+        contract_rent/turnover_rent，2026-07-18 拍板计入分红基数）汇入费用台账，幂等可重跑。
       additionalProperties: false
       required:
         - idempotency_key
@@ -36175,7 +36989,8 @@ components:
           maxLength: 64
     DividendPlanRequest:
       type: object
-      description: 请求载荷 `DividendPlanRequest`（分红方案新建/修改共用）：凡涉数据皆可配——比例/税率/周期/基数构成开关全部可调，空缺按默认口径补齐（平台 80%、股息红利 20%、季度+月度预览、净利润全项）。修改时 merchant_id 不可变更；status=ended 停用方案。一个商户同一时期只允许一个生效中方案。
+      description: 请求载荷 `DividendPlanRequest`（分红方案新建/修改共用）：凡涉数据皆可配——比例/税率/周期/基数构成开关全部可调，空缺按默认口径补齐（平台 80%、股息红利
+        20%、季度+月度预览、净利润全项）。修改时 merchant_id 不可变更；status=ended 停用方案。一个商户同一时期只允许一个生效中方案。
       additionalProperties: false
       required:
         - idempotency_key
@@ -36281,7 +37096,8 @@ components:
           description: 固定延后释放的周期数（默认 1；仅 reserve_release_mode=fixed_delay 生效，季度方案 N×3 月 / 月度方案 N 月）。
     DividendComputeRequest:
       type: object
-      description: 请求载荷 `DividendComputeRequest`（期间分红作业触发）：kind=official 正式单（period_label 须匹配方案周期类型）或 preview 月度预览（period_label=yyyy-MM，仅季度方案出预览）。merchant_id 为空=对全部生效中方案跑批。幂等可重跑：草稿/预览/驳回单作废重算，已进入审批流跳过。
+      description: 请求载荷 `DividendComputeRequest`（期间分红作业触发）：kind=official 正式单（period_label 须匹配方案周期类型）或 preview
+        月度预览（period_label=yyyy-MM，仅季度方案出预览）。merchant_id 为空=对全部生效中方案跑批。幂等可重跑：草稿/预览/驳回单作废重算，已进入审批流跳过。
       additionalProperties: false
       required:
         - idempotency_key
@@ -36323,7 +37139,8 @@ components:
           maxLength: 1000
     VoucherDefinitionRequest:
       type: object
-      description: 请求载荷 `VoucherDefinitionRequest`（新建券定义）：商户折扣券须带面额与归属商户；店内实物券须带货品/库位/件数；结算口径选内部结算时须带内部结算价与结算商户。外部伙伴券不在统一台账建定义（配置在通票权益模板，V282）。
+      description: 请求载荷
+        `VoucherDefinitionRequest`（新建券定义）：商户折扣券须带面额与归属商户；店内实物券须带货品/库位/件数；结算口径选内部结算时须带内部结算价与结算商户。外部伙伴券不在统一台账建定义（配置在通票权益模板，V282）。
       additionalProperties: false
       required:
         - idempotency_key
@@ -36454,13 +37271,116 @@ components:
           type: string
           maxLength: 500
           description: 核销备注（选填）。
+    CanaryRolloutRequest:
+      type: object
+      description: 请求载荷 `CanaryRolloutRequest`；开/关某「端 × 能力」的灰度试点（按 端×能力 唯一，重复提交即覆盖）。
+      additionalProperties: false
+      required:
+        - terminal_type
+        - capability_code
+        - active
+        - reason
+      properties:
+        terminal_type:
+          type: string
+          description: 调用终端类型；只能使用统一口径 D5 的终端码，或跨端通配 `*`。
+          maxLength: 64
+        capability_code:
+          type: string
+          description: 受灰度控制的能力码；与 terminal_capability_switches.capability_code 同一取值面。
+          maxLength: 128
+        active:
+          type: boolean
+          description: 灰度试点是否生效；true=进入试点期（白名单外一律关闭），false=不做灰度（灰度层弃权）。
+        reason:
+          type: string
+          description: 开/关灰度试点的理由；必填，进入审计留痕。
+          maxLength: 1000
+    CanaryTargetRequest:
+      type: object
+      description: 请求载荷 `CanaryTargetRequest`；加入灰度白名单（target_type+target_id+reason）或移出白名单（仅 reason，软删除存档理由）。
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        target_type:
+          type: string
+          description: 试点维度；不含 global（放 global 等于全量放开）。
+          enum:
+            - project
+            - merchant
+            - business_system
+            - module
+            - version
+            - device
+        target_id:
+          type: string
+          description: 试点对象唯一标识；与该维度在请求上下文中的取值逐字比较。
+          maxLength: 64
+        reason:
+          type: string
+          description: 加入或移出白名单的理由；必填，进入审计留痕。
+          maxLength: 1000
+    StaffSalesPositionRequest:
+      type: object
+      description: 员工「销售岗」标识维护请求体。sales_position=是否销售岗（true=该员工卖出的卡座按销售人员费率计提提成，false=按非销售人员费率）；reason=改动事由（必填，直接影响提成计提档，须留审计可回溯）。
+      additionalProperties: false
+      required:
+        - sales_position
+        - reason
+      properties:
+        sales_position:
+          type: boolean
+          description: 是否销售岗。true=按销售人员费率计提卡座提成；false=按非销售人员费率。
+        reason:
+          type: string
+          description: 改动事由（必填）。
+          maxLength: 1000
+    TicketTypePricingRequest:
+      type: object
+      description: 改票种售价／折扣请求载荷；保存当场比对凑整允许误差，超出即拒。
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        reason:
+          type: string
+          description: 改价理由（必填）；进入审计留痕，事后能查是谁为什么把价改成这个数。
+          maxLength: 1000
+        combo_discount_rate:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: 票种折扣（百分数，100=不打折，85=八五折）；系统算出售价 = 各业态价格（原称「票面原价」）合计 × 本折扣 ÷ 100。
+        weekday_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 平日售价（分）＝这张票的基准售价；凑整误差闸比的就是它与系统算出售价的差额。
+        weekend_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 周末售价（分，可空）；周末加价按日历规则走，不在误差闸内。
+        holiday_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 节假日售价（分，可空）；节假日加价按日历规则走，不在误差闸内。
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
   requestBodyRule: 所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入
   idempotencyRule: x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕
-  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码；设备能力写入 x-device-capability，服务端/监控调用写入 x-invocation-channel。
-  authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为 public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或 x-data-scope 代替认证上下文。
+  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码；设备能力写入
+    x-device-capability，服务端/监控调用写入 x-invocation-channel。
+  authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为
+    public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或
+    x-data-scope 代替认证上下文。
 x-contract-hardening:
   date: 2026-06-12
   scope: P0 OpenAPI 字段级可编码补强
@@ -36469,7 +37389,8 @@ x-contract-hardening:
     - 金额字段单位统一为分，比例字段范围为 0-100，数量字段必须非负。
     - 路径、方法、operationId、权限、认证上下文和业务枚举不在本次机械补强中改变。
 x-p0-example-coverage:
-  strategy: P0 first covers high-risk write flows and external integration flows; full operation examples are P1 documentation hardening.
+  strategy: P0 first covers high-risk write flows and external integration flows; full operation examples are P1
+    documentation hardening.
   request_bodies:
     - Webhook
     - CustomerTicketOrderRequest

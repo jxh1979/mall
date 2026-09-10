@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +29,7 @@ function makeApi(): AdminApi {
     if ((init?.method ?? "GET").toUpperCase() === "POST" && url.includes("/staff/shifts/batch")) {
       lastPostUrl = url;
       lastPostBody = init?.body ? JSON.parse(String(init.body)) : null;
-      return Promise.resolve(raw({ created_count: 5, updated_count: 2, shifts: [] }));
+      return Promise.resolve(raw({ created_count: 5, updated_count: 2, shifts: [], review_id: "review-batch", publication_status: "pending_review" }));
     }
     if (url.includes("/staff/shifts")) return Promise.resolve(listEnvelope([]));
     if (url.includes("/staff/attendance")) return Promise.resolve(listEnvelope([]));
@@ -102,8 +103,8 @@ describe("StaffShiftAttendancePage 按周批量排班", () => {
 
     await waitFor(() => expect(screen.queryByTestId("shift-batch-guided")).toBeNull());
     expect(screen.getByTestId("shift-batch-result").textContent).toContain("新建 5 个班次");
-    expect(screen.getByTestId("shift-batch-result").textContent).toContain("覆盖修改 2 个班次");
-    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "staff_shift_batch_saved" }));
+    expect(screen.getByTestId("shift-batch-result").textContent).toContain("修改 2 个班次");
+    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ 结果: "整批排班已提交审批", 审批单: "review-batch" }));
   });
 
   it("跨零点班(22:00-06:00)界面明说「结束时间为次日」，白班不提示", async () => {

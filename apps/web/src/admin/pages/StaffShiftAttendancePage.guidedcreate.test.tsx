@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -22,15 +23,17 @@ function raw(data: unknown): Response {
 
 let lastPostBody: unknown = null;
 let lastPostUrl = "";
+// U03-009：编辑态用例需要一条由当前用户(u1)创建、尚未开始的排班。
+let existingShifts: unknown[] = [];
 function makeApi(): AdminApi {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if ((init?.method ?? "GET").toUpperCase() === "POST" && url.includes("/staff/shifts")) {
       lastPostUrl = url;
       lastPostBody = init?.body ? JSON.parse(String(init.body)) : null;
-      return Promise.resolve(raw({ id: "sh-new" }));
+      return Promise.resolve(raw({ id: "sh-new", review_id: "review-single", publication_status: "pending_review" }));
     }
-    if (url.includes("/staff/shifts")) return Promise.resolve(listEnvelope([]));
+    if (url.includes("/staff/shifts")) return Promise.resolve(listEnvelope(existingShifts));
     if (url.includes("/staff/attendance")) return Promise.resolve(listEnvelope([]));
     return Promise.resolve(listEnvelope([]));
   }));
@@ -57,6 +60,7 @@ describe("StaffShiftAttendancePage 引导式新增排班(phase-10)", () => {
     vi.unstubAllGlobals();
     lastPostBody = null;
     lastPostUrl = "";
+    existingShifts = [];
     window.history.replaceState({}, "", "/admin/staff/shifts");
   });
 
@@ -88,7 +92,7 @@ describe("StaffShiftAttendancePage 引导式新增排班(phase-10)", () => {
     expect(typeof (lastPostBody as { start_at: string }).start_at).toBe("string");
     expect(typeof (lastPostBody as { end_at: string }).end_at).toBe("string");
     await waitFor(() => expect(screen.queryByTestId("shift-create-guided")).toBeNull());
-    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "staff_shift_saved" }));
+    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ 结果: "排班申请已提交，等待主管上一级审批", 审批单: "review-single" }));
   });
 
   it("步内校验拦截：员工留空则不进下一步、不提交", async () => {
@@ -102,5 +106,29 @@ describe("StaffShiftAttendancePage 引导式新增排班(phase-10)", () => {
     expect(screen.getByTestId("shift-create-guided-error").textContent).toContain("员工");
     expect(screen.queryByTestId("shift-create-guided-summary")).toBeNull();
     expect(lastPostBody).toBeNull();
+  });
+
+  it("修改排班：原因留空则在提交前拦截（U03-009），填写原因后才 POST 且带 note", async () => {
+    const future = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+    const start = new Date(future.getTime()); start.setHours(9, 0, 0, 0);
+    const end = new Date(future.getTime()); end.setHours(18, 0, 0, 0);
+    existingShifts = [{ id: "sh-1", user_id: "staff-1", work_date: start.toISOString().slice(0, 10), start_at: start.toISOString(), end_at: end.toISOString(),
+      point_space_ids: [], note: null, created_by: "u1", publication_status: "published" }];
+    renderPage();
+    const edit = await screen.findByText("申请修改");
+    fireEvent.click(edit);
+    await waitFor(() => expect(screen.getByTestId("shift-create-guided")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("shift-create-guided-next")); // 步1→步2
+    fireEvent.click(screen.getByTestId("shift-create-guided-next")); // 步2→确认：原因为空，应拦截
+    expect(screen.getByTestId("shift-create-guided-error").textContent).toContain("原因");
+    expect(screen.queryByTestId("shift-create-guided-summary")).toBeNull();
+    expect(lastPostBody).toBeNull();
+    fireEvent.change(screen.getByTestId("shift-note-input"), { target: { value: "员工申请换班" } });
+    fireEvent.click(screen.getByTestId("shift-create-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("shift-create-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("shift-save"));
+    await waitFor(() => expect(lastPostBody).toBeTruthy());
+    expect((lastPostBody as { note: string }).note).toBe("员工申请换班");
+    expect((lastPostBody as { shift_id: string }).shift_id).toBe("sh-1");
   });
 });

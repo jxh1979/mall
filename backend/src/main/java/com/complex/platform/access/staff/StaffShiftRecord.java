@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -15,6 +17,17 @@ public record StaffShiftRecord(
         String note,
         String createdBy,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String reviewId,
+        String publicationStatus
 ) {
+    public StaffShiftRecord(String id, String userId, LocalDate workDate, Instant startAt, Instant endAt,
+            List<String> pointSpaceIds, String note, String createdBy, Instant createdAt, Instant updatedAt) {
+        this(id, userId, workDate, startAt, endAt, pointSpaceIds, note, createdBy, createdAt, updatedAt, null, "published");
+    }
+
+    public StaffShiftRecord awaitingReview(String reviewId) {
+        return new StaffShiftRecord(id, userId, workDate, startAt, endAt, pointSpaceIds, note, createdBy,
+                createdAt, updatedAt, reviewId, "pending_review");
+    }
 }

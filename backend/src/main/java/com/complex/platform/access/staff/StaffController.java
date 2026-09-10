@@ -1,4 +1,6 @@
 package com.complex.platform.access.staff;
+
+// 文件版本：V0.08
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -26,15 +28,38 @@ import org.springframework.web.bind.annotation.RestController;
 public class StaffController {
 
     private final StaffService service;
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffRegistrationService registrations;
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffLockerService lockers;
 
     public StaffController(StaffService service) {
         this.service = service;
     }
 
+    /** U05-006：员工本人会话申请柜机扫码凭证；格口事件改由柜机端 /api/v1/terminals/kiosks/{device_id}/locker-events 单端上报。 */
+    @PostMapping("/lockers/scan-token")
+    public ApiResponse<StaffLockerService.ScanToken> issueLockerScanToken(@RequestBody StaffLockerService.ScanTokenRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(lockers.issueScanToken(request));
+    }
+
+    @GetMapping("/registration-companies")
+    public ApiResponse<java.util.List<StaffRegistrationService.CompanyOption>> registrationCompanies() {
+        return ApiResponse.ok(registrations.companies());
+    }
+
+    @PostMapping("/self-registrations")
+    public ApiResponse<StaffRegistrationService.Receipt> selfRegister(
+            @RequestBody com.complex.platform.access.staff.dto.StaffSelfRegistrationRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(registrations.selfRegister(request));
+    }
+
     @PostMapping("/registrations")
     public ApiResponse<StaffProfileRecord> submitRegistration(@RequestBody @jakarta.validation.Valid StaffRegistrationRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.submitRegistration(request));
+        return ApiResponse.ok(service.submitRegistration(request).maskedPersonalInfo());
     }
 
     @PostMapping("/registrations/{id}/review")
@@ -43,40 +68,50 @@ public class StaffController {
             @RequestBody @jakarta.validation.Valid StaffRegistrationReviewRequest request
     ) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.reviewRegistration(id, request));
+        return ApiResponse.ok(service.reviewRegistration(id, request).maskedPersonalInfo());
     }
 
     @GetMapping("/profiles")
     public ApiResponse<PageResponse<StaffProfileRecord>> listProfiles(
             @org.springframework.web.bind.annotation.RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived) {
-        return ApiResponse.ok(service.listProfiles(includeArchived));
+        PageResponse<StaffProfileRecord> profiles = service.listProfiles(includeArchived);
+        return ApiResponse.ok(new PageResponse<>(profiles.items().stream()
+                .map(StaffProfileRecord::maskedPersonalInfo).toList(),
+                profiles.page(), profiles.pageSize(), profiles.total()));
     }
 
     // ── V264 员工档案存档与审批后删除 ──────────────────────────────────
     @PostMapping("/profiles/{id}/archive")
     public ApiResponse<StaffProfileRecord> archiveProfile(@PathVariable String id,
             @org.springframework.web.bind.annotation.RequestBody(required = false) com.complex.platform.access.staff.dto.StaffProfileArchiveRequest request) {
-        return ApiResponse.ok(service.archiveProfile(id, true, request == null ? null : request.reason()));
+        return ApiResponse.ok(service.archiveProfile(id, true, request == null ? null : request.reason()).maskedPersonalInfo());
     }
 
     @PostMapping("/profiles/{id}/unarchive")
     public ApiResponse<StaffProfileRecord> unarchiveProfile(@PathVariable String id) {
-        return ApiResponse.ok(service.archiveProfile(id, false, null));
+        return ApiResponse.ok(service.archiveProfile(id, false, null).maskedPersonalInfo());
     }
 
     // ── V349 销售岗标识（卡座提成按员工岗位判档的唯一依据）────────────────
+    @PostMapping("/profiles/{id}/employment-status")
+    public ApiResponse<StaffProfileRecord> setEmploymentStatus(@PathVariable String id,
+            @RequestBody com.complex.platform.access.staff.dto.StaffEmploymentStatusRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.setEmploymentStatus(id, request).maskedPersonalInfo());
+    }
+
     @PostMapping("/profiles/{id}/sales-position")
     public ApiResponse<StaffProfileRecord> setSalesPosition(
             @PathVariable String id,
             @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffSalesPositionRequest request) {
-        return ApiResponse.ok(service.setSalesPosition(id, request));
+        return ApiResponse.ok(service.setSalesPosition(id, request).maskedPersonalInfo());
     }
 
     @PostMapping("/profiles/{id}/delete-request")
     public ApiResponse<StaffProfileRecord> requestDeleteProfile(
             @PathVariable String id,
             @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffProfileDeleteRequest request) {
-        return ApiResponse.ok(service.requestDeleteProfile(id, request));
+        return ApiResponse.ok(service.requestDeleteProfile(id, request).maskedPersonalInfo());
     }
 
     @PostMapping("/profiles/{id}/delete-approve")
@@ -135,6 +170,24 @@ public class StaffController {
         return ApiResponse.ok(service.batchUpsertShifts(request));
     }
 
+    /** U06-004：临时顶班记录（不走排班审批）。 */
+    @PostMapping("/shifts/{id}/cover")
+    public ApiResponse<StaffShiftCoverRecord> coverShift(@PathVariable String id,
+            @RequestBody com.complex.platform.access.staff.dto.StaffShiftCoverRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.coverShift(id, request));
+    }
+
+    @GetMapping("/shifts/{id}/covers")
+    public ApiResponse<java.util.List<StaffShiftCoverRecord>> shiftCovers(@PathVariable String id) {
+        return ApiResponse.ok(service.shiftCovers(id));
+    }
+
+    @GetMapping("/shifts/{id}/history")
+    public ApiResponse<java.util.List<StaffApprovalService.History>> shiftHistory(@PathVariable String id) {
+        return ApiResponse.ok(service.shiftHistory(id));
+    }
+
     @GetMapping("/shifts")
     public ApiResponse<PageResponse<StaffShiftRecord>> listShifts(
             @org.springframework.web.bind.annotation.RequestParam(value = "date", required = false) String date,
@@ -143,6 +196,30 @@ public class StaffController {
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         java.time.LocalDate workDate = date == null || date.isBlank() ? null : java.time.LocalDate.parse(date);
         return ApiResponse.ok(service.listShifts(workDate, userId, page, size));
+    }
+
+    @GetMapping("/settings/payroll-penalty-cap")
+    public ApiResponse<StaffNumericSetting> getPenaltyCap() {
+        return ApiResponse.ok(service.getPenaltyCap());
+    }
+
+    @PostMapping("/settings/payroll-penalty-cap")
+    public ApiResponse<com.complex.platform.governance.review.SupervisorReviewDecisionRecord> requestPenaltyCap(
+            @RequestBody com.complex.platform.access.staff.dto.StaffPenaltyCapRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestPenaltyCap(request));
+    }
+
+    @GetMapping("/settings/shift-visible-days")
+    public ApiResponse<StaffNumericSetting> getShiftVisibility() {
+        return ApiResponse.ok(service.getShiftVisibility());
+    }
+
+    @PostMapping("/settings/shift-visible-days")
+    public ApiResponse<StaffNumericSetting> setShiftVisibility(
+            @RequestBody com.complex.platform.access.staff.dto.StaffNumericSettingRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.setShiftVisibility(request));
     }
 
     @GetMapping("/shifts/mine")
@@ -291,14 +368,14 @@ public class StaffController {
     // ── BYOD 二期 Wave1(2026-07-19 拍板):本人档案自助 + 工资条提成明细 ──
     @GetMapping("/profiles/mine")
     public ApiResponse<StaffProfileRecord> myProfile() {
-        return ApiResponse.ok(service.getMyProfile());
+        return ApiResponse.ok(service.getMyProfile().maskedPersonalInfo());
     }
 
     @PostMapping("/profiles/mine")
     public ApiResponse<StaffProfileRecord> updateMyProfile(
             @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.updateMyProfile(request));
+        return ApiResponse.ok(service.updateMyProfile(request).maskedPersonalInfo());
     }
 
     @GetMapping("/payroll/mine/commissions")

@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -32,6 +34,12 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired com.complex.platform.access.AccessRepository access;
+    @org.junit.jupiter.api.BeforeEach void grantActors() {
+        StaffTestActors.grant(jdbcTemplate,access,"usr_admin","proj_staff_test");
+        StaffTestActors.grant(jdbcTemplate,access,"usr_same","proj_staff_test");
+    }
+
     @AfterEach
     void tearDown() {
         TestSecurityActors.clear();
@@ -50,7 +58,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
         seed("staff_del", "user_del_1");
         service.archiveProfile("staff_del", true, "测试存档理由");
         service.requestDeleteProfile("staff_del", new StaffProfileDeleteRequest("离职"));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        StaffTestActors.master();
         StaffProfileDeleteDecision decision = service.approveDeleteProfile(
                 "staff_del", new StaffProfileDeleteApprovalRequest("approved", null));
         assertThat(decision.deleted()).isTrue();
@@ -81,7 +89,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
                 INSERT INTO staff_attendance_records (id, user_id, punch_type, punched_at, method, judgement, created_at)
                 VALUES ('att_use_1', 'user_use_1', 'check_in', ?, 'manual', 'normal', ?)
                 """, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        StaffTestActors.master();
         assertThatThrownBy(() -> service.approveDeleteProfile("staff_use",
                 new StaffProfileDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
@@ -89,7 +97,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     }
 
     @Test
-    void selfApproveForbidden() {
+    void ordinaryApplicantCannotApproveMasterOnlyDeletion() {
         TestSecurityActors.asPlatformAdmin("usr_same");
         seed("staff_self", "user_self_1");
         service.archiveProfile("staff_self", true, "测试存档理由");
@@ -97,6 +105,6 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
         assertThatThrownBy(() -> service.approveDeleteProfile("staff_self",
                 new StaffProfileDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("发起人");
+                .hasMessageContaining("最高权限");
     }
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 文件版本：V0.01
 // PII 落库加密门禁(2026-07-05 立,防"buyer_phone 明文"类回归复发;2026-07-27 扩到全部主体)。
 // 口径:登记表列出所有"自然人手机号/PII 必须密文落库"的列 + 其写入文件;
 // 断言每处 addValue("<col>", ...) 都被 piiCipher.encrypt(...) 包裹。明文即 FAIL。
@@ -10,6 +11,9 @@ import { readFileSync } from "node:fs";
 // 注释还写着"商业联系人不在此列",而实证 merchants 59/59 明文入库。PIPL 不按消费者/商业伙伴划线,
 // 商户/供应商/招商线索/费用通知/进场报备联系人同为自然人手机号,一并纳入(迁移 V339)。
 const REGISTRY = [
+  { table: "staff_profiles", column: "name", writeFile: "backend/src/main/java/com/complex/platform/access/staff/JdbcStaffRepository.java" },
+  { table: "staff_profiles", column: "phone", writeFile: "backend/src/main/java/com/complex/platform/access/staff/JdbcStaffRepository.java" },
+  { table: "staff_profiles", column: "id_doc", writeFile: "backend/src/main/java/com/complex/platform/access/staff/JdbcStaffRepository.java" },
   // ── 消费者侧(V188/V247/V248)──
   { table: "customers", column: "phone", writeFile: "backend/src/main/java/com/complex/platform/customer/JdbcCustomerRepository.java" },
   { table: "ticket_orders", column: "buyer_phone", writeFile: "backend/src/main/java/com/complex/platform/ticketing/JdbcTicketingParameterSource.java" },

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.18
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -66,6 +66,14 @@ public class StaffService {
     private final com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner;
     // 打卡「当下」的来源。生产恒为 Clock.systemUTC()；单测注固定 Clock 对拍考勤日归属（见 StaffAttendanceLocalZoneTests）。
     private final Clock clock;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.access.AccessService accessService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.terminal.TerminalDeviceRepository terminalRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffApprovalService staffApprovals;
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffRegistrationService registrations;
 
     @org.springframework.beans.factory.annotation.Autowired
     public StaffService(
@@ -115,7 +123,9 @@ public class StaffService {
     @GuardedAction(permission = "staff.profile.submit")
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord submitRegistration(StaffRegistrationRequest request) {
+        if (request == null) throw ApiException.badRequest("VALIDATION_FAILED", "须填写注册资料");
         requireRegistrationScope(request.projectId(), request.merchantId());
+        String approvingCompany = registrations.merchantApprovingCompany(request.merchantId());
         try {
             return idempotencyService.execute(
                     "submitStaffRegistration",
@@ -124,11 +134,11 @@ public class StaffService {
                     () -> {
                         String projectId = trimToNull(request.projectId());
                         if (projectId == null) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "project_id is required");
+                            throw ApiException.badRequest("VALIDATION_FAILED", "必须选择项目");
                         }
                         String name = trimToNull(request.name());
                         if (name == null) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "name is required");
+                            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写员工姓名");
                         }
                         if (request.staffLevelId() != null
                                 && accessRepository.findStaffLevelById(request.staffLevelId()).isEmpty()) {
@@ -142,8 +152,8 @@ public class StaffService {
                                 trimToNull(request.merchantId()),
                                 null,
                                 name,
-                                trimToNull(request.phoneHash()),
-                                trimToNull(request.idDocHash()),
+                                trimToNull(request.phone()),
+                                trimToNull(request.idDoc()),
                                 trimToNull(request.staffLevelId()),
                                 "submitted",
                                 null,
@@ -153,7 +163,8 @@ public class StaffService {
                                 now,
                                 now
                         );
-                        StaffProfileRecord saved = repository.saveProfile(profile);
+                        StaffProfileRecord saved = repository.saveProfile(profile.withCompanyRoute(approvingCompany, "merchant_submitted"));
+                        repository.recordRegistrationInitiator(saved.id(), authorizationService.currentActor().id());
                         auditEventService.recordSuccess("staff.registered", "staff.profile.submit",
                                 "staff_profile", saved.id(), null, request.idempotencyKey(),
                                 Map.of("project_id", saved.projectId()));
@@ -184,8 +195,15 @@ public class StaffService {
                         }
                         String decision = trimToNull(request.decision());
                         AccessActor actor = authorizationService.currentActor();
-                        if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) != null) {
-                            throw ApiException.forbidden("COMPANY_APPROVAL_REQUIRED", "员工注册须由对应公司审批，商户不能自行批准");
+                        if (repository.isRegistrationInitiator(id, actor.id())
+                                && !authorizationService.isMasterAuthority(actor)) {
+                            throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN", "不能审批自己发起的员工注册");
+                        }
+                        if (!authorizationService.isMasterAuthority(actor)
+                                && (trimToNull(actor.merchantId()) != null
+                                    || profile.companyId() == null
+                                    || !profile.companyId().equals(registrations.actorCompany(actor)))) {
+                            throw ApiException.forbidden("COMPANY_APPROVAL_REQUIRED", "须由该申请所属公司或商户对应域公司审批");
                         }
                         Instant now = Instant.now();
                         if ("approve".equalsIgnoreCase(decision == null ? "" : decision)) {
@@ -211,11 +229,13 @@ public class StaffService {
                             // 否则真实员工(userType=staff)无任何 user_roles 行 → 所有 BYOD 自助端点(我的薪资/
                             // 班次/考勤/请假/通知/打卡)对其一律 403;此前仅 platform_admin 桥可用。幂等(ON CONFLICT DO NOTHING)。
                             accessRepository.assignUserRole(created.id(), "role_staff_self");
-                            StaffProfileRecord approved = new StaffProfileRecord(
-                                    profile.id(), profile.projectId(), profile.merchantId(), created.id(),
-                                    profile.name(), profile.phoneHash(), profile.idDocHash(), profile.staffLevelId(),
-                                    "approved", actor.id(), now, null, profile.status(),
-                                    profile.createdAt(), now);
+                            if (profile.staffLevelId() != null) {
+                                accessService.assignStaffLevel(new com.complex.platform.access.dto.StaffLevelAssignmentRequest(
+                                        request.idempotencyKey() + ":level", request.operatorNote(), created.id(),
+                                        profile.staffLevelId(), null, "CNY", null));
+                            }
+                            StaffProfileRecord approved = profile.withRegistrationReview(
+                                    created.id(), "approved", actor.id(), now, null);
                             StaffProfileRecord saved = repository.saveProfile(approved);
                             createNotice(saved.id(), "approval_result", "注册审批通过",
                                     "您的员工注册已通过审批，已生成账号。", false, actorIdOrSystem(actor));
@@ -230,11 +250,8 @@ public class StaffService {
                                 throw ApiException.badRequest("VALIDATION_FAILED",
                                         "驳回时必须填写驳回理由");
                             }
-                            StaffProfileRecord rejected = new StaffProfileRecord(
-                                    profile.id(), profile.projectId(), profile.merchantId(), profile.userId(),
-                                    profile.name(), profile.phoneHash(), profile.idDocHash(), profile.staffLevelId(),
-                                    "rejected", actor.id(), now, reason, profile.status(),
-                                    profile.createdAt(), now);
+                            StaffProfileRecord rejected = profile.withRegistrationReview(
+                                    profile.userId(), "rejected", actor.id(), now, reason);
                             StaffProfileRecord saved = repository.saveProfile(rejected);
                             createNotice(saved.id(), "approval_result", "注册审批驳回", reason, false,
                                     actorIdOrSystem(actor));
@@ -266,8 +283,12 @@ public class StaffService {
         AccessActor actor = authorizationService.currentActor();
         List<StaffProfileRecord> profiles;
         if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) == null) {
-            profiles = repository.listProfilesByProject(authorizationService.requireProjectScope(actor)).stream()
-                    .filter(profile -> includeArchived || profile.archivedAt() == null).toList();
+            var scoped = new java.util.LinkedHashMap<String, StaffProfileRecord>();
+            repository.listProfilesByProject(authorizationService.requireProjectScope(actor)).stream()
+                    .filter(p -> p.companyId().equals(registrations.actorCompany(actor)))
+                    .forEach(p -> scoped.put(p.id(),p));
+            repository.listProfilesByCompany(registrations.actorCompany(actor)).forEach(p -> scoped.put(p.id(),p));
+            profiles = scoped.values().stream().filter(p -> includeArchived || p.archivedAt() == null).toList();
         } else {
             profiles = repository.listProfiles(merchantScopeOrNull(), includeArchived);
         }
@@ -287,11 +308,11 @@ public class StaffService {
         }
     }
 
-    @GuardedAction(permission = "staff.profile.review")
+    @GuardedAction(permission = "staff.profile.submit")
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord archiveProfile(String id, boolean archive, String reason) {
         StaffProfileRecord profile = requireProfileInScope(id);
-        String r = archive ? requireText(reason, "reason") : null;
+        String r = archive ? requireReason(reason) : null;
         Instant now = Instant.now();
         StaffProfileRecord updated = archive
                 ? profile.withArchive(now, archiveActorId(), now)
@@ -299,7 +320,7 @@ public class StaffService {
         StaffProfileRecord saved = repository.saveProfile(updated);
         repository.setStaffProfileArchiveReason(id, r);
         auditEventService.recordSuccess(archive ? "staff.profile.archived" : "staff.profile.unarchived",
-                "staff.profile.review", "staff_profile", id, null, null, Map.of("archived", archive));
+                "staff.profile.submit", "staff_profile", id, null, null, Map.of("archived", archive));
         return saved;
     }
 
@@ -315,14 +336,41 @@ public class StaffService {
      */
     @GuardedAction(permission = "staff.profile.review")
     @org.springframework.transaction.annotation.Transactional
+    public StaffProfileRecord setEmploymentStatus(String id,
+            com.complex.platform.access.staff.dto.StaffEmploymentStatusRequest request) {
+        try {
+        StaffProfileRecord profile = requireProfileInScope(id);
+        if (request == null || request.employmentStatus() == null
+                || !java.util.Set.of("pending_entry", "employed", "trial", "suspended", "departed")
+                        .contains(request.employmentStatus())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "员工状态须为待入职、在职、试岗、停岗或离职");
+        }
+        String reason = requireReason(request.reason());
+        // U05-011：与其它员工写口相同，按操作命名空间幂等去重。
+        return idempotencyService.execute("staffEmploymentStatus:" + id, request.idempotencyKey(), request, () -> {
+            StaffProfileRecord saved = repository.saveProfile(profile.withEmploymentStatus(request.employmentStatus(), clock.instant()));
+            auditEventService.recordSuccess("staff.profile.employment_status_changed", "staff.profile.review",
+                    "staff_profile", id, null, null,
+                    Map.of("before", profile.employmentStatus(), "after", saved.employmentStatus(), "reason", reason));
+            return saved;
+        }, StaffProfileRecord.class);
+        } catch (RuntimeException exception) {
+            // U14-008：失败路径按契约声明的 *_failed 事件留痕。
+            auditEventService.recordFailure("staff.profile.employment_status_change_failed", "staff.profile.review", "staff_profile", id, null, idempotencyKeyOf(request), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    @GuardedAction(permission = "staff.profile.review")
+    @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord setSalesPosition(String id,
             com.complex.platform.access.staff.dto.StaffSalesPositionRequest request) {
         StaffProfileRecord profile = requireProfileInScope(id);
         if (request == null || request.salesPosition() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "sales_position is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定是否为销售岗");
         }
         boolean salesPosition = request.salesPosition();
-        String reason = requireText(request.reason(), "reason");
+        String reason = requireReason(request.reason());
         StaffProfileRecord saved = repository.saveProfile(profile.withSalesPosition(salesPosition, Instant.now()));
         auditEventService.recordSuccess("staff.profile.sales_position_changed", "staff.profile.review",
                 "staff_profile", id, null, null,
@@ -342,10 +390,15 @@ public class StaffService {
             throw ApiException.conflict("STAFF_PROFILE_DELETE_ALREADY_PENDING", "该员工档案已有待审批的删除申请");
         }
         Instant now = Instant.now();
-        String reason = requireText(request == null ? null : request.reason(), "reason");
+        String reason = requireReason(request == null ? null : request.reason());
         StaffProfileRecord saved = repository.saveProfile(profile.withDelete("pending", archiveActorId(), now, reason, now));
         auditEventService.recordSuccess("staff.profile.delete_requested", "staff.profile.review",
                 "staff_profile", id, null, null, Map.of());
+        if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            approveDeleteProfile(id, new com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest(
+                    "approved", reason));
+            return saved.withDelete("approved", saved.deleteRequestedBy(), saved.deleteRequestedAt(), reason, now);
+        }
         return saved;
     }
 
@@ -353,6 +406,9 @@ public class StaffService {
     @org.springframework.transaction.annotation.Transactional
     public com.complex.platform.access.staff.dto.StaffProfileDeleteDecision approveDeleteProfile(String id,
             com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest request) {
+        if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "员工档案删除须由最高权限本人批准");
+        }
         StaffProfileRecord profile = requireProfileInScope(id);
         if (!"pending".equals(profile.deleteStatus())) {
             throw ApiException.badRequest("STAFF_PROFILE_DELETE_NOT_PENDING", "该员工档案没有待审批的删除申请");
@@ -361,10 +417,6 @@ public class StaffService {
                 ? null : request.decision().trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
-        }
-        String actor = archiveActorId();
-        if (actor != null && actor.equals(profile.deleteRequestedBy())) {
-            throw ApiException.forbidden("STAFF_PROFILE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
         }
         if ("rejected".equals(decision)) {
             repository.saveProfile(profile.withDelete("none", null, null, null, Instant.now()));
@@ -375,7 +427,7 @@ public class StaffService {
         long refs = repository.countProfileReferences(id);
         if (refs > 0) {
             throw ApiException.conflict("STAFF_PROFILE_IN_USE",
-                    "员工仍挂有 " + refs + " 条考勤/请假/职级薪资记录，不可删除");
+                    "员工仍挂有 " + refs + " 条考勤、请假、职级、未结束排班或未取寄存记录，不可删除");
         }
         repository.deleteProfile(id);
         auditEventService.recordSuccess("staff.profile.delete_approved", "staff.profile.approve",
@@ -405,11 +457,11 @@ public class StaffService {
                             throw ApiException.badRequest("DEVICE_CREDENTIAL_PLACEHOLDER",
                                     "设备公钥与设备指纹必须为真实 Keystore 值，不能用占位符");
                         }
-                        requireProfileInScope(staffId);
+                        requireOwnProfile(staffId);
                         // 换机识别：已有 active 且指纹不同 → 新凭证 pending_review + supersedes 指向旧 active。
                         Optional<StaffDeviceCredentialRecord> active = repository.findActiveCredential(staffId);
                         String supersedes = null;
-                        boolean rebind = false;
+                        boolean rebind = repository.hasCredentialHistory(staffId);
                         if (active.isPresent()) {
                             if (fingerprint.equals(active.get().deviceFingerprintHash())) {
                                 throw ApiException.conflict("ALREADY_BOUND",
@@ -420,9 +472,9 @@ public class StaffService {
                         }
                         Instant now = Instant.now();
                         StaffDeviceCredentialRecord credential = new StaffDeviceCredentialRecord(
-                                "scred_" + slug(request.idempotencyKey()),
-                                staffId, publicKey, fingerprint, "pending_review",
-                                supersedes, "trusted", null, null, null, now, now);
+                                "scred_" + UUID.randomUUID(),
+                                staffId, publicKey, fingerprint, rebind ? "pending_review" : "active",
+                                supersedes, "trusted", null, rebind ? null : now, null, now, now);
                         StaffDeviceCredentialRecord saved = repository.saveCredential(credential);
                         String event = rebind ? "staff_device.rebind_requested" : "staff_device.bound";
                         auditEventService.recordSuccess(event, "staff.device.bind",
@@ -493,9 +545,8 @@ public class StaffService {
                         StaffDeviceCredentialRecord credential = repository.findCredentialById(credId)
                                 .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND",
                                         "员工设备凭证不存在：" + credId));
-                        // P1-2 越权修复：完整性上报此前不校验凭证归属，任意已认证用户可按 credId 跨商户吊销他人设备凭证（DoS）。
-                        // 改为按调用者商户范围校验凭证所属员工档案归属（与 revokeCredential 同范式；平台 scope 放行）。
-                        requireProfileInScope(credential.staffProfileId());
+                        // 手机自助上报只处理本人凭证；后台吊销仍走独立授权入口。
+                        requireOwnProfile(credential.staffProfileId());
                         String status = trimToNull(request.integrityStatus());
                         if (status == null
                                 || !(status.equals("trusted") || INTEGRITY_FAILURES.contains(status))) {
@@ -572,29 +623,49 @@ public class StaffService {
 
     // ============================================================ 员工通知
 
-    /** E1(2026-07-02 拍板):主管排班——双端(后台页+主管App);班次到分钟+指定点位;
-     * 同员工同开始时刻幂等覆盖;审计留痕。 */
+    /** 主管提出排班或修改；上一级批准后才写入生效排班。 */
+    @org.springframework.transaction.annotation.Transactional
     public StaffShiftRecord upsertShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
+        try {
         authorizationService.requirePermission("staff.shift.manage");
-        if (request == null || request.userId() == null || request.userId().isBlank()
-                || request.workDate() == null || request.startAt() == null || request.endAt() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写用户、工作日期、开始与结束时间");
+        return idempotencyService.execute("staffShiftSubmit", request == null ? null : request.idempotencyKey(), request,
+                () -> {
+                    StaffShiftRecord submitted = staffApprovals.submitShifts(List.of(draftShift(request)), request.idempotencyKey()).shifts().getFirst();
+                    // U16-006：operation 级成功事件；governance.supervisor_review.evaluated 只属于 evaluateSupervisorReview。
+                    auditEventService.recordSuccess("staff.shift.submitted", "staff.shift.manage", "staff_shift", submitted.id(), null,
+                            request.idempotencyKey(), Map.of("review_id", String.valueOf(submitted.reviewId()), "publication_status", String.valueOf(submitted.publicationStatus())));
+                    return submitted;
+                },
+                StaffShiftRecord.class);
+        } catch (RuntimeException exception) {
+            // U14-008：失败路径按契约声明的 *_failed 事件留痕。
+            auditEventService.recordFailure("staff.shift.save_failed", "staff.shift.manage", "staff_shift", null, null, idempotencyKeyOf(request), codeOf(exception));
+            throw exception;
         }
-        if (!request.endAt().isAfter(request.startAt())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "结束时间必须晚于开始时间");
+    }
+
+    private StaffShiftRecord draftShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
+        if (request == null || trimToNull(request.userId()) == null || request.workDate() == null
+                || request.startAt() == null || request.endAt() == null || !request.endAt().isAfter(request.startAt())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "须填写员工、工作日期及有效的开始结束时间");
         }
         requireUserInScope(request.userId().trim());
-        var actor = authorizationService.currentActor();
-        Instant now = Instant.now();
-        StaffShiftRecord saved = repository.upsertShift(new StaffShiftRecord(
-                "shf_" + UUID.randomUUID(), request.userId().trim(), request.workDate(),
-                request.startAt(), request.endAt(),
-                request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds(),
-                request.note(), actor == null ? null : actor.id(), now, now));
-        auditEventService.recordSuccess("staff.shift.saved", "staff.shift.manage",
-                "staff_shift_schedule", saved.id(), null, request.idempotencyKey(),
-                java.util.Map.of("user_id", saved.userId(), "work_date", saved.workDate().toString()));
-        return saved;
+        Instant now = clock.instant();
+        StaffShiftRecord previous = trimToNull(request.shiftId()) == null
+                ? repository.findShiftByUserStart(request.userId().trim(), request.startAt()).orElse(null)
+                : repository.findShiftById(request.shiftId()).orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "原排班不存在"));
+        if (!request.startAt().isAfter(now) || (previous != null && !previous.startAt().isAfter(now))) {
+            throw ApiException.conflict("SHIFT_STARTED", "班次已经开始，不能改写排班；临时顶班须记录顶班安排");
+        }
+        String actor = authorizationService.currentActor().id();
+        if (previous != null && (!previous.userId().equals(request.userId().trim()) || !actor.equals(previous.createdBy()))) {
+            throw ApiException.forbidden("SHIFT_AUTHOR_REQUIRED", "排班修改须由原排班负责人办理，员工应先向负责人申请");
+        }
+        if (previous != null) requireReason(request.note());
+        return new StaffShiftRecord(previous == null ? "shf_" + UUID.randomUUID() : previous.id(),
+                request.userId().trim(), request.workDate(), request.startAt(), request.endAt(),
+                request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds(), request.note(), actor,
+                previous == null ? now : previous.createdAt(), now);
     }
 
     /**
@@ -605,12 +676,30 @@ public class StaffService {
      * （如 22:00-06:00）即跨零点班，班次结束自动顺延到次日，排班员不用手动选日期。
      * 日历日→时刻一律按 {@link LocalZone}（北京）折算，与考勤按 start_at/end_at 区间配班同一把尺子。
      *
-     * <p>逐条走 {@link #upsertShift}：权限闸、项目隔离、审计留痕、幂等覆盖与单班排班同一条路，
-     * 唯一键 (user_id, start_at) 承接「重排同一开始时刻＝覆盖，不是新建」。
+     * <p>逐条使用单班相同校验生成草稿，整批一张审批单；批准后整批生效，修改前后均追加留痕。
      */
+    @org.springframework.transaction.annotation.Transactional
     public com.complex.platform.access.staff.dto.StaffShiftBatchResult batchUpsertShifts(
             com.complex.platform.access.staff.dto.StaffShiftBatchRequest request) {
+        try {
         authorizationService.requirePermission("staff.shift.manage");
+        return idempotencyService.execute("staffShiftBatchSubmit", request == null ? null : request.idempotencyKey(), request,
+                () -> {
+                    com.complex.platform.access.staff.dto.StaffShiftBatchResult submitted = draftShiftBatch(request);
+                    // U16-006：一批一条 operation 级成功事件，business_id=审批单。
+                    auditEventService.recordSuccess("staff.shift.submitted", "staff.shift.manage", "staff_shift", submitted.reviewId(), null,
+                            request.idempotencyKey(), Map.of("created", submitted.createdCount(), "updated", submitted.updatedCount(), "publication_status", String.valueOf(submitted.publicationStatus())));
+                    return submitted;
+                }, com.complex.platform.access.staff.dto.StaffShiftBatchResult.class);
+        } catch (RuntimeException exception) {
+            // U14-008：失败路径按契约声明的 *_failed 事件留痕。
+            auditEventService.recordFailure("staff.shift.save_failed", "staff.shift.manage", "staff_shift", null, null, idempotencyKeyOf(request), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private com.complex.platform.access.staff.dto.StaffShiftBatchResult draftShiftBatch(
+            com.complex.platform.access.staff.dto.StaffShiftBatchRequest request) {
         if (request == null || request.startDate() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写排班起始日期");
         }
@@ -643,24 +732,20 @@ public class StaffService {
         List<String> points = request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds().stream()
                 .map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct().toList();
 
+        userIds.forEach(this::requireUserInScope);
         java.util.List<StaffShiftRecord> saved = new java.util.ArrayList<>();
-        int created = 0;
         for (java.time.LocalDate date : dates) {
             Instant startAt = date.atTime(startTime).atZone(LocalZone.ID).toInstant();
             // 跨零点：结束时刻不晚于开始时刻 → 结束落在次日（22:00-06:00 排班员只填时段即可）。
             java.time.LocalDate endDate = endTime.isAfter(startTime) ? date : date.plusDays(1);
             Instant endAt = endDate.atTime(endTime).atZone(LocalZone.ID).toInstant();
             for (String userId : userIds) {
-                StaffShiftRecord row = upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                StaffShiftRecord row = draftShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
                         request.idempotencyKey(), userId, date, startAt, endAt, points, request.note()));
-                if (row.createdAt() != null && row.createdAt().equals(row.updatedAt())) {
-                    created++;
-                }
                 saved.add(row);
             }
         }
-        return new com.complex.platform.access.staff.dto.StaffShiftBatchResult(
-                created, saved.size() - created, List.copyOf(saved));
+        return staffApprovals.submitShifts(List.copyOf(saved), request.idempotencyKey());
     }
 
     private static java.util.Set<java.time.DayOfWeek> parseWeekdays(List<Integer> weekdays) {
@@ -690,23 +775,161 @@ public class StaffService {
         }
     }
 
+    public List<StaffApprovalService.History> shiftHistory(String id) {
+        auditEventService.recordSuccess("staff.shift.history_viewed", "staff.shift.manage", "staff_shift", id, null, null, Map.of());
+        authorizationService.requirePermission("staff.shift.manage");
+        var history = staffApprovals.history(id);
+        if (history.isEmpty()) {
+            var shift = repository.findShiftById(id).orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "排班不存在"));
+            requireUserInScope(shift.userId());
+        } else { requireUserInScope(history.getFirst().after().userId()); }
+        return history;
+    }
+
     /** E1:后台/主管按日(可选按人)查排班。 */
     public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId) {
         return listShifts(workDate, userId, 1, 500);
     }
 
+    /** U06-004（BSM L1443）：已开始/任意班次的临时顶班——领班直接安排，只追加记录，不改写原班次、不走上一级排班审批。 */
+    @org.springframework.transaction.annotation.Transactional
+    public StaffShiftCoverRecord coverShift(String shiftId, com.complex.platform.access.staff.dto.StaffShiftCoverRequest request) {
+        try {
+        authorizationService.requirePermission("staff.shift.manage");
+        StaffShiftRecord shift = repository.findShiftById(trimToNull(shiftId) == null ? "" : shiftId.trim())
+                .orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "原排班不存在"));
+        String coverUserId = request == null ? null : trimToNull(request.coverUserId());
+        if (coverUserId == null) throw ApiException.badRequest("VALIDATION_FAILED", "须填写顶班员工");
+        if (coverUserId.equals(shift.userId())) throw ApiException.badRequest("VALIDATION_FAILED", "顶班员工不能是原班次员工");
+        String reason = requireReason(request.reason());
+        requireUserInScope(coverUserId);
+        String actor = authorizationService.currentActor().id();
+        return idempotencyService.execute("staffShiftCover:" + shift.id(), request.idempotencyKey(), request, () -> {
+            StaffShiftCoverRecord saved = repository.saveShiftCover(new StaffShiftCoverRecord("cover_" + UUID.randomUUID(),
+                    shift.id(), shift.userId(), coverUserId, actor, reason, clock.instant()));
+            auditEventService.recordSuccess("staff.shift.covered", "staff.shift.manage", "staff_shift", shift.id(), null,
+                    request.idempotencyKey(), Map.of("cover_user_id", coverUserId, "original_user_id", shift.userId(), "reason", reason));
+            return saved;
+        }, StaffShiftCoverRecord.class);
+        } catch (RuntimeException exception) {
+            // U14-008：失败路径按契约声明的 *_failed 事件留痕。
+            auditEventService.recordFailure("staff.shift.cover_failed", "staff.shift.manage", "staff_shift", shiftId, null, idempotencyKeyOf(request), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    public List<StaffShiftCoverRecord> shiftCovers(String shiftId) {
+        authorizationService.requirePermission("staff.shift.manage");
+        List<StaffShiftCoverRecord> covers = repository.listShiftCovers(shiftId);
+        auditEventService.recordSuccess("staff.shift.covers_viewed", "staff.shift.manage", "staff_shift", shiftId, null, null, Map.of("count", covers.size()));
+        return covers;
+    }
+
     // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 默认 500 保留既有一次拉取。
     public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId, int page, int size) {
         authorizationService.requirePermission("staff.shift.manage");
-        return repository.listShiftsPaged(workDate, userId, projectScope(), page, size);
+        return repository.listShiftsPaged(workDate, userId, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
     }
 
-    /** E1:员工自有手机看自己的班次与点位(今天起 7 天)。 */
+    /** U06-001：员工所属经营主体配置键，写读共用——商户员工 merchant:<merchantId>，公司员工 company:<companyId>；不回落 projectId。 */
+    static String settingScopeKey(String merchantId, String companyId) {
+        if (trimToNull(merchantId) != null) return "merchant:" + merchantId.trim();
+        if (trimToNull(companyId) == null) throw ApiException.conflict("STAFF_COMPANY_REQUIRED", "员工档案未归属公司，无法确定经营主体配置");
+        return "company:" + companyId.trim();
+    }
+
+    private String staffSettingScope() {
+        AccessActor actor = authorizationService.currentActor();
+        return settingScopeKey(actor.merchantId(), registrations.actorCompany(actor));
+    }
+
+    public StaffNumericSetting getShiftVisibility() {
+        authorizationService.requirePermission("staff.shift.manage");
+        String scope = staffSettingScope();
+        StaffNumericSetting value = repository.numericSetting("shift_visible_days", scope);
+        auditEventService.recordSuccess("staff.shift.visibility_viewed", "staff.shift.manage", "staff_policy", scope,
+                null, null, Map.of("value", value.value(), "min", value.minValue(), "max", value.maxValue()));
+        return value;
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public StaffNumericSetting setShiftVisibility(com.complex.platform.access.staff.dto.StaffNumericSettingRequest request) {
+        try {
+        authorizationService.requirePermission("staff.shift.manage");
+        StaffNumericSetting value = requireNumericSetting(request, 1, Integer.MAX_VALUE);
+        String scope = staffSettingScope();
+        // U05-011：与其它员工写口相同，按操作命名空间幂等去重。
+        return idempotencyService.execute("staffShiftVisibility:" + scope, request.idempotencyKey(), request, () -> {
+            repository.saveNumericSetting("shift_visible_days", scope, value, authorizationService.currentActor().id());
+            auditEventService.recordSuccess("staff.shift.visibility_changed", "staff.shift.manage", "staff_policy", scope,
+                    null, null, Map.of("value", value.value(), "min", value.minValue(), "max", value.maxValue(), "reason", request.reason()));
+            return value;
+        }, StaffNumericSetting.class);
+        } catch (RuntimeException exception) {
+            // U14-008：失败路径按契约声明的 *_failed 事件留痕。
+            auditEventService.recordFailure("staff.shift.visibility_change_failed", "staff.shift.manage", "staff_policy", "shift_visible_days", null, idempotencyKeyOf(request), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    public StaffNumericSetting getPenaltyCap() {
+        authorizationService.requirePermission("staff.payroll.manage");
+        StaffNumericSetting value = repository.numericSetting("payroll_penalty_cap_bps", "global");
+        auditEventService.recordSuccess("staff.payroll.penalty_cap_viewed", "staff.payroll.manage", "staff_policy", "global",
+                null, null, Map.of("value", value.value(), "min", value.minValue(), "max", value.maxValue()));
+        return value;
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public com.complex.platform.governance.review.SupervisorReviewDecisionRecord requestPenaltyCap(
+            com.complex.platform.access.staff.dto.StaffPenaltyCapRequest request) {
+        try {
+        authorizationService.requirePermission("staff.payroll.manage");
+        var value = requireNumericSetting(request == null ? null : new com.complex.platform.access.staff.dto.StaffNumericSettingRequest(
+                request.idempotencyKey(), request.value(), request.minValue(), request.maxValue(), request.reason()), 0, 10000);
+        return idempotencyService.execute("staffPenaltyCapRequest", request.idempotencyKey(), request,
+                () -> {
+                    var submitted = staffApprovals.submitPenaltyCap(value, request);
+                    // U16-006：operation 级成功事件。
+                    auditEventService.recordSuccess("staff.payroll.penalty_cap_requested", "staff.payroll.manage", "staff_policy", "payroll_penalty_cap_bps", null,
+                            request.idempotencyKey(), Map.of("value", value.value(), "review_id", submitted.reviewId()));
+                    return submitted;
+                },
+                com.complex.platform.governance.review.SupervisorReviewDecisionRecord.class);
+        } catch (RuntimeException exception) {
+            // U14-008：失败路径按契约声明的 *_failed 事件留痕。
+            auditEventService.recordFailure("staff.payroll.penalty_cap_request_failed", "staff.payroll.manage", "staff_policy", "payroll_penalty_cap_bps", null, idempotencyKeyOf(request), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private static String requireReason(String reason) {
+        String value = trimToNull(reason);
+        if (value == null) throw ApiException.badRequest("VALIDATION_FAILED", "请填写改动缘由");
+        return value;
+    }
+
+    private StaffNumericSetting requireNumericSetting(com.complex.platform.access.staff.dto.StaffNumericSettingRequest request,
+            int lower, int upper) {
+        if (request == null || request.value() == null || request.minValue() == null || request.maxValue() == null
+                || request.minValue() < lower || request.maxValue() > upper
+                || request.value() < request.minValue() || request.value() > request.maxValue()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "须同时填写参数值及有效上下限，参数值须在上下限内");
+        }
+        requireReason(request.reason());
+        return new StaffNumericSetting(request.value(), request.minValue(), request.maxValue());
+    }
+
+    /** 员工查看所属经营主体配置天数内的本人排班，出厂为含今天在内七天。 */
     public PageResponse<StaffShiftRecord> listMyShifts() {
         authorizationService.requirePermission("staff.shift.view");
         var actor = authorizationService.currentActor();
         java.time.LocalDate today = java.time.LocalDate.ofInstant(clock.instant(), LocalZone.ID);
-        return page(repository.listShiftsForUserBetween(actor.id(), today, today.plusDays(7)));
+        StaffProfileRecord profile = repository.findProfileByUserId(actor.id())
+                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在"));
+        String scope = settingScopeKey(profile.merchantId(), profile.companyId());
+        int days = repository.numericSetting("shift_visible_days", scope).value();
+        return page(repository.listShiftsForUserBetween(actor.id(), today, today.plusDays(days - 1L)));
     }
 
     /** E2(2026-07-02 拍板):打卡——打卡时刻取服务器(客户端不可篡改);严格无宽限:上班晚于班次开始即迟到、
@@ -714,21 +937,58 @@ public class StaffService {
      *
      * <p>2026-08-02:配哪个班改按<b>时间区间</b>判定,不再折日历日——排班本来就存「几月几日几点→几月几日几点」,
      * 跨零点班(8/2 22:00→8/3 06:00)的 work_date 是 8/2,按打卡当天查必然漏,员工凌晨下班被记「无排班」。 */
+    @org.springframework.transaction.annotation.Transactional
     public StaffAttendanceRecord punch(com.complex.platform.access.staff.dto.StaffAttendancePunchRequest request) {
+        try {
         authorizationService.requirePermission("staff.attendance.punch");
         if (request == null || request.punchType() == null
                 || (!request.punchType().equals("check_in") && !request.punchType().equals("check_out"))) {
             throw ApiException.badRequest("VALIDATION_FAILED", "打卡类型必须为上班（check_in）或下班（check_out）");
         }
-        String method = request.method() == null ? "manual" : request.method();
-        if (!java.util.Set.of("nfc", "qr", "manual").contains(method)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "打卡方式必须为 nfc/qr/manual 之一");
+        String method = request.method();
+        if (method == null || !java.util.Set.of("nfc", "qr", "charging_disconnect").contains(method)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "打卡须使用工作手机 NFC、扫码或离开充电设施事件");
+        }
+        if (!"charging_disconnect".equals(method) && trimToNull(request.tagRef()) == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "NFC 或扫码须包含读取到的点位标签");
+        }
+        if (("charging_disconnect".equals(method) || "nfc".equals(method)) && !"check_in".equals(request.punchType())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "NFC 和离开充电设施仅记录上班领取");
         }
         var actor = authorizationService.currentActor();
+        var terminal = com.complex.platform.gate.TerminalIdentityHolder.current()
+                .filter(t -> t.verified() && "staff_work_phone".equals(t.terminalType()))
+                .orElseThrow(() -> ApiException.forbidden("WORK_PHONE_REQUIRED", "须从已验证的本人工作手机记录考勤"));
+        var device = terminalRepository.findByDeviceId(terminal.deviceId())
+                .filter(d -> "bound".equals(d.status()) && "staff_work_phone".equals(d.terminalType()))
+                .orElseThrow(() -> ApiException.forbidden("WORK_PHONE_REQUIRED", "工作手机当前不可用"));
+        var profile = repository.findProfileByUserId(actor.id())
+                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在"));
+        if (!profile.id().equals(device.staffId())) {
+            throw ApiException.forbidden("WORK_PHONE_OWNER_REQUIRED", "只能用分配给本人的工作手机记录考勤");
+        }
+        return idempotencyService.execute("staffAttendancePunch", request.idempotencyKey(), request,
+                () -> recordPunch(request, actor, terminal.deviceId()), StaffAttendanceRecord.class);
+        } catch (RuntimeException exception) {
+            // U14-008：失败路径按契约声明的 *_failed 事件留痕。
+            auditEventService.recordFailure("staff.attendance.punch_failed", "staff.attendance.punch", "staff_attendance", null, null, idempotencyKeyOf(request), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private StaffAttendanceRecord recordPunch(
+            com.complex.platform.access.staff.dto.StaffAttendancePunchRequest request, AccessActor actor, String deviceId) {
+        repository.lockAttendanceUser(actor.id());
+        String method = request.method();
         Instant now = clock.instant();
         java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserOverlapping(
                 actor.id(), now.minusSeconds(SHIFT_MATCH_WINDOW_SECONDS), now.plusSeconds(SHIFT_MATCH_WINDOW_SECONDS));
         StaffShiftRecord shift = pickShift(shifts, request.punchType(), now);
+        if ("check_in".equals(request.punchType())) {
+            var first = repository.findFirstCheckIn(actor.id(), shift == null ? null : shift.id(),
+                    java.time.LocalDate.ofInstant(now, LocalZone.ID));
+            if (first.isPresent()) return first.get();
+        }
         String judgement;
         if (shift == null) {
             judgement = "no_shift";
@@ -740,7 +1000,7 @@ public class StaffService {
         StaffAttendanceRecord saved = repository.saveAttendance(new StaffAttendanceRecord(
                 "att_" + UUID.randomUUID(), actor.id(), request.punchType(), now, method,
                 trimToNull(request.tagRef()), trimToNull(request.spaceId()),
-                trimToNull(request.deviceFingerprint()), shift == null ? null : shift.id(), judgement, now));
+                deviceId, shift == null ? null : shift.id(), judgement, now));
         auditEventService.recordSuccess("staff.attendance.punched", "staff.attendance.punch",
                 "staff_attendance_record", saved.id(), null, request.idempotencyKey(),
                 java.util.Map.of("punch_type", saved.punchType(), "judgement", judgement, "method", method));
@@ -778,12 +1038,12 @@ public class StaffService {
 
     public PageResponse<StaffAttendanceRecord> listAttendance(java.time.LocalDate date, int page, int size) {
         authorizationService.requirePermission("staff.attendance.view");
-        return repository.listAttendanceOnPaged(date, projectScope(), page, size);
+        return repository.listAttendanceOnPaged(date, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
     }
 
     @GuardedAction(permission = "staff.notice.view")
     public PageResponse<EmployeeNoticeRecord> listNotices() {
-        List<EmployeeNoticeRecord> notices = repository.listNotices(merchantScopeOrNull());
+        List<EmployeeNoticeRecord> notices = repository.listNoticesForUser(authorizationService.currentActor().id());
         auditEventService.recordSuccess("staff.notice.viewed", "staff.notice.view",
                 "employee_notice", "all", null, null, Map.of("count", notices.size()));
         return page(notices);
@@ -800,7 +1060,7 @@ public class StaffService {
                         EmployeeNoticeRecord notice = repository.findNoticeById(noticeId)
                                 .orElseThrow(() -> ApiException.notFound("NOTICE_NOT_FOUND",
                                         "员工告知书不存在：" + noticeId));
-                        requireProfileInScope(notice.staffProfileId());
+                        requireOwnProfile(notice.staffProfileId());
                         String next;
                         if (Boolean.TRUE.equals(request.decline())) {
                             next = "declined";
@@ -889,12 +1149,12 @@ public class StaffService {
         Instant now = Instant.now();
         StaffProfileRecord updated = new StaffProfileRecord(
                 current.id(), current.projectId(), current.merchantId(), current.userId(), name,
-                current.phoneHash(), current.idDocHash(), current.staffLevelId(), current.registrationStatus(),
+                current.phone(), current.idDoc(), current.staffLevelId(), current.registrationStatus(),
                 current.approvedBy(), current.approvedAt(), current.rejectReason(), current.status(),
                 current.createdAt(), now, current.archivedAt(), current.archivedBy(), current.deleteStatus(),
                 current.deleteRequestedBy(), current.deleteRequestedAt(), current.deleteReason(),
                 // V349：员工自助只能改姓名，销售岗原样带过——员工不能自己把自己设成销售岗给自己提档提成。
-                current.salesPosition());
+                current.salesPosition(), current.employmentStatus(), current.companyId(), current.registrationSource());
         StaffProfileRecord saved = repository.saveProfile(updated);
         auditEventService.recordSuccess("staff.profile.self_updated", "staff.profile.self",
                 "staff_profile", saved.id(), null, request.idempotencyKey(),
@@ -911,7 +1171,22 @@ public class StaffService {
     private StaffProfileRecord requireProfileInScope(String id) {
         StaffProfileRecord profile = repository.findProfileById(id)
                 .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id));
-        requireRegistrationScope(profile.projectId(), profile.merchantId());
+        var actor = authorizationService.currentActor();
+        if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) == null) {
+            if (!profile.companyId().equals(registrations.actorCompany(actor))) {
+                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "该员工不在当前公司范围内");
+            }
+        } else {
+            requireRegistrationScope(profile.projectId(), profile.merchantId());
+        }
+        return profile;
+    }
+
+    private StaffProfileRecord requireOwnProfile(String id) {
+        StaffProfileRecord profile = requireProfileInScope(id);
+        if (!authorizationService.currentActor().id().equals(profile.userId())) {
+            throw ApiException.forbidden("STAFF_OWNER_REQUIRED", "只能操作本人的员工档案及手机");
+        }
         return profile;
     }
 
@@ -951,13 +1226,37 @@ public class StaffService {
     }
 
     /** P0 租户隔离(V214):主管/后台列表按调用方项目 scope 过滤;平台管理员/无组织全局员工=null 见全量。 */
+    private String staffMerchantScope() {
+        AccessActor actor = authorizationService.currentActor();
+        return authorizationService.isPlatformAdmin(actor) ? null : trimToNull(actor.merchantId());
+    }
+
+    private String staffCompanyScope() {
+        AccessActor actor = authorizationService.currentActor();
+        return authorizationService.isPlatformAdmin(actor) || trimToNull(actor.merchantId()) != null
+                ? null : registrations.actorCompany(actor);
+    }
+
     private String projectScope() {
-        return authorizationService.currentProjectScopeQuietly().orElse(null);
+        return staffCompanyScope() == null ? authorizationService.currentProjectScopeQuietly().orElse(null) : null;
     }
 
     /** 清单 P1(2026-07-03 审计):按项目 scope 守卫写/审批——项目主管只可操作本综合体员工;
      * 平台管理员(空 scope)放行。scope 由 token 派生,不取请求体。 */
     private void requireUserInScope(String userId) {
+        AccessActor actor = authorizationService.currentActor();
+        StaffProfileRecord target = repository.findProfileByUserId(userId).orElse(null);
+        if (target != null && target.companyId() != null) {
+            requireProfileInScope(target.id());
+            return;
+        }
+        if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) != null) {
+            StaffProfileRecord profile = repository.findProfileByUserId(userId)
+                    .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在"));
+            if (!actor.merchantId().equals(profile.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该员工不在当前商户范围内");
+            }
+        }
         authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
             String userProject = repository.findUserProjectId(userId).orElse(null);
             if (!scope.equals(userProject)) {
@@ -1073,7 +1372,7 @@ public class StaffService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
             }
             var actor = authorizationService.currentActor();
-            int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now(), projectScope());
+            int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now(), projectScope(), staffMerchantScope(), staffCompanyScope());
             auditEventService.recordSuccess("staff.payroll.month_closed", "staff.payroll.manage",
                     "staff_payroll_statement", request.month(), null, request.idempotencyKey(),
                     java.util.Map.of("month", request.month(), "statements", count));
@@ -1175,7 +1474,7 @@ public class StaffService {
 
     public PageResponse<StaffPayrollStatementRecord> listPayroll(String month, int page, int size) {
         authorizationService.requirePermission("staff.payroll.manage");
-        return repository.listPayrollStatementsPaged(month, null, projectScope(), page, size);
+        return repository.listPayrollStatementsPaged(month, null, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
     }
 
     /** F批(拍板:月结后才可见):员工查自己薪资——只返回已定格薪资单,未结月自然为空。 */
@@ -1273,7 +1572,7 @@ public class StaffService {
 
     public PageResponse<StaffLeaveRequestRecord> listLeaves(String status, int page, int size) {
         authorizationService.requirePermission("staff.shift.manage");
-        return repository.listLeavesPaged(status, null, projectScope(), page, size);
+        return repository.listLeavesPaged(status, null, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
     }
 
     /** F批(2026-07-02 拍板六态口径):考勤月视图——出勤/缺勤(有排班无上班卡)/迟到/早退/
@@ -1287,55 +1586,46 @@ public class StaffService {
         java.time.YearMonth yearMonth = java.time.YearMonth.parse(month);
         java.time.LocalDate first = yearMonth.atDay(1);
         java.time.LocalDate last = yearMonth.atEndOfMonth();
-        java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserBetween(actor.id(), first, last);
-        java.util.Map<java.time.LocalDate, StaffShiftRecord> shiftByDay = new java.util.LinkedHashMap<>();
-        for (StaffShiftRecord shift : shifts) {
-            shiftByDay.putIfAbsent(shift.workDate(), shift);
-        }
-        java.util.Set<java.time.LocalDate> leaveDays = repository.approvedLeaveDates(actor.id(), first, last);
-        java.util.List<StaffAttendanceRecord> punches = repository.listAttendanceForUserBetween(actor.id(),
+        List<StaffShiftRecord> shifts = repository.listShiftsEndingBetween(actor.id(),
                 first.atStartOfDay(LocalZone.ID).toInstant(),
                 last.plusDays(1).atStartOfDay(LocalZone.ID).toInstant());
-        java.util.List<StaffAttendanceDayRecord> out = new java.util.ArrayList<>();
+        Map<java.time.LocalDate, List<StaffShiftRecord>> shiftsByDay = shifts.stream().collect(
+                java.util.stream.Collectors.groupingBy(
+                        shift -> java.time.LocalDate.ofInstant(shift.endAt(), LocalZone.ID)));
+        java.util.Set<java.time.LocalDate> leaveDays = repository.approvedLeaveDates(actor.id(), first, last);
+        List<StaffAttendanceRecord> punches = repository.listAttendanceForShifts(actor.id(),
+                shifts.stream().map(StaffShiftRecord::id).toList());
+        List<StaffAttendanceDayRecord> out = new java.util.ArrayList<>();
         for (java.time.LocalDate day = first; !day.isAfter(last); day = day.plusDays(1)) {
-            final java.time.LocalDate current = day;
-            if (leaveDays.contains(current)) {
-                StaffShiftRecord shift = shiftByDay.get(current);
-                out.add(new StaffAttendanceDayRecord(current, java.util.List.of("leave"),
-                        shift == null ? null : shift.startAt(), shift == null ? null : shift.endAt()));
+            List<StaffShiftRecord> dayShifts = shiftsByDay.getOrDefault(day, List.of());
+            Instant start = dayShifts.stream().map(StaffShiftRecord::startAt).min(Instant::compareTo).orElse(null);
+            Instant end = dayShifts.stream().map(StaffShiftRecord::endAt).max(Instant::compareTo).orElse(null);
+            if (leaveDays.contains(day)) {
+                out.add(new StaffAttendanceDayRecord(day, List.of("leave"), start, end));
                 continue;
             }
-            StaffShiftRecord shift = shiftByDay.get(current);
-            if (shift == null) {
-                out.add(new StaffAttendanceDayRecord(current, java.util.List.of("rest"), null, null));
+            if (dayShifts.isEmpty()) {
+                out.add(new StaffAttendanceDayRecord(day, List.of("rest"), null, null));
                 continue;
             }
-            java.util.List<StaffAttendanceRecord> dayPunches = punches.stream()
-                    .filter(p -> shift.id().equals(p.shiftId())
-                            || java.time.LocalDate.ofInstant(p.punchedAt(), LocalZone.ID).equals(current))
-                    .toList();
-            StaffAttendanceRecord checkIn = dayPunches.stream()
-                    .filter(p -> p.punchType().equals("check_in")).findFirst().orElse(null);
-            StaffAttendanceRecord checkOut = dayPunches.stream()
-                    .filter(p -> p.punchType().equals("check_out"))
-                    .reduce((a, b) -> b).orElse(null);
-            java.util.List<String> statuses = new java.util.ArrayList<>();
-            if (checkIn == null) {
-                statuses.add("absent");
-            } else {
-                if (checkIn.judgement().equals("late")) {
-                    statuses.add("late");
-                }
-                if (checkOut == null) {
-                    statuses.add("missing_checkout");
-                } else if (checkOut.judgement().equals("early_leave")) {
-                    statuses.add("early_leave");
-                }
-                if (statuses.isEmpty()) {
-                    statuses.add("present");
+            java.util.Set<String> statuses = new java.util.LinkedHashSet<>();
+            for (StaffShiftRecord shift : dayShifts) {
+                List<StaffAttendanceRecord> ownPunches = punches.stream()
+                        .filter(p -> shift.id().equals(p.shiftId())).toList();
+                StaffAttendanceRecord checkIn = ownPunches.stream()
+                        .filter(p -> "check_in".equals(p.punchType())).findFirst().orElse(null);
+                StaffAttendanceRecord checkOut = ownPunches.stream()
+                        .filter(p -> "check_out".equals(p.punchType())).reduce((a, b) -> b).orElse(null);
+                if (checkIn == null) {
+                    statuses.add("absent");
+                } else {
+                    if ("late".equals(checkIn.judgement())) statuses.add("late");
+                    if (checkOut == null) statuses.add("missing_checkout");
+                    else if ("early_leave".equals(checkOut.judgement())) statuses.add("early_leave");
                 }
             }
-            out.add(new StaffAttendanceDayRecord(current, statuses, shift.startAt(), shift.endAt()));
+            if (statuses.isEmpty()) statuses.add("present");
+            out.add(new StaffAttendanceDayRecord(day, List.copyOf(statuses), start, end));
         }
         return out;
     }

@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -9,17 +10,17 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 import type { AdminPageProps } from "../types";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
-type ShiftRow = { id: string; userId?: string; workDate?: string; startAt?: string; endAt?: string; pointSpaceIds?: string[]; note?: string };
+type ShiftRow = { id: string; userId?: string; workDate?: string; startAt?: string; endAt?: string; pointSpaceIds?: string[]; note?: string; createdBy?: string; reviewId?: string };
 type AttendanceRow = { id: string; userId?: string; punchType?: string; punchedAt?: string; method?: string; judgement?: string; spaceId?: string; deviceFingerprint?: string };
 
 const TEXT = {
   title: "排班与考勤",
-  description: "主管排班到分钟并指定点位(后台与手机双端同一套规则);员工手机 NFC/扫码打卡;严格考勤:晚于班次开始即迟到、早于结束即早退,只记录不自动扣罚。",
+  description: "排班及每次修改均经主管上一级批准后发布，开始后锁定。员工领取本人工作手机记上班，NFC、扫码与离开充电设施不重复计时；严格按班次判定考勤。",
   loadFailed: "排班考勤读取失败",
 };
 
 const JUDGE_LABELS: Record<string, string> = { normal: "正常", late: "迟到", early_leave: "早退", no_shift: "无班次" };
-const METHOD_LABELS: Record<string, string> = { nfc: "NFC", qr: "扫码", manual: "手动" };
+const METHOD_LABELS: Record<string, string> = { nfc: "NFC", qr: "扫码", manual: "历史手动记录", charging_disconnect: "离开充电设施" };
 const TYPE_LABELS: Record<string, string> = { check_in: "上班", check_out: "下班" };
 const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
@@ -41,7 +42,12 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult, navigateTo }: AdminPageProps) {
+export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult, navigateTo, user }: AdminPageProps) {
+  const [editingShift, setEditingShift] = React.useState<string | null>(null);
+  const [visibility, setVisibility] = React.useState<{ value: string; minValue: string; maxValue: string } | null>(null);
+  const [settingReason, setSettingReason] = React.useState("");
+  const [settingMessage, setSettingMessage] = React.useState("");
+  const [historyText, setHistoryText] = React.useState("");
   const [date, setDate] = React.useState(today);
   const [shifts, setShifts] = React.useState<ShiftRow[]>([]);
   const [attendance, setAttendance] = React.useState<AttendanceRow[]>([]);
@@ -136,15 +142,18 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
     setShiftSaving(true);
     setShiftError("");
     try {
-      await api.post("/api/v1/staff/shifts", {
+      const result = await api.post<{ reviewId?: string }>("/api/v1/staff/shifts", {
         userId: userId.trim(),
+        shiftId: editingShift,
         workDate: date,
         startAt: new Date(start).toISOString(),
         endAt: new Date(end).toISOString(),
         pointSpaceIds: points.split(",").map((value) => value.trim()).filter(Boolean),
         note: note.trim() || null,
       });
-      setActionResult({ action: "staff_shift_saved", userId: userId.trim(), workDate: date });
+      setActionResult({ 结果: "排班申请已提交，等待主管上一级审批", 审批单: result?.reviewId });
+      setBatchSummary("排班申请已提交，批准后才会出现在生效排班中。审批单：" + (result?.reviewId ?? "—"));
+      setEditingShift(null);
       setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote("");
       setShiftOpen(false);
       await reload();
@@ -167,7 +176,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
     setBatchSaving(true);
     setBatchError("");
     try {
-      const result = await api.post<{ createdCount?: number; updatedCount?: number }>("/api/v1/staff/shifts/batch", {
+      const result = await api.post<{ createdCount?: number; updatedCount?: number; reviewId?: string }>("/api/v1/staff/shifts/batch", {
         userIds,
         startDate: batchStartDate,
         days,
@@ -179,8 +188,8 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
       });
       const created = result?.createdCount ?? 0;
       const updated = result?.updatedCount ?? 0;
-      setBatchSummary(`本次批量排班:新建 ${created} 个班次、覆盖修改 ${updated} 个班次(共 ${created + updated} 个)。`);
-      setActionResult({ action: "staff_shift_batch_saved", userCount: userIds.length, createdCount: created, updatedCount: updated });
+      setBatchSummary(`本次申请新建 ${created} 个班次、修改 ${updated} 个班次，共用一张审批单，批准后整批发布。审批单：${result?.reviewId ?? "—"}`);
+      setActionResult({ 结果: "整批排班已提交审批", 新建班次: created, 修改班次: updated, 审批单: result?.reviewId });
       setBatchOpen(false);
       await reload();
     } catch (e) { setBatchError((e as Error).message); } finally { setBatchSaving(false); }
@@ -205,9 +214,31 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         <div className="admin-kpi-card"><span>考勤打卡数</span><strong className="admin-kpi-value--text" data-testid="staff-attendance-kpi-count">{attendanceKpi.status === "ready" && attendanceKpi.value !== null ? attendanceKpi.value : "—"}</strong><small>平台口径·{date}{attendanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.attendance_count" from={date} to={date} testid="staff-attendance-metric-detail-count" /> : null}</small></div>
         <div className="admin-kpi-card"><span>迟到打卡数</span><strong className="admin-kpi-value--text" data-testid="staff-late-kpi-count">{lateKpi.status === "ready" && lateKpi.value !== null ? lateKpi.value : "—"}</strong><small>平台口径·{date}{lateKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.attendance_late_count" from={date} to={date} testid="staff-late-metric-detail-count" /> : null}</small></div>
       </div>
-      <h3>排班(同员工同开始时刻重复保存=覆盖修改)</h3>
+      <h3>已发布排班（开始后锁定，修改保留历史）</h3>
+      <button type="button" onClick={async () => {
+        try {
+          const value = await api.get<{ value: number; minValue: number | null; maxValue: number | null }>("/api/v1/staff/settings/shift-visible-days");
+          setVisibility({ value: String(value.value), minValue: value.minValue == null ? "" : String(value.minValue), maxValue: value.maxValue == null ? "" : String(value.maxValue) });
+          setSettingMessage("");
+        } catch (error) { setSettingMessage((error as Error).message); }
+      }}>设置本经营主体的排班可见天数</button>
+      {visibility ? <fieldset><legend>员工可见排班天数（含今天，首次配置须填写上下限）</legend>
+        {([['value', '可见天数'], ['minValue', '天数下限'], ['maxValue', '天数上限']] as const).map(([key, label]) => <label key={key}>{label}
+          <input type="number" min={1} aria-label={label} value={visibility[key]} onChange={(event) => setVisibility({ ...visibility, [key]: event.target.value })} />
+        </label>)}
+        <label>配置事由<input aria-label="配置事由" value={settingReason} onChange={(event) => setSettingReason(event.target.value)} /></label>
+        <button type="button" onClick={async () => {
+          if (Object.values(visibility).some((value) => !value.trim()) || !settingReason.trim()) { setSettingMessage("请填写天数、上下限及事由。"); return; }
+          try {
+            await api.post("/api/v1/staff/settings/shift-visible-days", { value: Number(visibility.value), minValue: Number(visibility.minValue), maxValue: Number(visibility.maxValue), reason: settingReason.trim() });
+            setSettingMessage("本经营主体的排班可见天数已保存。");
+          } catch (error) { setSettingMessage((error as Error).message); }
+        }}>保存可见天数</button>
+      </fieldset> : null}
+      {settingMessage ? <p role="status">{settingMessage}</p> : null}
+      {historyText ? <pre aria-label="排班修改历史">{historyText}</pre> : null}
       <div className="admin-form-row" data-testid="shift-editor">
-        <button type="button" data-testid="shift-create-open" onClick={() => { setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setShiftError(""); setShiftOpen(true); }}>＋ 新增排班</button>
+        <button type="button" data-testid="shift-create-open" onClick={() => { setEditingShift(null); setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setShiftError(""); setShiftOpen(true); }}>＋ 新增排班</button>
         <button type="button" data-testid="shift-batch-open" onClick={() => { setBatchError(""); setBatchSummary(""); setBatchOpen(true); }}>＋ 批量排班(按周)</button>
       </div>
       {batchSummary ? <p data-testid="shift-batch-result">{batchSummary}</p> : null}
@@ -225,7 +256,19 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                   <td>{localTime(row.endAt)}</td>
                   <td>{row.pointSpaceIds?.length ? row.pointSpaceIds.join("、") : "未指定"}</td>
                   <td>{row.note ?? "—"}</td>
-                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看排班详情" onClick={(event) => { event.stopPropagation(); openShiftDetail(row); }}>查看详情</button></td></tr>
+                <td className="admin-row-detail-cell">
+                  {row.createdBy === user.id && new Date(row.startAt ?? "").getTime() > Date.now() ? <button type="button" onClick={(event) => {
+                    event.stopPropagation(); setEditingShift(row.id); setUserId(row.userId ?? "");
+                    const inputTime = (value?: string) => { const d = new Date(value ?? ""); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16); };
+                    setStart(inputTime(row.startAt)); setEnd(inputTime(row.endAt)); setPoints((row.pointSpaceIds ?? []).join(",")); setNote(""); setShiftOpen(true);
+                  }}>申请修改</button> : null}
+                  <button type="button" onClick={async (event) => {
+                    event.stopPropagation();
+                    try {
+                      const entries = await api.get<Array<{ reviewId: string; before: ShiftRow | null; after: ShiftRow; appliedAt: string | null }>>("/api/v1/staff/shifts/" + encodeURIComponent(row.id) + "/history");
+                      setHistoryText(entries.length ? entries.map((entry) => "审批单：" + entry.reviewId + "；" + (entry.appliedAt ? "已发布" : "未发布") + "\n原时间：" + localTime(entry.before?.startAt) + " ~ " + localTime(entry.before?.endAt) + "\n申请时间：" + localTime(entry.after.startAt) + " ~ " + localTime(entry.after.endAt) + "\n事由：" + (entry.after.note ?? "—")).join("\n\n") : "暂无修改历史。");
+                    } catch (error) { setHistoryText((error as Error).message); }
+                  }}>修改历史</button><button type="button" className="admin-row-detail-btn" aria-label="查看排班详情" onClick={(event) => { event.stopPropagation(); openShiftDetail(row); }}>查看详情</button></td></tr>
               ))}
               {shifts.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">本日暂无排班，点「＋ 新增排班」开始</td></tr> : null}
             </tbody>
@@ -255,7 +298,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
       </AdminDataState>
       <GuidedFlowModal
         open={shiftOpen}
-        title="新增排班"
+        title={editingShift ? "申请修改排班" : "新增排班"}
         testId="shift-create-guided"
         submitTestId="shift-save"
         submitLabel="保存排班"
@@ -270,7 +313,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             validate: () => (userId.trim() && start && end ? null : "请填全 员工/开始/结束时间"),
             content: (
               <>
-                <label>员工 user_id<input data-testid="shift-user-input" value={userId} onChange={(event) => setUserId(event.target.value)} /></label>
+                <label>员工 user_id<input data-testid="shift-user-input" value={userId} disabled={Boolean(editingShift)} onChange={(event) => setUserId(event.target.value)} /></label>
                 <label>开始<input data-testid="shift-start-input" type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} /></label>
                 <label>结束<input data-testid="shift-end-input" type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
               </>
@@ -278,7 +321,9 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
           },
           {
             title: "点位与备注",
-            description: "点位（space_id，逗号分隔）与备注选填。",
+            description: "点位选填；修改排班必须填写原因，批准后生效。",
+            // U03-009：修改排班的原因在提交前拦截（与后端 requireReason 同口径），不等后端 400。
+            validate: () => (editingShift && !note.trim() ? "修改排班必须填写原因" : null),
             content: (
               <>
                 <label>点位(space_id 逗号分隔)<input data-testid="shift-points-input" value={points} onChange={(event) => setPoints(event.target.value)} /></label>
@@ -301,7 +346,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         title="批量排班(一次排一周)"
         testId="shift-batch-guided"
         submitTestId="shift-batch-save"
-        submitLabel="生成班次"
+        submitLabel="提交整批审批"
         submitting={batchSaving}
         error={batchError || undefined}
         onClose={() => setBatchOpen(false)}

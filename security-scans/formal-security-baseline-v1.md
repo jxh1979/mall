@@ -3,8 +3,8 @@
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 720
-- OpenAPI SHA-256: `4e19b1a33af2f0a26cb2b861c4d731063792acf7c85dde9ada601c73a750f6fc`
+- OpenAPI operation count: 732
+- OpenAPI SHA-256: `c7c4857abec5a2f009da6e725b08ab8067b741acb90112280a45ef7781df846e`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
@@ -39,10 +39,10 @@
 | auth_context | operation_count |
 |---|---:|
 | `customer-token` | 39 |
-| `device-credential` | 3 |
+| `device-credential` | 4 |
 | `open-app-credential` | 1 |
-| `public` | 5 |
-| `staff-token` | 668 |
+| `public` | 7 |
+| `staff-token` | 677 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,25 +57,25 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 720 |
-| 写 operation | 434 |
-| public operation | 5 |
+| 全部 operation | 732 |
+| 写 operation | 441 |
+| public operation | 7 |
 | open-app/webhook operation | 5 |
 
 | terminal_or_channel | operation_count |
 |---|---:|
 | `app` | 50 |
-| `kiosk` | 43 |
-| `merchant_app` | 1 |
-| `merchant_portal` | 21 |
+| `kiosk` | 44 |
+| `merchant_app` | 2 |
+| `merchant_portal` | 22 |
 | `miniapp` | 50 |
 | `mobile_admin` | 64 |
 | `provider-webhook` | 3 |
 | `server-to-server` | 2 |
-| `staff_private_phone` | 30 |
-| `staff_work_phone` | 70 |
+| `staff_private_phone` | 39 |
+| `staff_work_phone` | 81 |
 | `tablet` | 103 |
-| `web` | 687 |
+| `web` | 694 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 

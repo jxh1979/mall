@@ -1,5 +1,7 @@
 package com.complex.terminal
 
+// 文件版本：V0.05
+
 import android.app.Activity
 import android.content.Intent
 import com.google.zxing.integration.android.IntentIntegrator
@@ -47,6 +49,7 @@ class MainActivity : Activity() {
   // 平板 POS 绑定持久化：首次配置本机所属酒吧后写入，之后不再追问（跨启动保留）。
   private val posPrefs: SharedPreferences by lazy { getSharedPreferences("bar_pos", Context.MODE_PRIVATE) }
   private var posBarId: String? = null
+  private val workPhonePrefs: SharedPreferences by lazy { getSharedPreferences("work_phone", Context.MODE_PRIVATE) }
   // 当前桌台 + 购物车（本 Activity 会话态；下单成功清空）。
   private val posCart = LinkedHashMap<String, PosCartLine>()
   private var posTable: BarTableAvailabilityRow? = null
@@ -56,16 +59,22 @@ class MainActivity : Activity() {
       BuildConfig.COMPLEX_API_BASE_URL.trim().trimEnd('/'),
       allowedHosts = BuildConfig.COMPLEX_API_ALLOWED_HOSTS.split(',')
         .map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
-    )
+    ).apply {
+      deviceId = workPhonePrefs.getString("device_id", null)
+      deviceSigner = DeviceKeystore::sign
+    }
   }
   private val workflow: TerminalWorkflow by lazy { TerminalWorkflow(api, store) }
 
   // 4.2 扫码相机：ZXing 内置扫码界面（IntentIntegrator 旧式回调，兼容纯 Activity），
   // 本地解码无网络依赖，结果回填目标输入框。
   private var scanTarget: EditText? = null
+  private var scanResult: ((String) -> Unit)? = null
+  private var nfcResult: ((String) -> Unit)? = null
 
   private fun launchScan(target: EditText) {
     scanTarget = target
+    scanResult = null
     IntentIntegrator(this)
       .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
       .setPrompt("对准客人验票二维码")
@@ -76,8 +85,10 @@ class MainActivity : Activity() {
 
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
     val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
-    if (result != null && result.contents != null) {
-      scanTarget?.setText(result.contents)
+    if (result != null) {
+      val callback = scanResult
+      scanResult = null
+      result.contents?.let { value -> if (callback != null) callback(value) else scanTarget?.setText(value) }
       return
     }
     super.onActivityResult(requestCode, resultCode, data)
@@ -85,11 +96,39 @@ class MainActivity : Activity() {
 
   // ── E批 NFC 打卡:前台分发读点位标签(NDEF 文本或标签 UID),填入当前打卡屏输入框 ──
   private var nfcAdapter: android.nfc.NfcAdapter? = null
-  private var nfcTarget: EditText? = null
+
+  private fun recordWorkPhoneReceipt(method: String, tag: String? = null, type: String = "check_in", status: TextView? = null) {
+    if (api.accessToken == null || api.deviceId == null) {
+      status?.text = "请先登录并在本机完成工作手机登记"
+      return
+    }
+    runBackground(
+      action = { api.punchAttendance(AttendancePunchRequest(java.util.UUID.randomUUID().toString(), type, method,
+        tagRef = tag, spaceId = tag?.removePrefix("space:"))) },
+      onSuccess = { row ->
+        val text = "${if (type == "check_in") "上班领取" else "下班"}已记录：${row.punchedAt ?: "-"}"
+        status?.text = text
+        android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()
+      },
+      onError = {
+        val text = "考勤记录失败：${friendly(it)}"
+        status?.text = text
+        android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()
+      },
+    )
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     nfcAdapter = android.nfc.NfcAdapter.getDefaultAdapter(this)
+    // U01-001：终端身份由本机绑定类型决定并只声明一次，重启后从本地绑定记录恢复（工作手机 / 平板 POS）。
+    workPhonePrefs.getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = "staff_work_phone" }
+    posPrefs.getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = "tablet" }
+    // U01-007：私人手机在本人注册时已把 Keystore 公钥/指纹绑定为员工设备凭证，重启后按登记的指纹恢复私人手机身份（只声明一次）。
+    getSharedPreferences("private_phone", MODE_PRIVATE).getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = STAFF_PRIVATE_PHONE }
+    // U01-002：拔线接收器由常驻前台服务持有并在开机后重注册；本页只消费投递（进程被回收期间的拔线在下次登录后补记）。
+    ChargingReceiptBridge.handler = { runOnUiThread { recordWorkPhoneReceipt("charging_disconnect") } }
+    ChargingReceiptService.start(this)
     showLogin()
   }
 
@@ -114,6 +153,11 @@ class MainActivity : Activity() {
     }
   }
 
+  override fun onDestroy() {
+    ChargingReceiptBridge.handler = null
+    super.onDestroy()
+  }
+
   override fun onResume() {
     super.onResume()
     val adapter = nfcAdapter ?: return
@@ -130,7 +174,6 @@ class MainActivity : Activity() {
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    val target = nfcTarget ?: return
     val messages = intent.getParcelableArrayExtra(android.nfc.NfcAdapter.EXTRA_NDEF_MESSAGES)
     // 正确解析 NDEF 文本记录:取第一条「知名类型·文本(RTD_TEXT)」记录,按 payload 结构
     // [状态字节][语言码][正文]跳过状态字节+语言码,只留正文;避免旧写法把语言码"en"污染进点位ID。
@@ -145,7 +188,7 @@ class MainActivity : Activity() {
     val uid = tag?.id?.joinToString("") { b -> "%02x".format(b) }
     val value = ndefText ?: uid
     if (value != null) {
-      runOnUiThread { target.setText(value) }
+      nfcResult?.invoke(value)
     }
   }
 
@@ -171,7 +214,8 @@ class MainActivity : Activity() {
         action = { workflow.login(u, p) },
         onSuccess = { session ->
           status.text = "登录成功：${session.username}"
-          showDeviceBinding()
+          if (ChargingReceiptBridge.consumePending(this@MainActivity)) recordWorkPhoneReceipt("charging_disconnect")
+          if (api.deviceId != null) showHome() else showDeviceBinding()
         },
         onError = { status.text = "登录失败：${friendly(it)}" },
       )
@@ -180,7 +224,9 @@ class MainActivity : Activity() {
     setContentView(
       screen(
         title = "综合体终端 · 登录",
-        children = listOf(status, username, password, loginButton),
+        // U01-001/U01-007：自助注册只属于员工私人手机通道——本机已绑定为工作手机/平板时不显示。
+        children = listOfNotNull(status, username, password, loginButton,
+          if (api.terminalType == null) button("公司员工自助注册（私人手机）") { showStaffSelfRegistration() } else null),
         root = true,
       ),
     )
@@ -191,10 +237,11 @@ class MainActivity : Activity() {
   // ---------------------------------------------------------------------------
   private fun showDeviceBinding() {
     val deviceId = editText("设备编号").apply {
-      setText("ANDROID-${System.currentTimeMillis()}")
+      setText(workPhonePrefs.getString("device_id", ""))
     }
     val spaceId = editText("绑定空间（点位）")
-    val status = statusText("登录账号：${store.session?.username ?: "-"}\n请绑定本机到现场点位")
+    val staffId = editText("持有员工档案编号（领用即绑定，U07-001）")
+    val status = statusText("登录账号：${store.session?.username ?: "-"}\n由设备管理员填写已登记的设备编号与领用员工的档案编号；普通员工无需重复配置")
 
     val bindButton = button("绑定设备") {
       val d = deviceId.text.toString().trim()
@@ -202,19 +249,31 @@ class MainActivity : Activity() {
         status.text = "请输入设备编号"
         return@button
       }
+      val holder = staffId.text.toString().trim()
+      if (holder.isEmpty()) {
+        status.text = "请输入持有员工档案编号"
+        return@button
+      }
+      val space = spaceId.text.toString().trim().ifEmpty { null }
       status.text = "正在绑定…"
       runBackground(
         action = {
-          workflow.bindDevice(
+          val binding = workflow.bindDevice(
             BindDeviceRequest(
               deviceId = d,
               terminalType = "staff_work_phone",
               bindingScope = "space",
-              boundSpaceId = spaceId.text.toString().trim().ifEmpty { null },
+              boundSpaceId = space,
+              staffId = holder,
             ),
           )
+          api.registerDeviceSigningKey(d, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString())
+          binding
         },
         onSuccess = { binding ->
+          workPhonePrefs.edit().putString("device_id", d).apply()
+          api.deviceId = d
+          api.terminalType = "staff_work_phone"
           status.text = "绑定完成：${binding.deviceCode}（状态 ${deviceStatusZh(binding.status)}）"
           showHome()
         },
@@ -260,7 +319,7 @@ class MainActivity : Activity() {
       button("代客点服务") { showServiceOrderCreate() },
       button("我的服务收入") { showMyServiceOrders() },
       button("主管排班(需排班权限)") { showShiftManage() },
-      button("员工注册申请(店长/HR 代提交)") { showStaffRegistration() },
+      button("商户员工注册申请（商户代提交）") { showStaffRegistration() },
       button("我的资料(个人信息)") { showMyProfile() },
       button("重新登录") { logoutAndRestart() },
     )
@@ -786,7 +845,7 @@ class MainActivity : Activity() {
     runBackground(
       action = { api.listMyShifts() },
       onSuccess = { shifts ->
-        status.text = "未来 7 天班次 ${shifts.size} 个"
+        status.text = "已发布班次 ${shifts.size} 个"
         list.text = if (shifts.isEmpty()) "暂无排班" else shifts.joinToString("\n\n") { s ->
           "${s.workDate}  ${s.startAt ?: "-"} ~ ${s.endAt ?: "-"}\n点位: " +
             (s.pointSpaceIds?.takeIf { it.isNotEmpty() }?.joinToString("、") ?: "未指定") +
@@ -802,52 +861,23 @@ class MainActivity : Activity() {
   }
 
   private fun showPunch() {
-    val tagInput = editText("点位标签(手机碰 NFC 标签自动填入,或扫码)")
-    nfcTarget = tagInput
-    val status = statusText(
-      if (nfcAdapter == null) "本机无 NFC:请用扫码打卡(点位贴二维码)"
-      else "把手机背面贴近点位 NFC 标签即可读取;严格考勤:晚于班次开始即迟到、早于结束即早退",
-    )
-    val scanButton = button("扫码读取点位标签") { launchScan(tagInput) }
-    fun doPunch(type: String, label: String) {
-      val tag = tagInput.text.toString().trim()
-      val method = when {
-        tag.isEmpty() -> "manual"
-        nfcAdapter != null && nfcTarget === tagInput -> "nfc"
-        else -> "qr"
-      }
-      status.text = "正在打卡($label)…"
-      runBackground(
-        action = {
-          api.punchAttendance(AttendancePunchRequest(
-            idempotencyKey = "punch_${System.currentTimeMillis()}",
-            punchType = type,
-            method = method,
-            tagRef = tag.ifEmpty { null },
-            spaceId = tag.removePrefix("space:").ifEmpty { null },
-            deviceFingerprint = runCatching { DeviceKeystore.deviceFingerprintHash() }.getOrNull(),
-          ))
-        },
-        onSuccess = { record ->
-          val judgement = when (record.judgement) {
-            "normal" -> "正常"
-            "late" -> "迟到"
-            "early_leave" -> "早退"
-            "no_shift" -> "当日无班次"
-            else -> record.judgement ?: "-"
-          }
-          status.text = "$label 打卡成功：$judgement(服务器时间 ${record.punchedAt ?: "-"})"
-        },
-        onError = { status.text = "打卡失败：${friendly(it)}" },
-      )
+    val status = statusText("领取工作手机即记录上班；碰 NFC、扫码或取离充电设施，以最早一次为准。拔线由常驻服务监听并记录。")
+    val type = android.widget.Spinner(this).apply {
+      adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("上班领取", "下班"))
     }
-    val checkInButton = button("上班打卡") { doPunch("check_in", "上班") }
-    val checkOutButton = button("下班打卡") { doPunch("check_out", "下班") }
-    setContentView(screen(
-      title = "考勤打卡",
-      children = listOf(status, tagInput, scanButton, checkInButton, checkOutButton,
-        backButton()),
-    ))
+    fun record(method: String, tag: String) {
+      if (tag.isBlank()) { status.text = "未读取到点位标签，请重试"; return }
+      recordWorkPhoneReceipt(method, tag, if (method == "nfc" || type.selectedItemPosition == 0) "check_in" else "check_out", status)
+    }
+    nfcResult = { tag -> record("nfc", tag) }
+    val scan = button("扫描点位二维码并记录") {
+      scanTarget = null
+      scanResult = { tag -> record("qr", tag) }
+      IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+        .setPrompt("对准工作手机领取点位二维码").setBeepEnabled(true).initiateScan()
+    }
+    setContentView(screen(title = "考勤打卡", children = listOf(status, type,
+      statusText(if (nfcAdapter == null) "本机不支持 NFC，请扫码。" else "碰 NFC 标签只记录上班领取；下班请选择“下班”后扫码。"), scan, backButton())))
   }
 
   private fun showShiftManage() {
@@ -857,8 +887,8 @@ class MainActivity : Activity() {
     val endAt = editText("结束(2026-07-03T18:30:00Z)")
     val points = editText("点位,逗号分隔(可空)")
     val note = editText("备注(可空)")
-    val status = statusText("主管排班:同员工同开始时刻重复提交=覆盖修改;需主管排班权限")
-    val submitButton = button("保存排班") {
+    val status = statusText("排班提交上一级审批后发布；修改仅限原发起人在班次开始前申请")
+    val submitButton = button("提交排班审批") {
       val u = userId.text.toString().trim()
       val d = workDate.text.toString().trim()
       val st = startAt.text.toString().trim()
@@ -877,7 +907,7 @@ class MainActivity : Activity() {
             note = note.text.toString().trim().ifEmpty { null },
           ))
         },
-        onSuccess = { s -> status.text = "已保存：${s.userId} ${s.workDate} ${s.startAt}~${s.endAt}" },
+        onSuccess = { s -> status.text = "已提交，等待上一级批准后发布。审批编号：${s.reviewId ?: "-"}" },
         onError = { status.text = "保存失败：${friendly(it)}" },
       )
     }
@@ -1166,28 +1196,65 @@ class MainActivity : Activity() {
     ))
   }
 
-  private fun showStaffRegistration() {
-    val name = editText("新员工姓名")
-    val projectId = editText("综合体")
-    val status = statusText("店长/HR 在自己手机上代新员工提交注册申请;后台审批通过后账号生效。")
-    val submitButton = button("提交注册申请") {
-      val n = name.text.toString().trim()
-      val pj = projectId.text.toString().trim()
-      if (n.isEmpty() || pj.isEmpty()) { status.text = "请填姓名与综合体"; return@button }
+  /** U01-007（PGM L579 / BSM L935）：公司员工在本人私人手机上注册；本机 Keystore 生成的设备公钥与指纹随申请提交，服务端在登记时绑定本人。 */
+  private fun showStaffSelfRegistration() {
+    val name = editText("姓名")
+    val phone = editText("手机号")
+    val idDoc = editText("证件号码")
+    val merchant = editText("自营商户编号（公司总部员工留空）")
+    val company = android.widget.Spinner(this)
+    var companies: List<StaffRegistrationCompany> = emptyList()
+    val status = statusText("选择所属公司并提交资料；本机将生成并随申请绑定该手机专属的设备标识（Keystore 公钥/指纹）。公司审批通过后，用本机登录。")
+    val requestKey = java.util.UUID.randomUUID().toString()
+    val submit = button("提交本人注册申请") {
+      val selected = companies.getOrNull(company.selectedItemPosition)
+      if (selected == null || name.text.toString().trim().isEmpty()) { status.text = "请选择公司并填写姓名"; return@button }
+      val fingerprint = DeviceKeystore.deviceFingerprintHash()
+      val request = StaffSelfRegistrationRequest(requestKey, selected.id, name.text.toString().trim(),
+        DeviceKeystore.devicePublicKeyBase64(), fingerprint,
+        merchant.text.toString().trim().ifEmpty { null }, phone.text.toString().trim().ifEmpty { null }, idDoc.text.toString().trim().ifEmpty { null })
       runBackground(
-        action = {
-          api.submitStaffRegistration(StaffRegistrationSubmitRequest(
-            idempotencyKey = "byod_reg_${System.currentTimeMillis()}",
-            projectId = pj, name = n, operatorNote = "BYOD 手机代提交"))
+        action = { api.submitStaffSelfRegistration(request) },
+        onSuccess = { receipt ->
+          // 绑定成功：本机以登记的指纹作为设备编号、按私人手机终端码声明身份并签名（U01-001 只声明一次）。
+          getSharedPreferences("private_phone", MODE_PRIVATE).edit().putString("device_id", fingerprint).apply()
+          api.deviceId = fingerprint
+          api.terminalType = STAFF_PRIVATE_PHONE
+          status.text = "申请已提交，本机设备标识已随申请绑定；等待所属公司审批，通过后用本机登录。申请编号：${receipt.id}"
         },
-        onSuccess = { p -> status.text = "已提交：${p.name ?: n}(状态 ${p.status?.let { staffStatusZh(it) } ?: "待审批"})" },
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
     }
-    setContentView(screen(
-      title = "员工注册申请",
-      children = listOf(status, name, projectId, submitButton, backButton()),
-    ))
+    runBackground(
+      action = { api.listStaffRegistrationCompanies() },
+      onSuccess = { choices -> companies = choices; company.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, choices.map { it.name }) },
+      onError = { status.text = "公司列表读取失败：${friendly(it)}" },
+    )
+    setContentView(screen(title = "公司员工自助注册（私人手机）", children = listOf(status, company, name, phone, idDoc, merchant, submit, button("返回登录") { showLogin() })))
+  }
+
+  private fun showStaffRegistration() {
+    val name = editText("新员工姓名")
+    val projectId = editText("所属项目编号")
+    val merchantId = editText("本商户编号")
+    val phone = editText("员工手机号")
+    val idDoc = editText("员工证件号码")
+    val status = statusText("商户代员工提交资料，由对应域公司审批。自营商户员工请在本人私人手机安装本应用后，从登录页「公司员工自助注册（私人手机）」提交。")
+    val requestKey = java.util.UUID.randomUUID().toString()
+    val submitButton = button("提交商户员工注册申请") {
+      val n = name.text.toString().trim()
+      val pj = projectId.text.toString().trim()
+      val merchant = merchantId.text.toString().trim()
+      if (n.isEmpty() || pj.isEmpty() || merchant.isEmpty()) { status.text = "请填姓名、项目与商户编号"; return@button }
+      val request = StaffRegistrationSubmitRequest(requestKey, pj, n, "商户手机代提交", merchant,
+        phone.text.toString().trim().ifEmpty { null }, idDoc.text.toString().trim().ifEmpty { null })
+      runBackground(
+        action = { api.submitStaffRegistration(request) },
+        onSuccess = { p -> status.text = "已提交：${p.name ?: n}，等待对应域公司审批" },
+        onError = { status.text = "提交失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(title = "商户员工注册申请", children = listOf(status, name, projectId, merchantId, phone, idDoc, submitButton, backButton())))
   }
 
   // ===========================================================================
@@ -1230,17 +1297,22 @@ class MainActivity : Activity() {
       status.text = "正在绑定…"
       runBackground(
         action = {
-          workflow.bindDevice(
+          // U01-006：平板 POS 与工作手机同样写入设备编号并登记签名公钥，enforce 下写请求才有签名；类型码用服务端闭集 tablet。
+          val binding = workflow.bindDevice(
             BindDeviceRequest(
               deviceId = dev,
-              terminalType = "bar_pos",
+              terminalType = "tablet",
               bindingScope = "space",
               boundSpaceId = bar,
             ),
           )
+          api.registerDeviceSigningKey(dev, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString())
+          binding
         },
         onSuccess = { binding ->
-          posPrefs.edit().putString("bar_id", bar).apply()
+          posPrefs.edit().putString("bar_id", bar).putString("device_id", dev).apply()
+          api.deviceId = dev
+          api.terminalType = "tablet"
           posBarId = bar
           status.text = "绑定完成：${binding.deviceCode}（${deviceStatusZh(binding.status)}）"
           showPosTables()
@@ -1535,6 +1607,7 @@ class MainActivity : Activity() {
 
   private fun screen(title: String, children: List<View>, root: Boolean = false, secure: Boolean = false): View {
     onRootScreen = root
+    if (title != "考勤打卡") nfcResult = null
     // 防截屏:敏感屏(薪资/考勤/服务分账)设 FLAG_SECURE 挡截图/录屏/最近任务缩略图;
     // 因是单 Activity 多屏切换,每次进屏按敏感与否设/清标记,离开敏感屏即恢复可截屏。
     if (secure) {
@@ -1742,7 +1815,7 @@ class MainActivity : Activity() {
           "rejected" -> "已驳回"; "suspended" -> "已停用"
           else -> p.registrationStatus ?: "-"
         }
-        status.text = "档案状态: $reg / ${staffStatusZh(p.status)}(手机、证件仅存不可逆加密，不可回显)"
+        status.text = "档案状态: $reg / ${staffStatusZh(p.status)}(手机、证件加密存放，界面只显示脱敏)"
       },
       onError = { status.text = "拉取失败：${friendly(it)}(本账号可能无员工档案)" },
     )

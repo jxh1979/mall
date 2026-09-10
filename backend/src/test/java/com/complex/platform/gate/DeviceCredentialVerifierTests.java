@@ -1,5 +1,7 @@
 package com.complex.platform.gate;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -59,8 +61,7 @@ class DeviceCredentialVerifierTests {
         when(deviceRepo.findByDeviceId(DEVICE)).thenReturn(Optional.of(device("staff_work_phone", "bound")));
         when(authz.currentActor()).thenReturn(new AccessActor("u1", "user", "staff", "org", null, "active"));
         when(staffRepo.findProfileByUserId("u1")).thenReturn(Optional.of(profile()));
-        when(staffRepo.findActiveCredential("sp1"))
-                .thenReturn(Optional.of(credential(pubB64)));
+        when(signingKeyStore.findActivePublicKey(DEVICE)).thenReturn(Optional.of(pubB64));
     }
 
     private DeviceCredentialVerifier verifier(String defaultMode) {
@@ -91,11 +92,20 @@ class DeviceCredentialVerifierTests {
 
     @Test
     void nonDeviceBoundTypePassesThrough() {
+        // U07-003/U12-005：无设备号的写请求 fail-close——自报 web 且无 Cookie 会话在 enforce 下拒；有 Cookie 会话才以未验签态放行。
+        MockHttpServletRequest bare = new MockHttpServletRequest("POST", "/api/v1/services/orders");
+        bare.addHeader("X-Terminal-Type", "web");
+        assertThatThrownBy(() -> verifier("enforce").verify(bare))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
         MockHttpServletRequest r = new MockHttpServletRequest("POST", "/api/v1/services/orders");
         r.addHeader("X-Terminal-Type", "web");
+        r.setCookies(new jakarta.servlet.http.Cookie("admin_access_token", "session"));
         TerminalIdentityHolder.VerifiedTerminal vt = verifier("enforce").verify(r);
         assertThat(vt.terminalType()).isEqualTo("web");
         assertThat(vt.verified()).isFalse();
+        MockHttpServletRequest unknown = new MockHttpServletRequest("POST", "/api/v1/services/orders");
+        assertThatThrownBy(() -> verifier("enforce").verify(unknown))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
     }
 
     @Test
@@ -106,6 +116,14 @@ class DeviceCredentialVerifierTests {
         assertThat(vt.verified()).isTrue();
         assertThat(vt.terminalType()).isEqualTo("staff_work_phone");
         assertThat(vt.deviceId()).isEqualTo(DEVICE);
+    }
+
+    @Test
+    void privatePhoneKeyCannotReplaceWorkPhoneKey() throws Exception {
+        when(signingKeyStore.findActivePublicKey(DEVICE)).thenReturn(Optional.empty());
+        when(staffRepo.findActiveCredential("sp1")).thenReturn(Optional.of(credential(pubB64)));
+        assertThatThrownBy(() -> verifier("enforce").verify(signedRequest("POST", NOW, "n1", sign("POST", NOW, "n1"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
     }
 
     @Test
@@ -239,6 +257,8 @@ class DeviceCredentialVerifierTests {
         org.springframework.mock.web.MockHttpServletRequest r =
                 new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/services/orders/o1/mark-paid");
         r.addHeader("X-Terminal-Type", "web");
+        // U07-003：web 写请求的证明是不可伪造的 Cookie 会话，不是自报头。
+        r.setCookies(new jakarta.servlet.http.Cookie("admin_access_token", "session"));
         TerminalIdentityHolder.VerifiedTerminal vt = verifierWith("grace", "enforce", "").verify(r);
         assertThat(vt.terminalType()).isEqualTo("web");
         assertThat(vt.verified()).isFalse();

@@ -1,3 +1,4 @@
+// 文件版本：V0.03
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +20,10 @@ const directColumns = [
 ];
 
 const inheritedRules = [
+  { pattern: /^staff_shift_revisions$/, source: "review_id/shift_id", path: "review_id -> supervisor_reviews; published shift_id -> staff_shifts -> staff_profiles company/merchant scope" },
+  { pattern: /^staff_locker_records$/, source: "staff_profile_id", path: "staff_profile_id -> staff_profiles -> current authenticated employee; cabinet and slot identify storage location" },
+  { pattern: /^staff_locker_scan_tokens$/, source: "staff_profile_id", path: "staff_profile_id -> staff_profiles -> employee company/merchant scope; one-time scan token presented to the kiosk (U05-006)" },
+  { pattern: /^staff_shift_covers$/, source: "shift_id", path: "shift_id -> staff_shifts -> staff_profiles company/merchant scope; cover_user_id must be in the same scope (U06-004)" },
   { pattern: /^bar_order_items$/, source: "order_id", path: "order_id -> bar_orders -> table_id/bar_id -> venue/project scope" },
   { pattern: /^bar_bill/, source: "bill/order linkage", path: "bill/order linkage -> bar_orders -> venue/project scope" },
   { pattern: /^bar_production_ticket/, source: "order_id", path: "order_id -> bar_orders -> venue/project scope" },
@@ -65,6 +70,7 @@ const globalTables = new Set([
   "platform_migration_baseline",
   // 集中数据清理台账（Tier-D）：平台级操作台账，记谁发起/审批/删了几条；非租户数据边界。
   "data_cleanup_jobs",
+  "staff_penalty_cap_revisions",
 ]);
 
 function readMigrations() {
@@ -141,6 +147,11 @@ const ANALYTICS_SCOPE_OVERRIDES = new Map([
 ]);
 
 function classify(table, definition) {
+  if (table === "staff_policy_settings") return {
+    scope_type: "direct", scope_source: "scope_id",
+    scope_path: "shift_visible_days: scope_id = employer business entity; payroll_penalty_cap_bps: scope_id = global",
+    multi_complex_note: "employer visibility settings scoped at source; global cap changes require HR, finance, legal and top authority approval",
+  };
   const overridden = ANALYTICS_SCOPE_OVERRIDES.get(table);
   if (overridden) return overridden;
   const direct = findColumn(definition, directColumns);
@@ -189,10 +200,11 @@ function buildCsv() {
     return {
       table_name: table,
       ...classification,
+      file_version: "V0.01",
       status: "covered",
     };
   });
-  const headers = ["table_name", "scope_type", "scope_source", "scope_path", "multi_complex_note", "status"];
+  const headers = ["table_name", "scope_type", "scope_source", "scope_path", "multi_complex_note", "file_version", "status"];
   return `${headers.join(",")}\n${rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")).join("\n")}\n`;
 }
 

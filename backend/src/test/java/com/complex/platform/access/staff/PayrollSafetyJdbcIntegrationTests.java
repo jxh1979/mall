@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -42,8 +44,11 @@ class PayrollSafetyJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired com.complex.platform.access.AccessRepository access;
+
     @BeforeEach
     void setUp() {
+        StaffTestActors.grant(jdbcTemplate,access,"usr_admin","project_main");
         authenticateAsPlatformAdmin();
     }
 
@@ -170,10 +175,10 @@ class PayrollSafetyJdbcIntegrationTests {
 
     private void seedProfile(String projectId, String userId) {
         jdbcTemplate.update("""
-                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash,
+                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name, company_id,
                         registration_status, status, created_at, updated_at)
-                VALUES (?, ?, NULL, ?, 'scoped', 'sha256:p', 'sha256:i', 'approved', 'active', now(), now())
-                """, "stf_" + key(), projectId, userId);
+                VALUES (?, ?, NULL, ?, 'scoped', ?, 'approved', 'active', now(), now())
+                """, "stf_" + key(), projectId, userId, projectId);
     }
 
     private Long statementTotal(String month, String userId) {

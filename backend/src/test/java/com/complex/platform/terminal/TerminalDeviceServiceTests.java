@@ -635,6 +635,7 @@ class TerminalDeviceServiceTests {
     }
 
     private DeviceBindRequest bindRequest(String idempotencyKey, String deviceId) {
+        // U07-001：工作手机领用即绑定持有员工（staff_id 必填）。
         return new DeviceBindRequest(
                 idempotencyKey,
                 "bind",
@@ -645,7 +646,8 @@ class TerminalDeviceServiceTests {
                 "point_1",
                 "mdm-" + deviceId,
                 null,
-                null
+                null,
+                "staff_1"
         );
     }
 
@@ -1105,13 +1107,13 @@ class TerminalDeviceServiceTests {
         seedMerchant("merchant_a", null);
         DeviceBindingResponse response = service.bindDevice(new DeviceBindRequest(
                 "bind-with-merchant", "bind", List.of(), "P0-ANDROID-9", "staff_work_phone",
-                "space", "point_1", "mdm-P0-ANDROID-9", null, "merchant_a"));
+                "space", "point_1", "mdm-P0-ANDROID-9", null, "merchant_a", "staff_1"));
 
         assertThat(response.merchantId()).isEqualTo("merchant_a");
 
         assertThatThrownBy(() -> service.bindDevice(new DeviceBindRequest(
                 "bind-with-bad-merchant", "bind", List.of(), "P0-ANDROID-10", "staff_work_phone",
-                "space", "point_1", "mdm-P0-ANDROID-10", null, "no_such_merchant")))
+                "space", "point_1", "mdm-P0-ANDROID-10", null, "no_such_merchant", "staff_1")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("MERCHANT_NOT_FOUND"));
     }
@@ -1122,7 +1124,7 @@ class TerminalDeviceServiceTests {
         seedMerchant("merchant_a", null);
         service.bindDevice(new DeviceBindRequest(
                 "bind-keep-1", "bind", List.of(), "P0-ANDROID-11", "staff_work_phone",
-                "space", "point_1", "mdm-P0-ANDROID-11", null, "merchant_a"));
+                "space", "point_1", "mdm-P0-ANDROID-11", null, "merchant_a", "staff_1"));
         service.returnDevice(new DeviceReturnRequest(
                 "return-keep-1", "note", List.of(), "P0-ANDROID-11", "staff_1", false, "shift done"));
 

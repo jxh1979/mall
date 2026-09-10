@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import fs from "node:fs";
 import path from "node:path";
 
@@ -61,6 +62,7 @@ function taskGroup(tag, operationId) {
   if (tag === "analytics") return "ANA-风控分析";
   if (tag === "system") return "SYS-系统健康";
   if (tag === "ops") return "OPS-生产前置";
+  if (tag === "staff") return "STAFF-员工";
   return "P0-待归类";
 }
 
@@ -170,7 +172,9 @@ const exampleRequestBodies = Array.isArray(exampleCoverage.request_bodies)
   : "-";
 const exampleResponses = Array.isArray(exampleCoverage.responses) ? exampleCoverage.responses.join(", ") : "-";
 
-const document = `# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.1
+// U17-007：标题版本跟随契约源 info.version（本文件是 openapi-p0.json 的投影；从现文件回读会让内容变化不入账）。
+const documentVersion = String(openapi.info?.version ?? "").match(/V?\d+\.\d+/) ? `V${String(openapi.info.version).replace(/^V/, "")}` : "V0.01";
+const document = `# P0 OpenAPI 权限、事件、任务追溯收口附录 ${documentVersion}
 
 ## 1. 文档定位
 
@@ -264,11 +268,7 @@ Given 文档中仍保留 \`/api/admin/*\`、\`/api/mobile/*\`、\`/api/integrati
 | 售票型与非售票型一体机能力混用 | 按 \`kiosk_mode\`、设备绑定、能力开关和 \`x-terminal-allowed\` 拒绝 |
 | 旧路径表格与 OpenAPI 冲突 | 旧路径表格只作为历史能力名，正式实现以 OpenAPI 和本文为准 |
 
-## 9. 变更记录
-
-| 日期 | 版本 | 说明 |
-|---|---|---|
-| 2026-06-13 | V0.1 | 新增由 OpenAPI 反向生成的权限、事件、任务追溯收口附录，补齐本轮对抗式文档审计发现的执行缺口 |
+版本说明：本文档版本与 \`docs/openapi/openapi-p0.json\` 的 \`info.version\` 同步，契约变更即版本递增；不另维护变更记录表（历史见 OpenAPI 与 git 记录）。
 `;
 
 function normalize(value) {

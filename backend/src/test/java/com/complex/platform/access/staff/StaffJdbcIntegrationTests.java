@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.04
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -30,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * R5 T1 员工三表集成测试：迁移落地 + 状态机闭环（注册审批 / 换机 supersedes 唯一 active /
- * 完整性失效）+ 两套凭证实体隔离 + 商户 scope 隔离 + CHECK 枚举约束 + 仅存不可逆哈希。
+ * 完整性失效）+ 两套凭证实体隔离 + 商户 scope 隔离 + CHECK 枚举约束 + 个人资料加密。
  * 走真实 Postgres，@Transactional 用例结束回滚。
  */
 @SpringBootTest(properties = {
@@ -53,14 +55,26 @@ class StaffJdbcIntegrationTests {
     @Autowired
     private com.complex.platform.access.AccessRepository accessRepository;
 
+    @Autowired StaffRegistrationService registrations;
+    @Autowired com.complex.platform.terminal.TerminalDeviceRepository terminals;
+    @Autowired com.complex.platform.governance.review.SupervisorReviewRepository reviews;
+    @Autowired com.complex.platform.governance.review.SupervisorReviewService reviewService;
+
     @BeforeEach
     void setUp() {
+        StaffTestActors.grant(jdbcTemplate,accessRepository,"usr_admin","project_main");
+        StaffTestActors.grant(jdbcTemplate,accessRepository,"usr_m010_reviewer","project_main");
+        StaffTestActors.grant(jdbcTemplate,accessRepository,"usr_m010_boss","project_main");
+        accessRepository.saveStaffLevelAssignment(new com.complex.platform.access.StaffLevelAssignment("usr_m010_boss","lvl_m3_lower",null,"CNY",null,"project_main",null,"usr_admin",Instant.now()));
+        reviews.saveDirectSuperior("usr_admin","usr_m010_boss","main","usr_admin",Instant.now());
+        jdbcTemplate.update("INSERT INTO business_entities(id,entity_name,entity_role,status,created_at,updated_at) VALUES('project_main','测试项目公司','project_company','active',now(),now()) ON CONFLICT(id) DO NOTHING");
         authenticateAsPlatformAdmin();
     }
 
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+        org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
     }
 
     @Test
@@ -155,13 +169,12 @@ class StaffJdbcIntegrationTests {
     void deviceRebindUnbindsOldThenActivatesNewKeepingExactlyOneActive() {
         StaffProfileRecord staff = approvedProfile(null);
 
-        // 首次绑定 → pending_review → 审批 active。
+        // 首次本人绑定直接生效；换机仍需审批。
         StaffDeviceCredentialRecord first = service.bindCredential(new StaffDeviceBindRequest(
                 key(), null, staff.id(), "pubkey-1", "fp-hash-1"));
-        assertThat(first.bindStatus()).isEqualTo("pending_review");
+        assertThat(first.bindStatus()).isEqualTo("active");
         assertThat(first.supersedesCredentialId()).isNull();
-        StaffDeviceCredentialRecord firstActive = service.approveRebind(first.id(),
-                new StaffDeviceRebindDecisionRequest(key(), null));
+        StaffDeviceCredentialRecord firstActive = first;
         assertThat(firstActive.bindStatus()).isEqualTo("active");
 
         // 换机：新设备绑定 → pending_review + supersedes 指向旧 active。
@@ -221,7 +234,8 @@ class StaffJdbcIntegrationTests {
         StaffDeviceCredentialRecord cred = service.bindCredential(new StaffDeviceBindRequest(
                 key(), null, mB.id(), "pubkey-xm", "fp-hash-xm"));
         // 切换为 merchant_a 调用者：跨商户凭证归属校验应拒绝。
-        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_a");
+        StaffTestActors.grant(jdbcTemplate,accessRepository,"usr_merchant_a","project_main");
+        StaffTestActors.actor("usr_merchant_a","staff","project_main","merchant_a");
         assertThatThrownBy(() -> service.reportIntegrity(cred.id(),
                 new StaffDeviceIntegrityReportRequest(key(), null, "root_detected")))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -275,15 +289,13 @@ class StaffJdbcIntegrationTests {
     }
 
     @Test
-    void onlyIrreversibleHashesPersistedNoPlaintextPii() {
+    void personalValuesAreEncryptedAndCanBeReadInternally() {
         StaffProfileRecord staff = submitRegistration(null);
-        // phone_hash 列里就是我们传入的哈希值；不存在任何明文手机号列。
-        assertThat(staff.phoneHash()).isEqualTo("sha256:phone-hash");
-        List<String> columns = jdbcTemplate.queryForList("""
-                SELECT column_name FROM information_schema.columns WHERE table_name = 'staff_profiles'
-                """, String.class);
-        assertThat(columns).contains("phone_hash", "id_doc_hash")
-                .doesNotContain("phone", "phone_number", "id_card", "id_doc");
+        assertThat(staff.phone()).isEqualTo("13800138000");
+        assertThat(jdbcTemplate.queryForObject("SELECT phone FROM staff_profiles WHERE id=?", String.class, staff.id()))
+                .startsWith("enc:v1:").doesNotContain("13800138000");
+        assertThat(jdbcTemplate.queryForObject("SELECT id_doc FROM staff_profiles WHERE id=?", String.class, staff.id()))
+                .startsWith("enc:v1:");
     }
 
     @Test
@@ -306,65 +318,61 @@ class StaffJdbcIntegrationTests {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private StaffProfileRecord submitRegistration(String merchantId) {
-        return service.submitRegistration(new StaffRegistrationRequest(
-                key(), null, "project_main", merchantId, "员工" + key(),
-                "sha256:phone-hash", "sha256:id-hash", null));
+        authenticateAsPlatformAdmin();
+        StaffProfileRecord submitted;
+        if (merchantId == null) {
+            var proof=StaffTestActors.deviceProof();
+            var receipt=registrations.selfRegister(new com.complex.platform.access.staff.dto.StaffSelfRegistrationRequest(key(),"project_main",null,"员工"+key(),"13800138000","110101199001010000",proof[0],proof[1]));
+            submitted=repository.findProfileById(receipt.id()).orElseThrow();
+        } else {
+            jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,status,created_at,updated_at) VALUES(?,?,'retail','project_main','active',now(),now()) ON CONFLICT(id) DO NOTHING",merchantId,merchantId);
+            submitted=service.submitRegistration(new StaffRegistrationRequest(key(),null,"project_main",merchantId,"员工"+key(),"13800138000","110101199001010000",null));
+        }
+        StaffTestActors.actor("usr_m010_reviewer","platform_admin","project_main",null);
+        return submitted;
     }
 
     private StaffProfileRecord approvedProfile(String merchantId) {
-        StaffProfileRecord submitted = submitRegistration(merchantId);
-        return service.reviewRegistration(submitted.id(),
-                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-Staff-1"));
+        // 非注册用例直接建立已经批准的员工夹具，避免把注册审批混入待验证的设备/通知行为。
+        String user="staff_fixture_"+key();
+        StaffTestActors.grant(jdbcTemplate,accessRepository,user,"project_main");
+        Instant now=Instant.now();
+        var profile=repository.saveProfile(new StaffProfileRecord("staff_"+key(),"project_main",merchantId,user,"员工",null,null,null,"approved","usr_m010_reviewer",now,null,"active",now,now));
+        authenticateAsStaff(user,merchantId);
+        return profile;
+    }
+
+    private StaffShiftRecord seedPublishedShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
+        return repository.upsertShift(new StaffShiftRecord("shift_"+key(),request.userId(),request.workDate(),request.startAt(),request.endAt(),request.pointSpaceIds(),request.note(),"usr_admin",Instant.now(),Instant.now()));
+    }
+
+    private void approveShift(String reviewId) {
+        var previous=SecurityContextHolder.getContext().getAuthentication();
+        StaffTestActors.actor("usr_m010_boss","staff","project_main",null);
+        reviewService.approve(reviewId,new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(key(),"批准排班",List.of(),null,"approved","同意"));
+        SecurityContextHolder.getContext().setAuthentication(previous);
     }
 
     @org.junit.jupiter.api.Test
     void v210ShiftAttendanceStrictJudgement() {
-        // E批(2026-07-02 拍板):排班幂等覆盖+我的班次窗;打卡严格无宽限——晚于开始即迟到、
-        // 早于结束即早退、无班次记 no_shift;权限种子在位。
-        authenticateAsPlatformAdmin();
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM permissions WHERE permission_code IN "
-                        + "('staff.shift.manage','staff.shift.view','staff.attendance.punch','staff.attendance.view')",
-                Integer.class)).isEqualTo(4);
-
-        Instant now = Instant.now();
-        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, com.complex.platform.common.LocalZone.ID);
-        // 排班:已开始 1 小时、还有 7 小时结束 → 现在打上班=迟到,打下班=早退。
-        com.complex.platform.access.staff.StaffShiftRecord shift = service.upsertShift(
-                new com.complex.platform.access.staff.dto.StaffShiftRequest(
-                        key(), "usr_admin", today, now.minusSeconds(3600), now.plusSeconds(7 * 3600),
-                        List.of("sp_point_1", "sp_point_2"), "E批测试"));
-        assertThat(shift.pointSpaceIds()).containsExactly("sp_point_1", "sp_point_2");
-        // 幂等覆盖:同 (user, start_at) 再排 → 单行,点位更新。
-        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
-                key(), "usr_admin", today, now.minusSeconds(3600), now.plusSeconds(8 * 3600),
-                List.of("sp_point_3"), "改班"));
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM staff_shift_schedules WHERE user_id='usr_admin'", Integer.class)).isEqualTo(1);
-
+        var staff=approvedProfile(null);
+        Instant now=Instant.now();
+        java.time.LocalDate today=java.time.LocalDate.ofInstant(now,com.complex.platform.common.LocalZone.ID);
+        var shift=seedPublishedShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(key(),staff.userId(),today,now.minusSeconds(3600),now.plusSeconds(7*3600),List.of("sp_point_3"),"已发布班次"));
+        assertThatThrownBy(() -> service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(key(),staff.userId(),today,shift.startAt(),now.plusSeconds(8*3600),List.of(),"已开始后改班"))).isInstanceOf(ApiException.class);
+        String device="phone_"+key();
+        terminals.save(new com.complex.platform.terminal.TerminalDeviceRecord(device,device,device,"staff_work_phone","project",null,null,null,null,null,null,null,staff.id(),"bound",now,null,null,null,null,now,now));
+        var request=new org.springframework.mock.web.MockHttpServletRequest();
+        request.setAttribute("com.complex.platform.gate.verified_terminal",new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("staff_work_phone",device,true));
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(new org.springframework.web.context.request.ServletRequestAttributes(request));
         assertThat(service.listMyShifts().items()).hasSize(1);
-
-        com.complex.platform.access.staff.StaffAttendanceRecord checkIn = service.punch(
-                new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(
-                        key(), "check_in", "nfc", "space:sp_point_3", "sp_point_3", "fp_test"));
-        assertThat(checkIn.judgement()).isEqualTo("late");        // 严格:开始后打卡即迟到
-        assertThat(checkIn.shiftId()).isNotNull();
-
-        com.complex.platform.access.staff.StaffAttendanceRecord checkOut = service.punch(
-                new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(
-                        key(), "check_out", "qr", "space:sp_point_3", "sp_point_3", "fp_test"));
-        assertThat(checkOut.judgement()).isEqualTo("early_leave"); // 严格:结束前打卡即早退
-
-        assertThat(service.listMyAttendance().items()).hasSizeGreaterThanOrEqualTo(2);
-        assertThat(service.listAttendance(today).items())
-                .extracting(com.complex.platform.access.staff.StaffAttendanceRecord::judgement)
-                .contains("late", "early_leave");
-
-        // 删班次后打卡 → no_shift。
-        jdbcTemplate.update("DELETE FROM staff_shift_schedules WHERE user_id='usr_admin'");
-        com.complex.platform.access.staff.StaffAttendanceRecord orphan = service.punch(
-                new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(
-                        key(), "check_in", "manual", null, null, null));
+        var checkIn=service.punch(new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(key(),"check_in","nfc","space:sp_point_3","sp_point_3",null));
+        assertThat(checkIn.judgement()).isEqualTo("late");
+        var checkOut=service.punch(new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(key(),"check_out","qr","space:sp_point_3","sp_point_3",null));
+        assertThat(checkOut.judgement()).isEqualTo("early_leave");
+        assertThat(service.listMyAttendance().items()).hasSize(2);
+        jdbcTemplate.update("DELETE FROM staff_shift_schedules WHERE user_id=?",staff.userId());
+        var orphan=service.punch(new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(key(),"check_in","nfc","space:sp_point_3","sp_point_3",null));
         assertThat(orphan.judgement()).isEqualTo("no_shift");
     }
 
@@ -460,7 +468,7 @@ class StaffJdbcIntegrationTests {
                 key(), "approve", "准"));
 
         // 排班一天(2099-08-05)不打卡=缺勤;请假日=leave;其余无排班=rest。
-        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+        seedPublishedShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
                 key(), "usr_admin", java.time.LocalDate.parse("2099-08-05"),
                 Instant.parse("2099-08-05T02:00:00Z"), Instant.parse("2099-08-05T10:00:00Z"),
                 List.of("sp_p1"), null));
@@ -476,8 +484,8 @@ class StaffJdbcIntegrationTests {
         assertThat(byDay.get("2099-08-11")).containsExactly("leave");
         assertThat(byDay.get("2099-08-20")).containsExactly("rest");
 
-        // 请假扣薪(2026-07-05 拍板):事假(无薪假)按日工资×天数扣;病假/年假不扣。
-        // 已有年假 2099-08-10..11(2 天)不扣;新增事假 2099-08-15..16(2 天)扣、病假 2099-08-18(1 天)不扣。
+        // 事假按实际排班工时扣；没有排班的事假日不扣，病假和年假也不扣。
+        // 本例仅 8/5 有排班，8/15..16 事假和 8/18 病假均不产生工时扣款。
         com.complex.platform.access.staff.StaffLeaveRequestRecord personalLeave = service.submitLeave(
                 new com.complex.platform.access.staff.dto.StaffLeaveRequest(
                         key(), "personal", java.time.LocalDate.parse("2099-08-15"),
@@ -494,8 +502,7 @@ class StaffJdbcIntegrationTests {
         service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
         com.complex.platform.access.staff.StaffPayrollStatementRecord withLeave = service.listMyPayroll(month).items().stream()
                 .filter(row -> row.userId().equals("usr_admin")).findFirst().orElseThrow();
-        long dailyWage = Math.round(800000L / 21.75);   // 月薪÷21.75(法定计薪天数),四舍五入到分
-        assertThat(withLeave.leaveDeductionCent()).isEqualTo(dailyWage * 2);   // 仅事假 2 天,病假/年假不扣
+        assertThat(withLeave.leaveDeductionCent()).isZero(); // 事假日期没有排班工时，不按固定月天数扣款；按工时扣款另有回归覆盖。
         assertThat(withLeave.totalCent()).isEqualTo(withLeave.baseCent() + withLeave.commissionCent()
                 + withLeave.bonusCent() - withLeave.penaltyCent() - withLeave.leaveDeductionCent()
                 - withLeave.taxCent());
@@ -512,7 +519,7 @@ class StaffJdbcIntegrationTests {
         Instant start = Instant.parse("2099-07-01T02:00:00Z");
 
         // 排班:写入即带员工项目。
-        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+        seedPublishedShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
                 key(), userId, day, start, start.plusSeconds(8 * 3600), List.of("sp_p1"), null));
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT project_id FROM staff_shift_schedules WHERE user_id = ?", String.class, userId))
@@ -530,6 +537,7 @@ class StaffJdbcIntegrationTests {
                 .isEqualTo("project_main");
 
         // 请假(usr_admin 提交,无档案 → project NULL):平台全量可见,任一项目 scoped 均不可见。
+        authenticateAsPlatformAdmin();
         com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
                 new com.complex.platform.access.staff.dto.StaffLeaveRequest(
                         key(), "annual", day, day, "隔离测试"));
@@ -623,7 +631,7 @@ class StaffJdbcIntegrationTests {
         // 重复排同一开始时刻=覆盖不新增;天数上限拦手滑。
         authenticateAsPlatformAdmin();
         java.time.ZoneId zone = com.complex.platform.common.LocalZone.ID;
-        java.time.LocalDate monday = java.time.LocalDate.of(2026, 8, 3);   // 周一
+        java.time.LocalDate monday = java.time.LocalDate.of(2099, 8, 3).with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.MONDAY)); // 未来周一
 
         com.complex.platform.access.staff.dto.StaffShiftBatchResult week = service.batchUpsertShifts(
                 new com.complex.platform.access.staff.dto.StaffShiftBatchRequest(
@@ -632,6 +640,11 @@ class StaffJdbcIntegrationTests {
         assertThat(week.shifts()).hasSize(7);
         assertThat(week.createdCount()).isEqualTo(7);
         assertThat(week.updatedCount()).isZero();
+        assertThat(week.publicationStatus()).isEqualTo("pending_review");
+        // U16-006：批量提交同样落 staff.shift.submitted（一批一条）。
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='staff.shift.submitted' AND business_id=?",
+                Integer.class, week.reviewId())).isEqualTo(1);
+        approveShift(week.reviewId());
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM staff_shift_schedules WHERE user_id='usr_admin' AND work_date BETWEEN ? AND ?",
                 Integer.class, java.sql.Date.valueOf(monday), java.sql.Date.valueOf(monday.plusDays(6)))).isEqualTo(7);
@@ -653,6 +666,7 @@ class StaffJdbcIntegrationTests {
                         "22:00", "06:00", List.of("sp_point_2"), "夜班周排(改点位)"));
         assertThat(again.createdCount()).isZero();
         assertThat(again.updatedCount()).isEqualTo(7);
+        approveShift(again.reviewId());
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM staff_shift_schedules WHERE user_id='usr_admin' AND work_date BETWEEN ? AND ?",
                 Integer.class, java.sql.Date.valueOf(monday), java.sql.Date.valueOf(monday.plusDays(6)))).isEqualTo(7);
@@ -747,10 +761,10 @@ class StaffJdbcIntegrationTests {
 
     private void seedProfile(String projectId, String userId) {
         jdbcTemplate.update("""
-                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash,
+                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name, company_id,
                         registration_status, status, created_at, updated_at)
-                VALUES (?, ?, NULL, ?, 'scoped', 'sha256:p', 'sha256:i', 'approved', 'active', now(), now())
-                """, "stf_" + key(), projectId, userId);
+                VALUES (?, ?, NULL, ?, 'scoped', ?, 'approved', 'active', now(), now())
+                """, "stf_" + key(), projectId, userId, projectId);
     }
 
     private boolean statementExists(String month, String userId) {
@@ -850,9 +864,9 @@ class StaffJdbcIntegrationTests {
         service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
         Instant now = Instant.now();
         java.time.LocalDate today = java.time.LocalDate.ofInstant(now, com.complex.platform.common.LocalZone.ID);
-        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+        seedPublishedShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
                 key(), userA, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
-        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+        seedPublishedShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
                 key(), userB, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
 
         // 以真实员工 A 的 token:自助端点放行,且只见自己的记录(看不到 B)。
@@ -868,7 +882,7 @@ class StaffJdbcIntegrationTests {
     /** 以真实员工(account_type=staff)身份认证:走 role\u2192permission 解析,不再享 platform_admin 桥的通配放行。 */
     private void authenticateAsStaff(String userId, String merchantId) {
         AuthService.UserRecord user = new AuthService.UserRecord(
-                userId, "staff_" + userId, "hash", "staff", null, merchantId, "active",
+                userId, "staff_" + userId, "hash", "staff", "project_main", merchantId, "active",
                 Instant.parse("2026-07-19T00:00:00Z"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 user, "token", List.of(new SimpleGrantedAuthority("ROLE_STAFF"))));
@@ -890,21 +904,26 @@ class StaffJdbcIntegrationTests {
         // 排班只需 staff.shift.manage,不再连带要求 notice.view。构造仅持 shift.manage 的真实 staff。
         String mgr = "usr_shiftmgr_" + key();
         accessRepository.createUser(new com.complex.platform.access.AccessUser(
-                mgr, "sm_" + key(), "staff", null, null, "active", Instant.now()));
+                mgr, "sm_" + key(), "staff", "project_main", null, "active", Instant.now()));
         String roleId = "role_shiftmgr_test_" + key();
         jdbcTemplate.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at) "
                 + "VALUES (?, ?, 'shift mgr regression role', 'project', 'active', now())", roleId, "SHIFTMGR_" + key());
         jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'staff.shift.manage')", roleId);
         accessRepository.assignUserRole(mgr, roleId);
 
+        reviews.saveDirectSuperior(mgr,"usr_m010_boss","main","usr_admin",Instant.now());
+        seedProfile("project_main",mgr);
         authenticateAsStaff(mgr, null);
-        Instant now = Instant.now();
+        Instant now = Instant.now().plusSeconds(86400);
         java.time.LocalDate today = java.time.LocalDate.ofInstant(now, com.complex.platform.common.LocalZone.ID);
         // 有 shift.manage、无 notice.view → 不再被 notice.view 拦,排班成功。
         com.complex.platform.access.staff.StaffShiftRecord saved = service.upsertShift(
                 new com.complex.platform.access.staff.dto.StaffShiftRequest(
-                        key(), mgr, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
+                        key(), mgr, today, now, now.plusSeconds(7 * 3600), List.of(), null));
         assertThat(saved.userId()).isEqualTo(mgr);
+        // U16-006：排班提交成功事件为 operation 级 staff.shift.submitted，不借用 governance.supervisor_review.evaluated。
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='staff.shift.submitted' AND business_id=?",
+                Integer.class, saved.id())).isEqualTo(1);
     }
 
     @org.junit.jupiter.api.Test

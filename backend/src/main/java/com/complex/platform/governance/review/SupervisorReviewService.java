@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.07
+// 文件版本：V0.10
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -36,6 +36,8 @@ public class SupervisorReviewService {
     private final AuditEventService auditEventService;
     // M087：审批链引擎（组织层级逐级节点链）。纯领域对象，随服务构造，不单独注入。
     private final ApprovalChainService chainService;
+    // U09-005：事件发布器必填注入——批准后的员工落地（U05 StaffApprovalService.afterDecision）依赖该事件，不得静默不发。
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // specific_role 策略的"指定角色"以审批人须经角色持有的权限码表达（双轨收口 §24.3）。
     // 默认沿用督导复核审批权限 governance.supervisor_review.approve（须来自角色，非临时授权），
@@ -47,6 +49,10 @@ public class SupervisorReviewService {
     static final String TAX_RULE_ADJUST_ACTION = "finance.tax_rule.adjust";
 
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
+            new SupervisorReviewPolicyRecord("staff_shift_publish", "staff.shift.publish", 0, 1, true, List.of("reason"), "active", "one_level_up"),
+            new SupervisorReviewPolicyRecord("staff_penalty_cap_adjust", "staff.payroll.penalty_cap.adjust", 0, 3, true,
+                    List.of("reason", "before_after"), "active", "top_authority", null,
+                    List.of("hr_review", "finance_review", "legal_review")),
             new SupervisorReviewPolicyRecord("manual_release_l2", "manual_release", 0, 2, true, List.of("operator_note", "evidence_attachment"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
             new SupervisorReviewPolicyRecord("bill_waiver_l3", "bill_waiver", 1, 3, true, List.of("reason", "evidence_attachment"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
             new SupervisorReviewPolicyRecord("refund_l2", "refund", 1, 2, true, List.of("reason"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
@@ -64,12 +70,14 @@ public class SupervisorReviewService {
             AuthorizationService authorizationService,
             IdempotencyService idempotencyService,
             SupervisorReviewRepository supervisorReviewRepository,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            org.springframework.context.ApplicationEventPublisher eventPublisher
     ) {
         this.authorizationService = authorizationService;
         this.idempotencyService = idempotencyService;
         this.supervisorReviewRepository = supervisorReviewRepository;
         this.auditEventService = auditEventService;
+        this.eventPublisher = java.util.Objects.requireNonNull(eventPublisher, "eventPublisher");
         this.chainService = new ApprovalChainService(supervisorReviewRepository, authorizationService);
     }
 
@@ -205,6 +213,12 @@ public class SupervisorReviewService {
                                 "组织层级未维护，审批链未生成；请平台管理员维护发起人的直接上级后重新生成审批链");
                     }
                     ApprovalChainNode node = resolveDecidableNode(pending, nodes, reviewerId, reviewerLevel);
+                    if ("staff.payroll.penalty_cap.adjust".equals(pending.actionType())
+                            && ApprovalChainNode.KIND_MASTER.equals(node.approverKind())
+                            && nodes.stream().anyMatch(n -> !ApprovalChainNode.MAIN_LINE.equals(n.lineCode())
+                                    && !ApprovalChainNode.APPROVED.equals(n.status()))) {
+                        throw ApiException.conflict("DEPARTMENT_REVIEWS_PENDING", "须先完成人力、财务、法务三审，再由顶层平台最终确认");
+                    }
                     requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
                     Instant now = Instant.now();
                     // M087-I2-02（PGM-1.7.1「任一人审批即完成该节点」）：节点裁决为 status='pending' 的比较并交换，先到先得；后到者被拒。
@@ -277,6 +291,7 @@ public class SupervisorReviewService {
                             request.idempotencyKey(),
                             Map.of("decision", outcome, "action_type", pending.actionType())
                     );
+                    eventPublisher.publishEvent(result);
                     return result;
                 },
                 SupervisorReviewDecisionRecord.class
@@ -612,7 +627,8 @@ public class SupervisorReviewService {
 
     private static boolean isMoneyAction(String actionType) {
         String type = actionType == null ? "" : actionType;
-        return type.startsWith("finance.") || type.endsWith(".money")
+        // U09-002：员工扣除上限是薪资安全阈值（BSM L1458、BSM-001 涉钱参数），与税费同按涉钱 1 个工作日。
+        return type.startsWith("finance.") || type.startsWith("staff.payroll.") || type.endsWith(".money")
                 || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
                 "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
     }

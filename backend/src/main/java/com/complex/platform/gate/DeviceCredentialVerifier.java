@@ -1,9 +1,13 @@
 package com.complex.platform.gate;
 
+import com.complex.platform.auth.AuthCookies;
+
+// 文件版本：V0.02
+
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
-import com.complex.platform.access.staff.StaffDeviceCredentialRecord;
 import com.complex.platform.access.staff.StaffProfileRecord;
+import com.complex.platform.access.staff.StaffDeviceCredentialRecord;
 import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
@@ -34,8 +38,8 @@ import org.springframework.web.util.WebUtils;
  * AUD-010 每请求设备凭证验签 + 服务端派生可信终端身份 + enforce 前置加固全套。
  *
  * <p>设备绑定型终端（staff_work_phone/tablet/kiosk）的<b>写</b>请求需对
- * {@code deviceId|timestamp|nonce|METHOD|path|sha256(body)} 的签名验签：staff_work_phone→员工 Keystore 公钥且
- * header deviceId 归属该员工（⑤）；kiosk/tablet→设备级签名公钥（{@code terminal_device_signing_keys}，②）。
+ * {@code deviceId|timestamp|nonce|METHOD|path|sha256(body)} 的签名验签：staff_work_phone→工作手机设备级公钥且
+ * header deviceId 归属该员工（⑤）；所有设备绑定型终端均使用设备级签名公钥（{@code terminal_device_signing_keys}，②）。
  * 验签量含 body SHA-256（④）；nonce 由拦截器落库防重放（③）。
  *
  * <p><b>2026-08-03 收口</b>：终端类型不再由自报的 {@code X-Terminal-Type} 决定入闸与否——带
@@ -54,7 +58,9 @@ public class DeviceCredentialVerifier {
 
     private static final Logger log = LoggerFactory.getLogger(DeviceCredentialVerifier.class);
 
-    static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk");
+    // U01-001/U07-003：私人手机也是设备绑定型——身份由员工私人手机凭证（staff_device_credentials，指纹＝X-Device-Id）派生，不自报。
+    static final String STAFF_PRIVATE_PHONE = "staff_private_phone";
+    static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", STAFF_PRIVATE_PHONE);
     private static final String STAFF_WORK_PHONE = "staff_work_phone";
     private static final String EVENT = "terminal.device_credential";
     /** 哨兵：⑤ deviceId 与所用密钥归属不符（内部返回，非真实密钥）。 */
@@ -170,17 +176,29 @@ public class DeviceCredentialVerifier {
                     return new TerminalIdentityHolder.VerifiedTerminal(terminalType, deviceId, false);
             }
         }
-        if ("web".equals(terminalType) && write && hasBearer(request)) {
-            if (modeFor("web") == Mode.ENFORCE) {
-                reject("web", deviceId, "web_requires_cookie_session");
+        // U07-003/U12-005（BSM-044 三端不同用途、PGM L572 人机对应）：没有设备号的写请求 fail-close——
+        // web 只认不可伪造的 Cookie 会话（admin_access_token），自报类型头本身不是证明；app 仍须客人侧证明；
+        // 其它自报/缺失类型一律按无证明处理。grace 模式只留痕放行，enforce 模式拒绝。
+        if (write) {
+            if ("web".equals(terminalType)) {
+                if (AuthCookies.readAccessToken(request) == null) {
+                    if (modeFor("web") == Mode.ENFORCE) {
+                        reject("web", deviceId, "web_requires_cookie_session");
+                    }
+                    audit("web", deviceId, hasBearer(request) ? "grace_bearer_self_reported_web" : "grace_web_without_session", "success");
+                }
+            } else if ("app".equals(terminalType)) {
+                if (modeFor("app") == Mode.ENFORCE) {
+                    reject("app", deviceId, "app_requires_customer_proof");
+                }
+                audit("app", deviceId, "grace_allow_app_write", "success");
+            } else {
+                Mode mode = terminalType == null ? defaultMode : modeFor(terminalType);
+                if (mode == Mode.ENFORCE) {
+                    reject(terminalType, deviceId, "terminal_proof_required");
+                }
+                audit(terminalType, deviceId, "grace_allow_unproven_write", "success");
             }
-            audit("web", deviceId, "grace_bearer_self_reported_web", "success");
-        }
-        if ("app".equals(terminalType) && write) {
-            if (modeFor("app") == Mode.ENFORCE) {
-                reject("app", deviceId, "app_requires_customer_proof");
-            }
-            audit("app", deviceId, "grace_allow_app_write", "success");
         }
         return new TerminalIdentityHolder.VerifiedTerminal(terminalType, deviceId, false);
     }
@@ -202,17 +220,19 @@ public class DeviceCredentialVerifier {
         if (Math.abs(clock.millis() - ts) > toleranceSeconds * 1000L) {
             return Outcome.invalid("stale_timestamp");
         }
-        if (device == null) {
+        // 私人手机没有 terminal_devices 登记行：设备号＝员工凭证指纹，钥由 resolveSigningKey 按当前员工凭证解析。
+        boolean privatePhone = device == null && STAFF_PRIVATE_PHONE.equals(terminalType);
+        if (device == null && !privatePhone) {
             return Outcome.noProof();
         }
-        if (!"bound".equals(device.status())) {
+        if (device != null && !"bound".equals(device.status())) {
             return Outcome.invalid("device_not_bound");
         }
         // 自报头也报了设备绑定型、却与登记类型不符 → 篡改信号，仍按 type_mismatch 拒；
         // 自报为空/web/app 时不视为不符（登记类型已顶上，由签名而非自报头决定放行）。
-        if (device.terminalType() == null
+        if (device != null && (device.terminalType() == null
                 || (claimed != null && DEVICE_BOUND_TYPES.contains(claimed)
-                        && !device.terminalType().equalsIgnoreCase(claimed))) {
+                        && !device.terminalType().equalsIgnoreCase(claimed)))) {
             return Outcome.invalid("type_mismatch");
         }
         String publicKey = resolveSigningKey(terminalType, device, deviceId);
@@ -229,10 +249,27 @@ public class DeviceCredentialVerifier {
         if (!verifySignature(publicKey, canonical, signature)) {
             return Outcome.invalid("bad_signature");
         }
-        return Outcome.verified(device.terminalType());
+        return Outcome.verified(device == null ? terminalType : device.terminalType());
     }
 
     private String resolveSigningKey(String terminalType, TerminalDeviceRecord device, String deviceId) {
+        if (STAFF_PRIVATE_PHONE.equals(terminalType)) {
+            // U01-001：私人手机身份＝当前员工的生效凭证（安装时生成并绑定的 Keystore 公钥），指纹须等于所报设备号。
+            AccessActor actor = currentActorQuietly();
+            if (actor == null || actor.id() == null) {
+                return null;
+            }
+            StaffProfileRecord profile = staffRepository.findProfileByUserId(actor.id()).orElse(null);
+            if (profile == null) {
+                return null;
+            }
+            StaffDeviceCredentialRecord credential = staffRepository.findActiveCredential(profile.id()).orElse(null);
+            if (credential == null || credential.deviceFingerprintHash() == null
+                    || !credential.deviceFingerprintHash().equalsIgnoreCase(deviceId)) {
+                return INVALID_OWNER;
+            }
+            return credential.devicePublicKey();
+        }
         if (STAFF_WORK_PHONE.equals(terminalType)) {
             AccessActor actor = currentActorQuietly();
             if (actor == null || actor.id() == null) {
@@ -246,10 +283,6 @@ public class DeviceCredentialVerifier {
             if (device.staffId() == null || !device.staffId().equals(profile.id())) {
                 return INVALID_OWNER;
             }
-            return staffRepository.findActiveCredential(profile.id())
-                    .map(StaffDeviceCredentialRecord::devicePublicKey)
-                    .filter(k -> k != null && !k.isBlank())
-                    .orElse(null);
         }
         return deviceSigningKeyStore.findActivePublicKey(deviceId).filter(k -> !k.isBlank()).orElse(null);
     }

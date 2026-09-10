@@ -40,7 +40,10 @@ public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
             "/api/v1/terminals/capability-switches",
             // 非终端通道（2026-08-03 随写请求 fail-closed 一并登记，否则被新增的 403 误杀）：
             "/api/open/",               // 第三方开放平台回调，自带签名验证，不是受管终端
-            "/api/v1/terminals/kiosks/" // 一体机自助端点，X-Device-Token 认证，亦豁免于设备凭证拦截器
+            "/api/v1/terminals/kiosks/", // 一体机自助端点，X-Device-Token 认证，亦豁免于设备凭证拦截器
+            // U05-003/U07-004：公开自助注册入口——私人手机此时尚未成为受管终端，身份证明是请求体里的设备公钥/指纹（服务端校验 + 频控）。
+            "/api/v1/staff/self-registrations",
+            "/api/v1/staff/registration-companies"
     );
 
     // ObjectProvider：@WebMvcTest 切片自动纳入 HandlerInterceptor 但不装 gate 依赖，guard 缺席时跳过闸；

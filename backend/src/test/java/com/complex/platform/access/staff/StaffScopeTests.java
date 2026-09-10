@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,9 +32,14 @@ class StaffScopeTests {
         IdempotencyService idem = mock(IdempotencyService.class);
         AuditEventService audit = mock(AuditEventService.class);
         authz = mock(AuthorizationService.class);
+        when(authz.currentActor()).thenReturn(new com.complex.platform.access.AccessActor("manager","manager","staff","prj_A",null,"active"));
         when(idem.execute(any(), any(), any(), any(), any()))
                 .thenAnswer(i -> ((Supplier<?>) i.getArgument(3)).get());
-        return new StaffService(repo, access, idem, audit, authz, com.complex.platform.access.AccessCredentialProvisioner.noop());
+        StaffService service = new StaffService(repo, access, idem, audit, authz, com.complex.platform.access.AccessCredentialProvisioner.noop());
+        StaffApprovalService approvals=mock(StaffApprovalService.class);
+        when(approvals.submitShifts(any(),any())).thenAnswer(i -> new com.complex.platform.access.staff.dto.StaffShiftBatchResult(1,0,i.getArgument(0),"review_test","pending_review"));
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"staffApprovals",approvals);
+        return service;
     }
 
     @Test
@@ -41,8 +48,8 @@ class StaffScopeTests {
         when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
         when(repo.findUserProjectId("usr_b")).thenReturn(Optional.of("prj_B"));
         assertThatThrownBy(() -> svc.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
-                "k1", "usr_b", LocalDate.parse("2026-07-10"),
-                Instant.parse("2026-07-10T10:00:00Z"), Instant.parse("2026-07-10T18:00:00Z"), List.of(), null)))
+                "k1", "usr_b", LocalDate.parse("2099-07-10"),
+                Instant.parse("2099-07-10T10:00:00Z"), Instant.parse("2099-07-10T18:00:00Z"), List.of(), null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
     }
 
@@ -51,7 +58,7 @@ class StaffScopeTests {
         StaffService svc = build();
         when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
         when(repo.findLeaveById("lv_x")).thenReturn(Optional.of(new StaffLeaveRequestRecord(
-                "lv_x", "usr_b", "annual", LocalDate.parse("2026-07-10"), LocalDate.parse("2026-07-11"),
+                "lv_x", "usr_b", "annual", LocalDate.parse("2099-07-10"), LocalDate.parse("2099-07-11"),
                 "假", "pending", null, null, Instant.now(), Instant.now())));
         when(repo.findUserProjectId("usr_b")).thenReturn(Optional.of("prj_B"));
         assertThatThrownBy(() -> svc.reviewLeave("lv_x",
@@ -67,7 +74,7 @@ class StaffScopeTests {
         when(repo.upsertShift(any())).thenAnswer(i -> i.getArgument(0));
         // 同项目 → 守卫放行,不抛 CROSS_PROJECT(落到正常保存)。
         svc.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
-                "k3", "usr_same", LocalDate.parse("2026-07-10"),
-                Instant.parse("2026-07-10T10:00:00Z"), Instant.parse("2026-07-10T18:00:00Z"), List.of(), null));
+                "k3", "usr_same", LocalDate.parse("2099-07-10"),
+                Instant.parse("2099-07-10T10:00:00Z"), Instant.parse("2099-07-10T18:00:00Z"), List.of(), null));
     }
 }

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.1
+# P0 OpenAPI Operation 验收矩阵 V0.14
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 720 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 732 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -303,7 +303,7 @@
 | inventory | `POST` | `/api/v1/inventory/supply-contracts/{id}/approve` | `approveSupplyContract` | 审批供应合同(draft→approved/rejected) | `object` | `inventory.purchase.approve` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `supply_contract.approved` | `supply_contract.approve_failed` |
 | inventory | `GET` | `/api/v1/inventory/warehouses` | `listWarehouses` | 查询库房列表 | `-` | `inventory.warehouse.manage` | `staff-token` | `warehouse` | web | 否 | `inventory.warehouse.list` | `inventory.warehouse.list_failed` |
 | inventory | `POST` | `/api/v1/inventory/warehouses` | `createWarehouse` | 创建结构化库房(六类) | `object` | `inventory.warehouse.manage` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.warehouse.created` | `inventory.warehouse.create_failed` |
-| access | `POST` | `/api/v1/staff/registrations` | `submitStaffRegistration` | 员工自助注册 | `StaffRegistrationRequest` | `staff.profile.submit` | `staff-token` | `project` | staff_private_phone, web | 是 | `staff.registered` | `staff.register_failed` |
+| access | `POST` | `/api/v1/staff/registrations` | `submitStaffRegistration` | 商户代员工提交注册 | `StaffRegistrationRequest` | `staff.profile.submit` | `staff-token` | `project` | web, merchant_app, merchant_portal, staff_work_phone | 是 | `staff.registered` | `staff.register_failed` |
 | access | `POST` | `/api/v1/staff/registrations/{id}/review` | `reviewStaffRegistration` | 审批员工注册 | `StaffRegistrationReviewRequest` | `staff.profile.review` | `staff-token` | `project` | web, mobile_admin | 是 | `staff.approved` | `staff.review_failed` |
 | access | `GET` | `/api/v1/staff/profiles` | `listStaffProfiles` | 查询员工档案 | `-` | `staff.profile.view` | `staff-token` | `project` | web, mobile_admin | 否 | `staff.profile.viewed` | `staff.profile.view_failed` |
 | access | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | `setStaffSalesPosition` | 设置员工销售岗标识 | `StaffSalesPositionRequest` | `staff.profile.review` | `staff-token` | `project` | web, mobile_admin | 否 | `staff.profile.sales_position_changed` | `staff.profile.sales_position_change_failed` |
@@ -625,10 +625,10 @@
 | facility | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | `listWorkOrdersAssignedToMe` | 我的工单(员工自有手机) | `-` | `facility.work_order.view_assigned` | `staff-token` | `platform` | staff_private_phone, web | 否 | `facility.work_order_assigned_list.viewed` | `facility.work_order_assigned_list.view_failed` |
 | bar | `GET` | `/api/v1/bar/tables/availability` | `listBarTableAvailability` | 酒吧空位视图(员工代订用) | `-` | `bar.reservation.create` | `staff-token` | `project-merchant-space` | staff_private_phone, web, tablet | 否 | `bar.table_availability.viewed` | `bar.table_availability.view_failed` |
 | staff | `GET` | `/api/v1/staff/shifts` | `listStaffShifts` | 查排班(后台/主管) | `-` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 否 | `staff.shift.viewed` | `staff.shift.view_failed` |
-| staff | `POST` | `/api/v1/staff/shifts` | `upsertStaffShift` | 主管排班(双端) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 是 | `staff.shift.saved` | `staff.shift.save_failed` |
-| staff | `POST` | `/api/v1/staff/shifts/batch` | `batchUpsertStaffShifts` | 按周批量排班(一次排一周) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 是 | `staff.shift.saved` | `staff.shift.save_failed` |
+| staff | `POST` | `/api/v1/staff/shifts` | `upsertStaffShift` | 主管排班(双端) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 是 | `staff.shift.submitted` | `staff.shift.save_failed` |
+| staff | `POST` | `/api/v1/staff/shifts/batch` | `batchUpsertStaffShifts` | 按周批量排班(一次排一周) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 是 | `staff.shift.submitted` | `staff.shift.save_failed` |
 | staff | `GET` | `/api/v1/staff/shifts/mine` | `listMyStaffShifts` | 我的班次与点位(员工手机) | `-` | `staff.shift.view` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.shift_mine.viewed` | `staff.shift_mine.view_failed` |
-| staff | `POST` | `/api/v1/staff/attendance/punch` | `punchStaffAttendance` | 考勤打卡(NFC/扫码) | `object` | `staff.attendance.punch` | `staff-token` | `platform` | staff_private_phone, web | 是 | `staff.attendance.punched` | `staff.attendance.punch_failed` |
+| staff | `POST` | `/api/v1/staff/attendance/punch` | `punchStaffAttendance` | 考勤打卡(NFC/扫码) | `object` | `staff.attendance.punch` | `staff-token` | `platform` | staff_work_phone | 是 | `staff.attendance.punched` | `staff.attendance.punch_failed` |
 | staff | `GET` | `/api/v1/staff/attendance/mine` | `listMyStaffAttendance` | 我的打卡记录(最近30天) | `-` | `staff.shift.view` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.attendance_mine.viewed` | `staff.attendance_mine.view_failed` |
 | staff | `GET` | `/api/v1/staff/attendance` | `listStaffAttendance` | 按日查考勤(后台/主管) | `-` | `staff.attendance.view` | `staff-token` | `platform` | web, staff_private_phone | 否 | `staff.attendance.viewed` | `staff.attendance.view_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/base` | `setStaffBaseSalary` | 固定工资设定(人事) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.base_saved` | `staff.payroll.base_save_failed` |
@@ -741,6 +741,18 @@
 | integration | `GET` | `/api/v1/integration/channel-ticket-type-maps` | `listIntegrationChannelTicketTypeMaps` | 查询渠道票种映射 | `-` | `integration.channel_store_map.view` | `staff-token` | `platform` | web | 否 | `integration.channel_ticket_type_map.viewed` | `integration.channel_ticket_type_map.view_failed` |
 | integration | `POST` | `/api/v1/integration/channel-ticket-type-maps` | `saveIntegrationChannelTicketTypeMap` | 登记/改绑渠道票种映射 | `object` | `integration.channel_store_map.manage` | `staff-token` | `platform` | web | 是 | `integration.channel_ticket_type_map.saved` | `integration.channel_ticket_type_map.save_failed` |
 | integration | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | `archiveIntegrationChannelTicketTypeMap` | 停用渠道票种映射 | `object` | `integration.channel_store_map.manage` | `staff-token` | `platform` | web | 是 | `integration.channel_ticket_type_map.archived` | `integration.channel_ticket_type_map.archive_failed` |
+| staff | `GET` | `/api/v1/staff/registration-companies` | `listStaffRegistrationCompanies` | 获取可注册公司 | `-` | `public` | `public` | `self` | staff_private_phone | 否 | `staff.registration_companies_viewed` | `staff.registration_companies_view_failed` |
+| staff | `POST` | `/api/v1/staff/self-registrations` | `submitStaffSelfRegistration` | 公司员工本人注册 | `object` | `public` | `public` | `self` | staff_private_phone | 是 | `staff.self_registered` | `staff.self_register_failed` |
+| staff | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | `setStaffEmploymentStatus` | 更新员工任职状态 | `object` | `staff.profile.review` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.profile.employment_status_changed` | `staff.profile.employment_status_change_failed` |
+| staff | `GET` | `/api/v1/staff/settings/shift-visible-days` | `getStaffShiftVisibility` | 读取排班可见天数 | `-` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.shift.visibility_viewed` | `staff.shift.visibility_view_failed` |
+| staff | `POST` | `/api/v1/staff/settings/shift-visible-days` | `setStaffShiftVisibility` | 设置排班可见天数 | `object` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.shift.visibility_changed` | `staff.shift.visibility_change_failed` |
+| staff | `GET` | `/api/v1/staff/settings/payroll-penalty-cap` | `getStaffPenaltyCap` | 读取普通扣除上限 | `-` | `staff.payroll.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.payroll.penalty_cap_viewed` | `staff.payroll.penalty_cap_view_failed` |
+| staff | `POST` | `/api/v1/staff/settings/payroll-penalty-cap` | `requestStaffPenaltyCap` | 申请调整普通扣除上限 | `object` | `staff.payroll.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.payroll.penalty_cap_requested` | `staff.payroll.penalty_cap_request_failed` |
+| staff | `GET` | `/api/v1/staff/shifts/{id}/history` | `listStaffShiftHistory` | 查看排班修改历史 | `-` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.shift.history_viewed` | `staff.shift.history_view_failed` |
+| staff | `POST` | `/api/v1/terminals/kiosks/{device_id}/locker-events` | `recordStaffLockerScan` | 柜机上报寄存柜扫码存取 | `object` | `not_applicable` | `device-credential` | `project-device` | kiosk | 是 | `staff.locker.recorded` | `staff.locker.record_failed` |
+| staff | `POST` | `/api/v1/staff/lockers/scan-token` | `issueStaffLockerScanToken` | 申请寄存柜扫码凭证 | `object` | `staff.profile.self` | `staff-token` | `self` | staff_private_phone, staff_work_phone | 是 | `staff.locker.scan_token_issued` | `staff.locker.scan_token_failed` |
+| staff | `POST` | `/api/v1/staff/shifts/{id}/cover` | `coverStaffShift` | 记录临时顶班 | `object` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.shift.covered` | `staff.shift.cover_failed` |
+| staff | `GET` | `/api/v1/staff/shifts/{id}/covers` | `listStaffShiftCovers` | 查看班次顶班记录 | `-` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.shift.covers_viewed` | `staff.shift.covers_view_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -799,14 +811,4 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 - `US-P0-API-004` 作为测试负责人，我要把本文每个 P0 operation 转换为正向、权限、数据范围、幂等、异常、审计留痕和并发测试用例。
 - `US-P0-API-005` 作为第三方供应商联调负责人，我要先对接 Adapter、Webhook 接收、mock 契约和轮询校验，再在供应商资料到位后补字段映射与异常补偿。
 
-## 7. 变更记录
-
-| 日期 | 版本 | 说明 |
-|---|---|---|
-| 2026-06-11 | V0.1 | 新增 P0 OpenAPI operation 级验收矩阵，补齐接口、权限、鉴权上下文、终端、幂等、审计事件、验收标准、边界场景和用户故事。 |
-| 2026-06-11 | V0.1 终端枚举收口 | 按当时 OpenAPI 全量重建 operation 表格；`x-terminal-allowed` 只保留 D5 终端码，门禁/年龄核验设备与服务端调用改由设备能力或调用通道表达。 |
-| 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
-| 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
-| 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 720 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
-| 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |
+版本说明：本文档版本与 `docs/openapi/openapi-p0.json` 的 `info.version` 同步，契约变更即版本递增；不另维护变更记录表（历史见 OpenAPI 与 git 记录）。
