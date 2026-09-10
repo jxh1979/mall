@@ -1,13 +1,14 @@
 {
   "status": "passed",
   "evidence_type": "formal_security_baseline_v1",
-  "verified_at": "2026-08-03T00:00:00Z",
+  "verified_at": "2026-09-10T05:00:53Z",
   "verified_on_host": "192.168.88.160",
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 720,
-  "security_baseline_version": "V1",
+  "openapi_operation_count": 732,
+  "security_baseline_version": "V1.03",
   "plaintext_secret_present": false,
-  "notes": "Re-synced to 720 operations: 票务退款兑付确认 —— 新增 POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout (财务实际打款后确认拨付, 退款单 approved→success) 与 GET /api/v1/ticketing/refunds (退款台账, 后台看待确认拨付). 依据 business-enum-quick-reference-v0.1.html 退款单状态行: 退款以成功为最终完成态, 只有成功的退款才计入已退金额; 已通过表示已批准并已发起不可逆兑付. 修复点: 审批通过后原先同方法内联置 success, 钱未出账当天净收入即被扣."
+  "notes": "U-FIX B3（U13-001/U13-010/U14-001）：OpenAPI 定稿后由 main 生成器重生三件并同步 732 项接口（删除 setMerchantSelfOperated；新增 issueStaffLockerScanToken / recordStaffLockerScan（柜机单端）/ coverStaffShift / listStaffShiftCovers）；U13-010 已修（生成器 reminder_days 判据读取面扩到 canonical 规则文档），verify:security-baseline --strict 绿。生产前置阻断仍以原台账为准。",
+  "version": "V0.03"
 }

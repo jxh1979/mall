@@ -20,7 +20,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class DeviceCredentialInterceptor implements HandlerInterceptor {
 
-    private static final List<String> EXEMPT_PREFIXES = List.of("/api/v1/terminals/kiosks/");
+    // U05-003/U07-004：公开注册入口的身份证明是请求体里的私人手机设备公钥/指纹（服务端校验），此时尚无可签名的凭证。
+    private static final List<String> EXEMPT_PREFIXES = List.of("/api/v1/terminals/kiosks/",
+            "/api/v1/staff/self-registrations", "/api/v1/staff/registration-companies");
 
     private final ObjectProvider<DeviceCredentialVerifier> verifier;
     private final ObjectProvider<NonceStore> nonceStore;

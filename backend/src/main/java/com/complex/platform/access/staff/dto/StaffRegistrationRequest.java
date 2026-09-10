@@ -1,8 +1,10 @@
 package com.complex.platform.access.staff.dto;
 
+// 文件版本：V0.02
+
 /**
- * 员工自助注册请求（私人手机 App 提交）。个人信息只传不可逆哈希（phone_hash / id_doc_hash），
- * 后端不再二次保存明文（PIPL）。project_id 必填（隔离）；merchant_id 可空（NULL=平台员工）。
+ * 员工注册资料。phone/id_doc 传原值，由服务端加密存放，日常返回脱敏值。
+ * project_id 必填；merchant_id 必填（商户代提交）；公司员工本人注册走公开入口 /staff/self-registrations（U14-007）。
  */
 public record StaffRegistrationRequest(
         String idempotencyKey,
@@ -10,8 +12,8 @@ public record StaffRegistrationRequest(
         String projectId,
         String merchantId,
         String name,
-        String phoneHash,
-        String idDocHash,
+        String phone,
+        String idDoc,
         String staffLevelId
 ) {
 }

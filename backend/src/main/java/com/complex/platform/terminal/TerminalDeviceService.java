@@ -1,5 +1,7 @@
 package com.complex.platform.terminal;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -656,6 +658,14 @@ public class TerminalDeviceService {
         if (merchantId == null && existingDevice != null) {
             merchantId = existingDevice.merchantId();
         }
+        // U07-001（PGM L611/L617）：工作手机领用即绑定持有员工，验签按 device.staffId 收口；不传则沿用既有归属，不靠归还回填。
+        String staffId = trimToNull(actual.staffId());
+        if (staffId == null && existingDevice != null) {
+            staffId = existingDevice.staffId();
+        }
+        if ("staff_work_phone".equals(terminalType) && staffId == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "工作手机领用必须指定持有员工 (staff_id)");
+        }
 
         Instant now = Instant.now();
         TerminalDeviceRecord record = new TerminalDeviceRecord(
@@ -671,7 +681,7 @@ public class TerminalDeviceService {
                 null,
                 null,
                 trimToNull(actual.boundSpaceId()),
-                null,
+                staffId,
                 "bound",
                 now,
                 null,

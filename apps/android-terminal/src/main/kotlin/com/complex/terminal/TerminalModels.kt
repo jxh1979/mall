@@ -1,5 +1,7 @@
 package com.complex.terminal
 
+// 文件版本：V0.03
+
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -53,6 +55,9 @@ data class BindDeviceRequest(
   val mdmDeviceRef: String? = null,
   @SerialName("kiosk_mode")
   val kioskMode: String? = null,
+  /** U07-001：工作手机领用即绑定持有员工（员工档案编号），验签按 device.staffId 收口。 */
+  @SerialName("staff_id")
+  val staffId: String? = null,
   @SerialName("idempotency_key")
   val idempotencyKey: String = "",
 )
@@ -445,7 +450,29 @@ data class StaffRegistrationSubmitRequest(
   val projectId: String,
   val name: String,
   val operatorNote: String? = null,
+  val merchantId: String? = null,
+  val phone: String? = null,
+  val idDoc: String? = null,
 )
+
+@Serializable
+data class StaffRegistrationCompany(val id: String, val name: String)
+
+/** U01-007/U02-002（PGM L579/BSM L935）：私人手机安装时生成的设备公钥（Base64 X.509 DER）与指纹（SHA-256 十六进制）随注册提交并绑定本人。 */
+@Serializable
+data class StaffSelfRegistrationRequest(
+  val idempotencyKey: String,
+  val companyId: String,
+  val name: String,
+  val devicePublicKey: String,
+  val deviceFingerprintHash: String,
+  val merchantId: String? = null,
+  val phone: String? = null,
+  val idDoc: String? = null,
+)
+
+@Serializable
+data class StaffRegistrationReceipt(val id: String, val registrationStatus: String)
 
 @Serializable
 data class StaffProfileRecord(
@@ -453,6 +480,9 @@ data class StaffProfileRecord(
   val name: String? = null,
   val status: String? = null,
   val registrationStatus: String? = null,
+  val employmentStatus: String? = null,
+  val phone: String? = null,
+  val companyId: String? = null,
 )
 
 @Serializable
@@ -596,6 +626,8 @@ data class StaffShiftRow(
   val endAt: String? = null,
   val pointSpaceIds: List<String>? = null,
   val note: String? = null,
+  val reviewId: String? = null,
+  val publicationStatus: String? = null,
 )
 
 @Serializable

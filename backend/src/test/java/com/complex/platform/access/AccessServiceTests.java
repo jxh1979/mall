@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1444,7 +1444,7 @@ class AccessServiceTests {
                 authorizationService,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository), event -> { }
         );
     }
 

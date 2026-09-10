@@ -1,5 +1,7 @@
 package com.complex.terminal
 
+// 文件版本：V0.04
+
 import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URI
@@ -22,6 +24,9 @@ import kotlinx.serialization.json.decodeFromJsonElement
  * android.jar 不包含 java.net.http 包，故此处改用 [HttpURLConnection]。
  * 业务逻辑（TerminalWorkflow / TerminalModels / InMemoryLocalStore）保持复用，不重复实现。
  */
+/** U01-001/U01-007：员工私人手机通道的终端码（与 JVM 版 TerminalApiClient 常量同值；该文件不在 Android 源集内）。 */
+const val STAFF_PRIVATE_PHONE = "staff_private_phone"
+
 class ApiException(
   val statusCode: Int,
   val path: String,
@@ -57,6 +62,13 @@ class TerminalApiClient(
   }
 
   var accessToken: String? = null
+  var deviceId: String? = null
+  var deviceSigner: ((ByteArray) -> String)? = null
+  /** U01-001：终端身份由本机绑定类型决定并只声明一次（工作手机/平板）；未绑定不发类型头（服务端 fail-close）。 */
+  var terminalType: String? = null
+
+  fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String): JsonObject =
+    post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey))
 
   fun login(username: String, password: String): LoginResponse =
     post("/api/v1/auth/login", LoginRequest(username, password))
@@ -90,8 +102,18 @@ class TerminalApiClient(
 
   // ── BYOD 一期(2026-07-02):员工自有手机四功能(与 JVM 版签名一致) ──
 
+
+
   fun submitStaffRegistration(request: StaffRegistrationSubmitRequest): StaffProfileRecord =
     post("/api/v1/staff/registrations", request)
+
+  // ── U01-007（PGM L579/BSM L935）：公司员工本人在私人手机 App 注册；两条公开路径只声明私人手机终端码，
+  //    设备公钥/指纹随请求体提交并在服务端绑定本人（无设备证明即 4xx）。未绑定前无设备编号，不做设备签名（公开路径）。 ──
+  fun listStaffRegistrationCompanies(): List<StaffRegistrationCompany> =
+    get("/api/v1/staff/registration-companies", STAFF_PRIVATE_PHONE)
+
+  fun submitStaffSelfRegistration(request: StaffSelfRegistrationRequest): StaffRegistrationReceipt =
+    post("/api/v1/staff/self-registrations", request, STAFF_PRIVATE_PHONE)
 
   // ── G批:服务点单(公司代收口径:收款码原文由服务端返回,App 重绘 QR) ──
 
@@ -243,26 +265,26 @@ class TerminalApiClient(
   // 传输层（HttpURLConnection）
   // --------------------------------------------------------------------------
 
-  private inline fun <reified T> get(path: String): T {
-    val connection = open(path, "GET")
+  private inline fun <reified T> get(path: String, terminalTypeOverride: String? = null): T {
+    val connection = open(path, "GET", terminalTypeOverride)
     return send(path, connection, body = null)
   }
 
-  private inline fun <reified RequestBody, reified ResponseBody> post(path: String, body: RequestBody): ResponseBody {
-    val connection = open(path, "POST")
+  private inline fun <reified RequestBody, reified ResponseBody> post(path: String, body: RequestBody, terminalTypeOverride: String? = null): ResponseBody {
+    val connection = open(path, "POST", terminalTypeOverride)
     connection.setRequestProperty("content-type", "application/json")
     connection.doOutput = true
     return send(path, connection, json.encodeToString(body))
   }
 
   @PublishedApi
-  internal fun open(path: String, method: String): HttpURLConnection {
+  internal fun open(path: String, method: String, terminalTypeOverride: String? = null): HttpURLConnection {
     val connection = URL("$baseUrl$path").openConnection() as HttpURLConnection // nosemgrep: baseUrl is validated to https/loopback in init.
     connection.requestMethod = method
     connection.connectTimeout = connectTimeoutMs
     connection.readTimeout = readTimeoutMs
     // 3.19 二期：声明终端类型，接受 terminal.enabled 总开关逐请求后端强制（矩阵页关端=接口硬拒）。
-    connection.setRequestProperty("X-Terminal-Type", "staff_work_phone")
+    (terminalTypeOverride ?: terminalType)?.let { connection.setRequestProperty("X-Terminal-Type", it) }
     accessToken?.takeIf { it.isNotBlank() }?.let { connection.setRequestProperty("authorization", "Bearer $it") }
     return connection
   }
@@ -270,6 +292,12 @@ class TerminalApiClient(
   @PublishedApi
   internal inline fun <reified T> send(path: String, connection: HttpURLConnection, body: String?): T {
     try {
+      val id = deviceId
+      val signer = deviceSigner
+      if (id != null && signer != null && path != "/api/v1/auth/login") {
+        deviceRequestHeaders(id, connection.requestMethod, path, body ?: "", signer)
+          .forEach { (name, value) -> connection.setRequestProperty(name, value) }
+      }
       if (body != null) {
         connection.outputStream.use { it.write(body.toByteArray(StandardCharsets.UTF_8)) }
       }

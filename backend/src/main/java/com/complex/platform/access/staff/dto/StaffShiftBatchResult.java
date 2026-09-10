@@ -1,17 +1,13 @@
 package com.complex.platform.access.staff.dto;
 
+// 文件版本：V0.01
 import com.complex.platform.access.staff.StaffShiftRecord;
 import java.util.List;
 
-/**
- * 批量排班结果：排班员提交完要看到「到底排出了什么」——新建几个班、覆盖改了几个班、逐条明细。
- *
- * <p>新建 vs 覆盖的判据：落库走 {@code ON CONFLICT (user_id, start_at) DO UPDATE}，冲突分支不改
- * {@code created_at}，所以回读到的行 {@code createdAt == updatedAt} 即本次新建，否则是覆盖了旧班。
- */
-public record StaffShiftBatchResult(
-        int createdCount,
-        int updatedCount,
-        List<StaffShiftRecord> shifts
-) {
+/** 同一批排班共用一张审批单；批准后整批发布。 */
+public record StaffShiftBatchResult(int createdCount, int updatedCount, List<StaffShiftRecord> shifts,
+        String reviewId, String publicationStatus) {
+    public StaffShiftBatchResult(int createdCount, int updatedCount, List<StaffShiftRecord> shifts) {
+        this(createdCount, updatedCount, shifts, null, "published");
+    }
 }

@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -50,10 +52,21 @@ class StaffAttendanceLocalZoneTests {
     private StaffService build(Instant fixedNow) {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_1", "夜班员工", "staff", "org_1", null, "active"));
-        return new StaffService(repo, mock(AccessRepository.class), mock(IdempotencyService.class),
-                mock(AuditEventService.class), authz, AccessCredentialProvisioner.noop(),
-                Clock.fixed(fixedNow, ZoneOffset.UTC));
+        IdempotencyService idem=mock(IdempotencyService.class);
+        when(idem.execute(any(),any(),any(),any(),any())).thenAnswer(i -> ((java.util.function.Supplier<?>)i.getArgument(3)).get());
+        StaffService service=new StaffService(repo, mock(AccessRepository.class), idem,
+                mock(AuditEventService.class), authz, AccessCredentialProvisioner.noop(), Clock.fixed(fixedNow, ZoneOffset.UTC));
+        when(repo.findProfileByUserId("usr_1")).thenReturn(java.util.Optional.of(new StaffProfileRecord("sp1","org_1",null,"usr_1","员工",null,null,null,"approved",null,null,null,"active",fixedNow,fixedNow)));
+        var devices=mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
+        when(devices.findByDeviceId("phone")).thenReturn(java.util.Optional.of(new com.complex.platform.terminal.TerminalDeviceRecord("phone","phone","phone","staff_work_phone","project",null,null,null,null,null,null,null,"sp1","bound",fixedNow,null,null,null,null,fixedNow,fixedNow)));
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"terminalRepository",devices);
+        var request=new org.springframework.mock.web.MockHttpServletRequest();
+        request.setAttribute("com.complex.platform.gate.verified_terminal",new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("staff_work_phone","phone",true));
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(new org.springframework.web.context.request.ServletRequestAttributes(request));
+        return service;
     }
+
+    @org.junit.jupiter.api.AfterEach void clearRequest() { org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes(); }
 
     /** 跨零点夜班（work_date=8/2，北京 8/2 22:00 → 8/3 06:00）。 */
     private StaffShiftRecord nightShift() {
@@ -76,7 +89,7 @@ class StaffAttendanceLocalZoneTests {
         Instant at0500 = Instant.parse("2026-08-02T21:00:00Z");
 
         StaffAttendanceRecord saved = build(at0500).punch(new StaffAttendancePunchRequest(
-                "k1", "check_out", "nfc", null, null, null));
+                "k1", "check_out", "qr", "space:test", null, null));
 
         assertThat(saved.shiftId()).isEqualTo("shf_night");
         assertThat(saved.judgement()).isEqualTo("early_leave");
@@ -96,7 +109,7 @@ class StaffAttendanceLocalZoneTests {
         Instant at0630 = Instant.parse("2026-08-02T22:30:00Z");
 
         StaffAttendanceRecord saved = build(at0630).punch(new StaffAttendancePunchRequest(
-                "k2", "check_out", "nfc", null, null, null));
+                "k2", "check_out", "qr", "space:test", null, null));
 
         assertThat(saved.shiftId()).isEqualTo("shf_night");
         assertThat(saved.judgement()).isEqualTo("normal");
@@ -116,31 +129,31 @@ class StaffAttendanceLocalZoneTests {
         when(repo.saveAttendance(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         StaffAttendanceRecord saved = build(Instant.parse("2026-08-02T19:00:00Z"))
-                .punch(new StaffAttendancePunchRequest("k3", "check_in", "nfc", null, null, null));
+                .punch(new StaffAttendancePunchRequest("k3", "check_in", "nfc", "space:test", null, null));
 
         assertThat(saved.shiftId()).isEqualTo("shf_day");
         assertThat(saved.judgement()).isEqualTo("normal");
     }
 
-    /** 考勤月视图：取数窗口按北京日历月切；无 shift_id 的打卡按北京日历日归日行。 */
+    /** 考勤月视图：取数窗口按北京日历月切；按班次结束所在北京日历日归行。 */
     @Test
     void monthViewWindowAndDayAttributionFollowBeijingCalendarDay() {
         StaffShiftRecord shift = new StaffShiftRecord("shf_x", "usr_1", LocalDate.parse("2026-08-03"),
                 BEIJING_0803_0200, BEIJING_0803_1000, List.of(), null, null, BEIJING_0803_0200, BEIJING_0803_0200);
-        when(repo.listShiftsForUserBetween(eq("usr_1"), any(), any())).thenReturn(List.of(shift));
-        // shift_id 留空:强制走「按打卡时刻折日历日」这条归属分支(本次改的就是它)。
-        when(repo.listAttendanceForUserBetween(eq("usr_1"), any(), any())).thenReturn(List.of(
+        when(repo.listShiftsEndingBetween(eq("usr_1"), any(), any())).thenReturn(List.of(shift));
+        // 打卡关联具体班次，月归属按班次结束时间。
+        when(repo.listAttendanceForShifts(eq("usr_1"), any())).thenReturn(List.of(
                 new StaffAttendanceRecord("att_in", "usr_1", "check_in", BEIJING_0803_0200, "nfc",
-                        null, null, null, null, "normal", BEIJING_0803_0200),
-                new StaffAttendanceRecord("att_out", "usr_1", "check_out", BEIJING_0803_1000, "nfc",
-                        null, null, null, null, "normal", BEIJING_0803_1000)));
+                        null, null, null, "shf_x", "normal", BEIJING_0803_0200),
+                new StaffAttendanceRecord("att_out", "usr_1", "check_out", BEIJING_0803_1000, "qr",
+                        null, null, null, "shf_x", "normal", BEIJING_0803_1000)));
 
         List<StaffAttendanceDayRecord> days = build(BEIJING_0803_0200).myAttendanceMonthView("2026-08");
 
         // 窗口:北京 8/1 00:00 起、北京 9/1 00:00 止(UTC 口径会是 8/1T00:00Z / 9/1T00:00Z,漏掉 8/1 凌晨那班)。
         ArgumentCaptor<Instant> from = ArgumentCaptor.forClass(Instant.class);
         ArgumentCaptor<Instant> to = ArgumentCaptor.forClass(Instant.class);
-        verify(repo).listAttendanceForUserBetween(eq("usr_1"), from.capture(), to.capture());
+        verify(repo).listShiftsEndingBetween(eq("usr_1"), from.capture(), to.capture());
         assertThat(from.getValue()).isEqualTo(Instant.parse("2026-07-31T16:00:00Z"));
         assertThat(to.getValue()).isEqualTo(Instant.parse("2026-08-31T16:00:00Z"));
 

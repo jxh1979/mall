@@ -31,6 +31,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private static final List<Rule> RULES = List.of(
             new Rule("/api/v1/auth/login", Category.AUTH),
             new Rule("/api/v1/auth/refresh", Category.AUTH),
+            // U07-004：公开自助注册入口按认证类频控（PGM L579 设备绑定契约落地前后均须防刷）。
+            new Rule("/api/v1/staff/self-registrations", Category.AUTH),
             new Rule("/api/v1/customer/auth/phone-login", Category.AUTH),
             new Rule("/api/v1/finance/payment-intents", Category.PAYMENT),
             new Rule("/api/v1/finance/payments/*/confirm-offline", Category.PAYMENT),

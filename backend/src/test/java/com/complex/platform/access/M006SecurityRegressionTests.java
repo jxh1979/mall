@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -14,6 +14,7 @@ import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -400,7 +401,7 @@ class M006SecurityRegressionTests {
         when(reviewRepository.saveSupervisorReview(any())).thenAnswer(a -> a.getArgument(0));
         var reviews = new com.complex.platform.governance.review.SupervisorReviewService(authorization,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                reviewRepository, new AuditEventService(new InMemoryAuditEventRepository()));
+                reviewRepository, new AuditEventService(new InMemoryAuditEventRepository()), event -> { });
         when(repository.findStaffLevelAssignment("admin")).thenReturn(Optional.of(new StaffLevelAssignment(
                 "admin", "top-level", 0L, "CNY", null, "org", null, "admin", Instant.now())));
         when(repository.findStaffLevelById("top-level")).thenReturn(Optional.of(new StaffLevelRecord(
@@ -451,7 +452,7 @@ class M006SecurityRegressionTests {
 
 
     // M006-011/029：员工审批也必须成功创建凭证，不能退化成静默空操作。
-    @Test void employeeApprovalWithoutCredentialAdapterWritesNoAccount() {
+    @Test void employeeApprovalWithoutCredentialAdapterWritesNoAccount() throws Exception {
         var staffRepository = mock(com.complex.platform.access.staff.JdbcStaffRepository.class);
         when(staffRepository.saveProfile(any())).thenAnswer(a -> a.getArgument(0));
         when(staffRepository.saveNotice(any())).thenAnswer(a -> a.getArgument(0));
@@ -462,8 +463,10 @@ class M006SecurityRegressionTests {
         var staff = new com.complex.platform.access.staff.StaffService(staffRepository, repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(new InMemoryAuditEventRepository()), authorization, provider);
+        withRegistrations(staff, staffRepository);
+        // 商户代提交路径 merchant_id 必填（公司员工本人注册走公开入口）。
         var profile = staff.submitRegistration(new com.complex.platform.access.staff.dto.StaffRegistrationRequest(
-                "no-credential-registration", null, "org", null, "员工", null, null, null));
+                "no-credential-registration", null, "org", "merchant", "员工", null, null, null));
         when(staffRepository.findProfileById(profile.id())).thenReturn(Optional.of(profile));
         assertThatThrownBy(() -> staff.reviewRegistration(profile.id(),
                 new com.complex.platform.access.staff.dto.StaffRegistrationReviewRequest(
@@ -473,7 +476,7 @@ class M006SecurityRegressionTests {
     }
 
     // M006-011/002：登记不创建账号；商户不能自批，公司审批才开通并自动赋员工自助。
-    @Test void registrationCreatesAccountOnlyAfterCompanyApproval() {
+    @Test void registrationCreatesAccountOnlyAfterCompanyApproval() throws Exception {
         var staffRepository = mock(com.complex.platform.access.staff.JdbcStaffRepository.class);
         Map<String, com.complex.platform.access.staff.StaffProfileRecord> profiles = new HashMap<>();
         when(staffRepository.saveProfile(any())).thenAnswer(a -> {
@@ -488,6 +491,7 @@ class M006SecurityRegressionTests {
         var staff = new com.complex.platform.access.staff.StaffService(staffRepository, repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(new InMemoryAuditEventRepository()), authorization, provider);
+        withRegistrations(staff, staffRepository);
         var registration = staff.submitRegistration(new com.complex.platform.access.staff.dto.StaffRegistrationRequest(
                 "registration", "后台辅助登记", "org", "merchant", "员工", null, null, null));
         assertThat(registration.registrationStatus()).isEqualTo("submitted");
@@ -574,7 +578,7 @@ class M006SecurityRegressionTests {
         });
         var reviews = new com.complex.platform.governance.review.SupervisorReviewService(authorization,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                reviewRepository, new AuditEventService(new InMemoryAuditEventRepository()));
+                reviewRepository, new AuditEventService(new InMemoryAuditEventRepository()), event -> { });
         service = new AccessService(repository, new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(new InMemoryAuditEventRepository()), authorization, credentials, reviews, true, 3, 3);
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("archive", "archive", "停止使用", List.of()));
@@ -613,6 +617,25 @@ class M006SecurityRegressionTests {
     private static AccessUser user(String id, String org, String merchant) {
         return new AccessUser(id, id, "staff", org, merchant, "active", Instant.now());
     }
+
+    /** U06-007：重放后的 StaffService 经 StaffRegistrationService 派生审批域公司（字段注入）；手工构造时按 main 拓扑注入一个只读夹具。 */
+    private void withRegistrations(com.complex.platform.access.staff.StaffService staff,
+            com.complex.platform.access.staff.JdbcStaffRepository staffRepository) throws Exception {
+        var platform = mock(com.complex.platform.governance.PlatformRepository.class);
+        Instant now = Instant.now();
+        var merchant = new com.complex.platform.governance.MerchantRecord("merchant", "商户", "retail", "org", null, null, null, null,
+                null, null, null, null, null, null, null, "lease", "active", now, now);
+        when(platform.findMerchantById("merchant")).thenReturn(Optional.of(merchant));
+        when(platform.findActiveBusinessEntityBindingByMerchantId(anyString())).thenReturn(Optional.empty());
+        when(platform.listBusinessEntities()).thenReturn(List.of(new com.complex.platform.governance.BusinessEntityRecord(
+                "org", "公司", "management_company", null, null, null, "active", now, now)));
+        var registrations = new com.complex.platform.access.staff.StaffRegistrationService(staffRepository, platform, repository,
+                new AuditEventService(new InMemoryAuditEventRepository()), new InMemoryIdempotencyRepository(), new ObjectMapper());
+        var field = com.complex.platform.access.staff.StaffService.class.getDeclaredField("registrations");
+        field.setAccessible(true);
+        field.set(staff, registrations);
+    }
+
     private static void actor(String id, String type, String org, String merchant) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(id, id, type, org, merchant, "active"), "unused", List.of()));

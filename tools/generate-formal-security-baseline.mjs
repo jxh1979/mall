@@ -10,6 +10,8 @@ const paths = {
   task: path.join(root, "docs", "formal-security-baseline-generation-task-v0.1.md"),
   ledger: path.join(root, "docs", "production-readiness-implementation-ledger-template-v0.1.md"),
   credentialRunbook: path.join(root, "docs", "production-credential-rotation-runbook-v0.1.md"),
+  // U13-010：b969b8cf 把 reminder_days 行搬到 scope-wide 规则正本；判据读取面随之覆盖该文档。
+  canonicalRules: path.join(root, "docs", "scope-wide-coding-rule-canonical-V0.01.md"),
   nasRunbook: path.join(root, "docs", "nas-backup-and-restore-runbook-v0.1.md"),
   server160Runbook: path.join(root, "docs", "server-160-runbook-v0.2.md"),
   packageJson: path.join(root, "package.json"),
@@ -107,6 +109,7 @@ const openapi = JSON.parse(openapiText);
 const taskText = readRequired(paths.task);
 const ledgerText = readRequired(paths.ledger);
 const credentialRunbookText = readRequired(paths.credentialRunbook);
+const canonicalRulesText = readOptional(paths.canonicalRules);
 const packageJson = JSON.parse(readRequired(paths.packageJson));
 const pom = readRequired(paths.pom);
 const authService = readRequired(paths.authService);
@@ -190,7 +193,7 @@ const sourceFindings = {
     /对象存储/.test(credentialRunbookText),
     /JWT\/Token 签名密钥/.test(credentialRunbookText),
     /第三方供应商 API 密钥/.test(credentialRunbookText),
-    /reminder_days/.test(credentialRunbookText),
+    /reminder_days/.test(credentialRunbookText) || /reminder_days/.test(canonicalRulesText),
     /rollback_step/.test(credentialRunbookText),
     packageJson.scripts?.["verify:production-credentials"] === "node tools/verify-production-credential-rotation-ledger.mjs",
     packageJson.scripts?.["verify:ops160-recovery"]?.includes("verify:production-credentials"),

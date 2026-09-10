@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import fs from "node:fs";
 
 const jsonPath = "docs/openapi/openapi-p0.json";
@@ -79,7 +80,9 @@ const tableRows = rows
   )
   .join("\n");
 
-const document = `# P0 OpenAPI Operation 验收矩阵 V0.1
+// U17-008/U18：标题版本跟随契约源 info.version（本文件是 openapi-p0.json 的投影；从现文件回读会让内容变化不入账）。
+const documentVersion = String(openapi.info?.version ?? "").match(/V?\d+\.\d+/) ? `V${String(openapi.info.version).replace(/^V/, "")}` : "V0.01";
+const document = `# P0 OpenAPI Operation 验收矩阵 ${documentVersion}
 
 ## 1. 文档定位
 
@@ -161,17 +164,7 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 - \`US-P0-API-004\` 作为测试负责人，我要把本文每个 P0 operation 转换为正向、权限、数据范围、幂等、异常、审计留痕和并发测试用例。
 - \`US-P0-API-005\` 作为第三方供应商联调负责人，我要先对接 Adapter、Webhook 接收、mock 契约和轮询校验，再在供应商资料到位后补字段映射与异常补偿。
 
-## 7. 变更记录
-
-| 日期 | 版本 | 说明 |
-|---|---|---|
-| 2026-06-11 | V0.1 | 新增 P0 OpenAPI operation 级验收矩阵，补齐接口、权限、鉴权上下文、终端、幂等、审计事件、验收标准、边界场景和用户故事。 |
-| 2026-06-11 | V0.1 终端枚举收口 | 按当时 OpenAPI 全量重建 operation 表格；\`x-terminal-allowed\` 只保留 D5 终端码，门禁/年龄核验设备与服务端调用改由设备能力或调用通道表达。 |
-| 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 \`GET /api/v1/customer/bar-reservation-options\`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
-| 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：\`logout\` 改为 \`LogoutRequest\`，\`unbindDevice\` 改为 \`DeviceUnbindRequest\`，一体机心跳使用 \`device-credential\` 与 \`x-permission=not_applicable\`，所有 operation 必须显式 \`x-auth-context\`。 |
-| 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 ${rows.length} 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
-| 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 \`p0-openapi-contract-closure-appendix-v0.1.md\`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |
+版本说明：本文档版本与 \`docs/openapi/openapi-p0.json\` 的 \`info.version\` 同步，契约变更即版本递增；不另维护变更记录表（历史见 OpenAPI 与 git 记录）。
 `;
 
 function normalize(value) {

@@ -1,3 +1,4 @@
+// 文件版本：V0.03
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -28,6 +29,8 @@ import org.junit.jupiter.api.Test;
  * 夹具：{@link InMemorySupervisorReviewRepository#superiors} 为直接上级表（org_hierarchy），各用例按需配置。
  */
 class SupervisorReviewServiceTests {
+    // U09-005/U12-003：记录服务发布的终态事件，供用例断言。
+    final java.util.List<Object> publishedEvents = new java.util.ArrayList<>();
 
     private InMemoryAuditEventRepository auditEventRepository;
     private InMemorySupervisorReviewRepository reviewRepository;
@@ -41,7 +44,7 @@ class SupervisorReviewServiceTests {
                 new AuthorizationService(levelAwareRepository(SHARED_RANKS, null)),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository), publishedEvents::add
         );
     }
 
@@ -54,11 +57,12 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(10); // + 税费调整三审策略（M087-A-03）
+        assertThat(page.total()).isEqualTo(12); // 含排班发布和普通扣除上限审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
-                        "permission_grant_l1", "permission_grant_l2", "permission_grant_l3");
+                        "permission_grant_l1", "permission_grant_l2", "permission_grant_l3",
+                        "staff.shift.publish", "staff.payroll.penalty_cap.adjust");
         assertThat(page.items())
                 .filteredOn(policy -> "contract_violation".equals(policy.actionType()))
                 .first()
@@ -304,7 +308,7 @@ class SupervisorReviewServiceTests {
                 new AuthorizationService(repo),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,
-                new AuditEventService(auditEventRepository));
+                new AuditEventService(auditEventRepository), publishedEvents::add);
 
         TestSecurityActors.asSupervisor("usr_no_level", 3);
         var pending = svc.evaluate(evaluate("review-conservative", "v", List.of(),
@@ -334,7 +338,7 @@ class SupervisorReviewServiceTests {
                 new AuthorizationService(repo),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,
-                new AuditEventService(auditEventRepository));
+                new AuditEventService(auditEventRepository), publishedEvents::add);
 
         reviewRepository.superiors.put("usr_init_sr", "usr_sr_sup"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_init_sr", 2);
@@ -369,7 +373,7 @@ class SupervisorReviewServiceTests {
                 new AuthorizationService(repo),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,
-                new AuditEventService(auditEventRepository));
+                new AuditEventService(auditEventRepository), publishedEvents::add);
         reviewRepository.superiors.put("usr_rf_init", "usr_rf_sup");
         reviewRepository.superiors.put("usr_rf_sup", "usr_rf_boss");
         reviewRepository.superiors.put("usr_rf_boss", "usr_rf_norole");
@@ -421,7 +425,7 @@ class SupervisorReviewServiceTests {
                 new AuthorizationService(repo),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,
-                new AuditEventService(auditEventRepository));
+                new AuditEventService(auditEventRepository), publishedEvents::add);
         reviewRepository.superiors.put("usr_init_a", "usr_sup_a");
         reviewRepository.superiors.put("usr_init_b", "usr_sup_b");
         TestSecurityActors.asSupervisor("usr_init_a", 1);
@@ -488,6 +492,90 @@ class SupervisorReviewServiceTests {
                             levelId, "M", "lower", rank, null, "active", java.time.Instant.parse("2026-06-14T00:00:00Z")));
                 });
         return repo;
+    }
+
+
+    // ── U12-003（U09-004 测试面）：第 9 段新增的员工域策略必须有可失败用例 ──────────────────────────
+
+    /** 处罚上限调整固定三条平行线（hr/finance/legal），发起时缺任一线最终审批人即拒（fail-closed）。 */
+    @Test
+    void penaltyCapAdjustRequiresFinalApproverOnEachDepartmentLine() {
+        chainL1();
+        TestSecurityActors.asSupervisorLevel(1);
+        var missingHr = new SupervisorReviewEvaluateRequest("u12-cap-missing", "n", List.of(), "staff.payroll.penalty_cap.adjust",
+                "staff_policy", "cap_u12_1", 0L, null, null,
+                List.of(new SupervisorReviewEvaluateRequest.ParallelLine("finance_review", "usr_fin_final"),
+                        new SupervisorReviewEvaluateRequest.ParallelLine("legal_review", "usr_legal_final")));
+        assertThatThrownBy(() -> service.evaluate(missingHr))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_LINE_FINAL_APPROVER_REQUIRED"));
+    }
+
+    /** 三审未齐时顶层（master）先批被拒 DEPARTMENT_REVIEWS_PENDING；三线齐后 master 确认，整单终态经注入的发布器发出。 */
+    @Test
+    void penaltyCapAdjustNeedsDepartmentReviewsBeforeMasterAndPublishesTerminalDecision() {
+        chainL1();
+        for (String code : List.of("hr_review", "finance_review", "legal_review")) {
+            // 与 V418 种子一致：hr_review 线无起点人，线上唯一节点＝发起时指定的最终审批人。
+            reviewRepository.lines.put(code, new SupervisorReviewRepository.ApprovalLine(code, code, 1, null, "active"));
+        }
+        TestSecurityActors.asSupervisorLevel(1);
+        var lines = List.of(new SupervisorReviewEvaluateRequest.ParallelLine("hr_review", "usr_hr_review_final"),
+                new SupervisorReviewEvaluateRequest.ParallelLine("finance_review", "usr_finance_review_final"),
+                new SupervisorReviewEvaluateRequest.ParallelLine("legal_review", "usr_legal_review_final"));
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest("u12-cap", "n", List.of(), "staff.payroll.penalty_cap.adjust",
+                "staff_policy", "cap_u12_2", 0L, null, null, lines));
+        assertThat(pending.reviewStatus()).isEqualTo("pending_review");
+        var nodes = reviewRepository.listChainNodes(pending.reviewId());
+        assertThat(nodes).extracting(ApprovalChainNode::lineCode).contains("hr_review", "finance_review", "legal_review", ApprovalChainNode.MAIN_LINE);
+        var master = nodes.stream().filter(n -> ApprovalChainNode.KIND_MASTER.equals(n.approverKind())).findFirst().orElseThrow();
+        assertThat(master.lineCode()).isEqualTo(ApprovalChainNode.MAIN_LINE);
+        // 主线上的直接上级节点先逐级通过，master 成为当前节点后仍须等三条部门线（DEPARTMENT_REVIEWS_PENDING）。
+        for (var node : nodes.stream().filter(n -> ApprovalChainNode.MAIN_LINE.equals(n.lineCode()) && !ApprovalChainNode.KIND_MASTER.equals(n.approverKind())).toList()) {
+            TestSecurityActors.asSupervisor(node.approverId(), 10);
+            service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("u12-cap-main-" + node.seq(), "n", List.of("att"), null, "approved", "主线逐级"));
+        }
+        publishedEvents.clear();
+        asMasterAuthority();
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("u12-cap-master-early", "n", List.of("att"), null, "approved", "确认")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEPARTMENT_REVIEWS_PENDING"));
+        assertThat(publishedEvents).isEmpty();
+        for (var line : lines) {
+            TestSecurityActors.asSupervisor(line.finalApproverId(), 3);
+            service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("u12-cap-" + line.lineCode(), "n", List.of("att"), null, "approved", "部门审核"));
+        }
+        asMasterAuthority();
+        var done = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("u12-cap-master", "n", List.of("att"), null, "approved", "确认"));
+        assertThat(done.reviewStatus()).isEqualTo("approved");
+        assertThat(publishedEvents).extracting(e -> ((SupervisorReviewDecisionRecord) e).reviewId()).contains(pending.reviewId());
+    }
+
+    /** 排班发布走 one_level_up：直接上级是唯一审批节点，发起人不能自批，上级批准即 approved 并发布终态事件。 */
+    @Test
+    void shiftPublishFollowsOneLevelUpChainAndPublishesApproval() {
+        chainL1();
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.evaluate(evaluate("u12-shift", "排班", List.of(), "staff.shift.publish", "staff_shift", "shift_u12", 0L, null));
+        assertThat(pending.reviewStatus()).isEqualTo("pending_review");
+        var nodes = reviewRepository.listChainNodes(pending.reviewId());
+        assertThat(nodes).hasSize(1);
+        assertThat(nodes.getFirst().approverId()).isEqualTo("usr_reviewer_a");
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("u12-shift-self", "n", List.of(), null, "approved", "自批")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
+        publishedEvents.clear();
+        TestSecurityActors.asSupervisor("usr_reviewer_a", 3);
+        var approved = service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("u12-shift-sup", "n", List.of(), null, "approved", "上一级批准"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
+        assertThat(publishedEvents).extracting(e -> ((SupervisorReviewDecisionRecord) e).reviewId()).containsExactly(pending.reviewId());
+    }
+
+
+    /** 顶层平台最高权限主会话（USB master）：id 与 username 同时匹配 SessionIssuer 常量才被识别为 master。 */
+    private static void asMasterAuthority() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", null, null, "active"),
+                        "test", List.of()));
     }
 
     /** 共享 service 用到的审批人夹具 rank：a → 主管级 3、b → 主管级 2（用例断言从上下文取的级别）；其余为顶级 30。 */
@@ -787,7 +875,7 @@ class SupervisorReviewServiceTests {
                 new AuthorizationService(levelAwareRepository(SHARED_RANKS, null)),
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 reviewRepository,  // 共享同一持久化存储
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository), publishedEvents::add
         );
 
         TestSecurityActors.asSupervisor("usr_reviewer_c", 3);

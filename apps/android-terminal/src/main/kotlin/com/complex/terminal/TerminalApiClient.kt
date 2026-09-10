@@ -1,5 +1,7 @@
 package com.complex.terminal
 
+// 文件版本：V0.04
+
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
@@ -23,6 +25,9 @@ class ApiException(
   val path: String,
   val responseBody: String,
 ) : RuntimeException("$path returned $statusCode: $responseBody")
+
+/** 员工私人手机通道的终端类型码（main TerminalCanaryService 闭集）。 */
+const val STAFF_PRIVATE_PHONE = "staff_private_phone"
 
 class TerminalApiClient(
   @PublishedApi internal val baseUrl: String,
@@ -48,6 +53,14 @@ class TerminalApiClient(
   }
 
   var accessToken: String? = null
+  var deviceId: String? = null
+  var deviceSigner: ((ByteArray) -> String)? = null
+  /** U01-001/U02-001：终端身份由绑定/登记的设备类型决定并只声明一次——应用在绑定成功后写入（staff_work_phone / tablet / kiosk）；
+   *  员工私人手机通道固定声明 [STAFF_PRIVATE_PHONE]。未绑定时不发类型头（服务端缺头即拒，fail-close），不按路径改报、不自报 app。 */
+  var terminalType: String? = null
+
+  fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String): JsonObject =
+    post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey))
 
   fun health(): HealthResponse = get("/api/v1/system/health")
 
@@ -123,7 +136,13 @@ class TerminalApiClient(
   // 员工设备凭证：绑定
   // ── BYOD 一期(2026-07-02):员工自有手机四功能 ──
 
-  /** 手机自助提交员工注册申请(审批通过后才有账号;staff_private_phone 终端契约)。 */
+  /** 私人手机自助提交员工注册申请(审批通过后才有账号)：以 staff_private_phone 声明通道身份，请求体携带安装时生成的设备公钥/指纹（U01-007/U02-002）。 */
+  fun listStaffRegistrationCompanies(): List<StaffRegistrationCompany> =
+    get("/api/v1/staff/registration-companies", STAFF_PRIVATE_PHONE)
+
+  fun submitStaffSelfRegistration(request: StaffSelfRegistrationRequest): StaffRegistrationReceipt =
+    post("/api/v1/staff/self-registrations", request, STAFF_PRIVATE_PHONE)
+
   fun submitStaffRegistration(request: StaffRegistrationSubmitRequest): StaffProfileRecord =
     post("/api/v1/staff/registrations", request)
 
@@ -249,39 +268,48 @@ class TerminalApiClient(
     return post("/api/v1/ticketing/verifications/${verificationSeg}/reverse", request)
   }
 
-  inline fun <reified T> get(path: String): T {
+  inline fun <reified T> get(path: String, terminalTypeOverride: String? = null): T {
     val builder = HttpRequest.newBuilder()
       .uri(URI.create("$baseUrl$path"))
       .timeout(Duration.ofSeconds(30))
       .GET()
-    applyHeaders(builder)
+    applyHeaders(builder, path, "GET", "", terminalTypeOverride)
     val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     return decode(path, response)
   }
 
-  inline fun <reified RequestBody, reified ResponseBody> post(path: String, body: RequestBody): ResponseBody {
+  inline fun <reified RequestBody, reified ResponseBody> post(path: String, body: RequestBody, terminalTypeOverride: String? = null): ResponseBody {
+    val encoded = json.encodeToString(body)
     val builder = HttpRequest.newBuilder()
       .uri(URI.create("$baseUrl$path"))
       .timeout(Duration.ofSeconds(30))
       .header("content-type", "application/json")
-      .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(body)))
-    applyHeaders(builder)
+      .POST(HttpRequest.BodyPublishers.ofString(encoded))
+    applyHeaders(builder, path, "POST", encoded, terminalTypeOverride)
     val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     return decode(path, response)
   }
 
   inline fun <reified ResponseBody> postJson(path: String, body: JsonObject): ResponseBody {
+    val encoded = json.encodeToString(normalizeJsonObjectKeys(body))
     val builder = HttpRequest.newBuilder()
       .uri(URI.create("$baseUrl$path"))
       .timeout(Duration.ofSeconds(30))
       .header("content-type", "application/json")
-      .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(normalizeJsonObjectKeys(body))))
-    applyHeaders(builder)
+      .POST(HttpRequest.BodyPublishers.ofString(encoded))
+    applyHeaders(builder, path, "POST", encoded)
     val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     return decode(path, response)
   }
 
-  fun applyHeaders(builder: HttpRequest.Builder) {
+  /** 类型头只来自绑定/登记类型（或私人手机通道的固定声明），不按路径改报；设备签名只跳过登录（U02-001/U07-003）。 */
+  fun applyHeaders(builder: HttpRequest.Builder, path: String, method: String, body: String, terminalTypeOverride: String? = null) {
+    (terminalTypeOverride ?: terminalType)?.let { builder.header("X-Terminal-Type", it) }
+    val id = deviceId
+    val signer = deviceSigner
+    if (id != null && signer != null && path != "/api/v1/auth/login") {
+      deviceRequestHeaders(id, method, path, body, signer).forEach { (name, value) -> builder.header(name, value) }
+    }
     accessToken?.takeIf { it.isNotBlank() }?.let { builder.header("authorization", "Bearer $it") }
   }
 

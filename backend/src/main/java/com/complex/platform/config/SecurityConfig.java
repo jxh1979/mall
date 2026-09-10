@@ -1,5 +1,7 @@
 package com.complex.platform.config;
 
+// 文件版本：V0.02
+
 import com.complex.platform.auth.BearerAuthenticationFilter;
 import com.complex.platform.auth.CustomerTokenAuthenticationFilter;
 import com.complex.platform.auth.DoubleSubmitCsrfFilter;
@@ -116,12 +118,15 @@ public class SecurityConfig {
     private String[] publicApiPaths() {
         return new String[]{
                 "/api/v1/auth/login",
+                "/api/v1/staff/registration-companies",
+                "/api/v1/staff/self-registrations",
                 "/api/v1/auth/refresh",
                 "/api/v1/auth/master/**",
                 "/api/v1/customer/**",
                 "/api/open/**",
                 "/api/v1/terminals/kiosks/*/config",
                 "/api/v1/terminals/kiosks/*/heartbeat",
+                "/api/v1/terminals/kiosks/*/locker-events",
                 "/api/v1/system/health",
                 "/api/v1/system/version",
                 "/actuator/health",

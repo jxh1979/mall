@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -16,7 +17,7 @@ type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: s
 
 const TEXT = {
   title: "薪酬与请假",
-  description: "薪资四块:固定工资(员工档案)+提成(业务自动归集)+奖金/处罚(手录必须带事由,审计留痕);人事「月结」后员工才可见,补录后可重结覆盖。请假由排班主管审批,通过区间考勤记「请假」;事假(无薪假)按日工资(月薪÷21.75)×天数自动扣薪,病假/年假/调休不扣。",
+  description: "薪资四块:固定工资(员工档案)+提成(业务自动归集)+奖金/处罚(手录必须带事由,审计留痕);人事「月结」后员工才可见,补录后可重结覆盖。请假由排班主管审批,通过区间考勤记「请假」;事假按请假占实际排班的工时比例扣薪，扣后不低于零,病假/年假/调休不扣。",
   loadFailed: "薪酬请假读取失败",
 };
 
@@ -39,6 +40,11 @@ function cnMonth(value?: string) {
 }
 
 export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, effectivePermissions, navigateTo }: AdminPageProps) {
+  const [cap, setCap] = React.useState<{ value: string; minValue: string; maxValue: string } | null>(null);
+  const [capReason, setCapReason] = React.useState("");
+  const [capReviewers, setCapReviewers] = React.useState({ hr_review: "", finance_review: "", legal_review: "" });
+  const [capMessage, setCapMessage] = React.useState("");
+  const [capSaving, setCapSaving] = React.useState(false);
   const [month, setMonth] = React.useState(currentMonth);
   const [payroll, setPayroll] = React.useState<PayrollRow[]>([]);
   const [leaves, setLeaves] = React.useState<LeaveRow[]>([]);
@@ -180,6 +186,38 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
   return (
     <section data-testid="staff-payroll-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      {hasPermissions(effectivePermissions, ["staff.payroll.manage"]) ? <>
+        <button type="button" onClick={async () => {
+          try {
+            const current = await api.get<{ value: number; minValue: number; maxValue: number }>("/api/v1/staff/settings/payroll-penalty-cap");
+            setCap({ value: String(current.value / 100), minValue: String(current.minValue / 100), maxValue: String(current.maxValue / 100) });
+            setCapMessage("");
+          } catch (error) { setCapMessage((error as Error).message); }
+        }}>普通扣除上限</button>
+        {cap ? <fieldset><legend>全平台普通扣除上限（百分比）</legend>
+          <p>修改须经人力、财务、法务审核，再由顶层平台最终确认；已月结单据沿用原上限。</p>
+          {([['value', '上限比例（%）'], ['minValue', '允许下限（%）'], ['maxValue', '允许上限（%）']] as const).map(([key, label]) => <label key={key}>{label}
+            <input aria-label={label} type="number" min={0} max={100} step="0.01" value={cap[key]} onChange={(event) => setCap({ ...cap, [key]: event.target.value })} />
+          </label>)}
+          {([['hr_review', '人力最终审批人'], ['finance_review', '财务最终审批人'], ['legal_review', '法务最终审批人']] as const).map(([key,label]) => <label key={key}>{label}
+            <input aria-label={label} value={capReviewers[key]} onChange={(event) => setCapReviewers({ ...capReviewers, [key]: event.target.value })} placeholder="员工账号编号" />
+          </label>)}
+          <label>调整事由<input aria-label="上限调整事由" value={capReason} onChange={(event) => setCapReason(event.target.value)} /></label>
+          <button type="button" disabled={capSaving} onClick={async () => {
+            if ([...Object.values(cap), ...Object.values(capReviewers), capReason].some((value) => !value.trim())) { setCapMessage("请填写比例、上下限、三条线的最终审批人及事由。"); return; }
+            setCapSaving(true);
+            try {
+              const review = await api.post<{ reviewId: string }>("/api/v1/staff/settings/payroll-penalty-cap", {
+                value: Math.round(Number(cap.value) * 100), minValue: Math.round(Number(cap.minValue) * 100), maxValue: Math.round(Number(cap.maxValue) * 100),
+                reason: capReason.trim(), parallelLines: Object.entries(capReviewers).map(([lineCode, finalApproverId]) => ({ lineCode, finalApproverId: finalApproverId.trim() })),
+              });
+              setCapMessage("申请已提交，审批完成前现行上限不变。审批单：" + review.reviewId);
+            } catch (error) { setCapMessage((error as Error).message); }
+            finally { setCapSaving(false); }
+          }}>提交上限调整审批</button>
+        </fieldset> : null}
+      </> : null}
+      {capMessage ? <p role="status">{capMessage}</p> : null}
       <AuditTrailHint event="staff.payroll.month_closed / staff.payroll.adjustment_added / staff.leave.reviewed" />
       <div className="admin-toolbar">
         <label>月份:<CnDatePicker mode="month" data-testid="payroll-month" value={month} onChange={(v) => setMonth(v || currentMonth())} /></label>

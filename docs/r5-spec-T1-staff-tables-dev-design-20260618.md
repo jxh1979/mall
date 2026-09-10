@@ -1,10 +1,19 @@
-# T1 员工三表 可编码开发规格 V0.1（2026-06-18）
+# T1 员工三表 可编码开发规格 V0.13（2026-06-18）
 
 > **任务**：R5 backlog **T1（员工档案/设备凭证/通知三表）**，W0 底座，**解锁 T9（Android 设备凭证）**。
 > **裁决依据**：R5 裁决⑨——员工三表 + Android 端凭证本期 P0；MDM 自有侧字段暂缓。
 > **关键边界**：本规格的 `staff_device_credentials`（员工私人手机 Keystore 公钥/不可逆指纹）与既有 `terminal_device_credentials`（V011，kiosk 一体机随机 token）是**两套完全不同实体**，互不复用、互不串值。
-> **工程约定**（对齐既有迁移）：`id VARCHAR(64)` 主键；`TIMESTAMPTZ ... DEFAULT now()`；CHECK 命名 `chk_<表>_<字段>`、唯一 `uq_<表>_<列>`；隔离列 `project_id VARCHAR(64) NOT NULL`、`merchant_id VARCHAR(64)`（NULL=平台员工）；个人信息只存不可逆哈希（PIPL，compliance §4）。
-> **迁移**：当前最新 V065，本任务取 **V066**（连续取号）；测试用 `MigrationVersions.latest()` 动态读版本（R3 已去硬钉，无需改 12 处 JDBC 测试）。落地后把 `matrix-migration-claims.json` 中 `staff_profiles`/`staff_device_credentials`/`employee_notices` 由 absent 改 present。
+> **工程约定**（对齐既有迁移）：`id VARCHAR(64)` 主键；`TIMESTAMPTZ ... DEFAULT now()`；CHECK 命名 `chk_<表>_<字段>`、唯一 `uq_<表>_<列>`；隔离列 `project_id VARCHAR(64) NOT NULL`、`merchant_id VARCHAR(64)`（NULL=平台员工）；姓名、手机号与证件使用既有 PiiCipher 加密存放；phone/id_doc 接收原值，日常 HTTP 响应强制脱敏，不从旧哈希恢复。
+> **迁移**：三表最初由 V066 建立；本次员工域迁移以 main 已应用的 V410 之后连续编号为 V411—V422（原稿 V400—V409 低于 V410，按 U10-001 重编号；V421 为寄存柜扫码凭证表、V422 为顶班记录表）；测试用 `MigrationVersions.latest()` 动态读版本（R3 已去硬钉，无需改 12 处 JDBC 测试）。落地后把 `matrix-migration-claims.json` 中 `staff_profiles`/`staff_device_credentials`/`employee_notices` 由 absent 改 present。
+
+## M010 当前实现（2026-09-08）
+
+- 注册分两条路径：商户通过 `/staff/registrations` 代提交，审批域公司＝该商户当前生效的经营主体公司（main 主体拓扑为三角色多对多，无固定父链）；公司员工在私人手机 App 安装时由 Keystore 生成设备密钥，以私人手机通道（终端类型 `staff_private_phone`）调用公开 `/staff/self-registrations` 本人提交，请求必须携带该手机的设备公钥与指纹并随申请绑定本人（缺失、不符或指纹已绑他人即拒），公开入口按认证类频控；公司列表来自 `/staff/registration-companies`。合作方式为「自营」的商户视同公司自有，其员工使用公司员工路径。公开提交只返回申请编号与待审状态，审核前不产生账号。提交人不得自审；公司审批与商户提交分开。
+- 姓名、手机号和证件由现有 PiiCipher 加密；日常接口固定脱敏手机和证件。任职状态独立保存待入职、在职、试岗、停岗、离职，与审批、存档分开。通知和私人手机操作仅限本人；首次私人手机绑定直接生效，换机及异常后的复核保留。删除须先存档、最高权限批准且无现存引用；未结束排班和未取寄存物也属于引用。
+- 单次或整周排班先完整验证，再通过现有主管上一级审批。批准前不写入已发布排班；修改由原发起人在班次开始前填写原因，前后快照和审批编号追加留存。审批单包含人员、前后时间、点位和原因。可见天数按经营主体设置，出厂含今天共七天，配置须同时填写上下限。
+- 普通扣除合计按当月总薪资的比例封顶，默认20%；总薪资按 HTML 为基础工资、各项补贴、绩效工资与奖金之和（现行列只有固定工资与奖金两项先取全，补贴/绩效列落地后并入分母），提成不进入分母，事假单算。上限变更要求人事、财务、法务均通过，再由最高权限最终确认；已月结月份保留原上限快照。事假按已批准且覆盖实际排班的请假工时占当期总工时的比例，从当期应发薪资（固定工资+提成+奖金，个税与处罚另算）中扣减，下限为零。跨月班次按结束时点归属，月历只采用属于该班次的打卡。
+- 柜机以已登记 kiosk 设备令牌（`X-Device-Token`）单端调用 `/api/v1/terminals/kiosks/{device_id}/locker-events` 上报扫码完成事件；员工身份只由本人手机会话申请的一次性短时扫码凭证（`POST /api/v1/staff/lockers/scan-token`，120 秒内有效）承载并由服务端换回，不要求同一请求带员工会话；`staff_locker_records` 留存格口和存取时刻。重复事件按幂等键返回原结果，未取空格口不能给他人使用，取空后可流动使用。员工不用另外填写登记表。此处完成的是软件事件记录；厂商扫码身份接入、物理开锁协议尚缺资料，未声称完成设备联调。
+
 
 ---
 
@@ -19,9 +28,9 @@ CREATE TABLE IF NOT EXISTS staff_profiles (
     project_id VARCHAR(64) NOT NULL,                 -- 综合体归属（隔离）
     merchant_id VARCHAR(64),                         -- NULL=平台员工；非空=商户员工
     user_id VARCHAR(64),                             -- 审批通过后关联 access_users.id（生成角色）
-    name VARCHAR(128) NOT NULL,
-    phone_hash VARCHAR(64),                          -- 手机号不可逆哈希（PIPL）
-    id_doc_hash VARCHAR(64),                         -- 证件不可逆哈希（可选）
+    name TEXT NOT NULL,                         -- 姓名密文
+    phone TEXT,                                     -- 手机号密文
+    id_doc TEXT,                                    -- 证件密文（可选）
     staff_level_id VARCHAR(64) REFERENCES staff_levels(id),  -- 职级（V055）
     registration_status VARCHAR(32) NOT NULL DEFAULT 'submitted',
     approved_by VARCHAR(64),
@@ -85,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 `submitted → approved`（生成 user_id + 默认角色，写 staff.approved 事件 + approval_result 通知）｜`submitted → rejected`（reject_reason 必填）｜`approved → suspended`（停用，撤销关联角色）。
 
 **设备凭证** `staff_device_credentials.bind_status`
-- 首次绑定：`(无) → pending_review →（审批）active`，写 `bound_at`。
+- 首次本人绑定：`(无) → active`，写 `bound_at`；不另加人工审批。换机及异常后重新绑定继续复核。
 - 换机：新凭证 `pending_review` 且 `supersedes_credential_id=旧 active.id`；审批通过 → 新凭证 `active`、旧凭证 `superseded`（保证 `uq_staff_dev_cred_one_active`）。
 - 失效：`active|pending_review → revoked`（解绑、或 integrity 检测异常），写 `revoked_at`/`revoked_reason`。
 - 完整性：`integrity_status` 由 Android 端 report；`root_detected/debug_detected/abnormal` → 自动 `bind_status=revoked` + 写 staff_device.integrity_failed + 进库存域外的复核（沿用 supervisor_review 或仅通知，见下）。
@@ -102,7 +111,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 - `suspend(scope, id)` / `listProfiles(scope)`（强制 currentMerchantScope 过滤）。
 
 `StaffDeviceCredentialService`
-- `bindCredential(scope, staffId, publicKey, fingerprintHash)` → pending_review（若已有 active 且 fingerprint 不同→视为换机，置 supersedes）。
+- `bindCredential(scope, staffId, publicKey, fingerprintHash)` 校验本人归属；首次直接 active，已有凭证历史则 pending_review；已有 active 且指纹不同时置 supersedes，批准时先停旧再启新。
 - `approveRebind(scope, credId)` → 新 active、旧 superseded；权限 `staff.device.review`。
 - `reportIntegrity(staffId, credId, status)` → 非 trusted 即 revoke + 通知 + 事件；端侧上报。
 - `revokeCredential(scope, credId, reason)` / `unbind(...)`；权限 `staff.device.revoke`。
@@ -118,10 +127,18 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 ## 4. API / OpenAPI 端点（P0）
 | 方法 | 路径 | 权限点 | 说明 |
 |---|---|---|---|
-| POST | /api/v1/staff/registrations | staff.profile.submit | 私人手机 App 提交注册 |
+| POST | /api/v1/staff/registrations | staff.profile.submit | 商户代员工提交注册（merchant_id 必填，由商户经营主体公司审批） |
+| GET | /api/v1/staff/registration-companies | public | 公司员工自助注册可选公司列表 |
+| POST | /api/v1/staff/self-registrations | public（私人手机通道，须带设备公钥/指纹，频控） | 公司员工本人提交注册，只返回申请编号与待审状态 |
+| POST | /api/v1/staff/profiles/{id}/employment-status | staff.profile.review | 任职五态变更（幂等键必填） |
+| GET | /api/v1/staff/settings/shift-visible-days | staff.shift.manage | 读经营主体可见天数（缺行回落全局出厂行 7/1..31） |
+| POST | /api/v1/staff/settings/shift-visible-days | staff.shift.manage | 设可见天数（值与上下限同填，幂等键必填） |
+| POST | /api/v1/staff/lockers/scan-token | staff.profile.self | 本人申请寄存柜一次性扫码凭证 |
+| POST | /api/v1/terminals/kiosks/{device_id}/locker-events | 柜机 X-Device-Token | 柜机单端上报格口存取事件 |
+| POST | /api/v1/staff/shifts/{id}/cover | staff.shift.manage | 已开始班次的临时顶班记录（不走排班审批） |
 | POST | /api/v1/staff/registrations/{id}/review | staff.profile.review | 后台审批通过/驳回 |
 | GET | /api/v1/staff/profiles | staff.profile.view | 隔离列表 |
-| POST | /api/v1/staff/device-credentials | staff.device.bind | 绑定/换机申请（pending_review）|
+| POST | /api/v1/staff/device-credentials | staff.device.bind | 本人首次绑定直接生效；换机/异常重新绑定待复核|
 | POST | /api/v1/staff/device-credentials/{id}/approve-rebind | staff.device.review | 审批换机生效 |
 | POST | /api/v1/staff/device-credentials/{id}/report-integrity | （端侧鉴权）| Root/调试上报 |
 | POST | /api/v1/staff/device-credentials/{id}/revoke | staff.device.revoke | 解绑/失效 |
@@ -167,7 +184,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 - **实体区分**：staff_device_credentials 与 terminal_device_credentials 无外键/无串值。
 
 ## 8. 测试计划
-- 迁移应用：`MigrationVersions.latest()` 动态断言到 V066；CHECK 约束拒绝非法枚举。
+- 迁移应用：`MigrationVersions.latest()` 动态读最新版本，不硬钉具体版号；CHECK 约束拒绝非法枚举。
 - 状态机：注册 approve/reject、换机 supersede 链、一员工仅一 active（唯一索引冲突用例）、root→revoke。
 - 隔离：商户 scope 只见自身；平台 scope 见全量；越权读他户被拒。
 - `verify:matrix-vs-migration`：实现后三表 absent→present 触发闸口 → 更新 claims.json。

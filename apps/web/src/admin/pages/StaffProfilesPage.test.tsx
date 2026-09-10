@@ -1,3 +1,4 @@
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -34,6 +35,40 @@ function renderPage(api: AdminApiClient) {
 }
 
 describe("StaffProfilesPage 员工档案销售岗维护（ADM-STF-004）", () => {
+  it("员工状态只提供五种业务状态，变更须填写事由", async () => {
+    const api = makeApi();
+    renderPage(api);
+    const select = await screen.findByLabelText("员工状态-sp-1");
+    expect(Array.from(select.querySelectorAll("option")).map((option) => option.textContent)).toEqual(["待入职", "在职", "试岗", "停岗", "离职"]);
+    fireEvent.change(select, { target: { value: "employed" } });
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "已入职" } });
+    fireEvent.change(select, { target: { value: "employed" } });
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/employment-status", { employmentStatus: "employed", reason: "已入职" }));
+  });
+
+  it("日常存档提交事由，恢复入口只显示在已存档档案上", async () => {
+    const api = makeApi();
+    renderPage(api);
+    const archive = await screen.findByTestId("staff-profile-archive-sp-1");
+    fireEvent.click(archive);
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "工作结束" } });
+    fireEvent.click(archive);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/archive", { reason: "工作结束" }));
+  });
+
+  it("显示已存档后可以申请删除，不把删除申请当成审批完成", async () => {
+    const api = makeApi();
+    vi.mocked(api.get).mockResolvedValue([{ ...PROFILES[0], archivedAt: "2026-09-08T00:00:00Z", deleteStatus: "none" }]);
+    renderPage(api);
+    fireEvent.click(await screen.findByLabelText("显示已存档"));
+    fireEvent.change(await screen.findByTestId("staff-profiles-reason"), { target: { value: "申请清理" } });
+    fireEvent.click(screen.getByTestId("staff-profile-delete-request-sp-1"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/delete-request", { reason: "申请清理" }));
+    expect(screen.queryByTestId("staff-profile-delete-approve-sp-1")).toBeNull();
+  });
+
   it("列出员工并显示销售岗是/否", async () => {
     renderPage(makeApi());
     await waitFor(() => expect(screen.getByTestId("staff-profiles-table")).toBeTruthy());
@@ -73,5 +108,16 @@ describe("StaffProfilesPage 员工档案销售岗维护（ADM-STF-004）", () =>
       "/api/v1/staff/profiles/sp-2/sales-position",
       { salesPosition: false, reason: "转岗后勤" },
     ));
+  });
+});
+
+describe("StaffProfilesPage 已存档档案按需拉取（U03-008）", () => {
+  it("默认不请求已存档档案，勾选后才带 include_archived=true 重新拉取", async () => {
+    const api = makeApi();
+    renderPage(api);
+    await screen.findByLabelText("员工状态-sp-1");
+    expect((api.get as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => call[0])).toEqual(["/api/v1/staff/profiles"]);
+    fireEvent.click(screen.getByTestId("staff-profiles-include-archived"));
+    await waitFor(() => expect((api.get as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => call[0])).toContain("/api/v1/staff/profiles?include_archived=true"));
   });
 });

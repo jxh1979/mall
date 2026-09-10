@@ -1,5 +1,7 @@
 package com.complex.terminal
 
+// 文件版本：V0.01
+
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -20,6 +22,16 @@ object DeviceKeystore {
   /** 设备公钥 Base64(X.509 DER)。 */
   fun devicePublicKeyBase64(): String =
     Base64.encodeToString(ensurePublicKey().encoded, Base64.NO_WRAP)
+
+  fun sign(bytes: ByteArray): String {
+    ensurePublicKey()
+    val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+    val key = keyStore.getKey(KEY_ALIAS, null) as java.security.PrivateKey
+    val signature = java.security.Signature.getInstance("SHA256withECDSA").run {
+      initSign(key); update(bytes); sign()
+    }
+    return Base64.encodeToString(signature, Base64.NO_WRAP)
+  }
 
   /** 设备指纹哈希 = SHA-256(公钥 X.509 DER) 十六进制。 */
   fun deviceFingerprintHash(): String {

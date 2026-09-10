@@ -1,10 +1,12 @@
 package com.complex.platform.access.staff.dto;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
-/** E1 排班请求(同员工同开始时刻幂等覆盖)。 */
+/** 排班及修改申请；修改时间时显式指定原班次，须审批后发布。 */
 public record StaffShiftRequest(
         String idempotencyKey,
         String userId,
@@ -12,6 +14,11 @@ public record StaffShiftRequest(
         Instant startAt,
         Instant endAt,
         List<String> pointSpaceIds,
-        String note
+        String note,
+        String shiftId
 ) {
+    public StaffShiftRequest(String idempotencyKey, String userId, LocalDate workDate, Instant startAt,
+            Instant endAt, List<String> pointSpaceIds, String note) {
+        this(idempotencyKey, userId, workDate, startAt, endAt, pointSpaceIds, note, null);
+    }
 }
