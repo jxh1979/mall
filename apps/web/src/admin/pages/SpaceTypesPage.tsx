@@ -205,16 +205,12 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
                           label="审批通过"
                           impact={`由最高权限批准删除种类「${row.typeName}」。申请人不能批自己。批准后前台不再使用，后台仍可查阅。`}
                           onConfirm={() => void approveDeleteType(row, "approved")}
-                          permissionsState={effectivePermissions}
-                          permissions={MANAGE}
                           data-testid={`space-type-delete-approve-${row.typeCode}`}
                         />
                         <HighRiskConfirm
                           label="审批驳回"
                           impact={`驳回删除种类「${row.typeName}」的申请，该种类回到已存档。`}
                           onConfirm={() => void approveDeleteType(row, "rejected")}
-                          permissionsState={effectivePermissions}
-                          permissions={MANAGE}
                           data-testid={`space-type-delete-reject-${row.typeCode}`}
                         />
                       </>

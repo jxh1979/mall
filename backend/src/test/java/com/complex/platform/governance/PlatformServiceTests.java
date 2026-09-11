@@ -319,6 +319,14 @@ class PlatformServiceTests {
     }
 
     @Test
+    void createSpaceTypeRejectsExistingCodeEvenWhenActive() {
+        assertThatThrownBy(() -> service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-dup-shop", "add", List.of(), "shop", "改名铺位", 1, "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_CODE_EXISTS"));
+    }
+
+    @Test
     void createSpaceTypeIgnoresRequestedDisabledAndStaysActive() {
         SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
                 "st-force-active", "add", List.of(), "tempkind", "临时种类", 10, "disabled"));

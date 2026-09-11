@@ -455,15 +455,8 @@ public class PlatformService {
                             .filter(item -> typeCode.equals(item.typeCode()))
                             .findFirst();
                     if (existing.isPresent()) {
-                        SpaceTypeRecord current = existing.get();
-                        if (!"active".equals(current.status())) {
-                            throw ApiException.conflict("SPACE_TYPE_CODE_EXISTS",
-                                    "该种类编码已存在（已存档或已删除），不能直接新建启用");
-                        }
-                        return repository.saveSpaceType(new SpaceTypeRecord(
-                                current.id(), typeCode, typeName,
-                                request.sortOrder() == null ? current.sortOrder() : request.sortOrder(),
-                                "active", current.createdAt(), now));
+                        throw ApiException.conflict("SPACE_TYPE_CODE_EXISTS",
+                                "该种类编码已存在，不能用新增改已有种类");
                     }
                     return repository.saveSpaceType(new SpaceTypeRecord(
                             "sptype_" + typeCode, typeCode, typeName,
