@@ -1,22 +1,22 @@
 {
-  "note": "verify:tenant-isolation 已知缺口 baseline（棘轮底座）。闸口对此清单之外的新增 finding 硬失败。本清单只登记扫描器已发现、尚未收紧的项；不得把缺口写成已修复。收紧后从本清单移除。重建：node tools/verify-tenant-isolation.mjs --write-baseline。",
+  "note": "verify:tenant-isolation 已知缺口 baseline（棘轮底座）。闸口对此清单之外的新增 finding 硬失败。本清单只登记扫描器已发现、尚未收紧的项，并指向 generated_at_source。不得把缺口写成已修复或豁免。收紧后从本清单移除。重建：node tools/verify-tenant-isolation.mjs --write-baseline。",
   "generated_at_source": "static scan of Jdbc*Repository.java vs domain-ownership-scope-audit-v0.1.csv",
   "known_findings": [
     {
       "key": "F1:UNSCOPED_DIRECT_READ:access_grant_requests",
-      "text": "[F1 UNSCOPED_DIRECT_READ] 表 access_grant_requests 在 JdbcAccessRepository 中有 SELECT 读，扫描器未找到带 project_id = : 的 scoped 查询。本条仍是未收紧的跨租户读风险，不是已修复。"
+      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 access_grant_requests 有 SELECT 读，未见 project_id = : 的 scoped 查询。尚未收紧。证据：generated_at_source。"
     },
     {
       "key": "F2:UNREGISTERED_TABLE:d",
-      "text": "[F2 UNREGISTERED_TABLE] 扫描器把 SQL 自连接别名 d 报成未登记表。本条仍在清单里，是尚未从扫描器消除的误报，不是已收口的豁免。"
+      "text": "[F2 UNREGISTERED_TABLE] 扫描器报未登记表名 d。尚未收紧。证据：generated_at_source。"
     },
     {
       "key": "F1:UNSCOPED_DIRECT_READ:revenue_stream_attribution",
-      "text": "[F1 UNSCOPED_DIRECT_READ] 表 revenue_stream_attribution 存在无项目范围的读。本条仍是未收紧的行级过滤缺口；端点权限闸不代替行级隔离，也不构成本条已修复。"
+      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 revenue_stream_attribution 存在无项目范围的读。尚未收紧。证据：generated_at_source。"
     },
     {
       "key": "F1:UNSCOPED_DIRECT_READ:integration_channel_store_map",
-      "text": "[F1 UNSCOPED_DIRECT_READ] 表 integration_channel_store_map 存在无商户范围的读。本条仍是未收紧的行级过滤缺口；不得把无范围全表读写成业务必然。"
+      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 integration_channel_store_map 存在无商户范围的读。尚未收紧。证据：generated_at_source。"
     }
   ]
 }
