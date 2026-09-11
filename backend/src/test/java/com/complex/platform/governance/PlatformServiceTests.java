@@ -310,6 +310,54 @@ class PlatformServiceTests {
         assertThat(service.listMerchants(false).items()).noneMatch(m -> m.id().equals(merchant.id()));
     }
 
+    @Test
+    void requestDeleteMerchantWithoutArchiveIsRejected() {
+        MerchantRecord merchant = seedMerchant("seed-no-archive");
+        assertThatThrownBy(() -> service.requestDeleteMerchant(merchant.id(),
+                new MerchantDeleteRequest("delete-no-archive", "跳过存档")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_NOT_ARCHIVED"));
+    }
+
+    @Test
+    void requestDeleteOnAlreadyDeletedMerchantIsRejected() {
+        MerchantRecord merchant = seedMerchant("seed-already-del");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-ad", "测试存档理由"));
+        platformRepository.merchantReferenceCount = 0;
+        asMasterAuthority();
+        service.requestDeleteMerchant(merchant.id(), new MerchantDeleteRequest("delete-ad-1", "第一次删除"));
+        TestSecurityActors.asPlatformAdmin();
+        assertThatThrownBy(() -> service.requestDeleteMerchant(merchant.id(),
+                new MerchantDeleteRequest("delete-ad-2", "再申请一次")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_ALREADY_DELETED"));
+    }
+
+    @Test
+    void requesterCannotApproveOwnMerchantDelete() {
+        MerchantRecord merchant = seedMerchant("seed-self-appr");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-sa", "测试存档理由"));
+        TestSecurityActors.asPlatformAdmin(SessionIssuer.MASTER_USER_ID);
+        service.requestDeleteMerchant(merchant.id(), new MerchantDeleteRequest("delete-sa", "自己申请"));
+        asMasterAuthority();
+        assertThatThrownBy(() -> service.approveDeleteMerchant(merchant.id(),
+                new MerchantDeleteApprovalRequest("delete-sa-appr", "approved", null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_SELF_APPROVE_FORBIDDEN"));
+    }
+
+    @Test
+    void masterDirectDeleteStillRejectedWhenMerchantReferenced() {
+        MerchantRecord merchant = seedMerchant("seed-master-inuse");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-mi", "测试存档理由"));
+        platformRepository.merchantReferenceCount = 3;
+        asMasterAuthority();
+        assertThatThrownBy(() -> service.requestDeleteMerchant(merchant.id(),
+                new MerchantDeleteRequest("delete-mi", "密钥直办仍占用")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_IN_USE"));
+    }
+
     // ---- M009-014：字典分页元数据须覆盖全部条目 ----
     @Test
     void listSpaceTypesPageSizeCoversAllItems() {
