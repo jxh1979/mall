@@ -1,7 +1,28 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V3.37
+版本：V3.43
+
+## 当前 M016 B5-r1双PASS，四值全等，M016 → PASS（先记账，再写闭环文件）
+2026-09-11T09:58:05Z。Grok B5-r1真实exit0，报告modules/M016-b5-r1-grok-raw.md（V0.01，37973bytes SHAb5add5923387475c2fc89971bd69b347f70286eddc6379e896cb81d0ed9279cd，四项交付事实成立），整模块三线全量结论PASS。席甲B5-r1票PASS（modules/M016-b5-r1-self-raw.md V0.01，16411bytes SHA6ef6ad5d81260d5c083b1b5cc7f7b69670b6f9529d7a568af16df6a435cb34d7；Grok真实退出后主仓实跑测试与 complex_test 只读探针并独立落盘、再读Grok）。合取双PASS。
+B5后四值（精确路径modules/M016-b5-r1-grok-raw.md最后独占锁行）：实算/sidecar/ledger/Grok均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+M016状态IN_PROGRESS→PASS：B3累计1（只新增迁移 V423__m016_floor_plan_and_space_type_checks.sql：project_id 列级 NOT VALID 非空、shape_type CHECK 八值、字典 status 闭集；同批 M015 白名单 + M017 先红用例 + 门禁产物再生成；已应用 V023/V034/V184/V203 零改写）；B4双PASS；修复队列4 个 ID 全否（3 项已修：001–003；004 观察）；添加项0；questions 0；无HTML修改申请；未提交/推送/合并/部署（阶段B不提交；M016修复随下一检查点，含迁移须全链 verify:predeploy 绿）。本节写入后再创建闭环文件modules/M016-floor-plan-space-type-migrations-seg1.md。当前16PASS/0IN_PROGRESS/455PENDING；操作员本批指令（继续 M016）至此完成。
+
+## 当前 M016 B4-r1双PASS，进入B5-r1整模块全量重审
+2026-09-11T09:43:33Z。Grok B4-r1真实exit0，报告modules/M016-b4-r1-grok-raw.md（V0.01，36148bytes SHA2e2376c0c7a502534ca423170ace1b72a0a98848576d30f001e36ae5258f9708，四项交付事实成立），结论PASS（内容与§5闸3归因均PASS）。席甲B4-r1票PASS（modules/M016-b4-r1-self-raw.md V0.01，25713bytes SHA7bd87f7fa3c8bd89da0657fd9c6a53149b7c5a93e97fd061a20329e3145211a5；全部hunk落到 001–003，未改写已应用迁移、未改 OpenAPI/HTML/锁/权限种子/前端）。合取双PASS，findings V1.97把 001–003 队列改否；当前队列是=0。B3 累计 1/3。
+下一步B5-r1：派Grok整模块全量三线重审，席甲自席raw后读Grok并做四值校验（精确路径modules/M016-b5-r1-grok-raw.md最后独占锁行）；双PASS→ledger先记PASS再写modules/M016-<slug>.md；任一FAIL→回退统一规则。
+
+## 当前 M016 B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-11T09:28:37Z。席甲在主工作区就地修（TDD：RED＝先加 4 个可失败用例——`FloorPlanJdbcIntegrationTests` booth/public_area 落库 + 空 project_id 拒绝、`PlatformJdbcIntegrationTests` 字典 status='Active' 拒绝、`FloorPlanServiceTests` booth/public_area 白名单——在无 V423、白名单未改时 5 例 1 失败 1 错误 / 17 例 1 失败 / 28 例 1 错误；GREEN＝新增 `V423__m016_floor_plan_and_space_type_checks.sql`（Flyway 在测试启动时把 complex_test 从 V422 升到 V423）+ `FloorPlanService.SHAPE_TYPES` 八值后 6 个测试类 75/75 全绿；同批 `npm run docs:data-isolation-spec` / `docs:domain-ownership-scope` 重生成门禁产物并 verify 通过；干跑先在一次性 m016_scratch 库验证（RED 4 红 → GREEN 50/50，scratch 已删）；日志 /tmp/m016_b3r1_run.log、_red.log、_green.log）：before tree ced99bc97a1ccceaf075d804ed39e5f6ad74b3e0 → after tree 71f1468b8bf3bc19d5624d92bcebd5a3edd99cde（6 files changed, 100 insertions(+), 6 deletions(-)）；diff 冻结 /tmp/m016_b3_r1.diff（12377 bytes SHA 0351ea65a591a33def9327c2f8d6d3bfbbdbd3a75a825a2dd4d1bee2ee982ea2）。改动文件版本头递增（FloorPlanService V0.03、FloorPlanServiceTests V0.03、FloorPlanJdbcIntegrationTests V0.02、PlatformJdbcIntegrationTests V0.05）。B3 累计 0→1。未改 V023/V034/V184/V203/OpenAPI/三份 HTML/锁/权限种子/前端；未提交。下一步：派 Grok B4-r1（modules/M016-b4-r1-grok-raw.md），真实退出后席甲自席落盘 B4 raw 再读。
+
+## 当前 M016 B2-r1 双 PASS 定稿，进 B3-r1（席甲修）
+2026-09-11T09:27:51Z。Grok B2-r1 真实退出（exit 0；M016-b1-grok-raw.md V0.02 追加段，全文 54228bytes SHA 5b8796975fbd26b6ff74a561410d4922aee14669c73460291231b83b9f5fc541，票 PASS，逐 ID 001–004 全 PASS（非阻断勘误：PlatformJdbcIntegrationTests 属 M011 非 M017；候选「20 张表」应表述为迁移全文 0 处 REFERENCES projects；软引用引用点应写 V005/V023 列定义而非 V084））；席甲 B2-r1 票 PASS（M016-b1-self-raw.md V0.02，全文 32879bytes SHA 6c83f833d66f0bb622d3c290902121fcf9d332550d569f7f5c1b7a228cd417f2，自席落盘后才读 Grok 追加段）。定稿 findings V1.96：队列「是」3（001–003）、「否」1（004）。B3-r1 由席甲在主工作区就地 TDD 修复（RED→GREEN；干跑在一次性 m016_scratch 库已验证 RED 3 例 → GREEN 22/22），修前 tree 记入 B3 完成节供 B4 冻结 diff。派发勘误：B2-r1 首次派发因候选 JSON 一处未转义引号解析失败致 findings 未写、提示词哈希占位符为空，Grok 启动约 60 秒内被席甲终止（raw 前缀 35809 bytes 未变、未产出），修正后重派；不计失败重跑。
+
+## 当前 M016 B2-r1 候选已落盘（findings V1.95），待 Grok B2 票
+2026-09-11T09:15:44Z。B1：Grok 真实 exit 0（modules/M016-b1-grok-raw.md V0.01 35809bytes SHA decd1a01…c0cef，FAIL，GR-M016-001…003、OBS-01…12）；席甲独立落盘（modules/M016-b1-self-raw.md V0.01 30020bytes SHA 59d183df…6661a，FAIL，CX-M016-001…003、OBS-1…10；complex_test 只读探针 + M017 Jdbc 集成 3/3）后才读 Grok；B1 后四值全等 b012328f…6695a。两席三条根因同集（GR-001↔CX-002、GR-002↔CX-001、GR-003↔CX-003）。B2-r1 候选 findings V1.95：M016-001…004，队列「是」3（001 project_id 列级必填 NOT VALID、002 shape_type CHECK 八值 + M015 白名单同批、003 字典 status 闭集顺手同一 V423）、「否」1（004 观察）；无添加项、无 questions；不 BLOCKED。勘误：Grok B1 引「铁律 8」不存在（控制合同铁律 7 条）。B3 干跑已在一次性 m016_scratch 库验证（RED 3 例红 → GREEN 22/22，V423 四条约束落库，scratch 已删，complex_test 仍 V422）。派 Grok B2-r1（追加到 M016-b1-grok-raw.md，V0.02），真实退出后席甲自席落盘 self-raw V0.02 票再读追加段。正本 HEAD=origin/main=fe50e3f3（PR #436 已合并）。
+
+## 当前 M016 B1开始（M001–M015 已闭环；U01–U18 未发布材料已审修发布）
+2026-09-11T08:52:44Z。操作员 2026-09-11 指令：「继续 M016」。M016「空间点位、楼层平面图与营业时段／数据库迁移／第1段」PENDING→IN_PROGRESS，4 文件（计划冻结 164 行）：V023__p1_floor_plan_polygons.sql、V034__p2_floor_plan_import_tasks.sql、V184__space_type_dictionary.sql、V203__spaces_status_check.sql，映射 18 判据（GEN-001…018）；B3 累计 0；子代理失败重跑 0。正本 main HEAD=origin/main=fe50e3f309c04f81820f8414bd8860325d694098（PR #436 M015 闭环检查点已合并，工作区干净）。顺序：先派 Grok B1（报告 modules/M016-b1-grok-raw.md V0.01），Grok 真实退出后席甲（Claude Fable 5.1，作者自审票）独立落盘 modules/M016-b1-self-raw.md 再读 Grok；B1 后四值校验。转入本模块的既有口径：M015-002（mall_floor_plans.project_id 列级 NOT NULL 归本模块）、M015-013（候选区域类型摊位/公共区：V023/V034 shape_type CHECK 放宽须新迁移，与 M015 白名单/M018 前端同批）、M013-004/M014-002（空间类型活校验＝V184 字典八码，OpenAPI/文档枚举仅契约快照）、M009-013/018（补列＝新建能力、全局遗漏不在模块内加迁移）。已应用迁移不得改写（Flyway 校验和），缺陷处置只能是新 V 号迁移并重生成 data-isolation spec；测试库 complex_test 只读探针（三个 COMPLEX_DATABASE_* 变量，不 source env）。当前 15 PASS / 1 IN_PROGRESS / 455 PENDING。
 
 ## 当前 M015 B5-r1双PASS，四值全等，M015 → PASS（先记账，再写闭环文件）
 2026-09-11T08:37:47Z。Grok B5-r1真实exit0，报告modules/M015-b5-r1-grok-raw.md（V0.01，41949bytes SHA73f8f552a491c2dd1de844adb054bdfebd85a2001c7fb3b00cefe3469a7321ac，四项交付事实成立），整模块三线全量结论PASS。席甲B5-r1票PASS（modules/M015-b5-r1-self-raw.md V0.01，31876bytes SHA2184901a923e29ad41acac364b228fca5e9c3318b027cce3e48c2b774824a666；Grok真实退出后主仓实跑测试并独立落盘、再读Grok）。合取双PASS。
@@ -1030,7 +1051,7 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M013-entity-topology-binding-docs-seg1.md) | 0 | B5-r1全4文件三线双PASS；四值全等；10项队列全否（8已修/1 XM→M392/1登记）；B3累计1；HTML裁决1项已落地（PR #433）；席甲=Claude Fable 5.1 |
 | M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M014-governance-product-spec-seg2.md) | 0 | B5-r1全文件三线双PASS；四值全等；修复队列20 个 ID 全否（18 项已修、019 XM→M261、020 登记）；B3累计1；席甲=Claude Fable 5.1 |
 | M015 `空间点位、楼层平面图与营业时段／后台实现／第1段` | PASS | 2 | 2 | [B5-r1双PASS](modules/M015-floorplan-business-hours-backend-seg1.md) | 0 | B5-r1全23文件三线双PASS；四值全等；修复队列14 个 ID 全否（9 项已修；010/011 XM 同批、012 全局遗漏、013 XM→M016/M018、014 观察）；B3累计2；席甲=Claude Fable 5.1 |
-| M016 `空间点位、楼层平面图与营业时段／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M139、M145、M146；既有累计仅保留历史，不代表本版已审 |
+| M016 `空间点位、楼层平面图与营业时段／数据库迁移／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M016-floor-plan-space-type-migrations-seg1.md) | 0 | B5-r1全4+1迁移三线双PASS；四值全等；修复队列4 个 ID 全否（3 项已修：001–003；004 观察）；B3累计1；席甲=Claude Fable 5.1 |
 | M017 `空间点位、楼层平面图与营业时段／后台验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M109、M111；既有累计仅保留历史，不代表本版已审 |
 | M018 `空间点位、楼层平面图与营业时段／网页与验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M161、M167、M171；既有累计仅保留历史，不代表本版已审 |
 | M019 `空间点位、楼层平面图与营业时段／文档与接口定义／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M250、M270、M274；既有累计仅保留历史，不代表本版已审 |

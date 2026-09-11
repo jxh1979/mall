@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -31,7 +31,8 @@ import static com.complex.platform.common.Strings.requireText;
 public class FloorPlanService {
 
     private static final Set<String> STATUSES = Set.of("active", "inactive", "archived");
-    private static final Set<String> SHAPE_TYPES = Set.of("area", "shop", "entrance", "facility", "risk_zone", "route");
+    // M016-002（M015-013 同批）：与 V423 CHECK 同闭集——治理地图候选区域「铺位、摊位、公共区」= shop / booth / public_area。
+    private static final Set<String> SHAPE_TYPES = Set.of("area", "shop", "entrance", "facility", "risk_zone", "route", "booth", "public_area");
     private static final Set<String> REF_TYPES = Set.of("space", "merchant", "project", "amusement_project", "device", "custom");
     private static final Set<String> IMPORT_SOURCE_FORMATS = Set.of("svg", "standard_json");
     private static final Set<String> IMPORT_TASK_STATUSES = Set.of("parsed", "failed", "published", "cancelled");

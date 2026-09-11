@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,6 +13,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -369,6 +370,15 @@ class PlatformJdbcIntegrationTests {
         }
         assertThat(repository.listSpaces()).hasSize(500);
         assertThat(repository.findSpaceById("sp_limit_0")).isPresent();
+    }
+
+    // M016-003：空间类型字典 status 只允许 active/disabled（V423 前无 CHECK → 此例红）
+    @Test
+    void spaceTypeDictionaryRejectsUnknownStatus() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        assertThatThrownBy(() -> repository.saveSpaceType(
+                new SpaceTypeRecord("sptype_jdbc_bad", "jdbc_bad", "字典状态测试", 100, "Active", now, now)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private String regclass(String tableName) {

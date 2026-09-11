@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -541,6 +541,33 @@ class FloorPlanServiceTests {
                 "sp_1",
                 "Shop 101",
                 polygon,
+                10,
+                "active"
+        );
+    }
+
+    // M016-002（M015-013 同批）：候选区域类型「摊位」「公共区」须被服务白名单接受（修复前白名单六值 → 此例红）
+    @Test
+    void saveShapeAcceptsBoothAndPublicArea() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-booth-types"));
+
+        FloorPlanShapeRecord booth = service.saveShape(floorPlan.id(), shapeRequestOfType("shape-booth", "booth"));
+        FloorPlanShapeRecord publicArea = service.saveShape(floorPlan.id(), shapeRequestOfType("shape-public-area", "public_area"));
+
+        assertThat(booth.shapeType()).isEqualTo("booth");
+        assertThat(publicArea.shapeType()).isEqualTo("public_area");
+    }
+
+    private FloorPlanShapeSaveRequest shapeRequestOfType(String idempotencyKey, String shapeType) {
+        return new FloorPlanShapeSaveRequest(
+                idempotencyKey,
+                "save polygon",
+                null,
+                shapeType,
+                "space",
+                "sp_1",
+                shapeType + " shape",
+                polygon(),
                 10,
                 "active"
         );
