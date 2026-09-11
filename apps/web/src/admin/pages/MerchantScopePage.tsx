@@ -16,6 +16,7 @@ const TEXT = {
   boundary: "商户角色不得访问平台治理、财务总账、第三方配置和其它商户数据；真实多商户隔离仍以后端权限和数据范围策略为准，本页只展示当前授权范围。",
   empty: "暂无授权商户数据",
   loadFailed: "商户授权数据读取失败",
+  scopeMissing: "当前账号缺少商户授权范围，无法展示任何商户数据，请联系管理员配置。",
   confirm: "确认授权范围",
   focusClear: "清除筛选，返回全部",
 };
@@ -42,14 +43,15 @@ function display(value: unknown) {
   return String(value);
 }
 
-// 平台口径账号（如 platform_admin）无 merchantId 时是合法的全量监督；商户账号缺 merchantId 则是越权风险。
-function isPlatformOversight(accountType: string | undefined) {
-  return accountType === "platform_admin";
+function moneyYuan(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} 元`;
 }
 
-function matchesMerchant(merchantId: string | null | undefined, rowMerchantId: string | undefined, platformOversight: boolean) {
-  if (platformOversight) return true; // 平台监督口径：看全量
-  if (!merchantId) return false;      // 商户账号缺 merchantId：fail-safe 不放行（不再看全量）
+function matchesMerchant(merchantId: string | null | undefined, rowMerchantId: string | undefined) {
+  if (!merchantId) return false;
   return rowMerchantId === merchantId;
 }
 
@@ -83,23 +85,21 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
-  const platformOversight = isPlatformOversight(user.accountType);
-  // fail-safe：商户类账号缺 merchantId（配置异常）→ 空集 + 报错，绝不回退到看全量。
-  const scopeMissing = !platformOversight && !user.merchantId;
+  const scopeMissing = !user.merchantId;
 
   const { loading, error, reload } = useAdminResource(
     async () => {
       if (scopeMissing) {
         setWorkOrders([]);
         setBills([]);
-        throw new Error("当前账号缺少商户授权范围（merchantId），无法展示任何商户数据，请联系管理员配置。");
+        throw new Error(TEXT.scopeMissing);
       }
       const [workOrderRows, billRows] = await Promise.all([
         api.get<MerchantScopeWorkOrderRow[]>("/api/v1/merchant-service/work-orders"),
         api.get<MerchantScopeBillRow[]>("/api/v1/merchant-billing/bills"),
       ]);
-      setWorkOrders(workOrderRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId, platformOversight)));
-      setBills(billRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId, platformOversight)));
+      setWorkOrders(workOrderRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId)));
+      setBills(billRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId)));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -113,7 +113,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
     setActionResult({
       status: "merchant_scope_confirmed",
       audit: "merchant_authorized_scope_checked",
-      merchantId: user.merchantId ?? (platformOversight ? "platform-all" : "unscoped"),
+      merchantId: user.merchantId ?? "unscoped",
       authorizedScopes,
       workOrderCount: workOrders.length,
       billCount: bills.length,
@@ -143,7 +143,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
         { label: "商户", value: row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId) },
         { label: "账单号", value: display(row.billNo) },
         { label: "标题", value: display(row.title) },
-        { label: "金额", value: display(row.totalAmount) },
+        { label: "金额", value: moneyYuan(row.totalAmount) },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "授权范围", value: display(row.authorizedScope) },
         { label: "留痕证据", value: display(row.auditEvidenceRef) },
@@ -169,7 +169,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="merchant-scope-bills-table">
           <thead><tr><th>商户</th><th>账单号</th><th>标题</th><th>金额</th><th>状态</th><th>授权范围</th><th>留痕证据</th><th>详情</th></tr></thead>
-          <tbody>{bills.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-scope-bill-row-${row.id}`} onClick={() => openBillDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBillDetail(row); } }}><td onClick={(event) => event.stopPropagation()}>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.billNo)}</td><td>{display(row.title)}</td><td>{display(row.totalAmount)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看授权账单详情" onClick={(event) => { event.stopPropagation(); openBillDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <tbody>{bills.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-scope-bill-row-${row.id}`} onClick={() => openBillDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBillDetail(row); } }}><td onClick={(event) => event.stopPropagation()}>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.billNo)}</td><td>{display(row.title)}</td><td>{moneyYuan(row.totalAmount)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看授权账单详情" onClick={(event) => { event.stopPropagation(); openBillDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>
@@ -197,7 +197,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
               <div className="admin-kpi-card"><span>授权范围</span><strong>{authorizedScopes.length}</strong><small>{authorizedScopes.join(" / ") || "-"}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户工单</span><button type="button" className="admin-kpi-value" data-testid="merchant-scope-kpi-work-orders" onClick={() => enterKpiFocus("workOrders")}>{workOrders.length}</button><small>当前商户</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户账单</span><button type="button" className="admin-kpi-value" data-testid="merchant-scope-kpi-bills" onClick={() => enterKpiFocus("bills")}>{bills.length}</button><small>授权账单</small></div>
-              <div className="admin-kpi-card"><span>账单金额</span><strong>{display(totalBillAmount)}</strong><small>只读汇总</small></div>
+              <div className="admin-kpi-card"><span>账单金额</span><strong>{moneyYuan(totalBillAmount)}</strong><small>只读汇总</small></div>
             </div>
 
             <div className="admin-form-row">

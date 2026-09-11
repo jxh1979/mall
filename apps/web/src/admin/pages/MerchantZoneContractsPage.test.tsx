@@ -46,13 +46,13 @@ describe("MerchantZoneContractsPage KPI 聚焦视图", () => {
     window.history.replaceState({}, "", "/admin/merchant-zone/contracts");
   });
 
-  it("点“履约中” → URL 带 ?kpi=contracts&subset=effective，聚焦只剩履约中合同，合同下钻 TraceLink 保留", async () => {
+  it("点“已生效” → URL 带 ?kpi=contracts&subset=effective，聚焦只剩已生效合同，合同下钻 TraceLink 保留", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-zone-contracts-kpi-effective")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-zone-contracts-kpi-effective"));
     expect(window.location.search).toContain("kpi=contracts");
     expect(window.location.search).toContain("subset=effective");
-    expect(screen.getByTestId("merchant-zone-contracts-kpi-focus-banner").textContent).toContain("正在查看：履约中合同（1）");
+    expect(screen.getByTestId("merchant-zone-contracts-kpi-focus-banner").textContent).toContain("正在查看：已生效合同（1）");
     const table = screen.getByTestId("merchant-zone-contracts-table").textContent ?? "";
     expect(table).toContain("aaaa1111");
     expect(table).not.toContain("bbbb2222");
@@ -74,10 +74,14 @@ describe("MerchantZoneContractsPage KPI 聚焦视图", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-zone-contracts-table")).toBeTruthy());
     const table = screen.getByTestId("merchant-zone-contracts-table").textContent ?? "";
-    expect(table).toContain("履约中");
+    expect(table).toContain("已生效");
     expect(table).toContain("已到期");
+    expect(table).not.toContain("履约中");
+    expect(table).not.toContain("起草中");
     expect(table).not.toContain("effective");
     expect(table).not.toContain("expired");
+    expect(table).toContain("元");
+    expect(table).not.toContain("CNY");
   });
 
   it("租期列为中文日期，不含 ISO 原文", async () => {
@@ -102,7 +106,10 @@ describe("MerchantZoneContractsPage 行明细抽屉（整行可点·日期中文
     const drawer = screen.getByTestId("row-detail-drawer");
     const text = drawer.textContent ?? "";
     expect(text).toContain("2026年1月1日");
-    expect(text).toContain("履约中");
+    expect(text).toContain("已生效");
+    expect(text).not.toContain("履约中");
+    expect(text).toContain("元");
+    expect(text).not.toContain("CNY");
     expect(text).not.toContain("effective");
     expect(drawer.querySelector('[data-testid="trace-link-ADM-CONT-001-contract-aaaa1111"]')).toBeTruthy();
   });
