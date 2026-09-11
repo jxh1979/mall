@@ -451,11 +451,122 @@ public class PlatformService {
                     String typeCode = requireText(request == null ? null : request.typeCode(), "type_code");
                     String typeName = requireText(request == null ? null : request.typeName(), "type_name");
                     Instant now = Instant.now();
+                    java.util.Optional<SpaceTypeRecord> existing = repository.listSpaceTypes().stream()
+                            .filter(item -> typeCode.equals(item.typeCode()))
+                            .findFirst();
+                    if (existing.isPresent()) {
+                        throw ApiException.conflict("SPACE_TYPE_CODE_EXISTS",
+                                "该种类编码已存在，不能用新增改已有种类");
+                    }
                     return repository.saveSpaceType(new SpaceTypeRecord(
                             "sptype_" + typeCode, typeCode, typeName,
                             request.sortOrder() == null ? 100 : request.sortOrder(),
-                            trimToDefault(request.status(), "active"), now, now));
+                            "active", now, now));
                 });
+    }
+
+    public void deleteSpaceType(String id) {
+        authorizationService.requirePlatformScope();
+        repository.findSpaceTypeById(id)
+                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
+        throw ApiException.badRequest("SPACE_TYPE_DELETE_REQUIRES_APPROVAL", "删除须先存档，再申请并由最高权限审批");
+    }
+
+    public void archiveSpaceType(String id, String reason) {
+        authorizationService.requirePlatformScope();
+        requireText(reason, "reason");
+        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
+                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
+        if ("pending_delete".equals(existing.status())) {
+            throw ApiException.badRequest("SPACE_TYPE_ARCHIVE_NOT_ALLOWED", "待审批的删除申请不能用存档撤回，请驳回");
+        }
+        if ("disabled".equals(existing.status())) {
+            throw ApiException.badRequest("SPACE_TYPE_ALREADY_DELETED", "该种类已删除");
+        }
+        Instant now = Instant.now();
+        repository.saveSpaceType(new SpaceTypeRecord(
+                existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
+                "archived", existing.createdAt(), now));
+        auditEventService.recordSuccess(
+                "space_type.archived", "governance.space.manage", "space_type", id, null, null,
+                Map.of("type_code", existing.typeCode(), "reason", reason.trim()));
+    }
+
+    public void unarchiveSpaceType(String id) {
+        authorizationService.requirePlatformScope();
+        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
+                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
+        if (!"archived".equals(existing.status())) {
+            throw ApiException.badRequest("SPACE_TYPE_NOT_ARCHIVED", "只有已存档的种类可以取消存档");
+        }
+        Instant now = Instant.now();
+        repository.saveSpaceType(new SpaceTypeRecord(
+                existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
+                "active", existing.createdAt(), now));
+        auditEventService.recordSuccess(
+                "space_type.unarchived", "governance.space.manage", "space_type", id, null, null,
+                Map.of("type_code", existing.typeCode()));
+    }
+
+    public void requestDeleteSpaceType(String id, String reason) {
+        authorizationService.requirePlatformScope();
+        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
+                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
+        if (!"archived".equals(existing.status())) {
+            throw ApiException.badRequest("SPACE_TYPE_NOT_ARCHIVED", "要删除须先存档");
+        }
+        String text = requireText(reason, "reason");
+        long used = repository.countSpacesByTypeCode(existing.typeCode());
+        if (used > 0) {
+            throw ApiException.conflict("SPACE_TYPE_IN_USE", "还有空间在用这个种类，不能删除");
+        }
+        String actor = actorId() == null ? "unknown" : actorId();
+        if (isMasterAuthority()) {
+            repository.saveSpaceTypeDeleteRequest(existing.id(), text, actor);
+            repository.saveSpaceType(new SpaceTypeRecord(
+                    existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
+                    "disabled", existing.createdAt(), Instant.now()));
+            auditEventService.recordSuccess(
+                    "space_type.deleted", "governance.space.manage", "space_type", id, null, null,
+                    Map.of("type_code", existing.typeCode()));
+            return;
+        }
+        repository.saveSpaceType(new SpaceTypeRecord(
+                existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
+                "pending_delete", existing.createdAt(), Instant.now()));
+        repository.saveSpaceTypeDeleteRequest(existing.id(), text, actor);
+        auditEventService.recordSuccess(
+                "space_type.delete_requested", "governance.space.manage", "space_type", id, null, null,
+                Map.of("type_code", existing.typeCode()));
+    }
+
+    public void approveDeleteSpaceType(String id, String decision) {
+        authorizationService.requirePlatformScope();
+        if (!isMasterAuthority()) {
+            throw ApiException.forbidden("SPACE_TYPE_DELETE_APPROVER_NOT_MASTER", "空间种类删除只能由最高权限审批通过");
+        }
+        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
+                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
+        if (!"pending_delete".equals(existing.status())) {
+            throw ApiException.badRequest("SPACE_TYPE_DELETE_NOT_PENDING", "该种类没有待审批的删除申请");
+        }
+        String actor = actorId();
+        String requestedBy = repository.findSpaceTypeDeleteRequestedBy(id);
+        if (actor != null && actor.equals(requestedBy)) {
+            throw ApiException.forbidden("SPACE_TYPE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
+        }
+        String verdict = decision == null ? "" : decision.trim().toLowerCase(Locale.ROOT);
+        if (!"approved".equals(verdict) && !"rejected".equals(verdict)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过或驳回");
+        }
+        Instant now = Instant.now();
+        String next = "approved".equals(verdict) ? "disabled" : "archived";
+        repository.saveSpaceType(new SpaceTypeRecord(
+                existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
+                next, existing.createdAt(), now));
+        auditEventService.recordSuccess(
+                "space_type.delete_approved", "governance.space.manage", "space_type", id, null, null,
+                Map.of("decision", next, "type_code", existing.typeCode()));
     }
 
     public SpaceRecord createSpace(SpaceRequest request) {
@@ -475,7 +586,7 @@ public class PlatformService {
                     // 条目3 硬校验：space_type 必须是空间类型字典中处于 active 的取值（前端走下拉、后台可维护字典）。
                     if (!repository.listActiveSpaceTypeCodes().contains(spaceType)) {
                         throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED",
-                                "铺位类型必须是铺位类型字典中的启用值");
+                                "空间种类必须是空间种类表中的启用值");
                     }
                     String projectId = trimToNull(request.projectId());
                     if (projectId != null && !repository.projectExists(projectId)) {

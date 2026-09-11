@@ -47,7 +47,7 @@ describe("SpaceTypesPage 引导式新增空间类型(phase-7)", () => {
     await waitFor(() => expect(screen.getByTestId("space-types-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("space-types-create-open"));
 
-    fireEvent.change(screen.getByLabelText("类型编码"), { target: { value: "floor" } });
+    fireEvent.change(screen.getByLabelText("种类编码"), { target: { value: "floor" } });
     fireEvent.change(screen.getByLabelText("显示名"), { target: { value: "楼层" } });
     fireEvent.change(screen.getByLabelText("排序"), { target: { value: "200" } });
     fireEvent.click(screen.getByTestId("space-types-guided-next"));
@@ -62,16 +62,45 @@ describe("SpaceTypesPage 引导式新增空间类型(phase-7)", () => {
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "space_type_saved" }));
   });
 
+  it("新建没有停用选项，确认页状态固定为启用", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("space-types-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("space-types-create-open"));
+    expect(screen.queryByLabelText("状态")).toBeNull();
+    expect(screen.queryByText("停用")).toBeNull();
+    fireEvent.change(screen.getByLabelText("种类编码"), { target: { value: "booth" } });
+    fireEvent.change(screen.getByLabelText("显示名"), { target: { value: "摊位" } });
+    fireEvent.click(screen.getByTestId("space-types-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("space-types-guided-summary")).toBeTruthy());
+    expect(screen.getByTestId("space-types-guided-summary").textContent).toContain("启用");
+    expect(screen.getByTestId("space-types-guided-summary").textContent).not.toContain("停用");
+  });
+
   it("步内校验拦截：编码/显示名缺失则不进下一步、不提交", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("space-types-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("space-types-create-open"));
-    fireEvent.change(screen.getByLabelText("类型编码"), { target: { value: "floor" } });
+    fireEvent.change(screen.getByLabelText("种类编码"), { target: { value: "floor" } });
     // 显示名留空
     fireEvent.click(screen.getByTestId("space-types-guided-next"));
-    expect(screen.getByTestId("space-types-guided-error").textContent).toContain("请填写类型编码与显示名");
+    expect(screen.getByTestId("space-types-guided-error").textContent).toContain("请填写种类编码与显示名");
     expect(screen.queryByTestId("space-types-guided-summary")).toBeNull();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("已删除种类不再提供申请删除；已存档可取消存档", async () => {
+    const api = makeApi();
+    api.get = vi.fn().mockResolvedValue([
+      { id: "st-1", typeCode: "kiosk", typeName: "一体机位", sortOrder: 100, status: "active" },
+      { id: "st-2", typeCode: "old", typeName: "旧种类", sortOrder: 90, status: "disabled" },
+      { id: "st-3", typeCode: "arc", typeName: "已存档种类", sortOrder: 80, status: "archived" },
+    ]);
+    renderPage(api);
+    await waitFor(() => expect(screen.getByTestId("space-type-archive-kiosk")).toBeTruthy());
+    expect(screen.getByTestId("space-types-table").textContent).toContain("已删除");
+    expect(screen.queryByTestId("space-type-delete-request-old")).toBeNull();
+    expect(screen.getByTestId("space-type-unarchive-arc")).toBeTruthy();
+    expect(screen.getByTestId("space-type-delete-request-arc")).toBeTruthy();
   });
 });

@@ -39,12 +39,7 @@ function crossesMidnight(openTime: string, closeTime: string): boolean {
   return !!openTime && !!closeTime && closeTime < openTime;
 }
 
-/**
- * 场地营业时间（ADM-GOV-008，D1）：给每个场地按星期几配「开业→歇业」时刻。
- *
- * 这张表决定场次怎么划：客人的入场资格票、当天无限权益都按场次核销——开业开场、歇业关场、
- * 过了场次的票自动作废。某个场地没配营业时间，那个场地的这类票当天一律核销不了。
- */
+/** 场地营业时间：给每个场地按星期几配开业、歇业时刻。 */
 export function VenueBusinessHoursPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<VenueBusinessHoursRow[]>([]);
   const [spaces, setSpaces] = React.useState<GovernanceSpaceRow[]>([]);
@@ -146,7 +141,7 @@ export function VenueBusinessHoursPage({ api, setActionResult, setGlobalError, e
     <section data-testid="venue-business-hours-page">
       <AdminPageHeader
         title="场地营业时间"
-        description="按场地配每个星期几的开业和歇业时刻。这张表决定场次怎么划：入场资格票、当天无限权益都按场次核销——开业开场、歇业关场、过了场次的票自动作废。某个场地没配营业时间，该场地这类票当天一律核销不了；歇业时刻早于开业时刻表示营业到次日凌晨（如 20:00 至次日 02:00）。保存即刻生效，不设草稿。"
+        description="按场地配每个星期几的开业和歇业时刻。歇业时刻早于开业时刻表示营业到次日凌晨（如 20:00 至次日 02:00）。"
       />
       <TechDetails>
         <div className="admin-generic-evidence" data-testid="venue-business-hours-evidence">

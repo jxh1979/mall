@@ -34,6 +34,7 @@ function makeApi(): AdminApi {
         return Promise.resolve(dataEnvelope({ id: "fp-new" }));
       }
       if (url.endsWith("/floor-plans")) return Promise.resolve(listEnvelope(PLANS));
+      if (url.includes("/platform/projects")) return Promise.resolve(dataEnvelope([{ id: "prj-1", name: "主项目" }]));
       return Promise.resolve(listEnvelope([]));
     }),
   );
@@ -74,6 +75,7 @@ describe("FloorPlanImportPage 引导式新增平面图(phase-10)", () => {
     await waitFor(() => expect(screen.getByTestId("floor-plan-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("floor-plan-create-open"));
 
+    fireEvent.change(screen.getByTestId("floor-plan-project"), { target: { value: "prj-1" } });
     fireEvent.change(screen.getByTestId("floor-plan-name"), { target: { value: "三层平面图" } });
     fireEvent.change(screen.getByTestId("floor-plan-building"), { target: { value: "B2" } });
     fireEvent.change(screen.getByTestId("floor-plan-floor"), { target: { value: "3F" } });
@@ -83,6 +85,7 @@ describe("FloorPlanImportPage 引导式新增平面图(phase-10)", () => {
 
     await waitFor(() => expect(lastPostBody).toBeTruthy());
     expect(lastPostUrl).toContain("/floor-plans");
+    expect((lastPostBody as { project_id: string }).project_id).toBe("prj-1");
     expect((lastPostBody as { plan_name: string }).plan_name).toBe("三层平面图");
     expect((lastPostBody as { building_code: string }).building_code).toBe("B2");
     expect((lastPostBody as { floor_no: string }).floor_no).toBe("3F");
@@ -95,6 +98,7 @@ describe("FloorPlanImportPage 引导式新增平面图(phase-10)", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("floor-plan-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("floor-plan-create-open"));
+    fireEvent.change(screen.getByTestId("floor-plan-project"), { target: { value: "prj-1" } });
     fireEvent.change(screen.getByTestId("floor-plan-name"), { target: { value: "  " } });
     fireEvent.click(screen.getByTestId("floor-plan-create-guided-next"));
     expect(screen.getByTestId("floor-plan-create-guided-error").textContent).toContain("名称");
