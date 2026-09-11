@@ -2,7 +2,7 @@
 
 ## 1. 定位
 
-本文档定义 P2-A 商场平面图导入能力的后端接口、权限、事件、数据边界和验收口径。该能力建立在 P1 `mall_floor_plans` 与 `floor_plan_shapes` 之上，用于把 SVG 或平台标准 JSON 解析为候选区域，再由管理员人工发布为正式 shape。
+本文档定义 P2-A 商场平面图导入能力的后端接口、权限、事件、数据边界和验收口径。该能力建立在 P1 `mall_floor_plans` 与 `floor_plan_shapes` 之上，用于把矢量图或标准数据解析为候选区域，再由管理员人工发布为正式 shape。机内码仍为 `svg` / `standard_json`。
 
 本期不支持 DWG/DXF/CAD 原生解析、不支持 AI/OCR 自动识别铺位号、不支持机器人/视频/设备深度绑定。CAD 文件必须先由实施工具转换为 SVG 或标准 JSON。
 
@@ -67,7 +67,7 @@
 规则：
 
 - `idempotency_key` 必填。
-- `source_format` 仅支持 `svg`、`standard_json`。
+- `source_format` 给人看只有两种：矢量图（`svg`，默认）、标准数据（`standard_json`）。不接受其它格式。
 - `source_payload` 最大 1,000,000 字符。
 - 导入只生成候选和错误，不直接改写正式 `floor_plan_shapes`。
 - 若没有任何合法候选，任务状态为 `failed`。
@@ -160,8 +160,9 @@
 - 仅解析 `<polygon>`。
 - `<polyline>` 必须已闭合；未闭合时记录 `POLYLINE_NOT_CLOSED`，不生成候选。
 - 必须存在正向 `viewBox`，用于把点位归一化到 0 到 1。
-- 默认 `shape_type=shop`，默认 `ref_type=custom`。
-- 可通过 `data-shape-type`、`data-ref-type`、`data-ref-id` 覆盖。
+- 默认 `shape_type=shop`（铺位），默认 `ref_type=custom`。
+- `shape_type` 只允许八种：铺位 `shop`、摊位 `booth`、公共区 `public_area`、区域 `area`、入口 `entrance`、设施 `facility`、风险区 `risk_zone`、路径 `route`。无走道。
+- 可通过 `data-shape-type`、`data-ref-type`、`data-ref-id` 覆盖；不在八种内的记入错误明细，不生成候选。
 - 候选 label 优先取 `data-label`，其次取 `id`。
 
 ### 4.2 标准 JSON

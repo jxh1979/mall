@@ -9,7 +9,7 @@
 | 能力 | P1 本次包含 | 本次不包含 |
 |---|---|---|
 | 平面图管理 | 创建、查询图片平面图，记录项目、楼栋、楼层、图片 URL、图片尺寸、版本和状态 | 图片上传、对象存储、图片裁剪 |
-| 多边形标注 | 为平面图保存区域、商铺、入口、设施、风险区、路线等多边形 | 拖拽编辑器、自动识别、批量绘制 |
+| 多边形标注 | 为平面图保存铺位、摊位、公共区、区域、入口、设施、风险区、路径多边形 | 拖拽编辑器、自动识别、批量绘制 |
 | 坐标标准 | 使用 0-1 归一化坐标，结合图片宽高还原像素位置 | 直接存储屏幕像素坐标作为主口径 |
 | 引用关系 | 支持引用空间、商户、项目、游乐项目、设备或自定义对象 | 强制校验外部对象存在性 |
 | CAD/SVG | 预留后续标准化导入口径 | 本次不实现 CAD/SVG 解析和导入任务 |
@@ -62,7 +62,7 @@
 | `operator_note` | 否 | string | 审计说明，默认 `shape_saved` |
 | `evidence_attachment_ids` | 否 | string[] | 仅存附件 ID 引用 |
 | `shape_id` | 否 | string | 为空时创建；不为空时更新该标注 |
-| `shape_type` | 是 | enum | `area`/`shop`/`entrance`/`facility`/`risk_zone`/`route` |
+| `shape_type` | 是 | enum | `shop` 铺位 / `booth` 摊位 / `public_area` 公共区 / `area` 区域 / `entrance` 入口 / `facility` 设施 / `risk_zone` 风险区 / `route` 路径。给人看只用这八种中文，无走道 |
 | `ref_type` | 是 | enum | `space`/`merchant`/`project`/`amusement_project`/`device`/`custom` |
 | `ref_id` | 否 | string | 被引用对象 ID；`custom` 可为空 |
 | `label` | 是 | string | 标注名称 |
