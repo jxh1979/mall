@@ -23,7 +23,8 @@ const MANAGE = ["governance.space.manage"];
  * 空间类型字典管理页（ADM-GOV-007，条目3b）：平台管理员维护空间类型（楼栋/楼层/区块/铺位/公共区域…），
  * 作为空间建档 space_type 的下拉数据源与硬校验依据。新增/启用后即可用于空间 space_type 校验。
  */
-export function SpaceTypesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+  const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const [rows, setRows] = React.useState<SpaceTypeRow[]>([]);
   const [form, setForm] = React.useState({ typeCode: "", typeName: "", sortOrder: "100", status: "active" });
   // 引导式流程 phase-7：新增空间类型收起为主按钮 + 分步引导弹窗。
@@ -124,23 +125,11 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
     }
   }
 
-  async function disableType(row: SpaceTypeRow) {
-    setGlobalError(null);
-    try {
-      await api.post(`/api/v1/platform/space-types/${row.id}/disable`);
-      setActionResult({ action: "space_type_disabled", typeCode: row.typeCode });
-      reload();
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : "停用空间种类失败";
-      setGlobalError(message);
-    }
-  }
-
   return (
     <section data-testid="space-types-page">
       <AdminPageHeader
         title="空间种类"
-        description="维护空间种类。建空间时从本表选择种类。可新增、停用。删除须先存档，再申请并经最高权限审批。有空间还在用的种类不能删除。"
+        description="维护空间种类。建空间时从本表选择种类。可新增。下线用存档。删除须先存档，再申请并经最高权限审批。有空间还在用的种类不能删除。"
       />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
@@ -156,24 +145,14 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
                   <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{formatBusinessStatus(row.status)}</td>
                   <td>
                     {row.status === "active" ? (
-                      <>
-                        <HighRiskConfirm
-                          label="停用"
-                          impact={`停用种类「${row.typeName}」后，不能再用来新建空间。已经建好的空间仍保留这个种类。`}
-                          onConfirm={() => void disableType(row)}
-                          permissionsState={effectivePermissions}
-                          permissions={MANAGE}
-                          data-testid={`space-type-disable-${row.typeCode}`}
-                        />
-                        <HighRiskConfirm
-                          label="存档"
-                          impact={`先把种类「${row.typeName}」存档，然后才能申请删除。`}
-                          onConfirm={() => void archiveType(row)}
-                          permissionsState={effectivePermissions}
-                          permissions={MANAGE}
-                          data-testid={`space-type-archive-${row.typeCode}`}
-                        />
-                      </>
+                      <HighRiskConfirm
+                        label="存档"
+                        impact={`把种类「${row.typeName}」存档后，不能再用来新建空间。已经建好的空间仍保留这个种类。存档之后才能申请删除。`}
+                        onConfirm={() => void archiveType(row)}
+                        permissionsState={effectivePermissions}
+                        permissions={MANAGE}
+                        data-testid={`space-type-archive-${row.typeCode}`}
+                      />
                     ) : null}
                     {row.status === "archived" ? (
                       <HighRiskConfirm
@@ -185,7 +164,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
                         data-testid={`space-type-delete-request-${row.typeCode}`}
                       />
                     ) : null}
-                    {row.status === "pending_delete" ? (
+                    {row.status === "pending_delete" && isMaster ? (
                       <HighRiskConfirm
                         label="审批删除"
                         impact={`由最高权限审批删除种类「${row.typeName}」。申请人不能批自己。`}
@@ -194,6 +173,8 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
                         permissions={MANAGE}
                         data-testid={`space-type-delete-approve-${row.typeCode}`}
                       />
+                    ) : row.status === "pending_delete" ? (
+                      <span>待最高权限审批</span>
                     ) : null}
                   </td>
                 </tr>
