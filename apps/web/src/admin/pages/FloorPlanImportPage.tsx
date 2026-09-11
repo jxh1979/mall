@@ -271,7 +271,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             </table>
             <div className="admin-form-grid" data-testid="floor-plan-publish-form">
               <fieldset data-testid="floor-plan-publish-candidates">
-                <legend>待发布区域（不勾选则发布当前待复核的全部）</legend>
+                <legend>待发布区域</legend>
                 {pendingCandidates.map((item) => (
                   <label key={item.id}>
                     <input
