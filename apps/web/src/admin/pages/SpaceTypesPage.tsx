@@ -132,7 +132,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
             validate: () => (typeInvalid() ? "请填写类型编码与显示名" : null),
             content: (
               <>
-                <label>类型编码<input aria-label="类型编码" placeholder="类型编码（如 kiosk）" value={form.typeCode}
+                <label>类型编码<input aria-label="类型编码" placeholder="类型编码（如铺位）" value={form.typeCode}
                   onChange={(event) => setForm({ ...form, typeCode: event.target.value })} /></label>
                 <label>显示名<input aria-label="显示名" placeholder="显示名（如 一体机位）" value={form.typeName}
                   onChange={(event) => setForm({ ...form, typeName: event.target.value })} /></label>

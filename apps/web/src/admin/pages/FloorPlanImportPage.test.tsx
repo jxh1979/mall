@@ -40,6 +40,7 @@ function makeApi(): AdminApi {
       if (url.includes("/imports/imp-1/candidates")) return Promise.resolve(dataEnvelope(DETAILS));
       if (url.includes("/floor-plans/fp-1/imports")) return Promise.resolve(listEnvelope(IMPORTS));
       if (url.endsWith("/floor-plans")) return Promise.resolve(listEnvelope(PLANS));
+      if (url.includes("/platform/projects")) return Promise.resolve(dataEnvelope([{ id: "prj-1", name: "主项目" }]));
       return Promise.resolve(listEnvelope([]));
     }),
   );
@@ -87,7 +88,7 @@ describe("FloorPlanImportPage 英文全清", () => {
   it("候选明细表类型/关联/状态渲染中文，不含原始英文码", async () => {
     await openDetails();
     const table = screen.getByTestId("floor-plan-candidates-table").textContent ?? "";
-    expect(table).toContain("商铺"); // shapeType shop
+    expect(table).toContain("铺位"); // shapeType shop
     expect(table).toContain("空间"); // refType space
     expect(table).toContain("待处理"); // status pending
     expect(table).not.toContain("shop");
@@ -105,7 +106,7 @@ describe("FloorPlanImportPage 行明细抽屉", () => {
     fireEvent.click(screen.getByTestId("floor-plan-candidate-row-cd-1"));
     const drawer = await screen.findByTestId("row-detail-drawer");
     const text = drawer.textContent ?? "";
-    expect(text).toContain("商铺"); // shape_type shop
+    expect(text).toContain("铺位"); // shape_type shop
     expect(text).toContain("空间"); // ref_type space
     expect(text).toContain("待处理"); // status pending
     expect(text).toContain("A101"); // label
@@ -118,7 +119,7 @@ describe("FloorPlanImportPage 行明细抽屉", () => {
     fireEvent.click(screen.getByTestId("floor-plan-error-row-er-1"));
     const drawer = await screen.findByTestId("row-detail-drawer");
     const text = drawer.textContent ?? "";
-    expect(text).toContain("geometry");
+    expect(text).toContain("图形");
     expect(text).toContain("多边形无效");
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
