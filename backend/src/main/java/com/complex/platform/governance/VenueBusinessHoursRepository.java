@@ -1,4 +1,5 @@
 package com.complex.platform.governance;
+// 文件版本：V0.01
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -6,6 +7,7 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -34,6 +36,33 @@ class VenueBusinessHoursRepository {
                   FROM venue_business_hours
                  ORDER BY venue_id, day_of_week
                 """, new MapSqlParameterSource(), (rs, n) -> new VenueBusinessHoursRecord(
+                rs.getString("id"),
+                rs.getString("venue_id"),
+                rs.getInt("day_of_week"),
+                rs.getObject("open_time", LocalTime.class).format(HH_MM),
+                rs.getObject("close_time", LocalTime.class).format(HH_MM),
+                rs.getBoolean("is_draft"),
+                rs.getObject("effective_from", LocalDate.class),
+                rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant(),
+                rs.getObject("updated_at", java.time.OffsetDateTime.class).toInstant()));
+    }
+
+    /** M015-009：场地＝spaces.id；返回其综合体项目归属（无项目归属返回空串），场地不存在返回 empty。 */
+    Optional<String> findVenueProjectId(String venueId) {
+        return jdbcTemplate.query("SELECT COALESCE(project_id, '') AS project_id FROM spaces WHERE id = :id",
+                new MapSqlParameterSource("id", venueId), (rs, n) -> rs.getString("project_id")).stream().findFirst();
+    }
+
+    /** M015-009：按综合体项目过滤的营业时间行（BEQR-152 项目隔离；JOIN spaces 取 project_id）。 */
+    List<VenueBusinessHoursRecord> listByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT h.id, h.venue_id, h.day_of_week, h.open_time, h.close_time, h.is_draft, h.effective_from,
+                       h.created_at, h.updated_at
+                  FROM venue_business_hours h
+                  JOIN spaces s ON s.id = h.venue_id
+                 WHERE s.project_id = :project_id
+                 ORDER BY h.venue_id, h.day_of_week
+                """, new MapSqlParameterSource("project_id", projectId), (rs, n) -> new VenueBusinessHoursRecord(
                 rs.getString("id"),
                 rs.getString("venue_id"),
                 rs.getInt("day_of_week"),

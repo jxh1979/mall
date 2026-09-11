@@ -1,4 +1,5 @@
 package com.complex.platform.floorplan;
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -41,6 +42,11 @@ public class FloorPlanService {
     // 一个 <1MB 的 payload 仍可塞入海量小多边形或单个超多顶点多边形撑爆解析/落库，故 parse 后强制上限。
     private static final int MAX_IMPORT_CANDIDATES = 2_000;
     private static final int MAX_IMPORT_POLYGON_POINTS = 1_000;
+    // M015-008：发布一次最多 200 个候选（与 OpenAPI FloorPlanImportPublishRequest.candidate_ids maxItems 一致）。
+    private static final int MAX_PUBLISH_CANDIDATES = 200;
+    // M015-005：本模块校验文案中文整句，不经 FieldLabels 通用键翻译（candidate_ids/plan_name 在通用表中另有含义）。
+    private static final Map<String, String> FIELD_LABELS = Map.of(
+            "status", "状态", "shape_type", "图形类型", "ref_type", "关联类型", "source_format", "导入格式");
 
     private final FloorPlanRepository repository;
     private final IdempotencyService idempotencyService;
@@ -63,10 +69,13 @@ public class FloorPlanService {
     }
 
     public PageResponse<FloorPlanRecord> listFloorPlans() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        List<FloorPlanRecord> records = scope.isPresent()
-                ? repository.findAllFloorPlansByMerchant(scope.get())
-                : repository.findAllFloorPlans();
+        Optional<String> merchantScope = authorizationService.currentMerchantIdQuietly();
+        // M015-003：商户 scope 优先（用永不抛的 currentMerchantIdQuietly，项目员工才能走到项目 scope）；否则按项目 scope（BEQR-152）；平台管理员全量。
+        List<FloorPlanRecord> records = merchantScope.isPresent()
+                ? repository.findAllFloorPlansByMerchant(merchantScope.get())
+                : authorizationService.currentProjectScopeQuietly()
+                        .map(repository::findAllFloorPlansByProject)
+                        .orElseGet(repository::findAllFloorPlans);
         auditEventService.recordSuccess(
                 "floor_plan.viewed",
                 "floor_plan.view",
@@ -76,7 +85,7 @@ public class FloorPlanService {
                 null,
                 Map.of("count", records.size())
         );
-        return new PageResponse<>(records, 1, 50, records.size());
+        return new PageResponse<>(records, 1, Math.max(records.size(), 1), records.size());
     }
 
     public PageResponse<FloorPlanShapeRecord> listShapes(String floorPlanId) {
@@ -92,7 +101,7 @@ public class FloorPlanService {
                 null,
                 Map.of("count", records.size())
         );
-        return new PageResponse<>(records, 1, 50, records.size());
+        return new PageResponse<>(records, 1, Math.max(records.size(), 1), records.size());
     }
 
     public FloorPlanRecord createFloorPlan(FloorPlanCreateRequest request) {
@@ -138,7 +147,7 @@ public class FloorPlanService {
                 null,
                 Map.of("count", records.size())
         );
-        return new PageResponse<>(records, 1, 50, records.size());
+        return new PageResponse<>(records, 1, Math.max(records.size(), 1), records.size());
     }
 
     public FloorPlanImportDetailsResponse getImportDetails(String floorPlanId, String importTaskId) {
@@ -218,13 +227,13 @@ public class FloorPlanService {
 
     private FloorPlanRecord createFloorPlanOnce(FloorPlanCreateRequest request) {
         Instant now = Instant.now();
-        Optional<String> scope = authorizationService.currentMerchantScope();
+        Optional<String> scope = authorizationService.currentMerchantIdQuietly();
         FloorPlanRecord record = repository.saveFloorPlan(new FloorPlanRecord(
                 "fp_" + UUID.randomUUID(),
-                trimToNull(request.projectId()),
+                requireText(request.projectId(), "project_id"),
                 trimToNull(request.buildingCode()),
                 requireText(request.floorNo(), "floor_no"),
-                requireText(request.planName(), "plan_name"),
+                requireField(request.planName(), "平面图名称"),
                 requireText(request.imageUrl(), "image_url"),
                 request.imageWidth(),
                 request.imageHeight(),
@@ -256,7 +265,7 @@ public class FloorPlanService {
         }
         Instant now = Instant.now();
         FloorPlanShapeRecord record = repository.saveShape(new FloorPlanShapeRecord(
-                requestedShapeId == null ? "fps_" + slug(request.idempotencyKey()) : requestedShapeId,
+                requestedShapeId == null ? derivedId("fps_", floorPlanId + "_" + request.idempotencyKey()) : requestedShapeId,
                 floorPlanId,
                 normalizeAllowed(request.shapeType(), "shape_type", SHAPE_TYPES),
                 normalizeAllowed(request.refType(), "ref_type", REF_TYPES),
@@ -284,7 +293,7 @@ public class FloorPlanService {
         Instant now = Instant.now();
         FloorPlanImportParseResult parseResult = importParser.parse(request.sourceFormat(), request.sourcePayload());
         enforceImportLimits(parseResult);
-        String taskId = "fpi_" + slug(request.idempotencyKey());
+        String taskId = derivedId("fpi_", floorPlanId + "_" + request.idempotencyKey());
         String status = parseResult.candidates().isEmpty() ? "failed" : "parsed";
         FloorPlanImportTaskRecord task = repository.saveImportTask(new FloorPlanImportTaskRecord(
                 taskId,
@@ -362,7 +371,7 @@ public class FloorPlanService {
                 .distinct()
                 .toList();
         if (candidateIds.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "candidate_ids is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "候选项列表不能为空");
         }
 
         List<FloorPlanImportCandidateRecord> candidates = new ArrayList<>();
@@ -381,7 +390,7 @@ public class FloorPlanService {
         Instant now = Instant.now();
         for (FloorPlanImportCandidateRecord candidate : candidates) {
             repository.saveShape(new FloorPlanShapeRecord(
-                    "fps_" + slug(importTaskId + "_" + candidate.id()),
+                    derivedId("fps_", importTaskId + "_" + candidate.id()),
                     floorPlanId,
                     candidate.shapeType(),
                     candidate.refType(),
@@ -494,8 +503,20 @@ public class FloorPlanService {
             throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
+        // M015-002/003：平面图必须归属已存在的综合体项目（PGM-017），且项目员工只能在本项目下创建（BEQR-152）。
+        String projectId = requireText(request.projectId(), "project_id");
+        if (!repository.projectExists(projectId)) {
+            throw ApiException.notFound("PROJECT_NOT_FOUND", "综合体项目不存在或已被删除");
+        }
+        if (authorizationService.currentMerchantIdQuietly().isEmpty()) {
+            authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
+                if (!scope.equals(projectId)) {
+                    throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能在当前综合体项目下创建平面图");
+                }
+            });
+        }
         requireText(request.floorNo(), "floor_no");
-        requireText(request.planName(), "plan_name");
+        requireField(request.planName(), "平面图名称");
         requireText(request.imageUrl(), "image_url");
         requireText(request.versionNo(), "version_no");
         requirePositive(request.imageWidth(), "image_width");
@@ -514,7 +535,7 @@ public class FloorPlanService {
         normalizeAllowed(request.status(), "status", STATUSES);
         List<FloorPlanPoint> points = request.polygonPoints();
         if (points == null || points.size() < 3) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "多边形顶点（polygon_points）至少需要 3 个点");
+            throw ApiException.badRequest("VALIDATION_FAILED", "多边形至少需要 3 个顶点");
         }
         for (FloorPlanPoint point : points) {
             if (point == null || point.x() < 0 || point.x() > 1 || point.y() < 0 || point.y() > 1) {
@@ -532,7 +553,7 @@ public class FloorPlanService {
         requireText(request.sourceName(), "source_name");
         String payload = requireText(request.sourcePayload(), "source_payload");
         if (payload.length() > 1_000_000) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "导入内容（source_payload）超过 1000000 字符上限");
+            throw ApiException.badRequest("VALIDATION_FAILED", "导入内容超过 100 万字符上限");
         }
     }
 
@@ -561,7 +582,10 @@ public class FloorPlanService {
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         if (request.candidateIds() == null || request.candidateIds().isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "candidate_ids is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "候选项列表不能为空");
+        }
+        if (request.candidateIds().size() > MAX_PUBLISH_CANDIDATES) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "一次发布的候选项不能超过 " + MAX_PUBLISH_CANDIDATES + " 个");
         }
     }
 
@@ -569,11 +593,23 @@ public class FloorPlanService {
         FloorPlanRecord fp = repository.findFloorPlanById(id)
                 .orElseThrow(() -> ApiException.notFound("FLOOR_PLAN_NOT_FOUND", "平面图不存在或已被删除"));
         checkMerchantOwnership(fp.merchantId());
+        checkProjectOwnership(fp.projectId());
         return fp;
     }
 
+    // M015-003：项目员工只能访问本项目平面图（BEQR-152）；商户账号走商户闸、平台管理员 scope 为空放行。
+    private void checkProjectOwnership(String resourceProjectId) {
+        if (authorizationService.currentMerchantIdQuietly().isPresent()) {
+            return;
+        }
+        Optional<String> scope = authorizationService.currentProjectScopeQuietly();
+        if (scope.isPresent() && !scope.get().equals(resourceProjectId)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "平面图属于其他综合体项目");
+        }
+    }
+
     private void checkMerchantOwnership(String resourceMerchantId) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
+        Optional<String> scope = authorizationService.currentMerchantIdQuietly();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "平面图属于其他商户");
         }
@@ -598,9 +634,23 @@ public class FloorPlanService {
     private String normalizeAllowed(String value, String field, Set<String> allowed) {
         String normalized = requireText(value, field).toLowerCase(Locale.ROOT);
         if (!allowed.contains(normalized)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is invalid");
+            throw ApiException.badRequest("VALIDATION_FAILED", FIELD_LABELS.getOrDefault(field, field) + "取值无效");
         }
         return normalized;
+    }
+
+    private String requireField(String value, String label) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", label + "不能为空");
+        }
+        return trimmed;
+    }
+
+    // M015-001（r2）：派生主键＝前缀 + SHA-256 前 32 位十六进制（恒 36 字符），确定性、含平面图域且恒落入 id VARCHAR(64)；
+    // slug 直接拼接会随平面图 UUID 与客户端键长度溢出（候选 id 68、UUID 键图形 id 80）。
+    private String derivedId(String prefix, String seed) {
+        return prefix + sha256(seed).substring(0, 32);
     }
 
     private String slug(String value) {

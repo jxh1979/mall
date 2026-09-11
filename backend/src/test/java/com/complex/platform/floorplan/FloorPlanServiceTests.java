@@ -1,4 +1,5 @@
 package com.complex.platform.floorplan;
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -24,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -326,13 +328,161 @@ class FloorPlanServiceTests {
                 .get().extracting(FloorPlanRecord::merchantId).isEqualTo("m_2");
     }
 
+    // M015-001: 图形/导入任务主键须含平面图域——跨平面图同一客户端幂等键不得覆盖他图数据（修复前此两例红）
+    @Test
+    void saveShapeWithSameKeyAcrossFloorPlansDoesNotOverwrite() {
+        FloorPlanRecord planA = service.createFloorPlan(createRequest("fp-shape-key-a"));
+        FloorPlanRecord planB = service.createFloorPlan(createRequest("fp-shape-key-b"));
+        FloorPlanShapeRecord shapeOnA = service.saveShape(planA.id(), shapeRequest("shared-shape-key", null, polygon()));
+
+        FloorPlanShapeRecord shapeOnB = service.saveShape(planB.id(), shapeRequest("shared-shape-key", null, polygon()));
+
+        assertThat(shapeOnB.id()).isNotEqualTo(shapeOnA.id());
+        assertThat(repository.findShapeById(shapeOnA.id())).get()
+                .extracting(FloorPlanShapeRecord::floorPlanId).isEqualTo(planA.id());
+        assertThat(repository.findShapesByFloorPlanId(planA.id())).hasSize(1);
+        assertThat(repository.findShapesByFloorPlanId(planB.id())).hasSize(1);
+    }
+
+    @Test
+    void createImportTaskWithSameKeyAcrossFloorPlansDoesNotOverwrite() {
+        FloorPlanRecord planA = service.createFloorPlan(createRequest("fp-import-key-a"));
+        FloorPlanRecord planB = service.createFloorPlan(createRequest("fp-import-key-b"));
+        FloorPlanImportTaskRecord taskOnA = service.createImportTask(planA.id(), importRequest("shared-import-key"));
+
+        FloorPlanImportTaskRecord taskOnB = service.createImportTask(planB.id(), importRequest("shared-import-key"));
+
+        assertThat(taskOnB.id()).isNotEqualTo(taskOnA.id());
+        assertThat(repository.findImportTaskById(taskOnA.id())).get()
+                .extracting(FloorPlanImportTaskRecord::floorPlanId).isEqualTo(planA.id());
+        assertThat(repository.findImportCandidatesByTaskId(taskOnA.id())).hasSize(1);
+        assertThat(repository.findImportCandidatesByTaskId(taskOnB.id())).hasSize(1);
+    }
+
+    // M015-001（r2）：派生主键必须落入 V023/V034 的 id VARCHAR(64)——现网前端键 fpi-<13 位时间戳> 与 UUID 键都要能落库（修复前候选 id 68、UUID 图形 id 80 → 此例红）
+    @Test
+    void derivedIdsFitVarchar64Columns() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-varchar64"));
+        FloorPlanImportTaskRecord task = service.createImportTask(floorPlan.id(), importRequest("fpi-1757570000000"));
+        List<String> candidateIds = repository.findImportCandidatesByTaskId(task.id()).stream()
+                .map(FloorPlanImportCandidateRecord::id).toList();
+        service.publishImportTask(floorPlan.id(), task.id(),
+                new FloorPlanImportPublishRequest("publish-varchar64", "publish import", candidateIds));
+        FloorPlanShapeRecord shape = service.saveShape(floorPlan.id(),
+                shapeRequest("6f1d2c3b-4a5e-4f60-9b7c-8d9e0f1a2b3c", null, polygon()));
+
+        assertThat(task.id()).hasSizeLessThanOrEqualTo(64);
+        assertThat(candidateIds).allSatisfy(id -> assertThat(id).hasSizeLessThanOrEqualTo(64));
+        assertThat(repository.findShapesByFloorPlanId(floorPlan.id()))
+                .extracting(FloorPlanShapeRecord::id)
+                .allSatisfy(id -> assertThat(id).hasSizeLessThanOrEqualTo(64));
+        assertThat(shape.id()).hasSizeLessThanOrEqualTo(64);
+    }
+
+    // M015-007：列表不分页时 pageSize/total 必须等于真实条数（修复前 pageSize 谎报 50 → 此例红）
+    @Test
+    void listShapesReportsHonestPageSizeAndTotal() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-honest-page"));
+        service.saveShape(floorPlan.id(), shapeRequest("shape-page-1", null, polygon()));
+        service.saveShape(floorPlan.id(), shapeRequest("shape-page-2", null, polygon()));
+
+        PageResponse<FloorPlanShapeRecord> page = service.listShapes(floorPlan.id());
+
+        assertThat(page.items()).hasSize(2);
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.pageSize()).isEqualTo(2);
+    }
+
+    // M015-002: 平面图必须带综合体项目归属且项目须存在（PGM-017/PGM-022；修复前此两例红）
+    @Test
+    void createFloorPlanRequiresProjectId() {
+        assertThatThrownBy(() -> service.createFloorPlan(createRequest("floor-plan-no-project", " ")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(repository.floorPlanSaveCount).isZero();
+    }
+
+    @Test
+    void createFloorPlanRejectsUnknownProject() {
+        assertThatThrownBy(() -> service.createFloorPlan(createRequest("floor-plan-unknown-project", "prj_missing")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PROJECT_NOT_FOUND"));
+        assertThat(repository.floorPlanSaveCount).isZero();
+    }
+
+    // M015-003: 项目员工按项目 scope 隔离（BEQR-152）；修复前此三例红
+    @Test
+    void listFloorPlansFiltersToProjectScope() {
+        service.createFloorPlan(createRequest("fp-project-scope-1", "prj_1"));
+        service.createFloorPlan(createRequest("fp-project-scope-2", "prj_2"));
+
+        PageResponse<FloorPlanRecord> scoped = serviceWithProjectScope("prj_1").listFloorPlans();
+
+        assertThat(scoped.items()).extracting(FloorPlanRecord::projectId).containsOnly("prj_1");
+        assertThat(service.listFloorPlans().items()).hasSize(2);
+    }
+
+    @Test
+    void accessingFloorPlanBelongingToDifferentProjectIsForbidden() {
+        FloorPlanRecord planOnProject2 = service.createFloorPlan(createRequest("fp-project-access-2", "prj_2"));
+
+        assertThatThrownBy(() -> serviceWithProjectScope("prj_1").listShapes(planOnProject2.id()))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+    }
+
+    @Test
+    void createFloorPlanOutsideProjectScopeIsForbidden() {
+        assertThatThrownBy(() -> serviceWithProjectScope("prj_1").createFloorPlan(createRequest("fp-project-create-2", "prj_2")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(repository.floorPlanSaveCount).isZero();
+    }
+
+    // 平台管理员桥（生产语义：isPlatformAdminBridge → 商户/项目 scope 皆空、永不抛）
     private AuthorizationService noScopeAuth() {
         return new AuthorizationService(null) {
             @Override
             public Optional<String> currentMerchantScope() {
                 return Optional.empty();
             }
+
+            @Override
+            public Optional<String> currentMerchantIdQuietly() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<String> currentProjectScopeQuietly() {
+                return Optional.empty();
+            }
         };
+    }
+
+    private FloorPlanService serviceWithProjectScope(String projectId) {
+        return new FloorPlanService(
+                repository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                new FloorPlanImportParser(),
+                // 项目员工（生产语义：无 merchantId → currentMerchantScope 抛 MERCHANT_SCOPE_REQUIRED；currentMerchantIdQuietly 为空；项目 scope 有值）
+                new AuthorizationService(null) {
+                    @Override
+                    public Optional<String> currentMerchantScope() {
+                        throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
+                    }
+
+                    @Override
+                    public Optional<String> currentMerchantIdQuietly() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<String> currentProjectScopeQuietly() {
+                        return Optional.of(projectId);
+                    }
+                }
+        );
     }
 
     private FloorPlanService serviceWithMerchantScope(String merchantId) {
@@ -341,20 +491,35 @@ class FloorPlanServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 new FloorPlanImportParser(),
+                // 商户员工（生产语义：有 merchantId、无 organizationId → currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED）
                 new AuthorizationService(null) {
                     @Override
                     public Optional<String> currentMerchantScope() {
                         return Optional.of(merchantId);
+                    }
+
+                    @Override
+                    public Optional<String> currentMerchantIdQuietly() {
+                        return Optional.of(merchantId);
+                    }
+
+                    @Override
+                    public Optional<String> currentProjectScopeQuietly() {
+                        throw ApiException.forbidden("PROJECT_SCOPE_REQUIRED", "此操作必须在项目范围内进行");
                     }
                 }
         );
     }
 
     private FloorPlanCreateRequest createRequest(String idempotencyKey) {
+        return createRequest(idempotencyKey, "prj_1");
+    }
+
+    private FloorPlanCreateRequest createRequest(String idempotencyKey, String projectId) {
         return new FloorPlanCreateRequest(
                 idempotencyKey,
                 "create floor plan",
-                "prj_1",
+                projectId,
                 "A",
                 "1F",
                 "1F plan",
@@ -414,6 +579,18 @@ class FloorPlanServiceTests {
         private int floorPlanSaveCount;
         private int shapeSaveCount;
         private int importTaskSaveCount;
+
+        @Override
+        public boolean projectExists(String projectId) {
+            return Set.of("prj_1", "prj_2").contains(projectId);
+        }
+
+        @Override
+        public List<FloorPlanRecord> findAllFloorPlansByProject(String projectId) {
+            return floorPlans.values().stream()
+                    .filter(fp -> projectId.equals(fp.projectId()))
+                    .toList();
+        }
 
         @Override
         public List<FloorPlanRecord> findAllFloorPlans() {
