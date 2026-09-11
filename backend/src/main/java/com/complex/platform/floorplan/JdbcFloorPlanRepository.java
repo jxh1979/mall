@@ -1,4 +1,5 @@
 package com.complex.platform.floorplan;
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -58,6 +59,13 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
                  WHERE project_id = :project_id
                  ORDER BY floor_no, version_no, id
                 """, Map.of("project_id", projectId), this::mapFloorPlan);
+    }
+
+    @Override
+    public boolean projectExists(String projectId) {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM projects WHERE id = :id",
+                Map.of("id", projectId), Long.class);
+        return count != null && count > 0;
     }
 
     @Override

@@ -1,4 +1,5 @@
 package com.complex.platform.floorplan;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -161,7 +162,7 @@ class FloorPlanJdbcIntegrationTests {
                 1,
                 "points",
                 "POINTS_TOO_FEW",
-                "polygon requires at least 3 points",
+                "多边形至少需要 3 个顶点",
                 now
         ));
 

@@ -1,4 +1,5 @@
 package com.complex.platform.floorplan;
+// 文件版本：V0.01
 
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,9 @@ public interface FloorPlanRepository {
     }
 
     List<FloorPlanRecord> findAllFloorPlansByMerchant(String merchantId);
+
+    /** M015-002：平面图必须归属已存在的综合体项目（projects.id）。 */
+    boolean projectExists(String projectId);
 
     Optional<FloorPlanRecord> findFloorPlanById(String id);
 

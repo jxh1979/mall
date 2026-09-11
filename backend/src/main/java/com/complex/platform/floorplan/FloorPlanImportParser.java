@@ -1,4 +1,5 @@
 package com.complex.platform.floorplan;
+// 文件版本：V0.01
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,7 +34,7 @@ public class FloorPlanImportParser {
         if (sourcePayload == null || sourcePayload.isBlank()) {
             return new FloorPlanImportParseResult(
                     List.of(),
-                    List.of(error(null, "source_payload", "PAYLOAD_REQUIRED", "source_payload is required"))
+                    List.of(error(null, "source_payload", "PAYLOAD_REQUIRED", "导入内容不能为空"))
             );
         }
         return switch (format) {
@@ -41,7 +42,7 @@ public class FloorPlanImportParser {
             case "standard_json" -> parseStandardJson(sourcePayload);
             default -> new FloorPlanImportParseResult(
                     List.of(),
-                    List.of(error(null, "source_format", "UNSUPPORTED_SOURCE_FORMAT", "source_format is not supported"))
+                    List.of(error(null, "source_format", "UNSUPPORTED_SOURCE_FORMAT", "不支持的导入格式（仅支持 svg / standard_json）"))
             );
         };
     }
@@ -53,7 +54,7 @@ public class FloorPlanImportParser {
         if (viewBox == null || viewBox[2] <= 0 || viewBox[3] <= 0) {
             return new FloorPlanImportParseResult(
                     List.of(),
-                    List.of(error(null, "viewBox", "VIEWBOX_REQUIRED", "svg viewBox with positive width and height is required"))
+                    List.of(error(null, "viewBox", "VIEWBOX_REQUIRED", "SVG 必须包含宽高为正数的 viewBox"))
             );
         }
 
@@ -64,19 +65,19 @@ public class FloorPlanImportParser {
             Map<String, String> attributes = readAttributes(matcher.group(2));
             String points = attributes.get("points");
             if (points == null || points.isBlank()) {
-                errors.add(error(shapeNo, "points", "POINTS_REQUIRED", "points attribute is required"));
+                errors.add(error(shapeNo, "points", "POINTS_REQUIRED", "图形缺少 points 属性"));
                 shapeNo++;
                 continue;
             }
 
             List<FloorPlanPoint> rawPoints = parseSvgPoints(points);
             if (rawPoints.size() < 3) {
-                errors.add(error(shapeNo, "points", "POINTS_TOO_FEW", "polygon requires at least 3 points"));
+                errors.add(error(shapeNo, "points", "POINTS_TOO_FEW", "多边形至少需要 3 个顶点"));
                 shapeNo++;
                 continue;
             }
             if ("polyline".equals(tag) && !samePoint(rawPoints.getFirst(), rawPoints.getLast())) {
-                errors.add(error(shapeNo, "points", "POLYLINE_NOT_CLOSED", "polyline must be closed before import"));
+                errors.add(error(shapeNo, "points", "POLYLINE_NOT_CLOSED", "折线（polyline）必须首尾闭合后才能导入"));
                 shapeNo++;
                 continue;
             }
@@ -86,7 +87,7 @@ public class FloorPlanImportParser {
 
             List<FloorPlanPoint> normalized = normalizePoints(rawPoints, viewBox);
             if (normalized.stream().anyMatch(point -> outOfRange(point.x()) || outOfRange(point.y()))) {
-                errors.add(error(shapeNo, "points", "POINT_OUT_OF_RANGE", "normalized point x/y must be between 0 and 1"));
+                errors.add(error(shapeNo, "points", "POINT_OUT_OF_RANGE", "归一化后的顶点坐标 x/y 必须在 0 到 1 之间"));
                 shapeNo++;
                 continue;
             }
@@ -103,7 +104,7 @@ public class FloorPlanImportParser {
         }
 
         if (candidates.isEmpty() && errors.isEmpty()) {
-            errors.add(error(null, "source_payload", "NO_SHAPES_FOUND", "svg does not contain polygon or polyline shapes"));
+            errors.add(error(null, "source_payload", "NO_SHAPES_FOUND", "SVG 中没有 polygon 或 polyline 图形"));
         }
         return new FloorPlanImportParseResult(candidates, errors);
     }
@@ -118,13 +119,13 @@ public class FloorPlanImportParser {
         } catch (Exception exception) {
             return new FloorPlanImportParseResult(
                     List.of(),
-                    List.of(error(null, "source_payload", "JSON_PARSE_FAILED", "source_payload is not valid JSON"))
+                    List.of(error(null, "source_payload", "JSON_PARSE_FAILED", "导入内容不是合法的 JSON"))
             );
         }
         if (!shapesNode.isArray()) {
             return new FloorPlanImportParseResult(
                     List.of(),
-                    List.of(error(null, "shapes", "SHAPES_REQUIRED", "standard_json requires a shapes array"))
+                    List.of(error(null, "shapes", "SHAPES_REQUIRED", "standard_json 必须包含 shapes 数组"))
             );
         }
 
@@ -238,9 +239,9 @@ public class FloorPlanImportParser {
 
     private String messageFor(String errorCode) {
         return switch (errorCode) {
-            case "POINT_OUT_OF_RANGE" -> "polygon point x/y must be between 0 and 1";
-            case "POINTS_TOO_FEW" -> "polygon requires at least 3 points";
-            default -> "import candidate is invalid";
+            case "POINT_OUT_OF_RANGE" -> "多边形顶点坐标 x/y 必须在 0 到 1 之间";
+            case "POINTS_TOO_FEW" -> "多边形至少需要 3 个顶点";
+            default -> "导入候选项无效";
         };
     }
 

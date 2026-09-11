@@ -1,9 +1,11 @@
 package com.complex.platform.governance;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.dto.VenueBusinessHoursRequest;
@@ -12,6 +14,8 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -31,6 +35,24 @@ class VenueBusinessHoursServiceTests {
             super(null);
         }
 
+        private final List<String> projectQueries = new ArrayList<>();
+
+        @Override
+        Optional<String> findVenueProjectId(String venueId) {
+            return Optional.ofNullable(Map.of("sp_bar_main", "prj_1", "sp_bar_side", "prj_2").get(venueId));
+        }
+
+        @Override
+        List<VenueBusinessHoursRecord> listAll() {
+            return new ArrayList<>(saved);
+        }
+
+        @Override
+        List<VenueBusinessHoursRecord> listByProject(String projectId) {
+            projectQueries.add(projectId);
+            return saved.stream().filter(r -> projectId.equals(findVenueProjectId(r.venueId()).orElse(null))).toList();
+        }
+
         @Override
         VenueBusinessHoursRecord upsert(String id, String venueId, int dayOfWeek, LocalTime openTime,
                                         LocalTime closeTime, boolean disabled, LocalDate effectiveFrom, Instant now) {
@@ -46,9 +68,49 @@ class VenueBusinessHoursServiceTests {
     private VenueBusinessHoursService service;
 
     private VenueBusinessHoursService service() {
+        return service(null);
+    }
+
+    private VenueBusinessHoursService service(String projectScope) {
         repository = new RecordingRepository();
-        service = new VenueBusinessHoursService(repository, mock(AuditEventService.class));
+        service = new VenueBusinessHoursService(repository, mock(AuditEventService.class), auth(projectScope));
         return service;
+    }
+
+    private static AuthorizationService auth(String projectScope) {
+        return new AuthorizationService(null) {
+            @Override
+            public Optional<String> currentProjectScopeQuietly() {
+                return Optional.ofNullable(projectScope);
+            }
+        };
+    }
+
+    // M015-009：场地必须是现存空间（spaces.id），且项目员工只能读写本项目场地（BEQR-152）；修复前此三例红
+    @Test
+    void rejectsUnknownVenue() {
+        assertThatThrownBy(() -> service().save(
+                new VenueBusinessHoursRequest("idem-1", "sp_missing", 1, "18:00", "23:00", false, null)))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("VENUE_NOT_FOUND"));
+        assertThat(repository.saved).isEmpty();
+    }
+
+    @Test
+    void rejectsVenueOutsideProjectScope() {
+        assertThatThrownBy(() -> service("prj_2").save(request(1, "18:00", "23:00")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(repository.saved).isEmpty();
+    }
+
+    @Test
+    void listFiltersByProjectScope() {
+        VenueBusinessHoursService scoped = service("prj_1");
+        scoped.save(request(1, "18:00", "23:00"));
+        repository.saved.add(new VenueBusinessHoursRecord(
+                "vbh_side", "sp_bar_side", 1, "18:00", "23:00", false, null, Instant.EPOCH, Instant.EPOCH));
+
+        assertThat(scoped.list()).extracting(VenueBusinessHoursRecord::venueId).containsOnly("sp_bar_main");
+        assertThat(repository.projectQueries).containsExactly("prj_1");
     }
 
     private VenueBusinessHoursRequest request(Integer dayOfWeek, String open, String close) {
