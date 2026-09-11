@@ -454,32 +454,19 @@ public class PlatformService {
                     return repository.saveSpaceType(new SpaceTypeRecord(
                             "sptype_" + typeCode, typeCode, typeName,
                             request.sortOrder() == null ? 100 : request.sortOrder(),
-                            trimToDefault(request.status(), "active"), now, now));
+                            "active", now, now));
                 });
     }
 
     public void deleteSpaceType(String id) {
         authorizationService.requirePlatformScope();
-        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
+        repository.findSpaceTypeById(id)
                 .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
-        long used = repository.countSpacesByTypeCode(existing.typeCode());
-        if (used > 0) {
-            throw ApiException.conflict("SPACE_TYPE_IN_USE", "还有空间在用这个种类，不能删除");
-        }
-        repository.deleteSpaceType(id);
-        auditEventService.recordSuccess(
-                "space_type.deleted", "governance.space.manage", "space_type", id, null, null,
-                Map.of("type_code", existing.typeCode()));
+        throw ApiException.badRequest("SPACE_TYPE_DELETE_REQUIRES_APPROVAL", "删除须先存档，再申请并由最高权限审批");
     }
 
     public void disableSpaceType(String id) {
-        authorizationService.requirePlatformScope();
-        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
-                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
-        repository.deleteSpaceType(id);
-        auditEventService.recordSuccess(
-                "space_type.disabled", "governance.space.manage", "space_type", id, null, null,
-                Map.of("type_code", existing.typeCode()));
+        archiveSpaceType(id);
     }
 
 
@@ -500,7 +487,7 @@ public class PlatformService {
         authorizationService.requirePlatformScope();
         SpaceTypeRecord existing = repository.findSpaceTypeById(id)
                 .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
-        if (!"archived".equals(existing.status())) {
+        if (!"archived".equals(existing.status()) && !"disabled".equals(existing.status())) {
             throw ApiException.badRequest("SPACE_TYPE_NOT_ARCHIVED", "要删除须先存档");
         }
         String text = requireText(reason, "reason");

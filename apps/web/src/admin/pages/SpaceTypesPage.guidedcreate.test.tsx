@@ -62,6 +62,20 @@ describe("SpaceTypesPage 引导式新增空间类型(phase-7)", () => {
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "space_type_saved" }));
   });
 
+  it("新建没有停用选项，确认页状态固定为启用", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("space-types-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("space-types-create-open"));
+    expect(screen.queryByLabelText("状态")).toBeNull();
+    expect(screen.queryByText("停用")).toBeNull();
+    fireEvent.change(screen.getByLabelText("种类编码"), { target: { value: "booth" } });
+    fireEvent.change(screen.getByLabelText("显示名"), { target: { value: "摊位" } });
+    fireEvent.click(screen.getByTestId("space-types-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("space-types-guided-summary")).toBeTruthy());
+    expect(screen.getByTestId("space-types-guided-summary").textContent).toContain("启用");
+    expect(screen.getByTestId("space-types-guided-summary").textContent).not.toContain("停用");
+  });
+
   it("步内校验拦截：编码/显示名缺失则不进下一步、不提交", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));

@@ -19,6 +19,13 @@ type SpaceTypeRow = {
 
 const MANAGE = ["governance.space.manage"];
 
+function spaceKindStatusLabel(status: string) {
+  if (status === "active") return "启用";
+  if (status === "archived" || status === "disabled") return "已存档";
+  if (status === "pending_delete") return "待删除审批";
+  return formatBusinessStatus(status);
+}
+
 /**
  * 空间类型字典管理页（ADM-GOV-007，条目3b）：平台管理员维护空间类型（楼栋/楼层/区块/铺位/公共区域…），
  * 作为空间建档 space_type 的下拉数据源与硬校验依据。新增/启用后即可用于空间 space_type 校验。
@@ -26,7 +33,8 @@ const MANAGE = ["governance.space.manage"];
 export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const [rows, setRows] = React.useState<SpaceTypeRow[]>([]);
-  const [form, setForm] = React.useState({ typeCode: "", typeName: "", sortOrder: "100", status: "active" });
+  const [form, setForm] = React.useState({ typeCode: "", typeName: "", sortOrder: "100" });
+  const createKeyRef = React.useRef("");
   // 引导式流程 phase-7：新增空间类型收起为主按钮 + 分步引导弹窗。
   const [createOpen, setCreateOpen] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -67,15 +75,17 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
     setGlobalError(null);
     setSubmitting(true);
     try {
+      if (!createKeyRef.current) createKeyRef.current = `space-type-${Math.random().toString(36).slice(2)}`;
       await api.post("/api/v1/platform/space-types", {
-        idempotencyKey: `space-type-${code}-${form.sortOrder}`,
+        idempotencyKey: createKeyRef.current,
         typeCode: code,
         typeName: name,
         sortOrder: Number(form.sortOrder) || 100,
-        status: form.status,
+        status: "active",
       });
       setActionResult({ action: "space_type_saved", typeCode: code });
-      setForm({ typeCode: "", typeName: "", sortOrder: "100", status: "active" });
+      setForm({ typeCode: "", typeName: "", sortOrder: "100" });
+      createKeyRef.current = "";
       setCreateOpen(false);
       reload();
     } catch (actionError) {
@@ -142,7 +152,7 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
                 <tr key={row.typeCode} data-testid={`space-type-${row.typeCode}`}
                     data-focus-space={isFocused(row) ? focusObjectId : undefined}
                     className={isFocused(row) ? "admin-row-selected" : undefined}>
-                  <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{formatBusinessStatus(row.status)}</td>
+                  <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{spaceKindStatusLabel(row.status)}</td>
                   <td>
                     {row.status === "active" ? (
                       <HighRiskConfirm
@@ -154,7 +164,7 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
                         data-testid={`space-type-archive-${row.typeCode}`}
                       />
                     ) : null}
-                    {row.status === "archived" ? (
+                    {row.status === "archived" || row.status === "disabled" ? (
                       <HighRiskConfirm
                         label="申请删除"
                         impact={`申请删除种类「${row.typeName}」。须填写理由，并由最高权限审批。有空间占用则不能删。`}
@@ -184,7 +194,7 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
         </div>
         <div className="admin-form-row" data-testid="space-types-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
-            data-testid="space-types-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>
+            data-testid="space-types-create-open" onClick={() => { setFormError(""); createKeyRef.current = ""; setCreateOpen(true); }}>
             ＋ 新增空间种类
           </PermissionButton>
         </div>
@@ -202,7 +212,7 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
         steps={[
           {
             title: "种类信息",
-            description: "填写种类编码与显示名，设置排序与启用状态。编码/显示名必填。",
+            description: "填写种类编码与显示名，设置排序。编码/显示名必填。新建为启用。",
             validate: () => (typeInvalid() ? "请填写种类编码与显示名" : null),
             content: (
               <>
@@ -212,10 +222,6 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
                   onChange={(event) => setForm({ ...form, typeName: event.target.value })} /></label>
                 <label>排序<input aria-label="排序" type="number" min="0" placeholder="排序" value={form.sortOrder}
                   onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} /></label>
-                <label>状态<select aria-label="状态" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-                  <option value="active">启用</option>
-                  <option value="disabled">停用</option>
-                </select></label>
               </>
             ),
           },
@@ -224,7 +230,7 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
           { label: "种类编码", value: form.typeCode.trim() || "未填写" },
           { label: "显示名", value: form.typeName.trim() || "未填写" },
           { label: "排序", value: String(Number(form.sortOrder) || 100) },
-          { label: "状态", value: form.status === "active" ? "启用" : "停用" },
+          { label: "状态", value: "启用" },
         ]}
       />
     </section>
