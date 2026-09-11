@@ -138,5 +138,7 @@ describe("MerchantScopePage 行明细抽屉", () => {
     await waitFor(() => expect(screen.getByTestId("merchant-scope-bill-row-bl-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-scope-bill-row-bl-1"));
     expect(screen.getByTestId("row-detail-drawer").textContent).toContain("B-1");
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("100.00 元");
+    expect(screen.getByTestId("row-detail-drawer").textContent).not.toContain("CNY");
   });
 });

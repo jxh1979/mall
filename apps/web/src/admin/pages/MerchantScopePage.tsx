@@ -43,6 +43,13 @@ function display(value: unknown) {
   return String(value);
 }
 
+function moneyYuan(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} 元`;
+}
+
 function matchesMerchant(merchantId: string | null | undefined, rowMerchantId: string | undefined) {
   if (!merchantId) return false;
   return rowMerchantId === merchantId;
@@ -136,7 +143,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
         { label: "商户", value: row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId) },
         { label: "账单号", value: display(row.billNo) },
         { label: "标题", value: display(row.title) },
-        { label: "金额", value: display(row.totalAmount) },
+        { label: "金额", value: moneyYuan(row.totalAmount) },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "授权范围", value: display(row.authorizedScope) },
         { label: "留痕证据", value: display(row.auditEvidenceRef) },
@@ -162,7 +169,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="merchant-scope-bills-table">
           <thead><tr><th>商户</th><th>账单号</th><th>标题</th><th>金额</th><th>状态</th><th>授权范围</th><th>留痕证据</th><th>详情</th></tr></thead>
-          <tbody>{bills.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-scope-bill-row-${row.id}`} onClick={() => openBillDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBillDetail(row); } }}><td onClick={(event) => event.stopPropagation()}>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.billNo)}</td><td>{display(row.title)}</td><td>{display(row.totalAmount)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看授权账单详情" onClick={(event) => { event.stopPropagation(); openBillDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <tbody>{bills.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-scope-bill-row-${row.id}`} onClick={() => openBillDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBillDetail(row); } }}><td onClick={(event) => event.stopPropagation()}>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.billNo)}</td><td>{display(row.title)}</td><td>{moneyYuan(row.totalAmount)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看授权账单详情" onClick={(event) => { event.stopPropagation(); openBillDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>
@@ -190,7 +197,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError, 
               <div className="admin-kpi-card"><span>授权范围</span><strong>{authorizedScopes.length}</strong><small>{authorizedScopes.join(" / ") || "-"}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户工单</span><button type="button" className="admin-kpi-value" data-testid="merchant-scope-kpi-work-orders" onClick={() => enterKpiFocus("workOrders")}>{workOrders.length}</button><small>当前商户</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户账单</span><button type="button" className="admin-kpi-value" data-testid="merchant-scope-kpi-bills" onClick={() => enterKpiFocus("bills")}>{bills.length}</button><small>授权账单</small></div>
-              <div className="admin-kpi-card"><span>账单金额</span><strong>{display(totalBillAmount)}</strong><small>只读汇总</small></div>
+              <div className="admin-kpi-card"><span>账单金额</span><strong>{moneyYuan(totalBillAmount)}</strong><small>只读汇总</small></div>
             </div>
 
             <div className="admin-form-row">

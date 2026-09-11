@@ -10,7 +10,7 @@ import type { AdminPageProps, MerchantZoneContractRow } from "../types";
 
 const TEXT = {
   title: "我的合同",
-  description: "本商户合同的关键信息(租期 / 空间 / 状态 / 押金)只读;改价、变更与审批仍走平台侧权威流程。",
+  description: "本商户合同的租期、到期情况和状态只读；改价、变更、关键条款与审批仍走平台侧权威流程。",
   loadFailed: "合同读取失败",
   focusClear: "清除筛选，返回全部",
 };
