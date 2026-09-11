@@ -6,6 +6,7 @@ import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 
 // 空间类型字典行（后端 SpaceTypeRecord，客户端 unwrap 已 camel 化）。
 type SpaceTypeRow = {
@@ -85,17 +86,29 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
     }
   }
 
+  async function deleteType(row: SpaceTypeRow) {
+    setGlobalError(null);
+    try {
+      await api.delete(`/api/v1/platform/space-types/${row.id}`);
+      setActionResult({ action: "space_type_deleted", typeCode: row.typeCode });
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "删除空间种类失败";
+      setGlobalError(message);
+    }
+  }
+
   return (
     <section data-testid="space-types-page">
       <AdminPageHeader
-        title="空间类型字典"
-        description="维护空间类型（楼栋/楼层/区块/铺位/公共区域…）。空间建档时 space_type 从本字典下拉选择并硬校验；管理员可新增或停用类型。仅 governance.space.manage 可改。"
+        title="空间种类"
+        description="维护空间种类。建空间时从本表选择种类。管理员可新增或删除。有空间还在用的种类不能删除。仅有空间管理权限的人可改。"
       />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="space-types-table">
             <thead>
-              <tr><th>编码</th><th>名称</th><th>排序</th><th>状态</th></tr>
+              <tr><th>编码</th><th>名称</th><th>排序</th><th>状态</th><th>操作</th></tr>
             </thead>
             <tbody>
               {rows.map((row) => (
@@ -103,6 +116,16 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
                     data-focus-space={isFocused(row) ? focusObjectId : undefined}
                     className={isFocused(row) ? "admin-row-selected" : undefined}>
                   <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{formatBusinessStatus(row.status)}</td>
+                  <td>
+                    <HighRiskConfirm
+                      label="删除"
+                      impact={`删除种类「${row.typeName}」后，不能再用来新建空间。若还有空间在用这个种类，系统会拒绝删除。`}
+                      onConfirm={() => void deleteType(row)}
+                      permissionsState={effectivePermissions}
+                      permissions={MANAGE}
+                      data-testid={`space-type-delete-${row.typeCode}`}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

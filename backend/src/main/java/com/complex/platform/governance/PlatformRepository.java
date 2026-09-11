@@ -90,6 +90,13 @@ public interface PlatformRepository {
     /** 条目3：录入/更新一条空间类型字典（按 type_code upsert）。 */
     SpaceTypeRecord saveSpaceType(SpaceTypeRecord spaceType);
 
+    long countSpacesByTypeCode(String typeCode);
+
+    java.util.Optional<SpaceTypeRecord> findSpaceTypeById(String id);
+
+    void deleteSpaceType(String id);
+
+
     BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding);
 
     List<BusinessEntityBindingRecord> listBusinessEntityBindings();

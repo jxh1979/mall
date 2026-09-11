@@ -349,6 +349,37 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public long countSpacesByTypeCode(String typeCode) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM spaces WHERE space_type = :type_code",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("type_code", typeCode),
+                Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public java.util.Optional<SpaceTypeRecord> findSpaceTypeById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, type_code, type_name, sort_order, status, created_at, updated_at
+                  FROM space_type_dictionary
+                 WHERE id = :id
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", id),
+                (rs, n) -> new SpaceTypeRecord(
+                        rs.getString("id"), rs.getString("type_code"), rs.getString("type_name"),
+                        rs.getInt("sort_order"), rs.getString("status"),
+                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
+                .stream().findFirst();
+    }
+
+    @Override
+    public void deleteSpaceType(String id) {
+        jdbcTemplate.update(
+                "DELETE FROM space_type_dictionary WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", id));
+    }
+
+    @Override
     public BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding) {
         jdbcTemplate.update("""
                 INSERT INTO business_entity_bindings (

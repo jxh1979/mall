@@ -458,6 +458,20 @@ public class PlatformService {
                 });
     }
 
+    public void deleteSpaceType(String id) {
+        authorizationService.requirePlatformScope();
+        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
+                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
+        long used = repository.countSpacesByTypeCode(existing.typeCode());
+        if (used > 0) {
+            throw ApiException.conflict("SPACE_TYPE_IN_USE", "还有空间在用这个种类，不能删除");
+        }
+        repository.deleteSpaceType(id);
+        auditEventService.recordSuccess(
+                "space_type.deleted", "governance.space.manage", "space_type", id, null, null,
+                Map.of("type_code", existing.typeCode()));
+    }
+
     public SpaceRecord createSpace(SpaceRequest request) {
         authorizationService.requirePlatformScope();
         return executeWrite(

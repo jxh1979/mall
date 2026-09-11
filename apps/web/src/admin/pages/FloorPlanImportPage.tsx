@@ -41,7 +41,7 @@ const ERROR_CODE_LABELS: Record<string, string> = {
 const zhOrDash = (map: Record<string, string>, code: string | null | undefined) =>
   code ? map[code] ?? "其他" : "-";
 const REF_TYPE_LABELS: Record<string, string> = { space: "空间", merchant: "商户", facility: "设施" };
-const fpLabel = (map: Record<string, string>, code: string | null | undefined) => (code ? map[code] ?? code : "-");
+const fpLabel = (map: Record<string, string>, code: string | null | undefined) => (code ? map[code] ?? "其他" : "-");
 
 // 后端 floorplan 域记录映射(接现有 /api/v1/floor-plans/* 契约)。
 type FloorPlan = { id: string; projectId?: string; buildingCode?: string; floorNo?: string; planName?: string; versionNo?: string; status?: string };
@@ -78,6 +78,9 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   const [planOpen, setPlanOpen] = React.useState(false);
   const [planError, setPlanError] = React.useState("");
   const [planSaving, setPlanSaving] = React.useState(false);
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importError, setImportError] = React.useState("");
+  const [importSaving, setImportSaving] = React.useState(false);
   const [importForm, setImportForm] = React.useState({ sourceFormat: "svg", sourceName: "", sourcePayload: "" });
   const [publishCandidateIds, setPublishCandidateIds] = React.useState("");
   // 行明细抽屉：候选/错误明细数据行整行可点 → 完整字段（枚举中文·序号/行号原样）。
@@ -99,12 +102,15 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setSelectedPlanId(floorPlanId);
     setSelectedImportId("");
     setFloorPlanImportDetails(null);
+    importKeyRef.current = "";
+    publishKeyRef.current = "";
     const res = await api.get<{ items?: ImportTask[] } | ImportTask[]>(`/api/v1/floor-plans/${floorPlanId}/imports`);
     setImports(Array.isArray(res) ? res : (res?.items ?? []));
   };
 
   const loadCandidates = async (floorPlanId: string, importId: string) => {
     setSelectedImportId(importId);
+    publishKeyRef.current = "";
     const details = await api.get<FloorPlanImportDetails>(`/api/v1/floor-plans/${floorPlanId}/imports/${importId}/candidates`);
     setFloorPlanImportDetails(details);
   };
@@ -128,14 +134,19 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   };
 
   const createImport = async () => {
+    setImportSaving(true);
+    setImportError("");
     try {
+      if (!importKeyRef.current) importKeyRef.current = `fpi-${selectedPlanId}-${importForm.sourceName || "import"}`;
       const res = await api.post<ImportTask>(`/api/v1/floor-plans/${selectedPlanId}/imports`, {
-        idempotency_key: importKeyRef.current || (importKeyRef.current = `fpi-${selectedPlanId}-${importForm.sourceName || "import"}`), source_format: importForm.sourceFormat,
+        idempotency_key: importKeyRef.current, source_format: importForm.sourceFormat,
         source_name: importForm.sourceName, source_payload: importForm.sourcePayload,
       });
       setActionResult({ action: "floor_plan_import_created", importId: res?.id });
+      importKeyRef.current = "";
+      setImportOpen(false);
       await loadImports(selectedPlanId);
-    } catch (e) { setGlobalError((e as Error).message); }
+    } catch (e) { setImportError((e as Error).message); } finally { setImportSaving(false); }
   };
 
   const publishImport = async () => {
@@ -182,7 +193,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
 
   return (
     <section data-testid="floor-plan-import-page">
-      <AdminPageHeader title="商场平面图导入" description="P2 平面图导入：上传商场平面图，解析出候选区域，人工复核候选与错误后发布到正式平面图。发布为高危动作，需二次确认。" />
+      <AdminPageHeader title="商场平面图导入" description="上传商场平面图，解析出候选区域，人工复核候选与错误后发布到正式平面图。发布为高危动作，需二次确认。" />
       <AuditTrailHint event="floor_plan.created / floor_plan.import_published" />
       <TechDetails><div className="admin-generic-evidence" data-testid="floor-plan-evidence">/api/v1/floor-plans</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
@@ -209,13 +220,8 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
         {selectedPlanId ? (
           <>
             <h3>导入任务</h3>
-            <div className="admin-form-grid" data-testid="floor-plan-import-form">
-              <label>来源格式<select data-testid="floor-plan-import-format" value={importForm.sourceFormat} onChange={(e) => setImportForm({ ...importForm, sourceFormat: e.target.value })}>
-                {SOURCE_FORMAT_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select></label>
-              <label>来源名称<input data-testid="floor-plan-import-name" value={importForm.sourceName} onChange={(e) => setImportForm({ ...importForm, sourceName: e.target.value })} /></label>
-              <label>来源内容<textarea data-testid="floor-plan-import-payload" value={importForm.sourcePayload} onChange={(e) => setImportForm({ ...importForm, sourcePayload: e.target.value })} /></label>
-              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="floor-plan-import-create" onClick={() => void createImport()}>创建导入</PermissionButton>
+            <div className="admin-form-row" data-testid="floor-plan-import-form">
+              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="floor-plan-import-open" onClick={() => { setImportForm({ sourceFormat: "svg", sourceName: "", sourcePayload: "" }); importKeyRef.current = ""; setImportError(""); setImportOpen(true); }}>＋ 创建导入</PermissionButton>
             </div>
             <table className="admin-table" data-testid="floor-plan-imports-table">
               <thead><tr><th>来源</th><th>状态</th><th>候选数</th><th>错误数</th><th>操作</th></tr></thead>
@@ -241,7 +247,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             <table className="admin-table" data-testid="floor-plan-candidates-table">
               <thead><tr><th>序号</th><th>类型</th><th>关联</th><th>标签</th><th>状态</th><th>详情</th></tr></thead>
               <tbody>
-                {(floorPlanImportDetails.candidates ?? []).slice(0, 50).map((candidate) => (
+                {(floorPlanImportDetails.candidates ?? []).map((candidate) => (
                   <tr key={candidate.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-candidate-row-${candidate.id}`}
                     onClick={() => openCandidateDetail(candidate)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCandidateDetail(candidate); } }}>
@@ -255,7 +261,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             <table className="admin-table" data-testid="floor-plan-errors-table">
               <thead><tr><th>行号</th><th>字段</th><th>错误码</th><th>说明</th><th>详情</th></tr></thead>
               <tbody>
-                {(floorPlanImportDetails.errors ?? []).slice(0, 50).map((row) => (
+                {(floorPlanImportDetails.errors ?? []).map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-error-row-${row.id}`}
                     onClick={() => openErrorDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openErrorDetail(row); } }}>
@@ -264,7 +270,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
               </tbody>
             </table>
             <div className="admin-form-grid" data-testid="floor-plan-publish-form">
-              <label>待发布区域（不填则发布当前待复核的全部）<input data-testid="floor-plan-publish-candidates" value={publishCandidateIds} onChange={(e) => setPublishCandidateIds(e.target.value)} /></label>
+              <label>待发布区域<input data-testid="floor-plan-publish-candidates" value={publishCandidateIds} onChange={(e) => setPublishCandidateIds(e.target.value)} /></label>
               <HighRiskConfirm
                 label="发布候选到正式平面图"
                 impact={`${PUBLISH_CONFIRM_TITLE}：发布后候选会写入正式平面图区域，请确认已完成业务复核，发布不可静默覆盖既有区域证据。`}
@@ -316,6 +322,37 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
           { label: "楼栋", value: planForm.buildingCode.trim() || "—" },
           { label: "楼层", value: planForm.floorNo.trim() || "—" },
           { label: "初始状态", value: "草稿" },
+        ]}
+      />
+      <GuidedFlowModal
+        open={importOpen}
+        title="创建导入"
+        testId="floor-plan-import-guided"
+        submitTestId="floor-plan-import-create"
+        submitLabel="创建导入"
+        submitting={importSaving}
+        error={importError || undefined}
+        onClose={() => setImportOpen(false)}
+        onSubmit={() => void createImport()}
+        steps={[
+          {
+            title: "导入内容",
+            description: "选择来源格式，填写名称和内容。",
+            validate: () => (importForm.sourcePayload.trim() ? null : "请填写来源内容"),
+            content: (
+              <>
+                <label>来源格式<select data-testid="floor-plan-import-format" value={importForm.sourceFormat} onChange={(e) => setImportForm({ ...importForm, sourceFormat: e.target.value })}>
+                  {SOURCE_FORMAT_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select></label>
+                <label>来源名称<input data-testid="floor-plan-import-name" value={importForm.sourceName} onChange={(e) => setImportForm({ ...importForm, sourceName: e.target.value })} /></label>
+                <label>来源内容<textarea data-testid="floor-plan-import-payload" value={importForm.sourcePayload} onChange={(e) => setImportForm({ ...importForm, sourcePayload: e.target.value })} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "来源格式", value: SOURCE_FORMAT_OPTIONS.find((opt) => opt.value === importForm.sourceFormat)?.label ?? importForm.sourceFormat },
+          { label: "来源名称", value: importForm.sourceName.trim() || "—" },
         ]}
       />
     </section>

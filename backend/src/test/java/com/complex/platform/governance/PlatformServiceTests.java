@@ -835,6 +835,21 @@ class PlatformServiceTests {
         }
 
         @Override
+        public long countSpacesByTypeCode(String typeCode) {
+            return spaces.values().stream().filter(space -> typeCode.equals(space.spaceType())).count();
+        }
+
+        @Override
+        public java.util.Optional<SpaceTypeRecord> findSpaceTypeById(String id) {
+            return spaceTypes.values().stream().filter(item -> id.equals(item.id())).findFirst();
+        }
+
+        @Override
+        public void deleteSpaceType(String id) {
+            spaceTypes.values().removeIf(item -> id.equals(item.id()));
+        }
+
+        @Override
         public BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding) {
             businessEntityBindings.put(binding.id(), binding);
             businessEntityBindingStatusHistory.add(binding.status());
