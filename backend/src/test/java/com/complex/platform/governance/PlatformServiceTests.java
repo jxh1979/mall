@@ -326,10 +326,11 @@ class PlatformServiceTests {
     }
 
     @Test
-    void disableSpaceTypeArchivesInsteadOfDeleting() {
-        service.disableSpaceType("sptype_booth");
+    void archiveSpaceTypeRequiresReasonAndCanUnarchive() {
+        service.archiveSpaceType("sptype_booth", "暂时不用");
         assertThat(platformRepository.findSpaceTypeById("sptype_booth").orElseThrow().status()).isEqualTo("archived");
-        assertThat(platformRepository.listSpaceTypes()).anyMatch(item -> "booth".equals(item.typeCode()));
+        service.unarchiveSpaceType("sptype_booth");
+        assertThat(platformRepository.findSpaceTypeById("sptype_booth").orElseThrow().status()).isEqualTo("active");
     }
 
     @Test
@@ -347,7 +348,7 @@ class PlatformServiceTests {
         assertThatThrownBy(() -> service.requestDeleteSpaceType(created.id(), "未存档"))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("SPACE_TYPE_NOT_ARCHIVED"));
-        service.archiveSpaceType(created.id());
+        service.archiveSpaceType(created.id(), "不再使用");
         service.requestDeleteSpaceType(created.id(), "不再使用");
         assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("pending_delete");
         assertThatThrownBy(() -> service.approveDeleteSpaceType(created.id(), "approved"))
@@ -356,6 +357,44 @@ class PlatformServiceTests {
         asMasterAuthority();
         service.approveDeleteSpaceType(created.id(), "approved");
         assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("disabled");
+        assertThatThrownBy(() -> service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-revive", "add", List.of(), "tempdel", "复活", 20, "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_CODE_EXISTS"));
+    }
+
+    @Test
+    void occupiedSpaceTypeCannotBeDeleted() {
+        service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-shop-occ", "create", List.of(), null, null, null, "Shop Occ", "shop", "1", null, null, "active"));
+        service.archiveSpaceType("sptype_shop", "测试占用");
+        assertThatThrownBy(() -> service.requestDeleteSpaceType("sptype_shop", "想删"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_IN_USE"));
+    }
+
+    @Test
+    void masterRequestDeleteSpaceTypeExecutesWithoutApproval() {
+        SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-master-del", "add", List.of(), "masterdel", "密钥直删", 30, "active"));
+        service.archiveSpaceType(created.id(), "密钥持有人清理");
+        asMasterAuthority();
+        service.requestDeleteSpaceType(created.id(), "密钥持有人清理");
+        assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("disabled");
+    }
+
+    @Test
+    void archiveCannotPullPendingDeleteBack() {
+        SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-pend", "add", List.of(), "pendkind", "待审种类", 40, "active"));
+        service.archiveSpaceType(created.id(), "先存档");
+        service.requestDeleteSpaceType(created.id(), "申请删");
+        assertThatThrownBy(() -> service.archiveSpaceType(created.id(), "想撤回"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_ARCHIVE_NOT_ALLOWED"));
+        asMasterAuthority();
+        service.approveDeleteSpaceType(created.id(), "rejected");
+        assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("archived");
     }
 
     // V348/V384 商户业态标准字段：六值（酒吧/餐饮/零售/游乐/传媒/其他）之外的业态一律拒收（业态错＝通票分账份额拆给错的业态）。M011-005

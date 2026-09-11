@@ -39,9 +39,14 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   VALIDATION_FAILED: "校验未通过",
 };
 const zhOrDash = (map: Record<string, string>, code: string | null | undefined) =>
-  code ? map[code] ?? "其他" : "-";
+  code ? map[code] ?? "未识别" : "-";
 const REF_TYPE_LABELS: Record<string, string> = { space: "空间", merchant: "商户", facility: "设施" };
-const fpLabel = (map: Record<string, string>, code: string | null | undefined) => (code ? map[code] ?? "其他" : "-");
+const fpLabel = (map: Record<string, string>, code: string | null | undefined) => (code ? map[code] ?? "未识别" : "-");
+function floorPlanStatusLabel(status?: string) {
+  if (status === "published") return "已发布";
+  if (status === "draft") return "草稿";
+  return formatBusinessStatus(status);
+}
 
 // 后端 floorplan 域记录映射(接现有 /api/v1/floor-plans/* 契约)。
 type FloorPlan = { id: string; projectId?: string; buildingCode?: string; floorNo?: string; planName?: string; versionNo?: string; status?: string };
@@ -211,7 +216,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             {floorPlans.map((plan) => (
               <tr key={plan.id}>
                 <td>{plan.planName ?? plan.id}</td><td>{plan.buildingCode ?? "-"}/{plan.floorNo ?? "-"}</td>
-                <td>{plan.versionNo ?? "-"}</td><td>{formatBusinessStatus(plan.status)}</td>
+                <td>{plan.versionNo ?? "-"}</td><td>{floorPlanStatusLabel(plan.status)}</td>
                 <td><IconButton icon={<UnorderedListOutlined />} tip="查看导入任务" onClick={() => void loadImports(plan.id)} testId={`floor-plan-select-${plan.id}`} /></td>
               </tr>
             ))}

@@ -21,8 +21,9 @@ const MANAGE = ["governance.space.manage"];
 
 function spaceKindStatusLabel(status: string) {
   if (status === "active") return "启用";
-  if (status === "archived" || status === "disabled") return "已存档";
+  if (status === "archived") return "已存档";
   if (status === "pending_delete") return "待删除审批";
+  if (status === "disabled") return "已删除";
   return formatBusinessStatus(status);
 }
 
@@ -99,12 +100,26 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
 
   async function archiveType(row: SpaceTypeRow) {
     setGlobalError(null);
+    const reason = typeof window !== "undefined" ? window.prompt("请填写存档理由") : "";
+    if (!reason || !reason.trim()) return;
     try {
-      await api.post(`/api/v1/platform/space-types/${row.id}/archive`);
+      await api.post(`/api/v1/platform/space-types/${row.id}/archive`, { reason: reason.trim() });
       setActionResult({ action: "space_type_archived", typeCode: row.typeCode });
       reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "存档空间种类失败";
+      setGlobalError(message);
+    }
+  }
+
+  async function unarchiveType(row: SpaceTypeRow) {
+    setGlobalError(null);
+    try {
+      await api.post(`/api/v1/platform/space-types/${row.id}/unarchive`);
+      setActionResult({ action: "space_type_unarchived", typeCode: row.typeCode });
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "取消存档失败";
       setGlobalError(message);
     }
   }
@@ -123,11 +138,11 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
     }
   }
 
-  async function approveDeleteType(row: SpaceTypeRow) {
+  async function approveDeleteType(row: SpaceTypeRow, decision: "approved" | "rejected") {
     setGlobalError(null);
     try {
-      await api.post(`/api/v1/platform/space-types/${row.id}/delete-approve`, { decision: "approved" });
-      setActionResult({ action: "space_type_delete_approved", typeCode: row.typeCode });
+      await api.post(`/api/v1/platform/space-types/${row.id}/delete-approve`, { decision });
+      setActionResult({ action: decision === "approved" ? "space_type_delete_approved" : "space_type_delete_rejected", typeCode: row.typeCode });
       reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "审批删除失败";
@@ -157,32 +172,52 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
                     {row.status === "active" ? (
                       <HighRiskConfirm
                         label="存档"
-                        impact={`把种类「${row.typeName}」存档后，不能再用来新建空间。已经建好的空间仍保留这个种类。存档之后才能申请删除。`}
+                        impact={`把种类「${row.typeName}」存档后，不能再用来新建空间。已经建好的空间仍保留这个种类。须填写理由。存档之后才能申请删除。`}
                         onConfirm={() => void archiveType(row)}
                         permissionsState={effectivePermissions}
                         permissions={MANAGE}
                         data-testid={`space-type-archive-${row.typeCode}`}
                       />
                     ) : null}
-                    {row.status === "archived" || row.status === "disabled" ? (
-                      <HighRiskConfirm
-                        label="申请删除"
-                        impact={`申请删除种类「${row.typeName}」。须填写理由，并由最高权限审批。有空间占用则不能删。`}
-                        onConfirm={() => void requestDeleteType(row)}
-                        permissionsState={effectivePermissions}
-                        permissions={MANAGE}
-                        data-testid={`space-type-delete-request-${row.typeCode}`}
-                      />
+                    {row.status === "archived" ? (
+                      <>
+                        <HighRiskConfirm
+                          label="取消存档"
+                          impact={`把种类「${row.typeName}」恢复为启用，可以再用来新建空间。`}
+                          onConfirm={() => void unarchiveType(row)}
+                          permissionsState={effectivePermissions}
+                          permissions={MANAGE}
+                          data-testid={`space-type-unarchive-${row.typeCode}`}
+                        />
+                        <HighRiskConfirm
+                          label="申请删除"
+                          impact={`申请删除种类「${row.typeName}」。须填写理由，并由最高权限审批。有空间占用则不能删。最高权限本人申请会直接办结。`}
+                          onConfirm={() => void requestDeleteType(row)}
+                          permissionsState={effectivePermissions}
+                          permissions={MANAGE}
+                          data-testid={`space-type-delete-request-${row.typeCode}`}
+                        />
+                      </>
                     ) : null}
                     {row.status === "pending_delete" && isMaster ? (
-                      <HighRiskConfirm
-                        label="审批删除"
-                        impact={`由最高权限审批删除种类「${row.typeName}」。申请人不能批自己。`}
-                        onConfirm={() => void approveDeleteType(row)}
-                        permissionsState={effectivePermissions}
-                        permissions={MANAGE}
-                        data-testid={`space-type-delete-approve-${row.typeCode}`}
-                      />
+                      <>
+                        <HighRiskConfirm
+                          label="审批通过"
+                          impact={`由最高权限批准删除种类「${row.typeName}」。申请人不能批自己。批准后前台不再使用，后台仍可查阅。`}
+                          onConfirm={() => void approveDeleteType(row, "approved")}
+                          permissionsState={effectivePermissions}
+                          permissions={MANAGE}
+                          data-testid={`space-type-delete-approve-${row.typeCode}`}
+                        />
+                        <HighRiskConfirm
+                          label="审批驳回"
+                          impact={`驳回删除种类「${row.typeName}」的申请，该种类回到已存档。`}
+                          onConfirm={() => void approveDeleteType(row, "rejected")}
+                          permissionsState={effectivePermissions}
+                          permissions={MANAGE}
+                          data-testid={`space-type-delete-reject-${row.typeCode}`}
+                        />
+                      </>
                     ) : row.status === "pending_delete" ? (
                       <span>待最高权限审批</span>
                     ) : null}

@@ -169,9 +169,18 @@ public class PlatformController {
     }
 
     @PostMapping("/space-types/{id}/archive")
-    public ApiResponse<Void> archiveSpaceType(@org.springframework.web.bind.annotation.PathVariable("id") String id) {
+    public ApiResponse<Void> archiveSpaceType(
+            @org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody java.util.Map<String, String> body) {
         authorizationService.requirePermission("governance.space.manage");
-        service.archiveSpaceType(id);
+        service.archiveSpaceType(id, body == null ? null : body.get("reason"));
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/space-types/{id}/unarchive")
+    public ApiResponse<Void> unarchiveSpaceType(@org.springframework.web.bind.annotation.PathVariable("id") String id) {
+        authorizationService.requirePermission("governance.space.manage");
+        service.unarchiveSpaceType(id);
         return ApiResponse.ok(null);
     }
 
@@ -189,13 +198,6 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.PathVariable("id") String id,
             @RequestBody java.util.Map<String, String> body) {
         service.approveDeleteSpaceType(id, body == null ? null : body.get("decision"));
-        return ApiResponse.ok(null);
-    }
-
-    @PostMapping("/space-types/{id}/disable")
-    public ApiResponse<Void> disableSpaceType(@org.springframework.web.bind.annotation.PathVariable("id") String id) {
-        authorizationService.requirePermission("governance.space.manage");
-        service.disableSpaceType(id);
         return ApiResponse.ok(null);
     }
 

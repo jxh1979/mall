@@ -88,4 +88,19 @@ describe("SpaceTypesPage 引导式新增空间类型(phase-7)", () => {
     expect(screen.queryByTestId("space-types-guided-summary")).toBeNull();
     expect(post).not.toHaveBeenCalled();
   });
+
+  it("已删除种类不再提供申请删除；已存档可取消存档", async () => {
+    const api = makeApi();
+    api.get = vi.fn().mockResolvedValue([
+      { id: "st-1", typeCode: "kiosk", typeName: "一体机位", sortOrder: 100, status: "active" },
+      { id: "st-2", typeCode: "old", typeName: "旧种类", sortOrder: 90, status: "disabled" },
+      { id: "st-3", typeCode: "arc", typeName: "已存档种类", sortOrder: 80, status: "archived" },
+    ]);
+    renderPage(api);
+    await waitFor(() => expect(screen.getByTestId("space-type-archive-kiosk")).toBeTruthy());
+    expect(screen.getByTestId("space-types-table").textContent).toContain("已删除");
+    expect(screen.queryByTestId("space-type-delete-request-old")).toBeNull();
+    expect(screen.getByTestId("space-type-unarchive-arc")).toBeTruthy();
+    expect(screen.getByTestId("space-type-delete-request-arc")).toBeTruthy();
+  });
 });
