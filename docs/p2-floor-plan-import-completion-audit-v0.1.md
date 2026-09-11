@@ -10,8 +10,9 @@ P2-A 商场平面图 SVG/标准 JSON 导入能力已完成当前可编码范围�
 
 | 范围 | 结论 |
 |---|---|
-| SVG 导入 | 支持 `<polygon>`；未闭合 `<polyline>` 记录错误，不生成候选 |
-| 标准 JSON 导入 | 支持 `shapes` 数组和 `polygon_points` |
+| 矢量图导入 | 支持 `<polygon>`；未闭合 `<polyline>` 记录错误，不生成候选 |
+| 标准数据导入 | 支持 `shapes` 数组和 `polygon_points` |
+| 候选种类 | 只发布铺位、摊位、公共区、区域、入口、设施、风险区、路径八种 |
 | 候选区 | 导入结果先进入 `floor_plan_import_candidates`，不直接覆盖正式 shape |
 | 错误明细 | 非法点位、未闭合 polyline、JSON 错误等进入错误明细 |
 | 人工发布 | 仅 `parsed` 任务和 `pending` 候选允许发布 |
