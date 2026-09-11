@@ -101,11 +101,11 @@ class MerchantPortalServiceTests {
         ContractSettlementRecord disputed = service.submitSettlementDispute("s1",
                 new MerchantSettlementDisputeRequest("k1", null, "金额与合同约定不符"));
 
-        assertThat(disputed.status()).isEqualTo("disputed");
+        assertThat(disputed.status()).isEqualTo("pending_settlement");
         assertThat(disputed.disputeReason()).contains("金额与合同约定不符");
         ArgumentCaptor<ContractSettlementRecord> captor = ArgumentCaptor.forClass(ContractSettlementRecord.class);
         verify(contractRepository).saveSettlement(captor.capture());
-        assertThat(captor.getValue().status()).isEqualTo("disputed");
+        assertThat(captor.getValue().status()).isEqualTo("pending_settlement");
     }
 
     @Test

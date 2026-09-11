@@ -22,14 +22,14 @@ import static com.complex.platform.common.Strings.requireText;
  * 商户专区一期(3.18 方案A)商户自助层:我的合同 / 我的对账只读 + 结算异议留言。
  * 数据边界铁律:currentMerchantScope——商户账号只见本商户(员工无 merchant 抛 MERCHANT_SCOPE_REQUIRED
  * fail-closed),平台管理员 scope 为空走全量监督口径;资金/审批的平台侧权威流程不变
- * (异议只把结算单挂起为「有争议」,裁决仍走 contract.settlement.dispute.resolve)。
+ * (异议只留言、不改结算状态、不暂停付款义务)。
  */
 @Service
 public class MerchantPortalService {
 
     /** 结算单可提异议的驻留态:开账后未结清且未挂起争议。 */
     private static final Set<String> DISPUTABLE_STATUSES =
-            Set.of("in_progress", "pending_settlement", "deposit_offsetting", "arrears_collecting");
+            Set.of("pending_settlement", "deposit_offsetting", "arrears_collecting");
 
     private final ContractRepository contractRepository;
     private final AuthorizationService authorizationService;
@@ -94,7 +94,7 @@ public class MerchantPortalService {
         return items;
     }
 
-    /** 商户对未结清结算单提异议留言:挂起为「有争议」,平台按既有裁决流(resolve-dispute)闭环。 */
+    /** 商户对结算单提异议留言：只记理由，不改状态、不暂停付款。 */
     @Transactional
     public ContractSettlementRecord submitSettlementDispute(String settlementId, MerchantSettlementDisputeRequest request) {
         authorizationService.requirePermission("merchant.portal.settlement.dispute");
@@ -121,7 +121,7 @@ public class MerchantPortalService {
         }
         Instant now = Instant.now();
         ContractSettlementRecord disputed = contractRepository.saveSettlement(new ContractSettlementRecord(
-                settlement.id(), settlement.contractId(), settlement.triggerType(), "disputed",
+                settlement.id(), settlement.contractId(), settlement.triggerType(), settlement.status(),
                 settlement.settlementItems(), reason, null, null,
                 settlement.projectId(), settlement.createdAt(), now));
         auditEventService.recordSuccess(
