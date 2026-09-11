@@ -264,6 +264,10 @@ public class PlatformService {
                         throw ApiException.conflict("MERCHANT_DELETE_ALREADY_PENDING",
                                 "该商户已有待审批的删除申请");
                     }
+                    if ("approved".equals(merchant.deleteStatus())) {
+                        throw ApiException.badRequest("MERCHANT_ALREADY_DELETED",
+                                "该商户已删除，不能再申请删除");
+                    }
                     Instant now = Instant.now();
                     String reason = requireText(request == null ? null : request.reason(), "reason");
                     String actor = actorId();
