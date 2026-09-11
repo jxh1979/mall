@@ -1,7 +1,31 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V3.21
+版本：V3.28
+
+## 当前 M014 B5-r1双PASS，四值全等，M014 → PASS（先记账，再写闭环文件）
+2026-09-11T05:52:00Z。Grok B5-r1真实exit0，报告modules/M014-b5-r1-grok-raw.md（V0.01，47722bytes SHA7e399d8d28350e91867fecf4fab861021043f04620c3aecaa4faf01cb9f3f01e，四项交付事实成立），整模块三线全量结论PASS。席甲B5-r1票PASS（modules/M014-b5-r1-self-raw.md V0.01，16155bytes SHAbb535ff7246253f42980dd9c4df408b23007b4152e284404b914d2485087e819；Grok真实退出后主仓实跑只读验证并独立落盘、再读Grok）。合取双PASS。
+B5后四值（精确路径modules/M014-b5-r1-grok-raw.md最后独占锁行）：实算/sidecar/ledger/Grok均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+M014状态IN_PROGRESS→PASS：B3累计1（只改本模块1份文档 docs/platform-governance-product-spec-v0.2.md V0.05→V0.06）；B4双PASS；修复队列20 个 ID 全否（18 项已修、019 XM→M261、020 登记）；添加项0；questions 0；无HTML修改申请；未提交/推送/合并/部署（阶段B不提交；M014修复随下一检查点）。本节写入后再创建闭环文件modules/M014-governance-product-spec-seg2.md。当前14PASS/0IN_PROGRESS/457PENDING；下一步：M015（空间点位、楼层平面图与营业时段／后台实现／第1段，23文件）。
+
+## 当前 M014 B4-r1双PASS，进入B5-r1整模块全量重审
+2026-09-11T05:31:29Z。Grok B4-r1真实exit0，报告modules/M014-b4-r1-grok-raw.md（V0.01，64984bytes SHA6383e6d7232564a8ab7f26ad3292af3bdd8f13b25f166a82e6a658db4f6df750，四项交付事实成立），结论PASS（内容与§5闸3归因均PASS）。席甲B4-r1票PASS（modules/M014-b4-r1-self-raw.md V0.01，79022bytes SHAb0a2b6d6e5c5a7403fe4e35d1a727fb3bd5110ce34198cfcfc4d6dfef1da81e9；全部hunk落到定稿ID，未改源码/迁移/OpenAPI/HTML/锁）。合取双PASS，findings V1.90把已修ID队列改否；当前队列是=0。
+下一步B5-r1：派Grok整模块全量三线重审，席甲自席raw后读Grok并做四值校验（精确路径modules/M014-b5-r1-grok-raw.md最后独占锁行）；双PASS→ledger先记PASS再写modules/M014-<slug>.md；任一FAIL→回退统一规则（B3累计1/3）。
+
+## 当前 M014 B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-11T05:12:22Z。席甲在主工作区就地修 docs/platform-governance-product-spec-v0.2.md（版本铁律 V0.05→V0.06，头部一行变更记录 + 三张原文件变更日志各一行）：before tree 94998d82f3caf6c16f3ffaa31491f0d5735715dc → after tree 82136f01b088c2bf59a5b480a92e2bc4c71f9923（1 file changed, 40 insertions(+), 43 deletions(-)）；diff 冻结 /tmp/m014_b3_r1.diff（39184 bytes SHA 1d98f1229c38d8d41a34124c28f01fbd92ae1bd0302e618fe0b7feffd84f399f）。文档模块无测试面：只读验证 /tmp/m014_b3r1_run.log（改写后陈述逐字对照 V394/V184/V111/V028、PlatformService、OpenAPI x-terminal-allowed 与三份 HTML 现文）。B3 累计 0→1。未改源码/迁移/OpenAPI/三份 HTML/锁；未提交。下一步：派 Grok B4-r1（modules/M014-b4-r1-grok-raw.md），真实退出后席甲自席落盘 B4 raw 再读。
+
+## 当前 M014 B2-r2 双 PASS 定稿，进 B3-r1（席甲修）
+2026-09-11T05:12:21Z。Grok B2-r2 真实退出（exit 0；M014-b1-grok-raw.md V0.03 追加段，全文 105470bytes SHA 8e68e2f4a998bf3fe595ee689c2deee7559ec5c17346b480272105510c0b6d4d，票 PASS，逐 ID 001–020 全 PASS（非阻断：B3 L896 点名 HTML 九类名词；以 V1.88 r2 覆盖段为准，不回退 r1 残留单元格））；席甲 B2-r2 票 PASS（M014-b1-self-raw.md V0.03，全文 35645bytes SHA 275381370495e6c5007d812067dc80bf079070548c68846ea63ea19c8e2a0259，自席落盘后才读 Grok 追加段）。定稿 findings V1.89：队列「是」18（001–018）、「否」2（019 XM→M261、020）。B3-r1 由席甲在主工作区就地修单文件（版本铁律 V0.05→V0.06），修前 tree 记入 B3 完成节供 B4 冻结 diff。
+
+## 当前 M014 B2-r1 Grok FAIL → B2-r2 修订候选已落盘（findings V1.88），待 Grok B2-r2 票
+2026-09-11T05:01:48Z。Grok B2-r1 真实退出（exit 0；M014-b1-grok-raw.md V0.02 追加段，全文 78928bytes SHA 8518cb71…7a531，票 FAIL：001 最小处置漏 L892/L900 同根活句、009「业态代码值」仍属立法；其余 18 个 ID 逐票 PASS）；席甲 B2-r1 票 PASS（M014-b1-self-raw.md V0.02，33645bytes SHA fcd74ce4…b3639）。合取不成立，按回退统一规则修订 001/009 最小处置为 r2 候选（findings V1.88，ID 不变），Grok 非阻断意见（003/005/011 措辞、020 事实栏 V217 句作废）并入 B3 边界。派 Grok B2-r2（追加到同一 raw，V0.03）；B3 累计仍 0。
+
+## 当前 M014 B2-r1 候选已落盘（findings V1.87），待 Grok B2 票
+2026-09-11T04:41:40Z。B1：Grok 真实 exit 0（modules/M014-b1-grok-raw.md V0.01 53179bytes SHA ebadd23d…0e584，FAIL：GR-M014-001…016、OBS-01…12，七段全文覆盖表齐全）；席甲独立落盘（modules/M014-b1-self-raw.md V0.01 29222bytes SHA 08a613b2…d6881，FAIL：CX-M014-001…007）后才读 Grok；B1 后四值全等 b012328f…6695a。B2-r1 候选 findings V1.87：M014-001…020（队列「是」18：001–018；「否」2：019 XM→M261、020 观察）；无添加项、无 questions、不 BLOCKED。派 Grok B2-r1（追加到 M014-b1-grok-raw.md，V0.02），真实退出后席甲自席落盘 self-raw V0.02 票再读其追加段。主工作区 HEAD=origin/main=685dca4e（PR #434 已合并）。
+
+## 当前 M014 B1开始（M001–M013 已闭环；U01–U18 未发布材料已审修发布）
+2026-09-11T04:11:02Z。操作员 2026-09-10 指令：「继续从 M013 开始主审计，m014,m015」。M014「综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段」PENDING→IN_PROGRESS，1 文件（计划冻结 3494 行，OVERSIZE-SINGLE-FILE：按 runbook V0.02 分段阅读但 raw 须列全文件覆盖表）：docs/platform-governance-product-spec-v0.2.md（V0.05，221816bytes，SHA256 b3ee635aa1763d1f5b1e6e7c7e381fe78bc71057c162caad39ae8cd3b8bbcd31），映射 84 判据（BEQR 21、BSM 12、GEN 18、PGM 33，与 M013 同集）；B3 累计 0；子代理失败重跑 0。正本 main HEAD=origin/main=685dca4e1088ed59e68196c3c5b45787fde9db02（PR #434 M013 闭环检查点已合并）。顺序：先派 Grok B1（报告 modules/M014-b1-grok-raw.md V0.01），Grok 真实退出后席甲（Claude Fable 5.1，作者自审票）独立落盘 modules/M014-b1-self-raw.md 再读 Grok；B1 后四值校验。转入本模块的既有口径：M013-001…010（V410 三角色/删父链、V394 已闭合、自营＝self_operated、空间类型字典活校验、DELETE 恒 409 走 lifecycle、税费权限码落点缺、evaluate 员工域已接线、私人手机「查看考勤」、OpenAPI entity_role 旧六值归 M392）、U04-001、业务地图 V0.14 / 治理地图 V0.12。B3/B4/B5 在主工作区就地做。当前 13 PASS / 1 IN_PROGRESS / 457 PENDING。
 
 ## 当前 M013 B5-r1双PASS，四值全等，M013 → PASS（先记账，再写闭环文件）
 2026-09-11T04:08:57Z。Grok B5-r1真实exit0，报告modules/M013-b5-r1-grok-raw.md（V0.01，44522bytes SHAa14fde458071763182a64d9463991f8b249fc4fd0da17dc738ecd7786dc89094，四项交付事实成立），整模块三线全量结论PASS。席甲B5-r1票PASS（modules/M013-b5-r1-self-raw.md V0.01，17768bytes SHA79f602ed4eb5a2a045aeca9686143b935df5eb4147543ddff1bb3380dcbffac9；Grok真实退出后主仓实跑只读验证并独立落盘、再读Grok）。合取双PASS。
@@ -974,7 +998,7 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M011 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M011-governance-topology-backend-verification-01.md) | 0 | B5-r1全3文件三线双PASS；四值全等；7项队列全否（5已修/2登记）；B3累计1；无添加项；席甲=Claude Fable 5.1 |
 | M012 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M012-governance-topology-web-01.md) | 0 | B5-r1全6文件三线双PASS；四值全等；9项队列全否（8已修/1登记）；B3累计1；添加项2答删除已执行；席甲=Claude Fable 5.1 |
 | M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M013-entity-topology-binding-docs-seg1.md) | 0 | B5-r1全4文件三线双PASS；四值全等；10项队列全否（8已修/1 XM→M392/1登记）；B3累计1；HTML裁决1项已落地（PR #433）；席甲=Claude Fable 5.1 |
-| M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PENDING | 0 | 2 | - | 0 | 原322归属：M282；既有累计仅保留历史，不代表本版已审 |
+| M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M014-governance-product-spec-seg2.md) | 0 | B5-r1全文件三线双PASS；四值全等；修复队列20 个 ID 全否（18 项已修、019 XM→M261、020 登记）；B3累计1；席甲=Claude Fable 5.1 |
 | M015 `空间点位、楼层平面图与营业时段／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M047、M049；既有累计仅保留历史，不代表本版已审 |
 | M016 `空间点位、楼层平面图与营业时段／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M139、M145、M146；既有累计仅保留历史，不代表本版已审 |
 | M017 `空间点位、楼层平面图与营业时段／后台验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M109、M111；既有累计仅保留历史，不代表本版已审 |
