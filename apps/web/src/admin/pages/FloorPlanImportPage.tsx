@@ -82,7 +82,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   const [importError, setImportError] = React.useState("");
   const [importSaving, setImportSaving] = React.useState(false);
   const [importForm, setImportForm] = React.useState({ sourceFormat: "svg", sourceName: "", sourcePayload: "" });
-  const [publishCandidateIds, setPublishCandidateIds] = React.useState("");
+  const [publishCandidateIds, setPublishCandidateIds] = React.useState<string[]>([]);
   // 行明细抽屉：候选/错误明细数据行整行可点 → 完整字段（枚举中文·序号/行号原样）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -111,6 +111,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   const loadCandidates = async (floorPlanId: string, importId: string) => {
     setSelectedImportId(importId);
     publishKeyRef.current = "";
+    setPublishCandidateIds([]);
     const details = await api.get<FloorPlanImportDetails>(`/api/v1/floor-plans/${floorPlanId}/imports/${importId}/candidates`);
     setFloorPlanImportDetails(details);
   };
@@ -122,7 +123,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setPlanSaving(true);
     setPlanError("");
     try {
-      if (!planKeyRef.current) planKeyRef.current = `fp-${planForm.projectId}-${planForm.planName.trim()}`;
+      if (!planKeyRef.current) planKeyRef.current = `fp-${Math.random().toString(36).slice(2)}`;
       await api.post("/api/v1/floor-plans", {
         idempotency_key: planKeyRef.current, plan_name: planForm.planName, project_id: planForm.projectId,
         building_code: planForm.buildingCode, floor_no: planForm.floorNo, status: "draft",
@@ -137,7 +138,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setImportSaving(true);
     setImportError("");
     try {
-      if (!importKeyRef.current) importKeyRef.current = `fpi-${selectedPlanId}-${importForm.sourceName || "import"}`;
+      if (!importKeyRef.current) importKeyRef.current = `fpi-${selectedPlanId}-${Math.random().toString(36).slice(2)}`;
       const res = await api.post<ImportTask>(`/api/v1/floor-plans/${selectedPlanId}/imports`, {
         idempotency_key: importKeyRef.current, source_format: importForm.sourceFormat,
         source_name: importForm.sourceName, source_payload: importForm.sourcePayload,
@@ -151,10 +152,9 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
 
   const publishImport = async () => {
     try {
-      const typed = publishCandidateIds.split(",").map((s) => s.trim()).filter(Boolean);
-      const ids = typed.length > 0 ? typed : pendingCandidates.map((item) => item.id).filter(Boolean);
+      const ids = publishCandidateIds.length > 0 ? publishCandidateIds : pendingCandidates.map((item) => item.id).filter(Boolean);
       if (ids.length === 0) { setGlobalError("没有待发布的区域"); return; }
-      if (!publishKeyRef.current) publishKeyRef.current = `fpp-${selectedImportId}`;
+      if (!publishKeyRef.current) publishKeyRef.current = `fpp-${selectedImportId}-${Math.random().toString(36).slice(2)}`;
       const result = await api.post(`/api/v1/floor-plans/${selectedPlanId}/imports/${selectedImportId}/publish`, {
         idempotency_key: publishKeyRef.current, candidate_ids: ids,
       });
@@ -270,7 +270,21 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
               </tbody>
             </table>
             <div className="admin-form-grid" data-testid="floor-plan-publish-form">
-              <label>待发布区域<input data-testid="floor-plan-publish-candidates" value={publishCandidateIds} onChange={(e) => setPublishCandidateIds(e.target.value)} /></label>
+              <fieldset data-testid="floor-plan-publish-candidates">
+                <legend>待发布区域（不勾选则发布当前待复核的全部）</legend>
+                {pendingCandidates.map((item) => (
+                  <label key={item.id}>
+                    <input
+                      type="checkbox"
+                      checked={publishCandidateIds.includes(item.id)}
+                      onChange={(event) => {
+                        setPublishCandidateIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id));
+                      }}
+                    />
+                    {item.label ?? item.id}
+                  </label>
+                ))}
+              </fieldset>
               <HighRiskConfirm
                 label="发布候选到正式平面图"
                 impact={`${PUBLISH_CONFIRM_TITLE}：发布后候选会写入正式平面图区域，请确认已完成业务复核，发布不可静默覆盖既有区域证据。`}

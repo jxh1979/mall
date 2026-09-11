@@ -36,7 +36,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
       const items = await api.get<SpaceTypeRow[]>("/api/v1/platform/space-types");
       setRows(items ?? []);
     },
-    { onError: setGlobalError, fallbackMessage: "空间类型字典读取失败" },
+    { onError: setGlobalError, fallbackMessage: "空间种类读取失败" },
   );
 
   // 下钻定位:从别的页点空间引用进来(?focus=id)→ 滚动到命中的空间类型行(按 id 或 typeCode 匹配)并高亮;无 focus 或未命中时不动。
@@ -59,7 +59,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
     const code = form.typeCode.trim();
     const name = form.typeName.trim();
     if (typeInvalid()) {
-      setFormError("请填写类型编码与显示名");
+      setFormError("请填写种类编码与显示名");
       return;
     }
     setFormError("");
@@ -78,7 +78,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
       setCreateOpen(false);
       reload();
     } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : "新增空间类型失败";
+      const message = actionError instanceof Error ? actionError.message : "新增空间种类失败";
       setFormError(message);
       setGlobalError(message);
     } finally {
@@ -94,6 +94,18 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
       reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "删除空间种类失败";
+      setGlobalError(message);
+    }
+  }
+
+  async function disableType(row: SpaceTypeRow) {
+    setGlobalError(null);
+    try {
+      await api.post(`/api/v1/platform/space-types/${row.id}/disable`);
+      setActionResult({ action: "space_type_disabled", typeCode: row.typeCode });
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "停用空间种类失败";
       setGlobalError(message);
     }
   }
@@ -117,9 +129,19 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
                     className={isFocused(row) ? "admin-row-selected" : undefined}>
                   <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{formatBusinessStatus(row.status)}</td>
                   <td>
+                    {row.status !== "disabled" ? (
+                      <HighRiskConfirm
+                        label="停用"
+                        impact={`停用种类「${row.typeName}」后，不能再用来新建空间。已经建好的空间仍保留这个种类。`}
+                        onConfirm={() => void disableType(row)}
+                        permissionsState={effectivePermissions}
+                        permissions={MANAGE}
+                        data-testid={`space-type-disable-${row.typeCode}`}
+                      />
+                    ) : null}
                     <HighRiskConfirm
                       label="删除"
-                      impact={`删除种类「${row.typeName}」后，不能再用来新建空间。若还有空间在用这个种类，系统会拒绝删除。`}
+                      impact={`删除种类「${row.typeName}」后前台不再使用。库里仍保留。若还有空间在用这个种类，系统会拒绝删除。`}
                       onConfirm={() => void deleteType(row)}
                       permissionsState={effectivePermissions}
                       permissions={MANAGE}
@@ -134,28 +156,28 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
         <div className="admin-form-row" data-testid="space-types-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
             data-testid="space-types-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>
-            ＋ 新增空间类型
+            ＋ 新增空间种类
           </PermissionButton>
         </div>
       </AdminDataState>
       <GuidedFlowModal
         open={createOpen}
-        title="新增空间类型"
+        title="新增空间种类"
         testId="space-types-guided"
         submitTestId="space-types-save"
-        submitLabel="保存类型"
+        submitLabel="保存种类"
         submitting={submitting}
         error={formError || undefined}
         onClose={() => setCreateOpen(false)}
         onSubmit={() => void saveType()}
         steps={[
           {
-            title: "类型信息",
-            description: "填写类型编码与显示名，设置排序与启用状态。编码/显示名必填。",
-            validate: () => (typeInvalid() ? "请填写类型编码与显示名" : null),
+            title: "种类信息",
+            description: "填写种类编码与显示名，设置排序与启用状态。编码/显示名必填。",
+            validate: () => (typeInvalid() ? "请填写种类编码与显示名" : null),
             content: (
               <>
-                <label>类型编码<input aria-label="类型编码" placeholder="类型编码（如铺位）" value={form.typeCode}
+                <label>种类编码<input aria-label="种类编码" placeholder="种类编码（如铺位）" value={form.typeCode}
                   onChange={(event) => setForm({ ...form, typeCode: event.target.value })} /></label>
                 <label>显示名<input aria-label="显示名" placeholder="显示名（如 一体机位）" value={form.typeName}
                   onChange={(event) => setForm({ ...form, typeName: event.target.value })} /></label>
@@ -170,7 +192,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
           },
         ]}
         summary={[
-          { label: "类型编码", value: form.typeCode.trim() || "未填写" },
+          { label: "种类编码", value: form.typeCode.trim() || "未填写" },
           { label: "显示名", value: form.typeName.trim() || "未填写" },
           { label: "排序", value: String(Number(form.sortOrder) || 100) },
           { label: "状态", value: form.status === "active" ? "启用" : "停用" },

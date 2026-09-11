@@ -168,6 +168,13 @@ public class PlatformController {
         return ApiResponse.ok(null);
     }
 
+    @PostMapping("/space-types/{id}/disable")
+    public ApiResponse<Void> disableSpaceType(@org.springframework.web.bind.annotation.PathVariable("id") String id) {
+        authorizationService.requirePermission("governance.space.manage");
+        service.disableSpaceType(id);
+        return ApiResponse.ok(null);
+    }
+
     @PostMapping("/spaces")
     public ApiResponse<SpaceRecord> createSpace(@RequestBody @jakarta.validation.Valid SpaceRequest request) {
         authorizationService.requirePermission("governance.space.manage");

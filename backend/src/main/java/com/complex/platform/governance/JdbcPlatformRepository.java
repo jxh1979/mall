@@ -375,8 +375,10 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public void deleteSpaceType(String id) {
         jdbcTemplate.update(
-                "DELETE FROM space_type_dictionary WHERE id = :id",
-                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", id));
+                "UPDATE space_type_dictionary SET status = 'disabled', updated_at = :updated_at WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("updated_at", timestampWithTimeZone(java.time.Instant.now())));
     }
 
     @Override

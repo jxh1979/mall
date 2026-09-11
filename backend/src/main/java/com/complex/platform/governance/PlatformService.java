@@ -472,6 +472,16 @@ public class PlatformService {
                 Map.of("type_code", existing.typeCode()));
     }
 
+    public void disableSpaceType(String id) {
+        authorizationService.requirePlatformScope();
+        SpaceTypeRecord existing = repository.findSpaceTypeById(id)
+                .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
+        repository.deleteSpaceType(id);
+        auditEventService.recordSuccess(
+                "space_type.disabled", "governance.space.manage", "space_type", id, null, null,
+                Map.of("type_code", existing.typeCode()));
+    }
+
     public SpaceRecord createSpace(SpaceRequest request) {
         authorizationService.requirePlatformScope();
         return executeWrite(

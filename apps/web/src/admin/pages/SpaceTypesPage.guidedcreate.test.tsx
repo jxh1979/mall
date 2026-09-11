@@ -47,7 +47,7 @@ describe("SpaceTypesPage 引导式新增空间类型(phase-7)", () => {
     await waitFor(() => expect(screen.getByTestId("space-types-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("space-types-create-open"));
 
-    fireEvent.change(screen.getByLabelText("类型编码"), { target: { value: "floor" } });
+    fireEvent.change(screen.getByLabelText("种类编码"), { target: { value: "floor" } });
     fireEvent.change(screen.getByLabelText("显示名"), { target: { value: "楼层" } });
     fireEvent.change(screen.getByLabelText("排序"), { target: { value: "200" } });
     fireEvent.click(screen.getByTestId("space-types-guided-next"));
@@ -67,10 +67,10 @@ describe("SpaceTypesPage 引导式新增空间类型(phase-7)", () => {
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("space-types-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("space-types-create-open"));
-    fireEvent.change(screen.getByLabelText("类型编码"), { target: { value: "floor" } });
+    fireEvent.change(screen.getByLabelText("种类编码"), { target: { value: "floor" } });
     // 显示名留空
     fireEvent.click(screen.getByTestId("space-types-guided-next"));
-    expect(screen.getByTestId("space-types-guided-error").textContent).toContain("请填写类型编码与显示名");
+    expect(screen.getByTestId("space-types-guided-error").textContent).toContain("请填写种类编码与显示名");
     expect(screen.queryByTestId("space-types-guided-summary")).toBeNull();
     expect(post).not.toHaveBeenCalled();
   });
