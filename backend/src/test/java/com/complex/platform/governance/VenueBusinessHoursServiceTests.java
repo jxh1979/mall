@@ -1,14 +1,15 @@
 package com.complex.platform.governance;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.dto.VenueBusinessHoursRequest;
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -16,7 +17,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * D1 场地营业时间配置的入参闸（V226 建表后一直无界面，本页是唯一配置入口）。
@@ -65,6 +71,7 @@ class VenueBusinessHoursServiceTests {
     }
 
     private RecordingRepository repository;
+    private InMemoryAuditEventRepository auditEventRepository;
     private VenueBusinessHoursService service;
 
     private VenueBusinessHoursService service() {
@@ -73,7 +80,9 @@ class VenueBusinessHoursServiceTests {
 
     private VenueBusinessHoursService service(String projectScope) {
         repository = new RecordingRepository();
-        service = new VenueBusinessHoursService(repository, mock(AuditEventService.class), auth(projectScope));
+        // M017-008：真实 AuditEventService + 内存审计库（与 FloorPlanServiceTests 同构），审计事件可断言
+        auditEventRepository = new InMemoryAuditEventRepository();
+        service = new VenueBusinessHoursService(repository, new AuditEventService(auditEventRepository), auth(projectScope));
         return service;
     }
 
@@ -147,21 +156,88 @@ class VenueBusinessHoursServiceTests {
     @Test
     void rejectsDayOfWeekOutOfRange() {
         assertThatThrownBy(() -> service().save(request(7, "18:00", "23:00")))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("VALIDATION_FAILED"));
         assertThatThrownBy(() -> service().save(request(null, "18:00", "23:00")))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("VALIDATION_FAILED"));
     }
 
     @Test
     void rejectsMalformedTimeAndMissingVenue() {
         assertThatThrownBy(() -> service().save(request(1, "晚上八点", "23:00")))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("VALIDATION_FAILED"));
         assertThatThrownBy(() -> service().save(request(1, "18:00", null)))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, ex -> {
+                    assertThat(ex.code()).isEqualTo("VALIDATION_FAILED");
+                    // M017-006：M015-006 已改的中文整句
+                    assertThat(ex.getMessage()).isEqualTo("结束营业时间必须填写，格式 HH:mm");
+                });
         assertThatThrownBy(() -> service().save(
                 new VenueBusinessHoursRequest("idem-1", "  ", 1, "18:00", "23:00", false, null)))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, ex -> {
+                    assertThat(ex.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(ex.getMessage()).isEqualTo("场地不能为空");
+                });
         assertThat(repository.saved).isEmpty();
+    }
+
+    // M017-008：保存/列表须写审计事件（GEN-011；修复前 mock 从未 verify）
+    @Test
+    void saveAndListWriteAuditEvents() {
+        VenueBusinessHoursService svc = service();
+        svc.save(request(3, "18:00", "23:00"));
+        svc.list();
+
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .containsExactly("venue_business_hours.updated", "venue_business_hours.viewed");
+    }
+
+    // M017-008：平台管理员（项目 scope 为空）列表取全量，且 effective_from 原样落库
+    @Test
+    void adminListsAllVenuesAndEffectiveFromIsPersisted() {
+        VenueBusinessHoursService svc = service();
+        VenueBusinessHoursRecord saved = svc.save(
+                new VenueBusinessHoursRequest("idem-1", "sp_bar_main", 4, "18:00", "23:00", false, LocalDate.of(2026, 10, 1)));
+        svc.save(new VenueBusinessHoursRequest("idem-2", "sp_bar_side", 4, "18:00", "23:00", false, null));
+
+        assertThat(saved.effectiveFrom()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(svc.list()).extracting(VenueBusinessHoursRecord::venueId).containsExactlyInAnyOrder("sp_bar_main", "sp_bar_side");
+        assertThat(repository.projectQueries).isEmpty();
+    }
+
+    // M017-007：真实仓库 SQL（spaces / venue_business_hours 表）——不存在场地 empty、存在场地返回项目、按项目过滤；事务回滚
+    @Nested
+    @SpringBootTest(properties = {
+            "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
+            "spring.datasource.username=complex",
+            "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
+    })
+    @Transactional
+    class RealRepositoryCases {
+
+        @Autowired
+        private VenueBusinessHoursRepository realRepository;
+
+        @Autowired
+        private JdbcTemplate jdbcTemplate;
+
+        @Test
+        void findVenueProjectIdAndListByProjectHitRealSpacesTable() {
+            jdbcTemplate.update("INSERT INTO spaces (id, project_id, space_name, space_type, status, created_at, updated_at) VALUES "
+                    + "('sp_vbh_a', 'prj_vbh_1', '吧台 A', 'shop', 'active', now(), now()), "
+                    + "('sp_vbh_b', 'prj_vbh_2', '吧台 B', 'shop', 'active', now(), now())");
+
+            assertThat(realRepository.findVenueProjectId("sp_vbh_missing")).isEmpty();
+            assertThat(realRepository.findVenueProjectId("sp_vbh_a")).contains("prj_vbh_1");
+
+            Instant now = Instant.parse("2026-06-14T00:00:00Z");
+            realRepository.upsert("vbh_real_a", "sp_vbh_a", 1, LocalTime.of(18, 0), LocalTime.of(23, 0), false, null, now);
+            realRepository.upsert("vbh_real_b", "sp_vbh_b", 1, LocalTime.of(18, 0), LocalTime.of(23, 0), false, null, now);
+
+            assertThat(realRepository.listByProject("prj_vbh_1"))
+                    .extracting(VenueBusinessHoursRecord::venueId)
+                    .containsExactly("sp_vbh_a");
+        }
     }
 
     @Test

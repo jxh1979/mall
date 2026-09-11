@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -98,8 +98,11 @@ class FloorPlanServiceTests {
                 "shape-two-points",
                 null,
                 List.of(new FloorPlanPoint(0.1, 0.1), new FloorPlanPoint(0.2, 0.2))
-        ))).isInstanceOfSatisfying(ApiException.class, exception ->
-                assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+        ))).isInstanceOfSatisfying(ApiException.class, exception -> {
+            assertThat(exception.code()).isEqualTo("VALIDATION_FAILED");
+            // M017-006：M015-006 已改的中文整句
+            assertThat(exception.getMessage()).isEqualTo("多边形至少需要 3 个顶点");
+        });
     }
 
     @Test
@@ -546,6 +549,148 @@ class FloorPlanServiceTests {
         );
     }
 
+    // M017-002：发布「不可静默覆盖既有布局证据」（治理地图 L472）——发布前已有图形须并存且原样
+    @Test
+    void publishImportTaskKeepsExistingShapes() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-publish-keep"));
+        FloorPlanShapeRecord existing = service.saveShape(floorPlan.id(), shapeRequest("shape-existing", null, polygon()));
+        FloorPlanImportTaskRecord task = service.createImportTask(floorPlan.id(), importRequest("fp-import-keep"));
+        String candidateId = repository.findImportCandidatesByTaskId(task.id()).getFirst().id();
+
+        service.publishImportTask(floorPlan.id(), task.id(),
+                new FloorPlanImportPublishRequest("publish-keep", "publish import", List.of(candidateId)));
+
+        assertThat(repository.findShapesByFloorPlanId(floorPlan.id()))
+                .extracting(FloorPlanShapeRecord::label)
+                .containsExactlyInAnyOrder("Shop 101", "A101");
+        assertThat(repository.findShapeById(existing.id())).contains(existing);
+    }
+
+    // M017-002：解析失败的导入任务落 failed、错误落库，且不可发布
+    @Test
+    void importTaskWithOnlyErrorsIsFailedAndCannotBePublished() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-import-failed"));
+        FloorPlanImportTaskRecord task = service.createImportTask(floorPlan.id(),
+                importRequest("fp-import-failed-key", "<svg viewBox=\"0 0 1000 800\"><polygon id=\"bad\" points=\"1,1 2,2\" /></svg>"));
+
+        assertThat(task.status()).isEqualTo("failed");
+        assertThat(task.candidateCount()).isZero();
+        assertThat(task.errorCount()).isEqualTo(1);
+        assertThat(repository.findImportErrorsByTaskId(task.id()))
+                .extracting(FloorPlanImportErrorRecord::errorCode)
+                .containsExactly("POINTS_TOO_FEW");
+        assertThatThrownBy(() -> service.publishImportTask(floorPlan.id(), task.id(),
+                new FloorPlanImportPublishRequest("publish-failed", "publish import", List.of("fpic_x"))))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    // M017-002 / M017-006：候选项必须属于该导入任务（中文整句）；不存在的候选项 → IMPORT_CANDIDATE_NOT_FOUND；两次拒绝都不落图形
+    @Test
+    void publishRejectsCandidateOfAnotherTaskOrUnknownCandidate() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-publish-owner"));
+        FloorPlanImportTaskRecord taskA = service.createImportTask(floorPlan.id(), importRequest("fp-import-owner-a"));
+        FloorPlanImportTaskRecord taskB = service.createImportTask(floorPlan.id(), importRequest("fp-import-owner-b"));
+        String candidateOfB = repository.findImportCandidatesByTaskId(taskB.id()).getFirst().id();
+
+        assertThatThrownBy(() -> service.publishImportTask(floorPlan.id(), taskA.id(),
+                new FloorPlanImportPublishRequest("publish-owner-1", "publish import", List.of(candidateOfB))))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(exception.getMessage()).isEqualTo("候选项不属于该导入任务");
+                });
+        assertThatThrownBy(() -> service.publishImportTask(floorPlan.id(), taskA.id(),
+                new FloorPlanImportPublishRequest("publish-owner-2", "publish import", List.of("fpic_missing"))))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("IMPORT_CANDIDATE_NOT_FOUND"));
+        assertThat(repository.findShapesByFloorPlanId(floorPlan.id())).isEmpty();
+    }
+
+    // M015-008 / M017-002 / M017-006：一次发布最多 200 个候选项；空列表拒绝（中文整句）
+    @Test
+    void publishRejectsMoreThanTwoHundredCandidatesAndEmptyList() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-publish-cap"));
+        FloorPlanImportTaskRecord task = service.createImportTask(floorPlan.id(), importRequest("fp-import-cap"));
+        List<String> tooMany = java.util.stream.IntStream.rangeClosed(1, 201).mapToObj(i -> "fpic_" + i).toList();
+
+        assertThatThrownBy(() -> service.publishImportTask(floorPlan.id(), task.id(),
+                new FloorPlanImportPublishRequest("publish-cap", "publish import", tooMany)))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(exception.getMessage()).isEqualTo("一次发布的候选项不能超过 200 个");
+                });
+        assertThatThrownBy(() -> service.publishImportTask(floorPlan.id(), task.id(),
+                new FloorPlanImportPublishRequest("publish-empty", "publish import", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(exception.getMessage()).isEqualTo("候选项列表不能为空");
+                });
+    }
+
+    // M017-002：导入任务列表与详情（含错误清单）可读，并写审计事件
+    @Test
+    void listImportTasksAndDetailsReturnRecordsAndWriteAuditEvents() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-import-details"));
+        FloorPlanImportTaskRecord task = service.createImportTask(floorPlan.id(), importRequest("fp-import-details-key"));
+
+        assertThat(service.listImportTasks(floorPlan.id()).items())
+                .extracting(FloorPlanImportTaskRecord::id)
+                .containsExactly(task.id());
+        FloorPlanImportDetailsResponse details = service.getImportDetails(floorPlan.id(), task.id());
+
+        assertThat(details.task().id()).isEqualTo(task.id());
+        assertThat(details.candidates()).hasSize(1);
+        assertThat(details.errors()).isEmpty();
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("floor_plan.import_viewed", "floor_plan.import_candidate_viewed");
+    }
+
+    // M017-006：导入内容上限文案（M015-006 已改中文整句）——1,000,001 字符被拒
+    @Test
+    void createImportTaskRejectsPayloadOverOneMillionCharsWithChineseMessage() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-import-huge"));
+        String huge = "<svg viewBox=\"0 0 10 10\">" + "x".repeat(1_000_001) + "</svg>";
+
+        assertThatThrownBy(() -> service.createImportTask(floorPlan.id(), importRequest("fp-import-huge-key", huge)))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(exception.getMessage()).isEqualTo("导入内容超过 100 万字符上限");
+                });
+    }
+
+    // M017-003：平面图列表与导入任务列表同样诚实不分页（M015-007 三处；修复前只锁 listShapes）
+    @Test
+    void listFloorPlansAndImportTasksReportHonestPageSizeAndTotal() {
+        FloorPlanRecord planA = service.createFloorPlan(createRequest("fp-honest-a"));
+        service.createFloorPlan(createRequest("fp-honest-b"));
+        service.createImportTask(planA.id(), importRequest("fp-honest-import-1"));
+        service.createImportTask(planA.id(), importRequest("fp-honest-import-2"));
+
+        PageResponse<FloorPlanRecord> plans = service.listFloorPlans();
+        PageResponse<FloorPlanImportTaskRecord> tasks = service.listImportTasks(planA.id());
+
+        assertThat(plans.items()).hasSize(2);
+        assertThat(plans.total()).isEqualTo(2);
+        assertThat(plans.pageSize()).isEqualTo(2);
+        assertThat(tasks.items()).hasSize(2);
+        assertThat(tasks.total()).isEqualTo(2);
+        assertThat(tasks.pageSize()).isEqualTo(2);
+    }
+
+    // M017-005 / M017-006：非闭集的候选区域类型（如 corridor）须被服务白名单拒绝（中文整句）；corridor 不进白名单
+    @Test
+    void saveShapeRejectsShapeTypeOutsideClosedSet() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-corridor"));
+
+        assertThatThrownBy(() -> service.saveShape(floorPlan.id(), shapeRequestOfType("shape-corridor", "corridor")))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(exception.getMessage()).isEqualTo("图形类型取值无效");
+                });
+        assertThat(repository.findShapesByFloorPlanId(floorPlan.id())).isEmpty();
+    }
+
     // M016-002（M015-013 同批）：候选区域类型「摊位」「公共区」须被服务白名单接受（修复前白名单六值 → 此例红）
     @Test
     void saveShapeAcceptsBoothAndPublicArea() {
@@ -571,6 +716,10 @@ class FloorPlanServiceTests {
                 10,
                 "active"
         );
+    }
+
+    private FloorPlanImportCreateRequest importRequest(String idempotencyKey, String svgPayload) {
+        return new FloorPlanImportCreateRequest(idempotencyKey, "import svg", "svg", "1F.svg", svgPayload);
     }
 
     private FloorPlanImportCreateRequest importRequest(String idempotencyKey) {

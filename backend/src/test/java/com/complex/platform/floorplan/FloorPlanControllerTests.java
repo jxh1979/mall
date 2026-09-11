@@ -1,4 +1,5 @@
 package com.complex.platform.floorplan;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -148,25 +149,28 @@ class FloorPlanControllerTests {
 
     @Test
     void listUsesViewPermissionAndPageShape() throws Exception {
-        when(service.listFloorPlans()).thenReturn(new PageResponse<>(List.of(floorPlan()), 1, 50, 1));
+        // M017-003：桩取诚实不分页形状（M015-007），并断言 page_size 出网
+        when(service.listFloorPlans()).thenReturn(new PageResponse<>(List.of(floorPlan()), 1, 1, 1));
 
         mockMvc.perform(get("/api/v1/floor-plans")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].id").value("fp_1"))
-                .andExpect(jsonPath("$.data.total").value(1));
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.page_size").value(1));
 
         verify(authorizationService).requirePermission("floor_plan.view");
     }
 
     @Test
     void listShapesUsesViewPermission() throws Exception {
-        when(service.listShapes("fp_1")).thenReturn(new PageResponse<>(List.of(shape()), 1, 50, 1));
+        when(service.listShapes("fp_1")).thenReturn(new PageResponse<>(List.of(shape()), 1, 1, 1));
 
         mockMvc.perform(get("/api/v1/floor-plans/fp_1/shapes")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].id").value("fps_1"));
+                .andExpect(jsonPath("$.data.items[0].id").value("fps_1"))
+                .andExpect(jsonPath("$.data.page_size").value(1));
 
         verify(authorizationService).requirePermission("floor_plan.view");
     }
@@ -228,13 +232,14 @@ class FloorPlanControllerTests {
 
     @Test
     void listImportsUsesImportViewPermission() throws Exception {
-        when(service.listImportTasks("fp_1")).thenReturn(new PageResponse<>(List.of(importTask()), 1, 50, 1));
+        when(service.listImportTasks("fp_1")).thenReturn(new PageResponse<>(List.of(importTask()), 1, 1, 1));
 
         mockMvc.perform(get("/api/v1/floor-plans/fp_1/imports")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].id").value("fpi_1"))
-                .andExpect(jsonPath("$.data.total").value(1));
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.page_size").value(1));
 
         verify(authorizationService).requirePermission("floor_plan.import.view");
     }
@@ -289,6 +294,66 @@ class FloorPlanControllerTests {
 
         verify(authorizationService).requirePermission("floor_plan.import.manage");
     }
+
+    // M017-004：8 个端点权限被拒时统一 403 PERMISSION_DENIED（修复前只有 create 一例）
+    @Test
+    void everyEndpointReturnsForbiddenWhenPermissionDenied() throws Exception {
+        record Call(String permission, org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request) {
+        }
+        List<Call> calls = List.of(
+                new Call("floor_plan.view", get("/api/v1/floor-plans")),
+                new Call("floor_plan.manage", post("/api/v1/floor-plans").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY)),
+                new Call("floor_plan.view", get("/api/v1/floor-plans/fp_1/shapes")),
+                new Call("floor_plan.manage", post("/api/v1/floor-plans/fp_1/shapes").contentType(MediaType.APPLICATION_JSON).content(SHAPE_BODY)),
+                new Call("floor_plan.import.view", get("/api/v1/floor-plans/fp_1/imports")),
+                new Call("floor_plan.import.manage", post("/api/v1/floor-plans/fp_1/imports").contentType(MediaType.APPLICATION_JSON).content(IMPORT_BODY)),
+                new Call("floor_plan.import.view", get("/api/v1/floor-plans/fp_1/imports/fpi_1/candidates")),
+                new Call("floor_plan.import.manage", post("/api/v1/floor-plans/fp_1/imports/fpi_1/publish").contentType(MediaType.APPLICATION_JSON).content(PUBLISH_BODY))
+        );
+        for (Call call : calls) {
+            Mockito.reset(authorizationService);
+            doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                    .when(authorizationService)
+                    .requirePermission(call.permission());
+
+            mockMvc.perform(call.request().with(user("ops").roles("P0_SMOKE")))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        }
+    }
+
+    // M017-004：saveShape / createImport 缺幂等键 → 400 VALIDATION_FAILED（修复前只有 create/publish 两例）
+    @Test
+    void saveShapeAndCreateImportWithoutIdempotencyKeyReturnValidationFailed() throws Exception {
+        mockMvc.perform(post("/api/v1/floor-plans/fp_1/shapes")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(SHAPE_BODY.replace("\"idempotency_key\": \"shape-save\",", "")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        mockMvc.perform(post("/api/v1/floor-plans/fp_1/imports")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(IMPORT_BODY.replace("\"idempotency_key\": \"floor-import-create\",", "")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    private static final String CREATE_BODY = """
+            {"idempotency_key": "floor-plan-create", "project_id": "prj_1", "floor_no": "1F", "plan_name": "1F plan",
+             "image_url": "https://assets.example.com/floor-1.png", "image_width": 1600, "image_height": 1200,
+             "version_no": "v1", "status": "active"}
+            """;
+    private static final String SHAPE_BODY = """
+            {"idempotency_key": "shape-save", "shape_type": "shop", "ref_type": "space", "ref_id": "sp_1", "label": "Shop 101",
+             "polygon_points": [{"x": 0.1, "y": 0.1}, {"x": 0.4, "y": 0.1}, {"x": 0.4, "y": 0.3}], "z_index": 10, "status": "active"}
+            """;
+    private static final String IMPORT_BODY = """
+            {"idempotency_key": "floor-import-create", "source_format": "svg", "source_name": "1F.svg", "source_payload": "<svg viewBox='0 0 10 10'><polygon points='1,1 2,1 2,2' /></svg>"}
+            """;
+    private static final String PUBLISH_BODY = """
+            {"idempotency_key": "floor-import-publish", "candidate_ids": ["fpic_1"]}
+            """;
 
     private FloorPlanRecord floorPlan() {
         return new FloorPlanRecord(

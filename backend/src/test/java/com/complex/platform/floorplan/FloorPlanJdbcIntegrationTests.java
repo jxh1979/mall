@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -198,6 +198,39 @@ class FloorPlanJdbcIntegrationTests {
         assertThatThrownBy(() -> repository.saveFloorPlan(
                 floorPlan("fp_no_project", null, Instant.parse("2026-06-14T00:00:00Z"))))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    // M017-007：projectExists 走真实 projects 表（内存仓夹具掩盖不了 SQL）
+    @Test
+    void projectExistsQueriesRealProjectsTable() {
+        assertThat(repository.projectExists("prj_jdbc_missing")).isFalse();
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) "
+                + "VALUES ('prj_jdbc_real', 'mall', '测试综合体', 'active', now(), now())");
+
+        assertThat(repository.projectExists("prj_jdbc_real")).isTrue();
+    }
+
+    // M017-005：导入候选表的 shape_type 八值 CHECK（V423）——booth/public_area 可落库、非闭集值被拒（M016-004 观察）
+    @Test
+    void importCandidateShapeTypeFollowsDatabaseCheck() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveFloorPlan(floorPlan("fp_cand_types", "prj_jdbc", now));
+        repository.saveImportTask(new FloorPlanImportTaskRecord("fpi_cand_types", "fp_cand_types", "svg", "1F.svg", "hash",
+                "<svg />", "parsed", 2, 0, null, now, now));
+        repository.saveImportCandidate(candidate("fpic_cand_booth", "fpi_cand_types", 1, "booth", now));
+        repository.saveImportCandidate(candidate("fpic_cand_public", "fpi_cand_types", 2, "public_area", now));
+
+        assertThat(repository.findImportCandidatesByTaskId("fpi_cand_types"))
+                .extracting(FloorPlanImportCandidateRecord::shapeType)
+                .containsExactlyInAnyOrder("booth", "public_area");
+        assertThatThrownBy(() -> repository.saveImportCandidate(candidate("fpic_cand_corridor", "fpi_cand_types", 3, "corridor", now)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private static FloorPlanImportCandidateRecord candidate(String id, String taskId, int no, String shapeType, Instant now) {
+        return new FloorPlanImportCandidateRecord(id, taskId, no, shapeType, "space", null, shapeType + " candidate",
+                List.of(new FloorPlanPoint(0.1, 0.1), new FloorPlanPoint(0.4, 0.1), new FloorPlanPoint(0.4, 0.3)),
+                0, "pending", now, now);
     }
 
     private static FloorPlanRecord floorPlan(String id, String projectId, Instant now) {
