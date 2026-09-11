@@ -1,22 +1,22 @@
 {
-  "note": "verify:tenant-isolation 已知缺口 baseline（棘轮底座）。闸口对此清单之外的新增 finding 硬失败；每条须在 security-scans/findings-register-v1.md tenant-isolation 小节有对应 SEC-*-TENANT-ISOLATION-* 证据；修复后从本清单与台账移除以收紧闸口。重建：node tools/verify-tenant-isolation.mjs --write-baseline。",
+  "note": "verify:tenant-isolation 已知缺口 baseline（棘轮底座）。闸口对此清单之外的新增 finding 硬失败。本清单只登记扫描器已发现、尚未收紧的项，并指向 generated_at_source。不得把缺口写成已修复或豁免。收紧后从本清单移除。重建：node tools/verify-tenant-isolation.mjs --write-baseline。",
   "generated_at_source": "static scan of Jdbc*Repository.java vs domain-ownership-scope-audit-v0.1.csv",
   "known_findings": [
     {
       "key": "F1:UNSCOPED_DIRECT_READ:access_grant_requests",
-      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'access_grant_requests'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/access/JdbcAccessRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 access_grant_requests 有 SELECT 读，未见 project_id = : 的 scoped 查询。尚未收紧。证据：generated_at_source。"
     },
     {
       "key": "F2:UNREGISTERED_TABLE:d",
-      "text": "[F2 UNREGISTERED_TABLE·误报豁免] 'd' 是 SQL 自连接别名（FROM <表> d）非真实表：JdbcAnalyticsRepository.java:1294（merchant_revenue_attribution_rules d）与 JdbcSettlementConfigWriteRepository.java:205（\" + cfg.table + \" d）的 Path 2 转正自连接。真实表已登记 domain-ownership-scope CSV；静态扫描器把别名 d 误判为未登记表。batch1 引入，非真实缺口。证据见 findings-register SEC-P3-TENANT-ISOLATION-BATCH1-ALIAS-001。"
+      "text": "[F2 UNREGISTERED_TABLE] 扫描器报未登记表名 d。尚未收紧。证据：generated_at_source。"
     },
     {
       "key": "F1:UNSCOPED_DIRECT_READ:revenue_stream_attribution",
-      "text": "[F1 UNSCOPED_DIRECT_READ·平台级有意读] revenue_stream_attribution 的无 project scope 读在 JdbcSettlementConfigWriteRepository.listPendingConfigDrafts（草案复核队列 UNION，行 345-348）。该读仅被 SettlementConfigService.overview → GET /api/v1/settlement/config/overview 调用，端点强制 settlement.config.view + requirePlatformScope（平台管理员专属）。平台管理员跨项目审所有配置草案=有意平台级读，项目操作者先 403 到不了；端点级 scope 闸静态扫描器不识别（同 access_grant_requests 范式）。batch1 引入。证据见 findings-register SEC-P2-TENANT-ISOLATION-BATCH1-PLATFORM-READ-001。"
+      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 revenue_stream_attribution 存在无项目范围的读。尚未收紧。证据：generated_at_source。"
     },
     {
       "key": "F1:UNSCOPED_DIRECT_READ:integration_channel_store_map",
-      "text": "[F1 UNSCOPED_DIRECT_READ·平台级有意读] integration_channel_store_map 是平台运营维护的「外部渠道门店→商户」归属映射表（招商/运营人工录入，配合 listUnattributedOrderSyncs 未归属回流运营视图）。5 处读（listChannelStoreMaps/findChannelStoreMapById/findChannelStoreMapByNaturalKey/findActiveChannelStoreMapMerchant + upsert）均在平台集成域 JdbcIntegrationRepository.java，经 IntegrationController 的 integration.channel_store_map.view/.manage 权限闸（平台管理员专属，与 order_sync 同属 platform 数据范围）。回流归属任务按外部门店反查 merchant_id——读时尚未知 merchant_id，无法也不应按 token merchant scope 过滤；平台管理员需列全表管理映射；商户 token 不持该权限、到不了端点。加 merchant_id = : 过滤会破坏平台列表与回流归属，语义错误。端点级平台权限闸静态扫描器不识别（同 revenue_stream_attribution / access_grant_requests 范式）。V334（P1 营业额抽成回流落商户）引入。证据键 SEC-P2-TENANT-ISOLATION-REFLOW-CHANNEL-MAP-001。"
+      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 integration_channel_store_map 存在无商户范围的读。尚未收紧。证据：generated_at_source。"
     }
   ]
 }
