@@ -43,7 +43,7 @@ for i in $(seq 0 $((COUNT - 1))); do
     \"merchant_name\":\"$NAME\",
     \"merchant_type\":\"bar\",
     \"contact_name\":\"$NAME 负责人\",
-    \"status\":\"active\",
+    \"status\":\"pending_admission\",
     \"operator_note\":\"开发环境酒吧主数据播种(家数可配)\"
   }" | python3 -c 'import sys,json
 raw=sys.stdin.read()
