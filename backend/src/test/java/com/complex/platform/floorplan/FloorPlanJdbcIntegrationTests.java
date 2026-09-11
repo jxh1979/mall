@@ -1,7 +1,8 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import java.time.Instant;
@@ -9,6 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -175,6 +177,38 @@ class FloorPlanJdbcIntegrationTests {
         assertThat(repository.findImportErrorsByTaskId("fpi_jdbc"))
                 .extracting(FloorPlanImportErrorRecord::errorCode)
                 .containsExactly("POINTS_TOO_FEW");
+    }
+
+    // M016-002：库层 shape_type 闭集须含治理地图「摊位」「公共区」（V423 前 CHECK 六值 → 此例红）
+    @Test
+    void shapeTypeBoothAndPublicAreaAreAcceptedByDatabase() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveFloorPlan(floorPlan("fp_shape_types", "prj_jdbc", now));
+        repository.saveShape(shape("fps_booth", "fp_shape_types", "booth", now));
+        repository.saveShape(shape("fps_public_area", "fp_shape_types", "public_area", now));
+
+        assertThat(repository.findShapesByFloorPlanId("fp_shape_types"))
+                .extracting(FloorPlanShapeRecord::shapeType)
+                .containsExactlyInAnyOrder("booth", "public_area");
+    }
+
+    // M016-001：mall_floor_plans.project_id 列级不得为空（V423 前可空 → 此例红）
+    @Test
+    void floorPlanWithoutProjectIsRejectedByDatabase() {
+        assertThatThrownBy(() -> repository.saveFloorPlan(
+                floorPlan("fp_no_project", null, Instant.parse("2026-06-14T00:00:00Z"))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private static FloorPlanRecord floorPlan(String id, String projectId, Instant now) {
+        return new FloorPlanRecord(id, projectId, "A", "1F", "1F plan", "https://assets.example.com/floor-1.png",
+                1600, 1200, "v1", "active", now, now, null);
+    }
+
+    private static FloorPlanShapeRecord shape(String id, String floorPlanId, String shapeType, Instant now) {
+        return new FloorPlanShapeRecord(id, floorPlanId, shapeType, "space", null, shapeType + " shape",
+                List.of(new FloorPlanPoint(0.1, 0.1), new FloorPlanPoint(0.4, 0.1), new FloorPlanPoint(0.4, 0.3)),
+                0, "active", now, now);
     }
 
     private String regclass(String tableName) {
