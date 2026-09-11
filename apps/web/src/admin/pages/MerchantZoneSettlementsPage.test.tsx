@@ -7,7 +7,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 const SETTLEMENTS = [
   { id: "st-1", contract_id: "c-1", trigger_type: "move_out", status: "pending_settlement", dispute_reason: null },
-  { id: "st-2", contract_id: "c-2", trigger_type: "expiry", status: "disputed", dispute_reason: "金额不符" },
+  { id: "st-2", contract_id: "c-2", trigger_type: "expiry", status: "pending_settlement", dispute_reason: "金额不符" },
   { id: "st-3", contract_id: "c-3", trigger_type: "expiry", status: "settled", dispute_reason: null },
 ];
 
@@ -47,18 +47,14 @@ describe("MerchantZoneSettlementsPage KPI 聚焦视图", () => {
     window.history.replaceState({}, "", "/admin/merchant-zone/settlements");
   });
 
-  it("点“有异议” → URL 带 ?kpi=settlements&subset=disputed，聚焦只剩有异议单，合同下钻 TraceLink 保留", async () => {
+  it("没有「有异议」KPI，不把留言做成待裁决挂起", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlements-kpi-disputed")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("merchant-zone-settlements-kpi-disputed"));
-    expect(window.location.search).toContain("kpi=settlements");
-    expect(window.location.search).toContain("subset=disputed");
-    expect(screen.getByTestId("merchant-zone-settlements-kpi-focus-banner").textContent).toContain("正在查看：有异议（1）");
-    expect(screen.getByTestId("merchant-zone-settlement-pick-st-2")).toBeTruthy();
-    expect(screen.queryByTestId("merchant-zone-settlement-pick-st-1")).toBeNull();
-    expect(screen.queryByTestId("merchant-zone-settlements-summary")).toBeNull();
-    // 合同下钻链接（P1/P2 TraceLink）在聚焦表内保留。
-    expect(screen.getByTestId("trace-link-ADM-CONT-001-c-2")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlements-summary")).toBeTruthy());
+    expect(screen.queryByTestId("merchant-zone-settlements-kpi-disputed")).toBeNull();
+    const page = screen.getByTestId("merchant-zone-settlements-page").textContent ?? "";
+    expect(page).not.toContain("有异议");
+    expect(page).not.toContain("待平台裁决");
+    expect(page).toContain("提交异议");
   });
 
   it("点“未结清” → 聚焦排除已结清，点「返回全部」恢复完整页面", async () => {
@@ -78,9 +74,12 @@ describe("MerchantZoneSettlementsPage KPI 聚焦视图", () => {
     await waitFor(() => expect(screen.getByTestId("merchant-zone-settlements-table")).toBeTruthy());
     const table = screen.getByTestId("merchant-zone-settlements-table").textContent ?? "";
     expect(table).toContain("退租");
-    expect(table).toContain("有异议");
+    expect(table).toContain("待结算");
+    expect(table).toContain("已结清");
+    expect(table).not.toContain("有异议");
+    expect(table).not.toContain("进行中");
     expect(table).not.toContain("move_out");
-    expect(table).not.toContain("disputed");
+    expect(table).not.toContain("pending_settlement");
   });
 });
 

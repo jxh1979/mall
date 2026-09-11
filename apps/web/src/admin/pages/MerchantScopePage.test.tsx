@@ -5,8 +5,14 @@ import { MerchantScopePage } from "./MerchantScopePage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-const WORK_ORDERS = [{ id: "wo-1", merchant_id: "m-1", work_order_type: "repair", title: "工单甲", priority: "high", status: "processing", authorized_scope: "工单" }];
-const BILLS = [{ id: "bl-1", merchant_id: "m-1", bill_no: "B-1", title: "账单甲", total_amount: 100, status: "unpaid", authorized_scope: "账单" }];
+const WORK_ORDERS = [
+  { id: "wo-1", merchant_id: "m-1", work_order_type: "repair", title: "工单甲", priority: "high", status: "processing", authorized_scope: "工单" },
+  { id: "wo-2", merchant_id: "m-2", work_order_type: "repair", title: "工单乙", priority: "high", status: "processing", authorized_scope: "工单" },
+];
+const BILLS = [
+  { id: "bl-1", merchant_id: "m-1", bill_no: "B-1", title: "账单甲", total_amount: 100, status: "unpaid", authorized_scope: "账单" },
+  { id: "bl-2", merchant_id: "m-2", bill_no: "B-2", title: "账单乙", total_amount: 200, status: "unpaid", authorized_scope: "账单" },
+];
 
 function envelope(items: unknown[]): Response {
   return new Response(
@@ -30,10 +36,10 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(user: AdminPageProps["user"] = { id: "u1", username: "merchant", accountType: "merchant_admin", merchantId: "m-1" }) {
   const fullProps: AdminPageProps = {
     api: makeApi(),
-    user: { id: "u1", username: "admin", accountType: "platform_admin" },
+    user,
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
     effectivePermissions: ADMIN_PERMS,
@@ -91,6 +97,21 @@ describe("MerchantScopePage KPI 聚焦视图", () => {
     const text = screen.getByTestId("merchant-scope-work-orders-table").textContent ?? "";
     expect(text).toContain("报修");
     expect(text).not.toContain("repair");
+  });
+
+  it("本商户看不见其他商户的工单和账单", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-work-order-row-wo-1")).toBeTruthy());
+    expect(screen.queryByTestId("merchant-scope-work-order-row-wo-2")).toBeNull();
+    expect(screen.getByTestId("merchant-scope-bill-row-bl-1")).toBeTruthy();
+    expect(screen.queryByTestId("merchant-scope-bill-row-bl-2")).toBeNull();
+  });
+
+  it("平台管理员无商户范围时不看全量", async () => {
+    renderPage({ id: "u-admin", username: "admin", accountType: "platform_admin" });
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-page")).toBeTruthy());
+    expect(screen.queryByTestId("merchant-scope-work-order-row-wo-1")).toBeNull();
+    expect(screen.queryByTestId("merchant-scope-bill-row-bl-1")).toBeNull();
   });
 });
 

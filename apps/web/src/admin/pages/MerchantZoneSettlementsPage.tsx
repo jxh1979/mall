@@ -15,7 +15,7 @@ const DISPUTE_PERMS = ["merchant.portal.settlement.dispute"];
 
 const TEXT = {
   title: "我的对账",
-  description: "查看与本商户相关的退租 / 到期结算单;对未结清的结算单可提交异议留言,平台裁决后继续结算。资金流程仍由平台侧权威闭环。",
+  description: "查看本商户结算与分成明细；有疑问可留言提异议。留言不改变结算状态、不暂停付款。退租金额异议在退租审批中提出。",
   loadFailed: "对账数据读取失败",
   actionFailed: "异议提交失败",
   reasonRequired: "提交异议必须填写理由。",
@@ -31,15 +31,15 @@ const TRIGGER_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  in_progress: "进行中",
   pending_settlement: "待结算",
   deposit_offsetting: "押金抵扣中",
   arrears_collecting: "欠费追缴中",
-  disputed: "有异议",
   settled: "已结清",
+  disputed: "有争议",
+  disputed_litigation: "有争议，诉讼/仲裁",
 };
 
-const DISPUTABLE = new Set(["in_progress", "pending_settlement", "deposit_offsetting", "arrears_collecting"]);
+const DISPUTABLE = new Set(["pending_settlement", "deposit_offsetting", "arrears_collecting"]);
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -50,20 +50,18 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
 }
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染结算单表对应子集。
-// URL 约定：?kpi=settlements[&subset=open|disputed]。TraceLink（合同下钻）在聚焦表内保留。
-type KpiFocus = { subset: "all" | "open" | "disputed" };
+// URL 约定：?kpi=settlements[&subset=open]。TraceLink（合同下钻）在聚焦表内保留。
+type KpiFocus = { subset: "all" | "open" };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
   if (params.get("kpi") !== "settlements") return null;
-  const subset = params.get("subset");
-  return { subset: subset === "open" || subset === "disputed" ? subset : "all" };
+  return { subset: params.get("subset") === "open" ? "open" : "all" };
 }
 
 function focusTitle(subset: KpiFocus["subset"]): string {
   if (subset === "open") return "未结清";
-  if (subset === "disputed") return "有异议";
   return "结算单";
 }
 
@@ -132,10 +130,8 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
   }
 
   const openRows = rows.filter((row) => row.status !== "settled");
-  const disputedRows = rows.filter((row) => row.status === "disputed");
   const openCount = openRows.length;
-  const disputedCount = disputedRows.length;
-  const focusRows = kpiFocus?.subset === "open" ? openRows : kpiFocus?.subset === "disputed" ? disputedRows : rows;
+  const focusRows = kpiFocus?.subset === "open" ? openRows : rows;
   const paged = usePagedRows(kpiFocus ? focusRows : rows, 10, kpiFocus ? kpiFocus.subset : "");
 
   function openSettlementDetail(row: MerchantZoneSettlementRow) {
@@ -195,8 +191,7 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
           <>
             <div className="admin-kpi-grid" data-testid="merchant-zone-settlements-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>结算单</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-settlements-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>本商户</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>未结清</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-settlements-kpi-open" onClick={() => enterKpiFocus("open")}>{openCount}</button><small>进行中/待结算</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>有异议</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-settlements-kpi-disputed" onClick={() => enterKpiFocus("disputed")}>{disputedCount}</button><small>待平台裁决</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>未结清</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-settlements-kpi-open" onClick={() => enterKpiFocus("open")}>{openCount}</button><small>待结算</small></div>
             </div>
             <div className="admin-form-row" data-testid="merchant-zone-settlement-dispute-form">
               <label>异议理由<input data-testid="merchant-zone-settlement-dispute-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="如:金额与合同约定不符" /></label>

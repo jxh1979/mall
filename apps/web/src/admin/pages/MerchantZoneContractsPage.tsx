@@ -16,14 +16,14 @@ const TEXT = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  draft: "起草中",
-  pending_approval: "审批中",
+  draft: "草拟",
   pending_confirmation: "待确认",
-  effective: "履约中",
+  pending_effective: "待生效",
+  effective: "已生效",
+  renewing: "续签中",
   expired: "已到期",
-  pending_settlement: "结算中",
   terminated: "已终止",
-  renewed: "已续签",
+  archived: "归档",
 };
 
 // ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
@@ -34,7 +34,7 @@ function shortId(id: string | null | undefined): string {
 
 function money(cent: number | null | undefined) {
   if (cent === undefined || cent === null) return "-";
-  return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cent / 100)} CNY`;
+  return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cent / 100)} 元`;
 }
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染合同表对应子集。
@@ -157,7 +157,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
         {kpiFocus ? (
           <>
             <div className="admin-state" data-testid="merchant-zone-contracts-kpi-focus-banner">
-              正在查看：{kpiFocus.subset === "effective" ? "履约中合同" : "合同总数"}（{focusRows.length}）
+              正在查看：{kpiFocus.subset === "effective" ? "已生效合同" : "合同总数"}（{focusRows.length}）
               <button type="button" data-testid="merchant-zone-contracts-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
             </div>
             {contractsTable}
@@ -166,7 +166,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
           <>
             <div className="admin-kpi-grid" data-testid="merchant-zone-contracts-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>合同总数</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-contracts-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>本商户</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>履约中</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-contracts-kpi-effective" onClick={() => enterKpiFocus("effective")}>{activeCount}</button><small>当前有效</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>已生效</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-contracts-kpi-effective" onClick={() => enterKpiFocus("effective")}>{activeCount}</button><small>当前有效</small></div>
             </div>
             {contractsTable}
           </>
