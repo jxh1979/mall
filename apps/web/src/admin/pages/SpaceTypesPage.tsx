@@ -86,14 +86,40 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
     }
   }
 
-  async function deleteType(row: SpaceTypeRow) {
+  async function archiveType(row: SpaceTypeRow) {
     setGlobalError(null);
     try {
-      await api.delete(`/api/v1/platform/space-types/${row.id}`);
-      setActionResult({ action: "space_type_deleted", typeCode: row.typeCode });
+      await api.post(`/api/v1/platform/space-types/${row.id}/archive`);
+      setActionResult({ action: "space_type_archived", typeCode: row.typeCode });
       reload();
     } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : "删除空间种类失败";
+      const message = actionError instanceof Error ? actionError.message : "存档空间种类失败";
+      setGlobalError(message);
+    }
+  }
+
+  async function requestDeleteType(row: SpaceTypeRow) {
+    setGlobalError(null);
+    const reason = typeof window !== "undefined" ? window.prompt("请填写删除理由") : "";
+    if (!reason || !reason.trim()) return;
+    try {
+      await api.post(`/api/v1/platform/space-types/${row.id}/delete-request`, { reason: reason.trim() });
+      setActionResult({ action: "space_type_delete_requested", typeCode: row.typeCode });
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "申请删除失败";
+      setGlobalError(message);
+    }
+  }
+
+  async function approveDeleteType(row: SpaceTypeRow) {
+    setGlobalError(null);
+    try {
+      await api.post(`/api/v1/platform/space-types/${row.id}/delete-approve`, { decision: "approved" });
+      setActionResult({ action: "space_type_delete_approved", typeCode: row.typeCode });
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "审批删除失败";
       setGlobalError(message);
     }
   }
@@ -114,7 +140,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
     <section data-testid="space-types-page">
       <AdminPageHeader
         title="空间种类"
-        description="维护空间种类。建空间时从本表选择种类。管理员可新增或删除。有空间还在用的种类不能删除。仅有空间管理权限的人可改。"
+        description="维护空间种类。建空间时从本表选择种类。可新增、停用。删除须先存档，再申请并经最高权限审批。有空间还在用的种类不能删除。"
       />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
@@ -129,24 +155,46 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
                     className={isFocused(row) ? "admin-row-selected" : undefined}>
                   <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{formatBusinessStatus(row.status)}</td>
                   <td>
-                    {row.status !== "disabled" ? (
+                    {row.status === "active" ? (
+                      <>
+                        <HighRiskConfirm
+                          label="停用"
+                          impact={`停用种类「${row.typeName}」后，不能再用来新建空间。已经建好的空间仍保留这个种类。`}
+                          onConfirm={() => void disableType(row)}
+                          permissionsState={effectivePermissions}
+                          permissions={MANAGE}
+                          data-testid={`space-type-disable-${row.typeCode}`}
+                        />
+                        <HighRiskConfirm
+                          label="存档"
+                          impact={`先把种类「${row.typeName}」存档，然后才能申请删除。`}
+                          onConfirm={() => void archiveType(row)}
+                          permissionsState={effectivePermissions}
+                          permissions={MANAGE}
+                          data-testid={`space-type-archive-${row.typeCode}`}
+                        />
+                      </>
+                    ) : null}
+                    {row.status === "archived" ? (
                       <HighRiskConfirm
-                        label="停用"
-                        impact={`停用种类「${row.typeName}」后，不能再用来新建空间。已经建好的空间仍保留这个种类。`}
-                        onConfirm={() => void disableType(row)}
+                        label="申请删除"
+                        impact={`申请删除种类「${row.typeName}」。须填写理由，并由最高权限审批。有空间占用则不能删。`}
+                        onConfirm={() => void requestDeleteType(row)}
                         permissionsState={effectivePermissions}
                         permissions={MANAGE}
-                        data-testid={`space-type-disable-${row.typeCode}`}
+                        data-testid={`space-type-delete-request-${row.typeCode}`}
                       />
                     ) : null}
-                    <HighRiskConfirm
-                      label="删除"
-                      impact={`删除种类「${row.typeName}」后前台不再使用。库里仍保留。若还有空间在用这个种类，系统会拒绝删除。`}
-                      onConfirm={() => void deleteType(row)}
-                      permissionsState={effectivePermissions}
-                      permissions={MANAGE}
-                      data-testid={`space-type-delete-${row.typeCode}`}
-                    />
+                    {row.status === "pending_delete" ? (
+                      <HighRiskConfirm
+                        label="审批删除"
+                        impact={`由最高权限审批删除种类「${row.typeName}」。申请人不能批自己。`}
+                        onConfirm={() => void approveDeleteType(row)}
+                        permissionsState={effectivePermissions}
+                        permissions={MANAGE}
+                        data-testid={`space-type-delete-approve-${row.typeCode}`}
+                      />
+                    ) : null}
                   </td>
                 </tr>
               ))}

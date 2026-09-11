@@ -96,6 +96,10 @@ public interface PlatformRepository {
 
     void deleteSpaceType(String id);
 
+    void saveSpaceTypeDeleteRequest(String spaceTypeId, String reason, String requestedBy);
+
+    String findSpaceTypeDeleteRequestedBy(String spaceTypeId);
+
 
     BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding);
 

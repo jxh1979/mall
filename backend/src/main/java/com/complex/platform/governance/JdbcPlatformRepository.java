@@ -382,6 +382,28 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public void saveSpaceTypeDeleteRequest(String spaceTypeId, String reason, String requestedBy) {
+        jdbcTemplate.update("""
+                INSERT INTO space_type_delete_requests (id, space_type_id, reason, requested_by, requested_at, status)
+                VALUES (:id, :space_type_id, :reason, :requested_by, :requested_at, 'pending')
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", "stdr_" + spaceTypeId + "_" + java.time.Instant.now().toEpochMilli())
+                .addValue("space_type_id", spaceTypeId)
+                .addValue("reason", reason)
+                .addValue("requested_by", requestedBy)
+                .addValue("requested_at", timestampWithTimeZone(java.time.Instant.now())));
+    }
+
+    @Override
+    public String findSpaceTypeDeleteRequestedBy(String spaceTypeId) {
+        java.util.List<String> rows = jdbcTemplate.queryForList(
+                "SELECT requested_by FROM space_type_delete_requests WHERE space_type_id = :id AND status = 'pending' ORDER BY requested_at DESC LIMIT 1",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", spaceTypeId),
+                String.class);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    @Override
     public BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding) {
         jdbcTemplate.update("""
                 INSERT INTO business_entity_bindings (

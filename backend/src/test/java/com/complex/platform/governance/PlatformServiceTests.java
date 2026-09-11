@@ -849,6 +849,18 @@ class PlatformServiceTests {
             spaceTypes.values().removeIf(item -> id.equals(item.id()));
         }
 
+        private final java.util.Map<String, String> deleteRequestedBy = new java.util.HashMap<>();
+
+        @Override
+        public void saveSpaceTypeDeleteRequest(String spaceTypeId, String reason, String requestedBy) {
+            deleteRequestedBy.put(spaceTypeId, requestedBy);
+        }
+
+        @Override
+        public String findSpaceTypeDeleteRequestedBy(String spaceTypeId) {
+            return deleteRequestedBy.get(spaceTypeId);
+        }
+
         @Override
         public BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding) {
             businessEntityBindings.put(binding.id(), binding);
