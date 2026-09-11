@@ -1,7 +1,25 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V3.16
+版本：V3.21
+
+## 当前 M013 B5-r1双PASS，四值全等，M013 → PASS（先记账，再写闭环文件）
+2026-09-11T04:08:57Z。Grok B5-r1真实exit0，报告modules/M013-b5-r1-grok-raw.md（V0.01，44522bytes SHAa14fde458071763182a64d9463991f8b249fc4fd0da17dc738ecd7786dc89094，四项交付事实成立），整模块三线全量结论PASS。席甲B5-r1票PASS（modules/M013-b5-r1-self-raw.md V0.01，17768bytes SHA79f602ed4eb5a2a045aeca9686143b935df5eb4147543ddff1bb3380dcbffac9；Grok真实退出后主仓实跑只读验证并独立落盘、再读Grok）。合取双PASS。
+B5后四值（精确路径modules/M013-b5-r1-grok-raw.md最后独占锁行）：实算/sidecar/ledger/Grok均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+M013状态IN_PROGRESS→PASS：B3累计1（只改本模块4份文档：绑定设计按V410刷新并登记OpenAPI契约缺口、集团PRD/验收包/PRD的V394已闭合与端点表/税费句/准入闸口现状/自营标注/空间字典口径/「查看考勤」两处）；B4双PASS；10个ID修复队列全否（8项已修、1项XM归M392、1项登记）；添加项0；questions 0；HTML修改申请1项已由操作员批准并于PR #433落地（治理地图V0.12 L741）；未提交/推送/合并/部署（阶段B不提交；M013修复随下一检查点）。本节写入后再创建闭环文件modules/M013-entity-topology-binding-docs-seg1.md。当前13PASS/0IN_PROGRESS/458PENDING；下一步：M014（docs/platform-governance-product-spec-v0.2.md，单文件3494行 OVERSIZE-SINGLE-FILE）。
+
+## 当前 M013 B4-r1双PASS，进入B5-r1整模块全量重审
+2026-09-11T03:55:49Z。Grok B4-r1真实exit0，报告modules/M013-b4-r1-grok-raw.md（V0.01，65113bytes SHA7d43db50a7e6ef1a13b1d586d4b8da36b93db23af9d91a29ee6c6a9bd76130d7，四项交付事实成立），结论PASS（内容与§5闸3归因均PASS）。席甲B4-r1票PASS（modules/M013-b4-r1-self-raw.md V0.01，62791bytes SHA4b653c0f9a34e5a8fc5af9e8f275c8df51260dc598d2288c552f440bfe39179a；全部hunk落到001–008，未改源码/迁移/OpenAPI/HTML/锁）。合取双PASS，findings V1.86把001–008队列改否；当前队列是=0。
+下一步B5-r1：派Grok整模块全量三线重审，席甲自席raw后读Grok并做四值校验（精确路径modules/M013-b5-r1-grok-raw.md最后独占锁行）；双PASS→ledger先记PASS再写modules/M013-<slug>.md；任一FAIL→回退统一规则（B3累计1/3）。
+
+## 当前 M013 B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-11T03:39:05Z。席甲在主工作区就地修 4 份文档（只改本模块文件；版本铁律：绑定设计 V0.08→V0.09、集团 PRD V1.0→V1.01、验收包 V0.03→V0.04、PRD V0.03→V0.04）：before tree 30fa8121f4f1bdfc79201aa516ecaa7233edee0e → after tree dcfc3a8cc70a23e43ef3b47c668411f2c05af1b4（4 文件 4 files changed, 31 insertions(+), 24 deletions(-)）；diff 冻结 /tmp/m013_b3_r1.diff（42391 bytes SHA 559063ead76569775cfaaea9de88a72621161c892c8a3bc7f72950fdc81afd09）。文档模块无测试面：只读验证 /tmp/m013_b3r1_run.log（改写后陈述逐字对照 V410/V394/V217/V184/AccessService/StaffApprovalService/OpenAPI 与治理地图 V0.12 L741、业务地图 V0.14）。B3 累计 0→1。未改源码/迁移/OpenAPI/三份 HTML/锁；未提交。下一步：派 Grok B4-r1（modules/M013-b4-r1-grok-raw.md），真实退出后席甲自席落盘 B4 raw 再读。
+
+## 当前 M013 B2-r1 双 PASS 定稿，进 B3-r1（席甲修）
+2026-09-11T03:38:29Z。Grok B2-r1 真实退出（exit 0；M013-b1-grok-raw.md V0.02 追加段，全文 62958bytes SHA bba1fa84…85fa8，票 PASS，逐 ID 001–010 全 PASS，两条非阻断勘误已并入定稿：006 事实栏收窄、004 表头/差异说明）；席甲 B2-r1 票 PASS（M013-b1-self-raw.md V0.02，全文 31826bytes SHA a35ec62f…c6b5d，自席落盘后才读 Grok 追加段）。定稿 findings V1.85：队列「是」8（001–008）、「否」2（009 XM→M392、010）。B3-r1 由席甲在主工作区就地修 4 份文档（版本铁律递增），修前 tree 记入 B3 完成节供 B4 冻结 diff。派发勘误：B2-r1 首次派发未传报告路径参数（适配器目标误为 M013-b2-r1-grok-raw.md），Grok 启动 15 秒内即被席甲终止并以正确目标重派，Grok 未产出任何内容，不计失败重跑。
+
+## 当前 M013 B2-r1 候选已落盘（findings V1.84），待 Grok B2 票
+2026-09-11T03:24:08Z。B1：Grok 真实 exit 0（modules/M013-b1-grok-raw.md V0.01 41273bytes SHA f6e9f5ad…db61e，FAIL：GR-M013-001…005、OBS-01…12）；席甲独立落盘（modules/M013-b1-self-raw.md V0.01 27544bytes SHA 4be118ba…3285b，FAIL：CX-M013-001…007）后才读 Grok；B1 后四值全等 b012328f…6695a。B2-r1 候选 findings V1.84：M013-001…010（队列「是」8：001–008；「否」2：009 XM→M392、010 观察）；无添加项、无 questions、不 BLOCKED。派 Grok B2-r1（追加到 M013-b1-grok-raw.md，V0.02），真实退出后席甲自席落盘 self-raw V0.02 票再读其追加段。主工作区 HEAD=origin/main=5692a895（PR #433 治理地图 V0.12 已合并，V3.16 随之入库；未跟踪文件仅 M013 两份 raw）。
 
 ### 操作员裁决：治理地图 L741 私人手机低风险功能列表「考勤打卡」改「查看考勤」（席甲：Claude Fable 5.1）
 
@@ -955,7 +973,7 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M010 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／数据库迁移／第1段` | PASS | 2 | 2 | [B5-r2双PASS](modules/M010-governance-topology-migrations-01.md) | 0 | B5-r2全4文件+V410三线双PASS；四值全等；14项队列全否（5已修/9登记）；B3累计2；2.2两项答删除已执行；complex_test改名保留+新建至V410；席甲=Claude Fable 5.1 |
 | M011 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M011-governance-topology-backend-verification-01.md) | 0 | B5-r1全3文件三线双PASS；四值全等；7项队列全否（5已修/2登记）；B3累计1；无添加项；席甲=Claude Fable 5.1 |
 | M012 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M012-governance-topology-web-01.md) | 0 | B5-r1全6文件三线双PASS；四值全等；9项队列全否（8已修/1登记）；B3累计1；添加项2答删除已执行；席甲=Claude Fable 5.1 |
-| M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | IN_PROGRESS | 0 | 2 | - | 0 | B1进行中（先Grok后席甲）；席甲=Claude Fable 5.1；M009/M010/U04-001 拓扑与自营口径转入；原322归属：M281、M293；既有累计仅保留历史，不代表本版已审 |
+| M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M013-entity-topology-binding-docs-seg1.md) | 0 | B5-r1全4文件三线双PASS；四值全等；10项队列全否（8已修/1 XM→M392/1登记）；B3累计1；HTML裁决1项已落地（PR #433）；席甲=Claude Fable 5.1 |
 | M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PENDING | 0 | 2 | - | 0 | 原322归属：M282；既有累计仅保留历史，不代表本版已审 |
 | M015 `空间点位、楼层平面图与营业时段／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M047、M049；既有累计仅保留历史，不代表本版已审 |
 | M016 `空间点位、楼层平面图与营业时段／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M139、M145、M146；既有累计仅保留历史，不代表本版已审 |
