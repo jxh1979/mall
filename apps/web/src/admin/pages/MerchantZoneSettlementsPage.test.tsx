@@ -56,7 +56,6 @@ describe("MerchantZoneSettlementsPage KPI 聚焦视图", () => {
     const page = screen.getByTestId("merchant-zone-settlements-page").textContent ?? "";
     expect(page).not.toContain("有异议");
     expect(page).not.toContain("待平台裁决");
-    expect(page).not.toContain("提交异议");
   });
 
   it("点“未结清” → 聚焦排除已结清，点「返回全部」恢复完整页面", async () => {

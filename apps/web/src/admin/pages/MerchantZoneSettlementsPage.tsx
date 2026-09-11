@@ -10,7 +10,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 
 const TEXT = {
   title: "我的对账",
-  description: "查看本商户结算单。退租金额异议在退租审批中提出，本页不提交异议、不改变结算状态、不暂停付款。",
+  description: "查看本商户结算单。退租金额异议在退租审批中提出。本页只读，不改变结算状态、不暂停付款。",
   loadFailed: "对账数据读取失败",
   focusClear: "清除筛选，返回全部",
 };
