@@ -1,7 +1,14 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V3.14
+版本：V3.16
+
+### 操作员裁决：治理地图 L741 私人手机低风险功能列表「考勤打卡」改「查看考勤」（席甲：Claude Fable 5.1）
+
+2026-09-11T03:15:48Z。M013 B1 席甲追流发现治理地图 L741 仍把「考勤打卡」列入员工自有手机低风险功能，与业务地图 L1445 及 2026-09-10 裁决（V3.13）不一致；弹窗逐句发问，操作员答复「同意按此修改」（仅「考勤打卡」→「查看考勤」，其余不动，不加行）。落地：在独立工作树 /home/james/wt/pgm-v012（分支 audit/20260911/pgm-v0.12-punch-terminal，基于 origin/main ec735cac）内改治理地图两行（L2 版本 V0.11→V0.12、L741），同批 business-decision-ledger V0.24 决策节、entry-registry.csv 行 953（PGM-E0211）与 authority-rule-ledger.csv 行 644（PGM-0113，两处）镜像同步；治理地图 V0.12 SHA256=a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1；业务地图 V0.14、枚举 V0.07 字节不变。门禁（工作树内实跑）：verify:entry-anchors PASS / verify:html-ledger-sync PASS / verify:predeploy exit 0（14 个 PASS、0 个 FAIL）。主工作区 HEAD 在 Grok M013 B1 真实退出前保持 ec735cac（不改变其审计输入），退出后 ff 拉取；PR 号随下一版台账记。M013 PRD §5/§6.9 两处「考勤打卡」作为 B3 修复项随 HTML 现文同步（候选 CX-M013-006）。
+
+## 当前 M013 B1开始（M001–M012 已闭环；U01–U18 未发布材料已审修发布）
+2026-09-11T02:59:02Z。操作员 2026-09-10 指令：「继续从 M013 开始主审计，m014,m015」。M013「综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段」PENDING→IN_PROGRESS，4 文件（计划冻结 1517 行）：business-entity-binding-development-design-v0.1.md、group-governance-rebuild-prd-v1.0.md、platform-governance-acceptance-pack-v0.2.md、platform-governance-prd-v0.1.md，映射 84 判据（BEQR 21、BSM 12、GEN 18、PGM 33）；B3 累计 0；子代理失败重跑 0。正本 main HEAD=origin/main=ec735cac3806283a6c6ea7d452f3e7c9a180fa09（PR #430/#431/#432 已合并：U-FIX 发布、U 段台账检查点、业务地图 V0.14）。顺序：先派 Grok B1（报告 modules/M013-b1-grok-raw.md V0.01），Grok 真实退出后席甲（Claude Fable 5.1，作者自审票）独立落盘 modules/M013-b1-self-raw.md 再读 Grok；B1 后四值校验。转入本模块的既有口径：M009（主体拓扑三角色 platform/project_company/management_company，V410 删 parent_entity_id 与父链；六类合作方式码；空间状态闭集）、M010-002/003（entity_role 三值）、U04-001（自营独立布尔＝删除，标注即合作方式 self_operated）、业务地图 V0.14（考勤打卡以 L1445 为准）；文档类模块的三线口径沿用 M001/M006：文档陈述须与三份 HTML 及 main 实现事实一致，不得把过期设计当现行合同。B3/B4/B5 在主工作区就地做（无并行审计，不再用 worktree）。当前 12 PASS / 1 IN_PROGRESS / 458 PENDING。
 
 ### 业务地图 V0.14：考勤打卡措辞按操作员裁决落地（席甲：Claude Fable 5.1）
 
@@ -948,7 +955,7 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M010 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／数据库迁移／第1段` | PASS | 2 | 2 | [B5-r2双PASS](modules/M010-governance-topology-migrations-01.md) | 0 | B5-r2全4文件+V410三线双PASS；四值全等；14项队列全否（5已修/9登记）；B3累计2；2.2两项答删除已执行；complex_test改名保留+新建至V410；席甲=Claude Fable 5.1 |
 | M011 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M011-governance-topology-backend-verification-01.md) | 0 | B5-r1全3文件三线双PASS；四值全等；7项队列全否（5已修/2登记）；B3累计1；无添加项；席甲=Claude Fable 5.1 |
 | M012 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M012-governance-topology-web-01.md) | 0 | B5-r1全6文件三线双PASS；四值全等；9项队列全否（8已修/1登记）；B3累计1；添加项2答删除已执行；席甲=Claude Fable 5.1 |
-| M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M281、M293；既有累计仅保留历史，不代表本版已审 |
+| M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | IN_PROGRESS | 0 | 2 | - | 0 | B1进行中（先Grok后席甲）；席甲=Claude Fable 5.1；M009/M010/U04-001 拓扑与自营口径转入；原322归属：M281、M293；既有累计仅保留历史，不代表本版已审 |
 | M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PENDING | 0 | 2 | - | 0 | 原322归属：M282；既有累计仅保留历史，不代表本版已审 |
 | M015 `空间点位、楼层平面图与营业时段／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M047、M049；既有累计仅保留历史，不代表本版已审 |
 | M016 `空间点位、楼层平面图与营业时段／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M139、M145、M146；既有累计仅保留历史，不代表本版已审 |
