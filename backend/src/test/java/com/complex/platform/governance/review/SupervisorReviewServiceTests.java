@@ -150,7 +150,7 @@ class SupervisorReviewServiceTests {
                 "review-approve-2", "approve", List.of("att_3"), 3, "approved", "final"));
         assertThat(decision.reviewId()).isEqualTo(pending.reviewId());
         assertThat(decision.reviewStatus()).isEqualTo("approved");
-        assertThat(decision.reviewerLevel()).isEqualTo(10); // 从安全上下文取（usr_reviewer_c rank 30 → 主管级 10），不是请求体的 3
+        assertThat(decision.reviewerLevel()).isEqualTo(2); // M032：非密钥主体主管级封顶上两级；usr_reviewer_c rank 30 → 2，不是请求体的 3
         assertThat(decision.evidenceAttachmentIds()).containsExactly("att_3");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)

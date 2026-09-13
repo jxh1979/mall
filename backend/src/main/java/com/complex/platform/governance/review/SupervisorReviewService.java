@@ -141,8 +141,9 @@ public class SupervisorReviewService {
                     if (blocked) {
                         requireDesignatedRoleHolder(policy, request.finalApproverId()); // R-003 fail-closed
                         supervisorReviewRepository.saveSupervisorReview(decision);
-                        scheduleDeadline(decision.reviewId(), null, actionType, policy.policyCode());
-                        generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
+                        String beneficiaryId = request.objectId();
+                        scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policy.policyCode());
+                        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.evaluated",
@@ -366,7 +367,7 @@ public class SupervisorReviewService {
 
     /** specific_role 节点：沿用 M007 的主管级别闸、角色闸与同商户范围闸（不满足即抛原错误码）。 */
     private void requireRoleNodeGates(SupervisorReviewDecisionRecord pending, String reviewerId, int reviewerLevel) {
-        if (reviewerLevel < pending.requiredLevel()) {
+        if (reviewerLevel < roleNodeLevelGate(pending.requiredLevel())) {
             throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
         }
         // 双轨收口的角色闸/范围闸仅在可解析角色与隔离键时强制；不可解析时回退既有 level 闸（向后兼容）。
@@ -734,6 +735,12 @@ public class SupervisorReviewService {
                             || schedule.map(s -> target.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_FORWARD_TARGET_FORBIDDEN", "不得转发给申请人本人或直接受益人");
                     }
+                    if (ApprovalChainNode.KIND_ROLE.equals(node.approverKind())
+                            && node.approverId() != null && !node.approverId().isBlank()
+                            && !authorizationService.holdsPermissionViaRole(target, node.approverId())
+                            && !authorizationService.holdsPermissionViaRole(target, APPROVE_PERMISSION)) {
+                        throw ApiException.forbidden("SUPERVISOR_ROLE_REQUIRED", "职级不能替代该事项的审批权限点");
+                    }
                     Instant now = Instant.now();
                     if (!supervisorReviewRepository.updateChainNode(node.withForward(target, actorId))) {
                         throw ApiException.conflict("SUPERVISOR_REVIEW_NOT_FOUND", "审批节点已不在待裁决状态");
@@ -777,8 +784,14 @@ public class SupervisorReviewService {
                     if (actorId != null && actorId.equals(node.forwardedTo())) {
                         return node;
                     }
-                    if (authorizationService.currentSupervisorLevel() < pending.requiredLevel()) {
+                    if (authorizationService.currentSupervisorLevel() < roleNodeLevelGate(pending.requiredLevel())) {
                         throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
+                    }
+                    String roleKey = node.approverId();
+                    if (roleKey != null && !roleKey.isBlank()
+                            && !authorizationService.holdsPermissionViaRole(actorId, roleKey)
+                            && !authorizationService.holdsPermissionViaRole(actorId, APPROVE_PERMISSION)) {
+                        throw ApiException.forbidden("SUPERVISOR_ROLE_REQUIRED", "职级不能替代该事项的审批权限点");
                     }
                     return node;
                 }
@@ -858,12 +871,23 @@ public class SupervisorReviewService {
         return released;
     }
 
+    /**
+     * 角色节点的职级闸最高按上两级。第 3 级只给 USB 主会话（M032），角色事项用角色权限点而不是密钥身份。
+     */
+    private static int roleNodeLevelGate(int requiredLevel) {
+        return Math.min(Math.max(requiredLevel, 0), 2);
+    }
+
     // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：三类与违规、人工放行一样恒进复核；
     // M087-A-03：税费规则与税费调整恒进三审 + 老板确认链。
     private boolean isAlwaysBlocked(String actionType) {
-        return actionType.contains("violation") || actionType.equals("manual_release")
-                || actionType.equals("bill_waiver") || actionType.equals("refund") || actionType.equals("ar_ap_adjustment")
-                || actionType.equals(TAX_RULE_ADJUST_ACTION);
+        String type = actionType == null ? "" : actionType;
+        return type.contains("violation") || type.equals("manual_release")
+                || type.equals("bill_waiver") || type.equals("refund") || type.equals("ar_ap_adjustment")
+                || type.equals(TAX_RULE_ADJUST_ACTION)
+                || type.contains("grant") || type.contains("authorization")
+                || type.contains("debit") || type.contains("deduction")
+                || type.endsWith(".money");
     }
 
     // M007-F-09（PGM-1.16「谁发起、为什么、谁审批、结果是什么，都要能查到」）：按策略声明的证据类型 fail-closed。
