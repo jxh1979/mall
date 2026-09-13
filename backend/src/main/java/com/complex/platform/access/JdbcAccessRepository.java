@@ -886,7 +886,7 @@ class JdbcAccessRepository implements AccessRepository {
                 """, Map.of("user_id", userId), this::mapPermissionEffect));
         effects.addAll(jdbcTemplate.query("""
                 SELECT subject_id AS user_id, permission_code, 'grant' AS effect, 'TEMPORARY_GRANT' AS source,
-                       id::text AS source_id, valid_from, expires_at AS valid_until,
+                       grant_group_id::text AS source_id, valid_from, expires_at AS valid_until,
                        single_use, consumed
                   FROM temporary_permission_grants
                  WHERE subject_type = 'user'
@@ -1038,9 +1038,8 @@ class JdbcAccessRepository implements AccessRepository {
                 UPDATE temporary_permission_grants
                    SET consumed = TRUE,
                        consumed_at = :consumed_at
-                 WHERE id::text = :source_id
+                 WHERE grant_group_id = :source_id
                    AND subject_id = :user_id
-                   AND permission_code = :permission_code
                    AND status = 'active'
                    AND single_use = TRUE
                    AND consumed = FALSE
