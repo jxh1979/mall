@@ -215,11 +215,10 @@ public class SupervisorReviewService {
                                 "组织层级未维护，审批链未生成；请平台管理员维护发起人的直接上级后重新生成审批链");
                     }
                     ApprovalChainNode node = resolveDecidableNode(pending, nodes, reviewerId, reviewerLevel);
-                    if ("staff.payroll.penalty_cap.adjust".equals(pending.actionType())
-                            && ApprovalChainNode.KIND_MASTER.equals(node.approverKind())
+                    if (ApprovalChainNode.KIND_MASTER.equals(node.approverKind())
                             && nodes.stream().anyMatch(n -> !ApprovalChainNode.MAIN_LINE.equals(n.lineCode())
                                     && !ApprovalChainNode.APPROVED.equals(n.status()))) {
-                        throw ApiException.conflict("DEPARTMENT_REVIEWS_PENDING", "须先完成人力、财务、法务三审，再由顶层平台最终确认");
+                        throw ApiException.conflict("DEPARTMENT_REVIEWS_PENDING", "须先完成各部门平行线审核，再由顶层平台最终确认");
                     }
                     requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
                     Instant now = Instant.now();
@@ -504,7 +503,11 @@ public class SupervisorReviewService {
 
     /** M087：复核单的审批链节点（主线 + 平行线，按线与序号）。 */
     public List<ApprovalChainNode> chain(String reviewId) {
-        return supervisorReviewRepository.listChainNodes(requireText(reviewId, "review_id"));
+        String id = requireText(reviewId, "review_id");
+        SupervisorReviewDecisionRecord record = supervisorReviewRepository.findSupervisorReviewById(id)
+                .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在"));
+        requireVisibleReview(record);
+        return supervisorReviewRepository.listChainNodes(id);
     }
 
     /**
@@ -518,8 +521,14 @@ public class SupervisorReviewService {
                 .findPendingSupervisorReviewById(id)
                 .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
         List<ApprovalChainNode> existing = supervisorReviewRepository.listChainNodes(id);
+        requireVisibleReview(pending);
         if (!existing.isEmpty()) {
             return existing;
+        }
+        SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
+        if (policy != null && !policy.parallelLineCodes().isEmpty()) {
+            throw ApiException.conflict("APPROVAL_LINE_FINAL_APPROVER_REQUIRED",
+                    "本事项含平行审批线，组织层级补齐后须重新发起并指定各线最终审批人");
         }
         String beneficiaryId = supervisorReviewRepository.findSupervisorReviewSchedule(id)
                 .map(SupervisorReviewRepository.ReviewSchedule::beneficiaryId).orElse(null);
@@ -602,7 +611,7 @@ public class SupervisorReviewService {
                 || type.contains("dividend") || type.contains("authorization")) {
             return true;
         }
-        return type.contains("grant") && amountCent != null && amountCent > 0;
+        return type.contains("grant");
     }
 
     private boolean requiresBeneficiary(String actionType) {
@@ -851,7 +860,9 @@ public class SupervisorReviewService {
     /** M007-A-02：待复核清单（审批人可见卡在哪一节点、到期与升级、转发状态）。 */
     /** M087-I5-01：按编号读取复核单（任意状态），供审批链页把授权申请类复核单的裁决汇入授权申请落地路径。 */
     public Optional<SupervisorReviewDecisionRecord> findReview(String reviewId) {
-        return supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
+        Optional<SupervisorReviewDecisionRecord> found = supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
+        found.ifPresent(this::requireVisibleReview);
+        return found;
     }
 
     /**
@@ -884,9 +895,29 @@ public class SupervisorReviewService {
             return true;
         }
         String initiator = item.decision().initiatedBy();
+        if (actor.id().equals(initiator)) {
+            return true;
+        }
         boolean sameProject = authorizationService.organizationIdOf(initiator).map(projectId::equals).orElse(false);
-        boolean sameMerchant = merchantId.isEmpty() || authorizationService.merchantIdOf(initiator).map(merchantId::equals).orElse(false);
+        Optional<String> initiatorMerchant = authorizationService.merchantIdOf(initiator);
+        boolean sameMerchant = merchantId.isEmpty()
+                ? initiatorMerchant.isEmpty()
+                : initiatorMerchant.map(merchantId::equals).orElse(false);
         return sameProject && sameMerchant;
+    }
+
+    private void requireVisibleReview(SupervisorReviewDecisionRecord record) {
+        AccessActor actor = authorizationService.currentActor();
+        if (authorizationService.isMasterAuthority(actor)) {
+            return;
+        }
+        String projectId = authorizationService.requireProjectScope(actor);
+        String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
+        SupervisorReviewRepository.PendingReview item = new SupervisorReviewRepository.PendingReview(
+                record, supervisorReviewRepository.findSupervisorReviewSchedule(record.reviewId()).orElse(null));
+        if (!visibleTo(actor, projectId, merchantId, item)) {
+            throw ApiException.forbidden("SUPERVISOR_REVIEW_SCOPE_FORBIDDEN", "看不到别的商户或别的项目的复核单");
+        }
     }
 
     /**
