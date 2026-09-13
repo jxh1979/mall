@@ -290,7 +290,7 @@ class AccessControllerTests {
 
     @Test
     void userEffectivePermissionsReturnsTargetUserSetWithUserViewPermission() throws Exception {
-        when(authorizationService.effectivePermissionsForUser("usr_target")).thenReturn(new EffectivePermissions(
+        when(service.effectivePermissionsForUser("usr_target")).thenReturn(new EffectivePermissions(
                 "usr_target",
                 List.of("amusement.project.view"),
                 List.of(),
