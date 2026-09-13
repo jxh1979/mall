@@ -3,6 +3,7 @@ package com.complex.platform.access;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.api.ApiException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -71,7 +72,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<PermissionTemplate> listTemplates(String organizationId) {
-        if (organizationId == null) return listTemplates();
+        requireProjectScopeId(organizationId);
         return jdbcTemplate.query("""
                 SELECT t.id, t.template_code, t.template_name, t.description, t.template_type, t.source_template_id,
                        t.owner_scope_type, t.owner_scope_id, t.usage_mode, t.valid_from, t.valid_to, t.single_use,
@@ -198,7 +199,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<AccessUser> listUsers(String organizationId) {
-        if (organizationId == null) return listUsers();
+        requireProjectScopeId(organizationId);
         return jdbcTemplate.query("""
                 SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
                        phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
@@ -210,8 +211,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<AccessUser> listUsersByMerchant(String merchantId) {
-        // 商户面 scoped 读通道：按 access_users.merchant_id = token scope 过滤（AC-ISO-1，§4）。
-        if (merchantId == null) return listUsers();
+        requireMerchantScopeId(merchantId);
         return jdbcTemplate.query("""
                 SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
                        phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
@@ -306,7 +306,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<RoleRecord> listRoles(String organizationId) {
-        if (organizationId == null) return listRoles();
+        requireProjectScopeId(organizationId);
         return attachPermissionCodes(jdbcTemplate.query("""
                 SELECT id, role_name, description, data_scope, status, created_at, organization_id
                   FROM roles
@@ -415,14 +415,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<PositionRoleTemplate> listPositionRoleTemplates(String organizationId) {
-        if (organizationId == null) {
-            return jdbcTemplate.query("""
-                    SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                           status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
-                      FROM position_role_templates
-                     ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
-                    """, this::mapPositionRoleTemplate);
-        }
+        requireProjectScopeId(organizationId);
         return jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
                        status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
@@ -1478,5 +1471,16 @@ class JdbcAccessRepository implements AccessRepository {
         return effect.name().toLowerCase(java.util.Locale.ROOT);
     }
 
+    private static void requireProjectScopeId(String organizationId) {
+        if (organizationId == null || organizationId.isBlank()) {
+            throw ApiException.forbidden("PROJECT_SCOPE_REQUIRED", "此操作必须在项目范围内进行");
+        }
+    }
+
+    private static void requireMerchantScopeId(String merchantId) {
+        if (merchantId == null || merchantId.isBlank()) {
+            throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
+        }
+    }
 
 }

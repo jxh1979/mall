@@ -1066,6 +1066,7 @@ class AccessServiceTests {
 
         assertThat(applied.status()).isEqualTo("applied");
         assertThat(accessRepository.temporaryGrants.values()).hasSize(1);
+        authenticateAsPlatformAdmin("org_a");
         assertThat(authorizationService.effectivePermissionsForUser("usr_temp_target").grants())
                 .doesNotContain("ops.production_readiness.check");
     }

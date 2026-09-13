@@ -156,7 +156,7 @@ public class AuthorizationService implements CallerScopeResolver {
         AccessActor actor = currentActor();
         AccessUser user = accessRepository.findUserById(userId)
                 .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在"));
-        if (!isPlatformAdmin(actor)) {
+        if (!isMasterAuthority(actor)) {
             String organizationId = requireProjectScope(actor);
             if (!organizationId.equals(user.organizationId())) {
                 throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权查询其他组织的用户");
@@ -415,15 +415,12 @@ public class AuthorizationService implements CallerScopeResolver {
 
     /**
      * Returns the merchant scope of the current caller.
-     * Platform admins get Optional.empty() (no filter, sees everything).
      * Merchant users get Optional.of(merchantId).
-     * Staff without a merchantId throw MERCHANT_SCOPE_REQUIRED.
+     * Callers without a merchantId throw MERCHANT_SCOPE_REQUIRED.
+     * 红线④：不因平台管理员身份整类关掉商户隔离；持密钥最高权限只在逐笔接口放行。
      */
     public Optional<String> currentMerchantScope() {
         AccessActor actor = currentActor();
-        if (isPlatformAdminBridge(actor)) {
-            return Optional.empty();
-        }
         String merchantId = actor.merchantId();
         if (merchantId != null && !merchantId.isBlank()) {
             return Optional.of(merchantId);
@@ -433,18 +430,13 @@ public class AuthorizationService implements CallerScopeResolver {
 
     /**
      * Returns the current caller's merchant id if present, otherwise empty.
-     * Unlike {@link #currentMerchantScope()}, this never throws: platform admins and staff
-     * without a merchant simply yield {@code Optional.empty()}. Degrades to empty on any error.
-     * Used by admission-gate fact checks that are scoped to the caller's merchant.
+     * Unlike {@link #currentMerchantScope()}, this never throws: callers without a merchant
+     * yield {@code Optional.empty()}. Degrades to empty on any error.
+     * 有商户号就按商户号过滤，不因平台管理员身份改成看全量。
      */
     public Optional<String> currentMerchantIdQuietly() {
         try {
             AccessActor actor = currentActor();
-            // 审计主线2 根因：平台管理员即便被 seed 误绑 merchant_id，也必须按平台视角看全量。
-            // 与 currentMerchantScope() 同口径先判平台管理员桥→empty，防止数据层把平台账号当商户过滤成 0。
-            if (isPlatformAdminBridge(actor)) {
-                return Optional.empty();
-            }
             String merchantId = actor.merchantId();
             if (merchantId != null && !merchantId.isBlank()) {
                 return Optional.of(merchantId);
@@ -503,15 +495,11 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     /**
-     * 项目维度只读 scope（3.2 跨项目读隔离）：平台管理员与无组织归属的全局平台员工返回 empty（全量），
-     * 带组织归属（organizationId=项目）的项目员工返回其项目 ID，仓储层据此加 project_id 谓词，
-     * 多项目下项目员工不能越读他项目的数据。与 {@link #currentMerchantScope()} 同范式，永不抛。
+     * 项目维度只读 scope：返回当前主体的项目 ID。没有项目归属则拒绝。
+     * 红线④：不因平台管理员身份返回空（全量）。
      */
     public Optional<String> currentProjectScopeQuietly() {
         AccessActor actor = currentActor();
-        if (isPlatformAdminBridge(actor)) {
-            return Optional.empty();
-        }
         return Optional.of(requireProjectScope(actor));
     }
 
