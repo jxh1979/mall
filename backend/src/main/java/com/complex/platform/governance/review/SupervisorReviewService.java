@@ -107,7 +107,7 @@ public class SupervisorReviewService {
                     List<ApprovalChainService.ParallelLine> lines = parallelLines(request.parallelLines());
                     requireDefaultLines(policy, lines);
                     long amountCent = request.amountCent() == null ? 0 : request.amountCent();
-                    boolean amountHit = amountCent >= policy.minAmountCent();
+                    boolean amountHit = amountCent >= policy.minAmountCent() || amountCent < 0;
                     boolean violationHit = textPresent(request.violationSummary());
                     boolean blocked = policy.blocksByDefault() && (amountHit || violationHit || isAlwaysBlocked(actionType));
                     String status = blocked ? "pending_review" : "allowed";
@@ -201,6 +201,9 @@ public class SupervisorReviewService {
                     String reviewerId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule =
                             supervisorReviewRepository.findSupervisorReviewSchedule(id);
+                    if (requiresBeneficiary(pending.actionType()) && schedule.map(s -> !textPresent(s.beneficiaryId())).orElse(true)) {
+                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+                    }
                     // PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」。
                     if (schedule.map(s -> reviewerId != null && reviewerId.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "直接受益人不能复核与自己相关的申请");
@@ -607,11 +610,8 @@ public class SupervisorReviewService {
 
     private boolean requiresTopAuthorityGrant(String actionType, Long amountCent) {
         String type = actionType == null ? "" : actionType;
-        if (type.endsWith(".money") || type.contains("debit") || type.contains("deduction")
-                || type.contains("dividend") || type.contains("authorization")) {
-            return true;
-        }
-        return type.contains("grant");
+        return type.endsWith(".money") || type.contains("debit") || type.contains("deduction")
+                || type.contains("dividend") || type.contains("authorization");
     }
 
     private boolean requiresBeneficiary(String actionType) {
@@ -777,6 +777,9 @@ public class SupervisorReviewService {
                             .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
                     String actorId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule = supervisorReviewRepository.findSupervisorReviewSchedule(id);
+                    if (requiresBeneficiary(pending.actionType()) && schedule.map(s -> !textPresent(s.beneficiaryId())).orElse(true)) {
+                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+                    }
                     List<ApprovalChainNode> nodes = supervisorReviewRepository.listChainNodes(id);
                     if (nodes.isEmpty()) {
                         throw ApiException.forbidden("APPROVAL_CHAIN_UNRESOLVED", "组织层级未维护，审批链未生成，无法转发");
@@ -959,6 +962,7 @@ public class SupervisorReviewService {
         return type.contains("violation") || type.equals("manual_release")
                 || type.equals("bill_waiver") || type.equals("refund") || type.equals("ar_ap_adjustment")
                 || type.equals(TAX_RULE_ADJUST_ACTION)
+                || type.contains("penalty") || type.contains("payroll")
                 || type.contains("grant") || type.contains("authorization")
                 || type.contains("debit") || type.contains("deduction")
                 || type.endsWith(".money");
