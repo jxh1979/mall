@@ -425,6 +425,7 @@ public class AccessService {
         return page(mappings);
     }
 
+    @Transactional
     public PositionRoleTemplate createPositionRoleTemplate(PositionRoleTemplateRequest request) {
         PositionRoleTemplateRequest r = requireRequest(request);
         try {
@@ -452,6 +453,7 @@ public class AccessService {
         }
     }
 
+    @Transactional
     public PositionRoleTemplate updatePositionRoleTemplate(String id, PositionRoleTemplateRequest request) {
         PositionRoleTemplateRequest r = requireRequest(request);
         try {
