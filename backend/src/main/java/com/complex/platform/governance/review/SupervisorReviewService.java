@@ -103,7 +103,7 @@ public class SupervisorReviewService {
                 request,
                 () -> {
                     String actionType = normalize(requireText(request.actionType(), "action_type"));
-                    SupervisorReviewPolicyRecord policy = findPolicy(actionType);
+                    SupervisorReviewPolicyRecord policy = resolvePolicy(actionType, request.amountCent());
                     List<ApprovalChainService.ParallelLine> lines = parallelLines(request.parallelLines());
                     requireDefaultLines(policy, lines);
                     long amountCent = request.amountCent() == null ? 0 : request.amountCent();
@@ -139,9 +139,10 @@ public class SupervisorReviewService {
                             requiredApproverRank
                     );
                     if (blocked) {
+                        String beneficiaryId = textPresent(request.beneficiaryId()) ? request.beneficiaryId().trim() : null;
+                        requireBeneficiaryIfNeeded(actionType, beneficiaryId);
                         requireDesignatedRoleHolder(policy, request.finalApproverId()); // R-003 fail-closed
                         supervisorReviewRepository.saveSupervisorReview(decision);
-                        String beneficiaryId = request.objectId();
                         scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policy.policyCode());
                         generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
                     }
@@ -381,10 +382,10 @@ public class SupervisorReviewService {
                         "SUPERVISOR_ROLE_NOT_AUTHORIZED",
                         "复核人不具备该复核要求的审批角色");
             }
-            // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（或平台管理员越权）。
+            // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（仅 USB 最高权限可逐笔越权）。
             Optional<String> initiatorMerchant = authorizationService.merchantIdOf(pending.initiatedBy());
             if (initiatorMerchant.isPresent()
-                    && !authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+                    && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
                 Optional<String> reviewerMerchant = authorizationService.merchantIdOf(reviewerId);
                 if (reviewerMerchant.isEmpty() || !reviewerMerchant.get().equals(initiatorMerchant.get())) {
                     throw ApiException.forbidden(
@@ -449,6 +450,15 @@ public class SupervisorReviewService {
             String finalApproverId
     ) {
         String initiatedBy = authorizationService.currentActor().id();
+        if (requiresTopAuthorityGrant(actionType, null)) {
+            SupervisorReviewPolicyRecord top = findPolicyByCode("permission_grant_l3");
+            if (top != null) {
+                policyCode = top.policyCode();
+                approvalLevelCode = top.approvalLevel();
+                requiredLevel = top.requiredLevel();
+            }
+        }
+        requireBeneficiaryIfNeeded(actionType, beneficiaryId);
         requireDesignatedRoleHolder(findPolicyByCode(policyCode), finalApproverId); // R-003 fail-closed
         SupervisorReviewPolicyRecord blockPolicy = findPolicyByCode(policyCode);
         if (blockPolicy != null) {
@@ -573,6 +583,39 @@ public class SupervisorReviewService {
                 .filter(policy -> policy.actionType().equals(actionType))
                 .min(Comparator.comparing(SupervisorReviewPolicyRecord::policyCode))
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REVIEW_ACTION", "无法识别的复核操作类型"));
+    }
+
+    /** 资金、分红、扣款与带金额的授出不由入口自报上一级/上两级，一律走最高权限档。 */
+    private SupervisorReviewPolicyRecord resolvePolicy(String actionType, Long amountCent) {
+        if (requiresTopAuthorityGrant(actionType, amountCent)) {
+            SupervisorReviewPolicyRecord top = findPolicyByCode("permission_grant_l3");
+            if (top != null) {
+                return top;
+            }
+        }
+        return findPolicy(actionType);
+    }
+
+    private boolean requiresTopAuthorityGrant(String actionType, Long amountCent) {
+        String type = actionType == null ? "" : actionType;
+        if (type.endsWith(".money") || type.contains("debit") || type.contains("deduction")
+                || type.contains("dividend") || type.contains("authorization")) {
+            return true;
+        }
+        return type.contains("grant") && amountCent != null && amountCent > 0;
+    }
+
+    private boolean requiresBeneficiary(String actionType) {
+        String type = actionType == null ? "" : actionType;
+        return type.contains("grant") || type.contains("authorization") || type.contains("refund")
+                || type.contains("waiver") || type.contains("debit") || type.contains("deduction")
+                || type.endsWith(".money") || type.equals("ar_ap_adjustment");
+    }
+
+    private void requireBeneficiaryIfNeeded(String actionType, String beneficiaryId) {
+        if (requiresBeneficiary(actionType) && !textPresent(beneficiaryId)) {
+            throw ApiException.badRequest("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+        }
     }
 
     /** 审批时按 policy_code 复原策略（取 specific_role 角色权限）；未知策略返回 {@code null}（按非 specific_role 处理）。 */
@@ -813,14 +856,14 @@ public class SupervisorReviewService {
 
     /**
      * M007-R6-02（PGM-1.10.1「所有业务数据默认按项目隔离……不提供关闭开关」、PGM-1.7.1「④看不到别的商户和别的项目的数据」）：
-     * 待复核清单按当前操作人范围过滤——非平台管理员只看到发起人属本项目（有商户隔离键时同商户）的单据，或自己是当前节点审批人 / 被转发人
-     * 的单据；平台管理员跨范围查看留痕。
+     * 待复核清单按当前操作人范围过滤——非密钥主体只看到发起人属本项目（有商户隔离键时同商户）的单据，或自己是当前节点审批人 / 被转发人
+     * 的单据；持密钥最高权限跨范围查看留痕（红线④逐笔开放）。
      */
     public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
         AccessActor actor = authorizationService.currentActor();
         List<SupervisorReviewRepository.PendingReview> all = supervisorReviewRepository.listPendingSupervisorReviews(limit);
         List<SupervisorReviewRepository.PendingReview> items;
-        if (authorizationService.isPlatformAdmin(actor)) {
+        if (authorizationService.isMasterAuthority(actor)) {
             items = all;
             auditEventService.recordSuccess("governance.supervisor_review.pending_listed_cross_scope", VIEW_PERMISSION, "supervisor_review", "pending", null, null,
                     Map.of("actor_id", actor.id(), "count", items.size()));
