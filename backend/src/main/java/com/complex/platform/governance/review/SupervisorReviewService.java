@@ -597,8 +597,18 @@ public class SupervisorReviewService {
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REVIEW_ACTION", "无法识别的复核操作类型"));
     }
 
-    /** 资金、分红、扣款与带金额的授出不由入口自报上一级/上两级，一律走最高权限档。 */
+    /** 评估入口不得自报授出档位；带平行线的事项不得被名称改写成无平行线的最高权限档。 */
     private SupervisorReviewPolicyRecord resolvePolicy(String actionType, Long amountCent) {
+        if ("permission_grant_l1".equals(actionType) || "permission_grant_l2".equals(actionType)) {
+            throw ApiException.badRequest("GRANT_LEVEL_NOT_SELECTABLE", "授出档位不由入口自报，资金分红须最高权限，其它授出由准入闸按事项落档");
+        }
+        SupervisorReviewPolicyRecord original = policies.stream()
+                .filter(policy -> policy.actionType().equals(actionType))
+                .min(Comparator.comparing(SupervisorReviewPolicyRecord::policyCode))
+                .orElse(null);
+        if (original != null && !original.parallelLineCodes().isEmpty()) {
+            return original;
+        }
         if (requiresTopAuthorityGrant(actionType, amountCent)) {
             SupervisorReviewPolicyRecord top = findPolicyByCode("permission_grant_l3");
             if (top != null) {
