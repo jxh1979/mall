@@ -16,8 +16,25 @@ public record SupervisorReviewEvaluateRequest(
         Long amountCent,
         String violationSummary,
         String finalApproverId,
-        List<ParallelLine> parallelLines
+        List<ParallelLine> parallelLines,
+        String beneficiaryId
 ) {
+    public SupervisorReviewEvaluateRequest(
+            String idempotencyKey,
+            String operatorNote,
+            List<String> evidenceAttachmentIds,
+            String actionType,
+            String objectType,
+            String objectId,
+            Long amountCent,
+            String violationSummary,
+            String finalApproverId,
+            List<ParallelLine> parallelLines
+    ) {
+        this(idempotencyKey, operatorNote, evidenceAttachmentIds, actionType, objectType, objectId,
+                amountCent, violationSummary, finalApproverId, parallelLines, null);
+    }
+
     /** 平行线：line_code 对应 approval_lines 设置；finalApproverId 为该线最终审批人。 */
     public record ParallelLine(String lineCode, String finalApproverId) {
     }

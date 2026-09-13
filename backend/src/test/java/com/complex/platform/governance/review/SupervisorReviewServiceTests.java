@@ -150,7 +150,7 @@ class SupervisorReviewServiceTests {
                 "review-approve-2", "approve", List.of("att_3"), 3, "approved", "final"));
         assertThat(decision.reviewId()).isEqualTo(pending.reviewId());
         assertThat(decision.reviewStatus()).isEqualTo("approved");
-        assertThat(decision.reviewerLevel()).isEqualTo(10); // 从安全上下文取（usr_reviewer_c rank 30 → 主管级 10），不是请求体的 3
+        assertThat(decision.reviewerLevel()).isEqualTo(2); // M032：非密钥主体主管级封顶上两级；usr_reviewer_c rank 30 → 2，不是请求体的 3
         assertThat(decision.evidenceAttachmentIds()).containsExactly("att_3");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
@@ -233,7 +233,7 @@ class SupervisorReviewServiceTests {
         reviewRepository.superiors.put("usr_supervisor_l2", "usr_reviewer_b"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisorLevel(2);
         var pending = service.evaluate(evaluate("review-evaluate-refund", "refund needs review", List.of("att_refund"),
-                "refund", "ticket_refund", "refund_1", 100L, null));
+                "refund", "ticket_refund", "refund_1", 100L, null, "usr_payee"));
 
         // R-003：specific_role 策略 = 直接上级节点 + 链尾按角色解析的节点；主管级别闸沿用于角色节点。
         TestSecurityActors.asSupervisor("usr_reviewer_b", 2);
@@ -342,7 +342,7 @@ class SupervisorReviewServiceTests {
 
         reviewRepository.superiors.put("usr_init_sr", "usr_sr_sup"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_init_sr", 2);
-        var pending = svc.evaluate(evaluate("review-sr", null, List.of("att"), "refund", "ticket", "r1", 100L, null));
+        var pending = svc.evaluate(evaluate("review-sr", null, List.of("att"), "refund", "ticket", "r1", 100L, null, "usr_payee"));
         assertThat(pending.requiredApproverRank()).isNull(); // specific_role 不按 rank
         assertThat(reviewRepository.listChainNodes(pending.reviewId())).extracting(ApprovalChainNode::approverKind).containsExactly("user", "role");
         TestSecurityActors.asSupervisor("usr_sr_sup", 2);
@@ -379,7 +379,7 @@ class SupervisorReviewServiceTests {
         reviewRepository.superiors.put("usr_rf_boss", "usr_rf_norole");
 
         TestSecurityActors.asSupervisor("usr_rf_init", 2);
-        var undesignated = svc.evaluate(evaluate("review-rf-1", null, List.of("att"), "refund", "ticket", "rf_1", 100L, null));
+        var undesignated = svc.evaluate(evaluate("review-rf-1", null, List.of("att"), "refund", "ticket", "rf_1", 100L, null, "usr_payee"));
         assertThat(reviewRepository.listChainNodes(undesignated.reviewId()))
                 .extracting(ApprovalChainNode::approverKind, ApprovalChainNode::approverId)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("user", "usr_rf_sup"), org.assertj.core.groups.Tuple.tuple("user", "usr_rf_boss"),
@@ -398,17 +398,15 @@ class SupervisorReviewServiceTests {
                 "review-rf-1-role", "n", List.of("att"), 3, "approved", "role")).reviewStatus()).isEqualTo("approved");
 
         TestSecurityActors.asSupervisor("usr_rf_init", 2);
-        var designated = svc.evaluate(new SupervisorReviewEvaluateRequest("review-rf-2", null, List.of("att"),
-                "refund", "ticket", "rf_2", 100L, null, "usr_rf_boss", List.of()));
+        var designated = svc.evaluate(new SupervisorReviewEvaluateRequest("review-rf-2", null, List.of("att"), "refund", "ticket", "rf_2", 100L, null, "usr_rf_boss", List.of(), "usr_payee"));
         assertThat(reviewRepository.listChainNodes(designated.reviewId())).extracting(ApprovalChainNode::approverId)
                 .containsExactly("usr_rf_sup", "usr_rf_boss"); // 指定最终审批人：补全到该人，无独立角色节点
-        assertThatThrownBy(() -> svc.evaluate(new SupervisorReviewEvaluateRequest("review-rf-3", null, List.of("att"),
-                "refund", "ticket", "rf_3", 100L, null, "usr_rf_norole", List.of())))
+        assertThatThrownBy(() -> svc.evaluate(new SupervisorReviewEvaluateRequest("review-rf-3", null, List.of("att"), "refund", "ticket", "rf_3", 100L, null, "usr_rf_norole", List.of(), "usr_payee")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FINAL_APPROVER_LACKS_ROLE"));
 
         reviewRepository.superiors.clear();
         TestSecurityActors.asSupervisor("usr_rf_orphan", 2);
-        var orphan = svc.evaluate(evaluate("review-rf-4", null, List.of("att"), "refund", "ticket", "rf_4", 100L, null));
+        var orphan = svc.evaluate(evaluate("review-rf-4", null, List.of("att"), "refund", "ticket", "rf_4", 100L, null, "usr_payee"));
         assertThat(reviewRepository.listChainNodes(orphan.reviewId())).isEmpty(); // 无组织层级：链不生成（fail-closed）
     }
 
@@ -438,6 +436,12 @@ class SupervisorReviewServiceTests {
         TestSecurityActors.asSupervisor("usr_sup_b", 1); // org_1 账号，但是 b 单当前节点审批人：可见
         assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactlyInAnyOrder(a.reviewId(), b.reviewId());
         TestSecurityActors.asPlatformAdmin("usr_admin_all");
+        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactly(a.reviewId());
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                        "token", List.of()));
         assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactlyInAnyOrder(a.reviewId(), b.reviewId());
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.pending_listed_cross_scope");
     }
@@ -590,7 +594,14 @@ class SupervisorReviewServiceTests {
 
     private static SupervisorReviewEvaluateRequest evaluate(String key, String note, List<String> attachments, String actionType,
                                                             String objectType, String objectId, Long amountCent, String violation) {
-        return new SupervisorReviewEvaluateRequest(key, note, attachments, actionType, objectType, objectId, amountCent, violation, null, List.of());
+        return evaluate(key, note, attachments, actionType, objectType, objectId, amountCent, violation, null);
+    }
+
+    private static SupervisorReviewEvaluateRequest evaluate(String key, String note, List<String> attachments, String actionType,
+                                                            String objectType, String objectId, Long amountCent, String violation,
+                                                            String beneficiaryId) {
+        return new SupervisorReviewEvaluateRequest(key, note, attachments, actionType, objectType, objectId, amountCent, violation,
+                null, List.of(), beneficiaryId);
     }
 
     private static int rankFromCurrentActor(String userId) {
@@ -633,7 +644,7 @@ class SupervisorReviewServiceTests {
     void approvedReviewIsConsumedForReleaseExactlyOnce() {
         reviewRepository.superiors.put("usr_waiver_init", "usr_reviewer_c"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_waiver_init", 1);
-        var pending = service.evaluate(evaluate("review-release-eval", "waiver", List.of("att"), "bill_waiver", "bill", "bill_release", 0L, null));
+        var pending = service.evaluate(evaluate("review-release-eval", "waiver", List.of("att"), "bill_waiver", "bill", "bill_release", 0L, null, "usr_payee"));
         assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
 
         TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
@@ -768,6 +779,13 @@ class SupervisorReviewServiceTests {
         TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
         service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("esc-approve-node1", "note", List.of("att"), 3, "approved", "ok"));
         assertThat(service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("esc-approve-node2", "note", List.of("att"), 3, "approved", "ok"))
+                .reviewStatus()).isEqualTo("pending_review");
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                        "token", List.of()));
+        assertThat(service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("esc-approve-master", "note", List.of("att"), 3, "approved", "ok"))
                 .reviewStatus()).isEqualTo("approved");
     }
 
@@ -850,14 +868,18 @@ class SupervisorReviewServiceTests {
     void deadlineIsShorterForMoneyActions() {
         TestSecurityActors.asSupervisorLevel(1);
         var money = service.blockForAdmission("bar_bill_waiver_block", "bar.bill_waiver", "bar_bill", "b_money",
-                "one_level_up", 2, null);
+                "one_level_up", 2, "usr_bar_payee");
         var normal = service.blockForAdmission("amusement_reopen_block", "amusement.reopen", "amusement", "a_normal",
                 "two_levels_up", 3, null);
         var moneyDue = reviewRepository.schedules.get(money.reviewId()).dueAt();
         var normalDue = reviewRepository.schedules.get(normal.reviewId()).dueAt();
         assertThat(moneyDue).isAfter(java.time.Instant.now());
         assertThat(normalDue).isAfter(moneyDue);
-        TestSecurityActors.asPlatformAdmin("usr_admin_deadline"); // M007-R6-02：清单按范围过滤，本用例只看时限，以平台管理员查看全量
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                        "token", List.of())); // 红线④：只有密钥主体可整批看待审
         assertThat(service.listPending(10).items()).extracting(item -> item.decision().reviewId())
                 .contains(money.reviewId(), normal.reviewId());
     }
@@ -902,7 +924,7 @@ class SupervisorReviewServiceTests {
     // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：金额 0、无违规说明的免单也必须进复核。
     void evaluateBlocksBillWaiverEvenAtZeroAmount() {
         TestSecurityActors.asSupervisorLevel(1);
-        var decision = service.evaluate(evaluate("review-autopass-1", null, List.of(), "bill_waiver", "bill", "bill_autopass", 0L, null));
+        var decision = service.evaluate(evaluate("review-autopass-1", null, List.of(), "bill_waiver", "bill", "bill_autopass", 0L, null, "usr_payee"));
 
         assertThat(decision.blocked()).isTrue();
         assertThat(decision.reviewStatus()).isEqualTo("pending_review");
@@ -923,7 +945,7 @@ class SupervisorReviewServiceTests {
     @Test
     void evaluateReturnsReviewRequiredWhenPolicyMatches() {
         TestSecurityActors.asSupervisorLevel(1);
-        var decision = service.evaluate(evaluate("review-match-1", null, List.of("att_match"), "bill_waiver", "bill", "bill_match", 500L, null));
+        var decision = service.evaluate(evaluate("review-match-1", null, List.of("att_match"), "bill_waiver", "bill", "bill_match", 500L, null, "usr_payee"));
 
         assertThat(decision.blocked()).isTrue();
         assertThat(decision.reviewStatus()).isEqualTo("pending_review");

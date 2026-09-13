@@ -103,11 +103,11 @@ public class SupervisorReviewService {
                 request,
                 () -> {
                     String actionType = normalize(requireText(request.actionType(), "action_type"));
-                    SupervisorReviewPolicyRecord policy = findPolicy(actionType);
+                    SupervisorReviewPolicyRecord policy = resolvePolicy(actionType, request.amountCent());
                     List<ApprovalChainService.ParallelLine> lines = parallelLines(request.parallelLines());
                     requireDefaultLines(policy, lines);
                     long amountCent = request.amountCent() == null ? 0 : request.amountCent();
-                    boolean amountHit = amountCent >= policy.minAmountCent();
+                    boolean amountHit = amountCent >= policy.minAmountCent() || amountCent < 0;
                     boolean violationHit = textPresent(request.violationSummary());
                     boolean blocked = policy.blocksByDefault() && (amountHit || violationHit || isAlwaysBlocked(actionType));
                     String status = blocked ? "pending_review" : "allowed";
@@ -139,10 +139,12 @@ public class SupervisorReviewService {
                             requiredApproverRank
                     );
                     if (blocked) {
+                        String beneficiaryId = textPresent(request.beneficiaryId()) ? request.beneficiaryId().trim() : null;
+                        requireBeneficiaryIfNeeded(actionType, beneficiaryId);
                         requireDesignatedRoleHolder(policy, request.finalApproverId()); // R-003 fail-closed
                         supervisorReviewRepository.saveSupervisorReview(decision);
-                        scheduleDeadline(decision.reviewId(), null, actionType, policy.policyCode());
-                        generateChain(decision.reviewId(), initiatedBy, null, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
+                        scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policy.policyCode());
+                        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.evaluated",
@@ -199,6 +201,9 @@ public class SupervisorReviewService {
                     String reviewerId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule =
                             supervisorReviewRepository.findSupervisorReviewSchedule(id);
+                    if (requiresBeneficiary(pending.actionType()) && schedule.map(s -> !textPresent(s.beneficiaryId())).orElse(true)) {
+                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+                    }
                     // PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」。
                     if (schedule.map(s -> reviewerId != null && reviewerId.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "直接受益人不能复核与自己相关的申请");
@@ -213,11 +218,10 @@ public class SupervisorReviewService {
                                 "组织层级未维护，审批链未生成；请平台管理员维护发起人的直接上级后重新生成审批链");
                     }
                     ApprovalChainNode node = resolveDecidableNode(pending, nodes, reviewerId, reviewerLevel);
-                    if ("staff.payroll.penalty_cap.adjust".equals(pending.actionType())
-                            && ApprovalChainNode.KIND_MASTER.equals(node.approverKind())
+                    if (ApprovalChainNode.KIND_MASTER.equals(node.approverKind())
                             && nodes.stream().anyMatch(n -> !ApprovalChainNode.MAIN_LINE.equals(n.lineCode())
                                     && !ApprovalChainNode.APPROVED.equals(n.status()))) {
-                        throw ApiException.conflict("DEPARTMENT_REVIEWS_PENDING", "须先完成人力、财务、法务三审，再由顶层平台最终确认");
+                        throw ApiException.conflict("DEPARTMENT_REVIEWS_PENDING", "须先完成各部门平行线审核，再由顶层平台最终确认");
                     }
                     requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
                     Instant now = Instant.now();
@@ -366,7 +370,7 @@ public class SupervisorReviewService {
 
     /** specific_role 节点：沿用 M007 的主管级别闸、角色闸与同商户范围闸（不满足即抛原错误码）。 */
     private void requireRoleNodeGates(SupervisorReviewDecisionRecord pending, String reviewerId, int reviewerLevel) {
-        if (reviewerLevel < pending.requiredLevel()) {
+        if (reviewerLevel < roleNodeLevelGate(pending.requiredLevel())) {
             throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
         }
         // 双轨收口的角色闸/范围闸仅在可解析角色与隔离键时强制；不可解析时回退既有 level 闸（向后兼容）。
@@ -380,10 +384,10 @@ public class SupervisorReviewService {
                         "SUPERVISOR_ROLE_NOT_AUTHORIZED",
                         "复核人不具备该复核要求的审批角色");
             }
-            // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（或平台管理员越权）。
+            // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（仅 USB 最高权限可逐笔越权）。
             Optional<String> initiatorMerchant = authorizationService.merchantIdOf(pending.initiatedBy());
             if (initiatorMerchant.isPresent()
-                    && !authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+                    && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
                 Optional<String> reviewerMerchant = authorizationService.merchantIdOf(reviewerId);
                 if (reviewerMerchant.isEmpty() || !reviewerMerchant.get().equals(initiatorMerchant.get())) {
                     throw ApiException.forbidden(
@@ -448,6 +452,15 @@ public class SupervisorReviewService {
             String finalApproverId
     ) {
         String initiatedBy = authorizationService.currentActor().id();
+        if (requiresTopAuthorityGrant(actionType, null)) {
+            SupervisorReviewPolicyRecord top = findPolicyByCode("permission_grant_l3");
+            if (top != null) {
+                policyCode = top.policyCode();
+                approvalLevelCode = top.approvalLevel();
+                requiredLevel = top.requiredLevel();
+            }
+        }
+        requireBeneficiaryIfNeeded(actionType, beneficiaryId);
         requireDesignatedRoleHolder(findPolicyByCode(policyCode), finalApproverId); // R-003 fail-closed
         SupervisorReviewPolicyRecord blockPolicy = findPolicyByCode(policyCode);
         if (blockPolicy != null) {
@@ -493,7 +506,11 @@ public class SupervisorReviewService {
 
     /** M087：复核单的审批链节点（主线 + 平行线，按线与序号）。 */
     public List<ApprovalChainNode> chain(String reviewId) {
-        return supervisorReviewRepository.listChainNodes(requireText(reviewId, "review_id"));
+        String id = requireText(reviewId, "review_id");
+        SupervisorReviewDecisionRecord record = supervisorReviewRepository.findSupervisorReviewById(id)
+                .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在"));
+        requireVisibleReview(record);
+        return supervisorReviewRepository.listChainNodes(id);
     }
 
     /**
@@ -507,8 +524,14 @@ public class SupervisorReviewService {
                 .findPendingSupervisorReviewById(id)
                 .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
         List<ApprovalChainNode> existing = supervisorReviewRepository.listChainNodes(id);
+        requireVisibleReview(pending);
         if (!existing.isEmpty()) {
             return existing;
+        }
+        SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
+        if (policy != null && !policy.parallelLineCodes().isEmpty()) {
+            throw ApiException.conflict("APPROVAL_LINE_FINAL_APPROVER_REQUIRED",
+                    "本事项含平行审批线，组织层级补齐后须重新发起并指定各线最终审批人");
         }
         String beneficiaryId = supervisorReviewRepository.findSupervisorReviewSchedule(id)
                 .map(SupervisorReviewRepository.ReviewSchedule::beneficiaryId).orElse(null);
@@ -572,6 +595,46 @@ public class SupervisorReviewService {
                 .filter(policy -> policy.actionType().equals(actionType))
                 .min(Comparator.comparing(SupervisorReviewPolicyRecord::policyCode))
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REVIEW_ACTION", "无法识别的复核操作类型"));
+    }
+
+    /** 评估入口不得自报授出档位；带平行线的事项不得被名称改写成无平行线的最高权限档。 */
+    private SupervisorReviewPolicyRecord resolvePolicy(String actionType, Long amountCent) {
+        if ("permission_grant_l1".equals(actionType) || "permission_grant_l2".equals(actionType)) {
+            throw ApiException.badRequest("GRANT_LEVEL_NOT_SELECTABLE", "授出档位不由入口自报，资金分红须最高权限，其它授出由准入闸按事项落档");
+        }
+        SupervisorReviewPolicyRecord original = policies.stream()
+                .filter(policy -> policy.actionType().equals(actionType))
+                .min(Comparator.comparing(SupervisorReviewPolicyRecord::policyCode))
+                .orElse(null);
+        if (original != null && !original.parallelLineCodes().isEmpty()) {
+            return original;
+        }
+        if (requiresTopAuthorityGrant(actionType, amountCent)) {
+            SupervisorReviewPolicyRecord top = findPolicyByCode("permission_grant_l3");
+            if (top != null) {
+                return top;
+            }
+        }
+        return findPolicy(actionType);
+    }
+
+    private boolean requiresTopAuthorityGrant(String actionType, Long amountCent) {
+        String type = actionType == null ? "" : actionType;
+        return type.endsWith(".money") || type.contains("debit") || type.contains("deduction")
+                || type.contains("dividend") || type.contains("authorization");
+    }
+
+    private boolean requiresBeneficiary(String actionType) {
+        String type = actionType == null ? "" : actionType;
+        return type.contains("grant") || type.contains("authorization") || type.contains("refund")
+                || type.contains("waiver") || type.contains("debit") || type.contains("deduction")
+                || type.endsWith(".money") || type.equals("ar_ap_adjustment");
+    }
+
+    private void requireBeneficiaryIfNeeded(String actionType, String beneficiaryId) {
+        if (requiresBeneficiary(actionType) && !textPresent(beneficiaryId)) {
+            throw ApiException.badRequest("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+        }
     }
 
     /** 审批时按 policy_code 复原策略（取 specific_role 角色权限）；未知策略返回 {@code null}（按非 specific_role 处理）。 */
@@ -724,6 +787,9 @@ public class SupervisorReviewService {
                             .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
                     String actorId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule = supervisorReviewRepository.findSupervisorReviewSchedule(id);
+                    if (requiresBeneficiary(pending.actionType()) && schedule.map(s -> !textPresent(s.beneficiaryId())).orElse(true)) {
+                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+                    }
                     List<ApprovalChainNode> nodes = supervisorReviewRepository.listChainNodes(id);
                     if (nodes.isEmpty()) {
                         throw ApiException.forbidden("APPROVAL_CHAIN_UNRESOLVED", "组织层级未维护，审批链未生成，无法转发");
@@ -733,6 +799,12 @@ public class SupervisorReviewService {
                     if (target.equals(pending.initiatedBy())
                             || schedule.map(s -> target.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_FORWARD_TARGET_FORBIDDEN", "不得转发给申请人本人或直接受益人");
+                    }
+                    if (ApprovalChainNode.KIND_ROLE.equals(node.approverKind())
+                            && node.approverId() != null && !node.approverId().isBlank()
+                            && !authorizationService.holdsPermissionViaRole(target, node.approverId())
+                            && !authorizationService.holdsPermissionViaRole(target, APPROVE_PERMISSION)) {
+                        throw ApiException.forbidden("SUPERVISOR_ROLE_REQUIRED", "职级不能替代该事项的审批权限点");
                     }
                     Instant now = Instant.now();
                     if (!supervisorReviewRepository.updateChainNode(node.withForward(target, actorId))) {
@@ -777,8 +849,14 @@ public class SupervisorReviewService {
                     if (actorId != null && actorId.equals(node.forwardedTo())) {
                         return node;
                     }
-                    if (authorizationService.currentSupervisorLevel() < pending.requiredLevel()) {
+                    if (authorizationService.currentSupervisorLevel() < roleNodeLevelGate(pending.requiredLevel())) {
                         throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
+                    }
+                    String roleKey = node.approverId();
+                    if (roleKey != null && !roleKey.isBlank()
+                            && !authorizationService.holdsPermissionViaRole(actorId, roleKey)
+                            && !authorizationService.holdsPermissionViaRole(actorId, APPROVE_PERMISSION)) {
+                        throw ApiException.forbidden("SUPERVISOR_ROLE_REQUIRED", "职级不能替代该事项的审批权限点");
                     }
                     return node;
                 }
@@ -795,19 +873,21 @@ public class SupervisorReviewService {
     /** M007-A-02：待复核清单（审批人可见卡在哪一节点、到期与升级、转发状态）。 */
     /** M087-I5-01：按编号读取复核单（任意状态），供审批链页把授权申请类复核单的裁决汇入授权申请落地路径。 */
     public Optional<SupervisorReviewDecisionRecord> findReview(String reviewId) {
-        return supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
+        Optional<SupervisorReviewDecisionRecord> found = supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
+        found.ifPresent(this::requireVisibleReview);
+        return found;
     }
 
     /**
      * M007-R6-02（PGM-1.10.1「所有业务数据默认按项目隔离……不提供关闭开关」、PGM-1.7.1「④看不到别的商户和别的项目的数据」）：
-     * 待复核清单按当前操作人范围过滤——非平台管理员只看到发起人属本项目（有商户隔离键时同商户）的单据，或自己是当前节点审批人 / 被转发人
-     * 的单据；平台管理员跨范围查看留痕。
+     * 待复核清单按当前操作人范围过滤——非密钥主体只看到发起人属本项目（有商户隔离键时同商户）的单据，或自己是当前节点审批人 / 被转发人
+     * 的单据；持密钥最高权限跨范围查看留痕（红线④逐笔开放）。
      */
     public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
         AccessActor actor = authorizationService.currentActor();
         List<SupervisorReviewRepository.PendingReview> all = supervisorReviewRepository.listPendingSupervisorReviews(limit);
         List<SupervisorReviewRepository.PendingReview> items;
-        if (authorizationService.isPlatformAdmin(actor)) {
+        if (authorizationService.isMasterAuthority(actor)) {
             items = all;
             auditEventService.recordSuccess("governance.supervisor_review.pending_listed_cross_scope", VIEW_PERMISSION, "supervisor_review", "pending", null, null,
                     Map.of("actor_id", actor.id(), "count", items.size()));
@@ -828,9 +908,29 @@ public class SupervisorReviewService {
             return true;
         }
         String initiator = item.decision().initiatedBy();
+        if (actor.id().equals(initiator)) {
+            return true;
+        }
         boolean sameProject = authorizationService.organizationIdOf(initiator).map(projectId::equals).orElse(false);
-        boolean sameMerchant = merchantId.isEmpty() || authorizationService.merchantIdOf(initiator).map(merchantId::equals).orElse(false);
+        Optional<String> initiatorMerchant = authorizationService.merchantIdOf(initiator);
+        boolean sameMerchant = merchantId.isEmpty()
+                ? initiatorMerchant.isEmpty()
+                : initiatorMerchant.map(merchantId::equals).orElse(false);
         return sameProject && sameMerchant;
+    }
+
+    private void requireVisibleReview(SupervisorReviewDecisionRecord record) {
+        AccessActor actor = authorizationService.currentActor();
+        if (authorizationService.isMasterAuthority(actor)) {
+            return;
+        }
+        String projectId = authorizationService.requireProjectScope(actor);
+        String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
+        SupervisorReviewRepository.PendingReview item = new SupervisorReviewRepository.PendingReview(
+                record, supervisorReviewRepository.findSupervisorReviewSchedule(record.reviewId()).orElse(null));
+        if (!visibleTo(actor, projectId, merchantId, item)) {
+            throw ApiException.forbidden("SUPERVISOR_REVIEW_SCOPE_FORBIDDEN", "看不到别的商户或别的项目的复核单");
+        }
     }
 
     /**
@@ -858,12 +958,24 @@ public class SupervisorReviewService {
         return released;
     }
 
+    /**
+     * 角色节点的职级闸最高按上两级。第 3 级只给 USB 主会话（M032），角色事项用角色权限点而不是密钥身份。
+     */
+    private static int roleNodeLevelGate(int requiredLevel) {
+        return Math.min(Math.max(requiredLevel, 0), 2);
+    }
+
     // M007-F-07（PGM-1.16.2 常见复核：免单、退款、调账不设金额豁免）：三类与违规、人工放行一样恒进复核；
     // M087-A-03：税费规则与税费调整恒进三审 + 老板确认链。
     private boolean isAlwaysBlocked(String actionType) {
-        return actionType.contains("violation") || actionType.equals("manual_release")
-                || actionType.equals("bill_waiver") || actionType.equals("refund") || actionType.equals("ar_ap_adjustment")
-                || actionType.equals(TAX_RULE_ADJUST_ACTION);
+        String type = actionType == null ? "" : actionType;
+        return type.contains("violation") || type.equals("manual_release")
+                || type.equals("bill_waiver") || type.equals("refund") || type.equals("ar_ap_adjustment")
+                || type.equals(TAX_RULE_ADJUST_ACTION)
+                || type.contains("penalty") || type.contains("payroll")
+                || type.contains("grant") || type.contains("authorization")
+                || type.contains("debit") || type.contains("deduction")
+                || type.endsWith(".money");
     }
 
     // M007-F-09（PGM-1.16「谁发起、为什么、谁审批、结果是什么，都要能查到」）：按策略声明的证据类型 fail-closed。
