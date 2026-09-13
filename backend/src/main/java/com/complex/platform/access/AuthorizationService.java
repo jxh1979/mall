@@ -314,7 +314,9 @@ public class AuthorizationService implements CallerScopeResolver {
             return 0;
         }
         int rank = currentActorLevelRank();
-        return rank > 0 ? (rank + 2) / 3 : 0;
+        int derived = rank > 0 ? (rank + 2) / 3 : 0;
+        // 最高权限（第 3 级）只给持密钥主体；职级只映射到上一级/上两级。
+        return Math.min(derived, 2);
     }
 
     /**

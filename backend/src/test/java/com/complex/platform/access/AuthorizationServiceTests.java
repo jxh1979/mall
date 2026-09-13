@@ -235,6 +235,13 @@ class AuthorizationServiceTests {
     }
 
     @Test
+    void currentSupervisorLevelIsThreeOnlyForMasterAuthority() {
+        authenticateActor(new AccessActor(
+                "usr_master_authority", "master-authority", "platform_admin", "org", "merchant", "active"));
+        assertThat(service.currentSupervisorLevel()).isEqualTo(3);
+    }
+
+    @Test
     void currentMerchantIdQuietlyReturnsMerchantIdForRealMerchantUser() {
         // 真实商户账号（非 platform_admin）仍按 merchant_id 隔离——保证修复不放开商户隔离。
         authenticate("usr_staff", "ordinary-staff", "staff");
