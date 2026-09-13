@@ -425,6 +425,34 @@ class AccessServiceTests {
     }
 
     @Test
+    void effectivePermissionsForUserRejectsCrossOrganization() {
+        accessRepository.users.put("usr_org_b", new AccessUser(
+                "usr_org_b", "org-b-user", "staff", "org_b", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_org_a", "org-a-user", "org_a");
+        assertThatThrownBy(() -> service.effectivePermissionsForUser("usr_org_b"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN");
+                });
+    }
+
+    @Test
+    void changeUserScopeRejectsTargetOutsideActorProject() {
+        accessRepository.users.put("usr_org_a", new AccessUser(
+                "usr_org_a", "org-a-user", "staff", "org_a", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_org_a", "org-a-user", "org_a");
+        assertThatThrownBy(() -> service.changeUserScope("usr_org_a", new UserScopeChangeRequest(
+                "scope-cross-target", null, "org_b", null, "ops_clerk", "lvl_m1_lower",
+                null, null, null, "move", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN");
+                });
+    }
+
+    @Test
     void listStaffLevelsReturnsSeededLevels() {
         assertThat(service.listStaffLevels().items())
                 .extracting(StaffLevelRecord::id)
