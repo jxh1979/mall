@@ -303,6 +303,12 @@ class ProductionAuthJdbcIntegrationTests {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.detail_code").value("MASTER_SESSION_REFRESH_FORBIDDEN"));
 
+        productionAuthService.revokeOutstandingMasterSessions();
+        int statusAfterRevoke = mockMvc.perform(get("/api/v1/ops/production-readiness/items")
+                        .cookie(new jakarta.servlet.http.Cookie("admin_access_token", accessToken)))
+                .andReturn().getResponse().getStatus();
+        assertThat(statusAfterRevoke).isIn(401, 403);
+
         mockMvc.perform(post("/api/v1/auth/master/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
