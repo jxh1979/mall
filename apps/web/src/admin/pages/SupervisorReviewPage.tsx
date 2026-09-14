@@ -79,6 +79,12 @@ function reviewIdFrom(result: unknown) {
   return "";
 }
 
+function sameAccount(candidate: string, actor?: { id?: string; username?: string } | null) {
+  const value = candidate.trim();
+  if (!value || !actor) return false;
+  return Boolean(actor.id && value === actor.id) || Boolean(actor.username && value === actor.username);
+}
+
 const SUPERVISOR_REVIEW_PERMISSION = "governance.supervisor_review.manage";
 // M007-F-08（PGM-1.10 一个单一功能一个权限点）：评估用 manage，审批用 approve，与后端端点门禁一致。
 const SUPERVISOR_APPROVE_PERMISSION = "governance.supervisor_review.approve";
@@ -191,7 +197,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     }
     const finalApprover = finalApproverId.trim();
     const beneficiary = beneficiaryId.trim();
-    if (user?.id && finalApprover && finalApprover === user.id) {
+    if (finalApprover && sameAccount(finalApprover, user)) {
       setFormError("不能指定申请人为最终审批人");
       return;
     }
@@ -257,12 +263,16 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
       return false;
     }
     const pending = selectedPending(latestReviewId);
+    if (pending && !pending.decision.initiatedBy) {
+      setFormError("申请人未登记，不能放行或驳回");
+      return false;
+    }
     const initiator = pending?.decision.initiatedBy ?? user?.id;
-    if (user?.id && initiator && user.id === initiator) {
+    if (initiator && sameAccount(initiator, user)) {
       setFormError("不能复核自己发起的单");
       return false;
     }
-    if (user?.id && pending?.schedule?.beneficiaryId && user.id === pending.schedule.beneficiaryId) {
+    if (pending?.schedule?.beneficiaryId && sameAccount(pending.schedule.beneficiaryId, user)) {
       setFormError("直接受益人不能复核与自己相关的申请");
       return false;
     }

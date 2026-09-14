@@ -178,6 +178,17 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
   });
 
+  it("最终审批人填登录名也按申请人拦住", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "admin" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定申请人为最终审批人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
   it("最终审批人不能是直接受益人", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
@@ -188,6 +199,18 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定直接受益人为最终审批人");
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
+  it("待审行没有申请人 → 不能放行或驳回", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p3")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p3"));
+    fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "同意放行" } });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("supervisor-review-approve"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("申请人未登记，不能放行或驳回");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/approve"))).toBe(false);
   });
 
   it("待审动作对不上策略 → 不能放行", async () => {
