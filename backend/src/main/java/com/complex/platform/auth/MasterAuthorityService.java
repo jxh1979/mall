@@ -145,7 +145,7 @@ public class MasterAuthorityService {
             fail("MASTER_SIGNATURE_INVALID", "master signature verification failed");
             throw ApiException.unauthorized("MASTER_SIGNATURE_INVALID", "主授权签名校验未通过");
         }
-        AuthService.LoginResponse response = sessionIssuer.issueMasterSession();
+        AuthService.LoginResponse response = sessionIssuer.issueMasterSession("usb-master:" + sourceOf(sourceKey));
         windows.remove(sourceOf(sourceKey));
         auditEventService.recordSuccess("auth.master.login_succeeded", "auth.master", "auth-session",
                 SessionIssuer.MASTER_USER_ID, null, null,

@@ -29,8 +29,8 @@ class MasterAuthorityServiceTests {
     });
     private final AuthService.LoginResponse stubResponse = new AuthService.LoginResponse(
             "acc", "ref", "sess-1", "Bearer",
-            new AuthService.ApiUser("usr_master_authority", "master-authority", "platform_admin", "platform-company", null));
-    private final SessionIssuer issuer = () -> stubResponse;
+            new AuthService.ApiUser("usr_master_authority", "master-authority", SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null));
+    private final SessionIssuer issuer = deviceId -> stubResponse;
     private final KeyPair keyPair = generateKeyPair();
 
     private MasterAuthorityService service(Duration ttl, String pubKeyBase64) {
@@ -85,7 +85,7 @@ class MasterAuthorityServiceTests {
         String challenge = svc.issueChallenge("t");
         AuthService.LoginResponse resp = svc.login(challenge, sign(keyPair, challenge), "t");
         assertThat(resp.sessionId()).isEqualTo("sess-1");
-        assertThat(resp.user().accountType()).isEqualTo("platform_admin");
+        assertThat(resp.user().accountType()).isEqualTo(SessionIssuer.MASTER_ACCOUNT_TYPE);
     }
 
     @Test
