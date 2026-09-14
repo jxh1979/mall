@@ -222,6 +222,16 @@ class AuthServiceTests {
     }
 
     @Test
+    void liveMasterSessionCannotRefreshWithoutUsb() {
+        AuthService.LoginResponse master = service.issueMasterSession("usb-master:test");
+        assertThatThrownBy(() -> service.refresh(
+                new AuthService.RefreshTokenRequest(master.refreshToken(), "usb-master:test"),
+                master.accessToken()
+        )).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_SESSION_REFRESH_FORBIDDEN"));
+        assertThat(service.authenticateToken(master.accessToken())).isPresent();
+    }
+
+    @Test
     void revokingMasterSessionsInvalidatesAlreadyIssuedMasterAccessTokens() {
         AuthService.LoginResponse master = service.issueMasterSession("usb-master:test");
         assertThat(service.authenticateToken(master.accessToken())).isPresent();

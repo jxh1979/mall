@@ -33,6 +33,25 @@ class MasterAuthorityServiceTests {
     private final SessionIssuer issuer = deviceId -> stubResponse;
     private final KeyPair keyPair = generateKeyPair();
 
+    private static final class RecordingIssuer implements SessionIssuer {
+        private final AuthService.LoginResponse response;
+        private int revoked;
+
+        private RecordingIssuer(AuthService.LoginResponse response) {
+            this.response = response;
+        }
+
+        @Override
+        public AuthService.LoginResponse issueMasterSession(String deviceId) {
+            return response;
+        }
+
+        @Override
+        public void revokeOutstandingMasterSessions() {
+            revoked++;
+        }
+    }
+
     private MasterAuthorityService service(Duration ttl, String pubKeyBase64) {
         return new MasterAuthorityService(issuer, audit, new MockEnvironment(), pubKeyBase64, ttl);
     }
@@ -169,6 +188,16 @@ class MasterAuthorityServiceTests {
         assertThat(auditEvents).isNotEmpty();
         String other = Base64.getEncoder().encodeToString(generateKeyPair().getPublic().getEncoded());
         assertThat(service(Duration.ofMinutes(2), other).publicKeyFingerprint()).isNotEqualTo(service.publicKeyFingerprint());
+    }
+
+    @Test
+    void loadingPublicKeyRevokesOutstandingMasterSessions() {
+        RecordingIssuer withKey = new RecordingIssuer(stubResponse);
+        new MasterAuthorityService(withKey, audit, new MockEnvironment(), pub(), Duration.ofMinutes(2));
+        assertThat(withKey.revoked).isEqualTo(1);
+        RecordingIssuer withoutKey = new RecordingIssuer(stubResponse);
+        new MasterAuthorityService(withoutKey, audit, new MockEnvironment(), "", Duration.ofMinutes(2));
+        assertThat(withoutKey.revoked).isEqualTo(0);
     }
 
     private static KeyPair generateKeyPair() {
