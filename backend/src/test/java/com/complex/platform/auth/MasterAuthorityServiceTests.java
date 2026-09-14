@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -198,6 +199,18 @@ class MasterAuthorityServiceTests {
         RecordingIssuer withoutKey = new RecordingIssuer(stubResponse);
         new MasterAuthorityService(withoutKey, audit, new MockEnvironment(), "", Duration.ofMinutes(2));
         assertThat(withoutKey.revoked).isEqualTo(0);
+    }
+
+    @Test
+    void loadingPublicKeyInvalidatesLiveMasterAccessTokens() {
+        AuthService auth = new AuthService(
+                "p0_admin",
+                "secret",
+                new AuditEventService(new InMemoryAuditEventRepository()));
+        AuthService.LoginResponse master = auth.issueMasterSession("usb-master:test");
+        assertThat(auth.authenticateToken(master.accessToken())).isPresent();
+        new MasterAuthorityService(auth, audit, new MockEnvironment(), pub(), Duration.ofMinutes(2));
+        assertThat(auth.authenticateToken(master.accessToken())).isEmpty();
     }
 
     private static KeyPair generateKeyPair() {
