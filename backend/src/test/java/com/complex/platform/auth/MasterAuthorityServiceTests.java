@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -32,6 +33,25 @@ class MasterAuthorityServiceTests {
             new AuthService.ApiUser("usr_master_authority", "master-authority", SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null));
     private final SessionIssuer issuer = deviceId -> stubResponse;
     private final KeyPair keyPair = generateKeyPair();
+
+    private static final class RecordingIssuer implements SessionIssuer {
+        private final AuthService.LoginResponse response;
+        private int revoked;
+
+        private RecordingIssuer(AuthService.LoginResponse response) {
+            this.response = response;
+        }
+
+        @Override
+        public AuthService.LoginResponse issueMasterSession(String deviceId) {
+            return response;
+        }
+
+        @Override
+        public void revokeOutstandingMasterSessions() {
+            revoked++;
+        }
+    }
 
     private MasterAuthorityService service(Duration ttl, String pubKeyBase64) {
         return new MasterAuthorityService(issuer, audit, new MockEnvironment(), pubKeyBase64, ttl);
@@ -169,6 +189,28 @@ class MasterAuthorityServiceTests {
         assertThat(auditEvents).isNotEmpty();
         String other = Base64.getEncoder().encodeToString(generateKeyPair().getPublic().getEncoded());
         assertThat(service(Duration.ofMinutes(2), other).publicKeyFingerprint()).isNotEqualTo(service.publicKeyFingerprint());
+    }
+
+    @Test
+    void loadingPublicKeyRevokesOutstandingMasterSessions() {
+        RecordingIssuer withKey = new RecordingIssuer(stubResponse);
+        new MasterAuthorityService(withKey, audit, new MockEnvironment(), pub(), Duration.ofMinutes(2));
+        assertThat(withKey.revoked).isEqualTo(1);
+        RecordingIssuer withoutKey = new RecordingIssuer(stubResponse);
+        new MasterAuthorityService(withoutKey, audit, new MockEnvironment(), "", Duration.ofMinutes(2));
+        assertThat(withoutKey.revoked).isEqualTo(0);
+    }
+
+    @Test
+    void loadingPublicKeyInvalidatesLiveMasterAccessTokens() {
+        AuthService auth = new AuthService(
+                "p0_admin",
+                "secret",
+                new AuditEventService(new InMemoryAuditEventRepository()));
+        AuthService.LoginResponse master = auth.issueMasterSession("usb-master:test");
+        assertThat(auth.authenticateToken(master.accessToken())).isPresent();
+        new MasterAuthorityService(auth, audit, new MockEnvironment(), pub(), Duration.ofMinutes(2));
+        assertThat(auth.authenticateToken(master.accessToken())).isEmpty();
     }
 
     private static KeyPair generateKeyPair() {
