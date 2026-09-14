@@ -240,11 +240,11 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
       setFormError("申请人未登记，不能转交");
       return;
     }
-    if (target === pending.decision.initiatedBy) {
+    if (target === pending.decision.initiatedBy || (sameAccount(pending.decision.initiatedBy, user) && sameAccount(target, user))) {
       setFormError("不得转交给申请人本人");
       return;
     }
-    if (pending?.schedule?.beneficiaryId && target === pending.schedule.beneficiaryId) {
+    if (pending.schedule.beneficiaryId && (target === pending.schedule.beneficiaryId || (sameAccount(pending.schedule.beneficiaryId, user) && sameAccount(target, user)))) {
       setFormError("不得转交给直接受益人");
       return;
     }
