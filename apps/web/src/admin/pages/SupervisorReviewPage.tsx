@@ -14,7 +14,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 const TEXT = {
   title: "主管复核与违规阻断",
   description: "覆盖高风险业务动作的默认阻断、主管复核评估和审批放行留痕；所有放行动作必须带幂等键、证据附件和审批意见。",
-  evidence: "接口证据：读取 /api/v1/platform/supervisor-review-policies；评估 POST /api/v1/platform/supervisor-review/evaluate；审批 POST /api/v1/platform/supervisor-review/{review_id}/approve。",
+  evidence: "接口证据：读取主管复核策略、提交评估、提交审批。路径为系统内部接口。",
   loadFailed: "主管复核策略读取失败",
   actionFailed: "主管复核操作失败",
   total: "策略总数",
@@ -23,15 +23,18 @@ const TEXT = {
   maxLevel: "最高级别",
   actionType: "动作类型",
   objectType: "对象类型",
-  objectId: "对象 ID",
-  amountCent: "金额(分)",
+  objectId: "对象编号",
+  amountCent: "金额（分）",
+  beneficiary: "直接受益人",
+  evidenceAttachment: "证据附件编号",
+  forwardHint: "不得转交给申请人或直接受益人",
   violationSummary: "违规说明",
-  reviewerLevel: "主管级别",
+  reviewerLevel: "所需主管级别",
   approvalComment: "审批意见",
   evaluate: "评估违规动作",
   approve: "主管审批放行",
   reject: "主管驳回退回起草人",
-  boundary: "违规动作必须先阻断并生成待复核记录；主管审批只能放行当前 review_id，不得绕过证据附件、幂等键和审计留痕。",
+  boundary: "违规动作必须先阻断并生成待复核记录；主管审批只能放行当前复核单，不得绕过证据附件、幂等键和审计留痕。",
   policy: "策略",
   requiredEvidence: "所需证据",
   status: "状态",
@@ -63,7 +66,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   }
   if (action === "supervisor_review_evaluated") {
     const blocked = Boolean((result as { blocked?: unknown } | null)?.blocked);
-    return blocked ? `已生成待复核记录：${reviewId}` : `评估结果：允许，无需复核（${reviewId}）`;
+    return blocked ? `已生成待复核记录：${reviewId}` : `评估结果：服务端判定本次不走本页复核（${reviewId}）`;
   }
   if (action === "supervisor_review_rejected") {
     return `复核单 ${reviewId} 已驳回，整单退回起草人`;
@@ -76,6 +79,12 @@ function reviewIdFrom(result: unknown) {
   return "";
 }
 
+function sameAccount(candidate: string, actor?: { id?: string; username?: string } | null) {
+  const value = candidate.trim();
+  if (!value || !actor) return false;
+  return Boolean(actor.id && value === actor.id) || Boolean(actor.username && value === actor.username);
+}
+
 const SUPERVISOR_REVIEW_PERMISSION = "governance.supervisor_review.manage";
 // M007-F-08（PGM-1.10 一个单一功能一个权限点）：评估用 manage，审批用 approve，与后端端点门禁一致。
 const SUPERVISOR_APPROVE_PERMISSION = "governance.supervisor_review.approve";
@@ -85,7 +94,7 @@ const SUPERVISOR_APPROVE_PERMISSION = "governance.supervisor_review.approve";
 type KpiFocus = { subset: "all" | "blocked" | "active" };
 type PendingRow = {
   decision: { reviewId: string; actionType?: string | null; objectType?: string | null; objectId?: string | null; initiatedBy?: string | null; approvalLevel?: string | null; requiredLevel?: number | null };
-  schedule?: { dueAt?: string | null; escalationCount?: number | null; forwardedTo?: string | null } | null;
+  schedule?: { dueAt?: string | null; escalationCount?: number | null; forwardedTo?: string | null; beneficiaryId?: string | null } | null;
 };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
@@ -102,19 +111,20 @@ function focusTitle(subset: KpiFocus["subset"]): string {
   return TEXT.total;
 }
 
-export function SupervisorReviewPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function SupervisorReviewPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<SupervisorReviewPolicyRow[]>([]);
   const [pendingRows, setPendingRows] = React.useState<PendingRow[]>([]);
   const [forwardReviewId, setForwardReviewId] = React.useState("");
   const [forwardTarget, setForwardTarget] = React.useState("");
   const [latestReviewId, setLatestReviewId] = React.useState("");
   const [actionType, setActionType] = React.useState("contract_violation");
-  const [objectType, setObjectType] = React.useState("contract");
+  const [objectType, setObjectType] = React.useState("合同");
   const [objectId, setObjectId] = React.useState("contract-1");
   const [amountCent, setAmountCent] = React.useState("0");
-  const [violationSummary, setViolationSummary] = React.useState("合同主体与基础定义不一致");
-  const [reviewerLevel, setReviewerLevel] = React.useState("3");
-  const [approvalComment, setApprovalComment] = React.useState("证据齐备，同意放行");
+  const [violationSummary, setViolationSummary] = React.useState("");
+  const [beneficiaryId, setBeneficiaryId] = React.useState("");
+  const [evidenceAttachment, setEvidenceAttachment] = React.useState("");
+  const [approvalComment, setApprovalComment] = React.useState("");
   // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人」）：可空，空则按档位下限沿直接上级链生成。
   const [finalApproverId, setFinalApproverId] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
@@ -185,24 +195,57 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
       setFormError("违规说明不能为空");
       return;
     }
+    const finalApprover = finalApproverId.trim();
+    const beneficiary = beneficiaryId.trim();
+    if (finalApprover && sameAccount(finalApprover, user)) {
+      setFormError("不能指定申请人为最终审批人");
+      return;
+    }
+    if (finalApprover && beneficiary && finalApprover === beneficiary) {
+      setFormError("不能指定直接受益人为最终审批人");
+      return;
+    }
     const request = {
       idempotencyKey: nextKey("supervisor-review-evaluate"),
       operatorNote: "完整后台主管复核评估",
-      evidenceAttachmentIds: ["att-supervisor-review-evaluate"],
+      evidenceAttachmentIds: evidenceAttachment.trim() ? [evidenceAttachment.trim()] : [],
       actionType,
       objectType,
       objectId,
       amountCent: Number(amountCent || 0),
       violationSummary,
       finalApproverId: finalApproverId.trim() || undefined,
+      beneficiaryId: beneficiaryId.trim() || undefined,
     };
     await runAction("supervisor_review_evaluated", request, () => api.post("/api/v1/platform/supervisor-review/evaluate", request));
   }
 
   // M007-A-02（PGM-1.7.1 转发：不限层级，但不得转给申请人本人或直接受益人——由后端校验）。
+  function selectedPending(reviewId: string) {
+    return pendingRows.find((row) => row.decision.reviewId === reviewId);
+  }
+
   async function forwardReview() {
     if (!forwardReviewId || !forwardTarget.trim()) {
       setFormError("请先选择待复核记录并填写转交账号");
+      return;
+    }
+    const pending = selectedPending(forwardReviewId);
+    const target = forwardTarget.trim();
+    if (!pending?.schedule?.beneficiaryId) {
+      setFormError("直接受益人未登记，不能转交");
+      return;
+    }
+    if (!pending?.decision.initiatedBy) {
+      setFormError("申请人未登记，不能转交");
+      return;
+    }
+    if (target === pending.decision.initiatedBy || (sameAccount(pending.decision.initiatedBy, user) && sameAccount(target, user))) {
+      setFormError("不得转交给申请人本人");
+      return;
+    }
+    if (pending.schedule.beneficiaryId && (target === pending.schedule.beneficiaryId || (sameAccount(pending.schedule.beneficiaryId, user) && sameAccount(target, user)))) {
+      setFormError("不得转交给直接受益人");
       return;
     }
     const request = {
@@ -214,13 +257,45 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
     await runAction("supervisor_review_forwarded", request, () => api.post(`/api/v1/platform/supervisor-review/${forwardReviewId}/forward`, request));
   }
 
-  function validateApprove() {
+  function validateDecisionActor() {
     if (!hasPendingReview) {
       setFormError("请先评估违规动作并生成待复核记录");
       return false;
     }
+    const pending = selectedPending(latestReviewId);
+    if (pending && !pending.decision.initiatedBy) {
+      setFormError("申请人未登记，不能放行或驳回");
+      return false;
+    }
+    const initiator = pending?.decision.initiatedBy ?? user?.id;
+    if (initiator && sameAccount(initiator, user)) {
+      setFormError("不能复核自己发起的单");
+      return false;
+    }
+    if (pending?.schedule?.beneficiaryId && sameAccount(pending.schedule.beneficiaryId, user)) {
+      setFormError("直接受益人不能复核与自己相关的申请");
+      return false;
+    }
     if (!approvalComment.trim()) {
       setFormError("审批意见不能为空");
+      return false;
+    }
+    return true;
+  }
+
+  function validateApprove() {
+    if (!validateDecisionActor()) {
+      return false;
+    }
+    const pending = selectedPending(latestReviewId);
+    const policy = rows.find((row) => row.actionType === (pending?.decision.actionType ?? actionType));
+    if (!policy) {
+      setFormError("找不到对应复核策略，不能放行");
+      return false;
+    }
+    const needsAttachment = Array.isArray(policy.requiredEvidenceTypes) && policy.requiredEvidenceTypes.length > 0;
+    if (needsAttachment && !evidenceAttachment.trim()) {
+      setFormError("请填写证据附件编号");
       return false;
     }
     return true;
@@ -233,8 +308,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
     const request = {
       idempotencyKey: nextKey("supervisor-review-approve"),
       operatorNote: "完整后台主管审批放行",
-      evidenceAttachmentIds: ["att-supervisor-review-approve"],
-      reviewerLevel: Number(reviewerLevel || 3),
+      evidenceAttachmentIds: [evidenceAttachment.trim()],
       decision: "approved",
       comment: approvalComment,
     };
@@ -242,14 +316,13 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   }
   // M007-R6-03（PGM-1.7.1「任一节点驳回则整单退回起草人」）：驳回当前节点，整单退回起草人。
   async function rejectReview() {
-    if (!validateApprove()) {
+    if (!validateDecisionActor()) {
       return;
     }
     const request = {
       idempotencyKey: nextKey("supervisor-review-reject"),
       operatorNote: "完整后台主管驳回",
-      evidenceAttachmentIds: ["att-supervisor-review-reject"],
-      reviewerLevel: Number(reviewerLevel || 3),
+      evidenceAttachmentIds: [evidenceAttachment.trim()],
       decision: "rejected",
       comment: approvalComment,
     };
@@ -264,7 +337,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
         { label: TEXT.actionType, value: formatBusinessStatus(row.actionType) },
         { label: TEXT.reviewerLevel, value: displayValue(row.requiredLevel) },
         { label: TEXT.defaultBlocked, value: displayValue(row.blocksByDefault) },
-        { label: TEXT.requiredEvidence, value: displayValue(row.requiredEvidenceTypes) },
+        { label: TEXT.requiredEvidence, value: Array.isArray(row.requiredEvidenceTypes) ? row.requiredEvidenceTypes.map((item) => formatBusinessStatus(String(item))).join("、") : displayValue(row.requiredEvidenceTypes) },
         { label: TEXT.status, value: formatBusinessStatus(row.status) },
       ],
     });
@@ -282,7 +355,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
             <td>{formatBusinessStatus(row.actionType)}</td>
             <td>{displayValue(row.requiredLevel)}</td>
             <td>{displayValue(row.blocksByDefault)}</td>
-            <td>{displayValue(row.requiredEvidenceTypes)}</td>
+            <td>{Array.isArray(row.requiredEvidenceTypes) ? row.requiredEvidenceTypes.map((item) => formatBusinessStatus(String(item))).join("、") : displayValue(row.requiredEvidenceTypes)}</td>
             <td>{formatBusinessStatus(row.status)}</td>
           <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看复核策略详情" onClick={(event) => { event.stopPropagation(); openPolicyDetail(row); }}>查看详情</button></td></tr>
         ))}</tbody>
@@ -317,13 +390,14 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
             {pendingRows.length === 0 ? <div className="admin-muted-action" data-testid="supervisor-review-pending-empty">{TEXT.noPending}</div> : (
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="supervisor-review-pending">
-                  <thead><tr><th>复核单</th><th>{TEXT.actionType}</th><th>对象</th><th>发起人</th><th>审批层级</th><th>{TEXT.dueAt}</th><th>状态</th><th></th></tr></thead>
+                  <thead><tr><th>复核单</th><th>{TEXT.actionType}</th><th>对象</th><th>发起人</th><th>{TEXT.beneficiary}</th><th>审批层级</th><th>{TEXT.dueAt}</th><th>状态</th><th></th></tr></thead>
                   <tbody>{pendingRows.map((row) => (
                     <tr key={row.decision.reviewId} data-testid={`supervisor-review-pending-${row.decision.reviewId}`}>
                       <td>{row.decision.reviewId}</td>
                       <td>{formatBusinessStatus(row.decision.actionType ?? "")}</td>
-                      <td>{row.decision.objectType ?? "-"} / {row.decision.objectId ?? "-"}</td>
+                      <td>{formatBusinessStatus(row.decision.objectType ?? "")} / {row.decision.objectId ?? "-"}</td>
                       <td>{row.decision.initiatedBy ?? "-"}</td>
+                      <td>{row.schedule?.beneficiaryId || "-"}</td>
                       <td>{formatBusinessStatus(row.decision.approvalLevel ?? "")}（主管级 {displayValue(row.decision.requiredLevel)}）</td>
                       <td>{row.schedule?.dueAt ? cnDate(row.schedule.dueAt) : "-"}</td>
                       <td>{(row.schedule?.escalationCount ?? 0) > 0 ? `已升级 ${row.schedule?.escalationCount} 次` : "待审"}{row.schedule?.forwardedTo ? `，已转交给 ${row.schedule.forwardedTo}` : ""}</td>
@@ -335,7 +409,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
             )}
             <div className="admin-inline-form" data-testid="supervisor-review-forward-form">
               <span>{forwardReviewId ? `转交复核单 ${forwardReviewId}` : "未选择复核单"}</span>
-              <input aria-label={TEXT.forwardTarget} data-testid="supervisor-review-forward-target" placeholder={TEXT.forwardTarget} value={forwardTarget} onChange={(event) => setForwardTarget(event.target.value)} />
+              <input aria-label={TEXT.forwardTarget} data-testid="supervisor-review-forward-target" placeholder={TEXT.forwardHint} value={forwardTarget} onChange={(event) => setForwardTarget(event.target.value)} />
               <PermissionButton permissionsState={effectivePermissions} permissions={[SUPERVISOR_APPROVE_PERMISSION]} disabled={busyAction !== "" || !forwardReviewId} data-testid="supervisor-review-forward" onClick={() => void forwardReview()}>{TEXT.forward}</PermissionButton>
             </div>
 
@@ -346,7 +420,8 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
               <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => { setAmountCent(event.target.value); resetPendingReview(); }} /></label>
               <label>{TEXT.violationSummary}<input data-testid="supervisor-review-violation-summary" value={violationSummary} onChange={(event) => { setViolationSummary(event.target.value); resetPendingReview(); }} /></label>
               <label>主线最终审批人（可空）<input data-testid="supervisor-review-final-approver" value={finalApproverId} onChange={(event) => { setFinalApproverId(event.target.value); resetPendingReview(); }} /></label>
-              <label>{TEXT.reviewerLevel}<input data-testid="supervisor-review-reviewer-level" type="number" value={reviewerLevel} onChange={(event) => setReviewerLevel(event.target.value)} /></label>
+              <label>{TEXT.beneficiary}<input data-testid="supervisor-review-beneficiary" value={beneficiaryId} onChange={(event) => { setBeneficiaryId(event.target.value); resetPendingReview(); }} /></label>
+              <label>{TEXT.evidenceAttachment}<input data-testid="supervisor-review-evidence-attachment" value={evidenceAttachment} onChange={(event) => setEvidenceAttachment(event.target.value)} /></label>
               <label>{TEXT.approvalComment}<input data-testid="supervisor-review-approval-comment" value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} /></label>
             </div>
             <div className="admin-form-row" data-testid="supervisor-review-actions">
@@ -371,14 +446,14 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
                 label={TEXT.reject}
                 impact={`将驳回复核单 ${latestReviewId || "未生成"} 当前节点，整单退回起草人并写入主管审批留痕。`}
                 disabled={busyAction !== "" || !hasPendingReview}
-                precheck={validateApprove}
+                precheck={validateDecisionActor}
                 onConfirm={() => void rejectReview()}
                 permissionsState={effectivePermissions}
                 permissions={[SUPERVISOR_APPROVE_PERMISSION]}
                 data-testid="supervisor-review-reject"
               />
             </div>
-            <div className="admin-muted-action" data-testid="supervisor-review-current-review">当前待审批 review_id：{latestReviewId || "未生成"}</div>
+            <div className="admin-muted-action" data-testid="supervisor-review-current-review">当前待审批复核单：{latestReviewId || "未生成"}</div>
             <div className="admin-muted-action" data-testid="supervisor-review-boundary">{TEXT.boundary}</div>
             {formError ? <div data-testid="supervisor-review-error" className="admin-inline-error">{formError}</div> : null}
 

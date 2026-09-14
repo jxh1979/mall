@@ -19,7 +19,15 @@ function envelope(items: unknown[]): Response {
 
 const PENDING = [
   { decision: { review_id: "review_p1", policy_code: "bar_bill_waiver_block", action_type: "bar.bill_waiver", object_type: "bar_bill", object_id: "b1", initiated_by: "u-9", approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
-    schedule: { review_id: "review_p1", beneficiary_id: null, due_at: "2026-09-07T02:00:00Z", escalation_count: 1, escalated_at: "2026-09-06T02:00:00Z", forwarded_to: null } },
+    schedule: { review_id: "review_p1", beneficiary_id: "usr_benef", due_at: "2026-09-07T02:00:00Z", escalation_count: 1, escalated_at: "2026-09-06T02:00:00Z", forwarded_to: null } },
+  { decision: { review_id: "review_p2", policy_code: "contract_violation_l3", action_type: "contract_violation", object_type: "合同", object_id: "c1", initiated_by: "u-9", approval_level: "two_levels_up", required_level: 3, review_status: "pending_review" },
+    schedule: { review_id: "review_p2", beneficiary_id: null, due_at: "2026-09-07T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
+  { decision: { review_id: "review_p3", policy_code: "refund_l2", action_type: "refund", object_type: "票据", object_id: "t1", initiated_by: null, approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
+    schedule: { review_id: "review_p3", beneficiary_id: "usr_benef", due_at: "2026-09-07T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
+  { decision: { review_id: "review_p4", policy_code: "bar_bill_waiver_block", action_type: "bar.bill_waiver", object_type: "bar_bill", object_id: "b2", initiated_by: "u1", approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
+    schedule: { review_id: "review_p4", beneficiary_id: "usr_benef", due_at: "2026-09-07T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
+  { decision: { review_id: "review_p5", policy_code: "bar_bill_waiver_block", action_type: "bar.bill_waiver", object_type: "bar_bill", object_id: "b3", initiated_by: "u-9", approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
+    schedule: { review_id: "review_p5", beneficiary_id: "u1", due_at: "2026-09-07T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
 ];
 
 function raw(data: unknown): Response {
@@ -86,13 +94,15 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
   // M007-R6-03（PGM-1.7.1「任一节点驳回则整单退回起草人」）：本页可驳回，提交 decision=rejected，结果为中文句子；无 approve 权限时不可用。
   it("驳回 → 提交 decision=rejected 且结果为中文句子", async () => {
     const props = renderPage();
-    await evaluateOnce();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p1"));
+    fireEvent.change(screen.getByTestId("supervisor-review-evidence-attachment"), { target: { value: "att-1" } });
     fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "证据不足，退回起草人" } });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByTestId("supervisor-review-reject"));
     const fetchMock = vi.mocked(globalThis.fetch);
-    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/review_1/approve"))).toBe(true));
-    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_1/approve"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/review_p1/approve"))).toBe(true));
+    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_p1/approve"));
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.decision).toBe("rejected");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^复核单 .* 已驳回，整单退回起草人/)));
@@ -119,6 +129,126 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.forwarded_to).toBe("usr_x");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^复核单 review_p1 已转交给 usr_x/)));
+  });
+
+  it("待复核清单展示直接受益人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-review_p1")).toBeTruthy());
+    expect(screen.getByTestId("supervisor-review-pending-review_p1").textContent ?? "").toContain("usr_benef");
+    expect(screen.getByTestId("supervisor-review-pending-review_p2").textContent ?? "").toContain("-");
+  });
+
+  it("合同违规待审行没有直接受益人 → 转交被拦且不发请求", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p2"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "usr_x" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("直接受益人未登记，不能转交");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
+  });
+
+  it("退款待审行没有申请人 → 转交被拦且不发请求", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p3")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p3"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "usr_x" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("申请人未登记，不能转交");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
+  });
+
+  it("申请人用登录名转交给自己 → 被拦", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p4")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p4"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "admin" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不得转交给申请人本人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
+  });
+
+  it("直接受益人用登录名转交给自己 → 被拦", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p5")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p5"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "admin" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不得转交给直接受益人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
+  });
+
+  it("不得转交给申请人本人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p1"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "u-9" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不得转交给申请人本人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
+  });
+
+  it("最终审批人不能是当前申请人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定申请人为最终审批人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
+  it("最终审批人填登录名也按申请人拦住", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "admin" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定申请人为最终审批人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
+  it("最终审批人不能是直接受益人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-beneficiary"), { target: { value: "usr_benef" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "usr_benef" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定直接受益人为最终审批人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
+  it("待审行没有申请人 → 不能放行或驳回", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p3")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p3"));
+    fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "同意放行" } });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("supervisor-review-approve"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("申请人未登记，不能放行或驳回");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/approve"))).toBe(false);
+  });
+
+  it("待审动作对不上策略 → 不能放行", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p1"));
+    fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "同意放行" } });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("supervisor-review-approve"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("找不到对应复核策略，不能放行");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/approve"))).toBe(false);
   });
 
   it("动作类型选项与服务端策略一致：无「账单折扣」，有免单 / 退款 / 调账", async () => {
