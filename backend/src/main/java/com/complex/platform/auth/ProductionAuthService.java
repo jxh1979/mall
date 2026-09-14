@@ -323,6 +323,33 @@ public class ProductionAuthService implements SessionIssuer {
 
     @Override
     @Transactional
+    public void revokeOutstandingMasterSessions() {
+        Instant now = Instant.now();
+        int revoked = jdbcTemplate.update("""
+                UPDATE auth_sessions
+                   SET status = 'logged_out',
+                       revoked_at = :now,
+                       updated_at = :now
+                 WHERE user_id = :user_id
+                   AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("user_id", SessionIssuer.MASTER_USER_ID)
+                .addValue("now", timestampWithTimeZone(now)));
+        if (revoked > 0) {
+            auditEventService.recordSuccess(
+                    "auth.master.sessions_revoked",
+                    "auth.master",
+                    "auth-session",
+                    SessionIssuer.MASTER_USER_ID,
+                    null,
+                    null,
+                    Map.of("revoked_count", String.valueOf(revoked))
+            );
+        }
+    }
+
+    @Override
+    @Transactional
     public AuthService.LoginResponse issueMasterSession(String deviceId) {
         // U 盘破窗：upsert 保留超管账号 + 凭证（密码不可用，只走 U 盘），不依赖已有账号；随后发最高权限会话。
         // M008-G2-02（BSM-1.26.1「最高权限全平台只设一人」；R-001 通配只认 usr_master_authority + master-authority）：

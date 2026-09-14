@@ -103,6 +103,8 @@ public class MasterAuthorityService {
             // M008-A1-04 / F-02：每次启动记录当前验签公钥指纹，换钥（重新 provision）后指纹变化即为系统侧留痕。
             auditEventService.recordSuccess("auth.master.public_key_configured", "auth.master", "auth-session",
                     "master-public-key", null, null, Map.of("fingerprint", this.publicKeyFingerprint));
+            // 作废旧钥匙=换公钥并重启：同时作废库里已签发的最高权限登录，旧票不能无盘继续用。
+            sessionIssuer.revokeOutstandingMasterSessions();
         }
     }
 

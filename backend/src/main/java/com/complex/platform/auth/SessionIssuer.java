@@ -15,4 +15,8 @@ public interface SessionIssuer {
 
     /** 签发最高权限会话。须随插盘来源带上设备标识；不得按平台管理员身份签发。 */
     AuthService.LoginResponse issueMasterSession(String deviceId);
+
+    /** 验签公钥加载或更换时作废已签发的最高权限登录，旧盘换到的票不能继续用。 */
+    default void revokeOutstandingMasterSessions() {
+    }
 }

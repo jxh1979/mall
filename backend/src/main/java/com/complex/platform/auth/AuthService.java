@@ -301,6 +301,43 @@ public class AuthService implements SessionIssuer {
     }
 
     @Override
+    public void revokeOutstandingMasterSessions() {
+        Instant now = Instant.now();
+        int revoked = 0;
+        for (SessionRecord session : java.util.List.copyOf(sessionsById.values())) {
+            if (!MASTER_USER_ID.equals(session.userId()) || !"active".equals(session.status())) {
+                continue;
+            }
+            accessTokensToSessionId.remove(session.accessToken());
+            refreshTokensToSessionId.remove(session.refreshToken());
+            sessionsById.put(session.id(), new SessionRecord(
+                    session.id(),
+                    session.userId(),
+                    session.accessToken(),
+                    session.refreshToken(),
+                    session.deviceId(),
+                    session.terminalType(),
+                    "logged_out",
+                    session.createdAt(),
+                    now,
+                    session.accessExpiresAt()
+            ));
+            revoked++;
+        }
+        if (revoked > 0) {
+            auditEventService.recordSuccess(
+                    "auth.master.sessions_revoked",
+                    "auth.master",
+                    "auth-session",
+                    MASTER_USER_ID,
+                    null,
+                    null,
+                    Map.of("revoked_count", String.valueOf(revoked))
+            );
+        }
+    }
+
+    @Override
     public LoginResponse issueMasterSession(String deviceId) {
         requireText(deviceId, "device_id");
         UserRecord user = usersById.computeIfAbsent(SessionIssuer.MASTER_USER_ID, id ->
