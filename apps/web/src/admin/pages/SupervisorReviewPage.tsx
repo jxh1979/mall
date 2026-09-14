@@ -66,7 +66,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   }
   if (action === "supervisor_review_evaluated") {
     const blocked = Boolean((result as { blocked?: unknown } | null)?.blocked);
-    return blocked ? `已生成待复核记录：${reviewId}` : `评估结果：允许，无需复核（${reviewId}）`;
+    return blocked ? `已生成待复核记录：${reviewId}` : `评估结果：服务端判定本次不走本页复核（${reviewId}）`;
   }
   if (action === "supervisor_review_rejected") {
     return `复核单 ${reviewId} 已驳回，整单退回起草人`;
@@ -112,7 +112,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
   const [forwardTarget, setForwardTarget] = React.useState("");
   const [latestReviewId, setLatestReviewId] = React.useState("");
   const [actionType, setActionType] = React.useState("contract_violation");
-  const [objectType, setObjectType] = React.useState("contract");
+  const [objectType, setObjectType] = React.useState("合同");
   const [objectId, setObjectId] = React.useState("contract-1");
   const [amountCent, setAmountCent] = React.useState("0");
   const [violationSummary, setViolationSummary] = React.useState("");
@@ -216,6 +216,12 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     }
     const pending = selectedPending(forwardReviewId);
     const target = forwardTarget.trim();
+    const action = pending?.decision.actionType ?? "";
+    const needsBeneficiary = /grant|authorization|refund|waiver|debit|deduction|money|ar_ap/.test(action);
+    if (needsBeneficiary && !pending?.schedule?.beneficiaryId) {
+      setFormError("直接受益人未登记，不能转交");
+      return;
+    }
     if (pending?.decision.initiatedBy && target === pending.decision.initiatedBy) {
       setFormError("不得转交给申请人本人");
       return;
@@ -239,7 +245,8 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
       return false;
     }
     const pending = selectedPending(latestReviewId);
-    if (user?.id && pending?.decision.initiatedBy && user.id === pending.decision.initiatedBy) {
+    const initiator = pending?.decision.initiatedBy ?? user?.id;
+    if (user?.id && initiator && user.id === initiator) {
       setFormError("不能复核自己发起的单");
       return false;
     }
@@ -251,8 +258,11 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
       setFormError("审批意见不能为空");
       return false;
     }
-    if (!evidenceAttachment.trim()) {
-      setFormError("该策略要求审批附带证据附件");
+    const policy = rows.find((row) => row.actionType === (pending?.decision.actionType ?? actionType));
+    const needsAttachment = Array.isArray(policy?.requiredEvidenceTypes)
+      && policy.requiredEvidenceTypes.some((item) => String(item).includes("evidence") || String(item).includes("attachment") || String(item) === "contract");
+    if (needsAttachment && !evidenceAttachment.trim()) {
+      setFormError("请填写证据附件编号");
       return false;
     }
     return true;

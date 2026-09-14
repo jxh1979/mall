@@ -19,7 +19,7 @@ function envelope(items: unknown[]): Response {
 
 const PENDING = [
   { decision: { review_id: "review_p1", policy_code: "bar_bill_waiver_block", action_type: "bar.bill_waiver", object_type: "bar_bill", object_id: "b1", initiated_by: "u-9", approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
-    schedule: { review_id: "review_p1", beneficiary_id: null, due_at: "2026-09-07T02:00:00Z", escalation_count: 1, escalated_at: "2026-09-06T02:00:00Z", forwarded_to: null } },
+    schedule: { review_id: "review_p1", beneficiary_id: "usr_benef", due_at: "2026-09-07T02:00:00Z", escalation_count: 1, escalated_at: "2026-09-06T02:00:00Z", forwarded_to: null } },
 ];
 
 function raw(data: unknown): Response {
@@ -86,14 +86,15 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
   // M007-R6-03（PGM-1.7.1「任一节点驳回则整单退回起草人」）：本页可驳回，提交 decision=rejected，结果为中文句子；无 approve 权限时不可用。
   it("驳回 → 提交 decision=rejected 且结果为中文句子", async () => {
     const props = renderPage();
-    await evaluateOnce();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p1"));
     fireEvent.change(screen.getByTestId("supervisor-review-evidence-attachment"), { target: { value: "att-1" } });
     fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "证据不足，退回起草人" } });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByTestId("supervisor-review-reject"));
     const fetchMock = vi.mocked(globalThis.fetch);
-    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/review_1/approve"))).toBe(true));
-    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_1/approve"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/review_p1/approve"))).toBe(true));
+    const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_p1/approve"));
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.decision).toBe("rejected");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^复核单 .* 已驳回，整单退回起草人/)));
