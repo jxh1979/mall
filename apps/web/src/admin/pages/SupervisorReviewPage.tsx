@@ -216,9 +216,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     }
     const pending = selectedPending(forwardReviewId);
     const target = forwardTarget.trim();
-    const action = pending?.decision.actionType ?? "";
-    const needsBeneficiary = /grant|authorization|refund|waiver|debit|deduction|money|ar_ap/.test(action);
-    if (needsBeneficiary && !pending?.schedule?.beneficiaryId) {
+    if (!pending?.schedule?.beneficiaryId) {
       setFormError("直接受益人未登记，不能转交");
       return;
     }
@@ -357,13 +355,14 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
             {pendingRows.length === 0 ? <div className="admin-muted-action" data-testid="supervisor-review-pending-empty">{TEXT.noPending}</div> : (
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="supervisor-review-pending">
-                  <thead><tr><th>复核单</th><th>{TEXT.actionType}</th><th>对象</th><th>发起人</th><th>审批层级</th><th>{TEXT.dueAt}</th><th>状态</th><th></th></tr></thead>
+                  <thead><tr><th>复核单</th><th>{TEXT.actionType}</th><th>对象</th><th>发起人</th><th>{TEXT.beneficiary}</th><th>审批层级</th><th>{TEXT.dueAt}</th><th>状态</th><th></th></tr></thead>
                   <tbody>{pendingRows.map((row) => (
                     <tr key={row.decision.reviewId} data-testid={`supervisor-review-pending-${row.decision.reviewId}`}>
                       <td>{row.decision.reviewId}</td>
                       <td>{formatBusinessStatus(row.decision.actionType ?? "")}</td>
                       <td>{formatBusinessStatus(row.decision.objectType ?? "")} / {row.decision.objectId ?? "-"}</td>
                       <td>{row.decision.initiatedBy ?? "-"}</td>
+                      <td>{row.schedule?.beneficiaryId || "-"}</td>
                       <td>{formatBusinessStatus(row.decision.approvalLevel ?? "")}（主管级 {displayValue(row.decision.requiredLevel)}）</td>
                       <td>{row.schedule?.dueAt ? cnDate(row.schedule.dueAt) : "-"}</td>
                       <td>{(row.schedule?.escalationCount ?? 0) > 0 ? `已升级 ${row.schedule?.escalationCount} 次` : "待审"}{row.schedule?.forwardedTo ? `，已转交给 ${row.schedule.forwardedTo}` : ""}</td>

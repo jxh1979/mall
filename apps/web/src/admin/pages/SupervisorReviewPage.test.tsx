@@ -20,6 +20,8 @@ function envelope(items: unknown[]): Response {
 const PENDING = [
   { decision: { review_id: "review_p1", policy_code: "bar_bill_waiver_block", action_type: "bar.bill_waiver", object_type: "bar_bill", object_id: "b1", initiated_by: "u-9", approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
     schedule: { review_id: "review_p1", beneficiary_id: "usr_benef", due_at: "2026-09-07T02:00:00Z", escalation_count: 1, escalated_at: "2026-09-06T02:00:00Z", forwarded_to: null } },
+  { decision: { review_id: "review_p2", policy_code: "contract_violation_l3", action_type: "contract_violation", object_type: "合同", object_id: "c1", initiated_by: "u-9", approval_level: "two_levels_up", required_level: 3, review_status: "pending_review" },
+    schedule: { review_id: "review_p2", beneficiary_id: null, due_at: "2026-09-07T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
 ];
 
 function raw(data: unknown): Response {
@@ -121,6 +123,24 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.forwarded_to).toBe("usr_x");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^复核单 review_p1 已转交给 usr_x/)));
+  });
+
+  it("待复核清单展示直接受益人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-review_p1")).toBeTruthy());
+    expect(screen.getByTestId("supervisor-review-pending-review_p1").textContent ?? "").toContain("usr_benef");
+    expect(screen.getByTestId("supervisor-review-pending-review_p2").textContent ?? "").toContain("-");
+  });
+
+  it("合同违规待审行没有直接受益人 → 转交被拦且不发请求", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p2"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "usr_x" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("直接受益人未登记，不能转交");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
   });
 
   it("动作类型选项与服务端策略一致：无「账单折扣」，有免单 / 退款 / 调账", async () => {
