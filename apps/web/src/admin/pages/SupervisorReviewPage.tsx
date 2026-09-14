@@ -189,6 +189,16 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
       setFormError("违规说明不能为空");
       return;
     }
+    const finalApprover = finalApproverId.trim();
+    const beneficiary = beneficiaryId.trim();
+    if (user?.id && finalApprover && finalApprover === user.id) {
+      setFormError("不能指定申请人为最终审批人");
+      return;
+    }
+    if (finalApprover && beneficiary && finalApprover === beneficiary) {
+      setFormError("不能指定直接受益人为最终审批人");
+      return;
+    }
     const request = {
       idempotencyKey: nextKey("supervisor-review-evaluate"),
       operatorNote: "完整后台主管复核评估",
@@ -241,7 +251,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     await runAction("supervisor_review_forwarded", request, () => api.post(`/api/v1/platform/supervisor-review/${forwardReviewId}/forward`, request));
   }
 
-  function validateApprove() {
+  function validateDecisionActor() {
     if (!hasPendingReview) {
       setFormError("请先评估违规动作并生成待复核记录");
       return false;
@@ -260,9 +270,20 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
       setFormError("审批意见不能为空");
       return false;
     }
+    return true;
+  }
+
+  function validateApprove() {
+    if (!validateDecisionActor()) {
+      return false;
+    }
+    const pending = selectedPending(latestReviewId);
     const policy = rows.find((row) => row.actionType === (pending?.decision.actionType ?? actionType));
-    const needsAttachment = Array.isArray(policy?.requiredEvidenceTypes)
-      && policy.requiredEvidenceTypes.some((item) => String(item).includes("evidence") || String(item).includes("attachment") || String(item) === "contract");
+    if (!policy) {
+      setFormError("找不到对应复核策略，不能放行");
+      return false;
+    }
+    const needsAttachment = Array.isArray(policy.requiredEvidenceTypes) && policy.requiredEvidenceTypes.length > 0;
     if (needsAttachment && !evidenceAttachment.trim()) {
       setFormError("请填写证据附件编号");
       return false;
@@ -285,7 +306,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
   }
   // M007-R6-03（PGM-1.7.1「任一节点驳回则整单退回起草人」）：驳回当前节点，整单退回起草人。
   async function rejectReview() {
-    if (!validateApprove()) {
+    if (!validateDecisionActor()) {
       return;
     }
     const request = {
@@ -415,7 +436,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
                 label={TEXT.reject}
                 impact={`将驳回复核单 ${latestReviewId || "未生成"} 当前节点，整单退回起草人并写入主管审批留痕。`}
                 disabled={busyAction !== "" || !hasPendingReview}
-                precheck={validateApprove}
+                precheck={validateDecisionActor}
                 onConfirm={() => void rejectReview()}
                 permissionsState={effectivePermissions}
                 permissions={[SUPERVISOR_APPROVE_PERMISSION]}

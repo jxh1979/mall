@@ -167,6 +167,41 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
   });
 
+  it("最终审批人不能是当前申请人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定申请人为最终审批人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
+  it("最终审批人不能是直接受益人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-beneficiary"), { target: { value: "usr_benef" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "usr_benef" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定直接受益人为最终审批人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
+  it("待审动作对不上策略 → 不能放行", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p1"));
+    fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "同意放行" } });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("supervisor-review-approve"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("找不到对应复核策略，不能放行");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/approve"))).toBe(false);
+  });
+
   it("动作类型选项与服务端策略一致：无「账单折扣」，有免单 / 退款 / 调账", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("supervisor-review-action-type")).toBeTruthy());
