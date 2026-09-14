@@ -92,10 +92,7 @@ public class MasterAuthorityService {
         this.challengeTtl = (challengeTtl == null || challengeTtl.isNegative() || challengeTtl.isZero())
                 ? Duration.ofMinutes(2) : challengeTtl;
         this.publicKey = parsePublicKey(publicKeyBase64);
-        // 真实生产 = prod profile 且未带 prod-profile 集成测试豁免（与 ProductionDatabaseCredentialGuard 同一开关，
-        // 仅对确以共享 dev 库跑 prod-profile 的集成测试置 false）。
-        boolean production = environment != null && environment.acceptsProfiles(Profiles.of("prod"))
-                && Boolean.parseBoolean(environment.getProperty("complex.database.credential-separation.enforced", "true"));
+        boolean production = environment != null && environment.acceptsProfiles(Profiles.of("prod"));
         if (production && this.publicKey == null) {
             // M008-A1-02：生产缺验签公钥 = 应急恢复通道不存在，且无人知晓；fail-closed 阻止启动（与 ProductionDatabaseCredentialGuard 同范式）。
             throw new IllegalStateException(

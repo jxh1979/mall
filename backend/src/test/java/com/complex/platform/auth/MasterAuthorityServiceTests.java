@@ -142,7 +142,7 @@ class MasterAuthorityServiceTests {
     }
 
     // M008-A1-02（BSM-1.26.1 U 盘托管为上线必做；PGM-1.15.1 破窗为管理员全失锁时唯一恢复通道）：
-    // 真实 prod 启动缺验签公钥即拒绝启动；prod-profile 集成测试（credential-separation 豁免）与 dev/test 仅关闭功能。
+    // prod 启动缺验签公钥即拒绝启动，不因库凭证开关而豁免。
     @Test
     void productionRefusesToStartWithoutPublicKey() {
         MockEnvironment prod = new MockEnvironment();
@@ -154,7 +154,9 @@ class MasterAuthorityServiceTests {
         MockEnvironment prodIntegrationTest = new MockEnvironment();
         prodIntegrationTest.setActiveProfiles("prod");
         prodIntegrationTest.setProperty("complex.database.credential-separation.enforced", "false");
-        assertThat(new MasterAuthorityService(issuer, audit, prodIntegrationTest, "", Duration.ofMinutes(2)).enabled()).isFalse();
+        assertThatThrownBy(() -> new MasterAuthorityService(issuer, audit, prodIntegrationTest, "", Duration.ofMinutes(2)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("COMPLEX_MASTER_AUTHORITY_PUBKEY");
     }
 
     // M008-A1-04 / F-02（PGM-1.15.1「更换的每一步都留痕」；BSM-1.26.1「启用 U 盘托管…都要记录」）：
