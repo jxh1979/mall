@@ -87,6 +87,7 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
   it("驳回 → 提交 decision=rejected 且结果为中文句子", async () => {
     const props = renderPage();
     await evaluateOnce();
+    fireEvent.change(screen.getByTestId("supervisor-review-evidence-attachment"), { target: { value: "att-1" } });
     fireEvent.change(screen.getByTestId("supervisor-review-approval-comment"), { target: { value: "证据不足，退回起草人" } });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByTestId("supervisor-review-reject"));
