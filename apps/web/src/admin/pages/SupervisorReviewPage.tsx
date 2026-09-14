@@ -220,7 +220,11 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
       setFormError("直接受益人未登记，不能转交");
       return;
     }
-    if (pending?.decision.initiatedBy && target === pending.decision.initiatedBy) {
+    if (!pending?.decision.initiatedBy) {
+      setFormError("申请人未登记，不能转交");
+      return;
+    }
+    if (target === pending.decision.initiatedBy) {
       setFormError("不得转交给申请人本人");
       return;
     }

@@ -22,6 +22,8 @@ const PENDING = [
     schedule: { review_id: "review_p1", beneficiary_id: "usr_benef", due_at: "2026-09-07T02:00:00Z", escalation_count: 1, escalated_at: "2026-09-06T02:00:00Z", forwarded_to: null } },
   { decision: { review_id: "review_p2", policy_code: "contract_violation_l3", action_type: "contract_violation", object_type: "合同", object_id: "c1", initiated_by: "u-9", approval_level: "two_levels_up", required_level: 3, review_status: "pending_review" },
     schedule: { review_id: "review_p2", beneficiary_id: null, due_at: "2026-09-07T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
+  { decision: { review_id: "review_p3", policy_code: "refund_l2", action_type: "refund", object_type: "票据", object_id: "t1", initiated_by: null, approval_level: "one_level_up", required_level: 2, review_status: "pending_review" },
+    schedule: { review_id: "review_p3", beneficiary_id: "usr_benef", due_at: "2026-09-07T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
 ];
 
 function raw(data: unknown): Response {
@@ -139,6 +141,28 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "usr_x" } });
     fireEvent.click(screen.getByTestId("supervisor-review-forward"));
     expect(screen.getByTestId("supervisor-review-error").textContent).toContain("直接受益人未登记，不能转交");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
+  });
+
+  it("退款待审行没有申请人 → 转交被拦且不发请求", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p3")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p3"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "usr_x" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("申请人未登记，不能转交");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
+  });
+
+  it("不得转交给申请人本人", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-select-review_p1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-pending-select-review_p1"));
+    fireEvent.change(screen.getByTestId("supervisor-review-forward-target"), { target: { value: "u-9" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-forward"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不得转交给申请人本人");
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/forward"))).toBe(false);
   });
