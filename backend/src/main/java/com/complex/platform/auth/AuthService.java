@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -173,8 +174,12 @@ public class AuthService implements SessionIssuer {
             if (!session.id().equals(accessSessionId)) {
                 throw ApiException.unauthorized("SESSION_MISMATCH", "登录凭证与当前会话不匹配，请重新登录");
             }
-            if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
+            requireText(request.deviceId(), "device_id");
+            if (!request.deviceId().equals(session.deviceId())) {
                 throw ApiException.unauthorized("SESSION_MISMATCH", "设备与当前会话不匹配，请重新登录");
+            }
+            if (SessionIssuer.MASTER_USER_ID.equals(session.userId())) {
+                throw ApiException.unauthorized("MASTER_SESSION_REFRESH_FORBIDDEN", "最高权限须重新插授权 U 盘破窗，不能续期");
             }
 
             UserRecord user = usersById.get(session.userId());
@@ -283,14 +288,68 @@ public class AuthService implements SessionIssuer {
                 .map(usersById::get);
     }
 
+    public void attachSession(HttpServletRequest request, String token) {
+        if (request == null || isBlank(token)) {
+            return;
+        }
+        SessionRecord session = Optional.ofNullable(accessTokensToSessionId.get(token)).map(sessionsById::get).orElse(null);
+        if (session == null || !"active".equals(session.status())) {
+            return;
+        }
+        request.setAttribute("auth.sessionId", session.id());
+        request.setAttribute("auth.deviceId", session.deviceId());
+    }
+
     @Override
-    public LoginResponse issueMasterSession() {
-        // U 盘破窗：按需保留超管账号（内存），不依赖已有账号；随后发最高权限会话。
+    public void revokeOutstandingMasterSessions() {
+        Instant now = Instant.now();
+        int revoked = 0;
+        for (SessionRecord session : java.util.List.copyOf(sessionsById.values())) {
+            if (!MASTER_USER_ID.equals(session.userId()) || !"active".equals(session.status())) {
+                continue;
+            }
+            accessTokensToSessionId.remove(session.accessToken());
+            refreshTokensToSessionId.remove(session.refreshToken());
+            sessionsById.put(session.id(), new SessionRecord(
+                    session.id(),
+                    session.userId(),
+                    session.accessToken(),
+                    session.refreshToken(),
+                    session.deviceId(),
+                    session.terminalType(),
+                    "logged_out",
+                    session.createdAt(),
+                    now,
+                    session.accessExpiresAt()
+            ));
+            revoked++;
+        }
+        if (revoked > 0) {
+            auditEventService.recordSuccess(
+                    "auth.master.sessions_revoked",
+                    "auth.master",
+                    "auth-session",
+                    MASTER_USER_ID,
+                    null,
+                    null,
+                    Map.of("revoked_count", String.valueOf(revoked))
+            );
+        }
+    }
+
+    @Override
+    public LoginResponse issueMasterSession(String deviceId) {
+        requireText(deviceId, "device_id");
         UserRecord user = usersById.computeIfAbsent(SessionIssuer.MASTER_USER_ID, id ->
                 new UserRecord(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
-                        "!usb-only-no-password", "platform_admin", "platform-company", null, "active", Instant.now()));
+                        "!usb-only-no-password", MASTER_ACCOUNT_TYPE, "platform-company", null, "active", Instant.now()));
+        if (!MASTER_ACCOUNT_TYPE.equals(user.accountType())) {
+            user = new UserRecord(user.id(), user.username(), user.passwordHash(), MASTER_ACCOUNT_TYPE,
+                    user.organizationId(), user.merchantId(), user.status(), user.createdAt());
+            usersById.put(user.id(), user);
+        }
         usersByUsername.putIfAbsent(SessionIssuer.MASTER_USERNAME, user);
-        SessionRecord session = createSession(user, "usb-master", "recovery");
+        SessionRecord session = createSession(user, deviceId, "recovery");
         auditEventService.recordSuccess("auth.master.session_issued", "auth.master", "auth-session",
                 session.id(), null, null, java.util.Map.of("user_id", user.id()));
         return responseFor(session, user);

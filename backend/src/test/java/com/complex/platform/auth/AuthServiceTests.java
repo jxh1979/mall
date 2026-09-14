@@ -221,6 +221,18 @@ class AuthServiceTests {
         assertThat(shortLived.authenticateToken(login.accessToken())).isEmpty();
     }
 
+    @Test
+    void revokingMasterSessionsInvalidatesAlreadyIssuedMasterAccessTokens() {
+        AuthService.LoginResponse master = service.issueMasterSession("usb-master:test");
+        assertThat(service.authenticateToken(master.accessToken())).isPresent();
+        service.revokeOutstandingMasterSessions();
+        assertThat(service.authenticateToken(master.accessToken())).isEmpty();
+        assertThatThrownBy(() -> service.refresh(
+                new AuthService.RefreshTokenRequest(master.refreshToken(), "usb-master:test"),
+                master.accessToken()
+        )).isInstanceOf(ApiException.class);
+    }
+
     private AuthService.LoginResponse login() {
         return service.login(new AuthService.LoginRequest(
                 "p0_admin",

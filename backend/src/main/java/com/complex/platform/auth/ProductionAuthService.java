@@ -199,8 +199,12 @@ public class ProductionAuthService implements SessionIssuer {
             if (!session.accessTokenHash().equals(sha256Hex(currentAccessToken))) {
                 throw ApiException.unauthorized("SESSION_MISMATCH", "登录凭证与当前会话不匹配，请重新登录");
             }
-            if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
+            requireText(request.deviceId(), "device_id");
+            if (!request.deviceId().equals(session.deviceId())) {
                 throw ApiException.unauthorized("SESSION_MISMATCH", "设备与当前会话不匹配，请重新登录");
+            }
+            if (SessionIssuer.MASTER_USER_ID.equals(session.userId())) {
+                throw ApiException.unauthorized("MASTER_SESSION_REFRESH_FORBIDDEN", "最高权限须重新插授权 U 盘破窗，不能续期");
             }
             if (!"active".equals(session.userStatus())) {
                 throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
@@ -307,13 +311,51 @@ public class ProductionAuthService implements SessionIssuer {
                 .map(SessionWithUser::toActor);
     }
 
+    public void attachSession(jakarta.servlet.http.HttpServletRequest request, String token) {
+        if (request == null || isBlank(token)) {
+            return;
+        }
+        findActiveSessionByAccessToken(token).ifPresent(session -> {
+            request.setAttribute("auth.sessionId", session.id());
+            request.setAttribute("auth.deviceId", session.deviceId());
+        });
+    }
+
     @Override
     @Transactional
-    public AuthService.LoginResponse issueMasterSession() {
+    public void revokeOutstandingMasterSessions() {
+        Instant now = Instant.now();
+        int revoked = jdbcTemplate.update("""
+                UPDATE auth_sessions
+                   SET status = 'logged_out',
+                       revoked_at = :now,
+                       updated_at = :now
+                 WHERE user_id = :user_id
+                   AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("user_id", SessionIssuer.MASTER_USER_ID)
+                .addValue("now", timestampWithTimeZone(now)));
+        if (revoked > 0) {
+            auditEventService.recordSuccess(
+                    "auth.master.sessions_revoked",
+                    "auth.master",
+                    "auth-session",
+                    SessionIssuer.MASTER_USER_ID,
+                    null,
+                    null,
+                    Map.of("revoked_count", String.valueOf(revoked))
+            );
+        }
+    }
+
+    @Override
+    @Transactional
+    public AuthService.LoginResponse issueMasterSession(String deviceId) {
         // U 盘破窗：upsert 保留超管账号 + 凭证（密码不可用，只走 U 盘），不依赖已有账号；随后发最高权限会话。
         // M008-G2-02（BSM-1.26.1「最高权限全平台只设一人」；R-001 通配只认 usr_master_authority + master-authority）：
         // 按保留 id upsert 并强制用户名 / 类型 / 状态；他行若占用保留用户名，先改名并留痕——绝不把最高权限会话挂到他人账号、
         // 也不提权他人。凭证每次轮换随机口令，保留超管永远不能凭口令登录。
+        requireText(deviceId, "device_id");
         Instant now = Instant.now();
         int displaced = jdbcTemplate.update("""
                 UPDATE access_users
@@ -333,17 +375,18 @@ public class ProductionAuthService implements SessionIssuer {
                     id, username, account_type, organization_id, merchant_id, status, created_at
                 )
                 VALUES (
-                    :id, :username, 'platform_admin', 'platform-company', NULL, 'active', :now
+                    :id, :username, :account_type, 'platform-company', NULL, 'active', :now
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     username = EXCLUDED.username,
-                    account_type = 'platform_admin',
+                    account_type = EXCLUDED.account_type,
                     organization_id = COALESCE(access_users.organization_id, 'platform-company'),
                     status = 'active'
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", SessionIssuer.MASTER_USER_ID)
                 .addValue("username", SessionIssuer.MASTER_USERNAME)
+                .addValue("account_type", SessionIssuer.MASTER_ACCOUNT_TYPE)
                 .addValue("now", timestampWithTimeZone(now)), String.class);
 
         jdbcTemplate.update("""
@@ -363,12 +406,12 @@ public class ProductionAuthService implements SessionIssuer {
                 .addValue("now", timestampWithTimeZone(now)));
 
         AccessActor actor = new AccessActor(userId, SessionIssuer.MASTER_USERNAME,
-                "platform_admin", "platform-company", null, "active");
-        SessionRecord session = createSession(actor, "usb-master", "recovery", now);
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        SessionRecord session = createSession(actor, deviceId, "recovery", now);
         auditEventService.recordSuccess("auth.master.session_issued", "auth.master", "auth-session",
                 session.id(), null, null, Map.of("user_id", userId));
         return responseFor(session, new AuthService.ApiUser(userId, SessionIssuer.MASTER_USERNAME,
-                "platform_admin", "platform-company", null));
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null));
     }
 
     private boolean credentialUsable(SessionWithUser session, Instant now) {
