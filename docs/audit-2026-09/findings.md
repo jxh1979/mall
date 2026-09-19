@@ -1,5 +1,973 @@
 # 全量审计 Findings 台账
-版本：V1.100
+版本：V2.38
+
+## M013 本次复审已收口（B5-r5 双PASS）
+2026-09-19T21:53:15Z：self 2f34738470eccc0ffbeede61ccd8268382525306a6c857878e9c0f75bcee0c7d（12931bytes）/ Grok 366f6d3459faa0548ef2ff68f937b967c6d3ceadb87f20f298ebbe6c17c5fed3（29508bytes）均 PASS，四值全等。M013-001–024 当前全否（唯一当前表见「当前 M013 B4-r5双PASS后队列」）；跨模块观察登记于收口文件。下方各段为历史时序，原样保留。
+
+
+## 当前 M013 B4-r5双PASS后队列：001–024全部否
+2026-09-19T21:38:08Z：依据 self modules/M013-b4-r5-self-raw.md V0.01 SHA256 9ca77c99acb5aa25df8fcd197fffb6df67433cad951244adb7aabcb26385f575、Grok modules/M013-b4-r5-grok-raw.md V0.01 SHA256 573147e3fddce301518324c90102370e505b438bcb226d8419119748cb5b7d67（26592bytes），B4 内容/归因双方 PASS、真实 EXIT_CODE=0；完整差异原样存档（after 2720a4e02b917ab6e88b5ba20d4912d59c007fae）。本次将 024 转否；001–023 保持否。修复 21 项，登记 3 项（009→M392、010 观察、017→M348）。两次获批追加修复均已使用（B3 累计 5）。M013 尚待 B5-r5 全模块双 PASS，不能称模块完成。
+
+| 当前ID | 修复队列 | 处置 |
+|---|---|---|
+| M013-001…018 | 否 | 保持（已修/登记，见 B4-r3 双PASS后队列表） |
+| M013-019…023 | 否 | 已修复，B4-r4双PASS确认保留 |
+| M013-024 | 否 | 已修复，B4-r5双PASS确认转否（删绑定设计 L49 括注） |
+
+
+## 当前 M013 第二次追加修复B2双PASS定稿：仅024是
+2026-09-19T21:27:15Z：候选V2.35（SHA256 d19f19aa9bc0700587daeb4e69a5a262477a3e88962d0692e0318ee96ead2a73）获两席完整PASS。self b1 V0.07/76335bytes/SHA256 34f6f16914c8a57c7ef09993b196a317815cd8bb69beb9722de41f478ad0f3e6；Grok b1 V0.07/173010bytes/SHA256 0805c3240f7c159c9165e102691c918d1d74e7fdc1c3e132961bc69f2296942c，适配器实际EXIT_CODE=0。旧双方前缀均完整保留、未增独占锁行。
+定稿：M013-024（细化、工程缺陷）修复队列「是」，方案A删括注；001–023否。当前24项：1是、23否。B3累计4尚未新增，本次整批完成取得after树才记5。下方候选段的逐句原句/拟改即B3执行文本，不再改动。
+
+
+## 当前 M013 第二次获批追加修复：B2整批候选（尚未定稿）
+2026-09-19T21:18:59Z：操作员2026-09-19在M013 BLOCKED-4ROUNDS后再次选择「批准再追加一次修复」：先B2定稿，再B3（第5次）→B4-r5→B5-r5。M013恢复IN_PROGRESS；B3历史累计4不清零，本次修完取得after树才记5。B2双PASS前不改任何文档/源码/测试。无HTML修改授权、无添加项、无questions。
+输入仅触发回退的两份完整B5-r4：self modules/M013-b5-r4-self-raw.md V0.01 17629bytes SHA256 af260f344faee42bc7e3e8a705f6b51af2fc22f1454b7c9dc446e7c3a4388b77（FAIL，CX-B5R4-01）；Grok modules/M013-b5-r4-grok-raw.md V0.01 25264bytes SHA256 ec4a7b838abe2939ce52b396d2fdb21eeeadf23f5440dded3447182a019a8407（PASS，无新发现）。两席原票不改写，B2评的是下表完整归并候选。
+候选：新M013-024一项修复队列拟「是」；001–023保持否。ID判定：CX-B5R4-01是B3-r4按023拟改写入的新误述，不是023原缺陷（OpenAPI status四值裂口未披露）本身；023的披露已落地且无回归，故不重开023，按「无ID者分配新ID」立024并注明来源。
+
+|正式ID|本批来源|分类|工程缺陷|修复队列归属（候选）|当前依据与归并理由|最小修复边界|
+|---|---|---|---|---|---|---|
+|M013-024|CX-B5R4-01（席甲 B5-r4）；Grok B5-r4 无新发现、其§5对照以服务提示语为据|细化|是|是|绑定设计:49 括注「（归档走存档端点）」：PlatformController 对 business-entities 仅 L42 `GET /business-entities`、L52 `POST /business-entities`、L97 `POST /business-entities/{entity_id}/projects`，存档端点只有 merchants（L108/L117）与 space-types（L190/L199）；PlatformService:893–900 `requireSubjectStatus` 提示「归档请使用存档操作」被创建主体（:119）与商户档案更新（:1001）共用，:53 注释「归档只经存档端点」为商户口径（M009-004）；JdbcPlatformRepository 无 business_entities 存档写法。同文 :108「完整存档/删除流程未在当前接口落地」、:121「也不存在主体完整 CRUD」与之相反。接入方按 :49 去找主体存档接口会 404。HTML 无相反规则→非冲突；实现事实误述→细化；无业务发明→非添加。判据 GEN-002、GEN-016、GEN-001、PGM-006。|方案A（席甲建议、操作员选项已列）：删去括注「（归档走存档端点）」，句止于「`blacklisted`」——:57/:108 已如实登记归档词表与存档流程差距，不重复；不新写要求句（同021先例）。方案B（备选）：改为「（`archived` 不由该字段写入；主体存档流程未在当前接口落地，见 §4.3）」。绑定设计 V0.12→V0.13，L3 最后更新仍为 2026-09-19（同日）。本文件无变更日志段，不新造。不改代码、HTML、OpenAPI。|
+
+### 本批逐句原句与拟改（方案A；B3按此逐字执行；check模式已核每处原句在当前文件恰好出现1次，共3处）
+1. M013-024 版本 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+# 四类主体唯一绑定开发设计 V0.12
+```
+拟改：
+```text
+# 四类主体唯一绑定开发设计 V0.13
+```
+2. M013-024 版本 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+> 版本：V0.12 ｜ 最后更新：2026-09-19 ｜ 状态：现行开发设计
+```
+拟改：
+```text
+> 版本：V0.13 ｜ 最后更新：2026-09-19 ｜ 状态：现行开发设计
+```
+3. M013-024 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+| `status` | `VARCHAR(32)` | 当前代码状态，尚无 DB CHECK；服务只接受 `pending_admission` / `active` / `suspended` / `terminated` / `blacklisted`（归档走存档端点） |
+```
+拟改：
+```text
+| `status` | `VARCHAR(32)` | 当前代码状态，尚无 DB CHECK；服务只接受 `pending_admission` / `active` / `suspended` / `terminated` / `blacklisted` |
+```
+
+### 影响
+- 绑定设计 §3.1 status 行只陈述服务可设五值，归档与存档流程差距由 §3.1 末条与 §4.3 承载；不再指向不存在的主体存档端点。
+- 不改 HTML、代码、测试、OpenAPI、决策台账、锁。001–023 不动。
+
+### 跨模块观察（收口时登记）
+- O-B5R4-01：PlatformService `requireSubjectStatus` 提示语「归档请使用存档操作」对主体档案调用方误导（代码措辞，归 PlatformService 所属后台模块）。
+- 沿用 V2.31 候选段所列：019 同根句 M014/M421/M439；023 OpenAPI status 四值 → M392。
+
+### B3验证（尚未执行）
+纯文档修改：补丁脚本 check 逐处计数=1后 apply；B3 前后四值（④取 M013-b5-r4-grok-raw.md 末条）；临时索引取前后树；B4-r5 用前后树完整 diff，逐行归因到 024。无代码改动，不跑后端测试。
+
+
+## 当前 M013 B5-r4 合取FAIL待交接（BLOCKED-4ROUNDS；未B2定稿）
+2026-09-19T20:52:03Z：B5-r4 两席完整报告已齐。席甲 modules/M013-b5-r4-self-raw.md V0.01 17629bytes SHA256 af260f344faee42bc7e3e8a705f6b51af2fc22f1454b7c9dc446e7c3a4388b77：FAIL（新发现 CX-B5R4-01）。Grok modules/M013-b5-r4-grok-raw.md V0.01 25264bytes SHA256 ec4a7b838abe2939ce52b396d2fdb21eeeadf23f5440dded3447182a019a8407：PASS。合取 FAIL。B3 累计 4/4（3 次额度 + 操作员 2026-09-19 批准追加的 1 次）均已使用，按 V0.17 第 460 行本轮停止，不擅自 B2/B3、不修复、不进 M014；须操作员新指令。019–023 已于 B4-r4 双 PASS 转否并在 B5-r4 核实落地无回归；001–023 当前全否。
+
+|来源临时号|关联正式ID|本席分类/状态|完整问题与证据|拟处置及影响（尚未执行）|
+|---|---|---|---|---|
+|CX-B5R4-01|有ID（M013-023，已转否）但不在修复队列，待B2重开或分新ID|细化；席甲确认工程缺陷；Grok本轮PASS|绑定设计:49 由 023 拟改写入的括注「（归档走存档端点）」：PlatformController 对 business-entities 仅 L42 GET、L52 POST、L97 POST …/projects 三个入口，存档端点只有 merchants（L108/L117）与 space-types（L190/L199）；PlatformService:893–900 requireSubjectStatus 提示「归档请使用存档操作」被创建主体（:119）与商户档案更新（:1001）共用；:53 注释「归档只经存档端点」针对商户（M009-004）。同文 :108「完整存档/删除流程未在当前接口落地」、:121「也不存在主体完整 CRUD」与之相反。B2/B4-r4 两席均以服务提示语为据接受，未核主体存档入口存在。|A（席甲建议）：删去括注「（归档走存档端点）」；B：改为「（`archived` 不由该字段写入；主体存档流程未在当前接口落地，见 §4.3）」。绑定设计 V0.12→V0.13。不改代码/HTML/OpenAPI。|
+|（Grok 本轮无新发现）|—|Grok B5-r4 PASS：四文件全文、84/84 判据均记「否缺陷」，019–023 落地无回归，001–023 全否不解释为功能全实现|Grok §5 对照表「主体 status 五码+归档走存档 → PlatformService:54–56、:893–899」与 B2/B4 四票同样以服务提示语和注释为据，未 grep PlatformController 核主体档案是否有存档端点；席甲 CX-B5R4-01 的证据（Controller 仅三入口、提示语为商户/主体共用）Grok 未审到。按双席合取规则，席甲 FAIL 即本轮 FAIL，不以任一方覆盖另一方。|无需处置；CX-B5R4-01 待 B2 由两席共同复核。|
+
+本批完整raw：席甲 V0.01 17629bytes SHA256 af260f344faee42bc7e3e8a705f6b51af2fc22f1454b7c9dc446e7c3a4388b77；Grok V0.01 25264bytes SHA256 ec4a7b838abe2939ce52b396d2fdb21eeeadf23f5440dded3447182a019a8407，适配器实际 EXIT_CODE=0。B5 后四值：实算/sidecar/ledger/Grok raw 末条均为 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，全等。三 HTML、锁、HEAD e456ba96、真实索引未改；四文档为 B3-r4 after 态（ddff52da…）。无 HTML 申请、无添加项、无未答 questions；停止原因仅本模块修复次数用尽（含获批追加一次），需要操作员新指令才可继续。
+
+
+## 当前 M013 B4-r4双PASS后队列：001–023全部否
+2026-09-19T20:37:56Z：依据 self modules/M013-b4-r4-self-raw.md V0.01 SHA256 4d7a6f5b77b77cc2d683360b5a024f65c4b081486d5caf95abb0e4cc06eea1c7（10052bytes）、Grok modules/M013-b4-r4-grok-raw.md V0.01 SHA256 f5ca9babcc4b1838a3c2fc07c464dc5ba33d394f15d74c897882410b312751d7（62894bytes），B4 内容/归因双方 PASS、真实 EXIT_CODE=0；完整 34121byte/18hunk 差异（before 4fe06d65137e6fefa5e2da4061af7260cee291be / after ddff52dad5669cf17a598b75490df0bcfb454429，SHA256 6b97dbc641237b9711116c6e2de3a298db981b1868efeaff3d66b3d6770a95e0）均原样存档。本次将 019–023 转否；001–018 保持否。修复 20 项，登记 3 项（009→M392、010 观察、017→M348）。获批追加一次修复已使用（B3 累计 4）。M013 尚待 B5-r4 全模块双 PASS，不能称模块完成。
+
+| 当前ID | 修复队列 | 处置 |
+|---|---|---|
+| M013-001 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-002 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-003 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-004 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-005 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-006 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-007 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-008 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-009 | 否 | 跨模块OpenAPI登记→M392，未在本模块修 |
+| M013-010 | 否 | 观察续记（含B5-r3 O-B5-01/O-B5-03），非待修 |
+| M013-011 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-012 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-013 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-014 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-015 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-016 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-017 | 否 | 跨模块项目结果过滤缺口→M348，依赖M032，仍未修 |
+| M013-018 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-019 | 否 | 已修复，B4-r4双PASS确认转否 |
+| M013-020 | 否 | 已修复，B4-r4双PASS确认转否 |
+| M013-021 | 否 | 已修复，B4-r4双PASS确认转否 |
+| M013-022 | 否 | 已修复，B4-r4双PASS确认转否 |
+| M013-023 | 否 | 已修复，B4-r4双PASS确认转否 |
+
+
+## 当前 M013 追加修复B2双PASS定稿：019–023是
+2026-09-19T20:24:23Z：候选V2.31（SHA256 70cfc3ba2c6016763f924f3a9dcc3ebac043200e2f2bc1038ef8d192a15b32c7）获两席完整PASS。self b1 V0.06/72465bytes/SHA256 2e924f5fd5d8ddad31936a6767d9406c7e62a2b5b5d541b8c82f2a113d903d29；Grok b1 V0.06/156407bytes/SHA256 560eed6a1f09c5a710df695d3ee5d08d2a6bf5b588437874c2809eef7fa09bd8，适配器实际EXIT_CODE=0。旧双方前缀均完整保留、未增独占锁行。
+定稿：M013-019（冲突）、020/021/022/023（细化、工程缺陷）修复队列「是」；M013-010续记否；001–018否。当前23项：5是、18否。B3累计3尚未新增，本次整批完成取得after树才记4。下方候选段的逐句原句/拟改即B3执行文本，不再改动。
+
+
+## 当前 M013 获批追加一次修复：B2整批候选（尚未定稿）
+2026-09-19T20:08:18Z：操作员2026-09-19在M013 BLOCKED-3ROUNDS后选择「批准追加一次修复」：先B2定稿，再B3（第4次）→B4-r4→B5-r4。本轮M013恢复IN_PROGRESS；B3历史累计3不清零，本次修完取得after树才记4。B2双PASS前不改任何文档/源码/测试。无HTML修改授权、无添加项、无questions。
+输入仅触发回退的两份完整B5-r3：self modules/M013-b5-r3-self-raw.md V0.01 23489bytes SHA256 bd610a579af0d1d91dd1dd52fe68b7c0f7e4a5b90a20b17932dce814e2f9b916；Grok modules/M013-b5-r3-grok-raw.md 文件内第二个CRITERIA-LOCK行（L359）起的本次完整报告V0.02，全文件59882bytes SHA256 e4748561d14d8b6508dd8329a8a51a68601be6fac3b5e2a8a7a410efd355b808（前缀V0.01为Codex派发未取得退出码的旧票，不作输入）。两席原FAIL原文不改写，B2评的是下表完整归并候选。
+V2.31修订（2026-09-19T20:10:36Z）：V2.30漏并本席B5-r3观察O-B5-01、O-B5-03及Grok B5-r3「历史已批口径」，本版在表末补M013-010续记行（只登记、否）；019–023五行及逐句原句/拟改未改一字。V2.30派发的Grok B2在运行约65秒时由席甲中止，未产出报告、目标raw未变。
+候选：新M013-019…023五项修复队列拟「是」（双PASS定稿后生效）；M013-001–018保持否。CX-B5-02、GR-B5R3-01所涉事实曾在M013-010（技术性/正向观察汇总，否）里作观察记述，但010只登记「差距方向正确的诚实登记」，未认定这两处过时/遗漏为缺陷，故另立新ID，010不改。
+
+|正式ID|本批来源|分类|工程缺陷|修复队列归属（候选）|当前依据与归并理由|最小修复边界|
+|---|---|---|---|---|---|---|
+|M013-019|CX-B5-01（席甲）；Grok B5-r3 PGM-042行判否，待本次复核|冲突|是|是|集团PRD:76与平台治理PRD:407「本规则不把仅职级变化、责任范围变化或任意手工模板应用列为触发条件（DEC-R8-91）」；PRD:523「仅职级变化不作为本规则触发」、:544「本规则不扩展到仅职级变化」、:656「本条不把仅职级变化或任意手工模板应用列为触发条件」。治理HTML docs/platform-governance-map-for-operations-v0.1.html L658角色装配「HR 部门定每个人的层级/职位，定完系统自动适配对应角色和权限模板」、L669「职级影响默认权限模板和审批层级」；AccessService:1305–1313已定岗员工改职级走assignUserPositionDirect按新职级映射重算（M006-G-02，注释引PGM-1.10.1/1.10.2）。docs/prd-audit/business-decision-ledger.md:1936 DEC-R8-91原文只把「职级」与手工模板排除、无「责任范围」；操作员2026-09-06裁决R-002（本地裁决记录，160无副本）答「重算」，晚于DEC-R8-91。文档排除项与HTML相反→冲突，按2.1删除相反内容。|只删五处排除句中的「仅职级变化」「责任范围变化」，保留「任意手工模板应用」不触发；集团PRD:5修订说明、PRD:966变更日志是历史记录不改。集团PRD版本V1.02→V1.03（与020合并一次）、PRD V0.05→V0.06，各加一条变更记录。他模块同根句只登记跨模块观察（见下）。不改HTML、代码、决策台账、锁。|
+|M013-020|CX-B5-02（席甲）；Grok B5-r3 Q4判文已分清，待本次复核|细化|是|是|集团PRD:23表头「取值（当前实现 CHECK / 服务校验）」只写request_type四值并称「DB CHECK 预留 4 类」，:70同。已发布V392把chk_access_grant_requests_type扩为六值（另含user_scope_change、position_high_risk_release），complex_test pg_constraint实查一致；AccessService:56–57定义两类、:1792–1802审批应用处理，申请入口:1580–1585只收前三类，GET grant-requests正常返回这两类。当前实现栏过时。|:23改六值并注明申请入口只收前三类、两类由跨范围定岗与岗位高危挂起在服务内生成、role_permission服务层未开放；:70补一句。与019同文件合并一次版本变更。|
+|M013-021|CX-B5-03（席甲）；Grok B5-r3 G7判一致，待本次复核|细化|是|是|验收包:181 G7说明「…承接基本聚合能力，所有对象继续携带 `project_id`」；complex_test information_schema实查business_entities、business_entity_bindings、roles、users、permission_templates均无project_id列；同模块绑定设计:56、:80明写没有。PGM L412–413「所有基础对象都要带“综合体项目归属”」是要求，被写成已完成事实。|删去「，所有对象继续携带 `project_id`」（不另写新要求句，避免扩写）。验收包V0.05→V0.06并加一行变更记录。|
+|M013-022|GR-B5R3-01（Grok）并席甲O-B5-02；席甲已核代码后接受|细化|是|是|绑定设计:39迁移只列到V410、:56把「当前表没有 `project_id`」当现状却未提项目关联、§5当前API表未列`POST /api/v1/platform/business-entities/{entity_id}/projects`、§8依据无V427。工作区V427建business_entity_projects；PlatformService:121创建主体经creationProject关联当前项目（最高权限可指定已存在项目，:419–429）、:92列表按currentProject过滤、:363–381关联方法须平台范围且isMasterAuthority；PlatformController:97关联端点。|§3.1补V427多对多项目关联及「创建时关联当前项目、列表按当前项目过滤」，保留「主体表本身无project_id列」事实；§5补关联端点一行；§8依据补V427。与023合并一次版本变更（V0.11→V0.12）。不改代码、不发明新规则。|
+|M013-023|GR-B5R3-02（Grok）；席甲已核实后接受|细化|是|是|绑定设计:49 status行只写「尚无 DB CHECK」、:55只登记entity_role旧六值契约缺口。openapi-p0.yaml BusinessEntityRequest.status枚举draft/active/suspended/archived；PlatformService:54–56 SUBJECT_STATUSES为pending_admission/active/suspended/terminated/blacklisted，「归档」只经存档端点。按OpenAPI传draft/archived第一次即400。|§3.1 status行补服务可设五值；:55同句补披露OpenAPI status四值与服务五值不一致、归契约模块处理（同009）。本模块不改OpenAPI。随022同一次版本变更。|
+|M013-010（续记）|O-B5-01、O-B5-03（席甲观察）；Grok B5-r3「历史已批口径」|技术性/观察|否|否|O-B5-01：平台治理PRD:650「职级只影响默认权限模板和审批层级建议」较PGM L669「职级影响默认权限模板和审批层级」多「建议」，:648与验收包G6写审批层级按组织汇报链解析、不折算职级档位；HTML未写明职级如何影响审批层级，未见可复现的相反实现，不立案。O-B5-03：验收包§11变更日志行序非时间序（09-11、09-14行在09-01行之前），不影响内容可验证性。Grok历史已批口径（BSM-114锁旧摘录与BSM-120页脚日期为M009已登记观察、私人手机查看考勤、M013-017归M348、M013-009归M392等）独立复核后保留，不重开。|只登记，不改文。|
+
+### 本批逐句原句与拟改（B3按此逐字执行；check模式已核每处原句在当前文件恰好出现1次，共22处）
+1. M013-022/023 版本 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+# 四类主体唯一绑定开发设计 V0.11
+```
+拟改：
+```text
+# 四类主体唯一绑定开发设计 V0.12
+```
+2. M013-022/023 版本 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+> 版本：V0.11 ｜ 最后更新：2026-09-14 ｜ 状态：现行开发设计
+```
+拟改：
+```text
+> 版本：V0.12 ｜ 最后更新：2026-09-19 ｜ 状态：现行开发设计
+```
+3. M013-022 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+（V318 的父链列已由 V410 删除，只作历史）。
+```
+拟改：
+```text
+（V318 的父链列已由 V410 删除，只作历史）；V427 另建 `business_entity_projects` 多对多项目关联表，主体表本身仍无 `project_id` 列。
+```
+4. M013-023 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+| `status` | `VARCHAR(32)` | 当前代码状态，尚无 DB CHECK |
+```
+拟改：
+```text
+| `status` | `VARCHAR(32)` | 当前代码状态，尚无 DB CHECK；服务只接受 `pending_admission` / `active` / `suspended` / `terminated` / `blacklisted`（归档走存档端点） |
+```
+5. M013-023 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+属契约缺口（M013-009，归 OpenAPI 契约模块处理），不得当作活闭集。
+```
+拟改：
+```text
+属契约缺口（M013-009，归 OpenAPI 契约模块处理），不得当作活闭集；同一 schema 的 `status` 枚举仍是 draft / active / suspended / archived，与服务可设五值不一致，同属契约缺口（M013-023，归 OpenAPI 契约模块处理）。
+```
+6. M013-022 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+- 当前表没有 `project_id`、主体联系电话、证照附件或证照有效期字段。证照、资质和保险由合规到期台账承载，不得在本文虚构这些现行列。
+```
+拟改：
+```text
+- 当前表没有 `project_id`、主体联系电话、证照附件或证照有效期字段。项目归属由 V427 `business_entity_projects` 多对多关联承载：创建主体时关联当前项目（持授权 U 盘密钥的最高权限可指定已存在项目），列表按当前项目过滤。证照、资质和保险由合规到期台账承载，不得在本文虚构这些现行列。
+```
+7. M013-022 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+| `/api/v1/platform/business-entities` | POST | 创建主体档案 |
+```
+拟改：
+```text
+| `/api/v1/platform/business-entities` | POST | 创建主体档案 |
+| `/api/v1/platform/business-entities/{entity_id}/projects` | POST | 为主体追加项目关联（须平台范围且由持授权 U 盘密钥的最高权限执行） |
+```
+8. M013-022 · `docs/business-entity-binding-development-design-v0.1.md`
+原句：
+```text
+- 当前实现：V002、V005、V010、V318、V354、V410（删父链、角色三值）；
+```
+拟改：
+```text
+- 当前实现：V002、V005、V010、V318、V354、V410（删父链、角色三值）、V427（主体项目关联）；
+```
+9. M013-019/020 版本 · `docs/group-governance-rebuild-prd-v1.0.md`
+原句：
+```text
+# 集团治理重建 PRD（V1.02·补断点）
+```
+拟改：
+```text
+# 集团治理重建 PRD（V1.03·补断点）
+```
+10. M013-020 · `docs/group-governance-rebuild-prd-v1.0.md`
+原句：
+```text
+| 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` | DB CHECK 预留 4 类；当前 `AccessService` 实际支持前三类，`role_permission` 服务层未开放 |
+```
+拟改：
+```text
+| 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` / `user_scope_change` / `position_high_risk_release` | DB CHECK 六类（V392）；申请入口只接受前三类，`user_scope_change`、`position_high_risk_release` 由跨范围定岗与岗位高危挂起在服务内生成，`role_permission` 服务层未开放 |
+```
+11. M013-020 · `docs/group-governance-rebuild-prd-v1.0.md`
+原句：
+```text
+DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支。
+```
+拟改：
+```text
+DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支；另有服务内生成的 `user_scope_change`、`position_high_risk_release` 两类（V392），不是申请入口可填类型。
+```
+12. M013-019 · `docs/group-governance-rebuild-prd-v1.0.md`
+原句：
+```text
+本规则不把仅职级变化、责任范围变化或任意手工模板应用列为触发条件（DEC-R8-91）。
+```
+拟改：
+```text
+本规则不把任意手工模板应用列为触发条件（DEC-R8-91）。
+```
+13. M013-019/020 变更记录 · `docs/group-governance-rebuild-prd-v1.0.md`
+原句：
+```text
+> 变更记录（2026-09-14，V1.02，M013-012–016）：集团项目隔离现状与审批属性闭合分开；岗位模板普通权限与待批高危、日常临时审批、申请权限风险档、总结查询参数按现有实现订正。
+```
+拟改：
+```text
+> 变更记录（2026-09-14，V1.02，M013-012–016）：集团项目隔离现状与审批属性闭合分开；岗位模板普通权限与待批高危、日常临时审批、申请权限风险档、总结查询参数按现有实现订正。
+
+> 变更记录（2026-09-19，V1.03，M013-019/020）：删去角色装配重算规则中与治理 HTML「HR 定层级/职位即自动适配」「职级影响默认权限模板」相反的职级与责任范围排除；授权申请类型按 V392 六类订正。
+```
+14. M013-021 版本 · `docs/platform-governance-acceptance-pack-v0.2.md`
+原句：
+```text
+# 平台治理验收包 V0.05
+```
+拟改：
+```text
+# 平台治理验收包 V0.06
+```
+15. M013-021 · `docs/platform-governance-acceptance-pack-v0.2.md`
+原句：
+```text
+承接基本聚合能力，所有对象继续携带 `project_id` |
+```
+拟改：
+```text
+承接基本聚合能力 |
+```
+16. M013-021 变更记录 · `docs/platform-governance-acceptance-pack-v0.2.md`
+原句：
+```text
+| 2026-09-14 | 改 | §10A G7 | 版本升 V0.05；区分集团审批属性已闭合与项目范围隔离待对齐 | M013-012；集团治理 PRD §4 与当前集团总览调用链 |
+```
+拟改：
+```text
+| 2026-09-14 | 改 | §10A G7 | 版本升 V0.05；区分集团审批属性已闭合与项目范围隔离待对齐 | M013-012；集团治理 PRD §4 与当前集团总览调用链 |
+| 2026-09-19 | 改 | §10A G7 | 版本升 V0.06；删去与主体档案、四类主体绑定表实况不符的「所有对象继续携带 project_id」 | M013-021；四类主体绑定开发设计 §3 |
+```
+17. M013-019 版本 · `docs/platform-governance-prd-v0.1.md`
+原句：
+```text
+# 平台治理层产品需求 PRD V0.05
+```
+拟改：
+```text
+# 平台治理层产品需求 PRD V0.06
+```
+18. M013-019 · `docs/platform-governance-prd-v0.1.md`
+原句：
+```text
+本规则不把仅职级变化、责任范围变化或任意手工模板应用列为触发条件（DEC-R8-91）。
+```
+拟改：
+```text
+本规则不把任意手工模板应用列为触发条件（DEC-R8-91）。
+```
+19. M013-019 · `docs/platform-governance-prd-v0.1.md`
+原句：
+```text
+；仅职级变化不作为本规则触发；敏感权限变更可追溯
+```
+拟改：
+```text
+；敏感权限变更可追溯
+```
+20. M013-019 · `docs/platform-governance-prd-v0.1.md`
+原句：
+```text
+- 本规则不扩展到仅职级变化，也不扩展到任意手工模板应用；
+```
+拟改：
+```text
+- 本规则不扩展到任意手工模板应用；
+```
+21. M013-019 · `docs/platform-governance-prd-v0.1.md`
+原句：
+```text
+本条不把仅职级变化或任意手工模板应用列为触发条件（DEC-R8-91）。
+```
+拟改：
+```text
+本条不把任意手工模板应用列为触发条件（DEC-R8-91）。
+```
+22. M013-019 变更记录 · `docs/platform-governance-prd-v0.1.md`
+原句：
+```text
+| 2026-09-14 | 改 | §12 已确认第15条 | 版本升 V0.05；集团基本聚合与审批属性已具备，项目级结果过滤仍待对齐 | M013-012；PGM 权限规则及集团治理 PRD §4 |
+```
+拟改：
+```text
+| 2026-09-14 | 改 | §12 已确认第15条 | 版本升 V0.05；集团基本聚合与审批属性已具备，项目级结果过滤仍待对齐 | M013-012；PGM 权限规则及集团治理 PRD §4 |
+| 2026-09-19 | 改 | §6.10 第 9 条 / §7.8 / §7.8.2 / §12 第 14B 条 | 版本升 V0.06；删去与治理 HTML「HR 定层级/职位即自动适配」「职级影响默认权限模板」相反的仅职级变化、责任范围变化排除，只保留任意手工模板应用不触发 | M013-019；PGM L658/L669；AccessService 改职级重算现状 |
+```
+
+### 影响
+- 019：四处现行规则与治理HTML「定完系统自动适配」「职级影响默认权限模板」及现行改职级重算代码一致；任意手工模板应用仍不触发，DEC-R8-91第6条免审射程不变。
+- 020：集团PRD授权申请类型与V392 CHECK一致，并写明申请入口只收三类。
+- 021：验收包不再把PGM L412–413的要求写成已完成事实。
+- 022/023：绑定设计补齐V427项目关联、关联端点与status契约裂口，按文档开发可发现真实行为与契约缺口。
+- 不改HTML、代码、测试、OpenAPI、决策台账、锁。
+
+### 跨模块观察（收口时登记到收口文件cross_module_observations，不在本模块改）
+- 019同根句：M014 docs/platform-governance-product-spec-v0.2.md:1979；M421 docs/business-html-source-of-truth-acceptance-spec-v0.1.md:67（RULE-GOV-ROLE-CHANGE-01）；M439 docs/product-requirements-v0.1.md:601、:650（:688为变更日志历史）。
+- 023：docs/openapi/openapi-p0.yaml BusinessEntityRequest.status四值 → M392（同009）。
+
+### B3验证（尚未执行）
+纯文档修改：补丁脚本check逐处计数=1后apply；B3前后四值（④取M013-b5-r3-grok-raw.md末条）；临时索引取前后树；B4用前后树完整diff，逐行归因到019–023。无代码改动，不跑后端测试。
+
+
+
+## 当前 M013 B5-r3 全批FAIL待交接（BLOCKED-3ROUNDS；未B2定稿）
+2026-09-19T19:43:57Z：本批两席完整B5报告已齐，均FAIL。席甲自2026-09-19起由Claude接替停在B5-r3的Codex；Codex 2026-09-15T01:00:38Z派发的Grok B5-r3只留EXIT_CODE=PENDING、进程结束后无人取得退出码，按§0判交付失败，已用ledger原命令逐字重派（提示词SHA256 e306ed975ab34aa1e4c5e1689be9a3af11b64fdd9a3a597acbd725064e83fa5e），回执REPORT_PATH=…/M013-b5-r3-grok-raw.md、EXIT_CODE=0；席甲self先封存后才读Grok。B3累计3/3，按V0.17第460行本轮停止，不擅自新一轮B2/B3或下一模块。001–018当前NO保持；下表是完整本批待归并依据，不冒称已获B2双PASS，不做无ID修复。
+
+|来源临时号|关联正式ID|本席分类/状态|完整问题与证据|拟处置及影响（尚未执行）|
+|---|---|---|---|---|
+|CX-B5-01|无，待重启后B2分配|冲突；席甲确认工程缺陷；Grok本轮未提（其PGM-042行判否），待B2核|集团PRD:76与平台治理PRD:407「本规则不把仅职级变化、责任范围变化或任意手工模板应用列为触发条件（DEC-R8-91）」，PRD:523「仅职级变化不作为本规则触发」、:544「本规则不扩展到仅职级变化」、:656同义；集团PRD:5修订说明④反写「岗位、职级、组织、商户或责任范围变化后立即重算」。PGM L658「HR 部门定每个人的层级/职位，定完系统自动适配对应角色和权限模板」、L669「职级影响默认权限模板和审批层级」。AccessService:1305–1313改职级走assignUserPositionDirect按新映射重算（M006-G-02）。决策台账:1936 DEC-R8-91原文只排除「职级」与手工模板、无「责任范围」；操作员2026-09-06 R-002原话「重算」（改职级按新岗位×职级映射立即重算，晚于DEC-R8-91）。|删五处排除条款中的「仅职级变化」「责任范围变化」，只保留「任意手工模板应用」；集团PRD:5历史说明与PRD:966变更日志按当时文字保留。两文件版本+1、各加一行变更记录。不改HTML、代码、锁。|
+|CX-B5-02|无（事实曾作Codex O06归入010观察），待B2重分类|细化；席甲确认工程缺陷；Grok本轮Q4判「文已分清」，待B2核|集团PRD:23表头「取值（当前实现 CHECK / 服务校验）」写request_type四值且「DB CHECK 预留 4 类」；:70同。complex_test（flyway 427）pg_constraint实查chk_access_grant_requests_type为六值（另含user_scope_change、position_high_risk_release），来源已发布V392；AccessService:56–57定义两类、:1792–1802审批应用处理、申请入口:1580–1585只收前三类。GET grant-requests正常返回这两类。|:23改六值并注明「申请入口只收前三类；两类由跨范围定岗与岗位高危挂起在服务内生成；role_permission未开放」；:70同步一句。与CX-B5-01同文件合并一次版本变更。|
+|CX-B5-03|无，待B2分配|细化；席甲确认工程缺陷；Grok本轮G7判一致，待B2核|验收包:181 G7说明「…承接基本聚合能力，所有对象继续携带 `project_id`」；complex_test information_schema实查business_entities、business_entity_bindings、roles、users、permission_templates均无project_id列；同模块绑定设计:56、:80明写没有。PGM L412–413「所有基础对象都要带“综合体项目归属”」是要求，被写成已完成事实。|删去「，所有对象继续携带 `project_id`」或改为「所有对象须带 project_id 归属（主体档案与四类主体绑定当前尚无该列）」，B2二选一。验收包V0.05→V0.06并加一行变更记录。|
+|GR-B5R3-01（并席甲O-B5-02）|无（事实曾作Grok OBS01归入010观察），待B2重分类|细化；Grok判工程缺陷；席甲已核实代码后接受|绑定设计:39迁移只列到V410、:56「当前表没有 `project_id`」当作缺口、:113–120 §5当前API未列`POST /api/v1/platform/business-entities/{entity_id}/projects`、:136验收。工作区V427建business_entity_projects；PlatformService:133创建主体时写项目关联、:92列表按currentProject过滤、:363关联方法；PlatformController:97关联端点。|§3.1补V427多对多项目关联与「创建时关联当前项目、列表按当前项目过滤」，保留「主体表本身无 project_id 列」事实；§5补关联端点一行；§8依据补V427。版本+1并加变更记录。不改代码、不发明新规则。|
+|GR-B5R3-02|无，待B2分配|细化；Grok判工程缺陷；席甲已核实后接受|绑定设计:49 status行只写「尚无 DB CHECK」、:55只登记entity_role旧六值。openapi-p0.yaml BusinessEntityRequest.status枚举draft/active/suspended/archived；PlatformService:54–56 SUBJECT_STATUSES为pending_admission/active/suspended/terminated/blacklisted，「归档」只经存档端点。按OpenAPI传draft/archived第一次即400。|§3.1 status行与:55同句补披露OpenAPI status四值与服务五码不一致（归契约模块M392处理，同009），不在本模块改OpenAPI。随GR-B5R3-01同一次版本变更。|
+
+本批完整raw：
+- 席甲 modules/M013-b5-r3-self-raw.md V0.01，23489bytes，SHA256 bd610a579af0d1d91dd1dd52fe68b7c0f7e4a5b90a20b17932dce814e2f9b916（Claude接任席甲，未读Grok前封存）。
+- Grok modules/M013-b5-r3-grok-raw.md 本次完整报告为文件内第二个CRITERIA-LOCK行（L359）起，报告版本V0.02；全文件59882bytes，SHA256 e4748561d14d8b6508dd8329a8a51a68601be6fac3b5e2a8a7a410efd355b808；前缀V0.01（Codex派发、退出码未取得）原样保留、不采信。
+B5后四值：实算/sidecar/ledger/Grok raw末条均为b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，全等。三HTML、四文档SHA、HEAD、真实索引未改。无HTML申请、无添加项、无未答questions；停止原因仅本轮修复次数上限，需要操作员新指令才可继续。
+
+## 当前 M013 B4-r3双PASS后队列：001–018全部否
+依据：self V0.01 SHA4d6cdcf9d823e0e944ae717fd1d38dc8f6ec237f26fca575b2bf41d964b7048d、Grok V0.01 SHA61bd2c69da533f3951e237b04309da4d0ccfcc67559a8ad54fe002b895086034（22607bytes），B4内容/归因双方PASS、真实exit0；完整836byte差异均原样存档。本次将仍是的011–016及018全部改否。原001–010/017否保持。修复15项，登记3项；017后台项目过滤缺口仍未修，M348（依赖M032）；009 OpenAPI归M392；010观察不构成待修。M013尚待B5全模块双PASS，不能称模块完成。
+
+| 当前ID | 修复队列 | 处置 |
+|---|---|---|
+| M013-001 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-002 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-003 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-004 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-005 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-006 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-007 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-008 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-009 | 否 | 跨模块OpenAPI登记→M392，未在本模块修 |
+| M013-010 | 否 | 观察续记，非待修 |
+| M013-011 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-012 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-013 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-014 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-015 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-016 | 否 | 已修复，B4-r3双PASS确认保留 |
+| M013-017 | 否 | 跨模块项目结果过滤缺口→M348，依赖M032，仍未修 |
+| M013-018 | 否 | 已修复，B4-r3双PASS确认保留 |
+
+## 当前 M013 B2-r3双PASS定稿，7项是
+Codex V0.05 66673bytes SHA2851bfe5ca0337ba256c148da6d82b8ed7468d86179593f084475679dacfe7f3、Grok V0.05 133121bytes SHA485f35257824197ecc98e1fe476c226e291251acca94433b06b0633ab84ea071，B2均PASS；Grok真实exit0，完整追加13991bytes已读、旧119130bytes前缀未变。Grok独立按GEN016版本明文撤回旧banner观察，接受018技术性工程缺陷。以下候选全部原句/拟改文字不变，现正式定稿：011–016及018是，001–010/017否。第3次B3只需核16处保持，唯一实际修改018两行版本/当前日期。无HTML修改、添加或questions；B3累计2，未执行本次修复。
+
+## 当前 M013 B4-r2回退 B2-r3整批候选
+输入完整raw：modules/M013-b4-r2-self-raw.md V0.01（47331bytes，SHA c7d26b9aeca2ce9abd64b523162b9e48083f9583465118f89befd395ae3fa15a）修复内容FAIL/归因PASS；modules/M013-b4-r2-grok-raw.md V0.01（56850bytes，SHA 72aefb6fd603c46fb66003bbf56f6555115367f5056b19d4156a3902887ea45d）修复内容PASS/归因PASS，真实EXIT_CODE0。两席全33677bytes/16hunk审完，完整diff均逐字一致；本方封存先于读取对方。合取FAIL，无越界不回滚。
+当前队列候选：011–016仍是（B4未双PASS不得清队）；018新增是；001–010及017否。B3累计2/3，本批尚未第3次。无添加/HTML申请/questions。
+
+| 正式ID | 两席来源 | 分类 | 工程缺陷 | 修复队列 | 判据与证据 | 最小修复与影响 |
+|---|---|---|---|---|---|---|
+| M013-018 | CX-B4-01；Grok §5/§9同处观察，分歧待B2 | 技术性 | 是 | 是（候选） | GEN-016明确含文档版本/状态，GEN-018；after ad9c27c34fcf3032cf42e330821e14f26d5e510e的绑定设计L1 V0.10，L3当前版本V0.09/最后更新2026-09-11。实际re比对same=false。打开文件即同时看到两个互斥当前版本，无偶发条件，不以API会否报错代替文档判据。 | 仅绑定设计L1及L3统一V0.11，L3最后更新设本次操作员当地日期2026-09-14；不改正文业务规则、HTML、代码、历史记录。无业务发明，免人闸。 |
+
+### M013-018 完整原句、拟改句和影响
+文件：docs/business-entity-binding-development-design-v0.1.md，当前V0.10，153行。
+原文：
+```markdown
+# 四类主体唯一绑定开发设计 V0.10
+
+> 版本：V0.09 ｜ 最后更新：2026-09-11 ｜ 状态：现行开发设计
+```
+拟改：
+```markdown
+# 四类主体唯一绑定开发设计 V0.11
+
+> 版本：V0.11 ｜ 最后更新：2026-09-14 ｜ 状态：现行开发设计
+```
+影响：只让本文件的当前版本和更新时间一致，业务说明、接口行为、审批规则和HTML均不改变。下一次内容修改按操作员版本铁律从已写入V0.10升到V0.11，不能回退或把已完成B3当作没发生。Grok把L3视为无需阻断观察；Codex认为L3明确“版本/最后更新/现行开发设计”不是历史日志，GEN-016已有“版本”要求，正常打开文档即复现，未新增判据。双方应在B2复核该具体分歧，不以B2-r2只写标题的遗漏作当前事实依据。
+
+### 下一批整批边界
+011–016原16处已精确落地且两席B4均认为内容纠正，仍是仅因B4合取未通过。下一次B3先核16处已修文本保持，无需为重复执行而再改业务句/再升另外三文件；唯一实际差异为018的上述两行（+2/-2），两行均归018。绑定原011修正保留。001–010、017不动；017后台项目过滤缺口仍归M348（依赖M032），不得称已修。旧定稿、失败票和完整diff原样保留。
+
+## 当前 M013 B2-r2 双PASS定稿（6项待修）
+本节是当前M013唯一已定稿队列：011–016＝是；001–010、017＝否。下方V2.24全部原句/拟改/影响及分类字节仍作为本次已审核方案，不改变任何一项。旧历史保留。
+Codex B2 V0.04 PASS，self raw 63961bytes SHA256 6085d1c039acd9c08be9d305c8b1aa1a7fe76b389ac64987c3eeb10635567415；Grok B2 V0.04 PASS，grok raw 119130bytes SHA256 9dc13b4307adeaf59eeca40fda7b11a85828d514d9bf32e85c740b297fa04f93，真实exit0，新增172行完整读取。两票均核同一V2.24候选 SHA256 608151f69052d71804ddbbe058eb286d111b1225a526fe1fdf6b9343be086c6e。
+Grok逐项实核并接受Codex另五项（012–016），不维持B1抽核绿；无修订要求。011合入其L99意见；017后台范围缺口仍未修并只归M348，守卫依赖M032。1冲突/5细化，添加0、questions0、HTML申请0。修复只按下列16处定稿文字、4标题版本及3份现有变更记录最小一行执行。B3累计1，尚未本批修复。
+2026-09-15T00:18:47.152612+00:00
+
+## 当前 M013 B2-r2 整批候选 V2.24（未定稿，尚未修复）
+2026-09-15T00:07:36.938889+00:00
+输入：本次完整B1 self V0.03 SHA256=d2222ac3a96165f0f17438191c2758de779e9ff1eeacc5f6f6968da63f70023f，60622bytes；Grok V0.03 SHA256=d638a7134bdb7396534deb764548c3796c5c301761b42af97bbc36c0c323312a，98356bytes；Grok真实exit0。本方先封存后读取，双席完整4文件1524行/84判据，B1四锁全等。
+历史B3=1，本次尚未B3。001–008已修否、009 XM→M392否、010观察否保留；新增011–016为6项候选是（1冲突/5细化），017为关联后台缺口否。无添加、无questions、无HTML修改。普通非HTML修复已有操作员授权；仍须本B2整批双PASS后才进入B3。
+候选所有原句、拟改全文与影响在本节；“当前”只指本节，下方历史记录不作为本批活动队列。
+| ID | 来源 | 分类 | 工程缺陷 | 队列候选 | 判据 |
+|---|---|---|---|---|---|
+| M013-011 | CX-M013-N01 + Grok GR-M013-011 | 细化 | 是 | 是 | BEQR-143 / PGM-026 / GEN-002 / GEN-008 / GEN-016 / GEN-018 |
+| M013-012 | CX-M013-N02（Grok B1未发现，待B2独立复核） | 细化 | 是 | 是 | BEQR-152 / PGM-041 / GEN-005 / GEN-008 / GEN-016 / GEN-018 |
+| M013-013 | CX-M013-N03（Grok B1未发现，待B2独立复核） | 细化 | 是 | 是 | PGM-041 / GEN-002 / GEN-008 / GEN-016 |
+| M013-014 | CX-M013-N04（Grok B1未发现，待B2独立复核） | 冲突 | 是 | 是 | BSM-007 / PGM-041 / GEN-005 / GEN-008 / GEN-016 |
+| M013-015 | CX-M013-N05（Grok B1未发现，待B2独立复核） | 细化 | 是 | 是 | BSM-007 / GEN-008 / GEN-016 |
+| M013-016 | CX-M013-N06（Grok B1未发现，待B2独立复核） | 细化 | 是 | 是 | PGM-041 / GEN-002 / GEN-008 / GEN-016 |
+| M013-017 | CX-M013-N02 关联代码观察 | 细化（跨模块） | 是 | 否（XM→M348；AuthorizationService依赖M032） | PGM-041 / GEN-005 / GEN-008 |
+## 本批逐项原文、拟改与影响
+### M013-011 — 主体绑定创建与状态变更现状说明滞后
+证据：PlatformService:756–866：创建先锁商户，requireUnfinishedBindingSlot、requireUnchangedFinancialSubjects；未来 effective_from 写 inactive 且不投影商户三主体，已到日期写 active 才同步。945–960：已有非空三主体不得经此接口替换；ACTIVE_BINDING_EXISTS 包括 active 或 inactive+effective_to为空。change 828–837：BINDING_PERIOD_ENDED / BINDING_FINANCIAL_CHANGE_REQUIRES_REVIEW / BINDING_NOT_EFFECTIVE。JdbcPlatformRepository:585–601 对应SQL；PlatformServiceTests:860–942现有反例（本次只读，未冒称重跑）。
+分类顺序：不与HTML立相反业务规则；属于已有主体/权限条目的实现细化；不走技术性或添加旁路。
+影响：调用方不会再按无条件启用或任意状态切换接入；不更改日期规则、不新增后端能力。
+位置：docs/business-entity-binding-development-design-v0.1.md:80
+原句：
+当前没有 `project_id`、`binding_no`、`version`、`created_by`、`reviewed_by`、`reviewed_at`，也没有 `business_entity_binding_usages` 表。当前创建接口直接写 `active`，已有 active 时拒绝；状态变更接口只改启用、停用或暂停，尚未实现 HTML 要求的主体权责配置审批、新旧关系切换和下游统一引用闭环。
+拟修改为：
+当前没有 `project_id`、`binding_no`、`version`、`created_by`、`reviewed_by`、`reviewed_at`，也没有 `business_entity_binding_usages` 表。当前创建按 `effective_from` 相对 UTC 当天判断：未来日期写 `inactive`，不提前同步商户三主体；已到日期写 `active` 并同步。已有生效或未结束待生效绑定时拒绝重复；已有商户三主体不得经此接口替换。状态变更还受生效期间及财税变更守卫限制（见 §5）。完整主体权责配置审批、新旧关系切换和下游统一引用闭环仍未实现。
+位置：docs/business-entity-binding-development-design-v0.1.md:90
+原句：
+当前差距：`POST /api/v1/platform/business-entity-bindings` 直接创建 active 记录，没有草稿、审批和复核状态。
+拟修改为：
+当前差距：`POST /api/v1/platform/business-entity-bindings` 按生效日期创建 `active` 或待生效 `inactive` 记录，只有生效时才同步商户三主体；待生效记录不是审批草稿，尚无完整草稿、审批和复核流程。
+位置：docs/business-entity-binding-development-design-v0.1.md:99
+原句：
+当前差距：`POST /api/v1/platform/business-entity-bindings/{id}/change` 只改变现有记录状态，不能提交新的三主体组合，也没有上述审批链和历史版本切换。
+拟修改为：
+当前差距：`POST /api/v1/platform/business-entity-bindings/{id}/change` 只接受状态动作并校验生效期间；生效中绑定不得直接停用或暂停，已结束期间不得重开，未到生效日不得启用或结束。该接口不能提交新的三主体组合，也没有上述审批链和历史版本切换；到达生效日期后可调用启用，不表示系统会自动启用。
+位置：docs/business-entity-binding-development-design-v0.1.md:117
+原句：
+| `/api/v1/platform/business-entity-bindings` | POST | 直接创建 active 绑定；已有 active 时返回 `ACTIVE_BINDING_EXISTS` |
+拟修改为：
+| `/api/v1/platform/business-entity-bindings` | POST | 未来 `effective_from` 写 `inactive` 且不提前同步商户三主体；已到日期写 `active` 并同步。已有 `active` 或 `inactive` 且 `effective_to` 为空的绑定返回 `ACTIVE_BINDING_EXISTS`；替换商户既有三主体返回 `BINDING_FINANCIAL_CHANGE_REQUIRES_REVIEW` |
+位置：docs/business-entity-binding-development-design-v0.1.md:118
+原句：
+| `/api/v1/platform/business-entity-bindings/{id}/change` | POST | 将状态改为 active、inactive 或 suspended，并填写原因 |
+拟修改为：
+| `/api/v1/platform/business-entity-bindings/{id}/change` | POST | 接受 active、inactive、suspended 并必填原因；已结束期间返回 `BINDING_PERIOD_ENDED`，生效中绑定停用/暂停返回 `BINDING_FINANCIAL_CHANGE_REQUIRES_REVIEW`，未到生效日返回 `BINDING_NOT_EFFECTIVE`。启用还检查商户、三主体、未完成绑定槽位及既有财税主体不被替换 |
+### M013-012 — 集团总览错误宣称项目级调用已按本项目过滤
+证据：AnalyticsController:119–125仅 requirePermission、requirePlatformScope，再 groupOverview(groupBy)。AuthorizationService:482–498只查平台管理员桥、外包、merchantId，不检查project/organization；AnalyticsService:774–830读取全部project快照/平台回退，未接调用者project。无商户归属的项目员工获analytics.group.view后，当前链没有本项目过滤。AnalyticsServiceTests:286–300明确无actor输入时返回project_1及project_2。
+分类顺序：不与HTML立相反业务规则；属于已有主体/权限条目的实现细化；不走技术性或添加旁路。
+影响：避免按已隔离状态验收；后台缺口仅cross_module_observations→M348（AnalyticsController/Service），AuthorizationService证据归M032，不扩本轮修复。
+位置：docs/group-governance-rebuild-prd-v1.0.md:14
+原句：
+- 集团下钻与项目公司级隔离按角色分级共存，不冲突：**平台/集团级角色**（`requirePlatformScope()` 放行者）可跨项目公司汇总下钻；**项目公司管理员**只看本项目公司；**商户用户** scope 一律 fail-closed 403。`GET /api/v1/analytics/group-overview` 除校验 `analytics.group.view` 外，还调用 `requirePlatformScope()`，商户 scope 调用 fail-closed（返回 403）。即「集团下钻」只对平台/集团级角色开放，对项目公司/商户仍按其 scope 收敛。
+拟修改为：
+- 集团下钻的业务边界：只有项目之上的获授权岗位可跨项目汇总，项目公司管理员限本项目，商户用户不得查看集团总览。**当前实现待对齐**：`GET /api/v1/analytics/group-overview` 校验 `analytics.group.view` 和 `requirePlatformScope()`；后者拦截商户及外包范围，但未按项目级调用者过滤汇总。不得把通过该守卫等同于已认定的平台/集团级角色；项目范围隔离尚未闭环，见 §4。
+位置：docs/group-governance-rebuild-prd-v1.0.md:95
+原句：
+- 集团视图能看什么由职位模板最终授出的权限决定；只有拥有 `analytics.group.view` **且通过 `requirePlatformScope()`（平台/集团级角色）**的职位/角色/临时授权可见集团总览。项目公司管理员即便持有该权限，也因 scope 收敛到本项目、无法跨项目公司下钻；商户用户 fail-closed 403。
+拟修改为：
+- 集团视图的业务可见范围仍按治理 HTML 的项目隔离与岗位授权执行。**当前实现**只校验 `analytics.group.view` 和 `requirePlatformScope()`，再按 `groupBy` 汇总全部项目快照；无商户归属的项目级调用者通过守卫后，结果没有按其项目收敛。该范围缺口待后台实现模块处理，不能据本 PRD 判为已经隔离。
+位置：docs/group-governance-rebuild-prd-v1.0.md:110
+原句：
+- 权限：`analytics.group.view`（`domain=analytics`、`risk_level=high`、`requires_approval=true`，V394 已置）。**实现待对齐（2026-08-04 F1 登记）已闭合（2026-09-11 M013 核对）**：跨项目汇总下钻属 §3 强制闸门第 2 类「提权或跨商户跨项目（综合体）」，按该强制闸门 `requires_approval` **应为 `true`**；V115 初始种子为 `false`，V394 已更新为 `true`，与 §3「不得把 HTML 明确的强制项降级为无需审批」一致；§4 的 `requirePlatformScope()` 只收敛可见范围、不替代授权审批。
+拟修改为：
+- 权限：`analytics.group.view`（`domain=analytics`、`risk_level=high`、`requires_approval=true`，V394 已置）。**审批属性缺口（2026-08-04 F1 登记）已闭合（2026-09-11 M013 核对）**：跨项目汇总下钻属 §3 强制闸门第 2 类「提权或跨商户跨项目（综合体）」，按该强制闸门 `requires_approval` **应为 `true`**；V115 初始种子为 `false`，V394 已更新为 `true`，与 §3「不得把 HTML 明确的强制项降级为无需审批」一致；该结论只涉及审批属性；`requirePlatformScope()` 不替代授权审批，也尚未完成本节所述项目级结果过滤。
+位置：docs/platform-governance-acceptance-pack-v0.2.md:181
+原句：
+| G7 | 集团视图与跨项目汇总 | 已承接；实现缺口已闭合 | 已由 `group-governance-rebuild-prd-v1.0.md` 与 V115/V169/V170 承接，所有对象继续携带 `project_id` | `analytics.group.view` 审批属性已由 V394 置 `requires_approval=true`（集团治理 PRD §4 同步），不反向改写业务口径 |
+拟修改为：
+| G7 | 集团视图与跨项目汇总 | 已承接；审批属性已闭合，项目范围隔离待对齐 | 已由 `group-governance-rebuild-prd-v1.0.md` 与 V115/V169/V170 承接基本聚合能力，所有对象继续携带 `project_id` | `analytics.group.view` 审批属性已由 V394 置 `requires_approval=true`；项目级调用者的汇总结果尚未按本项目过滤（集团治理 PRD §4），不得把审批属性闭合当作隔离已完成 |
+位置：docs/platform-governance-prd-v0.1.md:657
+原句：
+15. 所有对象必须带综合体项目（`project_id`）归属，跨项目汇总一律按该归属聚合——这是本 PRD 的强制要求。集团视图与跨项目汇总下钻**已由 `group-governance-rebuild-prd-v1.0.md` 承接落地**（V115 集团总览权限、V169 职位角色装配、V170 高危授权审批）（GAP-20 `analytics.group.view` `requires_approval` 已由 V394 置 `true`，闭环），**不再是本 PRD 的未来待办**。（2026-08-04 F-FIN 时态协调：**本 PRD 早期表述**“未来需要集团视图和跨项目汇总视图，但 P0 先保证……”与本节后续细化第 12 条的已落地状态时态冲突，以本条为准。2026-08-07 引文订正：该句**不是 HTML 原文**——PGM「未来需要集团视图和跨项目汇总视图」条现文为“未来需要集团视图和跨项目汇总视图，保证所有对象带综合体项目归属”，无“但 P0 先”字样）
+拟修改为：
+15. 所有对象必须带综合体项目（`project_id`）归属，跨项目汇总一律按该归属聚合——这是本 PRD 的强制要求。集团视图与跨项目汇总下钻**已由 `group-governance-rebuild-prd-v1.0.md` 承接落地**（V115 集团总览权限、V169 职位角色装配、V170 高危授权审批）（GAP-20 `analytics.group.view` `requires_approval` 已由 V394 置 `true`，闭环），**基本聚合能力不再是本 PRD 的未来待办**；上述闭环仅指审批属性，项目级调用者的汇总结果尚未按本项目过滤，仍须按集团治理 PRD §4 对齐项目隔离。（2026-08-04 F-FIN 时态协调：**本 PRD 早期表述**“未来需要集团视图和跨项目汇总视图，但 P0 先保证……”与本节后续细化第 12 条的已落地状态时态冲突，以本条为准。2026-08-07 引文订正：该句**不是 HTML 原文**——PGM「未来需要集团视图和跨项目汇总视图」条现文为“未来需要集团视图和跨项目汇总视图，保证所有对象带综合体项目归属”，无“但 P0 先”字样）
+### M013-013 — 日常权限的临时申请被文档误写为拒绝
+证据：AccessService:879–901明确dailyTemporary=approvalRequired.isEmpty() && temporary_permission；仅非日常临时且无审批必需码才拒绝，日常临时使用permission_grant_l1。AccessServiceTests:1430–1453已有dailyTemporaryPermissionApplicationEntersSupervisorChain，断言pending与一级链。PGM-041：员工可申请临时权限，按层级对应主管审批。
+分类顺序：不与HTML立相反业务规则；属于已有主体/权限条目的实现细化；不走技术性或添加旁路。
+影响：接入方不会把合法日常临时申请改走直接授予；只修当前说明，不改变后台权限策略。
+位置：docs/group-governance-rebuild-prd-v1.0.md:71
+原句：
+- 申请时服务先解析目标授权会授出的权限码，只允许包含 `requires_approval=true` 的授权申请；若没有审批必需权限，返回 `GRANT_APPROVAL_NOT_REQUIRED`，应走直接授权。
+拟修改为：
+- 申请时服务先解析目标权限码。角色/岗位授权申请若不含 `requires_approval=true` 的权限，返回 `GRANT_APPROVAL_NOT_REQUIRED`，应走直接授权；临时权限申请无论日常或高危均进入主管审批链，其中仅含日常权限的申请使用当前一级主管策略，不直接授出。
+### M013-014 — 岗位模板仍描述全量持权检查与平台管理员wildcard例外
+证据：BSM-007平台管理员仅自动拥有日常功能；高危等逐项授予。AuthorizationService:178–206实际返回wildcard=false，daily集合扣denies；AccessService:2060–2076使用requireActorCanGrantImmediate，808–812只对立即生效普通码检查持权，待批高危不要求配置人先持有。assignUserPositionDirect:1464–1527混合模板保存普通部分，高危交holdHighRiskPositionPermissions，而非整单拒绝。
+分类顺序：与BSM-007平台管理员权限边界的明文冲突先成立；删除wildcard例外，其余实现说明按同一缺陷收窄。
+影响：防止把日常管理员解释成全权限，或因一个待批高危码把整份正常定岗拒绝。改现状说明，不授予任何新权限。
+位置：docs/group-governance-rebuild-prd-v1.0.md:34
+原句：
+- 创建/更新职位模板必须是平台管理员，并且复用 `requireActorCanGrant`：模板里角色权限和权限模板条目都不能超出操作者自身有效权限，平台管理员 wildcard 例外。
+拟修改为：
+- 创建/更新职位模板必须是平台管理员，服务使用 `requireActorCanGrantImmediate` 检查模板中会立即生效的普通权限不得超出操作者自身有效权限；须审批的高危权限不要求配置者预先持有，实际授出仍须审批。平台管理员没有 wildcard 全权限例外，显式拒绝继续有效。
+位置：docs/group-governance-rebuild-prd-v1.0.md:38
+原句：
+- 直接分配/取消角色同样复用 `requireActorCanGrant` 和跨组织闸；角色装配只要包含五类强制高危权限或其他 `requires_approval=true` 权限，就必须被审批闸拦截并走 §3 申请，不受可关闭总开关影响。
+拟修改为：
+- 直接分配/取消角色继续使用 `requireActorCanGrant` 和跨组织闸；直接授出须审批的高危权限仍被拦截并走 §3 申请。同范围定岗按普通权限与待批高危权限分别处理：普通部分随保存生效，高危部分挂起进入审批链，通过后才释放，不因模板含高危权限而整单拒绝；岗位规则不推广为其他授权入口的免审例外。
+### M013-015 — 授权申请权限风险档仍引用V170旧值
+证据：本文:7称迁移/代码/接口为当前实现证据。V170:100确为历史high；V394:13明确UPDATE apply风险档为low，:14授予staff_self；当前所有迁移中此码无后续反改。原初值可保留作历史，不能未标注地当现行值。
+分类顺序：不与HTML立相反业务规则；属于已有主体/权限条目的实现细化；不走技术性或添加旁路。
+影响：避免集成者按旧高危档判断谁能发起申请；申请归类为日常不等于授权授出免审。
+位置：docs/group-governance-rebuild-prd-v1.0.md:90
+原句：
+- 权限：`access.grant_request.view`（medium）、`access.grant_request.apply`（high）、`access.grant_request.review`（critical、requires approval）、既有 `governance.supervisor_review.approve`
+拟修改为：
+- 权限：`access.grant_request.view`（medium）、`access.grant_request.apply`（low；V170 原 high，V394 已调整）、`access.grant_request.review`（critical、requires approval）、既有 `governance.supervisor_review.approve`
+### M013-016 — 智能总结端点示例携带已被拒绝的查询策略参数
+证据：AccessController:158–165仍接收这些参数但透传；AccessService:1044–1055任一threshold非null或window非后台值即QUERY_POLICY_OVERRIDE_FORBIDDEN；实际阈值/窗口从grantPolicy读取。正常按文档示例填写数字即被拒绝，不是极端情形。
+分类顺序：不与HTML立相反业务规则；属于已有主体/权限条目的实现细化；不走技术性或添加旁路。
+影响：可直接按文档调用；不放宽参数覆盖，不新增配置。
+位置：docs/group-governance-rebuild-prd-v1.0.md:77
+原句：
+- 智能总结：`grantSummary` 统计窗口内临时权限申请。某职位/层级/权限组合达到阈值时返回“建议转固定权限”；某用户频繁申请时返回异常总结供复核。
+拟修改为：
+- 智能总结：`grantSummary` 统计窗口内临时权限申请。某职位/层级/权限组合达到阈值时返回“建议转固定权限”；某用户频繁申请时返回异常总结供复核。统计窗口和频繁阈值从后台授权政策读取，查询不得覆盖；兼容的 `window_days` 仅在等于后台值时接受，两个阈值参数只要传入即返回 `QUERY_POLICY_OVERRIDE_FORBIDDEN`。
+位置：docs/group-governance-rebuild-prd-v1.0.md:83
+原句：
+- `GET /api/v1/access/grant-requests/summary?window_days=...&position_threshold=...&user_threshold=...`
+拟修改为：
+- `GET /api/v1/access/grant-requests/summary`（使用后台授权政策，不传阈值参数）
+### M013-017 — 集团总览项目范围后台缺口（本模块不修）
+证据与012相同，正常有group权限且无merchantId的项目员工路径未被按项目收敛。现行modules.md M348包含AnalyticsController/Service，M032包含AuthorizationService；这里只读追依赖，未全审这些模块，未宣布其PASS或分配未来ID。后续按既定顺序承接；本模块只修012对应文档，不把文档准确视作后台缺口已修。
+## 全部观察与历史意见归并（队列否）
+Grok OBS01（V427项目关联未列）：business_entities表无project_id仍真，关联API非当前四主体写路径必需参数，不新增文档段；归010观察续记。OBS02→009；OBS03→011证据（服务未完成槽位并非DB唯一索引）。OBS04/05/07/08/09/10/11/12→010（工作树事实/版本惯例/历史日志/声明不取业务效力/状态完整性差距/已有缺口/未跑命令/HTML无新问题）。OBS06→011。全部12条已覆盖，无丢弃。
+Codex O01（BSM114/120已批措辞与页脚旧摘录差）→010既知事实续记：不改锁/HTML，不重新问操作员；O02/O04→010/009历史，O03（PRD606业态引用）→010非阻断观察，因同格明确不定义且正文明确废止，不据此新造开关或擅修；O05→017，O06→010公开/内部类型区别。6条均覆盖。
+001–008旧已修：V410父链/角色、V394 group审批属性、self_operated、空间字典、DELETE/lifecycle、税费落点说明、evaluate员工接线、私人查看考勤均未回归；本次012项目scope缺口与旧002“审批属性”不是同一事实，不能覆盖旧002也不能用它证明隔离已完成。
+Grok本次B1仅011是；其集团PRD通过结论不是对新增012–016具体反例的否决，B2须独立核这些新证据并逐ID作判断。绝不以本方自审覆盖其最终FAIL。
+## B3预定范围与验证（尚未执行）
+只改上述4文件16处现状文字，并分别递增标题版本：绑定V0.09→V0.10，集团V1.01→V1.02，验收包V0.04→V0.05，主PRD V0.04→V0.05。各文件现有变更记录处追加最小一行（绑定无专用日志则不新建章节，仅改标题），分别归011、012、013–016；不改旧历史日志。完整原句与拟改字节已上列。
+验证为只读字符串/源码分支对照、4文件版本与完整diff逐行归因；文档类不强制新增测试，不运行数据库修改或整仓发布门禁。B3前后用临时索引write-tree捕获全工作树，真实索引不动。B4/B5仍按固定双席和完整模块流程。
+本节结论：候选，NOT-FINAL；等待Codex/Grok各自B2票。
+
+## 当前 M012 B4-r4双PASS验收：017转否，17项全否
+双方完整3261byte/4hunk报告已齐：self V0.01/12369bytes/SHA447999538638727fb9d5b9c2939b7141afe333424cbad28d7b20896349379c3e；Grok V0.01/22443bytes/SHAf22717fb0f80843e4a982b3bb98f1f1b2a460f13545fea0bc883c88415dbeb7f，实际exit0。内容与归因均PASS，017达到唯一B2边界，现在才将下方017队列转否。001–016保持否，013反例已由Grok在B2撤回，不重开。
+历史定稿/候选/FAIL保留作时序；17项当前NO不替代B5全模块双审。获批一次已使用，B3累计4。当前56单测（19/21/16，含参数化it.each）/tsc实跑通过；Grok静态it声明52不是实际用例数，不相加、不把静态计数当测试失败。
+
+
+
+## 当前 M012 追加修复B2双PASS定稿：仅017是
+操作员批准追加一次修复；本批候选V2.21 SHA516a6478dda793c8ed27ec661379f9daae7248cc111c26ff7746fcd2f9df518a已获双方完整PASS。self b1 V0.06/71203bytes/SHA e62a4d6c42f5f4c711b0bcc7aba0b5016d24289678b77efdb97e7eddbe43ac68；Grok b1 V0.06/153998bytes/SHA fc54e0e239b68b7f35b641ac6e3a30f4b17213fe75943210fd11f2df5a787885，实际exit0。旧双方前缀均完整保留、未增独占锁行。
+Grok明确承认B5 GEN011漏审，017入队；独立追当前项目Controller→currentProject→主键WHERE后撤回其501项目反例，013不重开。两席同意的唯一修复边界是下表017：两页删错误Hint节点及仅不再用的导入，组织auditTraceField保留，版本递增；其余001–016仍否。不改历史B5 FAIL原文。
+当前17项：1是（017）、16否；B3累计3尚未新增，本次整批完成才记4。下方候选/争议是历史时序，边界原样保留。
+
+
+
+## 当前 M012 获批追加一次修复：B2整批候选（尚未定稿）
+操作员在“是否授权M012再执行1次修复，先完成两项依据的B2复核，再仅修定稿项”之后明确答“批准”。本轮恢复M012 IN_PROGRESS；B3历史累计3不清零，本次获准再执行1次，实际修完after树才记累计4。本批先B2，双PASS之前禁止改源码/测试。无HTML修改授权。
+输入仅触发回退的两份完整B5-r3：self V0.01 15529bytes SHA256 f09e7ce3c550c4d56f6947bcf100b8f3f087c8f8d72d0391a28db2ae5d551b6c；Grok V0.01 18848bytes SHA256 f02108cfa1a711ce8bf47f334b536fc41b26991c246ae6de219f051ba1c813a5。各原始FAIL不改写，B2评的是当前完整归并候选。
+候选只有1项修复队列是（新M012-017）；M012-001–016继续否。013的本轮反例完整保留并提交Grok复核，本席不单方宣称其已撤回。下表为本批唯一执行候选，后文是历史时间线。
+
+|正式ID|本批来源|分类|工程缺陷|修复队列归属|当前依据与归并理由|最小修复边界|
+|---|---|---|---|---|---|---|
+|M012-017|CX-B5-01；Grok B5 GEN-011原票够，待本次复核|细化|是|否|拓扑245“操作留痕：governance_topology.viewed”；组织419“操作留痕：organization.viewed / merchant_profile.created”。实际Hint仅呈现文字；页面读取的后台事件分别entity_binding.viewed、merchant.viewed、project.viewed（拓扑另space.viewed/space_type.viewed）；POST商户为merchant.updated。旧三个标识在backend/src零命中。正常展开技术说明便出现无法按名称对应的证据说明。BSM-001/PGM-001溯源上位，GEN-011/016；依据=实际代码与可复现搜索。|只删除GovernanceTopologyPage.tsx与OrganizationMerchantPage.tsx两处错误AuditTrailHint JSX节点；仅清理由删除产生的未用导入，组织页同源auditTraceField继续保留；两文件自身版本递增。现有对象操作审计TraceLink、接口证据、后台真实审计、创建/存档/绑定功能全保留。不改HTML、后台、共享组件、types、路由、数据库、其他页面或测试目的。|
+|M012-013|GR-M012-B5-01（已有ID，当前否）|细化|否（本轮501项目反例前提不成立，待Grok独立确认）|否|Grok假设/projects一次可返回501项目，第一页未涵盖商户projectId。本席核当前Controller144–150→Service444–445 listProjectsPaged(currentProject(),...)→JdbcRepository1287–1300；COUNT/SELECT均WHERE id=:project_id，projects.id是对象唯一键；商户列表1267–1284同currentProject筛选。当前接口本来仅当前项目0或1条；不同于可有501条的本项目商户/空间/实体。Grok手造500项目内存算法未复现当前接口。|不为不成立的输入前提增项目分页或修拓扑查找；013原已验收分页/错误恢复行为保留。Grok若仍坚持应修，须给现行真实接口下第一次正常触发，B2本批FAIL后再统一修候选；禁止Codex忽略Grok意见直接修017。|
+
+### 017原文、拟改与影响（操作员已批准范围，仍待B2）
+拓扑原代码：<AuditTrailHint event="governance_topology.viewed" />。
+组织原代码：<AuditTrailHint event="organization.viewed / merchant_profile.created" />。
+拟改：删除以上两行，从两处import中只移除不再使用的AuditTrailHint标识（组织页auditTraceField保留），版本Topology V0.03→V0.04、Organization V0.04→V0.05。
+影响：页面不再提供错误的事件名称提示；不删除真实日志，不改变商户创建/审批/绑定，不触碰任何业务HTML。已有接口证据和对象操作审计入口保留。不新增审计事件来迎合旧文字。
+分类顺序：有上位溯源需求，归细化；无新增业务概念/权限/状态，不进添加询问。内部标识符可显示的例外只说明英文可留，不保证错误事件名正确。
+验证：属于静态证据文字删除，不为纯文案新增同构测试；以完整受限diff/只读源码校验确认两节点与仅相关import删除、auditTraceField保留；跑现有全部56单测和typecheck验证无行为回归。B4/B5按获批累计第4次记r4，审完整范围，不用绿测代替双审。
+无新判据/LOCK-AMEND/未答questions；两席B2结论分别追加既有b1 raw（V0.05→V0.06），保留全部前缀，不新增独占锁行。
+
+
+## 当前 M012 B5-r3 全批FAIL待交接（BLOCKED-3ROUNDS；未B2定稿）
+2026-09-14：本批两席完整B5报告已齐，均FAIL。Codex已先封存后读Grok，Grok真实EXIT_CODE=0。B3累计3/3，按V0.17第460行本轮停止，不擅自新一轮B2/B3或下一模块。此前001–016当前NO是B4验收历史，保持原值；下列是完整本批待归并依据，不冒称已获B2双PASS，不无ID修复、不提前重开013。
+
+|来源临时号|关联正式ID|本席分类/状态|完整问题与证据|拟处置及影响（尚未执行）|
+|---|---|---|---|---|
+|CX-B5-01|无，待重启后B2分配|细化；Codex确认工程缺陷；Grok本轮GEN-011认为够，尚未B2核该差异|GovernanceTopologyPage.tsx:245现“操作留痕：governance_topology.viewed”；OrganizationMerchantPage.tsx:419现“操作留痕：organization.viewed / merchant_profile.created”。AuditTrailHint仅显示文字；实际Service:94/152/447/514/528记录entity_binding.viewed、merchant.viewed、project.viewed、space.viewed、space_type.viewed，创建商户:993为merchant.updated。backend/src三个旧事件0命中。正常展开提示就能看到不准确的事件说明，真实日志并未丢失。依据BSM-001/PGM-001溯源上位，GEN-011/016与可执行产物；不以英文或折叠位置为缺陷。|最小方向删除两个错误Hint节点及由此失去使用处的两条导入；按版本铁律递增两源版本。不新增后台事件、不改真实日志、权限、商户创建、数据库或HTML。若保留提示，则只改对应真实事件的准确说明，方案须经B2。|
+|GR-M012-B5-01|M012-013，目前NO|Grok认为细化/工程缺陷；Codex当前核实触发前提不成立，保留原FAIL及争议，未执行建议|Grok报告称项目第501条未入首页，拓扑显示“-”，要求未加载提示及项目分页。其算法手造首页500项目；实际PlatformController:144–150→PlatformService:444–445调用listProjectsPaged(currentProject(),page,size)，JdbcPlatformRepository:1287–1300的COUNT和SELECT都是WHERE id = :project_id；同一请求只有当前所属项目0或1条。商户读取也按同一currentProject范围。不能把501商户/空间的真实场景机械移植为501个项目；报告探针片段也非完整可执行JS。不据此自动添加本页项目分页器。|重启后B2先将真实调用链提交Grok核实；在它复核之前不删除其原票、不把该项伪称已解决、不重开013修复。当前不要求用户决定虚构业务前提。若仍有另一个真实正常触发，应提供实际接口依据后统一归并。|
+
+本批完整raw：
+- Codex modules/M012-b5-r3-self-raw.md V0.01，15529bytes，SHA256 f09e7ce3c550c4d56f6947bcf100b8f3f087c8f8d72d0391a28db2ae5d551b6c。
+- Grok modules/M012-b5-r3-grok-raw.md V0.01，18848bytes，SHA256 f02108cfa1a711ce8bf47f334b536fc41b26991c246ae6de219f051ba1c813a5。
+不是仅以Codex否决Grok：双方原票都FAIL，完整合取FAIL；即使Grok项目反例后续排除，Codex留痕文字问题仍待B2处理。
+三HTML当前SHA、六源SHA、HEAD与真实索引均未改。当前56单测/typecheck与B4四失败恢复探针通过，不推翻新证据文案缺陷。无HTML申请/添加项问题/未答questions；停止原因仅本轮修复次数上限，需要操作员新指令才可继续。
+
+
+
+## 当前 M012 B4-r3 双PASS验收（七项队列均转否）
+2026-09-14：B4-r3本席V0.01 SHA febb028c00874d7696f687f0c9b26d593916e0c53b0bcf7afad686fb73fddc79、Grok V0.01 SHA 9dc2dd94b247ecc6a25a39be2fa83347816c98f0dcd8923bdb9dcc0511d71a52，均完整16hunk/13673byte diff、内容与归因PASS；Grok正常exit0。双方明确七项达到B2边界后，本次才将下方唯一当前定稿表010–016的队列改否。历史001–009否保留。
+本轮013两条遗漏关闭；010/011/012/014/015/016沿上轮已审且当前保留的内容一并验收。无新ID/添加/HTML申请/待答；B3累计3/3。下方B4-r2及B2文字记录其发生时的状态，不当作当前待修结论；下表事实列保留原发现，队列为本次验收后的当前值。仍须B5整模块双审，不以队列全否写模块PASS。
+
+## 当前 M012 B4-r2 回退记录（沿用已定稿七项，队列不改）
+B4-r2两席完整票已落齐且内容FAIL/归因PASS。Codex的重试残留全局错误与Grok的无主体权限误用“主体资料未加载”，均是既有M012-013分页改造未修好；该ID当前仍为是。两条一批直接回B3，不新分配ID、不重定边界、不改两席原文。读取开始清除错误是恢复换hook前onStart已有行为；无权限展示原有“-”，有权但关联页未加载才展示“主体资料未加载”。对应最小测试归013。其余010/011/012/014/015/016已经落地并由两席认为够，但B4整批未双PASS，七项仍是，不提前转否。历史001–009仍否。
+证据：modules/M012-b4-r2-self-raw.md V0.01（2ab647cb…）与modules/M012-b4-r2-grok-raw.md V0.01（fbd7f0e4…）；Grok实际exit0。本次B3尚未再次执行，累计2。下表是沿用的B2定稿，原B1事实与历史候选不覆盖。
+
+## 当前 M012 本次重开 B2 整批定稿（双 PASS）
+
+本台账V2.17：本批B2已双PASS，当前010–016七项是、历史001–009否及全部修复边界均未变。候选输入V2.16 SHA256 e802cf09b96b397334b933ccad13d6b2fc7a7bbc6fc499270e363eab1e20df54；self B2 V0.05 67517bytes SHA25660318f58e5e9492f717bde9e47ade4b0a326b0f0441a7b261d1f958cb6e18beb；Grok B2 V0.05 139005bytes SHA25692361d2f1439193f7b57dc51dd1dd273de0ee6f5390d4cdebc65e11251d21290，真实EXIT_CODE=0，旧117487bytes完整保留且未新增独占锁行。Grok明确改判011细化、013/014观察转修复，并逐项接受010–016及009边界。下文候选时序与原分歧原样保留，不冒称B1本已一致。本次B3尚未执行，累计仍1；现在允许整批B3，不等于模块PASS。
+
+
+
+本节是 M012 的唯一当前队列表；历史 001–008 已修、009 登记保留，历史原文不覆盖。本次 B3 尚未执行，累计仍为 1。候选仅合并本次完整 B1，当前审计结论仍 FAIL，模块 IN_PROGRESS；双 PASS 前不改源码/测试/HTML。
+
+输入原文：
+- modules/M012-b1-self-raw.md 本次 V0.04，61399 bytes，SHA256 5a776f60330237348994adf36f765352a8f1e0d083b2ed74b6f2d28a500ee4f6；旧 30522 bytes 保留。本次 6 文件 1755 行、21 判据；CX-01..05。
+- modules/M012-b1-grok-raw.md 本次 V0.04，117487 bytes，SHA256 d89fa6cd0a6110c36156c825d323d6d7f0bc9406b91e8494a52ebbfa03b630f1；旧 85746 bytes 保留，真实 EXIT_CODE=0；GR-M012-010/011/012 与 §8 全部观察。
+- 只采各 raw 最后独占锁行起的完整本次报告。两席报告锁、实际锁、sidecar 与 ledger 基准相同；锁 V0.11 不改，LOCK-AMEND-COUNT=1。冻结 21 项：BSM-001/003、GEN-001..018、PGM-001，未增判据。
+- B1 两席都审完才归并；Codex 在自身完整报告封存后才读 Grok 本次正文。37 原有单测 PASS、typecheck PASS 不掩盖行为反例 FAIL；原始 B1 不因 B2 归并而改写。
+
+|正式ID|本次来源|分类|工程缺陷|修复队列归属|事实与证据|冻结依据|最小修复边界|
+|---|---|---|---|---|---|---|---|
+|M012-010|CX-01 + GR-M012-010|细化|是|否|Topology:164–182 按 project.merchantId 反连；Organization:373–375 仍把项目 merchantId 当所属商户。现行 MerchantRecord.projectId + 当前项目列表，项目 merchantId 可空；真实形状运行反例项目列为空。|BSM-001/003、PGM-001、GEN-002/003/008|仅两个页面局部类型读 merchant.projectId，正向对应 project.id。组织项目表撤销“项目属于一个商户”的错误表达，按当前项目名称/编码与商户真实归属展示；不加归属配置器或历史回填，不改 types.ts/后台。对应测试与011共同归因。|
+|M012-011|GR-M012-011 + CX-01 验证缺口|细化|是|否|Topology/Organization 测试仍造项目 merchant_id=m-1、商户无 project_id；37绿不能证明现行关系。Organization 缺主体权限降级无断言，Subject 写失败catch无断言。|GEN-003/005/008/009；BSM-001/PGM-001上位通过GEN-008追流|更新两页商户 project_id 夹具、项目 merchant_id 可空，保留原关键断言并测试正确关系。组织缺 entity.binding.view 不请求主体、绑定后端拒绝仍可见各补最小用例。绑定DTO本身无 project_id，不向BindingRow或其夹具捏造该字段，不要求前端重复后端项目过滤。|
+|M012-012|GR-M012-012|细化|是|否|Subject:40 导语原文“展示经营对象、运营主体、合同主体和结算主体的唯一绑定关系；所有变更必须带原因、幂等键和证据附件。”实际表单选状态/填原因，键自动生成、无附件控件，请求163–167不含附件。|GEN-002/016、PGM-001|只把导语改为“展示经营对象、运营主体、合同主体和结算主体的唯一绑定关系；变更时须选择状态并填写原因。”删除过度声称；不新增附件上传，不改业务HTML或原因必填。|
+|M012-013|CX-02；与 Grok OBS-01 有分歧待复核|细化|是|否|三页api.get丢total/只读首批；生产默认500，正常同项目501条记录只见500且无后页。内存实际渲染500而非501；首轮50/51只是信封例，随后已按生产500/501修正实跑。无两三种偶发条件，只是已有列表一页以上。|GEN-002/003/008/012、BSM-003|复用已有getPaged及TablePager/useServerPagedRows能力，保留分页元数据，让后页可达。总数用真实total；仅本页过滤/去重指标明确“本页”，不能冒称全量。关联字典不因独立首页截断就误判不存在；若仅展示局部明确未加载，而非未关联。不给后台增聚合API，不无限抓全、不抬固定上限；不造新通用分页器。Grok若仍认为无需修，必须在B2说明如何处理已运行反例，本席不可把争议暗改为否。|
+|M012-014|CX-03；Grok OBS-04相关英文状态|冲突|是|否|三页通用formatter把suspended写成“已封禁”，Topology旧测试还锁定该错译。HTML商户/运营主体明确“暂停”与“黑名单”分列。内存suspended实际显示已封禁；现有合法 pending_admission/pending_activation/archived 等也可因词表缺项直出英文，不能以本页创建默认active排除正常读现有记录。|GEN-002/003/008/015/017、PGM-001|删除三个页面/对应测试错误状态表达，按各对象现有合法状态作局部中文映射；暂停保持暂停、不等同黑名单。对合法状态缺中文同批修正；保留已正确标签，未知码不直出业务界面。不得全局改customer状态码语义，不新增状态或状态转换。|
+|M012-015|CX-04|细化|是|否|三页tr处理所有冒泡Enter/Space并preventDefault；Subject:232–233 radio只stop click，空格默认被取消。内存fireEvent.keyDown(radio,Space)返回false且打开抽屉；同形行内按钮/链接受影响。|GEN-002/003/015|三个页面已有行快捷键仅在event.target===event.currentTarget时处理；原生子控件保留默认键盘行为。最小回归覆盖子控件Space/Enter未被取消、行自身开详情仍有效。不用新键盘抽象，不取消可访问性。|
+|M012-016|CX-05|冲突|是|否|Topology:14–17只列8种空间类型，未知码fallback原码。后台既有字典可新建kiosk/一体机位，M011已测可创建和用于空间；内存当前字典+空间fixture页面实显kiosk。HTML PGM:287要求状态/枚举全中文，非内部ID例外。|GEN-002/003/008/015、PGM-001|读取既有space-types字典，按真实typeName展示并保留既有八码中文兼容；未知未解析类型用中文未识别/破折号而非英文码。不新增业务类型/接口/权限规则，不要求重写字典管理。|
+|M012-009|历史登记 + 本次双方其余观察|登记|否|否|历史保留、未转成无条件完成：附件上传缺口不做；012仅删当前误导。首次单击不撞的双击幂等/缺submitting、内部ID/TraceLink、无创建绑定/归属配置器、KPI URL内部英文键均只登记。active绑定改停用被现行财税守卫拒绝，mock成功不等于实际业务放行；新增项目资料已获批仅后端，不要求本页补输入。|既有GEN相关面，未增加判据|不改这些观察。无project_id历史商户不可见是已批准隔离/不猜填边界，绝不当成本页必须恢复越权可见的缺陷。OBS-01与04已分别明确纳入013/014争议复核，其余不遗漏、不顺修。|
+
+### 分类与差集说明（必须逐项复核，非替 Grok 改票）
+
+1. 010：双方同一根因去重，但接受 Grok 的 Organization 页面承载，未只修拓扑。Grok 所述历史NULL档案不可见是后端已批准的隔离结果，从本页修复边界剔除，不隐瞒原报告原话。
+2. 011：Grok 原分类“技术性”仍完整保留在其 raw；候选按 §2.1 有具体业务归属上位优先细化。HTML business-system-map:509–510“哪个综合体、谁在经营、在哪经营、签了什么合同、谁能操作、谁负责。”；platform-governance-map:260–261“先管归属：哪个综合体、哪个楼层、哪个区域、哪个点位、哪个商户”。测试只校验已有业务/权限/失败反馈，无业务发明。BindingRecord没有project_id，所以仅澄清DTO事实，不删除本项有效测试缺陷。若Grok不同意分类/边界，本批不得双PASS。
+3. 012：全部接受 Grok 的过度声称缺陷；优先删除无实际入口的要求，拟改文字如表。它不是业务HTML修改，已处于用户普通代码修复授权内。
+4. 013：保留Codex FAIL证据并正面提交Grok OBS-01分歧。500+条无需并发/故障/罕见组合；请求正常返回total501而界面500且不可翻页，可复现。复用现有分页与收窄统计表述，执行铁律6最小既有规则修复，不发明新业务；尚待Grok复核，不将建议冒称最终定稿。
+5. 014/016：冲突按删除处理，删除错误词义/英文直出路径，以已有HTML语义、合法枚举、真实字典显示替换；不是删掉页面或字典功能。PGM:287“所有文字，含状态、枚举取值……必须全部中文”；BEQR:238状态列有“待准入、正常、暂停、终止、归档、黑名单”，不凭默认创建active否认正常已存暂停/归档记录。
+6. 015：有实跑按键反例，Grok B1只测点击/Esc不足以否定默认动作被取消；只收窄原行监听一项条件，保留子控件原生行为。
+7. 每项所需验证原文/完整反例命令和输出已嵌在self B1 V0.04，Grok B2可直接复核。单元测试、typecheck与read-only in-memory探针不是浏览器/真实HTTP证据，未冒称已运行后者。未修改本模块六文件，SHA仍为两份B1清单。
+
+### 整批执行边界（如且仅如 B2 双 PASS）
+
+修复路径仅 M012 六文件及对应文件版本递增；复用现有共享能力，只读追流其它文件，不顺改后台/types/全局标签/HTML。010/011共享关系测试逐块归因；其余必要回归归对应ID。原37测试全部保留目的，纠正错业务断言。B3前后全树快照、全部diff归因、适当测试/typecheck；B4双PASS后才把本批修复队列转否，然后B5整模块双审。当前是候选7项是、历史8已修和009观察均否。无添加项、无questions、无HTML问题、无需再向操作员索要已经给出的普通修复授权。
+
+## M009本次复审已收口
+本台账V2.15；B5-r3两席全20文件/87判据PASS且四值校验相等后，ledger V3.73已将M009置PASS。当前24行仍全否（18修复6登记），不新增或删除队列项。详见modules/M009-governance-topology-backend-01.md V0.02。下文既有修复前事实与各批时序保留，不充当当前待修。
+
+## 当前M009第五批修复队列（唯一当前表；B4-r3双PASS）
+本台账V2.14；B3=3/3。B4-r3内容/归因双PASS：self V0.02 SHA256 0b5c47a44a2181386eb85e49e965b96209d45cdbec233aeab0fb74ee4aac0136；Grok V0.02 SHA256 d30e00b45e2ccfef1fe06d84c0bc2684f677b3f0bb11c7a5bc8eb337b329607f，EXIT_CODE=0。057已按定稿只修注释和V0.01，现24行队列全否（18已修、6登记），不等于B5或模块PASS。表内事实保留修复前描述；下列候选/定稿时间线原样保留。
+
+本台账V2.13；第五批B2双PASS已定稿。两票审同一候选V2.12 SHA256 c37083760956300222e0ca223e29cffc4523a37408677560c04643491efc5539。self V0.10 SHA256 db41437ea9bcd86bf9d29ed11e896ff7f6064c4a080330d7b8aa08eec057b69c；Grok V0.10 SHA256 f53b5784697bcb945d98d2681de9ca751c5ab9e3448b601217a39c3a12056a64，EXIT_CODE=0，224632byte旧前缀保留。当前24行及全部执行边界未改：仅057是。注释精确在旧源第5行、所附record声明第6行；全文原句和修复对象无歧义。以下保留候选时序。
+
+本台账V2.12；B3已执行2/3。B5-r2完整双席报告已收齐：Codex FAIL（一处注释错误），Grok PASS（无新问题）；合取FAIL。完整并集只有CX-B5-01→新ID M009-057；没有改写或推翻Grok票，仍须两席独立复核本候选。当前24行：057修复队列是；原17项已修与6项登记继续否。B2期间没有代码改动。
+输入self modules/M009-b5-r2-self-raw.md本次V0.03，48547bytes/SHA256 5137ff3d152bb08b00561bc57f470d95d9fdd938e27a2624ac601cf6cd481435；Grok modules/M009-b5-r2-grok-raw.md本次V0.02，92216bytes/SHA256 9d6e4c6fa44b480e1e46c2e60582a4c6fb9abef1d633d7f542cc31c25efcc75a。两份均只采最后哈希行起的完整报告，历史前缀保留。
+
+|正式ID|本轮来源|分类|工程缺陷|修复队列归属|事实|冻结依据|最小修复边界|
+|---|---|---|---|---|---|---|---|
+|M009-038|CX-01|冲突|是|否|项目普通岗位通过平台守卫后仍可跨项目读写。|PGM-041 / BEQR-152 / GEN-005|按已批准范围补商户项目归属、公司项目多对多及必要后端维护；五类列表/COUNT和相关写入按真实项目校验；专用项目补录保留其余字段。必要依赖AuthorizationService复用SessionIssuer常量识别真实master_authority，不让platform_admin冒充。旧资料不猜填，普通岗位不能认领。详见下。|
+|M009-039|CX-02 + GR-03|冲突|是|否|空间projectId可空，父空间可来自另一项目。|PGM-017 / GEN-004 / GEN-006|createSpace要求projectId且等于当前项目；父空间存在并属于同项目；merchantId若有也须本项目。相关spaceExists复用同一项目范围。|
+|M009-040|CX-03|冲突|是|否|普通绑定停用/替换路径可以改动当前结算主体，缺公司权责变更审核。|PGM-026 / GEN-005|删除普通入口改变已有三主体身份的分支：新建/激活绑定若与商户已有非空三主体不一致则拒绝；生效绑定不得由普通change停用/暂停以绕过再绑。首次建立且商户三主体空，或首次权威绑定与已有三主体完全一致可继续；不引入财税审批流程，不以USB权限代替财税并审。|
+|M009-041|CX-04（未来生效部分）|冲突|是|否|effectiveFrom设为2027-09-14，保存即active并改商户主体。|PGM-026 / GEN-006 / GEN-008|未来effectiveFrom保存为已有inactive、effectiveTo=null，不投影；创建与激活都拒绝另一条active或inactive且未结束绑定，事务内锁同一商户后检查/写入。到期现有active动作再次校验。Leasing新商户先不写三主体，后续绑定入口处理；不加新状态/调度。|
+|M009-031|CX-04（停用部分）+ GR-02；沿用旧ID|冲突|是|否|绑定停用后商户当前三主体投影仍保留，且可形成effectiveTo早于effectiveFrom。|PGM-026 / BEQR-143 / GEN-006|与040/041合并改分支：生效绑定的普通失效操作拒绝，原记录及投影不变；未生效绑定不写倒置日期，effectiveTo不得早于effectiveFrom；已结束历史绑定不重新打开历史期间。激活成功才同步三主体；不清空财税主体、不改历史快照。|
+|M009-042|CX-05|冲突|是|否|空间类型删除后disabled，恢复只接受archived。|BSM-004 / GEN-009|unarchiveSpaceType复用现有入口，同时接受archived和disabled并恢复active；pending_delete仍不能绕过审批，历史申请保留。|
+|M009-043|CX-06 + GR-05；关联旧M009-021|冲突|是|否|空间类型创建/商户删除审批审计缺对象ID；删除理由会被清空；驳回仍记录merchant.delete_approved。|BSM-004 / PGM-066 / GEN-011|executeWrite补SpaceTypeRecord/MerchantDeleteDecision对象ID，按现有请求类型把理由/审批决定写到不可变审计metadata；恢复清空档案理由不抹去事件理由。商户和空间类型驳回事件明确rejected；删除申请/最高权限直删也保留reason。无新审计系统。|
+|M009-044|CX-07|细化|是|否|空间类型正常审批完成，申请表status仍为pending。|BSM-004 / GEN-006 / GEN-011|在既有space_type_delete_requests把本次待审申请更新为approved/rejected；最高权限直删本次申请也结清。保留旧历史申请；现有类型行与本次申请更新在同一事务内，不新建状态机。|
+|M009-045|CX-08|细化|是|否|仅存在已失效历史绑定，也被countMerchantReferences视为活占用并阻止商户软删除。|BSM-004 / GEN-002 / GEN-006|占用统计仅排除真正已结束的inactive历史绑定；future inactive且effectiveTo=null仍算预约中的引用，不能当已失效而放行软删。其它合同、钱账、权益等引用判断保持。|
+|M009-046|CX-09|细化|是|否|容量/面积/租金接受负数，DTO和数据库无对应有效范围拦截。|PGM-020 / PGM-026 / GEN-004 / GEN-006|现有入口校验capacity、面积和租金单价不得负数；可空和零保持，不添加业务上限或新计价规则。|
+|M009-030|CX-10 + GR-01；沿用旧ID|细化|是|否|初建商户可写不存在的三主体ID，形成绑定表之外的主体投影。|PGM-026 / BEQR-143 / GEN-004|统一细化；新建商户对已提供三主体ID复用存在性及038项目关联校验，缺省仍可空，不强制所有建档自动绑定。Leasing由现有后续绑定入口落权威主体。|
+|M009-047|CX-12|冲突|是|否|多处中文错误message带英文角色/状态列表，共用翻译器原样透传。|PGM-001 / PGM-066 / GEN-008 / GEN-015|删除用户message中的英文枚举括注，保留原有中文说明与内部错误码；不改公共FieldLabels处理策略。|
+|M009-018|CX-13；沿用旧ID|冲突|是|否|商户普通档案更新可立即设terminated，没有退出缓冲生效机制。|BEQR-155 / GEN-006|普通建档拒绝terminated；普通更新拒绝由其它状态直接切到terminated，已有terminated档案的无状态变化保存不擅自改状态。不新建退出调度，不把存档当退出，不新增黑名单联合审批。|
+|M009-013|GR-04；沿用旧ID|细化|是|否|项目档案缺负责人、地址、经营范围；ProjectRequest/ProjectRecord/SQL及projects表均无三字段。|PGM-020 / BSM-028 / GEN-002|按已获批范围在ProjectRequest/ProjectRecord/创建/列表读回/JDBC及新迁移补ownerPerson,address,businessScope，三项可空；保留旧JSON缺字段和旧Java构造方式，必要往返验证；无页面、无旧项目编辑补录入口。|
+|M009-054|CX-B4-01 + GR-01|冲突|是|否|真实最高权限进入岗位模板生命周期时，被仅platform_admin入口拦截，已有删除审批分支不可达。|BSM-004 / GEN-005 / GEN-008|仅在AccessService.changePositionTemplateLifecycle对真实isMasterAuthority身份兼容该方法已有动作；不改共享requirePlatformAdmin或其它入口。保留Controller功能权限、对象状态、占用检查、独立审批和留痕；补真实最高权限及普通管理员边界验证。|
+|M009-055|GR-02 + 本席B4原有八项失败中的商户范围部分|细化|是|否|本批直接身份回归夹具/请求缺目标merchantId；资金及员工档案验证先被商户范围守卫阻断，未到要测的行为。|GEN-003 / GEN-005 / GEN-008 / PGM-041|只调整BarStoredValueFundChainJdbcIntegrationTests、StoredValueNotificationIntegrationTest和M010RegressionTests对应失败用例的合法操作人/商户资料/现有调用前提；保留核心金额、通知、隔离与隐私断言。不得放宽资金/员工生产代码权限或伪装最高权限。详见下。|
+|M009-056|GR-03|细化|是|否|M006最高权限审批身份测试的permission_grant_l3缺已要求的直接受益人，未到该用例要验证的合法审批。|GEN-003 / GEN-005 / GEN-008|只在M006SecurityRegressionTests该用例补测试授权的真实受益人及既有schedule数据；仍证明普通最高职级管理员不能代替USB、真实USB合法审批。保留生产受益人及利益冲突检查，不新增豁免。|
+|M009-048|Grok T-01|细化|否|否|listMerchantsByBusinessEntity作为商户隔离查询承载。|PGM-027 / BSM-072|有HTML上位条目，按分类顺序归细化；本次无独立工程缺陷，不因零调用删除。|
+|M009-049|Grok T-02|细化|否|否|JdbcPlatformRepository实现已有审批链持久化。|BEQR-166|有HTML上位审批链条目；不新增角色/流程。findDirectSuperior一人一个上级的观察仅保留。|
+|M009-050|Grok T-03|细化|否|否|联系人PiiCipher和读时脱敏。|PGM-041 / GEN-010|有敏感数据控制上位要求，无新业务发明，当前无缺陷。|
+|M009-051|Grok T-04|技术性|否|否|COUNT/LIMIT及PageResponse分页。|GEN-012|仅资源与接口承载，不引入业务实体、状态、收费、权限或业务默认值。|
+|M009-052|Grok T-05|细化|否|否|空间类型直接DELETE拒绝、导向存档审批。|BSM-004|现有业务流程的实现；恢复缺陷另列042，不把该拒绝端点重复判缺陷。|
+|M009-053|Grok T-06 + 本方package-info登记|技术性|否|否|package-info.java仅package声明。|GEN-001 / GEN-017|编译单元，不含业务实体、枚举、状态、角色权限、校验、价格或默认值。|
+|M009-057|CX-B5-01；Grok B5本次无问题|细化|是|否|SpaceTypeRequest.java:6声称存在则更新名称/排序/状态；实际新增接口拒绝重复typeCode并固定active。|BSM-004 / PGM-005 / PGM-020 / GEN-002 / GEN-008 / GEN-016|只删除Java注释中录入/修改、存在则更新的错误承诺，说明为新建、编码不可重复、新建启用；必要自身版本V0.01。不新增更新功能，不改DTO字段、接口行为、测试或HTML。|
+
+### M009-057 原文、拟改与影响
+位置：backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java:6。
+原句：/** 条目3 空间类型字典 录入/修改请求（后台管理员维护）。typeCode 为唯一键，存在则更新名称/排序/状态。 */
+拟改：/** 空间类型字典新建请求（后台管理员维护）。typeCode 不得重复，新建状态固定为启用。 */
+执行事实：PlatformService.java:551-558重复编码抛SPACE_TYPE_CODE_EXISTS，新建保存active；既有PlatformServiceTests.java:374-387两条实际通过，直接证明旧注释承诺无法执行。代码与三HTML规则没有冲突；字典请求说明指向BSM-004、PGM-005/020已有维护能力，按顺序归细化且有工程缺陷，不因DTO本身直接归技术性。依据类型为可执行产物＋可复现命令输出，冻结GEN-002/008/016，不新增审计判据。
+最小范围仅该注释及用户版本铁律要求的自身版本：原文件没有文件版本，加入V0.01；不改字段、类签名、状态、错误码、方法、调用者和测试，不新增任何功能。其余已修文件保持，业务HTML只读。注释修改用当前实现与既有两条测试证据核对；不为注释增加重复测试。
+用户“如果不是修改html，那么修复没有问题”授权适用；已在普通对话给出完整原句/拟改/影响，不需再次弹窗。本范围没有添加业务、未答问题或HTML修改申请。B2双PASS前不改注释。
+观察保留：self发现BSM-114锁内“考勤打卡”与现HTML“查看考勤”及BSM-120日期差异；Grok所谓87/87检查只覆盖首条摘录行邻域，不代表所有69业务片段全文逐字一致。这两处不承载M009行为、不改HTML或锁、不新增队列；不得将Grok报告改写成67/69全文匹配。
+
+## 历史第四批（以下原样保留，不是当前队列）
+## 当前M009第四批修复队列（唯一当前表；B4双PASS）
+版本：本台账V2.11；B3=2/3。B4-r2内容与归因双PASS，17项修复均完成（原14项r1已落地，054-056在r2修复其直接依赖/夹具缺口）；23行队列全否，其中17已修复/6仅登记。此为修复队列状态，不等于B5或模块PASS。下列事实保留修复前描述，边界仍适用。
+
+|正式ID|本轮来源|分类|工程缺陷|修复队列归属|事实|冻结依据|最小修复边界|
+|---|---|---|---|---|---|---|---|
+|M009-038|CX-01|冲突|是|否|项目普通岗位通过平台守卫后仍可跨项目读写。|PGM-041 / BEQR-152 / GEN-005|按已批准范围补商户项目归属、公司项目多对多及必要后端维护；五类列表/COUNT和相关写入按真实项目校验；专用项目补录保留其余字段。必要依赖AuthorizationService复用SessionIssuer常量识别真实master_authority，不让platform_admin冒充。旧资料不猜填，普通岗位不能认领。详见下。|
+|M009-039|CX-02 + GR-03|冲突|是|否|空间projectId可空，父空间可来自另一项目。|PGM-017 / GEN-004 / GEN-006|createSpace要求projectId且等于当前项目；父空间存在并属于同项目；merchantId若有也须本项目。相关spaceExists复用同一项目范围。|
+|M009-040|CX-03|冲突|是|否|普通绑定停用/替换路径可以改动当前结算主体，缺公司权责变更审核。|PGM-026 / GEN-005|删除普通入口改变已有三主体身份的分支：新建/激活绑定若与商户已有非空三主体不一致则拒绝；生效绑定不得由普通change停用/暂停以绕过再绑。首次建立且商户三主体空，或首次权威绑定与已有三主体完全一致可继续；不引入财税审批流程，不以USB权限代替财税并审。|
+|M009-041|CX-04（未来生效部分）|冲突|是|否|effectiveFrom设为2027-09-14，保存即active并改商户主体。|PGM-026 / GEN-006 / GEN-008|未来effectiveFrom保存为已有inactive、effectiveTo=null，不投影；创建与激活都拒绝另一条active或inactive且未结束绑定，事务内锁同一商户后检查/写入。到期现有active动作再次校验。Leasing新商户先不写三主体，后续绑定入口处理；不加新状态/调度。|
+|M009-031|CX-04（停用部分）+ GR-02；沿用旧ID|冲突|是|否|绑定停用后商户当前三主体投影仍保留，且可形成effectiveTo早于effectiveFrom。|PGM-026 / BEQR-143 / GEN-006|与040/041合并改分支：生效绑定的普通失效操作拒绝，原记录及投影不变；未生效绑定不写倒置日期，effectiveTo不得早于effectiveFrom；已结束历史绑定不重新打开历史期间。激活成功才同步三主体；不清空财税主体、不改历史快照。|
+|M009-042|CX-05|冲突|是|否|空间类型删除后disabled，恢复只接受archived。|BSM-004 / GEN-009|unarchiveSpaceType复用现有入口，同时接受archived和disabled并恢复active；pending_delete仍不能绕过审批，历史申请保留。|
+|M009-043|CX-06 + GR-05；关联旧M009-021|冲突|是|否|空间类型创建/商户删除审批审计缺对象ID；删除理由会被清空；驳回仍记录merchant.delete_approved。|BSM-004 / PGM-066 / GEN-011|executeWrite补SpaceTypeRecord/MerchantDeleteDecision对象ID，按现有请求类型把理由/审批决定写到不可变审计metadata；恢复清空档案理由不抹去事件理由。商户和空间类型驳回事件明确rejected；删除申请/最高权限直删也保留reason。无新审计系统。|
+|M009-044|CX-07|细化|是|否|空间类型正常审批完成，申请表status仍为pending。|BSM-004 / GEN-006 / GEN-011|在既有space_type_delete_requests把本次待审申请更新为approved/rejected；最高权限直删本次申请也结清。保留旧历史申请；现有类型行与本次申请更新在同一事务内，不新建状态机。|
+|M009-045|CX-08|细化|是|否|仅存在已失效历史绑定，也被countMerchantReferences视为活占用并阻止商户软删除。|BSM-004 / GEN-002 / GEN-006|占用统计仅排除真正已结束的inactive历史绑定；future inactive且effectiveTo=null仍算预约中的引用，不能当已失效而放行软删。其它合同、钱账、权益等引用判断保持。|
+|M009-046|CX-09|细化|是|否|容量/面积/租金接受负数，DTO和数据库无对应有效范围拦截。|PGM-020 / PGM-026 / GEN-004 / GEN-006|现有入口校验capacity、面积和租金单价不得负数；可空和零保持，不添加业务上限或新计价规则。|
+|M009-030|CX-10 + GR-01；沿用旧ID|细化|是|否|初建商户可写不存在的三主体ID，形成绑定表之外的主体投影。|PGM-026 / BEQR-143 / GEN-004|统一细化；新建商户对已提供三主体ID复用存在性及038项目关联校验，缺省仍可空，不强制所有建档自动绑定。Leasing由现有后续绑定入口落权威主体。|
+|M009-047|CX-12|冲突|是|否|多处中文错误message带英文角色/状态列表，共用翻译器原样透传。|PGM-001 / PGM-066 / GEN-008 / GEN-015|删除用户message中的英文枚举括注，保留原有中文说明与内部错误码；不改公共FieldLabels处理策略。|
+|M009-018|CX-13；沿用旧ID|冲突|是|否|商户普通档案更新可立即设terminated，没有退出缓冲生效机制。|BEQR-155 / GEN-006|普通建档拒绝terminated；普通更新拒绝由其它状态直接切到terminated，已有terminated档案的无状态变化保存不擅自改状态。不新建退出调度，不把存档当退出，不新增黑名单联合审批。|
+|M009-013|GR-04；沿用旧ID|细化|是|否|项目档案缺负责人、地址、经营范围；ProjectRequest/ProjectRecord/SQL及projects表均无三字段。|PGM-020 / BSM-028 / GEN-002|按已获批范围在ProjectRequest/ProjectRecord/创建/列表读回/JDBC及新迁移补ownerPerson,address,businessScope，三项可空；保留旧JSON缺字段和旧Java构造方式，必要往返验证；无页面、无旧项目编辑补录入口。|
+|M009-054|CX-B4-01 + GR-01|冲突|是|否|真实最高权限进入岗位模板生命周期时，被仅platform_admin入口拦截，已有删除审批分支不可达。|BSM-004 / GEN-005 / GEN-008|仅在AccessService.changePositionTemplateLifecycle对真实isMasterAuthority身份兼容该方法已有动作；不改共享requirePlatformAdmin或其它入口。保留Controller功能权限、对象状态、占用检查、独立审批和留痕；补真实最高权限及普通管理员边界验证。|
+|M009-055|GR-02 + 本席B4原有八项失败中的商户范围部分|细化|是|否|本批直接身份回归夹具/请求缺目标merchantId；资金及员工档案验证先被商户范围守卫阻断，未到要测的行为。|GEN-003 / GEN-005 / GEN-008 / PGM-041|只调整BarStoredValueFundChainJdbcIntegrationTests、StoredValueNotificationIntegrationTest和M010RegressionTests对应失败用例的合法操作人/商户资料/现有调用前提；保留核心金额、通知、隔离与隐私断言。不得放宽资金/员工生产代码权限或伪装最高权限。详见下。|
+|M009-056|GR-03|细化|是|否|M006最高权限审批身份测试的permission_grant_l3缺已要求的直接受益人，未到该用例要验证的合法审批。|GEN-003 / GEN-005 / GEN-008|只在M006SecurityRegressionTests该用例补测试授权的真实受益人及既有schedule数据；仍证明普通最高职级管理员不能代替USB、真实USB合法审批。保留生产受益人及利益冲突检查，不新增豁免。|
+|M009-048|Grok T-01|细化|否|否|listMerchantsByBusinessEntity作为商户隔离查询承载。|PGM-027 / BSM-072|有HTML上位条目，按分类顺序归细化；本次无独立工程缺陷，不因零调用删除。|
+|M009-049|Grok T-02|细化|否|否|JdbcPlatformRepository实现已有审批链持久化。|BEQR-166|有HTML上位审批链条目；不新增角色/流程。findDirectSuperior一人一个上级的观察仅保留。|
+|M009-050|Grok T-03|细化|否|否|联系人PiiCipher和读时脱敏。|PGM-041 / GEN-010|有敏感数据控制上位要求，无新业务发明，当前无缺陷。|
+|M009-051|Grok T-04|技术性|否|否|COUNT/LIMIT及PageResponse分页。|GEN-012|仅资源与接口承载，不引入业务实体、状态、收费、权限或业务默认值。|
+|M009-052|Grok T-05|细化|否|否|空间类型直接DELETE拒绝、导向存档审批。|BSM-004|现有业务流程的实现；恢复缺陷另列042，不把该拒绝端点重复判缺陷。|
+|M009-053|Grok T-06 + 本方package-info登记|技术性|否|否|package-info.java仅package声明。|GEN-001 / GEN-017|编译单元，不含业务实体、枚举、状态、角色权限、校验、价格或默认值。|
+
+
+### 继承M009-038及013等已批准执行边界
+
+- 数据承载：merchants新增可空project_id（历史null原样）；MerchantRecord、MerchantProfileRequest及BusinessEntityRequest增加projectId并保留旧构造入口。公司项目关系用独立business_entity_projects表，(business_entity_id,project_id)唯一；不恢复已删除的公司固定父链，不给公司单塞唯一project_id。
+- 新建商户：普通请求从currentProjectScopeQuietly取得当前项目，显式projectId只能与之相同且项目存在；新建公司默认从当前项目取得归属，同一事务记录关联；公司新建经既有USB最高权限显式提交目标projectId时校验目标项目存在，不猜项目；普通调用的显式projectId仍须等于当前项目。LeasingService的已校验intent.projectId明确传入建档请求，旧调用缺字段仍从当前项目取得，不猜一个默认项目。
+- 已有归属：普通商户更新、存档、恢复、申请删除、审批删除以及绑定创建/变更都必须验证所属项目；原有最高权限删除/审批明确对象分支的边界见下；空间及其merchant/parent引用也须同项目。列表过滤在SQL COUNT与取页之前完成，返回total不泄露其它项目数量；业务公司按EXISTS关联过滤，绑定按其merchant.project_id过滤；不只在Controller拦，服务内部调用也执行。listMerchantsByBusinessEntity也归038：查询明确接收项目参数并同时按项目与经营主体过滤，不能把048登记否读成保留跨项目反查；空项目不退全表。
+- 后端维护：商户项目补录使用只更新project_id的专用后端操作，不调用全量档案覆盖逻辑。请求只含idempotencyKey、projectId、reason，按数据库条件只允许null到明确项目或同值幂等，不改变商户其它字段；任何已有明确归属不允许迁移为其它项目。公司使用另一关联维护入口，把已存在公司关联到指定的已存在项目，保留其它项目关系，不增加撤销/删除关系流程。两者复用同一个简短ProjectAssociationRequest，不新增审批系统或业务状态。
+- 权限边界：AuthorizationService.isMasterAuthority现要求platform_admin，但生产SessionIssuer/ProductionAuthService明确签发master_authority。按038必要依赖把此共用识别对齐SessionIssuer已有MASTER_ACCOUNT_TYPE、MASTER_USER_ID、MASTER_USERNAME三个常量，requirePermission现有分支由同一识别生效；不另写一套角色判断、不改签发/验签/会话安全。普通platform_admin即便同名同ID也不算U盘最高权限。测试使用实际master_authority三件套，不再拿platform_admin冒充。
+- 真实项目与配置例外：全部普通列表（包括platform_admin与最高权限）使用当前实际项目，不自动全量。沿用当前项目scope获取；缺项目上下文沿用现有403，非空组织ID若在projects不存在（例如platform-company）则列表为空、total=0；写入要求真实项目存在。普通新建的显式projectId只能等于该真实当前项目，普通更新禁止改project_id（包括null→当前项目和迁移）。
+- 仅真实U盘最高权限可调用显式归属配置：无归属商户null→请求指定的已存在项目，或同值幂等；公司增加指定已存在项目的关联，保留原关联。目标取请求projectId，只校验存在及本段对象条件，不要求它等于platform-company/currentProjectScopeQuietly返回值；缺目标就拒绝、不猜填。公司新建若真实最高权限显式指定目标，按同样的存在性校验创建并关联；普通调用仅当前项目。功能权限仍只在现有Controller或新增维护入口检查一次，保留DENY和已知权限检查，不制造单次权限二次消费。本次新增的USB例外只用于明确归属配置。既有BSM-004明确的最高权限商户删除/审批分支继续按请求中明确商户ID执行并留痕，不能因为生产USB的platform-company不是项目而被038误封；只保留原本有最高权限判断的业务分支，不把特例扩成普通档案修改或全局查询。任何上述例外都不能用于040绕过财税并审，也不给任何普通列表全量。
+- 留痕：记录操作者、对象、项目、理由；要求幂等键，复用AuditedOperationExecutor事务/事件。只新增必要关联，不自动替任何历史记录填归属；本轮不实际补历史业务数据。关联不修改商户三主体财税字段、合同、结算或收入归属；补录SQL只条件更新project_id，不能覆盖其它档案字段。
+- 可验证行为：同一公司可关联甲乙两项目；甲项目岗位只能读甲项目商户/空间/绑定及甲项目关联公司；伪造乙项目请求失败；普通platform_admin同样无全量；跨项目数量不进total；未归属旧资料不暴露；未授权认领失败；显式合法关联/补录成功并留痕；招商转商户项目不丢。
+
+### 031/040/041以及030的共同执行边界
+普通入口不提供财税主体调整审批。对已生效绑定的普通停用/暂停直接拒绝而不清空商户投影；新建或激活会改变现有非空三主体身份时也拒绝。初建商户可无三主体，提供时须校验真实且在本项目关联公司范围内（030/038）；不强制建档自动建绑定。
+未来绑定用既有inactive和日期存储，不投影。创建与激活都检查唯一未结束槽：该商户已有另一条active，或inactive且effectiveTo IS NULL，就拒绝新建/激活；不是只在激活时检查，不是只问findActive。激活还必须不早于effectiveFrom、商户有效、项目匹配。创建/激活/失效在原AuditedOperation事务中锁同一商户行后检查并写入，避免两个正常未来请求同时占槽；可共享最小未结束查询，不增加状态/调度/判据。未结束未来绑定不被045当作失效垃圾引用。结束日期不早于开始日期；已结束历史绑定不改回未结束。
+LeasingService.autoCreateMerchantForSign目前先把三列写成contractSubjectId，再调用绑定服务。为保证未来签约不先产生当前主体，本批在这一调用点将三列改为null，并继续由紧接着的createFourPartyBinding带合同/运营/结算主体和生效日。这属于041根因覆盖及038项目传递，不审/改招商其它业务；测试须覆盖这个真实调用顺序。生效当天初始绑定仍按既有流程同步；不引入调度或新的pending枚举。
+
+### 013与必要依赖文件
+本批允许按ID归因改M009清单之外的直接依赖：ProjectRecord（013）；LeasingService及其对应验证（038/041）；AuthorizationService共用最高权限识别及直接受影响的身份夹具/验证（038，保持已有角色和权限码）；JDBC迁移及现有测试（各对应ID）。不因此扩大待审模块清单、不改判据或HTML。新迁移编号在B3按当时实际最大编号顺序取下一号，先核对共享库情况；不修改已发布迁移。三个项目资料字段允许null，旧JSON和Java调用兼容，不自动历史回填。
+其余修复以表中现有入口最小调整为限。所有新增的可执行行为先补按ID归因的最小失败验证，B3整批修完后B4再审完整tree差异，B5重审原M009全部20文件及必要依赖。不在B2写源代码。
+
+
+### 新增054—056的具体执行边界
+054不修改共享requirePlatformAdmin；仅修changePositionTemplateLifecycle对真实最高权限的入口兼容。该方法原有archive、restore、request_delete、approve_delete、reject_delete均针对显式模板ID；真实最高权限仍走这些既有分支，原有功能权限/DENY、存档前置、占用、独立审批与审计不删。普通管理员仍须原权限，不能通过审批内层最高权限检查。此处是既有最高权限配置操作与生产身份一致，不开放资金、不更改038普通列表与商户档案规则，不增加角色或状态。对应测试需覆盖真实USB删除申请/审批/恢复及普通管理员不可最高审批；不按GEN规则扫修Access其它接口。
+055已在本批B4两份完整报告中出现：GR-02明确两资金测试类；本席原始输出另有M010 OwnAndManagementProfileResponsesDoNotReturnPersonalValues同类MERCHANT_SCOPE_REQUIRED。本批一次归并这个已出现的直接回归，禁止扩大到所有旧失败。商户卡资金操作以目标商户的合法操作人和既有功能权限执行，必要时复用现有TestSecurityActors；不再用固定masterID配普通platform_admin类型。通知消费测试须在既有允许的商户卡消费路径校验通知、金额、余额、card_type；原无商户范围项目卡内部扣款须保留正确拒绝验证，不伪造可用的项目卡扣款入口、不把错误换成预期来冒充原成功功能已实现。项目卡充值通知原有验证保持。M010仅将隐私验证中的档案及管理调用放在同一明确商户上下文，本人读取仍按真实本人；脱敏及明文禁止断言保留。上述生产资金/员工服务不修改，项目卡消费支持问题不在本ID下造新实现。
+056只给测试pending授权对象补其明确受益人（与审批人、申请人的利益冲突规则仍按现有实现）；正确配置既有SupervisorReviewSchedule及测试相关记录，不去生产代码解除受益人要求。测试仍先验证普通高职级被拒，再验证真实USB批准同一合法审批事项。不得把actionType偷换成不需受益人的其它业务。
+
+### B4整批输入、证据纠正与当前状态
+输入为两份本次完整B4-r1报告：self V0.02，359046bytes/SHA256 3ac0c87d592b3cbe0e3b7697e3112cd819d1c9e3649e35fed2c1e1f7eb98ea74；grok V0.02，318436bytes/SHA256 92c5964ee2fbf14077f24dc595295a86ea1a0658bd75872a43dd72b1c688bdd1。各自含完整185872byte binary diff，归因双PASS、内容双FAIL；无越界回滚依据。只使用各文件末尾本次报告，原前缀属于旧轮。
+GR-01与CX-B4-01为同一项→054。GR-02与本席已列出的本批直接测试商户范围失败归055。GR-03→056。其它十四是沿用，不在B4 FAIL时改否；六否继续登记。
+事实纠正：Grok将GR-02/03描述为本批引入/连带，不能成立；本席B3已恢复before树AuthorizationService及原身份夹具实跑94例，仍同样1failure+7errors，其原始输出在self B4第验证节。currentMerchantScope在before也不因platform_admin无merchantId放行。它们是既有夹具前提与当前真实规则不一致，因本批直接验证遇到而纳入，不能恢复假身份或放宽生产守卫。Grok提“派发记录ProductionAuth 8 errors”无对应本批派发依据；本批原282是十一类汇总1failure+8errors，不曾报告ProductionAuth8errors。
+独立核对Grok fresh XML：13类=320例、1failure+13errors，包含AccessJdbcIntegrationTests24和AccessServiceTests50、ProductionAuth8，不含mtime仍旧的M01044；总数成立。Grok跑过的核心/直接七类188全过。AccessServiceTests六项未改类的既有受益人失败继续作为观察，本次不扩入。
+行数口径：冻结plan/modules.md当前明确M00920文件、2476行；before树同20文件实算2879行、after3368行。self B4的“原20文件/2879行”指本轮修复前实读值，不能称冻结计划计数；本候选明确区分，不修改plan/lock。
+本轮B3已执行1/3。ledger原模块表仍留0的遗漏与顶部1矛盾，本次仅校正模块表为1，与已冻结before/after事实一致，不是执行第2批。
+本批无新增业务规则或待操作员决定的添加项；013/038批准原文持续有效。B2仍须双方新票逐一同意分类、依据、工程缺陷及最小边界，候选不能直接实施。通过后才第2批B3；第2批以现有全部17是为范围，已落实行为保持，未坏的不重复改。
+
+---
+
+
+## 历史M009第三批B2定稿（当时双PASS；已由顶部第四批候选接续）
+版本：本台账V2.08；B3=0/3。第三批双方V0.08均PASS，实际审阅输入是V2.07 SHA256 7276a84f4af5d44937de776329b6cb151501cf0c84e8839a4f194b259a8d1178；本次只登记定稿状态，20行与下列执行边界原样。下面20行是本批当前值，后文所有M009候选/暂停表保留为历史；其它模块当前值不变。
+
+|正式ID|本轮来源|分类|工程缺陷|修复队列归属|事实|冻结依据|最小修复边界|
+|---|---|---|---|---|---|---|---|
+|M009-038|CX-01|冲突|是|是|项目普通岗位通过平台守卫后仍可跨项目读写。|PGM-041 / BEQR-152 / GEN-005|按已批准范围补商户项目归属、公司项目多对多及必要后端维护；五类列表/COUNT和相关写入按真实项目校验；专用项目补录保留其余字段。必要依赖AuthorizationService复用SessionIssuer常量识别真实master_authority，不让platform_admin冒充。旧资料不猜填，普通岗位不能认领。详见下。|
+|M009-039|CX-02 + GR-03|冲突|是|是|空间projectId可空，父空间可来自另一项目。|PGM-017 / GEN-004 / GEN-006|createSpace要求projectId且等于当前项目；父空间存在并属于同项目；merchantId若有也须本项目。相关spaceExists复用同一项目范围。|
+|M009-040|CX-03|冲突|是|是|普通绑定停用/替换路径可以改动当前结算主体，缺公司权责变更审核。|PGM-026 / GEN-005|删除普通入口改变已有三主体身份的分支：新建/激活绑定若与商户已有非空三主体不一致则拒绝；生效绑定不得由普通change停用/暂停以绕过再绑。首次建立且商户三主体空，或首次权威绑定与已有三主体完全一致可继续；不引入财税审批流程，不以USB权限代替财税并审。|
+|M009-041|CX-04（未来生效部分）|冲突|是|是|effectiveFrom设为2027-09-14，保存即active并改商户主体。|PGM-026 / GEN-006 / GEN-008|未来effectiveFrom保存为已有inactive、effectiveTo=null，不投影；创建与激活都拒绝另一条active或inactive且未结束绑定，事务内锁同一商户后检查/写入。到期现有active动作再次校验。Leasing新商户先不写三主体，后续绑定入口处理；不加新状态/调度。|
+|M009-031|CX-04（停用部分）+ GR-02；沿用旧ID|冲突|是|是|绑定停用后商户当前三主体投影仍保留，且可形成effectiveTo早于effectiveFrom。|PGM-026 / BEQR-143 / GEN-006|与040/041合并改分支：生效绑定的普通失效操作拒绝，原记录及投影不变；未生效绑定不写倒置日期，effectiveTo不得早于effectiveFrom；已结束历史绑定不重新打开历史期间。激活成功才同步三主体；不清空财税主体、不改历史快照。|
+|M009-042|CX-05|冲突|是|是|空间类型删除后disabled，恢复只接受archived。|BSM-004 / GEN-009|unarchiveSpaceType复用现有入口，同时接受archived和disabled并恢复active；pending_delete仍不能绕过审批，历史申请保留。|
+|M009-043|CX-06 + GR-05；关联旧M009-021|冲突|是|是|空间类型创建/商户删除审批审计缺对象ID；删除理由会被清空；驳回仍记录merchant.delete_approved。|BSM-004 / PGM-066 / GEN-011|executeWrite补SpaceTypeRecord/MerchantDeleteDecision对象ID，按现有请求类型把理由/审批决定写到不可变审计metadata；恢复清空档案理由不抹去事件理由。商户和空间类型驳回事件明确rejected；删除申请/最高权限直删也保留reason。无新审计系统。|
+|M009-044|CX-07|细化|是|是|空间类型正常审批完成，申请表status仍为pending。|BSM-004 / GEN-006 / GEN-011|在既有space_type_delete_requests把本次待审申请更新为approved/rejected；最高权限直删本次申请也结清。保留旧历史申请；现有类型行与本次申请更新在同一事务内，不新建状态机。|
+|M009-045|CX-08|细化|是|是|仅存在已失效历史绑定，也被countMerchantReferences视为活占用并阻止商户软删除。|BSM-004 / GEN-002 / GEN-006|占用统计仅排除真正已结束的inactive历史绑定；future inactive且effectiveTo=null仍算预约中的引用，不能当已失效而放行软删。其它合同、钱账、权益等引用判断保持。|
+|M009-046|CX-09|细化|是|是|容量/面积/租金接受负数，DTO和数据库无对应有效范围拦截。|PGM-020 / PGM-026 / GEN-004 / GEN-006|现有入口校验capacity、面积和租金单价不得负数；可空和零保持，不添加业务上限或新计价规则。|
+|M009-030|CX-10 + GR-01；沿用旧ID|细化|是|是|初建商户可写不存在的三主体ID，形成绑定表之外的主体投影。|PGM-026 / BEQR-143 / GEN-004|统一细化；新建商户对已提供三主体ID复用存在性及038项目关联校验，缺省仍可空，不强制所有建档自动绑定。Leasing由现有后续绑定入口落权威主体。|
+|M009-047|CX-12|冲突|是|是|多处中文错误message带英文角色/状态列表，共用翻译器原样透传。|PGM-001 / PGM-066 / GEN-008 / GEN-015|删除用户message中的英文枚举括注，保留原有中文说明与内部错误码；不改公共FieldLabels处理策略。|
+|M009-018|CX-13；沿用旧ID|冲突|是|是|商户普通档案更新可立即设terminated，没有退出缓冲生效机制。|BEQR-155 / GEN-006|普通建档拒绝terminated；普通更新拒绝由其它状态直接切到terminated，已有terminated档案的无状态变化保存不擅自改状态。不新建退出调度，不把存档当退出，不新增黑名单联合审批。|
+|M009-013|GR-04；沿用旧ID|细化|是|是|项目档案缺负责人、地址、经营范围；ProjectRequest/ProjectRecord/SQL及projects表均无三字段。|PGM-020 / BSM-028 / GEN-002|按已获批范围在ProjectRequest/ProjectRecord/创建/列表读回/JDBC及新迁移补ownerPerson,address,businessScope，三项可空；保留旧JSON缺字段和旧Java构造方式，必要往返验证；无页面、无旧项目编辑补录入口。|
+|M009-048|Grok T-01|细化|否|否|listMerchantsByBusinessEntity作为商户隔离查询承载。|PGM-027 / BSM-072|有HTML上位条目，按分类顺序归细化；本次无独立工程缺陷，不因零调用删除。|
+|M009-049|Grok T-02|细化|否|否|JdbcPlatformRepository实现已有审批链持久化。|BEQR-166|有HTML上位审批链条目；不新增角色/流程。findDirectSuperior一人一个上级的观察仅保留。|
+|M009-050|Grok T-03|细化|否|否|联系人PiiCipher和读时脱敏。|PGM-041 / GEN-010|有敏感数据控制上位要求，无新业务发明，当前无缺陷。|
+|M009-051|Grok T-04|技术性|否|否|COUNT/LIMIT及PageResponse分页。|GEN-012|仅资源与接口承载，不引入业务实体、状态、收费、权限或业务默认值。|
+|M009-052|Grok T-05|细化|否|否|空间类型直接DELETE拒绝、导向存档审批。|BSM-004|现有业务流程的实现；恢复缺陷另列042，不把该拒绝端点重复判缺陷。|
+|M009-053|Grok T-06 + 本方package-info登记|技术性|否|否|package-info.java仅package声明。|GEN-001 / GEN-017|编译单元，不含业务实体、枚举、状态、角色权限、校验、价格或默认值。|
+
+### M009-038获批新增的具体执行边界
+- 数据承载：merchants新增可空project_id（历史null原样）；MerchantRecord、MerchantProfileRequest及BusinessEntityRequest增加projectId并保留旧构造入口。公司项目关系用独立business_entity_projects表，(business_entity_id,project_id)唯一；不恢复已删除的公司固定父链，不给公司单塞唯一project_id。
+- 新建商户：普通请求从currentProjectScopeQuietly取得当前项目，显式projectId只能与之相同且项目存在；新建公司默认从当前项目取得归属，同一事务记录关联；经既有USB最高权限显式提交目标projectId时校验目标项目存在，不猜项目；普通调用的显式projectId仍须等于当前项目。LeasingService的已校验intent.projectId明确传入建档请求，旧调用缺字段仍从当前项目取得，不猜一个默认项目。
+- 已有归属：普通商户更新、存档、恢复、申请删除、审批删除以及绑定创建/变更都必须验证所属项目；原有最高权限删除/审批明确对象分支的边界见下；空间及其merchant/parent引用也须同项目。列表过滤在SQL COUNT与取页之前完成，返回total不泄露其它项目数量；业务公司按EXISTS关联过滤，绑定按其merchant.project_id过滤；不只在Controller拦，服务内部调用也执行。listMerchantsByBusinessEntity也归038：查询明确接收项目参数并同时按项目与经营主体过滤，不能把048登记否读成保留跨项目反查；空项目不退全表。
+- 后端维护：商户项目补录使用只更新project_id的专用后端操作，不调用全量档案覆盖逻辑。请求只含idempotencyKey、projectId、reason，按数据库条件只允许null到明确项目或同值幂等，不改变商户其它字段；任何已有明确归属不允许迁移为其它项目。公司使用另一关联维护入口，把已存在公司关联到指定的已存在项目，保留其它项目关系，不增加撤销/删除关系流程。两者复用同一个简短ProjectAssociationRequest，不新增审批系统或业务状态。
+- 权限边界：AuthorizationService.isMasterAuthority现要求platform_admin，但生产SessionIssuer/ProductionAuthService明确签发master_authority。按038必要依赖把此共用识别对齐SessionIssuer已有MASTER_ACCOUNT_TYPE、MASTER_USER_ID、MASTER_USERNAME三个常量，requirePermission现有分支由同一识别生效；不另写一套角色判断、不改签发/验签/会话安全。普通platform_admin即便同名同ID也不算U盘最高权限。测试使用实际master_authority三件套，不再拿platform_admin冒充。
+- 真实项目与配置例外：全部普通列表（包括platform_admin与最高权限）使用当前实际项目，不自动全量。沿用当前项目scope获取；缺项目上下文沿用现有403，非空组织ID若在projects不存在（例如platform-company）则列表为空、total=0；写入要求真实项目存在。普通新建的显式projectId只能等于该真实当前项目，普通更新禁止改project_id（包括null→当前项目和迁移）。
+- 仅真实U盘最高权限可调用显式归属配置：无归属商户null→请求指定的已存在项目，或同值幂等；公司增加指定已存在项目的关联，保留原关联。目标取请求projectId，只校验存在及本段对象条件，不要求它等于platform-company/currentProjectScopeQuietly返回值；缺目标就拒绝、不猜填。公司新建若真实最高权限显式指定目标，按同样的存在性校验创建并关联；普通调用仅当前项目。功能权限仍只在现有Controller或新增维护入口检查一次，保留DENY和已知权限检查，不制造单次权限二次消费。本次新增的USB例外只用于明确归属配置。既有BSM-004明确的最高权限商户删除/审批分支继续按请求中明确商户ID执行并留痕，不能因为生产USB的platform-company不是项目而被038误封；只保留原本有最高权限判断的业务分支，不把特例扩成普通档案修改或全局查询。任何上述例外都不能用于040绕过财税并审，也不给任何普通列表全量。
+- 留痕：记录操作者、对象、项目、理由；要求幂等键，复用AuditedOperationExecutor事务/事件。只新增必要关联，不自动替任何历史记录填归属；本轮不实际补历史业务数据。关联不修改商户三主体财税字段、合同、结算或收入归属；补录SQL只条件更新project_id，不能覆盖其它档案字段。
+- 可验证行为：同一公司可关联甲乙两项目；甲项目岗位只能读甲项目商户/空间/绑定及甲项目关联公司；伪造乙项目请求失败；普通platform_admin同样无全量；跨项目数量不进total；未归属旧资料不暴露；未授权认领失败；显式合法关联/补录成功并留痕；招商转商户项目不丢。
+
+### 031/040/041以及030的共同执行边界
+普通入口不提供财税主体调整审批。对已生效绑定的普通停用/暂停直接拒绝而不清空商户投影；新建或激活会改变现有非空三主体身份时也拒绝。初建商户可无三主体，提供时须校验真实且在本项目关联公司范围内（030/038）；不强制建档自动建绑定。
+未来绑定用既有inactive和日期存储，不投影。创建与激活都检查唯一未结束槽：该商户已有另一条active，或inactive且effectiveTo IS NULL，就拒绝新建/激活；不是只在激活时检查，不是只问findActive。激活还必须不早于effectiveFrom、商户有效、项目匹配。创建/激活/失效在原AuditedOperation事务中锁同一商户行后检查并写入，避免两个正常未来请求同时占槽；可共享最小未结束查询，不增加状态/调度/判据。未结束未来绑定不被045当作失效垃圾引用。结束日期不早于开始日期；已结束历史绑定不改回未结束。
+LeasingService.autoCreateMerchantForSign目前先把三列写成contractSubjectId，再调用绑定服务。为保证未来签约不先产生当前主体，本批在这一调用点将三列改为null，并继续由紧接着的createFourPartyBinding带合同/运营/结算主体和生效日。这属于041根因覆盖及038项目传递，不审/改招商其它业务；测试须覆盖这个真实调用顺序。生效当天初始绑定仍按既有流程同步；不引入调度或新的pending枚举。
+
+### 013与必要依赖文件
+本批允许按ID归因改M009清单之外的直接依赖：ProjectRecord（013）；LeasingService及其对应验证（038/041）；AuthorizationService共用最高权限识别及直接受影响的身份夹具/验证（038，保持已有角色和权限码）；JDBC迁移及现有测试（各对应ID）。不因此扩大待审模块清单、不改判据或HTML。新迁移编号在B3按当时实际最大编号顺序取下一号，先核对共享库情况；不修改已发布迁移。三个项目资料字段允许null，旧JSON和Java调用兼容，不自动历史回填。
+其余修复以表中现有入口最小调整为限。所有新增的可执行行为先补按ID归因的最小失败验证，B3整批修完后B4再审完整tree差异，B5重审原M009全部20文件及必要依赖。不在B2写源代码。
+
+### 本轮B2输入与授权
+本批用B1两份原始报告全部问题、前两批B2双方完整意见作归并输入：Codex b1 raw V0.04（B1）、V0.05/V0.06/V0.07（B2 FAIL）；Grok b1 raw V0.05（B1 FAIL）、V0.06（第一批B2 PASS）、V0.07（第二批B2 FAIL）。第二批意见全部合并：专用项目补录、公司创建显式项目输入、真U盘身份识别、真实项目范围与配置例外、创建和激活共同未结束唯一性及事务行锁。20行全部保留，14是/6否；030分类由Grok第1票统一为细化；043包括两种删除驳回事由，不重新启用旧021；013/018/030/031沿用旧正式ID。旧001–037其它项保持当前否，不以旧PASS替代新票。
+操作员先后批准013与038前述完整范围；038最近回复原文“批准”。用户已要求不再弹窗，后续需要决定时在对话列完整原文、拟修改内容、影响。当前无待答复新增项。第三批两席B2均PASS；依据为双方新V0.08完整票，不沿用第一批Grok PASS。
+
+
+---
+
+## 当前恢复：013及038具体范围均已批准，继续B2
+M009-038操作员已在普通对话中回复“批准”，批准前一条完整方案：补商户项目归属、公司与项目多对多关联、相关后端读写隔离及必要维护接口/验证；不自动补历史数据，不含页面、集团汇总和新审批系统，不修改业务HTML。M009-013三个暂可空项目资料字段的既有授权继续有效。后续审批只在普通对话提供完整原文、拟修改内容与影响，不再弹窗。本授权解除038必要新增的停止要求；仍须本批B2双PASS后才可整批B3。
+当前B3=0/3；下列暂停记录保留为历史，不是当前未答复项。
+
+## 历史暂停：M009-038需要必要新增授权，013原授权继续有效
+本轮B2第1批：Grok V0.06票PASS，Codex V0.05/V0.06票FAIL，合取FAIL；B3仍0/3。Grok建议只修项目/空间并明示留下商户跨项目残留，本方不把未解决部分删出同一finding。当前状态BLOCKED-ASK；下述038完整提案待操作员答复，禁止先修部分或推进其它模块。
+Grok路径：modules/M009-b1-grok-raw.md，真实EXIT_CODE=0；本次报告完整读取，原146230bytes前缀保持不变；当前整文件SHA256 b53dc0cf008823b261111180d044759cc54c0bc3c89801fda9a89de67125259b。两席本次完整B2票分别追加各自b1 raw，没有增加锁段起点或新产物类型。
+
+【M009-038：项目隔离缺少归属关系——完整修改说明】
+
+一、业务原文及背景
+出处：platform-governance-map-for-operations-v0.1.html，第412—418、440—445、651行附近；business-enum-quick-reference-v0.1.html，第235行。
+“综合体和集团：当前一个项目，未来能看集团”
+“当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属”。未来需要集团视图和跨项目汇总。”
+“物理项目与运营公司：多对多协作，不是固定隶属层级”
+“物理项目：是空间、价格、经营数据和权限隔离维度。一个运营公司可以服务多个项目，一个项目也可以同时由多家运营公司分域负责。”
+“为商户、空间、合同、员工、设备、票务和看板提供归属。”
+“所有数据默认按项目隔离，普通岗位不得跨项目查看；只有项目之上的获授权岗位可以跨项目汇总。”
+以上是现有HTML要求；业务HTML原句不修改。
+
+二、目前系统实际怎么做
+本次已复现：属于甲项目的普通员工，通过现有功能权限和“平台范围”检查后，项目列表仍返回甲、乙两个项目。
+项目与空间已有可过滤的项目编号；商户档案却没有“所属综合体”字段，公司主体也没有“服务哪些综合体”的关联关系，商户、公司、主体绑定列表仍按全表查询。
+不能拿公司编号代替综合体编号，因为原文已经明确“一家公司可以服务多个项目”。也不能看到旧商户签过某份合同，就自动猜它全部资料应归那个项目。
+Grok本次B2给了PASS，但其方案明确只修已有项目字段的项目/空间，留下商户跨项目残留。本方不接受把这一残留当作已解决，B2整体仍未通过。
+
+三、准备申请的新增范围
+1. 在现有商户后端及数据库补“所属综合体”字段。新建商户记录其经过服务端校验的当前综合体；招商转商户时带入已校验的意向项目。普通请求不能靠更换项目编号操作其它项目。
+2. 增加“公司主体—综合体”的多对多关联承载及必要的后端关联维护：同一家公司可以关联甲、乙多个综合体，不改成一家公司的固定单项目隶属；关联本身不改商户合同主体、结算主体或收入归属。
+3. 项目、空间、商户、公司及主体绑定的相关读取和写入，使用上述真实归属校验。主体绑定沿商户项目判断范围；公司按其项目关联判断。现有功能权限继续检查，不因“平台管理员”身份自动开放所有项目数据，也不新增关闭隔离的开关或跨项目授权规则。
+4. 存量资料不猜填、不批量重分配；缺归属的旧商户、缺关联的旧公司不向普通项目岗位按全局列表展示。归属/关联的补录须由有相应权限的操作明确提交并留痕。补齐具体哪些旧记录的归属，不包含在这次代码修复中。
+5. 本次新增只限后端、数据库、必要接口及验证，不增加页面、集团汇总或新的审批系统。公司与项目的关联维护属于本次后端范围；页面接入另计。具体实现仍须回到B2，由Codex与Grok确认后才能进入整批修复。
+
+四、影响和限制
+批准后，项目员工看到的数据会减少为所属项目的资料；尚未明确归属的历史资料可能暂时从其列表消失，资料本身保留。公司仍可跨项目经营，但项目员工不会因此看到该公司的其它项目商户和绑定。已有调用、招商转商户、列表总数与分页、越项目读写需要验证。
+本项不属于刚才批准的M009-013三个项目资料字段；那项授权继续有效，不需要重批。这里申请的是另一项缺失的项目归属实现。
+若不批准，保留现状并登记该缺失，M009不能因此写为完整PASS；不能把只修项目/空间说成全部隔离问题已修好。
+
+五、请决定
+是否同意上述M009-038“补商户项目归属、公司与项目多对多关联、相关后端读写隔离及验证，不自动补历史数据、不含页面”的新增范围？
+
+需要确认的依据：你提供的160-audit-prompt.md V0.17第51行要求，前三种最小修法无法解决而“必须新增”时，“停下报告操作员，本轮到此结束”，不得自行新增。现有字段不足以完整修复本项，故此次停在此处等本项授权。
+
+---
+
+## M009：操作员已批准013具体新增范围，恢复B2
+操作员通过本次完整问答回复原文：“同意上述具体范围”。
+获批范围：项目档案后端和数据库补齐负责人ownerPerson、地址address、经营范围businessScope；允许三项暂时为空以兼容旧数据和旧调用，不猜填历史资料；包括必要新建/读取和验证，不包含页面接入或旧项目补录入口，不修改三份业务HTML。
+本授权仅解决M009-013的必要新增边界，不能当成B2双席PASS。恢复后先完成Codex/Grok对全部20行候选的B2复核，再整批修复。当前B3=0/3，尚未改业务代码。
+
+
+## 当前 M009：2026-09-14 新授权轮 B2 整批候选，尚未双PASS定稿
+版本演进说明：台账旧顶版V1.100按两位小数版本规则归一至V2.00后，本次内容更新为V2.01；历史记录不改写。
+
+输入仅本次完整B1 raw（各文件最后独占锁行至EOF）：
+- Codex：modules/M009-b1-self-raw.md V0.04，全文SHA256 103af2a09d98fa4fc5f3d080a450459d3b1ebfd256f6cea97fde12bf0d0e1f7f，12个临时问题（CX-11未成立，未纳入）。
+- Grok：modules/M009-b1-grok-raw.md V0.05，146230bytes，SHA256 ffc57c87438442c0afceeed9848721abf2a75b5655cbd81a17673a8ed0b2daf9，真实EXIT_CODE=0，GR-01…05和T-01…06完整读取。
+- 两席B1均FAIL；20文件SHA与派发一致；锁实算、sidecar、ledger、Grok独算四值均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。
+- 本轮B3=0/3。未修源代码或HTML。旧轮37项历史不改写；本次重新讨论旧013/018/030/031，新增正式ID038…053，永不复用。
+- 本节为候选，不代表B2双PASS，不授权B3。013原暂停已获操作员授权解除并执行本批B2；现在因038必要新增待授权停止。下方013说明及旧停止记录保留其原背景，以顶部本次状态为准。
+
+### 全部问题与登记项
+|正式ID|本轮来源|分类候选|工程缺陷|修复队列候选|实际问题/登记内容|冻结依据|最小处置候选|
+|---|---|---|---|---|---|---|---|
+|M009-038|CX-01|冲突|是|是|项目普通岗位通过平台守卫后仍可跨项目读写。|PGM-041 / BEQR-152 / GEN-005|现有项目/空间可按当前项目收窄；商户与公司/绑定缺完整归属承载，不能留下跨项目残留仍判已修。新增商户项目归属及公司项目多对多关联的完整提案见顶部；当前待授权，不新增隔离开关，不把平台管理员视为自动全量。|
+|M009-039|CX-02 + GR-03|冲突|是|是|空间projectId可空，父空间可来自另一项目。|PGM-017 / GEN-004 / GEN-006|projectId必填；现有存在性校验后增加父空间同项目校验。|
+|M009-040|CX-03|冲突|是|是|普通绑定停用/替换路径可以改动当前结算主体，缺公司权责变更审核。|PGM-026 / GEN-005|优先收窄普通操作入口，禁止未经所需审批的财税主体变化；不新造一套审批系统。|
+|M009-041|CX-04（未来生效部分）|冲突|是|是|effectiveFrom设为2027-09-14，保存即active并改商户主体。|PGM-026 / GEN-006 / GEN-008|修正现有日期/激活校验和投影时间；禁止生效日前切换主体，不新增调度框架。|
+|M009-031|CX-04（停用部分）+ GR-02；沿用旧ID|冲突|是|是|绑定停用后商户当前三主体投影仍保留，且可形成effectiveTo早于effectiveFrom。|PGM-026 / BEQR-143 / GEN-006|修正现有停用动作及日期一致性；任何清空/更换财税主体仍遵守038/040对应对象权限与变更审核，不改历史结算快照。|
+|M009-042|CX-05|冲突|是|是|空间类型删除后disabled，恢复只接受archived。|BSM-004 / GEN-009|复用已有恢复入口接受已软删除状态，保留历史申请与占用检查，不新增恢复流程。|
+|M009-043|CX-06 + GR-05；关联旧M009-021|冲突|是|是|空间类型创建/商户删除审批审计缺对象ID；删除理由会被清空；驳回仍记录merchant.delete_approved。|BSM-004 / PGM-066 / GEN-011|使用现有审计事件与metadata保存对象、理由及实际决策，补现有结果类型的businessId提取，驳回事件反映真实决定。旧021审批意见部分由本ID覆盖，021不重复入队。|
+|M009-044|CX-07|细化|是|是|空间类型正常审批完成，申请表status仍为pending。|BSM-004 / GEN-006 / GEN-011|在现有申请记录上更新实际审批结果；不新建状态机/重试框架。故障注入的部分写入观察不独立扩修。|
+|M009-045|CX-08|细化|是|是|仅存在已失效历史绑定，也被countMerchantReferences视为活占用并阻止商户软删除。|BSM-004 / GEN-002 / GEN-006|只缩窄已失效主体绑定的占用判断，保留所有其它合同、资金、权益占用检查及历史行。|
+|M009-046|CX-09|细化|是|是|容量/面积/租金接受负数，DTO和数据库无对应有效范围拦截。|PGM-020 / PGM-026 / GEN-004 / GEN-006|在现有输入入口拒绝负数量；保留可空/零的现有业务含义，不发明新上限。|
+|M009-030|CX-10 + GR-01；沿用旧ID|细化|是|是|初建商户可写不存在的三主体ID，形成绑定表之外的主体投影。|PGM-026 / BEQR-143 / GEN-004|对创建请求已提供的三主体引用复用requireBusinessEntity校验；缺省保持可空，不强制建档自动绑定。Grok B2 V0.06已接受统一细化；整批尚未双PASS。|
+|M009-047|CX-12|冲突|是|是|多处中文错误message带英文角色/状态列表，共用翻译器原样透传。|PGM-001 / PGM-066 / GEN-008 / GEN-015|删除对用户message中的英文括注，保留内部错误码；复用既有中文表述。|
+|M009-018|CX-13；沿用旧ID|冲突|是|是|商户普通档案更新可立即设terminated，没有退出缓冲生效机制。|BEQR-155 / GEN-006|优先收窄普通档案更新的立即终止通道，不把存档当退出，也不新增暂停/黑名单联合审批。完整退出流程的新增不在本轮擅自实施。|
+|M009-013|GR-04；沿用旧ID|细化（明确需求缺失）|是|是（013具体范围已获批）|项目档案缺负责人、地址、经营范围；ProjectRequest/ProjectRecord/SQL及projects表均无三字段。|PGM-020 / BSM-028 / GEN-002|按已获批范围补ownerPerson/address/businessScope三个可空字段及后端/数据库读写验证；兼容旧HTTP和Java构造调用，不自动补历史，不含页面及旧项目补录入口。|
+|M009-048|Grok T-01|细化|否|否|listMerchantsByBusinessEntity作为商户隔离查询承载。|PGM-027 / BSM-072|有HTML上位条目，按分类顺序归细化；本次无独立工程缺陷，不因零调用删除。|
+|M009-049|Grok T-02|细化|否|否|JdbcPlatformRepository实现已有审批链持久化。|BEQR-166|有HTML上位审批链条目；不新增角色/流程。findDirectSuperior一人一个上级的观察仅保留。|
+|M009-050|Grok T-03|细化|否|否|联系人PiiCipher和读时脱敏。|PGM-041 / GEN-010|有敏感数据控制上位要求，无新业务发明，当前无缺陷。|
+|M009-051|Grok T-04|技术性|否|否|COUNT/LIMIT及PageResponse分页。|GEN-012|仅资源与接口承载，不引入业务实体、状态、收费、权限或业务默认值。|
+|M009-052|Grok T-05|细化|否|否|空间类型直接DELETE拒绝、导向存档审批。|BSM-004|现有业务流程的实现；恢复缺陷另列042，不把该拒绝端点重复判缺陷。|
+|M009-053|Grok T-06 + 本方package-info登记|技术性|否|否|package-info.java仅package声明。|GEN-001 / GEN-017|编译单元，不含业务实体、枚举、状态、角色权限、校验、价格或默认值。|
+
+本批14个缺陷候选（含4个旧ID）+6个无缺陷登记项。旧001…037中除013/018/030/031外，最新队列值继续保持否；021的审批意见观察由043审计证据完整性覆盖，不重复入队。Grok T-01/02/03/05明确能指到HTML上位条目，故候选按“冲突→细化→技术性→添加”顺序从技术性调整为细化，保留Grok原始分类与原文供B2复核；不改写Grok报告。
+
+### 差异、纠正和证据边界
+1. Grok在BEQR-152/PGM-041认为requirePlatformScope保证项目隔离；Codex真实employee项目作用域探针和全表查询证明该守卫仅拦商户/外包，不拦其它项目普通人员。交B2复核038，不单方覆盖外审结论。
+2. Grok认为错误出口均中文；Codex实际调用FieldLabels.translate后仍得到“主体角色必须为 顶层平台/城市项目公司/域主管公司 之一(platform/project_company/management_company)”。缺幂等键可翻译并不能证明所有错误均已翻译。交B2复核047。
+3. 本方B1在PGM-020覆盖说明中写“项目状态/地址/归属等存在”，其中“地址存在”不准确。经重新读取ProjectRequest.java:5–17、ProjectRecord.java全文、PlatformService.java:376–409及migration搜索确认无地址字段；接受GR-04事实并沿用旧013。本方原始报告保留，纠正仅在归并记录追加，不冒充首次即发现。
+4. Grok B1 §1.1写“与派发期望锁哈希一致”不准确：本轮-p没有提供期望锁值，只要求其独算；实际四值一致以实算输出为证，待后续Grok补充澄清。本方不改其raw。
+5. Grok说明曾用环境默认URL只读非测试库约束；其正式证据与75项测试以complex_test为准。本方不据该非测试库观察下结论；未发生业务写入报告。
+6. 本批没有无HTML来源的业务“添加”项，故不新建2.2 questions文件。下面是铁律6对新增实现能力的停止要求，不能伪装为业务发明问卷。
+
+### M009-013：操作员已批准的完整修改说明（仅本项新增范围）
+操作员要求审批时同时给出原文、具体改法和影响；本段替代先前简略提案。操作员现已回复“同意上述具体范围”；下列原问答完整保留为授权边界，尚未实施。
+
+#### 1. 原文和业务背景
+出处：docs/platform-governance-map-for-operations-v0.1.html，第412–445行相关内容；本次SSH重核SHA256 a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1。
+
+> 综合体和集团：当前一个项目，未来能看集团
+>
+> 当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属”。未来需要集团视图和跨项目汇总。
+>
+> 建立综合体项目档案。
+>
+> 记录项目状态、负责人、地址和经营范围。
+>
+> 为商户、空间、合同、员工、设备、票务和看板提供归属。
+>
+> 预留集团视图，后续汇总多个综合体的收入、客流、异常、商户和结算。
+
+以上是相关原文摘录，不是拟修改后的HTML。三份业务HTML保持原样。
+
+#### 2. 当前实现的实际行为
+当前项目档案可记录名称、编号、场地类型、楼层、容量、状态及商户关联。ProjectRequest、ProjectRecord、PlatformService.createProject及projects数据库表没有项目负责人、地址、经营范围。商户档案中的ownerPerson属于商户，不能代替综合体项目负责人。
+当前Controller仅有项目新建POST和读取GET入口；不能把本方案说成已经包含旧项目编辑/补录入口。
+
+#### 3. 拟实现的业务行为
+“新建综合体项目档案时，在原有资料之外，可以一并提交项目负责人、项目地址和项目经营范围；保存后，读取该项目档案时能够返回这三项资料。”
+
+对应改动：给现有项目请求、记录类型和数据库增加ownerPerson、address、businessScope三个资料字段，接入现有新建及读取逻辑，增加最小保存后读回验证。不是修改HTML原句，也不是新增公司、审批、收费或权限规则。
+
+兼容方案仍是待批准提案：三项允许暂时为空，以保留旧调用和旧数据；不擅自加必填约束，不猜填或自动补全历史资料。字段存储/接口的具体技术约束须在B2双席复核中核定。
+
+#### 4. 对数据、业务和操作的影响
+|方面|拟方案的影响与限制|
+|---|---|
+|现有数据|保留现有项目、编号、状态及其它资料；历史项目三项初始为空，不自动填充。|
+|新建和读取|接入这些字段的调用方可以提交并读取三项资料；不传三项的旧调用拟继续可用，兼容性必须实际测试确认。|
+|权限、合同、结算|此项修改只记录项目资料；填写负责人不自动授予权限，填写项目经营范围不改商户合同许可或结算规则。|
+|页面和旧项目补录|当前提案仅后端/数据库。页面不会自动增加输入框，旧项目补录入口也不包含在本次范围。因此不能把它称为业务页面全部可用。若操作员要页面录入和旧项目补录，应先调整本提案范围，不默默扩大。|
+|代价与不批准的结果|需维护三项资料、调整相关接口/数据库读写并补验证；不批准则保留缺失记录，不将本项写作已修或已满足。|
+
+#### 5. 待决定的问题
+是否同意上述“后端和数据库补齐三项资料、暂时可空、不包含页面和旧项目补录入口”的范围？也可提出需要调整的范围。当前尚未得到批准，M009仍停在B2候选；批准后仍须先完成Codex与Grok的B2归并复核，再执行修复。
+
+需要确认的来源是操作员160-audit-prompt.md V0.17第51行：
+> 修法优先级：① 删除 ② 收窄已有规则 ③ 改一个已有的时间点或字段。前三种都不行才叫「必须新增」——此时停下报告操作员，本轮到此结束，不得自行新增。
+
+本项已有明确HTML来源，不属于2.2无来源业务“添加”，不创建新的questions文件或新判据。
+
 
 ## 当前 M017 B4-r1 双PASS，M017-001…008 已修转「否」，进入B5-r1
 2026-09-11T10:57:32Z。B3-r1 diff（before 5dedaf48e6d9fdccdb3bf8ca8959b4caa8b1cfed → after 03981e7c1bcfe2a5db58169d37475aede7c85c94，5 files changed, 422 insertions(+), 18 deletions(-)，34184bytes SHAebd46c56447d7bc79b3cf1cf07e549f78edc37db406e3dcd41d84eedefef5bbf；只落 5 个测试文件，实现零改动）。席甲B4-r1票PASS（内容PASS、§5闸3归因PASS；modules/M017-b4-r1-self-raw.md V0.01，全文49204bytes SHAb78412248106c5ed7b3c173701e257f912b3bf95bb9d3e3b1fc5b5d0d31c6506）；Grok B4-r1票PASS（modules/M017-b4-r1-grok-raw.md V0.01，全文60456bytes SHA2f5e0b487e7d01f1f409182d452377587d5307287ad4c80dd2dbbe743a615bb0，本方在自席落盘后全文读取）。合取双PASS。
