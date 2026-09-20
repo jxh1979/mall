@@ -10,9 +10,11 @@ const HOURS = [
 ];
 const SPACES = [{ id: "sp_bar_main", spaceName: "主吧台大厅" }];
 
-function makeApi(post = vi.fn().mockResolvedValue({})): { api: AdminApiClient; get: ReturnType<typeof vi.fn>; post: typeof post } {
-  const get = vi.fn().mockImplementation((url: string) =>
-    Promise.resolve(url.includes("venue-business-hours") ? HOURS : SPACES));
+function makeApi(post = vi.fn().mockResolvedValue({}), spacesFail = false): { api: AdminApiClient; get: ReturnType<typeof vi.fn>; post: typeof post } {
+  const get = vi.fn().mockImplementation((url: string) => {
+    if (url.includes("venue-business-hours")) return Promise.resolve(HOURS);
+    return spacesFail ? Promise.reject(new Error("场地清单读取失败")) : Promise.resolve(SPACES);
+  });
   const api: AdminApiClient = {
     get,
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
@@ -84,5 +86,34 @@ describe("VenueBusinessHoursPage 场地营业时间(D1)", () => {
         closeTime: "02:00",
         disabled: false,
       }));
+  });
+
+  // M018-006：「本日不营业」= 停用，配置保留（M017-003 口径），提交 disabled:true 且时刻不丢
+  it("取消勾选本日营业后保存，提交 disabled:true 且保留时刻，说明列显示停用", async () => {
+    const { api, post } = makeApi();
+    renderPage(api);
+    await userEvent.selectOptions(await screen.findByTestId("venue-business-hours-venue-select"), "sp_bar_main");
+    await userEvent.click(await screen.findByTestId("venue-business-hours-open-flag-5"));
+    expect(screen.getByTestId("venue-business-hours-note-5").textContent).toContain("本日不营业");
+    await userEvent.click(screen.getByTestId("venue-business-hours-save-5"));
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith("/api/v1/platform/venue-business-hours", {
+        venueId: "sp_bar_main",
+        dayOfWeek: 5,
+        openTime: "20:00",
+        closeTime: "02:00",
+        disabled: true,
+      }));
+  });
+
+  // M018-006：场地清单是副资源，读取失败只降级提示，已配营业时间的场地仍可选、可改
+  it("场地清单读取失败时显示降级提示，已配场地仍可从营业时间行中选到", async () => {
+    const { api } = makeApi(undefined, true);
+    renderPage(api);
+    const notice = await screen.findByTestId("venue-business-hours-spaces-degraded");
+    expect(notice.textContent).toContain("加载失败");
+    await userEvent.selectOptions(screen.getByTestId("venue-business-hours-venue-select"), "sp_bar_main");
+    await waitFor(() => expect(screen.getByTestId("venue-business-hours-open-5")).toHaveValue("20:00"));
   });
 });

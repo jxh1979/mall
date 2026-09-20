@@ -318,6 +318,93 @@ class PlatformServiceTests {
         assertThat(page.pageSize()).isEqualTo(500);
     }
 
+    @Test
+    void createSpaceTypeRejectsExistingCodeEvenWhenActive() {
+        assertThatThrownBy(() -> service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-dup-shop", "add", List.of(), "shop", "改名铺位", 1, "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_CODE_EXISTS"));
+    }
+
+    @Test
+    void createSpaceTypeIgnoresRequestedDisabledAndStaysActive() {
+        SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-force-active", "add", List.of(), "tempkind", "临时种类", 10, "disabled"));
+        assertThat(created.status()).isEqualTo("active");
+    }
+
+    @Test
+    void archiveSpaceTypeRequiresReasonAndCanUnarchive() {
+        service.archiveSpaceType("sptype_booth", "暂时不用");
+        assertThat(platformRepository.findSpaceTypeById("sptype_booth").orElseThrow().status()).isEqualTo("archived");
+        service.unarchiveSpaceType("sptype_booth");
+        assertThat(platformRepository.findSpaceTypeById("sptype_booth").orElseThrow().status()).isEqualTo("active");
+    }
+
+    @Test
+    void directDeleteSpaceTypeRequiresArchiveAndMasterApproval() {
+        assertThatThrownBy(() -> service.deleteSpaceType("sptype_other"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_DELETE_REQUIRES_APPROVAL"));
+        assertThat(platformRepository.findSpaceTypeById("sptype_other")).isPresent();
+    }
+
+    @Test
+    void spaceTypeDeleteGoesArchiveRequestThenMasterApprove() {
+        SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-del-flow", "add", List.of(), "tempdel", "待删种类", 20, "disabled"));
+        assertThatThrownBy(() -> service.requestDeleteSpaceType(created.id(), "未存档"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_NOT_ARCHIVED"));
+        service.archiveSpaceType(created.id(), "不再使用");
+        service.requestDeleteSpaceType(created.id(), "不再使用");
+        assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("pending_delete");
+        assertThatThrownBy(() -> service.approveDeleteSpaceType(created.id(), "approved"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_DELETE_APPROVER_NOT_MASTER"));
+        asMasterAuthority();
+        service.approveDeleteSpaceType(created.id(), "approved");
+        assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("disabled");
+        assertThatThrownBy(() -> service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-revive", "add", List.of(), "tempdel", "复活", 20, "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_CODE_EXISTS"));
+    }
+
+    @Test
+    void occupiedSpaceTypeCannotBeDeleted() {
+        service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-shop-occ", "create", List.of(), null, null, null, "Shop Occ", "shop", "1", null, null, "active"));
+        service.archiveSpaceType("sptype_shop", "测试占用");
+        assertThatThrownBy(() -> service.requestDeleteSpaceType("sptype_shop", "想删"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_IN_USE"));
+    }
+
+    @Test
+    void masterRequestDeleteSpaceTypeExecutesWithoutApproval() {
+        SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-master-del", "add", List.of(), "masterdel", "密钥直删", 30, "active"));
+        service.archiveSpaceType(created.id(), "密钥持有人清理");
+        asMasterAuthority();
+        service.requestDeleteSpaceType(created.id(), "密钥持有人清理");
+        assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("disabled");
+    }
+
+    @Test
+    void archiveCannotPullPendingDeleteBack() {
+        SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-pend", "add", List.of(), "pendkind", "待审种类", 40, "active"));
+        service.archiveSpaceType(created.id(), "先存档");
+        service.requestDeleteSpaceType(created.id(), "申请删");
+        assertThatThrownBy(() -> service.archiveSpaceType(created.id(), "想撤回"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SPACE_TYPE_ARCHIVE_NOT_ALLOWED"));
+        asMasterAuthority();
+        service.approveDeleteSpaceType(created.id(), "rejected");
+        assertThat(platformRepository.findSpaceTypeById(created.id()).orElseThrow().status()).isEqualTo("archived");
+    }
+
     // V348/V384 商户业态标准字段：六值（酒吧/餐饮/零售/游乐/传媒/其他）之外的业态一律拒收（业态错＝通票分账份额拆给错的业态）。M011-005
     @Test
     void createMerchantRejectsBusinessFormatOutsideSixValues() {
@@ -832,6 +919,36 @@ class PlatformServiceTests {
         public SpaceTypeRecord saveSpaceType(SpaceTypeRecord t) {
             spaceTypes.put(t.typeCode(), t);
             return t;
+        }
+
+        @Override
+        public long countSpacesByTypeCode(String typeCode) {
+            return spaces.values().stream().filter(space -> typeCode.equals(space.spaceType())).count();
+        }
+
+        @Override
+        public java.util.Optional<SpaceTypeRecord> findSpaceTypeById(String id) {
+            return spaceTypes.values().stream().filter(item -> id.equals(item.id())).findFirst();
+        }
+
+        @Override
+        public void deleteSpaceType(String id) {
+            spaceTypes.replaceAll((code, item) -> id.equals(item.id())
+                    ? new SpaceTypeRecord(item.id(), item.typeCode(), item.typeName(), item.sortOrder(),
+                    "disabled", item.createdAt(), java.time.Instant.now())
+                    : item);
+        }
+
+        private final java.util.Map<String, String> deleteRequestedBy = new java.util.HashMap<>();
+
+        @Override
+        public void saveSpaceTypeDeleteRequest(String spaceTypeId, String reason, String requestedBy) {
+            deleteRequestedBy.put(spaceTypeId, requestedBy);
+        }
+
+        @Override
+        public String findSpaceTypeDeleteRequestedBy(String spaceTypeId) {
+            return deleteRequestedBy.get(spaceTypeId);
         }
 
         @Override

@@ -349,6 +349,61 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public long countSpacesByTypeCode(String typeCode) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM spaces WHERE space_type = :type_code",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("type_code", typeCode),
+                Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public java.util.Optional<SpaceTypeRecord> findSpaceTypeById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, type_code, type_name, sort_order, status, created_at, updated_at
+                  FROM space_type_dictionary
+                 WHERE id = :id
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", id),
+                (rs, n) -> new SpaceTypeRecord(
+                        rs.getString("id"), rs.getString("type_code"), rs.getString("type_name"),
+                        rs.getInt("sort_order"), rs.getString("status"),
+                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
+                .stream().findFirst();
+    }
+
+    @Override
+    public void deleteSpaceType(String id) {
+        jdbcTemplate.update(
+                "UPDATE space_type_dictionary SET status = 'disabled', updated_at = :updated_at WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("updated_at", timestampWithTimeZone(java.time.Instant.now())));
+    }
+
+    @Override
+    public void saveSpaceTypeDeleteRequest(String spaceTypeId, String reason, String requestedBy) {
+        jdbcTemplate.update("""
+                INSERT INTO space_type_delete_requests (id, space_type_id, reason, requested_by, requested_at, status)
+                VALUES (:id, :space_type_id, :reason, :requested_by, :requested_at, 'pending')
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", "stdr_" + spaceTypeId + "_" + java.time.Instant.now().toEpochMilli())
+                .addValue("space_type_id", spaceTypeId)
+                .addValue("reason", reason)
+                .addValue("requested_by", requestedBy)
+                .addValue("requested_at", timestampWithTimeZone(java.time.Instant.now())));
+    }
+
+    @Override
+    public String findSpaceTypeDeleteRequestedBy(String spaceTypeId) {
+        java.util.List<String> rows = jdbcTemplate.queryForList(
+                "SELECT requested_by FROM space_type_delete_requests WHERE space_type_id = :id AND status = 'pending' ORDER BY requested_at DESC LIMIT 1",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", spaceTypeId),
+                String.class);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    @Override
     public BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding) {
         jdbcTemplate.update("""
                 INSERT INTO business_entity_bindings (

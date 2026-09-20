@@ -253,6 +253,7 @@ settlement_tax_configs,direct,project_id,project_id column on settlement_tax_con
 settlement_transactions,direct,project_id,project_id column on settlement_transactions,ready for project/merchant scoped query enforcement,V0.01,covered
 site_entry_reports,direct,project_id,project_id column on site_entry_reports,ready for project/merchant scoped query enforcement,V0.01,covered
 space_expiry_color_rules,direct,project_id,project_id column on space_expiry_color_rules,ready for project/merchant scoped query enforcement,V0.01,covered
+space_type_delete_requests,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.01,covered
 space_type_dictionary,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.01,covered
 spaces,direct,project_id,project_id column on spaces,ready for project/merchant scoped query enforcement,V0.01,covered
 staff_attendance_records,direct,project_id,project_id column on staff_attendance_records,ready for project/merchant scoped query enforcement,V0.01,covered

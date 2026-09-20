@@ -15,6 +15,7 @@ import com.complex.platform.governance.dto.SpaceRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -158,6 +159,46 @@ public class PlatformController {
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.SpaceTypeRequest request) {
         authorizationService.requirePermission("governance.space.manage");
         return ApiResponse.ok(service.createSpaceType(request));
+    }
+
+    @DeleteMapping("/space-types/{id}")
+    public ApiResponse<Void> deleteSpaceType(@org.springframework.web.bind.annotation.PathVariable("id") String id) {
+        authorizationService.requirePermission("governance.space.manage");
+        service.deleteSpaceType(id);
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/space-types/{id}/archive")
+    public ApiResponse<Void> archiveSpaceType(
+            @org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody java.util.Map<String, String> body) {
+        authorizationService.requirePermission("governance.space.manage");
+        service.archiveSpaceType(id, body == null ? null : body.get("reason"));
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/space-types/{id}/unarchive")
+    public ApiResponse<Void> unarchiveSpaceType(@org.springframework.web.bind.annotation.PathVariable("id") String id) {
+        authorizationService.requirePermission("governance.space.manage");
+        service.unarchiveSpaceType(id);
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/space-types/{id}/delete-request")
+    public ApiResponse<Void> requestDeleteSpaceType(
+            @org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody java.util.Map<String, String> body) {
+        authorizationService.requirePermission("governance.space.manage");
+        service.requestDeleteSpaceType(id, body == null ? null : body.get("reason"));
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/space-types/{id}/delete-approve")
+    public ApiResponse<Void> approveDeleteSpaceType(
+            @org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody java.util.Map<String, String> body) {
+        service.approveDeleteSpaceType(id, body == null ? null : body.get("decision"));
+        return ApiResponse.ok(null);
     }
 
     @PostMapping("/spaces")
