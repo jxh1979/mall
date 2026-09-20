@@ -1,5 +1,32 @@
 # 全量审计 Findings 台账
-版本：V2.76
+版本：V2.79
+
+## 当前 M024 B4-r1 双PASS，M024-001…005 已修转「否」，进入B5-r1
+2026-09-20T21:56:55Z。Grok B4-r1 票 PASS（modules/M024-b4-r1-grok-raw.md，28203bytes SHA 5f9635ef932dc6d417719edea38dc5d74714991fa333a8a63958dd58e9b584e3）；席甲票 PASS（modules/M024-b4-r1-self-raw.md，15949bytes SHA ea3bc899f21f9f98bd8bd1e45d7e4fa054a0f4db414a6cf1c922a25d89f80c3c）。M024-001…005 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（5）：M024-001…005（已修）。
+- 当前M024修复队列「是」：0。
+
+
+## 当前 M024 B2-r1 双PASS定稿，5项待修（B3-r1）
+2026-09-20T21:45:49Z。Grok B2-r1 票 PASS（modules/M024-b1-grok-raw.md V0.02，全文 59337bytes SHA c2f8c6ad8cb06d3a48a72c279abc8f9fe65eb7c34e9b63f66d1b34c1fc3007e0）；席甲 B2-r1 票 PASS（modules/M024-b1-self-raw.md V0.03，全文 25864bytes SHA cee4be4d0c48aa85fec293cc2bac648f90b4b1aa5f8b38aab0ce9c4ab8fbedfd）。定稿：M024-001…005 修复队列「是」（均细化）。
+- 修复队列「是」（5）：M024-001…005。
+- 修复队列「否」（0）。
+
+
+## 当前 M024 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T21:33:41Z。输入仅当前 471 计划 M024 的完整 B1 双席 raw：modules/M024-b1-self-raw.md V0.01+V0.02 更正段（24182bytes SHA 6b90a10c44a9b5f1e846c19e0bc54e772088aea4ddf627694fc936f72f41e6d1，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M024-001…003、OBS-1…5）、modules/M024-b1-grok-raw.md V0.01（33051bytes SHA d49a241c601340000ba7056bf68d9058131b97f3f3e321161387888f6be9b223，Grok 席乙，FAIL：GR-01…05、观察 O-1…O-8）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01+CX-001→001；GR-03+GR-04+CX-002→002；CX-003→003（Grok 未报）；GR-02→004（席甲 B1 判通过，复核后采 Grok）；GR-05→005（席甲漏）。B3 累计 0；写入集合＝本模块 1 文件（同批把文首版本 V0.13→V0.14、最后更新日改为修复当日）。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M024-001 | Grok GR-01 + 席甲CX-M024-001 | 细化 | 是 | 是 | `docs/merchant-portal-zone-prd-v0.1.md:126`「…使用真分页，默认 `page=1/size=500`，平台全量取真实 total；商户 scope 只见本商户。」；现行 `MerchantPortalService`（M020-001，PR #461 已合并）两个列表方法首行 `requireMerchantScope()`，无商户范围即 403 `MERCHANT_SCOPE_REQUIRED`，平台全量分支已删；分页为按商户取全量后 `PageResponse.of(…, page, size)` 切片，total＝本商户真实总数；默认 page=1/size=500 仍成立。§10 L157「实现诚实」自设通过条件不满足 | GEN-016 / GEN-002 / GEN-008 / BSM-114（商户侧页面「不看平台全局」）；最小处置：该句改写为现行事实——默认 `page=1/size=500`；按当前账号商户范围取回本商户全部记录后切片，`total` 为本商户真实总数；当前账号无商户范围时一律拒绝（403 `MERCHANT_SCOPE_REQUIRED`），不提供平台全量口径。不加新规则 |
+| M024-002 | Grok GR-03 + GR-04 + 席甲CX-M024-002 | 细化 | 是 | 是 | `docs/merchant-portal-zone-prd-v0.1.md:95`「BSM L1562 所定的异议期…」——`sed -n 1562p` 为 `<div class="info-block">`，原句在 L1566（注册表 BSM-E0499「给商户」）；`docs/merchant-portal-zone-prd-v0.1.md:133`「HTML L1311-L1318 的资料、订单履约、差异、异常、授权业务功能和自助事项统一入口」——该区间只到「可结算结果」，异常 L1319、授权业务功能 L1320、自助句 L1322 均在区间外。DEC-R8-17（`tools/verify-entry-anchors.mjs` 头注）已废行号、只留条目名；门禁检查③ 只认「实测 LNNN」句式故未红 | GEN-016；最小处置：只换锚点不动句意——L95 改「BSM「给商户」所定的异议期…」；L133 改「BSM「商户管理·主要功能」与 BSM「商户专区自助」的资料、订单履约、…统一入口」。不改为新行号（Grok 备选之一）：行号制度已废 |
+| M024-003 | 席甲CX-M024-003（Grok 未报） | 细化 | 是 | 是 | `docs/merchant-portal-zone-prd-v0.1.md:161-162` §11 依据：BSM…「主要功能」在注册表正文子串命中 15 条（不唯一）；PGM…「终端十一端」「导出与暗纹」「证照与合同关键日期」在 PGM 0 命中（「终端十一端」只在 ENUM）。门禁检查② 只匹配紧邻文件代号的第一个名字，同一行后续名字漏检，故 `[entry-anchors] PASS` | GEN-016；最小处置：§11 三行每个名字都写成 `代号「名」` 并换成可唯一定位的名字（席甲已按门禁同一规则逐个实查各 1 条）：BSM「商户管理·主要功能」；PGM「受控的十一类终端」、PGM「导出文件是否脱敏，不由导出人判断，也不提供关闭开关」、PGM「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定」（暗纹与敏感页句在此条）、PGM「管理证照、资质、保险和合同关键日期的到期预警与到期阻断」；其余名字不变，仅补代号前缀。修后跑 `node tools/verify-entry-anchors.mjs` 须 PASS |
+| M024-004 | Grok GR-02（席甲 B1 判通过，B2 复核后采 Grok） | 细化 | 是 | 是 | `docs/merchant-portal-zone-prd-v0.1.md:118-119` §8 表「权限」列：ADM-MER-004 写 `merchant.service_work_order.view/create`、ADM-MER-005 写 `merchant.portal.settlement.view/dispute`；`adminRoutes.ts:90-91` 路由门控只有 view，create/dispute 是页内 `PermissionButton`（`MerchantZoneWorkOrdersPage.tsx:13` `WO_CREATE`、`MerchantZoneSettlementsPage.tsx:15` `DISPUTE_PERMS`）。同表其余四行与路由逐字一致，这两行拿去对 `adminRoutes.ts` 对不上 | GEN-016 / GEN-005 / GEN-008；最小处置：两行「权限」列只留路由门控码（`…view`），页内权限写进「当前能力」列——004「我的工单读与发起（发起另需 `merchant.service_work_order.create`）」、005「我的对账与异议留言（留言另需 `merchant.portal.settlement.dispute`）」。不改权限模型 |
+| M024-005 | Grok GR-05（席甲 B1 漏） | 细化 | 是 | 是 | `docs/merchant-portal-zone-prd-v0.1.md:29` 把「在线页面都带…暗纹。敏感页文字不可选中、不可复制，不提供另存和打印；打开敏感页本身须留痕」写成现行边界；文首 L4 自设规则「当前页面、接口或终端不足时，标为实现差距」；同出处的导出在 §7 L111 已标差距，暗纹/敏感页既未标也未进 §9。现状：apps/web/src 与 backend/src/main 对「暗纹/watermark/敏感页/sensitive page」0 命中（席甲复核） | GEN-016 / GEN-017；最小处置：L29 保留 HTML 转述原句，句末补「当前商户专区尚未实现页面暗纹与敏感页防护，见 §9。」；§9 增一条「页面暗纹与敏感页防护（文字不可选中与复制、不提供另存和打印、打开留痕）。」。不删 HTML 要求、不改 §10 验收条件 |
+
+- 只登记不入队：条目锚点门禁两处盲区（检查② 只检紧邻代号的第一个名字；检查③ 行号只认「实测 LNNN」句式）属 `tools/verify-entry-anchors.mjs` 所在模块（跨模块观察）；`docs/full-admin-ui-acceptance-matrix-v0.1.md` UI-ADM-MER-007 备注「明文显示手机号」与现行掩码不一致（Grok O-2，属矩阵文档所在模块）；专区工单页 `resolved` 显示「已解决」与枚举「已处理待关闭」未对齐（本文 L69 已如实写明，差距本体属该页面模块）；V166 文件头注释称 V022 为死表（注释不是依据，Grok O-3）；合同/结算前端超 500 条丢行（Grok O-4）；专区工单页不展示 `sla_breached`（O-5）；V199 种子 reason 未写分红（O-6）；`MerchantBillingService.listBills` 不可达的 findAllBills 分支（O-7，M023 已登记）；「我的合同」关键条款无字段（O-1，本文 L54 已标差距）；注册表冻结名「受控的十类终端/终端十端」与 HTML 现文不同名属 DEC-R8-17 设计。
+- 修复队列「是」（5）：M024-001…005。
+- 修复队列「否」（0）。
+
 
 ## 当前 M023 B4-r2 双PASS，M023-007 已修转「否」，进入B5-r2
 2026-09-20T20:56:24Z。Grok B4-r2 票 PASS（modules/M023-b4-r2-grok-raw.md，16916bytes SHA 78a5abd792ef2b8535e64fd4d4191c92b623d6a9f4f1400a3e199a36651881b7）；席甲票 PASS（modules/M023-b4-r2-self-raw.md，9006bytes SHA 62c0c8014cb38e6232342601e356c7367f3a0a0e123274889b519b2efe398e98）。M023-007 修复队列「是」→「否（已修，B3-r2）」。
