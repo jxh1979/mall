@@ -1,5 +1,37 @@
 # 全量审计 Findings 台账
-版本：V2.58
+版本：V2.61
+
+## 当前 M019 B4-r1 双PASS，M019-001…009 已修转「否」，进入B5-r1
+2026-09-20T10:11:54Z。Grok B4-r1 票 PASS（modules/M019-b4-r1-grok-raw.md，37974bytes SHA 8c0f288409abf93bc16316ebac579296bbacb167c614bc4ef0b6e8c7669280ad）；席甲票 PASS（modules/M019-b4-r1-self-raw.md，23136bytes SHA 14a62d0720863e2eeebfaa50c4090e722d610e3caee2285feeb7f06450ec539a）。M019-001…009 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（9）：M019-001…009（已修）。
+- 当前M019修复队列「是」：0。
+
+
+## 当前 M019 B2-r1 双PASS定稿，9项待修（B3-r1）
+2026-09-20T09:56:04Z。Grok B2-r1 票 PASS（modules/M019-b1-grok-raw.md V0.02，全文 60723bytes SHA 90db14d9ec2d2efd629761b76f972822259d29b5b17db2924767d850dd5b4304）；席甲 B2-r1 票 PASS（modules/M019-b1-self-raw.md V0.02，全文 21952bytes SHA 49f8430a5e2eca120a2583971153e1951b20e230c371594958919aab001234a4）。定稿：M019-001…009 修复队列「是」（003/007 技术性，其余细化）。
+- 修复队列「是」（9）：M019-001…009。
+- 修复队列「否」（0）。
+
+
+## 当前 M019 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T09:47:01Z。输入仅当前 471 计划 M019 的完整 B1 双席 raw：modules/M019-b1-self-raw.md V0.01（20314bytes SHA 6f60c608d38970dea0126e3531dd9456485693ff9f85f33b57124d315c8dfd60，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M019-001/002、OBS-1…5）、modules/M019-b1-grok-raw.md V0.01（40410bytes SHA 32adea173eb78bfcd6f907c1ef3d43ce1089e0a5b6fb1a283b2dccbd09d59646，Grok 席乙，FAIL：GR-M019-001…009、OBS-1…10）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：席甲 CX-001 按 Grok 粒度拆入 001（字段）/002（错误矩阵）/003（引用），CX-002 拆入 004（发布规则）/005（示例 id）/006（解析规则）；Grok 独有 007（完成快照/分页措辞）、008（二次确认句）、009（V423）。分类：003/007 技术性（修引用/工程数字，无业务发明），其余细化（治理地图 L469/L472 下位契约文档）。B3 累计 0；全部为文档改动。
+
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M019-001 | Grok GR-M019-001 + 席甲CX-M019-001（字段部分） | 细化 | 是 | 是 | `docs/p1-floor-plan-polygon-api-contract-v0.1.md:45/:63`（`evidence_attachment_ids`）、`:55/:72`（`operator_user_id` 必填）：DTO `FloorPlanCreateRequest`/`FloorPlanShapeSaveRequest` 与 OpenAPI（`additionalProperties: false`）均无此两字段，照契约带 `operator_user_id` 即 400；`:70` `z_index` 标必填而服务 `FloorPlanService:277` 缺省 0 | GEN-016 / GEN-008 / PGM-023（上位：治理地图 L469/L472）；最小处置：删四行幽灵字段，`z_index` 改「否，缺省 0」；标题 V0.1→V0.2 + 文首一行变更记录。只改本文件 |
+| M019-002 | Grok GR-M019-002 + 席甲CX-M019-001（错误矩阵部分） | 细化 | 是 | 是 | `docs/p1-floor-plan-polygon-api-contract-v0.1.md:94` 404 `FLOOR_PLAN_SHAPE_NOT_FOUND`：后端 0 处该码；`saveShapeOnce:260-270` 未知 `shape_id` 按该 id 新建，仅他图 id → 400 VALIDATION_FAILED「图形不属于该平面图」；`:85-95` 矩阵缺 M015-002/003 现行 `PROJECT_NOT_FOUND`（404）、`CROSS_PROJECT_FORBIDDEN`/`CROSS_MERCHANT_FORBIDDEN`（403） | GEN-016 / GEN-009 / GEN-008；最小处置：该行改为现行两种行为（未知 id 新建；他图 id 400）、补三行现行码；不重开 M015-002/003 |
+| M019-003 | Grok GR-M019-003 + 席甲CX-M019-001（引用部分） | 技术性 | 是 | 是 | `docs/p1-floor-plan-polygon-api-contract-v0.1.md:127-130`：`V001__initial_schema.sql` 不存在（P0 轻量 `polygon_points` 所在迁移以 grep 为准）；`docs/master-roadmap.md#阶段-8-市场基准增强为-p1p2-演进` 与 `docs/p0-user-story-map-and-sprint-slices-v0.1.md#第二期-p1` 锚点无对应标题（roadmap 实际 L217「### 阶段 8：市场基准增强与 SaaS 化深度能力」，故事图无该标题） | GEN-016（无业务发明：修引用）；最小处置：文件名改为实际迁移、两处锚点改真实标题或去掉 fragment |
+| M019-004 | Grok GR-M019-004 + 席甲CX-M019-002（发布规则部分） | 细化 | 是 | 是 | `docs/p2-floor-plan-import-api-contract-v0.1.md:151`「仅 parsed 允许发布」、`docs/p2-floor-plan-import-completion-audit-v0.1.md:18`、`docs/superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md:205`「published task 不允许重复发布」 vs `FloorPlanService:367`（M015-016）parsed 或 published 均可继续发布剩余 pending，failed/cancelled 拒 | GEN-016 / PGM-023 / GEN-008；最小处置：三处改为「任务 parsed 或 published 且所选候选均 pending；failed/cancelled 拒绝」，计划勾选描述随改；不重开 M015-016 |
+| M019-005 | Grok GR-M019-005 + 席甲CX-M019-002（示例 id 部分） | 细化 | 是 | 是 | `docs/p2-floor-plan-import-api-contract-v0.1.md:56` `fpi_floor-import-create-001`、`:106/:111` `fpi_1`/`fpic_1`、`docs/superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md:173` `fpic_1/fpic_2` vs `derivedId`（M015-001）前缀 + SHA-256 前 32 位 | GEN-016 / GEN-008；最小处置：示例改为派生形态并加一句「id 由平面图 id 与幂等键派生，示意」；不重开 M015-001 |
+| M019-006 | Grok GR-M019-006 + 席甲CX-M019-002（解析规则部分） | 细化 | 是 | 是 | `docs/p2-floor-plan-import-api-contract-v0.1.md:70`「svg 默认」（`validateImportCreateRequest` `normalizeAllowed(source_format)` 必填无默认）、`:160`「仅解析 polygon」（`FloorPlanImportParser:18/79-84` 闭合 polyline 亦生成候选）、`:165`「不在八种内记错误明细」（服务候选循环 `:321` `normalizeAllowed` 整单 400，无 try/catch，不落任务/明细）；`docs/p2-floor-plan-import-completion-audit-v0.1.md:13` 同「支持 `<polygon>`」 | GEN-016 / GEN-008 / PGM-023；最小处置：三句与完成审计一句改为现行口径；不改解析器/服务 |
+| M019-007 | Grok GR-M019-007（席甲 B1 只记 OBS-1） | 技术性 | 是 | 是 | `docs/p2-floor-plan-import-completion-audit-v0.1.md:51-54`「33 个测试 / 528 个 / 181 个 operation」为无日期历史快照（现行四测试类 @Test 75、backend 测试 3014、openapi operationId 732，本轮未跑 mvn/semgrep）；`docs/p2-floor-plan-import-api-contract-v0.1.md:211`「后续完成前仍需运行…」与完成审计「已通过」自相矛盾；`docs/superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md:151`「分页列表」 vs M015-007 诚实不分页 | GEN-016 / GEN-003 / GEN-013；最小处置：完成审计 §5 表前加「2026-06 编码完成时 160 记录快照，非当前门禁；当前以四测试类与 verify:predeploy 为准」、p2 §6 末句改「全量测试、P0 契约与安全扫描以 verify:predeploy 门禁为准」、计划 :151 改「列表（PageResponse 信封，单页全量）」 |
+| M019-008 | Grok GR-M019-008（席甲 OBS-5 同根 M015-011） | 细化 | 是 | 是 | `docs/p2-floor-plan-import-api-contract-v0.1.md:139-153` 发布请求体仅 idempotency_key/operator_note/candidate_ids，规则未提治理地图 L472「发布为高危动作，须二次确认」；M015-011 已把服务端确认字段列 XM（代码/OpenAPI/前端同批，否） | PGM-023 / GEN-016；最小处置：§3.4 规则加一句「发布为高危动作，须二次确认；服务端确认字段与 OpenAPI/前端同批落地（M015-011），本文尚未列入请求体」；不改代码、不重开 011 |
+| M019-009 | Grok GR-M019-009 | 细化 | 是 | 是 | `docs/p2-floor-plan-import-completion-audit-v0.1.md:23`「新增 V034 迁移，包含…约束」与 `docs/superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md:49/:71-122` 只点名 V034：V034 候选 `shape_type` CHECK 仍为历史六值，现行八值 CHECK 在 `V423__m016_floor_plan_and_space_type_checks.sql:5-8`（M016-002） | GEN-016 / GEN-014 / GEN-008；最小处置：两处各加一句「shape_type 八值 CHECK 见 V423（V034 原六值已被其后迁移替换）」；不改 V034 |
+
+- 只登记不入队：席甲 OBS-2/3/4（计划历史勾选、F-CROSS-10 一致、PR #442 文档部分未合并 origin/main）、Grok OBS-1…10（铺位六态着色不入本 API、OpenAPI 事件名/plan_name 长度/saveShape additionalProperties 属别模块、P1 L15 为切片范围句、requires_approval 未写、JSONB 存储、计划与契约重复、未跑 verify:p0-contract）。
+- 修复队列「是」（9）：M019-001…009。
+- 修复队列「否」（0）。
+
 
 ## 当前 M018 B4-r2 双PASS，M018-010 已修转「否」，进入B5-r2
 2026-09-20T08:46:50Z。Grok B4-r2 票 PASS（modules/M018-b4-r2-grok-raw.md，31103bytes SHA 8f9387edba9497bcf863d3c5b9088bce4b1961eff0deaa3ddbd3da9160b1beed）；席甲票 PASS（modules/M018-b4-r2-self-raw.md，17080bytes SHA 04bf3381ff4642779682e76eb26f9bff6b32c0e3ca7e49c55e1fae5e550f1c94）。M018-010 修复队列「是」→「否（已修，B3-r2）」。
