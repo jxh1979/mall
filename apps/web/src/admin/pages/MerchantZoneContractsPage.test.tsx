@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -6,8 +7,10 @@ import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 const CONTRACTS = [
-  { id: "contract-aaaa1111", lifecycle_status: "effective", effective_date: "2026-01-01", expiry_date: "2026-12-31", deposit_cent: 100000, space_ids: ["sp-1"] },
+  { id: "contract-aaaa1111", lifecycle_status: "effective", effective_date: "2026-01-01", expiry_date: "2026-12-31", deposit_cent: 100000, space_ids: ["sp-1", "sp-2"], renewed_from_contract_id: "contract-bbbb2222" },
   { id: "contract-bbbb2222", lifecycle_status: "expired", effective_date: "2025-01-01", expiry_date: "2025-12-31", deposit_cent: 50000, space_ids: [] },
+  { id: "contract-cccc3333", lifecycle_status: "weird_status", effective_date: "2024-01-01", expiry_date: "2024-12-31", deposit_cent: 0, space_ids: [] },
+  { id: "contract-dddd4444", lifecycle_status: "drafting", effective_date: "2027-01-01", expiry_date: "2027-12-31", deposit_cent: 0, space_ids: [] },
 ];
 
 function envelope(items: unknown[]): Response {
@@ -37,7 +40,8 @@ function renderPage() {
     effectivePermissions: ADMIN_PERMS,
     navigateTo: vi.fn(),
   };
-  render(<MerchantZoneContractsPage {...props} />);
+  const view = render(<MerchantZoneContractsPage {...props} />);
+  return { props, container: view.container };
 }
 
 describe("MerchantZoneContractsPage KPI 聚焦视图", () => {
@@ -46,18 +50,16 @@ describe("MerchantZoneContractsPage KPI 聚焦视图", () => {
     window.history.replaceState({}, "", "/admin/merchant-zone/contracts");
   });
 
-  it("点“履约中” → URL 带 ?kpi=contracts&subset=effective，聚焦只剩履约中合同，合同下钻 TraceLink 保留", async () => {
+  it("点“已生效” → URL 带 ?kpi=contracts&subset=effective，聚焦只剩已生效合同", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-zone-contracts-kpi-effective")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-zone-contracts-kpi-effective"));
     expect(window.location.search).toContain("kpi=contracts");
     expect(window.location.search).toContain("subset=effective");
-    expect(screen.getByTestId("merchant-zone-contracts-kpi-focus-banner").textContent).toContain("正在查看：履约中合同（1）");
-    const table = screen.getByTestId("merchant-zone-contracts-table").textContent ?? "";
-    expect(table).toContain("aaaa1111");
-    expect(table).not.toContain("bbbb2222");
+    expect(screen.getByTestId("merchant-zone-contracts-kpi-focus-banner").textContent).toContain("正在查看：已生效合同（1）");
+    expect(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111")).toBeTruthy();
+    expect(screen.queryByTestId("merchant-zone-contract-row-contract-bbbb2222")).toBeNull();
     expect(screen.queryByTestId("merchant-zone-contracts-summary")).toBeNull();
-    expect(screen.getByTestId("trace-link-ADM-CONT-001-contract-aaaa1111")).toBeTruthy();
   });
 
   it("聚焦后点「返回全部」→ 恢复 KPI 卡+全量合同", async () => {
@@ -67,17 +69,37 @@ describe("MerchantZoneContractsPage KPI 聚焦视图", () => {
     fireEvent.click(screen.getByTestId("merchant-zone-contracts-kpi-focus-clear"));
     expect(window.location.search).not.toContain("kpi=");
     expect(screen.getByTestId("merchant-zone-contracts-summary")).toBeTruthy();
-    expect(screen.getByTestId("merchant-zone-contracts-table").textContent).toContain("bbbb2222");
+    expect(screen.getByTestId("merchant-zone-contract-row-contract-bbbb2222")).toBeTruthy();
   });
 
-  it("生命周期状态列为中文，不含英文枚举码", async () => {
+  it("生命周期状态列为中文：未知码给中文占位，不含英文枚举码", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-zone-contracts-table")).toBeTruthy());
     const table = screen.getByTestId("merchant-zone-contracts-table").textContent ?? "";
-    expect(table).toContain("履约中");
+    expect(table).toContain("已生效");
     expect(table).toContain("已到期");
+    expect(table).toContain("未知状态");
+    expect(table).not.toContain("履约中");
+    expect(table).not.toContain("起草中");
     expect(table).not.toContain("effective");
     expect(table).not.toContain("expired");
+    expect(table).not.toContain("weird_status");
+    expect(table).toContain("元");
+    expect(table).not.toContain("CNY");
+  });
+
+  it("后端起草态真码 drafting 显示「草拟」，不落到未知状态（M023-007）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-contract-row-contract-dddd4444")).toBeTruthy());
+    const rowText = screen.getByTestId("merchant-zone-contract-row-contract-dddd4444").textContent ?? "";
+    expect(rowText).toContain("草拟");
+    expect(rowText).not.toContain("未知状态");
+    expect(rowText).not.toContain("drafting");
+    fireEvent.click(screen.getByTestId("merchant-zone-contract-row-contract-dddd4444"));
+    const drawerText = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawerText).toContain("草拟");
+    expect(drawerText).not.toContain("未知状态");
+    expect(drawerText).not.toContain("drafting");
   });
 
   it("租期列为中文日期，不含 ISO 原文", async () => {
@@ -87,6 +109,17 @@ describe("MerchantZoneContractsPage KPI 聚焦视图", () => {
     expect(table).toContain("2026年1月1日");
     expect(table).not.toContain("2026-01-01");
   });
+
+  it("合同号 / 空间 / 续签自为纯文本，不渲染商户点了没反应的下钻按钮（M023-005）", async () => {
+    const { container, props } = renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111")).toBeTruthy());
+    expect(container.querySelector('[data-testid^="trace-link-"]')).toBeNull();
+    const row = screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111").textContent ?? "";
+    expect(row).toContain("aaaa1111");
+    expect(row).toContain("sp-1、sp-2");
+    expect(row).toContain("bbbb2222");
+    expect(props.navigateTo).not.toHaveBeenCalled();
+  });
 });
 
 describe("MerchantZoneContractsPage 行明细抽屉（整行可点·日期中文）", () => {
@@ -95,16 +128,22 @@ describe("MerchantZoneContractsPage 行明细抽屉（整行可点·日期中文
     window.history.replaceState({}, "", "/admin/merchant-zone/contracts");
   });
 
-  it("点合同行 -> 抽屉含租期中文日期+中文状态+押金，合同下钻 TraceLink 保留", async () => {
+  it("点合同行 -> 抽屉含合同号全量、租期中文日期、中文状态、押金与空间，无下钻假按钮", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111"));
     const drawer = screen.getByTestId("row-detail-drawer");
     const text = drawer.textContent ?? "";
+    expect(text).toContain("contract-aaaa1111");
     expect(text).toContain("2026年1月1日");
-    expect(text).toContain("履约中");
+    expect(text).toContain("已生效");
+    expect(text).not.toContain("履约中");
+    expect(text).toContain("1,000.00 元");
+    expect(text).toContain("sp-1、sp-2");
+    expect(text).toContain("contract-bbbb2222");
+    expect(text).not.toContain("CNY");
     expect(text).not.toContain("effective");
-    expect(drawer.querySelector('[data-testid="trace-link-ADM-CONT-001-contract-aaaa1111"]')).toBeTruthy();
+    expect(drawer.querySelector('[data-testid^="trace-link-"]')).toBeNull();
   });
 
   it("点合同行 -> Esc 关闭抽屉", async () => {
@@ -114,22 +153,5 @@ describe("MerchantZoneContractsPage 行明细抽屉（整行可点·日期中文
     expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
-  });
-
-  it("点合同下钻 TraceLink 触发下钻、不弹抽屉（stopPropagation）", async () => {
-    const navigateTo = vi.fn();
-    const props: AdminPageProps = {
-      api: makeApi(),
-      user: { id: "u1", username: "merchant", accountType: "merchant_admin" },
-      setActionResult: vi.fn(),
-      setGlobalError: vi.fn(),
-      effectivePermissions: ADMIN_PERMS,
-      navigateTo,
-    };
-    render(<MerchantZoneContractsPage {...props} />);
-    await waitFor(() => expect(screen.getByTestId("trace-link-ADM-CONT-001-contract-aaaa1111")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("trace-link-ADM-CONT-001-contract-aaaa1111"));
-    expect(navigateTo).toHaveBeenCalled();
-    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
   });
 });
