@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -72,9 +72,10 @@ public class FloorPlanService {
     public PageResponse<FloorPlanRecord> listFloorPlans() {
         Optional<String> merchantScope = authorizationService.currentMerchantIdQuietly();
         // M015-003：商户 scope 优先（用永不抛的 currentMerchantIdQuietly，项目员工才能走到项目 scope）；否则按项目 scope（BEQR-152）；平台管理员全量。
+        // M015-015：项目 scope 经 projectScopeOrAll()（平台管理员为空＝全量；其余走会抛的 currentProjectScopeQuietly）。
         List<FloorPlanRecord> records = merchantScope.isPresent()
                 ? repository.findAllFloorPlansByMerchant(merchantScope.get())
-                : authorizationService.currentProjectScopeQuietly()
+                : projectScopeOrAll()
                         .map(repository::findAllFloorPlansByProject)
                         .orElseGet(repository::findAllFloorPlans);
         auditEventService.recordSuccess(
@@ -362,8 +363,9 @@ public class FloorPlanService {
             FloorPlanImportPublishRequest request
     ) {
         FloorPlanImportTaskRecord task = ensureImportTaskBelongsToFloorPlan(floorPlanId, importTaskId);
-        if (!"parsed".equals(task.status())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "只有解析完成的导入任务才能发布");
+        // M015-016：人工复核可分批发布——已发布任务的剩余待处理候选仍可继续发布（PGM-023）；failed/cancelled 仍拒。
+        if (!"parsed".equals(task.status()) && !"published".equals(task.status())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "只有解析完成或已发布的导入任务才能继续发布");
         }
 
         List<String> candidateIds = request.candidateIds().stream()
@@ -510,7 +512,7 @@ public class FloorPlanService {
             throw ApiException.notFound("PROJECT_NOT_FOUND", "综合体项目不存在或已被删除");
         }
         if (authorizationService.currentMerchantIdQuietly().isEmpty()) {
-            authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
+            projectScopeOrAll().ifPresent(scope -> {
                 if (!scope.equals(projectId)) {
                     throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能在当前综合体项目下创建平面图");
                 }
@@ -603,10 +605,19 @@ public class FloorPlanService {
         if (authorizationService.currentMerchantIdQuietly().isPresent()) {
             return;
         }
-        Optional<String> scope = authorizationService.currentProjectScopeQuietly();
+        Optional<String> scope = projectScopeOrAll();
         if (scope.isPresent() && !scope.get().equals(resourceProjectId)) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "平面图属于其他综合体项目");
         }
+    }
+
+    // M015-015：项目 scope 只读取值——平台管理员（isPlatformAdmin）为空＝全量，与 requirePlatformScope 的平台管理员桥同口径；
+    // 其余主体走 currentProjectScopeQuietly（无项目归属的员工 fail-closed 抛 PROJECT_SCOPE_REQUIRED，红线④保持）。
+    private Optional<String> projectScopeOrAll() {
+        if (authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+            return Optional.empty();
+        }
+        return authorizationService.currentProjectScopeQuietly();
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {

@@ -325,3 +325,13 @@ END=2026-09-11T05:37:53Z
 | 002–006、008、009、011、013 | PASS（r2 未变） | 与 r1 票相同 |
 
 本席 B2-r2 票：**PASS**（队列是＝001–009；否＝010–014）。B3-r1 边界以 findings V1.92 r2 节 + r1 原表为准。不以本席票覆盖外审。
+
+
+## M015 B2-r3 整批候选复核（席甲票）
+
+- 时间：2026-09-20T04:53:51Z。输入：modules/M015-b5-r1-grok-raw.md V0.02 追加段（全文 73711 bytes，SHA256 837327dbb73b46d13675de525863593d8e87fadc12ab8a98d65e99e40bb104a6）、modules/M015-b5-r1-self-raw.md V0.03+V0.04（全文 91043 bytes，SHA256 fea086dc5d05969ddea74705786e0d4c718425bbe5a68ae0f66a0f4579cda291）；候选 findings.md 顶部「当前 M015 B2-r3 整批候选」段（全文件 SHA256 866e95e4b6109438228505843bcedfea02eb54834aebe7eecbbc1e1f33cf53fa）。本票落盘前未读 Grok B2-r3 追加段。不写独占锁行。
+- 差集：Grok 两条 GR-M015-B5r1-01/02 ↔ 候选 015/016 一一对应；席甲撤回段无第三条；无漏并、无改写。
+- 015：分类细化（BEQR-152「所有业务数据默认按项目隔离…只有项目之上的获授权岗位才可以跨项目汇总」、BSM-007「平台管理员拥有全部日常功能权限」的下位实现错误）；工程缺陷成立（`AuthorizationService.java:504-507/289-294` 原文 + M006 回归 `:150`）；最小处置只在两服务内加 `projectScopeOrAll()` 并改五处调用、测试桩改生产语义各加一例先红，不碰 `AuthorizationService`（红线④）/Controller/OpenAPI/HTML；队列是。同意。
+- 016：分类细化（PGM-023 L472「人工复核候选与错误后发布」的下位状态机）；工程缺陷成立（`FloorPlanService.java:365-367/422-435`）；最小处置为前置放宽到 parsed/published + 文案 + 一例先红，不新增候选状态、不改 DTO；同意。
+- 001–014 不动，不回潮；无添加项、无 HTML 申请、无 questions。
+- 席甲 B2-r3 票：**PASS**（整批候选同意）。

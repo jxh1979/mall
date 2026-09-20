@@ -1,5 +1,29 @@
 # 全量审计 Findings 台账
-版本：V2.49
+版本：V2.52
+
+## 当前 M015 B4-r3 双PASS，M015-015/016 已修转「否」，进入B5-r3
+2026-09-20T05:22:47Z。Grok B4-r3 票 PASS（modules/M015-b4-r3-grok-raw.md，24339bytes SHA fbad9ec3b5e62578775a59ea3f9049697669b5cb666efaf15f41403a8f4b9ecf）；席甲票 PASS（modules/M015-b4-r3-self-raw.md，28421bytes SHA 53d3e024a439730d334cb85f7d9d84105994e85bc800a64096b8cd990cf8c4be）。M015-015、016 修复队列「是」→「否（已修，B3-r3）」。
+- 修复队列「否」（16）：M015-001…009、015、016（已修）；010–014（XM/全局遗漏/观察）。
+- 当前M015修复队列「是」：0。
+
+
+## 当前 M015 B2-r3 双PASS定稿，2项待修（B3-r3，第 3 次）
+2026-09-20T05:03:40Z。Grok B2-r3 票 PASS（modules/M015-b1-grok-raw.md V0.04，全文 111953bytes SHA f0d252ff59866c20398cee0d86b27c9486367cc63a5bc48015a03c5bd3115ada）；席甲 B2-r3 票 PASS（modules/M015-b1-self-raw.md V0.04，全文 41027bytes SHA 1c8ecfd15f6d8112d4940d9af117e46ef8632f43188e030a2e554388b92df706）。定稿：M015-015、M015-016 细化／工程缺陷是／修复队列「是」；001–014 不变。
+- 修复队列「是」（2）：M015-015、M015-016（细化）。
+- 修复队列「否」（不变）：M015-001…009（已修）、010–014。
+
+
+## 当前 M015 B2-r3 整批候选（B5-r1 再执行合取 FAIL 回退；尚未定稿；无添加项、无 questions）
+2026-09-20T04:53:46Z。输入：modules/M015-b5-r1-grok-raw.md V0.02 追加段（全文 73711bytes SHA 837327dbb73b46d13675de525863593d8e87fadc12ab8a98d65e99e40bb104a6，Grok 票 FAIL：GR-M015-B5r1-01/02）；modules/M015-b5-r1-self-raw.md V0.03+V0.04（全文 91043bytes SHA fea086dc5d05969ddea74705786e0d4c718425bbe5a68ae0f66a0f4579cda291，席甲票 PASS 经核源撤回为 FAIL）。两条依据均无 ID 且 001–014 已全否 → 整批先回 B2；仅给无 ID 条目分配新 ID：M015-015、M015-016（细化，工程缺陷是，队列是）。001–014 不动。B3 累计 2，定稿后 B3-r3 为第 3 次（上限）。
+
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M015-015 | Grok GR-M015-B5r1-01（席甲 B5 再执行票 PASS 经核源撤回） | 细化 | 是 | 是 | `FloorPlanService.java:72-79`（列表：商户 scope 空时 `currentProjectScopeQuietly().map(findAllFloorPlansByProject).orElseGet(findAllFloorPlans)`）、`:512-518`（创建的项目 scope 校验）、`:601-610`（`checkProjectOwnership`）；`VenueBusinessHoursService.java:42-47`（list）、`:65-68`（save）：五处都把 `AuthorizationService.currentProjectScopeQuietly()` 当作「无项目归属＝空＝平台管理员全量」；真实现 `AuthorizationService.java:504-507` 为 `Optional.of(requireProjectScope(actor))`，`:289-294` 无 organizationId 即抛 `PROJECT_SCOPE_REQUIRED`（源注释「红线④：不因平台管理员身份返回空（全量）」；M006 回归 `M006SecurityRegressionTests.java:150` 锁定此行为）→ organizationId 为空的平台管理员调 `listFloorPlans`/读单图/创建/营业时段 `list()`/`save()` 一律 403，`findAllFloorPlans`/`listAll` 生产不可达；`FloorPlanServiceTests.java:445-461`（桩注释「永不抛」、返回 empty）、`VenueBusinessHoursServiceTests.java:89-94`（`Optional.ofNullable`）伪造了生产不存在的语义，83 例全绿。M015-003 已修的项目员工支不回潮，本条是 003 声明的「平台管理员全量」未在真契约下落地 | BEQR-152 / PGM-041 / BSM-007 / GEN-002 / GEN-003 / GEN-005；最小处置：两服务各加私有 `projectScopeOrAll()`：`authorizationService.isPlatformAdmin(authorizationService.currentActor())` 为真 → `Optional.empty()`（全量，与 `requirePlatformScope` 的平台管理员桥同口径），否则 `currentProjectScopeQuietly()`（无归属员工继续 fail-closed 抛 `PROJECT_SCOPE_REQUIRED`）；五处调用改用该方法；两测试类桩改为生产语义（平台管理员：`isPlatformAdmin` 真且 `currentProjectScopeQuietly` 抛；无归属普通员工：抛 → 期望 `PROJECT_SCOPE_REQUIRED`）并各加一例先红；不改 `AuthorizationService`（M006 红线④保持）、Controller、OpenAPI、HTML |
+| M015-016 | Grok GR-M015-B5r1-02（席甲撤回 PASS） | 细化 | 是 | 是 | `FloorPlanService.java:365-367` 发布前置只接受任务 `parsed`；`:369-389` 按请求 `candidateIds` 子集只发 pending 候选；`:422-435` 发布后整任务写 `published`、未选候选仍 `pending`。治理地图 L472「由人工复核候选与错误后发布」+ DTO `candidate_ids` 子集：第一次只发部分候选后，剩余 pending 候选再发被「只有解析完成的导入任务才能发布」拒绝，无任何路径可完成，第一次正常复核发布即撞上 | PGM-023 / GEN-009；最小处置：发布前置改为任务状态 ∈ {parsed, published} 且所选候选均 pending（`failed`/`cancelled` 仍拒），错误文案改「只有解析完成或已发布的导入任务才能继续发布」；加一例先红（先发 1 个候选、再发剩余 1 个成功，任务仍 published、图形共 2 个、剩余候选 published）；不改 DTO/OpenAPI/HTML、不新增候选状态 |
+
+- 修复队列「是」（2）：M015-015、M015-016（细化）。
+- 修复队列「否」（不变）：M015-001…009（已修）、010（冲突，XM 同批）、011（细化，XM 同批）、012（全局遗漏）、013（XM→M016/M018）、014（观察）。
+
 
 ## M014 重开复审已收口（获批 B5-r4 双PASS）
 2026-09-20T03:47:35Z：self bbf1995a0f365e47502ee330d68ee721f832978a1d3398035cf8057db4d45bee（14208bytes）/ Grok 305e00b7cb4daa343e8d76e9709ae202be21a3c1fbf66d82598bbbe84c50fa4b（38834bytes）均 PASS，四值全等。M014-001–025 当前全否（唯一当前表见「当前 M014 B4-r4双PASS后队列」）。下方各段为历史时序，原样保留。
