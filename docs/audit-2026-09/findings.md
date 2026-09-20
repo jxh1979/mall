@@ -1,5 +1,29 @@
 # 全量审计 Findings 台账
-版本：V2.64
+版本：V2.67
+
+## 当前 M021 B4-r1 双PASS，M021-001 已修转「否」，进入B5-r1
+2026-09-20T18:00:19Z。Grok B4-r1 票 PASS（modules/M021-b4-r1-grok-raw.md，24606bytes SHA 797795b5aaef3e7d91ccff0a43e1235e4761b5f0c50909bb8d274aae7d106e0e）；席甲票 PASS（modules/M021-b4-r1-self-raw.md，12521bytes SHA 7b633b5290e190489409724190f0107f8af3b5ca86c739ef0fe75c7b17d868cb）。M021-001 修复队列「是」→「否（已修，B3-r1）」；M021-002 维持「否（只登记）」。
+- 修复队列「否」（2）：M021-001（已修）、002（登记）。
+- 当前M021修复队列「是」：0。
+
+
+## 当前 M021 B2-r1 双PASS定稿，1项待修（B3-r1）
+2026-09-20T17:46:59Z。Grok B2-r1 票 PASS（modules/M021-b1-grok-raw.md V0.02，全文 49811bytes SHA 205cf1e59a688bf087e446839abdf4d09a0dd5588ed70e955992162d21cdae28）；席甲 B2-r1 票 PASS（modules/M021-b1-self-raw.md V0.02，全文 21703bytes SHA b03de15a6deb76d677ea6e969b56ad8d702ea1236569bbb9ede8a3409456364b）。定稿：M021-001 冲突/是/是；M021-002 技术性/否/否（只登记）。
+- 修复队列「是」（1）：M021-001。
+- 修复队列「否」（1）：M021-002。
+
+
+## 当前 M021 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T17:35:34Z。输入仅当前 471 计划 M021 的完整 B1 双席 raw：modules/M021-b1-self-raw.md V0.01（20006bytes SHA cd8ad7840729d91266ab330e4f59ed88290263381cc8cf7e524f24f8b81b57ac，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M021-001、OBS-1…6）、modules/M021-b1-grok-raw.md V0.01（35139bytes SHA cd58fda5bcc82b083b5042972e946bdf6adfd93f33eb97b3456a2b59e08fdcfa，Grok 席乙，FAIL：GR-M021-B1-01/02、OBS-M021-B1-01…07）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-02+CX-001→001（分类采 Grok「冲突」）；GR-01+席甲 OBS-2/3→002（席甲核源后拟 技术性/否/否：授予为业务地图 L587-588 明文要求，DELETE 授予反与 HTML 冲突；注释不可改写）。B3 累计 0；写入集合＝新迁移 V428 + 真实库测试类 `backend/src/test/java/com/complex/platform/settlement/SettlementFormatShareS11Tests.java`（别模块单元，PENDING，跨单元 TDD）+ 随迁移重生成的门禁产物。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M021-001 | Grok GR-M021-B1-02 + 席甲CX-M021-001 | 冲突（采 Grok 判：先冲突——现行 HTML 明文六值业态且「业态用于确定…域内结算规则」「演出票 → 传媒公司」，五值封口拒绝合法业态 media 作分账行键，两者不能同时成立；席甲原判细化，按 2.1 顺序从严） | 是 | 是 | `backend/src/main/resources/db/migration/V384__merchant_business_format_media.sql:13-26` 自称「词表一次性放开」「同词表同步」，只重建 `chk_merchants_business_format` 与 `chk_leasing_leads_business_format`；同词表第三处 `V366__settlement_bill_format_shares.sql:37` `chk_sbfs_format` 仍五值（complex_test pg_constraint 实态，无后续迁移触及）；`JdbcSettlementBillRepository.aggregateFormatRevenue:186` 业态取 merchants.merchant_type，`TicketDistributionSettlementService:151/:359-368` 逐业态 upsert `business_format` → media 业态商户权益首次进通票月结即违反 CHECK、整张结算单生成失败；无测试在真实库写 media 份额 | GEN-014 / GEN-006 / GEN-008 / GEN-002 / GEN-003（上位：枚举 L195、业务地图 L1309 六值业态句、L1690 演出票→传媒公司）；最小处置：已应用 V366/V384 不可改写 → 新增前向迁移 `V428__m021_settlement_format_share_media.sql`（文件版本 V0.01；`ALTER TABLE settlement_bill_format_shares DROP CONSTRAINT IF EXISTS chk_sbfs_format;` 再 ADD 同名六值 CHECK；表为月结留痕小表，不用 NOT VALID）；TDD：在既有真实库测试类 `backend/src/test/java/com/complex/platform/settlement/SettlementFormatShareS11Tests.java` 加一例 media 业态商户进月结（份额行 business_format=media、beneficiary_kind=entity、beneficiary_entity_id=be_media），RED（CHECK 违例）后加迁移转 GREEN；随新迁移重生成 data-isolation spec / domain-ownership 等门禁产物并跑全链 verify:predeploy；不改结算 Java、不改 V366/V384/HTML。编号说明：origin/main 最大 V426，主工作区有 M009 遗留暂存 V427（complex_test 已应用），故取 V428 |
+| M021-002 | Grok GR-M021-B1-01 + 席甲 OBS-2/OBS-3（M020-007 的 V200 部分转入） | 技术性（无业务发明：只涉一句历史注释；授予本身是 HTML 明文要求的下位实现，不新增角色/权限/状态） | 否 | 否 | `backend/src/main/resources/db/migration/V200__merchant_portal_zone_permissions.sql:10` 注释「平台管理员默认可监督商户自助层」与 M020 定稿的 fail-closed（无商户归属账号 403 MERCHANT_SCOPE_REQUIRED）不符；`:11-18` 把三码授 role_platform_admin。核源：业务地图 L587-588「平台管理员拥有全部日常功能权限…定为日常功能的会自动同步给他，不会出现"管理员反而没权限"的情况」，三码 active/medium/无需审批即 `AuthorizationService.dailyPermissions` 口径的日常功能码，全仓 83 条迁移同范式授予——授予是 HTML 要求而非缺陷；Grok 拟「前向迁移 DELETE 三行授予」会与 L587-588 冲突，不采；「持码却 403」是权限闸 × 数据范围闸两道闸（红线④ 商户隔离）的既定结果，平台监督走 `merchant.billing.manage` 等平台口径（`MerchantFeeNotificationRecipientController:85-89` 同构）；注释属已应用迁移（Flyway checksum 1214979897）不可改写，无可执行修复面 | GEN-016 / GEN-005（登记）；处置：只登记（先例 M010-006 迁移注释失实、M016-004 平台管理员授予范式均 技术性/否/否）；M020-007 的 V200 部分就此闭合为登记 |
+
+- 只登记不入队：V147:1 行号漂移（:429→L494）、V348:2-4 五值引句已被六值句取代、V366:27 列注释「V348 五值」（M319）、V348 旧词表归一到 other（开发环境口径）、出厂无商户角色（补角色=添加，不问不建）、`LeasingService.java:285` 注释「同五值词表」（别模块）、枚举速查「其他须指定主管公司」规则不在本五文件（别模块）、主工作区 M009 遗留暂存 V427（complex_test 已应用、origin/main 最大 V426；生产库 complex flyway 385、`validate-on-migrate: true` 且未开 out-of-order → V427 须先于或随同 V428 并入后再部署，否则乱序校验会拒绝，报操作员）、Grok OBS-07 正向依赖核实。
+- 修复队列「是」（1）：M021-001。
+- 修复队列「否」（1）：M021-002（只登记）。
+
 
 ## 当前 M020 B4-r1 双PASS，M020-001…006 已修转「否」，进入B5-r1
 2026-09-20T11:30:42Z。Grok B4-r1 票 PASS（modules/M020-b4-r1-grok-raw.md，27138bytes SHA 06f38844071a519f4adb12c7f61b13c92e5fe9b9e9033c57541e42b65212810c）；席甲票 PASS（modules/M020-b4-r1-self-raw.md，44026bytes SHA 9a02d05b19f3a72de522870852ca0455b2f229db67d6268af069d6ef93ab1997）。M020-001…006 修复队列「是」→「否（已修，B3-r1）」；M020-007 维持「否（XM → M392/M021）」。
