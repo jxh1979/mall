@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# 开发环境:按「招商 / 商户准入」正路建 N 家酒吧商户(酒吧A98、酒吧B98 …)。
+# 文件版本：V0.01
+# 开发环境:用后台建商户接口播 N 家酒吧商户(酒吧A98、酒吧B98 …),供联调。
+# 本脚本不替代招商、合同、准入审批,也不把测试数据写进正式迁移。
 #
-# 为什么是脚本不是迁移:酒吧＝商户(merchant_type='bar'),不是经营主体;建商户是招商的业务动作,
-#   走后台正路才有审批与留痕。把 10 家写进 Flyway 迁移链会把开发测试数据固化进正式发布链,
-#   而且用户明确「酒吧数量必须可配 —— 可能七八家,也可能二三十家」,写死家数正好违背这条。
+# 为什么是脚本不是迁移:把固定家数写进 Flyway 会把开发数据固化进发布链;
+#   酒吧家数必须可配(七八家到二三十家),写死家数正好违背这条。
 #
 # 家数是参数:  ./seed-dev-bars.sh          → 10 家(A98…J98,与 2026-07 主数据一致)
 #              ./seed-dev-bars.sh 25       → 25 家
@@ -27,7 +28,7 @@ if [ -z "${ADMIN_TOK:-}" ]; then
 fi
 AH="Authorization: Bearer $ADMIN_TOK"
 
-# 娱乐平台公司参股各酒吧(业务口径),故所属经营主体挂娱乐平台公司(V354 稳定 id)。
+# 开发播种给商户填一个已有经营主体 id(接口不强制该字段);不表示各酒吧生产上同一经营主体,也不表示参股等于经营主体。
 ENTITY=be_ent_platform
 
 echo "== 建 $COUNT 家酒吧商户(所属主体 $ENTITY)=="
@@ -35,7 +36,7 @@ for i in $(seq 0 $((COUNT - 1))); do
   if [ "$i" -lt 26 ]; then SUFFIX="${LETTERS:$i:1}"; else SUFFIX="$((i + 1))"; fi
   NAME="酒吧${SUFFIX}98"
   EXISTS=$(curl -s "$API/api/v1/platform/merchants?page=1&size=500" -H "$AH" \
-    | python3 -c "import sys,json;d=json.load(sys.stdin)['data'];items=d['items'] if isinstance(d,dict) else d;print(next((m['id'] for m in items if m.get('merchantName')=='$NAME'),''))")
+    | python3 -c "import sys,json;d=json.load(sys.stdin)['data'];items=d['items'] if isinstance(d,dict) else d;print(next((m['id'] for m in items if m.get('merchant_name')=='$NAME'),''))")
   if [ -n "$EXISTS" ]; then echo "  跳过(已存在) $NAME=$EXISTS"; continue; fi
   ID=$(curl -s -X POST "$API/api/v1/platform/merchants" -H "$J" -H "$AH" -d "{
     \"idempotency_key\":\"seed-bar-${SUFFIX}98\",
@@ -43,7 +44,7 @@ for i in $(seq 0 $((COUNT - 1))); do
     \"merchant_name\":\"$NAME\",
     \"merchant_type\":\"bar\",
     \"contact_name\":\"$NAME 负责人\",
-    \"status\":\"active\",
+    \"status\":\"pending_admission\",
     \"operator_note\":\"开发环境酒吧主数据播种(家数可配)\"
   }" | python3 -c 'import sys,json
 raw=sys.stdin.read()

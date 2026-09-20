@@ -1,5 +1,30 @@
 # 全量审计 Findings 台账
-版本：V2.79
+版本：V2.82
+
+## 当前 M025 B4-r1 双PASS，M025-001、002 已修转「否」，进入B5-r1
+2026-09-20T22:56:12Z。Grok B4-r1 票 PASS（modules/M025-b4-r1-grok-raw.md，18015bytes SHA 47787fd1ad1a61e1b9791a4a1fd7b7d99bdff920bbfe2ca37b7ca4ff450cb9dd）；席甲票 PASS（modules/M025-b4-r1-self-raw.md，6884bytes SHA e8df5032a74eee4c4c6b8896ff9fcd704d74593dd9defaa84502f8a8ba5dfc9f）。M025-001、002 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（2）：M025-001、M025-002（已修）。
+- 当前M025修复队列「是」：0。
+
+
+## 当前 M025 B2-r1 双PASS定稿，2项待修（B3-r1）
+2026-09-20T22:48:06Z。Grok B2-r1 票 PASS（modules/M025-b1-grok-raw.md V0.02，全文 57641bytes SHA e6fbe3266894aeb7507ed96da42ab96a379f111f87ef9c7d477fca1265c6d3eb）；席甲 B2-r1 票 PASS（modules/M025-b1-self-raw.md V0.02，全文 37807bytes SHA 1391bf936520b9e78ed26d90d3e98ec1efdc9be7bf465d84cb7499444a6f1f68）。定稿：M025-001、002 修复队列「是」（均细化）；GR-03 只登记、挂 M009 未发布改动联动项。
+- 修复队列「是」（2）：M025-001、M025-002。
+- 修复队列「否」（0）。
+
+
+## 当前 M025 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T22:39:59Z。输入仅当前 471 计划 M025 的完整 B1 双席 raw：modules/M025-b1-self-raw.md V0.01（35922bytes SHA 7faaf51ff23a04e6dbd2d42ab66d81f102d9ba4e3ac66de4e0e35676a233545a，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M025-001、OBS-1…5）、modules/M025-b1-grok-raw.md V0.01（37899bytes SHA d39f496c6d7880038327042495bc4b32187ac0d5542ab8bedf2a6e115d226337，Grok 席乙，FAIL：GR-01…03、观察若干）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01+CX-001→001；GR-02→002（席甲漏）；GR-03→拟只登记（分歧项，理由与新证据见下）。B3 累计 0；写入集合＝本模块 1 文件。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M025-001 | Grok GR-01 + 席甲CX-M025-001 | 细化（上位：业务地图「基础管理·主要功能」/治理地图「商户和主体」的「建立商户档案」；席甲 B1 判技术性，按四分类顺序细化先于技术性，采 Grok） | 是 | 是 | `ops/160/seed-dev-bars.sh:10` 头注「幂等:同名商户已存在则跳过(按 merchant_name 查)」，`:37-39` 实际 `m.get('merchantName')`；后端响应全局 SNAKE_CASE（`application.yml:16`；`PlatformControllerTests.java:150` 断言 `$.data.items[0].merchant_name`），查重永不命中。再次运行：24 小时内靠同一幂等键重放不重复但谎报「建成」；请求体变过（2026-09-11 本地提交把 status 由 active 改 pending_admission）→ 同键不同体 409 首家即退出；超过幂等记录 24 小时有效期（`IdempotencyService.DEFAULT_TTL_SECONDS = 86_400`）后重跑 → 插入重名商户（`merchants` 表无名称唯一约束，complex_test 索引实查）。席甲 B1 只写了前两种，第三种漏，采 Grok | GEN-002 / GEN-007 / GEN-008 / GEN-006 / GEN-003 / GEN-016；最小处置：L38 键名改 `merchant_name`（一处）；文件第 2 行加 `# 文件版本：V0.01`。不改接口、不改幂等键、不加功能。验证（不调用接口）：脚本同款 python 表达式对后端形状的蛇形样例，修前输出空、修后输出该商户 id |
+| M025-002 | Grok GR-02（席甲 B1 漏） | 细化（同上位；注释是对「建立商户档案」接口的下位声称） | 是 | 是 | `ops/160/seed-dev-bars.sh:30` 注释「开发播种挂一个已有经营主体,只为接口必填;…」；`MerchantProfileRequest.businessEntityId` 无必填注解，服务端只在该字段非空时才校验主体（主工作区 `PlatformService.java:1011`；origin/main `:874` 同样 `trimToNull(request.businessEntityId())` 可空）——「接口必填」不成立，席甲复核两态均可空，采 Grok | GEN-016 / GEN-002；最小处置：只改这一句注释的前半——「开发播种给商户填一个已有经营主体 id(接口不强制该字段);不表示各酒吧生产上同一经营主体,也不表示参股等于经营主体。」后半「不表示…」原样保留；不改是否传该字段 |
+
+- 只登记不入队（拟，请 Grok 重点复核）：Grok GR-03「创建主路径依赖当前项目与 business_entity_projects，complex_test 两者皆空，脚本未准备」。席甲复核事实：GR-03 引的 `creationProject`／`businessEntityInProject`／`PROJECT_SCOPE_MISMATCH` 三处在 origin/main 的 `PlatformService.java` 中 **0 命中**、只在主工作区 **7 命中**——`git status` 显示该文件为已暂存未提交（`M `，+238/-56），`V427__m009_project_profiles_and_associations.sql` 为已暂存新增（`A `），即 M009 闭环时留在主工作区、至今未发布的那批改动（ledger 既有登记：V427 须先于 V428 落地，已多次报操作员）。据此拟不入本模块修复队列，理由四条：① 触发证据取自 complex_test——它是单测用的迁移态空库，不是本脚本的目标环境（脚本面向一个正在运行的联调 API，其库内有无项目、主体是否已关联，两席按只读约束都没有查、也不能查）；② 脚本在被后端拒绝时按 L48-52 打印响应原文并非零退出，L55「完成」只在全部成功后才打印，不存在谎报成功（GEN-009 成立）；③ 该前提来自另一模块（M009）尚未发布的代码，现在把它写进本脚本注释，检查点合入 origin/main 后注释描述的是 origin/main 里不存在的规则，反而造出一条 GEN-016 不一致；④ Grok 拟处置①「创建前预检并中文报错」要新增接口调用与分支，超出最小处置。登记为跨模块观察，挂 M009 未发布改动的联动项：该批改动发布时，须同时核本脚本在「无项目／主体未关联项目」的新库上的前置说明。若 Grok 认为仍应入队，请明确：在 origin/main 尚无该规则的前提下，最小处置写什么、不构成对未发布规则的描述。
+- 只登记不入队（其余）：头注 L8「与 2026-07 主数据一致」无法从纳入范围复现；L22 每次先用开发默认口令试登、在已换口令环境留一条失败登录记录；口令经 curl 传参短暂出现在本机进程列表；查重只取第一页 500 条；origin/main 版本仍为 status=active 与立法式注释（主工作区两个本地提交对应 OPEN PR #445，检查点带入现状）；`requireIdempotencyKey` 英文报错属后端公共类。
+- 修复队列「是」（2）：M025-001、M025-002。
+- 修复队列「否」（0）。
+
 
 ## 当前 M024 B4-r1 双PASS，M024-001…005 已修转「否」，进入B5-r1
 2026-09-20T21:56:55Z。Grok B4-r1 票 PASS（modules/M024-b4-r1-grok-raw.md，28203bytes SHA 5f9635ef932dc6d417719edea38dc5d74714991fa333a8a63958dd58e9b584e3）；席甲票 PASS（modules/M024-b4-r1-self-raw.md，15949bytes SHA ea3bc899f21f9f98bd8bd1e45d7e4fa054a0f4db414a6cf1c922a25d89f80c3c）。M024-001…005 修复队列「是」→「否（已修，B3-r1）」。
