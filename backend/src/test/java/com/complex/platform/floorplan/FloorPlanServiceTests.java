@@ -1,11 +1,12 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -274,6 +275,37 @@ class FloorPlanServiceTests {
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
     }
 
+    // M015-016：人工复核只发部分候选后，剩余待处理候选仍可继续发布（修复前第二次发布被「只有解析完成的导入任务才能发布」拒绝）
+    @Test
+    void publishRemainingPendingCandidatesAfterPartialPublish() {
+        FloorPlanRecord floorPlan = service.createFloorPlan(createRequest("fp-publish-partial"));
+        FloorPlanImportTaskRecord task = service.createImportTask(floorPlan.id(), importRequest("fp-import-partial", """
+                <svg viewBox="0 0 1000 800">
+                  <polygon id="A101" data-shape-type="shop" data-ref-type="space" data-ref-id="sp_101" points="100,80 300,80 300,240 100,240" />
+                  <polygon id="A102" data-shape-type="booth" data-ref-type="space" data-ref-id="sp_102" points="400,80 600,80 600,240 400,240" />
+                </svg>
+                """));
+        List<String> candidateIds = repository.findImportCandidatesByTaskId(task.id()).stream()
+                .map(FloorPlanImportCandidateRecord::id)
+                .toList();
+        assertThat(candidateIds).hasSize(2);
+
+        FloorPlanImportTaskRecord first = service.publishImportTask(floorPlan.id(), task.id(),
+                new FloorPlanImportPublishRequest("publish-partial-1", "publish first", List.of(candidateIds.get(0))));
+        assertThat(first.status()).isEqualTo("published");
+
+        FloorPlanImportTaskRecord second = service.publishImportTask(floorPlan.id(), task.id(),
+                new FloorPlanImportPublishRequest("publish-partial-2", "publish rest", List.of(candidateIds.get(1))));
+
+        assertThat(second.status()).isEqualTo("published");
+        assertThat(repository.findShapesByFloorPlanId(floorPlan.id()))
+                .extracting(FloorPlanShapeRecord::label)
+                .containsExactlyInAnyOrder("A101", "A102");
+        assertThat(repository.findImportCandidatesByTaskId(task.id()))
+                .extracting(FloorPlanImportCandidateRecord::status)
+                .containsOnly("published");
+    }
+
     // P1-2: saveShape 未校验 shapeId 归属 — 修复前此测试会红（无归属校验时覆写成功）
     @Test
     void saveShapeRejectsShapeIdBelongingToDifferentFloorPlan() {
@@ -442,22 +474,53 @@ class FloorPlanServiceTests {
         assertThat(repository.floorPlanSaveCount).isZero();
     }
 
-    // 平台管理员桥（生产语义：isPlatformAdminBridge → 商户/项目 scope 皆空、永不抛）
+    // M015-015：无 organizationId 的平台管理员全量可达（修复前真 currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED，本例与 setUp 用 service 的各例一起红）
+    @Test
+    void platformAdminWithoutOrganizationSeesAllFloorPlans() {
+        service.createFloorPlan(createRequest("fp-admin-all-1", "prj_1"));
+        service.createFloorPlan(createRequest("fp-admin-all-2", "prj_2"));
+
+        assertThat(service.listFloorPlans().items())
+                .extracting(FloorPlanRecord::projectId)
+                .containsExactlyInAnyOrder("prj_1", "prj_2");
+    }
+
+    // M015-015：无项目归属的普通员工 fail-closed（红线④：不因缺归属放行全量）
+    @Test
+    void staffWithoutProjectScopeIsRejected() {
+        FloorPlanRecord plan = service.createFloorPlan(createRequest("fp-orphan-1", "prj_1"));
+        FloorPlanService orphan = new FloorPlanService(
+                repository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                new FloorPlanImportParser(),
+                orphanStaffAuth()
+        );
+
+        assertThatThrownBy(orphan::listFloorPlans)
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PROJECT_SCOPE_REQUIRED"));
+        assertThatThrownBy(() -> orphan.listShapes(plan.id()))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PROJECT_SCOPE_REQUIRED"));
+    }
+
+    // M015-015：平台管理员（生产语义：只替换 currentActor，currentMerchantIdQuietly / currentProjectScopeQuietly / isPlatformAdmin 走真实现——
+    // 无 organizationId 的平台管理员调 currentProjectScopeQuietly 会抛 PROJECT_SCOPE_REQUIRED，服务须经 isPlatformAdmin 判全量）
     private AuthorizationService noScopeAuth() {
+        return actorAuth(new AccessActor("usr_platform_admin", "platform-admin", "platform_admin", null, null, "active"));
+    }
+
+    // M015-015：无项目归属的普通员工（生产语义：currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED，fail-closed）
+    private AuthorizationService orphanStaffAuth() {
+        return actorAuth(new AccessActor("usr_orphan", "orphan", "staff", null, null, "active"));
+    }
+
+    private static AuthorizationService actorAuth(AccessActor actor) {
         return new AuthorizationService(null) {
             @Override
-            public Optional<String> currentMerchantScope() {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional<String> currentMerchantIdQuietly() {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional<String> currentProjectScopeQuietly() {
-                return Optional.empty();
+            public AccessActor currentActor() {
+                return actor;
             }
         };
     }
@@ -468,23 +531,8 @@ class FloorPlanServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 new FloorPlanImportParser(),
-                // 项目员工（生产语义：无 merchantId → currentMerchantScope 抛 MERCHANT_SCOPE_REQUIRED；currentMerchantIdQuietly 为空；项目 scope 有值）
-                new AuthorizationService(null) {
-                    @Override
-                    public Optional<String> currentMerchantScope() {
-                        throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
-                    }
-
-                    @Override
-                    public Optional<String> currentMerchantIdQuietly() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public Optional<String> currentProjectScopeQuietly() {
-                        return Optional.of(projectId);
-                    }
-                }
+                // 项目员工（生产语义：仅替换 currentActor；无 merchantId → currentMerchantScope 抛、currentMerchantIdQuietly 空；organizationId=项目 → 项目 scope 有值）
+                actorAuth(new AccessActor("usr_" + projectId, projectId + "-staff", "staff", projectId, null, "active"))
         );
     }
 
@@ -494,23 +542,8 @@ class FloorPlanServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 new FloorPlanImportParser(),
-                // 商户员工（生产语义：有 merchantId、无 organizationId → currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED）
-                new AuthorizationService(null) {
-                    @Override
-                    public Optional<String> currentMerchantScope() {
-                        return Optional.of(merchantId);
-                    }
-
-                    @Override
-                    public Optional<String> currentMerchantIdQuietly() {
-                        return Optional.of(merchantId);
-                    }
-
-                    @Override
-                    public Optional<String> currentProjectScopeQuietly() {
-                        throw ApiException.forbidden("PROJECT_SCOPE_REQUIRED", "此操作必须在项目范围内进行");
-                    }
-                }
+                // 商户员工（生产语义：仅替换 currentActor；有 merchantId、无 organizationId → currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED）
+                actorAuth(new AccessActor("usr_" + merchantId, merchantId + "-staff", "merchant_staff", null, merchantId, "active"))
         );
     }
 

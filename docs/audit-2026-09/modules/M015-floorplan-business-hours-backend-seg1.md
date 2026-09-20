@@ -1,4 +1,12 @@
 # M015 空间点位、楼层平面图与营业时段／后台实现／第1段
+版本：V0.03
+
+2026-09-20 操作员裁定补派 Grok B5-r1 再执行 → Grok FAIL（平台管理员项目 scope 抛点、部分发布锁死）→ B2-r3 定稿 M015-015/016 → B3-r3（第 3 次，上限）修复 → B4-r3 双 PASS → B5-r3 双 PASS：Grok V0.01 SHA256 f803af2423d40706ae203c8fb525f91ad6431e06edde34af30bc9d277fbb3e04；席甲 V0.01 SHA256 caf4bb0d72c234627831175d6ddfd77d501483bb85e01e56690e18d989d6874c；四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。改动：`FloorPlanService` V0.04（`projectScopeOrAll()`、发布前置 parsed/published）、`VenueBusinessHoursService` V0.02（`projectScopeOrAll()`）、两测试类桩改生产语义 + 5 例。001–016 全否；席甲 B5-r1 再执行票经核源撤回，教训：沿用测试桩语义未追 `AuthorizationService` 真实现。
+
+---
+以下历史 V0.02 原文原样保留：
+
+# M015 空间点位、楼层平面图与营业时段／后台实现／第1段
 版本：V0.02
 
 2026-09-19 席甲补充复查PASS；Grok NOT-CALLED。本次按操作员「从 M009 重新独立审计，有问题按 V0.17 完整双席流程」执行，无问题只记录，不是新双 PASS；历史 Claude Fable 5.1/Grok B5-r1 双 PASS 保留。B3 累计 2，本次修复 0。

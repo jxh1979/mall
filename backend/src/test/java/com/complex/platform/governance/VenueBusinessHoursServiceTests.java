@@ -1,9 +1,10 @@
 package com.complex.platform.governance;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEvent;
@@ -86,11 +87,18 @@ class VenueBusinessHoursServiceTests {
         return service;
     }
 
+    // M015-015：只替换 currentActor，scope 方法走真实现——projectScope 为空＝无 organizationId 的平台管理员（真 currentProjectScopeQuietly 会抛，服务须经 isPlatformAdmin 判全量）
     private static AuthorizationService auth(String projectScope) {
+        return actorAuth(projectScope == null
+                ? new AccessActor("usr_platform_admin", "platform-admin", "platform_admin", null, null, "active")
+                : new AccessActor("usr_" + projectScope, projectScope + "-staff", "staff", projectScope, null, "active"));
+    }
+
+    private static AuthorizationService actorAuth(AccessActor actor) {
         return new AuthorizationService(null) {
             @Override
-            public Optional<String> currentProjectScopeQuietly() {
-                return Optional.ofNullable(projectScope);
+            public AccessActor currentActor() {
+                return actor;
             }
         };
     }
@@ -120,6 +128,32 @@ class VenueBusinessHoursServiceTests {
 
         assertThat(scoped.list()).extracting(VenueBusinessHoursRecord::venueId).containsOnly("sp_bar_main");
         assertThat(repository.projectQueries).containsExactly("prj_1");
+    }
+
+    // M015-015：无 organizationId 的平台管理员列表取全量（修复前真 currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED，本例与 service() 各例一起红）
+    @Test
+    void platformAdminWithoutOrganizationListsAllVenues() {
+        VenueBusinessHoursService admin = service();
+        admin.save(request(1, "18:00", "23:00"));
+        repository.saved.add(new VenueBusinessHoursRecord(
+                "vbh_side", "sp_bar_side", 1, "18:00", "23:00", false, null, Instant.EPOCH, Instant.EPOCH));
+
+        assertThat(admin.list()).extracting(VenueBusinessHoursRecord::venueId).containsExactlyInAnyOrder("sp_bar_main", "sp_bar_side");
+        assertThat(repository.projectQueries).isEmpty();
+    }
+
+    // M015-015：无项目归属的普通员工 fail-closed（红线④：不因缺归属放行全量）
+    @Test
+    void staffWithoutProjectScopeIsRejected() {
+        repository = new RecordingRepository();
+        VenueBusinessHoursService orphan = new VenueBusinessHoursService(repository, new AuditEventService(new InMemoryAuditEventRepository()),
+                actorAuth(new AccessActor("usr_orphan", "orphan", "staff", null, null, "active")));
+
+        assertThatThrownBy(orphan::list)
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("PROJECT_SCOPE_REQUIRED"));
+        assertThatThrownBy(() -> orphan.save(request(1, "18:00", "23:00")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("PROJECT_SCOPE_REQUIRED"));
+        assertThat(repository.saved).isEmpty();
     }
 
     private VenueBusinessHoursRequest request(Integer dayOfWeek, String open, String close) {

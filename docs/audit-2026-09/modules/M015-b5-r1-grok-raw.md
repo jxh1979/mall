@@ -440,3 +440,377 @@ HTML 来源行 72/72 hit
 **PASS**。
 
 23 文件全覆盖；90 判据逐项核对；三线均执行；声称均有四类证据之一。无未答 questions。无未定稿缺陷。无添加项。无 HTML 修改申请。Grok 哈希行有效。001–009 独立复验仍成立。010–014 维持否，不升格。本票不等于双席合取或模块 PASS。
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+# M015 B5-r1 再执行 整模块全量三线审计（Grok 席乙 V0.02）
+
+- 文件版本：V0.02（同名 raw 追加；旧 41949 字节 V0.01 前缀完整保留，本段自本行上一空行后的独占锁行起）
+- 席位：固定 Grok 外审席乙（grok-4.6 / reasoning xhigh；不派子代理、不用 MCP、不问操作员）
+- 步骤：B5-r1 再执行（操作员 2026-09-20 裁定：历史双 PASS + 席甲 2026-09-19 单席补充复查不算完成，须席乙完整 B5 全量重审；B3 累计仍为 2，文件名 r1 不改）
+- 计划：`docs/audit-2026-09/plan/modules.md` V0.04 M015 23 文件；`runbook.md` V0.02；控制提示词 `.scratch/module-recheck-20260908/160-audit-prompt.md` V0.17
+- 模块：M015 — 空间点位、楼层平面图与营业时段／后台实现／第1段
+- 正本：`/home/james/complex-management` main 主工作区
+- 判据锁：`docs/audit-2026-09/plan/criteria-lock.md` V0.11；本席独立实算 `sha256sum` / `python3 hashlib` / `openssl dgst -sha256` 三工具同值，未抄 sidecar / ledger / 派发期望 / 旧 raw
+- 独立性：未读 `M015-b5-r1-self-raw.md`（含其任何新追加段）；旧 B1/B4/B5 grok 与 findings 只作已定稿边界，不复用历史票代替本轮取证
+- 禁止动作：未修业务/HTML/锁/findings/ledger；未 fetch/commit/push/merge/deploy；未建脚本、日志或临时产物；验证命令 stdout 仅由本席工具缓冲
+
+本次审计结论：**FAIL**。
+
+新工程缺陷 2 条（临时编号 GR-M015-B5r1-01 / GR-M015-B5r1-02），均无已定稿可沿用且仍在修复队列的 ID（001–014 当前全部为「否」），按回退统一规则整批须先回 B2。001–009 已修点在当前源上仍成立，不重复立项。010–014 维持「否」，不升格。无添加项、无 HTML 自身问题申请、无锁外判据。本票不等于双席合取。
+
+---
+
+## 0. 技能自核（V0.17 §6，按 B5 收窄；环境实用强制技能如实记录）
+
+本席实际读取并按收窄口径使用：
+
+| 技能 | 本机路径 | 用法 |
+|---|---|---|
+| using-superpowers | `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 先核技能；用户指令优先。B5 禁止子代理/问人/修复 |
+| using-arc | `~/.claude/plugins/marketplaces/howells/plugins/arc/skills/using-arc/SKILL.md` | 已读；Arc `audit` 会派评审子代理并另写 `docs/arc/audits/`，与双席/§7 冲突，**不调用** |
+| graft | `~/.claude/skills/graft/SKILL.md` | 已读。本任务已给出 23 个精确路径，按「已能点名则直接读源」收窄，未再跑 `graft ask/grep`（全文读源是 B5 硬要求，不能用节点摘要替代） |
+| grilling | `.../mattpocock-skills/1.2.3/skills/productivity/grilling/SKILL.md` | 只用追问树自己取证：越权、幂等、项目 scope、派生主键长度、发布上限、营业时段场地校验、错误文案中文 |
+| grill-me | 同套件 `productivity/grill-me/SKILL.md`（转发 grilling） | 内部 sharpen |
+| diagnosing-bugs | `.../engineering/diagnosing-bugs/SKILL.md` | 先建可红环（锁哈希、源行、AuthorizationService 真实现 vs 测试桩、surefire XML）再下结论；B5 不修复、不写新测试 |
+| codebase-design | `.../engineering/codebase-design/SKILL.md` | 接口契约：`currentProjectScopeQuietly` 名称 vs `requireProjectScope` 实现 |
+| verification-before-completion | superpowers 同名 | 先跑指定 mvn 再写可执行声称 |
+| systematic-debugging | superpowers 同名 | 只借读错误→复现→追数据流；B5 不修 |
+| ponytail-review | `~/.claude/plugins/cache/ponytail/ponytail/4.9.0/skills/ponytail-review/SKILL.md` | 可删面：`FloorPlanRepository.findAllFloorPlansByProject` 默认 `List.of()` 是隔离闸门禁锚点，不标删除；`orElseGet(findAllFloorPlans)` 在生产上是死通道，归缺陷而非「可删复杂度」 |
+| long-running-background-tasks | `~/.grok/bundled/skills/long-running-background-tasks/SKILL.md` | 已读；本次 mvn 约 6s 完成，未起 monitor |
+| writing-for-agents | mattpocock 同名 | 本 raw 给下游合取席读 |
+
+B5 不适用、按 controller 收窄不调用：brainstorming / writing-plans（A）、test-driven-development / tdd / ponytail 修复强度（B3）、requesting-code-review（B4）、receiving-code-review（甲席收乙席）、resolving-merge-conflicts、using-git-worktrees、executing-plans、dispatching-parallel-agents、subagent-driven-development、research、domain-modeling。
+
+缺口（不冒称调用）：
+
+- `batch-grill-me`：mattpocock 技能树无独立技能（有 grilling / grill-me）
+- `ubiquitous-language`：未找到
+- Arc `audit` / Trail of Bits `audit-context-building`：会派子代理，**不调用**
+
+---
+
+## 1. 锁、范围与源指纹
+
+本席哈希命令：`sha256sum /home/james/complex-management/docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'`（独立实算）。`python3 hashlib` 与 `openssl dgst -sha256` 同值。独占锁行仅本段第一行。
+
+| 项 | 值 |
+|---|---|
+| 锁文件 | `docs/audit-2026-09/plan/criteria-lock.md` V0.11 |
+| 字节 / 行 | 889020 / 6850 |
+| sidecar `docs/audit-2026-09/plan/criteria-lock.sha256` | 全文一行同值（核后一致，非抄写来源） |
+| 映射行 `criteria-lock.md:6394` | 90 条、无重复、MISSING=[] EXTRA=[]；BEQR 22 / BSM 14 / GEN 18 / PGM 36 |
+| 计划 FILES | 23 条与 modules.md V0.04 FILES-BEGIN/END 逐字相同 |
+| 计划冻结有效内容行 | 1999；当前工作区 `wc -l` **2118**（以实算为准，不改计划凑数） |
+| 工作区 HEAD | `e456ba96c84185c8d39f18f548011daac48a6466`（`origin/main`=`84e3441fd0f2c4724621ff34be6d244e40f2ca7c`，主工作区另有未推提交/暂存，审计对象为工作区现状） |
+| questions | 无 `questions/M015*` |
+| 160 提示词 | `.scratch/module-recheck-20260908/160-audit-prompt.md` V0.17 |
+
+三 HTML 工作区 SHA（本席独立 `sha256sum`，只读未改）：
+
+| 文件 | SHA256 |
+|---|---|
+| `docs/business-enum-quick-reference-v0.1.html` | `4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66` |
+| `docs/business-system-map-for-operations-v0.1.html` | `eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66` |
+| `docs/platform-governance-map-for-operations-v0.1.html` | `a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1` |
+
+`plan/modules.md` SHA256 `8df1c96711ad31985b09f5aa0b83db889fb4d8d91a7d8e5fcb352336181b5ffa`；`plan/runbook.md` SHA256 `c4ef224d35c3708b72086621fa80251e1363bc97de0ccf90cd6606518ad6539f`。
+
+### 1.1 23 文件覆盖表（全文已读；SHA 为工作区 blob）
+
+| 行(wc -l) | SHA256 | 路径 |
+|---:|---|---|
+| 95 | `33e14ba8868dd24c5235ba55658e51a38c7ff52572d3cb59fd10c07849941bef` | `backend/src/main/java/com/complex/platform/floorplan/FloorPlanController.java` |
+| 21 | `9db3b6126ab0ca3e624e857684f68e680d7c99f9fe3e0ef6cf8a31080d373bce` | `.../FloorPlanRecord.java` |
+| 51 | `9c5e50bff229838722ac00cc9096a8a188b111731be90da291a25c1f43c986a7` | `.../FloorPlanRepository.java` |
+| 678 | `21e7ea67b986b73d827e20a5a24f55c96ad8340659e117bdb22e8714522a193c` | `.../FloorPlanService.java`（版本头 V0.03） |
+| 454 | `bb3fed48fb09410e7532c6930e7d3b2a3c83080490782cd2d04736b03cf502f3` | `.../JdbcFloorPlanRepository.java` |
+| 23 | `7bf4056cf8b920718b377272334b32f7d64c76f329078042f9e77bdedb065a33` | `.../FloorPlanImportCandidateRecord.java` |
+| 14 | `5b0011b08d106da9a797ecd6d9915d665460c8823c03c50140b68354a11ae8d5` | `.../FloorPlanImportDetailsResponse.java` |
+| 14 | `6cfdb0787b4f3b6a4b785106e9f89f26b366d5b25a0fe326f9c9f6032b6b4e92` | `.../FloorPlanImportErrorRecord.java` |
+| 35 | `3315458ff08fb345a499a6fba09a296a671e92a6b07a717f8634ce0faab1666b` | `.../FloorPlanImportParseResult.java` |
+| 303 | `9c8fb4eef4fbe0a4b3dfbe1aaa74392f756e6b290a3e7aebb7d05fc3596e2ccb` | `.../FloorPlanImportParser.java` |
+| 19 | `164d55ea7a81e8099c1ad8f44ef07bd3b3e474dfe7fb9f9d3f69893ac423a270` | `.../FloorPlanImportTaskRecord.java` |
+| 7 | `cc32d4e81cc6e58813c676f5ebfeeff86e2e48d4ea360ad2183843ffd661b6f5` | `.../FloorPlanPoint.java` |
+| 22 | `4cfece0c8c5a9f13f2171b0d667eb29c109fe6cc3c9bfdf58590a575607e168f` | `.../FloorPlanShapeRecord.java` |
+| 16 | `0bc12e7e268a7d8904645c560027f48262a330412cada0f44b0d7da47bef8625` | `.../dto/FloorPlanCreateRequest.java` |
+| 10 | `7ecd9fca8fab9864815285d809a18375c6532c5036990599d11b12f3a99598a8` | `.../dto/FloorPlanImportCreateRequest.java` |
+| 13 | `ae890f5f0877b2b3d120d626434b63a0158cffa87f75afa6fb503ef8f2359859` | `.../dto/FloorPlanImportPublishRequest.java` |
+| 18 | `b890d08f0bfb9e5e1675dc4d2f84a5b21e5f59427b39d59053653e545e07e20d` | `.../dto/FloorPlanShapeSaveRequest.java` |
+| 25 | `3d18793172d90f57cd5296ae76f2d15983a61a60a5ff93b24dd8bd1697284487` | `.../governance/ProjectRecord.java`（工作区相对 HEAD 已暂存 M009 字段，见观察） |
+| 22 | `f13f27eaf2dbdb754f18d4f841f1ebfd515d973e5863624583deab8adac7eac1` | `.../governance/SpaceRecord.java` |
+| 15 | `388191c191993bac3ae452374d001a2236f5245a41257b6b9e2c6e7f649b7bd1` | `.../governance/SpaceTypeRecord.java` |
+| 29 | `ec04b55b8b3c747b9623450bd7460e00b6a585b2d2d0f8485f80cfc59def6957` | `.../governance/VenueBusinessHoursRecord.java` |
+| 119 | `f4557789c8eaa6cd0f5a8be883c2a32568264324fb2191848df33623ec02a6ba` | `.../governance/VenueBusinessHoursRepository.java` |
+| 115 | `866fbe936d58375b88cb58cbd845c23c710f869c951e043a9d196c5512920f12` | `.../governance/VenueBusinessHoursService.java` |
+| **2118** | | **23 文件合计** |
+
+---
+
+## 2. 可执行证据（类型 2 / 4）
+
+命令（只从 `/etc/complex/complex.env` 逐行读取三个键，URL 库名 `/complex`→`/complex_test`；未 source 该文件；未连生产库 `complex`；未 DDL/写生产）：
+
+```
+mvn -o -q --file backend/pom.xml -Dtest=FloorPlanControllerTests,FloorPlanImportParserTests,FloorPlanJdbcIntegrationTests,FloorPlanServiceTests,VenueBusinessHoursServiceTests -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+- 进程环境仅保留 PATH/HOME/USER/JAVA 等必要项 + 三个 `COMPLEX_DATABASE_*`；`COMPLEX_DATABASE_URL=jdbc:postgresql://127.0.0.1:5432/complex_test`
+- 未导出 `SPRING_PROFILES_ACTIVE`（按派发）；Spring 回落到默认 profile `local`
+- Flyway：`Successfully validated 395 migrations`；`Current version of schema "public": 427`；`No migration necessary`
+- **MVN_EXIT=0**
+- surefire XML（`backend/target/surefire-reports/TEST-*.xml`，含 `@Nested`）：
+
+| XML | tests | failures | errors | skipped |
+|---|---:|---:|---:|---:|
+| FloorPlanControllerTests | 14 | 0 | 0 | 0 |
+| FloorPlanImportParserTests | 14 | 0 | 0 | 0 |
+| FloorPlanJdbcIntegrationTests | 7 | 0 | 0 | 0 |
+| FloorPlanServiceTests | 36 | 0 | 0 | 0 |
+| VenueBusinessHoursServiceTests | 12 | 0 | 0 | 0 |
+| **合计** | **83** | **0** | **0** | **0** |
+
+GEN-003：测试通过本身不替代行为证据。本席不以 83 绿宣称 003 的「平台管理员全量」已在生产路径成立——见 GR-M015-B5r1-01（测试桩把 `currentProjectScopeQuietly` 改写成返回 `Optional.empty()`，与 `AuthorizationService` 真实现相反）。
+
+派生主键长度（类型 4，python hashlib 复算，与 `FloorPlanService.derivedId` 同算法）：`fps_`/`fpi_` = 前缀+32 hex = **36**；候选/错误 `fpic_`/`fpie_` + 任务 id + `_1` = **43**；`fp_`+UUID = **39**；`vbh_`+32 hex = **36**。均 ≤ VARCHAR(64)。M015-001 现态成立。
+
+---
+
+## 3. 第一性原理三问（按文件组）
+
+### 3.1 FloorPlanController
+
+1. **为何必须存在**：删掉则无 `/api/v1/floor-plans` 入口，PGM-023「商场平面图网页导入…人工复核后发布」与 BSM-028「建立综合体项目、楼层、区域、点位」的后台写/读做不到。
+2. **声称是否执行**：8 个映射均 `requirePermission` + 写路径 `requireIdempotencyKey`。本席跑 `FloorPlanControllerTests` 14/14，日志可见无权限 `PERMISSION_DENIED`、缺幂等键 `VALIDATION_FAILED raw_message=idempotency_key is required`。
+3. **未核实前提**：权限码是否在种子里授给目标岗位——种子不在本模块，本席不发明授权矩阵；入口本身有服务端闸。
+
+### 3.2 FloorPlanService + DTOs + 记录类 + Parser + Jdbc 仓库
+
+1. **为何必须存在**：平面图 CRUD、多边形、导入解析/候选/发布、项目存在性与 scope 过滤是 PGM-022/023 与 BSM-028 的下位实现。
+2. **声称是否执行**：创建校验 `projectExists`、列表商户优先/项目其次、派生 id、发布上限 200、导入节点上限、中文校验句、SHAPE_TYPES 八值，均在源中；测试 36+14+7 绿覆盖其中主路径。生产幂等写由 `IdempotencyService.runAndComplete` 在注入 `PlatformTransactionManager` 时包事务（`IdempotencyService.java:167-172`）。
+3. **未核实前提（本轮被证伪）**：`listFloorPlans` / `checkProjectOwnership` / `validateCreateRequest` / `VenueBusinessHoursService.list|save` 把 `currentProjectScopeQuietly()` 当作「无项目则 empty、平台管理员全量」。真实现是 `Optional.of(requireProjectScope(actor))`，无 `organizationId` **抛** `PROJECT_SCOPE_REQUIRED`（`AuthorizationService.java:289-294, 504-507`）。`orElseGet(repository::findAllFloorPlans)` 与 `listAll()` 在生产不可达。见 GR-M015-B5r1-01。
+
+### 3.3 VenueBusinessHours*
+
+1. **为何必须存在**：服务注释与 BSM-001/场次划界：入场资格/当天无限权益靠营业时段；无配置入口则只能改库。
+2. **声称是否执行**：星期 0–6、HH:mm、开歇同刻拒绝、场地必须是 `spaces.id`、项目 scope 过滤；`VenueBusinessHoursServiceTests` XML 12/12 绿。Controller（非本模块）另有 `requirePlatformScope`。
+3. **未核实前提**：同 3.2，平台管理员无 org 时 `list()`/`save()` 在服务层抛 `PROJECT_SCOPE_REQUIRED`，与测试桩 `Optional.ofNullable(null)` 不符。
+
+### 3.4 ProjectRecord / SpaceRecord / SpaceTypeRecord
+
+1. **为何必须存在**：综合体项目、空间、空间类型是平面图 `project_id` 与营业时段 `venue_id=spaces.id` 的归属载体（PGM-005/017/022，BSM-028）。
+2. **声称是否执行**：本模块内仅为记录类型，无行为；`floorplan` 包零引用 `ProjectRecord` 字段。
+3. **未核实前提**：工作区 `ProjectRecord` 相对 HEAD 暂存增加 `ownerPerson`/`address`/`businessScope` 及兼容构造（`git diff --cached`），属 **M009 在途**，本模块只登记跨模块观察，不入本模块队列。
+
+---
+
+## 4. 顺从式：90 项逐条（定义来自锁，不新增判据）
+
+适用口径：本模块文件对锚点有实现面则核一致性；无实现面则核无冲突/无发明。映射不等于要求本模块实现沽清、合同审批或管理费。
+
+### 4.1 BEQR（22）
+
+| ID | 适用 | 证据（类型 1=锁内 HTML 原文） | 结论 |
+|---|---|---|---|
+| BEQR-063 高危动作 | 本模块无反结/沽清/免单实现面；发布二次确认已定稿 M015-011（否/XM） | 锁 L786；PGM-023 L472 发布高危走 011 | 无新冲突 |
+| BEQR-074 隐私桌台 | 无桌台权限实现 | 锁 L907 | 无本面、无发明 |
+| BEQR-143 四类主体 | ProjectRecord/SpaceRecord 不发明四类主体枚举 | 锁 L1666 | 无发明 |
+| BEQR-144 经营主体关系 | 无行政隶属链硬编码 | 锁 L1677 | 无冲突 |
+| BEQR-145 城市项目公司 | 无把项目公司写成管酒吧 | 锁 L1688 | 无冲突 |
+| BEQR-146 运营公司职责 | 无本面 | 锁 L1699 | 无本面 |
+| BEQR-147 主要收入归属 | 无票款/租金记账 | 锁 L1710 | 无本面 |
+| BEQR-148 合作模式 | 无合作模式枚举发明 | 锁 L1721 | 无本面 |
+| BEQR-149 职级 | 无职级 | 锁 L1732 | 无本面 |
+| BEQR-150 终端十一端 | 本模块为 Web API 后台，不发明终端清单 | 锁 L1743 | 无本面 |
+| BEQR-151 最终权限计算 | 入口 `requirePermission`；计算在 access 模块 | 锁 L1754 | 无冲突 |
+| BEQR-152 项目与敏感数据权限 | **适用核心**。列表/读写按商户或项目过滤；**平台之上跨项目汇总通道在生产不可达** | 锁 L1765；`FloorPlanService:72-79,601-610`；`VenueBusinessHoursService:42-69`；见 01 | **本项支撑 FAIL** |
+| BEQR-153 终端开关 | 无开关实现 | 锁 L1776 | 无本面 |
+| BEQR-154 综合体项目状态 | 不发明项目状态机；`projectExists` 只查存在 | 锁 L1787；`JdbcFloorPlanRepository:65-69` | 无发明 |
+| BEQR-155 商户状态 | 无本面 | 锁 L1798 | 无本面 |
+| BEQR-156 合同状态 | 无本面 | 锁 L1809 | 无本面 |
+| BEQR-157 员工状态 | 无本面 | 锁 L1820 | 无本面 |
+| BEQR-158 设备状态 | 无本面 | 锁 L1831 | 无本面 |
+| BEQR-159 权限状态 | 无本面 | 锁 L1842 | 无本面 |
+| BEQR-166 合同审批链 | 无合同审批 | 锁 L1919 | 无本面 |
+| BEQR-170 铺位租赁状态 | 平面图 shape 不是租赁六态；六态在 contract 仓（014 观察） | 锁 L1963；SHAPE_TYPES 八值无租赁态 | 无冲突 |
+| BEQR-189 管理费方式 | 无本面 | 锁 L2172 | 无本面 |
+
+### 4.2 BSM（14）
+
+| ID | 适用 | 证据 | 结论 |
+|---|---|---|---|
+| BSM-001 整体说明/可配原则 | 营业时段「保存即生效」与「涉及钱的配置须草案化」之张力已定稿 M015-010（否/XM），不升格 | 锁 L2271 含「不即改即生效」；`VenueBusinessHoursService:24-26` | 维持 010 |
+| BSM-003 通用能力 | 引导/分岗在前端与权限模块；本模块提供后端闸 | 锁 L2349 | 无冲突 |
+| BSM-004 配置可存档删除 | 营业时段停用=is_draft 复用，不物理删（010 语义） | 锁；`VenueBusinessHoursRecord:15-16` | 随 010 |
+| BSM-005 分步引导新建 | 后端无引导 UI；不发明步骤 | 锁 | 无本面 |
+| BSM-006 动态二维码 | 无本面 | 锁 L2395 | 无本面 |
+| BSM-007 平台管理员日常权限 | **适用**。平面图查看属日常后台能力；无 org 的平台管理员会被项目 scope 抛点挡住 | 锁 L2407；与 01 同根 | **本项支撑 FAIL** |
+| BSM-009 基础管理 | 空间/项目/平面图属基础管理盘子 | 锁 L2439 | 有上位 |
+| BSM-028 主要功能 | 建立楼层/区域/点位；导入发布为下位 | 锁 L2730 HTML「建立综合体项目、楼层、区域、点位」 | 有上位；发布状态机见 02 |
+| BSM-029 和谁有关 | 连接基础管理 | 锁 | 无冲突 |
+| BSM-072 商户完整使用自己的系统 | 商户 scope 列表 `findAllFloorPlansByMerchant`；不能看他商户 | `FloorPlanService:75-76,612-617` | 商户面成立 |
+| BSM-074 和谁有关 | 商户不能看平台全局和其他商户 | 同上 | 无冲突 |
+| BSM-114 各类入口 | API 按权限码分 view/manage/import | Controller:33-93 | 无冲突 |
+| BSM-115 相互关系 | 平面图连空间/项目 | create 校验 projectExists | 无冲突 |
+| BSM-120 已确认规则 | 「未来集团视图、做好项目归属」 | 锁 L4909；project_id 必填（002） | 项目归属成立；跨项目汇总见 01 |
+
+### 4.3 GEN（18）
+
+| ID | 适用 | 证据 | 结论 |
+|---|---|---|---|
+| GEN-001 | 23 文件均有可验证用途；`findAllFloorPlansByProject` 默认空实现是隔离闸锚点 | 仓库接口注释 L10-16 | 不删 |
+| GEN-002 | 主路径测试绿；**管理员全量路径生产不可执行** | mvn 83 绿 vs AuthorizationService 抛点 | **01 缺陷** |
+| GEN-003 | 测试桩伪造 quietly 永不抛 | `FloorPlanServiceTests:445-461` 注释写「生产语义…永不抛」；真代码抛 | **01 缺陷** |
+| GEN-004 | 创建/导入/发布/营业时段均有校验 | Service validate* | 成立（除 01） |
+| GEN-005 | 入口权限 + 对象归属；管理员被误伤、跨项目汇总做不到 | Controller + Service check* | **01 缺陷** |
+| GEN-006 | 派生 id 分平面图域；生产导入写在幂等事务内 | derivedId L653-655；IdempotencyService L167-172 | 001 成立 |
+| GEN-007 | 幂等键 + 事务；发布非幂等重入靠任务状态 | publish 仅 `parsed` 可发 | 发布一次终态；子集后剩余见 02 |
+| GEN-008 | 八值白名单与 V423/M016 同批；DTO 无分页参数与诚实 PageResponse 一致 | SHAPE_TYPES L35；PageResponse L79/95/141 | 成立 |
+| GEN-009 | 部分发布把任务标 published、其余候选仍 pending | `publishImportTaskOnce:365-445` | **02 缺陷** |
+| GEN-010 | 无注入/路径穿越；JSON 坏数据走 500 | Jdbc L430-444 | 成立 |
+| GEN-011 | 写路径 auditEventService.recordSuccess/Failure | Service 多处 | 成立 |
+| GEN-012 | 导入 2000 节点/1000 顶点；发布 200 | L44-47,565-590 | 成立 |
+| GEN-013 | 本模块无独立构建入口 | — | 无本面 |
+| GEN-014 | 无迁移文件（M016） | — | 无本面 |
+| GEN-015 | 004–006 中文句仍在；`Strings.requireText` 英键经 FieldLabels 出网 | Parser 中文；Service FIELD_LABELS | 成立 |
+| GEN-016 | 本模块无文档完成声明 | — | 无本面 |
+| GEN-017 | 本轮分类见 §6 | — | 已走四分类 |
+| GEN-018 | 本报告证据为 HTML/命令/源行 | — | 本席遵守 |
+
+### 4.4 PGM（36）
+
+| ID | 适用 | 证据 | 结论 |
+|---|---|---|---|
+| PGM-001 治理层底座 | 空间/项目/时段属底座 | 锁 | 有上位 |
+| PGM-002 治理顺序 | 无本面流程引擎 | 锁 | 无本面 |
+| PGM-003 模块入口 | 无导航 | 锁 | 无本面 |
+| PGM-004 综合体和集团 | project_id 归属 | 002 已修 | 成立 |
+| PGM-005 空间和点位 | SpaceRecord 载体；补列 012 否 | 锁；SpaceRecord 无用途/负责人 | 维持 012 |
+| PGM-006–016 | 商户/合同/员工/权限/终端/设备/商户侧/开放接口/留痕/楼宇/应急 | 本模块无对应实现或仅记录类 | 无本面/无发明 |
+| PGM-017 综合体和集团 | 创建须已存在项目 | `validateCreateRequest:507-518` | 002 成立 |
+| PGM-018–021 | 多对多/职责/主要功能/业务意义 | 无发明隶属链 | 无冲突 |
+| PGM-022 空间和点位 | 上位；导入在 023 | 锁 L 空间节 | 有上位 |
+| PGM-023 主要功能 | HTML：解析候选（铺位、摊位、公共区）→ 人工复核 → 发布；二次确认；不可静默覆盖 | 现行 HTML L472；八值含 shop/booth/public_area；发布追加新 shape 不改旧行；确认字段 011 否/XM | **发布子集状态机 02**；011 不升格 |
+| PGM-026–027 | 他节主要功能/边界 | 无本面 | 无本面 |
+| PGM-031 / 035 | 经销/提成 | 无本面 | 无本面 |
+| PGM-040 单一功能授权 | 独立 permission 码 | Controller | 成立 |
+| PGM-041 权限规则 | 「所有业务数据默认按项目隔离…只有项目之上的获授权岗位才可以跨项目汇总」 | 锁 L5796-5800；01 使「之上岗位汇总」在本模块不可达 | **本项支撑 FAIL** |
+| PGM-042–044 / 048 / 060 | 职级/外包/桌台/商户侧/会员 | 无本面 | 无本面 |
+| PGM-065 连接关系 | 平面图连空间 | 有 | 无冲突 |
+| PGM-066 已拍板 | 不发明待排期项为已实现 | — | 无假完成 |
+
+90/90 均有适用记录。顺从线本身在 01/02 上失败，故整席 FAIL。
+
+---
+
+## 5. 对抗式（grilling 结构，自问自答，不等操作员）
+
+❓ 越权：项目员工能否读他项平面图？  
+➡️ `ensureFloorPlanExists`→`checkProjectOwnership`：scope 存在且不等则 `CROSS_PROJECT_FORBIDDEN`（L601-609）。商户走 `checkMerchantOwnership`。**平台管理员无 org：quietly 抛 `PROJECT_SCOPE_REQUIRED`，连本项也读不到**（01）。
+
+❓ 幂等：跨图同客户端键会不会改挂图形？  
+➡️ `derivedId("fps_", floorPlanId + "_" + key)` 恒 36 字符（L268-269,653-655）。001 现态成立。
+
+❓ 项目 scope：无商户有项目的员工？  
+➡️ `currentMerchantIdQuietly` 空后走项目过滤（L75-79,512-518）。项目员工桩与生产：quietly 返回 of(projectId) 当 actor 有 organizationId。此支成立。
+
+❓ 派生主键长度？  
+➡️ 见 §2，36/43/39 ≤ 64。
+
+❓ 发布上限？  
+➡️ `candidateIds.size() > 200` → 中文 VALIDATION_FAILED（L588-589）。008 现态成立。
+
+❓ 营业时段场地校验？  
+➡️ 非 `spaces.id` → `VENUE_NOT_FOUND`；他项 → `CROSS_PROJECT_FORBIDDEN`（L63-68）。009 现态成立。无 org 管理员仍被 quietly 抛点挡住（01）。
+
+❓ 错误文案中文？  
+➡️ Parser 13 处中文；本模块 `FIELD_LABELS`+`requireField("平面图名称")`；`Strings.requireText` 英键经 FieldLabels。004–006 现态成立。
+
+❓ 人工复核只发布部分候选？  
+➡️ 第一次按 PGM-023「复核后发布」只勾选部分 `candidate_ids`：任务变 `published`，未选仍 `pending`，再次发布被「只有解析完成的导入任务才能发布」拒绝（02）。
+
+❓ 解析器不校验闭集、非法 shape_type？  
+➡️ 生产 `IdempotencyService` 事务包裹 `createImportTaskOnce`，非法类型 `normalizeAllowed` 抛错后回滚。013 原文「事务回滚，无半写」在生产仍成立。不新立项。
+
+---
+
+## 6. 已定稿 M015-001…014 复验（不重复立项）
+
+| ID | 队列 | 本轮现态 |
+|---|---|---|
+| 001 派生主键超 64 | 否（已修） | derivedId 36 字符；候选 43。成立 |
+| 002 project_id 必填且存在 | 否（已修） | `requireText`+`projectExists`→`PROJECT_NOT_FOUND`。成立 |
+| 003 项目 scope | 否（已修） | **项目员工支成立；「平台管理员全量」生产未落地** → 新缺陷 01，不重开 003 号 |
+| 004 Parser 中文 | 否（已修） | 源中文仍在。成立 |
+| 005 本模块中文整句 | 否（已修） | FIELD_LABELS / 平面图名称 / 候选项列表。成立 |
+| 006 去掉夹带英文键 | 否（已修） | 所列句子已纯中文。成立 |
+| 007 诚实不分页 | 否（已修） | 三处 `pageSize=max(size,1), total=size`。成立 |
+| 008 发布 ≤200 | 否（已修） | L588-589。成立 |
+| 009 场地存在+项目过滤 | 否（已修） | findVenueProjectId + listByProject。成立 |
+| 010 保存即生效 vs 草案化 | 否/XM | 实现仍保存即生效。不升格 |
+| 011 发布无服务端确认字段 | 否/XM | DTO 仍无确认字段。不升格 |
+| 012 spaces 用途/负责人 | 否/全局遗漏 | SpaceRecord 仍无此二列。不升格 |
+| 013 摊位/公共区 | 否/XM→M016 | SHAPE_TYPES 八值含 booth/public_area。不升格 |
+| 014 观察 | 否 | 营业时段不走 IdempotencyService、靠 UNIQUE(venue_id,day_of_week)；saveFloorPlan 不更新 merchant_id。不升格 |
+
+---
+
+## 7. 本轮问题（收齐后统一判定）
+
+### GR-M015-B5r1-01 — 平台管理员全量通道是死代码；测试桩伪造 `currentProjectScopeQuietly`
+
+- **文件:行 / 原句**
+  - `FloorPlanService.java:72-79`：`merchantScope.isPresent() ? findAllFloorPlansByMerchant : currentProjectScopeQuietly().map(findAllFloorPlansByProject).orElseGet(findAllFloorPlans)`
+  - `FloorPlanService.java:512-518`、`601-610`：创建与 `checkProjectOwnership` 同样调用 quietly
+  - `VenueBusinessHoursService.java:42-47,65-68`：列表/保存同样调用
+  - `AuthorizationService.java:289-294`：`requireProjectScope` — 「projectId == null \|\| isBlank → 抛 PROJECT_SCOPE_REQUIRED」
+  - `AuthorizationService.java:504-507`：`currentProjectScopeQuietly` **原句** `return Optional.of(requireProjectScope(actor));`（名称「Quietly」与实现相反，且**不**对 `isPlatformAdminBridge` 放行）
+  - `FloorPlanServiceTests.java:445-461`：注释「平台管理员桥（生产语义：…项目 scope 皆空、永不抛）」+ 桩返回 `Optional.empty()`
+  - `VenueBusinessHoursServiceTests.java:89-94`：`Optional.ofNullable(projectScope)` 使 null 变 empty
+- **正常触发（第一次就会撞）**：`accountType=platform_admin` 且 `organizationId` 空（`AccessRepository` 注释「Null organizationId = platform admin」）的主体，已通过 `floor_plan.view` / `governance.space.view` 后调用 `listFloorPlans` 或 `VenueBusinessHoursService.list` → 生产抛 `PROJECT_SCOPE_REQUIRED`，永远走不到 `findAllFloorPlans`/`listAll`。BSM-007「平台管理员拥有全部日常功能权限」、BEQR-152/PGM-041「只有项目之上的获授权岗位可以跨项目汇总」、B2-r2 非阻断「不把无组织全局员从现网全量改成 403」均被现实现违反。
+- **四分类**：冲突？否（HTML 要求之上岗位可汇总，实现不是「多给了规则」而是没做到）。细化？**是**（BEQR-152 / PGM-041 / BSM-007 的下位实现错误）。不到技术性/添加。
+- **已有判据**：BEQR-152、PGM-041、BSM-007、GEN-002、GEN-003、GEN-005。不新造判据。
+- **证据类型**：1（HTML/锁原文）+ 4（源行并列；本席未跑 M006 测试类，`M006SecurityRegressionTests:146-150` 只作只读旁证：缺组织时 quietly 抛，不计入本模块 surefire）。
+- **工程缺陷**：是。不复用 M015-003 号（003 已否=已修项目员工支；本条是 003 声明的「平台管理员全量」未在真 AuthorizationService 契约下落地）。
+- **修复队列**：无 ID 且 003 已不在队列 → 回退须整批先 B2。
+
+### GR-M015-B5r1-02 — 部分发布后任务直接 published，剩余 pending 无法再发
+
+- **文件:行 / 原句**
+  - `FloorPlanService.java:365-367`：`if (!"parsed".equals(task.status())) throw … "只有解析完成的导入任务才能发布"`
+  - `FloorPlanService.java:369-389`：按请求 `candidateIds` 子集取 pending 候选
+  - `FloorPlanService.java:422-435`：整任务 `status` 写成 `"published"`，**不**把未选候选改为 rejected，也**不**把任务留在 parsed
+- **正常触发**：PGM-023「由人工复核候选与错误后发布」——操作员去掉错误候选、只提交部分 id（DTO 正是 `List<String> candidateIds`）。第一次成功后任务已 published；剩余 pending 再发布即 400。HTML 要求的复核子集发布在第二次无法完成。
+- **四分类**：冲突？否（HTML 未写「一次必须发完全部」）。细化？**是**（PGM-023 发布写入正式区域的下位状态机）。不到技术性/添加。
+- **已有判据**：PGM-023、GEN-009。
+- **证据类型**：1 + 4（源行；指定 mvn 未覆盖该负例，故不以测试绿否定）。
+- **工程缺陷**：是。无已定稿 ID。
+
+### 观察（不入缺陷、不升 014）
+
+- `ProjectRecord` 暂存 M009 字段 `ownerPerson`/`address`/`businessScope`：floorplan 包零引用；属 M009，不入本模块队列。
+- `PlatformController` `PageResponse.of(list(),1,500)` 截断营业时段列表：控制器不在 M015 FILES。
+- `operatorNote` 发布请求不落库：014 已观察。
+- `saveFloorPlan` ON CONFLICT 不更新 `merchant_id`：014 已观察。
+- 商户账号创建时跳过 project_id==scope（L512 `if merchant empty`）：商户是否持 `floor_plan.manage` 未在本模块证明，不为假设授权加需求。
+
+无添加项。三 HTML 本身未审出须铁律 4 上报的损坏。
+
+---
+
+## 8. 三线收口
+
+| 线 | 执行 | 结果 |
+|---|---|---|
+| 第一性原理 | 23 文件三问 + 90 定义全文（锁）+ 三 HTML 相关锚（BEQR-152、BSM-007/028、PGM-022/023/041、平面图 L472） | 01 证伪「quietly=empty=全量」 |
+| 顺从式 | 90/90 有适用记录 | 01/02 未满足已映射判据 |
+| 对抗式 | grilling 七问 + 部分发布 + 非法类型事务 | 01/02 |
+
+---
+
+## 9. 本席 B5 再执行结论
+
+**FAIL**。
+
+23 文件全覆盖；90 判据逐项核对；三线均执行；声称有四类证据。无未答 questions。无 HTML 修改申请。无锁外判据。哈希行有效。
+
+未定稿工程缺陷 2 条（GR-M015-B5r1-01、GR-M015-B5r1-02），均无「有 ID 且仍在修复队列」可沿用，按 V0.17 回退统一规则整批先回 B2，禁止直接 B3。001–009 已修点不回潮为新 ID。010–014 维持否。本票具否决权，不等于双席合取完成。
