@@ -1,7 +1,21 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V4.54
+版本：V4.57
+
+## 当前M017 席甲补充复查PASS
+2026-09-20T04:01:43Z。按操作员「从M009重新独立审计，有问题按V0.17完整双席流程」续作。当前 5 测试文件 2057 行全文重读、90 判据三线核对（GEN-003 为核心），无新缺陷/添加项/HTML 问题；五文件 SHA256 与 2026-09-11 B5-r1 覆盖表逐一相等（对 HEAD/origin/main diff 为空）。被测实现：`FloorPlanService` V0.03 已在 B5-r1 审本内，其余 6 个实现文件对 HEAD 无 diff；今日 M015 补充复查已全读 23 个实现文件。探针与 B5-r1 §2 同口径（解析器错误码 10/10 有负例、审计事件 8 个有断言、8 端点 403 + 缺幂等键 400、诚实分页桩、真实 projectExists/@Nested 真实 spaces、candidates 八值 CHECK 正/负例）。5 类测试主工作区实跑（complex_test Flyway 427、只导出三个 DB 变量、SPRING_PROFILES_ACTIVE 未导出）：83 例零失败/错误/跳过（XML 口径），MVN_EXIT=0。
+生命周期保留 PASS，B3 累计 1，本次 0；Grok NOT-CALLED，无命令/退出码/新票；历史 Claude/Grok B5-r1 双 PASS 保留，不写成新双 PASS。结论 modules/M017-b5-r1-self-raw.md V0.02（本条写后落盘，字节/SHA 记入收口文件），旧 15875byte 前缀完整（SHA256 2b41ee248de935779ee3bb55406c05f2e025fb063ee29183406b86afd6ddd361）；收口文件随后 V0.02。10 项历史队列全否不改；无 HTML 申请、未答问题或 BLOCKED。锁实算/sidecar/ledger 三值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；旧 Grok 锁同值不冒称本次调用；LOCK-AMEND-COUNT 1。源码/测试/三 HTML 未改，未发布/未提交。下一模块 M018（PENDING，历史未审）按正常 B1 双席开工。
+
+
+## 当前 M014 检查点已合并（PR #454）
+2026-09-20T03:56:14Z。M014 B5-r4 双 PASS 收口（ledger V4.54）后执行检查点：主工作区仍含接手前遗留的已暂存未提交文件（M009 代码/V427 迁移/工具文件）、未推送本地提交（M040–M046，对应 OPEN PR #449–#452）与 OPEN PR #439–#448，故沿 M013 先例在基于 origin/main（246385d9）的独立 worktree /home/james/wt-m014 分支 audit/20260919/m014-checkpoint 上进行，只带 docs/platform-governance-product-spec-v0.2.md 终态 V0.09 + ledger V4.54 / findings V2.49 + M014 全部 raw 与收口文件 V0.02 + M015 补充复查两文件（self raw V0.02、收口文件 V0.02），提交 ace2411a（20 文件，仅文档）；ops/160/propose-change.sh 本地 verify:predeploy 15 步全绿后推分支开 PR #454；ops/160/merge-pr.sh --merge 等 predeploy-gates run 35487527443 success 后合并，origin/main 现为 ba8f5775。主工作区未动（其 ledger 已续到 V4.55）；遗留的暂存文件/未推提交/OPEN PR 仍待操作员指令，不并入本检查点。worktree 与分支随后清理。
+
+
+## 当前M016 席甲补充复查PASS
+2026-09-20T03:56:12Z。按操作员「从M009重新独立审计，有问题按V0.17完整双席流程」续作。当前 4 冻结迁移 + V423 全文重读、18 判据三线核对，无新缺陷/添加项/HTML 问题；五文件 SHA256 与 2026-09-11 B5-r1 覆盖表逐一相等（对 HEAD/origin/main diff 为空，已应用迁移零改写）。同表后续迁移只读追流：M018 闭环 V424/V425/V426（字典 status 闭集由 V423 两值扩为 active/disabled/archived/pending_delete 四值、历史 disabled→archived）与 M009 在途 V427（暂存未提交）；complex_test 已应用到 V427，活库约束实查：mall_floor_plans project_id NOT VALID 非空、两表 shape_type 八值、字典 status 四值、spaces 二值；字典八行 active。V425 取代 V423 两值 CHECK 属 M018 授权变更，非 M016 缺陷；V184/V423 中「active/disabled」注释陈旧登记为观察（XM→M018 已闭环）。6 类测试主工作区实跑（complex_test、只导出三个 DB 变量、SPRING_PROFILES_ACTIVE 未导出）：106 例零失败/错误/跳过（XML 口径），CLEAN_EXIT=0、MVN_EXIT=0；门禁 verify:data-isolation-spec exit=1、verify:domain-ownership-scope exit=1（主工作区含 M009 暂存产物，如实记）。
+生命周期保留 PASS，B3 累计 1，本次 0；Grok NOT-CALLED，无命令/退出码/新票；历史 Claude/Grok B5-r1 双 PASS 保留，不写成新双 PASS。结论 modules/M016-b5-r1-self-raw.md V0.02（本条写后落盘，字节/SHA 记入收口文件），旧 16411byte 前缀完整（SHA256 6ef6ad5d81260d5c083b1b5cc7f7b69670b6f9529d7a568af16df6a435cb34d7）；收口文件随后 V0.02。4 项历史队列全否不改；无 HTML 申请、未答问题或 BLOCKED。锁实算/sidecar/ledger 三值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；旧 Grok 锁同值不冒称本次调用；LOCK-AMEND-COUNT 1。源码/迁移/测试/三 HTML 未改，未发布/未提交。下一模块 M017 预检。
+
 
 ## 当前 M014 获批B5-r4双PASS，正式收口
 2026-09-20T03:47:35Z。席甲 self modules/M014-b5-r4-self-raw.md V0.01/14208bytes/SHA256 bbf1995a0f365e47502ee330d68ee721f832978a1d3398035cf8057db4d45bee（PASS，封存于 Grok 落盘前）；Grok modules/M014-b5-r4-grok-raw.md V0.01/38834bytes/SHA256 305e00b7cb4daa343e8d76e9709ae202be21a3c1fbf66d82598bbbe84c50fa4b（PASS），适配器实际 EXIT_CODE=0。B5 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。
@@ -1982,10 +1996,10 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M011 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台验证／第1段` | PASS | 1 | 2 | [历史双PASS+Codex本次复查PASS](modules/M011-governance-topology-backend-verification-01.md) | 0 | 2026-09-14 Codex三文件2632行/87项复查PASS，106已执行全过；Grok NOT-CALLED；历史B5-r1双PASS；四值全等；7项队列全否（5已修/2登记）；B3累计1；无添加项；席甲=Claude Fable 5.1 |
 | M012 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段` | PASS | 4 | 2 | [B5-r4双PASS](modules/M012-governance-topology-web-01.md) | 0 | 2026-09-14 B5-r4双PASS；6文件2085行/21判据；17队列全否；累计4；HTML未改；未发布 |
 | M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | PASS | 5 | 2 | B5-r5 双PASS：self 2f34738470eccc0f… / Grok 366f6d3459faa054… | 1 | 2026-09-19 收口：B3累计5（3次额度+两次获批追加）；001–024全否（21已修、009/010/017登记）；B5-r3 Grok交付失败重派1次；席甲自2026-09-19由Claude接任；收口文件V0.02；检查点 PR #453 已合并（origin/main 246385d9） |
-| M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PASS | 4 | 2 | B5-r4 双PASS：self bbf1995a0f365e47… / Grok 305e00b7cb4daa34… | 0 | 2026-09-19 重开后收口：B3累计4（r2 021–023、r3 024、获批r4 025）；001–025全否（23已修、019/020登记）；席甲=Claude；收口文件V0.02 |
+| M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PASS | 4 | 2 | B5-r4 双PASS：self bbf1995a0f365e47… / Grok 305e00b7cb4daa34… | 0 | 2026-09-19 重开后收口：B3累计4（r2 021–023、r3 024、获批r4 025）；001–025全否（23已修、019/020登记）；席甲=Claude；收口文件V0.02；检查点 PR #454 已合并（origin/main ba8f5775） |
 | M015 `空间点位、楼层平面图与营业时段／后台实现／第1段` | PASS | 2 | 2 | [历史双PASS+席甲本次复查PASS](modules/M015-floorplan-business-hours-backend-seg1.md) | 0 | 2026-09-19 席甲补充复查23文件2118行/90项PASS，5类83例（XML）实跑零失败，Grok NOT-CALLED；历史B5-r1全23文件三线双PASS；四值全等；修复队列14 个 ID 全否（9 项已修；010/011 XM 同批、012 全局遗漏、013 XM→M016 已由V423落地/M018、014 观察）；B3累计2；席甲=Claude Fable 5.1 |
-| M016 `空间点位、楼层平面图与营业时段／数据库迁移／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M016-floor-plan-space-type-migrations-seg1.md) | 0 | B5-r1全4+1迁移三线双PASS；四值全等；修复队列4 个 ID 全否（3 项已修：001–003；004 观察）；B3累计1；席甲=Claude Fable 5.1 |
-| M017 `空间点位、楼层平面图与营业时段／后台验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M017-floorplan-business-hours-tests-seg1.md) | 0 | B5-r1全5文件三线双PASS；四值全等；修复队列10 个 ID 全否（8 项已修：001–008；009/010 观察）；B3累计1；席甲=Claude Fable 5.1 |
+| M016 `空间点位、楼层平面图与营业时段／数据库迁移／第1段` | PASS | 1 | 2 | [历史双PASS+席甲本次复查PASS](modules/M016-floor-plan-space-type-migrations-seg1.md) | 0 | 2026-09-20 席甲补充复查4冻结迁移+V423/18项PASS，6类106例（XML）实跑零失败，Grok NOT-CALLED；后续M018 V425/V426把字典status闭集扩为四值（登记，非M016缺陷）；历史B5-r1全4+1迁移三线双PASS；四值全等；修复队列4 个 ID 全否（3 项已修：001–003；004 观察）；B3累计1；席甲=Claude Fable 5.1 |
+| M017 `空间点位、楼层平面图与营业时段／后台验证／第1段` | PASS | 1 | 2 | [历史双PASS+席甲本次复查PASS](modules/M017-floorplan-business-hours-tests-seg1.md) | 0 | 2026-09-20 席甲补充复查5文件2057行/90项PASS，5类83例（XML）实跑零失败，Grok NOT-CALLED；历史B5-r1全5文件三线双PASS；四值全等；修复队列10 个 ID 全否（8 项已修：001–008；009/010 观察）；B3累计1；席甲=Claude Fable 5.1 |
 | M018 `空间点位、楼层平面图与营业时段／网页与验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M161、M167、M171；既有累计仅保留历史，不代表本版已审 |
 | M019 `空间点位、楼层平面图与营业时段／文档与接口定义／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M250、M270、M274；既有累计仅保留历史，不代表本版已审 |
 | M020 `商户档案、商户类型与商户侧门户／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M064；既有累计仅保留历史，不代表本版已审 |

@@ -1,4 +1,18 @@
 # M016 空间点位、楼层平面图与营业时段／数据库迁移／第1段
+版本：V0.02
+
+2026-09-20 席甲补充复查PASS；Grok NOT-CALLED。本次按操作员「从 M009 重新独立审计，有问题按 V0.17 完整双席流程」执行，无问题只记录，不是新双 PASS；历史 Claude Fable 5.1/Grok B5-r1 双 PASS 保留。B3 累计 1，本次修复 0。
+
+当前 4 冻结迁移 + V423 全文与 18 判据三线核对完成，五文件 SHA 与 B5-r1 逐一相等（零改写）。同表后续迁移 M018 V424–V426（字典 status 闭集扩为四值、历史 disabled→archived）与 M009 在途 V427 只读追流：V425 取代 V423 两值 CHECK 属 M018 授权变更，非本模块缺陷；V184/V423「active/disabled」注释陈旧登记为观察。活库约束实查 001/002 原样；6 类 106 例（XML 口径）主工作区 `complex_test`（Flyway 427）实跑零失败/错误/跳过。
+
+[本次完整报告](M016-b5-r1-self-raw.md) V0.02：50012 bytes，SHA256 c702e7e91420f405f5e913ee784610004f118810cf99fb60cb269d8c5df624be；旧 16411 byte 前缀完整保留。旧 Grok V0.01 SHA256 b5add5923387475c2fc89971bd69b347f70286eddc6379e896cb81d0ed9279cd 保持。历史 4 项全否（3 已修、004 观察）不改；没有新问题/人闸。
+
+锁实算/sidecar/ledger＝b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1；HEAD e456ba96。三 HTML/源码/迁移/测试/锁未改、未发布；先写 ledger V4.55 保留 PASS，后写本文件。
+
+---
+以下历史 V0.01 原文原样保留：
+
+# M016 空间点位、楼层平面图与营业时段／数据库迁移／第1段
 版本：V0.01
 
 状态：PASS。范围：plan/modules.md V0.04 的 4 文件（V023__p1_floor_plan_polygons.sql、V034__p2_floor_plan_import_tasks.sql、V184__space_type_dictionary.sql、V203__spaces_status_check.sql；计划冻结 164 行）；判据 18 项（GEN-001…018）。B3 整批修复累计 1 次。修复队列4 个 ID 全否（3 项已修：001–003；004 观察）；添加项 0；questions 0；无 HTML 修改申请。
