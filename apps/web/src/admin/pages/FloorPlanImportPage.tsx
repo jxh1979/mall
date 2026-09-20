@@ -14,9 +14,39 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 import type { AdminPageProps } from "../types";
 
 // 平面图导入域内枚举中文（全局状态表未含的形状/关联类型，页内映射；状态码走全局表兜底）。
-const SHAPE_TYPE_LABELS: Record<string, string> = { shop: "商铺", booth: "摊位", public_area: "公共区", corridor: "走道", facility: "设施" };
+const SHAPE_TYPE_LABELS: Record<string, string> = {
+  shop: "铺位",
+  booth: "摊位",
+  public_area: "公共区",
+  area: "区域",
+  entrance: "入口",
+  facility: "设施",
+  risk_zone: "风险区",
+  route: "路径",
+};
+const SOURCE_FORMAT_OPTIONS: { value: string; label: string }[] = [
+  { value: "svg", label: "矢量图" },
+  { value: "standard_json", label: "标准数据" },
+];
+const ERROR_FIELD_LABELS: Record<string, string> = {
+  geometry: "图形",
+  shape_type: "图形类型",
+  source_format: "导入格式",
+  project_id: "所属项目",
+};
+const ERROR_CODE_LABELS: Record<string, string> = {
+  INVALID_POLYGON: "多边形无效",
+  VALIDATION_FAILED: "校验未通过",
+};
+const zhOrDash = (map: Record<string, string>, code: string | null | undefined) =>
+  code ? map[code] ?? "未识别" : "-";
 const REF_TYPE_LABELS: Record<string, string> = { space: "空间", merchant: "商户", facility: "设施" };
-const fpLabel = (map: Record<string, string>, code: string | null | undefined) => (code ? map[code] ?? code : "-");
+const fpLabel = (map: Record<string, string>, code: string | null | undefined) => (code ? map[code] ?? "未识别" : "-");
+function floorPlanStatusLabel(status?: string) {
+  if (status === "published") return "已发布";
+  if (status === "draft") return "草稿";
+  return formatBusinessStatus(status);
+}
 
 // 后端 floorplan 域记录映射(接现有 /api/v1/floor-plans/* 契约)。
 type FloorPlan = { id: string; projectId?: string; buildingCode?: string; floorNo?: string; planName?: string; versionNo?: string; status?: string };
@@ -44,20 +74,31 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   const [imports, setImports] = React.useState<ImportTask[]>([]);
   const [selectedImportId, setSelectedImportId] = React.useState("");
   const [floorPlanImportDetails, setFloorPlanImportDetails] = React.useState<FloorPlanImportDetails | null>(null);
-  const [planForm, setPlanForm] = React.useState({ planName: "", buildingCode: "", floorNo: "" });
+  const [planForm, setPlanForm] = React.useState({ projectId: "", planName: "", buildingCode: "", floorNo: "" });
+  const [projects, setProjects] = React.useState<{ id: string; name?: string }[]>([]);
+  const planKeyRef = React.useRef("");
+  const importKeyRef = React.useRef("");
+  const publishKeyRef = React.useRef("");
   // 引导式「新增平面图」弹窗状态（范式：字段留页面持有，弹窗只编排）。
   const [planOpen, setPlanOpen] = React.useState(false);
   const [planError, setPlanError] = React.useState("");
   const [planSaving, setPlanSaving] = React.useState(false);
-  const [importForm, setImportForm] = React.useState({ sourceFormat: "geojson", sourceName: "", sourcePayload: "" });
-  const [publishCandidateIds, setPublishCandidateIds] = React.useState("");
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importError, setImportError] = React.useState("");
+  const [importSaving, setImportSaving] = React.useState(false);
+  const [importForm, setImportForm] = React.useState({ sourceFormat: "svg", sourceName: "", sourcePayload: "" });
+  const [publishCandidateIds, setPublishCandidateIds] = React.useState<string[]>([]);
   // 行明细抽屉：候选/错误明细数据行整行可点 → 完整字段（枚举中文·序号/行号原样）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const list = await api.get<{ items?: FloorPlan[] } | FloorPlan[]>("/api/v1/floor-plans");
+      const [list, projectList] = await Promise.all([
+        api.get<{ items?: FloorPlan[] } | FloorPlan[]>("/api/v1/floor-plans"),
+        api.get<{ items?: { id: string; name?: string }[] } | { id: string; name?: string }[]>("/api/v1/platform/projects"),
+      ]);
       setFloorPlans(Array.isArray(list) ? list : (list?.items ?? []));
+      setProjects(Array.isArray(projectList) ? projectList : (projectList?.items ?? []));
     },
     { onError: setGlobalError, fallbackMessage: "平面图读取失败", onStart: () => setGlobalError(null) },
   );
@@ -66,24 +107,30 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setSelectedPlanId(floorPlanId);
     setSelectedImportId("");
     setFloorPlanImportDetails(null);
+    importKeyRef.current = "";
+    publishKeyRef.current = "";
     const res = await api.get<{ items?: ImportTask[] } | ImportTask[]>(`/api/v1/floor-plans/${floorPlanId}/imports`);
     setImports(Array.isArray(res) ? res : (res?.items ?? []));
   };
 
   const loadCandidates = async (floorPlanId: string, importId: string) => {
     setSelectedImportId(importId);
+    publishKeyRef.current = "";
+    setPublishCandidateIds([]);
     const details = await api.get<FloorPlanImportDetails>(`/api/v1/floor-plans/${floorPlanId}/imports/${importId}/candidates`);
     setFloorPlanImportDetails(details);
   };
 
   // 提交在确认步触发；校验失败/接口失败弹窗留开显错，成功才关。原接口/请求体保留（双保险再校验一次名称）。
   const createPlan = async () => {
+    if (!planForm.projectId.trim()) { setPlanError("请选择所属项目"); return; }
     if (!planForm.planName.trim()) { setPlanError("请填写平面图名称"); return; }
     setPlanSaving(true);
     setPlanError("");
     try {
+      if (!planKeyRef.current) planKeyRef.current = `fp-${Math.random().toString(36).slice(2)}`;
       await api.post("/api/v1/floor-plans", {
-        idempotency_key: `fp-${Date.now()}`, plan_name: planForm.planName,
+        idempotency_key: planKeyRef.current, plan_name: planForm.planName, project_id: planForm.projectId,
         building_code: planForm.buildingCode, floor_no: planForm.floorNo, status: "draft",
       });
       setActionResult({ action: "floor_plan_created", planName: planForm.planName });
@@ -93,21 +140,28 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   };
 
   const createImport = async () => {
+    setImportSaving(true);
+    setImportError("");
     try {
+      if (!importKeyRef.current) importKeyRef.current = `fpi-${selectedPlanId}-${Math.random().toString(36).slice(2)}`;
       const res = await api.post<ImportTask>(`/api/v1/floor-plans/${selectedPlanId}/imports`, {
-        idempotency_key: `fpi-${Date.now()}`, source_format: importForm.sourceFormat,
+        idempotency_key: importKeyRef.current, source_format: importForm.sourceFormat,
         source_name: importForm.sourceName, source_payload: importForm.sourcePayload,
       });
       setActionResult({ action: "floor_plan_import_created", importId: res?.id });
+      importKeyRef.current = "";
+      setImportOpen(false);
       await loadImports(selectedPlanId);
-    } catch (e) { setGlobalError((e as Error).message); }
+    } catch (e) { setImportError((e as Error).message); } finally { setImportSaving(false); }
   };
 
   const publishImport = async () => {
     try {
-      const ids = publishCandidateIds.split(",").map((s) => s.trim()).filter(Boolean);
+      const ids = publishCandidateIds.length > 0 ? publishCandidateIds : pendingCandidates.map((item) => item.id).filter(Boolean);
+      if (ids.length === 0) { setGlobalError("没有待发布的区域"); return; }
+      if (!publishKeyRef.current) publishKeyRef.current = `fpp-${selectedImportId}-${Math.random().toString(36).slice(2)}`;
       const result = await api.post(`/api/v1/floor-plans/${selectedPlanId}/imports/${selectedImportId}/publish`, {
-        idempotency_key: `fpp-${Date.now()}`, candidate_ids: ids,
+        idempotency_key: publishKeyRef.current, candidate_ids: ids,
       });
       setActionResult({ action: "floor_plan_import_published", candidateIds: ids, result });
       await loadCandidates(selectedPlanId, selectedImportId);
@@ -133,8 +187,8 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
       title: `导入错误明细 · 第 ${row.lineNo ?? "—"} 行`,
       fields: [
         { label: "行号", value: row.lineNo ?? "—" },
-        { label: "字段", value: row.fieldName ?? "—" },
-        { label: "错误码", value: row.errorCode ?? "—" },
+        { label: "字段", value: zhOrDash(ERROR_FIELD_LABELS, row.fieldName) },
+        { label: "错误码", value: zhOrDash(ERROR_CODE_LABELS, row.errorCode) },
         { label: "说明", value: row.errorMessage ?? "—" },
       ],
     });
@@ -144,7 +198,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
 
   return (
     <section data-testid="floor-plan-import-page">
-      <AdminPageHeader title="商场平面图导入" description="P2 平面图导入：上传商场平面图，解析出候选区域，人工复核候选与错误后发布到正式平面图。发布为高危动作，需二次确认。" />
+      <AdminPageHeader title="商场平面图导入" description="上传商场平面图，解析出候选区域，人工复核候选与错误后发布到正式平面图。发布为高危动作，需二次确认。" />
       <AuditTrailHint event="floor_plan.created / floor_plan.import_published" />
       <TechDetails><div className="admin-generic-evidence" data-testid="floor-plan-evidence">/api/v1/floor-plans</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
@@ -153,7 +207,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             permissionsState={effectivePermissions}
             permissions={MANAGE}
             data-testid="floor-plan-create-open"
-            onClick={() => { setPlanForm({ planName: "", buildingCode: "", floorNo: "" }); setPlanError(""); setPlanOpen(true); }}
+            onClick={() => { setPlanForm({ projectId: "", planName: "", buildingCode: "", floorNo: "" }); planKeyRef.current = ""; setPlanError(""); setPlanOpen(true); }}
           >＋ 新增平面图</PermissionButton>
         </div>
         <table className="admin-table" data-testid="floor-plans-table">
@@ -162,7 +216,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             {floorPlans.map((plan) => (
               <tr key={plan.id}>
                 <td>{plan.planName ?? plan.id}</td><td>{plan.buildingCode ?? "-"}/{plan.floorNo ?? "-"}</td>
-                <td>{plan.versionNo ?? "-"}</td><td>{formatBusinessStatus(plan.status)}</td>
+                <td>{plan.versionNo ?? "-"}</td><td>{floorPlanStatusLabel(plan.status)}</td>
                 <td><IconButton icon={<UnorderedListOutlined />} tip="查看导入任务" onClick={() => void loadImports(plan.id)} testId={`floor-plan-select-${plan.id}`} /></td>
               </tr>
             ))}
@@ -171,11 +225,8 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
         {selectedPlanId ? (
           <>
             <h3>导入任务</h3>
-            <div className="admin-form-grid" data-testid="floor-plan-import-form">
-              <label>来源格式<input data-testid="floor-plan-import-format" value={importForm.sourceFormat} onChange={(e) => setImportForm({ ...importForm, sourceFormat: e.target.value })} /></label>
-              <label>来源名称<input data-testid="floor-plan-import-name" value={importForm.sourceName} onChange={(e) => setImportForm({ ...importForm, sourceName: e.target.value })} /></label>
-              <label>来源内容<textarea data-testid="floor-plan-import-payload" value={importForm.sourcePayload} onChange={(e) => setImportForm({ ...importForm, sourcePayload: e.target.value })} /></label>
-              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="floor-plan-import-create" onClick={() => void createImport()}>创建导入</PermissionButton>
+            <div className="admin-form-row" data-testid="floor-plan-import-form">
+              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="floor-plan-import-open" onClick={() => { setImportForm({ sourceFormat: "svg", sourceName: "", sourcePayload: "" }); importKeyRef.current = ""; setImportError(""); setImportOpen(true); }}>＋ 创建导入</PermissionButton>
             </div>
             <table className="admin-table" data-testid="floor-plan-imports-table">
               <thead><tr><th>来源</th><th>状态</th><th>候选数</th><th>错误数</th><th>操作</th></tr></thead>
@@ -201,7 +252,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             <table className="admin-table" data-testid="floor-plan-candidates-table">
               <thead><tr><th>序号</th><th>类型</th><th>关联</th><th>标签</th><th>状态</th><th>详情</th></tr></thead>
               <tbody>
-                {(floorPlanImportDetails.candidates ?? []).slice(0, 50).map((candidate) => (
+                {(floorPlanImportDetails.candidates ?? []).map((candidate) => (
                   <tr key={candidate.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-candidate-row-${candidate.id}`}
                     onClick={() => openCandidateDetail(candidate)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCandidateDetail(candidate); } }}>
@@ -215,16 +266,30 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             <table className="admin-table" data-testid="floor-plan-errors-table">
               <thead><tr><th>行号</th><th>字段</th><th>错误码</th><th>说明</th><th>详情</th></tr></thead>
               <tbody>
-                {(floorPlanImportDetails.errors ?? []).slice(0, 50).map((row) => (
+                {(floorPlanImportDetails.errors ?? []).map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-error-row-${row.id}`}
                     onClick={() => openErrorDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openErrorDetail(row); } }}>
-                    <td>{row.lineNo ?? "-"}</td><td>{row.fieldName ?? "-"}</td><td>{row.errorCode ?? "-"}</td><td>{row.errorMessage ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看导入错误详情" onClick={(event) => { event.stopPropagation(); openErrorDetail(row); }}>查看详情</button></td></tr>
+                    <td>{row.lineNo ?? "-"}</td><td>{zhOrDash(ERROR_FIELD_LABELS, row.fieldName)}</td><td>{zhOrDash(ERROR_CODE_LABELS, row.errorCode)}</td><td>{row.errorMessage ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看导入错误详情" onClick={(event) => { event.stopPropagation(); openErrorDetail(row); }}>查看详情</button></td></tr>
                 ))}
               </tbody>
             </table>
             <div className="admin-form-grid" data-testid="floor-plan-publish-form">
-              <label>候选 ID（逗号分隔，留空=全部待发布）<input data-testid="floor-plan-publish-candidates" value={publishCandidateIds} onChange={(e) => setPublishCandidateIds(e.target.value)} /></label>
+              <fieldset data-testid="floor-plan-publish-candidates">
+                <legend>待发布区域</legend>
+                {pendingCandidates.map((item) => (
+                  <label key={item.id}>
+                    <input
+                      type="checkbox"
+                      checked={publishCandidateIds.includes(item.id)}
+                      onChange={(event) => {
+                        setPublishCandidateIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id));
+                      }}
+                    />
+                    {item.label ?? item.id}
+                  </label>
+                ))}
+              </fieldset>
               <HighRiskConfirm
                 label="发布候选到正式平面图"
                 impact={`${PUBLISH_CONFIRM_TITLE}：发布后候选会写入正式平面图区域，请确认已完成业务复核，发布不可静默覆盖既有区域证据。`}
@@ -252,9 +317,17 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
           {
             title: "基本信息",
             description: "平面图名称必填；楼栋/楼层选填。新建平面图初始为草稿，导入候选复核后再发布。",
-            validate: () => (planForm.planName.trim() ? null : "请填写平面图名称"),
+            validate: () => {
+              if (!planForm.projectId.trim()) return "请选择所属项目";
+              if (!planForm.planName.trim()) return "请填写平面图名称";
+              return null;
+            },
             content: (
               <>
+                <label>所属项目<select data-testid="floor-plan-project" value={planForm.projectId} onChange={(e) => setPlanForm({ ...planForm, projectId: e.target.value })}>
+                  <option value="">请选择</option>
+                  {projects.map((project) => <option key={project.id} value={project.id}>{project.name ?? project.id}</option>)}
+                </select></label>
                 <label>平面图名称<input data-testid="floor-plan-name" value={planForm.planName} onChange={(e) => setPlanForm({ ...planForm, planName: e.target.value })} /></label>
                 <label>楼栋<input data-testid="floor-plan-building" value={planForm.buildingCode} onChange={(e) => setPlanForm({ ...planForm, buildingCode: e.target.value })} /></label>
                 <label>楼层<input data-testid="floor-plan-floor" value={planForm.floorNo} onChange={(e) => setPlanForm({ ...planForm, floorNo: e.target.value })} /></label>
@@ -263,10 +336,42 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
           },
         ]}
         summary={[
+          { label: "所属项目", value: projects.find((p) => p.id === planForm.projectId)?.name ?? (planForm.projectId || "未选择") },
           { label: "平面图名称", value: planForm.planName.trim() || "未填写" },
           { label: "楼栋", value: planForm.buildingCode.trim() || "—" },
           { label: "楼层", value: planForm.floorNo.trim() || "—" },
           { label: "初始状态", value: "草稿" },
+        ]}
+      />
+      <GuidedFlowModal
+        open={importOpen}
+        title="创建导入"
+        testId="floor-plan-import-guided"
+        submitTestId="floor-plan-import-create"
+        submitLabel="创建导入"
+        submitting={importSaving}
+        error={importError || undefined}
+        onClose={() => setImportOpen(false)}
+        onSubmit={() => void createImport()}
+        steps={[
+          {
+            title: "导入内容",
+            description: "选择来源格式，填写名称和内容。",
+            validate: () => (importForm.sourcePayload.trim() ? null : "请填写来源内容"),
+            content: (
+              <>
+                <label>来源格式<select data-testid="floor-plan-import-format" value={importForm.sourceFormat} onChange={(e) => setImportForm({ ...importForm, sourceFormat: e.target.value })}>
+                  {SOURCE_FORMAT_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select></label>
+                <label>来源名称<input data-testid="floor-plan-import-name" value={importForm.sourceName} onChange={(e) => setImportForm({ ...importForm, sourceName: e.target.value })} /></label>
+                <label>来源内容<textarea data-testid="floor-plan-import-payload" value={importForm.sourcePayload} onChange={(e) => setImportForm({ ...importForm, sourcePayload: e.target.value })} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "来源格式", value: SOURCE_FORMAT_OPTIONS.find((opt) => opt.value === importForm.sourceFormat)?.label ?? importForm.sourceFormat },
+          { label: "来源名称", value: importForm.sourceName.trim() || "—" },
         ]}
       />
     </section>

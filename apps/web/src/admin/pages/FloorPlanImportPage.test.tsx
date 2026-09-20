@@ -16,6 +16,7 @@ const DETAILS = {
   task: { id: "imp-1", status: "processing" },
   candidates: [
     { id: "cd-1", candidate_no: 1, shape_type: "shop", ref_type: "space", ref_id: "sp-1", label: "A101", status: "pending" },
+    { id: "cd-2", candidate_no: 2, shape_type: "corridor", ref_type: "space", ref_id: "sp-2", label: "旧数据", status: "pending" },
   ],
   errors: [
     { id: "er-1", line_no: 5, field_name: "geometry", error_code: "INVALID_POLYGON", error_message: "多边形无效" },
@@ -40,6 +41,7 @@ function makeApi(): AdminApi {
       if (url.includes("/imports/imp-1/candidates")) return Promise.resolve(dataEnvelope(DETAILS));
       if (url.includes("/floor-plans/fp-1/imports")) return Promise.resolve(listEnvelope(IMPORTS));
       if (url.endsWith("/floor-plans")) return Promise.resolve(listEnvelope(PLANS));
+      if (url.includes("/platform/projects")) return Promise.resolve(dataEnvelope([{ id: "prj-1", name: "主项目" }]));
       return Promise.resolve(listEnvelope([]));
     }),
   );
@@ -78,7 +80,7 @@ describe("FloorPlanImportPage 英文全清", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("floor-plans-table")).toBeTruthy());
     const table = screen.getByTestId("floor-plans-table").textContent ?? "";
-    expect(table).toContain("已上架"); // published
+    expect(table).toContain("已发布"); // published
     expect(table).toContain("草稿"); // draft
     expect(table).not.toContain("published");
     expect(table).not.toContain("draft");
@@ -87,7 +89,7 @@ describe("FloorPlanImportPage 英文全清", () => {
   it("候选明细表类型/关联/状态渲染中文，不含原始英文码", async () => {
     await openDetails();
     const table = screen.getByTestId("floor-plan-candidates-table").textContent ?? "";
-    expect(table).toContain("商铺"); // shapeType shop
+    expect(table).toContain("铺位"); // shapeType shop
     expect(table).toContain("空间"); // refType space
     expect(table).toContain("待处理"); // status pending
     expect(table).not.toContain("shop");
@@ -105,7 +107,7 @@ describe("FloorPlanImportPage 行明细抽屉", () => {
     fireEvent.click(screen.getByTestId("floor-plan-candidate-row-cd-1"));
     const drawer = await screen.findByTestId("row-detail-drawer");
     const text = drawer.textContent ?? "";
-    expect(text).toContain("商铺"); // shape_type shop
+    expect(text).toContain("铺位"); // shape_type shop
     expect(text).toContain("空间"); // ref_type space
     expect(text).toContain("待处理"); // status pending
     expect(text).toContain("A101"); // label
@@ -118,9 +120,36 @@ describe("FloorPlanImportPage 行明细抽屉", () => {
     fireEvent.click(screen.getByTestId("floor-plan-error-row-er-1"));
     const drawer = await screen.findByTestId("row-detail-drawer");
     const text = drawer.textContent ?? "";
-    expect(text).toContain("geometry");
+    expect(text).toContain("图形");
     expect(text).toContain("多边形无效");
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});
+
+describe("FloorPlanImportPage 闭集与导入格式", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("未知候选种类显示未识别，不显示其他或走道", async () => {
+    await openDetails();
+    const table = screen.getByTestId("floor-plan-candidates-table").textContent ?? "";
+    expect(table).toContain("铺位");
+    expect(table).toContain("未识别");
+    expect(table).not.toContain("其他");
+    expect(table).not.toContain("走道");
+  });
+
+  it("创建导入下拉只有矢量图和标准数据", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("floor-plan-select-fp-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("floor-plan-select-fp-1"));
+    await waitFor(() => expect(screen.getByTestId("floor-plan-import-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("floor-plan-import-open"));
+    const text = screen.getByTestId("floor-plan-import-guided").textContent ?? "";
+    expect(text).toContain("矢量图");
+    expect(text).toContain("标准数据");
+    expect(text).not.toContain("geojson");
   });
 });
