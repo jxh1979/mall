@@ -1,4 +1,5 @@
 package com.complex.platform.settlement;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -360,6 +361,37 @@ class SettlementFormatShareS11Tests {
         assertThat(again.keySet()).containsExactlyInAnyOrder("bar", "catering");
         assertThat(again.get("bar").get("net_revenue_cent")).isEqualTo(50000L);
         assertThat(again.get("catering").get("net_revenue_cent")).isEqualTo(10000L);
+    }
+
+    // ---------------------------------------------------------------- ⑤ 传媒业态份额（M021-001 / V428）
+
+    /**
+     * M021-001：演出传媒（media）是 V384 起合法的第六种业态（业务 HTML「商户业态」：酒吧、餐饮、零售、游乐、
+     * 演出传媒（系统枚举码 media）、其他；「演出票 → 传媒公司」）。它的权益进联合通票月结时，业态份额留痕行
+     * 必须写得进去——V366 建表时的五值封口由 V428 放开到同一六值闭集——且份额归传媒公司这个主体
+     * （V384 全局种子：performance_ticket 流 → be_media），不进酒吧池、不参与酒吧排名。
+     */
+    @Test
+    void mediaShareIsRecordedAndAttributedToMediaEntity() {
+        String pid = newProject();
+        setRankTier(pid, 1, 9, 5000);
+        seedMerchant("m_fmt_bar_md", "bar");
+        seedMerchant("m_fmt_media", "media");
+        seedVerified(pid, "m_fmt_bar_md", 2, 2, 50000L);
+        seedVerified(pid, "m_fmt_media", 3, 3, 20000L);
+
+        String billId = settlementService.settleMonth(pid, MONTH);
+        Map<String, Object> b = bill(pid);
+
+        Map<String, Map<String, Object>> shares = formatShares(billId);
+        assertThat(shares.keySet()).containsExactlyInAnyOrder("bar", "media");
+        assertThat(shares.get("media").get("net_revenue_cent")).isEqualTo(20000L);
+        assertThat(shares.get("media").get("beneficiary_kind")).as("传媒份额归传媒公司这个主体").isEqualTo("entity");
+        assertThat(shares.get("media").get("beneficiary_entity_id"))
+                .as("V384 全局种子:performance_ticket 流 → 传媒公司").isEqualTo("be_media");
+        assertThat(b.get("ticket_revenue_cent")).isEqualTo(70000L);
+        assertThat(b.get("available_pool_cent")).as("传媒份额不进酒吧池").isEqualTo(50000L);
+        assertThat(itemAmounts(pid)).as("分池明细只有酒吧").containsOnlyKeys("m_fmt_bar_md");
     }
 
     // ---------------------------------------------------------------- 夹具
