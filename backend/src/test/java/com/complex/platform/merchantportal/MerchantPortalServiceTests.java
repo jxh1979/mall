@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.FieldLabels;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.contract.ContractRecord;
@@ -119,6 +120,18 @@ class MerchantPortalServiceTests {
                 "merchant_portal_contract", null, null, null, "MERCHANT_SCOPE_REQUIRED");
         verify(audit).recordFailure("merchant_portal.settlement.view_failed", "merchant.portal.settlement.view",
                 "merchant_portal_settlement", null, null, null, "MERCHANT_SCOPE_REQUIRED");
+
+        // M022-004:异议入口同样 fail-closed(disputeOnce 内的商户 scope 闸),不写库并落 dispute_failed。
+        when(contractRepository.findSettlementById("s1"))
+                .thenReturn(Optional.of(settlement("s1", "c1", "pending_settlement")));
+        when(contractRepository.findContractById("c1")).thenReturn(Optional.of(contract("c1", "mch_a")));
+        assertThatThrownBy(() -> service.submitSettlementDispute("s1",
+                new MerchantSettlementDisputeRequest("k0", null, "无归属账号留言")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_SCOPE_REQUIRED"));
+        verify(contractRepository, never()).saveSettlement(any());
+        verify(audit).recordFailure("merchant_portal.settlement.dispute_failed", "merchant.portal.settlement.dispute",
+                "merchant_portal_settlement", "s1", null, "k0", "MERCHANT_SCOPE_REQUIRED");
     }
 
     @Test
@@ -130,7 +143,11 @@ class MerchantPortalServiceTests {
         PageResponse<ContractSettlementRecord> page = service.listMySettlements(1, 500);
 
         assertThat(page.items()).extracting(ContractSettlementRecord::id).containsExactly("s1");
+        assertThat(page.total()).isEqualTo(1L);
         verify(authz).requirePermission("merchant.portal.settlement.view");
+        // M022-005:成功路径落 merchant_portal.settlement.viewed 审计。
+        verify(audit).recordSuccess(eq("merchant_portal.settlement.viewed"), eq("merchant.portal.settlement.view"),
+                eq("merchant_portal_settlement"), eq("mch_a"), isNull(), isNull(), eq(Map.of("count", 1)));
         verify(contractRepository, never()).listAllSettlementsPaged(anyInt(), anyInt());
     }
 
@@ -141,6 +158,8 @@ class MerchantPortalServiceTests {
         ContractSettlementRecord disputed = service.submitSettlementDispute("s1",
                 new MerchantSettlementDisputeRequest("k1", null, "金额与合同约定不符"));
 
+        // M022-006:异议入口先过 merchant.portal.settlement.dispute 权限码。
+        verify(authz).requirePermission("merchant.portal.settlement.dispute");
         assertThat(disputed.status()).isEqualTo("pending_settlement");
         assertThat(disputed.disputeReason()).isEqualTo("金额与合同约定不符");
         ArgumentCaptor<ContractSettlementRecord> captor = ArgumentCaptor.forClass(ContractSettlementRecord.class);
@@ -170,7 +189,7 @@ class MerchantPortalServiceTests {
         assertThat(disputed.status()).isEqualTo("pending_settlement");
     }
 
-    // M020-003:合并后超过 dispute_reason 列宽(500)→ 400 且不写库;恰为 500 允许。
+    // M020-003 / M022-003:新留言单独超列宽、或「既有理由 + 新留言」合并后超列宽(500)→ 400 且不写库;恰为 500 允许。
     @Test
     void disputeReasonBeyondColumnWidthIsRejected() {
         stubOwnOpenSettlement();
@@ -183,6 +202,20 @@ class MerchantPortalServiceTests {
                 });
         verify(contractRepository, never()).saveSettlement(any());
 
+        // M022-003:既有理由 300 字 + 换行 + 新留言 250 字 = 551 > 500;新留言单独并不超限,量的是合并后长度。
+        when(contractRepository.findSettlementById("s1")).thenReturn(Optional.of(
+                settlement("s1", "c1", "pending_settlement", "平".repeat(300), "usr_manager",
+                        Instant.parse("2026-09-01T08:00:00Z"))));
+        assertThatThrownBy(() -> service.submitSettlementDispute("s1",
+                new MerchantSettlementDisputeRequest("k3b", null, "漏".repeat(250))))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(e.getMessage()).contains("500");
+                });
+        verify(contractRepository, never()).saveSettlement(any());
+
+        when(contractRepository.findSettlementById("s1"))
+                .thenReturn(Optional.of(settlement("s1", "c1", "pending_settlement")));
         assertThat(service.submitSettlementDispute("s1",
                 new MerchantSettlementDisputeRequest("k4", null, "漏算".repeat(250))).disputeReason())
                 .hasSize(500);
@@ -247,8 +280,11 @@ class MerchantPortalServiceTests {
 
         assertThatThrownBy(() -> service.submitSettlementDispute("s1",
                 new MerchantSettlementDisputeRequest("k8", null, "  ")))
-                .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                    // M022-007:服务层机读英文经 GlobalExceptionHandler → FieldLabels.translate 出网,用户看到的是中文。
+                    assertThat(FieldLabels.translate(e.getMessage())).isEqualTo("原因未填写");
+                });
         verify(contractRepository, never()).saveSettlement(any());
         verify(audit).recordFailure(eq("merchant_portal.settlement.dispute_failed"), any(), any(), eq("s1"),
                 isNull(), eq("k8"), eq("VALIDATION_FAILED"));

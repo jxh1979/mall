@@ -1,5 +1,34 @@
 # 全量审计 Findings 台账
-版本：V2.67
+版本：V2.70
+
+## 当前 M022 B4-r1 双PASS，M022-001…007 已修转「否」，进入B5-r1
+2026-09-20T19:06:21Z。Grok B4-r1 票 PASS（modules/M022-b4-r1-grok-raw.md，37381bytes SHA 2db2ce1bcbf64e14b916040fda3ce137f01371cfdd1454eebfce343e40c9582c）；席甲票 PASS（modules/M022-b4-r1-self-raw.md，22890bytes SHA 6db2e33021e8b99b0364443b6ab535e21b27230952415d787a5deaecec8d68b9）。M022-001…007 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（7）：M022-001…007（已修）。
+- 当前M022修复队列「是」：0。
+
+
+## 当前 M022 B2-r1 双PASS定稿，7项待修（B3-r1）
+2026-09-20T18:48:06Z。Grok B2-r1 票 PASS（modules/M022-b1-grok-raw.md V0.02，全文 58816bytes SHA 6904fe3b25789817af04487bdb5110a44f6eacb837997bafdbdd71c848e213a1）；席甲 B2-r1 票 PASS（modules/M022-b1-self-raw.md V0.02，全文 18584bytes SHA 799c068763d66812ab1ca19b0de8455bfcbf2538522699cdf770f546a53c6535）。定稿：M022-001（冲突）…007 修复队列「是」。
+- 修复队列「是」（7）：M022-001…007。
+- 修复队列「否」（0）。
+
+
+## 当前 M022 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T18:37:40Z。输入仅当前 471 计划 M022 的完整 B1 双席 raw：modules/M022-b1-self-raw.md V0.01（17072bytes SHA dc4c17f4b9bc10289b168e2e06de59b94f24175c9ecc42b6310afbd064374e69，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M022-001/002、OBS-1…4）、modules/M022-b1-grok-raw.md V0.01（36216bytes SHA 30169fb47486896f875a51adcd5d4c1397b08aa5f8510770c459fa820cbc1bc2，Grok 席乙，FAIL：GR-01…06、XM-1…3、OBS-3…8）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01+CX-001→001（分类与处置采 Grok：冲突、删用例）；CX-002（Grok 未发现，席甲核源）→002；GR-02→003；GR-03→004；GR-04→005；GR-05→006；GR-06→007（处置口径：锁全局处理器出网中文，不采 XM-1 改服务文案）。席甲 B1 对自己 M020 所写的服务测试类判「通过」，Grok 查出 5 处断言缺口（003–007）经核源全部成立，如实入队。B3 累计 0；写入集合＝本模块 2 个测试文件（本模块自身单元），不改生产代码。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M022-001 | Grok GR-01 + 席甲CX-M022-001（M020 观察转入） | 冲突（采 Grok 判：业务地图 L1848-1850「不看平台全局」、L1310「不能看平台全局和其他商户数据」明文，与类注释宣称的「商户专区平台管理员全量」不能同时成立；席甲原判细化，按 2.1 顺序从严） | 是 | 是 | `backend/src/test/java/com/complex/platform/merchantportal/MerchantPortalJdbcIntegrationTests.java:16-21` 类注释「商户专区平台管理员「全量合同/结算」真分页」、`:30` 行内注释、`:46-63` 用例 `platformAllSettlementsPagedRealTotalAndSecondPageReachable`、`:73` 注释：M020-001 后服务层 0 处调用 `listAllSettlementsPaged`/`listContractsPaged`（本前缀不提供全量口径），`listAllSettlementsPaged` 生产 0 调用方 | BSM-114 / GEN-016 / GEN-001 / GEN-003；最小处置（采 Grok）：删除该用例，类注释与行内注释改写为现行事实（本类只锁商户维度读取的谓词隔离；商户专区不提供平台全量口径）；加版本标记 V0.01；仓储方法去留归合同域（XM） |
+| M022-002 | 席甲CX-M022-002（Grok B1 未发现） | 细化 | 是 | 是 | 「我的合同只见本商户」：服务层 `listContractsByMerchant`（`JdbcContractRepository:288` `WHERE merchant_id = :mid`）+ `listContractSpaceIds` 在全仓测试中只被 Mockito 引用、@SpringBootTest 引用 0（席甲探针 4）；把该谓词改坏无任何用例会红；结算侧已有对等真实库用例 | GEN-003 / BSM-114 / GEN-005；最小处置：`backend/src/test/java/com/complex/platform/merchantportal/MerchantPortalJdbcIntegrationTests.java` 加 1 例 `merchantScopeContractsStayIsolated`（两商户各存一份合同，`listContractsByMerchant` 只回本商户；`listContractSpaceIds` 对无绑定合同回空），沿用本类夹具与 @Transactional 回滚；不改生产代码 |
+| M022-003 | Grok GR-02 | 细化 | 是 | 是 | `backend/src/test/java/com/complex/platform/merchantportal/MerchantPortalServiceTests.java:173-188` 注释「合并后超过列宽」但 `stubOwnOpenSettlement` 的结算单无既有理由，只测了新留言单独 502 字；把实现 `merged.length() > 500` 改成 `reason.length() > 500` 两例仍绿、库写入可超 VARCHAR(500) | GEN-003 / GEN-016 / GEN-006；最小处置：加「既有理由 + 新留言合并后 >500」→ 400 且 never save 的断言（既有理由取自带理由的结算单夹具），保留恰 500 允许 |
+| M022-004 | Grok GR-03 | 细化 | 是 | 是 | `backend/src/test/java/com/complex/platform/merchantportal/MerchantPortalServiceTests.java:37-40` 类注释「无商户归属一律 MERCHANT_SCOPE_REQUIRED」，`:102-122` 只覆盖两条列表；异议入口 `disputeOnce` 内的 `requireMerchantScope` 无用例，改坏不红 | GEN-003 / GEN-005 / BSM-114；最小处置：该用例追加无 scope 调 `submitSettlementDispute` → MERCHANT_SCOPE_REQUIRED + `dispute_failed` 失败审计 + never save |
+| M022-005 | Grok GR-04 | 细化 | 是 | 是 | `backend/src/test/java/com/complex/platform/merchantportal/MerchantPortalServiceTests.java:124-135` 结算列表成功路径只 verify 权限码，未断言 `merchant_portal.settlement.viewed` 成功审计与 total；删掉实现的 recordSuccess 仍绿 | GEN-003 / GEN-011 / PGM-001；最小处置：补 `verify(audit).recordSuccess("merchant_portal.settlement.viewed", "merchant.portal.settlement.view", "merchant_portal_settlement", "mch_a", null, null, Map.of("count", 1))` 与 `page.total()` 断言 |
+| M022-006 | Grok GR-05 | 细化 | 是 | 是 | 异议各用例均未 `verify(authz).requirePermission("merchant.portal.settlement.dispute")`；删掉实现 L116 仍绿 | GEN-003 / GEN-005 / BSM-114；最小处置：异议成功用例补该 verify |
+| M022-007 | Grok GR-06（含其 XM-1 的处置口径） | 细化 | 是 | 是 | `backend/src/test/java/com/complex/platform/merchantportal/MerchantPortalServiceTests.java:244-255` 空理由只断言错误码，不锁用户可见文案为中文。核源：服务层 `"reason is required"` 是全仓约定的机读英文形态（`Strings.requireText` 同形，70+ 处），出网前由 `GlobalExceptionHandler:61 FieldLabels.translate` 统一中文化——`translate("reason is required")` = 「原因未填写」（`FieldLabels` REQUIRED_OR_INVALID + `p("reason","原因")`）；Grok M020 B1 亦据此判「这两处不另立项」。故用户侧零英文成立，XM-1（改 M020 服务文案）不采；缺口在测试未锁这条用户可见口径 | GEN-003 / PGM-001（L287 零英文）；最小处置：该用例断言 `FieldLabels.translate(e.getMessage())` 等于「原因未填写」（即全局处理器出网文案为中文、不含英文），不改已闭环的 M020 服务文件 |
+
+- 只登记不入队：Grok XM-1（服务层英文机读文案——见 007 核源，不采）、XM-2/席甲 OBS-3（`listAllSettlementsPaged` 生产零调用，归合同域）、XM-3（`requireMerchantScope` 的 orElseThrow 在真实现已抛前提下为防御性冗余，M020 B4/B5 已审）、Grok OBS-3…8、席甲 OBS-1（本包无控制器测试）、OBS-4（数据源属性硬编码范式）。
+- 修复队列「是」（7）：M022-001…007。
+- 修复队列「否」（0）。
+
 
 ## 当前 M021 B4-r1 双PASS，M021-001 已修转「否」，进入B5-r1
 2026-09-20T18:00:19Z。Grok B4-r1 票 PASS（modules/M021-b4-r1-grok-raw.md，24606bytes SHA 797795b5aaef3e7d91ccff0a43e1235e4761b5f0c50909bb8d274aae7d106e0e）；席甲票 PASS（modules/M021-b4-r1-self-raw.md，12521bytes SHA 7b633b5290e190489409724190f0107f8af3b5ca86c739ef0fe75c7b17d868cb）。M021-001 修复队列「是」→「否（已修，B3-r1）」；M021-002 维持「否（只登记）」。
