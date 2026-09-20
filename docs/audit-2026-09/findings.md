@@ -1,5 +1,56 @@
 # 全量审计 Findings 台账
-版本：V2.70
+版本：V2.76
+
+## 当前 M023 B4-r2 双PASS，M023-007 已修转「否」，进入B5-r2
+2026-09-20T20:56:24Z。Grok B4-r2 票 PASS（modules/M023-b4-r2-grok-raw.md，16916bytes SHA 78a5abd792ef2b8535e64fd4d4191c92b623d6a9f4f1400a3e199a36651881b7）；席甲票 PASS（modules/M023-b4-r2-self-raw.md，9006bytes SHA 62c0c8014cb38e6232342601e356c7367f3a0a0e123274889b519b2efe398e98）。M023-007 修复队列「是」→「否（已修，B3-r2）」。
+- 修复队列「否」（7）：M023-001…007（已修）。
+- 当前M023修复队列「是」：0。
+
+
+## 当前 M023 B2-r2 双PASS定稿，1项待修（B3-r2，第 2 次）
+2026-09-20T20:45:49Z。Grok B2-r2 票 PASS（modules/M023-b1-grok-raw.md V0.03，全文 78134bytes SHA a87a33b632af5f396a443d94b05e0fa1eb855dd9bfb5778cefa3dcee964ec70c）；席甲 B2-r2 票 PASS（modules/M023-b1-self-raw.md V0.03，全文 26722bytes SHA 7707a82c5e308a7a85ec468207c6e85a66c746d8026cb3e0d018e3b90e09aee6）。定稿：M023-007 细化／工程缺陷是／修复队列「是」；001–006 不变；amended 登记不入队。
+- 修复队列「是」（1）：M023-007（细化）。
+- 修复队列「否」（不变）：M023-001…006（已修）。
+
+
+## 当前 M023 B2-r2 整批候选（B5-r1 合取 FAIL 回退；尚未定稿；无添加项、无 questions）
+2026-09-20T20:36:08Z。输入：modules/M023-b5-r1-grok-raw.md V0.01（28046bytes SHA 4e9a232dfd76f972324e08ce429c2bf285ad0ad1eb1cbd4e7abb46ff28d5b6cd，Grok 票 FAIL：GR-01）；modules/M023-b5-r1-self-raw.md V0.01+V0.02（全文 12857bytes SHA 135bf4f27092a63b7f47dc63f1fbd48c30e49e9c3ff7bd4098c00ba09fe90788，席甲票 PASS 经核源撤回为 FAIL）。唯一依据无 ID 且 001–006 已全否 → 整批先回 B2；分配新 ID：M023-007（细化，工程缺陷是，队列是）。001–006 不动。B3 累计 1，定稿后 B3-r2 为第 2 次。写入集合＝本模块 2 文件（MerchantZoneContractsPage.tsx 与其测试）。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M023-007 | Grok B5-r1 GR-01（席甲 B5-r1 票 PASS 经核源撤回；B1/B4 两席均漏） | 细化 | 是 | 是 | `apps/web/src/admin/pages/MerchantZoneContractsPage.tsx:18-27` 页内合同状态字典首键写 `draft: "草拟"`；后端起草态真码是 `drafting`（`ContractService.java:206` 起草落库、`:291`/`:330` 驳回回 `drafting`；`V314__contract_scope_grant_and_amendment.sql:15-17` 的 `chk_contracts_lifecycle_status` 闭集亦为 `drafting`、不含 `draft`）；`JdbcContractRepository.listContractsByMerchant` 无状态过滤 → 平台给该商户起草合同后，商户第一次打开「我的合同」状态列与抽屉即显示「未知状态」而非「草拟」；`apps/web/src/admin/pages/MerchantZoneContractsPage.test.tsx:9-12` 夹具只有 effective/expired/weird_status，003 的未知码占位把英文挡住，用例照绿 | GEN-008 / GEN-002 / GEN-003 / GEN-015（上位：业务地图 L1322 商户专区「我的合同」；枚举 L239 八态中文仅作分类对照，不作判据）；最小处置：字典键 `draft` 改为 `drafting: "草拟"`；夹具加一条 `lifecycle_status: "drafting"` 并断言表格行与抽屉均显示「草拟」、不含「未知状态」、不含英文 `drafting`；两文件版本标记 V0.01→V0.02。不改 `types.ts`／后端／全局 `statusLabels`（全局 `drafting→起草中` 与页内「草拟」不同词，本页沿用页内字典）；其余 7 键已与 CHECK 闭集逐个对上，不动 |
+
+- 只登记不入队（新增 1 条）：后端合同第 9 态 `amended`（`V314:13-17`「被变更子合同接替的原合同」；`ContractService.java:1180` 真路径；`listContractsByMerchant` 同样会返回）在 apps/web 0 处中文名；三份 HTML 未给该态名称（枚举 L239 只列草拟…归档八态，业务地图 L1352 只描述「变更子合同」本身）。007 修后该态在本页显示「未知状态」（003 占位，不泄英文）。给它起中文名属业务用词，席甲不自拟；「后端九态 vs 枚举 L239 八态」的差异属合同状态机所在模块（M254 后台实现 / M041 迁移 V314）的审计对象，登记为跨模块观察并在回执报操作员。其余登记项同 B2-r1。
+- 修复队列「是」（1）：M023-007（细化）。
+- 修复队列「否」（不变）：M023-001…006（已修）。
+
+
+## 当前 M023 B4-r1 双PASS，M023-001…006 已修转「否」，进入B5-r1
+2026-09-20T20:07:40Z。Grok B4-r1 票 PASS（modules/M023-b4-r1-grok-raw.md，22503bytes SHA 22d4e736fccfb48ca604b94c4bd8d081178a2b551f30d36cbc97c67c5bfb6006）；席甲票 PASS（modules/M023-b4-r1-self-raw.md，84057bytes SHA aec5253e0b0f47b02dd74cd335d76ad62b4f1c82711bfa452bfa9892a67bd30e）。M023-001…006 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（6）：M023-001…006（已修）。
+- 当前M023修复队列「是」：0。
+
+
+## 当前 M023 B2-r1 双PASS定稿，6项待修（B3-r1）
+2026-09-20T19:51:59Z。Grok B2-r1 票 PASS（modules/M023-b1-grok-raw.md V0.02，全文 57171bytes SHA 54be68670679d2087ce7540320b07f0b1b7fe79549505a76e1544407811bac0a）；席甲 B2-r1 票 PASS（modules/M023-b1-self-raw.md V0.02，全文 25191bytes SHA 7881639069276773fb94c3c8ad10856740b2738a6c6a27055a941b68030e645f）。定稿：M023-001…006 修复队列「是」（006 冲突，其余细化）。
+- 修复队列「是」（6）：M023-001…006。
+- 修复队列「否」（0）。
+
+
+## 当前 M023 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T19:41:20Z。输入仅当前 471 计划 M023 的完整 B1 双席 raw：modules/M023-b1-self-raw.md V0.01（23658bytes SHA aa3f811f350de0f9615b5e5148800aff0ec0a4d072316a366a4ca5bd520f70aa，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M023-001…005、OBS-1…5）、modules/M023-b1-grok-raw.md V0.01（33144bytes SHA 9ed7728a96bf3d7b4a28622995d3c68e4107b6d2176ecd8e77db04bcde2f7404，Grok 席乙，FAIL：GR-01…06、观察 1…10）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01+CX-001→001；GR-02+CX-002→002；GR-03+GR-05（字典）+CX-003→003；GR-05（KPI）+CX-004→004；GR-06+CX-005→005；GR-04→006（冲突）。分歧与处置：席甲 B1 以枚举 L252 判「对账页无异议表单合规、M020 OBS-5 转入项不成立」；Grok GR-04 以 L1322 明文判冲突。复核 M020 已闭环的上位依据正是 L1322，两句可并存，席甲撤回「不成立」、采 Grok。B3 累计 0；写入集合＝本模块 6 文件；含 PR #444 三个未合并本地提交的现状为基线。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M023-001 | Grok GR-01 + 席甲CX-M023-001 | 细化 | 是 | 是 | `apps/web/src/admin/pages/MerchantScopePage.tsx:46-51/:107-108/:133-134/:145-149/:159-160/:171-172/:197/:200` 读 `row.totalAmount`、账单 `row.title`、`authorizedScope`、`auditEvidenceRef`；`/api/v1/merchant-billing/bills` 返回 `MerchantBillRecord`（金额 `totalAmountCent` 分，无 title/authorizedScope/auditEvidenceRef），`MerchantWorkOrderRecord` 亦无后两者 → 真实后端下金额列恒「-」、账单金额 KPI 恒「0.00 元」、授权范围 KPI 恒 0、三列恒「-」；`MerchantScopePage.test.tsx:8-15/:141` 夹具伪造 `total_amount/title/authorized_scope` 得假绿 | GEN-002 / GEN-008 / GEN-003 / GEN-001（上位 L1322「我的账单（该交多少…）」）；最小处置：金额读 `totalAmountCent` 分→元；删后端不存在的列与 KPI（账单「标题」、两表「授权范围」「留痕证据」、「授权范围」KPI）；行类型在页内局部收口（不改别模块 `types.ts`）；夹具改后端真实形状并断言金额与合计。不新增列（Grok 建议的 spaceId/contractId 展示属可选增强，不入本条） |
+| M023-002 | Grok GR-02 + 席甲CX-M023-002 | 细化（隶属本页的操作控件；处置为删除伪动作，不构成新业务动作，不走 2.2） | 是 | 是 | `apps/web/src/admin/pages/MerchantScopePage.tsx:111-122/:203-206` `confirmScope()` 0 次 api 调用却 `setActionResult` 伪结果（英文状态/审计名、虚构附件号 att-merchant-scope-confirm）；`:184` AuditTrailHint `merchant.scope.viewed / merchant.scope_confirmed` 后端 0 处；`:15` 文案「权限由 merchant.portal.read…控制」迁移 0 处该码（路由 ADM-MER-002 真实要求 work_order.view + billing.view；真实列表事件 `merchant_service.work_order.viewed`、`merchant_billing.bill.viewed`） | GEN-011 / GEN-016 / GEN-002 / GEN-008 / PGM-001；最小处置：删确认按钮、confirmScope、TEXT.confirm；AuditTrailHint 改真实事件；TEXT.evidence 改真实权限码；测试同步 |
+| M023-003 | Grok GR-03 + GR-05（字典部分）+ 席甲CX-M023-003 | 细化 | 是 | 是 | `apps/web/src/admin/pages/MerchantScopePage.tsx:147/:172` 账单状态走通用 `formatBusinessStatus`：`issued` 得票务义「已出票」、`viewed` 无字典原样英文（账单专区 `MerchantZoneBillsPage:18-25` 用「已出账/已查看/已确认/有异议/已逾期/已结清」）；`apps/web/src/admin/pages/MerchantZoneSettlementsPage.tsx:24-31` 结算字典缺 V307 的 `voided`；`apps/web/src/admin/pages/MerchantZoneSettlementsPage.tsx:99-100/:120-121`、`apps/web/src/admin/pages/MerchantZoneContractsPage.tsx:69/:137` 未知码回退英文原码 | PGM-001（L287 零英文）/ GEN-015 / GEN-008 / GEN-003；最小处置：授权工作台账单状态用页内字典（与账单专区同词）；结算字典补 `voided: "已作废"`；三页未知码回退改中文占位；测试补 issued/viewed/voided/未知码 |
+| M023-004 | Grok GR-05（KPI 部分）+ 席甲CX-M023-004 | 细化 | 是 | 是 | `apps/web/src/admin/pages/MerchantZoneSettlementsPage.tsx:88-90/:149` `openRows = status !== "settled"` 把 voided（已作废，`ContractService:1301-1304` 真路径）算进「未结清」 | GEN-002 / GEN-003；最小处置：未结清 = 状态不在 (settled, voided)；测试补 voided 行 |
+| M023-005 | Grok GR-06 + 席甲CX-M023-005 | 细化 | 是 | 是 | 三页 TraceLink 目标对本页受众不可达：ADM-MER-005/006 为 `accountForms: ["merchant"]` 商户专页，合同→ADM-CONT-001（需 contract.draft.manage）、空间→ADM-GOV-007（「空间类型字典」，对象也对不上）、商户→ADM-GOV-002；`AdminApp.navigateTo:545-552` 无权限静默 return → 按钮点了没反应；单测以 `navigateTo: vi.fn()` 断言被调用，测不到拦截 | PGM-001（全链可点击）/ GEN-015 / GEN-002 / GEN-003；最小处置：对账页合同下钻改指商户可达的「我的合同」ADM-MER-006；合同页自身合同号/续签自/空间、授权工作台商户号无商户可达目标者降为纯文本（不渲染假按钮）；测试同步；不改 AdminApp/TraceLink/路由（别模块），不给商户加平台权限 |
+| M023-006 | Grok GR-04（席甲 B1 判「不成立」，B2 核源后撤回） | 冲突（采 Grok：L1322 明文「我的对账（结算与分成明细，有疑问可留言提异议）」，页面既无明细数字也无留言入口，测试还把缺入口写成规范） | 是 | 是 | `apps/web/src/admin/pages/MerchantZoneSettlementsPage.tsx:11-16/:81-125` 不渲染 `settlementItems`、无留言；`MerchantZoneSettlementsPage.test.tsx:50-59` 断言「本页不提交异议」。席甲 B1 以枚举 L252「商户对退租结算金额的异议在退租审批流程中提出并解决」判表单缺席合规；复核：M020（双 PASS 已闭环）正是以 L1322「可留言提异议」+「提出异议期间付款义务不暂停」为上位保留 note-only 端点 `POST /merchant-portal/settlements/{id}/dispute`（不改状态、不暂停付款）——L252 管的是异议的正式提出与解决通道（退租审批），L1322 给的是专区内的留言；两句可并存，L252 不能删掉 L1322 的括号。后端结算单 `settlementItems`（`TerminationSettlementMath:40-75`：item/amountCent/note）已随列表返回而页面不展示，「只能就数字提出异议」却看不到数字 | BSM-001 / PGM-001 / GEN-002 / GEN-003 / GEN-008 / GEN-015；最小处置：明细抽屉渲染 `settlementItems`（条目中文名、amountCent 分→元、note）；恢复留言入口——对可留言状态（pending_settlement/deposit_offsetting/arrears_collecting）提供理由输入（≤500 字）与提交，走既有 POST（AdminApi 自带 idempotencyKey），按 `merchant.portal.settlement.dispute` 权限门控，文案写明「留言不改变结算状态、不暂停付款；退租金额异议的正式处理在退租审批流程中进行」；重写该测试为断言明细与留言路径。不改后端、不发明新状态/KPI。口径已在回执报操作员（可否决留言项，明细项不受影响） |
+
+- 只登记不入队：e2e `full-admin-remaining.spec.ts:917` 仍找异议表单（006 修复后该 testid 恢复，e2e 模块自核）；「我的对账」无月度结算与分成明细（后端/产品一期范围，报操作员）；「我的合同」缺关键条款正文（MerchantContractView 最小披露）；ADM-MER-002 在 governance 组且无 accountForms；`MerchantBillingService.listBills` 的 findAllBills 分支与 M020-001 同一错误前提（别模块）；前端 10 行分页叠后端默认页；TechDetails 内的路径/事件名属内部标识；Grok 建议的工单 spaceId/contractId 展示（可选增强，不加）。
+- 修复队列「是」（6）：M023-001…006。
+- 修复队列「否」（0）。
+
 
 ## 当前 M022 B4-r1 双PASS，M022-001…007 已修转「否」，进入B5-r1
 2026-09-20T19:06:21Z。Grok B4-r1 票 PASS（modules/M022-b4-r1-grok-raw.md，37381bytes SHA 2db2ce1bcbf64e14b916040fda3ce137f01371cfdd1454eebfce343e40c9582c）；席甲票 PASS（modules/M022-b4-r1-self-raw.md，22890bytes SHA 6db2e33021e8b99b0364443b6ab535e21b27230952415d787a5deaecec8d68b9）。M022-001…007 修复队列「是」→「否（已修，B3-r1）」。
