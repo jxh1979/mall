@@ -416,3 +416,211 @@ END=2026-09-20T03:52:53Z
 ## 8. 结论
 
 席甲补充复查：**PASS**（不是新双 PASS；历史 B5-r1 Claude/Grok 双 PASS 保留）。Grok NOT-CALLED。未改源码/迁移/测试/三份 HTML/锁/findings；未提交/推送。锁实算/sidecar/ledger 首行三值全等 `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`；旧 Grok B5-r1 raw 锁行同值但不作本次调用报数；LOCK-AMEND-COUNT 1。先写 ledger V4.55 保留 PASS，再更新收口文件，本报告最后落盘。
+
+
+---
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M016 B5-r1 再执行 · 席甲完整报告
+版本：V0.03（2026-09-20T05:59:50Z；上方 V0.01/V0.02 原样保留，50012 bytes，SHA256 c702e7e91420f405f5e913ee784610004f118810cf99fb60cb269d8c5df624be）
+
+## 0. 身份、范围与方法
+
+- 席甲：Claude Fable 5.1（作者自审票）。操作员 2026-09-20 裁定：M015–M017 补派 Grok B5 全量重审，两席同一 B3 次数（累计 1）下向同名 b5 raw 追加完整报告，双 PASS 才维持 PASS。本报告是席甲本次 B5 再执行的完整报告：从本行上方独占锁行起至文件末尾。
+- 范围：4 冻结迁移（V023/V034/V184/V203）+ 本模块 B3 产物 V423；18 判据（GEN-001…018）；锁 `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（实算＝sidecar＝ledger 首行；LOCK-AMEND-COUNT 1）。正本主工作区 HEAD `e456ba96`。
+- 顺序：Grok 已先派（追加到 modules/M016-b5-r1-grok-raw.md，存在=True），本报告落盘前未读其本次追加段；只读承诺同 V0.02（未改源码/测试/三 HTML/锁/findings，测试只导出三个 DB 变量、complex_test）。
+
+## 1. 与 V0.02 审本的一致性
+
+- V0.02（席甲补充复查完整报告）覆盖表 16 个文件当前 SHA256 逐一复算：本模块文件 5 个全部相等——V0.02 的三线审计、判据逐族核对与 finding 结论对本次工作区状态直接有效，本报告不重复抄写；只读依赖 `FloorPlanServiceTests.java`（现 SHA256 ea7aa63ecdb3…）、`VenueBusinessHoursServiceTests.java`（现 SHA256 3585ca694bf1…）、`FloorPlanService.java`（现 SHA256 5cad799d091f…） 因 M015 第 3 轮修复（M015-015/016：`projectScopeOrAll()`、发布前置放宽、测试桩生产语义）已变，不属本模块修复面，其变更已经 M015 B4-r3/B5-r3 两席审计；本席复读其中与本模块相关段（`FloorPlanService.SHAPE_TYPES` 八值、V423 约束引用）未动，V0.02 结论不受影响。
+- 三份业务 HTML 与锁的 SHA 与 V0.02 相同（§2 log 末段）。
+
+## 2. 本次重跑证据原文（/home/james/audit-tmp/m016_reexec_run.log）
+
+```
+START=2026-09-20T05:58:43Z HEAD=e456ba96 origin/main=1e5183d5 URL=jdbc:postgresql://127.0.0.1:5432/complex_test
+== 0. 4 frozen migrations + V423 + later same-table migrations + 6 test classes (lines/bytes/sha256)
+backend/src/main/resources/db/migration/V023__p1_floor_plan_polygons.sql 61 2828 141970f242484accdf99ac37a896ed04762677f5c41d1d4808b2be0ba13815e6
+backend/src/main/resources/db/migration/V034__p2_floor_plan_import_tasks.sql 73 3658 fd9200070b4f4439c58cb32f4a03d6eb7f62b16c47320a57c2645ab2f101a56b
+backend/src/main/resources/db/migration/V184__space_type_dictionary.sql 24 1535 238d1529736908fcf3ff5346e0c7af4636361e035cb7629b27f8729b4895cc52
+backend/src/main/resources/db/migration/V203__spaces_status_check.sql 6 540 a159a62c1b8f23a82ddb002a6a625870c469a9250001ed51743a8cfcd3cdb83f
+backend/src/main/resources/db/migration/V423__m016_floor_plan_and_space_type_checks.sql 22 2099 b9912e89df22d03b54305a48af70052c53a58563df8212be0192b60e73ef4043
+backend/src/main/resources/db/migration/V424__space_type_delete_requests.sql 8 239 9625314129ba6b8ad47601e034a0a82c42240ff9ef1a1c604d427092a7af0295
+backend/src/main/resources/db/migration/V425__space_type_status_archive_pending.sql 6 569 81803091a24a655924293ac0bc1362693cb456441eb7d4ec5752a616bf3eff1c
+backend/src/main/resources/db/migration/V426__space_type_legacy_disabled_to_archived.sql 2 182 2686332155001257a8992b818bcd9fb075e6a25040ea92ffa2cee286a00c1627
+backend/src/main/resources/db/migration/V427__m009_project_profiles_and_associations.sql 20 705 cc8c391bda2bdb2658d5640ceff6036736bfe9d2c3b864de8f13e8474f9a3b13
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanControllerTests.java 472 21466 acd1f485522c9c31c3ec37c1194226fb5259db54e40a970e3fb2b0ea2aaa7aac
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanImportParserTests.java 193 7611 a6e0f52b13a11a0d157df098a569b0e2c62a0044eaebbb3cfa5fe8382e1b758c
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanJdbcIntegrationTests.java 277 11748 5a5932ce4bf3dc12d3b1a652cf107144bd33663cef462f6c0d87f405bdedaa59
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanServiceTests.java 897 44445 ea7aa63ecdb36e9cb8e0b921c62f012e5931d1a157a99ae202015a6b4ceda31d
+backend/src/test/java/com/complex/platform/governance/PlatformJdbcIntegrationTests.java 734 40076 6dce8606a79e06b46d7d302ef7ca8048bb300a67191b9e6980ff8bb81cabb95f
+backend/src/test/java/com/complex/platform/governance/VenueBusinessHoursServiceTests.java 285 14140 3585ca694bf16fdd809689b819d258641792c6a8c964448374f295dff85c9c76
+backend/src/main/java/com/complex/platform/floorplan/FloorPlanService.java 689 32061 5cad799d091fd43b58d99ff05d12e10afbc16e63fb7e59857dcd94c042ccdd80
+== 1. frozen four + V423 unchanged vs HEAD and vs origin/main (empty = unchanged)
+A  backend/src/main/resources/db/migration/V427__m009_project_profiles_and_associations.sql
+== 2. later migrations touching the same tables (M018 V424–V426, M009 V427) — git provenance
+ed0bf4f4 2026-09-11 audit M018: hide deleted space kinds, archive reason and unarchive, reject, no other-shape
+e35dd757 2026-09-11 audit M018: new space kinds always active, archive replaces disable, delete needs approval
+757ef452 2026-09-11 audit M018: space type archive, delete request, master approval
+== 3. flyway_schema_history (complex_test, SELECT only)
+023|p1 floor plan polygons|t|2026-09-09
+034|p2 floor plan import tasks|t|2026-09-09
+184|space type dictionary|t|2026-09-09
+203|spaces status check|t|2026-09-09
+423|m016 floor plan and space type checks|t|2026-09-11
+424|space type delete requests|t|2026-09-14
+425|space type status archive pending|t|2026-09-14
+426|space type legacy disabled to archived|t|2026-09-14
+427|m009 project profiles and associations|t|2026-09-14
+427
+== 4. constraints now (SELECT only)
+spaces|chk_spaces_status|CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'unavailable'::character varying])::text[])))
+mall_floor_plans|chk_mall_floor_plans_image_size|CHECK (((image_width > 0) AND (image_height > 0)))
+mall_floor_plans|chk_mall_floor_plans_project_id_required|CHECK ((project_id IS NOT NULL)) NOT VALID
+mall_floor_plans|chk_mall_floor_plans_status|CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'archived'::character varying])::text[])))
+floor_plan_shapes|chk_floor_plan_shapes_points_array|CHECK (((jsonb_typeof(polygon_points) = 'array'::text) AND (jsonb_array_length(polygon_points) >= 3)))
+floor_plan_shapes|chk_floor_plan_shapes_ref_type|CHECK (((ref_type)::text = ANY ((ARRAY['space'::character varying, 'merchant'::character varying, 'project'::character varying, 'amusement_project'::character varying, 'device'::character varying, 'custom'::character varying])::text[])))
+floor_plan_shapes|chk_floor_plan_shapes_shape_type|CHECK (((shape_type)::text = ANY ((ARRAY['area'::character varying, 'shop'::character varying, 'entrance'::character varying, 'facility'::character varying, 'risk_zone'::character varying, 'route'::character varying, 'booth'::character varying, 'public_area'::character varying])::text[])))
+floor_plan_shapes|chk_floor_plan_shapes_status|CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'archived'::character varying])::text[])))
+floor_plan_import_candidates|chk_floor_plan_import_candidates_no|CHECK ((candidate_no > 0))
+floor_plan_import_candidates|chk_floor_plan_import_candidates_points_array|CHECK (((jsonb_typeof(polygon_points) = 'array'::text) AND (jsonb_array_length(polygon_points) >= 3)))
+floor_plan_import_candidates|chk_floor_plan_import_candidates_ref_type|CHECK (((ref_type)::text = ANY ((ARRAY['space'::character varying, 'merchant'::character varying, 'project'::character varying, 'amusement_project'::character varying, 'device'::character varying, 'custom'::character varying])::text[])))
+floor_plan_import_candidates|chk_floor_plan_import_candidates_shape_type|CHECK (((shape_type)::text = ANY ((ARRAY['area'::character varying, 'shop'::character varying, 'entrance'::character varying, 'facility'::character varying, 'risk_zone'::character varying, 'route'::character varying, 'booth'::character varying, 'public_area'::character varying])::text[])))
+floor_plan_import_candidates|chk_floor_plan_import_candidates_status|CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'published'::character varying, 'rejected'::character varying])::text[])))
+space_type_dictionary|chk_space_type_dictionary_status|CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'disabled'::character varying, 'archived'::character varying, 'pending_delete'::character varying])::text[])))
+building|active
+floor|active
+zone|active
+shop|active
+public_area|active
+parking|active
+booth|active
+other|active
+0|0
+0
+== 5. 002 same-batch whitelist + version headers
+2:// 文件版本：V0.04
+35:    private static final Set<String> SHAPE_TYPES = Set.of("area", "shop", "entrance", "facility", "risk_zone", "route", "booth", "public_area");
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanControllerTests.java:2:// 文件版本：V0.01
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanImportParserTests.java:2:// 文件版本：V0.01
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanJdbcIntegrationTests.java:2:// 文件版本：V0.03
+backend/src/test/java/com/complex/platform/floorplan/FloorPlanServiceTests.java:2:// 文件版本：V0.05
+backend/src/test/java/com/complex/platform/governance/PlatformJdbcIntegrationTests.java:2:// 文件版本：V0.08
+backend/src/test/java/com/complex/platform/governance/VenueBusinessHoursServiceTests.java:2:// 文件版本：V0.03
+== 6. V423 idempotency shape + V425 supersedes V423 status CHECK
+4
+4
+backend/src/main/resources/db/migration/V423__m016_floor_plan_and_space_type_checks.sql:22:    CHECK (status IN ('active', 'disabled'));
+backend/src/main/resources/db/migration/V425__space_type_status_archive_pending.sql:6:    CHECK (status IN ('active', 'disabled', 'archived', 'pending_delete'));
+backend/src/main/resources/db/migration/V184__space_type_dictionary.sql:8:    status VARCHAR(32) NOT NULL DEFAULT 'active',   -- active/disabled
+backend/src/main/resources/db/migration/V423__m016_floor_plan_and_space_type_checks.sql:17:-- 3) 空间类型字典 status 闭集（V184 注释 active/disabled；listActiveSpaceTypeCodes 只认 active）：
+== 7. gate docs (read-only verify; main worktree contains M009 staged files)
+data isolation spec is out of sync with Flyway migrations. Run: npm run docs:data-isolation-spec
+DATA_ISOLATION_EXIT=1
+docs/domain-ownership-scope-audit-v0.1.csv is out of sync with Flyway migrations; run npm run docs:domain-ownership-scope
+DOMAIN_OWNERSHIP_EXIT=1
+== 8. tests (main worktree, complex_test, three DB vars only)
+0
+CLEAN_EXIT=0
+22:58:55.469 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests]: FloorPlanJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+22:58:55.526 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests
+22:58:55.556 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests]: FloorPlanJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+22:58:55.557 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-09-19T22:58:55.715-07:00  INFO 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanJdbcIntegrationTests    : Starting FloorPlanJdbcIntegrationTests using Java 21.0.12.1 with PID 1595314 (started by james in /home/james/complex-management/backend)
+2026-09-19T22:58:55.715-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanJdbcIntegrationTests    : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-09-19T22:58:55.716-07:00  INFO 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanJdbcIntegrationTests    : No active profile set, falling back to 1 default profile: "local"
+2026-09-19T22:58:56.568-07:00  INFO 1595314 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-19T22:58:56.638-07:00  INFO 1595314 --- [complex-api] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@2f2d8770
+2026-09-19T22:58:56.639-07:00  INFO 1595314 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-19T22:58:56.648-07:00  INFO 1595314 --- [complex-api] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://127.0.0.1:5432/complex_test (PostgreSQL 16.14)
+2026-09-19T22:58:56.741-07:00  INFO 1595314 --- [complex-api] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 395 migrations (execution time 00:00.064s)
+2026-09-19T22:58:56.756-07:00  INFO 1595314 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 427
+2026-09-19T22:58:56.758-07:00  INFO 1595314 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-09-19T22:58:57.563-07:00  INFO 1595314 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-09-19T22:58:58.008-07:00  INFO 1595314 --- [complex-api] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-09-19T22:58:58.042-07:00  INFO 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanJdbcIntegrationTests    : Started FloorPlanJdbcIntegrationTests in 2.467 seconds (process running for 3.112)
+2026-09-19T22:58:58.084-07:00  INFO 1595314 --- [complex-api] [           main] .p.c.c.MultiPartyContactPhonePiiBackfill : PII_BACKFILL_CLEAN: 六个多主体手机号列均无明文残留
+2026-09-19T22:58:58.085-07:00  WARN 1595314 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/openapi endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-09-19T22:58:58.085-07:00  WARN 1595314 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/swagger-ui endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-09-19T22:58:58.421-07:00  INFO 1595314 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanControllerTests
+2026-09-19T22:58:58.424-07:00  INFO 1595314 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-09-19T22:58:58.439-07:00  INFO 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : Starting FloorPlanControllerTests using Java 21.0.12.1 with PID 1595314 (started by james in /home/james/complex-management/backend)
+2026-09-19T22:58:58.439-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-09-19T22:58:58.439-07:00  INFO 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : No active profile set, falling back to 1 default profile: "local"
+2026-09-19T22:58:58.820-07:00  INFO 1595314 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-09-19T22:58:58.940-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.auth.CustomerSessionCookieFilter   : Filter 'customerSessionCookieFilter' configured for use
+2026-09-19T22:58:58.940-07:00 DEBUG 1595314 --- [complex-api] [           main] .c.p.g.DeviceCredentialBodyCachingFilter : Filter 'deviceCredentialBodyCachingFilter' configured for use
+2026-09-19T22:58:58.940-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-09-19T22:58:58.940-07:00 DEBUG 1595314 --- [complex-api] [           main] .c.p.a.CustomerTokenAuthenticationFilter : Filter 'customerTokenAuthenticationFilter' configured for use
+2026-09-19T22:58:58.940-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.auth.DoubleSubmitCsrfFilter        : Filter 'doubleSubmitCsrfFilter' configured for use
+2026-09-19T22:58:58.941-07:00  INFO 1595314 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-09-19T22:58:58.941-07:00  INFO 1595314 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-19T22:58:58.942-07:00  INFO 1595314 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-09-19T22:58:58.959-07:00  INFO 1595314 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : Started FloorPlanControllerTests in 0.531 seconds (process running for 4.029)
+2026-09-19T22:58:59.113-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.122-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=VALIDATION_FAILED raw_message=idempotency_key is required
+2026-09-19T22:58:59.145-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=VALIDATION_FAILED raw_message=idempotency_key is required
+2026-09-19T22:58:59.148-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=VALIDATION_FAILED raw_message=idempotency_key is required
+2026-09-19T22:58:59.170-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=VALIDATION_FAILED raw_message=idempotency_key is required
+2026-09-19T22:58:59.175-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.177-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.178-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.180-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.181-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.182-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.184-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.185-07:00 DEBUG 1595314 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : api error: code=PERMISSION_DENIED raw_message=permission denied
+2026-09-19T22:58:59.193-07:00  INFO 1595314 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.governance.PlatformJdbcIntegrationTests]: PlatformJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-09-19T22:58:59.205-07:00  INFO 1595314 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.PlatformJdbcIntegrationTests
+2026-09-19T22:58:59.205-07:00  INFO 1595314 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.governance.PlatformJdbcIntegrationTests]: PlatformJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-09-19T22:58:59.206-07:00  INFO 1595314 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.PlatformJdbcIntegrationTests
+2026-09-19T22:58:59.951-07:00  INFO 1595314 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.governance.VenueBusinessHoursServiceTests$RealRepositoryCases]: RealRepositoryCases does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-09-19T22:58:59.952-07:00  INFO 1595314 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.VenueBusinessHoursServiceTests$RealRepositoryCases
+2026-09-19T22:58:59.952-07:00  INFO 1595314 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.governance.VenueBusinessHoursServiceTests$RealRepositoryCases]: RealRepositoryCases does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-09-19T22:58:59.952-07:00  INFO 1595314 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.governance.VenueBusinessHoursServiceTests]: VenueBusinessHoursServiceTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-09-19T22:58:59.953-07:00  INFO 1595314 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.VenueBusinessHoursServiceTests$RealRepositoryCases
+MVN_EXIT=0
+TEST-com.complex.platform.floorplan.FloorPlanControllerTests: tests="14" errors="0" skipped="0" failures="0" 
+TEST-com.complex.platform.floorplan.FloorPlanImportParserTests: tests="14" errors="0" skipped="0" failures="0" 
+TEST-com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests: tests="7" errors="0" skipped="0" failures="0" 
+TEST-com.complex.platform.floorplan.FloorPlanServiceTests: tests="39" errors="0" skipped="0" failures="0" 
+TEST-com.complex.platform.governance.PlatformJdbcIntegrationTests: tests="23" errors="0" skipped="0" failures="0" 
+TEST-com.complex.platform.governance.VenueBusinessHoursServiceTests: tests="14" errors="0" skipped="0" failures="0" 
+== 9. HTML + lock untouched
+4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66  docs/business-enum-quick-reference-v0.1.html
+eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66  docs/business-system-map-for-operations-v0.1.html
+a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1  docs/platform-governance-map-for-operations-v0.1.html
+b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a  docs/audit-2026-09/plan/criteria-lock.md
+END=2026-09-20T05:59:00Z
+```
+
+6 类（含 PlatformJdbcIntegrationTests/FloorPlanJdbcIntegrationTests 等）+ complex_test 只读探针 本次实跑：6 类 111 例（TEST-*.xml 口径）零失败/错误/跳过，MVN_EXIT=0。
+
+## 3. 三线结论
+
+- 第一性原理线 / 顺从式线 / 对抗式线的逐条内容以 V0.02 为准（同一文件集合、SHA 未变）；本次再执行重跑全部可执行证据，结果与 V0.02 一致，未发现新缺陷、添加项或 HTML 问题。
+- 修复队列不变（历史 finding 全否）。
+
+## 4. 结论
+
+席甲 B5-r1 再执行票：**PASS**。Grok 本次追加段未读；两席落齐后做四值校验并合取判定。
