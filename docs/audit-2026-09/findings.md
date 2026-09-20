@@ -1,5 +1,61 @@
 # 全量审计 Findings 台账
-版本：V2.52
+版本：V2.58
+
+## 当前 M018 B4-r2 双PASS，M018-010 已修转「否」，进入B5-r2
+2026-09-20T08:46:50Z。Grok B4-r2 票 PASS（modules/M018-b4-r2-grok-raw.md，31103bytes SHA 8f9387edba9497bcf863d3c5b9088bce4b1961eff0deaa3ddbd3da9160b1beed）；席甲票 PASS（modules/M018-b4-r2-self-raw.md，17080bytes SHA 04bf3381ff4642779682e76eb26f9bff6b32c0e3ca7e49c55e1fae5e550f1c94）。M018-010 修复队列「是」→「否（已修，B3-r2）」。
+- 修复队列「否」（10）：M018-001…010（已修）。
+- 当前M018修复队列「是」：0。
+
+
+## 当前 M018 B2-r2 双PASS定稿，1项待修（B3-r2，第 2 次）
+2026-09-20T08:34:49Z。Grok B2-r2 票 PASS（modules/M018-b1-grok-raw.md V0.03，全文 81696bytes SHA a654175d671773a8ba27e080b1a0327560a3f5b4447c7fb51d236887f635c6aa）；席甲 B2-r2 票 PASS（modules/M018-b1-self-raw.md V0.03，全文 37814bytes SHA e1e5f7dd178d8933f61b7f7f3fe38148f17643316118609ea27f1121797db0b8）。定稿：M018-010 细化／工程缺陷是／修复队列「是」；001–009 不变。
+- 修复队列「是」（1）：M018-010（细化）。
+- 修复队列「否」（不变）：M018-001…009（已修）。
+
+
+## 当前 M018 B2-r2 整批候选（B5-r1 合取 FAIL 回退；尚未定稿；无添加项、无 questions）
+2026-09-20T08:25:14Z。输入：modules/M018-b5-r1-grok-raw.md V0.01（38891bytes SHA cd5789ec692859bdbe39d419157e27f9e32cbf399a1145afd7ed3e659e0a57c6，Grok 票 FAIL：GR-M018-B5-01）；modules/M018-b5-r1-self-raw.md V0.01+V0.02（全文 15626bytes SHA a37b3c3972f6fcda0de61389a2542c416b796d6441c217d5155d3dd827043d8d，席甲票 PASS 经核源撤回为 FAIL）。唯一依据无 ID 且 001–009 已全否 → 整批先回 B2；分配新 ID：M018-010（细化，工程缺陷是，队列是）。001–009 不动。B3 累计 1，定稿后 B3-r2 为第 2 次。
+
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M018-010 | Grok GR-M018-B5-01（席甲 B5-r1 票 PASS 经核源撤回；B1 两席均漏） | 细化 | 是 | 是 | `FloorPlanImportPage.tsx:113-121` 首屏 `useAdminResource` 用 `Promise.all` 同时取 `/api/v1/floor-plans`（后端 `FloorPlanController:33` 要 floor_plan.view）与 `/api/v1/platform/projects`（`PlatformController:148-149` 要 governance.project.view + requirePlatformScope）；路由 `adminRoutes.ts:95` 只要求 floor_plan.view。只授 floor_plan.view 的分岗账号（或商户账号）第一次打开本页：平面图 200、项目 403 → `Promise.all` 整体拒绝 → `useAdminResource` 报「平面图读取失败」，平面图表不渲染。项目列表只服务于新建弹窗下拉（`:373-376`）。同模块 `VenueBusinessHoursPage.tsx:54-61` 对场地清单已用 `loadSecondary` 降级。测试 `FloorPlanImportPage.test.tsx` VIEW_ONLY 用例的 fetch 桩对 projects 一律 200，32 例不能在真实 403 上失败 | GEN-002 / GEN-005 / GEN-009 / GEN-003 / BSM-003（上位：业务地图 L588「其他岗位按岗位分配各自能看能做的范围」、治理地图 L472）；最小处置：项目列表改 `loadSecondaryIfPermitted(hasPermissions(effectivePermissions, ["governance.project.view"]), () => api.get(...), [])`——无权限不发请求、失败只降级；`projects=[]` 时平面图表仍渲染，新建弹窗项目下拉旁显示降级提示（`floor-plan-projects-degraded`），已有「请选择所属项目」拦截保留；+2 用例（仅 floor_plan.view：不请求 projects 且表渲染；projects 403：表仍渲染、提示出现、不报「读取失败」）。不改路由/后端/权限码 |
+
+- 修复队列「是」（1）：M018-010（细化）。
+- 修复队列「否」（不变）：M018-001…009（已修）。
+
+
+## 当前 M018 B4-r1 双PASS，M018-001…009 已修转「否」，进入B5-r1
+2026-09-20T08:06:12Z。Grok B4-r1 票 PASS（modules/M018-b4-r1-grok-raw.md，83242bytes SHA 5c2f1648474146de74c5abdcff19e13af9203e377c89c6c068968a95914f303d）；席甲票 PASS（modules/M018-b4-r1-self-raw.md，76760bytes SHA cd68e6ffd4c901a17a653a7bd6b95fd158608ee12a50193dae64db2bb85d6744）。M018-001…009 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（9）：M018-001…009（已修）。
+- 当前M018修复队列「是」：0。
+
+
+## 当前 M018 B2-r1 双PASS定稿，9项待修（B3-r1）
+2026-09-20T07:48:57Z。Grok B2-r1 票 PASS（modules/M018-b1-grok-raw.md V0.02，全文 60271bytes SHA 4f051bbd76abd31f8aa6ba5abe9ab9bc744fc7c28d1fcb2a9c6ee9f081b12025）；席甲 B2-r1 票 PASS（modules/M018-b1-self-raw.md V0.02，全文 36566bytes SHA 2e6570269fc8be13291ef55311736851ab7eb672c0130bb15530f31c0342522d）。定稿：M018-001…009 修复队列「是」（001/003/007/008/009 细化、002 冲突、004/005/006 技术性）；GR-06/07 并入 M015-010/011 不变。
+- 修复队列「是」（9）：M018-001…009。
+- 修复队列「否」（0）。
+
+
+## 当前 M018 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T07:36:45Z。输入仅当前 471 计划 M018 的完整 B1 双席 raw：modules/M018-b1-self-raw.md V0.01（34780bytes SHA fa76354a020730444690b1e50cbab8e54f1de33caa815cb8652621523d62a9a6，席甲=Claude Fable 5.1，作者自审票，结论 FAIL：CX-M018-001…006、OBS-1…11）、modules/M018-b1-grok-raw.md V0.01（36814bytes SHA e94832c95ab57fad2f621a173ba9a3894c57bc779368e2c8f1da260962cd9f6a，Grok 席乙，结论 FAIL：GR-M018-01…09、OBS-01…14）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：同根合并（001=GR-01+CX-001、002=GR-05+CX-002、003=GR-04+CX-003、006=GR-09+CX-006），Grok 独有 GR-02/03/08 → 007/008/009，席甲独有 CX-004/005 → 004/005；GR-06/07 并入 M015-010/011（否/XM）。分类按 2.1 顺序，Grok 对 002 改判冲突（PGM-001 零英文明文）、003 细化以 Grok 为准。B3 累计 0。
+
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M018-001 | Grok GR-M018-01 + 席甲CX-M018-001 | 细化 | 是 | 是 | `FloorPlanImportPage.tsx:125-140` createPlan 请求体只有 idempotency_key/plan_name/project_id/building_code/floor_no/status:"draft"，`:319`「楼栋/楼层选填」、`:320-324` validate 只校验 projectId/planName、`:343` 初始状态「草稿」；后端 `FloorPlanService.java:502-526 validateCreateRequest` 必填 floor_no/image_url/version_no/image_width>0/image_height>0、status ∈ {active,inactive,archived}（`:33`；V023:6-16 五列 NOT NULL + CHECK；OpenAPI FloorPlanCreateRequest required 含 image_url/image_width/image_height/version_no，status enum 三值）；`FloorPlanService.FIELD_LABELS` 无这些键→文案「image_url不能为空」。测试 `FloorPlanImportPage.guidedcreate.test.tsx:73-95` fetch 桩断言 status "draft"、不断言缺失字段。真实后端下第一次正常提交必 400 VALIDATION_FAILED，功能不可用而用例全绿 | GEN-002 / GEN-008 / GEN-003（上位：治理地图 L469「维护楼层、区域、点位…」、L472「上传或导入商场平面布局图」）；最小处置：引导弹窗补齐后端必填（楼层改必填；底图地址、底图宽、高、版本号），提交 status "active"（后端闭集，不发明 draft）；validate/summary 同步；guidedcreate 用例改断言完整 body 与 status active，并加一例缺楼层被步内校验拦截。不改后端/OpenAPI/HTML |
+| M018-002 | Grok GR-M018-05 + 席甲CX-M018-002 | 冲突（Grok 改判：PGM-001 零英文明文，席甲原判细化） | 是 | 是 | `FloorPlanImportPage.tsx:45-49 floorPlanStatusLabel` 只译 published/draft，后端平面图 status 闭集 active/inactive/archived（`:33`、V023:15）→ 列表显示「有效/未激活/archived」（全局码表 `customer/i18n/statusLabels.ts:255-260` 未知码回落原码、无 archived）；`:236/:179/:260` 导入任务与候选走 formatBusinessStatus：后端 IMPORT_TASK_STATUSES parsed/failed/published/cancelled、候选 pending/published/rejected（`:38-39`）→ 正常态 parsed 直出英文，published→「已上架」；`:31-40 ERROR_FIELD_LABELS/ERROR_CODE_LABELS` 键（geometry/shape_type/project_id、INVALID_POLYGON）后端 0 处，解析器真实字段 source_format/viewBox/points/shapes/source_payload、错误码 10 个（`FloorPlanImportParser.java:45-128`）→ 错误表「字段」「错误码」两列恒「未识别」。夹具 `FloorPlanImportPage.test.tsx:8-24` 用 published/draft/processing/INVALID_POLYGON/geometry（后端不产生），6 例绿 | GEN-008 / GEN-015 / GEN-003 / PGM-001（上位：治理地图 L472「由人工复核候选与错误后发布」）；最小处置：页内字典改为后端闭集——平面图 active「启用」/inactive「停用」/archived「已存档」，任务 parsed「已解析」/failed「解析失败」/published「已发布」/cancelled「已取消」，候选 pending「待复核」/published「已发布」/rejected「已驳回」，错误字段 5 键、错误码 10 码中文短语（与解析器中文 errorMessage 同义）；夹具改真实码并断言 parsed/failed/published 与真实错误码中文。只改本模块页 + .test |
+| M018-003 | Grok GR-M018-04 + 席甲CX-M018-003 | 细化（BSM-003 权限分岗；席甲原判技术性） | 是 | 是 | `FloorPlanImportPage.tsx:58 MANAGE=["floor_plan.manage"]` 用于 `:229` 创建导入、`:293-300` 发布；后端 `FloorPlanController.java:71/:91` 要求 floor_plan.import.manage（V034:60-61 独立高危码 requires_approval=TRUE）；下钻 `:112/:120` 需 floor_plan.import.view（`:62/:81`），路由 `adminRoutes.ts:95` 只要求 floor_plan.view；`Can.tsx:40`「与后端 requirePermission 对齐」。持有 floor_plan.manage 而无 import.manage 的账号按钮可点→后端 403（服务端拦截成立）；持有 import.manage 而无 floor_plan.manage 的账号前端禁用→功能不可达 | GEN-005 / GEN-008 / BSM-003；最小处置：`IMPORT_MANAGE=["floor_plan.import.manage"]` 用于创建导入与发布两处（新增平面图仍 floor_plan.manage）；两处下钻 IconButton（查看导入任务/查看候选明细）以 `Can permissions=["floor_plan.import.view"]` 包裹（无权限隐藏，与后端 :62/:81 对齐）；+1 用例（无 import.manage 时发布按钮 disabled）。路由入口不改 |
+| M018-004 | 席甲CX-M018-004（Grok B1 未发现） | 技术性 | 是 | 是 | `FloorPlanImportPage.tsx:106-114 loadImports`、`:116-122 loadCandidates` 无 try/catch，`:220/:238` 以 `void` 调用；接口失败（含 403、网络错误）成为未处理拒绝，页面无提示、旧表不变；同页 createPlan/createImport/publishImport 均有 catch | GEN-009；最小处置：两函数包 try/catch → `setGlobalError((e as Error).message)`；+1 用例（imports 接口 403 → setGlobalError 被调） |
+| M018-005 | 席甲CX-M018-005（Grok B1 判 GEN-007 满足，未核客户端键归一；席甲 §2 探针 5 实跑证明页面键被覆盖） | 技术性 | 是 | 是 | `FloorPlanImportPage.tsx:131-135/:146-150/:162-165` 传 `idempotency_key: xxxKeyRef.current`（snake）；`client/adminClient.ts:90-92 normalizeRequestBody` 先补 `idempotencyKey ?? nextIdempotencyKey()` 再整体转 snake，后者覆盖前者（逐字抽取函数实跑：floorplan_page_body / publish_body 的 idempotency_key 均为 admin-web-<generated>；SpaceTypesPage camel 键保留）→ 三个 KeyRef「失败重试复用同键」全部失效，首次请求服务端已成功而响应失败后重试携新键→重复创建平面图/导入任务 | GEN-007 / GEN-008；最小处置：三处改 `idempotencyKey: xxxKeyRef.current`（与 SpaceTypesPage:81 同范式）；guidedcreate 用例断言 lastPostBody.idempotency_key 以 "fp-" 开头 |
+| M018-006 | Grok GR-M018-09 + 席甲CX-M018-006 | 技术性 | 是 | 是 | 发布流（勾选→HighRiskConfirm→POST candidate_ids；`:161` 空候选提示）与创建导入 POST body 在两测试文件 0 处引用；`SpaceTypesPage.guidedcreate.test.tsx:92-105` 只断言按钮存在，存档（window.prompt 理由 + confirm → POST /archive {reason}）、取消存档、申请删除、最高权限审批通过/驳回（`SpaceTypesPage.tsx:202` isMaster 分支）与非 master「待最高权限审批」提示 0 处执行；`VenueBusinessHoursPage.test.tsx` 停用保存 disabled:true、场地清单降级提示、未选场地/未填时刻提示 0 处。改坏 publishImport 的 candidate_ids 或 approveDeleteType 的 decision，17 例仍绿 | GEN-003（上位：治理地图 L472 发布高危、业务地图 L570 删除审批、M017-003 停用保留配置口径）；最小处置：每页补最小用例——发布 1（勾选 1 个候选→confirm→POST body candidate_ids）、未勾选发布被拦 1（008）、创建导入 1 + 来源名称空被拦 1（007）、parsed/archived 中文与真实错误码 1（002）、权限码 1（003）、下钻 403 显错 1（004）、幂等键 1（005）、空间种类存档/申请删除/审批/恢复各 1（stub window.prompt/confirm；009）、营业时间停用 1、降级提示 1；只改 4 个测试文件 |
+| M018-007 | Grok GR-M018-02（席甲 B1 未发现） | 细化 | 是 | 是 | `FloorPlanImportPage.tsx:356-360` 创建导入步内 validate 只校验 sourcePayload，`:147-150` POST `source_name: importForm.sourceName`（可空串）；后端 `FloorPlanService.validateImportCreateRequest` `requireText(request.sourceName(), "source_name")`、V034 `source_name VARCHAR(160) NOT NULL`。选平面图→创建导入→只贴内容、名称留空→提交，前端放行、后端 400「source_name is required」 | GEN-002 / GEN-004 / GEN-008；最小处置：步内校验来源名称非空（中文提示「请填写来源名称」）与后端必填对齐；+1 用例（006 合并） |
+| M018-008 | Grok GR-M018-03（席甲 B1 只记 OBS-1） | 细化 | 是 | 是 | `FloorPlanImportPage.tsx:158-165` `ids = publishCandidateIds.length > 0 ? publishCandidateIds : pendingCandidates.map(...)`，`:277-300` 复选框默认未勾、`HighRiskConfirm` 无 precheck：一个都不勾、确认「发布候选到正式平面图」→ 全部 pending 候选被发布（可能一次超过后端 200 上限）。治理地图 L472「由人工复核候选与错误后发布」——勾选即复核，未勾即全发是静默扩大范围 | GEN-002 / GEN-009 / PGM-001（上位：治理地图 L472）；最小处置：未勾选时 `HighRiskConfirm precheck` 拦截并 `setGlobalError("请勾选要发布的区域")`，不默认全发；`ids` 只取 publishCandidateIds；+1 用例（006 合并） |
+| M018-009 | Grok GR-M018-08（席甲 B1 只记 OBS-9） | 细化 | 是 | 是 | `SpaceTypesPage.tsx:22-27` disabled→「已删除」、`:172-220` 取消存档/申请删除仅 `archived` 行，`disabled` 行无任何动作；后端 `PlatformService.unarchiveSpaceType:593` 允许 archived/disabled 恢复为 active；业务地图 L571「删除只隐藏不抹除…数据始终留在库里可查、可审计、可恢复」。审批通过删除后本页无法恢复 | BSM-003 / GEN-002；最小处置：`disabled` 行提供「恢复」`HighRiskConfirm`（走既有 `/unarchive`，权限 governance.space.manage），文案「把已删除种类「X」恢复为启用」；+1 用例（006 合并）。不新增端点/状态 |
+
+- 并入既有 XM、不分配新 ID：Grok GR-M018-06（营业时段保存即生效/无生效日，席甲 OBS-4）→ M015-010（否，XM 同批，前端部分待后端草案契约）；Grok GR-M018-07（发布请求无服务端确认字段，席甲 OBS-5）→ M015-011（否，XM 同批，契约加字段后前端同批送值）。
+- 只登记不入队：席甲 OBS-2/3/6/7/8/10/11、Grok OBS-01…14（含 PR #439 未合并 origin/main 事实、`shape-N` 默认标签属 M015/M017、`approveDeleteSpaceType` 控制器无 requirePermission 属 M009 后端、`zhOrDash`/`fpLabel` 重复）。
+- 修复队列「是」（9）：M018-001…009（001/003/007/008/009 细化、002 冲突、004/005/006 技术性）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M015 B4-r3 双PASS，M015-015/016 已修转「否」，进入B5-r3
 2026-09-20T05:22:47Z。Grok B4-r3 票 PASS（modules/M015-b4-r3-grok-raw.md，24339bytes SHA fbad9ec3b5e62578775a59ea3f9049697669b5cb666efaf15f41403a8f4b9ecf）；席甲票 PASS（modules/M015-b4-r3-self-raw.md，28421bytes SHA 53d3e024a439730d334cb85f7d9d84105994e85bc800a64096b8cd990cf8c4be）。M015-015、016 修复队列「是」→「否（已修，B3-r3）」。

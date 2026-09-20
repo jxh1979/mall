@@ -154,7 +154,7 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
     <section data-testid="space-types-page">
       <AdminPageHeader
         title="空间种类"
-        description="维护空间种类。建空间时从本表选择种类。可新增。下线用存档。删除须先存档，再申请并经最高权限审批。有空间还在用的种类不能删除。"
+        description="维护空间种类。建空间时从本表选择种类。可新增。下线用存档。删除须先存档，再申请并经最高权限审批。有空间还在用的种类不能删除。已删除的种类可恢复为启用。"
       />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
@@ -198,6 +198,17 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
                           data-testid={`space-type-delete-request-${row.typeCode}`}
                         />
                       </>
+                    ) : null}
+                    {row.status === "disabled" ? (
+                      // M018-009：删除只隐藏不抹除、可恢复（业务地图 L571）——走既有 unarchive（后端允许 disabled → active）。
+                      <HighRiskConfirm
+                        label="恢复"
+                        impact={`把已删除种类「${row.typeName}」恢复为启用，可以再用来新建空间。`}
+                        onConfirm={() => void unarchiveType(row)}
+                        permissionsState={effectivePermissions}
+                        permissions={MANAGE}
+                        data-testid={`space-type-restore-${row.typeCode}`}
+                      />
                     ) : null}
                     {row.status === "pending_delete" && isMaster ? (
                       <>
