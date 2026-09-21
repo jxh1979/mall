@@ -1,7 +1,84 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V5.81
+版本：V5.92
+
+## 当前 M026 B5-r1双PASS，四值全等，M026 → PASS（先记账，再写闭环文件）
+2026-09-21T00:08:50Z。Grok B5-r1 真实 exit 0，报告 modules/M026-b5-r1-grok-raw.md（V0.01，30540bytes SHA256 9388291edbbf143dcf55e6388cc9cdfcdeec3fec2e73009a6a09a9debb383316，四项交付事实成立），整模块三线全量结论 PASS。席甲 B5-r1 票 PASS（modules/M026-b5-r1-self-raw.md V0.01，6297bytes SHA256 ba50fc9cd4391a834f665c1e3dfe3b18bb8a61d307a698d03a0a724246c66d33；封存后才读 Grok）。合取双 PASS。
+B5 后四值（精确路径 modules/M026-b5-r1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+M026 IN_PROGRESS→PASS：B3 累计 1（001，1 个文件的类注释）；修复队列 1 个 ID 全否（已修）；添加项 0；questions 0；无 HTML 修改申请。本节写入后再创建闭环文件 modules/M026-jdbc-timestamps-seg1.md，随后按操作员「逐模块检查点」做检查点，合并后开 M027。
+
+
+## 当前 M026 B5-r1 本席完整PASS已封存，待Grok
+2026-09-20T23:50:34Z。席甲 self modules/M026-b5-r1-self-raw.md V0.01/6297bytes/SHA256 ba50fc9cd4391a834f665c1e3dfe3b18bb8a61d307a698d03a0a724246c66d33：1 文件全覆盖、21 项逐项核对、三线完成、取证脚本（/home/james/audit-tmp/m026_b5r1_run.log）与检查（/home/james/audit-tmp/m026_b5r1_check.log）复核，封存前未读 Grok 本次正文。结论 PASS：001 修复落地无回归、无新发现。Grok B5-r1 仍运行，EXIT_CODE=PENDING，出处 modules/M026-b5-r1-grok-raw.md，命令见「B4-r1双PASS，进入整模块重审（B5-r1）」段。M026 IN_PROGRESS/B3 累计 1；四值待 Grok 落盘后再核。尚非合取结论。
+
+
+## 当前 M026 B4-r1双PASS，进入整模块重审（B5-r1）
+2026-09-20T23:50:31Z。Grok B4-r1 真实 exit 0，报告 modules/M026-b4-r1-grok-raw.md（V0.01，17368bytes SHA256 9452526e6051ffeb1ce57a995760beb540d2763b2bb8eec97615aacbbff5e55d，四项交付事实成立），结论 PASS（内容与 §5 闸 3 归因均 PASS）。席甲 B4-r1 票 PASS（modules/M026-b4-r1-self-raw.md V0.01，6075bytes SHA256 3b6c996df06dac4254606084f6bce2363561bc9524864ae5c034637cf4f92b77）。合取双 PASS，findings V2.85（SHA256 e8e94b632e7c96159d51fe08887bf7eac7e21e0f0b3f09e4c93c84f24252ac32）把 001 队列改否；当前队列是=0。B3 累计 1/3。
+下一步 B5-r1：派 Grok 整模块全量三线重审（modules/M026-b5-r1-grok-raw.md），席甲自席 raw 后读 Grok 并做四值校验（精确路径 modules/M026-b5-r1-grok-raw.md 最后独占锁行）；双 PASS → ledger 先记 PASS 再写 modules/M026-jdbc-timestamps-seg1.md、检查点合并；任一 FAIL → 回退统一规则。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.6/xhigh。M026 B5-r1修复后整模块三线全量重审（后台实现模块），正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B1/B5及三线，全文读backend/src/main/java/com/complex/platform/common/jdbc/JdbcTimestamps.java（现带文件版本V0.01）和21项已冻结映射定义/相关三HTML，不能只看diff或复用B2/B4票。背景：B1你票FAIL（GR-01类注释完成口径）、席甲PASS撤回→B2-r1双PASS定稿M026-001（技术性）→B3-r1只改类注释与版本标记→B4-r1内容/归因双PASS（Grok raw SHA256 9452526e6051ffeb1ce57a995760beb540d2763b2bb8eec97615aacbbff5e55d、席甲 SHA256 3b6c996df06dac4254606084f6bce2363561bc9524864ae5c034637cf4f92b77）；B3累计1。
+范围：plan/modules.md V0.04 M026 1文件（after tree 22d70caf574f878827e9d2afbd6bf9c62cb696e1），行数与SHA以实算为准。判据锁V0.11，M026 21项；全部适用或无本面逐项记录，不新增判据。findings现在V2.85：001否（已修）；不把全部否当文件已全对，允许真实新证据或回归。两个方法对null、非UTC会话时区、带与不带时区列的真实行为，调用面与被读列类型，类注释与方法注释的每条声称，测试是否能守住关键分支，按对象只读核实；psql只对complex_test做SELECT（-h 127.0.0.1 -U complex，口令只从/etc/complex/complex.env的COMPLEX_DATABASE_PASSWORD行读取且不回显，不得source该文件）；可只读复跑 /home/james/audit-tmp/m026_check.sh。
+全量审需第一性三问、顺从21项、grilling对抗，审完全文收齐全部问题才统一PASS/FAIL；不为理论场景加需求；别的模块里的同构副本已在B2双席定为只登记，不得在无新证据时改判。每问题给精确文件行/原句/正常触发/四分类顺序/已有判据/类型1、2或4证据。
+独立性：不得读本次M026-b5-r1-self-raw.md；两份本次完整raw各自封存后才互读；旧B1/B2/B4可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M026-b5-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/21证据/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M026 B4-r1 本席完整PASS已封存，待Grok
+2026-09-20T23:42:39Z。席甲 self modules/M026-b4-r1-self-raw.md V0.01/6075bytes/SHA256 3b6c996df06dac4254606084f6bce2363561bc9524864ae5c034637cf4f92b77：diff 6 条 ± 行逐条归因 001/随批版本行，内容 PASS/归因 PASS；封存前未读 Grok 本次正文。Grok B4-r1 仍运行，EXIT_CODE=PENDING，出处 modules/M026-b4-r1-grok-raw.md，命令见「B3-r1 已修」段。M026 IN_PROGRESS/B3 累计 1。尚非合取结论。
+
+
+## 当前 M026 B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-20T23:42:36Z。席甲在主工作区改本模块 1 文件的类注释：修前只读检查 RED（RED_CHECK_EXIT=1：注释带「已在所有仓储收口」的完成口径，而仓内尚有 9 处同构私有副本）→ 应用 2 处字符串替换（首行文件版本 V0.01；类注释一句）→ 修后同一检查 GREEN（GREEN_CHECK_EXIT=0：完成口径 0 处、单文件 javac 通过、方法体指纹 4b9880a6da40… 修前修后一致）。日志 /home/james/audit-tmp/m026_b3r1_run.log。before tree 122926c48d76e39783614d9ca0ec33e3e4ffb893 → after tree 22d70caf574f878827e9d2afbd6bf9c62cb696e1（1 file changed, 3 insertions(+), 3 deletions(-)）；diff 冻结 /home/james/audit-tmp/m026_b3_r1.diff（985 bytes SHA256 9c8a415f67788af4b62f7de8e899cdf3a5f1bcfedc25ccc99576196425a92c47）。未改方法体/别的模块/三份 HTML/锁；未提交。B3 累计 0→1。
+下一步：派 Grok B4-r1（modules/M026-b4-r1-grok-raw.md），席甲同步落盘 B4-r1 self raw 后再读。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.6/xhigh。M026 B4-r1：只读审计席甲B3-r1修复diff本身（后台实现模块），正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B4与§5闸3：diff＝两个tree id之间的全部差异，逐行归因到findings.md V2.84已定稿且归属「是」的ID（仅M026-001），归因不到的行即越界；内容上核改动是否按定稿最小处置（只改类注释一句、去掉every JDBC repository and parameter source的完成口径并采用B2双席定稿的措辞；文件首行加文件版本V0.01标记；两个方法体逐字不动）、改后注释是否仍含不可复现的完成口径或新增了会再过时的声称、有无业务发明或越界（不得改方法体、不得迁移别的模块副本、不得改其他文件）、单文件javac是否通过。
+输入：before tree 122926c48d76e39783614d9ca0ec33e3e4ffb893 → after tree 22d70caf574f878827e9d2afbd6bf9c62cb696e1；冻结diff文件 /home/james/audit-tmp/m026_b3_r1.diff（985bytes SHA256 9c8a415f67788af4b62f7de8e899cdf3a5f1bcfedc25ccc99576196425a92c47；1 file changed, 3 insertions(+), 3 deletions(-)），可自行 git diff --binary 122926c48d76e39783614d9ca0ec33e3e4ffb893 22d70caf574f878827e9d2afbd6bf9c62cb696e1 复核一致。改动文件1个：backend/src/main/java/com/complex/platform/common/jdbc/JdbcTimestamps.java。证据：修前检查 /home/james/audit-tmp/m026_b3r1_red.log（exit 1）、修后同一检查 /home/james/audit-tmp/m026_b3r1_green.log（exit 0，含单文件javac与方法体指纹4b9880a6da40f02496b5b9f873bc94386a9f89dc2a5a5109460dad9a3d1c4699修前修后一致）、执行日志 /home/james/audit-tmp/m026_b3r1_run.log；检查脚本 /home/james/audit-tmp/m026_check.sh 只读可复跑。
+独立性：不得读本次M026-b4-r1-self-raw.md；两份本次完整raw各自落盘后才互读；旧B1/B2可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M026-b4-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。diff逐块归因表、内容审计、最终PASS或FAIL（内容与归因分别给票，任一FAIL即FAIL）留raw，CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M026 B2-r1 双 PASS 定稿，进 B3-r1（席甲修）
+2026-09-20T23:42:34Z。Grok B2-r1 真实退出（exit 0；modules/M026-b1-grok-raw.md V0.02 追加段，全文 42187bytes SHA256 7a67b22a572da94e1cc8a85e5c4bdf427814c6725e8999a2f524d89e5a8a90a6，票 PASS）；席甲 B2-r1 票 PASS（modules/M026-b1-self-raw.md V0.02，全文 12942bytes SHA256 77f6978cdabb6211c10bdf95a348aa30731873b3d2a1cecd6878c0974ee3f9f7，自席落盘后才读 Grok 追加段）。定稿 findings V2.84（SHA256 ef5ee39a27a2506802927d1603c284d679409cf2af2dfa8a66f4a2f5ef7b65c1）：队列「是」1（001）、「否」0。B3-r1 由席甲在主工作区改本模块 1 文件的类注释（修前只读检查得 RED，修后同一检查 GREEN + 单文件 javac 编译通过）；修前 tree 记入 B3 完成节供 B4 冻结 diff；B3 累计 0→1。
+
+
+## 当前 M026 B2-r1 本席票已封存（PASS），待 Grok B2 票
+2026-09-20T23:33:47Z。席甲 B2-r1 票追加到 modules/M026-b1-self-raw.md V0.02（全文 12942bytes SHA256 77f6978cdabb6211c10bdf95a348aa30731873b3d2a1cecd6878c0974ee3f9f7；旧 11546bytes 前缀完整），封存前未读 Grok 本次追加段；同段撤回席甲 B1 的 PASS。Grok 仍运行，EXIT_CODE=PENDING，出处 modules/M026-b1-grok-raw.md V0.02 追加段。M026 IN_PROGRESS/B3 累计 0。尚非双 PASS。
+
+
+## 当前 M026 B1 两票已齐（Grok FAIL／席甲 PASS → 合取 FAIL），B2-r1 候选已落盘，待 Grok B2 票
+2026-09-20T23:33:44Z。Grok B1 交付：适配器回执 REPORT_PATH=modules/M026-b1-grok-raw.md、EXIT_CODE=0；V0.01 23976bytes SHA256 c658018655d80d12941959900bb6b6e1a2231d005e525b43db8dbdd9d28d7b21，结论 FAIL：GR-01（类注释「Centralizes … copy-pasted verbatim across every JDBC repository and parameter source」的收口声称与仓内现状不符——同构转换仍有多处不经本类；技术性，工程缺陷是）。席甲 self V0.01 11546bytes SHA256 377d0ad1f3776e1f2822360bbd7670b3a62fe705ee40013785934d2f91da1704（封存于 Grok 退出前），票 PASS：同一事实只登记为 OBS-1。两席落齐后席甲复核：主句 Centralizes 是现在时的收口声称，席甲 B1 读法过宽，撤回，合取 FAIL，采 Grok。
+B1 后四值（精确路径 modules/M026-b1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+B2-r1 候选 findings V2.83（SHA256 e3660cfc207102cd43e71ca71a68411dd67eba9d8f81b9e935d69e579db12357）：M026-001 拟入队（技术性；已逐条登记无业务发明的理由，请 Grok 独立复核分类）；处置只改类注释一句 + 文件版本标记，方法体不动。无添加项、无 questions、不 BLOCKED。写入集合＝本模块 1 文件。派 Grok B2-r1（追加到 modules/M026-b1-grok-raw.md V0.02），席甲自席 B2 票追加到 modules/M026-b1-self-raw.md V0.02 后再读其追加段。M026 IN_PROGRESS/B3 累计 0；源码/HTML/锁未改。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.6/xhigh。执行M026 B2-r1整批归并复核，正本/home/james/complex-management main主工作区。B1两席已落齐：你的modules/M026-b1-grok-raw.md V0.01（23976bytes SHA256 c658018655d80d12941959900bb6b6e1a2231d005e525b43db8dbdd9d28d7b21，FAIL，GR-01、OBS-1至6）；席甲modules/M026-b1-self-raw.md V0.01（11546bytes SHA256 377d0ad1f3776e1f2822360bbd7670b3a62fe705ee40013785934d2f91da1704，PASS，无findings、OBS-1至3，双方已封存现可读）。候选：findings.md V2.83（全文件SHA256 e3660cfc207102cd43e71ca71a68411dd67eba9d8f81b9e935d69e579db12357）顶部「当前 M026 B2-r1 整批候选」段：M026-001拟入队（技术性）。不得读本次self b1 raw之后新增的B2结论段。
+只审本批的归并/分类/队列/最小修复边界，不重新审模块。逐项独立核实：一、差集：你的GR-01与席甲OBS-1是同一事实（席甲B1把类注释读成只讲此前状态、只登记；B2复核后撤回该读法、采你的GR-01），其余两席观察全部只登记，有无漏并或改写。二、001分类技术性：按V0.17技术性分类判据逐条登记无业务发明的理由与证据是否充分（只涉时间戳转换代码的收口范围描述，不含任何业务对象、规则、状态或金额），请独立复核分类。三、最小处置：只改本文件类注释一句，去掉every JDBC repository and parameter source的完成口径，拟改为：Shared JDBC timestamp conversions: the Instant <-> SQL timestamptz mapping used by the JDBC repositories and parameter sources that import this class. 不新增还有哪些没收口之类会再过时的声称；文件首行加文件版本V0.01标记（M020至M025各模块修复文件同批加标记的既有做法）；两个方法体不动；不在本模块迁移别的模块里的副本。请核这句英文是否仍含不可复现的完成口径、措辞有无更小的改法。四、本批无添加项、无HTML申请、无questions。
+逐条给差集核实、分类理由、队列归属与最小修复边界意见，明确同意或不同意候选整批；PASS/FAIL二选一，不存在条件通过。已冻结判据不加判据，不用MCP或任何子代理，不改源码/测试/HTML/lock/findings/ledger，不fetch/commit/push/merge/deploy，不写新产物。
+唯一可写 /home/james/complex-management/docs/audit-2026-09/modules/M026-b1-grok-raw.md：已有23976bytes/V0.01，必须在末尾追加本次完整B2-r1报告，版本V0.02，保留整个旧前缀。B2不写任何新的独占CRITERIA-LOCK-SHA256行；注明输入两份B1报告和候选版本。本次CLI只交报告，不在stdout回带正文或标记；适配器处理退出回执。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M026 B1 本席完整PASS已封存，待Grok
+2026-09-20T23:17:05Z。席甲 self modules/M026-b1-self-raw.md V0.01/11546bytes/SHA256 377d0ad1f3776e1f2822360bbd7670b3a62fe705ee40013785934d2f91da1704：1 文件全读、21 判据逐项、三线完成、取证脚本 /home/james/audit-tmp/m026_b1_run.log（只读；其中一条汇总 SQL 写错已在 raw 如实说明、不作证据），封存前未读 Grok 本次正文。结论 PASS：无工程缺陷；登记 OBS-1（别的模块里仍有 2 处私有 nullableInstant 拷贝与 6 处内联转换）、OBS-2（无直测，77 个真库测试类间接守住）、OBS-3（英文类注释非界面文字）。Grok B1 仍运行，EXIT_CODE=PENDING，出处 modules/M026-b1-grok-raw.md，命令见「M026 B1开始」段。M026 IN_PROGRESS/B3 累计 0；四值待 Grok 落盘后再核。按 V0.17，无发现也须 B2 登记定稿→跳过 B3/B4→B5 确认后才收口。
+
+
+## 当前 M026 B1开始（M001–M025 已闭环；M025 检查点 PR #466 已合并）
+2026-09-20T23:14:24Z。操作员 2026-09-20 指令：严格按 V0.17 提示词审计，逐模块收口后先检查点提交合并推送再开下一模块（M025 检查点 PR #466 已合并，origin/main 28cfc46f）。M026「租户范围与数据隔离（技术不变量）／后台实现／第1段」PENDING→IN_PROGRESS（本版未审，ledger 无任何 M026 段/finding），1 文件 backend/src/main/java/com/complex/platform/common/jdbc/JdbcTimestamps.java（当前 29 行 / 1064 bytes / SHA256 369ffc5be326f26334ee3291c67e1231e8fda509f455a17650119ef28189ac6a；与 HEAD、origin/main 均无差异），映射 21 判据（BSM-001、BSM-003、PGM-001、GEN-001…018）。当前计数：PASS 25、IN_PROGRESS 1、PENDING 445。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1。两席并行独立：Grok 写 modules/M026-b1-grok-raw.md，席甲写 modules/M026-b1-self-raw.md，各自落盘后才互读；B1 后做四值校验。B3 累计 0。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读独立审计席乙，模型grok-4.6/xhigh，正本/home/james/complex-management main主工作区。执行160-audit-prompt.md V0.17阶段B的M026 B1修复前全模块审计（本模块首次开工，PENDING→IN_PROGRESS，本版历史未审）。独立发现，不读取modules/M026-b1-self-raw.md或依赖其发现；本席与席甲（Claude Fable 5.1，作者自审票）同时独立工作，各自全量审完全部范围、落完整raw后才互读。不因第一条问题停下或边审边修。
+范围严格为plan/modules.md V0.04 M026「租户范围与数据隔离（技术不变量）／后台实现／第1段」1个文件：backend/src/main/java/com/complex/platform/common/jdbc/JdbcTimestamps.java（当前29行，行数与SHA以实算为准；与HEAD及origin/main均无差异），全文读不抽样。三HTML只读为业务最终解释权；当前criteria-lock.md V0.11 M026映射21项（BSM-001、BSM-003、PGM-001与GEN-001至GEN-018），逐项读定义全文并逐项记录适用或无本面及理由。
+三线：第一性原理三问（用途/实际行为/未经验证前提），顺从式21项与全文覆盖，对抗式用grilling结构自问自答。本文件是全后端JDBC仓储共用的时间戳转换工具，审计要点：两个方法对null、对非UTC时区、对带时区与不带时区列的真实行为（以现行PostgreSQL JDBC驱动版本与complex_test库内列类型为准，psql只SELECT，-h 127.0.0.1 -U complex，口令只从/etc/complex/complex.env的COMPLEX_DATABASE_PASSWORD行读取且不回显，不得source该文件）；调用面（哪些仓储在用、读取的列是否都是timestamptz）；类注释里的每条声称（例如已把各仓储里逐字复制的转换收口到此）是否可从当前纳入范围复现；是否有会失败的测试守住这两个方法的关键分支（直接或经仓储测试间接），必要时可只读跑现有相关测试类，不得改源码与测试。代码是实现证据不是业务依据；HTML沉默处不得反推业务规则；不为理论场景补需求，真实首次正常照做可复现才立项。
+既有事实：主工作区HEAD e456ba96落后于origin/main（现28cfc46f，PR #466已合并）且含其他模块的未推本地提交与暂存改动；本文件自身三态一致。
+每项临时GR编号必须精确文件行、原文及更长上下文、正常触发/影响、最小拟处置、四分类顺序（冲突→细化→技术性→添加）、工程缺陷是否成立、冻结ID、四类第一性依据之一（HTML原文/可执行产物/外部规范原文/实际只读命令输出）。全模块问题与观察收齐后统一PASS/FAIL；无新发现也完整全文覆盖+21判据适用证据+三线记录。本轮只读业务代码/文档/三HTML/锁/台账，不改计划/findings/ledger，不fetch/commit/push/merge/deploy，不使用MCP/任何子代理/第三席，不等操作员，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写报告/home/james/complex-management/docs/audit-2026-09/modules/M026-b1-grok-raw.md：指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建（本次为V0.01）。本次报告第一行独立实算criteria-lock.md SHA256，格式CRITERIA-LOCK-SHA256: <64hex>；不得抄其它报告或期待值。完整报告从本次独占锁行至末尾。CLI不回带正文或机器标记，全部结论留指定raw。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M025 检查点已合并（PR #466）
+2026-09-20T23:12:24Z。按操作员「逐模块收口后先检查点提交合并推送再开下一模块」：在基于 origin/main（6da4e51b）的独立 worktree /home/james/wt-m025-checkpoint 分支 audit/20260920/m025-checkpoint 上只带本模块 1 个脚本终态（含 OPEN PR #445 内容） + ledger/findings + M025 全部 raw 与闭环文件（10 文件），提交 c6d00639；ops/160/propose-change.sh 本地 verify:predeploy 全绿后推分支开 PR #466；ops/160/merge-pr.sh --merge 等 predeploy-gates run 35543937841 success 后合并，origin/main 现为 28cfc46f。主工作区未动；其余遗留暂存/未推提交/OPEN PR 不并入。worktree 与分支随后清理。下一模块 M026。
+
 
 ## 当前 M025 B5-r1双PASS，四值全等，M025 → PASS（先记账，再写闭环文件）
 2026-09-20T23:11:12Z。Grok B5-r1 真实 exit 0，报告 modules/M025-b5-r1-grok-raw.md（V0.01，29212bytes SHA256 17e262398565430c8f5ea5d348a66bb823cb6c39c730b3c5aad9aaaea8467555，四项交付事实成立），整模块三线全量结论 PASS。席甲 B5-r1 票 PASS（modules/M025-b5-r1-self-raw.md V0.01，16497bytes SHA256 179e025a7b0beb7da661b9e08e169d6f962904a7bdbe18ac463e39f84128efbf；封存后才读 Grok）。合取双 PASS。
@@ -2959,8 +3036,8 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M022 `商户档案、商户类型与商户侧门户／后台验证／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M022-merchant-portal-backend-tests-seg1.md) | 0 | 2026-09-20 首次审计：B1 双 FAIL（GR 6/CX 2）→ B2-r1 双 PASS 定稿 001–007 → B3-r1（只改 2 个测试文件，变异给红）→ B4-r1 双 PASS → B5-r1 双 PASS：self be6c5006… / Grok 39550083…，四值全等；修复队列 7 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #463 已合并（origin/main 89686538） |
 | M023 `商户档案、商户类型与商户侧门户／网页与验证／第1段` | PASS | 2 | 2 | [B5-r2双PASS](modules/M023-merchant-portal-web-seg1.md) | 0 | 2026-09-20 首次审计：B1 双 FAIL（GR 6/CX 5）→ B2-r1 定稿 001–006（006 冲突）→ B3-r1（6 前端文件，TDD）→ B4-r1 双 PASS → B5-r1 Grok FAIL（GR-01，席甲 PASS 撤回）→ B2-r2 定稿 007 → B3-r2（2 文件）→ B4-r2 双 PASS → B5-r2 双 PASS：self 16801160… / Grok 79de241f…，四值全等；修复队列 7 个 ID 全否（已修）；B3累计2；席甲=Claude Fable 5.1；检查点 PR #464 已合并（origin/main 0c04a5e2） |
 | M024 `商户档案、商户类型与商户侧门户／文档与接口定义／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M024-merchant-portal-prd-seg1.md) | 0 | 2026-09-20 首次审计：B1 双 FAIL（GR 5/CX 3）→ B2-r1 双 PASS 定稿 001–005 → B3-r1（1 文档）→ B4-r1 双 PASS → B5-r1 双 PASS：self 4f025683… / Grok fa725d0c…，四值全等；修复队列 5 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #465 已合并（origin/main 6da4e51b） |
-| M025 `商户档案、商户类型与商户侧门户／运行和发布脚本／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M025-seed-dev-bars-script-seg1.md) | 0 | 2026-09-20 首次审计：B1 双 FAIL（GR 3/CX 1）→ B2-r1 双 PASS 定稿 001、002（GR-03 只登记）→ B3-r1（1 脚本）→ B4-r1 双 PASS → B5-r1 双 PASS：self 179e025a… / Grok 17e26239…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1 |
-| M026 `租户范围与数据隔离（技术不变量）／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M025；既有累计仅保留历史，不代表本版已审 |
+| M025 `商户档案、商户类型与商户侧门户／运行和发布脚本／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M025-seed-dev-bars-script-seg1.md) | 0 | 2026-09-20 首次审计：B1 双 FAIL（GR 3/CX 1）→ B2-r1 双 PASS 定稿 001、002（GR-03 只登记）→ B3-r1（1 脚本）→ B4-r1 双 PASS → B5-r1 双 PASS：self 179e025a… / Grok 17e26239…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #466 已合并（origin/main 28cfc46f） |
+| M026 `租户范围与数据隔离（技术不变量）／后台实现／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M026-jdbc-timestamps-seg1.md) | 0 | 2026-09-20 首次审计：B1 Grok FAIL（GR-01）／席甲 PASS 撤回 → B2-r1 双 PASS 定稿 001（技术性）→ B3-r1（1 文件类注释）→ B4-r1 双 PASS → B5-r1 双 PASS：self ba50fc9c… / Grok 9388291e…，四值全等；修复队列 1 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1 |
 | M027 `租户范围与数据隔离（技术不变量）／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M139、M140、M145、M146、M147；既有累计仅保留历史，不代表本版已审 |
 | M028 `租户范围与数据隔离（技术不变量）／文档与接口定义／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M269；既有累计仅保留历史，不代表本版已审 |
 | M029 `租户范围与数据隔离（技术不变量）／检查及生成工具／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M312、M317；既有累计仅保留历史，不代表本版已审 |
