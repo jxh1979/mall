@@ -1,5 +1,31 @@
 # 全量审计 Findings 台账
-版本：V3.07
+版本：V3.10
+
+## 当前 M035 B4-r1 双PASS，M035-001、002、003 已修转「否」，进入B5-r1
+2026-09-21T09:55:53Z。Grok B4-r1 票 PASS（modules/M035-b4-r1-grok-raw.md，25174bytes SHA 30d6997a219e5e4f71eab476a991698ff9276ed9178a3343a79bdcd3cb59fcf9）；席甲票 PASS（modules/M035-b4-r1-self-raw.md，25036bytes SHA 8739200b16e50e758d170ce39cfc988d7e8b679db5d21bdec9aac3f6965ae4a9）。M035-001、002、003 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（3）：M035-001、M035-002、M035-003（已修）。
+- 当前M035修复队列「是」：0。
+
+
+## 当前 M035 B2-r1 双PASS定稿，3项待修（B3-r1）
+2026-09-21T09:38:11Z。Grok B2-r1 票 PASS（modules/M035-b1-grok-raw.md V0.02，全文 58559bytes SHA 43d8597527439bf5da294574ed02baeaa0d787084a3a1785af7fd64cc5d5f0b3）；席甲 B2-r1 票 PASS（modules/M035-b1-self-raw.md V0.02，全文 26035bytes SHA 23ce492c02729216b0875ff4a368daee3b32ee90e2092779560973f76857fa4f）。定稿：M035-001（冲突）、002、003（技术性）修复队列「是」；XM-M035-A 登记。Grok 确认：V430 是 001 最小完整处置的一部分、不是扩范围；「人工智能」为「AI」的同义直译，不新造业务对象，不须 2.2 提问；002 补测必须对复数方法 requirePermissions（双码）打桩/校验，archive 分支校验单数方法；reject_delete 与 approve_delete 同一分支，测其一即可。
+- 修复队列「是」（3）：M035-001、M035-002、M035-003。
+- 修复队列「否」（0）。
+
+
+## 当前 M035 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T09:27:07Z。输入仅当前 471 计划 M035 的完整 B1 双席 raw：modules/M035-b1-self-raw.md V0.01（24623bytes SHA 732a60e07799ab70f67361654757edfe3491251df9a816b829357c5c8da7351a，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M035-001，OBS-1…4）、modules/M035-b1-grok-raw.md V0.01（38958bytes SHA a03bf5ae91c906a9f4903ea9a0b5bf4a6d6bbf7751f42a38eae8f9c68228abdf，Grok 席乙，FAIL：GR-01、GR-02、GR-03，观察 O-1…11）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-03→001（席甲漏）；CX-M035-001＋GR-01→002；GR-02（＝席甲 OBS-4）→003。B3 累计 0；写入集合＝`backend/src/test/java/com/complex/platform/access/AccessControllerTests.java`、`backend/src/test/java/com/complex/platform/access/AccessJdbcIntegrationTests.java`＋新增前向迁移 `backend/src/main/resources/db/migration/V430__permission_names_no_latin_ai.sql`（001 的配套，免得主干留一条已知红的测试）；检查点里隔离规格文档随新迁移机械重生成 1 行（先例 M034）。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M035-001 | Grok GR-03（席甲 B1 漏：把该测试记为「有真库断言」，没去对它 SQL 里的豁免与 HTML 原文） | 冲突（采 Grok 分类） | 是 | 是 | `backend/src/test/java/com/complex/platform/access/AccessJdbcIntegrationTests.java:673-686` `seededDisplayNamesAreChinese` 用 `replace(permission_name, 'AI', '') ~ '[A-Za-z]'` 把「AI」挖掉再查拉丁字母，注释称「HTML 正文自身使用的『AI』除外」。治理地图原文：展示给用户的一切文字「必须全部为中文，不得出现任何英文」，可以不用中文的只有四样（单据号、设备编号、二维码内容、系统内部标识符），没有第五样。库内现有两条权限名含「AI」（`analytics.risk_alert.view` 查看经营分析风险预警和AI质量台账、`wecom.ai_qc.manage` 管理企微AI语义质检开关和适配器），权限列表页直接上屏，本测试按设计不会红。HTML 里「AI」只在一句描述本地大模型的正文里出现两次，不是界面文字的豁免依据；台账与 findings 内查不到操作员对该豁免的裁决 | PGM-001 / GEN-003 / GEN-015；最小处置：①测试去掉 `replace(…, 'AI', '')` 与注释里的豁免句，对任何拉丁字母都红；②为不让主干留一条已知红的测试，同批新增前向迁移 `V430`：`UPDATE permissions SET permission_name = replace(permission_name, 'AI', '人工智能') WHERE permission_name ~ 'AI'`（「AI」→「人工智能」是同义中文写法，不改含义；permission_code 为机读标识不动；已应用迁移不回改）。其它上屏面（前端页面文案等）若还有拉丁字母，属各自模块，登记 XM-M035-A |
+| M035-002 | 席甲 CX-M035-001＋Grok GR-01（同一主题：控制器门控没有被测试锁住） | 技术性（采 Grok 对 GR-01 的分类；席甲原拟细化，上位句只是旁证，测试缺口本身无业务发明） | 是 | 是 | `backend/src/test/java/com/complex/platform/access/AccessControllerTests.java`：①岗位模板生命周期端点按 action 分两种权限要求、②授权申请审批须同时持两个权限码、③职级与定岗端点用路径 id 覆盖请求体 user_id——三处在全部测试里 0 处引用（席甲探针 2）；④已有的三条成功路径测试（权限点列表 L87-109、职级列表 L205-219、职级分配 L221-242）不校验各自的门控码 `access.permission.view`／`access.staff_level.view`／`access.staff_level.manage`，控制器漏掉门控它们仍绿（Grok GR-01） | GEN-003 / GEN-005；最小处置（只改该测试类，不改被测代码，不铺 33 入口矩阵）：补三条——生命周期端点（approve_delete 校验双权限、archive 校验单权限）、授权审批端点（校验双权限且被拒时 403）、职级与定岗端点（请求体带别人的 user_id，ArgumentCaptor 断言传给服务层的是路径 id）；并在上述三条成功路径测试里各加一句 `verify(authorizationService).requirePermission("<对应码>")` |
+| M035-003 | Grok GR-02（席甲 B1 记为 OBS-4） | 技术性 | 是 | 是 | `backend/src/test/java/com/complex/platform/access/AccessJdbcIntegrationTests.java:661-671` `staffLevelChangeRunsInOneTransactionLikePositionAssignment` 的名称与注释声称守住「已定岗改职级的四步写入同一事务」，实际只断言两个方法带 `@Transactional` 注解，零次调用被测方法；读测试的人会以为四步原子性已被真库锁住 | GEN-003 / GEN-016；最小处置：只改测试名与注释，如实写成「断言 assignUserPosition 与 assignStaffLevel 两个入口声明了事务」；不新造四步路径的真库测试（该路径的行为测试在 M036），不动 M006-G-07 的断言本身 |
+
+- 跨模块登记：XM-M035-A（→各前端/文档模块）：001 只管权限名；其它上屏面若仍含拉丁字母（含「AI」），由各自模块按同一条 HTML 原文处置。
+- 只登记不入队：未登录断言接受 401 或 403（两席一致；先例 M011）；控制器夹具 `wildcard=true` 与实现恒 false 不符（只验 JSON 形状）；其余 20 个未被调到的映射为无分支单权限门控加透传，不铺矩阵；审计只读正则以后缀近似写操作（种子现态下绿）；同一 UUID 出现在两个测试（并行才会撞）；DENY 覆盖 GRANT 的组合断言在 M036；映射未含 BEQR-149/151、PGM-040/041（不扩锁）；plan/modules.md 记 1166 行、实算 1200 行；席甲派发词写「34 个映射」、方法级实为 33。
+- 修复队列「是」（3）：M035-001（冲突）、M035-002（技术性）、M035-003（技术性）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M034 B4-r1 双PASS，M034-001 已修转「否」，进入B5-r1
 2026-09-21T08:41:02Z。Grok B4-r1 票 PASS（modules/M034-b4-r1-grok-raw.md，29949bytes SHA 0f22abea97d12725d554142b7f3c823a34198bd8589220fbc7cd596e85e96910）；席甲票 PASS（modules/M034-b4-r1-self-raw.md，11973bytes SHA 1f56db1ea8de11e10b838f04c36c3edddf4db6f84e7520d3d0cb5dcbea50684d）。M034-001 修复队列「是」→「否（已修，B3-r1）」。
