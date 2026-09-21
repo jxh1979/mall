@@ -1,5 +1,36 @@
 # 全量审计 Findings 台账
-版本：V2.99
+版本：V3.02
+
+## 当前 M032 B4-r1 双PASS，M032-001、002 已修转「否」，进入B5-r1
+2026-09-21T06:33:20Z。Grok B4-r1 票 PASS（modules/M032-b4-r1-grok-raw.md，35182bytes SHA 8ae82ca230ec57782ea9ef0ba3c17992d64ee6bd0048372669fd54da88f8a341）；席甲票 PASS（modules/M032-b4-r1-self-raw.md，23329bytes SHA d0a24eb6ed5f183fb179299ac89cbe0b127ae986031c6bb42e6c3f8d553c4f81）。M032-001、002 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（2）：M032-001、M032-002（已修）。
+- 当前M032修复队列「是」：0。
+
+
+## 当前 M032 B2-r1 双PASS定稿，2项待修（B3-r1）
+2026-09-21T06:18:55Z。Grok B2-r1 票 PASS（modules/M032-b1-grok-raw.md V0.02，全文 67123bytes SHA 6f37ca0e6dcc71601f7f00dd3814b1a96b776c98122e16ea8050920e158e10dd）；席甲 B2-r1 票 PASS（modules/M032-b1-self-raw.md V0.02，全文 33509bytes SHA a1f7ae159ee6d889938a6077811dc7b1c86540e0b654ae6bddba4293eee26ebe）。定稿：M032-001（细化）、002（技术性）修复队列「是」；W-1…W-4 按 D-029 登记到 2026-09-13 未发布工作流，不入本模块队列、不随本模块发布（Grok 明确同意；该工作流发布前必须消掉平台管理员列表 403）。
+- 修复队列「是」（2）：M032-001、M032-002。
+- 修复队列「否」（0）。
+- Grok B2 对 001 的边界（采纳）：第 5 组件可空、紧凑构造器不把它列入非空闭集；`@JsonInclude(NON_NULL)`；4 参便捷构造器；`saveGrantPolicy` 用 jsonb `||` 合并，主工作区与发布变体同一处同一文本；真库回归＋内存 JSON 补键。冻结支撑 GEN-002／GEN-006／GEN-008，PGM-026 不作本条支撑、不扩锁。Grok 撤回其 B1「Jackson 读记录类默认忽略未知字段」之说（jackson-databind 2.21.5，`new ObjectMapper()` 的 FAIL_ON_UNKNOWN_PROPERTIES 默认开）。
+
+
+## 当前 M032 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T06:05:27Z。输入仅当前 471 计划 M032 的完整 B1 双席 raw：modules/M032-b1-self-raw.md V0.01（32223bytes SHA 88bf80c3a26e1f8b31c349c26de2ebc009468e18716c561606dfc421bc5fa011，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M032-001…004，OBS-1…7）、modules/M032-b1-grok-raw.md V0.01（46223bytes SHA 1ac439d8812b0550e153d7e3c4ca71d2715023795d88962388bfc773beefb165，Grok 席乙，FAIL：GR-01、GR-02、GR-03，观察 O-1…13）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-03＋席甲真库探针→001（席甲 B1 漏，采 Grok 并加重）；CX-M032-001＋O-3→002；GR-01/GR-02/CX-003/CX-004 只在主工作区未发布版成立→按 D-029 登记 W-1…W-4。B3 累计 0；写入集合＝`backend/src/main/java/com/complex/platform/access/AccessGrantPolicy.java`、`backend/src/main/java/com/complex/platform/access/JdbcAccessRepository.java`（只动 `saveGrantPolicy` 一条 SQL）、`backend/src/main/java/com/complex/platform/access/EffectivePermissions.java`＋测试文件 AccessJdbcIntegrationTests.java（M035）、AccessServiceTests.java（M036）（均 PENDING）。JdbcAccessRepository.java 的发布变体＝origin/main 版＋同一处补丁（主工作区版另含未发布改动，不随本模块带出；先例 M031 的 M006SecurityRegressionTests）。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M032-001 | Grok GR-03（席甲 B1 漏）＋席甲 B2 真库探针（比 GR-03 写的更重） | 细化（上位：治理地图「全平台审批通用时限」为后台业务参数；采 Grok 分类） | 是 | 是 | `backend/src/main/java/com/complex/platform/access/AccessGrantPolicy.java:9-18` 记录类只有 4 个字段；库内 `supervisor_review_policies` 的 `access_grant` 行自已发布迁移 V389 起带第 5 个键 `deadlineWorkingDays`（complex_test 实查：`{"value":3,"min":1,"max":30}`）。①读：`AccessService.grantPolicy()` 用 `new ObjectMapper()` 反序列化，Jackson 默认遇未知字段即抛——席甲探针（/home/james/audit-tmp/m032_probe.log：一次性 worktree＝origin/main 原样，对 complex_test）实得 `grantPolicy FAILED ApiException 后台授权政策格式或上下限无效`。凡经 `grantPolicy()` 的路径在跑过 V389 的库上都会 409：GET /grant-policy、授权申请列表、频繁申请统计、含须审批权限的授权申请、岗位模板含高危码时的定岗与范围变更。Grok B1 写「Jackson 读记录类默认忽略未知字段」不成立。②写：`backend/src/main/java/com/complex/platform/access/JdbcAccessRepository.java:776-783` `saveGrantPolicy` 整份覆盖 jsonb，记录类序列化不含该键，保存一次即把审批时限键抹掉，主管复核回落到代码默认日。两版文件相同，origin/main 成立；内存测试的政策 JSON 不带该键所以一直是绿的 | GEN-002 / GEN-006 / GEN-008 / PGM-026；最小处置（只改本模块 2 个文件）：①`AccessGrantPolicy` 增第 5 个组件 `BoundedInt deadlineWorkingDays`，可为空（未跑 V389 的库没有该键），非空时由 `BoundedInt` 既有校验把关，序列化时为空则不输出；保留 4 参便捷构造器（`M006JdbcRegressionTests.java:144` 在用）；②`saveGrantPolicy` 改为 `parameters = parameters || CAST(:parameters AS jsonb)`，客户端没带的键保持库内原值。测试：AccessJdbcIntegrationTests（M035，PENDING，与 origin/main 相同）补一条真库回归——读库内现行政策行经同一解析路径得到含 `deadlineWorkingDays` 的对象，保存一份不带该键的政策后库内该键仍在；AccessServiceTests 内存政策 JSON 补上该键 |
+| M032-002 | 席甲 CX-M032-001＋Grok O-3 | 技术性 | 是 | 是 | `backend/src/main/java/com/complex/platform/access/EffectivePermissions.java` 类注释现在时声称「`wildcard=true` 仅当 actor 命中平台管理员桥」；全后端唯一构造点 `AuthorizationService.java:206` 第四参恒 `false`，平台管理员的日常码并入 `grants` 返回；两版相同 | GEN-016；最小处置：只改该类注释为现状（`wildcard` 现恒为 false；平台管理员的日常功能码已并入 `grants`；`denies` 仍优先），不改字段与计算 |
+
+- 只在主工作区未发布版成立、按 D-029 登记到「2026-09-13 未发布工作流」（提交 52074492、e9b88faf、49aaaa94 加已暂存改动；不入本模块队列，不随本模块发布；该工作流整体立项时带入）：
+  - W-1（Grok GR-01＝席甲 CX-M032-002＝XM-M031-A）：Jdbc 三个带参列表对 null 改为 PROJECT_SCOPE_REQUIRED，而已发布的 `AccessRepository` 接口契约与 `AccessService` 调用点仍是「null＝平台管理员全量」，平台管理员打开权限模板/角色/岗位映射列表即 403；种子平台模板 `owner_scope_id` 为空，即便改传管理员自己的项目号也列不出。Grok 拟处置：Jdbc 恢复 null→全量。席甲意见：这与该工作流提交说明「带参列人员/模板/角色时空范围改为拒绝，不再退成全表」正相反，取哪边取决于「七类红线第四条是否约束平台管理员」——属业务口径，报操作员；无论取哪边，发布该工作流前必须消掉这条 403。
+  - W-2（Grok GR-02＝席甲 OBS-1）：`currentProjectScopeQuietly()` 现在会抛，PartnerService/InventoryService/FloorPlanService/AccessService 的 `.orElse(null)` 调用面按「不抛」写成；无组织归属的主体进这些列表即 403。Grok 拟处置：Quietly 对无项目返回 empty。同属上面的业务口径。
+  - W-3（席甲 CX-M032-003＝Grok O-1）：单次临时授权改按 `grant_group_id` 整组消耗后，`M006JdbcRegressionTests` 自建临时表缺该列，主工作区该类 12 测 1 报错。处置：夹具补列，随该工作流。
+  - W-4（席甲 CX-M032-004＝Grok O-12）：主工作区版 AuthorizationService 依赖未发布的 `SessionIssuer.MASTER_ACCOUNT_TYPE`，「origin/main＋本模块 25 个现行文件」编译失败，不能单独发布。
+  - Grok O-4/O-5：`currentMerchantScope` 对无商户的管理员与最高权限一律抛、「逐笔开放」未实现；`pageGrantRequests`/`listGrantRequests` 对 null 仍全量，与 W-1 的收紧不一致。同属该工作流。
+- 只登记不入队（本模块观察，两版都有）：`withLifecycle` 与生命周期 SQL 恒写 inactive（M031-001 已在调用侧解决）；`findTemporaryGrant` 对非 UUID id 抛 IllegalArgumentException；origin/main 版 `currentSupervisorLevel` 不封顶（消费方另有最高权限闸；封顶改动在未发布工作流里）；`listUserIdsAssignedToPosition` Jdbc 未覆盖（M031 已登记）；`copyTemplate` 仓储自调用无事务（生产有服务层幂等事务）；`knownPermission` 吞异常当无权限（保守方向）；凭证 upsert 会清失败次数与锁定；`access_users.partner_org_id`、`position_role_templates.archived_by` 等列未映射到记录类；无咨询锁、用表锁与行锁；`listTemplates(org)` 不含平台模板而 `listRoles(org)` 含全局角色；读有效权限时顺带清理到期行；`createTemporaryGrant` 逐码插入。
+- 修复队列「是」（2）：M032-001（细化）、M032-002（技术性）。
+- 修复队列「否」（0）；登记到未发布工作流 W-1…W-4。
+
 
 ## 当前 M031 B4-r1 双PASS，M031-001、002、003 已修转「否」，进入B5-r1
 2026-09-21T05:18:17Z。Grok B4-r1 票 PASS（modules/M031-b4-r1-grok-raw.md，45046bytes SHA 1691edb3ad6c2bb0e9f29bebcfde5bd4fd3bc32271829f0c0a1e63fd138f28a8）；席甲票 PASS（modules/M031-b4-r1-self-raw.md，44079bytes SHA 64ad616fdb7af35e0a799b5407985bed2926a8859e1a701928f673e990f12e13）。M031-001、002、003 修复队列「是」→「否（已修，B3-r1）」。
