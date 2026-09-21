@@ -1,5 +1,31 @@
 # 全量审计 Findings 台账
-版本：V3.13
+版本：V3.16
+
+## 当前 M037 B4-r1 双PASS，M037-001、002 已修转「否」，进入B5-r1
+2026-09-21T12:27:32Z。Grok B4-r1 票 PASS（modules/M037-b4-r1-grok-raw.md，28582bytes SHA c4902059ab645eef904edb4e44cbd9b909fcf2b53dd3cddaa5e416b36156f6ff）；席甲票 PASS（modules/M037-b4-r1-self-raw.md，19436bytes SHA ffde3044eef953a29c89fbfa779784bbd642744ac8e97ffa162a1cad2f4f9fb4）。M037-001、002 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（2）：M037-001、M037-002（已修）。
+- 当前M037修复队列「是」：0。
+
+
+## 当前 M037 B2-r1 双PASS定稿，2项待修（B3-r1）
+2026-09-21T12:07:58Z。Grok B2-r1 票 PASS（modules/M037-b1-grok-raw.md V0.02，全文 52894bytes SHA f57d33f3cad1e69d2e6b557e2fbe3e3d690bae497e0dd7299243db8131710197）；席甲 B2-r1 票 PASS（modules/M037-b1-self-raw.md V0.02，全文 38450bytes SHA c3307cf8668fce77a4af5556dfc62844711fbf06180cb6acdfce7295fd309182）。定稿：M037-001（技术性）、002（细化）修复队列「是」；W-M037-1…2、XM-M037-A 登记。Grok 确认：001 是本聚合「权限模板」主面上授出能力闸与审批闸的关键分支（其 B1 O-1 的子集升队）；处置须在本条测试内加一条不须审批且操作人未持有的第三码，三种情形后模板项均不变；不得改 AccessService，不得只收紧原场景错误码而不补另外两支，不得把套用／建角色／员工授予／岗位路径的失败面写进本文件（那是 XM-M037-A）。002 采细化，三处并入同一条测试；只改发布口径、沿用 origin/main 的主会话夹具、不引入未发布常量；主工作区版只落 001。W 改号同意；XM-M037-A 同意登记待操作员决定是否重开 M036，不在本模块文件补。
+- 修复队列「是」（2）：M037-001、M037-002。
+- 修复队列「否」（0）。
+
+
+## 当前 M037 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T11:56:47Z。输入仅当前 471 计划 M037 的完整 B1 双席 raw：modules/M037-b1-self-raw.md V0.01（37297bytes SHA a6a0dd618c7816f0ca0c89772891dd7a178ea82f81e83770b48e0a727c87bfd8，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M037-001①②，OBS-1…3、W-M037-1、XM-M037-A）、modules/M037-b1-grok-raw.md V0.01（34828bytes SHA 57ce8fc531d664a542b2e7151e6056da90d0a62ade15bb5938a184d136b98ca8，Grok 席乙，FAIL：GR-01，W-1…W-4，观察 O-1…8）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：CX-M037-001①→001（Grok B1 未报）；GR-01＋CX-M037-001②→002（同一条生命周期测试的三处缺口；席甲 B1 漏了①②两处）。B3 累计 0；写入集合＝`backend/src/test/java/com/complex/platform/access/M006SecurityRegressionTests.java` 一个文件（主工作区版只落 001；发布变体＝origin/main 版＋001＋002），不改被测代码、不加迁移。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M037-001 | 席甲 CX-M037-001①（Grok B1 未报；其 O-1 把「多处只断言 ApiException」整体记为观察） | 技术性 | 是 | 是 | `backend/src/test/java/com/complex/platform/access/M006SecurityRegressionTests.java` origin/main 版 L175-183（主工作区版同文同行）`templateEditCannotGrantAnUnownedHighPermission` 用同一个「操作人不持有、又须审批」的码 HIGH 去撞 `AccessService.updatePermissionTemplate` 的两道闸（origin/main 版 L174 `requireActorCanGrant(added)`、L175 `requireGrantApprovalIfNeeded(added)`），断言只核抛 ApiException 与模板项不变。单独删掉任何一道（变异 template_edit_no_own_gate／template_edit_no_approval_gate，/home/james/audit-tmp/m037_mutation2.log），origin/main 全量 3473 个后端测试都 0 个新增变红；把第一道闸整体放开（actor_can_grant_open，m037_mutation.log）本测试也不红。两道闸守的是两件不同的事：模板管理员把自己不持有的日常权限加进已应用的模板（只有第一道拦）；把自己持有的高危权限加进已应用的模板直接发给已套用者（只有第二道拦）——正是 M006-005 当初定稿的缺陷 | GEN-003 / GEN-005（上位治理地图 L658／L703「属于既有高危权限的，不得因处于岗位模板内而免除授出前审批」、L660 高危授权审批五类）；最小处置（只改这一条测试，不改被测代码；两版文件打同一处补丁）：原场景断言错误码 `GRANT_EXCEEDS_OWN_PERMISSIONS`；补「不持有但不须审批的码」→ `GRANT_EXCEEDS_OWN_PERMISSIONS`；补「持有的高危码」→ `GRANT_REQUIRES_APPROVAL`；三种情形后模板项均不变 |
+| M037-002 | Grok GR-01（①非平台管理员存档、②驳回删除）＋席甲 CX-M037-001②（③普通管理员批准删除那处断言被「不得自审」顶替）——同一条测试 | 细化（采 Grok 分类） | 是 | 是 | `backend/src/test/java/com/complex/platform/access/M006SecurityRegressionTests.java` origin/main 版 L553-608 `positionTemplateLifecyclePreservesDataAndRequiresIndependentMasterApproval`：①全程主体是平台管理员或主会话，`AccessService.changePositionTemplateLifecycleAudited`（origin/main 版 L500-502）对非平台管理员抛 PLATFORM_ADMIN_REQUIRED 的闸从未被触发；②`reject_delete` 分支从未被调用；③L592-593「普通管理员批准删除」只断言抛 ApiException，而来批准的就是发起删除申请的同一个 admin——拿掉最高权限闸（变异 lifecycle_no_master）后该处改抛 SUPERVISOR_SELF_REVIEW_FORBIDDEN（/home/james/audit-tmp/m037_equiv.log），照样绿。三处各自的变异（席甲读 Grok 报告后补跑 lifecycle_no_platform_admin、reject_delete_as_approve，/home/james/audit-tmp/m037_mutation3.log；lifecycle_no_master 见 m037_mutation.log）在 origin/main 全量 3473 个后端测试上均 0 个新增变红。只在 origin/main 版成立：主工作区未发布版已有这三处断言（用的是未发布的 MASTER_ACCOUNT_TYPE 夹具） | GEN-003（辅 BSM-003、BSM-028、GEN-005）；最小处置（只改发布口径的这一条测试，沿用 origin/main 的主会话夹具＝MASTER_USER_ID＋platform_admin，不引入未发布常量；不改被测代码）：①先以 staff 主体调 archive，断言 `PLATFORM_ADMIN_REQUIRED` 且 `savePositionTemplateLifecycle` 未被调用；②申请删除后由主会话 `reject_delete`，断言未软删、删除复核单号清空，随后可再次申请并批准；③「普通管理员批准删除」改为核错误码 `MASTER_AUTHORITY_REQUIRED`。主工作区版该测试已含等价断言，不再改 |
+
+- 只在主工作区未发布版成立（D-029，不入队、不发布）：W-M037-1＝Grok W-1＋W-3＋W-4＝席甲 W-M037-1（主会话改按 SessionIssuer.MASTER_ACCOUNT_TYPE 识别、建岗位模板的主体改为 template-admin，依赖 origin/main 没有的常量，origin/main＋主工作区版无法编译）；W-M037-2＝Grok W-2（`topAuthorityReview…` 补的复核排期夹具只为满足未发布 SupervisorReviewService 的「须登记直接受益人」，与 W-M036-3 同源）。随该工作流一并发布。
+- 跨模块登记：XM-M037-A（→M036 的 AccessServiceTests，已闭环）：变异 actor_can_grant_open 把「授出不得超过自身权限」整体放开后，全量只红装配角色、建临时授权两条；该闸的另外几处调用点（套用模板、建角色、员工单独授予、岗位路径）没有各自能失败的测试。不属本模块文件，登记待操作员决定是否重开 M036。
+- 只登记不入队：其余 23 处只断言异常类型的写法（25 处现抛的都是各自所守的码，m037_codes.log；6 处变异验证能红，其余由 verify(never)／状态断言或单一守卫兜住；两席一致不逐一改成核码）；两条岗位派生测试断言的是测试自己的桩（两席一致；库内语义由 M036-001 守住）；`grantListHasADefaultTimeWindow` 只断言 cutoff 非空、不锁 30 天；反射调私有方法与一次字段注入（与生产装配一致）；桩内职级只 1–2 档；映射无 BSM-007／PGM-040／BEQR-151（不扩锁）；XM-M036-A 基线 20 红。
+- 修复队列「是」（2）：M037-001（技术性）、M037-002（细化）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M036 B4-r1 双PASS，M036-001、002 已修转「否」，进入B5-r1
 2026-09-21T11:11:04Z。Grok B4-r1 票 PASS（modules/M036-b4-r1-grok-raw.md，37980bytes SHA 801b81a97bea0398add1a7f7a1c4943034e0b8048bd8fc567cdd67a1e5bbb9f8）；席甲票 PASS（modules/M036-b4-r1-self-raw.md，31781bytes SHA 7cb73508d012936a99ea871fed907ee68beb7ad7f1a819cf030abe366f2bade0）。M036-001、002 修复队列「是」→「否（已修，B3-r1）」。
