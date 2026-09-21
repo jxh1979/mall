@@ -624,6 +624,26 @@ class AccessJdbcIntegrationTests {
                 .containsEntry("result", "expired");
     }
 
+    // M032-001（治理地图「全平台审批通用时限」为后台业务参数）：库内现行授权政策行（V389 起带 deadlineWorkingDays）
+    // 必须能按服务层同一解析路径读出；保存一份不带该键的政策后，库内该键保持原值。
+    @Test
+    void storedGrantPolicyParsesAndSavingKeepsDeadlineWorkingDays() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String stored = repository.findGrantPolicy().orElseThrow();
+        int days = mapper.readTree(stored).path("deadlineWorkingDays").path("value").asInt();
+        assertThat(days).isPositive();
+
+        AccessGrantPolicy current = mapper.readValue(stored, AccessGrantPolicy.class);
+
+        repository.saveGrantPolicy(mapper.writeValueAsString(new AccessGrantPolicy(
+                current.windowDays(), current.positionThreshold(), current.userThreshold(), current.riskReviews())));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT (parameters -> 'deadlineWorkingDays' ->> 'value')::int FROM supervisor_review_policies"
+                        + " WHERE policy_code = 'access_grant'", Integer.class)).isEqualTo(days);
+        assertThat(mapper.readValue(repository.findGrantPolicy().orElseThrow(), AccessGrantPolicy.class).windowDays().value())
+                .isEqualTo(current.windowDays().value());
+    }
+
     // M006-G-07（PGM-1.10.1「旧派生同步失效」）：已定岗改职级复用定岗的四步写入（职级、定岗、套模板、替换派生），
     // 入口必须与 assignUserPosition 一样由 Spring 事务整体包住，否则套模板已提交、替换派生失败时新旧派生并存。
     @Test

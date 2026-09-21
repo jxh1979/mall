@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -783,7 +783,7 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     public void saveGrantPolicy(String policyJson) {
         int changed = jdbcTemplate.update("""
-                UPDATE supervisor_review_policies SET parameters = CAST(:parameters AS jsonb), updated_at = now()
+                UPDATE supervisor_review_policies SET parameters = parameters || CAST(:parameters AS jsonb), updated_at = now()
                  WHERE policy_code = 'access_grant' AND enabled = true
                 """, Map.of("parameters", policyJson));
         if (changed != 1) throw new IllegalStateException("授权政策未配置");
