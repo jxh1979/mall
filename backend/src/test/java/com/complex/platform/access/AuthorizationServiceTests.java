@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -330,6 +330,26 @@ class AuthorizationServiceTests {
         ));
 
         assertThat(service.effectivePermissions().grants()).doesNotContain("ops.production_readiness.view");
+    }
+
+    // M036-002（治理地图「临时授权可设有效期或单次使用」）：生效时间未到的授予不放行，也不进有效权限集。
+    @Test
+    void grantWhoseValidityHasNotStartedDoesNotAuthorize() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(new AccessRepository.PermissionEffect(
+                "usr_staff",
+                "ops.production_readiness.manage",
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPORARY_GRANT,
+                "temp_not_started",
+                Instant.parse("2099-01-01T00:00:00Z"),
+                Instant.parse("2099-01-02T00:00:00Z"),
+                false,
+                false
+        ));
+
+        assertPermissionDenied("ops.production_readiness.manage");
+        assertThat(service.effectivePermissions().grants()).doesNotContain("ops.production_readiness.manage");
     }
 
     private AccessRepository.PermissionEffect effect(
