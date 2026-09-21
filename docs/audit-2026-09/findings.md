@@ -1,5 +1,28 @@
 # 全量审计 Findings 台账
-版本：V2.93
+版本：V2.96
+
+## 当前 M030 B4-r1 双PASS，M030-001 已修转「否」，进入B5-r1
+2026-09-21T03:56:35Z。Grok B4-r1 票 PASS（modules/M030-b4-r1-grok-raw.md，20831bytes SHA b55d4eec9d6a6e4abef747eb4614c8b2c4e102ba302d6b2f65fab970683c0171）；席甲票 PASS（modules/M030-b4-r1-self-raw.md，5457bytes SHA 2e120b064cce8092a92983ad01f1aac9d88344fb1e6275e5e342dd9aee977a22）。M030-001 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（1）：M030-001（已修）。
+- 当前M030修复队列「是」：0。
+
+
+## 当前 M030 B2-r1 双PASS定稿，1项待修（B3-r1）
+2026-09-21T03:46:58Z。Grok B2-r1 票 PASS（modules/M030-b1-grok-raw.md V0.02，全文 51873bytes SHA 2d1788c401042c6da737b7c983161698f820f91d14adca254974089447c28a99）；席甲 B2-r1 票 PASS（modules/M030-b1-self-raw.md V0.02，全文 14538bytes SHA 2358cc6838404dbb1079fa8bdfb4417ee73c45c1bc03a292aa921c5f9d1f850b）。定稿：M030-001 细化／工程缺陷是／修复队列「是」。
+- 修复队列「是」（1）：M030-001。
+- 修复队列「否」（0）。
+
+
+## 当前 M030 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T03:34:55Z。输入仅当前 471 计划 M030 的完整 B1 双席 raw：modules/M030-b1-self-raw.md V0.01（13545bytes SHA 420c3f8ab0051567a59fc655ea27709bd33cf849945b70b7c80baa9f9be82c6e，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M030-001、OBS-1…3）、modules/M030-b1-grok-raw.md V0.01（31502bytes SHA f105b34a6f4b05e31cb3cb72463a157ea12c3cfe26c578497d22e5f1717f5d84，Grok 席乙，FAIL：GR-01、观察 1…8）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01+CX-001→001（同一事实、同一处置）。B3 累计 0；写入集合＝本模块 1 文件。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M030-001 | Grok GR-01 + 席甲CX-M030-001（两席同见、处置相同） | 细化（上位：业务地图红线「看不到别的商户和别的项目的数据」、治理地图「数据的项目与商户隔离不提供关闭开关」；本文件是其机审棘轮清单。采 Grok 列出的上位句） | 是 | 是 | `security-scans/tenant-isolation-baseline.json:5-12` 两个条目 `F1:UNSCOPED_DIRECT_READ:access_grant_requests`、`F2:UNREGISTERED_TABLE:d`：扫描器现已不再复现（前者因 origin/main `JdbcAccessRepository.java:766` 已按 `project_id = :organization_id` 过滤；后者因 M029-002 起扫描器中和 `IS [NOT] DISTINCT FROM`），工具每次运行都提示「baseline 中 2 条已不再复现…应从 baseline 与台账移除以收紧闸口」；两条 text 仍写「扫描器报…尚未收紧」，与 `:2` note「只登记扫描器已发现、尚未收紧的项…收紧后从本清单移除」不符；默认闸口仍把这两个键当「已知」，同键回归不会作为新增失败 | GEN-002 / GEN-016 / GEN-005 / GEN-010 / GEN-001；最小处置：从 `known_findings` 删除这两个对象，保留仍被复现的两条 F1 与 note、generated_at_source 原文逐字不动。不跑 `--write-baseline`（会用扫描器内置文案覆盖中性 note 与活键 text）；不改扫描器、仓储、安全台账 |
+
+- 只登记不入队：`tools/generate-formal-security-baseline.mjs:304-310` 与其生成的 `security-scans/findings-register-v1.md:27` 写「access_grant_requests 保留 baseline…收紧至 1 条…可移除最后 1 条」，与本文件现状不符（安全基线生成器与台账所在模块）；`--write-baseline` 内置的旧 note 要求的 SEC-*-TENANT-ISOLATION-* 一一对应在现行台账里不存在（扫描器模块，M029 已闭环，观察）；`generated_at_source` 不是一次扫描的定位符；origin/main `JdbcAccessRepository.java:747` 仍有按 id 的无范围读（扫描器头注 B3 盲区）；主工作区副本与 origin/main 的 5 行差异（OPEN PR #446 的中性化改写）随检查点带入；陈旧键只提示不失败是扫描器既定行为。
+- 修复队列「是」（1）：M030-001（细化）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M029 B4-r1 双PASS，M029-001、002 已修转「否」，进入B5-r1
 2026-09-21T03:00:18Z。Grok B4-r1 票 PASS（modules/M029-b4-r1-grok-raw.md，29156bytes SHA bb5dacdcb59a71935b31eb9e7b85a0b15948b2d0c51cfce781c1e2a27df27b0e）；席甲票 PASS（modules/M029-b4-r1-self-raw.md，18932bytes SHA da8155b75a1e7cdaa3c3ba3f2ee992889cedf1ba719263bfb196d57245520d88）。M029-001、002 修复队列「是」→「否（已修，B3-r1）」。
