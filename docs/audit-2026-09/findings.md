@@ -1,5 +1,26 @@
 # 全量审计 Findings 台账
-版本：V3.02
+版本：V3.04
+
+## 当前 M033 B2-r1 双PASS定稿，修复队列为空（跳过 B3/B4，进 B5-r1）
+2026-09-21T07:36:38Z。Grok B2-r1 票 PASS（modules/M033-b1-grok-raw.md V0.02，全文 53261bytes SHA 10ca20e8b86b07fa64b6b7ed40aa0066215e7f7f03446143d6f44d548c014ca4）；席甲 B2-r1 票 PASS（modules/M033-b1-self-raw.md V0.02，全文 25755bytes SHA 5f01f3dd7d617f634b65b2f7dbc752aab2c396d9d43fece548e638cd774f8d80）。定稿：M033-001、002、003 均细化、工程缺陷「是」、修复队列「否」（本模块 13 个文件内不存在「改完后首次正常使用可观察行为变对、且不触碰已闭环模块」的改法；Grok 撤回其 B1 三条删除拟处置）；XM-M033-A/B/C→M392（003 兼 →M031）登记。
+- 修复队列「是」（0）。
+- 修复队列「否」（3）：M033-001、002、003。
+- Grok B2 的两处非阻断订正（采纳）：①席甲写「HTML『人工只补原因和证据』未点名授权类动作」过窄——治理地图 L656「权限的授予、收回、到期、单次消耗、失效全部留痕」、L899 必须留痕清单含「权限变更、临时授权和敏感权限使用」，HTML 点名了授权类留痕；PGM-066 同时写明「人工只补原因和证据」是操作指引、不作合规判定依据。这不改变 003 的队列归属（删 DTO 组件不能让附件进审批链）。②席甲引的「10.4 无微小改动豁免」在 V0.17 里没有该条号，依据应为 V0.17 §5 闸 3（diff 逐行归因、不设例外清单）＋本模块写入集合不含 AccessService.java。另：对未知 mode 返回 400 不一定要改 AccessService，但也不能让套用语义变对，002 结论不变。
+
+
+## 当前 M033 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T07:21:36Z。输入仅当前 471 计划 M033 的完整 B1 双席 raw：modules/M033-b1-self-raw.md V0.01（24360bytes SHA b4fe55ed697658aefdcb38d11127a8d8e5beb442b35dc58ad9ddb5d60b119982，席甲=Claude Fable 5.1，作者自审票，PASS：无 findings、OBS-1…7）、modules/M033-b1-grok-raw.md V0.01（35607bytes SHA e9097cb55ae9e1f8e2221aed1cd3376f6a043b870a853c0e6566f2ffa941a771，Grok 席乙，FAIL：GR-01、GR-02、GR-03，观察 O-1…14）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01→001、GR-02→002、GR-03→003，三条事实席甲均核实成立（席甲 B1 把 001、003 只记成观察、漏了 002 的契约枚举对照），工程缺陷「是」；但三条的缺陷所在与可生效的处置都不在本模块 13 个文件内（契约 M392／已闭环 M031／全项目信封约定），修复队列「否」。席甲 B1 票 PASS 撤回，合取 FAIL。B3 累计 0；本模块写入集合为空。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与处置 |
+|---|---|---|---|---|---|---|
+| M033-001 | Grok GR-01（＝席甲 OBS-3） | 细化（采 Grok 分类） | 是 | 否（XM→M392） | `backend/src/main/java/com/complex/platform/access/dto/AccessUserRequest.java:14` `phone` 组件带 `@JsonIgnore`、服务层不读；契约 `openapi-p0.yaml:31927-31930` 却写「后端不落明文，仅保存不可逆 phone_hash」——按契约传手机号的调用方以为已哈希入库，实际被丢弃。事实成立。席甲核实后不采「删除该组件」：①该组件与 `@JsonIgnore` 是已闭环 M006-025（冲突：手工建号把手机号存为无密钥 SHA-256 并经 AccessUser 返回）的处置结果；`M006SecurityRegressionTests.java:221-223` 正是用带 phone 的构造器断言 `created.phoneHash()` 为空来钉住「即便手机号进得来也不落库」，删组件等于拆掉这条回归的抓手；②删与不删对调用方没有任何可观察差别（Spring 的反序列化对未知字段本就忽略），说谎的是契约 | GEN-008 / PGM-059；处置：契约去掉 `phone` 或改写其描述为「本接口不接收手机号」——契约文件属 M392，登记 XM-M033-A，本模块 13 个文件不改 |
+| M033-002 | Grok GR-02 | 细化（采 Grok 分类） | 是 | 否（XM→M392） | `backend/src/main/java/com/complex/platform/access/dto/PermissionTemplateApplyRequest.java:11` `mode`；契约 `openapi-p0.yaml:29439-29445` 枚举 `replace / merge / preview`；服务层 `AccessService.java:241` 只识别 `single_use`，其余一律按追加处理；现行管理端 `PermissionTemplatesPage.tsx:328` 发送的是 `single_use` 或 `append`——三方里只有契约不对：按契约传 `preview` 的调用方以为是预览，实际会真的套用。事实成立 | GEN-008；处置：契约枚举改为后端与管理端实际使用的 `single_use / append`——属 M392，登记 XM-M033-B；对不认识的 mode 直接 400 要改已闭环 M031 的 AccessService，不在本模块；DTO 是无约束 String，本模块 13 个文件不改 |
+| M033-003 | Grok GR-03（＝席甲 OBS-1） | 细化（采 Grok 分类） | 是 | 否（登记） | 5 个 DTO（AccessGrantApplyRequest、RoleRequest、PermissionTemplateRequest、PermissionTemplateApplyRequest、TemporaryGrantRequest）的 `evidenceAttachmentIds` 后端不读、不落库。事实成立。席甲核实后不采「删除这些组件」：①这是全项目统一的写请求信封——后端 135 个 *Request.java 声明该组件、契约 96 个 schema 带 `evidence_attachment_ids`，只从这 5 个里删会破坏信封一致；②删与不删对调用方无可观察差别（未知字段本就被忽略），契约仍会继续宣称可传；③`TemporaryGrantRequest` 在已闭环 M031 的 `AccessService.java:1809` 被按现有参数个数构造，删组件必须改 M031 文件（10.4 无微小改动豁免）；④要让这些动作真的存证是新增能力（添加项），HTML「人工只补原因和证据」未点名授权类动作，不反推 | GEN-008 / GEN-011；处置：登记为全项目信封观察并转 M392（契约不应对不落证据的端点宣称该字段）与 M031（若操作员要求授权申请存证，属添加项，另行 2.2 提问）；本模块 13 个文件不改 |
+
+- 跨模块登记：XM-M033-A（→M392：`AccessUserRequest.phone` 契约描述与实现不符）、XM-M033-B（→M392：套用模板 `mode` 枚举与后端、管理端实际取值不符，按契约传 preview 会真套用）、XM-M033-C（→M392：契约缺 `final_approver_id`；`UserPermissionOverrideRequest` 无 schema，同 XM-M031-C；对不落证据的端点仍宣称 `evidence_attachment_ids`）。
+- 只登记不入队（本模块观察）：`PermissionTemplateApplyRequest.templateId`、`PermissionTemplateRequest.sourceTemplateId` 后端不读（一律用路径 id；首次正常两处同值）；两个向后兼容构造器只剩测试在用；记录类自动 toString 含口令但控制器/服务层无日志点，幂等层只存含随机幂等键的请求 JSON 的 SHA-256；DTO 无 Bean Validation、控制器 `@Valid` 空转，校验在服务层；仅 `AccessUserRequest` 带与全局蛇形策略同名的 `@JsonAlias`（冗余无害）；职级/定岗请求体的 `userId` 被控制器用路径 id 覆盖；`/temporary-grants/{id}/revoke` 不读 `action`（URL 已表达动作）；`expiresAt` 与 `validUntil` 分属不同 schema；映射未含 PGM-040（计划问题，不 LOCK-AMEND）。
+- 修复队列「是」（0）。
+- 修复队列「否」（3）：M033-001、002、003（均登记并转 XM）。
+
 
 ## 当前 M032 B4-r1 双PASS，M032-001、002 已修转「否」，进入B5-r1
 2026-09-21T06:33:20Z。Grok B4-r1 票 PASS（modules/M032-b4-r1-grok-raw.md，35182bytes SHA 8ae82ca230ec57782ea9ef0ba3c17992d64ee6bd0048372669fd54da88f8a341）；席甲票 PASS（modules/M032-b4-r1-self-raw.md，23329bytes SHA d0a24eb6ed5f183fb179299ac89cbe0b127ae986031c6bb42e6c3f8d553c4f81）。M032-001、002 修复队列「是」→「否（已修，B3-r1）」。
