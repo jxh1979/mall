@@ -1,7 +1,64 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V6.57
+版本：V6.65
+
+## 当前 M033 B5-r1双PASS，四值全等，M033 → PASS（先记账，再写闭环文件）
+2026-09-21T07:50:25Z。Grok B5-r1 真实 exit 0，报告 modules/M033-b5-r1-grok-raw.md（V0.01，29947bytes SHA256 2a65e7c6403f8d7fc9132f72928668dad50077da575167a2ffb3058fc3d0eddf，四项交付事实成立），整模块三线全量结论 PASS。席甲 B5-r1 票 PASS（modules/M033-b5-r1-self-raw.md V0.01，24410bytes SHA256 913bdce03aa0de03a5b3476c1597a2582d0cca79bdcc97c83e085485531b5028；封存后才读 Grok）。合取双 PASS。
+B5 后四值（精确路径 modules/M033-b5-r1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+M033 IN_PROGRESS→PASS：B3 累计 0（队列为空）；001…003 缺陷是、队列否，XM-M033-A/B/C→M392（003 兼 →M031）登记；添加项 0；questions 0；无 HTML 修改申请。本节写入后再创建闭环文件 modules/M033-access-backend-dto-seg3.md，随后按操作员「逐模块检查点」做检查点（只带台账/raw），合并后开 M034。
+
+
+## 当前 M033 B5-r1 本席完整PASS已封存，待Grok
+2026-09-21T07:36:45Z。席甲 self modules/M033-b5-r1-self-raw.md V0.01/24410bytes/SHA256 913bdce03aa0de03a5b3476c1597a2582d0cca79bdcc97c83e085485531b5028：13 文件全覆盖、52 项逐项核对、三线完成、取证脚本（/home/james/audit-tmp/m033_b5_run.log）重跑复核，封存前未读 Grok 本次正文。结论 PASS：本模块文件无新发现；001…003 登记未变；新登记 XM-M033-D（→M392：契约 account_type 枚举缺 outsourced_vendor，而建号接口只放行它）。Grok B5-r1 出处 modules/M033-b5-r1-grok-raw.md，命令见「B2-r1 双 PASS 定稿（修复队列为空）」段。M033 IN_PROGRESS/B3 累计 0；四值待 Grok 落盘后再核。尚非合取结论。
+
+
+## 当前 M033 B2-r1 双 PASS 定稿（修复队列为空），跳过 B3/B4，进入整模块确认审（B5-r1）
+2026-09-21T07:36:38Z。Grok B2-r1 真实退出（exit 0；modules/M033-b1-grok-raw.md V0.02 追加段，全文 53261bytes SHA256 10ca20e8b86b07fa64b6b7ed40aa0066215e7f7f03446143d6f44d548c014ca4，票 PASS）；席甲 B2-r1 票 PASS（modules/M033-b1-self-raw.md V0.02，全文 25755bytes SHA256 5f01f3dd7d617f634b65b2f7dbc752aab2c396d9d43fece548e638cd774f8d80，自席落盘后才读 Grok 追加段）。定稿 findings V3.04（SHA256 5870e1005e6a867f0d155125f6806ce74c2e326f90e96d1dafacdd716ba9c9b5）：001、002、003 工程缺陷「是」、队列「否」，XM-M033-A/B/C 登记；Grok 两处非阻断订正已记入 findings。按 V0.17：B2 定稿后修复队列为空 → 跳过 B3/B4 直接进 B5；不得因队列为空就直接判 PASS 收口，B5 双 PASS 仍是必须。B3 累计 0。
+下一步 B5-r1：派 Grok 整模块全量三线确认审（modules/M033-b5-r1-grok-raw.md），席甲自席 raw 后读 Grok 并做四值校验；双 PASS → ledger 先记 PASS 再写 modules/M033-access-backend-dto-seg3.md、检查点合并（本模块无代码改动，只带台账/raw）。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.6/xhigh。M033 B5-r1整模块三线全量确认审（本模块B2定稿修复队列为空，按160-audit-prompt.md V0.17跳过B3与B4，B5双PASS仍是收口必须），正本/home/james/complex-management main主工作区。按V0.17 B1/B5及三线，全文读plan/modules.md V0.04 M033的13个文件（backend/src/main/java/com/complex/platform/access/dto/下13个请求记录类，自B1以来未改，与origin/main 124902b7逐字节相同）和52项已冻结映射定义，不能复用B1/B2票。背景：B1你票FAIL（GR-01、GR-02、GR-03）、席甲PASS撤回→B2-r1双PASS定稿M033-001、002、003均细化、工程缺陷是、修复队列否（有效修复在契约M392与已闭环M031，不在本模块13个文件），XM-M033-A、B、C登记；你的B2 raw SHA256 10ca20e8b86b07fa64b6b7ed40aa0066215e7f7f03446143d6f44d548c014ca4、席甲 SHA256 5f01f3dd7d617f634b65b2f7dbc752aab2c396d9d43fece548e638cd774f8d80；findings现在V3.04。B3累计0。
+全量审需第一性三问、顺从52项、grilling对抗，审完全部文件收齐全部问题才统一PASS/FAIL；不把队列为空当模块已全对，允许真实新证据；已在B2双席定为登记的三条与各观察不得在无新证据时改判；不为理论场景加需求。每问题给精确文件行/原句/正常触发/四分类顺序/已有判据/类型1、2或4证据。后端测试只导出三个COMPLEX_DATABASE变量（库名改complex_test），不得source /etc/complex/complex.env；psql只对complex_test做SELECT。
+独立性：不得读本次M033-b5-r1-self-raw.md；两份本次完整raw各自封存后才互读；旧B1/B2可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物（一次性worktree除外且须删除），不对任何数据库执行写语句（跑既有测试类除外）。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M033-b5-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/52证据/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M033 B2-r1 本席票已封存（PASS），待 Grok B2 票
+2026-09-21T07:21:39Z。席甲 B2-r1 票追加到 modules/M033-b1-self-raw.md V0.02（全文 25755bytes SHA256 5f01f3dd7d617f634b65b2f7dbc752aab2c396d9d43fece548e638cd774f8d80；旧 24360bytes 前缀完整），封存前未读 Grok 本次追加段；同段撤回席甲 B1 的 PASS。Grok 仍运行，EXIT_CODE=PENDING，出处 modules/M033-b1-grok-raw.md V0.02 追加段。M033 IN_PROGRESS/B3 累计 0。尚非双 PASS。
+
+
+## 当前 M033 B1 两票已齐（Grok FAIL／席甲 PASS → 合取 FAIL），B2-r1 候选已落盘，待 Grok B2 票
+2026-09-21T07:21:36Z。Grok B1 交付：适配器回执 REPORT_PATH=modules/M033-b1-grok-raw.md、EXIT_CODE=0；V0.01 35607bytes SHA256 e9097cb55ae9e1f8e2221aed1cd3376f6a043b870a853c0e6566f2ffa941a771，结论 FAIL：GR-01（phone：契约可写、JSON 丢弃、服务不读）、GR-02（套用模板 mode：契约三枚举，服务只认 single_use）、GR-03（5 个 DTO 的证据附件收下不读）。席甲 self V0.01 24360bytes SHA256 b4fe55ed697658aefdcb38d11127a8d8e5beb442b35dc58ad9ddb5d60b119982（封存于读 Grok 正文之前），票 PASS（同类事实只记为观察，002 的契约枚举对照漏了）。两席落齐后席甲逐条核源：三条事实都成立，PASS 撤回、合取 FAIL；但缺陷所在与能生效的处置都不在本模块 13 个文件内——phone 的 JsonIgnore 是已闭环 M006-025 的处置且有回归测试用该组件钉住；mode 三方里只有契约不对（管理端发 single_use/append）；证据附件是全项目写请求信封（135 个 DTO／96 个 schema），其中 TemporaryGrantRequest 还被已闭环 M031 按现有参数构造。候选：三条工程缺陷「是」、队列「否」，登记转 XM-M033-A/B/C（→M392，003 兼 →M031）。
+B1 后四值（精确路径 modules/M033-b1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+B2-r1 候选 findings V3.03（SHA256 d6b3b353e90dbf779907d94cfdd6695008a0166ad8b3e70d6abaea61e3dc94be）。无添加项、无 questions、不 BLOCKED。派 Grok B2-r1（追加到 modules/M033-b1-grok-raw.md V0.02），席甲自席 B2 票追加到 modules/M033-b1-self-raw.md V0.02 后再读其追加段。M033 IN_PROGRESS/B3 累计 0。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.6/xhigh。执行M033 B2-r1整批归并复核，正本/home/james/complex-management main主工作区。B1两席已落齐：你的modules/M033-b1-grok-raw.md V0.01（35607bytes SHA256 e9097cb55ae9e1f8e2221aed1cd3376f6a043b870a853c0e6566f2ffa941a771，FAIL，GR-01、GR-02、GR-03、观察O-1至O-14）；席甲modules/M033-b1-self-raw.md V0.01（24360bytes SHA256 b4fe55ed697658aefdcb38d11127a8d8e5beb442b35dc58ad9ddb5d60b119982，PASS，OBS-1至7，双方已封存现可读）。候选：findings.md V3.03（全文件SHA256 d6b3b353e90dbf779907d94cfdd6695008a0166ad8b3e70d6abaea61e3dc94be）顶部「当前 M033 B2-r1 整批候选」段。不得读本次self b1 raw之后新增的B2结论段。
+只审本批的归并/分类/队列/最小修复边界，不重新审模块。席甲对你的三条事实全部核实成立、工程缺陷是、分类采你的细化，并撤回自己B1的PASS；分歧只在处置：你拟删除DTO组件，席甲拟三条都不改本模块13个文件、登记转跨模块。请逐条独立核实席甲的技术理由，明确同意或给出反驳：一、GR-01删phone组件：该组件加JsonIgnore是已闭环M006-025（冲突：手工建号把手机号存为无密钥SHA-256）的处置结果；M006SecurityRegressionTests第221至223行正是用带phone的构造器断言created.phoneHash()为空来钉住即便手机号进得来也不落库，删组件等于拆掉这条回归的抓手；删与不删对调用方无可观察差别（Spring反序列化对未知字段本就忽略，请核application.yml与全仓无fail-on-unknown配置）；与实现不符的是契约第31927至31930行的描述，契约属M392。二、GR-02 mode：现行管理端PermissionTemplatesPage.tsx第328行发送single_use或append，后端只识别single_use其余按追加，三方里只有契约枚举replace、merge、preview不对；改契约属M392，对未知mode返回400要改已闭环M031的AccessService；DTO是无约束String，本模块内没有能让行为变对的改法。三、GR-03删五处evidenceAttachmentIds：这是全项目统一的写请求信封（后端135个Request记录类声明该组件、契约96个schema带该字段，请自行grep核数），只删这5个会破坏信封一致；删与不删对调用方无可观察差别；TemporaryGrantRequest在已闭环M031的AccessService第1809行按现有参数个数构造，删组件必须改M031文件（10.4无微小改动豁免）；让这些动作真的存证是新增能力，HTML人工只补原因和证据未点名授权类动作。四、因此修复队列为空，三条登记并转XM-M033-A、B、C至M392（及M031），按V0.17空队列跳过B3与B4直接进B5，B5双PASS仍是必须。若你认为其中某条必须在本模块13个文件内改，请给出改了之后首次正常使用下可观察行为会变对的证据与不触碰已闭环模块的最小改法。五、其余观察只登记，有无漏并或应升队项。六、本批无添加项、无HTML申请、无questions。
+逐条给差集核实、分类理由、队列归属意见，明确同意或不同意候选整批；PASS/FAIL二选一，不存在条件通过。已冻结判据不加判据，不用MCP或任何子代理，不改源码/文档/HTML/lock/findings/ledger，不fetch/commit/push/merge/deploy，不写新产物，不对任何数据库执行写语句。
+唯一可写 /home/james/complex-management/docs/audit-2026-09/modules/M033-b1-grok-raw.md：已有35607bytes/V0.01，必须在末尾追加本次完整B2-r1报告，版本V0.02，保留整个旧前缀。B2不写任何新的独占CRITERIA-LOCK-SHA256行；注明输入两份B1报告和候选版本。本次CLI只交报告，不在stdout回带正文或标记；适配器处理退出回执。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M033 B1 本席完整PASS已封存，待Grok
+2026-09-21T06:59:28Z。席甲 self modules/M033-b1-self-raw.md V0.01/24360bytes/SHA256 b4fe55ed697658aefdcb38d11127a8d8e5beb442b35dc58ad9ddb5d60b119982：13 文件 229 行全读、52 判据逐项、三线完成；取证 /home/james/audit-tmp/m033_b1_run.log（只读），封存前未读 Grok 本次正文。结论 PASS：无工程缺陷；登记 OBS-1…7（5 个 DTO 的证据附件字段与 2 个 id 字段后端不读；契约 3 处字段差与 1 个缺失 schema 属 M392；兼容构造器只剩测试在用；toString 含口令但无日志点；无 Bean Validation）。Grok B1 出处 modules/M033-b1-grok-raw.md，命令见「M033 B1开始」段。M033 IN_PROGRESS/B3 累计 0；四值待 Grok 落盘后再核。
+
+
+## 当前 M033 B1开始（M001–M032 已闭环；M032 检查点 PR #473 已合并）
+2026-09-21T06:56:37Z。操作员 2026-09-20 指令：严格按 V0.17 提示词审计，逐模块收口后先检查点提交合并推送再开下一模块（M032 检查点 PR #473 已合并，origin/main 124902b7）。M033「功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第3段」PENDING→IN_PROGRESS（本版未审，ledger 无任何 M033 段/finding），13 个请求记录类（access/dto/）合计 229 行，全部与 origin/main 逐字节相同（不受未发布工作流影响，D-029 不适用）。映射 52 判据。当前计数：PASS 32、IN_PROGRESS 1、PENDING 438。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1。两席并行独立：Grok 写 modules/M033-b1-grok-raw.md，席甲写 modules/M033-b1-self-raw.md，各自落盘后才互读；B1 后做四值校验。B3 累计 0（台账行 B3 列现值为原 322 计划历史累计，仅留存）。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读独立审计席乙，模型grok-4.6/xhigh，正本/home/james/complex-management main主工作区。执行160-audit-prompt.md V0.17阶段B的M033 B1修复前全模块审计（本模块首次开工，PENDING→IN_PROGRESS，本版历史未审）。独立发现，不读取modules/M033-b1-self-raw.md或依赖其发现；本席与席甲（Claude Fable 5.1，作者自审票）同时独立工作，各自全量审完全部范围、落完整raw后才互读。不因第一条问题停下或边审边修。
+范围严格为plan/modules.md V0.04 M033「功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第3段」13个文件：backend/src/main/java/com/complex/platform/access/dto/下13个请求记录类（AccessGrantApplyRequest、AccessGrantReviewRequest、AccessUserRequest、PermissionTemplateApplyRequest、PermissionTemplateRequest、PositionRoleTemplateRequest、RoleAssignmentRequest、RoleRequest、StaffLevelAssignmentRequest、StatusChangeRequest、TemporaryGrantRequest、UserPermissionOverrideRequest、UserPositionAssignmentRequest；当前合计229行，行数与SHA以实算为准），全文读不抽样。三HTML只读为业务最终解释权；当前criteria-lock.md V0.11 M033映射52项，逐项读定义全文及相关HTML原文，逐项记录适用或无本面及理由。
+必读的环境事实：origin/main现124902b7（M032检查点PR #473已合并）；主工作区HEAD e456ba96落后于它且含未推提交与暂存改动，但本模块13个文件与origin/main逐字节相同。这些记录类的消费者是已闭环的AccessController与AccessService（M031）及StaffService，契约在docs/openapi/openapi-p0.yaml（M392），只作只读追证。ledger D-029与M031、M032各段记有相邻事实（未发布的红线第四条工作流、XM-M031-A/B/C、W-1至W-4），不得在无新证据时重复立项。后端测试只能在160上跑且只导出COMPLEX_DATABASE_URL、COMPLEX_DATABASE_USERNAME、COMPLEX_DATABASE_PASSWORD三个变量（值逐行读自/etc/complex/complex.env，URL的库名改为complex_test），不得source该文件；psql只对complex_test做SELECT。不得改源码与测试。
+三线：第一性原理三问（用途/实际行为/未经验证前提），顺从式52项与全文覆盖，对抗式用grilling结构自问自答。审计要点：每个组件的JSON命名与全局命名策略及契约是否一致、JsonAlias与JsonIgnore的实际效果；每个组件后端读不读（接口收下却丢弃的字段对首次正常使用有没有可复现的后果）；向后兼容构造器是否仍有调用方；必填与可空在消费方的校验是否对得上；敏感字段（口令、手机号）在日志、幂等请求哈希与审计里的去向；注释与文档性声称是否可复现。代码和契约是实现证据不是业务依据；HTML沉默处不得反推业务规则；不为理论场景补需求，真实首次正常照做可复现才立项。
+每项临时GR编号必须精确文件行、原文及更长上下文、正常触发/影响、最小拟处置、四分类顺序（冲突→细化→技术性→添加）、工程缺陷是否成立、冻结ID、四类第一性依据之一（HTML原文/可执行产物/外部规范原文/实际只读命令输出）。全模块问题与观察收齐后统一PASS/FAIL；无新发现也完整全文覆盖+52判据适用证据+三线记录。本轮只读业务代码/文档/三HTML/锁/台账，不改计划/findings/ledger，不fetch/commit/push/merge/deploy，不使用MCP/任何子代理/第三席，不等操作员，不建脚本日志临时产物（一次性worktree除外且须删除），不对任何数据库执行写语句（跑既有测试类除外）。按环境实用强制技能如实记录。
+唯一可写报告/home/james/complex-management/docs/audit-2026-09/modules/M033-b1-grok-raw.md：指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建（本次为V0.01）。本次报告第一行独立实算criteria-lock.md SHA256，格式CRITERIA-LOCK-SHA256: <64hex>；不得抄其它报告或期待值。完整报告从本次独占锁行至末尾。CLI不回带正文或机器标记，全部结论留指定raw。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M032 检查点已合并（PR #473）
+2026-09-21T06:53:48Z。按操作员「逐模块收口后先检查点提交合并推送再开下一模块」：在基于 origin/main（2c178f7a）的独立 worktree /home/james/wt-m032-checkpoint 分支 audit/20260920/m032-checkpoint 上只带 AccessGrantPolicy.java、EffectivePermissions.java、JdbcAccessRepository.java 发布变体（origin/main 版＋一处补丁）+ 2 个测试文件 + ledger/findings + M032 全部 raw 与闭环文件（14 文件）；提交前在该 worktree 里实跑六类测试全绿（临时拷入的未发布迁移跑完即删，不入提交），提交 7ec3f98f；ops/160/propose-change.sh 本地 verify:predeploy 全绿后推分支开 PR #473；ops/160/merge-pr.sh --merge 等 predeploy-gates run 35570398208 success 后合并，origin/main 现为 124902b7。主工作区未动；其余遗留暂存/未推提交/OPEN PR 不并入。worktree 与分支随后清理。下一模块 M033。
+
 
 ## 当前 M032 B5-r1双PASS，四值全等，M032 → PASS（先记账，再写闭环文件）
 2026-09-21T06:52:05Z。Grok B5-r1 真实 exit 0，报告 modules/M032-b5-r1-grok-raw.md（V0.01，44333bytes SHA256 bbace2c818a3cbd61a6191a09f9382bbb3372d14273956c44193c2076816d698，四项交付事实成立），整模块三线全量结论 PASS。席甲 B5-r1 票 PASS（modules/M032-b5-r1-self-raw.md V0.01，25457bytes SHA256 f36aabbc318477d806613147d9ba23da862a1df3a5930d3f057f92c5ebac7270；封存后才读 Grok）。合取双 PASS。
@@ -3502,8 +3559,8 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M029 `租户范围与数据隔离（技术不变量）／检查及生成工具／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M029-isolation-tools-seg1.md) | 0 | 2026-09-21 首次审计：B1 Grok FAIL（GR 2）／席甲 PASS 撤回 → B2-r1 双 PASS 定稿 001、002 → B3-r1（3 个工具 + 两份产物机械重生成）→ B4-r1 双 PASS → B5-r1 双 PASS：self fee1c69c… / Grok 0972ddbb…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #470 已合并（origin/main d215fde0） |
 | M030 `租户范围与数据隔离（技术不变量）／质量检查记录／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M030-tenant-isolation-baseline-seg1.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（同一条）→ B2-r1 双 PASS 定稿 001 → B3-r1（删两条陈旧键）→ B4-r1 双 PASS → B5-r1 双 PASS：self 04540071… / Grok 95c42b9f…，四值全等；修复队列 1 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #471 已合并（origin/main 508b2e87） |
 | M031 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第1段` | PASS | 1（本版；原322归属 M006 的历史累计 5 仅留存） | 2 | [B5-r1双PASS](modules/M031-access-backend-seg1.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 2/CX 2）→ B2-r1 双 PASS 定稿 001–003，GR-01 与事务内失败留痕丢失登记为 XM → B3-r1（AccessService＋2 个测试文件，TDD＋变异核对）→ B4-r1 双 PASS → B5-r1 双 PASS：self c95e5605… / Grok 3a01f0a9…，四值全等；修复队列 3 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；原322归属：M006；检查点 PR #472 已合并（origin/main 2c178f7a） |
-| M032 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第2段` | PASS | 1（本版；原322归属的历史累计 5 仅留存） | 2 | [B5-r1双PASS](modules/M032-access-backend-seg2.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 3/CX 4）→ B2-r1 双 PASS 定稿 001（授权政策读写）、002（注释），W-1…W-4 按 D-029 登记到未发布工作流 → B3-r1（TDD，发布口径 worktree）→ B4-r1 双 PASS → B5-r1 双 PASS：self f36aabbc… / Grok bbace2c8…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；原322归属：M006、M007、M008 |
-| M033 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第3段` | PENDING | 0 | 2 | - | 0 | 原322归属：M007、M008；既有累计仅保留历史，不代表本版已审 |
+| M032 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第2段` | PASS | 1（本版；原322归属的历史累计 5 仅留存） | 2 | [B5-r1双PASS](modules/M032-access-backend-seg2.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 3/CX 4）→ B2-r1 双 PASS 定稿 001（授权政策读写）、002（注释），W-1…W-4 按 D-029 登记到未发布工作流 → B3-r1（TDD，发布口径 worktree）→ B4-r1 双 PASS → B5-r1 双 PASS：self f36aabbc… / Grok bbace2c8…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；原322归属：M006、M007、M008；检查点 PR #473 已合并（origin/main 124902b7） |
+| M033 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第3段` | PASS | 0（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M033-access-backend-dto-seg3.md) | 0 | 2026-09-21 首次审计：B1 Grok FAIL（GR 3）／席甲 PASS 撤回 → B2-r1 双 PASS 定稿 001–003（缺陷是、队列否，转 XM→M392/M031）→ 队列为空跳过 B3/B4 → B5-r1 双 PASS：self 913bdce0… / Grok 2a65e7c6…，四值全等；B3累计0；席甲=Claude Fable 5.1 |
 | M034 `功能权限点、职级三十档、权限模板与最终权限计算／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M138、M141、M144、M145、M146、M148、M150；既有累计仅保留历史，不代表本版已审 |
 | M035 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M084；既有累计仅保留历史，不代表本版已审 |
 | M036 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第2段` | PENDING | 0 | 2 | - | 0 | 原322归属：M084；既有累计仅保留历史，不代表本版已审 |
