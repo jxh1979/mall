@@ -1,5 +1,29 @@
 # 全量审计 Findings 台账
-版本：V2.85
+版本：V2.87
+
+## 当前 M027 B2-r1 双PASS定稿，修复队列为空（跳过 B3/B4，直接 B5-r1）
+2026-09-21T00:39:12Z。Grok B2-r1 票 PASS（modules/M027-b1-grok-raw.md V0.02，全文 52198bytes SHA bbf624aa15bd69624234629b6c1570b69eb6f44bfa7e8f228db04303ca2d7f3d）；席甲 B2-r1 票 PASS（modules/M027-b1-self-raw.md V0.02，全文 26024bytes SHA 476f99321ac4c8ce86851d467ba2c666b6616f6f589a6144a3a0ec57d65cb872）。定稿：无 ID、修复队列为空；11 条观察只登记。
+- 修复队列「是」（0）。
+- 修复队列「否」（0）。
+
+
+## 当前 M027 B2-r1 整批候选（修复队列为空：只登记；尚未定稿；无添加项、无 questions）
+2026-09-21T00:31:12Z。输入仅当前 471 计划 M027 的完整 B1 双席 raw：modules/M027-b1-self-raw.md V0.01（24425bytes SHA 80440ad2982921604526203cde1d95010a7d49e1943639a726b59b5917a6cd61，席甲=Claude Fable 5.1，作者自审票，PASS：无 findings、OBS-1…6）、modules/M027-b1-grok-raw.md V0.01（36658bytes SHA ce202dc090ccc503d2adbaf829b1cba19fedf5f1a4f83a9f666640e2fc0d4353，Grok 席乙，PASS：临时 GR 项 0、观察 1…9）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。两席均无 finding → 本批无 ID 分配、修复队列为空。按 V0.17：B2 定稿后跳过 B3、B4（无可修、无 diff，B3 次数不变），直接进 B5 做全量审计确认，B5 双 PASS 才收口。
+- 只登记不入队（两席 B1 均 0 条 finding；以下全部为观察）：
+  1. `chk_stock_adjustment_type`（V046:56-62）以 NOT VALID 建立后从未 VALIDATE，库内 convalidated=f（两席同见：席甲 OBS-1、Grok 观察 1）。约束对 V046 之后的写入已生效、闭集与 `InventoryStockMovementService.ALLOWED_ADJUSTMENT_TYPES` 一致，首次正常路径无失败可复现。补一条 VALIDATE 的前向迁移在生产存量含闭集外旧值时会让部署失败，而生产数据两席都不能查——是否补属发布决策，报操作员。
+  2. merchant_id 宽度三档（V047 为 100、V051 为 80、其余 64；merchants.id 为 64），更宽不截断（席甲 OBS-2、Grok 观察 2）。
+  3. V214 八张表加 project_id、只给七张建索引；staff_base_salaries 每人一行、按主键访问（席甲 OBS-4、Grok 观察 3）。
+  4. `upsertBaseSalary` 的 ON CONFLICT 不更新 project_id：需「无档案先写薪资、之后再改薪资」才留 stale/NULL，属 access/staff 仓储所在模块（Grok 观察 4，跨模块）。
+  5. V049 的 ADD COLUMN 无 IF NOT EXISTS、当时未建索引（V065 已补）（席甲 OBS-3）。
+  6. V237/V244 头注记录的基线提交号与当时最高迁移号为历史信息，已应用迁移不可改（席甲 OBS-5）。
+  7. V243 三条回填对生产存量的实际命中无法在只读约束下验证；complex_test 的 ar_ap_items 28 行为晚于 V243 的测试残留、project/merchant 皆空，符合「推不出留 null」（席甲 OBS-6、Grok 观察 5）。
+  8. 隔离靠「列＋应用层谓词」，无行级安全策略；HTML 未要求（Grok 观察 6）。
+  9. 本模块无测试文件，行为由库现态与别的模块的真库测试旁证（Grok 观察 7、席甲 GEN-003 行）。
+  10. 主工作区别的模块有暂存改动；HEAD 的 `currentMerchantScope()` 无商户即抛，而部分调用方仍写 `.orElse(null)`——属各调用方所在模块（Grok 观察 8；与 M023/M024 既有登记同源）。
+  11. 库内 Flyway checksum 与朴素 CRC32 算法不同，不以之作漂移证据（Grok 观察 9）。
+- 修复队列「是」（0）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M026 B4-r1 双PASS，M026-001 已修转「否」，进入B5-r1
 2026-09-20T23:50:31Z。Grok B4-r1 票 PASS（modules/M026-b4-r1-grok-raw.md，17368bytes SHA 9452526e6051ffeb1ce57a995760beb540d2763b2bb8eec97615aacbbff5e55d）；席甲票 PASS（modules/M026-b4-r1-self-raw.md，6075bytes SHA 3b6c996df06dac4254606084f6bce2363561bc9524864ae5c034637cf4f92b77）。M026-001 修复队列「是」→「否（已修，B3-r1）」。
