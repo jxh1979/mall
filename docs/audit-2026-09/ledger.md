@@ -1,7 +1,88 @@
 CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
 LOCK-AMEND-COUNT: 1
 
-版本：V6.65
+版本：V6.77
+
+## 当前 M034 检查点：隔离规格文档随 V429 机械重生成（1 行）
+2026-09-21T09:03:06Z。检查点 worktree（origin/main 4f6ef48b＋V429）里 `node tools/generate-data-isolation-spec.mjs --check` 报「out of sync」：规格文档自动区块首行写着「当前解析到最新迁移 **V428**」，新增迁移后须重生成。按 M021／M029 先例（Grok M034 B4 Q7 亦已认可把重生留在基于 origin/main 的检查点）在该 worktree 里机械重生成：`docs/data-isolation-and-tenant-scope-security-spec-v0.1.md` 仅 1 行变化（V428→V429，仍 170 张表），归 M034-001 的机械后果；`docs/domain-ownership-scope-audit-v0.1.csv` 重生成后无变化。该规格文档属已闭环 M028，只变生成器拥有的自动区块、手写段不动。主工作区那份副本因含未发布 V427 本就与 origin/main 不同（D-028），不动。此为技术性环境处理，席甲自定并记此。
+
+
+## 当前 M034 B5-r1双PASS，四值全等，M034 → PASS（先记账，再写闭环文件）
+2026-09-21T09:02:09Z。Grok B5-r1 真实 exit 0，报告 modules/M034-b5-r1-grok-raw.md（V0.01，26587bytes SHA256 5b0759830843c8c65e4c86f2e225bd48419d2912a029375a171a9f1e8ad27f72，四项交付事实成立），整模块三线全量结论 PASS。席甲 B5-r1 票 PASS（modules/M034-b5-r1-self-raw.md V0.01，25910bytes SHA256 7bd7d110125dd9da2b536019319d0f099b185fad13a4542b668ea039f4d1f78b；封存后才读 Grok）。合取双 PASS。
+B5 后四值（精确路径 modules/M034-b5-r1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+M034 IN_PROGRESS→PASS：B3 累计 1（001）；修复队列 1 个 ID 否（已修）；添加项 0；questions 0；无 HTML 修改申请；XM-M034-A（票务端点与服务下线）、XM-M034-B（游乐强制改判权限码与端点同根，属游乐模块）登记。本节写入后再创建闭环文件 modules/M034-access-permission-migrations-seg1.md，随后按操作员「逐模块检查点」做检查点，合并后开 M035。
+
+
+## 当前 M034 B5-r1 本席完整PASS已封存，待Grok
+2026-09-21T08:41:14Z。席甲 self modules/M034-b5-r1-self-raw.md V0.01/25910bytes/SHA256 7bd7d110125dd9da2b536019319d0f099b185fad13a4542b668ea039f4d1f78b：13 个已应用迁移＋V429 全覆盖、18 项逐项核对、三线完成、取证脚本（/home/james/audit-tmp/m034_b5_run.log）与权限名对 HTML 否定句的反查（m034_b5_negation.log）实跑，封存前未读 Grok 本次正文。结论 PASS：001 修复落地无回归；本模块文件无新发现；反查另登记 XM-M034-B（`amusement.verification.override` 与人工放行同根，由 V014 种入、属游乐模块）。Grok B5-r1 出处 modules/M034-b5-r1-grok-raw.md，命令见「B4-r1双PASS，进入整模块重审（B5-r1）」段。M034 IN_PROGRESS/B3 累计 1；四值待 Grok 落盘后再核。尚非合取结论。
+
+
+## 当前 M034 B4-r1双PASS，进入整模块重审（B5-r1）
+2026-09-21T08:41:02Z。Grok B4-r1 真实 exit 0，报告 modules/M034-b4-r1-grok-raw.md（V0.01，29949bytes SHA256 0f22abea97d12725d554142b7f3c823a34198bd8589220fbc7cd596e85e96910，四项交付事实成立），结论 PASS（内容与 §5 闸 3 归因均 PASS）。席甲 B4-r1 票 PASS（modules/M034-b4-r1-self-raw.md V0.01，11973bytes SHA256 1f56db1ea8de11e10b838f04c36c3edddf4db6f84e7520d3d0cb5dcbea50684d）。合取双 PASS，findings V3.07（SHA256 2cee7dd869271e991f8e4dff360854a49100c7965b0858151fb9068c0dcb27d0）把 001 队列改否；当前队列是=0。B3 累计 1/3。
+下一步 B5-r1：派 Grok 整模块全量三线重审（modules/M034-b5-r1-grok-raw.md），席甲自席 raw 后读 Grok 并做四值校验；双 PASS → ledger 先记 PASS 再写 modules/M034-access-permission-migrations-seg1.md、检查点合并（V429＋AccessJdbcIntegrationTests.java＋台账/raw；提交前跑全链 verify:predeploy）；任一 FAIL → 回退统一规则。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.6/xhigh。M034 B5-r1修复后整模块三线全量重审（数据库迁移模块），正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B1/B5及三线，全文读plan/modules.md V0.04 M034的13个已应用迁移（未改）并连同本轮新增的前向迁移backend/src/main/resources/db/migration/V429__retire_verification_manual_override.sql一起看库内终态，逐项过18项已冻结映射定义，不能只看diff或复用B2/B4票。背景：B1你票FAIL（GR-01）、席甲PASS撤回→B2-r1双PASS定稿M034-001（冲突：人工放行权限码与枚举速查原文相反）→B3-r1新增V429并补真库断言→B4-r1内容/归因双PASS（Grok raw SHA256 0f22abea97d12725d554142b7f3c823a34198bd8589220fbc7cd596e85e96910、席甲 SHA256 1f56db1ea8de11e10b838f04c36c3edddf4db6f84e7520d3d0cb5dcbea50684d）；B3累计1；XM-M034-A（票务端点与服务下线）登记。complex_test现Flyway最高429；psql只SELECT（-h 127.0.0.1 -U complex，口令只从/etc/complex/complex.env的COMPLEX_DATABASE_PASSWORD行读取且不回显，不得source该文件）；如需实跑测试只导出三个COMPLEX_DATABASE变量（库名改complex_test）。
+范围：M034 13文件加V429（after tree 6a961e93046d113f530b5492170ff0c91398d79f），行数与SHA以实算为准。判据锁V0.11，M034 18项；全部适用或无本面逐项记录，不新增判据。findings现在V3.07：001否（已修）；不把全部否当模块已全对，允许真实新证据或回归。重点：拿权限字典里每个active权限码的中文名去对三份HTML的否定句（不提供、不得、任何…都不能），看还有没有第二个与HTML相反的能力码；V429之后平台管理员角色、审计员与员工自助角色、模板项的终态；其余幂等、闭集、中文名、注释一致性。
+全量审需第一性三问、顺从18项、grilling对抗，审完全部文件收齐全部问题才统一PASS/FAIL；不为理论场景加需求；已在B2双席定为只登记的观察不得在无新证据时改判。每问题给精确文件行/原句/正常触发/四分类顺序/已有判据/类型1、2或4证据。
+独立性：不得读本次M034-b5-r1-self-raw.md；两份本次完整raw各自封存后才互读；旧B1/B2/B4可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物，不对任何数据库执行写语句（跑既有测试类除外）。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M034-b5-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/18证据/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M034 B4-r1 本席完整PASS已封存，待Grok
+2026-09-21T08:28:16Z。席甲 self modules/M034-b4-r1-self-raw.md V0.01/11973bytes/SHA256 1f56db1ea8de11e10b838f04c36c3edddf4db6f84e7520d3d0cb5dcbea50684d：diff 31 条 ± 行全部归因 001，内容 PASS/归因 PASS；封存前未读 Grok 本次正文。Grok B4-r1 仍运行，EXIT_CODE=PENDING，出处 modules/M034-b4-r1-grok-raw.md，命令见「B3-r1 已修」段。M034 IN_PROGRESS/B3 累计 1。尚非合取结论。
+
+
+## 当前 M034 B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-21T08:28:13Z。席甲在主工作区新增前向迁移 V429__retire_verification_manual_override.sql（17 行）并给 AccessJdbcIntegrationTests.java 补一条真库断言（14 行）；已应用的 13 个迁移未动。沿 M021 先例在主工作区对 complex_test 跑（m034_b3r1_run.log）：修前库内该码 active、role_permissions 1 行、Flyway 最高 428 → 只落断言 RED（26 测 1 失败：`Expecting value to be false but was true`）→ 加入 V429 后 GREEN 26/26，Flyway 升到 429，该码 retired，role_permissions/模板项/员工覆盖/active 临时授权均 0 行，平台管理员缺的 active 码仍为 0 → 同批回归 AccessJdbcIntegrationTests 26、AuthorizationServiceTests 24、TicketingControllerTests 20 全绿。如实说明：日志里「untouched applied migrations: 1 changed」的 1 是主工作区里未跟踪的 V428（已随 M021 检查点发布到 origin/main），不是本次改动；冻结 diff 只含两个文件。before tree 0b52ef063c92fced6cb33ac28c30c67b314d06bb → after tree 6a961e93046d113f530b5492170ff0c91398d79f（2 files changed, 31 insertions(+)）；diff 冻结 /home/james/audit-tmp/m034_b3r1.diff（3630 bytes SHA256 076be04f4c948bc7c8d630ed0066237e66ca210b838463d89f64d93e8710c3ca）。未动票务端点/服务（XM-M034-A）、三份 HTML、锁；未提交。B3 累计 0→1（台账行 B3 列原值 0 是原 322 计划的历史累计，仅留存）。
+下一步：派 Grok B4-r1（modules/M034-b4-r1-grok-raw.md），席甲同步落盘 B4-r1 self raw 后再读。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.6/xhigh。M034 B4-r1：只读审计席甲B3-r1整批修复diff本身（数据库迁移模块），正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B4与§5闸3：diff＝两个tree id之间的全部差异，逐行归因到findings.md V3.06已定稿且归属「是」的ID（M034-001），归因不到的行即越界；内容上核是否按定稿最小处置与你B2给的边界（新增前向迁移V429：该码permissions.status置retired；删除该码在role_permissions、permission_template_items、user_permission_overrides的行；该码仍active的temporary_permission_grants置revoked；已应用的V270与本模块其余12个迁移不得改；AccessJdbcIntegrationTests补一条真库断言；一次B3只这两个文件），迁移SQL是否正确、可在未跑过的库上首次执行成功、注释是否与SQL一致，有无业务发明或越界，可执行位与文件模式是否未变。
+输入：before tree 0b52ef063c92fced6cb33ac28c30c67b314d06bb → after tree 6a961e93046d113f530b5492170ff0c91398d79f；冻结diff文件 /home/james/audit-tmp/m034_b3r1.diff（3630bytes SHA256 076be04f4c948bc7c8d630ed0066237e66ca210b838463d89f64d93e8710c3ca；2 files changed, 31 insertions(+)），可自行 git diff --binary 0b52ef063c92fced6cb33ac28c30c67b314d06bb 6a961e93046d113f530b5492170ff0c91398d79f 复核一致。证据：/home/james/audit-tmp/m034_b3r1_run.log——沿M021先例在主工作区对complex_test跑：修前库内该码active、role_permissions 1行、Flyway最高428；只落真库断言RED（AccessJdbcIntegrationTests 26测1失败：Expecting value to be false but was true）；加入V429后GREEN 26全绿，Flyway升到429，该码retired、四处授予0行、平台管理员缺的active码仍为0；同批回归AccessJdbcIntegrationTests 26、AuthorizationServiceTests 24、TicketingControllerTests 20全绿（票务控制器测试用授权桩，不读字典）。日志里untouched applied migrations计数1是主工作区未跟踪的V428（已随M021检查点发布到origin/main），不是本次改动；冻结diff只含上述两个文件。complex_test现已是429，psql只SELECT可核终态；如需实跑测试，只导出三个COMPLEX_DATABASE变量（库名改complex_test），不得source /etc/complex/complex.env。
+独立性：不得读本次M034-b4-r1-self-raw.md；两份本次完整raw各自落盘后才互读；旧B1/B2可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物，不对任何数据库执行写语句（跑既有测试类除外）。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M034-b4-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。diff逐块归因表、内容审计、最终PASS或FAIL（内容与归因分别给票，任一FAIL即FAIL）留raw，CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M034 B2-r1 双 PASS 定稿，进 B3-r1（席甲修）
+2026-09-21T08:25:20Z。Grok B2-r1 真实退出（exit 0；modules/M034-b1-grok-raw.md V0.02 追加段，全文 42982bytes SHA256 8605cc6fe59dd9057b8cf8b64fe6b749bc8bd4760fde59a024411ff28f4f09fc，票 PASS）；席甲 B2-r1 票 PASS（modules/M034-b1-self-raw.md V0.02，全文 17889bytes SHA256 1202bf0301a54e378bf87615cab5f538073617386ee0e2d4b55e2913d666d55c，自席落盘后才读 Grok 追加段）。定稿 findings V3.06（SHA256 44109d038529bf0e948f52df99a12e3fb7da9af8d489c81c1f2585ff3191428e）：队列「是」1（001）、「否」0；XM-M034-A 登记。环境决定（技术性，沿 M021 先例）：前向迁移的 RED/GREEN 在主工作区对 complex_test 跑，Flyway 会把 complex_test 升到 429；已应用的 13 个迁移不动；修前 tree 记入 B3 完成节供 B4 冻结 diff；B3 累计 0→1。
+
+
+## 当前 M034 B2-r1 本席票已封存（PASS），待 Grok B2 票
+2026-09-21T08:11:31Z。席甲 B2-r1 票追加到 modules/M034-b1-self-raw.md V0.02（全文 17889bytes SHA256 1202bf0301a54e378bf87615cab5f538073617386ee0e2d4b55e2913d666d55c；旧 16438bytes 前缀完整），封存前未读 Grok 本次追加段；同段撤回席甲 B1 的 PASS。Grok 仍运行，EXIT_CODE=PENDING，出处 modules/M034-b1-grok-raw.md V0.02 追加段。M034 IN_PROGRESS/B3 累计 0。尚非双 PASS。
+
+
+## 当前 M034 B1 两票已齐（Grok FAIL／席甲 PASS → 合取 FAIL），B2-r1 候选已落盘，待 Grok B2 票
+2026-09-21T08:11:28Z。Grok B1 交付：适配器回执 REPORT_PATH=modules/M034-b1-grok-raw.md、EXIT_CODE=0；V0.01 27617bytes SHA256 41a77fb7292ae28cd0785a2031b590ab7cc5d79f610a3d29a19401e3083ff496，结论 FAIL：GR-01（V270 种入的 `verification.manual_override` 与枚举速查「系统不提供人工放行…任何岗位、任何权限都不能」冲突）。席甲 self V0.01 16438bytes SHA256 575cd2a9c3d188e953a052b4e34339e91a5986495f3a933671ac8055381031c7（封存于读 Grok 正文之前），票 PASS——只核了种子的风险档、审批位与库内终态，没有拿「人工放行」这项能力本身去对 HTML，漏了。两席落齐后席甲核源成立：HTML 原句属实；库内该码 active 且授给平台管理员；入口 `TicketingController.java:498-502` 仍在；项目自己的权限矩阵文档 2026-08-06 起已标「停用，待代码轮下线」。PASS 撤回，合取 FAIL，采 Grok。
+B1 后四值（精确路径 modules/M034-b1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+B2-r1 候选 findings V3.05（SHA256 02291884d9341baf26dbb91c28eb97209e4aa048b63c282b2057159e34ba785d）：M034-001（冲突）拟入队——新增前向迁移 V429 把该码停用并清掉全部授予；入口下线登记 XM-M034-A 转票务模块。无添加项、无 questions、不 BLOCKED。派 Grok B2-r1（追加到 modules/M034-b1-grok-raw.md V0.02），席甲自席 B2 票追加到 modules/M034-b1-self-raw.md V0.02 后再读其追加段。M034 IN_PROGRESS/B3 累计 0。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.6/xhigh。执行M034 B2-r1整批归并复核，正本/home/james/complex-management main主工作区。B1两席已落齐：你的modules/M034-b1-grok-raw.md V0.01（27617bytes SHA256 41a77fb7292ae28cd0785a2031b590ab7cc5d79f610a3d29a19401e3083ff496，FAIL，GR-01、观察O-1至O-11）；席甲modules/M034-b1-self-raw.md V0.01（16438bytes SHA256 575cd2a9c3d188e953a052b4e34339e91a5986495f3a933671ac8055381031c7，PASS，OBS-1至5，双方已封存现可读）。候选：findings.md V3.05（全文件SHA256 02291884d9341baf26dbb91c28eb97209e4aa048b63c282b2057159e34ba785d）顶部「当前 M034 B2-r1 整批候选」段：M034-001（你的GR-01，冲突）拟入队，席甲撤回B1的PASS。不得读本次self b1 raw之后新增的B2结论段。
+只审本批的归并/分类/队列/最小修复边界，不重新审模块。逐项独立核实：一、席甲补的旁证：docs/p0-operation-permission-matrix-v0.1.md第5行（2026-08-06 R10口径修订：人工放行已废止）与第63行（verification.manual_override停用，待代码轮下线）——项目文档早已按HTML口径标废，字典里却仍active，是否加强了冲突定性。二、最小处置请逐点核：新增前向迁移V429（origin/main与主工作区现最高版本均为428；主工作区另有未发布的V427，与本迁移无依赖），内容为：该码permissions.status置retired；删除该码在role_permissions、permission_template_items、user_permission_overrides的行；把该码仍active的temporary_permission_grants置revoked（库内现0行，为确定性而写）。请核：AuthorizationService.permissionGrant先判knownPermission（JdbcAccessRepository.permissionExists只认status等于active）再判最高权限与日常桥，故retired之后任何主体调该入口都PERMISSION_DENIED；findPermissionEffects不联permissions.status，所以四张授予表必须同时清；listPermissions只列active，字典与模板页不再出现该码；status取值retired库内已有先例且无CHECK。有无遗漏的授予来源（岗位派生走roles与role_permissions、模板应用走permission_template_items，均已覆盖）、有无更小改法。三、测试：AccessJdbcIntegrationTests（M035，PENDING，现与origin/main相同）补一条真库断言（该码非active且四张授予表0行）；按M021先例，前向迁移在主工作区跑，Flyway会把complex_test升到429，是否可接受。四、端点、服务方法、契约、前端与TicketingControllerTests相关用例的下线属票务模块，登记XM-M034-A不在本模块改，是否同意。五、其余观察全部只登记，有无漏并或应升队项。六、本批无添加项、无HTML申请、无questions。
+逐条给差集核实、分类理由、队列归属与最小修复边界意见，明确同意或不同意候选整批；PASS/FAIL二选一，不存在条件通过。已冻结判据不加判据，不用MCP或任何子代理，不改源码/文档/HTML/lock/findings/ledger，不fetch/commit/push/merge/deploy，不写新产物，不对任何数据库执行写语句。
+唯一可写 /home/james/complex-management/docs/audit-2026-09/modules/M034-b1-grok-raw.md：已有27617bytes/V0.01，必须在末尾追加本次完整B2-r1报告，版本V0.02，保留整个旧前缀。B2不写任何新的独占CRITERIA-LOCK-SHA256行；注明输入两份B1报告和候选版本。本次CLI只交报告，不在stdout回带正文或标记；适配器处理退出回执。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M034 B1 本席完整PASS已封存，待Grok
+2026-09-21T07:57:56Z。席甲 self modules/M034-b1-self-raw.md V0.01/16438bytes/SHA256 575cd2a9c3d188e953a052b4e34339e91a5986495f3a933671ac8055381031c7：13 个已应用迁移 690 行全读、18 判据逐项、三线完成；取证 /home/james/audit-tmp/m034_b1_run.log（complex_test 只读终态＋后续迁移叠加清单），封存前未读 Grok 本次正文。结论 PASS：库内终态与各迁移意图一致（381 权限、平台管理员缺 0、名称含拉丁字母 0、V393/V394 点名码全部符合、四条 CHECK 在库、13 版本均 success）；登记 OBS-1…5。Grok B1 出处 modules/M034-b1-grok-raw.md，命令见「M034 B1开始」段。M034 IN_PROGRESS/B3 累计 0；四值待 Grok 落盘后再核。
+
+
+## 当前 M034 B1开始（M001–M033 已闭环；M033 检查点 PR #474 已合并）
+2026-09-21T07:53:57Z。操作员 2026-09-20 指令：严格按 V0.17 提示词审计，逐模块收口后先检查点提交合并推送再开下一模块（M033 检查点 PR #474 已合并，origin/main 4f6ef48b）。M034「功能权限点、职级三十档、权限模板与最终权限计算／数据库迁移／第1段」PENDING→IN_PROGRESS（本版未审，ledger 无任何 M034 段/finding），13 个已应用的 Flyway 迁移（V003、V092、V158、V169、V180、V204、V261、V270、V321、V322、V387、V393、V394）合计 690 行，全部与 origin/main 逐字节相同；已应用迁移不可改，发现问题只能提议新的前向迁移或登记。映射 18 判据。当前计数：PASS 33、IN_PROGRESS 1、PENDING 437。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1。两席并行独立：Grok 写 modules/M034-b1-grok-raw.md，席甲写 modules/M034-b1-self-raw.md，各自落盘后才互读；B1 后做四值校验。B3 累计 0（台账行 B3 列现值为原 322 计划历史累计，仅留存）。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读独立审计席乙，模型grok-4.6/xhigh，正本/home/james/complex-management main主工作区。执行160-audit-prompt.md V0.17阶段B的M034 B1修复前全模块审计（本模块首次开工，PENDING→IN_PROGRESS，本版历史未审）。独立发现，不读取modules/M034-b1-self-raw.md或依赖其发现；本席与席甲（Claude Fable 5.1，作者自审票）同时独立工作，各自全量审完全部范围、落完整raw后才互读。不因第一条问题停下或边审边修。
+范围严格为plan/modules.md V0.04 M034「功能权限点、职级三十档、权限模板与最终权限计算／数据库迁移／第1段」13个文件：backend/src/main/resources/db/migration/下V003、V092、V158、V169、V180、V204、V261、V270、V321、V322、V387、V393、V394（文件全名以该清单FILES段为准；当前合计690行，行数与SHA以实算为准），全文读不抽样。三HTML只读为业务最终解释权；当前criteria-lock.md V0.11 M034映射18项，逐项读定义全文及相关HTML原文（治理地图权限规则、最终权限计算、高危五类与授出前审批、平台管理员日常权限、外包与审计员只读、员工自助；枚举九相关行），逐项记录适用或无本面及理由。
+必读的环境事实：origin/main现4f6ef48b（M033检查点PR #474已合并）；主工作区HEAD e456ba96落后于它且含未推提交与暂存改动，但本模块13个文件与origin/main逐字节相同。这13个迁移均已在complex_test应用过，已应用的Flyway迁移不可改——发现问题只能提议新的前向迁移或登记，不得提议改写已应用文件。判断迁移效果要看后续迁移叠加后的库内终态：psql只对complex_test做SELECT（-h 127.0.0.1 -U complex，口令只从/etc/complex/complex.env的COMPLEX_DATABASE_PASSWORD行读取且不回显，不得source该文件；complex_test含主工作区未发布的V427，属预期），同一张表或同一行被后续迁移改过的，须grep全部迁移核对现状再下结论，陈旧事实不得当现状。ledger里M027（同类已应用迁移模块）、M031、M032、M033各段与D-029记有相邻事实，不得在无新证据时重复立项。不得改任何文件。
+三线：第一性原理三问（用途/实际行为/未经验证前提），顺从式18项与全文覆盖，对抗式用grilling结构自问自答。审计要点：每条INSERT与UPDATE是否幂等、可重放安全；权限码、风险等级、requires_approval与HTML高危五类及日常权限口径在库内终态是否一致；默认角色与模板种子是否给出了超出HTML的权限（平台管理员、审计员只读、外包、员工自助）；中文显示名是否覆盖全部权限与角色且不含拉丁字母（HTML自身用词除外）；CHECK闭集、唯一键、外键与Java侧取值是否一致；注释声称与实际SQL是否一致。迁移是实现证据不是业务依据；HTML沉默处不得反推业务规则；不为理论场景补需求，真实首次正常照做可复现才立项。
+每项临时GR编号必须精确文件行、原文及更长上下文、正常触发/影响、最小拟处置、四分类顺序（冲突→细化→技术性→添加）、工程缺陷是否成立、冻结ID、四类第一性依据之一（HTML原文/可执行产物/外部规范原文/实际只读命令输出）。全模块问题与观察收齐后统一PASS/FAIL；无新发现也完整全文覆盖+18判据适用证据+三线记录。本轮只读业务代码/文档/三HTML/锁/台账，不改计划/findings/ledger，不fetch/commit/push/merge/deploy，不使用MCP/任何子代理/第三席，不等操作员，不建脚本日志临时产物，不对任何数据库执行写语句。按环境实用强制技能如实记录。
+唯一可写报告/home/james/complex-management/docs/audit-2026-09/modules/M034-b1-grok-raw.md：指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建（本次为V0.01）。本次报告第一行独立实算criteria-lock.md SHA256，格式CRITERIA-LOCK-SHA256: <64hex>；不得抄其它报告或期待值。完整报告从本次独占锁行至末尾。CLI不回带正文或机器标记，全部结论留指定raw。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M033 检查点已合并（PR #474）
+2026-09-21T07:51:43Z。按操作员「逐模块收口后先检查点提交合并推送再开下一模块」：在基于 origin/main（124902b7）的独立 worktree /home/james/wt-m033-checkpoint 分支 audit/20260920/m033-checkpoint 上只带 ledger/findings + M033 全部 raw 与闭环文件（7 文件；本模块无代码改动），提交 0691d841；ops/160/propose-change.sh 本地 verify:predeploy 全绿后推分支开 PR #474；ops/160/merge-pr.sh --merge 等 predeploy-gates run 35574935254 success 后合并，origin/main 现为 4f6ef48b。主工作区未动；其余遗留暂存/未推提交/OPEN PR 不并入。worktree 与分支随后清理。下一模块 M034。
+
 
 ## 当前 M033 B5-r1双PASS，四值全等，M033 → PASS（先记账，再写闭环文件）
 2026-09-21T07:50:25Z。Grok B5-r1 真实 exit 0，报告 modules/M033-b5-r1-grok-raw.md（V0.01，29947bytes SHA256 2a65e7c6403f8d7fc9132f72928668dad50077da575167a2ffb3058fc3d0eddf，四项交付事实成立），整模块三线全量结论 PASS。席甲 B5-r1 票 PASS（modules/M033-b5-r1-self-raw.md V0.01，24410bytes SHA256 913bdce03aa0de03a5b3476c1597a2582d0cca79bdcc97c83e085485531b5028；封存后才读 Grok）。合取双 PASS。
@@ -3560,8 +3641,8 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M030 `租户范围与数据隔离（技术不变量）／质量检查记录／第1段` | PASS | 1 | 2 | [B5-r1双PASS](modules/M030-tenant-isolation-baseline-seg1.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（同一条）→ B2-r1 双 PASS 定稿 001 → B3-r1（删两条陈旧键）→ B4-r1 双 PASS → B5-r1 双 PASS：self 04540071… / Grok 95c42b9f…，四值全等；修复队列 1 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #471 已合并（origin/main 508b2e87） |
 | M031 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第1段` | PASS | 1（本版；原322归属 M006 的历史累计 5 仅留存） | 2 | [B5-r1双PASS](modules/M031-access-backend-seg1.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 2/CX 2）→ B2-r1 双 PASS 定稿 001–003，GR-01 与事务内失败留痕丢失登记为 XM → B3-r1（AccessService＋2 个测试文件，TDD＋变异核对）→ B4-r1 双 PASS → B5-r1 双 PASS：self c95e5605… / Grok 3a01f0a9…，四值全等；修复队列 3 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；原322归属：M006；检查点 PR #472 已合并（origin/main 2c178f7a） |
 | M032 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第2段` | PASS | 1（本版；原322归属的历史累计 5 仅留存） | 2 | [B5-r1双PASS](modules/M032-access-backend-seg2.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 3/CX 4）→ B2-r1 双 PASS 定稿 001（授权政策读写）、002（注释），W-1…W-4 按 D-029 登记到未发布工作流 → B3-r1（TDD，发布口径 worktree）→ B4-r1 双 PASS → B5-r1 双 PASS：self f36aabbc… / Grok bbace2c8…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；原322归属：M006、M007、M008；检查点 PR #473 已合并（origin/main 124902b7） |
-| M033 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第3段` | PASS | 0（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M033-access-backend-dto-seg3.md) | 0 | 2026-09-21 首次审计：B1 Grok FAIL（GR 3）／席甲 PASS 撤回 → B2-r1 双 PASS 定稿 001–003（缺陷是、队列否，转 XM→M392/M031）→ 队列为空跳过 B3/B4 → B5-r1 双 PASS：self 913bdce0… / Grok 2a65e7c6…，四值全等；B3累计0；席甲=Claude Fable 5.1 |
-| M034 `功能权限点、职级三十档、权限模板与最终权限计算／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M138、M141、M144、M145、M146、M148、M150；既有累计仅保留历史，不代表本版已审 |
+| M033 `功能权限点、职级三十档、权限模板与最终权限计算／后台实现／第3段` | PASS | 0（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M033-access-backend-dto-seg3.md) | 0 | 2026-09-21 首次审计：B1 Grok FAIL（GR 3）／席甲 PASS 撤回 → B2-r1 双 PASS 定稿 001–003（缺陷是、队列否，转 XM→M392/M031）→ 队列为空跳过 B3/B4 → B5-r1 双 PASS：self 913bdce0… / Grok 2a65e7c6…，四值全等；B3累计0；席甲=Claude Fable 5.1；检查点 PR #474 已合并（origin/main 4f6ef48b） |
+| M034 `功能权限点、职级三十档、权限模板与最终权限计算／数据库迁移／第1段` | PASS | 1（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M034-access-permission-migrations-seg1.md) | 0 | 2026-09-21 首次审计：B1 Grok FAIL（GR 1）／席甲 PASS 撤回 → B2-r1 双 PASS 定稿 001（冲突：人工放行权限码）→ B3-r1（前向迁移 V429＋真库断言）→ B4-r1 双 PASS → B5-r1 双 PASS：self 7bd7d110… / Grok 5b075983…，四值全等；修复队列 1 个 ID 否（已修）；B3累计1；席甲=Claude Fable 5.1 |
 | M035 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M084；既有累计仅保留历史，不代表本版已审 |
 | M036 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第2段` | PENDING | 0 | 2 | - | 0 | 原322归属：M084；既有累计仅保留历史，不代表本版已审 |
 | M037 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第3段` | PENDING | 0 | 2 | - | 0 | 原322归属：新增受控文件；既有累计仅保留历史，不代表本版已审 |

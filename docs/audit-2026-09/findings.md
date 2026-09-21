@@ -1,5 +1,29 @@
 # 全量审计 Findings 台账
-版本：V3.04
+版本：V3.07
+
+## 当前 M034 B4-r1 双PASS，M034-001 已修转「否」，进入B5-r1
+2026-09-21T08:41:02Z。Grok B4-r1 票 PASS（modules/M034-b4-r1-grok-raw.md，29949bytes SHA 0f22abea97d12725d554142b7f3c823a34198bd8589220fbc7cd596e85e96910）；席甲票 PASS（modules/M034-b4-r1-self-raw.md，11973bytes SHA 1f56db1ea8de11e10b838f04c36c3edddf4db6f84e7520d3d0cb5dcbea50684d）。M034-001 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（1）：M034-001（已修）。
+- 当前M034修复队列「是」：0。
+
+
+## 当前 M034 B2-r1 双PASS定稿，1项待修（B3-r1）
+2026-09-21T08:25:20Z。Grok B2-r1 票 PASS（modules/M034-b1-grok-raw.md V0.02，全文 42982bytes SHA 8605cc6fe59dd9057b8cf8b64fe6b749bc8bd4760fde59a024411ff28f4f09fc）；席甲 B2-r1 票 PASS（modules/M034-b1-self-raw.md V0.02，全文 17889bytes SHA 1202bf0301a54e378bf87615cab5f538073617386ee0e2d4b55e2913d666d55c）。定稿：M034-001（冲突）修复队列「是」——新增前向迁移 V429：该码 retired＋清 role_permissions/permission_template_items/user_permission_overrides＋active 临时授权置 revoked（Grok 确认四张授予表必须同时清、无更小且同样完整的改法、无遗漏的有效授予来源）；AccessJdbcIntegrationTests 补一条真库断言。XM-M034-A（→票务模块：端点、服务方法、契约、前端与相关测试下线）登记。
+- 修复队列「是」（1）：M034-001。
+- 修复队列「否」（0）。
+
+
+## 当前 M034 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T08:11:28Z。输入仅当前 471 计划 M034 的完整 B1 双席 raw：modules/M034-b1-self-raw.md V0.01（16438bytes SHA 575cd2a9c3d188e953a052b4e34339e91a5986495f3a933671ac8055381031c7，席甲=Claude Fable 5.1，作者自审票，PASS：无 findings、OBS-1…5）、modules/M034-b1-grok-raw.md V0.01（27617bytes SHA 41a77fb7292ae28cd0785a2031b590ab7cc5d79f610a3d29a19401e3083ff496，Grok 席乙，FAIL：GR-01，观察 O-1…11）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01→001（席甲漏，核源成立，采 Grok）；席甲 B1 票 PASS 撤回，合取 FAIL。B3 累计 0；写入集合＝新增 `backend/src/main/resources/db/migration/V429__retire_verification_manual_override.sql`＋测试文件 AccessJdbcIntegrationTests.java（M035，PENDING）；已应用的 13 个迁移不动；若发布门禁要求，随批机械重生成受影响的生成物。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M034-001 | Grok GR-01（席甲 B1 漏：只核了种子的风险档与审批位，没有拿「人工放行」这项能力本身去对 HTML） | 冲突（采 Grok 分类） | 是 | 是 | `backend/src/main/resources/db/migration/V270__ticket_manual_override_permission.sql:8-16` 种入 `verification.manual_override`（人工放行票务核销，high、须审批）并授给 `role_platform_admin`；库内终态 active、role_permissions 1 行、模板项/员工覆盖/临时授权 0 行，后续迁移无人再动该码。枚举速查「核销记录状态」原文：「系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」。入口仍在：`TicketingController.java:498-502` `POST /api/v1/ticketing/verifications/manual-override` 先 `requirePermission("verification.manual_override")`。项目自己的文档已按该口径标废：`docs/p0-operation-permission-matrix-v0.1.md:5`（2026-08-06 R10 口径修订）、`:63`「`verification.manual_override`（停用，待代码轮下线）」——字典里却一直是 active | GEN-005 / GEN-017；HTML 原文为类型 1 证据。最小处置（已应用的 V270 不改）：新增前向迁移 `V429`——①`UPDATE permissions SET status = 'retired'`（该码）；②`DELETE` 该码在 `role_permissions`、`permission_template_items`、`user_permission_overrides` 的行；③把该码仍 active 的 `temporary_permission_grants` 置 revoked。效果：`AuthorizationService.permissionGrant` 先判 `knownPermission`（只认 active），该码对任何主体（含最高权限）一律 PERMISSION_DENIED，入口即便还在也放不行；权限字典、模板与角色页不再列出它。测试：AccessJdbcIntegrationTests（M035，PENDING）补真库断言——该码非 active 且四张授予表内 0 行。端点/服务方法/契约/前端与测试的下线属票务模块，登记 XM-M034-A |
+
+- 跨模块登记：XM-M034-A（→票务后台实现/接口定义所在模块）：`POST /api/v1/ticketing/verifications/manual-override`、`TicketingService.manualOverrideVerification`、契约与 `TicketingControllerTests` 相关用例随「人工放行已废止」下线；`docs/business-decision-log-v0.1.md:417` 的 2026-07-07 增项已被 2026-08-06 R10 口径取代。
+- 只登记不入队（本模块观察）：`role_platform_admin` 库内持全部 376 个 active 码、运行时按 M006 裁决过滤；high 且免审批现 10 条（V394 注释写 11，已应用迁移不可改）；V261「累计漏 25 条」现状不可复现；「新权限迁移须同步授平台管理员」是注释约定、无门禁，现状缺 0 条；权限种子 `DO NOTHING` 与 `DO UPDATE` 两种写法并存；外部审计与外包三角色 role_permissions 为空是 V181 终态；内审 81 条只读含 `analytics.group.view`、`finance.ar_ap.view`、`wecom.view`（Grok O-3，未见越 HTML 证据）；`role_staff_self` 第 8 码来自后续迁移；`roles.description` 仍有英文（非上屏面）；`permissions.status` 无 CHECK（现值 active/inactive/retired）；V180 内审 DELETE 段声明了未用的 CTE；V003/V394 个别语句只在手工重放时才有幂等问题。
+- 修复队列「是」（1）：M034-001（冲突）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M033 B2-r1 双PASS定稿，修复队列为空（跳过 B3/B4，进 B5-r1）
 2026-09-21T07:36:38Z。Grok B2-r1 票 PASS（modules/M033-b1-grok-raw.md V0.02，全文 53261bytes SHA 10ca20e8b86b07fa64b6b7ed40aa0066215e7f7f03446143d6f44d548c014ca4）；席甲 B2-r1 票 PASS（modules/M033-b1-self-raw.md V0.02，全文 25755bytes SHA 5f01f3dd7d617f634b65b2f7dbc752aab2c396d9d43fece548e638cd774f8d80）。定稿：M033-001、002、003 均细化、工程缺陷「是」、修复队列「否」（本模块 13 个文件内不存在「改完后首次正常使用可观察行为变对、且不触碰已闭环模块」的改法；Grok 撤回其 B1 三条删除拟处置）；XM-M033-A/B/C→M392（003 兼 →M031）登记。

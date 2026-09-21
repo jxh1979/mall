@@ -644,6 +644,20 @@ class AccessJdbcIntegrationTests {
                 .isEqualTo(current.windowDays().value());
     }
 
+    // M034-001（枚举速查「系统不提供人工放行…任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」）：
+    // 人工放行权限码已停用，且不留任何授予来源。
+    @Test
+    void manualOverridePermissionIsRetiredAndGrantedToNobody() {
+        assertThat(repository.permissionExists("verification.manual_override")).isFalse();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT (SELECT count(*) FROM role_permissions WHERE permission_code = 'verification.manual_override')
+                     + (SELECT count(*) FROM permission_template_items WHERE permission_code = 'verification.manual_override')
+                     + (SELECT count(*) FROM user_permission_overrides WHERE permission_code = 'verification.manual_override')
+                     + (SELECT count(*) FROM temporary_permission_grants
+                         WHERE permission_code = 'verification.manual_override' AND status = 'active')
+                """, Long.class)).isZero();
+    }
+
     // M006-G-07（PGM-1.10.1「旧派生同步失效」）：已定岗改职级复用定岗的四步写入（职级、定岗、套模板、替换派生），
     // 入口必须与 assignUserPosition 一样由 Spring 事务整体包住，否则套模板已提交、替换派生失败时新旧派生并存。
     @Test
