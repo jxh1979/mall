@@ -1,5 +1,28 @@
 # 全量审计 Findings 台账
-版本：V2.82
+版本：V2.85
+
+## 当前 M026 B4-r1 双PASS，M026-001 已修转「否」，进入B5-r1
+2026-09-20T23:50:31Z。Grok B4-r1 票 PASS（modules/M026-b4-r1-grok-raw.md，17368bytes SHA 9452526e6051ffeb1ce57a995760beb540d2763b2bb8eec97615aacbbff5e55d）；席甲票 PASS（modules/M026-b4-r1-self-raw.md，6075bytes SHA 3b6c996df06dac4254606084f6bce2363561bc9524864ae5c034637cf4f92b77）。M026-001 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（1）：M026-001（已修）。
+- 当前M026修复队列「是」：0。
+
+
+## 当前 M026 B2-r1 双PASS定稿，1项待修（B3-r1）
+2026-09-20T23:42:34Z。Grok B2-r1 票 PASS（modules/M026-b1-grok-raw.md V0.02，全文 42187bytes SHA 7a67b22a572da94e1cc8a85e5c4bdf427814c6725e8999a2f524d89e5a8a90a6）；席甲 B2-r1 票 PASS（modules/M026-b1-self-raw.md V0.02，全文 12942bytes SHA 77f6978cdabb6211c10bdf95a348aa30731873b3d2a1cecd6878c0974ee3f9f7）。定稿：M026-001 技术性／工程缺陷是／修复队列「是」（Grok 已独立复核分类）。
+- 修复队列「是」（1）：M026-001（技术性）。
+- 修复队列「否」（0）。
+
+
+## 当前 M026 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-20T23:33:44Z。输入仅当前 471 计划 M026 的完整 B1 双席 raw：modules/M026-b1-self-raw.md V0.01（11546bytes SHA 377d0ad1f3776e1f2822360bbd7670b3a62fe705ee40013785934d2f91da1704，席甲=Claude Fable 5.1，作者自审票，PASS：无 findings、OBS-1…3）、modules/M026-b1-grok-raw.md V0.01（23976bytes SHA c658018655d80d12941959900bb6b6e1a2231d005e525b43db8dbdd9d28d7b21，Grok 席乙，FAIL：GR-01、观察 OBS-1…6）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01（与席甲 OBS-1 同一事实，席甲只登记）→001，采 Grok。B3 累计 0；写入集合＝本模块 1 文件。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M026-001 | Grok GR-01（席甲 B1 只登记为 OBS-1、GEN-016 判通过；B2 复核后采 Grok） | 技术性（工具类注释，三 HTML 无上位句可指；无业务发明——只涉时间戳转换代码的收口范围描述，不含任何业务对象、规则、状态或金额；Grok B1 已独立判技术性） | 是 | 是 | `backend/src/main/java/com/complex/platform/common/jdbc/JdbcTimestamps.java:9-12` 类注释「Centralizes the Instant <-> SQL timestamptz mapping that was previously copy-pasted verbatim across every JDBC repository and parameter source.」；仓内现状：同构转换仍有多处不经本类——私有 `nullableInstant`（`JdbcMerchantServiceRepository.java:316-319`、`JdbcProductionReadinessRepository.java:197-200`，`getTimestamp().toInstant()` 写法）、写侧 `offset`/内联 `atOffset(ZoneOffset.UTC)`（`JdbcInventoryRepository.java:2177-2179`、`JdbcTicketingRepository.java:1720-1722`、`TicketFacePhotoRepository.java:55/101/154`、`VenueBusinessHoursRepository.java:99`）、读侧 `instant`（`JdbcAmusementRowMapper.java:333-336`）。维护者按注释以为改本类即全局生效，第一次对照搜索即可见不成立。席甲 B1 把该句读成只讲「此前」的历史状态——但主句 Centralizes 是现在时的收口声称，读法过宽，撤回 | GEN-016；最小处置：只改本文件类注释这一句，去掉「every JDBC repository and parameter source」的完成口径，改为「Shared JDBC timestamp conversions: the Instant <-> SQL timestamptz mapping used by the JDBC repositories and parameter sources that import this class.」（不新增「还有哪些没收口」之类会再过时的声称）；文件首行加 `// 文件版本：V0.01`。两个方法体不动；不在本模块迁移别的模块里的副本 |
+
+- 只登记不入队：别的模块里的同构副本本体（上列各文件，属各自模块的收口项）；`JdbcIdempotencyRepository` 写用本类、读走 `getTimestamp().toInstant()`（Grok OBS-2）；pgjdbc 42.7.11 对 timestamp without time zone 的两种读法在非 UTC JVM 下相差时区偏移，库内仅 flyway_schema_history.installed_on 一列且无调用方（Grok OBS-3）；列名碰撞 occurred_at／valid_from／valid_to 两席均核过读路径对应表为 timestamptz（Grok OBS-4、席甲 §2）；无直接单测、由 77 个真库测试类间接守住（席甲 OBS-2）；英文类注释非界面文字（席甲 OBS-3）；JDBC 会话时区与 psql 会话时区不同但对 timestamptz 的 Instant 一致（Grok OBS-6）。
+- 修复队列「是」（1）：M026-001（技术性）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M025 B4-r1 双PASS，M025-001、002 已修转「否」，进入B5-r1
 2026-09-20T22:56:12Z。Grok B4-r1 票 PASS（modules/M025-b4-r1-grok-raw.md，18015bytes SHA 47787fd1ad1a61e1b9791a4a1fd7b7d99bdff920bbfe2ca37b7ca4ff450cb9dd）；席甲票 PASS（modules/M025-b4-r1-self-raw.md，6884bytes SHA e8df5032a74eee4c4c6b8896ff9fcd704d74593dd9defaa84502f8a8ba5dfc9f）。M025-001、002 修复队列「是」→「否（已修，B3-r1）」。
