@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -246,6 +246,29 @@ class M006JdbcRegressionTests {
         assertThat(restored.templateId()).isEqualTo("template");
         assertThat(restored.status()).isEqualTo("inactive");
         assertThatThrownBy(() -> repository.deletePositionRoleTemplate("mapping")).isInstanceOf(IllegalStateException.class);
+    }
+
+    // M036-001：岗位派生角色（user_position_assignments.assigned_role_id）的权限码以 ROLE 来源并入有效权限；
+    // 岗位派生置空后不再返回。
+    @Test void positionDerivedRoleFeedsPermissionEffectsUntilThePositionGrantsAreCleared() {
+        for (String table : java.util.List.of("user_roles", "roles", "role_permissions", "user_position_assignments",
+                "permission_template_items", "user_permission_overrides")) {
+            jdbc.execute("CREATE TEMP TABLE " + table + " (LIKE public." + table + " INCLUDING ALL)");
+        }
+        jdbc.execute("ALTER TABLE pg_temp.permission_templates ADD COLUMN status varchar, ADD COLUMN valid_from timestamptz, ADD COLUMN valid_to timestamptz");
+        jdbc.execute("ALTER TABLE pg_temp.permission_template_applications ADD COLUMN target_type varchar, ADD COLUMN revoked_by varchar, ADD COLUMN revoked_at timestamptz");
+        jdbc.execute("ALTER TABLE pg_temp.temporary_permission_grants ADD COLUMN subject_type varchar");
+        jdbc.update("INSERT INTO roles (id, role_name, data_scope, status, created_at) VALUES ('position-role','岗位角色','project','active',now())");
+        jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES ('position-role','position.only.code')");
+        jdbc.update("INSERT INTO user_position_assignments (user_id,position_code,staff_level_id,organization_id,assigned_by,assigned_role_id) VALUES ('user','position','level','org','operator','position-role')");
+
+        assertThat(repository.findPermissionEffects("user", Instant.now()))
+                .extracting(AccessRepository.PermissionEffect::permissionCode, AccessRepository.PermissionEffect::source,
+                        AccessRepository.PermissionEffect::effect)
+                .containsExactly(tuple("position.only.code", AccessRepository.Source.ROLE, AccessRepository.Effect.GRANT));
+
+        repository.replacePositionGrants("user", null, null, java.util.List.of(), "operator", Instant.now());
+        assertThat(repository.findPermissionEffects("user", Instant.now())).isEmpty();
     }
 
     private UUID temporaryGrant() {

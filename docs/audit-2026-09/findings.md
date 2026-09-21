@@ -1,5 +1,31 @@
 # 全量审计 Findings 台账
-版本：V3.10
+版本：V3.13
+
+## 当前 M036 B4-r1 双PASS，M036-001、002 已修转「否」，进入B5-r1
+2026-09-21T11:11:04Z。Grok B4-r1 票 PASS（modules/M036-b4-r1-grok-raw.md，37980bytes SHA 801b81a97bea0398add1a7f7a1c4943034e0b8048bd8fc567cdd67a1e5bbb9f8）；席甲票 PASS（modules/M036-b4-r1-self-raw.md，31781bytes SHA 7cb73508d012936a99ea871fed907ee68beb7ad7f1a819cf030abe366f2bade0）。M036-001、002 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（2）：M036-001、M036-002（已修）。
+- 当前M036修复队列「是」：0。
+
+
+## 当前 M036 B2-r1 双PASS定稿，2项待修（B3-r1）
+2026-09-21T10:49:33Z。Grok B2-r1 票 PASS（modules/M036-b1-grok-raw.md V0.02，全文 56186bytes SHA 0c4227794df08be9c1cc3d6a67847f2361af6e98d862a9776818d30e1566c043）；席甲 B2-r1 票 PASS（modules/M036-b1-self-raw.md V0.02，全文 55470bytes SHA 98b60d6f9fa3a39ed0316d7c98caaadfbe9b66943a1d2c66aafdd8e363cabbf2）。定稿：M036-001（细化）、002（技术性）修复队列「是」；W-M036-1…3、XM-M036-A 登记。Grok 确认：001 在其原拟处置上补的两点（内存仓应用 id 不重复；M006JdbcRegressionTests 补岗位 JOIN 与置空收回的临时表测试）仍属最小完整处置；002 为本聚合「最终权限计算」测试面 isActive 的关键未锁分支（其 B1 漏报），新测试插在 effectivePermissionsExcludesExpiredGrant 之后、私有助手之前，必须把 validFrom 设到未来，不得复用 2099 为截止时间的 temporaryGrant 助手；新真库测试只建临时表、不写 public 业务表；三个幸存变异判第二道闸只登记，同意；XM-M036-A 的 20 条无一应由本模块处置。
+- 修复队列「是」（2）：M036-001、M036-002。
+- 修复队列「否」（0）。
+
+
+## 当前 M036 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T10:39:50Z。输入仅当前 471 计划 M036 的完整 B1 双席 raw：modules/M036-b1-self-raw.md V0.01（53858bytes SHA f933fa98ec14188bb8158654855e10fc2410c6ee4ce15a2b88b74b9318c81fcc，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M036-001，OBS-1…6、W-3/5/6、XM-M036-A）、modules/M036-b1-grok-raw.md V0.01（36104bytes SHA 7cd36b38f3da7ab31d88464c781b9650aec7633a4b58cc5b5deab1c5baa41242，Grok 席乙，FAIL：GR-01，W-1…W-4，观察 O-1…6）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01→001（席甲 B1 只记成 OBS-1）；CX-M036-001→002（Grok B1 未报）。B3 累计 0；写入集合＝`backend/src/test/java/com/complex/platform/access/AccessServiceTests.java`、`backend/src/test/java/com/complex/platform/access/AuthorizationServiceTests.java`、`backend/src/test/java/com/complex/platform/access/M006JdbcRegressionTests.java`，不改被测代码、不加迁移。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M036-001 | Grok GR-01（席甲 B1 只记成 OBS-1，并误称相应真实语义已由别的测试守住） | 细化（采 Grok 分类） | 是 | 是 | `backend/src/test/java/com/complex/platform/access/AccessServiceTests.java:1567-1617` `savingAPositionMappingRecomputesAssignedUsersAndDeactivatingRevokesDerivedGrants` 的名称与注释声称「按新映射重算有效权限、停用则收回派生」，断言只打内存仓的 `positionRoles` 指针与薪资；内存仓 `replacePositionGrants`（L1687-1688）整段只是 `positionRoles.put(userId, roleId)`、不撤旧岗位派生的模板应用，`findPermissionEffects`（L2011-2075）不读 `positionRoles`，所以岗位派生角色的权限码从不进有效集、停用后旧模板应用在内存里仍是 active。生产 `JdbcAccessRepository.replacePositionGrants` 先撤 `position_application_ids` 指向的旧应用再写新指针，`findPermissionEffects` 另有一条 `user_position_assignments ⋈ roles ⋈ role_permissions` 的查询把岗位角色并入授予。席甲读 Grok 报告后补跑变异 no_position_role_join（把该查询改成恒空，/home/james/audit-tmp/m036_mutation2.log）：origin/main 全量 3471 个后端测试 0 个新增变红——岗位派生角色并入有效权限这条路径在内存层与真库层都没有测试 | GEN-003 / GEN-008（上位 BSM-003、PGM-066）；最小处置（只改本模块两个测试类，不改被测代码）：①AccessServiceTests 内存仓按 Jdbc 语义对齐——`applyTemplate` 生成不重复的应用 id；`replacePositionGrants` 先把该用户上一次记录的岗位应用 id 置 revoked，再记新角色与新应用 id；`findPermissionEffects` 把 `positionRoles` 指向的启用角色的权限码并为 ROLE 来源的授予。②`savingAPositionMapping…` 改用互不相同的码（旧角色、新角色、模板各一个），并经 `authorizationService.effectivePermissionsForUser` 断言：定岗后含旧角色码与模板码；改映射后含新角色码、不含旧角色码；停用后三者都不含，且旧岗位模板应用为 revoked。③M006JdbcRegressionTests 补一条临时表测试：`findPermissionEffects` 返回岗位派生角色的权限码（ROLE 来源），`replacePositionGrants(user, null, null, [], …)` 之后不再返回 |
+| M036-002 | 席甲 CX-M036-001（Grok B1 未报） | 技术性 | 是 | 是 | `backend/src/test/java/com/complex/platform/access/AuthorizationServiceTests.java`（origin/main 版 21 个测试、主工作区未发布版 24 个测试）都没有「生效时间未到的授权不放行」场景。被测 `AuthorizationService.isActive` 的 `validFrom != null && checkedAt.isBefore(validFrom)` 是唯一的闸：`JdbcAccessRepository.findPermissionEffects` 的 SQL 不按生效时间过滤，只回传 valid_from。变异 ignore_valid_from（/home/james/audit-tmp/m036_mutation.log）下全量 3471 个后端测试 0 个新增变红。权限模板页有「生效时间」输入（PermissionTemplatesPage.tsx L381、L501），临时授权请求也带 valid_from，首次正常使用即可走到 | GEN-003 / GEN-005（上位治理地图 L656「临时授权可设有效期或单次使用」、L659「有时间限制、到期自动失效」）；最小处置：AuthorizationServiceTests 补一条——给员工一条生效时间在 2099 年的授予，断言 `requirePermission` 拒绝且 `effectivePermissions().grants()` 不含该码；不改被测代码；两版文件打同一处补丁，发布用「origin/main 版＋补丁」（D-029） |
+
+- 只在主工作区未发布版成立（D-029，不入队、不发布；为免与 M032 的 W-1…W-4 撞号，本模块用 W-M036-n）：W-M036-1＝Grok W-1＋W-2＝席甲 W-6（AuthorizationServiceTests V0.03 的两条改名测试把平台管理员的商户范围断言反转为 contains("merchant")，三条 MASTER 测试依赖 origin/main 没有的 SessionIssuer.MASTER_ACCOUNT_TYPE，origin/main＋V0.03 无法编译）；W-M036-2＝Grok W-3＝席甲 W-3（未发布的单次授权整组消耗 SQL 用 grant_group_id，M006JdbcRegressionTests 的手写临时表没有该列，报 bad SQL grammar；即 M032 W-3 在本模块文件上的表现）；W-M036-3＝Grok W-4＝席甲 W-5（未发布的 SupervisorReviewService 要求登记直接受益人，AccessService 发起授权申请不带，AccessServiceTests 6 条报错；该工作流发布时须同批改 AccessService 调用点与这些测试）。
+- 跨模块登记：XM-M036-A（→各自模块）：origin/main 3ca1b507 全量后端测试 3471 个里有 20 个红，均与本模块无关——FinanceControllerTests 12（ApplicationContext 加载失败）、ComplianceControllerTests 3（期望 200/400 实得 403）、FacilityEquipmentArchiveDeleteJdbcIntegrationTests 3、AmusementServiceTests 1、CustomerGuardedActionAndRejectionAuditTests 1；清单见席甲 B1 raw §6。后端测试不在 CI 的 predeploy-gates 里。
+- 只登记不入队：`createAccessUserWithAllowedAccountTypeSucceeds` 的单元素循环与恒假条件（两席一致；「非外包类型须先注册」分支由 M037 的测试守住）；`markSingleUsePermissionConsumed` 内存实现恒 true（两席一致；单次消耗由另两类覆盖）；`assumeTrue` 缺环境整类跳过（两席一致）；M006JdbcRegressionTests 4 张手写临时表只含被测 SQL 用到的列（origin/main 版与真表相容）；`copyPermissionTemplateKeepsSnapshot…` 源模板前后权限项相同（快照真实语义在 AccessJdbcIntegrationTests）；三个幸存但属第二道闸的变异（停用主体、未登记权限码、按角色持有判断的显式拒绝）；`listStaffLevelsReturnsSeededLevels` 内存只 2 档（30 档目录属已闭环迁移）；`remainingValidationMessagesAreChinese` 反射私有方法；`effectivePermissionsDoesNotGiveAdministratorAnUnboundedWildcard` 只读恒 false 的标志位。
+- 修复队列「是」（2）：M036-001（细化）、M036-002（技术性）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M035 B4-r1 双PASS，M035-001、002、003 已修转「否」，进入B5-r1
 2026-09-21T09:55:53Z。Grok B4-r1 票 PASS（modules/M035-b4-r1-grok-raw.md，25174bytes SHA 30d6997a219e5e4f71eab476a991698ff9276ed9178a3343a79bdcd3cb59fcf9）；席甲票 PASS（modules/M035-b4-r1-self-raw.md，25036bytes SHA 8739200b16e50e758d170ce39cfc988d7e8b679db5d21bdec9aac3f6965ae4a9）。M035-001、002、003 修复队列「是」→「否（已修，B3-r1）」。

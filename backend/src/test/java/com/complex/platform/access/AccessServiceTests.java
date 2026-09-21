@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1572,11 +1572,14 @@ class AccessServiceTests {
         accessRepository.users.put("usr_recompute", new AccessUser(
                 "usr_recompute", "recompute", "staff", "seed-org", null, "active",
                 Instant.parse("2026-06-14T00:00:00Z")));
-        for (String roleId : List.of("role_recompute_old", "role_recompute_new")) {
-            accessRepository.roles.put(roleId, new RoleRecord(
-                    roleId, roleId, "Ops checker", "project", "active",
+        // M036-001：旧角色、新角色、模板各带一个互不相同的码，有效权限集才分得清派生来自哪里。
+        for (Map.Entry<String, String> role : Map.of(
+                "role_recompute_old", "ops.production_readiness.view",
+                "role_recompute_new", "governance.supervisor_review.view").entrySet()) {
+            accessRepository.roles.put(role.getKey(), new RoleRecord(
+                    role.getKey(), role.getKey(), "Ops checker", "project", "active",
                     Instant.parse("2026-06-14T00:00:00Z"),
-                    List.of("ops.production_readiness.check"),
+                    List.of(role.getValue()),
                     null));
         }
         accessRepository.saveTemplate(new PermissionTemplate(
@@ -1598,12 +1601,19 @@ class AccessServiceTests {
                 "assign-recompute", null, "usr_recompute", "ops_recompute", "lvl_m1_lower",
                 500000L, "CNY", null));
         assertThat(accessRepository.positionRoles.get("usr_recompute")).isEqualTo("role_recompute_old");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_recompute").grants())
+                .contains("ops.production_readiness.view", "ops.production_readiness.check");
 
         service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
                 "map-recompute-change", null, "ops_recompute", "lvl_m1_lower",
                 "role_recompute_new", "tpl_recompute", "active"));
 
         assertThat(accessRepository.positionRoles.get("usr_recompute")).isEqualTo("role_recompute_new");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_recompute").grants())
+                .contains("governance.supervisor_review.view", "ops.production_readiness.check")
+                .doesNotContain("ops.production_readiness.view");
+        assertThat(accessRepository.templateApplications).filteredOn(a -> "usr_recompute".equals(a.targetId()))
+                .extracting(PermissionTemplateApplication::status).containsExactly("revoked", "active");
         assertThat(accessRepository.findStaffLevelAssignment("usr_recompute")).get()
                 .extracting(StaffLevelAssignment::baseSalaryAmountCent)
                 .isEqualTo(500000L);
@@ -1614,6 +1624,11 @@ class AccessServiceTests {
 
         assertThat(accessRepository.positionRoles).containsKey("usr_recompute");
         assertThat(accessRepository.positionRoles.get("usr_recompute")).isNull();
+        assertThat(authorizationService.effectivePermissionsForUser("usr_recompute").grants())
+                .doesNotContain("ops.production_readiness.view", "governance.supervisor_review.view",
+                        "ops.production_readiness.check");
+        assertThat(accessRepository.templateApplications).filteredOn(a -> "usr_recompute".equals(a.targetId()))
+                .extracting(PermissionTemplateApplication::status).containsOnly("revoked");
     }
 
     // M031-003（GEN-011）：岗位模板生命周期与授权政策两个写口失败也留痕。
@@ -1684,8 +1699,14 @@ class AccessServiceTests {
             if (fingerprints.putIfAbsent(id, fingerprint) != null) throw new IllegalStateException("fingerprint already set");
         }
         @Override public Optional<String> findGrantFingerprint(String id) { return Optional.ofNullable(fingerprints.get(id)); }
+        final Map<String, List<String>> positionApplicationIds = new LinkedHashMap<>();
+        // M036-001：与 JdbcAccessRepository 同语义——先撤上一次岗位派生的模板应用，再记新角色与新应用 id；独立模板应用不受影响。
         @Override public void replacePositionGrants(String userId, String roleId, String mappingId,
-                List<String> applicationIds, String actorId, Instant at) { positionRoles.put(userId, roleId); }
+                List<String> applicationIds, String actorId, Instant at) {
+            revokeTemplateApplications(userId, positionApplicationIds.getOrDefault(userId, List.of()), actorId, at);
+            positionRoles.put(userId, roleId);
+            positionApplicationIds.put(userId, List.copyOf(applicationIds));
+        }
         final Map<String, PermissionTemplate> templates = new LinkedHashMap<>();
         final Map<String, List<PermissionTemplateItem>> items = new LinkedHashMap<>();
         final Map<String, TemporaryGrant> temporaryGrants = new LinkedHashMap<>();
@@ -1925,7 +1946,7 @@ class AccessServiceTests {
         ) {
             List<PermissionTemplateApplication> applications = targetUserIds.stream()
                     .map(userId -> new PermissionTemplateApplication(
-                            "app_" + userId,
+                            "app_" + userId + "_" + (templateApplications.size() + 1),
                             templateId,
                             "user",
                             userId,
@@ -2016,7 +2037,12 @@ class AccessServiceTests {
                     effects.add(override);
                 }
             }
-            for (String roleId : userRoles.getOrDefault(userId, Set.of())) {
+            // M036-001：与 JdbcAccessRepository 同语义——岗位派生角色与直接装配的角色一样以 ROLE 来源并入授予。
+            Set<String> roleIds = new LinkedHashSet<>(userRoles.getOrDefault(userId, Set.of()));
+            if (positionRoles.get(userId) != null) {
+                roleIds.add(positionRoles.get(userId));
+            }
+            for (String roleId : roleIds) {
                 RoleRecord role = roles.get(roleId);
                 if (role == null || !"active".equals(role.status())) {
                     continue;
