@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -418,6 +418,34 @@ class AccessServiceTests {
         authenticateAsOrgUser("usr_org_a", "org-a-user", "org_a");
         assertThatThrownBy(() -> service.assignStaffLevel(new StaffLevelAssignmentRequest(
                 "k-a-cross", null, "usr_org_b", "lvl_m1_lower", null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN");
+                });
+    }
+
+    @Test
+    void effectivePermissionsForUserRejectsCrossOrganization() {
+        accessRepository.users.put("usr_org_b", new AccessUser(
+                "usr_org_b", "org-b-user", "staff", "org_b", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_org_a", "org-a-user", "org_a");
+        assertThatThrownBy(() -> service.effectivePermissionsForUser("usr_org_b"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN");
+                });
+    }
+
+    @Test
+    void changeUserScopeRejectsTargetOutsideActorProject() {
+        accessRepository.users.put("usr_org_a", new AccessUser(
+                "usr_org_a", "org-a-user", "staff", "org_a", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_org_a", "org-a-user", "org_a");
+        assertThatThrownBy(() -> service.changeUserScope("usr_org_a", new UserScopeChangeRequest(
+                "scope-cross-target", null, "org_b", null, "ops_clerk", "lvl_m1_lower",
+                null, null, null, "move", null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.status().value()).isEqualTo(403);
                     assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN");
@@ -1038,6 +1066,7 @@ class AccessServiceTests {
 
         assertThat(applied.status()).isEqualTo("applied");
         assertThat(accessRepository.temporaryGrants.values()).hasSize(1);
+        authenticateAsPlatformAdmin("org_a");
         assertThat(authorizationService.effectivePermissionsForUser("usr_temp_target").grants())
                 .doesNotContain("ops.production_readiness.check");
     }
@@ -1474,6 +1503,134 @@ class AccessServiceTests {
                 "pending", null, "scope test", "usr_requester", null, null, projectId, null, now, now);
     }
 
+    // M031-001（BSM-003；业务地图原文「想恢复点"取消存档"即可」）：存档后恢复即回到可定岗的启用态。
+    @Test
+    void restoringAnArchivedPositionMappingMakesItAssignableAgain() {
+        authenticateAsPlatformAdmin("seed-org");
+        PositionRoleTemplate mapping = seedRestoreFixture("usr_restore", "ops_restore", "map-restore");
+        service.changePositionTemplateLifecycle(mapping.id(), new StatusChangeRequest("restore-archive", "archive", "停止使用", List.of()));
+        assertThatThrownBy(() -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-while-archived", null, "usr_restore", "ops_restore", "lvl_m1_lower", null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("POSITION_ROLE_TEMPLATE_NOT_FOUND"));
+
+        PositionRoleTemplate restored = service.changePositionTemplateLifecycle(mapping.id(),
+                new StatusChangeRequest("restore-restore", "restore", "恢复使用", List.of()));
+
+        assertThat(restored.status()).isEqualTo("active");
+        PositionRoleTemplate stored = accessRepository.findPositionRoleTemplateById(mapping.id()).orElseThrow();
+        assertThat(stored.status()).isEqualTo("active");
+        assertThat(stored.archivedAt()).isNull();
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-after-restore", null, "usr_restore", "ops_restore", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.positionRoles.get("usr_restore")).isEqualTo("role_restore");
+    }
+
+    // M031-001：同岗位同职级已有启用中的替代映射时，恢复被拒且原映射状态不变。
+    @Test
+    void restoringIsRejectedWhileAnActiveReplacementMappingExists() {
+        authenticateAsPlatformAdmin("seed-org");
+        PositionRoleTemplate mapping = seedRestoreFixture("usr_restore_blocked", "ops_restore_blocked", "map-restore-blocked");
+        service.changePositionTemplateLifecycle(mapping.id(), new StatusChangeRequest("blocked-archive", "archive", "停止使用", List.of()));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-restore-replacement", null, "ops_restore_blocked", "lvl_m1_lower", "role_restore", "tpl_restore", "active"));
+
+        assertThatThrownBy(() -> service.changePositionTemplateLifecycle(mapping.id(),
+                new StatusChangeRequest("blocked-restore", "restore", "恢复使用", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.code()).isEqualTo("POSITION_TEMPLATE_ACTIVE_EXISTS");
+                });
+
+        PositionRoleTemplate unchanged = accessRepository.findPositionRoleTemplateById(mapping.id()).orElseThrow();
+        assertThat(unchanged.status()).isEqualTo("inactive");
+        assertThat(unchanged.archivedAt()).isNotNull();
+    }
+
+    private PositionRoleTemplate seedRestoreFixture(String userId, String positionCode, String idempotencyKey) {
+        accessRepository.users.put(userId, new AccessUser(
+                userId, userId, "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_restore", new RoleRecord(
+                "role_restore", "role_restore", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_restore", "tpl_restore", "Ops Check", null, "base",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(
+                        "tpl_restore", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        return service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                idempotencyKey, null, positionCode, "lvl_m1_lower", "role_restore", "tpl_restore", "active"));
+    }
+
+    // M031-002（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」）：
+    // 保存岗位映射后在岗人员按新映射重算、薪资不变；映射停用则收回派生。
+    @Test
+    void savingAPositionMappingRecomputesAssignedUsersAndDeactivatingRevokesDerivedGrants() {
+        authenticateAsPlatformAdmin("seed-org");
+        accessRepository.users.put("usr_recompute", new AccessUser(
+                "usr_recompute", "recompute", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        for (String roleId : List.of("role_recompute_old", "role_recompute_new")) {
+            accessRepository.roles.put(roleId, new RoleRecord(
+                    roleId, roleId, "Ops checker", "project", "active",
+                    Instant.parse("2026-06-14T00:00:00Z"),
+                    List.of("ops.production_readiness.check"),
+                    null));
+        }
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_recompute", "tpl_recompute", "Ops Check", null, "base",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(
+                        "tpl_recompute",
+                        "ops.production_readiness.check",
+                        AccessRepository.Effect.GRANT,
+                        "project",
+                        false)));
+        PositionRoleTemplate mapping = service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-recompute", null, "ops_recompute", "lvl_m1_lower",
+                "role_recompute_old", "tpl_recompute", "active"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-recompute", null, "usr_recompute", "ops_recompute", "lvl_m1_lower",
+                500000L, "CNY", null));
+        assertThat(accessRepository.positionRoles.get("usr_recompute")).isEqualTo("role_recompute_old");
+
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "map-recompute-change", null, "ops_recompute", "lvl_m1_lower",
+                "role_recompute_new", "tpl_recompute", "active"));
+
+        assertThat(accessRepository.positionRoles.get("usr_recompute")).isEqualTo("role_recompute_new");
+        assertThat(accessRepository.findStaffLevelAssignment("usr_recompute")).get()
+                .extracting(StaffLevelAssignment::baseSalaryAmountCent)
+                .isEqualTo(500000L);
+
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "map-recompute-off", null, "ops_recompute", "lvl_m1_lower",
+                "role_recompute_new", "tpl_recompute", "inactive"));
+
+        assertThat(accessRepository.positionRoles).containsKey("usr_recompute");
+        assertThat(accessRepository.positionRoles.get("usr_recompute")).isNull();
+    }
+
+    // M031-003（GEN-011）：岗位模板生命周期与授权政策两个写口失败也留痕。
+    @Test
+    void positionTemplateLifecycleAndGrantPolicyFailuresAreAudited() {
+        authenticateAsPlatformAdmin("seed-org");
+        assertThatThrownBy(() -> service.changePositionTemplateLifecycle("prt_missing",
+                new StatusChangeRequest("lifecycle-missing", "archive", "停止使用", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("POSITION_ROLE_TEMPLATE_NOT_FOUND"));
+        assertThatThrownBy(() -> service.updateGrantPolicy(null))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "failure".equals(event.eventResult()))
+                .extracting(AuditEvent::eventName)
+                .contains("access.position_role_template.lifecycle_failed", "access.grant_policy.change_failed");
+    }
+
     private void authenticateAsPlatformAdmin(String organizationId) {
         AuthService.UserRecord user = new AuthService.UserRecord(
                 "usr_admin", "seed-admin", "hash", "platform_admin", organizationId, null, "active",
@@ -1724,10 +1881,21 @@ class AccessServiceTests {
                     .findFirst());
         }
 
+        // 与 JdbcAccessRepository 同语义：upsert 不动存档/删除列；生命周期保存恒写 inactive。
         @Override
         public PositionRoleTemplate savePositionRoleTemplate(PositionRoleTemplate mapping) {
-            positionRoleTemplates.put(mapping.id(), mapping);
+            PositionRoleTemplate existing = positionRoleTemplates.get(mapping.id());
+            positionRoleTemplates.put(mapping.id(), existing == null ? mapping : new PositionRoleTemplate(
+                    mapping.id(), mapping.positionCode(), mapping.staffLevelId(), mapping.roleId(), mapping.templateId(),
+                    mapping.organizationId(), mapping.status(), mapping.createdBy(), mapping.createdAt(), mapping.updatedAt(),
+                    existing.archivedAt(), existing.deletedAt(), existing.deleteReviewId(), existing.deleteReason()));
             return mapping;
+        }
+
+        @Override
+        public void savePositionTemplateLifecycle(PositionRoleTemplate mapping, String actorId) {
+            positionRoleTemplates.put(mapping.id(), mapping.withLifecycle(mapping.archivedAt(), mapping.deletedAt(),
+                    mapping.deleteReviewId(), mapping.deleteReason(), mapping.updatedAt()));
         }
 
         @Override

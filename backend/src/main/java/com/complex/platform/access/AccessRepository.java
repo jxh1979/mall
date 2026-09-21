@@ -145,6 +145,17 @@ public interface AccessRepository {
         return Optional.empty();
     }
 
+    /** 当前定在该职位+职级上的账号。默认按人员列表逐条查岗位；Jdbc 仓储可下推 SQL。 */
+    default List<String> listUserIdsAssignedToPosition(String positionCode, String staffLevelId) {
+        return listUsers().stream()
+                .filter(user -> findUserPositionAssignment(user.id())
+                        .filter(assignment -> positionCode.equals(assignment.positionCode())
+                                && staffLevelId.equals(assignment.staffLevelId()))
+                        .isPresent())
+                .map(AccessUser::id)
+                .toList();
+    }
+
     /** 在当前岗位行上替换派生授权；独立 user_roles 与模板应用不受影响。 */
     default void replacePositionGrants(String userId, String roleId, String mappingId, List<String> applicationIds,
                                       String actorId, Instant changedAt) {

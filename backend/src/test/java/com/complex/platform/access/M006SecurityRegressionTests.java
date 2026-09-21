@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.24
+// 文件版本：V0.30
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -556,6 +556,7 @@ class M006SecurityRegressionTests {
         when(repository.findPositionRoleTemplateById("lifecycle")).thenAnswer(a -> Optional.of(mapping.get()));
         when(repository.listPositionRoleTemplates(null)).thenAnswer(a -> List.of(mapping.get()));
         doAnswer(a -> { mapping.set(a.getArgument(0)); return null; }).when(repository).savePositionTemplateLifecycle(any(), anyString());
+        doAnswer(a -> { mapping.set(a.getArgument(0)); return a.getArgument(0); }).when(repository).savePositionRoleTemplate(any());
         doReturn(1L).when(repository).countPositionTemplateUsage("lifecycle");
         var reviewRepository = mock(com.complex.platform.governance.review.SupervisorReviewRepository.class);
         Map<String, com.complex.platform.governance.review.SupervisorReviewDecisionRecord> decisions = new HashMap<>();
@@ -598,7 +599,7 @@ class M006SecurityRegressionTests {
         assertThat(service.listPositionRoleTemplates(true).items()).hasSize(1);
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("restore", "restore", "恢复留存配置", List.of()));
         assertThat(mapping.get().deletedAt()).isNull();
-        assertThat(mapping.get().status()).isEqualTo("inactive");
+        assertThat(mapping.get().status()).isEqualTo("active"); // M031-001：恢复即回到启用态
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("self-archive", "archive", "停止使用", List.of()));
         int reviewCount = decisions.size();
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("self-request", "request_delete", "最高权限本人删除", List.of()));
