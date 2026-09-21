@@ -106,6 +106,7 @@ class AccessControllerTests {
                 .andExpect(jsonPath("$.code").value("OK"))
                 .andExpect(jsonPath("$.data.items[0].permission_code").value("ops.production_readiness.view"))
                 .andExpect(jsonPath("$.data.total").value(1));
+        Mockito.verify(authorizationService).requirePermission("access.permission.view");
     }
 
     @Test
@@ -216,6 +217,7 @@ class AccessControllerTests {
                 .andExpect(jsonPath("$.code").value("OK"))
                 .andExpect(jsonPath("$.data.items[0].id").value("lvl_m1_lower"))
                 .andExpect(jsonPath("$.data.items[0].level_rank").value(1));
+        Mockito.verify(authorizationService).requirePermission("access.staff_level.view");
     }
 
     @Test
@@ -239,6 +241,7 @@ class AccessControllerTests {
                 .andExpect(jsonPath("$.code").value("OK"))
                 .andExpect(jsonPath("$.data.staff_level_id").value("lvl_m1_lower"))
                 .andExpect(jsonPath("$.data.salary_currency").value("CNY"));
+        Mockito.verify(authorizationService).requirePermission("access.staff_level.manage");
     }
 
     @Test
@@ -305,6 +308,76 @@ class AccessControllerTests {
                 .andExpect(jsonPath("$.data.user_id").value("usr_target"))
                 .andExpect(jsonPath("$.data.grants[0]").value("amusement.project.view"))
                 .andExpect(jsonPath("$.data.wildcard").value(true));
+    }
+
+    // M035-002：岗位模板生命周期端点按动作分两种门控——批准/驳回删除须同时持两个权限码，其余动作只须角色装配权限。
+    @Test
+    void positionTemplateLifecycleGatesDeleteDecisionsOnBothPermissions() throws Exception {
+        mockMvc.perform(post("/api/v1/access/position-role-templates/prt_1/lifecycle")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "lifecycle-approve", "action": "approve_delete", "reason": "同意删除"}
+                                """))
+                .andExpect(status().isOk());
+        Mockito.verify(authorizationService).requirePermissions("access.role.assign", "governance.supervisor_review.approve");
+        Mockito.verify(authorizationService, Mockito.never()).requirePermission("access.role.assign");
+
+        Mockito.reset(authorizationService);
+        mockMvc.perform(post("/api/v1/access/position-role-templates/prt_1/lifecycle")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "lifecycle-archive", "action": "archive", "reason": "停止使用"}
+                                """))
+                .andExpect(status().isOk());
+        Mockito.verify(authorizationService).requirePermission("access.role.assign");
+        Mockito.verify(authorizationService, Mockito.never())
+                .requirePermissions("access.role.assign", "governance.supervisor_review.approve");
+    }
+
+    // M035-002：授权申请审批须同时持审批权限与主管复核权限；缺任一即 403，且不进服务层。
+    @Test
+    void grantReviewRequiresBothReviewAndSupervisorApprovePermissions() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermissions("access.grant_request.review", "governance.supervisor_review.approve");
+
+        mockMvc.perform(post("/api/v1/access/grant-requests/agr_1/review")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "review-denied", "decision": "approve"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        Mockito.verify(service, Mockito.never()).reviewGrant(any(), any());
+    }
+
+    // M035-002：职级与定岗端点以路径里的账号为准，请求体里的 user_id 不生效。
+    @Test
+    void staffLevelAndPositionEndpointsUseThePathUserIdNotTheBodyUserId() throws Exception {
+        mockMvc.perform(put("/api/v1/access/users/usr_path/staff-level")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "level-path", "user_id": "usr_body", "staff_level_id": "lvl_m1_lower"}
+                                """))
+                .andExpect(status().isOk());
+        var level = org.mockito.ArgumentCaptor.forClass(com.complex.platform.access.dto.StaffLevelAssignmentRequest.class);
+        Mockito.verify(service).assignStaffLevel(level.capture());
+        org.assertj.core.api.Assertions.assertThat(level.getValue().userId()).isEqualTo("usr_path");
+
+        mockMvc.perform(put("/api/v1/access/users/usr_path/position")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "position-path", "user_id": "usr_body", "position_code": "ops_clerk", "staff_level_id": "lvl_m1_lower"}
+                                """))
+                .andExpect(status().isOk());
+        var position = org.mockito.ArgumentCaptor.forClass(com.complex.platform.access.dto.UserPositionAssignmentRequest.class);
+        Mockito.verify(service).assignUserPosition(position.capture());
+        org.assertj.core.api.Assertions.assertThat(position.getValue().userId()).isEqualTo("usr_path");
     }
 
     @TestConfiguration

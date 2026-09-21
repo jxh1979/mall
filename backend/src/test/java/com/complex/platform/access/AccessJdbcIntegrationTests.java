@@ -658,10 +658,11 @@ class AccessJdbcIntegrationTests {
                 """, Long.class)).isZero();
     }
 
-    // M006-G-07（PGM-1.10.1「旧派生同步失效」）：已定岗改职级复用定岗的四步写入（职级、定岗、套模板、替换派生），
-    // 入口必须与 assignUserPosition 一样由 Spring 事务整体包住，否则套模板已提交、替换派生失败时新旧派生并存。
+    // M006-G-07（PGM-1.10.1「旧派生同步失效」）：已定岗改职级复用定岗的四步写入，两个入口都须声明事务。
+    // M035-003：本测试只断言 assignUserPosition 与 assignStaffLevel 两个入口带事务声明，不执行四步写入本身
+    // （四步路径的行为测试在 AccessServiceTests）。
     @Test
-    void staffLevelChangeRunsInOneTransactionLikePositionAssignment() throws NoSuchMethodException {
+    void positionAndStaffLevelEntryPointsDeclareATransaction() throws NoSuchMethodException {
         assertThat(transactionAttributeSource.getTransactionAttribute(AccessService.class.getMethod(
                 "assignUserPosition", com.complex.platform.access.dto.UserPositionAssignmentRequest.class), AccessService.class))
                 .isNotNull();
@@ -671,12 +672,13 @@ class AccessJdbcIntegrationTests {
     }
 
     // M006-G-08（PGM-1.18「界面全中文」）：治理页 / 模板页直接上屏的权限名、角色名、模板名不含拉丁字母
-    // （HTML 正文自身使用的「AI」除外；permission_code / id 是机读标识，不在此列）。
+    // （permission_code / id 是机读标识，不在此列）。M035-001：治理地图「不得出现任何英文…可以不用中文的只有四样，没有第五样」，
+    // 「AI」不是豁免。
     @Test
     void seededDisplayNamesAreChinese() {
         assertThat(jdbcTemplate.queryForList("""
                 SELECT permission_code FROM permissions
-                 WHERE replace(permission_name, 'AI', '') ~ '[A-Za-z]'
+                 WHERE permission_name ~ '[A-Za-z]'
                  ORDER BY permission_code
                 """, String.class)).isEmpty();
         assertThat(jdbcTemplate.queryForList(
