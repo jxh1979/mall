@@ -1,5 +1,29 @@
 # 全量审计 Findings 台账
-版本：V2.90
+版本：V2.93
+
+## 当前 M029 B4-r1 双PASS，M029-001、002 已修转「否」，进入B5-r1
+2026-09-21T03:00:18Z。Grok B4-r1 票 PASS（modules/M029-b4-r1-grok-raw.md，29156bytes SHA bb5dacdcb59a71935b31eb9e7b85a0b15948b2d0c51cfce781c1e2a27df27b0e）；席甲票 PASS（modules/M029-b4-r1-self-raw.md，18932bytes SHA da8155b75a1e7cdaa3c3ba3f2ee992889cedf1ba719263bfb196d57245520d88）。M029-001、002 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（2）：M029-001、M029-002（已修）。
+- 当前M029修复队列「是」：0。
+
+
+## 当前 M029 B2-r1 双PASS定稿，2项待修（B3-r1）
+2026-09-21T02:48:41Z。Grok B2-r1 票 PASS（modules/M029-b1-grok-raw.md V0.02，全文 54224bytes SHA 58359b0eacb8f1f72847d83ef58c434f315a47e9a8020a9ffd22e70860f9e441）；席甲 B2-r1 票 PASS（modules/M029-b1-self-raw.md V0.02，全文 18663bytes SHA 1d69077aee9d7c0766eb0eea3c4ad21b2573b61b171072e40da4125b0d0d0e1a）。定稿：M029-001、002 修复队列「是」（均细化）。
+- 修复队列「是」（2）：M029-001、M029-002。
+- 修复队列「否」（0）。
+
+
+## 当前 M029 B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-21T02:36:47Z。输入仅当前 471 计划 M029 的完整 B1 双席 raw：modules/M029-b1-self-raw.md V0.01（16960bytes SHA 27a366a09fd3f04bf4325e7e08df08fefaa2a8bf9fa49fe803049ba80ba3b672，席甲=Claude Fable 5.1，作者自审票，PASS：无 findings、OBS-1…7）、modules/M029-b1-grok-raw.md V0.01（32315bytes SHA 8f4c619b9cb3f2a14695a8914eac5b03eef2752bfe264ac8063975b06d0ea3df，Grok 席乙，FAIL：GR-01、GR-02、观察 1…12）。B1 后四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。归并：GR-01（席甲 OBS-3 同一事实）→001；GR-02→002（席甲漏）。席甲 B1 票 PASS 经复核撤回，合取 FAIL。B3 累计 0；写入集合＝本模块 3 个工具文件 + 两份生成物的机械重生成（规格自动区块 2 个单元格、CSV 1 行；属 M028 文件，只变生成器拥有的区域）。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M029-001 | Grok GR-01（席甲 B1 只登记为 OBS-3，理由是「改生成器会牵动已闭环 M028 的产物」——那是流程顾虑不是技术反驳，撤回，采 Grok） | 细化（上位：治理地图与业务地图对「商户不能查看平台全局和其他商户数据」的隔离要求，本模块是其下位机审实现；采 Grok 分类） | 是 | 是 | `tools/generate-data-isolation-spec.mjs:84-88` `scopeType` 对没有 merchant_id/project_id/organization_id 的表发射 `inherited-or-location-scope`；该值不在规格 §1 定义的类型闭集（direct／inherited／single_complex_default，且 §1 写明「与盘点 CSV 的 scope_type 对齐」）。自动区块只收「自带 scope 列」的表，按 §1 定义即 direct；现 170 张表在 CSV 里也全部是 direct（席甲实查：自动区块表中 CSV 类型≠direct 的 0 张；现走兜底的只有 `venue_business_hours`、`venue_sessions`，CSV 均为 direct）。`tools/generate-domain-ownership-scope-audit.mjs:22-65` `inheritedRules` 无 `business_process_step_records`，该表落入兜底 single_complex_default，而规格 §3 手写清单写明它经 `process_instance_id` 继承 `business_process_instances` 的 merchant_id/project_id。两个 `--check` 都发现不了类型非法或跨产物矛盾 | GEN-008 / GEN-002 / GEN-016；最小处置：①`tools/generate-data-isolation-spec.mjs` `scopeType` 改为恒返回 `direct` 并注明依据（本区块只列自带 scope 列的表，按规格 §1 即 direct，与 CSV 同口径），不再发射闭集外的值；②`tools/generate-domain-ownership-scope-audit.mjs` `inheritedRules` 增一条 `business_process_step_records`（source：process_instance_id；path：process_instance_id -> business_process_instances -> merchant_id/project_id）；③两文件版本标记（`tools/generate-data-isolation-spec.mjs` 新增 V0.01、`tools/generate-domain-ownership-scope-audit.mjs` V0.03→V0.04）；④机械后果：用修后的生成器在 origin/main 口径重生成两份产物——规格自动区块 2 个单元格由 `inherited-or-location-scope` 变 `direct`、CSV 1 行由 single_complex_default 变 inherited——随本模块同批带入（先例：M021 新增迁移时同批重生成这两份产物）；产物只在生成器拥有的区域变化，M028 已审的手写段不动。不采 Grok 的另一备选（删写死的 covered）：两席均已将其登记为观察 |
+| M029-002 | Grok GR-02（席甲 B1 漏：`--strict` 输出只看了末 4 行） | 细化（上位：治理地图与业务地图对「商户不能查看平台全局和其他商户数据」的隔离要求，本模块是其下位机审实现；采 Grok 分类） | 是 | 是 | `tools/verify-tenant-isolation.mjs:145-167` `extractReferencedTables` 用 `\bFROM\s+<标识符>` 抽表名，只中和了 `EXTRACT(… FROM …)`，没中和 SQL 运算符 `IS [NOT] DISTINCT FROM`；`JdbcAnalyticsRepository.java:1246`、`JdbcSettlementConfigWriteRepository.java:485` 的 `IS NOT DISTINCT FROM d.<col>` 使别名 `d` 被当成未登记表，`--strict` 每次报两条 `表 'd'`；默认路径因 `security-scans/tenant-isolation-baseline.json` 含 `F2:UNREGISTERED_TABLE:d` 而不红——换个别名就会作为「新增回归」误阻断。仓储里该运算符现有 14 处 | GEN-002 / GEN-003；最小处置：在抽取前与 EXTRACT 同样就地中和 `\bIS\s+(?:NOT\s+)?DISTINCT\s+FROM\b`（一行）；`tools/verify-tenant-isolation.mjs` 加版本标记 V0.01。baseline 里的 `d` 键修后会被工具报告为「已不再复现」，其清理属 baseline 文件所在模块（M030），本模块不动 |
+
+- 只登记不入队：CSV 生成器写死 status=covered、uncovered 检查不可达（两席同为观察；当前是 P0 盘点策略，不另立「未知表必须红」的新判据）；测试库门禁根目录缺失时静默 PASS、只扫四种后缀（现树与 npm 路径不触发）；`verify:test-db-isolation` 不在 delivery-gates（package.json 非本模块文件）；机审头注「fail-closed，发现即非 0」与默认棘轮的字面差（L253-257 已写明棘轮，--strict 可用）；baseline 陈旧项 access_grant_requests 与两条已登记 F1 缺口（M030／台账）；扫描面外 17 个含 SQL 的 Java 文件（头注 B4）；DROP COLUMN／RENAME TABLE 未解析（现迁移无此情形，头注未声称支持）；迁移版本到 V1000 时两生成器排序分叉；`globalTables` 里的 `roles` 因 direct 列先命中而不可达；CSV 行内 file_version 恒 V0.01；四个工具无自带单测；主工作区因未发布 V427 三个检查必红（D-028）。
+- 修复队列「是」（2）：M029-001、M029-002（均细化）。
+- 修复队列「否」（0）。
+
 
 ## 当前 M028 B4-r1 双PASS，M028-001…010 已修转「否」，进入B5-r1
 2026-09-21T01:52:40Z。Grok B4-r1 票 PASS（modules/M028-b4-r1-grok-raw.md，46368bytes SHA 1a8416ff1d6e77199fa948ade5b90bf606df65bd1be7fe012fee8a20eb689e9b）；席甲票 PASS（modules/M028-b4-r1-self-raw.md，32042bytes SHA d7f8710b63d44e5b3e65cdc449c92664b75ecbe86bddbfc340eb4c828856fbb9）。M028-001…010 修复队列「是」→「否（已修，B3-r1）」。
