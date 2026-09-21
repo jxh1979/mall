@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -173,12 +173,22 @@ class M006SecurityRegressionTests {
     }
 
     // M006-005：已应用模板的内容编辑不能把不持有的高危权限发出去。
+    // M037-001：两道闸各自锁住——不持有的码（无论是否须审批）被「不得授出自己不持有的权限」拦下；持有的高危码被「须审批」拦下。
     @Test void templateEditCannotGrantAnUnownedHighPermission() {
+        String daily = "ops.production_readiness.check";
+        var definitions = new ArrayList<>(repository.listPermissions());
+        definitions.add(new PermissionDefinition(daily, "检查", "ops", "medium", false, "active"));
+        when(repository.listPermissions()).thenReturn(definitions);
         actor("manager", "staff", "org", null);
         effect("manager", LOW, AccessRepository.Effect.GRANT, "own", false);
         PermissionTemplate t = service.createPermissionTemplate(template("create", LOW));
         assertThatThrownBy(() -> service.updatePermissionTemplate(t.id(), template("edit", HIGH)))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        assertThatThrownBy(() -> service.updatePermissionTemplate(t.id(), template("edit-daily", LOW, daily)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        effect("manager", HIGH, AccessRepository.Effect.GRANT, "own-high", false);
+        assertThatThrownBy(() -> service.updatePermissionTemplate(t.id(), template("edit-owned-high", LOW, HIGH)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
         assertThat(items.get(t.id())).extracting(PermissionTemplateItem::permissionCode).containsExactly(LOW);
     }
 
@@ -582,6 +592,13 @@ class M006SecurityRegressionTests {
                 reviewRepository, new AuditEventService(new InMemoryAuditEventRepository()), event -> { });
         service = new AccessService(repository, new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(new InMemoryAuditEventRepository()), authorization, credentials, reviews, true, 3, 3);
+        // M037-002：非平台管理员不得操作岗位模板生命周期，且不落任何写入。
+        actor("ordinary-staff", "staff", "org", null);
+        assertThatThrownBy(() -> service.changePositionTemplateLifecycle("lifecycle",
+                new StatusChangeRequest("staff-archive", "archive", "越权操作", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_ADMIN_REQUIRED"));
+        verify(repository, never()).savePositionTemplateLifecycle(any(), anyString());
+        actor("admin", "platform_admin", "org", null);
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("archive", "archive", "停止使用", List.of()));
         assertThat(mapping.get().archivedAt()).isNotNull();
         assertThat(service.listPositionRoleTemplates().items()).isEmpty();
@@ -590,10 +607,19 @@ class M006SecurityRegressionTests {
         doReturn(0L).when(repository).countPositionTemplateUsage("lifecycle");
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("request", "request_delete", "删除申请", List.of()));
         assertThatThrownBy(() -> service.changePositionTemplateLifecycle("lifecycle",
-                new StatusChangeRequest("ordinary-admin", "approve_delete", "同意", List.of()))).isInstanceOf(ApiException.class);
+                new StatusChangeRequest("ordinary-admin", "approve_delete", "同意", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
                         com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", null, null, "active"), "unused", List.of()));
+        // M037-002：最高权限驳回删除——不软删、清掉删除复核单号，之后可再次申请并批准。
+        var masterAuthentication = SecurityContextHolder.getContext().getAuthentication();
+        service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("reject", "reject_delete", "保留配置", List.of()));
+        assertThat(mapping.get().deletedAt()).isNull();
+        assertThat(mapping.get().deleteReviewId()).isNull();
+        actor("admin", "platform_admin", "org", null);
+        service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("request-again", "request_delete", "重新申请", List.of()));
+        SecurityContextHolder.getContext().setAuthentication(masterAuthentication);
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("approve", "approve_delete", "同意", List.of()));
         assertThat(mapping.get().deletedAt()).isNotNull();
         assertThat(service.listPositionRoleTemplates(true).items()).hasSize(1);
