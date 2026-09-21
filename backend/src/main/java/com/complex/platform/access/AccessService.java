@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.19
+// 文件版本：V0.21
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -425,6 +425,7 @@ public class AccessService {
         return page(mappings);
     }
 
+    @Transactional
     public PositionRoleTemplate createPositionRoleTemplate(PositionRoleTemplateRequest request) {
         PositionRoleTemplateRequest r = requireRequest(request);
         try {
@@ -452,6 +453,7 @@ public class AccessService {
         }
     }
 
+    @Transactional
     public PositionRoleTemplate updatePositionRoleTemplate(String id, PositionRoleTemplateRequest request) {
         PositionRoleTemplateRequest r = requireRequest(request);
         try {
@@ -482,8 +484,22 @@ public class AccessService {
 
     @Transactional
     public PositionRoleTemplate changePositionTemplateLifecycle(String id, StatusChangeRequest request) {
+        // M031-003（GEN-011）：生命周期操作失败也留痕，与同文件其余写口同一范式。
+        try {
+            return changePositionTemplateLifecycleAudited(id, request);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.position_role_template.lifecycle_failed", "access.role.assign",
+                    "position_role_template", id, null, request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private PositionRoleTemplate changePositionTemplateLifecycleAudited(String id, StatusChangeRequest request) {
         requireRequest(request);
-        requirePlatformAdmin(authorizationService.currentActor());
+        AccessActor actor = authorizationService.currentActor();
+        if (!authorizationService.isMasterAuthority(actor)) {
+            requirePlatformAdmin(actor);
+        }
         String action = requireText(request.action(), "action");
         String reason = requireText(request.reason(), "reason");
         return idempotencyService.execute("positionTemplateLifecycle:" + id, request.idempotencyKey(), request, () -> {
@@ -499,6 +515,11 @@ public class AccessService {
                 case "restore" -> {
                     if (current.archivedAt() == null) throw ApiException.conflict("INVALID_STATE", "模板未存档");
                     if (current.deleteReviewId() != null && current.deletedAt() == null) throw ApiException.conflict("DELETE_REVIEW_PENDING", "须先处理删除复核");
+                    // M031-001（BSM-004「想恢复点"取消存档"即可」）：恢复即回到可定岗的启用态；同范围已有启用中的替代映射时拒绝，不静默留成停用。
+                    if (repository.findPositionRoleTemplate(current.organizationId(), current.positionCode(), current.staffLevelId())
+                            .filter(active -> java.util.Objects.equals(active.organizationId(), current.organizationId())).isPresent()) {
+                        throw ApiException.conflict("POSITION_TEMPLATE_ACTIVE_EXISTS", "同岗位同职级已有启用中的岗位模板，须先停用或存档后再恢复");
+                    }
                     updated = current.withLifecycle(null, null, null, null, now);
                 }
                 case "request_delete" -> {
@@ -536,6 +557,11 @@ public class AccessService {
                 default -> throw ApiException.badRequest("INVALID_ACTION", "不支持的岗位模板生命周期操作");
             }
             repository.savePositionTemplateLifecycle(updated, authorizationService.currentActor().id());
+            if ("restore".equals(action)) {
+                updated = new PositionRoleTemplate(updated.id(), updated.positionCode(), updated.staffLevelId(), updated.roleId(),
+                        updated.templateId(), updated.organizationId(), "active", updated.createdBy(), updated.createdAt(), now);
+                repository.savePositionRoleTemplate(updated);
+            }
             auditEventService.recordSuccess("access.position_role_template." + action, "access.role.assign",
                     "position_role_template", id, null, request.idempotencyKey(), Map.of("reason", reason));
             return updated;
@@ -595,6 +621,7 @@ public class AccessService {
                         requireSameOrganization(actor, target);
                         String newOrganization = trimToDefault(r.organizationId(), target.organizationId());
                         String newMerchant = isBlank(r.merchantId()) ? null : r.merchantId().trim();
+                        requireActorCanAssignToScope(actor, newOrganization, newMerchant);
                         if (java.util.Objects.equals(newOrganization, target.organizationId())
                                 && java.util.Objects.equals(newMerchant, target.merchantId())) {
                             throw ApiException.badRequest("SCOPE_UNCHANGED", "所属商户与项目均未变化；同范围换岗请使用定岗入口");
@@ -1915,6 +1942,17 @@ public class AccessService {
 
     @Transactional
     public AccessGrantPolicy updateGrantPolicy(AccessGrantPolicy.Update request) {
+        // M031-003（GEN-011）：授权政策保存失败也留痕。
+        try {
+            return updateGrantPolicyAudited(request);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.grant_policy.change_failed", "admission.policy.manage",
+                    "supervisor_review_policy", "access_grant", null, request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private AccessGrantPolicy updateGrantPolicyAudited(AccessGrantPolicy.Update request) {
         if (request == null || request.policy() == null) throw ApiException.badRequest("VALIDATION_FAILED", "授权政策不能为空");
         requireText(request.operatorNote(), "operator_note");
         return idempotencyService.execute("updateAccessGrantPolicy", request.idempotencyKey(), request, () -> {
@@ -2098,7 +2136,39 @@ public class AccessService {
                 request.idempotencyKey(),
                 Map.of("position_code", saved.positionCode(), "staff_level_id", saved.staffLevelId())
         );
+        recomputeUsersOnPositionTemplate(saved, request);
         return saved;
+    }
+
+    public EffectivePermissions effectivePermissionsForUser(String userId) {
+        AccessActor actor = authorizationService.currentActor();
+        requireSameOrganization(actor, requireTargetUser(userId));
+        return authorizationService.effectivePermissionsForUser(userId);
+    }
+
+    /** 保存岗位模板后立即按新映射重算在岗人员派生权；停用则收回派生。 */
+    private void recomputeUsersOnPositionTemplate(PositionRoleTemplate saved, PositionRoleTemplateRequest request) {
+        List<String> userIds = repository.listUserIdsAssignedToPosition(saved.positionCode(), saved.staffLevelId());
+        AccessActor actor = authorizationService.currentActor();
+        Instant now = Instant.now();
+        if (!"active".equals(saved.status())) {
+            for (String userId : userIds) {
+                repository.replacePositionGrants(userId, null, null, List.of(), actor.id(), now);
+            }
+            return;
+        }
+        for (String userId : userIds) {
+            StaffLevelAssignment salary = repository.findStaffLevelAssignment(userId).orElse(null);
+            assignUserPositionDirect(new UserPositionAssignmentRequest(
+                    request.idempotencyKey(),
+                    request.operatorNote(),
+                    userId,
+                    saved.positionCode(),
+                    saved.staffLevelId(),
+                    salary == null ? null : salary.baseSalaryAmountCent(),
+                    salary == null ? "CNY" : salary.salaryCurrency(),
+                    salary == null ? null : salary.salaryDetail()), true);
+        }
     }
 
     private <T> T requireRequest(T request) {
@@ -2128,6 +2198,18 @@ public class AccessService {
         }
         if (!isBlank(actor.merchantId()) && !actor.merchantId().equals(targetUser.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能操作其他商户的用户");
+        }
+    }
+
+    private void requireActorCanAssignToScope(AccessActor actor, String organizationId, String merchantId) {
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return;
+        }
+        if (!authorizationService.requireProjectScope(actor).equals(organizationId)) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能把人员改挂到其他项目");
+        }
+        if (!isBlank(actor.merchantId()) && !actor.merchantId().equals(merchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能把人员改挂到其他商户");
         }
     }
 

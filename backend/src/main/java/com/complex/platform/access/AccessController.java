@@ -250,7 +250,7 @@ public class AccessController {
     @GetMapping("/users/{id}/effective-permissions")
     public ApiResponse<EffectivePermissions> effectivePermissionsForUser(@PathVariable String id) {
         authorizationService.requirePermission("access.user.view");
-        return ApiResponse.ok(authorizationService.effectivePermissionsForUser(id));
+        return ApiResponse.ok(service.effectivePermissionsForUser(id));
     }
 
     @GetMapping("/staff-levels")
