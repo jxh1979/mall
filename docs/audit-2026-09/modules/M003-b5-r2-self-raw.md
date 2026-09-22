@@ -664,3 +664,232 @@ print('M003_B5_ENTRY_ASSERTIONS_PASS')
 ## 7. 完整本席结论
 三线全部完成；202/202行、127/127脚本、18/18冻结GEN已覆盖。当前无新增工程缺陷、无冲突、无业务添加、无新HTML自身问题；全部内容按技术性/细化正常审计而非因HTML沉默删除。当前重复观察不会作为“有缺陷拒修”残留。
 本席B5 PASS。未看本次Grok正文，不能以本席PASS宣布双PASS或模块收口。下一步保存此完整报告后读Grok本次完整报告，核验实算/sidecar/ledger/Grok四值；两席确实PASS才能先写ledger PASS再写模块收口文件。未修改源码或增加B3次数。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+# M003 B5-r2 Codex 全模块独立复审
+版本：V0.04
+结论：PASS（本席B5，Grok本次票未读，尚非模块结项）。
+V0.17/471计划。B2 selfV0.11、GrokV0.08双PASS，findingsV3.36七项队列否，跳新增B3/B4，累计B3仍2。正本main HEAD e456ba96c84185c8d39f18f548011daac48a6466。
+两文件.gitignore58+package147共205行，18GEN。本B5独立实算两源SHA均与B1完整读取一致，明确复用相同字节完整阅读、graft定位与包装器已读事实；重新判断全18项、127scripts与58行ignore，不继承旧PASS。Grok先派发，本席封存前未读当前外席raw/JSON。
+本次新跑127命令sh -n、75Node --check、ignore6个正负匹配；B1的后端环境/npm参数转发/预发布失败传播不重跑，下面逐项说明为复用既有命令证据，不冒称B5新跑全链。
+
+## 第一性原理
+为何存在：root npm manifest是127实际工程入口及workspace/依赖声明；ignore排除构建、本机配置、运行态产物及图缓存。一般工程载体无直接业务上位也可技术性保留；两运行态目录细化已有图片上传与追踪证据需求，忽略Git不是删除业务数据。
+可执行证据：本次全语法/目标与ignore正负，B1已实际环境检查/工作区help和dry/失败传播；不能用静态存在替代具体业务行为通过。
+未验证前提：全量后端/UI/Android构建、生产DB、安装可重建、发布门禁全绿均未声称；npm11与声明npm10差异保留，未假设全版本等价；跨模块台账/快照红仍未修。
+
+## 18GEN本次重新评估
+| ID | 当前证据与判断 | 本席 |
+|---|---|---|
+| GEN-001 | 必要性：根manifest集中声明127开发/核验入口；ignore排除构建缓存与运行态产物。重叠规则不造成首跑故障，保留历史027无缺陷观察，不强制删。 | PASS |
+| GEN-002 | 本B5新跑127脚本sh -n全0，75Node目标存在且node --check全0；npm引用图无悬空和循环；B1 backend-env实跑PASS，本B5复用；转发Vite help与tsc dry成功，不能冒充完整应用验收。 | PASS |
+| GEN-003 | 配置模块无自带测试；真实ignore正负例、根预发布失败传播和工作区转发证明所查行为，Node语法通过不等于业务断言通过。 | PASS |
+| GEN-004 | 固定本地命令，不接收网络输入；npm --参数需要逐层分隔；脚本本身可接受输入的校验由所属模块负责，本模块不绕过。 | PASS |
+| GEN-005 | private包、不自动部署或授业务权限；核验入口不会因平台管理员身份放宽范围，命令层不引入角色规则。 | PASS |
+| GEN-006 | 根manifest与lock根镜像name/version/workspaces/devDependencies/engines全部匹配；没有数据库状态转换。 | PASS |
+| GEN-007 | 脚本聚合用&&严格顺序，npm脚本图无循环；本文件无业务并发，未宣称交易幂等已实测。 | PASS |
+| GEN-008 | apps/web工作区脚本名全部存在；Maven参数传到backend/pom.xml，Android固定项目参数路径存在；根lock镜像一致。 | PASS |
+| GEN-009 | B1实跑verify:predeploy首关exit1，本B5同字节复用并停止，后续entry-anchors未被执行；读取wrapper末端process.exit(result.status ?? 1)不会吞失败。 | PASS |
+| GEN-010 | ignore保护.env、本机配置、运行态图片证据；不忽略.env.example/源码/findings/有日期JSON证据。package无生产秘密。PII入口细化现HTML870。 | PASS |
+| GEN-011 | 验证命令真实输出保留；help/dry与运行环境检查分别记录，不当完整UI/后端业务通过。 | PASS |
+| GEN-012 | 127固定命令，无递归脚本循环；长驻dev与Android真实smoke未运行。无新资源池或循环业务。 | PASS |
+| GEN-013 | Node v24.21.0符合engines；npm实用11.19.0与packageManager npm@10.9.8不同如实披露，本轮B1入口运行成功，B5明确复用，不猜测必须失败；依赖未安装或升级。 | PASS |
+| GEN-014 | 本模块无SQL。migration-version-order在delivery-gates，未在predeploy；当前文件声明就是如此，不自行补挂或扩功能。 | PASS |
+| GEN-015 | 本模块是工程配置，无用户UI；工程英文命令、内部标识不等于产品展示文案。业务全中文保持。 | PASS |
+| GEN-016 | 两源全205行（58+147），plan旧202为历史冻结计量，文件清单不变。package documentVersion V0.01；.gitignore新增graft三行是既有工作区事实，本轮未改。 | PASS |
+| GEN-017 | 按冲突→细化→技术性→添加。一般工程声明技术性，HTML解释权/数据隔离/PII核验有明确上位句为细化，未发现添加。 | PASS |
+| GEN-018 | 每条结论落本次源字节、实际命令及HTML完整原句；不以旧PASS或外审意见作判据。Grok当前票未读。 | PASS |
+
+## 全文件分类和完整脚本逐项
+下表在本B5重新审视相同源事实，沿用B1表述作为证据载体；脚本的目标和sh/node语法本B5全部重跑。B2对新Graft对象已拆032，旧016只1–55，不再沿用B1临时CX01过宽的ID归属。
+## .gitignore全部58行分类与用途
+| 行段 | 规则对象 | 分类及证据 |
+|---|---|---|
+|1–21|node_modules/dist/target/env/db/coverage/vite/gradle/kotlin/build/class/dex/apk/aab/local.properties|技术性，无业务发明；真实根及子目录样例匹配；027四组重叠不新增行为或产生失败，仅观察|
+|22–26|空行及Playwright报告/测试结果|技术性，仅运行态测试产物|
+|27–32|本机Claude配置及tsbuildinfo|技术性，机器专属配置/缓存不入Git|
+|33–39|扫描log、滚动semgrep目录及归档log|技术性；有日期findings.json不被这几条排除，log被忽略|
+|40–51|loop产物及根debug/probe/smoke等临时脚本|技术性；根debug-test匹配，tools/debug-test不匹配，锚定根目录|
+|52–55|bar-images/evidence-files|细化已有上传保存/证据追踪；不把忽略Git解释为数据删除|
+|56–58|空行、Graft本地可重建缓存/graft/|技术性，无业务发明；graft/INDEX.md被忽略，sub/graft/INDEX.md不被该根模式忽略，源码不忽略；属于既有工作区新增缓存规则，本轮未改|
+
+上位完整原句：BSM L959：“商品分类、商品图片、套餐都在后台维护：分类可自定义、图片后台上传保存、套餐由后台从已有商品组合而成。”PGM L893：“平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。”PGM L907：“查看企业微信会话原文、查看视频证据和查看财务敏感信息。”这些仅支持016运行态产物，不借此增加业务字段。
+
+## package.json全部147行与127脚本
+L1–9 name/private/version/documentVersion/type/workspaces；L10–138 scripts全表如下；L139–147 packageManager/engines/devDependencies及闭合。根镜像5字段相等，workspace存在。SemVer0.1.0与documentVersion V0.01用途分开，不擅改依赖版本。
+HTML核验细化：BEQR L23：“本表与《业务系统地图》《平台治理地图》共同组成三份最高业务解释权 HTML；只有经批准写入这三份 HTML 的内容才是最终业务口径，PRD、其他文档和后台配置均不得覆盖。”
+PII入口细化：PGM L870：“客人和员工的手机号、身份信息等个人信息，在系统里一律加密存放。”
+隔离入口细化：PGM L447：“集团下钻细则（已确认）：集团视图能看什么按职位配置模板决定——不同职位有不同可见范围（汇总、下钻各项目明细、跨项目对标）；数据隔离仍是综合体级，只有集团高层按其职位模板可跨综合体查看。职位配置模板只决定汇总与下钻到哪一层，不是可自定义的数据范围；数据范围没有后台设置项。”其它工程聚合不凭名称臆造业务添加。
+
+| script | 实际声明 | 分类/归属 | 静态证据 |
+|---|---|---|---|
+| dev | `npm run dev:backend` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| dev:backend | `node tools/run-backend-maven.mjs spring-boot:run` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| test:backend | `node tools/run-backend-maven.mjs test` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:backend-env | `node tools/run-backend-maven.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| dev:api | `npm run dev:backend` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| dev:web | `npm run dev --workspace apps/web` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:openapi | `node tools/verify-openapi-contract.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| audit:client-routes | `node tools/audit-client-api-routes.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:client-routes | `node tools/audit-client-api-routes.mjs --strict` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| audit:client-openapi | `node tools/audit-client-openapi-coverage.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:client-openapi | `node tools/audit-client-openapi-coverage.mjs --strict` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| audit:client-payload | `node tools/verify-client-payload-policy.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:client-payload | `node tools/verify-client-payload-policy.mjs --strict` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:openapi-examples | `node tools/apply-openapi-p0-examples.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:openapi-examples | `node tools/verify-openapi-p0-examples.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:operation-matrix | `node tools/generate-openapi-operation-matrix.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:operation-matrix | `node tools/generate-openapi-operation-matrix.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:openapi-closure | `node tools/generate-openapi-contract-closure-appendix.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:openapi-closure | `node tools/generate-openapi-contract-closure-appendix.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:security-baseline | `node tools/generate-formal-security-baseline.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:entry-baseline | `node tools/refresh-entry-doc-baseline.mjs` | 细化/030 | sh -n=0；Node目标存在/--check=0 |
+| verify:html-ledger-sync | `node tools/verify-html-ledger-sync.mjs` | 细化/030 | sh -n=0；Node目标存在/--check=0 |
+| verify:entry-anchors | `node tools/verify-entry-anchors.mjs` | 细化/030 | sh -n=0；Node目标存在/--check=0 |
+| verify:html-param-tier | `node tools/verify-html-param-tier.mjs` | 细化/030 | sh -n=0；Node目标存在/--check=0 |
+| verify:entry-doc-baseline | `node tools/refresh-entry-doc-baseline.mjs --check` | 细化/030 | sh -n=0；Node目标存在/--check=0 |
+| verify:security-baseline | `npm run verify:prod-docs-access && node tools/verify-formal-security-baseline.mjs --strict` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:prod-docs-access | `node tools/verify-prod-docs-access-policy.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:ops160-execution-policy | `node tools/verify-ops160-execution-policy.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:ops160-backup-restore | `node tools/verify-160-backup-restore-scripts.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-credentials | `node tools/verify-production-credential-rotation-ledger.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:p0a-ops-hardening | `node tools/verify-p0a-ops-hardening.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:ops160-recovery | `npm run verify:coding-host-protection && npm run verify:ops160-execution-policy && npm run verify:ops160-backup-restore && npm run verify:production-credentials && npm run verify:p0a-ops-hardening && npm run verify:nas-smb-mount-evidence` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:p0-contract | `npm run verify:no-legacy-api-prototype && npm run verify:openapi && npm run verify:openapi-examples && npm run verify:operation-matrix && npm run verify:openapi-closure && npm run verify:client-routes && npm run verify:client-openapi && npm run verify:client-payload` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:p0-web | `npm run verify:p0-contract && npm run build` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:p0-env | `npm run verify:backend-env && npm run verify:android-env` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| build | `npm run build --workspace apps/web` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| typecheck | `npm run typecheck --workspace apps/web` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| smoke:p0 | `npm run test:backend` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:android-env | `node tools/run-android-gradle.mjs --check --require-android-sdk --project apps/android-terminal/android-app` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| android:p0:build | `node tools/run-android-gradle.mjs --project apps/android-terminal clean build` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| android:p0:smoke | `node tools/run-android-p0-smoke.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| android:p0:apk | `node tools/run-android-gradle.mjs --project apps/android-terminal/android-app --require-android-sdk :app:assembleDebug` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:p0 | `npm run verify:coding-host-protection && npm run verify:p0-contract && npm run verify:security-baseline && npm run test:backend && npm run build && npm run verify:android-env && npm run android:p0:build && npm run verify:android-p0-smoke-wrapper && npm run android:p0:smoke && npm run android:p0:apk` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:no-legacy-api-prototype | `node tools/verify-no-legacy-api-prototype.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:coding-host-protection | `node tools/verify-coding-host-protection.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:t3-coding-package | `node tools/verify-t3-coding-package.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:t3b-supplier-mock-kit | `node tools/verify-t3b-supplier-mock-kit.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:t3d-local-llm-ai-quality | `node tools/verify-t3d-local-llm-ai-quality.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:external-dependency-gates | `node tools/verify-external-dependency-gates.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:delivery-gates-docs | `node tools/verify-delivery-gates.mjs` | 技术性/031 | sh -n=0；Node目标存在/--check=0 |
+| verify:delivery-gates | `npm run verify:delivery-gates-docs && npm run verify:full-admin-matrix && npm run verify:domain-ownership-scope && npm run verify:matrix-vs-migration && npm run verify:migration-version-order && npm run verify:data-isolation-spec && npm run verify:tenant-isolation && npm run verify:unit && npm run verify:coding-host-protection && npm run verify:external-dependency-gates && npm run verify:integration-capability-switches && npm run verify:external-evidence-requirement-traceability && npm run verify:partial-requirement-mock-coverage && npm run verify:t3-coding-package && npm run verify:t3b-supplier-mock-kit && npm run verify:t3d-local-llm-ai-quality && npm run verify:p0-contract && npm run verify:security-baseline && npm run verify:final-closed-loop-audit && npm run verify:closed-loop-current-state && npm run verify:runtime-acceptance-evidence && npm run verify:ui-experience-acceptance && npm run verify:production-readiness-evidence && npm run verify:nas-current-state-drift && npm run verify:nas-diagnostics && npm run verify:nas-it-handoff && npm run verify:production-blocker-register-no-go-fixtures && npm run verify:production-blockers && npm run verify:production-closure-gap-reports && npm run verify:production-evidence-backfill-execution-ledger && npm run verify:production-evidence-backfill-priority && npm run verify:production-evidence-crosslinks && npm run verify:production-evidence-draft-prep && npm run verify:production-evidence-draft-prep-fixtures && npm run verify:production-evidence-intake && npm run verify:production-evidence-manifest-templates && npm run verify:production-evidence-negative-fixtures && npm run verify:production-evidence-owner-execution-packets && npm run verify:production-evidence-owner-guides && npm run verify:production-evidence-p0-quickstart && npm run verify:production-evidence-positive-fixtures && npm run verify:production-evidence-positive-propagation-fixtures && npm run verify:production-evidence-submission-kit && npm run verify:production-evidence-submissions-guard && npm run verify:production-evidence-submission-status && npm run verify:production-no-go-command-center && npm run verify:production-owner-actions && npm run verify:production-ready-no-go-fixtures && npm run verify:production-ready-positive-fixtures` | 技术性/031 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:nas-smb-mount-evidence | `node tools/verify-nas-smb-mount-evidence.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-readiness-evidence | `node tools/verify-production-readiness-evidence.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-blockers | `node tools/generate-production-blocker-register.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-blockers | `node tools/generate-production-blocker-register.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-intake | `node tools/verify-production-evidence-intake-templates.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-owner-actions | `node tools/generate-production-owner-action-packs.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-owner-actions | `node tools/generate-production-owner-action-packs.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-submission-kit | `node tools/generate-production-evidence-submission-kit.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-submission-kit | `node tools/generate-production-evidence-submission-kit.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-submission-status | `node tools/generate-production-evidence-submission-status.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-submission-status | `node tools/generate-production-evidence-submission-status.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-manifest-templates | `node tools/generate-production-evidence-manifest-templates.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-manifest-templates | `node tools/generate-production-evidence-manifest-templates.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-owner-guides | `node tools/generate-production-evidence-owner-guides.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-owner-guides | `node tools/generate-production-evidence-owner-guides.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-submissions-guard | `node tools/verify-production-evidence-submissions-guard.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-backfill-priority | `node tools/generate-production-evidence-backfill-priority.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-backfill-priority | `node tools/generate-production-evidence-backfill-priority.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-backfill-execution-ledger | `node tools/generate-production-evidence-backfill-execution-ledger.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-backfill-execution-ledger | `node tools/generate-production-evidence-backfill-execution-ledger.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| test:ui | `playwright test` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:ui | `playwright test` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| test:ui:update | `playwright test --update-snapshots` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:ui:real-backend | `REAL_BACKEND_E2E=1 playwright test --config=playwright.real-backend.config.ts` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:ui:real-backend:seeded | `node tools/run-real-backend-ui-e2e.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:android-p0-smoke-wrapper | `node tools/verify-android-p0-smoke-wrapper.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:full-admin-matrix | `node tools/verify-full-admin-page-matrix.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| test:unit | `npm run test:unit --workspace apps/web` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:unit | `npm run test:unit --workspace apps/web` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| docs:domain-ownership-scope | `node tools/generate-domain-ownership-scope-audit.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:domain-ownership-scope | `node tools/generate-domain-ownership-scope-audit.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:matrix-vs-migration | `node tools/verify-matrix-vs-migration.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:migration-version-order | `node tools/verify-migration-version-order.mjs` | 技术性/031 | sh -n=0；Node目标存在/--check=0 |
+| verify:tenant-isolation | `node tools/verify-tenant-isolation.mjs` | 细化/031 | sh -n=0；Node目标存在/--check=0 |
+| verify:predeploy | `npm run verify:html-ledger-sync && npm run verify:entry-anchors && npm run verify:html-param-tier && npm run verify:delivery-gates-docs && npm run verify:full-admin-matrix && npm run verify:domain-ownership-scope && npm run verify:matrix-vs-migration && npm run verify:data-isolation-spec && npm run verify:tenant-isolation && npm run verify:p0-contract && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:production-blockers && npm run verify:pii-encryption && npm run verify:test-db-isolation` | 技术性/031 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:pii-encryption | `node tools/verify-pii-encryption.mjs` | 细化/031 | sh -n=0；Node目标存在/--check=0 |
+| verify:test-db-isolation | `node tools/verify-test-db-isolation.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-closure-gap-reports | `node tools/generate-production-closure-gap-report.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-closure-gap-reports | `node tools/generate-production-closure-gap-report.mjs --check && node tools/verify-production-closure-gap-reports.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:final-closed-loop-audit | `node tools/verify-final-closed-loop-audit.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-negative-fixtures | `node tools/verify-production-evidence-negative-fixtures.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:nas-current-state-drift | `node tools/generate-nas-current-state-drift-report.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:nas-current-state-drift | `node tools/generate-nas-current-state-drift-report.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:closed-loop-current-state | `node tools/generate-closed-loop-current-state.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:closed-loop-current-state | `node tools/generate-closed-loop-current-state.mjs --verify` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:closed-loop-runtime | `npm run test:backend && npm run typecheck --workspace apps/web && npm run build --workspace apps/web && npm run verify:ui && npm run verify:ui:real-backend:seeded` | 技术性/029 | sh -n=0；npm/workspace/bin声明有效 |
+| verify:nas-it-handoff | `node tools/verify-nas-it-handoff.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:external-evidence-requirement-traceability | `node tools/generate-external-evidence-requirement-traceability.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:external-evidence-requirement-traceability | `node tools/generate-external-evidence-requirement-traceability.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:nas-diagnostics | `node tools/generate-nas-diagnostic-report.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:nas-diagnostics | `node tools/generate-nas-diagnostic-report.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-p0-quickstart | `node tools/generate-production-evidence-p0-quickstart.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-p0-quickstart | `node tools/generate-production-evidence-p0-quickstart.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:runtime-acceptance-evidence | `node tools/generate-runtime-acceptance-evidence.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:runtime-acceptance-evidence | `node tools/generate-runtime-acceptance-evidence.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:ui-experience-acceptance | `node tools/generate-ui-experience-acceptance-report.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:ui-experience-acceptance | `node tools/generate-ui-experience-acceptance-report.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-evidence-owner-execution-packets | `node tools/generate-production-evidence-owner-execution-packets.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-owner-execution-packets | `node tools/generate-production-evidence-owner-execution-packets.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| prepare:production-evidence-drafts | `node tools/prepare-production-evidence-manifest-drafts.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-draft-prep | `node tools/prepare-production-evidence-manifest-drafts.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-draft-prep-fixtures | `node tools/verify-production-evidence-draft-prep-fixtures.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-positive-fixtures | `node tools/verify-production-evidence-positive-fixtures.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-positive-propagation-fixtures | `node tools/verify-production-evidence-positive-propagation-fixtures.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-ready-no-go-fixtures | `node tools/verify-production-ready-no-go-fixtures.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-blocker-register-no-go-fixtures | `node tools/verify-production-blocker-register-no-go-fixtures.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-ready-positive-fixtures | `node tools/verify-production-ready-positive-fixtures.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-evidence-crosslinks | `node tools/verify-production-evidence-crosslinks.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:partial-requirement-mock-coverage | `node tools/generate-partial-requirement-mock-coverage.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:partial-requirement-mock-coverage | `node tools/generate-partial-requirement-mock-coverage.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:production-no-go-command-center | `node tools/generate-production-no-go-resolution-command-center.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:production-no-go-command-center | `node tools/generate-production-no-go-resolution-command-center.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:integration-capability-switches | `node tools/generate-integration-capability-switches.mjs` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| verify:integration-capability-switches | `node tools/generate-integration-capability-switches.mjs --check` | 技术性/029 | sh -n=0；Node目标存在/--check=0 |
+| docs:data-isolation-spec | `node tools/generate-data-isolation-spec.mjs` | 细化/031 | sh -n=0；Node目标存在/--check=0 |
+| verify:data-isolation-spec | `node tools/generate-data-isolation-spec.mjs --check` | 细化/031 | sh -n=0；Node目标存在/--check=0 |
+
+
+## 本B5新跑结果
+```json
+{
+  "hashes": {
+    ".gitignore": "a10b953aa5d53b1f476c250c8ccd4e0ff3751f122ceac7a240f8e4643d125836",
+    "package.json": "350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f"
+  },
+  "lines": {
+    ".gitignore": 58,
+    "package.json": 147
+  },
+  "lock": "b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458",
+  "scripts": 127,
+  "nodes": 75,
+  "bad": [],
+  "ignore_output": ".gitignore:58:/graft/\tgraft/INDEX.md\n.gitignore:4:.env\t.env\n.gitignore:55:backend/data/evidence-files/\tbackend/data/evidence-files/x\n",
+  "ignore_exit": 0,
+  "sidecar": "b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458"
+}
+```
+两源SHA未变，127shell/75Node语法零失败；根graft/env/证据正例匹配，sub/graft/.env.example/源码负例未忽略。两文件共205行全部覆盖，未以plan历史202冒充当前范围。
+
+## 同字节既有执行证据（本B5未重跑，非新命令回执）
+B1后端环境check真实0：Java21.0.12.1、Maven3.9.11。根npm双层--转发后到Vite8.0.16 help与tsc dry，均0；初次只到npmhelp/dryrun的错误调用已明确不作应用转发证据。root-lock五字段相同，127npm引用图无缺失无环，25ignore样例19匹配6不匹配。
+B1 verify:predeploy首关html-ledger-sync真实1且后续不执行。当前获批PGM未同批同步M426业务决策台账，工具M008，不能称全局绿。Grok前一B1实跑entry-doc-baseline DRIFT为其原始证据，根没有伪称本B5自己跑过；只作为M435 README、M436入口文档、M008工具既有输入。AGENTS图与缓存表述张力归M435，尚非本模块缺陷。
+后端/Android包装器B1完整已读，参数转发/退出码不吞错；Androidsmoke会启动业务服务，未运行。配置模块不要求全量业务测试。
+
+## 对抗线
+1. 声明目标丢失/脚本循环：当前75目标与127语法全部重验，B1npm图无环无缺引用。同字节不存在新增绕过。
+2. 聚合吞失败：源码&&串接，B1真实预发布首关1且停止；不将正确报错认作入口缺陷。
+3. 忽略误伤：graft模式锚仓根，源码/.env.example/日期扫描JSON保留，运行证据目录不进Git不代表可删除数据。
+4. 管理员/业务授权放宽：本文件只有工程命令；隔离/PII检查本身不写新权限或范围；不扩批准商户例外。
+5. 参数假验证：区分npmhelp、Vitehelp、tscdry、真实环境检查与完整业务测试，未偷换完成声明。
+6. 冗余强删：027重叠首次正常运行未失败，B2无缺陷定稿不重开；Graft新对象032只登记不修。
+7. 恢复旧通过：旧55行B5不能覆盖现58行；本次完整三线205行，全部18GEN重新作出结论，实际源指纹匹配。
+
+## 当前问题与定稿七项
+本B5新finding空集。016原ignore技术性/两运行态目录细化无缺陷；027重叠观察不强删；028元信息技术性；029普通入口技术性；030HTML核验细化；031聚合技术性/隔离PII细化；032新图缓存技术性无缺陷。七项队列均否，旧001—031保留历史、032不复用旧ID。023删除024保留裁决不重开。
+无添加、无新HTML自身问题、无未答questions、无锁外判据。没有任何本批业务文件修改或B3增次。
+沿用本轮已读取适用技能及V0.17收窄规则，不新建技能产物、不开第三席、不运行MCP/fetch/commit/push/worktree/部署。当前只本席B5 PASS，待Grok完整报告与四值校验，双PASS后才先改ledger状态再写现有收口文件。

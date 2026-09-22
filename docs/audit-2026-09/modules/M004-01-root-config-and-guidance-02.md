@@ -1,3 +1,17 @@
+# M004 — 治理门禁与 CI 基线／配置与工程入口／第2段
+版本：V0.03
+
+状态：PASS。V0.17、471计划、锁V0.14。已先在ledger V7.70写入PASS。
+唯一package-lock.json3321行/220记录/18GEN；源documentVersionV0.02，SHA d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef。本轮无源码改动，B3累计1、方案修复2、失败0不变。
+
+B1 selfV0.08/GrokV0.06均PASS；B2 selfV0.09/GrokV0.07整批PASS，findingsV3.38七项全否。跳新增B3/B4，完整B5-r1 selfV0.04 190568bytes SHA f8ee5cc230aa5dc736ba48d0644340e9d513071c3d3da84e56669838fa27a3d4；GrokV0.03 231170bytes SHA 37122326694e71df96d38e5a2a6306fded049268507a8765d506f9f9cef66a16。根先封存后读全部57260字符新外审（含前导换行），真实exit0、两席PASS。B5后实算/sidecar/ledger/Grok四值均 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，COUNT1。
+
+全图220/582、清单镜像、116engine、217URL/SRI形态与错误payload拒绝均通过，原生ls与dry-run0；dry不是安装或构建测试。audit仍exit1/moderate2，同GHSA涉及Vitest/mocker；当前未启公开插件入口，007按铁律6只登记，不升级。磁盘nanoid3.3.12/postcss8.5.15/undici7.28.0仍旧，锁为3.3.18/8.5.23/7.29.0；不能称修补版已运行。未全量下载tarball或实际安装/业务测试/部署/提交。全局PGM台账/入口快照红保留。
+
+外审历史措辞限制：V0.03把旧V0.01/V0.02合说成65254915/V0.01/audit绿，不能采信该历史概括。实际旧V0.02已明确d3676e/V0.02/audit红；当前同字节复用依据是新B1V0.06和实算，现结论不依赖该旧票概括。原文不改，无源码finding。
+
+## 历史 V0.02 原文（不代表现锁）
+
 # M004 — 01-root-config-and-guidance-02
 版本：V0.02
 

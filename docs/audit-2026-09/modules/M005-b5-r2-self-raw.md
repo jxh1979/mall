@@ -462,3 +462,64 @@ HOOK override EXIT 0 [pre-push] ALLOW_MAIN_PUSH=1 覆盖:放行直推 main(已�
 
 
 ```
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+UTC 2026-09-22T10:47:37.609729+00:00
+
+# M005 当前锁B5-r2完整独立审计
+版本：V0.02
+
+当前模块三源52行18GEN；B2本轮已双PASS，findings V3.40三当前项queue空；跳新增B3/B4，B3累计2。先派Grok，本票封存前未读本次Grok B5。此轮是完整模块重新判断，不只检查旧014修复。
+
+## 源阅读及全字段覆盖
+本B5先对三源和直接依赖实算SHA，均与本轮B1 self V0.10所完整读取字节相同。明确复用该次完整源码阅读；下面按所有字段重新判断，不继承B1/B2 PASS。源SHA见末尾本次实算。
+- tsconfig.base.json L1–13：根对象只有compilerOptions，九项target ES2022/module ESNext/moduleResolution Bundler/strict true/esModuleInterop true/forceConsistentCasingInFileNames true/skipLibCheck true/resolveJsonModule true/noUncheckedIndexedAccess true。B5原生解析354 web输入，errors[]，继承存在。strict与unchecked两个TS2322负例、正例无错误。
+- .github/CODEOWNERS L1–12：三个注释声明独立复核意图/保护条件/当前限制；九工程路径为api部署、web部署、hooks目录、propose-change、ops/ci、.github、tools、package.json、migration目录，owner均@jxh1979。B5逐路径存在/语法验证，当前B1真实保护403与owner admin不冒称此步重新API。路由不构成产品岗位；不增第二owner。
+- .github/workflows/predeploy-gates.yml L1–27：V0.02/name；L3–6说明静态CI信号与部署/hook责任。on两事件branches main；job ubuntu-latest；checkout固定34e114…+fetch-depth0；setup-node固定49933e…+22；npm ci --ignore-scripts；HTML_GATES_BASE精确PRbase.sha/pushbefore表达式；npm run verify:predeploy，无continue-on-error。B5 YAML全部原生解析并与镜像全字节相等，docs checker pass，hook与真实verify失败传播再跑。
+
+## 18GEN全量三线
+- GEN-001：三工程入口均有消费者：web extends、仓库路径路由、PR/push治理；删除会移除现有约束。无新的业务功能。
+- GEN-002：当前52行声明均解析正确；原生354输入配置/正负诊断与hook三分支实跑；不等同全业务编译。
+- GEN-003：负例undefined和数组越界均TS2322，正例无诊断；hook拒绝exit1，predeploy红exit1。断言真正能失败。
+- GEN-004：事件SHA经环境传给工具，非法ref在本轮B1已实测拒绝，源码同字节复用此证据。无不可信标题拼shell。
+- GEN-005：路由账户当前B1只读API=admin、保护403；本B5不重复API，明确沿用同轮证据不冒称新查。未放宽产品权限。
+- GEN-006：无业务状态转换或金额写入，配置解析/镜像一致性已核。事务边界不适用。
+- GEN-007：只有静态检查与编译配置，重复运行不会重复扣款。无依据新增concurrency。
+- GEN-008：TS九选项真实继承；YAML live/mirror字节一致、eventBase逐字、Node22。接口业务契约无改。
+- GEN-009：verify链用&&且无continue-on-error；当前PGM台账红真实传出exit1，没有吞错/假绿。
+- GEN-010：三文件无秘密、动作pin官方SHA在同轮B1 API匹配；不安装依赖/不发业务数据。未宣称全仓安全。
+- GEN-011：具名步骤及明确错误指向PGM台账；本B5原生检查输出留档。记录失败不替换为通过。
+- GEN-012：9选项/9规则/4步骤均有限；无本模块无界业务负载。沿用已核官方默认，不因未显式timeout发明缺陷。
+- GEN-013：TS原生解析与镜像门禁B5再实跑；Node22是声明，宿主24不假冒22全构建。未真npm ci。
+- GEN-014：没有DDL/SQL；CODEOWNERS对migration目录只是路由，不等于迁移执行与验收。
+- GEN-015：没有业务UI，键盘焦点页面验收不适用，不冒称界面完成。
+- GEN-016：V0.02 L6与当前hook0/1/0和此前已读部署循环对应；同字节沿用阅读，未重复修注释。
+- GEN-017：全部技术性；冲突/细化/添加均无当前命题。编译/仓库治理非产品岗位或审批，012–014有出处证据。
+- GEN-018：本B5以当前文件哈希+源完整阅读复用+重新运行证据下结论，未读当前Grok；不拿任何旧PASS替代。
+
+## 第一性原理三问
+1. 为什么存在：共享编译约束、工程评审路由、GitHub独立静态门禁各有真实消费，没有HTML指定某工具名称也不该删。四分类技术性成立，不借此加业务要求。
+2. 什么实际执行：本B5重跑TS原生配置/两负一正诊断、YAML/9owner路径、镜像门禁、hook3分支、显式HEAD predeploy，原始输出在末尾；本轮B1 GitHub API证据明确复用，不冒称本B5全CI或构建完成。
+3. 哪些前提未证：未安装/真实npm ci、未全业务编译/构建、未触发GitHubCI；当前保护不强制且ref与工作区分叉；不把既有CI成功当本工作区绿。以上不是本模块新增待修要求。
+
+## 顺从及对抗
+顺从：52行声明和当前工具原生解析、消费者、职责逐项匹配。对抗：TS非法赋值/数组索引不能悄然成功；main默认拒绝而override明确放行，证明hook不是不可绕过安全边界；真正PGM台账红保留并终止链，证明没有continue-on-error吞错。基线语义按同轮B2已核：origin ref ebb1eb99，merge-base88c7b465；本次显式HEAD取e456ba96，两种比较不冒称同次。
+未发现新问题。不为理论配置增强增timeout/concurrency/permissions/files[]/owner覆盖；没有HTML修改或业务添加。
+
+## 全部finding与队列
+M005-012当前TS技术性/无缺陷/否；M005-013当前CODEOWNERS技术性/无缺陷/否；M005-014当前workflow技术性/历史缺陷已修/否。原014错误注释已由旧B3r2修复，当前镜像和实际hook一致，本轮不重修。
+001—006原范围历史缺陷已修队列否、007—011原范围登记队列否，保留旧ID不复用；不冒称其现归属模块已完成。当前新CX无，未答questions无，三文件HTML冲突无。
+真实PGM业务决策台账同步红→M426/工具M008，入口快照漂移原登记M435/M436；不在本模块跨界修源。不称全仓或发布PASS。
+
+## 本次真实命令输出
+原生命令与探针正文对应本轮B1相同命令，本B5重新执行；以下非复制旧结果。
+```
+{"native": {"cmd": ["node", "-"], "exit": 0, "out": "{\"ts\":{\"version\":\"5.9.3\",\"files\":354,\"errors\":[],\"options\":{\"target\":9,\"module\":99,\"moduleResolution\":100,\"strict\":true,\"esModuleInterop\":true,\"forceConsistentCasingInFileNames\":true,\"skipLibCheck\":true,\"resolveJsonModule\":true,\"noUncheckedIndexedAccess\":true,\"jsx\":4,\"types\":[\"vite/client\"]}},\"negative\":[{\"code\":2322,\"msg\":\"Type 'undefined' is not assignable to type 'number'.\"},{\"code\":2322,\"msg\":\"Type 'number | undefined' is not assignable to type 'number'.   Type 'undefined' is not assignable to type 'number'.\"}],\"positive\":[],\"workflow\":{\"events\":{\"pull_request\":{\"branches\":[\"main\"]},\"push\":{\"branches\":[\"main\"]}},\"runner\":\"ubuntu-latest\",\"steps\":[{\"uses\":\"actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5\",\"with\":{\"fetch-depth\":0}},{\"uses\":\"actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020\",\"with\":{\"node-version\":\"22\"}},{\"name\":\"install deps\",\"run\":\"npm ci --ignore-scripts\"},{\"name\":\"verify:predeploy (governance gates)\",\"env\":{\"HTML_GATES_BASE\":\"${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}\"},\"run\":\"npm run verify:predeploy\"}],\"mirror\":true},\"owners\":[{\"path\":\"/ops/160/complex-deploy-api.sh\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/160/complex-deploy-web.sh\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/160/hooks/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/160/propose-change.sh\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/ci/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/.github/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/tools/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/package.json\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/backend/src/main/resources/db/migration/\",\"owner\":\"@jxh1979\",\"exists\":true}]}\n", "err": ""}, "docs": {"cmd": ["npm", "run", "verify:delivery-gates-docs"], "exit": 0, "out": "\n> entertainment-complex-management@0.1.0 verify:delivery-gates-docs\n> node tools/verify-delivery-gates.mjs\n\nDELIVERY_GATES_DOCS_PASS\n", "err": ""}, "repo": {"cmd": ["gh", "repo", "view", "--json", "nameWithOwner,isPrivate"], "exit": 0, "out": "{\"isPrivate\":true,\"nameWithOwner\":\"jxh1979/mall\"}\n", "err": ""}, "hook": [{"name": "feature", "exit": 0, "out": "", "err": ""}, {"name": "main", "exit": 1, "out": "", "err": "[pre-push] 拒绝直推 main。请走 PR 流程(ops/160/propose-change.sh)。\n[pre-push] 确需直推:ALLOW_MAIN_PUSH=1 git push ...(并在 PR/说明记录原因)。\n"}, {"name": "override", "exit": 0, "out": "", "err": "[pre-push] ALLOW_MAIN_PUSH=1 覆盖:放行直推 main(已留痕提醒)。\n"}]}
+
+{"files": {"tsconfig.base.json": {"sha": "13d49b947d918bf064b5f98ceaa049e1c954f88eafe736c438cd4372b44696db", "lines": 13}, ".github/CODEOWNERS": {"sha": "b8b7a9f196172ca7a6220ab31b1d2909a773b5cdf796913b56c8722927ccef3d", "lines": 12}, ".github/workflows/predeploy-gates.yml": {"sha": "4c20c029b7c5b0786d56164f2657444a9b9ee3d3694c18013f2e50c1e966049d", "lines": 27}, "ops/ci/predeploy-gates.yml": {"sha": "4c20c029b7c5b0786d56164f2657444a9b9ee3d3694c18013f2e50c1e966049d", "lines": 27}, "apps/web/tsconfig.json": {"sha": "4cd04b3f2cb9cb3a95cd06f11f09f3cad61458159398a530f1c99e1817de1ac9", "lines": 10}, "ops/160/hooks/pre-push": {"sha": "e38ccd33e40065045c24fa8d4bb08d35f519a753ce2520884fee7103e4e77f85", "lines": 17}, "tools/verify-delivery-gates.mjs": {"sha": "cbdfe7c023c3a5cc623b4f1742c56ca46238f039d701150d8d1b6abbe9102b8f", "lines": 333}, "ops/160/complex-deploy-api.sh": {"sha": "8bd3cd0c514257531315b1efee6b137e0fe0b6dba3e7bca41e98ad7a53fd815b", "lines": 247}, "ops/160/complex-deploy-web.sh": {"sha": "5549661743a48cf724e66ea3d0d8d656a5f2eaa7f2642bdbad31c665d02828c1", "lines": 72}}, "predeploy": {"exit": 1, "out": "\n> entertainment-complex-management@0.1.0 verify:predeploy\n> npm run verify:html-ledger-sync && npm run verify:entry-anchors && npm run verify:html-param-tier && npm run verify:delivery-gates-docs && npm run verify:full-admin-matrix && npm run verify:domain-ownership-scope && npm run verify:matrix-vs-migration && npm run verify:data-isolation-spec && npm run verify:tenant-isolation && npm run verify:p0-contract && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:production-blockers && npm run verify:pii-encryption && npm run verify:test-db-isolation\n\n\n> entertainment-complex-management@0.1.0 verify:html-ledger-sync\n> node tools/verify-html-ledger-sync.mjs\n\n", "err": "[html-ledger-sync] FAIL: 改动了业务最终解释权 HTML，但决策台账未同步。比对范围：工作区（含未提交改动）↔ 基线 HEAD@e456ba96。\n  已改动的 HTML：\n    - docs/platform-governance-map-for-operations-v0.1.html\n  必须在同一批改动内一并更新：docs/prd-audit/business-decision-ledger.md\n  依据：用户 2026-08-03 拍板——台账保持完整，改 HTML 必须同 PR 同步台账。\n  若本次确为纯排版/错别字、不涉及口径，请在台账内追加一行说明后再提交。\n"}, "lock": "b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458"}
+
+```
+
+## 结论
+本席B5 PASS。当前整个52行/18GEN无待修finding。必须等当前Grok完整报告并做四值合取后才能模块PASS；该票不代外审。未修源码/HTML/锁，不改B3计数。

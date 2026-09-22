@@ -2963,3 +2963,468 @@ grilling 自问：Q1 当前第一次正常跑是否撞上？是，现快照即�
 ### 结论
 
 全批差集成立：唯一新正式 ID 为 047，分类细化、工程缺陷是、修复队列是；其余 ID 处置按上表。原 B5 PASS 原文保留为历史裁定；本票按 238 实际分支与当前快照独立接受候选，不是沿用 Codex 票，也不是改写本席 B5。本席 B2 **PASS**。须 Codex 本批 B2 PASS 后才能定稿并一次修复 047 的标题+L96；未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M006 IN_PROGRESS，B3=1。
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M006 B1 Grok 独立审计报告（现锁 V0.14／当前两文档）
+
+- 报告自身版本：V0.12（追加；保留本文件既有 V0.01–V0.11 全部 **250969** 字节，SHA256 `b135ef908122b81e3ce12aa4c0363e985d63e8f4282f7de1de202a40fc490c42`，不覆盖。末版本核为 V0.11，按真实递增 V0.11→V0.12）
+- 控制：`.scratch/module-recheck-20260908/160-audit-prompt.md` V0.17（`docs/audit-2026-09/160-audit-prompt.md` 当前不存在）；`plan/runbook.md` V0.02 不另扩流程
+- 席位：Grok（乙），修复前全量独立审计；不修复、不改方案、不写 questions、不派子代理、不 fetch/commit/push/worktree/部署/安装依赖/MCP；固定 CLI 参数未改
+- 模块：M006 — 治理门禁与 CI 基线／文档与接口定义／第1段（`plan/modules.md` V0.04；标记 `NORMAL`；计划历史有效行 **207**；当前 `git ls-files -z -- <两路径> | xargs -0 cat | wc -l` = **206**）
+- 唯一受审：`docs/delivery-readiness-gates-v0.1.md`（标题 V0.12，158 行）、`docs/deploy-and-change-flow-v0.1.md`（标题 V0.07，48 行）。**不是**旧同号权限后端模块；旧 001–036 历史保留、不复用、不继承
+- 映射：`plan/criteria-lock.md` 映射行 `M006 → [BEQR-085…096,118,146,155,160–181, BSM-020,028,081–083,111–119, GEN-001–018, PGM-015,018,026,039,052–056,066]`（**79**；定义区自读；HTML 派生 61 条锁摘录与现文锚点行 **0 处失配**）
+- ledger（只读顶部与本模块行，不写）：M001—M005 现锁 PASS；M006 `IN_PROGRESS`，历史 B3 累计 **2**、方案修复 2、失败重跑 0（本席不清零、不改）；顶部 `LOCK-AMEND-COUNT: 1`
+- 正本：`/home/james/complex-management` 分支 `main`；工作区 `HEAD=e456ba96c84185c8d39f18f548011daac48a6466`，`origin/main=ebb1eb99c610df330c07d24278798c2d3611299a`（ahead/behind 分叉，本席未 fetch）。两受审文件相对 HEAD 与 origin/main **blob 全等**，porcelain 空
+- 互盲：未读取任何 `*-self-raw.md`、本次 Codex 结论。可读：两源全文、锁/sidecar、ledger 顶部与本模块行、findings 中 M006 037–047 历史段（只作编号与原句线索，不继承 PASS）、本席旧票 V0.09 B1 / V0.10–V0.11 B2。旧票所审 delivery 当时 SHA `7c120e8e…`（V0.11／15715 字节）**≠** 当前 `0615cd1b…`（V0.12／15751 字节），故两源本轮全文重读；deploy 当前 SHA 与旧票记录 `543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1` 相同，仍全文重读 48 行，不拿旧结论当现行证据
+- 本席 B1 结论：**PASS**
+- HTML 自身问题（本模块范围内）：**无上报**。不扩审 M007/M008，不重开 M001—M005
+
+---
+
+## 0. §6 技能自核（本席实际环境）
+
+开工前按本机路径列目录并读 `SKILL.md`。用户本轮指令覆盖 skill 默认：无 MCP、无子代理、不等操作员、不问人、不写 findings/ledger/锁/源。Arc 默认全量派席 **不作废本节点**。
+
+| 技能 | 路径核验 | 本次用法 |
+|---|---|---|
+| `using-superpowers` | `/home/james/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 开工技能路由；用户禁子代理／禁等人覆盖其默认 |
+| `using-arc` | Arc `skills/using-arc/SKILL.md` | 仅路由；**未**调用 `arc:audit`（会写 §7 外产物并派子代理） |
+| `graft` | `/home/james/.claude/skills/graft/SKILL.md` | 定位消费者：`graft grep "delivery-readiness-gates-v0.1.md"` 命中 `tools/verify-delivery-gates.mjs` 等；`deploy-and-change-flow-v0.1.md` 索引 0 命中，改直读两源 + 只读 sh/yml。不扩审命中工具全文 |
+| `grilling` / `grill-me` | mattpocock `productivity/grilling`、`productivity/grill-me` | 对抗式／第一性原理追问结构；**自问自答**；不派子代理、不问操作员 |
+| `codebase-design` | mattpocock `engineering/codebase-design` | 删除测试：闸口文档是机检锚点与人读契约；实现在 M007 脚本／M008 校验器 |
+| `diagnosing-bugs` | mattpocock `engineering/diagnosing-bugs` | 只构造可红探针（docs 机检、traceability --check、protection 403）；不加 instrumentation |
+| `systematic-debugging` | superpowers | 只借读错误→复现→追数据流；B1 **不改**生产代码 |
+| `ponytail-review` | ponytail `4.9.0/skills/ponytail-review` | 找可删内容；不改文件 |
+| `verification-before-completion` | superpowers | 任何 PASS/FAIL 前用本报告内命令输出 |
+| `writing-for-agents` | mattpocock `productivity/writing-for-agents` | 本 raw 按下游 B2 可差集、可归因来写 |
+| `receiving-code-review` | superpowers | 只借先核实再接受或反驳；B1 禁止修复 |
+| `tdd` / `test-driven-development` | 存在 | 说明性 Markdown B1 不适用；未新增测试 |
+| `i-have-adhd` | marketplace `skills/i-have-adhd/SKILL.md` | 输出形状；本报告第一行仍按闸 1 独占哈希 |
+
+缺口（如实，不冒充已调用）：
+
+- `batch-grill-me`：本环境技能目录**未找到**独立 SKILL.md
+- `ubiquitous-language`：`/home/james/.qwen/skills/ubiquitous-language/SKILL.md` 目录存在；本节点未读全文、**未调用**（本模块 FILES 无词表文件）
+
+明确不用：`brainstorming`／`writing-plans`（阶段 A）；`ponytail` 本体（B3）；`requesting-code-review`（B4）；`resolving-merge-conflicts`（无合并）；`git-guardrails-claude-code`（会写钩子）；§6 划掉的子代理／worktree／research／ponytail-audit／debt／gain。
+
+未派子代理。未改 HTML／findings／ledger／lock／sidecar／两受审文件。未执行 `npm install`／真实 `npm ci`／生成器无 `--check` 写入／部署／`gh api -X PUT`／DB 连接。未创建 §7 外产物。两受审文件 inode/mtime 运行后仍为既有时间戳，porcelain 空。
+
+graft：配置文档本身不在源码图；`graft grep` 给出 `verify-delivery-gates.mjs` L171 `requireIncludes`、NAS/crosslinks/intake 另几处字符串消费。只读这些入口到足够证明「文档被机检吃标记／命令名」，**不把工具扩成 M007/M008 全审**。
+
+---
+
+## 1. 输入哈希、行数、覆盖
+
+本席独立实算（未抄 sidecar／派发期望值）。正文不再重复锁字段名。
+
+| 项 | 值 |
+|---|---|
+| `plan/criteria-lock.md` | 本席 `sha256sum … \| awk '{print $1}'` 写在本次报告第一行；sidecar `cat` 同值；ledger 顶部同值 |
+| 锁版本 | V0.14；判据总数 401；`LOCK-AMEND-COUNT: 1`；M006 **79** |
+| `docs/delivery-readiness-gates-v0.1.md` | 158 行／15751 字节／SHA256 `0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09`；LF 158、无 CRLF；L1=`# 交付总闸口与上线准入验证 V0.12`；blob `d262d35e81cdb56cde8cd11c995b9eaf9a373f7b` = HEAD = origin/main |
+| `docs/deploy-and-change-flow-v0.1.md` | 48 行／7117 字节／SHA256 `543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1`；LF 48、无 CRLF；L1 标题 V0.07；blob `febbed4b0387288609fdd801a634e13404a910f7` = HEAD = origin/main |
+| 官方有效行 | **206**（计划历史 207，冻结计量不改） |
+| 旧本文件前缀 | 250969 字节／`b135ef908122b81e3ce12aa4c0363e985d63e8f4282f7de1de202a40fc490c42` |
+| 宿主 | node v24.21.0；npm 11.19.0；hostname `y9000p-ai`；IPv4 含 `192.168.88.160/24`。根清单 `packageManager=npm@10.9.8`（本机工具链差披露，不写成两文件缺陷） |
+
+全行覆盖：delivery 1–158、deploy 1–48 均进入三线，无抽样冒充整文件。
+
+锁摘录对照：映射 61 条 HTML 派生 ID 的「来源 \`file:line\`」与三份现文该行 **全部 match**（`MISMATCH_N=0`）。三 HTML 只读，SHA：枚举 `4396bb71…`／业务地图 `eebc5b41…`／治理地图 `5c4594a7…`。
+
+---
+
+## 2. 第一性原理线（2.3 三问）
+
+### 2.1 这段东西为什么必须存在？
+
+**delivery-readiness-gates-v0.1.md。** 删除测试：`tools/verify-delivery-gates.mjs` L171–237 `requireIncludes` 该路径 65 个标记（64 唯一，本席核文档 **missing=[]**）；缺文件或缺标记则 `verify:delivery-gates-docs` 红，从而 `verify:delivery-gates`／`verify:predeploy`／两份部署脚本 `REQUIRED_GATES` 中的 docs 闸红。HTML 上位：BSM-116「系统从打包测试环境正式上线为生产环境，是一次要专门把关的动作」+ PGM-066「第三方接口资料当前未确定，先做自有系统和对外对接接口示例」。删掉会失去机检锚点与人读总闸口，**不等于**已完成 HTML 上线必做——L116 现文已写明。四分类：**细化**（交付把关／禁伪实现）为主；命令表／标记／失败手册为 **技术性**。
+
+**deploy-and-change-flow-v0.1.md。** 删除测试：四道仓内门禁与仓外缺口失去人读契约；脚本／workflow／钩子仍在别模块。HTML 无「feature 分支 + PR」原文。四分类：**技术性**（变更流程）。L116 的 HTML 上线必做不在本文件实现。
+
+### 2.2 声称的行为有没有被实际执行验证？
+
+已验证（类型 1／3／4，命令见 §8）：
+
+- 两文件 UTF-8／LF／可解析 Markdown。delivery 两表：T1 数据 38 行×2 列、T2 7 行×2 列，空单元格 0，无「33」顺序列，无 `?requires` 残片
+- `npm run`：delivery 出现 94 次、不重复名 **67**，**missing=[]**（均在 `package.json.scripts`）；deploy 无 `npm run` 字面量
+- `verify:delivery-gates` 链 **49** 项可解析；不含 `test:backend`／`android:p0`／`build`／`dev:*`。表内 39 个 verify 名全部 ∈ 该链；链中 10 项不在「主要闸口」表——L63 已写完整清单以 `package.json` 为准
+- `npm run verify:delivery-gates-docs` → `DELIVERY_GATES_DOCS_PASS` exit 0。机检 **不 parse 表**，绿 **不能**证明表义；表义由本席解析
+- `npm run verify:coding-host-protection` → `CODING_HOST_PROTECTION_PASS` exit 0（脚本无 `writeFileSync`）
+- `npm run verify:external-evidence-requirement-traceability`（`--check`）→ `EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS` exit 0；check 分支只比对已有产物，不 `writeFileSync`
+- 现快照 `external-evidence-requirement-traceability-latest.json`：`partial_requirements=8`＝`traceable_partial_requirements=8`；8 行均 `covered_by_disabled_integration_switches`，`mapped_item_ids`／`owner_groups`／`target_manifest_paths` 全空。生成器 L238：mapped 空且 disabled 非空则 `continue`；L246 将该分支计入 traceable；L267 policy `owner_manifest_or_disabled_switch`。L96 现句含「或已记录对应接入开关关闭」，与两分支同向
+- 两 workflow 原始字节相等（1335／SHA `4c20c029…`）；`fetch-depth: 0`；`HTML_GATES_BASE` 字面量与 verifier `eventBase` 全等；`run: npm run verify:predeploy`
+- 部署两脚本 `REQUIRED_GATES` 各 15 名，彼此相等且 **等于** `package.json` `verify:predeploy` 15 名；逐项 `npm run "$gate"`，非 0 则 `exit 1`；**不解析** `verify:predeploy` 串。L6／L36「固定的预部署门禁清单」与数组入口一致
+- `ops/160/hooks/pre-push` L8–14 拒直推 `refs/heads/main`，`ALLOW_MAIN_PUSH=1` 覆盖；L2–3 写明非安全边界
+- `ops/160/merge-pr.sh` L35–72：`SKIP_CI_WAIT=1` 警告；否则 `gh run watch --exit-status` 后核 remote／PR head 再 `--match-head-commit`。**未真实合并**
+- `ops/160/propose-change.sh` L17–21：本地 `verify:predeploy` 后 `git push`。**未真实推送**
+- 只读 GitHub：workflow `state=active` id `307870467`；近 5 次 run `conclusion=success`（最新 `35601416957` event=push `head_sha=ebb1eb99…`＝当前 origin/main）；`private:true`；`branches/main/protection` 与 `rulesets` HTTP **403**「Upgrade to GitHub Pro or make this repository public」。**未 PUT**
+- L45 gh 示例：`-F` 作用于 bool／int／null，`-f` 仅 contexts 字符串；无旧 `-f strict=true` 残留。本席只解析命令行，不执行
+- `.github/CODEOWNERS` 存在且 L2–3 写明免费版不自动强制，与 403 一致
+- 文内 `docs/`／`ops/`／`tools/` 路径 `Path.exists=True`
+- L116 含：强密码更换、U 盘密钥托管及相关留痕、自动识别环境的安装包、业务语言教程。对照 BSM-117 L1934–1936、BSM-118 L1942–1943 原文，指向「业务系统地图『系统交付与上线』」，未声称这些已完成
+
+未验证、不得伪称：`verify:delivery-gates` 全 49 链；任何 `docs:*` 生成写入；真实部署／合并／push；`m001-regression.mjs`（会 clone 并 `writeFileSync`／临时 commit）；运行中 PostgreSQL 实例／账号；workflow **2026-07-06 历史首跑**当日原始 run；npm 10.9.8 与本机 11.19.0 对 67 脚本语义逐字节相同。
+
+### 2.3 未验证就当真的前提（明示）
+
+1. 文内「主要闸口」表 = 49 项完整链 — **不成立**；L63 已改口，完整清单以 package.json 为准。
+2. `verify:delivery-gates-docs` PASS = 表格正确 — **不成立**（机检只 `includes` 标记／脚本名）。
+3. 标题「上线准入」= 已覆盖／已完成 BSM-117/118 — **不成立**；L7 是最低交付准入，L116 显式「不是完整上线验收」并列 HTML 必做。
+4. 快照 `status=all_mapped_external_evidence_valid` = 生产证据已回填 — **不成立**；8 行 mapped 空、走 disabled；L150 禁止因此关闭 blocker。属生成器状态名（M414），本 FILES 未把该 JSON 状态写成已上线。
+5. 「对抗自测证实:篡改后部署仍跑全部门禁」— 部署脚本源码确不解析 package.json（类型 4 读 sh）；`m001-regression.mjs` L202–204 实测的是 docs 机检对 `verify:predeploy="true"` 变红，**不是**执行部署脚本。本席未跑该回归。硬编码事实成立；不把未复跑的「对抗自测」当本轮新证据，也不单开缺陷（首次正常跑不因该措辞失败）。
+6. 「2026-07-06 首跑 SUCCESS」— 当前 workflow active 且近 run 绿已证；该日原始 run **未取到**，不把历史首跑当已证。
+7. 「complex_test 与生产同实例同账号」— `application.yml` 默认 `jdbc:postgresql://127.0.0.1:5432/complex` 用户 `complex`；prod 默认用户回退同名。**未连库**。L46 已标为仓外待办，不包装为已隔离，也不因缺现场探针升本模块缺陷。
+8. 全局 `verify:html-ledger-sync` 红（PGM HTML 工作区改动 vs 台账，基线 `origin/main@88c7b465`）与 `verify:entry-doc-baseline --check` DRIFT（入口快照 ops/V431/tests 计数）— 用户已按归属登记。两红 **不是** 本两文件字节造成，不为刷绿改源。
+
+---
+
+## 3. 顺从式：79 映射 ID 逐项
+
+作用边界：本模块只定义**仓库交付／变更门禁文档**，不实现游乐／招商／楼宇／看板／商户档案。不适用 = 文档未述该枚举且无冲突无发明。不能因「技术文档」免审与 HTML 冲突或发明。每 ID 本轮独立核对，不抄旧票。
+
+### 3.1 GEN-001–018
+
+| ID | 适用 | 证据 | 本席 |
+|---|---|---|---|
+| GEN-001 | 适用 | 闸口文档有机检锚点用途；L63 不再维护第二套 49 项序号；L92 双命令同格为 039 定稿最小写法，两名均在链内。不为假设场景加表闸 | 满足 |
+| GEN-002 | 适用 | 声明入口：67 npm 名均存在；docs／host／traceability --check 实跑 exit 0；部署数组＝predeploy 串 15 名。声称「完整清单在 package.json」与 49 项解析一致 | 满足 |
+| GEN-003 | 部分适用 | 本 FILES 无测试代码。docs 机检是 M008 工具：能在缺标记时红（源码 L38–40），**不能**在表损坏时红。当前表可解析且父句诚实，不把「机检绿」当表义证明 | 满足（文档类型 4；不扩修工具） |
+| GEN-004 | 适用 | 门禁吃环境／git／gh；部署不信 package.json 串；基线取不到须失败（ledger-sync L30–40 源码，只读追证） | 满足 |
+| GEN-005 | N/A 边界 | 无业务授权实现；`SKIP_CI_WAIT`／`ALLOW_MAIN_PUSH` 已写明非安全边界 | 无越权发明 |
+| GEN-006 | N/A | 无状态／金额写入 | 无本面 |
+| GEN-007 | 适用 deploy | `merge-pr.sh` 等待后再比 remote／PR head（L65–71） | 满足（源码；未实跑合并） |
+| GEN-008 | 适用 | 表命令 ⊆ 链；workflow 双份字节一致；REQUIRED_GATES＝verify:predeploy 15 名；L96 与生成器两分支同向 | 满足 |
+| GEN-009 | 适用 | 失败手册 L129–139「不要跳过闸口」；docs／host／traceability 失败显式。表损坏时旧伪成功已随 039 修表＋改口消失 | 满足 |
+| GEN-010 | 适用 | 文禁明文密钥进仓；两文件无密钥正文；L92／L150 强调 manifest 不含原始证据／明文密钥 | 满足 |
+| GEN-011 | 适用 | 机检 PASS／FAIL 行；快照 8 行状态与 L96 可对读 | 满足 |
+| GEN-012 | N/A | 无运行时循环资源 | 无本面 |
+| GEN-013 | 适用 | 脚本名均在 package.json；workflow pin SHA；`node --check` 两工具 exit 0 | 满足 |
+| GEN-014 | N/A | 无迁移。链中 `verify:migration-version-order` 未进「主要闸口」表，L63 指向 package.json | 无本面 |
+| GEN-015 | N/A | 非用户界面。PGM-066 全中文约束后台／客人端／设备／安卓，不是本工程 md | 无本面 |
+| GEN-016 | 适用 | 路径存在；命令可复现；L96「8 条」＝快照 8；L116 未把 HTML 上线写成已完成；版本 V0.12／V0.07 与标题一致。历史首跑日期／同实例现场未当已证 | 满足（声明边界内） |
+| GEN-017 | 适用 | 见 §5。无冲突、无待询添加。044–046 本轮仍细化 | 满足 |
+| GEN-018 | 本席遵守 | 依据 HTML 原文、脚本行为、gh 403、命令输出；不继承旧 PASS | 满足 |
+
+### 3.2 BEQR（37）
+
+HTML 原文按锁行对照现文 `td.k`，本轮 37／37 行匹配。两文档无这些枚举、无冲突、无发明。
+
+| ID | 锚点 | 覆盖 |
+|---|---|---|
+| BEQR-085…096 | 游乐状态／容量／设备／补偿／巡检／包场／P2 | **N/A**：无本面 |
+| BEQR-118 | 运营营业日 | **N/A** |
+| BEQR-146 | 运营公司职责 | **N/A** |
+| BEQR-155 | 商户／运营主体状态 | **N/A** |
+| BEQR-160…174 | 招商／合同／物业工单 | **N/A** |
+| BEQR-175…181 | 楼宇机电／能耗／巡检 | **N/A**（NAS≠楼宇机电台账；NAS 为运维挂载／诊断，见 037） |
+
+分类对照用、**不在本模块映射**的「接入的外部系统」现文 `business-enum-quick-reference-v0.1.html:208`：团购／企微／POS／聚合支付／机器人／视频／X 光／人脸／短信／微信支付宝登录／税务发票。L110 的支付／企微／人脸落在该闭集；MDM 另有 PGM L620 上位（044）。「统一原则」现文 L210：预留接口＋后台开关默认关＋不阻塞自研＋不伪造对账——供 047／PGM-066 分类，不新增锁 ID。
+
+### 3.3 BSM（14）
+
+| ID | 覆盖 |
+|---|---|
+| BSM-020,081,082,083 | 楼宇运营 **N/A** |
+| BSM-028 | 基础管理主要功能 **N/A**（未发明六类合作／红线） |
+| BSM-111,112,113 | 经营看板 **N/A** |
+| BSM-114 | 各类入口 **N/A**（160 主机是工程门禁，不是入口表） |
+| BSM-115 | 子系统必须连接 **N/A** |
+| BSM-116 | **适用／满足**：L5–L7 交付总闸口；L116 指向「系统交付与上线」且声明工程闸不能替代 |
+| BSM-117 | **适用／满足**：L116「强密码更换、U 盘密钥托管及相关留痕」对照 HTML L1934–1936；未声称已换密／已托管 |
+| BSM-118 | **适用／满足**：L116「自动识别环境的安装包和业务语言教程」对照 HTML L1942–1943；未声称安装包已交付 |
+| BSM-119 | **适用／边界**：HTML 要求换密／插盘／破窗留痕。L116「及相关留痕」指向该节；本文不实现留痕系统。Semgrep／人工 review 在 T2 安全发布行，不替代 U 盘留痕 |
+
+BSM-116 原文（`business-system-map-for-operations-v0.1.html:1928`）：「系统从打包测试环境正式上线为生产环境，是一次要专门把关的动作。上线不是把测试那套原样搬过去，而是要完成一批只在生产环境才做的安全加固；同时，交付给现场的安装要让不懂技术的人也能照着装、照着用。」
+
+### 3.4 PGM（10）
+
+| ID | 覆盖 |
+|---|---|
+| PGM-015,052–056 | 楼宇 **N/A** |
+| PGM-018 | 多对多主体 **N/A** |
+| PGM-026 | 商户主要功能 **N/A** |
+| PGM-039 | **细化／无缺陷**：HTML「独立立项批准前不定义设备动作」。交付 L109／L111 阻断真实设备控制伪实现，与「先自有接口、后接资料」同向 |
+| PGM-066 | **适用／满足**：第三方未定→先自有／mock（HTML L959）与 L7、L109–L111、L150 同向。界面全中文不约束本 md。后台开关默认关（HTML L963）与 L96 disabled 分支同向 |
+
+PGM-066 原文（`platform-governance-map-for-operations-v0.1.html:959`）：「已拍板：第三方接口资料当前未确定，先做自有系统和对外对接接口示例，后续再接第三方对接。」
+
+合同 AI 原文不在 M006 映射（属他锚点），分类仍用三 HTML：`platform-governance-map-for-operations-v0.1.html:532`「P0 可引入本地 AI 大模型做辅助分析判断……AI 结果只作为“待人工确认建议”，不得自动替代合同台账、审批、阻断或放行结论。」交付 L112 约束的是当前 AI **服务能力**不得自动做业务决定，未创设处罚／价格／绩效规则。
+
+---
+
+## 4. 对抗式（grilling 结构，自答事实）
+
+Q1 表格损坏时操作员会不会漏跑闸口？当前 T1 38×2 可解析、无空格、无序号列；L63 把完整顺序交给 package.json 49 项。**不会因旧损坏表漏跑。** 主要闸口省略的 10 项仍在父链。
+
+Q2 机检会不会拦住坏表？仍不会 parse 表。当前表完好，父句不再声称「串联以下闸口＝该表」。不把工具缺口写成 M006 现缺陷（修工具属 M008，本轮不扩）。
+
+Q3 把 `verify:predeploy` 改成 `true` 能否骗过部署？骗不过部署脚本硬编码 15 项；仍骗得过只看该串的人。docs 机检会因 predeploy 串缺 HTML 三闸而红（regression 源码 L202–204）。本席未执行回归／部署。
+
+Q4 `--no-verify`／不装钩子／Web 合并能否绕过 pre-push？文档 L20–24 已承认。protection API 403 证实无仓外强制。
+
+Q5 `SKIP_CI_WAIT=1` 能否合红灯？能，源码 L35–39。文档要求写 PR 原因，机器不读 PR 正文。已诚实记录。
+
+Q6 生产 ready=true 夹具是否等于 HTML 上线完成？L88 是闭环当前态工程 flag；L116 声明不能替代 BSM-117/118。**不等于。**
+
+Q7 L96 只写「均已追踪到责任组／manifest」时，disabled 空映射会不会伪绿？**会**（生成器 238 continue、246 仍 traceable、--check 现仍 PASS）。现句已加「或已记录对应接入开关关闭」。快照 8／8 全是该分支。047 现文与行为对齐。
+
+Q8 金额精度／票种／岗位权限？本模块无。
+
+ponytail-review：`Lean already. Ship.` 现文无损坏表／无 `?requires` 残片／无 40／31 固定计数。不删 L9–53 标记（机检锚点）。不把 NAS／MDM／对象存储名词当可删业务发明（有上位或运维载体）。net: 0。
+
+---
+
+## 5. 四分类（冲突→细化→技术性→添加）
+
+无 **冲突**（未发现与 HTML 明文相反的规则）。
+
+无 **添加**（本轮独立：MDM／对象存储／AI 限制均能指到 HTML 具体条目，见 044–046）。
+
+**delivery-readiness-gates-v0.1.md**
+
+- L1–L7 定位：细化 BSM-116／PGM-066。标题含「上线准入」但 L7＋L116 把范围收在最低交付准入／非完整上线。**无现缺陷**
+- L9–53 机器标记：技术性。`requireIncludes` 65 标记均在文内。无结构缺陷
+- L55–105 §2 表：技术性 CI 编排。039／040／047 现文成立（见 §6）
+- L108–L112 §3：L109–L111 细化 PGM-066／第三方表；L110 MDM→044；L112 AI→046
+- L114–L127 §4：细化 BSM-116–119（043 现句在 **L116**）
+- L129–L140 §5：技术性失败手册。所列 `npm run` 均在 scripts；本席不跑会写文件的 `docs:*`
+- L141–L150 Partial：细化「先 mock 不关生产 blocker」；L150 对象存储→045
+- L152–L158 附录：技术性指挥板；路径／脚本存在
+
+**deploy-and-change-flow-v0.1.md**
+
+- L1–L3 病史：技术性
+- L5–L10 四道门禁：技术性。源码／gh／cmp 支持。文件名 v0.1 vs 标题 V0.07 为文件名与自身版本标签，未当完成声明
+- L12–L18 变更流程：技术性。独立复核是指令不是机器闸，L21 已承认
+- L19–L24 局限：技术性诚实记录；403 已证
+- L26–L31 workflow 维护：技术性；与 verifier + 工具源码一致。L31 指向可丢弃副本跑 regression，本席未跑
+- L33–L48 已做／仓外：技术性。041／042 现文成立；同实例同账号未现场证、已标仓外
+
+技术性无业务发明理由：CI／钩子／workflow／CODEOWNERS／主机 IP／证据夹具不引入票种、价格、角色权限或新合作模式。
+
+---
+
+## 6. Findings 与历史 ID 重判
+
+### 6.1 本次新临时 GR
+
+**空集。** 审完整 206 行／79 ID 后无新缺陷、无新添加、无 HTML 自身问题上报。不预设无问题：下列为逐项重判，不继承旧 B1 FAIL／旧 B2／B4／B5 PASS。
+
+### 6.2 037–047 本轮独立重判（当前源）
+
+| 冻结 ID | 当前行 | 四分类 | 工程缺陷（当前） | 本席 | 证据类型 | 冻结判据 |
+|---|---|---|---|---|---|---|
+| M006-037 | delivery 无缺陷段（标记／§5／附录／NAS 运维句） | 技术性；生产用途细化 | 否 | **PASS**（只登记） | 4 | GEN-001–018 覆盖表 |
+| M006-038 | deploy 全文 | 技术性 | 否 | **PASS**（只登记） | 3＋4 | GEN-002／013／016 |
+| M006-039 | 原损坏表；现 T1 38×2、L63 改口、L92 双命令同格、无 `?requires` | 技术性（历史是） | 历史是、**现已修** | **PASS** | 4 | GEN-001／002／016／018 |
+| M006-040 | 原 40／31；现文无 `40 份`／`31 个`；L86／L88「当前全部」 | 技术性（历史是） | 历史是、**现已修** | **PASS** | 4 | GEN-011／016／018 |
+| M006-041 | deploy L45 gh 示例 `-F` bool／int／null | 技术性（历史是） | 历史是、**现已修** | **PASS** | 3＋4 | GEN-002／008／013／016 |
+| M006-042 | deploy L6／L36「固定的预部署门禁清单」；两 sh 15 项数组 | 技术性（历史是） | 历史是、**现已修** | **PASS** | 4 | GEN-002／013／016 |
+| M006-043 | **L116**（历史引 L117 为空行）HTML 上线必做 | 细化（历史是） | 历史是、**现已修** | **PASS** | 1＋4 | BSM-116–119／GEN-016 |
+| M006-044 | **L110** MDM（历史引 L111） | **细化** | 否 | **PASS**（原句不改） | 1 | GEN-017；上位 PGM L619–620「企业级手机统一管控」；不因 BEQR:208 无 MDM 四字改添加 |
+| M006-045 | **L150** 对象存储（历史引 L151） | **细化** | 否 | **PASS**（原句不改） | 1 | GEN-017；上位 PGM L958 永久存储、BSM L1613 附件／视频、BSM L1195 录像长期保存 |
+| M006-046 | **L112** AI 自动业务副作用（历史引 L113） | **细化** | 否 | **PASS**（原句不改） | 1 | GEN-017；上位 PGM L532 只作待人工确认建议、不得自动替代台账／审批／阻断／放行。未创设处罚／价格／绩效业务规则 |
+| M006-047 | **L96**＋标题 V0.12 | 细化（历史是） | 历史是、**现已修** | **PASS** | 1＋4 | GEN-002／016／018／017；HTML L210 开关默认关＋PGM-066。现句与生成器 238／246 两分支一致；8＝快照 8 |
+
+旧 **001–036**：历史处置保留，编号不复用，本轮不重开。
+
+无 questions。无 LOCK-AMEND 主张。
+
+---
+
+## 7. 直接消费者（只读到足够，不扩模块）
+
+| 消费者 | 本席读到 | 不扩 |
+|---|---|---|
+| `tools/verify-delivery-gates.mjs` V0.04 | L47–50 docs 脚本名；L106–157 requiredDeliveryCommands（含重复项，属工具，不升 M006）；L171–237 对本文件标记；L290–319 workflow 字节／fetch-depth／REQUIRED_GATES 含 HTML 三闸 | 不审整个 M008 |
+| `package.json` scripts | `verify:delivery-gates-docs`＝本工具；父链 49；`verify:predeploy` 15＝部署数组 | 不审 M003 全 scripts |
+| `ops/160/complex-deploy-{api,web}.sh` | REQUIRED_GATES 15；`npm run "$gate"` | 不审部署后半 |
+| `ops/160/{propose,merge}-pr.sh`、`hooks/pre-push` | 与 deploy 文一致 | 不跑 push／merge |
+| NAS／crosslinks／intake 工具 | graft 命中对本文件的 `requireIncludes` 字符串 | 不审那些模块 |
+| 生成器 `generate-external-evidence-requirement-traceability.mjs` | L166–246／408–421 只读 | 不改 M414、不跑无 --check 写入 |
+
+---
+
+## 8. 真实验证命令与输出（节录）
+
+```
+sha256sum docs/audit-2026-09/plan/criteria-lock.md
+→ b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+git ls-files -z -- docs/delivery-readiness-gates-v0.1.md docs/deploy-and-change-flow-v0.1.md | xargs -0 cat | wc -l
+→ 206
+npm run verify:delivery-gates-docs → DELIVERY_GATES_DOCS_PASS EXIT 0
+npm run verify:coding-host-protection → CODING_HOST_PROTECTION_PASS EXIT 0
+npm run verify:external-evidence-requirement-traceability → EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS EXIT 0
+node --check tools/verify-delivery-gates.mjs → 0
+node --check tools/generate-external-evidence-requirement-traceability.mjs → 0
+gh api .../actions/workflows/predeploy-gates.yml → state=active id=307870467
+gh api .../branches/main/protection → HTTP 403 Upgrade to GitHub Pro...
+gh api repos/jxh1979/mall → private=true
+（观察、不归属本 FILES）npm run verify:html-ledger-sync → FAIL 台账未同步 PGM HTML EXIT 1
+（观察、不归属本 FILES）npm run verify:entry-doc-baseline → DRIFT 732 ops / V431 / 147 tests EXIT 1
+```
+
+未跑：全链 `verify:delivery-gates`、`docs:*` 生成、部署、merge、PUT、regression、DB。
+
+---
+
+## 9. 技能缺口／未验证范围
+
+- `batch-grill-me` 不存在；`ubiquitous-language` 未调用
+- 未读本次 self-raw
+- 未验证 2026-07-06 首跑原始 run、未连库证同实例
+- 全局 PGM 台账红与入口快照漂移按既有归属观察，不刷绿
+
+---
+
+## 10. 结论
+
+- 审计结论：**PASS**（两文件 206 行全覆盖；79 映射逐项适用或 N/A；三线完成；声称有四类证据之一；新 GR 空集；037–047 现文重判无当前缺陷；无未答 questions；哈希行有效）
+- 模块生命周期：**IN_PROGRESS**（本席不写 ledger／收口）。B3 累计 2 不清零。B1 不是模块 PASS
+- 无 HTML 修改申请；B1 不发问、不修复
+- 本席独立；固定 CLI 未改
+
+## M006 现锁B2整批归并票（Grok 席追加）
+版本：V0.13（本文件既有 V0.01–V0.12 全部 **281664** 字节原样保留，SHA256 `0f9e87a39a32a018106fccbc20ead8fe615d618ef19570a00e84c4e7262a6eca`，不覆盖、不改 V0.12 原文；自身版本 V0.12→V0.13）
+
+本席B2：**PASS**。此票只判断 findings V3.41 顶部「当前M006现锁B2整批候选」相对两份指定完整 B1 raw 的全批差集、四分类、当前缺陷、修复队列与最小处置。不是独立 B1 PASS，不是模块 PASS，不是发布 PASS。不继承本文件旧 B2（V0.02–V0.11，当时 047 曾入队）、不继承旧 B4/B5、不继承本席 V0.12 B1 PASS、不继承 self V0.20 B1 PASS。self-raw 在 202271 字节之后的 V0.21 追加段**不在本批输入、不采其结论**。根候选未把本席 V0.12 空 GR 改写成新缺陷。本段不写独占锁哈希字段行。
+
+现锁由本席本节点独立实算（`sha256sum docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'`），**不是**抄 sidecar／ledger／派发期望值后再回填：`b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`。对照：sidecar `plan/criteria-lock.sha256` 同值；ledger 顶部第 1 行同值；self V0.20 独占锁行同值；本文件 V0.12 之前最后独占锁行同值。四值全等。`LOCK-AMEND-COUNT: 1`。锁版本 V0.14；M006 映射 79。
+
+### 本批输入（精确路径／版本／体积／SHA）
+
+| 输入 | 路径 | 版本 | 体积 | SHA256 |
+|---|---|---|---|---|
+| 席甲最后完整 B1 | `docs/audit-2026-09/modules/M006-b1-self-raw.md` | V0.20（自最后独占锁行（值 `b0863b95…`）起至「须Grok完整报告和四值后整批B2…不以本票覆盖。」止；其后 V0.21 不在本批输入） | 封存前缀 **202271** 字节（当前磁盘整文件 207058，尾 4787 字节为 V0.21，本席只用封存前缀） | `118beeef09a708bfd115572d683b4a4461830771ed33cb600e60e2347c88a360` |
+| 本席最后完整 B1 | `docs/audit-2026-09/modules/M006-b1-grok-raw.md` 本文件 | V0.12（自上一独占锁行起至 V0.12「本席独立；固定 CLI 未改」） | **281664** 字节（追加前整文件） | `0f9e87a39a32a018106fccbc20ead8fe615d618ef19570a00e84c4e7262a6eca` |
+| 候选台账 | `docs/audit-2026-09/findings.md` 顶部「当前M006现锁B2整批候选」至「尚非模块PASS。」 | V3.41 | **1233937** 字节（整文件） | `17bc38639710cb2272f2fd587c3b44a089e4b15d8e00b358ee4256bcbf3a1bc8` |
+
+两份 B1 与候选段全文已读。当前范围只认两源 206 行、映射 79：`docs/delivery-readiness-gates-v0.1.md` 标题 V0.12／158 行／15751 字节／SHA256 `0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09`；`docs/deploy-and-change-flow-v0.1.md` 标题 V0.07／48 行／7117 字节／SHA256 `543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1`。`git ls-files -z -- <两路径> | xargs -0 cat | wc -l` = **206**（计划历史 207，冻结计量不改）。blob 工作区＝HEAD＝origin/main。两文件 porcelain 空。**不是**旧同号权限后端模块。`questions/M006-027.md` 是旧权限模块储值历史询问，已有操作员答复且分类已改细化，**不是**本批未答添加项。
+
+未派子代理、未用 MCP、未 fetch／commit／push／安装／部署／真实 PUT／DB，未改 findings／ledger／源码／HTML／锁／收口／两受审文件。固定 CLI 形态未改。
+
+### 全部 ID 差集（不继承旧 B2 队列）
+
+席甲 V0.20 当前临时项 **CX-01…CX-11**（CX-08/09/10 以斜线合写三项，正文对应 MDM／对象存储／AI）。本席 V0.12 当前新 GR **空集**（§6.1 明文；V0.12 正文无 `GR-` 临时号）。无添加项、无未答 questions、无新 HTML 自身问题、无 LOCK-AMEND 主张。
+
+| 正式ID | 本批全部来源 | 四分类 | 当前工程缺陷 | 修复队列 | 本席独立核后的最小处置 |
+|---|---|---|---|---|---|
+| M006-001…036 | 历史表（旧权限源码模块）；两席本轮 B1 均声明不在本两文档 206 行 | 各行原分类保留 | 原值保留 | **否**（原队列归属保留为历史） | **历史原范围保留**；不改写成交付／部署文档；不重开、不复用号、不冒称本次重审了权限源码 |
+| M006-037 | self CX-01；Grok V0.12 delivery 无缺陷段重判 | 技术性；生产用途细化 | **否**（否） | **否** | 只登记。机器标记／失败手册／NAS 运维句为技术性；BSM-116 上线把关用途为细化。保持现文。GEN-001–018 |
+| M006-038 | self CX-02；Grok V0.12 deploy 全文 | 技术性 | **否**（否） | **否** | 只登记。48 行变更／门禁／局限／workflow 维护，无票种／角色／价格发明。GEN-002／013／016 |
+| M006-039 | self CX-03；Grok V0.12 表／L63／L92 | 技术性（历史是） | **否**（历史已修） | **否** | 不重修。现 T1 数据 38×2、T2 7×2，空格 0，无序号列／`?requires`；L63 完整清单以 package.json 为准；L92 双命令同格。父链 49 项均可解析。GEN-001／002／016／018 |
+| M006-040 | self CX-04；Grok V0.12 L86／L88 | 技术性（历史是） | **否**（历史已修） | **否** | 不重修。现文无 `40 份`／`31 个`；L86／L88 用「当前全部」。L96「8 条」＝快照 8，不机械删准确现数。GEN-011／016／018 |
+| M006-041 | self CX-05；Grok V0.12 deploy L45 | 技术性（历史是） | **否**（历史已修） | **否** | 不重修。L45 现 `-F`×4（strict bool、enforce_admins bool、review_count int、restrictions null）+ `-f`×1（contexts 字符串）；无旧 `-f strict=true`。本席只解析命令行，**未**执行 PUT。GEN-002／008／013／016 |
+| M006-042 | self CX-06；Grok V0.12 固定清单＋两 sh | 技术性（历史是） | **否**（历史已修） | **否** | 不重修。两部署脚本 `REQUIRED_GATES` 各 15 名且彼此相等，并 **等于** `package.json` `verify:predeploy` 15 名；逐项 `npm run`，不解析该串。GEN-002／013／016 |
+| M006-043 | self CX-07；Grok V0.12 HTML 上线必做 | 细化（历史是） | **否**（历史已修） | **否** | 不重修。现句在 **L116**（见勘误）：强密码更换、U 盘密钥托管及相关留痕、自动识别环境的安装包、业务语言教程；对照 BSM L1928／L1934–1936／L1942–1943。未声称已完成。BSM-116–119／GEN-016 |
+| M006-044 | self CX-08；Grok V0.12 MDM | **细化** | **否**（否） | **否** | 原句不改、不重开。现句在 **L110**（见勘误）。上位 PGM L619–620「企业级手机统一管控」。不因枚举 L208「接入的外部系统」无 MDM 四字改添加。GEN-017 |
+| M006-045 | self CX-09；Grok V0.12 对象存储 | **细化** | **否**（否） | **否** | 原句不改。现句在 **L150**（见勘误）。上位 PGM L958 永久存储（不自动到期删除）。本文只把对象存储列为生产证据载体，不新建保留期或审批规则。GEN-017 |
+| M006-046 | self CX-10；Grok V0.12 AI 限制 | **细化** | **否**（否） | **否** | 原句不改。现句在 **L112**（见勘误）。上位 PGM L532「待人工确认建议，不得自动替代合同台账、审批、阻断或放行」。L112 禁止自动处罚／退款／调价／核销／绩效，未创设经营规则。GEN-017 |
+| M006-047 | self CX-11；Grok V0.12 L96＋标题 V0.12 | 细化（历史是） | **否**（历史已修） | **否** | 不重修。L96 现含「或已记录对应接入开关关闭」。快照 8／8 均 `production_trace_status=covered_by_disabled_integration_switches`，`mapped_item_ids`／`owner_groups`／`target_manifest_paths` 全空。生成器 L238：mapped 空且 disabled 非空则 `continue`；L246 该分支计入 traceable。枚举 L210 开关默认关＋PGM-066。GEN-002／016／017／018 |
+
+漏并：**无。** CX-01…11 全部落入 037–047。本席 V0.12 无新 GR 可丢。001–036 均在候选声明中保留原范围，未改写成当前 206 行含义，未复用号。
+
+分类顺序冲突→细化→技术性→添加：当前十一项均冲突否、添加否。037 兼有生产用途细化与命令／标记技术性，与两席 B1 一致，不拆新号。044–046 均能指到 HTML 具体条目，不走 2.2。技术性无业务发明：CI／钩子／workflow／证据命令编排不引入票种、价格、角色权限或新合作模式。
+
+队列「是」= **空集**。与两席本轮 B1 及候选十一行一致。旧 B2 曾把 039–043／047 标「是」——那是修前状态，**本票不继承**。
+
+### 候选行号勘误（源文与三值不变；不改原 raw）
+
+本席按 `splitlines()` 实读现文，接受候选已写勘误，并独立复核：
+
+| 候选 ID | self V0.20 旧行号 | 现文实位置 | 该行要点 |
+|---|---|---|---|
+| 043 | L117（空行） | **L116** | 上线必做原文；L117 为空 |
+| 044 | L111（供应商 SDK 条） | **L110** | MDM 与 pending_info 外部能力 |
+| 045 | L151（空行） | **L150** | Production boundary 含对象存储 |
+| 046 | L113（空行） | **L112** | 本地 AI 只读、禁止自动业务副作用 |
+
+源 SHA 不变，判断（细化／当前缺陷否／队列否）不变，保留原 B1 raw。
+
+本席另核 042：候选写 deploy L6／L36。「固定的预部署门禁清单」首处在 **L7**（L6 是「## 四道门禁」节标题），第二处 **L36** 正确。此为引用行号、不改 042 三值、不新开号、不改候选表。15 项数组与两脚本／`verify:predeploy` 全等才是 042 的现行证据。
+
+### runtime 陈旧观察：仅 M409／M415 的 B1 输入
+
+本席本节点实跑 `npm run verify:runtime-acceptance-evidence`（`--check`，无写入）**exit 1**：
+
+- fingerprint `c92b4fa55fde…` ≠ current `496943b69618…`
+- generated **56.0** days ago（候选写 55.9，同一证据、时点差）exceeds `RUNTIME_EVIDENCE_MAX_AGE_DAYS=30`
+
+delivery **L102** 明文要求源码已变更或超期即陈旧失败。当前红灯是该声明被执行，**不是** M006 两文档写错。
+
+归属（`plan/modules.md` 文件清单，本席实读）：
+
+- **M409**（文档与接口定义／第2段）含 `docs/runtime-acceptance-evidence-latest.json`、`docs/runtime-acceptance-evidence-v0.1.md`
+- **M415**（检查及生成工具／第2段）含 `tools/generate-runtime-acceptance-evidence.mjs`
+
+只作为那两模块日后 B1 的既有输入。本 B2 **不定分类、不入本模块队、不生成回填、不把正确报红写成 M006 文档缺陷或全局 PASS**。PGM 决策台账同步（M426／工具 M008）与入口快照漂移（M435／M436／工具 M008）同样按既有归属保留。
+
+### 与候选的合取／根未覆盖本席意见
+
+候选十一行分类／当前缺陷／队列与本席 V0.12 §6.2 表及本票独立复算一致；001–036 保留句与两席 B1 一致；runtime→M409／M415、PGM 红→M426／M008、入口快照→M435／M436 与候选一致；行号勘误与本席实读一致。候选没有把本席空 GR 改写成缺陷，没有拆分或复用 037–047。无 ID 遗漏，故不因此 FAIL。
+
+证据层次差（不改三值、不另造 ID）：席甲 V0.20 跑了 runtime --check；本席 V0.12 B1 未跑该命令、只把历史首跑／同实例现场标未验证。本票补跑后仍归跨模块观察，不升 M006 finding。席甲曾 loopback 捕获 gh PUT JSON 类型；本席 B2 **未**再做任何 PUT／loopback，只解析 L45 标志。快照顶层 `status=all_mapped_external_evidence_valid` **不等于**生产证据已回填（8 行 mapped 空、走 disabled；L150 与 policy `this_report_does_not_close_blockers` 禁止因此关闭 blocker）。
+
+### 本席 grilling（自答；禁止表演性同意）
+
+1. 能否因两席 B1 都 PASS、或因 self V0.21 已写 PASS，就预设本 B2 PASS？**不能。** V0.21 不是输入。差集、三值、行号、runtime 归属均在本票独立核实后才下。
+2. 空新 GR 是否漏并？**否。** V0.12 §6.1 明文空集；正文无 `GR-` 临时号。
+3. CX-08/09/10 斜线合写是否丢 09／10？**否。** 三项分别对应 044／045／046，候选与两席正文齐全。
+4. 039–043／047 应否因历史缺陷再入队？**否。** 现表可解析、40／31 已删、L45 类型化、15 项数组匹配、L116 已列 HTML 必做、L96 已含关闭开关分支。重修会变成无缺陷改文档。
+5. runtime 红应否立 M006 缺陷？**否。** L102 要求它红；产物在 M409、工具在 M415。
+6. 044 会否因枚举 L208 无 MDM 四字变成添加？**否。** PGM L619–620 有企业级手机统一管控；两席均细化。不重开已裁决原意。
+7. 快照 `all_mapped_external_evidence_valid` 能否当生产闭环？**不能。** 8 行 disabled、mapped 空；L150 禁止关闭 blocker。
+8. 空队列能否直接模块 PASS？**不能。** 按 V0.17 只允许跳新增 B3／B4 进入 **B5-r2**。
+9. 旧 001–036 能否因本两文档 PASS 而改写成已审权限源码？**不能。** 范围不同。
+10. 042 候选 L6 与现文 L7 不一致是否整票 FAIL？**否。** 三值与 15 项数组证据成立；只记引用行号。
+
+### 实跑证据（类型 4；本节点；只读）
+
+```text
+self_v020_prefix=202271/118beeef09a708bfd115572d683b4a4461830771ed33cb600e60e2347c88a360
+self_disk=207058/a94db400cff4d1cf6eacedb6fc08423005b3d33dd3deb99b7210f67b7926063e (V0.21 excluded)
+grok_v012_before_append=281664/0f9e87a39a32a018106fccbc20ead8fe615d618ef19570a00e84c4e7262a6eca
+findings_v341=1233937/17bc38639710cb2272f2fd587c3b44a089e4b15d8e00b358ee4256bcbf3a1bc8
+lock_workspace=b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+sidecar_eq=true ledger_top_eq=true
+LOCK-AMEND-COUNT=1
+HEAD=e456ba96c84185c8d39f18f548011daac48a6466
+origin/main=ebb1eb99c610df330c07d24278798c2d3611299a
+delivery=158/15751/0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09 blob=d262d35e81cdb56cde8cd11c995b9eaf9a373f7b
+deploy=48/7117/543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1 blob=febbed4b0387288609fdd801a634e13404a910f7
+official_lines=206 mapped=79 html=61 gen=18
+tables=T1_38x2 T2_7x2
+npm_run_uniq=67 missing=[]
+parent_chain=49 no_test_backend no_build
+REQUIRED_GATES_api=15 eq_web=true eq_predeploy=true
+L45_-F=4 -f=1 old_-f_strict=false
+snapshot_partial=8 traceable=8 all_disabled_branch=true mapped_items=0
+verify:delivery-gates-docs=DELIVERY_GATES_DOCS_PASS EXIT 0
+verify:external-evidence-requirement-traceability=EXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS EXIT 0
+verify:runtime-acceptance-evidence=RUNTIME_ACCEPTANCE_EVIDENCE_FAIL EXIT 1 fingerprint c92b4fa55fde!=496943b69618 age=56.0d
+node --check verify-delivery-gates.mjs / generate-external-evidence-requirement-traceability.mjs / generate-runtime-acceptance-evidence.mjs = 0
+two_source_porcelain=empty
+cx_ids=CX-01..CX-11
+grok_new_GR=empty
+candidate_ids=M006-037..047 + historical 001-036
+queue_yes=empty
+adding=0 unanswered_questions_this_batch=0
+B3_cumulative=2
+```
+
+未真实 `npm ci`、未跑 49 项父链、未 `docs:*` 写入、未部署、未 merge、未 PUT、未连库。
+
+### 最终结论
+
+**本席 B2：PASS。**
+
+实际差集：席甲 V0.20 当前临时项 CX-01—11 → 037—047；本席 V0.12 新 GR 空集。候选覆盖上述全部 ID，无漏并、无改写本席空集为缺陷、无拆分或复用。037／038 技术性（037 兼生产用途细化）只登记、队列否。039／040／041／042 技术性历史已修、当前否、队列否。043／047 细化历史已修、当前否、队列否。044／045／046 细化、当前否、队列否、原句不改。001—036 历史原范围保留。无添加、无新 HTML 申请、无本批未答 questions。
+
+self V0.20 行号 117／111／151／113 更正为 116／110／150／112，源文与判断不变。runtime 陈旧 exit 1 归 M409／M415 仅 B1 输入，本模块不修、不刷绿。
+
+修复队列「是」= 空集。按 V0.17：双席 B2 定稿后跳过新增 B3／B4（累计 B3 仍 **2**），必须再做独立 **B5-r2** 全模块重审。现在不得标模块 PASS。两席 B1 PASS 不代替 B2／B5。空队列只允许下一步 B5-r2，不能直接模块 PASS。
+
+不修改候选。不修 HTML／锁／源码／配置。双席合取仍须根席本批 B2；本席不得被自审覆盖。本段未写独占锁哈希字段行。其后本节点不进入 B3／B4／B5／其他模块。
+
+B2 结束。不修复。

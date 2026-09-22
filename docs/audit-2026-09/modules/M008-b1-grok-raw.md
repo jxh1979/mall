@@ -790,3 +790,388 @@ JavaScript `\\s` 含 LF。只读探针：`npm\\nrun verify:html-param-tier` 对 
 两项争议本席票：① 001 是/是；② OBS-01 并入 007 是/是，008 仍否。找不到「160 漏匹配已裁定 008 无缺陷」的冻结原句。
 
 本席 B2-r3 **PASS**。未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M008 `IN_PROGRESS`，B3=1。当前真实父链红保留。
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M008 B1 Grok 独立审计原文（V0.05 追加）
+
+- 席位：Grok 独立审计席乙
+- 阶段：B1 全模块独立三线审计（现锁重开，不继承旧 PASS）
+- 文件自身版本：V0.05（本段追加；上方 V0.01–V0.04 合计前缀 **83685 bytes** SHA256 `6e3b0f7cbdce80bd5f0af1aeda641bfcf692b6dee9d5c14f3e877f46d556586d` 原样保留，未改写、未覆盖）
+- 模块：M008 — 治理门禁与 CI 基线／检查及生成工具／第1段
+- 计划源：`docs/audit-2026-09/plan/modules.md` FILES 17 文件；历史冻结有效内容行 1530；**当前实算 1605**（`git ls-files -z -- <17 paths> | xargs -0 cat | wc -l`）
+- 冻结判据：GEN-001–018 + PGM-036，共 19 条（`criteria-lock.md` 映射行核锁）
+- 控制：160-audit-prompt.md V0.17；runbook V0.02；criteria-lock **V0.14**；modules.md V0.04
+- 旧 B3 累计 2（仅作历史输入）；001–004/006–007 旧修、005/008–016 登记仅输入，**不继承 PASS**
+- 本席 B1 结论：**PASS**
+- 本轮新立工程缺陷临时编号：**空集**
+- 未修源码、未改三 HTML、未改台账/锁/findings/ledger/收口/主索引、未 push/PR/merge/部署、未装主仓 hook、未派子代理、未调 MCP、未 fetch、未对正本跑无 `--check` 生成器。未读本次 self raw。
+
+## 0. 技能自核（V0.17 §6）
+
+本席实际读取并按收窄口径使用：
+
+| 技能 | 本机路径 | 用法 |
+|---|---|---|
+| using-superpowers | `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 先核技能再取证；用户/提示词覆盖技能本体 |
+| grilling | `~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/skills/productivity/grilling/SKILL.md` | 只借追问树自查，不向操作员发问、不派子代理 |
+| grill-me | 同上套件 `grill-me/SKILL.md` | 内部 sharpen，不写文件、不问事实 |
+| codebase-design | `.../engineering/codebase-design/SKILL.md` | 删除测试：17 文件仍有治理闸用途 |
+| diagnosing-bugs | `.../engineering/diagnosing-bugs/SKILL.md` | 先建可红反馈环再下结论；本席不修 |
+| systematic-debugging | superpowers `systematic-debugging/SKILL.md` | 只借读错误→复现→追数据流；不改生产代码 |
+| verification-before-completion | superpowers 同名 | 先跑命令再声称 |
+| ponytail-review | `~/.claude/plugins/cache/ponytail/ponytail/4.9.0/skills/ponytail-review/SKILL.md` | 只列可删复杂度，不落地 |
+
+缺口（不冒称调用）：
+
+- `batch-grill-me`：本机技能树未找到
+- `ubiquitous-language`：其它目录有副本，但 V0.17 明确不用（会改 CONTEXT.md / 超 §7）
+
+## 1. 锁哈希与范围核验
+
+独立命令（独占锁行已写在本段第一行，此处不重复该标签）：
+
+- CMD-LOCK：`python3 hashlib` / 等价 `sha256sum docs/audit-2026-09/plan/criteria-lock.md`
+- OUT-LOCK：`b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`
+- sidecar `plan/criteria-lock.sha256` 同值
+- `ledger.md` 顶行同值；`LOCK-AMEND-COUNT: 1`；ledger 版本 V7.83；表行 M008 仍 `IN_PROGRESS`、B3=2（历史 B5 收口记录保留，现锁已重开 B1）
+- 工作区 `criteria-lock.md` 相对 HEAD **脏**；本席哈希的是磁盘现文（V0.14），与 sidecar/ledger 顶行全等。未改、未还原该文件。
+- `criteria-lock.md` 映射行 `M008 → [GEN-001 … GEN-018, PGM-036]`，定义区 19/19 存在
+- `plan/modules.md` M008 FILES 17 条与用户清单逐字相同
+- 17 文件 `\\n` 计数之和 = **1605**（历史计划 1530；差额来自已合入的 B3 修复，主要是 `m001-regression.mjs` 216→278 行等）。不改 `modules.md`
+
+HEAD：`e456ba96c84185c8d39f18f548011daac48a6466`；`origin/main`=`ebb1eb99c610df330c07d24278798c2d3611299a`；merge-base=`88c7b465475fb8eb26e46200ae90ad3e00500522`。本席未 fetch。这 17 路径相对 HEAD 与相对 `origin/main` 的 `git diff --stat` 皆空。`GIT_INDEX_FILE` 未设置。主仓无新 `.git` 写入。
+
+## 2. 17 文件覆盖表（全文已读；版本/行数/指纹为当前实算）
+
+| # | 路径 | 声称版本 | 字节 | 行（\\n） | SHA256 |
+|---|---|---|---:|---:|---|
+| 1 | tools/html-param-tier-baseline.json | 无版本头 | 596 | 10 | 9332010bd445a64ff8f1fb5e3b6d7bbe387c7b76543b68424f0209dd7ddbfdc8 |
+| 2 | tools/refresh-entry-doc-baseline.mjs | V0.02 | 7807 | 126 | 8bd1ba5ac141ef47dbcd409616fcacc3303546b06cceba998852895fac4f8cbb |
+| 3 | tools/verify-delivery-gates.mjs | V0.04 | 16444 | 333 | cbdfe7c023c3a5cc623b4f1742c56ca46238f039d701150d8d1b6abbe9102b8f |
+| 4 | tools/verify-entry-anchors.mjs | V0.03 | 16186 | 275 | 7e62c6a19e36be5c13b166fd40aa4cb75e6ad057dfd6e97090323cae17853b82 |
+| 5 | tools/verify-html-ledger-sync.mjs | V0.02 | 3894 | 68 | 1c9f974f4c49c3886469e6b86236675393317b7b0379bbbd1d354599f911214d |
+| 6 | tools/verify-html-param-tier.mjs | V0.02 | 11193 | 199 | c79cdb39969b123264e917aa2921e4442e2ac1679f5f78ae6fbc0c70a5e71be9 |
+| 7 | tools/gate-hardening-tests/99-predeploy-final.log | 无 | 7027 | 138 | 61c74dc4e62f27c5f75c3a39735c93f73ba8054a26c063822da7d05348804421 |
+| 8 | tools/gate-hardening-tests/A-worktree-uncommitted.log | 无 | 5776 | 42 | 14ada1aa68187b672b10bcd98b0843df7177c147adafee8ded0cd826053942c4 |
+| 9 | tools/gate-hardening-tests/B-committed.log | 无 | 1692 | 17 | 3dce69862e4c9c340f9db0d1769c6e383172b05b3447140c4113f550bbe63339 |
+| 10 | tools/gate-hardening-tests/C-no-baseline.log | 无 | 2462 | 39 | 5f33afad72fc0a3a1375da16a08293097b74bb7795e05ab6ca6d341baf10ec67 |
+| 11 | tools/gate-hardening-tests/D-baseline-legacy-pass.log | 无 | 1100 | 10 | 7fbcd28464611e031881424bb4478767c33118c5c621a2e48da2fb59471ec164 |
+| 12 | tools/gate-hardening-tests/E-ignore-marker.log | 无 | 803 | 5 | 0c29f64c5510c204dc6be1a48293b5df69a1e58e53674b5e40d3469db5ab8633 |
+| 13 | tools/gate-hardening-tests/F-ci-baseline-evidence.log | 无 | 926 | 7 | 5e07e04d48d5b3312dac8bd6fd5e107ebe5965fcd6414d4e8041847fbdfca14f |
+| 14 | tools/gate-hardening-tests/G-merge-pr-guards.log | 无 | 1108 | 24 | 59ebf364d51ad9caa6b03234eced31ef6d8cce2fbebf5c4f64828bb2ffe489ae |
+| 15 | tools/gate-hardening-tests/I1-baseline-ratchet.log | 无 | 1055 | 13 | fa1a0a89f762063635f0711a5b57ed4f97be5a57a1e091cc0b33d28475d7b483 |
+| 16 | tools/gate-hardening-tests/I2-ignore-granularity.log | 无 | 4264 | 21 | 75394c0dd0e5e3c8296edb036ea053af444a0ea678277919e301478837e3a25b |
+| 17 | tools/gate-hardening-tests/m001-regression.mjs | V0.07 | 17155 | 278 | c64e3048e7525c6158e102f9cd9eaf9cd10972c1255f9a2deb5528a8299383a6 |
+
+10 份 `.log` **只作历史证据**，不冒称本席当前实跑。E-log 当时裸豁免 EXIT 0；现行回归「空豁免」EXIT 1。A/D/I2 当时基线 6 条；现行 `entries: []`。99-log 当时全链 PASS、entry-anchors 文案仍写「未登记条目不在保护范围」；现行脚本声称整条正文保护。路径内可见当时 worktree `/home/james/wt-gates/`。
+
+同目录 `tools/gate-hardening-tests/m007-regression.mjs` **不在本模块 FILES**，未读未跑未改。M007 旧运行 hook 维持原副本，不碰。
+
+夹具隔离（执行前源码核验，执行后目录删除）：`tempParent = fs.realpathSync(os.tmpdir())`；`mkdtemp(m001-gates-)`；`finally` 断言 `dirname(resolved)==tempParent` 且 basename 前缀 `m001-gates-` 后 `rmSync`。嵌套 `git init`/`clone --no-hardlinks`/`commit` 均在该绝对临时树；`core.hooksPath` 指空目录。本席另制探针：`tempParent=/tmp`，`mkdtemp(m008-b1-grok-)`，所有目标 `realpath` 断言落在该目录内；夹具 cwd 求 `git rev-parse --absolute-git-dir` → `/tmp/m008-b1-grok-…/html/.git`。未把相对 `.git` 写进主仓。
+
+## 3. 用户 B/C 原意（不误报、不延伸）
+
+操作员已确认 B/C 是业务配置原意。本席对照现行 BSM 原文：
+
+- B：`docs/business-system-map-for-operations-v0.1.html:1020`「来源枚举项为业务参数，按项目可配。」
+- C：同文件 `:1068`「现场打折必须选择原因分类：招待、客诉补偿、活动执行、员工亲友、其他（枚举项业务参数，按项目可配）」
+
+TIER 正则含 `(?<!不)可配` 与 `业务参数`。对上述两行 `TIER=True`。**不判冲突。** 该授权只覆盖这两处业务配置句，**不延伸到 CLI 的 PASS/FAIL/DRIFT**，也不当作 CI 特批。
+
+## 4. PGM-036 原文与适用
+
+锁定义来源 `docs/platform-governance-map-for-operations-v0.1.html:611`，HTML 原文：
+
+> 设备管理：谁领了什么设备，设备能不能用
+> 设备包括工作手机、平板、一体机、扫码设备、综合体入场三道环节设备（安检环节的 X 光设备、年龄核验环节的人脸扫描设备、检票环节的检票闸机）和其他现场设备。设备要绑定员工、班次、点位和状态。
+
+本 17 文件是 HTML/CI 治理门禁与回归，不建设备台账、领用、点位绑定或闸机/人脸可用性。无设备业务枚举发明。**判据适用结论：不适用（无实现面）。** 映射因旧「治理门禁」文件继承而存在，不能用本模块票替代设备域后续模块。
+
+## 5. 第一性原理（逐文件）
+
+删除测试：删掉这些工具，三份 HTML 的解释权声明仍写在 HTML 里，但「改 HTML 必须同批同步台账 / 带数值句必须标层级 / 引用不得用行号」没有机械闸，历史已两次靠人记性失败（脚本头注释）。答得上的是治理保护，不是 PGM-036 设备功能。2.1：技术性（CI 脚本，提示词明文「不算业务发明」），上位若要指 HTML 只能指解释权声明，该锚点不在本模块 19 条锁内，故不升为细化项去改 HTML。
+
+| 文件 | 为何存在 | 声称是否真执行 | 未证前提 |
+|---|---|---|---|
+| html-param-tier-baseline.json | 棘轮只缩不增的存量清单 | 现行 `entries: []`。隔离复制现行三 HTML 全量 scan：未标层级 0。空基线与现行 HTML 一致 | 空基线不等于「以后不用扫」；未改 HTML 时门禁跳过扫描（设计如此） |
+| refresh-entry-doc-baseline.mjs | 入口文档/README 数字快照回填 | 正本 `--check` EXIT 1，报 00-entry+README，应为 `732 ops / V431（399 迁移） / 147 tests`。隔离写：126/160 回填为 2026-09-22 / 732 / V431 / 147 tests，历史 V182/516/1606 句保留，随后 `--check` EXIT 0。正本 SHA 未变 | 正本数字仍旧属 M435/M436 **输入**，不是生成器漏匹配 |
+| verify-delivery-gates.mjs | 文档标记 + workflow 镜像 + HTML 门禁接入 | `node tools/verify-delivery-gates.mjs` EXIT 0，`DELIVERY_GATES_DOCS_PASS`；回归 echo/相似名/换行可红，`&&` 后续行可绿 | `requiredDeliveryCommands` 50 项/44 唯一/6 次重复（见旧 005） |
+| verify-entry-anchors.mjs | 条目名/CSV/账本/矩阵/镜像列逐字 | 现行仓 EXIT 0 PASS（注册表 1228 / 账本 1235 / 矩阵 1244 / 镜像片段 1565 / md 440 / 引用 1564）。空 `entry_body` 回归 EXIT 1 | 旧「6 红」是当时资料态，不当当前 |
+| verify-html-ledger-sync.mjs | 改 HTML 必须同批出现台账文件 | 现行仓 EXIT 1：工作区 PGM 脏、台账未同批。隔离删除台账 EXIT 1；合法同步 EXIT 0 | 只检文件是否出现在 diff（`--diff-filter=d` 排除删除），不检台账是否写了对应口径 |
+| verify-html-param-tier.mjs | 数值句标层级 + 基线棘轮 | 现行仓因 PGM 脏全量扫该文件，EXIT 0，存量 0。隔离三 HTML 全扫 EXIT 0。非法 ref 设计 FAIL。Git 为 `execFileSync` argv | 未改的 HTML 不扫（设计） |
+| 10× .log | 当时门禁升级批取证 | 不执行。内容与现行代码/基线条数部分相反 | 若当当前绿证 → 违反 GEN-016；本席不当 |
+| m001-regression.mjs | 门禁/CSV/CI/merge-pr/001–004/006–007 可失败回归 | 本席 `node tools/gate-hardening-tests/m001-regression.mjs` EXIT 0，`M001_GOVERNANCE_REGRESSION_PASS`，全程临时目录，约 4s | 未挂 package.json；不覆盖检查⑦全仓资料面（该面本席现行 PASS） |
+
+权威计数（本席实算，非文档声称）：OpenAPI **732** operations；迁移 **399** 个、最新 **V431**；surefire xml 4 份、tests 属性合计 **147**。
+
+## 6. 顺从式（19 条逐 ID）
+
+| ID | 覆盖结论 | 2.1 | 工程缺陷 |
+|---|---|---|---|
+| GEN-001 | 17 文件均有用途。`requiredDeliveryCommands` 50/44，6 次重复；`has()` 幂等。重复不改绿/红 | 技术性观察 | 否（并入旧 005 现状） |
+| GEN-002 | 门禁主路径/错误路径已实跑。refresh 声称维护 126「实测」与 160「取证为」：隔离写两句均更新；正本 `--check` 正确报 DRIFT | 技术性 | 否（工具执行其声称；正本漂移=M435/M436 输入） |
+| GEN-003 | `m001-regression.mjs` 有可失败断言并本席实跑 EXIT 0。故意缺命令/空 body/删台账/非法 ref 均可红 | 技术性 | 否 |
+| GEN-004 | HTML 路径写死。基线 ref 进 `execFileSync` argv；`HEAD;echo INJECTED` 被当成单一非法对象名，设计 FAIL，echo 未执行 | 技术性 | 否（旧 006 修后现状） |
+| GEN-005 | 无主体/对象授权面，本地/CI 工具 | 不适用 | 否 |
+| GEN-006 | 无库表金额。台账闸是同 diff 出现文件且排除删除 | 技术性 | 否（旧 003 修后现状；文件级语义=012） |
+| GEN-007 | 门禁非业务重试账。merge-pr 三态回归覆盖等待期间 tip 变化 | 技术性 | 否 |
+| GEN-008 | 两份 workflow `cmp` 0（各 1335 bytes）；`verify:predeploy` 经 `npmCommands` 含三 HTML 闸；`verify:delivery-gates-docs` 精确等于本脚本 | 技术性 | 否 |
+| GEN-009 | 缺基线/非法 ref 有设计 FAIL 文案。注入不再抛未捕获「后续 git diff」 | 技术性 | 否 |
+| GEN-010 | 两脚本 `const git = (...args) => execFileSync("git", args, …)`；`git show ${mergeBase}:${BASELINE}` 亦 argv。隔离注入未执行 echo | 技术性 | 否 |
+| GEN-011 | 失败打印范围/文件/数值。旧 log 不应当当前证据。缺一重复命令打印 3 次相同真失败 | 技术性观察 | 否（005） |
+| GEN-012 | 回归本地 clone，本席 4s 内结束 | 技术性 | 否 |
+| GEN-013 | `yaml` 在 package.json `^2.9.0`。缺基线红。回归未进 npm script，真门禁已在 `verify:predeploy` | 技术性观察 | 否（011） |
+| GEN-014 | 无迁移文件 | 不适用 | 否 |
+| GEN-015 | 无十一类终端 UI。CLI 中英混排属内部标识 | 技术性观察 | 否（014） |
+| GEN-016 | 旧 log 不当当前。正本 00-entry:126/160 与 README 块仍写 V385/720/862，`--check` 报 DRIFT 而非伪绿 | 技术性 | 否（工具未把旧证据写成当前通过） |
+| GEN-017 | 本批无 HTML 冲突项、无添加项。工具本身技术性 | — | 否 |
+| GEN-018 | 结论落到 HTML 原文、隔离/现行命令输出 | — | 否 |
+| PGM-036 | 无设备实现面 | 不适用 | 否 |
+
+## 7. 对抗式最小反例（本席自构，未问操作员）
+
+1. 未提交 HTML 无台账 → ledger-sync EXIT 1（回归「未提交错误」；现行仓 PGM 脏同红）。
+2. 同改加台账任意一行 → ledger-sync EXIT 0（文件级，内容不必描述口径）。
+3. 工作区删除台账 / 已提交删除 → EXIT 1（回归 M008-003）。
+4. 基线外「30 天」无层级 → param-tier EXIT 1。
+5. 「（法定值，不可配）」「（业务参数，按项目可配）」→ EXIT 0。
+6. 「该天数不可配」无「法定值」→ EXIT 1。
+7. 裸 `param-tier:ignore` → 现行 EXIT 1；**旧 E-log EXIT 0 已过时**。
+8. 部分豁免只列 30 天留下 3 次 → EXIT 1。
+9. 段落内换行标注 / 同行两段 / 段后豁免粒度 → 回归 M008-004 全过。
+10. 本地基线多 key → EXIT 1。
+11. `HTML_GATES_BASE=absent-ref` → EXIT 1 设计文案。
+12. `HEAD;echo INJECTED` → EXIT 1「取不到基线 HEAD;echo INJECTED」，echo **未**执行（旧 006 闭合）。
+13. CSV 列数/未闭合引号 → EXIT 1；BOM/CRLF/跨行字段 → EXIT 0；空 entry_body → EXIT 1。
+14. CI 镜像改 fetch-depth 1 / 删 HTML_GATES_BASE / `echo skipped` 代替 predeploy → delivery-gates EXIT 1。
+15. `echo verify:html-param-tier` / 相似名 / 整串打印 / 注释 / `npm\nrun` / `&&` 前换行 → EXIT 1；`&&` 后续行 → EXIT 0（回归 M008-001）。
+16. merge-pr stable 0；watch/late 1（不碰真 PR）。
+17. 隔离 refresh：check1 → 写0 → check0；126 与 160 均更新；changelog V182 句保留；正本 SHA 未变。
+18. 去掉实际脚本中一次 `verify:production-evidence-positive-propagation-fixtures` → EXIT 1，相同错误行 **3** 次（005 现状）。
+19. 三 HTML 现行正文全量 scan 未标层级 0。B/C 两句 TIER 命中，对抗扫描不报。
+
+不把 B/C 结果说成 CLI 文案已获授权。不为刷绿改 PGM/台账/00-entry/README。
+
+## 8. 本轮新 GR
+
+**空集。** 三线审完后，没有「声称未执行 / 伪成功 / 伪失败 / 注入可执行」的新工程缺陷。父链红（台账未同步、入口/README 快照数字旧）由工具正确打红，归属已声明的输入模块，不在本 17 文件修。
+
+## 9. 旧 16 项现状重判（不继承 PASS；历史「工程缺陷是」列只作输入）
+
+分类一律技术性（无业务发明：CI/检查/计数/历史证据，不引入票种/状态/角色/价格/审批链/设备台账）。证据类型除另注外为 **2.3 类型 4**（可复现命令）；PGM-036 适用判断另用类型 1 HTML 原文。
+
+| 旧 ID | 现状位置 | 现状事实（本席命令） | 判据 | 工程缺陷现状 | 队列 |
+|---|---|---|---|---|---|
+| M008-001 | `verify-delivery-gates.mjs:7-11,161-164,321-324` `npmCommands`+`Set.has` | 回归：打印/相似名/整串打印/注释/命令内换行/`&&`前换行 → EXIT 1；`&&`后续行 → 0。现行仓 DELIVERY_GATES_DOCS_PASS | GEN-002/008/009/013 | **否**（旧修仍成立） | 否 |
+| M008-002 | `verify-entry-anchors.mjs:113-116` `if (!entryBody \|\| !flat[code].includes(entryBody))` | 回归「M008-002 空条目正文」EXIT 1。现行仓 EXIT 0 | GEN-002/004/009/016 | **否** | 否 |
+| M008-003 | `verify-html-ledger-sync.mjs:58` `--diff-filter=d` | 回归删除/已提交删除 EXIT 1；同步 EXIT 0 | GEN-002/006/009/011 | **否** | 否 |
+| M008-004 | `verify-html-param-tier.mjs:60-88` 按 p/li/tr/div/h 分块 | 回归换行标注 0、同行两段 1、段后豁免粒度 4 条全过 | GEN-002/008/009/016 | **否** | 否 |
+| M008-005 | `verify-delivery-gates.mjs:106-157` | 仍 50/44；隔离去掉一次实际命令，相同缺失打印 3 次且 EXIT 1。有命令仍绿 | GEN-001/011 | **否**（仅登记；不删 6 个重复常量） | 否 |
+| M008-006 | ledger-sync:12 / param-tier:22,141 `execFileSync` argv | 回归非法基线 EXIT 1；本席 `HEAD;echo INJECTED` 设计 FAIL，echo 未执行 | GEN-002/004/009/010 | **否** | 否 |
+| M008-007 | `refresh-entry-doc-baseline.mjs:67-71` | 回归 126/160 样例回填；隔离**现行**入口两句均更新为 732/V431/147；正本 `--check` 报 DRIFT 而非漏检伪绿 | GEN-002/009/016 | **否**（旧修仍成立；正本数字=M435/M436 输入） | 否 |
+| M008-008 | 生成器 README 块与其它有效快照行 | `--check` 同时报 README；隔离写后 README 块 V431/732/147 且 check 0。不加自动版本管理 | GEN-001/002/016 | **否** | 否 |
+| M008-009 | `verify-entry-anchors.mjs` 全量；`verify-html-ledger-sync.mjs` | **现状与旧票不同**：anchors 现 EXIT 0。ledger-sync EXIT 1 仅 PGM 工作区脏、台账未同步——工具正确拒绝，属 **M426 输入** | GEN-002/008/016 | **否**（本模块源码） | 否 |
+| M008-010 | 10× `.log` | 全文已读。E 旧裸 ignore 绿 vs 现行红；A/D/I2 旧 6 条 vs `entries:[]`；99 旧全链绿不是当前全链。不当本轮验收 | GEN-001/011/016 | **否** | 否 |
+| M008-011 | `m001-regression.mjs` | 本席新鲜 EXIT 0 + `M001_GOVERNANCE_REGRESSION_PASS`。未挂 npm。不另立测试工程 | GEN-003/013/018 | **否** | 否 |
+| M008-012 | ledger-sync 文件级；param-tier 未改不扫 | 任意新增台账行可绿（≠003 删除）。三 HTML 隔离全扫 0 未标层级 | GEN-002/006/009 | **否** | 否 |
+| M008-013 | `verify-entry-anchors.mjs:40` EXCLUDE `-report` | 偏宽仍在；现行 PASS，无本票误绿证据。不加新排除策略 | GEN-002/016 | **否** | 否 |
+| M008-014 | 各脚本 CLI 文案 | PASS/FAIL/DRIFT 内部标识。B/C 不延伸 | GEN-015/017 | **否** | 否 |
+| M008-015 | `refresh-entry-doc-baseline.mjs:51` `toISOString()` | 隔离回填日期 2026-09-22（UTC 日）。不增时区参数 | GEN-002/016 | **否** | 否 |
+| M008-016 | 全 17 文件 vs PGM-036:611 | 无设备实现面 | PGM-036/GEN-017/018 | **否** | 否 |
+
+旧 findings 表把 001–004/006–007 的「工程缺陷」列留「是」作为已确认历史；本席 **现状** 列判「否」= 当前源码上该缺陷不可再复现，不是改写旧票、也不是继承 B5 PASS。
+
+## 10. 无缺陷技术性观察（无业务发明）
+
+1. `requiredDeliveryCommands` 重复 6 次（propagation-fixtures×3 等）。`Set.has` 幂等。ponytail：`verify-delivery-gates.mjs:L130-155 shrink: 50→44`。删重复不改变绿/红。B3 不得借 005 删。
+2. 台账闸文件级：范围内已有台账改动后，再追加未提交 HTML 仍可绿。与脚本「同 PR 同步台账」的文件级自称一致。不添语义审查。
+3. 未改 HTML 时 param-tier 不扫描。三份现行 HTML 全量 scan 未标层级=0。
+4. `E-ignore-marker.log` 当时裸豁免绿；现行回归红。历史证据。
+5. refresh `--check` 去日期再比，避免日历闹钟。数字漂移仍红。
+6. refresh / entry-anchors / delivery-gates 不以 `git rev-parse --show-toplevel` 切仓根；文档入口是仓根 `node tools/…`。子目录缺文件会抛错（偏红），不是伪绿。
+7. CLI 中英混排。不把 B/C 当授权。
+8. 回归未进 `package.json`。真门禁已在 `verify:predeploy`。
+9. PGM-036 不适用，见 §4。
+10. 现行 `verify:runtime-acceptance-evidence` 等全链未跑；用户指定 runtime 陈旧属 M409/M415 输入。本模块 FILES 不含那些生成器。
+
+ponytail-review（只列，不改代码）：
+
+- `verify-delivery-gates.mjs:L130-155: shrink: requiredDeliveryCommands 重复 6 次。unique 即可。`
+- net: 约 −6 行可能；正确性不依赖该删。
+
+## 11. 本席实跑命令（非锁行）
+
+均在主仓只读或 `/tmp/m001-gates-*` / `/tmp/m008-b1-grok-*` 隔离；正本 17 文件 `git diff --stat` 空。00-entry / README 正本未写。baseline SHA 事后仍为 `9332010bd445a64ff8f1fb5e3b6d7bbe387c7b76543b68424f0209dd7ddbfdc8`。
+
+| 标签 | 命令 | EXIT | 要点 |
+|---|---|---:|---|
+| CMD-NODE-CHECK | `node --check` 六份 mjs | 0 | 语法过 |
+| CMD-LEDGER | `node tools/verify-html-ledger-sync.mjs` | 1 | PGM 工作区脏、台账未同批（**M426 输入**；工具成立） |
+| CMD-PARAM | `node tools/verify-html-param-tier.mjs` | 0 | 改了 1 份 PGM，全文件扫无基线外未标句 |
+| CMD-DELIVERY | `node tools/verify-delivery-gates.mjs` | 0 | `DELIVERY_GATES_DOCS_PASS` |
+| CMD-REFRESH-CHECK | `node tools/refresh-entry-doc-baseline.mjs --check` | 1 | 00-entry+README；应为 732/V431/399/147（**M435/M436 输入**） |
+| CMD-ANCHORS | `node tools/verify-entry-anchors.mjs` | 0 | 与旧「6 红」不同，现状 PASS |
+| CMD-REGRESSION | `node tools/gate-hardening-tests/m001-regression.mjs` | 0 | `M001_GOVERNANCE_REGRESSION_PASS`；约 4s；临时目录已删 |
+| CMD-WF-CMP | `cmp` 两份 predeploy-gates.yml | 0 | 各 1335 bytes |
+| CMD-SCAN3 | 隔离复制现行三 HTML，脏文件强制全扫 | 0 | 未标层级 0 |
+| CMD-ISO-REFRESH | `/tmp/m008-b1-grok-*/refresh` 写再 `--check` | 写 0 / check 0 | 126 与 160 均更新；历史 V182 句保留；正本未动 |
+| CMD-ISO-INJECT | 夹具 `'HEAD;echo INJECTED'` | 1 设计 FAIL | echo 未执行 |
+| CMD-005-DUP | 隔离去掉一次重复必跑命令 | 1 | 相同缺失行 ×3 |
+
+未跑：`npm run verify:delivery-gates` 全链、`verify:predeploy` 全链、真 push/PR/merge/部署、正本无 `--check` 的 refresh、正本 `--write-baseline`、安装 hook、runtime 验收生成器（M409/M415）。
+
+工作区 `docs/platform-governance-map-for-operations-v0.1.html` 相对 HEAD 脏；ledger-sync 红证明闸在工作，问题在 **M426** 台账未同批，本模块不修、不为绿改数据。入口/README 数字旧属 **M435/M436**。`criteria-lock.md` 工作区脏不在本 FILES，未动。
+
+## 12. 限制（如实，不是有条件 PASS）
+
+- 未把旧 M001/M007/M008 B5 票当本 17 文件已审。
+- 未创建主项目 worktree；未改主仓 Git 配置/hook/index。
+- `batch-grill-me` 缺口见 §0。
+- 同目录 `m007-regression.mjs` 不在范围。
+- 三 HTML 只读；未发现需按铁律申请改 HTML 的本模块冲突句。
+- HEAD ≠ `origin/main`；本席未 fetch。17 FILES 与二者 diff 皆空。
+- 本席 PASS ≠ 模块 PASS ≠ 全链绿 ≠ 部署通过。须另有 Codex 本次 B1 独立 PASS 且四值以**本段首行**锁哈希对齐。
+
+## 13. 结论
+
+**PASS**
+
+全部 17 文件已全文覆盖，当前有效行 **1605**（历史计划 1530），19 条判据已逐条给适用/不适用理由，三线已跑。旧 16 项现状全部重判为当前无待修工程缺陷；本轮无新 GR、无添加项、无未答 questions、无条件通过措辞。父链资料红保留在其归属模块。未经双席合取不得写 ledger PASS 或收口。
+
+## M008 现锁B2整批归并票（Grok 席追加）
+版本：V0.06（本文件既有 V0.01–V0.04 前缀 **83685** 字节 SHA256 `6e3b0f7cbdce80bd5f0af1aeda641bfcf692b6dee9d5c14f3e877f46d556586d`，加上本次 V0.05 B1，合计封存前缀 **109143** 字节 SHA256 `763a0f50bbdef9e661a13c902f2e752ca8ff687d30b5e29fe2c4ef90c7c9d055`，原样保留，不覆盖、不改 V0.05 原文；自身版本 V0.05→V0.06）
+席位：Grok（审计席乙，独立）。步骤：B2。模块：M008 — 治理门禁与 CI 基线／检查及生成工具／第1段
+控制：160-audit-prompt.md V0.17；runbook V0.02；criteria-lock V0.14；modules.md V0.04
+本席B2：**PASS**。此票只判断 findings V3.45 顶部「当前M008现锁B2整批候选」相对两份指定完整 B1 raw（及用户点名已读的席甲 V0.06 候选段）的全批差集、四分类、当前缺陷、当前修复队列与最小处置。不是独立 B1 PASS，不是模块 PASS，不是发布 PASS，不是全链绿。不继承本文件旧 B2-r1/r2/r3、不继承旧 B4/B5、不继承本席 V0.05 B1 PASS、不继承 self V0.05 B1 PASS、不继承 self V0.06 B2 PASS。本段不写独占锁哈希字段行。
+
+### 输入路径与版本（B2 必注）
+
+| 角色 | 路径 | 本次版本切片 | 字节 | SHA256 |
+|---|---|---|---:|---|
+| 席甲最后完整 B1 | `docs/audit-2026-09/modules/M008-b1-self-raw.md` | V0.05（自最后独占锁行值 `b0863b95…` 起至「后续按完整双席B2决定是否需要B3；空队列则按旧累计r2进B5。」止） | 封存前缀 **189813**（当前磁盘整文件 196638，尾 6825 字节为 V0.06 Codex B2，三值以本席重判为准、不采其 PASS） | `c2f218e30a811a7e064faae25f35e99b6b7f44a01f3d9104d6e75ceb07f47702` |
+| 席乙最后完整 B1 | `docs/audit-2026-09/modules/M008-b1-grok-raw.md` 本段之前 | V0.05（自最后独占锁行值 `b0863b95…` 起至「未经双席合取不得写 ledger PASS 或收口。」止） | **109143** | `763a0f50bbdef9e661a13c902f2e752ca8ff687d30b5e29fe2c4ef90c7c9d055` |
+| 候选台账 | `docs/audit-2026-09/findings.md` 顶部「当前M008现锁B2整批候选」至「非直接收口。」 | V3.45 | 整文件 1244814 | `842c9efc6dc00bf99f4d988bf557ceb1f5e32ca1530875e57722eeaa5d8e2890` |
+| 席甲本批 B2（用户点名已读，非合取依据） | 同 self-raw V0.06 | 候选表与 V3.45 十六行同文 | 不计入封存前缀 | 本席独立重判，不继承 |
+
+四值实算现锁 `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`：`sha256sum docs/audit-2026-09/plan/criteria-lock.md` 与 sidecar 全文一行、`ledger.md` 顶行、两席本次 B1 独占锁行值全等；`LOCK-AMEND-COUNT: 1`。criteria-lock 版本 V0.14，891182 bytes。映射行 `M008 → [GEN-001 … GEN-018, PGM-036]`，定义区 19/19 标题存在，本批未改锁。未改 HTML／源码／sidecar／ledger／findings／主索引／hook。
+
+17 FILES 当前指纹与本席 V0.05 §2 表逐文件 SHA 全等，`\\n` 合计 **1605**。源码同字节 → 复用本次 B1 类型 4 回归/隔离证据，不重跑 77 项 / `m001-regression.mjs`。本节点另核工作区资料态（见下「本席本节点命令」）。
+
+### 0. 技能自核与 V0.05 技能表补正（不覆盖旧票）
+
+本节点实际重读并按 V0.17 收窄使用：`using-superpowers`、`using-arc`（本任务不走 Arc 实现流）、`receiving-code-review`（先核源/命令再接受或反驳，禁止表演性同意；B2 不修复）、`verification-before-completion`、`grilling`/`grill-me`、`ubiquitous-language`（见下）、`codebase-design`（删除测试只用于分类，不改源）、`diagnosing-bugs`（以当前五入口作红/绿环，B2 不修）、`systematic-debugging`（只借读错误→复现；不改生产代码）、`ponytail-review`（只列可删，不落地）、`writing-for-agents`（本 raw 给下游差集可读）。
+
+**补正本席 V0.05 §0**（原文保留在 109143 字节前缀内，本段追加、不覆盖）：V0.17 §6 末行是「`batch-grill-me` / `ubiquitous-language`：若存在则用，同 `grilling` 收窄口径（不派子代理、不等操作员）；不存在则记缺口，不得冒充已调用」。V0.05 写成「V0.17 明确不用」不准确。本机核到 `ubiquitous-language` 存在（至少 `/home/james/.qwen/skills/ubiquitous-language/SKILL.md`，另有多份同文副本）。本体要写 `UBIQUITOUS_LANGUAGE.md` → 超 §7，故按 grilling 收窄：只做术语冲突自问自答，**不另写词汇表文件、不问操作员、不派子代理、不改 CONTEXT.md**。`domain-modeling` 仍按 V0.17 划掉不用。
+
+`batch-grill-me`：本环境仍无独立 `SKILL.md`；mattpocock grilling 文档写明该技能已并入 grilling。记缺口，未冒充调用。grilling 的「等用户 / 派子代理查事实」作废，本票用内问内答。
+
+未用 MCP。未派子代理。未 fetch。未真实 Git 发布/安装/部署。
+
+#### ubiquitous-language × grilling 收窄自问自答（本批用到的词）
+
+1. **「当前缺陷」是不是「历史工程缺陷是」？** 否。历史列只作原证据。当前缺陷看现行 17 文件能否再复现该失败。16 项当前缺陷均为否。
+2. **「有正式 ID」是不是「修复队列是」？** 否。队列「是」只给冲突 / 当前有工程缺陷 / 操作员答删除的添加。有 ID 且只登记 → 队列否。
+3. **「数据红」是不是「本模块工具缺陷」？** 否。工具正确打红、红的是台账/入口资料，归属 M426 / M435 / M436。不得改写成全链绿，也不得在本 17 文件修。
+4. **「仓根调用」和「runtime 验收」是不是同一对象？** 否。仓根调用 = refresh / entry-anchors / delivery-gates 以 `process.cwd()` 或相对 `docs/…` 读文件、不 `chdir(show-toplevel)`，子目录缺文件偏红。runtime = `verify:runtime-acceptance-evidence` 等全链/生成器，FILES 外，陈旧属 M409/M415。前者路由观察 6→008，后者观察 10→009；不把新对象塞进旧票正文三值。
+5. **「技术性」能不能当模块收口？** 否。分类≠收口。技术性只说明无业务发明 + 无 HTML 冲突。
+6. **GEN-001「重复应删除」是否强制删 005 六条重复常量？** 否。`Set.has` 幂等，删不改绿/红；旧双席已裁定保留。本批不收窄 GEN-001 定义去强删。
+7. **CLI 的 PASS/FAIL/DRIFT 是不是十一类终端产品 UI？** 否。内部标识。B/C 业务「可配」授权不延伸 CLI。
+8. **PGM-036 设备绑定是否本模块实现面？** 否。HTML `:611` 原文是领用/点位/闸机等人机设备；本 17 文件是检查/生成/证据。
+
+术语表（只写在本 raw，不另落盘）：**当前缺陷** = 现行源码仍可复现的失败；**修复队列** = 本批 B2 定稿后要不要改源；**数据红** = 工具正确拒绝的外模块资料态；**观察** = 无缺陷披露，不新编号。避免把「DRIFT」「FAIL」「未同步」互相替换。
+
+### 1. 全批差集（不漏并、不改写、不新编号、不抹旧票）
+
+- 席甲 V0.05 新 CX：**空集**。
+- 席乙 V0.05 新 GR：**空集**。
+- 候选 16 行覆盖旧 001–016 全集合，无第 17 号、无复用、无把新对象写入旧 ID 三值。
+- 10 条技术观察全部映射到既有 ID，映射表见下；观察不是 finding，不新增 ID。
+- 无添加项、无 `questions/`、无三 HTML 修改申请。
+- 旧票 001–016 编号与历史「工程缺陷是」（001–004/006–007 已修史）保留；本票只改**当前**三值语义，不删历史 raw。
+
+| 观察# | 本席 V0.05 原句对象 | 候选映射 | 本席独立是否接受 | 理由 |
+|---|---|---|---|---|
+| 1 | `requiredDeliveryCommands` 50/44、6 次重复 | 005 | 接受 | 同一对象；队列仍否；不删常量 |
+| 2 | 台账闸文件级 | 012 | 接受 | 同一职责边界 |
+| 3 | 未改 HTML 时 param-tier 不扫 | 012 | 接受 | 同「变更才扫」边界，不是新闸 |
+| 4 | E-log 裸 ignore 旧绿现红 | 010 | 接受 | 历史 log 不当当前 |
+| 5 | `--check` 去日期、数字漂移仍红 | 008 | 接受 | 解释 008 剩余红是数字而非日历 |
+| 6 | refresh/anchors/delivery **不以** `show-toplevel` 切仓根；子目录缺文件偏红 | **008** | 接受为**观察路由** | 见下专节；008 三值仍是 README/entry 快照，不改写成 cwd 票 |
+| 7 | CLI 中英混排 | 014 | 接受 | 同一对象 |
+| 8 | 回归未进 package.json | 011 | 接受 | 同一对象 |
+| 9 | PGM-036 无实现面 | 016 | 接受 | 同一对象 |
+| 10 | runtime 全链未跑、生成器不在 FILES | **009** | 接受为**观察路由** | 见下专节；009 三值仍是 anchors/M426，不改写成 runtime 票 |
+
+**观察 6（仓根调用→008）独立核源（graft + 读行，未再跑子目录实验）：**
+- `tools/refresh-entry-doc-baseline.mjs:12` `const root = process.cwd();`
+- `tools/verify-delivery-gates.mjs:13` `const repoRoot = process.cwd();`
+- `tools/verify-entry-anchors.mjs` 无 `cwd`/`show-toplevel`，相对路径 `docs/…`（L32–38），隐式依赖调用时 cwd=仓根
+- 文档入口是仓根 `node tools/…`。子目录缺文件会抛错/记 missing → **偏红，不是假绿**
+- **不在观察 6 声称范围**：`verify-html-ledger-sync.mjs:16` 与 `verify-html-param-tier.mjs:26` **会** `chdir(git rev-parse --show-toplevel)`。不得把这两份的切根写进 008，也不得把观察 6 扩大成「17 文件都不切根」
+- 008 表行三值保持：README/entry 仍旧、工具报 DRIFT、归 M435/M436、不加自动版本管理。仓根约定只作无缺陷披露，不新 ID
+
+**观察 10（runtime→009）独立核源：**
+- `requiredDeliveryCommands` 含 `verify:runtime-acceptance-evidence`（delivery L153），生成器 `tools/generate-runtime-acceptance-evidence.mjs` **不在**本模块 17 FILES
+- 本席 V0.05 与用户指定：runtime 陈旧属 **M409/M415 输入**，本批未跑全链
+- 009 表行三值保持：anchors 当前 0；ledger 红仅 PGM 未同步、归 **M426**；工具不放宽
+- runtime ≠ M426。映射 10→009 只表示「父链资料红不得拿来放宽本模块工具 / 不得新编号」，**不把 009 改写成 runtime 票**
+
+### 2. 十六项独立重判（分类 / 无业务发明 / 当前缺陷 / 当前队列）
+
+顺序：冲突 → 细化 → 技术性 → 添加。17 文件均为 CI/检查/生成/历史证据；三份 HTML 无对应业务实体/价格/权限/设备台账实现。无冲突可指原文。无添加。全部**技术性**（无业务发明：不增加票种/状态/角色/审批/设备对象或规则）。证据：类型 2（现行脚本行为）+ 类型 4（命令）；016/PGM-036 兼类型 1（PGM `:611`）。
+
+| ID | 分类 | 当前缺陷 | 当前修复队列 | 本席处置（不继承 PASS） |
+|---|---|---|---|---|
+| M008-001 | 技术性 | 否（历史已修） | 否 | delivery `npmCommands`+`Set.has` L7–11/161–164/321–324；伪打印/相似名/注释/命令内 LF/`&&` 前 LF 拒、后续行允许。现行 `DELIVERY_GATES_DOCS_PASS` exit0。GEN-002/004/008/009/013 |
+| M008-002 | 技术性 | 否（历史已修） | 否 | anchors L113–116 空 `entry_body` 拒。现行 anchors exit0（1228/1235/1244）。GEN-002/004/009/016 |
+| M008-003 | 技术性 | 否（历史已修） | 否 | ledger L58 `--diff-filter=d`；删除不算同步。现行 PGM 脏、台账未同批 exit1 **正确**。GEN-002/006/009/011 |
+| M008-004 | 技术性 | 否（历史已修） | 否 | param L60–88 逻辑块。B1 换行/双 p/段后豁免回归仍适用（源码同字节）。GEN-002/008/009/016 |
+| M008-005 | 技术性 | 否 | 否 | delivery L106–157 仍 **50 项 / 44 唯一 / extra 6**（propagation-fixtures×3、ready-no-go×2、blocker-no-go×2、ready-positive×2、no-go-command-center×2）。`has()` 幂等。 **保留不删 6 常量**，不收窄 GEN-001。GEN-001/011 |
+| M008-006 | 技术性 | 否（历史已修） | 否 | ledger L12 / param L22、141 argv 含 `show`。B1 注入反例源码未变。GEN-002/004/009/010/018 |
+| M008-007 | 技术性 | 否（历史已修） | 否 | refresh L67–71 覆盖 126/160。B1 隔离 check1→write0→check0 源码未变；正本仍 DRIFT。GEN-002/009/016 |
+| M008-008 | 技术性 | 否 | 否 | 正本 README+entry 仍旧；`--check` 报两文件，应为 732/V431（399）/147。归 **M435/M436 输入**。不加自动版本管理。仓根调用观察挂此 ID 路由，三值不改。GEN-001/002/016 |
+| M008-009 | 技术性 | 否 | 否 | 现行 anchors **exit0**，旧六红不再现。ledger **exit1** 仅 PGM 未同步 → **M426**。工具不放宽。runtime 观察挂此 ID 路由，三值不改成 M409/M415。GEN-002/008/016 |
+| M008-010 | 技术性 | 否 | 否 | 10× `.log` 只作历史；E 旧裸 ignore 绿 vs 现行红；A/D/I2 旧 6 vs `entries:[]`；99 旧全链绿不是本轮。GEN-001/011/016 |
+| M008-011 | 技术性 | 否 | 否 | `m001-regression.mjs` 278 行，双方 B1 实跑 PASS（源码 SHA 仍 `c64e3048…`）。未挂 npm、裸 assert 早失败不强制改。GEN-003/013/018 |
+| M008-012 | 技术性 | 否 | 否 | 文件级台账；变更 HTML 才扫。B1 隔离三 HTML 全扫 0。无新增语义检查。GEN-002/006/009 |
+| M008-013 | 技术性 | 否 | 否 | anchors L40 `-report` 偏宽；现行 PASS，无正常误排误绿证据。不新增排除策略。GEN-002/016 |
+| M008-014 | 技术性 | 否 | 否 | CLI PASS/FAIL/DRIFT 内部标识。B/C 不延伸。GEN-015/017 |
+| M008-015 | 技术性 | 否 | 否 | refresh L51 UTC 取证日，非营业日。不增时区参数。GEN-002/016 |
+| M008-016 | 技术性 | 否 | 否 | 17 文件 1605 行工程工具/证据。PGM `:611`「设备要绑定员工、班次、点位和状态」无本模块实现面。PGM-036/GEN-017/018 |
+
+ponytail-review（只列不改）：`verify-delivery-gates.mjs:L130-155 shrink: requiredDeliveryCommands 50→44 unique。正确性不依赖该删。` net: 约 −6 行可能。B3 不得借 005 删。
+
+### 3. 本席本节点命令（非锁行；工作区资料态）
+
+正本 17 文件指纹与 V0.05 表全等后，只重核会随资料变的入口，不重跑回归。
+
+| 标签 | 命令 | EXIT | 要点 |
+|---|---|---:|---|
+| CMD-LOCK | `sha256sum docs/audit-2026-09/plan/criteria-lock.md` | 0 | `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458` |
+| CMD-PREFIX-GROK | 本文件前 109143 字节 | — | SHA `763a0f50bbdef9e661a13c902f2e752ca8ff687d30b5e29fe2c4ef90c7c9d055` |
+| CMD-PREFIX-SELF | self-raw 前 189813 字节 | — | SHA `c2f218e30a811a7e064faae25f35e99b6b7f44a01f3d9104d6e75ceb07f47702` |
+| CMD-17SHA | 17 路径 sha256 对表 | — | 0 mismatch；nl_sum 1605 |
+| CMD-DUP | 解析 `requiredDeliveryCommands` | — | 50/44/extra6 |
+| CMD-LEDGER | `node tools/verify-html-ledger-sync.mjs` | **1** | PGM 工作区脏、台账未同批；基线 `origin/main@88c7b465`。**M426 输入** |
+| CMD-REFRESH-CHECK | `node tools/refresh-entry-doc-baseline.mjs --check` | **1** | 00-entry+README；应为 732 ops / V431（399 迁移）/ 147 tests。**M435/M436 输入** |
+| CMD-ANCHORS | `node tools/verify-entry-anchors.mjs` | 0 | 1228/1235/1244；PASS |
+| CMD-DELIVERY | `node tools/verify-delivery-gates.mjs` | 0 | `DELIVERY_GATES_DOCS_PASS` |
+| CMD-PARAM | `node tools/verify-html-param-tier.mjs` | 0 | 改 1 份 PGM 全扫，存量 0 |
+| CMD-HOOK-INDEX | 只读 sha256 | — | 主 hook `46aabdf33cb3496d83a71e4357ca85ba2ed9dbbfd4582ab53747bc50bb748d6b`；index `d9a65108a1e87bd300c299ca7640f832bd5c2feb771f35a7a2413d32a1748331`（与席甲 V0.05 记录同）。本批未写 hook/index |
+
+HEAD `e456ba96c84185c8d39f18f548011daac48a6466`；`origin/main` `ebb1eb99c610df330c07d24278798c2d3611299a`；merge-base `88c7b465475fb8eb26e46200ae90ad3e00500522`。未 fetch。未对正本跑无 `--check` 的 refresh，未 `--write-baseline`，未装 hook。
+
+两数据红 **保留**。源码无修复候选。005 重复常量 **不删**。
+
+### 4. 与候选 / 席甲 V0.06 的合取意见
+
+候选十六行分类=技术性、当前缺陷=否（001–004/006–007 标历史已修）、队列=否：与本席独立重判一致，**不是**因为席甲已写 PASS。观察映射 1–10 接受为路由，附加边界：008/009 表行对象不因观察 6/10 而改写。无漏并、无改写席乙 finding、无把正确打红改成全链绿。
+
+修复队列「是」= **空集**。历史 B3 累计 **2** 保留，不清零。
+
+按 V0.17：双席 B2 定稿后跳过新增 B3／B4，必须再做独立 **B5-r2** 全模块重审。现在不得标模块 PASS。两席 B1 PASS 不代替 B2／B5。空队列只允许下一步 B5-r2，不能直接收口。
+
+无添加、无未答 questions、无 HTML 申请。本段未写独占锁哈希字段行。其后本节点不进入 B3／B4／B5／其他模块。不修复。
+
+**本席 B2：PASS。**

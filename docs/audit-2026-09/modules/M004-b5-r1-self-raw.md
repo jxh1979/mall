@@ -1098,3 +1098,444 @@ const {createRequire}=require('node:module');const nr=createRequire('/usr/lib/no
 ```
 实际exit0：arborist9.9.1；all582、nonRoot579、nonWorkspace567、nonLink582、nonTop560；root3、web15、link0。未把563硬解释成已证实的另一统计口径；它不改变完整条目/已验证的边有效性和两席无新工程缺陷结论。本次没有任何源改动。
 当前步骤B5 / M004共471，B3历史累计1；ledger此时IN_PROGRESS。B2定稿findings V0.94七项当前队列全否，无添加/HTML问题/待答闸，无新修复。两席audit均保留exit1、同一GHSA中等2包，不报全绿。全局BSM镜像门禁红仍保留。本次双PASS与四值相等成立，下一步先写ledger PASS，再写收口并进入下一模块。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+# M004 B5-r1 新锁全模块 Codex 独立终审
+版本：V0.04
+
+本席B5：PASS。新CX空集，无待修/添加/HTML问题。只是本席票；Grok本次报告尚未读取，M004仍IN_PROGRESS，尚非模块PASS。控制V0.17，471计划锁V0.14；B3累计1。B2已selfV0.09/GrokV0.07双PASS，findingsV3.38定稿001—007队列全否，未执行新B3/B4。
+
+## 本次范围与完整阅读
+唯一package-lock.json，3321行114258bytes，documentVersionV0.02，SHA d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef。本轮先实算确认与刚完成B1V0.08全部字节相同，明确复用该次四批全220记录全部字段阅读，不继承B1/B2或旧B5 PASS。重新审全部18GEN/220记录的用途、执行证据、前提及反例；下表每条覆盖，不抽样。根/web清单、Vite/Vitest配置仍已核源码，配置哈希见本次输出。M001—M003现锁通过，不据此省本模块。
+使用本长轮已实际读的using-superpowers/grilling/verification-before-completion/writing-for-agents/receiving-code-review收窄方法，B1自检4文件存在；没有再读同技能、没有第三席/新权限闸。AGENTS/Graft定位沿用紧接前模块事实，锁数据直接读JSON。
+
+## 第一性原理
+为什么要存在：锁使已存在CI npm ci按固定树安装；三HTML没有npm依赖规则，属于GEN013技术性，不能因HTML沉默删除。删除锁破坏现入口。
+实际证据是什么：本B5新跑原生全图/字段/SRI反例、npm ls、npm audit。B1同字节dry-run exit0和现配置/公告/发行代码阅读作为明确复用证据，不冒称本B5又做安装预演。所有220节点/582边重新原生判断。
+哪些前提未证：远端217tarball字节、真实npm安装、平台构建、前端测试、npm10.9.8逐项兼容本轮没实跑。磁盘三旧叶与锁不同，不称修补版已运行；audit红保留。
+
+## 顺从式18GEN重新判断
+| ID | 当前证据与结论 |
+|---|---|
+| GEN-001 | 必要性：锁定确定依赖树供CI npm ci；嵌套pluginutils同版副本和可选平台包都有npm解析位置，不凭重复文本删锁。 |
+| GEN-002 | 本次原生loadVirtual、npm ls全树、npm ci离线dry-run均exit0；仅证明锁可解析/安装计划，未实际安装或执行业务。 |
+| GEN-003 | 217项SRI用错误payload均拒绝，断言可失败；本文件不是业务测试，不声称覆盖前端用例。 |
+| GEN-004 | JSON完整严格解析；所有217resolved均HTTPS registry.npmjs.org、无userinfo，摘要sha512且64字节；依赖范围交由Arborist全边验证。 |
+| GEN-005 | 无业务授权配置；根/workspace/link为工程元数据，未出现默认赋权。 |
+| GEN-006 | 两清单name/version/dependencies/devDependencies/workspaces/engines逐项等值；220条引用一致，未改数据库事务。 |
+| GEN-007 | 无业务并发或幂等入口；锁的确定依赖不等于业务幂等。没有相关实现可判缺。 |
+| GEN-008 | 根/web/唯一workspace link一致，lockfileVersion3、documentVersionV0.02保留，无业务DTO/枚举。 |
+| GEN-009 | npm audit实际exit1保留，ls/dry明确区分，不吞错；SRI反例拒绝而非伪成功。 |
+| GEN-010 | 007公告仍命中4.1.9，但现Vite仅react插件，Vitest jsdom无browser；上游公告与发行node.js核对，按铁律6只登记现未接入口。不报无漏洞。 |
+| GEN-011 | 本报告记录源码哈希、命令、输出、边界；锁不是业务审计事件实现。 |
+| GEN-012 | 有限220记录582边，无应用循环/缓存/连接新增；平台optional不触发全平台执行。 |
+| GEN-013 | 原生树0invalid/0missing/0extraneous，116nodeengine与24.21.0相容；npm11.19.0与声明npm10.9.8差异披露。本轮未用10重跑不作其验证声明。 |
+| GEN-014 | 无数据库迁移，不将锁版与SQL迁移混同。 |
+| GEN-015 | 无用户界面文案；包名英文为标识符，不能以界面中文要求重命名。 |
+| GEN-016 | lock与两清单一致；dry-run不是真实安装。安装目录旧三叶版本与锁不一致在输出显式出现，既有node_modules不能证明修补版已经运行。 |
+| GEN-017 | 全部字段属于技术性依赖描述；没有业务冲突/细化/添加，不提无依据删除或功能扩充。 |
+| GEN-018 | 证据为当前完整源字段、可复现npm/Node命令、上游公告原文；旧票只作输入，不继承其PASS。 |
+
+上述GEN002中安装预演指本批B1同字节复用，GEN010官方公告和发行代码亦B1实际读取；本B5没有再GET。其余“本次”解析/SRI/镜像/原生图/engine/audit/ls为本B5新跑，下方原始输出为准，不混用时序。
+
+## 全范围分类和对抗
+所有元数据/220记录全部技术性；无业务冲突/细化/添加。根空键与apps/web镜像、唯一apps-web链接无SRI要求；其余217全部HTTPS npmjs无userinfo并具64字节sha512。嵌套副本与跨平台optional不是删除理由，0extraneous；29可选peer缺失的旧外席补证不是必选缺失。本席新跑原生边无invalid/missing。
+对抗1：只看known三包？本B5遍历220/582，后附全表。
+对抗2：SRI格式可以冒充下载认证？不可以；217错误payload拒绝，仅验证机制。dry本身不抽取。
+对抗3：audit红就要求升级？本项目公开mock插件入口未启用，公告版本命中属实但铁律6只登记，007不入队。若实际入口变化则重新判断；本次配置SHA不变。
+对抗4：node_modules旧叶推翻锁？不推翻，源锁钉扎修补版但安装态未更新；本票不声称部署或运行修补成功。
+对抗5：改坏清单/范围可被dry漏掉？镜像用deepEqual独立验证，不靠dry证明字符串相等。坏摘要只用ssri反例证明拒绝，不靠dry。
+对抗6：权限/数据库/业务UI仍可能有问题？不在本模块实现，不把锁PASS当这些业务PASS。全局门禁红不遮蔽。
+
+## 七项既有输入逐项
+001 nanoid3.3.18、002 postcss8.5.23依赖nanoid^3.3.16、003undici7.29.0：锁未回退，本B5audit不含这三项，旧缺陷/修复保留；当前均无待修。
+004根/web/唯一链接与清单一致；005全图原生相容；006217URL/SRI且明确字节验证边界；007同GHSA两包moderate/exit1，配置未注册公开入口，按已定稿口径只登记，不擅自升级。七项技术性/当前缺陷否/队列否。没有新CX，没复用ID处理新对象。questions/M004*为空。
+全局PGM台账未同批同步及入口快照漂移归既有模块，未在此修；不称发布门禁绿。
+
+## 本B5实际输出（Node stdin代码与B1V0.08末附一致）
+```json
+{
+  "native": {
+    "exit": 0,
+    "data": {
+      "records": 220,
+      "mirror": [
+        ":name",
+        ":version",
+        ":workspaces",
+        ":dependencies",
+        ":devDependencies",
+        ":engines",
+        "apps/web:name",
+        "apps/web:version",
+        "apps/web:workspaces",
+        "apps/web:dependencies",
+        "apps/web:devDependencies",
+        "apps/web:engines"
+      ],
+      "sri": 217,
+      "wrongPayloadRejected": 217,
+      "engines": 116,
+      "engineMismatch": [],
+      "platform": 28,
+      "installScripts": [
+        "node_modules/fsevents",
+        "node_modules/playwright/node_modules/fsevents"
+      ],
+      "urls": [],
+      "invalid": [],
+      "missing": [],
+      "extraneous": [],
+      "edgeCount": 582,
+      "inventory": 220,
+      "node": "v24.21.0",
+      "npm": "11.19.0",
+      "arborist": "9.9.1"
+    },
+    "stderr": ""
+  },
+  "audit": {
+    "exit": 1,
+    "data": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {
+        "@vitest/mocker": {
+          "name": "@vitest/mocker",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1193684,
+              "name": "@vitest/mocker",
+              "dependency": "@vitest/mocker",
+              "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
+              "url": "https://github.com/advisories/GHSA-82fw-gwwq-j7x9",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 5.9,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+              },
+              "range": ">=2.1.0 <4.1.11"
+            }
+          ],
+          "effects": [
+            "vitest"
+          ],
+          "range": "2.1.0 - 4.1.10",
+          "nodes": [
+            "node_modules/@vitest/mocker"
+          ],
+          "fixAvailable": true
+        },
+        "vitest": {
+          "name": "vitest",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "@vitest/mocker",
+            {
+              "source": 1193683,
+              "name": "vitest",
+              "dependency": "vitest",
+              "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
+              "url": "https://github.com/advisories/GHSA-82fw-gwwq-j7x9",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 5.9,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+              },
+              "range": ">=2.1.0 <4.1.11"
+            }
+          ],
+          "effects": [],
+          "range": "2.1.0-beta.1 - 4.1.10",
+          "nodes": [
+            "node_modules/vitest"
+          ],
+          "fixAvailable": true
+        }
+      },
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 2,
+          "high": 0,
+          "critical": 0,
+          "total": 2
+        },
+        "dependencies": {
+          "prod": 74,
+          "dev": 146,
+          "optional": 34,
+          "peer": 11,
+          "peerOptional": 0,
+          "total": 219
+        }
+      }
+    },
+    "stderr": ""
+  },
+  "ls": {
+    "exit": 0,
+    "data": {
+      "problems": [],
+      "direct": [
+        "@playwright/test",
+        "apps-web",
+        "yaml"
+      ]
+    },
+    "stderr": ""
+  },
+  "source": {
+    "sha": "d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef",
+    "lines": 3321
+  },
+  "lock": "b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458",
+  "questions": [],
+  "configs": {
+    "package.json": "350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f",
+    "apps/web/package.json": "b8017d9782b4c00eac1c992204dad2b009e23db7c4c804737bdf8fcbc90b8f1f",
+    "apps/web/vite.config.ts": "9ec4c8e6b012120c78aa7911c7b51d46cec7c767897227e8059b4ae0e784521f",
+    "apps/web/vitest.config.ts": "07727cd131923d5c046d27860e7899763061ea689423db6153c3fa63d5a39682"
+  }
+}
+```
+
+本B5命令：node -（原生全图验证）；npm ls --package-lock-only --all --json；npm audit --package-lock-only --ignore-scripts --json。前两exit0，auditexit1；源SHA前后相同。未真实npm ci/install/npx/npm exec、未tarball下载、未完整构建/后端/UI/Android、未数据库/服务/部署，未fetch/commit/push/worktree。
+
+## 全字段覆盖220条
+首层1—7、尾部3320—3321为结构，其余连续如下。每条均技术性/无本次待修。
+
+| # | 行 | 包位置 | 版本或链接 | 全字段 |
+|---|---|---|---|---|
+|1|8—21|(root)|0.1.0|name,version,workspaces,devDependencies,engines|
+|2|22—44|apps/web|0.1.0|name,version,dependencies,devDependencies|
+|3|45—51|apps/web/node_modules/@rolldown/pluginutils|1.0.1|version,resolved,integrity,dev,license|
+|4|52—77|apps/web/node_modules/@vitejs/plugin-react|6.0.2|version,resolved,integrity,dev,license,dependencies,engines,peerDependencies,peerDependenciesMeta|
+|5|78—84|node_modules/@adobe/css-tools|4.5.0|version,resolved,integrity,dev,license|
+|6|85—93|node_modules/@ant-design/colors|7.2.1|version,resolved,integrity,license,dependencies|
+|7|94—112|node_modules/@ant-design/cssinjs|1.24.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|8|113—127|node_modules/@ant-design/cssinjs-utils|1.1.3|version,resolved,integrity,license,dependencies,peerDependencies|
+|9|128—139|node_modules/@ant-design/fast-color|2.0.6|version,resolved,integrity,license,dependencies,engines|
+|10|140—159|node_modules/@ant-design/icons|5.6.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|11|160—165|node_modules/@ant-design/icons-svg|4.4.2|version,resolved,integrity,license|
+|12|166—181|node_modules/@ant-design/react-slick|1.1.2|version,resolved,integrity,license,dependencies,peerDependencies|
+|13|182—198|node_modules/@asamuzakjp/css-color|5.1.11|version,resolved,integrity,dev,license,dependencies,engines|
+|14|199—215|node_modules/@asamuzakjp/dom-selector|7.1.1|version,resolved,integrity,dev,license,dependencies,engines|
+|15|216—225|node_modules/@asamuzakjp/generational-cache|1.0.1|version,resolved,integrity,dev,license,engines|
+|16|226—232|node_modules/@asamuzakjp/nwsapi|2.3.9|version,resolved,integrity,dev,license|
+|17|233—248|node_modules/@babel/code-frame|7.29.7|version,resolved,integrity,dev,license,peer,dependencies,engines|
+|18|249—259|node_modules/@babel/helper-validator-identifier|7.29.7|version,resolved,integrity,dev,license,peer,engines|
+|19|260—268|node_modules/@babel/runtime|7.29.7|version,resolved,integrity,license,engines|
+|20|269—281|node_modules/@bramus/specificity|2.4.2|version,resolved,integrity,dev,license,dependencies,bin|
+|21|282—301|node_modules/@csstools/color-helpers|6.0.2|version,resolved,integrity,dev,funding,license,engines|
+|22|302—325|node_modules/@csstools/css-calc|3.2.1|version,resolved,integrity,dev,funding,license,engines,peerDependencies|
+|23|326—353|node_modules/@csstools/css-color-parser|4.1.7|version,resolved,integrity,dev,funding,license,dependencies,engines,peerDependencies|
+|24|354—376|node_modules/@csstools/css-parser-algorithms|4.0.0|version,resolved,integrity,dev,funding,license,engines,peerDependencies|
+|25|377—401|node_modules/@csstools/css-syntax-patches-for-csstree|1.1.5|version,resolved,integrity,dev,funding,license,peerDependencies,peerDependenciesMeta|
+|26|402—421|node_modules/@csstools/css-tokenizer|4.0.0|version,resolved,integrity,dev,funding,license,engines|
+|27|422—433|node_modules/@emnapi/core|1.10.0|version,resolved,integrity,dev,license,optional,dependencies|
+|28|434—444|node_modules/@emnapi/runtime|1.10.0|version,resolved,integrity,dev,license,optional,dependencies|
+|29|445—455|node_modules/@emnapi/wasi-threads|1.2.1|version,resolved,integrity,dev,license,optional,dependencies|
+|30|456—461|node_modules/@emotion/hash|0.8.0|version,resolved,integrity,license|
+|31|462—467|node_modules/@emotion/unitless|0.7.5|version,resolved,integrity,license|
+|32|468—485|node_modules/@exodus/bytes|1.15.1|version,resolved,integrity,dev,license,engines,peerDependencies,peerDependenciesMeta|
+|33|486—492|node_modules/@jridgewell/sourcemap-codec|1.5.5|version,resolved,integrity,dev,license|
+|34|493—511|node_modules/@napi-rs/wasm-runtime|1.1.5|version,resolved,integrity,dev,license,optional,dependencies,funding,peerDependencies|
+|35|512—521|node_modules/@oxc-project/types|0.133.0|version,resolved,integrity,dev,license,funding|
+|36|522—537|node_modules/@playwright/test|1.61.0|version,resolved,integrity,dev,license,dependencies,bin,engines|
+|37|538—549|node_modules/@rc-component/async-validator|5.1.0|version,resolved,integrity,license,dependencies,engines|
+|38|550—565|node_modules/@rc-component/color-picker|2.0.1|version,resolved,integrity,license,dependencies,peerDependencies|
+|39|566—579|node_modules/@rc-component/context|1.4.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|40|580—591|node_modules/@rc-component/mini-decimal|1.1.3|version,resolved,integrity,license,dependencies,engines|
+|41|592—609|node_modules/@rc-component/mutate-observer|1.1.0|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|42|610—627|node_modules/@rc-component/portal|1.1.2|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|43|628—643|node_modules/@rc-component/qrcode|1.1.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|44|644—663|node_modules/@rc-component/tour|1.15.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|45|664—684|node_modules/@rc-component/trigger|2.3.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|46|685—701|node_modules/@rolldown/binding-android-arm64|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|47|702—718|node_modules/@rolldown/binding-darwin-arm64|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|48|719—735|node_modules/@rolldown/binding-darwin-x64|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|49|736—752|node_modules/@rolldown/binding-freebsd-x64|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|50|753—769|node_modules/@rolldown/binding-linux-arm-gnueabihf|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|51|770—786|node_modules/@rolldown/binding-linux-arm64-gnu|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|52|787—803|node_modules/@rolldown/binding-linux-arm64-musl|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|53|804—820|node_modules/@rolldown/binding-linux-ppc64-gnu|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|54|821—837|node_modules/@rolldown/binding-linux-s390x-gnu|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|55|838—854|node_modules/@rolldown/binding-linux-x64-gnu|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|56|855—871|node_modules/@rolldown/binding-linux-x64-musl|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|57|872—888|node_modules/@rolldown/binding-openharmony-arm64|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|58|889—907|node_modules/@rolldown/binding-wasm32-wasi|1.0.3|version,resolved,integrity,cpu,dev,license,optional,dependencies,engines|
+|59|908—924|node_modules/@rolldown/binding-win32-arm64-msvc|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|60|925—941|node_modules/@rolldown/binding-win32-x64-msvc|1.0.3|version,resolved,integrity,cpu,dev,license,optional,os,engines|
+|61|942—948|node_modules/@standard-schema/spec|1.1.0|version,resolved,integrity,dev,license|
+|62|949—969|node_modules/@testing-library/dom|10.4.1|version,resolved,integrity,dev,license,peer,dependencies,engines|
+|63|970—989|node_modules/@testing-library/jest-dom|6.9.1|version,resolved,integrity,dev,license,dependencies,engines|
+|64|990—996|node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api|0.6.3|version,resolved,integrity,dev,license|
+|65|997—1024|node_modules/@testing-library/react|16.3.2|version,resolved,integrity,dev,license,dependencies,engines,peerDependencies,peerDependenciesMeta|
+|66|1025—1038|node_modules/@testing-library/user-event|14.6.1|version,resolved,integrity,dev,license,engines,peerDependencies|
+|67|1039—1049|node_modules/@tybys/wasm-util|0.10.2|version,resolved,integrity,dev,license,optional,dependencies|
+|68|1050—1057|node_modules/@types/aria-query|5.0.4|version,resolved,integrity,dev,license,peer|
+|69|1058—1068|node_modules/@types/chai|5.2.3|version,resolved,integrity,dev,license,dependencies|
+|70|1069—1075|node_modules/@types/deep-eql|4.0.2|version,resolved,integrity,dev,license|
+|71|1076—1082|node_modules/@types/estree|1.0.9|version,resolved,integrity,dev,license|
+|72|1083—1092|node_modules/@types/react|19.2.16|version,resolved,integrity,dev,license,dependencies|
+|73|1093—1102|node_modules/@types/react-dom|19.2.3|version,resolved,integrity,dev,license,peerDependencies|
+|74|1103—1120|node_modules/@vitest/expect|4.1.9|version,resolved,integrity,dev,license,dependencies,funding|
+|75|1121—1147|node_modules/@vitest/mocker|4.1.9|version,resolved,integrity,dev,license,dependencies,funding,peerDependencies,peerDependenciesMeta|
+|76|1148—1160|node_modules/@vitest/pretty-format|4.1.9|version,resolved,integrity,dev,license,dependencies,funding|
+|77|1161—1174|node_modules/@vitest/runner|4.1.9|version,resolved,integrity,dev,license,dependencies,funding|
+|78|1175—1190|node_modules/@vitest/snapshot|4.1.9|version,resolved,integrity,dev,license,dependencies,funding|
+|79|1191—1200|node_modules/@vitest/spy|4.1.9|version,resolved,integrity,dev,license,funding|
+|80|1201—1215|node_modules/@vitest/utils|4.1.9|version,resolved,integrity,dev,license,dependencies,funding|
+|81|1216—1226|node_modules/ansi-regex|5.0.1|version,resolved,integrity,dev,license,peer,engines|
+|82|1227—1240|node_modules/ansi-styles|5.2.0|version,resolved,integrity,dev,license,peer,engines,funding|
+|83|1241—1305|node_modules/antd|5.29.3|version,resolved,integrity,license,dependencies,funding,peerDependencies|
+|84|1306—1309|node_modules/apps-web|link→apps/web|resolved,link|
+|85|1310—1319|node_modules/aria-query|5.3.0|version,resolved,integrity,dev,license,dependencies|
+|86|1320—1329|node_modules/assertion-error|2.0.1|version,resolved,integrity,dev,license,engines|
+|87|1330—1339|node_modules/bidi-js|1.0.3|version,resolved,integrity,dev,license,dependencies|
+|88|1340—1349|node_modules/chai|6.2.2|version,resolved,integrity,dev,license,engines|
+|89|1350—1355|node_modules/classnames|2.5.1|version,resolved,integrity,license|
+|90|1356—1361|node_modules/compute-scroll-into-view|3.1.1|version,resolved,integrity,license|
+|91|1362—1368|node_modules/convert-source-map|2.0.0|version,resolved,integrity,dev,license|
+|92|1369—1377|node_modules/copy-to-clipboard|3.3.3|version,resolved,integrity,license,dependencies|
+|93|1378—1391|node_modules/css-tree|3.2.1|version,resolved,integrity,dev,license,dependencies,engines|
+|94|1392—1398|node_modules/css.escape|1.5.1|version,resolved,integrity,dev,license|
+|95|1399—1404|node_modules/csstype|3.2.3|version,resolved,integrity,license|
+|96|1405—1418|node_modules/data-urls|7.0.0|version,resolved,integrity,dev,license,dependencies,engines|
+|97|1419—1424|node_modules/dayjs|1.11.21|version,resolved,integrity,license|
+|98|1425—1431|node_modules/decimal.js|10.6.0|version,resolved,integrity,dev,license|
+|99|1432—1441|node_modules/dequal|2.0.3|version,resolved,integrity,dev,license,engines|
+|100|1442—1451|node_modules/detect-libc|2.1.2|version,resolved,integrity,dev,license,engines|
+|101|1452—1459|node_modules/dom-accessibility-api|0.5.16|version,resolved,integrity,dev,license,peer|
+|102|1460—1472|node_modules/entities|8.0.0|version,resolved,integrity,dev,license,engines,funding|
+|103|1473—1479|node_modules/es-module-lexer|2.1.0|version,resolved,integrity,dev,license|
+|104|1480—1489|node_modules/estree-walker|3.0.3|version,resolved,integrity,dev,license,dependencies|
+|105|1490—1499|node_modules/expect-type|1.3.0|version,resolved,integrity,dev,license,engines|
+|106|1500—1517|node_modules/fdir|6.5.0|version,resolved,integrity,dev,license,engines,peerDependencies,peerDependenciesMeta|
+|107|1518—1532|node_modules/fsevents|2.3.3|version,resolved,integrity,dev,hasInstallScript,license,optional,os,engines|
+|108|1533—1545|node_modules/html-encoding-sniffer|6.0.0|version,resolved,integrity,dev,license,dependencies,engines|
+|109|1546—1555|node_modules/indent-string|4.0.0|version,resolved,integrity,dev,license,engines|
+|110|1556—1562|node_modules/is-potential-custom-element-name|1.0.1|version,resolved,integrity,dev,license|
+|111|1563—1570|node_modules/js-tokens|4.0.0|version,resolved,integrity,dev,license,peer|
+|112|1571—1611|node_modules/jsdom|29.1.1|version,resolved,integrity,dev,license,dependencies,engines,peerDependencies,peerDependenciesMeta|
+|113|1612—1620|node_modules/json2mq|0.2.0|version,resolved,integrity,license,dependencies|
+|114|1621—1650|node_modules/lightningcss|1.32.0|version,resolved,integrity,dev,license,dependencies,engines,funding,optionalDependencies|
+|115|1651—1671|node_modules/lightningcss-android-arm64|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|116|1672—1692|node_modules/lightningcss-darwin-arm64|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|117|1693—1713|node_modules/lightningcss-darwin-x64|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|118|1714—1734|node_modules/lightningcss-freebsd-x64|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|119|1735—1755|node_modules/lightningcss-linux-arm-gnueabihf|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|120|1756—1776|node_modules/lightningcss-linux-arm64-gnu|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|121|1777—1797|node_modules/lightningcss-linux-arm64-musl|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|122|1798—1818|node_modules/lightningcss-linux-x64-gnu|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|123|1819—1839|node_modules/lightningcss-linux-x64-musl|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|124|1840—1860|node_modules/lightningcss-win32-arm64-msvc|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|125|1861—1881|node_modules/lightningcss-win32-x64-msvc|1.32.0|version,resolved,integrity,cpu,dev,license,optional,os,engines,funding|
+|126|1882—1891|node_modules/lru-cache|11.5.1|version,resolved,integrity,dev,license,engines|
+|127|1892—1902|node_modules/lz-string|1.5.0|version,resolved,integrity,dev,license,peer,bin|
+|128|1903—1912|node_modules/magic-string|0.30.21|version,resolved,integrity,dev,license,dependencies|
+|129|1913—1919|node_modules/mdn-data|2.27.1|version,resolved,integrity,dev,license|
+|130|1920—1929|node_modules/min-indent|1.0.1|version,resolved,integrity,dev,license,engines|
+|131|1930—1948|node_modules/nanoid|3.3.18|version,resolved,integrity,dev,funding,license,bin,engines|
+|132|1949—1962|node_modules/obug|2.1.3|version,resolved,integrity,dev,funding,license,engines|
+|133|1963—1975|node_modules/parse5|8.0.1|version,resolved,integrity,dev,license,dependencies,funding|
+|134|1976—1982|node_modules/pathe|2.0.3|version,resolved,integrity,dev,license|
+|135|1983—1989|node_modules/picocolors|1.1.1|version,resolved,integrity,dev,license|
+|136|1990—2002|node_modules/picomatch|4.0.4|version,resolved,integrity,dev,license,engines,funding|
+|137|2003—2021|node_modules/playwright|1.61.0|version,resolved,integrity,dev,license,dependencies,bin,engines,optionalDependencies|
+|138|2022—2034|node_modules/playwright-core|1.61.0|version,resolved,integrity,dev,license,bin,engines|
+|139|2035—2049|node_modules/playwright/node_modules/fsevents|2.3.2|version,resolved,integrity,dev,hasInstallScript,license,optional,os,engines|
+|140|2050—2078|node_modules/postcss|8.5.23|version,resolved,integrity,dev,funding,license,dependencies,engines|
+|141|2079—2094|node_modules/pretty-format|27.5.1|version,resolved,integrity,dev,license,peer,dependencies,engines|
+|142|2095—2102|node_modules/pretty-format/node_modules/react-is|17.0.2|version,resolved,integrity,dev,license,peer|
+|143|2103—2112|node_modules/punycode|2.3.1|version,resolved,integrity,dev,license,engines|
+|144|2113—2121|node_modules/qrcode.react|4.2.0|version,resolved,integrity,license,peerDependencies|
+|145|2122—2138|node_modules/rc-cascader|3.34.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|146|2139—2153|node_modules/rc-checkbox|3.5.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|147|2154—2169|node_modules/rc-collapse|3.9.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|148|2170—2186|node_modules/rc-dialog|9.6.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|149|2187—2203|node_modules/rc-drawer|7.3.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|150|2204—2219|node_modules/rc-dropdown|4.2.1|version,resolved,integrity,license,dependencies,peerDependencies|
+|151|2220—2237|node_modules/rc-field-form|2.7.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|152|2238—2255|node_modules/rc-image|7.12.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|153|2256—2270|node_modules/rc-input|1.8.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|154|2271—2287|node_modules/rc-input-number|9.5.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|155|2288—2306|node_modules/rc-mentions|2.20.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|156|2307—2324|node_modules/rc-menu|9.16.1|version,resolved,integrity,license,dependencies,peerDependencies|
+|157|2325—2339|node_modules/rc-motion|2.9.5|version,resolved,integrity,license,dependencies,peerDependencies|
+|158|2340—2358|node_modules/rc-notification|5.6.4|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|159|2359—2374|node_modules/rc-overflow|1.5.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|160|2375—2389|node_modules/rc-pagination|5.1.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|161|2390—2428|node_modules/rc-picker|4.11.3|version,resolved,integrity,license,dependencies,engines,peerDependencies,peerDependenciesMeta|
+|162|2429—2443|node_modules/rc-progress|4.0.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|163|2444—2461|node_modules/rc-rate|2.13.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|164|2462—2477|node_modules/rc-resize-observer|1.4.3|version,resolved,integrity,license,dependencies,peerDependencies|
+|165|2478—2493|node_modules/rc-segmented|2.7.1|version,resolved,integrity,license,dependencies,peerDependencies|
+|166|2494—2515|node_modules/rc-select|14.16.8|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|167|2516—2533|node_modules/rc-slider|11.1.9|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|168|2534—2551|node_modules/rc-steps|6.0.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|169|2552—2566|node_modules/rc-switch|4.1.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|170|2567—2587|node_modules/rc-table|7.54.0|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|171|2588—2609|node_modules/rc-tabs|15.7.0|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|172|2610—2626|node_modules/rc-textarea|1.10.2|version,resolved,integrity,license,dependencies,peerDependencies|
+|173|2627—2642|node_modules/rc-tooltip|6.4.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|174|2643—2662|node_modules/rc-tree|5.13.1|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|175|2663—2679|node_modules/rc-tree-select|5.27.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|176|2680—2694|node_modules/rc-upload|4.11.0|version,resolved,integrity,license,dependencies,peerDependencies|
+|177|2695—2708|node_modules/rc-util|5.44.4|version,resolved,integrity,license,dependencies,peerDependencies|
+|178|2709—2727|node_modules/rc-virtual-list|3.19.2|version,resolved,integrity,license,dependencies,engines,peerDependencies|
+|179|2728—2736|node_modules/react|19.2.7|version,resolved,integrity,license,engines|
+|180|2737—2748|node_modules/react-dom|19.2.7|version,resolved,integrity,license,dependencies,peerDependencies|
+|181|2749—2754|node_modules/react-is|18.3.1|version,resolved,integrity,license|
+|182|2755—2768|node_modules/redent|3.0.0|version,resolved,integrity,dev,license,dependencies,engines|
+|183|2769—2778|node_modules/require-from-string|2.0.2|version,resolved,integrity,dev,license,engines|
+|184|2779—2784|node_modules/resize-observer-polyfill|1.5.1|version,resolved,integrity,license|
+|185|2785—2818|node_modules/rolldown|1.0.3|version,resolved,integrity,dev,license,dependencies,bin,engines,optionalDependencies|
+|186|2819—2825|node_modules/rolldown/node_modules/@rolldown/pluginutils|1.0.1|version,resolved,integrity,dev,license|
+|187|2826—2838|node_modules/saxes|6.0.0|version,resolved,integrity,dev,license,dependencies,engines|
+|188|2839—2844|node_modules/scheduler|0.27.0|version,resolved,integrity,license|
+|189|2845—2853|node_modules/scroll-into-view-if-needed|3.1.0|version,resolved,integrity,license,dependencies|
+|190|2854—2860|node_modules/siginfo|2.0.0|version,resolved,integrity,dev,license|
+|191|2861—2870|node_modules/source-map-js|1.2.1|version,resolved,integrity,dev,license,engines|
+|192|2871—2877|node_modules/stackback|0.0.2|version,resolved,integrity,dev,license|
+|193|2878—2884|node_modules/std-env|4.1.0|version,resolved,integrity,dev,license|
+|194|2885—2890|node_modules/string-convert|0.2.1|version,resolved,integrity,license|
+|195|2891—2903|node_modules/strip-indent|3.0.0|version,resolved,integrity,dev,license,dependencies,engines|
+|196|2904—2909|node_modules/stylis|4.4.0|version,resolved,integrity,license|
+|197|2910—2916|node_modules/symbol-tree|3.2.4|version,resolved,integrity,dev,license|
+|198|2917—2925|node_modules/throttle-debounce|5.0.2|version,resolved,integrity,license,engines|
+|199|2926—2932|node_modules/tinybench|2.9.0|version,resolved,integrity,dev,license|
+|200|2933—2942|node_modules/tinyexec|1.2.4|version,resolved,integrity,dev,license,engines|
+|201|2943—2959|node_modules/tinyglobby|0.2.17|version,resolved,integrity,dev,license,dependencies,engines,funding|
+|202|2960—2969|node_modules/tinyrainbow|3.1.0|version,resolved,integrity,dev,license,engines|
+|203|2970—2982|node_modules/tldts|7.4.3|version,resolved,integrity,dev,license,dependencies,bin|
+|204|2983—2989|node_modules/tldts-core|7.4.3|version,resolved,integrity,dev,license|
+|205|2990—2995|node_modules/toggle-selection|1.0.6|version,resolved,integrity,license|
+|206|2996—3008|node_modules/tough-cookie|6.0.1|version,resolved,integrity,dev,license,dependencies,engines|
+|207|3009—3021|node_modules/tr46|6.0.0|version,resolved,integrity,dev,license,dependencies,engines|
+|208|3022—3029|node_modules/tslib|2.8.1|version,resolved,integrity,dev,license,optional|
+|209|3030—3043|node_modules/typescript|5.9.3|version,resolved,integrity,dev,license,bin,engines|
+|210|3044—3053|node_modules/undici|7.29.0|version,resolved,integrity,dev,license,engines|
+|211|3054—3131|node_modules/vite|8.0.16|version,resolved,integrity,dev,license,dependencies,bin,engines,funding,optionalDependencies,peerDependencies,peerDependenciesMeta|
+|212|3132—3221|node_modules/vitest|4.1.9|version,resolved,integrity,dev,license,dependencies,bin,engines,funding,peerDependencies,peerDependenciesMeta|
+|213|3222—3234|node_modules/w3c-xmlserializer|5.0.0|version,resolved,integrity,dev,license,dependencies,engines|
+|214|3235—3244|node_modules/webidl-conversions|8.0.1|version,resolved,integrity,dev,license,engines|
+|215|3245—3254|node_modules/whatwg-mimetype|5.0.0|version,resolved,integrity,dev,license,engines|
+|216|3255—3269|node_modules/whatwg-url|16.0.1|version,resolved,integrity,dev,license,dependencies,engines|
+|217|3270—3286|node_modules/why-is-node-running|2.3.0|version,resolved,integrity,dev,license,dependencies,bin,engines|
+|218|3287—3296|node_modules/xml-name-validator|5.0.0|version,resolved,integrity,dev,license,engines|
+|219|3297—3303|node_modules/xmlchars|2.2.0|version,resolved,integrity,dev,license|
+|220|3304—3319|node_modules/yaml|2.9.0|version,resolved,integrity,dev,license,bin,engines,funding|
+
+本席B5 PASS。220记录/3321行/18GEN全部重判，无新问题。当前外席B5未读，模块IN_PROGRESS，不提前双PASS。

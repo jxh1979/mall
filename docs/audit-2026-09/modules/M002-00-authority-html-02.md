@@ -1,5 +1,18 @@
 # M002 — 业务需求正本／需求HTML／第2段
-版本：V0.02
+版本：V0.03
+
+## 当前收口：V0.14判据锁全量复审PASS
+ledger V7.62已先登记M002 PASS。B1 self V0.13/Grok V0.10双PASS；B2 self V0.14/Grok V0.11双PASS；findings V3.34四项队列均否，跳新增B3/B4，B3累计2不变。
+B5-r2 self/Grok均V0.03完整报告已读完，双PASS，Grok真实exit0。
+- self SHA256 1a16c3fcb0f3fa7b910e746bd23b2693b98269bfd2eb81b346a5b7304741a98a
+- Grok SHA256 4ed8b24b44c17c4508bd735e9d44d3b49330524d4b4145c20d50bfd9eafbda84
+- B5后四值（实算/sidecar/ledger/Grok）均为 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+唯一范围治理HTML V0.13全979行，SHA256 5c4594a73e767c704238ad311899903dbaaf94503e4a4cc18f21a5596e67429f；84映射三线全量重新评估。两席明确区分同字节全文阅读复用与本次验证，不继承旧PASS。
+66摘录全部匹配，18section/31内部链接/4表thead，结构正负例通过。入口锚点与其回归测试通过；全局html-ledger-sync仍红：获批680/871现文待同批同步M426 business-decision-ledger，检查器属M008，已作为归属模块B1输入保留。不是本HTML自相矛盾，也不是全仓或发布PASS。
+本次新finding空、无添加/未答questions/新HTML申请。无业务文件修改，无新B3。下一模块M003；M009单次权限消费代码仍待执行。HEAD e456ba96c84185c8d39f18f548011daac48a6466，未fetch/commit/push/部署。COUNT仍1。
+以下旧V0.02收口全部保留历史，不代表当前锁或现文件版本。
+
+## 历史 V0.02 收口
 
 当前状态：PASS。当前471模块计划、控制V0.17；M001保持PASS。两席完整B5-r2均PASS，根读取Grok完整311行并校验四值相等后，已先将ledger V1.61的M002置PASS，再写本文件；下方旧322模块收口仅保留历史。
 
