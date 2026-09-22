@@ -1,4 +1,4 @@
-# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.03
+# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.04
 
 > 创建日期：2026-06-18
 > 状态：权威安全规格（补齐此前缺口——隔离模型此前仅存在于各迁移 .sql 注释中，无单一权威文档）。
@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V430**，发现 **170** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V432**，发现 **172** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -104,6 +104,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_table_sessions` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_tables` | `merchant_id` + `space_id` | direct | V047, V084 | `V047__bar_security_merchant_isolation.sql`<br>`V084__object_space_mapping.sql` |
 | `business_entity_bindings` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
+| `business_entity_projects` | `project_id` | direct | V432 | `V432__m009_project_profiles_and_associations.sql` |
 | `business_process_instances` | `merchant_id` + `project_id` + `venue_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
 | `business_review_locks` | `project_id` | direct | V216 | `V216__business_review_locks.sql` |
 | `channel_fee_configs` | `project_id` | direct | V327 | `V327__settlement_channel_fee_configs.sql` |
@@ -172,6 +173,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_fee_notification_recipient` | `merchant_id` | direct | V182 | `V182__merchant_fee_notification_recipient.sql` |
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
+| `merchants` | `project_id` | direct | V432 | `V432__m009_project_profiles_and_associations.sql` |
 | `pass_gift_cost_configs` | `project_id` | direct | V373 | `V373__pass_gift_cost_configs.sql` |
 | `pass_gift_cost_variance_ledger` | `project_id` | direct | V377 | `V377__pass_gift_variance_ledger.sql` |
 | `platform_retention_rules` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |

@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,6 +36,7 @@ class LeasingSignAtomicityJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbcTemplate;
 
     private String suffix;
+    private String projectId;
     private String subject;   // contract_subject_id 标记（同时是 merchant/binding 三主体快照）
     private String leadId;
     private String intentId;
@@ -51,12 +52,14 @@ class LeasingSignAtomicityJdbcIntegrationTests {
                 + "(SELECT id FROM contracts WHERE contract_subject_id = ?)", subject);
         jdbcTemplate.update("DELETE FROM contracts WHERE contract_subject_id = ?", subject);
         jdbcTemplate.update("DELETE FROM business_entity_bindings WHERE contract_entity_id = ?", subject);
-        jdbcTemplate.update("DELETE FROM merchants WHERE contract_entity_id = ?", subject);
+        jdbcTemplate.update("DELETE FROM merchants WHERE project_id = ?", projectId);
+        jdbcTemplate.update("DELETE FROM business_entity_projects WHERE project_id = ?", projectId);
         jdbcTemplate.update("DELETE FROM business_entities WHERE id = ?", subject); // M009-006 夹具主体
         jdbcTemplate.update("DELETE FROM leasing_intents WHERE id = ?", intentId);
         jdbcTemplate.update("DELETE FROM leasing_leads WHERE id = ?", leadId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "%" + suffix + "%");
         jdbcTemplate.update("DELETE FROM spaces WHERE id LIKE ?", "sp_%" + suffix);
+        jdbcTemplate.update("DELETE FROM projects WHERE id = ?", projectId);
     }
 
     /** AUD-002：签约中途失败（草稿空间不存在）→ 商户/四主体绑定/合同全回滚，无孤儿；线索未置 signed。 */
@@ -103,10 +106,35 @@ class LeasingSignAtomicityJdbcIntegrationTests {
         assertThat(countContracts()).isEqualTo(1);
     }
 
+
+    @Test
+    void futureSignKeepsCurrentSubjectsEmptyAndRetainsIntentProject() {
+        String spaceId = "sp_future_" + newSuffix();
+        seedSpace(spaceId);
+        seed(spaceId);
+        LocalDate future = LocalDate.now(java.time.ZoneOffset.UTC).plusYears(1);
+        ContractRecord contract = leasingService.signIntent(intentId, new LeasingSignRequest(
+                null, subject, null, null, future, future.plusYears(1), "sign_" + suffix));
+        Map<String, Object> merchant = jdbcTemplate.queryForMap(
+                "SELECT project_id, business_entity_id, contract_entity_id, settlement_entity_id FROM merchants WHERE id = ?",
+                contract.merchantId());
+        assertThat(merchant).containsEntry("project_id", projectId)
+                .containsEntry("business_entity_id", null).containsEntry("contract_entity_id", null)
+                .containsEntry("settlement_entity_id", null);
+        assertThat(jdbcTemplate.queryForMap(
+                "SELECT status, effective_from, effective_to FROM business_entity_bindings WHERE merchant_id = ?",
+                contract.merchantId())).containsEntry("status", "inactive")
+                .containsEntry("effective_from", java.sql.Date.valueOf(future)).containsEntry("effective_to", null);
+        assertThat(countActiveBindings()).isZero();
+        assertThat(countMerchants()).isEqualTo(1);
+    }
+
     // ---- helpers ----
 
     private String newSuffix() {
         suffix = UUID.randomUUID().toString().substring(0, 8);
+        projectId = "lease_project_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '签约项目', 'active', now(), now())", projectId);
         subject = "be_test_" + suffix;
         leadId = "lead_aud_" + suffix;
         intentId = "intent_aud_" + suffix;
@@ -114,27 +142,30 @@ class LeasingSignAtomicityJdbcIntegrationTests {
     }
 
     private void seed(String intendedSpaceId) {
-        TestSecurityActors.asPlatformAdmin();
+        var actor = new com.complex.platform.access.AccessActor("usr_admin", "platform_admin_user", "platform_admin", projectId, null, "active");
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(actor, "token", java.util.List.of()));
         Instant now = Instant.now();
         // M009-006：四类主体绑定要求主体真实存在（BEQR-143/PGM-026），合同主体须先在 business_entities 建档。
         jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at) "
                 + "VALUES (?, ?, 'management_company', 'active', now(), now())", subject, "签约测试合同主体");
+        jdbcTemplate.update("INSERT INTO business_entity_projects(business_entity_id,project_id) VALUES (?, ?)", subject, projectId);
         leasingRepository.saveLead(new LeasingLeadRecord(leadId, "签约测试联系人", "13800002222", "referral",
-                "retail", intendedSpaceId, null, null, "usr_sales", "negotiating", null, null, null, now, now));
+                "retail", intendedSpaceId, null, null, "usr_sales", "negotiating", null, null, projectId, now, now));
         leasingRepository.saveIntent(new LeasingIntentRecord(intentId, leadId, "pending_signing", intendedSpaceId,
-                null, Map.of(), now, "usr_supervisor", null, now, now));
+                null, Map.of(), now, "usr_supervisor", projectId, now, now));
     }
 
     private void seedSpace(String spaceId) {
         jdbcTemplate.update("INSERT INTO spaces (id, project_id, merchant_id, parent_space_id, space_name, "
                 + "space_type, floor_no, area_square_meter, status, created_at, updated_at) "
-                + "VALUES (?, NULL, NULL, NULL, ?, 'shop', '1F', 88.0, 'active', now(), now())",
-                spaceId, "签约测试铺位");
+                + "VALUES (?, ?, NULL, NULL, ?, 'shop', '1F', 88.0, 'active', now(), now())",
+                spaceId, projectId, "签约测试铺位");
     }
 
     private int countMerchants() {
         return jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM merchants WHERE contract_entity_id = ?", Integer.class, subject);
+                "SELECT COUNT(*) FROM merchants WHERE project_id = ?", Integer.class, projectId);
     }
 
     private int countActiveBindings() {

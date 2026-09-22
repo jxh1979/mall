@@ -1,8 +1,9 @@
 package com.complex.platform.governance.dto;
+// 文件版本：V0.01
 
 import java.util.List;
 
-/** 条目3 空间类型字典 录入/修改请求（后台管理员维护）。typeCode 为唯一键，存在则更新名称/排序/状态。 */
+/** 空间类型字典新建请求（后台管理员维护）。typeCode 不得重复，新建状态固定为启用。 */
 public record SpaceTypeRequest(
         String idempotencyKey,
         String operatorNote,

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.05
 
 import com.complex.platform.access.*;
 import com.complex.platform.auth.SessionIssuer;
@@ -24,7 +24,7 @@ final class StaffTestActors {
     }
     static void master() {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new AccessActor(SessionIssuer.MASTER_USER_ID,SessionIssuer.MASTER_USERNAME,"platform_admin",null,null,"active"),"test",List.of()));
+                new AccessActor(SessionIssuer.MASTER_USER_ID,SessionIssuer.MASTER_USERNAME,com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE,null,null,"active"),"test",List.of()));
     }
 
     /** U05-003/U11-007：模拟私人手机安装时生成的 EC 密钥对 → [Base64(X.509 DER 公钥), SHA-256(DER) 十六进制指纹]。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.22
+// 文件版本：V0.27
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -322,7 +322,7 @@ class M010RegressionTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='staff.payroll.penalty_cap_requested' AND metadata->>'review_id'=?",
                 Integer.class, pending.reviewId())).isEqualTo(1);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new AccessActor("usr_master_authority","master-authority","platform_admin","m010_p",null,"active"),"test",List.of()));
+                new AccessActor("usr_master_authority","master-authority",com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE,"m010_p",null,"active"),"test",List.of()));
         assertThatThrownBy(() -> reviewService.approve(pending.reviewId(),new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(key(),"确认",List.of(),null,"approved","确认")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEPARTMENT_REVIEWS_PENDING"));
         for (var line : lines) {
@@ -331,7 +331,7 @@ class M010RegressionTests {
             assertThat(service.getPenaltyCap().value()).isEqualTo(2000);
         }
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new AccessActor("usr_master_authority","master-authority","platform_admin","m010_p",null,"active"),"test",List.of()));
+                new AccessActor("usr_master_authority","master-authority",com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE,"m010_p",null,"active"),"test",List.of()));
         reviewService.approve(pending.reviewId(),new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(key(),"最终确认",List.of(),null,"approved","确认"));
         assertThat(service.getPenaltyCap().value()).isEqualTo(1000);
         actor(manager,"platform_admin",null);
@@ -473,13 +473,15 @@ class M010RegressionTests {
     }
 
     @Test void OwnAndManagementProfileResponsesDoNotReturnPersonalValues() throws Exception {
-        var profile = profile(null);
+        access.updateUserScope(manager, "m010_p", registrationMerchant, manager, Instant.now());
+        actor(manager, "platform_admin", registrationMerchant);
+        var profile = profile(registrationMerchant);
         repository.saveProfile(new StaffProfileRecord(profile.id(), profile.projectId(), profile.merchantId(),
                 profile.userId(), profile.name(), "13800138000", "110101199001010000", null, "approved", manager,
                 profile.approvedAt(), null, "active", profile.createdAt(), Instant.now()));
         assertThat(json.writeValueAsString(controller.listProfiles(false))).contains("138****8000")
                 .doesNotContain("13800138000", "110101199001010000");
-        actor(profile.userId(), "staff", null);
+        actor(profile.userId(), "staff", registrationMerchant);
         assertThat(json.writeValueAsString(controller.myProfile())).contains("138****8000")
                 .doesNotContain("13800138000", "110101199001010000");
     }
@@ -600,7 +602,7 @@ class M010RegressionTests {
         repository.saveProfile(profile.withArchive(now, manager, now));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", null, null, "active"),
+                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "m010_p", null, "active"),
                 "test", List.of()));
         var deleted = service.requestDeleteProfile(profile.id(), new StaffProfileDeleteRequest("工作结束"));
         assertThat(deleted.deleteStatus()).isEqualTo("approved");

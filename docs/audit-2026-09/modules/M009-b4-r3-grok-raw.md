@@ -287,3 +287,306 @@ mvn -Dtest=PlatformServiceTests,PlatformControllerTests,PlatformJdbcIntegrationT
 总结论：PASS。
 
 此票不是模块 PASS，也不是 B4 双 PASS。须席甲独立 B4 票且双 PASS 后才把 036 队列改否并进 B5。本席未改 findings 队列归属。B3 累计 3/3 为最后一次；本票 PASS 不等于第 3 轮后的模块收口。
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+# M009 B4-r3 修复内容独立审计（Grok 席乙）
+
+文件版本：V0.02
+步骤：B4-r3（第五批 B3 第 3 次整批修复的「修复内容」本身）
+席位：固定 Grok 外审席乙
+计划：160 审计 V0.17（本席不派子代理、不用 MCP、不修源/HTML/台账/findings/ledger/锁，不提交推送部署）
+本文件路径：docs/audit-2026-09/modules/M009-b4-r3-grok-raw.md
+本文件自身版本：V0.02（路径原先存在 V0.01：历史第三批 B4-r3，正式队列当时为 M009-036。本次不覆盖该前缀，只在文末追加第五批完整票）
+本次完整报告范围：本文件自本行上一行独占锁行起至文末。正文不再出现同名独占字段行。上方 20299 字节 V0.01 前缀原样保留，不得当作本票。
+
+修复内容结论：PASS。
+范围归因结论：PASS。
+总结论：PASS。
+以上仅为席乙本轮第五批 B4-r3 票，不等于 B4 双 PASS，也不等于 B5 或模块 PASS。不可用 B3 自报代替本轮完整审计。席甲票仍是作者自审票；本席 FAIL 具否决权。§5 闸 3 越界判定同样须双 PASS。本席不行使否决。
+
+未读取：任何 `M009-b4-r3-self-raw.md` 正文（目录可见同名文件，本席不打开）；未读席甲本次未封存稿。定稿队列以 findings.md V2.13 顶部「当前M009第五批B2定稿（唯一当前表；双PASS）」为准：24 行仅 M009-057 修复队列「是」；原 17 已修 + 6 登记共 23 否。本轮只审 057 的最小落地。054–056 先改后确认历史保留，不倒填事先批准。用户非 HTML 修复授权已收到；本 diff 未改三份业务 HTML。
+
+本轮实际审查口径：两个可复核 tree 之间的无过滤 binary 全文 diff、1 个定稿「是」ID（M009-057）是否按 V2.13 最小边界修好、每一行（含文件版本号）能否归因到该当前正式 YES ID、是否越界改 HTML/锁/sidecar/ledger 基准/权限种子/迁移/测试/DTO 字段与类/运行分支/其它 19 个计划文件/已修 17 项与 6 登记否。B4 只审完整 diff 及直接依赖，不全仓扫、不重跑全套；B5 整模块另做。未新造判据/角色，未询问操作员。
+
+---
+
+## 1. 输入与独立锁实算
+
+本席哈希命令：`sha256sum docs/audit-2026-09/plan/criteria-lock.md`（独立实算，未抄 sidecar / ledger / 派发期望值）。三工具同值。
+
+LOCK-FILE-SHA256SUM: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a  docs/audit-2026-09/plan/criteria-lock.md
+
+python3 hashlib 同值；`openssl dgst -sha256` 同值；889020 字节。sidecar `docs/audit-2026-09/plan/criteria-lock.sha256` 全文一行同值。ledger 顶行同值。criteria-lock 版本仍 V0.11。`LOCK-AMEND-COUNT: 1`。本批 B3 两树 lock blob 均为 `8db3fc02ce8a6dc998863a9784e7e88af511b960`（未改锁）；sidecar blob 均为 `41f575026b693af74d2a36e6faf86d260ef6f6ca`。
+
+| 项 | 值 |
+|---|---|
+| 模块 | M009 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台实现／第1段 |
+| 阶段 | B4-r3 只读审计 B3 第3次整批修复的「修复内容」本身（第五批；B3=3/3 已在 after 取得后计入，冻结树内 ledger 仍为 V3.68 / B3=2/3，见下） |
+| 正式队列「是」（1） | **M009-057** |
+| 正式队列「否」（23） | 038、039、040、041、031、042、043、044、045、046、030、047、018、013、054、055、056（17 已修）；048、049、050、051、052、053（6 登记） |
+| before（对象类型 tree，可解析） | `aed0f2d9c35c0ffdecf7bbd8e2341d27d5cd1f3d` |
+| after（对象类型 tree，可解析） | `39b7324829f44339c8c2afb4d2800dfce674ed2c` |
+| 本席自取 | `git cat-file -t` 两者均为 `tree` |
+| 完整 diff 命令 | `git diff --binary aed0f2d9c35c0ffdecf7bbd8e2341d27d5cd1f3d 39b7324829f44339c8c2afb4d2800dfce674ed2c`（无路径过滤，覆盖 tracked/staged/untracked） |
+| 实际差异 | 859 bytes；SHA256 `2c7445ea8b5b36d3c7bb868379f7986ef5b61c850771203906d7698b5880fb3a`；UTF-8；1 文件；2 插入 / 1 删除；1 hunk；name-status 为 M |
+| 与派发期望 | 字节/SHA256/1 文件/1 hunk 均独算确认一致 |
+| `git diff --check` | exit 0（无空白错误） |
+| `git diff-tree -r --raw` | 仅 1 条：`f38cc5b2d3fb165a6937136f7969215d7d3b4a5c` → `61bde624e9493df104d561d767438286972c2947` `SpaceTypeRequest.java` |
+| 两树路径清单 | 各 3761 条，差集空；无新增/删除路径 |
+| HEAD | `e456ba96c84185c8d39f18f548011daac48a6466`（本批修复未提交；该路径 HEAD blob = before） |
+| 工作区 SpaceTypeRequest | 内容 SHA256 `7c3a5fa28ab5a45b49d3fc325e39d1f25ddcbc38b86de3872ca86ce338b05f34`，与 after 全文逐字节相等 |
+| 真实 index | `.git/index` SHA256 `1657ef91568fc6c00e7fd66f58f4c00461260651323d2ecbf616238602b973a2`（与台账所记 B3 前后真实 index 同值；本席只核当前值，B3 用临时 `GIT_INDEX_FILE`，主 index 不在本 diff 内） |
+| findings.md | 工作区 = 两树内容 SHA256 `ad589ab194cbce5d4d926dc8adc36e1ac564101c0d9eb56ae72bdfc5bdacd2a8`（866628 字节，V2.13）；两树 blob 均为 `4663d8798298da8d019d7d258c2088985cac05da`（本 diff 未改 findings） |
+| ledger.md | 两树 blob 均为 `4528e54b2311b91b034761e494ca722d29cfef8e`，内容 SHA256 `29c6142755d0c4c14128c7a12272179c2b8441e473e660eaa1f029fceff26499`，版本 **V3.68**（本 diff 未改）。工作区另有 V3.70 记事（B3 计次与 B4 派发），不在两树 diff 内，不按本轮修复内容审计 |
+| 候选 V2.12 | 派发给出 SHA256 `c37083760956300222e0ca223e29cffc4523a37408677560c04643491efc5539`；现行磁盘已是 V2.13，本席不回放旧字节。B2 两票文件本席独算：Codex `M009-b1-self-raw.md` 116315 bytes / `db41437ea9bcd86bf9d29ed11e896ff7f6064c4a080330d7b8aa08eec057b69c`；本席 B2 `M009-b1-grok-raw.md` 239474 bytes / `f53b5784697bcb945d98d2681de9ca751c5ab9e3448b601217a39c3a12056a64` |
+| 三 HTML 两树 git blob | BEQR `86a717930f9303d4f131ee2864478baa14450e6d` / BSM `7002bb80afb0ef6060e01a440daa361a99bcf040` / PGM `8eca4668cfd42a4c6628ae5a66d60ab8e5c8ebb3`，完全相同 |
+| 三 HTML 内容 SHA256（before=after=工作区） | BEQR `4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66`（133961）；BSM `eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66`（304482）；PGM `a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1`（103015） |
+| 锁/sidecar 两树 blob | 相同（未改） |
+| PlatformService / PlatformServiceTests / PlatformController | 两树 blob 相同（`b325adc09bd66d73505130138889b7a87f9bd211` / `394ae9d1f13d5d2229fe39093785d42186683a98` / `52d3f0d27191d6fd4cc923a1607a9263bc3eb7fa`） |
+| 迁移 / 权限种子 | 两树 diff 无名 |
+
+`git diff --stat --binary`：
+
+```
+ .../java/com/complex/platform/governance/dto/SpaceTypeRequest.java     | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+```
+
+`git diff --numstat`：`2	1	backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java`。
+
+计划 `modules.md` V0.04 M009 FILES 20 条 / 冻结有效内容行 2476（切分时不改）。当前同 20 文件 `wc -l` 合计：**before 3368 / after=工作区 3369**（本 diff +1 行，计划行数不凑）。
+
+本席未改任何源文件，只向本 raw 追加本次完整报告。
+
+---
+
+## 2. 锁、分类与正式队列（既有，不新造）
+
+适用冻结判据仍是 criteria-lock V0.11 已映射到 M009 的集合。本轮只用定稿 057 已引用的 ID：GEN-002、GEN-008、GEN-016、BSM-004、PGM-005（findings 冻结列另有 PGM-020，作相关治理上下文；本席不把本 diff 扩到项目档案字段）。不 LOCK-AMEND。
+
+本席自读锁定义（节录，不新造）：
+
+- GEN-002：声明的入口、主路径和错误路径须能构建或执行，并与其接口、断言和文档声称的行为一致。
+- GEN-008：前端、后端、数据库、OpenAPI、迁移、DTO 和测试夹具对名称、类型、可空性、枚举及错误语义的约定须一致。
+- GEN-016：文档中的路径、命令、链接、版本、状态和完成声明须可从当前纳入范围复现，不得把计划或旧证据写成当前事实。
+- BSM-004：来源 `business-system-map-for-operations-v0.1.html:566`。现行 HTML 第 566 行仍是 `<h3>配置数据可以存档、也可以删除（删除要审批）</h3>`，与锁摘录命中。
+- PGM-005：来源 `platform-governance-map-for-operations-v0.1.html:347`。现行 HTML 第 347 行仍是 `<h3>空间和点位</h3>`，与锁摘录命中。
+
+B3-r3 / 057 边界（与本席第五批 B2 V0.10 及 findings V2.13 顶部一致）：只删除 Java 注释中「录入/修改」「存在则更新名称/排序/状态」的错误承诺，改为新建、编码不可重复、新建启用；原文件无自身版本则加 `V0.01`。不新增更新功能；不改 DTO 字段、类签名、接口行为、测试或三份 HTML；不强制改旧测试名或事件名。注释修改用当前实现与既有两条测试证据核对；不为注释增加重复测试。
+
+四分类本轮不重开 057：B2 已定为细化。本席核对落地是否仍停在该格：改的是 DTO 文档声称，使之与已有 create-only 行为一致；无新状态机、无新更新入口、无 HTML 发明。仍是细化，无业务发明。
+
+授权：057 改的是 Java 注释，不是三份 HTML。适用已收到的「如果不是修改html，那么修复没有问题」。无 2.2 添加项，无 HTML 申请。
+
+---
+
+## 3. 完整未过滤 binary diff（全文，非链接、非摘要）
+
+命令：`git diff --binary aed0f2d9c35c0ffdecf7bbd8e2341d27d5cd1f3d 39b7324829f44339c8c2afb4d2800dfce674ed2c`
+
+before tree = `aed0f2d9c35c0ffdecf7bbd8e2341d27d5cd1f3d`
+after tree = `39b7324829f44339c8c2afb4d2800dfce674ed2c`
+
+字节 859；SHA256 `2c7445ea8b5b36d3c7bb868379f7986ef5b61c850771203906d7698b5880fb3a`；UTF-8；15 行（含末尾换行）；完整原文如下。
+
+````diff
+diff --git a/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java b/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java
+index f38cc5b2..61bde624 100644
+--- a/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java
++++ b/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java
+@@ -1,8 +1,9 @@
+ package com.complex.platform.governance.dto;
++// 文件版本：V0.01
+ 
+ import java.util.List;
+ 
+-/** 条目3 空间类型字典 录入/修改请求（后台管理员维护）。typeCode 为唯一键，存在则更新名称/排序/状态。 */
++/** 空间类型字典新建请求（后台管理员维护）。typeCode 不得重复，新建状态固定为启用。 */
+ public record SpaceTypeRequest(
+         String idempotencyKey,
+         String operatorNote,
+````
+
+以上即为两树完整未过滤 binary diff 的全部字节，无省略、无第二文件、无后续 hunk。
+
+---
+
+## 4. 逐块 / 逐行归因（闸 3）
+
+仅 1 文件 1 hunk。git 元数据行与上下文行随该文件出现，全部归 M009-057。
+
+| 块 | 路径 | 行（hunk 内） | 变化 | 归属 |
+|---|---|---|---|---|
+| H1 | `.../dto/SpaceTypeRequest.java` | `package …dto;` | 上下文，未改 | M009-057（所在文件） |
+| H1 | 同上 | `+// 文件版本：V0.01` | 新增自身版本 | M009-057（V2.13：原文件无版本，按版本铁律加 V0.01；格式与同目录 DTO `package` 后 `// 文件版本：V0.01` 惯例一致，抽检 `MerchantArchiveRequest` / `ProjectRequest`） |
+| H1 | 同上 | `import java.util.List;` 及空行 | 上下文，未改 | M009-057（所在文件） |
+| H1 | 同上 | `-/** 条目3 空间类型字典 录入/修改请求（后台管理员维护）。typeCode 为唯一键，存在则更新名称/排序/状态。 */` | 删除误导 javadoc | M009-057（与 findings 原句逐字相同） |
+| H1 | 同上 | `+/** 空间类型字典新建请求（后台管理员维护）。typeCode 不得重复，新建状态固定为启用。 */` | 写入拟改 javadoc | M009-057（与 findings 拟改逐字相同） |
+| H1 | 同上 | `public record SpaceTypeRequest(` / `idempotencyKey` / `operatorNote` | 上下文，未改；hunk 在默认 3 行下文结束 | M009-057（所在文件） |
+
+字段 `typeCode` / `typeName` / `sortOrder` / `status`、record 签名、类名均未出现在 `+`/`-` 行。无第二块可归因。无归因落空行。
+
+---
+
+## 5. 修复内容核对（057 是否按最小边界落地）
+
+### 5.1 注释与版本
+
+after 全文（16 行 / 457 字节）：
+
+```
+package com.complex.platform.governance.dto;
+// 文件版本：V0.01
+
+import java.util.List;
+
+/** 空间类型字典新建请求（后台管理员维护）。typeCode 不得重复，新建状态固定为启用。 */
+public record SpaceTypeRequest(
+        String idempotencyKey,
+        String operatorNote,
+        List<String> evidenceAttachmentIds,
+        String typeCode,
+        String typeName,
+        Integer sortOrder,
+        String status
+) {
+}
+```
+
+- 旧 javadoc 已不在 after 中。
+- 新 javadoc 与 findings V2.13「拟改」逐字相同。
+- before 无 `文件版本` 行；after 为 `V0.01`，不是从已有版本递增，符合「无自身版本→V0.01」。
+- `String status` 字段保留（边界：不改 DTO 字段）。
+
+### 5.2 去注释 token 一致性
+
+剥离 `//…` 与 `/**…*/` 后，before/after 非空白 token 序列均为 24 项，逐项相等：
+
+`package` `com.complex.platform.governance.dto;` `import` `java.util.List;` `public` `record` `SpaceTypeRequest(` `String` `idempotencyKey,` `String` `operatorNote,` `List<String>` `evidenceAttachmentIds,` `String` `typeCode,` `String` `typeName,` `Integer` `sortOrder,` `String` `status` `)` `{` `}`
+
+无字段/类/方法 token 增减。
+
+### 5.3 对应实现（两树 blob 相同，行号 551–558 仍成立）
+
+`PlatformService.createSpaceType`（工作区 = after = before）：
+
+```
+551:                    if (existing.isPresent()) {
+552:                        throw ApiException.conflict("SPACE_TYPE_CODE_EXISTS",
+553:                                "该种类编码已存在，不能用新增改已有种类");
+554:                    }
+555:                    return repository.saveSpaceType(new SpaceTypeRecord(
+556:                            "sptype_" + typeCode, typeCode, typeName,
+557:                            request.sortOrder() == null ? 100 : request.sortOrder(),
+558:                            "active", now, now));
+```
+
+拒绝重复编码；新建状态字面量 `"active"`，忽略 `request.status()`。无按编码更新名称/排序/状态的分支。与新注释一致，与旧注释相反。`executeWrite` 仍用事件名 `space_type.updated` / `space_type.update_failed`——057 明确不强制改事件名，本 diff 未改。
+
+### 5.4 既有两条测试源（两树 blob 相同）
+
+`PlatformServiceTests.java:374-387`：
+
+- `createSpaceTypeRejectsExistingCodeEvenWhenActive`：对已有 `shop` 再 POST，断言 `SPACE_TYPE_CODE_EXISTS`。
+- `createSpaceTypeIgnoresRequestedDisabledAndStaysActive`：请求 `status=disabled`，断言结果仍 `active`。
+
+这两条即「拒重复 / 固定 active」的可失败断言。本 diff 未改测试文件。`:827` 方法名仍为 `createSpaceTypeUpsertsDictionaryAndEnablesItForSpaceValidation`，方法体只新建 `kiosk` 并用于 `createSpace`，不断言 upsert；不把该方法名扩进 057。
+
+### 5.5 封存 283 / 239（本轮按派发不重跑全套）
+
+类型 4 封存，不把历史套件写成「本席本轮新跑」：
+
+- 席甲 B4-r2 / B5-r2 封存：11 类 283 项，0 failure / 0 error / 0 skip，`MAVEN_EXIT=0`；命令含 `PlatformServiceTests`（见 `M009-b4-r2-self-raw.md` 与 `M009-b5-r2-self-raw.md` 历史段、ledger 第四批 B4 记事）。本席读的是历史封存，**不是**本次 `M009-b4-r3-self-raw.md`。
+- 本席 B5-r2 封存：10 类 239 项，0/0/0，`MAVEN_EXIT=0`；其中 `PlatformServiceTests` 69/0/0/0（`M009-b5-r2-grok-raw.md` V0.02 本次完整报告 §6）。该 69 例包含上述两条。
+- 本 B3 未改 `PlatformService` / `PlatformServiceTests` blob，故封存时通过的这两条断言在 after 树上仍然是同一源。注释修复不要求新绿跑。
+
+### 5.6 20 文件：仅 SpaceTypeRequest 在两树不同
+
+| # | 路径 | before 行 | after/工作区 行 | 两树 blob |
+|---|---|---:|---:|---|
+| 1 | BusinessEntityRecord.java | 17 | 17 | 同 |
+| 2 | BusinessEntityBindingRecord.java | 19 | 19 | 同 |
+| 3 | MerchantRecord.java | 116 | 116 | 同 |
+| 4 | MerchantDeleteDecision.java | 9 | 9 | 同 |
+| 5 | JdbcPlatformRepository.java | 1338 | 1338 | 同 |
+| 6 | PlatformController.java | 296 | 296 | 同 |
+| 7 | PlatformRepository.java | 204 | 204 | 同 |
+| 8 | PlatformService.java | 1173 | 1173 | 同 |
+| 9 | package-info.java | 1 | 1 | 同 |
+| 10 | BusinessEntityBindingRequest.java | 17 | 17 | 同 |
+| 11 | BusinessEntityRequest.java | 26 | 26 | 同 |
+| 12 | MerchantArchiveRequest.java | 6 | 6 | 同 |
+| 13 | MerchantDeleteApprovalRequest.java | 5 | 5 | 同 |
+| 14 | MerchantDeleteRequest.java | 5 | 5 | 同 |
+| 15 | MerchantProfileRequest.java | 41 | 41 | 同 |
+| 16 | ProjectRequest.java | 26 | 26 | 同 |
+| 17 | SpaceRequest.java | 21 | 21 | 同 |
+| 18 | **SpaceTypeRequest.java** | **15** | **16** | **不同（本 diff 唯一）** |
+| 19 | StatusChangeRequest.java | 11 | 11 | 同 |
+| 20 | VenueBusinessHoursRequest.java | 22 | 22 | 同 |
+| | 合计 | 3368 | 3369 | |
+
+工作区 19 个未改文件内容等于 after；SpaceTypeRequest 工作区等于 after。计划冻结 2476 未改。
+
+### 5.7 未做（边界内禁止项，本席确认 diff 无名）
+
+未改：DTO 字段/类签名；`createSpaceType` 分支/错误码/事件名；测试（含旧名）；三份业务 HTML；锁/sidecar；findings 队列列（057 在 B4 双 PASS 前仍为「是」，正确）；权限种子；迁移；其它模块生产代码。未实现「存在则更新」。未新增测试。
+
+---
+
+## 6. 对抗自问（grilling 收窄为自问自答，不问操作员、不派子代理）
+
+1. 是否借注释顺手实现了 upsert？否。token 去注释后全等；`PlatformService` blob 未变。
+2. 是否删掉 `status` 字段或改类签名？否。字段仍在；057 禁止改字段。
+3. 新注释是否仍声称可修改/可更新？否。现句只有新建、不得重复、新建启用。
+4. 是否把「条目3」删掉算越界？否。拟改原文即无「条目3」，落地与拟改逐字相同。
+5. 版本写成 V0.02 是否错？否。before 无版本行，铁律是加入 V0.01。
+6. 事件名 `space_type.updated` 未改是否 FAIL？否。B2/V2.13 明确不强制改事件名。
+7. 旧测试名仍含 Upserts 是否 FAIL？否。同样明确不强制改。
+8. 工作区 ledger V3.70 ≠ 冻结树 V3.68 是否越界？否。那是 after 树取得之后的 B3 计次/B4 派发记事，两树 ledger blob 相同，不在本 diff。
+9. 是否改了三份 HTML？否。before=after=工作区内容 SHA 全等。
+10. 是否需要本轮新跑 283/239？否。派发允许用封存证据；本 diff 无行为/测试变化。
+
+---
+
+## 7. 技能与缺口
+
+已按 V0.17 收窄实际使用（只读，无第三席）：
+
+| 技能 | 用法 | 缺口 |
+|---|---|---|
+| using-superpowers | 开工自检；用户/160 提示词优先于技能本体 | 本体「技能未读不得动手」与本派发「只写指定 raw」并存；已读适用节 |
+| requesting-code-review | B4 请审 = 本席本票 | 本体 `HEAD~1`、派子代理 **作废** |
+| receiving-code-review | 先核源与 diff 再接受或反驳，禁止表演性同意 | 本体「逐条 IMPLEMENT」**作废**（B4 禁止修） |
+| verification-before-completion | PASS 前独算两树 binary diff、token、实现/测试源、HTML/20 文件 blob | 按派发 **不** 新跑全套 Maven；不以历史 283/239 冒充本轮新跑 |
+| grilling | 对抗自问见 §6 | 本体「向用户发问 / 派子代理查事实」**作废** |
+| ponytail | 最懒可行尺度：只改误导注释+补 V0.01 | 不落地代码 |
+| test-driven-development | 纯注释，不强制新测 | 未新写（禁止） |
+| graft | 派发已给精确路径；B4 对象是冻结 tree-id diff | **未调用** graft CLI（记缺口，不冒称已检索） |
+| 子代理 / MCP / worktree / mattpocock 并行 code-review | 禁用 | 未用 |
+
+无 MCP。无第三席。未询问操作员。
+
+---
+
+## 8. 问题二分（回退统一规则）
+
+有 ID 且仍在修复队列、本轮未修好：无。
+无 ID 或不在修复队列的新缺陷：无。
+
+残留观察（不构成 FAIL、不新开 ID、不扩大 057）：
+
+- `createSpaceType` 审计事件名仍为 `space_type.updated` / `space_type.update_failed`。
+- `PlatformServiceTests:827` 方法名仍含 Upserts，方法体不是 upsert。
+- DTO 仍有未被服务端读取的 `status` 入参；新注释已写明新建固定启用，未把该字段改成可写状态机。
+- 本席 B5-r2「87/87 邻域命中 ≠ 69 业务片段全文同字节」与 BSM-114/BSM-120 观察仍不入队、不改 HTML/锁。
+
+---
+
+## 9. 结论
+
+修复内容：PASS（057 按定稿最小边界落地：误导 javadoc 已换成拟改原文；无版本→V0.01；去注释 token 全等；`PlatformService` 551–558 拒重复/固定 active 未改且与新注释一致；既有两条测试源与封存 283/239 中的 `PlatformServiceTests` 通过记录仍覆盖该行为；未改字段/类/测试/HTML）。
+范围归因：PASS（1 文件 1 hunk 2+/1- 逐行可归到 M009-057；无越界）。
+总结论：PASS。
+
+此票不是模块 PASS，也不是 B4 双 PASS。须席甲独立本次 B4 票且双 PASS 后才把 057 队列改否并进 B5。本席未改 findings 队列归属。B3 累计 3/3 为最后一次；本票 PASS 不等于第 3 轮后的模块收口。若本轮双 PASS 后 B5 仍 FAIL，按既有 `BLOCKED-3ROUNDS` 交操作员，本席不自行加轮。

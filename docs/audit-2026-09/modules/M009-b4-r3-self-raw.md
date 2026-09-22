@@ -172,3 +172,57 @@ index 308166f8..148e460e 100644
 ### 4.4 结论
 
 内容修复：**PASS**。范围归因：**PASS**。总：**PASS**（作者自审票；须 Grok B4-r3 亦 PASS 才进 B5-r3；B3 已达上限 3）。本席在本报告落盘前未读取 `M009-b4-r3-grok-raw.md`。
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+# M009 B4-r3 Codex 完整修复差异复核
+版本：V0.02
+内容审计：PASS
+归因审计：PASS
+本席总体：PASS
+模块生命周期IN_PROGRESS；B3已执行3/3。本票仅B4，不能代替B5或Grok票。Grok83937已先派，Codex独立读取本轮完整1文件1块和直接行为依据，封存本票前未读取本次Grok raw或原始JSON。
+
+## 输入和冻结
+B2第五批对findings V2.12双PASS，定稿V2.13当前24行仅057是，23否保持。用户非HTML修复授权收到；旧054-056先改后确认历史保留，不改其时间线。本轮唯一修复057。
+before=aed0f2d9c35c0ffdecf7bbd8e2341d27d5cd1f3d
+after=39b7324829f44339c8c2afb4d2800dfce674ed2c
+完整binary diff=859bytes，SHA256=2c7445ea8b5b36d3c7bb868379f7986ef5b61c850771203906d7698b5880fb3a
+真实index SHA256 1657ef91568fc6c00e7fd66f58f4c00461260651323d2ecbf616238602b973a2。
+HEAD e456ba96c84185c8d39f18f548011daac48a6466；当前16行SpaceTypeRequest与after同字节，其余代码未改。三HTML前后同字节。未提交/推送/部署。
+B3前后四值均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；第四来源B5-r2-grok，LOCK-AMEND-COUNT=1。B3计数在取得after后才从2增3。
+
+## 全部差异逐块归因
+|块|文件|范围|正式ID|归因|
+|---|---|---|---|---|
+|1|backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java|@@ -1,8 +1,9 @@|M009-057|新增//文件版本V0.01满足用户版本铁律；删除旧“录入/修改、存在则更新”注释，替为新建、编码不得重复、固定启用。没有其它改动。|
+归因覆盖整个diff，不按路径过滤。没有归到NO或无ID；没有测试、字段、调用者、业务权限、HTML改动。无需回滚。
+精确改后注释：/** 空间类型字典新建请求（后台管理员维护）。typeCode 不得重复，新建状态固定为启用。 */
+
+## 三线与验证
+第一性原理：旧注释指导调用者把POST当更新；第一次提交已有编码即拒绝。删错误承诺、对齐已有入口即可，不新增更新能力。空间字典有BSM-004/PGM-005上位，归细化+工程缺陷；冻结GEN-002/008/016，不增判据。
+顺从式：PlatformService551-558仍拒绝已有typeCode并把新建status设active；改后注释逐项一致。SpaceTypeRequest完整16行的字段和record签名原样；旧自身无版本，新添V0.01符合已定稿边界。
+对抗式：尝试将修改理解为放宽重复编码或允许请求disabled——去注释后旧/新非空token序列逐一全等，无法产生新运行分支。已有两个测试分别验证重复编码抛SPACE_TYPE_CODE_EXISTS、请求disabled仍返回active，正文与现实现匹配；它们已在本席283/Grok239套件实际通过，本轮不冒称重新运行、不为注释加重复测试。
+可复现验证：Python从git show before:path与当前源移除块/行注释后，re.findall非空token序列相等；assert True。git diff --check before after exit0。当前文件SHA256 7c3a5fa28ab5a45b49d3fc325e39d1f25ddcbc38b86de3872ca86ce338b05f34。
+初次执行全仓相对HEAD的git diff --check exit2，原因是旧审计raw中的literal diff尾空白；它不等于本批两树diff存在空白错误。没有修改/覆盖历史raw或借机格式化。已收窄到本次完整两tree检查，exit0。
+沿用已读receiving-code-review、verification-before-completion与最小修复要求，核真实源码和token等价；未使用未核实工具，不派第三席。无新的技术/业务内容需登记，无待答问题/HTML申请。
+
+## 本次全部问题
+0项。内容PASS且逐块归因PASS；须等Grok同样PASS才可将057队列改否并进入B5。第3次本轮若最终FAIL按原三次上限处理，不自行加轮。
+
+## 完整未过滤binary diff
+diff --git a/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java b/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java
+index f38cc5b2..61bde624 100644
+--- a/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java
++++ b/backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java
+@@ -1,8 +1,9 @@
+ package com.complex.platform.governance.dto;
++// 文件版本：V0.01
+ 
+ import java.util.List;
+ 
+-/** 条目3 空间类型字典 录入/修改请求（后台管理员维护）。typeCode 为唯一键，存在则更新名称/排序/状态。 */
++/** 空间类型字典新建请求（后台管理员维护）。typeCode 不得重复，新建状态固定为启用。 */
+ public record SpaceTypeRequest(
+         String idempotencyKey,
+         String operatorNote,
+

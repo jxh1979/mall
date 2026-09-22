@@ -630,3 +630,359 @@ BSM-004「存档（先下线）…不再被 **新业务** 选用」在 028 已�
 本席第三批 B2-r1：**PASS**
 
 036 升格入队（已发布 V203 CHECK→500 与 005 同形态，不能用「无 HTML 闭集」挡住 spaces 半边；字典半边仍 029）。037 维持否（028 最小边界，不扩既有绑定激活）。差集无漏并。无添加项需 2.2。无 HTML 修改申请。无条件通过。本票只覆盖本批归并，**不是**模块 PASS，**不是** B5 合取，**不是**已修 036。
+
+---
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M009 B5-r2 Grok 乙席完整审计报告
+
+- 文件版本：V0.02（指定路径已有 V0.01 旧前缀 60863 bytes / SHA256 `7d16017177438aa97c05b0657e5bfe468d0860ac0d5afa66b12587f9541c3457`，本次在末尾追加完整报告，不覆盖）
+- 席位：固定 Grok 外审席乙（grok-4.6；不派子代理、不用 MCP、不问操作员、不读本次 `M009-b5-r2-self-raw`）
+- 步骤：B5-r2（第四批 B3 第 2 次整批修复后的整模块全量三线审计；不是只看 r2 的 5 个文件或 20857byte diff；不可用 B4-r2 PASS、B3 自报或历史 B1/旧 B5-r2 前缀替代）
+- 计划：`docs/audit-2026-09/plan/modules.md` V0.04 M009 同一 20 文件，冻结有效内容行 2476；当前同 20 文件实算 3368（修复后增长已登记，计划与映射未私改）
+- 模块：M009 — 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台实现／第1段
+- 模块生命周期（台账上下文，非本席改写）：`IN_PROGRESS`；B3 累计 2/3；LOCK-AMEND-COUNT 1
+- 判据锁：`docs/audit-2026-09/plan/criteria-lock.md` V0.11；本席独立实算 `sha256sum` / `python3 hashlib` / `openssl dgst -sha256` 三工具同值 `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（889020 字节）；sidecar 全文一行同值；ledger 顶行同值
+- 映射：`M009 → [BEQR-063 … PGM-066]`，COUNT=87 unique=87 MISSING=[]；定义与 HTML 出处均从锁自读，不新造判据
+- 正本：`HEAD=e456ba96c84185c8d39f18f548011daac48a6466`（ahead origin/main）；审计对象=工作区 20 文件，与 after tree `e4c10154a405e61e1bfad9fedb6fde11068f653a` 逐文件字节相等；before=`e60778ec7fd700bcfa671887ffa62ba85897d21b` 仅作 B4 已冻结背景，B5 不靠 diff 收口
+- 本席约束：只读业务代码与计划；唯一写入本 raw；不修源/三 HTML/正本资料/findings/ledger/锁；不 commit/push/PR/merge/部署；不装依赖；不写永久测试；不对生产做负向变更
+- 未读取：任何本次 `M009-b5-r2-self-raw` 正文。findings V2.11 / ledger V3.65 / B4-r2 双方 SHA 只作已定稿边界与 054-056 时序，不作本 B5 通过依据
+- 已定稿背景（只作边界，本席独立复核行为）：findings V2.11 当前 23 行全否（17 已修复 + 6 仅登记）。原 14 项在 r1 落地，054-056 在 r2 关闭直接依赖/夹具缺口。054-056 **先改后确认**：ledger 明文「操作员先指出未经批准实施，随后答复“如果不是修改html，那么修复没有问题”」；**不得倒填为事先批准**。013/038 代码测试已获批准。六项登记否本身不代表需删除。
+- 技能（V0.17 收窄）：见文末技能节
+
+本次审计结论：**PASS**。无新增未定稿工程缺陷、无添加项、无待问、无锁外判据、无 HTML 修改申请。17 项修复后行为独立复验成立；048–053 维持仅登记。模块生命周期仍 `IN_PROGRESS`，本票不等于双席 B5 或模块 PASS。席甲票仍是作者自审票；本席 FAIL 具否决权——本席不行使否决。
+
+---
+
+## 1. 锁、范围与源指纹
+
+本席哈希命令：`sha256sum docs/audit-2026-09/plan/criteria-lock.md`（独立实算，未抄 sidecar / ledger / 派发期望值）。
+
+LOCKFILE-SHA-CMD: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+| 项 | 值 |
+|---|---|
+| 锁文件 | `docs/audit-2026-09/plan/criteria-lock.md` V0.11 |
+| 独立 SHA256 | `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a` |
+| 字节 | 889020 |
+| python3 hashlib | 同值 |
+| openssl dgst -sha256 | 同值 |
+| sidecar `plan/criteria-lock.sha256` | 全文一行同值 |
+| ledger 顶行 | 同行；`LOCK-AMEND-COUNT: 1` |
+| 映射行抽出 | 87 条、无重复、MISSING=[] |
+| 锁内映射 HTML 来源行 vs 现行三 HTML | checked 87 miss 0（GEN 无 HTML 行；其余首条摘录落在引用行邻域） |
+| 计划 FILES | 20 条与 modules.md FILES-BEGIN/END 逐字相同 |
+| 计划冻结有效内容行 | 2476（切分时）；当前工作区 `wc -l`（`\n` 计数）合计 **3368** |
+| questions | 本模块 0 |
+
+三 HTML 工作区 SHA（本席独立，未改）：
+
+| 文件 | 行 | SHA256 |
+|---|---:|---|
+| `docs/business-enum-quick-reference-v0.1.html` | 308 | `4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66` |
+| `docs/business-system-map-for-operations-v0.1.html` | 2032 | `eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66` |
+| `docs/platform-governance-map-for-operations-v0.1.html` | 979 | `a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1` |
+
+证据类型按提示词 2.3：1=三 HTML 原文；2=可执行产物行为；3=外部规范原文；4=可复现命令输出。
+
+映射闭集（锁 6388 行原文抽出，87 unique）：
+
+BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-060, PGM-065, PGM-066.
+
+after 树类型：`git cat-file -t e4c10154a405e61e1bfad9fedb6fde11068f653a` → `tree`。20 文件工作区 blob 均等于该 after。允许只读的直接依赖同样等于 after：`ProjectRecord.java`、`ProjectAssociationRequest.java`、`V427__m009_project_profiles_and_associations.sql`、`AuthorizationService.java`、`LeasingService.java`、`AccessService.java`。`SessionIssuer.java` 实际路径为 `backend/src/main/java/com/complex/platform/auth/SessionIssuer.java`（非 access 包）。
+
+### 1.1 20 文件当前行数 / 字节 / SHA256（工作区实算，`wc -l` = `\n` 计数；均 = after）
+
+| # | 路径 | 行 | 字节 | SHA256 |
+|---|---|---:|---:|---|
+| 1 | `backend/src/main/java/com/complex/platform/governance/BusinessEntityRecord.java` | 17 | 391 | `45431c580d0bca0c217bcdb8ea120604eb7ed2b441845a5ac52257d5130b1277` |
+| 2 | `backend/src/main/java/com/complex/platform/governance/BusinessEntityBindingRecord.java` | 19 | 463 | `f97af4de8ed4d45134196b4fcb83169591d5991e6aefaa4aa22411a49e78f422` |
+| 3 | `backend/src/main/java/com/complex/platform/governance/MerchantRecord.java` | 116 | 7319 | `dda319c37032c33c3cc5d260a0c9f43c7740d21b80a106c4a4efd49a19cdef00` |
+| 4 | `backend/src/main/java/com/complex/platform/governance/MerchantDeleteDecision.java` | 9 | 400 | `e08618c856b35a1eda8447a9c9bd0c88ed00a9ee371c1ee33d3f2f3ab7ce5e40` |
+| 5 | `backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java` | 1338 | 76785 | `2816e96cd73867d2702b660854a1d342254c68b72b7c1e68fa12fb460e0bc98a` |
+| 6 | `backend/src/main/java/com/complex/platform/governance/PlatformController.java` | 296 | 16702 | `9e4cef62553160bbd9b2c8bba8779feadec81a4dd26cf3d28664fb160777c3d2` |
+| 7 | `backend/src/main/java/com/complex/platform/governance/PlatformRepository.java` | 204 | 10238 | `df6dfee9894fc34f1df28fdae3d549ba50320df14219129779fa267affb08cdc` |
+| 8 | `backend/src/main/java/com/complex/platform/governance/PlatformService.java` | 1173 | 61467 | `984d57a4ba7a5a1059734cac427045ce4ee73143249cd93d0bd70f36488226b1` |
+| 9 | `backend/src/main/java/com/complex/platform/governance/package-info.java` | 1 | 41 | `e3094c51b508bf10015ead9e92ac2ae2f3edf3b09786d88816ab8009d21921d9` |
+| 10 | `.../dto/BusinessEntityBindingRequest.java` | 17 | 442 | `66d4a8cd5c7f206f0c023e190ac5ed94ff6585263a737e35f062be9d8de211da` |
+| 11 | `.../dto/BusinessEntityRequest.java` | 26 | 944 | `18911088cbde9575ca7c38f9a6ac6eee3f4a812098aea9a29482133fe14dec19` |
+| 12 | `.../dto/MerchantArchiveRequest.java` | 6 | 319 | `e0f16f5417b61e801ed23803616450e90810853ec7588a49714b43040d809f93` |
+| 13 | `.../dto/MerchantDeleteApprovalRequest.java` | 5 | 225 | `2516fb1d78e082fe89222a41f7178dde4b40d749c5ed2c2e712bbb14a74112c4` |
+| 14 | `.../dto/MerchantDeleteRequest.java` | 5 | 214 | `4898e50f2150e27c73d6d400b317d792f02c342a0e95a8b3dadbef5a7ebc8f45` |
+| 15 | `.../dto/MerchantProfileRequest.java` | 41 | 1800 | `7b6dd241328b57dc646eb9b3c531e01e3a3a3d1bb1b848711c7ce43106973cf1` |
+| 16 | `.../dto/ProjectRequest.java` | 26 | 878 | `6ac09b14c1766bebd6df69fbf5579ccf602959d10179b497ff90ea1b3f521108` |
+| 17 | `.../dto/SpaceRequest.java` | 21 | 525 | `63857df14972fd6904a32fc7aade0de49b88ec3b946df493f61086c77d1ab7aa` |
+| 18 | `.../dto/SpaceTypeRequest.java` | 15 | 457 | `d181151ff1b58851a985a0effad2370b5b17937823a7caea525c7f944cd729f2` |
+| 19 | `.../dto/StatusChangeRequest.java` | 11 | 231 | `75b75cfaee897096f6fce0886fc4e71da8c5762774a901739cff244e1425f60f` |
+| 20 | `.../dto/VenueBusinessHoursRequest.java` | 22 | 700 | `6347c6dfe087be2310fe5f618a0ac27e188f340d1af84add2ab831e98cb333f1` |
+| | **合计** | **3368** | **180541** | |
+
+三个大实现文件按结构完整阅读：`JdbcPlatformRepository`（L24–1338：CRUD、COUNT/LIMIT 分页、占用统计、行锁、未结束绑定、项目过滤重载、审批链持久化）、`PlatformService`（L34–1173：列表隔离、建档/补录、绑定未来生效、空间类型恢复/审批、数字非负、中文错误）、`PlatformController`（L28–296：权限一次检查、补录入口、脱敏）。`PlatformRepository` 接口 L7–204 同步读完。
+
+---
+
+## 2. 20 文件逐一覆盖
+
+分类顺序：冲突 → 细化 → 技术性 → 添加。无新添加项。
+
+| # | 文件 | 为什么必须存在 | 实际执行 | 未验证前提 | 分类 | 覆盖结论 |
+|---|---|---|---|---|---|---|
+| 1 | BusinessEntityRecord | PGM-018/019 主体档案最小字段 | 创建/列表/关联测试绿 | 无页面 | 细化 | 无缺陷 |
+| 2 | BusinessEntityBindingRecord | BEQR-143/PGM-026 四类主体绑定 | 未来/到期/历史重开测试绿 | 无调度 | 细化 | 无缺陷 |
+| 3 | MerchantRecord V0.04 | PGM-026 商户档案 + 038 projectId；旧 19/25 参构造兼容 | JDBC 补录不改其它列 | 不自动回填历史 | 细化 | 无缺陷 |
+| 4 | MerchantDeleteDecision | BSM-004 删除审批结果 | 服务返回 approved/rejected | 无新审计系统 | 细化 | 无缺陷 |
+| 5 | JdbcPlatformRepository V0.08 | 持久化与 COUNT 隔离 | JDBC 23 例含五类 total | 无项目的 COUNT=0 | 细化 | 见 §4 |
+| 6 | PlatformController V0.02 | REST 入口 + 权限一次检查 | Controller 14 例 | 空间类型审批无独立功能码，服务层 USB 闸仍 fail-closed | 细化 | 无缺陷 |
+| 7 | PlatformRepository V0.06 | 仓储缝；scoped 重载 + 空项目不退全表 | 默认与 JDBC 覆写对照 | 无项目 scope 的旧无参分页仅测试调用 | 细化 | 无缺陷 |
+| 8 | PlatformService V0.11 | 写口校验、隔离、绑定、恢复 | Service 69 例 | 集团视图按 HTML「未来」+038 不含 | 细化 | 见 §4 |
+| 9 | package-info.java | 编译单元 | 仅 `package` 声明 | — | 技术性（053） | 无业务发明 |
+| 10 | BusinessEntityBindingRequest | 绑定写入 | 创建绑定测试 | 无财税审批流 | 细化 | 无缺陷 |
+| 11 | BusinessEntityRequest V0.03 | 主体写入 + 可选 projectId；旧构造兼容 | 公司多对多测试 | USB 显式项目须存在 | 细化 | 无缺陷 |
+| 12 | MerchantArchiveRequest | BSM-004 存档理由 | 存档路径 | 存档≠退出 | 细化 | 无缺陷 |
+| 13 | MerchantDeleteApprovalRequest | BSM-004 审批 | 审批路径 | USB 直删例外保留 | 细化 | 无缺陷 |
+| 14 | MerchantDeleteRequest | BSM-004 申请理由 | 申请路径 | 须先存档 | 细化 | 无缺陷 |
+| 15 | MerchantProfileRequest V0.02 | 商户档案 + 可选 projectId；旧构造兼容 | 更新禁迁项目 | 普通更新不能 null→项目 | 细化 | 无缺陷 |
+| 16 | ProjectRequest V0.01 | PGM-020 三项可空 + 旧 10 字段构造 | 创建读回负责人/地址/范围 | 无旧项目编辑页 | 细化 | 无缺陷 |
+| 17 | SpaceRequest | PGM-017 空间归属 | projectId 必填、同项目父空间 | 无楼层图页 | 细化 | 无缺陷 |
+| 18 | SpaceTypeRequest | 空间类型字典 | 创建冲突/恢复 | 字典非项目切片（平台配置） | 细化 | 无缺陷 |
+| 19 | StatusChangeRequest | 绑定 change | 停用拒绝/历史不重开 | 无新状态机 | 细化 | 无缺陷 |
+| 20 | VenueBusinessHoursRequest | PGM-015 场地营业时间写入 DTO | 本模块仅 DTO+Controller 转调 | 实现主体在 M015；本席未扩审全仓 | 细化 | 无本模块新缺陷 |
+
+直接依赖（可读、不扩大模块清单）：
+
+- `ProjectRecord`：ownerPerson/address/businessScope 可空，旧 10 参构造保留。
+- `ProjectAssociationRequest`：仅 idempotencyKey/projectId/reason。
+- `V427`：projects 三列可空、merchants.project_id 可空 FK、business_entity_projects 唯一主键；历史不回填。Flyway 实跑 schema 427、无需再迁。
+- `AuthorizationService.isMasterAuthority`：三常量合取 `master_authority` + `usr_master_authority` + `master-authority`；`platform_admin` 同名同 ID 为假。
+- `SessionIssuer`：MASTER_* 三常量。
+- `LeasingService.autoCreateMerchantForSign`：三主体列传 null，随后 `createFourPartyBinding`；`intent.projectId` 传入建档。
+- `AccessService.changePositionTemplateLifecycle`：非 USB 仍 `requirePlatformAdmin`；USB 走既有 archive/restore/request_delete/approve/reject；未改共享 `requirePlatformAdmin`。
+
+---
+
+## 3. 87 映射逐项核对 / 适用性证据
+
+适用口径：映射到本模块的判据必须说明本 20 文件（及已批准直接依赖）是否承载该锚点；不承载不等于缺陷，也不新造判据。HTML 原文以锁内摘录为准，并已与现行三 HTML 行邻域核对 87/87。
+
+| ID | 适用性 | 证据（文件:行或命令） | 依据类型 |
+|---|---|---|---|
+| GEN-001 | 适用：最小入口 | 20 文件无重复页面/调度/新审批系统；048–053 零调用不删 | 4 |
+| GEN-002 | 适用：入口可执行 | 10 类测试 239 例 exit 0 | 2/4 |
+| GEN-003 | 适用：测试能失败 | 隔离 COUNT、未来绑定、USB/普通、项目卡拒绝均有反向断言 | 2 |
+| GEN-004 | 适用：输入校验 | 负数、缺 projectId、不存在主体、显式项目必须存在 | 2 |
+| GEN-005 | 适用：授权 | Controller 功能权限一次；写口 `requirePlatformScope`；USB 识别三常量；普通无全量 | 2 |
+| GEN-006 | 适用：完整性和日期 | 行锁+未结束槽；effectiveTo 不早于 from；历史不重开 | 2 |
+| GEN-007 | 适用：幂等 | 补录同值幂等；AuditedOperation 键；绑定唯一槽 | 2 |
+| GEN-008 | 适用：模式一致 | DTO/Record/SQL 三字段与 project_id 对齐；旧构造兼容 | 1/4 |
+| GEN-009 | 适用：错误恢复 | 中文 400/403/409；不伪成功迁项目 | 2 |
+| GEN-010 | 适用：PII | 仓库加解密 + Controller 脱敏（050） | 2 |
+| GEN-011 | 适用：审计 | executeWrite 补对象 ID/理由/decision；空间类型申请结清 | 2 |
+| GEN-012 | 适用：分页 | COUNT+LIMIT 500 封顶（051） | 4 |
+| GEN-013 | 适用：构建 | JDK21 + Maven BUILD SUCCESS | 4 |
+| GEN-014 | 适用：迁移 | V427 已在 complex_test 为 427，No migration necessary | 4 |
+| GEN-015 | 适用：文案中文 | 用户 message 无英文角色/状态括注；错误码为内部标识 | 1/2 |
+| GEN-016 | 适用：计划行数 | 冻结 2476 vs 实算 3368 已登记，未改 plan | 4 |
+| GEN-017 | 适用：分类 | 本席无添加项；053/051 技术性理由成立 | 1 |
+| GEN-018 | 适用：证据 | 本报告落到 HTML/命令/测试 | 4 |
+| BEQR-063 | 部分：删除审批/USB 例外；酒吧双证据非本 20 文件 | PlatformService 删除/空间类型审批 | 1 |
+| BEQR-074 | 本模块无桌台实现面 | 无对应代码；不发明桌台权限 | 1 |
+| BEQR-143 | 适用：四类主体唯一绑定 | BindingRecord + createBusinessEntityBinding L756–798 | 1/2 |
+| BEQR-144 | 适用：项目-公司多对多 | business_entity_projects；associate 保留原关联 | 1/2 |
+| BEQR-145 | 适用：城市项目公司角色 | BUSINESS_ENTITY_ROLES 含 project_company | 1 |
+| BEQR-146 | 映射：域主管角色在本模块；域内经营细则在他模块 | entity_role=management_company | 1 |
+| BEQR-147 | 映射：收入归属不在本模块计算；绑定提供结算主体 | settlementEntityId 投影仅激活时 | 1 |
+| BEQR-148 | 适用：六类合作方式 | MERCHANT_COOPERATION_FORMS L49–51 | 1/2 |
+| BEQR-149 | 本模块无职级档位实现 | 权限码在 Controller；职级在 access | 1 |
+| BEQR-150 | 本模块无十一端实现 | — | 1 |
+| BEQR-151 | 映射：最终权限公式在 access；本模块消费 requirePermission | Controller L46–273 | 1 |
+| BEQR-152 | 适用：默认项目隔离 | 五类 COUNT 先过滤；普通岗位跨项目失败 | 1/2 |
+| BEQR-153 | 本模块无终端开关优先级 | — | 1 |
+| BEQR-154 | 适用：项目六态 | PROJECT_STATUSES L57–59 | 1/2 |
+| BEQR-155 | 适用：商户状态；退出缓冲 | SUBJECT_STATUSES；拒绝直接 terminated（018） | 1/2 |
+| BEQR-156 | 本模块无合同状态机 | 招商只把条款喂入合同域 | 1 |
+| BEQR-157 | 本模块无员工状态 | — | 1 |
+| BEQR-158 | 本模块无设备状态 | — | 1 |
+| BEQR-159 | 本模块无权限状态枚举表 | — | 1 |
+| BEQR-166 | 映射：审批链持久化在 JDBC（049 登记） | Jdbc L804–1089 | 1 |
+| BEQR-189 | 本模块无管理费计费 | — | 1 |
+| BSM-001 | 适用：治理后端承载基础对象 | /api/v1/platform | 1 |
+| BSM-003 | 适用：可改可删、分岗 | 存档/审批删除；权限码 | 1 |
+| BSM-004 | 适用：存档/审批删除/占用/USB 直办 | archive/request/approve；countMerchantReferences；USB 例外 | 1/2 |
+| BSM-005 | 本模块无分步引导页面（038/013 明确无页面） | DTO 仍一次提交 | 1 |
+| BSM-006 | 本模块无动态二维码 | — | 1 |
+| BSM-007 | 适用：日常权限≠USB 全权 | platform_admin 非 isMasterAuthority | 1/2 |
+| BSM-009 | 适用：基础管理入口 | 项目/商户/空间 | 1 |
+| BSM-028 | 适用：项目档案功能 | 013 三字段可空 | 1/2 |
+| BSM-029 | 适用：相关主体 | 公司-项目关联 | 1 |
+| BSM-072 | 适用：商户范围 | requirePlatformScope；listMerchantsByBusinessEntity 同时按项目+主体 | 1/2 |
+| BSM-074 | 同 072 边界 | 商户不能看平台全局 | 1 |
+| BSM-114 | 适用：入口分岗 | Controller 各权限码 | 1 |
+| BSM-115 | 适用：绑定连接合同/结算引用 | 激活才投影三主体 | 1 |
+| BSM-120 | 适用：隔离无关闭开关 | 无 isolation flag | 1 |
+| PGM-001 | 适用：治理底座 | package + controller | 1 |
+| PGM-002 | 适用：先权限后业务 | requirePermission 后进服务 | 1 |
+| PGM-003 | 适用：模块入口清单中的综合体/商户/空间 | 对应 GET/POST | 1 |
+| PGM-004 | 适用：综合体和集团入口 | /projects | 1 |
+| PGM-005 | 适用：空间点位 | /spaces /space-types | 1 |
+| PGM-006 | 适用：商户和主体 | /merchants /business-entities /bindings | 1 |
+| PGM-007 | 合同准入主体在合同/招商模块 | 本模块只提供绑定 | 1 |
+| PGM-008 | 员工手机非本模块；联系人脱敏在本模块 | withMaskedPhones | 1 |
+| PGM-009 | 权限职级主体在 access | 本模块调用 AuthorizationService | 1 |
+| PGM-010 | 终端开关非本模块 | — | 1 |
+| PGM-011 | 设备非本模块 | — | 1 |
+| PGM-012 | 商户侧门户非本模块 | 平台列表对商户账号 fail-closed | 1 |
+| PGM-013 | 开放接口非本模块重点 | REST 已有 | 1 |
+| PGM-014 | 适用：留痕 | audit metadata reason/decision/projectId | 1/2 |
+| PGM-015 | 楼宇运营：营业时间 DTO/转调 | VenueBusinessHoursRequest + Controller L232–246 | 1 |
+| PGM-016 | 隐私：联系人脱敏 | Controller L281–295 | 1 |
+| PGM-017 | 适用：对象带项目归属、当前单项目 | currentProject()+SQL WHERE；USB platform-company 列表 total=0 | 1/2 |
+| PGM-018 | 适用：多对多非固定父链 | 独立关联表，不恢复已删父链 | 1/2 |
+| PGM-019 | 适用：角色三值 | platform/project_company/management_company | 1 |
+| PGM-020 | 适用：项目档案状态/负责人/地址/经营范围 | ProjectRecord 三字段可空 | 1/2 |
+| PGM-021 | 集团视图预留：HTML 写未来；038 明确不含页面/集团汇总 | 不提前投影集团 | 1 |
+| PGM-026 | 适用：档案+绑定+财税主体不得普通改 | 040/041/030/031 | 1/2 |
+| PGM-027 | 适用：商户不能看平台/他商户 | requirePlatformScope；048 承载隔离查询 | 1/2 |
+| PGM-031 | 经销商资金非本模块 | — | 1 |
+| PGM-035 | 提成非本模块 | — | 1 |
+| PGM-040 | 适用：单一功能授权 | 各端点独立 permission | 1 |
+| PGM-041 | 适用：默认项目隔离、无关闭开关 | 五类列表+写口 | 1/2 |
+| PGM-042 | 职级规则在 access | USB 审批等级=3 仅 master | 1 |
+| PGM-043 | 外包/审计人员非本模块 | — | 1 |
+| PGM-044 | 桌台挂单权限非本模块 | — | 1 |
+| PGM-048 | 商户侧全开放非本模块门户 | 平台侧 fail-closed | 1 |
+| PGM-060 | 会员生物信息非本模块 | — | 1 |
+| PGM-065 | 适用：治理连接业务的绑定 | 四类主体绑定 | 1 |
+| PGM-066 | 适用：中文界面；对象带综合体归属已拍板 | 用户 message 中文；项目归属实现 | 1/2 |
+
+---
+
+## 4. 三线审计
+
+### 4.1 第一性原理
+
+1. **为什么必须存在**：删掉治理后端，PGM-017「所有基础对象都要带综合体项目归属」、PGM-018 多对多、PGM-020 项目档案、PGM-026 四类主体绑定、PGM-041「普通岗位没有跨项目查看权」、BSM-004 存档/审批删除，均无法落地。答得上业务上位需求。无页面、无集团汇总、无新调度/新审批系统——与已批准边界一致，不是缺口。
+2. **声称是否被实际执行**：见 §6。10 个相关测试类 239 例全过；Flyway 427；隔离 COUNT、USB/普通、未来绑定不投影、补录只改 project_id、项目卡消费仍拒绝均有可失败断言。
+3. **未验证前提（如实）**：集团下钻/KPI 分层（PGM-020/021 未来条款）按 038 不含未实现，不当作已交付；空间类型字典仍是平台级配置、未按项目切片（038 五类列表未包含字典，HTML 也未要求字典按综合体复制）；无参 JDBC 分页重载仍存在，生产 HTTP 只走带 projectId 的服务重载（graft：无参实体/项目/空间/绑定分页生产入边为 0）。以上不构成与冻结 HTML 的冲突，也不新造判据。
+
+### 4.2 顺从式（假定实现正确，逐条核 17 项 + 6 登记）
+
+不因队列已「否」而跳过。
+
+| ID | 独立核查 | 结果 |
+|---|---|---|
+| 038 | 服务 list* 均 `repository.*Paged(currentProject(),…)`；JDBC COUNT 带同一 WHERE；空/platform-company/missing total=0；普通更新禁改 project_id；USB 补录专用 SQL `project_id IS NULL OR =`；公司关联 ON CONFLICT DO NOTHING；USB 列表仍按真实项目（masterHasNoGlobalList 全 0） | 真实修复 |
+| 039 | createSpace 必填 projectId、等于当前、父空间/商户同项目；spaceExists 过滤 projectId | 真实修复 |
+| 040 | 生效绑定普通停用拒绝；非空三主体不一致拒绝；USB 同样不能普通替换（bindingCannotReplaceExistingFinancialSubjectsEvenForMasterAuthority） | 真实修复 |
+| 041 | 未来 effectiveFrom → inactive + effectiveTo=null，不投影；创建/激活都查未结束槽；lockMerchant；Leasing 建档三列 null 再绑定 | 真实修复 |
+| 031 | 已结束 effectiveTo 非空不能重开；未生效不写倒置日期 | 真实修复 |
+| 042 | unarchive 接受 archived 与 disabled；pending_delete 不能绕过 | 真实修复 |
+| 043 | executeWrite 识别 SpaceTypeRecord/MerchantDeleteDecision；metadata 含 reason/decision；驳回事件名 delete_rejected | 真实修复 |
+| 044 | completeSpaceTypeDeleteRequest 更新当前 pending；历史行保留 | 真实修复 |
+| 045 | 占用排除「inactive 且 from/to 均非空且 to>=from 且 to<=今天」；未来 inactive to=null 仍占用 | 真实修复 |
+| 046 | capacity/面积/租金 signum<0 拒绝；可空和 0 保持 | 真实修复 |
+| 030 | 新建已给的三主体走 requireBusinessEntity（存在+本项目关联）；可空 | 真实修复 |
+| 047 | 用户 message 无英文枚举括注；内部 code 仍英文 | 真实修复 |
+| 018 | 新建/他态更新拒绝 terminated；已是 terminated 无状态变化可保存 | 真实修复 |
+| 013 | 三字段可空、旧 JSON/Java 构造、列表读回、V427、无页面 | 真实修复 |
+| 054 | 仅 lifecycle 入口 `if (!isMasterAuthority) requirePlatformAdmin`；普通管理员审批仍 MASTER_AUTHORITY_REQUIRED；USB 可拒/批/自删；共享 requirePlatformAdmin 未改 | 真实修复 |
+| 055 | 商户卡路径 `asMerchantOperator`/`asMerchantUser`；项目卡 consumeInternal 仍 MERCHANT_SCOPE_REQUIRED；金额/通知/脱敏断言保留；未宣称项目卡消费已补齐 | 真实修复 |
+| 056 | permission_grant_l3 补 beneficiary schedule；普通最高职级仍拒；USB 可批；生产受益人检查未豁免 | 真实修复 |
+| 048–053 | 隔离查询承载、审批链持久化、PII、分页、空间类型 DELETE 拒绝、package-info。无独立工程缺陷，不因零调用删除 | 维持登记否 |
+
+054-056 时序：代码与测试先落地，操作员后确认「如果不是修改 html，那么修复没有问题」。本席按该历史记录，**不**写成 B3 前已批准。
+
+### 4.3 对抗式（grilling 结构自问自答，不等用户、不派子代理）
+
+| 反例 | 结果 |
+|---|---|
+| 甲项目岗位改 page size 是否把乙项目计入 total？ | COUNT 与页同一 WHERE；JDBC 五类 total 甲=1 乙不进 |
+| USB 持 platform-company 是否全表？ | currentProject() 非真实项目 → null → SQL `project_id = NULL` 无行，total=0 |
+| platform_admin 冒充 USB（同 ID/用户名） | isMasterAuthority 要求 accountType=master_authority，测例为假 |
+| 普通更新 projectId=当前以认领历史 null | requireMerchant 先 PROJECT_SCOPE_MISMATCH；更新显式改归属也禁 |
+| 已有项目的补录改到乙 | assign 返回 0 → MERCHANT_PROJECT_ALREADY_ASSIGNED；其它列 JSON 差集为空 |
+| 未来绑定保存即改商户三列 | 不投影；leasing futureSign 三列仍 null |
+| 再插一条未来绑定 | ACTIVE_BINDING_EXISTS；行锁 |
+| USB 建绑定改已有非空三主体 | BINDING_FINANCIAL_CHANGE_REQUIRES_REVIEW |
+| 提前激活/结束未来绑定 | BINDING_NOT_EFFECTIVE |
+| 重开已结束历史 | BINDING_PERIOD_ENDED |
+| 负数租金/面积/容量 | VALIDATION_FAILED 中文「不得为负数」 |
+| 直接 DELETE 空间类型 | 须存档再申请 |
+| 只失效历史绑定能否软删 | 占用公式排除已结束 inactive，未来预约仍拦 |
+| 055 是否放宽资金守卫 | 项目卡内部扣款仍 MERCHANT_SCOPE_REQUIRED，余额不变 |
+| 056 是否去掉受益人 | 测试补 schedule，生产 approve 仍走既有受益人规则 |
+
+无成立的越权/提前生效/全量泄露反例。
+
+---
+
+## 5. 三线问题全集
+
+**无。** 无 GR-01 及后续临时编号。无冲突待删、无新细化缺陷、无新添加项、无锁外主张。观察（不入队、不要求删除）：JDBC 无参分页重载仍保留且仅测试/兼容调用；空间类型审批 Controller 未再挂功能权限码，服务层 USB 闸 fail-closed，与 BSM-004「持授权 U 盘最高权限审批」一致。
+
+---
+
+## 6. 实际测试命令与 exit
+
+只从 `/etc/complex/complex.env` 解析 `COMPLEX_DATABASE_URL` / `COMPLEX_DATABASE_USERNAME` / `COMPLEX_DATABASE_PASSWORD` 三键；不 source 全文件；不导出其它 `COMPLEX_*`；不在本报告输出凭据或其长度。URL 库名进程内改为 `complex_test`。
+
+```text
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+java 21.0.12 (OpenJDK 64-Bit Server VM, 测试进程日志)
+mvn -f backend/pom.xml -Dtest=PlatformServiceTests,PlatformControllerTests,PlatformJdbcIntegrationTests,AuthorizationServiceTests,LeasingServiceTests,LeasingSignAtomicityJdbcIntegrationTests,M006SecurityRegressionTests,M010RegressionTests,BarStoredValueFundChainJdbcIntegrationTests,StoredValueNotificationIntegrationTest -DfailIfNoTests=true test
+```
+
+Flyway 日志：`Database: jdbc:postgresql://127.0.0.1:5432/complex_test (PostgreSQL 16.14)`；`Successfully validated 395 migrations`；`Current version of schema "public": 427`；`No migration necessary`。
+
+**MAVEN_EXIT=0**。Surefire XML：
+
+| 类 | tests | failures | errors | skipped |
+|---|---:|---:|---:|---:|
+| PlatformServiceTests | 69 | 0 | 0 | 0 |
+| PlatformControllerTests | 14 | 0 | 0 | 0 |
+| PlatformJdbcIntegrationTests | 23 | 0 | 0 | 0 |
+| AuthorizationServiceTests | 24 | 0 | 0 | 0 |
+| LeasingServiceTests | 11 | 0 | 0 | 0 |
+| LeasingSignAtomicityJdbcIntegrationTests | 3 | 0 | 0 | 0 |
+| M006SecurityRegressionTests | 39 | 0 | 0 | 0 |
+| M010RegressionTests | 44 | 0 | 0 | 0 |
+| BarStoredValueFundChainJdbcIntegrationTests | 8 | 0 | 0 | 0 |
+| StoredValueNotificationIntegrationTest | 4 | 0 | 0 | 0 |
+| **合计** | **239** | **0** | **0** | **0** |
+
+未声称全仓；未跑与本批无关的 AccessServiceTests 旧观察。未新增源码/测试文件。主仓业务文件未改。
+
+---
+
+## 7. 技能（V0.17 收窄，按实际存在执行）
+
+| 技能 | 用法 | 缺口 |
+|---|---|---|
+| using-superpowers | 开工自检并读 SKILL | 无 |
+| grilling | 对抗式追问结构，自问自答 | 本体「等用户/派子代理」作废 |
+| codebase-design | 仓储/服务/控制器缝与深度 | 无 |
+| diagnosing-bugs | 以测试为反馈环核实 17 项 | 不改生产、不加探针 |
+| verification-before-completion | PASS 前实跑 Maven | 无 |
+| receiving-code-review | 核实 B4 声称的 17 项，禁止表演性同意 | 不实施修复 |
+| ponytail-review | 搜可删；048–053 与无参分页不因零调用/登记否删除 | 无 |
+| graft | 只读 skeleton/grep 定位 | 无第三席 |
+| tdd / test-driven-development | B5 不写测试 | 未新写（禁止） |
+| batch-grill-me / ubiquitous-language / git-guardrails | 可选 | **未调用**（记缺口，不冒充） |
+| i-have-adhd | 输出模式 | 本 raw 首行被锁哈希格式覆盖 |
+
+明确不用：subagent-driven-development、dispatching-parallel-agents、using-git-worktrees、research、executing-plans、mattpocock code-review 并行子代理。无第三席。
+
+---
+
+## 8. 结论
+
+- 20 文件全部覆盖，行数 3368，与 after `e4c10154a405e61e1bfad9fedb6fde11068f653a` 一致。
+- 87 映射逐项核对，锁摘录与现行 HTML 87/87 命中。
+- 17 项修复独立复验成立；6 项登记否不删除。
+- 054-056 历史为先改后确认，不倒填事先批准。
+- 三线问题全集：无。
+- 测试 239/0/0/0，MAVEN_EXIT=0。
+
+**本席 B5-r2 审计结论：PASS。**
+
+本票不是模块 PASS，也不是双席合取。须席甲独立封存本次 B5 票且双 PASS、且闸 1 四值全等后，才允许把 ledger 改 PASS。本席未改 findings/ledger/锁/源码。

@@ -1,6 +1,49 @@
 # 全量审计 Findings 台账
-版本：V3.54
+版本：V3.58
 
+## 当前M009第6次发布修复 B2整批定稿
+状态：B2双PASS定稿后执行授权第6次B3；B4-r6双席正确性与归因PASS，060/061/062当前缺陷否、队列否，063仍否，30项当前均无待修。B5-r6两席完整报告均PASS且四值全等，ledger已先登记M009 PASS；发布另走既有PR/CI门禁。
+两席本次完整B1均FAIL：20文件3381行/88判据；原26ID当前无缺陷，三项发布缺陷另编号，不把旧013/038业务实现改判未修。无添加、无HTML修改、无扩锁。
+输入 self modules/M009-b1-self-raw.md V0.18完整报告+V0.19/0.20补证 SHA db48bc859cf0342f3f62fa84b5f3532a41e49201320fc9d5af8fe29c53b0a5c8；Grok modules/M009-b1-grok-raw.md V0.17（新增段起于byte373312）SHA 3132b99553831987d9ed370ad7139e6ae9f3f36bf1e84847713a4cf0a3526ccb，真实exit0；四值均b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。
+
+|正式ID|本轮来源|分类|工程缺陷|修复队列归属|事实|冻结依据|最小修复边界|
+|---|---|---|---|---|---|---|---|
+|M009-038|CX-01|冲突|否|否|项目普通岗位通过平台守卫后仍可跨项目读写。|PGM-041 / BEQR-152 / GEN-005|按已批准范围补商户项目归属、公司项目多对多及必要后端维护；五类列表/COUNT和相关写入按真实项目校验；专用项目补录保留其余字段。必要依赖AuthorizationService复用SessionIssuer常量识别真实master_authority，不让platform_admin冒充。旧资料不猜填，普通岗位不能认领。详见下。|
+|M009-039|CX-02 + GR-03|冲突|否|否|空间projectId可空，父空间可来自另一项目。|PGM-017 / GEN-004 / GEN-006|createSpace要求projectId且等于当前项目；父空间存在并属于同项目；merchantId若有也须本项目。相关spaceExists复用同一项目范围。|
+|M009-040|CX-03|冲突|否|否|普通绑定停用/替换路径可以改动当前结算主体，缺公司权责变更审核。|PGM-026 / GEN-005|删除普通入口改变已有三主体身份的分支：新建/激活绑定若与商户已有非空三主体不一致则拒绝；生效绑定不得由普通change停用/暂停以绕过再绑。首次建立且商户三主体空，或首次权威绑定与已有三主体完全一致可继续；不引入财税审批流程，不以USB权限代替财税并审。|
+|M009-041|CX-04（未来生效部分）|冲突|否|否|effectiveFrom设为2027-09-14，保存即active并改商户主体。|PGM-026 / GEN-006 / GEN-008|未来effectiveFrom保存为已有inactive、effectiveTo=null，不投影；创建与激活都拒绝另一条active或inactive且未结束绑定，事务内锁同一商户后检查/写入。到期现有active动作再次校验。Leasing新商户先不写三主体，后续绑定入口处理；不加新状态/调度。|
+|M009-031|CX-04（停用部分）+ GR-02；沿用旧ID|冲突|否|否|绑定停用后商户当前三主体投影仍保留，且可形成effectiveTo早于effectiveFrom。|PGM-026 / BEQR-143 / GEN-006|与040/041合并改分支：生效绑定的普通失效操作拒绝，原记录及投影不变；未生效绑定不写倒置日期，effectiveTo不得早于effectiveFrom；已结束历史绑定不重新打开历史期间。激活成功才同步三主体；不清空财税主体、不改历史快照。|
+|M009-042|CX-05|冲突|否|否|空间类型删除后disabled，恢复只接受archived。|BSM-004 / GEN-009|unarchiveSpaceType复用现有入口，同时接受archived和disabled并恢复active；pending_delete仍不能绕过审批，历史申请保留。|
+|M009-043|CX-06 + GR-05；关联旧M009-021|冲突|否|否|空间类型创建/商户删除审批审计缺对象ID；删除理由会被清空；驳回仍记录merchant.delete_approved。|BSM-004 / PGM-066 / GEN-011|executeWrite补SpaceTypeRecord/MerchantDeleteDecision对象ID，按现有请求类型把理由/审批决定写到不可变审计metadata；恢复清空档案理由不抹去事件理由。商户和空间类型驳回事件明确rejected；删除申请/最高权限直删也保留reason。无新审计系统。|
+|M009-044|CX-07|细化|否|否|空间类型正常审批完成，申请表status仍为pending。|BSM-004 / GEN-006 / GEN-011|在既有space_type_delete_requests把本次待审申请更新为approved/rejected；最高权限直删本次申请也结清。保留旧历史申请；现有类型行与本次申请更新在同一事务内，不新建状态机。|
+|M009-045|CX-08|细化|否|否|仅存在已失效历史绑定，也被countMerchantReferences视为活占用并阻止商户软删除。|BSM-004 / GEN-002 / GEN-006|占用统计仅排除真正已结束的inactive历史绑定；future inactive且effectiveTo=null仍算预约中的引用，不能当已失效而放行软删。其它合同、钱账、权益等引用判断保持。|
+|M009-046|CX-09|细化|否|否|容量/面积/租金接受负数，DTO和数据库无对应有效范围拦截。|PGM-020 / PGM-026 / GEN-004 / GEN-006|现有入口校验capacity、面积和租金单价不得负数；可空和零保持，不添加业务上限或新计价规则。|
+|M009-030|CX-10 + GR-01；沿用旧ID|细化|否|否|初建商户可写不存在的三主体ID，形成绑定表之外的主体投影。|PGM-026 / BEQR-143 / GEN-004|统一细化；新建商户对已提供三主体ID复用存在性及038项目关联校验，缺省仍可空，不强制所有建档自动绑定。Leasing由现有后续绑定入口落权威主体。|
+|M009-047|CX-12|冲突|否|否|多处中文错误message带英文角色/状态列表，共用翻译器原样透传。|PGM-001 / PGM-066 / GEN-008 / GEN-015|删除用户message中的英文枚举括注，保留原有中文说明与内部错误码；不改公共FieldLabels处理策略。|
+|M009-018|CX-13；沿用旧ID|冲突|否|否|商户普通档案更新可立即设terminated，没有退出缓冲生效机制。|BEQR-155 / GEN-006|普通建档拒绝terminated；普通更新拒绝由其它状态直接切到terminated，已有terminated档案的无状态变化保存不擅自改状态。不新建退出调度，不把存档当退出，不新增黑名单联合审批。|
+|M009-013|GR-04；沿用旧ID|细化|否|否|项目档案缺负责人、地址、经营范围；ProjectRequest/ProjectRecord/SQL及projects表均无三字段。|PGM-020 / BSM-028 / GEN-002|按已获批范围在ProjectRequest/ProjectRecord/创建/列表读回/JDBC及新迁移补ownerPerson,address,businessScope，三项可空；保留旧JSON缺字段和旧Java构造方式，必要往返验证；无页面、无旧项目编辑补录入口。|
+|M009-054|CX-B4-01 + GR-01|冲突|否|否|真实最高权限进入岗位模板生命周期时，被仅platform_admin入口拦截，已有删除审批分支不可达。|BSM-004 / GEN-005 / GEN-008|仅在AccessService.changePositionTemplateLifecycle对真实isMasterAuthority身份兼容该方法已有动作；不改共享requirePlatformAdmin或其它入口。保留Controller功能权限、对象状态、占用检查、独立审批和留痕；补真实最高权限及普通管理员边界验证。|
+|M009-055|GR-02 + 本席B4原有八项失败中的商户范围部分|细化|否|否|本批直接身份回归夹具/请求缺目标merchantId；资金及员工档案验证先被商户范围守卫阻断，未到要测的行为。|GEN-003 / GEN-005 / GEN-008 / PGM-041|只调整BarStoredValueFundChainJdbcIntegrationTests、StoredValueNotificationIntegrationTest和M010RegressionTests对应失败用例的合法操作人/商户资料/现有调用前提；保留核心金额、通知、隔离与隐私断言。不得放宽资金/员工生产代码权限或伪装最高权限。详见下。|
+|M009-056|GR-03|细化|否|否|M006最高权限审批身份测试的permission_grant_l3缺已要求的直接受益人，未到该用例要验证的合法审批。|GEN-003 / GEN-005 / GEN-008|只在M006SecurityRegressionTests该用例补测试授权的真实受益人及既有schedule数据；仍证明普通最高职级管理员不能代替USB、真实USB合法审批。保留生产受益人及利益冲突检查，不新增豁免。|
+|M009-048|Grok T-01|细化|否|否|listMerchantsByBusinessEntity作为商户隔离查询承载。|PGM-027 / BSM-072|有HTML上位条目，按分类顺序归细化；本次无独立工程缺陷，不因零调用删除。|
+|M009-049|Grok T-02|细化|否|否|JdbcPlatformRepository实现已有审批链持久化。|BEQR-166|有HTML上位审批链条目；不新增角色/流程。findDirectSuperior一人一个上级的观察仅保留。|
+|M009-050|Grok T-03历史登记；本次边界澄清|细化|否|否|既有联系人手机号PiiCipher及无权限时掩码有上位需求；持权原文/列表审计缺陷另列058，姓名覆盖边界另列059。|PGM-041 / GEN-010|保留已有手机号加密与掩码工具；旧泛称无缺陷不豁免058/059，不改历史原文。|
+|M009-051|Grok T-04|技术性|否|否|COUNT/LIMIT及PageResponse分页。|GEN-012|仅资源与接口承载，不引入业务实体、状态、收费、权限或业务默认值。|
+|M009-052|Grok T-05|细化|否|否|空间类型直接DELETE拒绝、导向存档审批。|BSM-004|现有业务流程的实现；恢复缺陷另列042，不把该拒绝端点重复判缺陷。|
+|M009-053|Grok T-06 + 本方package-info登记|技术性|否|否|package-info.java仅package声明。|GEN-001 / GEN-017|编译单元，不含业务实体、枚举、状态、角色权限、校验、价格或默认值。|
+|M009-057|CX-B5-01；Grok B5本次无问题|细化|否|否|SpaceTypeRequest.java:6声称存在则更新名称/排序/状态；实际新增接口拒绝重复typeCode并固定active。|BSM-004 / PGM-005 / PGM-020 / GEN-002 / GEN-008 / GEN-016|只删除Java注释中录入/修改、存在则更新的错误承诺，说明为新建、编码不可重复、新建启用；必要自身版本V0.01。不新增更新功能，不改DTO字段、接口行为、测试或HTML。|
+|M009-058|CX现锁B1V0.16 + GR-M009-B1-01|冲突|否|否|本批单次与同组消费缺陷已修，B4双PASS；当前HTML持权明文例外合法，查看对象上下文已留痕。|PGM-041 L656 / PGM-059 L871 / GEN-002 / GEN-005 / GEN-011|删除只查询即明文及同组分次消费路径。仅PlatformController七个商户响应入口共享现有helper，复用AuthorizationService.requirePermissions同时核功能权及可选电话权、按来源消费一次；本次是否明文传给两个mask重载，不再消费后重查。无电话权仅核原功能权并脱敏。公共currentActorHasPermission保持只读，保留范围/幂等/审计；在现有PlatformControllerTests补真实授权服务单次/同组/列表多条/写回/消费拒绝验证，旧测试必要适配；文件版本递增。无新端点角色权限、数据库修改或回填。|
+|M009-059|CX-03、GR-M009-B1-02；操作员明确应加密|细化|否|否|merchants.contact_name及secondary_contact_name直接明文读写，VARCHAR(120)不足容纳原120字姓名的密文。|PGM-026 / GEN-010 / GEN-008；操作员本次“3.应该加密”确定主次联系人姓名范围，不采用R006作为新判据|只在JdbcPlatformRepository共用merchantParameters/mapMerchant调用既有PiiCipher加/解密两列；新增最小SQL迁移将两列改TEXT（不删数据，不改旧迁移，不扩其他姓名列）；既有PlatformJdbcIntegrationTests验证新增/更新/两列原始密文和读取一致、120字中文姓名、null及空串。现有tools/verify-pii-encryption.mjs仅登记两列并升版。遵循AGENTS不新增历史回填/兼容组件；仅新建及后续保存走加密，旧数据未重存的不声称已全部加密。不得改手机号、owner_person、legal_representative、其它模块姓名/生日、HTML及共享PiiCipher。|
+|M009-060|CX-PUB-01 / GR-M009-B1-01|技术性|否|否|未发布V427不大于origin/main最大430；编号门禁exit1；隔离430库Flyway实际拒绝“resolved migration not applied:427”。|GEN-014 / GEN-002 / GEN-013|发布前fetch核最新编号；当前纯重命名V427为V432，内容逐字节不变，文件头V0.01保持（仅文件名改变，不改内容，不伪增业务版本）。不改已发布428—430或431SQL，不开outOfOrder/ignore开关。无业务发明：仅迁移执行序列，原013/038字段、关系不增删。|
+|M009-061|CX-PUB-02之CSV / GR-M009-B1-02|技术性|否|否|domain-ownership CSV --check退出1；现335行须反映新增business_entity_projects及merchants scope_source机械优先值。|GEN-016 / GEN-008|编号落地后运行现生成器重生成CSV。为执行操作员版本铁律，仅将该生成器既有file_version常量V0.01→V0.02及自身头V0.04→V0.05同步；不改分类算法/数组/列结构/status/业务规则。CSV各行file_version据此同升V0.02。无业务发明：生成器投影既有已批迁移，不新增隔离政策。|
+|M009-062|CX-PUB-02之安全规格 / GR-M009-B1-03|技术性|否|否|安全规格生成区现V428/170，--check退出1；现迁移需172表，换号后最新V432。候选仅标题V430仍红。|GEN-016|运行原docs:data-isolation-spec，仅自动区机械同步，并按版本铁律标题自身V0.03→V0.04；手写业务条款不改，生成器代码不改。无业务发明：已有表和scope列的事实镜像。|
+|M009-063|CX-PUB-01验证边界 / GR-M009-B1-04|技术性|否|否|complex_test已有427/431，不能靠重命名声称旧库可再跑432。|GEN-014 / GEN-006|仅登记约束挂060：空库全迁移、无427历史的430库升级均独立验证。原complex_test不改history不删业务，不向SQL加IF NOT EXISTS兼容补丁；该旧未发布库不是本批升级目标。无新功能、无新的强制判据。|
+ 
+完整归并：GR01→060；GR02→061；GR03→062；GR04→063否；CX01→060/063；CX02拆到061/062。原26行均否，当前30ID中仅060/061/062是。分列两清单不扩修复范围，仍同一次B3。所有旧观察/XM保留。
+版本差异说明：Grok建议SQL头V0.01保持可采纳，因为纯改名不改字节；其建议“安全规格只改自动区”加上必要自身版本递增，按用户AGENTS明确版本铁律；CSV已有file_version不是另造文件或字段，生成器仅版本常量同步不改算法。
+Grok B1将V427概括为“M010 FILES”不精确：冻结M010仅005/048/318/354，V427是M009已批直接迁移；本批不借他模块轮次。Grok只读生成比较曾在/tmp写删临时副本；不是正本写入，但未遵守本轮限定正本.scratch的运行时落点，保留此偏差记录，后续外审明确只许正本.scratch。不把此次B1说成全程无临时写入。
+发布依赖：B5需核整个候选相对origin的已有Auth/Authorization/审批/JdbcAccess生产差异及相关测试是当前授权实现的直接依赖；不为删依赖而改Java。全部源码1199文件与主工作区同字节、此前clean299 PASS是已验证事实，不宣称其它模块全审完或旧13PR全部已清。
+ 
 ## 当前M011现锁B2候选（2026-09-22，全量重开）
 状态：两席本批B2均PASS，Grok真实exit0，7ID/12观察已定稿；本节是当前队列，下方历史001—007的“是”是当年修复前事实，不作为本次待修。
 输入：modules/M011-b1-self-raw.md V0.04，29526 bytes SHA 0616b00ea1e092f23c05e897984288a4048c62fdc59a5bef16f1fadcee227a34；modules/M011-b1-grok-raw.md V0.04，107115 bytes SHA 7fc6df48a1c2b9ca1db61d30dcb7ec6d70241cfbee6b056ba7c531f8919f611d。B1两席PASS，Grok真实exit0；四值同为b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。范围3测试2776行/87判据，B3累计1。
