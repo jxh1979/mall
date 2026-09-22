@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.02
+// 文件版本：V0.09
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -31,7 +31,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
-    // P0-A/GAP-07：商户联系人手机号 PII 落库加密（V339）。范式同 customers.phone(V188)/ticket_orders.buyer_phone(V247)：
+    // 商户主次联系人姓名及手机号 PII 落库加密。范式同 customers.phone(V188)/ticket_orders.buyer_phone(V247)：
     // 仓库层写时 encrypt、读时 decrypt，业务层始终拿明文；展示脱敏在 controller 按权限做。
     private final PiiCipher piiCipher;
 
@@ -83,14 +83,14 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                     leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                     rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
                 )
                 VALUES (
                     :id, :merchant_name, :merchant_type, :business_entity_id, :contract_entity_id,
                     :settlement_entity_id, :contact_name, :contact_phone, :owner_person, :mall_block_code, :area_square_meter,
                     :leased_area_square_meter, :secondary_contact_name, :secondary_contact_phone,
                     :rent_per_square_meter, :cooperation_form, :status, :created_at, :updated_at,
-                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason, :project_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_name = EXCLUDED.merchant_name,
@@ -127,7 +127,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
                   FROM merchants
                  ORDER BY created_at DESC, id
                  LIMIT 500
@@ -142,7 +142,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
                   FROM merchants
                  WHERE (:include_archived OR (archived_at IS NULL AND delete_status <> 'approved'))
                  ORDER BY created_at DESC, id
@@ -182,7 +182,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
                   FROM merchants
                  WHERE id = :id
                 """, Map.of("id", merchantId), this::mapMerchant).stream().findFirst();
@@ -218,8 +218,12 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 continue;
             }
             // table 名来自 information_schema（系统元数据，非用户输入），无注入风险；merchant_id 走参数绑定。
+            String activeReference = "business_entity_bindings".equals(table)
+                    ? " AND NOT (status = 'inactive' AND effective_from IS NOT NULL AND effective_to IS NOT NULL"
+                            + " AND effective_to >= effective_from AND effective_to <= (now() AT TIME ZONE 'UTC')::date)"
+                    : "";
             Long c = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(1) FROM " + table + " WHERE merchant_id = :id",
+                    "SELECT COUNT(1) FROM " + table + " WHERE merchant_id = :id" + activeReference,
                     Map.of("id", merchantId), Long.class);
             total += c == null ? 0L : c;
         }
@@ -227,31 +231,31 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
-    public List<MerchantRecord> listMerchantsByBusinessEntity(String businessEntityId) {
+    public List<MerchantRecord> listMerchantsByBusinessEntity(String projectId, String businessEntityId) {
         // 商户面 scoped 读通道：按 merchants.business_entity_id = token scope 过滤（AC-ISO-1，§4）。
-        if (businessEntityId == null) return listMerchants();
+        if (projectId == null || businessEntityId == null) return List.of();
         return jdbcTemplate.query("""
                 SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
                   FROM merchants
-                 WHERE business_entity_id = :business_entity_id
+                 WHERE project_id = :project_id AND business_entity_id = :business_entity_id
                    AND archived_at IS NULL AND delete_status <> 'approved'
                  ORDER BY created_at DESC, id
                  LIMIT 500
-                """, Map.of("business_entity_id", businessEntityId), this::mapMerchant);
+                """, Map.of("business_entity_id", businessEntityId, "project_id", projectId), this::mapMerchant);
     }
 
     @Override
     public ProjectRecord saveProject(ProjectRecord project) {
         jdbcTemplate.update("""
                 INSERT INTO projects (
-                    id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at
+                    id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at, owner_person, address, business_scope
                 )
                 VALUES (
-                    :id, :merchant_id, :venue_type, :name, :code, :floor, :capacity, :status, :created_at, :updated_at
+                    :id, :merchant_id, :venue_type, :name, :code, :floor, :capacity, :status, :created_at, :updated_at, :owner_person, :address, :business_scope
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_id = EXCLUDED.merchant_id,
@@ -261,7 +265,10 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     floor = EXCLUDED.floor,
                     capacity = EXCLUDED.capacity,
                     status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    owner_person = EXCLUDED.owner_person,
+                    address = EXCLUDED.address,
+                    business_scope = EXCLUDED.business_scope
                 """, projectParameters(project));
         return project;
     }
@@ -269,7 +276,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public List<ProjectRecord> listProjects() {
         return jdbcTemplate.query("""
-                SELECT id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at
+                SELECT id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at, owner_person, address, business_scope
                   FROM projects
                  ORDER BY created_at DESC, id
                  LIMIT 500
@@ -467,7 +474,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 + "contract_entity_id, settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, "
                 + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
                 + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
-                + "delete_status, delete_requested_by, delete_requested_at, delete_reason FROM merchants" + where
+                + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id FROM merchants" + where
                 + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapMerchant);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
@@ -480,7 +487,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM projects", params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<ProjectRecord> items = jdbcTemplate.query("""
-                SELECT id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at
+                SELECT id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at, owner_person, address, business_scope
                   FROM projects
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
@@ -563,6 +570,37 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
 
 
+    @Override
+    public void completeSpaceTypeDeleteRequest(String spaceTypeId, String status) {
+        jdbcTemplate.update("""
+                UPDATE space_type_delete_requests SET status = :status
+                 WHERE id = (
+                     SELECT id FROM space_type_delete_requests
+                      WHERE space_type_id = :id AND status = 'pending'
+                      ORDER BY requested_at DESC, id DESC LIMIT 1
+                 )
+                """, Map.of("id", spaceTypeId, "status", status));
+    }
+
+    @Override
+    public void lockMerchant(String merchantId) {
+        jdbcTemplate.query("SELECT id FROM merchants WHERE id = :id FOR UPDATE",
+                Map.of("id", merchantId), (rs, rowNum) -> rs.getString("id"));
+    }
+
+    @Override
+    public boolean hasUnfinishedBusinessEntityBinding(String merchantId, String excludedId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM business_entity_bindings
+                     WHERE merchant_id = :merchant_id
+                       AND (:excluded_id IS NULL OR id::text <> :excluded_id)
+                       AND (status = 'active' OR (status = 'inactive' AND effective_to IS NULL))
+                )
+                """, new MapSqlParameterSource("merchant_id", merchantId)
+                .addValue("excluded_id", excludedId, java.sql.Types.VARCHAR), Boolean.class));
+    }
+
     private MapSqlParameterSource businessEntityParameters(BusinessEntityRecord businessEntity) {
         return new MapSqlParameterSource()
                 .addValue("id", businessEntity.id())
@@ -584,13 +622,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("business_entity_id", merchant.businessEntityId())
                 .addValue("contract_entity_id", merchant.contractEntityId())
                 .addValue("settlement_entity_id", merchant.settlementEntityId())
-                .addValue("contact_name", merchant.contactName())
+                .addValue("contact_name", piiCipher.encrypt(merchant.contactName()))
                 .addValue("contact_phone", piiCipher.encrypt(merchant.contactPhone()))
                 .addValue("owner_person", merchant.ownerPerson())
                 .addValue("mall_block_code", merchant.mallBlockCode())
                 .addValue("area_square_meter", merchant.areaSquareMeter())
                 .addValue("leased_area_square_meter", merchant.leasedAreaSquareMeter())
-                .addValue("secondary_contact_name", merchant.secondaryContactName())
+                .addValue("secondary_contact_name", piiCipher.encrypt(merchant.secondaryContactName()))
                 .addValue("secondary_contact_phone", piiCipher.encrypt(merchant.secondaryContactPhone()))
                 .addValue("rent_per_square_meter", merchant.rentPerSquareMeter())
                 .addValue("cooperation_form", merchant.cooperationForm())
@@ -602,7 +640,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("delete_status", merchant.deleteStatus() == null ? "none" : merchant.deleteStatus())
                 .addValue("delete_requested_by", merchant.deleteRequestedBy())
                 .addValue("delete_requested_at", timestampWithTimeZone(merchant.deleteRequestedAt()))
-                .addValue("delete_reason", merchant.deleteReason());
+                .addValue("delete_reason", merchant.deleteReason())
+                .addValue("project_id", merchant.projectId());
     }
 
     private MapSqlParameterSource projectParameters(ProjectRecord project) {
@@ -616,7 +655,10 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("capacity", project.capacity())
                 .addValue("status", project.status())
                 .addValue("created_at", timestampWithTimeZone(project.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(project.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(project.updatedAt()))
+                .addValue("owner_person", project.ownerPerson())
+                .addValue("address", project.address())
+                .addValue("business_scope", project.businessScope());
     }
 
     private MapSqlParameterSource spaceParameters(SpaceRecord space) {
@@ -673,13 +715,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("business_entity_id"),
                 resultSet.getString("contract_entity_id"),
                 resultSet.getString("settlement_entity_id"),
-                resultSet.getString("contact_name"),
+                piiCipher.decrypt(resultSet.getString("contact_name")),
                 piiCipher.decrypt(resultSet.getString("contact_phone")),
                 resultSet.getString("owner_person"),
                 resultSet.getString("mall_block_code"),
                 resultSet.getBigDecimal("area_square_meter"),
                 resultSet.getBigDecimal("leased_area_square_meter"),
-                resultSet.getString("secondary_contact_name"),
+                piiCipher.decrypt(resultSet.getString("secondary_contact_name")),
                 piiCipher.decrypt(resultSet.getString("secondary_contact_phone")),
                 resultSet.getBigDecimal("rent_per_square_meter"),
                 resultSet.getString("cooperation_form"),
@@ -691,7 +733,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("delete_status"),
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
-                resultSet.getString("delete_reason")
+                resultSet.getString("delete_reason"),
+                resultSet.getString("project_id")
         );
     }
 
@@ -706,7 +749,10 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 integerValue(resultSet, "capacity"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("owner_person"),
+                resultSet.getString("address"),
+                resultSet.getString("business_scope")
         );
     }
 
@@ -1163,5 +1209,130 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public void setMerchantArchiveReason(String id, String reason) {
         jdbcTemplate.update("UPDATE merchants SET archive_reason = :reason WHERE id = :id",
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
+
+    @Override
+    public Optional<BusinessEntityRecord> findBusinessEntityById(String entityId) {
+        return jdbcTemplate.query("""
+                SELECT id, entity_name, entity_role, unified_social_credit_code, legal_representative,
+                       bank_account_ref, status, created_at, updated_at
+                  FROM business_entities WHERE id = :id
+                """, Map.of("id", entityId), this::mapBusinessEntity).stream().findFirst();
+    }
+
+    @Override
+    public boolean businessEntityInProject(String businessEntityId, String projectId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM business_entity_projects
+                    WHERE business_entity_id = :entity_id AND project_id = :project_id)
+                """, new MapSqlParameterSource().addValue("entity_id", businessEntityId)
+                .addValue("project_id", projectId, java.sql.Types.VARCHAR), Boolean.class));
+    }
+
+    @Override
+    public void associateBusinessEntityProject(String businessEntityId, String projectId) {
+        jdbcTemplate.update("""
+                INSERT INTO business_entity_projects (business_entity_id, project_id)
+                VALUES (:entity_id, :project_id) ON CONFLICT DO NOTHING
+                """, Map.of("entity_id", businessEntityId, "project_id", projectId));
+    }
+
+    @Override
+    public boolean assignMerchantProject(String merchantId, String projectId) {
+        return jdbcTemplate.update("""
+                UPDATE merchants SET project_id = :project_id
+                 WHERE id = :id AND (project_id IS NULL OR project_id = :project_id)
+                """, Map.of("id", merchantId, "project_id", projectId)) == 1;
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<BusinessEntityRecord> listBusinessEntitiesPaged(String projectId,
+            int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_id", projectId, java.sql.Types.VARCHAR);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM business_entities WHERE EXISTS (SELECT 1 FROM business_entity_projects ep WHERE ep.business_entity_id = business_entities.id AND ep.project_id = :project_id)", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<BusinessEntityRecord> items = jdbcTemplate.query("""
+                SELECT id, entity_name, entity_role, unified_social_credit_code, legal_representative,
+                       bank_account_ref, status, created_at, updated_at
+                  FROM business_entities
+                 WHERE EXISTS (SELECT 1 FROM business_entity_projects ep WHERE ep.business_entity_id = business_entities.id AND ep.project_id = :project_id)
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapBusinessEntity);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+    @Override
+    public com.complex.platform.common.api.PageResponse<MerchantRecord> listMerchantsPaged(String projectId,
+            boolean includeArchived, String businessFormat, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_id", projectId, java.sql.Types.VARCHAR).addValue("include_archived", includeArchived)
+                .addValue("business_format", businessFormat);
+        // V348 按业态查询：business_format 为空＝不筛（走 idx_merchants_business_format）。
+        String where = " WHERE project_id = :project_id AND (:include_archived OR (archived_at IS NULL AND delete_status <> 'approved'))"
+                + " AND (CAST(:business_format AS VARCHAR) IS NULL OR merchant_type = :business_format)";
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchants" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<MerchantRecord> items = jdbcTemplate.query("SELECT id, merchant_name, merchant_type, business_entity_id, "
+                + "contract_entity_id, settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, "
+                + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
+                + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
+                + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id FROM merchants" + where
+                + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapMerchant);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+    @Override
+    public com.complex.platform.common.api.PageResponse<ProjectRecord> listProjectsPaged(String projectId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_id", projectId, java.sql.Types.VARCHAR);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM projects WHERE id = :project_id", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<ProjectRecord> items = jdbcTemplate.query("""
+                SELECT id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at, owner_person, address, business_scope
+                  FROM projects
+                 WHERE id = :project_id
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapProject);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+    @Override
+    public com.complex.platform.common.api.PageResponse<SpaceRecord> listSpacesPaged(String projectId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_id", projectId, java.sql.Types.VARCHAR);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM spaces WHERE project_id = :project_id", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<SpaceRecord> items = jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                  FROM spaces
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapSpace);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+    @Override
+    public com.complex.platform.common.api.PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindingsPaged(String projectId,
+            int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_id", projectId, java.sql.Types.VARCHAR);
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM business_entity_bindings WHERE merchant_id IS NOT NULL AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = business_entity_bindings.merchant_id AND m.project_id = :project_id)", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<BusinessEntityBindingRecord> items = jdbcTemplate.query("""
+                SELECT id::text AS id, merchant_id, operation_entity_id, contract_entity_id, settlement_entity_id,
+                       status, effective_from, effective_to, change_reason, created_at, updated_at
+                  FROM business_entity_bindings
+                 WHERE merchant_id IS NOT NULL AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = business_entity_bindings.merchant_id AND m.project_id = :project_id)
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapBusinessEntityBinding);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 }

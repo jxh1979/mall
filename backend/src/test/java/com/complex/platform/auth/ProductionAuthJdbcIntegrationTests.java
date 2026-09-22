@@ -268,7 +268,7 @@ class ProductionAuthJdbcIntegrationTests {
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.user.username").value("master-authority"))
-                .andExpect(jsonPath("$.data.user.account_type").value("platform_admin"))
+                .andExpect(jsonPath("$.data.user.account_type").value("master_authority"))
                 .andReturn();
         java.util.List<String> cookies = loginResult.getResponse().getHeaders("Set-Cookie");
         assertThat(cookies).anyMatch(cookie -> cookie.startsWith("admin_access_token=") && cookie.contains("HttpOnly"));
@@ -277,11 +277,11 @@ class ProductionAuthJdbcIntegrationTests {
         String accessToken = login.at("/data/access_token").asText();
 
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM access_users WHERE id = 'usr_master_authority' AND username = 'master-authority' AND account_type = 'platform_admin'",
+                "SELECT count(*) FROM access_users WHERE id = 'usr_master_authority' AND username = 'master-authority' AND account_type = 'master_authority'",
                 Integer.class)).isEqualTo(1);
         assertThat(jdbcTemplate.queryForList(
                 "SELECT device_id || '/' || terminal_type FROM auth_sessions WHERE user_id = 'usr_master_authority' AND status = 'active'",
-                String.class)).containsExactly("usb-master/recovery");
+                String.class)).containsExactly("usb-master:127.0.0.1/recovery");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM auth_sessions WHERE user_id = 'usr_master_authority' AND access_token_hash = ?",
                 Integer.class, accessToken)).isZero(); // 会话只存哈希，不存明文令牌
@@ -289,6 +289,25 @@ class ProductionAuthJdbcIntegrationTests {
         mockMvc.perform(get("/api/v1/ops/production-readiness/items")
                         .cookie(new jakarta.servlet.http.Cookie("admin_access_token", accessToken)))
                 .andExpect(status().isOk()); // Cookie 会话可进受保护后台读接口（与日常登录同通道）
+
+        String refreshToken = login.at("/data/refresh_token").asText();
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refresh_token": "%s",
+                                  "device_id": "usb-master:127.0.0.1"
+                                }
+                                """.formatted(refreshToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail_code").value("MASTER_SESSION_REFRESH_FORBIDDEN"));
+
+        productionAuthService.revokeOutstandingMasterSessions();
+        int statusAfterRevoke = mockMvc.perform(get("/api/v1/ops/production-readiness/items")
+                        .cookie(new jakarta.servlet.http.Cookie("admin_access_token", accessToken)))
+                .andReturn().getResponse().getStatus();
+        assertThat(statusAfterRevoke).isIn(401, 403);
 
         mockMvc.perform(post("/api/v1/auth/master/login")
                         .contentType(MediaType.APPLICATION_JSON)

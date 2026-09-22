@@ -10,7 +10,13 @@ public interface SessionIssuer {
     /** 保留超管账号 id/username（U 盘破窗专用，与普通管理员分离）。 */
     String MASTER_USER_ID = "usr_master_authority";
     String MASTER_USERNAME = "master-authority";
+    /** 最高权限账号类型。不是平台管理员，不得当日常全权通配。 */
+    String MASTER_ACCOUNT_TYPE = "master_authority";
 
-    /** 签发一个平台最高权限会话（platform_admin + active，被 isPlatformAdminBridge 视为 wildcard）。 */
-    AuthService.LoginResponse issueMasterSession();
+    /** 签发最高权限会话。须随插盘来源带上设备标识；不得按平台管理员身份签发。 */
+    AuthService.LoginResponse issueMasterSession(String deviceId);
+
+    /** 验签公钥加载或更换时作废已签发的最高权限登录，旧盘换到的票不能继续用。 */
+    default void revokeOutstandingMasterSessions() {
+    }
 }

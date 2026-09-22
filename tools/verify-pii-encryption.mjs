@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文件版本：V0.01
+// 文件版本：V0.02
 // PII 落库加密门禁(2026-07-05 立,防"buyer_phone 明文"类回归复发;2026-07-27 扩到全部主体)。
 // 口径:登记表列出所有"自然人手机号/PII 必须密文落库"的列 + 其写入文件;
 // 断言每处 addValue("<col>", ...) 都被 piiCipher.encrypt(...) 包裹。明文即 FAIL。
@@ -19,6 +19,8 @@ const REGISTRY = [
   { table: "ticket_orders", column: "buyer_phone", writeFile: "backend/src/main/java/com/complex/platform/ticketing/JdbcTicketingParameterSource.java" },
   { table: "amusement_group_bookings", column: "contact_phone", writeFile: "backend/src/main/java/com/complex/platform/amusement/JdbcAmusementRepository.java" },
   // ── 多主体联系人侧(V339,P0-A/GAP-07)──
+  { table: "merchants", column: "contact_name", writeFile: "backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java" },
+  { table: "merchants", column: "secondary_contact_name", writeFile: "backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java" },
   { table: "merchants", column: "contact_phone", writeFile: "backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java" },
   { table: "merchants", column: "secondary_contact_phone", writeFile: "backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java" },
   { table: "inventory_suppliers", column: "contact_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },

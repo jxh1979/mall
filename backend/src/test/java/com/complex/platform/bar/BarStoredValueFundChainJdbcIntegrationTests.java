@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,12 +58,15 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.access.AccessRepository accessRepository;
+
     @BeforeEach
     void setUpActor() {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         new com.complex.platform.access.AccessActor("usr_master_authority", "master-authority",
-                                "platform_admin", "org_1", null, "active"), null, java.util.List.of()));
+                                com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"), null, java.util.List.of()));
     }
 
     @AfterEach
@@ -76,6 +79,7 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     @Test
     void settleBillWithStoredValueChannelPersistsSettlementAndDeductsBalance() {
         String customerId = seedCustomer("svchain1");
+        asMerchantOperator("merchant_svchain1");
         String billId = seedUnpaidBill("svchain1", customerId, "merchant_svchain1", 5000L);
         seedAccount(customerId, null, "merchant_svchain1", 8000L, null);
 
@@ -109,6 +113,7 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     @Test
     void settleBillRejectsReplayOfForeignConsumeTransaction() {
         String customerId = seedCustomer("svchain3");
+        asMerchantOperator("merchant_svchain3");
         String billId = seedUnpaidBill("svchain3", customerId, "merchant_svchain3", 5000L);
         seedAccount(customerId, null, "merchant_svchain3", 8000L, null);
         // 预占键：同客户先以 barsv_k3attack 做了一笔小额消费（历史数据/内部键碰撞）。
@@ -142,18 +147,19 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     @Test
     void idempotentReplayWithSameFingerprintReturnsOriginalTransaction() {
         String customerId = seedCustomer("svchain5");
-        seedAccount(customerId, PROJECT_ID, null, 5000L, null);
+        asMerchantOperator("merchant_svchain5");
+        seedAccount(customerId, null, "merchant_svchain5", 5000L, null);
 
-        CustomerStoredValueTransactionRecord first = storedValueService.consumeInternal(customerId, PROJECT_ID, null,
+        CustomerStoredValueTransactionRecord first = storedValueService.consumeInternal(customerId, null, "merchant_svchain5",
                 1200L, "same request retry", "retrykey_svchain5");
-        CustomerStoredValueTransactionRecord replay = storedValueService.consumeInternal(customerId, PROJECT_ID, null,
+        CustomerStoredValueTransactionRecord replay = storedValueService.consumeInternal(customerId, null, "merchant_svchain5",
                 1200L, "same request retry", "retrykey_svchain5");
 
         assertThat(replay.id()).isEqualTo(first.id());
-        assertThat(projectCardBalance(customerId, PROJECT_ID)).isEqualTo(3800L);
+        assertThat(accountBalance(customerId, "merchant_svchain5")).isEqualTo(3800L);
 
         // 同键改金额=指纹不符，拒绝而非错误重放。
-        assertThatThrownBy(() -> storedValueService.consumeInternal(customerId, PROJECT_ID, null,
+        assertThatThrownBy(() -> storedValueService.consumeInternal(customerId, null, "merchant_svchain5",
                 999L, "same request retry", "retrykey_svchain5"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("已被其他操作使用");
@@ -190,6 +196,7 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     @Test
     void merchantPrepaidCardRefundsAtCounterWhileOnlineRefundStaysRejected() {
         String customerId = seedCustomer("svchain7");
+        asMerchantOperator("merchant_svchain7");
         seedAccount(customerId, null, "merchant_svchain7", 10000L, "merchant_prepaid");
 
         // 线上退款仍无条件拒（AUD-060 口径不变）。
@@ -222,6 +229,7 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     @Test
     void onlineAndCounterRefundKeysLiveInSeparateNamespaces() {
         String customerId = seedCustomer("svchain8");
+        asMerchantOperator("merchant_svchain8");
         seedAccount(customerId, null, "merchant_svchain8", 9000L, "platform_collect");
 
         // 线上退款(platform_collect 卡允许)用键 X。
@@ -238,6 +246,16 @@ class BarStoredValueFundChainJdbcIntegrationTests {
     }
 
     // ---------------- 造数 ----------------
+
+    private void asMerchantOperator(String merchantId) {
+        String userId = "usr_" + merchantId;
+        accessRepository.createUser(new com.complex.platform.access.AccessUser(
+                userId, "merchant_user", "staff", "org_1", merchantId, "active", Instant.now()));
+        accessRepository.saveUserPermissionOverrides(userId,
+                java.util.List.of("customer.stored_value.refund"),
+                com.complex.platform.access.AccessRepository.Effect.GRANT, "本商户柜台退款测试授权", userId);
+        TestSecurityActors.asMerchantUser(merchantId);
+    }
 
     private String seedCustomer(String prefix) {
         String id = prefix + "_customer";

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.02
+// 文件版本：V0.06
 
 import java.util.List;
 import java.util.Optional;
@@ -43,10 +43,10 @@ public interface PlatformRepository {
      * 勿删:本方法零调用是常态(多综合体隔离通道,建成待激活),但 verify:tenant-isolation 门禁
      * 以「该表存在 scoped 查询」为隔离能力判据,删除会导致门禁 fail-closed 阻断部署。
      */
-    default List<MerchantRecord> listMerchantsByBusinessEntity(String businessEntityId) {
-        if (businessEntityId == null) return listMerchants();
+    default List<MerchantRecord> listMerchantsByBusinessEntity(String projectId, String businessEntityId) {
+        if (projectId == null || businessEntityId == null) return List.of();
         return listMerchants().stream()
-                .filter(m -> businessEntityId.equals(m.businessEntityId()))
+                .filter(m -> projectId.equals(m.projectId()) && businessEntityId.equals(m.businessEntityId()))
                 .toList();
     }
 
@@ -100,6 +100,8 @@ public interface PlatformRepository {
 
     String findSpaceTypeDeleteRequestedBy(String spaceTypeId);
 
+    void completeSpaceTypeDeleteRequest(String spaceTypeId, String status);
+
 
     BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding);
 
@@ -108,6 +110,18 @@ public interface PlatformRepository {
     Optional<BusinessEntityBindingRecord> findBusinessEntityBindingById(String id);
 
     Optional<BusinessEntityBindingRecord> findActiveBusinessEntityBindingByMerchantId(String merchantId);
+
+    void lockMerchant(String merchantId);
+
+    default boolean hasUnfinishedBusinessEntityBinding(String merchantId, String excludedId) {
+        return listBusinessEntityBindings().stream()
+                .filter(binding -> merchantId.equals(binding.merchantId()))
+                .filter(binding -> !java.util.Objects.equals(excludedId, binding.id()))
+                .anyMatch(binding -> "active".equals(binding.status())
+                        || ("inactive".equals(binding.status()) && binding.effectiveTo() == null));
+    }
+
+
 
 
 
@@ -141,5 +155,50 @@ public interface PlatformRepository {
     default com.complex.platform.common.api.PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindingsPaged(
             int page, int size) {
         return com.complex.platform.common.api.PageResponse.of(listBusinessEntityBindings(), page, size);
+    }
+
+    default Optional<BusinessEntityRecord> findBusinessEntityById(String entityId) {
+        return listBusinessEntities().stream().filter(entity -> entityId.equals(entity.id())).findFirst();
+    }
+
+    boolean businessEntityInProject(String businessEntityId, String projectId);
+
+    void associateBusinessEntityProject(String businessEntityId, String projectId);
+
+    boolean assignMerchantProject(String merchantId, String projectId);
+
+    default com.complex.platform.common.api.PageResponse<BusinessEntityRecord> listBusinessEntitiesPaged(
+            String projectId, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listBusinessEntities().stream()
+                .filter(entity -> projectId != null && businessEntityInProject(entity.id(), projectId))
+                .toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<MerchantRecord> listMerchantsPaged(
+            String projectId, boolean includeArchived, String businessFormat, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listMerchants(includeArchived).stream()
+                .filter(merchant -> projectId != null && projectId.equals(merchant.projectId()))
+                .filter(merchant -> businessFormat == null || businessFormat.equals(merchant.merchantType()))
+                .toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<ProjectRecord> listProjectsPaged(
+            String projectId, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listProjects().stream()
+                .filter(project -> projectId != null && projectId.equals(project.id())).toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<SpaceRecord> listSpacesPaged(
+            String projectId, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listSpaces().stream()
+                .filter(space -> projectId != null && projectId.equals(space.projectId())).toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindingsPaged(
+            String projectId, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listBusinessEntityBindings().stream()
+                .filter(binding -> projectId != null && findMerchantById(binding.merchantId())
+                        .filter(merchant -> projectId.equals(merchant.projectId())).isPresent())
+                .toList(), page, size);
     }
 }

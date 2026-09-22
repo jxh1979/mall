@@ -46,6 +46,7 @@ public class ProductionBearerAuthenticationFilter extends OncePerRequestFilter {
                 );
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             });
+            authService.attachSession(request, token);
         }
         filterChain.doFilter(request, response);
     }

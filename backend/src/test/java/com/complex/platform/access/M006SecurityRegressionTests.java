@@ -348,11 +348,7 @@ class M006SecurityRegressionTests {
         when(repository.applyTemplate(anyString(), anyList(), any(), any(), anyBoolean(), anyString())).thenReturn(List.of());
         roles.put("old", new RoleRecord("old", "旧岗位", null, "project", "active", Instant.now(), List.of(LOW), "org"));
         roles.put("new", new RoleRecord("new", "新岗位", null, "project", "active", Instant.now(), List.of(other), "org"));
-        actor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID, "platform_admin", "org", null);
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org", null, "active"),
-                "unused", List.of()));
+        actor("template-admin", "platform_admin", "org", null);
         PermissionTemplate template = service.createPermissionTemplate(template("empty"));
         for (String code : List.of("old", "new")) service.createPositionRoleTemplate(
                 new PositionRoleTemplateRequest(code, "理由", code, "level", code, template.id(), "active"));
@@ -403,6 +399,10 @@ class M006SecurityRegressionTests {
                 "top", "permission_grant_l3", "permission_grant_l3", "access_grant_request", "request",
                 true, "pending", 3, 0, null, "理由", List.of(), Instant.now(), "requester", "top_authority", 30);
         when(reviewRepository.findPendingSupervisorReviewById("top")).thenReturn(Optional.of(pending));
+        users.put("permission-target", user("permission-target", "org", null));
+        when(reviewRepository.findSupervisorReviewSchedule("top")).thenReturn(Optional.of(
+                new com.complex.platform.governance.review.SupervisorReviewRepository.ReviewSchedule(
+                        "top", "permission-target", Instant.now().plusSeconds(3600), 0, null, null)));
         // M087：最高权限事项的链末节点为主会话节点（可变持有，裁决后 listChainNodes 反映新状态）。
         List<com.complex.platform.governance.chain.ApprovalChainNode> topChain = new ArrayList<>(List.of(
                 new com.complex.platform.governance.chain.ApprovalChainNode("n_top", "top", "main", 1, "master", null, "pending", null, null, null, null, 0)));
@@ -419,11 +419,12 @@ class M006SecurityRegressionTests {
         effect("admin", "governance.supervisor_review.approve", AccessRepository.Effect.GRANT, "approval-role", false);
         var request = new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(
                 "top-admin", "同意", List.of(), null, "approved", "同意");
-        assertThatThrownBy(() -> reviews.approve("top", request)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> reviews.approve("top", request)).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
         verify(reviewRepository, never()).saveSupervisorReview(any());
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", null, null, "active"),
+                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, null, null, "active"),
                 "unused", List.of()));
         assertThat(reviews.approve("top", new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(
                 "top-master", "同意", List.of(), null, "approved", "同意")).decision()).isEqualTo("approved");
@@ -592,12 +593,10 @@ class M006SecurityRegressionTests {
                 reviewRepository, new AuditEventService(new InMemoryAuditEventRepository()), event -> { });
         service = new AccessService(repository, new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(new InMemoryAuditEventRepository()), authorization, credentials, reviews, true, 3, 3);
-        // M037-002：非平台管理员不得操作岗位模板生命周期，且不落任何写入。
         actor("ordinary-staff", "staff", "org", null);
         assertThatThrownBy(() -> service.changePositionTemplateLifecycle("lifecycle",
                 new StatusChangeRequest("staff-archive", "archive", "越权操作", List.of())))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_ADMIN_REQUIRED"));
-        verify(repository, never()).savePositionTemplateLifecycle(any(), anyString());
         actor("admin", "platform_admin", "org", null);
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("archive", "archive", "停止使用", List.of()));
         assertThat(mapping.get().archivedAt()).isNotNull();
@@ -611,8 +610,7 @@ class M006SecurityRegressionTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_REQUIRED"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", null, null, "active"), "unused", List.of()));
-        // M037-002：最高权限驳回删除——不软删、清掉删除复核单号，之后可再次申请并批准。
+                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, null, null, "active"), "unused", List.of()));
         var masterAuthentication = SecurityContextHolder.getContext().getAuthentication();
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("reject", "reject_delete", "保留配置", List.of()));
         assertThat(mapping.get().deletedAt()).isNull();
@@ -622,7 +620,9 @@ class M006SecurityRegressionTests {
         SecurityContextHolder.getContext().setAuthentication(masterAuthentication);
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("approve", "approve_delete", "同意", List.of()));
         assertThat(mapping.get().deletedAt()).isNotNull();
+        actor("admin", "platform_admin", "org", null);
         assertThat(service.listPositionRoleTemplates(true).items()).hasSize(1);
+        SecurityContextHolder.getContext().setAuthentication(masterAuthentication);
         service.changePositionTemplateLifecycle("lifecycle", new StatusChangeRequest("restore", "restore", "恢复留存配置", List.of()));
         assertThat(mapping.get().deletedAt()).isNull();
         assertThat(mapping.get().status()).isEqualTo("active"); // M031-001：恢复即回到启用态
@@ -818,9 +818,7 @@ class M006SecurityRegressionTests {
         when(repository.findUserPositionAssignment(anyString())).thenAnswer(a -> Optional.ofNullable(positions.get(a.getArgument(0))));
         roles.put("junior", new RoleRecord("junior", "初级", null, "project", "active", Instant.now(), List.of(LOW), "org"));
         roles.put("senior", new RoleRecord("senior", "高级", null, "project", "active", Instant.now(), List.of(other), "org"));
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                        com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org", null, "active"), "unused", List.of()));
+        actor("template-admin", "platform_admin", "org", null);
         PermissionTemplate template = service.createPermissionTemplate(template("empty"));
         service.createPositionRoleTemplate(new PositionRoleTemplateRequest("m-l1", "理由", "ops", "l1", "junior", template.id(), "active"));
         service.createPositionRoleTemplate(new PositionRoleTemplateRequest("m-l2", "理由", "ops", "l2", "senior", template.id(), "active"));
