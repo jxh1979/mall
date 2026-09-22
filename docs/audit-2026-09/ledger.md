@@ -1,7 +1,7 @@
 CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
 LOCK-AMEND-COUNT: 1
 
-版本：V8.41
+版本：V8.66
 
 ## 当前M010：按最新指令完整双席B1重开
 操作员明确“D:\AI\ccwork\160-audit-prompt.md 按这个提示词，继续m010及后续模块”。本次采用完整B1→B2→必要B3/B4→B5双席流程，先PENDING再IN_PROGRESS。此前单席PASS仅历史，不当本次双PASS。4源203行+V410 26行/18GEN/14既有ID全审。B3累计2；M038不接管。
@@ -4167,7 +4167,7 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M040 `高危授权审批、临时授权、角色装配重算与主管复核链／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M007、M050；既有累计仅保留历史，不代表本版已审 |
 | M041 `高危授权审批、临时授权、角色装配重算与主管复核链／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M138、M139、M140、M144、M145、M148、M149、M150、M151；既有累计仅保留历史，不代表本版已审 |
 | M042 `高危授权审批、临时授权、角色装配重算与主管复核链／后台验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M111；既有累计仅保留历史，不代表本版已审 |
-| M043 `高危授权审批、临时授权、角色装配重算与主管复核链／网页与验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M168；既有累计仅保留历史，不代表本版已审 |
+| M043 `高危授权审批、临时授权、角色装配重算与主管复核链／网页与验证／第1段` | PASS | 2 | 2 | [B5-r2双PASS](modules/M043-supervisor-review-web-01.md) | 0 | 原322归属：M168；既有累计仅保留历史，不代表本版已审 |
 | M044 `登录会话、生产凭证守卫与破窗紧急恢复（U 盘密钥）／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M018；既有累计仅保留历史，不代表本版已审 |
 | M045 `登录会话、生产凭证守卫与破窗紧急恢复（U 盘密钥）／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M138；既有累计仅保留历史，不代表本版已审 |
 | M046 `登录会话、生产凭证守卫与破窗紧急恢复（U 盘密钥）／后台验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M091；既有累计仅保留历史，不代表本版已审 |
@@ -7750,3 +7750,120 @@ self V0.01 SHA98547a2468c655ae3a12422e0b730d0b0c4a8d15dd05fdaa4179d0cc165eda24�
 ## M009 B5-r6 双PASS及发布交接
 本席完整raw封存后，Grok真实exit0且完整41113字节报告已分段读完。self V0.01 SHAba855ec799942cc9e3f2e01df735ccffe23ae706615da2bbf91704e16f5615b4；Grok V0.01 SHA29eb43323a2fc9ae0cfc54145b31ce2f2d40318bc6c6cc05e454481a545cf8af。20源3381行经同SHA复用全文阅读，88判据与30ID重新判断、全无待修；发布候选1199Java/399SQL同字节，依赖双审无未批新功能。B5后实算/sidecar/ledger/本次Grok四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458；先核再写本行PASS，后写收口。B3累计6，本次授权追加只用1次。
 发布分支audit/20260922/m009-m011-publish以origin/main d8f12c33为底；将M009/M011已审正本字节与本轮证据提交，按propose-change.sh推PR、CI绿后merge-pr.sh合并，不直推main、不部署。实际发布结果以该分支GitHub PR合并状态和回执为准，不以本段计划冒称已合并。
+
+## 旧PR核销与M043发布遗漏审计
+操作员明确：已被后续发布覆盖的关闭申请，真正遗漏的按审计流程发布。#440—#452为连续祖先链，逐PR独有增量核对；#450两前端文件尚不在main，按本次优先指令先审M043整模块三文件865行。M012/M038在制证据保持，不并行推进，不清历史计数；本次M043 B1从PENDING改IN_PROGRESS，B3=0。锁不变，HTML只读，唯一修复者Codex、Grok独立只读；不直接合并累计旧分支。
+
+## M043 B1 旧PR遗漏审计 派发
+```text
+/home/james/.local/bin/grok -p '执行M043本次完整B1，固定160-audit-prompt.md V0.17（.scratch/module-recheck-20260908/160-audit-prompt.md）和runbook/criteria-lock。用户最新授权优先核销旧PR440—452，已覆盖的关闭、真正遗漏按审计流程发布。#450两个SupervisorReviewPage文件未在origin/main；因此按新优先顺序先审M043，M012/M038仅保留不同时推进。
+正本/home/james/complex-management main主工作区；M043已PENDING→IN_PROGRESS，B3=0。冻结3文件：apps/web/src/admin/pages/SupervisorReviewPage.tsx、SupervisorReviewPage.chain.test.tsx、SupervisorReviewPage.test.tsx，共现865行，计划冻结660不改。严格全文件完整读/全映射106项（请自算）三线第一性、顺从、对抗，不能只审#450差异。现后端审批/会话依赖已由#481发布，origin/main=27ad0e5fc25eb02e33cfe4743fb50072c2488593。三HTML现文只读，无新需求/锁外判据/角色/产物。锁实算应与sidecar/ledger比，报告首行CRITERIA-LOCK-SHA256。
+对旧PR450不要预设通过：查前端是否与后端实际beneficiary/审批转发/权限、申请人和直接受益人禁自审、证据/幂等、中文、数据隔离匹配；真实可复现正常路径问题才入finding，极端并发观察保留。发现问题先全部审完，禁止修代码、禁止只看一个问题就停。每finding临时GR编号、文件行/HTML完整原句或冻结GEN原文、四分类和工程缺陷、有无添加/最小处置。无新增功能，冲突按V0.17已有修法，不提新判据。
+只能写docs/audit-2026-09/modules/M043-b1-grok-raw.md，已存在则完整追加递增Vx.xx、保留旧前缀。不得读本次self raw或CLI缓冲，不改ledger/findings/源/测试/HTML/DB/主index。固定两席无MCP/子代理。临时仅正本.scratch，不/tmp。本次可跑只读现有前端测试/类型检查（不写产品文件）；不得跑旧complex_test新432迁移。检查技能按prompt收窄，不派第三席。完成整模块后报告明确PASS/FAIL及完整证据，不能有条件通过。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## 旧PR已覆盖核销（2026-09-22）
+操作员已授权关闭被后续发布覆盖的申请。已逐独有增量、后续修正与origin/main 27ad0e5f核验，gh pr close真实exit0：#440/#441→#481；#442→#460；#443→#461；#444→#464（M023-006明确替代旧删除留言入口）；#445→#466；#446→#471；#447→#472/#481；#448→#473/#481；#449→#481。十个均已CLOSED且附说明，未删分支/提交。#450尚有M043两文件未发布；#451/#452自身增量已由#481覆盖，但累计继承#450，保留OPEN至遗漏发布。8个Graft工具配置不混入。
+M043根B1全文封存：3文件865行、106映射判据；self SHA b95d62bd3df8c161ef7728affe715ade8affee5940cf3c41f1515292e3e01c04，4个细化工程缺陷，结论FAIL；本次23前端测试、typecheck实跑exit0。Grok仍在运行，未读其正文；尚未B2/B3。
+
+## M043 B1 旧PR遗漏审计 实际交付
+2026-09-22T20:35:58.359389+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M043-b1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M043 B1结束及B2候选
+Grok真实exit0，28539字节SHA092aa8bbce46a860e9a67fb65aceb6e0e75a92a70cf6564051354b8c25a90863；根封存后全文读完。两席FAIL，8项全归并，无添加。B1后四值核验全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458；B3=0，IN_PROGRESS。findings已写M043-001..008候选，未修代码，下一步B2双席复核。
+
+## M043 B2 派发
+```text
+/home/james/.local/bin/grok -p '执行M043 B2整批候选归并复核。固定提示词V0.17/runbook，正本/home/james/complex-management，只Codex/Grok无子代理/MCP。B1两席完整报告均已封存并互读，输入docs/audit-2026-09/modules/M043-b1-self-raw.md V0.01、M043-b1-grok-raw.md V0.01完整全文。findings.md顶部M043本次旧PR遗漏B2候选8条M043-001..008，当前均工程缺陷是/队列是；GR八条全纳入，CX1→004，CX2→003，CX3/4→002。核两份raw与候选差集、分类/归属/最小修法，PASS/FAIL明确。无添加，无HTML改动，无新判据。你不修代码/ledger/findings/DB/index。
+关键最小范围：004删除全单一概必须受益人的前端分支，保留利益冲突与服务端requireBeneficiary（不在前端复制全部后端谓词）；002目录按policyCode找，未匹配不在前端硬拒，由服务端节点/证据校验，只有明确evidence_attachment要附件。005复用已有审批预检用于驳回，空附件[]；006只当前三种资金动作的既有表单必填提示/校验。008只改“账号”为“用户编号（不是登录名）”，不实现username解析服务，不宣称任意username支持。001仅本页既有字段中文映射/未知中文占位，不改全局字典，不新增业务码。003复用已有ApprovalChainPage结果语义。007测试通过页面公共交互且先红后绿。
+若不同意完整列出原因/最小替代，不能替根修。把本批B2结论完整追加到docs/audit-2026-09/modules/M043-b1-grok-raw.md，保留原前缀，追加段版本V0.02并注明输入raw路径，不写新的CRITERIA-LOCK-SHA256行（B2特别规则）。只写该raw，临时仅.scratch；不读本批self B2追加前的草稿、不把B2PASS写成代码已修。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M043 B2 实际交付
+2026-09-22T20:45:28.803067+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M043-b1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M043 B2双PASS及B3开始
+2026-09-22T20:48:11.919585+00:00：双方B2完整票PASS，Grok真实exit0；8项定稿，无添加，无HTML改动。B3累计0；当前IN_PROGRESS。B3前四值同 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。只修已定稿001—008。
+
+## M043 B3第1次整批结束
+8项定稿001—008本轮整批；before=f26b340bfa35c31ecdc0329256e8ce1d40620c0f after=47af849df0eb7c41c6a7b962723786eca1baecb9。B3累计1；仍IN_PROGRESS。红测14FAIL/24PASS，修后38PASS；初次新测试误以为失败不回传结果，改为验证failed对象且只调用一次；TypeScript数组夹具非空断言修正后typecheck exit0。只动Page和原test，chain测试不改；HTML/锁/真实index不改。B3后四值同 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。待B4双审，不把绿测当PASS。
+
+## M043 B4-r1 派发
+```text
+/home/james/.local/bin/grok -p '按 .scratch/module-recheck-20260908/160-audit-prompt.md V0.17 和 docs/audit-2026-09/plan/runbook.md，进行M043 B4-r1修复diff完整独立审计。你是固定Grok席乙，只读，禁止修代码/测试/HTML/锁/ledger/findings，禁止子代理/MCP/第三席。只允许写指定报告。先核提示词/计划/锁/M043三文件，完整读取findings顶部本次M043-001—008 B2整批定稿及两份B1/B2raw。不读本次B4 self报告；你独立判断正确性/充分性和每行归因，FAIL有否决权。
+本轮before tree=f26b340bfa35c31ecdc0329256e8ce1d40620c0f；after tree=47af849df0eb7c41c6a7b962723786eca1baecb9。必须独立执行git diff --binary <before> <after>，不按路径过滤，全文写入本票，两个tree及逐块ID归因全写。真实diff仅2文件（Page和test），chain测试未变。完整审完全部diff再报，不边审边修。
+本轮001页内局部显示映射/未知中文，不动全局；002按policyCode查明确附件，未知交服务端；003区分节点通过/整单；004删无受益人一律拒转，保留利益冲突；005两decision同预检/空数组；006仅表单既有三资金动作提示；007原tests公共UI+fetch覆盖；008ID标签明确。自行核，不沿用我的结论。版本头是本文件首次加，本次Page V0.01、test V0.03。根红测试14FAIL24PASS，修后38PASS，typecheck0；最初失败结果测试误以为不回传，已改按existing useAdminAction failed对象断言；你自行验证。真实目录无id所致React key警告现文既有，不得顺手修；可独立判是否缺陷并给事实，不能虚PASS。
+B3计1，模块IN_PROGRESS；主HEAD e456ba96c84185c8d39f18f548011daac48a6466；HTML/主index未动。不得因测试绿跳审；无新增功能/依赖/后端。按§5闸3每行须归定稿队列，否则FAIL。
+报告指定路径 /home/james/complex-management/docs/audit-2026-09/modules/M043-b4-r1-grok-raw.md 。已有内容则把本次完整报告追加末尾，不得覆盖；不存在则创建。独立sha256sum锁，本次报告第一行独占CRITERIA-LOCK-SHA256: <实际hash>。报告自身V0.01（已有则递增）、完整diff/逐块归因、测试真实命令/exit、PASS或FAIL及全部依据。不返回正文给调度，不需要机器回执标记；适配器以落盘四事实验收。不得commit/push/merge/deploy/改数据库。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M043 B4-r1 实际交付
+2026-09-22T20:59:53.134032+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M043-b4-r1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M043 B4-r1双PASS进入B5
+Grok exit0完整报告已读，完整diff与两tree逐字一致；self/Grok正确性与逐行归因均PASS；001—008队列否；B3累计1，模块仍IN_PROGRESS。React key警告源于既有目录无id，记录观察，不用假id掩盖，也不顺手扩修。接续3文件106判据全审。
+
+## M043 B5-r1 派发
+```text
+/home/james/.local/bin/grok -p '严格按 .scratch/module-recheck-20260908/160-audit-prompt.md V0.17 与 runbook V0.02，进行M043 B5-r1修复后整模块独立三线审计。固定席乙Grok只读，不用MCP/子代理/第三席，禁止修改源码/测试/HTML/锁/ledger/findings。本次B4两席均PASS才由调度派此命令；但不得沿用票当B5。
+完整读取plan/modules.md中M043三个文件全部现文：SupervisorReviewPage.tsx、SupervisorReviewPage.test.tsx、SupervisorReviewPage.chain.test.tsx；逐条核criteria-lock.md对M043全部106映射。第一性原理/顺从/对抗三线均做，不只8个修复ID或diff，找齐全批问题再结束。需求唯一三份HTML；其它代码只证实现。完整核原有评估、策略KPI/明细、转交、审批、驳回、链入口、身份/范围/字段/证据/错误及测试有效性，追必要后端/shared依赖但不扩修复面。按四分类与2.3证据，不因HTML宽映射擅自新增业务。观察与首次正常缺陷区分，不凭测试绿PASS。
+本次M043 B3累计1；8项001—008经B4双PASS已清修复队列。整模块当前行数自行实算、3文件sha独算。运行可执行验证并实报命令exit；没有实际执行的浏览器/全后端不得声称。主HEAD e456ba96c84185c8d39f18f548011daac48a6466，origin/main当前需实查；主index不得修改。页内中文、policyCode/明确附件、节点结果、转交可空、既有三动作受益人、ID标签等不等于已满足其它全量规则，要独立审查。不要读本次self B5，不依席甲结论。
+报告指定 /home/james/complex-management/docs/audit-2026-09/modules/M043-b5-r1-grok-raw.md 。文件存在则追加本次完整报告，不得覆盖；不存在创建。第一行必须独立sha256sum锁后写 CRITERIA-LOCK-SHA256: <实际64hex>。自身版本V0.01（已存在递增）、完整文件覆盖、全部106映射覆盖及证据/不适用理由、三线、四分类、全部发现、最终PASS或FAIL。不得把条件或待补写PASS。报告只写此路径，不写其它审计产物；原始JSON不落盘。禁止commit/push/merge/deploy/数据库写。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M043 B5-r1 实际交付
+2026-09-22T21:15:40.683872+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M043-b5-r1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M043 B5-r1完整FAIL回退B2
+两席完整票已收齐：self PASS；Grok FAIL/exit0。合取FAIL，三项新缺陷无现行队列ID，按整批回退B2，分009—011候选。根先前把key警告记观察，现接受外席否决：真实目录第一遍即缺键；复核withBase现有部署契约证实入口前缀遗漏。B3仍1，IN_PROGRESS，不停止全流程、不先修。
+
+## M043 B5-r1回退B2 派发
+```text
+/home/james/.local/bin/grok -p '按 .scratch/module-recheck-20260908/160-audit-prompt.md V0.17，M043 B5-r1 FAIL回退B2整批归并。只读固定Grok乙席，无MCP/子代理/第三席，不修改代码/测试/HTML/锁/findings/ledger。本批触发输入M043-b5-r1-self-raw.md V0.01完整PASS、M043-b5-r1-grok-raw.md V0.01完整FAIL，而不是旧B1票。findings顶部“B5-r1回退 B2候选”009—011。请完整差集复核、四分类、工程缺陷/队列和最小修法逐项给票；无新判据，Grok否决照旧。001—008已修队列否，不重开。
+009=GR01：仅现Page key/testid以已有policyCode替代不存在id，测试选择器与真实目录唯一行验证；不改共享types.ts/后端/引入id或兼容层。
+010=GR02：仅既有a href复用../../basePath已有withBase，保留review_id编码、根路径和/complex部署；不强制改SPA navigateTo、不新增路由、不改ApprovalChainPage。
+011=GR03：原两测试文件覆盖真实目录每行/明细对应、根路径与/complex href、空和非空finalApprover请求；不新框架，保留其余断言。
+这些是拟方案，独立判定不沿用调度结论。若有漏并/误合/分类或最小方案问题整批FAIL，完整说明；无条件票。四分类无添加则明确，不自己发明功能。不得修代码，B3累计1，IN_PROGRESS。
+报告只追加 /home/james/complex-management/docs/audit-2026-09/modules/M043-b1-grok-raw.md 末尾，本次完整B2回退票自身V0.03（如有更高版本递增），保留全部旧前缀，不写新的CRITERIA-LOCK-SHA256:独占行（B2不改B1起点）。独立哈希写正文叙述即可。本次B2不得读取对席同轮B2票作依据。只负责完整报告落盘，不返回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M043 B5-r1回退B2 实际交付
+2026-09-22T21:30:31.726584+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M043-b1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M043 回退B2双PASS，B3第2次开始
+Grok追加V0.03已完整读，exit0；根同批PASS。009—011整批定稿，001—008保持否。B3前四值同 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。IN_PROGRESS，计数仍1，完成after再加。
+
+## M043 B3第2次整批结束
+before=e3939c9899d4464e4b5f2798a6b688125153076b after=97e3cb99c8e2c7113406158539c6ea0da421af0b；009—011全部最小修复。先红3FAIL37PASS，后40PASS、typecheck0；key警告消失，jsdom scrollTo原提示保留。B3累计2，IN_PROGRESS。四值同 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458；三文件以外无本轮修改。待B4。
+
+## M043 B4-r2 派发
+```text
+/home/james/.local/bin/grok -p '按 .scratch/module-recheck-20260908/160-audit-prompt.md V0.17 /runbook，M043 B4-r2完整diff独立审计。固定Grok乙席，只读，不MCP/子代理/第三席，不读本次B4self。仅写指定报告，禁止代码/测试/HTML/锁/findings/ledger/index/数据库修改，禁止提交发布。
+本批B5-r1 FAIL回退B2两席完整PASS定稿：findings009细化/010细化/011技术性，工程缺陷是/队列是；001—008已修队列否不重开。对照两B5-r1和b1raw尾部B2票，完整核差异。
+before=e3939c9899d4464e4b5f2798a6b688125153076b；after=97e3cb99c8e2c7113406158539c6ea0da421af0b。独立git diff --binary两树，不按路径过滤；全文与逐块ID归因进报告。仅3文件22+/11-：现Page行key/testid读policyCode(009)，现href复用已有withBase(010)，两原test补真实目录每行唯一+抽屉对应、根路径/complexhref和空/填最终人请求体(011)，版本同步。独立判断充分性，不沿用根绿测。
+根B3先红3FAIL37PASS后40PASS/typecheck0，React key警告消失。只读审完全部diff再给PASS/FAIL，不边审边修。scope本模块3文件，不改types/Java/链页/HTML。B3累计2，IN_PROGRESS。
+报告只写 /home/james/complex-management/docs/audit-2026-09/modules/M043-b4-r2-grok-raw.md 。已有则追加本次完整报告不覆盖，不存在创建；自身版本V0.01或递增。独立sha256sum锁，本次第一行CRITERIA-LOCK-SHA256: <实际64hex>。完整diff、逐块归因、真实验证命令exit、发现与最终票，无条件。只落盘完整报告，不回正文或机器格式标记给调度。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M043 B4-r2 实际交付
+2026-09-22T21:41:35.211373+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M043-b4-r2-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M043 B4-r2双PASS进入B5
+Grok真实exit0，完整报告已读；内嵌binary diff与两树逐字一致。双方正确性及逐行归因PASS，009—011清队；001—008不重开。B3累计2、IN_PROGRESS。测试40PASS、类型检查0；行身份DOM断言不能单独证明React key，key另以源码及无警告核验。继续全部三文件1029行、106映射B5。
+
+## M043 B5-r2 派发
+```text
+/home/james/.local/bin/grok -p '严格按 .scratch/module-recheck-20260908/160-audit-prompt.md V0.17 与 runbook V0.02，进行M043 B5-r2修复后整模块独立三线审计。固定席乙Grok只读，不用MCP/子代理/第三席，禁止修改源码/测试/HTML/锁/ledger/findings。本次B4两席均PASS才由调度派此命令；但不得沿用票当B5。
+完整读取plan/modules.md中M043三个文件全部现文：SupervisorReviewPage.tsx、SupervisorReviewPage.test.tsx、SupervisorReviewPage.chain.test.tsx；逐条核criteria-lock.md对M043全部106映射。第一性原理/顺从/对抗三线均做，不只11个修复ID或diff，找齐全批问题再结束。需求唯一三份HTML；其它代码只证实现。完整核原有评估、策略KPI/明细、转交、审批、驳回、链入口、身份/范围/字段/证据/错误及测试有效性，追必要后端/shared依赖但不扩修复面。按四分类与2.3证据，不因HTML宽映射擅自新增业务。观察与首次正常缺陷区分，不凭测试绿PASS。
+本次M043 B3累计2；11项001—011经两轮B4双PASS已清修复队列。整模块当前行数自行实算、3文件sha独算。运行可执行验证并实报命令exit；没有实际执行的浏览器/全后端不得声称。主HEAD e456ba96c84185c8d39f18f548011daac48a6466，origin/main当前需实查；主index不得修改。页内中文、policyCode/明确附件、节点结果、转交可空、既有三动作受益人、ID标签等不等于已满足其它全量规则，要独立审查。不要读本次self B5，不依席甲结论。
+报告指定 /home/james/complex-management/docs/audit-2026-09/modules/M043-b5-r2-grok-raw.md 。文件存在则追加本次完整报告，不得覆盖；不存在创建。第一行必须独立sha256sum锁后写 CRITERIA-LOCK-SHA256: <实际64hex>。自身版本V0.01（已存在递增）、完整文件覆盖、全部106映射覆盖及证据/不适用理由、三线、四分类、全部发现、最终PASS或FAIL。不得把条件或待补写PASS。报告只写此路径，不写其它审计产物；原始JSON不落盘。禁止commit/push/merge/deploy/数据库写。
+第1次B5外席曾FAIL于真实目录key、/complex链接、空最终人测试。经B2双PASS和B3第2次修复，再B4-r2双PASS。禁止以这些通过替代当前全量审计。现三文件：Page V0.02、test V0.04、chain.test V0.01；本次需全模块1029行以实算为准。根40tests/typecheck0仅参考，自行验证。报告文件名必须M043-b5-r2-grok-raw.md。原失败r1证据保留，不覆盖。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M043 B5-r2 实际交付
+2026-09-22T21:57:47.335672+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M043-b5-r2-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M043 B5-r2双PASS、发布交接
+2026-09-22T21:58:34.241554+00:00 两席完整报告均PASS；本席先独立封存，后读Grok全363行，真实exit0。3文件1029行/106判据/11项清队，B3累计2。
+self SHA e8d2494b420d0ce8bf0eb5f6c6d131ad5b9525ff522197fdc90c0ea1a00f4769；Grok SHA 30eb2cad51be11890915614611aa49b8036620a4a39e7f49f078d61d538341c9。B5后actual/sidecar/ledger/Grok四值全部 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458；LOCK-AMEND-COUNT1。先核并写本模块PASS，随后创建收口文件。40tests/typecheck0；未运行浏览器和全后端。观察沿Grok七项保留、不扩修复。
+发布以fresh origin/main新建隔离分支，仅复制本模块3源与审计证据，propose-change.sh提交推PR、CI绿后merge-pr.sh；8个Graft工具配置及其他模块在制不混入。#450以补漏新PR替代，#451/#452自身已由#481覆盖，补漏合并后再关闭；实际合并/关闭状态以GitHub回执为准，本段不冒称已发布。
