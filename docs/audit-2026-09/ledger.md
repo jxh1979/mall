@@ -1,7 +1,292 @@
-CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
 LOCK-AMEND-COUNT: 1
 
-版本：V7.10
+版本：V8.23
+
+## 当前M010：按最新指令完整双席B1重开
+操作员明确“D:\AI\ccwork\160-audit-prompt.md 按这个提示词，继续m010及后续模块”。本次采用完整B1→B2→必要B3/B4→B5双席流程，先PENDING再IN_PROGRESS。此前单席PASS仅历史，不当本次双PASS。4源203行+V410 26行/18GEN/14既有ID全审。B3累计2；M038不接管。
+
+
+## 当前M010：Codex补充复查PASS
+2026-09-22T14:51:03.279309+00:00。按操作员“m010继续”与无问题只自己审计要求，4历史迁移203行+V410 26行/18GEN全审；本轮只读SQL exit0，五checksum全部一致，未发现新问题。Grok NOT-CALLED，不冒称当前新双PASS；B3累计2、本次修复0，历史PASS保留。只更新本席报告和复查记录，不开M038。
+
+## 当前M010：操作员纠正继续范围
+操作员明确“m010继续”。此前转向M038是调度误解，已停止仅该次M038只读Grok调用（真实exit -15，人工取消不是交付故障，不重跑）；M038业务代码/测试未由本次修改，状态和B3累计保持原值，不接管。M010依操作员此前“无问题只自己审、发现问题按完整提示词”先由Codex复查，旧PASS证据保留，未作本次完成声明。
+
+## 当前M038：Codex按现锁接续完整B1
+操作员在M009闭环后答“继续”。核实M010—M037均有PASS记录，不重做已闭环；M038 IN_PROGRESS停在旧锁B2-r2，Grok无运行进程、现有报告最后更新2026-09-21。保留历史B3累计1、全部既有修复和报告；按现锁对16文件/106判据重新全审，011仅既有输入，B1期间不修。仅Codex/Grok两席，不执行旧其它席的检查点提交/合并授权。
+
+## 当前M009：现锁B5-r5双PASS收口
+2026-09-22T14:45:10.564202+00:00。selfV0.01/GrokV0.02完整报告均已读，恢复调用真实exit0，四值全等。全20文件3381行/88判据/26ID当前队列全否。B3累计5保持。先登记本行PASS，再写V0.03收口。138项根测试有效通过（114单测+24集成分两次成功运行），外审93项重叠不相加；未提交推送部署。M001—M009现锁PASS，后续按顺序。首次中断回执丢失及原样重跑历史保留。并发双建空间类型观察属极端竞态，按规程不入当前队列。
+
+## M009 B5-r5中断回执恢复
+首次Grok完整V0.01报告已落盘PASS，SHA c89c8160e5099f3faba910b81246bd9c2be97db3d07e568b970d4fe2625bacc5；用户中断后原本机会话不存在，真实退出码无法取回，不能假报exit0。当前未登记模块PASS。确认远端Grok进程已结束，原样重跑ledger所记同一CLI命令（含原-p），同名raw按原提示追加完整新版本。仅恢复交付证据，B3仍5，业务代码不改。
+
+## 当前M009：B4-r5双PASS，B5-r5完整复审
+self/Grok B4V0.01正确性及归因双PASS，Grok真实exit0。findingsV3.49当前26项全部队列否；B3累计5保留。现在全20文件/3381行/88判据双席B5，不把B4通过当模块通过。
+
+## 当前M009：第5批B3完成，B4-r5双席审查
+仅058，before 4ddfdc255c4bbf0da9d42837e9b1bd7c0124b6be，after a685f41c8cc2333c5bb937acce746d5258f9eade，完整diff SHA190cf338324bd6be153d5afabe5ee87d948cb53bedfff8f881443f1269db3148，2文件。红19例5fail0error，绿114例全PASS。真实主索引不变，三HTML/锁不变。B3前后四值全等。累计4→5（操作员追加一次），未称模块PASS。
+
+## 当前M009：B2双PASS，开始授权B3
+findingsV3.48定稿；selfB2V0.17与GrokB2V0.16PASS。当前队列仅058单次消费，修法复用requirePermissions同次核验。B3累计4，本批完成后累计5。无新功能/HTML/数据库修改。
+
+## 当前M009：B1双FAIL、B2候选复核
+两席唯一058单次消费残余；selfV0.16、GrokV0.15真实exit0、全20/88、四值全等。findingsV3.47全26项候选，队列仅058。B3累计4，追加至5已批准，B2期间未修。
+
+## 当前M009：现锁B1重开
+M001—M008已闭环。操作员最新“都批准修改”三项已登记：PGM871及680获批原文已落地，656单次授权规则不改、允许修代码消费。本批追加一次B3授权保留至累计5，当前B3仍4。先全20文件/88判据两席B1/B2，不带旧终态结论。
+
+## 当前M008：现锁B5双PASS收口
+两席B5-r2V0.02完整报告已读，外审真实exit0，四值现锁全等；17文件1605行/19判据，16项当前队列否，无新增缺陷。B3仍2，无新修复。M001—M008现锁PASS，下一M009。M426台账、M435/M436入口快照、M409/M415 runtime输入红保留，不能称全链绿。
+
+## 当前M008：B2双PASS，B5-r2进行中
+findingsV3.46十六项队列全否，新增B3/B4跳过，B3累计2；两数据红保留原归属，仍IN_PROGRESS，禁止提前收口。
+
+## 当前M008：B1双席完整、B2候选待复核
+B1四值全等，self/Grok均V0.05；本席B2V0.06 PASS，findingsV3.45全16候选队列否，GrokB2待完成。仍IN_PROGRESS/B3累计2，无修复。
+
+## 当前M008：现锁B1进行中
+M001—M007现锁PASS；M008完整17文件/19判据，两席独立，B3累计2。外审夹具写入加强绝对目录前置核验，禁止主仓hook/index变更。
+
+## 当前M007：现锁B5双PASS结项及操作事故披露
+两席B5当前V0.02完整报告已读，Grok真实exit0、四值全等，163行79判据当前11项无待修，B3累计1。M001—M007现锁PASS，下一M008。
+外审夹具事故：Grok测试相对.git路径误指主仓，短暂覆盖.git/hooks/pre-push，违反本轮禁止主仓hook写入指令。外席已恢复；根随后独立检查内容997bytes/SHA46aabdf33cb3496d83a71e4357ca85ba2ed9dbbfd4582ab53747bc50bb748d6b等于事前B1/B2/根B5记录并等于历史blob45966c01610c92bb624b921b8333314f08238fed，mode775；实际index仍d9a65108…、HEAD不变、五源porcelain空。不能把本轮称为全程只读或无事故；Grok报告中未安装/无写入的概括须受此例外限制。当前旧副本恢复，不当作运行发布。
+本事故不构成五源新代码缺陷：5源始终未变，隔离fixture改绝对路径后重复验证成立。原报告与事故历史保留，不修改外审raw；结项仅源码范围PASS、不表示运行副本已同步。后续外审仅允许运行已读且路径隔离已确认的现有回归；任何自制写入夹具必须绝对路径解析及前置目录包含断言，不能把相对Git目录拼到主仓。
+
+
+## 当前M007：B2双PASS，B5-r1进行中
+findingsV3.44十一项当前队列空，跳新增B3/B4，累计1；两席完整重审163行79判据。
+
+## 当前M007：B1双PASS，B2整批归并中
+五源163行79判据，findingsV3.43十一项当前队列否候选；旧运行hook观察独立保留，B3累计1。
+
+## 当前M007：现锁B1进行中
+M001—M006现锁PASS；M007五文件163行79判据，旧B3累计1，完整独立审计开始。
+
+## 当前M006：现锁B5双PASS结项
+两席本次V0.03完整报告已读，Grok真实exit0；四值全等，206行79判据完整覆盖，037—047当前队列空。历史B3累计2不变。M001—M006现锁PASS，下一模块M007；M009单次授权消费待修。M414生成器L330旧自述仅作为该模块B1输入，当前不定finding不修。
+
+## 当前M006：B2双PASS，B5-r2进行中
+findings V3.42十一项当前队列否；跳新增B3/B4，累计2不变；B5两席独立完整重审206行79判据，尚非模块PASS。
+
+## 当前M006：B1双PASS，B2归并进行中
+两源206行79判据完整审计；findings V3.41十一项当前无缺陷候选，B3累计2。未作模块PASS。
+
+## 当前M006：现锁B1进行中
+M001—M005现锁PASS；M006当前两文档206行79判据，两席互盲并行。B3累计2不变。下方旧当前段仅历史。
+
+## 当前M005：现锁B5双PASS结项
+2026-09-22T10:57:45.892261+00:00。self V0.02/Grok V0.02完整报告已全部读完，真实exit0；四值全等，先ledger PASS再既有收口。52行18GEN全覆盖，当前012—014队列空，B3累计2。M001—M005现锁PASS；M006—M009仍待复审，M009单次授权消费代码未修。全局PGM台账和入口快照红保留。
+
+
+## 当前M005：B2双PASS，B5-r2进行中
+self V0.11/Grok V0.09完整归并票PASS，findings V3.40已定稿queue空；跳新增B3/B4，B3累计2，模块仍IN_PROGRESS。基线语义已双方澄清，不新增缺陷。
+
+## 当前M005：B1双PASS，B2进行中
+self V0.10/Grok V0.08完整报告已读；四值全等；findings V3.39候选三项队列空，待本批B2双席复核，B3累计2不变。
+
+## 当前M005：新锁B1进行中
+M001—M004现锁PASS；M005三文件52行18GEN两席互盲并行，B3累计2不变。下方旧当前段仅历史。
+
+## 当前M004：现锁B5双PASS结项
+2026-09-22T10:21:38.473087+00:00。self V0.04/Grok V0.03完整报告已读完，真实exit0；四值全等，先写ledger PASS再写收口。3321行220记录18GEN全覆盖，七项队列空，B3累计1。M001—M004新锁通过，M005—M009仍待复审。全局红灯/007公告/磁盘旧三叶限制保留，M009授权消费尚未修。下方旧当前段仅历史。
+
+## 当前M004：B2双PASS，B5-r1进行中
+七ID无当前缺陷/队列空，跳新增B3/B4；B3累计1保持，M004仍IN_PROGRESS。findings V3.38已定稿，两席新锁全模块B5未齐前不PASS。下方旧当前段仅历史。
+
+## 当前M004：新锁B1进行中
+M001—M003现锁PASS，M004 IN_PROGRESS累计B3=1；全3321行220记录18GEN。两席并行互盲，根封存前不读当前外审。下方旧当前段仅历史。
+
+## 当前M003：现锁B5-r2双PASS，结项
+2026-09-22T09:41:28.535272+00:00。root V0.04与Grok V0.03完整报告已全部读完，真实exit0；B5后四值全等b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。205行/18GEN/127脚本；七ID队列空，B3累计2不变。先登记ledger PASS再写既有收口。M001—M003当前锁通过；M004—M009待复审，M009单次授权消费仍未修。全局PGM台账同步/入口快照漂移保留，下方旧当前段仅历史。
+
+## 当前M003：B2双PASS，B5-r2进行中
+七项无缺陷、队列否，B3累计2不变；M001/M002现锁PASS。M003当前仍IN_PROGRESS，未作模块PASS，下方旧当前段仅历史。
+
+## 当前M002：B5-r2双PASS，结项
+2026-09-22T09:01:48.221073+00:00。两份V0.03完整报告已读完，Grok真实exit0；四值实算/sidecar/ledger/Grok全等b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。先记ledger PASS，再写既有收口。M001/M002已按现锁通过，M003—M009仍待复审，M009单次消费代码尚未修。下方旧当前段均为历史。
+
+## 当前M002：B2双PASS，进入B5-r2
+M001已结项；M002 IN_PROGRESS，四项队列空，B3累计2不变。self V0.14/Grok V0.11双PASS，后者真实exit0；findings V3.34定稿。当前尚非模块PASS，下方旧当前段仅历史。
+
+## 当前 M001：新锁 B5-r4 双 PASS，结项
+2026-09-22T08:27:07.133847+00:00。本席与Grok V0.02完整报告已全部读取，Grok真实exit0；335项全覆盖、无新增问题，findings V3.32队列空。B5后四值实算/sidecar/ledger/Grok全部等于 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。先登记本表PASS，再更新现有收口文件。B3累计4不变，无新增修复。下方旧当前段均为历史；M002—M009尚待当前锁复审，单次授权代码尚未修。全局PGM决策台账同步仍红，不称全仓通过。
+
+## 当前M001 B5-r4：B2已双PASS，跳过新增修复
+M001 IN_PROGRESS，B3累计4。本次B2 self V0.43/Grok V0.22均PASS，Grok exit0；findingsV3.32定稿队列空，按提示词跳B3/B4，进入新锁B5-r4全模块。尚非模块PASS，下方旧当前段仅历史。
+
+## 当前 M001 新锁B1：本席封存，Grok运行中
+M001 IN_PROGRESS B3累计4。本席V0.42完整报告已封存：619885bytes SHA256 aa32a8fdb6031993ac7a3f2ce260c8f7807dbecda04ce02e6bd05e6afd110b96，PASS。两文件2340行均与本席上轮全文阅读字节完全一致；本轮重新验证335映射、317摘录全部匹配、UTF8/结构解析；复用的entry-anchors测试明确标注未重跑。未读Grok本次V0.21。Grok尚未交付，不作模块PASS。下方PENDING等旧状态为历史。
+
+## 当前：BSM120日期LOCK-AMEND双PASS，④⑤完成
+新基准已登记，COUNT1不变。M001已PENDING，须从新锁B1重开；M002—M009保持PENDING。B3累计和历史报告全部保留。本次只同步批准日期副本，不改业务HTML/代码。下方所有旧当前段是历史。
+
+## 当前 M001 B1：本席完整报告已封存，Grok运行中
+M001 IN_PROGRESS，B3累计4、本轮新增0。self raw追加V0.40，565053bytes，SHA256 a0a85f8b9d23ee4e41f9b3cc84dc1594de0698a81b05235dc8508ace2c0a654c，旧511244bytes前缀保留；本席封存前未读Grok V0.19。2文件2340行、335判据完整核对，本席B1 PASS；Grok尚未交付，不作双PASS或模块PASS。entry-anchors及其测试本次exit0。BSM120唯一摘录字节差为页脚更新日期09-08到09-10，业务内容相同，透明记录待归并；未改锁或HTML。单次授权代码仍未修。
+下方所有旧“当前”段为历史记录，以本段和模块状态行为准。
+
+## 历史：考勤摘录LOCK-AMEND③双PASS，④⑤完成，从M001重审
+本段为最新状态；新基准已登记，COUNT仍1。M001/M002已PENDING，M003—M009维持PENDING，旧报告和累计次数不重置。下方旧状态段仅历史。
+
+## 历史：商户联系人LOCK-AMEND③双PASS，④⑤完成，从M002重审
+Grok真实EXIT_CODE=0，回执型结论PASS，出处IN-RECEIPT全文见末尾；本席反向验证及一致性PASS。新基准已登记，LOCK-AMEND-COUNT仍1（全部变更ID来自本次获批HTML）。
+已按⑤将M002—M009从PASS/IN_PROGRESS改PENDING，保留全部旧raw/收口文件及B3累计数。旧收口文件仅为历史证据，不代表新锁复审完成。M001不变，M009 B3仍4；两处HTML已落实，单次权限代码仍未修。
+## 当前：获批HTML同步，执行LOCK-AMEND①②，待双席复核
+操作员本线程“都批准修改”：逐条批准治理HTML原871句及680末句的完整提案；656单次授权原句不改，批准最小代码修复且保留明文查看功能。解除此前M009终态以执行本次获批工作，B3累计4不重置，允许完成本次修复及复核，不解读为无限追加轮次。
+本次触发M009；发生定义变更的ID：PGM-043、PGM-059，均来源治理HTML且记录铁律4批准。映射变更ID：PGM-059，仅补M009对获批商户联系人例外的直接引用，M009变88判据；其余映射不变，general不变。因全部变更ID均有获批HTML来源，LOCK-AMEND-COUNT维持1，尚未执行④，ledger顶部旧基准必须保持。
+HTML仅两处获批文字+自身V0.12→V0.13；656原句不改，另外两HTML不改。锁V0.11→V0.12，sidecar已更新。最早现有引用模块实查M002，不是M009；双PASS后须按⑤将M002—M009已有PASS及当前IN_PROGRESS改PENDING、保留原报告和累计B3，从M002 B1重新核查。M001不受本次定义引用影响。后续已开展模块旧证据不当作按新锁审过，待串行到达按新锁复核。
+旧基准SHA256：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+新锁SHA256：57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a
+Grok本次LOCK-AMEND复核尚未调用。单次权限代码尚未修改。
+
+## 当前M009：B5-r4双FAIL，BLOCKED-3ROUNDS
+本段为最新状态，优先于下方历史“IN_PROGRESS/待交付”记录。操作员授权的额外一次B3已完成，累计4不清零。第2项商户查看留痕、第3项主次联系人姓名新建/保存加密已修，B4双PASS，108测试全通过；第1项手机号明文权限豁免及布尔单次授权旁路按“1不动”保留，原冲突未解决。B5整模块两席均FAIL，未发现新的需定稿finding。没有改三HTML，不进入下一模块，不执行第5次修复。
+提示词V0.17 §4：“第3次B3后……B4或B5审完仍FAIL→停下……状态记BLOCKED-3ROUNDS”；本次仅获准额外一次，已耗尽。因此停止推进，不反复申请修改已拒绝的第1项。若需继续下一模块，须操作员明确裁决如何处理该保留冲突与“双PASS才进下一模块”的流程关系；不得代操作员把该项判PASS。
+
+## 当前M009：B2双PASS，开始授权追加B3一次
+状态IN_PROGRESS，B3历史3，本次整批完成后累计4。两席V0.14票已完整交付，Grok真实EXIT_CODE=0，实际调用见V7.33派发段。058仅留痕、059两姓名；第1项保持不动。findings V3.25定稿。三HTML不改，不新增CHECK/回填，不触碰其它姓名列。只在complex_test验证。
+
+## 当前M009：IN_PROGRESS，B2重新归并
+操作员最新原话“2 可以 3.应该加密 1不动”；随后在明确“允许按第2、3项重新复核，并追加执行1次修复”的询问后回复“继续”。据此解除本次轮次暂停，仅授权一次追加B3（累计第4次），不清零历史。先完成本批B2双席复核；第1项不动，不据此假称符合原HTML；三HTML不改，其他模块不动。
+本批候选明确为操作员对已发现问题的处置裁决，不擅自扩判据、不将历史R006自动升级为判据。059引用已有PGM-026档案及GEN-010安全/GEN-008一致性，以此次明确指令消除姓名保护范围的不确定；如Grok认为仍需LOCK-AMEND，应明确FAIL、提出具体必要变更，不单席越过。058手机号部分保留不修的事实与原审计FAIL保留，不能冒称整模块B5 PASS。
+本次登记时间：2026-09-22T05:32:40.086794+00:00。尚未调用本批Grok；业务文件未改。技能using-superpowers、receiving-code-review实际读取并按V0.17收窄适用。
+
+## M009 最新操作员裁决：替代此前修复范围，待重新归并
+操作员原话：“2 可以 3.应该加密 1不动”。
+编号对应上一条答复：1=删除手机号明文豁免；2=补商户编号、入口、筛选及分页留痕；3=联系人姓名加密。
+1. 第1项不动：保留现有手机号明文权限分支，不执行删除豁免；这不是宣称它符合原冻结判据，也不是业务HTML改文授权。原冲突事实和历史审计意见保留。
+2. 第2项允许：在现有merchant.viewed中补返回商户编号、入口、筛选及分页信息；撤回此前“此项不执行”的工作安排。不得外扩为新的查看通道或另建审计功能。
+3. 第3项应加密：M009商户主/次联系人姓名按操作员要求进入重新归并的拟修范围，优先复用现有加密机制；具体字段兼容、历史数据及最小验证方案须核实，不在本次登记中声称已实施。其他所属模块保留各自B1输入，不能据此跳过其审计。
+原M009-058的“两部分均修”B2定稿、M009-059的“仅观察不入队”处置不再作为当前可执行方案；两席历史原始报告不改，旧PASS不能代表本次新范围已获双席复核。
+本次仅登记裁决。业务源码、测试、数据库和三份业务HTML未修改；冻结判据未改。B3累计3、新增0，生命周期暂保留BLOCKED-3ROUNDS，不自行重置计数。本次回复明确处置范围；未将其擅自解释为不受限的追加修复轮次。下一步需结合新范围重新归并，并处理冻结判据与第1项保留要求的关系后再进入B3。
+本次Grok：NOT-CALLED。记录时间：2026-09-22T05:29:59.440044+00:00。
+
+## 当前 M009：BLOCKED-3ROUNDS（B2已双PASS，尚未修复）
+本轮定稿仅M009-058待修；M009-059姓名范围观察不入队。B3历史累计3、本轮新增0；未获操作员额外轮次授权不得执行第4次。三HTML与20源码本轮未改；不推进下一模块。以下历次当前标题按时间保留，以此处与本模块状态行为准。
+
+## 当前 M009 B1：Codex/Grok完整独立重审开始
+2026-09-22T04:23:04.545271+00:00。M009 PENDING→IN_PROGRESS；B3累计3不变；20文件3369行/87判据，纳入XM-008/010。先派Grok，本席同时独立核查；本席完整raw追加封存前不读Grok本轮报告。两席原b1 raw V0.10保留，新的完整B1追加V0.11。Grok退出码待实际交付，尚无审计结论。
+实际派发命令：
+
+```text
+/home/james/.local/bin/grok -p '固定只读外审席乙Grok，grok-4.6/xhigh。操作员2026-09-21指示“m009开始”，现对M009重新执行B1完整独立审计。正本/home/james/complex-management main，HEAD e456ba96c84185c8d39f18f548011daac48a6466。遵循.scratch/module-recheck-20260908/160-audit-prompt.md V0.17和docs/audit-2026-09/plan/runbook.md。专项规则覆盖AGENTS普通worktree/fetch规则。禁止fetch/commit/push/merge/worktree/deploy，禁止MCP/子代理/第三席。仅可追加你的指定raw，不改代码/HTML/数据库/lock/findings/ledger，不写helper/log文件，不运行会写库或构建产物的测试；静态证据不得冒称实跑。
+
+完整范围是plan/modules.md的M009全部20文件3369行与criteria-lock.md映射87判据，不是只审交接两项。第一性原理、顺从式逐判据、对抗式均审完整模块，可只读直接依赖，禁止中途修复/提问。锁SHA b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1，须自算不修改。
+既有输入：ledger末尾2026-09-21补登记的XM-008（PlatformController持pii.contact_phone.view时列表/单条明文与逐次查看留痕）、XM-010（JdbcPlatformRepository联系人姓名存储）。它们不是已定稿finding或分类。治理HTML871日常界面只脱敏且无关闭开关、677敏感查看审批留痕、870个人信息一律加密。R-006操作员“覆盖：生日与姓名也要加密”为历史裁决输入，不冒充HTML/冻结判据。按本471计划findings现值去重，M009-050历史仅登记不能据其旧“无缺陷”免审；若无冻结依据须报告LOCK-AMEND需要，不自行扩判据。“没有pii.contact_phone.viewed字符串”不证明没有通用审计，须追调用链。保留M009-013/038等已批准范围及历史修复，原B3累计3保持，不等于额外B3授权。M038保留现场，本次不审。
+你不得读取Codex本次新追加self结论。历史既有输入可核，当前完整结论须独立形成。按提示词§6核实实际技能并报告缺口。报告须含20文件SHA与覆盖、87判据逐项证据、三线过程、全部finding临时GR号/文件行号/事实/冻结依据/四分类/工程缺陷/最小处置，最终PASS或FAIL。未完整审完不得PASS。
+只追加完整报告到/home/james/complex-management/docs/audit-2026-09/modules/M009-b1-grok-raw.md。原239474bytes SHA f53b5784697bcb945d98d2681de9ca751c5ab9e3448b601217a39c3a12056a64全部原字节保留，旧V0.10，新追加段V0.11；段首独占CRITERIA-LOCK-SHA256: <实算值>，标明2026-09-21重开B1本次报告。不能覆盖旧报告，不要求stdout任何特殊标记。适配器仅暴露报告路径和真实exit code。
+冻结范围（漂移必须指出）：
+backend/src/main/java/com/complex/platform/governance/BusinessEntityRecord.java 45431c580d0bca0c217bcdb8ea120604eb7ed2b441845a5ac52257d5130b1277
+backend/src/main/java/com/complex/platform/governance/BusinessEntityBindingRecord.java f97af4de8ed4d45134196b4fcb83169591d5991e6aefaa4aa22411a49e78f422
+backend/src/main/java/com/complex/platform/governance/MerchantRecord.java dda319c37032c33c3cc5d260a0c9f43c7740d21b80a106c4a4efd49a19cdef00
+backend/src/main/java/com/complex/platform/governance/MerchantDeleteDecision.java e08618c856b35a1eda8447a9c9bd0c88ed00a9ee371c1ee33d3f2f3ab7ce5e40
+backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java 2816e96cd73867d2702b660854a1d342254c68b72b7c1e68fa12fb460e0bc98a
+backend/src/main/java/com/complex/platform/governance/PlatformController.java 9e4cef62553160bbd9b2c8bba8779feadec81a4dd26cf3d28664fb160777c3d2
+backend/src/main/java/com/complex/platform/governance/PlatformRepository.java df6dfee9894fc34f1df28fdae3d549ba50320df14219129779fa267affb08cdc
+backend/src/main/java/com/complex/platform/governance/PlatformService.java 984d57a4ba7a5a1059734cac427045ce4ee73143249cd93d0bd70f36488226b1
+backend/src/main/java/com/complex/platform/governance/package-info.java e3094c51b508bf10015ead9e92ac2ae2f3edf3b09786d88816ab8009d21921d9
+backend/src/main/java/com/complex/platform/governance/dto/BusinessEntityBindingRequest.java 66d4a8cd5c7f206f0c023e190ac5ed94ff6585263a737e35f062be9d8de211da
+backend/src/main/java/com/complex/platform/governance/dto/BusinessEntityRequest.java 18911088cbde9575ca7c38f9a6ac6eee3f4a812098aea9a29482133fe14dec19
+backend/src/main/java/com/complex/platform/governance/dto/MerchantArchiveRequest.java e0f16f5417b61e801ed23803616450e90810853ec7588a49714b43040d809f93
+backend/src/main/java/com/complex/platform/governance/dto/MerchantDeleteApprovalRequest.java 2516fb1d78e082fe89222a41f7178dde4b40d749c5ed2c2e712bbb14a74112c4
+backend/src/main/java/com/complex/platform/governance/dto/MerchantDeleteRequest.java 4898e50f2150e27c73d6d400b317d792f02c342a0e95a8b3dadbef5a7ebc8f45
+backend/src/main/java/com/complex/platform/governance/dto/MerchantProfileRequest.java 7b6dd241328b57dc646eb9b3c531e01e3a3a3d1bb1b848711c7ce43106973cf1
+backend/src/main/java/com/complex/platform/governance/dto/ProjectRequest.java 6ac09b14c1766bebd6df69fbf5579ccf602959d10179b497ff90ea1b3f521108
+backend/src/main/java/com/complex/platform/governance/dto/SpaceRequest.java 63857df14972fd6904a32fc7aade0de49b88ec3b946df493f61086c77d1ab7aa
+backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java 7c3a5fa28ab5a45b49d3fc325e39d1f25ddcbc38b86de3872ca86ce338b05f34
+backend/src/main/java/com/complex/platform/governance/dto/StatusChangeRequest.java 75b75cfaee897096f6fce0886fc4e71da8c5762774a901739cff244e1425f60f
+backend/src/main/java/com/complex/platform/governance/dto/VenueBusinessHoursRequest.java 6347c6dfe087be2310fe5f618a0ac27e188f340d1af84add2ab831e98cb333f1' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## 当前 M009：操作员指定重新开始，待进入 B1
+2026-09-22T04:23:04.538150+00:00。操作员“m009开始”。M009 PASS→PENDING，历史B3累计3和全部证据保留；M038原B2现场保留，本轮不推进。只依现有20文件/87判据重开，不改业务源码/HTML/判据、不清零计数、不视为额外B3授权。
+
+## 当前 M038 B2-r2 本席票已封存（PASS），待 Grok B2-r2 票
+2026-09-21T14:15:13Z。席甲 B2-r2 票追加到 modules/M038-b1-self-raw.md V0.03（全文 46328bytes SHA256 d3e01d070901abb732ab1efc2346d7167eae2520b6cb694dde70ed300654972d；旧 45359bytes 前缀完整），封存前未读 Grok 本次追加段。M038 IN_PROGRESS/B3 累计 1。尚非双 PASS。
+
+
+## 当前 M038 B5-r1 合取 FAIL（Grok 否决），B2-r2 候选已落盘，待 Grok B2-r2 票
+2026-09-21T14:15:08Z。Grok B5-r1 交付：适配器回执 REPORT_PATH=modules/M038-b5-r1-grok-raw.md、EXIT_CODE=0；V0.01 42963bytes SHA256 3094ede246bee6f1aa7a8ed827ccdb5550bcf5a80723d0e383d22d17714b2f33，结论 FAIL：GR-M038-012（权限模板页「复制模板」「应用模板」无提交中态，连点发两笔；001…010 落地无回归）。席甲 B5-r1 票 PASS（34574bytes SHA256 4dcfe0ecc5ca6dc23b780cfc79c2b231a8f10dd32252dff267d3e573df468fc0，封存于读 Grok 正文之前）被否决——席甲在 §3 写模板页写动作「原本就各有 try/catch 与置忙或二次确认」，对「复制模板」不成立（它只有 try/catch）。B5 后四值（精确路径 modules/M038-b5-r1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+按统一规则回到 B2：候选 findings V3.20（SHA256 dbb1dcb4a6d36cd6d802796c4499c565ea2deaee2405e03b22beba9288b9d1db）：M038-011（技术性）拟入队；无添加项、无 questions、不 BLOCKED。派 Grok B2-r2（追加到 modules/M038-b1-grok-raw.md V0.03），席甲自席票追加到 modules/M038-b1-self-raw.md V0.03 后再读其追加段。M038 IN_PROGRESS/B3 累计 1。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.6/xhigh。执行M038 B2-r2候选复核，正本/home/james/complex-management main主工作区。B5-r1两席已落齐：你的modules/M038-b5-r1-grok-raw.md V0.01（42963bytes SHA256 3094ede246bee6f1aa7a8ed827ccdb5550bcf5a80723d0e383d22d17714b2f33，FAIL，GR-M038-012）；席甲modules/M038-b5-r1-self-raw.md V0.01（34574bytes SHA256 4dcfe0ecc5ca6dc23b780cfc79c2b231a8f10dd32252dff267d3e573df468fc0，PASS，被你否决；双方已封存现可读）。候选：findings.md V3.20（全文件SHA256 dbb1dcb4a6d36cd6d802796c4499c565ea2deaee2405e03b22beba9288b9d1db）顶部「当前 M038 B5-r1 合取 FAIL，B2-r2 候选」段，只有一条M038-011＝你的GR-M038-012，采你的技术性分类与最小拟处置。
+只审本条的归并/分类/队列/最小修复边界，不重新审模块。请核：一、席甲按同根复查了本模块其余写按钮（治理页14处已经runWrite、两个引导弹窗保存有置忙；账号页创建有submitting、绑定解绑有bindBusy；模板页保存修改与新建有置忙），结论是只剩复制与应用两处，是否同意，有无漏的。二、处置：模板页加一个与runWrite同构的互斥包装（ref挡并发、沿用现有submitting让按钮禁用），复制与应用走它，两个按钮的disabled并入submitting；PermissionTemplatesPage.test.tsx补两条（连点两次复制只发一笔且提交中两个按钮禁用；连点两次应用并都确认只发一笔）；不改HighRiskConfirm、公共字典、客户端与后端。边界是否合适。三、你B5-r1第8节第15条（005的审批403未单独打桩、403断言只核非空）你已写明不单独立项，席甲照此只登记，是否确认。四、本批无添加项、无HTML申请、无questions。
+明确同意或不同意候选；PASS/FAIL二选一，不存在条件通过。已冻结判据不加判据，不用MCP或任何子代理，不改源码/文档/HTML/lock/findings/ledger，不fetch/commit/push/merge/deploy，不写新产物，不对任何数据库执行写语句。
+唯一可写 /home/james/complex-management/docs/audit-2026-09/modules/M038-b1-grok-raw.md：已有65479bytes/V0.02，必须在末尾追加本次完整B2-r2报告，版本V0.03，保留整个旧前缀。B2不写任何新的独占CRITERIA-LOCK-SHA256行；注明输入两份B5-r1报告和候选版本。本次CLI只交报告，不在stdout回带正文或标记；适配器处理退出回执。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M038 B5-r1 本席完整PASS已封存，待Grok
+2026-09-21T13:52:55Z。席甲 self modules/M038-b5-r1-self-raw.md V0.01/34574bytes/SHA256 4dcfe0ecc5ca6dc23b780cfc79c2b231a8f10dd32252dff267d3e573df468fc0：16 个前端文件全覆盖、106 项逐项核对、三线完成、取证脚本（/home/james/audit-tmp/m038_b5_run.log；本模块 57 测全绿、类型检查通过）实跑复核，封存前未读 Grok 本次正文。结论 PASS：001…010 修复落地无回归、无新发现；登记 XM-M038-A（origin/main 全量前端单测 3 条既有失败属别的模块）。Grok B5-r1 出处 modules/M038-b5-r1-grok-raw.md，命令见「B4-r1双PASS，进入整模块重审（B5-r1）」段。M038 IN_PROGRESS/B3 累计 1；四值待 Grok 落盘后再核。尚非合取结论。
+
+
+## 当前 M038 B4-r1双PASS，进入整模块重审（B5-r1）
+2026-09-21T13:52:33Z。Grok B4-r1 真实 exit 0，报告 modules/M038-b4-r1-grok-raw.md（V0.01，107410bytes SHA256 e47c16c28b569fde7cc6af837b5ff89c9bebd68bfdfcd757f0d59db2b0be888c，四项交付事实成立），结论 PASS（内容与 §5 闸 3 归因均 PASS）。席甲 B4-r1 票 PASS（modules/M038-b4-r1-self-raw.md V0.01，141003bytes SHA256 4c75672f9e7ef3cde53d352a6f07091c0490186e6fad08354d966288f8d003bf）。合取双 PASS，findings V3.19（SHA256 a628a3eb8c6e4474b5a1c429dd1ca07249c9d33ca4607dad3b53bdcd45ed9e7f）把 001…010 队列改否；当前队列是=0。B3 累计 1/3。
+下一步 B5-r1：派 Grok 整模块全量三线重审（modules/M038-b5-r1-grok-raw.md），席甲自席 raw 后读 Grok 并做四值校验；双 PASS → ledger 先记 PASS 再写 modules/M038-access-web-seg1.md、检查点合并（8 个改过的前端文件＋台账/raw）；任一 FAIL → 回退统一规则。操作员 2026-09-21 指示：M038 完成即停止，不开 M039。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.6/xhigh。M038 B5-r1修复后整模块三线全量重审（网页与验证模块），正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B1/B5及三线，全文读plan/modules.md V0.04 M038的16个文件（apps/web/src/admin/pages/下三个页面及其测试、apps/web/src/admin/security/下Can.tsx、PermissionGate.tsx、PermissionGate.test.ts），逐项过106项已冻结映射定义，不能只看diff或复用B2/B4票。背景：B1双FAIL→B2-r1双PASS定稿M038-001至010→B3-r1→B4-r1内容/归因双PASS（Grok raw SHA256 e47c16c28b569fde7cc6af837b5ff89c9bebd68bfdfcd757f0d59db2b0be888c、席甲 SHA256 4c75672f9e7ef3cde53d352a6f07091c0490186e6fad08354d966288f8d003bf）；B3累计1。修前16个文件与origin/main逐字节相同，主工作区现状即发布版（after tree 9df1fad44caa2ef615993fe970d3efc4620aca25）。前端单测实跑须在origin/main的一次性worktree里做：git worktree add --detach后用git diff df21dfdfa3aaa27416857eeca14dedcd04cee631 9df1fad44caa2ef615993fe970d3efc4620aca25的输出git apply进去（或逐个拷入8个改过的文件），软链主工作区的node_modules与apps/web/node_modules，在apps/web下npx vitest run加本模块11个测试文件路径应得57全绿，npx tsc -b --noEmit应通过；跑完先删软链再git worktree remove，不用--force；不装依赖。已知基线：origin/main全量前端单测有3条失败属别的模块（TraceLinkDrilldown与TraceLinkP2c），全量后端测试有20条失败属别的模块，比较时减去。后端与库只读：psql只对complex_test做SELECT，不调用任何会写的接口。
+范围：M038 16文件，行数与SHA以实算为准。判据锁V0.11，M038 106项；全部适用或无本面逐项记录，不新增判据。findings现在V3.19：001至010全部否（已修）；不把全部否当模块已全对，允许真实新证据或回归。重点：页面上每个会上屏的取值是否都有中文（对后端闭集逐键）、字段名与提示是否还有英文、每个写动作失败时用户看到什么、有无仍可双击重复提交的写按钮、读出再保存的字段是否保值、30档下拉与库内编号逐键一致、权限码与AccessController门控码一致、新补测试断言能否失败、有无把被测逻辑整个mock掉、页面文案与HTML原句及后端现行行为是否一致。
+全量审需第一性三问、顺从106项、grilling对抗，审完全部文件收齐全部问题才统一PASS/FAIL；不为理论场景加需求；已在B2双席定为只登记的观察不得在无新证据时改判。每问题给精确文件行/原句/正常触发/四分类顺序/已有判据/类型1、2或4证据。
+独立性：不得读本次M038-b5-r1-self-raw.md；两份本次完整raw各自封存后才互读；旧B1/B2/B4可读；全仓检索时若命中该路径的片段须丢弃不采信。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物（一次性worktree除外且须删除），不对任何数据库执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M038-b5-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/106证据/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M038 B4-r1 本席完整PASS已封存，待Grok
+2026-09-21T13:34:29Z。席甲 self modules/M038-b4-r1-self-raw.md V0.01/141003bytes/SHA256 4c75672f9e7ef3cde53d352a6f07091c0490186e6fad08354d966288f8d003bf：diff 545 条 ± 行逐条归因 001…010，内容 PASS/归因 PASS；封存前未读 Grok 本次正文。Grok B4-r1 出处 modules/M038-b4-r1-grok-raw.md，命令见「B3-r1 已修」段。M038 IN_PROGRESS/B3 累计 1。尚非合取结论。
+
+
+## 当前 M038 B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-21T13:34:25Z。席甲在主工作区改本模块 8 个文件（三个页面、五个测试文件）；公共字典、客户端、后端未动。修前 16 个文件与 origin/main 逐字节相同，主工作区改后即发布版。origin/main 一次性 worktree 里跑（m038_b3r1_run.log，已还原移除）：BASE 本模块 11 个测试文件 38 测全绿 → 只落测试补丁 RED：57 测 14 红（001 四条、003、004、005 两条、006、007、008、009 两条，外加随 002 改 aria-label 而红的一条既有测试；010 的权限闸组件与引导提交用例属补测，未改页面时即绿）→ 再落页面补丁 GREEN 57 全绿、web 类型检查通过；全量前端单测 928 测里失败 3 条与 origin/main 基线相同（TraceLinkDrilldown.test.tsx 1 条、TraceLinkP2c.test.tsx 2 条，属别的模块，登记 XM-M038-A），无新增失败；主工作区 diff 与一次性 worktree 里验证过的 diff 逐字节相同。before tree df21dfdfa3aaa27416857eeca14dedcd04cee631 → after tree 9df1fad44caa2ef615993fe970d3efc4620aca25（8 files changed, 484 insertions(+), 61 deletions(-)）；diff 冻结 /home/james/audit-tmp/m038_b3r1.diff（73515 bytes SHA256 30bbbdc50244c0384c56bc9bcdecc326e55bf74d6c6d43250344fd438d34fc4b，8 文件，545 条 ± 行已全部归因：{'008': 26, '010': 134, '002': 32, '001/003/004/005/007/008/009（本段共用夹具）': 44, '001': 117, '003': 12, '004': 10, '005': 68, '007': 9, '009': 28, '文件版本号（随本文件所含各 ID）': 6, '004/005': 2, '002/008': 8, '001/009（本段共用夹具）': 5, '001/006（本段共用夹具）': 13, '006': 31}）。两个页面的文件版本号各加一。未动三份 HTML、锁；未提交。B3 累计 0→1（台账行 B3 列原值 0 是原 322 计划的历史累计，仅留存）。
+下一步：派 Grok B4-r1（modules/M038-b4-r1-grok-raw.md），席甲同步落盘 B4-r1 self raw 后再读。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.6/xhigh。M038 B4-r1：只读审计席甲B3-r1整批修复diff本身（网页与验证模块），正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B4与§5闸3：diff＝两个tree id之间的全部差异，逐行归因到findings.md V3.18已定稿且归属「是」的ID（M038-001至010），归因不到的行即越界；内容上逐ID核每处改动是否按定稿最小处置与你B2给的边界：001页内映射覆盖后端闭集全部取值（applied译已生效等七个中文与定稿一致）、开通方式两个取值、模板类型role及两个下拉、默认审批意见改通过或驳回；002字段名占位aria-label校验句去掉id与ID而data-testid不动；003未映射岗位码显示为未登记岗位加括号里的岗位码；004已存档未删除写取消存档、已删除写恢复；005页内一个提交中标志加一个包装函数runWrite（置忙、执行、失败报后端中文消息、复位），七个写动作走它、提交中相应按钮禁用；006 toDateTimeLocal按本地时区取年月日时分；007删重复表头；008四处职级改30档下拉、选项页内生成、须与zhLevel正则及库内30个编号（/home/james/audit-tmp/m038_verify.log）逐键相同、范围变更处留沿用原职级空选项、未调staff-levels接口；009两处下拉与确认摘要改用formatBusinessStatus取字；010 PermissionGate.test.ts补组件渲染用例、发起授权申请的引导提交补进本模块已有的AccessGovernancePage.guidedcreate.test.tsx且未新建与M080同名的文件。另核：未改公共字典statusLabels.ts、客户端adminClient.ts、后端与任何本模块16个文件之外的文件；两个页面的文件版本号各加一；新断言能否失败；有无业务发明；文件模式未变。
+输入：before tree df21dfdfa3aaa27416857eeca14dedcd04cee631 → after tree 9df1fad44caa2ef615993fe970d3efc4620aca25；冻结diff文件 /home/james/audit-tmp/m038_b3r1.diff（73515bytes SHA256 30bbbdc50244c0384c56bc9bcdecc326e55bf74d6c6d43250344fd438d34fc4b；8 files changed, 484 insertions(+), 61 deletions(-)），可自行 git diff --binary df21dfdfa3aaa27416857eeca14dedcd04cee631 9df1fad44caa2ef615993fe970d3efc4620aca25 复核一致。修前本模块16个文件与origin/main逐字节相同，主工作区改后即发布版，无发布变体。证据：/home/james/audit-tmp/m038_b3r1_run.log——origin/main一次性worktree里（软链node_modules，已还原移除）：BASE本模块11个测试文件38测全绿；只落测试补丁RED 57测14红（001的四条、003、004、005两条、006、007、008、009两条，加上随002改aria-label而红的一条既有测试；010的组件与引导提交用例属补测、在未改页面时即绿）；再落页面补丁GREEN 57全绿、web类型检查tsc通过；全量前端单测928测里失败3条与origin/main基线的3条相同（TraceLinkDrilldown与TraceLinkP2c，属别的模块），无新增失败；主工作区diff与一次性worktree里验证过的diff逐字节相同。如需实跑：在origin/main一次性worktree里应用该diff（git apply），软链主工作区的node_modules与apps/web/node_modules，在apps/web下npx vitest run加文件路径，跑完先删软链再git worktree remove，不用--force。
+独立性：不得读本次M038-b4-r1-self-raw.md；两份本次完整raw各自落盘后才互读；旧B1/B2可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不装依赖，不建脚本日志临时产物（一次性worktree除外且须删除），不对任何数据库执行写语句，不调用任何会写的接口。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/M038-b4-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。diff逐块归因表、逐ID内容审计、最终PASS或FAIL（内容与归因分别给票，任一FAIL即FAIL）留raw，CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M038 B2-r1 双 PASS 定稿，进 B3-r1（席甲修）
+2026-09-21T13:29:22Z。Grok B2-r1 真实退出（exit 0；modules/M038-b1-grok-raw.md V0.02 追加段，全文 65479bytes SHA256 0d09b4c1035d80616349f4120305a902a7052a87fed1697a01e318914e01872d，票 PASS）；席甲 B2-r1 票 PASS（modules/M038-b1-self-raw.md V0.02，全文 45359bytes SHA256 3f5946f523fe7298cc5698ed0b39f6c581c66ffcefd4cb622c1d0360fad2da4f，自席落盘后才读 Grok 追加段）。定稿 findings V3.18（SHA256 67f839c7c6e100c6cc2a9ba1ab86ade731a69f51cd186dbbd057136423e650a7）：队列「是」10、「否」0。B3-r1 由席甲在主工作区改本模块文件（16 个文件与 origin/main 逐字节相同，主工作区版即发布版）；RED/GREEN 在 origin/main 的一次性 worktree 里跑 vitest（软链 node_modules）；修前 tree 记入 B3 完成节供 B4 冻结 diff；B3 累计 0→1。
+
+
+## 当前 M038 B2-r1 本席票已封存（PASS），待 Grok B2 票
+2026-09-21T13:15:25Z。席甲 B2-r1 票追加到 modules/M038-b1-self-raw.md V0.02（全文 45359bytes SHA256 3f5946f523fe7298cc5698ed0b39f6c581c66ffcefd4cb622c1d0360fad2da4f；旧 43748bytes 前缀完整），封存前未读 Grok 本次追加段。Grok 出处 modules/M038-b1-grok-raw.md V0.02 追加段。M038 IN_PROGRESS/B3 累计 0。尚非双 PASS。
+
+
+## 当前 M038 B1 两票已齐（双 FAIL），B2-r1 候选已落盘，待 Grok B2 票
+2026-09-21T13:15:21Z。Grok B1 交付：适配器回执 REPORT_PATH=modules/M038-b1-grok-raw.md、EXIT_CODE=0；V0.01 43552bytes SHA256 56eec0788741bc116816514112adfadd924790ec8b4854867deefc29e094c8bc，结论 FAIL：GR-M038-001…011。席甲 self V0.01 43748bytes SHA256 be038208d3821d8d66ea2316f2969be75b7b13bb13c4caaeed101c6d59cfb760（封存于读 Grok 正文之前），FAIL：CX-M038-001…005。两席落齐后席甲核源：Grok 11 条均成立（库内模板类型 role×5、30 档编号规则、治理地图 L287 原句已核），其中 GR-005（岗位码未映射英文上屏）、GR-001（职级自由文本）席甲 B1 只记成观察，改判；GR-002、GR-004、GR-007…010 席甲 B1 漏。席甲 CX-002（恢复按钮文案）、CX-004（时间往返）及 001 里的开通方式、默认审批意见两点 Grok B1 未报。
+B1 后四值（精确路径 modules/M038-b1-grok-raw.md 最后独占锁行）：实算/sidecar/ledger/Grok 均 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1。
+B2-r1 候选 findings V3.17（SHA256 10153c406c987ab2becb402100a3c1e08edb68a3a9f77e6cf4a6d23ce0f1582f）：M038-001…010 拟入队。无添加项、无 questions、不 BLOCKED。派 Grok B2-r1（追加到 modules/M038-b1-grok-raw.md V0.02），席甲自席 B2 票追加到 modules/M038-b1-self-raw.md V0.02 后再读其追加段。M038 IN_PROGRESS/B3 累计 0。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.6/xhigh。执行M038 B2-r1整批归并复核，正本/home/james/complex-management main主工作区。B1两席已落齐：你的modules/M038-b1-grok-raw.md V0.01（43552bytes SHA256 56eec0788741bc116816514112adfadd924790ec8b4854867deefc29e094c8bc，FAIL，GR-M038-001至011）；席甲modules/M038-b1-self-raw.md V0.01（43748bytes SHA256 be038208d3821d8d66ea2316f2969be75b7b13bb13c4caaeed101c6d59cfb760，FAIL，CX-M038-001至005、OBS-1至7，双方已封存现可读）。候选：findings.md V3.17（全文件SHA256 10153c406c987ab2becb402100a3c1e08edb68a3a9f77e6cf4a6d23ce0f1582f）顶部「当前 M038 B2-r1 整批候选」段，共10个ID：你的11条全部采纳（其中GR-005与GR-001席甲B1只记成观察，现改判入队），席甲另有两条你B1未报。不得读本次self b1 raw之后新增的B2结论段。
+只审本批的归并/分类/队列/最小修复边界，不重新审模块。逐项独立核实：一、001（冲突）把你的GR-003、GR-002与席甲CX-001并为同根一条，另含你未报的两点——账号详情的开通方式取值manual_admin与legacy无中文（AccessUsersPage L182；库内现值全是legacy）、审批意见为空时把英文approve或reject当意见与备注发给后端留痕（AccessGovernancePage L389至390）。处置只改本模块文件、沿用本模块已有的页内小映射写法，公共字典属别的模块不动。请核这几个中文是否只是取值的直译而无业务发明：applied译已生效、role_permission译角色权限、user_scope_change译人员范围变更（本页该功能的标题原文）、position_high_risk_release译岗位高危权限释放、manual_admin译后台手动录入、legacy译历史账号、模板类型role译角色模板（治理地图原文有支持角色级权限模板）；若你认为其中某个须操作员定名请明确指出，席甲将按2.2提问。二、002（你的GR-004）：字段名、占位、aria-label、校验句里的id与ID改成编号或去掉，data-testid不动，随改测试里按旧aria-label取元素的几处。三、003（你的GR-005）：席甲原以岗位码属内部标识符未立项，现采纳；处置取你给的第二种思路的变体——未映射的岗位码显示为「未登记岗位（岗位码）」，中文说明在前、岗位码作为系统内部标识符放括号里，与本页角色显示名称加编号同一写法；不新造岗位字典、不改输入方式。是否同意，或你坚持不得出现岗位码。四、004（席甲CX-002，你未报）：恢复按钮写恢复为停用模板，而业务地图原句是想恢复点取消存档即可、后端M031-001后恢复即回到启用态；改为已存档未删除写取消存档、已删除写恢复。五、005把你的GR-006、GR-007与席甲CX-003并为一条（同一组函数）：页内一个提交中标志加一个包装函数（置忙、执行、失败提示、复位），七个写动作走它。六、006（席甲CX-004，你未报）：权限模板编辑的时间往返，证据见席甲raw探针4与后端updatePermissionTemplate的放宽有效期判断；请独立核实。七、007表头；008职级下拉——选项由30档闭集在页内生成（库内30个编号恰为lvl_m加1至10加下划线lower或middle或upper，日志/home/james/audit-tmp/m038_verify.log），不调staff-levels接口以免新增权限依赖与失败面，是否同意；009状态用词——把你的GR-009与席甲OBS-7（岗位模板状态下拉写启用停用而表格显示有效未激活）并为同根一条，两处下拉改用formatBusinessStatus取字；010缺测试两处合并。八、其余观察只登记，有无漏并或应升队项。九、本批无添加项、无HTML申请、无questions（除非你在第一点认为定名须问操作员）。
+逐条给差集核实、分类理由、队列归属与最小修复边界意见，明确同意或不同意候选整批；PASS/FAIL二选一，不存在条件通过。已冻结判据不加判据，不用MCP或任何子代理，不改源码/文档/HTML/lock/findings/ledger，不fetch/commit/push/merge/deploy，不写新产物，不对任何数据库执行写语句。
+唯一可写 /home/james/complex-management/docs/audit-2026-09/modules/M038-b1-grok-raw.md：已有43552bytes/V0.01，必须在末尾追加本次完整B2-r1报告，版本V0.02，保留整个旧前缀。B2不写任何新的独占CRITERIA-LOCK-SHA256行；注明输入两份B1报告和候选版本。本次CLI只交报告，不在stdout回带正文或标记；适配器处理退出回执。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M038 B1 本席完整FAIL已封存，待Grok
+2026-09-21T12:56:13Z。席甲 self modules/M038-b1-self-raw.md V0.01/43748bytes/SHA256 be038208d3821d8d66ea2316f2969be75b7b13bb13c4caaeed101c6d59cfb760：16 个前端文件 2787 行全读、106 判据逐项、三线完成；取证 /home/james/audit-tmp/m038_b1_run.log（发布口径 vitest 11 个文件 38 个测试全绿；字典缺键清单；库内闭集只读查询；时区往返实跑；写动作错误处理清单），封存前未读 Grok 本次正文。结论 FAIL：CX-M038-001（冲突：授权申请状态 applied 与三种类型、账号开通方式、默认审批意见以英文上屏／留痕）、002（冲突：恢复按钮写「恢复为停用模板」，与业务地图「取消存档」及 M031-001 后恢复即启用相反）、003（技术性：五个写动作无错误处理，后端拒绝时页面无提示）、004（技术性：权限模板编辑原样保存把生效/截止时间前移 8 小时，带生效时间的模板一改就 409）、005（技术性：智能总结表表头多一列）。登记 OBS-1…7。Grok B1 出处 modules/M038-b1-grok-raw.md，命令见「M038 B1开始」段。M038 IN_PROGRESS/B3 累计 0；四值待 Grok 落盘后再核。
+
+
+## 当前 M038 B1开始（M001–M037 已闭环；M037 检查点 PR #478 已合并）
+2026-09-21T12:47:00Z。操作员 2026-09-20 指令：严格按 V0.17 提示词审计，逐模块收口后先检查点提交合并推送再开下一模块（M037 检查点 PR #478 已合并，origin/main ebb1eb99）。M038「功能权限点、职级三十档、权限模板与最终权限计算／网页与验证／第1段」PENDING→IN_PROGRESS（本版未审，ledger 无任何 M038 段/finding），16 个前端文件（3 个页面、2 个权限闸组件、11 个测试）合计 2787 行，均与 origin/main 逐字节相同。映射 106 判据。当前计数：PASS 37、IN_PROGRESS 1、PENDING 433。锁 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a、LOCK-AMEND-COUNT 1。两席并行独立：Grok 写 modules/M038-b1-grok-raw.md，席甲写 modules/M038-b1-self-raw.md，各自落盘后才互读；B1 后做四值校验。B3 累计 0（台账行 B3 列现值为原 322 计划历史累计，仅留存）。实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读独立审计席乙，模型grok-4.6/xhigh，正本/home/james/complex-management main主工作区。执行160-audit-prompt.md V0.17阶段B的M038 B1修复前全模块审计（本模块首次开工，PENDING→IN_PROGRESS，本版历史未审）。独立发现，不读取modules/M038-b1-self-raw.md或依赖其发现；本席与席甲（Claude Fable 5.1，作者自审票）同时独立工作，各自全量审完全部范围、落完整raw后才互读。不因第一条问题停下或边审边修。
+范围严格为plan/modules.md V0.04 M038「功能权限点、职级三十档、权限模板与最终权限计算／网页与验证／第1段」16个文件（apps/web/src/admin/pages/下AccessGovernancePage.tsx及其4个测试、AccessUsersPage.tsx及其4个测试、PermissionTemplatesPage.tsx及其2个测试，apps/web/src/admin/security/下Can.tsx、PermissionGate.tsx、PermissionGate.test.ts；当前合计2787行，行数与SHA以实算为准），全文读不抽样。三HTML只读为业务最终解释权；当前criteria-lock.md V0.11 M038映射106项，逐项读定义全文及相关HTML原文，逐项记录适用或无本面及理由。
+必读的环境事实：origin/main现ebb1eb99（M037检查点PR #478已合并）；主工作区HEAD e456ba96落后于它且含未推提交与暂存改动，但本模块16个文件与origin/main逐字节相同。这些页面调用的后端（AccessController、AccessService、请求记录类、权限迁移与字典，M031至M037）均已闭环，只作只读追证；页面依赖的共享前端文件（types.ts、接口客户端、公共组件等）属别的模块，主工作区里其中一些含未发布改动，凡结论依赖它们的须注明以origin/main版为准（git show origin/main:路径）。前端单测用vitest：发布口径须在origin/main的一次性worktree里跑（git worktree add --detach；把主工作区的node_modules与apps/web/node_modules软链进去；在apps/web下npx vitest run加文件路径；跑完先删软链再git worktree remove，不用--force）；不得改源码与测试，不得装依赖。后端与库只读：psql只对complex_test做SELECT，不调用任何会写的接口（含登录）。
+三线：第一性原理三问（用途/实际行为/未经验证前提），顺从式逐项与全文覆盖，对抗式用grilling结构自问自答。网页模块审计要点：页面上每个入口、按钮、表单字段、下拉选项、提示语是否与三份HTML对该功能的描述一致（HTML写了要有的有没有、HTML否定或已废止的还在不在）；前端枚举与下拉的取值是否逐键等于后端校验闭集与数据库CHECK（多一个少一个拼错一个都算）；请求的路径、方法、字段名是否与AccessController实际映射和请求记录类一致；权限闸（Can、PermissionGate与各页的权限码）是否与后端门控码一致、无权限时是隐藏还是禁用是否符合HTML；界面文字是否全部中文（HTML原文：不得出现任何英文，可以不用中文的只有四样）；加载失败、空数据、降级、重复提交的处理；测试是否真的渲染并操作了目标行为、断言能不能失败、有没有把被测逻辑整个mock掉。不为理论场景补需求；缺测试只有在对应的是本聚合维度的关键分支且首次正常使用可复现的行为时才立项。登记「HTML未规定」之前先grep三份HTML原文。
+每项临时GR编号必须精确文件行、原文及更长上下文、正常触发/影响、最小拟处置、四分类顺序（冲突→细化→技术性→添加）、工程缺陷是否成立、冻结ID、四类第一性依据之一（HTML原文/可执行产物/外部规范原文/实际只读命令输出）。全模块问题与观察收齐后统一PASS/FAIL；无新发现也完整全文覆盖+逐项判据适用证据+三线记录。本轮只读业务代码/文档/三HTML/锁/台账，不改计划/findings/ledger，不fetch/commit/push/merge/deploy，不使用MCP/任何子代理/第三席，不等操作员，不建脚本日志临时产物（一次性worktree除外且须删除），不对任何数据库执行写语句。按环境实用强制技能如实记录。
+唯一可写报告/home/james/complex-management/docs/audit-2026-09/modules/M038-b1-grok-raw.md：指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建（本次为V0.01）。本次报告第一行独立实算criteria-lock.md SHA256，格式CRITERIA-LOCK-SHA256: <64hex>；不得抄其它报告或期待值。完整报告从本次独占锁行至末尾。CLI不回带正文或机器标记，全部结论留指定raw。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 M037 检查点已合并（PR #478）
+2026-09-21T12:45:23Z。按操作员「逐模块收口后先检查点提交合并推送再开下一模块」：在基于 origin/main（40fcc8f1）的独立 worktree /home/james/wt-m037-checkpoint 分支 audit/20260920/m037-checkpoint 上只带一个测试类（M006SecurityRegressionTests.java 用「origin/main 版＋001＋002」的发布变体，D-029）+ ledger/findings + M037 全部 raw 与闭环文件（10 文件）；提交前在该 worktree 里实跑真库测试全绿、两个生成器 --check 通过（临时拷入的未发布迁移跑完即删，不入提交），提交 f9bda025；ops/160/propose-change.sh 本地 verify:predeploy 全绿后推分支开 PR #478；ops/160/merge-pr.sh --merge 等 predeploy-gates run 35601337164 success 后合并，origin/main 现为 ebb1eb99。主工作区未动；其余遗留暂存/未推提交/OPEN PR 不并入。worktree 与分支随后清理。下一模块 M038。
+
 
 ## 当前 M037 B5-r1双PASS，四值全等，M037 → PASS（先记账，再写闭环文件）
 2026-09-21T12:43:34Z。Grok B5-r1 真实 exit 0，报告 modules/M037-b5-r1-grok-raw.md（V0.01，35770bytes SHA256 d3e026094676eb008095a64c1b58b620ce613987734de17da7cfdb31c2469244，四项交付事实成立），整模块三线全量结论 PASS。席甲 B5-r1 票 PASS（modules/M037-b5-r1-self-raw.md V0.01，20736bytes SHA256 a34e511cd40fa9404805fef2ada092d4f33f983f224e81334b5a4ba3e030b1d6；封存后才读 Grok）。合取双 PASS。
@@ -3840,18 +4125,18 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 
 | 模块 | 状态 | B3执行次数 | 方案复核已修次数 | PASS证据 | 子代理失败重跑次数 | 备注 |
 |---|---|---:|---:|---|---:|---|
-| M001 `业务需求正本／需求HTML／第1段` | PASS | 4 | 2 | modules/M001-b5-r4-self-raw.md + modules/M001-b5-r4-grok-raw.md，V0.01双PASS，B5后四值全等 | 6 | A/D一次修复完成；B/C原意已确认无缺陷；当前16行队列空，无再修额度 |
-| M002 `业务需求正本／需求HTML／第2段` | PASS | 2 | 2 | - | 0 | 当前B5-r2双PASS，四值全等；979行/84项全覆盖，本轮无修复；全局BSM镜像问题按M425/M427保留 |
-| M003 `治理门禁与 CI 基线／配置与工程入口／第1段` | PASS | 2 | 2 | modules/M003-b5-r2-self-raw.md V0.03 + modules/M003-b5-r2-grok-raw.md V0.02，双PASS/四值全等 | 0 | 当前471计划202行/18GEN全覆盖；6ID队列空，本轮未修；全局BSM镜像红灯保留 |
-| M004 `治理门禁与 CI 基线／配置与工程入口／第2段` | PASS | 1 | 2 | M004-b5-r1-self-raw.md V0.03 + M004-b5-r1-grok-raw.md V0.02 | 0 | 当前471计划B5双PASS/四值全等；7项队列否，007公告只登记；本次无新修复 |
-| M005 `治理门禁与 CI 基线／配置与工程入口／第3段` | PASS | 2 | 2 | [self](modules/M005-b5-r2-self-raw.md) / [grok](modules/M005-b5-r2-grok-raw.md) | 0 | 当前471计划全量B5双PASS/四值一致；014两YAML说明修正已出队 |
+| M001 `业务需求正本／需求HTML／第1段` | PASS | 4 | 2 | modules/M001-b5-r4-self-raw.md + modules/M001-b5-r4-grok-raw.md，V0.02双PASS，现锁B5后四值全等 | 6 | 335项全范围新锁复审通过；16项队列空，本次新增B3=0；旧报告保留历史 |
+| M002 `业务需求正本／需求HTML／第2段` | PASS | 2 | 2 | modules/M002-b5-r2-self-raw.md V0.03 + modules/M002-b5-r2-grok-raw.md V0.03，现锁双PASS/四值全等 | 0 | 979行84项全覆盖；本次新增修复0，四ID队列空；M426台账同步红保留 |
+| M003 `治理门禁与 CI 基线／配置与工程入口／第1段` | PASS | 2 | 2 | modules/M003-b5-r2-self-raw.md V0.04 + modules/M003-b5-r2-grok-raw.md V0.03，双PASS/四值全等 | 0 | 当前两文件205行/18GEN全覆盖；016、027—032七ID队列空，本轮未修；全局门禁红保留 |
+| M004 `治理门禁与 CI 基线／配置与工程入口／第2段` | PASS | 1 | 2 | M004-b5-r1-self-raw.md V0.04 + M004-b5-r1-grok-raw.md V0.03 | 0 | 现锁3321行220记录18GEN全覆盖双PASS/四值全等；七项队列否；007公告与磁盘漂移保留，无新修复 |
+| M005 `治理门禁与 CI 基线／配置与工程入口／第3段` | PASS | 2 | 2 | [self](modules/M005-b5-r2-self-raw.md) / [grok](modules/M005-b5-r2-grok-raw.md) | 0 | 现锁完整B5双PASS/四值一致；012—014当前队列空，未新增修复 |
 | M006 `治理门禁与 CI 基线／文档与接口定义／第1段` | PASS | 2 | 2 | [self B5-r2](modules/M006-b5-r2-self-raw.md)、[Grok B5-r2](modules/M006-b5-r2-grok-raw.md) | 0 | 当前471计划两文档完整双审通过；039–043/047已修；HTML未改 |
 | M007 `治理门禁与 CI 基线／运行和发布脚本／第1段` | PASS | 1 | 2 | [self B5](modules/M007-b5-r1-self-raw.md)、[Grok B5](modules/M007-b5-r1-grok-raw.md) | 0 | B5全量双PASS、四值全等；001–004已修出队，005–011否；未部署 |
 | M008 `治理门禁与 CI 基线／检查及生成工具／第1段` | PASS | 2 | 3 | [B5双PASS](modules/M008-governance-ci-tools-01.md) | 0 | B5-r2全17文件三线双PASS；四值全等；16项队列全否 |
-| M009 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台实现／第1段` | PASS | 3 | 3 | [B5-r3 self](modules/M009-b5-r3-self-raw.md) / [Grok](modules/M009-b5-r3-grok-raw.md) | 1 | 20文件3369行/87判据双PASS；24队列全否；三HTML未改；未发布 |
-| M010 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／数据库迁移／第1段` | PASS | 2 | 2 | [历史双PASS+Codex本次复查PASS](modules/M010-governance-topology-migrations-01.md) | 0 | 2026-09-14 Codex独立复查4文件+V410/18项PASS，Grok NOT-CALLED；历史B5-r2三线双PASS；四值全等；14项队列全否（5已修/9登记）；B3累计2；2.2两项答删除已执行；complex_test改名保留+新建至V410；席甲=Claude Fable 5.1 |
-| M011 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台验证／第1段` | PASS | 1 | 2 | [历史双PASS+Codex本次复查PASS](modules/M011-governance-topology-backend-verification-01.md) | 0 | 2026-09-14 Codex三文件2632行/87项复查PASS，106已执行全过；Grok NOT-CALLED；历史B5-r1双PASS；四值全等；7项队列全否（5已修/2登记）；B3累计1；无添加项；席甲=Claude Fable 5.1 |
-| M012 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段` | PASS | 4 | 2 | [B5-r4双PASS](modules/M012-governance-topology-web-01.md) | 0 | 2026-09-14 B5-r4双PASS；6文件2085行/21判据；17队列全否；累计4；HTML未改；未发布 |
+| M009 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台实现／第1段` | PASS | 5 | 3 | [现锁B5-r5收口](modules/M009-governance-topology-backend-01.md) | 2 | selfV0.01/GrokV0.02双PASS，20文件3381行88判据，26项当前队列空；四值全等，真实exit0。 |
+| M010 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／数据库迁移／第1段` | PASS | 2 | 2 | 当前锁B1/B2/B5-r2两席PASS；self V0.04/Grok V0.02；本次修复0 | 0 | 2026-09-22完整重审关闭，14项均否，9观察保留；B3累计2；Grok B1临时库偏差已记录并清理。 |
+| M011 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台验证／第1段` | PASS | 1 | 2 | [当前锁B5 self V0.03](modules/M011-b5-r1-self-raw.md)、[Grok V0.02](modules/M011-b5-r1-grok-raw.md)；完整B1/B2/B5双PASS | 0 | 3文件2776行/87判据/7ID+12观察；113测试通过，本次无修复，累计1。发布待处理，非已合并声明。 |
+| M012 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段` | IN_PROGRESS | 4 | 2 | 当前锁完整B1重开；旧B5-r4保留 | 0 | M011现锁双PASS后按操作员要求顺序推进；六文件2085行/21判据，17既有ID；累计4不清零，未授权新增第5修复轮。 |
 | M013 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段` | PASS | 5 | 2 | B5-r5 双PASS：self 2f34738470eccc0f… / Grok 366f6d3459faa054… | 1 | 2026-09-19 收口：B3累计5（3次额度+两次获批追加）；001–024全否（21已修、009/010/017登记）；B5-r3 Grok交付失败重派1次；席甲自2026-09-19由Claude接任；收口文件V0.02；检查点 PR #453 已合并（origin/main 246385d9） |
 | M014 `综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段` | PASS | 4 | 2 | B5-r4 双PASS：self bbf1995a0f365e47… / Grok 305e00b7cb4daa34… | 0 | 2026-09-19 重开后收口：B3累计4（r2 021–023、r3 024、获批r4 025）；001–025全否（23已修、019/020登记）；席甲=Claude；收口文件V0.02；检查点 PR #454 已合并（origin/main ba8f5775） |
 | M015 `空间点位、楼层平面图与营业时段／后台实现／第1段` | PASS | 3 | 2 | [B5-r3双PASS](modules/M015-floorplan-business-hours-backend-seg1.md) | 1 | 2026-09-19 席甲补充复查23文件2118行/90项PASS，5类83例（XML）实跑零失败，Grok NOT-CALLED；历史B5-r1全23文件三线双PASS；四值全等；修复队列14 个 ID 全否（9 项已修；010/011 XM 同批、012 全局遗漏、013 XM→M016 已由V423落地/M018、014 观察）；B3累计2；席甲=Claude Fable 5.1；2026-09-20 B5-r1 再执行 Grok FAIL→015/016 定稿→B3-r3→B4-r3 双 PASS→B5-r3 双 PASS：self caf4bb0d… / Grok f803af24…，四值全等；B3 累计 3；第 3 轮检查点 PR #456 已合并（origin/main 1e5183d5） |
@@ -3876,8 +4161,8 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 | M034 `功能权限点、职级三十档、权限模板与最终权限计算／数据库迁移／第1段` | PASS | 1（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M034-access-permission-migrations-seg1.md) | 0 | 2026-09-21 首次审计：B1 Grok FAIL（GR 1）／席甲 PASS 撤回 → B2-r1 双 PASS 定稿 001（冲突：人工放行权限码）→ B3-r1（前向迁移 V429＋真库断言）→ B4-r1 双 PASS → B5-r1 双 PASS：self 7bd7d110… / Grok 5b075983…，四值全等；修复队列 1 个 ID 否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #475 已合并（origin/main c3a48ccd） |
 | M035 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第1段` | PASS | 1（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M035-access-backend-tests-seg1.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 3/CX 1）→ B2-r1 双 PASS 定稿 001（冲突：展示名测试去掉「AI」豁免＋V430）、002（控制器门控测试）、003（事务测试名实相符）→ B3-r1（TDD＋变异核对）→ B4-r1 双 PASS → B5-r1 双 PASS：self 95c73427… / Grok eac9b645…，四值全等；修复队列 3 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #476 已合并（origin/main 3ca1b507） |
 | M036 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第2段` | PASS | 1（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M036-access-backend-tests-seg2.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 1/CX 1）→ B2-r1 双 PASS 定稿 001（细化：岗位派生角色并入有效权限与停用收回的测试）、002（技术性：生效时间未到不放行的测试）→ B3-r1（发布口径 BASE→三个变异 RED→GREEN）→ B4-r1 双 PASS → B5-r1 双 PASS：self d0993e80… / Grok 748e3539…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #477 已合并（origin/main 40fcc8f1） |
-| M037 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第3段` | PASS | 1（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M037-access-backend-tests-seg3.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 1/CX 1）→ B2-r1 双 PASS 定稿 001（技术性：模板编辑回归测试分清两道闸）、002（细化：生命周期测试补非平台管理员存档、驳回删除、批准删除核最高权限码）→ B3-r1（发布口径 BASE→五个变异 RED→GREEN）→ B4-r1 双 PASS → B5-r1 双 PASS：self a34e511c… / Grok d3e02609…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1 |
-| M038 `功能权限点、职级三十档、权限模板与最终权限计算／网页与验证／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M155、M165、M180；既有累计仅保留历史，不代表本版已审 |
+| M037 `功能权限点、职级三十档、权限模板与最终权限计算／后台验证／第3段` | PASS | 1（本版；原322归属的历史累计 0 仅留存） | 2 | [B5-r1双PASS](modules/M037-access-backend-tests-seg3.md) | 0 | 2026-09-21 首次审计：B1 双 FAIL（GR 1/CX 1）→ B2-r1 双 PASS 定稿 001（技术性：模板编辑回归测试分清两道闸）、002（细化：生命周期测试补非平台管理员存档、驳回删除、批准删除核最高权限码）→ B3-r1（发布口径 BASE→五个变异 RED→GREEN）→ B4-r1 双 PASS → B5-r1 双 PASS：self a34e511c… / Grok d3e02609…，四值全等；修复队列 2 个 ID 全否（已修）；B3累计1；席甲=Claude Fable 5.1；检查点 PR #478 已合并（origin/main ebb1eb99） |
+| M038 `功能权限点、职级三十档、权限模板与最终权限计算／网页与验证／第1段` | IN_PROGRESS | 1（本版；原322归属的历史累计 0 仅留存） | 2 | - | 0 | 原322归属：M155、M165、M180；既有累计仅保留历史，不代表本版已审 |
 | M039 `功能权限点、职级三十档、权限模板与最终权限计算／文档与接口定义／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M238、M281、M296、M297；既有累计仅保留历史，不代表本版已审 |
 | M040 `高危授权审批、临时授权、角色装配重算与主管复核链／后台实现／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M007、M050；既有累计仅保留历史，不代表本版已审 |
 | M041 `高危授权审批、临时授权、角色装配重算与主管复核链／数据库迁移／第1段` | PENDING | 0 | 2 | - | 0 | 原322归属：M138、M139、M140、M144、M145、M148、M149、M150、M151；既有累计仅保留历史，不代表本版已审 |
@@ -6189,3 +6474,1170 @@ Grok有效终稿：会话01a081c8-444e-7d63-ad6b-3a74a2f79504，真实退出0；
 > ## V1.36 接续位置纠正：Claude已完成M009
 > 操作员明确“claude告诉我m009他已经完成”。核实本机D:/AI/audit-runs/complex-management/20260902T183912Z/state.json：Claude运行的M009为“个人信息保护：PII加密、敏感查看审批、人脸/生物信息与同意”，与本目录322模块方案中的M009（10-backend-main-access-04）不是同一切分，不按相同编号混写PASS。该运行M009第8次报告席甲Fable PASS、席乙Grok PASS、Fable终审r3 PASS，均绑定main 8765bd2e37d10616c15b360a1faa7eff7ad4ca41；三文件SHA分别d56d9b8ee94846a83b99a5e40f27cb8064c0ec452b1bb8254c18f018a0f8e217、25217eebb142c1edb905974603e08a070b697fc6f2efffa70e463d7c178e81a7、2e8f12158a6b7da2b2046384f5c79f524f098171b579a8e7129d2f73a6de41a4，实算全部与封存记录一致。PR #424实际MERGED；PR #426后M009再次复审完成，失效队列本项DONE，无需再次发布。
 > V1.35仅修改了本目录两份台账，Grok实际NOT-CALLED，无B1 raw，无B3和源码修改。因此撤销M007 IN_PROGRESS登记、恢复PENDING，保留原过程及Claude全部成果。后续接续依据应为Claude上述运行的实际状态，其next_action登记M010 round1尚未启动，且含D-022“m009结束后停止”历史指令；本次只核实并纠正接续位置，未启动M010。原锁、sidecar、顶部两行不变。
+
+## 2026-09-21 Codex 补登记：Claude 2026-09-18 交接的四项 B1 既有输入
+
+来源：操作员在本线程转交的 Claude（Fable 5.1）2026-09-18 同步 §3，并于 2026-09-21 指示「继续」。沿用本台账 2026-09-11 U 段 32 项“归 M…”的登记方式。旧 XM 编号仅作来源索引，属于旧 87 模块运行的观察，不是本 471 模块计划已定稿 finding；本次不分配 Mxxx-xxx、不定分类、不判定修复队列、不记双席 PASS、不启动 B3。各所属模块 B1 应将本节作为既有输入，与当时工作区代码、三份 HTML 及冻结判据逐项复核；B2 才归并、分类、定稿，“添加”按 §2.2 取得操作员答复。
+
+| 来源编号 | 待核事项及本次只读证据 | 本 471 计划归属模块 | 后续核查边界 |
+|---|---|---|---|
+| XM-008 | 多主体联系人手机号：持权者列表/单条响应明文及逐次查看留痕。当前 PlatformController:281–293、SiteEntryReportController:93/100、InventoryController:361/369、LeasingController:157/164、MerchantFeeNotificationRecipientController:99/107 仍有持 pii.contact_phone.view 权限直接返回原记录/列表的分支；PhoneMask:19 定义权限码。PlatformControllerTests:164 与 MerchantFeeNotificationRecipientControllerTests:147 仍有持权见明文用例。 | M009、M223、M249、M266、M282、M396 | 治理 HTML:871“员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关”；:677 审计人员敏感查看审批并全程留痕。rg 搜索 backend/src/main 的精确事件串 pii.contact_phone.viewed 无命中，只能证明该串不存在，不能替代通用审计调用链核查。批准查看权限不自动证明列表明文符合业务要求。 |
+| XM-010 | 客人生日、联系人姓名加密范围。当前 JdbcCustomerRepository:572 直接绑定 sqlDate(customer.birthDate())；JdbcPlatformRepository:625/631 直接绑定 contactName/secondaryContactName，与相邻手机号 piiCipher.encrypt 分支不同。verify-pii-encryption.mjs 包含 staff_profiles.name，未登记 customers.birth_date 或上述联系人姓名列。其余四类联系人姓名写链待所属模块完整核实。 | M009、M053、M158、M159、M225、M249、M266、M282 | 治理 HTML:870“一律加密存放”。本地 R-006-20260907-M009-A1-02-一律加密存放覆盖生日与姓名.md 已读到操作员原答“覆盖：生日与姓名也要加密”，选项说明要求跨模块单独处理；保留为历史裁决输入，不冒充三份 HTML 或冻结判据。是否需要确认/LOCK-AMEND 由对应 B1/B2 按当前判据判定，不直接新增列、迁移或加密逻辑。 |
+| XM-011 | 入场验龄核对持票本人。完整读取 DisabledFaceVerificationGate、ReservedFaceVerificationGate、FaceVerificationRouter、FaceVerificationPort：当前路由选择占位实现，分别返回 RESERVED/NOT_CONFIGURED；这些实现没有票面人脸比对调用。 | M049、M128 | 业务 HTML:842、治理 HTML:885 原句均为“门票与人脸绑定后，客人通过年龄核验环节的刷脸设备时，可核对是否为持票本人”。保留“可核对”措辞。所属模块需核 TicketFacePhotoService/存储/完整调用链及既有第三方预留裁决；本次不把“可核对”扩大为一律强制接入厂商或阻断入场。 |
+| XM-012 | 测试数据残留与 keyset 分页。LoyaltyConfirmConcurrencyIntegrationTests:21–22 明确真实提交、不能靠类级事务回滚；:43–46 注释积分账本 append-only/FK，依赖唯一种子保留残留；:54 构造 cust_aud014_ 前缀。CustomerJdbcIntegrationTests:186 存在所述分页用例。 | M085、M161 | 本次只读核到代码前提，未连接 complex_test、未实跑，不能声称当前分页失败已复现或已证明唯一根因。须在所属模块核数据隔离和真实失败；不得为清测试破坏 append-only 约束。交接中另外 8 个历史失败类仅是 2026-09-07 背景，不能直接计作现行失败。 |
+
+模块反向索引（不提前开工）：M009←XM-008/XM-010；M049←XM-011；M053←XM-010；M085←XM-012；M128←XM-011；M158/M159←XM-010；M161←XM-012；M223←XM-008；M225←XM-010；M249/M266/M282←XM-008/XM-010；M396←XM-008。以上 14 个模块的归属已只读核对当前 plan/modules.md。
+
+M009 处置：当前台账 PASS、B3累计3。PlatformController 和 JdbcPlatformRepository 两处线索均回补到上述 M009 既有输入索引，不以此次登记撤销历史审计证据、不重置累计次数、不直接修复。当前尚无针对这两项的本计划双席 B1/B2 定稿；§4 的 B4/B5 FAIL 批量回退不能仅由外来线索替代，若确需改冻结判据须完整走 §5 LOCK-AMEND。后续需要重开/超限修复时按现行规则和操作员指令处理，不因本登记自行增加轮次。
+
+恢复现场：本次自160读取 HEAD=e456ba96c84185c8d39f18f548011daac48a6466；ledger V7.22 顶部当前 M038 B2-r2，本席票已封存等待 Grok；M013 行已 PASS/B3累计5，注明 Claude 自2026-09-19接任。恢复上下文中的“M013仍待审”已过时，不据此重开或覆盖 M013，不接管 M038 当前修复。本次只新增本段登记并递增 ledger 自身版本；findings、模块状态、原有报告、源码、HTML、判据锁、真实 git index 均不由本次改变。未调用 Grok；因此本次无 Grok 命令/退出码/新 raw，也无阶段 PASS 声明。
+
+静态证据读取方式：直接 SSH 至 james@192.168.88.160，在 /home/james/complex-management 用 Python 按文件/行读取上述源码，读取 plan/modules.md 的所属模块完整文件清单及三份 HTML 对应原句；精确事件检索为 rg -n pii.contact_phone.viewed backend/src/main。以下文件 SHA256 固定本次观察字节，不能当作运行测试证据。
+
+- `backend/src/test/java/com/complex/platform/merchantbilling/MerchantFeeNotificationRecipientControllerTests.java`：`74de3a8d43215e51e433abb090d5ea6ae404f2c63b492267a028b81270f9ec29`
+- `backend/src/test/java/com/complex/platform/customer/LoyaltyConfirmConcurrencyIntegrationTests.java`：`3d9f70c7a0e2040fb6a43f36f4a858cc166cff75ebafdc01d24e5d448d4aabfb`
+- `backend/src/test/java/com/complex/platform/customer/CustomerJdbcIntegrationTests.java`：`02ce8443e208e1d00a463b32ad00854110b5f8b36e37249d9d45eff7f555314c`
+- `backend/src/test/java/com/complex/platform/governance/PlatformControllerTests.java`：`a6ca2117d2dcfbe39af334a0fa13281ddb98e6e703fd72637c56e44521b1c01a`
+- `backend/src/main/java/com/complex/platform/entry/ReservedFaceVerificationGate.java`：`59669b001d8ecc05df03c95aaca1ff657d578d0a6be8786ee77ccf1fa84b15a7`
+- `backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java`：`8062c6262e282fd086cd2c3f50bab7351a2c9d2e339d032d75a94553a841876f`
+- `backend/src/main/java/com/complex/platform/entry/FaceVerificationPort.java`：`b4fcbfdd3a313259f32fb5bd0e7b36ff19cb32430bfd108edcf6d3bb289d0b44`
+- `backend/src/main/java/com/complex/platform/entry/DisabledFaceVerificationGate.java`：`26d7ee4fbbff707a20ecdb6a6284747d1a29cbb85a4efa985d86e0df9ac4f736`
+- `backend/src/main/java/com/complex/platform/common/PhoneMask.java`：`698fd42b16be5f0488ab7efaf73e9b3012895a120e973eabe9bf47e73af955b7`
+- `backend/src/main/java/com/complex/platform/merchantbilling/MerchantFeeNotificationRecipientController.java`：`06914ab22217f9dc8afba065f9d402080a5d7f055de0952347e2f14fe4bd4a4b`
+- `backend/src/main/java/com/complex/platform/customer/JdbcCustomerRepository.java`：`ccba580b7a1c856db3bc32b04ee44500e846fb142b99dcdd3ce76e4374ca024b`
+- `backend/src/main/java/com/complex/platform/inventory/InventoryController.java`：`353830592fa2e73328bda8e2374d7bec44308ace3ec0d5743719418d540173b6`
+- `backend/src/main/java/com/complex/platform/facility/SiteEntryReportController.java`：`fecd1d67605c038c6e7424c7ae03a9c14ea985e2dcdd263c9f2dd4e59779f84f`
+- `backend/src/main/java/com/complex/platform/governance/PlatformController.java`：`9e4cef62553160bbd9b2c8bba8779feadec81a4dd26cf3d28664fb160777c3d2`
+- `backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java`：`2816e96cd73867d2702b660854a1d342254c68b72b7c1e68fa12fb460e0bc98a`
+- `backend/src/main/java/com/complex/platform/leasing/LeasingController.java`：`c60f856780bbb80c400883e7b1ee0eb27deb5cf377a6373b13e9409322768aae`
+- `tools/verify-pii-encryption.mjs`：`17a5d59856cfca619aa26295dadee86fc13dc584291901e5dab34134e6a38159`
+
+
+## 2026-09-21 M009 B1 本方封存与派发纠偏
+版本记录：V7.26；UTC 2026-09-22T04:32:31.702439+00:00。
+本席完整self raw新段V0.11已封存（139387bytes；SHA256 57aa9b8d06812e0a0155a18172a1133a63745310cf4face62346e23b3fbcf73b），20文件3369行/87判据三线完成，结论FAIL，候选CX-01/02/03待整批B2。160实际Maven定向测试83项全通过，但其中原文明文断言说明测试绿不等于需求一致。本次无业务修复。
+派发自检发现本次-p文案误含预期判据哈希，违反提示词A2禁止提供期望值。该调用尚在运行，不杀进程、不宣称交付失败、不计失败重跑；其交付不用于有效B1合取。尚未读其本次正文。待真实结束后，以不含期望值的新完整B1派发纠正；原始两席段永久保留不改。M009暂保持IN_PROGRESS，B3累计3，lock/sidecar/ledger基准均未改；未推进B2/B3、未触碰M038。
+
+
+## M009 派发纠偏：原调用已交付，当前回PENDING
+真实EXIT_CODE=0；报告modules/M009-b1-grok-raw.md 269852bytes SHA256 8aa550b5accea6e75bfc4d3217128ae7c880306fd6448d63f4ff6696577861ac；原239474bytes前缀保持。本席未读取该次结论。因派发给了预期锁值，不用于合格B1合取；非交付失败，失败重跑次数不加。M009 IN_PROGRESS→PENDING，保留B3=3，准备完整重开。
+
+
+## 当前 M009 B1：纠正派发后重新独立审计
+版本记录V7.28；UTC 2026-09-22T04:47:16.596052+00:00。PENDING→IN_PROGRESS；B3累计3。20文件SHA均仍与本轮起点一致。下列完整-p不含预期锁哈希；要求Grok重新完整审计、自算锁值，不读本席2026-09-21所有新段，也不继承其上一次Grok结论。先派Grok，本席在不读它的本次报告前追加完整self V0.12，复用本轮同一字节的已完成全量读取/测试并纳入直接依赖补证，不冒称重复运行测试。
+实际派发命令：
+```text
+/home/james/.local/bin/grok -p '固定只读外审席乙Grok，grok-4.6/xhigh。操作员2026-09-21指示“m009开始”，现纠正一次派发格式错误后，对M009重新执行B1完整独立审计。上一派发提供了预期锁哈希，不采信该次票；请从当前完整范围重新独立审计，不读取Codex的2026-09-21任一本次self段，不沿用刚才Grok段的结论。正本/home/james/complex-management main，HEAD e456ba96c84185c8d39f18f548011daac48a6466。遵循.scratch/module-recheck-20260908/160-audit-prompt.md V0.17和docs/audit-2026-09/plan/runbook.md。专项规则覆盖AGENTS普通worktree/fetch规则。禁止fetch/commit/push/merge/worktree/deploy，禁止MCP/子代理/第三席。仅可追加你的指定raw，不改代码/HTML/数据库/lock/findings/ledger，不写helper/log文件，不运行会写库或构建产物的测试；静态证据不得冒称实跑。
+
+完整范围是plan/modules.md的M009全部20文件3369行与criteria-lock.md映射87判据，不是只审交接两项。第一性原理、顺从式逐判据、对抗式均审完整模块，可只读直接依赖，禁止中途修复/提问。须独立实算criteria-lock.md的SHA256，不以任何历史报告或提示内容的值代填。
+既有输入：ledger末尾2026-09-21补登记的XM-008（PlatformController持pii.contact_phone.view时列表/单条明文与逐次查看留痕）、XM-010（JdbcPlatformRepository联系人姓名存储）。它们不是已定稿finding或分类。治理HTML871日常界面只脱敏且无关闭开关、677敏感查看审批留痕、870个人信息一律加密。R-006操作员“覆盖：生日与姓名也要加密”为历史裁决输入，不冒充HTML/冻结判据。按本471计划findings现值去重，M009-050历史仅登记不能据其旧“无缺陷”免审；若无冻结依据须报告LOCK-AMEND需要，不自行扩判据。“没有pii.contact_phone.viewed字符串”不证明没有通用审计，须追调用链。保留M009-013/038等已批准范围及历史修复，原B3累计3保持，不等于额外B3授权。M038保留现场，本次不审。
+你不得读取Codex本次新追加self结论。历史既有输入可核，当前完整结论须独立形成。按提示词§6核实实际技能并报告缺口。报告须含20文件SHA与覆盖、87判据逐项证据、三线过程、全部finding临时GR号/文件行号/事实/冻结依据/四分类/工程缺陷/最小处置，最终PASS或FAIL。未完整审完不得PASS。
+只追加完整报告到/home/james/complex-management/docs/audit-2026-09/modules/M009-b1-grok-raw.md。调用开始时该文件全部原字节保留，按当前末段版本再递增一位（预计V0.11→V0.12；如尚未追加则V0.10→V0.11），新段独立完整；段首独占CRITERIA-LOCK-SHA256: <实算值>，标明2026-09-21重开B1本次报告。不能覆盖旧报告，不要求stdout任何特殊标记。适配器仅暴露报告路径和真实exit code。
+冻结范围（漂移必须指出）：
+backend/src/main/java/com/complex/platform/governance/BusinessEntityRecord.java 45431c580d0bca0c217bcdb8ea120604eb7ed2b441845a5ac52257d5130b1277
+backend/src/main/java/com/complex/platform/governance/BusinessEntityBindingRecord.java f97af4de8ed4d45134196b4fcb83169591d5991e6aefaa4aa22411a49e78f422
+backend/src/main/java/com/complex/platform/governance/MerchantRecord.java dda319c37032c33c3cc5d260a0c9f43c7740d21b80a106c4a4efd49a19cdef00
+backend/src/main/java/com/complex/platform/governance/MerchantDeleteDecision.java e08618c856b35a1eda8447a9c9bd0c88ed00a9ee371c1ee33d3f2f3ab7ce5e40
+backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java 2816e96cd73867d2702b660854a1d342254c68b72b7c1e68fa12fb460e0bc98a
+backend/src/main/java/com/complex/platform/governance/PlatformController.java 9e4cef62553160bbd9b2c8bba8779feadec81a4dd26cf3d28664fb160777c3d2
+backend/src/main/java/com/complex/platform/governance/PlatformRepository.java df6dfee9894fc34f1df28fdae3d549ba50320df14219129779fa267affb08cdc
+backend/src/main/java/com/complex/platform/governance/PlatformService.java 984d57a4ba7a5a1059734cac427045ce4ee73143249cd93d0bd70f36488226b1
+backend/src/main/java/com/complex/platform/governance/package-info.java e3094c51b508bf10015ead9e92ac2ae2f3edf3b09786d88816ab8009d21921d9
+backend/src/main/java/com/complex/platform/governance/dto/BusinessEntityBindingRequest.java 66d4a8cd5c7f206f0c023e190ac5ed94ff6585263a737e35f062be9d8de211da
+backend/src/main/java/com/complex/platform/governance/dto/BusinessEntityRequest.java 18911088cbde9575ca7c38f9a6ac6eee3f4a812098aea9a29482133fe14dec19
+backend/src/main/java/com/complex/platform/governance/dto/MerchantArchiveRequest.java e0f16f5417b61e801ed23803616450e90810853ec7588a49714b43040d809f93
+backend/src/main/java/com/complex/platform/governance/dto/MerchantDeleteApprovalRequest.java 2516fb1d78e082fe89222a41f7178dde4b40d749c5ed2c2e712bbb14a74112c4
+backend/src/main/java/com/complex/platform/governance/dto/MerchantDeleteRequest.java 4898e50f2150e27c73d6d400b317d792f02c342a0e95a8b3dadbef5a7ebc8f45
+backend/src/main/java/com/complex/platform/governance/dto/MerchantProfileRequest.java 7b6dd241328b57dc646eb9b3c531e01e3a3a3d1bb1b848711c7ce43106973cf1
+backend/src/main/java/com/complex/platform/governance/dto/ProjectRequest.java 6ac09b14c1766bebd6df69fbf5579ccf602959d10179b497ff90ea1b3f521108
+backend/src/main/java/com/complex/platform/governance/dto/SpaceRequest.java 63857df14972fd6904a32fc7aade0de49b88ec3b946df493f61086c77d1ab7aa
+backend/src/main/java/com/complex/platform/governance/dto/SpaceTypeRequest.java 7c3a5fa28ab5a45b49d3fc325e39d1f25ddcbc38b86de3872ca86ce338b05f34
+backend/src/main/java/com/complex/platform/governance/dto/StatusChangeRequest.java 75b75cfaee897096f6fce0886fc4e71da8c5762774a901739cff244e1425f60f
+backend/src/main/java/com/complex/platform/governance/dto/VenueBusinessHoursRequest.java 6347c6dfe087be2310fe5f618a0ac27e188f340d1af84add2ab831e98cb333f1' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+Grok出口待返回；当前没有有效的双席B1结论。
+
+
+## 当前M009 B2：完整B1 FAIL并集候选已落盘
+版本记录V7.29；UTC 2026-09-22T05:03:37.202754+00:00。有效Grok B1交付EXIT_CODE=0；完整报告V0.12，301012bytes SHA256 0996c0167e39458ee87b7bcd4b9a9fd125a10be660a2d8e8054b44b5d2a8368a，旧前缀保留。Codex完整V0.12 FAIL，Grok完整V0.12 FAIL。20源码SHA无漂移。
+B1后四值原样：实算=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；sidecar=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；ledger=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；Grok=b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。LOCK-AMEND-COUNT=1。
+候选findings V3.21 SHA256 943b552433a7210fa07043e34b4a29d22e004f660dcd3019ad3d53c04123bd40，26行，058候选是，059观察否，其余历史24否。观察非已加密，不把R006变判据；LOCK-AMEND建议保留但本批不采用锁外义务入队。完整理由在候选，交Grok独立否决。M009 IN_PROGRESS，B3累计3；本批未修代码/HTML，未新增questions。
+实际B2命令：
+```text
+/home/james/.local/bin/grok -p '固定席乙Grok，M009当前执行B2整批候选复核，不修复。只通过SSH所在正本/home/james/complex-management main；遵循.scratch/module-recheck-20260908/160-audit-prompt.md V0.17。禁止MCP/子代理/第三席、fetch/commit/push/merge/worktree/部署、业务/HTML/lock/ledger/findings写入；只追加指定Grok raw。保持grok-4.6/xhigh既有参数。
+
+输入必须为本轮纠正派发后完整B1：modules/M009-b1-self-raw.md最后哈希行起V0.12，本轮B1封存前缀163739bytes SHA256 69b413e04d3b50acfb7a84ef8b6de2d57c00cd82a5449f708772f6ed07a70f19；modules/M009-b1-grok-raw.md最后哈希行起V0.12，封存前缀301012bytes SHA256 0996c0167e39458ee87b7bcd4b9a9fd125a10be660a2d8e8054b44b5d2a8368a。随后B2按规则追加，故验证以上前缀而非误把追加后的全文SHA当漂移。不要使用派发有误的V0.11票。
+
+候选docs/audit-2026-09/findings.md V3.21，当前全文SHA256 943b552433a7210fa07043e34b4a29d22e004f660dcd3019ad3d53c04123bd40，顶部“当前 M009 2026-09-21 重开 B1→B2 候选”及完整26项表是本批候选；下方M038和历史M009各表不是本批新输入。独立做完整差集、四分类、工程缺陷与队列、最小修复范围核对。不能漏并任何B1意见、观察或LOCK-AMEND建议。
+
+候选合并CX-01/02与你GR-M009-B1-01为新058（冲突/工程是/候选队列是），细列删除日常接口手机号明文豁免、原merchant.viewed补返回商户IDs与入口/过滤页信息，单次布尔grant旁路随前一删除消失；不新增明文审批通道，也不取消USB本人的既有免审批，不修全局授权器或其他controller。
+CX-03/GR-02为059，明确选择你B1允许的“降观察不入队”分支：姓名存储明文事实保留，但加密句仅客人和员工，导出七项姓名不自动变成所有商事联系人在库存储加密义务；R-006不当HTML/新判据。当前细化/工程缺陷未由冻结依据证成/队列否，绝不宣称姓名已加密或永久豁免。请独立判断该处置是否符合你的完整B1，不同意要明确FAIL和理由，不能因调度解释而自动同意。
+PGM-057/059映射建议完整保留。候选058按已映射PGM-043/041及GEN判据成立，059不采用未映射句入队，本批不扩锁；若你判必须LOCK-AMEND请明确，不偷改锁。最早受影响模块须按实际全锁引用计算（不可预设只M009）。
+050合法手机号加密/普通掩码登记否保留，旧无缺陷不可豁免058/059；043历史写事件问题与本次列表问题不混。无添加项/新questions/HTML修改。B3累计3不得清零或自动加轮；双PASS后仍需受既有轮次上限约束。
+
+将本批B2完整PASS/FAIL结论（包含输入路径、候选版本与SHA、完整差集/分类/队列检查、任何分歧）只追加到/home/james/complex-management/docs/audit-2026-09/modules/M009-b1-grok-raw.md。保留301012byte原前缀全部字节。新追加段版本V0.13，标题明确B2；本B2段禁止写CRITERIA-LOCK-SHA256:行。不要求stdout任何特殊标记；适配器只暴露路径与真实exit code。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+EXIT_CODE待交付；结论出处modules/M009-b1-grok-raw.md的新B2追加段。
+
+
+## M009 本轮B2交付与轮次终态
+版本记录V7.30；UTC 2026-09-22T05:13:49.173972+00:00。
+当前步骤M009/B2已定稿；生命周期BLOCKED-3ROUNDS；B3累计3，本轮新增0。全471计划未宣称完成。
+有效B1两席FAIL；纠正派发后Grok B1 exit0，完整V0.12。有效B2两席PASS，Grok exit0，出处modules/M009-b1-grok-raw.md V0.13追加段，313305bytes SHA256 f8c85942ac902db546e650e67a4807a8eff2d2eaa9c0fb7acb8e6e83a0fea5f7；self同名self V0.13，167491bytes SHA256 f528436da3718dc4f1c5afd19654f8c3b9d40cdfe07ce910d77cdce1a0df811e。完整调用命令见前一节原样记录，参数未变。
+findings V3.22 SHA256 7d0843e51c78e12b48c669c8bff60ae2e8df1ca2095758a3a8d5b3446ea64765已定稿26项，仅058队列是。059仅登记，不宣称姓名已加密或永久无需加密；无新添加项、无HTML修改、无新questions、未扩锁。
+依据提示词V0.17 §4“计B3的执行次数，同一模块上限3次”“是否重启由操作员另行下指令，不许自行加轮、不许自行解封”。用户本次m009开始据以重开B1/B2，不据以静默清零历史或假定第四轮。
+需要操作员：是否授权M009在既有三轮记录之外，再执行1次B3，仅修已定稿M009-058（日常商户响应统一掩码；现有merchant.viewed补返回对象和入口/筛选分页），随后完成B4/B5双席验证？原文/改法/影响全文见findings本次定稿段。该授权不包含姓名加密、其他controller、三HTML、迁移、提交或发布。
+历次三轮全部diff与两席逐块归因仍完整保存在modules/M009-b4-r1-{self,grok}-raw.md、M009-b4-r2-{self,grok}-raw.md、M009-b4-r3-{self,grok}-raw.md，已只读镜像D:/AI/codex/outputs/160-audit-20260921-m009/，6/6 SHA256匹配、UTF-8严格解码通过。未新增产物类型。
+
+
+## 本次M009 B2 V0.14派发
+2026-09-22T05:33:06.651414+00:00
+实际命令：
+```text
+/home/james/.local/bin/grok -p '固定审计席乙Grok，执行M009本批B2重新归并复核，不修复。遵循.scratch/module-recheck-20260908/160-audit-prompt.md V0.17。工作区/home/james/complex-management main。禁止第三席/子代理/MCP/fetch/commit/push/worktree/部署；只能追加指定grok raw，业务、HTML、lock、findings、ledger只读。先自核对应技能，缺失如实记录。
+
+本轮触发：操作员先反对自行新增，之后明确“2 可以 3.应该加密 1不动”。编号对应：1删除手机号明文豁免（拒绝修改），2补商户编号/入口/筛选分页留痕（批准），3联系人姓名加密（明确要求）。Codex随后明确请求“允许按第2、3项重新复核，并追加执行1次修复”，操作员回答“继续”。这些新指令优先于先前范围，但不代表批准改HTML、不准篡改原始FAIL或将手机号问题标已修。
+候选findings V3.24 SHA256 d044dbc707df525c0442e56e72c741688d01c100f29a4af3baed24f0a6dd4300，顶部“当前 M009 B2：按操作员裁决重定第2、3项（未修复）”完整26项表。ledger V7.32，当前IN_PROGRESS，B3历史3，最多仅额外1次至4。
+输入有效B1：modules/M009-b1-self-raw.md V0.12完整报告截至163739bytes；grok同名V0.12截至301012bytes。各已有V0.13历史B2票，现被新裁决替代，不改历史。核对完整差集/所有观察/分类/队列，禁止只审2行。
+058原手机号冲突保留但按第1项不动；当前只修其留痕部分。稳定入口、返回merchant IDs、项目、实际page/pageSize、includeArchived及businessFormat，不写姓名/手机号。059用原有PiiCipher在商户主次姓名共用读写加解密，必要迁移两列VARCHAR120→TEXT、既有JDBC测试和现有PII门禁两列登记。AGENTS禁止新增历史回填兼容设计，旧数据未保存不声称已加密。无其它姓名或客人生日范围扩展。实际源码/调用者/类型/迁移检查后判断最小方案够不够，不预设PASS。
+当前候选059依据PGM026档案、GEN010安全与GEN008一致性，操作员明确裁决消除了过去姓名覆盖的不确定，不将R006或未映射PGM059偷偷当新判据；请独立判断是否可不改锁落实本次明确授权。如果你认为必须LOCK-AMEND或此候选与保留第1项冲突，给明确FAIL及准确原因，不能静默扩大范围或建议擅改HTML。B2通过仅表示此授权修复范围可执行，不代表整模块符合未变HTML；后续B5不能隐去第1项残留。
+将完整B2 PASS/FAIL（注明输入/候选SHA/全差集/分类/队列/必要修复文件与验证）追加到/home/james/complex-management/docs/audit-2026-09/modules/M009-b1-grok-raw.md。保留旧313305bytes前缀，新段V0.14。B2不写CRITERIA-LOCK-SHA256行。不要求stdout特殊格式，适配器只返回路径/真实exit。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+EXIT_CODE待真实返回，出处modules/M009-b1-grok-raw.md V0.14。
+
+
+## M009 B3累计4完成，B4派发
+2026-09-22T05:46:29.022023+00:00
+B3前树 d23497895e200310c4e9692323d5f4e431234981；后树 4a8843e8fd431fdd9c9639d2ba96013049986c7a；完整diff SHA256 6fa14a09544d45a41e6fc14bcc51d47b56f96525295e8869cd427a0bed41a4bb；仅6文件，真实暂存区未变。B3前后四值全等：b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。新测试先红2/2，再绿108/108；PII门禁18列PASS。本批六文件diff --check PASS。全工作区git diff --check exit2来自此前审计raw的尾空格，不改历史证据，不冒称全库干净。
+实际B4命令：
+```text
+/home/james/.local/bin/grok -p '固定席乙Grok，对M009累计B3第4次（操作员仅授权一次额外修复）执行B4全部diff只读独立审计，不修复。正本/home/james/complex-management main，遵循.scratch/module-recheck-20260908/160-audit-prompt.md V0.17。禁止MCP/子代理/第三席/fetch/commit/push/worktree/部署，仅写指定grok raw。
+B2输入findings V3.25，两席b1 raw V0.14已双PASS。用户裁决“2 可以 3.应该加密 1不动”及“继续”：058只修第2项merchant.viewed对象/入口/项目/筛选分页，059只两姓名加解密及必要两列TEXT、既有测试/门禁。手机号明文豁免不得改，未修冲突保留，不把本轮B4当模块PASS。无新CHECK/回填/共享cipher变更，无其它姓名列。无需重做分类或扩锁。
+本轮before tree=d23497895e200310c4e9692323d5f4e431234981；after tree=4a8843e8fd431fdd9c9639d2ba96013049986c7a。自行git diff --binary两树取得全部diff并全文落你的raw（禁止路径过滤），核验当前工作区六个diff文件仍等于after树。每块每行逐一归因058或059（含自身版本/测试/SQL/门禁），无法归因即FAIL，不准顺手改。六文件变更：PlatformService、JdbcPlatformRepository、V431__merchant_contact_names_ciphertext.sql、PlatformServiceTests、PlatformJdbcIntegrationTests、tools/verify-pii-encryption.mjs。
+核对运行路径、空projectId不会NPE、实际page/pageSize、只返回本页IDs不泄露姓名/手机号、加解密双列所有读写、VARCHAR→TEXT容量、无数据删除、手机号Controller保持前样。修复前两个新测试真实失败（日志双方审计同目录self报告将记录，勿读取本轮self意见）；修复后mvn -o -Dtest=PlatformServiceTests,PlatformControllerTests,PlatformJdbcIntegrationTests test -q exit0，70+14+24=108零失败错误跳过；node tools/verify-pii-encryption.mjs exit0共18列；两树git diff --check exit0。请自己读Surefire/源码，不照抄通过结论。不得跑会写代码/数据库/构建产物的命令。
+独立实际sha256sum判据锁，将本次完整报告第一行写CRITERIA-LOCK-SHA256: 后跟你实算值，不能从提示拷值（本提示不提供预期值）。必要技能自检。全diff全部审完一次出全部意见，不发现第一条就结束。不读本轮self报告内容。
+完整报告只写/home/james/complex-management/docs/audit-2026-09/modules/M009-b4-r4-grok-raw.md。已有则完整追加不得覆盖，首次版本V0.01。包含两树ID、完整binary diff、逐块ID归因和独立PASS/FAIL。适配器只暴露路径/真实exit，不需stdout特殊格式。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+Grok真实退出待交付，出处modules/M009-b4-r4-grok-raw.md；IN_PROGRESS，B3累计4，无剩余额外轮次。
+
+
+## M009 B4-r4双PASS，B5整模块派发
+2026-09-22T06:03:22.150561+00:00
+Grok B4真实exit0；raw SHA256 6a4966ffd73683af2f8ace362fc9b5f7a266ddbf4ab7c1572cb3cf40608cc386；self SHA e7a0ef672e1d95de8713da3040465047281bad802a6a6673a37abe12d9516f86。两席完整diff逐行ID归因PASS，无本批越界。findings V3.26依双PASS将本批已修队列置否，手机号残留保留。
+B5实际命令：
+```text
+/home/james/.local/bin/grok -p '固定席乙Grok，对M009执行B5修复后整模块完整独立审计（B3累计4），不修复。仅正本/home/james/complex-management main。遵循.scratch/module-recheck-20260908/160-audit-prompt.md V0.17与最新操作员范围指令。禁止MCP/子代理/第三席/fetch/commit/push/worktree/部署。只能写指定grok raw。
+B4累计r4已两席PASS（你自己b4-r4-grok原票；不读取本次B5 self报告）。before=d23497895e200310c4e9692323d5f4e431234981 after=4a8843e8fd431fdd9c9639d2ba96013049986c7a六文件修复已冻结，当前findings V3.26，ledger V7.36 B5 IN_PROGRESS，B3=4额外一次已用尽。
+必须按plan/modules.md M009完整20文件+criteria-lock.md M009映射全部87判据及general，第一性原理/顺从/对抗三线逐文件整模块审完，全部问题收齐再落报告；不是只看刚改的6文件，不因预知第1项残留而提前停止。按需只读直接依赖，不扩大其它模块修复。
+操作员：“2 可以 3.应该加密 1不动”，再对第2/3项追加一次修复请求答“继续”。因此058第2项留痕已修且B4双PASS后该部分队列否，058第1项手机号豁免+布尔单次授权旁路仍保留、禁止本批修改，也不伪称已符合HTML。059两姓名新建/保存加密、读时解密，V431两列TEXT，无回填/CHECK，旧数据未保存不声称已全加密。第1项必须如实审计记录；本提示不预设你B5结论。
+修复后真实mvn -o -Dtest=PlatformServiceTests,PlatformControllerTests,PlatformJdbcIntegrationTests test -q exit0、108 tests零failure/error/skipped，既有PII门禁18列PASS；可读Surefire，禁跑写代码/库/构建产物命令。只读命令可跑，没实跑不写实跑。
+额外已核背景：node tools/verify-migration-version-order.mjs exit1仅旧V427，before/after bad集合均只有V427且该文件blob完全相同；本次V431正确排于origin/main现有最大430之后。它不是本次引入，保留对应M009-013/后续迁移模块背景，不顺手改号、不将全局门禁写全绿。全工作区git diff --check也有旧raw尾空格，六文件两树diff --check是0。
+本批未扩锁。059已在B2裁定依据PGM026/GEN010/GEN008及用户明确处置，不偷偷映射PGM059。原OBS01…04及映射建议完整保留。无HTML修改许可，无新业务添加授权。发现新问题须给临时ID/路径行/证据/四分类/已冻结判据/工程缺陷，不能跳到代码修复。
+先自核适用技能。必须独立实算criteria-lock SHA，将报告第一行写CRITERIA-LOCK-SHA256: 后跟你自己实算值。本提示没有预期锁哈希。逐文件完整覆盖表含行数/SHA，逐判据核查结果含具体依据。无条件PASS不存在，若FAIL所有问题全部列完再交付。
+完整报告只写/home/james/complex-management/docs/audit-2026-09/modules/M009-b5-r4-grok-raw.md，已有内容则追加完整报告不得覆盖，首次版本V0.01。不读取M009-b5-r4-self-raw.md。适配器只回路径与真实exit。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+B5未有结论；IN_PROGRESS；B3=4无新增修复授权。
+
+## M009 B5-r4交付与终态回执
+2026-09-22T06:14:58.871655+00:00
+当前步骤B5完成；模块M009/471；B3累计4；生命周期BLOCKED-3ROUNDS。
+Grok实际命令全文见上一节“B5实际命令”，参数原样；本次真实EXIT_CODE=0，交付成功，审计结论FAIL，两者不混。
+self报告SHA256 0272e1e0829b6fd34de4dad0730fd052934bc9fb29100bfdcafa0a1966413b27；Grok报告SHA256 2d3a1a1697f567eebdf7032a0be11eaebddf1371317a0f17662266ba899dece7。两席完整20文件3375行/87判据；Grok对PGM003–016合组说明，未遗漏映射范围，不据此声称PASS。残留CX-B5-01与GR-M009-B5-01均为既有058第1项；没有新ID、没有新添加项、没有HTML修改申请。
+B5后四值（①实算②sidecar③ledger④本次Grok）原样：
+1 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+2 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+3 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+4 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+全部相等。LOCK-AMEND-COUNT: 1（不变）。
+授权修复证据：r1/r2/r3/r4两席b4 raw保留完整diff；r4 before d23497895e200310c4e9692323d5f4e431234981 / after 4a8843e8fd431fdd9c9639d2ba96013049986c7a。未提交、未推送、未合并、未发布。旧姓名未保存不声称加密；旧V427迁移顺序门禁仍FAIL，非本次六文件回归。
+后续需要操作员的不是重复批准修第1项，而是明确：保持第1项不动时，是否允许M009保留FAIL登记并继续下一模块。当前未取得该流程例外，不自行推进。
+
+## 本次获批HTML及完整lock差异（LOCK-AMEND③输入）
+2026-09-22T06:22:48.082867+00:00
+```diff
+--- a/docs/platform-governance-map-for-operations-v0.1.html
++++ b/docs/platform-governance-map-for-operations-v0.1.html
+@@ -1,5 +1,5 @@
+ <!doctype html>
+-<!-- 文件版本：V0.12 -->
++<!-- 文件版本：V0.13 -->
+ <html lang="zh-CN">
+ <head>
+   <meta charset="utf-8">
+@@ -677,7 +677,7 @@
+                 <li>审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。</li>
+                 <!-- 2026-07-03 回写：经营报表查看/导出分权(已上线)。 -->
+                 <li>经营报表同理：看板有权限就能看，但把数据导出带走是另一件事——导出须单独授权、逐次留痕；资金类数据的查看权和导出权必须分开，不给同一人默认双权。</li>
+-                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。</li>
++                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。商户档案页面中的第一联系人和第二联系人手机号，按“客人与员工的个人信息保护”条中明确的查看权限例外执行；该页面查看例外不授予未脱敏导出或打印权限，也不免除敏感页的查看留痕及其他页面保护要求。</li>
+                 <li>所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定。密码由导出人账号、导出时刻、导出所用设备的唯一识别号（如网卡地址、主板序列号等）以及接入网络等可查证要素按统一算法生成，长度不超过十位，且可由系统反向推算出对应的导出人、导出时间与导出设备；导出人可以在专门的地方查到自己导出文件的密码。导出文件中的数据不可复制、不可编辑：不得从文件中选取复制内容，也不得修改文件内容；确需可编辑版本用于二次加工的，须另行申请、说明用途与接收方，经最高权限审批后发放，可编辑版同样带密码与暗纹并逐次留痕。后台、商户专区和员工手机端的所有在线页面都带有按同一规则生成的暗纹；暗纹可反向推算：把页面的截屏图片、或对着屏幕拍摄的照片上传到系统，即可算出该页面是由哪个账号、在哪一台设备上、于什么时间打开的。凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页：敏感页上的文字不能被选中、不能被复制，也不提供页面另存与打印，防的是有人绕开导出口子直接把内容抄走。打开敏感页这件事本身也要留痕，记下是谁打开的、什么时间打开的、打开的是哪一个页面、这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）；这条留痕不提供关闭开关。</li>
+               </ul>
+             </div>
+@@ -868,7 +868,7 @@
+               <h3>客人与员工的个人信息保护</h3>
+               <ul>
+                 <li>客人和员工的手机号、身份信息等个人信息，在系统里一律加密存放。</li>
+-                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。</li>
++                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。商户档案中的第一联系人和第二联系人手机号除外：经单独授权且查看权限有效的人员，以及持授权 U 盘密钥的最高权限本人，可以在其获准访问的商户档案列表和档案操作结果中查看完整号码；其他人员仍只显示脱敏号码。平台管理员身份本身不自动取得该查看权限。该例外仅适用于商户档案联系人，不扩大到客人或员工档案的手机号，也不免除项目范围检查和查看留痕。</li>
+                 <li>手机号是查询客人的唯一路径：凡要定位到具体某一位客人，一律只能输入手机号，并走客人查询专门通道，查了谁、谁查的都留痕；姓名、昵称、卡座、订单号、存酒标签等其他字段都不得用于反查客人，只有在通过手机号定位到该客人之后，才能看到其名下的卡座、订单号等相关信息。从订单、账单、订台单、存酒单等任何单据上点开“客人”，等同于发起一次客人查询：同样走这条专门通道、同样先鉴权、同样留痕，打开后只显示脱敏信息，不因为是从单据点进来的就直接放明文。会员号即注册手机号，平台不设独立卡号体系；收银现场录入会员号就是录入客人手机号，该动作走客人查询专门通道并留痕。</li>
+               </ul>
+             </div>
+```
+```diff
+--- a/docs/audit-2026-09/plan/criteria-lock.md
++++ b/docs/audit-2026-09/plan/criteria-lock.md
+@@ -1,6 +1,6 @@
+ # 审计判据冻结
+ 
+-版本：V0.11
++版本：V0.12
+ 
+ - 判据总数：401（18 条通用工程判据 + 383 个 HTML 锚点判据）
+ - HTML 锚点闭集：BEQR `td.k` 197；BSM `h2/h3` 120；PGM `h2/h3` 66。
+@@ -5832,6 +5832,7 @@
+ ### PGM-043 — 外包人员与审计人员（2026-06-29 新增）
+ 
+ - 来源：`docs/platform-governance-map-for-operations-v0.1.html:673`；锚点：`h3`；父锚点：权限和职级：每一个单一功能都可以单独授权
++- 铁律4批准依据：本线程操作员对两处完整改文及单次权限修复答“都批准修改”；本条仅同步获批HTML原文，未新增业务判据。
+ - 适用标签：governance
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -5844,7 +5845,7 @@
+                 <li>审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。</li>
+                 <!-- 2026-07-03 回写：经营报表查看/导出分权(已上线)。 -->
+                 <li>经营报表同理：看板有权限就能看，但把数据导出带走是另一件事——导出须单独授权、逐次留痕；资金类数据的查看权和导出权必须分开，不给同一人默认双权。</li>
+-                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。</li>
++                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。商户档案页面中的第一联系人和第二联系人手机号，按“客人与员工的个人信息保护”条中明确的查看权限例外执行；该页面查看例外不授予未脱敏导出或打印权限，也不免除敏感页的查看留痕及其他页面保护要求。</li>
+                 <li>所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定。密码由导出人账号、导出时刻、导出所用设备的唯一识别号（如网卡地址、主板序列号等）以及接入网络等可查证要素按统一算法生成，长度不超过十位，且可由系统反向推算出对应的导出人、导出时间与导出设备；导出人可以在专门的地方查到自己导出文件的密码。导出文件中的数据不可复制、不可编辑：不得从文件中选取复制内容，也不得修改文件内容；确需可编辑版本用于二次加工的，须另行申请、说明用途与接收方，经最高权限审批后发放，可编辑版同样带密码与暗纹并逐次留痕。后台、商户专区和员工手机端的所有在线页面都带有按同一规则生成的暗纹；暗纹可反向推算：把页面的截屏图片、或对着屏幕拍摄的照片上传到系统，即可算出该页面是由哪个账号、在哪一台设备上、于什么时间打开的。凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页：敏感页上的文字不能被选中、不能被复制，也不提供页面另存与打印，防的是有人绕开导出口子直接把内容抄走。打开敏感页这件事本身也要留痕，记下是谁打开的、什么时间打开的、打开的是哪一个页面、这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）；这条留痕不提供关闭开关。</li>
+               </ul>
+             </div>
+@@ -6187,6 +6188,7 @@
+ ### PGM-059 — 客人与员工的个人信息保护
+ 
+ - 来源：`docs/platform-governance-map-for-operations-v0.1.html:868`；锚点：`h3`；父锚点：应急恢复和客人隐私：最坏情况有后路，个人信息看不到明文
++- 铁律4批准依据：本线程操作员对两处完整改文及单次权限修复答“都批准修改”；本条仅同步获批HTML原文，未新增业务判据。
+ - 适用标签：access、compliance、customer
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -6195,7 +6197,7 @@
+               <h3>客人与员工的个人信息保护</h3>
+               <ul>
+                 <li>客人和员工的手机号、身份信息等个人信息，在系统里一律加密存放。</li>
+-                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。</li>
++                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。商户档案中的第一联系人和第二联系人手机号除外：经单独授权且查看权限有效的人员，以及持授权 U 盘密钥的最高权限本人，可以在其获准访问的商户档案列表和档案操作结果中查看完整号码；其他人员仍只显示脱敏号码。平台管理员身份本身不自动取得该查看权限。该例外仅适用于商户档案联系人，不扩大到客人或员工档案的手机号，也不免除项目范围检查和查看留痕。</li>
+                 <li>手机号是查询客人的唯一路径：凡要定位到具体某一位客人，一律只能输入手机号，并走客人查询专门通道，查了谁、谁查的都留痕；姓名、昵称、卡座、订单号、存酒标签等其他字段都不得用于反查客人，只有在通过手机号定位到该客人之后，才能看到其名下的卡座、订单号等相关信息。从订单、账单、订台单、存酒单等任何单据上点开“客人”，等同于发起一次客人查询：同样走这条专门通道、同样先鉴权、同样留痕，打开后只显示脱敏信息，不因为是从单据点进来的就直接放明文。会员号即注册手机号，平台不设独立卡号体系；收银现场录入会员号就是录入客人手机号，该动作走客人查询专门通道并留痕。</li>
+               </ul>
+             </div>
+@@ -6385,7 +6387,7 @@
+ M006 → [BEQR-085, BEQR-086, BEQR-087, BEQR-088, BEQR-089, BEQR-090, BEQR-091, BEQR-092, BEQR-093, BEQR-094, BEQR-095, BEQR-096, BEQR-118, BEQR-146, BEQR-155, BEQR-160, BEQR-161, BEQR-162, BEQR-163, BEQR-164, BEQR-165, BEQR-166, BEQR-167, BEQR-168, BEQR-169, BEQR-170, BEQR-171, BEQR-172, BEQR-173, BEQR-174, BEQR-175, BEQR-176, BEQR-177, BEQR-178, BEQR-179, BEQR-180, BEQR-181, BSM-020, BSM-028, BSM-081, BSM-082, BSM-083, BSM-111, BSM-112, BSM-113, BSM-114, BSM-115, BSM-116, BSM-117, BSM-118, BSM-119, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-015, PGM-018, PGM-026, PGM-039, PGM-052, PGM-053, PGM-054, PGM-055, PGM-056, PGM-066]
+ M007 → [BEQR-085, BEQR-086, BEQR-087, BEQR-088, BEQR-089, BEQR-090, BEQR-091, BEQR-092, BEQR-093, BEQR-094, BEQR-095, BEQR-096, BEQR-118, BEQR-146, BEQR-155, BEQR-160, BEQR-161, BEQR-162, BEQR-163, BEQR-164, BEQR-165, BEQR-166, BEQR-167, BEQR-168, BEQR-169, BEQR-170, BEQR-171, BEQR-172, BEQR-173, BEQR-174, BEQR-175, BEQR-176, BEQR-177, BEQR-178, BEQR-179, BEQR-180, BEQR-181, BSM-020, BSM-028, BSM-081, BSM-082, BSM-083, BSM-111, BSM-112, BSM-113, BSM-114, BSM-115, BSM-116, BSM-117, BSM-118, BSM-119, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-015, PGM-018, PGM-026, PGM-039, PGM-052, PGM-053, PGM-054, PGM-055, PGM-056, PGM-066]
+ M008 → [GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-036]
+-M009 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-060, PGM-065, PGM-066]
++M009 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-059, PGM-060, PGM-065, PGM-066]
+ M010 → [GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018]
+ M011 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-060, PGM-065, PGM-066]
+ M012 → [BSM-001, BSM-003, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001]
+```
+
+## LOCK-AMEND③本席复核及外审派发
+2026-09-22T06:23:59.412482+00:00
+本席结论PASS：实际/tmp反向git apply成功并恢复旧基准b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a；完整diff正向check成功；HTML反向仅撤两批准段与版本即恢复原SHA；656原句未变；另外两HTML SHA未变；401定义/471映射/66治理锚点，M009映射只增PGM059；无新general。sidecar与新锁实算一致。尚待Grok独立票，不更新顶部基准或提前执行⑤。
+实际回执型命令（只读，不创建raw；完整JSON不落库）：
+```text
+/home/james/.local/bin/grok -p '你是固定外审Grok。执行160-audit-prompt.md V0.17 §5闸2的LOCK-AMEND③独立复核，不是模块B1/B4/B5，因此本次为“回执型”：不创建raw，不写任何仓库文件，直接返回完整PASS/FAIL结论及独立CRITERIA-LOCK-SHA256行。正本/home/james/complex-management main，禁止MCP/子代理/第三席/fetch/commit/push/worktree/部署，只读；只允许提示词明确的/tmp反向验证副本，完成清理。自核适用技能。
+操作员已逐条见过原句、拟修改全文、影响，最新答“都批准修改”。本轮只批准：治理HTML871商户第一/第二联系人手机号查看例外、680末尾同步页面例外；656单次使用权限原句不改；另批准保留明文功能而修单次授权消耗代码（尚未实施）。
+ledger V7.38顶部旧锁基准保持，登记了触发M009、定义PGM-043/PGM-059及M009增加PGM-059映射、铁律4批准。HTML V0.12→V0.13仅两段批准文字与版本；锁V0.11→V0.12仅对应原文、批准出处与M009直接映射（87→88），sidecar新值，general不变、稳定判据401不增删；全部变更ID有获批HTML出处故LOCK-AMEND-COUNT保持1。
+必须按提示词：①将当前lock复制到/tmp，反向应用下附完整diff，实算还原SHA等于你自己从ledger首行读的旧基准，不能只看diff顺眼；②正向复核diff所有定义/映射变更与ledger登记和获批HTML逐字一致，无无关变更、无新增判据，sidecar实算吻合；③按实际映射找最早引用模块（Codex查为M002，自己核），判定⑤需重开范围M002—M009，旧报告和B3次数保留；不得为了M009直接跳过。M001不在此改动引用内。此时不得自己更新ledger基准/状态，留给③双PASS之后④⑤。
+核实这不是把获准明文功能与单次授权bug混为无缺陷；代码修复仍需恢复模块审计链/B2/B3。不审尚未发生的代码修复，不把LOCK复核PASS当M009PASS。
+完整lock diff如下（真实全文，不省略）：
+--- a/docs/audit-2026-09/plan/criteria-lock.md
++++ b/docs/audit-2026-09/plan/criteria-lock.md
+@@ -1,6 +1,6 @@
+ # 审计判据冻结
+ 
+-版本：V0.11
++版本：V0.12
+ 
+ - 判据总数：401（18 条通用工程判据 + 383 个 HTML 锚点判据）
+ - HTML 锚点闭集：BEQR `td.k` 197；BSM `h2/h3` 120；PGM `h2/h3` 66。
+@@ -5832,6 +5832,7 @@
+ ### PGM-043 — 外包人员与审计人员（2026-06-29 新增）
+ 
+ - 来源：`docs/platform-governance-map-for-operations-v0.1.html:673`；锚点：`h3`；父锚点：权限和职级：每一个单一功能都可以单独授权
++- 铁律4批准依据：本线程操作员对两处完整改文及单次权限修复答“都批准修改”；本条仅同步获批HTML原文，未新增业务判据。
+ - 适用标签：governance
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -5844,7 +5845,7 @@
+                 <li>审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。</li>
+                 <!-- 2026-07-03 回写：经营报表查看/导出分权(已上线)。 -->
+                 <li>经营报表同理：看板有权限就能看，但把数据导出带走是另一件事——导出须单独授权、逐次留痕；资金类数据的查看权和导出权必须分开，不给同一人默认双权。</li>
+-                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。</li>
++                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。商户档案页面中的第一联系人和第二联系人手机号，按“客人与员工的个人信息保护”条中明确的查看权限例外执行；该页面查看例外不授予未脱敏导出或打印权限，也不免除敏感页的查看留痕及其他页面保护要求。</li>
+                 <li>所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定。密码由导出人账号、导出时刻、导出所用设备的唯一识别号（如网卡地址、主板序列号等）以及接入网络等可查证要素按统一算法生成，长度不超过十位，且可由系统反向推算出对应的导出人、导出时间与导出设备；导出人可以在专门的地方查到自己导出文件的密码。导出文件中的数据不可复制、不可编辑：不得从文件中选取复制内容，也不得修改文件内容；确需可编辑版本用于二次加工的，须另行申请、说明用途与接收方，经最高权限审批后发放，可编辑版同样带密码与暗纹并逐次留痕。后台、商户专区和员工手机端的所有在线页面都带有按同一规则生成的暗纹；暗纹可反向推算：把页面的截屏图片、或对着屏幕拍摄的照片上传到系统，即可算出该页面是由哪个账号、在哪一台设备上、于什么时间打开的。凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页：敏感页上的文字不能被选中、不能被复制，也不提供页面另存与打印，防的是有人绕开导出口子直接把内容抄走。打开敏感页这件事本身也要留痕，记下是谁打开的、什么时间打开的、打开的是哪一个页面、这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）；这条留痕不提供关闭开关。</li>
+               </ul>
+             </div>
+@@ -6187,6 +6188,7 @@
+ ### PGM-059 — 客人与员工的个人信息保护
+ 
+ - 来源：`docs/platform-governance-map-for-operations-v0.1.html:868`；锚点：`h3`；父锚点：应急恢复和客人隐私：最坏情况有后路，个人信息看不到明文
++- 铁律4批准依据：本线程操作员对两处完整改文及单次权限修复答“都批准修改”；本条仅同步获批HTML原文，未新增业务判据。
+ - 适用标签：access、compliance、customer
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -6195,7 +6197,7 @@
+               <h3>客人与员工的个人信息保护</h3>
+               <ul>
+                 <li>客人和员工的手机号、身份信息等个人信息，在系统里一律加密存放。</li>
+-                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。</li>
++                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。商户档案中的第一联系人和第二联系人手机号除外：经单独授权且查看权限有效的人员，以及持授权 U 盘密钥的最高权限本人，可以在其获准访问的商户档案列表和档案操作结果中查看完整号码；其他人员仍只显示脱敏号码。平台管理员身份本身不自动取得该查看权限。该例外仅适用于商户档案联系人，不扩大到客人或员工档案的手机号，也不免除项目范围检查和查看留痕。</li>
+                 <li>手机号是查询客人的唯一路径：凡要定位到具体某一位客人，一律只能输入手机号，并走客人查询专门通道，查了谁、谁查的都留痕；姓名、昵称、卡座、订单号、存酒标签等其他字段都不得用于反查客人，只有在通过手机号定位到该客人之后，才能看到其名下的卡座、订单号等相关信息。从订单、账单、订台单、存酒单等任何单据上点开“客人”，等同于发起一次客人查询：同样走这条专门通道、同样先鉴权、同样留痕，打开后只显示脱敏信息，不因为是从单据点进来的就直接放明文。会员号即注册手机号，平台不设独立卡号体系；收银现场录入会员号就是录入客人手机号，该动作走客人查询专门通道并留痕。</li>
+               </ul>
+             </div>
+@@ -6385,7 +6387,7 @@
+ M006 → [BEQR-085, BEQR-086, BEQR-087, BEQR-088, BEQR-089, BEQR-090, BEQR-091, BEQR-092, BEQR-093, BEQR-094, BEQR-095, BEQR-096, BEQR-118, BEQR-146, BEQR-155, BEQR-160, BEQR-161, BEQR-162, BEQR-163, BEQR-164, BEQR-165, BEQR-166, BEQR-167, BEQR-168, BEQR-169, BEQR-170, BEQR-171, BEQR-172, BEQR-173, BEQR-174, BEQR-175, BEQR-176, BEQR-177, BEQR-178, BEQR-179, BEQR-180, BEQR-181, BSM-020, BSM-028, BSM-081, BSM-082, BSM-083, BSM-111, BSM-112, BSM-113, BSM-114, BSM-115, BSM-116, BSM-117, BSM-118, BSM-119, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-015, PGM-018, PGM-026, PGM-039, PGM-052, PGM-053, PGM-054, PGM-055, PGM-056, PGM-066]
+ M007 → [BEQR-085, BEQR-086, BEQR-087, BEQR-088, BEQR-089, BEQR-090, BEQR-091, BEQR-092, BEQR-093, BEQR-094, BEQR-095, BEQR-096, BEQR-118, BEQR-146, BEQR-155, BEQR-160, BEQR-161, BEQR-162, BEQR-163, BEQR-164, BEQR-165, BEQR-166, BEQR-167, BEQR-168, BEQR-169, BEQR-170, BEQR-171, BEQR-172, BEQR-173, BEQR-174, BEQR-175, BEQR-176, BEQR-177, BEQR-178, BEQR-179, BEQR-180, BEQR-181, BSM-020, BSM-028, BSM-081, BSM-082, BSM-083, BSM-111, BSM-112, BSM-113, BSM-114, BSM-115, BSM-116, BSM-117, BSM-118, BSM-119, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-015, PGM-018, PGM-026, PGM-039, PGM-052, PGM-053, PGM-054, PGM-055, PGM-056, PGM-066]
+ M008 → [GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-036]
+-M009 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-060, PGM-065, PGM-066]
++M009 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-059, PGM-060, PGM-065, PGM-066]
+ M010 → [GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018]
+ M011 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-060, PGM-065, PGM-066]
+ M012 → [BSM-001, BSM-003, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001]
+
+HTML逐条批准全文差异（真实全文）：
+--- a/docs/platform-governance-map-for-operations-v0.1.html
++++ b/docs/platform-governance-map-for-operations-v0.1.html
+@@ -1,5 +1,5 @@
+ <!doctype html>
+-<!-- 文件版本：V0.12 -->
++<!-- 文件版本：V0.13 -->
+ <html lang="zh-CN">
+ <head>
+   <meta charset="utf-8">
+@@ -677,7 +677,7 @@
+                 <li>审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。</li>
+                 <!-- 2026-07-03 回写：经营报表查看/导出分权(已上线)。 -->
+                 <li>经营报表同理：看板有权限就能看，但把数据导出带走是另一件事——导出须单独授权、逐次留痕；资金类数据的查看权和导出权必须分开，不给同一人默认双权。</li>
+-                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。</li>
++                <li>导出文件是否脱敏，不由导出人判断，也不提供关闭开关：系统按导出内容自动判定并强制执行。凡导出内容中包含以下任何一类，一律强制脱敏——一是法律法规要求保护的个人信息，只有下面七项，没有第八项：姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置；其中：员工的姓名、所属部门与所属公司不脱敏，全体员工均可查看；员工的手机号只对该员工直属管理上级这条管理线上的各级岗位、以及顶层平台公司的管理层不脱敏，对其他岗位一律脱敏；客人的姓名与手机号默认脱敏；例外：商户查询与导出属于本商户的客户信息不脱敏（按业务系统地图「账户注销」条的来源判定，2026-08-05 用户裁决）。因为脱敏由系统自动判定、没有人工把关，这张清单必须是封闭的，不留“等”字，要增加一项必须先经批准写入三份 HTML，不得由后台自行添加；二是敏感经营数据，即内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格，以及其他被标记为敏感的数据。系统在生成导出文件前先扫描内容并自动打码，导出人无权取消、无权选择不脱敏，也不得通过更换导出模板、拆分字段或改变导出格式来规避。除此之外，跨商户、平台侧批量场景的未脱敏原文只允许持授权 U 盘密钥的最高权限本人导出；每一次未脱敏导出都单独留痕，记录导出时间、用途、接收方与实际导出内容范围。每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。一切递给客人的纸质凭条（收银小票、存取酒凭条等）：客人手机号只印后四位，姓名只印姓氏，不印证件号；票面不得出现其他客人的任何信息。纸质凭条与页面、导出同属强制脱敏面。商户档案页面中的第一联系人和第二联系人手机号，按“客人与员工的个人信息保护”条中明确的查看权限例外执行；该页面查看例外不授予未脱敏导出或打印权限，也不免除敏感页的查看留痕及其他页面保护要求。</li>
+                 <li>所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定。密码由导出人账号、导出时刻、导出所用设备的唯一识别号（如网卡地址、主板序列号等）以及接入网络等可查证要素按统一算法生成，长度不超过十位，且可由系统反向推算出对应的导出人、导出时间与导出设备；导出人可以在专门的地方查到自己导出文件的密码。导出文件中的数据不可复制、不可编辑：不得从文件中选取复制内容，也不得修改文件内容；确需可编辑版本用于二次加工的，须另行申请、说明用途与接收方，经最高权限审批后发放，可编辑版同样带密码与暗纹并逐次留痕。后台、商户专区和员工手机端的所有在线页面都带有按同一规则生成的暗纹；暗纹可反向推算：把页面的截屏图片、或对着屏幕拍摄的照片上传到系统，即可算出该页面是由哪个账号、在哪一台设备上、于什么时间打开的。凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页：敏感页上的文字不能被选中、不能被复制，也不提供页面另存与打印，防的是有人绕开导出口子直接把内容抄走。打开敏感页这件事本身也要留痕，记下是谁打开的、什么时间打开的、打开的是哪一个页面、这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）；这条留痕不提供关闭开关。</li>
+               </ul>
+             </div>
+@@ -868,7 +868,7 @@
+               <h3>客人与员工的个人信息保护</h3>
+               <ul>
+                 <li>客人和员工的手机号、身份信息等个人信息，在系统里一律加密存放。</li>
+-                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。</li>
++                <li>员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。商户档案中的第一联系人和第二联系人手机号除外：经单独授权且查看权限有效的人员，以及持授权 U 盘密钥的最高权限本人，可以在其获准访问的商户档案列表和档案操作结果中查看完整号码；其他人员仍只显示脱敏号码。平台管理员身份本身不自动取得该查看权限。该例外仅适用于商户档案联系人，不扩大到客人或员工档案的手机号，也不免除项目范围检查和查看留痕。</li>
+                 <li>手机号是查询客人的唯一路径：凡要定位到具体某一位客人，一律只能输入手机号，并走客人查询专门通道，查了谁、谁查的都留痕；姓名、昵称、卡座、订单号、存酒标签等其他字段都不得用于反查客人，只有在通过手机号定位到该客人之后，才能看到其名下的卡座、订单号等相关信息。从订单、账单、订台单、存酒单等任何单据上点开“客人”，等同于发起一次客人查询：同样走这条专门通道、同样先鉴权、同样留痕，打开后只显示脱敏信息，不因为是从单据点进来的就直接放明文。会员号即注册手机号，平台不设独立卡号体系；收银现场录入会员号就是录入客人手机号，该动作走客人查询专门通道并留痕。</li>
+               </ul>
+             </div>
+
+' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+EXIT_CODE待进程结束；结论出处IN-RECEIPT，待回执后仅登记结论全文。
+
+## LOCK-AMEND③ Grok回执结论全文及④⑤执行
+2026-09-22T06:35:01.971765+00:00
+EXIT_CODE=0
+结论出处：IN-RECEIPT
+
+> CRITERIA-LOCK-SHA256: 57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a
+
+**LOCK-AMEND③：PASS**
+
+本席为回执型闸2独立复核。未写仓库、未建 raw、未改 ledger 顶部基准、未执行④⑤。正本 `/home/james/complex-management` 分支 `main`（HEAD `e456ba96c84185c8d39f18f548011daac48a6466`）。`/tmp` 反向验证副本已删除。
+
+---
+
+### ① 反向还原（实算，不是目视）
+
+- 自读 `ledger.md` 首行旧基准：`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`
+- 将当前 `plan/criteria-lock.md` 复制到 `/tmp`，按所附完整 forward diff 以 `patch -R -p1 --fuzz=0` 反向应用；hunk 落在旧行号 1 / 5832 / 5844 / 6187 / 6195 / 6385
+- 还原文件 SHA256：`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（与旧基准逐字相等）
+- 字符串逆操作交叉验证同一哈希
+- 还原后：版本 V0.11；两条铁律4行消失；PGM-043/PGM-059 新句消失；M009 无 PGM-059；PGM-041「单次使用」句与现值相同
+
+### ② 正向一致（diff ↔ ledger 登记 ↔ 获批 HTML）
+
+独立实算当前锁：`sha256sum docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'`  
+→ `57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a`  
+sidecar 全文同值。ledger 顶部两行仍为旧基准 + `LOCK-AMEND-COUNT: 1`（④未执行，正确）。
+
+还原↔现值的实质变更仅此六类，无旁路改动：
+
+| 项 | 核实 |
+|---|---|
+| 锁版本 | V0.11→V0.12 |
+| 定义变更 ID | 仅 PGM-043、PGM-059 |
+| 映射变更 | 仅 M009 增加 PGM-059（87→88）；其余 470 条映射字节级不变 |
+| general | 与还原文件全等；未增删 GEN |
+| 稳定判据 | 401 个 ID、集合与顺序不变（GEN 18 + BEQR 197 + BSM 120 + PGM 66） |
+| PGM-043 HTML 原文 | 与治理 HTML 第 680 行逐字相同（页面例外） |
+| PGM-059 HTML 原文 | 与治理 HTML 第 871 行逐字相同（查看例外） |
+| 铁律4 | 两条定义均注明批准依据；判据正文仍为原「须与锚点原文一致」句，未新造业务规则 |
+| PGM-041 / HTML 656 | 「临时授权可设有效期或单次使用；…单次消耗、失效全部留痕」未改，锁原文与 HTML 656 逐字相同 |
+| 另外两份 HTML | 无本次例外句 |
+
+与 ledger 登记逐字对齐：触发 M009；定义 PGM-043/PGM-059；映射仅 PGM-059→M009；全部带治理 HTML 出处及铁律4，COUNT 维持 1 的口径成立。本席不改 COUNT。
+
+### ③ 最早引用模块（自核，不采信单席）
+
+「引用」按现映射列表实查（定义变更 PGM-043、PGM-059；映射变更 PGM-059）：
+
+- **M001**：零条 PGM，不在本次引用内
+- **最早引用：M002**（同时含 PGM-043 与 PGM-059；旧映射中 M002 已含 PGM-059，并非因本次才出现）
+- 当前触发模块 M009（旧 87 条无 PGM-059，新 88 条有）
+
+闸2⑤书面范围是「最早引用模块 → 当前模块」，不是「只重开 M009」。  
+**须重开：M002—M009**（含其间未直接映射这两 ID 的模块）。旧 raw/收口报告与各模块累计 B3 **保留**，状态改 PENDING 后从 M002 B1 按新锁串行重核。本席不写 ledger、不改状态。
+
+后续仍映射 PGM-043/PGM-059 的更晚模块（如 M011 起）不在本次⑤改写窗口；其旧 PASS 不得冒充已按新原文审过，待串行到达再按新锁复核。
+
+### 明文功能 ≠ 单次授权缺陷消失
+
+- 本次锁只同步获批的商户档案联系人**查看明文例外**及 680 页面对该例外的导出/打印边界
+- 656 / PGM-041 单次消耗原句仍在，继续约束单次授权
+- 操作员另批「保留明文、修单次授权消耗代码」**尚未实施**，本轮不审该代码
+- **本 LOCK 复核 PASS ≠ M009 PASS，≠ 单次授权 bug 已关闭，≠ 可跳过 B2/B3**
+- ⑤之后恢复模块链：M002 起 B1 → … → 到达 M009 后再对仍存在的单次授权缺陷走 B2/B3；不得把获准明文写成「无缺陷」
+
+### 技能自核（§6）
+
+已读并按收窄口径使用：`using-superpowers`、`receiving-code-review`（先核实）、`verification-before-completion`（先实算再下 PASS）、`grilling`（自问自答，不派子代理、不问操作员）。  
+本节点不适用：brainstorming / writing-plans / systematic-debugging / TDD / requesting-code-review / ponytail（属 A 或 B1/B3/B4）。  
+禁止且未用：MCP、子代理、第三席、fetch/commit/push/worktree/部署。  
+缺口：`batch-grill-me`、`ubiquitous-language` 未找到；`git-guardrails-claude-code` 未用（无 git 写）。graft 已读技能；本次对象为 docs 锁/HTML，未跑 graft 检索。
+
+④⑤留给双 PASS 之后的调度席。
+
+④新基准：57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a；COUNT=1。⑤PENDING：M002, M003, M004, M005, M006, M007, M008, M009。
+
+## M002新锁B1派发
+2026-09-22T06:35:42.876198+00:00
+M002/471，IN_PROGRESS，B3=2；先派Grok，self封存后才读本次Grok新段。
+实际命令：
+```text
+/home/james/.local/bin/grok -p '固定席乙Grok，执行M002 B1完整独立三线审计，按160-audit-prompt.md V0.17与runbook；正本/home/james/complex-management main。禁止MCP/子代理/第三席/fetch/commit/push/worktree/部署，不修任何文件，只追加本次指定raw。本席只读，不读本次Codex self B1新段。
+本次LOCK-AMEND③双PASS、④⑤已完成，ledger V7.40顶部是新基准；M002—M009按⑤重开，当前M002 PENDING→IN_PROGRESS，B3历史2不重置。判据锁V0.12，你必须独立实算，不提供预期SHA。模块范围plan/modules.md M002仅docs/platform-governance-map-for-operations-v0.1.html，当前V0.13/979行；映射84判据（GEN18+PGM66）。完整读整文件，每条判据具体证据，不只看新改句。
+最新操作员逐条批准两完整改文及第3项单次权限修复，回复“都批准修改”：HTML680末句加商户联系人页面例外，871明确商户第一/第二联系人获单独有效授权或真实USB最高本人可在获准商户列表/档案操作结果看完整号，其他仍脱敏；不扩大客人/员工档案、导出、打印，项目和留痕保持。656单次授权原句未改。本次两处和版本已在授权闸实施，LOCK双审不是M002PASS，必须全审。
+既有M002-001日期冲突已修、002十一端别名细化、003HTML/CSS目录技术性、004历史raw排除技术修复，本次均只作输入不预设PASS。M001操作员B/C原文原意已确认，不重开；其它两HTML仅相关只读。全局entry-anchor/CSV历史漂移如实记录不冒称全绿，不把无关模块问题塞入M002。单次授权代码尚未修属于M009，不以此否定需求HTML已表达一次性消费。
+审完全部范围收齐问题，按冲突→细化→技术性→添加，所有finding临时GR号、行号、足够长原文、冻结ID、工程缺陷与最小处置。不要为每个概述强制重复专项例外引入新判据。HTML若确有新矛盾必须如实报告，不修改。必要技能自核；可跑只读结构/锚点/UTF8/锁摘录一致性检查，不写日志helper或构建产物。报告含逐项84表、完整文件覆盖SHA、三线事实、检查输出、最终PASS/FAIL。
+指定唯一raw /home/james/complex-management/docs/audit-2026-09/modules/M002-b1-grok-raw.md；原125972bytes SHA8644bfc4a91552aca204536fddc80613aad1a9486abe822da0c6b92e81df1d4f完整保留，末尾追加新的完整V0.08。追加第一行独占CRITERIA-LOCK-SHA256: 实算值，正文不再另写此独占字段。不要求stdout特殊格式。适配器仅返回路径+实际退出码。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+EXIT_CODE待真实结束；结论出处modules/M002-b1-grok-raw.md V0.08。
+
+## M002 B1收齐与B2派发
+2026-09-22T06:51:08.500927+00:00
+M002/471 IN_PROGRESS B3=2；B1 Grok真实EXIT_CODE=0，本席FAIL与GrokPASS分歧仅旧锁摘录处置，HTML无新缺陷。四值均为57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a。findings V3.28候选已记录全部差集，B2不得修复。
+实际命令：
+```text
+/home/james/.local/bin/grok -p '固定席乙Grok，按160-audit-prompt.md V0.17执行M002 B2整批归并复核。正本/home/james/complex-management main，仅追加指定raw，禁止修HTML、代码、锁、台账，禁止MCP/子代理/fetch/commit/push/worktree。保持模型参数。
+输入本次完整报告：modules/M002-b1-self-raw.md 最后哈希行起V0.11；modules/M002-b1-grok-raw.md 最后哈希行起V0.08；候选findings.md最新V3.28末段。阅读两份完整报告，核所有差集和历史M002-001—004，不能只看分歧。
+事实双方一致：HTML741为查看考勤，与BSM930/1865及1445一致；锁PGM-047摘录仍考勤打卡。原HTML修改已有操作员2026-09-11“同意按此修改”及PR433依据，findings M013-008。Codex B1 FAIL只因冻结摘录滞后，你B1 PASS因为锁在审计排除目录。候选接受锁不是M002业务被审产品，所以不把CX-01塞入B3修复队列/不造新正式ID；但判据定义确实带旧需求，需按§5闸2在恢复后续审计前单独LOCK-AMEND同步既有批准原文，绝不改HTML回旧词。请独立判定这一流程处置是否正确；不能因锁排除就忽略它作为审计依据的自洽，也不为修审计产物制造业务finding。如认为无需LOCK-AMEND，给提示词原文依据与如何处理旧判据，不因Codex意见强制同意。
+本B2 PASS仅代表候选归并正确，绝非模块PASS；若一致需同步，下一步退出B执行LOCK-AMEND完整五步，未完成前不能B5。若FAIL如实给全部原因。
+指定路径/home/james/complex-management/docs/audit-2026-09/modules/M002-b1-grok-raw.md，已有内容原样保留，末尾追加完整B2 V0.09，注明输入报告路径/版本、候选版本、差集、队列及PASS/FAIL。B2不得新增CRITERIA-LOCK-SHA256独占行。不要求stdout特殊格式。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+B2 EXIT_CODE待真实结束，出处modules/M002-b1-grok-raw.md V0.09。
+
+## M002 B2双PASS及获批考勤摘录LOCK-AMEND①②登记
+2026-09-22T07:01:28.874401+00:00
+B2 Grok EXIT_CODE=0，出处modules/M002-b1-grok-raw.md V0.09；本席出处modules/M002-b1-self-raw.md V0.12。findings V3.28候选定稿，业务队列空，先退出B完成LOCK-AMEND，不能B5。
+触发M002 IN_PROGRESS，B3=2。定义变更ID：BSM-044、BSM-114、PGM-047。全部带HTML出处和铁律4批准依据：业务地图L930/L1865为PR432逐句批准，治理L741为2026-09-11同意按此修改/PR433；本线程交接与M013-008佐证。仅三个旧摘录考勤打卡→查看考勤和批准出处、版本，其他考勤打卡不动，三个HTML全不改。映射经核已有引用，零diff；判据401、映射471不增删、general不变。全部属于获批HTML同步，③双PASS后COUNT仍1。顶部基准此时保持旧值，禁止提前④。
+实查最早引用M001；当前M002，⑤需将M001 PASS与M002 IN_PROGRESS改PENDING，M003—M009已有PENDING继续保留。旧证据与B3计数保留。
+完整lock diff：
+```diff
+--- a/docs/audit-2026-09/plan/criteria-lock.md
++++ b/docs/audit-2026-09/plan/criteria-lock.md
+@@ -1,6 +1,6 @@
+ # 审计判据冻结
+ 
+-版本：V0.12
++版本：V0.13
+ 
+ - 判据总数：401（18 条通用工程判据 + 383 个 HTML 锚点判据）
+ - HTML 锚点闭集：BEQR `td.k` 197；BSM `h2/h3` 120；PGM `h2/h3` 66。
+@@ -3121,13 +3121,14 @@
+ ### BSM-044 — 酒吧平板/工作手机：平板点酒，工作手机核销
+ 
+ - 来源：`docs/business-system-map-for-operations-v0.1.html:929`；锚点：`h2`
++- 铁律4批准依据：操作员逐句批准的业务地图V0.14 L930/L1865，PR #432（本线程Claude交接）；治理地图V0.12 L741，2026-09-11“同意按此修改”、PR #433（本线程交接及findings M013-008）。仅同步已批准原文，不修改HTML。
+ - 适用标签：bar、terminal、ticketing
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+ 
+ ````html
+           <h2>酒吧平板/工作手机：平板点酒，工作手机核销</h2>
+-          <p class="lead">平板、公司工作手机、员工私人手机 App 是不同设备和不同用途。平板只做酒吧点酒下单；公司工作手机用于扫客人二维码核销门票和权益，并通过企业微信承接员工工作沟通；员工私人手机装的是同一个工作 App，按设备放权：注册、看公告、查自己的工单、帮客人订位、看排班、考勤打卡、请假、查薪资这些可离场办理的事，在自己手机上就能办；必须在现场完成的操作（比如服务点单的代客下单、出示公司收款码、完成履约、扫码核销放行），一律在公司工作手机上做——私人手机不允许带入工作现场，进办公区需寄存。</p>
++          <p class="lead">平板、公司工作手机、员工私人手机 App 是不同设备和不同用途。平板只做酒吧点酒下单；公司工作手机用于扫客人二维码核销门票和权益，并通过企业微信承接员工工作沟通；员工私人手机装的是同一个工作 App，按设备放权：注册、看公告、查自己的工单、帮客人订位、看排班、查看考勤、请假、查薪资这些可离场办理的事，在自己手机上就能办；必须在现场完成的操作（比如服务点单的代客下单、出示公司收款码、完成履约、扫码核销放行），一律在公司工作手机上做——私人手机不允许带入工作现场，进办公区需寄存。</p>
+           <div class="detail-grid">
+             <div class="info-block">
+ ````
+@@ -4719,6 +4720,7 @@
+ ### BSM-114 — 各类入口：不同人只看自己该看的、只做自己该做的
+ 
+ - 来源：`docs/business-system-map-for-operations-v0.1.html:1827`；锚点：`h2`
++- 铁律4批准依据：操作员逐句批准的业务地图V0.14 L930/L1865，PR #432（本线程Claude交接）；治理地图V0.12 L741，2026-09-11“同意按此修改”、PR #433（本线程交接及findings M013-008）。仅同步已批准原文，不修改HTML。
+ - 适用标签：access、amusement、analytics、bar、contract、customer、evidence、facility、finance、governance、inventory、merchantportal、notification、ops、settlement、terminal、ticketing
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -4762,7 +4764,7 @@
+               <tr>
+                 <td>员工私人手机 App</td>
+                 <td>全体员工</td>
+-                <td>注册、提交资料审批、收公告通知、查自己的工单、帮客人订位、看排班、考勤打卡、请假、查薪资等可离场办理的事；必须在现场完成的操作（代客下单、出示公司收款码、完成履约、扫码核销）在公司工作手机上做；私人手机不允许带入工作现场，进办公区需寄存。</td>
++                <td>注册、提交资料审批、收公告通知、查自己的工单、帮客人订位、看排班、查看考勤、请假、查薪资等可离场办理的事；必须在现场完成的操作（代客下单、出示公司收款码、完成履约、扫码核销）在公司工作手机上做；私人手机不允许带入工作现场，进办公区需寄存。</td>
+               </tr>
+               <tr>
+                 <td>工作人员平板 App</td>
+@@ -5928,6 +5930,7 @@
+ ### PGM-047 — 怎么控制
+ 
+ - 来源：`docs/platform-governance-map-for-operations-v0.1.html:728`；锚点：`h3`；父锚点：终端开关：哪些端能打开，后台说了算
++- 铁律4批准依据：操作员逐句批准的业务地图V0.14 L930/L1865，PR #432（本线程Claude交接）；治理地图V0.12 L741，2026-09-11“同意按此修改”、PR #433（本线程交接及findings M013-008）。仅同步已批准原文，不修改HTML。
+ - 适用标签：terminal
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -5946,7 +5949,7 @@
+                 <li>开关服务、支付通路、核销与入场等营业必需的能力，不得在营业时段进行任何可能导致中断的变更、升级或维护，所有此类操作只能安排在非营业时段并事先报备；开关拉取失败时按“兜底关闭”处理，写操作一律拒绝；只有留痕是例外——留痕是一种特殊的写操作，不受兜底关闭影响，开关拉不到期间发生过什么、谁被拒绝了，照样要记下来。前端隐藏只是辅助，后端接口必须独立校验。</li>
+                 <li>受控的十一类终端：客人手机应用、客人小程序、Web 前端（业务人员，客人无网页端）、工作人员平板、员工工作手机、员工私人手机、商户网页门户、商户手机应用、触摸屏一体机、移动管理端、独立经销商 Web 门户。经销商门户适用与其他终端相同的后台开关、权限、数据范围、访问拒绝留痕和兜底关闭规则，并与商户门户及内部员工端隔离账号、权限和数据。</li>
+                 <!-- 2026-07-03 回写：设备分级放权(员工App已上线口径)。 -->
+-                <li>同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、考勤打卡、请假、查自己薪资等）。</li>
++                <li>同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、查看考勤、请假、查自己薪资等）。</li>
+                 <li>酒吧和游乐/乐园未来独立运营时，可以只打开对应商户和对应模块。</li>
+               </ul>
+             </div>
+```
+
+### 考勤摘录LOCK-AMEND③实际派发
+```text
+/home/james/.local/bin/grok -p '固定外审Grok，执行160-audit-prompt.md V0.17 §5闸2 LOCK-AMEND③复核，回执型，不生成raw不写仓库，只在stdout返回完整PASS/FAIL及独立实算CRITERIA-LOCK-SHA256首行。禁止MCP子代理fetchcommitpushworktree部署；只许/tmp反向计算副本并清理。自核技能。
+M002 B2两席PASS，候选findings V3.28；Grok b1raw最新B2 V0.09明确同意先同步旧考勤摘录，再恢复B。本次不是M002/M009 PASS。
+本次lock V0.12→V0.13，仅BSM-044、BSM-114、PGM-047定义摘录各一处“考勤打卡”→“查看考勤”及铁律4批准出处；HTML不改。依据本线程操作员提供Claude交接：业务地图V0.14 PR432逐句获批L930/1865，治理V0.12 PR433 L741获批；findings M013-008记录2026-09-11同意按此修改。工作手机打卡原句不动，其他判据/全general不变，401ID不增删。原映射已覆盖，471映射零diff。ledger V7.43已登记全部ID/出处/批准，顶部旧基准未更新，sidecar已新。全部HTML批准同步拟COUNT仍1。
+必须实际把lock当前副本置/tmp反向应用下附完整diff，实算还原hash等于你自读ledger顶部旧基准；核所有定义/映射diff与登记相符、当前摘录包含于现行HTML、无未批准业务改动。核最早引用及⑤范围（当前M002，最早M001；M003—M009此前已PENDING不恢复旧PASS）。不能只看diff，不能自己更新ledger。双PASS后root执行④⑤。若FAIL列全部缺陷。
+完整diff：
+--- a/docs/audit-2026-09/plan/criteria-lock.md
++++ b/docs/audit-2026-09/plan/criteria-lock.md
+@@ -1,6 +1,6 @@
+ # 审计判据冻结
+ 
+-版本：V0.12
++版本：V0.13
+ 
+ - 判据总数：401（18 条通用工程判据 + 383 个 HTML 锚点判据）
+ - HTML 锚点闭集：BEQR `td.k` 197；BSM `h2/h3` 120；PGM `h2/h3` 66。
+@@ -3121,13 +3121,14 @@
+ ### BSM-044 — 酒吧平板/工作手机：平板点酒，工作手机核销
+ 
+ - 来源：`docs/business-system-map-for-operations-v0.1.html:929`；锚点：`h2`
++- 铁律4批准依据：操作员逐句批准的业务地图V0.14 L930/L1865，PR #432（本线程Claude交接）；治理地图V0.12 L741，2026-09-11“同意按此修改”、PR #433（本线程交接及findings M013-008）。仅同步已批准原文，不修改HTML。
+ - 适用标签：bar、terminal、ticketing
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+ 
+ ````html
+           <h2>酒吧平板/工作手机：平板点酒，工作手机核销</h2>
+-          <p class="lead">平板、公司工作手机、员工私人手机 App 是不同设备和不同用途。平板只做酒吧点酒下单；公司工作手机用于扫客人二维码核销门票和权益，并通过企业微信承接员工工作沟通；员工私人手机装的是同一个工作 App，按设备放权：注册、看公告、查自己的工单、帮客人订位、看排班、考勤打卡、请假、查薪资这些可离场办理的事，在自己手机上就能办；必须在现场完成的操作（比如服务点单的代客下单、出示公司收款码、完成履约、扫码核销放行），一律在公司工作手机上做——私人手机不允许带入工作现场，进办公区需寄存。</p>
++          <p class="lead">平板、公司工作手机、员工私人手机 App 是不同设备和不同用途。平板只做酒吧点酒下单；公司工作手机用于扫客人二维码核销门票和权益，并通过企业微信承接员工工作沟通；员工私人手机装的是同一个工作 App，按设备放权：注册、看公告、查自己的工单、帮客人订位、看排班、查看考勤、请假、查薪资这些可离场办理的事，在自己手机上就能办；必须在现场完成的操作（比如服务点单的代客下单、出示公司收款码、完成履约、扫码核销放行），一律在公司工作手机上做——私人手机不允许带入工作现场，进办公区需寄存。</p>
+           <div class="detail-grid">
+             <div class="info-block">
+ ````
+@@ -4719,6 +4720,7 @@
+ ### BSM-114 — 各类入口：不同人只看自己该看的、只做自己该做的
+ 
+ - 来源：`docs/business-system-map-for-operations-v0.1.html:1827`；锚点：`h2`
++- 铁律4批准依据：操作员逐句批准的业务地图V0.14 L930/L1865，PR #432（本线程Claude交接）；治理地图V0.12 L741，2026-09-11“同意按此修改”、PR #433（本线程交接及findings M013-008）。仅同步已批准原文，不修改HTML。
+ - 适用标签：access、amusement、analytics、bar、contract、customer、evidence、facility、finance、governance、inventory、merchantportal、notification、ops、settlement、terminal、ticketing
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -4762,7 +4764,7 @@
+               <tr>
+                 <td>员工私人手机 App</td>
+                 <td>全体员工</td>
+-                <td>注册、提交资料审批、收公告通知、查自己的工单、帮客人订位、看排班、考勤打卡、请假、查薪资等可离场办理的事；必须在现场完成的操作（代客下单、出示公司收款码、完成履约、扫码核销）在公司工作手机上做；私人手机不允许带入工作现场，进办公区需寄存。</td>
++                <td>注册、提交资料审批、收公告通知、查自己的工单、帮客人订位、看排班、查看考勤、请假、查薪资等可离场办理的事；必须在现场完成的操作（代客下单、出示公司收款码、完成履约、扫码核销）在公司工作手机上做；私人手机不允许带入工作现场，进办公区需寄存。</td>
+               </tr>
+               <tr>
+                 <td>工作人员平板 App</td>
+@@ -5928,6 +5930,7 @@
+ ### PGM-047 — 怎么控制
+ 
+ - 来源：`docs/platform-governance-map-for-operations-v0.1.html:728`；锚点：`h3`；父锚点：终端开关：哪些端能打开，后台说了算
++- 铁律4批准依据：操作员逐句批准的业务地图V0.14 L930/L1865，PR #432（本线程Claude交接）；治理地图V0.12 L741，2026-09-11“同意按此修改”、PR #433（本线程交接及findings M013-008）。仅同步已批准原文，不修改HTML。
+ - 适用标签：terminal
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
+ - HTML 原文：
+@@ -5946,7 +5949,7 @@
+                 <li>开关服务、支付通路、核销与入场等营业必需的能力，不得在营业时段进行任何可能导致中断的变更、升级或维护，所有此类操作只能安排在非营业时段并事先报备；开关拉取失败时按“兜底关闭”处理，写操作一律拒绝；只有留痕是例外——留痕是一种特殊的写操作，不受兜底关闭影响，开关拉不到期间发生过什么、谁被拒绝了，照样要记下来。前端隐藏只是辅助，后端接口必须独立校验。</li>
+                 <li>受控的十一类终端：客人手机应用、客人小程序、Web 前端（业务人员，客人无网页端）、工作人员平板、员工工作手机、员工私人手机、商户网页门户、商户手机应用、触摸屏一体机、移动管理端、独立经销商 Web 门户。经销商门户适用与其他终端相同的后台开关、权限、数据范围、访问拒绝留痕和兜底关闭规则，并与商户门户及内部员工端隔离账号、权限和数据。</li>
+                 <!-- 2026-07-03 回写：设备分级放权(员工App已上线口径)。 -->
+-                <li>同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、考勤打卡、请假、查自己薪资等）。</li>
++                <li>同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、查看考勤、请假、查自己薪资等）。</li>
+                 <li>酒吧和游乐/乐园未来独立运营时，可以只打开对应商户和对应模块。</li>
+               </ul>
+             </div>
+' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+回执型EXIT_CODE待结束；出处IN-RECEIPT，不新增raw。
+
+### 考勤摘录LOCK-AMEND③本席实际复核PASS
+真实patch --reverse --fuzz=0退出0，还原SHA=57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a，等于ledger旧基准。新实算=cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6，等于sidecar。定义ID401不增删，471映射逐行相同，general未改；三段摘录全文均包含于现行HTML；仅三个批准词替换、出处与版本。三个HTML SHA保持：{"business-enum-quick-reference-v0.1.html": "4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66", "business-system-map-for-operations-v0.1.html": "eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66", "platform-governance-map-for-operations-v0.1.html": "5c4594a73e767c704238ad311899903dbaaf94503e4a4cc18f21a5596e67429f"}。最早引用M001，③双PASS后才④更新基准COUNT1、⑤M001/M002改PENDING，从M001 B1重开。此刻本席PASS，Grok仍待交付，未提前更新。
+
+## 考勤摘录LOCK-AMEND③Grok完整回执与④⑤完成
+Grok真实EXIT_CODE=0；出处IN-RECEIPT。完整结论：
+CRITERIA-LOCK-SHA256: cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6
+
+**PASS**
+
+LOCK-AMEND③复核（席乙 Grok，回执型 IN-RECEIPT）。本次不是 M002 PASS，也不是 M009 PASS。未写仓库、未生成 raw、未改 ledger。`/tmp` 反向计算副本已删除。
+
+## 先验完整（反向实算）
+
+- 当前 lock 独立实算：`cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6`
+- sidecar 同行等值：是
+- 自读 ledger 顶部旧基准：`57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a`；`LOCK-AMEND-COUNT: 1`（顶部未提前④）
+- 将当前 lock 副本置于 `/tmp`，对所附完整 forward diff 执行 `patch -R --fuzz=0`，退出 0；还原 SHA256 = `57c250a3eece0a556af77b989797f61e9e163f257ae95342d6ba0f8ebe8c0a8a`，等于顶部旧基准
+
+## 再验一致（不只看所附 diff）
+
+独立对「还原副本 vs 当前 lock」做全文 diff，变更闭集仅为：
+
+| 项 | 事实 |
+|---|---|
+| 版本 | V0.12 → V0.13 |
+| 定义变更 ID | 仅 **BSM-044、BSM-114、PGM-047** |
+| 每 ID 变更 | 各加一处铁律4批准依据；摘录各一处「考勤打卡」→「查看考勤」 |
+| 映射 | 471 行逐行相同，零 diff |
+| 稳定 ID | 401 不增删（GEN 18 + BEQR 197 + BSM 120 + PGM 66） |
+| `## general` | 字节相同 |
+
+与 ledger「M002 B2双PASS及获批考勤摘录LOCK-AMEND①②登记」相符：触发 M002；定义 ID 三枚；映射无变更；全部带 HTML 出处且注明铁律4（业务地图 L930/L1865、PR #432；治理 L741、2026-09-11「同意按此修改」、PR #433、findings M013-008）。无通用工程判据变更 → 拟 COUNT 仍 1。派发所称「V7.43」只出现在派发原文；文件头仍为 V7.45。登记字段本身齐全，不构成 FAIL。
+
+## 摘录 ⊆ 现行 HTML；无未批准业务改动
+
+- 当前三份 `HTML 原文` 块均整段包含于现行 HTML：BSM-044 ⊆ 业务地图（L929 段，L930 为「查看考勤」）；BSM-114 ⊆ 业务地图（L1865 私人手机行为「查看考勤」）；PGM-047 ⊆ 治理地图（L741 为「查看考勤」）
+- 还原摘录（仍写「考勤打卡」）均不再被现行 HTML 包含，说明同步方向正确
+- 工作手机打卡原句未动：BSM-086 仍为「考勤打卡从领取工作手机开始算…」，与业务地图 L1445 相同；当前 lock 仅余这一处「考勤打卡」
+- 本步三份需求 HTML 未改：BSM/BEQR 相对 HEAD 无 diff；治理 HTML 工作区 3 行 diff 是上一轮获批商户联系人例外（V0.12→V0.13），diff 不含考勤措辞
+
+M013-008 事实行与 Grok B2 V0.09 一致：已批准改为「查看考勤」，不得把 HTML 改回旧词。B2 V0.09 明确同意先走闸 2 完整五步再恢复 B，且本票不是模块 PASS。
+
+## 最早引用与⑤范围
+
+- BSM-044 / BSM-114 最早映射：**M001**
+- PGM-047 最早映射：**M002**
+- 本次定义变更最早引用 = **M001**；当前模块 = **M002**（表行 `IN_PROGRESS`，B3=2）
+- 模块表实读：M001 `PASS`；M002 `IN_PROGRESS`；M003—M009 `PENDING`
+
+双 PASS 后由 root 执行④⑤（本席不写）：
+
+1. ④ 顶部基准改为 `cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6`；`LOCK-AMEND-COUNT` 保持 1
+2. ⑤ 将 M001 `PASS` 与 M002 `IN_PROGRESS` 改回 `PENDING`，从 **M001 B1** 重开；M003—M009 保持已有 `PENDING`，不得恢复旧 PASS；旧 raw / 收口 / B3 累计保留
+
+## 技能自核
+
+已实读并按 V0.17 收窄适用：`using-superpowers`、`verification-before-completion`（PASS 前完成反向哈希、独立 diff、HTML 包含、映射与表行实读）、`receiving-code-review`（只核实、不修复、不表演性同意）、`grilling`（自问自答，不派子代理、不问操作员）。
+
+本节点不适用：brainstorming / writing-plans / systematic-debugging / TDD / requesting-code-review / ponytail（B3）。提示词划掉的 executing-plans、dispatching-parallel-agents、subagent-driven-development、using-git-worktrees、finishing-a-development-branch 未调用。
+
+缺口：独立技能 `batch-grill-me`、`ubiquitous-language` 已并入 `grilling` / `domain-modeling`，无单独 SKILL 可调；`domain-modeling` 按提示词划掉。未假造已调用。
+④基准已更新为cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6，COUNT1。⑤M001/M002改PENDING；M003—M009保持PENDING。无业务代码改动。
+
+## M001新锁B1派发
+2026-09-22T07:12:27.214641+00:00
+M001/471，IN_PROGRESS，B3=4；先派Grok，self封存后才读本次Grok新段。
+实际命令：
+```text
+/home/james/.local/bin/grok -p '固定席乙Grok，执行160-audit-prompt.md V0.17 M001 B1完整独立三线审计。仅main正本/home/james/complex-management。禁止MCP子代理fetchcommitpushworktree部署修代码HTML；只追加指定raw。技能按§6自核。
+LOCK-AMEND三处考勤旧摘录③已双PASS④⑤已完成，ledger V7.46，新锁V0.13你自己实算，不提供预期hash。M001 PENDING→IN_PROGRESS B3历史4不清零。本模块2文件：docs/business-enum-quick-reference-v0.1.html、docs/business-system-map-for-operations-v0.1.html。全文件阅读、全部映射判据逐项（GEN及BEQR197/BSM120），不能只看此次改词，全部问题收齐后落盘。其它治理HTML仅有关交叉只读，不扩模块。
+三处定义同步不是HTML新改：业务HTML L930/L1865私人手机查看考勤已早先获批PR432，工作手机L1445考勤打卡不变。治理商户联系人例外此前本线程“都批准修改”获批，现V0.13；B/C操作员原话“b c两项原文不冲突。就是我的原意。”必须保持，不能当容忍缺陷。M001原A/D已修，16历史finding只作输入独立判断，不继承旧PASS。M009单次授权代码未修不塞本模块。
+本次若新HTML问题如实报告，绝不修改；冲突细化技术性添加顺序，临时GR号，依据限冻结ID和四类型证据。逐项全判据具体核对、两文件全部覆盖及SHA、结构锚点UTF8检查、必要全局门禁区分归属，最终PASS/FAIL不是模块PASS。禁止读本次self新报告。
+报告指定/home/james/complex-management/docs/audit-2026-09/modules/M001-b1-grok-raw.md；已有267283bytes SHA8bd4844f60d198c0cc0e81a7541ddb03f2501d48c1fe59261050d77bfb71594b原样保留，追加完整V0.19；首行独占CRITERIA-LOCK-SHA256: 实算值，正文不再独占此字段。不要求stdout标记。
+' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+EXIT_CODE待真实结束；结论出处modules/M001-b1-grok-raw.md V0.19。
+
+
+## M001 B1交付及B2日期摘录候选派发
+四值全等cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6，COUNT1。M001 IN_PROGRESS，B3累计4。Grok B1 exit0 V0.19 FAIL，self V0.40 PASS；唯一GR01锁摘录日期滞后，不是HTML新缺陷。findings V3.29候选已登记。B2实际命令：
+```text
+/home/james/.local/bin/grok -p '执行160-audit-prompt.md V0.17的M001 B2整批归并复核，非新B1；固定只读Grok席乙，禁止MCP子代理fetchcommitpushworktree，禁止业务HTML/源码/锁修改。读两份本次完整raw：docs/audit-2026-09/modules/M001-b1-self-raw.md V0.40及M001-b1-grok-raw.md V0.19（各取最后独占锁行起完整报告）；候选findings.md V3.29最顶部“当前 M001 B2候选”。全差集、分类、旧16ID、队列与最小处置独立复核。
+根本席已全文读你V0.19并复现日期差，不用自审PASS覆盖你的FAIL。候选：CX01→004技术性无缺陷；GR01审计锁BSM120日期滞后，技术性无业务发明，产品HTML不缺陷，不造M001017或挪用旧012/013；作为排除的审计依据同步登记，需§5完整LOCK-AMEND才恢复。当前不改HTML，不执行B3，B3累计4保持。判断该路线是否准确承接你的唯一GR，若需改正明确指出，禁止无根据放行。B/C原意不重判为缺陷；全局html-ledger-sync红保留归属观察。
+只追加你的B2完整票到/home/james/complex-management/docs/audit-2026-09/modules/M001-b1-grok-raw.md，现V0.19→V0.20；保留311936bytes旧前缀SHA d8f6b61ef5f28b2192f4e85fe77e9c55e54a38388105479e926e7d6a6cc36ae8。B2不得新增CRITERIA-LOCK-SHA256行，必须注明两输入raw和候选、差集全部、分类/队列、PASS/FAIL；不要求stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M001 B2双PASS，登记BSM120日期LOCK-AMEND①②
+self V0.41 PASS，Grok V0.20 PASS真实exit0（SHA fd7255b5235f5eccd1147b1a756706e074584f16387c5bd3473f6cfd486a55a7），两输入完整B1已归并。GR01不进产品队列，但必须同步判据副本。B3累计4、新增0，M001 IN_PROGRESS。
+触发模块M001；变更定义ID仅BSM-120。HTML出处business-system-map-for-operations-v0.1.html:1957及2003；铁律4批准依据：本线程Claude 2026-09-18同步PR432已逐句批准BSM V0.14，当前docs/prd-audit/business-decision-ledger.md:2603—2618明列L2和页脚09-08→09-10。非新业务裁决。只将摘录日期同步09-10，定义增加此批准出处说明，自身V0.13→V0.14；general与471映射原字节不变。全部变更ID均带已批准HTML出处，COUNT保持1。④前顶部旧基准不动；③需两席reverse验证后④⑤。最早引用M001，当前即M001，⑤重开M001；M002—009既有PENDING不变；旧报告及B3次数全保留。
+
+
+## BSM120 LOCK-AMEND③ Grok回执型派发
+顶部旧基准保持，M001 IN_PROGRESS B3=4 COUNT=1；实际命令：
+```text
+/home/james/.local/bin/grok -p '执行V0.17 §5闸2③ LOCK-AMEND独立回执型复核。固定Grok只读，不MCP不子代理不fetchcommitpushworktree，不写raw/日志/报告/业务/HTML/锁/ledger。仅允许/tmp副本反向验证，完成清理。main正本/home/james/complex-management。
+ledger V7.50已登记触发M001与唯一变更BSM120。完整①前后diff如下，必须实际对/tmp现锁副本reverse应用，SHA等于你自读ledger顶部旧基准；必须自己实算现锁SHA及sidecar，不从提示猜值。全401定义/471映射与general完整校验，唯一BSM120日期09-08→09-10及批准出处说明、自身V0.13→0.14。核当前决策台账2603—2618页脚批准记录及本线程用户同步PR432，HTML不改，所有383摘录再次对照；原B2 V0.20日期GR01接受同步，非B3。
+判断COUNT保持1条件是否成立；最早引用M001，当前M001 IN_PROGRESS/B3=4，④⑤尚未执行，不替根写。其它后续旧PASS不是新锁PASS。给完整可交付结论，独占CRITERIA-LOCK-SHA256: <你实算>及PASS/FAIL、reverse证据、变更完整性、影响/下一步。只回结论不输出隐藏思维/usage。
+完整diff：
+--- a/criteria-lock.md
++++ b/criteria-lock.md
+@@ -1,6 +1,6 @@
+ # 审计判据冻结
+ 
+-版本：V0.13
++版本：V0.14
+ 
+ - 判据总数：401（18 条通用工程判据 + 383 个 HTML 锚点判据）
+ - HTML 锚点闭集：BEQR `td.k` 197；BSM `h2/h3` 120；PGM `h2/h3` 66。
+@@ -4913,6 +4913,7 @@
+ - 来源：`docs/business-system-map-for-operations-v0.1.html:1957`；锚点：`h2`
+ - 适用标签：access、amusement、analytics、auth、bar、compliance、contract、customer、entry、evidence、finance、governance、integration、inventory、settlement、terminal、ticketing
+ - 判据：映射模块内的实现、测试和文档须与该锚点原文一致，不得冲突、遗漏或另行发明业务规则；可执行声称须有实际行为证据。
++- 批准依据：铁律4，操作员已批准PR432业务地图V0.14；docs/prd-audit/business-decision-ledger.md:2603—2618明确记录页脚更新日期09-08→09-10，本次仅同步获批HTML日期副本。
+ - HTML 原文：
+ 
+ ````html
+@@ -4962,7 +4963,7 @@
+           </div>
+         </section>
+ 
+-        <p class="footer-note">更新日期：2026-09-08。用途：给不懂产品和技术的业务人员理解综合体管理系统范围。<br><strong>解释权声明：</strong>本《业务系统地图》与《平台治理地图》《业务枚举速查表》共同组成三份最高业务解释权 HTML。发生冲突时，只以这三份 HTML 中经用户批准的内容为准；PRD、其他文档、后台配置、设计和实现均不得覆盖。某项业务内容若尚未写入三份 HTML，不因出现在 PRD、配置或实现中而取得效力，必须先逐项获得用户批准并补入相应 HTML。三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决。</p>
++        <p class="footer-note">更新日期：2026-09-10。用途：给不懂产品和技术的业务人员理解综合体管理系统范围。<br><strong>解释权声明：</strong>本《业务系统地图》与《平台治理地图》《业务枚举速查表》共同组成三份最高业务解释权 HTML。发生冲突时，只以这三份 HTML 中经用户批准的内容为准；PRD、其他文档、后台配置、设计和实现均不得覆盖。某项业务内容若尚未写入三份 HTML，不因出现在 PRD、配置或实现中而取得效力，必须先逐项获得用户批准并补入相应 HTML。三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决。</p>
+       </div>
+     </main>
+   </div>
+' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## BSM120 LOCK-AMEND③本席PASS，Grok待回
+实际/tmp现锁副本patch --reverse --fuzz=0 -p1 exit0，恢复SHA cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6 等于ledger旧基准。现锁SHA b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，sidecar相等。401ID集合顺序、471映射全字节、general原文不变；全383摘录均在对应现HTML逐字存在，无遗漏。唯一BSM120页脚同步已有批准，COUNT应保持1。三HTML未改。尚不执行④⑤。
+
+
+## BSM120 LOCK-AMEND③ Grok完整回执
+真实EXIT_CODE=0；出处IN-RECEIPT；仅可交付结论，不保存原始JSON。
+> CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+> 
+> **本席 LOCK-AMEND③：PASS。** 出处 `IN-RECEIPT`。未写 raw/日志/报告/业务/HTML/锁/ledger；`/tmp` 副本已删。正本锁未因本席 reverse 改动。
+> 
+> ## 先验完整（反向实算）
+> 
+> - 现锁独立实算：`b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`（891182 bytes）
+> - sidecar 单行同值：是
+> - 自读 ledger 顶部旧基准：`cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6`；`LOCK-AMEND-COUNT: 1`（顶部未提前④）
+> - 现锁副本置于 `/tmp`，对所附完整 forward diff 执行 `patch --reverse --fuzz=0 -p1`，退出 0；Hunk #1@1、#2@4913、#3@4962
+> - 还原 SHA256 = `cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6`，等于顶部旧基准
+> - 还原后锁头 `版本：V0.13`；BSM-120 无「批准依据」，摘录仅 `2026-09-08`、无 `2026-09-10`
+> 
+> ## 再验一致（不只看所附 diff）
+> 
+> 独立对「还原副本 vs 现锁」全文 `diff -u`：仅 3 行新增 / 2 行删除，闭集为：
+> 
+> | 项 | 事实 |
+> |---|---|
+> | 锁自身版本 | V0.13 → V0.14 |
+> | 定义变更 ID | 仅 **BSM-120** |
+> | 该 ID 变更 | 增一处铁律4批准依据；HTML 原文块页脚 `2026-09-08` → `2026-09-10` |
+> | 映射 | 471 行 `M001`…`M471` 连续，与还原锁**字节全等**，映射变化集为空 |
+> | 稳定 ID | 401 不增删、顺序不变（GEN 18 + BEQR 197 + BSM 120 + PGM 66），无重复 |
+> | `## general` | 1652 bytes，字节相同 |
+> 
+> 与登记「M001 B2双PASS，登记BSM120日期LOCK-AMEND①②」相符：触发 **M001**；定义 ID 仅 BSM-120；映射无变更。派发写 V7.50，文件头现为 V7.52；登记字段本身齐全，不构成 FAIL。顶部仍有历史「当前 M001 B1／未改锁」段，以该①②登记段为准。
+> 
+> ## 摘录 ⊆ 现行 HTML；HTML 本步未改
+> 
+> - 现锁 383 个 HTML 原文块均在对应现行 HTML 中逐字命中；来源路径/行号 383/383 正确；无缺 fence
+> - 现锁 BSM-120 摘录 5525 bytes = 业务地图自 L1957 `<h2>已确认规则…` 至 EOF；含 `2026-09-10`、不含 `2026-09-08`；还原摘录（09-08）不被现行 HTML 包含
+> - 现行锚点闭集：BEQR `td.k` 197；BSM `h2+h3` 27+93=120；PGM `h2+h3` 18+48=66
+> - 本步三份需求 HTML 未改：BEQR/BSM 相对 HEAD 无 diff。BSM L2=`V0.14；更新日期：2026-09-10`，L2003 页脚 `2026-09-10`，SHA256=`eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66`。治理 HTML 工作区 3 行 diff 是上一轮获批商户联系人例外（V0.12→V0.13，L680/L871），不含本 diff、不含页脚日期
+> 
+> ## 批准出处与 COUNT 保持 1
+> 
+> - 决策台账 `docs/prd-audit/business-decision-ledger.md:2603—2618`（V0.23）明文：页脚 `2026-09-08`→`2026-09-10`，L2 V0.13/09-08→V0.14/09-10
+> - 本机无 fetch：`Merge pull request #432`（`ec735cac`，`bsm-v0.14-punch-terminal`）；业务地图提交 `cf0c63ea` 为 V0.14 考勤终端裁决
+> - 原 B2 V0.20：**PASS**；唯一 GR-01 定为锁摘录日期滞后、技术性、无业务发明、产品 HTML 不缺陷、不进 B3、须 §5 完整 LOCK-AMEND。本次 diff 只承接该同步，非 B3
+> - 本次变更 ID 全集 = {BSM-120}：带 HTML 出处 `business-system-map-for-operations-v0.1.html:1957`（及 2003），出处注明铁律4（PR432 / 台账 2603—2618）；无通用工程判据、无其它 ID → **COUNT 保持 1 的条件成立**
+> 
+> ## 引用 / 生命周期 / ④⑤
+> 
+> - BSM-120 映射引用 236 个模块；**最早 M001**；M002 映射无 BSM-120
+> - 当前 M001 `IN_PROGRESS`，B3=4；④⑤尚未执行。本席不替根写基准、不改模块态
+> - 其它后续旧 PASS **不是**新锁 PASS；双 PASS 后须按⑤把 M001 的 `IN_PROGRESS` 改回 `PENDING` 并从 B1 重开，保留旧 raw 与 B3 累计；M002—M009 已 PENDING 不必扩改
+> 
+> ## 技能（§6 自核，本节点收窄）
+> 
+> | 技能 | 本席 |
+> |---|---|
+> | `using-superpowers` / `verification-before-completion` | 已读；结论前实跑 reverse/哈希/401/471/383 |
+> | `receiving-code-review` | 只借先核实再接受；本步禁止 IMPLEMENT |
+> | `grilling` | 自问自答（隐匿 diff、映射偷改、COUNT 不适用、HTML 被改、reverse 不等）；本体等用户/派子代理作废 |
+> | `batch-grill-me` | 本机未找到独立可调用包，**缺口**，未冒充 |
+> | graft CLI | 本节点为锁/台账复核；用户禁 MCP/子代理，未当源码检索 |
+> 
+> 明确不用：子代理、MCP、fetch/commit/push/worktree、B3/④⑤。
+> 
+> ## 影响 / 下一步
+> 
+> 合取仍待根席本批③票。本票 **PASS** 只证明：所附① diff 可逆回旧基准、变更闭集=BSM-120 日期+批准出处+锁版本、383 摘录已与现行获批 HTML 对齐、COUNT 拟仍 1。
+> 
+> **不是**模块 PASS，**不是**可跳 B5，**不是**④⑤已完成。根席双 PASS 后才可④把顶部基准改为现锁 `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458` 且 COUNT 保持 1，再⑤从 M001 B1 重开。本席不写。
+
+④⑤已由Codex在本版执行：基准更新、COUNT仍1、M001 IN_PROGRESS→PENDING，B3仍4。
+
+
+## M001 V0.14锁B1独立复审派发
+M001 IN_PROGRESS B3=4；先派Grok，本席封存前不读本次外审；HTML两文件字节未变，复用原文阅读必须明说、不继承旧结论。实际命令：
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt.md V0.17执行M001新锁B1完整独立审计。正本/home/james/complex-management main，2文件2340行与335判据（BEQR197+BSM120+GEN18）全范围三线，禁止MCP子代理fetchcommitpushworktree部署，禁止修改业务/HTML/锁/ledger/findings，只追加本席raw。
+日期LOCK-AMEND已③双PASS④⑤完成，ledger V7.53，本步根将M001 PENDING→IN_PROGRESS；B3累计4。锁V0.14须独立实算，不提供期望值。此轮唯一锁变化是BSM120页脚09-08→09-10及批准来源说明。HTML两文件与上轮B1完全同字节：BEQR4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66；BSMeebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66。仍须自算确认。
+你可复用自己V0.19完整阅读记录和对同字节HTML的原文取证，不必反复读取raw中几十万字的历史命令；但不能继承旧FAIL/PASS代替本次对全范围/全335判据的独立重新判断。报告如实标注复用同字节全文阅读、此次复核点及实际新跑命令。提取自己b1 raw最后独占锁行起V0.19+B2V0.20供既有输入；禁止读本次Codex self任何内容。锁变更已全383摘录核匹配，需你自核。操作员B/C原文即原意保持，不引入新限制；考勤私人手机查看/工作手机打卡，M009单次授权代码不在本模块。
+历史16ID只作输入，全335具体证据+结构锚点UTF8、全新发现集合和三线结论必须完整，不只出日期补丁结论。全局PGM台账同步红保留归属边界，不因为别模块红判两HTML故障。新问题如实报告，不按预期放行；不得新加判据。
+唯一追加/home/james/complex-management/docs/audit-2026-09/modules/M001-b1-grok-raw.md V0.20→V0.21，保留现全文件SHA fd7255b5235f5eccd1147b1a756706e074584f16387c5bd3473f6cfd486a55a7的全部旧字节。报告第一行独占CRITERIA-LOCK-SHA256: 实算，正文不重复独占字段。完成全部报告后结束，不要求stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M001新锁B1双PASS、B2派发
+self V0.42/Grok V0.21均PASS，后者exit0；四值全等b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，COUNT1。候选findingsV3.31队列空；状态IN_PROGRESS B3=4，不是模块PASS。实际B2命令：
+```text
+/home/james/.local/bin/grok -p 'M001 B2整批候选复核，按V0.17。只读两份本次完整B1（各精确取最后独占锁行到EOF）：modules/M001-b1-self-raw.md V0.42、modules/M001-b1-grok-raw.md V0.21；候选docs/audit-2026-09/findings.md V3.31顶部“当前 M001 新锁B2候选”到下一##。读取需要的完整当前段，不必重复历史几十万字命令。main正本/home/james/complex-management。全批差集CX01→004，Grok当前空；16旧ID、分类队列、日期旧GR01已LOCK-AMEND完成、不造017，B/C原意保持、不新增限制；队列空拟跳B3/B4进B5-r4（累计4不增加）。独立判断漏并/改写/分类/归属，不预设PASS。无业务/HTML/锁/台账修改，禁止MCP子代理fetchcommitpushworktree。
+只追加你的完整B2票到/home/james/complex-management/docs/audit-2026-09/modules/M001-b1-grok-raw.md，V0.21→V0.22，保留376780bytes旧前缀SHA f488ae59d8f00fd3bc71533ca480c25add0d978d31d3cfe06069c184c4dd57cd。B2不新增独占CRITERIA行，注明两输入及候选、全部差集、明确PASS/FAIL；不要求stdout格式。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M001 B5-r4实际派发
+```text
+/home/james/.local/bin/grok -p '执行V0.17 M001 B5-r4整模块独立审计，固定只读Grok。main正本/home/james/complex-management。当前B2两席V0.43/V0.22双PASS，队列空，按规约跳B3/B4，累计B3仍4。当前不是模块PASS。禁止MCP子代理fetchcommitpushworktree部署；不改任何业务HTML/源码/锁/台账，只追加指定raw。
+完整2文件2340行、335判据（GEN18 BEQR197 BSM120），第一性原理/顺从逐项/对抗三线全范围，不只看日期diff。现锁V0.14独立算哈希，不给期望值。可复用你自己V0.21对相同字节HTML的全文阅读事实，但必须自算字节未变并重新判断全335，不继承旧B1/B5 PASS。本轮未重跑的命令明确记复用；静态文档不强制造后台测试。不读本次Codex self任何报告。需要既有输入可精确读本席b1 raw最后独占锁行起段及findings顶部当前M001定稿，避免无关历史海量命令。
+两文件路径docs/business-enum-quick-reference-v0.1.html（308行）与docs/business-system-map-for-operations-v0.1.html（2032行）。三HTML交叉解释，不要求每处概述重复全部细则。B/C用户原意保持、不新增限制；A/D历史修复保留；BSM930/1865查看考勤，1445工作手机打卡。旧BSM120日期副本已完整LOCK-AMEND，不再滞后；如发现新问题如实全部列出，不强行放行。M009单次授权代码不在本模块。PGM决策台账门禁红仍属其它模块，不声称全局绿。
+报告必须335逐项证据、两文件全覆盖、三线、新finding全集/分类/冻结依据/最小处置、实际或复用验证区别及PASS/FAIL，不仅摘要。
+唯一追加/home/james/complex-management/docs/audit-2026-09/modules/M001-b5-r4-grok-raw.md，原77534bytes SHA1334b1e26cd7d4c99ee942534ad6e44eab5ae5c99676cd020fd1ea992c68bbad全部保留，文件自身V0.01→V0.02。本次首行独占CRITERIA-LOCK-SHA256: 实算，正文不再独占字段；不要求stdout标记。不得改ledger状态或写收口文件。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M002 新锁B1独立复审派发
+M001已现锁PASS；M002 IN_PROGRESS，B3仍2。根先派外审，再独立封存，不读本次Grok。实际命令：
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt.md V0.17执行M002当前V0.14判据锁B1全模块独立审计。正本/home/james/complex-management main，治理HTML docs/platform-governance-map-for-operations-v0.1.html共979行，66PGM+18GEN=84项完整三线。M001现锁B5双PASS已结项，M002本步转IN_PROGRESS，B3累计2不重置。锁哈希独立实算，不提供期望值。
+前次B1 V0.08、B2 V0.09可作历史输入（精确取本席b1 raw最后独占锁行起段），但不能继承PASS。HTML字节应与上轮相同SHA5c4594a73e767c704238ad311899903dbaaf94503e4a4cc18f21a5596e67429f，须自算核对；可明确复用自己同字节全文阅读事实，重新判断全84项。前轮PGM047考勤摘录已执行完整LOCK-AMEND为查看考勤，另BSM120日期亦完成同步。仍核全部PGM摘录。
+操作员已逐条批准871商户主次联系人按授权查看明文、680页面例外不放宽导出打印；656单次消耗原句保持，M009代码修复仍未做，勿把实现问题转成HTML缺陷。所有新问题如实列出，不预设PASS。历史四ID/问题仅作输入；全局html-ledger-sync门禁失败按实际归属判断，不冒称全局绿。
+禁止读本次Codex self，不得改业务/HTML/锁/ledger/findings；禁止MCP子代理fetchcommitpushworktree部署。只追加完整报告到/home/james/complex-management/docs/audit-2026-09/modules/M002-b1-grok-raw.md，旧189011bytes SHA673143ac7463b79fad7f20086437f03c0ff594df1955fd9dc9fec2ec96814be6必须全部保留，V0.09→V0.10。本次首行独占CRITERIA-LOCK-SHA256: 实算；全文全84具体证据、三线、所有新finding分类冻结依据最小处置、实际验证和复用区别、明确PASS/FAIL。正文不重复独占哈希字段，不要求stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M002新锁B1双PASS，B2派发
+两席完整报告已读，Grok exit0，四值全等；findings V3.33候选队列空。实际命令：
+```text
+/home/james/.local/bin/grok -p 'M002 B2整批归并复核，按160-audit-prompt V0.17。正本/home/james/complex-management main。请完整读取两份本次B1：modules/M002-b1-self-raw.md V0.13与modules/M002-b1-grok-raw.md V0.10，各从最后独占锁行起到EOF；候选docs/audit-2026-09/findings.md V3.33顶部“当前 M002 新锁B2候选”至下一##。核对全部差集、四项旧ID当前分类队列、CodexCX01→003、Grok当前空集、PGM047旧锁问题已解决、门禁红归M426/M008既有输入，不能漏并、改写外审或放宽批准范围。若队列空拟跳B3/B4进B5-r2，累计B3仍2；不预设PASS。
+只追加完整B2票到/home/james/complex-management/docs/audit-2026-09/modules/M002-b1-grok-raw.md，V0.10→V0.11，保留233738bytes旧前缀SHA51ef6b6e2316884ed2b300663b49a3ebc638ed3ee7fd21ef47741412786ec332；B2不新增独占CRITERIA行。不改源码/HTML/锁/ledger/findings，无MCP子代理fetchcommitpushworktree。完整票需清楚PASS/FAIL、输入/差集/分类/队列，不要求stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M002 B5-r2新锁实际派发
+```text
+/home/james/.local/bin/grok -p '执行160-audit-prompt V0.17 M002 B5-r2全模块独立复审。正本/home/james/complex-management main。B2 self V0.14/Grok V0.11双PASS，findings V3.34定稿四项队列空，跳B3/B4，本轮新增修复0、累计B3仍2。模块当前IN_PROGRESS，不能继承旧B5 PASS。
+唯一范围docs/platform-governance-map-for-operations-v0.1.html当前V0.13全979行，全84映射（GEN18+PGM66）三线，锁V0.14独立实算哈希。可明确复用你刚才V0.10同字节完整阅读，但须自算未变并重新判断全84，不继承B1结论。现文获批680/871联系人例外与656单次规则保持；PGM047锁已同步查看考勤，不再滞后。M009单次消费代码未修不能当成本HTML缺陷，待所属模块。新问题照实列齐，不预设PASS。
+需要输入仅读findings顶部当前M002及自己B1最新段，不读本次Codex self。全局html-ledger-sync红须如实披露、M426/M008归属保留；不回改获批HTML或称全局绿。命令本次实跑/同字节复用明确区分，不强制后端测试。
+只追加完整84项逐条证据/全979覆盖/第一性原理与对抗/新finding全集及最小处置/明确PASS或FAIL到/home/james/complex-management/docs/audit-2026-09/modules/M002-b5-r2-grok-raw.md。旧43495bytes SHA73af16a82408c9a07b66dac2fa8c92d56ae0c0b30976e83d97ac854de865aba9全部保留，自身V0.02→V0.03，首行独占CRITERIA-LOCK-SHA256: 实算，正文不重复该独占字段。无MCP子代理fetchcommitpushworktree部署；不改业务HTML/源码/锁/ledger/findings/收口文件。不要stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M003现锁B1派发
+M001/M002现锁PASS；M003 IN_PROGRESS，B3累计2。先派Grok，本席封存前不读当前外审。两文件现205行（gitignore58/package147），同一冻结文件清单，无增范围。实际命令：
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt V0.17执行M003现锁B1全模块独立审计。正本/home/james/complex-management main，M001/M002现锁已B5双PASS收口。M003本步PENDING→IN_PROGRESS，B3累计2不变。计划M003唯一.gitignore与package.json，现为58+147=205行（计划历史202，gitignore末尾新增graft缓存忽略），18GEN映射全审。锁V0.14独立实算哈希不提供期望值。
+先读本机AGENTS，graft图用于代码定位，无MCP；graft map/grep若配置未索引则直读补足。按当前两源完整读、所有scripts/ignore规则分类、三线全范围，不按旧PASS继承。只读真实引用目标用于证明入口、参数转发、失败传播、workspace/dependencies；不扩成其它模块全审。历史016/027—031作输入，027重叠无可复现故障已被B2收窄只登记，不无理由重开；旧001—026与023删除024保留裁决保存。package与旧B5同字节可明确复用全文阅读事实，gitignore新增三行需实际审。
+禁止修复任何源码HTML锁台账，禁止fetchcommitpushworktree部署安装依赖/MCP子代理。不要npm exec或npx自动安装；不执行未读或会写业务资料/启真实业务库/删除/外发/长驻命令。能只读/无副作用验证即执行；help/list/dry明确不等业务测试已完成。运行态目录忽略不意味删除业务数据。
+本模块入口引用核验与全局门禁红区分：entry-anchors已绿，html-ledger-sync因获批PGM680/871未同批同步M426台账而红，工具属M008。真实新错误照实报，不预设PASS；不重开M001/M002、不改已批准文字，不假称全局绿。
+互盲不读本次任何Codex self。可读自己旧b1/b5现版本末段作输入，不能继承结论。完整报告含205行和18GEN覆盖、全部scripts和ignore逐项证据分类、第一性原理三问、对抗/真实命令输出/不能验证边界、临时finding全清单、明确PASS/FAIL。
+唯一追加/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md，V0.06→V0.07；旧146410bytes SHAd4447390458ce76c3e5f1dd8085a2ccdf7a5f10199641a3d12b22c1be6f6ffc4全部保留。本次首行独占CRITERIA-LOCK-SHA256: 实算，正文不重复该字段；不要stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M003 新锁B1双PASS，B2整批派发
+Grok真实exit0，根已读完整报告，四值全等。findings V3.35候选，B3累计2不变。实际命令：
+```text
+/home/james/.local/bin/grok -p 'M003 B2整批归并复核，V0.17。只读正本/home/james/complex-management。完整输入：self B1 V0.10从最后独占锁行到本批B2附录前；Grok B1 V0.07从最后独占锁行到EOF；findings V3.35顶部“当前 M003 新锁B2候选”到下一##。当前205行/18GEN两席B1PASS不代替B2/B5。
+重点全批差集：根CX01拆原016和新032（.gitignore57–58缓存新对象），不把新Graft行塞旧016，保留你B1无GR/无工程缺陷原票；CX02→028；CX03→029/030/031，027不重开强删。请独立判断032是否正确独立登记、有无ID复用/添加误判，不预设认可。旧001—031保留、023删除024保留；七行队列均否，候选拟跳B3/B4→B5-r2累计2。门禁红完整保留M426/M008和入口快照M435/M436观察，不冒称全仓绿。
+只追加你的完整B2票到/home/james/complex-management/docs/audit-2026-09/modules/M003-b1-grok-raw.md，V0.07→V0.08，保留182381bytes旧前缀SHAae026edfc4d1529b730943e9836bec7e2bb3000b1c149bb77731215402d526a8。B2无新独占CRITERIA行；完整输入差集/分类/工程缺陷/队列、明确PASS/FAIL。禁止改HTML/源码/锁/ledger/findings/新questions，禁止MCP子代理fetchcommitpushworktree部署。不要stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M003 B5-r2现锁实际派发
+```text
+/home/james/.local/bin/grok -p '执行V0.17 M003 B5-r2全模块独立复审。正本/home/james/complex-management main。B2 selfV0.11/GrokV0.08双PASS，findings V3.36七行队列空，跳新增B3/B4，B3累计2。当前IN_PROGRESS不能继承旧B5。
+唯一FILES.gitignore58行+package.json147行=205，18GEN完整三线，锁V0.14须独立实算。可明确复用你刚完成V0.07对相同字节两源全文阅读，先自算确认，重新判断全部18GEN和127scripts/ignore全范围，不继承B1PASS。不读本次Codex self。需要既有输入可读findings当前M003及自己B1最新段，勿重复历史巨大命令。
+graft缓存新对象已分032技术性无缺陷；016原1–55、027重叠不强删、028—031既有登记保持。任何新问题照实全列不预设PASS。全局门禁红/entrydoc DRIFT按实际归属M426/M008/M435/M436保留，不回填刷绿、不重开M001/M002。所有实际运行与同字节复用明确区别；help/dry/check非业务测试通过。必要入口验证不得写业务资料/启动长驻/连接真实业务库/删除/外发/安装依赖。
+唯一追加/home/james/complex-management/docs/audit-2026-09/modules/M003-b5-r2-grok-raw.md，V0.02→V0.03，旧64554bytes SHA965163dbbb2e5d3969e78a038663fded87287eca59d30e21afb20bd303ab782a全部保留。完整全范围、18GEN、三线、127script与58ignore证据分类、全部finding和明确PASS/FAIL。首行独占CRITERIA-LOCK-SHA256: 实算，正文不重复字段，不要stdout标记。无MCP子代理fetchcommitpushworktree部署；不改源码/HTML/锁/ledger/findings/收口文件。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M004 新锁B1实际派发
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt V0.17执行M004新锁B1全模块独立审计，正本/home/james/complex-management main。M001—M003已现锁B5双PASS；本模块PENDING→IN_PROGRESS，历史B3=1不重置。唯一package-lock.json3321行220记录OVERSIZE；18GEN全审，锁V0.14自行计算不得继承旧锁票。
+先自核技能按V0.17收窄，读AGENTS/graft图用于定位，无MCP。源SHA与自己旧B5完全相同可明确复用全文阅读，但必须本次全范围重新判断、核全部字段依赖图/SRI/清单镜像/engine/workspace/optional/peer/错误传播。旧001—007作B1输入，不继承PASS。007旧公告只登记，如当前公告/入口变化按实证完整报告，不预设PASS不擅升依赖。
+只有Codex+Grok两席；不读本次self报告。只读源/锁/findings/ledger/旧自己的报告，必要直接引用源码只为核入口；不扩其它模块。无安装依赖fetchcommitpushworktree部署/MCP子代理。不得启业务库、长驻服务、写生成业务文档、删除文件。原生解析/只读audit/ignore-scripts的dry-run可以，实际运行与复用分别写明；不把dry/help当真实安装/编译测试。无已批准HTML改动或锁修改。
+唯一输出追加 /home/james/complex-management/docs/audit-2026-09/modules/M004-b1-grok-raw.md，V0.05→V0.06；保留旧163323bytes SHA c3cf6898805d515b7bfcb49f106d996e056b0b78ed8e51220fa1edec3012a3b1全部字节。新完整报告首行独占CRITERIA-LOCK-SHA256: 实算，正文不重复独占字段；全3321行/220记录/18GEN三线、第一性原理三问、真实命令证据、全部GR与明确PASS/FAIL。不改ledger/findings/收口，不stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M004新锁B1双PASS，B2候选V3.37实际派发
+两席新问题空集；根完整读完Grok，真实exit0，四值相等。累计B3=1不变。
+```text
+/home/james/.local/bin/grok -p 'M004 V0.17 B2整批归并复核，只读/home/james/complex-management。完整输入：modules/M004-b1-self-raw.md最新B1 V0.08（最后独占锁行至B2附录前）、你自己的最新B1 V0.06（最后锁行至EOF）、findings V3.37顶部“当前 M004 新锁B2候选”。七ID001—007，双方新CX/GR均空，候选技术性/当前缺陷否/队列否。请完整差集、分类、范围/证据/处置复核，不能只看候选或摘要；不预设PASS。
+核对007当前公告仍红/现未接公开入口所以只登记、磁盘旧三叶不冒充修补版已运行；dry不等真正安装和SRI验证，保留三旧修复历史。任何遗漏分歧按实报。不得因业务HTML获批而升依赖或增功能。
+唯一追加modules/M004-b1-grok-raw.md，V0.06→V0.07，保留227205bytes SHA69874032edf22fe6d7ac0f51ba525a9d0143b0b84d2e99b34da7bc636a91c145。B2无新独占CRITERIA-LOCK-SHA256行；完整输入差集/分类/工程缺陷/队列和明确PASS/FAIL。若同意空队列须B5-r1新锁全模块，累计B3=1，不提前模块PASS。不改源码HTML锁findingsledger或他席报告，无MCP子代理fetchcommitpushworktree部署安装依赖。无stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M004现锁B5实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M004 B5-r1现锁全模块独立复审。正本/home/james/complex-management main。B2 selfV0.09/GrokV0.07双PASS，findings V3.38七行定稿全否；跳新增B3/B4累计B3=1。IN_PROGRESS，不继承任何旧B5/B1/B2 PASS。
+唯一package-lock.json3321行220记录，18GEN全三线重新判断。锁V0.14须独立实算。先确认字节同B1V0.06，可明确复用自己的完整源阅读，不重复读取历史巨大票；但本次全范围重判和必要运行证据不可省。全字段覆盖、第一性原理三问、18GEN逐项、对抗、全部finding及明确PASS/FAIL。无本次self阅读。
+既有001—007作输入，007audit仍红/未接公开入口，磁盘三旧叶不称已修运行；原生锁图与声明/安装态区别、dry/help不等真正安装或SRI/业务测试。新问题如实报告不预设PASS。不改源码HTML锁findingsledgerquestions收口；不升依赖、不安装、不启长驻/业务库/外发/删除。MCP子代理fetchcommitpushworktree部署禁止。
+唯一追加modules/M004-b5-r1-grok-raw.md V0.02→V0.03，保留旧162406bytes SHA951be0608835cd8ed9df191bee4646cb5aeafcc97dd07b96ec1514116f97ffd1。完整报告首行独占CRITERIA-LOCK-SHA256: 实算，正文不重复该独占字段，不stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M005现锁B1实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M005现锁B1全模块独立审计，/home/james/complex-management main。M001—M004已新锁双PASS；M005 IN_PROGRESS历史B3=2不重置。唯一三FILES：tsconfig.base.json13行、.github/CODEOWNERS12行、.github/workflows/predeploy-gates.yml27行，共52行18GEN；锁V0.14独立实算。
+全部三文件完整阅读、18GEN三线，不继承旧B5。先技能自核按V0.17收窄，AGENTS/Graft定位适用。不读本次任何self；只读旧自己报告和当前findings作输入。001—011旧范围历史保留；012TS/013CODEOWNERS无缺陷登记，014两YAML注释职责已修V0.02，应核现代码/镜像消费而不重复修。
+完整检查TS原生解析与真实extends/必要可失败诊断、CODEOWNERS语法/路径/账号及真实保护边界、YAML事件/步骤/action固定SHA/环境baseline和门禁失败传递；只追必要直接依赖不扩审M007/M008。不要凭假设补permissions/concurrency/timeout、不要扩功能或修改HTML，旧timeout默认360纠正已确认不再把缺字段叫无上限。当前全局PGM台账同步红归M426、工具M008，入口快照M435/M436，真实红按归属报告，不刷绿。
+无安装依赖、服务/业务库/部署/删除/外发/fetchcommitpushworktree/MCP子代理。GitHub只读可验证，不触发workflow或修改设置。原生help/dry不当真实业务编译测试通过。必要命令先确认不会写业务资料。
+唯一追加modules/M005-b1-grok-raw.md，V0.07→V0.08，旧160886bytes SHAbdff7266f9420d6da849d5e9802e17cd0ca1ac0a94886b566fcd23fdf71774f3完整保留。完整报告首行独占CRITERIA-LOCK-SHA256:实算（冒号后空格），不在正文重复字段。52行全字段/18GEN覆盖、三问、对抗、真实命令和全部GR明确PASS/FAIL，不代写findingsledger收口，不stdout标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M005当前B2实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M005现锁B2整批归并独立复核。唯一审两份b1 raw最后完整报告：self V0.10（143794bytes SHAb98c3bafc50819092d1e4e4b305b82600af43eeff061b24685fae556ca19d307）和你V0.08（196533bytes SHA54490b95a068aea7f5e991aee2aff03a1f44818911a9e7514b0245ab8bb0bf0e），以及findings.md V3.39顶部当前M005候选（1229975bytes SHA67d75f1163e41262b16cca72e82f2cabde252b033748aa9e4ba23474c61d1aaf）。全文做差集、分类/队列/最小处置，不继承旧B2。
+当前仅三源52行18GEN，012/013登记，014历史已修当前否，001—011历史原范围保留。根没有覆盖你任何意见。若遗漏如实FAIL；没有修复动作，不加配置功能。
+请核实并澄清你V0.08§7 origin/main@88c7b465和顶部本地origin/main=ebb1eb99不一致：这是工具采用merge-base输出的实际SHA还是抄录，请读工具最小相关段/必要只读命令确认，不擅自改原报告。根HTML_GATES_BASE=HEAD实跑PGM台账红exit1；不能把origin CI绿当工作区绿。
+唯一追加modules/M005-b1-grok-raw.md V0.08→V0.09完整B2票，注明输入两raw精确路径/版本、候选SHA及全部ID差集、明确PASS/FAIL。保留旧196533bytes，B2禁止独占CRITERIA-LOCK-SHA256行。不得修改findings/ledger/源码/HTML/锁/收口；不派子代理/MCP、不fetchcommitpush安装部署。固定CLI不变。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M005当前B5实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M005现锁B5-r2全模块独立审计。B2 selfV0.11/GrokV0.09双PASS，findings V3.40三项定稿queue空；跳新增B3/B4，B3累计2。M005仍IN_PROGRESS，不继承旧B5。
+三源52行18GEN全三线重判：tsconfig.base.json13/.github/CODEOWNERS12/.github/workflows/predeploy-gates.yml27。完整本次判断、第一性三问、全部ID和必要原生证据，不只核注释。可先核SHA与自己B1V0.08一致而明确复用全文源阅读，避免重复读历史巨票；判断不可继承PASS。锁自行实算不抄。先派你根同时独立封票，不读本次self B5。
+012/013技术性登记；014当前职责已修不可重修；001—011历史原范围。无配置功能扩展、无HTML/源码/台账/锁修改。PGM同步真实红M426/M008、入口快照M435/M436保留；不要刷绿。B1/B2已澄清merge-base输出语义，无需重复巨额日志/全仓扫描。必要静态检查、配置真实消费/反例，诚实说明没全业务构建/安装/触发CI。
+唯一追加modules/M005-b5-r2-grok-raw.md V0.01→V0.02，旧16689bytes SHA0bd729eebbd18bb266a9137f1170e367af347a2e023c93f047682004ef1b8271保留。新完整报告首行独占CRITERIA-LOCK-SHA256:自算（冒号空格），正文不重复字段。52行所有字段18GEN逐项、三问/对抗/全部finding、明确PASS/FAIL，不能只输出摘要。不要代写ledger/findings/收口。无MCP子代理fetchcommitpush安装部署worktree，固定CLI不变。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M006现锁B1实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M006现锁B1全模块独立审计，正本/home/james/complex-management main。M001—M005现锁闭环。当前M006 PENDING→IN_PROGRESS，历史B3累计2不清零。唯一两源docs/delivery-readiness-gates-v0.1.md V0.12 158行和docs/deploy-and-change-flow-v0.1.md V0.07 48行，当前206行（计划历史207），79映射判据全三线；锁V0.14自算。不是旧M006权限模块，旧001—036历史保留。
+两份全文完整审，全部79映射ID逐项适用证据/N/A边界，HTML原文与当前锁对照，第一性三问、顺从/对抗，读必要直接消费者/可失败只读命令，不因文档要求部署/生成而真做。当前037/038登记、039—043和047旧两批已修、044—046细化原句保持；重新判断不能继承PASS。禁止预设无问题；有新问题审完整模块才归并。
+技能自核按V0.17收窄、AGENTS/Graft适用。禁止读取本次self，允许本席旧报告阅读复用源需先校SHA并说明。不得修复源/HTML/台账/锁/findings/ledger/收口，不扩审M007/M008，不派子代理/MCP。无fetchcommitpush/安装/部署/工作树/真实GitHub PUT/DB连接。只读GitHubAPI允许，禁止打印密钥。全局PGM台账同步红和入口快照漂移已按归属登记，不为刷绿修源。
+唯一追加modules/M006-b1-grok-raw.md V0.11→V0.12（先核当前末版本；若非V0.11按真实递增并说明），保留旧250969bytes SHAb135ef908122b81e3ce12aa4c0363e985d63e8f4282f7de1de202a40fc490c42。新完整报告首行独占CRITERIA-LOCK-SHA256: 自算（冒号空格），正文不重复字段。所有finding带GR编号、行号、分类、证据类型、冻结ID、明确PASS/FAIL。固定CLI不变。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M006现锁B2实际派发
+```text
+/home/james/.local/bin/grok -p '按V0.17执行M006当前B2完整归并，固定两席。读取modules/M006-b1-self-raw.md最后独占锁行起完整V0.20、modules/M006-b1-grok-raw.md本次V0.12全文，以及findings.md V3.41顶部M006整批候选（SHA17bc38639710cb2272f2fd587c3b44a089e4b15d8e00b358ee4256bcbf3a1bc8）。核完整差集CX01—11→037—047，旧001—036原范围保留，新GR空集；逐行分类/当前缺陷/队列，候选行号勘误和runtime陈旧观察归M409/M415仅B1输入。不得继承PASS，明确自己的PASS/FAIL。唯一写modules/M006-b1-grok-raw.md追加B2 V0.13，原281664bytes SHA0f9e87a39a32a018106fccbc20ead8fe615d618ef19570a00e84c4e7262a6eca保留；B2不得新增独占CRITERIA-LOCK-SHA256行，在正文说明独立实算现锁。无修源/HTML/findings/ledger/锁/新产物，不派代理/MCP、不fetchcommitpush部署安装/真实PUT/DB；只读验证允许。scope两文档206行79判据；B3累计2，空队列只允许下一步B5-r2，不能直接模块PASS。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M006现锁B5实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M006当前现锁B5-r2整模块最终独立审计。B2已双PASS findings V3.42，037—047队列空，跳新增B3/B4，历史B3累计2。不是旧权限M006。完整两源delivery V0.12 158行+deploy V0.07 48行共206行和79映射判据，三线完整、第一性三问、逐项分类，不只审旧diff。校验同字节后可复用本席全文阅读但必须本次完整判断/证据，不继承PASS。独立自算锁放本次报告首行，不能抄期望值。禁止读本次selfB5。
+唯一追加modules/M006-b5-r2-grok-raw.md：当前真正最新版本V0.02，本次V0.03，原68180bytes SHAf65d01f05ba1056c988f747534806da09fb6506cfcacbcc352f74290e8607bef保留。完整报告包含79映射适用/N-A证据，全部037—047重判、真实命令与未验证边界；源文行号以当前文件为准（上线116/MDM110/存储150/AI112/deploy固定清单7和36）。运行证据陈旧M409/M415、PGM台账红M426/M008、入口快照漂移M435/M436/M008仅跨模块B1输入，不为刷绿修改。若发现问题先审完本模块再报告，不自行修复。
+禁止写源/HTML/锁/findings/ledger/收口及新文件，禁止子代理/MCP/fetchcommitpush部署安装真实PUT/DB连接；只读命令允许。固定CLI不变，§6技能按用户V0.17收窄。明确PASS/FAIL与新GR或空集。不得以B1/B2已通过替代本次B5。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M007现锁B1实际派发
+```text
+/home/james/.local/bin/grok -p '按V0.17启动现锁M007 B1全模块三线独立审计，唯一5FILES见plan/modules.md（install-git-hooks.sh、merge-pr.sh、propose-change.sh、hooks/pre-push、ops/ci/predeploy-gates.yml），当前163行/79判据，计划历史156不改。旧B3累计1，001—004历史修复/005—011登记仅输入，不继承PASS。必要直接回归tools/gate-hardening-tests/m007-regression.mjs102行一并读。先审完所有源/判据才结束，第一性三问、顺从/对抗完整，可复用本席同字节全文阅读但当前重判不可省。
+唯一追加modules/M007-b1-grok-raw.md，V0.02→V0.03；旧49424bytes SHA09b192b4e7b4b358a6fc7e139e0196a4893d803aa9630be14043603285848155必须保留。本次完整报告首行独占锁字段，自算不要抄预期值；不得读本次selfB1。所有新GR带位置/四分类/证据类型/判据；无新问题也完整说明旧11项重判。
+只读主仓：禁修源/HTML/锁/findings/ledger/收口、子代理/MCP、fetchpush部署安装/真实GitHubPUT/DB/主仓commit。现有回归仅在确认写入隔离临时目录后允许运行：临时Git fixture init/commit及模拟gh/npm不属于正式仓库提交，不许真实远程push/merge或主仓安装hook。不要为审计造新工程功能。固定CLI不变，§6按V0.17收窄。全局PGM台账红/入口快照漂移/runtime过期已登记后续所属模块，不刷绿。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M007现锁B2实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M007当前B2整批归并。完整读取selfB1V0.03封存70964bytes SHA40d4759cef73fe7d6a1afa14d4f597ae1081b31ecb94dd6f7a22e344b0a2d2f8、GrokB1V0.03封存89977bytes SHA66466c551f9609a0e0cca9692ab46b45abe13c214f1317b5a5c665f0e1628779最后独占锁行起本次完整报告、findingsV3.43顶部M007候选SHA648b5378c44a8b68631a91bb2799e81ffbe4eccb6e6f9347acd0055744c0b84e。核全差集CX01—06→001—011、新GR空集，三值与最小处置，OBS1旧安装hook不伪称现源已装、OBS2/3、harness误用不藏失败。不继承PASS，给独立B2PASS/FAIL。
+唯一追加modules/M007-b1-grok-raw.md V0.03→V0.04，保留旧89977bytes SHA；B2不要新增独占锁字段。禁修源/HTML/锁/findings/ledger/收口/主仓hook安装/真实pushmerge部署/子代理MCP。只读验证与隔离fixture同B1允许，固定CLI不变。空队列必须双B2后B5-r1，B3累计1，不能直接模块PASS。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M007现锁B5实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17现锁M007 B5-r1全模块独立最终重审。五FILES163行79判据，必要直接m007回归102行，范围同本轮B1；findingsV3.44 B2双PASS队列空，跳新增B3/B4，累计B3仍1。校SHA后可复用同字节完整阅读，但本次完整判断/证据/三线必须独立，不继承PASS。禁止读本次selfB5。
+唯一追加modules/M007-b5-r1-grok-raw.md，原26860bytes SHA9e854ef37d9e8587c67721d8d48fe25e8b7655e4589c610c2314d3b45dcfb5e1、V0.01→V0.02，前缀保留；本次报告第一行独占锁字段自算，完整覆盖79判据/5文件全部行、11项重判、新GR或空集、真实验证/限制，明确PASS/FAIL。OBS1主仓hook旧副本不要假称已装，harness非法ref和exit2不是产品缺陷但不藏失败。
+禁止修源码/HTML/锁/台账/收口/主仓安装hook、子代理/MCP、fetchpush部署/真实GitHub写/DB。与B1相同隔离fixture允许（临时Gitinitcommit和file远端均不得碰真实origin），固定CLI不变。全局红灯所属后续模块不刷绿。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+M007事故独立核验：
+{"hook_sha": "46aabdf33cb3496d83a71e4357ca85ba2ed9dbbfd4582ab53747bc50bb748d6b", "length": 997, "mode": "0o775", "mtime": "2026-07-06T06:19:28.282117+00:00", "matches_old_blob": true, "source_sha": "e38ccd33e40065045c24fa8d4bb08d35f519a753ce2520884fee7103e4e77f85", "index_sha": "d9a65108a1e87bd300c299ca7640f832bd5c2feb771f35a7a2413d32a1748331", "head": "e456ba96c84185c8d39f18f548011daac48a6466", "five_source_status": ""}
+
+
+## M008现锁B1实际派发
+```text
+/home/james/.local/bin/grok -p 'V0.17现锁M008 B1全模块独立三线审计。范围plan/modules.md唯一17FILES，历史计划1530行，当前行数自行实算；映射GEN001—018及PGM036共19条须核锁。旧B3累计2，001—004/006—007旧修、005/008—016登记仅输入，不继承PASS。17文件所有源码/JSON/10个历史log全部读，旧log不当现验收；第一性三问、顺从/对抗完整审完才下结论。
+唯一追加modules/M008-b1-grok-raw.md V0.04→V0.05，旧83685bytes SHA6e3b0f7cbdce80bd5f0af1aeda641bfcf692b6dee9d5c14f3e877f46d556586d保留。本次首行独占锁字段自算，禁止读本次self。新GR逐项带位置/分类/证据类型/判据，所有旧16项现状重判。
+禁止源码/HTML/锁/findings/ledger/收口写入、主仓Git配置/hook/index写、真实GitHub写/生产DB/安装部署/fetchpushcommit、子代理MCP。上轮夹具写错主仓事故不可重复：优先现有已确认隔离的m001-regression；读完它确认绝对tempParent约束后可完整执行（内含本机临时clone/init/commit，非主仓提交，不网络fetch）。自制探针若需要写入，先resolve绝对临时目录并assert所有目标在该目录内；Git目录须在fixture cwd求--absolute-git-dir，绝不把相对.git写到主仓。禁止运行无--check生成器在正本；临时夹具中的生成允许。固定CLI不变。
+现PGM台账红属M426输入、入口快照漂移M435/M436输入、runtime陈旧M409/M415输入；判断工具有无错误，不为刷绿改数据。M007旧运行hook维持原副本，不碰。严格根源最小范围，不新增自动版本管理/重复诊断去重/新业务功能。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M008现锁B2派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M008现锁B2全批独立归并复核。读modules/M008-b1-self-raw.md本次V0.05完整B1及V0.06 B2、M008-b1-grok-raw.md本次V0.05完整B1、findings.md V3.45顶部当前M008全16候选，作全差集：本次新CX/GR空、16旧项现状逐项无待修；10技术观察已逐条映射，尤其观察6仓根调用→008、runtime→009。分类/无业务发明/当前缺陷/当前修复队列逐项判，不继承旧PASS、不抹旧票。判据现锁b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，19条不变。当前两数据红M426/M435/M436保留，源码无修复候选，005重复常量不删。另B1技能表ubiquitous-language声称V0.17不用不准确：prompt末行是存在则按grilling收窄使用，请核实际存在并按收窄自问自答使用或如实缺口，补正原票而非覆盖。唯一追加modules/M008-b1-grok-raw.md V0.05→V0.06，本批B2不写独占锁字段行，注明两输入路径/版本，全批PASS/FAIL及差集。旧109143bytes SHA763a0f50bbdef9e661a13c902f2e752ca8ff687d30b5e29fe2c4ef90c7c9d055保持。禁止任何其它文件/源码/HTML/锁/台账写；主仓hook/index/config绝不写，禁止真实Git发布/安装/部署/MCP/子代理。若需隔离实验绝对temp先assert全部目标，优先复用本次B1同字节证据，不重复无必要测试。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M008现锁B5-r2派发
+```text
+/home/james/.local/bin/grok -p 'V0.17 M008现锁B5-r2完整独立三线审计。B2 selfV0.06/GrokV0.06双PASS，findingsV3.46当前全16队列否，故跳新增B3/B4、B3累计2不重置。全17FILES1605行/GEN001—018+PGM036共19完整审，不能只看diff或旧PASS；先独立算现锁b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，首行独占锁字段。B1同字节全读可SHA验证后复用但须重新完整适用判断；已有新鲜回归/隔离结果若输入未变可说明复用，避免无必要重复，不把历史log当现证据。16项与B2观察映射全部覆盖，005不删重复常量；两数据红M426/M435/M436保留，runtime仍M409/M415输入，不刷绿。唯一追加modules/M008-b5-r2-grok-raw.md V0.01→V0.02，旧35604bytes SHA65f7ef12326060db9a1dbc67a3407568344cf87f753ac8aa8accc7ed74d428bf保留，不覆盖。未封存前不得读本次self B5。禁止任何其它文件写入、主仓hook/index/config写、真实Git发布fetch/安装/部署/MCP/子代理；实验绝对temp先assert全部目标。全文三线做完再PASS/FAIL；新发现全部找齐才结束，不自行修复或推进模块。技能遵V0.17，ubiquitous-language已B2补正按grilling收窄用。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M008现锁B5四值回执
+["b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458", "b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458", "b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458", "b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458"]
+self V0.02 49928bytes SHA54c458d7dcdb0618d7f4a91fc58b4a7f99a38e677d025c2f02d392bae8227da2；Grok V0.02 63267bytes SHAa7ebf8dcd1bb95dcfbff2b2295276dbd2f6df89b6b186349ed7b5188329d8df7，真实exit0。hook/index现核不变。
+
+
+## M009现锁B1派发
+```text
+/home/james/.local/bin/grok -p '按.scratch/module-recheck-20260908/160-audit-prompt.md V0.17，在主工作区对M009现锁重开B1完整独立三线审计。M001—M008现锁双席已闭环；M009当前PENDING将转IN_PROGRESS，B3累计4保留。plan/modules.md唯一20FILES，当前实际行数自行算；criteria-lock现版映射88条逐条核全定义及三HTML原文。全部20文件全文读，不只看058或diff，不继承旧PASS/FAIL。先技能自核/graft再源码，专项全读覆盖一般graft不读全文约定。必要直接依赖可追，不扩模块/判据。
+操作员最新“都批准修改”批准了已展示三项：PGM871商户主次联系人经授权/真实U盘最高权限可在档案列表及结果查看完整手机号；PGM680该页面例外不开放明文导出/打印，保留脱敏留痕；PGM656单次授权原文保持、代码修复单次使用后消费。获批HTML已改V0.13，LOCK-AMEND已双席完成并串行重开到本模块；你要自读HTML现文/锁核真，不引用旧原文判当前仍禁止所有商户明文。本次代码尚未修单次消费。上批第2项merchant.viewed对象上下文留痕和第3项两联系人姓名加密已B4-r4通过，保持；旧姓名未重存未回填，不宣称全已加密。批准本次追加1批B3至累计5，但B1/B2不修，实际队列需双席定稿。
+现有findings最新M00926项作为B1既有输入，旧001—059历史记录只输入不当当前值；四跨模块XM观察按各归属不扩本模块。旧V427顺序门禁等环境红保留，不顺便修。全26项重判及原OBS01—04，找齐本次新问题后完整报告。优先现有授权消费机制，禁止新增功能/全局布尔查询改成消费/新查看端点/新角色/其他姓名生日/HTML/迁移回填。业务范围变更需原闸，不擅加。
+唯一追加docs/audit-2026-09/modules/M009-b1-grok-raw.md V0.14→V0.15，保留旧332492bytes SHAdad795a16e0599fdd3c48f96b5a0640e72b6422150db505ace2de2f23d0d8c2d。首行独占CRITERIA-LOCK-SHA256自行实算；报告完整全范围/三线/每ID/新GR分类类型证据。禁止读取本次self B1及CLI原始输出对外。禁止所有其它文件/主hook/index/config写，禁止fetch/提交/推送/安装/部署/生产库/MCP/子代理。B1允许纯单元测试、只读核实；不跑写库集成测试。隔离实验若需写，仅绝对temp且先assert每个目标，不向主.git写。退出前仅报告指定文件，不推进B2。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M009现锁B2派发
+```text
+/home/james/.local/bin/grok -p '按V0.17对M009现锁B2整批归并复核，仅追加modules/M009-b1-grok-raw.md V0.15→V0.16，保留原前缀；不要写CRITERIA-LOCK-SHA256独占行。输入为同路径本次B1 V0.15与你未读过的M009-b1-self-raw.md完整B1 V0.16，以及findings.md顶部V3.47候选整26行。逐项差集/分类/当前工程缺陷/队列/最小修法复核。双方唯一058残余消费，保持两姓名保存加密和merchant.viewed已修。
+Codex追加了正常同组单次反证：merchant.profile.view和pii.contact_phone.view同来源single-use，原Controller先消费功能权，后判断手机号已无权，第一响应即脱敏，第二PERMISSION_DENIED；完整真实Java探针在selfV0.16。故简单后置helper requirePermission仍漏该正常路径。候选复用已有AuthorizationService.requirePermissions一次核验功能权+可选电话权、按来源消费一次；七个商户入口通过共享helper获得本次明文许可并传给两mask重载，避免消费后重新查询。无电话权保持仅原功能权限及脱敏。请核实该反证与最小边界，不把本地boolean返回值误作新增业务开关/权限。禁止修改全局boolean查询语义/新增端点角色权限/HTML/回填/其它模块。若不认可请完整报告具体反例，不动手。
+原OBS编号双方历史语义不一致，候选完整并列保留而不覆盖原报告，不新增finding；059旧行未回填是批准边界，不在本批重开。先验全部26项，不只看058。只能追加上述Grok报告，禁止改源码测试台账锁主.git，禁止fetch提交推送部署写库/MCP/子代理。成功或FAIL均报告完整归并意见及精确输入版本SHA。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M009 B4-r5派发
+```text
+/home/james/.local/bin/grok -p '按V0.17执行M009 B4-r5完整修复diff独立审计，只写modules/M009-b4-r5-grok-raw.md，文件若存在追加完整新版不覆盖。首行独占CRITERIA-LOCK-SHA256自算。B3累计5（操作员追加一次已批准），本批B2 selfV0.17/GrokV0.16双PASS，findingsV3.48仅058队列是。before tree 4ddfdc255c4bbf0da9d42837e9b1bd7c0124b6be、after tree a685f41c8cc2333c5bb937acce746d5258f9eade。你必须独立git diff --binary两tree完整不滤路径，全文和逐块ID归因写raw；实际2文件Controller V0.03+Tests V0.04，全部归058。主工作区不能改代码测试索引hook。
+修法已按你B2同意边界：七入口原view/manage功能码经共享requireMerchantPermission，电话权有效才同次requirePermissions(functional,phone)，无电话权只原functional；请求内boolean传两mask，无消费后再查。不改全局AuthorizationService、不添加功能/HTML/DB。红阶段19测试5fail0error，对应4单次/同组列表写回+消费失败用例；绿70+19+25=114全部通过。请独立核验现码/完整diff/授权范围/单次、同组、真实master/普通admin、无电话权、失败不泄漏、版本/测试质量、每行归058，不扩大到其它模块。可跑纯单测与绝对/tmp隔离探针，不写库/不修改业务测试；如有所有问题完整报完再判，不边审边修。禁止读取本次self B4或原始CLI给对方。仅你Grok席，禁止MCP/子代理/fetch/提交/推送/部署/安装/主.git写。退出交完整报告；B4通过也不是模块PASS。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M009 B5-r5派发
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt.md V0.17执行M009 B5-r5修复后整模块独立三线审计。B4-r5两席已PASS（不要只看diff），B3累计5；20FILES以plan/modules.md为准，当前3381行自行算，现锁88判据全部定义+三HTML全文适用段核对。全部20文件完整读、第一性/顺从/对抗三线，不继承B4或旧PASS。既有26项本次当前队列全部否，仍逐项重判，包括058消费及此前第2项留痕/059姓名保存加密；发现所有问题后完整报告，不边审边修。
+三项批准：PGM871授权商户联系人页面列表/操作结果可明文，PGM680不扩导出打印，PGM656单次消费原句保持。HTML现文已在锁，不引用旧禁令，不擅加新功能/姓名生日/旧数据回填。既有scope/幂等时序按已批准B2保持。原OBS及B4观察并列保留，XM各模块不扩。V427顺序等既有环境红保留不擅修，不宣称全链绿。
+唯一写入modules/M009-b5-r5-grok-raw.md；若已有则追加完整新版本、旧字节不覆盖。首行独占CRITERIA-LOCK-SHA256自己实算；写全范围每ID/判据矩阵、实跑证据、任何新finding临时编号和冻结依据及四分类。禁止读本次self B5、禁止改生产代码测试HTML锁台账及主.git；禁止fetch提交推送部署安装/MCP/子代理。优先纯单测/只读核实，可绝对/tmp隔离探针并先验证路径，不跑写库集成测试。本批生产仅Controller变，无数据库修改；不将旧surefire XML当本次测试。输出只交指定完整报告，由调度汇总。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M038 现锁B1派发
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt.md V0.17，固定Grok只读席乙，与Codex并行互盲执行M038当前锁B1全模块审计。正本/home/james/complex-management main。原M038有B3累计1和旧B5/B2历史，本次接续按现行criteria-lock完整重新审，不继承旧PASS，不重做已修。全部16个FILES以plan/modules.md M038为准，全文读，当前行数和SHA实算。当前映射106判据全部定义与三HTML适用原文核对，不只审011。完整第一性/顺从/对抗三线。现行业务HTML已批准商户档案联系人号码查看例外但不扩导出打印，单次授权规则不改；本模块不修改HTML。当前findings中001—010历史已修及011复制/应用模板重复提交候选均只作既有输入，逐项重判所有ID/观察/XM，不能依据旧表是值就直接修。所有新问题临时GR号、冻结依据、四分类、实际代码/复现证据，先完整审完不边审边修。
+先自核技能按提示词收窄，不派子代理/MCP。禁止读本次M038-b1-self-raw.md新增段。禁止修改生产/测试/HTML/锁/台账/主.git，禁止fetch/worktree/提交推送部署安装；本轮规程优先于历史其它席checkpoint操作。允许主工作区现有vitest指定本模块11测试、现有只读检查，禁止数据库写入。依赖只读追证不扩范围；不要把测试能跑等同产品正确，也不以先前报告代当前证据。
+唯一写入 /home/james/complex-management/docs/audit-2026-09/modules/M038-b1-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；本次自身版本V0.04。先独立实算criteria-lock全文SHA，报告首行独占CRITERIA-LOCK-SHA256: <64hex>，不要抄其它席或旧锁。报告完整覆盖全部文件/106判据/11既有ID，明确最终PASS或FAIL。CLI不输出报告正文/机器标记，适配器只取交付回执。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## M038 现锁B1实际交付回执
+2026-09-22T14:48:49.315318+00:00。REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M038-b1-grok-raw.md；EXIT_CODE=-15；ADAPTER_ERROR=GROK_EXIT。仅交付事实，非审计PASS；未读正文。
+
+## M010 现锁B1派发
+```text
+/home/james/.local/bin/grok -p '执行160-audit-prompt.md V0.17，固定Grok独立只读席乙，正本/home/james/complex-management main。操作员最新明确按该提示词继续M010及后续，故M010本次重开完整B1，不把此前Codex单席补充复查当双PASS。历史修复/报告保留，B3累计2不清零。
+范围plan/modules.md M010四份冻结迁移V005/V048/V318/V354（203行），以及本模块已修纠正迁移V410全文（26行）作为直接修复证据。当前criteria-lock映射GEN001—018全部定义，按第一性原理/顺从式/对抗式完整审计。三HTML实际原文用于来源追证，但不扩锁/判据。全部14既有ID及观察重新核当前事实；不得把历史V318父链/V354角色当最终模式而无视V410，也不得因旧PASS免审真实问题。历史001删父链、002/003删除spv/operation授权已给，不重复询问已批准范围。其余模块观察不扩范围。
+先自核技能、按提示词收窄。禁止读取本次M010-b1-self-raw新增正文，禁止修复代码/SQL/测试/HTML/锁/ledger/findings、主.git、fetch/worktree/提交推送部署/MCP/子代理。只读核当前complex_test结构、Flyway记录/checksum、直接测试/源码；不执行迁移/建库/回填/写库测试，不source全env、不输出秘密。可复用同源最近实跑证据但必须标明非本次新执行。必要反例应在不修改主工作区、不写业务库的可丢弃绝对/tmp上下文完成。任何新问题先完整收齐、临时GR号+文件行+冻结ID+四分类+实证，不边审边修。
+唯一报告/home/james/complex-management/docs/audit-2026-09/modules/M010-b1-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建。报告自身Vx.xx较前次前进；本次首行独立实算当前criteria-lock全文SHA，独占CRITERIA-LOCK-SHA256: <64hex>；不得抄旧值或他席。本次完整四源+V410、18判据、14ID三线，给明确PASS/FAIL。CLI不回正文/机器标记，适配器只处理交付事实。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M010 现锁B1实际交付
+2026-09-22T17:47:04.212731+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M010-b1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M010 当前B2 派发
+```text
+/home/james/.local/bin/grok -p '执行160-audit-prompt.md V0.17的M010现锁B2，固定Grok只读席乙。只复核当前两份B1完整报告（self V0.04及B2 V0.05；grok B1 V0.03）与findings.md V3.51顶部“当前M010现锁B2候选”至结束标记之间的14项/9观察。核全部差集、分类、当前队列（均否）、历史002/003删除授权、已修001—004/012与登记项，不能漏并或改写自己的finding。旧历史表的是/待答不是当前队列。无新finding。两席B1已PASS，B3累计2不变；B2只决定归并，不修复不提前宣称模块PASS。
+本次不进行新技术全审或运行写库测试。你此前B1曾创建并删除临时探针数据库，已经如实登记；这次严格禁止任何建库/删库/建表/写数据，包括临时库。只读既有报告/SQL/schema，禁止源码/HTML/锁/ledger/findings/.git修改，禁止fetch/提交/推送/MCP/子代理。输出完整B2 PASS/FAIL，列14项和9观察差集，若有漏并明确指出但不自行改台账。
+唯一报告/home/james/complex-management/docs/audit-2026-09/modules/M010-b1-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建。追加B2段自身版本V0.04（若已有更高则递增），注明两份输入raw路径及当前候选；本次B2禁止写CRITERIA-LOCK-SHA256行。CLI不返回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M010 当前B2 实际交付
+2026-09-22T17:56:46.643037+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M010-b1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M010 当前B2双PASS定稿
+两席当前B1/B2均PASS，Grok两次实际exit0；14项当前队列全否，无新ID，9观察归并；013按Grok票补齐三事实。findings V3.52。B3累计2，本次修复0；跳过新增B3/B4，进入B5-r2，生命周期仍IN_PROGRESS。Grok B1建临时探针库偏差已登记，Codex额外只读确认无残留。
+
+## M010 当前B5-r2 派发
+```text
+/home/james/.local/bin/grok -p '执行160-audit-prompt.md V0.17 M010 B5修复后全模块独立审计，固定Grok席乙。当前B1/B2双PASS，findings V3.52当前M010候选节已标定稿，14项均否，9观察完整归并；013补齐NULL/空串同键、全局与组织可同名、inactive占名。无本次新B3/B4，历史B3累计2，所以B5-r2。旧B5不替代本次。
+范围plan M010四冻结SQL V005/V048/V318/V354全部203行、既有修复V410全26行；冻结映射18GEN全文，三线完整重审整个模块，不只看修复点。来源追到HTML但不扩锁。只读源/当前schema/Flyway/checksum与直接消费方、已有验证证据；可以引用本次B1真实探针结果但标明非B5新执行，不需重复同源测试。必须读完整每份SQL，核14ID现态、反例边界，不拿前轮PASS免审。
+严格禁止任何数据库创建、删除、迁移、表DDL或写数据（包括临时库）；禁止写库测试；可读文件和SELECT。禁止源码/HTML/锁/ledger/findings/questions/.git修改，禁止fetch/worktree/提交推送部署/MCP/子代理。此前B1临时探针超出派发约束已登记并清理，本次不得再做。不要读取本次M010-b5-r2-self-raw新增正文。只可写唯一指定grok报告。
+唯一报告/home/james/complex-management/docs/audit-2026-09/modules/M010-b5-r2-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建。自身版本递增，本次完整报告第一行独立实算criteria-lock全文SHA，独占CRITERIA-LOCK-SHA256: <64hex>，不得抄值。本次全范围明确PASS/FAIL，有新问题完整收齐才交付，带文件行/冻结ID/分类/证据，不修复。CLI不回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M010 当前B5-r2 实际交付
+2026-09-22T18:08:48.911539+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M010-b5-r2-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M010 当前全流程关闭
+2026-09-22T18:09:22.954984+00:00 B1/B2/B5均双PASS；B5 Grok真实exit0。B5后四值实算/sidecar/ledger/Grok全等b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，LOCK-AMEND-COUNT1。self B5 V0.04 SHA03477f08fd20a6743c145272e7947d0430016dd52c54f7b77be943760630ebc0；Grok B5 V0.02 SHAf617c513ad4654f4fa10d9507e52e1da5f911c36ab0a4e68be6774dbf044751b。生命周期PASS，历史B3累计2，本次新修复0，无源码/HTML改动。下一模块M011。
+
+## M011 当前B1 派发
+```text
+/home/james/.local/bin/grok -p '执行160-audit-prompt.md V0.17 M011 B1完整当前锁重审。固定Grok独立只读席乙，M010已现锁完整B1/B2/B5双PASS关闭，严格顺序进入M011。ledger M011 IN_PROGRESS，历史B3累计1保持。
+范围plan M011三完整测试文件PlatformControllerTests.java、PlatformJdbcIntegrationTests.java、PlatformServiceTests.java，当前532/760/1484=2776行；冻结时1342行仅历史元信息，不漏当前全文。映射87项（69HTML+18GEN）从当前criteria-lock自读完整定义。三线完整审查测试真实性、全部行为/权限/项目商户范围/PII规则/软删/主体绑定/数据库缝/失效测试；需求以三HTML为唯一来源，当前治理HTML允许获有效权限或真实密钥最高权限在商户两联系号码页面与响应看明文，不能把旧全面遮蔽口径带回来。
+既有M011-001…007全重核，005测试命名/断言、006跨模块createSpaceType幂等旧观察和007环境/夹具现态不可只沿用旧结论。M009最新获批手机号一次性权限修复测试已在本模块，按当前HTML与锁审，不新增功能。
+禁止读本次M011-b1-self-raw新增正文。只读源/HTML/锁/已有测试证据和数据库SELECT；本轮Codex会运行三文件测试，你不运行Maven避免共享target与库竞争；用独立源码追证检查断言是否能失败，标明未新跑测试，不以绿代审。禁止任何建库删库DDL写业务数据，包括临时库；禁止编辑任何业务源码/测试/SQL/HTML/.git或ledger/findings/questions/锁，禁止fetch/worktree/提交推送部署/MCP/子代理。只允许追加指定Grok raw。
+先完整审完范围再收齐全部新问题：临时GR编号、文件行、冻结ID、四分类、实证，不边审边修。无问题明确PASS，有问题完整FAIL但不自行修。
+唯一报告/home/james/complex-management/docs/audit-2026-09/modules/M011-b1-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建。版本递增，首行独立实算criteria-lock全文SHA并独占CRITERIA-LOCK-SHA256: <64hex>，不抄值。CLI不回正文或机器标记。先技能自核按V0.17收窄。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## 操作员新增发布授权（2026-09-22）
+操作员原话：“记得提交合并推送”。此新指令覆盖提示词的收口不提交/不推送限制；审计期间固定双席和不修复未定稿项等规则仍适用。模块通过并完成范围/依赖核查后执行提交、推送、合并；不得将已暂存的其它未完模块混入。已实际git fetch origin，未改主工作区内容/index/HEAD；origin/main与本地HEAD分叉54/49，既有PR #440/#441含M018等累计改动且历史CI失败，不按标题盲合并。当前M011 B1 IN_PROGRESS，B3累计1；Grok仍运行，exit待进程结束。席甲V0.04完整报告已封存（SHA 0616b00ea1e092f23c05e897984288a4048c62fdc59a5bef16f1fadcee227a34），未读本次Grok正文。无新人工闸。
+
+## M011 当前B1 实际交付
+2026-09-22T18:24:35.698983+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M011-b1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M011 当前锁B2 派发
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt.md V0.17执行M011当前锁B2整批归并复核（只读Grok席乙）。输入：M011-b1-self-raw.md V0.04完整B1+V0.05甲票；你本次M011-b1-grok-raw.md V0.04完整B1；findings.md V3.53顶部“当前M011现锁B2候选”SHA b4219467662b8efcb4681bd04d7de70b732abdf9c1d3542ba08a94f143393365。两席当前B1均PASS；四值均b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。候选全7既有ID现队列否并逐项归并你12条OBS-R，核无遗漏/无改写原意/无新判据或功能，分类正确，旧B2-r2收窄003/005应保留。对每ID、全12观察及整批投PASS/FAIL；若否精确解释而不修。Codex本次实际三类测试113=19/24/70均零失败/错误/跳过，不把你的静态注解数或未跑测试算成实跑次数。
+不得新增独占CRITERIA-LOCK-SHA256行（B2）；不得改findings/ledger/锁/HTML/源码/测试/.git，不建库删库包括临时、不DDL不写业务数据、不跑Maven、不fetch/提交/推送/MCP/子代理。用户最新已授权Codex后续提交合并推送，不改变你只读角色；当前不是发布或修复。
+唯一报告/home/james/complex-management/docs/audit-2026-09/modules/M011-b1-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建。文件自身版本V0.04→V0.05（如实际有新版本读当前后递增）。终端不返回正文或机器标记。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M011 当前锁B2 实际交付
+2026-09-22T18:33:30.777185+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M011-b1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M011 当前锁B2双PASS，进入B5-r1
+self V0.05/Grok V0.05均PASS；Grok实际exit0，B1后四值全等。findings V3.54定稿7ID全否，12观察完整归并；跳过新B3/B4，累计1保持。B5按全3文件2776行/87判据重新双席审查，独立封存self后才读Grok；模块IN_PROGRESS。操作员提交合并推送授权保留，发布核查另行执行，不混未完模块。
+
+## M011 当前锁B5-r1 派发
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt.md V0.17执行M011当前锁B5-r1完整独立复审。当前B1/B2两席PASS、findings V3.54顶部M0117ID全否+12观察全登记；本次无B3/B4，历史B3累计1，故同名b5-r1追加完整报告，不另编号。不能沿用B1/B2或历史B5票，重新审全部3文件当前2776行PlatformControllerTests/JdbcIntegrationTests/ServiceTests，87映射完整判据（含18GEN），三线追断言有效性、权限/PII/软删/主体/项目隔离/未来绑定/真实数据库并发/一次性权限等接缝。当前HTML两联系人明文例外适用，旧B2-r2收窄003/005保持。既有7ID及12观察全核；所有新问题全收齐临时编号，禁止边审边修。
+Codex B1本次真实运行113=19/24/70全通过，源字节保持；可以只读Surefire XML独立核对，不得把你的未跑说成新跑。无源码修改或未解疑点不必重复Maven；不要与Codex并行Maven/改target。禁止读本次M011-b5-r1-self-raw新增正文，等本席报告封存后主调度才归并。只允许写指定Grok raw，不改ledger/findings/锁/源码/测试/SQL/HTML/.git，不建删库包括临时、不DDL不写业务数据、不fetch/提交推送/MCP/子代理。仅Codex有用户新发布授权，不改变你只读职责。
+唯一报告/home/james/complex-management/docs/audit-2026-09/modules/M011-b5-r1-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建。版本按现有递增。首行独立实算锁全文SHA以CRITERIA-LOCK-SHA256: <64hex>独占行写出。CLI不回正文或机器标记。先技能自核按V0.17收窄。完整B5结论只能PASS/FAIL，不作有条件通过；真实逐文件完整审阅，不以汇总或绿测试替代。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+## M011 B5期间发布准备实测（操作员已授权）
+本次npm run verify:predeploy真实exit1，首项html-ledger-sync因获批PGM V0.13两句未在docs/prd-audit/business-decision-ledger.md追加登记而拒绝。独立verify:entry-anchors真实exit0；不能说整套门禁通过，后续项尚未因链式停止执行。当前只核查未改镜像或业务文件，待审计收口后按既有HTML批准原文处理必要发布同步，不引新业务。GitHub旧PR #440/#441含其它模块及历史红CI，不盲合并。主工作区HEAD/index/hook仍原值，只有fetch更新远端引用。当前M011 B5席甲V0.03完整PASS已封存，54914bytes SHA b4127b2337304691bd377a3f95dce69f33173bd5bcf3cdbec11c030aa4cb3f3d；Grok未结束，不读未完成报告，不记模块PASS。
+
+## M011 当前锁B5-r1 实际交付
+2026-09-22T18:43:57.703947+00:00 REPORT_PATH=/home/james/complex-management/docs/audit-2026-09/modules/M011-b5-r1-grok-raw.md EXIT_CODE=0 ADAPTER_ERROR=None；仅交付事实，不是审计结论。
+
+## M011 当前锁B5-r1双PASS收口
+2026-09-22T18:44:34.711836+00:00。self V0.03 SHA b4127b2337304691bd377a3f95dce69f33173bd5bcf3cdbec11c030aa4cb3f3d / Grok V0.02 SHA 6a95b55c1fe6b9846214dd83aa61339e713db9371ede116eeb03926128958b44，完整报告均已读，Grok真实exit0；四值全等b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。findings V3.54全7ID否、12观察否，无新缺陷；113=19/24/70通过，B5只重读有效XML并核源hash，不冒称再次跑测。先记PASS再更新收口。Grok OBS08广义措辞须按B1/B2原始对象分开读：createSpaceType走executeWrite必填键，不宣称所有生命周期方法都走它；无新修复。技能发现范围以其B2记录找到ubiquitous-language为准，不把B5未找到改写成不存在。下一模块M012严格顺序。提交推送合并尚未完成；发布台账同步及主分支分叉待处理。
+
+## M012 当前锁完整B1重开
+M011已B5双PASS后顺序进入M012；先PASS→PENDING再IN_PROGRESS。六文件2085行、21判据、既有17ID及观察完整审，不因历史PASS跳过。B3累计4保留；若发现需修复，先B2定稿，累计轮次规则与既有明确授权范围照执行，不自行新增轮次。三HTML不改，发布授权仍待完成。
+
+## M012 当前锁B1 派发
+```text
+/home/james/.local/bin/grok -p '按160-audit-prompt.md V0.17执行M012当前锁完整B1，Grok只读独立席乙，与Codex并行。M011刚完整B1/B2/B5双PASS，现顺序进入M012。ledger IN_PROGRESS、历史B3累计4保持，旧第4轮授权不当新第5轮许可。全范围plan M012六文件GovernanceTopologyPage.tsx/.test.tsx、OrganizationMerchantPage.tsx/.test.tsx、SubjectBindingsPage.tsx/.test.tsx，当前2085行（274/308/520/435/257/291）；三线全文审，不只17旧ID/差异。21映射为BSM-001/003、PGM-001和18GEN，读取完整定义。以当前三HTML为唯一业务源，不凭实现反向立法，不新增功能。
+重核既有001—017全部当前状态+观察，006/007原操作员答删除保留，009不擅补附件/绑定创建/项目分配/项目资料三输入；旧B2对“501项目”反例已撤回因真实/projects按当前project主键0或1，别只读旧草稿。治理HTML当前获批商户两联系人有效权限/真实密钥最高权限查看例外不扩大导出。若发现新问题用GR临时号、冻结判据+源码/可复现证据、四分类、最小处置收齐后一次报告，不边审边修。禁止读取本次M012-b1-self-raw新增正文。
+本轮Codex单独运行六文件相关前端测试与typecheck；你不并发跑测试/改共享产物，可只读核断言与源码依赖。禁止Maven/建删库含临时/DDL/写业务数据。仅可写指定raw，禁止其它文件/源码/测试/HTML/锁/ledger/findings/.git，禁止fetch/worktree/提交推送/MCP/子代理。用户已授权Codex后续提交合并推送，不改变你只读职责，也不跳过审计或门禁。技能自核按V0.17收窄。
+唯一报告/home/james/complex-management/docs/audit-2026-09/modules/M012-b1-grok-raw.md。指定路径已有内容则把本次完整审计报告追加到末尾，不得覆盖；文件不存在则创建。自身版本依最后现版递增。首行独占CRITERIA-LOCK-SHA256: <独立实算64hex>。终端不回正文或机器标记。B1结论PASS/FAIL，发现问题完整收齐，不能条件通过。' -m grok-4.6 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 2026-09-22 发布优先与后续逐模块发布
+操作员明确“优先补齐提交、推送、合并”，且后续每模块审计完成必须提交、推送、合并后再推进。M012 审计暂停推进，既有外审交付只保留，不提前读取。第一批发布 M001—M008 已审字节及当前锁/台账；业务决策台账 V0.25 机械补记已批准的 PGM680/871，HTML 不再改。发布专用隔离工作树位于正本 .scratch 下，主索引及在制源码保持。M009—M011 及权限依赖另批核清，不将第一批称为全部发布完成。

@@ -1002,3 +1002,180 @@ SELF_B2_VERDICT: PASS
 输入本次完整raw：modules/M006-b5-r1-self-raw.md V0.01 SHAe2d2dad27f657ae4cd8a5ed1431f2b669bc043079a011037d5348700b42231f7（唯一CX-01 FAIL）；modules/M006-b5-r1-grok-raw.md V0.01 SHA610de7573e1cdcb85dffa615821b3e42aa50b400c58dc7b2c338e19cef874084（PASS、无新GR）。
 候选findings V1.04本批新增047；037/038登记不动、039–043已修出队、044–046细化不动，旧001–036不复用。全部差集只有CX-01，无漏并/偷改Grok意见/未答项。Grok原PASS完整保留；其“生成器自述同口径”不否认当前三类映射为空的实测事实，工程保证是否夸大必须在本批乙席独立复核。
 047依据GEN002/016/018、分类GEN017+HTML:210/PGM066，属细化且当前文档描述缺陷；只将L96的“均已”改“已”，加“或已记录对应接入开关关闭”，保持8/防伪生产边界/所有机器标记。标题V0.11→V0.12归047，deploy与工具/快照/HTML不改。范围与最小验证可执行，无新业务或新判据。当前本席B2 PASS，仍须Grok同候选PASS方可定稿和B3-r2。B3累计1不变。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+UTC 2026-09-22T11:02:43.020071+00:00
+
+# M006 现锁B1完整独立审计
+版本：V0.20
+范围：docs/delivery-readiness-gates-v0.1.md V0.12 158行 SHA0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09；docs/deploy-and-change-flow-v0.1.md V0.07 48行 SHA543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1。两份206行全部读取；计划207为旧修前计数不修改计划。79映射判据=61HTML+18GEN逐项。不是历史权限代码M006。先派Grok并行，本报告封存前未读本次外席raw。
+
+技能：本任务已读using-superpowers/grilling/diagnosing-bugs/verification/receiving/codebase-design/writing-for-agents方法按V0.17收窄继续使用；只问自己，不派第三席，不新增文件种类/规则。配置文档按类型4，无新业务测试文件。
+
+## 全文覆盖与真实消费
+delivery L1–7定位：准入只检查最低工程前提不是完整验收；L9–53机器标记内部标识，不当已上线；L55–106两列表逐项命令名和用途，当前67个npm引用全有定义，parent49项&&链未含完整后端测试/构建/部署直接入口；L108–113外部资料/MDM/本地AI只读边界；L115–127上线安全和按场景补验；L129–140失败处理，生成命令仅说明不在本次执行；L142–150 mock报告/8partial/生产不伪闭环；L152–158No-Go指挥板。Markdown原生两表47行均2列、1围栏，无断行丢命令。
+deploy L1–3历史原因；L5–10四道门禁和逃生边界；L12–18五步变更；L19–24真实限制；L26–31workflow镜像/基线/参数及CSV契约；L33–48仓内已做/外部条件/typed gh示例/DB隔离。当前两脚本全文读，merge73行、propose30行，真实main保护拒绝，未执行网络push/merge。M005已同轮实证workflow/hook/部署循环，复用同字节阅读和事实，不继承其模块PASS作为本模块依据。
+直接消费者：verify-delivery-gates.mjs333行本任务已全文读且当前实跑；external trace生成器全文（含关闭switch分支）及integration-capability-switches全文，runtime生成器477行全文读（原输出截断处已补齐）。仅核文档声明，不扩审这些工具整个模块。
+
+## 第一性原理三问
+1. 为什么需要：delivery汇总真实工程准入和HTML生产上线/外部集成边界，deploy告知维护者如何送审/合并/部署及无法强制的局限。纯工具字段无HTML逐字不是应删除；生产要求先归细化，npm/Git字段技术性。
+2. 实际验证：原生Markdown、67命令/所有路径、docs/trace check、运行证据过期反例、提议/合并main拒绝、gh typed请求loopback捕获都实跑；说明性内容按2.3类型4，不真实改GitHub设置或部署。61冻结HTML完整摘录逐字在当前三HTML存在，零漂移。
+3. 未验证的前提：未连接生产数据库证明当前live实例/账号、未执行整个delivery父串/全回归/部署/真实合并/PUT/新生成报告，不能把一条静态check绿当生产可用。源码测试用户与配置默认均complex支持文档所述隔离风险，但不声称现场全部连接已经核实。
+
+## 四分类逐段
+- delivery生产上线、供应商未定、预留mock/关闭开关、不能以假证据关闭生产边界：细化BSM116–119/PGM039/066；不新设业务功能。
+- delivery机器标记、npm命令/返回值/生成入口、deploy仓库工程治理：技术性，不创造业务角色/状态/价格。
+- 044 MDM：BSM115工作手机设备管控及PGM619–620企业统一管控有直接上位；细化，无缺陷。
+- 045对象存储：PGM066永久存储/证据留存既有上位，存储载体不新建保留期或审批规则；细化，无缺陷。
+- 046AI限制：BSM112只读分析不能控制+PGM532人工确认建议（后者只为分类参考不扩锁）支持本地AI只读工程边界；本文不取消人类操作的既有业务权限，不新加经营规则；细化，无当前缺陷。
+- 未发现冲突/添加/HTML自身问题。旧分类意见仅输入，以上以当前原文重新判断。
+
+## 79映射判据逐项
+| ID | 本轮逐项结论与范围 |
+|---|---|
+| BEQR-085 | 业务动作N/A：两文档不定义“项目开放状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-086 | 业务动作N/A：两文档不定义“场次状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-087 | 业务动作N/A：两文档不定义“游乐「当天／每天」口径”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-088 | 业务动作N/A：两文档不定义“容量双阈值”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-089 | 业务动作N/A：两文档不定义“园区容量”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-090 | 业务动作N/A：两文档不定义“设备关键/辅助分级”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-091 | 业务动作N/A：两文档不定义“全园故障与补偿通票”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-092 | 业务动作N/A：两文档不定义“安全严重度”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-093 | 业务动作N/A：两文档不定义“巡检任务状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-094 | 业务动作N/A：两文档不定义“越界类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-095 | 业务动作N/A：两文档不定义“团体/包场”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-096 | 业务动作N/A：两文档不定义“游乐增强阶段”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-118 | 业务动作N/A：两文档不定义“运营营业日”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-146 | 业务动作N/A：两文档不定义“运营公司职责”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-155 | 业务动作N/A：两文档不定义“商户/运营主体状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-160 | 业务动作N/A：两文档不定义“招商线索状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-161 | 业务动作N/A：两文档不定义“招商意向阶段”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-162 | 业务动作N/A：两文档不定义“品牌/客户库类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-163 | 业务动作N/A：两文档不定义“合同变更类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-164 | 业务动作N/A：两文档不定义“退租结算状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-165 | 业务动作N/A：两文档不定义“内部应付执行状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-166 | 业务动作N/A：两文档不定义“合同审批链”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-167 | 业务动作N/A：两文档不定义“租金/账单类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-168 | 业务动作N/A：两文档不定义“营业额抽成模式”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-169 | 业务动作N/A：两文档不定义“公区能源费”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-170 | 业务动作N/A：两文档不定义“铺位租赁状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-171 | 业务动作N/A：两文档不定义“物业工单类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-172 | 业务动作N/A：两文档不定义“物业工单状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-173 | 业务动作N/A：两文档不定义“商户服务工单状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-174 | 业务动作N/A：两文档不定义“工单时效”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-175 | 业务动作N/A：两文档不定义“楼宇机电设备状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-176 | 业务动作N/A：两文档不定义“设备维保类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-177 | 业务动作N/A：两文档不定义“能耗表计类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-178 | 业务动作N/A：两文档不定义“抄表状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-179 | 业务动作N/A：两文档不定义“能耗归集对象”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-180 | 业务动作N/A：两文档不定义“楼宇巡检任务状态”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BEQR-181 | 业务动作N/A：两文档不定义“楼宇巡检类型”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-020 | 业务动作N/A：两文档不定义“楼宇运营”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-028 | 业务动作N/A：两文档不定义“主要功能”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-081 | 业务动作N/A：两文档不定义“楼宇运营：机电设备、能耗抄表、楼宇巡检”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-082 | 业务动作N/A：两文档不定义“主要功能”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-083 | 业务动作N/A：两文档不定义“和谁有关”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-111 | 业务动作N/A：两文档不定义“经营看板：让管理层和运营看得懂、能追问”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-112 | delivery L113本地AI只读建议、不直接做处罚退款调价核销绩效，对应只读分析界面不能发控制；不改人工业务处置规则。AI合同建议另有PGM532分类参考。 |
+| BSM-113 | 业务动作N/A：两文档不定义“谁会看”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| BSM-114 | 交付涉及不同端的验证，不重定义私人/工作手机权限。批准后的查看考勤口径未被两文档覆盖或抵触；不声称终端实现完成。 |
+| BSM-115 | delivery L111/151 MDM依赖细化工作手机设备管控与外部集成留痕；说明缺证不能称生产完成，无新增经营规则。 |
+| BSM-116 | delivery L117明确准入不等于完整上线验收，生产加固另须完成；细化。 |
+| BSM-117 | delivery L117保留强密码、U盘托管、相关留痕，未声明当前已经生产执行；细化。 |
+| BSM-118 | delivery L117保留自动识别环境安装包和业务教程要求；本文工程命令不替代现场教程；细化。 |
+| BSM-119 | delivery L117保留上线留痕和权限安全，与本判据一致；无新权限。 |
+| GEN-001 | 交付/部署说明有实际命令消费；两个文档职责不同不重复删除，无新增配置。 |
+| GEN-002 | 67个npm名和路径全存在，真实docs与trace check通过；提议/合并main拒绝、gh本地typed payload通过，不冒称部署实跑。 |
+| GEN-003 | 文档按类型4豁免业务测试；Markdown原生解析、命令存在断言、运行证据陈旧反例确实exit1，非伪测试。 |
+| GEN-004 | 说明不要求把用户输入拼shell；gh字段类型通过loopback实际验证。基线输入直接依赖已证fail-closed。 |
+| GEN-005 | 四道工程门禁与产品审批分离，逃生口/同仓绕过/私库403如实披露；实际业务权限不在此二文档执行。 |
+| GEN-006 | 不修改业务金额/状态；本文禁止伪造生产证据，manifest约束属于工具/证据模块，不冒称其事务实现已审。 |
+| GEN-007 | 部署/合并指令非业务幂等服务；merge源码再次校验head并match-head-commit，无新增锁需求。 |
+| GEN-008 | 67npm引用和package脚本一致，表格47行全部2列，workflow镜像与当前入口相符，047涵盖关闭开关分支。 |
+| GEN-009 | 失败节要求修真实根因后重验；运行证据陈旧实际失败，没有重生成或篡改状态刷绿。 |
+| GEN-010 | 文档没有密钥正文；演示gh字段只用loopback假token，不打印真实token；外部证据引用/强密码边界保持。 |
+| GEN-011 | 要求保留验证输出和真实生产证据；READY标记是机检标识不是生产完成声明，正文明确限制。 |
+| GEN-012 | 父链49项有限且不直接后端全测/构建/部署；NAS网络诊断在工具内部，本轮不跑整个父链，不凭轻量一词扩性能规则。 |
+| GEN-013 | 67命令入口都声明；真实配置/调用顺序相符，父链以package为准，文档不虚构固定执行排序。 |
+| GEN-014 | 两文档无DDL，独立账号/实例是工程隔离说明；源码默认与测试用户名相同可核，未连接生产DB，不声称验证所有实时连接。 |
+| GEN-015 | 面向工程维护的文档而非业务用户UI；命令/机器标记英文属内部标识，不套全终端零英文规则强译代码。 |
+| GEN-016 | 当前行数206与计划历史207是旧修复差异；所有路径有效，047现句与8disabled实态一致，运行证据陈旧按文档预期被拒绝。 |
+| GEN-017 | 交付安全/外部依赖约束按HTML细化，纯npm和Git操作按技术性。MDM/对象存储/AI原句逐项对照，不因缩写缺失认添加。 |
+| GEN-018 | 判断落在61HTML摘录当前字节、原生Markdown/真实命令/只读消费者及loopback gh输出，无旧PASS替代。 |
+| PGM-015 | 业务动作N/A：两文档不定义“楼宇运营”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-018 | 业务动作N/A：两文档不定义“物理项目与运营公司：多对多协作，不是固定隶属层级”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-026 | 业务动作N/A：两文档不定义“主要功能”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-039 | delivery L68/112/113禁止供应商未定真实控制及独立AI服务提前实施，不定义设备动作/触发/延时；不擅自完成独立立项。 |
+| PGM-052 | 业务动作N/A：两文档不定义“楼宇运营：管好建筑本身的设备、能耗和巡检”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-053 | 业务动作N/A：两文档不定义“楼宇机电设备”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-054 | 业务动作N/A：两文档不定义“能耗计量”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-055 | 业务动作N/A：两文档不定义“楼宇巡检”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-056 | 业务动作N/A：两文档不定义“和谁有关”的实体、状态、数值、流程或权限；只声明工程验证入口，未据此宣称该业务已实现/测试通过。逐字HTML无冲突。 |
+| PGM-066 | delivery外部资料未定只mock/示例、开关关闭不能当真实证据，L96实际覆盖8disabled；对象存储是持久证据载体，不引入自动删除策略。工程内部标识不冒充业务终端文案。 |
+
+
+## 顺从式与对抗式
+逐条核对两文档全文和引用命令，未以模板READY/快照绿色当生产完成。对抗：1）main调用propose真实exit1；merge先用非法method探针exit1，再用有效--squash在main真实exit1；均在push/merge之前终止。2）文档gh保护命令解析原词，唯一将endpoint换127.0.0.1随机端口、token改假值；捕获真实GH CLI PUT JSON，布尔/整数/null/数组类型正确，没向GitHub PUT。3）runtime --check源码改动+55.9天过期真实exit1，说明L102“陈旧失败”确实生效，不重生成刷绿。4）047生成器在mapped空且disabled非空分支跳过manifest行要求，当前8项均该状态，文档L96有“或已记录对应接入开关关闭”，不再声称全部有manifest。5）工具镜像/部署循环/基线和脚本consumer一致，CLI逃生口明确不是安全边界。
+
+## 全部当前finding（供B2归并）
+- CX-01→M006-037：delivery全文无缺陷段；生产用途细化、纯命令/机器标记技术性。当前工程缺陷否/队列否，GEN002/008/016/017/018及BSM116–119/PGM039/066，证据类型1/4。
+- CX-02→M006-038：deploy全文工程流程；技术性，无业务发明，当前缺陷否/队列否，GEN002/005/009/010/013/016/017/018，类型4。
+- CX-03→M006-039：历史损坏表/排序/父链描述；当前表47行2列、父链只verify、无命令丢失，已修队列否。
+- CX-04→M006-040：历史40/31固化计数已删，文档按当前全部，队列否；8partial与当前实证一致不机械删准确数值。
+- CX-05→M006-041：gh保护示例类型，真实本地捕获bool/int/null/array正确，历史缺陷已修，队列否。
+- CX-06→M006-042：部署固定数组入口说明与两部署循环一致，历史已修队列否。
+- CX-07→M006-043：delivery117已保留HTML强密码/U盘/留痕/安装包/业务教程，历史遗漏已修队列否，不声称功能实现。
+- CX-08/09/10→M006-044/045/046：MDM/对象存储/AI分类见上；细化无缺陷队列否，不改原句。
+- CX-11→M006-047：L96关闭分支描述已与生成器/8项快照对应，细化历史缺陷已修队列否。
+旧001—036仅历史原范围保留，不重用、不称本次206行审过权限代码。不新增ID或删除历史缺陷。
+
+跨模块既有输入：runtime evidence当前55.9天过期且fingerprint c92b4fa55fde不等496943b69618，实跑exit1，归M409证据/M415工具的B1输入；不是本M006文档缺陷，后续模块分类，不预先定稿。生成器旧“均挂manifest”自述另模块M414既有观察保留，不在此改。PGM台账同步及入口快照既有红继续保留。
+
+## 真实命令输出
+```text
+{"checks": [{"cmd": ["npm", "run", "verify:delivery-gates-docs"], "exit": 0, "out": "\n> entertainment-complex-management@0.1.0 verify:delivery-gates-docs\n> node tools/verify-delivery-gates.mjs\n\nDELIVERY_GATES_DOCS_PASS\n", "err": ""}, {"cmd": ["npm", "run", "verify:external-evidence-requirement-traceability"], "exit": 0, "out": "\n> entertainment-complex-management@0.1.0 verify:external-evidence-requirement-traceability\n> node tools/generate-external-evidence-requirement-traceability.mjs --check\n\nEXTERNAL_EVIDENCE_REQUIREMENT_TRACEABILITY_PASS\n", "err": ""}, {"cmd": ["npm", "run", "verify:runtime-acceptance-evidence"], "exit": 1, "out": "\n> entertainment-complex-management@0.1.0 verify:runtime-acceptance-evidence\n> node tools/generate-runtime-acceptance-evidence.mjs --check\n\n", "err": "RUNTIME_ACCEPTANCE_EVIDENCE_FAIL\n- runtime acceptance evidence is stale: source changed since it was generated (evidence fingerprint c92b4fa55fde… != current 496943b69618…). Rerun npm run verify:closed-loop-runtime then npm run docs:runtime-acceptance-evidence.\n- runtime acceptance evidence is stale: generated 55.9 days ago exceeds RUNTIME_EVIDENCE_MAX_AGE_DAYS=30. Rerun the closed-loop runtime command and regenerate.\n"}, {"cmd": ["bash", "-n", "ops/160/merge-pr.sh"], "exit": 0, "out": "", "err": ""}, {"cmd": ["bash", "-n", "ops/160/propose-change.sh"], "exit": 0, "out": "", "err": ""}], "classify_html": "529:                 <li>全平台审批通用时限：任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝。升级到达该单据的最终审批节点、不再有上一级可升后仍然超时的，单据保持待审，仍不得默认通过、不得默认拒绝；审批人可将该单据的审批转发给指定人选（不限层级，可为任意人选，但不得转发给该单据的申请人本人，也不得转发给该单据的直接受益人——如该笔退款的收款人、临时权限或高危授权的被授权对象本人；申请人与直接受益人不得审批与自己相关的申请，转发不构成例外）：转发后原审批人保留审批权限，被转发人同时获得审批权限，任一人审批即完成该节点；转发逐单进行、仅对该单据有效，不存在设定一次永久有效的常设代理；明确要求由最高权限审批的事项，转发由最高权限本人逐单作出，未转发时保持待审直至最高权限本人处理；超时事实、每次催办、转发与最终处置全程留痕。本条适用于退款、免单、调账、临时权限申请、高危授权、人工补录复核及其他一切业务审批；已有专门时限规定的（合同审批、工单）从其规定。</li>\n530:                 <!-- 2026-08-04 第二轮裁决：本条即全平台统一审批模型（发起时指定主线最终审批人、系统逐级自动补全；平行相关部门线各指定该部门最终审批人并补全至该部门预设的最低起点层级），合同类同样适用，本条文字不改；用户逐项批准。 -->\n531:                 <li>管理证照、资质、保险和合同关键日期的到期预警与到期阻断（业态资质按国家法律对该业态的要求确定，如酒类、食品、烟草等）。到期预警一律提前发出（业务参数，按证照类型可配，出厂默认提前三个月，须同时配置上下限），使商户有充足时间准备与办理；预警同时送达商户侧，商户在商户专区可查看本商户全部证照的到期情况。证照或资质到期后，可申请一个后台可配时长的宽限期（业务参数，按证照类型可配，须同时配置上下限），宽限期须经最高权限审批后生效；宽限期内可继续经营但每日提醒，超过宽限期仍未更新的一律阻断，不得再次延长。</li>\n532:                 <li>P0 可引入本地 AI 大模型做辅助分析判断：对合同文本、人工录入摘要、证照/保险材料中的关键日期、责任主体、提醒建议、阻断风险和疑似缺失项给出提示；但 AI 结果只作为“待人工确认建议”，不得自动替代合同台账、审批、阻断或放行结论。</li>\n533:                 <!-- 2026-06-24 地产全链授权扩展：合同从「准入卡口」扩展为「租赁全生命周期」，新增多级审批流与续租/退租/变更办理。依据 gap-analysis §7B.4 合同审批流 + §7B.1 租金押金账单（已升正式条目）+ 用户 2026-06-24「扩展 HTML 到地产全链」拍板。 -->\n534:                 <!-- 2026-06-26 修改阶段：审批链回写为分组并行会签，与业务系统地图/枚举速查表统一（用户裁决#1：以业务系统地图「并行会签」为准，治理地图原「逐级单人」口径已纠正）。 -->\n617:                 <li>建设备台账，记录编号、型号、点位、责任人和状态。</li>\n618:                 <li>记录设备领用、归还、维修、挂失和报废。</li>\n619:                 <li>工作手机预装软件清单和网站白名单由后台维护。</li>\n620:                 <li>通过企业级手机统一管控手段阻止违规访问并留痕。</li>\n621:               </ul>", "trace": {"counts": {"partial_requirements": 8, "traceable_partial_requirements": 8, "mapped_evidence_items": 0, "mapped_ledger_rows": 0, "p0_evidence_rows": 0, "awaiting_evidence_rows": 0, "invalid_evidence_rows": 0, "valid_evidence_rows": 0, "production_blocking_requirements": 0}, "rows": [{"id": "REQ-17", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-PAY-001", "PRD-PAY-002", "PRD-FACE-001", "PRD-CRED-3P-001", "PRD-CRED-OBJ-001"]}, {"id": "REQ-21", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-PAY-001", "PRD-PAY-002"]}, {"id": "REQ-23b", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-FACE-001", "PRD-CRED-3P-001"]}, {"id": "REQ-25", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-PAY-001", "PRD-PAY-002"]}, {"id": "REQ-32", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-CRED-OBJ-001", "PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"]}, {"id": "REQ-40", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-3P-001", "PRD-CRED-OPEN-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"]}, {"id": "REQ-41", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001"]}, {"id": "REQ-44", "status": "covered_by_disabled_integration_switches", "mapped": [], "disabled": ["PRD-3P-001", "PRD-CRED-3P-001", "SEC-P1-WEBHOOK-REPLAY-001", "PRD-MDM-001", "SEC-P0-MDM-DEVICE-001"]}]}, "test_usernames": [{"file": "backend/src/test/java/com/complex/platform/access/AccessJdbcIntegrationTests.java", "line": 22, "username": "\"spring.datasource.username=complex\","}, {"file": "backend/src/test/java/com/complex/platform/access/staff/PayrollSafetyJdbcIntegrationTests.java", "line": 35, "username": "\"spring.datasource.username=complex\","}]}
+
+{"markdown": {"docs/delivery-readiness-gates-v0.1.md": {"table_count": 2, "row_widths": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "fences": 1}, "docs/deploy-and-change-flow-v0.1.md": {"table_count": 0, "row_widths": [], "fences": 0}}, "names": {"count": 67, "missing": []}, "paths": {".github/CODEOWNERS": true, ".github/workflows/": true, ".github/workflows/predeploy-gates.yml": true, "docs/nas-current-state-drift-report-v0.1.md": true, "docs/nas-diagnostic-report-v0.1.md": true, "docs/nas-it-controlled-mount-handoff-v0.1.md": true, "docs/partial-requirement-mock-coverage-latest.json": true, "docs/partial-requirement-mock-coverage-v0.1.md": true, "docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json": true, "docs/requirements-code-implementation-matrix-v0.1.csv": true, "ops/160/complex-deploy-*.sh": true, "ops/160/complex-nas-system-mount.example.sh": true, "ops/160/merge-pr.sh": true, "ops/160/propose-change.sh": true, "ops/ci": true, "ops/ci/predeploy-gates.yml": true, "tools/gate-hardening-tests/m001-regression.mjs": true, "tools/generate-partial-requirement-mock-coverage.mjs": true, "tools/verify-*.mjs": true}, "main_guard": [{"file": "ops/160/propose-change.sh", "exit": 1, "out": "", "err": "不要在 main 上提议;先切 feature 分支。\n"}, {"file": "ops/160/merge-pr.sh", "exit": 1, "out": "", "err": "合并方式只能是 --squash|--merge|--rebase\n"}], "username_config": [{"file": "backend/src/main/resources/application.yml", "line": 21, "text": "    username: ${COMPLEX_DATABASE_USERNAME:complex}"}, {"file": "ops/160/complex-deploy-api.sh", "line": 13, "text": "COMPLEX_DATABASE_USERNAME=\"${COMPLEX_DATABASE_USERNAME:-complex}\""}, {"file": "ops/160/complex-deploy-api.sh", "line": 122, "text": "    COMPLEX_DATABASE_USERNAME=\"$COMPLEX_DATABASE_USERNAME\" \\"}], "observation_owners": ["## M409 — 生产就绪证据体系：阻断清单、责任包、manifest 模板与看板生成器／文档与接口定义／第2段\n\n- 聚合维度：`生产就绪证据体系：阻断清单、责任包、manifest 模板与看板生成器／文档与接口定义`\n- 文件数：11\n- 有效内容行数：2497\n- 标记：NORMAL\n\n<!-- FILES-BEGIN -->\ndocs/runtime-acceptance-evidence-latest.json\ndocs/runtime-acceptance-evidence-v0.1.md\ndocs/production-readiness-evidence/coding-host-protection-latest.json\ndocs/production-readiness-evidence/external-evidence-requirement-traceability-latest.csv\ndocs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json\ndocs/production-readiness-evidence/p0a-ops-hardening-latest.json\ndocs/production-readiness-evidence/production-blocker-register-latest.json\ndocs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.csv\ndocs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.json\ndocs/production-readiness-evidence/production-evidence-backfill-priority-latest.json\ndocs/production-readiness-evidence/production-evidence-manifest-template-index-latest.json\n<!-- FILES-END -->\n\n", "## M415 — 生产就绪证据体系：阻断清单、责任包、manifest 模板与看板生成器／检查及生成工具／第2段\n\n- 聚合维度：`生产就绪证据体系：阻断清单、责任包、manifest 模板与看板生成器／检查及生成工具`\n- 文件数：10\n- 有效内容行数：2964\n- 标记：NORMAL\n\n<!-- FILES-BEGIN -->\ntools/generate-production-evidence-owner-guides.mjs\ntools/generate-production-evidence-p0-quickstart.mjs\ntools/generate-production-evidence-submission-kit.mjs\ntools/generate-production-evidence-submission-status.mjs\ntools/generate-production-no-go-resolution-command-center.mjs\ntools/generate-production-owner-action-packs.mjs\ntools/generate-runtime-acceptance-evidence.mjs\ntools/prepare-production-evidence-manifest-drafts.mjs\ntools/verify-entry-anchors.test.mjs\ntools/verify-final-closed-loop-audit.mjs\n<!-- FILES-END -->\n\n"]}
+
+{"local_capture_exit": 0, "payload": {"enforce_admins": true, "required_pull_request_reviews": {"required_approving_review_count": 1}, "required_status_checks": {"contexts": ["predeploy"], "strict": true}, "restrictions": null}, "err": ""}
+TYPED_PAYLOAD_PASS
+{"merge_main_guard_exit": 1, "out": "", "err": "[merge] main 上没有待合并的 PR;请切到 feature 分支。\n"}
+
+{"mapped": 79, "html": 61, "all_match": true, "bad": [], "sources": {"docs/delivery-readiness-gates-v0.1.md": "0615cd1b3beaffc097f96cc6140b16bfa3ec0a6be4e91c493dca2f0fa6217e09", "docs/deploy-and-change-flow-v0.1.md": "543a1543ca264f0741706fb5007d813f67ea84dd3acaafe40c2380cce9babda1"}}
+
+```
+
+## 结论
+B1 PASS；两源206行、79判据完整三线，没有当前待修项。未读当前Grok、未修改源码/HTML/锁/生成报告。须Grok完整报告和四值后整批B2，再按流程决定，不提前模块PASS。
+
+
+# M006 B2 Codex完整归并票 V0.21
+本票读取并逐项比较两席本次完整B1和findings V3.41（SHA17bc38639710cb2272f2fd587c3b44a089e4b15d8e00b358ee4256bcbf3a1bc8）；不继承旧票。现锁实算与sidecar/ledger/两席B1首行四值一致，b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。
+## 当前M006现锁B2整批候选
+输入两席完整B1已读：self V0.20 202271bytes SHA118beeef09a708bfd115572d683b4a4461830771ed33cb600e60e2347c88a360；Grok V0.12 281664bytes SHA0f9e87a39a32a018106fccbc20ead8fe615d618ef19570a00e84c4e7262a6eca，真实exit0。两源206行79判据，四值全等现锁b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458；COUNT1。
+全部差集：root CX01—11依次对应037—047；Grok新GR空集，逐项重判037—047。旧001—036保留原范围和历史，不重用编号、不冒称重新审了旧权限源码。
+| ID | 当前分类 | 当前缺陷 | 队列候选 | 当前证据与最小处置 |
+|---|---|---|---|---|
+| M006-037 | 技术性；生产用途细化 | 否（否） | 否 | 原机器标记、失败手册和NAS运维说明；GEN001–018；保持现文 |
+| M006-038 | 技术性 | 否（否） | 否 | deploy全48行；GEN002/013/016；保持现文 |
+| M006-039 | 技术性 | 否（历史已修） | 否 | delivery表38×2和7×2、L63完整清单指向package、L92双命令；GEN001/002/016/018；保持现文 |
+| M006-040 | 技术性 | 否（历史已修） | 否 | delivery L86/88当前全部替代40/31固定数；GEN011/016/018；保持现文 |
+| M006-041 | 技术性 | 否（历史已修） | 否 | deploy L45 -F类型化参数；本机回环捕获JSON bool/int/null实际通过；GEN002/008/013/016；保持现文 |
+| M006-042 | 技术性 | 否（历史已修） | 否 | deploy L6/36固定数组15项与两部署脚本匹配；GEN002/013/016；保持现文 |
+| M006-043 | 细化 | 否（历史已修） | 否 | delivery L116列HTML上线必做；BSM116–119/GEN016；保持现文 |
+| M006-044 | 细化 | 否（否） | 否 | delivery L110 MDM；PGM619–620统一手机管控，GEN017；保持现文 |
+| M006-045 | 细化 | 否（否） | 否 | delivery L150对象存储；PGM永久存储及证据留存，GEN017；保持现文 |
+| M006-046 | 细化 | 否（否） | 否 | delivery L112 AI能力限制；PGM532待人工建议不替代审批，GEN017；保持现文 |
+| M006-047 | 细化 | 否（历史已修） | 否 | delivery L96含关闭开关替代；8条全为disabled分支，GEN002/016/017/018，PGM066；保持现文 |
+技术性均为仓库交付/CI/证据命令编排，不新增业务主体/权限/状态。细化按两完整B1引用HTML原句；044–046保持，不重开已裁决原意。039–043/047保留历史缺陷和两次B3，不写成从无缺陷。
+勘误：self V0.20旧行号117/111/151/113分别更正116/110/150/112，对应043/044/045/046；源文和判断不变，保留原raw。
+跨模块既有输入登记：root实跑verify:runtime-acceptance-evidence exit1，指纹c92b4fa55fde…与当前496943b69618…不同，证据55.9天超过30天。归M409证据文件、M415生成/校验工具的B1既有输入；不是定稿finding，不在本模块修或生成回填。当前正确报红不能写成M006文档缺陷或全局PASS。原PGM决策台账同步M426/工具M008、入口快照M435/M436/工具M008观察保留。
+Grok未验证历史首跑日期/真实DB/真实部署，root也不把这些写成现验收；gh PUT仅loopback假token捕获，并未修改GitHub。当前67脚本名全部存在，49父链/两表/8快照/生产必做原文均有实证。
+候选无添加/未答questions/新HTML申请；队列空须B2双PASS后跳新增B3/B4到B5-r2，历史B3累计2不变。尚非模块PASS。
+
+## 本席差集裁定
+037/038是无缺陷工程文档登记；039/040/041/042是技术性历史修复当前有效；043上线要求细化历史修复有效；044/045/046均有已引HTML具体上位，不是添加、不改原句；047历史细化修复现源与8个disabled分支一致。逐行接受当前缺陷否和队列否。全部11个CX已映射，Grok无新GR，001—036不复用不漏历史。不存在应并未并的当前源码finding。
+接受Grok行号证据：043=116、044=110、045=150、046=112；本席V0.20旧行号勘误在此，不改原raw。源SHA不变，文字全文已审，非遗漏内容。
+同意runtime陈旧作为M409/M415既有B1输入，必须待所属模块双席判断才定分类和处置。本B2不清零真实红灯，也不从坏证据推断生成器缺陷。两席未执行真实部署/合并/PUT/DB，此边界原样保留。
+B2 PASS（分类、当前缺陷、队列三值全部接受）；无人工待答，空修复队列。只允许跳新增B3/B4进入B5-r2全模块复审，累计B3仍2。模块尚IN_PROGRESS。

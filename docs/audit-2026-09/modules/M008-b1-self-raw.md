@@ -2447,3 +2447,201 @@ CURRENT_EQUALS_B3_R1_AFTER tools/verify-html-param-tier.mjs True
 Grok raw嵌入完整binary diff已机械检查出现1次，21637bytes、SHA996b9954f7b4782aafca8ef5904a556dcee90067c0919311651b85139c8089d2；两完整报告自身锁行各1条。B4归因双PASS，因此保留r1合法变更，没有越界整批回滚的触发事实。
 
 **本批B2-r3本方结论：PASS。** 这只是一席的候选归并票；须Grok本批也PASS后才能定稿、进B3-r2。源文件、正本README/入口/HTML、基线和主索引未编辑。本方B1/B2旧159438bytes完整保留，本追加不冒充新B1全量报告。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M008现锁B1 Codex完整独立审计
+版本：V0.05
+保留原171121bytes V0.01—V0.04历史。现锁重新完整判断，不沿用旧PASS；Grok先派发，封存本报告前未读取本次对席正文。471计划M008，17FILES实际1605行（计划历史1530），19判据。B3累计2不重置。SSH正本main HEAD e456ba96c84185c8d39f18f548011daac48a6466，实际index d9a65108a1e87bd300c299ca7640f832bd5c2feb771f35a7a2413d32a1748331。
+
+## 第一性三问
+存在理由：校验CI/交付入口、需求条目引用和参数层级、同批台账、生成可重复计算的快照；基线保存存量边界、日志保存历史、回归证明拒绝错误输入。均工程用途，不因HTML无代码细节而删除。
+真实做法：完整源码读完、77正反例实跑、当前五入口实跑、三HTML和真实快照资料在绝对临时副本检查，具备可重复反证；没有用注释/旧PASS代替。
+未经证明的前提：未运行全产品测试/真实部署/线上CI；快照147只是现有surefire XML汇总，不是本轮全后端测试数；文件级台账同步不能证明自然语言语义一致，列入既有职责边界，不发明新审计规则。
+
+## 全范围阅读与逐文件判断
+[
+  {
+    "path": "tools/html-param-tier-baseline.json",
+    "lines": 10,
+    "sha": "9332010bd445a64ff8f1fb5e3b6d7bbe387c7b76543b68424f0209dd7ddbfdc8"
+  },
+  {
+    "path": "tools/refresh-entry-doc-baseline.mjs",
+    "lines": 126,
+    "sha": "8bd1ba5ac141ef47dbcd409616fcacc3303546b06cceba998852895fac4f8cbb"
+  },
+  {
+    "path": "tools/verify-delivery-gates.mjs",
+    "lines": 333,
+    "sha": "cbdfe7c023c3a5cc623b4f1742c56ca46238f039d701150d8d1b6abbe9102b8f"
+  },
+  {
+    "path": "tools/verify-entry-anchors.mjs",
+    "lines": 275,
+    "sha": "7e62c6a19e36be5c13b166fd40aa4cb75e6ad057dfd6e97090323cae17853b82"
+  },
+  {
+    "path": "tools/verify-html-ledger-sync.mjs",
+    "lines": 68,
+    "sha": "1c9f974f4c49c3886469e6b86236675393317b7b0379bbbd1d354599f911214d"
+  },
+  {
+    "path": "tools/verify-html-param-tier.mjs",
+    "lines": 199,
+    "sha": "c79cdb39969b123264e917aa2921e4442e2ac1679f5f78ae6fbc0c70a5e71be9"
+  },
+  {
+    "path": "tools/gate-hardening-tests/99-predeploy-final.log",
+    "lines": 138,
+    "sha": "61c74dc4e62f27c5f75c3a39735c93f73ba8054a26c063822da7d05348804421"
+  },
+  {
+    "path": "tools/gate-hardening-tests/A-worktree-uncommitted.log",
+    "lines": 42,
+    "sha": "14ada1aa68187b672b10bcd98b0843df7177c147adafee8ded0cd826053942c4"
+  },
+  {
+    "path": "tools/gate-hardening-tests/B-committed.log",
+    "lines": 17,
+    "sha": "3dce69862e4c9c340f9db0d1769c6e383172b05b3447140c4113f550bbe63339"
+  },
+  {
+    "path": "tools/gate-hardening-tests/C-no-baseline.log",
+    "lines": 39,
+    "sha": "5f33afad72fc0a3a1375da16a08293097b74bb7795e05ab6ca6d341baf10ec67"
+  },
+  {
+    "path": "tools/gate-hardening-tests/D-baseline-legacy-pass.log",
+    "lines": 10,
+    "sha": "7fbcd28464611e031881424bb4478767c33118c5c621a2e48da2fb59471ec164"
+  },
+  {
+    "path": "tools/gate-hardening-tests/E-ignore-marker.log",
+    "lines": 5,
+    "sha": "0c29f64c5510c204dc6be1a48293b5df69a1e58e53674b5e40d3469db5ab8633"
+  },
+  {
+    "path": "tools/gate-hardening-tests/F-ci-baseline-evidence.log",
+    "lines": 7,
+    "sha": "5e07e04d48d5b3312dac8bd6fd5e107ebe5965fcd6414d4e8041847fbdfca14f"
+  },
+  {
+    "path": "tools/gate-hardening-tests/G-merge-pr-guards.log",
+    "lines": 24,
+    "sha": "59ebf364d51ad9caa6b03234eced31ef6d8cce2fbebf5c4f64828bb2ffe489ae"
+  },
+  {
+    "path": "tools/gate-hardening-tests/I1-baseline-ratchet.log",
+    "lines": 13,
+    "sha": "fa1a0a89f762063635f0711a5b57ed4f97be5a57a1e091cc0b33d28475d7b483"
+  },
+  {
+    "path": "tools/gate-hardening-tests/I2-ignore-granularity.log",
+    "lines": 21,
+    "sha": "75394c0dd0e5e3c8296edb036ea053af444a0ea678277919e301478837e3a25b"
+  },
+  {
+    "path": "tools/gate-hardening-tests/m001-regression.mjs",
+    "lines": 278,
+    "sha": "c64e3048e7525c6158e102f9cd9eaf9cd10972c1255f9a2deb5528a8299383a6"
+  }
+]
+基线JSON10行entries空，说明只缩不增及稳定key与脚本一致。refresh126行已全读，7HTTP方法计数、数字迁移排序、现有XML测试数与无报告保留旧数、两活跃句式替换和历史保留；--check剔除日期避免日历误报，主仓只--check。
+delivery333行全读，必需命令/文档标记、npm链严格匹配、YAML解析/镜像与部署同闸核对；没有把includes文字当实际命令。重复常量旧处置保留。
+anchors275行全读，CSV引号/换行/BOM/宽度、entry正文空拒绝/规范化逐字、引用定位、矩阵与镜像列核对；当前真实数据通过，过宽历史-report排除仅登记。
+ledger68行全读，Git argv/基线/dirty变更范围，台账修改且非删除才通过；当前PGM未同步确实失败。
+param199行全读，屏蔽style/comment且保留偏移、逻辑块及精确豁免、基线key只缩不增、非法基线fail；全3HTML扫描副本0entries。
+10份历史log共316行已逐行读：99/A/B/C/D/E/F/G/I1/I2旧时间/旧规则/旧数量只作输入，不冒充本次pass；G旧stash不是本次执行指令。
+m001-regression278行V0.07已同字节全文阅读，实际调用受审脚本；所有写入以绝对os.tmpdir唯一目录构造，本机临时Git clone/init/commit与模拟gh不触主仓发布，finallyrealpath父目录验证。
+
+## 冻结判据完整矩阵
+- GEN-001：各检查/生成器/JSON基线有实际执行用途；10旧日志保留历史证据，005六个重复命令保持旧双席处置，非本批强制精简；不增解析框架。
+- GEN-002：77回归及真实入口结果与源码吻合；两个当前红是输入漂移，不是错误通过；真实副本生成后检查0。
+- GEN-003：回归实际调用当前脚本，反例预期exit1、正例0；关键空正文/删除台账/命令伪造/换行/注入/两快照句均执行，assert可失败；不以旧日志替代。
+- GEN-004：CSV列数、引号、必查entry_body，JSON entries数组与Git参数边界均检查；非法ref非0，未把文件内容当shell。
+- GEN-005：工程脚本非业务授权服务；未改变商户范围或最高权限；不以CLI门禁替代服务器授权。
+- GEN-006：只读检查不写业务；生成器只更新两份工程快照，当前用隔离副本检验。删除台账不能充当同步；文件级同步不是语义证明。
+- GEN-007：脚本一次性串行检查、无消息重投/共享数据库事务；临时回归各mkdtemp独立。不增加并发锁。
+- GEN-008：CSV/命令/JSON字段、生成器真实两活跃句式和现有计数口径匹配。数据红分配资料所属模块。
+- GEN-009：非法ref/错误CSV/新增baselinekey/缺门禁显式非0；真实快照过期被检查1，不吞成绿。
+- GEN-010：Git全部argv，包括gitshow；CLI/环境恶意基线77回归拒绝。只读主仓；无真实密钥输出。
+- GEN-011：本次实际输出与历史10日志区分，77项输出可复现；主索引/hook内容前后不变。
+- GEN-012：遍历受控文件/CSV/HTML/已有报告，无网络无限重试；Git maxBuffer32MB；回归finally核验绝对temp父再清理，未见首次正常资源失控。
+- GEN-013：Node标准库+已有yaml依赖；CI镜像/全history/事件基线/部署三门禁正反例通过；工具本身不安装依赖或部署。
+- GEN-014：无本模块数据库迁移写入；仅数迁移文件并按数字排最新，真实副本V431/399。不能代表数据库迁移已验收。
+- GEN-015：无产品UI；内部PASS/DRIFT与错误中文解释可读，不给CLI添UI功能。
+- GEN-016：十历史日志不是当前声明；真实entryanchors0、delivery0，快照与decisionledger红未隐藏；README/entry数字属后续资料回填。
+- GEN-017：按冲突→细化→技术性→添加判，17文件均工程工具/证据；没有可归物理设备的业务实现，也无业务发明；逐文件见下。
+- GEN-018：本报告证据为全源码/JSON/日志实读类型2与实际命令类型4，PGM原文类型1；不以席位历史票替代复现。
+- PGM-036：治理HTML611原文“设备要绑定员工、班次、点位和状态”；本模块CI gate/entry不是实体设备，适用审查后N/A，不宣称设备功能已实现。
+
+## 当前旧16项逐项重判（候选，待B2双席定稿）
+- M008-001：技术性，当前npmCommands精确识别已有npm-run与&&边界；打印/相似名/注释/命令内LF/&&前LF拒绝、&&后LF允许，两入口回归通过。旧缺陷已修，本轮无待修。
+- M008-002：技术性，entryBody为空显式失败；真实1228注册/1235账本/1244矩阵检查0；旧空正文绕过不再成立。
+- M008-003：技术性，删除台账不算同步，未提交删除和已提交删除有未跟踪副本两反例都拒绝；当前PGM未同步台账真实exit1正确。
+- M008-004：技术性，按逻辑块而非物理行；跨行标注/同物理行双p/段后豁免不扩散均现测通过。
+- M008-005：技术性，50常量44唯一六额外重复仍保留；旧两席不强制删除处置有效，未发现首次正常误判；不改GEN001定义。
+- M008-006：技术性，两个Git脚本argv含show，命令行和环境基线注入四反例均exit1，无注入执行。
+- M008-007：技术性，现生成器126/160句式均覆盖；现有回归和真实副本两句720/V385→732/V431/147，check1→write0→check0；旧漏匹配已消失。
+- M008-008：技术性，原README/entry仍过期，工具正常检测；M435/M436资料后续处理，不新增自动版本管理。
+- M008-009：技术性，旧anchors六红不再现，当前anchors0；当前decisionledger未同步PGM红属M426，保留未完成事实，不在工具里放宽。
+- M008-010：技术性，10历史log逐行读；E旧裸ignore放行而现拒绝，A/D/I2存量6现0，99旧链PASS不是本次；保留历史。
+- M008-011：技术性，本次完整77PASS而不是引用旧77；裸assert失败早退出是有效fail，不新增汇总框架/npm入口。
+- M008-012：技术性，文件级同批同步与只扫变更HTML符合现职责；本席另在隔离副本完整三HTML扫描entries0，未更改主baseline。
+- M008-013：技术性，-report排除宽为已登记理论限制，未取得正常误排实际证据；不加新策略。
+- M008-014：技术性，CLI内部英文标识不构成中文产品UI冲突。
+- M008-015：技术性，UTC工程取证日期不定义业务营业日；不增时区功能。
+- M008-016：技术性，全17工程工具/日志无设备业务新增；PGM036判断N/A，不越到后续设备模块。
+均无新冲突/添加；本席当前修复候选空，不把旧“归属是”当再次修同一已修缺陷的指令。
+
+## 当前实际测试
+node tools/gate-hardening-tests/m001-regression.mjs：exit0，77行PASS，末行M001_GOVERNANCE_REGRESSION_PASS；包括基线命令行/环境注入4，dirty/PR/push/基线、豁免/逻辑块、台账删除、key棘轮、部署基线、CSV、CI、部署三门禁、npm伪命令、merge三竞态与生成器三项。stderr空。
+npm run verify:delivery-gates-docs exit0 DELIVERY_GATES_DOCS_PASS。
+npm run verify:entry-anchors exit0：1228/1235/1244（同名1235/无rule9），1565镜像片段/440md/1564引用（1391原名+173正文定位）。
+npm run verify:html-ledger-sync exit1：PGM获批改动与origin/main@88c7b465工作区比较，docs/prd-audit/business-decision-ledger.md未同步。M426既有输入仍未完成。
+npm run verify:html-param-tier exit0：改动1份PGM全扫，基线0，无新未标层级。
+npm run verify:entry-doc-baseline exit1：应732 ops / V431（399迁移）/147 tests，README+entry过期。M435/M436既有输入仍未完成。
+真实主索引校验d9a65108…不变，主hook46aabdf33cb3496d83a71e4357ca85ba2ed9dbbfd4582ab53747bc50bb748d6b不变。
+
+## 隔离真实副本追加验证（类型4完整输出）
+临时路径先resolve并assert位于系统temp父/不是主仓，每个目标assert在临时目录内；只在临时Gitinit调用--write-baseline和生成器，主仓三HTML/README/entry/baseline无写入。
+{"init": {"exit": 0, "stdout": "", "stderr": ""}, "scan_all": {"exit": 0, "stdout": "[html-param-tier] 已重建基线 tools/html-param-tier-baseline.json：0 条。请人工核对条数只减不增。\n", "stderr": ""}, "baseline_entries": [], "refresh_before": {"exit": 1, "stdout": "", "stderr": "[entry-doc-baseline] DRIFT: docs/00-current-effective-document-entry-v0.1.md + README.md 快照落后于实际（应为 732 ops / V431（399 迁移） / 147 tests）。运行 node tools/refresh-entry-doc-baseline.mjs 回填。\n"}, "refresh_write": {"exit": 0, "stdout": "[entry-doc-baseline] 已回填 docs/00-current-effective-document-entry-v0.1.md + README.md：732 ops / V431（399 迁移） / 147 tests（2026-09-22）。\n", "stderr": ""}, "refresh_after": {"exit": 0, "stdout": "[entry-doc-baseline] PASS: 快照与实际一致（732 ops / V431（399 迁移） / 147 tests）。\n", "stderr": ""}, "entry_changed_lines": [{"line": 26, "before": "| P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-08-03）核验为 720 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |", "after": "| P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-09-22）核验为 732 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |"}, {"line": 126, "before": "本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-09-01 实测 OpenAPI 720 operations、Flyway 最新 V385；当前工作树无 `backend/target/surefire-reports`，故不声明当前测试数量。", "after": "本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-09-22 实测 OpenAPI 732 operations、Flyway 最新 V431；后端 surefire 现有报告 147 tests。"}, {"line": 160, "before": "本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-09-01 取证为 Flyway 最新 V385、OpenAPI 720 operations；当前工作树无后端 surefire 报告，不声明当前测试数量。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。", "after": "本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-09-22 取证为 Flyway 最新 V431、OpenAPI 732 operations；后端 surefire 现有报告 147 tests。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。"}, {"line": 205, "before": "| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看本轮核验 720 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径（operation 数以本矩阵与 OpenAPI 实时为准；下文历史变更记录里的 181/191/198/207/386/419 为旧快照）<!-- 文档goal(2026-06-30)：419→516 --> |", "after": "| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看本轮核验 732 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径（operation 数以本矩阵与 OpenAPI 实时为准；下文历史变更记录里的 181/191/198/207/386/419 为旧快照）<!-- 文档goal(2026-06-30)：419→516 --> |"}, {"line": 388, "before": "| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、720 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合（operation 数以 OpenAPI/矩阵实时为准） | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |", "after": "| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、732 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合（operation 数以 OpenAPI/矩阵实时为准） | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |"}, {"line": 420, "before": "| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把本轮核验 720 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵（operation 数以 OpenAPI/矩阵实时为准） |", "after": "| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把本轮核验 732 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵（operation 数以 OpenAPI/矩阵实时为准） |"}], "main_index": "d9a65108a1e87bd300c299ca7640f832bd5c2feb771f35a7a2413d32a1748331", "main_hook": "46aabdf33cb3496d83a71e4357ca85ba2ed9dbbfd4582ab53747bc50bb748d6b"}
+
+
+## 对抗式与顺从式汇合
+反问“echo门禁是否过”“&&换行是否错判”“删除台账是否当同步”“空body是否假逐字”“命令基线是否shell执行”“新key能否洗白”“排版能否改变层级”“两实际句式是否漏刷新”均有现存最小反例且新鲜实跑；正常CSV/CI/参数标注/快照刷新后检查保持通过。未发现当前M008首次正常运行仍存在的工具缺陷。两个真实数据红如实保留归属，不刷绿。
+
+## 本席结论
+本次M008 B1审计结论PASS；当前新增修复候选0，旧16项均重判，无待问添加项。此为Codex独立一票，模块仍IN_PROGRESS、Grok未收且B2/B5未做，不称模块完成。后续按完整双席B2决定是否需要B3；空队列则按旧累计r2进B5。
+
+
+# M008现锁B2 Codex完整归并票
+版本：V0.06
+输入：modules/M008-b1-self-raw.md本次V0.05、modules/M008-b1-grok-raw.md本次V0.05；两份完整报告已读，非摘要。findingsV3.45候选如下。
+## 当前M008现锁B2整批候选
+两席完整本次B1已读：selfV0.05 189813bytes SHAc2f218e30a811a7e064faae25f35e99b6b7f44a01f3d9104d6e75ceb07f47702；GrokV0.05 109143bytes SHA763a0f50bbdef9e661a13c902f2e752ca8ff687d30b5e29fe2c4ef90c7c9d055，真实exit0。四值均b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、COUNT1。
+两席新CX/GR空。以下全16行是当前值，旧表历史缺陷“是”作为原证据保留，不等于待修。Grok技术观察1→005、2→012、3→012、4→010、5→008、6→008（仓根调用约定，子目录失败非假绿）、7→014、8→011、9→016、10→009（runtime外模块输入），不遗漏、不新增ID、不把源码正确打红变更为全链绿。
+| ID | 当前全部来源 | 分类 | 当前缺陷 | 当前修复队列候选 | 当前证据/判据/处置 |
+|---|---|---|---|---|---|
+| M008-001 | Codex V0.05旧001重判；Grok V0.05旧001重判及对应技术观察 | 技术性 | 否（历史已修） | 否 | delivery7–11/161–164/321–324；精确npmCommands，伪打印/相似名/注释/LF反例均正确拒绝；GEN-002/004/008/009/013，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-002 | Codex V0.05旧002重判；Grok V0.05旧002重判及对应技术观察 | 技术性 | 否（历史已修） | 否 | anchors113–116；空entry_body回归拒绝，现行真实anchors0；GEN-002/004/009/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-003 | Codex V0.05旧003重判；Grok V0.05旧003重判及对应技术观察 | 技术性 | 否（历史已修） | 否 | ledger58；工作区及提交删除均拒绝，PGM未同步现红正确；GEN-002/006/009/011，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-004 | Codex V0.05旧004重判；Grok V0.05旧004重判及对应技术观察 | 技术性 | 否（历史已修） | 否 | param60–88；逻辑块替代物理行，换行/双p/段后豁免4回归通过；GEN-002/008/009/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-005 | Codex V0.05旧005重判；Grok V0.05旧005重判及对应技术观察 | 技术性 | 否 | 否 | delivery106–157；50项44唯一，重复真诊断无误判，保留不删6常量；不收窄GEN001定义；GEN-001/011，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-006 | Codex V0.05旧006重判；Grok V0.05旧006重判及对应技术观察 | 技术性 | 否（历史已修） | 否 | ledger12/param22及141；Git含show均argv，参数与环境注入拒绝；GEN-002/004/009/010/018，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-007 | Codex V0.05旧007重判；Grok V0.05旧007重判及对应技术观察 | 技术性 | 否（历史已修） | 否 | refresh67–71；实际副本126/160均回填732/V431/147，check1→write0→check0；无漏匹配；GEN-002/009/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-008 | Codex V0.05旧008重判；Grok V0.05旧008重判及对应技术观察 | 技术性 | 否 | 否 | refreshREADME块与其它快照；主README/entry仍旧，工具正确报漂移，归M435/M436输入；不加自动版本管理；GEN-001/002/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-009 | Codex V0.05旧009重判；Grok V0.05旧009重判及对应技术观察 | 技术性 | 否 | 否 | anchors当前0，旧六红不再现；ledger当前仅PGM无同步红归M426，工具不放宽；GEN-002/008/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-010 | Codex V0.05旧010重判；Grok V0.05旧010重判及对应技术观察 | 技术性 | 否 | 否 | 十历史log均完整读，E裸ignore旧绿现红、基线旧6现0、99旧全链绿不作本轮验证；保留历史；GEN-001/011/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-011 | Codex V0.05旧011重判；Grok V0.05旧011重判及对应技术观察 | 技术性 | 否 | 否 | m001-regression278行，本次双方实际运行通过；Codex77PASS，正常断言有效；未挂npm/裸assert早失败不强制改；GEN-003/013/018，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-012 | Codex V0.05旧012重判；Grok V0.05旧012重判及对应技术观察 | 技术性 | 否 | 否 | 文件级ledger检查/变更HTML才扫，双方隔离3HTML全扫0；无新增语义检查；GEN-002/006/009，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-013 | Codex V0.05旧013重判；Grok V0.05旧013重判及对应技术观察 | 技术性 | 否 | 否 | anchors40 -report偏宽，尚无正常误排误绿证据，仅登记，不新增规则；GEN-002/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-014 | Codex V0.05旧014重判；Grok V0.05旧014重判及对应技术观察 | 技术性 | 否 | 否 | CLI内部PASS/FAIL/DRIFT非产品UI；B/C业务授权不延伸CLI；GEN-015/017，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-015 | Codex V0.05旧015重判；Grok V0.05旧015重判及对应技术观察 | 技术性 | 否 | 否 | refresh51 UTC取证日期非营业日，不新增时区参数；GEN-002/016，证据类型2/4。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+| M008-016 | Codex V0.05旧016重判；Grok V0.05旧016重判及对应技术观察 | 技术性 | 否 | 否 | 17文件1605行均工程工具/证据；PGM036:611物理设备绑定无本模块实现面；PGM-036/GEN-017/018，证据类型2/4/1。无业务发明：检查/生成/证据，不增加业务对象或规则 |
+无添加/questions/HTML修改申请。候选修复队列空，待Grok B2独立全差集同意后才定稿；若双PASS跳新增B3/B4、B3仍2、B5-r2全模块，非直接收口。
+
+Grok两席事实与源码核对一致，原始票完整保留。B1Grok技能备注“ubiquitous-language明文不用”不准确：V0.17末行实为存在则按grilling收窄用；B2请求该席核对并补正实际使用/缺口，不能代其更写旧票。该流程表述不新增源码finding。
+本方本批B2结论PASS；只是一席票。无修复动作，不改源码/HTML/锁，待Grok复核候选归属与全差集。
