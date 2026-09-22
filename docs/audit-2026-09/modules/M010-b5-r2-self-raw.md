@@ -229,3 +229,343 @@ END_SUPP=2026-09-09T15:05:24Z
 ## 8. 结论
 
 本席 B5-r2 票：**PASS**。4 冻结文件 + V410 三线全审、18 判据逐项核对；两批共 5 项修复无回归、无新未定稿缺陷；无添加项、无 questions、无 HTML 修改申请；未提交/推送/合并/部署。本报告落盘前未读取 `M010-b5-r2-grok-raw.md` 任何正文。
+
+
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M010 Codex 独立补充复查完整报告
+版本：V0.02
+
+本次结论：PASS。Grok：NOT-CALLED（无命令、无退出码、无本次 Grok 票）。
+这是操作员“从M009自己重新审；没有问题只需自己审计，发现问题才按原提示词完整执行”的补充复查。保留旧B5-r2双PASS及真实席甲Claude Fable 5.1身份，不把本次单席改写为新双PASS。B3历史累计2，本次执行0，仍2。生命周期沿用PASS；无BLOCKED、无未答问题、无HTML申请。
+日期：2026-09-14；正本160:/home/james/complex-management，main，HEAD e456ba96c84185c8d39f18f548011daac48a6466。直接SSH；无MCP、无第三席。原本报告20044bytes的完整字节前缀保留，旧SHA256 846ec98dc791f420982127215bfa21416f5234b8af73ed4b03467f6d0e88b9ac。
+控制V0.17、冻结计划V0.04、判据V0.11；范围4文件203行+直接纠正依赖V410，映射GEN-001至018共18项，未扩冻结判据。
+
+## 1. 完整文件覆盖
+| 路径 | 行数 | SHA256 | 阅读 |
+|---|---:|---|---|
+| backend/src/main/resources/db/migration/V005__p0_platform_master_data.sql | 109 | 5118942eea90829a2c8d59fa88e70e7b9467ca87201acff653d2ccc2e4054905 | 全文 |
+| backend/src/main/resources/db/migration/V048__access_role_organization_isolation.sql | 7 | e6a216f045479450b61766e54f80324122d3706099fc48f048a927d0094c83fd | 全文 |
+| backend/src/main/resources/db/migration/V318__business_entity_parent_layer.sql | 16 | 466451ddb6e86f108f163e460282bedddc21f532d4289f80fc1c51e717d0b481 | 全文 |
+| backend/src/main/resources/db/migration/V354__business_entity_master_data.sql | 71 | c32019a3457610df46e436f18572c0b71567779eddc12baf5fa59a837c22bbf3 | 全文 |
+| backend/src/main/resources/db/migration/V410__m010_business_entity_topology_and_role_isolation.sql | 26 | 85c914d7d711b8d8b3eb1bbfad5799a13a9c1a40a9b4145bf200bf88cff12ef1 | 全文，直接纠正依赖 |
+
+## 2. 三线审计与业务分类
+第一性原理：主数据表承载项目/空间/商户/公司档案；V048列承载角色组织范围，V410去掉没有业务依据的固定行政父链。需求原文（已在本次连续会话读取正本）：
+- business-enum-quick-reference-v0.1.html“经营主体关系”：“物理项目与运营公司是多对多关系，不是固定的‘平台→项目公司→域公司→商户’行政隶属链。”（引号样式仅展示；原文见正本227行及BEQR-144）
+- platform-governance-map-for-operations-v0.1.html“综合体和集团：当前一个项目，未来能看集团”：“建立综合体项目档案。”“记录项目状态、负责人、地址和经营范围。”
+- business-enum-quick-reference-v0.1.html“项目与敏感数据权限”：“所有数据默认按项目隔离，普通岗位不得跨项目查看；只有项目之上的获授权岗位可以跨项目汇总。”
+四分类：V005四表与档案字段/权限种子为细化；主键/时间列/索引/ON CONFLICT为无业务发明的技术性存储机制；V048组织列为隔离细化，索引技术性；V318父链为历史冲突，当前由V410移除；V354六主体档案骨架为细化，工商数据不猜填；旧operation/spv添加已由操作员裁定删除且V410落实。V410每条仅纠正既有001–004，未新造结算/组织规则。
+顺从式：逐行核四份冻结迁移及后续V410，逐项核18判据；同一迁移链的最终状态用于判断当前行为，不把旧迁移孤立当成正在生效的父级业务规则。
+对抗式：分别尝试反证“旧父级仍在”“旧角色仍可入库”“不同组织角色被全局唯一卡住”“权限人读名称仍英文”“只有历史PASS没有活库证据”；通过以下目录查询和已实际执行的三条JDBC回归核对。没有发现新的待修项。
+技术性逐条：表主键与必要索引用于检索/唯一性；TIMESTAMPTZ用于持久化操作时间；ON CONFLICT/IF EXISTS为迁移执行机制；Flyway文件顺序为工程运行依赖，均不赋予业务权利。按本次用户单席复查例外不为这些既有分类另起Grok。
+
+## 3. 真实只读数据库核验
+直接SSH在160 Python中调用psql，PGDATABASE=complex_test，PGOPTIONS=-c default_transaction_read_only=on，psql -X -A -t -v ON_ERROR_STOP=1 -c SELECT…。返回PSQL_EXIT=0。只取模式、迁移状态和公开权限显示名；未执行DDL/DML、未重建或改名数据库。
+关键可复现查询：flyway_schema_history筛version IN ('005','048','251','318','354','410','427')；information_schema.columns筛public.business_entities.parent_entity_id；pg_indexes筛idx_business_entities_parent及roles唯一索引；pg_constraint对chk_be_entity_role执行pg_get_constraintdef；business_entities筛entity_role IN ('operation','spv')计数；permissions按V005八条permission_code读取permission_name。
+实际输出：
+```json
+{
+  "PSQL_EXIT": 0,
+  "read_only": true,
+  "V410_sha": "85c914d7d711b8d8b3eb1bbfad5799a13a9c1a40a9b4145bf200bf88cff12ef1",
+  "data": {
+    "database": "complex_test",
+    "migrations": [
+      {
+        "version": "005",
+        "script": "V005__p0_platform_master_data.sql",
+        "success": true
+      },
+      {
+        "version": "048",
+        "script": "V048__access_role_organization_isolation.sql",
+        "success": true
+      },
+      {
+        "version": "251",
+        "script": "V251__permission_names_i18n_zh.sql",
+        "success": true
+      },
+      {
+        "version": "318",
+        "script": "V318__business_entity_parent_layer.sql",
+        "success": true
+      },
+      {
+        "version": "354",
+        "script": "V354__business_entity_master_data.sql",
+        "success": true
+      },
+      {
+        "version": "410",
+        "script": "V410__m010_business_entity_topology_and_role_isolation.sql",
+        "success": true
+      },
+      {
+        "version": "427",
+        "script": "V427__m009_project_profiles_and_associations.sql",
+        "success": true
+      }
+    ],
+    "parent_column_count": 0,
+    "parent_index_count": 0,
+    "entity_role_constraint": "CHECK (((entity_role)::text = ANY ((ARRAY['platform'::character varying, 'project_company'::character varying, 'management_company'::character varying])::text[])))",
+    "unsupported_entity_role_count": 0,
+    "role_unique_indexes": [
+      "CREATE UNIQUE INDEX roles_pkey ON public.roles USING btree (id)",
+      "CREATE UNIQUE INDEX uq_roles_org_role_name ON public.roles USING btree (COALESCE(organization_id, ''::character varying), role_name)"
+    ],
+    "permission_names": {
+      "governance.project.manage": "管理平台项目",
+      "governance.project.view": "查看平台项目",
+      "governance.space.manage": "管理平台空间",
+      "governance.space.view": "查看平台空间",
+      "entity.binding.manage": "管理业务主体和绑定",
+      "entity.binding.view": "查看业务主体和绑定",
+      "merchant.profile.manage": "管理商户档案",
+      "merchant.profile.view": "查看商户档案"
+    }
+  }
+}
+```
+上述输出证明当前结果；不从迁移注释推断实际模式。源文件/测试均在M009结束后未发生生产改动，最后一次变化仅SpaceTypeRequest注释。
+
+## 4. 已执行的测试证据及本次限制
+本次M010不重复运行测试。使用同一会话2026-09-14 M009阶段JDK21+complex_test实际执行的PlatformJdbcIntegrationTests：23测试，failures=0，errors=0，skipped=0，Maven exit0；已封存在M009-b5-r2-self-raw.md及M009-b5-r3-self-raw.md，不将2026-09-09的16条旧结果写作当前23条。
+已读取本次源第680–714行：
+- parentEntityColumnIsRemovedFromBusinessEntities：真实查询列/索引计数都0。
+- entityRoleCheckRejectsSpvAndOperation：CHECK定义包含三合法值、排除spv/operation；真实插入合法值成功，spv插入被拒；没有声称对operation另做一次插入。
+- organizationScopedRolesMayShareNameAcrossOrganizations：真实插入不同组织同名两行成功，同组织重复抛DuplicateKeyException。NULL组织同名唯一从当前COALESCE索引定义核验，未声称本次另写NULL插入测试。
+M009根执行11类283条与Grok10类239条有重叠，未相加计数。本次只读SQL是新执行证据，测试为本会话已完成证据的明确复用。未声称执行全仓测试、生产库迁移或全链手动重放。
+
+## 5. 18条冻结判据逐项结论
+| 判据 | 结论 | 本次依据 |
+|---|---|---|
+| GEN-001 | PASS | V005 四张主数据表、V048 组织字段由当前仓储消费；V410 删除不再消费的父链。历史迁移留存用于 Flyway 校验，不复制重建。 |
+| GEN-002 | PASS | 当前 complex_test 的 005/048/318/354/410 均 success=true；列、约束、索引与 V410 结果一致。 |
+| GEN-003 | PASS | 三个 JDBC 回归检查删除列/索引、合法与非法角色、跨组织同名与同组织重复；本会话 M009 实跑23条全过，非只看测试名。 |
+| GEN-004 | PASS | DDL 固定文本，无外部输入拼接；entity_role NOT NULL + 三值 CHECK；源端对象校验由已全审 M009 服务承担。 |
+| GEN-005 | PASS | V005 固定 permission_code 和 role_platform_admin 种子，无新增授权动作；V048 组织列与 V410 唯一约束共同支持隔离，不把跨组织同名解释为跨组织访问权。 |
+| GEN-006 | PASS | 主键/NOT NULL/unique 保护基本完整性；V410 UPDATE 保留主体行，role 白名单收窄前完成转换；不改变金额。历史无硬 FK 和 status 无 CHECK 仍为既有登记007/008，不改写成已修。 |
+| GEN-007 | PASS | Flyway 已记录一次性执行；INSERT ON CONFLICT 和存在性 DDL 有确定重复行为。本次未手工重放整条迁移链，不声称重放实测通过。 |
+| GEN-008 | PASS | 当前 parent_entity_id 列/索引均0，三角色 CHECK 与 M009 DTO/记录/JDBC 对齐。旧迁移的历史状态值与注释按006/008保留登记。 |
+| GEN-009 | PASS | 测试实际断言 DataIntegrityViolationException 和 DuplicateKeyException；数据库核验 ON_ERROR_STOP=1 且返回0，没有吞错。 |
+| GEN-010 | PASS | 迁移不含凭据/动态SQL；核验凭据只经进程环境传递，报告仅列模式事实，不导出私人字段值。 |
+| GEN-011 | PASS | Flyway 版本、script、success 可查询；本次独立实算文件SHA与只读SQL输出封存。原始旧票完整保留。 |
+| GEN-012 | PASS | 迁移一次性操作既有四表/roles；索引针对状态、归属及唯一性，无新增循环、常驻连接或无界缓存。 |
+| GEN-013 | PASS | 本会话实际 JDK21、Maven exit0、complex_test 迁至V427；本次不改配置、不清库、不重新编号历史迁移。 |
+| GEN-014 | PASS | 当前 Flyway 执行与脚本同名成功，V410 从后来迁移纠正历史脚本；过去删父列授权保留，本次无破坏性数据库操作。 |
+| GEN-015 | 不适用（无界面） | SQL无界面组件。V005 八条人读英文权限名已被V251替换，当前查询全部为中文。 |
+| GEN-016 | PASS | 区分历史2026-09-09票与本次2026-09-14 Codex复查；当前库最高不是旧报告V410而是已核V427；旧注释登记不追改。 |
+| GEN-017 | PASS | 四文件按冲突→细化→技术性→添加逐段复查；原父链冲突由V410消除，operation/spv添加已有删除裁定；表/种子细化，索引/迁移标记技术性，无新添加业务。 |
+| GEN-018 | PASS | 以下结论分别落到四迁移+V410原文、当前HTML原句、真实SQL输出、已封存测试结果；历史PASS本身不作为当前正确性的证明。 |
+
+## 6. 既有登记与结论
+001–004、012五项已修保持；005–011、013、014九项仅登记保持。008的status无CHECK和历史inactive观察并未改成“已修”；006旧迁移注释因checksum保留；005已用活库核实V251中文化；009库已至V427，旧报告V410只代表当时。无新ID、无待补项、修复队列仍14项全否。
+本次PASS仅指M010当前4冻结文件+直接修复V410的18判据补充复查，无新工程缺陷/业务发明。Grok NOT-CALLED，旧Grok票未改。三业务HTML和业务源码/迁移全未改，未提交/推送/合并/部署。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+# M010 Codex补充复查
+版本：V0.03
+
+操作员本次明确“m010继续”，按此前“无问题只自己审计，发现问题再走原完整流程”。本次仅Codex复查；Grok NOT-CALLED，不冒称现锁新双PASS。历史B3累计2保持、修复0。M038错误派发已按操作员纠正取消，不属M010审计票。
+
+## 范围与三线
+冻结FILES四迁移共203行全部读完，另全文读直接纠正迁移V410共26行。18个GEN定义全读并逐项审查；HTML当前治理图415—440核对多对多协作和主体职责。历史V318/V354写父链/spv/operation不是当前模式，必须连V410看最终结果。
+第一性：表承载项目/空间/商户/主体主数据，组织列隔离角色；删掉会失去对象归属。SQL结构和索引属细化/技术性，不能因HTML未列字段名删除。
+顺从式：本轮实库现值对照V410纠正内容及当前HTML，不引用旧四层行政链作为现行口径。
+对抗式：核父链是否残留、角色白名单是否仍允许删除角色、全局角色名约束是否阻断组织同名、英文权限种子是否仍外显、应用历史与文件checksum是否漂移。各项现值未见反例成立。
+限制：不执行DDL/回填/迁移/数据库改名，不跑全后端，不称V427顺序门禁或发布链全绿。24项JDBC是同会话M009已跑证据，本轮读取XML核24/0/0/0及相关方法，不冒称本轮重新执行。纯SQL复查采用实际只读模式和checksum证据，不造TDD。
+
+## 全文件指纹
+- V005__p0_platform_master_data.sql：109行；SHA256 5118942eea90829a2c8d59fa88e70e7b9467ca87201acff653d2ccc2e4054905；实算/库内Flyway checksum 413803928/413803928，相等。
+- V048__access_role_organization_isolation.sql：7行；SHA256 e6a216f045479450b61766e54f80324122d3706099fc48f048a927d0094c83fd；实算/库内Flyway checksum -1430035601/-1430035601，相等。
+- V318__business_entity_parent_layer.sql：16行；SHA256 466451ddb6e86f108f163e460282bedddc21f532d4289f80fc1c51e717d0b481；实算/库内Flyway checksum -705915847/-705915847，相等。
+- V354__business_entity_master_data.sql：71行；SHA256 c32019a3457610df46e436f18572c0b71567779eddc12baf5fa59a837c22bbf3；实算/库内Flyway checksum -61418191/-61418191，相等。
+- V410__m010_business_entity_topology_and_role_isolation.sql：26行；SHA256 85c914d7d711b8d8b3eb1bbfad5799a13a9c1a40a9b4145bf200bf88cff12ef1；实算/库内Flyway checksum 983875231/983875231，相等。
+
+## 18判据逐项
+- GEN-001：基础表、项目/空间归属与角色组织隔离各有实际用途；纠正迁移消除旧固定父链，未新增功能。
+- GEN-002：当前complex_test模式及Flyway成功记录与五份迁移接线一致；本轮只读查询exit0。
+- GEN-003：复用同会话M009已真实运行24项JDBC结果，其中3项直接断言删父链、拒spv/operation、组织名唯一；明确未冒称本轮重跑。
+- GEN-004：entity_role现CHECK三值；roles组织范围由现有组织列承载；不为裸SQL绕过业务层新增校验。
+- GEN-005：角色按组织隔离唯一性；V005权限种子不替代运行期授权；M009已查现有高危权限过滤，不单凭历史直授判越权。
+- GEN-006：主键/唯一索引及三角色CHECK实际存在；旧父链删除不删六行主体；当前六主体分别为1平台/1项目/4域公司。
+- GEN-007：roles表达式唯一索引处理同组织重复；多组织同名允许；历史迁移受Flyway版本记录，不假造并发反例。
+- GEN-008：V410纠正旧父链/角色白名单；8权限名称当前中文；旧文件中英文注释不是现行产品口径。
+- GEN-009：psql ON_ERROR_STOP=1、READ ONLY事务、ROLLBACK；任何查询失败不会写PASS；本次查询成功。
+- GEN-010：未输出密码、未改加密或PII策略；查询只输出模式/权限字典及聚合数，姓名加密后续V431属既有依赖不扩。
+- GEN-011：Flyway应用脚本/version/success/checksum可关联；本轮保留完整命令口径和结果。
+- GEN-012：本模块常数种子、索引及一次迁移，无循环或无限重试；catalog查询限定表/版本。
+- GEN-013：无需安装工具或新增依赖，目标PostgreSQL现有psql执行；不声称运行发布链一致。
+- GEN-014：四历史迁移及V410实算Flyway逐行CRC32与已应用checksum五项全等；没有改已应用文件/重跑迁移/重建数据库。
+- GEN-015：8权限用户名称现为中文；历史V005英文由V251覆盖，无网页文件。
+- GEN-016：旧迁移注释关于固定四层等记作已登记历史，不改checksum，也不以旧注释作为现行需求。
+- GEN-017：全14项既有问题重判，当前无新添加/工程缺陷；旧spv/operation删除裁决沿用，不擅自恢复。
+- GEN-018：依据本轮完整源码/HTML原文、真实只读SQL及checksum，不以历史PASS或其它席意见为证据。
+
+## 全14既有ID当前重判
+- M010-001：当前队列否。父链列及索引现均不存在；V410删除已执行，稳定主体行保留。
+- M010-002：当前队列否。spv已不在角色CHECK，当前0行；旧删除裁决保持。
+- M010-003：当前队列否。operation已不在角色CHECK，当前0行；旧删除裁决保持。
+- M010-004：当前队列否。roles_role_name_key全局唯一约束已无；uq_roles_org_role_name以组织+名称唯一。
+- M010-005：当前队列否。八个permission_name现均中文，V251已成功应用。
+- M010-006：当前队列否。历史迁移过时来源注释保留登记，不能倒改已应用checksum。
+- M010-007：当前队列否。松引用由当前服务层校验承担；不新造硬外键。
+- M010-008：当前队列否。business_entities.status旧inactive归档口径与服务可设状态不同，已登记范围，不新增状态流程。
+- M010-009：当前队列否。当前库到V431，不把历史V410测试库快照当当前；不处置版本顺序/重建库。
+- M010-010：当前队列否。下游断言已有删列/角色拒绝/组织隔离覆盖，复用同会话24项通过证据。
+- M010-011：当前队列否。骨架稳定ID/不凭空造工商信息、ON CONFLICT与存档历史保持；不新增业务。
+- M010-012：当前队列否。Analytics旧operation夹具的历史修复保留；本次不冒称重跑Analytics整类。
+- M010-013：当前队列否。COALESCE(NULL,'')同键、inactive保留名称的既有唯一性说明保持。
+- M010-014：当前队列否。结算测试命名旧父链字样作为历史文案观察，不跨模块改名。
+
+## 本轮实跑
+psql在complex_test执行BEGIN TRANSACTION READ ONLY，限定information_schema/pg_indexes/pg_constraint、业务角色聚合、8个权限名称、Flyway目标版本，最后ROLLBACK；ON_ERROR_STOP=1，真实exit0。仅读取/etc/complex/complex.env三个既有DB变量，未source整个文件，不输出秘密。
+DB_EXIT 0
+BEGIN
+ current_database 
+------------------
+ complex_test
+(1 row)
+
+ column_name 
+-------------
+(0 rows)
+
+       indexname        |                                                               indexdef                                                               
+------------------------+--------------------------------------------------------------------------------------------------------------------------------------
+ uq_roles_org_role_name | CREATE UNIQUE INDEX uq_roles_org_role_name ON public.roles USING btree (COALESCE(organization_id, ''::character varying), role_name)
+(1 row)
+
+        conname         |                                                                        pg_get_constraintdef                                                                         
+------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ business_entities_pkey | PRIMARY KEY (id)
+ chk_be_entity_role     | CHECK (((entity_role)::text = ANY ((ARRAY['platform'::character varying, 'project_company'::character varying, 'management_company'::character varying])::text[])))
+(2 rows)
+
+    entity_role     | count 
+--------------------+-------
+ management_company |     4
+ platform           |     1
+ project_company    |     1
+(3 rows)
+
+      permission_code      |  permission_name   
+---------------------------+--------------------
+ entity.binding.manage     | 管理业务主体和绑定
+ entity.binding.view       | 查看业务主体和绑定
+ governance.project.manage | 管理平台项目
+ governance.project.view   | 查看平台项目
+ governance.space.manage   | 管理平台空间
+ governance.space.view     | 查看平台空间
+ merchant.profile.manage   | 管理商户档案
+ merchant.profile.view     | 查看商户档案
+(8 rows)
+
+ version |                           script                           | success 
+---------+------------------------------------------------------------+---------
+ 005     | V005__p0_platform_master_data.sql                          | t
+ 048     | V048__access_role_organization_isolation.sql               | t
+ 251     | V251__permission_names_i18n_zh.sql                         | t
+ 318     | V318__business_entity_parent_layer.sql                     | t
+ 354     | V354__business_entity_master_data.sql                      | t
+ 410     | V410__m010_business_entity_topology_and_role_isolation.sql | t
+ 427     | V427__m009_project_profiles_and_associations.sql           | t
+ 431     | V431__merchant_contact_names_ciphertext.sql                | t
+(8 rows)
+
+ max | max 
+-----+-----
+ 399 | 431
+(1 row)
+
+ROLLBACK
+
+
+
+另读取flyway_schema_history(script,checksum)五版本，Python binascii.crc32按UTF-8每行去行尾累计，32位有符号转换；五个实算与库内校验值全等。字节SHA见上。
+24项既有JDBC结果相关方法：parentEntityColumnIsRemovedFromBusinessEntities、entityRoleCheckRejectsSpvAndOperation、organizationScopedRolesMayShareNameAcrossOrganizations。断言是行为证据，非仅测试名称；本模块旧三条红→绿历史不覆盖。
+
+## 完整性及结论
+现锁实算/sidecar/ledger保持b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458；LOCK-AMEND-COUNT1。旧Grok末条锁为b012…，属于历史，不冒充本轮第四值；按用户单席复查例外不声称本轮四值双审。
+HEAD e456ba96c84185c8d39f18f548011daac48a6466；真实indexSHA d9a65108a1e87bd300c299ca7640f832bd5c2feb771f35a7a2413d32a1748331。源码/SQL/三HTML/锁均未修改，只允许本轮复查记录递增版本。
+使用grilling/第一性追问与codebase-design识别持久化用途，按V0.17收窄，不派子代理、不增加判据/功能。
+本次Codex复查结论PASS：未发现新问题。Grok NOT-CALLED，B3累计2、本次修复0、无待批准项。保留历史双席PASS及全部原始报告。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+# M010 B5-r2 当前锁全模块独立审计
+版本：V0.04
+
+席甲：Codex。B3累计2；本次未执行修复。先派Grok后独立读取源文件、当前数据库与历史授权；本报告落盘前未读取本次Grok正文。本批B1/B2已双PASS、当前14项队列均否；跳过新增B3/B4，历史累计2。此处重新读取五SQL全文和18GEN并执行新的只读数据库核验，不把此前单席补充PASS当双席结论。
+
+## 范围与第一性原理
+冻结FILES：V005 109行、V048 7行、V318 16行、V354 71行，共203行；另完整读取既有直接修复V410 26行。仅使用M010映射GEN-001至018，不扩映射。项目拓扑应从治理HTML“多对多协作，不是固定隶属层级”出发，不能从历史SQL注释反向发明行政层级。历史迁移需经后续纠正迁移求最终效果，不能单拿V318/V354旧DDL判当前仍有父链。
+当前HTML、锁与已有授权保持；questions/M010-002、003均明确“删除”。V410删父链和收紧角色是已批准且已实施的历史修复，本次不执行迁移。
+
+## 顺从式全覆盖
+V005：四类主数据表、主键/索引、时间字段、8权限种子及role_permissions均已逐行读取。VARCHAR长度为旧建表态，后续加密和治理迁移须一并考虑；历史英文权限名已有V251修正，不改已应用checksum。
+V048：可空organization_id及部分索引保留；实际角色同名隔离须同时查看V410替换全局唯一约束。
+V318：旧父链列/注释/索引曾违背HTML，V410已删除最终模式的列和索引，旧文件保持作迁移证据。
+V354：archive_reason、一次性operation归档、六稳定主体种子、旧五角色CHECK均读取。种子不造工商资料、不种十家酒吧、不单列资产公司。旧operation/spv白名单已被V410三值约束替换。
+V410：仅删除旧父链、转换旧角色并收紧CHECK、替换角色唯一性；无DROP实体表或删实体行。COALESCE组织键保持全局NULL/空串同键，不同组织可同名；未自行增加权限或生命周期规则。
+
+## 对抗式核验与实际命令证据
+本次真实只读psql，ON_ERROR_STOP=1，BEGIN TRANSACTION READ ONLY…ROLLBACK，exit0：
+- information_schema查business_entities.parent_entity_id：0行。
+- pg_indexes查旧父链索引与新角色唯一索引：仅uq_roles_org_role_name存在，定义UNIQUE btree(COALESCE(organization_id,''::varchar),role_name)。
+- pg_constraint查旧roles_role_name_key与chk_be_entity_role：仅后者存在，允许platform/project_company/management_company三值。
+- business_entities按角色计数：management_company4、platform1、project_company1；旧两角色无行。
+- Flyway 005/048/318/354/410全部success，checksum依次413803928、-1430035601、-705915847、-61418191、983875231；max(version::int)=431。
+文件本次SHA与刚完成的只读复查一致，未发生源字节漂移。本次B5重新按Flyway逐行UTF-8 CRC32算法算得五checksum，与当前数据库逐项全等。
+直接读取PlatformJdbcIntegrationTests:706-739：列/索引不存在断言；三角色定义断言+合法插入+spv违例；两组织同名成功、同组织同名DuplicateKey。最近M009实跑该类24/24为已有同源证据，本次未新跑写库测试；不声称重新跑全量后端。operation通过约束白名单排除，不谎称在已中止事务又执行了第二条违例插入。
+
+## 18项冻结判据
+| 判据 | 核验与本次结论 |
+|---|---|
+| GEN-001 | 四表/索引/稳定ID有当前调用用途；父链已删；未发现需增删新抽象，PASS |
+| GEN-002 | 五迁移当前Flyway成功，最终DDL与使用方直接测试一致，PASS |
+| GEN-003 | 直接三测试断言会因父链、角色放宽或组织唯一性回归而失败；不以旧绿替代本次DDL检查，PASS |
+| GEN-004 | 角色CHECK有效；引用关系由服务校验的既有设计，不擅增硬FK，PASS |
+| GEN-005 | 权限种子高风险管理须审批，organization索引不冒充完整授权；本模块未添越权入口，PASS |
+| GEN-006 | 唯一约束和CHECK由数据库实施，迁移按Flyway事务顺序；旧全局唯一已除，PASS |
+| GEN-007 | 固定种子ON CONFLICT避免重复，唯一性原子；不会宣称DO NOTHING修复人工漂移，PASS |
+| GEN-008 | 最终三角色/父链移除与当前后台、直接夹具一致；旧状态观察维持登记，PASS |
+| GEN-009 | 约束违例明确失败，无吞错；迁移失败不可伪成功，PASS |
+| GEN-010 | SQL无动态拼接输入或嵌入密钥；工商资料种子NULL；历史字段加密不重复开无授权功能，PASS |
+| GEN-011 | Flyway记录、checksum、schema实态可核；归档理由留存，PASS |
+| GEN-012 | 固定DDL/种子及必要索引，无应用无界循环或资源泄漏，PASS |
+| GEN-013 | 五文件checksum与既有安装一致；库当前V431，不复述旧409为现况，PASS |
+| GEN-014 | 历史破坏性删列有明确授权；本次无迁移执行，顺序和最终结构正确，PASS |
+| GEN-015 | 无本模块UI；权限文案经后续V251中文化，PASS |
+| GEN-016 | 旧注释残留登记006/014，未作为当前业务依据；当前效果可复现，PASS |
+| GEN-017 | 冲突→细化→技术性→添加顺序；旧两添加已答删除且完成，无新业务发明，PASS |
+| GEN-018 | 结论依HTML原文、SQL源和可复现只读输出；历史意见不是单独依据，PASS |
+
+## 全部14已定稿ID复核
+| ID | 现态与已定稿当前修复队列 |
+|---|---|
+| M010-001 | 父链列和索引实际不存在，已修，否 |
+| M010-002 | spv已不在CHECK，已批准删除且完成，否 |
+| M010-003 | operation已不在CHECK，已批准删除且完成，否 |
+| M010-004 | 组织复合唯一索引有效，已修，否 |
+| M010-005 | V005旧英文被V251后继修正，登记，否 |
+| M010-006 | 历史注释不实已登记，不回写Flyway历史文件，否 |
+| M010-007 | 无硬FK为已有下位实现选择；不增新规则，否 |
+| M010-008 | 状态/归档能力边界历史观察，未据此增新功能，否 |
+| M010-009 | 旧版本冲突已按授权V410处理，库现V431，否 |
+| M010-010 | 旧父链/operation夹具后果已处理，直接测试与最终结构一致，否 |
+| M010-011 | 种子及松引用等正向/限制观察保留，否 |
+| M010-012 | 既有Analytics夹具机械修正记录保留，本次无证据推翻且不称新跑该类，否 |
+| M010-013 | NULL/空串同键、inactive占名、全局与组织角色可同名是既有语义，不擅改，否 |
+| M010-014 | 他模块方法/注释文案残留登记，不顺手重命名，否 |
+
+## 技能与结论
+沿用本轮已实读技能：using-superpowers、grilling、codebase-design及验证技能，按V0.17只借自问结构/实证核验；禁第三席、禁业务扩展、禁未经B2修复。未声称调用新的技能工具。
+本次未发现新增缺陷；独立B5结论：PASS。当前两席B2定稿14项队列均否，9观察保留，Grok B2要求013补齐三事实已落实。只有本次Grok B5完整报告交付且同为PASS、四值校验全等后才能标模块PASS。当前尚未读取本次Grok B5正文。
+
+## B5执行边界
+此次Codex仅读取与SELECT，未创建/删除数据库、未执行迁移、未写业务数据。B1 Grok建临时探针库偏差不隐去，已于B2记录，额外只读确认无残留；本次Grok派发严格禁止包括临时库在内的建删。既有反例是B1证据，不伪称B5新执行。HTML/主索引/钩子上一检查hash未变，本次未操作它们。所有报告旧字节保留，不冒称整个项目全绿。
