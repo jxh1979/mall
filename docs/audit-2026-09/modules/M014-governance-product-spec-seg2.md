@@ -1,5 +1,19 @@
 # M014 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段
-版本：V0.02（2026-09-20T03:47:35Z；V0.01 为 2026-09-11 B5-r1 收口记录，以下按时序并入）
+版本：V0.03
+
+状态：PASS。2026-09-23T09:33:49.464436+00:00，B5-r8第二次 Codex/Grok V0.02双PASS；Grok真实exit0。
+
+范围：docs/platform-governance-product-spec-v0.2.md V0.13，3521行/236455字节，SHA256 020cceb047d5511a65dd8c08d2f06425d52727ee86cca6e769b8f96eeaf84017；84条冻结判据。
+B3累计8。001–038队列全否：34已修、019/020观察、027/028无工程缺陷；无添加项、待答问题或HTML修改申请。本轮仅029日志§7→§8、038十条→十一条及共同标题版本递增。
+B4-r8双PASS后，B5第一次Grok就025详情“异常说明”提出FAIL；B2独立核证为事项展示而非异常班次必填，双方确认缺陷否、原文保留。未修复，按同r8再次完整B5，双方PASS。保留两次原票，不把旧FAIL改写成PASS。
+证据：M014-b4-r8-self-raw.md / M014-b4-r8-grok-raw.md；M014-b1-self-raw.md末V0.13 / M014-b1-grok-raw.md末V0.10；M014-b5-r8-self-raw.md末V0.02 / M014-b5-r8-grok-raw.md末V0.02。
+B5后锁四值实算/sidecar/ledger/Grok末段均为 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，LOCK-AMEND-COUNT=1。ledger先记PASS后写本收口。
+三份业务HTML、程序、SQL与测试未改。文档审计不等于所有产品功能已实现，跨模块观察继续保留。
+发布分支：feature/audit-m014-20260923。发布仅携带本模块规格及其审计证据、全局台账检查点；实际提交/推送/合并以该分支PR为准，不混入8个工具配置文件。
+
+## 历史收口记录（原文保留）
+# M014 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第2段
+历史版本：V0.02（2026-09-20T03:47:35Z；V0.01 为 2026-09-11 B5-r1 收口记录，以下按时序并入）
 
 状态：PASS（B5-r4 双 PASS，2026-09-20T03:47:35Z）。范围：plan/modules.md V0.04 的 1 文件（docs/platform-governance-product-spec-v0.2.md；计划冻结 3494 行，现 3505 行，OVERSIZE-SINGLE-FILE，按段全读）；判据 84 项（BEQR 21、BSM 12、GEN 18、PGM 33）。B3 整批修复累计 4 次（3 次额度 + 操作员 2026-09-19 获批追加 1 次）。修复队列 25 个 ID 全否（23 已修：001–018 r1、021–023 r2、024 r3、025 r4；019 XM→M261；020 登记观察）；添加项 0；questions 0；无 HTML 修改申请。
 
@@ -11,3 +25,4 @@
   - M014-020 → governance/review 与 access 实现模块：§24.3 审批人解析仍含职级算术与 `specific_role`（M087 起审批人身份由组织层级节点决定，rank 作档位下限）；`POST /api/v1/access/permission-templates/{id}/copy` 仍在而规格已废止复制模板；BEQR-148「其他」收费模板未进字段表；`dealer_portal` 第十一端代码值未实现（V111 十码）。
   - M014-021 同根句 → M421 `docs/business-html-source-of-truth-acceptance-spec-v0.1.md:67`（RULE-GOV-ROLE-CHANGE-01）、M439 `docs/product-requirements-v0.1.md:601`、`:650`。
   - 席甲方法教训（已存记忆）：B5 投票前须对全文【已废止/不得回灌】条目做同根活句扫描（024、025 均为此型）。
+
