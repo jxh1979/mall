@@ -1,18 +1,28 @@
-// 文件版本：V0.02
+// 文件版本：V0.06
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { auditTraceField } from "../components/AuditTrailHint";
+import { useServerPagedRows } from "../hooks/useServerPagedRows";
+import { TablePager } from "../components/TablePager";
 import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+
+type MerchantRow = MerchantAdmissionRow & { projectId?: string | null };
+const ORGANIZATION_STATUS_LABELS: Record<string, string> = { pending_admission: "待准入", active: "正常", suspended: "暂停", terminated: "终止", archived: "归档", blacklisted: "黑名单" };
+const PROJECT_STATUS_LABELS: Record<string, string> = { draft: "草稿", pending_activation: "待启用", active: "已启用", suspended: "暂停", terminated: "终止", archived: "归档" };
+function formatOrganizationStatus(code?: string | null) {
+  return code ? ORGANIZATION_STATUS_LABELS[code] ?? "未识别状态" : "—";
+}
+function formatProjectStatus(code?: string | null) {
+  return code ? PROJECT_STATUS_LABELS[code] ?? "未识别状态" : "—";
+}
 
 const TEXT = {
   title: "组织与商户档案",
@@ -69,14 +79,11 @@ function readKpiFocusFromUrl(): KpiFocus | null {
 function kpiFocusTitle(focus: KpiFocus): string {
   if (focus.table === "entities") return "经营主体";
   if (focus.table === "projects") return "项目档案";
-  if (focus.status === "active") return "正常商户";
-  return focus.status ? `商户档案（${formatBusinessStatus(focus.status)}）` : "商户档案";
+  if (focus.status === "active") return "本页正常商户";
+  return focus.status ? `本页商户档案（${formatOrganizationStatus(focus.status)}）` : "商户档案";
 }
 
 export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
-  const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
-  const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
-  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   // M012-006：不预填验收默认值；商户名/联系人/电话/合作形式均由用户填写或选择。
   const [merchantName, setMerchantName] = React.useState("");
   // 业态必填 → 不预选，逼招商自己选；选错＝通票分账份额拆给错的业态。
@@ -126,22 +133,37 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
-  const { loading, error, reload } = useAdminResource(
-    async () => {
-      // 跨域副资源不请求（根因修）：主体端点需 entity.binding.view，本页 gate 仅 merchant.profile.view + governance.project.view——
-      // 缺该权限角色 403 会 reject 整个 Promise.all 致整页白屏；缺权限则不请求、主体下拉降级为空。
-      const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
-      const [nextEntities, nextMerchants, nextProjects] = await Promise.all([
-        canEntityView ? api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities") : Promise.resolve([] as BusinessEntityRow[]),
-        api.get<MerchantAdmissionRow[]>(`/api/v1/platform/merchants?includeArchived=${showArchived}${typeFilter ? `&merchantType=${typeFilter}` : ""}`),
-        api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
-      ]);
-      setEntities(nextEntities);
-      setMerchants(nextMerchants);
-      setProjects(nextProjects);
+  const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
+  const entityRows = useServerPagedRows(
+    (page, size) => {
+      setGlobalError(null);
+      return canEntityView ? api.getPaged<BusinessEntityRow>("/api/v1/platform/business-entities?page=" + page + "&size=" + size)
+      : Promise.resolve({ items: [] as BusinessEntityRow[], total: 0, page: 1, size });
     },
-    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
-  );
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const merchantRows = useServerPagedRows(
+    (page, size, query) => {
+      setGlobalError(null);
+      return api.getPaged<MerchantRow>("/api/v1/platform/merchants?" + (query || "includeArchived=false") + "&page=" + page + "&size=" + size);
+    },
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const projectRows = useServerPagedRows(
+    (page, size) => {
+      setGlobalError(null);
+      return api.getPaged<GovernanceProjectRow>("/api/v1/platform/projects?page=" + page + "&size=" + size);
+    },
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const entities = entityRows.rows;
+  const merchants = merchantRows.rows;
+  const projects = projectRows.rows;
+  const resources = [entityRows, merchantRows, projectRows];
+  const loading = resources.some((resource) => resource.loading);
+  const error = resources.find((resource) => resource.error)?.error ?? null;
+  const reload = () => resources.forEach((resource) => resource.reload());
+
+  React.useEffect(() => {
+    if (!merchantRows.loading && merchantRows.page > merchantRows.pageCount) merchantRows.search(merchantRows.keyword);
+  }, [merchantRows.loading, merchantRows.page, merchantRows.pageCount, merchantRows.keyword]);
 
   // 下钻定位：从别的页点商户进来（?focus=商户id）→ 滚动高亮该商户档案行；无 focus 或未命中时行为不变。
   React.useEffect(() => {
@@ -198,7 +220,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       firstArchivedToggle.current = false;
       return;
     }
-    void reload();
+    merchantRows.search(new URLSearchParams({ includeArchived: String(showArchived), ...(typeFilter ? { merchantType: typeFilter } : {}) }).toString());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showArchived, typeFilter]);
 
@@ -231,7 +253,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   }
 
   async function requestDeleteMerchant(id: string) {
-    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    const reason = window.prompt("删除理由（由最高权限审批；持授权 U 盘密钥的最高权限本人发起时直接执行）：");
     if (reason === null || !reason.trim()) { setGlobalError("删除理由必填"); return; }
     setGlobalError(null);
     try {
@@ -272,23 +294,28 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         { label: "统一社会信用代码", value: display(row.unifiedSocialCreditCode) },
         { label: "主体角色", value: formatBusinessStatus(row.entityRole) },
         { label: "法定代表人", value: display(row.legalRepresentative) },
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: formatOrganizationStatus(row.status) },
       ],
     });
   }
 
-  function openMerchantDetail(row: MerchantAdmissionRow) {
+  function merchantProjectName(row: MerchantRow) {
+    return projects.find((project) => project.id === row.projectId)?.name ?? (row.projectId ? "项目资料未加载" : "-");
+  }
+
+  function openMerchantDetail(row: MerchantRow) {
     setDetail({
       title: `商户档案 · ${display(row.merchantName)}`,
       fields: [
         { label: "商户", value: display(row.merchantName) },
+        { label: "所属项目", value: merchantProjectName(row) },
         { label: "业态", value: row.merchantType ? formatBusinessStatus(row.merchantType) : "-" },
         { label: "联系人", value: display(row.contactName) },
         { label: "联系电话", value: display(row.contactPhone) },
         { label: "区块", value: display(row.mallBlockCode) },
         { label: "面积", value: display(row.leasedAreaSquareMeter ?? row.areaSquareMeter) },
         { label: "合作形式", value: cooperationLabel(row.cooperationForm) },
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: formatOrganizationStatus(row.status) },
         auditTraceField(navigateTo, "merchant", row.id),
       ],
     });
@@ -300,9 +327,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       fields: [
         { label: "项目", value: display(row.name) },
         { label: "编码", value: display(row.code) },
-        { label: "商户", value: row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId) },
         { label: "业态", value: formatBusinessStatus(row.venueType) },
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: formatProjectStatus(row.status) },
       ],
     });
   }
@@ -313,8 +339,9 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       <div className="admin-table-scroll" data-testid="organization-entities-section">
         <table className="admin-table" data-testid="organization-entities-table">
           <thead><tr><th>主体</th><th>统一社会信用代码</th><th>主体角色</th><th>状态</th><th>详情</th></tr></thead>
-          <tbody>{entities.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`organization-entity-row-${row.id}`} onClick={() => openEntityDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEntityDetail(row); } }}><td>{display(row.entityName)}</td><td>{display(row.unifiedSocialCreditCode)}</td><td>{formatBusinessStatus(row.entityRole)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看经营主体详情" onClick={(event) => { event.stopPropagation(); openEntityDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <tbody>{entities.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`organization-entity-row-${row.id}`} onClick={() => openEntityDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openEntityDetail(row); } }}><td>{display(row.entityName)}</td><td>{display(row.unifiedSocialCreditCode)}</td><td>{formatBusinessStatus(row.entityRole)}</td><td>{formatOrganizationStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看经营主体详情" onClick={(event) => { event.stopPropagation(); openEntityDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
+        <TablePager testid="organization-entities-pager" page={entityRows.page} pageCount={entityRows.pageCount} total={entityRows.total} onPrev={entityRows.prev} onNext={entityRows.next} />
       </div>
     </>
   );
@@ -359,9 +386,10 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       <div className="admin-table-scroll" data-testid="organization-merchants-section">
         <table className="admin-table" data-testid="organization-merchants-table">
           {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
-          <thead><tr><th>商户</th><th>业态</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th><th>详情</th></tr></thead>
-          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{row.merchantType ? formatBusinessStatus(row.merchantType) : "-"}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{cooperationLabel(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <thead><tr><th>商户</th><th>所属项目</th><th>业态</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th><th>详情</th></tr></thead>
+          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{merchantProjectName(row)}</td><td>{row.merchantType ? formatBusinessStatus(row.merchantType) : "-"}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{cooperationLabel(row.cooperationForm)}</td><td>{formatOrganizationStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
+        <TablePager testid="organization-merchants-pager" page={merchantRows.page} pageCount={merchantRows.pageCount} total={merchantRows.total} onPrev={merchantRows.prev} onNext={merchantRows.next} />
       </div>
     </>
   );
@@ -371,26 +399,30 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       <div className="admin-section-title">项目档案</div>
       <div className="admin-table-scroll" data-testid="organization-projects-section">
         <table className="admin-table" data-testid="organization-projects-table">
-          <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th><th>详情</th></tr></thead>
-          <tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`organization-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.name)}</td><td>{display(row.code)}</td><td onClick={(event) => event.stopPropagation()}>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{formatBusinessStatus(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目档案详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <thead><tr><th>项目</th><th>编码</th><th>业态</th><th>状态</th><th>详情</th></tr></thead>
+          <tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`organization-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{formatBusinessStatus(row.venueType)}</td><td>{formatProjectStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目档案详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
+        <TablePager testid="organization-projects-pager" page={projectRows.page} pageCount={projectRows.pageCount} total={projectRows.total} onPrev={projectRows.prev} onNext={projectRows.next} />
       </div>
     </>
   );
 
-  const focusCount = kpiFocus ? (kpiFocus.table === "entities" ? entities.length : kpiFocus.table === "projects" ? projects.length : visibleMerchants.length) : 0;
+  const focusCount = kpiFocus ? (kpiFocus.table === "entities" ? entityRows.total : kpiFocus.table === "projects" ? projectRows.total : merchantStatusFilter ? visibleMerchants.length : merchantRows.total) : 0;
 
   return (
     <section data-testid="organization-merchant-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       {focusObjectId && (
-        <div className="admin-state" data-testid="organization-merchant-focus">已从下钻定位到商户：{focusObjectId}（在下表中查看其档案与归属）</div>
+        <div className="admin-state" data-testid="organization-merchant-focus">
+          {!loading && !error && (!kpiFocus || kpiFocus.table === "merchants") && visibleMerchants.some((row) => row.id === focusObjectId)
+            ? <>已从下钻定位到商户：{focusObjectId}（在下表中查看其档案与归属）</>
+            : "当前列表尚未定位到该商户，请检查筛选或翻页"}
+        </div>
       )}
       <TechDetails><div className="admin-generic-evidence" data-testid="organization-merchant-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="organization.viewed / merchant_profile.created" />
       {formError ? <div className="admin-inline-error" data-testid="organization-merchant-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
-        {entities.length === 0 && merchants.length === 0 && projects.length === 0 ? (
+        {entityRows.total === 0 && merchantRows.total === 0 && projectRows.total === 0 ? (
           <div className="admin-state admin-empty" data-testid="organization-merchant-empty">暂无组织与商户档案</div>
         ) : kpiFocus ? (
           <>
@@ -406,21 +438,21 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             <div className="admin-kpi-grid" data-testid="organization-merchant-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>经营主体</span>
-                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-entities" onClick={() => enterKpiFocus("entities")}>{entities.length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-entities" onClick={() => enterKpiFocus("entities")}>{entityRows.total}</button>
                 <small>组织档案</small>
               </div>
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>商户档案</span>
-                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchants.length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchantRows.total}</button>
                 <small>商户档案数</small>
               </div>
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>项目档案</span>
-                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-projects" onClick={() => enterKpiFocus("projects")}>{projects.length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-projects" onClick={() => enterKpiFocus("projects")}>{projectRows.total}</button>
                 <small>项目数</small>
               </div>
               <div className="admin-kpi-card admin-kpi-card--clickable">
-                <span>正常商户</span>
+                <span>本页正常商户</span>
                 <button type="button" className="admin-kpi-value" data-testid="organization-kpi-active-merchants" onClick={() => enterKpiFocus("merchants", "active")}>{merchants.filter((row) => row.status === "active").length}</button>
                 <small>正常商户数</small>
               </div>

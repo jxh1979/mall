@@ -1,31 +1,41 @@
-// 文件版本：V0.01
+// 文件版本：V0.04
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { useServerPagedRows } from "../hooks/useServerPagedRows";
+import { TablePager } from "../components/TablePager";
 import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, GovernanceSpaceRow, MerchantAdmissionRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
-// M012-004：空间类型字典 8 码（V184 space_type_dictionary 种子，type_name 中文）；PGM-001 零英文，页面不直出 type_code。
+type MerchantRow = MerchantAdmissionRow & { projectId?: string | null };
+type SpaceTypeRow = { typeCode: string; typeName: string };
+const PROJECT_STATUS_LABELS: Record<string, string> = { draft: "草稿", pending_activation: "待启用", active: "已启用", suspended: "暂停", terminated: "终止", archived: "归档" };
+const ORGANIZATION_STATUS_LABELS: Record<string, string> = { pending_admission: "待准入", active: "正常", suspended: "暂停", terminated: "终止", archived: "归档", blacklisted: "黑名单" };
+function formatTopologyStatus(project: GovernanceProjectRow | undefined, merchant: MerchantRow) {
+  const code = project?.status ?? merchant.status;
+  return code ? (project ? PROJECT_STATUS_LABELS : ORGANIZATION_STATUS_LABELS)[code] ?? "未识别状态" : "—";
+}
+
+// M012-016：字典显示名优先；保留原有中文种子作为兼容显示。
 const SPACE_TYPE_LABELS: Record<string, string> = { building: "楼栋", floor: "楼层", zone: "区块/区域", shop: "商铺/铺位", public_area: "公共区域", parking: "车位/车库", booth: "摊位/展位", other: "其他" };
-function formatSpaceType(code: string | null | undefined) {
-  return code ? SPACE_TYPE_LABELS[code] ?? formatBusinessStatus(code) : "—";
+function formatSpaceType(code: string | null | undefined, types: SpaceTypeRow[]) {
+  return code ? types.find((type) => type.typeCode === code)?.typeName || SPACE_TYPE_LABELS[code] || "未识别类型" : "—";
 }
 // M012-004：空间状态闭集 active/unavailable（M009-036）页内映射「可用/不可用」，不直出英文。
 const SPACE_STATUS_LABELS: Record<string, string> = { active: "可用", unavailable: "不可用" };
 function formatSpaceStatus(code: string | null | undefined) {
-  return code ? SPACE_STATUS_LABELS[code] ?? formatBusinessStatus(code) : "—";
+  return code ? SPACE_STATUS_LABELS[code] ?? "未识别状态" : "—";
 }
 
 const TEXT = {
   title: "集团/综合体拓扑",
   description: "展示集团、综合体、商户、项目和空间点位之间的治理关系，作为权限、合同、结算和运营责任归属的入口。",
-  evidence: "接口证据：读取 /api/v1/platform/business-entities、/api/v1/platform/merchants、/api/v1/platform/projects、/api/v1/platform/spaces。",
+  evidence: "接口证据：读取 /api/v1/platform/business-entities、/api/v1/platform/merchants、/api/v1/platform/projects、/api/v1/platform/spaces、/api/v1/platform/space-types。",
   boundary: "集团、综合体、商户、项目和空间点位必须用同一套拓扑口径承接权限、合同、结算和审计；拓扑页只展示关系，不做主体变更。",
   loadFailed: "治理拓扑读取失败",
   focusClear: "清除筛选，返回全部",
@@ -56,10 +66,38 @@ function kpiFocusTitle(focus: KpiFocus): string {
 }
 
 export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, navigateTo, effectivePermissions }: AdminPageProps) {
-  const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
-  const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
-  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
-  const [spaces, setSpaces] = React.useState<GovernanceSpaceRow[]>([]);
+  const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
+  const entityRows = useServerPagedRows(
+    (page, size) => {
+      setGlobalError(null);
+      return canEntityView
+      ? api.getPaged<BusinessEntityRow>("/api/v1/platform/business-entities?page=" + page + "&size=" + size)
+      : Promise.resolve({ items: [] as BusinessEntityRow[], total: 0, page: 1, size });
+    },
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const merchantRows = useServerPagedRows(
+    (page, size) => {
+      setGlobalError(null);
+      return api.getPaged<MerchantRow>("/api/v1/platform/merchants?page=" + page + "&size=" + size);
+    },
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const projectRows = useServerPagedRows(
+    (page, size) => {
+      setGlobalError(null);
+      return api.getPaged<GovernanceProjectRow>("/api/v1/platform/projects?page=" + page + "&size=" + size);
+    },
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const spaceRows = useServerPagedRows(
+    (page, size) => {
+      setGlobalError(null);
+      return api.getPaged<GovernanceSpaceRow>("/api/v1/platform/spaces?page=" + page + "&size=" + size);
+    },
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const entities = entityRows.rows;
+  const merchants = merchantRows.rows;
+  const projects = projectRows.rows;
+  const spaces = spaceRows.rows;
+  const [spaceTypes, setSpaceTypes] = React.useState<SpaceTypeRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：拓扑关系表 / 空间点位表整行可点 → 该行完整字段（枚举中文·商户可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -87,24 +125,14 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
-  const { loading, error, reload } = useAdminResource(
-    async () => {
-      // 跨域副资源不请求（根因修）：主体端点需 entity.binding.view，本页 gate 不含之——
-      // 缺该权限角色 403 会 reject 整个 Promise.all 致整页白屏；缺权限则不请求、主体层降级为空。
-      const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
-      const [nextEntities, nextMerchants, nextProjects, nextSpaces] = await Promise.all([
-        canEntityView ? api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities") : Promise.resolve([] as BusinessEntityRow[]),
-        api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
-        api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
-        api.get<GovernanceSpaceRow[]>("/api/v1/platform/spaces"),
-      ]);
-      setEntities(nextEntities);
-      setMerchants(nextMerchants);
-      setProjects(nextProjects);
-      setSpaces(nextSpaces);
-    },
+  const dictionary = useAdminResource(
+    async () => setSpaceTypes(await api.get<SpaceTypeRow[]>("/api/v1/platform/space-types")),
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
+  const resources = [entityRows, merchantRows, projectRows, spaceRows, dictionary];
+  const loading = resources.some((resource) => resource.loading);
+  const error = resources.find((resource) => resource.error)?.error ?? null;
+  const reload = () => resources.forEach((resource) => { void resource.reload(); });
 
   const projectIds = new Set(projects.map((project) => project.id));
   // M012-003：后台 SpaceRecord 以 projectId 挂接项目（无 venueId；types.ts 的 venueId 为旧臆造字段）。
@@ -126,17 +154,17 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
   const isFocused = (merchantId?: string, projectId?: string) =>
     !!focusObjectId && (focusObjectId === merchantId || focusObjectId === projectId);
 
-  function openTopologyDetail(entity: BusinessEntityRow | undefined, merchant: MerchantAdmissionRow, project: GovernanceProjectRow | undefined) {
+  function openTopologyDetail(entity: BusinessEntityRow | undefined, merchant: MerchantRow, project: GovernanceProjectRow | undefined) {
     setDetail({
       title: `拓扑关系 · ${display(merchant.merchantName)}`,
       fields: [
-        { label: "经营主体", value: display(entity?.entityName) },
+        { label: "经营主体", value: entity ? display(entity.entityName) : canEntityView && merchant.businessEntityId ? "主体资料未加载" : "-" },
         { label: "统一社会信用代码", value: display(entity?.unifiedSocialCreditCode) },
         { label: "商户", value: merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName) },
         { label: "项目", value: display(project?.name) },
         { label: "项目编码", value: display(project?.code) },
         { label: "业态", value: formatBusinessStatus(project?.venueType) },
-        { label: "状态", value: formatBusinessStatus(project?.status ?? merchant.status) },
+        { label: "状态", value: formatTopologyStatus(project, merchant) },
       ],
     });
   }
@@ -149,7 +177,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
         { label: "所属项目", value: display(project?.name ?? space.projectId) },
         { label: "楼层", value: display(space.floorNo) },
         { label: "面积(㎡)", value: display(space.areaSquareMeter) },
-        { label: "空间类型", value: formatSpaceType(space.spaceType) },
+        { label: "空间类型", value: formatSpaceType(space.spaceType, spaceTypes) },
         { label: "状态", value: formatSpaceStatus(space.status) },
       ],
     });
@@ -163,7 +191,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
           <thead><tr><th>经营主体</th><th>统一社会信用代码</th><th>商户</th><th>项目</th><th>项目编码</th><th>业态</th><th>状态</th><th>详情</th></tr></thead>
           <tbody>{merchants.map((merchant) => {
             const entity = entities.find((item) => item.id === merchant.businessEntityId);
-            const merchantProjects = projects.filter((project) => project.merchantId === merchant.id);
+            const merchantProjects = projects.filter((project) => project.id === merchant.projectId);
             const rows = merchantProjects.length ? merchantProjects : [undefined];
             return rows.map((project, index) => (
               <tr key={`${merchant.id}-${project?.id ?? "no-project"}-${index}`}
@@ -172,18 +200,20 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
                 className={`admin-row-clickable${isFocused(merchant.id, project?.id) ? " admin-row-selected" : ""}`}
                 tabIndex={0}
                 onClick={() => openTopologyDetail(entity, merchant, project)}
-                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTopologyDetail(entity, merchant, project); } }}>
-                <td>{display(entity?.entityName)}</td>
+                onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openTopologyDetail(entity, merchant, project); } }}>
+                <td>{entity ? display(entity.entityName) : canEntityView && merchant.businessEntityId ? "主体资料未加载" : "-"}</td>
                 <td>{display(entity?.unifiedSocialCreditCode)}</td>
                 <td onClick={(event) => event.stopPropagation()}>{merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName)}</td>
                 <td>{display(project?.name)}</td>
                 <td>{display(project?.code)}</td>
                 <td>{formatBusinessStatus(project?.venueType)}</td>
-                <td>{formatBusinessStatus(project?.status ?? merchant.status)}</td>
+                <td>{formatTopologyStatus(project, merchant)}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看拓扑关系详情" onClick={(event) => { event.stopPropagation(); openTopologyDetail(entity, merchant, project); }}>查看详情</button></td></tr>
             ));
           })}</tbody>
         </table>
+        <TablePager testid="governance-merchants-pager" page={merchantRows.page} pageCount={merchantRows.pageCount} total={merchantRows.total} onPrev={merchantRows.prev} onNext={merchantRows.next} />
+        {canEntityView && entityRows.pageCount > 1 ? <><span>经营主体资料分页（用于关系表）</span><TablePager testid="governance-entities-pager" page={entityRows.page} pageCount={entityRows.pageCount} total={entityRows.total} onPrev={entityRows.prev} onNext={entityRows.next} /></> : null}
       </div>
     </>
   );
@@ -197,22 +227,22 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
           <tbody>{spaces.map((space) => {
             const project = projects.find((item) => item.id === space.projectId);
             const spaceFocused = !!focusObjectId && (focusObjectId === space.id || focusObjectId === space.projectId);
-            return <tr key={space.id} data-testid={`governance-space-row-${space.id}`} className={`admin-row-clickable${spaceFocused ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openSpaceDetail(space, project)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSpaceDetail(space, project); } }}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatSpaceType(space.spaceType)}</td><td>{formatSpaceStatus(space.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看空间点位详情" onClick={(event) => { event.stopPropagation(); openSpaceDetail(space, project); }}>查看详情</button></td></tr>;
+            return <tr key={space.id} data-testid={`governance-space-row-${space.id}`} className={`admin-row-clickable${spaceFocused ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openSpaceDetail(space, project)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openSpaceDetail(space, project); } }}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatSpaceType(space.spaceType, spaceTypes)}</td><td>{formatSpaceStatus(space.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看空间点位详情" onClick={(event) => { event.stopPropagation(); openSpaceDetail(space, project); }}>查看详情</button></td></tr>;
           })}</tbody>
         </table>
+        <TablePager testid="governance-spaces-pager" page={spaceRows.page} pageCount={spaceRows.pageCount} total={spaceRows.total} onPrev={spaceRows.prev} onNext={spaceRows.next} />
       </div>
     </>
   );
 
-  const focusCount = kpiFocus ? (kpiFocus.table === "spaces" ? spaces.length : merchants.length) : 0;
+  const focusCount = kpiFocus ? (kpiFocus.table === "spaces" ? spaceRows.total : merchantRows.total) : 0;
 
   return (
     <section data-testid="governance-topology-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="governance-topology-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="governance_topology.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
-        {entities.length === 0 && merchants.length === 0 && projects.length === 0 && spaces.length === 0 ? (
+        {entityRows.total === 0 && merchantRows.total === 0 && projectRows.total === 0 && spaceRows.total === 0 ? (
           <div className="admin-state admin-empty" data-testid="governance-topology-empty">暂无治理拓扑数据</div>
         ) : kpiFocus ? (
           <>
@@ -225,10 +255,10 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="governance-topology-summary">
-              <div className="admin-kpi-card"><span>经营主体</span><strong>{entities.length}</strong><small>主体口径</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户</span><button type="button" className="admin-kpi-value" data-testid="governance-topology-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchants.length}</button><small>商户档案</small></div>
-              <div className="admin-kpi-card"><span>项目</span><strong>{projects.length}</strong><small>门店/场馆</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>空间点位</span><button type="button" className="admin-kpi-value" data-testid="governance-topology-kpi-spaces" onClick={() => enterKpiFocus("spaces")}>{spaces.length}</button><small>{attachedSpaces} 个已挂接</small></div>
+              <div className="admin-kpi-card"><span>经营主体</span><strong>{entityRows.total}</strong><small>主体口径</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户</span><button type="button" className="admin-kpi-value" data-testid="governance-topology-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchantRows.total}</button><small>商户档案</small></div>
+              <div className="admin-kpi-card"><span>项目</span><strong>{projectRows.total}</strong><small>门店/场馆</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>空间点位</span><button type="button" className="admin-kpi-value" data-testid="governance-topology-kpi-spaces" onClick={() => enterKpiFocus("spaces")}>{spaceRows.total}</button><small>本页 {attachedSpaces} 个已挂接</small></div>
             </div>
 
             <div className="admin-muted-action" data-testid="governance-topology-boundary">{TEXT.boundary}</div>
