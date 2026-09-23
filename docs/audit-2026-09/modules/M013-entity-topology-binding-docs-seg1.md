@@ -1,5 +1,15 @@
 # M013 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段
-版本：V0.02（2026-09-19T21:53:15Z；V0.01 为 2026-09-11 B5-r1 收口记录，其内容以下按时序并入）
+版本：V0.03（2026-09-23；本次Codex/Grok现锁B5-r0收口，历史完整保留）
+
+## 当前现锁结论（2026-09-23）
+状态：PASS。Codex/Grok固定两席完整B5-r0均PASS，外席真实exit0；4文件1539行（154/121/291/973）与aftertree55884d1267b69ea1bdbed8c15f2b53b184403022一致；84判据（21BEQR/12BSM/18GEN/33PGM）。
+本次仅007重开、025—030七项三md修复：绑定设计V0.14、集团PRDV1.04、主PRDV0.07，验收包V0.06未改。历史第6批B4-r6内容/归因双PASS。操作员“修复  记数清零一次”已仅M013执行，当前B3计0、历史6次和全部报告保留。
+B5 self SHA 6cfa00854b7a90247edbfa5f20df9ccb5e5836cce152f9645d11b81ceafda2be；Grok SHA b962a10a2c3cbec18a3a93562172213669c315b90c69b779159b8ec2d969fd02。见M013-b5-r0-self-raw.md与M013-b5-r0-grok-raw.md。四值锁均b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458，LOCK-AMEND-COUNT1。
+30个正式ID当前队列全否。009/023契约→M392、017过滤→M348、010观察仍保留；模块文档PASS不等于这些实现缺口已修。三HTML未改，无新增功能。UTF8/同树字节核对、业务diff --check通过；文档变更不强造代码测试。
+用户已授权逐模块提交推送合并：本收口作为发布输入，最终实际合并事实以GitHub PR和ledger发布回执为准，不提前宣称已发布。
+
+## 历史收口（以下状态与数字仅指其记录时间）
+
 
 状态：PASS（B5-r5 双 PASS，2026-09-19T21:53:15Z）。范围：plan/modules.md V0.04 的 4 文件（docs/business-entity-binding-development-design-v0.1.md、docs/group-governance-rebuild-prd-v1.0.md、docs/platform-governance-acceptance-pack-v0.2.md、docs/platform-governance-prd-v0.1.md；计划冻结 1517 行，现 1533 行）；判据 84 项（BEQR 21、BSM 12、GEN 18、PGM 33）。B3 整批修复累计 5 次（3 次额度 + 操作员 2026-09-19 两次批准追加）。M013-001–024：21 项已修复（001–008、011–016、018、019–024），009 跨模块观察（OpenAPI `BusinessEntityRequest.entity_role` 旧六值，归 M392），010 登记观察（含 B5-r3 O-B5-01/O-B5-03 续记），017 跨模块缺口（集团总览项目级结果过滤，归 M348、依赖 M032）。HTML 修改申请 1 项（治理地图 L741「考勤打卡」→「查看考勤」）经操作员逐句批准，已于 PR #433 落地为治理地图 V0.12；此后无 HTML 申请。
 

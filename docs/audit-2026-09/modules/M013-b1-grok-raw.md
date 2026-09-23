@@ -1676,3 +1676,555 @@ GEN-017 顺序：冲突 → 细化 → 技术性 → 添加。
 
 同意候选整批。逐 ID 001–024 全 **PASS**。本席 B2-r5 **PASS**。未经双 PASS 不得把候选当定稿，更不称模块 PASS。步骤仍 B2；M013 IN_PROGRESS；B3 累计 4，第二次获批追加的第 5 次尚未执行。
 
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M013 B1 Grok 独立审计原文（现锁重开追加）
+
+- 席位：Grok 独立审计席乙（固定 grok-4.6 xhigh；FAIL 具否决权）
+- 阶段：B1 修复前整模块全量审计（现锁；旧 B5-r5 为旧锁且 Claude 接任历史票，不代替本次）
+- 报告自身版本：V0.08（指定路径前缀 173010 bytes / SHA256 `0805c3240f7c159c9165e102691c918d1d74e7fdc1c3e132961bc69f2296942c` 的 V0.01–V0.07 原样保留，本次追加；只采信本段）
+- 模块：M013 — 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／文档与接口定义／第1段
+- 计划源：`docs/audit-2026-09/plan/modules.md` FILES 4；计划冻结有效内容行 1517。本模块是**四文档**，不是 M012 六源。当前 `git ls-files -z -- <4 paths> | xargs -0 cat | wc -l` 对索引跟踪内容计数；工作树 `wc -l` = **154+117+291+971=1533**（与用户口径一致）。四文件 `git status --porcelain` 均为 `MM`（已暂存+工作树未暂存修改）。本席读工作树正本。
+- 冻结判据：84 条（`M013 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-060, PGM-065, PGM-066]`，与锁映射行逐字相同；COUNT=84 unique=84 MISSING=[] EXTRA=[]）
+- 结论：**FAIL**
+- 工程缺陷成立、建议入 B2 修复队列的临时编号：GR-M013-025、GR-M013-026、GR-M013-027、GR-M013-028、GR-M013-029、GR-M013-030
+- 添加项（B1 只登记，不代用户回答 2.2；本批无）：无
+- 只登记、建议队列「否」：§8 观察（含既有 009/010/017 跨模块，不擅自实施）
+- 未修源码、未改三 HTML、未改台账/锁/主索引、未 push/PR/merge/部署、未装依赖、未写永久测试、未派子代理、未调 MCP、未读本次 self-raw、未问操作员、未对任一 `complex_test*` 库做写操作、未用 /tmp、未建隔离副本、未做 git 写操作
+- 不得用历史 PASS 或未批轮次强制 PASS。旧 001–024 当前 findings 队列全「否」（21 已修 + 009 XM→M392 / 010 观察 / 017 XM→M348）。当前 B3 累计 5，无第 6 次许可；本席只报告，不修。旧 B5-r5 不代替本次。
+- 本报告不表示全仓或发布门禁通过。文档审计不强制制造测试，未跑全后端/数据库。
+
+## 0. 技能自核（V0.17 §6，按 B1 收窄，不安装）
+
+本席实际读取并按收窄口径使用：
+
+| 技能 | 本机路径 | 用法 |
+|---|---|---|
+| using-superpowers | `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 先核技能再取证；用户指令与 controller 优先于技能本体 |
+| using-arc | `~/.claude/plugins/marketplaces/howells/plugins/arc/skills/using-arc/SKILL.md` | 已读；Arc `audit` 会派评审子代理并另写 `docs/arc/audits/`，与双席/§7 冲突，**不调用** |
+| grilling | `~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/skills/productivity/grilling/SKILL.md` | 只用追问树自己取证，不向操作员发问、不派子代理 |
+| grill-me | 同套件 `grill-me/SKILL.md`（本体转发 grilling） | 内部 sharpen |
+| codebase-design | `.../engineering/codebase-design/SKILL.md` | 删除测试：假迁移号、假联系人词表应删/改回 HTML 原词，不扩写审批流 |
+| diagnosing-bugs | `.../engineering/diagnosing-bugs/SKILL.md` | 先建可红反馈环（sha256 / `Path.exists` / OpenAPI enum / Controller Mapping）再下结论；不改生产代码 |
+| systematic-debugging | superpowers `systematic-debugging/SKILL.md` | 只借读错误→复现→追数据流（文档陈述→HTML 原句→V432/`PlatformService`/OpenAPI）；不作无 ID 改动 |
+| verification-before-completion | superpowers 同名 | 先跑命令再声称；`git ls-files` 有 V427 路径 ≠ 工作树文件存在 |
+| ponytail-review | `~/.claude/plugins/cache/ponytail/ponytail/4.9.0/skills/ponytail-review/SKILL.md` | 只列可删复杂度，不落地 |
+| writing-for-agents | `.../productivity/writing-for-agents/SKILL.md` | 本 raw 写给下游席读：步骤+完成判据同文件 |
+| graft | `~/.claude/skills/graft/SKILL.md` | 已读全文；本模块审计对象为四份 md（graft 以代码图为主），实现证据用工作树只读命令/grep，**未调用 graft CLI**（不冒称已检索） |
+
+B1 不适用、按 controller 收窄不调用：brainstorming / writing-plans（A）、test-driven-development / tdd / ponytail（B3）、requesting-code-review（B4）、receiving-code-review（甲席收乙席）、resolving-merge-conflicts（无合并）。tdd / test-driven-development 技能文件存在，文档类不强制落测试。
+
+缺口（不冒称调用）：
+
+- `batch-grill-me`：本机 mattpocock 技能树未找到独立技能
+- `ubiquitous-language`：本机技能树未找到（`domain-modeling` 存在，V0.17 明确不用）
+- `i-have-adhd`：本环境未另读独立技能全文；输出按 controller 收窄
+- Arc `audit`：会派评审子代理并另写 `docs/arc/audits/`，**不调用**
+
+明确不用（controller 划掉）：executing-plans、dispatching-parallel-agents、subagent-driven-development、using-git-worktrees、finishing-a-development-branch、research、domain-modeling、code-review（mattpocock）、ponytail-audit/debt/gain、MCP、第三主体、Claude 席。
+
+## 1. 锁哈希与范围核验
+
+独立命令（独占锁行已写在本段第一行，此处不重复该标签）：
+
+- CMD-LOCK：`sha256sum docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'`
+- OUT-LOCK：`b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`
+- sidecar `plan/criteria-lock.sha256` 正文一行同值
+- ledger 顶部同值；第二处历史行 `cf25d716…` 不作为本轮基准
+- `LOCK-AMEND-COUNT: 1`
+- `criteria-lock.md` 版本 **V0.14**；判据总数 401。映射行 `M013 → [...]` 与开工口径 84 项逐字相同
+- 旧 raw 所用 `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a` / lock V0.11 **不是**本次锁
+
+HEAD：`e456ba96c84185c8d39f18f548011daac48a6466`；`origin/main`=`ef4cacbc74fdb43163919ba2689f285f00d34c17`（两值不等）。本席读工作树，未设 `GIT_INDEX_FILE`，未动主索引，未 fetch/commit/push。
+
+controller `.scratch/module-recheck-20260908/160-audit-prompt.md` V0.17 SHA256 `c93ddca061831828a5dcabb1c83fe18a4a6b7a2a6cd839e3baaef63c66ad6f21`；runbook V0.02 SHA256 `c4ef224d35c3708b72086621fa80251e1363bc97de0ccf90cd6606518ad6539f`。
+
+ledger 只读：V8.86。模块表 M013 行 `IN_PROGRESS`、B3=5。findings 当前 001–024 队列全否。只作已登记边界背景，不代替本模块本轮审计。
+
+三份 HTML 只读、未改。本模块 66 条 HTML 派生判据的锁「来源：`path:line`」对现行文件 **66/66 行号落在文件内**。关键锚点抽核命中（见下）。三 HTML 本身未发现需铁律 4 人闸修改的原文错误。HTML 沉默处不升冲突。
+
+三 HTML 当前字节/SHA256（只读核验，本席未改）：
+
+| 文件 | 字节 | SHA256 |
+|---|---:|---|
+| docs/business-enum-quick-reference-v0.1.html | 133961 | 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66 |
+| docs/business-system-map-for-operations-v0.1.html | 304482 | eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66 |
+| docs/platform-governance-map-for-operations-v0.1.html | 103798 | 5c4594a73e767c704238ad311899903dbaaf94503e4a4cc18f21a5596e67429f |
+
+抽核：BEQR-143 L226 四类主体；BEQR-148 L231 合作模式六类；BEQR-155 L238 商户六态+缓冲；PGM-017 L412–413 项目归属；PGM-018 L415 多对多；PGM-026 L494 第一/第二联系人；PGM-041 L658 组织变更两支；PGM-042 L669 职级影响审批层级；PGM-016/客人隐私 L868/L871 双联系人查看例外；PGM L741 查看考勤；BSM L1445 考勤打卡从领取工作手机开始算。均 hit。
+
+## 2. 4 文件覆盖表（全文已读；行=`wc -l`）
+
+| # | 路径 | 行 | SHA256 | 覆盖 |
+|---|---|---:|---|---|
+| 1 | docs/business-entity-binding-development-design-v0.1.md | 154 | `b85d4d42a6bf7bfcdba197da90cf132ed07b8012080a311c3110f97506f25143` | 已读 L1–L154（标题 V0.13） |
+| 2 | docs/group-governance-rebuild-prd-v1.0.md | 117 | `7defd0840e09bd16b2bf35afe913141a9ebf3610e5d2d4c2153017311be35f52` | 已读 L1–L117（标题 V1.03） |
+| 3 | docs/platform-governance-acceptance-pack-v0.2.md | 291 | `56aca4616e8c77b5a8e474c597ebbc613a6b9e8b1aef9d3b5f73ca62693053a0` | 已读 L1–L291（标题 V0.06；含补录） |
+| 4 | docs/platform-governance-prd-v0.1.md | 971 | `e0f00b02ab8e7e7ec4b049ce643bbfbcc235612e9e8b79e4975f60652ba1730c` | 已读 L1–L971（标题 V0.06；未只读标题/搜索） |
+
+合计 1533 行。未抽样后宣称整文件 PASS。
+
+## 3. 数据流（文档陈述 → HTML 原句 → 工作树实现事实）
+
+1. **四类主体唯一绑定**：HTML BEQR-143 / PGM-026。绑设计 §1–§5 写当前 API 与差距。实现：`PlatformService` 创建按 UTC 当天比较 `effectiveFrom`，未来写 `inactive` 且不 `syncMerchantEntities`；`change` 拒生效中停用/暂停、已结束重开、未到日启用。与绑设计 L80/L90/L99/L118 **一致**（未来生效诚实）。
+2. **主体角色三值 / 无父链**：HTML PGM-018。代码 `BUSINESS_ENTITY_ROLES` 三值；V410 删 `parent_entity_id`。绑设计 §3.1 **一致**。OpenAPI `entity_role` 仍六旧值、`status` 仍 draft/active/suspended/archived：绑设计 L56 已登记 009/023 →M392，**不擅自改 yaml**。
+3. **项目归属 / 项目资料**：HTML PGM-017/020「所有基础对象都要带综合体项目归属」「记录项目状态、负责人、地址和经营范围」。工作树落盘迁移 **`V432__m009_project_profiles_and_associations.sql`**（`projects.owner_person/address/business_scope` 可空；`merchants.project_id` 可空 FK；`business_entity_projects` 多对多）。`git status`：`AD` 索引暂存已删的 `V427__…` 路径，工作树该文件 **不存在**；`V432` 为 `??` 未跟踪。绑设计仍写 **V427**（L39/L56/L154）→ **GR-M013-025**。PRD 把 HTML 项目归属写成所有对象必须带 **`project_id` 列** → **GR-M013-028**。PRD §7.1 列举负责人/地址/经营范围是产品需求，未把页面输入写成已完成；M012-009 不补三项目资料表单。本席不擅自补页面。
+4. **双联系人隐私**：HTML PGM-026 L494「负责人、第一联系人和第二联系人」；PGM L871 查看例外；PGM L680 该例外不授予未脱敏导出。代码：`owner_person` + `contact_name/phone` + `secondary_contact_*`，V339/V431 加密，Controller 测试明文/脱敏分支。PRD §7.4 写成「主要联系人、财务联系人、运营联系人」→ **GR-M013-026**。PRD §15A.1/§15A.5 抄了员工/客人脱敏，**丢掉**双联系人例外 → **GR-M013-027**。
+5. **组织变更 / 功能权限**：HTML PGM-041 两支（同商户同项目立即重算；跨商户/跨项目先审批）；PGM-042「职级影响默认权限模板和**审批层级**」。集团 PRD §3 正文与 PGM-041 同句。集团 L5 ④ 仍写「岗位、**职级**、组织、商户或**责任范围**变化后立即重算」→ **GR-M013-029**。PRD §12 第 11 条「审批层级**建议**」削弱 L669 → **GR-M013-030**。
+6. **集团范围**：HTML「只有项目之上的获授权岗位才可以跨项目汇总」。集团 PRD §4 / 验收包 G7 / 主 PRD §12#15 均写 `requirePlatformScope()` 未按项目级调用者过滤。`AnalyticsService.buildGroupOverview` 无当前项目收敛。此即已定稿 **M013-017**（XM→M348），**不擅自实施、不重开为新 ID**。
+7. **主体生命周期**：HTML 六态+缓冲。服务可设五码，归档走商户存档端点；主体无 archive Mapping（Controller 仅 GET/POST entities 与 POST entities/{id}/projects）。绑设计 L49 已无「归档走存档端点」括注（024 已修）；L57/L108 仍诚实登记词表/存档流程未落地。不重开 024。
+
+## 4. 三线审计
+
+### 4.1 第一性原理
+
+- **为什么必须存在**：删掉四文档，HTML 的四类主体、多对多协作、项目归属、商户档案/联系人、权限装配、集团预留将失去本模块的产品/实现说明载体。有业务上位。
+- **声称是否被执行验证**：文档类不强制跑测试。本席用类型 1（HTML 逐字）+ 类型 4（sha256、`Path.exists`、`git status`/`ls-files`、OpenAPI 枚举、Controller `@*Mapping`、`PlatformService` 绑定创建/变更、`AnalyticsService.groupOverview`）验证当前实现声称。未连库、未跑 Maven。
+- **未验证就当真的前提**：①「当前迁移号是 V427」——工作树文件不存在；②「商户关键字段是财务/运营联系人」——HTML 是第一/第二联系人；③「所有对象都有 `project_id` 列」——主体表无列、用多对多；④ L5 职级/责任范围触发等于现行 §3。
+
+### 4.2 顺从式（假定文档意图正确，逐条核 84 项）
+
+见 §5。通过项给出证据；缺陷见 §6。无 finding 不等于未审。
+
+### 4.3 对抗式（grilling 自问，不等操作员、不派子代理）
+
+1. 能否因 001–024 全否或旧 B5-r5 PASS 而本轮 PASS？**否**。现锁、现文、现工作树。
+2. 能否因 SQL 字节与旧 V427 相同就保留「V427」文件名？**否**。路径不可复现即 GEN-016。
+3. 财务/运营联系人能否算 HTML「联系人」细化？**否**。HTML 闭集是负责人+第一+第二；财务/运营是另一套角色词表，冲突优先于细化。
+4. §15A.5 只写员工界面脱敏、不写商户联系人，能否算 HTML 沉默？**否**。HTML 同一句后面就是「第一联系人和第二联系人手机号除外」。
+5. PRD 的 `project_id` 是产品要求不是当前事实，能否放过？**否**。它把 HTML「项目归属」写成列名，且与已发布 M009 多对多主体归属对打；021 已在验收包删过同根句。
+6. L5 是 2026-07-27 历史修订，能否当观察？**否**。它仍写「这些规则」且「不反向改写 PRD」，读者会当成现行触发清单。
+7. 「审批层级建议」是否文风？**否**。HTML L669 无「建议」。
+8. 应否在本模块改 OpenAPI 六旧值、改 group-overview 过滤、补项目资料页面？**否**。009/017 跨模块；M012-009 不补表单。
+9. 发现第一处（V427）是否停审？**否**。整模块审完再整批报告。
+10. 是否读了本次 self-raw？**否**。
+
+## 5. 84 项判据（适用证据 / 不适用理由）
+
+证据类型：1=HTML 原文；4=可复现命令/工作树文件。代码/OpenAPI 只作实现证据。
+
+| ID | 适用? | 证据或不适用理由 | 本席 |
+|---|---|---|---|
+| BEQR-063 | 不适用 | 四文档不立法沽清/反结/双证据；PRD 14A 只复述 PGM 高危五类，无酒吧出品闭集 | 无缺陷 |
+| BEQR-074 | 不适用 | 「隐私桌台」四文档 0 命中；不另造桌台权限 | 无缺陷 |
+| BEQR-143 | 适用 | 绑设计 §1 四类主体=HTML L226；实现四列+唯一 active | 无新缺陷 |
+| BEQR-144 | 适用 | 绑设计 §1.2 多对多；V410 无父链；关联表见 025 的迁移号问题 | 见 025 |
+| BEQR-145 | 适用 | 主 PRD §5 城市项目公司排除清单照抄 HTML | 无缺陷 |
+| BEQR-146 | 适用 | 主 PRD 娱乐平台公司段照抄 PGM | 无缺陷 |
+| BEQR-147 | 适用 | 主 PRD 未另造收入名目；未把平台自动取得收入写成规则 | 无缺陷 |
+| BEQR-148 | 适用 | 主 PRD 合作六类+「其他」收费模板；`MERCHANT_COOPERATION_FORMS` 六值；自营=`self_operated`（003 已修） | 无缺陷 |
+| BEQR-149 | 适用 | 主 PRD M1–M10 上中下 | 无缺陷 |
+| BEQR-150 | 适用 | 主 PRD/验收包十一端闭集与 L233 同 | 无缺陷 |
+| BEQR-151 | 适用 | 主 PRD/验收包最终权限公式与 L234 同 | 无缺陷 |
+| BEQR-152 | 适用 | 主 PRD §6.10/§7.8 项目隔离、无关闭开关；集团范围缺口见 017 登记 | 无新缺陷 |
+| BEQR-153 | 适用 | 主 PRD §12#16 优先级与兜底关闭 | 无缺陷 |
+| BEQR-154 | 适用 | 六态闭集；已废止状态门控 | 无缺陷 |
+| BEQR-155 | 适用 | 六态+缓冲+试运营不管；实现五可设码已披露 | 无新缺陷 |
+| BEQR-156 | 适用 | 合同八态+当地时间 | 无缺陷 |
+| BEQR-157 | 适用 | 员工五态 | 无缺陷 |
+| BEQR-158 | 适用 | 设备七态 | 无缺陷 |
+| BEQR-159 | 适用 | 权限五态 | 无缺陷 |
+| BEQR-166 | 适用 | 合同三类审批+平行线；验收包 G5 已废止单级 | 无缺陷 |
+| BEQR-189 | 不适用 | 「管理费方式」四文档 0 命中 | 无缺陷 |
+| BSM-004 | 适用 | 绑设计 §2.5/§7 存档删除与 HTML 同旨；主体存档接口未落地已披露 | 无新缺陷 |
+| BSM-005 | 适用 | 验收包页面引导；未把后台一步提交写成已实现唯一路径 | 无缺陷 |
+| BSM-006 | 不适用 | 动态二维码非本四文档立法面 | 无缺陷 |
+| BSM-007 | 适用 | 主 PRD §7.8.1 日常功能 vs 高危逐项授予 | 无缺陷 |
+| BSM-009 | 适用 | 主 PRD 治理层基础对象 | 无缺陷 |
+| BSM-028 | 适用 | 主 PRD 商户/合同/权限主要功能 | 见 026 |
+| BSM-029 | 适用 | 关系说明未另造隶属链 | 无缺陷 |
+| BSM-072 | 适用 | 商户授权范围内使用；未写成可看全局 | 无缺陷 |
+| BSM-074 | 适用 | 和谁有关未越权 | 无缺陷 |
+| BSM-114 | 适用 | 入口可见性；私人手机低风险已改「查看考勤」 | 无缺陷 |
+| BSM-115 | 适用 | 子系统必须连在一起；未把计划当已接线（§12#8 四域未接诚实） | 无缺陷 |
+| BSM-120 | 适用 | 已确认规则承接 | 无缺陷 |
+| GEN-001 | 适用 | 四文档均有上位；假迁移号/假词表应删不扩 | 见 025–030 |
+| GEN-002 | 适用 | 入口声称须可打开：V427 路径打不开 | 见 025 |
+| GEN-003 | 不适用 | 文档模块，runbook 不强制造测试；未跑全后端 | — |
+| GEN-004 | 不适用 | 无本模块用户输入面 | — |
+| GEN-005 | 适用 | 绑设计权限表；集团守卫诚实；不把 requirePlatformScope 写成已隔离 | 无新缺陷 |
+| GEN-006 | 适用 | active 唯一约束与未来 inactive 槽位与代码一致 | 无缺陷 |
+| GEN-007 | 适用 | 同时操作以先成功为准在主 PRD §2A.3；绑定未伪称自动启用 | 无缺陷 |
+| GEN-008 | 适用 | OpenAPI 六/四值已披露为契约缺口（009/023），不重开 | 无新缺陷 |
+| GEN-009 | 适用 | 绑定错误码与代码一致；未把 409 写成审批流 | 无缺陷 |
+| GEN-010 | 适用 | 双联系人隐私例外在 PRD 缺失 | 见 027 |
+| GEN-011 | 适用 | 留痕原则承接；未把未实现审批链写成已留痕闭环 | 无缺陷 |
+| GEN-012 | 不适用 | 无本模块资源面 | — |
+| GEN-013 | 不适用 | 无构建配置面 | — |
+| GEN-014 | 适用 | 引用的迁移文件名须存在 | 见 025 |
+| GEN-015 | 适用 | 界面全中文原则在主 PRD；本模块无 UI 文件 | 无缺陷 |
+| GEN-016 | 适用 | 不得把计划/旧路径写成当前事实 | 见 025/028/029 |
+| GEN-017 | 适用 | 冲突→细化→技术性→添加；本批无添加 | 见分类 |
+| GEN-018 | 适用 | 结论落到 HTML 或命令输出 | 本报告 |
+| PGM-002 | 适用 | 主 PRD §2.2 五步顺序 | 无缺陷 |
+| PGM-003 | 适用 | 模块入口覆盖 | 无缺陷 |
+| PGM-004 | 适用 | 综合体和集团 | 见 028 |
+| PGM-005 | 适用 | 空间九类；字典 vs OpenAPI 已披露（004 已修） | 无缺陷 |
+| PGM-006 | 适用 | 商户和主体 | 见 026 |
+| PGM-007 | 适用 | 合同准入；七类红线 | 无缺陷 |
+| PGM-008 | 适用 | 员工和手机；查看考勤 | 无缺陷 |
+| PGM-009 | 适用 | 权限和职级 | 见 030 |
+| PGM-010 | 适用 | 终端开关十一端 | 无缺陷 |
+| PGM-011 | 适用 | 设备管理 | 无缺陷 |
+| PGM-012 | 适用 | 商户侧边界 | 无缺陷 |
+| PGM-013 | 适用 | 开放接口未写成已对接第三方 | 无缺陷 |
+| PGM-014 | 适用 | 留痕复核 | 无缺陷 |
+| PGM-015 | 适用 | 楼宇运营未做成票务定价 | 无缺陷 |
+| PGM-016 | 适用 | 应急与隐私 | 见 027 |
+| PGM-017 | 适用 | 项目归属 | 见 028 |
+| PGM-018 | 适用 | 多对多；绑设计诚实 | 无新缺陷 |
+| PGM-019 | 适用 | 各主体职责表 | 无缺陷 |
+| PGM-020 | 适用 | 项目档案/负责人/地址/经营范围；未把页面写成已完成 | 观察 |
+| PGM-021 | 适用 | 业务意义 | 无缺陷 |
+| PGM-026 | 适用 | 主要功能含第一/第二联系人 | 见 026 |
+| PGM-027 | 适用 | 业务边界 | 无缺陷 |
+| PGM-031 | 适用 | 经销商全链；验收包 §2A | 无缺陷 |
+| PGM-035 | 适用 | 提成发放；帮客人订位 | 无缺陷 |
+| PGM-040 | 适用 | 单一功能授权 | 无缺陷 |
+| PGM-041 | 适用 | 权限规则/组织变更两支 | 见 029 |
+| PGM-042 | 适用 | 职级规则 | 见 030 |
+| PGM-043 | 适用 | 外包/导出脱敏含双联系人句 | 见 027 |
+| PGM-044 | 不适用 | 桌台/挂单权限四文档无立法 | 无缺陷 |
+| PGM-048 | 适用 | 商户侧授权范围全开放 | 无缺陷 |
+| PGM-060 | 适用 | 会员/生物信息；未把 consent 升必填 | 无缺陷 |
+| PGM-065 | 适用 | 连接关系 | 无缺陷 |
+| PGM-066 | 适用 | 已拍板规则 | 无缺陷 |
+
+## 6. Findings（临时 ID；正式 ID 仅 B2 分配）
+
+### GR-M013-025
+
+- **位置**：`docs/business-entity-binding-development-design-v0.1.md:39`、`:56`、`:154`
+- **原句**：
+  - L39：「…；V427 另建 `business_entity_projects` 多对多项目关联表，主体表本身仍无 `project_id` 列。」
+  - L56：「项目归属由 V427 `business_entity_projects` 多对多关联承载：…」
+  - L154：「当前实现：…、V427（主体项目关联）；…」
+- **证据类型**：4
+- **四分类**：细化（实现路径误述；非 HTML 冲突、非业务发明）
+- **工程缺陷**：是
+- **冻结判据**：GEN-016 / GEN-002 / GEN-014 / GEN-008 / PGM-018
+- **证据**：工作树 `Path.exists('…/V427__m009_project_profiles_and_associations.sql')` = False；`V432__m009_project_profiles_and_associations.sql` 存在且 `CREATE TABLE business_entity_projects`。`git status --porcelain`：`AD` 该 V427 路径（索引有、工作树删），`??` V432。`HEAD` 无此两文件。M009 已发布实现把同内容落在 V432。按绑设计去打开 V427 文件第一次即失败。
+- **最小处置**：三处 `V427` 改为 `V432`（或「现行工作树文件 `V432__m009_project_profiles_and_associations.sql`」）；保留「主体表无 `project_id` 列 / 多对多关联」事实。标题 V0.13→V0.14。不改 SQL、不改 HTML、不把未跟踪文件 git add。不重开 022 已落地的端点披露。
+- **不扩**：不补页面、不改 OpenAPI、不实施 017。
+
+### GR-M013-026
+
+- **位置**：`docs/platform-governance-prd-v0.1.md:459`
+- **原句**：「…合作模式摘要、主要联系人、财务联系人、运营联系人、资质信息、状态、备注」
+- **证据类型**：1
+- **四分类**：冲突（判定删除/改回 HTML 词表）
+- **工程缺陷**：是
+- **冻结判据**：PGM-026 / PGM-006 / GEN-017 / GEN-016
+- **HTML 原文**（PGM L494）：「建立商户档案、运营主体、负责人、第一联系人和第二联系人。」
+- **实现证据**：`merchants.owner_person` + `contact_name/contact_phone` + `secondary_contact_name/phone`（V147/V042/V339/V431）；无 finance_contact / operation_contact 列。
+- **最小处置**：该单元格三词改为「负责人、第一联系人、第二联系人」。不发明财务/运营联系人角色。版本 +0.01。不改代码。
+
+### GR-M013-027
+
+- **位置**：`docs/platform-governance-prd-v0.1.md:823-828`（§15A.1 七项+员工/客人例外，无双联系人句）；`:857`（§15A.5）
+- **原句**（L857）：「**员工日常界面只显示脱敏号码、不见明文**；**界面脱敏不提供关闭开关**（与 §15A.1 导出脱敏一致，均不由使用人判断、不提供关闭入口）。」
+- **证据类型**：1
+- **四分类**：冲突（遗漏 HTML 明文例外，等于把「除外」写成不存在）
+- **工程缺陷**：是
+- **冻结判据**：PGM-016 / PGM-043 / GEN-010 / GEN-016
+- **HTML 原文**：
+  - L871：「员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关。**商户档案中的第一联系人和第二联系人手机号除外**：经单独授权且查看权限有效的人员，以及持授权 U 盘密钥的最高权限本人，可以在其获准访问的商户档案列表和档案操作结果中查看完整号码；其他人员仍只显示脱敏号码。平台管理员身份本身不自动取得该查看权限。该例外仅适用于商户档案联系人，不扩大到客人或员工档案的手机号，也不免除项目范围检查和查看留痕。」
+  - L680 同旨：页面查看例外不授予未脱敏导出或打印。
+- **实现证据**：`PlatformControllerTests` 对 `secondary_contact_phone` 有脱敏/完整号分支。
+- **最小处置**：§15A.5 在现句后补上 L871 除外全文（或等价逐字）；§15A.1 补 L680「商户档案页面中的第一联系人和第二联系人手机号…不授予未脱敏导出或打印」句。不扩大到客人/员工档案，不授予导出。不改代码。可与 026 同一次版本递增。
+
+### GR-M013-028
+
+- **位置**：`docs/platform-governance-prd-v0.1.md:569`、`:657`、`:680`
+- **原句**：
+  - L569：「本 PRD 仅保留“所有对象必须带 `project_id` 归属”这一治理要求。」
+  - L657：「所有对象必须带综合体项目（`project_id`）归属，跨项目汇总一律按该归属聚合——这是本 PRD 的强制要求。」
+  - L680：「本 PRD 仅保留“所有对象必须带 `project_id` 归属、跨项目汇总按项目口径聚合”这一要求」
+- **证据类型**：1+4
+- **四分类**：细化（把 HTML「项目归属」写成列名/全表机制；021 已在验收包删同根「继续携带」句，主 PRD 未随）
+- **工程缺陷**：是
+- **冻结判据**：PGM-017 / PGM-020 / GEN-016 / GEN-008
+- **HTML 原文**（L413）：「当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属”。」L444 列举商户、空间、合同、员工、设备、票务和看板。
+- **实现证据**：`business_entities` 无 `project_id` 列；`business_entity_projects` 多对多；`merchants.project_id` 可空。不得要求给主体/绑定表加列。
+- **最小处置**：三处改回 HTML「所有基础对象都要带综合体项目归属」；允许括号说明「商户可用 `merchants.project_id`，主体用 `business_entity_projects` 多对多，不是每张对象表都有 `project_id` 列」。不改代码，不实施 017 过滤。
+
+### GR-M013-029
+
+- **位置**：`docs/group-governance-rebuild-prd-v1.0.md:5`
+- **原句**：「④补岗位、职级、组织、商户或责任范围变化后立即重算并收回旧范围派生权限。当前实现若不满足这些规则，记为实现待对齐，不反向改写 PRD。」
+- **证据类型**：1
+- **四分类**：细化（现行触发清单误述）
+- **工程缺陷**：是
+- **冻结判据**：PGM-041 / GEN-016
+- **对照**：同文件 §3 L76 已按 PGM-041 写成「保存岗位、职责或同一商户、同一项目范围内的所属组织变更…保存所属商户或发生跨项目变更…」；M013-019 已删正文中与 HTML 相反的职级/责任范围排除。L5 ④ 仍把职级、责任范围写成立即重算触发项。
+- **HTML**（L658）触发清单无「责任范围」；职级在 L669 影响默认模板，不是 L5 那句「或责任范围变化」。
+- **最小处置**：L5 ④ 改为与 §3/PGM-041 同句，或标明「2026-07-27 历史摘要，现行以 §3 为准」且删「职级、责任范围」作为并列触发。不改 AccessService。版本 +0.01。
+
+### GR-M013-030
+
+- **位置**：`docs/platform-governance-prd-v0.1.md:650`
+- **原句**：「11. 权限必须支持角色级和员工级完全自定义配置，职级只影响默认权限模板和审批层级建议，不能替代单一功能权限点，也不能让员工绕过具体功能授权。」
+- **证据类型**：1
+- **四分类**：冲突
+- **工程缺陷**：是
+- **冻结判据**：PGM-042 / PGM-040 / GEN-017
+- **HTML**（L669）：「职级影响默认权限模板和审批层级，但不能替代功能权限点。」无「建议」。
+- **最小处置**：删「建议」，与 L669 对齐。可与 026/027/028 同一次版本递增。不改代码。
+
+## 7. 与历史 001–024 的差集
+
+| 正式 ID | 当前队列 | 本轮 |
+|---|---|---|
+| 001–008、011–016、018–024 | 否（已修） | **保持否**；抽核绑设计 L49 无存档括注、V410 三值、V394 审批属性、查看考勤、lifecycle、税费登记句、空间字典口径均仍在 |
+| 009 | 否 XM→M392 | **保持否**；OpenAPI 六旧值仍在，本模块不改 yaml |
+| 010 | 否 观察 | **保持否**；文件名版本惯例等不升 |
+| 017 | 否 XM→M348 | **保持否**；group-overview 仍无项目级过滤，不擅自实施 |
+
+025 不是 022 回归：022 要补的是「有多对多关联/端点」事实，已在 L39/L56/L116 落地；本轮缺陷是**迁移文件名**从 V427 改为 V432 后文档未随。023 披露句仍在 L56，不重开。024 括注已删，不重开。
+
+## 8. 观察（建议队列「否」）
+
+1. 文件名 `*-v0.1.md` / `*-v0.2.md` 与正文 V0.13/V1.03/V0.06/V0.06 不一致：仓库惯例（010）。
+2. 主 PRD/验收包变更日志里的历史「单级确认」「P0 只预留 project_id」「持股超 51%」行：已有后续订正或【已废止】，不升。
+3. 项目资料三字段：V432 可空、仅后端；M012-009 不补表单。主 PRD §7.1 作为需求列举负责人/地址/经营范围，**未写成已有编辑页**。不立项、不补页面。
+4. `verify:openapi` 未跑；即使绿也只证契约自洽（009 已登记）。
+5. 集团 L14/验收 G7/主 PRD §12#15 对项目过滤缺口诚实，017 已 XM。
+6. 绑设计未来生效、change 守卫、DELETE 模板 409、自营=`self_operated` 与代码一致。
+7. 验收包补录历史摘录已标【已废止/不得回灌】。
+8. 四文件 `MM`、V432 `??`、V427 `AD`：过程/工作区状态，本席不 git 写。
+
+## 9. 命令证据（类型 4）
+
+```
+sha256sum docs/audit-2026-09/plan/criteria-lock.md
+# b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+wc -l docs/business-entity-binding-development-design-v0.1.md \
+     docs/group-governance-rebuild-prd-v1.0.md \
+     docs/platform-governance-acceptance-pack-v0.2.md \
+     docs/platform-governance-prd-v0.1.md
+# 154 117 291 971  total 1533
+test -f backend/src/main/resources/db/migration/V427__m009_project_profiles_and_associations.sql; echo $?
+# 1
+test -f backend/src/main/resources/db/migration/V432__m009_project_profiles_and_associations.sql; echo $?
+# 0
+git status --porcelain -- backend/src/main/resources/db/migration/V427__m009_project_profiles_and_associations.sql \
+  backend/src/main/resources/db/migration/V432__m009_project_profiles_and_associations.sql
+# AD V427...
+# ?? V432...
+```
+
+OpenAPI `BusinessEntityRequest.entity_role` enum 仍 operation/contract/settlement/invoice/payment/other；`status` 仍 draft/active/suspended/archived（009/023）。`PlatformController`：entities GET/POST、POST `{id}/projects`，无 archive；merchants 有 archive/unarchive。`PlatformService` L785–803 未来生效；L837–842 财税/未到期守卫。`AnalyticsService.buildGroupOverview` 无当前项目过滤。
+
+## 10. 无实现面 / 本席未做
+
+- 未跑 Maven、未连 `complex_test`、未写测试、未改任何源码/HTML/锁/ledger/findings。
+- 未实施 009/010/017。
+- 未申请改三 HTML。
+
+## 11. 审计结论
+
+单席 B1 **FAIL**。六条临时 finding 建议入修复队列（文档最小改写）。添加 0。HTML 申请 0。questions 0。无条件通过。须 B2 双席定稿后才能修；当前 B3=5，无第 6 次许可则不得 B3。
+
+本段结束。
+
+
+## M013 本次现锁 B2 整批归并复核（Grok 乙席）
+
+- 文件自身版本：V0.09（本段追加；上方前缀 205698 bytes / SHA256 `2e242395f8026bfe5ab5184e23fc08bd8c48148ae64eb0fc8c94c211cf4b7924` 的 V0.08 B1 及更早前缀原样保留，不得覆盖；本段不写独占 `CRITERIA-LOCK-SHA256:` 行，最新完整 B1 锁段保持在 V0.08 段首）
+- 席位：Grok 独立复核席乙（固定 grok-4.6 xhigh；FAIL 具否决权）。步骤：现锁 B1 后的 B2 整批候选复核，不是 B1 重审、不是 B3、不是修复、不是模块 PASS、不是第 6 次修复授权。
+- 固定分工：Codex 甲 / Grok 乙。未派子代理、未调 MCP、未用第三席。
+- 正本：`/home/james/complex-management` `main` 主工作区只读。唯一写入＝本指定路径追加。
+- 只读：未改源码/HTML/台账/锁/sidecar/索引/findings；未 fetch/commit/push/merge/deploy；未写脚本/日志/新产物；未用 `/tmp`；未修。
+- 输入（只采各 raw 最后独占锁行起的完整本次 V0.08 B1）：
+  - `modules/M013-b1-self-raw.md` 追加本席本段前：全文件 94448 bytes（V0.08 前缀 91353 bytes SHA256 `1d99267cb9ece43af9780ed6f2f0e8dccb6622068451dcdb7191ec3ed13850f6` + 席甲已先落的 B2 V0.09）。本席只采 V0.08 B1（末条锁行 L615 起至该 B1 结束）；席甲 B2 已看见但不作依据。
+  - `modules/M013-b1-grok-raw.md` 本段追加前：全文件 205698 bytes SHA256 `2e242395f8026bfe5ab5184e23fc08bd8c48148ae64eb0fc8c94c211cf4b7924`（即本席 V0.08 B1 全文）。
+- 候选：`docs/audit-2026-09/findings.md` 版本 V3.70、1299899 bytes、SHA256 `05bfd0c202228b67ae3fa433f9109896cef99845936564bd9b0d200f44f17291` 顶部「当前 M013 本次现锁 B2 整批候选（待双席定稿）」全七项原文/拟改/影响/观察归并。旧历史表 001–024 的「否」不覆盖顶部候选。
+- 锁实算（本段证据，非独占行）：`sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`；sidecar 正文同行；ledger 顶部同行；`LOCK-AMEND-COUNT: 1`。B2 不做四值闸判定。
+- 模块：M013 IN_PROGRESS；B3 累计 5；无第 6 次许可。本票 PASS 只表示候选归并可定稿，不是模块 PASS，也不是 B3 授权。
+- 本席 B2：**PASS**（逐 ID 001–030 全 PASS；添加 0、不发 2.2、无 HTML 申请；修复队列「是」=007 重开 + 025–030，「否」=001–006、008–024）。须席甲本批 B2 亦 PASS 才能定稿。不覆盖上方 B1 V0.08 **FAIL** 原文。
+
+### 0. 技能自核（V0.17 §6，按 B2 收窄）
+
+| 技能 | 用法 |
+|---|---|
+| using-superpowers | 先核路由；用户指定本机 CLI B2、禁止 MCP/子代理；Arc `audit` 会另写 `docs/arc/audits/`，**未用** |
+| receiving-code-review | 先核源码/HTML/命令再接受或反驳候选；禁止因席甲已写 B2 或操作员倾向而表演性同意。B2 不修复 |
+| grilling / grill-me | 只借追问结构自问自答；事实自读；不等操作员、不派子代理 |
+| verification-before-completion | 先跑 Path.exists / git / 源码行读 / HTML 行读，再下 PASS |
+| codebase-design | 删除测试：财务/运营联系人词表、全表 `project_id` 硬限定应删/改回 HTML，不扩审批流 |
+| diagnosing-bugs / systematic-debugging | 只借读错误→复现→追数据流（文档现状句 → AOP 注解 → `AdmissionGuard.check` → `blockForAdmission`）；不作无 ID 改动 |
+| ponytail-review | 只列可删复杂度，不落地。本批拟改已是最小句级 |
+| writing-for-agents | 本段写给下游席读：步骤+完成判据同文件 |
+| graft | 已读 SKILL；本步用 `graft grep/skeleton` 核 `admissionAction`/`GuardedAction`/`ActionGateAspect`/`AdmissionGuard`/`MerchantRecord`，再按命中行读源。未用 graft MCP |
+
+B2 不适用、按 controller 收窄不调用：brainstorming / writing-plans（A）、test-driven-development / tdd / ponytail（B3）、requesting-code-review（B4）、resolving-merge-conflicts。文档类不强制落测试。
+
+缺口（不冒称调用）：`batch-grill-me` 无独立技能文件；`ubiquitous-language` 未找到；`i-have-adhd` 未另读全文，输出按 controller 收窄。
+
+明确不用：executing-plans、dispatching-parallel-agents、subagent-driven-development、using-git-worktrees、finishing-a-development-branch、research、domain-modeling、ponytail-audit/debt/gain、MCP、第三主体。
+
+### 1. 范围与指纹
+
+| 对象 | 行/字节 | SHA256 或事实 |
+|---|---|---|
+| 绑定设计 | 154 行 | `b85d4d42a6bf7bfcdba197da90cf132ed07b8012080a311c3110f97506f25143`（标题 V0.13） |
+| 集团 PRD | 117 行 | `7defd0840e09bd16b2bf35afe913141a9ebf3610e5d2d4c2153017311be35f52`（标题 V1.03） |
+| 验收包 | 291 行 | `56aca4616e8c77b5a8e474c597ebbc613a6b9e8b1aef9d3b5f73ca62693053a0`（标题 V0.06；本批不动） |
+| 主 PRD | 971 行 | `e0f00b02ab8e7e7ec4b049ce643bbfbcc235612e9e8b79e4975f60652ba1730c`（标题 V0.06） |
+| HEAD | — | `e456ba96c84185c8d39f18f548011daac48a6466` |
+| origin/main | — | `ef4cacbc74fdb43163919ba2689f285f00d34c17`（与 HEAD 不等；本席读工作树） |
+| ledger M013 | V8.89 | IN_PROGRESS，B3=5 |
+| 冻结映射 | 84 | 与锁 `M013 → [...]` 逐字相同，本 B2 不改映射 |
+
+四文件合计 1533 行。本 B2 为归并复核，不重做 84 项全矩阵；84 项适用标记两席 B1 有范围解释差（BEQR-074/189、BSM-006、PGM-044 等），候选已记「不改冻结映射」，本席同意。无该项新增立法或实现修改。
+
+### 2. 全量差集（防漏并、防改写、防复用错 ID）
+
+| 来源 | 候选正式 ID | 差集裁定 |
+|---|---|---|
+| 席甲 CX-01 | 027 | 未漏。冲突。与 GR-027 同根并一条 |
+| 席甲 CX-02 | **007 重开** | 未漏。技术性。旧 007 同句现状，不新分配 |
+| 席甲 CX-03 | 026 | 未漏。席甲原细化，候选按本席 B1 冲突改回；不另立财务/运营联系人 |
+| GR-M013-025 | 025 | 未漏。细化。不是 022 回归 |
+| GR-M013-026 | 026 | 未漏 |
+| GR-M013-027 | 027 | 未漏 |
+| GR-M013-028 | 028 | 未漏。席甲原 O2 观察，B2 收窄后入队 |
+| GR-M013-029 | 029 | 未漏。选本席「标明历史/现行以 §3」方向 |
+| GR-M013-030 | 030 | 未漏 |
+| 席甲 O1/O4/O5 + 本席观察 1/3/4/5/6/7/8 | 010 续记 | 队列否。未升新 ID |
+| 009/023 OpenAPI | 保持否 XM→M392 | 未擅自改 yaml |
+| 017 集团过滤 | 保持否 XM→M348 | 未实施 |
+| 席甲 O2 | 原票保留；028 只收窄 `project_id` 字面 | 不判数据库加列 |
+| 席甲 O3 + 本席观察 2/7 | 历史不回写；029 只追加现行指向 | 不改 2026-07-27 原文 |
+| 001–006、008、011–016、018–024 | 保持否 | 抽核：绑设计 L49 无存档括注、V410 三值、查看考勤、lifecycle、022 关联事实仍在 L39/L56。不重开 |
+| 添加 / HTML 申请 / questions | 0 | 不发 2.2 |
+
+无第三条未映射的 CX/GR 工程缺陷。无把观察改写成添加。025–030 未复用旧号。007 不新开 031。
+
+唯一 ID 计数：001–030 共 **30** 项。队列是=7（007、025–030）；否=**23**（001–006、008–024）。候选「31 个 / 其余 24 否」是把历史 001–024 整块称为 24 项、同时顶部把 007 标是；按「旧历史表不覆盖顶部候选」理解，不把历史段的 007 否压掉顶部重开。不因此 FAIL。
+
+### 3. 007 独立核证（本席 B1 曾判四域未接，本票以源码推翻该前提）
+
+本席 V0.08 B1 §5 BSM-115 写「未把计划当已接线（§12#8 四域未接诚实）」，未升 finding。那是用「有无直接 `evaluate`」代替「有无准入调用」，前提错误。B2 按类型 4 重追。
+
+**调用链（工作树只读）**
+
+1. `ActionGateAspect.java` L40–47：`@Before("@annotation(guarded)")`；`admissionAction()` 非空则 `admissionGuard.check(...)`。
+2. `AdmissionGuard.java` L77–134：`check` 查启用策略 → 触发则 `block` 走 `blockToReview` → L126 `supervisorReviewService.blockForAdmission(...)` 后抛 `ADMISSION_BLOCKED`。无策略/未触发=放行，故「有注解 ≠ 每次都拦」。
+3. 员工域仍直接 `evaluate`：`StaffApprovalService.java` L44 排班发布、L61 处罚上限申请。与现状句前半一致。
+
+**候选所列 `admissionAction` 行，本席逐行打开，全部命中非空 `admissionAction`：**
+
+| 文件 | 行 | 注解要点 |
+|---|---|---|
+| TicketingService | 298 | `ticketing.dynamic_pricing_publish` |
+| TicketingService | 839 | `ticketing.refund_approve` |
+| TicketingService | 853 | `ticketing.refund_reject` |
+| TicketingService | 935 | `ticketing.special_release` |
+| TicketingService | 941 | `ticketing.verification_reverse` |
+| BarService | 649 | `bar.bill_waiver` |
+| BarService | 699 | `bar.order_item_void` |
+| BarService | 727 | `bar.bill_reopen` |
+| BarService | 804 | `bar.shift_close` |
+| AmusementService | 120 | `amusement.manual_override` |
+| AmusementService | 830 | `amusement.group_booking_approve` |
+| AmusementService | 870 | `amusement.reopen`（inspection） |
+| AmusementService | 890 | `amusement.reopen`（maintenance） |
+
+`graft grep admissionAction`：TicketingService 恰好这 5 处；Bar/Amusement 与上表一致。
+
+**不把「有部分接线」写成「关键目标全覆盖」**
+
+- 主 PRD L643–647 目标仍在：票务下单前+出票前、酒吧开台前+点酒/结算前、游乐入场核销前、结算日结/结算依据生成前。候选拟改只换 L642 现状子句，**保留 643–647**。同意。
+- `FinanceService.createDailyClose` L324 仅 `capability = "finance.daily_close.lock"`，**无** `admissionAction`。结算关键目标路径仍未证明覆盖。
+- FinanceService 另有 locked_backfill / refund / turnover_rent_bill 等 `admissionAction`。候选不把结算写成已接关键路径，也不扩写 007 去枚举财务注解。不因此 FAIL，也不自行改拟改。
+
+**分类与无业务发明**
+
+- 冲突？否。三 HTML 未写「四域尚未调用」。
+- 细化？否。缺陷是实现现状句为假，不是补 HTML 下位业务规则。
+- 技术性：无业务发明（不增阈值/权限/例外/接口/功能），只说明已有调用路径。GEN-002/016/018。工程缺陷成立。队列是。
+- 添加？否。
+
+**重开旧 ID**
+
+历史 M013-007（findings 旧表）：原句「evaluate 为孤立评估接口，业务域动作前尚未调用」，已修成「员工域两处已接线；四域仍未调用」，队列已否。现文 L642 仍是同一现状子句的后半假话。同一句、同一技术事实，不新开 031。已否故须本 B2 双 PASS 才能重开。同意。
+
+**拟改句核**
+
+原文子句与 L642 现状句一致（文档有反引号，候选执行句未带反引号，替换对象仍是该子句，不扩到 643–647）。拟改区分员工直接 `evaluate` 与票务/酒吧/游乐部分动作 AOP 接线，并写「已有接线不等于……各关键目标路径均已完整覆盖；目标仍为动作前强制校验。」最小、可执行、无业务发明。
+
+grilling 自问：①能否因 B1 写过「四域未接诚实」而维持 007 否？否，AOP 行可复现。②能否宣称四域关键路径已覆盖？否，643–647 与日结无 `admissionAction`。③接线是否业务发明？否，只描述已有注解与切面。④旧 007 已否是否必须新 ID？否，同句重开。
+
+007：**PASS**（技术性 / 工程缺陷是 / 队列是 / 重开原 ID）。
+
+### 4. 逐 ID 复核（025–030 与历史否项）
+
+#### M013-025（GR-025）细化 / 是 / 是 — **PASS**
+
+工作树 `Path.exists(V427__m009_project_profiles_and_associations.sql)=False`；`V432__…` 存在。`git status --porcelain`：`AD` V427、`??` V432。`git cat-file -e origin/main:…V432` exit 0；V427 在 origin/main 不存在（exit 128）。绑设计 L39/L56/L154 三处仍写 V427，打开即失败。拟改只替换这三处编号为 V432，其余逐字不变。不是 022 回归：022 要补的关联/端点事实已在 L39/L56 落地。不 git add 未跟踪文件、不改 SQL。GEN-002/008/014/016、PGM-018。同意。
+
+#### M013-026（CX-03 + GR-026）冲突 / 是 / 是 — **PASS**
+
+主 PRD L459 连续片段「主要联系人、财务联系人、运营联系人」属实。HTML PGM L494：「建立商户档案、运营主体、负责人、第一联系人和第二联系人。」`MerchantRecord` L14–21：`contactName/contactPhone/ownerPerson/secondaryContactName/secondaryContactPhone`。后端 `finance_contact|operation_contact|财务联系人|运营联系人` 零命中。冲突优先于细化：HTML 闭集是负责人+第一+第二，财务/运营是另一套角色词表。拟改将该片段换为「负责人、第一联系人、第二联系人」，不虚构映射、不立项新联系人类型、不改库。席甲 CX-03 原细化；本席 B1 已判冲突；候选按冲突改回 HTML。同意，不改候选。
+
+#### M013-027（CX-01 + GR-027）冲突 / 是 / 是 — **PASS**
+
+主 PRD L857 一般脱敏句无双联系人例外。HTML L871 除外全文与拟改 §15A.5 一致（PRD 内部交叉引用写 §15A.5，对应 HTML「客人与员工的个人信息保护」条）。HTML L680 末句「商户档案页面中的第一联系人和第二联系人手机号……不授予未脱敏导出或打印权限……」与拟改 §15A.1 追加句同旨。不扩大到客人/员工档案，不授予导出。PGM-016/043、GEN-010/016。同意。
+
+#### M013-028（GR-028；席甲 O2 收窄后入队）细化 / 是 / 是 — **PASS**
+
+原文三片段与 L569/L657/L680 一致：把 HTML「所有基础对象都要带综合体项目归属」（L413）写成全对象 `project_id` 列。主体表无该列，归属走 `business_entity_projects` 多对多。席甲 O2「要求句不是已完成列声明」原票保留为观察边界；B2 只删三处 `project_id` 字面硬限定、改回 HTML「基础对象/综合体项目归属」，保持跨项目聚合要求。不加列、不改数据库、不实施 017。与 021（验收包已删「继续携带」）不同位置，021 保持否。本席 B1 曾允许括号说明商户列 vs 多对多；候选不写括号更短，不强制。同意。
+
+#### M013-029（GR-029）细化 / 是 / 是 — **PASS**（最小处置足以消歧）
+
+集团 PRD L5 ④「岗位、职级、组织、商户或责任范围变化后立即重算」+「这些规则……不反向改写 PRD」仍可被读成现行触发清单。同文件 §3 L76 已按 PGM-041 写两支（同商户同项目立即重算；跨商户/跨项目先审批），无「责任范围」并列触发。HTML L658 角色装配触发清单无责任范围；L669 职级影响默认权限模板和审批层级（不是 L5 那种「或责任范围变化立即重算」）。旧 019 已删正文排除句，并写明 **L5 是历史记录不改**。
+
+本席 B1 曾给两路：改写 ④ 对齐 §3，**或**标明历史/现行以 §3 为准。候选选后者：原文整段保留，引用块后追加「上段为 2026-07-27 的历史修订摘要，不作为现行触发清单；现行角色装配与权限重算规则以 §3 及三份业务 HTML 为准。」不删职级作为默认模板/审批层级影响因素，不改 019，不改 AccessService。
+
+**是否足以消歧：** 是。理由：①19 已禁止回写 L5，再改 ④ 或从历史摘要里删「职级、责任范围」会改历史字句并与 019 冲突。②追加句明确「不作为现行触发清单」且指向 §3+HTML，读者不能再把 ④ 当现行触发。③PGM-042/L669 职级规则仍在 §3 与主 PRD 第 11 条（030 只删「建议」），不会因历史摘要保留职级字样而撤销职级模板/审批层级。④残余：「不反向改写 PRD」仍留在 2026-07-27 原文里，但是该段被新句定义为历史摘要后，效力让给 §3。不把这条残余升为改候选或 FAIL。
+
+异议：无。不自行改候选。
+
+#### M013-030（GR-030）冲突 / 是 / 是 — **PASS**
+
+主 PRD L650「审批层级建议」。HTML L669「职级影响默认权限模板和审批层级，但不能替代功能权限点。」无「建议」。拟改只删「建议」两字。不改审批实现，不使职级替代功能权限。同意。
+
+#### 历史 001–006、008–024 保持否 — **PASS（保持否）**
+
+不把顶部 007 是写回历史表去覆盖；历史表也不覆盖顶部。009/017 跨模块仍否。010 观察续记仍否。
+
+### 5. 拟改可执行性与修复边界（审阅文本，未改文件）
+
+候选「七项逐句原文、拟改与影响」与上节逐 ID 一致，可作 B3 执行文本，无需再猜。
+
+获批后的限定范围（仅当双 B2 PASS **且** 另有第 6 次 B3 许可后才可动；本票不授权 B3）：
+
+- 仅 3 份现有 md：绑定设计 V0.13→V0.14；集团 PRD V1.03→V1.04；平台治理 PRD V0.06→V0.07。验收包保持。
+- 已有标题/版本栏同步；已有变更日志加一行（无现成日志不另造，绑定设计先例 018）。
+- 不改三 HTML、源码、迁移、OpenAPI、锁、ledger、数据库。
+- 文档类按 2.3 类型 4 最小命令举证，不强制造测试。
+
+ponytail-review：七项均为删假词/改回 HTML/加一句指向/改迁移号。`Lean already. Ship.` 对候选文本而言；本席不落地。
+
+### 6. grilling 对抗（本批）
+
+1. 能否因 B3=5 无第 6 次许可就跳过 B2 或把队列置空？**否**。B2 定稿与 B3 许可分离。
+2. 能否因本席 B1 未报 007 而把 CX-02 降观察？**否**。源码行可复现，B1 前提已证伪。
+3. 026 能否按席甲细化留下财务/运营词？**否**。冲突优先，HTML 无该两角色。
+4. 028 能否要求给主体表加 `project_id`？**否**。不能改数据库；O2 不是完成声明。
+5. 029 能否回写 L5 ④ 对齐 §3？**否**。019 已定 L5 历史不改；指针足够。
+6. 007 拟改能否写成「四域已覆盖」？**否**。保留 643–647。
+7. 有无添加项要 2.2？**无**。
+8. 本票是否模块 PASS？**否**。
+
+### 7. 总结票
+
+同意候选整批。逐 ID 001–030 全 **PASS**。添加 0。HTML 申请 0。questions 0。
+
+- 修复队列「是」：M013-007（重开）、025、026、027、028、029、030
+- 修复队列「否」：001–006、008–024（含 009 XM→M392、010 观察、017 XM→M348）
+
+本席 B2 **PASS**。此票只通过候选归并/分类/队列归属，**不是模块 PASS，不是 B3 授权，不是第 6 次修复许可**。未经双 PASS 不得把候选当定稿，更不得修。步骤仍 B2；M013 IN_PROGRESS；B3 累计 5 不变。
+
+本段结束。
