@@ -1,6 +1,6 @@
-# 四类主体唯一绑定开发设计 V0.13
+# 四类主体唯一绑定开发设计 V0.14
 
-> 版本：V0.13 ｜ 最后更新：2026-09-19 ｜ 状态：现行开发设计
+> 版本：V0.14 ｜ 最后更新：2026-09-23 ｜ 状态：现行开发设计
 > 业务最终解释权：`business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html`。代码、迁移和接口只说明当前实现，不得覆盖三份 HTML。
 
 文档类型：Implementation  
@@ -36,7 +36,7 @@
 
 ### 3.1 `business_entities`
 
-当前迁移：V005 基表 + V354 `archive_reason` 与 `entity_role` CHECK + V410 删除 `parent_entity_id` 并把 `entity_role` 白名单收窄为 `platform` / `project_company` / `management_company`（V318 的父链列已由 V410 删除，只作历史）；V427 另建 `business_entity_projects` 多对多项目关联表，主体表本身仍无 `project_id` 列。
+当前迁移：V005 基表 + V354 `archive_reason` 与 `entity_role` CHECK + V410 删除 `parent_entity_id` 并把 `entity_role` 白名单收窄为 `platform` / `project_company` / `management_company`（V318 的父链列已由 V410 删除，只作历史）；V432 另建 `business_entity_projects` 多对多项目关联表，主体表本身仍无 `project_id` 列。
 
 | 当前字段 | 类型/约束 | 用途 |
 |---|---|---|
@@ -53,7 +53,7 @@
 实现差距：
 
 - V318 曾把 `parent_entity_id` 用作固定层级、V354 的角色白名单曾含 HTML 没有的代码值；V410 已删除该列并把白名单收为 HTML 三角色，代码按 HTML 的多对多协作关系收敛，业务读取不得据历史列推导固定行政隶属链。OpenAPI `BusinessEntityRequest.entity_role` 枚举仍是旧六值（operation / contract / settlement / invoice / payment / other），与服务白名单不一致，属契约缺口（M013-009，归 OpenAPI 契约模块处理），不得当作活闭集；同一 schema 的 `status` 枚举仍是 draft / active / suspended / archived，与服务可设五值不一致，同属契约缺口（M013-023，归 OpenAPI 契约模块处理）。
-- 当前表没有 `project_id`、主体联系电话、证照附件或证照有效期字段。项目归属由 V427 `business_entity_projects` 多对多关联承载：创建主体时关联当前项目（持授权 U 盘密钥的最高权限可指定已存在项目），列表按当前项目过滤。证照、资质和保险由合规到期台账承载，不得在本文虚构这些现行列。
+- 当前表没有 `project_id`、主体联系电话、证照附件或证照有效期字段。项目归属由 V432 `business_entity_projects` 多对多关联承载：创建主体时关联当前项目（持授权 U 盘密钥的最高权限可指定已存在项目），列表按当前项目过滤。证照、资质和保险由合规到期台账承载，不得在本文虚构这些现行列。
 - HTML 的商户/运营主体业务状态为待准入、正常、暂停、终止、归档、黑名单；试运营是商户自己的经营状态，系统不记录。暂停与列入黑名单由招商部门与运营部门决定。退出不立即生效，须进入按项目可配的缓冲期（上下限出厂为 30 至 60 天，出厂默认 30 天）；缓冲期内向该商户客人说明情况，并给出转到其他酒吧、客人自行取走或退款三种处理方式。当前 `status` 未实现该完整词表和缓冲期闭环。
 
 ### 3.2 `business_entity_bindings`
@@ -151,4 +151,4 @@
 - PGM「酒吧股权、牌照、场地和资金必须分别记录」
 - BSM「配置数据可以存档、也可以删除（删除要审批）」
 - ENUM「四类主体」「经营主体关系」「商户/运营主体状态」
-- 当前实现：V002、V005、V010、V318、V354、V410（删父链、角色三值）、V427（主体项目关联）；`PlatformController`、`PlatformService`、`JdbcPlatformRepository`
+- 当前实现：V002、V005、V010、V318、V354、V410（删父链、角色三值）、V432（主体项目关联）；`PlatformController`、`PlatformService`、`JdbcPlatformRepository`
