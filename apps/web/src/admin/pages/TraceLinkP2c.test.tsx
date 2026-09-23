@@ -2,8 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MerchantZoneBillsPage } from "./MerchantZoneBillsPage";
-import { MerchantZoneContractsPage } from "./MerchantZoneContractsPage";
-import { MerchantScopePage } from "./MerchantScopePage";
 import { OrganizationMerchantPage } from "./OrganizationMerchantPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
@@ -16,7 +14,12 @@ function makeApi(routes: Record<string, unknown>): AdminApiClient {
   });
   return {
     get,
-    getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
+    // XM-M038-A-002/005：治理拓扑与组织商户页已改分页取数（getPaged），桩按同一路由表返回分页形状。
+    getPaged: vi.fn((url: string) => {
+      const key = Object.keys(routes).find((r) => url.startsWith(r));
+      const items = (key ? routes[key] : []) as unknown[];
+      return Promise.resolve({ items, total: items.length, page: 1, size: 500 });
+    }),
     post: vi.fn().mockResolvedValue({}),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
@@ -61,32 +64,6 @@ describe("全链下钻 P2-C：商户门户源页引用可点", () => {
     expect(screen.queryByTestId("trace-link-ADM-CONT-001-m-x")).toBeNull();
   });
 
-  it("我的合同：合同号→ADM-CONT-001、空间→ADM-GOV-007 均可点", async () => {
-    const navigateTo = vi.fn();
-    const api = makeApi({
-      "/api/v1/merchant-portal/contracts": [
-        { id: "c-1", lifecycleStatus: "effective", spaceIds: ["sp-9"] },
-      ],
-    });
-    render(<MerchantZoneContractsPage {...baseProps(api, { navigateTo })} />);
-    fireEvent.click(await screen.findByTestId("trace-link-ADM-CONT-001-c-1"));
-    expect(navigateTo).toHaveBeenCalledWith("ADM-CONT-001", "c-1");
-    fireEvent.click(screen.getByTestId("trace-link-ADM-GOV-007-sp-9"));
-    expect(navigateTo).toHaveBeenCalledWith("ADM-GOV-007", "sp-9");
-  });
-
-  it("商户授权工作台：账单商户列点击 → navigateTo(ADM-GOV-002, merchantId)", async () => {
-    const navigateTo = vi.fn();
-    const api = makeApi({
-      "/api/v1/merchant-service/work-orders": [],
-      "/api/v1/merchant-billing/bills": [
-        { id: "sb-1", merchantId: "m-5", billNo: "SB1", totalAmount: 10, status: "issued" },
-      ],
-    });
-    render(<MerchantScopePage {...baseProps(api, { navigateTo })} />);
-    fireEvent.click(await screen.findByTestId("trace-link-ADM-GOV-002-m-5"));
-    expect(navigateTo).toHaveBeenCalledWith("ADM-GOV-002", "m-5");
-  });
 });
 
 describe("全链下钻 P2-C：组织与商户档案按 ?focus= 定位", () => {

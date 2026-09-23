@@ -1,5 +1,34 @@
 # 全量审计 Findings 台账
-版本：V3.90
+版本：V3.93
+
+## 当前 XM-M038-A B4-r1 双 PASS，001…006 已修转「否」，进入 B5-r1
+2026-09-23T21:41:04Z。Grok B4-r1 票 PASS（modules/XM-M038-A-b4-r1-grok-raw.md，20095bytes SHA 38581716105406a00a6c898a7df15881d85ffd5f486727bd51781242808e6844；越界行 0）；席甲票 PASS（modules/XM-M038-A-b4-r1-self-raw.md，11420bytes SHA 7cd51db83a1326b8cd9b90207e3fc654b599fd9a9385f5c7c27a46bce08772bd）。XM-M038-A-001…006 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（6）：XM-M038-A-001…006（已修）。
+- 当前 XM-M038-A 修复队列「是」：0。
+
+
+## 当前 XM-M038-A B2-r1 双 PASS 定稿，6 项待修（B3-r1）
+2026-09-23T21:29:18Z。Grok B2-r1 票 PASS（modules/XM-M038-A-b1-grok-raw.md V0.02，全文 53701bytes SHA ea136303361ffc938ef0988061dc3029033332c35b341a94fd895b35a1521ccc；逐 ID 同意，独立核实 xm038a_mut2.log 变异成立，002/005 同意改取技术性）；席甲 B2-r1 票 PASS（modules/XM-M038-A-b1-self-raw.md V0.02，全文 14981bytes SHA d7372e6d1cd8ef201013b1a0d8a6b286ec3d5e7ff26f63cd4d9866eb97ad724b）。定稿同上方候选段：XM-M038-A-001、003、004 细化（删除过期用例）；002、005 技术性（getPaged 按同一路由表返回分页形状）；006 技术性（否定断言改查任何 `trace-link-` 前缀元素、保留文本 c-77）。写入集合只两份测试文件；删除用例后闲置的导入随 003/004 一并删除。GR-07（→M285）与两席其余观察只登记。
+- 修复队列「是」（6）：XM-M038-A-001…006。
+- 修复队列「否」：0。
+
+
+## 当前 XM-M038-A B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-23T21:17:29Z。输入仅本合成模块两席 B1 完整 raw：modules/XM-M038-A-b1-self-raw.md V0.01（13816bytes SHA c510672e103911ea3952884ca13f232ab2a12e0107c7d4f91cdca47d8f273a8b，席甲=Claude Opus 5.5，作者自审票，FAIL：CX-01…06，OBS-1…3）、modules/XM-M038-A-b1-grok-raw.md V0.01（33643bytes SHA 8dbe09193bedec995ca1c4f886a412ef616ee24cb69c50782fad91de469e9b64，Grok 席乙，FAIL：GR-01…06，GR-07 只登记，OBS-1…3）。B1 后四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。两席 CX-0n 与 GR-0n（n=1…6）逐条同一事实，归并为 XM-M038-A-001…006。
+B2 补充证据（席甲，读 Grok B1 之后、写本候选之前）：/home/james/audit-tmp/xm038a_mut2.log——一次性 worktree 三个变异体逐个跑 M023 本页测试后还原：把「我的合同」合同号加回 ADM-CONT-001 下钻 → MerchantZoneContractsPage.test.tsx「合同号 / 空间 / 续签自为纯文本…（M023-005）」红；把「我的对账」下钻改回 ADM-CONT-001 → MerchantZoneSettlementsPage.test.tsx 两条红；把「商户授权工作台」商户号加回 ADM-GOV-002 下钻 → MerchantScopePage.test.tsx「商户号为纯文本…」红。即 M023-005 的三处现行行为已由 M023 本页测试守住（各测试均传 navigateTo: vi.fn()，非空转）。据此 001、003、004 的最小处置取删除过期用例，而非在第二个文件里改写成重复断言（GEN-001；ponytail：能删就不改）。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| XM-M038-A-001 | CX-01＋GR-01 | 细化（上位 PGM-001/BSM-001；受众可达口径由 M023-005 定稿） | 是 | 是 | `apps/web/src/admin/pages/TraceLinkDrilldown.test.tsx:55-64`「我的对账合同列点击 → navigateTo(ADM-CONT-001, contractId)」：页面现为 ADM-MER-006（`MerchantZoneSettlementsPage.tsx:191/221`），origin/main 上即红 | PGM-001、BSM-001、GEN-002、GEN-003、GEN-016；最小处置：删除该用例（现行行为已由 MerchantZoneSettlementsPage.test.tsx「合同下钻跳「我的合同」并带合同号」守住，变异证据见上）；不改页面 |
+| XM-M038-A-002 | CX-02＋GR-02 | 技术性（测试桩与页面分页取数接口约定；不涉任何 HTML 句子，无业务发明；Grok B1 记为细化，席甲取技术性，请复核） | 是 | 是 | `TraceLinkDrilldown.test.tsx:20` makeApi 的 `getPaged` 恒返回空；治理拓扑页自 M012 发布 0b272eec 起改用 `api.getPaged`（`GovernanceTopologyPage.tsx:74-93`），L113-130「治理拓扑带 focusObjectId → 高亮该商户行」即红；探针只补桩即转绿（xm038a_probe2.log），页面定位高亮未回归 | GEN-008、GEN-002、GEN-003；最小处置：makeApi 的 `getPaged` 按同一路由表返回 `{ items, total, page, size }`；不改页面 |
+| XM-M038-A-003 | CX-03＋GR-03 | 细化（同 001） | 是 | 是 | `TraceLinkP2c.test.tsx:64-76`「我的合同：合同号→ADM-CONT-001、空间→ADM-GOV-007 均可点」：M023-005 已降纯文本，即红 | PGM-001、GEN-002、GEN-003、GEN-016；最小处置：删除该用例（现行行为已由 MerchantZoneContractsPage.test.tsx:113-121 守住，变异证据见上）；不改页面 |
+| XM-M038-A-004 | CX-04＋GR-04 | 细化（同 001） | 是 | 是 | `TraceLinkP2c.test.tsx:78-90`「商户授权工作台：账单商户列点击 → navigateTo(ADM-GOV-002, merchantId)」：M023-005 已降纯文本，且页面按 user.merchantId 过滤、夹具无商户归属，即红 | PGM-001、GEN-002、GEN-003、GEN-005、GEN-016；最小处置：删除该用例（现行行为已由 MerchantScopePage.test.tsx:175-180 守住，该测试夹具带商户归属，变异证据见上）；不改页面 |
+| XM-M038-A-005 | CX-05＋GR-05 | 技术性（同 002） | 是 | 是 | `TraceLinkP2c.test.tsx:19` makeApi 的 `getPaged` 恒空；组织商户页改分页取数（`OrganizationMerchantPage.tsx:140-153`），L93-106 定位用例即红；探针只补桩即转绿 | GEN-008、GEN-002、GEN-003；最小处置：同 002 |
+| XM-M038-A-006 | CX-06＋GR-06 | 技术性（测试有效性；无业务发明：只让「不可点」断言能失败） | 是 | 是 | `TraceLinkDrilldown.test.tsx:66-73`「无 navigateTo 时降级纯文本（不可点）」查 `trace-link-ADM-CONT-001-c-77`，页面现为 ADM-MER-006，否定断言落空；变异（TraceLink 无 navigateTo 也渲染按钮）下仍通过（xm038a_mut1.log） | GEN-003；最小处置（采 Grok B1 处置）：改为断言容器内不存在任何 `[data-testid^="trace-link-"]`，保留文本 `c-77` 可见 |
+
+- 写入集合：只 `apps/web/src/admin/pages/TraceLinkDrilldown.test.tsx` 与 `apps/web/src/admin/pages/TraceLinkP2c.test.tsx`。不改页面、TraceLink、AdminApp、adminRoutes、客户端与后端。
+- 只登记不入队：GR-07＝席甲 OBS-1（「我的账单」ADM-MER-003 来源合同下钻指 ADM-CONT-001，商户账号点了静默不跳，与 M023-005 同根；页面属 M285——席甲 B1 误写为 M099，采 Grok；TraceLinkP2c.test.tsx:39-50 锁住该目标，M285 修页面时须同批改该用例）；两席 OBS（`verify:predeploy` 与 predeploy-gates 不跑前后端单测→M003/M005；两文件夹具重复；测试不经 AdminApp.navigateTo）。
+- 修复队列「是」（6）：XM-M038-A-001…006。修复队列「否」：0。
+
 
 ## 当前 M038 B4-r2 双PASS，M038-011、M038-012 已修转「否」，进入B5-r2
 2026-09-23T17:46:48Z。Grok B4-r2 票 PASS（modules/M038-b4-r2-grok-raw.md，34998bytes SHA 753ab137d993445e77395d3cb820c00536bde7f8ef9e7a8967de20c9d540bbc4）；席甲票 PASS（modules/M038-b4-r2-self-raw.md，28265bytes SHA 2b2bf5ebe0b78dc574b49ff2cd5c58c0fce883921fd14f35a7bba4883094c8a2）。M038-011、M038-012 修复队列「是」→「否（已修，B3-r2）」。
