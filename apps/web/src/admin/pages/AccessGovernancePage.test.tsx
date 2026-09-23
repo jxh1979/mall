@@ -95,7 +95,7 @@ describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
   it("员工单独授予 / 显式拒绝有写入口：显式拒绝按目标用户提交（PGM-1.10.1）", async () => {
     const props = renderPage();
     await waitFor(() => expect(screen.getByTestId("access-user-override-form")).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("覆盖用户 id"), { target: { value: "u-1" } });
+    fireEvent.change(screen.getByLabelText("覆盖用户"), { target: { value: "u-1" } });
     fireEvent.change(screen.getByLabelText("覆盖权限码"), { target: { value: "access.role.assign" } });
     fireEvent.change(screen.getByLabelText("覆盖效果"), { target: { value: "deny" } });
     fireEvent.click(screen.getByTestId("access-user-override-set"));
@@ -181,5 +181,148 @@ describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
     expect(text).toContain("用户");
     expect(text).not.toContain("position");
     expect(text).not.toMatch(/\buser\b/);
+  });
+});
+
+// M038 回归：取值全中文（001）、未登记岗位（003）、恢复文案（004）、写动作失败提示与防双击（005）、表头列数（007）、职级 30 档下拉（008）、状态用词（009）。
+describe("M038 访问治理页回归", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const M038_GRANTS = [
+    { id: "gr-a", request_type: "user_scope_change", target_user_id: "u-1", status: "applied" },
+    { id: "gr-b", request_type: "position_high_risk_release", target_user_id: "u-1", status: "pending" },
+    { id: "gr-c", request_type: "role_permission", target_user_id: "u-1", status: "rejected" },
+  ];
+  const M038_TEMPLATES = [
+    { id: "prt-x", position_code: "front_desk", staff_level_id: "lvl_m2_upper", role_id: "role-1", status: "active" },
+    { id: "prt-arch", position_code: "ops_manager", staff_level_id: "lvl_m1_lower", role_id: "role-1", status: "inactive", archived_at: "2026-08-01T00:00:00Z" },
+    { id: "prt-del", position_code: "ops_manager", staff_level_id: "lvl_m1_lower", role_id: "role-1", status: "inactive", archived_at: "2026-08-01T00:00:00Z", deleted_at: "2026-08-02T00:00:00Z", delete_review_id: "rv-1" },
+  ];
+  type Write = { url: string; body: Record<string, unknown> };
+
+  function renderM038(onWrite: (write: Write) => Promise<Response>) {
+    const writes: Write[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET").toUpperCase() !== "GET") {
+        const write = { url, body: init?.body ? JSON.parse(String(init.body)) : {} };
+        writes.push(write);
+        return onWrite(write);
+      }
+      if (url.includes("grant-requests/summary")) return Promise.resolve(raw(SUMMARY));
+      if (url.includes("grant-requests")) return Promise.resolve(envelope(M038_GRANTS));
+      if (url.includes("position-role-templates")) return Promise.resolve(envelope(M038_TEMPLATES));
+      if (url.includes("access/roles")) return Promise.resolve(envelope(ROLES));
+      if (url.includes("access/users")) return Promise.resolve(envelope(USERS));
+      return Promise.resolve(envelope([]));
+    }));
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<AccessGovernancePage {...props} />);
+    return { props, writes };
+  }
+
+  it("授权申请的三种状态与内部类型全部中文上屏（001）", async () => {
+    renderM038(() => Promise.resolve(raw({})));
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-gr-a")).toBeTruthy());
+    const text = screen.getByTestId("access-grant-requests-table").textContent ?? "";
+    for (const label of ["已生效", "待处理", "已驳回", "人员范围变更", "岗位高危权限释放", "角色权限"]) expect(text).toContain(label);
+    for (const code of ["applied", "user_scope_change", "position_high_risk_release", "role_permission"]) expect(text).not.toContain(code);
+    fireEvent.click(screen.getByTestId("access-grant-request-gr-a"));
+    const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawer).toContain("人员范围变更");
+    expect(drawer).toContain("已生效");
+    expect(drawer).not.toContain("applied");
+  });
+
+  it("审批不填意见时留痕为中文「通过」，结果提示为中文状态（001）", async () => {
+    const { props, writes } = renderM038(() => Promise.resolve(raw({ id: "gr-b", status: "applied" })));
+    await waitFor(() => expect(screen.getByTestId("access-grant-actions-gr-b")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-actions-gr-b"));
+    await waitFor(() => expect(screen.getByTestId("access-grant-approve-gr-b")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-approve-gr-b"));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]!.url).toContain("/grant-requests/gr-b/review");
+    expect(writes[0]!.body.comment).toBe("通过");
+    expect(writes[0]!.body.operator_note).toBe("通过");
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringContaining("已生效")));
+  });
+
+  it("未映射的岗位码显示为「未登记岗位（岗位码）」（003）", async () => {
+    renderM038(() => Promise.resolve(raw({})));
+    await waitFor(() => expect(screen.getByTestId("access-position-role-template-prt-x")).toBeTruthy());
+    const cells = screen.getByTestId("access-position-role-template-prt-x").querySelectorAll("td");
+    expect(cells[1]?.textContent).toBe("未登记岗位（front_desk）");
+    expect(cells[2]?.textContent).toBe("M2·上");
+  });
+
+  it("已存档的按钮写「取消存档」、已删除的写「恢复」，不再写「停用模板」（004）", async () => {
+    renderM038(() => Promise.resolve(raw({})));
+    await waitFor(() => expect(screen.getByTestId("access-position-role-template-prt-arch")).toBeTruthy());
+    const buttonTexts = (rowId: string) => Array.from(screen.getByTestId(`access-position-role-template-${rowId}`).querySelectorAll("button")).map((button) => button.textContent);
+    expect(buttonTexts("prt-arch")).toContain("取消存档");
+    expect(buttonTexts("prt-del")).toContain("恢复");
+    expect(buttonTexts("prt-del")).not.toContain("取消存档");
+    expect(screen.getByTestId("access-position-role-templates-table").textContent).not.toContain("停用模板");
+  });
+
+  it("装配角色被后端拒绝时页面报出原因（005）", async () => {
+    const { props, writes } = renderM038(() => Promise.resolve(new Response(
+      JSON.stringify({ success: false, code: "GRANT_REQUIRES_APPROVAL", message: "以下权限的授予需要审批：[finance.refund.create]" }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    )));
+    await waitFor(() => expect((screen.getByLabelText("装配角色") as HTMLSelectElement).value).toBe("role-1"));
+    fireEvent.click(screen.getByTestId("access-role-assign"));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith(expect.stringMatching(/\S/)));
+    expect(props.setActionResult).not.toHaveBeenCalled();
+  });
+
+  it("提交未完成时再次点击不发第二笔（005）", async () => {
+    let release: (value: Response) => void = () => undefined;
+    const { writes } = renderM038(() => new Promise<Response>((resolve) => { release = resolve; }));
+    await waitFor(() => expect((screen.getByLabelText("装配角色") as HTMLSelectElement).value).toBe("role-1"));
+    fireEvent.click(screen.getByTestId("access-role-assign"));
+    fireEvent.click(screen.getByTestId("access-role-assign"));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitFor(() => expect((screen.getByTestId("access-role-assign") as HTMLButtonElement).disabled).toBe(true));
+    release(raw({}));
+    await waitFor(() => expect((screen.getByTestId("access-role-assign") as HTMLButtonElement).disabled).toBe(false));
+    expect(writes.filter((write) => write.url.includes("/role-assignments"))).toHaveLength(1);
+  });
+
+  it("智能总结表表头列数等于数据行单元格数（007）", async () => {
+    renderM038(() => Promise.resolve(raw({})));
+    await waitFor(() => expect(screen.getByTestId("access-grant-summary-position-ops_manager")).toBeTruthy());
+    const table = screen.getByTestId("access-grant-summary-table");
+    expect(table.querySelectorAll("thead th")).toHaveLength(table.querySelectorAll("tbody tr")[0]!.querySelectorAll("td").length);
+  });
+
+  it("职级是 30 档下拉，范围变更处另有「沿用原职级」（008）", async () => {
+    renderM038(() => Promise.resolve(raw({})));
+    await waitFor(() => expect(screen.getByTestId("access-user-position-level")).toBeTruthy());
+    const options = Array.from((screen.getByTestId("access-user-position-level") as HTMLSelectElement).options);
+    expect(options).toHaveLength(30);
+    expect(options[0]!.value).toBe("lvl_m1_lower");
+    expect(options[0]!.textContent).toBe("M1·下");
+    expect(options[29]!.value).toBe("lvl_m10_upper");
+    expect(options[29]!.textContent).toBe("M10·上");
+    const scopeOptions = Array.from((screen.getByTestId("access-user-scope-level") as HTMLSelectElement).options);
+    expect(scopeOptions).toHaveLength(31);
+    expect(scopeOptions[0]!.textContent).toBe("沿用原职级");
+  });
+
+  it("岗位模板弹窗里的状态用词与表格同一套（009）", async () => {
+    renderM038(() => Promise.resolve(raw({})));
+    await waitFor(() => expect(screen.getByTestId("access-position-role-template-create-open")).toBeTruthy());
+    await waitFor(() => expect((screen.getByLabelText("装配角色") as HTMLSelectElement).value).toBe("role-1"));
+    fireEvent.click(screen.getByTestId("access-position-role-template-create-open")); // 引导弹窗为单页填写，状态下拉就在第一页
+    const status = await waitFor(() => screen.getByTestId("access-position-role-template-status") as HTMLSelectElement);
+    expect(Array.from(status.options).map((option) => option.textContent)).toEqual(["有效", "未激活"]);
   });
 });

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -49,7 +49,28 @@ const POSITION_LABELS: Record<string, string> = {
 };
 function zhPosition(code?: string | null): string {
   if (!code) return "—";
-  return POSITION_LABELS[code] ?? code;
+  // M038-003：未映射的岗位码不裸露英文——中文说明在前，岗位码作为系统内部标识符放括号里。
+  return POSITION_LABELS[code] ?? `未登记岗位（${code}）`;
+}
+// M038-008：职级是速查表写明的 30 档闭集（M1–M10 × 上/中/下），编号与库内 staff_levels 一致；页内生成下拉，不手填。
+const STAFF_LEVEL_IDS: string[] = [];
+for (let main = 1; main <= 10; main += 1) {
+  for (const band of ["lower", "middle", "upper"]) STAFF_LEVEL_IDS.push(`lvl_m${main}_${band}`);
+}
+function staffLevelOptions() {
+  return STAFF_LEVEL_IDS.map((id) => <option key={id} value={id}>{zhLevel(id)}</option>);
+}
+// M038-001：授权申请的状态与类型按后端闭集在页内给全中文（公共字典缺「已生效」与三种内部类型）。
+const GRANT_STATUS_LABELS: Record<string, string> = { pending: "待处理", applied: "已生效", rejected: "已驳回" };
+const GRANT_TYPE_LABELS: Record<string, string> = {
+  user_role: "用户角色", user_position: "用户职位", temporary_permission: "临时权限",
+  role_permission: "角色权限", user_scope_change: "人员范围变更", position_high_risk_release: "岗位高危权限释放",
+};
+function grantStatusLabel(code?: string | null): string {
+  return code ? GRANT_STATUS_LABELS[code] ?? formatBusinessStatus(code) : "—";
+}
+function grantTypeLabel(code?: string | null): string {
+  return code ? GRANT_TYPE_LABELS[code] ?? formatBusinessStatus(code) : "—";
 }
 function zhLevel(code?: string | null): string {
   if (!code) return "—";
@@ -81,14 +102,31 @@ function roleLabel(row: RoleRow | undefined) {
   return row ? `${row.roleName ?? row.roleCode ?? row.id} (${row.id})` : "-";
 }
 
-function statusBadge(status?: string | null) {
+function statusBadge(status?: string | null, label: (code: string) => string = formatBusinessStatus) {
   const value = status || "";
   const kind = value === "approved" || value === "active" ? "is-ok" : value === "rejected" ? "is-danger" : value === "pending" ? "is-warn" : "is-info";
   // 徽标文字中文化（业务HTML零英文规则）；颜色仍按原始码判定。
-  return <span className={`admin-badge ${kind}`}>{value ? formatBusinessStatus(value) : "—"}</span>;
+  return <span className={`admin-badge ${kind}`}>{value ? label(value) : "—"}</span>;
 }
 
 export function AccessGovernancePage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+  // M038-005：页内写动作统一走 runWrite——提交中置忙（防双击发两笔）、失败把后端中文消息报到页面。
+  const [writeBusy, setWriteBusy] = React.useState(false);
+  const writeBusyRef = React.useRef(false);
+  async function runWrite(action: () => Promise<void>, fallbackMessage: string) {
+    if (writeBusyRef.current) return;
+    writeBusyRef.current = true;
+    setWriteBusy(true);
+    setGlobalError(null);
+    try {
+      await action();
+    } catch (actionError) {
+      setGlobalError(actionError instanceof Error ? actionError.message : fallbackMessage);
+    } finally {
+      writeBusyRef.current = false;
+      setWriteBusy(false);
+    }
+  }
   const [users, setUsers] = React.useState<AccessUserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleRow[]>([]);
   const [positionTemplates, setPositionTemplates] = React.useState<PositionRoleTemplateRow[]>([]);
@@ -371,7 +409,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
         reason: grantForm.reason.trim() || "后台高危授权申请",
         operatorNote: grantForm.reason.trim() || "后台高危授权申请",
       });
-      setActionResult(`授权申请已提交：${result.id}（${formatBusinessStatus(result.status ?? "")}）`);
+      setActionResult(`授权申请已提交：${result.id}（${grantStatusLabel(result.status)}）`);
       setGrantOpen(false);
       await reload();
     } catch (actionError) {
@@ -386,11 +424,12 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
   async function reviewGrant(row: AccessGrantRequestRow, decision: "approve" | "reject") {
     const result = await api.post<AccessGrantRequestRow>(`/api/v1/access/grant-requests/${encodeURIComponent(row.id)}/review`, {
       decision,
-      comment: reviewForm.comment.trim() || decision,
-      operatorNote: reviewForm.comment.trim() || decision,
+      // M038-001：不填意见时留痕用中文，不把 approve／reject 当意见。
+      comment: reviewForm.comment.trim() || (decision === "approve" ? "通过" : "驳回"),
+      operatorNote: reviewForm.comment.trim() || (decision === "approve" ? "通过" : "驳回"),
       evidenceAttachmentIds: splitTokens(reviewForm.evidenceAttachmentIds),
     });
-    setActionResult(`授权申请 ${row.id} 已${decision === "approve" ? "通过" : "驳回"}（${formatBusinessStatus(result.status ?? "")}）`);
+    setActionResult(`授权申请 ${row.id} 已${decision === "approve" ? "通过" : "驳回"}（${grantStatusLabel(result.status)}）`);
     await reload();
   }
 
@@ -415,12 +454,12 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       title: `授权申请 · ${row.id}`,
       fields: [
         { label: "申请编号", value: row.id },
-        { label: "类型", value: formatBusinessStatus(row.requestType) },
+        { label: "类型", value: grantTypeLabel(row.requestType) },
         { label: "目标用户", value: row.targetUserId },
         { label: "角色", value: row.targetRoleId ?? "—" },
         { label: "岗位", value: row.positionCode ? `${zhPosition(row.positionCode)} / ${zhLevel(row.staffLevelId)}` : "—" },
         { label: "权限码", value: row.permissionCodes?.length ? row.permissionCodes.join("、") : "—" },
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: grantStatusLabel(row.status) },
         { label: "单次有效", value: row.singleUse ? "是" : "否" },
         { label: "过期时间", value: cnDate(row.expiresAt) },
         { label: "申请原因", value: row.reason ?? "—" },
@@ -479,12 +518,12 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
                 <td>{row.id}</td><td>{zhPosition(row.positionCode)}</td><td>{zhLevel(row.staffLevelId)}</td><td>{row.roleId ?? "-"}</td><td>{row.templateId ?? "-"}</td><td>{row.organizationId ?? "-"}</td><td>{row.deletedAt ? "已删除（可恢复）" : row.archivedAt ? "已存档" : statusBadge(row.status)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`access-position-role-template-select-${row.id}`} disabled={Boolean(row.archivedAt)} onClick={() => selectTemplate(row)}>选中</button>
-                  {!row.archivedAt ? <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid={`access-position-role-template-archive-${row.id}`} onClick={() => void changePositionLifecycle(row.id, "archive")}>存档</PermissionButton> : <>
-                    {!row.deletedAt && !row.deleteReviewId ? <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} onClick={() => void changePositionLifecycle(row.id, "request_delete")}>{user.id === "usr_master_authority" && user.username === "master-authority" ? "最高权限直接删除" : "申请删除"}</PermissionButton> : null}
+                  {!row.archivedAt ? <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid={`access-position-role-template-archive-${row.id}`} disabled={writeBusy} onClick={() => void runWrite(() => changePositionLifecycle(row.id, "archive"), "岗位模板处理失败")}>存档</PermissionButton> : <>
+                    {!row.deletedAt && !row.deleteReviewId ? <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} disabled={writeBusy} onClick={() => void runWrite(() => changePositionLifecycle(row.id, "request_delete"), "岗位模板处理失败")}>{user.id === "usr_master_authority" && user.username === "master-authority" ? "最高权限直接删除" : "申请删除"}</PermissionButton> : null}
                     {!row.deletedAt && row.deleteReviewId ? <>
-                      <PermissionButton permissionsState={effectivePermissions} permissions={["access.role.assign", "governance.supervisor_review.approve"]} onClick={() => void changePositionLifecycle(row.id, "approve_delete")}>最高权限批准删除</PermissionButton>
-                      <PermissionButton permissionsState={effectivePermissions} permissions={["access.role.assign", "governance.supervisor_review.approve"]} onClick={() => void changePositionLifecycle(row.id, "reject_delete")}>驳回删除</PermissionButton>
-                    </> : <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} onClick={() => void changePositionLifecycle(row.id, "restore")}>恢复为停用模板</PermissionButton>}
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["access.role.assign", "governance.supervisor_review.approve"]} disabled={writeBusy} onClick={() => void runWrite(() => changePositionLifecycle(row.id, "approve_delete"), "岗位模板处理失败")}>最高权限批准删除</PermissionButton>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["access.role.assign", "governance.supervisor_review.approve"]} disabled={writeBusy} onClick={() => void runWrite(() => changePositionLifecycle(row.id, "reject_delete"), "岗位模板处理失败")}>驳回删除</PermissionButton>
+                    </> : <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} disabled={writeBusy} onClick={() => void runWrite(() => changePositionLifecycle(row.id, "restore"), "岗位模板处理失败")}>{row.deletedAt ? "恢复" : "取消存档"}</PermissionButton>}
                   </>}
                 </td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看岗位角色模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td></tr>
@@ -503,48 +542,48 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
 
         <h3>给用户定职位自动适配</h3>
         <div className="admin-inline-form" data-testid="access-user-position-form">
-          <select aria-label="用户 id" value={positionForm.userId} onChange={(event) => setPositionForm({ ...positionForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          <select aria-label="用户" value={positionForm.userId} onChange={(event) => setPositionForm({ ...positionForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
           <input aria-label="岗位编码" placeholder="岗位编码" value={positionForm.positionCode} onChange={(event) => setPositionForm({ ...positionForm, positionCode: event.target.value })} />
-          <input aria-label="职级 id" placeholder="职级 id" value={positionForm.staffLevelId} onChange={(event) => setPositionForm({ ...positionForm, staffLevelId: event.target.value })} />
+          <select aria-label="职级" data-testid="access-user-position-level" value={positionForm.staffLevelId} onChange={(event) => setPositionForm({ ...positionForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select>
           <input aria-label="基础薪资元" type="number" min="0" placeholder="基础薪资(元)" value={positionForm.baseSalaryYuan} onChange={(event) => setPositionForm({ ...positionForm, baseSalaryYuan: event.target.value })} />
           <input aria-label="薪资备注" placeholder="薪资备注" value={positionForm.salaryDetail} onChange={(event) => setPositionForm({ ...positionForm, salaryDetail: event.target.value })} />
           <input aria-label="操作备注" placeholder="操作备注" value={positionForm.operatorNote} onChange={(event) => setPositionForm({ ...positionForm, operatorNote: event.target.value })} />
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-position-assign" onClick={() => void assignPosition()}>定职位并适配</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-position-assign" disabled={writeBusy} onClick={() => void runWrite(assignPosition, "定岗失败")}>定职位并适配</PermissionButton>
         </div>
 
         <h3>人员范围变更（所属商户 / 跨项目）</h3>
         <div className="admin-inline-form" data-testid="access-user-scope-form">
-          <select aria-label="变更用户 id" data-testid="access-user-scope-user" value={scopeForm.userId || positionForm.userId} onChange={(event) => setScopeForm({ ...scopeForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
-          <input aria-label="新所属项目 id" data-testid="access-user-scope-org" placeholder="新所属项目 id（不变可空）" value={scopeForm.organizationId} onChange={(event) => setScopeForm({ ...scopeForm, organizationId: event.target.value })} />
-          <input aria-label="新所属商户 id" data-testid="access-user-scope-merchant" placeholder="新所属商户 id（平台员工留空）" value={scopeForm.merchantId} onChange={(event) => setScopeForm({ ...scopeForm, merchantId: event.target.value })} />
+          <select aria-label="变更用户" data-testid="access-user-scope-user" value={scopeForm.userId || positionForm.userId} onChange={(event) => setScopeForm({ ...scopeForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          <input aria-label="新所属项目编号" data-testid="access-user-scope-org" placeholder="新所属项目编号（不变可空）" value={scopeForm.organizationId} onChange={(event) => setScopeForm({ ...scopeForm, organizationId: event.target.value })} />
+          <input aria-label="新所属商户编号" data-testid="access-user-scope-merchant" placeholder="新所属商户编号（平台员工留空）" value={scopeForm.merchantId} onChange={(event) => setScopeForm({ ...scopeForm, merchantId: event.target.value })} />
           <input aria-label="新范围岗位编码" data-testid="access-user-scope-position" placeholder="新范围岗位编码（沿用可空）" value={scopeForm.positionCode} onChange={(event) => setScopeForm({ ...scopeForm, positionCode: event.target.value })} />
-          <input aria-label="新范围职级 id" data-testid="access-user-scope-level" placeholder="新范围职级 id（沿用可空）" value={scopeForm.staffLevelId} onChange={(event) => setScopeForm({ ...scopeForm, staffLevelId: event.target.value })} />
+          <select aria-label="新范围职级" data-testid="access-user-scope-level" value={scopeForm.staffLevelId} onChange={(event) => setScopeForm({ ...scopeForm, staffLevelId: event.target.value })}><option value="">沿用原职级</option>{staffLevelOptions()}</select>
           <input aria-label="变更理由" data-testid="access-user-scope-reason" placeholder="变更理由" value={scopeForm.reason} onChange={(event) => setScopeForm({ ...scopeForm, reason: event.target.value })} />
           <input aria-label="主线最终审批人" data-testid="access-user-scope-final-approver" placeholder="主线最终审批人账号（可空）" value={scopeForm.finalApproverId} onChange={(event) => setScopeForm({ ...scopeForm, finalApproverId: event.target.value })} />
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-scope-change" onClick={() => void changeUserScope()}>提交范围变更（先审批后生效）</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-scope-change" disabled={writeBusy} onClick={() => void runWrite(changeUserScope, "范围变更提交失败")}>提交范围变更（先审批后生效）</PermissionButton>
         </div>
         <div className="admin-muted-action" data-testid="access-user-scope-boundary">保存所属商户或跨项目变更时，旧岗位或旧范围派生权限立即失效；新范围权限每次均须先审批，审批通过后方可生效；模板内既有高危权限不因在模板内而免审。</div>
 
         <h3>直接装配角色</h3>
         <div className="admin-inline-form" data-testid="access-role-assignment-form">
-          <select aria-label="装配用户 id" value={roleForm.userId} onChange={(event) => setRoleForm({ ...roleForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
-          <select aria-label="装配角色 id" value={roleForm.roleId} onChange={(event) => setRoleForm({ ...roleForm, roleId: event.target.value })}>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select>
+          <select aria-label="装配用户" value={roleForm.userId} onChange={(event) => setRoleForm({ ...roleForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          <select aria-label="装配角色" value={roleForm.roleId} onChange={(event) => setRoleForm({ ...roleForm, roleId: event.target.value })}>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select>
           <input aria-label="装配备注" placeholder="操作备注" value={roleForm.operatorNote} onChange={(event) => setRoleForm({ ...roleForm, operatorNote: event.target.value })} />
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-role-assign" onClick={() => void roleAssignment("assign")}>装配角色</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-role-unassign" onClick={() => void roleAssignment("unassign")}>卸载角色</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-role-assign" disabled={writeBusy} onClick={() => void runWrite(() => roleAssignment("assign"), "装配角色失败")}>装配角色</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-role-unassign" disabled={writeBusy} onClick={() => void runWrite(() => roleAssignment("unassign"), "卸载角色失败")}>卸载角色</PermissionButton>
         </div>
 
         <h3>员工单独授予 / 显式拒绝</h3>
         <div className="admin-inline-form" data-testid="access-user-override-form">
-          <select aria-label="覆盖用户 id" value={overrideForm.userId} onChange={(event) => setOverrideForm({ ...overrideForm, userId: event.target.value })}><option value="">请选择用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          <select aria-label="覆盖用户" value={overrideForm.userId} onChange={(event) => setOverrideForm({ ...overrideForm, userId: event.target.value })}><option value="">请选择用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
           <input aria-label="覆盖权限码" placeholder="权限码，逗号分隔" value={overrideForm.permissionCodes} onChange={(event) => setOverrideForm({ ...overrideForm, permissionCodes: event.target.value })} />
           <select aria-label="覆盖效果" value={overrideForm.effect} onChange={(event) => setOverrideForm({ ...overrideForm, effect: event.target.value })}>
             <option value="deny">显式拒绝</option>
             <option value="grant">单独授予</option>
           </select>
           <input aria-label="覆盖理由" placeholder="理由" value={overrideForm.reason} onChange={(event) => setOverrideForm({ ...overrideForm, reason: event.target.value })} />
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-set" onClick={() => void userPermissionOverride("set")}>设置</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-remove" onClick={() => void userPermissionOverride("remove")}>移除</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-set" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("set"), "员工级覆盖设置失败")}>设置</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-remove" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("remove"), "员工级覆盖移除失败")}>移除</PermissionButton>
         </div>
 
           </>) },
@@ -569,12 +608,12 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
             <thead><tr><th>申请</th><th>类型</th><th>目标</th><th>角色/岗位</th><th>权限码</th><th>状态</th><th>过期</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{grantRequests.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-request-${row.id}`} onClick={() => openGrantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openGrantDetail(row); } }}>
-                <td>{row.id}</td><td>{formatBusinessStatus(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {zhPosition(row.positionCode)}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{cnDate(row.expiresAt)}</td>
+                <td>{row.id}</td><td>{grantTypeLabel(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {zhPosition(row.positionCode)}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status, grantStatusLabel)}</td><td>{cnDate(row.expiresAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>{(() => {
                   const acts: RowAction[] = [];
                   if (row.status === "pending") {
-                    acts.push({ key: "approve", label: "通过", permissions: GRANT_REVIEW, onClick: () => void reviewGrant(row, "approve"), testId: `access-grant-approve-${row.id}` });
-                    acts.push({ key: "reject", label: "驳回", permissions: GRANT_REVIEW, danger: true, onClick: () => void reviewGrant(row, "reject"), testId: `access-grant-reject-${row.id}` });
+                    acts.push({ key: "approve", label: "通过", permissions: GRANT_REVIEW, onClick: () => void runWrite(() => reviewGrant(row, "approve"), "授权审批失败"), testId: `access-grant-approve-${row.id}` });
+                    acts.push({ key: "reject", label: "驳回", permissions: GRANT_REVIEW, danger: true, onClick: () => void runWrite(() => reviewGrant(row, "reject"), "授权审批失败"), testId: `access-grant-reject-${row.id}` });
                   }
                   return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`access-grant-actions-${row.id}`} />;
                 })()}</td>
@@ -609,7 +648,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
                   [risk]: { ...grantPolicy.riskReviews[risk], requiredLevel: Number(event.target.value) } } })} /></label>
             </fieldset>)}
             <label>修改理由<input data-testid="grant-policy-reason" value={grantPolicyReason} onChange={(event) => setGrantPolicyReason(event.target.value)} /></label>
-            <PermissionButton permissionsState={effectivePermissions} permissions={["admission.policy.manage"]} data-testid="access-grant-policy-save" onClick={() => void saveGrantPolicy()}>保存授权政策</PermissionButton>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["admission.policy.manage"]} data-testid="access-grant-policy-save" disabled={writeBusy} onClick={() => void runWrite(saveGrantPolicy, "授权政策保存失败")}>保存授权政策</PermissionButton>
           </> : null}
         </details>
 
@@ -617,7 +656,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
         {summaryNotice ? <div className="admin-state" data-testid="access-grant-summary-degraded">{summaryNotice}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-grant-summary-table">
-            <thead><tr><th>类型</th><th>对象</th><th>权限</th><th>次数</th><th>建议</th><th>详情</th><th>详情</th></tr></thead>
+            <thead><tr><th>类型</th><th>对象</th><th>权限</th><th>次数</th><th>建议</th><th>详情</th></tr></thead>
             <tbody>
               {(summary?.positionRecommendations ?? []).map((row) => <tr key={`position-${row.positionCode}-${row.permissionCode}`} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-summary-position-${row.positionCode}`} onClick={() => openSummaryPositionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSummaryPositionDetail(row); } }}><td>岗位</td><td>{zhPosition(row.positionCode)} / {zhLevel(row.staffLevelId)}</td><td>{row.permissionCode ?? "-"}</td><td>{row.requestCount}</td><td>{row.recommendation ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看岗位授权建议详情" onClick={(event) => { event.stopPropagation(); openSummaryPositionDetail(row); }}>查看详情</button></td></tr>)}
               {(summary?.userAnomalies ?? []).map((row) => <tr key={`user-${row.userId}`} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-summary-user-${row.userId}`} onClick={() => openSummaryUserDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSummaryUserDetail(row); } }}><td>用户</td><td>{row.userId}</td><td>-</td><td>{row.requestCount}</td><td>{row.summary ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看用户授权异常详情" onClick={(event) => { event.stopPropagation(); openSummaryUserDetail(row); }}>查看详情</button></td></tr>)}
@@ -652,16 +691,16 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
             content: (
               <>
                 <label>岗位编码<input data-testid="access-position-role-template-position" aria-label="岗位编码" placeholder="岗位编码" value={templateForm.positionCode} onChange={(event) => setTemplateForm({ ...templateForm, positionCode: event.target.value })} /></label>
-                <label>职级 id<input data-testid="access-position-role-template-level" aria-label="职级 id" placeholder="职级 id" value={templateForm.staffLevelId} onChange={(event) => setTemplateForm({ ...templateForm, staffLevelId: event.target.value })} /></label>
-                <label>角色<select data-testid="access-position-role-template-role" aria-label="角色 id" value={templateForm.roleId} onChange={(event) => setTemplateForm({ ...templateForm, roleId: event.target.value })}><option value="">不绑定角色</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
-                <label>权限模板 id<input data-testid="access-position-role-template-template-id" aria-label="权限模板 id" placeholder="权限模板 id" value={templateForm.templateId} onChange={(event) => setTemplateForm({ ...templateForm, templateId: event.target.value })} /></label>
+                <label>职级<select data-testid="access-position-role-template-level" aria-label="职级" value={templateForm.staffLevelId} onChange={(event) => setTemplateForm({ ...templateForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select></label>
+                <label>角色<select data-testid="access-position-role-template-role" aria-label="角色" value={templateForm.roleId} onChange={(event) => setTemplateForm({ ...templateForm, roleId: event.target.value })}><option value="">不绑定角色</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
+                <label>权限模板编号<input data-testid="access-position-role-template-template-id" aria-label="权限模板编号" placeholder="权限模板编号" value={templateForm.templateId} onChange={(event) => setTemplateForm({ ...templateForm, templateId: event.target.value })} /></label>
               </>
             ),
           },
           {
             title: "状态",
             content: (
-              <label>模板状态<select data-testid="access-position-role-template-status" aria-label="模板状态" value={templateForm.status} onChange={(event) => setTemplateForm({ ...templateForm, status: event.target.value })}><option value="active">启用</option><option value="inactive">停用</option></select></label>
+              <label>模板状态<select data-testid="access-position-role-template-status" aria-label="模板状态" value={templateForm.status} onChange={(event) => setTemplateForm({ ...templateForm, status: event.target.value })}><option value="active">{formatBusinessStatus("active")}</option><option value="inactive">{formatBusinessStatus("inactive")}</option></select></label>
             ),
           },
         ]}
@@ -671,7 +710,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           { label: "职级", value: templateForm.staffLevelId.trim() || "未填写" },
           { label: "角色", value: templateForm.roleId ? roleLabel(roles.find((r) => r.id === templateForm.roleId)) : "不绑定" },
           { label: "权限模板", value: templateForm.templateId.trim() || "—" },
-          { label: "状态", value: templateForm.status === "active" ? "启用" : "停用" },
+          { label: "状态", value: formatBusinessStatus(templateForm.status) },
         ]}
       />
       <GuidedFlowModal
@@ -713,7 +752,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
               <>
                 <label>申请角色<select aria-label="申请角色" value={grantForm.roleId} onChange={(event) => setGrantForm({ ...grantForm, roleId: event.target.value })}>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
                 <label>申请岗位<input aria-label="申请岗位" placeholder="岗位编码" value={grantForm.positionCode} onChange={(event) => setGrantForm({ ...grantForm, positionCode: event.target.value })} /></label>
-                <label>申请职级<input aria-label="申请职级" placeholder="职级 id" value={grantForm.staffLevelId} onChange={(event) => setGrantForm({ ...grantForm, staffLevelId: event.target.value })} /></label>
+                <label>申请职级<select aria-label="申请职级" value={grantForm.staffLevelId} onChange={(event) => setGrantForm({ ...grantForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select></label>
                 <label>临时权限码<input aria-label="临时权限码" placeholder="权限码，逗号分隔" value={grantForm.permissionCodes} onChange={(event) => setGrantForm({ ...grantForm, permissionCodes: event.target.value })} /></label>
                 <label>过期时间<input aria-label="过期时间" type="datetime-local" value={grantForm.expiresAt} onChange={(event) => setGrantForm({ ...grantForm, expiresAt: event.target.value })} /></label>
                 <label><input type="checkbox" checked={grantForm.singleUse} onChange={(event) => setGrantForm({ ...grantForm, singleUse: event.target.checked })} />单次有效</label>
@@ -723,7 +762,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           },
         ]}
         summary={[
-          { label: "申请类型", value: formatBusinessStatus(grantForm.requestType) },
+          { label: "申请类型", value: grantTypeLabel(grantForm.requestType) },
           { label: "目标用户", value: grantForm.targetUserId.trim() || "未选择" },
           { label: "角色", value: grantForm.requestType === "user_role" ? (grantForm.roleId ? roleLabel(roles.find((r) => r.id === grantForm.roleId)) : "未选择") : "—" },
           { label: "岗位/职级", value: grantForm.requestType === "user_position" ? `${grantForm.positionCode.trim() || "—"} / ${grantForm.staffLevelId.trim() || "—"}` : "—" },

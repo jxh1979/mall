@@ -15,7 +15,7 @@ const TEMPLATE_MANAGE_PERMISSION = "access.permission_template.manage";
 const TEMPLATE_APPLY_PERMISSION = "access.permission_template.apply";
 
 // 模板类型枚举中文化（base/temporary/copy 不进全局表：base 全局义为“普通会员”会串味，页内小映射）。
-const TEMPLATE_TYPE_LABELS: Record<string, string> = { base: "基础模板", temporary: "临时模板", copy: "复制模板" };
+const TEMPLATE_TYPE_LABELS: Record<string, string> = { base: "基础模板", temporary: "临时模板", copy: "复制模板", role: "角色模板" };
 function templateTypeLabel(type?: string | null) {
   const value = type ?? "base";
   return TEMPLATE_TYPE_LABELS[value] ?? value;
@@ -39,11 +39,13 @@ function displayTemplateName(row: PermissionTemplateRow) {
   return row.templateName ?? row.name ?? row.templateCode ?? row.id;
 }
 
+// M038-006：datetime-local 输入框按本地时区解释，这里也按本地时区取年月日时分，「读出→不改→保存」才是同一时刻。
 function toDateTimeLocal(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
-  return date.toISOString().slice(0, 16);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function toIsoOrUndefined(value: string) {
@@ -75,6 +77,19 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
   const [copyName, setCopyName] = React.useState("普通员工01");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // M038-011：复制、应用与「保存修改」共用提交中态——提交中按钮禁用，连点不发第二笔。
+  const exclusiveRef = React.useRef(false);
+  async function runExclusive(action: () => Promise<void>) {
+    if (exclusiveRef.current) return;
+    exclusiveRef.current = true;
+    setSubmitting(true);
+    try {
+      await action();
+    } finally {
+      exclusiveRef.current = false;
+      setSubmitting(false);
+    }
+  }
   // 引导式流程 phase-11：新建权限模板收起为主按钮 + 分步引导弹窗（选权限网格作为其中一步）。
   // 独立 state：与内联「选中编辑」表单完全隔离，避免选中行的 useEffect 回填污染新建字段。
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -312,7 +327,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
       return false;
     }
     if (parseTargetUsers(targetUsersText).length === 0) {
-      setFormError("至少输入一个目标员工 ID。");
+      setFormError("至少输入一个目标员工编号。");
       return false;
     }
     setFormError("");
@@ -376,6 +391,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
               <option value="base">基础模板</option>
               <option value="temporary">临时模板</option>
               <option value="copy">复制模板</option>
+              <option value="role">角色模板</option>
             </select>
           </label>
           <label>生效时间
@@ -404,21 +420,21 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
           <PermissionButton
             permissionsState={effectivePermissions}
             permissions={[TEMPLATE_MANAGE_PERMISSION]}
-            disabled={!selected?.id}
-            onClick={() => void copyTemplate()}
+            disabled={submitting || !selected?.id}
+            onClick={() => void runExclusive(copyTemplate)}
             data-testid="permission-template-copy"
           >
             复制模板
           </PermissionButton>
-          <label>目标员工 ID
+          <label>目标员工编号
             <input data-testid="permission-template-target-users" value={targetUsersText} onChange={(event) => setTargetUsersText(event.target.value)} placeholder="多个用逗号分隔" />
           </label>
           <HighRiskConfirm
             label="应用模板"
             impact="将把选中模板的权限项应用到目标账号并落库；单次有效模式会影响目标账号实际可操作范围。"
-            disabled={!selected?.id}
+            disabled={submitting || !selected?.id}
             precheck={validateApply}
-            onConfirm={() => void applyTemplate()}
+            onConfirm={() => void runExclusive(applyTemplate)}
             permissionsState={effectivePermissions}
             permissions={[TEMPLATE_APPLY_PERMISSION]}
             data-testid="permission-template-apply"
@@ -496,6 +512,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
                     <option value="base">基础模板</option>
                     <option value="temporary">临时模板</option>
                     <option value="copy">复制模板</option>
+                    <option value="role">角色模板</option>
                   </select>
                 </label>
                 <label>生效时间<input data-testid="permission-template-valid-from" type="datetime-local" value={newValidFrom} onChange={(event) => setNewValidFrom(event.target.value)} /></label>

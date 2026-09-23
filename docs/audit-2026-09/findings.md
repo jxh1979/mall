@@ -1,5 +1,29 @@
 # 全量审计 Findings 台账
-版本：V3.87
+版本：V3.90
+
+## 当前 M038 B4-r2 双PASS，M038-011、M038-012 已修转「否」，进入B5-r2
+2026-09-23T17:46:48Z。Grok B4-r2 票 PASS（modules/M038-b4-r2-grok-raw.md，34998bytes SHA 753ab137d993445e77395d3cb820c00536bde7f8ef9e7a8967de20c9d540bbc4）；席甲票 PASS（modules/M038-b4-r2-self-raw.md，28265bytes SHA 2b2bf5ebe0b78dc574b49ff2cd5c58c0fce883921fd14f35a7bba4883094c8a2）。M038-011、M038-012 修复队列「是」→「否（已修，B3-r2）」。
+- 修复队列「否」（12）：M038-001…012（已修）。
+- 当前M038修复队列「是」：0。
+
+
+## 当前 M038 现锁 B2-r3 双PASS定稿，2项待修（B3-r2）
+2026-09-23T17:32:13Z。Grok B2-r3 票 PASS（modules/M038-b1-grok-raw.md V0.05，全文 137922bytes SHA 91fafc4d9280288c2bdf19d27fb988794ec12b6b2544a81000bfe301a3a6d7ab）；席甲 B2-r3 票 PASS（modules/M038-b1-self-raw.md V0.05，全文 95182bytes SHA 6d34a0effeea52fcea1a1b3f10a956cd4eda590515d77af09c827154642922aa）。定稿：M038-011、M038-012（均技术性）修复队列「是」；001…010 维持已修。Grok B2-r3 逐项：差集无漏并、无原意改写；011 现锁下沿用定稿（技术性／是／是）；012＝GR-03 第一种处置、归并未改写原意、边界合适（技术性／是／是；并给非阻断实施注：内层 catch 入表用与成功路径同一份 enriched、清与成功路径同一批字段、账号类型用 formatBusinessStatus、成功文案不动、测试计数不含列表 GET、禁止创建后自动 POST 授权申请或改后端）；GR-02 Grok 撤回「同拍连点可发两笔」主张（React 19 离散事件状态更新在下一事件前同步刷新），同意只登记；001…010 四条现锁变更正文（BSM-114/BSM-120/PGM-043/PGM-059）在三页无对应对象、维持否、不重开；两席其余观察只登记；无添加项、无 HTML 申请、无 questions；Grok 只取席甲 raw 前 94155 字节、未采信其后追加段。席甲 B3-r2 写入集合＝PermissionTemplatesPage.tsx、PermissionTemplatesPage.test.tsx（011）＋ AccessUsersPage.tsx、AccessUsersPage.test.tsx（012），Grok 允许/禁止表照录
+- 修复队列「是」（2）：M038-011、M038-012。
+- 修复队列「否」（10）：M038-001…010（已修）。
+
+
+## 当前 M038 现锁 V0.14 B2-r3 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-23T17:21:27Z。输入仅现锁 B1 两席追加段：modules/M038-b1-self-raw.md V0.04 追加段（全文 94155bytes SHA f3678b1bece7d6d2aaf5d0cebfd1b8a170ec09c86c6bc884eeec1a78795cc6e5，席甲=Claude Fable 5.1，作者自审票，FAIL：CX-M038-006＝既有 M038-011）、modules/M038-b1-grok-raw.md V0.04 追加段（全文 115014bytes SHA 1322fb2d24c198f80b848adc205f5b37bd46fcfc7d1a252a8a9c9349513aeb76，Grok 席乙，FAIL：GR-01（＝既有 M038-011）、GR-02（账号页绑定/解绑只有 state 置忙、无 ref，称同拍连点可发两笔）、GR-03（外包账号创建成功后套模板失败，页面报整笔失败、账号已落库）；其余观察不立项；四个变更 ID 按 V0.14 正文重审、106 项均有记录）。席甲核源：GR-01 成立（＝011）；GR-03 成立→M038-012；GR-02 不成立为可复现缺陷——席甲在一次性 worktree 里用临时测试实测（/home/james/audit-tmp/m038_gr02_probe.log）：对「绑定机构」同步连点两次只发出 1 笔 POST、第二次点击时按钮已禁用（React 对离散事件的状态更新在下一个事件前同步刷新），无「首次正常使用可复现」的触发，按「不为理论场景补需求」只登记）。现锁 B1 后四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458（以两席本次追加段各自的独占锁行为准）。旧锁 V0.11 下的 M038-001…010 已在 B3-r1 落地、现锁下相关判据正文未变，作为既有修复保留（队列「否」不变）；旧锁 B2-r2 双 PASS 定稿的 M038-011 在现锁 B1 由两席各自独立重申。B3 累计 1；写入集合＝`apps/web/src/admin/pages/PermissionTemplatesPage.tsx` 与 `apps/web/src/admin/pages/PermissionTemplatesPage.test.tsx`（另见下表新增项的写入集合），不改公共字典、客户端与后端。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| M038-011 | 既有（旧锁 V0.11 下 Grok B5-r1 GR-M038-012 → 旧锁 B2-r2 双 PASS 定稿；现锁 B1 席甲 CX-M038-006 重申，Grok 现锁 B1 见其 raw V0.04） | 技术性（不变） | 是 | 是 | `apps/web/src/admin/pages/PermissionTemplatesPage.tsx` `copyTemplate` 与 `applyTemplate` 没有提交中态：「复制模板」按钮 `disabled={!selected?.id}`、`onClick={() => void copyTemplate()}`，「应用模板」经 `HighRiskConfirm` `disabled={!selected?.id}`、`onConfirm={() => void applyTemplate()}`；客户端每次请求新生成幂等键，连点两次「复制模板」后端建出两份副本，两次确认「应用模板」发两笔赋权。同页「保存修改」有 `submitting`。现锁 B1 探针 4 逐页清单：三个页面无忙态的写函数只剩这两处 | GEN-007 / GEN-002（现锁正文未变）；最小处置（只改本模块两个文件，与旧锁定稿相同）：模板页加一个与 runWrite 同构的互斥包装（ref 挡并发、沿用现有 `submitting` 让按钮禁用），复制与应用走它，两个按钮的 disabled 并入 `submitting`；`PermissionTemplatesPage.test.tsx` 补两条——连点两次「复制模板」只发一笔且提交中两个按钮禁用、连点两次「应用模板」并都确认只发一笔。不改 HighRiskConfirm、公共字典、客户端与后端 |
+| M038-012 | Grok 现锁 B1 GR-03（席甲现锁 B1 未报） | 技术性（采 Grok 分类） | 是 | 是 | `apps/web/src/admin/pages/AccessUsersPage.tsx` `createUser`：新建外部协作账号时先 POST `/api/v1/access/users`，再在同一个 try 里 POST `/api/v1/access/permission-templates/{id}/apply` 套模板；套模板失败（后端对含须审批权限的模板以 GRANT_REQUIRES_APPROVAL 403 拒绝，AccessService `requireGrantApprovalIfNeeded`）即进同一个 catch：结果提示写「创建员工并赋权失败」、表格不加行、弹窗不关、字段不清——而账号已经落库。操作人按提示重试，第二次 POST 同一账号名被后端拒绝，账号「建成了却看不见」 | GEN-009 / GEN-006（错误语义与部分写入；现锁正文未变）；最小处置（只改本模块两个文件，采 Grok 给的第一种：把结果说清楚，不新造「创建后自动走授权申请」）：套模板单独 try/catch——失败时账号照常入表、清字段、关弹窗，结果提示写成「创建员工：X（账号类型），账号已创建；套用权限模板 T 失败：<后端消息>」并 `setGlobalError(消息)`；成功路径不变。`AccessUsersPage.test.tsx` 补一条：打桩 apply 返回 403，断言账号 POST 只一笔、新行入表、弹窗关闭、结果提示含「账号已创建」与「失败」 |
+
+- 只登记不入队：Grok GR-02（账号页绑定/解绑只有 state 置忙、无 ref）——席甲实测不可复现：一次性 worktree 里临时测试对「绑定机构」同步连点两次只发 1 笔 POST、第二次点击时按钮已禁用（/home/james/audit-tmp/m038_gr02_probe.log：posts=1 disabled=true），React 对离散事件的状态更新在下一个事件前同步刷新，无首次正常使用可复现的触发，按「不为理论场景补需求」登记；两席现锁 B1 的其余观察（同旧锁 B2-r1/B2-r2 登记项；席甲 raw §6、Grok raw V0.04 §10）。
+- 修复队列「是」（2）：M038-011、M038-012。
+- 修复队列「否」（10）：M038-001…010（已修）。
+
 
 ## 当前 M014 已整模块双PASS收口（B5-r8第二次）
 两席V0.02全量3521行/84判据，Grok真实exit0，锁四值全等。001–038全部队列否：34已修、019/020观察、027/028无缺陷。025详情展示争议已在B2双方确认无工程缺陷，保留原文；不是第9次修复。B3累计8。此前FAIL与候选保留为历史证据。

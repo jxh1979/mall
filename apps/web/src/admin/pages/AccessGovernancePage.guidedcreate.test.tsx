@@ -86,7 +86,7 @@ describe("AccessGovernancePage 引导式新增岗位角色模板(phase-9)", () =
     fireEvent.click(screen.getByTestId("access-position-role-template-create-open"));
 
     fireEvent.change(screen.getByTestId("access-position-role-template-position"), { target: { value: "front_desk" } });
-    fireEvent.change(screen.getByTestId("access-position-role-template-level"), { target: { value: "lvl_p1" } });
+    fireEvent.change(screen.getByTestId("access-position-role-template-level"), { target: { value: "lvl_m2_upper" } });
     fireEvent.click(screen.getByTestId("access-position-role-template-guided-next")); // 步2→确认
     await waitFor(() => expect(screen.getByTestId("access-position-role-template-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("access-position-role-template-save"));
@@ -94,7 +94,7 @@ describe("AccessGovernancePage 引导式新增岗位角色模板(phase-9)", () =
     await waitFor(() => expect(lastPostBody).toBeTruthy());
     expect(lastPostUrl).not.toContain("prt-"); // 新建走 POST 集合路径，非 PUT /{id}
     expect((lastPostBody as { position_code: string }).position_code).toBe("front_desk");
-    expect((lastPostBody as { staff_level_id: string }).staff_level_id).toBe("lvl_p1");
+    expect((lastPostBody as { staff_level_id: string }).staff_level_id).toBe("lvl_m2_upper");
     expect((lastPostBody as { role_id: string }).role_id).toBe("role-1");
     await waitFor(() => expect(screen.queryByTestId("access-position-role-template-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^岗位模板已保存/)); // PGM-1.18：结果提示全中文
@@ -109,5 +109,83 @@ describe("AccessGovernancePage 引导式新增岗位角色模板(phase-9)", () =
     expect(screen.getByTestId("access-position-role-template-guided-error").textContent).toContain("岗位");
     expect(screen.queryByTestId("access-position-role-template-guided-summary")).toBeNull();
     expect(lastPostBody).toBeNull();
+  });
+});
+
+// M038-010：发起授权申请的引导提交（入口→类型与用户→权限码与过期时间→提交）此前没有测试。
+describe("AccessGovernancePage 引导式发起授权申请（M038-010）", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("入口→步进→提交：POST /grant-requests 带类型、目标用户、权限码、过期时间与单次有效", async () => {
+    let grantPost: { url: string; body: Record<string, unknown> } | null = null;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET").toUpperCase() === "POST" && url.endsWith("/api/v1/access/grant-requests")) {
+        grantPost = { url, body: JSON.parse(String(init?.body)) };
+        return Promise.resolve(raw({ id: "agr-new", status: "pending" }));
+      }
+      if (url.includes("grant-requests/summary")) return Promise.resolve(raw({ position_recommendations: [], user_anomalies: [] }));
+      if (url.includes("grant-requests")) return Promise.resolve(envelope([]));
+      if (url.includes("position-role-templates")) return Promise.resolve(envelope(TEMPLATES));
+      if (url.includes("access/roles")) return Promise.resolve(envelope(ROLES));
+      if (url.includes("access/users")) return Promise.resolve(envelope(USERS));
+      return Promise.resolve(envelope([]));
+    }));
+    const setActionResult = vi.fn();
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult,
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<AccessGovernancePage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("access-position-role-templates-table").textContent).toContain("prt-1"));
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    await waitFor(() => expect((screen.getByLabelText("目标用户") as HTMLSelectElement).value).toBe("u-1"));
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next")); // 步1→步2
+    fireEvent.change(screen.getByLabelText("临时权限码"), { target: { value: "finance.refund.create" } });
+    fireEvent.change(screen.getByLabelText("过期时间"), { target: { value: "2026-12-31T18:00" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next")); // 步2→确认
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create"));
+
+    await waitFor(() => expect(grantPost).toBeTruthy());
+    const body = grantPost!.body;
+    expect(body.request_type).toBe("temporary_permission");
+    expect(body.target_user_id).toBe("u-1");
+    expect(body.permission_codes).toEqual(["finance.refund.create"]);
+    expect(new Date(String(body.expires_at)).getTime()).toBe(new Date("2026-12-31T18:00").getTime());
+    expect(body.single_use).toBe(true);
+    await waitFor(() => expect(screen.queryByTestId("access-grant-request-guided")).toBeNull());
+    expect(setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^授权申请已提交：agr-new（待处理）/));
+  });
+
+  it("步内校验拦截：临时权限未填过期时间则不进确认、不提交", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("grant-requests/summary")) return Promise.resolve(raw({ position_recommendations: [], user_anomalies: [] }));
+      if (url.includes("position-role-templates")) return Promise.resolve(envelope(TEMPLATES));
+      if (url.includes("access/roles")) return Promise.resolve(envelope(ROLES));
+      if (url.includes("access/users")) return Promise.resolve(envelope(USERS));
+      return Promise.resolve(envelope([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<AccessGovernancePage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("access-position-role-templates-table").textContent).toContain("prt-1"));
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    await waitFor(() => expect((screen.getByLabelText("目标用户") as HTMLSelectElement).value).toBe("u-1"));
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next")); // 过期时间未填
+    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("过期时间");
+    expect(screen.queryByTestId("access-grant-request-guided-summary")).toBeNull();
+    expect(fetchMock.mock.calls.some(([, init]) => ((init as RequestInit | undefined)?.method ?? "GET").toUpperCase() === "POST")).toBe(false);
   });
 });

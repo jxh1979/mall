@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -13,6 +13,12 @@ import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailE
 
 function templateLabel(template: PermissionTemplateRow) {
   return template.templateName ?? template.name ?? template.id;
+}
+
+// M038-001：开通方式按后端现有取值在页内给中文（公共字典无这两个键）。
+const CREATED_VIA_LABELS: Record<string, string> = { manual_admin: "后台手动录入", legacy: "历史账号" };
+function createdViaLabel(code: string): string {
+  return CREATED_VIA_LABELS[code] ?? formatBusinessStatus(code);
 }
 
 // ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
@@ -92,7 +98,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       return false;
     }
     if (!organizationId.trim()) {
-      setFormError("组织 ID 不能为空，用于数据范围和留痕。 ");
+      setFormError("所属组织不能为空，用于数据范围和留痕。 ");
       return false;
     }
     setFormError("");
@@ -127,16 +133,27 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         evidenceAttachmentIds: evidenceAttachmentIds.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean),
         operatorNote: "后台手动录入工作人员",
       });
+      // M038-012：账号已落库后套模板被拒不算整笔失败——账号照常入表、关弹窗，提示写清「账号已创建；套用权限模板失败」。
+      let applyError = "";
       if (selectedTemplateId) {
-        await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selectedTemplateId)}/apply`, {
-          targetUserIds: [created.id],
-          mode: "append",
-          operatorNote: "后台手动录入后应用权限模板",
-        });
+        try {
+          await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selectedTemplateId)}/apply`, {
+            targetUserIds: [created.id],
+            mode: "append",
+            operatorNote: "后台手动录入后应用权限模板",
+          });
+        } catch (applyFailure) {
+          applyError = applyFailure instanceof Error ? applyFailure.message : "套用权限模板失败";
+        }
       }
       const enriched = { ...created, organizationId: organizationId.trim(), merchantId: merchantId.trim() || created.merchantId, status, accountType };
       setRows((current) => [...current, enriched]);
-      setActionResult(`${selectedTemplateId ? "创建员工并赋权" : "创建员工"}：${created.username}（${formatBusinessStatus(accountType)}）${selectedTemplateId ? `，已应用权限模板 ${selectedTemplateId}` : ""}`);
+      if (applyError) {
+        setGlobalError(applyError);
+        setActionResult(`创建员工：${created.username}（${formatBusinessStatus(accountType)}），账号已创建；套用权限模板 ${selectedTemplateId} 失败：${applyError}`);
+      } else {
+        setActionResult(`${selectedTemplateId ? "创建员工并赋权" : "创建员工"}：${created.username}（${formatBusinessStatus(accountType)}）${selectedTemplateId ? `，已应用权限模板 ${selectedTemplateId}` : ""}`);
+      }
       setUsername("");
       setPassword("");
       setConsentReference("");
@@ -179,7 +196,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         { label: "组织", value: orgDisplay(row.organizationId) },
         { label: "商户", value: merchantDisplay(row.merchantId) },
         { label: "状态", value: formatBusinessStatus(row.status ?? "active") },
-        { label: "开通方式", value: row.createdVia ? formatBusinessStatus(row.createdVia) : "—" },
+        { label: "开通方式", value: row.createdVia ? createdViaLabel(row.createdVia) : "—" },
         { label: "授权凭据", value: row.consentReference ?? "—" },
         { label: "证据附件", value: row.evidenceAttachmentIds?.length ? row.evidenceAttachmentIds.join("、") : "—" },
       ],
@@ -319,14 +336,14 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           {
             title: "归属与授权",
             description: accountType === "outsourced_vendor" ? "指定账号归属的组织/商户，并留存授权凭据。" : "指定员工归属的组织与商户。",
-            validate: () => (organizationId.trim() ? null : "组织 ID 不能为空，用于数据范围和留痕。"),
+            validate: () => (organizationId.trim() ? null : "所属组织不能为空，用于数据范围和留痕。"),
             content: (
               <>
-                <label>所属组织<input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织 ID" /></label>
+                <label>所属组织<input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织编号" /></label>
                 <label>所属商户<select data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)}><option value="">不绑定 / 平台账号</option>{merchants.map((m) => <option key={m.id} value={m.id}>{(m.displayName ?? m.companyName ?? m.id)}（{shortId(m.id)}）</option>)}</select></label>
                 {accountType === "outsourced_vendor" ? <>
                 <label>授权凭据<input data-testid="access-user-consent" value={consentReference} onChange={(event) => setConsentReference(event.target.value)} placeholder="同意/授权凭据编号（可选）" /></label>
-                <label>证据附件<input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="附件 ID，逗号分隔（可选）" /></label>
+                <label>证据附件<input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="附件编号，逗号分隔（可选）" /></label>
                 </> : null}
               </>
             ),
@@ -338,9 +355,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
               <>
                 {accountType !== "outsourced_vendor" ? <p>注册申请提交后，请在员工档案中完成公司审批；此处不提前生成可用账号或发放权限。</p> : <>
                 <label>初始状态<select data-testid="access-user-status" value={status} onChange={(event) => setStatus(event.target.value)}>
-                  <option value="active">启用</option>
-                  <option value="invited">待激活</option>
-                  <option value="disabled">禁用</option>
+                  {["active", "invited", "disabled"].map((value) => <option key={value} value={value}>{formatBusinessStatus(value)}</option>)}
                 </select></label>
                 <label>权限模板<select data-testid="access-user-template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
                   <option value="">暂不赋权</option>
