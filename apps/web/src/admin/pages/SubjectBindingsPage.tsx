@@ -1,14 +1,14 @@
-// 文件版本：V0.01
+// 文件版本：V0.03
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { useServerPagedRows } from "../hooks/useServerPagedRows";
+import { TablePager } from "../components/TablePager";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps } from "../types";
-import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 // M012-001：按后台 BusinessEntityBindingRecord 真实字段读取（AdminApi 已把 snake_case 转 camelCase）；
@@ -35,9 +35,14 @@ const BINDING_ACTIONS: ReadonlyArray<{ code: string; label: string }> = [
 // 后端写权限码（PlatformController：/business-entity-bindings/{id}/change）
 const BINDING_MANAGE_PERMISSION = "entity.binding.manage";
 
+const BINDING_STATUS_LABELS: Record<string, string> = { active: "有效", inactive: "停用", suspended: "暂停" };
+function formatBindingStatus(code?: string | null) {
+  return code ? BINDING_STATUS_LABELS[code] ?? "未识别状态" : "—";
+}
+
 const TEXT = {
   title: "四类主体绑定",
-  description: "展示经营对象、运营主体、合同主体和结算主体的唯一绑定关系；所有变更必须带原因、幂等键和证据附件。",
+  description: "展示经营对象、运营主体、合同主体和结算主体的唯一绑定关系；变更时须选择状态并填写原因。",
   evidence: "接口证据：读取 /api/v1/platform/business-entity-bindings；变更调用 /api/v1/platform/business-entity-bindings/{id}/change。",
   boundary: "四类主体绑定是合同、结算、利润报表和责任归属的基础口径；同一业务对象必须唯一绑定，历史合同和流程留痕不得被覆盖。",
   empty: "暂无主体绑定",
@@ -50,7 +55,7 @@ const TEXT = {
 };
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=bindings[&status=active]；点 KPI 数字=带参重进本页只渲染绑定表（对应子集）。
-// 唯一绑定对象=全量绑定表；生效绑定=status=active 子集。合同主体/选中绑定无独立行子集，KPI 数字保持纯文本不可点。
+// 唯一对象、生效绑定及合同主体指标只统计本页；翻页继续读取服务器数据。
 type KpiFocus = { status: string | null };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
@@ -67,7 +72,14 @@ function display(value: unknown) {
 }
 
 export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
-  const [bindings, setBindings] = React.useState<BindingRow[]>([]);
+  const bindingRows = useServerPagedRows(
+    (page, size) => {
+      setGlobalError(null);
+      return api.getPaged<BindingRow>("/api/v1/platform/business-entity-bindings?page=" + page + "&size=" + size);
+    },
+    500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
+  const bindings = bindingRows.rows;
+  const { loading, error, reload } = bindingRows;
   const { setSelectedId, selected } = useSelectedRow(bindings);
   // M012-006：原因不预填验收句，由用户填写；M012-002：变更后状态由用户选择。
   const [reason, setReason] = React.useState("");
@@ -86,7 +98,7 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
         { label: "运营主体编号", value: display(row.operationEntityId) },
         { label: "合同主体编号", value: display(row.contractEntityId) },
         { label: "结算主体编号", value: display(row.settlementEntityId) },
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: formatBindingStatus(row.status) },
         { label: "生效起", value: display(row.effectiveFrom) },
         { label: "生效止", value: display(row.effectiveTo) },
         { label: "变更原因", value: display(row.changeReason) },
@@ -121,18 +133,11 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
-  const { loading, error, reload } = useAdminResource(
-    async () => {
-      setBindings(await api.get<BindingRow[]>("/api/v1/platform/business-entity-bindings"));
-    },
-    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
-  );
-
   const activeCount = bindings.filter((row) => row.status === "active").length;
   const uniqueObjects = new Set(bindings.map((row) => row.merchantId).filter(Boolean)).size;
-  // 聚焦时按状态子集过滤内存数组；无子集=全量。
+  // 聚焦时按状态过滤本页；总条数和后页入口由服务器分页提供。
   const visibleBindings = kpiFocus?.status ? bindings.filter((row) => row.status === kpiFocus.status) : bindings;
-  const focusTitle = kpiFocus?.status === "active" ? "生效绑定" : "主体绑定";
+  const focusTitle = kpiFocus?.status === "active" ? "本页生效绑定" : "本页主体绑定";
 
   function validateChange() {
     if (!selected?.id) {
@@ -186,7 +191,7 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
       <AuditTrailHint event="entity_binding.viewed / entity_binding.changed" />
       {error ? <div className="admin-inline-error" data-testid="subject-bindings-error">{error.message}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
-        {bindings.length === 0 ? <div className="admin-state admin-empty" data-testid="subject-bindings-empty">{TEXT.empty}</div> : (
+        {bindingRows.total === 0 ? <div className="admin-state admin-empty" data-testid="subject-bindings-empty">{TEXT.empty}</div> : (
           <>
             {kpiFocus ? (
               <div className="admin-state" data-testid="subject-bindings-kpi-focus-banner">
@@ -196,10 +201,10 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
             ) : (
               <>
                 <div className="admin-kpi-grid" data-testid="subject-bindings-summary">
-                  <div className="admin-kpi-card admin-kpi-card--clickable"><span>唯一绑定对象</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-unique" onClick={() => enterKpiFocus()}>{uniqueObjects}</button><small>唯一绑定</small></div>
-                  <div className="admin-kpi-card admin-kpi-card--clickable"><span>生效绑定</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-active" onClick={() => enterKpiFocus("active")}>{activeCount}</button><small>生效中</small></div>
-                  <div className="admin-kpi-card"><span>合同主体</span><strong>{bindings.filter((row) => row.contractEntityId).length}</strong><small>合同口径</small></div>
-                  <div className="admin-kpi-card"><span>选中绑定</span><strong className="admin-kpi-value--text" title={selected?.merchantId ?? "-"}>{selected?.merchantId ?? "-"}</strong><small>{selected?.status ? formatBusinessStatus(selected.status) : "-"}</small></div>
+                  <div className="admin-kpi-card admin-kpi-card--clickable"><span>本页唯一绑定对象</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-unique" onClick={() => enterKpiFocus()}>{uniqueObjects}</button><small>唯一绑定</small></div>
+                  <div className="admin-kpi-card admin-kpi-card--clickable"><span>本页生效绑定</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-active" onClick={() => enterKpiFocus("active")}>{activeCount}</button><small>生效中</small></div>
+                  <div className="admin-kpi-card"><span>本页合同主体</span><strong>{bindings.filter((row) => row.contractEntityId).length}</strong><small>含合同主体的绑定记录</small></div>
+                  <div className="admin-kpi-card"><span>选中绑定</span><strong className="admin-kpi-value--text" title={selected?.merchantId ?? "-"}>{selected?.merchantId ?? "-"}</strong><small>{selected?.status ? formatBindingStatus(selected.status) : "-"}</small></div>
                 </div>
 
                 <div className="admin-form-grid">
@@ -229,18 +234,19 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
                 <tbody>{visibleBindings.map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`subject-bindings-row-${row.id}`}
                     onClick={() => openBindingDetail(row)}
-                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}>
+                    onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openBindingDetail(row); } }}>
                     <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此主体绑定 ${row.id}`} data-testid={`subject-bindings-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                     <td>{display(row.merchantId)}</td>
                     <td>{display(row.operationEntityId)}</td>
                     <td>{display(row.contractEntityId)}</td>
                     <td>{display(row.settlementEntityId)}</td>
-                    <td>{formatBusinessStatus(row.status)}</td>
+                    <td>{formatBindingStatus(row.status)}</td>
                     <td>{display(row.effectiveFrom)}</td>
                     <td>{display(row.changeReason)}</td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看主体绑定详情" onClick={(event) => { event.stopPropagation(); openBindingDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>
               </table>
+              <TablePager testid="subject-bindings-pager" page={bindingRows.page} pageCount={bindingRows.pageCount} total={bindingRows.total} onPrev={bindingRows.prev} onNext={bindingRows.next} />
             </div>
           </>
         )}

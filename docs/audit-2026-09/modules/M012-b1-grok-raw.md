@@ -843,3 +843,1115 @@ B3 若按 2.2 段或原表 006 去加选择器/权限闸，或按原表 004 去�
 本席 B2-r2：**PASS**
 
 未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M012 `IN_PROGRESS`，B3=0。不覆盖上方 B1 FAIL 与 B2-r1 FAIL 原文。
+CRITERIA-LOCK-SHA256: b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a
+
+# M012 B1 Grok 独立审计原文（重开全量）
+
+- 席位：Grok 独立审计席乙（固定 grok-4.6 xhigh；Grok FAIL 具否决权）
+- 阶段：B1 修复前整模块全量审计（ledger：M012 `IN_PROGRESS`，历史 B3 累计 1、原 B5-r1 双 PASS 保留；本次新增修复尚未执行）
+- 报告自身版本：V0.04（本段追加；上方 85746 字节原文逐字保留，不改写 B1/B2 前缀；本段是重开后的完整 B1 报告）
+- 模块：M012 — 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段
+- 计划源：`docs/audit-2026-09/plan/modules.md` V0.04 FILES 6 文件，计划冻结有效内容行 1485；当前 `git ls-files -z -- <6 paths> | xargs -0 cat | wc -l` = **1755**（用户清单同值；不以 1485 冒称当前行数）
+- 冻结判据：21 条（`M012 → [BSM-001, BSM-003, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001]`，与锁映射行逐字相同；COUNT=21 unique=21 MISSING=[]）
+- 结论：**FAIL**
+- 工程缺陷成立、建议入 B2 修复队列的临时编号：GR-M012-010、GR-M012-011、GR-M012-012
+- 添加项：无
+- 只登记、建议队列「否」：见 §8 观察
+- 未修源码、未改三 HTML、未改测试/方案/锁/findings/ledger/其它报告、未 commit/push/merge/部署、未改数据库结构或重建库、未派子代理、未调 MCP、未读本轮 Codex self-raw 或其临时发现、未把历史 B1/B5 结论当当前事实、未问操作员
+- 本报告不表示全仓或发布门禁通过。不声称未运行的浏览器/集成验证。历史 M009 本次结束、M010/M011 无新问题复查完成，只作范围边界，不重开那些模块。
+
+## 0. 技能自核（V0.17 §6，按 B1 收窄）
+
+本席实际读取并按收窄口径使用：
+
+| 技能 | 本机路径 | 用法 |
+|---|---|---|
+| grilling | `~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/skills/productivity/grilling/SKILL.md` | 只借追问树自行取证。技能原文要求向用户发问并派子代理找事实；本席按 controller **禁止发问/禁止子代理**，故未按其「dispatch sub-agent / wait for user」原文执行，只内部自问自答 |
+| verification-before-completion | superpowers 同名（本机 bundled/cache 存在） | 先跑 vitest 再写测试结果；37 绿 ≠ 行为对 |
+| diagnosing-bugs / systematic-debugging | 同套件存在 | 只借读错误→复现→追数据流（页→`/api/v1/platform/*`→现行 DTO/SQL→测试夹具）；不改生产代码 |
+| ponytail-review | `~/.claude/plugins/cache/ponytail/ponytail/4.9.0/skills/ponytail-review/SKILL.md` | 只列可删复杂度，不落地 |
+| writing-for-agents | mattpocock 同名 | 本 raw 写给下游席：步骤+完成判据同文件 |
+| long-running-background-tasks | `~/.grok/bundled/skills/long-running-background-tasks/SKILL.md` | 测试 1.75s 内结束，未起 monitor |
+| git-guardrails | 存在 | 本席未改 git、未直推 |
+
+B1 不适用、按 controller 收窄不调用：brainstorming / writing-plans（A）、test-driven-development / tdd / ponytail（B3）、requesting-code-review（B4）、receiving-code-review、resolving-merge-conflicts。
+
+缺口（不冒称调用）：
+
+- `batch-grill-me`：本机技能树未在本席本次核到，不写「已核实存在」
+- Arc `audit` 技能会派评审子代理并另写 `docs/arc/audits/`：与双席/§7 冲突，**不调用**
+- grilling 要求派子代理：与用户「不派任何子代理」冲突，按用户指令收窄
+
+明确不用：executing-plans、dispatching-parallel-agents、subagent-driven-development、using-git-worktrees、finishing-a-development-branch、research、domain-modeling、MCP 工具。
+
+## 1. 锁哈希与范围核验
+
+独立命令（本段第一行已写独占锁行，此处不重复该标签）：
+
+- CMD-LOCK：`sha256sum docs/audit-2026-09/plan/criteria-lock.md`
+- OUT-LOCK：`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`
+- sidecar `plan/criteria-lock.sha256` **文件内容**同值（sidecar 文件自身 sha256 为 `e27adda448fbf46d50c9c9f5afada2a382ef94bf7bbbbfef75aacd0580130289`，因文件只含该 hex 行，与锁文件哈希不同属预期）
+- `criteria-lock.md` 版本 V0.11
+- 映射行与开工口径 21 项逐字相同
+- `plan/modules.md` M012 FILES 6 条与用户清单逐字相同
+- 6 文件 `git ls-files -z -- <6 paths> | xargs -0 cat | wc -l` → **1755**
+- 6 文件当前 SHA/字节见 §2；`git status --porcelain` **不含**本模块 6 文件
+
+HEAD：`main` 工作区 `rev-parse HEAD` = `e456ba96c84185c8d39f18f548011daac48a6466`；`origin/main` = `merge-base` = `495285da120e6c8c0cc85659c1a1501baf2b294d`（本地 main 相对 origin 超前，本席未动主索引）。工作区另有未提交的 M009 后台/迁移改动（`PlatformController.java`、`PlatformService.java`、`MerchantRecord.java`、`JdbcPlatformRepository.java`、`MerchantProfileRequest.java`、`ProjectAssociationRequest.java`、`V427__m009_project_profiles_and_associations.sql` 等）。**这些是本模块页面的直接依赖，本席只读追流，不扩模块、不修。**
+
+controller `160-audit-prompt.md` V0.17 SHA256 `c93ddca061831828a5dcabb1c83fe18a4a6b7a2a6cd839e3baaef63c66ad6f21`（核自仓库内 `.scratch/module-recheck-20260908/160-audit-prompt.md`，版本行 V0.17）；runbook V0.02 SHA256 `c4ef224d35c3708b72086621fa80251e1363bc97de0ccf90cd6606518ad6539f`；modules.md V0.04 SHA256 `8df1c96711ad31985b09f5aa0b83db889fb4d8d91a7d8e5fcb352336181b5ffa`。
+
+三份 HTML 只读、未改。锁内 BSM-001 来源行对本席读取的现行 HTML **命中**（`business-system-map-for-operations-v0.1.html:505`）；BSM-003 命中 `:563`；PGM-001 命中 `platform-governance-map-for-operations-v0.1.html:256`。
+
+三 HTML 当前字节/SHA256（只读核验，本席未改）：
+
+| 文件 | 字节 | SHA256 |
+|---|---:|---|
+| docs/business-enum-quick-reference-v0.1.html | 133961 | 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66 |
+| docs/business-system-map-for-operations-v0.1.html | 304482 | eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66 |
+| docs/platform-governance-map-for-operations-v0.1.html | 103015 | a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1 |
+
+三 HTML 本身未发现需人闸修改的原文错误。HTML 沉默处不升冲突。BEQR-148/154/155、PGM-018/019 等未映射本模块的锚点，只作 GEN-008 对照的现行后台闭集来源说明，不当作本模块冻结判据去加需求。
+
+ledger 只读背景（不改、不代替本模块审计）：M012 行 `IN_PROGRESS`，B3 累计 1，备注历史 B5-r1 双 PASS 保留、本次恢复 B1。本席不把该历史双 PASS 当当前事实。
+
+## 2. 6 文件覆盖表（全文已读；行=`wc -l`）
+
+| # | 路径 | 行 | 字节 | SHA256 | 全文 |
+|---|---|---:|---:|---|---|
+| 1 | apps/web/src/admin/pages/GovernanceTopologyPage.tsx | 244 | 15598 | 403f714dd58b96f33d4da39a6870a6287054d61296fd036b0deada9cca32b342 | 已读 L1–L244 |
+| 2 | apps/web/src/admin/pages/GovernanceTopologyPage.test.tsx | 220 | 11317 | 146d449fa98a19beec0f61c6a602c3d1049a31c9344b5eea57e85f080637868d | 已读 L1–L220（11 @it） |
+| 3 | apps/web/src/admin/pages/OrganizationMerchantPage.tsx | 492 | 30248 | 95328007702f02c6c80f9c846eea72f80a94a5813f6b97349e8759964a4c1d95 | 已读 L1–L492 |
+| 4 | apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx | 331 | 19650 | a32dc1eb11bef528b532b64888b1752d8a3a63e943b96bdf0e33ea77b816110b | 已读 L1–L331（15 @it） |
+| 5 | apps/web/src/admin/pages/SubjectBindingsPage.tsx | 251 | 14279 | 028c97a810da1fce27768dfe3ca8983dbfca8af2d60d85eb3994aa81e5ea3378 | 已读 L1–L251 |
+| 6 | apps/web/src/admin/pages/SubjectBindingsPage.test.tsx | 217 | 11116 | 81d89f5b917d0ca96d9eefd51e830405c0d2c2960431a40b3d55021bf2b2f1bd | 已读 L1–L217（11 @it） |
+
+合计 **1755** 行 / 102208 字节。用户固定清单逐文件 match。本模块 6 文件对 `merchant.projectId` / `project_id` **0 命中**（组织页 grep `projectId` 为空；拓扑页 `projectId` 只用于空间挂接与下钻，商户-项目关系仍走 `project.merchantId`）。
+
+## 3. 数据流（页面 → 现行 `/api/v1/platform/*` → 测试）
+
+后台只读核对（非本模块文件，不作修复对象；以**当前工作区**为准）：`PlatformController.java`、`PlatformService.java`、`JdbcPlatformRepository.java`、`MerchantRecord.java`、`ProjectRecord.java`、`SpaceRecord.java`、`BusinessEntityRecord.java`、`BusinessEntityBindingRecord.java`、`MerchantProfileRequest.java`、`ProjectAssociationRequest.java`、`StatusChangeRequest.java`、`AuthorizationService.requireProjectScope`（`actor.organizationId()` 当作项目 ID）、`V427__m009_project_profiles_and_associations.sql`。
+
+现行读端（与历史 B3 合入后的页面所假设的「全量目录 + Project.merchantId」不同）：
+
+| 页面 | 方法 | 路径 | 后台权限 | 现行过滤 | 页内用法 |
+|---|---|---|---|---|---|
+| 拓扑 | GET | `/business-entities` | `entity.binding.view` + 平台作用域 | `business_entity_projects.project_id = currentProject()` | 缺该权限则**不请求**、主体列空 |
+| 拓扑/组织 | GET | `/merchants` | `merchant.profile.view` | **`merchants.project_id = currentProject()`**；无 `project_id` 的历史行不返回 | 拓扑用 `project.merchantId === merchant.id` 反连项目；组织页**不读** `projectId` |
+| 拓扑/组织 | GET | `/projects` | `governance.project.view` | **`projects.id = currentProject()`**（0 或 1 行） | 组织项目表「商户」列展示 `project.merchantId` |
+| 拓扑 | GET | `/spaces` | `governance.space.view` | `spaces.project_id = currentProject()` | `space.projectId` 挂接（M012-003 仍成立） |
+| 绑定 | GET | `/business-entity-bindings` | `entity.binding.view` | 绑定商户 `m.project_id = currentProject()` | 页读 `merchantId` 等真实字段（M012-001 仍成立） |
+| 组织 | POST | `/merchants` | `merchant.profile.manage` | `creationProject(request.projectId(), false)`：页**不传** `projectId`，后台用当前项目 | 名称/业态/电话非空；不传三主体/假证据 |
+| 组织 | POST | `/merchants/{id}/archive\|unarchive\|delete-request\|delete-approve` | manage / approve | `requireMerchant` → `requireCurrentProject(merchant.projectId())` | 存档/删除理由 + try/catch（M012-008 仍成立） |
+| 绑定 | POST | `/business-entity-bindings/{id}/change` | `entity.binding.manage` | action∈{active,inactive,suspended} + reason | 页传 `action`/`reason`/幂等键，不传假证据（M012-002/006 仍成立） |
+
+`currentProject()`：`AuthorizationService.currentProjectScopeQuietly()` 对 `actor.organizationId()` 必填，再 `projectExists` 否则返回 null。`AdminApi.get` 把信封 `data.items` 拍平并把 snake_case 转 camelCase，**丢弃 total**；三页均未调 `getPaged`、未传 `page`/`size`（后台默认 page=1,size=500）。
+
+路由只读：`adminRoutes.ts` ADM-GOV-001 要求 `governance.project.view`+`governance.space.view`+`merchant.profile.view`（不含 `entity.binding.view`）；ADM-GOV-002 要求 `merchant.profile.view`+`governance.project.view`；ADM-GOV-003 要求 `entity.binding.view`。
+
+`MerchantRecord` 现行含 `projectId`（V427 列 `merchants.project_id`，`mapMerchant` 读取）。`MerchantAdmissionRow`（types.ts，非本模块）无此字段；页面也未在局部类型中补读。`PUT /merchants/{id}/project` 与 `POST /business-entities/{id}/projects` 存在，本 6 文件无调用——不因 HTML 沉默要求本页发明项目归属配置器（该写口另需最高权限）。
+
+## 4. 三线审计
+
+### 4.1 第一性原理（每文件三问）
+
+#### GovernanceTopologyPage.tsx
+
+1. **为何必须存在**：删掉则 BSM-001「哪个综合体、谁在经营、在哪经营」与 PGM-001「先管归属：哪个综合体、哪个楼层、哪个区域、哪个点位、哪个商户」在后台无入口。有上位需求，不删。
+2. **声称是否执行**：自称只展示关系、读四接口、空间已挂接按 `projectId`。KPI/表/抽屉/缺 `entity.binding.view` 不请求主体，有测试。商户-项目关系仍 `projects.filter(p => p.merchantId === merchant.id)`。现行 GET `/merchants` 已带 `project_id`，GET `/projects` 只返回当前项目且 `merchant_id` 可空：首次用真实合同打开，商户行「项目/项目编码/业态」为「-」。
+3. **未验证前提**：测试夹具仍给 `projects[].merchant_id`、商户无 `project_id`；未验证现行 list 过滤与 `merchant.projectId` 正连。
+
+#### GovernanceTopologyPage.test.tsx
+
+1. **为何必须存在**：GEN-003 要求关键分支可失败断言。KPI、抽屉、中文业态/空间类型、已挂接、缺权限不白屏有上位。
+2. **声称是否执行**：11 例 vitest 均绿（CMD-VITEST）。断言钉在夹具自造的 `merchant_id`/`project_id`（空间）上，不钉商户 `project_id`。
+3. **未验证前提**：夹具形状 = 旧「项目属于商户」形状，不是现行「商户属于项目」。绿测不证明真实 GET 下拓扑关系列有综合体名。
+
+#### OrganizationMerchantPage.tsx
+
+1. **为何必须存在**：BSM-001 基础盘子；BSM-003 通用「可改可删、操作有引导」。新建引导流与存档/删除是该 h2 的下位承载，HTML 沉默不删。
+2. **声称是否执行**：读三接口、POST `/merchants`、存档/删除写路径与 catch、引导分步校验，有测试。页内 **0 处**读取 `merchant.projectId`。项目表「商户」列展示 `project.merchantId`（现行可空）。创建体不传 `projectId`（后台用当前项目，属会话推断，不另发明选择器）。
+3. **未验证前提**：假定 GET `/merchants`/`/projects` 仍是全量目录且项目行带所属商户；现行 SQL 为当前项目切片，历史 `project_id` 为空的商户不会出现。
+
+#### OrganizationMerchantPage.test.tsx
+
+1. **为何必须存在**：GEN-003。KPI、真实字段、引导创建、存档/删除/失败可见有上位。
+2. **声称是否执行**：15 例绿。创建体断言不含假主体/假证据；列表断言项目表含 `m-1`（来自夹具 `merchant_id`）。无 `entity.binding.view` 降级用例（拓扑页有）。夹具商户无 `project_id`。
+3. **未验证前提**：绿在未过滤、带 `merchant_id` 的信封上。
+
+#### SubjectBindingsPage.tsx
+
+1. **为何必须存在**：PGM-001 归属/合同/责任；BSM-001「谁在经营、签了什么合同」。四类主体绑定是底座。不删。
+2. **声称是否执行**：读真实 `merchantId`/三主体 ID、变更 POST 含 `action`/`reason`、原因空与缺 action 拦截、无假证据，有测试。导语仍写「所有变更必须带原因、幂等键和证据附件」；幂等键由客户端生成，证据附件既无控件也不入请求体。
+3. **未验证前提**：GET 绑定列表现行已按商户 `project_id` 过滤；页不展示当前项目，历史无归属商户的绑定不会出现。
+
+#### SubjectBindingsPage.test.tsx
+
+1. **为何必须存在**：GEN-003。KPI、真实字段、变更 action/原因/不含假证据有上位。
+2. **声称是否执行**：11 例绿，POST 成功路径有断言。无变更失败 catch 用例；夹具无 `project_id`。
+3. **未验证前提**：mock GET 不过滤项目，不能红在空列表或错连上。
+
+### 4.2 顺从式（21 条逐项）
+
+| ID | 本模块适用面 | 结论 |
+|---|---|---|
+| BSM-001 | 三页是「基础盘子」入口：哪个综合体、谁在经营、在哪经营 | **FAIL**：现行归属键是 `merchants.project_id`（及主体-项目关联表），拓扑/组织仍用 `Project.merchantId` 反连；真实合同下项目列为空，历史无 `project_id` 的档案从 list 消失。HTML 原句「哪个综合体、谁在经营、在哪经营、签了什么合同、谁能操作、谁负责。」（BSM `:509-510`）。GR-M012-010 |
+| BSM-003 | 锁摘录为 h2+导语；子条存档/引导/分岗属 BSM-004/005/007，**未映射本模块** | 页有引导新建与存档删除，作为通用规则承载面存在。子条细节不升本模块冲突。通过 |
+| GEN-001 | 三页均有 HTML 上位；KPI 聚焦为交互收窄 | 通过（KPI 同构不单独开 finding；不因 HTML 沉默删除抽屉/下钻/存档） |
+| GEN-002 | 拓扑声称展示治理关系；绑定导语声称变更必带证据附件 | **FAIL**：GR-M012-010（关系列与数据源）；GR-M012-012（导语与请求体不一致） |
+| GEN-003 | 37 例均执行且有断言 | **FAIL**：绿在旧夹具上，不能因现行 `project_id` 合同而红。GR-M012-011 |
+| GEN-004 | 创建/变更输入；信任边界在服务端 | 通过。名称/业态/电话/action/原因有页内校验；后台闭集与必填仍在。隐藏假主体已不传（M012-006 仍在） |
+| GEN-005 | 路由权限 + 按钮门 + 缺 `entity.binding.view` 不请求 | 通过。拓扑有测试；组织页同构未测（记入 GR-M012-011 测试缺口，不另开授权 finding）。写路径后台 `requirePermission` |
+| GEN-006 | 无本模块 SQL；一次 POST 一单 | 无实现面（库约束在后台）。观察：无 `project_id` 的历史商户 list 不可见、写口 `requireCurrentProject` 会 403，属 M009 依赖，不扩模块 |
+| GEN-007 | 幂等键含 `Date.now()`；创建未传 `submitting` | 观察：单击首次成功不撞；双击换键。铁律 6 收窄不修、不另加闸 |
+| GEN-008 | 页/后台/DTO/SQL/夹具字段与枚举 | **FAIL**：商户-项目关联键不一致；夹具仍造 `merchant_id` 反连。GR-M012-010/011 |
+| GEN-009 | 创建/存档/绑定变更均有 catch；组织存档失败有测试 | 通过（实现）。绑定失败 catch 无测试 → 并入 GR-M012-011 |
+| GEN-010 | 无密钥、无注入；电话按接口返回（无 `pii.contact_phone.view` 时后台已掩码） | 通过 |
+| GEN-011 | `AuditTrailHint`；写路径 `setActionResult`；后台 audit 事件 | 通过。导语「证据附件」过声称见 GR-M012-012，不把留痕事件本身判 FAIL |
+| GEN-012 | 列表默认 size=500，页未自扩、`get` 丢 total | 观察：当前项目切片下首次正常跑撞 500 截断不成立。通过（不另加分页器需求） |
+| GEN-013 | 6 文件无构建配置 | **无实现面** |
+| GEN-014 | 6 文件无迁移 | **无实现面**（V427 只作依赖追流） |
+| GEN-015 | 键盘行点击、抽屉 Esc、中文文案 | 通过（本席跑了抽屉 Esc 相关单测；未跑浏览器）。业态/空间类型页内中文映射仍在。URL `?kpi=` 非展示文案 |
+| GEN-016 | 页内「接口证据」路径可复现；绑定导语完成声明 | **FAIL**：GR-M012-012 把未实现的附件/用户持有的幂等键写成「必须带」 |
+| GEN-017 | 分类纪律 | 本席未把 HTML 沉默当冲突；未要求本页加项目选择器/附件上传器。010 细化、011 技术性、012 细化 |
+| GEN-018 | 本报告依据 | 类型 1 HTML 逐字 + 类型 4 命令（vitest / unwrap 模拟 / sha256 / grep）。未用历史席位意见当依据 |
+| PGM-001 | 底座+全中文+可点击+先管归属 | **FAIL**：归属入口在真实合同下看不到综合体（GR-M012-010）。零英文：业态/空间/合作形式页内中文仍成立。见名可点：商户 TraceLink 仍在；绑定编号为系统内部标识+行抽屉，观察不升 |
+
+### 4.3 对抗式（grilling 自问自答，不派子代理、不问操作员）
+
+Frontier 已内部结算：
+
+1. **真实 GET 商户/项目 unwrap 后，拓扑用哪一键连综合体？** 页：`project.merchantId === merchant.id`。现行记录：商户有 `projectId`，项目 `merchantId` 可空。模拟 unwrap：`PAGE_JOIN` 两商户项目名均为 None；`CONTRACT_JOIN` 均为「综合体一」。首次正常打开即发生。
+2. **GET `/merchants` 还是全量目录吗？** 否。`WHERE project_id = :current`。V427「历史资料保持为空，不推断项目归属」→ 历史行 `project_id` NULL → list 空。页面空态「暂无治理拓扑数据 / 暂无组织与商户档案」会在库中仍有商户时出现。
+3. **测试会因上述合同而红吗？** 不会。37/37 绿。夹具 `PROJECTS[].merchant_id = m-1`、商户无 `project_id`。
+4. **创建商户不传 `projectId` 是否首次必 400？** 后台 `creationProject(null)` 用当前项目；会话有合法项目则成功。不发明本页项目选择器（添加禁止）。不单开 finding。
+5. **绑定变更还有没有 `action`、还有没有假证据？** 有 action 三态；体不含 `evidence-full-admin`。测试覆盖。历史 GR-002/006 写路径修复仍在。
+6. **绑定导语是否仍要求用户带证据附件和幂等键？** 是。`SubjectBindingsPage.tsx` TEXT.description。用户填的只有原因；幂等键自动生成；附件无控件。首次阅读即发生。
+7. **无 `entity.binding.view` 是否仍整页白屏？** 拓扑不请求主体，有测试。组织页同构代码，无对应用例（测试缺口）。
+8. **page>500、双击创建换键、pending_admission 英文直出。** 500 非首次必撞；双击换键铁律 6 不修；`pending_admission`/`pending_activation`/`archived` 在 `formatBusinessStatus` 无词条会英文直出，但本页创建缺省 `active`，不把未在本页主路径出现的状态另加词表需求（观察）。
+9. **绑定页没有创建绑定、没有项目归属配置器？** HTML 未规定必须在本页；后台另有 POST。铁律 6 / HTML 沉默 → 观察，不升冲突、不加功能。
+
+ponytail-review（只列不改）：
+
+- `GovernanceTopologyPage.tsx:166`：delete 反连 `project.merchantId`；改读 `merchant.projectId`（局部类型补字段即可，不必改 types.ts）。
+- `OrganizationMerchantPage.tsx` 项目列 `row.merchantId`：shrink 为展示当前项目名/编码，或同样按 `merchant.projectId` 解释，不发明「项目改挂商户」编辑器。
+- `SubjectBindingsPage.tsx` TEXT.description：delete「幂等键和证据附件」。
+- KPI URL 三页复制：yagni 不成立（全站样板，有测试）。不删。
+- 不把 `getPaged` 强加为本页新分页器（GEN-012 未在首次路径撞上）。
+
+## 5. Findings（临时 ID，正式 ID 仅 B2 分配）
+
+历史 GR-M012-001…008 已在既往 B3 修复、本席核对写路径/真实字段/中文映射/catch **仍在源码中**；本轮不把它们当未修缺陷重复入队。本轮因 M009 现行合同新发现如下。
+
+### GR-M012-010
+
+- **标题**：拓扑/组织页仍用 `Project.merchantId` 反连商户与综合体，现行合同是 `Merchant.projectId` + 当前项目过滤；首次用真实 GET 看不到「哪个综合体」
+- **文件:行号**：`GovernanceTopologyPage.tsx:164-167`（`const merchantProjects = projects.filter((project) => project.merchantId === merchant.id)`）；`GovernanceTopologyPage.tsx:176-182`（项目/编码/业态列）；`OrganizationMerchantPage.tsx:373-375`（项目表「商户」列 `row.merchantId`）；组织页全文 **0 命中** `projectId`
+- **正常业务触发**：平台管理员打开「集团/综合体拓扑」或「组织与商户档案」（ADM-GOV-001/002）。M009 之后：list 只返回当前项目；商户带 `project_id`；项目 `merchant_id` 可空；历史商户 `project_id` 为空则根本不在 list 里。
+- **完整原文（页）**：`const merchantProjects = projects.filter((project) => project.merchantId === merchant.id);`；组织项目表 `<td>…{display(row.merchantId)}…`
+- **业务影响**：BSM-001/PGM-001 要求先看清哪个综合体、谁在经营、在哪经营。真实响应下：有归属的商户行项目列为「-」；无 `project_id` 的历史档案整页空态。空间「已挂接」仍按 `space.projectId` 计数，与商户-项目列自相矛盾。
+- **可复现证据**（类型 4；本席实跑，未改文件）：
+
+```text
+CMD-UNWRAP-JOIN（python 模拟 AdminApi unwrap）
+UNWRAP_MERCHANT_KEYS [..., 'projectId', ...]
+HAS_projectId_on_merchant True p-1
+HAS_merchantId_on_project True None
+PAGE_JOIN_project_merchantId [('m-1', [None]), ('m-2', [None])]
+CONTRACT_JOIN_merchant_projectId [('m-1', ['综合体一']), ('m-2', ['综合体一'])]
+HISTORICAL_NULL_project_id_LIST []
+
+只读 SQL（JdbcPlatformRepository.listMerchantsPaged）:
+  WHERE project_id = :project_id
+只读 SQL（listProjectsPaged）:
+  WHERE id = :project_id
+只读 V427: ADD COLUMN merchants.project_id; 「历史资料保持为空，不推断项目或公司归属」
+```
+
+- **冻结判据**：BSM-001、PGM-001、GEN-008、GEN-002
+- **2.3 依据类型**：1（BSM-001 `:509-510`「哪个综合体、谁在经营、在哪经营」；PGM-001 `:260-261`「先管归属：哪个综合体……哪个商户」）+ 4（unwrap 命令 + 现行 SQL/Record）
+- **四分类**：**细化**
+- **理由**：HTML 已要求归属可见，未规定列名必须是 `merchant.project_id`；缺陷是下位实现仍走已退役的 `projects.merchant_id` 反连，不是新业务实体，也不是与 HTML 明文相反的另一套规则。
+- **工程缺陷**：是
+- **建议入队**：是
+- **最小处置（仅建议，本席不修）**：本页局部类型补 `projectId`；拓扑按 `merchant.projectId === project.id` 正连（当前 list 已是单项目时，所有可见商户均属该项目）。不改 types.ts、不加项目选择器、不调用最高权限的 `PUT /merchants/{id}/project`。测试见 GR-M012-011。
+
+### GR-M012-011
+
+- **标题**：三份测试仍按旧「项目.merchant_id 反连、商户无 project_id、list 不过滤」造数，37 例全绿不能为 GR-M012-010 失败
+- **文件:行号**：`GovernanceTopologyPage.test.tsx:12-18`（`MERCHANTS` 无 `project_id`；`PROJECTS` 含 `merchant_id:"m-1"`）；`OrganizationMerchantPage.test.tsx:14-22`（同上；L142 断言项目表含 `m-1`）；`SubjectBindingsPage.test.tsx:12-15`（绑定夹具无商户 `project_id`）；组织测试无「缺 entity.binding.view 不请求主体」例（拓扑 L181-219 有）
+- **正常业务触发**：开发/审计只跑本模块单测即宣布页面与后台一致。
+- **可复现证据**（类型 4）：
+
+```text
+CMD-VITEST
+cd /home/james/complex-management && npm run test:unit --workspace apps/web -- \
+  src/admin/pages/GovernanceTopologyPage.test.tsx \
+  src/admin/pages/OrganizationMerchantPage.test.tsx \
+  src/admin/pages/SubjectBindingsPage.test.tsx
+exit=0
+Test Files  3 passed (3)
+Tests  37 passed (37)
+Duration  1.75s
+
+夹具不含 merchant project_id；拓扑/组织仍靠 projects.merchant_id 才能看见项目名。
+```
+
+- **冻结判据**：GEN-003、GEN-008
+- **2.3 依据类型**：4
+- **四分类**：**技术性**
+- **无业务发明理由**：测试是验证装置，不构成新业务规则；缺陷是夹具与现行 DTO/SQL 不一致，使关键归属分支不可红。
+- **工程缺陷**：是
+- **建议入队**：是
+- **最小处置**：夹具改为商户带 `project_id`、项目 `merchant_id` 可空；断言项目列/拓扑项目名在反连失败时红、正连时绿。组织页补一条与拓扑同构的缺 `entity.binding.view` 不请求主体。绑定失败 catch 至少一条。勿改测试凑绿、勿改后台。
+
+### GR-M012-012
+
+- **标题**：四类主体绑定页导语声称变更「必须带原因、幂等键和证据附件」，实际只让用户填原因，不采集附件、幂等键自动生成
+- **文件:行号**：`SubjectBindingsPage.tsx:38-41` TEXT.description；对照 `SubjectBindingsPage.tsx:163-167` 请求体仅 `action`/`reason`/`idempotencyKey`；`SubjectBindingsPage.test.tsx:200-215` 断言不含 `evidence-full-admin`
+- **完整原文**：`展示经营对象、运营主体、合同主体和结算主体的唯一绑定关系；所有变更必须带原因、幂等键和证据附件。`
+- **正常业务触发**：打开「四类主体绑定」阅读页头说明后点「提交绑定变更」。
+- **业务影响**：把用户不必提供、本页也未实现的附件上传写成强制条件；与已删除假证据后的真实写路径相反。属完成声明不可复现（GEN-016）与声称/行为不一致（GEN-002）。
+- **可复现证据**（类型 4）：源码对照；CMD-VITEST 成功路径 body 无附件字段。本席未跑浏览器。
+- **冻结判据**：GEN-002、GEN-016、PGM-001（责任/留痕是上位；本条不要求新增上传器）
+- **2.3 依据类型**：4 + 1（PGM-001 留痕/责任，作为上位，不把「本页必须上传附件」写成新需求）
+- **四分类**：**细化**
+- **理由**：能指到 PGM-001「谁创建、谁审批……证据与留痕」。缺陷是页内导语把已去掉的验收附件说成用户必带；修复优先删除该过声称，不发明上传流程（铁律 6）。
+- **工程缺陷**：是
+- **建议入队**：是
+- **最小处置**：删除导语中「幂等键和证据附件」（原因必填保留，已有表单与测试）。不新增附件控件。
+
+## 6. 实际执行与限制
+
+| 项 | 结果 |
+|---|---|
+| sha256sum criteria-lock.md | `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a` |
+| 6 文件全文 | 已读 1755 行 |
+| 21 条判据 | 已逐项核对 |
+| 三线 | 第一性原理 / 顺从式 / 对抗式均覆盖六文件 |
+| CMD-VITEST | 37/37 passed，exit 0，1.75s；**未**装新依赖 |
+| unwrap 关联模拟 | 见 GR-M012-010 |
+| 浏览器 / Playwright / 集成 / 真实 HTTP 打到后端 | **未运行**，不声称 |
+| 后台测试 / psql / 迁移 dry-run | **未运行**（本次无后台修复；生产源码只追流） |
+| 子代理 / MCP | 未使用 |
+| 写入 | 仅追加本文件 |
+
+未验证前提（因此不能 PASS）：真实浏览器里带会话项目作用域的 GET 响应；历史库中 `project_id` NULL 的行数。上述不影响 GR-M012-010 的源码级可复现性：页读键与现行 Record/SQL 已足以在首次正常打开路径上成立。
+
+## 7. 历史修复仍在（不入本轮队列）
+
+本席独立核对，不引用他席结论：
+
+- 绑定表读 `merchantId`/三主体 ID，不再读臆造七字段
+- 变更 POST 含 `action` 三态；原因空拦截；不传假证据号
+- 空间已挂接用 `space.projectId`
+- 业态/空间类型/合作形式/空间状态页内中文；创建不预填假主体
+- 电话非空而非 11 位正则；存档/删除 catch；缺 `entity.binding.view` 拓扑不请求主体
+
+这些不能抵消 GR-M012-010/011/012。
+
+## 8. 观察（队列「否」）
+
+- OBS-01：三页 `api.get` 丢 total、不传 page/size；后台默认 500。当前项目切片下首次正常跑不撞。不升 GEN-012。
+- OBS-02：创建商户 `GuidedFlowModal` 未传 `submitting`；双击换幂等键。铁律 6 不修。
+- OBS-03：绑定表展示系统内部 ID、无 TraceLink；行点击开抽屉。不因 HTML 沉默删除抽屉，不加本页创建绑定。
+- OBS-04：`formatBusinessStatus` 对 `pending_admission`/`pending_activation`/`archived` 直出英文码；本页创建缺省 active，不另加词表需求。
+- OBS-05：本页不调用 `PUT /merchants/{id}/project`。该口需最高权限，不加到本页。
+- OBS-06：KPI `?kpi=` 英文是 URL 内部键，不是界面文案。
+
+## 9. 最终结论
+
+**FAIL**
+
+理由：六文件已覆盖、21 条已核对、三线已做、锁哈希有效，但存在未定稿工程缺陷 GR-M012-010、GR-M012-011、GR-M012-012。有未完不得 PASS。37 例 mock 全绿不能替代现行读写合同。未跑浏览器。不覆盖上方 V0.01 B1 FAIL 与后续 B2 原文。未经双 PASS 不得进 B3，更不称模块 PASS。
+
+## M012 B2 整批归并复核（Grok 乙席）
+
+- 文件自身版本：V0.05（本段追加；上方 V0.04 B1 前缀 **117487** 字节原样保留，不改写 B1 锁段起点，**本段不写独占锁哈希字段行**）
+- 席位：Grok 独立审计席乙（固定 grok-4.6 xhigh；Grok FAIL 具否决权）。步骤：M012 本次重开 B2 整批候选复核。不是 B1 重审、不是 B3 修复、不是模块 PASS、不是 B4/B5。
+- 正本：`/home/james/complex-management` main。本席 `rev-parse HEAD` = `e456ba96c84185c8d39f18f548011daac48a6466`。本模块 6 文件 `git status --porcelain` 为空。未 commit/push/merge/deploy、未改数据库。
+- 控制：`.scratch/module-recheck-20260908/160-audit-prompt.md` V0.17（SHA `c93ddca061831828a5dcabb1c83fe18a4a6b7a2a6cd839e3baaef63c66ad6f21`）；runbook V0.02（SHA `c4ef224d35c3708b72086621fa80251e1363bc97de0ccf90cd6606518ad6539f`）；criteria-lock V0.11；modules.md V0.04 M012 FILES 6。
+- 锁实算（本席本步 `sha256sum docs/audit-2026-09/plan/criteria-lock.md`，正文叙述、非独占行）：`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`；sidecar 文件内容同值（sidecar 文件自身 SHA `e27adda448fbf46d50c9c9f5afada2a382ef94bf7bbbbfef75aacd0580130289`）；ledger 顶行同值；`LOCK-AMEND-COUNT: 1`。四值全等来自本席独算与只读比对。
+- ledger 只读背景：M012 `IN_PROGRESS`，B3 累计 1、本次 0。本席看见 ledger 顶有席甲已封存 B2 字样，**不采该票作证据、不预填合取**。本票只对候选台账与两份 B1 做差集。
+- 本席 B2：**PASS**
+- 添加项：0。questions：0。无 HTML 修改申请。无超六文件。无新增业务发明。
+- 无 MCP、无子代理、无第三席、不问操作员。除本指定路径外未写仓库内任何文件。未改 findings/ledger/方案/锁/业务 HTML/代码/测试。
+
+此票只判断 `docs/audit-2026-09/findings.md` **V2.16** 顶部「当前 M012 本次重开 B2 整批候选」相对本次两份完整 **B1 V0.04** 的全批差集、§2.1 四分类、工程缺陷、修复队列与最小修法。必须另有席甲本批 B2 PASS 且本席亦 PASS 才能定稿。不覆盖上方 V0.04 B1 **FAIL** 原文。不把本票写成「台账已按本席意见改过」。不把历史 001–008 当当前队列。
+
+### 本批输入（完整指定文件，本席实算）
+
+| 路径 | 版本 / 范围 | bytes | SHA256 |
+|---|---|---:|---|
+| `docs/audit-2026-09/modules/M012-b1-grok-raw.md` 前缀（本席 B1，本段追加前） | V0.04 本次 B1；最后独占锁行起 31741 字节 | 117487 | `d89fa6cd0a6110c36156c825d323d6d7f0bc9406b91e8494a52ebbfa03b630f1` |
+| `docs/audit-2026-09/modules/M012-b1-self-raw.md` 最后独占锁行起至 B1 V0.04 结论 | V0.04 B1（CX-01..05 + §7 观察） | 本席开读时全文 61399；锁行后 B1 30875 | 开读时全文 `5a776f60330237348994adf36f765352a8f1e0d083b2ed74b6f2d28a500ee4f6` |
+| 同上文件本席落盘时全文 | V0.04 B1 + 席甲已追加 B2 | 67517 | `60318f58e5e9492f717bde9e47ade4b0a326b0f0441a7b261d1f958cb6e18beb` |
+| `docs/audit-2026-09/findings.md` 顶部当前 M012 候选 | V2.16 | — | `e802cf09b96b397334b933ccad13d6b2fc7a7bbc6fc499270e363eab1e20df54` |
+
+B1 finding 集合**只取两份 B1 正文**（self 最后独占锁行起至「Codex本次B1审计FAIL」段；grok 最后独占锁行起至「§9 最终结论 FAIL」）。席甲后来追加的 B2 段存在，本席**不读其论证、不沿用其 PASS**。历史 B1/B2/B4/B5 前缀不是当前事实。
+
+6 文件当前 SHA 与两份 B1 清单全等（本席重算）：
+
+| 路径 | SHA256 |
+|---|---|
+| `apps/web/src/admin/pages/GovernanceTopologyPage.tsx` | `403f714dd58b96f33d4da39a6870a6287054d61296fd036b0deada9cca32b342` |
+| `apps/web/src/admin/pages/GovernanceTopologyPage.test.tsx` | `146d449fa98a19beec0f61c6a602c3d1049a31c9344b5eea57e85f080637868d` |
+| `apps/web/src/admin/pages/OrganizationMerchantPage.tsx` | `95328007702f02c6c80f9c846eea72f80a94a5813f6b97349e8759964a4c1d95` |
+| `apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx` | `a32dc1eb11bef528b532b64888b1752d8a3a63e943b96bdf0e33ea77b816110b` |
+| `apps/web/src/admin/pages/SubjectBindingsPage.tsx` | `028c97a810da1fce27768dfe3ca8983dbfca8af2d60d85eb3994aa81e5ea3378` |
+| `apps/web/src/admin/pages/SubjectBindingsPage.test.tsx` | `81d89f5b917d0ca96d9eefd51e830405c0d2c2960431a40b3d55021bf2b2f1bd` |
+
+`git ls-files -z -- <6 paths> | xargs -0 cat | wc -l` = **1755**。21 映射判据未增。冻结 `M012 → [BSM-001, BSM-003, GEN-001..018, PGM-001]`。
+
+三 HTML 只读、未改（与 B1 同 SHA）：枚举 `4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66`；业务地图 `eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66`；治理地图 `a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1`。
+
+### 技能（V0.17 §6 收窄，本节点实读）
+
+| 技能 | 本节点用法 |
+|---|---|
+| receiving-code-review | 先核源/HTML/命令再接受或反驳；禁止表演性同意本席 B1 的 GEN-012/OBS-01/OBS-04 PASS |
+| grilling | 只借追问结构自查：501 是否首次路径、suspended 是否主路径、radio Space 是否被 tr 取消、kiosk 是否已有字典、六文件是否够 |
+| verification-before-completion | 声称前先跑只读哈希/行号/源码/`graft` |
+| systematic-debugging / diagnosing-bugs | 只借读错→复现→数据流；不改生产代码 |
+| ponytail-review | 只评最小删除/收窄，不落地 |
+| writing-for-agents | 本 raw 结构；未改 AGENTS.md |
+| requesting-code-review / tdd / ponytail | 本体要派子代理或落地修复 → **未用** |
+| Arc audit / grilling 派子代理 | 与双席冲突 → **未用** |
+| batch-grill-me | **缺口：本环境未找到独立技能**；未冒充调用 |
+
+### 完整差集（GR-M012-010/011/012；OBS-01..06；CX-01..05；self §7 其余观察）
+
+漏并：无。误合：无。把旧历史表当当前：无。把本席观察静默丢弃：无（OBS-01 升 013、OBS-04 并 014，其余进 009）。被改写原意：无。本席原 3 项与全部观察均入表，不是只并同意项。
+
+| 正式ID | 本次来源（不改写原意） | 候选分类/缺陷/队列 | 本席票 |
+|---|---|---|---|
+| M012-010 | CX-01 + GR-M012-010 | 细化/是/是 | **PASS（细化/是/是）** |
+| M012-011 | GR-M012-011 + CX-01 验证缺口 | 细化/是/是（本席 B1 写作技术性） | **PASS（改判细化/是/是；原票完整保留）** |
+| M012-012 | GR-M012-012 | 细化/是/是 | **PASS（细化/是/是）** |
+| M012-013 | CX-02；与本席 OBS-01 分歧 | 细化/是/是 | **PASS（细化/是/是；推翻本席 B1「不升 GEN-012」）** |
+| M012-014 | CX-03；本席 OBS-04 英文状态 | 冲突/是/是 | **PASS（冲突/是/是；推翻本席 B1「创建默认 active 故不修词表」）** |
+| M012-015 | CX-04 | 细化/是/是 | **PASS（细化/是/是；本席 B1 点击/Esc 未覆盖）** |
+| M012-016 | CX-05 | 冲突/是/是 | **PASS（冲突/是/是）** |
+| M012-009 | 历史登记 + 双方其余观察 | 登记/否/否 | **PASS（登记/否/否）** |
+
+历史 001–008：已修、当前队列否，不重开。无新正式号占用旧号。添加 0。冲突入队 2（014、016）。细化入队 5（010、011、012、013、015）。技术性入队 0。登记否 1（009）。修复队列「是」7、「否」1（当前表）+ 历史 001–008 否。
+
+### 010 独立裁定（细化／是／是）——接受合并，收窄历史 NULL
+
+核源：
+
+- `GovernanceTopologyPage.tsx:164-167`：`projects.filter((project) => project.merchantId === merchant.id)`。
+- `OrganizationMerchantPage.tsx:373-375`：项目表「商户」列 `row.merchantId`；组织页全文 0 命中 `projectId`。
+- `MerchantRecord.java` 末位 `projectId`；`types.ts` `MerchantAdmissionRow` **无** `projectId`（故只能页内局部类型，不改 types.ts）。
+- 现行 `GET /merchants` `WHERE project_id = :current`；`GET /projects` `WHERE id = :current`；项目 `merchantId` 可空。
+- self 内存反例：商户 `project_id=p-1`、项目 `merchant_id=null` → 表文「商户甲--—有效」，不含「项目一」。
+- 组织测试 `OrganizationMerchantPage.test.tsx:142` 仍断言项目表含 `m-1`（夹具 `merchant_id`）。
+
+四分类：BSM `:509-510`「哪个综合体、谁在经营、在哪经营」；PGM `:260-261`「先管归属：哪个综合体……哪个商户」。下位实现走已退役反连，不是新实体 → **细化**。缺陷 **是**。队列 **是**。
+
+最小边界与候选一致、且与本席 GR-M012-010 同根：两页局部读 `merchant.projectId` 正连 `project.id`；组织项目表撤销「项目属于一个商户」。**不**修已批准的历史 `project_id` NULL 隔离（V427「不推断项目归属」；空列表不是本页越权恢复任务）。**不**造项目分配器、不调 `PUT /merchants/{id}/project`、不改 types.ts/后台。测试与 011 共同归因。
+
+票：**PASS（是）**。
+
+### 011 独立裁定（细化／是／是）——分类按 §2.1 改判，原技术性票保留
+
+本席 B1 把夹具/缺测写成 **技术性**（验证装置、无新业务规则）。候选按「有具体 HTML 归属上位先细化」改细化。§2.1 判定顺序写死：能指到 HTML 上位条目一律先归细化，不进技术性通道。上位即 BSM `:509-510` / PGM `:260-261`（关系与权限降级）及 GEN-009（写失败可见）。本席改判 **细化**，不是改成添加；原 GR-M012-011 全文仍在 B1，未被改写删除。
+
+核源：
+
+- 三份测试夹具商户无 `project_id`、项目带 `merchant_id:"m-1"`；37/37 绿。
+- 组织页 `OrganizationMerchantPage.tsx:133-135` **已有**缺 `entity.binding.view` 不请求主体；缺的是测试，不是实现。
+- 绑定页 `SubjectBindingsPage.tsx:172-176` 已有 catch；测试无失败例。
+- `BusinessEntityBindingRecord.java` 字段：`id/merchantId/operationEntityId/contractEntityId/settlementEntityId/status/effectiveFrom/effectiveTo/changeReason/createdAt/updatedAt`。**无 `projectId`**。页内 `BindingRow` 同构。候选「不向 BindingRow 或其夹具捏造该字段、不要求前端重复后端项目过滤」正确，是对本席原「绑定夹具无商户 project_id」的 **DTO 事实收窄**，不是删掉有效测试缺陷。
+
+最小：更新两页商户 `project_id` 夹具、项目 `merchant_id` 可空；保留原关键断言并改到正确关系；组织缺权限不请求主体、绑定后端拒绝仍可见各补最小用例。全部在六文件测试内。
+
+票：**PASS（细化/是/是）**。
+
+### 012 独立裁定（细化／是／是）——全部接受本席导语缺陷
+
+核源：`SubjectBindingsPage.tsx:40` 原文「所有变更必须带原因、幂等键和证据附件。」对照 `:163-167` 请求体仅 `action`/`reason`/`idempotencyKey`；无附件控件。测试成功路径断言不含假证据。
+
+候选拟文：「展示经营对象、运营主体、合同主体和结算主体的唯一绑定关系；变更时须选择状态并填写原因。」删除过声称，不加上传器，不改业务 HTML，原因必填保留。与本席最小处置一致；「选择状态」是页内已有必填，不是新流程。分类细化（PGM-001 留痕/责任上位）。缺陷是。队列是。
+
+票：**PASS（是）**。
+
+### 013 独立裁定（细化／是／是）——推翻本席 OBS-01
+
+本席 B1 GEN-012 / OBS-01 写：「默认 size=500，当前项目切片下首次正常跑不撞，不升、不加分页器。」B2 按对方完整探针与生产默认重裁，**不以旧观察为依据**。
+
+核源：
+
+- `adminClient.ts:42-48` `unwrap`：信封 `data.items` 拍平，**丢 total**。
+- 三页均 `api.get`、不传 `page`/`size`、未调 `getPaged`（拓扑 `:95-104`，组织 `:134-141`，绑定 `:124-127`）。
+- KPI/横幅用 `items.length` 或内存过滤长度（拓扑 `:227-231` 商户数=`merchants.length`；组织 `:406-425`；绑定 `:131-134` `uniqueObjects`/`activeCount` 均对已加载数组）。
+- `PlatformController.java`：`/business-entities`、`/merchants`、`/projects`、`/spaces`、`/business-entity-bindings` 均 `page default 1`、`size default 500`。本席核到生产默认，不是测试信封 50。
+- 已有能力：`AdminApi.getPaged` + `unwrapPaged` 保留 total/page/size；`useServerPagedRows`（`apps/web/src/admin/hooks/useServerPagedRows.ts`）按 page 再取；`TablePager` 已有上一页/下一页。多页（审计事件、台账等）已用此组合。候选禁止新建通用分页器、禁止新聚合 API、禁止无限抓全、禁止抬固定上限。
+- self 探针：先 50/51 KPI 得 50；核默认 500 后改 500 items + total 501，KPI 文本 **500** 不是 501，无后页控件。exit=1。这是单次打开列表、记录数大于默认页长，**不是**并发+故障+罕见组合。铁律 6「第一次正常跑就会撞上」成立：默认页长 500，第 501 条是该默认的下一页定义，不是第二件不巧的事。
+- 「当前项目切片」只减少跨项目行，不保证本项目 <500。未验证的数据量前提不能把已运行反例打成观察。
+
+四分类：BSM-001/003 要求看清「谁在经营」且数据与声称一致；GEN-002/016 总数声称；GEN-012 要有边界且不无界放大（分页是已有边界，不是取消边界）。有 HTML 上位 → **细化**。缺陷 **是**。队列 **是**。
+
+最小边界（确认候选，不扩）：三页改用已有 `getPaged`；后页必须经 page=2 再取（`useServerPagedRows` + `TablePager` 的服务端组合，**不得**只用 `usePagedRows` 对首 500 做客户端切片——那样 501 仍不可达）。总数用信封 `total`；本页过滤/去重/「已挂接」等派生指标必须标明本页，不得冒称全量。跨表关联缺行写「未加载」而非「未关联」。组织页已有 `includeArchived`/`merchantType` 查询参数必须随 getPaged 保留，属收窄已有入口，不是新需求。不改后台、不改共享 hook/组件源文件（只 import）、不改 types.ts。
+
+本席 B1 OBS-01 作为「不修」作废，并入本 ID，不另开号、不留观察双轨。
+
+票：**PASS（是）**。
+
+### 014 独立裁定（冲突／是／是）——推翻本席 OBS-04；悬停即 suspended
+
+核源：
+
+- `customer/i18n/statusLabels.ts:27` `suspended: "已封禁"`；未知码 `?? code` 直出英文。
+- 拓扑 `:182` `formatBusinessStatus(project?.status ?? merchant.status)`；测试 `:101-107` **锁定**「已封禁」且不含 `suspended`。夹具 m-2 `status:"suspended"` 是默认渲染主路径，不是旁路。
+- 组织 `:291/:363` 同样 `formatBusinessStatus(row.status)`；m-2 名「停用商户乙」实码仍是 suspended。
+- 绑定动作字面已是「暂停」（`:32`），状态列仍走通用表 → 同一码表内「暂停」按钮 vs「已封禁」展示。
+- HTML BEQR:238 商户/运营主体：「待准入、正常、暂停、终止、归档、黑名单」；暂停与黑名单分列。PGM:287 状态/枚举必须中文。
+- 后台闭集（`PlatformService.java:54-59`）：商户 `pending_admission/active/suspended/terminated/blacklisted`（归档走 `archivedAt`，不是可设 status）；项目 `draft/pending_activation/active/suspended/terminated/archived`；绑定变更 `active/inactive/suspended`。本席 OBS-04 所举 `pending_admission`/`pending_activation`/`archived` **都是这些页面会读到的合法码**，不是未出现的词。
+- 「本页创建默认 active」不能排除读已有暂停/待准入/已归档项目。组织页有「显示已存档商户」。列表页主路径就是读现有记录。
+
+四分类：**冲突**（明文「暂停」≠「已封禁」/「黑名单」；合法码英文直出 ≠ PGM-001）。缺陷是。队列是。
+
+最小：三页按对象上下文做**局部**中文映射，删除错误展示与把「已封禁」钉死的测试期望。暂停保持暂停。对上述合法码缺中文同批补；已正确的业态/角色/合作形式标签保留。未知码不直出英文业务界面（未识别/破折号）。**不得**改 `customer/i18n/statusLabels.ts` 全局客人「封禁」语义，不新增状态或转换。六文件足够。
+
+本席 OBS-04 并入本 ID，不另开号。
+
+票：**PASS（是）**。
+
+### 015 独立裁定（细化／是／是）
+
+核源：三页 `tr onKeyDown` 对冒泡 `Enter`/` ` 一律 `preventDefault` 并开抽屉（拓扑 `:175`，组织多表，绑定 `:232`）。绑定 radio 只 `td.onClick stopPropagation`（`:233`），**不**停 keydown。self：`fireEvent.keyDown(radio,{key:" ",code:"Space"})` 返回 **false** 且打开抽屉。行内「查看详情」按钮、TraceLink、RowActions 同形。本席 B1 只覆盖点击/Esc，不能否定该反例。
+
+GEN-015 键盘基本可用。有上位（已有行快捷键的下位实现）→ **细化**。缺陷是。队列是。
+
+最小：仅 `event.target === event.currentTarget` 时处理行快捷键；子控件保留原生 Space/Enter。补负例与行自身开详情正例。不新造键盘抽象。六文件。
+
+票：**PASS（是）**。
+
+### 016 独立裁定（冲突／是／是）
+
+核源：
+
+- 拓扑 `:14-17` 只列八码；未知走 `formatBusinessStatus` → 原码。
+- `GET /api/v1/platform/space-types` 已存在；权限 `governance.space.view`；`ADM-GOV-001` 路由**已含**该权限，不必改 `adminRoutes.ts`。
+- `SpaceTypeRecord`：`typeCode`/`typeName`。`listSpaceTypes()` 无分页参数（字典全量）。
+- self 探针：字典 `{type_code:"kiosk", type_name:"一体机位"}` + 空间 `space_type:"kiosk"` → 实显 `…kiosk可用…`，不含「一体机位」。
+- PGM:287 枚举取值必须中文；内部 ID 例外不含业务空间类型名。
+
+四分类：**冲突**（英文码直出）。缺陷是。队列是。不是添加新空间类型规则。
+
+最小：本页读取既有字典，按真实 `typeName` 展示，八码中文作兼容兜底；未解析用中文未识别/破折号。不新增类型/接口/权限、不改字典管理页、不发明校验。六文件（拓扑页+测试）。
+
+票：**PASS（是）**。
+
+### 009 与其余观察（登记／否／否）——完整，不漏并
+
+本席 OBS-02 双击换键/创建未传 submitting、OBS-03 内部 ID/无 TraceLink/无本页创建绑定、OBS-05 不调用项目归属配置器、OBS-06 KPI `?kpi=` URL 内部键：候选 009 均登记否。self §7：附件上传缺口不在 012 复活；active→inactive 被现行财税守卫拒绝、mock 成功≠放行；项目三资料字段已获批仅后端、本页不补输入。历史 NULL 商户不可见是已批准隔离，010 已剔除。OBS-01/04 已分别并入 013/014，009 明示不遗漏、不顺修。无第三条应入队却留在 009 的工程缺陷。
+
+票：**PASS（否）**。
+
+### 七项归因与六文件边界（足够且最小）
+
+候选执行面只 M012 六文件及版本递增；共享 `getPaged`/`TablePager`/`useServerPagedRows` **只读 import**，不改其源、不改后台/types/全局标签/HTML/路由。本席逐项核：
+
+| ID | 是否够六文件 | 是否新业务/超界 |
+|---|---|---|
+| 010 | 是（两页局部类型+正连+组织列表文案；测试在 011） | 否。不改 types.ts，MerchantAdmissionRow 本无 projectId |
+| 011 | 是（三测试文件夹具/用例） | 否。不捏造 BindingRow.projectId |
+| 012 | 是（一条导语） | 否。不上传器 |
+| 013 | 是（三页改用已有 getPaged/pager） | 否。不新 API、不无限取全、不造新分页器 |
+| 014 | 是（三页局部词表+测试期望） | 否。不改 customer statusLabels |
+| 015 | 是（三页一行条件+测试） | 否 |
+| 016 | 是（拓扑读已有 space-types；路由已有 space.view） | 否。不改 adminRoutes、不发明类型规则 |
+
+无需第七文件。无需 2.2 人闸。铁律 6：删除过声称（012）、收窄已有监听（015）、改已有展示键/词表/数据源（010/014/016）、复用已有分页（013）。不是必须新增。
+
+B3 若越出上述 import 去改共享实现、后台、types、全局词表或 HTML，属越界，由 B4 闸 3 整批回滚；本票不授权那些路径。
+
+### 真实执行与限制
+
+| 项 | 结果 |
+|---|---|
+| 锁哈希独算 | 与 sidecar/ledger/B1 独占行同值（正文叙述，非独占行） |
+| 候选 SHA | `e802cf09b96b397334b933ccad13d6b2fc7a7bbc6fc499270e363eab1e20df54` 重算一致 |
+| 双方 B1 | 全文从最后独占锁行读完；含本席 3 项+全部观察与对方 CX-01..05 及探针原文 |
+| 6 文件 | 重读关键行；SHA/1755 与 B1 清单一致；未改 |
+| 后台闭集/默认 500/BindingRecord/space-types 权限 | 只读追流，不扩模块 |
+| 浏览器 / 真实 HTTP / 后台测试 | **未运行**；013/014/015/016 采纳 self 已落盘内存探针输出（exit=1）+ 本席源码对照 |
+| 写入 | 仅追加本文件 |
+| 子代理 / MCP | 未使用 |
+| 席甲本次 B2 正文 | 不作为本票依据 |
+
+未验证前提（不阻本票）：真实浏览器带会话的 501 行；库中实际商户数。源码级默认 500 + unwrap 丢 total + KPI 用 length，加上已运行 500/501 反例，足够定工程缺陷。
+
+### 整批结论
+
+**PASS**
+
+8 行（010–016 是，009 否）全部给票，无待补、无条件通过、无添加项。本票不授权 B3、不修改台账。合取须席甲本批 B2 亦 PASS；本席不自称 findings/ledger 已改。不覆盖 V0.04 B1 FAIL。历史 001–008 保持已修否。
+
+## M012 获批追加一次修复 B2 整批归并复核（Grok 乙席）
+
+- 文件自身版本：V0.06（本段追加；上方 V0.05 前缀 **139005** 字节原样保留，不改写任何旧前缀或 B1 锁段起点，**本段不写独占锁哈希字段行**）
+- 席位：固定 Grok 只读外审席乙 grok-4.6/xhigh。Grok FAIL 具否决权；本票不因用户已「批准」再修 1 次而被迫通过。
+- 步骤：M012 获批追加一次修复的 B2 整批候选复核。不是 B5 重审、不是 B3 修复、不是模块 PASS、不是 B4。旧两份 B5-r3 FAIL 原文保留；B2 只重新判断当前候选。
+- 用户已明确答「批准」：先完成本批两条依据的 B2，再仅修定稿项；B3 历史累计 3 不清零，未执行第 4 次。
+- 正本：`/home/james/complex-management`，分支 `main`，本席 `rev-parse HEAD` = `e456ba96c84185c8d39f18f548011daac48a6466`。未 fetch/commit/push/merge/deploy，未改数据库。
+- 范围：只审本批全部两条依据的归并/分类/队列/边界。不重审别的模块，不加第 22 条判据。
+- 未读取：本次 `M012-b1-self-raw.md` 任何新增 B2 结论。未用 MCP、未派任何子代理、未提问、未改源码/测试/HTML/lock/findings/ledger。唯一写入即本文件本段。
+- 冻结 21 项未增：`M012 → [BSM-001, BSM-003, GEN-001 … GEN-018, PGM-001]`。锁实算（本席 `sha256sum docs/audit-2026-09/plan/criteria-lock.md`，正文叙述、非独占行）=`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`；sidecar 文件内容同值；`LOCK-AMEND-COUNT: 1`。
+- 本席 B2：**PASS**（同意候选整批：017 修复队列是，013 及旧 001–016 否）。无条件通过。无添加项。无 HTML 申请。无 LOCK-AMEND。
+
+此票只判断 `docs/audit-2026-09/findings.md` **V2.21** 顶部「当前 M012 获批追加一次修复：B2整批候选（尚未定稿）」相对本次两份完整 **B5-r3 V0.01** 的差集。必须另有席甲本批 B2 PASS 且本席亦 PASS 才能定稿。不覆盖上方 B5-r3 **FAIL** 原文，不把本票写成「台账已按本席意见改过」。
+
+### 本批输入（完整指定文件，本席实算）
+
+| 路径 | 版本 / 范围 | bytes | SHA256 |
+|---|---|---:|---|
+| `docs/audit-2026-09/modules/M012-b5-r3-self-raw.md` 全文 | V0.01；结论 FAIL；唯一新依据 CX-B5-01 | 15529 | `f09e7ce3c550c4d56f6947bcf100b8f3f087c8f8d72d0391a28db2ae5d551b6c` |
+| `docs/audit-2026-09/modules/M012-b5-r3-grok-raw.md` 全文 | V0.01；结论 FAIL；唯一未完 GR-M012-B5-01→旧 013 | 18848 | `f02108cfa1a711ce8bf47f334b536fc41b26991c246ae6de219f051ba1c813a5` |
+| `docs/audit-2026-09/findings.md` 顶部当前 M012 候选表 | V2.21；017 是 / 013 否；旧 001–016 否；未 B2 定稿 | 887238 | `516a6478dda793c8ed27ec661379f9daae7248cc111c26ff7746fcd2f9df518a` |
+| 本文件追加前 | V0.05 | 139005 | `92361d2f1439193f7b57dc51dd1dd273de0ee6f5390d4cdebc65e11251d21290` |
+
+六源工作区 blob 与 B5-r3 清单全等（本席重算，未改）：
+
+| 文件 | 行 | 版本头 | SHA256 |
+|---|---:|---|---|
+| `GovernanceTopologyPage.tsx` | 276 | V0.03 | `6204706ba5c97e53bfeb200799ddc7a39b615a18f69e1d71607dfb56765a5a89` |
+| `GovernanceTopologyPage.test.tsx` | 308 | V0.04 | `985196ad40864145f1be814cad1f5db6667883a114aed27e61453188219a28cb` |
+| `OrganizationMerchantPage.tsx` | 521 | V0.04 | `28f31ae9b3b731c7e3695cb3d928fc69613b1124b7d5dd970a3586e58b2c4d49` |
+| `OrganizationMerchantPage.test.tsx` | 435 | V0.07 | `d40c83d948e0b07f83f6eb5bcbb2a18af12b186ddd93fdcc651557d5870408a7` |
+| `SubjectBindingsPage.tsx` | 257 | V0.03 | `94f4d4dcfcb24c85701450794544574efe26f209a4aed242ff5c428af98d247c` |
+| `SubjectBindingsPage.test.tsx` | 291 | V0.04 | `ec22a9250ed24f61031f1997119b5537d77d1af537e388eff2018fa947d8591b` |
+
+### 技能（V0.17 §6 收窄，本节点实读）
+
+| 技能 | 本节点用法 |
+|---|---|
+| receiving-code-review | 先核 Controller→Service→JDBC 与两页 Hint 再接受或反驳；禁止表演性同意候选，也禁止因用户批准而改票 |
+| grilling | 只借追问结构自查：三事件是否真实落库、Hint 是否发请求、`/projects` 在现行 WHERE 下能否出现第 501 条 |
+| verification-before-completion | 声称前先跑只读哈希/行号/源码/`graft` |
+| systematic-debugging / diagnosing-bugs | 只借读错→复现→数据流；不改生产代码 |
+| ponytail-review | 只评最小删除是否够，不落地 |
+| graft | 定位 `AuditTrailHint`、`listProjectsPaged` 调用边、`currentProject` |
+| MCP / 任何子代理 / Arc audit | 禁用，未用 |
+
+### 差集核实（B5 并集 → 候选表）
+
+B5-r3 并集只有两条未定稿依据，无第三条：
+
+1. self **CX-B5-01**（新问题，当时无正式 ID）：两页 `AuditTrailHint` 列出后台不记录的事件名。本席 B5 矩阵把 GEN-011 写成「够」，未把 Hint 字面量与 `PlatformService` 成功事件做同名核对。
+2. 本席 **GR-M012-B5-01**（沿用已有 ID M012-013，当时队列否）：假设 `/projects` 默认首页 500 条且存在第 501 个项目，拓扑查找把未加载画成「-」。
+
+候选 V2.21：CX-B5-01 → 新 **M012-017** 队列是；GR-M012-B5-01 → **013 不重开** 队列否；001–016 继续否。无添加项、无 HTML 申请。
+
+本席本步独立核源后：**承认 B5 GEN-011「够」为漏审，不把它当作否决 017 的理由**；**撤回 GR-M012-B5-01 的 501 项目反例，013 不重开**。下面两条分别给四分类、队列与最小边界。不存在第三条应入本批队列的工程缺陷。
+
+---
+
+### M012-017 独立裁定（来源 CX-B5-01；细化／工程缺陷是／修复队列是）
+
+**差集：** self B5 唯一新依据。本席 B5 未开此号。候选新分配正式 ID M012-017 并入队。本席同意归并与入队，不同意用本席 B5 GEN-011「够」挡掉它。
+
+**独立核源（不是复述旧票）：**
+
+- 拓扑 `GovernanceTopologyPage.tsx:245`：`<AuditTrailHint event="governance_topology.viewed" />`。同文件 `:6` 仅为此组件导入 `AuditTrailHint`。
+- 组织 `OrganizationMerchantPage.tsx:419`：`<AuditTrailHint event="organization.viewed / merchant_profile.created" />`。同文件 `:6` `import { AuditTrailHint, auditTraceField }`；`auditTraceField` 在 `:319` 商户抽屉「操作审计」仍使用。
+- 组件 `AuditTrailHint.tsx:42–55`：只把 `event` 填进 `<p>操作留痕：{event}</p>`。两页调用均未传 `navigateTo`/`businessType`/`businessId`，Hint 自身不发审计请求、不写 `audit_events`。
+- 实际 Controller→Service 成功事件（本席读 `PlatformService.java`）：`:94` `entity_binding.viewed`；`:152` `merchant.viewed`；`:447` `project.viewed`；`:514` `space.viewed`；`:528` `space_type.viewed`；`:733` 绑定列表再记 `entity_binding.viewed`；创建/更新商户 `saveMerchant` `:993` 成功事件为 `merchant.updated`（不是 `merchant_profile.created`）。
+- `backend/src` 对 `governance_topology.viewed`、`organization.viewed`、`merchant_profile.created` **零命中**（本席 grep）。绑定页 `:191` `entity_binding.viewed / entity_binding.changed` 与后台一致，**不纳入本缺陷**。
+- 三页对应测试文件对上述三个错误字面量 **无断言**。删 Hint 节点不会为了绿测去改测试目的。
+- 第一次正常触发：有页面查看权限的操作员打开拓扑或组织商户页，展开已有「操作留痕」。不需要异常数据、并发或缺权。按页面所示名称去对操作记录会找不到对应事件；真实日志并未因此丢失。
+
+**四分类（GEN-017 顺序）：**
+
+1. 冲突：否。BSM-001/PGM-001 HTML 原文要求「哪个综合体、谁在经营」「先管归属」与「数据可溯源、全链可点击／来源、归属和上下游关联」，**没有**点名这三个事件字符串。不以英文本身为缺陷；折叠技术区允许内部标识，不证明标识与实际事件同名。
+2. 细化：是。指向已映射的 BSM-001、PGM-001 溯源/留痕上位，以及 GEN-011（结构化证据不得互相矛盾）、GEN-016（完成声称可从当前范围复现）。页上证据说明与 `AuditedOperationExecutor`/`recordSuccess` 实际常量不一致，是既有留痕能力的下位实现错误，不是新业务概念。
+3. 技术性：否。缺陷落在操作员可见的证据说明，不是无业务承载的纯编译单元。
+4. 添加：否。不新增事件、权限、状态、接口或审计系统。
+
+冻结依据：BSM-001、PGM-001、GEN-011、GEN-016。依据类型：可执行产物（JSX 字面量 + Service 事件常量）及可复现搜索。工程缺陷：**是**。
+
+**最小修复边界（同意候选，不扩）：**
+
+- 只删除拓扑 `:245` 与组织 `:419` 两处错误 `AuditTrailHint` JSX 节点。
+- 仅清因此未用的导入：拓扑整行 `AuditTrailHint` 导入可删；组织改为只保留 `auditTraceField`，**不得**删 `:319` 对象操作审计字段。
+- 两源版本递增：拓扑 V0.03→V0.04，组织 V0.04→V0.05。
+- 不改 HTML、后台、真实日志、权限、共享 `AuditTrailHint`/`TechDetails`、types、路由、数据库、绑定页 Hint、其他页面入口。
+- 不新增后台事件来迎合旧文案。不把 Hint 改写成真实事件清单（删除比改字更小，且避免再漂移）。
+- 验证：静态证据文字删除。完整受限 diff / 只读源码校验两节点及仅相关导入；跑现有 56 单测与 typecheck。不为纯文案另造同构测试。
+
+票：**PASS（是）**。
+
+---
+
+### M012-013 独立裁定（来源 GR-M012-B5-01；本轮反例撤回；工程缺陷否／修复队列否）
+
+**差集：** 本席 B5 唯一未完，沿用已有 ID 013（B4-r3 后队列已否）。候选保持否、不重开，要求本席按现行服务链确认或给出真实接口下的第一次正常触发。本席**撤回**该反例，同意不重开。
+
+**独立核现行服务链（用户点名的行，本席实读，不是复述候选）：**
+
+1. `PlatformController.java:144–150`：`GET /api/v1/platform/projects` → `requirePermission("governance.project.view")` + `requirePlatformScope()` → `service.listProjects(page, size)`。默认 `page=1,size=500`。
+2. `PlatformService.java:444–445`：`repository.listProjectsPaged(currentProject(), page, size)`。随后 `:447` 记 `project.viewed`。
+3. `PlatformService.java:405–409`：`currentProject()` = `currentProjectScopeQuietly()`，项目不存在则返回 `null`，**不会**改走全表。
+4. `JdbcPlatformRepository.java:1287–1300`：`COUNT(*) FROM projects WHERE id = :project_id`；`SELECT … FROM projects WHERE id = :project_id … LIMIT/OFFSET`。`projects.id` 是对象唯一键。同一请求下 total∈{0,1}，items 最多 1 条。
+5. 商户同范围：`PlatformService.java:150` `listMerchantsPaged(currentProject(), …)`；`JdbcPlatformRepository.java:1267–1284` `WHERE project_id = :project_id`。本项目商户可以 501 条（013 已验收的分页对象）；**不能**从「501 商户」推出「501 项目」。
+6. 无参重载 `JdbcPlatformRepository.listProjectsPaged(int,int)`（`:482–496`，`COUNT(*) FROM projects` 无 id 过滤）及接口 default `:147–149`：**graft callers 对生产 Service 无入边**。HTTP `/projects` 只走带 `projectId` 的重载。
+7. 已有测试不是手造前端内存：`PlatformServiceTests.projectListsAndTotalsStayWithinCurrentProjectForOrdinaryAdmin`（`:1101–1106`）两项目夹具下 `listProjects(1,1).total()==1` 且 items 恰为当前 `org_1`；`PlatformJdbcIntegrationTests` `:451` `listProjectsPaged(a,1,1).total()==1`。
+
+拓扑 `:85–90` 确以 `getPaged("/api/v1/platform/projects?page=&size=")`、默认 500 拉项目，`:195–211` 用 `projects.filter(id === merchant.projectId)`，空则 `[undefined]` 显示 `-`。该查找在**现行接口**下：商户列表已是当前项目切片，项目列表是该项目自身 0/1 条；`merchant.projectId` 非空时与当前项目 id 同值则命中名称，空则走 009 已登记的历史 NULL「-」。**不存在**「第 501 个项目落在第 2 页、首页 500 条未覆盖该商户 projectId」这条路径。本席 B5 探针是手造 500 条项目内存数组，未经过 Controller→`currentProject()`→`WHERE id=:project_id`，不能当实际接口响应。
+
+组织页已有项目 pager（`:405`）不改变 `/projects` 最多 1 条的事实，不能单独构成 013 重开。
+
+**若不同意须给真实接口下正常触发：** 本席找不到。要在现行 `GET /projects` 上看到 total≥501，必须让 `WHERE id=:project_id` 命中 501 行，与主键唯一矛盾。主权限列表仍走 `currentProject()`，没有本页全量项目目录。故不坚持原票。
+
+**四分类：** 本轮反例前提不成立，不重新分类为待修项。013 原已验收的商户/空间/实体/绑定分页、未加载文案、错误恢复**保持否**，不回滚那些行为。
+
+**最小边界：** 不为不成立的输入前提增项目分页或改拓扑查找。不把 013 队列改回是。
+
+票：**PASS（否）**。013 不重开。
+
+---
+
+### 旧 001–016（本批不重开）
+
+候选表写明旧 001–016 否。本批触发 raw 除撤回 013 反例外没有新依据指向它们。本席不把 017 顺修扩到分页/词表/键盘/导语。009 登记边界保持。
+
+### 整批执行边界（仅当双席本批 B2 均 PASS 之后才允许 B3）
+
+- 修复面只两页源文件 + 自身版本：`GovernanceTopologyPage.tsx`、`OrganizationMerchantPage.tsx`。
+- 不改测试目的、不改 HTML、后台、共享组件实现、types、路由、数据库、绑定页。
+- 验证：受限 diff 证明只删两节点及仅因此未用导入、组织 `auditTraceField` 仍在；现有 56 单测 + typecheck。
+- B3 累计记第 4 次；B4/B5 按获批 r4 审完整范围。本票不授权越出上述导入去改共享实现。
+- 无 2.2 人闸。铁律 6：删除错误证据文案，不是必须新增。
+
+### 真实执行与限制
+
+| 项 | 结果 |
+|---|---|
+| 两份 B5 SHA | 与用户给定及候选表逐字相同 |
+| 候选 V2.21 顶表 | 017 是 / 013 否 / 001–016 否；本席同意 |
+| 六源 SHA | 与 B5-r3 清单 MATCH |
+| `/projects` 服务链 | Controller144–150 → Service444–445 → JDBC1287–1300 实读 |
+| 浏览器 / 真实 HTTP / Maven | **未运行**；本批缺陷与撤回均落在静态源码与已有单元断言，不冒称 HTTP 验收 |
+| 写入 | 仅追加本文件本段 |
+| 子代理 / MCP | 未使用 |
+| 席甲本次 B2 正文 | 不作为本票依据 |
+
+### 整批结论
+
+**PASS**
+
+同意候选整批：新 M012-017 细化、工程缺陷是、修复队列是；M012-013 本轮反例撤回、队列否；旧 001–016 否。无待补、无条件通过、无添加项。本席撤回 GR-M012-B5-01，不重开 013；承认 B5 GEN-011「够」漏审，017 入队。合取须席甲本批 B2 亦 PASS。本票不授权 B3、不修改台账。不覆盖 B5-r3 FAIL 原文。不存在条件通过。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M012 B1 Grok 独立审计原文（当前锁完整重审）
+
+- 席位：Grok 独立只读席乙（固定 grok-4.6 xhigh）
+- 阶段：B1 修复前整模块全量审计（M011 现锁 B1/B2/B5 双 PASS 已关闭后，严格串行进入本模块）
+- 报告自身版本：V0.07（指定路径已有 V0.01 B1 + V0.02/V0.03 历史 B2 + V0.04 重开 B1 + V0.05/V0.06 B2；本次完整报告追加，不覆盖。封存前缀 **153998** 字节 SHA256 `fc54e0e239b68b7f35b641ac6e3a30f4b17213fe75943210fd11f2df5a787885` 原样保留）
+- 模块：M012 — 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／网页与验证／第1段
+- 计划源：`docs/audit-2026-09/plan/modules.md` V0.04 FILES 6；计划冻结有效内容行 1485 仅为切分元信息，本次按工作区全文审
+- 冻结判据：21 条（`M012 → [BSM-001, BSM-003, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001]`，COUNT=21 unique=21 MISSING=[]）
+- 结论：**PASS**
+- 工程缺陷成立、建议入 B2 修复队列的临时编号：**无**
+- 只登记、建议队列「否」：OBS-R-01…OBS-R-10（不含新正式缺陷）
+- 添加项：无（不代用户回答 2.2）
+- 未修源码/测试/HTML/.git 引用/ledger/findings/questions/锁；未 fetch/worktree/提交推送部署；未装依赖；未派子代理；未调 MCP；未读本次 `M012-b1-self-raw` 新增正文（开读时该文件仍为 2026-09-14、71203 字节旧前缀，无本轮新正文）；未跑六文件 vitest/typecheck（本轮由 Codex 单独跑，本席只读核断言与源码依赖）；未跑 Maven；未建库删库、未 DDL、未写业务数据、未建临时库
+- 本报告不表示全仓或发布门禁通过。不以测试绿代审（本席未新跑测试）。历史 B3 累计 4 保持；用户本轮指令「旧第4轮授权不当、新第5轮许可」作授权背景，本席 B1 无待修项故不消费第 5 轮。ledger 表行仍写「未授权新增第5修复轮」，本席不改台账。
+
+过程事故（不构成六源缺陷）：取证脚本误执行一次 `git write-tree`（exit 0）。只向对象库写入 tree 对象，未改 HEAD/分支/index/工作区六文件，未用该 tree 作证据，未 fetch/commit/push。
+
+## 0. 技能自核（V0.17 §6，按 B1 收窄）
+
+本席实际读取并按收窄口径使用：
+
+| 技能 | 本机路径 | 用法 |
+|---|---|---|
+| using-superpowers | `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 先核技能再取证；用户指令与 controller 优先于技能本体（禁止子代理处按用户指令收窄） |
+| grilling / grill-me | mattpocock `productivity/grilling/SKILL.md`；`grill-me/SKILL.md` 仅转发 | 只用追问树自己取证，不向操作员发问、不派子代理 |
+| codebase-design | `.../engineering/codebase-design/SKILL.md` | 删除测试：三页若删，归属展示与绑定变更缝回到后台记录本身；不派 DESIGN-IT-TWICE |
+| diagnosing-bugs | `.../engineering/diagnosing-bugs/SKILL.md` | 以「断言能否因生产/夹具改错而红」代替本席跑测；不改生产代码 |
+| systematic-debugging | superpowers 同名 | 只借读错误→追数据流（页→`/api/v1/platform/*`→DTO/Service/JDBC）；不作无 ID 插桩 |
+| verification-before-completion | superpowers 同名 | 锁哈希/行数/HTML 命中/事件名/SQL 先跑再写；**不声称测试已绿** |
+| ponytail-review | `~/.claude/plugins/cache/ponytail/ponytail/4.9.0/skills/ponytail-review/SKILL.md` | 只列可删复杂度，不落地 |
+| writing-for-agents | mattpocock 同名 | 本 raw 步骤+完成判据同文件 |
+| git-guardrails-claude-code | mattpocock `misc/` | 存在；本席未改 git 引用、未安装 hook、未 push/reset |
+| long-running-background-tasks | `~/.grok/bundled/skills/long-running-background-tasks/SKILL.md` | 本席不跑 vitest/Maven，未起 monitor |
+| tdd / test-driven-development | 本机存在 | **B1 禁止修复，不调用落测试** |
+
+B1 不适用、按 controller 收窄不调用：brainstorming / writing-plans（A）、ponytail（B3）、requesting-code-review（B4）、receiving-code-review（甲席收乙席）、resolving-merge-conflicts（无合并）。
+
+缺口（不冒称调用）：
+
+- `batch-grill-me`：本机技能树未找到
+- `ubiquitous-language`：本机技能树未找到（`domain-modeling` 存在，V0.17 明确不用）
+- Arc `audit` 会派评审子代理并另写 `docs/arc/audits/`：与双席/§7 冲突，**不调用**
+
+明确不用（controller 划掉）：executing-plans、dispatching-parallel-agents、subagent-driven-development、using-git-worktrees、finishing-a-development-branch、research、domain-modeling、code-review（mattpocock）、ponytail-audit/debt/gain。
+
+## 1. 锁哈希与范围核验
+
+独立命令（独占锁行已写在本次报告第一行，此处不重复该标签）：
+
+- CMD-LOCK：`sha256sum docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'`
+- OUT-LOCK：`b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`
+- sidecar `plan/criteria-lock.sha256` 文件内容同值（sidecar 文件自身 SHA `c4f8b2c53239206e0eb7b08c1a219049cf785bf9c233f93d66f7a8f0617c111f`）
+- ledger 顶行 `CRITERIA-LOCK-SHA256:` 同值；`LOCK-AMEND-COUNT: 1`
+- `criteria-lock.md` 版本 **V0.14**（历史 B1 为 V0.11 / `b012328f…`，不得抄旧值）
+- 映射行逐字：
+
+```
+M012 → [BSM-001, BSM-003, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001]
+```
+
+- 解析定义区 401 条；上列 21 条 MISSING=[]；HTML 锚点 3 + GEN 18
+- `plan/modules.md` M012 FILES 6 条与用户清单逐字相同（路径为 `apps/web/src/admin/pages/…`）
+- 6 文件 `git ls-files -z -- <6 paths> | xargs -0 wc -l` 与 `splitlines()` 均为 **2085**（274/308/520/435/257/291），与开工口径一致
+- HEAD：`main` = `e456ba96c84185c8d39f18f548011daac48a6466`（本席未 `git fetch`）
+- 六文件 `git status --porcelain` 为已暂存 `M`（相对 HEAD 未提交；工作区字节/SHA 与历史 B5-r4 after 清单逐文件相同）。本席审 **工作区当前全文**，不以计划 1485 或 HEAD blob 当漏审借口
+- 本席未设 `GIT_INDEX_FILE`，未动主索引（误触 `write-tree` 见文首过程事故）
+
+controller `160-audit-prompt.md` V0.17 SHA256 `c93ddca061831828a5dcabb1c83fe18a4a6b7a2a6cd839e3baaef63c66ad6f21`；runbook V0.02 SHA256 `c4ef224d35c3708b72086621fa80251e1363bc97de0ccf90cd6606518ad6539f`；modules.md V0.04 SHA256 `8df1c96711ad31985b09f5aa0b83db889fb4d8d91a7d8e5fcb352336181b5ffa`。
+
+ledger 只读：V8.22，1757170 bytes，SHA256 `3799bd475f6913060683f4ad3429c5633a12f2123c2d735526ab1d3ca6935b99`；模块表 M012 `IN_PROGRESS`、B3=4。findings V3.54，1265548 bytes，SHA256 `d0ca113ea4946640be0896605fdf34461877d29ffd779d2c0c86ee42c5291970`；M012 最近定稿段仍为 001–017 队列全否（历史事实栏不覆盖本次现态重核）。
+
+三份 HTML 只读、未改。锁内来源行对本席读取的现行 HTML **命中**：
+
+| 锁 ID | 锁内来源行 | 现行 HTML 命中 |
+|---|---|---|
+| BSM-001 | map `:505` | 命中「这套系统到底管什么」；「哪个综合体、谁在经营」；「数据可溯源、全链可点击」 |
+| BSM-003 | map `:563` | 命中「数据可改可删、操作有引导、权限分岗」导语 |
+| PGM-001 | gov `:256` | 命中「先管归属」；见名可点；界面全中文（含「导出文件表头与内容」）；内部标识四样例外 |
+
+锁摘录首行均能在现行 HTML 原文中找到。**PGM-059 不在本模块映射**。用户点名的现行治理 HTML `:871`（第一/第二联系人：有效查看权或真实密钥最高权限可在档案列表/操作结果看完整号码；不扩大到客人/员工；不免除项目范围与查看留痕）只作类型 1 解释，不启 LOCK-AMEND，不把未映射 ID 当第 22 条判据。
+
+三 HTML 当前字节/SHA256（只读核验，本席未改）：
+
+| 文件 | 字节 | SHA256 |
+|---|---:|---|
+| docs/business-enum-quick-reference-v0.1.html | 133961 | 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66 |
+| docs/business-system-map-for-operations-v0.1.html | 304482 | eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66 |
+| docs/platform-governance-map-for-operations-v0.1.html | 103798 | 5c4594a73e767c704238ad311899903dbaaf94503e4a4cc18f21a5596e67429f |
+
+相对历史 B1：BEQR 哈希未变；BSM/PGM 哈希已变（现行锁 V0.14 已同步获批原文）。三 HTML 本身未发现需人闸修改的原文错误。HTML 沉默处不升冲突。
+
+questions：`M012-006.md` / `M012-007.md`「## 操作员答复」段首行均为精确 `删除`。无未答。
+
+## 2. 6 文件覆盖表（全文已读；行=splitlines=`\n` 计数）
+
+| # | 路径 | 行 | 字节 | SHA256 | 全文 |
+|---|---|---:|---:|---|---|
+| 1 | apps/web/src/admin/pages/GovernanceTopologyPage.tsx | 274 | 18046 | 6338225cb0367502fefb3db2348673fe602ee9e6bed3cdae321feeea9a9b7036 | 已读 L1–L274；文件版本 V0.04 |
+| 2 | apps/web/src/admin/pages/GovernanceTopologyPage.test.tsx | 308 | 16571 | 985196ad40864145f1be814cad1f5db6667883a114aed27e61453188219a28cb | 已读 L1–L308；文件版本 V0.04；15 `it` + 2 `it.each`（2+2 组）= **19** 例 |
+| 3 | apps/web/src/admin/pages/OrganizationMerchantPage.tsx | 520 | 32061 | d3ddb2cc423cc901190e8a5d9c5c6f2e4095919d956a19a6c866124947fa6722 | 已读 L1–L520；文件版本 V0.05 |
+| 4 | apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx | 435 | 26133 | d40c83d948e0b07f83f6eb5bcbb2a18af12b186ddd93fdcc651557d5870408a7 | 已读 L1–L435；文件版本 V0.07；**21** `it` |
+| 5 | apps/web/src/admin/pages/SubjectBindingsPage.tsx | 257 | 14784 | 94f4d4dcfcb24c85701450794544574efe26f209a4aed242ff5c428af98d247c | 已读 L1–L257；文件版本 V0.03 |
+| 6 | apps/web/src/admin/pages/SubjectBindingsPage.test.tsx | 291 | 15482 | ec22a9250ed24f61031f1997119b5537d77d1af537e388eff2018fa947d8591b | 已读 L1–L291；文件版本 V0.04；**16** `it` |
+
+合计 **2085 行 / 123077 字节**。静态 `it`/`it.each` 声明 54 行，参数化展开后 **56** 例（19+21+16）。本席未跑；不以 52 静态声明覆盖实跑数。
+
+依赖只读追流（不扩模块）：`useServerPagedRows.ts`、`adminClient.ts` `unwrapPaged`/`getPaged`、`AuditTrailHint.tsx` `auditTraceField`、`TablePager.tsx`、`HighRiskConfirm.tsx`、`PermissionGate.hasPermissions`、`customer/i18n/statusLabels.ts`（经本页 `formatBusinessStatus` 再导出）、`PlatformController` 本页所用 GET/POST、`PlatformService.listProjects/listMerchants/changeBusinessEntityBinding/recordSuccess`、`JdbcPlatformRepository.listProjectsPaged(projectId,…)`、`MerchantRecord.withMaskedPhones`、`AuthorizationService.currentActorHasPermission`/`isMasterAuthority`、`PhoneMask.VIEW_PLAINTEXT_PERMISSION`。
+
+## 3. 第一性原理三问（2.3）
+
+1. **这段东西为什么必须存在？** 删掉这六文件，BSM-001「哪个综合体、谁在经营、在哪经营」、PGM-001「先管归属 / 见名可点 / 零英文」、BSM-003「可改可删、有引导、权限分岗」在管理端将失去本模块可失败的页面与断言。答得上 → 有业务上位需求。
+2. **声称的行为有没有被实际执行验证过？** 本席 **未新跑 vitest/tsc**。改用：逐条追断言到页面分支与后台契约，判断拿掉实现或改错夹具时能否红。**不以绿代审。**
+3. **哪一条前提没验证就当真？** 未验证 Codex 本轮将跑的 56 例与 typecheck 退出码；未开浏览器、未打真实 HTTP。`/projects` 0/1 条以源码 `WHERE id=:project_id` 为据，不以库内实有项目数为据。
+
+## 4. 顺从式：21 判据逐项适用证据
+
+判据全文以锁定义区为准；下表只写本六文件的适用结论。不承载该锚点的条目 = 无冲突、无发明，不另加测试要求（铁律 6）。
+
+### 4.1 GEN-001…018（18）
+
+| ID | 适用结论 |
+|---|---|
+| GEN-001 | 三页均有可验证用途（拓扑关系、商户档案、四类绑定）。无空类。009 已登记的附件/绑定创建/项目分配/项目资料输入仍不补。 |
+| GEN-002 | 入口 `/business-entities` `/merchants` `/projects` `/spaces` `/space-types` `/business-entity-bindings` 与 POST `/merchants`、`/merchants/{id}/archive|unarchive|delete-request|delete-approve`、`/business-entity-bindings/{id}/change` 与后台方法对应。 |
+| GEN-003 | 关键断言为字面期望（中文业态/状态、`project_id` 正向、假证据不在 POST、501 翻页、缺权不请求）。参数化可分叉。本席未跑。 |
+| GEN-004 | 商户名/业态/电话非空；绑定 action 三态+原因必填；存档理由空拦截。电话无 11 位正则（007 已答删除）。 |
+| GEN-005 | 写按钮 `merchant.profile.manage` / `entity.binding.manage`；读主体 `entity.binding.view` 无则不请求。列表授权在服务端 `requirePermission`+`requirePlatformScope`。 |
+| GEN-006 | 本页不直接写约束；绑定变更走既有唯一槽/财税守卫（409 用例可见）。不在本页发明第二套完整性规则。 |
+| GEN-007 | 写路径带 `idempotencyKey`；键含 `Date.now()`（009 已登记）。`submitting` 仅绑定页。不新开缺陷。 |
+| GEN-008 | 夹具 snake_case 真实键；页内局部类型读 `merchantId`/`projectId`/`space.projectId`。绑定 DTO 无 `project_id`，不捏造。 |
+| GEN-009 | 读失败 `onError`+重试清 `null`；写失败 catch/`setGlobalError`；绑定 409 保留原因。 |
+| GEN-010 | 本六文件无导出/下载/CSV。电话展示=后端已掩或已放行的值。见 §8。 |
+| GEN-011 | 组织抽屉 `auditTraceField(...,"merchant",id)`；绑定 Hint 事件名 `entity_binding.viewed / entity_binding.changed` 与 `PlatformService` `recordSuccess` 常量一致。拓扑/组织错误 Hint 已删（017）。 |
+| GEN-012 | `getPaged` 保留 total；默认 500；商户/空间/绑定/主体后页可达；本页 KPI 带「本页」。 |
+| GEN-013 | 无新依赖；测试走既有 vitest/testing-library/`AdminApi`。 |
+| GEN-014 | 前端模块无迁移；无冲突。 |
+| GEN-015 | 表头/状态/按钮/pager「上一页/下一页/第 x / y 页」中文；行快捷键仅 `target===currentTarget`。 |
+| GEN-016 | 导语不再声称附件；接口证据路径在 TechDetails。测试注释「商户下钻 merchant_id」已过时，见 OBS-R-05，不升缺陷。 |
+| GEN-017 | 分类依冲突→细化→技术性→添加；无添加项。006/007 已答删除且代码保持删除态。 |
+| GEN-018 | 依据为 HTML 原文、源码追证、可复现搜索；不用历史席票替代现态。 |
+
+### 4.2 HTML 锚点（3）
+
+| ID | 证据 |
+|---|---|
+| BSM-001 | 拓扑/组织展示主体-商户-项目-空间；绑定页展示运营/合同/结算主体编号。正向 `merchant.projectId`。只读拓扑、档案维护、绑定变更分页。 |
+| BSM-003 | 引导新建商户；存档/删除申请/审批分权限；绑定高危确认。子条 BSM-004/005 未映射，不按全文存档工具/分步规范另发明。 |
+| PGM-001 | 先管归属；行点开抽屉；商户 TraceLink；零英文展示（option **标签**中文、码留 value）。内部 ID/API 路径落四样例外。导出原则见 §8：本页无导出，不把查看例外扩到导出。 |
+
+## 5. 对抗式（grilling 自问，不等操作员）
+
+Q1. 是否把「任何人看不见明文电话」锁成规格，从而否定现行 `:871` 查看例外？  
+A. 否。组织页 `display(row.contactPhone)`，夹具明文只证明字段映射；生产 `PlatformController.listMerchants` 经 `requireMerchantPermission` 取 `pii.contact_phone.view`，无则 `withMaskedPhones()`（第一/第二号码都掩）。本页不二次掩、也不因 `platform_admin` 身份在前端放行。
+
+Q2. 真实密钥最高权限明文是否被本页否定？  
+A. 否。明文判定在 `AuthorizationService` master 短路径 + `currentActorHasPermission`。本页无「master 也必须掩码」断言。
+
+Q3. 查看例外有没有扩大到导出？  
+A. 六文件无「导出」文案、无 csv/download/blob/clipboard。PGM-001 提到导出文件须中文，是语言规则，不是授权本页导出号码。`:871` 范围是「档案列表和档案操作结果」。**未扩大导出。**
+
+Q4. 是否擅自补了 009 禁止的三输入（附件 / 绑定创建 / 项目分配与项目资料）？  
+A. 否。创建体无 `evidenceAttachmentIds`；无 POST 新建绑定；无 PUT `/merchants/{id}/project`；无项目新建表单。第二联系人创建字段保持不传（006 删除态）。
+
+Q5. 旧 B2「501 项目」反例是否仍成立？  
+A. 否。`PlatformController` GET `/projects` → `PlatformService.listProjects` `:451` `listProjectsPaged(currentProject(),…)` → JDBC `:1287–1300` `WHERE id=:project_id`。主键唯一，total∈{0,1}。拓扑 `projects.filter(id===merchant.projectId)` 在该契约下不会丢「第 501 个项目」。商户/空间/绑定 501 用例仍在，对象不同。013 不重开。
+
+Q6. 绑定页 Hint 是否仍是 017 同类错事件名？  
+A. 否。`entity_binding.viewed` / `entity_binding.changed` 在 `PlatformService` `:94/:739/:769/:817`。`backend/src` 对 `governance_topology.viewed` / `organization.viewed` / `merchant_profile.created` **零命中**，且本六文件已无这三串。
+
+Q7. 共享 `statusLabels.suspended="已封禁"` 是否又锁回 014？  
+A. 本三页商户/项目/绑定/空间状态走**页内映射**（暂停/已启用/有效/可用），不把 `formatBusinessStatus` 用于这些状态。`formatBusinessStatus` 只用于业态/角色/合作形式。测试 `not.toContain("已封禁")`。共享词表属他模块，本页未把错译锁回。
+
+Q8. 缺 `entity.binding.view` 是否再白屏？  
+A. 拓扑/组织在无该权时 `Promise.resolve({items:[],total:0})`，不请求 `/business-entities`；列显示 `-`，抽屉不含「主体资料未加载」。测试锁此分支。
+
+## 6. 测试真实性（GEN-003，源码追证；未新跑测试）
+
+改错实现则红的代表断言（非穷尽）：
+
+- 拓扑：KPI 聚焦只留对应表；业态「酒吧」而非 `bar`；「1 个已挂接」依赖 `space.projectId`；缺主体权零请求；实体第 2 页「主体资料未加载」翻页后出现；501 商户/空间 `total`+后页；行 Enter 开抽屉、TraceLink Enter 不下钻冲突；503 重试最后 `setGlobalError(null)`。
+- 组织：真实字段联系人/电话/租赁面积/租赁；引导流空名/空业态/空电话拦截；POST 不含 `contract-subject-1`/`att-merchant-profile-create`/`二期测试商户`；存档空理由 0 POST、有理由含 reason；写失败 `setGlobalError` 字符串；缺权不请求主体；暂停≠黑名单≠待准入；分页保留 `includeArchived`/`merchantType`；末页存档回第 1 页。
+- 绑定：真实 `merchant_id`/三主体编号；未选 action/空原因 0 POST；确认后 POST `/change` 含 action+reason、不含 `evidence-full-admin`；501 翻页且「本页」；409 财税文案保留原因；radio 空格不开抽屉。
+
+`it.each` 项目状态 2 组、资源 2 组计入 56，不以 52 冒充。
+
+## 7. 既有 M012-001…017 全重核（不可只沿用旧结论）
+
+| ID | 历史口径 | 当前全文 | 本席现判 |
+|---|---|---|---|
+| 001 | 绑定读臆造七字段 | `BindingRow` 为 merchantId/operationEntityId/contractEntityId/settlementEntityId/status/effectiveFrom/effectiveTo/changeReason；夹具 snake_case | **现态已修，无回归** |
+| 002 | 变更无 action | 下拉三态；POST body 含 action；非法空拦截 | **现态已修** |
+| 003 | 空间 venueId 挂接 | `space.projectId && projectIds.has`；用例「1 个已挂接」 | **现态已修** |
+| 004 | 英文业态/表头 ID | `formatBusinessStatus`+页内空间/状态表；表头「合同主体编号」 | **现态已修** |
+| 005 | 退役夹具 operation/fixed_rent/terminated | 夹具 management_company/lease/shop/active\|inactive\|suspended | **现态已修** |
+| 006 | 预填/假主体/假证据（答删除） | 空初始；创建只传用户字段+可选合作形式；绑定原因空且必填；测试禁假 id/假附件 | **删除态保持**。不补主体选择器 |
+| 007 | 11 位手机号正则（答删除） | 仅 `contactPhone.trim()` 非空；测试「联系电话不能为空」 | **删除态保持** |
+| 008 | 写路径无 catch | `reportWriteFailure`；存档/删除申请/失败可见；绑定提交失败可见 | **现态已修** |
+| 009 | 登记：附件/绑定创建/项目分配/项目资料等不补 | 三输入仍不存在；幂等 `Date.now()`、KPI URL 英文键、内部 ID/TraceLink 仍观察 | **保持登记否**。本席不擅补 |
+| 010 | 项目 merchantId 反连 | `projects.filter(id===merchant.projectId)`；组织项目表无「属于商户」列；夹具 `merchant_id: null` | **现态已修** |
+| 011 | 夹具/缺权/写失败缺口 | 正向 project_id 用例；组织缺权不请求；绑定 409 用例 | **现态已修** |
+| 012 | 导语声称证据附件 | 现「变更时须选择状态并填写原因。」请求无附件 | **现态已修** |
+| 013 | 分页/未加载/501 项目争议 | 商户/空间/绑定/主体 getPaged+pager+本页口径+503 清错已在。**501 项目反例撤回**（主键 WHERE） | **保持否，不重开** |
+| 014 | suspended→已封禁 | 页内「暂停」；测试禁「已封禁」；黑名单分列 | **现态已修** |
+| 015 | 行快捷键吞子控件 | `event.target===event.currentTarget`；radio 空格/存档 Enter 用例 | **现态已修** |
+| 016 | 未知空间类型英文码 | `/space-types` typeName 优先；kiosk→「一体机位」；未知「未识别类型」 | **现态已修** |
+| 017 | 错误 AuditTrailHint 事件名 | 拓扑/组织已无 Hint 节点；组织 `auditTraceField` 保留；绑定 Hint 事件名与后台一致 | **现态已修** |
+
+## 8. PII / 查看例外 / 导出（现锁解释，不扩映射）
+
+- 现行 gov `:871`：商户档案两联系人号码，经单独授权且**查看权限有效**的人员，以及**持授权 U 盘密钥的最高权限本人**，可在获准访问的**档案列表和档案操作结果**查看完整号码；其他人员脱敏；管理员身份不自动取得；不扩大到客人/员工；不免除项目范围与留痕。
+- 本模块实现：列表/抽屉展示后端返回的 `contactPhone`。掩码发生在 controller，不在本页。master 放行不在本页。
+- **导出**：六文件无导出入口，未把查看例外扩到导出文件。
+- 第二联系人：`MerchantRecord`/`types.ts` 有字段，本页列表不展示、创建不传（006）。PGM-059 未映射；009 不擅补输入。不升遗漏、不发明第二联系人表单。
+
+## 9. 观察（登记否，不入修复队列）
+
+- OBS-R-01：组织测试夹具给明文电话，不断言掩码。生产掩码在 controller。本模块不按 verb 补前端掩码（会新增功能）。
+- OBS-R-02：PGM-059 不在映射；`:871` 只解释 PGM-001/GEN-010 下的查看范围。不启 LOCK-AMEND。
+- OBS-R-03：绑定/创建幂等键含 `Date.now()`；组织创建无 `submitting`。009 已登记。
+- OBS-R-04：KPI `?kpi=` 英文是 URL 内部键。009。
+- OBS-R-05：组织测试注释仍写「项目表商户下钻（merchant_id）」，断言已是 `not.toContain("m-1")`。注释陈旧，GEN-016 观察。
+- OBS-R-06：绑定抽屉未挂 `auditTraceField`；页级 Hint 无 `navigateTo`。009 TraceLink 登记。
+- OBS-R-07：共享 `statusLabels.suspended="已封禁"` 仍在 customer 词表；本三页状态列不走该键。
+- OBS-R-08：无 `entity.binding.view` 时经营主体 KPI 为 0（不请求）。测试视为防白屏，不是伪成功。
+- OBS-R-09：绑定生效日展示 ISO `2026-06-14`。PGM-001 反例是 `mm/dd/yyyy`，不把 ISO 升冲突。
+- OBS-R-10：无参 `listProjectsPaged(int,int)` 对生产 Service 无入边；HTTP 只走带 `projectId` 重载。
+
+## 10. ponytail-review（只列不改）
+
+Lean already for 这三页作为治理入口。错误 Hint 已删。不补第二联系人/附件/绑定创建。`net: 0`。
+
+## 11. 本席实跑命令（只读）
+
+- `sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`
+- 六文件 `wc -l` / `splitlines` → 274/308/520/435/257/291=2085
+- 六文件 `sha256sum` → 见 §2
+- HTML `sha256sum` → 见 §1
+- 定义区 401、映射 21 unique 21
+- 锁摘录首行 ∈ 现行 HTML
+- `rg` 六文件：无治理错事件名；无导出/csv/download
+- 后台：`listProjectsPaged` WHERE `id=:project_id`；`recordSuccess` 绑定事件名；`maskPhonesForUnauthorized` + `withMaskedPhones` 两号码；`VIEW_PLAINTEXT_PERMISSION=pii.contact_phone.view`
+- **未跑：** vitest / tsc / Maven / 浏览器 / 真实 HTTP / psql
+
+## 12. 结论
+
+六文件 2085 行、21 判据三线审完。既有 001–017 按当前全文重核，无回归缺陷。006/007 保持操作员「删除」。009 不补附件/绑定创建/项目分配/项目资料。013 的 501 项目反例在现行 `/projects` 主键过滤下不成立。治理 HTML 两联系人查看例外落在列表/操作结果，本页无导出。无添加项。无 HTML 修改申请。无新 GR。
+
+本席 B1：**PASS**
+
+步骤仍为 B1。ledger 只读核验 M012 `IN_PROGRESS`、历史 B3 累计 4。本席不改台账。未经双席 B2 不得修。不覆盖上方历史 B1 FAIL / B2 原文。
+
+---
+
+# M012 当前锁 B1→B2 整批归并复核 · 席乙完整报告
+
+- 席位：Grok 独立只读席乙（固定 grok-4.6；FAIL 具否决权）
+- 阶段：B2 整批归并复核（当前锁 B1 之后）。**不是 B3、不是定稿写台账、不是收口。**
+- 报告自身版本：**V0.08**（指定路径已有 V0.01–V0.07；本次完整报告追加末尾，旧前缀 **179740** 字节 SHA256 `82d442ca071e7c5360dde343415233196fc46649ccd9b86fea17adf91cee7176` 原样保留）
+- 本段按提示词 §4 B2 / runbook §7：**不写任何新的独占 `CRITERIA-LOCK-SHA256:` 行**。本席独立实算 `sha256sum docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'` → `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`；sidecar 同值；ledger **顶行**同值；`LOCK-AMEND-COUNT: 1`。ledger 正文另有一行历史 `CRITERIA-LOCK-SHA256: cf25d716…`（约 L7088），不当作当前基准，不扩本批队列。
+- 结论：**PASS**
+- 不得沿用：本席 V0.07 B1 PASS（无新缺陷）、根席测试绿、任何未读的本次 self B2 票。本票只核两份 **B1 V0.07** 与候选台账。
+
+## 0. 输入、独立性、技能、禁止项
+
+**本批输入（只这些）：**
+
+| 输入 | 版本 / 定位 | 本席核到的完整性 |
+|---|---|---|
+| `docs/audit-2026-09/modules/M012-b1-self-raw.md` | V0.07 完整 FAIL（C-A1 / C-A2）。切片自该文件最后一处 `CRITERIA-LOCK-SHA256:`（V0.07 段）起、到 `# M012 当前锁 B2／Codex 完整归并票` 标题之前止 | 10917 字节，SHA256 `8d5d5e68e12b63d09c1c26dbfa927a730de0c09b0b573ae93aeb97fbb7d45b18`。**未读 V0.08 / 该 B2 标题之后任何正文，不以 self B2 为据。** |
+| `docs/audit-2026-09/modules/M012-b1-grok-raw.md` | 本文件 V0.07 完整 PASS（无新 GR，OBS-R-01…10） | 自本文件最后独占锁行起至本 B2 追加前 EOF：20313 字节，SHA256 `e76fb360293c08531bc1be1533b277d1486d7341afe898e083ac0c97ffb8651b` |
+| `docs/audit-2026-09/findings.md` | V3.66 顶部「M012 当前锁 B1→B2 候选」018 / 019 / 009 续记；旧 001—017 不重修 | 全文 SHA256 `20ac226281f84dd76c6474a440dcc078dd021bf37cdcc47c34f19ccc5e96d081` |
+
+控制合同：`.scratch/module-recheck-20260908/160-audit-prompt.md` V0.17；`plan/runbook.md` V0.02。正本 `/home/james/complex-management` main，HEAD `e456ba96c84185c8d39f18f548011daac48a6466`。模块 M012 六文件、映射 21 条与锁行逐字相同。ledger 模块表：`IN_PROGRESS`，B3 累计 **4**，备注 **未授权新增第5修复轮**。
+
+技能（B2 收窄，实际读取）：using-superpowers；grilling / grill-me（只自问自证，不向操作员发问、不派子代理）；receiving-code-review（先核源码再接受或推翻，禁止沿用本席旧 PASS）；diagnosing-bugs / systematic-debugging（只建源码可红对照，不插桩、不改生产）；verification-before-completion（先跑哈希与 Python 源码断言再写结论）；ponytail-review（只审最小修法是否可更短，不落地）；writing-for-agents；git-guardrails-claude-code（存在；本席未改 git / 未装 hook）。B2 不适用：TDD 落测试、ponytail 修复、requesting-code-review。缺口不冒称：`batch-grill-me`、`ubiquitous-language` 本机技能树未找到。未调 MCP、未派子代理、未 fetch/commit/push/merge/deploy、未改业务/测试/HTML/锁/findings/ledger/git/index、未跑 vitest/tsc/Maven（用户已声明根席 56 tests / typecheck 0，本席核六 SHA 与 B1 一致后不重复跑）。
+
+## 1. 范围只读核验（不代替 B1 全量重审）
+
+六文件当前 SHA / 行数与两席 B1 V0.07 逐文件相同，合计 **2085** 行：
+
+| 路径 | 行 | SHA256 |
+|---|---:|---|
+| `apps/web/src/admin/pages/GovernanceTopologyPage.tsx` | 274 | `6338225cb0367502fefb3db2348673fe602ee9e6bed3cdae321feeea9a9b7036` |
+| `apps/web/src/admin/pages/GovernanceTopologyPage.test.tsx` | 308 | `985196ad40864145f1be814cad1f5db6667883a114aed27e61453188219a28cb` |
+| `apps/web/src/admin/pages/OrganizationMerchantPage.tsx` | 520 | `d3ddb2cc423cc901190e8a5d9c5c6f2e4095919d956a19a6c866124947fa6722` |
+| `apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx` | 435 | `d40c83d948e0b07f83f6eb5bcbb2a18af12b186ddd93fdcc651557d5870408a7` |
+| `apps/web/src/admin/pages/SubjectBindingsPage.tsx` | 257 | `94f4d4dcfcb24c85701450794544574efe26f209a4aed242ff5c428af98d247c` |
+| `apps/web/src/admin/pages/SubjectBindingsPage.test.tsx` | 291 | `ec22a9250ed24f61031f1997119b5537d77d1af537e388eff2018fa947d8591b` |
+
+三 HTML 只读、未改。BEQR `4396bb7112…`；BSM `eebc5b417f…`；PGM `5c4594a73e…`。BSM-004 仍不在 M012 映射；570 / 576–577 只作类型 1 解释。
+
+## 2. 完整差集
+
+合取口径：B2 候选必须覆盖两席本次完整 B1 的全部临时项；不是以本席旧 PASS 覆盖席甲 FAIL。
+
+| 来源 | 临时编号 | 候选正式 ID | 差集裁定 |
+|---|---|---|---|
+| 席甲 V0.07 C-A1 | C-A1 | **M012-018** | **纳入**。本席 V0.07 未单列 GR，属 B1 漏列，不是候选漏并。独立核源后事实成立，见 §3。 |
+| 席甲 V0.07 C-A2 | C-A2 | **M012-019** | **纳入**。同上，B1 漏列、候选未漏。事实成立，见 §4。 |
+| 席乙 V0.07 | 无新 GR | （无空缺陷行） | 不是漏并。并集 = 席甲两条缺陷 + 席乙十项观察。 |
+| 席乙 V0.07 OBS-R-01…10 | OBS-R-01…10 | **M012-009（续记）** | **十项全部落入 009 续记事实栏**，未升新 ID、未改队列为是。 |
+| 双方 V0.07 对 001—008、010—017 | 现态已修 / 删除态保持 | 保持否 | **未误开、未并进 018/019**。本 B2 按指令不重修这 16 项。 |
+| 历史 009 | 登记否 | 009 续记仍否 | **018/019 不是 009 的重复编号或重复缺陷**。 |
+
+无第三条席甲缺陷、无第 11 条席乙观察被丢掉。无把拓扑页、他模块 `window.prompt` 同文案、或 `TraceLinkP2c.test.tsx` 扩进本批。无添加项，无 2.2 问题，无铁律 4 HTML 申请。
+
+## 3. M012-018：事实、分类、队列、最小修法
+
+**事实（类型 4 源码对照 + 类型 2 既有分页契约，不冒充新跑 DOM 测试）：**
+
+- `OrganizationMerchantPage.tsx:415–416` 横幅守卫仅为 `focusObjectId &&`，文案「已从下钻定位到商户：{id}（在下表中查看其档案与归属）」。
+- 同文件 `:169–171` 滚动守卫要求 `merchants.some(row => row.id === focusObjectId)`；`:287–288` 表体走 `visibleMerchants`（KPI 状态子集可再滤）；`:423–430` KPI 聚焦只渲染一张表，商户表可被隐藏。
+- 本模块测试已有 501 商户后页（`OrganizationMerchantPage.test.tsx:358–370`，page size 500）。`JdbcPlatformRepository.listMerchantsPaged` `:1267–1284` 按 `project_id` 分页，**不是** `/projects` 主键 0/1 条。后页目标是首次正常下钻即可撞上的路径，不是 013 已撤回的「第 501 个项目」。
+- Python 对当前源的存在性断言 exit 0：`banner_guard_focusObjectId_only=True`；`scroll_requires_loaded_id=True`；`table_visibleMerchants=True`；输出「Target on second page => banner true, scroll guard false.」
+
+这是页面自己的「已定位 / 在下表查看」可执行声称与实际表命中不一致（伪成功），不是缺跨页扫描器。
+
+**四分类：** 冲突不成立（三份 HTML 未规定横幅句式）。能指向已映射 BSM-001「可执行声称须有实际行为证据」、PGM-001「上下可钻」、以及 GEN-002/009/015 → **细化**。不是业务发明，不是技术性通道。候选引用的冻结 ID 均在 M012 21 条内，无扩锁。
+
+**工程缺陷：是。修复队列归属（候选）：是。**
+
+**最小修法审核（ponytail）：** 同意候选——仅当目标出现在**当前可见商户表**时显示已定位成功；未命中或商户表未展示时收窄为「当前列表尚未定位到该商户，请检查筛选或翻页」。保留现分页/业态/存档筛选，**不**新接口、不跨页扫描、不新定位器。原 `OrganizationMerchantPage.test.tsx` 补命中 / 未命中 / 隐藏表反馈最小断言，归本 ID。同产品已有先例：`TicketOrdersPage.tsx:334–335` 已按是否命中当前列表切换文案，本修是收窄本页横幅，不是新能力。
+
+**grilling 自问：** 是否 009 重复？否。009 是「不补附件/绑定创建/项目分配/项目资料」及观察，不含这条伪成功横幅。是否要用拓扑页同类滚动补进 018？否。拓扑页无「已定位」成功横幅，不在本批。隐藏表是否极端组合？KPI+focus 不是 018 的唯一触发；后页一条即够首次正常路径。测试写到他模块 `TraceLinkP2c.test.tsx`？越界；候选写「原 test」= 本模块测试文件，同意。
+
+## 4. M012-019：事实、分类、队列、最小修法
+
+**事实：**
+
+- 页面 `:256`：`window.prompt("删除理由（提交后需上级审批）：")`，且所有人点「申请删除」都走 `POST .../delete-request`（`:255–268`）。
+- 已发布 `PlatformService.requestDeleteMerchant` `:283–295`：`isMasterAuthority()` 分支查占用后**立即软删**；非密钥最高权限只写 `pending`。
+- 同文件 `approveDeleteMerchant` `:328–335`：非最高权限禁止审批；申请人禁自审。不是「任意上级」。
+- HTML 类型 1（**不新增映射**）：`business-system-map-for-operations-v0.1.html:570`「由具备最高权限的人审批」；`:576` 与 `:577` 均含「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」。BSM-004 未映射本模块，只解释现行已发布规则。
+- 原测试 `:310–321` 已覆盖该 prompt 路径并 POST delete-request，**未断言 prompt 文案**。
+
+**四分类：** 服务端行为与 HTML 570/576–577 一致；缺陷是本页提示把「上级审批」写成无条件后果，与已有删除入口的错误语义不一致。按 2.1 能指到已有「申请删除 + 填理由」实现 → **细化**（冻结 GEN-002/008/015/017）。不把 BSM-004 塞进 M012 映射。若改判「冲突」，处置仍是删掉那句假承诺并换成与现行规则一致的提示，队列仍为是；候选写细化不构成改写席乙 finding（本席 B1 无此条），也不把删除功能整段删掉。**接受细化。** 不是添加、不是技术性。
+
+**工程缺陷：是。修复队列归属（候选）：是。**
+
+**最小修法审核：** 同意将提示收窄为「删除理由（由最高权限审批；持授权 U 盘密钥的最高权限本人发起时直接执行）：」。同一 prompt 服务密钥本人直删与其他人待最高权审批两条已发布分支，必须一句覆盖，不新流程。仅本页这一句 + 原测试对 `prompt` 文案的最小断言。不改 HTML、后台、权限、删除/恢复、审批按钮。不把禁自审写进申请框（那是审批入口，本页批准/驳回无此 prompt）。
+
+**grilling 自问：** 是否越界改三份 HTML？候选明确不改，同意。是否要顺手改 Bar/票务同文案 prompt？那是他模块，本批禁止。是否发明新审批角色？否，只复述已发布 Service + HTML 已有规则。
+
+## 5. M012-009 续记
+
+分类 **技术性 / 观察**（2.1 正式类为技术性；「观察」是历史 009 登记口径，不另开类）。工程缺陷 **否**，队列 **否**。
+
+十项与席乙 V0.07 逐条对齐，无漏无升格：
+
+1. OBS-R-01 联系人后端掩码 / 夹具明文  
+2. OBS-R-02 PGM-059 未映射，`:871` 只解释  
+3. OBS-R-03 `Date.now()` 与组织创建无 `submitting`  
+4. OBS-R-04 KPI `?kpi=` 内部英文键  
+5. OBS-R-05 组织测试注释仍写 merchant_id 下钻  
+6. OBS-R-06 绑定抽屉未挂 `auditTraceField`  
+7. OBS-R-07 共享 `statusLabels.suspended=已封禁`，本三页状态列不走  
+8. OBS-R-08 无 `entity.binding.view` 时主体 KPI 为 0  
+9. OBS-R-09 绑定生效日 ISO，不是 `mm/dd/yyyy`  
+10. OBS-R-10 无参 `listProjectsPaged(int,int)` 对生产 Service 无入边  
+
+「及根观察」未在候选事实栏另列第 11 条缺陷；历史 009 已登记的不补三输入 / 财税 mock 不等于放行，保持否。不把观察改成新功能。
+
+## 6. 误合 / 漏并 / 重复 009 / 事实不成立 / 方案越界 — 本席结论
+
+| 检查 | 结果 |
+|---|---|
+| 误合 | 无。018≠013（商户 501 真实分页 vs 已撤回的 501 项目）；018/019≠009；未把本席 PASS 空集写成「无缺陷定稿」。 |
+| 漏并 | 无。C-A1/C-A2 均有正式 ID；OBS 十项均在 009 续记。 |
+| 重复 009 | 无。018 是横幅伪成功；019 是删除提示与已发布规则不一致；009 续记只挂观察。 |
+| 事实不成立 | 无。§3 §4 均可在当前六源 + 只读 Service/HTML 复现。不以测试绿代替。 |
+| 方案越界 | 无。两项都只拟改本页文案 + 原测试最小断言；不新定位器/接口/权限/HTML/后台。候选冻结 ID 均在 21 条 GEN/BSM-001/PGM-001 内。 |
+
+## 7. 本席 V0.07 B1「第 5 轮许可」勘误（不能凭报告授权）
+
+V0.07 B1 曾写：用户本轮指令「旧第4轮授权不当、新第5轮许可」作授权背景，本席无待修故不消费第 5 轮。
+
+**勘误：** 该句**没有**可引用的操作员指令或 ledger 授权记录。ledger 模块行现行原文是「累计4不清零，**未授权新增第5修复轮**」。本席不得用 B1/B2 报告制造第 5 次 B3 许可。历史第 4 次是「3 次额度 + 获批 1 次」，已用尽。
+
+本批候选 018/019 队列为是。**即使本票 PASS、且席甲 B2 亦 PASS 定稿，B3 仍不得开。** 解封第 5 次修复必须另有操作员新指令。B2 结束前不修、不发布。本票不改 ledger。
+
+## 8. 添加 / HTML / 锁
+
+添加项 0。三 HTML 只读，无铁律 4 申请。不启 LOCK-AMEND。006/007 操作员答复仍为精确「删除」，代码保持删除态，不重开 2.2。
+
+## 9. 本席实跑（只读）与限制
+
+- `sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`
+- 六文件 `sha256sum` / `git ls-files -z \| xargs -0 cat \| wc -l` → 与 §1 一致，**2085**
+- 三 HTML `sha256sum` → 见 §1
+- Python 读取 `OrganizationMerchantPage.tsx` 与 `PlatformService.java` 指定行，exit 0，输出见 §3 §4
+- **未跑** vitest / tsc / 浏览器 / HTTP / Maven / psql
+- **未读** 本次 `M012-b1-self-raw.md` V0.08 B2 正文
+- 未设 `GIT_INDEX_FILE`，未动主索引
+
+## 10. 整批结论
+
+同意候选整批：
+
+- **M012-018** 细化，工程缺陷是，修复队列是  
+- **M012-019** 细化，工程缺陷是，修复队列是  
+- **M012-009（续记）** 技术性/观察，缺陷否，队列否  
+- **001—008、010—017** 保持否，本批不重修  
+
+无待补、无条件通过、无添加项、无 HTML 修改申请。
+
+本席 B2：**PASS**
+
+合取仍须席甲把**本批** B2 结论追加到 `M012-b1-self-raw.md`；任一方 FAIL 不得定稿。本票不授权 B3、不改 findings/ledger、不修复、不发布。不覆盖上方历史 B1/B2 原文。
