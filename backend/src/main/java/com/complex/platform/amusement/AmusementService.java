@@ -359,7 +359,7 @@ public class AmusementService {
 
     /**
      * 恢复（取消存档 / 墓碑复活）：清存档标记 + 删除轴回退 none。
-     * 已被审批通过删除（墓碑）的绑定恢复须持审批权 amusement.project_entitlement.approve（只授 role_platform_admin）。
+     * 已被审批通过删除（墓碑）的绑定只能由最高权限本人恢复（BSM 第 570 行）。
      */
     @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.manage")
     @Transactional
@@ -377,14 +377,17 @@ public class AmusementService {
                 "amusement.project_entitlement.manage",
                 "amusement_project_entitlement",
                 () -> {
-                    checkProjectOwnership(id);
+                    boolean master = isMasterActor();
+                    if (!master) {
+                        checkProjectOwnership(id);
+                    }
                     AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
                     if (existing.active()) {
                         throw ApiException.conflict("PROJECT_ENTITLEMENT_NOT_ARCHIVED", "该权益绑定处于生效中，无需恢复");
                     }
-                    if ("approved".equals(existing.deleteStatus())) {
-                        // 墓碑复活=撤销一次最高权限批准的删除，按同级最高权限把守。
-                        authorizationService.requirePermission("amusement.project_entitlement.approve");
+                    if ("approved".equals(existing.deleteStatus()) && !master) {
+                        // 墓碑复活=撤销一次最高权限批准的删除，只认最高权限本人（BSM 第 570 行）。
+                        throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "已删除的项目权益绑定须由最高权限本人恢复");
                     }
                     repository.restoreProjectEntitlement(id, type);
                     return requireProjectEntitlement(id, type);
@@ -410,7 +413,10 @@ public class AmusementService {
                 "amusement.project_entitlement.manage",
                 "amusement_project_entitlement",
                 () -> {
-                    checkProjectOwnership(id);
+                    boolean master = isMasterActor();
+                    if (!master) {
+                        checkProjectOwnership(id);
+                    }
                     AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
                     if (existing.archivedAt() == null) {
                         throw ApiException.badRequest("PROJECT_ENTITLEMENT_NOT_ARCHIVED", "请先存档再申请删除");
@@ -419,6 +425,10 @@ public class AmusementService {
                         throw ApiException.conflict("PROJECT_ENTITLEMENT_DELETE_ALREADY_PENDING", "该权益绑定已有待审批的删除申请");
                     }
                     repository.requestDeleteProjectEntitlement(id, type, deleteReason, currentActorId());
+                    if (master) {
+                        // BSM 第 570 行：持授权 U 盘密钥的最高权限本人发起的删除不需要经过任何审批。
+                        repository.decideDeleteProjectEntitlement(id, type, true);
+                    }
                     return requireProjectEntitlement(id, type);
                 }
         );
@@ -426,7 +436,7 @@ public class AmusementService {
 
     /**
      * 审批删除申请：approved → delete_status='approved'（墓碑，行留库、全读取路径过滤、可恢复，不物理删）；
-     * rejected → 回 none。权限 amusement.project_entitlement.approve（只授 role_platform_admin），且申请人禁自审。
+     * rejected → 回 none。审批人只认最高权限本人（BSM 第 570 行），且申请人禁自审。
      */
     @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.approve")
     @Transactional
@@ -438,6 +448,9 @@ public class AmusementService {
         if (!"approved".equals(verdict) && !"rejected".equals(verdict)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
+        if (!isMasterActor()) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "项目权益绑定删除须由最高权限本人批准");
+        }
         return executeWrite(
                 "decideDeleteAmusementProjectEntitlement:" + id + ":" + type,
                 idempotencyKey,
@@ -448,7 +461,6 @@ public class AmusementService {
                 "amusement.project_entitlement.approve",
                 "amusement_project_entitlement",
                 () -> {
-                    checkProjectOwnership(id);
                     AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
                     if (!"pending".equals(existing.deleteStatus())) {
                         throw ApiException.badRequest("PROJECT_ENTITLEMENT_DELETE_NOT_PENDING", "该权益绑定没有待审批的删除申请");
@@ -462,6 +474,11 @@ public class AmusementService {
                     return requireProjectEntitlement(id, type);
                 }
         );
+    }
+
+    /** BSM 第 570 行：配置数据删除审批与墓碑恢复只认持授权 U 盘密钥的最高权限本人；这些单据级路径对其逐笔放行（经 executeWrite 留痕）。 */
+    private boolean isMasterActor() {
+        return authorizationService.isMasterAuthority(authorizationService.currentActor());
     }
 
     private AmusementProjectEntitlementRecord requireProjectEntitlement(String projectId, String entitlementType) {

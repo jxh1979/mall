@@ -108,12 +108,21 @@ public class FacilityEquipmentService {
         repository.updateEquipment(updated);
         auditEventService.recordSuccess("facility.equipment_delete_requested", PERM, "facility_equipment", id,
                 null, null, Map.of());
+        if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            // BSM 第 577 行：持授权 U 盘密钥的最高权限本人发起的删除不需要经过任何审批（占用检查照走）。
+            approveDelete(id, new com.complex.platform.facility.dto.FacilityEquipmentDeleteApprovalRequest("approved", null));
+            return updated.withDelete("approved", updated.deleteRequestedBy(), now, reason, now);
+        }
         return updated;
     }
 
     @Transactional
     public com.complex.platform.facility.dto.FacilityEquipmentDeleteDecision approveDelete(String id,
             com.complex.platform.facility.dto.FacilityEquipmentDeleteApprovalRequest request) {
+        // BSM 第 577 行：设施设备删除一律须由具备最高权限的人审批通过后执行，不设例外。
+        if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "设施设备删除须由最高权限本人批准");
+        }
         authorizationService.requirePermission("facility.equipment.approve");
         FacilityEquipmentRecord cur = load(id);
         if (!"pending".equals(cur.deleteStatus())) {
@@ -124,10 +133,7 @@ public class FacilityEquipmentService {
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
-        String actor = archiveActorId();
-        if (actor != null && actor.equals(cur.deleteRequestedBy())) {
-            throw ApiException.forbidden("FACILITY_EQUIPMENT_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
-        }
+        // 审批人只能是最高权限本人；最高权限发起的删除直接生效、不经审批，普通申请人无从审批自己的申请（BSM 第 577 行）。
         if ("rejected".equals(decision)) {
             repository.updateEquipment(cur.withDelete("none", null, null, null, Instant.now()));
             auditEventService.recordSuccess("facility.equipment_delete_rejected", "facility.equipment.approve",

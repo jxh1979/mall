@@ -72,6 +72,7 @@ public final class FieldLabels {
         p("org_category", "组织类别");
         p("entity_name", "主体名称");
         p("entity_role", "主体角色");
+        p("business_entity_id", "经营主体");
         p("subject_id", "主体");
         p("subject_type", "主体类型");
         p("partner_id", "合作方");

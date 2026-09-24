@@ -107,4 +107,15 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("最高权限");
     }
+
+    @Test
+    void masterRequestedDeletionTakesEffectDirectly() {
+        TestSecurityActors.asPlatformAdmin();
+        seed("staff_master", "user_master_1");
+        service.archiveProfile("staff_master", true, "测试存档理由");
+        StaffTestActors.master();
+        StaffProfileRecord deleted = service.requestDeleteProfile("staff_master", new StaffProfileDeleteRequest("最高权限直接删除"));
+        assertThat(deleted.deleteStatus()).isEqualTo("approved");
+        assertThat(repository.findProfileById("staff_master")).isEmpty();
+    }
 }

@@ -394,7 +394,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 INSERT INTO space_type_delete_requests (id, space_type_id, reason, requested_by, requested_at, status)
                 VALUES (:id, :space_type_id, :reason, :requested_by, :requested_at, 'pending')
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("id", "stdr_" + spaceTypeId + "_" + java.time.Instant.now().toEpochMilli())
+                .addValue("id", "stdr_" + java.util.UUID.randomUUID())
                 .addValue("space_type_id", spaceTypeId)
                 .addValue("reason", reason)
                 .addValue("requested_by", requestedBy)
