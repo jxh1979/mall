@@ -199,8 +199,10 @@ public class ProductionAuthService implements SessionIssuer {
             if (!session.accessTokenHash().equals(sha256Hex(currentAccessToken))) {
                 throw ApiException.unauthorized("SESSION_MISMATCH", "登录凭证与当前会话不匹配，请重新登录");
             }
-            requireText(request.deviceId(), "device_id");
-            if (!request.deviceId().equals(session.deviceId())) {
+            // XM-D029-006：登录时绑定了设备号的会话，刷新须带同一设备号（缺或错都拒）；未绑定设备（网页，空白或哨兵 unknown）照常续期；
+            // 提供了设备号就须与会话一致。
+            boolean deviceBound = !isBlank(session.deviceId()) && !"unknown".equals(session.deviceId());
+            if ((deviceBound || !isBlank(request.deviceId())) && !java.util.Objects.equals(request.deviceId(), session.deviceId())) {
                 throw ApiException.unauthorized("SESSION_MISMATCH", "设备与当前会话不匹配，请重新登录");
             }
             if (SessionIssuer.MASTER_USER_ID.equals(session.userId())) {

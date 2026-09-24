@@ -202,7 +202,7 @@ public class SupervisorReviewService {
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule =
                             supervisorReviewRepository.findSupervisorReviewSchedule(id);
                     if (requiresBeneficiary(pending.actionType()) && schedule.map(s -> !textPresent(s.beneficiaryId())).orElse(true)) {
-                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "授权事项必须登记直接受益人（被授权人）");
                     }
                     // PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」。
                     if (schedule.map(s -> reviewerId != null && reviewerId.equals(s.beneficiaryId())).orElse(false)) {
@@ -384,9 +384,10 @@ public class SupervisorReviewService {
                         "SUPERVISOR_ROLE_NOT_AUTHORIZED",
                         "复核人不具备该复核要求的审批角色");
             }
-            // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（仅 USB 最高权限可逐笔越权）。
+            // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（平台管理员越权，D-032；USB 最高权限逐笔越权）。
             Optional<String> initiatorMerchant = authorizationService.merchantIdOf(pending.initiatedBy());
             if (initiatorMerchant.isPresent()
+                    && !authorizationService.isPlatformAdmin(authorizationService.currentActor())
                     && !authorizationService.isMasterAuthority(authorizationService.currentActor())) {
                 Optional<String> reviewerMerchant = authorizationService.merchantIdOf(reviewerId);
                 if (reviewerMerchant.isEmpty() || !reviewerMerchant.get().equals(initiatorMerchant.get())) {
@@ -618,22 +619,26 @@ public class SupervisorReviewService {
         return findPolicy(actionType);
     }
 
+    /** XM-D029-005（PGM-041「持股分红……由最高权限审批」；其余高危授权按可配政策与指定最终审批人的审批链）：只有分红类升最高权限档。 */
     private boolean requiresTopAuthorityGrant(String actionType, Long amountCent) {
         String type = actionType == null ? "" : actionType;
-        return type.endsWith(".money") || type.contains("debit") || type.contains("deduction")
-                || type.contains("dividend") || type.contains("authorization");
+        return type.contains("dividend");
     }
 
+    /**
+     * XM-D029-003（治理地图第 529 行「申请人与直接受益人不得审批」）：只对授权类强制登记直接受益人——受益人是被授权的员工账号，
+     * 与审批人、转发目标同一编号体系，比较真实生效。免单、退款等准入路径的收款人是客人或往来方，与员工账号不同编号体系，
+     * 不在此强制（缺员工与客人／往来方的身份关联，另登记 XM）。
+     */
     private boolean requiresBeneficiary(String actionType) {
         String type = actionType == null ? "" : actionType;
-        return type.contains("grant") || type.contains("authorization") || type.contains("refund")
-                || type.contains("waiver") || type.contains("debit") || type.contains("deduction")
-                || type.endsWith(".money") || type.equals("ar_ap_adjustment");
+        return type.contains("grant") || type.contains("authorization")
+                || type.equals("access.grant_request.money") || type.equals("access.scope_change.money");
     }
 
     private void requireBeneficiaryIfNeeded(String actionType, String beneficiaryId) {
         if (requiresBeneficiary(actionType) && !textPresent(beneficiaryId)) {
-            throw ApiException.badRequest("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+            throw ApiException.badRequest("BENEFICIARY_REQUIRED", "授权事项必须登记直接受益人（被授权人）");
         }
     }
 
@@ -788,7 +793,7 @@ public class SupervisorReviewService {
                     String actorId = authorizationService.currentActor().id();
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule = supervisorReviewRepository.findSupervisorReviewSchedule(id);
                     if (requiresBeneficiary(pending.actionType()) && schedule.map(s -> !textPresent(s.beneficiaryId())).orElse(true)) {
-                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "退款、免单、授权与资金事项必须登记直接受益人");
+                        throw ApiException.forbidden("BENEFICIARY_REQUIRED", "授权事项必须登记直接受益人（被授权人）");
                     }
                     List<ApprovalChainNode> nodes = supervisorReviewRepository.listChainNodes(id);
                     if (nodes.isEmpty()) {
@@ -880,19 +885,19 @@ public class SupervisorReviewService {
 
     /**
      * M007-R6-02（PGM-1.10.1「所有业务数据默认按项目隔离……不提供关闭开关」、PGM-1.7.1「④看不到别的商户和别的项目的数据」）：
-     * 待复核清单按当前操作人范围过滤——非密钥主体只看到发起人属本项目（有商户隔离键时同商户）的单据，或自己是当前节点审批人 / 被转发人
-     * 的单据；持密钥最高权限跨范围查看留痕（红线④逐笔开放）。
+     * 待复核清单按当前操作人范围过滤——平台管理员跨范围查看留痕（D-032）；其余主体只看到发起人属本项目（有商户隔离键时同商户）的单据，
+     * 或自己是当前节点审批人 / 被转发人 / 发起人的单据。持密钥最高权限也按此过滤，不整表（红线④逐笔开放：按编号读取见 requireVisibleReview）。
      */
     public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
         AccessActor actor = authorizationService.currentActor();
         List<SupervisorReviewRepository.PendingReview> all = supervisorReviewRepository.listPendingSupervisorReviews(limit);
         List<SupervisorReviewRepository.PendingReview> items;
-        if (authorizationService.isMasterAuthority(actor)) {
+        if (authorizationService.isPlatformAdmin(actor)) {
             items = all;
             auditEventService.recordSuccess("governance.supervisor_review.pending_listed_cross_scope", VIEW_PERMISSION, "supervisor_review", "pending", null, null,
                     Map.of("actor_id", actor.id(), "count", items.size()));
         } else {
-            String projectId = authorizationService.requireProjectScope(actor);
+            String projectId = scopeProjectOf(actor);
             String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
             // ponytail: filters the <= limit rows already fetched; move the scope join into the query if pending volume grows
             items = all.stream().filter(item -> visibleTo(actor, projectId, merchantId, item)).toList();
@@ -921,16 +926,30 @@ public class SupervisorReviewService {
 
     private void requireVisibleReview(SupervisorReviewDecisionRecord record) {
         AccessActor actor = authorizationService.currentActor();
-        if (authorizationService.isMasterAuthority(actor)) {
+        if (authorizationService.isPlatformAdmin(actor)) {
             return;
         }
-        String projectId = authorizationService.requireProjectScope(actor);
+        String projectId = scopeProjectOf(actor);
         String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
         SupervisorReviewRepository.PendingReview item = new SupervisorReviewRepository.PendingReview(
                 record, supervisorReviewRepository.findSupervisorReviewSchedule(record.reviewId()).orElse(null));
         if (!visibleTo(actor, projectId, merchantId, item)) {
+            if (authorizationService.isMasterAuthority(actor)) {
+                // XM-D029-002（红线④「持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕」）：按编号逐笔放行并留痕。
+                auditEventService.recordSuccess("governance.supervisor_review.viewed_cross_scope", VIEW_PERMISSION, "supervisor_review",
+                        record.reviewId(), null, null, Map.of("actor_id", actor.id(), "review_id", record.reviewId()));
+                return;
+            }
             throw ApiException.forbidden("SUPERVISOR_REVIEW_SCOPE_FORBIDDEN", "看不到别的商户或别的项目的复核单");
         }
+    }
+
+    /** 可见范围的项目：最高权限可无项目号（只见本人为当前节点、被转发人或发起人的单），其余主体无项目号即拒。 */
+    private String scopeProjectOf(AccessActor actor) {
+        if (authorizationService.isMasterAuthority(actor)) {
+            return actor.organizationId() == null ? "" : actor.organizationId().trim();
+        }
+        return authorizationService.requireProjectScope(actor);
     }
 
     /**

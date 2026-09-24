@@ -89,7 +89,9 @@ public class PlatformService {
 
     // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 默认 500 保留既有前端一次拉取(下拉源)契约。
     public PageResponse<BusinessEntityRecord> listBusinessEntities(int page, int size) {
-        PageResponse<BusinessEntityRecord> result = repository.listBusinessEntitiesPaged(currentProject(), page, size);
+        PageResponse<BusinessEntityRecord> result = platformWide()
+                ? repository.listBusinessEntitiesPaged(page, size)
+                : repository.listBusinessEntitiesPaged(currentProject(), page, size);
         auditEventService.recordSuccess(
                 "entity_binding.viewed",
                 "entity.binding.view",
@@ -147,8 +149,11 @@ public class PlatformService {
             throw ApiException.badRequest("MERCHANT_BUSINESS_FORMAT_INVALID",
                     "商户业态必须为 酒吧/餐饮/零售/游乐/传媒/其他 之一");
         }
-        String projectId = currentProject();
-        PageResponse<MerchantRecord> result = repository.listMerchantsPaged(projectId, includeArchived, format, page, size);
+        boolean allProjects = platformWide();
+        String projectId = allProjects ? null : currentProject();
+        PageResponse<MerchantRecord> result = allProjects
+                ? repository.listMerchantsPaged(includeArchived, format, page, size)
+                : repository.listMerchantsPaged(projectId, includeArchived, format, page, size);
         auditEventService.recordSuccess(
                 "merchant.viewed",
                 "merchant.profile.view",
@@ -404,17 +409,31 @@ public class PlatformService {
 
     private MerchantRecord requireMerchant(String id) {
         MerchantRecord merchant = findMerchant(id);
-        requireCurrentProject(merchant.projectId());
+        if (!platformWide()) {
+            requireCurrentProject(merchant.projectId());
+        }
         return merchant;
+    }
+
+    /** D-032：平台管理员（项目范围为空＝全量）不受当前项目限定；普通项目岗位按真实项目校验（M009-038）。 */
+    private boolean platformWide() {
+        authorizationService.requirePlatformScope();
+        return authorizationService.currentProjectScopeQuietly().isEmpty();
     }
 
     private String currentProject() {
         authorizationService.requirePlatformScope();
-        String scope = authorizationService.currentProjectScopeQuietly().orElseThrow();
-        return repository.projectExists(scope) ? scope : null;
+        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
+        return scope != null && repository.projectExists(scope) ? scope : null;
     }
 
     private String requireCurrentProject(String projectId) {
+        if (platformWide()) {
+            if (projectId == null || !repository.projectExists(projectId)) {
+                throw ApiException.notFound("PROJECT_NOT_FOUND", "项目不存在");
+            }
+            return projectId;
+        }
         String current = currentProject();
         if (current == null || !current.equals(projectId)) {
             throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "无权访问该项目的数据");
@@ -429,6 +448,10 @@ public class PlatformService {
                 throw ApiException.notFound("PROJECT_NOT_FOUND", "项目不存在");
             }
             return explicit;
+        }
+        if (platformWide()) {
+            // 平台管理员新建须显式给出已存在的项目，不按「当前项目」隐式填。
+            return requireCurrentProject(requireText(explicit, "project_id"));
         }
         String current = currentProject();
         return requireCurrentProject(explicit == null ? current : explicit);
@@ -448,7 +471,9 @@ public class PlatformService {
     }
 
     public PageResponse<ProjectRecord> listProjects(int page, int size) {
-        PageResponse<ProjectRecord> result = repository.listProjectsPaged(currentProject(), page, size);
+        PageResponse<ProjectRecord> result = platformWide()
+                ? repository.listProjectsPaged(page, size)
+                : repository.listProjectsPaged(currentProject(), page, size);
         auditEventService.recordSuccess(
                 "project.viewed",
                 "governance.project.view",
@@ -505,6 +530,9 @@ public class PlatformService {
 
     /** 3.13：空间存在性（招商线索/意向意向空间校验用）。 */
     public boolean spaceExists(String spaceId) {
+        if (platformWide()) {
+            return spaceId != null && repository.findSpaceById(spaceId).isPresent();
+        }
         String projectId = currentProject();
         return spaceId != null && projectId != null && repository.findSpaceById(spaceId)
                 .filter(space -> projectId.equals(space.projectId())).isPresent();
@@ -515,7 +543,9 @@ public class PlatformService {
     }
 
     public PageResponse<SpaceRecord> listSpaces(int page, int size) {
-        PageResponse<SpaceRecord> result = repository.listSpacesPaged(currentProject(), page, size);
+        PageResponse<SpaceRecord> result = platformWide()
+                ? repository.listSpacesPaged(page, size)
+                : repository.listSpacesPaged(currentProject(), page, size);
         auditEventService.recordSuccess(
                 "space.viewed",
                 "governance.space.view",
@@ -705,7 +735,9 @@ public class PlatformService {
                     if (parentSpaceId != null) {
                         SpaceRecord parent = repository.findSpaceById(parentSpaceId)
                                 .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "上级空间不存在"));
-                        requireCurrentProject(parent.projectId());
+                        if (platformWide() ? !projectId.equals(parent.projectId()) : !projectId.equals(requireCurrentProject(parent.projectId()))) {
+                            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "上级空间须属于同一项目");
+                        }
                     }
                     requireNonNegative(request.areaSquareMeter(), "空间面积");
                     Instant now = Instant.now();
@@ -734,7 +766,9 @@ public class PlatformService {
     public PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindings(int page, int size) {
         try {
             PageResponse<BusinessEntityBindingRecord> result =
-                    repository.listBusinessEntityBindingsPaged(currentProject(), page, size);
+                    platformWide()
+                            ? repository.listBusinessEntityBindingsPaged(page, size)
+                            : repository.listBusinessEntityBindingsPaged(currentProject(), page, size);
             auditEventService.recordSuccess(
                     "entity_binding.viewed",
                     "entity.binding.view",
@@ -942,7 +976,7 @@ public class PlatformService {
         if (!repository.businessEntityExists(id)) {
             throw ApiException.notFound("BUSINESS_ENTITY_NOT_FOUND", "主体不存在：" + id);
         }
-        if (!repository.businessEntityInProject(id, currentProject())) {
+        if (!platformWide() && !repository.businessEntityInProject(id, currentProject())) {
             throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该主体未关联当前项目");
         }
         return id;
@@ -1010,7 +1044,7 @@ public class PlatformService {
                     MerchantRecord existing = update ? requireMerchant(merchantId) : null;
                     String projectId = existing == null ? creationProject(request.projectId(), false) : existing.projectId();
                     if (existing != null && trimToNull(request.projectId()) != null
-                            && !projectId.equals(request.projectId().trim())) {
+                            && !java.util.Objects.equals(projectId, request.projectId().trim())) {
                         throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "普通档案更新不能变更商户的项目归属");
                     }
                     if (existing == null) {

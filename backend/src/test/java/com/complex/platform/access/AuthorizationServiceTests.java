@@ -224,15 +224,19 @@ class AuthorizationServiceTests {
     }
 
     @Test
-    void currentMerchantScopeReturnsBoundMerchantForPlatformAdmin() {
+    void currentMerchantScopeReturnsEmptyForPlatformAdmin() {
         authenticate("usr_admin", "seed-admin", "platform_admin");
-        assertThat(service.currentMerchantScope()).contains("merchant");
+        assertThat(service.currentMerchantScope()).isEmpty();
     }
 
     @Test
-    void currentMerchantIdQuietlyReturnsBoundMerchantForPlatformAdmin() {
+    void currentMerchantIdQuietlyReturnsEmptyForPlatformAdminEvenWhenSeedBoundMerchantId() {
+        // 审计主线2 根因回归：dev seed 曾给 platform_admin 绑 merchant_id（AuthService seed-merchant）。
+        // authenticate 助手正是这种形态（accountType=platform_admin 且 merchantId=merchant）。
+        // 数据层过滤（TicketingService#filterByMerchantScope / AdmissionGuard）走 currentMerchantIdQuietly，
+        // 平台管理员必须得到 empty=看全平台，绝不能被 seed 的 merchant_id 当成商户过滤成 0。
         authenticate("usr_admin", "seed-admin", "platform_admin");
-        assertThat(service.currentMerchantIdQuietly()).contains("merchant");
+        assertThat(service.currentMerchantIdQuietly()).isEmpty();
     }
 
     @Test

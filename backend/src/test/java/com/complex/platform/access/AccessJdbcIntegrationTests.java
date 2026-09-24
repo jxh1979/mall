@@ -872,4 +872,37 @@ class AccessJdbcIntegrationTests {
     ) {
         return new PermissionTemplateItem(templateId, permissionCode, effect, "project", false);
     }
+
+    // XM-D029-004（PGM-041「临时授权可设有效期或单次使用；……单次消耗……全部留痕」）：一组两码的单次临时授权，
+    // 用其中一个即整组消耗，两个码都各有一条消耗留痕。
+    @Test
+    void consumingOneCodeOfASingleUseGrantGroupLogsEveryConsumedCode() {
+        TemporaryGrant grant = new TemporaryGrant(
+                "22222222-2222-2222-2222-222222222222",
+                "usr_jdbc_group_consume",
+                List.of("ops.production_readiness.view", "ops.production_readiness.check"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2099-06-15T00:00:00Z"),
+                true,
+                false,
+                "active",
+                "single use",
+                "seed-admin",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null,
+                null
+        );
+        repository.createTemporaryGrant(grant);
+
+        assertThat(repository.markSingleUsePermissionConsumed(grant.id(), "ops.production_readiness.view",
+                "usr_jdbc_group_consume", Instant.parse("2026-06-14T12:00:00Z"))).isTrue();
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_usage_logs
+                 WHERE user_id = ? AND result = 'consumed'
+                 ORDER BY permission_code
+                """, String.class, "usr_jdbc_group_consume"))
+                .containsExactly("ops.production_readiness.check", "ops.production_readiness.view");
+    }
 }

@@ -252,4 +252,18 @@ class AuthServiceTests {
                 "staff_work_phone"
         ));
     }
+
+    // XM-D029-006：网页后台登录与刷新都不带设备号——未绑定设备的会话照常续期；带设备号登录的会话，刷新缺或错设备号都拒。
+    @Test
+    void webSessionRefreshesWithoutDeviceButDeviceBoundSessionNeedsTheSameDevice() {
+        AuthService.LoginResponse web = service.login(new AuthService.LoginRequest("p0_admin", "secret", null, null, null));
+        assertThat(service.refresh(new AuthService.RefreshTokenRequest(web.refreshToken(), null), web.accessToken()).sessionId())
+                .isEqualTo(web.sessionId());
+
+        AuthService.LoginResponse phone = login();
+        assertThatThrownBy(() -> service.refresh(new AuthService.RefreshTokenRequest(phone.refreshToken(), null), phone.accessToken()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SESSION_MISMATCH"));
+        assertThatThrownBy(() -> service.refresh(new AuthService.RefreshTokenRequest(phone.refreshToken(), "other-phone"), phone.accessToken()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SESSION_MISMATCH"));
+    }
 }
