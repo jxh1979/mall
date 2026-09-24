@@ -1348,7 +1348,7 @@ class AccessServiceTests {
     }
 
     // M001-F05（PGM 权限规则「临时授权可设有效期或单次使用」「临时权限……有时间限制、到期自动失效」）：
-    // 临时模板必须有到期时间或单次使用，生效时间不得晚于到期时间；非临时模板不受影响。
+    // 临时模板必须有到期时间或单次使用，到期时间必须晚于生效时间；非临时模板不受影响。
     @Test
     void temporaryTemplateNeedsExpiryOrSingleUseOnCreateAndUpdate() {
         assertThatThrownBy(() -> service.createPermissionTemplate(new PermissionTemplateRequest(
@@ -1387,6 +1387,51 @@ class AccessServiceTests {
                 "copy-unbounded", "seed", List.of(), "Copied unbounded", "temporary", base.id(),
                 List.of("ops.production_readiness.view"), "project", null, null, false)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void updatingTemporaryTemplateWithReversedWindowIsRejectedBeforeReauthorizationRule() {
+        // M001-F07：修改时倒置窗口（新截止即使晚于旧截止）先于「延长有效期须重新授权」判定，按 400 拒绝；清空到期仍按原规则 409。
+        PermissionTemplate bounded = service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-bounded", "seed", List.of(), "Bounded temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                Instant.parse("2027-01-01T00:00:00Z"), Instant.parse("2027-01-02T00:00:00Z"), false));
+
+        assertThatThrownBy(() -> service.updatePermissionTemplate(bounded.id(), new PermissionTemplateRequest(
+                "update-reversed-later", "seed", List.of(), "Bounded temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                Instant.parse("2027-01-04T00:00:00Z"), Instant.parse("2027-01-03T00:00:00Z"), false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(400);
+                    assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                });
+        assertThatThrownBy(() -> service.updatePermissionTemplate(bounded.id(), new PermissionTemplateRequest(
+                "update-zero-later", "seed", List.of(), "Bounded temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                Instant.parse("2027-01-03T00:00:00Z"), Instant.parse("2027-01-03T00:00:00Z"), false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(400);
+                    assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                });
+        assertThatThrownBy(() -> service.updatePermissionTemplate(bounded.id(), new PermissionTemplateRequest(
+                "update-clear-expiry", "seed", List.of(), "Bounded temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                Instant.parse("2027-01-01T00:00:00Z"), null, false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.code()).isEqualTo("TEMPLATE_REAUTHORIZATION_REQUIRED");
+                });
+        PermissionTemplate singleUse = service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-single-bounded", "seed", List.of(), "Single use temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project", null, null, true));
+        assertThatThrownBy(() -> service.updatePermissionTemplate(singleUse.id(), new PermissionTemplateRequest(
+                "update-drop-single", "seed", List.of(), "Single use temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                null, Instant.parse("2027-01-02T00:00:00Z"), false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.code()).isEqualTo("TEMPLATE_REAUTHORIZATION_REQUIRED");
+                });
     }
 
     @Test

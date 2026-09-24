@@ -153,6 +153,7 @@ public class AccessService {
                         throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能修改其他组织的模板");
                     }
                     requireKnownPermissions(request.permissionCodes());
+                    requireTemporaryTimeOrder(request);  // M001-F07：倒置窗口先于「延长有效期须重新授权」判定，按 400 拒绝
                     List<PermissionTemplateItem> previousItems = repository.findTemplateItems(id);
                     boolean widensWindow = (existing.validFrom() != null
                             && (request.validFrom() == null || request.validFrom().isBefore(existing.validFrom())))
@@ -2298,10 +2299,7 @@ public class AccessService {
 
     private PermissionTemplate templateFromRequest(String id, PermissionTemplateRequest request, String sourceTemplateId, String ownerScopeId) {
         requireBoundedTemporaryTemplate(request.templateType(), request.validUntil(), Boolean.TRUE.equals(request.singleUse()));  // 建、改、复制共用
-        if (isTemporaryTemplate(request.templateType()) && request.validFrom() != null && request.validUntil() != null
-                && !request.validUntil().isAfter(request.validFrom())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "临时模板的到期时间必须晚于生效时间");
-        }
+        requireTemporaryTimeOrder(request);
         Instant now = Instant.now();
         return new PermissionTemplate(
                 id,
@@ -2331,6 +2329,14 @@ public class AccessService {
     private void requireBoundedTemporaryTemplate(String templateType, Instant validUntil, boolean singleUse) {
         if (isTemporaryTemplate(templateType) && validUntil == null && !singleUse) {
             throw ApiException.badRequest("VALIDATION_FAILED", "临时模板必须设置到期时间或单次使用");
+        }
+    }
+
+    // M001-F05/F07：临时模板的到期时间必须晚于生效时间（倒置与零长窗口都拒绝）；修改入口在「延长有效期须重新授权」之前调用。
+    private void requireTemporaryTimeOrder(PermissionTemplateRequest request) {
+        if (isTemporaryTemplate(request.templateType()) && request.validFrom() != null && request.validUntil() != null
+                && !request.validUntil().isAfter(request.validFrom())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "临时模板的到期时间必须晚于生效时间");
         }
     }
 
