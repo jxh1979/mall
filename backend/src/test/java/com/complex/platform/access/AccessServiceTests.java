@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
