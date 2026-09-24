@@ -60,7 +60,7 @@
 | 退款审批 | `ticket.refund.approve` | 财务主管、运营主管 | 高 | 是 | `ticket_refund.approved` | 与支付通道/财务台账联动 |
 | 票/券/权益核销 | `verification.execute` | 工作手机、授权闸机/核销点设备、票务/酒吧/游乐员工 | 中 | 否 | `verification.succeeded` / `verification.failed` | 必须在线核验动态码；平板不作为门票核销设备；售票型一体机只允许授权服务人员辅助售票/取票/查单，默认不做核销 |
 | 核销撤销 | `verification.reverse` | 现场主管 | 高 | 是 | `verification.reversed` | 必须填写原因 |
-| 人工放行（**已废止·见文首口径**） | `verification.manual_override`（停用，待代码轮下线） | — | — | — | `verification.manual_overridden`（停用） | 该动作不再提供，任何岗位、任何权限都不得放行不满足规则的核销 |
+| 人工放行（**已废止·见文首口径**） | `verification.manual_override`（停用，写入口已下线） | — | — | — | `verification.manual_overridden`（停用） | 该动作不再提供，任何岗位、任何权限都不得放行不满足规则的核销 |
 | 酒吧入场年龄核验 | `bar.entry.age_verify` | 酒吧门口员工、现场主管 | 高 | 否 | `bar.age_verification.requested` / `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 酒吧售酒/入场合规前置 |
 | 酒吧人脸核验结果写入 | `bar.entry.face_result.write` | 第三方人脸服务适配器、授权设备 | 高 | 系统准入 | `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 供应商确定前仅保留接口和模拟数据；生产未配置不得标记通过 |
 | 卡座预订入场人数核销 | `bar.table.guest_checkin` | 酒吧门口员工、现场主管 | 中 | 否 | `bar.table_guest.checked_in` / `bar.table_guest.rejected` | 只允许进入预定卡座所在酒吧；需幂等和并发额度锁 |
@@ -75,7 +75,7 @@
 | 游乐项目/场次查看 | `amusement.session.view` | 游乐员工、游乐主管、平台管理员 | 低 | 否 | `amusement.session.viewed` | P0 基础项目、场次和容量查询 |
 | 游乐项目/场次维护 | `amusement.session.manage` | 游乐主管、平台管理员 | 中 | 可配置 | `amusement.session.changed` | P0 基础项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径） |
 | 游乐核销记录查看 | `amusement.verification.view` | 游乐员工、游乐主管、平台管理员 | 低 | 否 | `amusement.verification.viewed` | 查询核销成功、失败和安全拒绝原因（原含「人工放行」，已废止·见文首口径） |
-| 游乐核销（原含「/人工放行」，已废止·见文首口径） | `amusement.verification.execute`（`amusement.verification.override` 停用，待代码轮下线） | 游乐员工、主管 | 中 | 否 | `amusement.verification_succeeded` / `amusement.verification_failed` / `amusement.verification_overridden` | 与票务权益联动 |
+| 游乐核销（原含「/人工放行」，已废止·见文首口径） | `amusement.verification.execute`（`amusement.verification.override` 停用，游乐改判接口已下线） | 游乐员工、主管 | 中 | 否 | `amusement.verification_succeeded` / `amusement.verification_failed` | 与票务权益联动 |
 | 游乐安全巡检模板查看/维护 | `amusement.safety_template.view` / `amusement.safety_template.manage` | 巡检员、游乐主管、平台管理员 | 高 | 模板维护可配置审批 | `amusement.safety_template.viewed` / `amusement.safety_template.changed` | P0 开放前、营业中抽检和阻断项模板 |
 | 游乐安全巡检任务查看/创建 | `amusement.safety_inspection.view` / `amusement.safety_inspection.create` | 巡检员、游乐主管、平台管理员 | 高 | 创建可配置审批 | `amusement.safety_inspection.viewed` / `amusement.safety_inspection.created` | P0 巡检任务、记录和整改复检查询 |
 | 游乐安全巡检提交 | `amusement.safety_inspection.submit` | 巡检员、游乐主管 | 高 | 否 | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | 开放前必检，阻断项自动暂停 |
@@ -248,7 +248,7 @@
 | 卡座提成查看/复核 | `bar.table_commission.view` / `bar.table_commission.review` | 高/是 | 可用（普通销售仅看本人摘要，不得改基数） |
 | 入场年龄核验 | `bar.entry.age_verify` | 高/否 | 可用（售酒/入场合规前置） |
 | 票/券/权益核销 | `verification.execute` | 中/否 | 可用（在线核验动态码） |
-| 核销撤销（原含「/ 人工放行」，已废止·见文首口径） | `verification.reverse`（`verification.manual_override` 停用） | 高/是 | 可用（现场主管/总控，须原因/证据） |
+| 核销撤销（原含「/ 人工放行」，已废止·见文首口径） | `verification.reverse`（`verification.manual_override` 停用，写入口已下线） | 高/是 | 可用（现场主管/总控，须原因/证据） |
 | 员工：账号查看/维护 | `access.user.view` / `access.user.manage` | 中-高/高变更留痕 | 可用（限本商户范围内员工） |
 | 员工：角色/模板/临时授权 | `access.role.view` / `access.permission_template.view` / `access.temporary_grant.create` / `access.temporary_grant.revoke` | 中-高 | 可用（限本商户范围；员工级完全自定义按 §2.2 组合，DENY 优先） |
 | 对账：应收应付台账查看 | `finance.ar_ap.view` | 中/否 | 可用（按主体绑定/数据范围） |
@@ -266,7 +266,7 @@
 | 项目/场次维护 | `amusement.session.manage` | 中/可配置 | 可用（基础项目容量（实时在玩人数）（原称「场次容量」，已废止·见文首口径）） |
 | 设备状态查看 | `amusement.device_status.view` | 中/否 | 可用 |
 | 核销记录查看 | `amusement.verification.view` | 低/否 | 可用 |
-| 核销执行（原含「/ 人工放行」，已废止·见文首口径） | `amusement.verification.execute`（`amusement.verification.override` 停用） | 中/否 | 可用（与票务权益联动） |
+| 核销执行（原含「/ 人工放行」，已废止·见文首口径） | `amusement.verification.execute`（`amusement.verification.override` 停用，改判接口已下线） | 中/否 | 可用（与票务权益联动） |
 | 安全巡检模板查看/维护 | `amusement.safety_template.view` / `amusement.safety_template.manage` | 高/维护可配置审批 | 可用 |
 | 安全巡检任务查看/创建/提交 | `amusement.safety_inspection.view` / `.create` / `.submit` | 高 | 可用（开放前必检，阻断项自动暂停） |
 | 安全整改/复检 | `amusement.safety_inspection.rectify` / `.recheck` | 高/可配置 | 可用（严重项未复检通过不得恢复） |

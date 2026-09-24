@@ -1463,3 +1463,190 @@ Grok“未设timeout=无上限”不采纳；本方已直接读取GitHub官方wo
 四锁值上次新B1之后全部b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，COUNT1未改；B2不写独占锁字段。两YAML/TS/CODEOWNERS/三HTML未改。
 已读receiving-code-review方法用于先核实根因、再按批B2；verification方法用于上述原生证据，未新调用第三席或新增规则。本次额外检查两个远程惯例skill路径均不存在，不把它们宣称成已读技能；使用的是本任务此前确已读的适用技能内容。
 结论：完整归并成立、012/013只登记、014按已列两文件四行整批修复。B2须等Grok本批PASS定稿；B3次数仍1、生命周期IN_PROGRESS。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+UTC 2026-09-22T10:28:59.893174+00:00
+
+# M005 当前锁 B1 完整独立审计
+版本：V0.10
+
+范围：tsconfig.base.json 13行、.github/CODEOWNERS 12行、.github/workflows/predeploy-gates.yml 27行，共52行；18GEN。全量源已逐行读取，直接依赖web tsconfig10行、镜像27行、hook17行、verify-delivery-gates333行完整读取；部署循环定点读取。历史B3=2保留。先派Grok，本报告封存前没有读取本次Grok正文。
+技能：本轮沿用已读取的using-superpowers、grilling、verification、receiving方法并按V0.17收窄，当前四路径存在性已实查；不派第三席，不把技能文件存在冒称执行其它动作。
+
+## 全字段源证据
+
+tsconfig.base.json SHA256 13d49b947d918bf064b5f98ceaa049e1c954f88eafe736c438cd4372b44696db
+```
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true
+  }
+}
+```
+
+.github/CODEOWNERS SHA256 b8b7a9f196172ca7a6220ab31b1d2909a773b5cdf796913b56c8722927ccef3d
+```
+# 强制点文件(2026-07-06):改动应经独立复核。
+# 注意:CODEOWNERS 仅在"受保护分支 + require review"启用时被 GitHub 自动强制;
+# 当前私有库免费版无法启用分支保护,故此文件当前仅"记录意图 + 一旦升级即生效"。
+/ops/160/complex-deploy-api.sh              @jxh1979
+/ops/160/complex-deploy-web.sh              @jxh1979
+/ops/160/hooks/                             @jxh1979
+/ops/160/propose-change.sh                  @jxh1979
+/ops/ci/                                    @jxh1979
+/.github/                                   @jxh1979
+/tools/                                     @jxh1979
+/package.json                               @jxh1979
+/backend/src/main/resources/db/migration/   @jxh1979
+```
+
+.github/workflows/predeploy-gates.yml SHA256 4c20c029b7c5b0786d56164f2657444a9b9ee3d3694c18013f2e50c1e966049d
+```
+# 文件版本：V0.02
+name: predeploy-gates
+# 独立治理门禁(GitHub 侧,与 .160 部署机隔离):PR 到 main 与 push 到 main 时静态跑
+# delivery-gates 快子集(scope 登记/安全基线/后台矩阵/契约/阻断台账),catch 治理漂移。
+# 无需数据库(全静态分析)。因私有库免费版无法设 required status check,此为可见信号 + 独立复现,
+# 部署前硬阻断由 .160 部署脚本执行治理门禁；本地 pre-push 仅拦截直接推送 main。
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  predeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1 (AUD-068：固定完整 commit SHA，防可变标签漂移)
+        with:
+          fetch-depth: 0  # 门禁需完整历史；取不到基线时必须失败
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0 (AUD-068：固定完整 commit SHA，防可变标签漂移)
+        with:
+          node-version: "22"
+      - name: install deps
+        run: npm ci --ignore-scripts
+      - name: verify:predeploy (governance gates)
+        env:
+          HTML_GATES_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: npm run verify:predeploy
+```
+
+## 18项三线全覆盖
+- GEN-001：必要性：三文件分别承载编译契约、工程评审路由、远端静态门禁；没有产品业务规则。删除会失去现有工程约束，HTML沉默不构成删除依据。
+- GEN-002：可执行正确性：TS原生解析九选项、354个web输入；正负编译诊断有效。YAML事件/四步骤/固定SHA/基线和hook真实三分支检查；不声称业务编译全绿。
+- GEN-003：测试有效性：两个负输入实际2322，正输入无诊断；hook0/1/0，未知基线exit1，predeploy真实红exit1，检查会失败不是只看存在。
+- GEN-004：信任边界：CODEOWNERS固定路径账户；YAML没有把PR标题等用户字符串拼shell，事件SHA只作环境值，未知ref拒绝。直接依赖工具只追到失败边界。
+- GEN-005：授权最小权限：仓库规则不是产品权限。真实GitHub owner admin，私库保护403限制被如实说明；不假装CODEOWNERS已强制，不凭空添加permissions或业务角色。
+- GEN-006：数据完整性：三文件不操作业务事务、余额或状态；npm ci由锁约束，mirror当前逐字一致。业务写入原子性不适用。
+- GEN-007：并发幂等：静态检查并行不写共享业务状态，无本模块重复扣款路径；不为假设CI竞争增加concurrency。
+- GEN-008：接口模式：根TS与实际web extends由原生解析验证；YAML与镜像相等，Node22与既有声明衔接。没改接口枚举。
+- GEN-009：错误恢复：无continue-on-error，install及verify分步；HTML缺基线和未同步台账均exit1传至bash。不把全局红灯抹成绿。
+- GEN-010：安全敏感：52行无秘密；action固定完整SHA且官方tags读API匹配；npm ci --ignore-scripts。此为局部源判断不是全仓无漏洞声明。
+- GEN-011：可观测证据：步骤具名、真实错误可定位PGM台账；prepush只是提醒且允许明确override不称安全边界。API错误原文留证。
+- GEN-012：资源性能：配置有限9项/9规则/4步骤，任务没有循环放大；不因未写timeout凭空认定无限运行，不新加超时配置。
+- GEN-013：构建依赖：TS5.9.3原生有效，Node22声明；checkout全历史、fixedSHA真实匹配、mirror检查exit0。未在GitHub触发任务或真npm ci。
+- GEN-014：数据库迁移：CODEOWNERS覆盖migration目录是评审路由，不执行迁移；本模块无SQL/DDL，不以目录存在称迁移已验证。
+- GEN-015：界面可访问：三文件无面向业务用户UI，页面键盘焦点不适用；TS jsx属直接消费配置不构成页面验收。
+- GEN-016：文档可验证：L6职责已修，当前hook17行+真实三分支和部署api197–210/web24–37循环相符；GitHub403与注释限制一致。
+- GEN-017：业务分类：CX01–03均技术性，按冲突→细化→技术性→添加顺序，没有HTML矛盾/新增业务概念。旧缺陷历史与当前队列分离。
+- GEN-018：第一性原理：所有判断锚在当前52行/原生输出/GitHub只读API和可复现命令；独立性未读本次Grok，不拿旧PASS作证。
+
+## 第一性原理三问
+1. 为什么存在：编译约束、仓库评审路由、PR/push静态治理三个真实工程用途；没有HTML要求某个选项，不强编HTML来源，归技术性。
+2. 是否实际执行：TS原生解析及有效反例、hook实际脚本、YAML原生解析、镜像工具和失败传播都实跑。GitHub CI实际运行、Node22业务构建、依赖完整重装未执行，不能称通过。
+3. 哪些前提未证：保护强制不能启用（API403已证），所以只是工程信号；磁盘旧依赖限制承接M004，不把dry当重装。外部修改服务器设置后的状态未保证。
+
+## 顺从式与对抗式
+九TS选项逐项解析并在web354输入中继承；strict/noUncheckedIndexedAccess各有可失败反例。九owner规则路径全存在，owner admin，当前GitHub codeowners/errors=[]只代表服务器版本，工作区语法另行原生/结构核验，不混为同字节远端结果。两事件仅main，checkout fetch-depth0，setupnode22，install --ignore-scripts，verify准确命令，env选择PR base.sha/push before。实际未知基线拒绝，真实PGM未同步台账令第一门禁拒绝，其后&&步骤不执行。部署脚本循环明确失败exit1；只读未部署。
+GitHub只读API repos/jxh1979/mall/branches/main/protection exit1 HTTP403: Upgrade to GitHub Pro or make this repository public to enable this feature. owner permission=admin。actions/checkout git/ref/tags/v4.3.1和setup-node v4.4.0均exit0，object.sha逐字匹配当前YAML。没有真实push、GitHub设置更改、workflow触发或安装。
+
+## 全部当前finding
+- CX-01 → 既有M005-012；tsconfig.base.json:1–13；GEN-002/003/008/013/017/018，依据类型4。技术性，当前工程缺陷否、队列否。九选项只定义编译，无业务发明。
+- CX-02 → 既有M005-013；.github/CODEOWNERS:1–12；GEN-005/010/016/017/018，依据类型4。技术性，缺陷否、队列否。九规则仓库路由不构成产品岗位；保护限制不隐瞒，不凭假设改权限。
+- CX-03 → 既有M005-014；.github/workflows/predeploy-gates.yml:1–27，重点L6；GEN-002/009/011/013/016/017/018，依据类型4。技术性，当前缺陷否、队列否。先前职责错误已由历史B3r2修复，两镜像V0.02一致，不重复修复。
+001—011属于旧范围的历史ID，保留原历史事实，不重新复用ID：001—006历史有缺陷已修/队列否，007—011登记否/否。当前不冒称审完它们现归属模块。
+全局PGM台账不同步当前仍红，归M426和工具M008；入口快照旧登记M435/M436仍保留。不是M005配置吞错，不能在此跨模块修源。
+
+## 本次真实检查输出
+```json
+{
+  "native": {
+    "cmd": [
+      "node",
+      "-"
+    ],
+    "exit": 0,
+    "out": "{\"ts\":{\"version\":\"5.9.3\",\"files\":354,\"errors\":[],\"options\":{\"target\":9,\"module\":99,\"moduleResolution\":100,\"strict\":true,\"esModuleInterop\":true,\"forceConsistentCasingInFileNames\":true,\"skipLibCheck\":true,\"resolveJsonModule\":true,\"noUncheckedIndexedAccess\":true,\"jsx\":4,\"types\":[\"vite/client\"]}},\"negative\":[{\"code\":2322,\"msg\":\"Type 'undefined' is not assignable to type 'number'.\"},{\"code\":2322,\"msg\":\"Type 'number | undefined' is not assignable to type 'number'.   Type 'undefined' is not assignable to type 'number'.\"}],\"positive\":[],\"workflow\":{\"events\":{\"pull_request\":{\"branches\":[\"main\"]},\"push\":{\"branches\":[\"main\"]}},\"runner\":\"ubuntu-latest\",\"steps\":[{\"uses\":\"actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5\",\"with\":{\"fetch-depth\":0}},{\"uses\":\"actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020\",\"with\":{\"node-version\":\"22\"}},{\"name\":\"install deps\",\"run\":\"npm ci --ignore-scripts\"},{\"name\":\"verify:predeploy (governance gates)\",\"env\":{\"HTML_GATES_BASE\":\"${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}\"},\"run\":\"npm run verify:predeploy\"}],\"mirror\":true},\"owners\":[{\"path\":\"/ops/160/complex-deploy-api.sh\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/160/complex-deploy-web.sh\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/160/hooks/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/160/propose-change.sh\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/ops/ci/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/.github/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/tools/\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/package.json\",\"owner\":\"@jxh1979\",\"exists\":true},{\"path\":\"/backend/src/main/resources/db/migration/\",\"owner\":\"@jxh1979\",\"exists\":true}]}\n",
+    "err": ""
+  },
+  "docs": {
+    "cmd": [
+      "npm",
+      "run",
+      "verify:delivery-gates-docs"
+    ],
+    "exit": 0,
+    "out": "\n> entertainment-complex-management@0.1.0 verify:delivery-gates-docs\n> node tools/verify-delivery-gates.mjs\n\nDELIVERY_GATES_DOCS_PASS\n",
+    "err": ""
+  },
+  "repo": {
+    "cmd": [
+      "gh",
+      "repo",
+      "view",
+      "--json",
+      "nameWithOwner,isPrivate"
+    ],
+    "exit": 0,
+    "out": "{\"isPrivate\":true,\"nameWithOwner\":\"jxh1979/mall\"}\n",
+    "err": ""
+  },
+  "hook": [
+    {
+      "name": "feature",
+      "exit": 0,
+      "out": "",
+      "err": ""
+    },
+    {
+      "name": "main",
+      "exit": 1,
+      "out": "",
+      "err": "[pre-push] 拒绝直推 main。请走 PR 流程(ops/160/propose-change.sh)。\n[pre-push] 确需直推:ALLOW_MAIN_PUSH=1 git push ...(并在 PR/说明记录原因)。\n"
+    },
+    {
+      "name": "override",
+      "exit": 0,
+      "out": "",
+      "err": "[pre-push] ALLOW_MAIN_PUSH=1 覆盖:放行直推 main(已留痕提醒)。\n"
+    }
+  ]
+}
+```
+额外检查：
+```
+[{"cmd": ["gh", "api", "repos/jxh1979/mall/codeowners/errors"], "exit": 0, "out": "{\"errors\":[]}", "err": ""}, {"cmd": ["node", "tools/verify-html-ledger-sync.mjs", "M005-NONEXISTENT-BASE"], "exit": 1, "out": "", "err": "fatal: Not a valid object name M005-NONEXISTENT-BASE\n[html-ledger-sync] FAIL: 取不到基线 M005-NONEXISTENT-BASE，无法判定本次改动范围。\n  无法判定不等于通过。请先 git fetch origin（CI 侧 actions/checkout 需 fetch-depth: 0）。\n  如需换基线：node tools/verify-html-ledger-sync.mjs <基线ref>\n"}, {"cmd": ["bash", "-e", "-c", "npm run verify:predeploy"], "exit": 1, "out": "\n> entertainment-complex-management@0.1.0 verify:predeploy\n> npm run verify:html-ledger-sync && npm run verify:entry-anchors && npm run verify:html-param-tier && npm run verify:delivery-gates-docs && npm run verify:full-admin-matrix && npm run verify:domain-ownership-scope && npm run verify:matrix-vs-migration && npm run verify:data-isolation-spec && npm run verify:tenant-isolation && npm run verify:p0-contract && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:production-blockers && npm run verify:pii-encryption && npm run verify:test-db-isolation\n\n\n> entertainment-complex-management@0.1.0 verify:html-ledger-sync\n> node tools/verify-html-ledger-sync.mjs\n\n", "err": "[html-ledger-sync] FAIL: 改动了业务最终解释权 HTML，但决策台账未同步。比对范围：工作区（含未提交改动）↔ 基线 HEAD@e456ba96。\n  已改动的 HTML：\n    - docs/platform-governance-map-for-operations-v0.1.html\n  必须在同一批改动内一并更新：docs/prd-audit/business-decision-ledger.md\n  依据：用户 2026-08-03 拍板——台账保持完整，改 HTML 必须同 PR 同步台账。\n  若本次确为纯排版/错别字、不涉及口径，请在台账内追加一行说明后再提交。\n"}]
+
+```
+
+## 结论
+B1 PASS，三个当前技术性登记均无当前工程缺陷/队列空；未修改源码HTML锁；不等于模块PASS或发布PASS。尚须读取独立Grok全量报告、B1四值与B2双席归并；若新外审finding则整批处理，不以本票覆盖。
+
+
+## M005 当前锁B2本席完整归并票
+版本：V0.11
+本席B2 PASS。输入为modules/M005-b1-self-raw.md V0.10（143794bytes，b98c3bafc50819092d1e4e4b305b82600af43eeff061b24685fae556ca19d307），modules/M005-b1-grok-raw.md V0.08（196533bytes，54490b95a068aea7f5e991aee2aff03a1f44818911a9e7514b0245ab8bb0bf0e）；两份本次完整B1逐字读完，外席本次24212字符覆盖全部。候选findings.md V3.39 1229975bytes SHA67d75f1163e41262b16cca72e82f2cabde252b033748aa9e4ba23474c61d1aaf。
+全部差集：本席CX01→012与Grok TS全字段；CX02→013与Grok九规则/真实保护；CX03→014与Grok workflow全字段/旧GR职责问题当前已修。Grok本轮无新GR；旧GR不是当前缺陷，历史仍保留。没有漏并、删除或代改外席finding。旧001—011原范围保留，001—006历史缺陷是已修队列否，007—011登记否/否，均不重用。
+四分类：三配置无产品业务含义，按冲突→细化→技术性→添加均技术性。原生TS诊断、GitHub只读主体/保护/API、镜像与hook/部署循环构成类型4当前事实。012/013无缺陷；014历史修复成立当前缺陷否/队列否。不存在添加项或未答问题；不借此增permissions/concurrency/timeout/owner/base files等。
+候选中请Grok澄清的基线表述，本席已定点验证：tools/verify-html-ledger-sync.mjs L30 base=参数/环境/originmain，L34 git merge-base(base,HEAD)，L47显示base@mergeBase前8位。git rev-parse origin/main=ebb1eb99c610df330c07d24278798c2d3611299a；git merge-base origin/main HEAD=88c7b465475fb8eb26e46200ae90ad3e00500522。故Grok两处并不矛盾：一个是ref值，一个是工具计算的共同祖先，不是伪造/抄录。候选没有据此新立缺陷或变队列，外席仍需自澄清。根明确HEAD调用与其默认origin调用对当前PGM台账均红，不可冒称对同一比较基线做相同调用。
+全局PGM台账/M426及工具M008、入口快照M435/M436只保留观察，不在本模块修复。当前queue全空，双B2后跳新增B3/B4，历史B3=2，再独立B5-r2。
+当前未修改源、HTML、判据、业务台账，无工作流触发/安装/部署。此票仅B2归并PASS，须Grok本批PASS才能定稿，不是模块或发布PASS。

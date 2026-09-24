@@ -1,11 +1,12 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.auth.AuthService;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -223,21 +224,52 @@ class AuthorizationServiceTests {
     }
 
     @Test
-    void currentMerchantScopeReturnsBoundMerchantForPlatformAdmin() {
+    void currentMerchantScopeReturnsEmptyForPlatformAdmin() {
         authenticate("usr_admin", "seed-admin", "platform_admin");
-        assertThat(service.currentMerchantScope()).contains("merchant");
+        assertThat(service.currentMerchantScope()).isEmpty();
     }
 
     @Test
-    void currentMerchantIdQuietlyReturnsBoundMerchantForPlatformAdmin() {
+    void currentMerchantIdQuietlyReturnsEmptyForPlatformAdminEvenWhenSeedBoundMerchantId() {
+        // 审计主线2 根因回归：dev seed 曾给 platform_admin 绑 merchant_id（AuthService seed-merchant）。
+        // authenticate 助手正是这种形态（accountType=platform_admin 且 merchantId=merchant）。
+        // 数据层过滤（TicketingService#filterByMerchantScope / AdmissionGuard）走 currentMerchantIdQuietly，
+        // 平台管理员必须得到 empty=看全平台，绝不能被 seed 的 merchant_id 当成商户过滤成 0。
         authenticate("usr_admin", "seed-admin", "platform_admin");
-        assertThat(service.currentMerchantIdQuietly()).contains("merchant");
+        assertThat(service.currentMerchantIdQuietly()).isEmpty();
+    }
+
+    @Test
+    void productionMasterIdentityGetsExistingAuthorityWithoutBypassingPermissionDenials() {
+        AccessActor master = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        authenticateActor(master);
+        assertThat(service.isMasterAuthority(master)).isTrue();
+        service.requirePermission("ops.production_readiness.manage");
+        repository.addEffect(effect(master.id(), "ops.production_readiness.manage", AccessRepository.Effect.DENY));
+        assertThatThrownBy(() -> service.requirePermission("ops.production_readiness.manage"))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("PERMISSION_DENIED"));
+        assertThatThrownBy(() -> service.requirePermission("not.registered"))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void platformAdminAndIncompleteMasterIdentityDoNotBecomeHighestAuthority() {
+        assertThat(service.isMasterAuthority(new AccessActor(SessionIssuer.MASTER_USER_ID,
+                SessionIssuer.MASTER_USERNAME, "platform_admin", "org", null, "active"))).isFalse();
+        assertThat(service.isMasterAuthority(new AccessActor(SessionIssuer.MASTER_USER_ID,
+                SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "disabled"))).isFalse();
+        assertThat(service.isMasterAuthority(new AccessActor("another-user", SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active"))).isFalse();
+        assertThat(service.isMasterAuthority(new AccessActor(SessionIssuer.MASTER_USER_ID, "another-name",
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active"))).isFalse();
     }
 
     @Test
     void currentSupervisorLevelIsThreeOnlyForMasterAuthority() {
         authenticateActor(new AccessActor(
-                "usr_master_authority", "master-authority", "platform_admin", "org", "merchant", "active"));
+                SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, "active"));
         assertThat(service.currentSupervisorLevel()).isEqualTo(3);
     }
 
@@ -333,6 +365,26 @@ class AuthorizationServiceTests {
         ));
 
         assertThat(service.effectivePermissions().grants()).doesNotContain("ops.production_readiness.view");
+    }
+
+    // M036-002（治理地图「临时授权可设有效期或单次使用」）：生效时间未到的授予不放行，也不进有效权限集。
+    @Test
+    void grantWhoseValidityHasNotStartedDoesNotAuthorize() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(new AccessRepository.PermissionEffect(
+                "usr_staff",
+                "ops.production_readiness.manage",
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPORARY_GRANT,
+                "temp_not_started",
+                Instant.parse("2099-01-01T00:00:00Z"),
+                Instant.parse("2099-01-02T00:00:00Z"),
+                false,
+                false
+        ));
+
+        assertPermissionDenied("ops.production_readiness.manage");
+        assertThat(service.effectivePermissions().grants()).doesNotContain("ops.production_readiness.manage");
     }
 
     private AccessRepository.PermissionEffect effect(

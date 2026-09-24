@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.common.jdbc;
 
 import java.sql.ResultSet;
@@ -7,9 +8,8 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 /**
- * Shared JDBC timestamp conversions. Centralizes the {@code Instant} <-> SQL
- * {@code timestamptz} mapping that was previously copy-pasted verbatim across
- * every JDBC repository and parameter source.
+ * Shared JDBC timestamp conversions: the {@code Instant} <-> SQL {@code timestamptz}
+ * mapping used by the JDBC repositories and parameter sources that import this class.
  */
 public final class JdbcTimestamps {
 

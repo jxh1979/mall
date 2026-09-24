@@ -53,3 +53,6 @@ docs/_archive/**/*.log
 # 图形化点单 POS 商品/套餐图片本地存储目录(运行态生成,不入库)
 backend/data/bar-images/
 backend/data/evidence-files/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

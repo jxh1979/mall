@@ -244,9 +244,6 @@ public interface AmusementRepository {
     boolean releaseEntryConcurrentCapacity(
             AmusementVerificationRecord entry, AmusementVerificationRecord exitRecord, java.time.Instant now);
 
-    /** 阶段2 主管释放（异常清场）：清零项目并发在场快照（point_device+project 维），返回涉及行数。 */
-    int clearProjectConcurrentCapacity(String projectId, java.time.Instant now);
-
     List<AmusementVerificationRecord> listVerifications();
 
     List<AmusementVerificationRecord> listVerificationsByMerchant(String merchantId);
@@ -256,12 +253,6 @@ public interface AmusementRepository {
 
     /** 阶段3 只读：并发在场容量快照；merchantId=null 为平台视角不加租户谓词。 */
     List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId);
-
-    AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override);
-
-    List<AmusementManualOverrideRecord> listManualOverrides();
-
-    List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId);
 
     AmusementDeviceStatusRecord saveDeviceStatus(AmusementDeviceStatusRecord status);
 

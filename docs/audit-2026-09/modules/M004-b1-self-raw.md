@@ -1361,3 +1361,321 @@ PY
 两席对全部001—007分类/队列一致，无漏并无改写，无人闸。根V0.06与GrokV0.05共同批准的候选V0.93 SHA2b1e47a4b23bc40a0c90dcd31ede7784fe9d775fa04c72f814147dcfc011be78已标为V0.94定稿；未改变其实质。007只登记，保留npm audit exit1和版本命中，不改锁、不称全绿。
 本次实算锁/sidecar/ledger基准/当前B1 Grok最后独占字段仍均b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，COUNT1。B2段不写独占锁字段；这不是未来B5后四值检查。
 B3/B4跳过，B3计数保持1。下一步先Grok完整B5-r1→真实结束→根独立全量审计保存→读取Grok→B5后四值。现在不能标模块PASS。全局6处BSM镜像红灯保持；无HTML问题或添加人闸。通道直接SSH，无MCP_Cloud_160/第三席。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+# M004 新锁 B1 Codex 完整独立审计
+版本：V0.08
+
+本席B1结论：PASS。新CX缺陷空集；既有001—007需整批B2，不提前模块PASS。M004/471 IN_PROGRESS，B3累计1、方案修复2、运行失败0；V0.17，锁V0.14。唯一package-lock.json，3321行114258bytes，SHA256 d3676e896b885b6bbb979440bb51b9dfe60728735cee000e528ab5d1791bcfef，documentVersion V0.02。Grok正在独立审查；本票保存前没有读取本次Grok报告。
+
+## 范围、技能、全文
+按plan当前M004唯一文件和18GEN；没有业务派生ID。全JSON220条全部字段（包括version/resolved/integrity/dependencies/dev/peer/optional/os/cpu/bin/license/funding/engines/peerMeta）经工具无截断取回并分四批0—54、55—109、110—164、165—219全部实际读取。不是只扫描已知三包；与旧B5同SHA，但本次重新读取完整语义内容，原3321行结构由严格JSON解析和覆盖表对照。不重切超大单文件。
+本轮技能自检四路径实际存在：本机superpowers6.3.0 using-superpowers / verification-before-completion及.agents skills grilling / writing-for-agents。沿用本长轮已读技能，仅借自问自答、先核后接受、证据再结论；不派第三席、不问第四闸、不生成额外设计。根AGENTS与Graft已在紧接此前M003实际读取/定位，本模块数据锁直接读JSON；没有把Graft深度分析作为已执行证据。无Claude hooks宿主，git禁force/reset/fetch/push约定保持。
+
+## 第一性原理三问
+1. 是否需要存在：package.json允许范围，CI明确npm ci --ignore-scripts；锁记录具体依赖版本/来源/摘要/平台，删除锁则可复现CI失效，属于GEN013技术性。
+2. 实际解决什么：根工具与apps/web唯一工作区完整220条/582边，链接apps-web→apps/web；开发和生产依赖、可选原生包及peer共同构成可安装图。包名不新增商户/票务/权限规则。
+3. 最小方案：原生npm解析和版本镜像成功，没有当前缺陷支持改锁。嵌套副本、Windows/macOS等optional不是不可达垃圾；不排序、不去重、不升级整套。历史001—003已修事实保留。
+
+## 本次真实验证
+- node stdin脚本：全部220记录、12清单字段比较、217个URL/SRI、217错误payload拒绝、116engine、28平台约束、2个installScript均darwin可选fsevents；Arborist9.9.1 loadVirtual库存220、边582、invalid/missing/extraneous各0、engineMismatch0。Node v24.21.0 / npm11.19.0。
+- npm ls --package-lock-only --all --json：exit0，problems=[]，顶层@playwright/test/apps-web/yaml。
+- npm ci --dry-run --ignore-scripts --offline --no-audit --no-fund：exit0，计划added188/removed186，不实际安装。输出remove nanoid3.3.12/postcss8.5.15/undici7.28.0而add3.3.18/8.5.23/7.29.0，说明现安装目录旧叶仍在；本轮不把已装目录当成锁修补版实运行。本模块源是锁，CI正常npm ci将用锁，这不是锁文件缺陷或本轮偷偷升级。
+- npm audit --package-lock-only --ignore-scripts --json：exit1；moderate2/high0/critical0；@vitest/mocker和vitest4.1.9，同一GHSA-82fw-gwwq-j7x9。非全绿。
+- 当前原文：apps/web/package.json完整；vite.config.ts完整只plugins[react()]；vitest.config.ts完整jsdom、setupFiles/include、无browser。定向rg mockerPlugin|interceptorPlugin|browser无匹配exit1。发行node.js145—212、358—379显示公开插件注册及redirect readFile；未运行漏洞或开启端口。
+- 上游原文已浏览 https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9 ：4.1.9在受影响范围，4.1.11修复；未经认证入口要求公开mocker/interceptor插件，browser RPC另有token。与当前配置合并判断007维持只登记，不说该包没有漏洞、不说永远不可达。
+- git status --short仅锁/root/web清单无差异；锁前后同SHA。不修改任何源码HTML依赖安装目录。
+
+## 18GEN顺从式逐项
+| ID | 本轮判断与证据 |
+|---|---|
+| GEN-001 | 必要性：锁定确定依赖树供CI npm ci；嵌套pluginutils同版副本和可选平台包都有npm解析位置，不凭重复文本删锁。 |
+| GEN-002 | 本次原生loadVirtual、npm ls全树、npm ci离线dry-run均exit0；仅证明锁可解析/安装计划，未实际安装或执行业务。 |
+| GEN-003 | 217项SRI用错误payload均拒绝，断言可失败；本文件不是业务测试，不声称覆盖前端用例。 |
+| GEN-004 | JSON完整严格解析；所有217resolved均HTTPS registry.npmjs.org、无userinfo，摘要sha512且64字节；依赖范围交由Arborist全边验证。 |
+| GEN-005 | 无业务授权配置；根/workspace/link为工程元数据，未出现默认赋权。 |
+| GEN-006 | 两清单name/version/dependencies/devDependencies/workspaces/engines逐项等值；220条引用一致，未改数据库事务。 |
+| GEN-007 | 无业务并发或幂等入口；锁的确定依赖不等于业务幂等。没有相关实现可判缺。 |
+| GEN-008 | 根/web/唯一workspace link一致，lockfileVersion3、documentVersionV0.02保留，无业务DTO/枚举。 |
+| GEN-009 | npm audit实际exit1保留，ls/dry明确区分，不吞错；SRI反例拒绝而非伪成功。 |
+| GEN-010 | 007公告仍命中4.1.9，但现Vite仅react插件，Vitest jsdom无browser；上游公告与发行node.js核对，按铁律6只登记现未接入口。不报无漏洞。 |
+| GEN-011 | 本报告记录源码哈希、命令、输出、边界；锁不是业务审计事件实现。 |
+| GEN-012 | 有限220记录582边，无应用循环/缓存/连接新增；平台optional不触发全平台执行。 |
+| GEN-013 | 原生树0invalid/0missing/0extraneous，116nodeengine与24.21.0相容；npm11.19.0与声明npm10.9.8差异披露。本轮未用10重跑不作其验证声明。 |
+| GEN-014 | 无数据库迁移，不将锁版与SQL迁移混同。 |
+| GEN-015 | 无用户界面文案；包名英文为标识符，不能以界面中文要求重命名。 |
+| GEN-016 | lock与两清单一致；dry-run不是真实安装。安装目录旧三叶版本与锁不一致在输出显式出现，既有node_modules不能证明修补版已经运行。 |
+| GEN-017 | 全部字段属于技术性依赖描述；没有业务冲突/细化/添加，不提无依据删除或功能扩充。 |
+| GEN-018 | 证据为当前完整源字段、可复现npm/Node命令、上游公告原文；旧票只作输入，不继承其PASS。 |
+
+## 对抗式自问自答
+- 顶层requires、workspace映射、版本扩展会导致npm拒绝？当前两次原生命令0；不使用“npm约定如此”当证据。
+- 仅看dependencies漏optional/peer？Arborist遍历每个edgesOut582，保留所有optional缺省peer；表220条覆盖全部位置。
+- 摘要格式正确能证明远端内容？不能。仅sha512解析64字节与错误payload拒绝217次，未下载217tarball。
+- audit exit1能被PASS掩盖？不能；明确保存007既有公告，按当前正常入口无注册路径与铁律6判断无须本批修。若Grok有新真实入口证据B2重判。
+- 旧node_modules可拿来声称三包修复行为？不能；本轮只验证锁安装计划，未重做历史隔离反例。
+- 忽略安装脚本是否漏需求？与现CI npm ci --ignore-scripts相同，只有两个darwin fsevents脚本记录；不承诺平台真实构建。
+- npm11与声明10不同要擅加配置？不。报告本次实用版本/边界，不为未复现行为改文件。
+- 此HTML变更会要求重新改锁？M004只18GEN，无业务映射；锁改变导致流程重审，不能把业务文本作为升级库依据。
+
+## B1全清单及分类
+001 nanoid3.3.18、002 postcss8.5.23（nanoid^3.3.16）、003 undici7.29.0：既有已修工程缺陷未见回退；保留历史。
+004 顶层根/web/link；005全图依赖/peer/optional/engine；006来源完整性；007现公告：本次均技术性，无当前待修工程缺陷，无添加。新CX空集。全部七ID及本次全部证据送B2，不能省掉归并。
+无新HTML自身问题/未答人闸。全局门禁红登记在M003与归属模块，不冒称发布通过。本次不修源码、不改HTML、锁、findings、ledger。完整报告只追加指定self原始路径。
+
+
+## 全字段已读覆盖表
+首层1—7与末尾3320—3321为顶层/闭合结构，以下每一条全部字段已读。全为技术性，图/镜像/摘要验证如上。
+
+| # | 行 | 位置 | 版本/link | 字段 |
+|---|---|---|---|---|
+| 1 | 8—21 | (root) | 0.1.0 | name,version,workspaces,devDependencies,engines |
+| 2 | 22—44 | apps/web | 0.1.0 | name,version,dependencies,devDependencies |
+| 3 | 45—51 | apps/web/node_modules/@rolldown/pluginutils | 1.0.1 | version,resolved,integrity,dev,license |
+| 4 | 52—77 | apps/web/node_modules/@vitejs/plugin-react | 6.0.2 | version,resolved,integrity,dev,license,dependencies,engines,peerDependencies,peerDependenciesMeta |
+| 5 | 78—84 | node_modules/@adobe/css-tools | 4.5.0 | version,resolved,integrity,dev,license |
+| 6 | 85—93 | node_modules/@ant-design/colors | 7.2.1 | version,resolved,integrity,license,dependencies |
+| 7 | 94—112 | node_modules/@ant-design/cssinjs | 1.24.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 8 | 113—127 | node_modules/@ant-design/cssinjs-utils | 1.1.3 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 9 | 128—139 | node_modules/@ant-design/fast-color | 2.0.6 | version,resolved,integrity,license,dependencies,engines |
+| 10 | 140—159 | node_modules/@ant-design/icons | 5.6.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 11 | 160—165 | node_modules/@ant-design/icons-svg | 4.4.2 | version,resolved,integrity,license |
+| 12 | 166—181 | node_modules/@ant-design/react-slick | 1.1.2 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 13 | 182—198 | node_modules/@asamuzakjp/css-color | 5.1.11 | version,resolved,integrity,dev,license,dependencies,engines |
+| 14 | 199—215 | node_modules/@asamuzakjp/dom-selector | 7.1.1 | version,resolved,integrity,dev,license,dependencies,engines |
+| 15 | 216—225 | node_modules/@asamuzakjp/generational-cache | 1.0.1 | version,resolved,integrity,dev,license,engines |
+| 16 | 226—232 | node_modules/@asamuzakjp/nwsapi | 2.3.9 | version,resolved,integrity,dev,license |
+| 17 | 233—248 | node_modules/@babel/code-frame | 7.29.7 | version,resolved,integrity,dev,license,peer,dependencies,engines |
+| 18 | 249—259 | node_modules/@babel/helper-validator-identifier | 7.29.7 | version,resolved,integrity,dev,license,peer,engines |
+| 19 | 260—268 | node_modules/@babel/runtime | 7.29.7 | version,resolved,integrity,license,engines |
+| 20 | 269—281 | node_modules/@bramus/specificity | 2.4.2 | version,resolved,integrity,dev,license,dependencies,bin |
+| 21 | 282—301 | node_modules/@csstools/color-helpers | 6.0.2 | version,resolved,integrity,dev,funding,license,engines |
+| 22 | 302—325 | node_modules/@csstools/css-calc | 3.2.1 | version,resolved,integrity,dev,funding,license,engines,peerDependencies |
+| 23 | 326—353 | node_modules/@csstools/css-color-parser | 4.1.7 | version,resolved,integrity,dev,funding,license,dependencies,engines,peerDependencies |
+| 24 | 354—376 | node_modules/@csstools/css-parser-algorithms | 4.0.0 | version,resolved,integrity,dev,funding,license,engines,peerDependencies |
+| 25 | 377—401 | node_modules/@csstools/css-syntax-patches-for-csstree | 1.1.5 | version,resolved,integrity,dev,funding,license,peerDependencies,peerDependenciesMeta |
+| 26 | 402—421 | node_modules/@csstools/css-tokenizer | 4.0.0 | version,resolved,integrity,dev,funding,license,engines |
+| 27 | 422—433 | node_modules/@emnapi/core | 1.10.0 | version,resolved,integrity,dev,license,optional,dependencies |
+| 28 | 434—444 | node_modules/@emnapi/runtime | 1.10.0 | version,resolved,integrity,dev,license,optional,dependencies |
+| 29 | 445—455 | node_modules/@emnapi/wasi-threads | 1.2.1 | version,resolved,integrity,dev,license,optional,dependencies |
+| 30 | 456—461 | node_modules/@emotion/hash | 0.8.0 | version,resolved,integrity,license |
+| 31 | 462—467 | node_modules/@emotion/unitless | 0.7.5 | version,resolved,integrity,license |
+| 32 | 468—485 | node_modules/@exodus/bytes | 1.15.1 | version,resolved,integrity,dev,license,engines,peerDependencies,peerDependenciesMeta |
+| 33 | 486—492 | node_modules/@jridgewell/sourcemap-codec | 1.5.5 | version,resolved,integrity,dev,license |
+| 34 | 493—511 | node_modules/@napi-rs/wasm-runtime | 1.1.5 | version,resolved,integrity,dev,license,optional,dependencies,funding,peerDependencies |
+| 35 | 512—521 | node_modules/@oxc-project/types | 0.133.0 | version,resolved,integrity,dev,license,funding |
+| 36 | 522—537 | node_modules/@playwright/test | 1.61.0 | version,resolved,integrity,dev,license,dependencies,bin,engines |
+| 37 | 538—549 | node_modules/@rc-component/async-validator | 5.1.0 | version,resolved,integrity,license,dependencies,engines |
+| 38 | 550—565 | node_modules/@rc-component/color-picker | 2.0.1 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 39 | 566—579 | node_modules/@rc-component/context | 1.4.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 40 | 580—591 | node_modules/@rc-component/mini-decimal | 1.1.3 | version,resolved,integrity,license,dependencies,engines |
+| 41 | 592—609 | node_modules/@rc-component/mutate-observer | 1.1.0 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 42 | 610—627 | node_modules/@rc-component/portal | 1.1.2 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 43 | 628—643 | node_modules/@rc-component/qrcode | 1.1.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 44 | 644—663 | node_modules/@rc-component/tour | 1.15.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 45 | 664—684 | node_modules/@rc-component/trigger | 2.3.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 46 | 685—701 | node_modules/@rolldown/binding-android-arm64 | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 47 | 702—718 | node_modules/@rolldown/binding-darwin-arm64 | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 48 | 719—735 | node_modules/@rolldown/binding-darwin-x64 | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 49 | 736—752 | node_modules/@rolldown/binding-freebsd-x64 | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 50 | 753—769 | node_modules/@rolldown/binding-linux-arm-gnueabihf | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 51 | 770—786 | node_modules/@rolldown/binding-linux-arm64-gnu | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 52 | 787—803 | node_modules/@rolldown/binding-linux-arm64-musl | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 53 | 804—820 | node_modules/@rolldown/binding-linux-ppc64-gnu | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 54 | 821—837 | node_modules/@rolldown/binding-linux-s390x-gnu | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 55 | 838—854 | node_modules/@rolldown/binding-linux-x64-gnu | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 56 | 855—871 | node_modules/@rolldown/binding-linux-x64-musl | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 57 | 872—888 | node_modules/@rolldown/binding-openharmony-arm64 | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 58 | 889—907 | node_modules/@rolldown/binding-wasm32-wasi | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,dependencies,engines |
+| 59 | 908—924 | node_modules/@rolldown/binding-win32-arm64-msvc | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 60 | 925—941 | node_modules/@rolldown/binding-win32-x64-msvc | 1.0.3 | version,resolved,integrity,cpu,dev,license,optional,os,engines |
+| 61 | 942—948 | node_modules/@standard-schema/spec | 1.1.0 | version,resolved,integrity,dev,license |
+| 62 | 949—969 | node_modules/@testing-library/dom | 10.4.1 | version,resolved,integrity,dev,license,peer,dependencies,engines |
+| 63 | 970—989 | node_modules/@testing-library/jest-dom | 6.9.1 | version,resolved,integrity,dev,license,dependencies,engines |
+| 64 | 990—996 | node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api | 0.6.3 | version,resolved,integrity,dev,license |
+| 65 | 997—1024 | node_modules/@testing-library/react | 16.3.2 | version,resolved,integrity,dev,license,dependencies,engines,peerDependencies,peerDependenciesMeta |
+| 66 | 1025—1038 | node_modules/@testing-library/user-event | 14.6.1 | version,resolved,integrity,dev,license,engines,peerDependencies |
+| 67 | 1039—1049 | node_modules/@tybys/wasm-util | 0.10.2 | version,resolved,integrity,dev,license,optional,dependencies |
+| 68 | 1050—1057 | node_modules/@types/aria-query | 5.0.4 | version,resolved,integrity,dev,license,peer |
+| 69 | 1058—1068 | node_modules/@types/chai | 5.2.3 | version,resolved,integrity,dev,license,dependencies |
+| 70 | 1069—1075 | node_modules/@types/deep-eql | 4.0.2 | version,resolved,integrity,dev,license |
+| 71 | 1076—1082 | node_modules/@types/estree | 1.0.9 | version,resolved,integrity,dev,license |
+| 72 | 1083—1092 | node_modules/@types/react | 19.2.16 | version,resolved,integrity,dev,license,dependencies |
+| 73 | 1093—1102 | node_modules/@types/react-dom | 19.2.3 | version,resolved,integrity,dev,license,peerDependencies |
+| 74 | 1103—1120 | node_modules/@vitest/expect | 4.1.9 | version,resolved,integrity,dev,license,dependencies,funding |
+| 75 | 1121—1147 | node_modules/@vitest/mocker | 4.1.9 | version,resolved,integrity,dev,license,dependencies,funding,peerDependencies,peerDependenciesMeta |
+| 76 | 1148—1160 | node_modules/@vitest/pretty-format | 4.1.9 | version,resolved,integrity,dev,license,dependencies,funding |
+| 77 | 1161—1174 | node_modules/@vitest/runner | 4.1.9 | version,resolved,integrity,dev,license,dependencies,funding |
+| 78 | 1175—1190 | node_modules/@vitest/snapshot | 4.1.9 | version,resolved,integrity,dev,license,dependencies,funding |
+| 79 | 1191—1200 | node_modules/@vitest/spy | 4.1.9 | version,resolved,integrity,dev,license,funding |
+| 80 | 1201—1215 | node_modules/@vitest/utils | 4.1.9 | version,resolved,integrity,dev,license,dependencies,funding |
+| 81 | 1216—1226 | node_modules/ansi-regex | 5.0.1 | version,resolved,integrity,dev,license,peer,engines |
+| 82 | 1227—1240 | node_modules/ansi-styles | 5.2.0 | version,resolved,integrity,dev,license,peer,engines,funding |
+| 83 | 1241—1305 | node_modules/antd | 5.29.3 | version,resolved,integrity,license,dependencies,funding,peerDependencies |
+| 84 | 1306—1309 | node_modules/apps-web | link→apps/web | resolved,link |
+| 85 | 1310—1319 | node_modules/aria-query | 5.3.0 | version,resolved,integrity,dev,license,dependencies |
+| 86 | 1320—1329 | node_modules/assertion-error | 2.0.1 | version,resolved,integrity,dev,license,engines |
+| 87 | 1330—1339 | node_modules/bidi-js | 1.0.3 | version,resolved,integrity,dev,license,dependencies |
+| 88 | 1340—1349 | node_modules/chai | 6.2.2 | version,resolved,integrity,dev,license,engines |
+| 89 | 1350—1355 | node_modules/classnames | 2.5.1 | version,resolved,integrity,license |
+| 90 | 1356—1361 | node_modules/compute-scroll-into-view | 3.1.1 | version,resolved,integrity,license |
+| 91 | 1362—1368 | node_modules/convert-source-map | 2.0.0 | version,resolved,integrity,dev,license |
+| 92 | 1369—1377 | node_modules/copy-to-clipboard | 3.3.3 | version,resolved,integrity,license,dependencies |
+| 93 | 1378—1391 | node_modules/css-tree | 3.2.1 | version,resolved,integrity,dev,license,dependencies,engines |
+| 94 | 1392—1398 | node_modules/css.escape | 1.5.1 | version,resolved,integrity,dev,license |
+| 95 | 1399—1404 | node_modules/csstype | 3.2.3 | version,resolved,integrity,license |
+| 96 | 1405—1418 | node_modules/data-urls | 7.0.0 | version,resolved,integrity,dev,license,dependencies,engines |
+| 97 | 1419—1424 | node_modules/dayjs | 1.11.21 | version,resolved,integrity,license |
+| 98 | 1425—1431 | node_modules/decimal.js | 10.6.0 | version,resolved,integrity,dev,license |
+| 99 | 1432—1441 | node_modules/dequal | 2.0.3 | version,resolved,integrity,dev,license,engines |
+| 100 | 1442—1451 | node_modules/detect-libc | 2.1.2 | version,resolved,integrity,dev,license,engines |
+| 101 | 1452—1459 | node_modules/dom-accessibility-api | 0.5.16 | version,resolved,integrity,dev,license,peer |
+| 102 | 1460—1472 | node_modules/entities | 8.0.0 | version,resolved,integrity,dev,license,engines,funding |
+| 103 | 1473—1479 | node_modules/es-module-lexer | 2.1.0 | version,resolved,integrity,dev,license |
+| 104 | 1480—1489 | node_modules/estree-walker | 3.0.3 | version,resolved,integrity,dev,license,dependencies |
+| 105 | 1490—1499 | node_modules/expect-type | 1.3.0 | version,resolved,integrity,dev,license,engines |
+| 106 | 1500—1517 | node_modules/fdir | 6.5.0 | version,resolved,integrity,dev,license,engines,peerDependencies,peerDependenciesMeta |
+| 107 | 1518—1532 | node_modules/fsevents | 2.3.3 | version,resolved,integrity,dev,hasInstallScript,license,optional,os,engines |
+| 108 | 1533—1545 | node_modules/html-encoding-sniffer | 6.0.0 | version,resolved,integrity,dev,license,dependencies,engines |
+| 109 | 1546—1555 | node_modules/indent-string | 4.0.0 | version,resolved,integrity,dev,license,engines |
+| 110 | 1556—1562 | node_modules/is-potential-custom-element-name | 1.0.1 | version,resolved,integrity,dev,license |
+| 111 | 1563—1570 | node_modules/js-tokens | 4.0.0 | version,resolved,integrity,dev,license,peer |
+| 112 | 1571—1611 | node_modules/jsdom | 29.1.1 | version,resolved,integrity,dev,license,dependencies,engines,peerDependencies,peerDependenciesMeta |
+| 113 | 1612—1620 | node_modules/json2mq | 0.2.0 | version,resolved,integrity,license,dependencies |
+| 114 | 1621—1650 | node_modules/lightningcss | 1.32.0 | version,resolved,integrity,dev,license,dependencies,engines,funding,optionalDependencies |
+| 115 | 1651—1671 | node_modules/lightningcss-android-arm64 | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 116 | 1672—1692 | node_modules/lightningcss-darwin-arm64 | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 117 | 1693—1713 | node_modules/lightningcss-darwin-x64 | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 118 | 1714—1734 | node_modules/lightningcss-freebsd-x64 | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 119 | 1735—1755 | node_modules/lightningcss-linux-arm-gnueabihf | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 120 | 1756—1776 | node_modules/lightningcss-linux-arm64-gnu | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 121 | 1777—1797 | node_modules/lightningcss-linux-arm64-musl | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 122 | 1798—1818 | node_modules/lightningcss-linux-x64-gnu | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 123 | 1819—1839 | node_modules/lightningcss-linux-x64-musl | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 124 | 1840—1860 | node_modules/lightningcss-win32-arm64-msvc | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 125 | 1861—1881 | node_modules/lightningcss-win32-x64-msvc | 1.32.0 | version,resolved,integrity,cpu,dev,license,optional,os,engines,funding |
+| 126 | 1882—1891 | node_modules/lru-cache | 11.5.1 | version,resolved,integrity,dev,license,engines |
+| 127 | 1892—1902 | node_modules/lz-string | 1.5.0 | version,resolved,integrity,dev,license,peer,bin |
+| 128 | 1903—1912 | node_modules/magic-string | 0.30.21 | version,resolved,integrity,dev,license,dependencies |
+| 129 | 1913—1919 | node_modules/mdn-data | 2.27.1 | version,resolved,integrity,dev,license |
+| 130 | 1920—1929 | node_modules/min-indent | 1.0.1 | version,resolved,integrity,dev,license,engines |
+| 131 | 1930—1948 | node_modules/nanoid | 3.3.18 | version,resolved,integrity,dev,funding,license,bin,engines |
+| 132 | 1949—1962 | node_modules/obug | 2.1.3 | version,resolved,integrity,dev,funding,license,engines |
+| 133 | 1963—1975 | node_modules/parse5 | 8.0.1 | version,resolved,integrity,dev,license,dependencies,funding |
+| 134 | 1976—1982 | node_modules/pathe | 2.0.3 | version,resolved,integrity,dev,license |
+| 135 | 1983—1989 | node_modules/picocolors | 1.1.1 | version,resolved,integrity,dev,license |
+| 136 | 1990—2002 | node_modules/picomatch | 4.0.4 | version,resolved,integrity,dev,license,engines,funding |
+| 137 | 2003—2021 | node_modules/playwright | 1.61.0 | version,resolved,integrity,dev,license,dependencies,bin,engines,optionalDependencies |
+| 138 | 2022—2034 | node_modules/playwright-core | 1.61.0 | version,resolved,integrity,dev,license,bin,engines |
+| 139 | 2035—2049 | node_modules/playwright/node_modules/fsevents | 2.3.2 | version,resolved,integrity,dev,hasInstallScript,license,optional,os,engines |
+| 140 | 2050—2078 | node_modules/postcss | 8.5.23 | version,resolved,integrity,dev,funding,license,dependencies,engines |
+| 141 | 2079—2094 | node_modules/pretty-format | 27.5.1 | version,resolved,integrity,dev,license,peer,dependencies,engines |
+| 142 | 2095—2102 | node_modules/pretty-format/node_modules/react-is | 17.0.2 | version,resolved,integrity,dev,license,peer |
+| 143 | 2103—2112 | node_modules/punycode | 2.3.1 | version,resolved,integrity,dev,license,engines |
+| 144 | 2113—2121 | node_modules/qrcode.react | 4.2.0 | version,resolved,integrity,license,peerDependencies |
+| 145 | 2122—2138 | node_modules/rc-cascader | 3.34.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 146 | 2139—2153 | node_modules/rc-checkbox | 3.5.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 147 | 2154—2169 | node_modules/rc-collapse | 3.9.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 148 | 2170—2186 | node_modules/rc-dialog | 9.6.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 149 | 2187—2203 | node_modules/rc-drawer | 7.3.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 150 | 2204—2219 | node_modules/rc-dropdown | 4.2.1 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 151 | 2220—2237 | node_modules/rc-field-form | 2.7.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 152 | 2238—2255 | node_modules/rc-image | 7.12.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 153 | 2256—2270 | node_modules/rc-input | 1.8.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 154 | 2271—2287 | node_modules/rc-input-number | 9.5.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 155 | 2288—2306 | node_modules/rc-mentions | 2.20.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 156 | 2307—2324 | node_modules/rc-menu | 9.16.1 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 157 | 2325—2339 | node_modules/rc-motion | 2.9.5 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 158 | 2340—2358 | node_modules/rc-notification | 5.6.4 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 159 | 2359—2374 | node_modules/rc-overflow | 1.5.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 160 | 2375—2389 | node_modules/rc-pagination | 5.1.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 161 | 2390—2428 | node_modules/rc-picker | 4.11.3 | version,resolved,integrity,license,dependencies,engines,peerDependencies,peerDependenciesMeta |
+| 162 | 2429—2443 | node_modules/rc-progress | 4.0.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 163 | 2444—2461 | node_modules/rc-rate | 2.13.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 164 | 2462—2477 | node_modules/rc-resize-observer | 1.4.3 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 165 | 2478—2493 | node_modules/rc-segmented | 2.7.1 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 166 | 2494—2515 | node_modules/rc-select | 14.16.8 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 167 | 2516—2533 | node_modules/rc-slider | 11.1.9 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 168 | 2534—2551 | node_modules/rc-steps | 6.0.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 169 | 2552—2566 | node_modules/rc-switch | 4.1.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 170 | 2567—2587 | node_modules/rc-table | 7.54.0 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 171 | 2588—2609 | node_modules/rc-tabs | 15.7.0 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 172 | 2610—2626 | node_modules/rc-textarea | 1.10.2 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 173 | 2627—2642 | node_modules/rc-tooltip | 6.4.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 174 | 2643—2662 | node_modules/rc-tree | 5.13.1 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 175 | 2663—2679 | node_modules/rc-tree-select | 5.27.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 176 | 2680—2694 | node_modules/rc-upload | 4.11.0 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 177 | 2695—2708 | node_modules/rc-util | 5.44.4 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 178 | 2709—2727 | node_modules/rc-virtual-list | 3.19.2 | version,resolved,integrity,license,dependencies,engines,peerDependencies |
+| 179 | 2728—2736 | node_modules/react | 19.2.7 | version,resolved,integrity,license,engines |
+| 180 | 2737—2748 | node_modules/react-dom | 19.2.7 | version,resolved,integrity,license,dependencies,peerDependencies |
+| 181 | 2749—2754 | node_modules/react-is | 18.3.1 | version,resolved,integrity,license |
+| 182 | 2755—2768 | node_modules/redent | 3.0.0 | version,resolved,integrity,dev,license,dependencies,engines |
+| 183 | 2769—2778 | node_modules/require-from-string | 2.0.2 | version,resolved,integrity,dev,license,engines |
+| 184 | 2779—2784 | node_modules/resize-observer-polyfill | 1.5.1 | version,resolved,integrity,license |
+| 185 | 2785—2818 | node_modules/rolldown | 1.0.3 | version,resolved,integrity,dev,license,dependencies,bin,engines,optionalDependencies |
+| 186 | 2819—2825 | node_modules/rolldown/node_modules/@rolldown/pluginutils | 1.0.1 | version,resolved,integrity,dev,license |
+| 187 | 2826—2838 | node_modules/saxes | 6.0.0 | version,resolved,integrity,dev,license,dependencies,engines |
+| 188 | 2839—2844 | node_modules/scheduler | 0.27.0 | version,resolved,integrity,license |
+| 189 | 2845—2853 | node_modules/scroll-into-view-if-needed | 3.1.0 | version,resolved,integrity,license,dependencies |
+| 190 | 2854—2860 | node_modules/siginfo | 2.0.0 | version,resolved,integrity,dev,license |
+| 191 | 2861—2870 | node_modules/source-map-js | 1.2.1 | version,resolved,integrity,dev,license,engines |
+| 192 | 2871—2877 | node_modules/stackback | 0.0.2 | version,resolved,integrity,dev,license |
+| 193 | 2878—2884 | node_modules/std-env | 4.1.0 | version,resolved,integrity,dev,license |
+| 194 | 2885—2890 | node_modules/string-convert | 0.2.1 | version,resolved,integrity,license |
+| 195 | 2891—2903 | node_modules/strip-indent | 3.0.0 | version,resolved,integrity,dev,license,dependencies,engines |
+| 196 | 2904—2909 | node_modules/stylis | 4.4.0 | version,resolved,integrity,license |
+| 197 | 2910—2916 | node_modules/symbol-tree | 3.2.4 | version,resolved,integrity,dev,license |
+| 198 | 2917—2925 | node_modules/throttle-debounce | 5.0.2 | version,resolved,integrity,license,engines |
+| 199 | 2926—2932 | node_modules/tinybench | 2.9.0 | version,resolved,integrity,dev,license |
+| 200 | 2933—2942 | node_modules/tinyexec | 1.2.4 | version,resolved,integrity,dev,license,engines |
+| 201 | 2943—2959 | node_modules/tinyglobby | 0.2.17 | version,resolved,integrity,dev,license,dependencies,engines,funding |
+| 202 | 2960—2969 | node_modules/tinyrainbow | 3.1.0 | version,resolved,integrity,dev,license,engines |
+| 203 | 2970—2982 | node_modules/tldts | 7.4.3 | version,resolved,integrity,dev,license,dependencies,bin |
+| 204 | 2983—2989 | node_modules/tldts-core | 7.4.3 | version,resolved,integrity,dev,license |
+| 205 | 2990—2995 | node_modules/toggle-selection | 1.0.6 | version,resolved,integrity,license |
+| 206 | 2996—3008 | node_modules/tough-cookie | 6.0.1 | version,resolved,integrity,dev,license,dependencies,engines |
+| 207 | 3009—3021 | node_modules/tr46 | 6.0.0 | version,resolved,integrity,dev,license,dependencies,engines |
+| 208 | 3022—3029 | node_modules/tslib | 2.8.1 | version,resolved,integrity,dev,license,optional |
+| 209 | 3030—3043 | node_modules/typescript | 5.9.3 | version,resolved,integrity,dev,license,bin,engines |
+| 210 | 3044—3053 | node_modules/undici | 7.29.0 | version,resolved,integrity,dev,license,engines |
+| 211 | 3054—3131 | node_modules/vite | 8.0.16 | version,resolved,integrity,dev,license,dependencies,bin,engines,funding,optionalDependencies,peerDependencies,peerDependenciesMeta |
+| 212 | 3132—3221 | node_modules/vitest | 4.1.9 | version,resolved,integrity,dev,license,dependencies,bin,engines,funding,peerDependencies,peerDependenciesMeta |
+| 213 | 3222—3234 | node_modules/w3c-xmlserializer | 5.0.0 | version,resolved,integrity,dev,license,dependencies,engines |
+| 214 | 3235—3244 | node_modules/webidl-conversions | 8.0.1 | version,resolved,integrity,dev,license,engines |
+| 215 | 3245—3254 | node_modules/whatwg-mimetype | 5.0.0 | version,resolved,integrity,dev,license,engines |
+| 216 | 3255—3269 | node_modules/whatwg-url | 16.0.1 | version,resolved,integrity,dev,license,dependencies,engines |
+| 217 | 3270—3286 | node_modules/why-is-node-running | 2.3.0 | version,resolved,integrity,dev,license,dependencies,bin,engines |
+| 218 | 3287—3296 | node_modules/xml-name-validator | 5.0.0 | version,resolved,integrity,dev,license,engines |
+| 219 | 3297—3303 | node_modules/xmlchars | 2.2.0 | version,resolved,integrity,dev,license |
+| 220 | 3304—3319 | node_modules/yaml | 2.9.0 | version,resolved,integrity,dev,license,bin,engines,funding |
+
+## 可复现原生检查程序
+```javascript
+const fs=require('node:fs'),assert=require('node:assert/strict'),{createRequire}=require('node:module'), nr=createRequire('/usr/lib/node_modules/npm/package.json');const semver=nr('semver'),ssri=nr('ssri'),A=nr('@npmcli/arborist');
+(async()=>{const l=JSON.parse(fs.readFileSync('package-lock.json')),p=JSON.parse(fs.readFileSync('package.json')),w=JSON.parse(fs.readFileSync('apps/web/package.json'));let checks={records:Object.keys(l.packages).length,mirror:[],sri:0,wrongPayloadRejected:0,engines:0,engineMismatch:[],platform:0,installScripts:[],urls:[],invalid:[],missing:[],extraneous:[],edgeCount:0};
+for(const [key,m] of [['',p],['apps/web',w]])for(const k of ['name','version','workspaces','dependencies','devDependencies','engines']){assert.deepEqual(l.packages[key][k],m[k]);checks.mirror.push(key+':'+k)}
+for(const [loc,n] of Object.entries(l.packages)){if(n.integrity){assert(ssri.parse(n.integrity,{strict:true}).sha512);assert.equal(Buffer.from(n.integrity.slice(7),'base64').length,64);checks.sri++;assert(!ssri.checkData(Buffer.from('m004 intentionally wrong payload'),n.integrity));checks.wrongPayloadRejected++;const u=new URL(n.resolved);assert.equal(u.protocol,'https:');assert.equal(u.hostname,'registry.npmjs.org');assert.equal(u.username+u.password,'');}
+if(n.engines?.node){checks.engines++;if(!semver.satisfies(process.version,n.engines.node))checks.engineMismatch.push(loc)}
+if(n.cpu||n.os)checks.platform++;if(n.hasInstallScript)checks.installScripts.push(loc);}
+const t=await new A({path:process.cwd(),offline:true,audit:false,ignoreScripts:true,save:false}).loadVirtual();checks.inventory=t.inventory.size;
+for(const n of t.inventory.values()){if(n.extraneous)checks.extraneous.push(n.location);for(const e of n.edgesOut.values()){checks.edgeCount++;if(e.error)checks.invalid.push([n.location,e.name,e.error]);if(!e.to&&!e.optional)checks.missing.push([n.location,e.name]);}}
+checks.node=process.version;checks.npm=nr('./package.json').version;checks.arborist=nr('@npmcli/arborist/package.json').version;console.log(JSON.stringify(checks));assert.equal(checks.invalid.length+checks.missing.length+checks.engineMismatch.length,0);})();
+```
+
+本席B1 PASS；尚未读取本次Grok，非模块PASS。
+
+
+## M004 新锁B2 Codex整批归并
+版本：V0.09
+
+B2本席PASS；不是模块PASS。输入完整读取：本文件V0.08最新B1（186395bytes SHA4ad45383df326aeeb9bcd120cf7e50277a8b94b88f5ca0d3c2e1526dcb39ec9f）；modules/M004-b1-grok-raw.md V0.06最新B1全部54647字符（全文件227205bytes SHA69874032edf22fe6d7ac0f51ba525a9d0143b0b84d2e99b34da7bc636a91c145）；findings V3.37顶部当前M004新锁B2候选全部七行。Grok B1真实exit0，原163323bytes前缀SHA正确；B1后四值b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458全部相等，COUNT1。
+
+差集闭集：Codex新CX=空、Grok新GR=空；双方001/002/003旧修复保留，004元数据、005全图、006SRI来源、007既有公告逐项都在候选。没有漏并、跨对象旧ID复用、拆分合并冲突或添加项。007是同一公告两包，不能重复立ID；当前配置两席均确认无公开插件注册/browser。根本次读官方公告与发行代码，Grok本次只读audit JSON并明确不冒称新GET，两者证据层次已区别，不改写对方报告。
+
+七项独立结论：001—003技术性/当前缺陷否/队列否，锁具体版本与范围未回退；004镜像和link一致，无缺；005220库存582边/116engines/28平台，原生图0invalid/missing/extraneous，无缺；006217HTTPS/SRI格式正确，错误payload拒绝，但未验远端字节，无声称过界；007实际audit exit1/moderate2不遮蔽，铁律6当前入口不启公开通道，技术性/当前缺陷否/队列否，不升级。
+Grok负例补充：破坏版本或缺条目显式拒绝；仅改范围字符串或坏摘要dry仍0。它不推翻根票，根已将镜像直接deepEqual、SRI用独立ssri反例验证，未把dry作为完整性证明。
+
+磁盘旧三叶属于安装态与锁差异，双方明确不假称当前已运行修补版，不在本批改node_modules。npm11.19与声明10.9.8差异保留，未复現故障不生造强制门禁。全局HTML台账/入口文档红不归本锁，不刷绿、不称全仓通过。
+同意findings V3.37候选全部七行；B3累计1、方案修复2、失败0保持。待外席B2同意后才定稿，队列空跳新增B3/B4，必须B5-r1现锁全模块重新复审。无新questions/HTML修改申请；本步只有审计记录，无源码修改。

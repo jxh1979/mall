@@ -1,6 +1,6 @@
-# 四类主体唯一绑定开发设计 V0.09
+# 四类主体唯一绑定开发设计 V0.14
 
-> 版本：V0.09 ｜ 最后更新：2026-09-11 ｜ 状态：现行开发设计
+> 版本：V0.14 ｜ 最后更新：2026-09-23 ｜ 状态：现行开发设计
 > 业务最终解释权：`business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html`。代码、迁移和接口只说明当前实现，不得覆盖三份 HTML。
 
 文档类型：Implementation  
@@ -36,7 +36,7 @@
 
 ### 3.1 `business_entities`
 
-当前迁移：V005 基表 + V354 `archive_reason` 与 `entity_role` CHECK + V410 删除 `parent_entity_id` 并把 `entity_role` 白名单收窄为 `platform` / `project_company` / `management_company`（V318 的父链列已由 V410 删除，只作历史）。
+当前迁移：V005 基表 + V354 `archive_reason` 与 `entity_role` CHECK + V410 删除 `parent_entity_id` 并把 `entity_role` 白名单收窄为 `platform` / `project_company` / `management_company`（V318 的父链列已由 V410 删除，只作历史）；V432 另建 `business_entity_projects` 多对多项目关联表，主体表本身仍无 `project_id` 列。
 
 | 当前字段 | 类型/约束 | 用途 |
 |---|---|---|
@@ -46,14 +46,14 @@
 | `unified_social_credit_code` | `VARCHAR(128)` | 统一社会信用代码 |
 | `legal_representative` | `VARCHAR(255)` | 法定代表人 |
 | `bank_account_ref` | `TEXT` | 银行账户引用 |
-| `status` | `VARCHAR(32)` | 当前代码状态，尚无 DB CHECK |
+| `status` | `VARCHAR(32)` | 当前代码状态，尚无 DB CHECK；服务只接受 `pending_admission` / `active` / `suspended` / `terminated` / `blacklisted` |
 | `archive_reason` | `TEXT` | 存档/下线理由 |
 | `created_at/updated_at` | `TIMESTAMPTZ` | 时间留痕 |
 
 实现差距：
 
-- V318 曾把 `parent_entity_id` 用作固定层级、V354 的角色白名单曾含 HTML 没有的代码值；V410 已删除该列并把白名单收为 HTML 三角色，代码按 HTML 的多对多协作关系收敛，业务读取不得据历史列推导固定行政隶属链。OpenAPI `BusinessEntityRequest.entity_role` 枚举仍是旧六值（operation / contract / settlement / invoice / payment / other），与服务白名单不一致，属契约缺口（M013-009，归 OpenAPI 契约模块处理），不得当作活闭集。
-- 当前表没有 `project_id`、主体联系电话、证照附件或证照有效期字段。证照、资质和保险由合规到期台账承载，不得在本文虚构这些现行列。
+- V318 曾把 `parent_entity_id` 用作固定层级、V354 的角色白名单曾含 HTML 没有的代码值；V410 已删除该列并把白名单收为 HTML 三角色，代码按 HTML 的多对多协作关系收敛，业务读取不得据历史列推导固定行政隶属链。OpenAPI `BusinessEntityRequest.entity_role` 枚举仍是旧六值（operation / contract / settlement / invoice / payment / other），与服务白名单不一致，属契约缺口（M013-009，归 OpenAPI 契约模块处理），不得当作活闭集；同一 schema 的 `status` 枚举仍是 draft / active / suspended / archived，与服务可设五值不一致，同属契约缺口（M013-023，归 OpenAPI 契约模块处理）。
+- 当前表没有 `project_id`、主体联系电话、证照附件或证照有效期字段。项目归属由 V432 `business_entity_projects` 多对多关联承载：创建主体时关联当前项目（持授权 U 盘密钥的最高权限可指定已存在项目），列表按当前项目过滤。证照、资质和保险由合规到期台账承载，不得在本文虚构这些现行列。
 - HTML 的商户/运营主体业务状态为待准入、正常、暂停、终止、归档、黑名单；试运营是商户自己的经营状态，系统不记录。暂停与列入黑名单由招商部门与运营部门决定。退出不立即生效，须进入按项目可配的缓冲期（上下限出厂为 30 至 60 天，出厂默认 30 天）；缓冲期内向该商户客人说明情况，并给出转到其他酒吧、客人自行取走或退款三种处理方式。当前 `status` 未实现该完整词表和缓冲期闭环。
 
 ### 3.2 `business_entity_bindings`
@@ -77,7 +77,7 @@
 
 唯一约束 `uq_business_entity_bindings_active_merchant` 保证每个商户至多一条 `active` 记录。
 
-当前没有 `project_id`、`binding_no`、`version`、`created_by`、`reviewed_by`、`reviewed_at`，也没有 `business_entity_binding_usages` 表。当前创建接口直接写 `active`，已有 active 时拒绝；状态变更接口只改启用、停用或暂停，尚未实现 HTML 要求的主体权责配置审批、新旧关系切换和下游统一引用闭环。
+当前没有 `project_id`、`binding_no`、`version`、`created_by`、`reviewed_by`、`reviewed_at`，也没有 `business_entity_binding_usages` 表。当前创建按 `effective_from` 相对 UTC 当天判断：未来日期写 `inactive`，不提前同步商户三主体；已到日期写 `active` 并同步。已有生效或未结束待生效绑定时拒绝重复；已有商户三主体不得经此接口替换。状态变更还受生效期间及财税变更守卫限制（见 §5）。完整主体权责配置审批、新旧关系切换和下游统一引用闭环仍未实现。
 
 ## 4. 目标流程与当前差距
 
@@ -87,7 +87,7 @@
 2. 转商户时，经营对象、运营主体、合同主体、结算主体默认可指向同一公司。
 3. 经适用审批生效后，下游合同、结算、权限、看板和第三方接入引用同一绑定。
 
-当前差距：`POST /api/v1/platform/business-entity-bindings` 直接创建 active 记录，没有草稿、审批和复核状态。
+当前差距：`POST /api/v1/platform/business-entity-bindings` 按生效日期创建 `active` 或待生效 `inactive` 记录，只有生效时才同步商户三主体；待生效记录不是审批草稿，尚无完整草稿、审批和复核流程。
 
 ### 4.2 主体或权责调整
 
@@ -96,7 +96,7 @@
 3. 审批后只影响生效时间之后的新业务；历史合同、订单、票据、结算和快照保持原值。
 4. 下游新业务切到新绑定，历史引用继续可追溯。
 
-当前差距：`POST /api/v1/platform/business-entity-bindings/{id}/change` 只改变现有记录状态，不能提交新的三主体组合，也没有上述审批链和历史版本切换。
+当前差距：`POST /api/v1/platform/business-entity-bindings/{id}/change` 只接受状态动作并校验生效期间；生效中绑定不得直接停用或暂停，已结束期间不得重开，未到生效日不得启用或结束。该接口不能提交新的三主体组合，也没有上述审批链和历史版本切换；到达生效日期后可调用启用，不表示系统会自动启用。
 
 ### 4.3 准入与引用
 
@@ -113,9 +113,10 @@
 |---|---|---|
 | `/api/v1/platform/business-entities` | GET | 真分页查询主体档案 |
 | `/api/v1/platform/business-entities` | POST | 创建主体档案 |
+| `/api/v1/platform/business-entities/{entity_id}/projects` | POST | 为主体追加项目关联（须平台范围且由持授权 U 盘密钥的最高权限执行） |
 | `/api/v1/platform/business-entity-bindings` | GET | 真分页查询四类主体绑定 |
-| `/api/v1/platform/business-entity-bindings` | POST | 直接创建 active 绑定；已有 active 时返回 `ACTIVE_BINDING_EXISTS` |
-| `/api/v1/platform/business-entity-bindings/{id}/change` | POST | 将状态改为 active、inactive 或 suspended，并填写原因 |
+| `/api/v1/platform/business-entity-bindings` | POST | 未来 `effective_from` 写 `inactive` 且不提前同步商户三主体；已到日期写 `active` 并同步。已有 `active` 或 `inactive` 且 `effective_to` 为空的绑定返回 `ACTIVE_BINDING_EXISTS`；替换商户既有三主体返回 `BINDING_FINANCIAL_CHANGE_REQUIRES_REVIEW` |
+| `/api/v1/platform/business-entity-bindings/{id}/change` | POST | 接受 active、inactive、suspended 并必填原因；已结束期间返回 `BINDING_PERIOD_ENDED`，生效中绑定停用/暂停返回 `BINDING_FINANCIAL_CHANGE_REQUIRES_REVIEW`，未到生效日返回 `BINDING_NOT_EFFECTIVE`。启用还检查商户、三主体、未完成绑定槽位及既有财税主体不被替换 |
 
 当前不存在 `/active?businessObjectId=` 和 `/{id}/usages` 两条接口，也不存在主体完整 CRUD。文档不得调用不存在的端点。
 
@@ -150,4 +151,4 @@
 - PGM「酒吧股权、牌照、场地和资金必须分别记录」
 - BSM「配置数据可以存档、也可以删除（删除要审批）」
 - ENUM「四类主体」「经营主体关系」「商户/运营主体状态」
-- 当前实现：V002、V005、V010、V318、V354、V410（删父链、角色三值）；`PlatformController`、`PlatformService`、`JdbcPlatformRepository`
+- 当前实现：V002、V005、V010、V318、V354、V410（删父链、角色三值）、V432（主体项目关联）；`PlatformController`、`PlatformService`、`JdbcPlatformRepository`

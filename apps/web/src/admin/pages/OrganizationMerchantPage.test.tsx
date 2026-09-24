@@ -1,5 +1,6 @@
-// 文件版本：V0.02
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OrganizationMerchantPage } from "./OrganizationMerchantPage";
@@ -12,27 +13,29 @@ const ENTITIES = [
   { id: "org-1", entity_name: "平台经营主体", entity_role: "management_company", unified_social_credit_code: "91330100MA27XW8H", legal_representative: "张三", bank_account_ref: "vault://demo", status: "active", created_at: "2026-07-01T00:00:00Z" },
 ];
 const MERCHANTS = [
-  { id: "m-1", merchant_name: "正常商户甲", merchant_type: "catering", business_entity_id: "org-1", contact_name: "联系人甲", contact_phone: "13800000001", mall_block_code: "1F-A", area_square_meter: 128.5, leased_area_square_meter: 120, cooperation_form: "lease", status: "active" },
-  { id: "m-2", merchant_name: "停用商户乙", contact_name: "联系人乙", status: "suspended" },
+  { id: "m-1", project_id: "p-1", merchant_name: "正常商户甲", merchant_type: "catering", business_entity_id: "org-1", contact_name: "联系人甲", contact_phone: "13800000001", mall_block_code: "1F-A", area_square_meter: 128.5, leased_area_square_meter: 120, cooperation_form: "lease", status: "active" },
+  { id: "m-2", project_id: "p-1", merchant_name: "停用商户乙", contact_name: "联系人乙", status: "suspended" },
   // M012-008：已存档商户（行内动作为取消存档/申请删除下拉）。status 取 suspended 以不改变「正常商户（1）」断言。
-  { id: "m-3", merchant_name: "已存档商户丙", contact_name: "联系人丙", status: "suspended", archived_at: "2026-07-01T00:00:00Z", delete_status: "none" },
+  { id: "m-3", project_id: "p-1", merchant_name: "已存档商户丙", contact_name: "联系人丙", status: "suspended", archived_at: "2026-07-01T00:00:00Z", delete_status: "none" },
 ];
 const PROJECTS = [
-  { id: "p-1", name: "项目一", code: "PJ-1", merchant_id: "m-1", venue_type: "bar", floor: "1F", capacity: 80, status: "active" },
+  { id: "p-1", name: "项目一", code: "PJ-1", merchant_id: null, venue_type: "bar", floor: "1F", capacity: 80, status: "active" },
 ];
 
-function envelope(items: unknown[]): Response {
+function envelope(items: unknown[], total = items.length, page = 1): Response {
   return new Response(
-    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total: items.length } }),
+    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page, page_size: 500, total } }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
 
-function makeApi(): AdminApi {
+function makeApi(respond?: (url: string, init?: RequestInit) => Response | undefined): AdminApi {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      const response = respond?.(url, init);
+      if (response) return Promise.resolve(response);
       // 写路径（创建/存档/删除申请）默认返回成功信封；失败场景由用例 mockImplementationOnce 覆盖。
       if (init?.method === "POST") return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: { id: "m-new" } }), { status: 200, headers: { "content-type": "application/json" } }));
       if (url.includes("business-entities")) return Promise.resolve(envelope(ENTITIES));
@@ -46,13 +49,14 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(respond?: (url: string, init?: RequestInit) => Response | undefined, overrides: Partial<AdminPageProps> = {}) {
   const fullProps: AdminPageProps = {
-    api: makeApi(),
+    api: makeApi(respond),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
     effectivePermissions: ADMIN_PERMS,
+    ...overrides,
   };
   render(<OrganizationMerchantPage {...fullProps} />);
   return fullProps;
@@ -60,7 +64,7 @@ function renderPage() {
 
 // 聚焦视图断言：只剩商户表（active 行），其余表/表单/KPI 卡全隐藏，横幅在场。
 function expectActiveMerchantsFocusView() {
-  expect(screen.getByTestId("organization-kpi-focus-banner").textContent).toContain("正在查看：正常商户（1）");
+  expect(screen.getByTestId("organization-kpi-focus-banner").textContent).toContain("正在查看：本页正常商户（1）");
   expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy();
   expect(screen.queryByTestId("organization-merchant-row-m-2")).toBeNull();
   expect(screen.queryByTestId("organization-entities-table")).toBeNull();
@@ -139,7 +143,8 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     const projectsText = screen.getByTestId("organization-projects-table").textContent ?? "";
     expect(projectsText).toContain("项目一");
     expect(projectsText).toContain("PJ-1");
-    expect(projectsText).toContain("m-1");
+    expect(projectsText).not.toContain("m-1");
+    expect(screen.getByTestId("organization-merchant-row-m-1").textContent).toContain("项目一");
     // M012-004：业态列中文（PGM-001 零英文），不再断言英文码。
     expect(projectsText).toContain("酒吧");
     expect(projectsText).not.toMatch(/\bbar\b/);
@@ -309,6 +314,8 @@ describe("OrganizationMerchantPage 存档/删除写路径（M012-008）", () => 
     fireEvent.click(screen.getByTestId("merchant-actions-m-3"));
     await waitFor(() => expect(screen.getByTestId("merchant-delete-request-m-3")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-delete-request-m-3"));
+    // M012-019：申请框须说明密钥本人会直接执行，不能承诺所有提交均待审批。
+    expect(window.prompt).toHaveBeenCalledWith("删除理由（由最高权限审批；持授权 U 盘密钥的最高权限本人发起时直接执行）：");
     await waitFor(() => expect(postCalls()).toHaveLength(1));
     const [url, init] = postCalls()[0]!;
     expect(String(url)).toContain("/api/v1/platform/merchants/m-3/delete-request");
@@ -327,5 +334,142 @@ describe("OrganizationMerchantPage 存档/删除写路径（M012-008）", () => 
     fireEvent.click(screen.getByTestId("merchant-archive-m-1"));
     // ApiError.message 经 shared/apiError 翻译层改写为中文业务话术（不一定含后端原文），此处只锁「失败被 catch 并以字符串报给 setGlobalError」。
     await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith(expect.any(String)));
+  });
+});
+
+
+describe("M012 本次组织档案回归", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState({}, "", "/admin/governance/organizations"); });
+
+  it("缺主体查看权仍展示商户且不请求主体接口", async () => {
+    renderPage(undefined, { effectivePermissions: { status: "ready", value: { grants: ["merchant.profile.view", "governance.project.view"], denies: [], wildcard: false } } });
+    expect(await screen.findByTestId("organization-merchant-row-m-1")).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/business-entities"))).toBe(false);
+  });
+
+  it("暂停、待准入和黑名单是不同的中文商户状态", async () => {
+    renderPage((url) => url.includes("/merchants")
+      ? envelope([{ ...MERCHANTS[0], status: "pending_admission" }, MERCHANTS[1], { ...MERCHANTS[2], status: "blacklisted" }])
+      : undefined);
+    expect((await screen.findByTestId("organization-merchant-row-m-1")).textContent).toContain("待准入");
+    expect(screen.getByTestId("organization-merchant-row-m-2").textContent).toContain("暂停");
+    expect(screen.getByTestId("organization-merchant-row-m-3").textContent).toContain("黑名单");
+    expect(screen.getByTestId("organization-merchants-table").textContent).not.toContain("已封禁");
+  });
+
+  it("分页保留商户归档和业态筛选参数，后页商户可达", async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({ ...MERCHANTS[0], id: "m-page-" + i, merchant_name: "分页商户" + i }));
+    renderPage((url) => {
+      if (!url.includes("/merchants")) return undefined;
+      const page = Number(new URL(url, "http://localhost").searchParams.get("page") || 1);
+      return envelope(rows.slice((page - 1) * 500, page * 500), 501, page);
+    });
+    await screen.findByTestId("organization-merchant-row-m-page-0");
+    fireEvent.click(screen.getByTestId("organization-merchants-pager-next"));
+    expect(await screen.findByTestId("organization-merchant-row-m-page-500")).toBeTruthy();
+    const pageTwoUrl = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).find(url => url.includes("/merchants") && url.includes("page=2"));
+    expect(pageTwoUrl).toContain("includeArchived=false");
+    expect(screen.getByTestId("organization-merchants-pager-status").textContent).toContain("共 501 条");
+    fireEvent.click(screen.getByTestId("merchant-show-archived").querySelector("input")!);
+    fireEvent.change(await screen.findByTestId("merchant-type-filter"), { target: { value: "retail" } });
+    await waitFor(() => {
+      const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter(url => url.includes("/merchants"));
+      const params = new URL(urls.at(-1)!, "http://localhost").searchParams;
+      expect(params.get("includeArchived")).toBe("true");
+      expect(params.get("merchantType")).toBe("retail");
+      expect(params.get("page")).toBe("1");
+    });
+    await screen.findByTestId("organization-merchant-row-m-page-0");
+    fireEvent.click(screen.getByTestId("organization-merchants-pager-next"));
+    await screen.findByTestId("organization-merchant-row-m-page-500");
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter(url => url.includes("/merchants"));
+    expect(urls.at(-1)).toContain("merchantType=retail");
+    expect(urls.at(-1)).toContain("includeArchived=true");
+
+  });
+
+  it("商户存档按钮用Enter触发原操作而不打开行抽屉", async () => {
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue(null);
+    renderPage();
+    const button = await screen.findByTestId("merchant-archive-m-1");
+    button.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(prompt).toHaveBeenCalledWith("存档（下线）理由：");
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+  it("存档最后一页的唯一商户后回到仍有记录的第一页", async () => {
+    let archived = false;
+    const rows = Array.from({ length: 501 }, (_, i) => ({ ...MERCHANTS[0], id: "m-last-" + i }));
+    renderPage((url, init) => {
+      if (init?.method === "POST" && url.includes("/archive")) { archived = true; return envelope([]); }
+      if (!url.includes("/merchants")) return undefined;
+      const page = Number(new URL(url, "http://localhost").searchParams.get("page") || 1);
+      const current = archived ? rows.slice(0, 500) : rows;
+      return envelope(current.slice((page - 1) * 500, page * 500), current.length, page);
+    });
+    await screen.findByTestId("organization-merchant-row-m-last-0");
+    fireEvent.click(screen.getByTestId("organization-merchants-pager-next"));
+    await screen.findByTestId("organization-merchant-row-m-last-500");
+    vi.spyOn(window, "prompt").mockReturnValue("结束经营");
+    fireEvent.click(screen.getByTestId("merchant-archive-m-last-500"));
+    await waitFor(() => expect(screen.getByTestId("organization-merchants-pager-status").textContent).toContain("第 1 / 1 页"));
+    expect(await screen.findByTestId("organization-merchant-row-m-last-0")).toBeTruthy();
+  });
+
+});
+
+
+it("M012-013：重试成功后清除全局读取错误", async () => {
+  let failed = false;
+  const props = renderPage((url, init) => {
+    if (init?.method !== "POST" && url.includes("/merchants") && !failed) {
+      failed = true;
+      return new Response(JSON.stringify({ success: false, code: "TEMPORARY_ERROR", message: "临时读取失败" }), { status: 503, headers: { "content-type": "application/json" } });
+    }
+    return undefined;
+  });
+  await screen.findByTestId("admin-retry");
+  expect(props.setGlobalError).toHaveBeenCalledWith("服务暂时不可用，请稍后重试");
+  vi.mocked(props.setGlobalError).mockClear();
+  fireEvent.click(screen.getByTestId("admin-retry"));
+  await screen.findByTestId("organization-merchants-table");
+  expect(props.setGlobalError).toHaveBeenLastCalledWith(null);
+});
+
+describe("M012-018：下钻提示只报告当前可见商户", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/governance/organizations");
+  });
+
+  it("后页目标未加载时不称已定位，翻页看到目标后才显示成功", async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({ ...MERCHANTS[0], id: "m-focus-" + i }));
+    renderPage((url, init) => {
+      if (init?.method === "POST" || !url.includes("/merchants")) return undefined;
+      const page = Number(new URL(url, "http://localhost").searchParams.get("page") || 1);
+      return envelope(rows.slice((page - 1) * 500, page * 500), 501, page);
+    }, { focusObjectId: "m-focus-500" });
+    expect(screen.getByTestId("organization-merchant-focus").textContent).not.toContain("已从下钻定位到商户");
+    await screen.findByTestId("organization-merchant-row-m-focus-0");
+    expect(screen.queryByTestId("organization-merchant-row-m-focus-500")).toBeNull();
+    expect(screen.getByTestId("organization-merchant-focus").textContent).toContain("当前列表尚未定位到该商户，请检查筛选或翻页");
+    fireEvent.click(screen.getByTestId("organization-merchants-pager-next"));
+    await screen.findByTestId("organization-merchant-row-m-focus-500");
+    expect(screen.getByTestId("organization-merchant-focus").textContent).toContain("已从下钻定位到商户：m-focus-500");
+  });
+
+  it.each([
+    ["?kpi=merchants&status=active", "m-2", "organization-merchants-table"],
+    ["?kpi=projects", "m-1", "organization-projects-table"],
+  ])("目标被当前视图隐藏时不称已定位：%s", async (query, target, table) => {
+    window.history.replaceState({}, "", "/admin/governance/organizations" + query);
+    renderPage(undefined, { focusObjectId: target });
+    await screen.findByTestId(table);
+    expect(screen.queryByTestId("organization-merchant-row-" + target)).toBeNull();
+    expect(screen.getByTestId("organization-merchant-focus").textContent).toContain("当前列表尚未定位到该商户，请检查筛选或翻页");
+    fireEvent.click(screen.getByTestId("organization-kpi-focus-clear"));
+    await screen.findByTestId("organization-merchant-row-" + target);
+    expect(screen.getByTestId("organization-merchant-focus").textContent).toContain("已从下钻定位到商户：" + target);
   });
 });

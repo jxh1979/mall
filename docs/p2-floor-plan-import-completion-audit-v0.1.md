@@ -1,4 +1,6 @@
-# P2-A 平面图导入编码完成审计 V0.1
+# P2-A 平面图导入编码完成审计 V0.2
+
+> 2026-09-20 160 全量审计 M019（B3-r1，V0.1→V0.2）：人工发布规则按现行实现改写（M019-004）；矢量图导入范围补闭合 `<polyline>`（M019-006）；§5 数字标为编码完成时快照（M019-007）；候选 `shape_type` 八值 CHECK 指向 V423（M019-009）。
 
 ## 1. 结论
 
@@ -10,17 +12,17 @@ P2-A 商场平面图 SVG/标准 JSON 导入能力已完成当前可编码范围�
 
 | 范围 | 结论 |
 |---|---|
-| 矢量图导入 | 支持 `<polygon>`；未闭合 `<polyline>` 记录错误，不生成候选 |
+| 矢量图导入 | 支持 `<polygon>` 与首尾闭合的 `<polyline>`；未闭合 `<polyline>` 记录错误，不生成候选 |
 | 标准数据导入 | 支持 `shapes` 数组和 `polygon_points` |
 | 候选种类 | 只发布铺位、摊位、公共区、区域、入口、设施、风险区、路径八种 |
 | 候选区 | 导入结果先进入 `floor_plan_import_candidates`，不直接覆盖正式 shape |
 | 错误明细 | 非法点位、未闭合 polyline、JSON 错误等进入错误明细 |
-| 人工发布 | 仅 `parsed` 任务和 `pending` 候选允许发布 |
+| 人工发布 | `parsed`/`published` 任务的 `pending` 候选允许分批发布；`failed`/`cancelled` 任务拒绝 |
 | 正式 shape | 发布后写入既有 `floor_plan_shapes` |
 | 权限 | 新增 `floor_plan.import.view`、`floor_plan.import.manage` |
 | 留痕 | 覆盖导入创建、查看候选、发布、失败事件 |
 | 幂等 | 创建导入和发布导入均接入 idempotency |
-| 数据库 | 新增 V034 迁移，包含导入任务、候选、错误表和权限种子 |
+| 数据库 | 新增 V034 迁移，包含导入任务、候选、错误表和权限种子；候选 `shape_type` 八值 CHECK 见 V423（V034 原六值已被其后迁移替换） |
 
 ## 3. 新增接口
 
@@ -45,6 +47,8 @@ P2-A 商场平面图 SVG/标准 JSON 导入能力已完成当前可编码范围�
 | 开发计划 | `docs/superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md` |
 
 ## 5. 验证证据
+
+> 下表为 2026-06 编码完成时的 160 记录快照，非当前门禁；当前验证以上述四个测试类与 `npm run verify:predeploy` 门禁为准。
 
 | 验证项 | 160 结果 |
 |---|---|

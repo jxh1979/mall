@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -435,14 +435,14 @@ class SupervisorReviewServiceTests {
         assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactly(a.reviewId());
         TestSecurityActors.asSupervisor("usr_sup_b", 1); // org_1 账号，但是 b 单当前节点审批人：可见
         assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactlyInAnyOrder(a.reviewId(), b.reviewId());
-        TestSecurityActors.asPlatformAdmin("usr_admin_all");
-        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactly(a.reviewId());
+        TestSecurityActors.asPlatformAdmin("usr_admin_all"); // D-032：平台管理员跨范围整表可见
+        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactlyInAnyOrder(a.reviewId(), b.reviewId());
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
-                        "token", List.of()));
-        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactlyInAnyOrder(a.reviewId(), b.reviewId());
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"),
+                        "token", List.of())); // XM-D029-002：最高权限不整表，按普通可见规则只见本项目 org_1 的单
+        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).containsExactly(a.reviewId());
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("governance.supervisor_review.pending_listed_cross_scope");
     }
 
@@ -578,7 +578,7 @@ class SupervisorReviewServiceTests {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", null, null, "active"),
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, null, null, "active"),
                         "test", List.of()));
     }
 
@@ -759,8 +759,8 @@ class SupervisorReviewServiceTests {
         reviewRepository.superiors.put("usr_esc_init", "usr_reviewer_a");
         reviewRepository.superiors.put("usr_reviewer_a", "usr_reviewer_c");
         TestSecurityActors.asSupervisor("usr_esc_init", 1);
-        var pending = service.blockForAdmission("permission_grant_l2", "access.grant_request.money", "access_grant_request",
-                "agr_esc", "two_levels_up", 2, "usr_esc_benef");
+        var pending = service.blockForAdmission("permission_grant_l3", "access.grant_request.money", "access_grant_request",
+                "agr_esc", "top_authority", 3, "usr_esc_benef"); // XM-D029-005：资金类不再自动升档，本例显式走最高权限档
         TestSecurityActors.asSupervisor("usr_reviewer_a", 3);
         assertThat(service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
                 "esc-forward-below-top", null, "usr_anyone", "handle")).forwardedTo()).isEqualTo("usr_anyone");
@@ -783,7 +783,7 @@ class SupervisorReviewServiceTests {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"),
                         "token", List.of()));
         assertThat(service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest("esc-approve-master", "note", List.of("att"), 3, "approved", "ok"))
                 .reviewStatus()).isEqualTo("approved");
@@ -809,7 +809,7 @@ class SupervisorReviewServiceTests {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"),
                         "token", List.of()));
         assertThat(service.forward(pending.reviewId(), new SupervisorReviewForwardRequest(
                 "top-forward-master", null, "usr_anyone", "handle")).forwardedTo()).isEqualTo("usr_anyone");
@@ -831,7 +831,7 @@ class SupervisorReviewServiceTests {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"),
                         "token", List.of()));
         assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "top-chain-master-early", "note", List.of("att"), 0, "approved", "too early")))
@@ -875,11 +875,7 @@ class SupervisorReviewServiceTests {
         var normalDue = reviewRepository.schedules.get(normal.reviewId()).dueAt();
         assertThat(moneyDue).isAfter(java.time.Instant.now());
         assertThat(normalDue).isAfter(moneyDue);
-        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
-                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
-                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, "platform_admin", "org_1", null, "active"),
-                        "token", List.of())); // 红线④：只有密钥主体可整批看待审
+        TestSecurityActors.asPlatformAdmin(); // D-032：平台管理员整表看待审（最高权限不整表，XM-D029-002）
         assertThat(service.listPending(10).items()).extracting(item -> item.decision().reviewId())
                 .contains(money.reviewId(), normal.reviewId());
     }
@@ -1231,5 +1227,77 @@ class SupervisorReviewServiceTests {
             }
             return false;
         }
+    }
+
+    // XM-D029-002（治理地图第 528 行第④类「持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕」）：
+    // 最高权限的待审清单不整表；按编号读取别的项目的复核单时逐笔放行并留痕。
+    @Test
+    void masterOpensAnotherProjectsReviewOnlyOneByOneAndLeavesATrace() {
+        com.complex.platform.access.AccessRepository repo = levelAwareRepository(Map.of("usr_far_init", 3), null);
+        org.mockito.Mockito.when(repo.findUserById("usr_far_init")).thenReturn(Optional.of(new com.complex.platform.access.AccessUser(
+                "usr_far_init", "far", "staff", "org_2", null, "active", java.time.Instant.parse("2026-06-14T00:00:00Z"))));
+        SupervisorReviewService svc = new SupervisorReviewService(
+                new AuthorizationService(repo),
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository), publishedEvents::add);
+        reviewRepository.superiors.put("usr_far_init", "usr_far_sup");
+        TestSecurityActors.asSupervisor("usr_far_init", 1);
+        var far = svc.evaluate(evaluate("scope-far", "v", List.of(), "contract_violation", "contract", "c_far", 0L, "violation"));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"),
+                        "token", List.of()));
+        assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).doesNotContain(far.reviewId());
+        assertThat(svc.findReview(far.reviewId())).isPresent();
+        assertThat(auditEventRepository.events).filteredOn(e -> "governance.supervisor_review.viewed_cross_scope".equals(e.eventName()))
+                .extracting(AuditEvent::businessId).containsExactly(far.reviewId());
+    }
+
+    // XM-D029-003（丁案）：准入闸六参路径拿不到收款人，免单复核单照常建、审批不因缺受益人被拒；授权类仍强制受益人、被授权人本人仍不能审批。
+    @Test
+    void admissionWaiverWithoutBeneficiaryIsCreatedAndNotRejectedForMissingBeneficiary() {
+        chainL1();
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.blockForAdmission("bar_bill_waiver_block", "bar.bill_waiver", "bar_bill", "b_walk_in", "one_level_up", 2);
+        assertThat(pending.reviewStatus()).isEqualTo("pending_review");
+        TestSecurityActors.asSupervisor("usr_reviewer_a", 3);
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "waiver-no-payee", "note", List.of("att"), 3, "approved", "同意"))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void grantRequestWithoutBeneficiaryIsStillRejected() {
+        chainL1();
+        TestSecurityActors.asSupervisorLevel(1);
+        assertThatThrownBy(() -> service.blockForAdmission("permission_grant_l1", "access.grant_request", "access_grant_request",
+                "agr_no_benef", "one_level_up", 1))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BENEFICIARY_REQUIRED"));
+    }
+
+    @Test
+    void granteeCannotApproveTheirOwnGrantRequest() {
+        chainL1();
+        TestSecurityActors.asSupervisorLevel(1);
+        var pending = service.blockForAdmission("permission_grant_l1", "access.grant_request", "access_grant_request",
+                "agr_self", "one_level_up", 1, "usr_grantee_self");
+        TestSecurityActors.asSupervisor("usr_grantee_self", 3);
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "grant-self", "note", List.of("att"), 3, "approved", "self")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
+    }
+
+    // XM-D029-005（PGM-041「持股分红……由最高权限审批」；其余高危授权按可配政策与指定最终审批人的链）：
+    // 资金类授权申请保留事项策略的档位，只有分红类升最高权限档。
+    @Test
+    void moneyGrantKeepsItsPolicyLevelWhileDividendGoesToTopAuthority() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var money = service.blockForAdmission("permission_grant_l1", "access.grant_request.money", "access_grant_request",
+                "agr_money_level", "one_level_up", 1, "usr_money_grantee");
+        assertThat(money.policyCode()).isEqualTo("permission_grant_l1");
+        var dividend = service.blockForAdmission("permission_grant_l1", "finance.dividend.release", "dividend_statement",
+                "div_level", "one_level_up", 1, "usr_dividend_payee");
+        assertThat(dividend.policyCode()).isEqualTo("permission_grant_l3");
     }
 }

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -52,24 +53,26 @@ describe("SupervisorReviewPage 指定最终审批人与审批链入口", () => {
     window.history.replaceState({}, "", "/admin/governance/supervisor-review");
   });
 
-  it("评估时填写最终审批人 → 请求体带 final_approver_id；不填则不带", async () => {
+  it.each(["usr_gm", ""])("评估时最终审批人 %s：填写则带字段，不填则不带", async (approver) => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
     fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
-    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "usr_gm" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: approver } });
     fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
     const fetchMock = vi.mocked(globalThis.fetch);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/evaluate"))).toBe(true));
     const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/supervisor-review/evaluate"));
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
-    expect(body.final_approver_id).toBe("usr_gm");
+    if (approver) expect(body.final_approver_id).toBe(approver);
+    else expect(body).not.toHaveProperty("final_approver_id");
   });
 
-  it("待复核清单每行带审批链入口链接（携带 review_id）", async () => {
+  it.each(["", "/complex"])("部署前缀 %s：待复核清单审批链链接保留前缀与 review_id", async (prefix) => {
+    window.history.replaceState({}, "", `${prefix}/admin/governance/supervisor-review`);
     renderPage();
     await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-review_p1")).toBeTruthy());
     const link = screen.getByTestId("supervisor-review-chain-link-review_p1") as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe("/admin/governance/approval-chain?review_id=review_p1");
+    expect(link.getAttribute("href")).toBe(`${prefix}/admin/governance/approval-chain?review_id=review_p1`);
     expect(link.textContent).toContain("审批链");
   });
 });

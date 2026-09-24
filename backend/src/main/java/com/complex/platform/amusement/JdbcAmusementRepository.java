@@ -1106,25 +1106,6 @@ class JdbcAmusementRepository implements AmusementRepository {
         return true;
     }
 
-    /**
-     * 阶段2 主管释放（异常清场）：把项目的并发在场快照（point_device + project 维度）occupied_count 清零。
-     * 用于漏扫出场堆积、异常清场。场次/批次型（session 维、amusement_sessions.used_capacity）不受影响。
-     * 返回清零涉及的快照行数（审计留痕参考）。
-     */
-    @Override
-    public int clearProjectConcurrentCapacity(String projectId, Instant now) {
-        return jdbcTemplate.update("""
-                UPDATE amusement_capacity_snapshot
-                   SET occupied_count = 0,
-                       updated_at = :updated_at
-                 WHERE project_id = :project_id
-                   AND dimension IN ('point_device', 'project')
-                   AND occupied_count > 0
-                """, new MapSqlParameterSource()
-                .addValue("project_id", projectId)
-                .addValue("updated_at", timestampWithTimeZone(now)));
-    }
-
     @Override
     public boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock) {
         int updated = jdbcTemplate.update("""
@@ -1365,48 +1346,6 @@ class JdbcAmusementRepository implements AmusementRepository {
         }
         sql.append(" ORDER BY dimension, project_id, updated_at DESC, id");
         return jdbcTemplate.query(sql.toString(), params, rowMapper::mapCapacitySnapshot);
-    }
-
-    @Override
-    public AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override) {
-        jdbcTemplate.update("""
-                INSERT INTO amusement_manual_overrides (
-                    id, project_id, session_id, override_type, reason, status,
-                    operator_note, evidence_attachment_ids, created_at
-                )
-                VALUES (
-                    :id, :project_id, :session_id, :override_type, :reason, :status,
-                    :operator_note, CAST(:evidence_attachment_ids AS jsonb), :created_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    override_type = EXCLUDED.override_type,
-                    reason = EXCLUDED.reason,
-                    status = EXCLUDED.status,
-                    operator_note = EXCLUDED.operator_note,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
-                """, manualOverrideParameters(override));
-        return override;
-    }
-
-    @Override
-    public List<AmusementManualOverrideRecord> listManualOverrides() {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, session_id, override_type, reason, status,
-                       operator_note, evidence_attachment_ids, created_at
-                  FROM amusement_manual_overrides
-                 ORDER BY created_at DESC, id
-                """, rowMapper::mapManualOverride);
-    }
-
-    @Override
-    public List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, session_id, override_type, reason, status,
-                       operator_note, evidence_attachment_ids, created_at
-                  FROM amusement_manual_overrides
-                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
-                 ORDER BY created_at DESC, id
-                """, Map.of("merchant_id", merchantId), rowMapper::mapManualOverride);
     }
 
     @Override
@@ -1991,19 +1930,6 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("entry_verification_id", verification.entryVerificationId())
                 .addValue("entitlement_id", verification.entitlementId())
                 .addValue("location_point_id", verification.locationPointId());
-    }
-
-    private MapSqlParameterSource manualOverrideParameters(AmusementManualOverrideRecord override) {
-        return new MapSqlParameterSource()
-                .addValue("id", override.id())
-                .addValue("project_id", override.projectId())
-                .addValue("session_id", override.sessionId())
-                .addValue("override_type", override.overrideType())
-                .addValue("reason", override.reason())
-                .addValue("status", override.status())
-                .addValue("operator_note", override.operatorNote())
-                .addValue("evidence_attachment_ids", writeJson(override.evidenceAttachmentIds()))
-                .addValue("created_at", timestampWithTimeZone(override.createdAt()));
     }
 
     private MapSqlParameterSource deviceStatusParameters(AmusementDeviceStatusRecord status) {

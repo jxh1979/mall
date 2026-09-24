@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -41,7 +41,8 @@ public class VenueBusinessHoursService {
 
     public List<VenueBusinessHoursRecord> list() {
         // M015-009：项目员工只看本项目场地（BEQR-152）；平台管理员 scope 为空取全量。
-        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+        // M015-015：平台管理员经 projectScopeOrAll() 取全量；其余走会抛的 currentProjectScopeQuietly。
+        Optional<String> projectScope = projectScopeOrAll();
         List<VenueBusinessHoursRecord> rows = projectScope.isPresent()
                 ? repository.listByProject(projectScope.get())
                 : repository.listAll();
@@ -49,6 +50,15 @@ public class VenueBusinessHoursService {
                 "venue_business_hours.viewed", "governance.space.view", "venue_business_hours", "all",
                 null, null, Map.of("count", rows.size()));
         return rows;
+    }
+
+    // M015-015：项目 scope 只读取值——平台管理员（isPlatformAdmin）为空＝全量，与 requirePlatformScope 的平台管理员桥同口径；
+    // 其余主体走 currentProjectScopeQuietly（无项目归属的员工 fail-closed 抛 PROJECT_SCOPE_REQUIRED，红线④保持）。
+    private Optional<String> projectScopeOrAll() {
+        if (authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+            return Optional.empty();
+        }
+        return authorizationService.currentProjectScopeQuietly();
     }
 
     public VenueBusinessHoursRecord save(VenueBusinessHoursRequest request) {
@@ -62,7 +72,7 @@ public class VenueBusinessHoursService {
         // M015-009：场地必须是现存空间（spaces.id），且项目员工只能配置本项目场地。
         String venueProjectId = repository.findVenueProjectId(venueId)
                 .orElseThrow(() -> ApiException.notFound("VENUE_NOT_FOUND", "场地不存在或已被删除"));
-        authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
+        projectScopeOrAll().ifPresent(scope -> {
             if (!scope.equals(venueProjectId)) {
                 throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "场地属于其他综合体项目");
             }

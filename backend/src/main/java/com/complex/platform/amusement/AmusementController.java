@@ -36,21 +36,6 @@ public class AmusementController {
         return ApiResponse.ok(service.listDeviceStatuses());
     }
 
-    @GetMapping("/manual-overrides")
-    public ApiResponse<PageResponse<AmusementManualOverrideRecord>> listManualOverrides() {
-        authorizationService.requirePermission("amusement.verification.override");
-        return ApiResponse.ok(service.listManualOverrides());
-    }
-
-    @PostMapping("/manual-overrides")
-    public ApiResponse<AmusementManualOverrideRecord> createManualOverride(
-            @RequestBody(required = false) @jakarta.validation.Valid AmusementManualOverrideRequest request
-    ) {
-        authorizationService.requirePermission("amusement.verification.override");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createManualOverride(request));
-    }
-
     @GetMapping("/projects")
     public ApiResponse<PageResponse<AmusementProjectRecord>> listProjects() {
         authorizationService.requirePermission("amusement.session.view");

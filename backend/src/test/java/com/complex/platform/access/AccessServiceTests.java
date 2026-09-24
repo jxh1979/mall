@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.06
+// 文件版本：V0.09
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1503,6 +1503,149 @@ class AccessServiceTests {
                 "pending", null, "scope test", "usr_requester", null, null, projectId, null, now, now);
     }
 
+    // M031-001（BSM-003；业务地图原文「想恢复点"取消存档"即可」）：存档后恢复即回到可定岗的启用态。
+    @Test
+    void restoringAnArchivedPositionMappingMakesItAssignableAgain() {
+        authenticateAsPlatformAdmin("seed-org");
+        PositionRoleTemplate mapping = seedRestoreFixture("usr_restore", "ops_restore", "map-restore");
+        service.changePositionTemplateLifecycle(mapping.id(), new StatusChangeRequest("restore-archive", "archive", "停止使用", List.of()));
+        assertThatThrownBy(() -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-while-archived", null, "usr_restore", "ops_restore", "lvl_m1_lower", null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("POSITION_ROLE_TEMPLATE_NOT_FOUND"));
+
+        PositionRoleTemplate restored = service.changePositionTemplateLifecycle(mapping.id(),
+                new StatusChangeRequest("restore-restore", "restore", "恢复使用", List.of()));
+
+        assertThat(restored.status()).isEqualTo("active");
+        PositionRoleTemplate stored = accessRepository.findPositionRoleTemplateById(mapping.id()).orElseThrow();
+        assertThat(stored.status()).isEqualTo("active");
+        assertThat(stored.archivedAt()).isNull();
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-after-restore", null, "usr_restore", "ops_restore", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.positionRoles.get("usr_restore")).isEqualTo("role_restore");
+    }
+
+    // M031-001：同岗位同职级已有启用中的替代映射时，恢复被拒且原映射状态不变。
+    @Test
+    void restoringIsRejectedWhileAnActiveReplacementMappingExists() {
+        authenticateAsPlatformAdmin("seed-org");
+        PositionRoleTemplate mapping = seedRestoreFixture("usr_restore_blocked", "ops_restore_blocked", "map-restore-blocked");
+        service.changePositionTemplateLifecycle(mapping.id(), new StatusChangeRequest("blocked-archive", "archive", "停止使用", List.of()));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-restore-replacement", null, "ops_restore_blocked", "lvl_m1_lower", "role_restore", "tpl_restore", "active"));
+
+        assertThatThrownBy(() -> service.changePositionTemplateLifecycle(mapping.id(),
+                new StatusChangeRequest("blocked-restore", "restore", "恢复使用", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.code()).isEqualTo("POSITION_TEMPLATE_ACTIVE_EXISTS");
+                });
+
+        PositionRoleTemplate unchanged = accessRepository.findPositionRoleTemplateById(mapping.id()).orElseThrow();
+        assertThat(unchanged.status()).isEqualTo("inactive");
+        assertThat(unchanged.archivedAt()).isNotNull();
+    }
+
+    private PositionRoleTemplate seedRestoreFixture(String userId, String positionCode, String idempotencyKey) {
+        accessRepository.users.put(userId, new AccessUser(
+                userId, userId, "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_restore", new RoleRecord(
+                "role_restore", "role_restore", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_restore", "tpl_restore", "Ops Check", null, "base",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(
+                        "tpl_restore", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        return service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                idempotencyKey, null, positionCode, "lvl_m1_lower", "role_restore", "tpl_restore", "active"));
+    }
+
+    // M031-002（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」）：
+    // 保存岗位映射后在岗人员按新映射重算、薪资不变；映射停用则收回派生。
+    @Test
+    void savingAPositionMappingRecomputesAssignedUsersAndDeactivatingRevokesDerivedGrants() {
+        authenticateAsPlatformAdmin("seed-org");
+        accessRepository.users.put("usr_recompute", new AccessUser(
+                "usr_recompute", "recompute", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        // M036-001：旧角色、新角色、模板各带一个互不相同的码，有效权限集才分得清派生来自哪里。
+        for (Map.Entry<String, String> role : Map.of(
+                "role_recompute_old", "ops.production_readiness.view",
+                "role_recompute_new", "governance.supervisor_review.view").entrySet()) {
+            accessRepository.roles.put(role.getKey(), new RoleRecord(
+                    role.getKey(), role.getKey(), "Ops checker", "project", "active",
+                    Instant.parse("2026-06-14T00:00:00Z"),
+                    List.of(role.getValue()),
+                    null));
+        }
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_recompute", "tpl_recompute", "Ops Check", null, "base",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(
+                        "tpl_recompute",
+                        "ops.production_readiness.check",
+                        AccessRepository.Effect.GRANT,
+                        "project",
+                        false)));
+        PositionRoleTemplate mapping = service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-recompute", null, "ops_recompute", "lvl_m1_lower",
+                "role_recompute_old", "tpl_recompute", "active"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-recompute", null, "usr_recompute", "ops_recompute", "lvl_m1_lower",
+                500000L, "CNY", null));
+        assertThat(accessRepository.positionRoles.get("usr_recompute")).isEqualTo("role_recompute_old");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_recompute").grants())
+                .contains("ops.production_readiness.view", "ops.production_readiness.check");
+
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "map-recompute-change", null, "ops_recompute", "lvl_m1_lower",
+                "role_recompute_new", "tpl_recompute", "active"));
+
+        assertThat(accessRepository.positionRoles.get("usr_recompute")).isEqualTo("role_recompute_new");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_recompute").grants())
+                .contains("governance.supervisor_review.view", "ops.production_readiness.check")
+                .doesNotContain("ops.production_readiness.view");
+        assertThat(accessRepository.templateApplications).filteredOn(a -> "usr_recompute".equals(a.targetId()))
+                .extracting(PermissionTemplateApplication::status).containsExactly("revoked", "active");
+        assertThat(accessRepository.findStaffLevelAssignment("usr_recompute")).get()
+                .extracting(StaffLevelAssignment::baseSalaryAmountCent)
+                .isEqualTo(500000L);
+
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "map-recompute-off", null, "ops_recompute", "lvl_m1_lower",
+                "role_recompute_new", "tpl_recompute", "inactive"));
+
+        assertThat(accessRepository.positionRoles).containsKey("usr_recompute");
+        assertThat(accessRepository.positionRoles.get("usr_recompute")).isNull();
+        assertThat(authorizationService.effectivePermissionsForUser("usr_recompute").grants())
+                .doesNotContain("ops.production_readiness.view", "governance.supervisor_review.view",
+                        "ops.production_readiness.check");
+        assertThat(accessRepository.templateApplications).filteredOn(a -> "usr_recompute".equals(a.targetId()))
+                .extracting(PermissionTemplateApplication::status).containsOnly("revoked");
+    }
+
+    // M031-003（GEN-011）：岗位模板生命周期与授权政策两个写口失败也留痕。
+    @Test
+    void positionTemplateLifecycleAndGrantPolicyFailuresAreAudited() {
+        authenticateAsPlatformAdmin("seed-org");
+        assertThatThrownBy(() -> service.changePositionTemplateLifecycle("prt_missing",
+                new StatusChangeRequest("lifecycle-missing", "archive", "停止使用", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("POSITION_ROLE_TEMPLATE_NOT_FOUND"));
+        assertThatThrownBy(() -> service.updateGrantPolicy(null))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "failure".equals(event.eventResult()))
+                .extracting(AuditEvent::eventName)
+                .contains("access.position_role_template.lifecycle_failed", "access.grant_policy.change_failed");
+    }
+
     private void authenticateAsPlatformAdmin(String organizationId) {
         AuthService.UserRecord user = new AuthService.UserRecord(
                 "usr_admin", "seed-admin", "hash", "platform_admin", organizationId, null, "active",
@@ -1547,7 +1690,7 @@ class AccessServiceTests {
 
     private static final class InMemoryAccessRepository implements AccessRepository {
         final Map<String, PermissionDefinition> permissions = new LinkedHashMap<>();
-        String policy = "{\"windowDays\":{\"value\":30,\"min\":1,\"max\":2147483647},\"positionThreshold\":{\"value\":3,\"min\":1,\"max\":2147483647},\"userThreshold\":{\"value\":3,\"min\":1,\"max\":2147483647},\"riskReviews\":{\"low\":{\"approvalLevel\":\"one_level_up\",\"requiredLevel\":1},\"medium\":{\"approvalLevel\":\"one_level_up\",\"requiredLevel\":1},\"high\":{\"approvalLevel\":\"two_levels_up\",\"requiredLevel\":2},\"critical\":{\"approvalLevel\":\"top_authority\",\"requiredLevel\":3}}}";
+        String policy = "{\"windowDays\":{\"value\":30,\"min\":1,\"max\":2147483647},\"positionThreshold\":{\"value\":3,\"min\":1,\"max\":2147483647},\"userThreshold\":{\"value\":3,\"min\":1,\"max\":2147483647},\"riskReviews\":{\"low\":{\"approvalLevel\":\"one_level_up\",\"requiredLevel\":1},\"medium\":{\"approvalLevel\":\"one_level_up\",\"requiredLevel\":1},\"high\":{\"approvalLevel\":\"two_levels_up\",\"requiredLevel\":2},\"critical\":{\"approvalLevel\":\"top_authority\",\"requiredLevel\":3}},\"deadlineWorkingDays\":{\"value\":3,\"min\":1,\"max\":30}}";
         final Map<String, String> fingerprints = new LinkedHashMap<>();
         final Map<String, String> positionRoles = new LinkedHashMap<>();
         @Override public void lockGrantAuthorizationFacts() {} // 单线程内存夹具；真实锁在 M006JdbcRegressionTests 验证。
@@ -1556,8 +1699,14 @@ class AccessServiceTests {
             if (fingerprints.putIfAbsent(id, fingerprint) != null) throw new IllegalStateException("fingerprint already set");
         }
         @Override public Optional<String> findGrantFingerprint(String id) { return Optional.ofNullable(fingerprints.get(id)); }
+        final Map<String, List<String>> positionApplicationIds = new LinkedHashMap<>();
+        // M036-001：与 JdbcAccessRepository 同语义——先撤上一次岗位派生的模板应用，再记新角色与新应用 id；独立模板应用不受影响。
         @Override public void replacePositionGrants(String userId, String roleId, String mappingId,
-                List<String> applicationIds, String actorId, Instant at) { positionRoles.put(userId, roleId); }
+                List<String> applicationIds, String actorId, Instant at) {
+            revokeTemplateApplications(userId, positionApplicationIds.getOrDefault(userId, List.of()), actorId, at);
+            positionRoles.put(userId, roleId);
+            positionApplicationIds.put(userId, List.copyOf(applicationIds));
+        }
         final Map<String, PermissionTemplate> templates = new LinkedHashMap<>();
         final Map<String, List<PermissionTemplateItem>> items = new LinkedHashMap<>();
         final Map<String, TemporaryGrant> temporaryGrants = new LinkedHashMap<>();
@@ -1753,10 +1902,21 @@ class AccessServiceTests {
                     .findFirst());
         }
 
+        // 与 JdbcAccessRepository 同语义：upsert 不动存档/删除列；生命周期保存恒写 inactive。
         @Override
         public PositionRoleTemplate savePositionRoleTemplate(PositionRoleTemplate mapping) {
-            positionRoleTemplates.put(mapping.id(), mapping);
+            PositionRoleTemplate existing = positionRoleTemplates.get(mapping.id());
+            positionRoleTemplates.put(mapping.id(), existing == null ? mapping : new PositionRoleTemplate(
+                    mapping.id(), mapping.positionCode(), mapping.staffLevelId(), mapping.roleId(), mapping.templateId(),
+                    mapping.organizationId(), mapping.status(), mapping.createdBy(), mapping.createdAt(), mapping.updatedAt(),
+                    existing.archivedAt(), existing.deletedAt(), existing.deleteReviewId(), existing.deleteReason()));
             return mapping;
+        }
+
+        @Override
+        public void savePositionTemplateLifecycle(PositionRoleTemplate mapping, String actorId) {
+            positionRoleTemplates.put(mapping.id(), mapping.withLifecycle(mapping.archivedAt(), mapping.deletedAt(),
+                    mapping.deleteReviewId(), mapping.deleteReason(), mapping.updatedAt()));
         }
 
         @Override
@@ -1786,7 +1946,7 @@ class AccessServiceTests {
         ) {
             List<PermissionTemplateApplication> applications = targetUserIds.stream()
                     .map(userId -> new PermissionTemplateApplication(
-                            "app_" + userId,
+                            "app_" + userId + "_" + (templateApplications.size() + 1),
                             templateId,
                             "user",
                             userId,
@@ -1877,7 +2037,12 @@ class AccessServiceTests {
                     effects.add(override);
                 }
             }
-            for (String roleId : userRoles.getOrDefault(userId, Set.of())) {
+            // M036-001：与 JdbcAccessRepository 同语义——岗位派生角色与直接装配的角色一样以 ROLE 来源并入授予。
+            Set<String> roleIds = new LinkedHashSet<>(userRoles.getOrDefault(userId, Set.of()));
+            if (positionRoles.get(userId) != null) {
+                roleIds.add(positionRoles.get(userId));
+            }
+            for (String roleId : roleIds) {
                 RoleRecord role = roles.get(roleId);
                 if (role == null || !"active".equals(role.status())) {
                     continue;
@@ -1946,6 +2111,18 @@ class AccessServiceTests {
         // M087：直接上级表与审批链节点（申请人 usr_requester 的直接上级为 usr_admin，链上只有这一个节点）。
         final Map<String, String> superiors = new LinkedHashMap<>(Map.of("usr_requester", "usr_admin"));
         final Map<String, List<com.complex.platform.governance.chain.ApprovalChainNode>> nodes = new LinkedHashMap<>();
+        // XM-D029-003：与 JDBC 同样存下排期里的直接受益人，审批时才读得到。
+        final Map<String, ReviewSchedule> schedules = new LinkedHashMap<>();
+
+        @Override
+        public void scheduleSupervisorReview(String reviewId, String beneficiaryId, Instant dueAt) {
+            schedules.put(reviewId, new ReviewSchedule(reviewId, beneficiaryId, dueAt, 0, null, null));
+        }
+
+        @Override
+        public Optional<ReviewSchedule> findSupervisorReviewSchedule(String reviewId) {
+            return Optional.ofNullable(schedules.get(reviewId));
+        }
 
         @Override
         public Optional<String> findDirectSuperior(String userId) {

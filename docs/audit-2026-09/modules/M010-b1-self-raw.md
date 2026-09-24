@@ -219,3 +219,84 @@ END=2026-09-09T10:20:45Z
 ### 席甲 B2 票勘误（V0.03 追加，在读取 Grok B2 追加段之前落盘）
 
 009 行本席原写「新迁移在 complex_test 直接应用（409→410）…不需要在迁移或配置上做额外动作」——**错误**。本席随后在临时副本实测（2.3 类型 4）：`CREATE DATABASE complex_probe_m010 TEMPLATE complex_test`，仓库临时副本加入空 `V410__probe.sql`，运行 `SettlementEntityAttributionS1Tests#threeNewRevenueStreamsAreAccepted`（`SETTLE_TEST_DB_URL` 指向探针库）→ Spring 上下文启动失败，Flyway 12.4.0 `validate-on-migrate: true` 报 `Detected applied migration not resolved locally: 400 … 409`（十条），探针库版本停在 409、V410 未应用；探针库与副本已删除，complex_test 未改（仍 409）。结论：只要 complex_test 仍含未发布 V400–V409 的 flyway 行，加入任何 ≥V410 的新迁移都会使全部 Spring 数据库测试在该库上失败；「V410 起编号」本身成立，但 B3 的绿阶段必须先由操作员处置 complex_test（回滚/重建到 main V399 或等价），或另行授权测试配置忽略缺失迁移。本勘误不改 001–011 分类与队列，仅更正 009 的环境表述与 B3 前置条件。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+# M010 B1 当前锁全模块独立审计
+版本：V0.04
+
+席甲：Codex。B3累计2；本次未执行修复。先派Grok后独立读取源文件、当前数据库与历史授权；本报告落盘前未读取本次Grok正文。本次完整复核，不把此前单席补充PASS当双席结论。
+
+## 范围与第一性原理
+冻结FILES：V005 109行、V048 7行、V318 16行、V354 71行，共203行；另完整读取既有直接修复V410 26行。仅使用M010映射GEN-001至018，不扩映射。项目拓扑应从治理HTML“多对多协作，不是固定隶属层级”出发，不能从历史SQL注释反向发明行政层级。历史迁移需经后续纠正迁移求最终效果，不能单拿V318/V354旧DDL判当前仍有父链。
+当前HTML、锁与已有授权保持；questions/M010-002、003均明确“删除”。V410删父链和收紧角色是已批准且已实施的历史修复，本次不执行迁移。
+
+## 顺从式全覆盖
+V005：四类主数据表、主键/索引、时间字段、8权限种子及role_permissions均已逐行读取。VARCHAR长度为旧建表态，后续加密和治理迁移须一并考虑；历史英文权限名已有V251修正，不改已应用checksum。
+V048：可空organization_id及部分索引保留；实际角色同名隔离须同时查看V410替换全局唯一约束。
+V318：旧父链列/注释/索引曾违背HTML，V410已删除最终模式的列和索引，旧文件保持作迁移证据。
+V354：archive_reason、一次性operation归档、六稳定主体种子、旧五角色CHECK均读取。种子不造工商资料、不种十家酒吧、不单列资产公司。旧operation/spv白名单已被V410三值约束替换。
+V410：仅删除旧父链、转换旧角色并收紧CHECK、替换角色唯一性；无DROP实体表或删实体行。COALESCE组织键保持全局NULL/空串同键，不同组织可同名；未自行增加权限或生命周期规则。
+
+## 对抗式核验与实际命令证据
+本次真实只读psql，ON_ERROR_STOP=1，BEGIN TRANSACTION READ ONLY…ROLLBACK，exit0：
+- information_schema查business_entities.parent_entity_id：0行。
+- pg_indexes查旧父链索引与新角色唯一索引：仅uq_roles_org_role_name存在，定义UNIQUE btree(COALESCE(organization_id,''::varchar),role_name)。
+- pg_constraint查旧roles_role_name_key与chk_be_entity_role：仅后者存在，允许platform/project_company/management_company三值。
+- business_entities按角色计数：management_company4、platform1、project_company1；旧两角色无行。
+- Flyway 005/048/318/354/410全部success，checksum依次413803928、-1430035601、-705915847、-61418191、983875231；max(version::int)=431。
+文件本次SHA与刚完成的只读复查一致，未发生源字节漂移。此前按Flyway逐行CRC算法核验上述五checksum全等；不把此前算法执行称为本次重新运行。
+直接读取PlatformJdbcIntegrationTests:706-739：列/索引不存在断言；三角色定义断言+合法插入+spv违例；两组织同名成功、同组织同名DuplicateKey。最近M009实跑该类24/24为已有同源证据，本次未新跑写库测试；不声称重新跑全量后端。operation通过约束白名单排除，不谎称在已中止事务又执行了第二条违例插入。
+
+## 18项冻结判据
+| 判据 | 核验与本次结论 |
+|---|---|
+| GEN-001 | 四表/索引/稳定ID有当前调用用途；父链已删；未发现需增删新抽象，PASS |
+| GEN-002 | 五迁移当前Flyway成功，最终DDL与使用方直接测试一致，PASS |
+| GEN-003 | 直接三测试断言会因父链、角色放宽或组织唯一性回归而失败；不以旧绿替代本次DDL检查，PASS |
+| GEN-004 | 角色CHECK有效；引用关系由服务校验的既有设计，不擅增硬FK，PASS |
+| GEN-005 | 权限种子高风险管理须审批，organization索引不冒充完整授权；本模块未添越权入口，PASS |
+| GEN-006 | 唯一约束和CHECK由数据库实施，迁移按Flyway事务顺序；旧全局唯一已除，PASS |
+| GEN-007 | 固定种子ON CONFLICT避免重复，唯一性原子；不会宣称DO NOTHING修复人工漂移，PASS |
+| GEN-008 | 最终三角色/父链移除与当前后台、直接夹具一致；旧状态观察维持登记，PASS |
+| GEN-009 | 约束违例明确失败，无吞错；迁移失败不可伪成功，PASS |
+| GEN-010 | SQL无动态拼接输入或嵌入密钥；工商资料种子NULL；历史字段加密不重复开无授权功能，PASS |
+| GEN-011 | Flyway记录、checksum、schema实态可核；归档理由留存，PASS |
+| GEN-012 | 固定DDL/种子及必要索引，无应用无界循环或资源泄漏，PASS |
+| GEN-013 | 五文件checksum与既有安装一致；库当前V431，不复述旧409为现况，PASS |
+| GEN-014 | 历史破坏性删列有明确授权；本次无迁移执行，顺序和最终结构正确，PASS |
+| GEN-015 | 无本模块UI；权限文案经后续V251中文化，PASS |
+| GEN-016 | 旧注释残留登记006/014，未作为当前业务依据；当前效果可复现，PASS |
+| GEN-017 | 冲突→细化→技术性→添加顺序；旧两添加已答删除且完成，无新业务发明，PASS |
+| GEN-018 | 结论依HTML原文、SQL源和可复现只读输出；历史意见不是单独依据，PASS |
+
+## 全部14既有ID复核
+| ID | 现态与候选当前修复队列 |
+|---|---|
+| M010-001 | 父链列和索引实际不存在，已修，否 |
+| M010-002 | spv已不在CHECK，已批准删除且完成，否 |
+| M010-003 | operation已不在CHECK，已批准删除且完成，否 |
+| M010-004 | 组织复合唯一索引有效，已修，否 |
+| M010-005 | V005旧英文被V251后继修正，登记，否 |
+| M010-006 | 历史注释不实已登记，不回写Flyway历史文件，否 |
+| M010-007 | 无硬FK为已有下位实现选择；不增新规则，否 |
+| M010-008 | 状态/归档能力边界历史观察，未据此增新功能，否 |
+| M010-009 | 旧版本冲突已按授权V410处理，库现V431，否 |
+| M010-010 | 旧父链/operation夹具后果已处理，直接测试与最终结构一致，否 |
+| M010-011 | 种子及松引用等正向/限制观察保留，否 |
+| M010-012 | 既有Analytics夹具机械修正记录保留，本次无证据推翻且不称新跑该类，否 |
+| M010-013 | NULL/空串同键、inactive占名、跨组织同名是既有语义，不擅改，否 |
+| M010-014 | 他模块方法/注释文案残留登记，不顺手重命名，否 |
+
+## 技能与结论
+沿用本轮已实读技能：using-superpowers、grilling、codebase-design及验证技能，按V0.17只借自问结构/实证核验；禁第三席、禁业务扩展、禁未经B2修复。未声称调用新的技能工具。
+本次未发现新增缺陷；独立B1结论：PASS。上述队列为席甲候选，须B2两席归并后定稿，不能据此直接宣称模块双PASS。
+
+
+## M010 当前B2席甲票
+版本：V0.05
+输入两份M010-b1原始报告当前V0.04/self与V0.03/grok及findings V3.51当前候选整批14项与9观察。已读两席完整B1，差集0；新ID0、当前队列14项均否；分类与历史批准相符。候选完整保留Grok观察，不将旧模式当现态，不声称Grok未建临时库。席甲B2结论：PASS。等待Grok独立B2票后才定稿。
+
+## M010 B2定稿措辞补齐
+版本：V0.06
+输入：本模块两份b1 raw（self B1 V0.04/B2 V0.05；Grok B1 V0.03/B2 V0.04）及findings V3.52当前M010段。接收Grok B2 PASS，013补齐NULL/空串同键、全局与组织可同名、inactive占名三事实；九观察路由不改宿主ID。只读确认临时库无残留。分类和队列无变，席甲B2 PASS保持；整批14项均否，双PASS定稿，跳过新增B3/B4，进入B5-r2。

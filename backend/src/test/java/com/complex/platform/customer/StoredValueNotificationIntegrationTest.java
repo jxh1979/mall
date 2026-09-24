@@ -1,8 +1,9 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.support.TestSecurityActors;
 import java.util.UUID;
@@ -40,7 +41,7 @@ class StoredValueNotificationIntegrationTest {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         new com.complex.platform.access.AccessActor("usr_master_authority", "master-authority",
-                                "platform_admin", "org_1", null, "active"), null, java.util.List.of()));
+                                com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"), null, java.util.List.of()));
         cleanupNotificationData();
         setSwitch("sms_notification", true);
         setSwitch("sms.notify.stored_value", true);
@@ -65,7 +66,7 @@ class StoredValueNotificationIntegrationTest {
         String phone = uniquePhone();
         insertCustomer(customerId, phone);
 
-        CustomerStoredValueTransactionRecord txn = settleTopup(customerId, 5_000L, prefix);
+        CustomerStoredValueTransactionRecord txn = settleTopup(customerId, 5_000L, prefix, null);
 
         assertThat(logCount("topup", phone)).isEqualTo(1);
         assertThat(logValue("topup", phone, "request_id")).isEqualTo("svtopup:" + txn.id());
@@ -91,12 +92,14 @@ class StoredValueNotificationIntegrationTest {
         String customerId = prefix + "_customer";
         String phone = uniquePhone();
         insertCustomer(customerId, phone);
-        settleTopup(customerId, 8_000L, prefix);
+        String merchantId = prefix + "_merchant";
+        settleTopup(customerId, 8_000L, prefix, merchantId);
+        TestSecurityActors.asMerchantUser(merchantId);
 
         CustomerStoredValueTransactionRecord txn = storedValueService.consumeInternal(
                 customerId,
-                PROJECT_ID,
                 null,
+                merchantId,
                 2_300L,
                 "notification test consume",
                 prefix + "_consume");
@@ -107,7 +110,7 @@ class StoredValueNotificationIntegrationTest {
         assertThat(logValue("consume", phone, "status")).isEqualTo("sent");
         assertThat(logParam("consume", phone, "amount_cent")).isEqualTo("2300");
         assertThat(logParam("consume", phone, "balance_after_cent")).isEqualTo("5700");
-        assertThat(logParam("consume", phone, "card_type")).isEqualTo("project");
+        assertThat(logParam("consume", phone, "card_type")).isEqualTo("merchant");
     }
 
     @Test
@@ -118,37 +121,55 @@ class StoredValueNotificationIntegrationTest {
         String phone = uniquePhone();
         insertCustomer(customerId, phone);
 
-        settleTopup(customerId, 3_000L, prefix);
+        settleTopup(customerId, 3_000L, prefix, null);
 
         assertThat(logCount("topup", phone)).isEqualTo(1);
         assertThat(logValue("topup", phone, "status")).isEqualTo("skipped_switch_off");
         assertThat(logValue("topup", phone, "reason")).isEqualTo("switch_off:sms_notification");
     }
 
+    @Test
+    void projectCardInternalConsumeWithoutMerchantScopeRemainsRejected() {
+        String prefix = unique("scope");
+        String customerId = prefix + "_customer";
+        String phone = uniquePhone();
+        insertCustomer(customerId, phone);
+        settleTopup(customerId, 5_000L, prefix, null);
+        assertThatThrownBy(() -> storedValueService.consumeInternal(customerId, PROJECT_ID, null,
+                1_000L, "无商户范围项目卡扣款", prefix + "_consume"))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_SCOPE_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT balance_cent FROM customer_stored_value_accounts WHERE customer_id = ? AND project_id = ? AND merchant_id IS NULL",
+                Long.class, customerId, PROJECT_ID)).isEqualTo(5_000L);
+        assertThat(logCount("consume", phone)).isZero();
+    }
+
     private CustomerStoredValueTransactionRecord settleTopup(
             String customerId,
             long amountCent,
-            String prefix
+            String prefix,
+            String merchantId
     ) {
         String paymentIntentId = prefix + "_payment_intent";
         insertCreatedPaymentIntent(paymentIntentId, customerId, amountCent);
         // AUD-058：settleTopup 只认充值时绑定的卡范围，夹具需同步落绑定行（等价 topup 落库动作）。
-        insertTopupIntentBinding(paymentIntentId, customerId);
+        insertTopupIntentBinding(paymentIntentId, customerId, merchantId);
         storedValueService.confirmOfflineTopupAndSettle(paymentIntentId,
                 new com.complex.platform.finance.dto.OfflinePaymentConfirmRequest(
                         prefix + "_pos_confirm", null, null, paymentIntentId, amountCent, "pos", java.time.Instant.now()));
         return customerRepository.findStoredValueTransactionByIdempotencyKey("sv_settle_" + paymentIntentId).orElseThrow();
     }
 
-    private void insertTopupIntentBinding(String paymentIntentId, String customerId) {
+    private void insertTopupIntentBinding(String paymentIntentId, String customerId, String merchantId) {
         jdbcTemplate.update("""
                 INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at)
-                VALUES (?, ?, ?, NULL, now())
+                VALUES (?, ?, ?, ?, now())
                 ON CONFLICT (payment_intent_id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
                     project_id = EXCLUDED.project_id,
                     merchant_id = EXCLUDED.merchant_id
-                """, paymentIntentId, customerId, PROJECT_ID);
+                """, paymentIntentId, customerId, merchantId == null ? PROJECT_ID : null, merchantId);
     }
 
     private void insertCreatedPaymentIntent(String id, String customerId, long amountCent) {

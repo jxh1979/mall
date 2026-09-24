@@ -1,6 +1,8 @@
-# P1 商场平面图图片与多边形坐标 API 契约 V0.1
+# P1 商场平面图图片与多边形坐标 API 契约 V0.2
 
 文档类型：Implementation / API Contract
+
+> 2026-09-20 160 全量审计 M019（B3-r1，V0.1→V0.2）：删去现行 DTO/OpenAPI 中不存在的 `evidence_attachment_ids`、`operator_user_id` 字段行，`z_index` 改为选填缺省 0（M019-001）；错误矩阵按现行实现改写——他图 `shape_id` 为 400 `VALIDATION_FAILED`、未知 `shape_id` 按该 id 新建，补 `PROJECT_NOT_FOUND`/`CROSS_PROJECT_FORBIDDEN`/`CROSS_MERCHANT_FORBIDDEN`（M019-002）；§9 引用改为现行迁移文件与真实标题（M019-003）。
 
 本文档固化 P1-FLOOR-PLAN-01「商场平面图先做图片 + 多边形坐标」的最小可编码契约。P0 空间档案中的轻量 `polygon_points` 保持兼容；本 P1 模块作为后续商户、游乐项目、设备、视频点位、机器人点位和 CAD/SVG 导入的标准地图数据源。
 
@@ -42,7 +44,6 @@
 |---|---|---|---|
 | `idempotency_key` | 是 | string | 同一创建请求幂等 |
 | `operator_note` | 否 | string | 审计说明，默认 `created` |
-| `evidence_attachment_ids` | 否 | string[] | 仅存附件 ID 引用 |
 | `project_id` | 是 | string | 所属综合体/项目 |
 | `building_code` | 否 | string | 楼栋编码 |
 | `floor_no` | 是 | string | 楼层，如 `B1`、`1F`、`3F` |
@@ -52,7 +53,6 @@
 | `image_height` | 是 | integer | 必须大于 0 |
 | `version_no` | 是 | string | 图片版本号 |
 | `status` | 是 | enum | `active`/`inactive`/`archived` |
-| `operator_user_id` | 是 | string | 操作人 |
 
 ### 4.2 保存多边形标注
 
@@ -60,16 +60,14 @@
 |---|---|---|---|
 | `idempotency_key` | 是 | string | 同一标注写入请求幂等 |
 | `operator_note` | 否 | string | 审计说明，默认 `shape_saved` |
-| `evidence_attachment_ids` | 否 | string[] | 仅存附件 ID 引用 |
 | `shape_id` | 否 | string | 为空时创建；不为空时更新该标注 |
 | `shape_type` | 是 | enum | `shop` 铺位 / `booth` 摊位 / `public_area` 公共区 / `area` 区域 / `entrance` 入口 / `facility` 设施 / `risk_zone` 风险区 / `route` 路径。给人看只用这八种中文，无走道 |
 | `ref_type` | 是 | enum | `space`/`merchant`/`project`/`amusement_project`/`device`/`custom` |
 | `ref_id` | 否 | string | 被引用对象 ID；`custom` 可为空 |
 | `label` | 是 | string | 标注名称 |
 | `polygon_points` | 是 | point[] | 至少 3 个点，每个点包含 `x`、`y` |
-| `z_index` | 是 | integer | 前端渲染层级 |
+| `z_index` | 否 | integer | 前端渲染层级，缺省 0 |
 | `status` | 是 | enum | `active`/`inactive`/`archived` |
-| `operator_user_id` | 是 | string | 操作人 |
 
 ## 5. 事件
 
@@ -90,8 +88,11 @@
 | 状态非法 | 非 `active`/`inactive`/`archived` | 400 | `VALIDATION_FAILED` | 拒绝写入 |
 | 多边形点数不足 | 少于 3 个点 | 400 | `VALIDATION_FAILED` | 拒绝写入 |
 | 坐标越界 | 任一点 `x`/`y` 不在 `[0, 1]` | 400 | `VALIDATION_FAILED` | 拒绝写入 |
+| 项目不存在 | 创建时 `project_id` 查询不到 | 404 | `PROJECT_NOT_FOUND` | 拒绝创建 |
+| 越项目 | 项目员工读写其他综合体项目的平面图 | 403 | `CROSS_PROJECT_FORBIDDEN` | 拒绝 |
+| 越商户 | 商户账号读写其他商户的平面图 | 403 | `CROSS_MERCHANT_FORBIDDEN` | 拒绝 |
 | 平面图不存在 | `floor_plan_id` 查询不到 | 404 | `FLOOR_PLAN_NOT_FOUND` | 拒绝保存标注 |
-| 标注不存在 | 更新时 `shape_id` 查询不到 | 404 | `FLOOR_PLAN_SHAPE_NOT_FOUND` | 拒绝更新 |
+| 标注属于其他平面图 | 更新时 `shape_id` 属于其他平面图 | 400 | `VALIDATION_FAILED` | 拒绝更新（文案「图形不属于该平面图」）；查询不到的 `shape_id` 按该 id 新建标注，不报错 |
 | 幂等冲突 | 同 key 不同请求体 | 409 | `IDEMPOTENCY_CONFLICT` | 要求换 key 或查询原请求 |
 
 ## 7. Anti-Patterns
@@ -125,6 +126,6 @@
 | Topic | Location |
 |---|---|
 | 本切片计划 | `docs/superpowers/plans/2026-06-14-p1-floor-plan-polygons.md` |
-| P1 总路线 | `docs/master-roadmap.md#阶段-8-市场基准增强为-p1p2-演进` |
-| P0/P1 用户故事分层 | `docs/p0-user-story-map-and-sprint-slices-v0.1.md#第二期-p1` |
-| 空间档案 P0 轻量坐标 | `backend/src/main/resources/db/migration/V001__initial_schema.sql` |
+| P1 总路线 | `docs/master-roadmap.md`（「阶段 8：市场基准增强与 SaaS 化深度能力」） |
+| P0/P1 用户故事分层 | `docs/p0-user-story-map-and-sprint-slices-v0.1.md`（§1.1 版本分层「第二期 / P1」行） |
+| 空间档案 P0 轻量坐标 | `backend/src/main/resources/db/migration/V005__p0_platform_master_data.sql` |

@@ -893,3 +893,193 @@ r1 表 007 处置仍写 `PageResponse.of(records,1,500)`；001 判据列仍含 P
 本席 B2-r2：**PASS**
 
 未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M015 `IN_PROGRESS`，B3=0。不覆盖上方 B1 FAIL 与 B2-r1 FAIL 原文。
+
+## M015 B2-r3 整批归并复核（Grok 乙席）
+
+- 文件自身版本：V0.04（本段追加；上方 V0.01 B1 + V0.02 B2-r1 + V0.03 B2-r2，全文 **89094** 字节原样保留，不改写 B1 锁段起点，本段不写独占锁哈希字段行）
+- 席位：Grok（固定外审席乙，grok-4.6 / xhigh；独立）。步骤：B2-r3 整批候选复核，不是 B1/B5 重审、不是修复、不是模块 PASS、不是 B3。
+- 控制：160-audit-prompt.md V0.17；runbook V0.02；criteria-lock V0.11；modules.md V0.04（471 模块，M015 FILES 23 / 锁映射 90 / 计划冻结 1999 行）
+- 正本：`/home/james/complex-management` main 主工作区。工作区 `HEAD`=`e456ba96c84185c8d39f18f548011daac48a6466`，`origin/main`=`84e3441fd0f2c4724621ff34be6d244e40f2ca7c`（与本席 B5-r1 再执行 V0.02 一致；审计对象为工作区现状）。
+- 席甲：Claude Fable 5.1（操作员 2026-09-09 接替指令），作者自审票；本席 FAIL 具否决权。本票不采信席甲 B5-r1 再执行 V0.03 PASS 原文，只核其 V0.04 撤回段是否与本席两条同根、候选是否漏并/改写。
+- 背景：操作员 2026-09-20 裁定补派席乙 B5-r1 再执行；本席 V0.02 追加段 FAIL（GR-M015-B5r1-01 / GR-M015-B5r1-02）；席甲再执行票 PASS 经核源撤回为 FAIL；合取 FAIL。两条均无 ID 且 001–014 全否 → 按回退统一规则整批回 B2。B3 累计 2，本批定稿后 B3-r3 为第 3 次（上限）。
+- 本席 B2-r3：**PASS**（差集两条全并、无第三条、无改写；015/016 分类细化、队列是、最小处置成立；001–014 不动；无添加项、无 HTML 申请、无 questions）
+- 本追加段不写独占锁哈希字段行。正文实算：`sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`；sidecar `plan/criteria-lock.sha256` 同值。未改锁/sidecar/ledger/findings/questions/HTML/源/主索引。
+- 无 MCP、无子代理、无第三席、不问操作员。未 fetch/commit/push/PR/merge/部署。未在主仓 cwd 写除本指定路径外的任何文件。未读 `M015-b1-self-raw.md`（含其本次 B2-r3 结论 V0.04）。
+
+此票只判断 findings.md V2.50 顶部「当前 M015 B2-r3 整批候选」相对本次两份 B5-r1 再执行报告（乙席 V0.02 追加段；甲席 V0.03+V0.04 撤回段）的全批差集、GEN-017 四分类、工程缺陷、修复队列与最小修法。必须另有席甲本批 B2 PASS 且本席亦 PASS 才能定稿。不覆盖上方 V0.01 B1 **FAIL**、V0.02 B2-r1 **FAIL**、V0.03 B2-r2 **PASS**、亦不以本票代替 B5。
+
+### 本批输入（完整指定文件，本席实算）
+
+| 路径 | 版本 | bytes | SHA256 |
+|---|---|---:|---|
+| `docs/audit-2026-09/modules/M015-b5-r1-grok-raw.md`（本席 B5-r1 再执行票，含 V0.01 前缀 + V0.02 追加段） | V0.02 | 73711 | `837327dbb73b46d13675de525863593d8e87fadc12ab8a98d65e99e40bb104a6` |
+| `docs/audit-2026-09/modules/M015-b5-r1-self-raw.md`（席甲 V0.03 再执行 + V0.04 撤回段） | V0.03+V0.04 | 91043 | `fea086dc5d05969ddea74705786e0d4c718425bbe5a68ae0f66a0f4579cda291` |
+| `docs/audit-2026-09/findings.md` 顶部「当前 M015 B2-r3 整批候选」 | V2.50 | 992202 | `866e95e4b6109438228505843bcedfea02eb54834aebe7eecbbc1e1f33cf53fa` |
+| 本文件前缀（本席 B1+B2-r1+B2-r2，本段追加前） | V0.03 | 89094 | `d5c1e95dae335122b562ef868ee6b3d8d72d8cb63da0abbe8c3e201bd374660d` |
+
+三输入字节/SHA 与派发清单全等。本文件独占锁哈希字段行仍仅文首一处，本段未新增。未读席甲 `M015-b1-self-raw.md` V0.04。
+
+三 HTML 只读核验（本席未改；与 B5-r1 再执行同）：
+
+| 文件 | SHA256 |
+|---|---|
+| 业务地图 | `eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66` |
+| 治理地图 | `a7fe8c015c61564bf60d78724f9749dc0eb272371b82f97fc69bd3e2bb50e0c1` |
+| 枚举速查 | `4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66` |
+
+候选形态：V2.50 顶部为 r3 **新 ID 段**（非整表重写 001–014）。表内仅 M015-015、M015-016 两行；其下「修复队列是（2）／否（不变）001–014」。本席按此读取，不把历史 B2-r1 表残留单元格当作本批有效处置。
+
+### 技能（V0.17 §6 收窄，本节点实读）
+
+| 技能 | 本节点用法 |
+|---|---|
+| using-superpowers / using-arc | 先核路由；用户指定 B2 归并覆盖 Arc audit；Arc audit 会派子代理并另写 `docs/arc/audits/`，**未用** |
+| graft | 已读。本批目标符号已能点名：`graft grep currentProjectScopeQuietly/isPlatformAdmin` + 三服务 `skeleton`，再按 span 读源；未派 MCP graft |
+| receiving-code-review | 先核源/HTML/锁/两份 B5-r1 再执行 raw 再接受或反驳；禁止表演性同意；B2 不修复 |
+| grilling | 只借追问结构自查：差集有无第三条、015 是否应改 AuthorizationService、016 未选候选改 rejected / 任务留 parsed 是否更小 |
+| verification-before-completion | 声称前先跑只读哈希与源码点读；本票不声称 83 用例本轮新绿 |
+| systematic-debugging / diagnosing-bugs | 只借读错→复现→数据流；不改生产代码 |
+| codebase-design | 删除测试：015 深度落在两服务私有桥，不落 M006 契约改写 |
+| ponytail-review | 只评最小删除/收窄，不落地。016 开 published 闸比新状态机 / 拒绝未选更懒 |
+| writing-for-agents | 报告结构；未改 AGENTS.md |
+| requesting-code-review | 本体要派同会话子代理 → 第四席；**未用** |
+| tdd / test-driven-development / ponytail | B2 禁止修复，未落测试、未改源 |
+| long-running-background-tasks | 本步秒级，未起 monitor |
+| batch-grill-me / ubiquitous-language | **缺口：本环境未找到**；未冒充调用 |
+
+### 一、差集核实（两席依据 → 候选；独立核源，不复述旧票代替）
+
+本席 B5-r1 再执行 V0.02：**FAIL**，临时编号仅两条，均无已定稿可沿用且仍在队列的 ID。席甲 V0.03 再执行票原 PASS、无独立临时编号；V0.04 撤回段核源后改 FAIL，只确认本席两条，未另立第三条。
+
+| 依据 | 所在 raw | 候选落点 | 同根？ | 本席票 |
+|---|---|---|---|---|
+| GR-M015-B5r1-01 平台管理员全量通道死代码；测试桩伪造 quietly 永不抛 | 乙 V0.02 §7 | M015-015 | 是。甲 V0.04：「`AuthorizationService.java:504-507` quietly=`Optional.of(requireProjectScope)`，`:289-294` 无 organizationId 抛；两测试桩伪造永不抛——GR-01 成立」 | **并入，无改写** |
+| GR-M015-B5r1-02 部分发布后任务直接 published，剩余 pending 无法再发 | 乙 V0.02 §7 | M015-016 | 是。甲 V0.04：「`FloorPlanService.java:365-367/422-435` 发布只接受 parsed 且发布后整任务 published——GR-02 成立」 | **并入，无改写** |
+| 席甲 V0.01/V0.02/V0.03 再执行 | 甲 | — | 无独立缺陷票。V0.04 自承漏审（沿用测试桩语义未追 AuthorizationService 真实现，违反 2.3） | 无第三条可并 |
+| 乙 V0.02 观察（ProjectRecord 暂存 M009 字段、PlatformController 营业时段 `of(...,1,500)`、operatorNote、商户创建跳过 project==scope） | 乙 V0.02 §7 观察 | 未立项 | 本席原判定不入缺陷；候选未升格 | **同意不立项** |
+| 乙 V0.01 OBS-01（201+ 候选一次发不完也不能续发） | 乙历史观察 | 未单列 | 根因是任务 published 锁死；016 打开 published+pending 后续发后，200 上限（008 已修、仍否）下可分批续发。不是第三条 | **同意不单列** |
+
+漏并：无。改写：无。第三条：无。新 ID 仅 015/016，符合「仅给无 ID 条目分配新 ID」。001–014 未出现在本批候选表行（顶部无 `| M015-001 |`…`| M015-014 |`），队列「否（不变）」与 B4-r2 收口一致。无本批添加项、无 HTML 申请、无 questions 文件。
+
+票：**PASS（差集）**。
+
+### 二、M015-015 分类与最小处置（独立核源）
+
+**事实（类型 4，工作区源；与候选五处一致）：**
+
+- `FloorPlanService.listFloorPlans:72-79`：商户 `currentMerchantIdQuietly` 优先；否则 `currentProjectScopeQuietly().map(findAllFloorPlansByProject).orElseGet(findAllFloorPlans)`。注释写「平台管理员全量」。
+- `validateCreateRequest:512-518`：商户空时 `currentProjectScopeQuietly().ifPresent` 校验 project_id==scope。
+- `checkProjectOwnership:602-610`（候选写 `:601-610`，601 为 003 注释、方法体 602 起，同一处）：商户空时 quietly 有值且不等则 `CROSS_PROJECT_FORBIDDEN`；empty 则放行。
+- `VenueBusinessHoursService.list:42-47`：quietly 有值 `listByProject`，否则 `listAll()`。注释写「平台管理员 scope 为空取全量」。
+- `save:65-68`：quietly.ifPresent 跨项目则 `CROSS_PROJECT_FORBIDDEN`。
+- 五处之外，本模块 23 文件无更多 `currentProjectScopeQuietly` 调用。
+- `AuthorizationService.requireProjectScope:289-294`：organizationId 空或空白 → `PROJECT_SCOPE_REQUIRED`。
+- `currentProjectScopeQuietly:500-507`：注释「红线④：不因平台管理员身份返回空（全量）」；实现 `return Optional.of(requireProjectScope(actor))`，**无** `isPlatformAdminBridge` 早退。名称 Quietly 与实现相反。
+- `isPlatformAdmin:279-281` = `isPlatformAdminBridge:509-512`（`accountType=platform_admin` 且 active）。
+- `requirePlatformScope:482-498`：**先** `isPlatformAdminBridge` 则 return；再拒外包/持 merchantId；其余无 merchant 的平台员也 return。**不是**「无项目即全量」的过滤器。
+- `M006SecurityRegressionTests:145-150`：`missingOrganizationCannotListAllUsersOrResolveGlobalProject`，`actor("orphan","staff",null,null)` 上 `currentProjectScopeQuietly` 必须抛。候选引用此行锁定红线④——本席点读：该例主体是 **staff 孤儿**不是 platform_admin，锁的是「缺组织 ≠ 全局授权」；红线④的「管理员也不准 quietly 返回空」写在 AuthorizationService 源注释。二者一起构成「不要改 quietly 实现」的理由，见下。
+- 测试桩：`FloorPlanServiceTests.noScopeAuth:445-461` 注释「生产语义：isPlatformAdminBridge → 商户/项目 scope 皆空、永不抛」，quietly **返回 empty**；默认 `service`（`:47`）走此桩，故 83 绿不证明管理员全量在真契约上可达。`VenueBusinessHoursServiceTests.auth:89-94` `Optional.ofNullable(projectScope)`，`service()` 传 null → empty → `listAll()`。商户桩 `:510-512` 已按生产抛 quietly（003 项目员工/商户支不回潮）。
+
+**正常触发：** `accountType=platform_admin`、`organizationId` 空的主体，已过 `floor_plan.view` / `governance.space.view` 后调列表/读单图（经 `ensureFloorPlanExists`→`checkProjectOwnership`）/创建/营业时段 list|save → 生产 403 `PROJECT_SCOPE_REQUIRED`，`findAllFloorPlans`/`listAll` 不可达。
+
+**四分类（2.1 顺序）：**
+
+- 冲突？否。HTML 要求之上岗位可汇总、平台管理员有日常功能；实现是没做到，不是「代码多给了与 HTML 相反的规则、应删除该规则」。删除 quietly 调用会拆掉 003 已修的项目员工闸。
+- 细化？**是。** 上位可指：BEQR-152 锁 L1773「所有数据默认按项目隔离…只有项目之上的获授权岗位可以跨项目汇总」；PGM-041 锁 L5800 同句；BSM-007 锁 L2417–2418「平台管理员…拥有系统里全部日常功能权限」（平面图查看/营业时段配置属日常后台，非资金/敏感价/删除/最终审批）。下位实现把「之上岗位汇总」误绑到 quietly 的 empty，而 quietly 在 M006 契约下永不 empty。
+- 不到技术性（有 HTML 上位）。不到添加（不发明新角色/新权限码；用已有 `isPlatformAdmin`）。
+
+工程缺陷：**是**。不复用 003 号（003 已否=已修项目员工支；本条是 003 声明的管理员全量未在真 quietly 契约下落地）。队列：**是**（本模块两服务可修）。
+
+**最小处置核实：** 两服务各加私有 `projectScopeOrAll()`：`isPlatformAdmin(currentActor())` 真 → `Optional.empty()`（全量）；否则 `currentProjectScopeQuietly()`（无归属员工继续 fail-closed 抛 `PROJECT_SCOPE_REQUIRED`）；五处改用；两测试类桩改生产语义并各加一例先红；不改 AuthorizationService、Controller、OpenAPI、HTML。
+
+- **最小？是。** 只动 M015 FILES 内两服务 + 其测试。不改 M006、不改入口、不加字段。
+- **与 requirePlatformScope 的平台管理员桥同口径？是，且必须停在「桥」而不是整方法。** `requirePlatformScope` 的第一支是 `isPlatformAdminBridge` 早退；公开入口即 `isPlatformAdmin`。候选写 `isPlatformAdmin(currentActor())` 即该支。**禁止**把全量闸换成 `requirePlatformScope()`：该方法对无 merchantId 的项目员工也 return，换成它会让 003 的项目员工重新看到全量，回归已修缺陷。
+- **有无业务发明？无。** 不上新角色。无归属普通员工仍 403，与红线④/`:150` 孤儿 staff 一致。
+- **应否改 AuthorizationService 或走 XM？否。** 替代文本（本席明确拒绝，不进入 2.2）：「XM→M006：让 `currentProjectScopeQuietly` 对 platform_admin 返回 empty」。拒绝理由：① 源注释红线④写死「不因平台管理员身份返回空」；② 改 quietly 会把 empty=全量泄漏给仓内 70+ 调用方，超出本模块 23 文件；③ `:150` 虽锁的是 staff 孤儿，但红线④的对象是管理员桥，改桥即改 M006 已定契约；④ 003 要的「管理员全量」是 **M015 服务过滤器**语义，不是 AuthorizationService 项目 scope 语义。本地私有方法把「过滤器 empty」与「scope 查询 empty」拆开，正是最小缝。
+
+**B3 非阻断边界（不构成否决）：**
+
+- 默认 `FloorPlanServiceTests.service` 与 `VenueBusinessHoursServiceTests.service()` 无 SecurityContext。生产写法 `isPlatformAdmin(currentActor())` 会先求值 `currentActor()`。桩除「`isPlatformAdmin` 真 + quietly 抛」外，必须 stub `currentActor()` 返回 platform_admin 主体（或等价不抛），否则 36+12 例默认服务会变 `UNAUTHENTICATED`。此为「桩改生产语义」的应有之义。
+- 无归属普通员工一例：`isPlatformAdmin` 假 + quietly 抛 → 期望 `PROJECT_SCOPE_REQUIRED`。先红对象是管理员全量（quietly 抛仍能 listAll/findAll）与无归属 403，不是 003 的项目员工支。
+- 暂存 `AuthorizationService` 仅改 `isMasterAuthority` 与版本头（与 quietly 无关）；`ProjectRecord` 暂存属 M009，本批不碰。
+
+票：**PASS（细化 / 缺陷是 / 队列是；处置最小；不同意改 AuthorizationService，不同意 XM）**。
+
+### 三、M015-016 分类与最小处置（独立核源）
+
+**事实（类型 4）：**
+
+- `publishImportTaskOnce:365-367`：任务状态不是 `parsed` →「只有解析完成的导入任务才能发布」。
+- `:369-389`：按请求 `candidateIds` 子集取候选；非本任务 / 非 `pending` → 拒（「只有待处理的候选项才能发布」已存在）。
+- `:422-435`：整任务写成 `published`；未选候选不改写（仍 `pending`）。
+- 任务闭集 `:38`：`parsed|failed|published|cancelled`。候选闭集 `:39`：`pending|published|rejected`。无 `partially_published`。cancelled 任务无本模块写路径（M016-004 已登记）。
+- DTO `FloorPlanImportPublishRequest.candidateIds` 本就是子集。治理地图 L472 / PGM-023 锁 L5439：「由人工复核候选与错误后发布到正式平面图」。
+- 现测 `publishImportTaskCreatesShapesAndMarksTaskPublished` 默认 SVG 仅 1 个 polygon，一次发完。`publishImportTaskRejectsAlreadyPublishedTask:259-275` 对**同一已 published 候选**再发，只断言 `VALIDATION_FAILED`、不断言旧任务态文案。016 之后该例仍会 400，改由候选非 pending 闸拦截，不必为了本条去改 DTO。
+
+**正常触发：** 复核去掉错误候选、第一次只提交部分 id（DTO 正是子集）→ 任务已 published → 剩余 pending 再发被任务态闸拒绝，无路径完成 PGM-023 的复核发布。
+
+**四分类：**
+
+- 冲突？否。HTML 未写「一次必须发完全部」；现网也不是「多给了一次发完规则」，是子集 API 第二次走不通。
+- 细化？**是。** 上位 PGM-023 L472 人工复核后发布；下位状态机把「任务 published」当成终态，与子集 DTO 不兼容。GEN-009（流程/状态一致性）为工程判据，不是新造业务规则。
+- 不到技术性。不到添加（不开新候选状态、不新 API）。
+
+工程缺陷：**是**。不重开 008（200 上限仍在、队列仍否）。队列：**是**。
+
+**最小处置核实：** 任务状态 ∈ {parsed, published} 且所选候选均 pending（任务 `failed`/`cancelled` 仍拒）；文案改「只有解析完成或已发布的导入任务才能继续发布」；加一例先红（先发 1、再发剩余 1，任务仍 published、图形共 2、剩余候选 published）；不改 DTO/OpenAPI/HTML、不新增候选状态。
+
+- **最小？是。** 只放宽任务前置一支，复用已有候选 pending 闸。`failed`/`cancelled` 任务仍拒＝闭集内其余两态保持。
+- **替代方案结论（本席选定，拒绝另外两支）：**
+  1. **未选改 `rejected`：** 不同意。把第一次子集发布发明成「未勾选＝终拒」；HTML/DTO 无此规则；剩余候选再也发不出，与「复核后发布」相反。比候选更大、是业务发明。
+  2. **任务保持 `parsed` 直到无 pending：** 不同意。已写入正式图形但任务仍 parsed，状态撒谎；若部分候选永不发布，还要另做拒绝/取消 API（现网无写路径）。比开 published 闸更大。
+  3. **新状态 `partially_published`：** 不同意。新枚举＝添加，还要动 CHECK/OpenAPI，越界。
+  4. **候选方案：** 同意。第二次及以后只要任务已 published、所选仍 pending 即可续发；未选继续 pending，不发明拒绝流。
+
+**B3 非阻断：** 先红须自备 ≥2 候选的 payload（默认 `importRequest()` 只有 A101 一枚）。已有 republish 例不断言旧文案，不必为 016 改其 code 断言；若日后改成断言中文句，应改指候选非 pending 或「不能继续发布」新句，不要锁回「只有解析完成的导入任务才能发布」。
+
+票：**PASS（细化 / 缺陷是 / 队列是；处置最小；拒绝 rejected / 留 parsed / 新状态三支）**。
+
+### 四、001–014 不动
+
+| ID | 本批候选 | 本席 |
+|---|---|---|
+| 001–009 | 否（已修） | **同意不动。** 003 项目员工支仍成立，不回潮 003 号。008 200 上限仍成立，不因 016 续发而改回「是」。 |
+| 010 | 否 / XM | **同意不升格。** |
+| 011 | 否 / XM | **同意不升格**（二次确认仍缺服务端字段；本批不改 OpenAPI/DTO）。 |
+| 012 | 否 / 全局遗漏 | **同意。** |
+| 013 | 否 / XM→M016/M018 | **同意。** |
+| 014 | 否 / 观察 | **同意不升。** operatorNote / UNIQUE last-write-wins 仍观察。 |
+
+无回潮、无把 010–014 改「是」、无新添加项。
+
+### 分类 / 队列 / 允许的最小修复边界
+
+本批可定稿（仍须席甲本批 B2-r3 PASS 合取）。队列是=015、016；否=001–014（001–009 已修不回潮）。一次 B3-r3 只改本模块 23 文件及其测试类，不改三 HTML、OpenAPI、迁移、FieldLabels、AuthorizationService、PlatformController、前端、ticketing、锁、台账。可执行行为先写归属该 ID 的最小失败测试（GEN-003）：
+
+- 015：两服务私有 `projectScopeOrAll()`（`isPlatformAdmin(currentActor())` → empty 全量，否则 quietly；无归属员工继续 `PROJECT_SCOPE_REQUIRED`）；五处改用。桩：平台管理员 `currentActor` 为 platform_admin + `isPlatformAdmin` 真 + quietly 抛；无归属普通员工 quietly 抛且 `isPlatformAdmin` 假。各加一例先红（管理员 quietly 抛仍全量；无归属 403）。**禁止**改 `AuthorizationService.currentProjectScopeQuietly` / 红线④ / `M006SecurityRegressionTests:150`；**禁止**用 `requirePlatformScope()` 当全量闸。
+- 016：任务前置改为 status ∈ {parsed, published}，所选候选均 pending；`failed`/`cancelled` 任务仍拒；文案同步；一例先红（两候选分两次发完）。不改未选候选状态、不把任务留在 parsed、不新增候选/任务状态、不改 DTO/OpenAPI/HTML。
+
+禁止：改 M006；把 003/008 改回「是」；给发布加确认字段（011）；本模块加迁移；为 016 写拒绝未选或新枚举。
+
+改动文件自身版本递增。B3 累计将为 3（上限）；本票不预支 B4/B5 结论。
+
+### 本席实跑（B2-r3，只读；无写模式）
+
+- 锁文件 sha256sum：`b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a`（与 sidecar、本文件既有文首独占行同值）
+- 输入三文件字节与 SHA：上表全等（与派发清单全等）
+- 本文件追加前：89094 字节，SHA `d5c1e95dae335122b562ef868ee6b3d8d72d8cb63da0abbe8c3e201bd374660d`；`CRITERIA-LOCK-SHA256` 仅文首 1 行
+- 点读：`AuthorizationService:279-281/289-294/482-498/500-512`；`FloorPlanService:72-79/365-367/369-389/422-435/512-518/602-610` 及闭集 `:38-39`；`VenueBusinessHoursService:42-47/65-68`；`FloorPlanServiceTests:47/259-275/445-461`；`VenueBusinessHoursServiceTests:89-94`；`M006SecurityRegressionTests:145-150`；锁 BEQR-152 L1773、BSM-007 L2417、PGM-041 L5800、PGM-023 L5439；治理地图 L472 原文命中
+- 工作区：`AuthorizationService` 暂存仅 `isMasterAuthority`/版本头，quietly 未改；M015 23 文件仅 `ProjectRecord` 暂存（M009），本批不碰
+- 未跑：主仓测试、psql 写、部署、修复
+- 未改 findings/ledger/锁/源/HTML/主索引
+- 未读：`M015-b1-self-raw.md` V0.04
+
+### 结论
+
+差集：乙席 GR-M015-B5r1-01/02 全部归并为 015/016；席甲撤回段同根、无第三条、无漏并无改写。001–014 不动。015 细化（BEQR-152/PGM-041/BSM-007），最小缝为两服务私有 `projectScopeOrAll()`，与 `requirePlatformScope` 的 **isPlatformAdmin 桥**同口径；不同意改 AuthorizationService，不同意 XM。016 细化（PGM-023），最小缝为任务 parsed|published + 所选 pending；不同意未选改 rejected、不同意任务留 parsed、不同意新状态。无添加项、无 HTML 申请、无 questions、无新判据。
+
+本席队列：**015、016 是（2 项，细化）；001–014 否（14 项，001–009 已修不回潮，010/011 XM）**。
+
+本席 B2-r3：**PASS**
+
+未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2。定稿后 B3-r3 为第 3 次（上限）。不覆盖上方 B1 FAIL、B2-r1 FAIL、B2-r2 PASS 原文。

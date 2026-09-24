@@ -1644,3 +1644,465 @@ Codex当前临时项仅CX-01/02/03。Grok当前临时项仅GR-M005-B1-01；另�
 四值在新独立B1后仍为b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，COUNT1未改锁。B2不写独占锁字段。M001—M004闭环保留。历史B3累计1、方案修复2、交付失败0不清零。生命周期仍IN_PROGRESS。
 
 结论：全批差集成立，012/013只登记，014按已列两文件四行整批修复。本席B2 PASS。须Codex本批B2 PASS后才能定稿并一次修复；未经双PASS不进B3，更不称模块PASS。
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M005 B1 Grok 独立审计报告（现锁 V0.14／当前文件清单）
+
+- 报告自身版本：V0.08（追加；保留本文件既有 V0.01–V0.07 全部 160886 字节，SHA256 `bdff7266f9420d6da849d5e9802e17cd0ca1ac0a94886b566fcd23fdf71774f3`，不覆盖）
+- 控制：`.scratch/module-recheck-20260908/160-audit-prompt.md` V0.17（`docs/audit-2026-09/160-audit-prompt.md` 当前不存在，以本机实有 V0.17 为准）；runbook 不另扩流程
+- 席位：Grok（乙），修复前全量独立审计；不修复、不改方案、不写 questions、不派子代理、不 fetch/commit/push/worktree/部署/安装依赖/MCP
+- 模块：M005 — 治理门禁与 CI 基线／配置与工程入口／第3段（`plan/modules.md` V0.04；标记 `NORMAL`；计划有效行 52）
+- 文件清单（唯一受审）：`tsconfig.base.json`（13）、`.github/CODEOWNERS`（12）、`.github/workflows/predeploy-gates.yml`（27）；`git ls-files -z -- <三路径> | xargs -0 cat | wc -l` = **52**
+- 映射：`plan/criteria-lock.md` 映射行 `M005 → [GEN-001 … GEN-018]`（18 条；无 HTML 派生 ID；本席自读定义区 L10–100）
+- ledger（只读顶部与本模块行，不写）：M001—M004 现锁 PASS；M005 `IN_PROGRESS`，历史 B3 累计 **2**、方案修复 2、失败重跑 0（本席不清零、不改）；顶部 COUNT=1
+- 正本：`/home/james/complex-management` 分支 `main`；工作区 `HEAD=e456ba96c84185c8d39f18f548011daac48a6466`，`origin/main=ebb1eb99c610df330c07d24278798c2d3611299a`（ahead 49 / behind 54，本席未 fetch）。三受审文件相对 HEAD porcelain 空，`git hash-object` 与 `HEAD:` 及 `origin/main:` blob 全等
+- 互盲：未读取任何 `*-self-raw.md`、本次 Codex 结论。可读输入：三源全文、锁、findings 当前 M005 段（012/013/014 及历史 001—011）、ledger 顶部与本模块行、本席旧 B1 V0.06／B2 V0.07。**不继承旧 B5、不继承旧 PASS/FAIL**
+- 源阅读：三文件本轮全文重读；YAML 相对本席 V0.06 所审 V0.01（SHA `5c62bef3…`）已变为 V0.02（SHA `4c20c029…`），按当前字节重判，不把旧 GR 当现行缺陷
+- 本席 B1 结论：**PASS**
+- HTML 自身问题（本模块范围内）：**无上报**。不重开 M001—M004，不改已批准文字。无已批准 HTML 改动或锁修改
+
+---
+
+## 0. §6 技能自核（本席实际环境）
+
+开工前按本机路径列目录并读 `SKILL.md`。用户本轮指令覆盖 skill 默认：无 MCP、无子代理、不等操作员、不问人、不写 findings/ledger。
+
+| 技能 | 路径核验 | 本次用法 |
+|---|---|---|
+| `using-superpowers` | `/home/james/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 开工技能路由；用户禁子代理／禁等人覆盖其默认 |
+| `using-arc` | Arc `skills/using-arc/SKILL.md` | 仅路由；**未**调用 `arc:audit`（会写 §7 外产物） |
+| `graft` | `/home/james/.claude/skills/graft/SKILL.md` | 定位；配置文件本身不在源码图内，改直读三源 |
+| `grilling` / `grill-me` | mattpocock `productivity/grilling`、`productivity/grill-me`（后者 `disable-model-invocation: true`，只转发 grilling） | 对抗式／第一性原理追问结构；**自问自答**；不派子代理、不问操作员 |
+| `codebase-design` | mattpocock `engineering/codebase-design` | 删除测试：base 是 web `extends` 的小接口；workflow 是 `verify:predeploy` 的声明面；CODEOWNERS 是升级后才强制的评审路由 |
+| `diagnosing-bugs` | mattpocock `engineering/diagnosing-bugs` | 只构造可红探针（非法 target／TS18048／零 SHA 基线／直推 main）；不加 instrumentation |
+| `systematic-debugging` | superpowers | 只借读错误→复现→追数据流；B1 **不改**生产代码 |
+| `ponytail-review` | ponytail `4.9.0/skills/ponytail-review` | 找可删内容；不改文件 |
+| `verification-before-completion` | superpowers | 任何 PASS/FAIL 前用本报告内命令输出 |
+| `writing-for-agents` | mattpocock `productivity/writing-for-agents` | 本 raw 按下游 B2 可差集、可归因来写 |
+| `tdd` / `test-driven-development` | 存在 | 纯配置 B1 不适用；未新增测试 |
+| `i-have-adhd` | marketplace `skills/i-have-adhd/SKILL.md` | 输出形状；本报告第一行仍按闸 1 独占哈希 |
+| `audit-context-building` | Trail of Bits 插件 | 用户禁子代理，**未**派 function-analyzer |
+
+缺口（如实，不冒充已调用）：
+
+- `batch-grill-me`：本环境技能目录**未找到**独立 SKILL.md
+- `ubiquitous-language`：`/home/james/.qwen/skills/ubiquitous-language/SKILL.md` 目录存在；本节点未读全文、**未调用**（本模块 FILES 无词表文件）
+
+明确不用：`brainstorming`／`writing-plans`（阶段 A）；`ponytail` 本体（B3）；`requesting-code-review`／`receiving-code-review`（B4）；`resolving-merge-conflicts`（无合并）；`git-guardrails-claude-code`（会写钩子）；§6 划掉的子代理／worktree／research／ponytail-audit／debt／gain。
+
+未派子代理。未改 HTML／findings／ledger／lock／sidecar／三受审文件／镜像。未执行 `npm install`／真实 `npm ci`／`npx`。未创建 §7 外产物。计算与反例只在 `/tmp/m005-*`。三受审文件 inode/mtime 运行前后不变。
+
+graft：`graft ask "M005 B1 audit tsconfig CODEOWNERS predeploy-gates"` 命中偏业务审计页（配置不在源码图）；`graft grep "tsconfig.base.json"` 仅 `tools/generate-runtime-acceptance-evidence.mjs` L23 指纹列表；`graft grep "HTML_GATES_BASE"` 命中 M008 消费点。定位改为直读三源全文；只核 checker／ledger-sync／指纹列表如何读本文件，**不扩审 M007/M008**。
+
+---
+
+## 1. 输入哈希、行数、覆盖
+
+本席独立实算（未抄 sidecar／派发期望值）。正文不再重复锁字段名。
+
+| 项 | 值 |
+|---|---|
+| `plan/criteria-lock.md` | 本席 `sha256sum … \| awk '{print $1}'` 写在本次报告第一行；sidecar `cat` 同值；ledger 顶部同值 |
+| 锁版本 | V0.14；判据总数 401；`LOCK-AMEND-COUNT: 1`；M005 仅 18 GEN |
+| `tsconfig.base.json` | 13 行／303 字节／SHA256 `13d49b947d918bf064b5f98ceaa049e1c954f88eafe736c438cd4372b44696db`；LF 13、无 CRLF、以换行结束 |
+| `.github/CODEOWNERS` | 12 行／743 字节／SHA256 `b8b7a9f196172ca7a6220ab31b1d2909a773b5cdf796913b56c8722927ccef3d`；LF 12、无 CRLF |
+| `.github/workflows/predeploy-gates.yml` | 27 行／1335 字节／SHA256 `4c20c029b7c5b0786d56164f2657444a9b9ee3d3694c18013f2e50c1e966049d`；LF 27、无 CRLF；L1=`# 文件版本：V0.02` |
+| 镜像 `ops/ci/predeploy-gates.yml`（只核消费，不审 M007） | 与 live **原始字节相等**（1335／同 SHA／`rawEqual=true`）；checker 比较口径是 CRLF→LF 后字符串 |
+| 官方有效行 | **52** |
+| 旧本文件前缀 | 160886 字节／`bdff7266f9420d6da849d5e9802e17cd0ca1ac0a94886b566fcd23fdf71774f3` |
+| 宿主 | node v24.21.0；npm 11.19.0；TypeScript 5.9.3；yaml 2.9.0；Linux x86_64；glibc 2.39。根清单 `packageManager=npm@10.9.8`、`engines.node=^22.13.0 \|\| >=24.0.0`（本机工具链差披露，不写成三文件缺陷） |
+
+blob：三受审文件 + 镜像 `git hash-object` = `HEAD:` = `origin/main:`（`tsconfig` `60709a9c…`，CODEOWNERS `cf51fabd…`，两 YAML `3857c0f9…`）。
+
+全行覆盖：tsconfig 1–13、CODEOWNERS 1–12、workflow 1–27 均进入三线，无抽样冒充整文件。
+
+---
+
+## 2. 第一性原理线（2.3 三问）
+
+### 2.1 这段东西为什么必须存在？
+
+**`tsconfig.base.json`。** 删除测试：仓内唯二 `tsconfig*.json` 为它与 `apps/web/tsconfig.json`；后者 L2 `"extends": "../../tsconfig.base.json"`。删掉 base，web 必须内联九项 `compilerOptions`，复杂性回到调用方。三份业务 HTML 对 `tsconfig`／`CODEOWNERS`／`predeploy-gates`／`GitHub Actions` **零命中**（本席 `rg -n -i` 三 HTML，无行）。答不上 HTML 上位 **≠ 该删**。四分类：**技术性**（编译器共享选项，无票种／角色／价格发明）。
+
+**`.github/CODEOWNERS`。** 删除测试：失去九条强制点的 owner 记录。官方 docs「CODEOWNERS and branch protection」：须改 branch protection 并打开 Require review from Code Owners 才自动强制。本席 `gh api …/branches/main/protection` 与 `…/rulesets` 均 HTTP 403「Upgrade to GitHub Pro or make this repository public」。当前不是运行时授权边界，是意图记录 + 升级后的接口。HTML 里的审批／留痕是业务单据，不是 Git 审阅。四分类：**技术性**。
+
+**`.github/workflows/predeploy-gates.yml`。** 删除测试：GitHub 上不再有名为 `predeploy-gates` 的可见检查（本席 `actions/workflows`：path 该文件、`state: active`、id `307870467`）。免费私有库设不了 required check（保护 API 403），硬合并闸本就不在本文件。部署脚本仍按 `REQUIRED_GATES` 逐个 `npm run`。本文件用途：PR/push 到 main 的可见信号，并把 `fetch-depth: 0` 与 `HTML_GATES_BASE` 送到 `npm run verify:predeploy`。四分类：**技术性**（CI 接线）。`verify:html-ledger-sync` 等对 HTML 解释权的机审是 **M008 工具 + M426 台账** 的下位实现，本 FILES 只声明调用，不把调用点写成新业务规则。
+
+### 2.2 声称的行为有没有被实际执行验证？
+
+已验证（类型 3+4，命令见 §8）：
+
+- JSON／YAML 可解析；九选项被 `tsc --showConfig -p apps/web/tsconfig.json` 合并为 `es2022`／`esnext`／`bundler`／`strict`／`noUncheckedIndexedAccess` 等
+- 内存探针：`const x: string = null` → TS2322；`noUncheckedIndexedAccess` 下 `a[0].toUpperCase()` → TS18048；关掉该选项则 0 诊断；非法 `target` → TS6046；未知选项 → TS5023
+- `tsc -b apps/web/tsconfig.json --dry` exit 0，输出 non-dry would build。**不是** `tsc -b --noEmit` 业务编译通过
+- CODEOWNERS：`codeowners/errors` = `{"errors":[]}`；九规则 git ls-files 均有命中；`@jxh1979` 为 User 且 admin；大小写反例不匹配；`tsconfig.base.json` 无规则（不立案补覆盖）
+- 保护边界：private=true；protection/rulesets 403；文件 L2–3 与事实一致，未把计划写成已强制
+- YAML：`on.pull_request/push.branches=[main]`；checkout SHA = tag `v4.3.1` object.sha；setup-node SHA = tag `v4.4.0` object.sha；`fetch-depth===0`；`HTML_GATES_BASE` 字面量与 `tools/verify-delivery-gates.mjs` `eventBase` 全等；`run===npm run verify:predeploy`；无 `continue-on-error`
+- 镜像：live 与 `ops/ci/predeploy-gates.yml` 原始字节相等；`npm run verify:delivery-gates-docs` → `DELIVERY_GATES_DOCS_PASS` exit 0
+- 门禁失败传递：非法基线／零 SHA `verify-html-ledger-sync` exit 1「取不到基线」；`npm run verify:html-ledger-sync && echo SHOULD_NOT_PRINT` 前者红且未打印后句；历史 job `33296882514` 与近次 `34865649772` 均为前步 success、`verify:predeploy (governance gates)` failure → job failure
+- L6 现行注释：部署脚本 `REQUIRED_GATES` 15 项与 `package.json` `verify:predeploy` 15 项逐名相等并 `npm run "$gate"` 非 0 则 exit 1；`ops/160/hooks/pre-push` 17 行不含 `npm`／`verify:predeploy`；三 probe 见 §8。**与当前 L6 一致，不重开、不重修 014**
+- 真实 CI（只读，未触发）：最新成功 run `35601416957` event=push、`head_sha=ebb1eb99…`（即当前 `origin/main`）、`node: v22.23.2`、`HTML_GATES_BASE: 40fcc8f1…`、展开 15 闸链、`DELIVERY_GATES_DOCS_PASS`
+
+未验证、不得伪称：本机 `npm ci`；apps/web 全量 `tsc --noEmit`／vite build；`verify:predeploy` 全 15 闸在本脏工作区跑通（第一闸已红）；registry／tarball；`ubuntu-latest` 镜像钉死；action 在 runner 上的 Node 20 弃用警告不等于 job 红。help／dry 不当业务编译／测试通过。
+
+### 2.3 它依赖的前提，哪一条是没验证过就当真的？
+
+1. 安装时 `actions/checkout`／`setup-node` 标签对象仍等于文件内 pin — **本次 API 已核** tag object.sha 与文件一致；未证明标签未来不会被 GitHub 改写（pin 的意义就是防可变标签）。
+2. `node-version: "22"` 在 GitHub 上解析为 ≥22.13.0 — 最近成功 run 日志 `node: v22.23.2`，满足 `^22.13.0`。未证明所有未来 `22` 浮动线都 ≥22.13.0。
+3. 缺 `timeout-minutes` 等于无上限 — **不成立**。官方 workflow-syntax：`jobs.<job_id>.timeout-minutes`「Default: 360」。本席不把缺字段写成无上限，不立案补字段。
+4. 缺 `permissions` 等于 GITHUB_TOKEN 可写 — **不成立**。`actions/permissions/workflow`：`default_workflow_permissions: read`。
+5. CODEOWNERS 在当前私有免费库自动拦合并 — **不成立**（403）。文件已写明。
+6. 最新 origin/main CI success 等于当前脏工作区也会绿 — **不成立**。工作区 `docs/platform-governance-map-for-operations-v0.1.html` 已改、台账未同步，第一闸 exit 1。
+7. `tsconfig.base.json` 无 `files`/`include` 时被当成根项目（本席解析 fileNames=372）— 声明入口是 web 继承，不是 `tsc -p tsconfig.base.json`。未跑无 `--noEmit` 的根项目编译。
+8. 是否还有白名单外的 extends — 本席 `find` 仅两份 `tsconfig*.json`，`rg extends` 仅 web 一处。
+
+---
+
+## 3. 顺从式：18 GEN 逐项
+
+判据全文以 `plan/criteria-lock.md` L10–100 `## general` 为准。本轮独立核对，不抄旧票结论。
+
+| ID | 适用 | 证据（类型 3／4） | 本席 |
+|---|---|---|---|
+| GEN-001 必要性与最小性 | 适用 | 见 §2.1。九选项均被 showConfig 继承，非空转。九条 CODEOWNERS 均有索引命中。workflow 四步均在 run `35601416957` 出现。ponytail：无可删业务层；不为假设场景补 `files:[]`／第二 owner／timeout 字段 | 满足 |
+| GEN-002 可执行正确性 | 适用（配置：验证解析与声明入口，不强制全构建） | JSON/YAML 可解析；TS 正负诊断；CI 真实跑 `npm run verify:predeploy`；L6 现行注释与 hook／部署脚本行为一致 | 满足（边界：非构建） |
+| GEN-003 测试有效性 | 部分适用 | 本模块无测试文件。用已装 typescript／yaml／tsc／gh／hook stdin 作可失败断言。不新造 TDD。不把 dry／help／CI 绿写成业务测试通过 | 满足（配置豁免） |
+| GEN-004 信任边界 | 适用 | `HTML_GATES_BASE` 来自事件；消费者对 `0000…0`／`not-a-ref` fail-closed。checkout 完整历史。workflow 本身不做字符串校验，失败交给 `git merge-base` | 满足（fail-closed） |
+| GEN-005 授权与最小权限 | 弱适用 | CODEOWNERS 当前因无 branch protection **不构成**强制授权。仓库 Actions 默认 token 只读。workflow 未提权。HTML 业务审批链不是本文件 | 不适用业务授权；无越权发明 |
+| GEN-006 数据完整性 | 弱适用 | 无事务／金额。基线取不到则 html-ledger-sync 拒绝 PASS。workflow 提供 fetch-depth 0 与事件 SHA | 满足（配置面） |
+| GEN-007 并发与幂等 | 弱适用 | 无 `concurrency`。门禁脚本只读。不把缺 concurrency 写成缺陷 | 不适用／无缺陷 |
+| GEN-008 接口与模式一致性 | 适用 | live＝镜像字节。`HTML_GATES_BASE` 与 checker 期望字面量一致。`node-version: "22"` 与最近 CI v22.23.2 及 engines `^22.13.0` 相容。15 闸名与两份部署 `REQUIRED_GATES` 全等。tsconfig 选项名与 TS 5.9 解析器一致 | 满足 |
+| GEN-009 错误处理与恢复 | 适用 | 无 `continue-on-error`。零 SHA／非法 ref 本地 exit 1。`&&` 短路成立。历史／近次 job 在 verify 步失败即失败。不吞错 | 满足 |
+| GEN-010 安全与敏感信息 | 适用 | 三文件无秘密、无注入点。action 完整 SHA 且与官方 tag 对象一致；仓库 `sha_pinning_required=false` 但本文件仍 pin。`npm ci --ignore-scripts`。CODEOWNERS 无 `!`／`[]`（官方：gitignore 这两类在 CODEOWNERS **不工作**） | 满足 |
+| GEN-011 可观测与审计证据 | 适用 | Actions 日志含 SHA、Node 版本、HTML_GATES_BASE、15 闸展开。CODEOWNERS errors API 可查。tsconfig 以 showConfig／探针为证据。不把 dry 写成已编译 | 满足 |
+| GEN-012 资源与性能边界 | 适用 | 官方 job timeout **默认 360 分钟**，缺字段 ≠ 无上限。`ubuntu-latest` 浮动仍是未验证边界，不立案。最近成功 run ~27s，未见无界放大 | 满足（已划默认 360） |
+| GEN-013 构建配置与依赖 | 主适用 | pin SHA 与 tag 对齐；Node 22 线 CI 实测 v22.23.2；typescript/yaml 已装可解析；`tsc --dry` 接受无 composite 的 web 工程。run 日志有 Node 20 deprecation warning，conclusion 仍 success，见未验证边界，不把 warning 写成已红 | 满足 |
+| GEN-014 数据库迁移 | 不适用执行 | 无 SQL。CODEOWNERS L12 只给迁移目录登记 owner，且当前不强制。tenant-isolation／test-db-isolation 为静态读文件（本席只读工具头，确认不连库），支持 L5「无需数据库」。不扩审 M008 其余逻辑 | 无缺陷 |
+| GEN-015 界面可用性 | 不适用 | 无用户界面。注释中文。脚本／路径为系统内部标识符 | 无缺陷 |
+| GEN-016 文档可验证性 | 适用 | L2–5 与 protection 403、静态闸、Actions 记录相符。L6 **当前**可从 hook 17 行与部署 `REQUIRED_GATES` 复现（V0.02 已修，本轮核消费不重修）。CODEOWNERS L2–3 可复现。tsconfig 无虚假完成声明。不把 origin/main CI 绿写成脏工作区绿 | 满足 |
+| GEN-017 业务来源分类 | 适用 | 见 §5。顺序冲突→细化→技术性→添加。无冲突、无添加。未因 HTML 沉默主张删除。未把补 CODEOWNERS 覆盖 tsconfig／补 permissions／timeout 写成业务需求 | 满足 |
+| GEN-018 第一性原理证据 | 适用 | 结论落到 HTML 原文（零命中）、可执行产物（tsc/yaml/node 门禁/hook）、外部规范（GitHub workflow-syntax Default 360、CODEOWNERS 大小写／last match／`!` 不支持、tag API）、可复现命令。不引用旧 B5／惯例／席位意见当依据 | 满足 |
+
+---
+
+## 4. 对抗式（grilling 自问 + 原生反例）
+
+席内问题与答案：
+
+1. 是否用旧 B5／B1 PASS 代替本 B1？否。YAML 已从 V0.01 变为 V0.02，本轮按当前字节重跑命令并重判 18 GEN 与 001—014。
+2. 无效 TS target／未知选项是否被解析器拒绝？会。TS6046／TS5023。
+3. `noUncheckedIndexedAccess` 会不会只写在 JSON 里不生效？会生效（TS18048）；关掉则 0 诊断。
+4. CODEOWNERS 大小写反例是否误匹配？`OPS/ci/…`、`TOOLS/…`、`.GITHUB/…` 均不在索引且规则不命中。
+5. `/package.json` 会不会吞掉 lock 或 workspace package.json？不会。二者 `matchedRules=[]`。
+6. `HTML_GATES_BASE=0000…0` 或非法 ref 是否假绿？exit 1，「取不到基线」「无法判定不等于通过」。
+7. 工作区改 PGM HTML 不改台账是否红？会。见 §7。这是闸按设计暴露，不是本 YAML 写错。
+8. verify 失败是否让 job 失败？近次 `34865649772` 与历史 `33296882514`：verify 步 failure → job failure；后续 setup-node Post 在失败 job 上 skipped。
+9. 现行 L6 是否仍把 pre-push 写成门禁承担者？否。当前句为「部署前硬阻断由 .160 部署脚本执行治理门禁；本地 pre-push 仅拦截直接推送 main。」三 probe 与部署循环支持该句。
+10. 标签 SHA 是否漂移？本次 API 上 tag object.sha 与文件 pin 一致。
+11. 缺 `permissions` 是否把 GITHUB_TOKEN 写成 write？仓库默认 workflow permissions = read。
+12. 缺 timeout 是否无上限？官方 Default: 360。不立案。
+13. 是否把 `tsc --help`／`--dry`／CI 绿当业务编译通过？否。
+14. 是否为刷绿改 HTML／CSV／台账？否。真实红按归属报告。
+
+构造反例（`/tmp/m005-ts-probe` 与 hook stdin；正本 inode/mtime/SHA 不变）：
+
+| 反例 | 工具 | 结果 |
+|---|---|---|
+| `target: NOT_A_REAL_TARGET` | `parseJsonConfigFileContent` | TS6046，列出含 `es2022` 的合法集合 |
+| `notARealOption: true` | 同上 | TS5023 Unknown compiler option |
+| `const x: string = null` + 继承选项 | 内存 program | TS2322 |
+| `a[0].toUpperCase()` + `noUncheckedIndexedAccess` | 内存 program | TS18048 |
+| 同上但关掉该选项 | 内存 program | 0 诊断 |
+| `string \| null = null` | 内存 program | 0 诊断 |
+| CODEOWNERS 大小写／lock／web package.json／merge-pr.sh | 规则匹配 | 不命中 |
+| hook feature 分支 | `bash ops/160/hooks/pre-push` stdin | exit 0 |
+| hook 直推 main | 同上 | exit 1，拒绝直推 |
+| hook `ALLOW_MAIN_PUSH=1` | 同上 | exit 0，留痕放行；**未 git push** |
+| `HTML_GATES_BASE` 零 SHA／`not-a-ref` | `node tools/verify-html-ledger-sync.mjs` | exit 1 fail-closed |
+| `verify:html-ledger-sync && echo SHOULD_NOT_PRINT` | npm | 前者 exit 1，无 SHOULD_NOT_PRINT |
+
+ponytail-review：三文件无死代码、无第二套抽象、无多余依赖。`Lean already. Ship.` net: -0。不为假设加固加字段。
+
+---
+
+## 5. 四分类（冲突 → 细化 → 技术性 → 添加）
+
+**冲突：** 无。三 HTML 无 tsconfig／CODEOWNERS／Actions 明文；三文件未发明票种、状态、价格、权限、删除审批。忽略／评审路由／CI 接线 ≠ 业务审批链。
+
+**细化：** 无 HTML 上位条目落在本 52 行字段上。`verify:predeploy` 链中 html-ledger-sync／entry-anchors／html-param-tier 是解释权 HTML 的机审入口，**实现属 M008、台账属 M426、入口快照属 M435/M436**；本 YAML 只 `npm run` 调用，不在本模块把调用点升为新业务口径。
+
+**技术性：** 全部 52 行。编译选项、仓库评审路由、CI 工作流不是业务角色／枚举／审批。不要求每行 HTML 锚点。
+
+**添加：** 无。不写 questions。不把「应再覆盖 tsconfig.base.json」「应写 permissions/concurrency/timeout」当成现有业务添加项（铁律 6；用户本轮亦明示不要凭假设补这些字段）。
+
+---
+
+## 6. 历史 001—014 作 B1 输入（独立重判，不继承 PASS）
+
+findings 当前段与历史表只作输入命题。本席按**当前三文件**重新取证。`questions/` 无 M005 文件。
+
+| ID | 当前实证 | 四分类 | 工程缺陷 | 修复队列 | 本席处置 |
+|---|---|---|---|---|---|
+| M005-001—006 | 旧计划 package.json engines／Playwright／REAL_BACKEND 等，**不在本 3 文件** | 技术性（历史） | 历史是 | 否 | **历史保留**；不改写成 CI／tsconfig 含义；不重开、不抹历史缺陷 |
+| M005-007—011 | 旧计划包字段／scripts／依赖／Playwright mock／real 配置覆盖 | 技术性（历史） | 否 | 否 | 历史保留；不属于本次 52 行 |
+| M005-012 | 当前 tsconfig 九选项 + web 真实 extends；原生 354 输入、正负诊断 | 技术性 | **否** | **否** | 只登记，无缺陷；不新分 ID |
+| M005-013 | 当前九条 CODEOWNERS + 保护 403 + errors=[] + 主体 admin | 技术性 | **否** | **否** | 只登记，无缺陷；不新分 ID |
+| M005-014 | 两 YAML 现 V0.02；L6 与 hook／部署循环一致；镜像字节相等；docs 门禁 exit 0 | 技术性 | 历史是、**当前已修** | **否** | **核现代码／镜像消费，不重复修**；不把已修注释再当现行缺陷 |
+
+无新 GR。不把「队列空」自动写成模块 PASS——那是 B5 的事。本 B1 只表示：当前整模块按三线审完，没有新的未定稿工程缺陷。
+
+### GR 显式 PASS/FAIL
+
+| GR | 本轮 |
+|---|---|
+| 本轮新临时 finding | **无** |
+| GR-M005-B1-01（旧 L6 把 pre-push 写成门禁硬阻断） | **现行缺陷不成立（FAIL as current defect）**。源已 V0.02，L6 可从 hook 与 `REQUIRED_GATES` 复现。历史记录保留，不重开、不重修 |
+| 假设补 permissions／concurrency／timeout／CODEOWNERS 覆盖 tsconfig／base `files:[]` | **不立案**（非现行缺陷；非添加项） |
+
+---
+
+## 7. 真实红按归属（不刷绿、不升本模块缺陷）
+
+| 观察 | 命令／出口 | 归属 | 与 M005 |
+|---|---|---|---|
+| PGM HTML 工作区已改、决策台账未同步 | `node tools/verify-html-ledger-sync.mjs` **exit 1**；范围「工作区↔基线 origin/main@88c7b465」；已改 `docs/platform-governance-map-for-operations-v0.1.html` | 台账 **M426**；工具 **M008** | 第一闸按设计红；YAML 无 `continue-on-error`，若推进 CI 会在 verify 步失败。**不改 HTML／台账刷绿** |
+| 入口文档快照漂移 | `node tools/refresh-entry-doc-baseline.mjs --check` **exit 1**（`--check` 在 writeFile 之前 exit，未写业务资料）：`00-current-effective-document-entry-v0.1.md + README.md`，应为 `732 ops / V431（399 迁移） / 147 tests` | **M435／M436** | **不在** `verify:predeploy` 15 闸内；本席按指令另跑观察。不升 M005 缺陷 |
+| `npm run verify:delivery-gates-docs` | `DELIVERY_GATES_DOCS_PASS` **exit 0** | M008 消费本 YAML | 镜像／fetch-depth／HTML_GATES_BASE／run 断言通过 |
+| origin/main CI `35601416957` success | 只读 run／log | 该 commit 工作区当时三 HTML 相对基线可过第一闸 | **不得**冒称当前脏工作区也会绿 |
+
+`verify:predeploy` 15 闸（独立计数，旧「16 闸」已纠正）：html-ledger-sync、entry-anchors、html-param-tier、delivery-gates-docs、full-admin-matrix、domain-ownership-scope、matrix-vs-migration、data-isolation-spec、tenant-isolation、p0-contract、security-baseline、production-readiness-evidence、production-blockers、pii-encryption、test-db-isolation。与 api／web 部署 `REQUIRED_GATES` 全等。本席**未**跑全链（第一闸已红且会滑出 M005）。
+
+---
+
+## 8. 52 行连续覆盖
+
+### A. `tsconfig.base.json`（13 行）
+
+| 行 | 原文要点 | 覆盖 |
+|---|---|---|
+| 1 | `{` | JSON 开。`ts.parseConfigFileTextToJson` `jsonError=null`。顶层键闭集仅 `compilerOptions` |
+| 2 | `"compilerOptions": {` | 仅此一块；无 `files`/`include`/`exclude`/`references`。单独 parse 当根项目 fileNames=**372**（声明入口不是这条路径） |
+| 3 | `"target": "ES2022"` | showConfig `target: es2022`；enum `ScriptTarget.ES2022`。负例非法 target → TS6046 |
+| 4 | `"module": "ESNext"` | showConfig `module: esnext` |
+| 5 | `"moduleResolution": "Bundler"` | showConfig `moduleResolution: bundler`；与 web 消费者同值覆盖，继承链成立 |
+| 6 | `"strict": true` | showConfig 展开 `strictNullChecks: true`。探针 `string = null` → TS2322；`string \| null` 0 诊断 |
+| 7 | `"esModuleInterop": true` | showConfig 同时 `allowSyntheticDefaultImports: true` |
+| 8 | `"forceConsistentCasingInFileNames": true` | showConfig true。未另造双文件大小写冲突（未验证边界） |
+| 9 | `"skipLibCheck": true` | showConfig true。跳过 `.d.ts` 体检；工程取舍，不立案 |
+| 10 | `"resolveJsonModule": true` | 选项被解析进 showConfig。未在 /tmp 另造 json 模块成功导入（不把「找不到模块」当选项失效） |
+| 11 | `"noUncheckedIndexedAccess": true` | 探针 TS18048 `'b' is possibly 'undefined'`；关掉则 0 诊断 |
+| 12 | `}` | compilerOptions 闭合。选项计数 **9** |
+| 13 | `}` | 文件闭合，LF 结尾 |
+
+消费者：`apps/web/tsconfig.json` extends；`apps/web` script `typecheck=tsc -b --noEmit`。`tsc --showConfig` files=**354**（均 `apps/web/src/**`）。`tsc -b --dry` exit 0。指纹列表 `tools/generate-runtime-acceptance-evidence.mjs` L23 含本文件名（M008 证据绑定，不扩审）。仓内无第三份 tsconfig。
+
+### B. `.github/CODEOWNERS`（12 行）
+
+| 行 | 原文要点 | 覆盖 |
+|---|---|---|
+| 1 | 强制点文件(2026-07-06):改动应经独立复核 | 意图。九条规则即清单，不是 `*` 全仓 owner |
+| 2 | 仅在受保护分支 + require review 启用时被 GitHub 自动强制 | 官方 about-code-owners「CODEOWNERS and branch protection」：Enable "Require review from Code Owners" |
+| 3 | 当前私有库免费版无法启用分支保护，仅记录意图 + 一旦升级即生效 | `private: true`；protection／rulesets **403** Upgrade to GitHub Pro。注释与事实一致，不是把计划写成已强制 |
+| 4 | `/ops/160/complex-deploy-api.sh @jxh1979` | ls-files 命中 1 |
+| 5 | `/ops/160/complex-deploy-web.sh @jxh1979` | 命中 1 |
+| 6 | `/ops/160/hooks/ @jxh1979` | 命中 1（`pre-push`）。`merge-pr.sh`／`install-git-hooks.sh` 不匹配 |
+| 7 | `/ops/160/propose-change.sh @jxh1979` | 命中 1 |
+| 8 | `/ops/ci/ @jxh1979` | 命中 1（镜像 YAML） |
+| 9 | `/.github/ @jxh1979` | 命中 2：本文件 + workflow。`git ls-files .github` 恰这两份。官方建议 CODEOWNERS 放 `.github` 并由该目录 owner 保护 |
+| 10 | `/tools/ @jxh1979` | 命中 91＝`git ls-files tools/` |
+| 11 | `/package.json @jxh1979` | 命中 1。lock／`apps/web/package.json` 不匹配 |
+| 12 | `/backend/src/main/resources/db/migration/ @jxh1979` | 命中 395＝该目录 ls-files |
+
+九规则 owner 均为 `@jxh1979`。`users/jxh1979` type=User；collaborators permission=**admin**（官方：code owners 须有 write）。`codeowners/errors`=`[]`。无 `!`／`[]`。官方：paths case sensitive；last matching pattern 优先。九条路径互不重叠，last-wins 合计 **494**，未匹配 **3281**／总 **3775**。根／docs 无第二份 CODEOWNERS。`tsconfig.base.json` 无规则——文件自列强制点外；补规则属添加，不立案。
+
+### C. `.github/workflows/predeploy-gates.yml`（27 行）
+
+| 行 | 原文要点 | 覆盖 |
+|---|---|---|
+| 1 | `# 文件版本：V0.02` | 注释。镜像同句。相对历史 V0.01 已递增 |
+| 2 | `name: predeploy-gates` | AST `name`；GitHub workflow `state: active` 同名 |
+| 3–4 | GitHub 侧独立治理门禁；PR/push 到 main 静态跑 delivery-gates 快子集 | `on.pull_request/push.branches:[main]`。实际 `run` 是 `npm run verify:predeploy`（15 闸），括号是主题枚举不是命令本身 |
+| 5 | 无需数据库；私有库免费版无法设 required check；可见信号 + 独立复现 | tenant-isolation／test-db-isolation 工具头为静态读文件／测试源，不连库。protection 403 支持「无法设 required check」 |
+| 6 | 部署前硬阻断由 .160 部署脚本执行治理门禁；本地 pre-push 仅拦截直接推送 main | **与 hook／REQUIRED_GATES 一致**（见 §2.2）。历史错误句已不在当前源 |
+| 7–11 | `on:` PR／push `main` | YAML 解析确认。无 `workflow_dispatch`／`paths`／`types` |
+| 12–15 | `jobs.predeploy.runs-on: ubuntu-latest` + `steps` | 无 permissions／concurrency／timeout-minutes。默认 token read；timeout 官方默认 360。不立案补字段。`ubuntu-latest` 浮动未验证 |
+| 16–18 | checkout `@34e114876b0b11c390a56381ad16ebd13914f8d5` 注释 v4.3.1；`fetch-depth: 0` | tag v4.3.1 object.sha **即该值**。40 位 hex。checker 要求 fetch-depth 0 |
+| 19–21 | setup-node `@49933ea5288caeca8642d1e84afbd3f7d6820020` 注释 v4.4.0；`node-version: "22"` | tag v4.4.0 object.sha **即该值**。最近 run `node: v22.23.2` |
+| 22–23 | `npm ci --ignore-scripts` | 同 run 步骤 success。本机未 npm ci |
+| 24–27 | `HTML_GATES_BASE` 表达式 + `npm run verify:predeploy` | 与 checker `eventBase` 逐字相等。push run 落到 `github.event.before`=`40fcc8f1…`。无 continue-on-error |
+
+镜像：`ops/ci/predeploy-gates.yml` 原始字节＝live。checker L292–308：LF 归一后比较、fetch-depth、run、HTML_GATES_BASE。`verify:delivery-gates-docs` exit 0。只追该直接依赖，不审 M007 其余脚本、不关闭 M007。
+
+---
+
+## 9. 未验证边界
+
+- 未跑 apps/web 全量 `tsc -b --noEmit`／`vite build`／`npm ci`／`verify:predeploy` 全 15 闸
+- 未构造 `forceConsistentCasingInFileNames` 双文件冲突；未做 resolveJsonModule 成功导入
+- `ubuntu-latest` 镜像浮动；run 日志 Node 20 deprecation warning（checkout／setup-node 仍 success）
+- CODEOWNERS 一旦可开「Require review from Code Owners」，单一 `@jxh1979` 且其为 PR 作者时能否形成独立复核：官方 required 下 owner 不能批自己的 PR；第二 owner 属添加，未立案
+- `ALLOW_MAIN_PUSH=1` 绕过 pre-push 后 GitHub 无 required check：已知免费私有库限制，L5 已写「可见信号」
+- 工作区 HEAD 与 origin/main 分叉（ahead 49／behind 54）；**三受审文件**两侧 blob 仍全等。未 fetch
+- 判据锁工作区哈希与可能的 HEAD 历史副本不等时，本席按工作区现锁 V0.14 读 GEN；四值以本报告首行为本席实算
+
+---
+
+## 10. 命令与真实出口（写安全已预先确认）
+
+下列命令只读或只写 `/tmp`：sha256sum／git hash-object／gh GET／tsc --showConfig|--dry|--help／内存探针／hook stdin／`--check` 门禁。未 `git push`、未 `workflow_dispatch`、未改 settings、未 npm ci、未写 findings／ledger／三源。三受审文件 inode 运行前后相同。
+
+| 命令 | 出口／要点 |
+|---|---|
+| `sha256sum` 三文件＋锁 | tsconfig `13d49b94…`；CODEOWNERS `b8b7a9f1…`；YAML `4c20c029…`；锁＝sidecar＝ledger 首行 `b0863b95…` |
+| `git ls-files -z -- <三路径> \| xargs -0 cat \| wc -l` | **52** |
+| `git status --porcelain --` 三文件 | 空 |
+| `ts.parseConfigFileTextToJson` | jsonError null；9 选项 |
+| `tsc --showConfig -p apps/web/tsconfig.json` | exit 0；es2022／esnext／bundler／strict／noUncheckedIndexedAccess／skipLibCheck 等；files 354 |
+| `tsc -b apps/web/tsconfig.json --dry` | exit 0；`A non-dry build would build project '…/apps/web/tsconfig.json'` |
+| `tsc --help` | exit 0；**不当 PASS** |
+| 内存 TS 探针 | TS2322／TS18048／TS6046／TS5023 见 §4 |
+| `yaml.parseDocument` | errors/warnings 空 |
+| `gh api …/codeowners/errors` | `{"errors":[]}` |
+| `gh api …/branches/main/protection` | HTTP 403 Upgrade to GitHub Pro |
+| `gh api …/actions/permissions/workflow` | `default_workflow_permissions: read` |
+| `gh api repos/actions/checkout/git/ref/tags/v4.3.1` | object.sha=`34e11487…` |
+| `gh api repos/actions/setup-node/git/ref/tags/v4.4.0` | object.sha=`49933ea5…` |
+| 官方 workflow-syntax（github/docs raw） | `jobs.<job_id>.timeout-minutes` **Default: 360** |
+| 官方 about-code-owners | case sensitive；last matching；`!`/`[]` 不工作；Require review from Code Owners 才强制 |
+| hook 三 probe | 0／1／0 |
+| `node tools/verify-html-ledger-sync.mjs` | **exit 1**（PGM／台账，M426） |
+| 零 SHA／`not-a-ref` | **exit 1** fail-closed |
+| `npm run verify:html-ledger-sync && echo SHOULD_NOT_PRINT` | 无 SHOULD_NOT_PRINT；CHAIN_EXIT=1 |
+| `npm run verify:delivery-gates-docs` | `DELIVERY_GATES_DOCS_PASS` **exit 0** |
+| `node tools/refresh-entry-doc-baseline.mjs --check` | **exit 1** DRIFT（M435／M436；未写文件） |
+| 只读 run `35601416957` | success；node v22.23.2；HTML_GATES_BASE=`40fcc8f1…` |
+| 只读 run `34865649772`／`33296882514` | verify 步 failure → job failure |
+
+---
+
+## 11. B1 结论
+
+**PASS**
+
+52 行已连续覆盖，GEN-001–018 已逐项取证，三线已做。本轮无新未定稿工程缺陷。012／013 维持技术性无缺陷登记；014 现行源与镜像消费与职责说明一致，不重复修。历史 001—011 保留旧范围。全局 PGM 台账同步红与入口快照漂移按归属保留，不刷绿，不称全仓／发布通过。
+
+本票不是模块收口（须 B5 双 PASS），不是 B2 定稿，不是发布 PASS。B3 累计 2 不清零。M001—M004 现锁闭环不重开。三份业务 HTML 未改。
+
+## M005 现锁B2整批归并票（Grok 席追加）
+版本：V0.09（本文件既有 V0.01–V0.08 全部 196533 字节原样保留，SHA256 `54490b95a068aea7f5e991aee2aff03a1f44818911a9e7514b0245ab8bb0bf0e`，不覆盖、不改 V0.08 原文；自身版本 V0.08→V0.09）
+
+本席B2：**PASS**。此票只判断 findings V3.39 顶部「当前M005现锁B2整批候选」相对两份指定完整 B1 raw 的全批差集、四分类、修复队列与最小处置。不是独立 B1 PASS，不是模块 PASS，不是发布 PASS。不继承本文件旧 B2（V0.03／V0.05／V0.07，当时 014 曾入队），不继承旧 B5，不采信 self-raw 在 143794 字节之后的 V0.11 追加段。根候选未改写本席 V0.08 分类／队列／不立案边界，§7 SHA 语义由本票独立核实，不由根代判。无修复动作，不加配置或功能。本段不写独占锁字段行。
+
+### 本批输入（精确路径／版本／体积／SHA）
+
+| 输入 | 路径 | 版本 | 体积 | SHA256 |
+|---|---|---|---|---|
+| Codex 最后完整 B1 | `docs/audit-2026-09/modules/M005-b1-self-raw.md` | V0.10（自独占锁行 `b0863b95…` 起至「尚须读取独立Grok全量报告…不以本票覆盖。」止；其后 V0.11 不在本批输入） | **143794** 字节（当前磁盘整文件 146046，本席只用封存前缀） | `b98c3bafc50819092d1e4e4b305b82600af43eeff061b24685fae556ca19d307` |
+| 本席最后完整 B1 | `docs/audit-2026-09/modules/M005-b1-grok-raw.md` 本文件 | V0.08（自 `1647` 行独占锁行起至文末） | **196533** 字节（追加前整文件） | `54490b95a068aea7f5e991aee2aff03a1f44818911a9e7514b0245ab8bb0bf0e` |
+| 候选台账 | `docs/audit-2026-09/findings.md` 顶部「当前M005现锁B2整批候选」至「下方旧当前段均历史。」 | V3.39 | **1229975** 字节（整文件） | `67d75f1163e41262b16cca72e82f2cabde252b033748aa9e4ba23474c61d1aaf` |
+
+两份 B1 与候选段全文已读。当前范围只认三源 52 行、映射 18 GEN：`tsconfig.base.json` 13、`.github/CODEOWNERS` 12、`.github/workflows/predeploy-gates.yml` 27。`questions/` 无 M005 文件。未派子代理、未用 MCP、未 fetch／commit／push／安装／部署，未改 findings／ledger／源码／HTML／锁／收口。固定 CLI 形态未改、本节点未重跑无头调用。
+
+### V0.08 §7 `origin/main@88c7b465` 与顶部 `origin/main=ebb1eb99`（本票澄清；不改原 raw）
+
+**结论：不是把 `origin/main` 尖端抄成 `88c7b465`，也不是伪造 SHA。** 那是 `tools/verify-html-ledger-sync.mjs` 在默认基线下把 **ref 名** 与 **`git merge-base` 实算祖先** 拼进失败文案。顶部 `origin/main=ebb1eb99…` 是 `git rev-parse origin/main`。二者语义不同，原文保留。
+
+工具最小相关段（只读 L29–48，未改文件）：
+
+- L30：`const base = process.argv[2] || process.env.HTML_GATES_BASE || "origin/main";`
+- L34：`mergeBase = git("merge-base", base, "HEAD").trim();`
+- L47 脏工作区文案：`` `工作区（含未提交改动）↔ 基线 ${base}@${mergeBase.slice(0, 8)}` ``
+
+故 `origin/main@88c7b465` = 基线 **ref 名** `origin/main` + `merge-base(origin/main, HEAD)` 前 8 位，**不是** `rev-parse origin/main`。
+
+本席 B2 只读复算（未 fetch）：
+
+| 命令 | 结果 |
+|---|---|
+| `git rev-parse HEAD` | `e456ba96c84185c8d39f18f548011daac48a6466` |
+| `git rev-parse origin/main` | `ebb1eb99c610df330c07d24278798c2d3611299a`（与 V0.08 顶部一致） |
+| `git merge-base origin/main HEAD` | `88c7b465475fb8eb26e46200ae90ad3e00500522`（前 8 位即文案中的 `88c7b465`） |
+| `git merge-base HEAD HEAD` | `e456ba96c84185c8d39f18f548011daac48a6466` |
+| `git status --porcelain --` 三份业务 HTML | 仅 ` M docs/platform-governance-map-for-operations-v0.1.html` |
+| `HTML_GATES_BASE=HEAD node tools/verify-html-ledger-sync.mjs` | **exit 1**；文案「工作区（含未提交改动）↔ 基线 HEAD@e456ba96」；已改 PGM；台账未同步 |
+| `env -u HTML_GATES_BASE node tools/verify-html-ledger-sync.mjs`（默认） | **exit 1**；文案「工作区（含未提交改动）↔ 基线 origin/main@88c7b465」；同一 PGM |
+| 显式 argv `origin/main` | 与默认相同，exit 1 |
+
+根实跑 `HTML_GATES_BASE=HEAD` 与本席默认 `origin/main` **不是同一次调用、不是同一比较基线**。当前两路都因 PGM／决策台账不同步而红，**不能**互相替代，更 **不能** 把 origin 上 CI run `35601416957`（`head_sha=ebb1eb99…`，V0.08 只读 success）写成当前脏工作区绿。该红灯归属台账 **M426**、工具 **M008**，不是本 52 行缺陷，不在本模块刷绿或加字段。V0.08 §7 原文不改。
+
+### 全部 ID 差集（不继承旧 B2 队列）
+
+Codex V0.10 当前临时项仅 **CX-01／CX-02／CX-03**。本席 V0.08 当前新 GR **空集**；旧 **GR-M005-B1-01** 已重判为现行缺陷不成立，不新开号。无添加项、无 questions、无新 HTML 自身问题。
+
+| 正式ID | 本批全部来源 | 四分类 | 当前工程缺陷 | 修复队列 | 最小处置 |
+|---|---|---|---|---|---|
+| M005-001 | 历史表（旧 package.json `engines`）；两席 B1 均声明不在本 3 文件 | 技术性（历史） | 历史是 | **否** | **历史原范围保留**；不改写成 tsconfig／CI；不重开、不抹历史缺陷 |
+| M005-002 | 历史表（`REAL_BACKEND_WEB_PORT`） | 技术性（历史） | 历史是 | **否** | 同上 |
+| M005-003 | 历史表（live-evidence 选择器） | 技术性（历史） | 历史是 | **否** | 同上 |
+| M005-004 | 历史表（`smoke:p0-ops`） | 技术性（历史） | 历史是 | **否** | 同上 |
+| M005-005 | 历史表（缺 `REAL_BACKEND_E2E` 假绿） | 技术性（历史） | 历史是 | **否** | 同上 |
+| M005-006 | 历史表（E2E 绑定 0.0.0.0） | 技术性（历史） | 历史是 | **否** | 同上 |
+| M005-007 | 历史表（包协议字段） | 技术性（历史） | 否 | **否** | 历史登记保留 |
+| M005-008 | 历史表（scripts） | 技术性（历史） | 否 | **否** | 历史登记保留 |
+| M005-009 | 历史表（依赖／packageManager） | 技术性（历史） | 否 | **否** | 历史登记保留 |
+| M005-010 | 历史表（mock Playwright） | 技术性（历史） | 否 | **否** | 历史登记保留 |
+| M005-011 | 历史表（real Playwright） | 技术性（历史） | 否 | **否** | 历史登记保留 |
+| M005-012 | self CX-01；Grok V0.08 tsconfig:1–13 全覆盖 | 技术性 | **否** | **否** | 只登记。九选项 + web 真实 extends 354 输入、正负诊断。不新分 ID |
+| M005-013 | self CX-02；Grok V0.08 CODEOWNERS:1–12 全覆盖 | 技术性 | **否** | **否** | 只登记。九规则仓库评审路由；保护 403、errors=[]、主体 admin。不写成业务岗位 |
+| M005-014 | self CX-03；Grok V0.08 workflow:1–27 全覆盖；旧 GR-M005-B1-01 重判 | 技术性 | **否**（历史是，当前源 V0.02 已修） | **否** | **不重修**。L6 与 hook 17 行／部署 `REQUIRED_GATES` 循环一致；两 YAML 镜像字节相等；`verify:delivery-gates-docs` exit 0。不把已修注释再当现行缺陷 |
+
+漏并：**无。** CX-01／02／03 全部落入 012／013／014。本席 V0.08 无新 GR 可丢。GR-M005-B1-01 未另开号、未丢、未改写成现行缺陷。001—011 十四项历史 ID 均在候选声明中保留原范围，未改写成当前 52 行含义，未复用号。假设第二 owner／扩大 CODEOWNERS 覆盖 tsconfig／permissions／concurrency／timeout／base `files:[]`：两席 B1 均不立案，候选未新增，本席同意，不造 questions。
+
+分类顺序冲突→细化→技术性→添加：当前三项均冲突否、细化否、技术性是、添加否。编译选项、仓库评审路由、CI 工作流不是票种／角色／价格／审批。无业务发明。
+
+队列「是」= **空集**。与两席本轮 B1 一致。旧 B2 V0.07 曾把 014 标「是」——那是修前状态，**本票不继承**。
+
+### 与候选的合取／根未覆盖本席意见
+
+候选三行（012／013／014）分类、当前缺陷、队列与本席 V0.08 §6 表一致；001—011 保留句与两席 B1 一致；PGM 红→M426／M008、入口快照→M435／M436 与本席 V0.08 §7 归属一致；不立案清单未把本席「不立案」改写成缺陷。候选把 §7 SHA 表述标为「应在其 B2 澄清」，**没有**用根席 merge-base 解释覆盖本席原文——本票完成该澄清。无 ID 遗漏，故不因此 FAIL。
+
+证据层次差（不改三值、不另造 ID）：self 额外检查里 `verify:predeploy` 文案为 `HEAD@e456ba96`（与 `HTML_GATES_BASE=HEAD` 一致）；本席 V0.08 默认调用文案为 `origin/main@88c7b465`。两路当前均红，不能写成同一次调用。本席未在本 B2 重跑 15 闸全链（第一闸已红且会滑出 M005）。
+
+### 本席 grilling（自答；禁止表演性同意）
+
+1. 能否因两席 B1 都 PASS 就预设本 B2 PASS？不能。差集、队列、SHA 语义均在本票独立核实后才下。
+2. 空新 GR 是否漏并？否。V0.08 明文无新临时 finding；旧 GR 并入 014 且现行缺陷否。
+3. 014 应否因历史缺陷再入队？否。当前 L1 V0.02、L6 可从 hook／部署循环复现，镜像字节相等。重修会变成无缺陷改配置。
+4. `88c7b465` 能否当 origin/main 现值或抄录错误而 FAIL？不能。工具 L47 明确是 `base@mergeBase[:8]`；`rev-parse origin/main` 仍是 `ebb1eb99`。
+5. origin CI 绿能否当工作区绿？不能。`HTML_GATES_BASE=HEAD` 本节点 exit 1。
+6. 应否补 timeout／permissions／CODEOWNERS 覆盖 tsconfig？不能。非现行缺陷、非添加项；用户本轮禁止加配置功能。
+7. 旧 B2／旧 B5 PASS 能否代替本票？不能。
+
+### 实跑证据（类型 4；本节点）
+
+```text
+self_v010_prefix=143794/b98c3bafc50819092d1e4e4b305b82600af43eeff061b24685fae556ca19d307
+grok_v008_before_append=196533/54490b95a068aea7f5e991aee2aff03a1f44818911a9e7514b0245ab8bb0bf0e
+findings_v339=1229975/67d75f1163e41262b16cca72e82f2cabde252b033748aa9e4ba23474c61d1aaf
+lock_workspace=b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+HEAD=e456ba96c84185c8d39f18f548011daac48a6466
+origin/main=ebb1eb99c610df330c07d24278798c2d3611299a
+merge-base(origin/main,HEAD)=88c7b465475fb8eb26e46200ae90ad3e00500522
+HTML_GATES_BASE=HEAD html-ledger-sync exit=1 scope=HEAD@e456ba96 html=PGM
+default html-ledger-sync exit=1 scope=origin/main@88c7b465 html=PGM
+three_source_porcelain=empty
+cx_ids=CX-01,CX-02,CX-03
+grok_new_GR=empty
+candidate_ids=M005-012,M005-013,M005-014 + historical 001-011
+queue_yes=empty
+adding=0 questions_M005=0
+```
+
+未真实 `npm ci`、未触发 workflow、未改三受审文件／镜像／hook。
+
+### 最终结论
+
+**本席 B2：PASS。**
+
+实际差集：Codex V0.10 当前临时项 CX-01／02／03 → 既有 012／013／014；本席 V0.08 新 GR 空集，旧 GR-M005-B1-01 并入 014 且现行缺陷否。候选覆盖上述全部 ID，无漏并、无改写本席空集为缺陷、无拆分或复用。012／013 技术性只登记、队列否。014 历史已修、当前否、队列否、不重修。001—011 历史原范围保留。无添加、无新 HTML 申请、无未答 questions。V0.08 §7 的 `origin/main@88c7b465` 是门禁工具 merge-base 实算输出，不是 `origin/main` 尖端抄录；根 `HTML_GATES_BASE=HEAD` 实跑 PGM 台账红 exit 1 已独立复现。不能把 origin CI 绿当工作区绿。
+
+修复队列「是」= 空集。按 V0.17：双席 B2 定稿后跳过新增 B3／B4（累计 B3 仍 **2**），必须再做独立 **B5-r2** 全模块重审。现在不得标模块 PASS。两席 B1 PASS 不代替 B2／B5。
+
+不修改候选。不修 HTML／锁／源码／配置。双席合取仍须根席本批 B2；本席不得被自审覆盖。本段未写独占锁哈希字段行。其后本节点不进入 B3／B4／B5／其他模块。
+
+B2 结束。不修复。

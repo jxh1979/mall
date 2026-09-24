@@ -1,4 +1,20 @@
 # M003 — 治理门禁与 CI 基线／配置与工程入口／第1段
+版本：V0.03
+
+状态：PASS。控制V0.17，471计划，锁V0.14。ledger V7.66已先登记本模块PASS。仅当前M001—M003完成新锁复审，不代表全仓通过。
+
+## 当前范围与证据
+.gitignore58行 + package.json147行=205行，18GEN全部三线复审。两源SHA256分别 a10b953aa5d53b1f476c250c8ccd4e0ff3751f122ceac7a240f8e4643d125836 / 350999a90ddf85b2d3dcbee090dd593fb7faff18d0f467f0a608d8b3664d473f。新增既有Graft缓存行单列032，不扩大016旧对象；027只登记重叠，无故障不强删。findings V3.36七ID016、027—032全为无缺陷/队列否，旧裁决与原票保留。无新增B3/B4，累计B3=2、方案修复2、失败重跑0。
+
+B1 self V0.10 / Grok V0.07均PASS；B2 self V0.11 / Grok V0.08整批PASS。B5-r2 self V0.04完整116159bytes SHA256 19ea4291c38154ed77c7924030b63dd4b4790b4c30b50b5cf626ec5cce9bde0c；Grok V0.03完整103531bytes SHA256 d6fff34948a42a72e70e526917f7636ba06cbcefd2d2e527b9f41caf651e2f06。self先封存再读Grok完整新报告，真实exit0，均PASS。B5后实算/sidecar/ledger/Grok四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458；LOCK-AMEND-COUNT=1。
+
+## 验证与限制
+127脚本语法、75Node入口语法、引用/工作区/锁镜像、ignore正负例及tracked-ignore=0均核验。后端环境check、Vite help、TypeScript dry只验证入口和环境，不是业务测试/编译已通过；root复用B1同字节运行证据明确见B5。Grok独立验证环境、入口失败传播、ignore及HTML门禁。
+html-ledger-sync/predeploy仍因获批PGM680/871与M426台账未同批同步而红，工具M008。entry-anchors现绿。入口快照DRIFT归README M435、入口文档M436、工具M008；AGENTS Graft措辞观察归M435。不刷绿、不在本模块修上述材料，不重开已收口HTML。未跑全后端/全UI/Android/数据库/全交付链，未提交推送或部署。本轮没有修改源码或HTML。
+
+## 历史 V0.02 原文（旧结论不代表现锁）
+
+# M003 — 治理门禁与 CI 基线／配置与工程入口／第1段
 版本：V0.02
 
 状态：PASS。当前471模块计划；控制V0.17、冻结锁V0.11。已先写ledger V1.63的M003 PASS，再写本收口。完成3/471模块；不代表全仓或发布门禁通过。

@@ -33,7 +33,6 @@ public class AmusementService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> PROJECT_STATUSES = Set.of("open", "paused", "closed", "maintenance");
     private static final Set<String> SESSION_STATUSES = Set.of("scheduled", "open", "closed", "cancelled");
-    private static final Set<String> OVERRIDE_TYPES = Set.of("allow", "deny", "pause", "resume", "release");
     private static final Set<String> RULE_TYPES = Set.of("age", "height", "weight", "capacity", "safety_notice", "manual");
     private static final Set<String> DEVICE_STATUSES = Set.of("active", "inactive", "maintenance", "retired");
 
@@ -103,33 +102,6 @@ public class AmusementService {
                 "amusement.safety_inspection.view",
                 "amusement_inspection_task",
                 () -> repository.listInspectionTasks(scope)
-        );
-    }
-
-    public PageResponse<AmusementManualOverrideRecord> listManualOverrides() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        return readPage(
-                "amusement.manual_override.viewed",
-                "amusement.manual_override.view_failed",
-                "amusement.verification.override",
-                "amusement_manual_override",
-                scope.isPresent() ? () -> repository.listManualOverridesByMerchant(scope.get()) : repository::listManualOverrides
-        );
-    }
-
-    @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.override", admissionAction = "amusement.manual_override", objectType = "amusement_manual_override")
-    @Transactional
-    public AmusementManualOverrideRecord createManualOverride(AmusementManualOverrideRequest request) {
-        return executeWrite(
-                "createAmusementManualOverride",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                AmusementManualOverrideRecord.class,
-                "amusement.verification_overridden",
-                "amusement.verification_override_failed",
-                "amusement.verification.override",
-                "amusement_manual_override",
-                () -> createManualOverrideInternal(request)
         );
     }
 
@@ -359,7 +331,7 @@ public class AmusementService {
 
     /**
      * 恢复（取消存档 / 墓碑复活）：清存档标记 + 删除轴回退 none。
-     * 已被审批通过删除（墓碑）的绑定恢复须持审批权 amusement.project_entitlement.approve（只授 role_platform_admin）。
+     * 已被审批通过删除（墓碑）的绑定只能由最高权限本人恢复（BSM 第 570 行）。
      */
     @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.manage")
     @Transactional
@@ -377,14 +349,17 @@ public class AmusementService {
                 "amusement.project_entitlement.manage",
                 "amusement_project_entitlement",
                 () -> {
-                    checkProjectOwnership(id);
+                    boolean master = isMasterActor();
+                    if (!master) {
+                        checkProjectOwnership(id);
+                    }
                     AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
                     if (existing.active()) {
                         throw ApiException.conflict("PROJECT_ENTITLEMENT_NOT_ARCHIVED", "该权益绑定处于生效中，无需恢复");
                     }
-                    if ("approved".equals(existing.deleteStatus())) {
-                        // 墓碑复活=撤销一次最高权限批准的删除，按同级最高权限把守。
-                        authorizationService.requirePermission("amusement.project_entitlement.approve");
+                    if ("approved".equals(existing.deleteStatus()) && !master) {
+                        // 墓碑复活=撤销一次最高权限批准的删除，只认最高权限本人（BSM 第 570 行）。
+                        throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "已删除的项目权益绑定须由最高权限本人恢复");
                     }
                     repository.restoreProjectEntitlement(id, type);
                     return requireProjectEntitlement(id, type);
@@ -410,7 +385,10 @@ public class AmusementService {
                 "amusement.project_entitlement.manage",
                 "amusement_project_entitlement",
                 () -> {
-                    checkProjectOwnership(id);
+                    boolean master = isMasterActor();
+                    if (!master) {
+                        checkProjectOwnership(id);
+                    }
                     AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
                     if (existing.archivedAt() == null) {
                         throw ApiException.badRequest("PROJECT_ENTITLEMENT_NOT_ARCHIVED", "请先存档再申请删除");
@@ -419,6 +397,10 @@ public class AmusementService {
                         throw ApiException.conflict("PROJECT_ENTITLEMENT_DELETE_ALREADY_PENDING", "该权益绑定已有待审批的删除申请");
                     }
                     repository.requestDeleteProjectEntitlement(id, type, deleteReason, currentActorId());
+                    if (master) {
+                        // BSM 第 570 行：持授权 U 盘密钥的最高权限本人发起的删除不需要经过任何审批。
+                        repository.decideDeleteProjectEntitlement(id, type, true);
+                    }
                     return requireProjectEntitlement(id, type);
                 }
         );
@@ -426,7 +408,7 @@ public class AmusementService {
 
     /**
      * 审批删除申请：approved → delete_status='approved'（墓碑，行留库、全读取路径过滤、可恢复，不物理删）；
-     * rejected → 回 none。权限 amusement.project_entitlement.approve（只授 role_platform_admin），且申请人禁自审。
+     * rejected → 回 none。审批人只认最高权限本人（BSM 第 570 行），且申请人禁自审。
      */
     @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.approve")
     @Transactional
@@ -438,6 +420,9 @@ public class AmusementService {
         if (!"approved".equals(verdict) && !"rejected".equals(verdict)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
+        if (!isMasterActor()) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "项目权益绑定删除须由最高权限本人批准");
+        }
         return executeWrite(
                 "decideDeleteAmusementProjectEntitlement:" + id + ":" + type,
                 idempotencyKey,
@@ -448,7 +433,6 @@ public class AmusementService {
                 "amusement.project_entitlement.approve",
                 "amusement_project_entitlement",
                 () -> {
-                    checkProjectOwnership(id);
                     AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
                     if (!"pending".equals(existing.deleteStatus())) {
                         throw ApiException.badRequest("PROJECT_ENTITLEMENT_DELETE_NOT_PENDING", "该权益绑定没有待审批的删除申请");
@@ -462,6 +446,11 @@ public class AmusementService {
                     return requireProjectEntitlement(id, type);
                 }
         );
+    }
+
+    /** BSM 第 570 行：配置数据删除审批与墓碑恢复只认持授权 U 盘密钥的最高权限本人；这些单据级路径对其逐笔放行（经 executeWrite 留痕）。 */
+    private boolean isMasterActor() {
+        return authorizationService.isMasterAuthority(authorizationService.currentActor());
     }
 
     private AmusementProjectEntitlementRecord requireProjectEntitlement(String projectId, String entitlementType) {
@@ -1561,44 +1550,6 @@ public class AmusementService {
                 && entitlementType.trim().toLowerCase(Locale.ROOT).startsWith(AMUSEMENT_ENTITLEMENT_TYPE_PREFIX);
     }
 
-    private AmusementManualOverrideRecord createManualOverrideInternal(AmusementManualOverrideRequest request) {
-        AmusementManualOverrideRequest actual = requireRequest(request);
-        String projectId = requireText(actual.projectId(), "project_id");
-        repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
-        checkProjectOwnership(projectId);
-        String sessionId = trimToNull(actual.sessionId());
-        if (sessionId != null) {
-            repository.findSessionById(sessionId)
-                    .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
-        }
-        String type = enumOrDefault(actual.overrideType(), null, OVERRIDE_TYPES, "override_type");
-        String reason = requireText(actual.reason(), "reason");
-        // 阶段2 主管释放（release）：异常清场——清零本项目并发在场快照（point_device+project 维），
-        // 用于漏扫出场堆积。场次/批次型（session 维、amusement_sessions.used_capacity）不受影响。
-        // 授权已由 @GuardedAction(amusement.verification.override) 限主管+审批留痕；本记录即审计凭据（谁/何时/原因/证据）。
-        if ("release".equals(type)) {
-            repository.clearProjectConcurrentCapacity(projectId, Instant.now());
-        }
-        String status = switch (type) {
-            case "allow" -> "approved";
-            case "deny" -> "denied";
-            case "release" -> "released";
-            default -> "recorded";
-        };
-        return repository.saveManualOverride(new AmusementManualOverrideRecord(
-                "override_" + slug(actual.idempotencyKey()),
-                projectId,
-                sessionId,
-                type,
-                reason,
-                status,
-                trimToNull(actual.operatorNote()),
-                evidence(actual.evidenceAttachmentIds()),
-                Instant.now()
-        ));
-    }
-
     private void checkProjectOwnership(String projectId) {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             AmusementProjectRecord project = repository.findProjectById(projectId)
@@ -1828,9 +1779,6 @@ public class AmusementService {
             return record.id();
         }
         if (response instanceof EntitlementSessionRecord record) {
-            return record.id();
-        }
-        if (response instanceof AmusementManualOverrideRecord record) {
             return record.id();
         }
         if (response instanceof AmusementReservationRecord record) {

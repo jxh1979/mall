@@ -1,4 +1,4 @@
-# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.02
+# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.04
 
 > 创建日期：2026-06-18
 > 状态：权威安全规格（补齐此前缺口——隔离模型此前仅存在于各迁移 .sql 注释中，无单一权威文档）。
@@ -30,7 +30,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 > 隔离列（`merchant_id`/`organization_id`/`project_id`）的值**在写入时由调用方的安全 token 注入**，**绝不允许从请求体或查询参数读取**。读取查询必须由服务端按 token 的 scope 强制追加过滤条件，不依赖前端传参。
 
 - 写入：Service 从 `AuthorizationService.currentMerchantScope()` / `currentActor()` 取 scope 落库。
-- 读取：repository 提供 `listXxxByMerchant(scope)` 等按 scope 过滤的方法；平台级（scope 为空）才走全量 `listXxx()`。参考实现：`FinanceService.listArApItems()`（`currentMerchantScope().isPresent() ? listArApItemsByMerchant : listArApItems`）。
+- 读取：repository 提供 `listXxxByMerchant(scope)` 等按 scope 过滤的方法；平台级（scope 为空）才走全量 `listXxx()`。参考实现：`FinanceService.listArApItems()`（取 `currentMerchantScope()` 与 `currentProjectScopeQuietly()` 两维范围，下推 `repository.listArApItemsPaged(merchantId, projectId, …)`；平台口径两者皆空＝全量）。
 - 旧行兼容：隔离列均为 **nullable**（`ADD COLUMN IF NOT EXISTS … VARCHAR`），存量旧行 `merchant_id IS NULL`；部分索引 `WHERE merchant_id IS NOT NULL` 只对已落 scope 的行建索引。**回填策略**见 §5。
 
 ## 3. 历史人工隔离列清单（初版快照，仅作背景）
@@ -38,11 +38,11 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | 迁移 | 表 | 列 | 类型 | 索引/约束 |
 |---|---|---|---|---|
 | V044 | `ar_ap_items` | merchant_id | VARCHAR(64) | 部分索引；另加 `uq_daily_close_scope_date UNIQUE(business_date,scope_type,scope_id)` on finance_daily_closes |
-| V046 | inventory 10 表 + `saved_bottles` | merchant_id | VARCHAR(64) | 部分索引；`chk_stock_adjustment_type`（**NOT VALID，待 VALIDATE**）|
+| V046 | inventory 9 表 + `saved_bottles` | merchant_id | VARCHAR(64) | 部分索引；`chk_stock_adjustment_type`（**NOT VALID，待 VALIDATE**）|
 | V047 | bar_tables / bar_reservations / bar_products / bar_orders / bar_production_tickets / bar_bills | merchant_id | VARCHAR(100) | 各部分索引 |
 | V048 | `roles` | organization_id | VARCHAR(64) | 部分索引（NULL=平台全局角色）|
-| V049 | amusement 4 表 | merchant_id | VARCHAR(?) | 部分索引已补（V065，ISO-GAP-03 已关闭）|
-| V051 | `compliance_reminders` | merchant_id | VARCHAR(64) | 部分索引；`uq_compliance_reminder_dedup` 去重约束 |
+| V049 | amusement 4 表 | merchant_id | VARCHAR(64) | 部分索引已补（V065，ISO-GAP-03 已关闭）|
+| V051 | `compliance_reminders` | merchant_id | VARCHAR(80) | 部分索引；`uq_compliance_reminder_dedup` 去重约束 |
 | V052 | `mall_floor_plans` | merchant_id | VARCHAR(64) | 部分索引 |
 | V055 | `staff_level_assignments` | organization_id + merchant_id | VARCHAR(64) | 两个部分索引（org/merchant）；`staff_levels` 为平台全局参考数据 `single_complex_default`，无 scope 列 |
 | V057 | `supervisor_review_decisions` | （无 scope 列） | — | 本次新增 `approval_level` / `required_approver_rank` 仅为审批留痕字段，**非隔离键**；该表仍无 organization/merchant scope 列（隔离裁决见 §6 / §7 注） |
@@ -50,13 +50,13 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | V059 | `business_process_step_records` | （无自带列） | — | `inherited`：经 `process_instance_id` 外键 join `business_process_instances` 继承 merchant_id/project_id 过滤 |
 | V059 | `service_responsibility_records` | merchant_id | VARCHAR(64) | `direct`；商户级直接过滤 |
 | V060 | `customer_points_rules` | project_id | VARCHAR(64) | `direct`，综合体/项目级隔离 |
-| V061 | `saved_bottles` | merchant_id（V046 已加） | VARCHAR(64) | `direct`；V061 另加 `customer_phone` 等字段（**敏感字段 at-rest 加密为后续项**，见 §6 ISO-GAP） |
+| V061 | `saved_bottles` | merchant_id（V046 已加） | VARCHAR(64) | `direct`；V061 另加 `customer_phone` 等字段（敏感字段 at-rest 加密已落地，见 §6 ISO-GAP-06） |
 
 > 注：迁移用 retrofit 方式事后加列，类型为 `VARCHAR`；早期 dev-design 文档把 merchant_id 写成 `uuid`，以本规格与迁移现实为准（待回头修正 design 文档，P2）。完整逐表 scope 映射见 `domain-ownership-scope-audit-v0.1.csv`。
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V423**，发现 **170** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V433**，发现 **172** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -104,6 +104,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_table_sessions` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_tables` | `merchant_id` + `space_id` | direct | V047, V084 | `V047__bar_security_merchant_isolation.sql`<br>`V084__object_space_mapping.sql` |
 | `business_entity_bindings` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
+| `business_entity_projects` | `project_id` | direct | V432 | `V432__m009_project_profiles_and_associations.sql` |
 | `business_process_instances` | `merchant_id` + `project_id` + `venue_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
 | `business_review_locks` | `project_id` | direct | V216 | `V216__business_review_locks.sql` |
 | `channel_fee_configs` | `project_id` | direct | V327 | `V327__settlement_channel_fee_configs.sql` |
@@ -172,6 +173,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_fee_notification_recipient` | `merchant_id` | direct | V182 | `V182__merchant_fee_notification_recipient.sql` |
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
+| `merchants` | `project_id` | direct | V432 | `V432__m009_project_profiles_and_associations.sql` |
 | `pass_gift_cost_configs` | `project_id` | direct | V373 | `V373__pass_gift_cost_configs.sql` |
 | `pass_gift_cost_variance_ledger` | `project_id` | direct | V377 | `V377__pass_gift_variance_ledger.sql` |
 | `platform_retention_rules` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
@@ -222,8 +224,8 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |
 | `turnover_rent_rules` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
 | `user_position_assignments` | `merchant_id` + `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
-| `venue_business_hours` | `venue_id` | inherited-or-location-scope | V226 | `V226__entitlement_session_kind_batch3.sql` |
-| `venue_sessions` | `venue_id` | inherited-or-location-scope | V226 | `V226__entitlement_session_kind_batch3.sql` |
+| `venue_business_hours` | `venue_id` | direct | V226 | `V226__entitlement_session_kind_batch3.sql` |
+| `venue_sessions` | `venue_id` | direct | V226 | `V226__entitlement_session_kind_batch3.sql` |
 | `voucher_definitions` | `merchant_id` | direct | V301 | `V301__unified_voucher_ledger.sql` |
 | `voucher_redemption_records` | `merchant_id` | direct | V301 | `V301__unified_voucher_ledger.sql` |
 | `warehouses` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
@@ -235,7 +237,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 ## 4. 运行时越权拦截与验收标准（Given/When/Then）
 
-每个**查询和写入** operation 必测两条（与 `p0-openapi-operation-acceptance-matrix-v0.1.md:272-273` 绑定）：
+每个**查询和写入** operation 必测两条（与 `p0-openapi-operation-acceptance-matrix-v0.1.md`「5. 边界与异常场景」表「数据范围穿透」行绑定）：
 
 - **AC-ISO-1 读隔离**：
   - Given 商户 A 的员工 token，存在商户 B 的数据；
@@ -265,7 +267,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | ISO-GAP-03 | **已关闭（V065）**：`V065__amusement_merchant_isolation_indexes.sql` 已给 amusement 4 表 merchant_id 建部分索引（原「无索引」P1 为过期标注，2026-07-02 回写并经库内索引核实） | Closed |
 | ISO-GAP-04 | V044–V061 缺 TDD 风格实现/回归 plan（对齐 `superpowers/plans/2026-06-15-security-audit-fixes.md` 的 V038/V039 记录）→ 详见本节末「ISO-GAP-04 TDD 回归 plan 待补」 | P1 |
 | ISO-GAP-05 | dev-design（bar/amusement/foundation）把 merchant_id 写成 `uuid`，与迁移 `VARCHAR` retrofit 不符 | P2 |
-| ISO-GAP-06 | `saved_bottles.customer_phone` 等 V061 新增敏感字段 **at-rest 加密未实现**（明文存储）→ 应补加密/脱敏方案 | P1 |
+| ISO-GAP-06 | **已关闭**：存酒手机号列已按 PiiCipher 加密落库（写入点 `JdbcInventoryRepository`），V396 补 `enc:v1:` 信封 CHECK | Closed |
 
 > **缺口登记状态（截至 2026-06-18，迁移基线 V061）**：V053 / V054 / V055（staff_level_assignments + staff_levels）/ V057（supervisor_review_decisions）/ V059（business_process_instances + business_process_step_records + service_responsibility_records）/ V060（customer_points_rules）/ V061（saved_bottles 补字段）均已在本规格 §3 逐表清单登记，scope_type/scope_source 已标注。后续新增带租户数据的表须继续按 §8 双向绑定登记。
 
@@ -274,7 +276,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例集**，隔离行为只散落在域内单测与人工口径中，无单一权威回归清单。回归 plan 落地前，应至少覆盖以下表（按 AC-ISO-1 读隔离 / AC-ISO-2 写注入不可被参数覆盖 / AC-ISO-3 平台级 / AC-ISO-4 旧行可见性 四条）：
 
 - V044：`ar_ap_items`（direct merchant_id）+ finance_daily_closes scope 唯一约束
-- V046：inventory 10 表 + `saved_bottles`（direct merchant_id）
+- V046：inventory 9 表 + `saved_bottles`（direct merchant_id）
 - V047：bar_tables / bar_reservations / bar_products / bar_orders / bar_production_tickets / bar_bills（direct merchant_id）
 - V048：`roles`（direct organization_id，NULL=平台全局）
 - V049：amusement 4 表（direct merchant_id，部分索引已补 V065）
@@ -301,7 +303,7 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
   - **查询/Repository**：扫描访问上述表的查询（JPA/Repository/原生 SQL），校验 scope 谓词来自**安全 token 注入**（§2 权威约定：scope 绝不取请求参数）；存在未注入 scope 的读/写查询 → 失败。
 - **失败口径（fail-closed）：** 任一"应隔离表的查询缺 scope 注入""scope 来源为请求参数""新增表未在 CSV/§3 登记"→ 闸口判失败，阻断合入。
 - **白名单例外：** 平台全局参考表（如 `staff_levels`、`roles` NULL=平台全局）须显式登记为"无 scope/平台全局"，方可豁免行级 scope 注入校验，避免误报。
-- **读路径谓词写法（2026-07-28 P0-D 教训）：** 带 scope 列的表，读路径一律写 `(<scope_col> IS NULL OR <scope_col> = :<scope_col>)`，**禁止**用 `COALESCE(<scope_col>, '__DEFAULT__') IN (...)` 哨兵比对。后者对常规数据语义等价，但 ① 机审识别不出 scoped 通道（会误报 F1）；② 依赖写面 rejectSentinel 保证「没有真 id 叫 `__DEFAULT__`」——一旦撞名，该行对**所有**调用方可见 = 真跨租户读（唯一索引只挡顶层默认槽，商户维不挡）。证据见 `SEC-P2-TENANT-ISOLATION-P0D-CONFIG-SCOPE-001`。
+- **读路径谓词写法（2026-07-28 P0-D 教训）：** 带 scope 列的表，读路径分两类写：业务数据表写 `(:<scope> IS NULL OR <scope_col> = :<scope>)`（调用方无该维范围才全量；scope 列为 NULL 的旧行按 §4 AC-ISO-4 默认不可见）；以 NULL 表示平台默认槽的配置类表写 `(<scope_col> IS NULL OR <scope_col> = :<scope_col>)`。两类均**禁止**用 `COALESCE(<scope_col>, '__DEFAULT__') IN (...)` 哨兵比对：① 机审识别不出 scoped 通道（会误报 F1）；② 依赖写面 rejectSentinel 保证「没有真 id 叫 `__DEFAULT__`」——一旦撞名，该行对**所有**调用方可见 = 真跨租户读（唯一索引只挡顶层默认槽，商户维不挡）。证据见 `JdbcSettlementBillRepository` 配置读取方法（`findComprehensiveServiceFee`）上的同一教训注释。
 - **与现有机审关系：** 现有机审基线只统计 OpenAPI auth context（验不到 DB 行级隔离），本闸口补 DB/查询级行级隔离校验，二者互补，不重复。
 
 ### 6A.2 越权 finding 台账（证据留痕）
@@ -339,19 +341,20 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 
 索引：`idx_supervisor_review_decisions_pending` 部分索引 `WHERE review_status='pending_review'`。
 业务/权限/事件口径见 `platform-governance-product-spec-v0.2.md`、OpenAPI `governance.supervisor_review.view/manage/approve`。
-**隔离缺口**：该表自身**无 scope 列**（`domain-ownership-scope-audit-v0.1.csv:131` 标注 "no direct scope column detected"）——需决策复核记录是否需按 organization/merchant 隔离（登记为 ISO-GAP，待治理负责人裁决）。
+**隔离缺口**：该表自身**无 scope 列**（`domain-ownership-scope-audit-v0.1.csv` 的 `supervisor_review_decisions` 行标注 "no direct scope column detected"）——需决策复核记录是否需按 organization/merchant 隔离（登记为 ISO-GAP，待治理负责人裁决）。
 
 ## 8. 字段级验收 = 与盘点 CSV 双向绑定
 
-本规格 §3 表 ↔ `domain-ownership-scope-audit-v0.1.csv` 逐行对应。任何新增带租户数据的表，必须：(1) 在 CSV 增行并标 scope_type/scope_source；(2) 在本规格 §3 增行；(3) 补 AC-ISO-1/2 用例。CSV 不再是 orphan，由本规格正式承接解释。
+`domain-ownership-scope-audit-v0.1.csv` 是全部表的 scope 分类闭集，§3A 是迁移中出现 scope 列的表的自动基线，二者均由生成器维护；§3 历史人工清单只作背景，不参与对应。任何新增带租户数据的表，必须：(1) 运行 `npm run docs:domain-ownership-scope` 与 `npm run docs:data-isolation-spec` 重生成 CSV 与 §3A（不手改）；(2) 补 AC-ISO-1/2 用例。CSV 不再是 orphan，由本规格正式承接解释。
 
 ## 9. append-only 防篡改与受限运行时角色（V140）
 
 审计/证据/流水/留痕表的不可变性由 DB 层硬强制，不依赖应用自觉：
 
 - **触发器（全环境生效，对 superuser/owner 亦触发）**：通用阻断函数 `complex_block_mutation()`，UPDATE/DELETE 命中即抛 `COMPLEX_APPEND_ONLY_VIOLATION`。
-  - **不可变表（UPDATE+DELETE 双锁，15 张）**：`audit_events`、`evidence_events`、`customer_stored_value_transactions`、`deposit_ledger`、`risk_alert_actions`、`ar_ap_payments`、`integration_robot_task_events`、`terminal_device_status_events`、`inventory_purchase_request_events`、`integration_video_access_audits`、`wecom_access_audits`、`cam_trueup_lines`、`cam_trueup_runs`、`integration_read_ledger`、`permission_template_usage_logs`。
-  - **永久留痕表（仅 DELETE 锁，保留幂等 UPDATE，15 张）**：`evidence_reviews`/`evidence_attachments`、`ar_ap_item_sources`、`bar_production_ticket_events`、`open_api_events`、`inventory_stock_movements`、`finance_reconciliation_differences`/`batches`、`ticket_payment_intents`/`finance_payment_intents`、`inventory_trace_handovers`/`steps`/`exceptions`、`ticket_refund_lines`、`customer_points_ledger`。
+  - **不可变表（UPDATE+DELETE 双锁，V140 初版 15 张；其中 `cam_trueup_lines`、`cam_trueup_runs` 已随 V274 删除）**：`audit_events`、`evidence_events`、`customer_stored_value_transactions`、`deposit_ledger`、`risk_alert_actions`、`ar_ap_payments`、`integration_robot_task_events`、`terminal_device_status_events`、`inventory_purchase_request_events`、`integration_video_access_audits`、`wecom_access_audits`、`cam_trueup_lines`、`cam_trueup_runs`、`integration_read_ledger`、`permission_template_usage_logs`。
+  - **永久留痕表（仅 DELETE 锁，保留幂等 UPDATE，V140 初版 15 张）**：`evidence_reviews`/`evidence_attachments`、`ar_ap_item_sources`、`bar_production_ticket_events`、`open_api_events`、`inventory_stock_movements`、`finance_reconciliation_differences`/`batches`、`ticket_payment_intents`/`finance_payment_intents`、`inventory_trace_handovers`/`steps`/`exceptions`、`ticket_refund_lines`、`customer_points_ledger`。
+  - 以上为 V140 初版清单，非现行闭集；后续迁移（如 V148 `supervisor_review_decisions`）继续追加，现行受保护表以库内调用 `complex_block_mutation()` 的触发器为准。
 - **CASCADE 中止**：删父业务行的级联删除触达受保护子表即触发 trigger 整事务回滚——等价 `ON DELETE CASCADE → RESTRICT` 的资金/审计保护，且比 FK 改造更鲁棒（未改 FK）。
 - **受限运行时角色 `complex_app`（生产）**：迁移 V140 以 owner 身份创建受限 role，REVOKE 不可变表 UPDATE/DELETE、永久留痕表 DELETE；运行时连接（`application-prod.yml` 的 `spring.datasource`）改用 `complex_app`，Flyway 仍以 owner 跑 DDL。`complex_app` 无 DDL 权限，无法 `DROP TRIGGER` 或 `SET session_replication_role` 绕过。未配置 app 专用 env 时回退 owner 凭证（向后兼容）。
 - **最小权限基线**：上述受限 role + append-only 触发器纳入安全基线检查项（`formal-security-baseline`）。
@@ -363,9 +366,9 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 | 主体 | 身份归属 | 可见 / 可操作范围 | 明确不可 | 落地承接 |
 |---|---|---|---|---|
 | **外包 / 检修单位** | 独立角色账号（账号类型 `outsourced_vendor`，区别于仅作台账的供货供应商记录），不进员工组织树 | 仅派给本单位/本人的工单/巡检/进场报备上下文（`data_scope=assignee`，角色 OUTSOURCED_FACILITY/OUTSOURCED_SECURITY_CLEANING/OUTSOURCED_CONSTRUCTION，细权限均为 `*_assigned`）；按授权范围只读或限定写 | 平台全局、其他商户/项目数据、财务与客人敏感信息、跨工单批量数据 | 已落地（V178 外包账号+facility assignee 强制、V179 进场报备）；检修记录须主管确认才生效，禁止巡检员/检修方单人闭环 |
-| **审计人员** | 平台员工，单独审计角色 | 跨域**只读**留痕/审计/复核记录（按授权综合体范围）；查看企微原文/视频证据/财务敏感信息属敏感操作 | 任何业务写操作、绕过 append-only 改记录、无审批查看敏感原文 | 已落地（V180 两级只读角色：内审 complex 全量只读 / 外审 project 限期只读，0 写权）；查看敏感原文须最小授权+审批并写访问审计（留痕复核节）；审计/证据表 append-only（见 §9） |
+| **审计人员** | 平台员工，单独审计角色 | 内部稽核：本综合体全部数据只读；外部审计/监管：只读划定的范围与时间段；两类都不能修改任何业务数据；查看企微原文/视频证据/财务敏感信息属敏感操作 | 任何业务写操作、绕过 append-only 改记录、无审批查看敏感原文 | 已落地（V180 两级只读角色：内审 complex 全量只读 / 外审 project 限期只读，0 写权）；查看敏感原文须最小授权+审批并写访问审计（留痕复核节）；审计/证据表 append-only（见 §9） |
 | **商户外包员工** | 归属某商户，受该商户授权 | 仅该商户授权业务范围（同商户侧边界） | 跨商户、平台全局（同 §1 商户隔离） | 复用商户侧 scope（§1/§2 token 注入 scope，绝不取请求参数） |
 
 - **统一原则**：三类主体一律走 §2「scope 只来自安全 token」，不得以请求参数放大范围；其访问（含被拒）按 HTML 留痕复核要求写审计（外包检修动作、审计人员敏感查看）。
-- **落地现状（2026-06-30 更新，纠正旧"待落地核对"措辞）**：外包与审计已落地——外包账号类型 `outsourced_vendor` + 三角色（OUTSOURCED_FACILITY / OUTSOURCED_SECURITY_CLEANING / OUTSOURCED_CONSTRUCTION）assignee 级数据范围强制（list 按 assignee 过滤、写操作 FORBIDDEN、跨商户/平台拒绝），审计两级只读角色（V180）；权限点已在 `full-admin-page-permission-field-matrix`（外包工作台 ADM-VND 页），详见治理 PRD §4，verify:full-admin-matrix 已绿。外包账号**独立于供货供应商台账**（供货供应商只作采购/对账对象、零登录账号）。
-- **自助下属层（已全部落地，2026-07-02 回写）**：外部协作机构自助开通/停用下属账号、平台设下属账号上限、账号有效期随合同周期到期自动停用、下属继承机构范围、机构查看下属工作完成情况（`PartnerSubordinateCompletionService` + subordinates-completion 端点 + `ADM-VND-004` 页）均已落地；原「尚未实现」为过期标注。需求口径见治理 PRD §4。
+- **落地现状（2026-06-30 更新，纠正旧"待落地核对"措辞）**：外包与审计已落地——外包账号类型 `outsourced_vendor` + 三角色（OUTSOURCED_FACILITY / OUTSOURCED_SECURITY_CLEANING / OUTSOURCED_CONSTRUCTION）assignee 级数据范围强制（list 按 assignee 过滤、写操作 FORBIDDEN、跨商户/平台拒绝），审计两级只读角色（V180）；权限点已在 `full-admin-page-permission-field-matrix`（外包工作台 ADM-VND 页），详见 `platform-governance-prd-v0.1.md` §4，verify:full-admin-matrix 已绿。外包账号**独立于供货供应商台账**（供货供应商只作采购/对账对象、零登录账号）。
+- **自助下属层（已全部落地，2026-07-02 回写）**：外部协作机构自助开通/停用下属账号、平台设下属账号上限、账号有效期随合同周期到期自动停用、下属继承机构范围、机构查看下属工作完成情况（`PartnerSubordinateCompletionService` + subordinates-completion 端点 + `ADM-VND-004` 页）均已落地；原「尚未实现」为过期标注。需求口径见 `platform-governance-prd-v0.1.md` §4.1。

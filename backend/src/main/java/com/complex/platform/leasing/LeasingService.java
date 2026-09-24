@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.01
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -240,7 +240,7 @@ public class LeasingService {
         // 1.4 决策A：merchant_id 空 → 签约自动建正式商户档案（带入线索/意向信息，四类主体默认同一公司=contractSubjectId）。
         String merchantId = trimToNull(actual.merchantId());
         if (merchantId == null) {
-            merchantId = autoCreateMerchantForSign(intent, contractSubjectId);
+            merchantId = autoCreateMerchantForSign(intent);
             // AUD-003：签约建"四主体"权威绑定——与商户/合同/线索同一事务原子落库；缺此则权威表(business_entity_bindings)恒空、
             // 主体绑定页/结算/权限按权威表读取时会把正式商户当未绑定。经营/结算主体缺省=合同主体（默认同一公司，后续走既有变更流拆分）。
             createFourPartyBinding(intent, merchantId, contractSubjectId, operationSubjectId, settlementSubjectId,
@@ -269,7 +269,7 @@ public class LeasingService {
      * 1.4 决策A：签约无既有商户 → 自动建正式商户档案，带入线索联系人/业态/空间/面积（四类主体默认同一公司=contractSubjectId）。
      * 稳定 idempotency key（按意向）→ 重签命中同一商户、不重复建；租金条款随合同 draft 带入，商户档案后续可完善。
      */
-    private String autoCreateMerchantForSign(LeasingIntentRecord intent, String contractSubjectId) {
+    private String autoCreateMerchantForSign(LeasingIntentRecord intent) {
         LeasingLeadRecord lead = repository.findLeadById(intent.leadId()).orElse(null);
         String contactName = lead != null ? trimToNull(lead.contactName()) : null;
         String contactPhone = lead != null ? trimToNull(lead.contactPhone()) : null;
@@ -285,11 +285,11 @@ public class LeasingService {
                 // V348 业态必填：线索意向业态直接带入（同五值词表）；线索阶段还没定业态的落「其他」，
                 // 由招商在商户档案里改正——不猜成「零售」，猜错＝通票分账把份额拆给错的业态。
                 businessType != null ? businessType : "other",
-                contractSubjectId, contractSubjectId, contractSubjectId,
+                null, null, null,
                 contactName, contactPhone, contactName,
                 spaceCode, area, area,
                 // M009-003：合作方式只能是 HTML 六类之一，签约阶段未定＝空，不发明「leasing_auto」值。
-                null, null, null, null, "active"));
+                null, null, null, null, "active", intent.projectId()));
         return merchant.id();
     }
 

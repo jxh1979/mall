@@ -382,7 +382,10 @@ public class StaffService {
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord requestDeleteProfile(String id,
             com.complex.platform.access.staff.dto.StaffProfileDeleteRequest request) {
-        StaffProfileRecord profile = requireProfileInScope(id);
+        // 最高权限逐笔开放（治理地图第 528 行第④类）：最高权限发起的删除只校验档案存在，不按公司或登记范围。
+        StaffProfileRecord profile = authorizationService.isMasterAuthority(authorizationService.currentActor())
+                ? repository.findProfileById(id).orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id))
+                : requireProfileInScope(id);
         if (profile.archivedAt() == null) {
             throw ApiException.badRequest("STAFF_PROFILE_NOT_ARCHIVED", "员工档案必须先存档才能申请删除");
         }
@@ -409,7 +412,9 @@ public class StaffService {
         if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
             throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "员工档案删除须由最高权限本人批准");
         }
-        StaffProfileRecord profile = requireProfileInScope(id);
+        // 最高权限逐笔开放（治理地图第 528 行第④类）：不按公司或登记范围取档案，只校验存在；留痕由 delete_approved/rejected 承担。
+        StaffProfileRecord profile = repository.findProfileById(id)
+                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id));
         if (!"pending".equals(profile.deleteStatus())) {
             throw ApiException.badRequest("STAFF_PROFILE_DELETE_NOT_PENDING", "该员工档案没有待审批的删除申请");
         }

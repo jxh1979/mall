@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.02
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -381,6 +381,130 @@ class PlatformControllerTests {
         verify(authorizationService).requirePermission("entity.binding.manage");
     }
 
+
+
+    @Test
+    void projectAssociationEndpointsConsumeEachFunctionalPermissionOnce() throws Exception {
+        MerchantRecord merchant = new MerchantRecord("mch_project", "项目商户", "other", null, null, null,
+                null, "18800000001", null, null, null, null, null, null, null, null, "active",
+                Instant.EPOCH, Instant.EPOCH).withProject("project_a");
+        when(service.assignMerchantProject(eq(merchant.id()), any())).thenReturn(merchant);
+        when(service.associateBusinessEntityProject(eq("entity_project"), any()))
+                .thenReturn(new BusinessEntityRecord("entity_project", "公司", "management_company",
+                        null, null, null, "active", Instant.EPOCH, Instant.EPOCH));
+        String request = """
+                {"idempotency_key":"project-association","project_id":"project_a","reason":"核实原始资料"}
+                """;
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                        "/api/v1/platform/merchants/mch_project/project")
+                        .with(user("ops").roles("P0_SMOKE")).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.project_id").value("project_a"))
+                .andExpect(jsonPath("$.data.contact_phone").value("188****0001"));
+        mockMvc.perform(post("/api/v1/platform/business-entities/entity_project/projects")
+                        .with(user("ops").roles("P0_SMOKE")).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value("entity_project"));
+        verify(authorizationService, Mockito.times(1)).requirePermission("merchant.profile.manage");
+        verify(authorizationService, Mockito.times(1)).requirePermission("entity.binding.manage");
+        var expected = new com.complex.platform.governance.dto.ProjectAssociationRequest(
+                "project-association", "project_a", "核实原始资料");
+        verify(service).assignMerchantProject("mch_project", expected);
+        verify(service).associateBusinessEntityProject("entity_project", expected);
+    }
+
+    @Test
+    void associationEndpointRejectsMissingKeyAndDeniedPermissionBeforeService() throws Exception {
+        mockMvc.perform(post("/api/v1/platform/business-entities/entity_project/projects")
+                        .with(user("ops").roles("P0_SMOKE")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"project_id\":\"project_a\",\"reason\":\"核实\"}"))
+                .andExpect(status().isBadRequest());
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "无权限"))
+                .when(authorizationService).requirePermission("merchant.profile.manage");
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                        "/api/v1/platform/merchants/mch_project/project")
+                        .with(user("ops").roles("P0_SMOKE")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"denied\",\"project_id\":\"project_a\",\"reason\":\"核实\"}"))
+                .andExpect(status().isForbidden());
+        Mockito.verifyNoInteractions(service);
+    }
+
+
+    // M009-058：真实授权服务；单次许可只供一次响应，同组功能权限不能先把电话权限耗掉。
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void merchantPhoneSingleUseAppliesToOneResponse(boolean writeResponse, boolean sameGrant) {
+        var repository = Mockito.mock(com.complex.platform.access.AccessRepository.class);
+        var consumed = new java.util.concurrent.atomic.AtomicBoolean();
+        String permission = writeResponse ? "merchant.profile.manage" : "merchant.profile.view";
+        when(repository.permissionExists(any())).thenReturn(true);
+        when(repository.findPermissionEffects(eq("phone_once"), any())).thenAnswer(call -> List.of(
+                new com.complex.platform.access.AccessRepository.PermissionEffect("phone_once", permission,
+                        com.complex.platform.access.AccessRepository.Effect.GRANT,
+                        sameGrant ? com.complex.platform.access.AccessRepository.Source.TEMPORARY_GRANT
+                                : com.complex.platform.access.AccessRepository.Source.ROLE,
+                        sameGrant ? "phone_once_grant" : "profile_role", null, null,
+                        sameGrant, sameGrant && consumed.get()),
+                new com.complex.platform.access.AccessRepository.PermissionEffect("phone_once", "pii.contact_phone.view",
+                        com.complex.platform.access.AccessRepository.Effect.GRANT,
+                        com.complex.platform.access.AccessRepository.Source.TEMPORARY_GRANT,
+                        "phone_once_grant", null, null, true, consumed.get())));
+        when(repository.markSingleUsePermissionConsumed(eq("phone_once_grant"), any(), eq("phone_once"), any()))
+                .thenAnswer(call -> consumed.compareAndSet(false, true));
+        var authorization = new AuthorizationService(repository);
+        var controller = new PlatformController(service, authorization, Mockito.mock(VenueBusinessHoursService.class));
+        var merchant = new MerchantRecord("mch_once", "商户", "other", null, null, null,
+                "甲", "18800000011", null, null, null, null, "乙", "18800000013",
+                null, null, "active", Instant.EPOCH, Instant.EPOCH);
+        when(service.listMerchants(false, null, 1, 50))
+                .thenReturn(new PageResponse<>(List.of(merchant, merchant), 1, 50, 2));
+        when(service.archiveMerchant(eq(merchant.id()), any())).thenReturn(merchant);
+        var previous = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor("phone_once", "phone_once", "staff",
+                                "project_a", null, "active"), "token", List.of()));
+        java.util.function.Supplier<List<MerchantRecord>> request = () -> writeResponse
+                ? List.of(controller.archiveMerchant(merchant.id(),
+                        new MerchantArchiveRequest("phone-once", "保存测试")).data())
+                : controller.listMerchants(false, null, 1, 50).data().items();
+        try {
+            assertThat(request.get()).allSatisfy(record -> {
+                assertThat(record.contactPhone()).isEqualTo("18800000011");
+                assertThat(record.secondaryContactPhone()).isEqualTo("18800000013");
+            });
+            assertThat(consumed.get()).isTrue();
+            if (sameGrant) {
+                org.assertj.core.api.Assertions.assertThatThrownBy(request::get)
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.code()).isEqualTo("PERMISSION_DENIED"));
+            } else {
+                assertThat(request.get()).allSatisfy(record -> {
+                    assertThat(record.contactPhone()).isEqualTo("188****0011");
+                    assertThat(record.secondaryContactPhone()).isEqualTo("188****0013");
+                });
+            }
+            verify(repository, Mockito.times(1)).markSingleUsePermissionConsumed(
+                    eq("phone_once_grant"), any(), eq("phone_once"), any());
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(previous);
+        }
+    }
+
+    @Test
+    void failedPhonePermissionConsumptionDoesNotReturnPlaintext() throws Exception {
+        when(authorizationService.currentActorHasPermission("pii.contact_phone.view")).thenReturn(true);
+        when(service.listMerchants(eq(false), any(), anyInt(), anyInt())).thenReturn(new PageResponse<>(
+                List.of(new MerchantRecord("mch_race", "商户", "other", null, null, null,
+                        "甲", "18800000011", null, null, null, null, "乙", "18800000013",
+                        null, null, "active", Instant.EPOCH, Instant.EPOCH)), 1, 50, 1));
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "单次授权已被使用"))
+                .when(authorizationService).requirePermissions("merchant.profile.view", "pii.contact_phone.view");
+
+        mockMvc.perform(get("/api/v1/platform/merchants").with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        Mockito.verifyNoInteractions(service);
+    }
 
     @TestConfiguration
     static class TestBeans {

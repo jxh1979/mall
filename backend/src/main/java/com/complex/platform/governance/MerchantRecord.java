@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.02
+// 文件版本：V0.04
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -31,8 +31,34 @@ public record MerchantRecord(
         String deleteStatus,
         String deleteRequestedBy,
         Instant deleteRequestedAt,
-        String deleteReason
+        String deleteReason,
+        String projectId
 ) {
+    public MerchantRecord(
+            String id, String merchantName, String merchantType, String businessEntityId, String contractEntityId,
+            String settlementEntityId, String contactName, String contactPhone, String ownerPerson,
+            String mallBlockCode, BigDecimal areaSquareMeter, BigDecimal leasedAreaSquareMeter,
+            String secondaryContactName, String secondaryContactPhone, BigDecimal rentPerSquareMeter,
+            String cooperationForm, String status, Instant createdAt, Instant updatedAt, Instant archivedAt,
+            String archivedBy, String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt,
+            String deleteReason) {
+        this(
+                id, merchantName, merchantType, businessEntityId, contractEntityId, settlementEntityId,
+                contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter,
+                secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm, status,
+                createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt,
+                deleteReason, null);
+    }
+
+    public MerchantRecord withProject(String projectId) {
+        return new MerchantRecord(
+                id, merchantName, merchantType, businessEntityId, contractEntityId, settlementEntityId,
+                contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter,
+                secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm, status,
+                createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt,
+                deleteReason, projectId);
+    }
+
     // ponytail: V260 前的 19 参构造点(既有代码/测试)不带存档/删除字段,默认未存档 + delete_status=none。
     //           避免为 6 个新字段改所有既有构造点;日后语义要变则删本构造让编译逼出所有点。
     public MerchantRecord(
@@ -53,7 +79,7 @@ public record MerchantRecord(
                 settlementEntityId, contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter,
                 leasedAreaSquareMeter, secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm,
                 status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
     }
 
     /**
@@ -66,7 +92,7 @@ public record MerchantRecord(
                 ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter, secondaryContactName,
                 com.complex.platform.common.PhoneMask.mask(secondaryContactPhone), rentPerSquareMeter,
                 cooperationForm, status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
     }
 
     /** M009-008：三个主体列以生效的四类主体绑定为准（PGM-026），绑定激活时由 PlatformService 同步投影。 */
@@ -76,7 +102,7 @@ public record MerchantRecord(
                 settlementEntityId, contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter,
                 leasedAreaSquareMeter, secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm,
                 status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
     }
 
     public MerchantRecord withDelete(String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt,
@@ -85,6 +111,6 @@ public record MerchantRecord(
                 settlementEntityId, contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter,
                 leasedAreaSquareMeter, secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm,
                 status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
     }
 }

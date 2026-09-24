@@ -2,6 +2,8 @@
 
 > **执行要求：** 编码前先按本计划做 TDD。先写失败测试并确认失败，再做最小实现，再运行聚焦测试、全量测试、契约校验和安全扫描。
 
+> 2026-09-20 160 全量审计 M019（B3-r1）：发布状态机、示例候选 id、列表信封与八值 CHECK 出处按现行实现改写（M019-004/005/007/009）；其余为历史编码计划原文。
+
 ## 1. 目标
 
 在 P1 “图片 + 多边形坐标”能力基础上，新增 P2-A 平面图导入能力：运营或实施人员可以上传/提交 SVG 或标准化 JSON，系统解析为候选区域，人工审核后发布为正式 `floor_plan_shapes`。
@@ -120,6 +122,8 @@
 - import task：`parsed`、`failed`、`published`、`cancelled`
 - candidate：`pending`、`published`、`rejected`
 
+候选 `shape_type` 八值 CHECK 见 `V423__m016_floor_plan_and_space_type_checks.sql`（V034 原六值已被其后迁移替换）。
+
 ## 6. 接口变化
 
 ### 6.1 创建导入任务
@@ -148,7 +152,7 @@
 
 权限：`floor_plan.import.view`
 
-返回：导入任务分页列表。
+返回：导入任务列表（PageResponse 信封，单页全量，不分页）。
 
 ### 6.3 查询导入候选
 
@@ -170,7 +174,7 @@
 {
   "idempotency_key": "floor-import-1f-publish-001",
   "operator_note": "publish reviewed candidates",
-  "candidate_ids": ["fpic_1", "fpic_2"]
+  "candidate_ids": ["<候选 id 1>", "<候选 id 2>"]
 }
 ```
 
@@ -202,7 +206,7 @@
 - [x] 写失败测试：导入到不存在的 floor plan 返回 `FLOOR_PLAN_NOT_FOUND`。
 - [x] 写失败测试：重复 idempotency key 同请求返回首个结果，不同请求返回冲突。
 - [x] 写失败测试：发布候选会写入正式 `floor_plan_shapes`，并将 task/candidate 标记为 published。
-- [x] 写失败测试：failed/cancelled/published task 不允许重复发布。
+- [x] 写失败测试：failed/cancelled task 不允许发布；published task 可继续发布剩余 pending 候选，已发布候选不得重复发布（M015-016 后口径）。
 - [x] 实现 service 最小逻辑。
 - [x] 运行 `cd /home/james/complex-management/backend && mvn -Dtest=FloorPlanServiceTests test`。
 

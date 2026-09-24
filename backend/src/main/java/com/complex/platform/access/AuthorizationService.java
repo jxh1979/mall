@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.08
+// 文件版本：V0.13
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -137,7 +137,8 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     public boolean isMasterAuthority(AccessActor actor) {
-        return isPlatformAdminBridge(actor)
+        return "active".equals(actor.status())
+                && SessionIssuer.MASTER_ACCOUNT_TYPE.equals(normalize(actor.accountType()))
                 && SessionIssuer.MASTER_USER_ID.equals(actor.id())
                 && SessionIssuer.MASTER_USERNAME.equals(actor.username());
     }
@@ -156,7 +157,7 @@ public class AuthorizationService implements CallerScopeResolver {
         AccessActor actor = currentActor();
         AccessUser user = accessRepository.findUserById(userId)
                 .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在"));
-        if (!isMasterAuthority(actor)) {
+        if (!isPlatformAdmin(actor) && !isMasterAuthority(actor)) {
             String organizationId = requireProjectScope(actor);
             if (!organizationId.equals(user.organizationId())) {
                 throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权查询其他组织的用户");
@@ -417,12 +418,15 @@ public class AuthorizationService implements CallerScopeResolver {
 
     /**
      * Returns the merchant scope of the current caller.
+     * Platform admins get Optional.empty() (no filter, sees everything; D-032：红线④不约束平台管理员).
      * Merchant users get Optional.of(merchantId).
-     * Callers without a merchantId throw MERCHANT_SCOPE_REQUIRED.
-     * 红线④：不因平台管理员身份整类关掉商户隔离；持密钥最高权限只在逐笔接口放行。
+     * Other callers without a merchantId throw MERCHANT_SCOPE_REQUIRED.
      */
     public Optional<String> currentMerchantScope() {
         AccessActor actor = currentActor();
+        if (isPlatformAdminBridge(actor)) {
+            return Optional.empty();
+        }
         String merchantId = actor.merchantId();
         if (merchantId != null && !merchantId.isBlank()) {
             return Optional.of(merchantId);
@@ -432,13 +436,16 @@ public class AuthorizationService implements CallerScopeResolver {
 
     /**
      * Returns the current caller's merchant id if present, otherwise empty.
-     * Unlike {@link #currentMerchantScope()}, this never throws: callers without a merchant
+     * Unlike {@link #currentMerchantScope()}, this never throws: platform admins and callers without a merchant
      * yield {@code Optional.empty()}. Degrades to empty on any error.
-     * 有商户号就按商户号过滤，不因平台管理员身份改成看全量。
+     * 平台管理员即便被种子误绑 merchant_id，也按平台视角看全量（D-032）。
      */
     public Optional<String> currentMerchantIdQuietly() {
         try {
             AccessActor actor = currentActor();
+            if (isPlatformAdminBridge(actor)) {
+                return Optional.empty();
+            }
             String merchantId = actor.merchantId();
             if (merchantId != null && !merchantId.isBlank()) {
                 return Optional.of(merchantId);
@@ -497,11 +504,13 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     /**
-     * 项目维度只读 scope：返回当前主体的项目 ID。没有项目归属则拒绝。
-     * 红线④：不因平台管理员身份返回空（全量）。
+     * 项目维度只读 scope：平台管理员返回空＝全量（D-032）；其余主体返回其项目 ID，没有项目归属则拒绝。
      */
     public Optional<String> currentProjectScopeQuietly() {
         AccessActor actor = currentActor();
+        if (isPlatformAdminBridge(actor)) {
+            return Optional.empty();
+        }
         return Optional.of(requireProjectScope(actor));
     }
 

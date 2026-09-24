@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -72,7 +72,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<PermissionTemplate> listTemplates(String organizationId) {
-        requireProjectScopeId(organizationId);
+        if (organizationId == null) return listTemplates();
         return jdbcTemplate.query("""
                 SELECT t.id, t.template_code, t.template_name, t.description, t.template_type, t.source_template_id,
                        t.owner_scope_type, t.owner_scope_id, t.usage_mode, t.valid_from, t.valid_to, t.single_use,
@@ -199,7 +199,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<AccessUser> listUsers(String organizationId) {
-        requireProjectScopeId(organizationId);
+        if (organizationId == null) return listUsers();
         return jdbcTemplate.query("""
                 SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
                        phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
@@ -211,7 +211,8 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<AccessUser> listUsersByMerchant(String merchantId) {
-        requireMerchantScopeId(merchantId);
+        // 商户面 scoped 读通道：按 access_users.merchant_id = token scope 过滤（AC-ISO-1，§4）。
+        if (merchantId == null) return listUsers();
         return jdbcTemplate.query("""
                 SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
                        phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
@@ -306,7 +307,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<RoleRecord> listRoles(String organizationId) {
-        requireProjectScopeId(organizationId);
+        if (organizationId == null) return listRoles();
         return attachPermissionCodes(jdbcTemplate.query("""
                 SELECT id, role_name, description, data_scope, status, created_at, organization_id
                   FROM roles
@@ -415,7 +416,14 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<PositionRoleTemplate> listPositionRoleTemplates(String organizationId) {
-        requireProjectScopeId(organizationId);
+        if (organizationId == null) {
+            return jdbcTemplate.query("""
+                    SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
+                           status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
+                      FROM position_role_templates
+                     ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
+                    """, this::mapPositionRoleTemplate);
+        }
         return jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
                        status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
@@ -776,7 +784,7 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     public void saveGrantPolicy(String policyJson) {
         int changed = jdbcTemplate.update("""
-                UPDATE supervisor_review_policies SET parameters = CAST(:parameters AS jsonb), updated_at = now()
+                UPDATE supervisor_review_policies SET parameters = parameters || CAST(:parameters AS jsonb), updated_at = now()
                  WHERE policy_code = 'access_grant' AND enabled = true
                 """, Map.of("parameters", policyJson));
         if (changed != 1) throw new IllegalStateException("授权政策未配置");
@@ -1034,7 +1042,7 @@ class JdbcAccessRepository implements AccessRepository {
                    AND application.status = 'active'
                    AND application.consumed = FALSE
                 """, parameters);
-        int grantRows = templateRows == 0 ? jdbcTemplate.update("""
+        List<String> consumedGrantCodes = templateRows == 0 ? jdbcTemplate.queryForList("""
                 UPDATE temporary_permission_grants
                    SET consumed = TRUE,
                        consumed_at = :consumed_at
@@ -1043,20 +1051,27 @@ class JdbcAccessRepository implements AccessRepository {
                    AND status = 'active'
                    AND single_use = TRUE
                    AND consumed = FALSE
-                """, parameters) : 0;
-        boolean consumed = templateRows > 0 || grantRows > 0;
+                RETURNING permission_code
+                """, parameters, String.class) : List.of();
+        boolean consumed = templateRows > 0 || !consumedGrantCodes.isEmpty();
         if (consumed) {
             parameters.addValue("application_id", templateRows > 0 ? sourceId : null)
                     .addValue("reason", templateRows > 0 ? "single_use"
                             : "single_use:temporary_grant:" + sourceId);
-            jdbcTemplate.update("""
-                    INSERT INTO permission_template_usage_logs (
-                        id, application_id, user_id, permission_code, result, reason, occurred_at
-                    )
-                    VALUES (
-                        :usage_log_id, :application_id, :user_id, :permission_code, 'consumed', :reason, :consumed_at
-                    )
-                    """, parameters);
+            // XM-D029-004（PGM-041「单次消耗全部留痕」）：整组消耗时，本次被标成已消耗的每个权限码各写一条使用日志。
+            List<String> loggedCodes = templateRows > 0 ? List.of(permissionCode) : consumedGrantCodes;
+            for (String loggedCode : loggedCodes) {
+                jdbcTemplate.update("""
+                        INSERT INTO permission_template_usage_logs (
+                            id, application_id, user_id, permission_code, result, reason, occurred_at
+                        )
+                        VALUES (
+                            :usage_log_id, :application_id, :user_id, :permission_code, 'consumed', :reason, :consumed_at
+                        )
+                        """, new MapSqlParameterSource(parameters.getValues())
+                        .addValue("usage_log_id", UUID.randomUUID())
+                        .addValue("permission_code", loggedCode));
+            }
         }
         return consumed;
     }
@@ -1470,16 +1485,5 @@ class JdbcAccessRepository implements AccessRepository {
         return effect.name().toLowerCase(java.util.Locale.ROOT);
     }
 
-    private static void requireProjectScopeId(String organizationId) {
-        if (organizationId == null || organizationId.isBlank()) {
-            throw ApiException.forbidden("PROJECT_SCOPE_REQUIRED", "此操作必须在项目范围内进行");
-        }
-    }
-
-    private static void requireMerchantScopeId(String merchantId) {
-        if (merchantId == null || merchantId.isBlank()) {
-            throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
-        }
-    }
 
 }

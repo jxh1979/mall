@@ -100,26 +100,6 @@ class AmusementServiceTests {
                 .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
-    @Test
-    void createManualOverrideRejectsCrossMerchantProject() {
-        TestSecurityActors.asMerchantUser("merchant_a");
-        AmusementSafetyTemplateRecord template = createTemplate("xmerchant-override");
-        AmusementProjectRecord project = createProject("xmerchant-override", template.id(), "open", 2);
-
-        TestSecurityActors.asMerchantUser("merchant_b");
-        assertThatThrownBy(() -> service.createManualOverride(new AmusementManualOverrideRequest(
-                        "override-xmerchant",
-                        "override",
-                        List.of("att_1"),
-                        project.id(),
-                        null,
-                        "allow",
-                        "supervisor approved")))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // 处理清单 #8：amusement_projects 空间指派/回填（over_space 依赖 space_id）
     // ─────────────────────────────────────────────────────────────────────────
@@ -1482,11 +1462,13 @@ class AmusementServiceTests {
         assertThat(pending.deleteReason()).isEqualTo("配错了不再用");
 
         // 审批通过 = 落墓碑，行仍在库（includeArchived 可见），默认视图不显示。
-        // 职责分离：换一名平台管理员审批（同人审批见 selfApprove 用例）。
-        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
+        // BSM 第 570 行：删除由最高权限本人审批（非最高权限见 nonMaster 用例）。
+        asMaster();
         AmusementProjectEntitlementRecord tomb = service.decideDeleteProjectEntitlement(
                 project.id(), "amusement_pass", "approved", "ent-del-appr");
         assertThat(tomb.deleteStatus()).isEqualTo("approved");
+        // 列表视图由运营侧平台管理员查看（最高权限的列表口径另见登记 XM-M036A-1，本批不改）。
+        TestSecurityActors.asPlatformAdmin();
         assertThat(service.listProjectEntitlements(project.id()).items()).isEmpty();
         assertThat(service.listProjectEntitlements(project.id(), true).items()).hasSize(1);
         assertThat(amusementRepository.listProjectEntitlementTypes(project.id())).isEmpty();
@@ -1500,7 +1482,7 @@ class AmusementServiceTests {
         service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-rej-arch");
         service.requestDeleteProjectEntitlement(project.id(), "amusement_pass", "误提", "ent-rej-req");
 
-        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
+        asMaster();
         AmusementProjectEntitlementRecord decided = service.decideDeleteProjectEntitlement(
                 project.id(), "amusement_pass", "rejected", "ent-rej-dec");
         assertThat(decided.deleteStatus()).isEqualTo("none");
@@ -1508,41 +1490,72 @@ class AmusementServiceTests {
     }
 
     @Test
-    void deleteRequesterCannotApproveOwnProjectEntitlementDeletion() {
+    void nonMasterCannotApproveProjectEntitlementDeletion() {
         AmusementProjectRecord project = projectWithTemplate("ent-self");
         service.createProjectEntitlement(project.id(),
                 new AmusementProjectEntitlementRequest("ent-self-key", null, List.of(), "amusement_pass"));
         service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-self-arch");
         service.requestDeleteProjectEntitlement(project.id(), "amusement_pass", "误配", "ent-self-req");
 
-        // 发起人=当前主体（usr_admin）→ 禁自审。
+        // 发起人本人与另一名平台管理员都不是最高权限 → 不能审批，申请仍待审批（BSM 第 570 行）。
         assertThatThrownBy(() -> service.decideDeleteProjectEntitlement(
                 project.id(), "amusement_pass", "approved", "ent-self-appr"))
                 .isInstanceOf(ApiException.class).extracting("code")
-                .isEqualTo("PROJECT_ENTITLEMENT_SELF_APPROVE_FORBIDDEN");
+                .isEqualTo("MASTER_APPROVAL_REQUIRED");
+        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
+        assertThatThrownBy(() -> service.decideDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "approved", "ent-other-appr"))
+                .isInstanceOf(ApiException.class).extracting("code")
+                .isEqualTo("MASTER_APPROVAL_REQUIRED");
+        assertThat(service.listProjectEntitlements(project.id(), true).items())
+                .extracting(AmusementProjectEntitlementRecord::deleteStatus).containsExactly("pending");
     }
 
     @Test
-    void tombstonedProjectEntitlementRestoreRequiresApprovePermission() {
+    void masterRequestedProjectEntitlementDeletionTakesEffectDirectly() {
+        AmusementProjectRecord project = projectWithTemplate("ent-master");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-master-key", null, List.of(), "amusement_pass"));
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-master-arch");
+        asMaster();
+        AmusementProjectEntitlementRecord tomb = service.requestDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "最高权限直接删除", "ent-master-req");
+        assertThat(tomb.deleteStatus()).isEqualTo("approved");
+        assertThat(amusementRepository.listProjectEntitlementTypes(project.id())).isEmpty();
+    }
+
+    @Test
+    void tombstonedProjectEntitlementRestoreRequiresMasterAuthority() {
         AmusementProjectRecord project = projectWithTemplate("ent-tomb");
         service.createProjectEntitlement(project.id(),
                 new AmusementProjectEntitlementRequest("ent-tomb-key", null, List.of(), "amusement_pass"));
         service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-tomb-arch");
         service.requestDeleteProjectEntitlement(project.id(), "amusement_pass", "作废", "ent-tomb-req");
-        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
+        asMaster();
         service.decideDeleteProjectEntitlement(project.id(), "amusement_pass", "approved", "ent-tomb-appr");
 
-        // 权限库里没有 amusement.project_entitlement.approve（permissionExists=false）→ 墓碑恢复被拒。
+        // 平台管理员与最高权限是两个角色：平台管理员不能复活墓碑。
+        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
         assertThatThrownBy(() -> service.restoreProjectEntitlement(project.id(), "amusement_pass", "ent-tomb-res1"))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("PERMISSION_DENIED");
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("MASTER_APPROVAL_REQUIRED");
 
-        // 授予审批权（最高权限 role_platform_admin 持有）后墓碑可恢复——删除铁律「可恢复」。
-        when(accessRepository.permissionExists("amusement.project_entitlement.approve")).thenReturn(true);
+        // 最高权限本人可复活墓碑——删除「可恢复」（BSM 第 571 行）。
+        asMaster();
         AmusementProjectEntitlementRecord restored =
                 service.restoreProjectEntitlement(project.id(), "amusement_pass", "ent-tomb-res2");
         assertThat(restored.deleteStatus()).isEqualTo("none");
         assertThat(restored.archivedAt()).isNull();
         assertThat(amusementRepository.listProjectEntitlementTypes(project.id())).containsExactly("amusement_pass");
+    }
+
+    /** 持授权 U 盘密钥的最高权限本人（生产会话形状：master_authority，所属公司 platform-company）。 */
+    private static void asMaster() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME,
+                                com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active"),
+                        "token", java.util.List.of()));
     }
 
     @Test
@@ -1579,42 +1592,6 @@ class AmusementServiceTests {
         assertThatThrownBy(() -> service.createProjectEntitlement(project.id(),
                 new AmusementProjectEntitlementRequest("ent-bad-key", null, List.of(), "ticket_single")))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_NOT_AMUSEMENT");
-    }
-
-    @Test
-    void manualOverrideRequiresReasonAndRecordsOverride() {
-        AmusementProjectRecord project = projectWithTemplate("override");
-        AmusementSessionRecord session = createSession("override-session", project.id(), 1, "open");
-
-        assertThatThrownBy(() -> service.createManualOverride(new AmusementManualOverrideRequest(
-                        "override-missing-reason",
-                        "override",
-                        List.of("att_1"),
-                        project.id(),
-                        session.id(),
-                        "allow",
-                        " "
-                )))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("VALIDATION_FAILED");
-
-        AmusementManualOverrideRecord override = service.createManualOverride(new AmusementManualOverrideRequest(
-                "override-once",
-                "override",
-                List.of("att_1"),
-                project.id(),
-                session.id(),
-                "allow",
-                "supervisor approved"
-        ));
-
-        assertThat(override)
-                .extracting(AmusementManualOverrideRecord::overrideType, AmusementManualOverrideRecord::status)
-                .containsExactly("allow", "approved");
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("amusement.verification_override_failed", "amusement.verification_overridden");
     }
 
     @Test
@@ -2275,7 +2252,6 @@ class AmusementServiceTests {
         private final Map<String, AmusementSessionRecord> sessions = new LinkedHashMap<>();
         private final Map<String, AmusementSafetyInspectionRecord> inspections = new LinkedHashMap<>();
         private final Map<String, AmusementVerificationRecord> verifications = new LinkedHashMap<>();
-        private final Map<String, AmusementManualOverrideRecord> manualOverrides = new LinkedHashMap<>();
         private final Map<String, AmusementDeviceStatusRecord> deviceStatuses = new LinkedHashMap<>();
         private final Map<String, AmusementQueueEntryRecord> queueEntries = new LinkedHashMap<>();
         private final Map<String, AmusementReservationRecord> reservations = new LinkedHashMap<>();
@@ -3059,24 +3035,8 @@ class AmusementServiceTests {
         }
 
         @Override
-        public int clearProjectConcurrentCapacity(String projectId, java.time.Instant now) {
-            return 0;
-        }
-
-        @Override
         public List<AmusementVerificationRecord> listVerifications() {
             return new ArrayList<>(verifications.values());
-        }
-
-        @Override
-        public AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override) {
-            manualOverrides.put(override.id(), override);
-            return override;
-        }
-
-        @Override
-        public List<AmusementManualOverrideRecord> listManualOverrides() {
-            return new ArrayList<>(manualOverrides.values());
         }
 
         @Override
@@ -3204,13 +3164,6 @@ class AmusementServiceTests {
         @Override
         public List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId) {
             return List.of();
-        }
-
-        @Override
-        public List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId) {
-            return manualOverrides.values().stream()
-                    .filter(o -> projects.containsKey(o.projectId()) && merchantId.equals(projects.get(o.projectId()).merchantId()))
-                    .toList();
         }
 
         @Override

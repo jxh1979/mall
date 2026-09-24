@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.amusement.AmusementExitRequest;
-import com.complex.platform.amusement.AmusementManualOverrideRequest;
 import com.complex.platform.amusement.AmusementProjectRecord;
 import com.complex.platform.amusement.AmusementRepository;
 import com.complex.platform.amusement.AmusementSafetyInspectionRecord;
@@ -25,21 +24,21 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 阶段2（2026-07-05 用户拍板）游乐核销：出场核销（并发容量回收）+ 主管释放 + 并发容量硬化（唯一约束防超扣）
+ * 阶段2（2026-07-05 用户拍板）游乐核销：出场核销（并发容量回收）+ 并发容量硬化（唯一约束防超扣）
  * 端到端验收（容量/幂等/并发铁律，含证伪）。
  *
  * <p>用例：
  * <ol>
  *   <li>自由进出型入场 +N → 出场 -N：并发在场快照(project 维)回落到 0、入场记录 released_at 落值、写一条 direction=exit。</li>
  *   <li>同一入场重复出场只释放一次（幂等）：第二次不再减容量、不新增 exit、返回既有 exit。</li>
- *   <li>主管释放（release override）：清零项目并发在场快照 + 落审计 override 记录（status=released）。</li>
  *   <li>并发双提交（同权益+同场次两次入场）：唯一约束只让一条成功，另一条被拒（不超扣）。</li>
  *   <li>无未释放入场即出场 → ENTITLEMENT_NO_ACTIVE_ENTRY，不误减、不写脏 exit。</li>
- *   <li>场次/批次型席位不受释放影响：出场与主管释放都只回收并发在场（point_device/project 维），
+ *   <li>场次/批次型席位不受出场影响：出场只回收并发在场（point_device/project 维），
  *       amusement_sessions.used_capacity 恒不变（木马每轮/密室每批满了等下一场）。</li>
  * </ol>
- * 证伪：注掉出场 -N（decrementConcurrentSnapshot）→ 用例1 快照断言红；去掉部分唯一索引 → 用例4 双入场断言红；
- * 把 clearProjectConcurrentCapacity/releaseEntryConcurrentCapacity 的维度过滤放开到 session 维 → 用例6 断言红。
+ * 证伪：注掉出场 -N（decrementConcurrentSnapshot）→ 用例1 快照断言红；去掉部分唯一索引 → 用例3 双入场断言红；
+ * 把 releaseEntryConcurrentCapacity 的维度过滤放开到 session 维 → 用例5 断言红。
+ * 在玩人数不允许人工清零（业务地图第 1263 行），原「主管释放」用例随游乐改判入口下线删除（XM-M034-AB）。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
@@ -73,7 +72,6 @@ class AmusementExitReleaseJdbcIntegrationTests {
         for (String project : seededProjects) {
             jdbcTemplate.update("DELETE FROM amusement_verifications WHERE project_id = ?", project);
             jdbcTemplate.update("DELETE FROM amusement_capacity_snapshot WHERE project_id = ?", project);
-            jdbcTemplate.update("DELETE FROM amusement_manual_overrides WHERE project_id = ?", project);
             jdbcTemplate.update("DELETE FROM amusement_safety_actions WHERE inspection_id IN "
                     + "(SELECT id FROM amusement_safety_inspections WHERE project_id = ?)", project);
             jdbcTemplate.update("DELETE FROM amusement_safety_inspections WHERE project_id = ?", project);
@@ -144,26 +142,6 @@ class AmusementExitReleaseJdbcIntegrationTests {
     }
 
     @Test
-    void supervisorReleaseClearsConcurrentCapacityWithAudit() {
-        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
-        String suffix = Long.toString(System.nanoTime());
-        seedDevice(suffix);
-        String pointId = "point_sup_" + suffix;
-        String projectId = seedOpenProjectWithSession(suffix, pointId, 5);
-        String code = seedAmusementEntitlement(suffix, 1);
-        verify(suffix, code, pointId);
-        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(1);
-
-        var override = amusementService.createManualOverride(new AmusementManualOverrideRequest(
-                "sup-release-" + suffix, "night clearance", List.of("att_evidence"),
-                projectId, null, "release", "漏扫出场堆积，主管异常清场"));
-
-        assertThat(override.overrideType()).isEqualTo("release");
-        assertThat(override.status()).isEqualTo("released");           // 审计留痕
-        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(0);   // 并发在场清零
-    }
-
-    @Test
     void concurrentDoubleEntrySameEntitlementRejectedByUniqueConstraint() {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
@@ -212,15 +190,15 @@ class AmusementExitReleaseJdbcIntegrationTests {
     }
 
     /**
-     * 场次/批次型（木马每轮、密室每批）席位不因出场或主管释放回收——满了等下一场。
+     * 场次/批次型（木马每轮、密室每批）席位不因出场回收——满了等下一场。
      *
      * <p>判定依据是【容量落在哪个维度】，不是项目上的类型开关：场次/批次席位记在
-     * amusement_sessions.used_capacity（session 维），而出场释放 releaseEntryConcurrentCapacity 与
-     * 主管释放 clearProjectConcurrentCapacity 都只动 amusement_capacity_snapshot 的
+     * amusement_sessions.used_capacity（session 维），而出场释放 releaseEntryConcurrentCapacity
+     * 只动 amusement_capacity_snapshot 的
      * point_device / project 两维 → session 维结构性不可达，无需也不会被释放。
      */
     @Test
-    void sessionBatchCapacityUnaffectedByExitAndSupervisorRelease() {
+    void sessionBatchCapacityUnaffectedByExit() {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
         seedDevice(suffix);
@@ -239,13 +217,6 @@ class AmusementExitReleaseJdbcIntegrationTests {
                 "exit-sess-" + suffix, code, pointId, deviceCode, "staff", List.of()));
         assertThat(projectSnapshotOccupied(projectId)).isEqualTo(0);   // 并发在场回收
         assertThat(sessionUsedCapacity(projectId)).isEqualTo(1);       // 场次席位不变（证伪：若误减则=0，断言红）
-
-        // 主管释放（异常清场）：同样只清并发在场快照，场次席位仍不受影响。
-        amusementService.createManualOverride(new AmusementManualOverrideRequest(
-                "sup-sess-" + suffix, "night clearance", List.of(),
-                projectId, null, "release", "异常清场核对场次席位不受影响"));
-        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(0);
-        assertThat(sessionUsedCapacity(projectId)).isEqualTo(1);       // 场次席位仍不变（证伪：若清零则=0，断言红）
     }
 
     // ===== helpers =====

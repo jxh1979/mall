@@ -3,14 +3,6 @@
   "generated_at_source": "static scan of Jdbc*Repository.java vs domain-ownership-scope-audit-v0.1.csv",
   "known_findings": [
     {
-      "key": "F1:UNSCOPED_DIRECT_READ:access_grant_requests",
-      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 access_grant_requests 有 SELECT 读，未见 project_id = : 的 scoped 查询。尚未收紧。证据：generated_at_source。"
-    },
-    {
-      "key": "F2:UNREGISTERED_TABLE:d",
-      "text": "[F2 UNREGISTERED_TABLE] 扫描器报未登记表名 d。尚未收紧。证据：generated_at_source。"
-    },
-    {
       "key": "F1:UNSCOPED_DIRECT_READ:revenue_stream_attribution",
       "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 revenue_stream_attribution 存在无项目范围的读。尚未收紧。证据：generated_at_source。"
     },

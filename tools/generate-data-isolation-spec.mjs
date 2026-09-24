@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 // docs:data-isolation-spec / verify:data-isolation-spec
 // 以 Flyway 迁移目录为事实源，生成数据隔离规格中的自动迁移隔离基线，避免 R1-FINDING-A 的静态计数漂移。
 
@@ -81,10 +82,9 @@ function parseSchema() {
   return { tables, files };
 }
 
-function scopeType(columns) {
-  const names = [...columns.keys()];
-  if (names.includes("merchant_id") || names.includes("project_id") || names.includes("organization_id")) return "direct";
-  return "inherited-or-location-scope";
+// 本区块只收自带 scope 列的表：按规格 §1 定义即 direct（与盘点 CSV 同口径），不发射 §1 类型闭集之外的值（M029-001）。
+function scopeType() {
+  return "direct";
 }
 
 function renderBlock() {
@@ -102,7 +102,7 @@ function renderBlock() {
     const colText = cols.map((c) => `\`${c.column}\``).join(" + ");
     const versions = [...new Set(cols.flatMap((c) => [...c.versions]))].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
     const sources = [...new Set(cols.flatMap((c) => [...c.sources]))].sort();
-    lines.push(`| \`${row.table}\` | ${colText} | ${scopeType(row.columns)} | ${versions.join(", ")} | ${sources.map((s) => `\`${s}\``).join("<br>")} |\n`);
+    lines.push(`| \`${row.table}\` | ${colText} | ${scopeType()} | ${versions.join(", ")} | ${sources.map((s) => `\`${s}\``).join("<br>")} |\n`);
   }
   lines.push(`\n> 自动基线说明：本区块只证明“迁移中出现了 scope 字段”，不替代 \`verify:tenant-isolation\` 对 Repository scope 过滤的机审，也不替代越权 E2E/单测。\n`);
   lines.push(END);

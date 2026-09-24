@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.19
+// 文件版本：V0.21
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -484,8 +484,22 @@ public class AccessService {
 
     @Transactional
     public PositionRoleTemplate changePositionTemplateLifecycle(String id, StatusChangeRequest request) {
+        // M031-003（GEN-011）：生命周期操作失败也留痕，与同文件其余写口同一范式。
+        try {
+            return changePositionTemplateLifecycleAudited(id, request);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.position_role_template.lifecycle_failed", "access.role.assign",
+                    "position_role_template", id, null, request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private PositionRoleTemplate changePositionTemplateLifecycleAudited(String id, StatusChangeRequest request) {
         requireRequest(request);
-        requirePlatformAdmin(authorizationService.currentActor());
+        AccessActor actor = authorizationService.currentActor();
+        if (!authorizationService.isMasterAuthority(actor)) {
+            requirePlatformAdmin(actor);
+        }
         String action = requireText(request.action(), "action");
         String reason = requireText(request.reason(), "reason");
         return idempotencyService.execute("positionTemplateLifecycle:" + id, request.idempotencyKey(), request, () -> {
@@ -501,6 +515,11 @@ public class AccessService {
                 case "restore" -> {
                     if (current.archivedAt() == null) throw ApiException.conflict("INVALID_STATE", "模板未存档");
                     if (current.deleteReviewId() != null && current.deletedAt() == null) throw ApiException.conflict("DELETE_REVIEW_PENDING", "须先处理删除复核");
+                    // M031-001（BSM-004「想恢复点"取消存档"即可」）：恢复即回到可定岗的启用态；同范围已有启用中的替代映射时拒绝，不静默留成停用。
+                    if (repository.findPositionRoleTemplate(current.organizationId(), current.positionCode(), current.staffLevelId())
+                            .filter(active -> java.util.Objects.equals(active.organizationId(), current.organizationId())).isPresent()) {
+                        throw ApiException.conflict("POSITION_TEMPLATE_ACTIVE_EXISTS", "同岗位同职级已有启用中的岗位模板，须先停用或存档后再恢复");
+                    }
                     updated = current.withLifecycle(null, null, null, null, now);
                 }
                 case "request_delete" -> {
@@ -538,6 +557,11 @@ public class AccessService {
                 default -> throw ApiException.badRequest("INVALID_ACTION", "不支持的岗位模板生命周期操作");
             }
             repository.savePositionTemplateLifecycle(updated, authorizationService.currentActor().id());
+            if ("restore".equals(action)) {
+                updated = new PositionRoleTemplate(updated.id(), updated.positionCode(), updated.staffLevelId(), updated.roleId(),
+                        updated.templateId(), updated.organizationId(), "active", updated.createdBy(), updated.createdAt(), now);
+                repository.savePositionRoleTemplate(updated);
+            }
             auditEventService.recordSuccess("access.position_role_template." + action, "access.role.assign",
                     "position_role_template", id, null, request.idempotencyKey(), Map.of("reason", reason));
             return updated;
@@ -1918,6 +1942,17 @@ public class AccessService {
 
     @Transactional
     public AccessGrantPolicy updateGrantPolicy(AccessGrantPolicy.Update request) {
+        // M031-003（GEN-011）：授权政策保存失败也留痕。
+        try {
+            return updateGrantPolicyAudited(request);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.grant_policy.change_failed", "admission.policy.manage",
+                    "supervisor_review_policy", "access_grant", null, request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private AccessGrantPolicy updateGrantPolicyAudited(AccessGrantPolicy.Update request) {
         if (request == null || request.policy() == null) throw ApiException.badRequest("VALIDATION_FAILED", "授权政策不能为空");
         requireText(request.operatorNote(), "operator_note");
         return idempotencyService.execute("updateAccessGrantPolicy", request.idempotencyKey(), request, () -> {

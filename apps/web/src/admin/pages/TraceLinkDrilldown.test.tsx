@@ -17,7 +17,12 @@ function makeApi(routes: Record<string, unknown>): AdminApiClient {
   });
   return {
     get,
-    getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
+    // XM-M038-A-002/005：治理拓扑与组织商户页已改分页取数（getPaged），桩按同一路由表返回分页形状。
+    getPaged: vi.fn((url: string) => {
+      const key = Object.keys(routes).find((r) => url.startsWith(r));
+      const items = (key ? routes[key] : []) as unknown[];
+      return Promise.resolve({ items, total: items.length, page: 1, size: 500 });
+    }),
     post: vi.fn().mockResolvedValue({}),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
@@ -52,24 +57,14 @@ describe("全链下钻 P1-A：源页引用字段成可点链接", () => {
     expect(navigateTo).toHaveBeenCalledWith("ADM-GOV-002", "m-9");
   });
 
-  it("我的对账合同列点击 → navigateTo(ADM-CONT-001, contractId)", async () => {
-    const navigateTo = vi.fn();
-    const api = makeApi({
-      "/api/v1/merchant-portal/settlements": [{ id: "s-1", contractId: "c-77", status: "pending_settlement" }],
-    });
-    render(<MerchantZoneSettlementsPage {...baseProps(api, { navigateTo })} />);
-    const link = await screen.findByTestId("trace-link-ADM-CONT-001-c-77");
-    fireEvent.click(link);
-    expect(navigateTo).toHaveBeenCalledWith("ADM-CONT-001", "c-77");
-  });
-
   it("无 navigateTo 时降级纯文本（不可点）", async () => {
     const api = makeApi({
       "/api/v1/merchant-portal/settlements": [{ id: "s-1", contractId: "c-77", status: "pending_settlement" }],
     });
-    render(<MerchantZoneSettlementsPage {...baseProps(api, {})} />);
+    const { container } = render(<MerchantZoneSettlementsPage {...baseProps(api, {})} />);
     await screen.findByText("c-77");
-    expect(screen.queryByTestId("trace-link-ADM-CONT-001-c-77")).toBeNull();
+    // XM-M038-A-006：页面下钻已改指 ADM-MER-006，否定断言改查任何下钻按钮，才能在「无 navigateTo 仍出按钮」时失败。
+    expect(container.querySelector('[data-testid^="trace-link-"]')).toBeNull();
   });
 });
 

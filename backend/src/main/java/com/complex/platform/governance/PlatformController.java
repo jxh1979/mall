@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.01
+// 文件版本：V0.03
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -11,6 +11,7 @@ import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
+import com.complex.platform.governance.dto.ProjectAssociationRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -62,16 +63,16 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "merchantType", required = false) String merchantType,
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
-        authorizationService.requirePermission("merchant.profile.view");
+        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.view");
         authorizationService.requirePlatformScope();
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.listMerchants(includeArchived, merchantType, page, size)));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.listMerchants(includeArchived, merchantType, page, size), viewPhonePlaintext));
     }
 
     @PostMapping("/merchants")
     public ApiResponse<MerchantRecord> createMerchant(@RequestBody @jakarta.validation.Valid MerchantProfileRequest request) {
-        authorizationService.requirePermission("merchant.profile.manage");
+        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.createMerchant(request)));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.createMerchant(request), viewPhonePlaintext));
     }
 
     @PutMapping("/merchants/{merchant_id}")
@@ -79,9 +80,27 @@ public class PlatformController {
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid MerchantProfileRequest request
     ) {
-        authorizationService.requirePermission("merchant.profile.manage");
+        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.updateMerchant(merchantId, request)));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.updateMerchant(merchantId, request), viewPhonePlaintext));
+    }
+
+    @PutMapping("/merchants/{merchant_id}/project")
+    public ApiResponse<MerchantRecord> assignMerchantProject(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody @jakarta.validation.Valid ProjectAssociationRequest request) {
+        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.assignMerchantProject(merchantId, request), viewPhonePlaintext));
+    }
+
+    @PostMapping("/business-entities/{entity_id}/projects")
+    public ApiResponse<BusinessEntityRecord> associateBusinessEntityProject(
+            @PathVariable("entity_id") String entityId,
+            @RequestBody @jakarta.validation.Valid ProjectAssociationRequest request) {
+        authorizationService.requirePermission("entity.binding.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.associateBusinessEntityProject(entityId, request));
     }
 
     // ================= V260 商户存档与审批后删除范式 =================
@@ -90,27 +109,27 @@ public class PlatformController {
     public ApiResponse<MerchantRecord> archiveMerchant(
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
-        authorizationService.requirePermission("merchant.profile.manage");
+        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.archiveMerchant(merchantId, request)));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.archiveMerchant(merchantId, request), viewPhonePlaintext));
     }
 
     @PostMapping("/merchants/{merchant_id}/unarchive")
     public ApiResponse<MerchantRecord> unarchiveMerchant(
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
-        authorizationService.requirePermission("merchant.profile.manage");
+        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.unarchiveMerchant(merchantId, request)));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.unarchiveMerchant(merchantId, request), viewPhonePlaintext));
     }
 
     @PostMapping("/merchants/{merchant_id}/delete-request")
     public ApiResponse<MerchantRecord> requestDeleteMerchant(
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantDeleteRequest request) {
-        authorizationService.requirePermission("merchant.profile.manage");
+        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.requestDeleteMerchant(merchantId, request)));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.requestDeleteMerchant(merchantId, request), viewPhonePlaintext));
     }
 
     @PostMapping("/merchants/{merchant_id}/delete-approve")
@@ -259,16 +278,22 @@ public class PlatformController {
     // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式——避免脱敏值污染幂等缓存后
     // 被有权限者重放读到掩码。
 
-    private boolean canViewPhonePlaintext() {
-        return authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+    private boolean requireMerchantPermission(String permissionCode) {
+        boolean viewPhonePlaintext = authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        if (viewPhonePlaintext) {
+            authorizationService.requirePermissions(permissionCode, PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        } else {
+            authorizationService.requirePermission(permissionCode);
+        }
+        return viewPhonePlaintext;
     }
 
-    private MerchantRecord maskPhonesForUnauthorized(MerchantRecord merchant) {
-        return canViewPhonePlaintext() || merchant == null ? merchant : merchant.withMaskedPhones();
+    private MerchantRecord maskPhonesForUnauthorized(MerchantRecord merchant, boolean viewPhonePlaintext) {
+        return viewPhonePlaintext || merchant == null ? merchant : merchant.withMaskedPhones();
     }
 
-    private PageResponse<MerchantRecord> maskPhonesForUnauthorized(PageResponse<MerchantRecord> page) {
-        if (canViewPhonePlaintext()) {
+    private PageResponse<MerchantRecord> maskPhonesForUnauthorized(PageResponse<MerchantRecord> page, boolean viewPhonePlaintext) {
+        if (viewPhonePlaintext) {
             return page;
         }
         return new PageResponse<>(page.items().stream().map(MerchantRecord::withMaskedPhones).toList(),

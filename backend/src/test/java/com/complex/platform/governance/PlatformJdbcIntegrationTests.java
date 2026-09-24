@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.05
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,6 +30,34 @@ class PlatformJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired private PlatformService platformService;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+
+    @Test
+    void merchantContactNamesAreEncryptedAtRestAndRoundTrip() {
+        String[][] names = {{"张".repeat(120), "李".repeat(120)}, {"王敏", "赵宁"}, {null, ""}};
+        for (String[] pair : names) {
+            repository.saveMerchant(new MerchantRecord(
+                    "mch_m009_name_cipher", "姓名加密测试商户", "other", null, null, null,
+                    pair[0], null, null, null, null, null, pair[1], null, null, null,
+                    "active", Instant.EPOCH, Instant.EPOCH));
+            Map<String, Object> stored = jdbcTemplate.queryForMap(
+                    "SELECT contact_name, secondary_contact_name FROM merchants WHERE id = ?",
+                    "mch_m009_name_cipher");
+            for (int i = 0; i < pair.length; i++) {
+                String ciphertext = (String) stored.get(i == 0 ? "contact_name" : "secondary_contact_name");
+                if (pair[i] == null || pair[i].isEmpty()) {
+                    assertThat(ciphertext).isEqualTo(pair[i]);
+                } else {
+                    assertThat(ciphertext).startsWith("enc:v1:").doesNotContain(pair[i]);
+                }
+            }
+            MerchantRecord loaded = repository.findMerchantById("mch_m009_name_cipher").orElseThrow();
+            assertThat(loaded.contactName()).isEqualTo(pair[0]);
+            assertThat(loaded.secondaryContactName()).isEqualTo(pair[1]);
+        }
+    }
 
     @Test
     void migrationCreatesPlatformMasterDataTablesAndSeedsPermissions() {
@@ -379,6 +407,245 @@ class PlatformJdbcIntegrationTests {
         assertThatThrownBy(() -> repository.saveSpaceType(
                 new SpaceTypeRecord("sptype_jdbc_bad", "jdbc_bad", "字典状态测试", 100, "Active", now, now)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+
+    @Test
+    void approvedProjectStorageExistsWithoutHistoricalBackfill() {
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT column_name FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'projects'
+                """, String.class)).contains("owner_person", "address", "business_scope");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT column_name FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'merchants'
+                """, String.class)).contains("project_id");
+        assertThat(regclass("business_entity_projects")).isEqualTo("business_entity_projects");
+    }
+
+    @Test
+    void onlyEndedInactiveBindingsStopOccupyingMerchant() {
+        String id = "00000000-0000-0000-0000-000000009045";
+        String merchant = "m009_reference_period";
+        Instant now = Instant.now();
+        LocalDate today = LocalDate.now(java.time.ZoneOffset.UTC);
+        repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(id, merchant,
+                "operation", "contract", "settlement", "inactive", today.minusDays(3), today.minusDays(1),
+                "历史期间结束", now, now));
+        assertThat(repository.countMerchantReferences(merchant)).isZero();
+        for (String status : List.of("inactive", "suspended", "active")) {
+            repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(id, merchant,
+                    "operation", "contract", "settlement", status, today.plusDays(2), null,
+                    "尚未结束", now, now));
+            assertThat(repository.countMerchantReferences(merchant)).isEqualTo(1);
+        }
+        repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(id, merchant,
+                "operation", "contract", "settlement", "inactive", today.plusDays(2), today.plusDays(3),
+                "未来结束", now, now));
+        assertThat(repository.countMerchantReferences(merchant)).isEqualTo(1);
+        repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(id, merchant,
+                "operation", "contract", "settlement", "inactive", today, today.minusDays(1),
+                "倒置期间不算真正结束", now, now));
+        assertThat(repository.countMerchantReferences(merchant)).isEqualTo(1);
+    }
+
+
+    private void seedProjectScopeRows() {
+        Instant now = Instant.now();
+        for (String key : List.of("a", "b")) {
+            repository.saveProject(new ProjectRecord("m009_project_" + key, null, "complex", "项目" + key,
+                    null, null, null, "active", now, now, "负责人" + key, "地址" + key, "范围" + key));
+            repository.saveBusinessEntity(new BusinessEntityRecord("m009_company_" + key, "公司" + key,
+                    "management_company", null, null, null, "active", now, now));
+            repository.associateBusinessEntityProject("m009_company_" + key, "m009_project_" + key);
+            repository.saveMerchant(new MerchantRecord("m009_merchant_" + key, "商户" + key, "other",
+                    "m009_company_" + key, null, null, null, null, null, null, null, null, null, null, null,
+                    null, "active", now, now).withProject("m009_project_" + key));
+            repository.saveSpace(new SpaceRecord("m009_space_" + key, "m009_project_" + key, "m009_merchant_" + key,
+                    null, "空间" + key, "shop", null, null, List.of(), "active", now, now));
+            repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(
+                    "00000000-0000-0000-0000-0000000090" + ("a".equals(key) ? "81" : "82"),
+                    "m009_merchant_" + key, "m009_company_" + key, "m009_company_" + key, "m009_company_" + key,
+                    "inactive", LocalDate.now().plusYears(1), null, "待生效", now, now));
+        }
+    }
+
+    @Test
+    void scopedSqlFiltersAllFiveTotalsAndSupportsCompanyManyToMany() {
+        seedProjectScopeRows();
+        String a = "m009_project_a";
+        assertThat(repository.listProjectsPaged(a, 1, 1).total()).isEqualTo(1);
+        assertThat(repository.listProjectsPaged(a, 1, 1).items()).singleElement().satisfies(project -> {
+            assertThat(project.ownerPerson()).isEqualTo("负责人a");
+            assertThat(project.address()).isEqualTo("地址a");
+            assertThat(project.businessScope()).isEqualTo("范围a");
+        });
+        assertThat(repository.listMerchantsPaged(a, true, null, 1, 1).total()).isEqualTo(1);
+        assertThat(repository.listMerchantsPaged(a, true, null, 1, 1).items()).extracting(MerchantRecord::id)
+                .containsExactly("m009_merchant_a");
+        assertThat(repository.listSpacesPaged(a, 1, 1).total()).isEqualTo(1);
+        assertThat(repository.listSpacesPaged(a, 1, 1).items()).extracting(SpaceRecord::id).containsExactly("m009_space_a");
+        assertThat(repository.listBusinessEntityBindingsPaged(a, 1, 1).total()).isEqualTo(1);
+        assertThat(repository.listBusinessEntityBindingsPaged(a, 1, 1).items())
+                .extracting(BusinessEntityBindingRecord::merchantId).containsExactly("m009_merchant_a");
+        assertThat(repository.listBusinessEntitiesPaged(a, 1, 1).total()).isEqualTo(1);
+        repository.associateBusinessEntityProject("m009_company_b", a);
+        repository.associateBusinessEntityProject("m009_company_b", a);
+        assertThat(repository.businessEntityInProject("m009_company_b", "m009_project_b")).isTrue();
+        assertThat(repository.listBusinessEntitiesPaged(a, 1, 1).total()).isEqualTo(2);
+        var companyPage1 = repository.listBusinessEntitiesPaged(a, 1, 1);
+        var companyPage2 = repository.listBusinessEntitiesPaged(a, 2, 1);
+        assertThat(companyPage2.items()).hasSize(1).doesNotContainAnyElementsOf(companyPage1.items());
+        assertThat(repository.listMerchantsByBusinessEntity(a, "m009_company_b")).isEmpty();
+        assertThat(repository.listMerchantsByBusinessEntity(a, "m009_company_a")).extracting(MerchantRecord::id)
+                .containsExactly("m009_merchant_a");
+        assertThat(repository.listMerchantsByBusinessEntity(null, "m009_company_a")).isEmpty();
+        for (String scope : new String[] {null, "platform-company", "missing-project"}) {
+            org.junit.jupiter.api.Assertions.assertAll(
+                    () -> assertThat(repository.listMerchantsPaged(scope, true, null, 1, 1).total()).isZero(),
+                    () -> assertThat(repository.listProjectsPaged(scope, 1, 1).total()).isZero(),
+                    () -> assertThat(repository.listSpacesPaged(scope, 1, 1).total()).isZero(),
+                    () -> assertThat(repository.listBusinessEntitiesPaged(scope, 1, 1).total()).isZero(),
+                    () -> assertThat(repository.listBusinessEntityBindingsPaged(scope, 1, 1).total()).isZero());
+        }
+    }
+
+    @Test
+    void projectOnlyBackfillPreservesEveryOtherDatabaseColumnAndLegacyNulls() {
+        seedProjectScopeRows();
+        Instant now = Instant.now();
+        MerchantRecord legacy = new MerchantRecord("m009_legacy", "旧资料", "other", "financial-original",
+                "contract-original", "settlement-original", "联系人", "18800000001", "负责人", "A",
+                BigDecimal.TEN, BigDecimal.ONE, "第二联系人", "18800000002", BigDecimal.ZERO, "lease",
+                "suspended", now, now).withArchive(now, "original-actor", now)
+                .withDelete("pending", "original-actor", now, "原理由", now);
+        repository.saveMerchant(legacy);
+        assertThat(repository.findMerchantById(legacy.id()).orElseThrow().projectId()).isNull();
+        assertThat(repository.listMerchantsPaged("m009_project_a", true, null, 1, 500).items())
+                .extracting(MerchantRecord::id).doesNotContain(legacy.id());
+        String before = jdbcTemplate.queryForObject(
+                "SELECT (to_jsonb(m) - 'project_id')::text FROM merchants m WHERE id = ?", String.class, legacy.id());
+        assertThat(repository.assignMerchantProject(legacy.id(), "m009_project_a")).isTrue();
+        assertThat(repository.assignMerchantProject(legacy.id(), "m009_project_a")).isTrue();
+        assertThat(repository.assignMerchantProject(legacy.id(), "m009_project_b")).isFalse();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT (to_jsonb(m) - 'project_id')::text FROM merchants m WHERE id = ?", String.class, legacy.id())).isEqualTo(before);
+        assertThat(repository.findMerchantById(legacy.id()).orElseThrow().projectId()).isEqualTo("m009_project_a");
+        // Existing record saves cannot erase a separately assigned project.
+        repository.saveMerchant(legacy);
+        assertThat(repository.findMerchantById(legacy.id()).orElseThrow().projectId()).isEqualTo("m009_project_a");
+        ProjectRecord oldRequest = new ProjectRecord("m009_legacy_project", null, "complex", "旧调用项目",
+                null, null, null, "active", now, now);
+        repository.saveProject(oldRequest);
+        assertThat(repository.listProjectsPaged(oldRequest.id(), 1, 1).items()).singleElement().satisfies(project -> {
+            assertThat(project.ownerPerson()).isNull();
+            assertThat(project.address()).isNull();
+            assertThat(project.businessScope()).isNull();
+        });
+    }
+
+    @Test
+    void completingSpaceTypeRequestKeepsPriorRequestHistory() {
+        Instant now = Instant.now();
+        repository.saveSpaceType(new SpaceTypeRecord("m009_type_request", "m009_type_request", "申请历史", 100, "archived", now, now));
+        repository.saveSpaceTypeDeleteRequest("m009_type_request", "第一次申请", "first-actor");
+        repository.completeSpaceTypeDeleteRequest("m009_type_request", "rejected");
+        repository.saveSpaceTypeDeleteRequest("m009_type_request", "第二次申请", "second-actor");
+        repository.completeSpaceTypeDeleteRequest("m009_type_request", "approved");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT requested_by || ':' || status FROM space_type_delete_requests WHERE space_type_id = ? ORDER BY requested_by",
+                String.class, "m009_type_request")).containsExactly("first-actor:rejected", "second-actor:approved");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM space_type_delete_requests WHERE space_type_id = ? AND status = 'pending'",
+                Integer.class, "m009_type_request")).isZero();
+    }
+
+    @Test
+    void backToBackSpaceTypeDeleteRequestsNeverCollideOnId() {
+        Instant now = Instant.now();
+        repository.saveSpaceType(new SpaceTypeRecord("m036a_type_burst", "m036a_type_burst", "连续申请", 100, "archived", now, now));
+        for (int i = 0; i < 50; i++) {
+            repository.saveSpaceTypeDeleteRequest("m036a_type_burst", "第" + i + "次申请", "actor-" + i);
+            repository.completeSpaceTypeDeleteRequest("m036a_type_burst", "rejected");
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM space_type_delete_requests WHERE space_type_id = ?",
+                Integer.class, "m036a_type_burst")).isEqualTo(50);
+    }
+
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void concurrentFutureBindingsWaitForMerchantLockAndOnlyOneReservesTheSlot() throws Exception {
+        String key = "m009_concurrent_" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        Instant now = Instant.now();
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        List<java.util.concurrent.Future<String>> futures = new java.util.ArrayList<>();
+        try {
+            repository.saveProject(new ProjectRecord(key, null, "complex", "并发绑定测试", null, null, null, "active", now, now));
+            repository.saveBusinessEntity(new BusinessEntityRecord(key, "并发主体", "management_company", null, null, null, "active", now, now));
+            repository.associateBusinessEntityProject(key, key);
+            repository.saveMerchant(new MerchantRecord(key, "并发商户", "other", null, null, null,
+                    null, null, null, null, null, null, null, null, null, null, "active", now, now).withProject(key));
+            var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            transaction.executeWithoutResult(status -> {
+                repository.lockMerchant(key);
+                for (int index = 0; index < 2; index++) {
+                    String requestKey = key + "_" + index;
+                    futures.add(pool.submit(() -> {
+                        var actor = new com.complex.platform.access.AccessActor("usr_admin", "platform_admin_user",
+                                "platform_admin", key, null, "active");
+                        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(actor, "token", List.of()));
+                        try {
+                            platformService.createBusinessEntityBinding(
+                                    new com.complex.platform.governance.dto.BusinessEntityBindingRequest(
+                                            requestKey, null, List.of(), key, key, key, key,
+                                            LocalDate.now(java.time.ZoneOffset.UTC).plusYears(1), "并发预约"));
+                            return "CREATED";
+                        } catch (com.complex.platform.common.api.ApiException exception) {
+                            return exception.code();
+                        } finally {
+                            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+                        }
+                    }));
+                }
+                int waiting = 0;
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                while (waiting < 2 && System.nanoTime() < deadline) {
+                    jdbcTemplate.execute("SELECT pg_stat_clear_snapshot()");
+                    waiting = jdbcTemplate.queryForObject("""
+                            SELECT count(*) FROM pg_stat_activity
+                             WHERE datname = current_database() AND wait_event_type = 'Lock'
+                               AND query LIKE 'SELECT id FROM merchants WHERE id = %FOR UPDATE%'
+                            """, Integer.class);
+                    if (waiting < 2) {
+                        try { Thread.sleep(25); }
+                        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted); }
+                    }
+                }
+                assertThat(waiting).as("两个请求均在商户行锁上等待，不能跳过锁直接检查").isEqualTo(2);
+            });
+            assertThat(List.of(futures.get(0).get(10, java.util.concurrent.TimeUnit.SECONDS),
+                    futures.get(1).get(10, java.util.concurrent.TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder("CREATED", "ACTIVE_BINDING_EXISTS");
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM business_entity_bindings WHERE merchant_id = ? AND status = 'inactive' AND effective_to IS NULL",
+                    Integer.class, key)).isEqualTo(1);
+            MerchantRecord merchant = repository.findMerchantById(key).orElseThrow();
+            assertThat(merchant.businessEntityId()).isNull();
+            assertThat(merchant.contractEntityId()).isNull();
+            assertThat(merchant.settlementEntityId()).isNull();
+        } finally {
+            pool.shutdownNow();
+            assertThat(pool.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            jdbcTemplate.update("DELETE FROM business_entity_bindings WHERE merchant_id = ?", key);
+            jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", key);
+            jdbcTemplate.update("DELETE FROM business_entity_projects WHERE business_entity_id = ?", key);
+            jdbcTemplate.update("DELETE FROM business_entities WHERE id = ?", key);
+            jdbcTemplate.update("DELETE FROM projects WHERE id = ?", key);
+            jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key IN (?, ?)", key + "_0", key + "_1");
+        }
     }
 
     private String regclass(String tableName) {

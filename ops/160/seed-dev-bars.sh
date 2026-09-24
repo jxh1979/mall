@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 文件版本：V0.01
 # 开发环境:用后台建商户接口播 N 家酒吧商户(酒吧A98、酒吧B98 …),供联调。
 # 本脚本不替代招商、合同、准入审批,也不把测试数据写进正式迁移。
 #
@@ -27,7 +28,7 @@ if [ -z "${ADMIN_TOK:-}" ]; then
 fi
 AH="Authorization: Bearer $ADMIN_TOK"
 
-# 开发播种挂一个已有经营主体,只为接口必填;不表示各酒吧生产上同一经营主体,也不表示参股等于经营主体。
+# 开发播种给商户填一个已有经营主体 id(接口不强制该字段);不表示各酒吧生产上同一经营主体,也不表示参股等于经营主体。
 ENTITY=be_ent_platform
 
 echo "== 建 $COUNT 家酒吧商户(所属主体 $ENTITY)=="
@@ -35,7 +36,7 @@ for i in $(seq 0 $((COUNT - 1))); do
   if [ "$i" -lt 26 ]; then SUFFIX="${LETTERS:$i:1}"; else SUFFIX="$((i + 1))"; fi
   NAME="酒吧${SUFFIX}98"
   EXISTS=$(curl -s "$API/api/v1/platform/merchants?page=1&size=500" -H "$AH" \
-    | python3 -c "import sys,json;d=json.load(sys.stdin)['data'];items=d['items'] if isinstance(d,dict) else d;print(next((m['id'] for m in items if m.get('merchantName')=='$NAME'),''))")
+    | python3 -c "import sys,json;d=json.load(sys.stdin)['data'];items=d['items'] if isinstance(d,dict) else d;print(next((m['id'] for m in items if m.get('merchant_name')=='$NAME'),''))")
   if [ -n "$EXISTS" ]; then echo "  跳过(已存在) $NAME=$EXISTS"; continue; fi
   ID=$(curl -s -X POST "$API/api/v1/platform/merchants" -H "$J" -H "$AH" -d "{
     \"idempotency_key\":\"seed-bar-${SUFFIX}98\",

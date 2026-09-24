@@ -1,4 +1,6 @@
-# P2-A 平面图 SVG/标准 JSON 导入接口契约 V0.1
+# P2-A 平面图 SVG/标准 JSON 导入接口契约 V0.2
+
+> 2026-09-20 160 全量审计 M019（B3-r1，V0.1→V0.2）：发布前置改为 `parsed`/`published` 可继续发布剩余待处理候选（M019-004）；示例 id 改为派生形态并加说明（M019-005）；`source_format` 必填无默认、解析闭合 `<polyline>`、非八种整单拒绝（M019-006）；§6 验证口径以 verify:predeploy 为准（M019-007）；§3.4 补高危二次确认句（M019-008）。
 
 ## 1. 定位
 
@@ -53,7 +55,7 @@
 {
   "code": "OK",
   "data": {
-    "id": "fpi_floor-import-create-001",
+    "id": "fpi_0123456789abcdef0123456789abcdef",
     "floor_plan_id": "fp_1",
     "source_format": "svg",
     "source_name": "1F.svg",
@@ -66,8 +68,8 @@
 
 规则：
 
-- `idempotency_key` 必填。
-- `source_format` 给人看只有两种：矢量图（`svg`，默认）、标准数据（`standard_json`）。不接受其它格式。
+- `idempotency_key` 必填；任务 id 为 `fpi_` + 由平面图 id 与幂等键派生的 SHA-256 前 32 位十六进制（共 36 字符），不直接拼接幂等键；本文示例 id 均为示意。
+- `source_format` 必填，给人看只有两种：矢量图（`svg`）、标准数据（`standard_json`）。不接受其它格式，无默认值。
 - `source_payload` 最大 1,000,000 字符。
 - 导入只生成候选和错误，不直接改写正式 `floor_plan_shapes`。
 - 若没有任何合法候选，任务状态为 `failed`。
@@ -148,21 +150,22 @@
 
 规则：
 
-- 仅 `parsed` 状态的导入任务允许发布。
+- `parsed` 或 `published` 状态的导入任务允许继续发布剩余待处理候选；`failed`/`cancelled` 拒绝。
 - 仅 `pending` 候选允许发布。
 - 发布后生成正式 `floor_plan_shapes`，候选状态变为 `published`，任务状态变为 `published`。
 - 发布必须幂等，同一请求重复提交不得重复创建正式 shape。
+- 发布为高危动作，须二次确认（治理地图「空间和点位」）；服务端确认字段与 OpenAPI/前端同批落地（M015-011），本文尚未列入请求体。
 
 ## 4. 解析规则
 
 ### 4.1 SVG
 
-- 仅解析 `<polygon>`。
+- 解析 `<polygon>` 与首尾闭合的 `<polyline>`。
 - `<polyline>` 必须已闭合；未闭合时记录 `POLYLINE_NOT_CLOSED`，不生成候选。
 - 必须存在正向 `viewBox`，用于把点位归一化到 0 到 1。
 - 默认 `shape_type=shop`（铺位），默认 `ref_type=custom`。
 - `shape_type` 只允许八种：铺位 `shop`、摊位 `booth`、公共区 `public_area`、区域 `area`、入口 `entrance`、设施 `facility`、风险区 `risk_zone`、路径 `route`。无走道。
-- 可通过 `data-shape-type`、`data-ref-type`、`data-ref-id` 覆盖；不在八种内的记入错误明细，不生成候选。
+- 可通过 `data-shape-type`、`data-ref-type`、`data-ref-id` 覆盖；不在八种内的整单拒绝（400 `VALIDATION_FAILED`），不生成任务、候选与错误明细。
 - 候选 label 优先取 `data-label`，其次取 `id`。
 
 ### 4.2 标准 JSON
@@ -208,4 +211,4 @@
 - `FloorPlanControllerTests`
 - `FloorPlanJdbcIntegrationTests`
 
-后续完成前仍需运行全量后端测试、P0 契约校验和 Semgrep 聚焦扫描。
+全量后端测试、P0 契约校验与安全扫描以 `npm run verify:predeploy` 门禁为准（完成审计 §5 的数字为编码完成时快照）。

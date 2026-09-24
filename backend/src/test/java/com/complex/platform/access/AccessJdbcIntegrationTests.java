@@ -624,10 +624,45 @@ class AccessJdbcIntegrationTests {
                 .containsEntry("result", "expired");
     }
 
-    // M006-G-07（PGM-1.10.1「旧派生同步失效」）：已定岗改职级复用定岗的四步写入（职级、定岗、套模板、替换派生），
-    // 入口必须与 assignUserPosition 一样由 Spring 事务整体包住，否则套模板已提交、替换派生失败时新旧派生并存。
+    // M032-001（治理地图「全平台审批通用时限」为后台业务参数）：库内现行授权政策行（V389 起带 deadlineWorkingDays）
+    // 必须能按服务层同一解析路径读出；保存一份不带该键的政策后，库内该键保持原值。
     @Test
-    void staffLevelChangeRunsInOneTransactionLikePositionAssignment() throws NoSuchMethodException {
+    void storedGrantPolicyParsesAndSavingKeepsDeadlineWorkingDays() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String stored = repository.findGrantPolicy().orElseThrow();
+        int days = mapper.readTree(stored).path("deadlineWorkingDays").path("value").asInt();
+        assertThat(days).isPositive();
+
+        AccessGrantPolicy current = mapper.readValue(stored, AccessGrantPolicy.class);
+
+        repository.saveGrantPolicy(mapper.writeValueAsString(new AccessGrantPolicy(
+                current.windowDays(), current.positionThreshold(), current.userThreshold(), current.riskReviews())));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT (parameters -> 'deadlineWorkingDays' ->> 'value')::int FROM supervisor_review_policies"
+                        + " WHERE policy_code = 'access_grant'", Integer.class)).isEqualTo(days);
+        assertThat(mapper.readValue(repository.findGrantPolicy().orElseThrow(), AccessGrantPolicy.class).windowDays().value())
+                .isEqualTo(current.windowDays().value());
+    }
+
+    // M034-001（枚举速查「系统不提供人工放行…任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」）：
+    // 人工放行权限码已停用，且不留任何授予来源。
+    @Test
+    void manualOverridePermissionIsRetiredAndGrantedToNobody() {
+        assertThat(repository.permissionExists("verification.manual_override")).isFalse();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT (SELECT count(*) FROM role_permissions WHERE permission_code = 'verification.manual_override')
+                     + (SELECT count(*) FROM permission_template_items WHERE permission_code = 'verification.manual_override')
+                     + (SELECT count(*) FROM user_permission_overrides WHERE permission_code = 'verification.manual_override')
+                     + (SELECT count(*) FROM temporary_permission_grants
+                         WHERE permission_code = 'verification.manual_override' AND status = 'active')
+                """, Long.class)).isZero();
+    }
+
+    // M006-G-07（PGM-1.10.1「旧派生同步失效」）：已定岗改职级复用定岗的四步写入，两个入口都须声明事务。
+    // M035-003：本测试只断言 assignUserPosition 与 assignStaffLevel 两个入口带事务声明，不执行四步写入本身
+    // （四步路径的行为测试在 AccessServiceTests）。
+    @Test
+    void positionAndStaffLevelEntryPointsDeclareATransaction() throws NoSuchMethodException {
         assertThat(transactionAttributeSource.getTransactionAttribute(AccessService.class.getMethod(
                 "assignUserPosition", com.complex.platform.access.dto.UserPositionAssignmentRequest.class), AccessService.class))
                 .isNotNull();
@@ -637,12 +672,13 @@ class AccessJdbcIntegrationTests {
     }
 
     // M006-G-08（PGM-1.18「界面全中文」）：治理页 / 模板页直接上屏的权限名、角色名、模板名不含拉丁字母
-    // （HTML 正文自身使用的「AI」除外；permission_code / id 是机读标识，不在此列）。
+    // （permission_code / id 是机读标识，不在此列）。M035-001：治理地图「不得出现任何英文…可以不用中文的只有四样，没有第五样」，
+    // 「AI」不是豁免。
     @Test
     void seededDisplayNamesAreChinese() {
         assertThat(jdbcTemplate.queryForList("""
                 SELECT permission_code FROM permissions
-                 WHERE replace(permission_name, 'AI', '') ~ '[A-Za-z]'
+                 WHERE permission_name ~ '[A-Za-z]'
                  ORDER BY permission_code
                 """, String.class)).isEmpty();
         assertThat(jdbcTemplate.queryForList(
@@ -835,5 +871,38 @@ class AccessJdbcIntegrationTests {
             AccessRepository.Effect effect
     ) {
         return new PermissionTemplateItem(templateId, permissionCode, effect, "project", false);
+    }
+
+    // XM-D029-004（PGM-041「临时授权可设有效期或单次使用；……单次消耗……全部留痕」）：一组两码的单次临时授权，
+    // 用其中一个即整组消耗，两个码都各有一条消耗留痕。
+    @Test
+    void consumingOneCodeOfASingleUseGrantGroupLogsEveryConsumedCode() {
+        TemporaryGrant grant = new TemporaryGrant(
+                "22222222-2222-2222-2222-222222222222",
+                "usr_jdbc_group_consume",
+                List.of("ops.production_readiness.view", "ops.production_readiness.check"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2099-06-15T00:00:00Z"),
+                true,
+                false,
+                "active",
+                "single use",
+                "seed-admin",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null,
+                null
+        );
+        repository.createTemporaryGrant(grant);
+
+        assertThat(repository.markSingleUsePermissionConsumed(grant.id(), "ops.production_readiness.view",
+                "usr_jdbc_group_consume", Instant.parse("2026-06-14T12:00:00Z"))).isTrue();
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_usage_logs
+                 WHERE user_id = ? AND result = 'consumed'
+                 ORDER BY permission_code
+                """, String.class, "usr_jdbc_group_consume"))
+                .containsExactly("ops.production_readiness.check", "ops.production_readiness.view");
     }
 }

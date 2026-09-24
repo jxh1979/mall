@@ -1,6 +1,7 @@
 package com.complex.platform.merchantportal;
+// 文件版本：V0.01
 
-import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.ApiRequests;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.contract.ContractSettlementRecord;
@@ -47,9 +48,8 @@ public class MerchantPortalController {
             @PathVariable("settlement_id") String settlementId,
             @RequestBody @jakarta.validation.Valid MerchantSettlementDisputeRequest request
     ) {
-        if (request == null || request.idempotencyKey() == null || request.idempotencyKey().isBlank()) {
-            throw ApiException.badRequest("IDEMPOTENCY_KEY_REQUIRED", "idempotency_key is required");
-        }
+        // M020-004:幂等键校验走共享助手(VALIDATION_FAILED),与全仓其它控制器一致。
+        ApiRequests.requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submitSettlementDispute(settlementId, request));
     }
 }

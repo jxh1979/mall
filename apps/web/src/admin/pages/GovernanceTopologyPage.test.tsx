@@ -1,5 +1,6 @@
-// 文件版本：V0.01
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GovernanceTopologyPage } from "./GovernanceTopologyPage";
@@ -7,28 +8,30 @@ import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 // mock 走真实 AdminApi（stub fetch）→ unwrap 转 camelCase → 组件。platform 域 snake_case 响应。
-// M012-005：夹具只用现行闭集——主体角色 platform/project_company/management_company（V410），空间类型走 V184 字典 8 码。
+// M012-005：夹具只用现行闭集——主体角色 platform/project_company/management_company（V410），空间类型使用现行字典。
 const ENTITIES = [{ id: "org-1", entity_name: "平台经营主体", unified_social_credit_code: "ORG-1", entity_role: "management_company", status: "active" }];
 const MERCHANTS = [
-  { id: "m-1", business_entity_id: "org-1", merchant_name: "商户甲", status: "active" },
-  { id: "m-2", business_entity_id: "org-1", merchant_name: "商户乙", status: "suspended" },
+  { id: "m-1", project_id: "p-1", business_entity_id: "org-1", merchant_name: "商户甲", status: "active" },
+  { id: "m-2", project_id: "p-1", business_entity_id: "org-1", merchant_name: "商户乙", status: "suspended" },
 ];
-const PROJECTS = [{ id: "p-1", name: "项目一", code: "PJ-1", merchant_id: "m-1", venue_type: "bar", status: "active" }];
+const PROJECTS = [{ id: "p-1", name: "项目一", code: "PJ-1", merchant_id: null, venue_type: "bar", status: "active" }];
 // M012-003：后台 SpaceRecord 以 project_id 挂接项目（无 venue_id）。
 const SPACES = [{ id: "s-1", space_name: "空间甲", project_id: "p-1", floor_no: "L1", area_square_meter: 120, space_type: "shop", status: "active" }];
 
-function envelope(items: unknown[]): Response {
+function envelope(items: unknown[], total = items.length, page = 1): Response {
   return new Response(
-    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total: items.length } }),
+    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page, page_size: 500, total } }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
 
-function makeApi(): AdminApi {
+function makeApi(respond?: (url: string, init?: RequestInit) => Response | undefined): AdminApi {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      const response = respond?.(url, init);
+      if (response) return Promise.resolve(response);
       if (url.includes("business-entities")) return Promise.resolve(envelope(ENTITIES));
       if (url.includes("merchants")) return Promise.resolve(envelope(MERCHANTS));
       if (url.includes("projects")) return Promise.resolve(envelope(PROJECTS));
@@ -41,15 +44,17 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(respond?: (url: string, init?: RequestInit) => Response | undefined, overrides: Partial<AdminPageProps> = {}) {
   const fullProps: AdminPageProps = {
-    api: makeApi(),
+    api: makeApi(respond),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
     effectivePermissions: ADMIN_PERMS,
+    ...overrides,
   };
   render(<GovernanceTopologyPage {...fullProps} />);
+  return fullProps;
 }
 
 describe("GovernanceTopologyPage KPI 聚焦视图", () => {
@@ -98,12 +103,12 @@ describe("GovernanceTopologyPage KPI 聚焦视图", () => {
     expect(screen.queryByTestId("governance-topology-table")).toBeNull();
   });
 
-  it("渲染输出状态列为中文，不含原英文枚举 active/suspended", async () => {
-    renderPage();
+  it.each([["active", "已启用"], ["suspended", "暂停"]])("项目状态%s显示为%s", async (status, label) => {
+    renderPage((url) => url.includes("/projects") ? envelope([{ ...PROJECTS[0], status }]) : undefined);
     await waitFor(() => expect(screen.getByTestId("governance-topology-table")).toBeTruthy());
     const text = screen.getByTestId("governance-topology-table").textContent ?? "";
-    expect(text).toContain("有效");
-    expect(text).toContain("已封禁");
+    expect(text).toContain(label);
+    expect(text).not.toContain("已封禁");
     expect(text).not.toContain("suspended");
   });
 });
@@ -149,7 +154,7 @@ describe("GovernanceTopologyPage 行明细抽屉（拓扑表 / 空间表整行�
     expect(drawer.textContent).toContain("平台经营主体");
     expect(drawer.textContent).toContain("商户甲");
     expect(drawer.textContent).toContain("项目一");
-    expect(drawer.textContent).toContain("有效");
+    expect(drawer.textContent).toContain("已启用");
     expect(drawer.textContent).toContain("酒吧");
     expect(drawer.textContent).not.toContain("active");
   });
@@ -216,5 +221,88 @@ describe("GovernanceTopologyPage 无 entity.binding.view 角色不请求主体�
     // 有权限的主内容仍请求、页面正常渲染
     expect(urls.some((u) => u.includes("merchants"))).toBe(true);
     expect(setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
+    const row = screen.getByTestId("governance-topology-row-m-1-p-1");
+    expect(row.querySelector("td")?.textContent).toBe("-");
+    fireEvent.click(row);
+    expect(screen.getByTestId("row-detail-drawer").textContent).not.toContain("主体资料未加载");
+    expect(screen.getByTestId("row-detail-drawer").textContent).not.toContain("平台经营主体");
   });
+});
+
+
+describe("M012 本次归并回归", () => {
+  afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState({}, "", "/admin/governance/topology"); });
+
+  it("商户按真实 project_id 归属当前综合体，项目没有反向 merchant_id 也能显示", async () => {
+    renderPage();
+    expect((await screen.findByTestId("governance-topology-row-m-2-p-1")).textContent).toContain("项目一");
+  });
+
+  it("现有自定义空间类型按字典中文名称展示", async () => {
+    renderPage((url) => url.includes("/space-types")
+      ? envelope([{ id: "type-kiosk", type_code: "kiosk", type_name: "一体机位", status: "active" }])
+      : url.includes("/spaces") ? envelope([{ ...SPACES[0], space_type: "kiosk" }]) : undefined);
+    const row = await screen.findByTestId("governance-space-row-s-1");
+    expect(row.textContent).toContain("一体机位");
+    expect(row.textContent).not.toContain("kiosk");
+  });
+
+  it.each(["merchants", "spaces"])("超过默认500条的%s能看到总数并读取第二页", async (resource) => {
+    const rows = Array.from({ length: 501 }, (_, i) => resource === "merchants"
+      ? { ...MERCHANTS[0], id: "m-page-" + i, merchant_name: "分页商户" + i }
+      : { ...SPACES[0], id: "s-page-" + i, space_name: "分页空间" + i });
+    renderPage((url) => {
+      if (!url.includes("/" + resource)) return undefined;
+      const page = Number(new URL(url, "http://localhost").searchParams.get("page") || 1);
+      return envelope(rows.slice((page - 1) * 500, page * 500), 501, page);
+    });
+    await waitFor(() => expect(screen.getByTestId("governance-topology-kpi-" + resource).textContent).toBe("501"));
+    fireEvent.click(screen.getByTestId("governance-" + resource + "-pager-next"));
+    const last = resource === "merchants" ? "governance-topology-row-m-page-500-p-1" : "governance-space-row-s-page-500";
+    expect(await screen.findByTestId(last)).toBeTruthy();
+  });
+
+  it("商户来源按钮可以用Enter下钻，行自身Enter仍打开详情", async () => {
+    const navigateTo = vi.fn();
+    renderPage(undefined, { navigateTo });
+    const button = await screen.findByTestId("trace-link-ADM-GOV-002-m-1");
+    button.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(navigateTo).toHaveBeenCalledWith("ADM-GOV-002", "m-1");
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+    fireEvent.keyDown(screen.getByTestId("governance-topology-row-m-1-p-1"), { key: "Enter" });
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+  });
+  it("主体资料在第二页时显示未加载，翻页后呈现真实主体", async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({ ...ENTITIES[0], id: "org-page-" + i, entity_name: "经营主体" + i }));
+    renderPage((url) => {
+      if (url.includes("/merchants")) return envelope([{ ...MERCHANTS[0], business_entity_id: "org-page-500" }]);
+      if (!url.includes("/business-entities")) return undefined;
+      const page = Number(new URL(url, "http://localhost").searchParams.get("page") || 1);
+      return envelope(rows.slice((page - 1) * 500, page * 500), 501, page);
+    });
+    const row = await screen.findByTestId("governance-topology-row-m-1-p-1");
+    expect(row.textContent).toContain("主体资料未加载");
+    fireEvent.click(screen.getByTestId("governance-entities-pager-next"));
+    await waitFor(() => expect(screen.getByTestId("governance-topology-row-m-1-p-1").textContent).toContain("经营主体500"));
+  });
+
+});
+
+
+it("M012-013：重试成功后清除全局读取错误", async () => {
+  let failed = false;
+  const props = renderPage((url, init) => {
+    if (init?.method !== "POST" && url.includes("/merchants") && !failed) {
+      failed = true;
+      return new Response(JSON.stringify({ success: false, code: "TEMPORARY_ERROR", message: "临时读取失败" }), { status: 503, headers: { "content-type": "application/json" } });
+    }
+    return undefined;
+  });
+  await screen.findByTestId("admin-retry");
+  expect(props.setGlobalError).toHaveBeenCalledWith("服务暂时不可用，请稍后重试");
+  vi.mocked(props.setGlobalError).mockClear();
+  fireEvent.click(screen.getByTestId("admin-retry"));
+  await screen.findByTestId("governance-topology-table");
+  expect(props.setGlobalError).toHaveBeenLastCalledWith(null);
 });

@@ -52,6 +52,10 @@ class FinanceControllerTests {
     @Autowired
     private MockMvc mockMvc;
 
+    // StoredValueService 有必需的 @Autowired 字段；@Bean 交出的 mock 仍会被字段注入，故用 @MockitoBean。
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.complex.platform.customer.StoredValueService storedValueService;
+
     @Autowired
     private FinanceService service;
 
@@ -414,11 +418,6 @@ class FinanceControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
-        }
-
-        @Bean
-        com.complex.platform.customer.StoredValueService storedValueService() {
-            return Mockito.mock(com.complex.platform.customer.StoredValueService.class);
         }
 
         @Bean

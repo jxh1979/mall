@@ -1,4 +1,26 @@
 # M015 空间点位、楼层平面图与营业时段／后台实现／第1段
+版本：V0.03
+
+2026-09-20 操作员裁定补派 Grok B5-r1 再执行 → Grok FAIL（平台管理员项目 scope 抛点、部分发布锁死）→ B2-r3 定稿 M015-015/016 → B3-r3（第 3 次，上限）修复 → B4-r3 双 PASS → B5-r3 双 PASS：Grok V0.01 SHA256 f803af2423d40706ae203c8fb525f91ad6431e06edde34af30bc9d277fbb3e04；席甲 V0.01 SHA256 caf4bb0d72c234627831175d6ddfd77d501483bb85e01e56690e18d989d6874c；四值全等 b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a。改动：`FloorPlanService` V0.04（`projectScopeOrAll()`、发布前置 parsed/published）、`VenueBusinessHoursService` V0.02（`projectScopeOrAll()`）、两测试类桩改生产语义 + 5 例。001–016 全否；席甲 B5-r1 再执行票经核源撤回，教训：沿用测试桩语义未追 `AuthorizationService` 真实现。
+
+---
+以下历史 V0.02 原文原样保留：
+
+# M015 空间点位、楼层平面图与营业时段／后台实现／第1段
+版本：V0.02
+
+2026-09-19 席甲补充复查PASS；Grok NOT-CALLED。本次按操作员「从 M009 重新独立审计，有问题按 V0.17 完整双席流程」执行，无问题只记录，不是新双 PASS；历史 Claude Fable 5.1/Grok B5-r1 双 PASS 保留。B3 累计 2，本次修复 0。
+
+当前 23 文件 2118 行全文与 90 判据三线核对完成，未发现新缺陷。与 B5-r1 相比 2 文件变化：`FloorPlanService.java` V0.03（commit `9bb45125`，M016-002＝M015-013 转入，`SHAPE_TYPES` 八值与 V423 CHECK 及活库约束同闭集）、`ProjectRecord.java`（M009-013 获批字段，主工作区暂存在途，floorplan 包零引用，不在本模块裁决）。5 类 83 例（XML 口径；.txt 摘要对 @Nested 记 0）在主工作区 `complex_test` 实跑零失败/错误/跳过。
+
+[本次完整报告](M015-b5-r1-self-raw.md) V0.02：66454 bytes，SHA256 1dfa94ba6be7f0364d127df40d9d5ecefe1673de78cb13370f9f654c60f87b56；旧 31876 byte 前缀完整保留。旧 Grok V0.01 SHA256 73f8f552a491c2dd1de844adb054bdfebd85a2001c7fb3b00cefe3469a7321ac 保持。历史 14 项全否（9 已修；010/011 XM、012 全局遗漏、013 XM→M016 已由 V423 落地/M018、014 观察）不改；没有新问题/人闸。
+
+锁实算/sidecar/ledger＝b012328f72f6df21a1a393c243fcaa276f00aeccf9818038fb9317d910c6695a，LOCK-AMEND-COUNT 1；HEAD e456ba96、origin/main 246385d9。三 HTML/源码/测试/锁未改、未发布；先写 ledger V4.38 保留 PASS，后写本文件。
+
+---
+以下历史 V0.01 原文原样保留：
+
+# M015 空间点位、楼层平面图与营业时段／后台实现／第1段
 版本：V0.01
 
 状态：PASS。范围：plan/modules.md V0.04 的 23 文件（floorplan 包 17 + governance 包 ProjectRecord/SpaceRecord/SpaceTypeRecord/VenueBusinessHoursRecord/Repository/Service；计划冻结 1999 行）；判据 90 项（BEQR 22、BSM 14、GEN 18、PGM 36；席甲 B1 曾写 89，B2 勘误）。B3 整批修复累计 2 次。修复队列14 个 ID 全否（9 项已修；010/011 XM 同批、012 全局遗漏、013 XM→M016/M018、014 观察）；添加项 0；questions 0；无 HTML 修改申请。

@@ -4887,3 +4887,780 @@ PY
 ### 交付边界
 本轮仅关闭M001与获准的A/D修复，不能据此宣称471模块全仓审计完成。76个未发布文件此前查重/溯源是单独只读结论，没有在本轮修复或发布它们。
 当前正本仍在160:/home/james/complex-management。本机交付副本统一放D:\AI\codex\outputs\160-M001-r4-20260908；复制后以逐文件SHA256及严格UTF-8核验。
+
+
+CRITERIA-LOCK-SHA256: cf25d7168a384952200e17af747a2a59f5a8247fd7350f795604ee72319dfce6
+
+# M001 B1 完整独立复审 — Codex
+版本：V0.40
+范围：2文件2340行；317 HTML判据+18 GEN=335。B3累计4，状态IN_PROGRESS。先启动Grok，本席封存前未读取其V0.19 raw/JSON。本次完整逐段阅读两份现文，未以历史PASS代替。技能沿用已实际读取的grilling追问结构、verification-before-completion和receiving-code-review；不调用第三席。文档模块不声称已测试业务后端。
+
+## 文件覆盖与第一性原理
+- docs/business-enum-quick-reference-v0.1.html：1—308全读；SHA256 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66。
+- docs/business-system-map-for-operations-v0.1.html：1—2032全读；SHA256 eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66。
+枚举是197个明确问题答案，地图提供流程、责任、入口和跨域关系；删除任何一份会丢失其专有说明。静态CSS和导航只负责可读性，无业务发明，沿用M001-004技术性登记。页面不是产品实现完成声明；不能因为要求中有功能就声称已有后台。地图1—455样式结构、456—726总览治理、727—1009票务会员员工入口、1010—1252酒吧服务供应链、1253—1478游乐商户物业员工、1479—1738第三方留痕财务、1739—2032分红看板终端关系上线已确认规则及导航脚本全部覆盖。枚举1—308全部13表含巨型通票池与账单操作原句完整阅读。
+
+## 通用判据逐项
+| ID | 实核与判断 |
+|---|---|
+| GEN-001 | 两文件提供业务范围与枚举互补；合作模式两处一简表一模板解释，用途不同，不以同名删除。 |
+| GEN-002 | HTMLParser解析成功；27目录目标存在；setActive的sections非空由27有效锚点实证。未运行浏览器，不声称视觉或后台验收。 |
+| GEN-003 | 现有entry-anchors测试实际1/1 PASS；文档类不强制Maven。 |
+| GEN-004 | 静态HTML无用户输入执行；导航href均本地静态片段；不评未纳入业务控制器。 |
+| GEN-005 | 商户本域、项目隔离、导出单独授权与PGM联系人特例对象不冲突；不因平台管理员日常概述扩最高权限。 |
+| GEN-006 | 退款成功才计退额、补录复核才生效、历史不回改条款相容；未声称数据库事务已验。 |
+| GEN-007 | 入场多次同场不重复扣；流水只追加冲正；静态阅读无写竞争。 |
+| GEN-008 | 状态目录与流程适用对象对齐，退款部分态为订单聚合不推翻单张禁部分退款；例外与一般规则合取。 |
+| GEN-009 | 对账差异、付款在途/失败、缺档位暂挂均有已定义出口，不引入新状态。 |
+| GEN-010 | 受控工作设备和敏感取证范围明确；静态文件无真实客人记录/凭据；手机号新特例不扩客人员工。 |
+| GEN-011 | 订单、服务归属、移交和人工补录证据明确；安检已批准设备侧例外保留。 |
+| GEN-012 | 导航仅27节一次scroll扫描，无外部请求/持久化资源；合理静态规模。 |
+| GEN-013 | 内联CSS/JS，静态浏览器原生API，无额外依赖；未编译非本模块。 |
+| GEN-014 | 本模块无迁移或DB执行；条款不证明模式已实现。 |
+| GEN-015 | 中文、UTF8、13表13thead/26th；地图13表13thead，导航链接可达，无重复id。 |
+| GEN-016 | V0.07/V0.14和页脚日期真实存在；entry-anchors现跑PASS，旧红不是当前结果。 |
+| GEN-017 | 按冲突→细化→技术性→添加；B/C为操作员已确认原意，不转为容忍缺陷。 |
+| GEN-018 | 本票证据限实际HTML原文及本次命令；未实跑的浏览器/服务端不宣称通过。 |
+
+## 顺从式：全317条对照
+以下来源坐标来自冻结定义，逐条绑定本席已全文阅读的现文。316条原摘录全文包含于现文；BSM-120仅页脚更新日期由09-08变09-10（原M001-012/PR432已批准的元数据），其业务正文、解释权声明及脚本完全一致；这是时间元数据，未改变判据业务含义，本票不自行改锁或将日期当新需求。三条考勤新同步均匹配，工作手机1445保持打卡。
+| ID | 标题 | HTML证据 | 结果 |
+|---|---|---|---|
+| BEQR-001 | 票种 | docs/business-enum-quick-reference-v0.1.html:29 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-002 | 票务策略状态 | docs/business-enum-quick-reference-v0.1.html:30 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-003 | 定价、售票与收款主体 | docs/business-enum-quick-reference-v0.1.html:32 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-004 | 年龄限制 | docs/business-enum-quick-reference-v0.1.html:33 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-005 | 通票赠酒下限 | docs/business-enum-quick-reference-v0.1.html:34 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-006 | 通票类型 | docs/business-enum-quick-reference-v0.1.html:35 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-007 | 权益类型 | docs/business-enum-quick-reference-v0.1.html:36 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-008 | 餐饮/零售券两种用法 | docs/business-enum-quick-reference-v0.1.html:37 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-009 | 资格判定 | docs/business-enum-quick-reference-v0.1.html:39 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-010 | 订单状态 | docs/business-enum-quick-reference-v0.1.html:40 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-011 | 票/权益状态 | docs/business-enum-quick-reference-v0.1.html:41 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-012 | 核销记录状态 | docs/business-enum-quick-reference-v0.1.html:43 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-013 | 手环入场 | docs/business-enum-quick-reference-v0.1.html:44 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-014 | 退款单状态 | docs/business-enum-quick-reference-v0.1.html:45 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-015 | 有效期类型 | docs/business-enum-quick-reference-v0.1.html:46 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-016 | 售票与退款原则 | docs/business-enum-quick-reference-v0.1.html:47 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-017 | 到期未核销款 | docs/business-enum-quick-reference-v0.1.html:48 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-018 | 域归属对照 | docs/business-enum-quick-reference-v0.1.html:49 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-019 | 跨域通票分配 | docs/business-enum-quick-reference-v0.1.html:51 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-020 | 酒吧通票可分配池 | docs/business-enum-quick-reference-v0.1.html:52 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-021 | 收费与免费权益结算 | docs/business-enum-quick-reference-v0.1.html:53 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-022 | 项目内部结算价 | docs/business-enum-quick-reference-v0.1.html:54 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-023 | 核销顺序 | docs/business-enum-quick-reference-v0.1.html:55 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-024 | 游乐核销归属 | docs/business-enum-quick-reference-v0.1.html:56 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-025 | 门票综合服务费 | docs/business-enum-quick-reference-v0.1.html:57 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-026 | 动态价与会员价 | docs/business-enum-quick-reference-v0.1.html:58 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-027 | 人脸验龄数据生命周期 | docs/business-enum-quick-reference-v0.1.html:60 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-028 | 会员唯一识别 | docs/business-enum-quick-reference-v0.1.html:65 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-029 | 会员注册 | docs/business-enum-quick-reference-v0.1.html:66 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-030 | 会员身份状态 | docs/business-enum-quick-reference-v0.1.html:68 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-031 | 等级与成长值 | docs/business-enum-quick-reference-v0.1.html:70 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-032 | 等级权益对照 | docs/business-enum-quick-reference-v0.1.html:71 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-033 | 积分与成长值来源 | docs/business-enum-quick-reference-v0.1.html:72 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-034 | 票务人次计算 | docs/business-enum-quick-reference-v0.1.html:73 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-035 | 有效消费与冻结 | docs/business-enum-quick-reference-v0.1.html:75 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-036 | 积分明细类型 | docs/business-enum-quick-reference-v0.1.html:77 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-037 | 积分兑换定价 | docs/business-enum-quick-reference-v0.1.html:78 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-038 | 商品规格 | docs/business-enum-quick-reference-v0.1.html:79 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-039 | 项目零售参考价 | docs/business-enum-quick-reference-v0.1.html:80 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-040 | 发券与核销结算 | docs/business-enum-quick-reference-v0.1.html:81 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-041 | 重复兑换与转赠 | docs/business-enum-quick-reference-v0.1.html:82 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-042 | 券包状态 | docs/business-enum-quick-reference-v0.1.html:83 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-043 | 积分结算账期 | docs/business-enum-quick-reference-v0.1.html:84 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-044 | 会员系统服务费 | docs/business-enum-quick-reference-v0.1.html:85 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-045 | 储值卡类型与收款主体 | docs/business-enum-quick-reference-v0.1.html:86 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-046 | 会员忠诚度扩展 | docs/business-enum-quick-reference-v0.1.html:87 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-047 | 会员注册与开卡 | docs/business-enum-quick-reference-v0.1.html:89 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-048 | 学生认证 | docs/business-enum-quick-reference-v0.1.html:90 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-049 | 会员积分活动状态 | docs/business-enum-quick-reference-v0.1.html:91 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-050 | 积分活动预算守恒 | docs/business-enum-quick-reference-v0.1.html:92 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-051 | 充值积分 | docs/business-enum-quick-reference-v0.1.html:93 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-052 | 会员营销边界 | docs/business-enum-quick-reference-v0.1.html:94 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-053 | 发券对象 | docs/business-enum-quick-reference-v0.1.html:95 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-054 | 桌台/卡座/吧台位状态 | docs/business-enum-quick-reference-v0.1.html:100 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-055 | 账单状态 | docs/business-enum-quick-reference-v0.1.html:101 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-056 | 订台定金状态 | docs/business-enum-quick-reference-v0.1.html:103 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-057 | 订卡邀请函状态 | docs/business-enum-quick-reference-v0.1.html:105 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-058 | 点酒方式 | docs/business-enum-quick-reference-v0.1.html:106 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-059 | 支付方式 | docs/business-enum-quick-reference-v0.1.html:107 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-060 | 销售提成 | docs/business-enum-quick-reference-v0.1.html:108 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-061 | 服务员提成 | docs/business-enum-quick-reference-v0.1.html:109 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-062 | 退菜退酒 | docs/business-enum-quick-reference-v0.1.html:110 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-063 | 高危动作（需审批/双证据） | docs/business-enum-quick-reference-v0.1.html:111 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-064 | 出品票据状态 | docs/business-enum-quick-reference-v0.1.html:112 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-065 | 账单操作 | docs/business-enum-quick-reference-v0.1.html:114 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-066 | 收银交班状态 | docs/business-enum-quick-reference-v0.1.html:115 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-067 | 最低消费 | docs/business-enum-quick-reference-v0.1.html:117 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-068 | 服务费 | docs/business-enum-quick-reference-v0.1.html:118 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-069 | 小费 | docs/business-enum-quick-reference-v0.1.html:119 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-070 | 客人存酒有效期与转存 | docs/business-enum-quick-reference-v0.1.html:120 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-071 | 存酒瓶数 | docs/business-enum-quick-reference-v0.1.html:122 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-072 | 套餐赠券适用范围 | docs/business-enum-quick-reference-v0.1.html:123 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-073 | 非低消商品 | docs/business-enum-quick-reference-v0.1.html:124 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-074 | 隐私桌台权限 | docs/business-enum-quick-reference-v0.1.html:125 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-075 | 桌台会话与菜单 | docs/business-enum-quick-reference-v0.1.html:126 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-076 | 桌台计时产品 | docs/business-enum-quick-reference-v0.1.html:127 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-077 | 门店支付方式 | docs/business-enum-quick-reference-v0.1.html:128 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-078 | 扫码点单身份 | docs/business-enum-quick-reference-v0.1.html:129 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-079 | 优惠券自动选择 | docs/business-enum-quick-reference-v0.1.html:130 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-080 | 优惠券付款预留 | docs/business-enum-quick-reference-v0.1.html:131 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-081 | 正式挂起订单状态 | docs/business-enum-quick-reference-v0.1.html:132 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-082 | 正式挂起订单规则 | docs/business-enum-quick-reference-v0.1.html:133 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-083 | 挂单取消与付款互斥 | docs/business-enum-quick-reference-v0.1.html:134 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-084 | 挂单坏账损耗 | docs/business-enum-quick-reference-v0.1.html:135 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-085 | 项目开放状态 | docs/business-enum-quick-reference-v0.1.html:140 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-086 | 场次状态 | docs/business-enum-quick-reference-v0.1.html:142 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-087 | 游乐「当天／每天」口径 | docs/business-enum-quick-reference-v0.1.html:144 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-088 | 容量双阈值 | docs/business-enum-quick-reference-v0.1.html:145 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-089 | 园区容量 | docs/business-enum-quick-reference-v0.1.html:146 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-090 | 设备关键/辅助分级 | docs/business-enum-quick-reference-v0.1.html:147 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-091 | 全园故障与补偿通票 | docs/business-enum-quick-reference-v0.1.html:148 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-092 | 安全严重度 | docs/business-enum-quick-reference-v0.1.html:149 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-093 | 巡检任务状态 | docs/business-enum-quick-reference-v0.1.html:150 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-094 | 越界类型 | docs/business-enum-quick-reference-v0.1.html:151 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-095 | 团体/包场 | docs/business-enum-quick-reference-v0.1.html:153 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-096 | 游乐增强阶段 | docs/business-enum-quick-reference-v0.1.html:154 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-097 | 供应合同模式 | docs/business-enum-quick-reference-v0.1.html:159 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-098 | 库房分类 | docs/business-enum-quick-reference-v0.1.html:160 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-099 | 物品大类 | docs/business-enum-quick-reference-v0.1.html:161 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-100 | 库存流水类型 | docs/business-enum-quick-reference-v0.1.html:162 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-101 | 高价值判定 | docs/business-enum-quick-reference-v0.1.html:164 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-102 | 跨主体借调 | docs/business-enum-quick-reference-v0.1.html:166 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-103 | 智能采购建议 | docs/business-enum-quick-reference-v0.1.html:168 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-104 | 门店要货履约状态 | docs/business-enum-quick-reference-v0.1.html:169 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-105 | 经销商状态 | docs/business-enum-quick-reference-v0.1.html:170 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-106 | 经销询价状态 | docs/business-enum-quick-reference-v0.1.html:171 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-107 | 经销价格目录状态 | docs/business-enum-quick-reference-v0.1.html:172 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-108 | 经销订单状态 | docs/business-enum-quick-reference-v0.1.html:173 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-109 | 经销退货单状态 | docs/business-enum-quick-reference-v0.1.html:174 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-110 | 经销库存外显 | docs/business-enum-quick-reference-v0.1.html:175 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-111 | 经销支付方式 | docs/business-enum-quick-reference-v0.1.html:176 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-112 | 经销库存预留 | docs/business-enum-quick-reference-v0.1.html:177 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-113 | 经销职责分离 | docs/business-enum-quick-reference-v0.1.html:178 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-114 | 经销取消、退货与开票 | docs/business-enum-quick-reference-v0.1.html:179 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-115 | 经销价格与税务快照 | docs/business-enum-quick-reference-v0.1.html:180 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-116 | 经销商停用撤权 | docs/business-enum-quick-reference-v0.1.html:181 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-117 | 经销资金归属 | docs/business-enum-quick-reference-v0.1.html:182 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-118 | 运营营业日 | docs/business-enum-quick-reference-v0.1.html:187 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-119 | 对账口径 | docs/business-enum-quick-reference-v0.1.html:188 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-120 | 对账差异四类 | docs/business-enum-quick-reference-v0.1.html:189 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-121 | 日结状态 | docs/business-enum-quick-reference-v0.1.html:190 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-122 | 差异处理状态 | docs/business-enum-quick-reference-v0.1.html:191 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-123 | 结算状态 | docs/business-enum-quick-reference-v0.1.html:192 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-124 | 综合通票定价 | docs/business-enum-quick-reference-v0.1.html:193 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-125 | 商户业态 | docs/business-enum-quick-reference-v0.1.html:195 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-126 | 合作模式 | docs/business-enum-quick-reference-v0.1.html:196 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-127 | 退款资金流向 | docs/business-enum-quick-reference-v0.1.html:197 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-128 | 物业费 | docs/business-enum-quick-reference-v0.1.html:198 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-129 | 能源费与损耗费 | docs/business-enum-quick-reference-v0.1.html:199 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-130 | 税费配置 | docs/business-enum-quick-reference-v0.1.html:201 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-131 | 三方对账框架 | docs/business-enum-quick-reference-v0.1.html:202 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-132 | 开票状态 | docs/business-enum-quick-reference-v0.1.html:203 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-133 | 接入的外部系统 | docs/business-enum-quick-reference-v0.1.html:208 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-134 | 客户标签 | docs/business-enum-quick-reference-v0.1.html:209 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-135 | 统一原则 | docs/business-enum-quick-reference-v0.1.html:210 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-136 | 接入状态 | docs/business-enum-quick-reference-v0.1.html:211 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-137 | 回流结果状态 | docs/business-enum-quick-reference-v0.1.html:212 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-138 | 风险四级 | docs/business-enum-quick-reference-v0.1.html:217 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-139 | 事件状态 | docs/business-enum-quick-reference-v0.1.html:218 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-140 | 主管复核强制项 | docs/business-enum-quick-reference-v0.1.html:219 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-141 | 经营异常处置状态 | docs/business-enum-quick-reference-v0.1.html:220 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-142 | 异常状态的统一出口 | docs/business-enum-quick-reference-v0.1.html:221 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-143 | 四类主体 | docs/business-enum-quick-reference-v0.1.html:226 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-144 | 经营主体关系 | docs/business-enum-quick-reference-v0.1.html:227 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-145 | 城市项目公司 | docs/business-enum-quick-reference-v0.1.html:228 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-146 | 运营公司职责 | docs/business-enum-quick-reference-v0.1.html:229 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-147 | 主要收入归属 | docs/business-enum-quick-reference-v0.1.html:230 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-148 | 合作模式 | docs/business-enum-quick-reference-v0.1.html:231 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-149 | 职级 | docs/business-enum-quick-reference-v0.1.html:232 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-150 | 终端十一端 | docs/business-enum-quick-reference-v0.1.html:233 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-151 | 最终权限计算 | docs/business-enum-quick-reference-v0.1.html:234 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-152 | 项目与敏感数据权限 | docs/business-enum-quick-reference-v0.1.html:235 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-153 | 终端开关优先级 | docs/business-enum-quick-reference-v0.1.html:236 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-154 | 综合体项目状态 | docs/business-enum-quick-reference-v0.1.html:237 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-155 | 商户/运营主体状态 | docs/business-enum-quick-reference-v0.1.html:238 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-156 | 合同状态 | docs/business-enum-quick-reference-v0.1.html:239 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-157 | 员工状态 | docs/business-enum-quick-reference-v0.1.html:240 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-158 | 设备状态 | docs/business-enum-quick-reference-v0.1.html:241 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-159 | 权限状态 | docs/business-enum-quick-reference-v0.1.html:242 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-160 | 招商线索状态 | docs/business-enum-quick-reference-v0.1.html:248 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-161 | 招商意向阶段 | docs/business-enum-quick-reference-v0.1.html:249 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-162 | 品牌/客户库类型 | docs/business-enum-quick-reference-v0.1.html:250 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-163 | 合同变更类型 | docs/business-enum-quick-reference-v0.1.html:251 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-164 | 退租结算状态 | docs/business-enum-quick-reference-v0.1.html:252 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-165 | 内部应付执行状态 | docs/business-enum-quick-reference-v0.1.html:253 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-166 | 合同审批链 | docs/business-enum-quick-reference-v0.1.html:255 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-167 | 租金/账单类型 | docs/business-enum-quick-reference-v0.1.html:256 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-168 | 营业额抽成模式 | docs/business-enum-quick-reference-v0.1.html:257 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-169 | 公区能源费 | docs/business-enum-quick-reference-v0.1.html:258 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-170 | 铺位租赁状态 | docs/business-enum-quick-reference-v0.1.html:259 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-171 | 物业工单类型 | docs/business-enum-quick-reference-v0.1.html:260 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-172 | 物业工单状态 | docs/business-enum-quick-reference-v0.1.html:262 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-173 | 商户服务工单状态 | docs/business-enum-quick-reference-v0.1.html:264 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-174 | 工单时效 | docs/business-enum-quick-reference-v0.1.html:265 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-175 | 楼宇机电设备状态 | docs/business-enum-quick-reference-v0.1.html:266 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-176 | 设备维保类型 | docs/business-enum-quick-reference-v0.1.html:267 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-177 | 能耗表计类型 | docs/business-enum-quick-reference-v0.1.html:268 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-178 | 抄表状态 | docs/business-enum-quick-reference-v0.1.html:269 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-179 | 能耗归集对象 | docs/business-enum-quick-reference-v0.1.html:270 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-180 | 楼宇巡检任务状态 | docs/business-enum-quick-reference-v0.1.html:271 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-181 | 楼宇巡检类型 | docs/business-enum-quick-reference-v0.1.html:273 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-182 | 考勤日结果 | docs/business-enum-quick-reference-v0.1.html:279 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-183 | 打卡方式 | docs/business-enum-quick-reference-v0.1.html:280 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-184 | 请假类型 | docs/business-enum-quick-reference-v0.1.html:281 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-185 | 请假单状态 | docs/business-enum-quick-reference-v0.1.html:282 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-186 | 薪资单构成 | docs/business-enum-quick-reference-v0.1.html:283 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-187 | 员工提成发放 | docs/business-enum-quick-reference-v0.1.html:285 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-188 | 服务订单状态 | docs/business-enum-quick-reference-v0.1.html:290 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-189 | 管理费方式 | docs/business-enum-quick-reference-v0.1.html:291 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-190 | 分红基数 | docs/business-enum-quick-reference-v0.1.html:296 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-191 | 分红比例 | docs/business-enum-quick-reference-v0.1.html:297 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-192 | 分红税务 | docs/business-enum-quick-reference-v0.1.html:298 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-193 | 分红周期 | docs/business-enum-quick-reference-v0.1.html:299 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-194 | 分红单状态 | docs/business-enum-quick-reference-v0.1.html:300 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-195 | 可选扣除项 | docs/business-enum-quick-reference-v0.1.html:301 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-196 | 发放保护线留存 | docs/business-enum-quick-reference-v0.1.html:302 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-197 | 期间关账 | docs/business-enum-quick-reference-v0.1.html:303 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-001 | 整体说明：这套系统到底管什么 | docs/business-system-map-for-operations-v0.1.html:505 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-002 | 一笔业务怎么走 | docs/business-system-map-for-operations-v0.1.html:526 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-003 | 系统通用能力：数据可改可删、操作有引导、权限分岗 | docs/business-system-map-for-operations-v0.1.html:563 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-004 | 配置数据可以存档、也可以删除（删除要审批） | docs/business-system-map-for-operations-v0.1.html:566 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-005 | 后台的"新建/录入"改成分步引导 | docs/business-system-map-for-operations-v0.1.html:581 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-006 | 验证用的二维码一律动态刷新（间隔可在后台设定） | docs/business-system-map-for-operations-v0.1.html:584 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-007 | 平台管理员拥有全部日常功能权限 | docs/business-system-map-for-operations-v0.1.html:587 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-008 | 子系统入口 | docs/business-system-map-for-operations-v0.1.html:592 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-009 | 基础管理 | docs/business-system-map-for-operations-v0.1.html:596 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-010 | 票务权益 | docs/business-system-map-for-operations-v0.1.html:601 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-011 | 客人端 | docs/business-system-map-for-operations-v0.1.html:606 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-012 | 酒吧平板/工作手机 | docs/business-system-map-for-operations-v0.1.html:611 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-013 | 触摸屏一体机 | docs/business-system-map-for-operations-v0.1.html:616 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-014 | 酒吧管理 | docs/business-system-map-for-operations-v0.1.html:621 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-015 | 供应链库存 | docs/business-system-map-for-operations-v0.1.html:626 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-016 | 游乐管理 | docs/business-system-map-for-operations-v0.1.html:631 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-017 | 商户管理 | docs/business-system-map-for-operations-v0.1.html:637 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-018 | 招商租赁 | docs/business-system-map-for-operations-v0.1.html:643 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-019 | 物业服务 | docs/business-system-map-for-operations-v0.1.html:650 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-020 | 楼宇运营 | docs/business-system-map-for-operations-v0.1.html:656 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-021 | 第三方接入 | docs/business-system-map-for-operations-v0.1.html:661 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-022 | 留痕与异常 | docs/business-system-map-for-operations-v0.1.html:666 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-023 | 财务对账 | docs/business-system-map-for-operations-v0.1.html:671 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-024 | 持股分红 | docs/business-system-map-for-operations-v0.1.html:676 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-025 | 经营看板 | docs/business-system-map-for-operations-v0.1.html:681 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-026 | 各类入口 | docs/business-system-map-for-operations-v0.1.html:686 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-027 | 基础管理：先把综合体的盘子管清楚 | docs/business-system-map-for-operations-v0.1.html:694 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-028 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:698 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-029 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:714 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-030 | 票务权益：管卖什么票、给什么权益、怎么核销 | docs/business-system-map-for-operations-v0.1.html:727 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-031 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:731 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-032 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:760 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-033 | 票种、通票与权益类型（系统支持哪些种类） | docs/business-system-map-for-operations-v0.1.html:772 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-034 | 核销、退款与有效期规则 | docs/business-system-map-for-operations-v0.1.html:796 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-035 | 会员与积分规则 | docs/business-system-map-for-operations-v0.1.html:813 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-036 | 人脸验龄数据使用与删除 | docs/business-system-map-for-operations-v0.1.html:840 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-037 | 客人端：客人自己买票、预定、查询、积分和出示二维码 | docs/business-system-map-for-operations-v0.1.html:850 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-038 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:854 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-039 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:873 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-040 | 登录与关键规则 | docs/business-system-map-for-operations-v0.1.html:883 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-041 | 会员注册、认证与收费边界 | docs/business-system-map-for-operations-v0.1.html:898 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-042 | 会员积分活动与发券 | docs/business-system-map-for-operations-v0.1.html:907 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-043 | 会员营销明确边界 | docs/business-system-map-for-operations-v0.1.html:916 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-044 | 酒吧平板/工作手机：平板点酒，工作手机核销 | docs/business-system-map-for-operations-v0.1.html:929 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-045 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:933 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-046 | 平板图形点单（POS） | docs/business-system-map-for-operations-v0.1.html:953 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-047 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:963 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-048 | 触摸屏一体机：权益领取、现场服务和辅助售票 | docs/business-system-map-for-operations-v0.1.html:978 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-049 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:982 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-050 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:996 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-051 | 酒吧管理：从入场、开台到结账关台 | docs/business-system-map-for-operations-v0.1.html:1010 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-052 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1014 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-053 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1041 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-054 | 桌台/账单状态与经营规则 | docs/business-system-map-for-operations-v0.1.html:1053 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-055 | 桌台、菜单与优惠券 | docs/business-system-map-for-operations-v0.1.html:1088 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-056 | 正式未付款订单挂起 | docs/business-system-map-for-operations-v0.1.html:1101 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-057 | 服务点单：客人点专项服务，公司统一收款、再按名录分账 | docs/business-system-map-for-operations-v0.1.html:1120 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-058 | 怎么点、怎么收钱 | docs/business-system-map-for-operations-v0.1.html:1124 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-059 | 钱怎么分、怎么退 | docs/business-system-map-for-operations-v0.1.html:1135 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-060 | 供应链库存：管供应商、采购、库房、消耗和存酒 | docs/business-system-map-for-operations-v0.1.html:1151 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-061 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1155 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-062 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1174 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-063 | 库存类型与规则 | docs/business-system-map-for-operations-v0.1.html:1186 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-064 | 采购建议与门店要货 | docs/business-system-map-for-operations-v0.1.html:1208 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-065 | 外部经销商准入、价格与库存 | docs/business-system-map-for-operations-v0.1.html:1216 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-066 | 经销订单、付款与履约 | docs/business-system-map-for-operations-v0.1.html:1226 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-067 | 经销退货、退款、红冲与资金归属 | docs/business-system-map-for-operations-v0.1.html:1238 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-068 | 游乐管理：管项目开放、项目容量（实时在玩人数）和安全异常 | docs/business-system-map-for-operations-v0.1.html:1253 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-069 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1257 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-070 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1276 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-071 | 游乐类型与规则 | docs/business-system-map-for-operations-v0.1.html:1287 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-072 | 商户管理：商户在授权范围内完整使用自己的系统 | docs/business-system-map-for-operations-v0.1.html:1308 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-073 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1313 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-074 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1326 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-075 | 招商租赁与合同履约：从找商户到签约、履约、变更、退租 | docs/business-system-map-for-operations-v0.1.html:1339 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-076 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1343 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-077 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1357 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-078 | 物业服务：商户和现场的报修、投诉、整改都进工单 | docs/business-system-map-for-operations-v0.1.html:1370 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-079 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1374 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-080 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1388 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-081 | 楼宇运营：机电设备、能耗抄表、楼宇巡检 | docs/business-system-map-for-operations-v0.1.html:1401 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-082 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1405 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-083 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1414 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-084 | 员工手机端：排班、考勤、请假、薪资，自己手机上都能办 | docs/business-system-map-for-operations-v0.1.html:1427 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-085 | 日常工作 | docs/business-system-map-for-operations-v0.1.html:1431 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-086 | 排班、考勤与请假 | docs/business-system-map-for-operations-v0.1.html:1441 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-087 | 我的薪资 | docs/business-system-map-for-operations-v0.1.html:1455 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-088 | 员工提成、活动执行与人员服务边界 | docs/business-system-map-for-operations-v0.1.html:1467 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-089 | 第三方接入：外部系统继续做专业系统，平台拿回结果 | docs/business-system-map-for-operations-v0.1.html:1479 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-090 | 机器人配送与扫码交接 | docs/business-system-map-for-operations-v0.1.html:1545 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-091 | 视频监控（留点位/时间） | docs/business-system-map-for-operations-v0.1.html:1554 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-092 | 重要事项短信通知（2026-06-29 新增） | docs/business-system-map-for-operations-v0.1.html:1563 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-093 | 留痕与异常：重要动作留得住，出了问题追得回 | docs/business-system-map-for-operations-v0.1.html:1574 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-094 | 必须关注的动作 | docs/business-system-map-for-operations-v0.1.html:1578 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-095 | 怎样减少人工填写 | docs/business-system-map-for-operations-v0.1.html:1596 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-096 | 处理结果 | docs/business-system-map-for-operations-v0.1.html:1607 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-097 | 风险等级与风控规则 | docs/business-system-map-for-operations-v0.1.html:1619 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-098 | 财务对账：把经营事实整理成财务能确认的口径 | docs/business-system-map-for-operations-v0.1.html:1636 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-099 | 内部结算价目录（按商品规格逐项建目录） | docs/business-system-map-for-operations-v0.1.html:1639 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-100 | 结算配置中心（后台总控页） | docs/business-system-map-for-operations-v0.1.html:1641 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-101 | 项目零售参考价 | docs/business-system-map-for-operations-v0.1.html:1643 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-102 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1648 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-103 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1666 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-104 | 收入归属：哪类收入归哪个业态主体 | docs/business-system-map-for-operations-v0.1.html:1678 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-105 | 三方对账框架：系统流水、渠道对账单、资金到账两两核对 | docs/business-system-map-for-operations-v0.1.html:1697 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-106 | 对账与结算类型规则 | docs/business-system-map-for-operations-v0.1.html:1709 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-107 | 持股分红：按持股把经营成果定期分给主理人 | docs/business-system-map-for-operations-v0.1.html:1737 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-108 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1741 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-109 | 谁会用 | docs/business-system-map-for-operations-v0.1.html:1760 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-110 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1768 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-111 | 经营看板：让管理层和运营看得懂、能追问 | docs/business-system-map-for-operations-v0.1.html:1781 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-112 | 主要指标 | docs/business-system-map-for-operations-v0.1.html:1785 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-113 | 谁会看 | docs/business-system-map-for-operations-v0.1.html:1813 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-114 | 各类入口：不同人只看自己该看的、只做自己该做的 | docs/business-system-map-for-operations-v0.1.html:1827 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-115 | 相互关系：为什么这些子系统必须连在一起 | docs/business-system-map-for-operations-v0.1.html:1897 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-116 | 系统交付与上线：正式上线要做的安全加固和安装交付 | docs/business-system-map-for-operations-v0.1.html:1928 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-117 | 正式上线时的安全加固 | docs/business-system-map-for-operations-v0.1.html:1932 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-118 | 能自动识别环境的安装包 + 内附教程 | docs/business-system-map-for-operations-v0.1.html:1940 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-119 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1947 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-120 | 已确认规则和实施前输入项 | docs/business-system-map-for-operations-v0.1.html:1957 | 业务段一致；页脚日期元数据差异如上 |
+
+## 对抗式具体反例
+1. 用手环试图跳年龄核验：枚举43通用三道与44同场条件合取，地图800明确重复进出仍三道；无明文豁免。不虚构手环绕过。
+2. 第二段无人核销试改余额：枚举52明确有参与者仍逐家减除，只有从无第二段参与者才余额；并列17.5%，默认1至10家行合计100%，未混第一段和第二段。
+3. 用明文商户权限看客人：现PGM871仅第一/第二商户联系人例外，BSM客人检索脱敏仍成立；导出打印另授权且不继承页面例外。
+4. 以无通知不算异议期：BSM1566按商户专区可见次日起，完整自然日不可用才扣除，通知成败不影响；与积分独立账期不混。
+5. 退款批准与到账混淆：枚举退款成功才计退额，资金在途保持待付不重付，失败有重付期限；不把批准等于完成。
+6. BSM521种类须写HTML与1020客源、1068折扣理由：B/C操作员确认原意，按具体条款可配；未重新提出变更。
+7. 全部物业工单都强制双确认：1380已按分类型回访验收关闭，投诉按商户/消费客人不同分支，保洁不被一般句覆盖。
+8. 私人手机标题“考勤”强推现场打卡：930/1865明确查看考勤，1445明确工作手机打卡；标题是域名不是授权例外。
+9. 跨月借业务日回改历史：考勤班次结束例外与经营开台营业日区别明示；结算固化版本、冲正而非改历史。
+10. 单票无部分退款和订单“部分退款”不是同一粒度，不能以枚举目录取消已确认业务；股权建议80/20不覆盖工商实际。
+11. 实物积分券发券预占、领取实扣与退回EXPIRED不可用相容；EXPIRED描述流水内部状态且已有中文，不证明客人界面英文。
+12. 主理人店内经营数据可见与跨项目隔离同存，内部结算价仍需专权；不能推定财务审批含自审或受益人豁免。
+
+## 真实命令与结果
+- Python3 HTMLParser：两文件strict UTF8通过、UFFFD=0；duplicates=[]；badlinks=[]。枚举13thead/26th；地图27section/27h2/93h3，45a均未发现失效片段。
+- Python冻结定义正则逐条提取来源和html fence，再对现文substring：317条，316精确包含，BSM120唯一差异经difflib逐行对比只有页脚日期09-08→09-10，末尾换行表现不构成内容差异。
+- npm run verify:entry-anchors：exit0，1228注册表/1235账本/1244矩阵/1565镜像/440Markdown，PASS。
+- node --test tools/verify-entry-anchors.test.mjs：exit0，tests1 pass1 fail0；历史raw可放行，现行失效引用仍拒绝。
+- 没有运行全仓predeploy、浏览器或后端测试，不据此声称它们绿。没改HTML/业务代码/DB。
+
+## 历史16项及当前发现全集
+001/002/003/005/006/008/012/013/016已修现场仍保留，分别核租赁状态/注销一年/合同八类交叉/两类投诉/容量/表头/目录日期版本/物业分类分支；004技术性无缺陷；007/009/010/011细化无缺陷；014/015按B/C确认原意无需修。历史编号和误判证据不删。
+本席当前CX-01：两文件静态样式结构导航，技术性、无业务发明、工程缺陷否，依据GEN001/002/015、实际HTMLParser与源码；沿用M001-004，不新编号。
+本席当前未发现新增工程缺陷或添加项；修复队列候选空，需B2复核，不能单席定稿。BSM120日期元数据已透明报告而非隐藏不匹配。
+本席B1结论：PASS。不是模块PASS；必须等Grok完整票、四值检查、B2及B5。本次B3新增0。
+
+
+# M001 B2整批复核 — Codex
+版本：V0.41
+输入本次b1-self V0.40、b1-grok V0.19最后独占锁行起全文；候选findings V3.29最顶部M001段。两席均全335覆盖；Grok唯一GR01日期差与本席命令一致，接受其必须同步副本判断，不覆盖B1 FAIL。CX01映射004无缺陷；16旧ID及队列全否保留。GR01是审计锁副本问题，不进入HTML产品修复队列、不新增正式M001017，不复用012/013/016。按§5完整LOCK-AMEND同步BSM120日期，不改HTML、不借此增加业务规则。B/C继续以用户原意为准，Grok关于已列集合的解释不据以新增限制或改变HTML。全局治理HTML台账门禁红仍登记后续归属。本席B2 PASS，仅归并路线通过，不是模块PASS；B3累计4不变，锁同步尚未执行。
+
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M001 B1 完整独立复审 — Codex
+版本：V0.42
+范围：2文件2340行；317 HTML判据+18 GEN=335。B3累计4，状态IN_PROGRESS。先启动Grok，本席封存前未读取其V0.21 raw/JSON。本轮自算两文件SHA与上轮V0.40逐段完整阅读的字节完全一致，复用其全文原文取证；本轮重新评估全335判据及三线结论，未把旧PASS当本次结论。技能沿用已实际读取的grilling追问结构、verification-before-completion和receiving-code-review；不调用第三席。文档模块不声称已测试业务后端。
+
+## 文件覆盖与第一性原理
+- docs/business-enum-quick-reference-v0.1.html：1—308全读；SHA256 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66。
+- docs/business-system-map-for-operations-v0.1.html：1—2032全读；SHA256 eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66。
+枚举是197个明确问题答案，地图提供流程、责任、入口和跨域关系；删除任何一份会丢失其专有说明。静态CSS和导航只负责可读性，无业务发明，沿用M001-004技术性登记。页面不是产品实现完成声明；不能因为要求中有功能就声称已有后台。地图1—455样式结构、456—726总览治理、727—1009票务会员员工入口、1010—1252酒吧服务供应链、1253—1478游乐商户物业员工、1479—1738第三方留痕财务、1739—2032分红看板终端关系上线已确认规则及导航脚本全部覆盖。枚举1—308全部13表含巨型通票池与账单操作原句完整阅读。
+
+## 通用判据逐项
+| ID | 实核与判断 |
+|---|---|
+| GEN-001 | 两文件提供业务范围与枚举互补；合作模式两处一简表一模板解释，用途不同，不以同名删除。 |
+| GEN-002 | HTMLParser解析成功；27目录目标存在；setActive的sections非空由27有效锚点实证。未运行浏览器，不声称视觉或后台验收。 |
+| GEN-003 | 现有entry-anchors测试实际1/1 PASS；文档类不强制Maven。 |
+| GEN-004 | 静态HTML无用户输入执行；导航href均本地静态片段；不评未纳入业务控制器。 |
+| GEN-005 | 商户本域、项目隔离、导出单独授权与PGM联系人特例对象不冲突；不因平台管理员日常概述扩最高权限。 |
+| GEN-006 | 退款成功才计退额、补录复核才生效、历史不回改条款相容；未声称数据库事务已验。 |
+| GEN-007 | 入场多次同场不重复扣；流水只追加冲正；静态阅读无写竞争。 |
+| GEN-008 | 状态目录与流程适用对象对齐，退款部分态为订单聚合不推翻单张禁部分退款；例外与一般规则合取。 |
+| GEN-009 | 对账差异、付款在途/失败、缺档位暂挂均有已定义出口，不引入新状态。 |
+| GEN-010 | 受控工作设备和敏感取证范围明确；静态文件无真实客人记录/凭据；手机号新特例不扩客人员工。 |
+| GEN-011 | 订单、服务归属、移交和人工补录证据明确；安检已批准设备侧例外保留。 |
+| GEN-012 | 导航仅27节一次scroll扫描，无外部请求/持久化资源；合理静态规模。 |
+| GEN-013 | 内联CSS/JS，静态浏览器原生API，无额外依赖；未编译非本模块。 |
+| GEN-014 | 本模块无迁移或DB执行；条款不证明模式已实现。 |
+| GEN-015 | 中文、UTF8、13表13thead/26th；地图13表13thead，导航链接可达，无重复id。 |
+| GEN-016 | V0.07/V0.14和页脚日期真实存在；entry-anchors现跑PASS，旧红不是当前结果。 |
+| GEN-017 | 按冲突→细化→技术性→添加；B/C为操作员已确认原意，不转为容忍缺陷。 |
+| GEN-018 | 本票证据限实际HTML原文及本次命令；未实跑的浏览器/服务端不宣称通过。 |
+
+## 顺从式：全317条对照
+以下来源坐标来自现锁V0.14，逐条绑定本席已读的相同字节现文。本轮317/317摘录全文均包含于现HTML，BSM120日期已按获批09-10完成LOCK-AMEND双PASS及④⑤；三条考勤匹配，工作手机1445保持打卡。
+| ID | 标题 | HTML证据 | 结果 |
+|---|---|---|---|
+| BEQR-001 | 票种 | docs/business-enum-quick-reference-v0.1.html:29 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-002 | 票务策略状态 | docs/business-enum-quick-reference-v0.1.html:30 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-003 | 定价、售票与收款主体 | docs/business-enum-quick-reference-v0.1.html:32 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-004 | 年龄限制 | docs/business-enum-quick-reference-v0.1.html:33 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-005 | 通票赠酒下限 | docs/business-enum-quick-reference-v0.1.html:34 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-006 | 通票类型 | docs/business-enum-quick-reference-v0.1.html:35 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-007 | 权益类型 | docs/business-enum-quick-reference-v0.1.html:36 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-008 | 餐饮/零售券两种用法 | docs/business-enum-quick-reference-v0.1.html:37 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-009 | 资格判定 | docs/business-enum-quick-reference-v0.1.html:39 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-010 | 订单状态 | docs/business-enum-quick-reference-v0.1.html:40 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-011 | 票/权益状态 | docs/business-enum-quick-reference-v0.1.html:41 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-012 | 核销记录状态 | docs/business-enum-quick-reference-v0.1.html:43 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-013 | 手环入场 | docs/business-enum-quick-reference-v0.1.html:44 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-014 | 退款单状态 | docs/business-enum-quick-reference-v0.1.html:45 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-015 | 有效期类型 | docs/business-enum-quick-reference-v0.1.html:46 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-016 | 售票与退款原则 | docs/business-enum-quick-reference-v0.1.html:47 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-017 | 到期未核销款 | docs/business-enum-quick-reference-v0.1.html:48 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-018 | 域归属对照 | docs/business-enum-quick-reference-v0.1.html:49 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-019 | 跨域通票分配 | docs/business-enum-quick-reference-v0.1.html:51 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-020 | 酒吧通票可分配池 | docs/business-enum-quick-reference-v0.1.html:52 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-021 | 收费与免费权益结算 | docs/business-enum-quick-reference-v0.1.html:53 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-022 | 项目内部结算价 | docs/business-enum-quick-reference-v0.1.html:54 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-023 | 核销顺序 | docs/business-enum-quick-reference-v0.1.html:55 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-024 | 游乐核销归属 | docs/business-enum-quick-reference-v0.1.html:56 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-025 | 门票综合服务费 | docs/business-enum-quick-reference-v0.1.html:57 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-026 | 动态价与会员价 | docs/business-enum-quick-reference-v0.1.html:58 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-027 | 人脸验龄数据生命周期 | docs/business-enum-quick-reference-v0.1.html:60 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-028 | 会员唯一识别 | docs/business-enum-quick-reference-v0.1.html:65 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-029 | 会员注册 | docs/business-enum-quick-reference-v0.1.html:66 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-030 | 会员身份状态 | docs/business-enum-quick-reference-v0.1.html:68 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-031 | 等级与成长值 | docs/business-enum-quick-reference-v0.1.html:70 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-032 | 等级权益对照 | docs/business-enum-quick-reference-v0.1.html:71 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-033 | 积分与成长值来源 | docs/business-enum-quick-reference-v0.1.html:72 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-034 | 票务人次计算 | docs/business-enum-quick-reference-v0.1.html:73 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-035 | 有效消费与冻结 | docs/business-enum-quick-reference-v0.1.html:75 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-036 | 积分明细类型 | docs/business-enum-quick-reference-v0.1.html:77 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-037 | 积分兑换定价 | docs/business-enum-quick-reference-v0.1.html:78 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-038 | 商品规格 | docs/business-enum-quick-reference-v0.1.html:79 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-039 | 项目零售参考价 | docs/business-enum-quick-reference-v0.1.html:80 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-040 | 发券与核销结算 | docs/business-enum-quick-reference-v0.1.html:81 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-041 | 重复兑换与转赠 | docs/business-enum-quick-reference-v0.1.html:82 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-042 | 券包状态 | docs/business-enum-quick-reference-v0.1.html:83 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-043 | 积分结算账期 | docs/business-enum-quick-reference-v0.1.html:84 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-044 | 会员系统服务费 | docs/business-enum-quick-reference-v0.1.html:85 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-045 | 储值卡类型与收款主体 | docs/business-enum-quick-reference-v0.1.html:86 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-046 | 会员忠诚度扩展 | docs/business-enum-quick-reference-v0.1.html:87 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-047 | 会员注册与开卡 | docs/business-enum-quick-reference-v0.1.html:89 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-048 | 学生认证 | docs/business-enum-quick-reference-v0.1.html:90 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-049 | 会员积分活动状态 | docs/business-enum-quick-reference-v0.1.html:91 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-050 | 积分活动预算守恒 | docs/business-enum-quick-reference-v0.1.html:92 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-051 | 充值积分 | docs/business-enum-quick-reference-v0.1.html:93 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-052 | 会员营销边界 | docs/business-enum-quick-reference-v0.1.html:94 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-053 | 发券对象 | docs/business-enum-quick-reference-v0.1.html:95 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-054 | 桌台/卡座/吧台位状态 | docs/business-enum-quick-reference-v0.1.html:100 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-055 | 账单状态 | docs/business-enum-quick-reference-v0.1.html:101 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-056 | 订台定金状态 | docs/business-enum-quick-reference-v0.1.html:103 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-057 | 订卡邀请函状态 | docs/business-enum-quick-reference-v0.1.html:105 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-058 | 点酒方式 | docs/business-enum-quick-reference-v0.1.html:106 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-059 | 支付方式 | docs/business-enum-quick-reference-v0.1.html:107 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-060 | 销售提成 | docs/business-enum-quick-reference-v0.1.html:108 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-061 | 服务员提成 | docs/business-enum-quick-reference-v0.1.html:109 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-062 | 退菜退酒 | docs/business-enum-quick-reference-v0.1.html:110 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-063 | 高危动作（需审批/双证据） | docs/business-enum-quick-reference-v0.1.html:111 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-064 | 出品票据状态 | docs/business-enum-quick-reference-v0.1.html:112 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-065 | 账单操作 | docs/business-enum-quick-reference-v0.1.html:114 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-066 | 收银交班状态 | docs/business-enum-quick-reference-v0.1.html:115 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-067 | 最低消费 | docs/business-enum-quick-reference-v0.1.html:117 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-068 | 服务费 | docs/business-enum-quick-reference-v0.1.html:118 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-069 | 小费 | docs/business-enum-quick-reference-v0.1.html:119 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-070 | 客人存酒有效期与转存 | docs/business-enum-quick-reference-v0.1.html:120 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-071 | 存酒瓶数 | docs/business-enum-quick-reference-v0.1.html:122 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-072 | 套餐赠券适用范围 | docs/business-enum-quick-reference-v0.1.html:123 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-073 | 非低消商品 | docs/business-enum-quick-reference-v0.1.html:124 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-074 | 隐私桌台权限 | docs/business-enum-quick-reference-v0.1.html:125 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-075 | 桌台会话与菜单 | docs/business-enum-quick-reference-v0.1.html:126 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-076 | 桌台计时产品 | docs/business-enum-quick-reference-v0.1.html:127 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-077 | 门店支付方式 | docs/business-enum-quick-reference-v0.1.html:128 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-078 | 扫码点单身份 | docs/business-enum-quick-reference-v0.1.html:129 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-079 | 优惠券自动选择 | docs/business-enum-quick-reference-v0.1.html:130 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-080 | 优惠券付款预留 | docs/business-enum-quick-reference-v0.1.html:131 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-081 | 正式挂起订单状态 | docs/business-enum-quick-reference-v0.1.html:132 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-082 | 正式挂起订单规则 | docs/business-enum-quick-reference-v0.1.html:133 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-083 | 挂单取消与付款互斥 | docs/business-enum-quick-reference-v0.1.html:134 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-084 | 挂单坏账损耗 | docs/business-enum-quick-reference-v0.1.html:135 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-085 | 项目开放状态 | docs/business-enum-quick-reference-v0.1.html:140 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-086 | 场次状态 | docs/business-enum-quick-reference-v0.1.html:142 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-087 | 游乐「当天／每天」口径 | docs/business-enum-quick-reference-v0.1.html:144 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-088 | 容量双阈值 | docs/business-enum-quick-reference-v0.1.html:145 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-089 | 园区容量 | docs/business-enum-quick-reference-v0.1.html:146 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-090 | 设备关键/辅助分级 | docs/business-enum-quick-reference-v0.1.html:147 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-091 | 全园故障与补偿通票 | docs/business-enum-quick-reference-v0.1.html:148 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-092 | 安全严重度 | docs/business-enum-quick-reference-v0.1.html:149 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-093 | 巡检任务状态 | docs/business-enum-quick-reference-v0.1.html:150 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-094 | 越界类型 | docs/business-enum-quick-reference-v0.1.html:151 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-095 | 团体/包场 | docs/business-enum-quick-reference-v0.1.html:153 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-096 | 游乐增强阶段 | docs/business-enum-quick-reference-v0.1.html:154 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-097 | 供应合同模式 | docs/business-enum-quick-reference-v0.1.html:159 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-098 | 库房分类 | docs/business-enum-quick-reference-v0.1.html:160 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-099 | 物品大类 | docs/business-enum-quick-reference-v0.1.html:161 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-100 | 库存流水类型 | docs/business-enum-quick-reference-v0.1.html:162 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-101 | 高价值判定 | docs/business-enum-quick-reference-v0.1.html:164 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-102 | 跨主体借调 | docs/business-enum-quick-reference-v0.1.html:166 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-103 | 智能采购建议 | docs/business-enum-quick-reference-v0.1.html:168 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-104 | 门店要货履约状态 | docs/business-enum-quick-reference-v0.1.html:169 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-105 | 经销商状态 | docs/business-enum-quick-reference-v0.1.html:170 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-106 | 经销询价状态 | docs/business-enum-quick-reference-v0.1.html:171 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-107 | 经销价格目录状态 | docs/business-enum-quick-reference-v0.1.html:172 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-108 | 经销订单状态 | docs/business-enum-quick-reference-v0.1.html:173 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-109 | 经销退货单状态 | docs/business-enum-quick-reference-v0.1.html:174 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-110 | 经销库存外显 | docs/business-enum-quick-reference-v0.1.html:175 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-111 | 经销支付方式 | docs/business-enum-quick-reference-v0.1.html:176 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-112 | 经销库存预留 | docs/business-enum-quick-reference-v0.1.html:177 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-113 | 经销职责分离 | docs/business-enum-quick-reference-v0.1.html:178 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-114 | 经销取消、退货与开票 | docs/business-enum-quick-reference-v0.1.html:179 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-115 | 经销价格与税务快照 | docs/business-enum-quick-reference-v0.1.html:180 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-116 | 经销商停用撤权 | docs/business-enum-quick-reference-v0.1.html:181 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-117 | 经销资金归属 | docs/business-enum-quick-reference-v0.1.html:182 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-118 | 运营营业日 | docs/business-enum-quick-reference-v0.1.html:187 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-119 | 对账口径 | docs/business-enum-quick-reference-v0.1.html:188 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-120 | 对账差异四类 | docs/business-enum-quick-reference-v0.1.html:189 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-121 | 日结状态 | docs/business-enum-quick-reference-v0.1.html:190 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-122 | 差异处理状态 | docs/business-enum-quick-reference-v0.1.html:191 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-123 | 结算状态 | docs/business-enum-quick-reference-v0.1.html:192 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-124 | 综合通票定价 | docs/business-enum-quick-reference-v0.1.html:193 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-125 | 商户业态 | docs/business-enum-quick-reference-v0.1.html:195 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-126 | 合作模式 | docs/business-enum-quick-reference-v0.1.html:196 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-127 | 退款资金流向 | docs/business-enum-quick-reference-v0.1.html:197 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-128 | 物业费 | docs/business-enum-quick-reference-v0.1.html:198 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-129 | 能源费与损耗费 | docs/business-enum-quick-reference-v0.1.html:199 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-130 | 税费配置 | docs/business-enum-quick-reference-v0.1.html:201 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-131 | 三方对账框架 | docs/business-enum-quick-reference-v0.1.html:202 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-132 | 开票状态 | docs/business-enum-quick-reference-v0.1.html:203 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-133 | 接入的外部系统 | docs/business-enum-quick-reference-v0.1.html:208 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-134 | 客户标签 | docs/business-enum-quick-reference-v0.1.html:209 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-135 | 统一原则 | docs/business-enum-quick-reference-v0.1.html:210 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-136 | 接入状态 | docs/business-enum-quick-reference-v0.1.html:211 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-137 | 回流结果状态 | docs/business-enum-quick-reference-v0.1.html:212 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-138 | 风险四级 | docs/business-enum-quick-reference-v0.1.html:217 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-139 | 事件状态 | docs/business-enum-quick-reference-v0.1.html:218 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-140 | 主管复核强制项 | docs/business-enum-quick-reference-v0.1.html:219 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-141 | 经营异常处置状态 | docs/business-enum-quick-reference-v0.1.html:220 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-142 | 异常状态的统一出口 | docs/business-enum-quick-reference-v0.1.html:221 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-143 | 四类主体 | docs/business-enum-quick-reference-v0.1.html:226 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-144 | 经营主体关系 | docs/business-enum-quick-reference-v0.1.html:227 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-145 | 城市项目公司 | docs/business-enum-quick-reference-v0.1.html:228 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-146 | 运营公司职责 | docs/business-enum-quick-reference-v0.1.html:229 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-147 | 主要收入归属 | docs/business-enum-quick-reference-v0.1.html:230 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-148 | 合作模式 | docs/business-enum-quick-reference-v0.1.html:231 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-149 | 职级 | docs/business-enum-quick-reference-v0.1.html:232 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-150 | 终端十一端 | docs/business-enum-quick-reference-v0.1.html:233 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-151 | 最终权限计算 | docs/business-enum-quick-reference-v0.1.html:234 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-152 | 项目与敏感数据权限 | docs/business-enum-quick-reference-v0.1.html:235 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-153 | 终端开关优先级 | docs/business-enum-quick-reference-v0.1.html:236 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-154 | 综合体项目状态 | docs/business-enum-quick-reference-v0.1.html:237 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-155 | 商户/运营主体状态 | docs/business-enum-quick-reference-v0.1.html:238 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-156 | 合同状态 | docs/business-enum-quick-reference-v0.1.html:239 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-157 | 员工状态 | docs/business-enum-quick-reference-v0.1.html:240 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-158 | 设备状态 | docs/business-enum-quick-reference-v0.1.html:241 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-159 | 权限状态 | docs/business-enum-quick-reference-v0.1.html:242 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-160 | 招商线索状态 | docs/business-enum-quick-reference-v0.1.html:248 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-161 | 招商意向阶段 | docs/business-enum-quick-reference-v0.1.html:249 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-162 | 品牌/客户库类型 | docs/business-enum-quick-reference-v0.1.html:250 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-163 | 合同变更类型 | docs/business-enum-quick-reference-v0.1.html:251 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-164 | 退租结算状态 | docs/business-enum-quick-reference-v0.1.html:252 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-165 | 内部应付执行状态 | docs/business-enum-quick-reference-v0.1.html:253 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-166 | 合同审批链 | docs/business-enum-quick-reference-v0.1.html:255 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-167 | 租金/账单类型 | docs/business-enum-quick-reference-v0.1.html:256 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-168 | 营业额抽成模式 | docs/business-enum-quick-reference-v0.1.html:257 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-169 | 公区能源费 | docs/business-enum-quick-reference-v0.1.html:258 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-170 | 铺位租赁状态 | docs/business-enum-quick-reference-v0.1.html:259 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-171 | 物业工单类型 | docs/business-enum-quick-reference-v0.1.html:260 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-172 | 物业工单状态 | docs/business-enum-quick-reference-v0.1.html:262 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-173 | 商户服务工单状态 | docs/business-enum-quick-reference-v0.1.html:264 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-174 | 工单时效 | docs/business-enum-quick-reference-v0.1.html:265 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-175 | 楼宇机电设备状态 | docs/business-enum-quick-reference-v0.1.html:266 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-176 | 设备维保类型 | docs/business-enum-quick-reference-v0.1.html:267 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-177 | 能耗表计类型 | docs/business-enum-quick-reference-v0.1.html:268 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-178 | 抄表状态 | docs/business-enum-quick-reference-v0.1.html:269 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-179 | 能耗归集对象 | docs/business-enum-quick-reference-v0.1.html:270 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-180 | 楼宇巡检任务状态 | docs/business-enum-quick-reference-v0.1.html:271 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-181 | 楼宇巡检类型 | docs/business-enum-quick-reference-v0.1.html:273 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-182 | 考勤日结果 | docs/business-enum-quick-reference-v0.1.html:279 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-183 | 打卡方式 | docs/business-enum-quick-reference-v0.1.html:280 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-184 | 请假类型 | docs/business-enum-quick-reference-v0.1.html:281 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-185 | 请假单状态 | docs/business-enum-quick-reference-v0.1.html:282 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-186 | 薪资单构成 | docs/business-enum-quick-reference-v0.1.html:283 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-187 | 员工提成发放 | docs/business-enum-quick-reference-v0.1.html:285 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-188 | 服务订单状态 | docs/business-enum-quick-reference-v0.1.html:290 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-189 | 管理费方式 | docs/business-enum-quick-reference-v0.1.html:291 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-190 | 分红基数 | docs/business-enum-quick-reference-v0.1.html:296 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-191 | 分红比例 | docs/business-enum-quick-reference-v0.1.html:297 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-192 | 分红税务 | docs/business-enum-quick-reference-v0.1.html:298 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-193 | 分红周期 | docs/business-enum-quick-reference-v0.1.html:299 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-194 | 分红单状态 | docs/business-enum-quick-reference-v0.1.html:300 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-195 | 可选扣除项 | docs/business-enum-quick-reference-v0.1.html:301 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-196 | 发放保护线留存 | docs/business-enum-quick-reference-v0.1.html:302 | 现文原段一致；与全篇流程合取无冲突 |
+| BEQR-197 | 期间关账 | docs/business-enum-quick-reference-v0.1.html:303 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-001 | 整体说明：这套系统到底管什么 | docs/business-system-map-for-operations-v0.1.html:505 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-002 | 一笔业务怎么走 | docs/business-system-map-for-operations-v0.1.html:526 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-003 | 系统通用能力：数据可改可删、操作有引导、权限分岗 | docs/business-system-map-for-operations-v0.1.html:563 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-004 | 配置数据可以存档、也可以删除（删除要审批） | docs/business-system-map-for-operations-v0.1.html:566 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-005 | 后台的"新建/录入"改成分步引导 | docs/business-system-map-for-operations-v0.1.html:581 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-006 | 验证用的二维码一律动态刷新（间隔可在后台设定） | docs/business-system-map-for-operations-v0.1.html:584 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-007 | 平台管理员拥有全部日常功能权限 | docs/business-system-map-for-operations-v0.1.html:587 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-008 | 子系统入口 | docs/business-system-map-for-operations-v0.1.html:592 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-009 | 基础管理 | docs/business-system-map-for-operations-v0.1.html:596 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-010 | 票务权益 | docs/business-system-map-for-operations-v0.1.html:601 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-011 | 客人端 | docs/business-system-map-for-operations-v0.1.html:606 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-012 | 酒吧平板/工作手机 | docs/business-system-map-for-operations-v0.1.html:611 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-013 | 触摸屏一体机 | docs/business-system-map-for-operations-v0.1.html:616 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-014 | 酒吧管理 | docs/business-system-map-for-operations-v0.1.html:621 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-015 | 供应链库存 | docs/business-system-map-for-operations-v0.1.html:626 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-016 | 游乐管理 | docs/business-system-map-for-operations-v0.1.html:631 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-017 | 商户管理 | docs/business-system-map-for-operations-v0.1.html:637 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-018 | 招商租赁 | docs/business-system-map-for-operations-v0.1.html:643 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-019 | 物业服务 | docs/business-system-map-for-operations-v0.1.html:650 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-020 | 楼宇运营 | docs/business-system-map-for-operations-v0.1.html:656 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-021 | 第三方接入 | docs/business-system-map-for-operations-v0.1.html:661 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-022 | 留痕与异常 | docs/business-system-map-for-operations-v0.1.html:666 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-023 | 财务对账 | docs/business-system-map-for-operations-v0.1.html:671 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-024 | 持股分红 | docs/business-system-map-for-operations-v0.1.html:676 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-025 | 经营看板 | docs/business-system-map-for-operations-v0.1.html:681 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-026 | 各类入口 | docs/business-system-map-for-operations-v0.1.html:686 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-027 | 基础管理：先把综合体的盘子管清楚 | docs/business-system-map-for-operations-v0.1.html:694 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-028 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:698 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-029 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:714 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-030 | 票务权益：管卖什么票、给什么权益、怎么核销 | docs/business-system-map-for-operations-v0.1.html:727 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-031 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:731 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-032 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:760 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-033 | 票种、通票与权益类型（系统支持哪些种类） | docs/business-system-map-for-operations-v0.1.html:772 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-034 | 核销、退款与有效期规则 | docs/business-system-map-for-operations-v0.1.html:796 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-035 | 会员与积分规则 | docs/business-system-map-for-operations-v0.1.html:813 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-036 | 人脸验龄数据使用与删除 | docs/business-system-map-for-operations-v0.1.html:840 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-037 | 客人端：客人自己买票、预定、查询、积分和出示二维码 | docs/business-system-map-for-operations-v0.1.html:850 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-038 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:854 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-039 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:873 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-040 | 登录与关键规则 | docs/business-system-map-for-operations-v0.1.html:883 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-041 | 会员注册、认证与收费边界 | docs/business-system-map-for-operations-v0.1.html:898 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-042 | 会员积分活动与发券 | docs/business-system-map-for-operations-v0.1.html:907 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-043 | 会员营销明确边界 | docs/business-system-map-for-operations-v0.1.html:916 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-044 | 酒吧平板/工作手机：平板点酒，工作手机核销 | docs/business-system-map-for-operations-v0.1.html:929 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-045 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:933 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-046 | 平板图形点单（POS） | docs/business-system-map-for-operations-v0.1.html:953 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-047 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:963 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-048 | 触摸屏一体机：权益领取、现场服务和辅助售票 | docs/business-system-map-for-operations-v0.1.html:978 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-049 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:982 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-050 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:996 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-051 | 酒吧管理：从入场、开台到结账关台 | docs/business-system-map-for-operations-v0.1.html:1010 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-052 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1014 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-053 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1041 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-054 | 桌台/账单状态与经营规则 | docs/business-system-map-for-operations-v0.1.html:1053 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-055 | 桌台、菜单与优惠券 | docs/business-system-map-for-operations-v0.1.html:1088 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-056 | 正式未付款订单挂起 | docs/business-system-map-for-operations-v0.1.html:1101 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-057 | 服务点单：客人点专项服务，公司统一收款、再按名录分账 | docs/business-system-map-for-operations-v0.1.html:1120 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-058 | 怎么点、怎么收钱 | docs/business-system-map-for-operations-v0.1.html:1124 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-059 | 钱怎么分、怎么退 | docs/business-system-map-for-operations-v0.1.html:1135 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-060 | 供应链库存：管供应商、采购、库房、消耗和存酒 | docs/business-system-map-for-operations-v0.1.html:1151 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-061 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1155 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-062 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1174 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-063 | 库存类型与规则 | docs/business-system-map-for-operations-v0.1.html:1186 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-064 | 采购建议与门店要货 | docs/business-system-map-for-operations-v0.1.html:1208 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-065 | 外部经销商准入、价格与库存 | docs/business-system-map-for-operations-v0.1.html:1216 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-066 | 经销订单、付款与履约 | docs/business-system-map-for-operations-v0.1.html:1226 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-067 | 经销退货、退款、红冲与资金归属 | docs/business-system-map-for-operations-v0.1.html:1238 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-068 | 游乐管理：管项目开放、项目容量（实时在玩人数）和安全异常 | docs/business-system-map-for-operations-v0.1.html:1253 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-069 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1257 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-070 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1276 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-071 | 游乐类型与规则 | docs/business-system-map-for-operations-v0.1.html:1287 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-072 | 商户管理：商户在授权范围内完整使用自己的系统 | docs/business-system-map-for-operations-v0.1.html:1308 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-073 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1313 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-074 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1326 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-075 | 招商租赁与合同履约：从找商户到签约、履约、变更、退租 | docs/business-system-map-for-operations-v0.1.html:1339 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-076 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1343 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-077 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1357 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-078 | 物业服务：商户和现场的报修、投诉、整改都进工单 | docs/business-system-map-for-operations-v0.1.html:1370 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-079 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1374 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-080 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1388 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-081 | 楼宇运营：机电设备、能耗抄表、楼宇巡检 | docs/business-system-map-for-operations-v0.1.html:1401 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-082 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1405 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-083 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1414 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-084 | 员工手机端：排班、考勤、请假、薪资，自己手机上都能办 | docs/business-system-map-for-operations-v0.1.html:1427 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-085 | 日常工作 | docs/business-system-map-for-operations-v0.1.html:1431 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-086 | 排班、考勤与请假 | docs/business-system-map-for-operations-v0.1.html:1441 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-087 | 我的薪资 | docs/business-system-map-for-operations-v0.1.html:1455 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-088 | 员工提成、活动执行与人员服务边界 | docs/business-system-map-for-operations-v0.1.html:1467 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-089 | 第三方接入：外部系统继续做专业系统，平台拿回结果 | docs/business-system-map-for-operations-v0.1.html:1479 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-090 | 机器人配送与扫码交接 | docs/business-system-map-for-operations-v0.1.html:1545 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-091 | 视频监控（留点位/时间） | docs/business-system-map-for-operations-v0.1.html:1554 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-092 | 重要事项短信通知（2026-06-29 新增） | docs/business-system-map-for-operations-v0.1.html:1563 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-093 | 留痕与异常：重要动作留得住，出了问题追得回 | docs/business-system-map-for-operations-v0.1.html:1574 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-094 | 必须关注的动作 | docs/business-system-map-for-operations-v0.1.html:1578 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-095 | 怎样减少人工填写 | docs/business-system-map-for-operations-v0.1.html:1596 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-096 | 处理结果 | docs/business-system-map-for-operations-v0.1.html:1607 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-097 | 风险等级与风控规则 | docs/business-system-map-for-operations-v0.1.html:1619 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-098 | 财务对账：把经营事实整理成财务能确认的口径 | docs/business-system-map-for-operations-v0.1.html:1636 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-099 | 内部结算价目录（按商品规格逐项建目录） | docs/business-system-map-for-operations-v0.1.html:1639 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-100 | 结算配置中心（后台总控页） | docs/business-system-map-for-operations-v0.1.html:1641 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-101 | 项目零售参考价 | docs/business-system-map-for-operations-v0.1.html:1643 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-102 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1648 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-103 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1666 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-104 | 收入归属：哪类收入归哪个业态主体 | docs/business-system-map-for-operations-v0.1.html:1678 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-105 | 三方对账框架：系统流水、渠道对账单、资金到账两两核对 | docs/business-system-map-for-operations-v0.1.html:1697 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-106 | 对账与结算类型规则 | docs/business-system-map-for-operations-v0.1.html:1709 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-107 | 持股分红：按持股把经营成果定期分给主理人 | docs/business-system-map-for-operations-v0.1.html:1737 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-108 | 主要功能 | docs/business-system-map-for-operations-v0.1.html:1741 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-109 | 谁会用 | docs/business-system-map-for-operations-v0.1.html:1760 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-110 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1768 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-111 | 经营看板：让管理层和运营看得懂、能追问 | docs/business-system-map-for-operations-v0.1.html:1781 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-112 | 主要指标 | docs/business-system-map-for-operations-v0.1.html:1785 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-113 | 谁会看 | docs/business-system-map-for-operations-v0.1.html:1813 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-114 | 各类入口：不同人只看自己该看的、只做自己该做的 | docs/business-system-map-for-operations-v0.1.html:1827 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-115 | 相互关系：为什么这些子系统必须连在一起 | docs/business-system-map-for-operations-v0.1.html:1897 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-116 | 系统交付与上线：正式上线要做的安全加固和安装交付 | docs/business-system-map-for-operations-v0.1.html:1928 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-117 | 正式上线时的安全加固 | docs/business-system-map-for-operations-v0.1.html:1932 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-118 | 能自动识别环境的安装包 + 内附教程 | docs/business-system-map-for-operations-v0.1.html:1940 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-119 | 和谁有关 | docs/business-system-map-for-operations-v0.1.html:1947 | 现文原段一致；与全篇流程合取无冲突 |
+| BSM-120 | 已确认规则和实施前输入项 | docs/business-system-map-for-operations-v0.1.html:1957 | 现文原段一致；日期副本已同步 |
+
+## 对抗式具体反例
+1. 用手环试图跳年龄核验：枚举43通用三道与44同场条件合取，地图800明确重复进出仍三道；无明文豁免。不虚构手环绕过。
+2. 第二段无人核销试改余额：枚举52明确有参与者仍逐家减除，只有从无第二段参与者才余额；并列17.5%，默认1至10家行合计100%，未混第一段和第二段。
+3. 用明文商户权限看客人：现PGM871仅第一/第二商户联系人例外，BSM客人检索脱敏仍成立；导出打印另授权且不继承页面例外。
+4. 以无通知不算异议期：BSM1566按商户专区可见次日起，完整自然日不可用才扣除，通知成败不影响；与积分独立账期不混。
+5. 退款批准与到账混淆：枚举退款成功才计退额，资金在途保持待付不重付，失败有重付期限；不把批准等于完成。
+6. BSM521种类须写HTML与1020客源、1068折扣理由：B/C操作员确认原意，按具体条款可配；未重新提出变更。
+7. 全部物业工单都强制双确认：1380已按分类型回访验收关闭，投诉按商户/消费客人不同分支，保洁不被一般句覆盖。
+8. 私人手机标题“考勤”强推现场打卡：930/1865明确查看考勤，1445明确工作手机打卡；标题是域名不是授权例外。
+9. 跨月借业务日回改历史：考勤班次结束例外与经营开台营业日区别明示；结算固化版本、冲正而非改历史。
+10. 单票无部分退款和订单“部分退款”不是同一粒度，不能以枚举目录取消已确认业务；股权建议80/20不覆盖工商实际。
+11. 实物积分券发券预占、领取实扣与退回EXPIRED不可用相容；EXPIRED描述流水内部状态且已有中文，不证明客人界面英文。
+12. 主理人店内经营数据可见与跨项目隔离同存，内部结算价仍需专权；不能推定财务审批含自审或受益人豁免。
+
+## 真实命令与结果（明确复用边界）
+本轮新跑哈希、映射、317摘录、UTF8及HTMLParser。下列entry-anchors与其测试、完整结构计数是同一会话V0.40实际结果，本轮文件字节未变，复用而未重跑；不声称新跑。
+- Python3 HTMLParser：两文件strict UTF8通过、UFFFD=0；duplicates=[]；badlinks=[]。枚举13thead/26th；地图27section/27h2/93h3，45a均未发现失效片段。
+- 本轮新跑Python冻结定义正则逐条提取来源和html fence，对现文substring：317/317一致，M001映射335且无缺号；两文件哈希与V0.40全文阅读时相同。
+- npm run verify:entry-anchors：exit0，1228注册表/1235账本/1244矩阵/1565镜像/440Markdown，PASS。
+- node --test tools/verify-entry-anchors.test.mjs：exit0，tests1 pass1 fail0；历史raw可放行，现行失效引用仍拒绝。
+- 没有运行全仓predeploy、浏览器或后端测试，不据此声称它们绿。没改HTML/业务代码/DB。
+
+## 历史16项及当前发现全集
+001/002/003/005/006/008/012/013/016已修现场仍保留，分别核租赁状态/注销一年/合同八类交叉/两类投诉/容量/表头/目录日期版本/物业分类分支；004技术性无缺陷；007/009/010/011细化无缺陷；014/015按B/C确认原意无需修。历史编号和误判证据不删。
+本席当前CX-01：两文件静态样式结构导航，技术性、无业务发明、工程缺陷否，依据GEN001/002/015、实际HTMLParser与源码；沿用M001-004，不新编号。
+本席当前未发现新增工程缺陷或添加项；修复队列候选空，需B2复核，不能单席定稿。上轮Grok GR01与本席已查出的日期差已通过完整LOCK-AMEND消除，所有旧FAIL原票保留。本轮没有旧日期残留，不给它新产品ID。
+本席B1结论：PASS。不是模块PASS；必须等Grok完整票、四值检查、B2及B5。本次B3新增0。
+
+
+# M001新锁B2整批复核 — Codex
+版本：V0.43
+两输入b1-self V0.42与b1-grok V0.21最后独占锁行起完整报告均已读；候选findings V3.31。CX01→004，技术性无业务发明无缺陷；Grok当前空集；旧GR01已完整LOCK-AMEND同步、不造017、不复用旧ID。16项分类、队列否准确，014/015用户原意不是容忍缺陷。无添加无questions。全局PGM台账红保留归属，不改业务文件。本席B2 PASS；队列空，双PASS后跳B3/B4进B5-r4，累计B3=4不变，尚非模块PASS。

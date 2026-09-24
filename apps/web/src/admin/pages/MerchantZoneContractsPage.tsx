@@ -1,10 +1,10 @@
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
-import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, MerchantZoneContractRow } from "../types";
 
@@ -16,7 +16,7 @@ const TEXT = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  draft: "草拟",
+  drafting: "草拟",
   pending_confirmation: "待确认",
   pending_effective: "待生效",
   effective: "已生效",
@@ -25,6 +25,14 @@ const STATUS_LABELS: Record<string, string> = {
   terminated: "已终止",
   archived: "归档",
 };
+
+// M023-003：未知码给中文占位，不把英文原码显示给用户。
+const UNKNOWN_STATUS = "未知状态";
+
+function statusLabel(code: string | null | undefined): string {
+  if (!code) return "-";
+  return STATUS_LABELS[code] ?? UNKNOWN_STATUS;
+}
 
 // ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
 function shortId(id: string | null | undefined): string {
@@ -38,7 +46,8 @@ function money(cent: number | null | undefined) {
 }
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染合同表对应子集。
-// URL 约定：?kpi=contracts[&subset=effective]。TraceLink（合同/空间下钻）在聚焦表内保留。
+// URL 约定：?kpi=contracts[&subset=effective]。
+// M023-005：本页只对商户账号开放，合同工作台/空间页需平台权限、商户点了没反应，故合同号/空间/续签自一律纯文本（整行点开明细抽屉）。
 type KpiFocus = { subset: "all" | "effective" };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
@@ -48,31 +57,27 @@ function readKpiFocusFromUrl(): KpiFocus | null {
   return { subset: params.get("subset") === "effective" ? "effective" : "all" };
 }
 
-export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
+export function MerchantZoneContractsPage({ api, setGlobalError }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneContractRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
-  // 行明细抽屉：整行可点 → 该合同完整字段（日期中文·金额¥·状态中文·合同/空间引用 TraceLink）。
+  // 行明细抽屉：整行可点 → 该合同完整字段（日期中文·金额元·状态中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   function openContractDetail(row: MerchantZoneContractRow) {
     setDetail({
       title: `合同明细 · ${shortId(row.id)}`,
       fields: [
-        { label: "合同", value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.id}>{row.id}</TraceLink> },
+        { label: "合同", value: row.id },
         { label: "租期", value: `${cnDate(row.effectiveDate)} ~ ${cnDate(row.expiryDate)}` },
         {
           label: "空间",
-          value: (row.spaceIds ?? []).length > 0
-            ? (row.spaceIds ?? []).map((sid, i) => <React.Fragment key={sid}>{i > 0 ? "、" : ""}<TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={sid}>{sid}</TraceLink></React.Fragment>)
-            : "—",
+          value: (row.spaceIds ?? []).length > 0 ? (row.spaceIds ?? []).join("、") : "—",
         },
-        { label: "状态", value: STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "—" },
+        { label: "状态", value: statusLabel(row.lifecycleStatus) },
         { label: "押金", value: money(row.depositCent) },
         {
           label: "续签自",
-          value: row.renewedFromContractId
-            ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.renewedFromContractId}>{row.renewedFromContractId}</TraceLink>
-            : "—",
+          value: row.renewedFromContractId ?? "—",
         },
       ],
     });
@@ -127,20 +132,12 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-zone-contract-row-${row.id}`}
               onClick={() => openContractDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}>
-              <td className="admin-id-cell" title={row.id} onClick={(event) => event.stopPropagation()}>
-                <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.id}>{shortId(row.id)}</TraceLink>
-              </td>
+              <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
               <td>{cnDate(row.effectiveDate)} ~ {cnDate(row.expiryDate)}</td>
-              <td onClick={(event) => event.stopPropagation()}>{(row.spaceIds ?? []).length > 0
-                ? (row.spaceIds ?? []).map((sid, i) => <React.Fragment key={sid}>{i > 0 ? "、" : ""}<TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={sid}>{sid}</TraceLink></React.Fragment>)
-                : "-"}</td>
-              <td>{STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "-"}</td>
+              <td>{(row.spaceIds ?? []).length > 0 ? (row.spaceIds ?? []).join("、") : "-"}</td>
+              <td>{statusLabel(row.lifecycleStatus)}</td>
               <td className="admin-num">{money(row.depositCent)}</td>
-              <td className="admin-id-cell" title={row.renewedFromContractId ?? undefined} onClick={(event) => event.stopPropagation()}>
-                {row.renewedFromContractId
-                  ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.renewedFromContractId}>{shortId(row.renewedFromContractId)}</TraceLink>
-                  : shortId(row.renewedFromContractId)}
-              </td>
+              <td className="admin-id-cell" title={row.renewedFromContractId ?? undefined}>{shortId(row.renewedFromContractId)}</td>
             <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同详情" onClick={(event) => { event.stopPropagation(); openContractDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>

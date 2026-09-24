@@ -1,4 +1,5 @@
 package com.complex.platform.leasing;
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -212,6 +213,7 @@ class LeasingServiceTests {
 
     @Test
     void signIntentWithoutMerchantAutoCreatesFormalMerchant() {
+        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("lease-current-project"));
         // 1.4 决策A：merchant_id 空 → 签约自动建正式商户，带入线索联系人/业态、四类主体默认同一公司。
         when(contractService.createDraft(any())).thenReturn(new ContractRecord(
                 "ctr_auto", "mch_auto", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
@@ -222,6 +224,11 @@ class LeasingServiceTests {
                 null, null, null, "leasing_auto", "active", Instant.now(), Instant.now()));
         LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
                 "钱七", "13800001111", "online_inquiry", "retail", "sp_1", null, null, "k1"));
+        // 本例验证已归属意向的签约调用点；线索创建归属由其所属模块另审。
+        repo.saveLead(new LeasingLeadRecord(lead.id(), lead.contactName(), lead.contactPhone(), lead.source(),
+                lead.intendedBusinessType(), lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(),
+                lead.ownerUserId(), lead.status(), lead.lostOrHoldReason(), lead.lastFollowUpAt(),
+                "lease-current-project", lead.createdAt(), lead.updatedAt()));
         LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), "sp_1", null, Map.of(), "k2"));
         service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "k4"));
 
@@ -231,19 +238,22 @@ class LeasingServiceTests {
 
         org.mockito.ArgumentCaptor<MerchantProfileRequest> captor =
                 org.mockito.ArgumentCaptor.forClass(MerchantProfileRequest.class);
-        verify(platformService).createMerchant(captor.capture());
+        var order = org.mockito.Mockito.inOrder(platformService);
+        order.verify(platformService).createMerchant(captor.capture());
         MerchantProfileRequest req = captor.getValue();
         assertThat(req.contactName()).isEqualTo("钱七");
         assertThat(req.contactPhone()).isEqualTo("13800001111");
         assertThat(req.merchantType()).isEqualTo("retail");
-        assertThat(req.contractEntityId()).isEqualTo("cs");
-        assertThat(req.businessEntityId()).isEqualTo("cs");
-        assertThat(req.settlementEntityId()).isEqualTo("cs");
+        org.junit.jupiter.api.Assertions.assertAll(
+                () -> assertThat(req.projectId()).isEqualTo("lease-current-project"),
+                () -> assertThat(req.contractEntityId()).isNull(),
+                () -> assertThat(req.businessEntityId()).isNull(),
+                () -> assertThat(req.settlementEntityId()).isNull());
 
         // AUD-003：自动建商户后必建"四主体"权威绑定（经营/合同/结算主体默认同一公司=cs）。
         org.mockito.ArgumentCaptor<com.complex.platform.governance.dto.BusinessEntityBindingRequest> bindingCaptor =
                 org.mockito.ArgumentCaptor.forClass(com.complex.platform.governance.dto.BusinessEntityBindingRequest.class);
-        verify(platformService).createBusinessEntityBinding(bindingCaptor.capture());
+        order.verify(platformService).createBusinessEntityBinding(bindingCaptor.capture());
         com.complex.platform.governance.dto.BusinessEntityBindingRequest binding = bindingCaptor.getValue();
         assertThat(binding.merchantId()).isEqualTo("mch_auto");
         assertThat(binding.operationEntityId()).isEqualTo("cs");

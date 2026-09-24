@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 // verify:tenant-isolation
 // 租户隔离机审闸口（对齐 docs/data-isolation-and-tenant-scope-security-spec-v0.1.md §6A.1，
 // 闭合 ISO-GAP-02「无 verify:tenant-isolation 自动闸口」）。
@@ -145,6 +146,8 @@ function extractReferencedTables(sql, cteNames) {
   // EXTRACT(<unit> FROM <expr>) 的 FROM 是函数语法而非表引用；不中和会把 open_time/close_time
   // 等列名(EXTRACT(EPOCH FROM open_time))误判为未登记表。抽取前就地中和该语法 FROM。
   sql = sql.replace(/\bEXTRACT\s*\(\s*\w+\s+FROM\b/gi, "EXTRACT(");
+  // IS [NOT] DISTINCT FROM 是比较运算符而非表引用；不中和会把其后的别名（如 d.merchant_id 的 d）误判为未登记表（M029-002）。
+  sql = sql.replace(/\bIS\s+(?:NOT\s+)?DISTINCT\s+FROM\b/gi, "IS_DISTINCT");
   const tables = new Set();
   const patterns = [
     new RegExp(`\\bFROM\\s+${TABLE_TOKEN}`, "gi"),

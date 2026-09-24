@@ -802,3 +802,438 @@ r1 表 003 处置仍写「fake 实现 `setMerchantArchiveReason` 并断言理由
 本席 B2-r2：**PASS**
 
 未经双 PASS 不进 B3，更不称模块 PASS。步骤仍 B2，M011 `IN_PROGRESS`，B3=0。不覆盖上方 B1 FAIL 与 B2-r1 FAIL 原文。
+
+
+-----
+
+CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
+
+# M011 B1 Grok 独立审计原文（当前锁完整重审）
+
+- 席位：Grok 独立只读席乙（固定 grok-4.6 xhigh）
+- 阶段：B1 修复前整模块全量审计（M010 现锁 B1/B2/B5 双 PASS 已关闭后，严格串行进入本模块）
+- 报告自身版本：V0.04（指定路径已有 V0.01 B1 + V0.02 B2-r1 + V0.03 B2-r2；本次完整报告追加，不覆盖）
+- 模块：M011 — 综合体/集团/项目公司/业态主体拓扑与四类主体绑定／后台验证／第1段
+- 计划源：`docs/audit-2026-09/plan/modules.md` FILES 3；计划冻结有效内容行 1342 仅为切分元信息，本次按工作区全文审
+- 冻结判据：87 条（69 HTML + 18 GEN）；映射行自读 `criteria-lock.md` V0.14 与 COUNT=87 unique=87 MISSING=[]
+- 结论：**PASS**
+- 工程缺陷成立、建议入 B2 修复队列的临时编号：**无**
+- 只登记、建议队列「否」：OBS-R-01…OBS-R-12（不含新正式缺陷）
+- 添加项：无（不代用户回答 2.2）
+- 未修源码/测试/SQL/HTML/.git/ledger/findings/questions/锁；未 fetch/worktree/提交推送部署；未装依赖；未派子代理；未调 MCP；未读本次 `M011-b1-self-raw` 新增正文；未跑 Maven（避免共享 target 与库竞争）；未建库删库、未 DDL、未写业务数据、未建临时库
+- 本报告不表示全仓或发布门禁通过。不以测试绿代审（本席未新跑三文件测试）。历史 B3 累计 1 保持，本席不改 ledger。
+
+## 0. 技能自核（V0.17 §6，按 B1 收窄）
+
+本席实际读取并按收窄口径使用：
+
+| 技能 | 本机路径 | 用法 |
+|---|---|---|
+| using-superpowers | `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/using-superpowers/SKILL.md` | 先核技能再取证；用户指令与 controller 优先于技能本体（禁止子代理处按用户指令收窄） |
+| grilling / grill-me | mattpocock `productivity/grilling/SKILL.md`；`grill-me/SKILL.md` 仅转发 | 只用追问树自己取证，不向操作员发问、不派子代理 |
+| codebase-design | `.../engineering/codebase-design/SKILL.md` | 测缝深度：控制器脱敏缝、服务状态机缝、JDBC 约束缝；不派 DESIGN-IT-TWICE |
+| diagnosing-bugs | `.../engineering/diagnosing-bugs/SKILL.md` | 以「断言能否因生产/夹具改错而红」代替本席跑测；不改生产代码 |
+| systematic-debugging | superpowers 同名 | 只借读错误→追数据流；不作无 ID 插桩 |
+| verification-before-completion | superpowers 同名 | 锁哈希/行数/HTML 命中/SELECT 先跑再写；**不声称测试已绿** |
+| ponytail-review | `~/.claude/plugins/cache/ponytail/ponytail/4.9.0/skills/ponytail-review/SKILL.md` | 只列可删复杂度，不落地 |
+| writing-for-agents | mattpocock 同名 | 本 raw 步骤+完成判据同文件 |
+| git-guardrails-claude-code | mattpocock `misc/` | 存在；本席未改 git、未安装 hook |
+| long-running-background-tasks | `~/.grok/bundled/skills/long-running-background-tasks/SKILL.md` | 本席不跑 Maven，未起 monitor |
+| tdd / test-driven-development | 本机存在 | **B1 禁止修复，不调用落测试** |
+
+B1 不适用、按 controller 收窄不调用：brainstorming / writing-plans（A）、ponytail（B3）、requesting-code-review（B4）、receiving-code-review（甲席收乙席）、resolving-merge-conflicts（无合并）。
+
+缺口（不冒称调用）：
+
+- `batch-grill-me`：本机技能树未找到
+- `ubiquitous-language`：本机技能树未找到（`domain-modeling` 存在，V0.17 明确不用）
+- Arc `audit` 会派评审子代理并另写 `docs/arc/audits/`：与双席/§7 冲突，**不调用**
+
+明确不用（controller 划掉）：executing-plans、dispatching-parallel-agents、subagent-driven-development、using-git-worktrees、finishing-a-development-branch、research、domain-modeling、code-review（mattpocock）、ponytail-audit/debt/gain。
+
+## 1. 锁哈希与范围核验
+
+独立命令（独占锁行已写在本次报告第一行，此处不重复该标签）：
+
+- CMD-LOCK：`sha256sum docs/audit-2026-09/plan/criteria-lock.md | awk '{print $1}'`
+- OUT-LOCK：`b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`
+- sidecar `plan/criteria-lock.sha256` 同值
+- ledger 顶行 `CRITERIA-LOCK-SHA256:` 同值（文件内另有历史行 `cf25d716…`，本席以顶行为现行基准，不改文件）
+- `criteria-lock.md` 版本 **V0.14**（历史 B1 为 V0.11 / `b012328f…`，不得抄旧值）
+- 映射行逐字：
+
+```
+M011 → [BEQR-063, BEQR-074, BEQR-143, BEQR-144, BEQR-145, BEQR-146, BEQR-147, BEQR-148, BEQR-149, BEQR-150, BEQR-151, BEQR-152, BEQR-153, BEQR-154, BEQR-155, BEQR-156, BEQR-157, BEQR-158, BEQR-159, BEQR-166, BEQR-189, BSM-001, BSM-003, BSM-004, BSM-005, BSM-006, BSM-007, BSM-009, BSM-028, BSM-029, BSM-072, BSM-074, BSM-114, BSM-115, BSM-120, GEN-001, GEN-002, GEN-003, GEN-004, GEN-005, GEN-006, GEN-007, GEN-008, GEN-009, GEN-010, GEN-011, GEN-012, GEN-013, GEN-014, GEN-015, GEN-016, GEN-017, GEN-018, PGM-001, PGM-002, PGM-003, PGM-004, PGM-005, PGM-006, PGM-007, PGM-008, PGM-009, PGM-010, PGM-011, PGM-012, PGM-013, PGM-014, PGM-015, PGM-016, PGM-017, PGM-018, PGM-019, PGM-020, PGM-021, PGM-026, PGM-027, PGM-031, PGM-035, PGM-040, PGM-041, PGM-042, PGM-043, PGM-044, PGM-048, PGM-060, PGM-065, PGM-066]
+```
+
+- 解析定义区 401 条；上列 87 条 MISSING=[]；HTML 锚点 69 + GEN 18
+- `plan/modules.md` M011 FILES 3 条与用户清单逐字相同
+- 3 文件 `git ls-files -z -- <3 paths> | xargs -0 cat | wc -l` → **2776**（计划冻结 1342 仅历史元信息；当前 532/760/1484）
+- HEAD：`main` = `e456ba96c84185c8d39f18f548011daac48a6466`（本席未 `git fetch`）
+- 三测试文件工作区状态 `MM`（已跟踪且有未提交改动）；本席审 **工作区当前全文**，不把冻结 1342 当漏审借口
+- 本席未设 `GIT_INDEX_FILE`，未动主索引
+
+三份 HTML 只读、未改。关键锚点对本席读取的现行 HTML **命中**：
+
+| 锁 ID | 锁内来源行 | 现行 HTML 命中 |
+|---|---|---|
+| BEQR-143…148 / 155 | enum `:226–231/:238` | 命中（四类主体/多对多/合作六类/商户六态） |
+| BSM-004 | map `:566` | 命中「配置数据可以存档、也可以删除」 |
+| BSM-072/074 | `:1308/:1326` | 命中 |
+| PGM-018/019 | gov `:415/:424` | 命中 |
+| PGM-026/027 | `:492/:507` | 命中 |
+| PGM-043 | `:673` | 命中；冻结原文含「商户档案两联系人手机号按个人信息保护条例外执行」 |
+| PGM-016 | `:404` 卡片 | 命中「客人和员工的个人信息保护」 |
+| （解释 PGM-043 指针）HTML `:868/:871` | PGM-059 定义区 | 命中现行例外原文；**PGM-059 不在本模块映射**，本席不启 LOCK-AMEND，仅作 PGM-043 指针的类型 1 解释 |
+
+三 HTML 当前字节/SHA256（只读核验，本席未改）：
+
+| 文件 | 字节 | SHA256 |
+|---|---:|---|
+| docs/business-enum-quick-reference-v0.1.html | 133961 | 4396bb7112f1421686d2da273c6d008fedb0b9e75977371c57ac72d4dbae1d66 |
+| docs/business-system-map-for-operations-v0.1.html | 304482 | eebc5b417f8ce30799852b1b0315c5619cb271ce100bd52e9b9b6a4a33268d66 |
+| docs/platform-governance-map-for-operations-v0.1.html | 103798 | 5c4594a73e767c704238ad311899903dbaaf94503e4a4cc18f21a5596e67429f |
+
+相对历史 B1：BEQR 哈希未变；BSM/PGM 哈希已变（现行锁 V0.14 已同步获批原文）。三 HTML 本身未发现需人闸修改的原文错误。HTML 沉默处不升冲突。
+
+## 2. 3 文件覆盖表（全文已读；行=splitlines=`\n` 计数）
+
+| # | 路径 | 行 | 字节 | SHA256 | 全文 |
+|---|---|---:|---:|---|---|
+| 1 | backend/src/test/java/com/complex/platform/governance/PlatformControllerTests.java | 532 | 28405 | 21e657c73b07a6e974e55f90156c2bbdd1338838729c097dcc67b373b7d57a8e | 已读 L1–L532；文件版本 V0.04；16 `@Test` + 1 `@ParameterizedTest`（4 组 CSV） |
+| 2 | backend/src/test/java/com/complex/platform/governance/PlatformJdbcIntegrationTests.java | 760 | 41492 | b42d8a292f7bcf3718703d996a4fe5d275069cbefe2472eba96f504c73ed48da | 已读 L1–L760；文件版本 V0.09；23 `@Test` |
+| 3 | backend/src/test/java/com/complex/platform/governance/PlatformServiceTests.java | 1484 | 84080 | c942935719f044f997b614783a3aacec8848172f9bf1d6a89c1a8e63248f1e16 | 已读 L1–L1484；文件版本 V0.17；70 `@Test` |
+
+合计 **2776 行 / 153977 字节**。被测生产类（`PlatformController`/`PlatformService`/`JdbcPlatformRepository`/`AuthorizationService`/`IdempotencyService`/`PhoneMask`/`MerchantRecord`）只作依赖追流，不扩模块。
+
+## 3. 第一性原理三问（2.3）
+
+1. **这段东西为什么必须存在？** 删掉这三份测试，BEQR-143–155 / BSM-004 / BSM-072–074 / PGM-018–019 / PGM-026–027 / PGM-043 指针下的商户档案两号码明文例外 / GEN-003 将失去本模块可失败证据。答得上 → 有业务上位需求。
+2. **声称的行为有没有被实际执行验证过？** 本席 **未新跑 Maven**。改用：(a) 逐条追断言到生产分支，判断拿掉实现或改错夹具时能否红；(b) 只读 SELECT 核 JDBC 所锁的库形状。**不以绿代审。**
+3. **哪一条前提没验证就当真？** 主机 `psql -h 127.0.0.1 -U complex` 密码失败；改在已有容器 `complex-postgres` 内对已有库 `complex_test` 做 SELECT（非临时库、无 DDL）。未验证 Codex 本轮将跑的 JVM 结果。`MigrationVersions.latest()` 动态读磁盘迁移，本席核磁盘最大 **V431** 且库 `flyway_schema_history` 成功顶版 **431**，但未执行该测试方法。
+
+## 4. 顺从式：87 判据逐项适用证据
+
+判据全文以锁定义区为准；下表只写本三文件的适用结论。不承载该锚点的条目 = 无冲突、无发明，不另加测试要求（铁律 6）。
+
+### 4.1 GEN-001…018（18）
+
+| ID | 适用结论 |
+|---|---|
+| GEN-001 | 三文件均为治理测试；未见无需求空类。`setMerchantArchiveReason` 内存空实现按既有 003 收窄保留，不另删。 |
+| GEN-002 | 入口/错误码与生产方法对应；源码追证见 §6。 |
+| GEN-003 | 关键断言为字面期望（掩码 `188****0011`、权限码、`deleteStatus=approved`、CHECK 名），非恒真。Parameterized 四组可分叉。 |
+| GEN-004 | 缺幂等键 400、非法业态/状态/角色 400、SQL 明文电话拒；校验在首次使用前。 |
+| GEN-005 | 控制器锁 `merchant.profile.*` / `entity.binding.*` / `governance.space.*` / `requirePlatformScope`；服务 `asMerchantUser` → `PLATFORM_SCOPE_REQUIRED`。 |
+| GEN-006 | JDBC 唯一索引/软删/父链列删除/角色 CHECK；并发绑定行锁测试存在（本席未跑）。 |
+| GEN-007 | 服务幂等 `createBusinessEntity` 同键二次不落库；`IdempotencyService.execute` 仍 `requireIdempotencyKey`。createSpaceType 控制器风格见 006。 |
+| GEN-008 | 夹具合作方式/商户状态已用 `lease`/`active`；服务负例仍用退役码当非法值。项目 `draft` 对齐 BEQR-154「草稿」。 |
+| GEN-009 | 失败路径有 `detail_code`；`failedPhonePermissionConsumptionDoesNotReturnPlaintext` 在消费失败时 `verifyNoInteractions(service)`。 |
+| GEN-010 | 落库 `enc:v1:`、展示掩码/明文分权；不把旧全面遮蔽锁回。 |
+| GEN-011 | `merchant.viewed` 只记本页 id、不含电话；删除/驳回审计带理由。 |
+| GEN-012 | `listSpaces` LIMIT 500 vs `findSpaceById`；分页 total。 |
+| GEN-013 | JDBC URL 钉 `127.0.0.1/complex_test`，口令走环境变量；本席宿主机 TCP 认证失败、容器内 SELECT 成功。 |
+| GEN-014 | 表/权限种子/CHECK 断言；`currentFlywayVersion().isEqualTo(MigrationVersions.latest())` 动态对齐磁盘 head。 |
+| GEN-015 | 后端测试；`userFacingRoleValidationDoesNotIncludeEnglishEnumNames` 锁用户可见文案不含英文枚举码。 |
+| GEN-016 | 005 现名 `SixValues`、绑定两条已去 Idempotency 字样。`createSpaceTypeUpserts…` 名称「Upsert」与实现冲突见 OBS-R-03，不升缺陷。 |
+| GEN-017 | 本席分类依冲突→细化→技术性→添加；无添加项。 |
+| GEN-018 | 依据为 HTML 原文、源码追证、SELECT 输出；不用历史席票。 |
+
+### 4.2 本模块主路径 HTML（直接被测）
+
+| ID | 证据 |
+|---|---|
+| BEQR-143 | 绑定三主体 + 经营对象；`createBusinessEntityBindingSyncsMerchantEntityColumns`；唯一活跃绑定。 |
+| BEQR-144 / PGM-018 | `parentEntityColumnIsRemovedFromBusinessEntities`；SELECT `parent_entity_id` 列数=0、父索引 0 行。 |
+| BEQR-145 / 146 / PGM-019 | 主体角色白名单服务拒 `spv`；JDBC CHECK 仅 `platform/project_company/management_company`。 |
+| BEQR-147 | 本三文件无收入拆分计算；无冲突。 |
+| BEQR-148 / PGM-026 | 服务拒 `fixed_rent_plus_commission`；夹具 `lease`/`joint_operation`。 |
+| BEQR-154 | 项目状态含草稿；`projectCreationReturnsApprovedOptionalProfileFields` 用 `draft` 合法。 |
+| BEQR-155 | 商户拒 `draft`；夹具 `active`/`pending_admission`/`suspended`。 |
+| BSM-004 | 软删保留行；取消存档；驳回删除；删前占用；最高权限直删免批；自批禁；存档 HTTP 权限+幂等键。 |
+| BSM-007 / PGM-041 | 管理员≠最高权限；删除审批只认 master；敏感电话查看不因管理员身份在 **有效权限** 上自动放行（见 §7）。 |
+| BSM-072 / 074 / PGM-027 / PGM-048 | 商户主体治理写拒平台作用域；五治理 GET 同锁 `requirePlatformScope`；项目隔离列表。 |
+| PGM-026 | 四类主体绑定、两联系人字段、合作六类、业态六值。 |
+| PGM-040 | 单一功能权限码分锁。 |
+| PGM-043 | 冻结原文把商户档案两号码指向个人信息保护例外；测试：无 `pii.contact_phone.view` 掩码、有权明文、单次授权一次响应明文、消费失败不回明文。 |
+| PGM-016 | 卡片指向隐私保护；与上条同一例外，不恢复全面遮蔽。 |
+
+### 4.3 映射但不由本三文件承载（无冲突）
+
+BEQR-063/074/149/150/151/153/156/157/158/159/166/189；BSM-001/003/005/006/009/028（招商细则超本测试面）/029/114/115/120；PGM-001–015 中入口卡片、PGM-017/020/021、PGM-031/035/042/044/060/065/066 中与本测试无交的拍板项。
+
+**PGM-059 不在映射。** 完整例外句子在 gov `:871`。本席用 PGM-043 指针 + 类型 1 HTML 原文解释，不把未映射 ID 当新判据，不走 LOCK-AMEND。
+
+## 5. 对抗式（grilling 自问，不等操作员）
+
+Q1. 测试是否把「任何人都看不见明文」锁成规格？  
+A. 否。`listingMerchantsReturnsPlaintextPhoneWithPiiPermission` L164–179 在 `currentActorHasPermission("pii.contact_phone.view")=true` 时期望 `18800000011/18800000013`。无权限用例才掩码。与 `:871`「经单独授权且查看权限有效的人员…查看完整号码；其他人员仍只显示脱敏号码」一致。
+
+Q2. 真实密钥最高权限明文是否被测试否定？  
+A. 控制器单测 mock `AuthorizationService`，不模拟 USB 会话。生产 `AuthorizationService.permissionGrant` L80–83：`isMasterAuthority(actor)` 对已知权限码直接放行，故 `currentActorHasPermission(pii.contact_phone.view)` 对最高权限为 true，控制器 `maskPhonesForUnauthorized` 不掩。本模块无「master 也必须掩码」断言，**未把旧全面遮蔽带回来**。master 有效集属 access 模块，本席不扩测、不新增功能。
+
+Q3. `v339SeedsContactPhonePlaintextViewPermission` 是否把「平台管理员自动取得明文」锁死？  
+A. 该例只断言 `role_permissions` 含种子行。SELECT：`pii.contact_phone.view` 为 `high` + `requires_approval=t`，且仍挂在 `role_platform_admin`。`isExplicitOrDailyGrant` L133–136 把默认管理员角色的高危授权排除出「视为已逐项授予」。因此 **有效权限** 不因管理员身份自动明文。测试也未断言管理员列表响应出明文。不升冲突（见 OBS-R-01）。
+
+Q4. 单次权限是否只覆盖一条记录、把同页第二条打回掩码，从而违背「列表一次查看」？  
+A. `merchantPhoneSingleUseAppliesToOneResponse` 一次 `listMerchants` 返回 2 条，`allSatisfy` 两条皆明文，然后 `consumed==true`。同一次响应内整页明文，符合 `:871`「档案列表…查看完整号码」与注释 M009-058。写路径 `archiveMerchant` 覆盖「档案操作结果」。
+
+Q5. 软删是否仍被内存 fake 物理 remove？  
+A. `InMemoryPlatformRepository.deleteMerchant` L1360–1366 `withDelete("approved",…)` 保留行。`approveDeleteSoftDeletesArchivedMerchantWhenNoReferences` 断言默认列表无、`listMerchants(true)` 含且 `approved`。JDBC 同口径。001 现态已修。
+
+Q6. createSpaceType 是否已变成可无键重复执行？  
+A. 控制器 L176–181 仍无 `requireIdempotencyKey`。DTO 仍有 `idempotencyKey`。`PlatformService.createSpaceType` 仍 `executeWrite(..., request.idempotencyKey(), ...)`。`IdempotencyService.execute` L75 仍 `requireIdempotencyKey`。缺键仍会在服务/幂等层 400，不是静默双写。006 现态仍为跨模块风格观察、缺陷否。
+
+Q7. 环境是否仍停在旧 410 红？  
+A. 否。磁盘最大迁移 V431；库成功顶版 431。断言是动态 `MigrationVersions.latest()`，不是钉 410。007 不得沿用「410=410」旧句，现态为 431=431（SELECT+列目录），**未跑测试方法**。
+
+Q8. JDBC 明文插入用 `status='draft'` 是否与 BEQR-155 冲突？  
+A. 该 INSERT 预期被 `chk_merchants_contact_phone_pii` 拒绝。SELECT：merchants **无** status CHECK，有 PII CHECK（`NOT VALID`，PostgreSQL 仍拦新行）。draft 在此是绕仓库探针，不是把 draft 锁成合法商户状态。服务层仍拒 draft。不升冲突。
+
+## 6. 测试真实性（GEN-003，源码追证；未新跑测试）
+
+### 6.1 控制器
+
+| 用例 | 若实现改错，断言能否红 |
+|---|---|
+| 未认证列表 401/403 | 若放行 200 则红；接受两码属 access 语义，不升缺陷 |
+| 无 `merchant.profile.manage` → 403 | `doThrow` + `detail_code` |
+| 无幂等键建商户 → 400 | 走 `ApiRequests.requireIdempotencyKey` |
+| 列表形状 + 无 PII 掩码 | mock 返回明文，期望 `188****0011/0013`；`PhoneMask.mask` 前3后4。摘掉 `withMaskedPhones` 即红 |
+| 有 PII 明文 | stub `currentActorHasPermission` true；若仍掩码则红 |
+| 建空间 `governance.space.manage` | `verify(requirePermission)` |
+| 存档权限+缺键 400 且服务只调一次 | 003 现态 |
+| 绑定读 `entity.binding.view` + `requirePlatformScope` | 缺任一带即红 |
+| 商户列表平台作用域 | 403 `PLATFORM_SCOPE_REQUIRED` |
+| 其余五 GET 平台作用域 | 循环五路径，004 现态 |
+| 绑定写权限（无 Idempotency 字样） | 005 现态；缺键共享闸仍由建商户用例覆盖 |
+| 项目关联各消耗一次功能权限 | 掩码电话 + 两次不同权限码 |
+| 缺键/拒权不进服务 | `verifyNoInteractions(service)` |
+| 单次电话权（真 `AuthorizationService`） | 四组 CSV；消费失败路径 403 且不调服务 |
+
+### 6.2 JDBC（SELECT 已核形状，方法本身未跑）
+
+与 SELECT 一致、断言可红：父链列/索引不存在；`chk_be_entity_role` 三角色；PII 权限码存在且管理员角色种子行存在；`chk_merchants_contact_phone_pii` 存在；六表 `to_regclass` 非空；软删/分页/绑定唯一/空间 LIMIT 等依赖运行时数据，本席未跑。
+
+`concurrentFutureBindingsWaitForMerchantLockAndOnlyOneReservesTheSlot`：`NOT_SUPPORTED` + 末尾 DELETE 清理；等待 `pg_stat_activity` 行锁=2，时序敏感。OBS-R-04。
+
+### 6.3 服务
+
+70 例覆盖：名称必填、合作六类、商户六态、主体角色、绑定存在性、空间归属、存档后不可引用、空间状态 CHECK 集、绑定投影、删除审批/自批/占用/最高权限直办、空间类型字典冲突/存档/占用、业态六值与过滤、取消存档、驳回删除、商户作用域、幂等、审计、未来绑定、项目隔离、master 无全局列表。内存 fake 软删与 JDBC 同语义。
+
+## 7. 既有 M011-001…007 全重核（不可只沿用旧结论）
+
+| ID | 历史口径 | 当前全文 | 本席现判 |
+|---|---|---|---|
+| 001 | fake `remove` vs JDBC 软删 | L1360–1366 `withDelete("approved")`；L543–561 默认列表无 / includeArchived 含且 approved；JDBC L374–385 同行 | **现态已对齐 BSM-004，无回归缺陷** |
+| 002 | 夹具退役合作码/`draft` | JDBC/Controller 夹具 `lease`+`active`；服务负例仍用退役码 **当作非法** | **现态已修；负例保留合法** |
+| 003 | 无取消存档/驳回/理由/HTTP | L566–575 取消存档可见；L579–596 驳回 none 且仍在已存档列表；申请后 `deleteReason` 非空；控制器 L216–250 存档权限+缺键 | **现态覆盖收窄处置**。内存 `setMerchantArchiveReason` 仍空（r2 禁止为理由造 fake），不重开 |
+| 004 | 无商户主体负例、五 GET 无作用域 | L601–608 `asMerchantUser`；L298–310 五 GET | **现态已修** |
+| 005 | 五值命名；绑定方法名含 Idempotency 却未测缺键 | L503 `createMerchantRejectsBusinessFormatOutsideSixValues`；L314–315/351 方法名无 Idempotency，断言只 verify 权限 | **名称与断言一致**。缺键不按 verb 各补，共享闸仍在 L101–112 |
+| 006 | createSpaceType 无控制器幂等键 | 现 L176–181 仍无；`IdempotencyService.execute:75` 仍必填；DTO 仍有键 | **现态与 M009-022 一致：技术性跨模块观察，缺陷否**。行号更新，结论不抄旧文却与现源码重合 |
+| 007 | 环境 410、夹具杂项 | 磁盘 V431、库顶版 431（动态 latest，不是 410）；`@Transactional` 仍在；TestBeans `AuthService("", "")` 仍在；`entityRoleCheckRejectsSpvAndOperation` 仍一条违例 INSERT+约束字符串；绑定夹具 `be_operation_*` 仍是主键串 | **现态已更新，无新缺陷**。禁止再写「410=410」当作当前事实 |
+
+## 8. PII / 权限 / 范围 / 软删 / 主体 / DB 缝（收口核对）
+
+- **PII 展示（PGM-043 + HTML:871）**：无有效查看权掩码；有 `pii.contact_phone.view` 明文；单次授权一次响应明文；消费失败 403 且不回列表。最高权限走 `isMasterAuthority` 放行已知权限，测试未要求对其掩码。**未带回旧全面遮蔽口径。**
+- **落库加密**：JDBC 读密文前缀 `enc:v1:`、业务对象明文；再存不二次加密；手写明文 CHECK 名可失败。
+- **姓名加密**：`merchantContactNamesAreEncryptedAtRestAndRoundTrip` 可红。
+- **项目/商户范围**：scoped SQL 五类 total；普通管理员只见当前项目；master 无全局列表（`masterHasNoGlobalListOrOrdinaryProfileBypass`）。
+- **软删**：服务+JDBC+fake 三缝对齐 BSM-004。
+- **主体绑定**：一商户一活跃；未来绑定不改当前三列；未结束 inactive 占槽；并发行锁测试存在（未跑）。
+- **失效测试**：退役合作码/draft/spv/非法空间状态/非法 action 均作为 **拒绝** 断言，不是当合法夹具。
+
+## 9. 观察（登记否，不入修复队列）
+
+- OBS-R-01：`role_platform_admin` 仍有 `pii.contact_phone.view` 种子行（V339），与「身份不自动取得」字面有张力；V394 已 `requires_approval=true` 且授权层排除默认管理员高危角色授出。本模块测试未把管理员列表锁成明文。清理种子属权限迁移/M006 面，非本三文件必改。
+- OBS-R-02：PGM-059 不在 M011 映射；例外靠 PGM-043 指针解释。不启 LOCK-AMEND。
+- OBS-R-03：`createSpaceTypeUpsertsDictionaryAndEnablesItForSpaceValidation` 名称含 Upsert，实现遇已存在码抛 `SPACE_TYPE_CODE_EXISTS`。断言本身可红，不升 005 同类缺陷。
+- OBS-R-04：并发绑定 JDBC 用例非事务 + 时序等锁，可能环境敏感。
+- OBS-R-05：未认证列表接受 401 或 403。
+- OBS-R-06：TestBeans 空密钥仅切片占位。
+- OBS-R-07：`plaintextPhoneWriteIsRejectedByDatabaseConstraint` 用 `status='draft'` 绕仓库，期望 PII CHECK；库无 status CHECK。
+- OBS-R-08：空间类型写 HTTP（archive/unarchive/delete-*）控制器无 `requireIdempotencyKey`，且 `approveDeleteSpaceType` HTTP 未调 `requirePermission`（服务层另有 master 判定）。属 M009 源码，本模块无对应控制器测试。铁律 6 不按 verb 各补。
+- OBS-R-09：内存 fake `setMerchantArchiveReason` 空；003 收窄已接受。
+- OBS-R-10：`entityRoleCheckRejectsSpvAndOperation` 运行时只插 `spv` 一条违例（另用约束定义字符串覆盖 operation）。
+- OBS-R-11：宿主机 TCP 用默认口令失败；容器内 SELECT 成功。测试依赖 `COMPLEX_DATABASE_PASSWORD`。
+- OBS-R-12：`PhoneMask` 注释仍写「无此权限的读端一律看掩码」，未写最高权限例外；生产放行在 `AuthorizationService` 不在 PhoneMask。注释不在本模块三文件。
+
+## 10. ponytail-review（只列不改）
+
+Lean already for 测试文件作为规格锁。`createSpaceTypeUpserts…` 名称可缩，不构成必须删除的死代码。`net: 0`。
+
+## 11. 本席实跑命令（只读）
+
+- `sha256sum docs/audit-2026-09/plan/criteria-lock.md` → `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`
+- `wc -l` 三测试 → 532/760/1484=2776
+- `sha256sum` 三测试 → 见 §2
+- HTML `sha256sum` → 见 §1
+- 定义区解析 401、映射 87 unique 87
+- 宿主机 `psql -h 127.0.0.1 -U complex -d complex_test` → FATAL password authentication failed
+- `docker exec complex-postgres psql -U complex -d complex_test` SELECT（无 DDL）：flyway 顶版 431；`pii.contact_phone.view` high/requires_approval=t；`role_platform_admin` 1 行；merchants CHECK 四条；`chk_be_entity_role` 三角色；`parent_entity_id` 0 列；父索引 0；七张治理表 `to_regclass` 非空
+- 磁盘 `V*.sql` 最大 431
+- **未跑：** Maven / 任何 `*Tests` 方法
+
+## 12. 结论
+
+三文件 2776 行、87 判据三线审完。既有 001–007 按当前全文重核，无回归缺陷。PII 展示符合现行治理 HTML：有效查看权或真实密钥最高权限（经授权服务 master 短路径）可在商户两联系号码列表/操作结果见明文；无有效权仍掩码。无添加项。无 HTML 修改申请。
+
+本席 B1：**PASS**
+
+步骤仍为 B1。ledger 只读核验 M011 `IN_PROGRESS`、历史 B3 累计 1。本席不改台账。未经双席 B2 不得修。不覆盖上方历史 B1 FAIL / B2 原文。
+
+
+## M011 现锁B2整批归并复核（Grok 乙席）
+版本：V0.05（本文件既有 V0.01 B1 + V0.02 B2-r1 + V0.03 B2-r2 + V0.04 当前锁完整 B1；封存前缀 **107115** 字节 SHA256 `7fc6df48a1c2b9ca1db61d30dcb7ec6d70241cfbee6b056ba7c531f8919f611d` 原样保留，不覆盖、不改 V0.04 原文；自身版本 V0.04→V0.05）
+- 席位：Grok 独立只读席乙（固定 grok-4.6 xhigh）。步骤：**B2** 整批候选复核，不是 B1 重审、不是修复、不是模块 PASS、不是发布、不是 B3。
+- 控制：`160-audit-prompt.md` V0.17；`plan/runbook.md` V0.02；`plan/criteria-lock.md` V0.14；`plan/modules.md` M011 FILES 3 / 冻结行 1342（历史切分元信息）/ 映射 87。
+- 正本：`/home/james/complex-management` main，`rev-parse HEAD`=`e456ba96c84185c8d39f18f548011daac48a6466`（本席未 `git fetch`）。ledger 只读：V8.13，模块表 M011 `IN_PROGRESS`、B3 累计 **1** 不清零。
+- 本席 B2：**PASS**（001–007 逐 ID PASS；OBS-R-01…12 逐条 PASS；整批 PASS）。
+- 合取：必须另有席甲本批 B2 PASS 才能定稿。席甲 V0.05 票已读，**不继承其 PASS**、不以自审覆盖本席。本票不继承本文件旧 B1 FAIL / B2-r1 FAIL / B2-r2 PASS、不继承本席 V0.04 B1 PASS、不继承席甲 V0.04 B1 PASS。
+- 本追加段不写独占锁哈希字段行（B2 禁止新增该行）。正文实算锁值见下「四值」。
+- 只读：未改 findings/ledger/锁/sidecar/HTML/源码/测试/.git/主索引/hook；未建库删库、未 DDL、未写业务数据、未跑 Maven、未 fetch/提交/推送、未 MCP、未派子代理。用户最新已授权 Codex 后续提交合并推送，**不改变本席只读角色**，不能以此跳过双审。
+
+此票只判断 findings.md V3.53 顶部「当前M011现锁B2候选」相对两份指定完整 B1 raw（及用户点名已读的席甲 V0.05 候选段）的全批差集、2.1 四分类、当前缺陷、当前修复队列、旧 B2-r2 对 003/005 的收窄是否保留。完成判据：7 既有 ID 与 12 条 OBS-R 均有独立 PASS/FAIL；漏并/改写原意/新判据或新功能/分类错/把静态注解数当实跑 → FAIL 且不修。
+
+### 本批输入（完整指定文件，本席实算）
+
+| 路径 | 本次切片 | bytes | SHA256 |
+|---|---|---:|---|
+| `docs/audit-2026-09/modules/M011-b1-grok-raw.md` 本段追加前（含 V0.04 完整 B1） | V0.04 | **107115** | `7fc6df48a1c2b9ca1db61d30dcb7ec6d70241cfbee6b056ba7c531f8919f611d` |
+| 其中当前锁完整 B1 | 自第二处独占锁行值 `b0863b95…` 起至「不覆盖上方历史 B1 FAIL / B2 原文。」 | （含在上列前缀内） | 见上 |
+| `docs/audit-2026-09/modules/M011-b1-self-raw.md` V0.04 完整 B1 | 自当前锁独占锁行起至「后续 B5 仍必须双席。」止 | **29526** | `0616b00ea1e092f23c05e897984288a4048c62fdc59a5bef16f1fadcee227a34` |
+| 同文件席甲本批 B2（用户点名已读，非合取依据） | V0.05「## M011 当前锁B2候选复核（Codex票）」 | **567**（整文件现 30095 / `151446afb7768a2f10b830c4d4ed9ceee4d32666553762ff8797f76ccdd37571`） | `365dd188ef567b7a6101125c341eb974cac85f1e25c916f60a8f2edf22909911` |
+| `docs/audit-2026-09/findings.md` 顶部「当前M011现锁B2候选」至「当前M011现锁B2候选结束」 | V3.53 | 整文件 **1265508** | `b4219467662b8efcb4681bd04d7de70b732abdf9c1d3542ba08a94f143393365` |
+
+候选台账自报输入：self V0.04 29526/`0616b00e…`、grok V0.04 107115/`7fc6df48…`，与上表全等。
+
+**四值**均 `b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`：① `sha256sum docs/audit-2026-09/plan/criteria-lock.md`；② sidecar `plan/criteria-lock.sha256` 文件正文一行；③ `ledger.md` 顶行；④ 本文件 V0.04 B1 独占锁行值。`LOCK-AMEND-COUNT: 1`（ledger 顶）。criteria-lock 版本 V0.14，891182 bytes。映射行 `M011 → [BEQR-063 … PGM-066]` 与 V0.04 逐字相同，本批未改锁。
+
+三测试文件指纹与本席 V0.04 §2 逐文件全等（源码同字节，B2 不重跑）：
+
+| 文件 | 行 | bytes | SHA256 |
+|---|---:|---:|---|
+| PlatformControllerTests.java | 532 | 28405 | `21e657c73b07a6e974e55f90156c2bbdd1338838729c097dcc67b373b7d57a8e` |
+| PlatformJdbcIntegrationTests.java | 760 | 41492 | `b42d8a292f7bcf3718703d996a4fe5d275069cbefe2472eba96f504c73ed48da` |
+| PlatformServiceTests.java | 1484 | 84080 | `c942935719f044f997b614783a3aacec8848172f9bf1d6a89c1a8e63248f1e16` |
+
+合计 2776 行。本席 **未跑 Maven**。席甲 V0.04 写明正本 `mvn -q -Dtest=PlatformControllerTests,PlatformJdbcIntegrationTests,PlatformServiceTests test` 真实 exit=0，Surefire XML：**Controller 19 / JDBC 24 / Service 70，合计 113，failure/error/skipped 均 0**。用户指定采信该 113，**不得**把本席 V0.04 静态注解（16 `@Test`+1 `@ParameterizedTest` / 23 `@Test` / 70 `@Test`）或未跑方法数算成实跑次数。候选 L16/L30 已按此分开，本席接受。
+
+### 技能（V0.17 §6 收窄，本节点实读）
+
+| 技能 | 本节点用法 |
+|---|---|
+| using-superpowers | 先核技能；用户/提示词覆盖技能本体 |
+| using-arc | 本任务不走 Arc 实现流；用户指定 160 V0.17 B2 |
+| receiving-code-review | 先核源/命令再接受或反驳；禁止表演性同意；B2 不修复 |
+| grilling / grill-me | 只借追问结构自查差集；不等操作员、不派子代理 |
+| verification-before-completion | 声称前先跑只读哈希/点读；**不声称本席本轮 113 绿** |
+| systematic-debugging / diagnosing-bugs | 只借读错→追数据流；不改生产代码 |
+| codebase-design | 003 深度落在 withArchive/withDelete + listMerchants(false/true)，不落 archiveReason 旁路 |
+| ponytail-review | 只评最小删除/收窄，不落地。005 按 verb 补缺键仍 = yagni |
+| writing-for-agents | 本 raw 步骤+完成判据同文件 |
+| git-guardrails-claude-code | 存在；本席未改 git、未安装 hook |
+| long-running-background-tasks | 本席不跑 Maven，未起 monitor |
+| tdd / test-driven-development / ponytail | B2 禁止修复，未落测试、未改源 |
+| requesting-code-review | 本体要派同会话子代理 → 第四席；**未用** |
+| resolving-merge-conflicts | 本节点无合并 |
+| ubiquitous-language | 本机存在（至少 `~/.qwen/skills/ubiquitous-language/SKILL.md` 及若干同文副本）。本体要写词汇表文件 → 超 §7。按 grilling 收窄：只做术语自问，**不另写文件、不问操作员、不派子代理**。本席 V0.04 §0 写「未找到」不准确，原文保留在 107115 字节前缀内，本段补正、不覆盖 |
+| batch-grill-me | **缺口：本环境无独立 SKILL.md**；未冒充调用 |
+| Arc audit | 会派子代理并另写 `docs/arc/audits/`，与双席冲突；**未用** |
+
+grilling 内问（不等操作员）：① 12 条 OBS-R 是否条条入表？② 003 是否仍逼 archiveReason fake？③ 005 是否又并入按 verb 缺键？④ Upserts 是否被发明成覆盖写入？⑤ 静态 16/23/70 是否被写成 113？⑥ 有无新正式 ID / 新判据 / 添加项？答见下，全否。
+
+术语（只写本 raw）：**当前缺陷** = 现行三测试仍可复现的失败；**修复队列** = 本批定稿后要不要改源；**观察** = 无缺陷披露，不新编号。有正式 ID ≠ 待修。
+
+### 完整差集（不漏并、不改写、不新编号）
+
+- 席甲 V0.04 新 CX：**空集**（无新正式缺陷）。
+- 席乙 V0.04 新 GR：**空集**；只登记 OBS-R-01…12，建议队列否。
+- 候选 7 行覆盖既有 M011-001…007 全集合，无第 8 号、无复用旧号写新对象。
+- 12 条观察全部映射到既有 ID（见下表）；观察不是 finding，不新增 ID。
+- 席甲正向证据（分页/加密/一次性权限/软删/未来绑定/项目关联）并入 001–007 当前事实，无未归并意见。
+- 无添加项、无 `questions/`、无三 HTML 修改申请、不进 BLOCKED-ASK。
+- 旧 B2-r2 收窄（003 不为 archiveReason 造 fake；005 不按 verb 补缺键、仅改名已落地）**应保留**，候选已保留。
+
+| 观察 | 本席 V0.04 原句对象 | 候选映射 | 本席票 | 理由 |
+|---|---|---|---|---|
+| OBS-R-01 | `role_platform_admin` 仍有 `pii.contact_phone.view` 种子；V394 `requires_approval=true`；授权层排除默认管理员高危授出；本模块测试未锁管理员列表明文；清理属 M006/权限迁移 | →007 | **PASS** | 同一对象；不把种子行当有效明文权；不删迁移；不新 ID |
+| OBS-R-02 | PGM-059 不在 M011 映射；例外靠 PGM-043 指针；不启 LOCK-AMEND | →007 | **PASS** | 同一解释路径；不扩锁、不引新判据 |
+| OBS-R-03 | `createSpaceTypeUpsertsDictionaryAndEnablesItForSpaceValidation` 名称含 Upsert；实现遇已存在码抛 `SPACE_TYPE_CODE_EXISTS`；不升 005 同类缺陷 | →005 | **PASS** | 挂名到 005 的 GEN-016 名称缝，**不改 005 三值**；另例 L416–419 已拒重复码；不发明覆盖写入、不因命名另补测试 |
+| OBS-R-04 | 并发绑定 JDBC 非事务 + 时序等锁，可能环境敏感 | →007 | **PASS** | 同一对象；候选写「本次实跑通过」指席甲 113，本席未跑该方法，不把未跑算绿、也不因此升缺陷 |
+| OBS-R-05 | 未认证列表接受 401 或 403 | →007 | **PASS** | 同一对象；属 access 语义 |
+| OBS-R-06 | TestBeans 空密钥仅切片占位 | →007 | **PASS** | 核源 ControllerTests L529 `new AuthService("", "")` |
+| OBS-R-07 | 明文 PII INSERT `status='draft'` 绕仓库，期望 PII CHECK；库无 status CHECK | →002/007 | **PASS** | 002 管「draft 不是合法商户状态」；007 管探针结构；不暗改业务状态 |
+| OBS-R-08 | 空间类型写 HTTP（archive/unarchive/delete-*）无 `requireIdempotencyKey`；`approveDeleteSpaceType` HTTP 未调 `requirePermission`（服务层另有 master）；属 M009；铁律 6 不按 verb 各补 | →006/007 | **PASS** | **006 表行三值仍是 createSpaceType 控制器不重复校验键 + M009-022 缺陷否**，未被改写成「全部空间类型 HTTP」。生命周期缺重复幂等闸与审批 HTTP 无普通管理权闸作为观察挂 006/007，不新 ID、不改 M009 |
+| OBS-R-09 | 内存 fake `setMerchantArchiveReason` 空；003 收窄已接受 | →003 | **PASS** | 旧 B2-r2 收窄保留；核源 L1303 空实现；MerchantRecord **无** `archiveReason` 字段 |
+| OBS-R-10 | `entityRoleCheckRejectsSpvAndOperation` 运行时只插 `spv` 一条违例（约束定义字符串覆盖 operation） | →007 | **PASS** | 核源 JDBC L717–729；不在失败事务重复插入 |
+| OBS-R-11 | 宿主机 TCP 默认口令失败；容器内 SELECT 成功；测试依赖 `COMPLEX_DATABASE_PASSWORD` | →007 | **PASS** | 不等同应用测试失败；席甲读既有环境变量跑 113，本席未跑、未显示秘密 |
+| OBS-R-12 | PhoneMask 注释仍写「无此权限的读端一律看掩码」，未写最高权限例外；放行在 AuthorizationService；注释不在本三文件 | →007 | **PASS** | 核源 `backend/src/main/java/com/complex/platform/common/PhoneMask.java` L10–16；常量/工具类归其它模块 |
+
+12/12 观察 **PASS**。无一条被改写成缺陷入队，无原意替换。
+
+### 001–007 独立裁定（分类 / 当前缺陷 / 当前队列）
+
+顺序：冲突 → 细化 → 技术性 → 添加。当前无添加。当前缺陷看现行三文件能否再复现该失败，不把历史「是」当待修。
+
+| ID | 分类 | 当前缺陷 | 当前修复队列 | 本席票 | 核源（只读，不继承 PASS） |
+|---|---|---|---|---|---|
+| M011-001 | 冲突 | 否（历史已修） | 否 | **PASS** | fake L1360–1366 `withDelete("approved")` 留行；Service L543–561 默认无 / includeArchived 含且 approved；JDBC L374–385 同行。BSM-004 现态对齐，无回归 |
+| M011-002 | 细化 | 否（历史已修） | 否 | **PASS** | Controller/JDBC 正例 `lease`/`active`（Controller L135–136）；服务负例仍用退役码当非法。JDBC L687–695 明文 INSERT 的 `draft` 只打 `chk_merchants_contact_phone_pii`，不把 draft 锁成合法商户状态 |
+| M011-003 | 细化 | 否（历史已修） | 否 | **PASS** | unarchive L566–575 默认列表重新可见；驳回 L579–595 `deleteStatus=none` 且仍在 `listMerchants(true)`；申请后 `deleteReason` 非空（L583–585）；控制器 L217–250 存档权限+缺键。**旧 B2-r2 收窄保留**：不为 archiveReason 造 fake、不加 record 字段、不为四条 HTTP 各写一条。不能以被撤回的 B2-r1「fake 实现 setMerchantArchiveReason」反指漏修 |
+| M011-004 | 细化 | 否（历史已修） | 否 | **PASS** | Service L601–608 `asMerchantUser` → `PLATFORM_SCOPE_REQUIRED`；Controller L299–310 五 GET + 既有 `/merchants` 与绑定读端，七读覆盖 |
+| M011-005 | 技术性 | 否（历史已修） | 否 | **PASS** | L503 `SixValues`；L315/351 `RequiresManagePermission`，断言只 verify 权限。共享缺键闸仍 L101–112。**旧 B2-r2 收窄保留**：不按 verb 补重复缺键测试。Upserts 仅名称观察（见 OBS-R-03），不新增功能 |
+| M011-006 | 技术性 | 否 | 否 | **PASS** | Controller L176–181 仍无 `requireIdempotencyKey`；服务仍走幂等层必填。按 M009-022：跨模块风格观察，缺陷否、队列否。M009 不重开。OBS-R-08 挂此 ID **不改本行三值** |
+| M011-007 | 技术性 | 否 | 否 | **PASS** | 环境/夹具/覆盖边界观察桶。当前事实：席甲 Surefire **113=19/24/70 均 0 失败 0 错误 0 跳过**；本席未新跑。禁止再用旧 410/57、「无联立/自审闸不可达」冒充当前问题。硬编码测试库、401 或 403、权限实现归 access、并发时序、单条 spv 违例、空密钥切片、PhoneMask 注释、PGM-059 未映射，均只登记 |
+
+冲突 1（001，历史类别保留，当前队列否）。细化 3（002/003/004，已修出队）。技术性 3（005 已修出队；006/007 登记否）。添加 0。
+
+### 旧 B2-r2 收窄核对（本席 B2-r2 原文，不采信转述）
+
+| r2 要求 | 候选 | 现行源 | 保留？ |
+|---|---|---|---|
+| 003：不为 archive_reason 新增 fake、不给 MerchantRecord 加字段 | 「按历史B2-r2明确不新增archiveReason fake字段」；OBS-R-09→003 | L1303 空实现；record 无该字段 | **是** |
+| 005：只改名；禁止绑定两条各补缺键 | 「B2-r2已撤回按verb补重复缺键测试」 | 方法名已 SixValues / ManagePermission；无新缺键用例 | **是** |
+| 006：缺陷按 M009-022 为否 | 「维持M009-022缺陷否」 | createSpaceType 控制器仍无重复校验键 | **是** |
+
+无把 r2 收窄读回 r1「补缺键 / 实现 archiveReason fake / 006 缺陷是」。
+
+### 分类 / 队列 / 无业务发明
+
+- 001 分类保持 **冲突**（历史与 BSM-004「不是真从数据库里抹掉」矛盾）；当前代码已软删对齐，**队列否**。有 ID ≠ 待修。
+- 002–004 **细化**（HTML 上位 BEQR-148/155、BSM-004、BSM-072/074）；工程缺陷已修，队列否。
+- 005–007 **技术性**（测试命名/跨模块风格/夹具与环境；无新业务实体、枚举、状态、角色、价格或默认值）。005 不因 Upserts 名称发明覆盖写入。007 不把外模块权限种子清理或 M009 HTTP 风格收进本三文件必修。
+- 无一条升「添加」。Grok 不改判添加。
+
+ponytail-review（只列不改）：`PlatformServiceTests.java:L867 shrink: 方法名 Upserts→Create。断言已能红，不构成必须删除的死代码。` net: 0。B3 不得借 005 发明 upsert 或补缺键。
+
+### 本席实跑（B2，只读；无写模式）
+
+- 锁文件 sha256sum：`b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458`（与 sidecar 正文、ledger 顶行、V0.04 独占锁行值全等）
+- findings 整文件 1265508 / `b4219467662b8efcb4681bd04d7de70b732abdf9c1d3542ba08a94f143393365`
+- grok 前缀 107115 / `7fc6df48…`；self V0.04 前缀 29526 / `0616b00e…`
+- 三测试 SHA 与 V0.04 表全等
+- 点读：fake 软删 L1360；unarchive/驳回/archive HTTP；SixValues L503；ManagePermission L315；createSpaceType 控制器 L176–181；approveDeleteSpaceType L215–221 无 `requirePermission`；setMerchantArchiveReason L1303 空；MerchantRecord 无 archiveReason；PII INSERT draft L692–695；entityRole spv L717–729；未认证 401/403 L71–77；TestBeans L529；PhoneMask L16；重复空间类型码 L416–419
+- HEAD `e456ba96c84185c8d39f18f548011daac48a6466`，未 fetch
+- **未跑：** Maven / 任何 `*Tests` 方法 / psql 写 / 部署 / 修复
+- 未改 findings/ledger/锁/源/HTML/主索引
+
+### 结论
+
+候选覆盖 7 既有 ID 与本席 12 条 OBS-R，无漏并、无改写原意、无新正式 ID、无新判据、无新功能、无添加项、无 HTML 人闸。分类正确。当前修复队列 **全否**。旧 B2-r2 对 003/005 的收窄保留。实跑次数只采信席甲 Surefire 113=19/24/70 均零失败/错误/跳过，不把本席静态注解或未跑测试算进该数。
+
+| 对象 | 票 |
+|---|---|
+| M011-001 | **PASS**（冲突 / 当前缺陷否 / 队列否） |
+| M011-002 | **PASS**（细化 / 否 / 否） |
+| M011-003 | **PASS**（细化 / 否 / 否；r2 收窄保留） |
+| M011-004 | **PASS**（细化 / 否 / 否） |
+| M011-005 | **PASS**（技术性 / 否 / 否；r2 收窄保留；Upserts 仅观察） |
+| M011-006 | **PASS**（技术性 / 否 / 否；M009-022） |
+| M011-007 | **PASS**（技术性 / 否 / 否） |
+| OBS-R-01…12 全 12 条 | **PASS**（均否，映射可接受） |
+| 整批 | **PASS** |
+
+本席队列：**空**（7 否 + 12 观察否）。
+
+若双 PASS 定稿：跳过新 B3/B4，B3 累计 **1** 保留，仍完整 B5-r1 双审。模块此时保持 `IN_PROGRESS`。未经双 PASS 不进 B5 收口，更不称模块 PASS。步骤仍 B2。不覆盖上方历史原文。
