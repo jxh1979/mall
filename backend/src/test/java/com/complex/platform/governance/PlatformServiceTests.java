@@ -82,7 +82,7 @@ class PlatformServiceTests {
         service.createMerchant(new MerchantProfileRequest(
                 "audit-bar", "seed", List.of(), "筛选外商户", "bar", "be_1",
                 null, null, "Jane", "18800000011",
-                null, null, null, null, null, null, null, null, "active"));
+                null, null, null, null, null, null, null, null, "active", "org_1"));
 
         assertThat(service.listMerchants(false, " other ", 2, 1).items())
                 .extracting(MerchantRecord::id).containsExactly(second.id());
@@ -95,7 +95,7 @@ class PlatformServiceTests {
         assertThat(views.get(0).metadata())
                 .containsEntry("merchantIds", List.of(second.id()))
                 .containsEntry("entry", "/api/v1/platform/merchants")
-                .containsEntry("projectId", "org_1")
+                .containsEntry("projectId", "") // D-032：平台管理员查询不按项目限定
                 .containsEntry("includeArchived", false)
                 .containsEntry("businessFormat", "other")
                 .containsEntry("page", 2).containsEntry("pageSize", 1)
@@ -136,7 +136,7 @@ class PlatformServiceTests {
                 null,
                 null,
                 "active"
-        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+        , "org_1"))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
 
         assertThat(auditEventRepository.events)
@@ -151,7 +151,7 @@ class PlatformServiceTests {
         return service.createMerchant(new MerchantProfileRequest(
                 key, "seed", List.of(), "存档删除测试商户", "other", "be_1",
                 null, null, "Jane", "18800000011",
-                null, null, null, null, null, null, null, null, "active"));
+                null, null, null, null, null, null, null, null, "active", "org_1"));
     }
 
     /** M009-006：绑定引用的主体须真实存在——直接落一条主体行（不经服务，避免干扰幂等计数断言）。 */
@@ -207,12 +207,12 @@ class PlatformServiceTests {
     void createMerchantRejectsCooperationFormOutsideSixModes() {
         assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
                 "coop-bad", "seed", List.of(), "合作方式错的商户", "other", null,
-                null, null, null, null, null, null, null, null, null, null, null, "fixed_rent_plus_commission", "active")))
+                null, null, null, null, null, null, null, null, null, null, null, "fixed_rent_plus_commission", "active", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("MERCHANT_COOPERATION_FORM_INVALID"));
         MerchantRecord lease = service.createMerchant(new MerchantProfileRequest(
                 "coop-lease", "seed", List.of(), "租赁商户", "other", null,
-                null, null, null, null, null, null, null, null, null, null, null, "lease", "active"));
+                null, null, null, null, null, null, null, null, null, null, null, "lease", "active", "org_1"));
         assertThat(lease.cooperationForm()).isEqualTo("lease");
         assertThat(seedMerchant("coop-null").cooperationForm()).isNull();
     }
@@ -222,12 +222,12 @@ class PlatformServiceTests {
     void createMerchantRejectsStatusOutsideEnumeratedStates() {
         assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
                 "status-bad", "seed", List.of(), "状态错的商户", "other", null,
-                null, null, null, null, null, null, null, null, null, null, null, null, "draft")))
+                null, null, null, null, null, null, null, null, null, null, null, null, "draft", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
         assertThat(service.createMerchant(new MerchantProfileRequest(
                 "status-pending", "seed", List.of(), "待准入商户", "other", null,
-                null, null, null, null, null, null, null, null, null, null, null, null, "pending_admission")).status())
+                null, null, null, null, null, null, null, null, null, null, null, null, "pending_admission", "org_1")).status())
                 .isEqualTo("pending_admission");
     }
 
@@ -248,7 +248,7 @@ class PlatformServiceTests {
     @Test
     void createBusinessEntityRejectsRoleOutsideWhitelist() {
         assertThatThrownBy(() -> service.createBusinessEntity(new BusinessEntityRequest(
-                "entity-spv", "create", List.of(), "SPV 主体", "spv", null, null, null, "active")))
+                "entity-spv", "create", List.of(), "SPV 主体", "spv", null, null, null, "active", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
     }
@@ -504,7 +504,7 @@ class PlatformServiceTests {
         assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
                 "bad-format", "seed", List.of(), "业态错的商户", "tenant", "be_1",
                 null, null, "Jane", "18800000011",
-                null, null, null, null, null, null, null, null, "active")))
+                null, null, null, null, null, null, null, null, "active", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("MERCHANT_BUSINESS_FORMAT_INVALID"));
     }
@@ -516,7 +516,7 @@ class PlatformServiceTests {
         service.createMerchant(new MerchantProfileRequest(
                 "seed-bar", "seed", List.of(), "话梅酒馆", "bar", "be_1",
                 null, null, "Jane", "18800000011",
-                null, null, null, null, null, null, null, null, "active"));
+                null, null, null, null, null, null, null, null, "active", "org_1"));
         MerchantRecord other = seedMerchant("seed-other");
 
         assertThat(service.listMerchants(true, "bar", 1, 50).items())
@@ -639,7 +639,8 @@ class PlatformServiceTests {
                 "91310000MA1P0",
                 "Jane Ops",
                 "vault://entity/bank",
-                "active"
+                "active",
+                "org_1"
         );
 
         BusinessEntityRecord first = service.createBusinessEntity(request);
@@ -844,7 +845,7 @@ class PlatformServiceTests {
                 null,
                 null,
                 "active"
-        ));
+        , "org_1"));
         BusinessEntityRecord e2 = service.createBusinessEntity(new BusinessEntityRequest(
                 "corp_A",
                 "entity corp_A",
@@ -855,7 +856,7 @@ class PlatformServiceTests {
                 null,
                 null,
                 "active"
-        ));
+        , "org_1"));
 
         assertThat(e1.id()).isNotEqualTo(e2.id());
         assertThat(e1.entityName()).isEqualTo("Corp A"); // 第一条未被覆盖
@@ -894,7 +895,7 @@ class PlatformServiceTests {
     private MerchantRecord unboundMerchant(String key) {
         return service.createMerchant(new MerchantProfileRequest(
                 key, "seed", List.of(), "待绑定商户", "other", null, null, null,
-                "Jane", "18800000011", null, null, null, null, null, null, null, null, "active"));
+                "Jane", "18800000011", null, null, null, null, null, null, null, null, "active", "org_1"));
     }
 
     @Test
@@ -1058,7 +1059,7 @@ class PlatformServiceTests {
     private MerchantProfileRequest numericMerchant(String key, String status,
             BigDecimal area, BigDecimal leasedArea, BigDecimal rent) {
         return new MerchantProfileRequest(key, null, List.of(), "数值验证商户", "other",
-                null, null, null, null, null, null, null, area, leasedArea, null, null, rent, null, status);
+                null, null, null, null, null, null, null, area, leasedArea, null, null, rent, null, status, "org_1");
     }
 
     @Test
@@ -1093,7 +1094,7 @@ class PlatformServiceTests {
     @Test
     void userFacingRoleValidationDoesNotIncludeEnglishEnumNames() {
         assertThatThrownBy(() -> service.createBusinessEntity(new BusinessEntityRequest(
-                "invalid-role-message", null, List.of(), "公司", "unknown", null, null, null, "active")))
+                "invalid-role-message", null, List.of(), "公司", "unknown", null, null, null, "active", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
                     assertThat(e.getMessage()).doesNotContain("platform", "project_company", "management_company");
@@ -1141,6 +1142,9 @@ class PlatformServiceTests {
     @Test
     void projectListsAndTotalsStayWithinCurrentProjectForOrdinaryAdmin() {
         twoProjectFixtures();
+        // D-032：平台管理员不受当前项目限定；本用例守的是普通项目岗位仍只见本项目（M009-038）。
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor("employee-a", "employee-a", "employee", "org_1", null, "active"), "token", List.of()));
         org.junit.jupiter.api.Assertions.assertAll(
                 () -> { var p = service.listProjects(1, 1); assertThat(p.total()).isEqualTo(1);
                     assertThat(p.items()).extracting(ProjectRecord::id).containsExactly("org_1"); },
@@ -1172,6 +1176,9 @@ class PlatformServiceTests {
     @Test
     void spaceRequiresCurrentProjectAndNonnegativeArea() {
         twoProjectFixtures();
+        // D-032：平台管理员不受当前项目限定；「须在当前项目」守的是普通项目岗位（M009-038）。
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor("employee-a", "employee-a", "employee", "org_1", null, "active"), "token", List.of()));
         org.junit.jupiter.api.Assertions.assertAll(
                 () -> assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
                         "missing-project", null, List.of(), null, null, null, "空间", "shop",
@@ -1261,9 +1268,6 @@ class PlatformServiceTests {
                 new ProjectAssociationRequest("ordinary-link", "org_1", "普通认领"))).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> service.assignMerchantProject("scoped-merchant-b",
                 new ProjectAssociationRequest("ordinary-assign", "org_1", "普通认领"))).isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> service.createBusinessEntity(new BusinessEntityRequest(
-                "ordinary-company-foreign", null, List.of(), "其它项目", "management_company", null, null, null, "active", "other-project")))
-                .isInstanceOf(ApiException.class);
     }
 
     @Test
@@ -1480,5 +1484,17 @@ class PlatformServiceTests {
 
 
 
+    }
+
+    // D-032（红线④不约束平台管理员；BSM-007、PGM-041「只有项目之上的获授权岗位才可以跨项目汇总」）：平台管理员列表不按当前项目截断。
+    @Test
+    void platformAdminListsAndTotalsCoverEveryProject() {
+        twoProjectFixtures();
+        org.junit.jupiter.api.Assertions.assertAll(
+                () -> assertThat(service.listProjects(1, 10).total()).isEqualTo(2),
+                () -> assertThat(service.listSpaces(1, 10).total()).isEqualTo(2),
+                () -> assertThat(service.listMerchants(true, null, 1, 10).total()).isEqualTo(2),
+                () -> assertThat(service.listBusinessEntities(1, 10).total()).isEqualTo(2),
+                () -> assertThat(service.listBusinessEntityBindings(1, 10).total()).isEqualTo(2));
     }
 }

@@ -42,6 +42,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class WecomRiskHitsEndpointReproTests {
 
+    // XM-D029-007：生产配置下验签公钥不再能由库凭证开关豁免；以运行时生成的 Ed25519 测试公钥满足启动要求（同 ProductionAuthJdbcIntegrationTests）。
+    private static final java.security.KeyPair MASTER_KEY_PAIR = generateMasterKeyPair();
+
+    @org.springframework.test.context.DynamicPropertySource
+    static void masterPublicKey(org.springframework.test.context.DynamicPropertyRegistry registry) {
+        registry.add("complex.auth.master.public-key",
+                () -> java.util.Base64.getEncoder().encodeToString(MASTER_KEY_PAIR.getPublic().getEncoded()));
+    }
+
+    private static java.security.KeyPair generateMasterKeyPair() {
+        try {
+            return java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        } catch (java.security.GeneralSecurityException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
     @Autowired
     private MockMvc mockMvc;
 

@@ -2111,6 +2111,18 @@ class AccessServiceTests {
         // M087：直接上级表与审批链节点（申请人 usr_requester 的直接上级为 usr_admin，链上只有这一个节点）。
         final Map<String, String> superiors = new LinkedHashMap<>(Map.of("usr_requester", "usr_admin"));
         final Map<String, List<com.complex.platform.governance.chain.ApprovalChainNode>> nodes = new LinkedHashMap<>();
+        // XM-D029-003：与 JDBC 同样存下排期里的直接受益人，审批时才读得到。
+        final Map<String, ReviewSchedule> schedules = new LinkedHashMap<>();
+
+        @Override
+        public void scheduleSupervisorReview(String reviewId, String beneficiaryId, Instant dueAt) {
+            schedules.put(reviewId, new ReviewSchedule(reviewId, beneficiaryId, dueAt, 0, null, null));
+        }
+
+        @Override
+        public Optional<ReviewSchedule> findSupervisorReviewSchedule(String reviewId) {
+            return Optional.ofNullable(schedules.get(reviewId));
+        }
 
         @Override
         public Optional<String> findDirectSuperior(String userId) {
