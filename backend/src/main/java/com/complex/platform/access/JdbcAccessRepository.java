@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -40,10 +40,36 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     public void lockGrantAuthorizationFacts() {
         // M006-006。ponytail: 审批期间暂停授权定义写入；出现配置写入争用时再改为逐定义版本锁。
+        // M001-F10：员工表取自斥的 SHARE ROW EXCLUSIVE——换项目要改员工表、审批落地要锁员工行，两者都持共享锁会互等死锁，
+        // 改为授权申请、审批、换项目彼此串行。ponytail: 全局串行，审批吞吐成问题时再按员工拆锁。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE access_users IN SHARE ROW EXCLUSIVE MODE");
         jdbcTemplate.getJdbcTemplate().execute("""
-                LOCK TABLE access_users, roles, role_permissions, permissions, permission_templates,
+                LOCK TABLE roles, role_permissions, permissions, permission_templates,
                            permission_template_items, position_role_templates, staff_levels IN SHARE MODE
                 """);
+    }
+
+    @Override
+    public void lockAccessUsers(List<String> userIds) {
+        // M001-F10：按编号顺序加行锁，同时套用多名员工的事务之间不互相死锁。
+        jdbcTemplate.queryForList("SELECT id FROM access_users WHERE id IN (:ids) ORDER BY id FOR UPDATE",
+                Map.of("ids", userIds), String.class);
+    }
+
+    @Override
+    public List<PermissionTemplateApplication> findActiveTemplateApplications(String templateId) {
+        return jdbcTemplate.query("""
+                SELECT id, template_id, target_type, target_id, valid_from, valid_until, single_use, consumed, status,
+                       applied_by, applied_at, revoked_by, revoked_at
+                  FROM permission_template_applications
+                 WHERE template_id = :template_id AND status = 'active' AND NOT consumed
+                   AND (valid_until IS NULL OR valid_until > now())
+                 ORDER BY id
+                """, Map.of("template_id", templateId), (rs, rowNum) -> new PermissionTemplateApplication(
+                rs.getString("id"), rs.getString("template_id"), rs.getString("target_type"), rs.getString("target_id"),
+                nullableInstant(rs, "valid_from"), nullableInstant(rs, "valid_until"), rs.getBoolean("single_use"),
+                rs.getBoolean("consumed"), rs.getString("status"), rs.getString("applied_by"),
+                nullableInstant(rs, "applied_at"), rs.getString("revoked_by"), nullableInstant(rs, "revoked_at")));
     }
 
     @Override

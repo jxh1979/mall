@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -176,7 +176,25 @@ public class AccessService {
                     requireActorCanGrant(added);
                     requireGrantApprovalIfNeeded(added);
                     PermissionTemplate template = templateFromRequest(id, request, existing.sourceTemplateId(), existing.ownerScopeId());
-                    return repository.saveTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
+                    PermissionTemplate saved = repository.saveTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
+                    // M001-F11（PGM 权限规则「权限的授予、收回……全部留痕」）：增减即时作用于仍生效的套用员工，逐人留痕。
+                    List<String> removed = previousGrants.stream()
+                            .filter(code -> !safeList(request.permissionCodes()).contains(code)).sorted().toList();
+                    if (!added.isEmpty() || !removed.isEmpty()) {
+                        for (PermissionTemplateApplication application : repository.findActiveTemplateApplications(id)) {
+                            auditEventService.recordSuccess(
+                                    "permission_template.effect_changed",
+                                    "access.permission_template.manage",
+                                    "access_user",
+                                    application.targetId(),
+                                    null,
+                                    request.idempotencyKey(),
+                                    Map.of("template_id", id, "application_id", application.id(),
+                                            "added_permission_codes", added, "removed_permission_codes", removed)
+                            );
+                        }
+                    }
+                    return saved;
                 }
         );
     }
@@ -231,8 +249,13 @@ public class AccessService {
                             throw ApiException.badRequest("VALIDATION_FAILED",
                                     "同一次套用中员工重复：" + String.join("、", duplicates));
                         }
+                        // M001-F10：先按编号顺序锁目标员工行再读归属，与换项目串行。
+                        repository.lockAccessUsers(targetUserIds.stream().sorted().toList());
+                        List<AccessUser> targets = new ArrayList<>();
                         for (String userId : targetUserIds) {
-                            requireSameOrganization(actor, requireTargetUser(userId));
+                            AccessUser target = requireTargetUser(userId);
+                            requireSameOrganization(actor, target);
+                            targets.add(target);
                         }
                         PermissionTemplate template = repository.findTemplateById(id)
                                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND", "权限模板不存在：" + id));
@@ -245,8 +268,12 @@ public class AccessService {
                                         "不能应用其他范围的模板：" + id);
                             }
                         }
+                        // M001-F09（PGM 权限规则，2026-09-24 操作员裁决）：项目自有模板只能套给本项目员工，平台管理员同样；
+                        // 跨项目使用须先复制为平台模板再套用。
+                        targets.forEach(target -> requireTemplateAssignableToTarget(template, target));
                         // P0-1：套用模板授予的权限码不得超出授权人自身有效权限（堵 copy-then-apply 提权）。
-                        List<String> templatePermissionCodes = repository.findTemplateItems(id).stream()
+                        List<PermissionTemplateItem> templateItems = repository.findTemplateItems(id);
+                        List<String> templatePermissionCodes = templateItems.stream()
                                 .map(PermissionTemplateItem::permissionCode)
                                 .toList();
                         requireActorCanGrant(templatePermissionCodes);
@@ -274,7 +301,12 @@ public class AccessService {
                                 null,
                                 request.idempotencyKey(),
                                 Map.of("target_count", result.applications().size(),
-                                        "application_ids", result.applications().stream().map(PermissionTemplateApplication::id).toList())
+                                        "application_ids", result.applications().stream().map(PermissionTemplateApplication::id).toList(),
+                                        // M001-F11：套用当时的权限码快照，授予与禁止分列
+                                        "permission_codes", templateItems.stream().filter(item -> item.effect() == AccessRepository.Effect.GRANT)
+                                                .map(PermissionTemplateItem::permissionCode).toList(),
+                                        "denied_permission_codes", templateItems.stream().filter(item -> item.effect() == AccessRepository.Effect.DENY)
+                                                .map(PermissionTemplateItem::permissionCode).toList())
                         );
                         return result;
                     },
@@ -637,7 +669,7 @@ public class AccessService {
                     () -> {
                         repository.lockGrantAuthorizationFacts();
                         AccessActor actor = authorizationService.currentActor();
-                        AccessUser target = requireTargetUser(id);
+                        AccessUser target = lockTargetUser(id);
                         requireSameOrganization(actor, target);
                         String newOrganization = trimToDefault(r.organizationId(), target.organizationId());
                         String newMerchant = isBlank(r.merchantId()) ? null : r.merchantId().trim();
@@ -1437,7 +1469,7 @@ public class AccessService {
                         if (trimToDefault(userId, "").isEmpty()) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "必须指定用户");
                         }
-                        AccessUser targetUser = requireTargetUser(userId.trim());
+                        AccessUser targetUser = lockTargetUser(userId.trim());
                         requireSameOrganization(actor, targetUser);
                         AccessRepository.Effect effect = switch (trimToDefault(r.effect(), "").toLowerCase(Locale.ROOT)) {
                             case "grant" -> AccessRepository.Effect.GRANT;
@@ -1575,7 +1607,7 @@ public class AccessService {
         if (request.validUntil() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写授权失效时间");
         }
-        requireSameOrganization(actor, requireTargetUser(requireText(request.targetUserId(), "target_user_id")));
+        requireSameOrganization(actor, lockTargetUser(requireText(request.targetUserId(), "target_user_id")));
         if (safeList(request.permissionCodes()).isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
         }
@@ -1845,7 +1877,7 @@ public class AccessService {
 
     private RoleGrantContext resolveRoleGrant(RoleAssignmentRequest request, boolean requireGrantorCanGrant) {
         AccessActor actor = authorizationService.currentActor();
-        AccessUser targetUser = requireTargetUser(requireText(request.userId(), "user_id"));
+        AccessUser targetUser = lockTargetUser(requireText(request.userId(), "user_id"));
         RoleRecord role = requireRole(requireText(request.roleId(), "role_id"));
         requireSameOrganization(actor, targetUser);
         requireRoleAssignableToTarget(role, targetUser);
@@ -1863,7 +1895,7 @@ public class AccessService {
         String userId = requireText(request.userId(), "user_id");
         String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
         String positionCode = requireText(request.positionCode(), "position_code");
-        AccessUser targetUser = requireTargetUser(userId);
+        AccessUser targetUser = lockTargetUser(userId);
         if (requireGrantorCanGrant) {
             // M087-I5-02（PGM-1.10.1 跨项目变更审批通过后方可生效）：审批落地与范围变更发起不按当前操作人的组织闸——
             // 授权来自审批链与申请指纹（目标范围已钉住）；直接定岗（enforceApproval）仍受同组织闸。
@@ -2202,6 +2234,12 @@ public class AccessService {
     private AccessUser requireTargetUser(String userId) {
         return repository.findUserById(userId)
                 .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在：" + userId));
+    }
+
+    // M001-F10：按员工归属写入授权的入口先锁目标员工行再读归属，与换项目（撤销旧范围全部增权）串行。
+    private AccessUser lockTargetUser(String userId) {
+        repository.lockAccessUsers(List.of(userId));
+        return requireTargetUser(userId);
     }
 
     private RoleRecord requireRole(String roleId) {
