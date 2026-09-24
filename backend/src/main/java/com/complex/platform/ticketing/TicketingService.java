@@ -931,12 +931,6 @@ public class TicketingService {
         );
     }
 
-    /** C1/REQ-05：人工放行（主管），留痕 status=manual_overridden。权限在端点层按主管权限码控制。 */
-    @com.complex.platform.gate.GuardedAction(admissionAction = "ticketing.special_release", objectType = "verification")
-    public VerificationResponse manualOverrideVerification(VerificationRequest request, String reason) {
-        return verificationService.manualOverride(request, reason);
-    }
-
     /** R5 T5：核销冲正。幂等键必填、reason 必填、权限 ticket.verify.reverse；成功事件 ticket.verification_reversed。 */
     @com.complex.platform.gate.GuardedAction(capability = "ticket.verify.reverse", admissionAction = "ticketing.verification_reverse", objectType = "verification")
     @Transactional

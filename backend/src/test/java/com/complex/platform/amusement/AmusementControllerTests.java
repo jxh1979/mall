@@ -61,8 +61,6 @@ class AmusementControllerTests {
     void resetMocks() {
         Mockito.reset(service, authorizationService);
         when(service.listDeviceStatuses()).thenReturn(new PageResponse<>(List.of(deviceStatus()), 1, 50, 1));
-        when(service.listManualOverrides()).thenReturn(new PageResponse<>(List.of(manualOverride()), 1, 50, 1));
-        when(service.createManualOverride(any(AmusementManualOverrideRequest.class))).thenReturn(manualOverride());
         when(service.listProjects()).thenReturn(new PageResponse<>(List.of(project()), 1, 50, 1));
         when(service.createProject(any(AmusementProjectRequest.class))).thenReturn(project());
         when(service.getOpenEligibility("project_1")).thenReturn(new AmusementOpenEligibilityResponse("project_1", null, true, List.of()));
@@ -113,8 +111,6 @@ class AmusementControllerTests {
     @ParameterizedTest
     @CsvSource({
             "GET,/api/v1/amusement/device-statuses,amusement.device_status.view",
-            "GET,/api/v1/amusement/manual-overrides,amusement.verification.override",
-            "POST,/api/v1/amusement/manual-overrides,amusement.verification.override",
             "GET,/api/v1/amusement/projects,amusement.session.view",
             "POST,/api/v1/amusement/projects,amusement.session.manage",
             "GET,/api/v1/amusement/projects/project_1/open-eligibility,amusement.safety_inspection.view",
@@ -192,7 +188,6 @@ class AmusementControllerTests {
 
     @ParameterizedTest
     @CsvSource({
-            "/api/v1/amusement/manual-overrides",
             "/api/v1/amusement/projects",
             "/api/v1/amusement/projects/project_1/rules",
             "/api/v1/amusement/projects/project_1/entitlements",
@@ -233,11 +228,6 @@ class AmusementControllerTests {
 
     private String bodyFor(String path, boolean withIdempotencyKey) {
         String idempotency = withIdempotencyKey ? "\"idempotency_key\":\"amusement-once\"," : "";
-        if (path.contains("manual-overrides")) {
-            return "{" + idempotency + """
-                    "project_id":"project_1","session_id":"session_1","override_type":"allow","reason":"supervisor approved","evidence_attachment_ids":["att_1"]}
-                    """;
-        }
         if (path.endsWith("/projects")) {
             return "{" + idempotency + """
                     "project_name":"Roller Coaster","capacity":2,"open_status":"open","safety_template_id":"template_1","eligibility_rule":{"min_age":12}}
@@ -386,10 +376,6 @@ class AmusementControllerTests {
 
     private AmusementVerificationRecord verification() {
         return AmusementVerificationRecord.entry("verification_1", "project_1", "session_1", "amu-ticket-1", "gate_1", "staff_1", "success", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"), 1, null, null);
-    }
-
-    private AmusementManualOverrideRecord manualOverride() {
-        return new AmusementManualOverrideRecord("override_1", "project_1", "session_1", "allow", "supervisor approved", "approved", null, List.of("att_1"), Instant.parse("2026-06-14T00:00:00Z"));
     }
 
     private AmusementDeviceStatusRecord deviceStatus() {

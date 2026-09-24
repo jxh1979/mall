@@ -259,7 +259,6 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/amusement/queue-entries": empty,
     "/api/v1/amusement/device-statuses": empty,
     "/api/v1/amusement/safety-inspections": state.safetyInspections,
-    "/api/v1/amusement/manual-overrides": empty,
     "/api/v1/amusement/group-bookings": state.groupBookings,
     "/api/v1/analytics/risk-rules": [{ id: "risk-rule-1", ruleCode: "RISK", ruleName: "Manual Risk", ruleType: "manual", threshold: 1, status: "active" }],
     "/api/v1/analytics/risk-alerts": state.riskAlerts,

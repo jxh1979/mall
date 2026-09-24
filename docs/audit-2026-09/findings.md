@@ -1,5 +1,75 @@
 # 全量审计 Findings 台账
-版本：V4.05
+版本：V4.12
+
+## 当前 XM-M034-AB B4-r3 双 PASS，005 已修转「否」，进入 B5-r2
+2026-09-24T09:30:36Z。Grok B4-r3 票 PASS（modules/XM-M034-AB-b4-r3-grok-raw.md，16411bytes SHA b1649908f53994543adce57e717ca1cf12f3b47b91f6fabb6210a0482805a711；越界 0）；席甲票 PASS（modules/XM-M034-AB-b4-r3-self-raw.md，3005bytes SHA 9b12c22cde181f2967f6d8820277915ae4962f6f3c8a4211bd24feda351e2982）。XM-M034-AB-005 修复队列「是」→「否（已修，B3-r3）」。
+- 修复队列「否」（5）：XM-M034-AB-001…005（已修）。当前修复队列「是」：0。
+
+
+## 当前 XM-M034-AB B2-r2 双 PASS 定稿：XM-M034-AB-005 入队（B3-r3）
+2026-09-24T09:16:46Z。Grok B2-r2 票 PASS（modules/XM-M034-AB-b1-grok-raw.md V0.03，全文 69492bytes SHA 1409a7360f35d2844d631f88ef0f60c5a4efad0253fad47ca803f4091351e442；grok-4.7；全仓复核无其他现行假路径，历史扫描快照不改）；席甲 B2-r2 票 PASS（modules/XM-M034-AB-b1-self-raw.md V0.04，全文 52786bytes SHA f733fe052c78da807114160f4ab4e2d699a5b021ed1359e2938a52aa2070963e）。定稿即上方 B2-r2 候选：XM-M034-AB-005（技术性）四行各删该类路径一处，写入集合只需求实现矩阵 csv。
+- 修复队列「是」（1）：XM-M034-AB-005。修复队列「否」（4）：XM-M034-AB-001…004（已修）。
+
+
+## 当前 XM-M034-AB B2-r2 候选（B5-r1 新问题 GR-01 → XM-M034-AB-005；其余维持 B2-r1 定稿；尚未定稿）
+2026-09-24T09:05:57Z。B5-r1：Grok 票 FAIL（modules/XM-M034-AB-b5-r1-grok-raw.md V0.01，31498bytes SHA 98afbc9d52a7089c65889c5ead6a0d3e1f8fd78baa86e884736256dedffa94c2；新问题 GR-01，001–004 复核成立）；席甲票 PASS（modules/XM-M034-AB-b5-r1-self-raw.md）被推翻——席甲只 grep 了已删类名在代码与契约中的残留，未核需求实现矩阵「相关代码文件」列的路径是否存在。四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。
+席甲核源：全仓（排除审计文档、.scratch、docs/prd-audit、docs/_archive、security-scans 历史扫描）点名三个已删除文件 AmusementManualOverrideRecord.java、AmusementManualOverrideRequest.java、VerificationManualOverrideRequest.java 的只有需求实现矩阵第 49–52 行各一处（均为「相关代码文件」列最后一项，形如「; backend/src/main/java/com/complex/platform/amusement/AmusementManualOverrideRecord.java」）；docs/production-evidence-closure-gap-report-v0.1.md:45 为历史 semgrep 扫描路径快照，属历史证据，不改。Grok B2-r1 曾写「代码文件列里的该类会变成指向已删文件的定位……本批不为此重写整行」，未进入 findings 登记；B5 时该路径已因本批删除而失效，属本批删除造成的新事实，非无新证据改判。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| XM-M034-AB-005 | Grok B5-r1 GR-01 | 技术性（索引路径失真；无业务发明） | 是 | 是 | docs/requirements-code-implementation-matrix-v0.1.csv 第 49–52 行（REQ-45…48）「相关代码文件」列仍含 backend/src/main/java/com/complex/platform/amusement/AmusementManualOverrideRecord.java，该文件已由 004 删除；同列其余路径存在；API 列已去掉两个 operation，表名 amusement_manual_overrides 保留 | GEN-016、GEN-002；最小处置：四行各删去「; backend/src/main/java/com/complex/platform/amusement/AmusementManualOverrideRecord.java」一处（共 4 处），其余列与表名不动；不改 OpenAPI、V433 与其他文件 |
+
+- 写入集合：只 docs/requirements-code-implementation-matrix-v0.1.csv（M424，已在 004 写入集合内）。
+- 001…004 维持 B2-r1 定稿与已修状态（B4-r2 双 PASS、B5-r1 Grok 复核成立），不重开。
+- 只登记：production-evidence-closure-gap-report 第 45 行历史扫描快照；其余 B2-r1 观察不变。
+- 修复队列「是」（1）：XM-M034-AB-005。修复队列「否」（4）：XM-M034-AB-001…004（已修）。B3 累计 2/3，B3-r3 为最后一次。
+
+
+## 当前 XM-M034-AB B4-r2 双 PASS，001…004 已修转「否」，进入 B5-r1
+2026-09-24T08:40:11Z。Grok B4-r2 票 PASS（modules/XM-M034-AB-b4-r2-grok-raw.md，14833bytes SHA adb1161dc1942e1e25d0a4538d1d2921b09fb97fdd67556c97b3433a3f35721f；grok-4.7；越界 0）；席甲票 PASS（modules/XM-M034-AB-b4-r2-self-raw.md，4404bytes SHA a12a02a17509eeffec3c393e893456ec51ca6580476bddc28860a805c9c8286a）。XM-M034-AB-001…004 修复队列「是」→「否（已修，B3-r1＋B3-r2）」。
+- 修复队列「否」（4）：XM-M034-AB-001…004（已修）。
+- 当前 XM-M034-AB 修复队列「是」：0。
+
+
+## 当前 XM-M034-AB B2-r1 双 PASS 定稿（按 D-033「删除」），4 项待修（B3-r1）
+2026-09-24T08:01:13Z。Grok B2-r1 重派票 PASS（modules/XM-M034-AB-b1-grok-raw.md V0.02，全文 58286bytes SHA 38c37978ed82856cd66733b0ed6c21b733386605db1813378cd88a90a290f31e；grok-4.7）；席甲 B2-r1 票 PASS（modules/XM-M034-AB-b1-self-raw.md V0.03，全文 51981bytes SHA 0de711ccf7b0889a9cb92152ec8f61c923113ebe36edf47da637aec965c74955）。Grok 自述按字节截取席甲 raw 时截断点后的标题进入预览、随即停读、不引用，如实记录。定稿即上方「按 D-033「删除」重写」候选的 001…004，按 Grok 补定三处边界（不另开 ID）：
+- AmusementControllerTests 的 writeRoutesRejectMissingIdempotencyKey CsvSource 第 195 行（POST /api/v1/amusement/manual-overrides）一并删除。
+- 门禁生成物点名进入写入集合：docs/data-isolation-and-tenant-scope-security-spec-v0.1.md（npm run docs:data-isolation-spec，最新迁移戳 V432→V433）；security-scans/formal-security-baseline-v1.md 与 security-scans/findings-register-v1.md（npm run docs:security-baseline，OpenAPI operation count 732→730）；两份契约附录（docs:operation-matrix、docs:openapi-closure）。domain-ownership-scope 与 matrix-vs-migration 不受 V433 影响。
+- 002/003 不另写 allow/release 拒绝逻辑，随整接口删除覆盖；releaseEntryConcurrentCapacity 四处不动；权限矩阵第 78、269 行只改 amusement.verification.override 的括号（第 78 行事件列去掉已不再发出的 amusement.verification_overridden），amusement.verification.execute 留格内。
+- 生成物一律在 origin/main＋补丁的一次性 worktree 内产出再落主工作区（主工作区含 Codex 线未发布改动，不在其上跑生成器）。
+- 修复队列「是」（4）：XM-M034-AB-001…004。修复队列「否」：0。
+
+
+## 当前 XM-M034-AB B2-r1 整批候选（按 D-033「删除」重写，取代 V4.06 同名候选；尚未定稿；无 questions）
+2026-09-24T07:41:12Z。输入仅本合成模块两席 B1 完整 raw：modules/XM-M034-AB-b1-self-raw.md V0.01（前 49028 bytes，SHA 991fc776eb2999e12ed0234d7a7b44ebfaa70708f67a8447e57ac1b2a1b2620a，席甲，FAIL：CX-01…04）、modules/XM-M034-AB-b1-grok-raw.md V0.01（36451bytes SHA df7bea7d80f9347af26e913a0ded98c527a139f69113516b289adfbdf36feeb2，Grok 席乙 grok-4.7，FAIL：GR-01…04）。B1 后四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。操作员 D-033 最终答复「删除」（ledger「当前 D-033 改判为「删除」」段）：deny、pause、resume 一并删除，游乐改判接口整体下线，权限码前向停用，历史行保留。V4.06 按「保留」写的候选与席甲 V0.02 票作废，按其派出的 Grok B2-r1 已终止、未写入。
+席甲读 Grok B1 后核源（B2 补证，沿用作废候选中仍成立的部分）：①两份 OpenAPI 无票务人工放行路径，席甲 B1 CX-01 该判断有误，采 Grok；②票务入口分类采 Grok「冲突」；③release 清零只改快照、不写入场记录 released_at，OpenAPI 枚举无 release 而服务端接受，并入 002。整体下线的补充核查（4 项新增文件，均不在开工段 33 个文件内）：④docs/p0-api-contract-pack-v0.1.md:334（M388）写该接口「已废止…待代码轮下线」；⑤docs/requirements-code-implementation-matrix-v0.1.csv 第 49–52 行（M424）把 POST /api/v1/amusement/manual-overrides#createAmusementManualOverride 列为 REQ-45…48 的实现依据，该表由 tools/verify-final-closed-loop-audit.mjs 等工具读取；⑥tests/e2e/support/mock-api.ts:262（M369）为该路径留一条空返回的模拟，前端无调用；⑦两份契约附录由 docs:operation-matrix、docs:openapi-closure 生成并有 --check 校验。两个记录类型 AmusementManualOverrideRecord/Request 只在游乐模块内部与 4 个测试文件使用；契约组件 requestBodies/schemas 的 AmusementManualOverrideRequest 只被这两个操作引用。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| XM-M034-AB-001 | GR-01＋CX-01 | 冲突（枚举速查第 43 行「系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」） | 是 | 是 | TicketingController.java:495-507 POST /api/v1/ticketing/verifications/manual-override；TicketingService.manualOverrideVerification:934-938；TicketVerificationService.manualOverride:207-248 写 status=manual_overridden；dto/VerificationManualOverrideRequest；TicketingControllerTests:237-328 四条、TicketingServiceTests:488-498 一条把人工放行断言为成功。V429 使权限码 retired、接口对含最高权限在内的所有主体拒绝，但写入口、服务方法与成功断言仍在 | BEQR-012、GEN-002、GEN-003、GEN-016；最小处置：删控制器映射与其 import、两个服务方法、只被其使用的 DTO；删上述五条测试；不留 403 空壳；不改 V067 CHECK、V270、V429，历史行保留；权限矩阵文档第 63、251 行「停用，待代码轮下线」改为写入口已下线 |
+| XM-M034-AB-002 | GR-02＋CX-03 | 冲突（BSM 第 1263 行「在玩人数不允许人工调整：任何岗位（含主管与最高权限）都不得手工修改、清零或修正在玩人数；计数只能由入场核销与出场自动扣减产生」） | 是 | 是 | AmusementService.createManualOverrideInternal:1594-1599 对 release 调 JdbcAmusementRepository.clearProjectConcurrentCapacity:1109-1125 清零并发在场快照（不写 released_at）；OpenAPI 枚举无 release 而服务端接受；AmusementExitReleaseJdbcIntegrationTests:147-164 与 :243-248 断言清零成功 | BSM-068、BSM-069、BEQR-088、BEQR-089、GEN-006、GEN-008；最小处置随 004 整体下线：删 clearProjectConcurrentCapacity（接口声明、Jdbc 实现、AmusementServiceTests 内存仓实现；出场用的 releaseEntryConcurrentCapacity 不动）；出场测试删 supervisorReleaseClearsConcurrentCapacityWithAudit，sessionBatchCapacity 用例去掉末段主管释放并改名、类注释同步，删只为清理改判记录的 DELETE 语句与 import |
+| XM-M034-AB-003 | GR-03＋CX-02 | 冲突（枚举速查第 43 行，同 001） | 是 | 是 | createManualOverrideInternal 接受 allow 并落 status=approved；OpenAPI 两份 override_type 枚举含 allow；AmusementServiceTests:1618-1650、:103-120，AmusementControllerTests 以 allow/approved 为成功样例 | BEQR-012、GEN-001、GEN-003；最小处置随 004 整体下线（入口与枚举随路径一并删除），不改核销执行方法，不删历史行 |
+| XM-M034-AB-004 | GR-04＋CX-04 | 添加（deny、pause、resume 三类无 HTML 上位句，只写记录、不改变核销结果与项目开放状态）；操作员 D-033 答复「删除」 | 是 | 是 | AmusementController.java:39-52 GET/POST /api/v1/amusement/manual-overrides；AmusementService:36 OVERRIDE_TYPES、:109-133 listManualOverrides/createManualOverride、:1581-1616 createManualOverrideInternal、:1850 返回值 id 分支；AmusementRepository 与 JdbcAmusementRepository 的 saveManualOverride/listManualOverrides/listManualOverridesByMerchant（:1371-1410）与 manualOverrideParameters（:1996 起）；JdbcAmusementRowMapper.mapManualOverride；AmusementManualOverrideRecord/Request；amusement.verification.override 在 V014:185/213 种入 active 并授平台管理员（V170 再写 active） | D-033；GEN-001、GEN-005、GEN-008、GEN-014、GEN-016；最小处置：①新增前向迁移 V433 照 V429 停用 amusement.verification.override（status=retired；删 role_permissions、permission_template_items、user_permission_overrides 中该码；active 临时授权置 revoked）；②删两端点、上列服务方法与常量与分支、四个仓储方法与参数助手、行映射方法、两个记录类型文件；③测试：AmusementServiceTests 删两条改判用例与内存仓的改判 Map 及方法实现，AmusementControllerTests 删改判的桩、两处 CsvSource 行、bodyFor 分支与样例，AmusementJdbcIntegrationTests 删 saveManualOverride 与 listManualOverrides 段、平台管理员权限清单去掉该码并补「该码 retired 且四处授予为 0」真库回归（照 AccessJdbcIntegrationTests 的 V429 回归）；④契约：openapi-p0.yaml/json 删 /api/v1/amusement/manual-overrides 两个操作、requestBodies 与 schemas 的 AmusementManualOverrideRequest，两份附录用 docs:operation-matrix、docs:openapi-closure 重生成；⑤文档同步：权限矩阵第 78、269 行改为该码已停用、接口已下线；契约包 docs/p0-api-contract-pack-v0.1.md:334 同改；需求实现矩阵第 49–52 行去掉该接口引用；e2e mock-api.ts:262 删该路径模拟；⑥保留 amusement_manual_overrides 表、历史行、V014/V234 CHECK 与 V099 准入策略行（已无调用方，惰性）；⑦检查点按门禁重生成数据隔离规格与域归属清单（若迁移影响），跑全链 verify:predeploy |
+
+- 写入集合（拟）：生产 TicketingController（M132）、TicketingService（M133）、TicketVerificationService 与 dto/VerificationManualOverrideRequest（M114，后者删除）、AmusementController、AmusementService、AmusementManualOverrideRecord 与 Request（M230，后两者删除）、AmusementRepository 与 JdbcAmusementRepository（M245）、JdbcAmusementRowMapper（M246）、新迁移 V433；测试 TicketingControllerTests（M134）、TicketingServiceTests（M135）、AmusementServiceTests（M232）、AmusementControllerTests 与 AmusementJdbcIntegrationTests（M248）、AmusementExitReleaseJdbcIntegrationTests（M233）、tests/e2e/support/mock-api.ts（M369）；契约 openapi-p0.yaml（M392）、openapi-p0.json（M391）及生成的两份附录（M389、M390）；文档 p0-operation-permission-matrix（M039）、p0-api-contract-pack（M388）、requirements-code-implementation-matrix csv（M424）；门禁要求的生成物如有变化一并带入。开工段外新增 4 个文件（M388、M424、M369 与新迁移），理由见上④⑤⑥与 D-033。
+- 失效范围：以上模块均为 PENDING。
+- 只登记不入队：Grok O-01/O-02 项目与场次状态常量与枚举速查不同形；O-04 主工作区 V429 与 origin/main 不同（审计以 origin/main 为准）；JdbcAdmissionFactRepository:135 注释提及 amusement_manual_override（下线后成过时注释，M460）；docs/amusement-operations-development-design.md 等设计文档已写「已废止」，不改；权限码中文名随停用失去意义，不改名。
+- 修复队列「是」（4）：XM-M034-AB-001…004。修复队列「否」：0。
+
+
+## 当前 XM-M034-AB B2-r1 整批候选（尚未定稿；含 D-033 操作员裁决；无 questions）
+2026-09-24T06:57:18Z。输入仅本合成模块两席 B1 完整 raw：modules/XM-M034-AB-b1-self-raw.md V0.01（49028bytes SHA 991fc776eb2999e12ed0234d7a7b44ebfaa70708f67a8447e57ac1b2a1b2620a，席甲，FAIL：CX-01…04）、modules/XM-M034-AB-b1-grok-raw.md V0.01（36451bytes SHA df7bea7d80f9347af26e913a0ded98c527a139f69113516b289adfbdf36feeb2，Grok 席乙 grok-4.7，FAIL：GR-01…04）。B1 后四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。操作员 D-033（ledger 同时段）：deny、pause、resume 保留。
+席甲读 Grok B1 后核源（B2 补证）：①两份 OpenAPI 无票务人工放行路径（git grep 只命中游乐路径），席甲 B1 CX-01「契约仍有票务路径」判断有误，采 Grok；票务侧契约无需改。②票务入口分类采 Grok「冲突」：权限停用后路由、服务方法与成功断言仍在，仍是在提供该能力。③Grok GR-02 补两点并入 002：release 清零只改快照、不写对应入场记录的 released_at；OpenAPI 枚举本无 release，服务端却接受，契约与实现不一致。④契约与两份附录把游乐改判接口整体写作「游乐人工放行（已废止，不得新增调用）」「deprecated: true」「待代码轮下线」，与 D-033 保留三类不符，同批改为现状。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| XM-M034-AB-001 | GR-01＋CX-01 | 冲突（枚举速查第 43 行「系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」） | 是 | 是 | TicketingController.java:495-507 POST /api/v1/ticketing/verifications/manual-override；TicketingService.manualOverrideVerification:934-937；TicketVerificationService.manualOverride:207-248 写 status=manual_overridden；dto/VerificationManualOverrideRequest；TicketingControllerTests:237-328、TicketingServiceTests:488-498 把人工放行断言为成功。V429 使权限码 retired、接口对含最高权限在内的所有主体拒绝，但写入口、服务方法与成功断言仍在 | BEQR-012、GEN-002、GEN-003、GEN-016；最小处置：删控制器映射、两个服务方法与只被其使用的 DTO；删或改两处测试里期望成功与 manual_overridden 的用例；不留 403 空壳；不改 V067 CHECK、V270、V429，不新增迁移，历史行保留；权限矩阵文档第 63、251 行「停用，待代码轮下线」改为写入口已去掉 |
+| XM-M034-AB-002 | GR-02＋CX-03 | 冲突（BSM 第 1263 行「在玩人数不允许人工调整：任何岗位（含主管与最高权限）都不得手工修改、清零或修正在玩人数；计数只能由入场核销与出场自动扣减产生」） | 是 | 是 | AmusementService.createManualOverrideInternal:1594-1599 对 release 调 JdbcAmusementRepository.clearProjectConcurrentCapacity:1109-1125 把并发在场快照清零（不写入场记录 released_at）；OpenAPI 枚举无 release 而服务端接受；AmusementExitReleaseJdbcIntegrationTests:147-164、:243-248 断言清零成功 | BSM-068、BSM-069、BEQR-088、BEQR-089、GEN-006、GEN-008；最小处置：OVERRIDE_TYPES 去掉 release（服务端按既有枚举校验报 VALIDATION_FAILED），删去 release 分支与对 clearProjectConcurrentCapacity 的调用；该方法已无生产调用方，连同接口声明、Jdbc 实现与测试内存仓的实现一并删除（出场扣减用的 releaseEntryConcurrentCapacity 不动）；两条集成测试改为断言 release 被拒、在场人数不变；V014/V234 CHECK 与历史行不动 |
+| XM-M034-AB-003 | GR-03＋CX-02 | 冲突（枚举速查第 43 行，同 001） | 是 | 是 | createManualOverrideInternal 接受 allow 并落 status=approved；OpenAPI 两份 override_type 枚举含 allow；AmusementServiceTests:1618-1650、AmusementControllerTests:116-117、236-238、391-392 把 allow/approved 当成功 | BEQR-012、GEN-001、GEN-003；最小处置：OVERRIDE_TYPES 去掉 allow 并删 allow→approved 分支；两份 OpenAPI 枚举去掉 allow；测试改用保留类型并补 allow、release 被拒断言；不改核销执行方法，不删历史行 |
+| XM-M034-AB-004 | GR-04＋CX-04（按 D-033 改写） | 细化（契约与文档准确性；D-033 保留三类后，「整接口已废止、待代码轮下线」的表述与实现不符） | 是 | 是 | openapi-p0.yaml:574-615 与 json 同构：summary「游乐人工放行（已废止，不得新增调用）」、deprecated: true、description「待代码轮下线」；p0-openapi-contract-closure-appendix:1854、1879 与 p0-openapi-operation-acceptance-matrix:43-44 同句；权限矩阵文档第 78、269 行「amusement.verification.override 停用，待代码轮下线」 | GEN-008、GEN-016；D-033；最小处置：契约两份把 POST/GET 的 summary 改为「游乐改判记录（拒绝／暂停／恢复）」、去掉 deprecated 与「待代码轮下线」、description 写明人工放行已废止、在玩人数不得人工清零；两份附录与权限矩阵对应行同口径改写；权限码、端点、deny/pause/resume 行为不改（pause/resume 名不副实留游乐模块串行审计） |
+
+- 写入集合（拟）：生产 TicketingController（M132）、TicketingService（M133）、TicketVerificationService 与 dto/VerificationManualOverrideRequest（M114）、AmusementService（M230）、AmusementRepository 与 JdbcAmusementRepository（M245）；测试 TicketingControllerTests（M134）、TicketingServiceTests（M135）、AmusementServiceTests（M232）、AmusementControllerTests（M248）、AmusementExitReleaseJdbcIntegrationTests（M233）；契约 openapi-p0.yaml（M392）、openapi-p0.json（M391）、p0-openapi-contract-closure-appendix（M389）、p0-openapi-operation-acceptance-matrix（M390）；文档 p0-operation-permission-matrix（M039）。无迁移。均在开工段 33 个文件内。
+- 失效范围：以上模块均为 PENDING。
+- 只登记不入队：Grok O-01/O-02 项目与场次状态常量与枚举速查不同形（未追完）；O-03 DTO 注释权限码笔误（随 001 删 DTO 消失）；O-04 主工作区 V429 与 origin/main 不同（审计以 origin/main 为准）；席甲观察 JdbcAdmissionFactRepository:135 过时注释、V099 准入策略行惰性保留；权限码中文名「强制改判游乐核验结果」（V254）与保留后的用途不符，改名须前向迁移，留游乐模块串行审计。
+- 修复队列「是」（4）：XM-M034-AB-001…004。修复队列「否」：0。
+
 
 ## 当前 XM-M031-B B4-r1 双 PASS，001 已修转「否」，进入 B5-r1
 2026-09-24T06:09:41Z。Grok B4-r1 票 PASS（modules/XM-M031-B-b4-r1-grok-raw.md，22500bytes SHA 3ffcb7b8db08b0da6ae86fed8e5e35d4b9ae3db27dd442819c0a7c612c68dc65；grok-4.7；2 块越界 0）；席甲票 PASS（modules/XM-M031-B-b4-r1-self-raw.md，5877bytes SHA f1ffeba71a1ef0233f6b21d6d984ebea297a4948bd1a0b19b2c4c3c5aa1d930b）。XM-M031-B-001 修复队列「是」→「否（已修，B3-r1）」。
