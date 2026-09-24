@@ -914,7 +914,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     // M006-G-06（PGM-1.10.1「到期、单次消耗、失效全部留痕」）：读取有效权限前，把本人已到期仍标 active 的
     // 临时授权 / 模板应用置为 expired 并各写一条用量日志；UPDATE 只命中 active 行，重复读取不再写，幂等。
-    // ponytail: 读时顺带清理、只扫本人行；需要按时全量到期时改为定时任务复用本方法即可。
+    // ponytail: 读时顺带清理、只扫本人行；模板套用的按时全量到期由 PermissionExpiryJob 复用 expireTemplateApplications（M001-F03）。
     private void expireLapsedEffects(String userId, Instant checkedAt) {
         MapSqlParameterSource parameters = new MapSqlParameterSource()
                 .addValue("user_id", userId)
@@ -932,19 +932,36 @@ class JdbcAccessRepository implements AccessRepository {
             logExpiry(null, userId, (String) grant.get("permission_code"),
                     "expired:temporary_grant:" + grant.get("source_id"), checkedAt);
         }
-        for (Map<String, Object> application : jdbcTemplate.queryForList("""
+        expireTemplateApplications(userId, checkedAt);
+    }
+
+    @Override
+    @Transactional
+    public int expireLapsedTemplateApplications(Instant checkedAt) {
+        return expireTemplateApplications(null, checkedAt);
+    }
+
+    // userId 为 null 时处理全部员工（M001-F03 到期作业）；UPDATE 只命中 active 行，重复运行不再写，幂等。
+    // 本人过滤按需拼固定片段（不用「参数 IS NULL OR」），读取有效权限这条热路径仍走 target_id 条件。
+    private int expireTemplateApplications(String userId, Instant checkedAt) {
+        String targetFilter = userId == null ? "" : "AND application.target_id = :user_id";
+        List<Map<String, Object>> expired = jdbcTemplate.queryForList("""
                 UPDATE permission_template_applications AS application
                    SET status = 'expired'
                   FROM permission_templates AS template
                  WHERE application.template_id = template.id
                    AND application.target_type = 'user'
-                   AND application.target_id = :user_id
+                   %s
                    AND application.status = 'active'
                    AND COALESCE(application.valid_until, template.valid_to) <= :checked_at
-             RETURNING application.id AS source_id
-                """, parameters)) {
-            logExpiry((String) application.get("source_id"), userId, null, "expired", checkedAt);
+             RETURNING application.id AS source_id, application.target_id AS user_id
+                """.formatted(targetFilter), new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("checked_at", timestampWithTimeZone(checkedAt)));
+        for (Map<String, Object> application : expired) {
+            logExpiry((String) application.get("source_id"), (String) application.get("user_id"), null, "expired", checkedAt);
         }
+        return expired.size();
     }
 
     @Override

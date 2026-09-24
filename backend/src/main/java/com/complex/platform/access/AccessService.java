@@ -31,6 +31,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -214,8 +215,23 @@ public class AccessService {
                         if (safeList(request.targetUserIds()).isEmpty()) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "必须选择授权目标");
                         }
-                        for (String userId : request.targetUserIds()) {
-                            requireSameOrganization(actor, requireTargetUser(requireText(userId, "user_id")));
+                        List<String> targetUserIds = request.targetUserIds().stream()
+                                .map(userId -> requireText(userId, "user_id"))
+                                .toList();
+                        // M001-F02（PGM 权限规则，2026-09-24 操作员裁决）：同一次套用中同一员工只能出现一次，重复即整单拒绝。
+                        Set<String> seen = new HashSet<>();
+                        Set<String> duplicates = new LinkedHashSet<>();
+                        for (String userId : targetUserIds) {
+                            if (!seen.add(userId)) {
+                                duplicates.add(userId);
+                            }
+                        }
+                        if (!duplicates.isEmpty()) {
+                            throw ApiException.badRequest("VALIDATION_FAILED",
+                                    "同一次套用中员工重复：" + String.join("、", duplicates));
+                        }
+                        for (String userId : targetUserIds) {
+                            requireSameOrganization(actor, requireTargetUser(userId));
                         }
                         PermissionTemplate template = repository.findTemplateById(id)
                                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND", "权限模板不存在：" + id));
@@ -239,13 +255,14 @@ public class AccessService {
                         // 故审批期间模板内容变化亦无从偷换。
                         requireGrantApprovalIfNeeded(templatePermissionCodes);
                         boolean singleUse = template.singleUse() || "single_use".equalsIgnoreCase(trimToDefault(request.mode(), "append"));
+                        // M001-F04（PGM 权限规则：授予全部留痕）：授予人记实际操作者，审计事件逐条带套用记录 id。
                         PermissionTemplateApplyResult result = new PermissionTemplateApplyResult(repository.applyTemplate(
                                 id,
-                                safeList(request.targetUserIds()),
+                                targetUserIds,
                                 template.validFrom(),
                                 template.validUntil(),
                                 singleUse,
-                                "access-api"
+                                actor.id()
                         ));
                         auditEventService.recordSuccess(
                                 "permission_template.applied",
@@ -254,7 +271,8 @@ public class AccessService {
                                 id,
                                 null,
                                 request.idempotencyKey(),
-                                Map.of("target_count", result.applications().size())
+                                Map.of("target_count", result.applications().size(),
+                                        "application_ids", result.applications().stream().map(PermissionTemplateApplication::id).toList())
                         );
                         return result;
                     },

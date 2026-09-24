@@ -1293,6 +1293,60 @@ class AccessServiceTests {
         });
     }
 
+    // ── M001（审计 20260924T114205Z）：套用的重复目标与真实授予人 ─────────────
+
+    @Test
+    void applyPermissionTemplateRejectsDuplicateTargetUserWithoutWriting() {
+        // M001-F02：同一次套用请求中同一员工只能出现一次，重复即整单拒绝、不生成任何套用记录（2026-09-24 操作员裁决）。
+        accessRepository.createUser(new AccessUser("usr_dup", "dup", "staff", "seed-org", null, "active", Instant.now()));
+        accessRepository.createUser(new AccessUser("usr_other", "other", "staff", "seed-org", null, "active", Instant.now()));
+        PermissionTemplate template = service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-dup", "seed", List.of(), "Dup template", "temporary", null,
+                List.of("ops.production_readiness.check"), "project",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), true));
+
+        assertThatThrownBy(() -> service.applyPermissionTemplate(template.id(), new PermissionTemplateApplyRequest(
+                "apply-dup", "apply", List.of(), template.id(), List.of("usr_dup", "usr_other", "usr_dup"), "merge")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(400);
+                    assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(e.getMessage()).isEqualTo("同一次套用中员工重复：usr_dup");
+                });
+        assertThat(accessRepository.templateApplications).isEmpty();
+    }
+
+    @Test
+    void applyPermissionTemplateRecordsEachActorAsAppliedByAndAuditsApplicationIds() {
+        // M001-F04：每条套用记录的授予人是实际操作者；成功审计事件逐条带套用记录 id。
+        accessRepository.templates.put("tpl_seed_apply", new PermissionTemplate(
+                "tpl_seed_apply", "tpl_seed_apply", "Seed org template", null, "base",
+                null, "organization", "seed-org", "merge", null, null, false, "active",
+                null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        accessRepository.items.put("tpl_seed_apply", List.of());
+        accessRepository.createUser(new AccessUser("usr_f4_a", "f4a", "staff", "seed-org", null, "active", Instant.now()));
+        accessRepository.createUser(new AccessUser("usr_f4_b", "f4b", "staff", "seed-org", null, "active", Instant.now()));
+        accessRepository.createUser(new AccessUser("usr_f4_c", "f4c", "staff", "seed-org", null, "active", Instant.now()));
+
+        PermissionTemplateApplyResult byAdmin = service.applyPermissionTemplate("tpl_seed_apply", new PermissionTemplateApplyRequest(
+                "apply-f4-admin", "apply", List.of(), "tpl_seed_apply", List.of("usr_f4_a", "usr_f4_b"), "merge"));
+        authenticateAsOrgUser("usr_seed_actor", "seed-actor", "seed-org");
+        PermissionTemplateApplyResult byOrgUser = service.applyPermissionTemplate("tpl_seed_apply", new PermissionTemplateApplyRequest(
+                "apply-f4-org", "apply", List.of(), "tpl_seed_apply", List.of("usr_f4_c"), "merge"));
+
+        assertThat(byAdmin.applications()).extracting(PermissionTemplateApplication::appliedBy)
+                .containsExactly("usr_admin", "usr_admin");
+        assertThat(byOrgUser.applications()).extracting(PermissionTemplateApplication::appliedBy).containsExactly("usr_seed_actor");
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "permission_template.applied".equals(event.eventName()))
+                .extracting(event -> event.metadata().get("application_ids"))
+                .containsExactly(
+                        byAdmin.applications().stream().map(PermissionTemplateApplication::id).toList(),
+                        byOrgUser.applications().stream().map(PermissionTemplateApplication::id).toList());
+    }
+
     // ── P0: listAccessUsers 只返回本组织用户 ──────────────────────────────
 
     @Test

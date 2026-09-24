@@ -171,6 +171,11 @@ public interface AccessRepository {
             String appliedBy
     );
 
+    /** M001-F03：把全部员工已到期仍标 active 的模板套用置 expired 并各写一条到期日志，返回处理条数（到期作业调用）。 */
+    default int expireLapsedTemplateApplications(Instant checkedAt) {
+        throw new UnsupportedOperationException("expireLapsedTemplateApplications not supported by this repository");
+    }
+
     TemporaryGrant createTemporaryGrant(TemporaryGrant temporaryGrant);
 
     TemporaryGrant revokeTemporaryGrant(String id, String revokedBy, Instant revokedAt);

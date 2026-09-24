@@ -624,6 +624,44 @@ class AccessJdbcIntegrationTests {
                 .containsEntry("result", "expired");
     }
 
+    // M001-F03（PGM 权限规则「到期自动失效」「到期……全部留痕」）：无人读取该员工权限时，到期作业也要置 expired
+    // 并恰写一条到期日志；重复运行不重复记账。
+    @Test
+    void lapsedTemplateApplicationIsExpiredByJobWithoutAnyEffectsRead() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_tpl_job",
+                "jdbc-tpl-job",
+                "staff",
+                "org",
+                "merchant",
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.createTemplate(
+                template("tpl_temporary_job", "temporary-job", null),
+                List.of(item("tpl_temporary_job", "ops.production_readiness.check", AccessRepository.Effect.GRANT))
+        );
+        String applicationId = repository.applyTemplate(
+                "tpl_temporary_job",
+                List.of("usr_jdbc_tpl_job"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-15T00:00:00Z"),
+                false,
+                "seed-admin"
+        ).get(0).id();
+        PermissionExpiryJob job = new PermissionExpiryJob(repository, false);
+
+        assertThat(job.runOnce(Instant.parse("2026-06-16T00:00:00Z"))).isGreaterThanOrEqualTo(1);
+        assertThat(job.runOnce(Instant.parse("2026-06-17T00:00:00Z"))).isZero();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permission_template_applications WHERE id = ?", String.class, applicationId))
+                .isEqualTo("expired");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT result FROM permission_template_usage_logs WHERE application_id = ?", String.class, applicationId))
+                .containsExactly("expired");
+    }
+
     // M032-001（治理地图「全平台审批通用时限」为后台业务参数）：库内现行授权政策行（V389 起带 deadlineWorkingDays）
     // 必须能按服务层同一解析路径读出；保存一份不带该键的政策后，库内该键保持原值。
     @Test
