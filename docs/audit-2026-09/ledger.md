@@ -1,7 +1,106 @@
 CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
 LOCK-AMEND-COUNT: 1
 
-版本：V9.96
+版本：V10.07
+
+## 当前 XM-M031-B B5-r1 双 PASS 收口，进入检查点
+2026-09-24T06:28:51Z。Grok B5-r1 真实 exit 0（回执 /home/james/audit-tmp/xm031b_b5.receipt），报告 modules/XM-M031-B-b5-r1-grok-raw.md（V0.01，23074bytes SHA256 02203e9a7cced7b6b3652d423e3b97af33b752af6c0a5a794b10b7abf267e74b，grok-4.7/xhigh），结论 PASS、新问题 0；其自跑变异（去注解则两条回归红）与全量 MVN_EXIT 0。席甲 B5-r1 票 PASS（modules/XM-M031-B-b5-r1-self-raw.md，12899bytes SHA256 4a85fc93a3cb97565618b4cc533aaa085efd220ce7a5786c7e37876027d08b46；3539 测 0 红；修复后探针 1 行／recordFailure=ok）。四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。合取双 PASS：XM-M031-B PASS；B3 累计 1/3；修复队列「是」＝0。闭环文件 modules/XM-M031-B-failure-audit-independent-tx.md。
+失效范围：写入集合所属 M092、M095 均为 PENDING。
+新观察（Grok B5 提出，只登记）：一次性空库全量里有 17 条测试被既有 assumeTrue 跳过（M006JdbcRegressionTests 13 条、M006StoredValueJdbcTests 4 条，要求库名恰为 complex_test）；complex_test 又因迁移历史含已改号 427 过不了 Flyway 校验，这 17 条目前在任何库上都不执行，归 M036/M037 所在的 access 测试模块现锁重审时处置。
+下一步：检查点——origin/main（4a066def）一次性 worktree 只带 2 个代码文件、ledger、findings、XM-M031-B 六份 raw 与闭环文件；提交前一次性空库后端全量须 0 红；再 propose-change／merge-pr --merge。之后按 D-031 顺序：XM-M034-A/B、XM-M033-A…D 与 XM-M031-C，再 13 个模块现锁重审（XM-M036A-1 并入 M032 现锁重审作输入）。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M031-B B5-r1 本席完整 PASS 已封存，待 Grok
+2026-09-24T06:11:46Z。席甲 B5-r1 自席 raw modules/XM-M031-B-b5-r1-self-raw.md（V0.01，12899bytes SHA256 4a85fc93a3cb97565618b4cc533aaa085efd220ce7a5786c7e37876027d08b46）已封存，结论 PASS：origin/main＋冻结 diff 后端全量 263 套 3539 测 0 红（xm031b_b5_run.log）；修复后重跑 B1 探针，带事务写方法失败事件 1 行、事务中止时 recordFailure 正常写入且原异常原样（xm031b_probe_post.log）；46 判据逐项；无新缺陷。封存时 Grok B5-r1 仍在运行，未读其正文。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M031-B B4-r1 双 PASS，进入整模块重审（B5-r1）
+2026-09-24T06:09:41Z。Grok B4-r1 真实 exit 0，报告 modules/XM-M031-B-b4-r1-grok-raw.md（V0.01，22500bytes SHA256 3ffcb7b8db08b0da6ae86fed8e5e35d4b9ae3db27dd442819c0a7c612c68dc65，grok-4.7），归因票 PASS（越界 0）、内容票 PASS。席甲 B4-r1 票 PASS。四值全等。合取双 PASS，findings V4.05（SHA256 42547ccfe72fbe082d03e525acc2a3047df7441570415394fe3d36e7b68d5ce8）把 001 队列改否；当前队列是＝0。B3 累计 1/3。
+下一步 B5-r1：派 Grok 整模块全量三线重审（modules/XM-M031-B-b5-r1-grok-raw.md），席甲自席 raw 后读 Grok 并做四值校验；双 PASS → 台账先记 PASS 再写闭环文件、检查点合并。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。合成模块XM-M031-B B5-r1修复后整模块三线全量重审，正本/home/james/complex-management main主工作区（开工段6个文件与TraceabilityJdbcIntegrationTests的主工作区现状即发布版：origin/main 4a066def加冻结diff /home/james/audit-tmp/xm031b_b3r1.diff）。按160-audit-prompt.md V0.17 B1/B5及三线，范围＝ledger「当前 XM-M031-B B1 开工」段所列6个文件的现状加B3改到的TraceabilityJdbcIntegrationTests，全读，并读判断所需的调用方（recordFailure的调用方、IdempotencyService事务模板）与audit_events表定义，逐项过锁内M092、M095映射并集46项，不能只看diff或复用旧票。背景：B1双FAIL→B2-r1双PASS→B2-r2双PASS（回归改放TraceabilityJdbcIntegrationTests）→B3-r1→B4-r1内容与归因双PASS（Grok raw SHA256 3ffcb7b8db08b0da6ae86fed8e5e35d4b9ae3db27dd442819c0a7c612c68dc65、席甲 SHA256 f1ffeba71a1ef0233f6b21d6d984ebea297a4948bd1a0b19b2c4c3c5aa1d930b）；B3累计1。findings现在V4.05：XM-M031-B-001否（已修）；不把全部否当模块已全对，允许真实新证据或回归。
+后端测试实跑须用一次性空库（complex_test迁移历史含已改号427，方法见ledger D-032段）：origin/main一次性worktree里git apply该冻结diff，建自己的一次性空库，只在该worktree内把测试里写死的5432/complex_test临时改指空库并设SETTLE_TEST_DB_URL，mvn -o test（JAVA_HOME须为21），跑完git checkout还原、DROP你建的空库、git worktree remove不加--force；不得写complex或complex_test。席甲B3 GREEN证据：/home/james/audit-tmp/xm031b_b3_run.log（3539测0红）。
+重点：带事务写方法失败后失败事件是否留住、事务中止时原异常是否不再被顶掉；成功事件是否仍随业务回滚；独立事务有无自锁、连接或测试串扰新问题；回归断言能否失败；有无新引入问题。全量审需第一性三问、顺从46项、grilling对抗，审完全部范围收齐全部问题才统一PASS/FAIL；不为理论场景加需求；已在B2双席定为只登记的项（IdempotencyService注释与带事务调用方、连接池、终端字面量web、errorCode为空、读路径坏JSON）不得在无新证据时改判。每问题给精确文件行/原句/正常触发/四分类顺序/已有判据/证据类型。
+独立性：不得读本次modules/XM-M031-B-b5-r1-self-raw.md；两份本次完整raw各自封存后才互读；旧raw可读；全仓检索时若命中该路径的片段须丢弃不采信。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物（一次性worktree与一次性空库除外且须删除），不对complex、complex_test执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M031-B-b5-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/46项证据/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M031-B B4-r1 本席完整 PASS 已封存，待 Grok
+2026-09-24T05:52:05Z。席甲 B4-r1 自席 raw modules/XM-M031-B-b4-r1-self-raw.md（V0.01，5877bytes SHA256 f1ffeba71a1ef0233f6b21d6d984ebea297a4948bd1a0b19b2c4c3c5aa1d930b）已封存：2 块归因齐全、越界 0；内容按定稿最小处置实现，GREEN 0 红。归因票 PASS、内容票 PASS。封存时 Grok B4-r1 仍在运行，未读其正文。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M031-B B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-24T05:51:30Z。席甲按 findings V4.04 定稿改生产 AuditEventService（M092：recordFailure 加 @Transactional(propagation = REQUIRES_NEW) 与说明注释）与测试 TraceabilityJdbcIntegrationTests（M095：三条真库回归，方法级 NOT_SUPPORTED，注入 AuditEventService、AccessService、PlatformTransactionManager）。origin/main 一次性 worktree＋一次性空库（/home/james/audit-tmp/xm031b_b3_run.log，已还原移除、空库已删）：RED 只落测试补丁，后端全量 263 套 3539 测 2 红，恰为两条新回归（事务中止那条被 UncategorizedSQLException 顶掉原异常、定岗那条失败事件 0 行；xm031b_b3_red.msgs）；GREEN 3539 测 0 红，MVN_EXIT 0。主工作区落补丁：写入前 2 个文件与 origin/main 4a066def 相同；before tree 70775ec209d7c10729b8d35f11369b3e716f2ef9 → after tree b0073bee235305853d226ddc84785805ec390b99；冻结 diff /home/james/audit-tmp/xm031b_b3r1.diff（6149bytes SHA256 3967a92b09840dda73033e5bd01d1ddd4880608b9466b790d044653d73955a6b，2 files changed, 75 insertions），与一次性 worktree 验证过的 diff 逐字节相同（xm031b_b3_apply.log）。逐块归因 2 块齐全。B3 累计 1/3。
+派 Grok B4-r1（modules/XM-M031-B-b4-r1-grok-raw.md），席甲 B4-r1 自席落 modules/XM-M031-B-b4-r1-self-raw.md。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。合成模块XM-M031-B B4-r1：只读审计席甲B3-r1修复diff本身，正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B4与§5闸3：逐行归因到findings.md V4.04已定稿且归属是的ID（XM-M031-B-001，按「XM-M031-B B2-r2 双 PASS 定稿」段及其所引B2-r2候选与B2-r1定稿），归因不到的行即越界；内容上核是否按定稿最小处置与你B2-r1、B2-r2写死的边界实现，是否引入新缺陷或新业务。
+输入：before tree 70775ec209d7c10729b8d35f11369b3e716f2ef9 → after tree b0073bee235305853d226ddc84785805ec390b99；冻结diff /home/james/audit-tmp/xm031b_b3r1.diff（6149bytes SHA256 3967a92b09840dda73033e5bd01d1ddd4880608b9466b790d044653d73955a6b；2 files changed, 75 insertions），可自行git diff --binary两个tree复核一致；写入前2个文件与origin/main 4a066def逐字节相同。席甲逐块归因表在ledger本段所附modules/XM-M031-B-b4-r1-self-raw.md里，你不得读其本次正文，需自行归因。证据：/home/james/audit-tmp/xm031b_b3_run.log——origin/main一次性worktree加一次性空库：RED只落测试补丁，后端全量3539测2红，恰为两条新回归（事务中止那条因UncategorizedSQLException顶掉原异常而红、定岗那条因失败事件0行而红，见xm031b_b3_red.msgs）；GREEN测试加生产补丁，3539测0红，MVN_EXIT 0；主工作区diff与一次性worktree验证过的diff逐字节相同（xm031b_b3_apply.log）。如需实跑后端测试只可自建一次性worktree与一次性空库（测试写死的complex_test只在该worktree内临时改指），跑完还原并删除；不得写complex或complex_test；或只跑不连库的单元测试类。
+重点：生产是否只在recordFailure上加REQUIRES_NEW（record、recordSuccess未动）且注释与事实相符；回归是否在TraceabilityJdbcIntegrationTests、方法级NOT_SUPPORTED、注入容器里的三个Bean、不DELETE不TRUNCATE、按本次唯一键断言；事务中止那条是否为打开的事务里SQL失败后recordFailure再throw原异常、不包内层try；三条断言修复前能否失败或守住边界；类中原有方法与夹具未改；文件模式未变。
+独立性：不得读本次modules/XM-M031-B-b4-r1-self-raw.md；两份本次完整raw各自落盘后才互读；旧raw可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不装依赖，不建脚本日志临时产物（一次性worktree与一次性空库除外且须删除），不对complex、complex_test执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M031-B-b4-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。diff逐块归因表、内容审计、最终PASS或FAIL（内容与归因分别给票，任一FAIL即FAIL）留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M031-B B2-r2 双 PASS 定稿，进入 B3-r1
+2026-09-24T05:48:54Z。Grok B2-r2 真实 exit 0（回执 /home/james/audit-tmp/xm031b_b2r2.receipt），追加段 modules/XM-M031-B-b1-grok-raw.md V0.03（全文 59828bytes SHA256 c574cc76f592ab78f1e2bad1f6c6ea44f8592d190b071299f1ff00fa27f6778d），票 PASS；席甲票 PASS。合取双 PASS：findings V4.04（SHA256 abea0358509fb953067f30ddb5dbd19ae155a7f40807b9e184fa5411d06eed12）定稿 XM-M031-B-001 修复队列「是」。B3 累计 0/3。
+下一步 B3-r1（席甲）：origin/main 一次性 worktree＋一次性空库，RED 只落测试补丁、GREEN 落测试＋生产补丁，各跑后端全量；GREEN 须 0 红；随后同一补丁落主工作区并冻结。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M031-B B2-r2（只改写 001 回归位置）候选已落盘，待 Grok B2-r2 票
+2026-09-24T05:33:21Z。Grok B2-r1 真实 exit 0（回执 /home/james/audit-tmp/xm031b_b2.receipt），追加段 modules/XM-M031-B-b1-grok-raw.md V0.02（全文 43314bytes SHA256 dba6f5e9488fab8c39797f19872ceeec5731078ea32f6799b390399d068f6015），票 PASS；席甲 B2-r1 票 PASS。B2-r1 双 PASS 定稿 XM-M031-B-001（细化）入队。Grok 自述按字节截取席甲 raw 时截断点后的标题进入预览、随即停读、结论不引用，如实记录。
+Grok B2-r1 指出回归宿主 EvidenceEventJdbcIntegrationTests 的 @BeforeEach 在 NOT_SUPPORTED 方法里会提交 TRUNCATE evidence_events，并以「只在一次性空库上跑」为约束；席甲认为该约束写不进代码（数据源写死 complex_test），提 B2-r2 只改回归位置为 TraceabilityJdbcIntegrationTests（M095，无清表夹具）。候选 findings V4.03（SHA256 cbfcf8ec9ac25f54c69e84e5e87b7a72d37dec44aa8a4bfe8135a12850314af3）。席甲 B2-r2 票 PASS 已追加到 modules/XM-M031-B-b1-self-raw.md V0.03（全文 19485bytes SHA256 e44d270a97c4b5ce0f6c1e1a95ad232a4e66fdb21256f3464992b7013e8df27f）。派 Grok B2-r2（追加到 modules/XM-M031-B-b1-grok-raw.md V0.03）。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.7/xhigh。执行合成模块XM-M031-B B2-r2复核，正本/home/james/complex-management main主工作区，以origin/main（4a066def）为准。B2-r1已双PASS定稿001（你的追加段在modules/XM-M031-B-b1-grok-raw.md V0.02）。席甲据你B2-r1第3节所写EvidenceEventJdbcIntegrationTests的@BeforeEach在NOT_SUPPORTED方法里会提交TRUNCATE evidence_events一事，提出B2-r2，只改写001的回归位置：改放同属M095的TraceabilityJdbcIntegrationTests。候选在findings.md顶部「当前 XM-M031-B B2-r2 候选」段。
+只审这次改写，不重新审模块、不重开001其余处置。逐项独立核实：一、TraceabilityJdbcIntegrationTests是否确无@BeforeEach、TRUNCATE、DELETE等会在方法级NOT_SUPPORTED下变成真提交的夹具写操作，类级注解与数据源写法如何，放入三条回归后除本次唯一键的audit_events行外是否还有别的持久副作用；二、「只在一次性空库上跑」能否作为约束保留在EvidenceEventJdbcIntegrationTests（该类数据源写死complex_test），改位置是否必要且最小；三、三条回归内容（赋角色与定岗失败各1行、事务中止后按recordFailure再throw原异常的形状不包内层try、会回滚事务里的成功事件0行）放到新位置后修复前能否失败、是否需要该类另注入什么；四、有无添加项、有无须问操作员的口径。
+独立性：本次不得读modules/XM-M031-B-b1-self-raw.md在其V0.02（18489字节）之后追加的席甲B2-r2段；只允许两席，不用MCP/子代理/第三席，不问人，不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M031-B-b1-grok-raw.md：在文件末尾追加「XM-M031-B B2-r2 复核（Grok席乙，V0.03）」段并把文件版本记为V0.03，不改前文；追加段不写独占锁行。逐项给结论、对改写投同意或反对并写理由，最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M031-B B1 两票已齐，B2-r1 候选已落盘，待 Grok B2-r1 票
+2026-09-24T05:13:43Z。Grok B1 真实 exit 0（回执 /home/james/audit-tmp/xm031b_b1.receipt），modules/XM-M031-B-b1-grok-raw.md V0.01（28762bytes SHA256 f53409a6998f6c408d37e846471d48dbdbdc6e172cfc419b8c995923e761852e，grok-4.7/xhigh），FAIL：GR-01。席甲 B1 V0.01 FAIL：CX-01、CX-02。四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。
+B2-r1 候选 findings V4.02（SHA256 79a9cbea78fd1e8a0e9714bf7814da1b32b2487c0ccc1fc4183208affa612861）：XM-M031-B-001（细化）拟入队——recordFailure 加 REQUIRES_NEW（采 Grok 写法），真库回归放 M095 EvidenceEventJdbcIntegrationTests（开工段外、同判据并集，请 Grok 核）；计数采 Grok 46/25/31；观察只登记。席甲 B2-r1 票 PASS 已追加到 modules/XM-M031-B-b1-self-raw.md V0.02（全文 18489bytes SHA256 fe20bc695a812fd18c6f563c1589bad718a2cdf844b0d415eb5ca1cc10eb5598）。无添加项、无 questions、不 BLOCKED。派 Grok B2-r1（追加到 modules/XM-M031-B-b1-grok-raw.md V0.02）。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.7/xhigh。执行合成模块XM-M031-B B2-r1整批归并复核，正本/home/james/complex-management main主工作区，以origin/main（4a066def）为准。B1两席已落齐：你的modules/XM-M031-B-b1-grok-raw.md V0.01（FAIL，GR-01），席甲modules/XM-M031-B-b1-self-raw.md V0.01（FAIL，CX-01、CX-02）；B1后四值全等。候选在findings.md顶部「当前 XM-M031-B B2-r1 整批候选」段。
+只审本批的归并、分类、队列与最小修复边界，不重新审模块。逐项独立核实：一、差集：GR-01与CX-01、CX-02并为001是否漏并或改写原意。二、001处置采你的方法级注解（recordFailure加REQUIRES_NEW，成功路径不动），席甲补核生产里唯一直接new AuditEventService的是AuthService第64行开发用空写仓储；请核该处及有无其他绕过代理的调用（含类内自调用、@Configuration手工构造）。三、写入集合：席甲拟把M095的EvidenceEventJdbcIntegrationTests（开工段6文件之外、同判据并集M095单元集内）纳入写入集合放真库回归，方法级NOT_SUPPORTED覆盖类级事务，不DELETE、按本次唯一键断言；请判定是否同意纳入、是否最小，或给更合适的位置。四、回归三条（赋角色与定岗失败各1行、事务中止后recordFailure不抛且原异常种类不变且1行、会回滚事务里的成功事件0行）能否在修复前失败、是否足够。五、计数更正（46个调用方文件、25个含注解、31处）与观察登记是否接受。六、有无添加项、有无须问操作员的业务口径。
+独立性：两份B1 raw已互读。本次不得读modules/XM-M031-B-b1-self-raw.md在其V0.01（16987字节）之后追加的席甲B2段；只允许两席，不用MCP/子代理/第三席，不问人，不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M031-B-b1-grok-raw.md：在文件末尾追加「XM-M031-B B2-r1 整批复核（Grok席乙，V0.02）」段并把文件版本记为V0.02，不改前文；追加段不写独占锁行。逐项给结论、对候选ID投同意或反对并写理由，最终整批PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M031-B B1 本席完整 FAIL 已封存，待 Grok
+2026-09-24T04:52:25Z。席甲 self modules/XM-M031-B-b1-self-raw.md V0.01/16987bytes/SHA256 a3e7fc91d8c7405766b5e05fc07a942669972c18a2001448f49ed0e9c1d186d1：6 个文件全读、46 判据逐项、三线完成；取证为一次性 worktree＋一次性空库两个探针（/home/james/audit-tmp/xm031b_probe.log，已删）。封存前未读 Grok 本次正文。结论 FAIL：CX-01 带事务写方法的失败事件随业务回滚丢失（1 行对 0 行）、CX-02 事务被 SQL 错误中止后 recordFailure 自身抛「current transaction is aborted」顶掉原异常；观察：IdempotencyService 注释与带事务调用方不符（→M084）、独立事务借第二连接的池耗尽只登记；回归位置建议 M095 EvidenceEventJdbcIntegrationTests（不在开工段 6 文件内，B2 定）。尚非合取结论。
+
+
+## 当前 XM-M031-B B1 开工（合成模块，D-031），待两席 B1
+2026-09-24T04:48:32Z。合成模块 XM-M031-B（M031 收口登记转 M092：带 @Transactional 的写方法在 catch 里记的失败事件随业务回滚丢失；M031 两席定为单点处置归 M092 的 AuditEventService，不逐个摘调用方事务注解）IN_PROGRESS，席甲＝Claude Opus 5.5。基线 origin/main 4a066def（PR #489 合并后，后端全量 0 红）。真库复现（/home/james/audit-tmp/xm031b_probe.log，一次性 worktree＋一次性空库，已删）：不带事务的 assignUserRole 失败事件 1 行、带事务的 assignUserPosition 失败事件 0 行。生产代码调 recordFailure 的 47 个文件中 27 个带 @Transactional。
+范围（6 个文件；origin/main 4a066def 行数与 blob）：
+| 文件 | 所属模块 | 行数 | blob |
+|---|---|---:|---|
+| backend/src/main/java/com/complex/platform/evidence/AuditEventService.java | M092 | 130 | 12a6a8300cfd |
+| backend/src/main/java/com/complex/platform/evidence/AuditEventRepository.java | M092 | 18 | 07eaa506678b |
+| backend/src/main/java/com/complex/platform/evidence/JdbcAuditEventRepository.java | M092 | 111 | b2adff87b9db |
+| backend/src/main/java/com/complex/platform/evidence/AuditedOperationExecutor.java | M092 | 188 | 64bc6e8ce174 |
+| backend/src/main/java/com/complex/platform/evidence/AuditEvent.java | M092 | 53 | 230ba0728e39 |
+| backend/src/test/java/com/complex/platform/evidence/AuditEventServiceTests.java | M095 | 58 | c766ea68cc6f |
+判据：锁内 M092、M095 映射并集 46 项，只读引用、不改锁、不占 LOCK-AMEND。写入集合以 B2 双 PASS 定稿为准。M092、M095 均为 PENDING，与 Codex 线认领中的 M015 无重叠。
+派 Grok B1（modules/XM-M031-B-b1-grok-raw.md），席甲自席 B1 落 modules/XM-M031-B-b1-self-raw.md；两份各自落盘后互读。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。执行160-audit-prompt.md V0.17阶段B的合成模块XM-M031-B B1修复前全量审计，正本/home/james/complex-management main主工作区，以origin/main（4a066def）为准。
+背景（读ledger顶部「当前 XM-M031-B B1 开工」段及D-031第2条）：XM-M031-B是M031收口时登记转M092的跨模块项：带@Transactional的写方法在catch里调AuditEventService.recordFailure记的失败事件，随业务事务回滚一并丢失。M031两席当时一致定为单点处置归M092的AuditEventService（让失败事件不随业务回滚丢失），不逐个摘调用方的@Transactional，不推翻M006-G-07。按D-031立合成模块走B1至B5。
+范围：开工段所列6个文件（M092审计写入链5个生产文件与M095的AuditEventServiceTests），全读；为判断需读IdempotencyService的事务模板用法、调recordFailure的调用方（生产代码47个文件调recordFailure，其中27个文件带@Transactional）与audit_events表定义。判据：锁内M092、M095映射并集46项，只读引用不新增；锁现行V0.14，LOCK-AMEND-COUNT 1。
+证据：/home/james/audit-tmp/xm031b_probe.log——origin/main 4a066def一次性worktree加一次性空库，复跑M031探针（/home/james/audit-tmp/M031FailureAuditProbeTests.java）：同一主体同类失败，不带事务的assignUserRole失败事件1行、带事务的assignUserPosition失败事件0行。M031时旧代码上的同一复现见m031_probe.log。complex_test迁移历史含已改号427，连它的Spring测试过不了Flyway校验，全量须用一次性空库；你只读这些日志，不对任何数据库执行写语句（含建库）；如需实跑只跑不连库的单元测试类，在origin/main一次性worktree里做，用完git worktree remove不加--force。
+审计要求：一、失败事件随回滚丢失的机制与影响面是否如登记所述，哪些HTML句子或判据要求失败也留痕；二、单点处置的可行方式与风险逐项判定（如失败事件走独立事务：外层事务挂起、第二个连接、连接池占用、审计表有无外键致自锁、成功事件是否必须仍随业务回滚、测试事务里写入的失败事件是否会留在库里造成后续测试串扰、无事务管理器的内存测试构造方式），给最小处置意见；三、范围内现有测试能否钉住该行为，需要什么真库回归；四、范围内其余问题。第一性三问、顺从46项（适用或无本面逐项记录）、grilling对抗，审完全部范围收齐全部问题才统一PASS/FAIL；不为理论场景加需求。每问题给临时编号GR-01起、精确文件行/原句/正常触发/四分类顺序/已有判据/证据类型、最小处置意见。
+独立性：不得读modules/XM-M031-B-b1-self-raw.md；两份本次完整raw各自落盘后才互读；只允许两席，不用MCP/子代理/第三席，不问人，不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物（一次性worktree除外且须删除）。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M031-B-b1-grok-raw.md：不存在则创建V0.01。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/46项逐项/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M036-A 检查点已合并（PR #489）
+2026-09-24T04:44:33Z。检查点提交 e50d5d14（origin/main 4f233e7b 一次性 worktree，只带 12 个代码文件、ledger、findings、XM-M036-A 六份 raw 与闭环文件，共 21 个文件）；提交前在该 worktree 用一次性空库 xm036ack_test 实跑后端全量：263 套 3536 测 0 红；冻结 diff 反向可应用；测试改指已还原、空库已删。PR https://github.com/jxh1979/mall/pull/489 经 ops/160/propose-change.sh 开出，ops/160/merge-pr.sh --merge 在 predeploy-gates（run 35956882619）对 e50d5d14 全绿后合并，origin/main＝4a066def。检查点 worktree 与分支已清理；早先基线用的一次性 worktree scratch-xm036a（干净）一并移除。
+XM-M036-A 闭环：origin/main 后端全量自此 0 红。下一步按 D-031 顺序：XM-M036A-1（最高权限在范围检查中被拒的系统性问题）单独立项为合成模块，其后 XM-M031-B、XM-M034-A/B、XM-M033-A…D 与 XM-M031-C，再 13 个模块现锁重审。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
 
 ## 当前 XM-M036-A B5-r1 双 PASS 收口，进入检查点
 2026-09-24T04:41:56Z。Grok B5-r1 真实 exit 0（回执 /home/james/audit-tmp/xm036a_b5.receipt），报告 modules/XM-M036-A-b5-r1-grok-raw.md（V0.01，28974bytes SHA256 802d0b9e3cd7c8792281b261d4ae1eedffcd393afc2d33e857a691b550672eb9，grok-4.7/xhigh），结论 PASS、新问题 0；其一次性空库自跑后端全量退出码 0。席甲 B5-r1 票 PASS（modules/XM-M036-A-b5-r1-self-raw.md，68383bytes SHA256 5656bb054d5ef213cb5a96b6b1d03de64daf1e123b92784f3cc3d60d0274352c；263 套 3536 测 0 红）。四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。合取双 PASS：XM-M036-A PASS；B3 累计 1/3；修复队列「是」＝0。闭环文件 modules/XM-M036-A-backend-baseline-red.md。
