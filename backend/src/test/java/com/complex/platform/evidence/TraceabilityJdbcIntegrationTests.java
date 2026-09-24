@@ -130,4 +130,73 @@ class TraceabilityJdbcIntegrationTests {
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
+
+    // ===== XM-M031-B：失败留痕不随调用方事务回滚丢失（audit_events 只追加，V140；按本次唯一键断言，不清理） =====
+
+    @Autowired
+    private AuditEventService auditEventService;
+
+    @Autowired
+    private com.complex.platform.access.AccessService accessService;
+
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    private int auditRows(String eventName, String idempotencyKey) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name = ? AND idempotency_key = ?",
+                Integer.class, eventName, idempotencyKey);
+    }
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void failureEventOfATransactionalWriteSurvivesItsRollback() {
+        TestSecurityActors.asPlatformAdmin("usr_xm031b");
+        String suffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+        String plainKey = "xm031b-plain-" + suffix;
+        String transactionalKey = "xm031b-tx-" + suffix;
+        // 不带事务的赋角色与带 @Transactional 的定岗，对同一个不存在的用户各失败一次。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> accessService.assignUserRole(
+                        new com.complex.platform.access.dto.RoleAssignmentRequest(plainKey, null, "usr_xm031b_missing", "role_xm031b_missing")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> accessService.assignUserPosition(
+                        new com.complex.platform.access.dto.UserPositionAssignmentRequest(transactionalKey, null, "usr_xm031b_missing",
+                                "ops_clerk", "lvl_m1_lower", null, null, null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        assertThat(auditRows("access.role.assign_failed", plainKey)).isEqualTo(1);
+        assertThat(auditRows("access.user_position.assign_failed", transactionalKey)).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void failureEventIsKeptAndTheOriginalErrorSurvivesWhenTheCallerTransactionIsAborted() {
+        String key = "xm031b-abort-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        // 与生产 catch 同形：recordFailure(...); throw original; 不包内层 try。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        new org.springframework.transaction.support.TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                            try {
+                                jdbcTemplate.queryForObject("SELECT 1/0", Integer.class);
+                            } catch (org.springframework.dao.DataAccessException original) {
+                                auditEventService.recordFailure("xm031b.aborted_write_failed", "xm031b.probe", "xm031b_probe",
+                                        key, null, key, "DIVISION_BY_ZERO");
+                                throw original;
+                            }
+                        }))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        assertThat(auditRows("xm031b.aborted_write_failed", key)).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void successEventOfARolledBackTransactionIsNotKept() {
+        String key = "xm031b-success-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        new org.springframework.transaction.support.TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                            auditEventService.recordSuccess("xm031b.rolled_back_write", "xm031b.probe", "xm031b_probe",
+                                    key, null, key, java.util.Map.of());
+                            throw new IllegalStateException("业务回滚");
+                        }))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(auditRows("xm031b.rolled_back_write", key)).isZero();
+    }
 }

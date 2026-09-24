@@ -1,5 +1,45 @@
 # 全量审计 Findings 台账
-版本：V4.01
+版本：V4.05
+
+## 当前 XM-M031-B B4-r1 双 PASS，001 已修转「否」，进入 B5-r1
+2026-09-24T06:09:41Z。Grok B4-r1 票 PASS（modules/XM-M031-B-b4-r1-grok-raw.md，22500bytes SHA 3ffcb7b8db08b0da6ae86fed8e5e35d4b9ae3db27dd442819c0a7c612c68dc65；grok-4.7；2 块越界 0）；席甲票 PASS（modules/XM-M031-B-b4-r1-self-raw.md，5877bytes SHA f1ffeba71a1ef0233f6b21d6d984ebea297a4948bd1a0b19b2c4c3c5aa1d930b）。XM-M031-B-001 修复队列「是」→「否（已修，B3-r1）」。
+- 修复队列「否」（1）：XM-M031-B-001（已修）。
+- 当前 XM-M031-B 修复队列「是」：0。
+
+
+## 当前 XM-M031-B B2-r2 双 PASS 定稿：001 回归改放 TraceabilityJdbcIntegrationTests，1 项待修（B3-r1）
+2026-09-24T05:48:54Z。Grok B2-r2 票 PASS（modules/XM-M031-B-b1-grok-raw.md V0.03，全文 59828bytes SHA c574cc76f592ab78f1e2bad1f6c6ea44f8592d190b071299f1ff00fa27f6778d；grok-4.7）；席甲 B2-r2 票 PASS（modules/XM-M031-B-b1-self-raw.md V0.03，全文 19485bytes SHA e44d270a97c4b5ce0f6c1e1a95ad232a4e66fdb21256f3464992b7013e8df27f）。定稿即上方 B2-r2 候选，按 Grok 改两句：
+- 持久副作用：宿主类夹具无提交写；三条回归按本次唯一键留下 audit_events 行，赋角色失败另留 idempotency_records 一行（模板外占位后标为可重试失败）；定岗、事务中止、成功回滚三条不留幂等行。
+- 注入与形状：宿主类另注入容器里的 AuditEventService、AccessService、PlatformTransactionManager；事务中止那条为「打开的事务里 SQL 失败，接着 recordFailure(...); throw 原异常;」，不包内层 try，不用缺失用户的定岗代替。
+- 写入集合：生产 AuditEventService（M092）；测试 TraceabilityJdbcIntegrationTests（M095）。
+- 修复队列「是」（1）：XM-M031-B-001。修复队列「否」：0。
+
+
+## 当前 XM-M031-B B2-r2 候选（只改写 001 的回归位置；其余维持 B2-r1 定稿；尚未定稿）
+2026-09-24T05:33:21Z。B2-r1 双 PASS（Grok modules/XM-M031-B-b1-grok-raw.md V0.02，全文 43314bytes SHA dba6f5e9488fab8c39797f19872ceeec5731078ea32f6799b390399d068f6015，PASS；席甲 V0.02 18489bytes SHA fe20bc695a812fd18c6f563c1589bad718a2cdf844b0d415eb5ca1cc10eb5598，PASS），定稿 XM-M031-B-001（细化）入队，处置为 recordFailure 加 REQUIRES_NEW、回归放 EvidenceEventJdbcIntegrationTests。Grok 同时写明：该类 @BeforeEach（第 33–35 行）TRUNCATE evidence_events，在 NOT_SUPPORTED 方法里会提交，把表清空（V140 行触发器不拦 TRUNCATE），「所以这条回归只在一次性空库上跑」。
+席甲据此提出 B2-r2，只改写回归位置：「只在一次性空库上跑」写不进代码——该类把数据源写死为 complex_test，开发者在共用测试库上跑全量即会提交清空 evidence_events，这是回归方法自己带来的副作用。改放同为 M095、同在判据并集内的 TraceabilityJdbcIntegrationTests：@SpringBootTest、类级 @Transactional、已注入 JdbcTemplate、无 @BeforeEach 与任何 TRUNCATE/DELETE，只有 @AfterEach 清安全上下文；方法级 NOT_SUPPORTED 下唯一留下的是按本次唯一键写入的 audit_events 行（只追加表，本就是修复要留住的失败事件）。
+- 001 处置其余不变：只给 recordFailure 加 `@Transactional(propagation = Propagation.REQUIRES_NEW)`；record()、recordSuccess、成功明细不动；不摘调用方注解、不改 M006-G-07、不改 IdempotencyService、不改连接池。
+- 回归（TraceabilityJdbcIntegrationTests，方法级 NOT_SUPPORTED，调用容器里的 AuditEventService 与 AccessService，不 DELETE、不 TRUNCATE，按本次唯一键断言）：①同一主体对缺失用户 assignUserRole 与 assignUserPosition，两条失败事件各 1 行（后者修复前为 0）；②事务内 SQL 中止后，调用方按「recordFailure(...); throw original;」形状，不包内层 try——修复前 recordFailure 的 UncategorizedSQLException 直接冒出、断言原异常种类即红，修复后原异常种类不变且失败事件 1 行；③会回滚的事务里记的成功事件 0 行（守住不把 REQUIRES_NEW 加宽到成功路径）。
+- 写入集合（改写后）：生产 AuditEventService（M092）；测试 TraceabilityJdbcIntegrationTests（M095）。EvidenceEventJdbcIntegrationTests、AuditEventServiceTests 不改。
+- 修复队列「是」（1）：XM-M031-B-001。修复队列「否」：0。
+
+
+## 当前 XM-M031-B B2-r1 整批候选（尚未定稿；无添加项、无 questions）
+2026-09-24T05:13:43Z。输入仅本合成模块两席 B1 完整 raw：modules/XM-M031-B-b1-self-raw.md V0.01（16987bytes SHA a3e7fc91d8c7405766b5e05fc07a942669972c18a2001448f49ed0e9c1d186d1，席甲，FAIL：CX-01、CX-02）、modules/XM-M031-B-b1-grok-raw.md V0.01（28762bytes SHA f53409a6998f6c408d37e846471d48dbdbdc6e172cfc419b8c995923e761852e，Grok 席乙 grok-4.7，FAIL：GR-01）。B1 后四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。
+席甲读 Grok B1 后核源（B2 补证）：①处置写法采 Grok——在 recordFailure 上加 `@Transactional(propagation = Propagation.REQUIRES_NEW)`，由 Spring 代理生效；生产调用都来自别的 bean（类内无自调用），测试 119 处 `new AuditEventService(repository)` 不经代理、行为不变；生产里唯一直接 new 的是 AuthService.java:64 开发用构造 `new AuditEventService(event -> event)`（空写仓储，不落库），不受影响。比席甲 B1 拟的「TransactionTemplate＋可选 setter 注入」少一层代码。②计数采 Grok 在 4a066def 上的重数：调 recordFailure 的调用方 46 个文件（另 1 个为定义）、155 处；含 @Transactional 的 25 个文件；方法级 @Transactional 且方法体内调用的 31 处、11 个文件。席甲 B1 的 47/27 为沿用登记数，更正。③回归须真库且测试方法本身不带事务；开工段 6 个文件里唯一的测试 AuditEventServiceTests 是纯内存单测，钉不住传播，拟把 M095 的 EvidenceEventJdbcIntegrationTests（同判据并集内、已注入 JdbcTemplate 与审计仓储）纳入写入集合，方法级 `@Transactional(propagation = NOT_SUPPORTED)` 覆盖类级事务；audit_events 受 V140 只追加触发器保护，不 DELETE、按本次唯一键断言。
+| ID | 来源归并 | 分类 | 工程缺陷 | 修复队列候选 | 位置与事实 | 冻结判据与最小处置 |
+|---|---|---|---|---|---|---|
+| XM-M031-B-001 | GR-01＋CX-01＋CX-02 | 细化（治理地图第 893 行「谁发起……结果是什么，都要能查到」、第 899 行「权限变更、临时授权和敏感权限使用」、第 902 行「终端开关……被拒绝访问」、第 960 行「所有有过程的业务动作都必须留痕」；BSM 第 1583 行「核销成功、失败、拒绝、撤销」、第 1599 行与第 1845 行「一律拒绝并留痕」、第 1995 行同句「所有有过程的业务动作都必须留痕」） | 是 | 是 | AuditEventService.recordFailure:59-71 无事务注解，经 record:128 在调用方事务内写 audit_events。①带 @Transactional 的写方法失败时失败事件随业务回滚丢失（探针：不带事务 assignUserRole 1 行、带事务 assignUserPosition 0 行）；②调用方事务已因 SQL 错误中止时，recordFailure 自身抛 UncategorizedSQLException（current transaction is aborted），生产 catch「recordFailure(...); throw exception;」的原异常被顶掉（探针二）。/home/james/audit-tmp/xm031b_probe.log | GEN-002、GEN-003、GEN-009、GEN-011；最小处置：只给 recordFailure 加 `@Transactional(propagation = Propagation.REQUIRES_NEW)`；record()、recordSuccess 及成功明细路径不动（成功事件须随业务回滚）；不摘调用方 @Transactional、不改 M006-G-07、不改 IdempotencyService、不改连接池；真库回归（EvidenceEventJdbcIntegrationTests，方法级 NOT_SUPPORTED，一次性空库）：同一主体对缺失用户做 assignUserRole 与 assignUserPosition，按本次幂等键两条失败事件都为 1 行；事务内 SQL 中止后 recordFailure 不抛、原异常种类不变、失败事件 1 行；会回滚的事务里记的成功事件为 0 行 |
+
+- 写入集合（拟）：生产 AuditEventService（M092）；测试 EvidenceEventJdbcIntegrationTests（M095，开工段外、同判据并集内，理由见上③）。AuditEventServiceTests 不改。
+- 失效范围：M092、M095 均为 PENDING。
+- 只登记不入队：
+  - 观察（→M084）：IdempotencyService 注释「reserve 仍在外先提交……失败留痕在外照常落」只相对其模板自建的事务成立；调用方带 @Transactional 时占位与 markRetryableFailure 并入外层、随回滚消失，重试可再占位，与「失败不留半截业务写入」一致，不改。
+  - 观察：独立事务每次失败多借一个连接片刻，连接池默认 10，只在约池大小的请求同时卡在 recordFailure 时才会等连接；不加数据源、不改池。
+  - 观察：类级 @Transactional 的真库测试（StaffJdbcIntegrationTests、ServiceOrderJdbcIntegrationTests 等）改后失败行会提交留下；现有失败断言均为「≥1」，一次性空库全量须确认无精确计数被碰到（B3 验证项）。
+  - Grok 不立案、席甲同意：AuditEventService:117 terminal 恒为 "web"；recordFailure 的 Map.of 在 errorCode 为 null 时抛空指针（正常工厂均传非空码）；JdbcAuditEventRepository:102-109 读路径坏 JSON 收成空 map。
+- 修复队列「是」（1）：XM-M031-B-001。修复队列「否」：0。
+
 
 ## 当前 XM-M036-A B4-r1 双 PASS，001…008 已修转「否」，进入 B5-r1
 2026-09-24T04:20:28Z。Grok B4-r1 票 PASS（modules/XM-M036-A-b4-r1-grok-raw.md，61739bytes SHA 3b617db9f77b130de14a3387cbeae39b6653c9a91f22581a3ac206a60ca65363；grok-4.7；30 块越界 0；游乐列表切回平台管理员的测试行判归 006、不越界）；席甲票 PASS（modules/XM-M036-A-b4-r1-self-raw.md，11759bytes SHA 96982b87cd4dbaf6ee158ce692bdc76b63b4508d2f9771fd4a9c20a3230941e2）。XM-M036-A-001…008 修复队列「是」→「否（已修，B3-r1）」。

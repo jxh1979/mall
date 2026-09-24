@@ -56,6 +56,12 @@ public class AuditEventService {
                 metadata, eventCategory, subjectType);
     }
 
+    /**
+     * 失败事件在独立事务里写入（XM-M031-B）：调用方事务回滚或已因 SQL 错误中止时，失败记录仍须留住、且不得顶掉原异常
+     * （治理地图第 893、899、902 行；BSM 第 1583 行）。成功事件仍随调用方事务，业务回滚时一起回滚。
+     */
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public AuditEvent recordFailure(
             String eventName,
             String permissionCode,
