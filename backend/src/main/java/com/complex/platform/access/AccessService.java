@@ -255,6 +255,7 @@ public class AccessService {
                         // 故审批期间模板内容变化亦无从偷换。
                         requireGrantApprovalIfNeeded(templatePermissionCodes);
                         boolean singleUse = template.singleUse() || "single_use".equalsIgnoreCase(trimToDefault(request.mode(), "append"));
+                        requireBoundedTemporaryTemplate(template.templateType(), template.validUntil(), singleUse);
                         // M001-F04（PGM 权限规则：授予全部留痕）：授予人记实际操作者，审计事件逐条带套用记录 id。
                         PermissionTemplateApplyResult result = new PermissionTemplateApplyResult(repository.applyTemplate(
                                 id,
@@ -1505,6 +1506,7 @@ public class AccessService {
             boolean enforceApproval
     ) {
         PositionGrantContext context = resolvePositionGrant(request, enforceApproval); // M087：审批落地不按落地人自身权限限制
+        requireBoundedTemporaryTemplate(context.template().templateType(), context.template().validUntil(), context.template().singleUse());
         // M087-F-06（PGM-1.10.1「同一商户、同一项目范围内的普通模板权限随保存立即生效」「既有高危不得因处于岗位模板内而免除授出前审批」）：
         // 岗位模板混有高危权限时不再整单拒绝——普通部分随保存生效，高危部分先显式拒绝、进审批链，审批通过后解除。
         List<PermissionDefinition> highRisk = enforceApproval && grantApprovalEnabled
@@ -2295,6 +2297,11 @@ public class AccessService {
     }
 
     private PermissionTemplate templateFromRequest(String id, PermissionTemplateRequest request, String sourceTemplateId, String ownerScopeId) {
+        requireBoundedTemporaryTemplate(request.templateType(), request.validUntil(), Boolean.TRUE.equals(request.singleUse()));  // 建、改、复制共用
+        if (isTemporaryTemplate(request.templateType()) && request.validFrom() != null && request.validUntil() != null
+                && !request.validUntil().isAfter(request.validFrom())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "临时模板的到期时间必须晚于生效时间");
+        }
         Instant now = Instant.now();
         return new PermissionTemplate(
                 id,
@@ -2317,6 +2324,18 @@ public class AccessService {
                 now,
                 safeList(request.permissionCodes())
         );
+    }
+
+    // M001-F05（PGM 权限规则「临时授权可设有效期或单次使用」「临时权限……有时间限制、到期自动失效」）：
+    // 临时模板要么有到期时间、要么（本次）单次使用；写模板与每条套用路径在写入前共用此校验。
+    private void requireBoundedTemporaryTemplate(String templateType, Instant validUntil, boolean singleUse) {
+        if (isTemporaryTemplate(templateType) && validUntil == null && !singleUse) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "临时模板必须设置到期时间或单次使用");
+        }
+    }
+
+    private boolean isTemporaryTemplate(String templateType) {
+        return "temporary".equalsIgnoreCase(trimToDefault(templateType, "base"));
     }
 
     private List<PermissionTemplateItem> items(String templateId, List<String> permissionCodes, String dataScope) {

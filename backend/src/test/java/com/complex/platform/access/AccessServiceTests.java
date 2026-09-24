@@ -1347,6 +1347,112 @@ class AccessServiceTests {
                         byOrgUser.applications().stream().map(PermissionTemplateApplication::id).toList());
     }
 
+    // M001-F05（PGM 权限规则「临时授权可设有效期或单次使用」「临时权限……有时间限制、到期自动失效」）：
+    // 临时模板必须有到期时间或单次使用，生效时间不得晚于到期时间；非临时模板不受影响。
+    @Test
+    void temporaryTemplateNeedsExpiryOrSingleUseOnCreateAndUpdate() {
+        assertThatThrownBy(() -> service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-unbounded", "seed", List.of(), "Unbounded temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project", null, null, false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-reversed", "seed", List.of(), "Reversed window", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                Instant.parse("2026-06-15T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        PermissionTemplate singleUseOnly = service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-single", "seed", List.of(), "Single use temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project", null, null, true));
+        PermissionTemplate base = service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-base", "seed", List.of(), "Open base", "base", null,
+                List.of("ops.production_readiness.view"), "project", null, null, false));
+
+        assertThat(singleUseOnly.singleUse()).isTrue();
+        assertThat(base.validUntil()).isNull();
+        assertThatThrownBy(() -> service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-zero-window", "seed", List.of(), "Zero window", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.updatePermissionTemplate(base.id(), new PermissionTemplateRequest(
+                "update-unbounded", "seed", List.of(), "Now temporary", "temporary", null,
+                List.of("ops.production_readiness.view"), "project", null, null, false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.updatePermissionTemplate(base.id(), new PermissionTemplateRequest(
+                "update-reversed", "seed", List.of(), "Now temporary reversed", "temporary", null,
+                List.of("ops.production_readiness.view"), "project",
+                Instant.parse("2026-06-15T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.copyPermissionTemplate(base.id(), new PermissionTemplateRequest(
+                "copy-unbounded", "seed", List.of(), "Copied unbounded", "temporary", base.id(),
+                List.of("ops.production_readiness.view"), "project", null, null, false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void applyingUnboundedTemporaryTemplateIsRejectedUnlessThisApplicationIsSingleUse() {
+        // M001-F05：库里已有的无期限临时模板（绕过入口或历史数据）套用时，本次非单次即拒绝且不写套用记录。
+        accessRepository.templates.put("tpl_unbounded_tmp", new PermissionTemplate(
+                "tpl_unbounded_tmp", "tpl_unbounded_tmp", "Unbounded temporary", null, "temporary",
+                null, "organization", "seed-org", "merge", null, null, false, "active",
+                null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        accessRepository.items.put("tpl_unbounded_tmp", List.of());
+        accessRepository.createUser(new AccessUser("usr_f5", "f5", "staff", "seed-org", null, "active", Instant.now()));
+
+        assertThatThrownBy(() -> service.applyPermissionTemplate("tpl_unbounded_tmp", new PermissionTemplateApplyRequest(
+                "apply-unbounded", "apply", List.of(), "tpl_unbounded_tmp", List.of("usr_f5"), "merge")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(accessRepository.templateApplications).isEmpty();
+
+        PermissionTemplateApplyResult once = service.applyPermissionTemplate("tpl_unbounded_tmp", new PermissionTemplateApplyRequest(
+                "apply-once", "apply", List.of(), "tpl_unbounded_tmp", List.of("usr_f5"), "single_use"));
+        assertThat(once.applications()).extracting(PermissionTemplateApplication::singleUse).containsExactly(true);
+
+        accessRepository.templates.put("tpl_single_tmp", new PermissionTemplate(
+                "tpl_single_tmp", "tpl_single_tmp", "Single use temporary", null, "temporary",
+                null, "organization", "seed-org", "merge", null, null, true, "active",
+                null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        accessRepository.items.put("tpl_single_tmp", List.of());
+        PermissionTemplateApplyResult merged = service.applyPermissionTemplate("tpl_single_tmp", new PermissionTemplateApplyRequest(
+                "apply-single-merge", "apply", List.of(), "tpl_single_tmp", List.of("usr_f5"), "merge"));
+        assertThat(merged.applications()).extracting(PermissionTemplateApplication::singleUse).containsExactly(true);
+    }
+
+    @Test
+    void positionAssignmentRejectsUnboundedTemporaryTemplateBeforeWriting() {
+        // M001-F05：岗位定岗同样是套用；映射到无期限、非单次临时模板时写入前拒绝，岗位、职级与套用记录都不落。
+        accessRepository.users.put("usr_position_tmp", new AccessUser(
+                "usr_position_tmp", "position-tmp", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_view", new RoleRecord(
+                "role_ops_view", "ops_view", "Ops viewer", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"),
+                null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_position_tmp", "tpl_position_tmp", "Position temporary", null, "temporary",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_position_tmp", "ops.production_readiness.check",
+                        AccessRepository.Effect.GRANT, "project", false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-ops-viewer", null, "ops_viewer", "lvl_m1_lower", "role_ops_view", "tpl_position_tmp", "active"));
+
+        assertThatThrownBy(() -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-position-tmp", null, "usr_position_tmp", "ops_viewer", "lvl_m1_lower", null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(accessRepository.findUserPositionAssignment("usr_position_tmp")).isEmpty();
+        assertThat(accessRepository.templateApplications).isEmpty();
+    }
+
     // ── P0: listAccessUsers 只返回本组织用户 ──────────────────────────────
 
     @Test
