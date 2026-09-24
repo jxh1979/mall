@@ -560,6 +560,19 @@ class PlatformJdbcIntegrationTests {
                 Integer.class, "m009_type_request")).isZero();
     }
 
+    @Test
+    void backToBackSpaceTypeDeleteRequestsNeverCollideOnId() {
+        Instant now = Instant.now();
+        repository.saveSpaceType(new SpaceTypeRecord("m036a_type_burst", "m036a_type_burst", "连续申请", 100, "archived", now, now));
+        for (int i = 0; i < 50; i++) {
+            repository.saveSpaceTypeDeleteRequest("m036a_type_burst", "第" + i + "次申请", "actor-" + i);
+            repository.completeSpaceTypeDeleteRequest("m036a_type_burst", "rejected");
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM space_type_delete_requests WHERE space_type_id = ?",
+                Integer.class, "m036a_type_burst")).isEqualTo(50);
+    }
+
 
     @Test
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)

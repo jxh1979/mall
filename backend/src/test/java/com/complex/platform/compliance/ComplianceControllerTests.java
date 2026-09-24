@@ -71,7 +71,7 @@ class ComplianceControllerTests {
 
     @Test
     void createContractKeyDateWithoutIdempotencyKeyReturnsValidationFailed() throws Exception {
-        mockMvc.perform(post("/api/v1/compliance/contract-key-dates")
+        mockMvc.perform(post("/api/v1/compliance/contract-key-dates").requestAttr("com.complex.platform.gate.verified_terminal", new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("web", null, true))
                         .with(user("ops").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -93,7 +93,7 @@ class ComplianceControllerTests {
     void createContractKeyDateRequiresManagePermissionAndReturnsRecord() throws Exception {
         when(service.createContractKeyDate(any(ContractKeyDateRequest.class))).thenReturn(contractDateRecord());
 
-        mockMvc.perform(post("/api/v1/compliance/contract-key-dates")
+        mockMvc.perform(post("/api/v1/compliance/contract-key-dates").requestAttr("com.complex.platform.gate.verified_terminal", new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("web", null, true))
                         .with(user("ops").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -153,7 +153,7 @@ class ComplianceControllerTests {
                 ))
         ));
 
-        mockMvc.perform(post("/api/v1/compliance/reminders/scan")
+        mockMvc.perform(post("/api/v1/compliance/reminders/scan").requestAttr("com.complex.platform.gate.verified_terminal", new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("web", null, true))
                         .with(user("ops").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

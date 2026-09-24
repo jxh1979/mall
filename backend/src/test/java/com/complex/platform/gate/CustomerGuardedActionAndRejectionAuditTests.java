@@ -39,7 +39,7 @@ class CustomerGuardedActionAndRejectionAuditTests {
                 // 储值（资金：充值/消费/退卡/冻结）
                 Arguments.of(StoredValueService.class, "topup", "customer.stored_value.topup"),
                 Arguments.of(StoredValueService.class, "settleTopup", "customer.stored_value.topup"),
-                Arguments.of(StoredValueService.class, "consume", "customer.stored_value.consume"),
+                Arguments.of(StoredValueService.class, "payTicketOrder", "customer.stored_value.consume"),
                 Arguments.of(StoredValueService.class, "refund", "customer.stored_value.refund"),
                 Arguments.of(StoredValueService.class, "freeze", "customer.stored_value.freeze"),
                 Arguments.of(StoredValueService.class, "unfreeze", "customer.stored_value.freeze"),

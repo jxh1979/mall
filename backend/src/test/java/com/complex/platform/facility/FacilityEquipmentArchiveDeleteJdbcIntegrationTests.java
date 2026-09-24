@@ -50,7 +50,7 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
         seed("feq_del");
         service.archive("feq_del", true, "测试存档理由");
         service.requestDelete("feq_del", new FacilityEquipmentDeleteRequest("报废"));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        asMaster(); // BSM 第 577 行：删除由最高权限本人审批
         FacilityEquipmentDeleteDecision decision = service.approveDelete(
                 "feq_del", new FacilityEquipmentDeleteApprovalRequest("approved", null));
         assertThat(decision.deleted()).isTrue();
@@ -86,7 +86,7 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
                 INSERT INTO facility_work_orders (id, code, work_order_type, title, equipment_id, created_at, updated_at)
                 VALUES ('fwo_use', 'FWO-USE-1', 'repair', '设备维修', 'feq_use', ?, ?)
                 """, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        asMaster(); // BSM 第 577 行：删除由最高权限本人审批
         assertThatThrownBy(() -> service.approveDelete("feq_use",
                 new FacilityEquipmentDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
@@ -94,7 +94,7 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
     }
 
     @Test
-    void selfApproveForbidden() {
+    void ordinaryApplicantCannotApproveMasterOnlyDeletion() {
         TestSecurityActors.asPlatformAdmin("usr_same");
         seed("feq_self");
         service.archive("feq_self", true, "测试存档理由");
@@ -102,6 +102,31 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
         assertThatThrownBy(() -> service.approveDelete("feq_self",
                 new FacilityEquipmentDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("发起人");
+                .hasMessageContaining("最高权限");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT delete_status FROM facility_equipment WHERE id = ?", String.class, "feq_self")).isEqualTo("pending");
+    }
+
+    @Test
+    void masterRequestedDeletionTakesEffectDirectly() {
+        TestSecurityActors.asPlatformAdmin();
+        seed("feq_master");
+        service.archive("feq_master", true, "测试存档理由");
+        asMaster();
+        FacilityEquipmentRecord deleted = service.requestDelete("feq_master", new FacilityEquipmentDeleteRequest("最高权限直接删除"));
+        assertThat(deleted.deleteStatus()).isEqualTo("approved");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT delete_status FROM facility_equipment WHERE id = ?", String.class, "feq_master")).isEqualTo("approved");
+        assertThat(repository.findEquipmentById("feq_master")).isEmpty();
+    }
+
+    /** 持授权 U 盘密钥的最高权限本人（生产会话形状：master_authority，所属公司 platform-company）。 */
+    private static void asMaster() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID,
+                                com.complex.platform.auth.SessionIssuer.MASTER_USERNAME,
+                                com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active"),
+                        "token", java.util.List.of()));
     }
 }
