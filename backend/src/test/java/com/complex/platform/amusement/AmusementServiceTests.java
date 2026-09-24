@@ -100,26 +100,6 @@ class AmusementServiceTests {
                 .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
-    @Test
-    void createManualOverrideRejectsCrossMerchantProject() {
-        TestSecurityActors.asMerchantUser("merchant_a");
-        AmusementSafetyTemplateRecord template = createTemplate("xmerchant-override");
-        AmusementProjectRecord project = createProject("xmerchant-override", template.id(), "open", 2);
-
-        TestSecurityActors.asMerchantUser("merchant_b");
-        assertThatThrownBy(() -> service.createManualOverride(new AmusementManualOverrideRequest(
-                        "override-xmerchant",
-                        "override",
-                        List.of("att_1"),
-                        project.id(),
-                        null,
-                        "allow",
-                        "supervisor approved")))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // 处理清单 #8：amusement_projects 空间指派/回填（over_space 依赖 space_id）
     // ─────────────────────────────────────────────────────────────────────────
@@ -1615,42 +1595,6 @@ class AmusementServiceTests {
     }
 
     @Test
-    void manualOverrideRequiresReasonAndRecordsOverride() {
-        AmusementProjectRecord project = projectWithTemplate("override");
-        AmusementSessionRecord session = createSession("override-session", project.id(), 1, "open");
-
-        assertThatThrownBy(() -> service.createManualOverride(new AmusementManualOverrideRequest(
-                        "override-missing-reason",
-                        "override",
-                        List.of("att_1"),
-                        project.id(),
-                        session.id(),
-                        "allow",
-                        " "
-                )))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("VALIDATION_FAILED");
-
-        AmusementManualOverrideRecord override = service.createManualOverride(new AmusementManualOverrideRequest(
-                "override-once",
-                "override",
-                List.of("att_1"),
-                project.id(),
-                session.id(),
-                "allow",
-                "supervisor approved"
-        ));
-
-        assertThat(override)
-                .extracting(AmusementManualOverrideRecord::overrideType, AmusementManualOverrideRecord::status)
-                .containsExactly("allow", "approved");
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("amusement.verification_override_failed", "amusement.verification_overridden");
-    }
-
-    @Test
     void reservationAndQueueWritesAreIdempotentStatusedAndAudited() {
         AmusementProjectRecord project = projectWithTemplate("reservation-queue");
         AmusementSessionRecord session = createSession("reservation-queue-session", project.id(), 3, "open");
@@ -2308,7 +2252,6 @@ class AmusementServiceTests {
         private final Map<String, AmusementSessionRecord> sessions = new LinkedHashMap<>();
         private final Map<String, AmusementSafetyInspectionRecord> inspections = new LinkedHashMap<>();
         private final Map<String, AmusementVerificationRecord> verifications = new LinkedHashMap<>();
-        private final Map<String, AmusementManualOverrideRecord> manualOverrides = new LinkedHashMap<>();
         private final Map<String, AmusementDeviceStatusRecord> deviceStatuses = new LinkedHashMap<>();
         private final Map<String, AmusementQueueEntryRecord> queueEntries = new LinkedHashMap<>();
         private final Map<String, AmusementReservationRecord> reservations = new LinkedHashMap<>();
@@ -3092,24 +3035,8 @@ class AmusementServiceTests {
         }
 
         @Override
-        public int clearProjectConcurrentCapacity(String projectId, java.time.Instant now) {
-            return 0;
-        }
-
-        @Override
         public List<AmusementVerificationRecord> listVerifications() {
             return new ArrayList<>(verifications.values());
-        }
-
-        @Override
-        public AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override) {
-            manualOverrides.put(override.id(), override);
-            return override;
-        }
-
-        @Override
-        public List<AmusementManualOverrideRecord> listManualOverrides() {
-            return new ArrayList<>(manualOverrides.values());
         }
 
         @Override
@@ -3237,13 +3164,6 @@ class AmusementServiceTests {
         @Override
         public List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId) {
             return List.of();
-        }
-
-        @Override
-        public List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId) {
-            return manualOverrides.values().stream()
-                    .filter(o -> projects.containsKey(o.projectId()) && merchantId.equals(projects.get(o.projectId()).merchantId()))
-                    .toList();
         }
 
         @Override

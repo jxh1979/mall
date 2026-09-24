@@ -21,7 +21,6 @@ import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
-import com.complex.platform.ticketing.dto.VerificationManualOverrideRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.complex.platform.ticketing.dto.VerificationReverseRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -490,20 +489,6 @@ public class TicketingController {
         authorizationService.requirePermission("ticket.verify.reverse");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reverseVerification(id, request, resolveReversedBy()));
-    }
-
-    // C1/REQ-05：人工放行（主管）。主管对核销做人工放行决策，留痕 status=manual_overridden。
-    //   权限=主管权限码 verification.manual_override；租户 scope 守卫 + 审计留痕在服务层
-    //   （TicketVerificationService.manualOverride 内 enforceMerchantScope + @GuardedAction 准入闸 + 落核销记录）。
-    @PostMapping("/ticketing/verifications/manual-override")
-    public ApiResponse<VerificationResponse> manualOverrideVerification(
-            @RequestBody @jakarta.validation.Valid VerificationManualOverrideRequest request
-    ) {
-        authorizationService.requirePermission("verification.manual_override");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.manualOverrideVerification(
-                request.toVerificationRequest(),
-                request == null ? null : request.reason()));
     }
 
     @PostMapping("/terminals/sync-tasks")

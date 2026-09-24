@@ -33,7 +33,6 @@ public class AmusementService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> PROJECT_STATUSES = Set.of("open", "paused", "closed", "maintenance");
     private static final Set<String> SESSION_STATUSES = Set.of("scheduled", "open", "closed", "cancelled");
-    private static final Set<String> OVERRIDE_TYPES = Set.of("allow", "deny", "pause", "resume", "release");
     private static final Set<String> RULE_TYPES = Set.of("age", "height", "weight", "capacity", "safety_notice", "manual");
     private static final Set<String> DEVICE_STATUSES = Set.of("active", "inactive", "maintenance", "retired");
 
@@ -103,33 +102,6 @@ public class AmusementService {
                 "amusement.safety_inspection.view",
                 "amusement_inspection_task",
                 () -> repository.listInspectionTasks(scope)
-        );
-    }
-
-    public PageResponse<AmusementManualOverrideRecord> listManualOverrides() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        return readPage(
-                "amusement.manual_override.viewed",
-                "amusement.manual_override.view_failed",
-                "amusement.verification.override",
-                "amusement_manual_override",
-                scope.isPresent() ? () -> repository.listManualOverridesByMerchant(scope.get()) : repository::listManualOverrides
-        );
-    }
-
-    @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.override", admissionAction = "amusement.manual_override", objectType = "amusement_manual_override")
-    @Transactional
-    public AmusementManualOverrideRecord createManualOverride(AmusementManualOverrideRequest request) {
-        return executeWrite(
-                "createAmusementManualOverride",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                AmusementManualOverrideRecord.class,
-                "amusement.verification_overridden",
-                "amusement.verification_override_failed",
-                "amusement.verification.override",
-                "amusement_manual_override",
-                () -> createManualOverrideInternal(request)
         );
     }
 
@@ -1578,44 +1550,6 @@ public class AmusementService {
                 && entitlementType.trim().toLowerCase(Locale.ROOT).startsWith(AMUSEMENT_ENTITLEMENT_TYPE_PREFIX);
     }
 
-    private AmusementManualOverrideRecord createManualOverrideInternal(AmusementManualOverrideRequest request) {
-        AmusementManualOverrideRequest actual = requireRequest(request);
-        String projectId = requireText(actual.projectId(), "project_id");
-        repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
-        checkProjectOwnership(projectId);
-        String sessionId = trimToNull(actual.sessionId());
-        if (sessionId != null) {
-            repository.findSessionById(sessionId)
-                    .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
-        }
-        String type = enumOrDefault(actual.overrideType(), null, OVERRIDE_TYPES, "override_type");
-        String reason = requireText(actual.reason(), "reason");
-        // 阶段2 主管释放（release）：异常清场——清零本项目并发在场快照（point_device+project 维），
-        // 用于漏扫出场堆积。场次/批次型（session 维、amusement_sessions.used_capacity）不受影响。
-        // 授权已由 @GuardedAction(amusement.verification.override) 限主管+审批留痕；本记录即审计凭据（谁/何时/原因/证据）。
-        if ("release".equals(type)) {
-            repository.clearProjectConcurrentCapacity(projectId, Instant.now());
-        }
-        String status = switch (type) {
-            case "allow" -> "approved";
-            case "deny" -> "denied";
-            case "release" -> "released";
-            default -> "recorded";
-        };
-        return repository.saveManualOverride(new AmusementManualOverrideRecord(
-                "override_" + slug(actual.idempotencyKey()),
-                projectId,
-                sessionId,
-                type,
-                reason,
-                status,
-                trimToNull(actual.operatorNote()),
-                evidence(actual.evidenceAttachmentIds()),
-                Instant.now()
-        ));
-    }
-
     private void checkProjectOwnership(String projectId) {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             AmusementProjectRecord project = repository.findProjectById(projectId)
@@ -1845,9 +1779,6 @@ public class AmusementService {
             return record.id();
         }
         if (response instanceof EntitlementSessionRecord record) {
-            return record.id();
-        }
-        if (response instanceof AmusementManualOverrideRecord record) {
             return record.id();
         }
         if (response instanceof AmusementReservationRecord record) {

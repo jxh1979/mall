@@ -331,7 +331,7 @@
 | `GET/POST` | `/api/v1/amusement/projects` | 游乐项目管理 | `GET=amusement.session.view`；`POST=amusement.session.manage` |
 | `GET/POST` | `/api/v1/amusement/sessions` | 场次和容量 | `GET=amusement.session.view`；`POST=amusement.session.manage` |
 | `POST` | `/api/v1/amusement/verifications` | 游乐权益核销 | `amusement.verification.execute` |
-| `POST` | `/api/v1/amusement/manual-overrides` | 人工放行（**已废止·见文首口径**，待代码轮下线，不得新增调用） | `amusement.verification.override`（停用） |
+| `POST` | `/api/v1/amusement/manual-overrides` | 人工放行（**已废止·见文首口径**，接口已下线） | `amusement.verification.override`（停用） |
 | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | 查询项目/场次安全与容量准入 | `amusement.safety_inspection.view` |
 | `GET/POST` | `/api/v1/amusement/safety-templates` | 巡检模板查询/维护 | `GET=amusement.safety_template.view`；`POST=amusement.safety_template.manage` |
 | `GET/POST` | `/api/v1/amusement/safety-inspections` | 开放前安全巡检 | `GET=amusement.safety_inspection.view`；`POST=amusement.safety_inspection.create` |

@@ -77,7 +77,6 @@ class AmusementJdbcIntegrationTests {
         assertThat(regclass("amusement_capacity_config")).isEqualTo("amusement_capacity_config");
         assertThat(regclass("amusement_project_entitlements")).isEqualTo("amusement_project_entitlements");
         assertThat(platformAdminPermissionCodes()).contains(
-                "amusement.verification.override",
                 "amusement.session.manage",
                 "amusement.capacity_config.manage",
                 "amusement.project_entitlement.manage",
@@ -191,17 +190,6 @@ class AmusementJdbcIntegrationTests {
                 null,
                 null
         ));
-        repository.saveManualOverride(new AmusementManualOverrideRecord(
-                "override_jdbc",
-                "project_jdbc",
-                "session_jdbc",
-                "allow",
-                "supervisor approved",
-                "approved",
-                "manual note",
-                List.of("att_override"),
-                now
-        ));
         repository.saveDeviceStatus(new AmusementDeviceStatusRecord(
                 "device_status_jdbc",
                 "project_jdbc",
@@ -288,9 +276,6 @@ class AmusementJdbcIntegrationTests {
                     assertThat(v.sessionId()).isEqualTo("session_jdbc");
                     assertThat(v.createdAt()).isEqualTo(now);
                 });
-        assertThat(repository.listManualOverrides())
-                .extracting(AmusementManualOverrideRecord::id, AmusementManualOverrideRecord::status)
-                .contains(tuple("override_jdbc", "approved"));
         assertThat(repository.listDeviceStatuses())
                 .extracting(AmusementDeviceStatusRecord::deviceId, AmusementDeviceStatusRecord::status)
                 .contains(tuple("device_1", "online"));
@@ -485,6 +470,22 @@ class AmusementJdbcIntegrationTests {
         // 关联通票号：无 ticket_verifications 交叉引用时为 null（LEFT JOIN 安全）。
         assertThat(repository.listVerificationItems(all, "merchant_amu_a"))
                 .allSatisfy(item -> assertThat(item.linkedTicketNo()).isNull());
+    }
+
+    // XM-M034-AB-004（操作员 D-033「删除」）：游乐人工改判入口整体下线，其权限码停用且不留任何授予来源；历史表保留。
+    @Test
+    void amusementOverridePermissionIsRetiredAndGrantedToNobody() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permissions WHERE permission_code = 'amusement.verification.override'", String.class))
+                .isEqualTo("retired");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT (SELECT count(*) FROM role_permissions WHERE permission_code = 'amusement.verification.override')
+                     + (SELECT count(*) FROM permission_template_items WHERE permission_code = 'amusement.verification.override')
+                     + (SELECT count(*) FROM user_permission_overrides WHERE permission_code = 'amusement.verification.override')
+                     + (SELECT count(*) FROM temporary_permission_grants
+                         WHERE permission_code = 'amusement.verification.override' AND status = 'active')
+                """, Long.class)).isZero();
+        assertThat(regclass("amusement_manual_overrides")).isEqualTo("amusement_manual_overrides");
     }
 
     private String regclass(String tableName) {

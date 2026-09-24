@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 732 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 730 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -40,8 +40,6 @@
 | amusement | `POST` | `/api/v1/amusement/group-bookings` | `createAmusementGroupBooking` | Create P2 amusement group or private booking request | `AmusementGroupBookingRequest` | `amusement.group_booking.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement_group_booking.created.success` | `amusement_group_booking.created.failure` |
 | amusement | `POST` | `/api/v1/amusement/group-bookings/{id}/approve` | `approveAmusementGroupBooking` | Approve P2 amusement group booking and lock capacity | `AmusementGroupBookingApprovalRequest` | `amusement.group_booking.approve` | `staff-token` | `project-amusement` | web | 是 | `amusement_group_booking.approved.success` | `amusement_group_booking.approved.failure` |
 | amusement | `POST` | `/api/v1/amusement/group-bookings/{id}/release` | `releaseAmusementGroupBooking` | Release P2 amusement group booking and free locked capacity | `AmusementGroupBookingReleaseRequest` | `amusement.group_booking.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement_group_booking.released.success` | `amusement_group_booking.released.failure` |
-| amusement | `GET` | `/api/v1/amusement/manual-overrides` | `listAmusementManualOverrides` | 查询游乐人工放行（已废止，不得新增调用） | `-` | `amusement.verification.override` | `staff-token` | `project-amusement` | web, tablet | 否 | `amusement.manual_override.viewed` | `amusement.manual_override.view_failed` |
-| amusement | `POST` | `/api/v1/amusement/manual-overrides` | `createAmusementManualOverride` | 游乐人工放行（已废止，不得新增调用） | `AmusementManualOverrideRequest` | `amusement.verification.override` | `staff-token` | `project-amusement-point` | staff_work_phone | 是 | `amusement.verification_overridden` | `amusement.verification_override_failed` |
 | amusement | `GET` | `/api/v1/amusement/maintenance-records` | `listAmusementMaintenanceRecords` | 查询游乐定期检修记录 | `-` | `amusement.maintenance.read` | `staff-token` | `project-amusement` | kiosk, web, mobile_admin | 否 | `amusement.maintenance.viewed` | `amusement.maintenance.view_failed` |
 | amusement | `POST` | `/api/v1/amusement/maintenance-records` | `createAmusementMaintenanceRecord` | 提交游乐定期检修 | `AmusementMaintenanceRecordRequest` | `amusement.maintenance.submit` | `staff-token` | `project-amusement-point` | kiosk, web, mobile_admin | 是 | `amusement.maintenance_recorded` | `amusement.maintenance_record_failed` |
 | amusement | `GET` | `/api/v1/amusement/maintenance-records/{id}` | `getAmusementMaintenanceRecord` | 查询游乐定期检修记录详情 | `-` | `amusement.maintenance.read` | `staff-token` | `project-amusement` | kiosk, web, mobile_admin | 否 | `amusement.maintenance.viewed` | `amusement.maintenance.view_failed` |

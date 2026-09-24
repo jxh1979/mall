@@ -200,20 +200,6 @@ final class JdbcAmusementRowMapper {
         );
     }
 
-    AmusementManualOverrideRecord mapManualOverride(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementManualOverrideRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("session_id"),
-                rs.getString("override_type"),
-                rs.getString("reason"),
-                rs.getString("status"),
-                rs.getString("operator_note"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at")
-        );
-    }
-
     AmusementDeviceStatusRecord mapDeviceStatus(ResultSet rs, int rowNum) throws SQLException {
         return new AmusementDeviceStatusRecord(
                 rs.getString("id"),

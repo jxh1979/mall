@@ -1,7 +1,206 @@
 CRITERIA-LOCK-SHA256: b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458
 LOCK-AMEND-COUNT: 1
 
-版本：V10.07
+版本：V10.27
+
+## 当前 XM-M034-AB B5-r2 双 PASS 收口，进入检查点
+2026-09-24T09:51:06Z。Grok B5-r2 真实 exit 0（回执 /home/james/audit-tmp/xm034_b5r2.receipt），报告 modules/XM-M034-AB-b5-r2-grok-raw.md（V0.01，40000bytes SHA256 2fc0a6fa9e148666e69e0396d66598e251851277c7c1316ab4332171cb9f6be1，grok-4.7/xhigh），结论 PASS、新问题 0；其自跑空库全量 MVN_EXIT 0（3529 测 0 失败）、全链 verify:predeploy 0。席甲 B5-r2 票 PASS（modules/XM-M034-AB-b5-r2-self-raw.md，51975bytes SHA256 20e23de2d2b1837133e35afc15db3fc6cb3d30fd92ac8ddad80762a977064667）。四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。合取双 PASS：XM-M034-AB PASS；B3 累计 3/3；修复队列「是」＝0。闭环文件 modules/XM-M034-AB-manual-override-retire.md。
+失效范围：写入集合所属 M039、M114、M132、M133、M134、M135、M230、M232、M233、M245、M246、M248、M369、M388、M389、M390、M391、M392、M424 及门禁生成物所属模块均为 PENDING，无 PASS 需改回。
+下一步：检查点——origin/main（daf6adfc）一次性 worktree 带 30 个改动路径（含 3 个删除文件、新迁移 V433、生成物与证据）、ledger、findings、XM-M034-AB 十二份 raw 与闭环文件；提交前一次性空库后端全量须 0 红；propose-change 跑全链 verify:predeploy 后开 PR，merge-pr --merge 等 CI 绿后合并。之后按 D-031 顺序：XM-M033-A…D 与 XM-M031-C（契约），再 13 个模块现锁重审。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B5-r2 本席完整 PASS 已封存，待 Grok
+2026-09-24T09:33:10Z。席甲 B5-r2 自席 raw modules/XM-M034-AB-b5-r2-self-raw.md（V0.01，51975bytes SHA256 20e23de2d2b1837133e35afc15db3fc6cb3d30fd92ac8ddad80762a977064667）已封存，结论 PASS：origin/main＋新累计 diff 后端全量 263 套 3529 测 0 红、全链 verify:predeploy 0、30 个路径与主工作区一致（xm034_b5r2_run.log）；三个已删文件名在活文档中无引用；181 判据逐项。新登记观察两条：验收映射第 50 行仍列已停用权限码（→M390）；编码规则正本第 259 行把扫码出场核销 exitVerification 列为已废止设计（→M230 对照 BSM 第 1262 行判定，不入本批）。封存时 Grok B5-r2 仍在运行，未读其正文。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B4-r3 双 PASS，进入整模块重审（B5-r2）
+2026-09-24T09:30:36Z。Grok B4-r3 真实 exit 0，报告 modules/XM-M034-AB-b4-r3-grok-raw.md（V0.01，16411bytes SHA256 b1649908f53994543adce57e717ca1cf12f3b47b91f6fabb6210a0482805a711，grok-4.7），归因与内容双 PASS。席甲 B4-r3 票 PASS。四值全等。findings V4.12（SHA256 fdfaa2835a0cb081ea5bf4a332e380d8a5ca91d43d0be2e0bcb949283934fa20）001…005 队列全否。B3 累计 3/3（已用满）。
+下一步 B5-r2：派 Grok 整模块全量三线重审（modules/XM-M034-AB-b5-r2-grok-raw.md），席甲自席 raw 后读 Grok 并做四值校验；双 PASS → 台账先记 PASS 再写闭环文件、检查点合并；再有否决即按 V0.17 记 BLOCKED-3ROUNDS 停下。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。合成模块XM-M034-AB B5-r2修复后整模块三线全量重审，正本/home/james/complex-management main主工作区（范围文件的主工作区现状即发布版：origin/main daf6adfc加累计diff /home/james/audit-tmp/xm034_b3cum_r3.diff，30个路径，含4个删除文件、1个新迁移V433）。按160-audit-prompt.md V0.17 B1/B5及三线，范围＝ledger「当前 XM-M034-AB B1 开工」段所列33个文件的现状（已删除的4个核其确已删除、无残留调用）加定稿新增的4项（契约包、需求实现矩阵、e2e模拟、V433）与门禁生成物和证据文件，全读并核判断所需的调用方，逐项过锁内M039、M114、M132、M133、M134、M135、M230、M232、M233、M237、M245、M246、M248、M389、M390、M391、M392映射并集181项，不能只看diff或复用旧票。背景：B1双FAIL→B2-r1按操作员D-033删除重写后双PASS→B3-r1→B4-r1 Grok归因否决（证据JSON三行越界）→B3-r2收窄→B4-r2双PASS→B5-r1你的GR-01（需求实现矩阵已删类路径）→B2-r2定稿005→B3-r3→B4-r3双PASS（Grok raw SHA256 b1649908f53994543adce57e717ca1cf12f3b47b91f6fabb6210a0482805a711、席甲 SHA256 9b12c22cde181f2967f6d8820277915ae4962f6f3c8a4211bd24feda351e2982）；B3累计3（已用满）。findings现在V4.12：XM-M034-AB-001至005全部否（已修）；不把全部否当模块已全对，允许真实新证据或回归。
+后端测试实跑须用一次性空库（complex_test迁移历史含已改号427，方法见ledger D-032段）：origin/main一次性worktree里git apply该累计diff，建自己的一次性空库，只在该worktree内把测试里写死的5432/complex_test临时改指空库并设SETTLE_TEST_DB_URL，mvn -o test（JAVA_HOME须为21），跑完git checkout还原、DROP你建的空库、git worktree remove不加--force；不得写complex或complex_test；如跑npm校验须把主工作区node_modules软链进该worktree并在删除前移除。席甲B3证据：/home/james/audit-tmp/xm034_b3_run.log（3529测0红）、xm034_b3r2_verify.log（全链verify:predeploy 0）。
+重点：票务人工放行写入口与游乐人工改判（含allow、release、deny、pause、resume）是否全链下线、无残留调用与契约；V433是否只停用该码并清四处授予；历史表、历史行、V014/V234/V067 CHECK、V099策略行、releaseEntryConcurrentCapacity与出场扣减是否保留；契约两份、附录、安全基线、隔离规格与证据文件是否一致且只含必要改动；测试删除是否只删守护废止能力的断言、新回归能否失败；有无新引入问题。全量审需第一性三问、顺从181项、grilling对抗，审完全部范围收齐全部问题才统一PASS/FAIL；不为理论场景加需求；已在B2双席定为只登记的项（O-01/O-02状态常量、JdbcAdmissionFactRepository注释、设计文档、权限中文名等）不得在无新证据时改判。每问题给精确文件行/原句/正常触发/四分类顺序/已有判据/证据类型。
+独立性：不得读本次modules/XM-M034-AB-b5-r2-self-raw.md；两份本次完整raw各自封存后才互读；旧raw可读；全仓检索时若命中该路径的片段须丢弃不采信。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物（一次性worktree与一次性空库除外且须删除），不对complex、complex_test执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b5-r2-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/181项证据/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M034-AB B4-r3 本席完整 PASS 已封存，待 Grok
+2026-09-24T09:17:51Z。席甲 B4-r3 自席 raw modules/XM-M034-AB-b4-r3-self-raw.md（V0.01，3005bytes SHA256 9b12c22cde181f2967f6d8820277915ae4962f6f3c8a4211bd24feda351e2982）已封存：r3 增量 1 块归 005、越界 0；四行只删该类路径；新旧累计 diff 只差该 csv；全链 verify:predeploy 0。封存时 Grok B4-r3 仍在运行，未读其正文。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B3-r3 已修（005），进 B4-r3
+2026-09-24T09:17:18Z。findings V4.11（SHA256 030e0810b39b9cbd1d3d4c41edea2d9d8e92058bbb819060a636db6af726281c）B2-r2 双 PASS 定稿 XM-M034-AB-005。席甲 B3-r3：需求实现矩阵第 49–52 行各删去已删除记录类路径一处；r3 增量 diff /home/james/audit-tmp/xm034_b3r3.diff（30256bytes SHA256 beb132b3e32282c2efebb0cd8dbc52fcdad10956aaf3fed73923ff1dac1711f5，1 file changed, 4 insertions, 4 deletions）；新累计 diff（限 30 个改动路径）/home/james/audit-tmp/xm034_b3cum_r3.diff（126338bytes SHA256 a8554489151f00ffeb3b518a46c0fc3a06ce88436e530a5db6dafe012da34aa0）。一次性 worktree 套新累计 diff 后 30 个路径与主工作区一致，全链 verify:predeploy 退出码 0，三个已删文件名在活文档中已无引用（xm034_b3r3.log）。补丁脚本同步。B3 累计 3/3（已用满，再有否决即 BLOCKED-3ROUNDS）。
+派 Grok B4-r3（modules/XM-M034-AB-b4-r3-grok-raw.md），席甲 B4-r3 自席落 modules/XM-M034-AB-b4-r3-self-raw.md。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。合成模块XM-M034-AB B4-r3：只读审计席甲B3-r3修复diff，正本/home/james/complex-management main主工作区。定稿见findings.md V4.11「XM-M034-AB B2-r2 双 PASS 定稿」段：XM-M034-AB-005（技术性）需求实现矩阵第49至52行各删去「; backend/src/main/java/com/complex/platform/amusement/AmusementManualOverrideRecord.java」一处，写入集合只此csv。
+输入：r3增量diff /home/james/audit-tmp/xm034_b3r3.diff（30256bytes SHA256 beb132b3e32282c2efebb0cd8dbc52fcdad10956aaf3fed73923ff1dac1711f5；1 file changed, 4 insertions, 4 deletions），before tree 1b8ef45788dda271ec109cba8129fc6aa1ee3160 → after tree c8512225561a3f0b268d5b59410f6de972a1159a（两棵树含审计文档变化，按路径只看该csv）；新累计diff（限30个改动路径）/home/james/audit-tmp/xm034_b3cum_r3.diff（126338bytes SHA256 a8554489151f00ffeb3b518a46c0fc3a06ce88436e530a5db6dafe012da34aa0）。证据：/home/james/audit-tmp/xm034_b3r3.log——一次性worktree套新累计diff后30个路径与主工作区逐一一致，全链verify:predeploy退出码0，三个已删文件名在活文档（排除审计文档、历史目录与历史扫描快照）中已无引用。
+审计：一、r3增量是否只删这4处、逐行归因到005，同行其余列与表名是否未动；二、新累计diff相对B4-r2已判PASS的累计diff是否只有这一处变化；三、有无新引入问题。
+独立性：不得读本次modules/XM-M034-AB-b4-r3-self-raw.md；两份本次完整raw各自落盘后才互读；旧raw可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不装依赖，不建脚本日志临时产物（一次性worktree除外且须删除），不对complex、complex_test执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b4-r3-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。diff逐块归因表、内容审计、最终PASS或FAIL（内容与归因分别给票，任一FAIL即FAIL）留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M034-AB B5-r1 被 Grok 否决（GR-01）→ B2-r2 候选已落盘，待 Grok B2-r2 票
+2026-09-24T09:05:57Z。Grok B5-r1 真实 exit 0（回执 /home/james/audit-tmp/xm034_b5.receipt），报告 modules/XM-M034-AB-b5-r1-grok-raw.md（V0.01，31498bytes SHA256 98afbc9d52a7089c65889c5ead6a0d3e1f8fd78baa86e884736256dedffa94c2，grok-4.7）：FAIL，新问题 GR-01（需求实现矩阵第 49–52 行「相关代码文件」列仍含已删除的 AmusementManualOverrideRecord.java）；001–004 经其空库全量与门禁复核成立。席甲 B5-r1 票 PASS 被推翻（只查了代码与契约残留，未核文档路径列）。四值全等。按 V0.17 回 B2。
+B2-r2 候选 findings V4.10（SHA256 50d1f57277eae898e85bf90860543fe18f49a3071b0250108fa4cfdf43d79f36）：XM-M034-AB-005（技术性）——四行各删去该类路径一处，写入集合只此 csv；全仓点名三个已删文件的只此四处（历史扫描快照除外，只登记）。席甲 B2-r2 票 PASS 已追加到 modules/XM-M034-AB-b1-self-raw.md V0.04（全文 52786bytes SHA256 f733fe052c78da807114160f4ab4e2d699a5b021ed1359e2938a52aa2070963e）。B3 累计 2/3，B3-r3 为最后一次。派 Grok B2-r2（追加到 modules/XM-M034-AB-b1-grok-raw.md V0.03）。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.7/xhigh。执行合成模块XM-M034-AB B2-r2复核，正本/home/james/complex-management main主工作区。你的B5-r1（modules/XM-M034-AB-b5-r1-grok-raw.md）FAIL，新问题GR-01：需求实现矩阵第49至52行「相关代码文件」列仍含已删除的AmusementManualOverrideRecord.java；001至004复核成立。席甲B5票PASS被推翻。候选在findings.md顶部「当前 XM-M034-AB B2-r2 候选」段：GR-01定为XM-M034-AB-005（技术性），最小处置为四行各删去「; backend/src/main/java/com/complex/platform/amusement/AmusementManualOverrideRecord.java」一处，写入集合只此csv；席甲补核全仓点名三个已删文件的只此四处，docs/production-evidence-closure-gap-report-v0.1.md第45行为历史扫描快照只登记。
+只审本批：一、归并与分类是否恰当；二、最小处置是否完整（四处、不动其他列与表名、不改其他文件），全仓有无还漏掉的点名已删文件（请自行git grep三个类名，含文档与索引表，排除审计文档与历史目录）；三、你B2-r1曾写该列本批不重写整行，现据B5新事实改为删路径，是否与之冲突；四、有无添加项或须问操作员的口径。
+独立性：本次不得读modules/XM-M034-AB-b1-self-raw.md在其V0.03（51981字节）之后追加的席甲B2-r2段；只允许两席，不用MCP/子代理/第三席，不问人，不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b1-grok-raw.md：在文件末尾追加「XM-M034-AB B2-r2 复核（Grok席乙，V0.03）」段并把文件版本记为V0.03，不改前文；追加段不写独占锁行。逐项给结论、对XM-M034-AB-005投同意或反对并写理由，最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M034-AB B5-r1 本席完整 PASS 已封存，待 Grok
+2026-09-24T08:42:42Z。席甲 B5-r1 自席 raw modules/XM-M034-AB-b5-r1-self-raw.md（V0.01，50398bytes SHA256 7457abd4937dcde8ea836017ad8601f60c10c80879af2bf16e393b86b3549451）已封存，结论 PASS：origin/main＋累计 diff 后端全量 263 套 3529 测 0 红、全链 verify:predeploy 0、30 个路径与主工作区一致（xm034_b5_run.log）；残留检索只余已应用迁移、新回归与历史扫描快照；181 判据逐项；无新缺陷。封存时 Grok B5-r1 仍在运行，未读其正文。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B4-r2 双 PASS，进入整模块重审（B5-r1）
+2026-09-24T08:40:11Z。Grok B4-r2 真实 exit 0，报告 modules/XM-M034-AB-b4-r2-grok-raw.md（V0.01，14833bytes SHA256 adb1161dc1942e1e25d0a4538d1d2921b09fb97fdd67556c97b3433a3f35721f，grok-4.7），归因票 PASS（越界 0）、内容票 PASS。席甲 B4-r2 票 PASS。四值全等。合取双 PASS，findings V4.09（SHA256 d6ee9157bcc1a03ed7c35ba50283536a5a35cae1e440977833f9ce13c8cad699）把 001…004 队列改否；当前队列是＝0。B3 累计 2/3。
+下一步 B5-r1：派 Grok 整模块全量三线重审（modules/XM-M034-AB-b5-r1-grok-raw.md），席甲自席 raw 后读 Grok 并做四值校验；双 PASS → 台账先记 PASS 再写闭环文件、检查点合并。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。合成模块XM-M034-AB B5-r1修复后整模块三线全量重审，正本/home/james/complex-management main主工作区（范围文件的主工作区现状即发布版：origin/main daf6adfc加累计diff /home/james/audit-tmp/xm034_b3cum.diff，30个路径，含4个删除文件、1个新迁移V433）。按160-audit-prompt.md V0.17 B1/B5及三线，范围＝ledger「当前 XM-M034-AB B1 开工」段所列33个文件的现状（已删除的4个核其确已删除、无残留调用）加定稿新增的4项（契约包、需求实现矩阵、e2e模拟、V433）与门禁生成物和证据文件，全读并核判断所需的调用方，逐项过锁内M039、M114、M132、M133、M134、M135、M230、M232、M233、M237、M245、M246、M248、M389、M390、M391、M392映射并集181项，不能只看diff或复用旧票。背景：B1双FAIL→B2-r1按操作员D-033删除重写后双PASS→B3-r1→B4-r1 Grok归因否决（证据JSON三行越界）→B3-r2收窄→B4-r2双PASS（Grok raw SHA256 adb1161dc1942e1e25d0a4538d1d2921b09fb97fdd67556c97b3433a3f35721f、席甲 SHA256 a12a02a17509eeffec3c393e893456ec51ca6580476bddc28860a805c9c8286a）；B3累计2。findings现在V4.09：XM-M034-AB-001至004全部否（已修）；不把全部否当模块已全对，允许真实新证据或回归。
+后端测试实跑须用一次性空库（complex_test迁移历史含已改号427，方法见ledger D-032段）：origin/main一次性worktree里git apply该累计diff，建自己的一次性空库，只在该worktree内把测试里写死的5432/complex_test临时改指空库并设SETTLE_TEST_DB_URL，mvn -o test（JAVA_HOME须为21），跑完git checkout还原、DROP你建的空库、git worktree remove不加--force；不得写complex或complex_test；如跑npm校验须把主工作区node_modules软链进该worktree并在删除前移除。席甲B3证据：/home/james/audit-tmp/xm034_b3_run.log（3529测0红）、xm034_b3r2_verify.log（全链verify:predeploy 0）。
+重点：票务人工放行写入口与游乐人工改判（含allow、release、deny、pause、resume）是否全链下线、无残留调用与契约；V433是否只停用该码并清四处授予；历史表、历史行、V014/V234/V067 CHECK、V099策略行、releaseEntryConcurrentCapacity与出场扣减是否保留；契约两份、附录、安全基线、隔离规格与证据文件是否一致且只含必要改动；测试删除是否只删守护废止能力的断言、新回归能否失败；有无新引入问题。全量审需第一性三问、顺从181项、grilling对抗，审完全部范围收齐全部问题才统一PASS/FAIL；不为理论场景加需求；已在B2双席定为只登记的项（O-01/O-02状态常量、JdbcAdmissionFactRepository注释、设计文档、权限中文名等）不得在无新证据时改判。每问题给精确文件行/原句/正常触发/四分类顺序/已有判据/证据类型。
+独立性：不得读本次modules/XM-M034-AB-b5-r1-self-raw.md；两份本次完整raw各自封存后才互读；旧raw可读；全仓检索时若命中该路径的片段须丢弃不采信。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物（一次性worktree与一次性空库除外且须删除），不对complex、complex_test执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b5-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/181项证据/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M034-AB B4-r2 本席完整 PASS 已封存，待 Grok
+2026-09-24T08:28:24Z。席甲 B4-r2 自席 raw modules/XM-M034-AB-b4-r2-self-raw.md（V0.01，4404bytes SHA256 a12a02a17509eeffec3c393e893456ec51ca6580476bddc28860a805c9c8286a）已封存：r2 增量 2 块归 004、越界 0；该证据文件相对 origin/main 只剩接口数一行；累计 diff 其余 29 个路径与 B3-r1 冻结 diff 逐字节相同；全链 verify:predeploy 0。封存时 Grok B4-r2 仍在运行，未读其正文。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B4-r1 被 Grok 否决（归因越界 3 行）→ B3-r2 已修，进 B4-r2
+2026-09-24T08:27:40Z。Grok B4-r1 真实 exit 0，报告 modules/XM-M034-AB-b4-r1-grok-raw.md（V0.01，28473bytes SHA256 0f1fe529f1c501002e5fced1ca1826a6a0a74d50a0a0235853b8f4a6453a6c36，grok-4.7）：内容票 PASS，归因票 FAIL——docs/production-readiness-evidence/security-baseline-latest.json 的 verified_at、notes 整段、version 三行归因不到 001…004（门禁只比较 openapi_operation_count，接口数一行可归 004），总结论 FAIL。席甲 B4-r1 票 PASS（作者自审票）被推翻：席甲把「门禁要求的产物一并带入」读成可顺手改写整份证据说明，属越界。四值全等。按 V0.17 回退 B3。
+B3-r2（席甲，只收窄该文件）：该证据文件改为 origin/main 原文仅 openapi_operation_count 732→730，verified_at、notes、version 恢复原值；r2 增量 diff /home/james/audit-tmp/xm034_b3r2.diff（1714bytes SHA256 716e7d09e06722474b15f5881ea682c58bff9163629e9c60a5e93d947bfba9ef，1 file changed）；累计 diff（限 30 个改动路径）/home/james/audit-tmp/xm034_b3cum.diff（126694bytes SHA256 21e4a442ddf404285e2b3a289a36acb6daae6b454549256afce3eccc65bb8797，30 files changed, 68 insertions, 828 deletions）。一次性 worktree 套累计 diff 后 30 个路径与主工作区逐一一致，全链 verify:predeploy 退出码 0（xm034_b3r2_verify.log、xm034_b3r2_predeploy.log；该日志之前两次作废：一次累计 diff 误含审计文档整体未生效，一次 node_modules 软链路径写错缺依赖包）。证据文件是文档，后端全量留 B5 复跑。B3 累计 2/3。补丁脚本 xm034_patch.py 同步改为只动接口数。
+派 Grok B4-r2（modules/XM-M034-AB-b4-r2-grok-raw.md），席甲 B4-r2 自席落 modules/XM-M034-AB-b4-r2-self-raw.md。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。合成模块XM-M034-AB B4-r2：只读审计席甲B3-r2修复diff，正本/home/james/complex-management main主工作区。你的B4-r1（modules/XM-M034-AB-b4-r1-grok-raw.md）内容票PASS、归因票FAIL：docs/production-readiness-evidence/security-baseline-latest.json的verified_at、notes整段、version三行越界，openapi_operation_count 732改730可归004；你写明若只改接口数、不改其余三项即整段归004。席甲B3-r2据此只做收窄。
+输入：r2增量diff /home/james/audit-tmp/xm034_b3r2.diff（1714bytes SHA256 716e7d09e06722474b15f5881ea682c58bff9163629e9c60a5e93d947bfba9ef；1 file changed，只动该证据文件），before tree d9fb40d9cbd9079b5d74129a2c0fad2b71764f32 → after tree 4d7ff6c530ca1189829c8c01f3e86a87f5154b5f（两棵树含审计文档变化，按路径只看该证据文件）；累计diff（origin/main加B3-r1加B3-r2，限30个改动路径）/home/james/audit-tmp/xm034_b3cum.diff（126694bytes SHA256 21e4a442ddf404285e2b3a289a36acb6daae6b454549256afce3eccc65bb8797；30 files changed）。证据：/home/james/audit-tmp/xm034_b3r2.log与xm034_b3r2_verify.log——证据文件相对origin/main只剩openapi_operation_count一行不同；一次性worktree套累计diff后30个路径与主工作区逐一一致，全链verify:predeploy退出码0（xm034_b3r2_predeploy.log）。说明：xm034_b3r2.log里的第一次累计diff把审计文档也算进去、在ledger上套不上而整体未生效，该次verify结果作废；xm034_b3r2_verify.log第一次因软链路径写错缺依赖包失败，同样作废，以最后一次为准。
+审计：一、r2增量是否只把该文件三行恢复为origin/main原值、接口数为730，逐行归因到004；二、累计diff相对你B4-r1已判PASS的内容是否只有这一处变化；三、有无新引入问题。
+独立性：不得读本次modules/XM-M034-AB-b4-r2-self-raw.md；两份本次完整raw各自落盘后才互读；旧raw可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不装依赖，不建脚本日志临时产物（一次性worktree除外且须删除），不对complex、complex_test执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b4-r2-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。diff逐块归因表、内容审计、最终PASS或FAIL（内容与归因分别给票，任一FAIL即FAIL）留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M034-AB B4-r1 本席完整 PASS 已封存，待 Grok
+2026-09-24T08:08:05Z。席甲 B4-r1 自席 raw modules/XM-M034-AB-b4-r1-self-raw.md（V0.01，23681bytes SHA256 9c8d54ca240ecf9285eaaeddc57de2ad12fd6ffb2e5ff88236633387fef2e262）已封存：69 块归因齐全、越界 0（生产就绪证据 JSON 归 004，待 Grok 判定）；各删除块边界逐块核过；GREEN 0 红、verify:predeploy 通过。归因票 PASS、内容票 PASS。封存时 Grok B4-r1 仍在运行，未读其正文。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B3-r1 已修（席甲），冻结 diff 进 B4-r1
+2026-09-24T08:06:59Z。席甲按 findings V4.08 定稿（D-033「删除」）落补丁：票务写入口链删除（控制器映射与 import、两个服务方法、DTO，五条测试）；游乐改判整体下线（两端点、服务方法与常量与分支、四个仓储方法与参数助手、行映射、两个记录类型、相关测试）；新迁移 V433 照 V429 停用 amusement.verification.override；OpenAPI 两份删路径与组件；生成物重建（两份契约附录、数据隔离规格 V432→V433、安全基线与发现登记 732→730）；文档同步（权限矩阵四行、契约包一行、需求实现矩阵 8 处、e2e 模拟一行）；另同步生产就绪证据 docs/production-readiness-evidence/security-baseline-latest.json（接口数 732→730、verified_at、notes、V0.03→V0.04；无生成器、历次手工同步；定稿未点名，首轮 GREEN 的 verify:predeploy 在 verify:production-readiness-evidence 报 must be 730, got 732 后补入，归 004，已请 Grok B4 判越界与否）。
+取证（origin/main daf6adfc 一次性 worktree＋一次性空库，已还原删除）：RED 只落测试补丁，后端全量 263 套 3529 测 1 红，恰为新增停用回归 AmusementJdbcIntegrationTests.amusementOverridePermissionIsRetiredAndGrantedToNobody；GREEN 3529 测 0 红，全链 verify:predeploy 退出码 0（/home/james/audit-tmp/xm034_b3_run.log、xm034_b3_predeploy.log；首轮见 xm034_b3_run_first.log）。主工作区落补丁：写入前 30 个文件与 origin/main 相同；生成物在一次性 worktree 产出后原样拷入；before tree d6e19dfb67d8583a3c1257c8f3f0f820f2743dd4 → after tree 46ea3be99b8fbe5ffd382ebbfaa0da0238a1ccb6；冻结 diff /home/james/audit-tmp/xm034_b3r1.diff（127358bytes SHA256 2c163c613e0e3924d79c7eafc2a6f5a3ac3767df74e582efc7c66b44db4dacc3，30 files changed, 71 insertions, 831 deletions），与一次性 worktree 的 diff 逐字节相同（xm034_b3_apply.log）。逐块归因 69 块齐全（xm034_att_table.md）。B3 累计 1/3。
+派 Grok B4-r1（modules/XM-M034-AB-b4-r1-grok-raw.md），席甲 B4-r1 自席落 modules/XM-M034-AB-b4-r1-self-raw.md。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。合成模块XM-M034-AB B4-r1：只读审计席甲B3-r1修复diff本身，正本/home/james/complex-management main主工作区。按160-audit-prompt.md V0.17 B4与§5闸3：逐行归因到findings.md V4.08已定稿且归属是的ID（XM-M034-AB-001至004，按「XM-M034-AB B2-r1 双 PASS 定稿（按 D-033「删除」）」段及其所引「按 D-033「删除」重写」候选段），归因不到的行即越界；内容上核是否按定稿最小处置与你B2-r1写死的边界实现，是否引入新缺陷或新业务。
+输入：before tree d6e19dfb67d8583a3c1257c8f3f0f820f2743dd4 → after tree 46ea3be99b8fbe5ffd382ebbfaa0da0238a1ccb6；冻结diff /home/james/audit-tmp/xm034_b3r1.diff（127358bytes SHA256 2c163c613e0e3924d79c7eafc2a6f5a3ac3767df74e582efc7c66b44db4dacc3；30 files changed, 71 insertions, 831 deletions；含4个删除文件与1个新迁移），可自行git diff --binary两个tree复核一致；写入前30个文件与origin/main daf6adfc逐字节相同。席甲逐块归因表在ledger本段所附modules/XM-M034-AB-b4-r1-self-raw.md里，你不得读其本次正文，需自行归因。证据：/home/james/audit-tmp/xm034_b3_run.log——origin/main一次性worktree加一次性空库：RED只落测试补丁，后端全量3529测1红，恰为新增的停用真库回归；GREEN全部补丁并用docs:operation-matrix、docs:openapi-closure、docs:data-isolation-spec、docs:security-baseline重建生成物后，3529测0红，全链verify:predeploy退出码0（xm034_b3_predeploy.log）；生成物在一次性worktree产出后原样拷入主工作区，主工作区diff与一次性worktree的diff逐字节相同（xm034_b3_apply.log）。请特别核一项定稿未点名的文件：docs/production-readiness-evidence/security-baseline-latest.json（无生成器、历次随接口数手工同步；首轮GREEN的verify:predeploy在verify:production-readiness-evidence报openapi_operation_count must be 730, got 732，见xm034_b3_run_first.log），席甲把接口数732改730、verified_at、notes与version V0.03改V0.04，归入004，请判定是否越界。如需实跑后端测试只可自建一次性worktree与一次性空库（测试写死的complex_test只在该worktree内临时改指），跑完还原并删除；不得写complex或complex_test；或只跑不连库的单元测试类与node校验脚本。
+重点：001只删票务写入口链与两行矩阵措辞、V067/V270/V429未动；002删clearProjectConcurrentCapacity三处实现、releaseEntryConcurrentCapacity未动、出场测试按你B2第3节切分；003与004整体下线的删除面完整、无残留调用、两个记录类型已删；V433与V429同形；AmusementJdbcIntegrationTests的平台管理员清单去码、全量权限清单保留、新回归能否在旧迁移下失败；控制器测试第195行已删；契约两份删路径与组件且深相等；四类生成物与证据文件的变更只含接口数、迁移戳与这两个接口的行；权限矩阵第78与269行只改括号及第78行事件列；需求矩阵只去8处接口引用；有无借机删弱或新业务；文件模式未变。
+独立性：不得读本次modules/XM-M034-AB-b4-r1-self-raw.md；两份本次完整raw各自落盘后才互读；旧raw可读。只允许两席，不用MCP/子代理/第三席，不问人、不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不装依赖，不建脚本日志临时产物（一次性worktree与一次性空库除外且须删除），不对complex、complex_test执行写语句。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b4-r1-grok-raw.md：不存在则创建V0.01；已有内容则追加不覆盖。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。diff逐块归因表、内容审计、最终PASS或FAIL（内容与归因分别给票，任一FAIL即FAIL）留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M034-AB B2-r1 双 PASS 定稿（按 D-033「删除」），进入 B3-r1
+2026-09-24T08:01:13Z。Grok B2-r1 重派真实 exit 0（回执 /home/james/audit-tmp/xm034_b2d.receipt），追加段 modules/XM-M034-AB-b1-grok-raw.md V0.02（全文 58286bytes SHA256 38c37978ed82856cd66733b0ed6c21b733386605db1813378cd88a90a290f31e），票 PASS；席甲 V0.03 票 PASS。合取双 PASS：findings V4.08（SHA256 ab3aeed585b1cbc1fb5fe32a008e728bea2befb0e46f2cd68629377192e30488）定稿 XM-M034-AB-001…004 修复队列「是」，并补定控制器测试第 195 行与三份门禁生成物。B3 累计 0/3。补丁已在一次性 worktree 试跑：测试阶段与全部阶段均编译通过，两份附录重建后 verify:p0-contract、verify:matrix-vs-migration 通过（/home/james/audit-tmp/xm034_dry.log，已删）。
+下一步 B3-r1（席甲）：origin/main 一次性 worktree＋一次性空库，RED 只落测试补丁、GREEN 落全部补丁并重建四类生成物，各跑后端全量，GREEN 另跑全链 verify:predeploy；GREEN 须 0 红；生成物在一次性 worktree 产出后落主工作区并冻结 diff。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B2-r1 候选按「删除」重写，重派 Grok B2-r1
+2026-09-24T07:41:13Z。操作员指示「继续 XM-M034-AB，按删除重写 B2 候选」。续审三查：锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458＝sidecar＝ledger 首行；origin/main 仍为 daf6adfc；160 上无其他席位进程。按 D-033「删除」重写候选 findings V4.07（SHA256 e28ad81a3fdf73f39e7b21082861766378c809897893a81a48b070f7449bdf99）：XM-M034-AB-001 票务写入口下线（冲突）；002 release、003 allow（冲突）随 004 整体下线；004 deny/pause/resume（添加，操作员答复删除）——前向迁移 V433 照 V429 停用 amusement.verification.override，删游乐改判两端点、服务与仓储方法、行映射、两个记录类型与相关测试，补停用真库回归；OpenAPI 两份删路径与组件、两份附录用生成器重建；权限矩阵、契约包、需求实现矩阵与 e2e 模拟同步。开工段外新增 4 个文件（契约包 M388、需求实现矩阵 M424、e2e 模拟 M369、新迁移）。席甲 B2-r1 票 PASS 已追加到 modules/XM-M034-AB-b1-self-raw.md V0.03（全文 51981bytes SHA256 0de711ccf7b0889a9cb92152ec8f61c923113ebe36edf47da637aec965c74955；V0.02 票作废）。无 questions、不 BLOCKED。重派 Grok B2-r1（追加到 modules/XM-M034-AB-b1-grok-raw.md V0.02）。LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.7/xhigh。执行合成模块XM-M034-AB B2-r1整批归并复核（重派），正本/home/james/complex-management main主工作区，以origin/main（daf6adfc）为准。B1两席已落齐：你的modules/XM-M034-AB-b1-grok-raw.md V0.01（FAIL，GR-01至GR-04），席甲modules/XM-M034-AB-b1-self-raw.md V0.01（FAIL，CX-01至CX-04）；B1后四值全等。你的GR-04判为添加项，操作员最终答复见ledger「当前 D-033 改判为「删除」」段：deny、pause、resume一并删除，游乐改判接口整体下线，权限码前向停用，历史行保留。此前按弹窗答复「保留」写的候选（findings V4.06）已作废，按它派给你的上一次B2-r1已被终止、未写入你的raw。本次候选在findings.md顶部「当前 XM-M034-AB B2-r1 整批候选（按 D-033「删除」重写…）」段。
+只审本批的归并、分类、队列与最小修复边界，不重新审模块。逐项独立核实：一、差集：GR与CX是否全部归并、有无漏并或改写原意。二、001票务写入口下线处置是否最小完整（不留403空壳、不改V067/V270/V429、权限矩阵两行措辞）。三、002与003随004整体下线，是否仍需单独的拒绝逻辑，clearProjectConcurrentCapacity删除是否只影响release（releaseEntryConcurrentCapacity不动），出场测试的改法是否恰当。四、004：前向迁移V433照V429停用amusement.verification.override是否完整（四处授予、临时授权），两端点、服务方法、仓储方法、行映射、两个记录类型删除后有无遗漏调用方（请自行git grep），测试改法与新增真库回归是否足够。五、写入集合在开工段33个文件之外新增的4项（契约包docs/p0-api-contract-pack-v0.1.md第334行、需求实现矩阵csv第49至52行、tests/e2e/support/mock-api.ts第262行、新迁移）是否必要，有无还漏掉的按接口名、操作名或权限码引用的文件；两份附录作为生成物用生成器重建是否正确；verify:predeploy里verify:matrix-vs-migration、verify:p0-contract等门禁在改后能否通过的风险点。六、分类（001至003冲突、004添加经操作员答复删除）与观察登记是否接受。七、有无新的添加项、有无须问操作员的口径。
+独立性：两份B1 raw已互读。本次不得读modules/XM-M034-AB-b1-self-raw.md在其V0.01（49028字节）之后追加的席甲B2段（V0.02作废票与V0.03本次票）；只允许两席，不用MCP/子代理/第三席，不问人，不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b1-grok-raw.md：在文件末尾追加「XM-M034-AB B2-r1 整批复核（Grok席乙，V0.02）」段并把文件版本记为V0.02，不改前文；追加段不写独占锁行。逐项给结论、对每个候选ID投同意或反对并写理由，最终整批PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 D-033 改判为「删除」；XM-M034-AB 停在 B2-r1（操作员「本轮结束后停止」）
+2026-09-24T07:09:30Z。操作员在聊天中对 D-033 同一问题再次答复（原样）：「删除」。以最新输入为准，D-033 改为：游乐人工改判 deny、pause、resume 三类一并删除——GET/POST /api/v1/amusement/manual-overrides 整体下线，amusement.verification.override 以前向迁移停用（照 V429：status=retired，清 role_permissions、permission_template_items、user_permission_overrides，active 临时授权置 revoked），amusement_manual_overrides 表与历史行、V014/V234 的 CHECK 约束保留不动；allow 与 release 随之去掉。上方按「保留」写的 B2-r1 候选（findings V4.06「当前 XM-M034-AB B2-r1 整批候选」段）作废。
+已派的 Grok B2-r1（xm034_b2，GROK_PID 871602，按作废候选在审）运行 11 分钟时由席甲终止，未写入：modules/XM-M034-AB-b1-grok-raw.md 仍为 V0.01、36451 bytes（SHA256 df7bea7d80f9347af26e913a0ded98c527a139f69113516b289adfbdf36feeb2），回执 0 字节。席甲 B2-r1 票（已追加到 modules/XM-M034-AB-b1-self-raw.md V0.02）针对作废候选，同样作废。
+操作员随后指示「本轮结束后停止」：本段写入后停止推进，不重派、不开 B3。主工作区本模块代码未改。
+恢复时第一步：按「删除」重写 B2-r1 候选——001 票务写入口下线（不变）；002/003/004 合为游乐改判整体下线：前向迁移 V433 停用 amusement.verification.override，删两端点、AmusementService.listManualOverrides/createManualOverride/createManualOverrideInternal 与 OVERRIDE_TYPES、仓储 saveManualOverride/listManualOverrides/listManualOverridesByMerchant/clearProjectConcurrentCapacity 与行映射、AmusementManualOverrideRecord/Request，删对应测试并补停用回归；OpenAPI 两份删两路径与相关 schema，两份附录用 docs:operation-matrix、docs:openapi-closure 重生成，权限矩阵文档同步；新迁移按门禁重生成数据隔离规格与域归属清单并跑全链 verify:predeploy。再派 Grok B2-r1（追加到其 b1 raw V0.02），席甲票另行追加 V0.03。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
+
+## 当前 XM-M034-AB B1 两票已齐，B2-r1 候选已落盘，待 Grok B2-r1 票
+2026-09-24T06:57:18Z。Grok B1 真实 exit 0（回执 /home/james/audit-tmp/xm034_b1.receipt），modules/XM-M034-AB-b1-grok-raw.md V0.01（36451bytes SHA256 df7bea7d80f9347af26e913a0ded98c527a139f69113516b289adfbdf36feeb2，grok-4.7/xhigh），FAIL：GR-01…04（GR-04 为添加项）。席甲 B1 V0.01 FAIL：CX-01…04。四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。添加项已弹窗问操作员，答复见上方 D-033（保留 deny/pause/resume）。
+B2-r1 候选 findings V4.06（SHA256 6312345cc5628cff2dc5cb0de193af7754e442034540bad3d8a641efe42867c5）：XM-M034-AB-001（票务人工放行写入口下线）、002（游乐 release 拒绝并删清零方法）、003（游乐 allow 拒绝、契约枚举去 allow）、004（按 D-033 把契约与文档里「整接口已废止」改为现状）拟入队；观察只登记。席甲 B2-r1 票 PASS 已追加到 modules/XM-M034-AB-b1-self-raw.md V0.02（全文 50443bytes SHA256 001dc48101326825e784c34ace4655f19a0cf7fcc9db03184b37e523b02e476a）。派 Grok B2-r1（追加到 modules/XM-M034-AB-b1-grok-raw.md V0.02）。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok只读外审席乙，grok-4.7/xhigh。执行合成模块XM-M034-AB B2-r1整批归并复核，正本/home/james/complex-management main主工作区，以origin/main（daf6adfc）为准。B1两席已落齐：你的modules/XM-M034-AB-b1-grok-raw.md V0.01（FAIL，GR-01至GR-04），席甲modules/XM-M034-AB-b1-self-raw.md V0.01（FAIL，CX-01至CX-04）；B1后四值全等。你的GR-04判为添加项，席甲已弹窗问操作员，答复见ledger顶部「当前 D-033」段（原样：保留——deny、pause、resume三类继续可写，权限码与端点保留，只去掉allow与release）。候选在findings.md顶部「当前 XM-M034-AB B2-r1 整批候选」段。
+只审本批的归并、分类、队列与最小修复边界，不重新审模块。逐项独立核实：一、差集：GR与CX是否全部归并、有无漏并或改写原意；席甲已更正其B1关于OpenAPI含票务路径的误判并采你对票务入口的冲突分类。二、001：删控制器映射、两个服务方法与只被其使用的DTO，不留403空壳，不改V067、V270、V429，权限矩阵第63与251行措辞同步，是否最小完整。三、002：OVERRIDE_TYPES去release、删分支，并删已无生产调用方的clearProjectConcurrentCapacity（接口、Jdbc实现、测试内存仓实现；不动releaseEntryConcurrentCapacity），两条集成测试改为断言被拒且在场人数不变，是否最小完整。四、003：去allow与approved分支、两份OpenAPI枚举去allow、测试改用保留类型并补被拒断言。五、004（按D-033改写）：契约两份与两份附录把接口整体写作人工放行已废止待代码轮下线、deprecated的表述，以及权限矩阵第78与269行，改为现状；分类细化是否恰当，改写是否超出D-033。六、写入集合是否全在开工段33文件内、有无遗漏必须同步的文件（如测试内存仓、契约json与yaml同构）。七、有无新的添加项、有无须问操作员的口径。
+独立性：两份B1 raw已互读。本次不得读modules/XM-M034-AB-b1-self-raw.md在其V0.01（49028字节）之后追加的席甲B2段；只允许两席，不用MCP/子代理/第三席，不问人，不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b1-grok-raw.md：在文件末尾追加「XM-M034-AB B2-r1 整批复核（Grok席乙，V0.02）」段并把文件版本记为V0.02，不改前文；追加段不写独占锁行。逐项给结论、对每个候选ID投同意或反对并写理由，最终整批PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 D-033：操作员裁决——游乐改判 deny、pause、resume 三类保留
+2026-09-24T06:57:18Z。XM-M034-AB B1 两席落齐后（席甲 CX-01…04、Grok GR-01…04），Grok GR-04 把游乐人工改判的 deny、pause、resume 三类判为「添加」（三份 HTML 无上位句；只写一条 amusement_manual_overrides 记录，不改变核销结果，pause/resume 也不改项目开放状态），席甲按 V0.17 添加项规则弹窗询问操作员。
+问（AskUserQuestion，原样）：「游乐「人工改判」入口里，deny（拒绝）、pause（暂停）、resume（恢复）三种记录类型在三份 HTML 里没有依据：它们只写一条记录，不改变核销结果，也不改变项目开放状态（暂停/恢复营业另有设备状态与检修确认流程）。按审计规则属「添加项」，保留还是删除？（allow 人工放行与 release 清零在玩人数已按 HTML 判为冲突，无论如何都会去掉。）」选项：「删除（推荐）」「保留」。
+操作员答复（原样）：「保留」。
+执行口径（D-033）：deny、pause、resume 三类继续可写，amusement.verification.override 保持 active，GET/POST /api/v1/amusement/manual-overrides 保留；只去掉 allow（枚举速查第 43 行「系统不提供人工放行」）与 release（BSM 第 1263 行「任何岗位（含主管与最高权限）都不得手工修改、清零或修正在玩人数」）。pause/resume 名不副实（不改项目开放状态）留到游乐模块串行审计时处置。契约与文档里把整个接口写作「人工放行（已废止，DEC-CFG-2026-08-03-12 / DEC-R6-08，待代码轮下线）」的表述同批改为现状：两条旧决策针对的是人工放行本身，与本裁决保留三类记录不矛盾。
+
+
+## 当前 XM-M034-AB B1 本席完整 FAIL 已封存，待 Grok
+2026-09-24T06:37:27Z。席甲 self modules/XM-M034-AB-b1-self-raw.md V0.01/49028bytes/SHA256 991fc776eb2999e12ed0234d7a7b44ebfaa70708f67a8447e57ac1b2a1b2620a：33 个文件全读、181 判据逐项、三线完成。封存前未读 Grok 本次正文。结论 FAIL：CX-01 票务人工放行入口自 V429 恒 403（retired 码对含最高权限在内的所有主体拒绝）但服务方法、DTO、契约与测试仍在；CX-02 游乐改判 allow 即人工放行决定（枚举速查第 43 行）；CX-03 游乐改判 release 清零在玩人数，与 BSM 第 1263 行「任何岗位（含主管与最高权限）都不得手工修改、清零或修正在玩人数」相反；CX-04 余下 deny/pause/resume 无读取方、无作用，amusement.verification.override 仍 active——拟前向迁移照 V429 停用该码并下线两端点、服务与仓储方法、契约与测试，保留表与历史行。尚非合取结论。
+
+
+## 当前 XM-M034-AB B1 开工（合成模块，D-031），待两席 B1
+2026-09-24T06:33:56Z。合成模块 XM-M034-AB（M034 收口登记的 XM-M034-A 票务人工放行入口下线、XM-M034-B 游乐强制改判停用与下线；二者同对枚举速查核销记录状态条末句「系统不提供人工放行」，按 D-031 合并审）IN_PROGRESS，席甲＝Claude Opus 5.5。基线 origin/main daf6adfc（PR #490 合并后，后端全量 0 红）。票务权限码 verification.manual_override 已由 M034-001 的 V429 停用，入口仍在；游乐 amusement.verification.override 仍 active，人工改判记录有 allow、deny、pause、resume、release 五种类型（V014、V234；release 为 2026-07-05 用户拍板的主管异常清场），须逐类型判定。前端无调用。
+范围（33 个文件：全仓对 manual-override、manualOverride、manual_override、verification.override 等的引用文件；origin/main 行数与 blob）：
+| 文件 | 所属模块 | 行数 | blob |
+|---|---|---:|---|
+| backend/src/main/java/com/complex/platform/amusement/AmusementController.java | M230 | 553 | 40ca6c2d90b7 |
+| backend/src/main/java/com/complex/platform/amusement/AmusementManualOverrideRecord.java | M230 | 17 | 954aa6fe9add |
+| backend/src/main/java/com/complex/platform/amusement/AmusementManualOverrideRequest.java | M230 | 14 | 4da1d63e6115 |
+| backend/src/main/java/com/complex/platform/amusement/AmusementRepository.java | M245 | 331 | 80b62f234d4d |
+| backend/src/main/java/com/complex/platform/amusement/AmusementService.java | M230 | 1947 | 6897b66d5d8c |
+| backend/src/main/java/com/complex/platform/amusement/JdbcAmusementRepository.java | M245 | 2075 | 305672cbc332 |
+| backend/src/main/java/com/complex/platform/amusement/JdbcAmusementRowMapper.java | M246 | 345 | 91b951b6edb6 |
+| backend/src/main/java/com/complex/platform/gate/JdbcAdmissionFactRepository.java | M460 | 181 | fdc205c9c940 |
+| backend/src/main/java/com/complex/platform/ticketing/dto/VerificationManualOverrideRequest.java | M114 | 25 | 0b35d59d9b9e |
+| backend/src/main/java/com/complex/platform/ticketing/TicketingController.java | M132 | 545 | ad56fa8f38d0 |
+| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | M133 | 977 | 6f048f32f4ae |
+| backend/src/main/java/com/complex/platform/ticketing/TicketVerificationService.java | M114 | 1262 | f4f44b6dcf73 |
+| backend/src/main/resources/db/migration/V014__p0_amusement_safety_session_verification.sql | M237 | 230 | 43aa02e54796 |
+| backend/src/main/resources/db/migration/V067__ticket_multiperson_reverse.sql | M381 | 33 | e51aa21fb3c2 |
+| backend/src/main/resources/db/migration/V099__admission_over_scope_policies.sql | M461 | 60 | 7b3dbf96e674 |
+| backend/src/main/resources/db/migration/V170__access_grant_requests.sql | M041 | 188 | 8ebf53ea5c13 |
+| backend/src/main/resources/db/migration/V234__amusement_exit_release.sql | M381 | 49 | b32fdead487f |
+| backend/src/main/resources/db/migration/V251__permission_names_i18n_zh.sql | M089 | 340 | 21c345bf37fb |
+| backend/src/main/resources/db/migration/V254__permission_names_p3_polish.sql | M089 | 23 | ff9258a39f25 |
+| backend/src/main/resources/db/migration/V270__ticket_manual_override_permission.sql | M034 | 16 | 2cd96bc12a8e |
+| backend/src/main/resources/db/migration/V429__retire_verification_manual_override.sql | 计划外（U-FIX e0446520 新增） | 17 | ac3c4bb658cf |
+| backend/src/test/java/com/complex/platform/access/AccessJdbcIntegrationTests.java | M035 | 908 | 4ad77d340032 |
+| backend/src/test/java/com/complex/platform/amusement/AmusementControllerTests.java | M248 | 477 | df7b38b15321 |
+| backend/src/test/java/com/complex/platform/amusement/AmusementJdbcIntegrationTests.java | M248 | 522 | d5ff5eee119d |
+| backend/src/test/java/com/complex/platform/amusement/AmusementServiceTests.java | M232 | 3424 | 017dd851c49f |
+| backend/src/test/java/com/complex/platform/ticketing/AmusementExitReleaseJdbcIntegrationTests.java | M233 | 346 | 97c2767120e3 |
+| backend/src/test/java/com/complex/platform/ticketing/TicketingControllerTests.java | M134 | 744 | 9ed49dcbc440 |
+| backend/src/test/java/com/complex/platform/ticketing/TicketingServiceTests.java | M135 | 4842 | f65ae75a6298 |
+| docs/openapi/openapi-p0.json | M391 | 51416 | 32231790707d |
+| docs/openapi/openapi-p0.yaml | M392 | 37406 | 1f056b360dc6 |
+| docs/p0-openapi-contract-closure-appendix-v0.1.md | M389 | 2617 | 164f78fc1067 |
+| docs/p0-openapi-operation-acceptance-matrix-v0.1.md | M390 | 814 | 5d2e9d233e0b |
+| docs/p0-operation-permission-matrix-v0.1.md | M039 | 301 | e129917ed22b |
+判据：锁内 M039、M114、M132、M133、M134、M135、M230、M232、M233、M237、M245、M246、M248、M389、M390、M391、M392 映射并集 181 项，只读引用、不改锁、不占 LOCK-AMEND。写入集合以 B2 双 PASS 定稿为准。上列模块除 M034（V270 属之，PASS）外均为 PENDING；本批不改 V270（已应用迁移不可改）。与 Codex 线认领中的 M015 无重叠。
+派 Grok B1（modules/XM-M034-AB-b1-grok-raw.md），席甲自席 B1 落 modules/XM-M034-AB-b1-self-raw.md；两份各自落盘后互读。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。完整实际命令：
+```text
+/home/james/.local/bin/grok -p '固定Grok独立只读审计席乙，grok-4.7/xhigh。执行160-audit-prompt.md V0.17阶段B的合成模块XM-M034-AB B1修复前全量审计，正本/home/james/complex-management main主工作区，以origin/main（daf6adfc）为准。
+背景（读ledger顶部「当前 XM-M034-AB B1 开工」段及D-031第2条）：M034收口登记两项同根跨模块项——XM-M034-A：票务人工放行入口（POST /api/v1/ticketing/verifications/manual-override、TicketingService.manualOverrideVerification、TicketVerificationService.manualOverride、契约与相关测试）仍在，权限码verification.manual_override已由M034-001的V429停用；XM-M034-B：游乐强制改判（amusement.verification.override，V014种入仍active；/api/v1/amusement/manual-overrides与AmusementService强制改判）。二者都对着枚举速查核销记录状态条末句「系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」。按D-031合并为一个合成模块走B1至B5。
+范围：开工段所列33个文件（票务与游乐的控制器、服务、DTO、仓储、行映射、测试，OpenAPI契约两份与两份契约附录，操作权限矩阵文档，相关迁移与准入仓储），全读每处引用及判断所需上下文与调用方。注意游乐人工改判记录有allow、deny、pause、resume、release五种类型（V014、V234），其中release为2026-07-05用户拍板的主管异常清场（AmusementExitReleaseJdbcIntegrationTests在用），须逐类型对三份HTML判定哪些与上句冲突、哪些是合法的现场操作，不能整条一刀切。判据：锁内M039、M114、M132、M133、M134、M135、M230、M232、M233、M237、M245、M246、M248、M389、M390、M391、M392映射并集181项，只读引用不新增；锁现行V0.14，LOCK-AMEND-COUNT 1。
+证据：origin/main daf6adfc后端全量在一次性空库上0红（XM-M031-B检查点，/home/james/audit-tmp/xm031b_ckpt_commit.log）。complex_test迁移历史含已改号427，全量须用一次性空库；你只读日志，不对任何数据库执行写语句（含建库）；如需实跑只跑不连库的单元测试类，在origin/main一次性worktree里做，用完git worktree remove不加--force。
+审计要求：一、票务人工放行入口的全部现存面（接口、服务、DTO、核销状态manual_overridden的写入与读取、契约、测试、文档）与已停用权限码的关系；二、游乐五种改判类型逐类判定，给HTML原句；三、下线或收窄的最小处置（删入口还是保留拒绝、历史记录与表约束如何处理、权限码是否停用或保留、是否需要前向迁移、契约与文档如何同步），不得删除历史数据、不得改已应用迁移；四、范围内其余问题。第一性三问、顺从181项（适用或无本面逐项记录）、grilling对抗，审完全部范围收齐全部问题才统一PASS/FAIL；不为理论场景加需求。每问题给临时编号GR-01起、精确文件行/原句/正常触发/四分类顺序/已有判据/证据类型、最小处置意见。
+独立性：不得读modules/XM-M034-AB-b1-self-raw.md；两份本次完整raw各自落盘后才互读；只允许两席，不用MCP/子代理/第三席，不问人，不修业务/HTML/锁/findings/ledger，不fetch/commit/push/merge/deploy，不建脚本日志临时产物（一次性worktree除外且须删除）。按环境实用强制技能如实记录。
+唯一可写/home/james/complex-management/docs/audit-2026-09/modules/XM-M034-AB-b1-grok-raw.md：不存在则创建V0.01。第一行独立实算criteria-lock SHA写CRITERIA-LOCK-SHA256: <64hex>，不得抄基准。全文覆盖/181项逐项/三线/所有问题及最终PASS或FAIL留raw，CLI不回正文或机器标记。' -m grok-4.7 --reasoning-effort xhigh --output-format json --permission-mode bypassPermissions --no-subagents --disable-web-search --cwd /home/james/complex-management
+```
+
+
+## 当前 XM-M031-B 检查点已合并（PR #490）
+2026-09-24T06:31:09Z。检查点提交 3e9d8738（origin/main 4a066def 一次性 worktree，只带 2 个代码文件、ledger、findings、XM-M031-B 六份 raw 与闭环文件，共 11 个文件）；提交前在该 worktree 用一次性空库 xm031bck_test 实跑后端全量：263 套 3539 测 0 红；冻结 diff 反向可应用；测试改指已还原、空库已删。PR https://github.com/jxh1979/mall/pull/490 经 ops/160/propose-change.sh 开出，ops/160/merge-pr.sh --merge 在 predeploy-gates（run 35964836973）对 3e9d8738 全绿后合并，origin/main＝daf6adfc。检查点 worktree 与分支已清理。
+XM-M031-B 闭环。下一步按 D-031 顺序：XM-M034-A/B（票务人工放行与游乐强制改判入口），再 XM-M033-A…D 与 XM-M031-C（契约），再 13 个模块现锁重审。锁 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458、LOCK-AMEND-COUNT 1；HTML 未改。
+
 
 ## 当前 XM-M031-B B5-r1 双 PASS 收口，进入检查点
 2026-09-24T06:28:51Z。Grok B5-r1 真实 exit 0（回执 /home/james/audit-tmp/xm031b_b5.receipt），报告 modules/XM-M031-B-b5-r1-grok-raw.md（V0.01，23074bytes SHA256 02203e9a7cced7b6b3652d423e3b97af33b752af6c0a5a794b10b7abf267e74b，grok-4.7/xhigh），结论 PASS、新问题 0；其自跑变异（去注解则两条回归红）与全量 MVN_EXIT 0。席甲 B5-r1 票 PASS（modules/XM-M031-B-b5-r1-self-raw.md，12899bytes SHA256 4a85fc93a3cb97565618b4cc533aaa085efd220ce7a5786c7e37876027d08b46；3539 测 0 红；修复后探针 1 行／recordFailure=ok）。四值全等 b0863b95a64b030bcd6e0b120a21b1436cd7bb9738b6ec95640e46cb0407f458。合取双 PASS：XM-M031-B PASS；B3 累计 1/3；修复队列「是」＝0。闭环文件 modules/XM-M031-B-failure-audit-independent-tx.md。

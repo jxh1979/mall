@@ -205,49 +205,6 @@ public class TicketVerificationService {
     }
 
     /**
-     * C1/REQ-05：人工放行（manual override）。主管对核销做人工放行决策，留痕为 status=manual_overridden 的核销记录，
-     * 对齐权威状态/事件 verification.manual_overridden。放行不自动扣减权益（是否扣减为后续策略）；权限在端点层按主管权限码控制。
-     */
-    VerificationResponse manualOverride(VerificationRequest request, String reason) {
-        requireRegisteredDevice(request);
-        TicketCredentialRecord credential = credentialByPayload(request == null ? null : request.credentialPayload()).orElse(null);
-        IssuedEntitlementRecord entitlement = credential == null
-                ? entitlementByCredential(request)
-                : repository.findIssuedEntitlementById(credential.entitlementId())
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
-        // P0-2 越权修复：人工放行同样按调用者商户范围校验权益归属，禁止对他商户权益创建放行记录（平台 scope 放行）。
-        enforceMerchantScope(entitlement.merchantId());
-        VerificationRecord verification = repository.saveVerification(new VerificationRecord(
-                "ver_" + UUID.randomUUID().toString().replace("-", ""),
-                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
-                entitlement.id(),
-                entitlement.entitlementCode(),
-                requireText(request.credentialType(), "credential_type"),
-                verificationPayload(request.credentialPayload(), credential),
-                requireText(request.deviceId(), "device_id"),
-                requireText(request.pointId(), "point_id"),
-                "manual_overridden",
-                reason == null || reason.isBlank() ? "manual override" : reason.trim(),
-                "manual_override",
-                null,
-                Instant.now(),
-                credential == null ? null : credential.nonce(),
-                null,
-                entitlement.merchantId(),
-                null,
-                null,
-                entitlement.numPeople(),
-                null,
-                null,
-                null,
-                // 人工放行非结算核销：不算结算价。
-                null
-        ));
-        return new VerificationResponse(verification.id(), verification.verificationNo(),
-                verification.status(), verification.resultReason());
-    }
-
-    /**
      * R5 T5 核销冲正：对 status=success 的核销记录做冲正——回滚 issued_entitlements.used_times、
      * 原记录置 reversed/reversed_by/reversed_at、新建一条 status=reversed 的核销记录 reverses_verification_id=原id。
      * 不存在/非 success/已冲正 → 拒绝（幂等/重复冲正拒绝）。reason 必填、权限 ticket.verify.reverse、幂等键在端点层。
