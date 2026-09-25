@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1365,24 +1365,34 @@ class AccessServiceTests {
                 .containsExactly(AccessRepository.Source.USER_OVERRIDE);
     }
 
-    // M002-F05 / UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）：最高权限目标不走审批闸，但被解除的码全部生效，操作人须本人持有每一个码。
+    // M002-F05/F07 / UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）：最高权限目标不走审批闸（即使同码有高危授予来源），
+    // 但被解除的码全部生效，操作人须本人持有每一个码；只删显式拒绝，挂起行保留。普通目标同组合仍须审批。
     @Test
     void denyRemovalOnMasterAuthorityTargetSkipsTheApprovalGateButRequiresTheActorToHoldEveryCode() {
-        m002HighRiskFixture("usr_m002_unused", null, "lvl_m1_lower");
+        m002HighRiskFixture("usr_m002_plain", null, "lvl_m1_lower");
         accessRepository.users.put(SessionIssuer.MASTER_USER_ID, new AccessUser(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
                 SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
-        accessRepository.saveUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, List.of(M002_CODE), AccessRepository.Effect.DENY, "停权", "usr_admin");
+        for (String userId : List.of(SessionIssuer.MASTER_USER_ID, "usr_m002_plain")) {
+            accessRepository.userRoles.put(userId, new LinkedHashSet<>(Set.of("role_ops_check"))); // 同码高危授予来源
+            accessRepository.saveUserPermissionOverrides(userId, List.of(M002_CODE), AccessRepository.Effect.DENY, "停权", "usr_admin");
+        }
+        accessRepository.saveHighRiskHolds(SessionIssuer.MASTER_USER_ID, List.of(M002_CODE), "岗位高危挂起", "usr_admin");
         accessRepository.users.put("usr_m002_pc_staff", new AccessUser(
                 "usr_m002_pc_staff", "usr_m002_pc_staff", "staff", "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
         authenticateAsOrgUser("usr_m002_pc_staff", "pc-staff", "platform-company");
         assertThatThrownBy(() -> service.removeUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, m002RemoveDeny("m002-master-remove-1", M002_CODE)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
         assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, M002_CODE, AccessRepository.Effect.DENY))
-                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+                .containsExactlyInAnyOrder(AccessRepository.Source.USER_OVERRIDE, AccessRepository.Source.POSITION_HOLD);
 
         authenticateAsPlatformAdmin("seed-org");
         service.removeUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, m002RemoveDeny("m002-master-remove-2", M002_CODE));
-        assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, M002_CODE, AccessRepository.Effect.DENY)).isEmpty();
+        assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, M002_CODE, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.POSITION_HOLD);
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides("usr_m002_plain", m002RemoveDeny("m002-plain-remove", M002_CODE)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
+        assertThat(overrideSources("usr_m002_plain", M002_CODE, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
     }
 
     // M002-F05：直接解除只删员工显式拒绝，岗位高危挂起行保留（只经挂起单释放或范围变更作废）。

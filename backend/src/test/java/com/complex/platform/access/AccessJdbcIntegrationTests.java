@@ -1017,6 +1017,50 @@ class AccessJdbcIntegrationTests {
         assertThat(result[0].wildcard()).isFalse();
     }
 
+    // M002-F07（UNRULED-C）：真库回归——最高权限账号同码有高危授予来源、岗位挂起与员工显式拒绝：持有该码的平台管理员直接解除成功、
+    // 只删显式行；非持有人被拒且拒绝行保留；普通目标同组合仍须审批。
+    @Test
+    void masterAuthorityTargetDenyRemovalSkipsTheApprovalGateOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String master = SessionIssuer.MASTER_USER_ID;
+        jdbcTemplate.update("""
+                INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)
+                VALUES (?, ?, ?, 'platform-company', 'active', now())
+                ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, account_type = EXCLUDED.account_type, status = 'active'
+                """, master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE);
+        String pcStaff = "usr_m002_pc_" + f.suffix();
+        repository.createUser(new AccessUser(pcStaff, pcStaff, "staff", "platform-company", null, "active", Instant.now()));
+        String role = "role_m002_master_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 高危角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code()), null));
+        for (String user : List.of(master, f.target(), f.admin())) {
+            repository.assignUserRole(user, role);
+        }
+        repository.saveHighRiskHolds(master, List.of(f.code()), "岗位高危挂起", f.admin());
+        for (String user : List.of(master, f.target())) {
+            repository.saveUserPermissionOverrides(user, List.of(f.code()), AccessRepository.Effect.DENY, "员工显式拒绝", f.admin());
+        }
+        assertThat(denyOrigins(master, f.code())).containsExactly("explicit", "position_hold");
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(master,
+                m002RemoveDeny("m002-j7-admin-" + f.suffix(), f.code())));
+        assertThat(denyOrigins(master, f.code())).containsExactly("position_hold");
+
+        repository.saveUserPermissionOverrides(master, List.of(f.code()), AccessRepository.Effect.DENY, "再次停权", f.admin());
+        assertThatThrownBy(() -> m002ActAs(pcStaff, "staff", "platform-company", () -> accessService.removeUserPermissionOverrides(master,
+                m002RemoveDeny("m002-j7-staff-" + f.suffix(), f.code()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        assertThat(denyOrigins(master, f.code())).containsExactly("explicit", "position_hold");
+        assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(f.target(),
+                m002RemoveDeny("m002-j7-plain-" + f.suffix(), f.code()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("explicit");
+    }
+
+    private UserPermissionOverrideRequest m002RemoveDeny(String key, String code) {
+        return new UserPermissionOverrideRequest(key, "M002", List.of(code), "deny", "解除显式拒绝");
+    }
+
     private String m002ApplyOverride(M002Fixture f, String requestType, String key) {
         m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
                 key + "-apply-" + f.suffix(), "M002", List.of(), requestType, f.target(), null, null, null, null, null, null,

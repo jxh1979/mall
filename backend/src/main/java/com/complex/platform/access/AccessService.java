@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -1500,7 +1500,11 @@ public class AccessService {
                             Set<String> granted = repository.findPermissionEffects(targetUser.id(), Instant.now()).stream()
                                     .filter(effectRow -> effectRow.effect() == AccessRepository.Effect.GRANT)
                                     .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
-                            if (grantApprovalEnabled) {
+                            AccessActor subject = new AccessActor(targetUser.id(), targetUser.username(), targetUser.accountType(),
+                                    targetUser.organizationId(), targetUser.merchantId(), targetUser.status());
+                            // UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）/ M002-F07：最高权限目标不走审批闸（即使同码有既有授予来源）。
+                            boolean masterTarget = authorizationService.isMasterAuthority(subject);
+                            if (grantApprovalEnabled && !masterTarget) {
                                 // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」「既有高危不得因处于岗位模板内而免除授出前审批」）：移除显式拒绝若使须审批的
                                 // 权限从既有 GRANT 来源生效，等同一次授出，须经授出审批；岗位高危挂起行只能由挂起单（position_high_risk_release）审批释放。
                                 // M002-F01：解除员工显式拒绝走授权申请 user_permission_deny_removal，获批后只删员工显式拒绝行。
@@ -1513,10 +1517,8 @@ public class AccessService {
                                 }
                             }
                             // M002-F05（P0-1）：解除拒绝会让既有授予来源的码生效，等同直接授予，不得超出操作人自身有效集；须审批码由上方审批闸处理。
-                            AccessActor subject = new AccessActor(targetUser.id(), targetUser.username(), targetUser.accountType(),
-                                    targetUser.organizationId(), targetUser.merchantId(), targetUser.status());
-                            if (authorizationService.isMasterAuthority(subject)) {
-                                // UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）：最高权限目标不走审批闸，被解除的码全部生效，操作人须本人持有。
+                            if (masterTarget) {
+                                // 最高权限目标不走审批闸，被解除的码全部生效，操作人须本人持有每一个码。
                                 requireActorCanGrant(permissionCodes);
                             } else {
                                 boolean wildcard = authorizationService.isPlatformAdmin(subject); // 平台管理员日常通配
