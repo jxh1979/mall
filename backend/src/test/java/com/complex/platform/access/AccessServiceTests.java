@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1598,6 +1598,87 @@ class AccessServiceTests {
         });
     }
 
+    // M001-F12（PGM「旧岗位或旧范围派生权限立即失效」；F10「换项目提交后不存在该员工的旧项目模板授权」）：空模板套用、空角色不产出权限码，
+    // 换项目时也按记录撤销；之后给它们加码不能让已调走的员工获得权限。
+    @Test
+    void scopeChangeRevokesEmptyTemplateApplicationsAndEmptyRoles() {
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        reviewRepository.superiors.put("usr_admin", "usr_boss");
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        accessRepository.users.put("usr_empty", new AccessUser("usr_empty", "empty", "staff", "seed-org", "merchant_a", "active", at));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active", at, List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, at, at),
+                List.of(new PermissionTemplateItem("tpl_ops_check", "ops.production_readiness.check", AccessRepository.Effect.GRANT, "project", false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-empty", null, "ops_clerk", "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active"));
+        accessRepository.roles.put("role_empty", new RoleRecord("role_empty", "empty", "Empty", "project", "active", at, List.of(), null));
+        accessRepository.userRoles.put("usr_empty", new java.util.LinkedHashSet<>(java.util.Set.of("role_empty")));
+        PermissionTemplate emptyTemplate = new PermissionTemplate(
+                "tpl_empty", "tpl_empty", "Empty", null, "base", null, "organization", "seed-org", "merge", null, null, false,
+                "active", null, null, null, at, at);
+        accessRepository.saveTemplate(emptyTemplate, List.of());
+        accessRepository.applyTemplate("tpl_empty", List.of("usr_empty"), null, null, false, "usr_admin");
+
+        service.changeUserScope("usr_empty", new UserScopeChangeRequest(
+                "scope-empty", null, "seed-org", "merchant_b", "ops_clerk", "lvl_m1_lower", null, null, null, "调往 B 商户", null));
+
+        assertThat(accessRepository.userRoles.getOrDefault("usr_empty", Set.of())).isEmpty();
+        assertThat(accessRepository.templateApplications).filteredOn(a -> "tpl_empty".equals(a.templateId()))
+                .isNotEmpty().allMatch(a -> "revoked".equals(a.status()));
+        accessRepository.saveTemplate(emptyTemplate, List.of(
+                new PermissionTemplateItem("tpl_empty", "governance.supervisor_review.view", AccessRepository.Effect.GRANT, "project", false)));
+        accessRepository.roles.put("role_empty", new RoleRecord(
+                "role_empty", "empty", "Empty", "project", "active", at, List.of("ops.production_readiness.view"), null));
+        assertThat(authorizationService.effectivePermissionsForUser("usr_empty").grants())
+                .doesNotContain("governance.supervisor_review.view", "ops.production_readiness.view");
+    }
+
+    // M001-F13：修改与套用在读模板之前先取模板锁（真实锁与并发交错见 AccessJdbcIntegrationTests）；模板不存在时锁已记下再报不存在。
+    @Test
+    void templateEditAndApplyLockTheTemplateBeforeReadingIt() {
+        assertThatThrownBy(() -> service.updatePermissionTemplate("tpl_ghost", new PermissionTemplateRequest(
+                "edit-ghost", "seed", List.of(), "Ghost", "base", null, List.of(), "project", null, null, false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TEMPLATE_NOT_FOUND"));
+        assertThat(accessRepository.lockOrder).containsExactly("edit:tpl_ghost");
+
+        accessRepository.lockOrder.clear();
+        accessRepository.createUser(new AccessUser("usr_tpl_lock", "tpl-lock", "staff", "seed-org", null, "active", Instant.now()));
+        assertThatThrownBy(() -> service.applyPermissionTemplate("tpl_ghost", new PermissionTemplateApplyRequest(
+                "apply-ghost", "apply", List.of(), "tpl_ghost", List.of("usr_tpl_lock"), "merge")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PERMISSION_TEMPLATE_NOT_FOUND"));
+        assertThat(accessRepository.lockOrder).containsExactly("user:usr_tpl_lock", "apply:tpl_ghost");
+    }
+
+    // M001-F10（「按员工编号顺序锁定目标员工行」）：保存岗位映射先取映射表锁，再按编号锁在岗员工，最后才锁映射行——
+    // 与定岗「员工行 → 映射行」同序。两人按编号倒序入库，重算原先按人员列表顺序逐个加锁。
+    @Test
+    void positionTemplateSaveLocksAssignedEmployeesByIdBeforeTheMapping() {
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        accessRepository.createUser(new AccessUser("usr_map_b", "map-first", "staff", "seed-org", null, "active", at));
+        accessRepository.createUser(new AccessUser("usr_map_a", "map-second", "staff", "seed-org", null, "active", at));
+        accessRepository.roles.put("role_map", new RoleRecord(
+                "role_map", "map", "Map", "project", "active", at, List.of("ops.production_readiness.check"), null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_map", "tpl_map", "Map", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, at, at), List.of());
+        PositionRoleTemplate mapping = service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-order", null, "ops_clerk", "lvl_m1_lower", "role_map", "tpl_map", "active"));
+        for (String userId : List.of("usr_map_b", "usr_map_a")) {
+            service.assignUserPosition(new UserPositionAssignmentRequest(
+                    "assign-" + userId, null, userId, "ops_clerk", "lvl_m1_lower", null, null, null));
+        }
+
+        accessRepository.lockOrder.clear();
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "map-order-save", null, "ops_clerk", "lvl_m1_lower", "role_map", "tpl_map", "active"));
+
+        assertThat(accessRepository.lockOrder).startsWith("prt-table", "user:usr_map_a", "user:usr_map_b", "mapping:" + mapping.id());
+    }
+
     // ── P0: listAccessUsers 只返回本组织用户 ──────────────────────────────
 
     @Test
@@ -2109,10 +2190,41 @@ class AccessServiceTests {
         }
 
         final List<String> lockedUsers = new ArrayList<>();
+        final List<String> lockOrder = new ArrayList<>(); // M001-F10/F13：员工、模板、映射各类锁的先后
 
         @Override
         public void lockAccessUsers(List<String> userIds) {
             lockedUsers.addAll(userIds);
+            userIds.forEach(userId -> lockOrder.add("user:" + userId));
+        }
+
+        @Override
+        public void lockTemplateForEdit(String templateId) {
+            lockOrder.add("edit:" + templateId);
+        }
+
+        @Override
+        public void lockTemplateForApply(String templateId) {
+            lockOrder.add("apply:" + templateId);
+        }
+
+        @Override
+        public void lockPositionRoleTemplatesForWrite() {
+            lockOrder.add("prt-table");
+        }
+
+        @Override
+        public List<String> findUserRoleIds(String userId) {
+            return List.copyOf(userRoles.getOrDefault(userId, Set.of()));
+        }
+
+        @Override
+        public List<String> findActiveTemplateApplicationIds(String userId) {
+            return templateApplications.stream()
+                    .filter(application -> userId.equals(application.targetId()) && "user".equals(application.targetType())
+                            && "active".equals(application.status()))
+                    .map(PermissionTemplateApplication::id)
+                    .toList();
         }
 
         @Override
@@ -2200,6 +2312,7 @@ class AccessServiceTests {
 
         @Override
         public Optional<PositionRoleTemplate> findPositionRoleTemplateById(String id) {
+            lockOrder.add("mapping:" + id); // 真实实现 FOR UPDATE
             return Optional.ofNullable(positionRoleTemplates.get(id));
         }
 

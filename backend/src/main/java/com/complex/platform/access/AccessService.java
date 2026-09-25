@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -146,6 +146,7 @@ public class AccessService {
                 "access.permission_template.manage",
                 request,
                 () -> {
+                    repository.lockTemplateForEdit(id); // M001-F13：锁内读前态，并发编辑按实际前态判闸、记增减
                     PermissionTemplate existing = repository.findTemplateById(id)
                             .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
                     if (!authorizationService.isPlatformAdmin(actor)
@@ -257,6 +258,7 @@ public class AccessService {
                             requireSameOrganization(actor, target);
                             targets.add(target);
                         }
+                        repository.lockTemplateForApply(id); // M001-F13：等进行中的模板编辑提交后再读条目，快照即生效码
                         PermissionTemplate template = repository.findTemplateById(id)
                                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND", "权限模板不存在：" + id));
                         // A1-05：apply 必须校验模板归属——非平台管理员只能套用本组织拥有的模板，
@@ -685,6 +687,25 @@ public class AccessService {
                             throw ApiException.badRequest("VALIDATION_FAILED", "范围变更须指定新范围的岗位与职级");
                         }
                         Instant now = Instant.now();
+                        // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效，审批通过后方可生效」）：旧范围下的非派生增权——直接装配角色、
+                        // 单独模板授予、临时授权、员工单独授予（显式 GRANT）——随范围变更一并撤销；新范围内的增权须重新申请并审批通过后才生效。
+                        // 员工单独的显式拒绝保留；模板套用整条撤销，模板内的禁止条目随之失效。
+                        List<String> frozen = new ArrayList<>();
+                        Set<String> frozenRoles = new HashSet<>();
+                        Set<String> frozenApplications = new HashSet<>();
+                        Set<String> frozenTemporary = new HashSet<>();
+                        Set<String> frozenOverrides = new HashSet<>();
+                        // M001-F12：有效权限读取放在一切撤销之前——它先把已到期的记录（含岗位派生套用）置过期并留痕，到期的不记成撤销。
+                        for (AccessRepository.PermissionEffect effect : repository.findPermissionEffects(id, now)) {
+                            if (effect.effect() != AccessRepository.Effect.GRANT) {
+                                continue;
+                            }
+                            switch (effect.source()) {
+                                case TEMPORARY_GRANT -> frozenTemporary.add(effect.sourceId());
+                                case USER_OVERRIDE -> frozenOverrides.add(effect.permissionCode());
+                                default -> { } // 直接角色与模板套用见下方按记录枚举
+                            }
+                        }
                         boolean revoked = position != null;
                         if (revoked) {
                             repository.replacePositionGrants(id, null, null, List.of(), actor.id(), now); // 旧派生立即失效
@@ -697,24 +718,9 @@ public class AccessService {
                             repository.saveGrantRequest(withDecision(held, "rejected", actor.id(), now));
                             cancelledHolds.add(held.id());
                         }
-                        // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效，审批通过后方可生效」）：旧范围下的非派生增权——直接装配角色、
-                        // 单独模板授予、临时授权、员工单独授予（显式 GRANT）——随范围变更一并撤销；新范围内的增权须重新申请并审批通过后才生效。显式拒绝保留。
-                        List<String> frozen = new ArrayList<>();
-                        Set<String> frozenRoles = new HashSet<>();
-                        Set<String> frozenApplications = new HashSet<>();
-                        Set<String> frozenTemporary = new HashSet<>();
-                        Set<String> frozenOverrides = new HashSet<>();
-                        for (AccessRepository.PermissionEffect effect : repository.findPermissionEffects(id, now)) {
-                            if (effect.effect() != AccessRepository.Effect.GRANT) {
-                                continue;
-                            }
-                            switch (effect.source()) {
-                                case ROLE -> frozenRoles.add(effect.sourceId());
-                                case TEMPLATE_APPLICATION -> frozenApplications.add(effect.sourceId());
-                                case TEMPORARY_GRANT -> frozenTemporary.add(effect.sourceId());
-                                case USER_OVERRIDE -> frozenOverrides.add(effect.permissionCode());
-                            }
-                        }
+                        // M001-F12：直接角色与模板套用按员工本身的记录枚举，不看是否产出权限码——空模板、空角色也一并撤销。
+                        frozenRoles.addAll(repository.findUserRoleIds(id));
+                        frozenApplications.addAll(repository.findActiveTemplateApplicationIds(id));
                         for (String roleId : frozenRoles) {
                             repository.unassignUserRole(id, roleId);
                             frozen.add("role:" + roleId);
@@ -2147,6 +2153,10 @@ public class AccessService {
         requirePlatformAdmin(actor);
         String positionCode = requireText(request.positionCode(), "position_code");
         String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
+        // M001-F10：映射表锁 → 在岗员工按编号 → 映射行，与定岗「员工行 → 映射行」、持授权事实锁的审批同序。
+        // ponytail: 预锁之后、映射行锁之前才定岗的人要到重算时才加锁（窗口极短，PostgreSQL 检出死锁回滚一方、可同键重试）。
+        repository.lockPositionRoleTemplatesForWrite();
+        repository.lockAccessUsers(repository.listUserIdsAssignedToPosition(positionCode, staffLevelId).stream().sorted().toList());
         if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
                     "无法识别的员工职级：" + staffLevelId);
@@ -2202,6 +2212,7 @@ public class AccessService {
     /** 保存岗位模板后立即按新映射重算在岗人员派生权；停用则收回派生。 */
     private void recomputeUsersOnPositionTemplate(PositionRoleTemplate saved, PositionRoleTemplateRequest request) {
         List<String> userIds = repository.listUserIdsAssignedToPosition(saved.positionCode(), saved.staffLevelId());
+        repository.lockAccessUsers(userIds.stream().sorted().toList()); // M001-F10：重列出的在岗员工（含预锁后新定岗的）按编号一次锁定
         AccessActor actor = authorizationService.currentActor();
         Instant now = Instant.now();
         if (!"active".equals(saved.status())) {

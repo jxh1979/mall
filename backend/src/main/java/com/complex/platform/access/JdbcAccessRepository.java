@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.15
+// 文件版本：V0.16
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -51,9 +51,49 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public void lockAccessUsers(List<String> userIds) {
+        if (userIds.isEmpty()) { // 岗位映射可能无人在岗；空 IN () 是语法错误
+            return;
+        }
         // M001-F10：按编号顺序加行锁，同时套用多名员工的事务之间不互相死锁。
         jdbcTemplate.queryForList("SELECT id FROM access_users WHERE id IN (:ids) ORDER BY id FOR UPDATE",
                 Map.of("ids", userIds), String.class);
+    }
+
+    @Override
+    public List<String> findActiveTemplateApplicationIds(String userId) {
+        return jdbcTemplate.queryForList("""
+                SELECT id FROM permission_template_applications
+                 WHERE target_type = 'user' AND target_id = :user_id AND status = 'active'
+                 ORDER BY id
+                """, Map.of("user_id", userId), String.class);
+    }
+
+    @Override
+    public List<String> findUserRoleIds(String userId) {
+        return jdbcTemplate.queryForList("SELECT role_id FROM user_roles WHERE user_id = :user_id ORDER BY role_id",
+                Map.of("user_id", userId), String.class);
+    }
+
+    @Override
+    public void lockTemplateForEdit(String templateId) {
+        // M001-F13：表级 ROW EXCLUSIVE 先于行锁——审批落地持模板表 SHARE 后会等员工行，编辑若先持行锁再等表锁，
+        // 与「持员工行、等模板行」的套用成三方环。行锁取 NO KEY UPDATE，不挡插套用行时外键取的 KEY SHARE。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE permission_templates IN ROW EXCLUSIVE MODE");
+        jdbcTemplate.queryForList("SELECT id FROM permission_templates WHERE id = :id FOR NO KEY UPDATE",
+                Map.of("id", templateId), String.class);
+    }
+
+    @Override
+    public void lockTemplateForApply(String templateId) {
+        // M001-F13：FOR SHARE 与编辑的 NO KEY UPDATE 互斥（KEY SHARE 不互斥，拦不住编辑）。
+        jdbcTemplate.queryForList("SELECT id FROM permission_templates WHERE id = :id FOR SHARE",
+                Map.of("id", templateId), String.class);
+    }
+
+    @Override
+    public void lockPositionRoleTemplatesForWrite() {
+        // M001-F10。ponytail: 把映射 upsert 本就要取的 ROW EXCLUSIVE 提到事务开头，与授权事实锁的 SHARE 先到先得。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE position_role_templates IN ROW EXCLUSIVE MODE");
     }
 
     @Override
