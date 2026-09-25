@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -325,7 +325,14 @@ public class AccessController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid UserPermissionOverrideRequest request
     ) {
-        authorizationService.requirePermission("access.role.assign");
+        // M002-F08/F09（操作员 2026-09-25 裁决「本人免审批，他人须审批」，本人「不要求事先持有该码」）：最高权限本人会话解除自己账号上的
+        // 显式拒绝不过 access.role.assign 门禁（该码本身可能正被拒绝）；服务层仍锁目标行、只删显式行。其余请求门禁不变。
+        AccessActor actor = authorizationService.currentActor();
+        boolean masterSelfDenyRemoval = actor != null && authorizationService.isMasterAuthority(actor) && actor.id().equals(id)
+                && request != null && request.effect() != null && "deny".equalsIgnoreCase(request.effect().trim());
+        if (!masterSelfDenyRemoval) {
+            authorizationService.requirePermission("access.role.assign");
+        }
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.removeUserPermissionOverrides(id, request));
     }

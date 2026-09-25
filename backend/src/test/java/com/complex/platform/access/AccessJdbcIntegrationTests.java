@@ -2,6 +2,10 @@ package com.complex.platform.access;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -24,10 +28,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,11 +45,15 @@ import org.springframework.transaction.support.TransactionTemplate;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class AccessJdbcIntegrationTests {
 
     @Autowired
     private JdbcAccessRepository repository;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -1062,6 +1073,57 @@ class AccessJdbcIntegrationTests {
                 m002RemoveDeny("m002-j7-plain-" + f.suffix(), f.code()))))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
         assertThat(denyOrigins(f.target(), f.code())).containsExactly("explicit");
+    }
+
+    // M002-F09（CODEX-M002-3-R1-01）：真实接口回归——最高权限本人会话把自己的 access.role.assign 设为显式拒绝后，仍可经解除接口直接解除、
+    // 只删显式行；其他主体经接口直接解除最高权限账号上须审批码的拒绝仍须审批。
+    @Test
+    void masterSessionRemovesItsOwnRoleAssignDenyThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String master = SessionIssuer.MASTER_USER_ID;
+        jdbcTemplate.update("""
+                INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)
+                VALUES (?, ?, ?, 'platform-company', 'active', now())
+                ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, account_type = EXCLUDED.account_type, status = 'active'
+                """, master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE);
+        var masterSession = m002Session(new AccessActor(master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, "active"));
+        mockMvc.perform(post("/api/v1/access/users/" + master + "/permission-overrides").with(masterSession)
+                        .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson("m002-j8-deny-" + f.suffix(), "access.role.assign")))
+                .andExpect(status().isOk());
+        assertThat(denyOrigins(master, "access.role.assign")).containsExactly("explicit");
+
+        mockMvc.perform(post("/api/v1/access/users/" + master + "/permission-overrides/remove").with(masterSession)
+                        .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson("m002-j8-remove-" + f.suffix(), "access.role.assign")))
+                .andExpect(status().isOk());
+        assertThat(denyOrigins(master, "access.role.assign")).isEmpty();
+
+        String role = "role_m002_endpoint_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 接口角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code(), "access.role.assign"), null));
+        repository.assignUserRole(f.admin(), role);
+        repository.saveUserPermissionOverrides(master, List.of(f.code()), AccessRepository.Effect.DENY, "停权", f.admin());
+        mockMvc.perform(post("/api/v1/access/users/" + master + "/permission-overrides/remove")
+                        .with(m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson("m002-j8-admin-" + f.suffix(), f.code())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("GRANT_REQUIRES_APPROVAL"));
+        assertThat(denyOrigins(master, f.code())).containsExactly("explicit");
+    }
+
+    // 后台 Web 终端（grace 模式下自报 web 的写请求留痕放行）+ 生产过滤器放入的 AccessActor 主体。
+    private org.springframework.test.web.servlet.request.RequestPostProcessor m002Session(AccessActor actor) {
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))))
+                    .postProcessRequest(request);
+        };
+    }
+
+    private String m002DenyJson(String key, String code) {
+        return """
+                {"idempotency_key": "%s", "permission_codes": ["%s"], "effect": "deny", "reason": "M002"}
+                """.formatted(key, code);
     }
 
     private UserPermissionOverrideRequest m002RemoveDeny(String key, String code) {
