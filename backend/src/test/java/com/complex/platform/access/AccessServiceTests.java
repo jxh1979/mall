@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1435,6 +1435,38 @@ class AccessServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
         assertThat(overrideSources("usr_m002_plain", M002_CODE, AccessRepository.Effect.DENY))
                 .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    // M002-F15：最高权限账号暂被停用时仍按账号身份认作最高权限目标——他人直接解除其须审批码的拒绝仍须审批，拒绝行保留。
+    @Test
+    void disabledMasterAuthorityAccountIsStillAMasterTargetForDenyRemoval() {
+        m002HighRiskFixture("usr_m002_unused_f15", null, "lvl_m1_lower");
+        String master = SessionIssuer.MASTER_USER_ID;
+        accessRepository.users.put(master, new AccessUser(master, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "disabled", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveUserPermissionOverrides(master, List.of(M002_CODE), AccessRepository.Effect.DENY, "停权", "usr_admin");
+
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides(master, m002RemoveDeny("m002-disabled-master", M002_CODE)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
+        assertThat(overrideSources(master, M002_CODE, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    // M002-F16：权限码列表含空值或空白元素时，建角色与员工覆盖在查库前以 400 VALIDATION_FAILED 拒绝，不留角色、覆盖行与成功事件。
+    @Test
+    void blankOrNullPermissionCodesAreRejectedBeforeAnyWrite() {
+        accessRepository.users.put("usr_m002_blank", new AccessUser(
+                "usr_m002_blank", "usr_m002_blank", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        int roles = accessRepository.roles.size();
+        assertThatThrownBy(() -> service.createRole(new RoleRequest(
+                "m002-blank-role", null, List.of(), "空码角色", null, java.util.Arrays.asList(M002_VIEW, null), "project")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.setUserPermissionOverrides("usr_m002_blank", new UserPermissionOverrideRequest(
+                "m002-blank-override", null, List.of("  "), "deny", "空白码")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(accessRepository.roles).hasSize(roles);
+        assertThat(accessRepository.overrides).noneMatch(o -> "usr_m002_blank".equals(o.userId()));
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .doesNotContain("role.changed", "access.user_permission_override.set");
     }
 
     // M002-F05：直接解除只删员工显式拒绝，岗位高危挂起行保留（只经挂起单释放或范围变更作废）。

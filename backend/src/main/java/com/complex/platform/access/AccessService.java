@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -1503,7 +1503,10 @@ public class AccessService {
                                     .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
                             AccessActor subject = new AccessActor(targetUser.id(), targetUser.username(), targetUser.accountType(),
                                     targetUser.organizationId(), targetUser.merchantId(), targetUser.status());
-                            boolean masterTarget = authorizationService.isMasterAuthority(subject);
+                            // M002-F15：最高权限目标按账号身份字段（固定 id / 用户名 / 账号类型）识别，不看当前状态——停用中的最高权限账号
+                            // 恢复后被解除的码即生效，他人解除仍须审批。
+                            boolean masterTarget = authorizationService.isMasterAuthority(new AccessActor(targetUser.id(), targetUser.username(),
+                                    targetUser.accountType(), targetUser.organizationId(), targetUser.merchantId(), "active"));
                             // M002-F08（操作员 2026-09-25 裁决「本人免审批，他人须审批」）：最高权限本人会话解除自己账号上的拒绝，不走审批、
                             // 不要求事先持有（BSM「其权限由密钥的物理保管来把关，不再另设审批环节」）；其他人照常过下方两道闸。
                             if (!(masterTarget && authorizationService.isMasterAuthority(actor))) {
@@ -2529,6 +2532,9 @@ public class AccessService {
 
     private void requireKnownPermissions(List<String> permissionCodes) {
         for (String permissionCode : safeList(permissionCodes)) {
+            if (permissionCode == null || permissionCode.isBlank()) { // M002-F16：空值 / 空白码在查库前拒绝（400），不再落成 500
+                throw ApiException.badRequest("VALIDATION_FAILED", "权限编码不能为空");
+            }
             if (!repository.permissionExists(permissionCode)) {
                 throw ApiException.badRequest("UNKNOWN_PERMISSION", "无法识别的权限编码：" + permissionCode);
             }
