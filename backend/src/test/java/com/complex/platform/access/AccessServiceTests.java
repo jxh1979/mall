@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1593,7 +1593,9 @@ class AccessServiceTests {
         assertThat(changed).allSatisfy(event -> {
             assertThat(event.metadata()).containsEntry("template_id", template.id())
                     .containsEntry("added_permission_codes", List.of("governance.supervisor_review.view"))
-                    .containsEntry("removed_permission_codes", List.of("ops.production_readiness.check"));
+                    .containsEntry("removed_permission_codes", List.of("ops.production_readiness.check"))
+                    .containsEntry("operator_id", "usr_admin"); // M001-F14：UserRecord 主体下也记操作人
+            assertThat(event.occurredAt()).isNotNull();
             assertThat(applied.applications()).extracting(PermissionTemplateApplication::id).contains((String) event.metadata().get("application_id"));
         });
     }

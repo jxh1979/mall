@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -191,7 +191,8 @@ public class AccessService {
                                     null,
                                     request.idempotencyKey(),
                                     Map.of("template_id", id, "application_id", application.id(),
-                                            "added_permission_codes", added, "removed_permission_codes", removed)
+                                            "added_permission_codes", added, "removed_permission_codes", removed,
+                                            "operator_id", actor.id()) // M001-F14：操作人（两类认证主体都能解析），时间取事件发生时间
                             );
                         }
                     }

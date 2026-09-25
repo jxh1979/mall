@@ -1020,6 +1020,12 @@ class AccessJdbcIntegrationTests {
             assertThat(edit.get(30, TimeUnit.SECONDS)).isNull();
             assertThat(eventCodes("permission_template.effect_changed", editKey, "added_permission_codes")).containsExactly(DAILY_C);
             assertThat(eventCodes("permission_template.effect_changed", editKey, "removed_permission_codes")).containsExactly(DAILY_B);
+            // M001-F14：生产同型主体下，逐人事件的操作人与发生时间
+            assertThat(jdbcTemplate.queryForList("""
+                    SELECT actor_id || '|' || actor_type || '|' || (metadata ->> 'operator_id') || '|' || CAST(occurred_at IS NOT NULL AS text)
+                      FROM audit_events WHERE event_name = 'permission_template.effect_changed' AND idempotency_key = ?
+                    """, String.class, editKey))
+                    .containsExactly("usr_m001_admin_" + suffix + "|platform_admin|usr_m001_admin_" + suffix + "|true");
         } finally {
             editor.shutdownNow();
             deleteTemplateAndUsers(templateId, userId);
@@ -1100,9 +1106,11 @@ class AccessJdbcIntegrationTests {
                 List.of(codes), "project", null, null, false);
     }
 
-    // 以平台管理员身份在当前线程执行，返回抛出的异常（成功为 null）。
+    // 以平台管理员身份在当前线程执行，返回抛出的异常（成功为 null）。主体用生产过滤器放入的 AccessActor。
     private Throwable asPlatformAdmin(String suffix, Runnable action) {
-        authenticate("usr_m001_admin_" + suffix, "m001-admin-" + suffix, "platform_admin", "org");
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor("usr_m001_admin_" + suffix, "m001-admin-" + suffix, "platform_admin", "org", null, "active"),
+                null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
         try {
             action.run();
             return null;
