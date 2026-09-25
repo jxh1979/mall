@@ -1120,6 +1120,54 @@ class AccessJdbcIntegrationTests {
         };
     }
 
+    // M002-F11/F13（操作员 2026-09-25 裁决，治理地图「权限规则」）：真实接口回归——持 access.role.assign、不持角色高危码的同组织员工
+    // 经撤销接口撤销成功；同样持码的跨组织员工被 CROSS_ORG_FORBIDDEN 拒绝、角色保留。
+    @Test
+    void roleAssignHolderRevokesAHighRiskRoleWithoutHoldingItsCodesThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String highRole = "role_m002_high_" + f.suffix();
+        String assignRole = "role_m002_assign_" + f.suffix();
+        repository.createRole(new RoleRecord(highRole, "M002 高危角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code()), null));
+        repository.createRole(new RoleRecord(assignRole, "M002 装配角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.assign"), null));
+        String sameOrg = "usr_m002_revoker_" + f.suffix();
+        String otherOrg = "usr_m002_revoker_b_" + f.suffix();
+        repository.createUser(new AccessUser(sameOrg, sameOrg, "staff", "org", null, "active", Instant.now()));
+        repository.createUser(new AccessUser(otherOrg, otherOrg, "staff", "org_other", null, "active", Instant.now()));
+        for (String user : List.of(sameOrg, otherOrg)) {
+            repository.assignUserRole(user, assignRole);
+            assertThat(repository.findPermissionEffects(user, Instant.now()))
+                    .extracting(AccessRepository.PermissionEffect::permissionCode).doesNotContain(f.code());
+        }
+        String kept = f.boss();
+        repository.assignUserRole(f.target(), highRole);
+        repository.assignUserRole(kept, highRole);
+
+        mockMvc.perform(post("/api/v1/access/role-assignments/unassign")
+                        .with(m002Session(new AccessActor(sameOrg, sameOrg, "staff", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON).content(m002UnassignJson("m002-j9-same-" + f.suffix(), f.target(), highRole)))
+                .andExpect(status().isOk());
+        assertThat(m002UserRoles(f.target())).doesNotContain(highRole);
+
+        mockMvc.perform(post("/api/v1/access/role-assignments/unassign")
+                        .with(m002Session(new AccessActor(otherOrg, otherOrg, "staff", "org_other", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON).content(m002UnassignJson("m002-j9-cross-" + f.suffix(), kept, highRole)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        assertThat(m002UserRoles(kept)).contains(highRole);
+    }
+
+    private String m002UnassignJson(String key, String userId, String roleId) {
+        return """
+                {"idempotency_key": "%s", "user_id": "%s", "role_id": "%s"}
+                """.formatted(key, userId, roleId);
+    }
+
+    private List<String> m002UserRoles(String userId) {
+        return jdbcTemplate.queryForList("SELECT role_id FROM user_roles WHERE user_id = ?", String.class, userId);
+    }
+
     private String m002DenyJson(String key, String code) {
         return """
                 {"idempotency_key": "%s", "permission_codes": ["%s"], "effect": "deny", "reason": "M002"}
