@@ -1017,10 +1017,10 @@ class AccessJdbcIntegrationTests {
         assertThat(result[0].wildcard()).isFalse();
     }
 
-    // M002-F07（UNRULED-C）：真库回归——最高权限账号同码有高危授予来源、岗位挂起与员工显式拒绝：持有该码的平台管理员直接解除成功、
-    // 只删显式行；非持有人被拒且拒绝行保留；普通目标同组合仍须审批。
+    // M002-F08（操作员 2026-09-25 裁决「本人免审批，他人须审批」）：真库回归——最高权限账号同码有高危授予来源、岗位挂起与员工显式拒绝：
+    // 本人会话直接解除成功且只删显式行；他人走解除申请、获批后只删显式行；持码的平台管理员直接解除须审批；普通目标同组合仍须审批。
     @Test
-    void masterAuthorityTargetDenyRemovalSkipsTheApprovalGateOnTheRealSchema() {
+    void masterAuthorityTargetDenyRemovalIsDirectOnlyForTheMasterSessionOnTheRealSchema() {
         M002Fixture f = m002ApprovalFixture();
         String master = SessionIssuer.MASTER_USER_ID;
         jdbcTemplate.update("""
@@ -1028,8 +1028,6 @@ class AccessJdbcIntegrationTests {
                 VALUES (?, ?, ?, 'platform-company', 'active', now())
                 ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, account_type = EXCLUDED.account_type, status = 'active'
                 """, master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE);
-        String pcStaff = "usr_m002_pc_" + f.suffix();
-        repository.createUser(new AccessUser(pcStaff, pcStaff, "staff", "platform-company", null, "active", Instant.now()));
         String role = "role_m002_master_" + f.suffix();
         repository.createRole(new RoleRecord(role, "M002 高危角色 " + f.suffix(), null, "project", "active", Instant.now(),
                 List.of(f.code()), null));
@@ -1042,14 +1040,23 @@ class AccessJdbcIntegrationTests {
         }
         assertThat(denyOrigins(master, f.code())).containsExactly("explicit", "position_hold");
 
-        m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(master,
-                m002RemoveDeny("m002-j7-admin-" + f.suffix(), f.code())));
+        m002ActAsMaster(() -> accessService.removeUserPermissionOverrides(master, m002RemoveDeny("m002-j7-self-" + f.suffix(), f.code())));
         assertThat(denyOrigins(master, f.code())).containsExactly("position_hold");
 
         repository.saveUserPermissionOverrides(master, List.of(f.code()), AccessRepository.Effect.DENY, "再次停权", f.admin());
-        assertThatThrownBy(() -> m002ActAs(pcStaff, "staff", "platform-company", () -> accessService.removeUserPermissionOverrides(master,
-                m002RemoveDeny("m002-j7-staff-" + f.suffix(), f.code()))))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
+                "m002-j7-apply-" + f.suffix(), "M002", List.of(), "user_permission_deny_removal", master, null, null, null, null, null, null,
+                List.of(f.code()), null, null, null, "解除最高权限账号显式拒绝")));
+        String requestId = m002PendingRequestId(master, "user_permission_deny_removal");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(requestId, m002Approve("m002-j7-review-" + f.suffix())));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("applied");
+        assertThat(denyOrigins(master, f.code())).containsExactly("position_hold");
+
+        repository.saveUserPermissionOverrides(master, List.of(f.code()), AccessRepository.Effect.DENY, "三次停权", f.admin());
+        assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(master,
+                m002RemoveDeny("m002-j7-admin-" + f.suffix(), f.code()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
         assertThat(denyOrigins(master, f.code())).containsExactly("explicit", "position_hold");
         assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(f.target(),
                 m002RemoveDeny("m002-j7-plain-" + f.suffix(), f.code()))))

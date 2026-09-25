@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1365,30 +1365,46 @@ class AccessServiceTests {
                 .containsExactly(AccessRepository.Source.USER_OVERRIDE);
     }
 
-    // M002-F05/F07 / UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）：最高权限目标不走审批闸（即使同码有高危授予来源），
-    // 但被解除的码全部生效，操作人须本人持有每一个码；只删显式拒绝，挂起行保留。普通目标同组合仍须审批。
+    // M002-F08（操作员 2026-09-25 裁决「本人免审批，他人须审批」）：最高权限账号上的显式拒绝——本人会话直接解除，不走审批、不要求事先持有；
+    // 其他人解除须审批码一律 GRANT_REQUIRES_APPROVAL（持码的平台管理员也不例外），须走解除申请、获批后只删显式行；解除日常码须本人持有；
+    // 挂起行不动。普通目标同组合仍须审批。
     @Test
-    void denyRemovalOnMasterAuthorityTargetSkipsTheApprovalGateButRequiresTheActorToHoldEveryCode() {
+    void masterAuthorityTargetDenyRemovalIsDirectOnlyForTheMasterSession() {
         m002HighRiskFixture("usr_m002_plain", null, "lvl_m1_lower");
-        accessRepository.users.put(SessionIssuer.MASTER_USER_ID, new AccessUser(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+        String master = SessionIssuer.MASTER_USER_ID;
+        accessRepository.users.put(master, new AccessUser(master, SessionIssuer.MASTER_USERNAME,
                 SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
-        for (String userId : List.of(SessionIssuer.MASTER_USER_ID, "usr_m002_plain")) {
+        for (String userId : List.of(master, "usr_m002_plain")) {
             accessRepository.userRoles.put(userId, new LinkedHashSet<>(Set.of("role_ops_check"))); // 同码高危授予来源
             accessRepository.saveUserPermissionOverrides(userId, List.of(M002_CODE), AccessRepository.Effect.DENY, "停权", "usr_admin");
         }
-        accessRepository.saveHighRiskHolds(SessionIssuer.MASTER_USER_ID, List.of(M002_CODE), "岗位高危挂起", "usr_admin");
+        accessRepository.saveHighRiskHolds(master, List.of(M002_CODE), "岗位高危挂起", "usr_admin");
+        accessRepository.saveUserPermissionOverrides(master, List.of(M002_VIEW), AccessRepository.Effect.DENY, "停权", "usr_admin");
         accessRepository.users.put("usr_m002_pc_staff", new AccessUser(
                 "usr_m002_pc_staff", "usr_m002_pc_staff", "staff", "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides(master, m002RemoveDeny("m002-master-admin-direct", M002_CODE)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
         authenticateAsOrgUser("usr_m002_pc_staff", "pc-staff", "platform-company");
-        assertThatThrownBy(() -> service.removeUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, m002RemoveDeny("m002-master-remove-1", M002_CODE)))
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides(master, m002RemoveDeny("m002-master-staff-view", M002_VIEW)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
-        assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, M002_CODE, AccessRepository.Effect.DENY))
+        assertThat(overrideSources(master, M002_CODE, AccessRepository.Effect.DENY))
                 .containsExactlyInAnyOrder(AccessRepository.Source.USER_OVERRIDE, AccessRepository.Source.POSITION_HOLD);
+        assertThat(overrideSources(master, M002_VIEW, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.USER_OVERRIDE);
+
+        authenticateAsMasterAuthority();
+        service.removeUserPermissionOverrides(master, m002RemoveDeny("m002-master-self", M002_CODE));
+        assertThat(overrideSources(master, M002_CODE, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.POSITION_HOLD);
+
+        accessRepository.saveUserPermissionOverrides(master, List.of(M002_CODE), AccessRepository.Effect.DENY, "再次停权", "usr_admin");
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord pending = service.applyGrant(m002Apply(
+                "m002-master-apply", "user_permission_deny_removal", master, List.of(M002_CODE)));
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThat(service.reviewGrant(pending.id(), m002Approve("m002-master-review")).status()).isEqualTo("applied");
+        assertThat(overrideSources(master, M002_CODE, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.POSITION_HOLD);
 
         authenticateAsPlatformAdmin("seed-org");
-        service.removeUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, m002RemoveDeny("m002-master-remove-2", M002_CODE));
-        assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, M002_CODE, AccessRepository.Effect.DENY))
-                .containsExactly(AccessRepository.Source.POSITION_HOLD);
         assertThatThrownBy(() -> service.removeUserPermissionOverrides("usr_m002_plain", m002RemoveDeny("m002-plain-remove", M002_CODE)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
         assertThat(overrideSources("usr_m002_plain", M002_CODE, AccessRepository.Effect.DENY))

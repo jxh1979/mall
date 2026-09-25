@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -1502,26 +1502,25 @@ public class AccessService {
                                     .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
                             AccessActor subject = new AccessActor(targetUser.id(), targetUser.username(), targetUser.accountType(),
                                     targetUser.organizationId(), targetUser.merchantId(), targetUser.status());
-                            // UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）/ M002-F07：最高权限目标不走审批闸（即使同码有既有授予来源）。
                             boolean masterTarget = authorizationService.isMasterAuthority(subject);
-                            if (grantApprovalEnabled && !masterTarget) {
-                                // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」「既有高危不得因处于岗位模板内而免除授出前审批」）：移除显式拒绝若使须审批的
-                                // 权限从既有 GRANT 来源生效，等同一次授出，须经授出审批；岗位高危挂起行只能由挂起单（position_high_risk_release）审批释放。
-                                // M002-F01：解除员工显式拒绝走授权申请 user_permission_deny_removal，获批后只删员工显式拒绝行。
-                                List<String> exposed = approvalRequiredPermissions(permissionCodes).stream()
-                                        .map(PermissionDefinition::permissionCode).filter(granted::contains).sorted().toList();
-                                if (!exposed.isEmpty()) {
-                                    throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL",
-                                            "移除显式拒绝将使以下须审批的权限生效，须经授出审批（员工显式拒绝请提交『解除员工显式拒绝』授权申请；"
-                                                    + "岗位高危挂起须经挂起单审批释放）：" + exposed);
+                            // M002-F08（操作员 2026-09-25 裁决「本人免审批，他人须审批」）：最高权限本人会话解除自己账号上的拒绝，不走审批、
+                            // 不要求事先持有（BSM「其权限由密钥的物理保管来把关，不再另设审批环节」）；其他人照常过下方两道闸。
+                            if (!(masterTarget && authorizationService.isMasterAuthority(actor))) {
+                                if (grantApprovalEnabled) {
+                                    // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」「既有高危不得因处于岗位模板内而免除授出前审批」）：移除显式拒绝若使须审批的
+                                    // 权限从既有 GRANT 来源生效，等同一次授出，须经授出审批；岗位高危挂起行只能由挂起单（position_high_risk_release）审批释放。
+                                    // M002-F01：解除员工显式拒绝走授权申请 user_permission_deny_removal，获批后只删员工显式拒绝行。
+                                    // M002-F08：最高权限账号的有效集是全部字典码，其须审批码的拒绝一经解除即生效。
+                                    List<String> exposed = approvalRequiredPermissions(permissionCodes).stream()
+                                            .map(PermissionDefinition::permissionCode).filter(code -> masterTarget || granted.contains(code)).sorted().toList();
+                                    if (!exposed.isEmpty()) {
+                                        throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL",
+                                                "移除显式拒绝将使以下须审批的权限生效，须经授出审批（员工显式拒绝请提交『解除员工显式拒绝』授权申请；"
+                                                        + "岗位高危挂起须经挂起单审批释放）：" + exposed);
+                                    }
                                 }
-                            }
-                            // M002-F05（P0-1）：解除拒绝会让既有授予来源的码生效，等同直接授予，不得超出操作人自身有效集；须审批码由上方审批闸处理。
-                            if (masterTarget) {
-                                // 最高权限目标不走审批闸，被解除的码全部生效，操作人须本人持有每一个码。
-                                requireActorCanGrant(permissionCodes);
-                            } else {
-                                boolean wildcard = authorizationService.isPlatformAdmin(subject); // 平台管理员日常通配
+                                // M002-F05（P0-1）：解除拒绝会让既有授予来源的码生效，等同直接授予，不得超出操作人自身有效集；须审批码由上方审批闸处理。
+                                boolean wildcard = masterTarget || authorizationService.isPlatformAdmin(subject); // 最高权限全字典、平台管理员日常通配
                                 requireActorCanGrantImmediate(permissionCodes.stream()
                                         .filter(code -> wildcard || granted.contains(code)).toList());
                             }
