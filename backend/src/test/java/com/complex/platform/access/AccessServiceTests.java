@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1600,8 +1600,8 @@ class AccessServiceTests {
         });
     }
 
-    // M001-F12（PGM「旧岗位或旧范围派生权限立即失效」；F10「换项目提交后不存在该员工的旧项目模板授权」）：空模板套用、空角色不产出权限码，
-    // 换项目时也按记录撤销；之后给它们加码不能让已调走的员工获得权限。
+    // M001-F12/F15（PGM「发生跨项目变更时，旧岗位或旧范围派生权限立即失效」；F10「换项目提交后不存在该员工的旧项目模板授权」）：
+    // 项目 A 的空模板套用、空角色不产出权限码，员工调到项目 B 时也按记录撤销；之后给它们加码不能让已调走的员工获得权限。
     @Test
     void scopeChangeRevokesEmptyTemplateApplicationsAndEmptyRoles() {
         InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
@@ -1626,8 +1626,9 @@ class AccessServiceTests {
         accessRepository.applyTemplate("tpl_empty", List.of("usr_empty"), null, null, false, "usr_admin");
 
         service.changeUserScope("usr_empty", new UserScopeChangeRequest(
-                "scope-empty", null, "seed-org", "merchant_b", "ops_clerk", "lvl_m1_lower", null, null, null, "调往 B 商户", null));
+                "scope-empty", null, "org_b", "merchant_b", "ops_clerk", "lvl_m1_lower", null, null, null, "调往 B 项目", null));
 
+        assertThat(accessRepository.users.get("usr_empty").organizationId()).isEqualTo("org_b");
         assertThat(accessRepository.userRoles.getOrDefault("usr_empty", Set.of())).isEmpty();
         assertThat(accessRepository.templateApplications).filteredOn(a -> "tpl_empty".equals(a.templateId()))
                 .isNotEmpty().allMatch(a -> "revoked".equals(a.status()));
