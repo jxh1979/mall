@@ -3,10 +3,18 @@ package com.complex.platform.access;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
+import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +23,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
@@ -33,6 +44,12 @@ class AccessJdbcIntegrationTests {
 
     @Autowired
     private AuthorizationService authorizationService;
+
+    @Autowired
+    private AccessService accessService;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Autowired
     private org.springframework.transaction.interceptor.TransactionAttributeSource transactionAttributeSource;
@@ -624,6 +641,44 @@ class AccessJdbcIntegrationTests {
                 .containsEntry("result", "expired");
     }
 
+    // M001-F03（PGM 权限规则「到期自动失效」「到期……全部留痕」）：无人读取该员工权限时，到期作业也要置 expired
+    // 并恰写一条到期日志；重复运行不重复记账。
+    @Test
+    void lapsedTemplateApplicationIsExpiredByJobWithoutAnyEffectsRead() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_tpl_job",
+                "jdbc-tpl-job",
+                "staff",
+                "org",
+                "merchant",
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.createTemplate(
+                template("tpl_temporary_job", "temporary-job", null),
+                List.of(item("tpl_temporary_job", "ops.production_readiness.check", AccessRepository.Effect.GRANT))
+        );
+        String applicationId = repository.applyTemplate(
+                "tpl_temporary_job",
+                List.of("usr_jdbc_tpl_job"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-15T00:00:00Z"),
+                false,
+                "seed-admin"
+        ).get(0).id();
+        PermissionExpiryJob job = new PermissionExpiryJob(repository, false);
+
+        assertThat(job.runOnce(Instant.parse("2026-06-16T00:00:00Z"))).isGreaterThanOrEqualTo(1);
+        assertThat(job.runOnce(Instant.parse("2026-06-17T00:00:00Z"))).isZero();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permission_template_applications WHERE id = ?", String.class, applicationId))
+                .isEqualTo("expired");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT result FROM permission_template_usage_logs WHERE application_id = ?", String.class, applicationId))
+                .containsExactly("expired");
+    }
+
     // M032-001（治理地图「全平台审批通用时限」为后台业务参数）：库内现行授权政策行（V389 起带 deadlineWorkingDays）
     // 必须能按服务层同一解析路径读出；保存一份不带该键的政策后，库内该键保持原值。
     @Test
@@ -812,6 +867,286 @@ class AccessJdbcIntegrationTests {
         assertThat(authorizationService.effectivePermissions().grants()).containsAll(govern)
                 .doesNotContain("finance.dividend.manage", "bar.internal_settlement_price.view", "access.grant_request.review");
         govern.forEach(authorizationService::requirePermission);
+    }
+
+    // M001-F11：模板当前仍生效的套用记录——撤销的、已单次消耗的、已过到期时间的不算。
+    @Test
+    void findActiveTemplateApplicationsSkipsRevokedConsumedAndLapsedOnes() {
+        List<String> users = List.of("usr_f11_active", "usr_f11_revoked", "usr_f11_consumed", "usr_f11_lapsed");
+        users.forEach(id -> repository.createUser(new AccessUser(
+                id, id, "staff", "org", null, "active", Instant.parse("2026-06-14T00:00:00Z"))));
+        repository.createTemplate(template("tpl_f11_active", "f11-active", null),
+                List.of(item("tpl_f11_active", "ops.production_readiness.check", AccessRepository.Effect.GRANT)));
+        List<PermissionTemplateApplication> applied = repository.applyTemplate("tpl_f11_active", users, null, null, true, "seed-admin");
+        repository.revokeTemplateApplications("usr_f11_revoked", List.of(applied.get(1).id()), "seed-admin", Instant.parse("2026-06-16T00:00:00Z"));
+        jdbcTemplate.update("UPDATE permission_template_applications SET consumed = TRUE WHERE id = ?", applied.get(2).id());
+        jdbcTemplate.update("UPDATE permission_template_applications SET valid_until = now() - interval '1 hour' WHERE id = ?", applied.get(3).id());
+
+        assertThat(repository.findActiveTemplateApplications("tpl_f11_active"))
+                .extracting(PermissionTemplateApplication::targetId).containsExactly("usr_f11_active");
+    }
+
+    // M001-F10（PGM #permission「旧岗位或旧范围派生权限立即失效」）：换项目事务锁住员工行并改归属期间，同时对他套用原项目模板的事务
+    // 须等锁释放、按新归属被拒；换项目提交后该员工不留旧项目模板授权。真实并发、数据真实提交，结束后清理。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void templateApplyWaitsForAConcurrentScopeChangeAndIsRejectedByTheNewProject() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String userId = "usr_f10_" + suffix;
+        String templateId = "tpl_f10_" + suffix;
+        String oldProject = "org_f10_old_" + suffix;
+        Instant now = Instant.now();
+        repository.createUser(new AccessUser(userId, "f10-" + suffix, "staff", oldProject, null, "active", now));
+        repository.createTemplate(new PermissionTemplate(templateId, templateId, "F10 template", "f10", "base", null,
+                "organization", oldProject, "merge", null, null, false, "active", "f10", "seed-admin", now, now, now), List.of());
+        ExecutorService applier = Executors.newSingleThreadExecutor();
+        try {
+            Future<Throwable> apply = new TransactionTemplate(transactionManager).execute(status -> {
+                repository.lockAccessUsers(List.of(userId));
+                jdbcTemplate.update("UPDATE access_users SET organization_id = ? WHERE id = ?", "org_f10_new_" + suffix, userId);
+                Future<Throwable> pending = applier.submit(() -> {
+                    authenticate("usr_f10_actor_" + suffix, "f10-actor-" + suffix, "staff", oldProject);
+                    try {
+                        accessService.applyPermissionTemplate(templateId, new PermissionTemplateApplyRequest(
+                                "f10-apply-" + suffix, "apply", List.of(), templateId, List.of(userId), "merge"));
+                        return null;
+                    } catch (Throwable e) {
+                        return e;
+                    } finally {
+                        SecurityContextHolder.clearContext();
+                    }
+                });
+                awaitWaiterOrDone(pending);
+                return pending;
+            });
+            assertThat(apply.get(30, TimeUnit.SECONDS)).isInstanceOfSatisfying(ApiException.class,
+                    e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM permission_template_applications WHERE target_id = ? AND status = 'active'",
+                    Integer.class, userId)).isZero();
+        } finally {
+            applier.shutdownNow();
+            jdbcTemplate.update("DELETE FROM permission_template_applications WHERE target_id = ?", userId);
+            jdbcTemplate.update("DELETE FROM permission_templates WHERE id = ?", templateId);
+            jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", userId);
+        }
+    }
+
+    // M001-F10：换项目（持授权事实锁、锁员工行后改员工表）与审批落地（持授权事实锁、再锁同一员工行）并发时串行完成，不互相死锁。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void scopeChangeAndGrantReviewOnTheSameUserSerializeWithoutDeadlock() throws Exception {
+        String userId = "usr_f10_dl_" + UUID.randomUUID().toString().substring(0, 8);
+        repository.createUser(new AccessUser(userId, userId, "staff", "org_f10_dl_old", null, "active", Instant.now()));
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        ExecutorService reviewer = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> review = tx.execute(status -> {
+                repository.lockGrantAuthorizationFacts();
+                repository.lockAccessUsers(List.of(userId));
+                Future<?> pending = reviewer.submit(() -> tx.executeWithoutResult(inner -> {
+                    repository.lockGrantAuthorizationFacts();
+                    repository.lockAccessUsers(List.of(userId));
+                }));
+                awaitWaiterOrDone(pending);
+                jdbcTemplate.update("UPDATE access_users SET organization_id = ? WHERE id = ?", "org_f10_dl_new", userId);
+                return pending;
+            });
+            review.get(30, TimeUnit.SECONDS);
+        } finally {
+            reviewer.shutdownNow();
+            jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", userId);
+        }
+    }
+
+    // M001-F12：换项目按员工本身的记录枚举来源——空模板的 active 套用、无权限码的直接角色都在列，撤销过的不在列；
+    // 已过到期时间的套用先被有效权限读取置为过期并留痕，也不在列（换项目先读有效权限、后枚举）。
+    @Test
+    void userGrantSourcesAreEnumeratedFromTheRecordsThemselves() {
+        repository.createUser(new AccessUser("usr_f12_src", "usr_f12_src", "staff", "org", null, "active", Instant.now()));
+        repository.createTemplate(baseTemplate("tpl_f12_empty"), List.of());
+        repository.createTemplate(baseTemplate("tpl_f12_other"), grants("tpl_f12_other", DAILY_A));
+        String empty = repository.applyTemplate("tpl_f12_empty", List.of("usr_f12_src"), null, null, false, "seed-admin").get(0).id();
+        String revoked = repository.applyTemplate("tpl_f12_other", List.of("usr_f12_src"), null, null, false, "seed-admin").get(0).id();
+        repository.revokeTemplateApplications("usr_f12_src", List.of(revoked), "seed-admin", Instant.now());
+        String lapsed = repository.applyTemplate("tpl_f12_other", List.of("usr_f12_src"), null,
+                Instant.now().minusSeconds(3600), false, "seed-admin").get(0).id();
+        repository.createRole(new RoleRecord("role_f12_empty", "role_f12_empty", "F12 empty role", "project", "active", Instant.now(), List.of(), null));
+        repository.assignUserRole("usr_f12_src", "role_f12_empty");
+
+        assertThat(repository.findPermissionEffects("usr_f12_src", Instant.now())).isEmpty(); // 空来源不产出权限码，到期的已置过期
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permission_template_applications WHERE id = ?", String.class, lapsed)).isEqualTo("expired");
+        assertThat(repository.findActiveTemplateApplicationIds("usr_f12_src")).containsExactly(empty);
+        assertThat(repository.findUserRoleIds("usr_f12_src")).containsExactly("role_f12_empty");
+    }
+
+    // M001-F10/F13：新增的锁语句在真实 schema 上可执行并真的持锁（空员工列表不发 SQL）。
+    @Test
+    void repairLockStatementsHoldTheirLocksOnTheRealSchema() {
+        repository.createTemplate(baseTemplate("tpl_lock_sql"), List.of());
+        repository.lockAccessUsers(List.of());
+        repository.lockPositionRoleTemplatesForWrite();
+        repository.lockTemplateForEdit("tpl_lock_sql");
+        repository.lockTemplateForApply("tpl_lock_sql");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM pg_locks
+                 WHERE pid = pg_backend_pid() AND granted AND mode = 'RowExclusiveLock'
+                   AND relation IN ('position_role_templates'::regclass, 'permission_templates'::regclass)
+                """, Integer.class)).isEqualTo(2);
+    }
+
+    // M001-F13（F11「记录……增加与去掉的权限码」）：两个编辑交错时，后提交者在模板锁内读前态，事件按实际前态记增减。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentTemplateEditsRecordTheRealDelta() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String templateId = "tpl_f13_edit_" + suffix;
+        String userId = "usr_f13_edit_" + suffix;
+        String editKey = "f13-edit-" + suffix;
+        repository.createUser(new AccessUser(userId, userId, "staff", "org", null, "active", Instant.now()));
+        repository.createTemplate(baseTemplate(templateId), grants(templateId, DAILY_A));
+        repository.applyTemplate(templateId, List.of(userId), null, null, false, "seed-admin");
+        ExecutorService editor = Executors.newSingleThreadExecutor();
+        try {
+            Future<Throwable> edit = new TransactionTemplate(transactionManager).execute(status -> {
+                repository.lockTemplateForEdit(templateId);
+                Future<Throwable> pending = editor.submit(() -> asPlatformAdmin(suffix, () -> accessService.updatePermissionTemplate(
+                        templateId, templateRequest(editKey, DAILY_A, DAILY_C))));
+                awaitWaiterOrDone(pending);
+                repository.saveTemplate(baseTemplate(templateId), grants(templateId, DAILY_A, DAILY_B));
+                return pending;
+            });
+            assertThat(edit.get(30, TimeUnit.SECONDS)).isNull();
+            assertThat(eventCodes("permission_template.effect_changed", editKey, "added_permission_codes")).containsExactly(DAILY_C);
+            assertThat(eventCodes("permission_template.effect_changed", editKey, "removed_permission_codes")).containsExactly(DAILY_B);
+            // M001-F14：生产同型主体下，逐人事件的操作人与发生时间
+            assertThat(jdbcTemplate.queryForList("""
+                    SELECT actor_id || '|' || actor_type || '|' || (metadata ->> 'operator_id') || '|' || CAST(occurred_at IS NOT NULL AS text)
+                      FROM audit_events WHERE event_name = 'permission_template.effect_changed' AND idempotency_key = ?
+                    """, String.class, editKey))
+                    .containsExactly("usr_m001_admin_" + suffix + "|platform_admin|usr_m001_admin_" + suffix + "|true");
+        } finally {
+            editor.shutdownNow();
+            deleteTemplateAndUsers(templateId, userId);
+        }
+    }
+
+    // M001-F13（F11「……回滚则不留」）：修改已套用模板的事务回滚后，逐人事件与条目改动都不留下。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void rolledBackTemplateEditLeavesNoEffectEvent() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String templateId = "tpl_f13_rb_" + suffix;
+        String userId = "usr_f13_rb_" + suffix;
+        String editKey = "f13-rb-" + suffix;
+        repository.createUser(new AccessUser(userId, userId, "staff", "org", null, "active", Instant.now()));
+        repository.createTemplate(baseTemplate(templateId), grants(templateId, DAILY_A));
+        repository.applyTemplate(templateId, List.of(userId), null, null, false, "seed-admin");
+        try {
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                assertThat(asPlatformAdmin(suffix, () -> accessService.updatePermissionTemplate(
+                        templateId, templateRequest(editKey, DAILY_A, DAILY_C)))).isNull();
+                // 正向对照：同一事务连接上看得到未提交的逐人事件，回滚后才消失
+                assertThat(eventCodes("permission_template.effect_changed", editKey, "added_permission_codes")).containsExactly(DAILY_C);
+                status.setRollbackOnly();
+            });
+            assertThat(eventCodes("permission_template.effect_changed", editKey, "added_permission_codes")).isEmpty();
+            assertThat(repository.findTemplateItems(templateId)).extracting(PermissionTemplateItem::permissionCode).containsExactly(DAILY_A);
+        } finally {
+            deleteTemplateAndUsers(templateId, userId);
+        }
+    }
+
+    // M001-F13（F11「模板套用成功事件同时记录当时的权限码快照」）：编辑未提交时发起的套用，等编辑提交后按提交后的权限码记快照。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void templateApplyWaitsForAConcurrentEditAndSnapshotsCommittedCodes() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String templateId = "tpl_f13_apply_" + suffix;
+        String userId = "usr_f13_apply_" + suffix;
+        String applyKey = "f13-apply-" + suffix;
+        repository.createUser(new AccessUser(userId, userId, "staff", "org", null, "active", Instant.now()));
+        repository.createTemplate(baseTemplate(templateId), grants(templateId, DAILY_A));
+        ExecutorService applier = Executors.newSingleThreadExecutor();
+        try {
+            Future<Throwable> apply = new TransactionTemplate(transactionManager).execute(status -> {
+                repository.lockTemplateForEdit(templateId);
+                repository.saveTemplate(baseTemplate(templateId), grants(templateId, DAILY_A, DAILY_B));
+                Future<Throwable> pending = applier.submit(() -> asPlatformAdmin(suffix, () -> accessService.applyPermissionTemplate(
+                        templateId, new PermissionTemplateApplyRequest(applyKey, "apply", List.of(), templateId, List.of(userId), "merge"))));
+                awaitWaiterOrDone(pending);
+                return pending;
+            });
+            assertThat(apply.get(30, TimeUnit.SECONDS)).isNull();
+            assertThat(eventCodes("permission_template.applied", applyKey, "permission_codes")).containsExactly(DAILY_A, DAILY_B);
+        } finally {
+            applier.shutdownNow();
+            deleteTemplateAndUsers(templateId, userId);
+        }
+    }
+
+    // 平台管理员日常桥可授的三个日常码（见 dailyCodesReachThePlatformAdminBridgeAndRiskTiersAreTheFourGovernedOnes），按字母序
+    private static final String DAILY_A = "amusement.device.view";
+    private static final String DAILY_B = "inventory.stocktake.view";
+    private static final String DAILY_C = "inventory.trace_code.view";
+
+    private PermissionTemplate baseTemplate(String id) {
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        return new PermissionTemplate(id, id, id, "M001 test template", "base", null, "platform", null, "merge",
+                null, null, false, "active", "integration test", "seed-admin", at, at, at);
+    }
+
+    private List<PermissionTemplateItem> grants(String templateId, String... codes) {
+        return java.util.Arrays.stream(codes).map(code -> item(templateId, code, AccessRepository.Effect.GRANT)).toList();
+    }
+
+    private PermissionTemplateRequest templateRequest(String idempotencyKey, String... codes) {
+        return new PermissionTemplateRequest(idempotencyKey, "M001 test", List.of(), "M001 test template", "base", null,
+                List.of(codes), "project", null, null, false);
+    }
+
+    // 以平台管理员身份在当前线程执行，返回抛出的异常（成功为 null）。主体用生产过滤器放入的 AccessActor。
+    private Throwable asPlatformAdmin(String suffix, Runnable action) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor("usr_m001_admin_" + suffix, "m001-admin-" + suffix, "platform_admin", "org", null, "active"),
+                null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+        try {
+            action.run();
+            return null;
+        } catch (Throwable e) {
+            return e;
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    private List<String> eventCodes(String eventName, String idempotencyKey, String field) {
+        return jdbcTemplate.queryForList(
+                "SELECT jsonb_array_elements_text(metadata -> CAST(? AS text)) FROM audit_events WHERE event_name = ? AND idempotency_key = ? ORDER BY 1",
+                String.class, field, eventName, idempotencyKey);
+    }
+
+    // 审计事件只追加、不删；套用行与条目随模板级联删除。
+    private void deleteTemplateAndUsers(String templateId, String... userIds) {
+        jdbcTemplate.update("DELETE FROM permission_template_applications WHERE template_id = ?", templateId);
+        jdbcTemplate.update("DELETE FROM permission_templates WHERE id = ?", templateId);
+        for (String userId : userIds) {
+            jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", userId);
+        }
+    }
+
+    // 在本事务连接上等到有会话被本事务的锁挡住，或对方不等锁就已结束（修复前的竞态），最多 20 秒。
+    private void awaitWaiterOrDone(Future<?> pending) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (!pending.isDone() && System.nanoTime() < deadline) {
+            Integer waiters = jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM pg_locks WHERE NOT granted AND pg_backend_pid() = ANY (pg_blocking_pids(pid))", Integer.class);
+            if (waiters != null && waiters > 0) {
+                return;
+            }
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(20));
+        }
     }
 
     private String regclass(String tableName) {

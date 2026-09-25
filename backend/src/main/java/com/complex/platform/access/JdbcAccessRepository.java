@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.13
+// 文件版本：V0.16
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -40,10 +40,76 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     public void lockGrantAuthorizationFacts() {
         // M006-006。ponytail: 审批期间暂停授权定义写入；出现配置写入争用时再改为逐定义版本锁。
+        // M001-F10：员工表取自斥的 SHARE ROW EXCLUSIVE——换项目要改员工表、审批落地要锁员工行，两者都持共享锁会互等死锁，
+        // 改为授权申请、审批、换项目彼此串行。ponytail: 全局串行，审批吞吐成问题时再按员工拆锁。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE access_users IN SHARE ROW EXCLUSIVE MODE");
         jdbcTemplate.getJdbcTemplate().execute("""
-                LOCK TABLE access_users, roles, role_permissions, permissions, permission_templates,
+                LOCK TABLE roles, role_permissions, permissions, permission_templates,
                            permission_template_items, position_role_templates, staff_levels IN SHARE MODE
                 """);
+    }
+
+    @Override
+    public void lockAccessUsers(List<String> userIds) {
+        if (userIds.isEmpty()) { // 岗位映射可能无人在岗；空 IN () 是语法错误
+            return;
+        }
+        // M001-F10：按编号顺序加行锁，同时套用多名员工的事务之间不互相死锁。
+        jdbcTemplate.queryForList("SELECT id FROM access_users WHERE id IN (:ids) ORDER BY id FOR UPDATE",
+                Map.of("ids", userIds), String.class);
+    }
+
+    @Override
+    public List<String> findActiveTemplateApplicationIds(String userId) {
+        return jdbcTemplate.queryForList("""
+                SELECT id FROM permission_template_applications
+                 WHERE target_type = 'user' AND target_id = :user_id AND status = 'active'
+                 ORDER BY id
+                """, Map.of("user_id", userId), String.class);
+    }
+
+    @Override
+    public List<String> findUserRoleIds(String userId) {
+        return jdbcTemplate.queryForList("SELECT role_id FROM user_roles WHERE user_id = :user_id ORDER BY role_id",
+                Map.of("user_id", userId), String.class);
+    }
+
+    @Override
+    public void lockTemplateForEdit(String templateId) {
+        // M001-F13：表级 ROW EXCLUSIVE 先于行锁——审批落地持模板表 SHARE 后会等员工行，编辑若先持行锁再等表锁，
+        // 与「持员工行、等模板行」的套用成三方环。行锁取 NO KEY UPDATE，不挡插套用行时外键取的 KEY SHARE。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE permission_templates IN ROW EXCLUSIVE MODE");
+        jdbcTemplate.queryForList("SELECT id FROM permission_templates WHERE id = :id FOR NO KEY UPDATE",
+                Map.of("id", templateId), String.class);
+    }
+
+    @Override
+    public void lockTemplateForApply(String templateId) {
+        // M001-F13：FOR SHARE 与编辑的 NO KEY UPDATE 互斥（KEY SHARE 不互斥，拦不住编辑）。
+        jdbcTemplate.queryForList("SELECT id FROM permission_templates WHERE id = :id FOR SHARE",
+                Map.of("id", templateId), String.class);
+    }
+
+    @Override
+    public void lockPositionRoleTemplatesForWrite() {
+        // M001-F10。ponytail: 把映射 upsert 本就要取的 ROW EXCLUSIVE 提到事务开头，与授权事实锁的 SHARE 先到先得。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE position_role_templates IN ROW EXCLUSIVE MODE");
+    }
+
+    @Override
+    public List<PermissionTemplateApplication> findActiveTemplateApplications(String templateId) {
+        return jdbcTemplate.query("""
+                SELECT id, template_id, target_type, target_id, valid_from, valid_until, single_use, consumed, status,
+                       applied_by, applied_at, revoked_by, revoked_at
+                  FROM permission_template_applications
+                 WHERE template_id = :template_id AND status = 'active' AND NOT consumed
+                   AND (valid_until IS NULL OR valid_until > now())
+                 ORDER BY id
+                """, Map.of("template_id", templateId), (rs, rowNum) -> new PermissionTemplateApplication(
+                rs.getString("id"), rs.getString("template_id"), rs.getString("target_type"), rs.getString("target_id"),
+                nullableInstant(rs, "valid_from"), nullableInstant(rs, "valid_until"), rs.getBoolean("single_use"),
+                rs.getBoolean("consumed"), rs.getString("status"), rs.getString("applied_by"),
+                nullableInstant(rs, "applied_at"), rs.getString("revoked_by"), nullableInstant(rs, "revoked_at")));
     }
 
     @Override
@@ -914,7 +980,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     // M006-G-06（PGM-1.10.1「到期、单次消耗、失效全部留痕」）：读取有效权限前，把本人已到期仍标 active 的
     // 临时授权 / 模板应用置为 expired 并各写一条用量日志；UPDATE 只命中 active 行，重复读取不再写，幂等。
-    // ponytail: 读时顺带清理、只扫本人行；需要按时全量到期时改为定时任务复用本方法即可。
+    // ponytail: 读时顺带清理、只扫本人行；模板套用的按时全量到期由 PermissionExpiryJob 复用 expireTemplateApplications（M001-F03）。
     private void expireLapsedEffects(String userId, Instant checkedAt) {
         MapSqlParameterSource parameters = new MapSqlParameterSource()
                 .addValue("user_id", userId)
@@ -932,19 +998,36 @@ class JdbcAccessRepository implements AccessRepository {
             logExpiry(null, userId, (String) grant.get("permission_code"),
                     "expired:temporary_grant:" + grant.get("source_id"), checkedAt);
         }
-        for (Map<String, Object> application : jdbcTemplate.queryForList("""
+        expireTemplateApplications(userId, checkedAt);
+    }
+
+    @Override
+    @Transactional
+    public int expireLapsedTemplateApplications(Instant checkedAt) {
+        return expireTemplateApplications(null, checkedAt);
+    }
+
+    // userId 为 null 时处理全部员工（M001-F03 到期作业）；UPDATE 只命中 active 行，重复运行不再写，幂等。
+    // 本人过滤按需拼固定片段（不用「参数 IS NULL OR」），读取有效权限这条热路径仍走 target_id 条件。
+    private int expireTemplateApplications(String userId, Instant checkedAt) {
+        String targetFilter = userId == null ? "" : "AND application.target_id = :user_id";
+        List<Map<String, Object>> expired = jdbcTemplate.queryForList("""
                 UPDATE permission_template_applications AS application
                    SET status = 'expired'
                   FROM permission_templates AS template
                  WHERE application.template_id = template.id
                    AND application.target_type = 'user'
-                   AND application.target_id = :user_id
+                   %s
                    AND application.status = 'active'
                    AND COALESCE(application.valid_until, template.valid_to) <= :checked_at
-             RETURNING application.id AS source_id
-                """, parameters)) {
-            logExpiry((String) application.get("source_id"), userId, null, "expired", checkedAt);
+             RETURNING application.id AS source_id, application.target_id AS user_id
+                """.formatted(targetFilter), new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("checked_at", timestampWithTimeZone(checkedAt)));
+        for (Map<String, Object> application : expired) {
+            logExpiry((String) application.get("source_id"), (String) application.get("user_id"), null, "expired", checkedAt);
         }
+        return expired.size();
     }
 
     @Override

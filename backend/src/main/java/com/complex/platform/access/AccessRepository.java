@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.09
+// 文件版本：V0.12
 
 import java.time.Instant;
 import java.util.List;
@@ -170,6 +170,45 @@ public interface AccessRepository {
             boolean singleUse,
             String appliedBy
     );
+
+    /**
+     * M001-F10：在当前事务内按编号顺序锁定这些员工行，锁到事务结束；按员工归属写入授权的入口与换项目在读员工归属前调用，锁内复核归属。
+     * 默认空实现只给单线程内存夹具用，真实锁见 JdbcAccessRepository。
+     */
+    default void lockAccessUsers(List<String> userIds) {
+    }
+
+    /** M001-F11：该模板当前仍生效的全部套用记录（模板编辑时逐人留痕用）；默认空列表只给不记套用的测试夹具用，真实查询见 JdbcAccessRepository。 */
+    default List<PermissionTemplateApplication> findActiveTemplateApplications(String templateId) {
+        return List.of();
+    }
+
+    /** M001-F12：该员工全部 active 模板套用 id，不看模板有无条目、是否生效（换项目按记录撤销）。 */
+    default List<String> findActiveTemplateApplicationIds(String userId) {
+        throw new UnsupportedOperationException("findActiveTemplateApplicationIds not supported by this repository");
+    }
+
+    /** M001-F12：该员工全部直接装配角色 id，不看角色有无权限码、是否生效。 */
+    default List<String> findUserRoleIds(String userId) {
+        throw new UnsupportedOperationException("findUserRoleIds not supported by this repository");
+    }
+
+    /** M001-F13：修改模板前取该模板写锁，锁到事务结束，锁内读前态；默认空实现只给单线程内存夹具用。 */
+    default void lockTemplateForEdit(String templateId) {
+    }
+
+    /** M001-F13：套用模板前取该模板共享锁，等进行中的编辑提交后再读条目；默认空实现只给单线程内存夹具用。 */
+    default void lockTemplateForApply(String templateId) {
+    }
+
+    /** M001-F10：保存岗位映射前先取映射表写意向锁，与授权事实锁先到先得；默认空实现只给单线程内存夹具用。 */
+    default void lockPositionRoleTemplatesForWrite() {
+    }
+
+    /** M001-F03：把全部员工已到期仍标 active 的模板套用置 expired 并各写一条到期日志，返回处理条数（到期作业调用）。 */
+    default int expireLapsedTemplateApplications(Instant checkedAt) {
+        throw new UnsupportedOperationException("expireLapsedTemplateApplications not supported by this repository");
+    }
 
     TemporaryGrant createTemporaryGrant(TemporaryGrant temporaryGrant);
 
