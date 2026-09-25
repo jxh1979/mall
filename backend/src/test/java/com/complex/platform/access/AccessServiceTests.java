@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -484,6 +484,32 @@ class AccessServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("access.role.assigned", "access.role.unassigned");
+    }
+
+    // M002-F11（操作员 2026-09-25 裁决，治理地图「权限规则」）：撤销角色只减权，不要求操作人持有该角色里的权限码——
+    // 不持有资金码的平台管理员、同组织员工都可撤销；跨组织仍被拒。
+    @Test
+    void unassignUserRoleDoesNotRequireTheActorToHoldTheRolesCodes() {
+        accessRepository.addPermission("finance.dividend.manage", "high", true);
+        accessRepository.roles.put("role_money", new RoleRecord(
+                "role_money", "money", "Money", "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("finance.dividend.manage"), null));
+        for (String userId : List.of("usr_money_a", "usr_money_b", "usr_money_c")) {
+            accessRepository.users.put(userId, new AccessUser(
+                    userId, userId, "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+            accessRepository.userRoles.put(userId, new LinkedHashSet<>(Set.of("role_money")));
+        }
+
+        service.unassignUserRole(new RoleAssignmentRequest("unassign-money-admin", null, "usr_money_a", "role_money"));
+        authenticateAsOrgUser("usr_seed_staff", "seed-staff", "seed-org");
+        service.unassignUserRole(new RoleAssignmentRequest("unassign-money-staff", null, "usr_money_b", "role_money"));
+        authenticateAsOrgUser("usr_other_staff", "other-staff", "org_b");
+        assertThatThrownBy(() -> service.unassignUserRole(new RoleAssignmentRequest("unassign-money-cross", null, "usr_money_c", "role_money")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+
+        assertThat(accessRepository.userRoles.get("usr_money_a")).doesNotContain("role_money");
+        assertThat(accessRepository.userRoles.get("usr_money_b")).doesNotContain("role_money");
+        assertThat(accessRepository.userRoles.get("usr_money_c")).contains("role_money");
     }
 
     @Test
@@ -2180,6 +2206,7 @@ class AccessServiceTests {
 
         List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> writes = List.of(
                 () -> service.assignUserRole(new RoleAssignmentRequest("role-lock", "r", "usr_ghost", "role_any")),
+                () -> service.unassignUserRole(new RoleAssignmentRequest("unassign-lock", "u", "usr_ghost", "role_any")), // M002-F10
                 () -> service.assignUserPosition(new UserPositionAssignmentRequest(
                         "position-lock", "p", "usr_ghost", "ops_clerk", "lvl_m1_lower", null, null, null)),
                 () -> service.createTemporaryGrant(new TemporaryGrantRequest("temporary-lock", "t", List.of(), "usr_ghost",

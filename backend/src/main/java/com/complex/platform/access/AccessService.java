@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -429,11 +429,12 @@ public class AccessService {
                     r,
                     () -> {
                         AccessActor actor = authorizationService.currentActor();
-                        AccessUser targetUser = requireTargetUser(requireText(r.userId(), "user_id"));
+                        // M002-F10：与其余授权写入入口同一锁序，读员工归属与范围检查前先锁目标员工行（M001-F10）。
+                        AccessUser targetUser = lockTargetUser(requireText(r.userId(), "user_id"));
                         RoleRecord role = requireRole(requireText(r.roleId(), "role_id"));
                         requireSameOrganization(actor, targetUser);
                         requireRoleAssignableToTarget(role, targetUser);
-                        requireActorCanGrant(role.permissionCodes());
+                        // M002-F11（操作员 2026-09-25 裁决，治理地图「权限规则」）：撤销只减权，不要求操作人持有该角色里的权限码。
                         repository.unassignUserRole(targetUser.id(), role.id());
                         auditEventService.recordSuccess(
                                 "access.role.unassigned",
