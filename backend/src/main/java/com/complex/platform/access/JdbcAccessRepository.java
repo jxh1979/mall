@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.17
+// 文件版本：V0.18
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1105,6 +1105,19 @@ class JdbcAccessRepository implements AccessRepository {
     @Transactional
     public int deleteExplicitDenies(String userId, List<String> permissionCodes) {
         return deleteOverridesByOrigin(userId, permissionCodes, Effect.DENY, "explicit");
+    }
+
+    @Override
+    public List<ExplicitDenyRow> findExplicitDenies(String userId, List<String> permissionCodes) {
+        return jdbcTemplate.query("""
+                SELECT permission_code, reason, created_by, created_at
+                  FROM user_permission_overrides
+                 WHERE user_id = :user_id AND effect = 'deny' AND origin = 'explicit'
+                   AND permission_code IN (:permission_codes)
+                 ORDER BY permission_code
+                """, new MapSqlParameterSource().addValue("user_id", userId).addValue("permission_codes", permissionCodes),
+                (rs, row) -> new ExplicitDenyRow(rs.getString("permission_code"), rs.getString("reason"),
+                        rs.getString("created_by"), nullableInstant(rs, "created_at")));
     }
 
     private int deleteOverridesByOrigin(String userId, List<String> permissionCodes, Effect effect, String origin) {

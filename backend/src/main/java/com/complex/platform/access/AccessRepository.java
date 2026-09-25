@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import java.time.Instant;
 import java.util.List;
@@ -327,6 +327,14 @@ public interface AccessRepository {
     /** M002-F01：只删员工显式拒绝行，岗位高危挂起行不动；返回删除行数。 */
     default int deleteExplicitDenies(String userId, List<String> permissionCodes) {
         throw new UnsupportedOperationException("deleteExplicitDenies");
+    }
+
+    /** M002-F06：该员工这些码的员工显式拒绝行（按码排序），解除单以此钉住所解除的拒绝版本。 */
+    default List<ExplicitDenyRow> findExplicitDenies(String userId, List<String> permissionCodes) {
+        throw new UnsupportedOperationException("findExplicitDenies");
+    }
+
+    record ExplicitDenyRow(String permissionCode, String reason, String createdBy, Instant createdAt) {
     }
 
     enum Effect {

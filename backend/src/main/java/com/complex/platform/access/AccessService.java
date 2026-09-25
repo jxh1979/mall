@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -1041,9 +1041,8 @@ public class AccessService {
                             throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "申请人不能审批自己的授权");
                         }
                         String decision = normalizeDecision(r.decision());
-                        if ("approve".equals(decision) && !repository.findGrantFingerprint(pending.id())
-                                .filter(saved -> saved.equals(authorizationFingerprint(pending))).isPresent()) {
-                            throw ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "授权内容或归属已变化，请重新申请");
+                        if ("approve".equals(decision)) {
+                            requireGrantSnapshotUnchanged(pending);
                         }
                         SupervisorReviewDecisionRecord review = requireSupervisorReviewService().approve(
                                 pending.reviewId(),
@@ -1437,7 +1436,7 @@ public class AccessService {
     }
 
     private RoleAssignmentRecord assignUserRoleDirect(RoleAssignmentRequest request, boolean enforceApproval) {
-        RoleGrantContext context = resolveRoleGrant(request, enforceApproval); // M087：审批落地不按落地人自身权限限制
+        RoleGrantContext context = resolveRoleGrant(request, enforceApproval, enforceApproval); // M087/M002-F04：审批落地不按落地人自身权限与组织限制
         if (enforceApproval) {
             requireGrantApprovalIfNeeded(context.role().permissionCodes());
         }
@@ -1497,24 +1496,40 @@ public class AccessService {
                             requireGrantApprovalIfNeeded(permissionCodes);
                             requireActorCanGrant(permissionCodes);
                         }
-                        if (!set && effect == AccessRepository.Effect.DENY && grantApprovalEnabled) {
-                            // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」「既有高危不得因处于岗位模板内而免除授出前审批」）：移除显式拒绝若使须审批的
-                            // 权限从既有 GRANT 来源生效，等同一次授出，须经授出审批；岗位高危挂起行只能由挂起单（position_high_risk_release）审批释放。
-                            // M002-F01：解除员工显式拒绝走授权申请 user_permission_deny_removal，获批后只删员工显式拒绝行。
+                        if (!set && effect == AccessRepository.Effect.DENY) {
                             Set<String> granted = repository.findPermissionEffects(targetUser.id(), Instant.now()).stream()
                                     .filter(effectRow -> effectRow.effect() == AccessRepository.Effect.GRANT)
                                     .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
-                            List<String> exposed = approvalRequiredPermissions(permissionCodes).stream()
-                                    .map(PermissionDefinition::permissionCode).filter(granted::contains).sorted().toList();
-                            if (!exposed.isEmpty()) {
-                                throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL",
-                                        "移除显式拒绝将使以下须审批的权限生效，须经授出审批（员工显式拒绝请提交『解除员工显式拒绝』授权申请；"
-                                                + "岗位高危挂起须经挂起单审批释放）：" + exposed);
+                            if (grantApprovalEnabled) {
+                                // M006-R6-02（PGM-1.10.1「显式拒绝优先级最高」「既有高危不得因处于岗位模板内而免除授出前审批」）：移除显式拒绝若使须审批的
+                                // 权限从既有 GRANT 来源生效，等同一次授出，须经授出审批；岗位高危挂起行只能由挂起单（position_high_risk_release）审批释放。
+                                // M002-F01：解除员工显式拒绝走授权申请 user_permission_deny_removal，获批后只删员工显式拒绝行。
+                                List<String> exposed = approvalRequiredPermissions(permissionCodes).stream()
+                                        .map(PermissionDefinition::permissionCode).filter(granted::contains).sorted().toList();
+                                if (!exposed.isEmpty()) {
+                                    throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL",
+                                            "移除显式拒绝将使以下须审批的权限生效，须经授出审批（员工显式拒绝请提交『解除员工显式拒绝』授权申请；"
+                                                    + "岗位高危挂起须经挂起单审批释放）：" + exposed);
+                                }
+                            }
+                            // M002-F05（P0-1）：解除拒绝会让既有授予来源的码生效，等同直接授予，不得超出操作人自身有效集；须审批码由上方审批闸处理。
+                            AccessActor subject = new AccessActor(targetUser.id(), targetUser.username(), targetUser.accountType(),
+                                    targetUser.organizationId(), targetUser.merchantId(), targetUser.status());
+                            if (authorizationService.isMasterAuthority(subject)) {
+                                // UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）：最高权限目标不走审批闸，被解除的码全部生效，操作人须本人持有。
+                                requireActorCanGrant(permissionCodes);
+                            } else {
+                                boolean wildcard = authorizationService.isPlatformAdmin(subject); // 平台管理员日常通配
+                                requireActorCanGrantImmediate(permissionCodes.stream()
+                                        .filter(code -> wildcard || granted.contains(code)).toList());
                             }
                         }
                         if (set) {
                             repository.saveUserPermissionOverrides(targetUser.id(), permissionCodes, effect,
                                     trimToDefault(r.reason(), r.operatorNote()), actor.id());
+                        } else if (effect == AccessRepository.Effect.DENY) {
+                            // M002-F05：直接解除只删员工显式拒绝；岗位高危挂起只经挂起单释放或范围变更作废。
+                            repository.deleteExplicitDenies(targetUser.id(), permissionCodes);
                         } else {
                             repository.deleteUserPermissionOverrides(targetUser.id(), permissionCodes, effect);
                         }
@@ -1622,7 +1637,10 @@ public class AccessService {
         if (request.validUntil() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写授权失效时间");
         }
-        requireSameOrganization(actor, lockTargetUser(requireText(request.targetUserId(), "target_user_id")));
+        AccessUser target = lockTargetUser(requireText(request.targetUserId(), "target_user_id"));
+        if (enforceApproval) { // M002-F04：审批落地不按终审人组织判定（与角色、员工单独授予落地同口径）
+            requireSameOrganization(actor, target);
+        }
         if (safeList(request.permissionCodes()).isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
         }
@@ -1718,7 +1736,7 @@ public class AccessService {
                 request.operatorNote(),
                 request.targetUserId(),
                 request.roleId()
-        ), false);
+        ), true, false);
         Instant now = Instant.now();
         return new AccessGrantRequestRecord(
                 "agr_" + UUID.randomUUID(),
@@ -1837,6 +1855,13 @@ public class AccessService {
         );
     }
 
+    private void requireGrantSnapshotUnchanged(AccessGrantRequestRecord request) {
+        if (!repository.findGrantFingerprint(request.id())
+                .filter(saved -> saved.equals(authorizationFingerprint(request))).isPresent()) {
+            throw ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "授权内容或归属已变化，请重新申请");
+        }
+    }
+
     private String authorizationFingerprint(AccessGrantRequestRecord request) {
         AccessUser target = requireTargetUser(request.targetUserId());
         List<Object> facts = new ArrayList<>();
@@ -1870,6 +1895,13 @@ public class AccessService {
                     .orElseThrow(() -> ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "岗位配置已变化，请重新申请"));
             facts.add(java.util.Arrays.asList(mapping.id(), mapping.organizationId(), mapping.roleId(),
                     mapping.templateId(), mapping.status()));
+        }
+        if (REQUEST_USER_PERMISSION_DENY_REMOVAL.equals(request.requestType())) {
+            // M002-F06（PGM「显式拒绝优先级最高」）：钉住所解除的员工显式拒绝行；待审期间被重写或删除即 GRANT_SNAPSHOT_CHANGED
+            facts.add(repository.findExplicitDenies(target.id(), request.permissionCodes()).stream()
+                    .map(row -> java.util.Arrays.asList(row.permissionCode(), row.reason(), row.createdBy(),
+                            String.valueOf(row.createdAt())))
+                    .toList());
         }
         facts.add(permissionDefinitions(request.permissionCodes()).stream()
                 .sorted(Comparator.comparing(PermissionDefinition::permissionCode))
@@ -1930,12 +1962,13 @@ public class AccessService {
 
     /**
      * M002-F01：员工单独授予 / 解除员工显式拒绝获批落地。批准本身即授出审批，不再调 requireGrantApprovalIfNeeded；
-     * 锁目标员工行并校验终审人与目标同组织（与角色、临时授权落地同口径）。同码已有显式拒绝时授予行照写，由有效权限扣减使其不生效。
+     * 锁目标员工行，以申请时按申请人校验并钉入授权事实指纹的目标范围与完整审批链为准，不按终审人所属组织判定（M002-F04，与岗位、范围变更、
+     * 角色、临时授权落地同口径）；解除单另在员工行锁下复核所钉的显式拒绝行（M002-F06）。同码已有显式拒绝时授予行照写，由有效权限扣减使其不生效。
      */
     private void landUserPermissionOverride(AccessGrantRequestRecord request, String idempotencyKey) {
         AccessActor approver = authorizationService.currentActor();
         AccessUser target = lockTargetUser(request.targetUserId());
-        requireSameOrganization(approver, target);
+        requireGrantSnapshotUnchanged(request); // M002-F06：审批时的比对在员工行锁之前；显式拒绝各写入口都先锁员工行，此处在锁下复核
         boolean grant = REQUEST_USER_PERMISSION_GRANT.equals(request.requestType());
         int affected = request.permissionCodes().size();
         if (grant) {
@@ -1956,11 +1989,14 @@ public class AccessService {
         );
     }
 
-    private RoleGrantContext resolveRoleGrant(RoleAssignmentRequest request, boolean requireGrantorCanGrant) {
+    private RoleGrantContext resolveRoleGrant(RoleAssignmentRequest request, boolean requireActorScope, boolean requireGrantorCanGrant) {
         AccessActor actor = authorizationService.currentActor();
         AccessUser targetUser = lockTargetUser(requireText(request.userId(), "user_id"));
         RoleRecord role = requireRole(requireText(request.roleId(), "role_id"));
-        requireSameOrganization(actor, targetUser);
+        if (requireActorScope) {
+            // M002-F04（PGM 审批链「逐级审批」「转发不限层级」）：直接写与建单按操作人范围；审批落地以指纹钉住的目标事实与完整审批链为准
+            requireSameOrganization(actor, targetUser);
+        }
         requireRoleAssignableToTarget(role, targetUser);
         if (requireGrantorCanGrant) {
             requireActorCanGrant(role.permissionCodes());

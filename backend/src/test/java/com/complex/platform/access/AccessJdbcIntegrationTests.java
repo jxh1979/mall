@@ -10,6 +10,7 @@ import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.access.dto.UserPermissionOverrideRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.complex.platform.auth.AuthService;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.List;
@@ -828,7 +829,7 @@ class AccessJdbcIntegrationTests {
                 "SELECT effect || '/' || origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ?",
                 String.class, user, code)).containsExactly("grant/explicit");
 
-        // 直接移除入口（闸门放行时）按码删该 effect 的全部来源行：挂起行与显式行一起删
+        // 仓储方法按码删该 effect 的全部来源行：挂起行与显式行一起删（服务层直接移除拒绝自 M002-F05 起改走 deleteExplicitDenies）
         repository.saveHighRiskHolds(user, List.of(code), "岗位高危挂起", "seed-admin");
         repository.saveUserPermissionOverrides(user, List.of(code), AccessRepository.Effect.DENY, "员工显式拒绝", "seed-admin");
         assertThat(repository.deleteUserPermissionOverrides(user, List.of(code), AccessRepository.Effect.DENY)).isEqualTo(2);
@@ -911,6 +912,128 @@ class AccessJdbcIntegrationTests {
                 String.class, f.target(), f.code())).containsExactly("grant/explicit");
     }
 
+    // M002-F04：真库回归——审批链上的终审人已属其他组织，员工单独授予获批后照常落地（不按终审人组织判定）。
+    @Test
+    void crossOrganizationChainApproverLandsUserPermissionGrantOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String requestId = m002ApplyOverride(f, "user_permission_grant", "m002-j1");
+        jdbcTemplate.update("UPDATE access_users SET organization_id = 'org_other' WHERE id = ?", f.boss());
+
+        m002ActAs(f.boss(), "staff", "org_other", () -> accessService.reviewGrant(requestId, m002Approve("m002-j1-review-" + f.suffix())));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("applied");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT effect || '/' || origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ?",
+                String.class, f.target(), f.code())).containsExactly("grant/explicit");
+    }
+
+    // M002-F04：真库回归——critical 码按库内授权政策走最高权限（链尾 master 节点），最高权限终审后照常落地。
+    @Test
+    void masterAuthorityFinalNodeLandsCriticalUserPermissionGrantOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        jdbcTemplate.update("UPDATE permissions SET risk_level = 'critical' WHERE permission_code = ?", f.code());
+        String requestId = m002ApplyOverride(f, "user_permission_grant", "m002-j2");
+        String reviewId = jdbcTemplate.queryForObject("SELECT review_id FROM access_grant_requests WHERE id = ?", String.class, requestId);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT approver_kind FROM supervisor_review_nodes WHERE review_id = ? ORDER BY seq", String.class, reviewId))
+                .containsExactly("user", "master");
+
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(requestId, m002Approve("m002-j2-boss-" + f.suffix())));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("pending");
+        m002ActAsMaster(() -> accessService.reviewGrant(requestId, m002Approve("m002-j2-master-" + f.suffix())));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("applied");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT effect || '/' || origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ?",
+                String.class, f.target(), f.code())).containsExactly("grant/explicit");
+    }
+
+    // M002-F05：真库回归——目标经角色持有日常码并有显式拒绝，不持有该码的操作人直接解除被拒，显式拒绝保留。
+    @Test
+    void dailyDenyRemovalByANonHolderIsRejectedOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String daily = "m002.override_test.daily_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 测试日常权限', 'ops', 'medium', FALSE, 'active')
+                """, daily);
+        String role = "role_m002_daily_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 日常角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(daily), null));
+        repository.assignUserRole(f.target(), role);
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.setUserPermissionOverrides(f.target(), new UserPermissionOverrideRequest(
+                "m002-j3-deny-" + f.suffix(), "M002", List.of(daily), "deny", "员工显式拒绝")));
+
+        assertThatThrownBy(() -> m002ActAs(f.boss(), "staff", () -> accessService.removeUserPermissionOverrides(f.target(),
+                new UserPermissionOverrideRequest("m002-j3-remove-" + f.suffix(), "M002", List.of(daily), "deny", "解除"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        assertThat(denyOrigins(f.target(), daily)).containsExactly("explicit");
+    }
+
+    // M002-F06：真库回归——解除单待审期间，另一人以新理由重写同码显式拒绝；批准报 GRANT_SNAPSHOT_CHANGED，新拒绝保留、申请仍待审。
+    @Test
+    void explicitDenyRewrittenByAnotherOperatorVoidsThePendingRemovalOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String requestId = m002PendingDenyRemoval(f, "m002-j4");
+        m002ActAs(f.boss(), "staff", () -> accessService.setUserPermissionOverrides(f.target(), new UserPermissionOverrideRequest(
+                "m002-j4-redeny-" + f.suffix(), "M002", List.of(f.code()), "deny", "再次停权")));
+
+        assertThatThrownBy(() -> m002ActAs(f.boss(), "staff",
+                () -> accessService.reviewGrant(requestId, m002Approve("m002-j4-review-" + f.suffix()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED"));
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT reason || '/' || created_by FROM user_permission_overrides WHERE user_id = ? AND permission_code = ? AND origin = 'explicit'",
+                String.class, f.target(), f.code())).containsExactly("再次停权/" + f.boss());
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("pending");
+    }
+
+    // M002-F06：真库回归——拒绝行的写入时间也钉入指纹（同人同理由在另一事务重写时只有 created_at 变化）。
+    @Test
+    void explicitDenyVersionIsPinnedByCreatedAtOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String requestId = m002PendingDenyRemoval(f, "m002-j5");
+        jdbcTemplate.update("""
+                UPDATE user_permission_overrides SET created_at = created_at + interval '1 second'
+                 WHERE user_id = ? AND permission_code = ? AND origin = 'explicit'
+                """, f.target(), f.code());
+
+        assertThatThrownBy(() -> m002ActAs(f.boss(), "staff",
+                () -> accessService.reviewGrant(requestId, m002Approve("m002-j5-review-" + f.suffix()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED"));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("explicit");
+    }
+
+    // M002-F03（R-001）：真库回归——USB 最高权限会话的有效集 = permissions 表全部 active 码（含须审批高危码）− 显式拒绝。
+    @Test
+    void masterAuthorityEffectiveSetIsTheWholeActiveDictionaryOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        EffectivePermissions[] result = new EffectivePermissions[1];
+        m002ActAsMaster(() -> result[0] = authorizationService.effectivePermissions());
+        List<String> active = jdbcTemplate.queryForList("SELECT permission_code FROM permissions WHERE status = 'active'", String.class);
+        assertThat(result[0].grants()).contains(f.code())
+                .containsExactlyInAnyOrderElementsOf(active.stream().filter(code -> !result[0].denies().contains(code)).toList());
+        assertThat(result[0].wildcard()).isFalse();
+    }
+
+    private String m002ApplyOverride(M002Fixture f, String requestType, String key) {
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
+                key + "-apply-" + f.suffix(), "M002", List.of(), requestType, f.target(), null, null, null, null, null, null,
+                List.of(f.code()), null, null, null, "员工覆盖授权申请")));
+        return m002PendingRequestId(f.target(), requestType);
+    }
+
+    private String m002PendingDenyRemoval(M002Fixture f, String key) {
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.setUserPermissionOverrides(f.target(), new UserPermissionOverrideRequest(
+                key + "-deny-" + f.suffix(), "M002", List.of(f.code()), "deny", "员工显式拒绝")));
+        return m002ApplyOverride(f, "user_permission_deny_removal", key);
+    }
+
+    private AccessGrantReviewRequest m002Approve(String key) {
+        return new AccessGrantReviewRequest(key, "M002", List.of(), "approve", "同意");
+    }
+
     // M002：真库授权申请夹具（随测试事务回滚）——自建一个 high、须审批的测试权限码（不依赖种子风险档）、平台管理员发起人、
     // 其直接上级（审批人，org_hierarchy）与目标员工；授权政策取库内 access_grant（high → 上两级）。
     private M002Fixture m002ApprovalFixture() {
@@ -934,8 +1057,22 @@ class AccessJdbcIntegrationTests {
 
     // 以生产过滤器放入的 AccessActor 身份在当前线程执行；异常原样抛出。
     private void m002ActAs(String id, String accountType, Runnable action) {
+        m002ActAs(id, accountType, "org", action);
+    }
+
+    private void m002ActAs(String id, String accountType, String organizationId, Runnable action) {
+        m002ActAs(new AccessActor(id, id, accountType, organizationId, null, "active"), action);
+    }
+
+    // USB 最高权限会话（与 ProductionAuthService 签发的主体同一组身份字段）。
+    private void m002ActAsMaster(Runnable action) {
+        m002ActAs(new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, "active"), action);
+    }
+
+    private void m002ActAs(AccessActor actor, Runnable action) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new AccessActor(id, id, accountType, "org", null, "active"), null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+                actor, null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
         try {
             action.run();
         } finally {

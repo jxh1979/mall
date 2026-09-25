@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -149,7 +149,7 @@ public class AuthorizationService implements CallerScopeResolver {
      */
     public EffectivePermissions effectivePermissions() {
         AccessActor actor = currentActor();
-        return computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor));
+        return computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor));
     }
 
     /** 指定用户的有效权限集（平台管理用；调用方须先校验 {@code access.user.view}）。 */
@@ -167,15 +167,12 @@ public class AuthorizationService implements CallerScopeResolver {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权查询其他商户的用户");
             }
         }
-        Optional<AccessUser> target = Optional.of(user);
-        boolean wildcard = target
-                .map(account -> "active".equals(account.status())
-                        && "platform_admin".equals(normalize(account.accountType())))
-                .orElse(false);
-        return computeEffectivePermissions(userId, wildcard);
+        AccessActor subject = new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(),
+                user.merchantId(), user.status());
+        return computeEffectivePermissions(userId, isPlatformAdminBridge(subject), isMasterAuthority(subject));
     }
 
-    private EffectivePermissions computeEffectivePermissions(String userId, boolean wildcard) {
+    private EffectivePermissions computeEffectivePermissions(String userId, boolean platformAdmin, boolean master) {
         Instant checkedAt = Instant.now();
         java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
         List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
@@ -197,9 +194,11 @@ public class AuthorizationService implements CallerScopeResolver {
                 .sorted()
                 .toList();
         java.util.Set<String> effective = new java.util.TreeSet<>(grants);
-        if (wildcard) {
+        // M002-F03（R-001「有效集并入全部权限字典，显式拒绝仍优先」）：最高权限并入全部 active 码，与 permissionGrant 对最高权限的放行同口径；
+        // 平台管理员只并入日常码。
+        if (platformAdmin || master) {
             accessRepository.listPermissions().stream()
-                    .filter(p -> SessionIssuer.MASTER_USER_ID.equals(userId) || daily.get().contains(p.permissionCode()))
+                    .filter(p -> master || daily.get().contains(p.permissionCode()))
                     .map(PermissionDefinition::permissionCode).forEach(effective::add);
         }
         effective.removeAll(denies);

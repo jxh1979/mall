@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.auth.AuthService;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -22,6 +23,7 @@ import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.access.dto.PositionRoleTemplateRequest;
 import com.complex.platform.access.dto.RoleAssignmentRequest;
+import com.complex.platform.access.dto.RoleRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
@@ -1206,18 +1208,258 @@ class AccessServiceTests {
         assertThat(accessRepository.grantRequests.values()).noneMatch(g -> "user_permission_deny_removal".equals(g.requestType()));
     }
 
-    // M002-F01：落地时校验终审人与目标同组织（与角色、临时授权落地同口径）——跨组织终审人落地被拒，不写授予，申请不变为已生效。
+    // M002-F04（PGM 审批链「逐级审批」「转发不限层级」）：落地不按终审人所属组织判定——其他组织的链上终审人批准后员工单独授予照常落地。
     @Test
-    void userPermissionOverrideLandingRejectsCrossOrganizationApprover() {
+    void userPermissionOverrideLandsWhenACrossOrganizationChainApproverFinalizes() {
         m002HighRiskFixture("usr_m002_cross", null, "lvl_m1_lower");
         AccessGrantRequestRecord pending = service.applyGrant(m002Apply(
                 "m002-apply-cross", "user_permission_grant", "usr_m002_cross", List.of(M002_CODE)));
 
         authenticateAsOrgUser("usr_boss", "boss", "org_b");
-        assertThatThrownBy(() -> service.reviewGrant(pending.id(), m002Approve("m002-review-cross")))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
-        assertThat(overrideSources("usr_m002_cross", M002_CODE, AccessRepository.Effect.GRANT)).isEmpty();
+        assertThat(service.reviewGrant(pending.id(), m002Approve("m002-review-cross")).status()).isEqualTo("applied");
+        assertThat(overrideSources("usr_m002_cross", M002_CODE, AccessRepository.Effect.GRANT))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "access.user_permission_override.set".equals(event.eventName()))
+                .extracting(event -> event.metadata().get("grant_request_id"))
+                .containsExactly(pending.id());
+    }
+
+    // M002-F04：critical 码的授权政策为最高权限（链尾 master 节点）；最高权限末节点终审后，员工单独授予与解除单都照常落地。
+    @Test
+    void criticalOverrideRequestsLandAfterMasterAuthorityFinalNode() {
+        m002HighRiskFixture("usr_m002_top", null, "lvl_m1_lower");
+        accessRepository.markRequiresApproval(M002_CODE, "critical");
+        accessRepository.users.put("usr_m002_top_grant", new AccessUser(
+                "usr_m002_top_grant", "usr_m002_top_grant", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        m002ExplicitDeny("usr_m002_top", "m002-deny-top");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-assign-top", null, "usr_m002_top", "ops_manager", "lvl_m1_lower", null, null, null));
+        List<AccessGrantRequestRecord> pending = List.of(
+                service.applyGrant(m002Apply("m002-apply-top-grant", "user_permission_grant", "usr_m002_top_grant", List.of(M002_CODE))),
+                service.applyGrant(m002Apply("m002-apply-top-removal", "user_permission_deny_removal", "usr_m002_top", List.of(M002_CODE))));
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        for (AccessGrantRequestRecord request : pending) {
+            assertThat(service.reviewGrant(request.id(), m002Approve("m002-review-top-boss-" + request.id())).status()).isEqualTo("pending");
+        }
+        authenticateAsMasterAuthority();
+        for (AccessGrantRequestRecord request : pending) {
+            assertThat(service.reviewGrant(request.id(), m002Approve("m002-review-top-master-" + request.id())).status()).isEqualTo("applied");
+        }
+        assertThat(overrideSources("usr_m002_top_grant", M002_CODE, AccessRepository.Effect.GRANT))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+        assertThat(overrideSources("usr_m002_top", M002_CODE, AccessRepository.Effect.DENY)).isEmpty();
+        authenticateAsPlatformAdmin("seed-org");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_m002_top").grants()).contains(M002_CODE);
+    }
+
+    // M002-F04：角色授予由最高权限末节点终审后照常落地。
+    @Test
+    void userRoleGrantLandsWhenMasterAuthorityFinalizes() {
+        m002HighRiskFixture("usr_m002_role_top", null, "lvl_m1_lower");
+        accessRepository.markRequiresApproval(M002_CODE, "critical");
+        AccessGrantRequestRecord pending = service.applyGrant(new AccessGrantApplyRequest(
+                "m002-apply-role-top", "M002", List.of(), "user_role", "usr_m002_role_top", "role_ops_check", null, null, null, null, null,
+                null, null, null, false, "角色授予申请"));
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThat(service.reviewGrant(pending.id(), m002Approve("m002-review-role-top-boss")).status()).isEqualTo("pending");
+        authenticateAsMasterAuthority();
+        assertThat(service.reviewGrant(pending.id(), m002Approve("m002-review-role-top-master")).status()).isEqualTo("applied");
+        assertThat(accessRepository.userRoles.get("usr_m002_role_top")).contains("role_ops_check");
+    }
+
+    // M002-F04：临时授权由其他组织的链上终审人批准后照常落地。
+    @Test
+    void temporaryPermissionLandsWhenCrossOrganizationChainApproverFinalizes() {
+        m002HighRiskFixture("usr_m002_temp_cross", null, "lvl_m1_lower");
+        AccessGrantRequestRecord pending = service.applyGrant(new AccessGrantApplyRequest(
+                "m002-apply-temp-cross", "M002", List.of(), "temporary_permission", "usr_m002_temp_cross", null, null, null, null, null, null,
+                List.of(M002_CODE), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2099-01-01T00:00:00Z"), false, "临时授权申请"));
+
+        authenticateAsOrgUser("usr_boss", "boss", "org_b");
+        assertThat(service.reviewGrant(pending.id(), m002Approve("m002-review-temp-cross")).status()).isEqualTo("applied");
+        assertThat(accessRepository.temporaryGrants.values()).extracting(TemporaryGrant::targetUserId)
+                .containsExactly("usr_m002_temp_cross");
+    }
+
+    // M002-F04 守护：去掉终审人组织闸后，目标范围由授权事实指纹接管——待审期间目标换组织即 GRANT_SNAPSHOT_CHANGED，不写授予。
+    @Test
+    void userPermissionGrantApprovalRejectedWhenTheTargetMovesOrganizationWhilePending() {
+        m002HighRiskFixture("usr_m002_moved", null, "lvl_m1_lower");
+        AccessGrantRequestRecord pending = service.applyGrant(m002Apply(
+                "m002-apply-moved", "user_permission_grant", "usr_m002_moved", List.of(M002_CODE)));
+        accessRepository.users.put("usr_m002_moved", new AccessUser(
+                "usr_m002_moved", "usr_m002_moved", "staff", "org_b", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThatThrownBy(() -> service.reviewGrant(pending.id(), m002Approve("m002-review-moved")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED"));
+        assertThat(overrideSources("usr_m002_moved", M002_CODE, AccessRepository.Effect.GRANT)).isEmpty();
         assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("pending");
+    }
+
+    // M002-F04 守护：直接写入口与建单仍按操作人 / 申请人范围——其他组织的操作人直接装配角色、直接临时授权、申请角色授予都被拒。
+    @Test
+    void directWritesAndRoleGrantRequestsStillRequireTheActorsOrganization() {
+        m002HighRiskFixture("usr_m002_direct", null, "lvl_m1_lower");
+        authenticateAsOrgUser("usr_requester", "requester", "org_b");
+        assertThatThrownBy(() -> service.assignUserRole(new RoleAssignmentRequest(
+                "m002-direct-role", null, "usr_m002_direct", "role_ops_check")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+        assertThatThrownBy(() -> service.createTemporaryGrant(new TemporaryGrantRequest(
+                "m002-direct-temp", null, List.of(), "usr_m002_direct", List.of(M002_CODE), null, Instant.parse("2099-01-01T00:00:00Z"), false, "r")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+        assertThatThrownBy(() -> service.applyGrant(new AccessGrantApplyRequest(
+                "m002-direct-apply-role", "M002", List.of(), "user_role", "usr_m002_direct", "role_ops_check", null, null, null, null, null,
+                null, null, null, false, "角色授予申请")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+        assertThat(accessRepository.userRoles.getOrDefault("usr_m002_direct", Set.of())).isEmpty();
+        assertThat(accessRepository.temporaryGrants.values()).isEmpty();
+        assertThat(accessRepository.grantRequests.values()).isEmpty();
+    }
+
+    // M002-F05（P0-1）：直接解除显式拒绝会让既有授予来源的日常码生效，操作人本人不持有该码即拒绝、拒绝行保留；持有后可正常解除。
+    @Test
+    void denyRemovalCannotExposeADailyCodeTheActorDoesNotHold() {
+        m002ViewDenyFixture("usr_m002_view_target");
+        accessRepository.users.put("usr_m002_view_operator", new AccessUser(
+                "usr_m002_view_operator", "usr_m002_view_operator", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_m002_view_operator", "view-operator", "seed-org");
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides("usr_m002_view_target", m002RemoveDeny("m002-view-remove-1", M002_VIEW)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        assertThat(overrideSources("usr_m002_view_target", M002_VIEW, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+
+        accessRepository.userRoles.put("usr_m002_view_operator", new LinkedHashSet<>(Set.of("role_view")));
+        service.removeUserPermissionOverrides("usr_m002_view_target", m002RemoveDeny("m002-view-remove-2", M002_VIEW));
+        assertThat(overrideSources("usr_m002_view_target", M002_VIEW, AccessRepository.Effect.DENY)).isEmpty();
+        authenticateAsPlatformAdmin("seed-org");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_m002_view_target").grants()).contains(M002_VIEW);
+    }
+
+    // M002-F05：员工不能自行解除上级写给自己的日常码显式拒绝（本人有效集已扣掉该码）。
+    @Test
+    void denyRemovalCannotSelfUnblockADailyCode() {
+        m002ViewDenyFixture("usr_m002_self");
+        authenticateAsOrgUser("usr_m002_self", "self", "seed-org");
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides("usr_m002_self", m002RemoveDeny("m002-self-remove", M002_VIEW)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        assertThat(overrideSources("usr_m002_self", M002_VIEW, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    // M002-F05：平台管理员目标没有授予行，日常码经通配生效——解除其拒绝同样要求操作人本人持有该码。
+    @Test
+    void denyRemovalOnPlatformAdminTargetRequiresTheActorToHoldTheCode() {
+        accessRepository.users.put("usr_m002_pa", new AccessUser(
+                "usr_m002_pa", "usr_m002_pa", "platform_admin", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveUserPermissionOverrides("usr_m002_pa", List.of(M002_VIEW), AccessRepository.Effect.DENY, "停权", "usr_admin");
+        accessRepository.users.put("usr_m002_pa_operator", new AccessUser(
+                "usr_m002_pa_operator", "usr_m002_pa_operator", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_m002_pa_operator", "pa-operator", "seed-org");
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides("usr_m002_pa", m002RemoveDeny("m002-pa-remove", M002_VIEW)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        assertThat(overrideSources("usr_m002_pa", M002_VIEW, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    // M002-F05 / UNRULED-C（操作员 2026-09-25「不走审批，保持现状」）：最高权限目标不走审批闸，但被解除的码全部生效，操作人须本人持有每一个码。
+    @Test
+    void denyRemovalOnMasterAuthorityTargetSkipsTheApprovalGateButRequiresTheActorToHoldEveryCode() {
+        m002HighRiskFixture("usr_m002_unused", null, "lvl_m1_lower");
+        accessRepository.users.put(SessionIssuer.MASTER_USER_ID, new AccessUser(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, List.of(M002_CODE), AccessRepository.Effect.DENY, "停权", "usr_admin");
+        accessRepository.users.put("usr_m002_pc_staff", new AccessUser(
+                "usr_m002_pc_staff", "usr_m002_pc_staff", "staff", "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_m002_pc_staff", "pc-staff", "platform-company");
+        assertThatThrownBy(() -> service.removeUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, m002RemoveDeny("m002-master-remove-1", M002_CODE)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, M002_CODE, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.removeUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, m002RemoveDeny("m002-master-remove-2", M002_CODE));
+        assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, M002_CODE, AccessRepository.Effect.DENY)).isEmpty();
+    }
+
+    // M002-F05：直接解除只删员工显式拒绝，岗位高危挂起行保留（只经挂起单释放或范围变更作废）。
+    @Test
+    void directDenyRemovalDeletesOnlyTheExplicitDeny() {
+        m002HighRiskFixture("usr_m002_direct_both", null, "lvl_m1_lower");
+        accessRepository.saveHighRiskHolds("usr_m002_direct_both", List.of(M002_CODE), "岗位高危挂起", "usr_admin");
+        accessRepository.saveUserPermissionOverrides("usr_m002_direct_both", List.of(M002_CODE), AccessRepository.Effect.DENY, "停权", "usr_admin");
+        service.removeUserPermissionOverrides("usr_m002_direct_both", m002RemoveDeny("m002-direct-both-remove", M002_CODE));
+        assertThat(overrideSources("usr_m002_direct_both", M002_CODE, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.POSITION_HOLD);
+    }
+
+    // M002-F06（PGM「显式拒绝优先级最高」）：解除单钉住所解除的拒绝行——待审期间该拒绝被重写，批准即 GRANT_SNAPSHOT_CHANGED，新拒绝保留、码不生效。
+    @Test
+    void denyRemovalApprovalRejectedWhenTheExplicitDenyIsRewrittenWhilePending() {
+        m002HighRiskFixture("usr_m002_rewrite", null, "lvl_m1_lower");
+        m002ExplicitDeny("usr_m002_rewrite", "m002-deny-rewrite-1");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-assign-rewrite", null, "usr_m002_rewrite", "ops_manager", "lvl_m1_lower", null, null, null));
+        AccessGrantRequestRecord pending = service.applyGrant(m002Apply(
+                "m002-apply-rewrite", "user_permission_deny_removal", "usr_m002_rewrite", List.of(M002_CODE)));
+        m002ExplicitDeny("usr_m002_rewrite", "m002-deny-rewrite-2");
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThatThrownBy(() -> service.reviewGrant(pending.id(), m002Approve("m002-review-rewrite")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED"));
+        assertThat(overrideSources("usr_m002_rewrite", M002_CODE, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+        assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("pending");
+        authenticateAsPlatformAdmin("seed-org");
+        assertThat(authorizationService.effectivePermissionsForUser("usr_m002_rewrite").grants()).doesNotContain(M002_CODE);
+    }
+
+    // M002-F06：审批时的比对在锁员工行之前——落地在员工行锁下复核所钉的拒绝行，锁前刚被重写即 GRANT_SNAPSHOT_CHANGED，新拒绝保留。
+    @Test
+    void denyRemovalLandingRechecksTheExplicitDenyUnderTheTargetLock() {
+        m002HighRiskFixture("usr_m002_race", null, "lvl_m1_lower");
+        m002ExplicitDeny("usr_m002_race", "m002-deny-race");
+        AccessGrantRequestRecord pending = service.applyGrant(m002Apply(
+                "m002-apply-race", "user_permission_deny_removal", "usr_m002_race", List.of(M002_CODE)));
+        accessRepository.beforeNextUserLock = () -> accessRepository.saveUserPermissionOverrides(
+                "usr_m002_race", List.of(M002_CODE), AccessRepository.Effect.DENY, "并发再次停权", "usr_other_admin");
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThatThrownBy(() -> service.reviewGrant(pending.id(), m002Approve("m002-review-race")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED"));
+        assertThat(accessRepository.findExplicitDenies("usr_m002_race", List.of(M002_CODE)))
+                .extracting(AccessRepository.ExplicitDenyRow::reason).containsExactly("并发再次停权");
+    }
+
+    // M002-F03（R-001「有效集并入全部权限字典，显式拒绝仍优先」）：最高权限没有预授角色也能建含高危码的角色（不再报超出本人权限）。
+    @Test
+    void masterAuthorityCreatesARoleWithoutPreAssignedRoles() {
+        accessRepository.markRequiresApproval(M002_CODE, "critical");
+        authenticateAsMasterAuthority();
+        RoleRecord role = service.createRole(new RoleRequest(
+                "m002-master-role", "M002", List.of(), "最高权限建角色", null, List.of(M002_CODE, M002_VIEW), "project"));
+        assertThat(accessRepository.roles.get(role.id()).permissionCodes()).containsExactly(M002_CODE, M002_VIEW);
+    }
+
+    // M002-F03：最高权限的有效集（本人会话与平台管理员查看）= 全部 active 字典码 − 显式拒绝；wildcard 标志保持 false。
+    @Test
+    void masterAuthorityEffectiveSetIsTheWholeDictionaryMinusExplicitDenies() {
+        accessRepository.markRequiresApproval(M002_CODE, "critical");
+        accessRepository.users.put(SessionIssuer.MASTER_USER_ID, new AccessUser(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, List.of("governance.supervisor_review.view"),
+                AccessRepository.Effect.DENY, "停权", "usr_admin");
+
+        EffectivePermissions viewed = authorizationService.effectivePermissionsForUser(SessionIssuer.MASTER_USER_ID);
+        assertThat(viewed.grants()).containsExactlyInAnyOrderElementsOf(accessRepository.permissions.keySet().stream()
+                .filter(code -> !"governance.supervisor_review.view".equals(code)).toList());
+        assertThat(viewed.denies()).containsExactly("governance.supervisor_review.view");
+        assertThat(viewed.wildcard()).isFalse();
+        authenticateAsMasterAuthority();
+        assertThat(authorizationService.effectivePermissions().grants()).containsExactlyElementsOf(viewed.grants());
     }
 
     // M002：共用装配——check 标为须审批高危；usr_admin（平台管理员、申请人）的直接上级为 usr_boss；
@@ -1258,6 +1500,22 @@ class AccessServiceTests {
 
     private AccessGrantReviewRequest m002Approve(String idempotencyKey) {
         return new AccessGrantReviewRequest(idempotencyKey, "approve", List.of(), "approve", "ok");
+    }
+
+    private static final String M002_VIEW = "ops.production_readiness.view";
+
+    // M002-F05：日常码装配——目标经 role_view 持有 view，并有一条员工显式拒绝。
+    private void m002ViewDenyFixture(String targetUserId) {
+        accessRepository.users.put(targetUserId, new AccessUser(
+                targetUserId, targetUserId, "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_view", new RoleRecord(
+                "role_view", "view", "Viewer", "project", "active", Instant.parse("2026-06-14T00:00:00Z"), List.of(M002_VIEW), null));
+        accessRepository.userRoles.put(targetUserId, new LinkedHashSet<>(Set.of("role_view")));
+        accessRepository.saveUserPermissionOverrides(targetUserId, List.of(M002_VIEW), AccessRepository.Effect.DENY, "停权", "usr_admin");
+    }
+
+    private UserPermissionOverrideRequest m002RemoveDeny(String idempotencyKey, String code) {
+        return new UserPermissionOverrideRequest(idempotencyKey, null, List.of(code), "deny", "解除显式拒绝");
     }
 
     private List<AccessRepository.Source> overrideSources(String userId, String code, AccessRepository.Effect effect) {
@@ -2389,6 +2647,17 @@ class AccessServiceTests {
         ));
     }
 
+    // M002：USB 最高权限会话（与 ProductionAuthService 签发的主体同一组身份字段）。
+    private void authenticateAsMasterAuthority() {
+        AuthService.UserRecord user = new AuthService.UserRecord(
+                SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, "hash", SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")
+        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                user, "token", List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
+        ));
+    }
+
     private void authenticateAsOrgUser(String id, String username, String organizationId) {
         AuthService.UserRecord user = new AuthService.UserRecord(
                 id, username, "hash", "staff", organizationId, null, "active",
@@ -2456,17 +2725,31 @@ class AccessServiceTests {
         ));
         final Map<String, StaffLevelAssignment> staffLevelAssignments = new LinkedHashMap<>();
         final List<PermissionEffect> overrides = new ArrayList<>();
+        // M002-F06：覆盖行的原因 / 写入人 / 写入时间（按 sourceId）；每写一次时间递增，对应 JDBC upsert 的 now()。
+        final Map<String, ExplicitDenyRow> overrideRows = new LinkedHashMap<>();
+        long overrideWrites;
+        Runnable beforeNextUserLock; // M002-F06：下一次锁员工行前执行一次（模拟锁前的并发写）
 
         // M002-F02：与 JdbcAccessRepository 同语义——员工显式行（USER_OVERRIDE）与岗位高危挂起行（POSITION_HOLD）按来源分行，
-        // upsert 只覆盖同来源的行；deleteUserPermissionOverrides 删该码该 effect 的全部来源。
+        // upsert 只覆盖同来源的行；deleteUserPermissionOverrides 删该码该 effect 的全部来源（服务层直接移除拒绝自 M002-F05 起只删显式行）。
         @Override
         public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
-            upsertOverrides(userId, permissionCodes, effect, Source.USER_OVERRIDE);
+            upsertOverrides(userId, permissionCodes, effect, Source.USER_OVERRIDE, reason, createdBy);
         }
 
         @Override
         public void saveHighRiskHolds(String userId, List<String> permissionCodes, String reason, String createdBy) {
-            upsertOverrides(userId, permissionCodes, Effect.DENY, Source.POSITION_HOLD);
+            upsertOverrides(userId, permissionCodes, Effect.DENY, Source.POSITION_HOLD, reason, createdBy);
+        }
+
+        @Override
+        public List<ExplicitDenyRow> findExplicitDenies(String userId, List<String> permissionCodes) {
+            return overrides.stream()
+                    .filter(o -> o.userId().equals(userId) && o.effect() == Effect.DENY && o.source() == Source.USER_OVERRIDE
+                            && permissionCodes.contains(o.permissionCode()))
+                    .map(o -> overrideRows.get(o.sourceId()))
+                    .sorted(java.util.Comparator.comparing(ExplicitDenyRow::permissionCode))
+                    .toList();
         }
 
         @Override
@@ -2486,11 +2769,13 @@ class AccessServiceTests {
             return removeOverrides(userId, permissionCodes, Effect.DENY, Source.USER_OVERRIDE);
         }
 
-        private void upsertOverrides(String userId, List<String> permissionCodes, Effect effect, Source source) {
+        private void upsertOverrides(String userId, List<String> permissionCodes, Effect effect, Source source,
+                                     String reason, String createdBy) {
             removeOverrides(userId, permissionCodes, effect, source);
             for (String code : permissionCodes) {
-                overrides.add(new PermissionEffect(userId, code, effect, source,
-                        userId + ":" + code + ":" + effect + ":" + source, null, null, false, false));
+                String sourceId = userId + ":" + code + ":" + effect + ":" + source;
+                overrides.add(new PermissionEffect(userId, code, effect, source, sourceId, null, null, false, false));
+                overrideRows.put(sourceId, new ExplicitDenyRow(code, reason, createdBy, Instant.ofEpochSecond(++overrideWrites)));
             }
         }
 
@@ -2569,6 +2854,11 @@ class AccessServiceTests {
 
         @Override
         public void lockAccessUsers(List<String> userIds) {
+            Runnable hook = beforeNextUserLock;
+            beforeNextUserLock = null;
+            if (hook != null) {
+                hook.run();
+            }
             lockedUsers.addAll(userIds);
             userIds.forEach(userId -> lockOrder.add("user:" + userId));
         }
