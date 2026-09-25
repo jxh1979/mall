@@ -50265,7 +50265,9 @@
             "enum": [
               "user_role",
               "user_position",
-              "temporary_permission"
+              "temporary_permission",
+              "user_permission_grant",
+              "user_permission_deny_removal"
             ]
           },
           "target_user_id": {
@@ -50308,7 +50310,7 @@
           },
           "permission_codes": {
             "type": "array",
-            "description": "临时权限码；temporary_permission 类型必填。",
+            "description": "权限码；temporary_permission、user_permission_grant、user_permission_deny_removal 类型必填。",
             "items": {
               "type": "string",
               "description": "权限码。",

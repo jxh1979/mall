@@ -192,6 +192,9 @@ describe("M038 访问治理页回归", () => {
     { id: "gr-a", request_type: "user_scope_change", target_user_id: "u-1", status: "applied" },
     { id: "gr-b", request_type: "position_high_risk_release", target_user_id: "u-1", status: "pending" },
     { id: "gr-c", request_type: "role_permission", target_user_id: "u-1", status: "rejected" },
+    // M002-F01：员工单独授予 / 解除员工显式拒绝两类申请同样中文上屏。
+    { id: "gr-d", request_type: "user_permission_grant", target_user_id: "u-1", status: "pending" },
+    { id: "gr-e", request_type: "user_permission_deny_removal", target_user_id: "u-1", status: "applied" },
   ];
   const M038_TEMPLATES = [
     { id: "prt-x", position_code: "front_desk", staff_level_id: "lvl_m2_upper", role_id: "role-1", status: "active" },
@@ -231,8 +234,8 @@ describe("M038 访问治理页回归", () => {
     renderM038(() => Promise.resolve(raw({})));
     await waitFor(() => expect(screen.getByTestId("access-grant-request-gr-a")).toBeTruthy());
     const text = screen.getByTestId("access-grant-requests-table").textContent ?? "";
-    for (const label of ["已生效", "待处理", "已驳回", "人员范围变更", "岗位高危权限释放", "角色权限"]) expect(text).toContain(label);
-    for (const code of ["applied", "user_scope_change", "position_high_risk_release", "role_permission"]) expect(text).not.toContain(code);
+    for (const label of ["已生效", "待处理", "已驳回", "人员范围变更", "岗位高危权限释放", "角色权限", "员工单独授予", "解除员工显式拒绝"]) expect(text).toContain(label);
+    for (const code of ["applied", "user_scope_change", "position_high_risk_release", "role_permission", "user_permission_grant", "user_permission_deny_removal"]) expect(text).not.toContain(code);
     fireEvent.click(screen.getByTestId("access-grant-request-gr-a"));
     const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
     expect(drawer).toContain("人员范围变更");

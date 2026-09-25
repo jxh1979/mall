@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.16
+// 文件版本：V0.17
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -968,8 +968,9 @@ class JdbcAccessRepository implements AccessRepository {
                    AND status = 'active'
                 """, Map.of("user_id", userId), this::mapPermissionEffect));
         effects.addAll(jdbcTemplate.query("""
-                SELECT user_id, permission_code, effect, 'USER_OVERRIDE' AS source,
-                       user_id || ':' || permission_code || ':' || effect AS source_id,
+                SELECT user_id, permission_code, effect,
+                       CASE origin WHEN 'position_hold' THEN 'POSITION_HOLD' ELSE 'USER_OVERRIDE' END AS source,
+                       user_id || ':' || permission_code || ':' || effect || ':' || origin AS source_id,
                        NULL::timestamptz AS valid_from, NULL::timestamptz AS valid_until,
                        FALSE AS single_use, FALSE AS consumed
                   FROM user_permission_overrides
@@ -1053,16 +1054,28 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     @Transactional
     public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
+        upsertOverrides(userId, permissionCodes, effect, "explicit", reason, createdBy);
+    }
+
+    @Override
+    @Transactional
+    public void saveHighRiskHolds(String userId, List<String> permissionCodes, String reason, String createdBy) {
+        upsertOverrides(userId, permissionCodes, Effect.DENY, "position_hold", reason, createdBy);
+    }
+
+    // M002-F02：挂起行与员工显式行按 origin 分行，冲突键随主键带上 origin，同码显式拒绝不再改写挂起行。
+    private void upsertOverrides(String userId, List<String> permissionCodes, Effect effect, String origin, String reason, String createdBy) {
         for (String permissionCode : permissionCodes) {
             jdbcTemplate.update("""
-                    INSERT INTO user_permission_overrides (user_id, permission_code, effect, reason, created_at, created_by)
-                    VALUES (:user_id, :permission_code, :effect, :reason, now(), :created_by)
-                    ON CONFLICT (user_id, permission_code, effect)
+                    INSERT INTO user_permission_overrides (user_id, permission_code, effect, origin, reason, created_at, created_by)
+                    VALUES (:user_id, :permission_code, :effect, :origin, :reason, now(), :created_by)
+                    ON CONFLICT (user_id, permission_code, effect, origin)
                     DO UPDATE SET reason = EXCLUDED.reason, created_at = EXCLUDED.created_at, created_by = EXCLUDED.created_by
                     """, new MapSqlParameterSource()
                     .addValue("user_id", userId)
                     .addValue("permission_code", permissionCode)
                     .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                    .addValue("origin", origin)
                     .addValue("reason", reason)
                     .addValue("created_by", createdBy));
         }
@@ -1079,6 +1092,32 @@ class JdbcAccessRepository implements AccessRepository {
                 """, new MapSqlParameterSource()
                 .addValue("user_id", userId)
                 .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                .addValue("permission_codes", permissionCodes));
+    }
+
+    @Override
+    @Transactional
+    public int deleteHighRiskHolds(String userId, List<String> permissionCodes) {
+        return deleteOverridesByOrigin(userId, permissionCodes, Effect.DENY, "position_hold");
+    }
+
+    @Override
+    @Transactional
+    public int deleteExplicitDenies(String userId, List<String> permissionCodes) {
+        return deleteOverridesByOrigin(userId, permissionCodes, Effect.DENY, "explicit");
+    }
+
+    private int deleteOverridesByOrigin(String userId, List<String> permissionCodes, Effect effect, String origin) {
+        return jdbcTemplate.update("""
+                DELETE FROM user_permission_overrides
+                 WHERE user_id = :user_id
+                   AND effect = :effect
+                   AND origin = :origin
+                   AND permission_code IN (:permission_codes)
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                .addValue("origin", origin)
                 .addValue("permission_codes", permissionCodes));
     }
 

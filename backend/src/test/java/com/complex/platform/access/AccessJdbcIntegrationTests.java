@@ -3,8 +3,12 @@ package com.complex.platform.access;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.access.dto.AccessGrantApplyRequest;
+import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
+import com.complex.platform.access.dto.UserPermissionOverrideRequest;
+import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
@@ -777,9 +781,10 @@ class AccessJdbcIntegrationTests {
     }
 
     // M087-I3-01（PGM-1.10.1 范围变更与模板内高危先审后生效）：两种新申请类型必须能在权威 schema 落库；未知类型仍被 CHECK 拒绝。
+    // M002-F01：员工单独授予、解除员工显式拒绝两类申请同样须能落库（V434）。
     @Test
     void scopeChangeAndHighRiskReleaseRequestTypesAreAcceptedByTheGrantRequestCheck() {
-        for (String type : List.of("user_scope_change", "position_high_risk_release")) {
+        for (String type : List.of("user_scope_change", "position_high_risk_release", "user_permission_grant", "user_permission_deny_removal")) {
             jdbcTemplate.update("""
                     INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
                     VALUES (?, ?, 'usr_m087_target', 'pending', 'M087 schema check', 'usr_m087_admin', now(), now())
@@ -791,6 +796,163 @@ class AccessJdbcIntegrationTests {
                 INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
                 VALUES ('agr_m087_unknown', 'user_scope_change_unknown', 'usr_m087_target', 'pending', 'x', 'usr_m087_admin', now(), now())
                 """)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // M002-F02（PGM「显式拒绝优先级最高」）：岗位高危挂起行与员工显式拒绝在真实表上分行存放——同码显式拒绝不改写挂起行，
+    // 两行都作为拒绝进入有效权限来源；释放挂起只删挂起行，解除显式拒绝只删显式行。
+    @Test
+    void positionHoldAndExplicitDenyAreSeparateRows() {
+        String user = "usr_m002_rows";
+        String code = "ops.production_readiness.check";
+        repository.createUser(new AccessUser(user, "m002-rows", "staff", "org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        repository.saveUserPermissionOverrides(user, List.of(code), AccessRepository.Effect.GRANT, "员工单独授予", "seed-admin");
+        repository.saveHighRiskHolds(user, List.of(code), "岗位高危挂起", "seed-admin");
+        repository.saveUserPermissionOverrides(user, List.of(code), AccessRepository.Effect.DENY, "员工显式拒绝", "seed-admin");
+
+        assertThat(denyOrigins(user, code)).containsExactly("explicit", "position_hold");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT reason FROM user_permission_overrides WHERE user_id = ? AND permission_code = ? AND origin = 'position_hold'",
+                String.class, user, code)).isEqualTo("岗位高危挂起");
+        List<AccessRepository.PermissionEffect> denies = repository.findPermissionEffects(user, Instant.parse("2026-06-14T12:00:00Z")).stream()
+                .filter(effect -> effect.effect() == AccessRepository.Effect.DENY && code.equals(effect.permissionCode()))
+                .toList();
+        assertThat(denies).extracting(AccessRepository.PermissionEffect::source)
+                .containsExactlyInAnyOrder(AccessRepository.Source.USER_OVERRIDE, AccessRepository.Source.POSITION_HOLD);
+        assertThat(denies).extracting(AccessRepository.PermissionEffect::sourceId).doesNotHaveDuplicates();
+
+        assertThat(repository.deleteHighRiskHolds(user, List.of(code))).isEqualTo(1);
+        assertThat(denyOrigins(user, code)).containsExactly("explicit");
+        assertThat(repository.deleteExplicitDenies(user, List.of(code))).isEqualTo(1);
+        assertThat(denyOrigins(user, code)).isEmpty();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT effect || '/' || origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ?",
+                String.class, user, code)).containsExactly("grant/explicit");
+
+        // 直接移除入口（闸门放行时）按码删该 effect 的全部来源行：挂起行与显式行一起删
+        repository.saveHighRiskHolds(user, List.of(code), "岗位高危挂起", "seed-admin");
+        repository.saveUserPermissionOverrides(user, List.of(code), AccessRepository.Effect.DENY, "员工显式拒绝", "seed-admin");
+        assertThat(repository.deleteUserPermissionOverrides(user, List.of(code), AccessRepository.Effect.DENY)).isEqualTo(2);
+        assertThat(denyOrigins(user, code)).isEmpty();
+    }
+
+    // M002-F02：origin CHECK——挂起行只能是拒绝。
+    @Test
+    void overrideOriginCheckRejectsGrantHold() {
+        repository.createUser(new AccessUser(
+                "usr_m002_hold_grant", "m002-hold-grant", "staff", "org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO user_permission_overrides (user_id, permission_code, effect, origin)
+                VALUES ('usr_m002_hold_grant', 'ops.production_readiness.check', 'grant', 'position_hold')
+                """))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                .hasMessageContaining("chk_user_permission_overrides_origin");
+    }
+
+    // M002-F02：origin CHECK——只认 explicit / position_hold。
+    @Test
+    void overrideOriginCheckRejectsUnknownOrigin() {
+        repository.createUser(new AccessUser(
+                "usr_m002_other_origin", "m002-other-origin", "staff", "org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO user_permission_overrides (user_id, permission_code, effect, origin)
+                VALUES ('usr_m002_other_origin', 'ops.production_readiness.check', 'deny', 'other')
+                """))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                .hasMessageContaining("chk_user_permission_overrides_origin");
+    }
+
+    // M002-F02：服务级真库回归——定岗挂起 → 员工显式拒绝 → 批准释放单：显式拒绝行仍在，有效权限来源里该码仍是拒绝。
+    @Test
+    void explicitDenyWrittenWhileAHoldIsPendingSurvivesTheReleaseOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String role = "role_m002_" + f.suffix();
+        String template = "tpl_m002_" + f.suffix();
+        String position = "m002_pos_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 测试角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code()), null));
+        repository.createTemplate(baseTemplate(template), List.of());
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_" + f.suffix(), position, "lvl_m1_lower", role, template,
+                "org", "active", f.admin(), Instant.now(), Instant.now()));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-j4-assign-" + f.suffix(), "M002", f.target(), position, "lvl_m1_lower", null, null, null)));
+        String holdId = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.setUserPermissionOverrides(f.target(), new UserPermissionOverrideRequest(
+                "m002-j4-deny-" + f.suffix(), "M002", List.of(f.code()), "deny", "挂起期间员工显式拒绝")));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("explicit", "position_hold");
+
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(holdId, new AccessGrantReviewRequest(
+                "m002-j4-review-" + f.suffix(), "M002", List.of(), "approve", "同意")));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, holdId))
+                .isEqualTo("applied");
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("explicit");
+        assertThat(repository.findPermissionEffects(f.target(), Instant.now()))
+                .filteredOn(effect -> f.code().equals(effect.permissionCode()) && effect.effect() == AccessRepository.Effect.DENY)
+                .extracting(AccessRepository.PermissionEffect::source)
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    // M002-F01：服务级真库回归——员工单独授予申请获批后，覆盖表写入 effect=grant、origin=explicit 的行。
+    @Test
+    void approvedUserPermissionGrantRequestWritesAnExplicitGrantRow() {
+        M002Fixture f = m002ApprovalFixture();
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
+                "m002-j5-apply-" + f.suffix(), "M002", List.of(), "user_permission_grant", f.target(), null, null, null, null, null, null,
+                List.of(f.code()), null, null, null, "员工单独授予申请")));
+        String requestId = m002PendingRequestId(f.target(), "user_permission_grant");
+        assertThat(jdbcTemplate.queryForList("SELECT origin FROM user_permission_overrides WHERE user_id = ?", String.class, f.target()))
+                .isEmpty();
+
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(requestId, new AccessGrantReviewRequest(
+                "m002-j5-review-" + f.suffix(), "M002", List.of(), "approve", "同意")));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("applied");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT effect || '/' || origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ?",
+                String.class, f.target(), f.code())).containsExactly("grant/explicit");
+    }
+
+    // M002：真库授权申请夹具（随测试事务回滚）——自建一个 high、须审批的测试权限码（不依赖种子风险档）、平台管理员发起人、
+    // 其直接上级（审批人，org_hierarchy）与目标员工；授权政策取库内 access_grant（high → 上两级）。
+    private M002Fixture m002ApprovalFixture() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        M002Fixture f = new M002Fixture(suffix, "m002.override_test.high_" + suffix,
+                "usr_m002_admin_" + suffix, "usr_m002_boss_" + suffix, "usr_m002_target_" + suffix);
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 测试高危权限', 'ops', 'high', TRUE, 'active')
+                """, f.code());
+        repository.createUser(new AccessUser(f.admin(), f.admin(), "platform_admin", "org", null, "active", Instant.now()));
+        repository.createUser(new AccessUser(f.boss(), f.boss(), "staff", "org", null, "active", Instant.now()));
+        repository.createUser(new AccessUser(f.target(), f.target(), "staff", "org", null, "active", Instant.now()));
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                f.admin(), f.boss(), f.admin());
+        return f;
+    }
+
+    private record M002Fixture(String suffix, String code, String admin, String boss, String target) {
+    }
+
+    // 以生产过滤器放入的 AccessActor 身份在当前线程执行；异常原样抛出。
+    private void m002ActAs(String id, String accountType, Runnable action) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(id, id, accountType, "org", null, "active"), null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+        try {
+            action.run();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    private String m002PendingRequestId(String targetUserId, String requestType) {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM access_grant_requests WHERE target_user_id = ? AND request_type = ? AND status = 'pending'",
+                String.class, targetUserId, requestType);
+    }
+
+    private List<String> denyOrigins(String userId, String code) {
+        return jdbcTemplate.queryForList(
+                "SELECT origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ? AND effect = 'deny' ORDER BY origin",
+                String.class, userId, code);
     }
 
     // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效」）：范围变更冻结单独模板授予的仓储写路径在真实 schema 上可执行且幂等。

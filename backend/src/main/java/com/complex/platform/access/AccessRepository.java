@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.time.Instant;
 import java.util.List;
@@ -301,13 +301,32 @@ public interface AccessRepository {
         throw new UnsupportedOperationException("updateUserScope");
     }
 
-    /** M006-G-01（PGM-1.10.1 员工单独授予 − 显式拒绝）：员工级覆盖写路径；同一 (user, code, effect) 幂等覆盖。 */
+    /**
+     * M006-G-01（PGM-1.10.1 员工单独授予 − 显式拒绝）：员工级覆盖写路径；同一 (user, code, effect) 幂等覆盖。
+     * M002-F02：只写 origin=explicit 行，岗位高危挂起行另走 {@link #saveHighRiskHolds}。
+     */
     default void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
         throw new UnsupportedOperationException("saveUserPermissionOverrides");
     }
 
+    /** M002-F02：删除该员工这些码、该 effect 的全部行（员工显式行与岗位高危挂起行一并删除）。 */
     default int deleteUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect) {
         throw new UnsupportedOperationException("deleteUserPermissionOverrides");
+    }
+
+    /** M002-F02：写岗位高危挂起行（origin=position_hold，只能是 deny），与员工显式拒绝分行存放。 */
+    default void saveHighRiskHolds(String userId, List<String> permissionCodes, String reason, String createdBy) {
+        throw new UnsupportedOperationException("saveHighRiskHolds");
+    }
+
+    /** M002-F02：只删岗位高危挂起行，员工显式拒绝不动；返回删除行数。 */
+    default int deleteHighRiskHolds(String userId, List<String> permissionCodes) {
+        throw new UnsupportedOperationException("deleteHighRiskHolds");
+    }
+
+    /** M002-F01：只删员工显式拒绝行，岗位高危挂起行不动；返回删除行数。 */
+    default int deleteExplicitDenies(String userId, List<String> permissionCodes) {
+        throw new UnsupportedOperationException("deleteExplicitDenies");
     }
 
     enum Effect {
@@ -319,7 +338,8 @@ public interface AccessRepository {
         ROLE,
         TEMPLATE_APPLICATION,
         TEMPORARY_GRANT,
-        USER_OVERRIDE
+        USER_OVERRIDE,
+        POSITION_HOLD // M002-F02：岗位高危挂起行（覆盖表 origin=position_hold）
     }
 
     record PermissionEffect(

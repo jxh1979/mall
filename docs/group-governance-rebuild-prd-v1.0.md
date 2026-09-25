@@ -1,4 +1,4 @@
-# 集团治理重建 PRD（V1.04·补断点）
+# 集团治理重建 PRD（V1.05·补断点）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -22,7 +22,7 @@
 | 对象 | 枚举/字段 | 取值（当前实现 CHECK / 服务校验） | 业务说明 |
 |---|---|---|---|
 | 职位角色模板 `position_role_templates` | `status` | `active` / `inactive` | 活跃模板参与定岗匹配；同组织、职位、职级仅允许一个活跃模板 |
-| 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` / `user_scope_change` / `position_high_risk_release` | DB CHECK 六类（V392）；申请入口只接受前三类，`user_scope_change`、`position_high_risk_release` 由跨范围定岗与岗位高危挂起在服务内生成，`role_permission` 服务层未开放 |
+| 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` / `user_scope_change` / `position_high_risk_release` / `user_permission_grant` / `user_permission_deny_removal` | DB CHECK 八类（V434）；申请入口接受五类（`user_role`、`user_position`、`temporary_permission`、`user_permission_grant`、`user_permission_deny_removal`），`user_scope_change`、`position_high_risk_release` 由跨范围定岗与岗位高危挂起在服务内生成，`role_permission` 服务层未开放 |
 | 授权申请 `access_grant_requests` | `status` | `pending` / `applied` / `rejected` | 待审批 / 已应用 / 已驳回 |
 | 权限定义 `permissions` | `requires_approval` | `true` / `false` | 实现字段；五类 HTML 强制高危权限必须为 `true`，后台只能新增高危项或提高审批等级，不能关闭强制项 |
 | 权限定义 `permissions` | `risk_level` | V394 已加 CHECK（low / medium / high / critical）；服务按 `critical` / `high` / 其他分档 | `critical` → l3 / 最高审批；`high` → l2 / 上两级；其他 → l1 / 上一级 |
@@ -37,7 +37,7 @@
 - 给用户定岗 `assignUserPosition` 时，系统按目标用户组织、职位、职级查模板，写三类结果：`staff_level_assignments`、`user_position_assignments`、`user_roles`，并套用 `permission_templates`。
 - 跨组织闸保持原 RBAC 规则：非平台管理员不得给其他组织用户定岗；角色或模板若带组织归属，也必须与目标用户组织一致。
 - `access.role.assign` 独立为高危权限，V169 设为 `risk_level=high`、`requires_approval=true`，避免把“配角色”混在普通 `access.role.manage` 里。
-- 直接分配/取消角色继续使用 `requireActorCanGrant` 和跨组织闸；直接授出须审批的高危权限仍被拦截并走 §3 申请。同范围定岗按普通权限与待批高危权限分别处理：普通部分随保存生效，高危部分挂起进入审批链，通过后才释放，不因模板含高危权限而整单拒绝；岗位规则不推广为其他授权入口的免审例外。
+- 直接分配/取消角色继续使用 `requireActorCanGrant` 和跨组织闸；直接授出须审批的高危权限仍被拦截并走 §3 申请。同范围定岗按普通权限与待批高危权限分别处理：普通部分随保存生效，高危部分挂起进入审批链，通过后才释放，不因模板含高危权限而整单拒绝；挂起行与员工显式拒绝分行存放，释放或作废只删挂起行；岗位规则不推广为其他授权入口的免审例外。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/access/position-role-templates`
@@ -69,11 +69,11 @@
   - 高危业务：如 `bar.product.sold_out`、`bar.bill.reopen`、`bar.order_item.void`、`bar.saved_bottle.manage`、`ticket.verify.reverse`、`amusement.verification.override`、`amusement.over_capacity_policy.configure`。
   - **第 5 类 税费规则与税费调整（2026-08-04 对齐平台治理地图/枚举速查表）**：所有税费规则和税费调整均须经过**财务审核、税务审核、法务审核**，再由**顶层平台公司的老板最终确认后生效**；**任一环节驳回均不得生效**；**提交人不得审批自己提交的调整**；全部审批意见和时间必须留痕。**税率、税目不属于普通后台配置项**，不得按普通配置项直接改动。
     - **实现待对齐（2026-08-04 登记；2026-09-11 M013 核对更新）**：当前实现已有薪资个税档权限码 `staff.tax_bracket.manage`（V217，`risk_level=high`、`requires_approval=true`；属薪资个税档，不是本条第 5 类「税费规则与税费调整」）与 `SupervisorReviewService` 的 `finance.tax_rule.adjust` 复核动作（策略 tax_rule_adjustment_l3，不是 `permissions` 行），但本条 HTML「税费规则与税费调整」在 `permissions` 侧尚无 `finance.tax_*` 权限码落点，**记为实现待对齐（范围收窄为该权限码）**，按事实源优先级**不反向改写 PRD**，留待实现批次补齐。
-- 申请类型当前服务支持三类：`user_role`、`user_position`、`temporary_permission`。DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支；另有服务内生成的 `user_scope_change`、`position_high_risk_release` 两类（V392），不是申请入口可填类型。
+- 申请类型当前服务支持五类：`user_role`、`user_position`、`temporary_permission`、`user_permission_grant`、`user_permission_deny_removal`（后两类为员工单独授予 / 解除员工显式拒绝，只收须审批权限，V434）。DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支；另有服务内生成的 `user_scope_change`、`position_high_risk_release` 两类（V392），不是申请入口可填类型。
 - 申请时服务先解析目标权限码。角色/岗位授权申请若不含 `requires_approval=true` 的权限，返回 `GRANT_APPROVAL_NOT_REQUIRED`，应走直接授权；临时权限申请无论日常或高危均进入主管审批链，其中仅含日常权限的申请使用当前一级主管策略，不直接授出。
 - 审批链不由发起人选择档位，也不按风险值自动映射成可选档或指定角色。发起单据时只需指定最终审批人，系统按组织层级自动补全。当前实现把 `critical`/`high`/其他 写成 `permission_grant_l3`/`l2`/`l1` 与 `top_authority`/`two_levels_up`/`one_level_up`，属实现证据，不是业务可选档。
 - 授权申请人与审批人必须职责分离；同一人审批自己的授权申请时一律拒绝并留痕。
-- 【实现证据/不取得效力】流程：申请创建 `access_grant_requests(status=pending)` 并调用 `SupervisorReviewService.blockForAdmission` 生成 `review_id`；审批端调用 SupervisorReview `approve` 后，批准则应用角色/定岗/临时权限并写 `applied`，驳回写 `rejected`——三份业务 HTML 零命中上述表名、状态流程与服务名，不得立法。
+- 【实现证据/不取得效力】流程：申请创建 `access_grant_requests(status=pending)` 并调用 `SupervisorReviewService.blockForAdmission` 生成 `review_id`；审批端调用 SupervisorReview `approve` 后，批准则应用角色/定岗/临时权限/员工单独授予 / 解除员工显式拒绝并写 `applied`，驳回写 `rejected`——三份业务 HTML 零命中上述表名、状态流程与服务名，不得立法。
 - 临时权限必须有 `expires_at`；可带 `valid_from`、`single_use`。V170 扩展 `temporary_permission_grants` 的 `status`、`valid_from`、撤销、单次消耗字段；有效权限查询按有效期和消耗状态过滤。
 - 角色装配按治理 HTML「角色装配（已确认）」两支执行。同商户同项目：保存岗位、职责或同一商户、同一项目范围内的所属组织变更时，系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效，同一商户、同一项目范围内的普通模板权限随保存立即生效。保存所属商户或发生跨项目变更时，旧岗位或旧范围派生权限立即失效，新范围权限每次均须先审批，审批通过后方可生效；属于既有高危权限的，不得因处于岗位模板内而免除授出前审批；超出新模板范围的增权保持未生效，审批通过后方可生效。在上述变更触发重算时，需保留的员工单独授权必须重新校验新范围，超出新范围则暂停并重新审批。本规则不把任意手工模板应用列为触发条件（DEC-R8-91）。
 - 智能总结：`grantSummary` 统计窗口内临时权限申请。某职位/层级/权限组合达到阈值时返回“建议转固定权限”；某用户频繁申请时返回异常总结供复核。统计窗口和频繁阈值从后台授权政策读取，查询不得覆盖；兼容的 `window_days` 仅在等于后台值时接受，两个阈值参数只要传入即返回 `QUERY_POLICY_OVERRIDE_FORBIDDEN`。
@@ -119,3 +119,5 @@
 > 变更记录（2026-09-19，V1.03，M013-019/020）：删去角色装配重算规则中与治理 HTML「HR 定层级/职位即自动适配」「职级影响默认权限模板」相反的职级与责任范围排除；授权申请类型按 V392 六类订正。
 
 > 变更记录（2026-09-23，V1.04，M013-029）：保留2026-07-27历史摘要原文，补明现行角色装配与权限重算规则的引用位置。
+
+> 变更记录（2026-09-25，V1.05，全量审计 M002 CODEX-M002-1-01/02）：授权申请类型按 V434 八类订正，申请入口新增员工单独授予（`user_permission_grant`）与解除员工显式拒绝（`user_permission_deny_removal`）两类、只收须审批权限；岗位高危挂起与员工显式拒绝分行存放，释放或作废只删挂起行。

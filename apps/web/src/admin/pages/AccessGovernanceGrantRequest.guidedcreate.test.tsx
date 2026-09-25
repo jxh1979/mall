@@ -112,4 +112,30 @@ describe("AccessGovernancePage 引导式新建授权申请(phase-11)", () => {
     expect(screen.queryByTestId("access-grant-request-guided-summary")).toBeNull();
     expect(lastPostBody).toBeNull();
   });
+
+  // M002-F01：员工单独授予只填权限码——留空被步内校验拦截；填写后提交带 permissionCodes，不带过期时间与单次有效。
+  it("员工单独授予：权限码留空被拦截，填写后提交只带权限码（M002-F01）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    fireEvent.change(screen.getByLabelText("申请类型"), { target: { value: "user_permission_grant" } });
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("员工单独授予与解除显式拒绝需填写权限码");
+    expect(screen.queryByTestId("access-grant-request-guided-summary")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "finance.refund.create" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create"));
+
+    await waitFor(() => expect(lastPostBody).toBeTruthy());
+    const body = lastPostBody as Record<string, unknown>;
+    expect(body.request_type).toBe("user_permission_grant");
+    expect(body.target_user_id).toBe("u-1");
+    expect(body.permission_codes).toEqual(["finance.refund.create"]);
+    expect(body).not.toHaveProperty("expires_at");
+    expect(body).not.toHaveProperty("single_use");
+  });
 });
