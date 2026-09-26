@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -358,11 +358,16 @@ describe("M012 本次组织档案回归", () => {
   });
 
   it("分页保留商户归档和业态筛选参数，后页商户可达", async () => {
-    const rows = Array.from({ length: 501 }, (_, i) => ({ ...MERCHANTS[0], id: "m-page-" + i, merchant_name: "分页商户" + i }));
+    // 页面按接口返回的当页条目渲染、按 total/500 算页数：第 1 页只回两条代表行、total 仍为 501，下一页照样可用。
+    // 原先第 1 页回满 500 行，本用例两次渲染 500 行商户表（每行含操作列），160 满载时超 5 秒（flaky-org-merchant.md）。
+    const pages: Record<number, unknown[]> = {
+      1: [0, 1].map((i) => ({ ...MERCHANTS[0], id: "m-page-" + i, merchant_name: "分页商户" + i })),
+      2: [{ ...MERCHANTS[0], id: "m-page-500", merchant_name: "分页商户500" }],
+    };
     renderPage((url) => {
       if (!url.includes("/merchants")) return undefined;
       const page = Number(new URL(url, "http://localhost").searchParams.get("page") || 1);
-      return envelope(rows.slice((page - 1) * 500, page * 500), 501, page);
+      return envelope(pages[page] ?? [], 501, page);
     });
     await screen.findByTestId("organization-merchant-row-m-page-0");
     fireEvent.click(screen.getByTestId("organization-merchants-pager-next"));

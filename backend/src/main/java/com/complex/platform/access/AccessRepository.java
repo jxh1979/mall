@@ -156,6 +156,19 @@ public interface AccessRepository {
                 .toList();
     }
 
+    /**
+     * M002-F22：实际挂在这张岗位映射上的员工（映射停用、所引权限模板被修改时对账用）。默认按岗位+职级（内存夹具）；
+     * Jdbc 按 user_position_assignments.assigned_position_template_id 取人。
+     */
+    default List<String> listUserIdsOnPositionTemplate(PositionRoleTemplate mapping) {
+        return listUserIdsAssignedToPosition(mapping.positionCode(), mapping.staffLevelId());
+    }
+
+    /** M002-F20：员工岗位行当前挂的岗位映射 id（派生前比对是否仍是同一映射）；没有岗位或未记录为空。 */
+    default Optional<String> findAssignedPositionTemplateId(String userId) {
+        return Optional.empty();
+    }
+
     /** 在当前岗位行上替换派生授权；独立 user_roles 与模板应用不受影响。 */
     default void replacePositionGrants(String userId, String roleId, String mappingId, List<String> applicationIds,
                                       String actorId, Instant changedAt) {
@@ -191,6 +204,10 @@ public interface AccessRepository {
     /** M001-F12：该员工全部直接装配角色 id，不看角色有无权限码、是否生效。 */
     default List<String> findUserRoleIds(String userId) {
         throw new UnsupportedOperationException("findUserRoleIds not supported by this repository");
+    }
+
+    /** M002-F20（[10]）：改模板先取模板表意向锁，再锁在岗员工行，最后锁模板行（见 AccessService.updatePermissionTemplate）。 */
+    default void lockPermissionTemplatesForEdit() {
     }
 
     /** M001-F13：修改模板前取该模板写锁，锁到事务结束，锁内读前态；默认空实现只给单线程内存夹具用。 */
@@ -259,13 +276,18 @@ public interface AccessRepository {
         return List.of();
     }
 
-    /** M087-I5-03：某账号某类型的待审授权申请（范围变更时作废旧范围高危挂起）。 */
-    // ponytail: filters the full list; add a targeted query if access_grant_requests grows large
+    /** M087-I5-03：某账号某类型的待审授权申请（岗位高危挂起对账、再次申请）。默认扫全部申请过滤；Jdbc 定向查询。 */
     default List<AccessGrantRequestRecord> listPendingGrantRequests(String targetUserId, String requestType) {
         return listGrantRequests(null).stream()
                 .filter(request -> targetUserId.equals(request.targetUserId()) && requestType.equals(request.requestType())
                         && "pending".equals(request.status()))
                 .toList();
+    }
+
+    /** M002-F20：某员工的全部授权申请（任意类型、任意状态，按创建时间先后）；Jdbc 定向查询。 */
+    default List<AccessGrantRequestRecord> listGrantRequestsForTarget(String targetUserId) {
+        return listGrantRequests(null).stream().filter(request -> targetUserId.equals(request.targetUserId()))
+                .sorted(java.util.Comparator.comparing(AccessGrantRequestRecord::createdAt)).toList();
     }
 
     /** 职级定义列表（参考数据，平台全局）。默认空，JdbcAccessRepository 覆盖。 */

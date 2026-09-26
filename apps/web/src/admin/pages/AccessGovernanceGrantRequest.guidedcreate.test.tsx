@@ -122,7 +122,7 @@ describe("AccessGovernancePage 引导式新建授权申请(phase-11)", () => {
     fireEvent.change(screen.getByLabelText("申请类型"), { target: { value: "user_permission_grant" } });
     fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "" } });
     fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
-    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("员工单独授予与解除显式拒绝需填写权限码");
+    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("员工单独授予、解除显式拒绝与岗位高危权限释放需填写权限码");
     expect(screen.queryByTestId("access-grant-request-guided-summary")).toBeNull();
 
     fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "finance.refund.create" } });
@@ -137,5 +137,32 @@ describe("AccessGovernancePage 引导式新建授权申请(phase-11)", () => {
     expect(body.permission_codes).toEqual(["finance.refund.create"]);
     expect(body).not.toHaveProperty("expires_at");
     expect(body).not.toHaveProperty("single_use");
+  });
+
+  // M002-F20：释放单被驳回后，对同一挂起再次发起「岗位高危权限释放」申请——下拉可选，只填权限码，提交带 position_high_risk_release。
+  it("岗位高危权限释放：可选该类型，权限码留空被拦截，填写后提交只带权限码（M002-F20）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    fireEvent.change(screen.getByLabelText("申请类型"), { target: { value: "position_high_risk_release" } });
+    expect((screen.getByLabelText("申请类型") as HTMLSelectElement).value).toBe("position_high_risk_release");
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("岗位高危权限释放需填写权限码");
+
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "finance.refund.create" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create"));
+
+    await waitFor(() => expect(lastPostBody).toBeTruthy());
+    const body = lastPostBody as Record<string, unknown>;
+    expect(body.request_type).toBe("position_high_risk_release");
+    expect(body.target_user_id).toBe("u-1");
+    expect(body.permission_codes).toEqual(["finance.refund.create"]);
+    expect(body).not.toHaveProperty("expires_at");
+    expect(body).not.toHaveProperty("single_use");
+    expect(body).not.toHaveProperty("position_code");
   });
 });

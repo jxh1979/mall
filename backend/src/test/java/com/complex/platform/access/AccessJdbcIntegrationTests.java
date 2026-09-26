@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,8 +12,12 @@ import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
+import com.complex.platform.access.dto.PositionRoleTemplateRequest;
+import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
+import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.UserPermissionOverrideRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
+import com.complex.platform.access.dto.UserScopeChangeRequest;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.api.ApiException;
@@ -1028,31 +1033,28 @@ class AccessJdbcIntegrationTests {
         assertThat(result[0].wildcard()).isFalse();
     }
 
-    // M002-F08（操作员 2026-09-25 裁决「本人免审批，他人须审批」）：真库回归——最高权限账号同码有高危授予来源、岗位挂起与员工显式拒绝：
+    // M002-F08（操作员 2026-09-25 裁决「本人免审批，他人须审批」）：真库回归——最高权限账号同码有高危授予来源与员工显式拒绝：
     // 本人会话直接解除成功且只删显式行；他人走解除申请、获批后只删显式行；持码的平台管理员直接解除须审批；普通目标同组合仍须审批。
+    // M002-F19（操作员 2026-09-25 裁决「最高权限账号不能被定岗」）：最高权限账号没有岗位高危挂起行，本人解除后该码不再有任何拒绝
+    // （原先固化的「本人解除后仍剩挂起行」按裁决改写）。
     @Test
     void masterAuthorityTargetDenyRemovalIsDirectOnlyForTheMasterSessionOnTheRealSchema() {
         M002Fixture f = m002ApprovalFixture();
-        String master = SessionIssuer.MASTER_USER_ID;
-        jdbcTemplate.update("""
-                INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)
-                VALUES (?, ?, ?, 'platform-company', 'active', now())
-                ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, account_type = EXCLUDED.account_type, status = 'active'
-                """, master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE);
+        String master = m002MasterAccount();
         String role = "role_m002_master_" + f.suffix();
         repository.createRole(new RoleRecord(role, "M002 高危角色 " + f.suffix(), null, "project", "active", Instant.now(),
                 List.of(f.code()), null));
         for (String user : List.of(master, f.target(), f.admin())) {
             repository.assignUserRole(user, role);
         }
-        repository.saveHighRiskHolds(master, List.of(f.code()), "岗位高危挂起", f.admin());
         for (String user : List.of(master, f.target())) {
             repository.saveUserPermissionOverrides(user, List.of(f.code()), AccessRepository.Effect.DENY, "员工显式拒绝", f.admin());
         }
-        assertThat(denyOrigins(master, f.code())).containsExactly("explicit", "position_hold");
+        assertThat(denyOrigins(master, f.code())).containsExactly("explicit");
 
         m002ActAsMaster(() -> accessService.removeUserPermissionOverrides(master, m002RemoveDeny("m002-j7-self-" + f.suffix(), f.code())));
-        assertThat(denyOrigins(master, f.code())).containsExactly("position_hold");
+        assertThat(denyOrigins(master, f.code())).isEmpty();
+        m002ActAsMaster(() -> authorizationService.requirePermission(f.code()));
 
         repository.saveUserPermissionOverrides(master, List.of(f.code()), AccessRepository.Effect.DENY, "再次停权", f.admin());
         m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
@@ -1062,13 +1064,13 @@ class AccessJdbcIntegrationTests {
         m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(requestId, m002Approve("m002-j7-review-" + f.suffix())));
         assertThat(jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId))
                 .isEqualTo("applied");
-        assertThat(denyOrigins(master, f.code())).containsExactly("position_hold");
+        assertThat(denyOrigins(master, f.code())).isEmpty();
 
         repository.saveUserPermissionOverrides(master, List.of(f.code()), AccessRepository.Effect.DENY, "三次停权", f.admin());
         assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(master,
                 m002RemoveDeny("m002-j7-admin-" + f.suffix(), f.code()))))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
-        assertThat(denyOrigins(master, f.code())).containsExactly("explicit", "position_hold");
+        assertThat(denyOrigins(master, f.code())).containsExactly("explicit");
         assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(f.target(),
                 m002RemoveDeny("m002-j7-plain-" + f.suffix(), f.code()))))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
@@ -1120,7 +1122,7 @@ class AccessJdbcIntegrationTests {
         };
     }
 
-    // M002-F11/F13（操作员 2026-09-25 裁决，治理地图「权限规则」）：真实接口回归——持 access.role.assign、不持角色高危码的同组织员工
+    // M002-F11（操作员 2026-09-25 裁决，治理地图「权限规则」）、M002-F13（控制席按长期规则自动批准的修复）：真实接口回归——持 access.role.assign、不持角色高危码的同组织员工
     // 经撤销接口撤销成功；同样持码的跨组织员工被 CROSS_ORG_FORBIDDEN 拒绝、角色保留。
     @Test
     void roleAssignHolderRevokesAHighRiskRoleWithoutHoldingItsCodesThroughTheEndpoint() throws Exception {
@@ -1251,6 +1253,836 @@ class AccessJdbcIntegrationTests {
         return jdbcTemplate.queryForList(
                 "SELECT origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ? AND effect = 'deny' ORDER BY origin",
                 String.class, userId, code);
+    }
+
+    // ── M002 第 7 轮（M002-F19～F23；F19、F20 为操作员 2026-09-25 裁决，F21～F23 为技术不变量）真库与真实接口回归 ─────────────────────────────────
+
+    // M002-F19：真库＋真实接口——平台管理员经接口给最高权限账号定岗 400 MASTER_AUTHORITY_NO_POSITION；范围变更同样 400；单独调职级不带
+    // 岗位派生，不拦（[6]）；不写岗位行、挂起行与申请单；最高权限会话调该须审批码照常放行。
+    @Test
+    void masterAuthorityAccountCannotBePositionedOnTheRealSchemaOrThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String master = m002MasterAccount();
+        M002Mapping m = m002HighRiskMapping(f);
+        String assignRole = "role_m002_f19_" + f.suffix();
+        repository.createRole(new RoleRecord(assignRole, "M002 装配角色 F19 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.assign"), null));
+        repository.assignUserRole(f.admin(), assignRole);
+
+        mockMvc.perform(put("/api/v1/access/users/" + master + "/position")
+                        .with(m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\": \"m002-j12-http-%s\", \"position_code\": \"%s\", \"staff_level_id\": \"lvl_m1_lower\"}"
+                                .formatted(f.suffix(), m.position())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("MASTER_AUTHORITY_NO_POSITION"));
+        List<Runnable> entries = List.of(
+                () -> accessService.changeUserScope(master, new UserScopeChangeRequest(
+                        "m002-j12-scope-" + f.suffix(), "M002", "org", null, m.position(), "lvl_m1_lower", null, null, null, "调入项目", null)));
+        for (Runnable entry : entries) {
+            assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", entry))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.status().value()).isEqualTo(400);
+                        assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_NO_POSITION");
+                    });
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_position_assignments WHERE user_id = ?", Long.class, master))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_permission_overrides WHERE user_id = ? AND origin = 'position_hold'",
+                Long.class, master)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?", Long.class, master))
+                .isZero();
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignStaffLevel(new StaffLevelAssignmentRequest(
+                "m002-j12-level-" + f.suffix(), "M002", master, "lvl_m1_lower", null, null, null)));
+        assertThat(jdbcTemplate.queryForObject("SELECT staff_level_id FROM staff_level_assignments WHERE user_id = ?", String.class, master))
+                .isEqualTo("lvl_m1_lower");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_position_assignments WHERE user_id = ?", Long.class, master))
+                .isZero();
+        m002ActAsMaster(() -> authorizationService.requirePermission(f.code()));
+    }
+
+    // M002-F19：真库回归——V435 清掉最高权限账号名下存量岗位（含岗位派生的模板套用）、挂起行，待审的岗位高危释放、定岗与范围变更申请
+    // 置 rejected（decided_by system:V435）并关闭其复核单（回归 [11][15]）；负对照（回归 [16][19]）：最高权限的员工显式拒绝、非岗位派生的
+    // 模板套用与待审角色申请，最高权限名下已决（已批准、已人工驳回）的同类申请及其复核单与节点（回归 [13]），另一名员工的岗位行、挂起行、
+    // 待审释放单、待审定岗申请与复核单都不动；重放第二次不再改动。
+    @Test
+    void v435ClearsMasterAuthorityPositionHoldsAndPendingReleasesIdempotently() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String master = m002MasterAccount();
+        String template = "tpl_m002_v435_" + f.suffix();
+        String application = "pta_m002_v435_" + f.suffix();
+        String ownApplication = "pta_m002_v435_own_" + f.suffix();
+        String peerApplication = "pta_m002_v435_peer_" + f.suffix();
+        String release = "agr_m002_v435_" + f.suffix();
+        String peerRelease = "agr_m002_v435_peer_" + f.suffix();
+        String positionRequest = "agr_m002_v435_pos_" + f.suffix();
+        String scopeRequest = "agr_m002_v435_scope_" + f.suffix();
+        String masterRoleRequest = "agr_m002_v435_role_" + f.suffix();
+        String peerPositionRequest = "agr_m002_v435_peerpos_" + f.suffix();
+        repository.createTemplate(baseTemplate(template), List.of());
+        for (String[] row : List.of(new String[] {application, master}, new String[] {ownApplication, master},
+                new String[] {peerApplication, f.target()})) {
+            jdbcTemplate.update("""
+                    INSERT INTO permission_template_applications (id, template_id, target_type, target_id, status, applied_by, applied_at)
+                    VALUES (?, ?, 'user', ?, 'active', ?, now())
+                    """, row[0], template, row[1], f.admin());
+        }
+        for (String[] row : List.of(new String[] {master, application}, new String[] {f.target(), peerApplication})) {
+            jdbcTemplate.update("""
+                    INSERT INTO user_position_assignments (user_id, position_code, staff_level_id, organization_id, assigned_by, assigned_at,
+                                                           position_application_ids)
+                    VALUES (?, ?, 'lvl_m1_lower', 'platform-company', ?, now(), ARRAY[?]::varchar[])
+                    ON CONFLICT (user_id) DO UPDATE SET position_application_ids = EXCLUDED.position_application_ids
+                    """, row[0], "m002_v435_" + f.suffix(), f.admin(), row[1]);
+        }
+        for (String user : List.of(master, f.target())) {
+            repository.saveHighRiskHolds(user, List.of(f.code()), "岗位高危挂起", f.admin());
+        }
+        repository.saveUserPermissionOverrides(master, List.of(f.code()), AccessRepository.Effect.DENY, "员工显式拒绝", f.admin());
+        for (String[] row : List.of(new String[] {release, master, "position_high_risk_release"},
+                new String[] {peerRelease, f.target(), "position_high_risk_release"}, new String[] {positionRequest, master, "user_position"},
+                new String[] {scopeRequest, master, "user_scope_change"}, new String[] {masterRoleRequest, master, "user_role"},
+                new String[] {peerPositionRequest, f.target(), "user_position"})) {
+            jdbcTemplate.update("""
+                    INSERT INTO supervisor_review_decisions (review_id, policy_code, action_type, object_type, object_id, blocked, review_status,
+                                                             required_level, evaluated_at)
+                    VALUES (?, 'permission_grant_l2', 'access.grant_request', 'access_grant_request', ?, TRUE, 'pending_review', 2, now())
+                    """, "rv_" + row[0], row[0]);
+            jdbcTemplate.update("""
+                    INSERT INTO supervisor_review_nodes (node_id, review_id, seq, approver_kind, approver_id, status)
+                    VALUES (?, ?, 1, 'user', ?, 'pending')
+                    """, "nd_" + row[0], "rv_" + row[0], f.boss());
+            jdbcTemplate.update("""
+                    INSERT INTO access_grant_requests (id, request_type, target_user_id, permission_codes, status, review_id, reason, requested_by,
+                                                       created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 'pending', ?, 'M002 存量待审单', ?, now(), now())
+                    """, row[0], row[2], row[1], f.code(), "rv_" + row[0], f.admin());
+        }
+
+        // 最高权限名下已决的同类申请：决定时间、决定人固定，重放后逐列不变
+        String decided = "2026-09-01 00:00:00+00";
+        for (String[] row : List.of(new String[] {"agr_m002_v435_done_pos_" + f.suffix(), "user_position", "applied", "approved"},
+                new String[] {"agr_m002_v435_done_rel_" + f.suffix(), "position_high_risk_release", "rejected", "rejected"},
+                new String[] {"agr_m002_v435_done_scope_" + f.suffix(), "user_scope_change", "applied", "approved"})) {
+            jdbcTemplate.update("""
+                    INSERT INTO supervisor_review_decisions (review_id, policy_code, action_type, object_type, object_id, blocked, review_status,
+                                                             decision, required_level, evaluated_at)
+                    VALUES (?, 'permission_grant_l2', 'access.grant_request', 'access_grant_request', ?, TRUE, ?, ?, 2, CAST(? AS timestamptz))
+                    """, "rv_" + row[0], row[0], row[3], row[3], decided);
+            jdbcTemplate.update("""
+                    INSERT INTO supervisor_review_nodes (node_id, review_id, seq, approver_kind, approver_id, status, decided_by, decided_at)
+                    VALUES (?, ?, 1, 'user', ?, ?, ?, CAST(? AS timestamptz))
+                    """, "nd_" + row[0], "rv_" + row[0], f.boss(), row[3], f.boss(), decided);
+            jdbcTemplate.update("""
+                    INSERT INTO access_grant_requests (id, request_type, target_user_id, permission_codes, status, review_id, reason, requested_by,
+                                                       decided_by, decided_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'M002 已决申请', ?, ?, CAST(? AS timestamptz), CAST(? AS timestamptz), CAST(? AS timestamptz))
+                    """, row[0], row[1], master, f.code(), row[2], "rv_" + row[0], f.admin(), f.boss(), decided, decided, decided);
+        }
+        String decidedFacts = """
+                SELECT string_agg(r.id || '|' || r.status || '|' || r.decided_by || '|' || (r.decided_at = CAST(? AS timestamptz))
+                                  || '|' || (r.updated_at = CAST(? AS timestamptz)) || '|' || d.review_status || '|' || (d.evaluated_at = CAST(? AS timestamptz))
+                                  || '|' || n.status || '|' || n.decided_by || '|' || (n.decided_at = CAST(? AS timestamptz)), ',' ORDER BY r.id)
+                  FROM access_grant_requests r
+                  JOIN supervisor_review_decisions d ON d.review_id = r.review_id
+                  JOIN supervisor_review_nodes n ON n.review_id = r.review_id
+                 WHERE r.target_user_id = ? AND r.id LIKE 'agr_m002_v435_done_%'
+                """;
+        String decidedBefore = jdbcTemplate.queryForObject(decidedFacts, String.class, decided, decided, decided, decided, master);
+        assertThat(decidedBefore).contains("|applied|", "|rejected|").doesNotContain("|false");
+
+        for (int replay = 0; replay < 2; replay++) {
+            m002ReplayMigration("V435__m002_master_authority_no_position.sql");
+            assertThat(jdbcTemplate.queryForObject(decidedFacts, String.class, decided, decided, decided, decided, master))
+                    .isEqualTo(decidedBefore);
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_position_assignments WHERE user_id = ?", Long.class, master))
+                    .isZero();
+            assertThat(denyOrigins(master, f.code())).containsExactly("explicit");
+            for (String closed : List.of(release, positionRequest, scopeRequest)) {
+                assertThat(jdbcTemplate.queryForObject("SELECT status || '/' || decided_by FROM access_grant_requests WHERE id = ?",
+                        String.class, closed)).as(closed).isEqualTo("rejected/system:V435");
+                assertThat(m002ReviewStatus("rv_" + closed)).as(closed).isEqualTo("rejected");
+                assertThat(jdbcTemplate.queryForObject("SELECT status || '/' || decided_by FROM supervisor_review_nodes WHERE review_id = ?",
+                        String.class, "rv_" + closed)).as(closed).isEqualTo("cancelled/system:V435");
+            }
+            assertThat(m002ApplicationStatus(application)).isEqualTo("revoked");
+            // 负对照：不是最高权限岗位派生的一律不动
+            assertThat(m002ApplicationStatus(ownApplication)).isEqualTo("active");
+            assertThat(m002ApplicationStatus(peerApplication)).isEqualTo("active");
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_position_assignments WHERE user_id = ?", Long.class, f.target()))
+                    .isEqualTo(1);
+            assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+            for (String untouched : List.of(peerRelease, masterRoleRequest, peerPositionRequest)) {
+                assertThat(m002Status(untouched)).as(untouched).isEqualTo("pending");
+                assertThat(m002ReviewStatus("rv_" + untouched)).as(untouched).isEqualTo("pending_review");
+                assertThat(m002PendingNodeCount("rv_" + untouched)).as(untouched).isEqualTo(1);
+            }
+        }
+    }
+
+    // M002-F20：真库＋真实接口回归——待审期间同岗重定保留原单（单号不变、总数仍为 1，回归 [18]）；驳回后挂起行保留、有效集没有该码、
+    // 直接解除 400、同岗重定不自动重开单；经接口对同一挂起提交「岗位高危权限释放」申请即再次发起（快照钉当前映射），批准后挂起删除、码生效；
+    // 此后同岗重定该码保持生效、不开新单（回归 [1]）。
+    @Test
+    void rejectedReleaseIsReappliedForTheSameHoldOnTheRealSchemaAndThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j10-assign-a");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002Assign(f, m.position(), "m002-j10-assign-b");
+        assertThat(m002PendingRequestId(f.target(), "position_high_risk_release")).isEqualTo(first);
+        assertThat(m002ReleaseCount(f.target())).isEqualTo(1);
+
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Reject("m002-j10-reject-" + f.suffix())));
+        assertThat(m002Status(first)).isEqualTo("rejected");
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(m002EffectiveGrants(f)).doesNotContain(f.code());
+        assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(f.target(),
+                m002RemoveDeny("m002-j10-remove-" + f.suffix(), f.code()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        m002Assign(f, m.position(), "m002-j10-reassign");
+        assertThat(m002PendingReleaseCount(f.target())).isZero();
+        assertThat(m002ReleaseCount(f.target())).isEqualTo(1);
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+
+        mockMvc.perform(post("/api/v1/access/grant-requests")
+                        .with(m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(("{\"idempotency_key\": \"m002-j10-reapply-%s\", \"request_type\": \"position_high_risk_release\", "
+                                + "\"target_user_id\": \"%s\", \"permission_codes\": [\"%s\"], \"reason\": \"驳回后再次发起\"}")
+                                .formatted(f.suffix(), f.target(), f.code())))
+                .andExpect(status().isOk());
+        String second = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThat(second).isNotEqualTo(first);
+        AccessGrantRequestRecord reapplied = repository.findGrantRequestById(second).orElseThrow();
+        assertThat(List.of(reapplied.positionCode(), reapplied.staffLevelId(), reapplied.targetRoleId(), reapplied.templateId()))
+                .containsExactly(m.position(), "lvl_m1_lower", m.role(), m.template());
+        assertThat(reapplied.permissionCodes()).containsExactly(f.code());
+
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(second, m002Approve("m002-j10-approve-" + f.suffix())));
+        assertThat(m002Status(second)).isEqualTo("applied");
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+        m002Assign(f, m.position(), "m002-j10-after-approval");
+        assertThat(m002PendingReleaseCount(f.target())).isZero();
+        assertThat(m002ReleaseCount(f.target())).isEqualTo(2);
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+    }
+
+    // M002-F20：真库回归——驳回后跨项目范围变更，已驳回单留下的挂起行作废；新范围审批落地后无挂起行、该码生效。
+    @Test
+    void scopeChangeVoidsTheHoldLeftByARejectedReleaseOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j15-assign");
+        String hold = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(hold, m002Reject("m002-j15-reject-" + f.suffix())));
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.changeUserScope(f.target(), new UserScopeChangeRequest(
+                "m002-j15-scope-" + f.suffix(), "M002", "org_m002_other", null, null, null, null, null, null, "调往另一项目", null)));
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        String scope = m002PendingRequestId(f.target(), "user_scope_change");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(scope, m002Approve("m002-j15-approve-" + f.suffix())));
+        assertThat(m002Status(scope)).isEqualTo("applied");
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+    }
+
+    // M002-F22：真库回归——停用岗位模板收回派生、作废挂起行与待审释放单并关闭其复核单（回归 [22]）；再启用恰开一张待审单；
+    // 存档、取消存档按基线不重算（回归修正）：派生、挂起行、待审单与复核单原样保留。
+    @Test
+    void deactivatingThePositionTemplateVoidsHoldsAndClosesReviewsWhileArchivingLeavesThemOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j11-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        String firstReview = m002ReviewId(first);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(),
+                m002MappingRequest("m002-j11-off-" + f.suffix(), m, "inactive")));
+        assertThat(m002Status(first)).isEqualTo("rejected");
+        assertThat(m002ReviewStatus(firstReview)).isEqualTo("rejected");
+        assertThat(m002PendingNodeCount(firstReview)).isZero();
+        assertThat(m002PendingReleaseCount(f.target())).isZero();
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002AssignedRole(f.target())).isNull();
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(),
+                m002MappingRequest("m002-j11-on-" + f.suffix(), m, "active")));
+        assertThat(m002PendingReleaseCount(f.target())).isEqualTo(1);
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(m002AssignedRole(f.target())).isEqualTo(m.role());
+        String second = m002PendingRequestId(f.target(), "position_high_risk_release");
+        String secondReview = m002ReviewId(second);
+
+        for (String action : List.of("archive", "restore")) {
+            m002ActAs(f.admin(), "platform_admin", () -> accessService.changePositionTemplateLifecycle(m.id(),
+                    new StatusChangeRequest("m002-j11-" + action + "-" + f.suffix(), action, "停止或恢复使用", List.of())));
+            assertThat(m002PendingRequestId(f.target(), "position_high_risk_release")).isEqualTo(second);
+            assertThat(m002ReviewStatus(secondReview)).isEqualTo("pending_review");
+            assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+            assertThat(m002AssignedRole(f.target())).isEqualTo(m.role());
+            assertThat(m002AssignedMapping(f.target())).isEqualTo(m.id());
+        }
+    }
+
+    // M002-F22（回归 [0]，真库验证定向查询口径）：同岗同职级的旧映射停用、新映射启用后员工重算挂到新映射；再保存或存档旧映射，
+    // 员工的派生、挂起行、待审释放单与复核单都不动（停用分支按 assigned_position_template_id 取人）。
+    @Test
+    void savingOrArchivingAnInactiveOldMappingLeavesEmployeesOnTheReplacementOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j16-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(),
+                m002MappingRequest("m002-j16-off-" + f.suffix(), m, "inactive")));
+        assertThat(m002Status(first)).isEqualTo("rejected");
+        PositionRoleTemplate[] replacement = new PositionRoleTemplate[1];
+        m002ActAs(f.admin(), "platform_admin", () -> replacement[0] = accessService.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "m002-j16-new-" + f.suffix(), "M002", m.position(), "lvl_m1_lower", m.role(), m.template(), "active")));
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(replacement[0].id());
+        String current = m002PendingRequestId(f.target(), "position_high_risk_release");
+        String currentReview = m002ReviewId(current);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(),
+                m002MappingRequest("m002-j16-edit-" + f.suffix(), m, "inactive")));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.changePositionTemplateLifecycle(m.id(),
+                new StatusChangeRequest("m002-j16-archive-" + f.suffix(), "archive", "删除旧模板前存档", List.of())));
+        assertThat(m002PendingRequestId(f.target(), "position_high_risk_release")).isEqualTo(current);
+        assertThat(m002ReviewStatus(currentReview)).isEqualTo("pending_review");
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(m002AssignedRole(f.target())).isEqualTo(m.role());
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(replacement[0].id());
+    }
+
+    // M002-F20/F22（「该岗位模板被…修改」，回归 [6][10]，真库）：修改岗位映射所引权限模板的内容——原待审释放单作废、复核单关闭，
+    // 删掉的高危码挂起行删除，仍在模板里的高危码重新挂起并恰开一张新单。
+    @Test
+    void editingThePositionsPermissionTemplateVoidsAndRejudgesHoldsOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String second = "m002.override_test.high2_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 测试高危权限二', 'ops', 'high', TRUE, 'active')
+                """, second);
+        M002Mapping m = new M002Mapping("prt_m002_t_" + f.suffix(), "m002_tpos_" + f.suffix(), "role_m002_t_" + f.suffix(),
+                "tpl_m002_t_" + f.suffix());
+        repository.createRole(new RoleRecord(m.role(), "M002 模板岗位角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(baseTemplate(m.template()), grants(m.template(), f.code(), second));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(m.id(), m.position(), "lvl_m1_lower", m.role(), m.template(),
+                null, "active", f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, m.position(), "m002-j17-assign");
+        String old = m002PendingRequestId(f.target(), "position_high_risk_release");
+        String oldReview = m002ReviewId(old);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePermissionTemplate(m.template(), new PermissionTemplateRequest(
+                "m002-j17-edit-" + f.suffix(), "M002", List.of(), m.template(), "base", null, List.of(f.code()), "project", null, null, false)));
+        assertThat(m002Status(old)).isEqualTo("rejected");
+        assertThat(m002ReviewStatus(oldReview)).isEqualTo("rejected");
+        assertThat(denyOrigins(f.target(), second)).isEmpty();
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        String renewed = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThat(repository.findGrantRequestById(renewed).orElseThrow().permissionCodes()).containsExactly(f.code());
+    }
+
+    // M002-F20（治理地图第 703 行「……原先未生效的这类权限及其待审批申请一并作废」，只作废未生效的；真库）：已批准生效的码按（员工、映射、码）判定——所引权限模板内容被修改、映射改角色后仍生效，
+    // 映射新增的高危码挂起并恰开一张单；改职级换到另一张映射，原已批准的码按新岗位重新挂起、另开新单。
+    @Test
+    void approvedHighRiskCodeStaysEffectiveOnTheSameMappingAndIsRejudgedOnAnotherMappingOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String second = "m002.override_test.high2_" + f.suffix();
+        String daily = "m002.override_test.daily_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 测试高危权限二', 'ops', 'high', TRUE, 'active'), (?, 'M002 测试日常权限', 'ops', 'low', FALSE, 'active')
+                """, second, daily);
+        String dailyHolder = "role_m002_daily_" + f.suffix();
+        repository.createRole(new RoleRecord(dailyHolder, "M002 日常码持有 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(daily), null));
+        repository.assignUserRole(f.admin(), dailyHolder); // 授权人只能授出自己持有的日常码
+        M002Mapping m = m002HighRiskMapping(f);
+        String secondRole = "role_m002_g2_" + f.suffix();
+        repository.createRole(new RoleRecord(secondRole, "M002 岗位角色二 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code(), second), null));
+        m002Assign(f, m.position(), "m002-j22-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Approve("m002-j22-approve-" + f.suffix())));
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePermissionTemplate(m.template(), new PermissionTemplateRequest(
+                "m002-j22-edit-" + f.suffix(), "M002", List.of(), m.template(), "base", null, List.of(daily), "project", null, null, false)));
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002ReleaseCount(f.target())).isEqualTo(1);
+        assertThat(m002EffectiveGrants(f)).contains(f.code(), daily);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(), m002MappingRequest(
+                "m002-j22-remap-" + f.suffix(), new M002Mapping(m.id(), m.position(), secondRole, m.template()), "active")));
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(denyOrigins(f.target(), second)).containsExactly("position_hold");
+        String added = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThat(repository.findGrantRequestById(added).orElseThrow().permissionCodes()).containsExactly(second);
+        assertThat(m002EffectiveGrants(f)).contains(f.code()).doesNotContain(second);
+
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_g10_" + f.suffix(), m.position(), "lvl_m10_upper", m.role(),
+                m.template(), null, "active", f.admin(), Instant.now(), Instant.now()));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignStaffLevel(new StaffLevelAssignmentRequest(
+                "m002-j22-level-" + f.suffix(), "M002", f.target(), "lvl_m10_upper", null, null, null)));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(m002Status(added)).isEqualTo("rejected");
+        AccessGrantRequestRecord moved = repository.findGrantRequestById(
+                m002PendingRequestId(f.target(), "position_high_risk_release")).orElseThrow();
+        assertThat(moved.staffLevelId()).isEqualTo("lvl_m10_upper");
+        assertThat(moved.permissionCodes()).containsExactly(f.code());
+        assertThat(m002EffectiveGrants(f)).doesNotContain(f.code());
+    }
+
+    // M002-F20（同上第 703 行原句，同岗同职级两张映射）：改存全平台映射时，改存前集合只用于挂在这张映射上的员工；派生到同岗同职级本组织映射的员工
+    // 按其自己的映射判定，已批准生效的码不重新挂起、不开新单。
+    @Test
+    void savingTheGlobalMappingKeepsApprovedCodesOfEmployeesOnTheOrganizationMappingOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String position = "m002_twopos_" + f.suffix();
+        String plainRole = "role_m002_tp_" + f.suffix();
+        String highRole = "role_m002_th_" + f.suffix();
+        String template = "tpl_m002_tt_" + f.suffix();
+        repository.createRole(new RoleRecord(plainRole, "M002 全平台普通角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createRole(new RoleRecord(highRole, "M002 本组织高危角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code()), null));
+        repository.createTemplate(baseTemplate(template), List.of());
+        M002Mapping global = new M002Mapping("prt_m002_tg_" + f.suffix(), position, plainRole, template);
+        String organizationMapping = "prt_m002_to_" + f.suffix();
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(global.id(), position, "lvl_m1_lower", plainRole, template,
+                null, "active", f.admin(), Instant.now(), Instant.now()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(organizationMapping, position, "lvl_m1_lower", highRole, template,
+                "org", "active", f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, position, "m002-j24-assign");
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(organizationMapping);
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Approve("m002-j24-approve-" + f.suffix())));
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(global.id(),
+                m002MappingRequest("m002-j24-resave-global-" + f.suffix(), global, "active")));
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(organizationMapping);
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002ReleaseCount(f.target())).isEqualTo(1);
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+    }
+
+    // M002-F22（停用只处理实际挂在该映射上的员工；仓库 AGENTS.md 第 8 条「不为存量数据做兼容、退化或回填设计」）：停用映射只按
+    // assigned_position_template_id 取人、收回派生；映射列为空、仍有派生角色的同岗同职级存量行不做兜底，也不回填。
+    @Test
+    void deactivatingAMappingTakesOnlyEmployeesLinkedByMappingIdOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j23-assign");
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(m.id());
+        String unlinked = "usr_m002_unlinked_" + f.suffix();
+        m002LegacyPositionRow(f, new String[] {unlinked, m.position(), "org", m.role(), null});
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(),
+                m002MappingRequest("m002-j23-off-" + f.suffix(), m, "inactive")));
+        assertThat(m002AssignedRole(f.target())).isNull();
+        assertThat(m002AssignedMapping(f.target())).isNull();
+        assertThat(m002AssignedRole(unlinked)).isEqualTo(m.role());
+        assertThat(m002AssignedMapping(unlinked)).isNull();
+    }
+
+    // M002-F20（[0][4][8]，真库）：定岗时已有员工显式拒绝的高危码不挂起、不开单；此后经「解除员工显式拒绝」获批而生效，改所引模板内容、
+    // 映射原样重存、同岗重定后都保持生效，不挂起、不开单，并记 already_approved。
+    @Test
+    void highRiskCodeLiftedByAnApprovedDenyRemovalStaysEffectiveOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String daily = "m002.override_test.daily_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 测试日常权限', 'ops', 'low', FALSE, 'active')
+                """, daily);
+        String dailyHolder = "role_m002_daily_" + f.suffix();
+        repository.createRole(new RoleRecord(dailyHolder, "M002 日常码持有 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(daily), null));
+        repository.assignUserRole(f.admin(), dailyHolder); // 授权人只能授出自己持有的日常码
+        M002Mapping m = m002HighRiskMapping(f);
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.setUserPermissionOverrides(f.target(), new UserPermissionOverrideRequest(
+                "m002-j25-deny-" + f.suffix(), "M002", List.of(f.code()), "deny", "员工显式拒绝")));
+        m002Assign(f, m.position(), "m002-j25-assign");
+        assertThat(m002ReleaseCount(f.target())).isZero();
+        String lift = m002ApplyOverride(f, "user_permission_deny_removal", "m002-j25");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(lift, m002Approve("m002-j25-approve-" + f.suffix())));
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+
+        List<Runnable> paths = List.of(
+                () -> accessService.updatePermissionTemplate(m.template(), new PermissionTemplateRequest(
+                        "m002-j25-edit-" + f.suffix(), "M002", List.of(), m.template(), "base", null, List.of(daily), "project", null, null, false)),
+                () -> accessService.updatePositionRoleTemplate(m.id(), m002MappingRequest("m002-j25-resave-" + f.suffix(), m, "active")),
+                () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                        "m002-j25-reassign-" + f.suffix(), "M002", f.target(), m.position(), "lvl_m1_lower", null, null, null)));
+        for (Runnable path : paths) {
+            m002ActAs(f.admin(), "platform_admin", path);
+            assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+            assertThat(m002ReleaseCount(f.target())).isZero();
+            assertThat(m002EffectiveGrants(f)).contains(f.code());
+        }
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM audit_events WHERE event_name = 'access.user_position.high_risk_already_approved' AND business_id = ?
+                """, Long.class, f.target())).isEqualTo(3);
+    }
+
+    // M002-F22（[3][11]，真库）：映射改职级后，原来挂在这张映射上的员工（岗位行仍是旧职级）找不到映射——收回岗位派生、清掉映射 id，
+    // 待审释放单作废、复核单关闭、挂起行删除。
+    @Test
+    void changingTheMappingsStaffLevelRejudgesEmployeesLeftOnItOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j26-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        String review = m002ReviewId(first);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(), new PositionRoleTemplateRequest(
+                "m002-j26-move-" + f.suffix(), "M002", m.position(), "lvl_m10_upper", m.role(), m.template(), "active")));
+        assertThat(m002Status(first)).isEqualTo("rejected");
+        assertThat(m002ReviewStatus(review)).isEqualTo("rejected");
+        assertThat(m002PendingNodeCount(review)).isZero();
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002AssignedRole(f.target())).isNull();
+        assertThat(m002AssignedMapping(f.target())).isNull();
+        assertThat(m002EffectiveGrants(f)).doesNotContain(f.code());
+    }
+
+    // M002-F20（[10]，真库并发）：员工换岗的事务持员工行未提交时，改其原映射所引模板的编辑在员工行锁上等待（锁序：模板表意向锁 → 员工行
+    // → 模板行）；换岗提交后编辑按映射 id 重新取人，员工已不在原映射，跳过对账——新岗位的挂起与待审释放单原样保留，该码不因原模板
+    // 去掉该码而免审生效。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void templateEditWaitsForAConcurrentPositionChangeAndLeavesTheNewHoldAlone() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String oldPosition = "m002_rpos1_" + f.suffix();
+        String newPosition = "m002_rpos2_" + f.suffix();
+        List<String> roles = List.of("role_m002_r1_" + f.suffix(), "role_m002_r2_" + f.suffix());
+        List<String> templates = List.of("tpl_m002_r1_" + f.suffix(), "tpl_m002_r2_" + f.suffix());
+        List<String> mappings = List.of("prt_m002_r1_" + f.suffix(), "prt_m002_r2_" + f.suffix());
+        ExecutorService editor = Executors.newSingleThreadExecutor();
+        try {
+            repository.createRole(new RoleRecord(roles.get(0), "M002 并发旧角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                    List.of(), null));
+            repository.createRole(new RoleRecord(roles.get(1), "M002 并发新角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                    List.of(f.code()), null));
+            repository.createTemplate(baseTemplate(templates.get(0)), grants(templates.get(0), f.code(), DAILY_A));
+            repository.createTemplate(baseTemplate(templates.get(1)), List.of());
+            repository.savePositionRoleTemplate(new PositionRoleTemplate(mappings.get(0), oldPosition, "lvl_m1_lower", roles.get(0),
+                    templates.get(0), null, "active", f.admin(), Instant.now(), Instant.now()));
+            repository.savePositionRoleTemplate(new PositionRoleTemplate(mappings.get(1), newPosition, "lvl_m1_lower", roles.get(1),
+                    templates.get(1), null, "active", f.admin(), Instant.now(), Instant.now()));
+            m002Assign(f, oldPosition, "m002-j27-assign");
+            String oldRelease = m002PendingRequestId(f.target(), "position_high_risk_release");
+
+            Future<Throwable> edit = new TransactionTemplate(transactionManager).execute(status -> {
+                m002Assign(f, newPosition, "m002-j27-move");
+                Future<Throwable> pending = editor.submit(() -> {
+                    try {
+                        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePermissionTemplate(templates.get(0),
+                                templateRequest("m002-j27-edit-" + f.suffix(), DAILY_A)));
+                        return null;
+                    } catch (Throwable e) {
+                        return e;
+                    }
+                });
+                awaitWaiterOrDone(pending);
+                assertThat(pending.isDone()).as("编辑应在员工行锁上等换岗提交").isFalse();
+                return pending;
+            });
+            assertThat(edit.get(30, TimeUnit.SECONDS)).isNull();
+            assertThat(repository.findTemplateItems(templates.get(0))).extracting(PermissionTemplateItem::permissionCode).containsExactly(DAILY_A);
+            assertThat(m002AssignedMapping(f.target())).isEqualTo(mappings.get(1));
+            assertThat(m002Status(oldRelease)).isEqualTo("rejected");
+            AccessGrantRequestRecord moved = repository.findGrantRequestById(
+                    m002PendingRequestId(f.target(), "position_high_risk_release")).orElseThrow();
+            assertThat(moved.positionCode()).isEqualTo(newPosition);
+            assertThat(moved.permissionCodes()).containsExactly(f.code());
+            assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+            assertThat(m002EffectiveGrants(f)).doesNotContain(f.code());
+        } finally {
+            editor.shutdownNow();
+            m002DeleteCommitted(f, mappings, roles, templates);
+        }
+    }
+
+    // M002-F20 b（回归 [17]，真库）：驳回后换岗（改职级到同岗位另一职级、同样含该码的映射）——已驳回留下的挂起按新岗位重挂、恰开一张新单
+    // （快照是新职级），批准后生效。
+    @Test
+    void changingPositionAfterRejectionRejudgesTheHoldOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_g10_" + f.suffix(), m.position(), "lvl_m10_upper", m.role(),
+                m.template(), null, "active", f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, m.position(), "m002-j18-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Reject("m002-j18-reject-" + f.suffix())));
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignStaffLevel(new StaffLevelAssignmentRequest(
+                "m002-j18-level-" + f.suffix(), "M002", f.target(), "lvl_m10_upper", null, null, null)));
+        String renewed = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThat(repository.findGrantRequestById(renewed).orElseThrow().staffLevelId()).isEqualTo("lvl_m10_upper");
+        assertThat(m002ReleaseCount(f.target())).isEqualTo(2);
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(renewed, m002Approve("m002-j18-approve-" + f.suffix())));
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+    }
+
+    // M002-F20 c（回归 [17]，真库）：驳回后换到不含该码的岗位——挂起行删除、无待审单；再批准含该码的角色申请，该码生效。
+    @Test
+    void movingToAPositionWithoutTheCodeAfterRejectionOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String plainPosition = m002PlainMapping(f);
+        m002Assign(f, m.position(), "m002-j19-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Reject("m002-j19-reject-" + f.suffix())));
+
+        m002Assign(f, plainPosition, "m002-j19-move");
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002PendingReleaseCount(f.target())).isZero();
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
+                "m002-j19-role-" + f.suffix(), "M002", List.of(), "user_role", f.target(), m.role(), null, null, null, null, null,
+                null, null, null, false, "角色授予申请")));
+        String role = m002PendingRequestId(f.target(), "user_role");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(role, m002Approve("m002-j19-approve-" + f.suffix())));
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+    }
+
+    // M002-F20 d（回归 [17]，真库）：同码员工显式拒绝在驳回后同岗重定、停用、再启用、换岗、范围变更各路径都保留，挂起行与待审单都不留。
+    @Test
+    void explicitDenySurvivesEveryVoidingPathOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String plainPosition = m002PlainMapping(f);
+        m002Assign(f, m.position(), "m002-j20-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.setUserPermissionOverrides(f.target(), new UserPermissionOverrideRequest(
+                "m002-j20-deny-" + f.suffix(), "M002", List.of(f.code()), "deny", "员工显式拒绝")));
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Reject("m002-j20-reject-" + f.suffix())));
+
+        List<Runnable> paths = List.of(
+                () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                        "m002-j20-reassign-" + f.suffix(), "M002", f.target(), m.position(), "lvl_m1_lower", null, null, null)),
+                () -> accessService.updatePositionRoleTemplate(m.id(), m002MappingRequest("m002-j20-off-" + f.suffix(), m, "inactive")),
+                () -> accessService.updatePositionRoleTemplate(m.id(), m002MappingRequest("m002-j20-on-" + f.suffix(), m, "active")),
+                () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                        "m002-j20-move-" + f.suffix(), "M002", f.target(), plainPosition, "lvl_m1_lower", null, null, null)),
+                () -> accessService.changeUserScope(f.target(), new com.complex.platform.access.dto.UserScopeChangeRequest(
+                        "m002-j20-scope-" + f.suffix(), "M002", "org_m002_other", null, null, null, null, null, null, "调往另一项目", null)));
+        for (Runnable path : paths) {
+            m002ActAs(f.admin(), "platform_admin", path);
+            assertThat(denyOrigins(f.target(), f.code())).containsExactly("explicit");
+            assertThat(m002PendingReleaseCount(f.target())).isZero();
+        }
+    }
+
+    // M002-F20 f（回归 [21]，真库）：码只有岗位挂起、没有任何授予来源时直接解除 400，挂起行不动，不写 remove 成功留痕（基线会删 0 行后记成功）。
+    @Test
+    void removingAHoldWithoutAnyGrantSourceIsRejectedOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        repository.saveHighRiskHolds(f.target(), List.of(f.code()), "岗位高危挂起", f.admin());
+        assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(f.target(),
+                m002RemoveDeny("m002-j21-remove-" + f.suffix(), f.code()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM audit_events
+                 WHERE event_name = 'access.user_permission_override.remove' AND event_result = 'success' AND business_id = ?
+                """, Long.class, f.target())).isZero();
+    }
+
+    // M002-F21：真实接口回归——两类申请的权限码列表混有 null / 空白时 400 VALIDATION_FAILED（不再落成 500），不建申请单、不建复核单（回归 [20]）。
+    @Test
+    void overrideRequestsWithNullOrBlankCodesAreRejectedWith400ThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        var session = m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+        String countReviews = "SELECT (SELECT count(*) FROM supervisor_review_decisions) || '/' || (SELECT count(*) FROM supervisor_review_nodes)";
+        String reviewsBefore = jdbcTemplate.queryForObject(countReviews, String.class);
+        int attempts = 0;
+        for (String type : List.of("user_permission_grant", "user_permission_deny_removal")) {
+            for (String codes : List.of("\"%1$s\", null", "null, \"%1$s\"", "\"%1$s\", \"  \"")) {
+                mockMvc.perform(post("/api/v1/access/grant-requests").with(session).contentType(MediaType.APPLICATION_JSON)
+                                .content(("{\"idempotency_key\": \"m002-j13-%s-%d\", \"request_type\": \"%s\", \"target_user_id\": \"%s\", "
+                                        + "\"permission_codes\": [%s], \"reason\": \"M002\"}")
+                                        .formatted(f.suffix(), ++attempts, type, f.target(), codes.formatted(f.code()))))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            }
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?", Long.class, f.target()))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(countReviews, String.class)).isEqualTo(reviewsBefore);
+    }
+
+    // M002-F23：真实接口回归——建角色 role_name 121 字、data_scope 65 字或不在契约枚举内均 400 VALIDATION_FAILED（不再落成列宽 500），
+    // 不留角色；120 字名与枚举值 self 可建。
+    @Test
+    void createRoleRejectsContractViolationsWith400ThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String manageRole = "role_m002_f23_" + f.suffix();
+        repository.createRole(new RoleRecord(manageRole, "M002 建角色 F23 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.manage"), null));
+        repository.assignUserRole(f.admin(), manageRole);
+        var session = m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+        String body = "{\"idempotency_key\": \"%s\", \"role_name\": \"%s\", \"permission_codes\": [], \"data_scope\": \"%s\"}";
+        List<String[]> invalid = List.of(
+                new String[] {"m002-j14-name-" + f.suffix(), "角".repeat(121), "project"},
+                new String[] {"m002-j14-scope-long-" + f.suffix(), "M002 范围超长 " + f.suffix(), "s".repeat(65)},
+                new String[] {"m002-j14-scope-enum-" + f.suffix(), "M002 范围不在枚举 " + f.suffix(), "tenant"});
+        for (String[] values : invalid) {
+            mockMvc.perform(post("/api/v1/access/roles").with(session).contentType(MediaType.APPLICATION_JSON)
+                            .content(body.formatted(values[0], values[1], values[2])))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM roles WHERE role_name = ?", Long.class, values[1])).isZero();
+        }
+        String longest = "角".repeat(112) + f.suffix();
+        mockMvc.perform(post("/api/v1/access/roles").with(session).contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted("m002-j14-ok-" + f.suffix(), longest, "self")))
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForObject("SELECT data_scope FROM roles WHERE role_name = ?", String.class, longest)).isEqualTo("self");
+    }
+
+    // 以平台管理员会话读目标员工的有效权限（有效集查询需要登录主体）。
+    private List<String> m002EffectiveGrants(M002Fixture f) {
+        List<List<String>> grants = new java.util.ArrayList<>();
+        m002ActAs(f.admin(), "platform_admin", () -> grants.add(authorizationService.effectivePermissionsForUser(f.target()).grants()));
+        return grants.get(0);
+    }
+
+    // M002：只含一个空角色、空模板的岗位映射（不派生任何须审批码），返回岗位编码。
+    private String m002PlainMapping(M002Fixture f) {
+        String position = "m002_ppos_" + f.suffix();
+        String role = "role_m002_p_" + f.suffix();
+        String template = "tpl_m002_p_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 普通岗位角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(baseTemplate(template), List.of());
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_p_" + f.suffix(), position, "lvl_m1_lower", role, template,
+                null, "active", f.admin(), Instant.now(), Instant.now()));
+        return position;
+    }
+
+    private long m002ReleaseCount(String userId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM access_grant_requests WHERE target_user_id = ? AND request_type = 'position_high_risk_release'",
+                Long.class, userId);
+    }
+
+    private String m002ReviewId(String requestId) {
+        return jdbcTemplate.queryForObject("SELECT review_id FROM access_grant_requests WHERE id = ?", String.class, requestId);
+    }
+
+    private String m002ReviewStatus(String reviewId) {
+        return jdbcTemplate.queryForObject("SELECT review_status FROM supervisor_review_decisions WHERE review_id = ?", String.class, reviewId);
+    }
+
+    private long m002PendingNodeCount(String reviewId) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM supervisor_review_nodes WHERE review_id = ? AND status = 'pending'",
+                Long.class, reviewId);
+    }
+
+    private String m002ApplicationStatus(String applicationId) {
+        return jdbcTemplate.queryForObject("SELECT status FROM permission_template_applications WHERE id = ?", String.class, applicationId);
+    }
+
+    private String m002AssignedMapping(String userId) {
+        return jdbcTemplate.queryForObject("SELECT assigned_position_template_id FROM user_position_assignments WHERE user_id = ?",
+                String.class, userId);
+    }
+
+    private String m002MasterAccount() {
+        jdbcTemplate.update("""
+                INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)
+                VALUES (?, ?, ?, 'platform-company', 'active', now())
+                ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, account_type = EXCLUDED.account_type, status = 'active'
+                """, SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE);
+        return SessionIssuer.MASTER_USER_ID;
+    }
+
+    private record M002Mapping(String id, String position, String role, String template) {
+    }
+
+    // M002：真库高危岗位映射（组织为空的全局映射，与接口保存口径一致）：m002_gpos_<后缀> / lvl_m1_lower → 含测试高危码的角色 + 空模板。
+    private M002Mapping m002HighRiskMapping(M002Fixture f) {
+        M002Mapping m = new M002Mapping("prt_m002_g_" + f.suffix(), "m002_gpos_" + f.suffix(), "role_m002_g_" + f.suffix(),
+                "tpl_m002_g_" + f.suffix());
+        repository.createRole(new RoleRecord(m.role(), "M002 岗位角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code()), null));
+        repository.createTemplate(baseTemplate(m.template()), List.of());
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(m.id(), m.position(), "lvl_m1_lower", m.role(), m.template(),
+                null, "active", f.admin(), Instant.now(), Instant.now()));
+        return m;
+    }
+
+    private void m002Assign(M002Fixture f, String position, String key) {
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                key + "-" + f.suffix(), "M002", f.target(), position, "lvl_m1_lower", null, null, null)));
+    }
+
+    private PositionRoleTemplateRequest m002MappingRequest(String key, M002Mapping m, String status) {
+        return new PositionRoleTemplateRequest(key, "M002", m.position(), "lvl_m1_lower", m.role(), m.template(), status);
+    }
+
+    private long m002PendingReleaseCount(String userId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM access_grant_requests
+                 WHERE target_user_id = ? AND request_type = 'position_high_risk_release' AND status = 'pending'
+                """, Long.class, userId);
+    }
+
+    private String m002Status(String requestId) {
+        return jdbcTemplate.queryForObject("SELECT status FROM access_grant_requests WHERE id = ?", String.class, requestId);
+    }
+
+    private String m002AssignedRole(String userId) {
+        return jdbcTemplate.queryForObject("SELECT assigned_role_id FROM user_position_assignments WHERE user_id = ?", String.class, userId);
+    }
+
+    private AccessGrantReviewRequest m002Reject(String key) {
+        return new AccessGrantReviewRequest(key, "M002", List.of(), "reject", "驳回");
+    }
+
+    // 重放迁移真源文件（不是手抄副本）；surefire 的 cwd 是 backend/，迁移文件在测试类路径上。
+    private void m002ReplayMigration(String file) throws java.io.IOException {
+        try (var in = AccessJdbcIntegrationTests.class.getResourceAsStream("/db/migration/" + file)) {
+            assertThat(in).as(file + " must be on classpath").isNotNull();
+            jdbcTemplate.execute(new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    // 并发用例提交了夹具数据：按外键顺序删掉本用例写入的行（审计事件与主管复核单只追加、不删；岗位、职级、覆盖、上级关系随员工级联删除）。
+    private void m002DeleteCommitted(M002Fixture f, List<String> mappings, List<String> roles, List<String> templates) {
+        for (String user : List.of(f.target(), f.boss(), f.admin())) {
+            for (String sql : List.of(
+                    "DELETE FROM access_grant_requests WHERE target_user_id = ?",
+                    "DELETE FROM permission_template_applications WHERE target_id = ?",
+                    "DELETE FROM access_users WHERE id = ?")) {
+                jdbcTemplate.update(sql, user);
+            }
+        }
+        mappings.forEach(id -> jdbcTemplate.update("DELETE FROM position_role_templates WHERE id = ?", id));
+        templates.forEach(id -> jdbcTemplate.update("DELETE FROM permission_templates WHERE id = ?", id));
+        for (String role : roles) {
+            jdbcTemplate.update("DELETE FROM role_permissions WHERE role_id = ?", role);
+            jdbcTemplate.update("DELETE FROM roles WHERE id = ?", role);
+        }
+        jdbcTemplate.update("DELETE FROM permissions WHERE permission_code = ?", f.code());
+    }
+
+    // 映射列为空的岗位行：{员工, 岗位, 组织, 派生角色, 已记映射}；员工不存在先建。
+    private void m002LegacyPositionRow(M002Fixture f, String[] row) {
+        if (repository.findUserById(row[0]).isEmpty()) {
+            repository.createUser(new AccessUser(row[0], row[0], "staff", row[2], null, "active", Instant.now()));
+        }
+        jdbcTemplate.update("""
+                INSERT INTO user_position_assignments (user_id, position_code, staff_level_id, organization_id, assigned_by, assigned_at,
+                                                       assigned_role_id, assigned_position_template_id)
+                VALUES (?, ?, 'lvl_m1_lower', ?, ?, now(), ?, ?)
+                """, row[0], row[1], row[2], f.admin(), row[3], row[4]);
     }
 
     // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效」）：范围变更冻结单独模板授予的仓储写路径在真实 schema 上可执行且幂等。

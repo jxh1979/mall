@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -503,6 +503,37 @@ public class SupervisorReviewService {
                         "final_approver_id", finalApproverId == null ? "" : finalApproverId)
         );
         return decision;
+    }
+
+    /**
+     * M002-F20（XMX-10 / XM-M002-N）：复核单所审的业务对象已被作废（如岗位高危释放单随换岗、模板停用或修改作废）时，由作废方在同一事务内
+     * 关闭该复核单：待审节点置 CANCELLED，复核单置 rejected 并留痕，从审批人待办与超时升级中消失。复核单不存在或已不在待审直接返回。
+     */
+    public void cancelPendingReview(String reviewId, String actorId, String reason) {
+        if (reviewId == null || reviewId.isBlank()) {
+            return;
+        }
+        supervisorReviewRepository.lockSupervisorReview(reviewId);
+        SupervisorReviewDecisionRecord pending = supervisorReviewRepository.findPendingSupervisorReviewById(reviewId).orElse(null);
+        if (pending == null) {
+            return;
+        }
+        Instant now = Instant.now();
+        List<String> cancelledNodes = new ArrayList<>();
+        for (ApprovalChainNode node : supervisorReviewRepository.listChainNodes(reviewId)) {
+            if (node.pending() && supervisorReviewRepository.updateChainNode(node.withStatus(ApprovalChainNode.CANCELLED, actorId, now))) {
+                cancelledNodes.add(node.nodeId());
+            }
+        }
+        supervisorReviewRepository.saveSupervisorReview(new SupervisorReviewDecisionRecord(
+                reviewId, pending.policyCode(), pending.actionType(), pending.objectType(), pending.objectId(), false,
+                "rejected", pending.requiredLevel(), pending.reviewerLevel(), "rejected", pending.reason(),
+                pending.evidenceAttachmentIds(), now, pending.initiatedBy(), pending.approvalLevel(), pending.requiredApproverRank()));
+        auditEventService.recordSuccess("governance.supervisor_review.cancelled", APPROVE_PERMISSION, "supervisor_review", reviewId,
+                null, null, Map.of("reason", reason == null ? "" : reason, "action_type", pending.actionType(),
+                        "object_type", pending.objectType() == null ? "" : pending.objectType(),
+                        "object_id", pending.objectId() == null ? "" : pending.objectId(),
+                        "cancelled_nodes", String.join(",", cancelledNodes), "operator_id", actorId == null ? "" : actorId));
     }
 
     /** M087：复核单的审批链节点（主线 + 平行线，按线与序号）。 */

@@ -75,6 +75,13 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public void lockPermissionTemplatesForEdit() {
+        // M002-F20（[10]）：表级 ROW EXCLUSIVE 先于员工行锁——审批落地持模板表 SHARE 后会等员工行（M001-F13），
+        // 编辑若先持员工行再等表锁会与之成环。lockTemplateForEdit 随后再取同一表锁（已持有）与模板行锁。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE permission_templates IN ROW EXCLUSIVE MODE");
+    }
+
+    @Override
     public void lockTemplateForEdit(String templateId) {
         // M001-F13：表级 ROW EXCLUSIVE 先于行锁——审批落地持模板表 SHARE 后会等员工行，编辑若先持行锁再等表锁，
         // 与「持员工行、等模板行」的套用成三方环。行锁取 NO KEY UPDATE，不挡插套用行时外键取的 KEY SHARE。
@@ -854,6 +861,59 @@ class JdbcAccessRepository implements AccessRepository {
                  WHERE policy_code = 'access_grant' AND enabled = true
                 """, Map.of("parameters", policyJson));
         if (changed != 1) throw new IllegalStateException("授权政策未配置");
+    }
+
+    // M002-F20/F22：岗位高危挂起对账每次派生都要查，按员工定向查询，不再读整张申请表。
+    @Override
+    public List<AccessGrantRequestRecord> listPendingGrantRequests(String targetUserId, String requestType) {
+        return jdbcTemplate.query("""
+                SELECT id, request_type, target_user_id, target_role_id, template_id, position_code,
+                       staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       permission_codes, valid_from, expires_at, single_use, status, review_id,
+                       reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                       created_at, updated_at
+                  FROM access_grant_requests
+                 WHERE target_user_id = :target_user_id AND request_type = :request_type AND status = 'pending'
+                 ORDER BY created_at, id
+                """, Map.of("target_user_id", targetUserId, "request_type", requestType), this::mapGrantRequest);
+    }
+
+    @Override
+    public List<AccessGrantRequestRecord> listGrantRequestsForTarget(String targetUserId) {
+        return jdbcTemplate.query("""
+                SELECT id, request_type, target_user_id, target_role_id, template_id, position_code,
+                       staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       permission_codes, valid_from, expires_at, single_use, status, review_id,
+                       reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                       created_at, updated_at
+                  FROM access_grant_requests
+                 WHERE target_user_id = :target_user_id
+                 ORDER BY created_at, id
+                """, Map.of("target_user_id", targetUserId), this::mapGrantRequest);
+    }
+
+    // M002-F22：在岗名单按岗位行定向查询，不再列全部员工逐个查岗。
+    @Override
+    public List<String> listUserIdsAssignedToPosition(String positionCode, String staffLevelId) {
+        return jdbcTemplate.queryForList("""
+                SELECT user_id FROM user_position_assignments
+                 WHERE position_code = :position_code AND staff_level_id = :staff_level_id
+                 ORDER BY user_id
+                """, Map.of("position_code", positionCode, "staff_level_id", staffLevelId), String.class);
+    }
+
+    // M002-F22：实际挂在这张映射上的员工，只按映射 id 取人；映射列为空的存量行不兜底、不回填（仓库 AGENTS.md 第 8 条）。
+    @Override
+    public List<String> listUserIdsOnPositionTemplate(PositionRoleTemplate mapping) {
+        return jdbcTemplate.queryForList("""
+                SELECT user_id FROM user_position_assignments WHERE assigned_position_template_id = :mapping_id ORDER BY user_id
+                """, Map.of("mapping_id", mapping.id()), String.class);
+    }
+
+    @Override
+    public Optional<String> findAssignedPositionTemplateId(String userId) {
+        return jdbcTemplate.queryForList("SELECT assigned_position_template_id FROM user_position_assignments WHERE user_id = :user_id",
+                Map.of("user_id", userId), String.class).stream().filter(java.util.Objects::nonNull).findFirst();
     }
 
     @Override

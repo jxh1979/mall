@@ -50267,7 +50267,8 @@
               "user_position",
               "temporary_permission",
               "user_permission_grant",
-              "user_permission_deny_removal"
+              "user_permission_deny_removal",
+              "position_high_risk_release"
             ]
           },
           "target_user_id": {
@@ -50310,7 +50311,7 @@
           },
           "permission_codes": {
             "type": "array",
-            "description": "权限码；temporary_permission、user_permission_grant、user_permission_deny_removal 类型必填。",
+            "description": "权限码；temporary_permission、user_permission_grant、user_permission_deny_removal、position_high_risk_release 类型必填。",
             "items": {
               "type": "string",
               "description": "权限码。",

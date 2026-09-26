@@ -1,4 +1,4 @@
-# 集团治理重建 PRD（V1.05·补断点）
+# 集团治理重建 PRD（V1.06·补断点）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -22,7 +22,7 @@
 | 对象 | 枚举/字段 | 取值（当前实现 CHECK / 服务校验） | 业务说明 |
 |---|---|---|---|
 | 职位角色模板 `position_role_templates` | `status` | `active` / `inactive` | 活跃模板参与定岗匹配；同组织、职位、职级仅允许一个活跃模板 |
-| 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` / `user_scope_change` / `position_high_risk_release` / `user_permission_grant` / `user_permission_deny_removal` | DB CHECK 八类（V434）；申请入口接受五类（`user_role`、`user_position`、`temporary_permission`、`user_permission_grant`、`user_permission_deny_removal`），`user_scope_change`、`position_high_risk_release` 由跨范围定岗与岗位高危挂起在服务内生成，`role_permission` 服务层未开放 |
+| 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` / `user_scope_change` / `position_high_risk_release` / `user_permission_grant` / `user_permission_deny_removal` | DB CHECK 八类（V434）；申请入口接受六类（`user_role`、`user_position`、`temporary_permission`、`user_permission_grant`、`user_permission_deny_removal`、`position_high_risk_release`），`user_scope_change` 由跨范围定岗在服务内生成；`position_high_risk_release` 首单由岗位高危挂起在服务内生成，被驳回后可经申请入口对同一挂起再次发起（M002-F20）；`role_permission` 服务层未开放 |
 | 授权申请 `access_grant_requests` | `status` | `pending` / `applied` / `rejected` | 待审批 / 已应用 / 已驳回 |
 | 权限定义 `permissions` | `requires_approval` | `true` / `false` | 实现字段；五类 HTML 强制高危权限必须为 `true`，后台只能新增高危项或提高审批等级，不能关闭强制项 |
 | 权限定义 `permissions` | `risk_level` | V394 已加 CHECK（low / medium / high / critical）；服务按 `critical` / `high` / 其他分档 | `critical` → l3 / 最高审批；`high` → l2 / 上两级；其他 → l1 / 上一级 |
@@ -37,7 +37,7 @@
 - 给用户定岗 `assignUserPosition` 时，系统按目标用户组织、职位、职级查模板，写三类结果：`staff_level_assignments`、`user_position_assignments`、`user_roles`，并套用 `permission_templates`。
 - 跨组织闸保持原 RBAC 规则：非平台管理员不得给其他组织用户定岗；角色或模板若带组织归属，也必须与目标用户组织一致。
 - `access.role.assign` 独立为高危权限，V169 设为 `risk_level=high`、`requires_approval=true`，避免把“配角色”混在普通 `access.role.manage` 里。
-- 直接分配/取消角色继续使用 `requireActorCanGrant` 和跨组织闸；直接授出须审批的高危权限仍被拦截并走 §3 申请。同范围定岗按普通权限与待批高危权限分别处理：普通部分随保存生效，高危部分挂起进入审批链，通过后才释放，不因模板含高危权限而整单拒绝；挂起行与员工显式拒绝分行存放，释放或作废只删挂起行；岗位规则不推广为其他授权入口的免审例外。
+- 直接分配角色使用 `requireActorCanGrant` 和跨组织闸；撤销角色只校验 `access.role.assign`、同组织与角色可配给目标，撤销前锁目标员工行，不要求操作人持有该角色的权限码（治理地图 V0.16「权限规则」，操作员 2026-09-25 裁决 M002-F11）。直接授出须审批的高危权限仍被拦截并走 §3 申请。同范围定岗按普通权限与待批高危权限分别处理：普通部分随保存生效，高危部分挂起进入审批链，通过后才释放，不因模板含高危权限而整单拒绝；挂起行与员工显式拒绝分行存放，释放或作废只删挂起行；释放单被驳回后该权限仍不生效，可对同一挂起再次提交 `position_high_risk_release` 申请（操作员 2026-09-25 裁决 M002-F20 原句「可以对同一挂起重新发起释放申请」；以下至「定岗或范围变更整单审批落地」为按治理地图第 703 行原句所作的技术细化）；员工仍在同一岗位映射且映射与模板快照没变时，待审单不重复开单、已驳回的不自动重开；已批准生效的高危权限（含定岗时已有员工显式拒绝、挂上该映射后经 `user_permission_deny_removal` 获批的）按（员工、岗位映射、权限码）判定，员工仍挂在同一张映射上、该码仍在该映射须审批集合内即保持生效，不因映射改角色、改模板或所引权限模板内容被修改而重新挂起；映射被修改（如改岗位编码或职级）致员工按原岗位职级改挂另一张映射时沿用原映射改存前的须审批集合，员工自己换岗、改职级到另一张映射、跨项目按新岗位全部重新判断；岗位行 `assigned_at` 记挂上当前映射的时间（同一映射期间不刷新）、`assigned_by` 记最近一次操作人；员工换岗（含改职级、换商户、跨项目）、岗位模板停用（只按 `assigned_position_template_id` 处理实际挂在该映射上的员工）或修改（含修改映射所引权限模板的内容；改映射的岗位编码或职级时，原来挂在该映射上的员工按其当前岗位职级重新派生，找不到映射即收回派生）时，旧挂起与待审释放单一并作废并关闭其复核单，按新岗位或新模板重新判断、需要时重新开单，定岗或范围变更整单审批落地时旧挂起与待审释放单同样作废；存档、取消存档不因此重算在岗员工（依据：F20 裁决更正段（控制席））；最高权限账号不设岗位、不套用岗位模板，给员工定岗、换岗的操作不能指向最高权限账号（操作员 2026-09-25 裁决 M002-F19，治理地图 V0.17 第 703 行）；落到接口（技术推导）：定岗、有岗位时改职级、范围变更与岗位申请不能指向最高权限账号（单独调整职级不带岗位派生、不在此列），存量岗位与名下待审的岗位高危释放、定岗、范围变更申请由 V435 清理；岗位规则不推广为其他授权入口的免审例外。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/access/position-role-templates`
@@ -69,7 +69,7 @@
   - 高危业务：如 `bar.product.sold_out`、`bar.bill.reopen`、`bar.order_item.void`、`bar.saved_bottle.manage`、`ticket.verify.reverse`、`amusement.verification.override`、`amusement.over_capacity_policy.configure`。
   - **第 5 类 税费规则与税费调整（2026-08-04 对齐平台治理地图/枚举速查表）**：所有税费规则和税费调整均须经过**财务审核、税务审核、法务审核**，再由**顶层平台公司的老板最终确认后生效**；**任一环节驳回均不得生效**；**提交人不得审批自己提交的调整**；全部审批意见和时间必须留痕。**税率、税目不属于普通后台配置项**，不得按普通配置项直接改动。
     - **实现待对齐（2026-08-04 登记；2026-09-11 M013 核对更新）**：当前实现已有薪资个税档权限码 `staff.tax_bracket.manage`（V217，`risk_level=high`、`requires_approval=true`；属薪资个税档，不是本条第 5 类「税费规则与税费调整」）与 `SupervisorReviewService` 的 `finance.tax_rule.adjust` 复核动作（策略 tax_rule_adjustment_l3，不是 `permissions` 行），但本条 HTML「税费规则与税费调整」在 `permissions` 侧尚无 `finance.tax_*` 权限码落点，**记为实现待对齐（范围收窄为该权限码）**，按事实源优先级**不反向改写 PRD**，留待实现批次补齐。
-- 申请类型当前服务支持五类：`user_role`、`user_position`、`temporary_permission`、`user_permission_grant`、`user_permission_deny_removal`（后两类为员工单独授予 / 解除员工显式拒绝，只收须审批权限，V434）。DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支；另有服务内生成的 `user_scope_change`、`position_high_risk_release` 两类（V392），不是申请入口可填类型。
+- 申请类型当前服务支持六类：`user_role`、`user_position`、`temporary_permission`、`user_permission_grant`、`user_permission_deny_removal`（这两类为员工单独授予 / 解除员工显式拒绝，只收须审批权限，V434）、`position_high_risk_release`（岗位高危释放单被驳回后对同一挂起再次发起，只收仍挂起、无待审单覆盖的码，M002-F20）。DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支；`user_scope_change` 由服务内生成（V392），不是申请入口可填类型。
 - 申请时服务先解析目标权限码。角色/岗位授权申请若不含 `requires_approval=true` 的权限，返回 `GRANT_APPROVAL_NOT_REQUIRED`，应走直接授权；临时权限申请无论日常或高危均进入主管审批链，其中仅含日常权限的申请使用当前一级主管策略，不直接授出。
 - 审批链不由发起人选择档位，也不按风险值自动映射成可选档或指定角色。发起单据时只需指定最终审批人，系统按组织层级自动补全。当前实现把 `critical`/`high`/其他 写成 `permission_grant_l3`/`l2`/`l1` 与 `top_authority`/`two_levels_up`/`one_level_up`，属实现证据，不是业务可选档。
 - 授权申请人与审批人必须职责分离；同一人审批自己的授权申请时一律拒绝并留痕。
@@ -121,3 +121,5 @@
 > 变更记录（2026-09-23，V1.04，M013-029）：保留2026-07-27历史摘要原文，补明现行角色装配与权限重算规则的引用位置。
 
 > 变更记录（2026-09-25，V1.05，全量审计 M002 CODEX-M002-1-01/02）：授权申请类型按 V434 八类订正，申请入口新增员工单独授予（`user_permission_grant`）与解除员工显式拒绝（`user_permission_deny_removal`）两类、只收须审批权限；岗位高危挂起与员工显式拒绝分行存放，释放或作废只删挂起行。
+
+> 变更记录（2026-09-25，V1.06，全量审计 M002 第 7 轮 M002-F24/F19/F20/F22）：§2 撤销角色口径按治理地图 V0.16 与操作员裁决 M002-F11 改为不要求操作人持有该角色的权限码（原句写撤销也校验操作人持有，与裁决相反）；补岗位高危挂起驳回后对同一挂起再次申请（申请入口增 `position_high_risk_release`，§1、§3 类型表同步为六类）、换岗与模板停用或修改时作废重判并关闭复核单、已批准的按（员工、映射、码）判定，以及最高权限账号不设岗位（治理地图 V0.17）。
