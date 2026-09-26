@@ -516,6 +516,7 @@ public class AccessService {
     public PositionRoleTemplate createPositionRoleTemplate(PositionRoleTemplateRequest request) {
         PositionRoleTemplateRequest r = requireRequest(request);
         try {
+            requirePositionCodeWithinColumn(r.positionCode()); // M002-F28：幂等预留的操作编号含岗位编码，超长须在预留前拒绝
             return idempotencyService.execute(
                     "createPositionRoleTemplate:" + trimToDefault(r.positionCode(), "") + ":" + trimToDefault(r.staffLevelId(), ""),
                     r.idempotencyKey(),
@@ -2511,6 +2512,7 @@ public class AccessService {
         AccessActor actor = authorizationService.currentActor();
         requirePlatformAdmin(actor);
         String positionCode = requireText(request.positionCode(), "position_code");
+        requirePositionCodeWithinColumn(positionCode);
         String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
         // M001-F10：映射表锁 → 在岗员工按编号 → 映射行，与定岗「员工行 → 映射行」、持授权事实锁的审批同序。
         // ponytail: 预锁之后、映射行锁之前才定岗的人要到重算时才加锁（窗口极短，PostgreSQL 检出死锁回滚一方、可同键重试）。
@@ -2877,11 +2879,21 @@ public class AccessService {
                         "verification", "payment").anyMatch(code::contains);
     }
 
+    // M002-F28（技术不变量：岗位映射与岗位行 position_code 列宽 VARCHAR(64)）：超长岗位编码在写库前 400，不落成列宽 500。
+    private static void requirePositionCodeWithinColumn(String positionCode) {
+        String trimmed = positionCode == null ? "" : positionCode.trim();
+        if (trimmed.codePointCount(0, trimmed.length()) > 64) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "岗位编码不能超过 64 个字符");
+        }
+    }
+
     private void requireKnownPermissions(List<String> permissionCodes) {
-        for (String permissionCode : safeList(permissionCodes)) {
-            if (permissionCode == null || permissionCode.isBlank()) { // M002-F16：空值 / 空白码在查库前拒绝（400），不再落成 500
-                throw ApiException.badRequest("VALIDATION_FAILED", "权限编码不能为空");
-            }
+        List<String> codes = safeList(permissionCodes);
+        // M002-F16/F26：先完整扫描整张列表的空值 / 空白码（400，不再落成 500），全部合格后才逐项查库
+        if (codes.stream().anyMatch(permissionCode -> permissionCode == null || permissionCode.isBlank())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "权限编码不能为空");
+        }
+        for (String permissionCode : codes) {
             if (!repository.permissionExists(permissionCode)) {
                 throw ApiException.badRequest("UNKNOWN_PERMISSION", "无法识别的权限编码：" + permissionCode);
             }

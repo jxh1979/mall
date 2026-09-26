@@ -1957,6 +1957,63 @@ class AccessJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(countReviews, String.class)).isEqualTo(reviewsBefore);
     }
 
+    // M002-F27（技术不变量：幂等键列宽 VARCHAR(128)，OpenAPI 幂等键 maxLength 128）：真实接口建角色——129 字幂等键 400 VALIDATION_FAILED，
+    // 发生在幂等预留与业务写入之前（不留角色、不留幂等记录、无任何带该键的事件）；128 字幂等键可正常建。
+    @Test
+    void idempotencyKeyLongerThan128IsRejectedWith400ThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String manageRole = "role_m002_f27_" + f.suffix();
+        repository.createRole(new RoleRecord(manageRole, "M002 建角色 F27 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.manage"), null));
+        repository.assignUserRole(f.admin(), manageRole);
+        var session = m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+        String body = "{\"idempotency_key\": \"%s\", \"role_name\": \"%s\", \"permission_codes\": [], \"data_scope\": \"project\"}";
+        String tooLong = ("k" + f.suffix()).repeat(20).substring(0, 129);
+        String name = "M002 幂等键长度 " + f.suffix();
+        mockMvc.perform(post("/api/v1/access/roles").with(session).contentType(MediaType.APPLICATION_JSON).content(body.formatted(tooLong, name)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM roles WHERE role_name = ?", Long.class, name)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM idempotency_records WHERE idempotency_key = ?", Long.class, tooLong)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE idempotency_key = ?", Long.class, tooLong)).isZero();
+
+        String longest = tooLong.substring(0, 128);
+        mockMvc.perform(post("/api/v1/access/roles").with(session).contentType(MediaType.APPLICATION_JSON).content(body.formatted(longest, name)))
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM roles WHERE role_name = ?", Long.class, name)).isEqualTo(1);
+    }
+
+    // M002-F28（技术不变量：岗位映射 position_code 列宽 VARCHAR(64)；真库）：新建岗位映射岗位编码 120 字、修改为 65 字均 400 VALIDATION_FAILED
+    // （不再落成列宽或幂等预留 500），不落行、原映射不变；64 字可保存。
+    @Test
+    void positionCodeLongerThanTheColumnIsRejectedOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String tooLong = ("q" + f.suffix()).repeat(14).substring(0, 120);
+        List<Runnable> entries = List.of(
+                () -> accessService.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                        "m002-j29-create-" + f.suffix(), "M002", tooLong, "lvl_m1_lower", m.role(), m.template(), "active")),
+                () -> accessService.updatePositionRoleTemplate(m.id(), new PositionRoleTemplateRequest(
+                        "m002-j29-update-" + f.suffix(), "M002", tooLong.substring(0, 65), "lvl_m1_lower", m.role(), m.template(), "active")));
+        for (Runnable entry : entries) {
+            assertThatThrownBy(() -> m002ActAs(f.admin(), "platform_admin", entry))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.status().value()).isEqualTo(400);
+                        assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                    });
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM position_role_templates WHERE position_code LIKE ?", Long.class,
+                "q" + f.suffix() + "%")).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT position_code FROM position_role_templates WHERE id = ?", String.class, m.id()))
+                .isEqualTo(m.position());
+
+        String longest = tooLong.substring(0, 64);
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "m002-j29-ok-" + f.suffix(), "M002", longest, "lvl_m1_lower", m.role(), m.template(), "active")));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM position_role_templates WHERE position_code = ?", Long.class, longest))
+                .isEqualTo(1);
+    }
+
     // M002-F23：真实接口回归——建角色 role_name 121 字、data_scope 65 字或不在契约枚举内均 400 VALIDATION_FAILED（不再落成列宽 500），
     // 不留角色；120 字名与枚举值 self 可建。
     @Test

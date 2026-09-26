@@ -2374,6 +2374,67 @@ class AccessServiceTests {
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("access.user_permission_override.remove");
     }
 
+    // M002-F26（技术不变量：信任边界输入先结构校验后查库；F21 验收「在排序、查库、写入前校验」）：两类授权申请、建角色、员工覆盖四个入口的
+    // 权限码列表混有 null 或空白时 400 VALIDATION_FAILED，整张列表的结构校验先于任何权限存在性查询（查询 0 次），无新行、无成功事件。
+    @Test
+    void permissionCodeListsAreStructurallyCheckedBeforeAnyExistenceLookup() {
+        String user = "usr_m002_structural";
+        m002HighRiskFixture(user, null, "lvl_m1_lower");
+        int roles = accessRepository.roles.size();
+        int attempt = 0;
+        for (List<String> codes : List.of(java.util.Arrays.asList(M002_CODE, null), java.util.Arrays.asList(null, M002_CODE),
+                List.of(M002_CODE, "  "))) {
+            String n = String.valueOf(++attempt);
+            List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> entries = List.of(
+                    () -> service.applyGrant(m002Apply("m002-structural-grant-" + n, "user_permission_grant", user, codes)),
+                    () -> service.applyGrant(m002Apply("m002-structural-lift-" + n, "user_permission_deny_removal", user, codes)),
+                    () -> service.createRole(m002Role("m002-structural-role-" + n, "结构校验角色" + n, null, codes, "project")),
+                    () -> service.setUserPermissionOverrides(user, new UserPermissionOverrideRequest(
+                            "m002-structural-override-" + n, "停权", codes, "deny", "员工显式拒绝")));
+            for (org.assertj.core.api.ThrowableAssert.ThrowingCallable entry : entries) {
+                accessRepository.permissionExistsCalls = 0;
+                assertThatThrownBy(entry).isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(400);
+                    assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                });
+                assertThat(accessRepository.permissionExistsCalls).as("结构校验失败时不应查询权限是否存在").isZero();
+            }
+        }
+        assertThat(accessRepository.grantRequests.values()).isEmpty();
+        assertThat(accessRepository.roles).hasSize(roles);
+        assertThat(accessRepository.overrides).noneMatch(override -> user.equals(override.userId()));
+        assertThat(auditEventRepository.events).noneMatch(event -> "success".equals(event.eventResult())
+                && event.idempotencyKey() != null && event.idempotencyKey().startsWith("m002-structural-"));
+    }
+
+    // M002-F28（技术不变量：岗位映射 position_code 列宽 VARCHAR(64)）：新建或修改岗位映射时岗位编码超过 64 字 400 VALIDATION_FAILED，
+    // 不落行、映射不变、无保存成功事件；64 字可保存。
+    @Test
+    void positionCodeLongerThanTheColumnIsRejectedBeforeSaving() {
+        PositionRoleTemplate existing = m002HighRiskFixture("usr_m002_long_code", null, "lvl_m1_lower");
+        int mappings = accessRepository.positionRoleTemplates.size();
+        String tooLong = "p".repeat(65);
+        List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> entries = List.of(
+                () -> service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                        "m002-long-create", null, tooLong, "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active")),
+                () -> service.updatePositionRoleTemplate(existing.id(), new PositionRoleTemplateRequest(
+                        "m002-long-update", null, tooLong, "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active")));
+        for (org.assertj.core.api.ThrowableAssert.ThrowingCallable entry : entries) {
+            assertThatThrownBy(entry).isInstanceOfSatisfying(ApiException.class, e -> {
+                assertThat(e.status().value()).isEqualTo(400);
+                assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+            });
+        }
+        assertThat(accessRepository.positionRoleTemplates).hasSize(mappings);
+        assertThat(accessRepository.positionRoleTemplates.get(existing.id()).positionCode()).isEqualTo("ops_manager");
+        assertThat(auditEventRepository.events).noneMatch(event -> "access.position_role_template.saved".equals(event.eventName())
+                && ("m002-long-create".equals(event.idempotencyKey()) || "m002-long-update".equals(event.idempotencyKey())));
+
+        String longest = "p".repeat(64);
+        assertThat(service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "m002-long-ok", null, longest, "lvl_m1_lower", "role_ops_check", "tpl_ops_check", "active")).positionCode()).isEqualTo(longest);
+    }
+
     // M002-F21：两类授权申请的权限码列表混有 null 或空白时，在排序、查库与任何写入前 400 VALIDATION_FAILED；不建单、不写指纹、
     // 不建复核单、无成功事件，失败留痕错误码为 VALIDATION_FAILED。
     @Test
@@ -3832,8 +3893,11 @@ class AccessServiceTests {
             return Optional.ofNullable(staffLevelAssignments.get(userId));
         }
 
+        int permissionExistsCalls; // M002-F26：权限存在性查询次数（断言结构校验先于查库）
+
         @Override
         public boolean permissionExists(String permissionCode) {
+            permissionExistsCalls++;
             return permissions.containsKey(permissionCode);
         }
 
