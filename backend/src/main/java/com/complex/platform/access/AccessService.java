@@ -968,7 +968,7 @@ public class AccessService {
         return settled;
     }
 
-    // M002-F20：申请单记下的岗位、职级、角色、模板与本次派生一致，且授权事实指纹未变（仍可批准）。
+    // M002-F20：申请单记下的岗位、职级、角色、模板与本次派生一致，且授权事实指纹未变（仍可批准；释放单指纹含所挂映射 id，M002-F25）。
     private boolean matchesDerivation(AccessGrantRequestRecord request, PositionGrantContext context) {
         return java.util.Objects.equals(request.positionCode(), context.positionCode())
                 && java.util.Objects.equals(request.staffLevelId(), context.staffLevelId())
@@ -2123,6 +2123,12 @@ public class AccessService {
                     .orElseThrow(() -> ApiException.conflict("GRANT_SNAPSHOT_CHANGED", "岗位配置已变化，请重新申请"));
             facts.add(java.util.Arrays.asList(mapping.id(), mapping.organizationId(), mapping.roleId(),
                     mapping.templateId(), mapping.status()));
+        }
+        if (REQUEST_POSITION_HIGH_RISK_RELEASE.equals(request.requestType())) {
+            // M002-F25（治理地图第 703 行「该岗位模板被停用或修改时，原先未生效的这类权限及其待审批申请一并作废」）：释放单钉住发起时员工所挂的
+            // 岗位映射 id。员工改挂另一张映射（哪怕岗位、职级、角色、模板都相同）即 GRANT_SNAPSHOT_CHANGED：对账时作废旧单并按新映射建单，
+            // 审批落地时拒绝；同一映射原样重存 id 不变，保留规则不变。
+            facts.add(java.util.Arrays.asList("position_mapping", repository.findAssignedPositionTemplateId(target.id()).orElse(null)));
         }
         if (REQUEST_USER_PERMISSION_DENY_REMOVAL.equals(request.requestType())) {
             // M002-F06（PGM「显式拒绝优先级最高」）：钉住所解除的员工显式拒绝行；待审期间被重写或删除即 GRANT_SNAPSHOT_CHANGED

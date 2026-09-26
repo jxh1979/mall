@@ -1808,6 +1808,45 @@ class AccessJdbcIntegrationTests {
         }
     }
 
+    // M002-F25（治理地图第 703 行原句「该岗位模板被停用或修改时，原先未生效的这类权限及其待审批申请一并作废，按新岗位或新模板重新判断」；
+    // 真库）：全平台映射 A 与组织专属映射 B 同岗同职级、同高危角色与模板，员工先挂 B 并有待审释放单；把 B 改到另一岗位编码后员工按原岗位
+    // 回落到 A——B 的待审单作废、复核单关闭、不能再获批；新挂起只对应一张 A 的待审单（同岗重定不重复开单），批准它之后该码才生效。
+    @Test
+    void releaseRequestIsBoundToItsMappingWhenTheEmployeeFallsBackToTheGlobalMappingOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping global = m002HighRiskMapping(f);
+        String orgMapping = "prt_m002_orgb_" + f.suffix();
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(orgMapping, global.position(), "lvl_m1_lower", global.role(),
+                global.template(), "org", "active", f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, global.position(), "m002-j28-assign");
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(orgMapping);
+        String old = m002PendingRequestId(f.target(), "position_high_risk_release");
+        String oldReview = m002ReviewId(old);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(orgMapping, new PositionRoleTemplateRequest(
+                "m002-j28-move-" + f.suffix(), "M002", "m002_moved_" + f.suffix(), "lvl_m1_lower", global.role(), global.template(), "active")));
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(global.id());
+        assertThat(m002Status(old)).isEqualTo("rejected");
+        assertThat(m002ReviewStatus(oldReview)).isEqualTo("rejected");
+        assertThat(m002PendingNodeCount(oldReview)).isZero();
+        assertThatThrownBy(() -> m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(old, m002Approve("m002-j28-old-" + f.suffix()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ACCESS_GRANT_REQUEST_NOT_FOUND"));
+        assertThat(m002PendingReleaseCount(f.target())).isEqualTo(1);
+        String renewed = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThat(renewed).isNotEqualTo(old);
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(m002EffectiveGrants(f)).doesNotContain(f.code());
+
+        m002Assign(f, global.position(), "m002-j28-reassign");
+        assertThat(m002PendingRequestId(f.target(), "position_high_risk_release")).isEqualTo(renewed);
+        assertThat(m002PendingReleaseCount(f.target())).isEqualTo(1);
+
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(renewed, m002Approve("m002-j28-new-" + f.suffix())));
+        assertThat(m002Status(renewed)).isEqualTo("applied");
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+    }
+
     // M002-F20 b（回归 [17]，真库）：驳回后换岗（改职级到同岗位另一职级、同样含该码的映射）——已驳回留下的挂起按新岗位重挂、恰开一张新单
     // （快照是新职级），批准后生效。
     @Test

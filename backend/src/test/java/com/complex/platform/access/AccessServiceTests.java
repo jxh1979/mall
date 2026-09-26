@@ -2276,6 +2276,24 @@ class AccessServiceTests {
         assertThat(authorizationService.effectivePermissionsForUser(user).grants()).doesNotContain(M002_CODE);
     }
 
+    // M002-F25（审批落地核对当前映射）：岗位高危释放单钉住发起时员工所挂的岗位映射——员工改挂另一张映射后（岗位、职级、角色、模板都相同），
+    // 旧单审批落地报 GRANT_SNAPSHOT_CHANGED，不解除挂起、不改单状态。
+    @Test
+    void releaseApprovalIsRefusedOnceTheEmployeeIsOnAnotherMapping() {
+        String user = "usr_m002_rebound";
+        m002HighRiskFixture(user, null, "lvl_m1_lower");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-rebound-assign", null, user, "ops_manager", "lvl_m1_lower", null, null, null));
+        AccessGrantRequestRecord pending = m002PendingHold();
+        accessRepository.positionMappings.put(user, "prt_m002_rebound_other"); // 岗位行改挂另一张映射，其余授权事实不变
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThatThrownBy(() -> service.reviewGrant(pending.id(), m002Approve("m002-rebound-approve")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED"));
+        assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("pending");
+        assertThat(overrideSources(user, M002_CODE, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.POSITION_HOLD);
+    }
+
     // M002-F22（[11]）：改模板对账在员工行锁下逐人复核——岗位行的岗位职级与映射对不上的员工，不拿映射当前角色与模板去算其高危集合：
     // 不删其挂起行、不作废其待审释放单。
     @Test
