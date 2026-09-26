@@ -721,6 +721,7 @@ public class AccessService {
                         if (positionCode.isEmpty() || staffLevelId.isEmpty()) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "范围变更须指定新范围的岗位与职级");
                         }
+                        requirePositionCodeWithinColumn(positionCode); // M002-F31：在撤销旧范围权限之前拒绝超长岗位编码
                         Instant now = Instant.now();
                         // M087-I7-02（PGM-1.10.1「超出新模板范围的增权保持未生效，审批通过后方可生效」）：旧范围下的非派生增权——直接装配角色、
                         // 单独模板授予、临时授权、员工单独授予（显式 GRANT）——随范围变更一并撤销；新范围内的增权须重新申请并审批通过后才生效。
@@ -2247,6 +2248,7 @@ public class AccessService {
         String userId = requireText(request.userId(), "user_id");
         String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
         String positionCode = requireText(request.positionCode(), "position_code");
+        requirePositionCodeWithinColumn(positionCode); // M002-F31：定岗、岗位申请建单、审批落地共用此处，查映射与任何写入之前拒绝超长编码
         AccessUser targetUser = lockTargetUser(userId);
         // M002-F19（操作员 2026-09-25 裁决原句「最高权限账号不能被定岗」，治理地图第 703 行「最高权限账号不设岗位、不套用岗位模板」）。
         // 经此处的入口（技术推导）：定岗、有岗位时改职级、岗位申请建单、定岗与范围变更审批落地、模板重算，目标为最高权限账号一律拒绝。
@@ -2879,7 +2881,8 @@ public class AccessService {
                         "verification", "payment").anyMatch(code::contains);
     }
 
-    // M002-F28（技术不变量：岗位映射与岗位行 position_code 列宽 VARCHAR(64)）：超长岗位编码在写库前 400，不落成列宽 500。
+    // M002-F28/F31（技术不变量：岗位映射、岗位行与申请单 position_code 列宽 VARCHAR(64)）：超长岗位编码在查映射与写库前 400，
+    // 不落成列宽 500 或找不到映射 404。
     private static void requirePositionCodeWithinColumn(String positionCode) {
         String trimmed = positionCode == null ? "" : positionCode.trim();
         if (trimmed.codePointCount(0, trimmed.length()) > 64) {

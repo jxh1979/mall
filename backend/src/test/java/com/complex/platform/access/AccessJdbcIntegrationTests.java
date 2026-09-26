@@ -2014,6 +2014,65 @@ class AccessJdbcIntegrationTests {
                 .isEqualTo(1);
     }
 
+    // M002-F31（技术不变量：岗位行、申请单 position_code 列宽 VARCHAR(64)；F28 验收「及其他写 position_code 的入口」）：真实接口——定岗、
+    // 岗位申请建单、范围变更的岗位编码 65 字与 120 字，都在查映射与任何业务写入之前 400 VALIDATION_FAILED（不再落成找不到映射 404）：
+    // 不写岗位行、不建申请单、范围变更不撤销旧权限、不改所属范围、无带这些键的成功事件；64 字的有效映射仍可定岗。
+    @Test
+    void positionCodeLongerThanTheColumnIsRejectedAtEveryAssignmentEntryThroughTheEndpoints() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String assignRole = "role_m002_f31_" + f.suffix();
+        repository.createRole(new RoleRecord(assignRole, "M002 装配角色 F31 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.assign"), null));
+        repository.assignUserRole(f.admin(), assignRole);
+        String kept = "role_m002_f31_kept_" + f.suffix();
+        repository.createRole(new RoleRecord(kept, "M002 保留角色 F31 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.assignUserRole(f.target(), kept);
+        var session = m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+        String base = ("w" + f.suffix()).repeat(14);
+        int attempt = 0;
+        for (String code : List.of(base.substring(0, 65), base.substring(0, 120))) {
+            String n = f.suffix() + "-" + (++attempt);
+            mockMvc.perform(put("/api/v1/access/users/" + f.target() + "/position").with(session).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"idempotency_key\": \"m002-j30-position-%s\", \"position_code\": \"%s\", \"staff_level_id\": \"lvl_m1_lower\"}"
+                                    .formatted(n, code)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            mockMvc.perform(post("/api/v1/access/grant-requests").with(session).contentType(MediaType.APPLICATION_JSON)
+                            .content(("{\"idempotency_key\": \"m002-j30-apply-%s\", \"request_type\": \"user_position\", \"target_user_id\": \"%s\", "
+                                    + "\"position_code\": \"%s\", \"staff_level_id\": \"lvl_m1_lower\", \"reason\": \"岗位申请\"}").formatted(n, f.target(), code)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            mockMvc.perform(put("/api/v1/access/users/" + f.target() + "/scope").with(session).contentType(MediaType.APPLICATION_JSON)
+                            .content(("{\"idempotency_key\": \"m002-j30-scope-%s\", \"organization_id\": \"org_m002_other\", \"position_code\": \"%s\", "
+                                    + "\"staff_level_id\": \"lvl_m1_lower\", \"reason\": \"调往另一项目\"}").formatted(n, code)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_position_assignments WHERE user_id = ?", Long.class, f.target()))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?", Long.class, f.target()))
+                .isZero();
+        assertThat(repository.findUserRoleIds(f.target())).contains(kept);
+        assertThat(jdbcTemplate.queryForObject("SELECT organization_id FROM access_users WHERE id = ?", String.class, f.target())).isEqualTo("org");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_result = 'success' AND idempotency_key LIKE ?", Long.class,
+                "m002-j30-%" + f.suffix() + "%")).isZero();
+
+        String longest = base.substring(0, 64);
+        String role = "role_m002_j30_" + f.suffix();
+        String template = "tpl_m002_j30_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 64 字岗位角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(baseTemplate(template), List.of());
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_j30_" + f.suffix(), longest, "lvl_m1_lower", role, template,
+                null, "active", f.admin(), Instant.now(), Instant.now()));
+        mockMvc.perform(put("/api/v1/access/users/" + f.target() + "/position").with(session).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\": \"m002-j30-ok-%s\", \"position_code\": \"%s\", \"staff_level_id\": \"lvl_m1_lower\"}"
+                                .formatted(f.suffix(), longest)))
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForObject("SELECT position_code FROM user_position_assignments WHERE user_id = ?", String.class, f.target()))
+                .isEqualTo(longest);
+    }
+
     // M002-F23：真实接口回归——建角色 role_name 121 字、data_scope 65 字或不在契约枚举内均 400 VALIDATION_FAILED（不再落成列宽 500），
     // 不留角色；120 字名与枚举值 self 可建。
     @Test
