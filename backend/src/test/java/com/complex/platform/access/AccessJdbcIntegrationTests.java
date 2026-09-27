@@ -2089,6 +2089,84 @@ class AccessJdbcIntegrationTests {
         assertThat(m002ReleaseCount(f.target())).isZero();
     }
 
+    // M002-F33（依据：治理地图第 655 行「最终权限 = 角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝；显式拒绝优先级最高」；真库）：
+    // 高危码 C 的员工单独授予获批后再定到含 C 的岗位——挂起照写（岗位派生那一份仍待释放单审批），C 仍生效；释放单驳回不删已批准的单独授予；
+    // 撤掉单独授予后岗位派生不成为未经审批的第二来源，C 无效。requirePermission 与有效权限查询结论一致。
+    @Test
+    void approvedIndividualGrantSurvivesAPositionHoldOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String grant = m002ApplyOverride(f, "user_permission_grant", "m002-j42");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(grant, m002Approve("m002-j42-approve-" + f.suffix())));
+        m002ExpectEffective(f, f.target(), true);
+
+        m002Assign(f, m.position(), "m002-j42-assign");
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        m002ExpectEffective(f, f.target(), true);
+        String release = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(release, m002Reject("m002-j42-reject-" + f.suffix())));
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM user_permission_overrides WHERE user_id = ? AND permission_code = ? AND effect = 'grant'
+                """, Long.class, f.target(), f.code())).isEqualTo(1);
+        m002ExpectEffective(f, f.target(), true);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.removeUserPermissionOverrides(f.target(), new UserPermissionOverrideRequest(
+                "m002-j42-remove-" + f.suffix(), "M002", List.of(f.code()), "grant", "撤销单独授予")));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        m002ExpectEffective(f, f.target(), false);
+    }
+
+    // M002-F33（真库）：先定岗、C 只因挂起而无效（没有其他来源时挂起仍使 C 无效）；再批准 C 的单独授予，C 生效，挂起仍在；
+    // 释放单获批后挂起解除，C 继续生效。
+    @Test
+    void individualGrantApprovedAfterThePositionHoldTakesEffectOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j43-assign");
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        m002ExpectEffective(f, f.target(), false);
+
+        String grant = m002ApplyOverride(f, "user_permission_grant", "m002-j43");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(grant, m002Approve("m002-j43-approve-" + f.suffix())));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        m002ExpectEffective(f, f.target(), true);
+
+        String release = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(release, m002Approve("m002-j43-release-" + f.suffix())));
+        assertThat(denyOrigins(f.target(), f.code())).isEmpty();
+        m002ExpectEffective(f, f.target(), true);
+    }
+
+    // M002-F33（真库）：同码的直接角色绑定、有效临时授权不被岗位挂起压掉；员工显式拒绝压过全部来源（直接角色、临时授权、岗位派生）。
+    @Test
+    void directRoleAndTemporaryGrantSurviveAPositionHoldButNotAnExplicitDenyOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String directRole = "role_m002_direct_" + f.suffix();
+        repository.createRole(new RoleRecord(directRole, "M002 直接角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code()), null));
+        repository.assignUserRole(f.target(), directRole);
+        m002Assign(f, m.position(), "m002-j44-assign");
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        m002ExpectEffective(f, f.target(), true);
+
+        String temporary = "usr_m002_temp_" + f.suffix();
+        repository.createUser(new AccessUser(temporary, temporary, "staff", "org", null, "active", Instant.now()));
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), temporary, List.of(f.code()),
+                Instant.now().minusSeconds(3600), Instant.now().plus(java.time.Duration.ofDays(1)), false, false, "active", "M002 临时授权",
+                f.admin(), Instant.now(), null, null));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-j44-temp-assign-" + f.suffix(), "M002", temporary, m.position(), "lvl_m1_lower", null, null, null)));
+        assertThat(denyOrigins(temporary, f.code())).containsExactly("position_hold");
+        m002ExpectEffective(f, temporary, true);
+
+        for (String user : List.of(f.target(), temporary)) {
+            m002ActAs(f.admin(), "platform_admin", () -> accessService.setUserPermissionOverrides(user, new UserPermissionOverrideRequest(
+                    "m002-j44-deny-" + user, "M002", List.of(f.code()), "deny", "员工显式拒绝")));
+            m002ExpectEffective(f, user, false);
+        }
+    }
+
     // M002-F20 b（回归 [17]，真库）：驳回后换岗（改职级到同岗位另一职级、同样含该码的映射）——已驳回留下的挂起按新岗位重挂、恰开一张新单
     // （快照是新职级），批准后生效。
     @Test
@@ -2779,6 +2857,21 @@ class AccessJdbcIntegrationTests {
     private static final String DAILY_A = "amusement.device.view";
     private static final String DAILY_B = "inventory.stocktake.view";
     private static final String DAILY_C = "inventory.trace_code.view";
+
+    // M002-F33：requirePermission（员工本人会话）与有效权限查询（平台管理员读）对夹具高危码的结论一致，且等于期望。
+    private void m002ExpectEffective(M002Fixture f, String userId, boolean expected) {
+        List<List<String>> grants = new java.util.ArrayList<>();
+        m002ActAs(f.admin(), "platform_admin", () -> grants.add(authorizationService.effectivePermissionsForUser(userId).grants()));
+        boolean allowed;
+        try {
+            m002ActAs(userId, "staff", () -> authorizationService.requirePermission(f.code()));
+            allowed = true;
+        } catch (ApiException denied) {
+            allowed = false;
+        }
+        assertThat(grants.get(0).contains(f.code())).as("有效权限查询").isEqualTo(expected);
+        assertThat(allowed).as("requirePermission").isEqualTo(expected);
+    }
 
     // M002-F32：只含给定条目的单次临时模板。
     private PermissionTemplate m002SingleUseTemplate(String id) {

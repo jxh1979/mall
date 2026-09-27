@@ -47,8 +47,10 @@ public class AuthorizationService implements CallerScopeResolver {
                 .filter(effect -> isActive(effect, checkedAt)).toList();
         java.util.Map<String, AccessRepository.PermissionEffect> consume = new java.util.LinkedHashMap<>();
         java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
+        java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
+                positionDerivedSources(actor.id());
         for (String code : new java.util.LinkedHashSet<>(java.util.Arrays.asList(permissionCodes))) {
-            AccessRepository.PermissionEffect grant = permissionGrant(actor, code, effects, daily);
+            AccessRepository.PermissionEffect grant = permissionGrant(actor, code, effects, daily, positionDerived);
             if (grant != null && grant.singleUse()) {
                 consume.putIfAbsent(grant.source() + ":" + grant.sourceId(), grant);
             }
@@ -63,20 +65,23 @@ public class AuthorizationService implements CallerScopeResolver {
 
     private AccessRepository.PermissionEffect permissionGrant(
             AccessActor actor, String code, List<AccessRepository.PermissionEffect> effects) {
-        return permissionGrant(actor, code, effects, dailyPermissions());
+        return permissionGrant(actor, code, effects, dailyPermissions(), positionDerivedSources(actor.id()));
     }
 
     private AccessRepository.PermissionEffect permissionGrant(
             AccessActor actor, String code, List<AccessRepository.PermissionEffect> effects,
-            java.util.function.Supplier<java.util.Set<String>> daily) {
+            java.util.function.Supplier<java.util.Set<String>> daily,
+            java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived) {
         if (!"active".equals(actor.status()) || !knownPermission(code)) {
             deny(code);
         }
         List<AccessRepository.PermissionEffect> matching = effects.stream()
                 .filter(effect -> code.equals(effect.permissionCode())).toList();
-        if (matching.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
+        // M002-F33：员工显式拒绝压过全部来源；岗位高危挂起只压住岗位派生的那一份授予（见 positionDerivedSources）
+        if (matching.stream().anyMatch(AuthorizationService::isExplicitDeny)) {
             deny(code);
         }
+        boolean held = matching.stream().anyMatch(AuthorizationService::isPositionHold);
         if (isMasterAuthority(actor)
                 || (isPlatformAdminBridge(actor) && daily.get().contains(code))
                 || (isCustomerSelfServiceBridge(actor) && CUSTOMER_SELF_SERVICE_PERMISSIONS.contains(code))) {
@@ -85,6 +90,7 @@ public class AuthorizationService implements CallerScopeResolver {
         AccessRepository.PermissionEffect grant = matching.stream()
                 .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
                 .filter(effect -> isExplicitOrDailyGrant(effect, daily))
+                .filter(effect -> !held || !positionDerived.get().test(effect))
                 .min(Comparator.comparing(AccessRepository.PermissionEffect::sourceId,
                         Comparator.nullsLast(String::compareTo))).orElse(null);
         if (grant == null) {
@@ -126,6 +132,48 @@ public class AuthorizationService implements CallerScopeResolver {
             "access.permission_template.manage", "access.permission_template.apply", "access.permission_template.revoke",
             "access.staff_level.manage", "access.user.manage",
             "access.temporary_grant.create", "access.temporary_grant.revoke");
+
+    private static boolean isExplicitDeny(AccessRepository.PermissionEffect effect) {
+        return effect.effect() == AccessRepository.Effect.DENY && effect.source() != AccessRepository.Source.POSITION_HOLD;
+    }
+
+    private static boolean isPositionHold(AccessRepository.PermissionEffect effect) {
+        return effect.effect() == AccessRepository.Effect.DENY && effect.source() == AccessRepository.Source.POSITION_HOLD;
+    }
+
+    /**
+     * M002-F33（依据：治理地图第 655 行「最终权限 = 角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝；显式拒绝优先级最高」；
+     * 以下为技术推导）：岗位高危挂起不是显式拒绝，只压住岗位派生的那一份授予——员工岗位行记下的岗位派生角色（未另行直接绑定）与岗位派生
+     * 模板套用。员工单独授予、直接角色绑定、非岗位模板套用与临时授权照常生效。首次用到才查库（只在该码有挂起时），一次判定内复用。
+     */
+    private java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerivedSources(String userId) {
+        java.util.concurrent.atomic.AtomicReference<java.util.function.Predicate<AccessRepository.PermissionEffect>> memo =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        return () -> {
+            if (memo.get() == null) {
+                String positionRole = accessRepository.findAssignedPositionRoleId(userId).orElse(null);
+                java.util.Set<String> positionApplications = accessRepository.findPositionApplications(userId).stream()
+                        .map(PermissionTemplateApplication::id).collect(java.util.stream.Collectors.toSet());
+                java.util.Set<String> directRoles = positionRole == null ? java.util.Set.of() : directRoleIds(userId);
+                memo.set(effect -> switch (effect.source()) {
+                    case ROLE -> effect.sourceId() != null && effect.sourceId().equals(positionRole)
+                            && !directRoles.contains(effect.sourceId());
+                    case TEMPLATE_APPLICATION -> positionApplications.contains(effect.sourceId());
+                    default -> false;
+                });
+            }
+            return memo.get();
+        };
+    }
+
+    // 不支持直接角色查询的仓储按「没有另行直接绑定」处理（挂起照常压住岗位派生角色）。
+    private java.util.Set<String> directRoleIds(String userId) {
+        try {
+            return new java.util.HashSet<>(accessRepository.findUserRoleIds(userId));
+        } catch (UnsupportedOperationException unsupported) {
+            return java.util.Set.of();
+        }
+    }
 
     private boolean isExplicitOrDailyGrant(AccessRepository.PermissionEffect effect,
                                            java.util.function.Supplier<java.util.Set<String>> daily) {
@@ -178,18 +226,20 @@ public class AuthorizationService implements CallerScopeResolver {
         List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
                 .filter(effect -> isActive(effect, checkedAt))
                 .toList();
-        List<String> denies = active.stream()
-                .filter(effect -> effect.effect() == AccessRepository.Effect.DENY)
-                .map(AccessRepository.PermissionEffect::permissionCode)
-                .distinct()
-                .sorted()
-                .toList();
-        // 实现 A：grants 预扣 denies（DENY 优先），denies 仍单独返回供前端展示冲突来源。
+        // M002-F33：员工显式拒绝压过全部来源；岗位高危挂起只压住岗位派生的那一份授予，与 permissionGrant 同口径。
+        java.util.Set<String> explicitDenies = active.stream().filter(AuthorizationService::isExplicitDeny)
+                .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
+        java.util.Set<String> held = active.stream().filter(AuthorizationService::isPositionHold)
+                .map(AccessRepository.PermissionEffect::permissionCode).collect(java.util.stream.Collectors.toSet());
+        java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
+                positionDerivedSources(userId);
+        // 实现 A：grants 预扣显式拒绝（DENY 优先）与被挂起压住的岗位派生授予。
         List<String> grants = active.stream()
                 .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
                 .filter(effect -> isExplicitOrDailyGrant(effect, daily))
+                .filter(effect -> !held.contains(effect.permissionCode()) || !positionDerived.get().test(effect))
                 .map(AccessRepository.PermissionEffect::permissionCode)
-                .filter(code -> !denies.contains(code))
+                .filter(code -> !explicitDenies.contains(code))
                 .distinct()
                 .sorted()
                 .toList();
@@ -201,7 +251,11 @@ public class AuthorizationService implements CallerScopeResolver {
                     .filter(p -> master || daily.get().contains(p.permissionCode()))
                     .map(PermissionDefinition::permissionCode).forEach(effective::add);
         }
-        effective.removeAll(denies);
+        effective.removeAll(explicitDenies);
+        // denies 仍单独返回供前端展示（前端以 denies 压过 grants）：员工显式拒绝，加上被挂起压住、又没有其他来源的码。
+        List<String> denies = java.util.stream.Stream.concat(explicitDenies.stream(),
+                        held.stream().filter(code -> !effective.contains(code)))
+                .distinct().sorted().toList();
         return new EffectivePermissions(userId, List.copyOf(effective), denies, false, checkedAt);
     }
 
@@ -373,14 +427,18 @@ public class AuthorizationService implements CallerScopeResolver {
                     .filter(effect -> permissionCode.equals(effect.permissionCode()))
                     .filter(effect -> isActive(effect, checkedAt))
                     .toList();
-            if (active.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
+            if (active.stream().anyMatch(AuthorizationService::isExplicitDeny)) {
                 return false;
             }
+            boolean held = active.stream().anyMatch(AuthorizationService::isPositionHold);
+            java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
+                    positionDerivedSources(userId);
             java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
             return active.stream()
                     .anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT
                             && effect.source() == AccessRepository.Source.ROLE
-                            && isExplicitOrDailyGrant(effect, daily));
+                            && isExplicitOrDailyGrant(effect, daily)
+                            && (!held || !positionDerived.get().test(effect)));
         } catch (RuntimeException exception) {
             return false;
         }
