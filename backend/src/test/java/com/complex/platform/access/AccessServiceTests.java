@@ -2294,6 +2294,46 @@ class AccessServiceTests {
         assertThat(overrideSources(user, M002_CODE, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.POSITION_HOLD);
     }
 
+    // M002-F32（技术推导）：同岗重定时岗位与所引模板都未变——保留原岗位派生套用（同一条、不撤销、不新增）。
+    @Test
+    void samePositionReassignmentKeepsThePositionTemplateApplication() {
+        String user = "usr_m002_keep_application";
+        m002HighRiskFixture(user, null, "lvl_m1_lower");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-keep-app-assign", null, user, "ops_manager", "lvl_m1_lower", null, null, null));
+        List<PermissionTemplateApplication> before = accessRepository.templateApplications.stream()
+                .filter(application -> user.equals(application.targetId())).toList();
+        assertThat(before).singleElement().extracting(PermissionTemplateApplication::status).isEqualTo("active");
+
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-keep-app-reassign", null, user, "ops_manager", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.templateApplications.stream().filter(application -> user.equals(application.targetId())).toList())
+                .isEqualTo(before);
+        assertThat(accessRepository.positionApplicationIds.get(user)).containsExactly(before.get(0).id());
+    }
+
+    // M002-F32（登记 1，技术推导）：映射改指单次模板、重新套用时，只有仅来自该单次模板的码不沿用旧批准；角色里也有、已批准并仍由角色生效的码
+    // 照常生效，不重新挂起、不开新单。
+    @Test
+    void reissuingASingleUseTemplateKeepsApprovedCodesThatTheRoleStillGrants() {
+        String user = "usr_m002_role_kept";
+        PositionRoleTemplate mapping = m002HighRiskFixture(user, null, "lvl_m1_lower");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-role-kept-assign", null, user, "ops_manager", "lvl_m1_lower", null, null, null));
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        service.reviewGrant(m002PendingHold().id(), m002Approve("m002-role-kept-approve"));
+        authenticateAsPlatformAdmin("seed-org");
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_once", "tpl_ops_once", "Ops Once", null, "temporary", null, "platform", null, "merge", null, null, true,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_once", M002_CODE, AccessRepository.Effect.GRANT, "project", false)));
+
+        service.updatePositionRoleTemplate(mapping.id(), m002Mapping("m002-role-kept-once", "role_ops_check", "tpl_ops_once", "active"));
+        assertThat(overrideSources(user, M002_CODE, AccessRepository.Effect.DENY)).isEmpty();
+        assertThat(m002PendingReleases(user)).isEmpty();
+        assertThat(authorizationService.effectivePermissionsForUser(user).grants()).contains(M002_CODE);
+    }
+
     // M002-F22（[11]）：改模板对账在员工行锁下逐人复核——岗位行的岗位职级与映射对不上的员工，不拿映射当前角色与模板去算其高危集合：
     // 不删其挂起行、不作废其待审释放单。
     @Test
@@ -3680,8 +3720,9 @@ class AccessServiceTests {
         assertThat(authorizationService.effectivePermissionsForUser("usr_recompute").grants())
                 .contains("governance.supervisor_review.view", "ops.production_readiness.check")
                 .doesNotContain("ops.production_readiness.view");
+        // M002-F32：映射只换了角色、所引模板未变，保留原岗位派生套用（不撤销重建）
         assertThat(accessRepository.templateApplications).filteredOn(a -> "usr_recompute".equals(a.targetId()))
-                .extracting(PermissionTemplateApplication::status).containsExactly("revoked", "active");
+                .extracting(PermissionTemplateApplication::status).containsExactly("active");
         assertThat(accessRepository.findStaffLevelAssignment("usr_recompute")).get()
                 .extracting(StaffLevelAssignment::baseSalaryAmountCent)
                 .isEqualTo(500000L);
@@ -3783,13 +3824,23 @@ class AccessServiceTests {
         // M036-001：与 JdbcAccessRepository 同语义——先撤上一次岗位派生的模板应用，再记新角色与新应用 id；独立模板应用不受影响。
         @Override public void replacePositionGrants(String userId, String roleId, String mappingId,
                 List<String> applicationIds, String actorId, Instant at) {
-            revokeTemplateApplications(userId, positionApplicationIds.getOrDefault(userId, List.of()), actorId, at);
+            // M002-F32：与 Jdbc 同语义——保留下来的原岗位派生套用不撤销
+            revokeTemplateApplications(userId, positionApplicationIds.getOrDefault(userId, List.of()).stream()
+                    .filter(id -> !applicationIds.contains(id)).toList(), actorId, at);
             positionRoles.put(userId, roleId);
             positionMappings.put(userId, mappingId);
             positionApplicationIds.put(userId, List.copyOf(applicationIds));
         }
         @Override public Optional<String> findAssignedPositionTemplateId(String userId) {
             return Optional.ofNullable(positionMappings.get(userId));
+        }
+        // M002-F32：与 JdbcAccessRepository 同语义——岗位行记下的岗位派生套用（任意状态）与岗位派生角色。
+        @Override public List<PermissionTemplateApplication> findPositionApplications(String userId) {
+            List<String> ids = positionApplicationIds.getOrDefault(userId, List.of());
+            return templateApplications.stream().filter(application -> ids.contains(application.id())).toList();
+        }
+        @Override public Optional<String> findAssignedPositionRoleId(String userId) {
+            return Optional.ofNullable(positionRoles.get(userId));
         }
         // M002-F22：与 JdbcAccessRepository 同语义——只取实际挂在这张映射上的员工。
         @Override public List<String> listUserIdsOnPositionTemplate(PositionRoleTemplate mapping) {

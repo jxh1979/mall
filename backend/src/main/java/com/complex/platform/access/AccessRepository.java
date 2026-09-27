@@ -164,6 +164,11 @@ public interface AccessRepository {
         return listUserIdsAssignedToPosition(mapping.positionCode(), mapping.staffLevelId());
     }
 
+    /** M002-F32：员工岗位行当前的岗位派生角色 id（派生前判断改动是否带来新的授出来源）；没有岗位或未记录为空。 */
+    default Optional<String> findAssignedPositionRoleId(String userId) {
+        return Optional.empty();
+    }
+
     /** M002-F20：员工岗位行当前挂的岗位映射 id（派生前比对是否仍是同一映射）；没有岗位或未记录为空。 */
     default Optional<String> findAssignedPositionTemplateId(String userId) {
         return Optional.empty();
@@ -189,6 +194,11 @@ public interface AccessRepository {
      * 默认空实现只给单线程内存夹具用，真实锁见 JdbcAccessRepository。
      */
     default void lockAccessUsers(List<String> userIds) {
+    }
+
+    /** M002-F32：员工岗位行记下的岗位派生套用（任意状态，含已消耗、已到期）；默认空列表表示不保留、照常重新套用。 */
+    default List<PermissionTemplateApplication> findPositionApplications(String userId) {
+        return List.of();
     }
 
     /** M001-F11：该模板当前仍生效的全部套用记录（模板编辑时逐人留痕用）；默认空列表只给不记套用的测试夹具用，真实查询见 JdbcAccessRepository。 */

@@ -934,7 +934,9 @@ public class AccessService {
      * 改挂另一张映射时，沿用原映射改存前的须审批集合；员工自己换岗、改职级到另一张映射、跨项目时为空，全部按新岗位重新判断。其中保持现状的——
      * ① 已生效：没有挂起行，且该员工在本岗位（岗位、职级）下有覆盖该码的已批准释放单、定岗或范围变更申请，或在挂上当前映射之后
      *    （岗位行 assigned_at 起）有覆盖该码的已批准「解除员工显式拒绝」（定岗时已有显式拒绝的码不挂起，解除获批即为其授出审批）。按（员工、映射、码）判定，
-     *    映射改角色、改模板或所引权限模板内容被修改都不让已批准的码重新挂起；码先移出须审批集合再加回属新增，重新挂起开单。
+     *    映射改角色、改模板或所引权限模板内容被修改都不让已批准的码重新挂起，前提是改动没有带来新的授出来源，或改动前该码已由岗位派生的
+     *    长期有效来源生效；改动带来新授出来源而改动前只由单次或限时来源生效、已用完、已到期的码，以及重新套用单次模板时只来自该模板的码，
+     *    已在 assignUserPositionDirect 里从 keepable 去掉（M002-F32/F32c）；码先移出须审批集合再加回属新增，重新挂起开单。
      * ② 驳回仍有效：仍挂起，且最近一张覆盖它的释放单是映射与模板快照都一致的驳回单（等人对同一挂起再次发起）；快照变了即属模板被修改，作废重判。
      */
     private Set<String> settledPositionCodes(String userId, PositionGrantContext context, Set<String> wanted, Set<String> keepable,
@@ -1749,6 +1751,36 @@ public class AccessService {
         boolean continuing = onMapping != null && (previousApprovalCodes.containsKey(onMapping) || onMapping.equals(context.mappingId()));
         Set<String> keepable = !continuing ? Set.of() : previousApprovalCodes.getOrDefault(onMapping,
                 highRisk.stream().map(PermissionDefinition::permissionCode).collect(java.util.stream.Collectors.toSet()));
+        // M002-F32（依据：治理地图第 656 行「临时授权可设有效期或单次使用」、第 660 行「以下五类权限授出前须先审批才生效」；以下为技术推导）：
+        // 仍挂同一映射、所引模板未变的直接派生（同岗重定、映射原样重存）保留原岗位派生套用及其消耗状态，不撤销重建；审批落地（enforceApproval
+        // 为假）按整单审批重新套用。
+        List<PermissionTemplateApplication> heldApplications = enforceApproval && context.mappingId().equals(onMapping)
+                ? repository.findPositionApplications(context.targetUser().id()) : List.of();
+        boolean keepApplications = !heldApplications.isEmpty() && heldApplications.stream().allMatch(application ->
+                context.template().id().equals(application.templateId()) && !"revoked".equals(application.status()));
+        // M002-F32（B1、登记 1；依据：第 660 行「授出前须先审批才生效」、第 703 行「……原先未生效的这类权限……按新模板重新判断」；以下为技术推导）：
+        // 本次改动带来新的授出来源（换了岗位派生角色、重新套用了模板）时，旧批准只在改动前该码已由岗位派生的长期有效来源生效时沿用
+        // （启用中的岗位派生角色；或启用中、无到期、非单次模板的未撤销套用）——改动前只由单次或限时来源生效、已用完、已到期的码，新来源比批准
+        // 时更宽，按新派生重新判断（M002-F32c；依据第 656 行「单次使用」「有效期」）。来源没变（原套用保留、角色未换）的码照旧。
+        // 重新套用单次模板时，只来自该模板（角色里没有）的码是新的单次授出，也不沿用旧批准。
+        if (!keepable.isEmpty()) {
+            String previousRole = repository.findAssignedPositionRoleId(context.targetUser().id()).orElse(null);
+            Set<String> templateCodes = grantCodesOf(context.template().id());
+            Set<String> fresh = new HashSet<>();
+            if (!context.role().id().equals(previousRole)) {
+                fresh.addAll(context.role().permissionCodes());
+            }
+            if (!keepApplications) {
+                fresh.addAll(templateCodes);
+            }
+            Set<String> live = longTermPositionCodes(context.targetUser().id(), previousRole, now);
+            Set<String> reissuedOnce = !keepApplications && context.template().singleUse()
+                    ? templateCodes.stream().filter(code -> !context.role().permissionCodes().contains(code))
+                            .collect(java.util.stream.Collectors.toSet())
+                    : Set.of();
+            keepable = keepable.stream().filter(code -> (!fresh.contains(code) || live.contains(code)) && !reissuedOnce.contains(code))
+                    .collect(java.util.stream.Collectors.toSet());
+        }
         // 岗位行 assigned_at 记员工挂上当前映射的时间：仍在本映射期间（continuing）不刷新，解除显式拒绝的批准据此限定在本映射期间。
         Instant assignedAt = continuing ? repository.findUserPositionAssignment(context.targetUser().id())
                 .map(UserPositionAssignment::assignedAt).orElse(now) : now;
@@ -1772,7 +1804,7 @@ public class AccessService {
                 context.actor().id(),
                 assignedAt
         ));
-        List<PermissionTemplateApplication> applications = repository.applyTemplate(
+        List<PermissionTemplateApplication> applications = keepApplications ? heldApplications : repository.applyTemplate(
                 context.template().id(),
                 List.of(context.targetUser().id()),
                 context.template().validFrom(),
@@ -2879,6 +2911,32 @@ public class AccessService {
         return "finance".equalsIgnoreCase(permission.domain() == null ? "" : permission.domain())
                 || java.util.stream.Stream.of("refund", "dividend", "payout", "deposit", "settle", "bill.adjust", "waiver", "tax",
                         "verification", "payment").anyMatch(code::contains);
+    }
+
+    // M002-F32/F32c（技术推导）：改动前该员工由岗位派生的长期有效来源生效的码——启用中的岗位派生角色的码，加上未撤销、非单次、无到期、
+    // 已到生效时间的岗位派生套用所带模板授予条目的码，且模板本身启用、非单次、无到期。单次或限时来源不算长期。在替换岗位派生来源之前调用。
+    private Set<String> longTermPositionCodes(String userId, String positionRoleId, Instant now) {
+        Set<String> live = new HashSet<>();
+        if (positionRoleId != null) {
+            repository.findRoleById(positionRoleId).filter(role -> "active".equals(role.status()))
+                    .ifPresent(role -> live.addAll(role.permissionCodes()));
+        }
+        for (PermissionTemplateApplication application : repository.findPositionApplications(userId)) {
+            boolean applicationLongTerm = "active".equals(application.status()) && !application.consumed() && !application.singleUse()
+                    && application.validUntil() == null && (application.validFrom() == null || !now.isBefore(application.validFrom()));
+            boolean templateLongTerm = repository.findTemplateById(application.templateId()).filter(template ->
+                    "active".equals(template.status()) && !template.singleUse() && template.validUntil() == null
+                            && (template.validFrom() == null || !now.isBefore(template.validFrom()))).isPresent();
+            if (applicationLongTerm && templateLongTerm) {
+                live.addAll(grantCodesOf(application.templateId()));
+            }
+        }
+        return live;
+    }
+
+    private Set<String> grantCodesOf(String templateId) {
+        return repository.findTemplateItems(templateId).stream().filter(item -> item.effect() == AccessRepository.Effect.GRANT)
+                .map(PermissionTemplateItem::permissionCode).collect(java.util.stream.Collectors.toSet());
     }
 
     // M002-F28/F31（技术不变量：岗位映射、岗位行与申请单 position_code 列宽 VARCHAR(64)）：超长岗位编码在查映射与写库前 400，

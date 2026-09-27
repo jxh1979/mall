@@ -104,6 +104,21 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public List<PermissionTemplateApplication> findPositionApplications(String userId) {
+        return jdbcTemplate.query("""
+                SELECT id, template_id, target_type, target_id, valid_from, valid_until, single_use, consumed, status,
+                       applied_by, applied_at, revoked_by, revoked_at
+                  FROM permission_template_applications
+                 WHERE id = ANY ((SELECT position_application_ids FROM user_position_assignments WHERE user_id = :user_id)::varchar[])
+                 ORDER BY id
+                """, Map.of("user_id", userId), (rs, rowNum) -> new PermissionTemplateApplication(
+                rs.getString("id"), rs.getString("template_id"), rs.getString("target_type"), rs.getString("target_id"),
+                nullableInstant(rs, "valid_from"), nullableInstant(rs, "valid_until"), rs.getBoolean("single_use"),
+                rs.getBoolean("consumed"), rs.getString("status"), rs.getString("applied_by"),
+                nullableInstant(rs, "applied_at"), rs.getString("revoked_by"), nullableInstant(rs, "revoked_at")));
+    }
+
+    @Override
     public List<PermissionTemplateApplication> findActiveTemplateApplications(String templateId) {
         return jdbcTemplate.query("""
                 SELECT id, template_id, target_type, target_id, valid_from, valid_until, single_use, consumed, status,
@@ -911,6 +926,12 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public Optional<String> findAssignedPositionRoleId(String userId) {
+        return jdbcTemplate.queryForList("SELECT assigned_role_id FROM user_position_assignments WHERE user_id = :user_id",
+                Map.of("user_id", userId), String.class).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    @Override
     public Optional<String> findAssignedPositionTemplateId(String userId) {
         return jdbcTemplate.queryForList("SELECT assigned_position_template_id FROM user_position_assignments WHERE user_id = :user_id",
                 Map.of("user_id", userId), String.class).stream().filter(java.util.Objects::nonNull).findFirst();
@@ -972,6 +993,7 @@ class JdbcAccessRepository implements AccessRepository {
                  WHERE target_id = :user_id AND status = 'active'
                    AND id = ANY ((SELECT position_application_ids FROM user_position_assignments
                                    WHERE user_id = :user_id)::varchar[])
+                   AND id <> ALL (:application_ids) -- M002-F32：保留下来的原岗位派生套用（同岗重定、映射原样重存）不撤销
                 """, parameters);
         int changed = jdbcTemplate.update("""
                 UPDATE user_position_assignments

@@ -1847,6 +1847,248 @@ class AccessJdbcIntegrationTests {
         assertThat(m002EffectiveGrants(f)).contains(f.code());
     }
 
+    // M002-F32（依据：治理地图第 656 行「临时授权可设有效期或单次使用」、第 660 行「以下五类权限授出前须先审批才生效」；真库链路）：
+    // 岗位映射引用只含一个须审批高危码的单次模板——首次审批 → 使用一次 → 同岗重定、映射原样重存 → 再次操作仍被拒：原岗位派生套用及其消耗状态保留
+    // （同一条套用、consumed 仍为真），旧释放单审批留痕不变、不开新单；映射改指另一单次模板即新的授出，该码重新挂起、须新审批后才能再用一次。
+    @Test
+    void consumedSingleUsePositionGrantStaysConsumedAcrossSamePositionReassignmentOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String position = "m002_spos_" + f.suffix();
+        String role = "role_m002_s_" + f.suffix();
+        String firstTemplate = "tpl_m002_s1_" + f.suffix();
+        String secondTemplate = "tpl_m002_s2_" + f.suffix();
+        String mapping = "prt_m002_s_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 单次岗位角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(m002SingleUseTemplate(firstTemplate), grants(firstTemplate, f.code()));
+        repository.createTemplate(m002SingleUseTemplate(secondTemplate), grants(secondTemplate, f.code()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(mapping, position, "lvl_m1_lower", role, firstTemplate, null, "active",
+                f.admin(), Instant.now(), Instant.now()));
+        M002Mapping m = new M002Mapping(mapping, position, role, firstTemplate);
+
+        m002Assign(f, position, "m002-j32-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Approve("m002-j32-approve-" + f.suffix())));
+        String application = m002PositionApplication(f.target());
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())); // 使用一次
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .isInstanceOf(ApiException.class);
+
+        List<Runnable> unchanged = List.of(
+                () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                        "m002-j32-reassign-" + f.suffix(), "M002", f.target(), position, "lvl_m1_lower", null, null, null)),
+                () -> accessService.updatePositionRoleTemplate(mapping, m002MappingRequest("m002-j32-resave-" + f.suffix(), m, "active")));
+        for (Runnable path : unchanged) {
+            m002ActAs(f.admin(), "platform_admin", path);
+            assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                    .as("已消耗的单次高危权限不得因同岗重定或映射原样重存再次可用").isInstanceOf(ApiException.class);
+            assertThat(m002PositionApplication(f.target())).isEqualTo(application);
+            assertThat(jdbcTemplate.queryForObject("SELECT status || '/' || consumed FROM permission_template_applications WHERE id = ?",
+                    String.class, application)).isEqualTo("active/true");
+            assertThat(m002Status(first)).isEqualTo("applied");
+            assertThat(m002PendingReleaseCount(f.target())).isZero();
+        }
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(mapping, m002MappingRequest(
+                "m002-j32-regrant-" + f.suffix(), new M002Mapping(mapping, position, role, secondTemplate), "active")));
+        assertThat(m002PositionApplication(f.target())).isNotEqualTo(application);
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        String regrant = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .isInstanceOf(ApiException.class);
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(regrant, m002Approve("m002-j32-regrant-approve-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .isInstanceOf(ApiException.class);
+    }
+
+    // M002-F32（B1；依据：治理地图第 660 行「以下五类权限授出前须先审批才生效」、第 703 行「该岗位模板被……修改时，原先未生效的这类权限……
+    // 按新模板重新判断」；真库）：单次模板里的高危码批准后用掉一次，映射改指含同一码的长期模板——已消耗的码属「原先未生效」，不沿用旧批准：
+    // 重新挂起并开新单，使用被拒；新单批准后才生效（长期，可多次使用）。
+    @Test
+    void consumedSingleUseCodeIsRejudgedWhenTheMappingSwitchesToALongTermTemplateOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String position = "m002_bpos_" + f.suffix();
+        String role = "role_m002_b_" + f.suffix();
+        String once = "tpl_m002_b1_" + f.suffix();
+        String longTerm = "tpl_m002_b3_" + f.suffix();
+        String mapping = "prt_m002_b_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 B1 岗位角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(m002SingleUseTemplate(once), grants(once, f.code()));
+        repository.createTemplate(baseTemplate(longTerm), grants(longTerm, f.code()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(mapping, position, "lvl_m1_lower", role, once, null, "active",
+                f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, position, "m002-j34-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Approve("m002-j34-approve-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(mapping, m002MappingRequest(
+                "m002-j34-long-" + f.suffix(), new M002Mapping(mapping, position, role, longTerm), "active")));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        String renewed = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .as("已消耗的单次码不得因映射改指长期模板而免审批生效").isInstanceOf(ApiException.class);
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(renewed, m002Approve("m002-j34-renewed-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+    }
+
+    // M002-F32（B1，真库）：单次模板里的高危码批准后用掉一次；映射改职级，员工按原岗位职级改挂同岗同职级、引用含同一码长期模板的本组织映射——
+    // 同样不沿用旧批准：重新挂起并开新单，使用被拒；批准后才生效。
+    @Test
+    void consumedSingleUseCodeIsRejudgedWhenTheEmployeeIsMovedToALongTermMappingOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String position = "m002_cpos_" + f.suffix();
+        String role = "role_m002_c_" + f.suffix();
+        String once = "tpl_m002_c1_" + f.suffix();
+        String longTerm = "tpl_m002_c3_" + f.suffix();
+        String mapping = "prt_m002_c_" + f.suffix();
+        String orgMapping = "prt_m002_co_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 B1 改挂角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(m002SingleUseTemplate(once), grants(once, f.code()));
+        repository.createTemplate(baseTemplate(longTerm), grants(longTerm, f.code()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(mapping, position, "lvl_m1_lower", role, once, null, "active",
+                f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, position, "m002-j35-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Approve("m002-j35-approve-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(orgMapping, position, "lvl_m1_lower", role, longTerm, "org", "active",
+                f.admin(), Instant.now(), Instant.now()));
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(mapping, new PositionRoleTemplateRequest(
+                "m002-j35-move-" + f.suffix(), "M002", position, "lvl_m10_upper", role, once, "active")));
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(orgMapping);
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        String renewed = m002PendingRequestId(f.target(), "position_high_risk_release");
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .isInstanceOf(ApiException.class);
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(renewed, m002Approve("m002-j35-renewed-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+    }
+
+    // M002-F32（技术推导，真库）：已消耗的单次高危码不经新审批不会复活——改职级换到另一张同样引用单次模板的映射，该码挂起开单、使用被拒；
+    // 定岗申请审批落地（整单审批即新的授权）后按新套用可再用一次。
+    @Test
+    void consumedSingleUseCodeNeedsANewApprovalAfterLevelChangeOrApprovalLandingOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String position = "m002_dpos_" + f.suffix();
+        String role = "role_m002_d_" + f.suffix();
+        String lower = "tpl_m002_d1_" + f.suffix();
+        String upper = "tpl_m002_d2_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 改职级角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(m002SingleUseTemplate(lower), grants(lower, f.code()));
+        repository.createTemplate(m002SingleUseTemplate(upper), grants(upper, f.code()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_d1_" + f.suffix(), position, "lvl_m1_lower", role, lower, null,
+                "active", f.admin(), Instant.now(), Instant.now()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_d2_" + f.suffix(), position, "lvl_m10_upper", role, upper, null,
+                "active", f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, position, "m002-j36-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Approve("m002-j36-approve-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignStaffLevel(new StaffLevelAssignmentRequest(
+                "m002-j36-level-" + f.suffix(), "M002", f.target(), "lvl_m10_upper", null, null, null)));
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(m002PendingReleaseCount(f.target())).isEqualTo(1);
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .isInstanceOf(ApiException.class);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
+                "m002-j36-apply-" + f.suffix(), "M002", List.of(), "user_position", f.target(), null, position, "lvl_m1_lower",
+                null, null, null, null, null, null, false, "定岗申请")));
+        String landing = m002PendingRequestId(f.target(), "user_position");
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .isInstanceOf(ApiException.class);
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(landing, m002Approve("m002-j36-landing-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .isInstanceOf(ApiException.class);
+    }
+
+    // M002-F32c（依据：治理地图第 656 行「临时授权可设有效期或单次使用」、第 660 行「以下五类权限授出前须先审批才生效」；真库）：
+    // 高危码 X 经单次或限时来源批准后尚未用完、未到期；映射改指含 X 的长期模板、只改角色为含 X 的角色、员工被改挂到引用长期模板的映射，
+    // 或限时模板到期前改指长期模板——新来源比批准时更宽，旧批准不沿用：X 挂起、开新单、使用被拒；新单批准后才生效（可多次使用）。
+    @Test
+    void approvalOfASingleUseCodeDoesNotCarryOverWhenTheMappingSwitchesToALongTermTemplateOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Widening w = m002WideningFixture(f, "e", m002SingleUseTemplate("tpl_m002_e1_" + f.suffix()));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(w.mapping(), m002MappingRequest(
+                "m002-j37-long-" + f.suffix(), new M002Mapping(w.mapping(), w.position(), w.role(), w.longTerm()), "active")));
+        m002ExpectRejudgedThenLongTerm(f, "m002-j37");
+    }
+
+    @Test
+    void approvalOfASingleUseCodeDoesNotCarryOverWhenOnlyTheRoleChangesToOneGrantingItOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Widening w = m002WideningFixture(f, "g", m002SingleUseTemplate("tpl_m002_g1_" + f.suffix()));
+        String wideRole = "role_m002_gw_" + f.suffix();
+        repository.createRole(new RoleRecord(wideRole, "M002 含高危码角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(f.code()), null));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(w.mapping(), m002MappingRequest(
+                "m002-j38-role-" + f.suffix(), new M002Mapping(w.mapping(), w.position(), wideRole, w.first()), "active")));
+        m002ExpectRejudgedThenLongTerm(f, "m002-j38");
+    }
+
+    @Test
+    void approvalOfASingleUseCodeDoesNotCarryOverWhenTheEmployeeIsMovedToALongTermMappingOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Widening w = m002WideningFixture(f, "h", m002SingleUseTemplate("tpl_m002_h1_" + f.suffix()));
+        String orgMapping = "prt_m002_ho_" + f.suffix();
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(orgMapping, w.position(), "lvl_m1_lower", w.role(), w.longTerm(), "org",
+                "active", f.admin(), Instant.now(), Instant.now()));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(w.mapping(), new PositionRoleTemplateRequest(
+                "m002-j39-move-" + f.suffix(), "M002", w.position(), "lvl_m10_upper", w.role(), w.first(), "active")));
+        assertThat(m002AssignedMapping(f.target())).isEqualTo(orgMapping);
+        m002ExpectRejudgedThenLongTerm(f, "m002-j39");
+    }
+
+    @Test
+    void approvalOfATimeLimitedCodeDoesNotCarryOverWhenTheMappingSwitchesToALongTermTemplateOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        String limited = "tpl_m002_k1_" + f.suffix();
+        M002Widening w = m002WideningFixture(f, "k", new PermissionTemplate(limited, limited, limited, "M002 限时模板", "temporary", null,
+                "platform", null, "merge", null, Instant.now().plus(java.time.Duration.ofDays(30)), false, "active", "integration test",
+                "seed-admin", at, at, at));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(w.mapping(), m002MappingRequest(
+                "m002-j40-long-" + f.suffix(), new M002Mapping(w.mapping(), w.position(), w.role(), w.longTerm()), "active")));
+        m002ExpectRejudgedThenLongTerm(f, "m002-j40");
+    }
+
+    // M002-F32（技术推导，真库）：普通长期模板的同岗重定——保留原岗位派生套用（同一条、仍 active），模板里的日常码照常生效、不挂起。
+    @Test
+    void longTermPositionTemplateSurvivesSamePositionReassignmentOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String daily = "m002.override_test.daily_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 测试日常权限', 'ops', 'low', FALSE, 'active')
+                """, daily);
+        String dailyHolder = "role_m002_daily_" + f.suffix();
+        repository.createRole(new RoleRecord(dailyHolder, "M002 日常码持有 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(daily), null));
+        repository.assignUserRole(f.admin(), dailyHolder);
+        String position = "m002_lpos_" + f.suffix();
+        String role = "role_m002_l_" + f.suffix();
+        String template = "tpl_m002_l_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 长期岗位角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.createTemplate(baseTemplate(template), grants(template, daily));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m002_l_" + f.suffix(), position, "lvl_m1_lower", role, template,
+                null, "active", f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, position, "m002-j33-assign");
+        String application = m002PositionApplication(f.target());
+        assertThat(m002EffectiveGrants(f)).contains(daily);
+
+        m002Assign(f, position, "m002-j33-reassign");
+        assertThat(m002PositionApplication(f.target())).isEqualTo(application);
+        assertThat(m002ApplicationStatus(application)).isEqualTo("active");
+        assertThat(m002EffectiveGrants(f)).contains(daily);
+        assertThat(denyOrigins(f.target(), daily)).isEmpty();
+        assertThat(m002ReleaseCount(f.target())).isZero();
+    }
+
     // M002-F20 b（回归 [17]，真库）：驳回后换岗（改职级到同岗位另一职级、同样含该码的映射）——已驳回留下的挂起按新岗位重挂、恰开一张新单
     // （快照是新职级），批准后生效。
     @Test
@@ -2537,6 +2779,51 @@ class AccessJdbcIntegrationTests {
     private static final String DAILY_A = "amusement.device.view";
     private static final String DAILY_B = "inventory.stocktake.view";
     private static final String DAILY_C = "inventory.trace_code.view";
+
+    // M002-F32：只含给定条目的单次临时模板。
+    private PermissionTemplate m002SingleUseTemplate(String id) {
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        return new PermissionTemplate(id, id, id, "M002 单次临时模板", "temporary", null, "platform", null, "merge",
+                null, null, true, "active", "integration test", "seed-admin", at, at, at);
+    }
+
+    private record M002Widening(String position, String role, String first, String longTerm, String mapping) {
+    }
+
+    // M002-F32c：岗位映射（空角色＋给定的单次或限时模板，含夹具高危码）；员工定岗后释放单获批，先不使用。另备一个含同一码的长期模板。
+    private M002Widening m002WideningFixture(M002Fixture f, String tag, PermissionTemplate first) {
+        M002Widening w = new M002Widening("m002_" + tag + "pos_" + f.suffix(), "role_m002_" + tag + "_" + f.suffix(), first.id(),
+                "tpl_m002_" + tag + "3_" + f.suffix(), "prt_m002_" + tag + "_" + f.suffix());
+        repository.createRole(new RoleRecord(w.role(), "M002 放宽用例角色 " + tag + f.suffix(), null, "project", "active", Instant.now(),
+                List.of(), null));
+        repository.createTemplate(first, grants(first.id(), f.code()));
+        repository.createTemplate(baseTemplate(w.longTerm()), grants(w.longTerm(), f.code()));
+        repository.savePositionRoleTemplate(new PositionRoleTemplate(w.mapping(), w.position(), "lvl_m1_lower", w.role(), w.first(), null,
+                "active", f.admin(), Instant.now(), Instant.now()));
+        m002Assign(f, w.position(), "m002-" + tag + "-assign");
+        String release = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(release, m002Approve("m002-" + tag + "-approve-" + f.suffix())));
+        assertThat(m002EffectiveGrants(f)).contains(f.code());
+        return w;
+    }
+
+    // M002-F32c：新来源比批准时更宽——X 挂起、只有一张新待审单、使用被拒；新单批准后生效，可多次使用。
+    private void m002ExpectRejudgedThenLongTerm(M002Fixture f, String key) {
+        assertThat(denyOrigins(f.target(), f.code())).containsExactly("position_hold");
+        assertThat(m002PendingReleaseCount(f.target())).isEqualTo(1);
+        assertThatThrownBy(() -> m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code())))
+                .as("单次或限时来源的旧批准不得放宽成长期").isInstanceOf(ApiException.class);
+        String renewed = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(renewed, m002Approve(key + "-renewed-" + f.suffix())));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+    }
+
+    // M002-F32：员工岗位行记下的岗位派生套用（岗位映射只套一个模板，取第一条）。
+    private String m002PositionApplication(String userId) {
+        return jdbcTemplate.queryForObject("SELECT position_application_ids[1] FROM user_position_assignments WHERE user_id = ?",
+                String.class, userId);
+    }
 
     private PermissionTemplate baseTemplate(String id) {
         Instant at = Instant.parse("2026-06-14T00:00:00Z");
