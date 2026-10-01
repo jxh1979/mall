@@ -2677,6 +2677,116 @@ class AccessJdbcIntegrationTests {
         }
     }
 
+    // ── M002 第 11 轮（M002-F38；依据治理地图第 653 行「所有业务数据默认按项目隔离」「数据的项目与商户隔离不提供关闭开关」与七类红线④，技术推导）──
+
+    // M002-F38：真库＋真实接口——只持 role_staff_self（含 access.grant_request.apply）的普通员工（无商户）给其他项目的员工 POST /grant-requests
+    // 提交岗位申请（user_position，映射含须审批码），403 CROSS_ORG_FORBIDDEN：不建授权单、不开复核单，目标原有岗位、职级、岗位派生角色与映射、
+    // 直接角色、模板套用与覆盖行（含挂起）不变。
+    @Test
+    void positionGrantRequestForATargetInAnotherProjectIsRejectedThroughTheEndpoint() throws Exception {
+        m002F38RejectedThroughTheEndpoint(null, "org_m002_f38_other", null, "CROSS_ORG_FORBIDDEN");
+    }
+
+    // M002-F38：真库＋真实接口——带商户的普通员工给同项目其他商户的员工提交岗位申请，403 CROSS_MERCHANT_FORBIDDEN，其余同上。
+    @Test
+    void positionGrantRequestForATargetOfAnotherMerchantInTheSameProjectIsRejectedThroughTheEndpoint() throws Exception {
+        m002F38RejectedThroughTheEndpoint("mch_m002_f38_a", "org", "mch_m002_f38_b", "CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    private void m002F38RejectedThroughTheEndpoint(String applicantMerchant, String targetOrg, String targetMerchant, String code)
+            throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String plain = m002PlainMapping(f);
+        String target = "usr_m002_f38_target_" + f.suffix();
+        String staff = "usr_m002_f38_staff_" + f.suffix();
+        String merchant = applicantMerchant == null ? null : applicantMerchant + "_" + f.suffix();
+        repository.createUser(new AccessUser(target, target, "staff", targetOrg, targetMerchant == null ? null : targetMerchant + "_" + f.suffix(),
+                "active", Instant.now()));
+        repository.createUser(new AccessUser(staff, staff, "staff", "org", merchant, "active", Instant.now()));
+        repository.assignUserRole(staff, "role_staff_self");
+        // 修复前可建单、开复核单（缺陷复现），不因申请人没有上级链而失败
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                staff, f.boss(), f.admin());
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-j38-seat-" + f.suffix(), "M002", target, plain, "lvl_m1_lower", null, null, null)));
+        List<String> before = m002TargetFacts(target);
+        String countReviews = "SELECT (SELECT count(*) FROM supervisor_review_decisions) || '/' || (SELECT count(*) FROM supervisor_review_nodes)";
+        String reviewsBefore = jdbcTemplate.queryForObject(countReviews, String.class);
+
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(m002Session(new AccessActor(staff, staff, "staff", "org", merchant, "active")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(("{\"idempotency_key\": \"m002-j38-apply-%s\", \"request_type\": \"user_position\", \"target_user_id\": \"%s\", "
+                                + "\"position_code\": \"%s\", \"staff_level_id\": \"lvl_m1_lower\", \"reason\": \"岗位申请\"}")
+                                .formatted(f.suffix(), target, m.position())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value(code));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?", Long.class, target))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(countReviews, String.class)).isEqualTo(reviewsBefore);
+        assertThat(m002AssignedRole(target)).isEqualTo("role_m002_p_" + f.suffix());
+        assertThat(m002TargetFacts(target)).isEqualTo(before);
+    }
+
+    // M002-F38 正向对照：真库＋真实接口——只持 role_staff_self 的同项目普通员工给本项目员工 POST 岗位申请照常 200 建单，其直接上级属另一项目、
+    // 作为链上终审人批准后照常落地（落地不按终审人组织判定）；平台管理员给其他项目员工的岗位申请照常 200 建单，获批后落地。
+    @Test
+    void positionGrantRequestsWithinScopeOrByThePlatformAdminLandWithACrossProjectFinalApproverThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String staff = "usr_m002_f38_peer_" + f.suffix();
+        String superior = "usr_m002_f38_hq_" + f.suffix();
+        String otherOrg = "usr_m002_f38_far_" + f.suffix();
+        repository.createUser(new AccessUser(staff, staff, "staff", "org", null, "active", Instant.now()));
+        repository.createUser(new AccessUser(superior, superior, "staff", "org_m002_f38_hq", null, "active", Instant.now()));
+        repository.createUser(new AccessUser(otherOrg, otherOrg, "staff", "org_m002_f38_other", null, "active", Instant.now()));
+        repository.assignUserRole(staff, "role_staff_self");
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                staff, superior, f.admin());
+        String body = "{\"idempotency_key\": \"%s\", \"request_type\": \"user_position\", \"target_user_id\": \"%s\", \"position_code\": \"%s\", "
+                + "\"staff_level_id\": \"lvl_m1_lower\", \"reason\": \"岗位申请\"}";
+
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(m002Session(new AccessActor(staff, staff, "staff", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted("m002-j38-peer-" + f.suffix(), f.target(), m.position())))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/access/grant-requests")
+                        .with(m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted("m002-j38-admin-" + f.suffix(), otherOrg, m.position())))
+                .andExpect(status().isOk());
+        String peer = m002PendingRequestId(f.target(), "user_position");
+        String admin = m002PendingRequestId(otherOrg, "user_position");
+
+        m002ActAs(superior, "staff", "org_m002_f38_hq", () -> accessService.reviewGrant(peer, m002Approve("m002-j38-peer-final-" + f.suffix())));
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(admin, m002Approve("m002-j38-admin-final-" + f.suffix())));
+        for (String[] landed : List.of(new String[] {peer, f.target()}, new String[] {admin, otherOrg})) {
+            assertThat(m002Status(landed[0])).as(landed[1]).isEqualTo("applied");
+            assertThat(jdbcTemplate.queryForObject("SELECT position_code FROM user_position_assignments WHERE user_id = ?", String.class,
+                    landed[1])).as(landed[1]).isEqualTo(m.position());
+            assertThat(m002AssignedRole(landed[1])).as(landed[1]).isEqualTo(m.role());
+        }
+        m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+    }
+
+    // M002-F38：目标员工的岗位行（岗位、职级、派生角色、所挂映射）、职级与薪资行、直接角色、模板套用与覆盖行（含挂起），逐行拼成文本整体比较。
+    private List<String> m002TargetFacts(String userId) {
+        return jdbcTemplate.queryForList("""
+                SELECT 'position/' || position_code || '/' || staff_level_id || '/' || coalesce(assigned_role_id, '') || '/'
+                       || coalesce(assigned_position_template_id, '') || '/' || assigned_at
+                  FROM user_position_assignments WHERE user_id = ?
+                UNION ALL
+                SELECT 'level/' || staff_level_id || '/' || coalesce(base_salary_amount_cent::text, '') || '/' || assigned_at
+                  FROM staff_level_assignments WHERE user_id = ?
+                UNION ALL
+                SELECT 'role/' || role_id FROM user_roles WHERE user_id = ?
+                UNION ALL
+                SELECT 'application/' || id || '/' || template_id || '/' || status FROM permission_template_applications WHERE target_id = ?
+                UNION ALL
+                SELECT 'override/' || permission_code || '/' || effect || '/' || origin FROM user_permission_overrides WHERE user_id = ?
+                ORDER BY 1
+                """, String.class, userId, userId, userId, userId, userId);
+    }
+
     // 以平台管理员会话读目标员工的有效权限（有效集查询需要登录主体）。
     private List<String> m002EffectiveGrants(M002Fixture f) {
         List<List<String>> grants = new java.util.ArrayList<>();

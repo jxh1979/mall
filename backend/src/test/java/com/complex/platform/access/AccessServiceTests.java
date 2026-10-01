@@ -2882,6 +2882,98 @@ class AccessServiceTests {
         }
     }
 
+    // ── M002 第 11 轮（M002-F38；依据治理地图第 653 行「所有业务数据默认按项目隔离」「数据的项目与商户隔离不提供关闭开关」与七类红线④，技术推导）──
+
+    // M002-F38：普通员工（无商户）给其他项目的员工提交岗位申请（user_position，映射含须审批码），建单前即 403 CROSS_ORG_FORBIDDEN（中文提示）：
+    // 不建授权单、不开复核单，写失败留痕；目标原有岗位、职级、岗位派生角色与映射、直接角色、模板套用、覆盖行（含挂起）不变。
+    @Test
+    void positionGrantRequestForATargetInAnotherProjectIsRejectedBeforeAnyRequestIsCreated() {
+        m002F38RejectedOutOfScope("usr_requester", null, "org_b", null, "CROSS_ORG_FORBIDDEN", "不能为其他组织的用户分配权限");
+    }
+
+    // M002-F38：带商户的员工给同项目其他商户的员工提交岗位申请，建单前即 403 CROSS_MERCHANT_FORBIDDEN（中文提示），其余同上。
+    @Test
+    void positionGrantRequestForATargetOfAnotherMerchantInTheSameProjectIsRejectedBeforeAnyRequestIsCreated() {
+        m002F38RejectedOutOfScope("usr_m002_f38_merchant_a", "merchant_a", "seed-org", "merchant_b", "CROSS_MERCHANT_FORBIDDEN", "不能操作其他商户的用户");
+    }
+
+    private void m002F38RejectedOutOfScope(String applicant, String applicantMerchant, String targetOrg, String targetMerchant, String code,
+                                           String message) {
+        m002HighRiskFixture("usr_m002_f38_seed", null, "lvl_m1_lower");
+        m002ViewMapping("ops_viewer");
+        String target = "usr_m002_f38_target";
+        accessRepository.users.put(target, new AccessUser(target, target, "staff", targetOrg, targetMerchant, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        m002Reviews.superiors.put(applicant, "usr_boss"); // 修复前可建单、开复核单（缺陷复现），不因申请人没有上级链而失败
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-f38-seat", null, target, "ops_viewer", "lvl_m1_lower", null, null, null));
+        List<Object> before = m002TargetFacts(target);
+        int requests = accessRepository.grantRequests.size();
+        int reviews = m002Reviews.reviews.size();
+
+        if (applicantMerchant == null) {
+            authenticateAsOrgUser(applicant, applicant, "seed-org");
+        } else {
+            authenticateAsMerchantUser(applicant, applicant, "seed-org", applicantMerchant);
+        }
+        assertThatThrownBy(() -> service.applyGrant(new AccessGrantApplyRequest(
+                "m002-f38-apply", "M002", List.of(), "user_position", target, null, "ops_manager", "lvl_m1_lower",
+                null, null, null, null, null, null, false, "岗位申请")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo(code);
+                    assertThat(e.getMessage()).contains(message);
+                });
+        assertThat(auditEventRepository.events).filteredOn(event -> "m002-f38-apply".equals(event.idempotencyKey()))
+                .extracting(AuditEvent::eventName).containsExactly("access.grant_request.apply_failed");
+        assertThat(accessRepository.grantRequests).hasSize(requests);
+        assertThat(m002Reviews.reviews).hasSize(reviews);
+        assertThat(m002TargetFacts(target)).isEqualTo(before);
+        assertThat(accessRepository.userPositionAssignments.get(target).positionCode()).isEqualTo("ops_viewer");
+        assertThat(overrideSources(target, M002_CODE, AccessRepository.Effect.DENY)).isEmpty();
+    }
+
+    // M002-F38 正向对照：同项目普通员工（无商户）给本项目员工的岗位申请照常建单，由其他组织的链上终审人批准后照常落地（落地不按终审人组织判定）；
+    // 平台管理员给其他项目员工的岗位申请照常建单并落地。
+    @Test
+    void positionGrantRequestsWithinScopeOrByThePlatformAdminStillLandWithACrossOrganizationFinalApprover() {
+        String sameOrg = "usr_m002_f38_same";
+        String otherOrg = "usr_m002_f38_admin_target";
+        m002HighRiskFixture(sameOrg, null, "lvl_m1_lower");
+        accessRepository.users.put(otherOrg, new AccessUser(otherOrg, otherOrg, "staff", "org_b", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+
+        authenticateAsOrgUser("usr_requester", "requester", "seed-org");
+        AccessGrantRequestRecord peer = service.applyGrant(new AccessGrantApplyRequest(
+                "m002-f38-peer-apply", "M002", List.of(), "user_position", sameOrg, null, "ops_manager", "lvl_m1_lower",
+                null, null, null, null, null, null, false, "岗位申请"));
+        assertThat(peer.status()).isEqualTo("pending");
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord admin = service.applyGrant(new AccessGrantApplyRequest(
+                "m002-f38-admin-apply", "M002", List.of(), "user_position", otherOrg, null, "ops_manager", "lvl_m1_lower",
+                null, null, null, null, null, null, false, "岗位申请"));
+        assertThat(admin.status()).isEqualTo("pending");
+
+        assertThat(service.reviewGrant(peer.id(), m002Approve("m002-f38-peer-first")).status()).isEqualTo("pending"); // 链首 usr_admin
+        authenticateAsOrgUser("usr_boss", "boss", "org_b");
+        assertThat(service.reviewGrant(peer.id(), m002Approve("m002-f38-peer-final")).status()).isEqualTo("applied");
+        assertThat(service.reviewGrant(admin.id(), m002Approve("m002-f38-admin-final")).status()).isEqualTo("applied");
+        authenticateAsPlatformAdmin("seed-org");
+        for (String target : List.of(sameOrg, otherOrg)) {
+            assertThat(accessRepository.userPositionAssignments.get(target).positionCode()).as(target).isEqualTo("ops_manager");
+            assertThat(accessRepository.positionRoles.get(target)).as(target).isEqualTo("role_ops_check");
+            assertThat(authorizationService.effectivePermissionsForUser(target).grants()).as(target).contains(M002_CODE);
+        }
+    }
+
+    // M002-F38：目标员工的岗位行、职级与薪资行、岗位派生角色与所挂映射、直接角色、模板套用与覆盖行（含挂起），用于断言范围拒绝后原样不变。
+    private List<Object> m002TargetFacts(String userId) {
+        return java.util.Arrays.asList(accessRepository.userPositionAssignments.get(userId), accessRepository.staffLevelAssignments.get(userId),
+                accessRepository.positionRoles.get(userId), accessRepository.positionMappings.get(userId),
+                Set.copyOf(accessRepository.userRoles.getOrDefault(userId, Set.of())),
+                accessRepository.templateApplications.stream().filter(application -> userId.equals(application.targetId())).toList(),
+                accessRepository.overrides.stream().filter(override -> userId.equals(override.userId())).toList());
+    }
+
     // M006-R6-03（PGM-1.18 后台报错全中文）：残留的英文校验文案改为中文。
     @Test
     void remainingValidationMessagesAreChinese() throws Exception {

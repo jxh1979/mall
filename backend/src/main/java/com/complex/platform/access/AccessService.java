@@ -780,7 +780,7 @@ public class AccessService {
                         repository.updateUserScope(id, newOrganization, newMerchant, actor.id(), now);
                         PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(
                                 r.idempotencyKey(), r.operatorNote(), id, positionCode, staffLevelId,
-                                r.baseSalaryAmountCent(), r.salaryCurrency(), r.salaryDetail()), false);
+                                r.baseSalaryAmountCent(), r.salaryCurrency(), r.salaryDetail()), false, false); // 操作人已按旧、新范围校验
                         GrantReviewPolicy policy = scopeChangeReviewPolicy(context.permissionCodes());
                         boolean moneyRelated = permissionDefinitions(context.permissionCodes()).stream().anyMatch(AccessService::isMoneyPermission);
                         String draftId = "agr_" + UUID.randomUUID();
@@ -1753,7 +1753,7 @@ public class AccessService {
             boolean enforceApproval,
             Map<String, Set<String>> previousApprovalCodes
     ) {
-        PositionGrantContext context = resolvePositionGrant(request, enforceApproval); // M087：审批落地不按落地人自身权限限制
+        PositionGrantContext context = resolvePositionGrant(request, enforceApproval, enforceApproval); // M087/M002-F04：审批落地不按落地人自身权限与组织限制
         requireBoundedTemporaryTemplate(context.template().templateType(), context.template().validUntil(), context.template().singleUse());
         // M087-F-06（PGM-1.10.1「同一商户、同一项目范围内的普通模板权限随保存立即生效」「既有高危不得因处于岗位模板内而免除授出前审批」）：
         // 岗位模板混有高危权限时不再整单拒绝——普通部分随保存生效，高危部分先写挂起行（M002-F02）、进审批链，审批通过后解除。
@@ -1959,7 +1959,7 @@ public class AccessService {
         UserPositionAssignment position = repository.findUserPositionAssignment(target.id())
                 .orElseThrow(() -> ApiException.conflict("POSITION_NOT_ASSIGNED", "该员工没有岗位，挂起须随岗位变更重新判断"));
         PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(request.idempotencyKey(), request.operatorNote(),
-                target.id(), position.positionCode(), position.staffLevelId(), null, null, null), false);
+                target.id(), position.positionCode(), position.staffLevelId(), null, null, null), false, false); // 范围闸已在上方
         Set<String> derived = approvalRequiredPermissions(context.permissionCodes()).stream()
                 .map(PermissionDefinition::permissionCode).collect(java.util.stream.Collectors.toSet());
         List<String> notDerived = codes.stream().filter(code -> !derived.contains(code)).toList();
@@ -2057,7 +2057,7 @@ public class AccessService {
                 request.baseSalaryAmountCent(),
                 request.salaryCurrency(),
                 request.salaryDetail()
-        ), false);
+        ), true, false); // M002-F38：建单按申请人范围（与角色申请建单同口径），不要求申请人持码
         Instant now = Instant.now();
         return new AccessGrantRequestRecord(
                 "agr_" + UUID.randomUUID(),
@@ -2302,6 +2302,7 @@ public class AccessService {
 
     private PositionGrantContext resolvePositionGrant(
             UserPositionAssignmentRequest request,
+            boolean requireActorScope,
             boolean requireGrantorCanGrant
     ) {
         AccessActor actor = authorizationService.currentActor();
@@ -2313,9 +2314,10 @@ public class AccessService {
         // M002-F19（操作员 2026-09-25 裁决原句「最高权限账号不能被定岗」，治理地图第 703 行「最高权限账号不设岗位、不套用岗位模板」）。
         // 经此处的入口（技术推导）：定岗、有岗位时改职级、岗位申请建单、定岗与范围变更审批落地、模板重算，目标为最高权限账号一律拒绝。
         requireNotMasterAuthorityAccount(targetUser);
-        if (requireGrantorCanGrant) {
-            // M087-I5-02（PGM-1.10.1 跨项目变更审批通过后方可生效）：审批落地与范围变更发起不按当前操作人的组织闸——
-            // 授权来自审批链与申请指纹（目标范围已钉住）；直接定岗（enforceApproval）仍受同组织闸。
+        if (requireActorScope) {
+            // M002-F38（治理地图第 653 行「所有业务数据默认按项目隔离」、七类红线④；技术推导）：直接定岗与岗位申请建单按操作人 / 申请人的
+            // 项目与商户范围，在读目标项目的岗位映射之前拒绝范围外目标。M087-I5-02（PGM-1.10.1 跨项目变更审批通过后方可生效）：审批落地
+            // 与范围变更发起不按当前操作人的组织闸——授权来自审批链与申请时校验并钉入指纹的目标范围；范围变更发起已先按旧、新范围校验操作人。
             requireSameOrganization(actor, targetUser);
         }
         if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
