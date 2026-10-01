@@ -48,14 +48,14 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(effectivePermissions: EffectivePermissionsState = ADMIN_PERMS) {
   const setActionResult = vi.fn();
   const props: AdminPageProps = {
     api: makeApi(),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult,
     setGlobalError: vi.fn(),
-    effectivePermissions: ADMIN_PERMS,
+    effectivePermissions,
   };
   render(<AccessGovernancePage {...props} />);
   return { setActionResult };
@@ -164,5 +164,31 @@ describe("AccessGovernancePage 引导式新建授权申请(phase-11)", () => {
     expect(body).not.toHaveProperty("expires_at");
     expect(body).not.toHaveProperty("single_use");
     expect(body).not.toHaveProperty("position_code");
+  });
+
+  // M002-F37（治理地图第 651 行）：员工单独授予、解除员工显式拒绝、岗位高危权限释放三类申请只能由具备分配/取消分配角色权限的人发起——
+  // 不持 access.role.assign（或该码被显式拒绝）时，申请类型下拉只剩临时权限、用户角色、用户职位；持该码时三类照常可选。
+  const APPLY_ONLY = ["access.grant_request.apply", "access.grant_request.view", "access.user.view", "access.role.view"];
+  const requestTypeOptions = async (permissions: EffectivePermissionsState) => {
+    renderPage(permissions);
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    return Array.from((screen.getByLabelText("申请类型") as HTMLSelectElement).options).map((option) => option.value);
+  };
+
+  it("不持分配角色权限：申请类型不提供三类（M002-F37）", async () => {
+    expect(await requestTypeOptions({ status: "ready", value: { grants: APPLY_ONLY, denies: [], wildcard: false } }))
+      .toEqual(["temporary_permission", "user_role", "user_position"]);
+  });
+
+  it("分配角色权限被显式拒绝：申请类型同样不提供三类（M002-F37）", async () => {
+    expect(await requestTypeOptions({ status: "ready", value: { grants: [...APPLY_ONLY, "access.role.assign"], denies: ["access.role.assign"], wildcard: false } }))
+      .toEqual(["temporary_permission", "user_role", "user_position"]);
+  });
+
+  it("持分配角色权限：三类照常可选（M002-F37 对照）", async () => {
+    expect(await requestTypeOptions({ status: "ready", value: { grants: [...APPLY_ONLY, "access.role.assign"], denies: [], wildcard: false } }))
+      .toEqual(["temporary_permission", "user_role", "user_position", "user_permission_grant", "user_permission_deny_removal", "position_high_risk_release"]);
   });
 });

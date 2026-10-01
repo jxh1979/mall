@@ -1208,6 +1208,8 @@ class AccessJdbcIntegrationTests {
                 VALUES (?, 'M002 测试高危权限', 'ops', 'high', TRUE, 'active')
                 """, f.code());
         repository.createUser(new AccessUser(f.admin(), f.admin(), "platform_admin", "org", null, "active", Instant.now()));
+        // M002-F37：发起人按真实平台管理员装配（role_platform_admin 种子含 access.role.assign），才能发起员工单独授予、解除显式拒绝与岗位高危释放申请。
+        repository.assignUserRole(f.admin(), "role_platform_admin");
         repository.createUser(new AccessUser(f.boss(), f.boss(), "staff", "org", null, "active", Instant.now()));
         repository.createUser(new AccessUser(f.target(), f.target(), "staff", "org", null, "active", Instant.now()));
         jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
@@ -2420,6 +2422,259 @@ class AccessJdbcIntegrationTests {
                         .content(body.formatted("m002-j14-ok-" + f.suffix(), longest, "self")))
                 .andExpect(status().isOk());
         assertThat(jdbcTemplate.queryForObject("SELECT data_scope FROM roles WHERE role_name = ?", String.class, longest)).isEqualTo("self");
+    }
+
+    // ── M002 第 10 轮（M002-F34、F37 为操作员 2026-09-30 裁决；F35、F36 为技术不变量）真库与真实接口回归 ─────────────────────────────────
+
+    // M002-F34（操作员 2026-09-30 裁决，治理地图第 703 行「其他人不能给最高权限账号设置显式拒绝。」）：真库＋真实接口——平台管理员、同组织持
+    // access.role.assign 的员工经接口给最高权限账号设显式拒绝 403 MASTER_AUTHORITY_DENY_FORBIDDEN，不写拒绝行、留 set_failed；停用中的最高权限
+    // 账号作目标同样被拒；最高权限本人会话给自己设、解除照常，第二轮仍可。
+    @Test
+    void othersCannotSetAnExplicitDenyOnTheMasterAuthorityThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String master = m002MasterAccount();
+        String assigner = "usr_m002_f34_pc_" + f.suffix();
+        String assignRole = "role_m002_f34_" + f.suffix();
+        repository.createUser(new AccessUser(assigner, assigner, "staff", "platform-company", null, "active", Instant.now()));
+        repository.createRole(new RoleRecord(assignRole, "M002 F34 装配角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.assign"), null));
+        repository.assignUserRole(assigner, assignRole);
+        var admin = m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+        var staff = m002Session(new AccessActor(assigner, assigner, "staff", "platform-company", null, "active"));
+
+        m002MasterDenyRejected(master, admin, "m002-j34-admin-" + f.suffix());
+        m002MasterDenyRejected(master, staff, "m002-j34-staff-" + f.suffix());
+        jdbcTemplate.update("UPDATE access_users SET status = 'disabled' WHERE id = ?", master);
+        m002MasterDenyRejected(master, admin, "m002-j34-disabled-" + f.suffix());
+        jdbcTemplate.update("UPDATE access_users SET status = 'active' WHERE id = ?", master);
+
+        var masterSession = m002Session(new AccessActor(master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, "active"));
+        for (int round = 1; round <= 2; round++) {
+            mockMvc.perform(post("/api/v1/access/users/" + master + "/permission-overrides").with(masterSession)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(m002DenyJson("m002-j34-self-deny-" + round + "-" + f.suffix(), "access.role.assign")))
+                    .andExpect(status().isOk());
+            assertThat(denyOrigins(master, "access.role.assign")).containsExactly("explicit");
+            mockMvc.perform(post("/api/v1/access/users/" + master + "/permission-overrides/remove").with(masterSession)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(m002DenyJson("m002-j34-self-remove-" + round + "-" + f.suffix(), "access.role.assign")))
+                    .andExpect(status().isOk());
+            assertThat(denyOrigins(master, "access.role.assign")).isEmpty();
+        }
+    }
+
+    private void m002MasterDenyRejected(String master, org.springframework.test.web.servlet.request.RequestPostProcessor session, String key)
+            throws Exception {
+        mockMvc.perform(post("/api/v1/access/users/" + master + "/permission-overrides").with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson(key, "access.role.assign")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("MASTER_AUTHORITY_DENY_FORBIDDEN"));
+        assertThat(denyOrigins(master, "access.role.assign")).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT event_name || '/' || business_id || '/' || (metadata ->> 'error_code') FROM audit_events
+                 WHERE idempotency_key = ? AND event_result = 'failure'
+                """, String.class, key)).isEqualTo("access.user_permission_override.set_failed/" + master + "/MASTER_AUTHORITY_DENY_FORBIDDEN");
+    }
+
+    // M002-F35（治理地图第 656 行「权限的授予、收回、到期、单次消耗、失效全部留痕」）：真库——映射停用时挂在该映射上的每名员工各留一条
+    // access.user_position.derivation_revoked（员工、映射、原岗位派生角色、被撤销的岗位派生套用、原因 inactive、操作人），有挂起的另有
+    // high_risk_voided；再次保存为停用、再启用、原样重存与同岗重定都不再记收回。
+    @Test
+    void deactivatingAMappingLeavesOneRevocationTrailPerEmployeeOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        String second = "usr_m002_f35_" + f.suffix();
+        repository.createUser(new AccessUser(second, second, "staff", "org", null, "active", Instant.now()));
+        m002Assign(f, m.position(), "m002-j35-assign");
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-j35-assign-second-" + f.suffix(), "M002", second, m.position(), "lvl_m1_lower", null, null, null)));
+        List<String> users = List.of(f.target(), second);
+        List<String> applications = users.stream().map(this::m002PositionApplicationIds).toList();
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(),
+                m002MappingRequest("m002-j35-off-" + f.suffix(), m, "inactive")));
+        for (int i = 0; i < users.size(); i++) {
+            assertThat(m002Revocations(users.get(i)))
+                    .containsExactly(String.join("|", users.get(i), m.id(), m.role(), applications.get(i), "inactive", f.admin()));
+            assertThat(m002EventCount("access.user_position.high_risk_voided", users.get(i))).isEqualTo(1);
+            assertThat(m002ApplicationStatus(applications.get(i))).isEqualTo("revoked");
+        }
+
+        for (String step : List.of("off-again", "on", "resave")) {
+            m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(m.id(),
+                    m002MappingRequest("m002-j35-" + step + "-" + f.suffix(), m, "off-again".equals(step) ? "inactive" : "active")));
+        }
+        m002Assign(f, m.position(), "m002-j35-reassign");
+        assertThat(m002AssignedRole(f.target())).isEqualTo(m.role());
+        for (String user : users) {
+            assertThat(m002Revocations(user)).hasSize(1);
+        }
+    }
+
+    // M002-F35：真库——映射改职级后，原来挂在上面、没有挂起的员工找不到映射：收回岗位派生并留一条原因 no_mapping 的收回记录（基线此时没有任何以该
+    // 员工为对象的留痕）；再保存改后的映射不再记。
+    @Test
+    void lostMappingAfterAStaffLevelChangeLeavesARevocationTrailOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String position = m002PlainMapping(f);
+        String mapping = "prt_m002_p_" + f.suffix();
+        String role = "role_m002_p_" + f.suffix();
+        String template = "tpl_m002_p_" + f.suffix();
+        m002Assign(f, position, "m002-j35b-assign");
+        String applications = m002PositionApplicationIds(f.target());
+
+        for (String step : List.of("move", "move-again")) {
+            m002ActAs(f.admin(), "platform_admin", () -> accessService.updatePositionRoleTemplate(mapping, new PositionRoleTemplateRequest(
+                    "m002-j35b-" + step + "-" + f.suffix(), "M002", position, "lvl_m10_upper", role, template, "active")));
+            assertThat(m002Revocations(f.target()))
+                    .containsExactly(String.join("|", f.target(), mapping, role, applications, "no_mapping", f.admin()));
+        }
+        assertThat(m002AssignedRole(f.target())).isNull();
+        assertThat(m002AssignedMapping(f.target())).isNull();
+        assertThat(m002ApplicationStatus(applications)).isEqualTo("revoked");
+    }
+
+    private String m002PositionApplicationIds(String userId) {
+        String ids = jdbcTemplate.queryForObject(
+                "SELECT array_to_string(position_application_ids, ',') FROM user_position_assignments WHERE user_id = ?", String.class, userId);
+        assertThat(ids).as("夹具：%s 须有岗位派生套用", userId).isNotBlank().doesNotContain(",");
+        return ids;
+    }
+
+    private List<String> m002Revocations(String userId) {
+        return jdbcTemplate.queryForList("""
+                SELECT concat_ws('|', metadata ->> 'user_id', metadata ->> 'mapping_id', metadata ->> 'role_id', metadata ->> 'application_ids',
+                                 metadata ->> 'reason', metadata ->> 'operator_id')
+                  FROM audit_events
+                 WHERE event_name = 'access.user_position.derivation_revoked' AND event_result = 'success' AND business_id = ?
+                 ORDER BY 1
+                """, String.class, userId);
+    }
+
+    private long m002EventCount(String eventName, String businessId) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = ? AND business_id = ?",
+                Long.class, eventName, businessId);
+    }
+
+    // M002-F36（契约 RoleAssignmentRequest.user_id / role_id maxLength 64；失败留痕 business_id 列宽 VARCHAR(128)）：真库＋真实接口——分配、撤销角色的
+    // user_id 与员工覆盖设置、解除的路径用户编号 129 字（基线写失败留痕超列宽 500、留痕丢失）与 65 字（基线 404）一律 400 VALIDATION_FAILED，不留
+    // 带该键的事件与幂等记录；分配、撤销的 role_id 65 字同样 400；64 字不存在的编号仍 404 且失败留痕写入；请求体编号前带 70 个空格（去空白后 64 字、
+    // 原串 134 字，基线把原串写进失败留痕超列宽 500）时同样 404，失败留痕记去空白后的编号。
+    @Test
+    void overlongTargetIdsAreRejectedWith400AndSixtyFourCharacterIdsStill404ThroughTheEndpoints() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        var session = m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+        String role = "role_m002_f36_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M002 F36 角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        List<String> kinds = List.of("assign", "unassign", "set", "remove");
+        int attempt = 0;
+        for (String id : List.of("x".repeat(129), "y".repeat(65))) {
+            for (String kind : kinds) {
+                String key = "m002-j36-" + kind + "-" + ++attempt + "-" + f.suffix();
+                m002IdCall(kind, id, role, key, session)
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+                m002AssertNoTrace(key);
+            }
+        }
+        for (String kind : List.of("assign", "unassign")) {
+            String key = "m002-j36-role-" + kind + "-" + f.suffix();
+            m002IdCall(kind, f.target(), "r".repeat(65), key, session)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            m002AssertNoTrace(key);
+        }
+
+        String id64 = ("z" + f.suffix()).repeat(8).substring(0, 64);
+        java.util.Map<String, String> failed = java.util.Map.of("assign", "access.role.assign_failed", "unassign", "access.role.unassign_failed",
+                "set", "access.user_permission_override.set_failed", "remove", "access.user_permission_override.remove_failed");
+        String padding = " ".repeat(70);
+        for (String kind : kinds) {
+            List<String> ids = kind.equals("assign") || kind.equals("unassign") ? List.of(id64, padding + id64) : List.of(id64);
+            for (String id : ids) {
+                String key = "m002-j36-404-" + kind + "-" + ++attempt + "-" + f.suffix();
+                m002IdCall(kind, id, role, key, session)
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.detail_code").value("USER_NOT_FOUND"));
+                assertThat(jdbcTemplate.queryForObject(
+                        "SELECT event_name || '/' || business_id FROM audit_events WHERE idempotency_key = ? AND event_result = 'failure'",
+                        String.class, key)).isEqualTo(failed.get(kind) + "/" + id64);
+            }
+        }
+    }
+
+    private org.springframework.test.web.servlet.ResultActions m002IdCall(String kind, String userId, String roleId, String key,
+            org.springframework.test.web.servlet.request.RequestPostProcessor session) throws Exception {
+        return switch (kind) {
+            case "assign" -> mockMvc.perform(post("/api/v1/access/role-assignments").with(session)
+                    .contentType(MediaType.APPLICATION_JSON).content(m002UnassignJson(key, userId, roleId)));
+            case "unassign" -> mockMvc.perform(post("/api/v1/access/role-assignments/unassign").with(session)
+                    .contentType(MediaType.APPLICATION_JSON).content(m002UnassignJson(key, userId, roleId)));
+            case "set" -> mockMvc.perform(post("/api/v1/access/users/{id}/permission-overrides", userId).with(session)
+                    .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson(key, "access.role.assign")));
+            default -> mockMvc.perform(post("/api/v1/access/users/{id}/permission-overrides/remove", userId).with(session)
+                    .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson(key, "access.role.assign")));
+        };
+    }
+
+    private void m002AssertNoTrace(String key) {
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE idempotency_key = ?", Long.class, key)).as(key).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM idempotency_records WHERE idempotency_key = ?", Long.class, key))
+                .as(key).isZero();
+    }
+
+    // M002-F37（操作员 2026-09-30 裁决，治理地图第 651 行「员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消
+    // 分配角色权限的人发起。」）：真库＋真实接口——只持 role_staff_self（V394 种子含 access.grant_request.apply）的普通员工对三类申请（内容均有效）
+    // POST /grant-requests 一律 403 PERMISSION_DENIED，不建单、不开复核单，第二轮仍被拒；同一员工的临时权限申请仍 200；持 access.role.assign 的
+    // 平台管理员三类均 200。
+    @Test
+    void onlyRoleAssignHoldersInitiateTheThreeRequestTypesThroughTheEndpoint() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), "m002-j37-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Reject("m002-j37-reject-" + f.suffix())));
+        repository.saveUserPermissionOverrides(f.target(), List.of(f.code()), AccessRepository.Effect.DENY, "员工显式拒绝", f.admin());
+        String staff = "usr_m002_f37_staff_" + f.suffix();
+        repository.createUser(new AccessUser(staff, staff, "staff", "org", null, "active", Instant.now()));
+        repository.assignUserRole(staff, "role_staff_self");
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                staff, f.boss(), f.admin());
+        var staffSession = m002Session(new AccessActor(staff, staff, "staff", "org", null, "active"));
+        String countRequests = "SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?";
+        String countReviews = "SELECT (SELECT count(*) FROM supervisor_review_decisions) || '/' || (SELECT count(*) FROM supervisor_review_nodes)";
+        long requestsBefore = jdbcTemplate.queryForObject(countRequests, Long.class, f.target());
+        String reviewsBefore = jdbcTemplate.queryForObject(countReviews, String.class);
+        List<String> types = List.of("user_permission_grant", "user_permission_deny_removal", "position_high_risk_release");
+        String body = "{\"idempotency_key\": \"%s\", \"request_type\": \"%s\", \"target_user_id\": \"%s\", \"permission_codes\": [\"%s\"], "
+                + "\"reason\": \"M002\"}";
+
+        for (int round = 1; round <= 2; round++) {
+            for (String type : types) {
+                mockMvc.perform(post("/api/v1/access/grant-requests").with(staffSession).contentType(MediaType.APPLICATION_JSON)
+                                .content(body.formatted("m002-j37-staff-" + type + "-" + round + "-" + f.suffix(), type, f.target(), f.code())))
+                        .andExpect(status().isForbidden())
+                        .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+            }
+        }
+        assertThat(jdbcTemplate.queryForObject(countRequests, Long.class, f.target())).isEqualTo(requestsBefore);
+        assertThat(jdbcTemplate.queryForObject(countReviews, String.class)).isEqualTo(reviewsBefore);
+
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(staffSession).contentType(MediaType.APPLICATION_JSON)
+                        .content(("{\"idempotency_key\": \"m002-j37-staff-temporary-%s\", \"request_type\": \"temporary_permission\", "
+                                + "\"target_user_id\": \"%s\", \"permission_codes\": [\"amusement.device.view\"], "
+                                + "\"expires_at\": \"2099-01-01T00:00:00Z\", \"reason\": \"临时顶班\"}").formatted(f.suffix(), staff)))
+                .andExpect(status().isOk());
+        assertThat(m002PendingRequestId(staff, "temporary_permission")).isNotNull();
+
+        var adminSession = m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+        for (String type : types) {
+            mockMvc.perform(post("/api/v1/access/grant-requests").with(adminSession).contentType(MediaType.APPLICATION_JSON)
+                            .content(body.formatted("m002-j37-admin-" + type + "-" + f.suffix(), type, f.target(), f.code())))
+                    .andExpect(status().isOk());
+            assertThat(m002PendingRequestId(f.target(), type)).isNotNull();
+        }
     }
 
     // 以平台管理员会话读目标员工的有效权限（有效集查询需要登录主体）。

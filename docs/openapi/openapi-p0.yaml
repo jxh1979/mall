@@ -19204,6 +19204,7 @@ paths:
       x-audit-event-success: access.grant_request.applied
       x-audit-event-failure: access.grant_request.apply_failed
       x-auth-context: staff-token
+      description: request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403。
       requestBody:
         $ref: "#/components/requestBodies/AccessGrantApplyRequest"
       responses:

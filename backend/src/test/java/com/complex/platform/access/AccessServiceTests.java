@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -67,10 +67,11 @@ class AccessServiceTests {
         accessRepository.addPermission("governance.supervisor_review.view", "medium", false);
         accessRepository.addPermission("governance.supervisor_review.approve", "high", false);
         // M006-001/012：夹具明确逐项授予高危权限和审批角色，不依赖管理员隐式全权。
+        // M002-F37：平台管理员持 access.role.assign（与真库 role_platform_admin 种子同口径），才能发起员工单独授予、解除显式拒绝与岗位高危释放申请。
         accessRepository.roles.put("explicit_admin_grants", new RoleRecord(
                 "explicit_admin_grants", "Explicit test grants", null, "global", "active", Instant.now(),
                 List.of("ops.production_readiness.check", "governance.supervisor_review.view",
-                        "governance.supervisor_review.approve", "finance.ar_ap.manage"), null));
+                        "governance.supervisor_review.approve", "finance.ar_ap.manage", "access.role.assign"), null));
         accessRepository.assignUserRole("usr_admin", "explicit_admin_grants");
         authorizationService = new AuthorizationService(accessRepository);
         service = newAccessService(false, null);
@@ -1159,6 +1160,10 @@ class AccessServiceTests {
 
         accessRepository.users.put("usr_m002_other_org", new AccessUser(
                 "usr_m002_other_org", "m002-other-org", "staff", "org_b", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        // M002-F37：跨组织与未开放类型的校验针对持分配角色权限的发起人（不持该码的员工在此之前即 403）
+        accessRepository.roles.put("role_m002_assign", new RoleRecord("role_m002_assign", "assign", null, "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of("access.role.assign"), null));
+        accessRepository.userRoles.put("usr_requester", new LinkedHashSet<>(Set.of("role_m002_assign")));
         authenticateAsOrgUser("usr_requester", "requester", "seed-org");
         assertThatThrownBy(() -> service.applyGrant(m002Apply(
                 "m002-cross-org", "user_permission_grant", "usr_m002_other_org", List.of(M002_CODE))))
@@ -2639,6 +2644,242 @@ class AccessServiceTests {
                 .filter(o -> o.userId().equals(userId) && o.permissionCode().equals(code) && o.effect() == effect)
                 .map(AccessRepository.PermissionEffect::source)
                 .toList();
+    }
+
+    // ── M002 第 10 轮（M002-F34、F37 为操作员 2026-09-30 裁决；F35、F36 为技术不变量） ─────────────────────────────────
+
+    // M002-F34（操作员 2026-09-30 裁决，治理地图第 703 行「其他人不能给最高权限账号设置显式拒绝。」）：平台管理员、同组织持 access.role.assign 的员工
+    // 给最高权限账号设显式拒绝一律 403，停用中的最高权限账号作目标同样被拒，不写拒绝行、写失败留痕；最高权限本人会话给自己设、解除照常，第二轮仍可；
+    // 对其他员工设拒绝不变。
+    @Test
+    void othersCannotSetAnExplicitDenyOnTheMasterAuthorityAccount() {
+        accessRepository.addPermission("access.role.assign", "high", true);
+        String master = SessionIssuer.MASTER_USER_ID;
+        accessRepository.users.put(master, m002MasterAccount("active"));
+        accessRepository.users.put("usr_m002_f34_assigner", new AccessUser("usr_m002_f34_assigner", "usr_m002_f34_assigner", "staff",
+                "platform-company", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_m002_f34_assign", new RoleRecord("role_m002_f34_assign", "assign", null, "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of("access.role.assign"), null));
+        accessRepository.userRoles.put("usr_m002_f34_assigner", new LinkedHashSet<>(Set.of("role_m002_f34_assign")));
+        accessRepository.users.put("usr_m002_f34_plain", new AccessUser("usr_m002_f34_plain", "usr_m002_f34_plain", "staff", "seed-org",
+                null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+
+        m002MasterDenyRejected(master, "m002-f34-admin"); // setUp 的平台管理员会话
+        authenticateAsOrgUser("usr_m002_f34_assigner", "f34-assigner", "platform-company");
+        m002MasterDenyRejected(master, "m002-f34-staff");
+        accessRepository.users.put(master, m002MasterAccount("disabled"));
+        authenticateAsPlatformAdmin("seed-org");
+        m002MasterDenyRejected(master, "m002-f34-disabled");
+        accessRepository.users.put(master, m002MasterAccount("active"));
+
+        authenticateAsMasterAuthority();
+        for (int round = 1; round <= 2; round++) {
+            service.setUserPermissionOverrides(master, new UserPermissionOverrideRequest(
+                    "m002-f34-self-set-" + round, null, List.of("access.role.assign"), "deny", "本人停权"));
+            assertThat(overrideSources(master, "access.role.assign", AccessRepository.Effect.DENY))
+                    .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+            service.removeUserPermissionOverrides(master, m002RemoveDeny("m002-f34-self-remove-" + round, "access.role.assign"));
+            assertThat(overrideSources(master, "access.role.assign", AccessRepository.Effect.DENY)).isEmpty();
+        }
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.setUserPermissionOverrides("usr_m002_f34_plain", new UserPermissionOverrideRequest(
+                "m002-f34-plain", null, List.of("access.role.assign"), "deny", "停权"));
+        assertThat(overrideSources("usr_m002_f34_plain", "access.role.assign", AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    private AccessUser m002MasterAccount(String status) {
+        return new AccessUser(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, status, Instant.parse("2026-06-14T00:00:00Z"));
+    }
+
+    private void m002MasterDenyRejected(String master, String key) {
+        assertThatThrownBy(() -> service.setUserPermissionOverrides(master, new UserPermissionOverrideRequest(
+                key, null, List.of("access.role.assign"), "deny", "给最高权限账号设拒绝")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("MASTER_AUTHORITY_DENY_FORBIDDEN");
+                    assertThat(e.getMessage()).contains("其他人不能给最高权限账号设置显式拒绝");
+                });
+        assertThat(overrideSources(master, "access.role.assign", AccessRepository.Effect.DENY)).isEmpty();
+        assertThat(auditEventRepository.events).filteredOn(event -> key.equals(event.idempotencyKey()))
+                .extracting(AuditEvent::eventName, AuditEvent::eventResult, AuditEvent::businessId)
+                .containsExactly(org.assertj.core.api.Assertions.tuple("access.user_permission_override.set_failed", "failure", master));
+    }
+
+    // M002-F35（治理地图第 656 行「权限的授予、收回、到期、单次消耗、失效全部留痕」）：映射停用时挂在该映射上的每名员工各留一条
+    // access.user_position.derivation_revoked（员工、映射、原岗位派生角色、被撤销的岗位派生套用、原因 inactive、操作人），有挂起的另有
+    // high_risk_voided；再次保存为停用、再启用、原样重存都不再记收回（第二次）；映射改职级后员工找不到映射，逐人记原因 no_mapping。
+    @Test
+    void revokingPositionDerivationLeavesOneTrailPerEmployee() {
+        List<String> users = List.of("usr_m002_f35_a", "usr_m002_f35_b");
+        PositionRoleTemplate mapping = m002HighRiskFixture(users.get(0), null, "lvl_m1_lower");
+        accessRepository.users.put(users.get(1), new AccessUser(users.get(1), users.get(1), "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        for (String user : users) {
+            service.assignUserPosition(new UserPositionAssignmentRequest(
+                    "m002-f35-assign-" + user, null, user, "ops_manager", "lvl_m1_lower", null, null, null));
+        }
+        Map<String, List<String>> applications = m002PositionApplications(users);
+
+        service.updatePositionRoleTemplate(mapping.id(), m002Mapping("m002-f35-off", "role_ops_check", "tpl_ops_check", "inactive"));
+        m002AssertRevocations(users, mapping.id(), applications, "inactive");
+        assertThat(auditEventRepository.events).filteredOn(event -> "access.user_position.high_risk_voided".equals(event.eventName()))
+                .extracting(AuditEvent::businessId).containsAll(users);
+        assertThat(users).allSatisfy(user -> assertThat(accessRepository.positionRoles.get(user)).isNull());
+
+        service.updatePositionRoleTemplate(mapping.id(), m002Mapping("m002-f35-off-again", "role_ops_check", "tpl_ops_check", "inactive"));
+        service.updatePositionRoleTemplate(mapping.id(), m002Mapping("m002-f35-on", "role_ops_check", "tpl_ops_check", "active"));
+        service.updatePositionRoleTemplate(mapping.id(), m002Mapping("m002-f35-resave", "role_ops_check", "tpl_ops_check", "active"));
+        assertThat(m002RevocationEvents()).hasSize(users.size());
+
+        applications = m002PositionApplications(users);
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "m002-f35-move", null, "ops_manager", "lvl_m10_upper", "role_ops_check", "tpl_ops_check", "active"));
+        m002AssertRevocations(users, mapping.id(), applications, "no_mapping");
+        assertThat(m002RevocationEvents()).hasSize(users.size() * 2);
+        assertThat(users).allSatisfy(user -> assertThat(accessRepository.positionMappings.get(user)).isNull());
+    }
+
+    private Map<String, List<String>> m002PositionApplications(List<String> users) {
+        Map<String, List<String>> applications = new LinkedHashMap<>();
+        for (String user : users) {
+            List<String> ids = accessRepository.findPositionApplications(user).stream()
+                    .filter(application -> "active".equals(application.status())).map(PermissionTemplateApplication::id).toList();
+            assertThat(ids).as("夹具：%s 须有生效中的岗位派生套用", user).isNotEmpty();
+            applications.put(user, ids);
+        }
+        return applications;
+    }
+
+    private List<AuditEvent> m002RevocationEvents() {
+        return auditEventRepository.events.stream()
+                .filter(event -> "access.user_position.derivation_revoked".equals(event.eventName())).toList();
+    }
+
+    private void m002AssertRevocations(List<String> users, String mappingId, Map<String, List<String>> applications, String reason) {
+        List<AuditEvent> trail = m002RevocationEvents().stream().filter(event -> reason.equals(event.metadata().get("reason"))).toList();
+        assertThat(trail).extracting(AuditEvent::businessId).containsExactlyInAnyOrderElementsOf(users);
+        for (AuditEvent event : trail) {
+            assertThat(event.eventResult()).isEqualTo("success");
+            assertThat(event.businessType()).isEqualTo("user_position_assignment");
+            assertThat(event.metadata())
+                    .containsEntry("user_id", event.businessId())
+                    .containsEntry("mapping_id", mappingId)
+                    .containsEntry("role_id", "role_ops_check")
+                    .containsEntry("application_ids", String.join(",", applications.get(event.businessId())))
+                    .containsEntry("operator_id", "usr_admin");
+            assertThat(accessRepository.templateApplications).filteredOn(a -> applications.get(event.businessId()).contains(a.id()))
+                    .extracting(PermissionTemplateApplication::status).containsOnly("revoked");
+        }
+    }
+
+    // M002-F36（契约 RoleAssignmentRequest.user_id / role_id maxLength 64；失败留痕 business_id 列宽 128）：分配、撤销角色的 user_id、role_id 与员工
+    // 覆盖设置、解除的路径用户编号去空白后 65 字、129 字一律 400 VALIDATION_FAILED，发生在锁员工行、查库与写失败留痕之前（不锁任何员工行、无任何
+    // 带该键的事件）；64 字不存在的编号（含首尾空白）仍 404，失败留痕记去空白后的编号。
+    @Test
+    void overlongTargetIdsAreRejectedWith400BeforeAnyLookup() {
+        accessRepository.lockOrder.clear();
+        int attempt = 0;
+        for (String id : List.of("u".repeat(65), "u".repeat(129), " " + "u".repeat(65) + " ")) {
+            String n = String.valueOf(++attempt);
+            Map<String, org.assertj.core.api.ThrowableAssert.ThrowingCallable> entries = new LinkedHashMap<>();
+            entries.put("m002-f36-assign-user-" + n, () -> service.assignUserRole(
+                    new RoleAssignmentRequest("m002-f36-assign-user-" + n, null, id, "explicit_admin_grants")));
+            entries.put("m002-f36-assign-role-" + n, () -> service.assignUserRole(
+                    new RoleAssignmentRequest("m002-f36-assign-role-" + n, null, "usr_admin", id)));
+            entries.put("m002-f36-unassign-user-" + n, () -> service.unassignUserRole(
+                    new RoleAssignmentRequest("m002-f36-unassign-user-" + n, null, id, "explicit_admin_grants")));
+            entries.put("m002-f36-unassign-role-" + n, () -> service.unassignUserRole(
+                    new RoleAssignmentRequest("m002-f36-unassign-role-" + n, null, "usr_admin", id)));
+            entries.put("m002-f36-override-set-" + n, () -> service.setUserPermissionOverrides(id, new UserPermissionOverrideRequest(
+                    "m002-f36-override-set-" + n, null, List.of(M002_VIEW), "deny", "停权")));
+            entries.put("m002-f36-override-remove-" + n, () -> service.removeUserPermissionOverrides(id, new UserPermissionOverrideRequest(
+                    "m002-f36-override-remove-" + n, null, List.of(M002_VIEW), "deny", "解除")));
+            entries.forEach((key, entry) -> {
+                assertThatThrownBy(entry).as(key).isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(400);
+                    assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                    assertThat(e.getMessage()).contains("不能超过 64 个字符");
+                });
+                assertThat(auditEventRepository.events).as(key).noneMatch(event -> key.equals(event.idempotencyKey()));
+            });
+        }
+        assertThat(accessRepository.lockOrder).isEmpty();
+
+        String id64 = "u".repeat(64);
+        attempt = 0;
+        for (String id : List.of(id64, "  " + id64 + "  ")) {
+            String n = String.valueOf(++attempt);
+            Map<String, org.assertj.core.api.ThrowableAssert.ThrowingCallable> entries = new LinkedHashMap<>();
+            entries.put("access.role.assign_failed", () -> service.assignUserRole(
+                    new RoleAssignmentRequest("m002-f36-404-assign-" + n, null, id, "explicit_admin_grants")));
+            entries.put("access.role.unassign_failed", () -> service.unassignUserRole(
+                    new RoleAssignmentRequest("m002-f36-404-unassign-" + n, null, id, "explicit_admin_grants")));
+            entries.put("access.user_permission_override.set_failed", () -> service.setUserPermissionOverrides(id,
+                    new UserPermissionOverrideRequest("m002-f36-404-set-" + n, null, List.of(M002_VIEW), "deny", "停权")));
+            entries.put("access.user_permission_override.remove_failed", () -> service.removeUserPermissionOverrides(id,
+                    new UserPermissionOverrideRequest("m002-f36-404-remove-" + n, null, List.of(M002_VIEW), "deny", "解除")));
+            entries.forEach((eventName, entry) -> {
+                int before = auditEventRepository.events.size();
+                assertThatThrownBy(entry).as(eventName).isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(404);
+                    assertThat(e.code()).isEqualTo("USER_NOT_FOUND");
+                });
+                assertThat(auditEventRepository.events.subList(before, auditEventRepository.events.size()))
+                        .extracting(AuditEvent::eventName, AuditEvent::businessId)
+                        .containsExactly(org.assertj.core.api.Assertions.tuple(eventName, id64));
+            });
+        }
+    }
+
+    // M002-F37（操作员 2026-09-30 裁决，治理地图第 651 行「员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消
+    // 分配角色权限的人发起。」）：无 access.role.assign 的普通员工发起三类申请（内容均有效）一律 403，不建单、不开复核单、留失败痕，第二轮仍被拒；
+    // 同一员工的临时权限申请照常进主管链（第 659 行不变）；持码的平台管理员三类照常建单。
+    @Test
+    void onlyRoleAssignHoldersInitiateTheOverrideAndReleaseRequests() {
+        String target = "usr_m002_f37_target";
+        m002HighRiskFixture(target, null, "lvl_m1_lower");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-f37-assign", null, target, "ops_manager", "lvl_m1_lower", null, null, null));
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        service.reviewGrant(m002PendingHold().id(), m002Reject("m002-f37-reject")); // 驳回后同一挂起可再次申请释放
+        accessRepository.saveUserPermissionOverrides(target, List.of(M002_CODE), AccessRepository.Effect.DENY, "员工显式拒绝", "usr_admin");
+        accessRepository.users.put("usr_requester", new AccessUser(
+                "usr_requester", "requester", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        int requests = accessRepository.grantRequests.size();
+        int reviews = m002Reviews.reviews.size();
+        List<String> types = List.of("user_permission_grant", "user_permission_deny_removal", "position_high_risk_release");
+
+        authenticateAsOrgUser("usr_requester", "requester", "seed-org");
+        for (int round = 1; round <= 2; round++) {
+            for (String type : types) {
+                String key = "m002-f37-staff-" + type + "-" + round;
+                assertThatThrownBy(() -> service.applyGrant(m002Apply(key, type, target, List.of(M002_CODE))))
+                        .as(key).isInstanceOfSatisfying(ApiException.class, e -> {
+                            assertThat(e.status().value()).isEqualTo(403);
+                            assertThat(e.code()).isEqualTo("PERMISSION_DENIED");
+                            assertThat(e.getMessage()).contains("只能由具备分配/取消分配角色权限的人发起");
+                        });
+                assertThat(auditEventRepository.events).filteredOn(event -> key.equals(event.idempotencyKey()))
+                        .extracting(AuditEvent::eventName).containsExactly("access.grant_request.apply_failed");
+            }
+        }
+        assertThat(accessRepository.grantRequests).hasSize(requests);
+        assertThat(m002Reviews.reviews).hasSize(reviews);
+
+        AccessGrantRequestRecord temporary = service.applyGrant(new AccessGrantApplyRequest(
+                "m002-f37-staff-temporary", "M002", List.of(), "temporary_permission", "usr_requester", null, null, null, null, null, null,
+                List.of(M002_VIEW), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "临时顶班"));
+        assertThat(temporary.status()).isEqualTo("pending");
+
+        authenticateAsPlatformAdmin("seed-org");
+        for (String type : types) {
+            AccessGrantRequestRecord applied = service.applyGrant(m002Apply("m002-f37-admin-" + type, type, target, List.of(M002_CODE)));
+            assertThat(applied.status()).as(type).isEqualTo("pending");
+            assertThat(applied.requestType()).isEqualTo(type);
+        }
     }
 
     // M006-R6-03（PGM-1.18 后台报错全中文）：残留的英文校验文案改为中文。

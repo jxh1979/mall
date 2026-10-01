@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -171,16 +171,21 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
 
   // 无权限副资源不请求（根因修）：授权列表/概要卡需 access.grant_request.view、用户清单需 access.user.view、角色清单需 access.role.view，
   // 本页 gate 仅 access.role.assign 不含这三码——缺权限裸 await 会 403 reject 整个 Promise.all 致整页报错，故一并门控
-  //（position-role-templates 与页面同码 access.role.assign，保持裸调用）。
+  //（position-role-templates 与页面同码 access.role.assign，按 canRoleAssign 门控，见下方 M002-F34 说明）。
   const canGrantView = hasPermissions(effectivePermissions, ["access.grant_request.view"]);
   const canUserView = hasPermissions(effectivePermissions, ["access.user.view"]);
   const canRoleView = hasPermissions(effectivePermissions, ["access.role.view"]);
+  // M002-F37（治理地图第 651 行）：员工单独授予、解除员工显式拒绝、岗位模板高危权限释放三类申请只能由具备分配/取消分配角色权限的人发起。
+  const canRoleAssign = hasPermissions(effectivePermissions, ASSIGN);
+  // M002-F34（依据 M002-F08 裁决「本人可以直接解除，不会卡死」）：最高权限本人拒绝了自己的 access.role.assign 时仍能进本页，
+  // 同码的 position-role-templates 此时会 403，一并按 canRoleAssign 门控，免得整页报错、盖住解除入口。
+  const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const { loading, error, reload } = useAdminResource(
     async () => {
       const [userRows, roleRows, templateRows, requestRows, grantSummary] = await Promise.all([
         canUserView ? api.get<AccessUserRow[]>("/api/v1/access/users") : Promise.resolve([] as AccessUserRow[]),
         canRoleView ? api.get<RoleRow[]>("/api/v1/access/roles") : Promise.resolve([] as RoleRow[]),
-        api.get<PositionRoleTemplateRow[]>(`/api/v1/access/position-role-templates?include_archived=${includeArchivedTemplates}`),
+        canRoleAssign ? api.get<PositionRoleTemplateRow[]>(`/api/v1/access/position-role-templates?include_archived=${includeArchivedTemplates}`) : Promise.resolve([] as PositionRoleTemplateRow[]),
         canGrantView ? api.getPaged<AccessGrantRequestRow>(`/api/v1/access/grant-requests?page=${grantPage}`) : Promise.resolve({ items: [] as AccessGrantRequestRow[], total: 0, page: 1, size: 50 }),
         // 智能总结=纯统计副资源（GRANT_VIEW 权限，无权账号可能 403）：单独降级，不拖垮角色装配/审批主流程。
         loadSecondaryIfPermitted(canGrantView, () => api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary"), null as AccessGrantSummary | null),
@@ -590,7 +595,8 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
 
         <h3>员工单独授予 / 显式拒绝</h3>
         <div className="admin-inline-form" data-testid="access-user-override-form">
-          <select aria-label="覆盖用户" value={overrideForm.userId} onChange={(event) => setOverrideForm({ ...overrideForm, userId: event.target.value })}><option value="">请选择用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          {/* M002-F34：最高权限本人总能选中自己（拒绝了 access.user.view 时用户清单为空）。 */}
+          <select aria-label="覆盖用户" value={overrideForm.userId} onChange={(event) => setOverrideForm({ ...overrideForm, userId: event.target.value })}><option value="">请选择用户</option>{(isMaster && !users.some((row) => row.id === user.id) ? [...users, { id: user.id, username: user.username, accountType: user.accountType }] : users).map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
           <input aria-label="覆盖权限码" placeholder="权限码，逗号分隔" value={overrideForm.permissionCodes} onChange={(event) => setOverrideForm({ ...overrideForm, permissionCodes: event.target.value })} />
           <select aria-label="覆盖效果" value={overrideForm.effect} onChange={(event) => setOverrideForm({ ...overrideForm, effect: event.target.value })}>
             <option value="deny">显式拒绝</option>
@@ -598,7 +604,8 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           </select>
           <input aria-label="覆盖理由" placeholder="理由" value={overrideForm.reason} onChange={(event) => setOverrideForm({ ...overrideForm, reason: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-set" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("set"), "员工级覆盖设置失败")}>设置</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-remove" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("remove"), "员工级覆盖移除失败")}>移除</PermissionButton>
+          {/* M002-F34：最高权限本人解除自己的显式拒绝不看 access.role.assign（与后端 M002-F09 门禁同口径）；选他人或单独授予仍按 ASSIGN。 */}
+          <PermissionButton permissionsState={effectivePermissions} permissions={isMaster && overrideForm.userId === user.id && overrideForm.effect === "deny" ? [] : ASSIGN} data-testid="access-user-override-remove" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("remove"), "员工级覆盖移除失败")}>移除</PermissionButton>
         </div>
 
           </>) },
@@ -750,9 +757,11 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
                     <option value="temporary_permission">临时权限</option>
                     <option value="user_role">用户角色</option>
                     <option value="user_position">用户职位</option>
-                    <option value="user_permission_grant">员工单独授予</option>
-                    <option value="user_permission_deny_removal">解除员工显式拒绝</option>
-                    <option value="position_high_risk_release">岗位高危权限释放</option>
+                    {canRoleAssign ? <>
+                      <option value="user_permission_grant">员工单独授予</option>
+                      <option value="user_permission_deny_removal">解除员工显式拒绝</option>
+                      <option value="position_high_risk_release">岗位高危权限释放</option>
+                    </> : null}
                   </select>
                 </label>
                 <label>目标用户<select aria-label="目标用户" value={grantForm.targetUserId} onChange={(event) => setGrantForm({ ...grantForm, targetUserId: event.target.value })}><option value="">请选择目标用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select></label>

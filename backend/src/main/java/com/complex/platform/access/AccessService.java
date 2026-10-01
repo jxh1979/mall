@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -59,6 +59,9 @@ public class AccessService {
     // M002-F01（PGM「支持员工级完全自定义配置」「授出前须先审批才生效」）：员工单独授予、解除员工显式拒绝的授权申请，只收须审批权限码。
     static final String REQUEST_USER_PERMISSION_GRANT = "user_permission_grant";
     static final String REQUEST_USER_PERMISSION_DENY_REMOVAL = "user_permission_deny_removal";
+    // M002-F37（操作员 2026-09-30 裁决「只让有分配角色权限的人发起这三类申请」，治理地图第 651 行）：只能由持 access.role.assign 者发起的申请类型。
+    private static final Set<String> ROLE_ASSIGN_INITIATED_REQUESTS = Set.of(
+            REQUEST_USER_PERMISSION_GRANT, REQUEST_USER_PERMISSION_DENY_REMOVAL, REQUEST_POSITION_HIGH_RISK_RELEASE);
     // M002-F20：批准后能作为「岗位派生高危码已生效」依据的申请类型（快照记岗位、职级、角色、模板）。
     private static final Set<String> APPROVAL_SNAPSHOT_TYPES = Set.of(
             REQUEST_POSITION_HIGH_RISK_RELEASE, REQUEST_USER_POSITION, REQUEST_USER_SCOPE_CHANGE);
@@ -426,6 +429,8 @@ public class AccessService {
 
     public RoleAssignmentRecord assignUserRole(RoleAssignmentRequest request) {
         RoleAssignmentRequest r = requireRequest(request);
+        requireIdWithinContract(r.userId(), "用户编号"); // M002-F36：幂等预留、查库与失败留痕之前
+        requireIdWithinContract(r.roleId(), "角色编号");
         try {
             return idempotencyService.execute(
                     "assignUserRole:" + trimToDefault(r.userId(), "") + ":" + trimToDefault(r.roleId(), ""),
@@ -439,7 +444,7 @@ public class AccessService {
                     "access.role.assign_failed",
                     "access.role.assign",
                     "user_role",
-                    request == null ? null : request.userId(),
+                    trimToNull(r.userId()), // M002-F36：去空白后的编号（已校验不超过 64 字）
                     null,
                     request == null ? null : request.idempotencyKey(),
                     codeOf(exception)
@@ -450,6 +455,8 @@ public class AccessService {
 
     public RoleAssignmentRecord unassignUserRole(RoleAssignmentRequest request) {
         RoleAssignmentRequest r = requireRequest(request);
+        requireIdWithinContract(r.userId(), "用户编号"); // M002-F36：幂等预留、查库与失败留痕之前
+        requireIdWithinContract(r.roleId(), "角色编号");
         try {
             return idempotencyService.execute(
                     "unassignUserRole:" + trimToDefault(r.userId(), "") + ":" + trimToDefault(r.roleId(), ""),
@@ -482,7 +489,7 @@ public class AccessService {
                     "access.role.unassign_failed",
                     "access.role.assign",
                     "user_role",
-                    request == null ? null : request.userId(),
+                    trimToNull(r.userId()), // M002-F36：去空白后的编号（已校验不超过 64 字）
                     null,
                     request == null ? null : request.idempotencyKey(),
                     codeOf(exception)
@@ -1108,6 +1115,7 @@ public class AccessService {
                     r.idempotencyKey(),
                     r,
                     () -> {
+                        requireRoleAssignInitiator(r.requestType()); // M002-F37：建单与开复核单之前
                         repository.lockGrantAuthorizationFacts();
                         AccessGrantRequestRecord draft = buildGrantRequest(r);
                         List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(draft.permissionCodes());
@@ -1594,7 +1602,8 @@ public class AccessService {
 
     /**
      * M006-G-01（PGM-1.10.1「最终权限 = … + 员工单独授予 − 显式拒绝」「员工级完全自定义」）：员工级覆盖写路径。
-     * deny 只减权、不设审批；grant 与直接装配同口径（高危须走授权申请，且不得超出授权人自身有效集）。幂等 + 审计留痕。
+     * deny 只减权、不设审批，但其他人不能给最高权限账号设 deny（M002-F34）；grant 与直接装配同口径（高危须走授权申请，且不得超出授权人自身有效集）。
+     * 幂等 + 审计留痕。
      */
     @Transactional
     public EffectivePermissions setUserPermissionOverrides(String userId, UserPermissionOverrideRequest request) {
@@ -1609,6 +1618,7 @@ public class AccessService {
     private EffectivePermissions changeUserPermissionOverrides(String userId, UserPermissionOverrideRequest request, boolean set) {
         UserPermissionOverrideRequest r = requireRequest(request);
         String action = set ? "set" : "remove";
+        requireIdWithinContract(userId, "用户编号"); // M002-F36：幂等预留、查库与失败留痕之前
         try {
             return idempotencyService.execute(
                     "userPermissionOverride:" + action + ":" + trimToDefault(userId, ""),
@@ -1626,6 +1636,12 @@ public class AccessService {
                             case "deny" -> AccessRepository.Effect.DENY;
                             default -> throw ApiException.badRequest("VALIDATION_FAILED", "覆盖效果只能是授予或拒绝");
                         };
+                        // M002-F34（操作员 2026-09-30 裁决「最高权限，别人就不能设置啊」，治理地图第 703 行「其他人不能给最高权限账号设置显式拒绝。」）：
+                        // 目标按账号身份识别（含停用中的最高权限账号，M002-F15），只有最高权限本人会话能给自己设拒绝；解除（F08/F09）不变。
+                        if (set && effect == AccessRepository.Effect.DENY && isMasterAuthorityAccount(targetUser)
+                                && !authorizationService.isMasterAuthority(actor)) {
+                            throw ApiException.forbidden("MASTER_AUTHORITY_DENY_FORBIDDEN", "其他人不能给最高权限账号设置显式拒绝");
+                        }
                         List<String> permissionCodes = safeList(r.permissionCodes()).stream().distinct().toList();
                         if (permissionCodes.isEmpty()) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
@@ -1715,7 +1731,7 @@ public class AccessService {
                     "access.user_permission_override." + action + "_failed",
                     "access.role.assign",
                     "user_permission_override",
-                    userId,
+                    trimToNull(userId), // M002-F36：去空白后的编号（已校验不超过 64 字）
                     null,
                     request == null ? null : request.idempotencyKey(),
                     codeOf(exception)
@@ -1893,6 +1909,17 @@ public class AccessService {
         return saved;
     }
 
+    // M002-F37（操作员 2026-09-30 裁决，治理地图第 651 行「员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备
+    // 分配/取消分配角色权限的人发起。」）：三类申请的发起人有效权限须含 access.role.assign，否则 403；角色、岗位、临时权限申请不在此列
+    // （第 659 行「员工可申请临时权限」不变）。
+    private void requireRoleAssignInitiator(String requestType) {
+        if (ROLE_ASSIGN_INITIATED_REQUESTS.contains(trimToDefault(requestType, "").toLowerCase(Locale.ROOT))
+                && !authorizationService.effectivePermissions().grants().contains("access.role.assign")) {
+            throw ApiException.forbidden("PERMISSION_DENIED",
+                    "员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消分配角色权限的人发起");
+        }
+    }
+
     private AccessGrantRequestRecord buildGrantRequest(AccessGrantApplyRequest request) {
         String type = normalizeGrantRequestType(request.requestType());
         return switch (type) {
@@ -1948,7 +1975,8 @@ public class AccessService {
 
     /**
      * M002-F01（PGM「支持员工级完全自定义配置」「显式拒绝优先级最高」「授出前须先审批才生效」）：员工单独授予 / 解除员工显式拒绝的授权申请。
-     * 只收须审批权限码（日常码仍走员工覆盖直接操作，受授权人自身有效集校验）；建单校验申请人与目标同组织，授权依据为主管链与授权事实指纹。
+     * 只收须审批权限码（日常码仍走员工覆盖直接操作，受授权人自身有效集校验）；申请人须持 access.role.assign（M002-F37，见 applyGrant），
+     * 建单校验申请人与目标同组织，授权依据为主管链与授权事实指纹。
      */
     private AccessGrantRequestRecord buildUserPermissionOverrideRequest(AccessGrantApplyRequest request, String type) {
         AccessActor actor = authorizationService.currentActor();
@@ -2628,8 +2656,7 @@ public class AccessService {
         Instant now = Instant.now();
         if (!"active".equals(saved.status())) {
             for (String userId : userIds) {
-                repository.replacePositionGrants(userId, null, null, List.of(), actor.id(), now);
-                reconcilePositionHolds(userId, null, List.of(), Set.of(), idempotencyKey, null, actor.id(), now);
+                revokePositionDerivation(userId, saved.id(), "inactive", idempotencyKey, actor.id(), now);
             }
             return;
         }
@@ -2646,10 +2673,26 @@ public class AccessService {
                     position.staffLevelId()).isPresent()) {
                 rederivePosition(userId, position.positionCode(), position.staffLevelId(), idempotencyKey, operatorNote, modified);
             } else {
-                repository.replacePositionGrants(userId, null, null, List.of(), actor.id(), now);
-                reconcilePositionHolds(userId, null, List.of(), Set.of(), idempotencyKey, null, actor.id(), now);
+                revokePositionDerivation(userId, saved.id(), "no_mapping", idempotencyKey, actor.id(), now);
             }
         }
+    }
+
+    /**
+     * M002-F35（治理地图第 656 行「权限的授予、收回、到期、单次消耗、失效全部留痕」）：映射停用、或映射改岗位编码/职级后员工找不到映射时，
+     * 收回其岗位派生角色与岗位派生套用，并逐人留一条收回记录（员工、映射、原派生角色、被撤销的套用、原因 inactive / no_mapping、操作人）；
+     * 收回与挂起对账照旧。
+     */
+    private void revokePositionDerivation(String userId, String mappingId, String reason, String idempotencyKey, String actorId,
+                                          Instant now) {
+        String roleId = repository.findAssignedPositionRoleId(userId).orElse("");
+        List<String> applicationIds = repository.findPositionApplications(userId).stream()
+                .filter(application -> "active".equals(application.status())).map(PermissionTemplateApplication::id).toList();
+        repository.replacePositionGrants(userId, null, null, List.of(), actorId, now);
+        auditEventService.recordSuccess("access.user_position.derivation_revoked", "access.role.assign", "user_position_assignment",
+                userId, null, idempotencyKey, Map.of("user_id", userId, "mapping_id", mappingId, "role_id", roleId,
+                        "application_ids", String.join(",", applicationIds), "reason", reason, "operator_id", actorId));
+        reconcilePositionHolds(userId, null, List.of(), Set.of(), idempotencyKey, null, actorId, now);
     }
 
     private void rederivePosition(String userId, String positionCode, String staffLevelId, String idempotencyKey, String operatorNote,
@@ -2945,6 +2988,15 @@ public class AccessService {
         String trimmed = positionCode == null ? "" : positionCode.trim();
         if (trimmed.codePointCount(0, trimmed.length()) > 64) {
             throw ApiException.badRequest("VALIDATION_FAILED", "岗位编码不能超过 64 个字符");
+        }
+    }
+
+    // M002-F36（契约 RoleAssignmentRequest.user_id / role_id maxLength 64；技术不变量：失败留痕 business_id 列宽 VARCHAR(128)）：角色分配、撤销与
+    // 员工覆盖设置、解除的目标编号去空白后超过 64 字即 400，在幂等预留、查库与写失败留痕之前拒绝，不再在写失败留痕时落成列宽 500。
+    private static void requireIdWithinContract(String id, String label) {
+        String trimmed = id == null ? "" : id.trim();
+        if (trimmed.codePointCount(0, trimmed.length()) > 64) {
+            throw ApiException.badRequest("VALIDATION_FAILED", label + "不能超过 64 个字符");
         }
     }
 
