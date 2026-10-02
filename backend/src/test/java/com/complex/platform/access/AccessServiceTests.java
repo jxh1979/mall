@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -4317,6 +4317,39 @@ class AccessServiceTests {
 
     private static PermissionTemplateRequest namedRequest(String key, String name, String type) {
         return new PermissionTemplateRequest(key, "seed", List.of(), name, type, null, List.of(), "project", null, null, false);
+    }
+
+    // M001-F25（句 2）：条目数据范围不一的在用模板，修改不填数据范围时保留的码沿用原范围、照常收窄（新增截止并改为单次）；
+    // 明确填写且与保留条目不同仍 409，模板不变。
+    @Test
+    void mixedScopeTemplateInUseNarrowsWhenTheRequestLeavesDataScopeEmpty() {
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        Instant until = Instant.parse("2099-01-31T00:00:00Z");
+        List<String> codes = List.of("ops.production_readiness.view", "ops.production_readiness.check");
+        accessRepository.saveTemplate(new PermissionTemplate("tpl_f25_mixed", "tpl_f25_mixed", "F25 混用范围", null, "base", null,
+                "platform", null, "merge", null, null, false, "active", null, null, null, at, at), List.of(
+                new PermissionTemplateItem("tpl_f25_mixed", codes.get(0), AccessRepository.Effect.GRANT, "assignee", false),
+                new PermissionTemplateItem("tpl_f25_mixed", codes.get(1), AccessRepository.Effect.GRANT, "project", false)));
+        accessRepository.createUser(new AccessUser("usr_f25", "f25", "staff", "seed-org", null, "active", Instant.now()));
+        service.applyPermissionTemplate("tpl_f25_mixed", new PermissionTemplateApplyRequest(
+                "f25-apply", "apply", List.of(), "tpl_f25_mixed", List.of("usr_f25"), "append"));
+
+        assertThatThrownBy(() -> service.updatePermissionTemplate("tpl_f25_mixed", new PermissionTemplateRequest(
+                "f25-explicit", "seed", List.of(), "F25 混用范围", "base", null, codes, "project", null, until, false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.getMessage()).isEqualTo("模板条目的数据范围不能直接修改；请新建模板或复制为新模板后另行套用");
+                });
+        assertThat(accessRepository.templates.get("tpl_f25_mixed").validUntil()).isNull();
+
+        assertThat(service.updatePermissionTemplate("tpl_f25_mixed", new PermissionTemplateRequest(
+                "f25-narrow", "seed", List.of(), "F25 混用范围", "base", null, codes, null, null, until, true)))
+                .satisfies(template -> {
+                    assertThat(template.validUntil()).isEqualTo(until);
+                    assertThat(template.singleUse()).isTrue();
+                });
+        assertThat(accessRepository.items.get("tpl_f25_mixed")).extracting(item -> item.permissionCode() + "=" + item.dataScope())
+                .containsExactlyInAnyOrder(codes.get(0) + "=assignee", codes.get(1) + "=project");
     }
 
     private static PermissionTemplateRequest codesRequest(String key, List<String> codes) {

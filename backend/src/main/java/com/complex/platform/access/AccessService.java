@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.34
+// 文件版本：V0.35
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -189,7 +189,9 @@ public class AccessService {
                     requireTemporaryTimeOrder(request);  // M001-F07：倒置窗口先于「延长有效期须重新授权」判定，按 400 拒绝
                     List<PermissionTemplateItem> previousItems = repository.findTemplateItems(id);
                     boolean singleUse = Boolean.TRUE.equals(request.singleUse());
-                    boolean changesScope = previousItems.stream().anyMatch(item ->
+                    // M001-F25（句 2）：请求没填数据范围时保留下来的码沿用原条目范围（grantItems，与复制同口径），不算改范围；
+                    // 只有明确填写且与保留条目不同才算，否则条目范围混用的在用模板无论填什么都收窄不了
+                    boolean changesScope = trimToNull(request.dataScope()) != null && previousItems.stream().anyMatch(item ->
                             safeList(request.permissionCodes()).contains(item.permissionCode())
                                     && !java.util.Objects.equals(item.dataScope(), trimToDefault(request.dataScope(), "project")));
                     // M001-F17（操作员裁决句 2「模板已被套用且仍有员工在用时，收窄其有效期或改为单次使用，在用员工立即按收窄后的期限执行……
@@ -222,7 +224,8 @@ public class AccessService {
                     requireActorCanGrant(added);
                     requireGrantApprovalIfNeeded(added);
                     PermissionTemplate template = templateFromRequest(id, request, existing.sourceTemplateId(), existing.ownerScopeId());
-                    PermissionTemplate saved = repository.saveTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
+                    PermissionTemplate saved = repository.saveTemplate(template,
+                            grantItems(template.id(), request.permissionCodes(), request.dataScope(), previousItems));
                     // M001-F11（PGM 权限规则「权限的授予、收回……全部留痕」）：增减即时作用于仍生效的套用员工，逐人留痕；
                     // M001-F18（句 2「并逐人记录改前改后的期限和操作人」）：收窄使某人实际期限或单次变化时同样逐人留痕，
                     // 记改前改后的实际生效、截止（ISO 8601，空串＝不限；审计元数据不收 null）与单次标记；实际期限没变的员工不写。
@@ -307,12 +310,7 @@ public class AccessService {
                     requireTemplateType(merged.templateType());
                     requireKnownPermissions(codes);
                     PermissionTemplate copy = templateFromRequest("tpl_" + UUID.randomUUID(), merged, id, ownerScopeId);
-                    Map<String, String> sourceScopes = new HashMap<>();
-                    sourceItems.forEach(item -> sourceScopes.put(item.permissionCode(), item.dataScope()));
-                    List<PermissionTemplateItem> copyItems = new ArrayList<>(trimToNull(request.dataScope()) != null
-                            ? items(copy.id(), codes, request.dataScope())
-                            : codes.stream().map(code -> new PermissionTemplateItem(copy.id(), code, AccessRepository.Effect.GRANT,
-                                    sourceScopes.getOrDefault(code, "project"), false)).toList());
+                    List<PermissionTemplateItem> copyItems = new ArrayList<>(grantItems(copy.id(), codes, request.dataScope(), sourceItems));
                     sourceItems.stream().filter(item -> item.effect() == AccessRepository.Effect.DENY && active.contains(item.permissionCode()))
                             .forEach(item -> copyItems.add(new PermissionTemplateItem(copy.id(), item.permissionCode(), item.effect(),
                                     item.dataScope(), item.sensitive())));
@@ -3054,6 +3052,18 @@ public class AccessService {
     private Set<String> activePermissionCodes() {
         return repository.listPermissions().stream().filter(permission -> "active".equals(permission.status()))
                 .map(PermissionDefinition::permissionCode).collect(java.util.stream.Collectors.toSet());
+    }
+
+    // 复制（M001-F19）与修改（M001-F25）同口径：填了数据范围就全部按填写；没填时与原条目相同的码沿用原范围、其余记 project
+    private List<PermissionTemplateItem> grantItems(String templateId, List<String> permissionCodes, String dataScope,
+                                                    List<PermissionTemplateItem> previousItems) {
+        if (trimToNull(dataScope) != null) {
+            return items(templateId, permissionCodes, dataScope);
+        }
+        Map<String, String> previousScopes = new HashMap<>();
+        previousItems.forEach(item -> previousScopes.put(item.permissionCode(), item.dataScope()));
+        return safeList(permissionCodes).stream().map(code -> new PermissionTemplateItem(templateId, code, AccessRepository.Effect.GRANT,
+                previousScopes.getOrDefault(code, "project"), false)).toList();
     }
 
     private List<PermissionTemplateItem> items(String templateId, List<String> permissionCodes, String dataScope) {

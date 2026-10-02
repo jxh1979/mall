@@ -154,6 +154,7 @@ describe("M038 权限模板页回归", () => {
     await waitFor(() => expect(putBody).toBeTruthy());
     expect(new Date(String(putBody!.valid_from)).getTime()).toBe(new Date("2026-06-14T00:00:00Z").getTime());
     expect(new Date(String(putBody!.valid_until)).getTime()).toBe(new Date("2026-06-15T00:00:00Z").getTime());
+    expect(putBody).not.toHaveProperty("data_scope"); // M001-F25：修改不写死数据范围
   });
 
   // M001-F18（控制席 2026-10-02 裁定）：输入框只到分钟；选中带秒的模板、不改时间直接保存，请求里的生效 / 截止与原值逐字一致，

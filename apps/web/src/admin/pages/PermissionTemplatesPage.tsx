@@ -279,7 +279,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
         templateType,
         sourceTemplateId: selected?.sourceTemplateId ?? undefined,
         permissionCodes: selectedPermissionCodes,
-        dataScope: "project",
+        // M001-F25：修改不发数据范围，保留的权限码沿用原条目范围（条目范围不一的在用模板也能收窄）
         validFrom: keepOrIso(validFrom, selected.validFrom),
         validUntil: keepOrIso(validUntil, selected.validUntil),
         singleUse,

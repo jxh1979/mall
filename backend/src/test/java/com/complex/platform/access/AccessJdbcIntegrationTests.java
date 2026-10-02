@@ -3997,6 +3997,44 @@ class AccessJdbcIntegrationTests {
         assertThat(usageResults(addedApplication)).containsExactly("expired");
     }
 
+    // M001-F25（句 2）：真实库迁移后的种子基础模板 tpl_outsourced_facility 条目范围为 assignee 与 project 混用（V181）。
+    // 套用后修改不填数据范围、只新增截止：保存成功，条目范围不变，在用员工逐人留痕、实际截止变为新截止；明确填 project 仍 409。
+    @Test
+    void mixedScopeSeedTemplateInUseNarrowsWithoutDataScopeOnTheRealSchema() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String admin = "usr_f25_admin_" + suffix;
+        String holder = "usr_f25_" + suffix;
+        String template = "tpl_outsourced_facility";
+        Instant until = Instant.parse("2099-01-31T00:00:00Z");
+        List<java.util.Map<String, Object>> before = jdbcTemplate.queryForList(
+                "SELECT permission_code, data_scope FROM permission_template_items WHERE template_id = ? AND effect = 'grant' ORDER BY permission_code",
+                template);
+        assertThat(before).extracting(row -> row.get("data_scope")).contains("assignee", "project"); // 种子确为混用范围
+        List<String> codes = before.stream().map(row -> (String) row.get("permission_code")).toList();
+        String name = repository.findTemplateById(template).orElseThrow().templateName();
+        repository.createUser(new AccessUser(holder, holder, "staff", "org", null, "active", Instant.now()));
+        String application = repository.applyTemplate(template, List.of(holder), null, null, false, "seed-admin").get(0).id();
+
+        assertThatThrownBy(() -> m002ActAs(admin, "platform_admin", () -> accessService.updatePermissionTemplate(template,
+                new PermissionTemplateRequest("f25-explicit-" + suffix, "M001-F25", List.of(), name, "base", null, codes, "project",
+                        null, until, false))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TEMPLATE_REAUTHORIZATION_REQUIRED"));
+
+        String key = "f25-narrow-" + suffix;
+        m002ActAs(admin, "platform_admin", () -> accessService.updatePermissionTemplate(template,
+                new PermissionTemplateRequest(key, "M001-F25", List.of(), name, "base", null, codes, null, null, until, false)));
+        assertThat(repository.findTemplateById(template).orElseThrow().validUntil()).isEqualTo(until);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT permission_code, data_scope FROM permission_template_items WHERE template_id = ? AND effect = 'grant' ORDER BY permission_code",
+                template)).isEqualTo(before);
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT metadata ->> 'valid_until_before' AS before, metadata ->> 'valid_until_after' AS after
+                  FROM audit_events WHERE event_name = 'permission_template.effect_changed' AND idempotency_key = ?
+                   AND metadata ->> 'application_id' = ?
+                """, key, application)).singleElement().satisfies(event -> assertThat(event)
+                .containsEntry("before", "").containsEntry("after", until.toString()));
+    }
+
     private PermissionTemplateRequest f17Request(String key, Instant from, Instant until, boolean singleUse) {
         return new PermissionTemplateRequest(key, "M001-F17", List.of(), "F17 临时模板", "temporary", null,
                 List.of(DAILY_A), "project", from, until, singleUse);
