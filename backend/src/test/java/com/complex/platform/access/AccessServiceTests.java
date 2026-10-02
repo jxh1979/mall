@@ -3011,8 +3011,10 @@ class AccessServiceTests {
     }
 
     // M002-F37（操作员 2026-09-30 裁决，治理地图第 651 行「员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消
-    // 分配角色权限的人发起。」）：无 access.role.assign 的普通员工发起三类申请（内容均有效）一律 403，不建单、不开复核单、留失败痕，第二轮仍被拒；
+    // 分配角色权限的人发起。」）：无 access.role.assign 的普通员工发起三类申请（内容均有效）一律 403，不建单、不开复核单，第二轮仍被拒；
     // 同一员工的临时权限申请照常进主管链（第 659 行不变）；持码的平台管理员三类照常建单。
+    // M002-F42：资格改在入口 AccessController.applyGrant 与申请权限一次核验，本用例按入口断言——持申请权限的员工经入口发起三类申请
+    // （类型带大小写与首尾空白同样）在进服务层之前即被拒（F37 原提示语），该幂等键不留任何服务层痕迹；临时权限申请与管理员三类申请均经入口建单。
     @Test
     void onlyRoleAssignHoldersInitiateTheOverrideAndReleaseRequests() {
         String target = "usr_m002_f37_target";
@@ -3024,35 +3026,42 @@ class AccessServiceTests {
         accessRepository.saveUserPermissionOverrides(target, List.of(M002_CODE), AccessRepository.Effect.DENY, "员工显式拒绝", "usr_admin");
         accessRepository.users.put("usr_requester", new AccessUser(
                 "usr_requester", "requester", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        // M002-F42：入口核验按字典判码——申请权限与真库 V394 同档（low、无需审批），分配角色权限同 2832 行登记；员工经角色持申请权限。
+        accessRepository.addPermission("access.grant_request.apply", "low", false);
+        accessRepository.addPermission("access.role.assign", "high", true);
+        accessRepository.roles.put("role_m002_f37_apply", new RoleRecord("role_m002_f37_apply", "apply", null, "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of("access.grant_request.apply"), null));
+        accessRepository.userRoles.put("usr_requester", new LinkedHashSet<>(Set.of("role_m002_f37_apply")));
+        AccessController entry = new AccessController(service, authorizationService);
         int requests = accessRepository.grantRequests.size();
         int reviews = m002Reviews.reviews.size();
         List<String> types = List.of("user_permission_grant", "user_permission_deny_removal", "position_high_risk_release");
 
         authenticateAsOrgUser("usr_requester", "requester", "seed-org");
         for (int round = 1; round <= 2; round++) {
-            for (String type : types) {
-                String key = "m002-f37-staff-" + type + "-" + round;
-                assertThatThrownBy(() -> service.applyGrant(m002Apply(key, type, target, List.of(M002_CODE))))
+            for (String type : List.of(types.get(0), types.get(1), types.get(2), "  User_Permission_DENY_Removal ")) {
+                String key = "m002-f37-staff-" + type.trim() + "-" + round;
+                assertThatThrownBy(() -> entry.applyGrant(m002Apply(key, type, target, List.of(M002_CODE))))
                         .as(key).isInstanceOfSatisfying(ApiException.class, e -> {
                             assertThat(e.status().value()).isEqualTo(403);
                             assertThat(e.code()).isEqualTo("PERMISSION_DENIED");
-                            assertThat(e.getMessage()).contains("只能由具备分配/取消分配角色权限的人发起");
+                            assertThat(e.getMessage()).isEqualTo(
+                                    "员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消分配角色权限的人发起");
                         });
-                assertThat(auditEventRepository.events).filteredOn(event -> key.equals(event.idempotencyKey()))
-                        .extracting(AuditEvent::eventName).containsExactly("access.grant_request.apply_failed");
+                assertThat(auditEventRepository.events).as(key).filteredOn(event -> key.equals(event.idempotencyKey())).isEmpty();
             }
         }
         assertThat(accessRepository.grantRequests).hasSize(requests);
         assertThat(m002Reviews.reviews).hasSize(reviews);
 
-        AccessGrantRequestRecord temporary = service.applyGrant(new AccessGrantApplyRequest(
+        AccessGrantRequestRecord temporary = entry.applyGrant(new AccessGrantApplyRequest(
                 "m002-f37-staff-temporary", "M002", List.of(), "temporary_permission", "usr_requester", null, null, null, null, null, null,
-                List.of(M002_VIEW), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "临时顶班"));
+                List.of(M002_VIEW), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "临时顶班")).data();
         assertThat(temporary.status()).isEqualTo("pending");
 
         authenticateAsPlatformAdmin("seed-org");
         for (String type : types) {
-            AccessGrantRequestRecord applied = service.applyGrant(m002Apply("m002-f37-admin-" + type, type, target, List.of(M002_CODE)));
+            AccessGrantRequestRecord applied = entry.applyGrant(m002Apply("m002-f37-admin-" + type, type, target, List.of(M002_CODE))).data();
             assertThat(applied.status()).as(type).isEqualTo("pending");
             assertThat(applied.requestType()).isEqualTo(type);
         }

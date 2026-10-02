@@ -1115,7 +1115,8 @@ public class AccessService {
                     r.idempotencyKey(),
                     r,
                     () -> {
-                        requireRoleAssignInitiator(r.requestType()); // M002-F37：建单与开复核单之前
+                        // M002-F37 / M002-F42：三类申请的发起资格（access.role.assign）在入口 AccessController.applyGrant 与申请权限一次核验，
+                        // 此处不再按有效集复查（入口已消耗的单次来源会被当成不持有而误拒）；本方法唯一的生产调用方是该入口。
                         repository.lockGrantAuthorizationFacts();
                         AccessGrantRequestRecord draft = buildGrantRequest(r);
                         List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(draft.permissionCodes());
@@ -1912,13 +1913,10 @@ public class AccessService {
 
     // M002-F37（操作员 2026-09-30 裁决，治理地图第 651 行「员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备
     // 分配/取消分配角色权限的人发起。」）：三类申请的发起人有效权限须含 access.role.assign，否则 403；角色、岗位、临时权限申请不在此列
-    // （第 659 行「员工可申请临时权限」不变）。
-    private void requireRoleAssignInitiator(String requestType) {
-        if (ROLE_ASSIGN_INITIATED_REQUESTS.contains(trimToDefault(requestType, "").toLowerCase(Locale.ROOT))
-                && !authorizationService.effectivePermissions().grants().contains("access.role.assign")) {
-            throw ApiException.forbidden("PERMISSION_DENIED",
-                    "员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消分配角色权限的人发起");
-        }
+    // （第 659 行「员工可申请临时权限」不变）。M002-F42：资格在入口 AccessController.applyGrant 与申请权限一次核验（同一单次来源只消耗一次），
+    // 本方法只判申请类型，归一化与 normalizeGrantRequestType 相同（去首尾空白、转小写）；入口复用这里的集合，不另抄一份。
+    static boolean isRoleAssignInitiatedRequest(String requestType) {
+        return requestType != null && ROLE_ASSIGN_INITIATED_REQUESTS.contains(requestType.trim().toLowerCase(Locale.ROOT));
     }
 
     private AccessGrantRequestRecord buildGrantRequest(AccessGrantApplyRequest request) {
@@ -1976,7 +1974,7 @@ public class AccessService {
 
     /**
      * M002-F01（PGM「支持员工级完全自定义配置」「显式拒绝优先级最高」「授出前须先审批才生效」）：员工单独授予 / 解除员工显式拒绝的授权申请。
-     * 只收须审批权限码（日常码仍走员工覆盖直接操作，受授权人自身有效集校验）；申请人须持 access.role.assign（M002-F37，见 applyGrant），
+     * 只收须审批权限码（日常码仍走员工覆盖直接操作，受授权人自身有效集校验）；申请人须持 access.role.assign（M002-F37；M002-F42：在入口 AccessController.applyGrant 与申请权限一次核验），
      * 建单校验申请人与目标同组织，授权依据为主管链与授权事实指纹。
      */
     private AccessGrantRequestRecord buildUserPermissionOverrideRequest(AccessGrantApplyRequest request, String type) {

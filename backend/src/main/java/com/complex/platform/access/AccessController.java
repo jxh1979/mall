@@ -131,7 +131,21 @@ public class AccessController {
 
     @PostMapping("/grant-requests")
     public ApiResponse<AccessGrantRequestRecord> applyGrant(@RequestBody @jakarta.validation.Valid AccessGrantApplyRequest request) {
-        authorizationService.requirePermission("access.grant_request.apply");
+        // M002-F42（治理地图第 651 行「只能由具备分配/取消分配角色权限的人发起」、第 656 行「临时授权可设有效期或单次使用」；操作员裁决 M002-F37）：
+        // 员工单独授予、解除员工显式拒绝、岗位模板高危权限释放三类申请，申请权限与分配角色权限在入口一次核验、同一单次来源只消耗一次（服务层不再按有效集复查，
+        // 复查会把本次刚消耗的来源当成不持有而误拒）。先做不消耗来源的判定：不持申请权限的照基线拒绝；不持（含显式拒绝）分配角色权限的按 F37 拒绝，都不消耗任何来源。
+        if (AccessService.isRoleAssignInitiatedRequest(request == null ? null : request.requestType())) {
+            if (!authorizationService.currentActorHasPermission("access.grant_request.apply")) {
+                authorizationService.requirePermission("access.grant_request.apply");
+            }
+            if (!authorizationService.currentActorHasPermission("access.role.assign")) {
+                throw ApiException.forbidden("PERMISSION_DENIED",
+                        "员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消分配角色权限的人发起");
+            }
+            authorizationService.requirePermissions("access.grant_request.apply", "access.role.assign");
+        } else {
+            authorizationService.requirePermission("access.grant_request.apply");
+        }
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.applyGrant(request));
     }

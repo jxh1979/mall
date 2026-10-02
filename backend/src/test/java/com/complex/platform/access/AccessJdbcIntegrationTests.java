@@ -3097,6 +3097,140 @@ class AccessJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", w.user(), w.admin());
     }
 
+    // ── M002 第 13 轮（M002-F42；治理地图第 651 行「只能由具备分配/取消分配角色权限的人发起」、第 656 行「临时授权可设有效期或单次使用」，
+    // 操作员裁决 M002-F37；同一操作先消耗一项必需权限再重查另一项致误拒为技术推导）真库与真实接口回归 ─────────────────────────────────
+
+    private static final List<String> M002_F42_TYPES = List.of("user_permission_grant", "user_permission_deny_removal", "position_high_risk_release");
+    private static final String M002_F37_MESSAGE =
+            "员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消分配角色权限的人发起";
+
+    // M002-F42：真库＋真实接口＋真实 AuthorizationService——申请人的「申请高危授权」与「分配/取消分配角色」只来自同一条有效单次模板套用（没有其他来源），
+    // 三类申请各由一名这样的员工首次提交：都 200 建单，该单次来源恰好消耗一次、一条消耗日志；每类恰好一张待审授权单、对应一张待审主管复核单，
+    // 复核单总数只增 3。修复前入口先核验并消耗申请权限的来源，服务层再按有效集查分配角色权限时该来源已被排除，403、来源已用掉。
+    @Test
+    void singleUseApplyAndRoleAssignSourceFilesEachOfTheThreeRequestTypesOnceThroughTheEndpointOnTheRealSchema() throws Exception {
+        M002Fixture f = m002F42ThreeTypeFixture("m002-j42a");
+        String countReviews = "SELECT count(*) FROM supervisor_review_decisions";
+        long reviewsBefore = jdbcTemplate.queryForObject(countReviews, Long.class);
+        int n = 0;
+        for (String type : M002_F42_TYPES) {
+            M002F42Applicant applicant = m002F42Applicant(f, "a" + (++n), "access.grant_request.apply", "access.role.assign");
+            assertThat(m002SourceUse(applicant.sources())).containsExactly("false/0");
+
+            m002F42Apply(f, applicant, type, "m002-j42a-" + n).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.request_type").value(type))
+                    .andExpect(jsonPath("$.data.status").value("pending"));
+            assertThat(m002SourceUse(applicant.sources())).as(type).containsExactly("true/1");
+            assertThat(jdbcTemplate.queryForList("""
+                    SELECT r.status || '/' || d.review_status || '/'
+                           || (SELECT count(*) FROM supervisor_review_decisions x WHERE x.object_id = r.id)::text
+                      FROM access_grant_requests r JOIN supervisor_review_decisions d ON d.review_id = r.review_id
+                     WHERE r.requested_by = ? AND r.request_type = ?
+                    """, String.class, applicant.id(), type)).as(type).containsExactly("pending/pending_review/1");
+        }
+        assertThat(jdbcTemplate.queryForObject(countReviews, Long.class)).isEqualTo(reviewsBefore + 3);
+    }
+
+    // M002-F42：真库＋真实接口——分配角色权限缺失或被显式拒绝时三类申请仍 403（F37 原提示语），且不消耗任何单次来源：甲只经单次模板持申请权限；
+    // 乙的单次模板含两码，但「分配/取消分配角色」有员工显式拒绝。两人对三类申请（另加带大小写与首尾空白的类型，不能绕过）都 403 PERMISSION_DENIED，
+    // 第二轮仍被拒；来源始终未消耗、无消耗日志，不建授权单、不开复核单，拒绝行仍在。修复前入口先消耗来源、服务层再拒绝，来源白白用掉。
+    @Test
+    void missingOrDeniedRoleAssignIsRefusedWithoutConsumingTheSingleUseSourceOnTheRealSchema() throws Exception {
+        M002Fixture f = m002F42ThreeTypeFixture("m002-j42b");
+        M002F42Applicant lacking = m002F42Applicant(f, "b1", "access.grant_request.apply");
+        M002F42Applicant denied = m002F42Applicant(f, "b2", "access.grant_request.apply", "access.role.assign");
+        repository.saveUserPermissionOverrides(denied.id(), List.of("access.role.assign"), AccessRepository.Effect.DENY, "停分配角色", f.admin());
+        String countRequests = "SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?";
+        String countReviews = "SELECT (SELECT count(*) FROM supervisor_review_decisions) || '/' || (SELECT count(*) FROM supervisor_review_nodes)";
+        long requestsBefore = jdbcTemplate.queryForObject(countRequests, Long.class, f.target());
+        String reviewsBefore = jdbcTemplate.queryForObject(countReviews, String.class);
+        List<String> types = new java.util.ArrayList<>(M002_F42_TYPES);
+        types.addAll(List.of(" User_Permission_GRANT ", "Position_High_Risk_Release  "));
+        int n = 0;
+        for (M002F42Applicant applicant : List.of(lacking, denied)) {
+            for (int round = 1; round <= 2; round++) {
+                for (String type : types) {
+                    m002F42Apply(f, applicant, type, "m002-j42b-" + (++n)).andExpect(status().isForbidden())
+                            .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(M002_F37_MESSAGE)));
+                    assertThat(m002SourceUse(applicant.sources())).as(applicant.id() + " " + type).containsExactly("false/0");
+                }
+            }
+        }
+        assertThat(jdbcTemplate.queryForObject(countRequests, Long.class, f.target())).isEqualTo(requestsBefore);
+        assertThat(jdbcTemplate.queryForObject(countReviews, String.class)).isEqualTo(reviewsBefore);
+        assertThat(denyOrigins(denied.id(), "access.role.assign")).containsExactly("explicit");
+    }
+
+    // M002-F42（行为保持）：真库＋真实接口——非三类与不持申请权限者不变：丙只经单次模板持申请权限，提交本人临时权限申请 200，该来源恰好消耗一次
+    // （不判分配角色权限）；丁只经单次模板持分配角色权限、不持申请权限，三类申请都 403 PERMISSION_DENIED「没有操作权限」（与基线同一标准拒绝），
+    // 其来源不消耗，不建授权单。
+    @Test
+    void temporaryRequestsAndCallersWithoutApplyKeepTheirBaselineBehaviourOnTheRealSchema() throws Exception {
+        M002Fixture f = m002F42ThreeTypeFixture("m002-j42c");
+        M002F42Applicant temporary = m002F42Applicant(f, "c1", "access.grant_request.apply");
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(m002Session(temporary.actor())).contentType(MediaType.APPLICATION_JSON)
+                        .content(("{\"idempotency_key\": \"m002-j42c-temporary-%s\", \"request_type\": \"temporary_permission\", "
+                                + "\"target_user_id\": \"%s\", \"permission_codes\": [\"amusement.device.view\"], "
+                                + "\"expires_at\": \"2099-01-01T00:00:00Z\", \"reason\": \"临时顶班\"}").formatted(f.suffix(), temporary.id())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending"));
+        assertThat(m002SourceUse(temporary.sources())).containsExactly("true/1");
+        assertThat(m002PendingRequestId(temporary.id(), "temporary_permission")).isNotNull();
+
+        M002F42Applicant withoutApply = m002F42Applicant(f, "c2", "access.role.assign");
+        String countRequests = "SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?";
+        long requestsBefore = jdbcTemplate.queryForObject(countRequests, Long.class, f.target());
+        int n = 0;
+        for (String type : M002_F42_TYPES) {
+            m002F42Apply(f, withoutApply, type, "m002-j42c-" + (++n)).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("没有操作权限")));
+        }
+        assertThat(m002SourceUse(withoutApply.sources())).containsExactly("false/0");
+        assertThat(jdbcTemplate.queryForObject(countRequests, Long.class, f.target())).isEqualTo(requestsBefore);
+    }
+
+    private record M002F42Applicant(String id, List<String> sources) {
+        AccessActor actor() {
+            return new AccessActor(id, id, "staff", "org", null, "active");
+        }
+    }
+
+    // M002-F42：三类申请内容均有效的目标（同 F37 真库用例）：定岗形成岗位高危挂起、首张释放单已驳回（可再次申请释放），另有一条员工显式拒绝。
+    private M002Fixture m002F42ThreeTypeFixture(String key) {
+        M002Fixture f = m002ApprovalFixture();
+        M002Mapping m = m002HighRiskMapping(f);
+        m002Assign(f, m.position(), key + "-assign");
+        String first = m002PendingRequestId(f.target(), "position_high_risk_release");
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(first, m002Reject(key + "-reject-" + f.suffix())));
+        repository.saveUserPermissionOverrides(f.target(), List.of(f.code()), AccessRepository.Effect.DENY, "员工显式拒绝", f.admin());
+        return f;
+    }
+
+    // M002-F42：同项目员工（无角色，上级为夹具审批人），所列权限只来自给它套用的一条单次模板（断言来源唯一）。
+    private M002F42Applicant m002F42Applicant(M002Fixture f, String tag, String... codes) {
+        String applicant = "usr_m002_f42_" + tag + "_" + f.suffix();
+        repository.createUser(new AccessUser(applicant, applicant, "staff", "org", null, "active", Instant.now()));
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                applicant, f.boss(), f.admin());
+        String template = "tpl_m002_f42_" + tag + "_" + f.suffix();
+        repository.createTemplate(m002SingleUseTemplate(template), grants(template, codes));
+        String source = repository.applyTemplate(template, List.of(applicant), null, null, true, f.admin()).get(0).id();
+        assertThat(repository.findPermissionEffects(applicant, Instant.now()))
+                .filteredOn(effect -> List.of(codes).contains(effect.permissionCode()))
+                .extracting(effect -> effect.permissionCode() + "@" + effect.sourceId())
+                .containsExactlyInAnyOrder(java.util.Arrays.stream(codes).map(code -> code + "@" + source).toArray(String[]::new));
+        return new M002F42Applicant(applicant, List.of(source));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions m002F42Apply(M002Fixture f, M002F42Applicant applicant, String type, String key)
+            throws Exception {
+        return mockMvc.perform(post("/api/v1/access/grant-requests").with(m002Session(applicant.actor())).contentType(MediaType.APPLICATION_JSON)
+                .content(("{\"idempotency_key\": \"%s-%s\", \"request_type\": \"%s\", \"target_user_id\": \"%s\", \"permission_codes\": [\"%s\"], "
+                        + "\"reason\": \"M002\"}").formatted(key, f.suffix(), type, f.target(), f.code())));
+    }
+
     // M002-F38：目标员工的岗位行（岗位、职级、派生角色、所挂映射）、职级与薪资行、直接角色、模板套用与覆盖行（含挂起），逐行拼成文本整体比较。
     private List<String> m002TargetFacts(String userId) {
         return jdbcTemplate.queryForList("""

@@ -19204,7 +19204,7 @@ paths:
       x-audit-event-success: access.grant_request.applied
       x-audit-event-failure: access.grant_request.apply_failed
       x-auth-context: staff-token
-      description: request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403。目标员工不在发起人所属项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。
+      description: request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign 一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人所属项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。
       requestBody:
         $ref: "#/components/requestBodies/AccessGrantApplyRequest"
       responses:
