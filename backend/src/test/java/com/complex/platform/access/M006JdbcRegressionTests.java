@@ -1,15 +1,17 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static org.assertj.core.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
@@ -20,17 +22,25 @@ import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 
-/** M006-014/017：只用 complex_test 中连接内临时表；不修改共享业务表。 */
+/** M006-014/017：只用 complex_test 中连接内临时表；不修改共享业务表（类开始前只做 Flyway 迁移，与 SpringBootTest 启动时相同）。 */
 class M006JdbcRegressionTests {
+    // M001-F22：与其余库测试同一约定——源码字面量指向 complex_test，控制席一次性验证用 sed 把它改指一次性库；
+    // 不再读 COMPLEX_DATABASE_URL（160 的 complex.env 里它指正式库 complex，验证作业里指一次性库但库名不是 complex_test，原门槛两头都跳过）。
+    private static final String URL = "jdbc:postgresql://127.0.0.1:5432/complex_test";
+    private static final String PASSWORD = Objects.requireNonNullElse(System.getenv("COMPLEX_DATABASE_PASSWORD"), "complex_dev_pwd");
     private Connection connection;
     private JdbcTemplate jdbc;
     private AccessRepository repository;
 
+    // M001-F22：本类不是 SpringBootTest，单跑时没有别的类替它迁移；LIKE public.xxx 要求库已迁到最新。配置同 application.yml。
+    @BeforeAll static void migrateTestDatabase() {
+        if (URL.matches(".*/complex(\\?.*)?")) throw new IllegalStateException("拒绝在正式库 complex 上建表或迁移：" + URL);
+        Flyway.configure().dataSource(URL, "complex", PASSWORD).locations("classpath:db/migration")
+                .baselineOnMigrate(true).validateOnMigrate(true).load().migrate();
+    }
+
     @BeforeEach void openTemporaryTables() throws Exception {
-        String url = System.getenv("COMPLEX_DATABASE_URL");
-        assumeTrue(url != null && url.matches("jdbc:postgresql:.*?/complex_test(?:\\?.*)?"));
-        connection = DriverManager.getConnection(url, System.getenv("COMPLEX_DATABASE_USERNAME"),
-                System.getenv("COMPLEX_DATABASE_PASSWORD"));
+        connection = DriverManager.getConnection(URL, "complex", PASSWORD);
         var dataSource = new SingleConnectionDataSource(connection, true);
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("CREATE TEMP TABLE permission_templates (id varchar PRIMARY KEY, single_use boolean NOT NULL)");
@@ -43,7 +53,7 @@ class M006JdbcRegressionTests {
                 """);
         jdbc.execute("""
                 CREATE TEMP TABLE temporary_permission_grants (
-                    id uuid PRIMARY KEY, subject_id varchar, permission_code varchar,
+                    id uuid PRIMARY KEY, grant_group_id varchar(64) NOT NULL, subject_id varchar, permission_code varchar,
                     single_use boolean NOT NULL, consumed boolean NOT NULL DEFAULT false,
                     consumed_at timestamptz, status varchar DEFAULT 'active',
                     valid_from timestamptz, expires_at timestamptz)
@@ -79,8 +89,11 @@ class M006JdbcRegressionTests {
     @Test void auditFailureRollsBackConsumptionThroughActualSpringTransaction() {
         UUID id = temporaryGrant();
         jdbc.execute("ALTER TABLE permission_template_usage_logs ADD CONSTRAINT reject_log CHECK (result <> 'consumed')");
+        // M001-F22：须确由日志写入撞 reject_log 失败，别的 SQL 错误不算回滚证据。
         assertThatThrownBy(() -> repository.markSingleUsePermissionConsumed(
-                id.toString(), "permission", "user", Instant.now())).isInstanceOf(RuntimeException.class);
+                id.toString(), "permission", "user", Instant.now()))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                .rootCause().hasMessageContaining("reject_log");
         assertThat(jdbc.queryForObject("SELECT consumed FROM temporary_permission_grants WHERE id = ?",
                 Boolean.class, id)).isFalse();
     }
@@ -122,14 +135,16 @@ class M006JdbcRegressionTests {
                 new DataSourceTransactionManager(jdbc.getDataSource())).execute(status -> {
             org.springframework.test.util.ReflectionTestUtils.invokeMethod(repository, "lockGrantAuthorizationFacts");
             for (String table : java.util.stream.Stream.concat(tables.stream(), java.util.stream.Stream.of("permission_templates")).toList()) {
+                // M001-F10/F22：员工表取 SHARE ROW EXCLUSIVE，其余定义表取 SHARE。
                 assertThat(jdbc.queryForObject("""
                         SELECT count(*) FROM pg_locks WHERE pid=pg_backend_pid()
-                          AND relation=to_regclass(?) AND mode='ShareLock' AND granted
-                        """, Integer.class, "pg_temp." + table)).isGreaterThan(0);
+                          AND relation=to_regclass(?) AND mode=? AND granted
+                        """, Integer.class, "pg_temp." + table,
+                        table.equals("access_users") ? "ShareRowExclusiveLock" : "ShareLock")).isGreaterThan(0);
             }
             return null;
         });
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_locks WHERE pid=pg_backend_pid() AND mode='ShareLock'",
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_locks WHERE pid=pg_backend_pid() AND mode IN ('ShareLock','ShareRowExclusiveLock')",
                 Integer.class)).isZero();
     }
 
@@ -273,7 +288,9 @@ class M006JdbcRegressionTests {
 
     private UUID temporaryGrant() {
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO temporary_permission_grants (id, subject_id, permission_code, single_use) VALUES (?, 'user', 'permission', true)", id);
+        // M001-F22：仓储按 grant_group_id 消耗（V004 起 NOT NULL，单条授予的组号即自身编号）。
+        jdbc.update("INSERT INTO temporary_permission_grants (id, grant_group_id, subject_id, permission_code, single_use) VALUES (?, ?, 'user', 'permission', true)",
+                id, id.toString());
         return id;
     }
 
