@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -370,12 +370,15 @@ class M006SecurityRegressionTests {
         Instant end = Instant.now().plusSeconds(3600);
         PermissionTemplate t = service.createPermissionTemplate(new PermissionTemplateRequest(
                 "limited", "理由", List.of(), "模板", "base", null, List.of(LOW), "project", null, end, true));
+        // M001-F17：放宽闸只管仍有员工在用的模板；夹具按用例名把模板标为已套用、套用未结束。
+        // 接口默认实现抛异常（fail-closed），本夹具默认走真实方法，所以用 doReturn 桩，不在 when(...) 里先调一次真实方法。
+        doReturn(true).when(repository).hasUnfinishedTemplateApplications(t.id());
         assertThatThrownBy(() -> service.updatePermissionTemplate(t.id(), new PermissionTemplateRequest(
                 "extend", "理由", List.of(), "模板", "base", null, List.of(LOW), "project", null, end.plusSeconds(3600), true)))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TEMPLATE_REAUTHORIZATION_REQUIRED"));
         assertThatThrownBy(() -> service.updatePermissionTemplate(t.id(), new PermissionTemplateRequest(
                 "repeat", "理由", List.of(), "模板", "base", null, List.of(LOW), "project", null, end, false)))
-                .isInstanceOf(ApiException.class);
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TEMPLATE_REAUTHORIZATION_REQUIRED"));
         assertThat(service.updatePermissionTemplate(t.id(), new PermissionTemplateRequest(
                 "reduce", "理由", List.of(), "模板", "base", null, List.of(), "project", null, end, true))
                 .permissionCodes()).isEmpty();

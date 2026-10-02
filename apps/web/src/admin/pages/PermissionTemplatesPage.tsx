@@ -14,8 +14,9 @@ import { GuidedFlowModal } from "../components/GuidedFlowModal";
 const TEMPLATE_MANAGE_PERMISSION = "access.permission_template.manage";
 const TEMPLATE_APPLY_PERMISSION = "access.permission_template.apply";
 
-// 模板类型枚举中文化（base/temporary/copy 不进全局表：base 全局义为“普通会员”会串味，页内小映射）。
-const TEMPLATE_TYPE_LABELS: Record<string, string> = { base: "基础模板", temporary: "临时模板", copy: "复制模板", role: "角色模板" };
+// 模板类型枚举中文化（base/temporary 不进全局表：base 全局义为“普通会员”会串味，页内小映射）。
+// 模板只有两种：基础模板（角色级）与临时模板（M001-F20，操作员 2026-09-25 裁决「合并为同一种」；库内 role / copy 已由 V436 并入）。
+const TEMPLATE_TYPE_LABELS: Record<string, string> = { base: "基础模板（角色级）", temporary: "临时模板" };
 function templateTypeLabel(type?: string | null) {
   const value = type ?? "base";
   return TEMPLATE_TYPE_LABELS[value] ?? value;
@@ -46,6 +47,12 @@ function toDateTimeLocal(value?: string | null) {
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// M001-F18（控制席 2026-10-02 裁定）：输入框只到分钟，没改动的时间原样回传——带秒的窗口按分钟回填会被截短，
+// 生效时间往前截被判为放宽（有人在用时 409），到期时间往前截被判为收窄（给每名在用员工写一条改动不到一分钟的留痕）。
+function keepOrIso(input: string, original?: string | null) {
+  return original && input === toDateTimeLocal(original) ? original : toIsoOrUndefined(input);
 }
 
 function toIsoOrUndefined(value: string) {
@@ -272,9 +279,9 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
         templateType,
         sourceTemplateId: selected?.sourceTemplateId ?? undefined,
         permissionCodes: selectedPermissionCodes,
-        dataScope: "project",
-        validFrom: toIsoOrUndefined(validFrom),
-        validUntil: toIsoOrUndefined(validUntil),
+        // M001-F25：修改不发数据范围，保留的权限码沿用原条目范围（条目范围不一的在用模板也能收窄）
+        validFrom: keepOrIso(validFrom, selected.validFrom),
+        validUntil: keepOrIso(validUntil, selected.validUntil),
         singleUse,
         operatorNote: templateType === "temporary" ? "后台权限模板临时授权配置" : "后台权限模板配置",
       };
@@ -306,8 +313,8 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
     setGlobalError(null);
     try {
       const copied = await api.post<PermissionTemplateRow>(`/api/v1/access/permission-templates/${encodeURIComponent(selected.id)}/copy`, {
+        // M001-F19：复制出的是新模板，只给名称；类型、权限、有效期与单次限制都沿用源模板（后端未填项沿用源模板）。
         templateName: copyName.trim(),
-        templateType: "copy",
         operatorNote: "后台复制权限模板",
       });
       setActionResult(`复制模板：${selected.id} → ${copied.id}`);
@@ -370,7 +377,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
 
   return (
     <section data-testid="permission-templates-page">
-      <AdminPageHeader title="权限模板" description="支持基础模板、复制模板、临时模板、时效和单次有效；复制不能影响原模板。" />
+      <AdminPageHeader title="权限模板" description="支持基础模板（角色级）、临时模板、时效和单次有效；复制出的是新模板，不影响原模板。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-form-row" data-testid="permission-template-create-row">
           <PermissionButton
@@ -388,10 +395,8 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
           </label>
           <label>模板类型
             <select data-testid="permission-template-edit-type" value={templateType} onChange={(event) => setTemplateType(event.target.value)}>
-              <option value="base">基础模板</option>
+              <option value="base">基础模板（角色级）</option>
               <option value="temporary">临时模板</option>
-              <option value="copy">复制模板</option>
-              <option value="role">角色模板</option>
             </select>
           </label>
           <label>生效时间
@@ -509,10 +514,8 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
                 <label>模板名称<input data-testid="permission-template-name" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="例如：普通员工01" /></label>
                 <label>模板类型
                   <select data-testid="permission-template-type" value={newType} onChange={(event) => setNewType(event.target.value)}>
-                    <option value="base">基础模板</option>
+                    <option value="base">基础模板（角色级）</option>
                     <option value="temporary">临时模板</option>
-                    <option value="copy">复制模板</option>
-                    <option value="role">角色模板</option>
                   </select>
                 </label>
                 <label>生效时间<input data-testid="permission-template-valid-from" type="datetime-local" value={newValidFrom} onChange={(event) => setNewValidFrom(event.target.value)} /></label>

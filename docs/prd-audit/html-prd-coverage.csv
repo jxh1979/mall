@@ -1247,3 +1247,5 @@ PGM-0261,岗位模板里的高危权限，授出审批被驳回后仍不生效,d
 PGM-0262,最高权限账号不设岗位、不套用岗位模板,docs/platform-governance-prd-v0.1.md,§12 第 13、14、14B 条 2026-09-25 全量审计 M002 补记,FULL,,,,,,03-governance-and-common
 PGM-0263,最高权限账号不设岗位、不套用岗位模板,docs/platform-governance-prd-v0.1.md,§12 第 13、14、14B 条 2026-09-25 全量审计 M002 补记,FULL,,,,,,03-governance-and-common
 PGM-0264,支持员工级完全自定义配置,docs/platform-governance-prd-v0.1.md,§12 第 13、14、14B 条 2026-09-25 全量审计 M002 补记,FULL,,,,,,03-governance-and-common
+PGM-0265,支持角色级权限模板,docs/platform-governance-prd-v0.1.md,§12 第 13、14 条 2026-10-01 全量审计 M001 第 4 轮补记,FULL,,,,,,03-governance-and-common
+PGM-0266,支持角色级权限模板,docs/platform-governance-prd-v0.1.md,§12 第 13、14 条 2026-10-01 全量审计 M001 第 4 轮补记,FULL,,,,,,03-governance-and-common

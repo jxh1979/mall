@@ -244,7 +244,11 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -29305,7 +29309,7 @@ components:
           maxLength: 120
         template_type:
           type: string
-          description: 模板类型；base 表示长期基础模板，temporary 表示临时模板。
+          description: 模板类型；模板只有两种：base 表示基础模板（角色级），temporary 表示临时模板，其他取值返回 400 VALIDATION_FAILED。复制模板时复制出的是新模板：本请求里填了的字段按填写，未填的（模板名称、类型、权限码、数据范围、生效时间、到期时间、单次；名称与类型为空白同未填）沿用源模板，校验与新建相同；复制请求无法清空生效或到期时间，需要时复制后修改复制件（复制件无人在用，可以放宽）。
           enum:
             - base
             - temporary
@@ -29316,14 +29320,14 @@ components:
           maxLength: 64
         permission_codes:
           type: array
-          description: 权限点编码集合；必须来自 P0 权限矩阵，不允许填写页面名称或岗位名称。
+          description: 权限点编码集合；必须来自 P0 权限矩阵，不允许填写页面名称或岗位名称；复制模板时填写（非空）即按填写并与新建同样校验，不填或空列表沿用源模板中仍启用的授予条目。
           items:
             type: string
             maxLength: 64
           maxItems: 200
         data_scope:
           type: string
-          description: 数据范围；限制可访问项目、商户、酒吧、仓库、设备或客户数据。
+          description: 数据范围；限制可访问项目、商户、酒吧、仓库、设备或客户数据。复制模板时填写即按填写，不填时与源模板相同的权限码沿用源条目的数据范围、其余记 project。修改模板时同口径：不填则保留下来的权限码沿用原条目的数据范围、新增的记 project；填写且与任一保留条目不同返回 409。
           enum:
             - global
             - project
@@ -29381,11 +29385,11 @@ components:
           maxItems: 200
         mode:
           type: string
-          description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
+          description: 套用方式：append 与 merge 同为追加，single_use 为本次单次使用；不传按 append，其他取值返回 400 VALIDATION_FAILED、不写套用记录。
           enum:
-            - replace
+            - append
             - merge
-            - preview
+            - single_use
           maxLength: 64
     TemporaryGrantRequest:
       type: object

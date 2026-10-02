@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.22
+// 文件版本：V0.24
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -3628,10 +3628,13 @@ class AccessServiceTests {
     @Test
     void updatingTemporaryTemplateWithReversedWindowIsRejectedBeforeReauthorizationRule() {
         // M001-F07：修改时倒置窗口（新截止即使晚于旧截止）先于「延长有效期须重新授权」判定，按 400 拒绝；清空到期仍按原规则 409。
+        // M001-F17：放宽闸只管仍有员工在用的模板，两个模板先各套给一名员工，409 的前提才成立。
         PermissionTemplate bounded = service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-bounded", "seed", List.of(), "Bounded temporary", "temporary", null,
                 List.of("ops.production_readiness.view"), "project",
                 Instant.parse("2027-01-01T00:00:00Z"), Instant.parse("2027-01-02T00:00:00Z"), false));
+        accessRepository.applyTemplate(bounded.id(), List.of("usr_f07_bounded"),
+                Instant.parse("2027-01-01T00:00:00Z"), Instant.parse("2027-01-02T00:00:00Z"), false, "usr_admin");
 
         assertThatThrownBy(() -> service.updatePermissionTemplate(bounded.id(), new PermissionTemplateRequest(
                 "update-reversed-later", "seed", List.of(), "Bounded temporary", "temporary", null,
@@ -3660,6 +3663,7 @@ class AccessServiceTests {
         PermissionTemplate singleUse = service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-single-bounded", "seed", List.of(), "Single use temporary", "temporary", null,
                 List.of("ops.production_readiness.view"), "project", null, null, true));
+        accessRepository.applyTemplate(singleUse.id(), List.of("usr_f07_single"), null, null, true, "usr_admin");
         assertThatThrownBy(() -> service.updatePermissionTemplate(singleUse.id(), new PermissionTemplateRequest(
                 "update-drop-single", "seed", List.of(), "Single use temporary", "temporary", null,
                 List.of("ops.production_readiness.view"), "project",
@@ -3893,6 +3897,474 @@ class AccessServiceTests {
                 "apply-ghost", "apply", List.of(), "tpl_ghost", List.of("usr_tpl_lock"), "merge")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PERMISSION_TEMPLATE_NOT_FOUND"));
         assertThat(accessRepository.lockOrder).containsExactly("user:usr_tpl_lock", "apply:tpl_ghost");
+    }
+
+    // ── M001 第 4 轮（M001-F16～F21）：服务层回归 ─────────────────────────────
+
+    // M001-F16（PGM 权限规则「数据的项目与商户隔离不提供关闭开关」；操作员 2026-09-26 更正段「模板修改入口对带商户归属的操作人逐人比对在用员工的商户，
+    // 不符即 403」）：在用员工含其他商户员工时，带商户归属的操作人修改被 403 拒绝，模板、条目、套用与逐人留痕都不动；在用员工的员工行在模板行之前锁住；
+    // 在用员工全在本商户时照常修改并逐人留痕；无商户归属的项目操作人与平台管理员不受此限；列表、新建、复制不加「商户账号一律拒绝」（句 3 已撤回）。
+    @Test
+    void merchantOperatorCannotEditATemplateHeldByAnotherMerchantsEmployee() {
+        accessRepository.users.put("usr_f16_a1", new AccessUser("usr_f16_a1", "f16-a1", "staff", "seed-org", "merchant_a", "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        seedTemplate("tpl_f16", "seed-org", null, "project", "ops.production_readiness.view");
+        accessRepository.applyTemplate("tpl_f16", List.of("usr_f16_a1"), null, null, false, "usr_admin");
+
+        authenticateAsMerchantUser("usr_f16_mb", "f16-mb", "seed-org", "merchant_b");
+        accessRepository.lockOrder.clear();
+        assertThatThrownBy(() -> service.updatePermissionTemplate("tpl_f16", baseTemplateRequest("f16-edit-b")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+                });
+        assertThat(accessRepository.lockOrder).containsSubsequence("user:usr_f16_a1", "edit:tpl_f16");
+        assertThat(accessRepository.templates.get("tpl_f16").templateName()).isEqualTo("tpl_f16");
+        assertThat(accessRepository.items.get("tpl_f16")).extracting(PermissionTemplateItem::permissionCode)
+                .containsExactly("ops.production_readiness.view");
+        assertThat(accessRepository.templateApplications).singleElement()
+                .satisfies(application -> assertThat(application.status()).isEqualTo("active"));
+        assertThat(accessRepository.findPermissionEffects("usr_f16_a1", Instant.now()))
+                .extracting(AccessRepository.PermissionEffect::permissionCode).containsExactly("ops.production_readiness.view");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("permission_template.effect_changed");
+        assertThat(service.listPermissionTemplates().items()).extracting(PermissionTemplate::id).contains("tpl_f16");
+        assertThat(service.createPermissionTemplate(baseTemplateRequest("f16-create-b")).ownerScopeId()).isEqualTo("seed-org");
+        assertThat(service.copyPermissionTemplate("tpl_f16", copyRequest("f16-copy-b", null, null)).sourceTemplateId())
+                .isEqualTo("tpl_f16");
+
+        authenticateAsMerchantUser("usr_f16_ma", "f16-ma", "seed-org", "merchant_a");
+        service.updatePermissionTemplate("tpl_f16", baseTemplateRequest("f16-edit-a"));
+        assertThat(accessRepository.items.get("tpl_f16")).isEmpty();
+        assertThat(auditEventRepository.events).filteredOn(event -> "permission_template.effect_changed".equals(event.eventName()))
+                .extracting(AuditEvent::businessId).containsExactly("usr_f16_a1");
+
+        authenticateAsOrgUser("usr_f16_org", "f16-org", "seed-org");
+        assertThat(service.updatePermissionTemplate("tpl_f16", namedRequest("f16-edit-org", "F16 项目操作人改名", "base")).templateName())
+                .isEqualTo("F16 项目操作人改名");
+        authenticateAsPlatformAdmin("seed-org");
+        service.updatePermissionTemplate("tpl_f16", codesRequest("f16-edit-admin", List.of("ops.production_readiness.view")));
+        assertThat(accessRepository.items.get("tpl_f16")).extracting(PermissionTemplateItem::permissionCode)
+                .containsExactly("ops.production_readiness.view");
+    }
+
+    // M001-F19（操作员确认句 1「复制出来的是一个新模板，权限、有效期、单次使用限制等都可以重新设定，按新建模板的规则校验」；
+    // 裁决说明「复制＝以源模板为初值新建，未填项沿用源模板……源模板不存在仍 404」）：两类主体复制不存在的源都 404、不建行、不写复制成功事件；
+    // 只给名称的复制（前端复制按钮同形）得到与源模板同类型、同窗口、同单次、同权限码的新模板，响应、再次查询与套用后的有效权限一致；
+    // 名称不填、类型空白同样沿用源模板；请求里填了的项按填的（换权限码、数据范围、重设生效、延长到期、取消单次），源模板不变，源模板随后修改不影响复制件；
+    // 校验与新建一样：类型闭集、临时须有到期或单次（含库里已有的无期限临时源模板只给名称复制）、未知权限码 400。
+    @Test
+    void copyIsANewTemplateSeededFromTheSourceAndAMissingSourceIsNotFound() {
+        int templatesBefore = accessRepository.templates.size();
+        assertThatThrownBy(() -> service.copyPermissionTemplate("tpl_f19_missing", copyRequest("f19-missing-admin", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(404);
+                    assertThat(e.code()).isEqualTo("TEMPLATE_NOT_FOUND");
+                });
+        authenticateAsOrgUser("usr_f19_org", "f19-org", "seed-org");
+        assertThatThrownBy(() -> service.copyPermissionTemplate("tpl_f19_missing", copyRequest("f19-missing-org", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TEMPLATE_NOT_FOUND"));
+        authenticateAsPlatformAdmin("seed-org");
+        assertThat(accessRepository.templates).hasSize(templatesBefore);
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("permission_template.copied");
+
+        Instant from = Instant.parse("2099-01-01T00:00:00Z");
+        Instant until = Instant.parse("2099-01-31T00:00:00Z");
+        PermissionTemplate source = service.createPermissionTemplate(new PermissionTemplateRequest(
+                "f19-source", "seed", List.of(), "F19 临时模板", "temporary", null,
+                List.of("ops.production_readiness.view"), "project", from, until, true));
+        PermissionTemplate copy = service.copyPermissionTemplate(source.id(), copyRequest("f19-copy", null, null));
+        assertThat(copy.templateType()).isEqualTo("temporary");
+        assertThat(copy.validFrom()).isEqualTo(from);
+        assertThat(copy.validUntil()).isEqualTo(until);
+        assertThat(copy.singleUse()).isTrue();
+        assertThat(copy.sourceTemplateId()).isEqualTo(source.id());
+        assertThat(copy.permissionCodes()).containsExactly("ops.production_readiness.view");
+        assertThat(accessRepository.templates.get(copy.id()).validFrom()).isEqualTo(from);
+        assertThat(accessRepository.items.get(copy.id())).extracting(PermissionTemplateItem::permissionCode)
+                .containsExactly("ops.production_readiness.view");
+
+        accessRepository.createUser(new AccessUser("usr_f19", "f19", "staff", "seed-org", null, "active", Instant.now()));
+        PermissionTemplateApplyResult applied = service.applyPermissionTemplate(copy.id(), new PermissionTemplateApplyRequest(
+                "f19-apply", "apply", List.of(), copy.id(), List.of("usr_f19"), "append"));
+        assertThat(applied.applications()).singleElement().satisfies(application -> {
+            assertThat(application.validUntil()).isEqualTo(until);
+            assertThat(application.singleUse()).isTrue();
+        });
+        assertThat(accessRepository.findPermissionEffects("usr_f19", Instant.now()))
+                .filteredOn(effect -> applied.applications().get(0).id().equals(effect.sourceId()))
+                .extracting(AccessRepository.PermissionEffect::permissionCode).containsExactlyElementsOf(copy.permissionCodes());
+
+        // 填了的按填的：换权限码、数据范围、重设生效时间、延长到期、取消单次；源模板不变。
+        Instant resetFrom = Instant.parse("2099-01-02T00:00:00Z");
+        Instant later = until.plusSeconds(86400);
+        PermissionTemplate reset = service.copyPermissionTemplate(source.id(), new PermissionTemplateRequest(
+                "f19-reset", "后台复制权限模板", List.of(), "F19 重设", null, null,
+                List.of("governance.supervisor_review.view"), "merchant", resetFrom, later, false));
+        assertThat(reset.templateType()).isEqualTo("temporary");
+        assertThat(reset.validFrom()).isEqualTo(resetFrom);
+        assertThat(reset.validUntil()).isEqualTo(later);
+        assertThat(reset.singleUse()).isFalse();
+        assertThat(reset.permissionCodes()).containsExactly("governance.supervisor_review.view");
+        assertThat(accessRepository.items.get(reset.id())).extracting(item -> item.permissionCode() + "=" + item.dataScope())
+                .containsExactly("governance.supervisor_review.view=merchant");
+        assertThat(accessRepository.templates.get(source.id())).satisfies(template -> {
+            assertThat(template.validFrom()).isEqualTo(from);
+            assertThat(template.validUntil()).isEqualTo(until);
+            assertThat(template.singleUse()).isTrue();
+        });
+        PermissionTemplate unnamed = service.copyPermissionTemplate(source.id(), new PermissionTemplateRequest(
+                "f19-unnamed", "后台复制权限模板", List.of(), null, " ", null, null, null, null, null, null));
+        assertThat(unnamed.templateName()).isEqualTo("F19 临时模板");
+        assertThat(unnamed.templateType()).isEqualTo("temporary");
+        assertThat(unnamed.validFrom()).isEqualTo(from);
+
+        // 源模板随后修改（换权限码），复制件不变。
+        service.updatePermissionTemplate(source.id(), new PermissionTemplateRequest(
+                "f19-source-edit", "seed", List.of(), "F19 临时模板", "temporary", null,
+                List.of("ops.production_readiness.check"), "project", from, until, true));
+        assertThat(accessRepository.items.get(copy.id())).extracting(PermissionTemplateItem::permissionCode)
+                .containsExactly("ops.production_readiness.view");
+
+        // 校验与新建完全一样。
+        PermissionTemplate baseSource = service.createPermissionTemplate(baseTemplateRequest("f19-base-source"));
+        assertThat(service.copyPermissionTemplate(baseSource.id(), copyRequest("f19-base-copy", null, null)).templateType()).isEqualTo("base");
+        accessRepository.templates.put("tpl_f19_unbounded", new PermissionTemplate(
+                "tpl_f19_unbounded", "tpl_f19_unbounded", "F19 无期限临时", null, "temporary",
+                null, "platform", null, "merge", null, null, false, "active",
+                null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.items.put("tpl_f19_unbounded", List.of());
+        int beforeInvalid = accessRepository.templates.size();
+        for (org.assertj.core.api.ThrowableAssert.ThrowingCallable write : List.<org.assertj.core.api.ThrowableAssert.ThrowingCallable>of(
+                () -> service.copyPermissionTemplate(baseSource.id(), new PermissionTemplateRequest(
+                        "f19-type-copy", "seed", List.of(), "F19", "copy", null, null, null, null, null, null)),
+                () -> service.copyPermissionTemplate(baseSource.id(), new PermissionTemplateRequest(
+                        "f19-unbounded-temporary", "seed", List.of(), "F19", "temporary", null, null, null, null, null, false)),
+                () -> service.copyPermissionTemplate("tpl_f19_unbounded", copyRequest("f19-unbounded-source", null, null)))) {
+            assertThatThrownBy(write).isInstanceOfSatisfying(ApiException.class, e -> {
+                assertThat(e.status().value()).isEqualTo(400);
+                assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+            });
+        }
+        assertThatThrownBy(() -> service.copyPermissionTemplate(baseSource.id(), new PermissionTemplateRequest(
+                "f19-unknown", "seed", List.of(), "F19", null, null, List.of("f19.unknown.view"), null, null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(400);
+                    assertThat(e.code()).isEqualTo("UNKNOWN_PERMISSION");
+                });
+        assertThat(accessRepository.templates).hasSize(beforeInvalid);
+    }
+
+    // M001-F17/F18（操作员确认句 2「模板已被套用且仍有员工在用时，收窄其有效期或改为单次使用，在用员工立即按收窄后的期限执行，
+    // 并逐人记录改前改后的期限和操作人；放宽的，新建模板后另行套用」）：有人在用的模板组合收窄——生效推后、到期提前、改为单次——直接保存，
+    // 在用员工的实际窗口立即取「套用当时窗口 ∩ 模板当前窗口」、单次取任一为单次；受影响员工一条 effect_changed 记改前改后的实际期限与操作人，
+    // 实际期限没变的员工（套用当时窗口本就在收窄后的窗口内）不写；有人在用时放宽（到期推后、生效提前、取消单次）409，模板与套用行都不变。
+    @Test
+    void narrowingAnAppliedTemplateTakesEffectForHoldersImmediatelyAndWideningIsRejected() {
+        Instant from = Instant.parse("2099-01-01T00:00:00Z");
+        Instant until = Instant.parse("2099-01-31T00:00:00Z");
+        Instant laterStart = Instant.parse("2099-01-03T00:00:00Z");
+        Instant earlier = Instant.parse("2099-01-05T00:00:00Z");
+        PermissionTemplate applied = service.createPermissionTemplate(windowRequest("f17-create-applied", from, until, false));
+        accessRepository.createUser(new AccessUser("usr_f17", "f17", "staff", "seed-org", null, "active", Instant.now()));
+        String applicationId = service.applyPermissionTemplate(applied.id(), new PermissionTemplateApplyRequest(
+                "f17-apply", "apply", List.of(), applied.id(), List.of("usr_f17"), "append")).applications().get(0).id();
+        // 第二名在用员工（定岗等入口写入的套用行）：套用当时的窗口 01-03～01-04、单次，本就在收窄后的窗口内，实际期限不变、不写事件。
+        accessRepository.applyTemplate(applied.id(), List.of("usr_f17_b"), laterStart, earlier.minusSeconds(86400), true, "usr_admin");
+
+        service.updatePermissionTemplate(applied.id(), windowRequest("f17-narrow", laterStart, earlier, true));
+
+        assertThat(accessRepository.findPermissionEffects("usr_f17", Instant.now()))
+                .filteredOn(effect -> applicationId.equals(effect.sourceId()))
+                .singleElement().satisfies(effect -> {
+                    assertThat(effect.validFrom()).isEqualTo(laterStart);
+                    assertThat(effect.validUntil()).isEqualTo(earlier);
+                    assertThat(effect.singleUse()).isTrue();
+                });
+        assertThat(auditEventRepository.events).filteredOn(event -> "permission_template.effect_changed".equals(event.eventName()))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.businessId()).isEqualTo("usr_f17");
+                    assertThat(event.metadata())
+                            .containsEntry("application_id", applicationId)
+                            .containsEntry("valid_from_before", from.toString())
+                            .containsEntry("valid_from_after", laterStart.toString())
+                            .containsEntry("valid_until_before", until.toString())
+                            .containsEntry("valid_until_after", earlier.toString())
+                            .containsEntry("single_use_before", false)
+                            .containsEntry("single_use_after", true)
+                            .containsEntry("added_permission_codes", List.of())
+                            .containsEntry("removed_permission_codes", List.of())
+                            .containsEntry("operator_id", "usr_admin");
+                });
+
+        for (PermissionTemplateRequest widening : List.of(
+                windowRequest("f17-later-end", laterStart, until, true),
+                windowRequest("f17-earlier-start", from, earlier, true),
+                windowRequest("f17-drop-single", laterStart, earlier, false))) {
+            assertThatThrownBy(() -> service.updatePermissionTemplate(applied.id(), widening))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.status().value()).isEqualTo(409);
+                        assertThat(e.code()).isEqualTo("TEMPLATE_REAUTHORIZATION_REQUIRED");
+                        assertThat(e.getMessage()).isEqualTo("模板已被套用且仍有员工在用，不能放宽有效期或取消单次使用限制；请新建模板或复制为新模板后另行套用");
+                    });
+        }
+        assertThat(accessRepository.templates.get(applied.id())).satisfies(template -> {
+            assertThat(template.validFrom()).isEqualTo(laterStart);
+            assertThat(template.validUntil()).isEqualTo(earlier);
+            assertThat(template.singleUse()).isTrue();
+        });
+        assertThat(accessRepository.templateApplications).filteredOn(application -> applicationId.equals(application.id()))
+                .singleElement().satisfies(application -> {
+                    assertThat(application.validUntil()).isEqualTo(until);
+                    assertThat(application.singleUse()).isFalse();
+                    assertThat(application.status()).isEqualTo("active");
+                });
+        assertThat(auditEventRepository.events).filteredOn(event -> "permission_template.effect_changed".equals(event.eventName())).hasSize(1);
+    }
+
+    // M001-F17/F18：纯期限收窄（新增截止）、纯单次收窄各给每名受影响在用员工写一条痕迹；同幂等请求重放不重复写；
+    // 新截止已过时，已到期的套用在这次修改里就置为到期（无人查询也不等到期作业），放宽此后不再被已结束的套用挡住、套用也不复活。
+    @Test
+    void narrowingOnlyTheWindowOrOnlySingleUseRecordsEachHolderOnceAndLapsedHoldersExpireInTheSameEdit() {
+        PermissionTemplate open = service.createPermissionTemplate(codesRequest("f18-open", List.of("ops.production_readiness.view")));
+        accessRepository.applyTemplate(open.id(), List.of("usr_f18_a", "usr_f18_b"), null, null, false, "usr_admin");
+        Instant until = Instant.parse("2099-02-01T00:00:00Z");
+        PermissionTemplateRequest addUntil = new PermissionTemplateRequest("f18-add-until", "seed", List.of(), "F18 模板", "base", null,
+                List.of("ops.production_readiness.view"), "project", null, until, false);
+        service.updatePermissionTemplate(open.id(), addUntil);
+        service.updatePermissionTemplate(open.id(), addUntil); // 同幂等键重放：返回原结果，不再写
+        assertThat(effectChanged("f18-add-until")).hasSize(2).allSatisfy(event -> assertThat(event.metadata())
+                .containsEntry("valid_until_before", "").containsEntry("valid_until_after", until.toString())
+                .containsEntry("single_use_before", false).containsEntry("single_use_after", false)
+                .containsEntry("operator_id", "usr_admin"));
+        assertThat(effectChanged("f18-add-until")).extracting(AuditEvent::businessId).containsExactlyInAnyOrder("usr_f18_a", "usr_f18_b");
+
+        service.updatePermissionTemplate(open.id(), new PermissionTemplateRequest("f18-single", "seed", List.of(), "F18 模板", "base", null,
+                List.of("ops.production_readiness.view"), "project", null, until, true));
+        assertThat(effectChanged("f18-single")).hasSize(2).allSatisfy(event -> assertThat(event.metadata())
+                .containsEntry("single_use_before", false).containsEntry("single_use_after", true)
+                .containsEntry("valid_until_before", until.toString()).containsEntry("valid_until_after", until.toString()));
+        assertThat(accessRepository.findPermissionEffects("usr_f18_a", Instant.now()))
+                .extracting(AccessRepository.PermissionEffect::singleUse).containsOnly(true);
+
+        Instant past = Instant.now().minusSeconds(3600);
+        service.updatePermissionTemplate(open.id(), new PermissionTemplateRequest("f18-past", "seed", List.of(), "F18 模板", "base", null,
+                List.of("ops.production_readiness.view"), "project", null, past, true));
+        assertThat(effectChanged("f18-past")).hasSize(2).allSatisfy(event -> assertThat(event.metadata())
+                .containsEntry("valid_until_after", past.toString()));
+        assertThat(accessRepository.templateApplications).filteredOn(application -> open.id().equals(application.templateId()))
+                .hasSize(2).allSatisfy(application -> assertThat(application.status()).isEqualTo("expired"));
+        assertThat(accessRepository.findPermissionEffects("usr_f18_a", Instant.now())).isEmpty();
+        service.updatePermissionTemplate(open.id(), codesRequest("f18-widen-after-expiry", List.of("ops.production_readiness.view")));
+        assertThat(accessRepository.templates.get(open.id()).validUntil()).isNull();
+        assertThat(accessRepository.findPermissionEffects("usr_f18_a", Instant.now())).isEmpty();
+    }
+
+    // M001-F17：修改入口的 409 按原因分开写，每条给出的办法都走得通——放宽（模板已被套用且仍有员工在用）：只给名称复制，
+    // 复制件与源模板同窗口、同单次，再修改复制件（没人在用，放宽不受限，仍按新建规则校验），源模板与在用员工不变；
+    // 数据范围变化：新建或复制时填新的数据范围；含禁止规则：新建模板；未启用：新建或复制（复制不看源模板状态）。
+    @Test
+    void editConflictsNameTheirReasonAndTheSuggestedRemedyWorks() {
+        Instant until = Instant.parse("2099-01-31T00:00:00Z");
+        Instant later = until.plusSeconds(86400);
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        PermissionTemplate bounded = service.createPermissionTemplate(windowRequest("f17r-bounded", null, until, true));
+        accessRepository.createUser(new AccessUser("usr_f17r", "f17r", "staff", "seed-org", null, "active", Instant.now()));
+        service.applyPermissionTemplate(bounded.id(), new PermissionTemplateApplyRequest(
+                "f17r-apply", "apply", List.of(), bounded.id(), List.of("usr_f17r"), "append"));
+        assertThatThrownBy(() -> service.updatePermissionTemplate(bounded.id(), windowRequest("f17r-widen", null, later, true)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.getMessage()).isEqualTo("模板已被套用且仍有员工在用，不能放宽有效期或取消单次使用限制；请新建模板或复制为新模板后另行套用");
+                });
+        PermissionTemplate copy = service.copyPermissionTemplate(bounded.id(), copyRequest("f17r-widen-copy", null, null));
+        assertThat(copy.validUntil()).isEqualTo(until);
+        assertThat(copy.singleUse()).isTrue();
+        assertThat(service.updatePermissionTemplate(copy.id(), windowRequest("f17r-copy-later", null, later, true)).validUntil())
+                .isEqualTo(later);
+        assertThat(service.updatePermissionTemplate(copy.id(), windowRequest("f17r-copy-multi", null, later, false)).singleUse())
+                .isFalse();
+        assertThat(service.updatePermissionTemplate(copy.id(), new PermissionTemplateRequest("f17r-copy-base", "seed", List.of(),
+                "F17 基础", "base", null, List.of("ops.production_readiness.view"), "project", null, null, false)))
+                .satisfies(template -> {
+                    assertThat(template.templateType()).isEqualTo("base");
+                    assertThat(template.validUntil()).isNull();
+                    assertThat(template.singleUse()).isFalse();
+                });
+        assertThat(accessRepository.templates.get(bounded.id())).satisfies(template -> {
+            assertThat(template.validUntil()).isEqualTo(until);
+            assertThat(template.singleUse()).isTrue();
+        });
+
+        seedTemplate("tpl_f17r_scope", null, null, "complex", "ops.production_readiness.view");
+        assertThatThrownBy(() -> service.updatePermissionTemplate("tpl_f17r_scope",
+                codesRequest("f17r-scope", List.of("ops.production_readiness.view"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.getMessage()).isEqualTo("模板条目的数据范围不能直接修改；请新建模板或复制为新模板后另行套用");
+                });
+        PermissionTemplate scopeCopy = service.copyPermissionTemplate("tpl_f17r_scope", new PermissionTemplateRequest(
+                "f17r-scope-copy", "后台复制权限模板", List.of(), "F17 数据范围", null, null, null, "project", null, null, null));
+        assertThat(accessRepository.items.get(scopeCopy.id())).extracting(item -> item.permissionCode() + "=" + item.dataScope())
+                .containsExactly("ops.production_readiness.view=project");
+
+        accessRepository.saveTemplate(new PermissionTemplate("tpl_f17r_deny", "tpl_f17r_deny", "F17 禁止规则", null, "base", null,
+                "platform", null, "merge", null, null, false, "active", null, null, null, at, at), List.of(
+                new PermissionTemplateItem("tpl_f17r_deny", "ops.production_readiness.view", AccessRepository.Effect.GRANT, "project", false),
+                new PermissionTemplateItem("tpl_f17r_deny", "ops.production_readiness.check", AccessRepository.Effect.DENY, "project", false)));
+        assertThatThrownBy(() -> service.updatePermissionTemplate("tpl_f17r_deny",
+                codesRequest("f17r-deny", List.of("ops.production_readiness.view"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.getMessage()).isEqualTo("模板含禁止规则，不能直接修改；请新建模板后另行套用");
+                });
+        assertThat(service.createPermissionTemplate(codesRequest("f17r-deny-new", List.of("ops.production_readiness.view"))).status())
+                .isEqualTo("active");
+        PermissionTemplate denyCopy = service.copyPermissionTemplate("tpl_f17r_deny", copyRequest("f17r-deny-copy", null, null));
+        assertThat(accessRepository.items.get(denyCopy.id())).extracting(PermissionTemplateItem::effect)
+                .contains(AccessRepository.Effect.DENY);
+
+        accessRepository.saveTemplate(new PermissionTemplate("tpl_f17r_inactive", "tpl_f17r_inactive", "F17 未启用", null, "base", null,
+                "platform", null, "merge", null, null, false, "inactive", null, null, null, at, at), List.of(
+                new PermissionTemplateItem("tpl_f17r_inactive", "ops.production_readiness.view", AccessRepository.Effect.GRANT, "project", false)));
+        assertThatThrownBy(() -> service.updatePermissionTemplate("tpl_f17r_inactive",
+                codesRequest("f17r-inactive", List.of("ops.production_readiness.view"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.getMessage()).isEqualTo("模板未启用，不能修改；请新建模板或复制为新模板后另行套用");
+                });
+        PermissionTemplate revived = service.copyPermissionTemplate("tpl_f17r_inactive", copyRequest("f17r-inactive-copy", null, null));
+        assertThat(revived.status()).isEqualTo("active");
+        assertThat(accessRepository.items.get(revived.id())).extracting(PermissionTemplateItem::permissionCode)
+                .containsExactly("ops.production_readiness.view");
+    }
+
+    // M001-F21（基础技术不变量：契约声明为预览的请求不得写入并生效授权；未识别的取值不得静默落为更宽的授权）：套用方式只收
+    // append / merge / single_use，其余（原契约里的 preview、replace 与 single_use 的各种错拼、大小写变体）一律 400、不写套用记录，
+    // 只留失败痕迹；不传按追加；single_use 按单次生效。
+    @Test
+    void applyRejectsModesOutsideTheClosedSetWithoutWriting() {
+        seedTemplate("tpl_f21", "seed-org", null, "project", "ops.production_readiness.view");
+        accessRepository.createUser(new AccessUser("usr_f21", "f21", "staff", "seed-org", null, "active", Instant.now()));
+        List<String> modes = List.of("preview", "replace", "single-use", "singleUse", "SINGLE_USE", "once");
+        for (String mode : modes) {
+            assertThatThrownBy(() -> service.applyPermissionTemplate("tpl_f21", new PermissionTemplateApplyRequest(
+                    "f21-invalid-" + mode, "apply", List.of(), "tpl_f21", List.of("usr_f21"), mode)))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.status().value()).isEqualTo(400);
+                        assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                    });
+        }
+        assertThat(accessRepository.templateApplications).isEmpty();
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("permission_template.applied");
+        assertThat(auditEventRepository.events).filteredOn(event -> "permission_template.apply_failed".equals(event.eventName()))
+                .hasSize(modes.size());
+
+        PermissionTemplateApplyResult defaulted = service.applyPermissionTemplate("tpl_f21", new PermissionTemplateApplyRequest(
+                "f21-default", "apply", List.of(), "tpl_f21", List.of("usr_f21"), null));
+        PermissionTemplateApplyResult merged = service.applyPermissionTemplate("tpl_f21", new PermissionTemplateApplyRequest(
+                "f21-merge", "apply", List.of(), "tpl_f21", List.of("usr_f21"), "merge"));
+        PermissionTemplateApplyResult once = service.applyPermissionTemplate("tpl_f21", new PermissionTemplateApplyRequest(
+                "f21-valid-single", "apply", List.of(), "tpl_f21", List.of("usr_f21"), "single_use"));
+        assertThat(defaulted.applications()).extracting(PermissionTemplateApplication::singleUse).containsExactly(false);
+        assertThat(merged.applications()).extracting(PermissionTemplateApplication::singleUse).containsExactly(false);
+        assertThat(once.applications()).extracting(PermissionTemplateApplication::singleUse).containsExactly(true);
+    }
+
+    // M001-F20（操作员 2026-09-25 裁决「合并为同一种」：模板只有基础（角色级）与临时两种，原 copy、role 已由 V436 并入）：
+    // 类型不是 base / temporary 时，新建、修改、复制一律 400、不落库；前端同形的 base / temporary 照常。
+    @Test
+    void templateTypeOutsideBaseAndTemporaryIsRejectedOnCreateUpdateAndCopy() {
+        PermissionTemplate base = service.createPermissionTemplate(baseTemplateRequest("f20-base"));
+        int templatesBefore = accessRepository.templates.size();
+        List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> writes = List.of(
+                () -> service.createPermissionTemplate(namedRequest("f20-create-role", "F20", "role")),
+                () -> service.createPermissionTemplate(namedRequest("f20-create-copy", "F20", "copy")),
+                () -> service.createPermissionTemplate(namedRequest("f20-create-unknown", "F20", "unknown")),
+                () -> service.updatePermissionTemplate(base.id(), namedRequest("f20-update-copy", "F20", "copy")),
+                () -> service.updatePermissionTemplate(base.id(), namedRequest("f20-update-role", "F20", "role")),
+                () -> service.copyPermissionTemplate(base.id(), namedRequest("f20-copy-role", "F20", "role")),
+                () -> service.copyPermissionTemplate(base.id(), namedRequest("f20-copy-copy", "F20", "copy")));
+        for (org.assertj.core.api.ThrowableAssert.ThrowingCallable write : writes) {
+            assertThatThrownBy(write).isInstanceOfSatisfying(ApiException.class, e -> {
+                assertThat(e.status().value()).isEqualTo(400);
+                assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+            });
+        }
+        assertThat(accessRepository.templates).hasSize(templatesBefore);
+        assertThat(accessRepository.templates.get(base.id()).templateType()).isEqualTo("base");
+        assertThat(service.createPermissionTemplate(windowRequest("f20-create-temporary", null, Instant.parse("2099-01-31T00:00:00Z"), false))
+                .templateType()).isEqualTo("temporary");
+    }
+
+    private List<AuditEvent> effectChanged(String idempotencyKey) {
+        return auditEventRepository.events.stream()
+                .filter(event -> "permission_template.effect_changed".equals(event.eventName()) && idempotencyKey.equals(event.idempotencyKey()))
+                .toList();
+    }
+
+    private void seedTemplate(String id, String ownerOrganizationId, Instant validUntil, String dataScope, String... codes) {
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        accessRepository.saveTemplate(new PermissionTemplate(id, id, id, null, "base", null,
+                        ownerOrganizationId == null ? "platform" : "organization", ownerOrganizationId, "merge",
+                        null, validUntil, false, "active", null, null, null, at, at),
+                java.util.Arrays.stream(codes).map(code -> new PermissionTemplateItem(id, code, AccessRepository.Effect.GRANT, dataScope, false))
+                        .toList());
+    }
+
+    private static PermissionTemplateRequest baseTemplateRequest(String key) {
+        return namedRequest(key, "F16 模板", "base");
+    }
+
+    private static PermissionTemplateRequest namedRequest(String key, String name, String type) {
+        return new PermissionTemplateRequest(key, "seed", List.of(), name, type, null, List.of(), "project", null, null, false);
+    }
+
+    // M001-F25（句 2）：条目数据范围不一的在用模板，修改不填数据范围时保留的码沿用原范围、照常收窄（新增截止并改为单次）；
+    // 明确填写且与保留条目不同仍 409，模板不变。
+    @Test
+    void mixedScopeTemplateInUseNarrowsWhenTheRequestLeavesDataScopeEmpty() {
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        Instant until = Instant.parse("2099-01-31T00:00:00Z");
+        List<String> codes = List.of("ops.production_readiness.view", "ops.production_readiness.check");
+        accessRepository.saveTemplate(new PermissionTemplate("tpl_f25_mixed", "tpl_f25_mixed", "F25 混用范围", null, "base", null,
+                "platform", null, "merge", null, null, false, "active", null, null, null, at, at), List.of(
+                new PermissionTemplateItem("tpl_f25_mixed", codes.get(0), AccessRepository.Effect.GRANT, "assignee", false),
+                new PermissionTemplateItem("tpl_f25_mixed", codes.get(1), AccessRepository.Effect.GRANT, "project", false)));
+        accessRepository.createUser(new AccessUser("usr_f25", "f25", "staff", "seed-org", null, "active", Instant.now()));
+        service.applyPermissionTemplate("tpl_f25_mixed", new PermissionTemplateApplyRequest(
+                "f25-apply", "apply", List.of(), "tpl_f25_mixed", List.of("usr_f25"), "append"));
+
+        assertThatThrownBy(() -> service.updatePermissionTemplate("tpl_f25_mixed", new PermissionTemplateRequest(
+                "f25-explicit", "seed", List.of(), "F25 混用范围", "base", null, codes, "project", null, until, false)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(409);
+                    assertThat(e.getMessage()).isEqualTo("模板条目的数据范围不能直接修改；请新建模板或复制为新模板后另行套用");
+                });
+        assertThat(accessRepository.templates.get("tpl_f25_mixed").validUntil()).isNull();
+
+        assertThat(service.updatePermissionTemplate("tpl_f25_mixed", new PermissionTemplateRequest(
+                "f25-narrow", "seed", List.of(), "F25 混用范围", "base", null, codes, null, null, until, true)))
+                .satisfies(template -> {
+                    assertThat(template.validUntil()).isEqualTo(until);
+                    assertThat(template.singleUse()).isTrue();
+                });
+        assertThat(accessRepository.items.get("tpl_f25_mixed")).extracting(item -> item.permissionCode() + "=" + item.dataScope())
+                .containsExactlyInAnyOrder(codes.get(0) + "=assignee", codes.get(1) + "=project");
+    }
+
+    private static PermissionTemplateRequest codesRequest(String key, List<String> codes) {
+        return new PermissionTemplateRequest(key, "seed", List.of(), "F18 模板", "base", null, codes, "project", null, null, false);
+    }
+
+    private static PermissionTemplateRequest windowRequest(String key, Instant from, Instant until, boolean singleUse) {
+        return new PermissionTemplateRequest(key, "seed", List.of(), "F17 临时模板", "temporary", null,
+                List.of("ops.production_readiness.view"), "project", from, until, singleUse);
+    }
+
+    // 前端复制按钮同形：只给名称（M001-F20 起不再带类型），其余不传（null）。
+    private static PermissionTemplateRequest copyRequest(String key, Instant validUntil, Boolean singleUse) {
+        return new PermissionTemplateRequest(key, "后台复制权限模板", List.of(), "F19 复制件", null, null,
+                null, null, null, validUntil, singleUse);
     }
 
     // M001-F10（「按员工编号顺序锁定目标员工行」）：保存岗位映射先取映射表锁，再按编号锁在岗员工，最后才锁映射行——
@@ -4552,13 +5024,56 @@ class AccessServiceTests {
                     .toList();
         }
 
+        // M001-F17：与 JdbcAccessRepository 同口径——实际截止＝套用当时截止与模板当前截止中较早的一个（null 为不限）。
         @Override
         public List<PermissionTemplateApplication> findActiveTemplateApplications(String templateId) {
             return templateApplications.stream()
                     .filter(application -> application.templateId().equals(templateId) && "active".equals(application.status())
-                            && !application.consumed()
-                            && (application.validUntil() == null || application.validUntil().isAfter(Instant.now())))
+                            && !application.consumed())
+                    .filter(application -> {
+                        Instant until = earlierOf(application.validUntil(), templateWindow(application).validUntil());
+                        return until == null || until.isAfter(Instant.now());
+                    })
                     .toList();
+        }
+
+        // M001-F17：与 JdbcAccessRepository 同口径——active、未消耗、套用行自身截止未过即算，不看模板窗口。
+        // （不标 @Override：红版只换测试文件、主代码为基线，接口里还没有这个方法。）
+        public boolean hasUnfinishedTemplateApplications(String templateId) {
+            return templateApplications.stream().anyMatch(application -> application.templateId().equals(templateId)
+                    && "active".equals(application.status()) && !application.consumed()
+                    && (application.validUntil() == null || application.validUntil().isAfter(Instant.now())));
+        }
+
+        // M001-F17：与 JdbcAccessRepository 同口径——该模板实际截止已到的 active 套用置为 expired（只命中 active，重复处理不重复）。
+        public int expireLapsedTemplateApplications(String templateId, Instant checkedAt) {
+            int expired = 0;
+            for (int i = 0; i < templateApplications.size(); i++) {
+                PermissionTemplateApplication a = templateApplications.get(i);
+                Instant until = earlierOf(a.validUntil(), templateWindow(a).validUntil());
+                if (templateId.equals(a.templateId()) && "active".equals(a.status()) && until != null && !until.isAfter(checkedAt)) {
+                    templateApplications.set(i, new PermissionTemplateApplication(a.id(), a.templateId(), a.targetType(), a.targetId(),
+                            a.validFrom(), a.validUntil(), a.singleUse(), a.consumed(), "expired", a.appliedBy(), a.appliedAt(),
+                            a.revokedBy(), a.revokedAt()));
+                    expired++;
+                }
+            }
+            return expired;
+        }
+
+        // 套用行对应模板的当前窗口；模板不在夹具里时按不限处理。
+        private PermissionTemplate templateWindow(PermissionTemplateApplication application) {
+            PermissionTemplate template = templates.get(application.templateId());
+            return template != null ? template : new PermissionTemplate(application.templateId(), null, null, null, "base", null,
+                    null, null, null, null, null, false, "active", null, null, null, null, null);
+        }
+
+        private static Instant laterOf(Instant a, Instant b) {
+            return a == null ? b : b == null || a.isAfter(b) ? a : b;
+        }
+
+        private static Instant earlierOf(Instant a, Instant b) {
+            return a == null ? b : b == null || a.isBefore(b) ? a : b;
         }
 
         @Override
@@ -4824,6 +5339,8 @@ class AccessServiceTests {
                 if (!userId.equals(application.targetId()) || !"active".equals(application.status())) {
                     continue;
                 }
+                // M001-F17：与 JdbcAccessRepository 同口径——窗口取套用当时与模板当前的交集，单次＝任一为单次。
+                PermissionTemplate template = templateWindow(application);
                 for (PermissionTemplateItem item : findTemplateItems(application.templateId())) {
                     effects.add(new PermissionEffect(
                             userId,
@@ -4831,9 +5348,9 @@ class AccessServiceTests {
                             item.effect(),
                             Source.TEMPLATE_APPLICATION,
                             application.id(),
-                            application.validFrom(),
-                            application.validUntil(),
-                            application.singleUse(),
+                            laterOf(application.validFrom(), template.validFrom()),
+                            earlierOf(application.validUntil(), template.validUntil()),
+                            application.singleUse() || template.singleUse(),
                             application.consumed()
                     ));
                 }
