@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import java.time.Instant;
 import java.util.List;
@@ -206,6 +206,14 @@ public interface AccessRepository {
         return List.of();
     }
 
+    /**
+     * M001-F17：该模板还有没有未撤销、未消耗、套用行自身截止未过的套用（不看模板窗口——只因模板收窄而失效、到期作业还没处理的
+     * 也算，放宽模板会让它不经套用、不留痕地复活）。修改入口的放宽闸据此判断；默认抛异常（fail-closed），新的仓库实现必须覆写。
+     */
+    default boolean hasUnfinishedTemplateApplications(String templateId) {
+        throw new UnsupportedOperationException("hasUnfinishedTemplateApplications not supported by this repository");
+    }
+
     /** M001-F12：该员工全部 active 模板套用 id，不看模板有无条目、是否生效（换项目按记录撤销）。 */
     default List<String> findActiveTemplateApplicationIds(String userId) {
         throw new UnsupportedOperationException("findActiveTemplateApplicationIds not supported by this repository");
@@ -234,6 +242,11 @@ public interface AccessRepository {
 
     /** M001-F03：把全部员工已到期仍标 active 的模板套用置 expired 并各写一条到期日志，返回处理条数（到期作业调用）。 */
     default int expireLapsedTemplateApplications(Instant checkedAt) {
+        throw new UnsupportedOperationException("expireLapsedTemplateApplications not supported by this repository");
+    }
+
+    /** M001-F17：同上，只处理该模板的套用（模板截止收窄到已过去时，修改事务内调用）。 */
+    default int expireLapsedTemplateApplications(String templateId, Instant checkedAt) {
         throw new UnsupportedOperationException("expireLapsedTemplateApplications not supported by this repository");
     }
 

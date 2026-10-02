@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.18
+// 文件版本：V0.19
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -118,20 +118,35 @@ class JdbcAccessRepository implements AccessRepository {
                 nullableInstant(rs, "applied_at"), rs.getString("revoked_by"), nullableInstant(rs, "revoked_at")));
     }
 
+    // M001-F17（操作员裁决句 2「在用员工立即按收窄后的期限执行」）：套用的实际窗口＝套用当时窗口 ∩ 模板当前窗口（起点取较晚、截止取较早，
+    // GREATEST / LEAST 忽略 NULL，两边都为 NULL 才不限），单次＝任一为单次。在用员工查询、有效权限查询与到期作业三处同口径。
+    // 返回的是套用行原值，改前改后的实际期限由服务层按同一口径计算后逐人留痕。
     @Override
     public List<PermissionTemplateApplication> findActiveTemplateApplications(String templateId) {
         return jdbcTemplate.query("""
-                SELECT id, template_id, target_type, target_id, valid_from, valid_until, single_use, consumed, status,
-                       applied_by, applied_at, revoked_by, revoked_at
-                  FROM permission_template_applications
-                 WHERE template_id = :template_id AND status = 'active' AND NOT consumed
-                   AND (valid_until IS NULL OR valid_until > now())
-                 ORDER BY id
+                SELECT pta.id, pta.template_id, pta.target_type, pta.target_id, pta.valid_from, pta.valid_until, pta.single_use,
+                       pta.consumed, pta.status, pta.applied_by, pta.applied_at, pta.revoked_by, pta.revoked_at
+                  FROM permission_template_applications pta
+                  JOIN permission_templates pt ON pt.id = pta.template_id
+                 WHERE pta.template_id = :template_id AND pta.status = 'active' AND NOT pta.consumed
+                   AND (LEAST(pta.valid_until, pt.valid_to) IS NULL OR LEAST(pta.valid_until, pt.valid_to) > now())
+                 ORDER BY pta.id
                 """, Map.of("template_id", templateId), (rs, rowNum) -> new PermissionTemplateApplication(
                 rs.getString("id"), rs.getString("template_id"), rs.getString("target_type"), rs.getString("target_id"),
                 nullableInstant(rs, "valid_from"), nullableInstant(rs, "valid_until"), rs.getBoolean("single_use"),
                 rs.getBoolean("consumed"), rs.getString("status"), rs.getString("applied_by"),
                 nullableInstant(rs, "applied_at"), rs.getString("revoked_by"), nullableInstant(rs, "revoked_at")));
+    }
+
+    // M001-F17：放宽闸看的是「套用还没结束」——未撤销、未消耗、套用行自身截止未过即算；不按模板窗口过滤
+    // （只因模板收窄而失效、到期作业还没处理的也算，放宽模板会让它复活）。套用行自身已到期的，放宽模板也救不回来，不算。
+    @Override
+    public boolean hasUnfinishedTemplateApplications(String templateId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM permission_template_applications
+                                WHERE template_id = :template_id AND status = 'active' AND NOT consumed
+                                  AND (valid_until IS NULL OR valid_until > now()))
+                """, Map.of("template_id", templateId), Boolean.class));
     }
 
     @Override
@@ -1030,8 +1045,8 @@ class JdbcAccessRepository implements AccessRepository {
                 """, Map.of("user_id", userId), this::mapPermissionEffect));
         effects.addAll(jdbcTemplate.query("""
                 SELECT pta.target_id AS user_id, pti.permission_code, pti.effect, 'TEMPLATE_APPLICATION' AS source,
-                       pta.id AS source_id, COALESCE(pta.valid_from, pt.valid_from) AS valid_from,
-                       COALESCE(pta.valid_until, pt.valid_to) AS valid_until,
+                       pta.id AS source_id, GREATEST(pta.valid_from, pt.valid_from) AS valid_from,
+                       LEAST(pta.valid_until, pt.valid_to) AS valid_until,
                        (pta.single_use OR pt.single_use) AS single_use, pta.consumed AS consumed
                   FROM permission_template_applications pta
                   JOIN permission_templates pt ON pt.id = pta.template_id AND pt.status = 'active'
@@ -1081,19 +1096,27 @@ class JdbcAccessRepository implements AccessRepository {
             logExpiry(null, userId, (String) grant.get("permission_code"),
                     "expired:temporary_grant:" + grant.get("source_id"), checkedAt);
         }
-        expireTemplateApplications(userId, checkedAt);
+        expireTemplateApplications(userId, null, checkedAt);
     }
 
     @Override
     @Transactional
     public int expireLapsedTemplateApplications(Instant checkedAt) {
-        return expireTemplateApplications(null, checkedAt);
+        return expireTemplateApplications(null, null, checkedAt);
     }
 
-    // userId 为 null 时处理全部员工（M001-F03 到期作业）；UPDATE 只命中 active 行，重复运行不再写，幂等。
-    // 本人过滤按需拼固定片段（不用「参数 IS NULL OR」），读取有效权限这条热路径仍走 target_id 条件。
-    private int expireTemplateApplications(String userId, Instant checkedAt) {
-        String targetFilter = userId == null ? "" : "AND application.target_id = :user_id";
+    @Override
+    @Transactional
+    public int expireLapsedTemplateApplications(String templateId, Instant checkedAt) {
+        return expireTemplateApplications(null, templateId, checkedAt);
+    }
+
+    // userId 与 templateId 都为 null 时处理全部员工（M001-F03 到期作业）；templateId 非空时只处理该模板（M001-F17 修改入口）。
+    // UPDATE 只命中 active 行，重复运行不再写，幂等。过滤按需拼固定片段（不用「参数 IS NULL OR」），读取有效权限这条热路径仍走 target_id 条件。
+    // M001-F17：实际截止取套用行与模板中较早的一个（LEAST 忽略 NULL），与有效权限查询同口径。
+    private int expireTemplateApplications(String userId, String templateId, Instant checkedAt) {
+        String targetFilter = (userId == null ? "" : "AND application.target_id = :user_id")
+                + (templateId == null ? "" : " AND application.template_id = :template_id");
         List<Map<String, Object>> expired = jdbcTemplate.queryForList("""
                 UPDATE permission_template_applications AS application
                    SET status = 'expired'
@@ -1102,10 +1125,11 @@ class JdbcAccessRepository implements AccessRepository {
                    AND application.target_type = 'user'
                    %s
                    AND application.status = 'active'
-                   AND COALESCE(application.valid_until, template.valid_to) <= :checked_at
+                   AND LEAST(application.valid_until, template.valid_to) <= :checked_at
              RETURNING application.id AS source_id, application.target_id AS user_id
                 """.formatted(targetFilter), new MapSqlParameterSource()
                 .addValue("user_id", userId)
+                .addValue("template_id", templateId)
                 .addValue("checked_at", timestampWithTimeZone(checkedAt)));
         for (Map<String, Object> application : expired) {
             logExpiry((String) application.get("source_id"), (String) application.get("user_id"), null, "expired", checkedAt);

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.33
+// 文件版本：V0.34
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -67,6 +67,11 @@ public class AccessService {
             REQUEST_POSITION_HIGH_RISK_RELEASE, REQUEST_USER_POSITION, REQUEST_USER_SCOPE_CHANGE);
     // M002-F23（OpenAPI RoleRequest.data_scope 枚举）：建角色的数据范围只收契约取值。
     private static final Set<String> ROLE_DATA_SCOPES = Set.of("global", "project", "merchant", "bar", "space", "self");
+    // M001-F21（信任边界入参闭集，与 OpenAPI、前端逐字一致）：套用方式，merge 与 append 同为追加。
+    private static final Set<String> TEMPLATE_APPLY_MODES = Set.of("append", "merge", "single_use");
+    // M001-F20（操作员 2026-09-25 裁决「合并为同一种」）：模板只有基础（角色级，base）与临时（temporary）两种；
+    // 种子 role 行与存量 copy 行由 V436 并入。
+    private static final Set<String> TEMPLATE_TYPES = Set.of("base", "temporary");
 
     private final AccessRepository repository;
     private final IdempotencyService idempotencyService;
@@ -141,6 +146,7 @@ public class AccessService {
                 "access.permission_template.manage",
                 request,
                 () -> {
+                    requireTemplateType(request.templateType());
                     requireKnownPermissions(request.permissionCodes());
                     PermissionTemplate template = templateFromRequest("tpl_" + UUID.randomUUID(), request, null, ownerScopeId);
                     return repository.createTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
@@ -157,7 +163,8 @@ public class AccessService {
                 "access.permission_template.manage",
                 request,
                 () -> {
-                    // M002-F20（[10]）锁序：模板表意向锁 → 在岗员工行（按编号）→ 模板行。表锁在前，与审批落地「持模板表 SHARE → 等员工行」
+                    requireTemplateType(request.templateType()); // M001-F20：类型闭集在取锁、查库之前
+                    // M002-F20（[10]）锁序：模板表意向锁 → 在岗员工行与在用员工行（按编号）→ 模板行。表锁在前，与审批落地「持模板表 SHARE → 等员工行」
                     // 不成环（M001-F13）；员工行在模板行之前，与套用、定岗「员工行 → 模板行」同序。
                     repository.lockPermissionTemplatesForEdit();
                     List<String> lockedUsers = usersOnEditedTemplate(id);
@@ -169,21 +176,43 @@ public class AccessService {
                             && !authorizationService.requireProjectScope(actor).equals(existing.ownerScopeId())) {
                         throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能修改其他组织的模板");
                     }
+                    // M001-F16（PGM 权限规则「数据的项目与商户隔离不提供关闭开关」、第 703 行「跨商户……权限每次均须先审批」；
+                    // 操作员 2026-09-26 更正段）：修改在用模板等同给在用员工增减权限，带商户归属的操作人与套用入口过同一道商户闸——
+                    // 模板行锁内重读在用员工（含非岗位套用），预锁之后才套上的员工补锁后再读归属，任一不属本商户即 403、不写库。
+                    List<PermissionTemplateApplication> holders = repository.findActiveTemplateApplications(id);
+                    if (!isBlank(actor.merchantId())) {
+                        repository.lockAccessUsers(holders.stream().map(PermissionTemplateApplication::targetId)
+                                .filter(userId -> !lockedUsers.contains(userId)).distinct().sorted().toList());
+                        holders.forEach(application -> requireSameOrganization(actor, requireTargetUser(application.targetId())));
+                    }
                     requireKnownPermissions(request.permissionCodes());
                     requireTemporaryTimeOrder(request);  // M001-F07：倒置窗口先于「延长有效期须重新授权」判定，按 400 拒绝
                     List<PermissionTemplateItem> previousItems = repository.findTemplateItems(id);
-                    boolean widensWindow = (existing.validFrom() != null
-                            && (request.validFrom() == null || request.validFrom().isBefore(existing.validFrom())))
-                            || (existing.validUntil() != null
-                            && (request.validUntil() == null || request.validUntil().isAfter(existing.validUntil())));
+                    boolean singleUse = Boolean.TRUE.equals(request.singleUse());
                     boolean changesScope = previousItems.stream().anyMatch(item ->
                             safeList(request.permissionCodes()).contains(item.permissionCode())
                                     && !java.util.Objects.equals(item.dataScope(), trimToDefault(request.dataScope(), "project")));
-                    if (widensWindow || (existing.singleUse() && !Boolean.TRUE.equals(request.singleUse()))
-                            || changesScope || previousItems.stream().anyMatch(item -> item.effect() == AccessRepository.Effect.DENY)
-                            || !"active".equals(existing.status())) {
+                    // M001-F17（操作员裁决句 2「模板已被套用且仍有员工在用时，收窄其有效期或改为单次使用，在用员工立即按收窄后的期限执行……
+                    // 放宽的，新建模板后另行套用」；句 1「复制出来的是一个新模板……都可以重新设定」）：收窄（生效推后、到期提前或新增到期、改为单次）
+                    // 直接保存，在用员工按「套用当时窗口 ∩ 模板当前窗口」立即执行（JdbcAccessRepository 三处同口径）；放宽只在仍有员工在用时 409，
+                    // 「在用」按套用未结束算（hasUnfinishedTemplateApplications：只因模板收窄而失效、到期作业未处理的也算，否则放宽会让它不经套用复活）。
+                    // 409 按原因分开写，各给一条走得通的办法。
+                    if (widensWindow(existing, request.validFrom(), request.validUntil(), singleUse)
+                            && repository.hasUnfinishedTemplateApplications(id)) {
                         throw ApiException.conflict("TEMPLATE_REAUTHORIZATION_REQUIRED",
-                                "有效期、一次性限制、数据范围或禁止规则变化须复制为新模板后重新授权");
+                                "模板已被套用且仍有员工在用，不能放宽有效期或取消单次使用限制；请新建模板或复制为新模板后另行套用");
+                    }
+                    if (changesScope) {
+                        throw ApiException.conflict("TEMPLATE_REAUTHORIZATION_REQUIRED",
+                                "模板条目的数据范围不能直接修改；请新建模板或复制为新模板后另行套用");
+                    }
+                    if (previousItems.stream().anyMatch(item -> item.effect() == AccessRepository.Effect.DENY)) {
+                        throw ApiException.conflict("TEMPLATE_REAUTHORIZATION_REQUIRED",
+                                "模板含禁止规则，不能直接修改；请新建模板后另行套用");
+                    }
+                    if (!"active".equals(existing.status())) {
+                        throw ApiException.conflict("TEMPLATE_REAUTHORIZATION_REQUIRED",
+                                "模板未启用，不能修改；请新建模板或复制为新模板后另行套用");
                     }
                     Set<String> previousGrants = previousItems.stream()
                             .filter(item -> item.effect() == AccessRepository.Effect.GRANT)
@@ -194,23 +223,41 @@ public class AccessService {
                     requireGrantApprovalIfNeeded(added);
                     PermissionTemplate template = templateFromRequest(id, request, existing.sourceTemplateId(), existing.ownerScopeId());
                     PermissionTemplate saved = repository.saveTemplate(template, items(template.id(), request.permissionCodes(), request.dataScope()));
-                    // M001-F11（PGM 权限规则「权限的授予、收回……全部留痕」）：增减即时作用于仍生效的套用员工，逐人留痕。
+                    // M001-F11（PGM 权限规则「权限的授予、收回……全部留痕」）：增减即时作用于仍生效的套用员工，逐人留痕；
+                    // M001-F18（句 2「并逐人记录改前改后的期限和操作人」）：收窄使某人实际期限或单次变化时同样逐人留痕，
+                    // 记改前改后的实际生效、截止（ISO 8601，空串＝不限；审计元数据不收 null）与单次标记；实际期限没变的员工不写。
                     List<String> removed = previousGrants.stream()
                             .filter(code -> !safeList(request.permissionCodes()).contains(code)).sorted().toList();
-                    if (!added.isEmpty() || !removed.isEmpty()) {
-                        for (PermissionTemplateApplication application : repository.findActiveTemplateApplications(id)) {
-                            auditEventService.recordSuccess(
-                                    "permission_template.effect_changed",
-                                    "access.permission_template.manage",
-                                    "access_user",
-                                    application.targetId(),
-                                    null,
-                                    request.idempotencyKey(),
-                                    Map.of("template_id", id, "application_id", application.id(),
-                                            "added_permission_codes", added, "removed_permission_codes", removed,
-                                            "operator_id", actor.id()) // M001-F14：操作人（两类认证主体都能解析），时间取事件发生时间
-                            );
+                    for (PermissionTemplateApplication application : holders) {
+                        Instant fromBefore = later(application.validFrom(), existing.validFrom());
+                        Instant untilBefore = earlier(application.validUntil(), existing.validUntil());
+                        Instant fromAfter = later(application.validFrom(), request.validFrom());
+                        Instant untilAfter = earlier(application.validUntil(), request.validUntil());
+                        boolean singleBefore = application.singleUse() || existing.singleUse();
+                        boolean singleAfter = application.singleUse() || singleUse;
+                        if (added.isEmpty() && removed.isEmpty() && java.util.Objects.equals(fromBefore, fromAfter)
+                                && java.util.Objects.equals(untilBefore, untilAfter) && singleBefore == singleAfter) {
+                            continue;
                         }
+                        Map<String, Object> metadata = new LinkedHashMap<>();
+                        metadata.put("template_id", id);
+                        metadata.put("application_id", application.id());
+                        metadata.put("added_permission_codes", added);
+                        metadata.put("removed_permission_codes", removed);
+                        metadata.put("valid_from_before", fromBefore == null ? "" : fromBefore.toString());
+                        metadata.put("valid_until_before", untilBefore == null ? "" : untilBefore.toString());
+                        metadata.put("single_use_before", singleBefore);
+                        metadata.put("valid_from_after", fromAfter == null ? "" : fromAfter.toString());
+                        metadata.put("valid_until_after", untilAfter == null ? "" : untilAfter.toString());
+                        metadata.put("single_use_after", singleAfter);
+                        metadata.put("operator_id", actor.id()); // M001-F14：操作人（两类认证主体都能解析），时间取事件发生时间
+                        auditEventService.recordSuccess("permission_template.effect_changed", "access.permission_template.manage",
+                                "access_user", application.targetId(), null, request.idempotencyKey(), metadata);
+                    }
+                    // M001-F17：新截止已过的，已到期的套用在本事务内置为到期并写到期日志（与到期作业同一谓词，只命中 active 行，重复处理不重复记）。
+                    Instant now = Instant.now();
+                    if (request.validUntil() != null && !request.validUntil().isAfter(now)) {
+                        repository.expireLapsedTemplateApplications(id, now);
                     }
                     reconcileHoldsOnEditedTemplate(id, previousItems.stream().map(PermissionTemplateItem::permissionCode).toList(),
                             lockedUsers, request.idempotencyKey(), request.operatorNote()); // M002-F20/F22：该岗位模板被修改
@@ -228,17 +275,49 @@ public class AccessService {
                 "access.permission_template.manage",
                 request,
                 () -> {
-                    if (!authorizationService.isPlatformAdmin(actor)) {
-                        // M006-036：先取项目范围（无组织主体在此得到 PROJECT_SCOPE_REQUIRED），再比较归属，不再对 null 调用 equals。
-                        String scope = authorizationService.requireProjectScope(actor);
-                        PermissionTemplate source = repository.findTemplateById(id)
-                                .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
-                        if (source.ownerScopeId() != null && !scope.equals(source.ownerScopeId())) {
-                            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能复制其他组织的模板");
-                        }
-                    }
+                    // M006-036：先取项目范围（无组织主体在此得到 PROJECT_SCOPE_REQUIRED），再比较归属，不再对 null 调用 equals。
                     String ownerScopeId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
-                    return repository.copyTemplate(id, templateFromRequest("tpl_" + UUID.randomUUID(), request, id, ownerScopeId));
+                    // M001-F19：所有操作人（含平台管理员）都先读真实源模板，不存在一律 404、不建行。先取源模板共享锁（与修改入口的
+                    // NO KEY UPDATE 互斥），窗口、类型与条目取自同一个已提交版本。
+                    repository.lockTemplateForApply(id);
+                    PermissionTemplate source = repository.findTemplateById(id)
+                            .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
+                    if (ownerScopeId != null && source.ownerScopeId() != null && !ownerScopeId.equals(source.ownerScopeId())) {
+                        throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能复制其他组织的模板");
+                    }
+                    // M001-F19（操作员确认句 1「复制出来的是一个新模板，权限、有效期、单次使用限制等都可以重新设定，按新建模板的规则校验」；
+                    // 裁决说明「复制＝以源模板为初值新建，未填项沿用源模板」）：请求里填了的项按填的，没填的（null；名称、类型空白同未填；
+                    // 权限码空列表同未填）沿用源模板。沿用的权限码只取源模板里仍启用的授予码（停用码不产生授权，也过不了新建校验）；
+                    // 禁止规则请求里无从填写，按源模板沿用。数据范围：请求填了按填（与新建同），没填时与源模板相同的码沿用源条目、其余记 project。
+                    // 接口表达不了「清空到期」：要去掉到期，复制后再修改复制件（复制件没人在用，放宽不受限）。
+                    List<PermissionTemplateItem> sourceItems = repository.findTemplateItems(id);
+                    Set<String> active = activePermissionCodes();
+                    List<String> codes = safeList(request.permissionCodes()).isEmpty()
+                            ? sourceItems.stream().filter(item -> item.effect() == AccessRepository.Effect.GRANT)
+                                    .map(PermissionTemplateItem::permissionCode).filter(active::contains).toList()
+                            : request.permissionCodes();
+                    PermissionTemplateRequest merged = new PermissionTemplateRequest(
+                            request.idempotencyKey(), request.operatorNote(), request.evidenceAttachmentIds(),
+                            trimToNull(request.templateName()) != null ? request.templateName() : source.templateName(),
+                            trimToNull(request.templateType()) != null ? request.templateType() : source.templateType(),
+                            id, codes, request.dataScope(),
+                            request.validFrom() != null ? request.validFrom() : source.validFrom(),
+                            request.validUntil() != null ? request.validUntil() : source.validUntil(),
+                            request.singleUse() != null ? request.singleUse() : source.singleUse());
+                    requireTemplateType(merged.templateType());
+                    requireKnownPermissions(codes);
+                    PermissionTemplate copy = templateFromRequest("tpl_" + UUID.randomUUID(), merged, id, ownerScopeId);
+                    Map<String, String> sourceScopes = new HashMap<>();
+                    sourceItems.forEach(item -> sourceScopes.put(item.permissionCode(), item.dataScope()));
+                    List<PermissionTemplateItem> copyItems = new ArrayList<>(trimToNull(request.dataScope()) != null
+                            ? items(copy.id(), codes, request.dataScope())
+                            : codes.stream().map(code -> new PermissionTemplateItem(copy.id(), code, AccessRepository.Effect.GRANT,
+                                    sourceScopes.getOrDefault(code, "project"), false)).toList());
+                    sourceItems.stream().filter(item -> item.effect() == AccessRepository.Effect.DENY && active.contains(item.permissionCode()))
+                            .forEach(item -> copyItems.add(new PermissionTemplateItem(copy.id(), item.permissionCode(), item.effect(),
+                                    item.dataScope(), item.sensitive())));
+                    repository.createTemplate(copy, copyItems);
+                    return repository.findTemplateById(copy.id()).orElse(copy); // 返回体以实际落库的条目为准
                 }
         );
     }
@@ -251,6 +330,13 @@ public class AccessService {
                     request.idempotencyKey(),
                     request,
                     () -> {
+                        // M001-F21（基础技术不变量：契约里声明为预览的请求不得写入并生效授权，未识别的取值不得静默落为更宽的授权）：
+                        // 套用方式按闭集校验，在任何查库与加锁之前；不传按追加。
+                        String mode = trimToDefault(request.mode(), "append");
+                        if (!TEMPLATE_APPLY_MODES.contains(mode)) {
+                            throw ApiException.badRequest("VALIDATION_FAILED",
+                                    "套用方式只能是追加（append 或 merge）或单次（single_use）：" + mode);
+                        }
                         if (safeList(request.targetUserIds()).isEmpty()) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "必须选择授权目标");
                         }
@@ -303,7 +389,7 @@ public class AccessService {
                         // 高风险授权须改走 applyGrant/reviewGrant 主管复核流；模板入口对高风险直接拒绝、无待审窗口，
                         // 故审批期间模板内容变化亦无从偷换。
                         requireGrantApprovalIfNeeded(templatePermissionCodes);
-                        boolean singleUse = template.singleUse() || "single_use".equalsIgnoreCase(trimToDefault(request.mode(), "append"));
+                        boolean singleUse = template.singleUse() || "single_use".equals(mode);
                         requireBoundedTemporaryTemplate(template.templateType(), template.validUntil(), singleUse);
                         // M001-F04（PGM 权限规则：授予全部留痕）：授予人记实际操作者，审计事件逐条带套用记录 id。
                         PermissionTemplateApplyResult result = new PermissionTemplateApplyResult(repository.applyTemplate(
@@ -2756,12 +2842,15 @@ public class AccessService {
         }
     }
 
-    // M002-F20（[10]）：引用该模板的启用映射上实际在岗的员工，按编号排好供预锁。
+    // M002-F20（[10]）：引用该模板的启用映射上实际在岗的员工；M001-F16：加上该模板仍生效套用的员工（含非岗位套用），
+    // 修改入口逐人比对商户前先锁住其员工行，与换项目、换商户串行。按编号排好供预锁。
     private List<String> usersOnEditedTemplate(String templateId) {
-        return repository.listPositionRoleTemplates(null).stream()
-                .filter(mapping -> templateId.equals(mapping.templateId()) && "active".equals(mapping.status())
-                        && mapping.archivedAt() == null && mapping.deletedAt() == null)
-                .flatMap(mapping -> repository.listUserIdsOnPositionTemplate(mapping).stream())
+        return java.util.stream.Stream.concat(
+                        repository.listPositionRoleTemplates(null).stream()
+                                .filter(mapping -> templateId.equals(mapping.templateId()) && "active".equals(mapping.status())
+                                        && mapping.archivedAt() == null && mapping.deletedAt() == null)
+                                .flatMap(mapping -> repository.listUserIdsOnPositionTemplate(mapping).stream()),
+                        repository.findActiveTemplateApplications(templateId).stream().map(PermissionTemplateApplication::targetId))
                 .distinct().sorted().toList();
     }
 
@@ -2935,6 +3024,36 @@ public class AccessService {
 
     private boolean isTemporaryTemplate(String templateType) {
         return "temporary".equalsIgnoreCase(trimToDefault(templateType, "base"));
+    }
+
+    // M001-F20：模板类型只收 base / temporary（不传按 base），其他（含原 copy、role）400；新建、修改、复制共用。
+    private void requireTemplateType(String templateType) {
+        String type = trimToNull(templateType);
+        if (type != null && !TEMPLATE_TYPES.contains(type)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "模板类型只能是基础模板（base）或临时模板（temporary）：" + type);
+        }
+    }
+
+    // M001-F17：新窗口比原模板宽——生效提前或清空、到期推后或清空、去掉单次（修改入口用；复制出的是新模板，不受此限）。
+    private static boolean widensWindow(PermissionTemplate existing, Instant validFrom, Instant validUntil, boolean singleUse) {
+        return (existing.validFrom() != null && (validFrom == null || validFrom.isBefore(existing.validFrom())))
+                || (existing.validUntil() != null && (validUntil == null || validUntil.isAfter(existing.validUntil())))
+                || (existing.singleUse() && !singleUse);
+    }
+
+    // M001-F17/F18：套用当时窗口与模板当前窗口取交集——起点取较晚、截止取较早，null 为不限（与 JdbcAccessRepository 的 GREATEST / LEAST 同口径）。
+    private static Instant later(Instant a, Instant b) {
+        return a == null ? b : b == null || a.isAfter(b) ? a : b;
+    }
+
+    private static Instant earlier(Instant a, Instant b) {
+        return a == null ? b : b == null || a.isBefore(b) ? a : b;
+    }
+
+    // M001-F19：权限字典里启用的码（JDBC 的 listPermissions 本就只返回启用码，这里再按状态过滤一次，测试夹具同口径）。
+    private Set<String> activePermissionCodes() {
+        return repository.listPermissions().stream().filter(permission -> "active".equals(permission.status()))
+                .map(PermissionDefinition::permissionCode).collect(java.util.stream.Collectors.toSet());
     }
 
     private List<PermissionTemplateItem> items(String templateId, List<String> permissionCodes, String dataScope) {
