@@ -48,14 +48,14 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(effectivePermissions: EffectivePermissionsState = ADMIN_PERMS) {
   const setActionResult = vi.fn();
   const props: AdminPageProps = {
     api: makeApi(),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult,
     setGlobalError: vi.fn(),
-    effectivePermissions: ADMIN_PERMS,
+    effectivePermissions,
   };
   render(<AccessGovernancePage {...props} />);
   return { setActionResult };
@@ -111,5 +111,84 @@ describe("AccessGovernancePage 引导式新建授权申请(phase-11)", () => {
     expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("权限码");
     expect(screen.queryByTestId("access-grant-request-guided-summary")).toBeNull();
     expect(lastPostBody).toBeNull();
+  });
+
+  // M002-F01：员工单独授予只填权限码——留空被步内校验拦截；填写后提交带 permissionCodes，不带过期时间与单次有效。
+  it("员工单独授予：权限码留空被拦截，填写后提交只带权限码（M002-F01）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    fireEvent.change(screen.getByLabelText("申请类型"), { target: { value: "user_permission_grant" } });
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("员工单独授予、解除显式拒绝与岗位高危权限释放需填写权限码");
+    expect(screen.queryByTestId("access-grant-request-guided-summary")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "finance.refund.create" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create"));
+
+    await waitFor(() => expect(lastPostBody).toBeTruthy());
+    const body = lastPostBody as Record<string, unknown>;
+    expect(body.request_type).toBe("user_permission_grant");
+    expect(body.target_user_id).toBe("u-1");
+    expect(body.permission_codes).toEqual(["finance.refund.create"]);
+    expect(body).not.toHaveProperty("expires_at");
+    expect(body).not.toHaveProperty("single_use");
+  });
+
+  // M002-F20：释放单被驳回后，对同一挂起再次发起「岗位高危权限释放」申请——下拉可选，只填权限码，提交带 position_high_risk_release。
+  it("岗位高危权限释放：可选该类型，权限码留空被拦截，填写后提交只带权限码（M002-F20）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    fireEvent.change(screen.getByLabelText("申请类型"), { target: { value: "position_high_risk_release" } });
+    expect((screen.getByLabelText("申请类型") as HTMLSelectElement).value).toBe("position_high_risk_release");
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("岗位高危权限释放需填写权限码");
+
+    fireEvent.change(screen.getByLabelText("权限码"), { target: { value: "finance.refund.create" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create"));
+
+    await waitFor(() => expect(lastPostBody).toBeTruthy());
+    const body = lastPostBody as Record<string, unknown>;
+    expect(body.request_type).toBe("position_high_risk_release");
+    expect(body.target_user_id).toBe("u-1");
+    expect(body.permission_codes).toEqual(["finance.refund.create"]);
+    expect(body).not.toHaveProperty("expires_at");
+    expect(body).not.toHaveProperty("single_use");
+    expect(body).not.toHaveProperty("position_code");
+  });
+
+  // M002-F37（治理地图第 651 行）：员工单独授予、解除员工显式拒绝、岗位高危权限释放三类申请只能由具备分配/取消分配角色权限的人发起——
+  // 不持 access.role.assign（或该码被显式拒绝）时，申请类型下拉只剩临时权限、用户角色、用户职位；持该码时三类照常可选。
+  const APPLY_ONLY = ["access.grant_request.apply", "access.grant_request.view", "access.user.view", "access.role.view"];
+  const requestTypeOptions = async (permissions: EffectivePermissionsState) => {
+    renderPage(permissions);
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    return Array.from((screen.getByLabelText("申请类型") as HTMLSelectElement).options).map((option) => option.value);
+  };
+
+  it("不持分配角色权限：申请类型不提供三类（M002-F37）", async () => {
+    expect(await requestTypeOptions({ status: "ready", value: { grants: APPLY_ONLY, denies: [], wildcard: false } }))
+      .toEqual(["temporary_permission", "user_role", "user_position"]);
+  });
+
+  it("分配角色权限被显式拒绝：申请类型同样不提供三类（M002-F37）", async () => {
+    expect(await requestTypeOptions({ status: "ready", value: { grants: [...APPLY_ONLY, "access.role.assign"], denies: ["access.role.assign"], wildcard: false } }))
+      .toEqual(["temporary_permission", "user_role", "user_position"]);
+  });
+
+  it("持分配角色权限：三类照常可选（M002-F37 对照）", async () => {
+    expect(await requestTypeOptions({ status: "ready", value: { grants: [...APPLY_ONLY, "access.role.assign"], denies: [], wildcard: false } }))
+      .toEqual(["temporary_permission", "user_role", "user_position", "user_permission_grant", "user_permission_deny_removal", "position_high_risk_release"]);
   });
 });

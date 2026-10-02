@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.12
+// 文件版本：V0.14
 
 import java.time.Instant;
 import java.util.List;
@@ -156,6 +156,24 @@ public interface AccessRepository {
                 .toList();
     }
 
+    /**
+     * M002-F22：实际挂在这张岗位映射上的员工（映射停用、所引权限模板被修改时对账用）。默认按岗位+职级（内存夹具）；
+     * Jdbc 按 user_position_assignments.assigned_position_template_id 取人。
+     */
+    default List<String> listUserIdsOnPositionTemplate(PositionRoleTemplate mapping) {
+        return listUserIdsAssignedToPosition(mapping.positionCode(), mapping.staffLevelId());
+    }
+
+    /** M002-F32：员工岗位行当前的岗位派生角色 id（派生前判断改动是否带来新的授出来源）；没有岗位或未记录为空。 */
+    default Optional<String> findAssignedPositionRoleId(String userId) {
+        return Optional.empty();
+    }
+
+    /** M002-F20：员工岗位行当前挂的岗位映射 id（派生前比对是否仍是同一映射）；没有岗位或未记录为空。 */
+    default Optional<String> findAssignedPositionTemplateId(String userId) {
+        return Optional.empty();
+    }
+
     /** 在当前岗位行上替换派生授权；独立 user_roles 与模板应用不受影响。 */
     default void replacePositionGrants(String userId, String roleId, String mappingId, List<String> applicationIds,
                                       String actorId, Instant changedAt) {
@@ -178,6 +196,11 @@ public interface AccessRepository {
     default void lockAccessUsers(List<String> userIds) {
     }
 
+    /** M002-F32：员工岗位行记下的岗位派生套用（任意状态，含已消耗、已到期）；默认空列表表示不保留、照常重新套用。 */
+    default List<PermissionTemplateApplication> findPositionApplications(String userId) {
+        return List.of();
+    }
+
     /** M001-F11：该模板当前仍生效的全部套用记录（模板编辑时逐人留痕用）；默认空列表只给不记套用的测试夹具用，真实查询见 JdbcAccessRepository。 */
     default List<PermissionTemplateApplication> findActiveTemplateApplications(String templateId) {
         return List.of();
@@ -191,6 +214,10 @@ public interface AccessRepository {
     /** M001-F12：该员工全部直接装配角色 id，不看角色有无权限码、是否生效。 */
     default List<String> findUserRoleIds(String userId) {
         throw new UnsupportedOperationException("findUserRoleIds not supported by this repository");
+    }
+
+    /** M002-F20（[10]）：改模板先取模板表意向锁，再锁在岗员工行，最后锁模板行（见 AccessService.updatePermissionTemplate）。 */
+    default void lockPermissionTemplatesForEdit() {
     }
 
     /** M001-F13：修改模板前取该模板写锁，锁到事务结束，锁内读前态；默认空实现只给单线程内存夹具用。 */
@@ -259,13 +286,18 @@ public interface AccessRepository {
         return List.of();
     }
 
-    /** M087-I5-03：某账号某类型的待审授权申请（范围变更时作废旧范围高危挂起）。 */
-    // ponytail: filters the full list; add a targeted query if access_grant_requests grows large
+    /** M087-I5-03：某账号某类型的待审授权申请（岗位高危挂起对账、再次申请）。默认扫全部申请过滤；Jdbc 定向查询。 */
     default List<AccessGrantRequestRecord> listPendingGrantRequests(String targetUserId, String requestType) {
         return listGrantRequests(null).stream()
                 .filter(request -> targetUserId.equals(request.targetUserId()) && requestType.equals(request.requestType())
                         && "pending".equals(request.status()))
                 .toList();
+    }
+
+    /** M002-F20：某员工的全部授权申请（任意类型、任意状态，按创建时间先后）；Jdbc 定向查询。 */
+    default List<AccessGrantRequestRecord> listGrantRequestsForTarget(String targetUserId) {
+        return listGrantRequests(null).stream().filter(request -> targetUserId.equals(request.targetUserId()))
+                .sorted(java.util.Comparator.comparing(AccessGrantRequestRecord::createdAt)).toList();
     }
 
     /** 职级定义列表（参考数据，平台全局）。默认空，JdbcAccessRepository 覆盖。 */
@@ -301,13 +333,40 @@ public interface AccessRepository {
         throw new UnsupportedOperationException("updateUserScope");
     }
 
-    /** M006-G-01（PGM-1.10.1 员工单独授予 − 显式拒绝）：员工级覆盖写路径；同一 (user, code, effect) 幂等覆盖。 */
+    /**
+     * M006-G-01（PGM-1.10.1 员工单独授予 − 显式拒绝）：员工级覆盖写路径；同一 (user, code, effect) 幂等覆盖。
+     * M002-F02：只写 origin=explicit 行，岗位高危挂起行另走 {@link #saveHighRiskHolds}。
+     */
     default void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
         throw new UnsupportedOperationException("saveUserPermissionOverrides");
     }
 
+    /** M002-F02：删除该员工这些码、该 effect 的全部行（员工显式行与岗位高危挂起行一并删除）。 */
     default int deleteUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect) {
         throw new UnsupportedOperationException("deleteUserPermissionOverrides");
+    }
+
+    /** M002-F02：写岗位高危挂起行（origin=position_hold，只能是 deny），与员工显式拒绝分行存放。 */
+    default void saveHighRiskHolds(String userId, List<String> permissionCodes, String reason, String createdBy) {
+        throw new UnsupportedOperationException("saveHighRiskHolds");
+    }
+
+    /** M002-F02：只删岗位高危挂起行，员工显式拒绝不动；返回删除行数。 */
+    default int deleteHighRiskHolds(String userId, List<String> permissionCodes) {
+        throw new UnsupportedOperationException("deleteHighRiskHolds");
+    }
+
+    /** M002-F01：只删员工显式拒绝行，岗位高危挂起行不动；返回删除行数。 */
+    default int deleteExplicitDenies(String userId, List<String> permissionCodes) {
+        throw new UnsupportedOperationException("deleteExplicitDenies");
+    }
+
+    /** M002-F06：该员工这些码的员工显式拒绝行（按码排序），解除单以此钉住所解除的拒绝版本。 */
+    default List<ExplicitDenyRow> findExplicitDenies(String userId, List<String> permissionCodes) {
+        throw new UnsupportedOperationException("findExplicitDenies");
+    }
+
+    record ExplicitDenyRow(String permissionCode, String reason, String createdBy, Instant createdAt) {
     }
 
     enum Effect {
@@ -319,7 +378,8 @@ public interface AccessRepository {
         ROLE,
         TEMPLATE_APPLICATION,
         TEMPORARY_GRANT,
-        USER_OVERRIDE
+        USER_OVERRIDE,
+        POSITION_HOLD // M002-F02：岗位高危挂起行（覆盖表 origin=position_hold）
     }
 
     record PermissionEffect(

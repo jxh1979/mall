@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.16
+// 文件版本：V0.18
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -75,6 +75,13 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public void lockPermissionTemplatesForEdit() {
+        // M002-F20（[10]）：表级 ROW EXCLUSIVE 先于员工行锁——审批落地持模板表 SHARE 后会等员工行（M001-F13），
+        // 编辑若先持员工行再等表锁会与之成环。lockTemplateForEdit 随后再取同一表锁（已持有）与模板行锁。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE permission_templates IN ROW EXCLUSIVE MODE");
+    }
+
+    @Override
     public void lockTemplateForEdit(String templateId) {
         // M001-F13：表级 ROW EXCLUSIVE 先于行锁——审批落地持模板表 SHARE 后会等员工行，编辑若先持行锁再等表锁，
         // 与「持员工行、等模板行」的套用成三方环。行锁取 NO KEY UPDATE，不挡插套用行时外键取的 KEY SHARE。
@@ -94,6 +101,21 @@ class JdbcAccessRepository implements AccessRepository {
     public void lockPositionRoleTemplatesForWrite() {
         // M001-F10。ponytail: 把映射 upsert 本就要取的 ROW EXCLUSIVE 提到事务开头，与授权事实锁的 SHARE 先到先得。
         jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE position_role_templates IN ROW EXCLUSIVE MODE");
+    }
+
+    @Override
+    public List<PermissionTemplateApplication> findPositionApplications(String userId) {
+        return jdbcTemplate.query("""
+                SELECT id, template_id, target_type, target_id, valid_from, valid_until, single_use, consumed, status,
+                       applied_by, applied_at, revoked_by, revoked_at
+                  FROM permission_template_applications
+                 WHERE id = ANY ((SELECT position_application_ids FROM user_position_assignments WHERE user_id = :user_id)::varchar[])
+                 ORDER BY id
+                """, Map.of("user_id", userId), (rs, rowNum) -> new PermissionTemplateApplication(
+                rs.getString("id"), rs.getString("template_id"), rs.getString("target_type"), rs.getString("target_id"),
+                nullableInstant(rs, "valid_from"), nullableInstant(rs, "valid_until"), rs.getBoolean("single_use"),
+                rs.getBoolean("consumed"), rs.getString("status"), rs.getString("applied_by"),
+                nullableInstant(rs, "applied_at"), rs.getString("revoked_by"), nullableInstant(rs, "revoked_at")));
     }
 
     @Override
@@ -856,6 +878,65 @@ class JdbcAccessRepository implements AccessRepository {
         if (changed != 1) throw new IllegalStateException("授权政策未配置");
     }
 
+    // M002-F20/F22：岗位高危挂起对账每次派生都要查，按员工定向查询，不再读整张申请表。
+    @Override
+    public List<AccessGrantRequestRecord> listPendingGrantRequests(String targetUserId, String requestType) {
+        return jdbcTemplate.query("""
+                SELECT id, request_type, target_user_id, target_role_id, template_id, position_code,
+                       staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       permission_codes, valid_from, expires_at, single_use, status, review_id,
+                       reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                       created_at, updated_at
+                  FROM access_grant_requests
+                 WHERE target_user_id = :target_user_id AND request_type = :request_type AND status = 'pending'
+                 ORDER BY created_at, id
+                """, Map.of("target_user_id", targetUserId, "request_type", requestType), this::mapGrantRequest);
+    }
+
+    @Override
+    public List<AccessGrantRequestRecord> listGrantRequestsForTarget(String targetUserId) {
+        return jdbcTemplate.query("""
+                SELECT id, request_type, target_user_id, target_role_id, template_id, position_code,
+                       staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       permission_codes, valid_from, expires_at, single_use, status, review_id,
+                       reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                       created_at, updated_at
+                  FROM access_grant_requests
+                 WHERE target_user_id = :target_user_id
+                 ORDER BY created_at, id
+                """, Map.of("target_user_id", targetUserId), this::mapGrantRequest);
+    }
+
+    // M002-F22：在岗名单按岗位行定向查询，不再列全部员工逐个查岗。
+    @Override
+    public List<String> listUserIdsAssignedToPosition(String positionCode, String staffLevelId) {
+        return jdbcTemplate.queryForList("""
+                SELECT user_id FROM user_position_assignments
+                 WHERE position_code = :position_code AND staff_level_id = :staff_level_id
+                 ORDER BY user_id
+                """, Map.of("position_code", positionCode, "staff_level_id", staffLevelId), String.class);
+    }
+
+    // M002-F22：实际挂在这张映射上的员工，只按映射 id 取人；映射列为空的存量行不兜底、不回填（仓库 AGENTS.md 第 8 条）。
+    @Override
+    public List<String> listUserIdsOnPositionTemplate(PositionRoleTemplate mapping) {
+        return jdbcTemplate.queryForList("""
+                SELECT user_id FROM user_position_assignments WHERE assigned_position_template_id = :mapping_id ORDER BY user_id
+                """, Map.of("mapping_id", mapping.id()), String.class);
+    }
+
+    @Override
+    public Optional<String> findAssignedPositionRoleId(String userId) {
+        return jdbcTemplate.queryForList("SELECT assigned_role_id FROM user_position_assignments WHERE user_id = :user_id",
+                Map.of("user_id", userId), String.class).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    @Override
+    public Optional<String> findAssignedPositionTemplateId(String userId) {
+        return jdbcTemplate.queryForList("SELECT assigned_position_template_id FROM user_position_assignments WHERE user_id = :user_id",
+                Map.of("user_id", userId), String.class).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
     @Override
     public List<AccessGrantRequestRecord> listGrantRequests(Instant createdAtFrom) {
         if (createdAtFrom == null) {
@@ -912,6 +993,7 @@ class JdbcAccessRepository implements AccessRepository {
                  WHERE target_id = :user_id AND status = 'active'
                    AND id = ANY ((SELECT position_application_ids FROM user_position_assignments
                                    WHERE user_id = :user_id)::varchar[])
+                   AND id <> ALL (:application_ids) -- M002-F32：保留下来的原岗位派生套用（同岗重定、映射原样重存）不撤销
                 """, parameters);
         int changed = jdbcTemplate.update("""
                 UPDATE user_position_assignments
@@ -968,8 +1050,9 @@ class JdbcAccessRepository implements AccessRepository {
                    AND status = 'active'
                 """, Map.of("user_id", userId), this::mapPermissionEffect));
         effects.addAll(jdbcTemplate.query("""
-                SELECT user_id, permission_code, effect, 'USER_OVERRIDE' AS source,
-                       user_id || ':' || permission_code || ':' || effect AS source_id,
+                SELECT user_id, permission_code, effect,
+                       CASE origin WHEN 'position_hold' THEN 'POSITION_HOLD' ELSE 'USER_OVERRIDE' END AS source,
+                       user_id || ':' || permission_code || ':' || effect || ':' || origin AS source_id,
                        NULL::timestamptz AS valid_from, NULL::timestamptz AS valid_until,
                        FALSE AS single_use, FALSE AS consumed
                   FROM user_permission_overrides
@@ -1053,16 +1136,28 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     @Transactional
     public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
+        upsertOverrides(userId, permissionCodes, effect, "explicit", reason, createdBy);
+    }
+
+    @Override
+    @Transactional
+    public void saveHighRiskHolds(String userId, List<String> permissionCodes, String reason, String createdBy) {
+        upsertOverrides(userId, permissionCodes, Effect.DENY, "position_hold", reason, createdBy);
+    }
+
+    // M002-F02：挂起行与员工显式行按 origin 分行，冲突键随主键带上 origin，同码显式拒绝不再改写挂起行。
+    private void upsertOverrides(String userId, List<String> permissionCodes, Effect effect, String origin, String reason, String createdBy) {
         for (String permissionCode : permissionCodes) {
             jdbcTemplate.update("""
-                    INSERT INTO user_permission_overrides (user_id, permission_code, effect, reason, created_at, created_by)
-                    VALUES (:user_id, :permission_code, :effect, :reason, now(), :created_by)
-                    ON CONFLICT (user_id, permission_code, effect)
+                    INSERT INTO user_permission_overrides (user_id, permission_code, effect, origin, reason, created_at, created_by)
+                    VALUES (:user_id, :permission_code, :effect, :origin, :reason, now(), :created_by)
+                    ON CONFLICT (user_id, permission_code, effect, origin)
                     DO UPDATE SET reason = EXCLUDED.reason, created_at = EXCLUDED.created_at, created_by = EXCLUDED.created_by
                     """, new MapSqlParameterSource()
                     .addValue("user_id", userId)
                     .addValue("permission_code", permissionCode)
                     .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                    .addValue("origin", origin)
                     .addValue("reason", reason)
                     .addValue("created_by", createdBy));
         }
@@ -1079,6 +1174,45 @@ class JdbcAccessRepository implements AccessRepository {
                 """, new MapSqlParameterSource()
                 .addValue("user_id", userId)
                 .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                .addValue("permission_codes", permissionCodes));
+    }
+
+    @Override
+    @Transactional
+    public int deleteHighRiskHolds(String userId, List<String> permissionCodes) {
+        return deleteOverridesByOrigin(userId, permissionCodes, Effect.DENY, "position_hold");
+    }
+
+    @Override
+    @Transactional
+    public int deleteExplicitDenies(String userId, List<String> permissionCodes) {
+        return deleteOverridesByOrigin(userId, permissionCodes, Effect.DENY, "explicit");
+    }
+
+    @Override
+    public List<ExplicitDenyRow> findExplicitDenies(String userId, List<String> permissionCodes) {
+        return jdbcTemplate.query("""
+                SELECT permission_code, reason, created_by, created_at
+                  FROM user_permission_overrides
+                 WHERE user_id = :user_id AND effect = 'deny' AND origin = 'explicit'
+                   AND permission_code IN (:permission_codes)
+                 ORDER BY permission_code
+                """, new MapSqlParameterSource().addValue("user_id", userId).addValue("permission_codes", permissionCodes),
+                (rs, row) -> new ExplicitDenyRow(rs.getString("permission_code"), rs.getString("reason"),
+                        rs.getString("created_by"), nullableInstant(rs, "created_at")));
+    }
+
+    private int deleteOverridesByOrigin(String userId, List<String> permissionCodes, Effect effect, String origin) {
+        return jdbcTemplate.update("""
+                DELETE FROM user_permission_overrides
+                 WHERE user_id = :user_id
+                   AND effect = :effect
+                   AND origin = :origin
+                   AND permission_code IN (:permission_codes)
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("effect", effect.name().toLowerCase(java.util.Locale.ROOT))
+                .addValue("origin", origin)
                 .addValue("permission_codes", permissionCodes));
     }
 

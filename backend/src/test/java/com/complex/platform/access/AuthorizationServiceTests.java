@@ -387,6 +387,77 @@ class AuthorizationServiceTests {
         assertThat(service.effectivePermissions().grants()).doesNotContain("ops.production_readiness.manage");
     }
 
+    // M002-F33（依据：治理地图第 655 行「最终权限 = 角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝；显式拒绝优先级最高」；以下为技术推导）：
+    // 岗位高危挂起只压住岗位派生来源（岗位派生角色、岗位派生模板套用）；员工单独授予、直接角色（含与岗位角色相同但另行直接绑定的）、
+    // 非岗位模板套用、临时授权照常生效；员工显式拒绝压过全部来源。requirePermission 与有效权限查询两条路径结论一致。
+    @Test
+    void positionHoldSuppressesOnlyPositionDerivedGrants() {
+        String code = "ops.production_readiness.manage";
+        repository.addKnownPermission(code);
+        java.util.Map<String, Boolean> expected = new java.util.LinkedHashMap<>();
+        java.util.function.BiFunction<String, AccessRepository.Source, AccessRepository.PermissionEffect> grant = (user, source) ->
+                new AccessRepository.PermissionEffect(user, code, AccessRepository.Effect.GRANT, source,
+                        source == AccessRepository.Source.ROLE ? "role_pos" : source == AccessRepository.Source.TEMPLATE_APPLICATION
+                                ? "pta_pos" : source.name().toLowerCase(), null, null, false, false);
+        java.util.function.BiFunction<String, AccessRepository.Source, AccessRepository.PermissionEffect> deny = (user, source) ->
+                new AccessRepository.PermissionEffect(user, code, AccessRepository.Effect.DENY, source, user + ":" + source, null, null, false, false);
+
+        repository.addEffect(deny.apply("usr_hold_role", AccessRepository.Source.POSITION_HOLD));
+        repository.addEffect(grant.apply("usr_hold_role", AccessRepository.Source.ROLE));
+        repository.positionRoles.put("usr_hold_role", "role_pos");
+        expected.put("usr_hold_role", false);
+
+        repository.addEffect(deny.apply("usr_hold_template", AccessRepository.Source.POSITION_HOLD));
+        repository.addEffect(grant.apply("usr_hold_template", AccessRepository.Source.TEMPLATE_APPLICATION));
+        repository.positionApplications.put("usr_hold_template", List.of("pta_pos"));
+        expected.put("usr_hold_template", false);
+
+        repository.addEffect(deny.apply("usr_hold_override", AccessRepository.Source.POSITION_HOLD));
+        repository.addEffect(grant.apply("usr_hold_override", AccessRepository.Source.ROLE));
+        repository.addEffect(grant.apply("usr_hold_override", AccessRepository.Source.USER_OVERRIDE));
+        repository.positionRoles.put("usr_hold_override", "role_pos");
+        expected.put("usr_hold_override", true);
+
+        repository.addEffect(deny.apply("usr_hold_direct", AccessRepository.Source.POSITION_HOLD));
+        repository.addEffect(grant.apply("usr_hold_direct", AccessRepository.Source.ROLE));
+        repository.positionRoles.put("usr_hold_direct", "role_pos");
+        repository.directRoles.put("usr_hold_direct", List.of("role_pos"));
+        expected.put("usr_hold_direct", true);
+
+        repository.addEffect(deny.apply("usr_hold_other_role", AccessRepository.Source.POSITION_HOLD));
+        repository.addEffect(grant.apply("usr_hold_other_role", AccessRepository.Source.ROLE));
+        repository.positionRoles.put("usr_hold_other_role", "role_other");
+        expected.put("usr_hold_other_role", true);
+
+        repository.addEffect(deny.apply("usr_hold_temp", AccessRepository.Source.POSITION_HOLD));
+        repository.addEffect(grant.apply("usr_hold_temp", AccessRepository.Source.TEMPORARY_GRANT));
+        expected.put("usr_hold_temp", true);
+
+        repository.addEffect(deny.apply("usr_hold_other_template", AccessRepository.Source.POSITION_HOLD));
+        repository.addEffect(grant.apply("usr_hold_other_template", AccessRepository.Source.TEMPLATE_APPLICATION));
+        repository.positionApplications.put("usr_hold_other_template", List.of("pta_elsewhere"));
+        expected.put("usr_hold_other_template", true);
+
+        repository.addEffect(deny.apply("usr_explicit", AccessRepository.Source.USER_OVERRIDE));
+        repository.addEffect(grant.apply("usr_explicit", AccessRepository.Source.TEMPORARY_GRANT));
+        repository.addEffect(grant.apply("usr_explicit", AccessRepository.Source.ROLE));
+        expected.put("usr_explicit", false);
+
+        expected.forEach((user, allowed) -> {
+            authenticate(user, user, "staff");
+            assertThat(service.effectivePermissions().grants().contains(code)).as(user + " 有效权限查询").isEqualTo(allowed);
+            assertThat(service.effectivePermissions().denies().contains(code)).as(user + " 拒绝列表").isEqualTo(!allowed);
+            boolean passed;
+            try {
+                service.requirePermission(code);
+                passed = true;
+            } catch (ApiException denied) {
+                passed = false;
+            }
+            assertThat(passed).as(user + " requirePermission").isEqualTo(allowed);
+        });
+    }
+
     private AccessRepository.PermissionEffect effect(
             String userId,
             String permissionCode,
@@ -464,6 +535,28 @@ class AuthorizationServiceTests {
 
         void addEffect(PermissionEffect effect) {
             effects.add(effect);
+        }
+
+        // M002-F33：岗位派生角色、岗位派生套用与直接绑定角色（与 JdbcAccessRepository 同语义）
+        final java.util.Map<String, String> positionRoles = new java.util.LinkedHashMap<>();
+        final java.util.Map<String, List<String>> positionApplications = new java.util.LinkedHashMap<>();
+        final java.util.Map<String, List<String>> directRoles = new java.util.LinkedHashMap<>();
+
+        @Override
+        public java.util.Optional<String> findAssignedPositionRoleId(String userId) {
+            return java.util.Optional.ofNullable(positionRoles.get(userId));
+        }
+
+        @Override
+        public List<PermissionTemplateApplication> findPositionApplications(String userId) {
+            return positionApplications.getOrDefault(userId, List.of()).stream()
+                    .map(id -> new PermissionTemplateApplication(id, "tpl_position", "user", userId, null, null, false, false, "active",
+                            "seed", Instant.parse("2026-06-14T00:00:00Z"), null, null)).toList();
+        }
+
+        @Override
+        public List<String> findUserRoleIds(String userId) {
+            return directRoles.getOrDefault(userId, List.of());
         }
 
         @Override

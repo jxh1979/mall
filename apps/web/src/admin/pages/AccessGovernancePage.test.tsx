@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccessGovernancePage } from "./AccessGovernancePage";
+import AdminApp from "../AdminApp";
 import { AdminApi } from "../client/adminClient";
-import type { AdminPageProps, EffectivePermissionsState } from "../types";
+import type { AdminPageProps, AdminUser, EffectivePermissions, EffectivePermissionsState } from "../types";
 
 const USERS = [{ id: "u-1", username: "张三", account_type: "staff", status: "active" }];
 const ROLES = [{ id: "role-1", role_name: "运营经理", role_code: "ops", status: "active" }];
@@ -192,6 +193,9 @@ describe("M038 访问治理页回归", () => {
     { id: "gr-a", request_type: "user_scope_change", target_user_id: "u-1", status: "applied" },
     { id: "gr-b", request_type: "position_high_risk_release", target_user_id: "u-1", status: "pending" },
     { id: "gr-c", request_type: "role_permission", target_user_id: "u-1", status: "rejected" },
+    // M002-F01：员工单独授予 / 解除员工显式拒绝两类申请同样中文上屏。
+    { id: "gr-d", request_type: "user_permission_grant", target_user_id: "u-1", status: "pending" },
+    { id: "gr-e", request_type: "user_permission_deny_removal", target_user_id: "u-1", status: "applied" },
   ];
   const M038_TEMPLATES = [
     { id: "prt-x", position_code: "front_desk", staff_level_id: "lvl_m2_upper", role_id: "role-1", status: "active" },
@@ -231,8 +235,8 @@ describe("M038 访问治理页回归", () => {
     renderM038(() => Promise.resolve(raw({})));
     await waitFor(() => expect(screen.getByTestId("access-grant-request-gr-a")).toBeTruthy());
     const text = screen.getByTestId("access-grant-requests-table").textContent ?? "";
-    for (const label of ["已生效", "待处理", "已驳回", "人员范围变更", "岗位高危权限释放", "角色权限"]) expect(text).toContain(label);
-    for (const code of ["applied", "user_scope_change", "position_high_risk_release", "role_permission"]) expect(text).not.toContain(code);
+    for (const label of ["已生效", "待处理", "已驳回", "人员范围变更", "岗位高危权限释放", "角色权限", "员工单独授予", "解除员工显式拒绝"]) expect(text).toContain(label);
+    for (const code of ["applied", "user_scope_change", "position_high_risk_release", "role_permission", "user_permission_grant", "user_permission_deny_removal"]) expect(text).not.toContain(code);
     fireEvent.click(screen.getByTestId("access-grant-request-gr-a"));
     const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
     expect(drawer).toContain("人员范围变更");
@@ -324,5 +328,145 @@ describe("M038 访问治理页回归", () => {
     fireEvent.click(screen.getByTestId("access-position-role-template-create-open")); // 引导弹窗为单页填写，状态下拉就在第一页
     const status = await waitFor(() => screen.getByTestId("access-position-role-template-status") as HTMLSelectElement);
     expect(Array.from(status.options).map((option) => option.textContent)).toEqual(["有效", "未激活"]);
+  });
+});
+
+// M002-F34 第（二）部分（依据 M002-F08 裁决「本人可以直接解除，不会卡死」；操作员 2026-09-30「最高权限本人给自己设拒绝后界面卡住的情况,这是不允许的。」）：
+// 最高权限本人给自己设了显式拒绝后，仍能从导航与直链进访问治理工作台、选中自己、点「移除」解除；其余门禁不变。
+describe("M002-F34 最高权限本人自设拒绝后界面不卡死", () => {
+  const MASTER: AdminUser = { id: "usr_master_authority", username: "master-authority", accountType: "master_authority" };
+  const PLATFORM_ADMIN: AdminUser = { id: "u1", username: "admin", accountType: "platform_admin" };
+  const STAFF: AdminUser = { id: "u-1", username: "张三", accountType: "staff" };
+  const F34_USERS = [
+    { id: "u-1", username: "张三", account_type: "staff", status: "active" },
+    { id: "u1", username: "admin", account_type: "platform_admin", status: "active" },
+  ];
+  const DENY_CASES: string[][] = [["access.role.assign"], ["access.role.assign", "access.user.view"]];
+  // 与后端有效集同形：wildcard=false，grants 已扣掉 denies。
+  const GRANTS = ["access.role.assign", "access.user.view", "access.role.view", "access.grant_request.view", "access.grant_request.apply"];
+  function perms(denies: string[]): EffectivePermissionsState {
+    return { status: "ready", value: { grants: GRANTS.filter((code) => !denies.includes(code)), denies, wildcard: false } };
+  }
+  // 与后端读接口门禁同口径：缺码即 403。
+  const READ_CODES: Array<[string, string]> = [
+    ["position-role-templates", "access.role.assign"], ["access/users", "access.user.view"],
+    ["access/roles", "access.role.view"], ["grant-requests", "access.grant_request.view"],
+  ];
+  type Write = { url: string; body: Record<string, unknown> };
+
+  function stubBackend(state: EffectivePermissionsState): Write[] {
+    const writes: Write[] = [];
+    const value: EffectivePermissions = state.status === "ready" ? state.value : { grants: [], denies: [], wildcard: false };
+    const readable = (code: string) => value.grants.includes(code) && !value.denies.includes(code);
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET").toUpperCase() !== "GET") {
+        writes.push({ url, body: init?.body ? JSON.parse(String(init.body)) : {} });
+        return Promise.resolve(raw({}));
+      }
+      if (url.includes("effective-permissions")) return Promise.resolve(raw(value));
+      if (url.includes("capability-switches")) return Promise.resolve(raw([]));
+      for (const [fragment, code] of READ_CODES) {
+        if (url.includes(fragment) && !readable(code)) {
+          return Promise.resolve(new Response(JSON.stringify({ success: false, code: "PERMISSION_DENIED", message: "权限不足" }), { status: 403, headers: { "content-type": "application/json" } }));
+        }
+      }
+      if (url.includes("grant-requests/summary")) return Promise.resolve(raw(SUMMARY));
+      if (url.includes("grant-requests")) return Promise.resolve(envelope([]));
+      if (url.includes("position-role-templates")) return Promise.resolve(envelope(TEMPLATES));
+      if (url.includes("access/roles")) return Promise.resolve(envelope(ROLES));
+      if (url.includes("access/users")) return Promise.resolve(envelope(F34_USERS));
+      return Promise.resolve(envelope([]));
+    }));
+    return writes;
+  }
+
+  function renderPageAs(user: AdminUser, state: EffectivePermissionsState) {
+    const writes = stubBackend(state);
+    render(<AccessGovernancePage api={new AdminApi("test-token")} user={user} setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={state} />);
+    return writes;
+  }
+  function fillOverride(userId: string, effect: "deny" | "grant") {
+    fireEvent.change(screen.getByLabelText("覆盖用户"), { target: { value: userId } });
+    fireEvent.change(screen.getByLabelText("覆盖权限码"), { target: { value: "access.role.assign" } });
+    fireEvent.change(screen.getByLabelText("覆盖效果"), { target: { value: effect } });
+  }
+  const button = (testId: string) => screen.getByTestId(testId) as HTMLButtonElement;
+  const overrideForm = () => waitFor(() => expect(screen.getByTestId("access-user-override-form")).toBeTruthy());
+
+  function renderAppAs(user: AdminUser, state: EffectivePermissionsState, path: string) {
+    window.localStorage.setItem("admin.session.v1", JSON.stringify({ user, sessionId: "s-f34" }));
+    window.history.pushState({}, "", path);
+    stubBackend(state);
+    render(<AdminApp />);
+  }
+
+  // 主壳懒加载页面：等待上限 3 秒（低于用例默认 5 秒），找不到时以「找不到元素」断言失败而非用例超时。
+  beforeEach(() => {
+    // jsdom 的元素没有 scrollTo；主壳换页时会调用。
+    if (typeof HTMLElement.prototype.scrollTo !== "function") HTMLElement.prototype.scrollTo = () => undefined;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+    window.history.pushState({}, "", "/");
+  });
+
+  it.each(DENY_CASES)("最高权限拒绝了 %s 等：页内能选中本人，点「移除」发出解除请求，第二次也能发", async (...denies: string[]) => {
+    const writes = renderPageAs(MASTER, perms(denies));
+    await overrideForm();
+    expect(screen.queryByTestId("admin-error")).toBeNull();
+    fillOverride("usr_master_authority", "deny");
+    expect((screen.getByLabelText("覆盖用户") as HTMLSelectElement).value).toBe("usr_master_authority");
+    expect(button("access-user-override-remove").disabled).toBe(false);
+    expect(button("access-user-override-set").disabled).toBe(true); // 设置仍按分配角色权限
+    fireEvent.click(button("access-user-override-remove"));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]!.url).toContain("/api/v1/access/users/usr_master_authority/permission-overrides/remove");
+    expect(writes[0]!.body.effect).toBe("deny");
+    expect(writes[0]!.body.permission_codes).toEqual(["access.role.assign"]);
+    await waitFor(() => expect(button("access-user-override-remove").disabled).toBe(false));
+    fireEvent.click(button("access-user-override-remove"));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]!.url).toContain("/api/v1/access/users/usr_master_authority/permission-overrides/remove");
+  });
+
+  it("最高权限选他人或选单独授予时，「移除」仍按分配角色权限判定", async () => {
+    renderPageAs(MASTER, perms(["access.role.assign"]));
+    await overrideForm();
+    fillOverride("u-1", "deny");
+    expect(button("access-user-override-remove").disabled).toBe(true);
+    fillOverride("usr_master_authority", "grant");
+    expect(button("access-user-override-remove").disabled).toBe(true);
+  });
+
+  it.each([PLATFORM_ADMIN, STAFF])("$username（$accountType）拒绝了分配角色权限：页内「移除」本人拒绝仍不可用", async (user: AdminUser) => {
+    renderPageAs(user, perms(["access.role.assign"]));
+    await overrideForm();
+    fillOverride(user.id, "deny");
+    expect((screen.getByLabelText("覆盖用户") as HTMLSelectElement).value).toBe(user.id);
+    expect(button("access-user-override-remove").disabled).toBe(true);
+  });
+
+  it.each(DENY_CASES)("最高权限拒绝了 %s 等：直链进访问治理工作台，导航项可点", async (...denies: string[]) => {
+    renderAppAs(MASTER, perms(denies), "/admin/access/governance");
+    expect(await screen.findByTestId("access-governance-page", {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByTestId("admin-permission-denied")).toBeNull();
+    expect(button("admin-nav-ADM-ACC-003").disabled).toBe(false);
+  });
+
+  it("最高权限拒绝了分配角色权限：从别的页点导航进访问治理工作台（同码的组织层级页仍拒）", async () => {
+    renderAppAs(MASTER, perms(["access.role.assign", "access.user.view"]), "/admin/access/org-hierarchy");
+    expect(await screen.findByTestId("admin-permission-denied")).toBeTruthy();
+    expect(button("admin-nav-ADM-ACC-004").disabled).toBe(true);
+    fireEvent.click(button("admin-nav-ADM-ACC-003"));
+    expect(await screen.findByTestId("access-governance-page", {}, { timeout: 3000 })).toBeTruthy();
+  });
+
+  it.each([PLATFORM_ADMIN, STAFF])("$username（$accountType）拒绝了分配角色权限：工作台直链与导航仍不可用", async (user: AdminUser) => {
+    renderAppAs(user, perms(["access.role.assign"]), "/admin/access/governance");
+    expect(await screen.findByTestId("admin-permission-denied")).toBeTruthy();
+    expect(screen.queryByTestId("access-governance-page")).toBeNull();
+    expect(button("admin-nav-ADM-ACC-003").disabled).toBe(true);
   });
 });

@@ -52,12 +52,23 @@ public class SupervisorReviewController {
             @PathVariable("review_id") String reviewId,
             @RequestBody @jakarta.validation.Valid SupervisorReviewApprovalRequest request
     ) {
-        authorizationService.requirePermission("governance.supervisor_review.approve");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        // M002-F40：保持原有拒绝顺序——不持主管复核审批权限者在读复核单之前即拒（PERMISSION_DENIED），不暴露复核单是否存在 / 是否在范围内；
+        // 这里只做不消耗来源的判定，真正的核验与单次来源消耗在下方按复核单类别一次完成。
+        if (!authorizationService.currentActorHasPermission("governance.supervisor_review.approve")) {
+            authorizationService.requirePermission("governance.supervisor_review.approve"); // 无此权限：照原顺序在读复核单之前拒绝，不消耗任何来源
+        }
         // M087-I5-01（PGM-1.10.1「审批通过后方可生效」、PGM-1.7.1「任一节点驳回则整单退回起草人」）：授权申请类复核单的节点裁决一律汇入
         // AccessService.reviewGrant——同一事务内推进节点、归约整单终态、落地或驳回授权申请；审批链页与授权申请页不再分叉。
         Optional<SupervisorReviewDecisionRecord> grantReview = service.findReview(reviewId)
                 .filter(review -> GRANT_REQUEST_OBJECT_TYPE.equals(review.objectType()) && "pending_review".equals(review.reviewStatus()));
+        if (grantReview.isPresent()) {
+            // M002-F40（治理地图第 655 行「显式拒绝优先级最高」，R-001「显式拒绝仍优先」）：授权申请的审批与授权申请页（AccessController.reviewGrant）
+            // 同一门禁——两码一次核验，显式拒绝压过全部来源（含最高权限会话），同一单次来源只消耗一次。
+            authorizationService.requirePermissions("access.grant_request.review", "governance.supervisor_review.approve");
+        } else {
+            authorizationService.requirePermission("governance.supervisor_review.approve");
+        }
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         if (grantReview.isPresent()) {
             String decision = request.decision() == null ? "" : request.decision().trim().toLowerCase(Locale.ROOT);
             accessService.reviewGrant(grantReview.get().objectId(), new AccessGrantReviewRequest(

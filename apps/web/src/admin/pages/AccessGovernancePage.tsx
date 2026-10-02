@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -65,7 +65,14 @@ const GRANT_STATUS_LABELS: Record<string, string> = { pending: "待处理", appl
 const GRANT_TYPE_LABELS: Record<string, string> = {
   user_role: "用户角色", user_position: "用户职位", temporary_permission: "临时权限",
   role_permission: "角色权限", user_scope_change: "人员范围变更", position_high_risk_release: "岗位高危权限释放",
+  user_permission_grant: "员工单独授予", user_permission_deny_removal: "解除员工显式拒绝",
 };
+// M002-F01：员工单独授予 / 解除员工显式拒绝两类申请只填权限码（不填过期时间、不带单次有效）。
+// M002-F20：岗位高危权限释放（释放单被驳回后对同一挂起再次发起）同样只填权限码。
+const OVERRIDE_GRANT_TYPES = ["user_permission_grant", "user_permission_deny_removal", "position_high_risk_release"];
+function grantNeedsCodes(requestType: string): boolean {
+  return requestType === "temporary_permission" || OVERRIDE_GRANT_TYPES.includes(requestType);
+}
 function grantStatusLabel(code?: string | null): string {
   return code ? GRANT_STATUS_LABELS[code] ?? formatBusinessStatus(code) : "—";
 }
@@ -164,16 +171,21 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
 
   // 无权限副资源不请求（根因修）：授权列表/概要卡需 access.grant_request.view、用户清单需 access.user.view、角色清单需 access.role.view，
   // 本页 gate 仅 access.role.assign 不含这三码——缺权限裸 await 会 403 reject 整个 Promise.all 致整页报错，故一并门控
-  //（position-role-templates 与页面同码 access.role.assign，保持裸调用）。
+  //（position-role-templates 与页面同码 access.role.assign，按 canRoleAssign 门控，见下方 M002-F34 说明）。
   const canGrantView = hasPermissions(effectivePermissions, ["access.grant_request.view"]);
   const canUserView = hasPermissions(effectivePermissions, ["access.user.view"]);
   const canRoleView = hasPermissions(effectivePermissions, ["access.role.view"]);
+  // M002-F37（治理地图第 651 行）：员工单独授予、解除员工显式拒绝、岗位模板高危权限释放三类申请只能由具备分配/取消分配角色权限的人发起。
+  const canRoleAssign = hasPermissions(effectivePermissions, ASSIGN);
+  // M002-F34（依据 M002-F08 裁决「本人可以直接解除，不会卡死」）：最高权限本人拒绝了自己的 access.role.assign 时仍能进本页，
+  // 同码的 position-role-templates 此时会 403，一并按 canRoleAssign 门控，免得整页报错、盖住解除入口。
+  const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const { loading, error, reload } = useAdminResource(
     async () => {
       const [userRows, roleRows, templateRows, requestRows, grantSummary] = await Promise.all([
         canUserView ? api.get<AccessUserRow[]>("/api/v1/access/users") : Promise.resolve([] as AccessUserRow[]),
         canRoleView ? api.get<RoleRow[]>("/api/v1/access/roles") : Promise.resolve([] as RoleRow[]),
-        api.get<PositionRoleTemplateRow[]>(`/api/v1/access/position-role-templates?include_archived=${includeArchivedTemplates}`),
+        canRoleAssign ? api.get<PositionRoleTemplateRow[]>(`/api/v1/access/position-role-templates?include_archived=${includeArchivedTemplates}`) : Promise.resolve([] as PositionRoleTemplateRow[]),
         canGrantView ? api.getPaged<AccessGrantRequestRow>(`/api/v1/access/grant-requests?page=${grantPage}`) : Promise.resolve({ items: [] as AccessGrantRequestRow[], total: 0, page: 1, size: 50 }),
         // 智能总结=纯统计副资源（GRANT_VIEW 权限，无权账号可能 403）：单独降级，不拖垮角色装配/审批主流程。
         loadSecondaryIfPermitted(canGrantView, () => api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary"), null as AccessGrantSummary | null),
@@ -382,6 +394,13 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
 
   const GRANT_USER_REQUIRED = "授权申请需填写目标用户";
   const GRANT_TEMP_REQUIRED = "临时高危授权需填写权限码和过期时间";
+  const GRANT_CODES_REQUIRED = "员工单独授予、解除显式拒绝与岗位高危权限释放需填写权限码";
+  // M002-F01：临时权限要权限码与过期时间；员工单独授予 / 解除显式拒绝只要权限码。
+  function grantDetailError(): string | null {
+    if (grantForm.requestType === "temporary_permission" && (!grantForm.permissionCodes.trim() || !grantForm.expiresAt)) return GRANT_TEMP_REQUIRED;
+    if (OVERRIDE_GRANT_TYPES.includes(grantForm.requestType) && !splitTokens(grantForm.permissionCodes).length) return GRANT_CODES_REQUIRED;
+    return null;
+  }
 
   // 提交在确认步触发；校验失败/接口失败弹窗留开显错（grantError），成功才关。原接口/请求体/双保险校验保留。
   async function applyGrantRequest() {
@@ -389,8 +408,9 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       setGrantError(GRANT_USER_REQUIRED);
       return;
     }
-    if (grantForm.requestType === "temporary_permission" && (!grantForm.permissionCodes.trim() || !grantForm.expiresAt)) {
-      setGrantError(GRANT_TEMP_REQUIRED);
+    const detailError = grantDetailError();
+    if (detailError) {
+      setGrantError(detailError);
       return;
     }
     setGrantError("");
@@ -403,7 +423,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
         roleId: grantForm.requestType === "user_role" ? grantForm.roleId.trim() || undefined : undefined,
         positionCode: grantForm.requestType === "user_position" ? grantForm.positionCode.trim() : undefined,
         staffLevelId: grantForm.requestType === "user_position" ? grantForm.staffLevelId.trim() : undefined,
-        permissionCodes: grantForm.requestType === "temporary_permission" ? splitTokens(grantForm.permissionCodes) : undefined,
+        permissionCodes: grantNeedsCodes(grantForm.requestType) ? splitTokens(grantForm.permissionCodes) : undefined,
         expiresAt: grantForm.requestType === "temporary_permission" ? toIso(grantForm.expiresAt) : undefined,
         singleUse: grantForm.requestType === "temporary_permission" ? grantForm.singleUse : undefined,
         reason: grantForm.reason.trim() || "后台高危授权申请",
@@ -575,7 +595,8 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
 
         <h3>员工单独授予 / 显式拒绝</h3>
         <div className="admin-inline-form" data-testid="access-user-override-form">
-          <select aria-label="覆盖用户" value={overrideForm.userId} onChange={(event) => setOverrideForm({ ...overrideForm, userId: event.target.value })}><option value="">请选择用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
+          {/* M002-F34：最高权限本人总能选中自己（拒绝了 access.user.view 时用户清单为空）。 */}
+          <select aria-label="覆盖用户" value={overrideForm.userId} onChange={(event) => setOverrideForm({ ...overrideForm, userId: event.target.value })}><option value="">请选择用户</option>{(isMaster && !users.some((row) => row.id === user.id) ? [...users, { id: user.id, username: user.username, accountType: user.accountType }] : users).map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
           <input aria-label="覆盖权限码" placeholder="权限码，逗号分隔" value={overrideForm.permissionCodes} onChange={(event) => setOverrideForm({ ...overrideForm, permissionCodes: event.target.value })} />
           <select aria-label="覆盖效果" value={overrideForm.effect} onChange={(event) => setOverrideForm({ ...overrideForm, effect: event.target.value })}>
             <option value="deny">显式拒绝</option>
@@ -583,7 +604,8 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           </select>
           <input aria-label="覆盖理由" placeholder="理由" value={overrideForm.reason} onChange={(event) => setOverrideForm({ ...overrideForm, reason: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-set" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("set"), "员工级覆盖设置失败")}>设置</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-override-remove" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("remove"), "员工级覆盖移除失败")}>移除</PermissionButton>
+          {/* M002-F34：最高权限本人解除自己的显式拒绝不看 access.role.assign（与后端 M002-F09 门禁同口径）；选他人或单独授予仍按 ASSIGN。 */}
+          <PermissionButton permissionsState={effectivePermissions} permissions={isMaster && overrideForm.userId === user.id && overrideForm.effect === "deny" ? [] : ASSIGN} data-testid="access-user-override-remove" disabled={writeBusy} onClick={() => void runWrite(() => userPermissionOverride("remove"), "员工级覆盖移除失败")}>移除</PermissionButton>
         </div>
 
           </>) },
@@ -726,7 +748,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
         steps={[
           {
             title: "类型与对象",
-            description: "选择申请类型与目标用户；临时权限走高危审批流。",
+            description: "选择申请类型与目标用户；临时权限、员工单独授予、解除员工显式拒绝、岗位高危权限释放都走审批流。",
             validate: () => (grantForm.targetUserId.trim() ? null : GRANT_USER_REQUIRED),
             content: (
               <>
@@ -735,6 +757,11 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
                     <option value="temporary_permission">临时权限</option>
                     <option value="user_role">用户角色</option>
                     <option value="user_position">用户职位</option>
+                    {canRoleAssign ? <>
+                      <option value="user_permission_grant">员工单独授予</option>
+                      <option value="user_permission_deny_removal">解除员工显式拒绝</option>
+                      <option value="position_high_risk_release">岗位高危权限释放</option>
+                    </> : null}
                   </select>
                 </label>
                 <label>目标用户<select aria-label="目标用户" value={grantForm.targetUserId} onChange={(event) => setGrantForm({ ...grantForm, targetUserId: event.target.value })}><option value="">请选择目标用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select></label>
@@ -743,17 +770,14 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           },
           {
             title: "授权明细",
-            description: "按申请类型填写：用户角色填角色；用户职位填岗位/职级；临时权限填权限码与过期时间（必填）。",
-            validate: () => {
-              if (grantForm.requestType === "temporary_permission" && (!grantForm.permissionCodes.trim() || !grantForm.expiresAt)) return GRANT_TEMP_REQUIRED;
-              return null;
-            },
+            description: "按申请类型填写：用户角色填角色；用户职位填岗位/职级；临时权限填权限码与过期时间（必填）；员工单独授予、解除员工显式拒绝填权限码（必填，只收须审批的权限）；岗位高危权限释放填该员工仍挂起、没有待审释放申请的权限码（释放申请被驳回后再次发起）。",
+            validate: grantDetailError,
             content: (
               <>
                 <label>申请角色<select aria-label="申请角色" value={grantForm.roleId} onChange={(event) => setGrantForm({ ...grantForm, roleId: event.target.value })}>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
                 <label>申请岗位<input aria-label="申请岗位" placeholder="岗位编码" value={grantForm.positionCode} onChange={(event) => setGrantForm({ ...grantForm, positionCode: event.target.value })} /></label>
                 <label>申请职级<select aria-label="申请职级" value={grantForm.staffLevelId} onChange={(event) => setGrantForm({ ...grantForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select></label>
-                <label>临时权限码<input aria-label="临时权限码" placeholder="权限码，逗号分隔" value={grantForm.permissionCodes} onChange={(event) => setGrantForm({ ...grantForm, permissionCodes: event.target.value })} /></label>
+                <label>{grantForm.requestType === "temporary_permission" ? "临时权限码" : "权限码"}<input aria-label={grantForm.requestType === "temporary_permission" ? "临时权限码" : "权限码"} placeholder="权限码，逗号分隔" value={grantForm.permissionCodes} onChange={(event) => setGrantForm({ ...grantForm, permissionCodes: event.target.value })} /></label>
                 <label>过期时间<input aria-label="过期时间" type="datetime-local" value={grantForm.expiresAt} onChange={(event) => setGrantForm({ ...grantForm, expiresAt: event.target.value })} /></label>
                 <label><input type="checkbox" checked={grantForm.singleUse} onChange={(event) => setGrantForm({ ...grantForm, singleUse: event.target.checked })} />单次有效</label>
                 <label>申请原因<input aria-label="申请原因" placeholder="申请原因" value={grantForm.reason} onChange={(event) => setGrantForm({ ...grantForm, reason: event.target.value })} /></label>
@@ -766,7 +790,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           { label: "目标用户", value: grantForm.targetUserId.trim() || "未选择" },
           { label: "角色", value: grantForm.requestType === "user_role" ? (grantForm.roleId ? roleLabel(roles.find((r) => r.id === grantForm.roleId)) : "未选择") : "—" },
           { label: "岗位/职级", value: grantForm.requestType === "user_position" ? `${grantForm.positionCode.trim() || "—"} / ${grantForm.staffLevelId.trim() || "—"}` : "—" },
-          { label: "权限码", value: grantForm.requestType === "temporary_permission" ? (splitTokens(grantForm.permissionCodes).join("、") || "未填写") : "—" },
+          { label: "权限码", value: grantNeedsCodes(grantForm.requestType) ? (splitTokens(grantForm.permissionCodes).join("、") || "未填写") : "—" },
           { label: "过期时间", value: grantForm.requestType === "temporary_permission" ? (grantForm.expiresAt ? cnDate(grantForm.expiresAt) : "未填写") : "—" },
           { label: "单次有效", value: grantForm.requestType === "temporary_permission" ? (grantForm.singleUse ? "是" : "否") : "—" },
           { label: "申请原因", value: grantForm.reason.trim() || "后台高危授权申请" },

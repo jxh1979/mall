@@ -513,9 +513,16 @@ export default function AdminApp() {
   // 菜单按账号形态隐藏（用户裁决）：外包/商户专用页对不匹配形态不渲染、不导航。
   const accountForm = accountFormOf(user);
 
+  // M002-F34（依据 M002-F08 裁决「本人可以直接解除，不会卡死」）：最高权限本人给自己设了拒绝（含 access.role.assign）后，
+  // 导航与直链仍能进访问治理工作台去解除；页内只放行「移除本人显式拒绝」，其余路由门禁不变。
+  const isMasterSession = user?.id === "usr_master_authority" && user?.username === "master-authority";
+  function routePermissions(target: AdminRoute) {
+    return isMasterSession && target.pageId === "ADM-ACC-003" ? [] : target.requiredPermissions;
+  }
+
   function navigate(nextRoute: AdminRoute) {
     // onClick 级拦截：无权限项不导航（不止 aria-disabled）。
-    if (!hasPermissions(effectivePermissions, nextRoute.requiredPermissions)) {
+    if (!hasPermissions(effectivePermissions, routePermissions(nextRoute))) {
       return;
     }
     if (!routeAllowsAccountForm(nextRoute, accountForm)) {
@@ -544,7 +551,7 @@ export default function AdminApp() {
   // 全链下钻：按 pageId 找目标页，校验权限后带对象 id 跳转并定位（URL ?focus=）。
   function navigateTo(pageId: string, objectId?: string) {
     const target = adminRoutes.find((item) => item.pageId === pageId);
-    if (!target || !hasPermissions(effectivePermissions, target.requiredPermissions)) {
+    if (!target || !hasPermissions(effectivePermissions, routePermissions(target))) {
       return;
     }
     if (!routeAllowsAccountForm(target, accountForm)) {
@@ -653,7 +660,7 @@ export default function AdminApp() {
                 {collapsed ? null : (
                   <div className="admin-nav-group-items">
                     {group.routes.map((item) => {
-                      const allowed = hasPermissions(effectivePermissions, item.requiredPermissions);
+                      const allowed = hasPermissions(effectivePermissions, routePermissions(item));
                       return (
                         <button
                           type="button"
@@ -722,7 +729,7 @@ export default function AdminApp() {
             // 形态不匹配（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
             <div className="admin-denied" data-testid="admin-account-form-mismatch">{accountFormHint(route)}</div>
           ) : (
-          <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
+          <PermissionGate permissionsState={effectivePermissions} permissions={routePermissions(route)}>
             {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，
                 不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
                 chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}

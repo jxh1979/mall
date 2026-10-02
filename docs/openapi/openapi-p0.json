@@ -11132,7 +11132,7 @@
         ],
         "operationId": "approveSupervisorReview",
         "summary": "主管审批或驳回复核记录",
-        "description": "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。",
+        "description": "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。",
         "x-permission": "governance.supervisor_review.approve",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -26821,6 +26821,7 @@
         "x-audit-event-success": "access.grant_request.applied",
         "x-audit-event-failure": "access.grant_request.apply_failed",
         "x-auth-context": "staff-token",
+        "description": "request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign 一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人所属项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。",
         "requestBody": {
           "$ref": "#/components/requestBodies/AccessGrantApplyRequest"
         },
@@ -50265,7 +50266,10 @@
             "enum": [
               "user_role",
               "user_position",
-              "temporary_permission"
+              "temporary_permission",
+              "user_permission_grant",
+              "user_permission_deny_removal",
+              "position_high_risk_release"
             ]
           },
           "target_user_id": {
@@ -50308,7 +50312,7 @@
           },
           "permission_codes": {
             "type": "array",
-            "description": "临时权限码；temporary_permission 类型必填。",
+            "description": "权限码；temporary_permission、user_permission_grant、user_permission_deny_removal、position_high_risk_release 类型必填。",
             "items": {
               "type": "string",
               "description": "权限码。",

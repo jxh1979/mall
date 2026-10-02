@@ -354,6 +354,91 @@ class AccessControllerTests {
         Mockito.verify(service, Mockito.never()).reviewGrant(any(), any());
     }
 
+    // M002-F42（治理地图第 651、656 行；M002-F37）：三类申请（类型去首尾空白、不分大小写）持两码时，入口对申请权限与分配角色权限一次核验
+    // （同一单次来源只消耗一次），不再单独核验申请权限，随后进服务层。
+    @Test
+    void roleAssignInitiatedGrantRequestsVerifyApplyAndRoleAssignInOneCheck() throws Exception {
+        for (String type : List.of("user_permission_grant", "user_permission_deny_removal", "position_high_risk_release", "  User_Permission_GRANT ")) {
+            Mockito.reset(service, authorizationService);
+            when(authorizationService.currentActorHasPermission("access.grant_request.apply")).thenReturn(true);
+            when(authorizationService.currentActorHasPermission("access.role.assign")).thenReturn(true);
+
+            mockMvc.perform(post("/api/v1/access/grant-requests")
+                            .with(user("ops").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(m002F42ApplyJson("f42-both", type)))
+                    .andExpect(status().isOk());
+            Mockito.verify(authorizationService).requirePermissions("access.grant_request.apply", "access.role.assign");
+            Mockito.verify(authorizationService, Mockito.never()).requirePermission(Mockito.anyString());
+            Mockito.verify(service).applyGrant(any());
+        }
+    }
+
+    // M002-F42：三类申请持申请权限、不持（含显式拒绝）分配角色权限——403 PERMISSION_DENIED，提示语为 F37 原文；
+    // 不做会消耗来源的核验，不进服务层。
+    @Test
+    void roleAssignInitiatedGrantRequestWithoutRoleAssignIsRefusedBeforeAnySourceIsConsumed() throws Exception {
+        for (String type : List.of("user_permission_grant", "user_permission_deny_removal", "position_high_risk_release", " POSITION_HIGH_RISK_RELEASE")) {
+            Mockito.reset(service, authorizationService);
+            when(authorizationService.currentActorHasPermission("access.grant_request.apply")).thenReturn(true);
+
+            mockMvc.perform(post("/api/v1/access/grant-requests")
+                            .with(user("ops").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(m002F42ApplyJson("f42-no-assign", type)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
+                            "员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消分配角色权限的人发起")));
+            Mockito.verify(authorizationService, Mockito.never()).requirePermissions("access.grant_request.apply", "access.role.assign");
+            Mockito.verify(authorizationService, Mockito.never()).requirePermission(Mockito.anyString());
+            Mockito.verify(service, Mockito.never()).applyGrant(any());
+        }
+    }
+
+    // M002-F42：三类申请不持申请权限——照基线由 requirePermission(apply) 给出标准拒绝，不再判分配角色权限，不进服务层。
+    @Test
+    void roleAssignInitiatedGrantRequestWithoutApplyGetsTheStandardRefusal() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "没有操作权限：access.grant_request.apply"))
+                .when(authorizationService)
+                .requirePermission("access.grant_request.apply");
+
+        mockMvc.perform(post("/api/v1/access/grant-requests")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(m002F42ApplyJson("f42-no-apply", "user_permission_grant")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("没有操作权限")));
+        Mockito.verify(authorizationService, Mockito.never()).currentActorHasPermission("access.role.assign");
+        Mockito.verify(authorizationService, Mockito.never()).requirePermissions("access.grant_request.apply", "access.role.assign");
+        Mockito.verify(service, Mockito.never()).applyGrant(any());
+    }
+
+    // M002-F42：临时权限、角色、岗位申请不属三类，仍只核验申请权限，不判分配角色权限。
+    @Test
+    void otherGrantRequestTypesStillVerifyOnlyTheApplyPermission() throws Exception {
+        for (String type : List.of("temporary_permission", "user_role", "user_position")) {
+            Mockito.reset(service, authorizationService);
+
+            mockMvc.perform(post("/api/v1/access/grant-requests")
+                            .with(user("ops").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(m002F42ApplyJson("f42-other", type)))
+                    .andExpect(status().isOk());
+            Mockito.verify(authorizationService).requirePermission("access.grant_request.apply");
+            Mockito.verify(authorizationService, Mockito.never()).currentActorHasPermission(Mockito.anyString());
+            Mockito.verify(authorizationService, Mockito.never()).requirePermissions("access.grant_request.apply", "access.role.assign");
+            Mockito.verify(service).applyGrant(any());
+        }
+    }
+
+    private String m002F42ApplyJson(String key, String type) {
+        return """
+                {"idempotency_key": "%s", "request_type": "%s", "target_user_id": "usr_target", "permission_codes": ["ops.production_readiness.check"]}
+                """.formatted(key, type);
+    }
+
     // M035-002：职级与定岗端点以路径里的账号为准，请求体里的 user_id 不生效。
     @Test
     void staffLevelAndPositionEndpointsUseThePathUserIdNotTheBodyUserId() throws Exception {
