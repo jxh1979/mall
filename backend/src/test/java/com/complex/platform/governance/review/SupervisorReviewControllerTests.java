@@ -63,6 +63,8 @@ class SupervisorReviewControllerTests {
     @BeforeEach
     void resetMocks() {
         Mockito.reset(service, authorizationService, accessService);
+        // M002-F40：通用复核入口先做不消耗来源的主管复核审批预检；切片里默认当前主体持有，拒绝路径由 requirePermission(s) 的 doThrow 表达。
+        when(authorizationService.currentActorHasPermission("governance.supervisor_review.approve")).thenReturn(true);
     }
 
     @Test
@@ -194,6 +196,33 @@ class SupervisorReviewControllerTests {
         assertThat(captor.getValue().decision()).isEqualTo("approve");
         assertThat(captor.getValue().idempotencyKey()).isEqualTo("chain-approve-grant");
         verify(service, never()).approve(any(), any());
+        // M002-F40：与授权申请页同一门禁——两码一次核验（同一单次来源只消耗一次），不再单查主管复核审批。
+        verify(authorizationService).requirePermissions("access.grant_request.review", "governance.supervisor_review.approve");
+        verify(authorizationService, never()).requirePermission("governance.supervisor_review.approve");
+    }
+
+    // M002-F40（治理地图第 655 行「显式拒绝优先级最高」）：授权申请类待审复核单经通用入口审批，缺「审核高危授权申请」或被显式拒绝（两码核验抛出）即 403，
+    // 不进授权申请审批，也不落到通用复核。
+    @Test
+    void approveOnAGrantRequestReviewIsRefusedWithoutTheGrantReviewPermission() throws Exception {
+        SupervisorReviewDecisionRecord pending = new SupervisorReviewDecisionRecord("review_grant", "permission_grant_l1", "access.scope_change",
+                "access_grant_request", "agr_1", true, "pending_review", 1, null, null, "scope", List.of(),
+                Instant.parse("2026-06-16T00:00:00Z"), "usr_hr", "one_level_up", null);
+        when(service.findReview("review_grant")).thenReturn(java.util.Optional.of(pending));
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "没有操作权限：access.grant_request.review"))
+                .when(authorizationService)
+                .requirePermissions("access.grant_request.review", "governance.supervisor_review.approve");
+
+        mockMvc.perform(post("/api/v1/platform/supervisor-review/review_grant/approve")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "chain-approve-denied", "decision": "rejected", "comment": "no"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        verify(accessService, never()).reviewGrant(any(), any());
+        verify(service, never()).approve(any(), any());
     }
 
     @Test
@@ -235,6 +264,8 @@ class SupervisorReviewControllerTests {
                 .andExpect(jsonPath("$.data.reviewer_level").value(3));
 
         verify(authorizationService).requirePermission("governance.supervisor_review.approve");
+        // M002-F40：非授权申请类复核单仍只查主管复核审批
+        verify(authorizationService, never()).requirePermissions("access.grant_request.review", "governance.supervisor_review.approve");
     }
 
     // M007-A-02：待复核清单须 view 权限；转发须 approve 权限 + 幂等键。

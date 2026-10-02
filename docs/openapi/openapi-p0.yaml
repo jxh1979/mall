@@ -7994,7 +7994,7 @@ paths:
         - platform
       operationId: approveSupervisorReview
       summary: 主管审批或驳回复核记录
-      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。
+      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。
       x-permission: governance.supervisor_review.approve
       x-data-scope: project-entity
       x-terminal-allowed:

@@ -1518,8 +1518,9 @@ public class AccessService {
                         if (userId.isEmpty()) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "必须指定用户");
                         }
-                        AccessUser targetUser = repository.findUserById(userId)
-                                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在：" + userId));
+                        // M002-F41（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」，R-002）：与其他定岗写入口
+                        // 同一把员工行锁，先锁后读——下方岗位读取、分支与两种写入都在锁内，并发换岗或定岗提交后按锁内读到的当前岗位重算。
+                        AccessUser targetUser = lockTargetUser(userId);
                         requireSameOrganization(actor, targetUser);
                         if (repository.findStaffLevelById(request.staffLevelId()).isEmpty()) {
                             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",

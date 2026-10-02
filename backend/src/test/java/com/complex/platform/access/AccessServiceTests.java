@@ -56,6 +56,8 @@ class AccessServiceTests {
     private RecordingCredentialProvisioner credentialProvisioner;
     private AuthorizationService authorizationService;
     private AccessService service;
+    private static final String GRANT_REVIEW = "access.grant_request.review";
+    private static final String GRANT_REVIEWER_ROLE = "grant_reviewer";
 
     @BeforeEach
     void setUp() {
@@ -1057,6 +1059,60 @@ class AccessServiceTests {
         assertThat(authorizationService.effectivePermissionsForUser("usr_m002_level").grants()).doesNotContain(M002_CODE);
     }
 
+    // M002-F41（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」，R-002；确定性交错）：改职级先锁员工行再读岗位——
+    // 锁前另一笔换岗已提交（锁前钩子），改职级按锁内读到的新岗位重算：岗位编码不写回旧值，两表职级一致，派生角色对应新岗位与新职级。
+    @Test
+    void staffLevelChangeRederivesFromThePositionReadUnderTheTargetLock() {
+        String user = "usr_m002_f41_move";
+        m002F41Fixture(user);
+        service.assignUserPosition(new UserPositionAssignmentRequest("m002-f41-seat", null, user, "ops_f41_old", "lvl_m1_lower", null, null, null));
+        accessRepository.beforeNextUserLock = () -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-f41-move", null, user, "ops_f41_new", "lvl_m1_lower", null, null, null));
+
+        service.assignStaffLevel(new StaffLevelAssignmentRequest("m002-f41-level", null, user, "lvl_m10_upper", null, null, null));
+        m002F41ExpectSeated(user);
+    }
+
+    // M002-F41（确定性交错）：员工原本无岗位——锁前另一笔定岗已提交，改职级在锁内读到新岗位，走定岗同路径改到新职级：两表职级一致（不只写职级表）。
+    @Test
+    void staffLevelChangeOfAnUnseatedEmployeeSeesASeatCommittedBeforeItsLock() {
+        String user = "usr_m002_f41_seat";
+        m002F41Fixture(user);
+        accessRepository.beforeNextUserLock = () -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                "m002-f41-seat-race", null, user, "ops_f41_new", "lvl_m1_lower", null, null, null));
+
+        service.assignStaffLevel(new StaffLevelAssignmentRequest("m002-f41-unseated-level", null, user, "lvl_m10_upper", null, null, null));
+        m002F41ExpectSeated(user);
+    }
+
+    // M002-F41：岗位 ops_f41_old / ops_f41_new × 两档职级各一张映射（日常码 view 的模板，各映射自己的角色：派生角色即可看出员工挂在哪张映射上）。
+    private void m002F41Fixture(String user) {
+        accessRepository.users.put(user, new AccessUser(user, user, "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_view", "tpl_ops_view", "Ops View", null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem("tpl_ops_view", M002_VIEW, AccessRepository.Effect.GRANT, "project", false)));
+        for (String position : List.of("ops_f41_old", "ops_f41_new")) {
+            for (String level : List.of("lvl_m1_lower", "lvl_m10_upper")) {
+                String role = "role_" + position + "_" + level;
+                accessRepository.roles.put(role, new RoleRecord(role, role, role, "project", "active", Instant.parse("2026-06-14T00:00:00Z"),
+                        List.of(M002_VIEW), null));
+                service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                        "m002-f41-map-" + role, null, position, level, role, "tpl_ops_view", "active"));
+            }
+        }
+    }
+
+    private void m002F41ExpectSeated(String user) {
+        assertThat(accessRepository.beforeNextUserLock).as("改职级在读岗位前锁员工行（锁前钩子已执行）").isNull();
+        assertThat(accessRepository.userPositionAssignments.get(user)).isNotNull().satisfies(position -> {
+            assertThat(position.positionCode()).isEqualTo("ops_f41_new");
+            assertThat(position.staffLevelId()).isEqualTo("lvl_m10_upper");
+        });
+        assertThat(accessRepository.staffLevelAssignments.get(user).staffLevelId()).isEqualTo("lvl_m10_upper");
+        assertThat(accessRepository.positionRoles.get(user)).isEqualTo("role_ops_f41_new_lvl_m10_upper");
+    }
+
     // M002-F01：含须审批权限的员工单独授予——直接覆盖仍拒绝；走授权申请，获批前不写授予、不生效，获批后写员工单独授予并留痕（带申请 id）。
     @Test
     void highRiskUserPermissionGrantLandsOnlyAfterApproval() {
@@ -1103,6 +1159,124 @@ class AccessServiceTests {
                 "m002-review-reject", "reject", List.of(), "reject", "驳回")).status()).isEqualTo("rejected");
         assertThat(overrideSources("usr_m002_self", M002_CODE, AccessRepository.Effect.GRANT)).isEmpty();
         assertThat(authorizationService.effectivePermissionsForUser("usr_m002_self").grants()).doesNotContain(M002_CODE);
+    }
+
+    // M002-F40（治理地图第 655 行「显式拒绝优先级最高」，R-001「显式拒绝仍优先」）：授权申请的两个审批入口——授权申请页（AccessController.reviewGrant）
+    // 与通用主管复核入口（SupervisorReviewController.approve，授权申请类待审复核单）——同一门禁：两码一次核验。链上合法当前节点持两码却被显式拒绝
+    // 「审核高危授权申请」时，两入口的通过与驳回都 403 PERMISSION_DENIED，申请、复核节点、目标授权不变，拒绝行仍在；解除拒绝后非当前节点、受益人、
+    // 申请人仍被拒，当前节点经通用入口批准落地；同一幂等键经两入口重放都不重复落地。
+    @Test
+    void explicitlyDeniedGrantReviewerIsRefusedAtBothReviewEntriesUntilTheDenyIsLifted() {
+        String target = "usr_m002_f40";
+        m002HighRiskFixture(target, null, "lvl_m1_lower");
+        AccessGrantRequestRecord pending = service.applyGrant(m002Apply(
+                "m002-f40-apply", "user_permission_grant", target, List.of(M002_CODE)));
+        accessRepository.users.put("usr_admin", new AccessUser("usr_admin", "seed-admin", "platform_admin", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z"))); // 申请人账号：通用入口按发起人项目判定复核单可见（落地后回读终态）
+        m002F40Reviewers("usr_boss");
+        accessRepository.saveUserPermissionOverrides("usr_boss", List.of(GRANT_REVIEW), AccessRepository.Effect.DENY, "停审批授权申请", "usr_admin");
+        List<com.complex.platform.governance.chain.ApprovalChainNode> nodesBefore = m002Reviews.listChainNodes(pending.reviewId());
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        m002F40Refused(pending, "m002-f40-denied");
+        assertThat(m002Reviews.listChainNodes(pending.reviewId())).isEqualTo(nodesBefore);
+        assertThat(overrideSources(target, M002_CODE, AccessRepository.Effect.GRANT)).isEmpty();
+        assertThat(overrideSources("usr_boss", GRANT_REVIEW, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.USER_OVERRIDE);
+
+        accessRepository.deleteExplicitDenies("usr_boss", List.of(GRANT_REVIEW));
+        accessRepository.users.put("usr_m002_f40_other", new AccessUser(
+                "usr_m002_f40_other", "usr_m002_f40_other", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        m002F40Reviewers("usr_m002_f40_other", target, "usr_admin");
+        Map<Runnable, String> refused = new LinkedHashMap<>();
+        refused.put(() -> authenticateAsOrgUser("usr_m002_f40_other", "m002-f40-other", "seed-org"), "SUPERVISOR_NOT_CURRENT_APPROVER");
+        refused.put(() -> authenticateAsOrgUser(target, target, "seed-org"), "BENEFICIARY_SELF_REVIEW_FORBIDDEN");
+        refused.put(() -> authenticateAsPlatformAdmin("seed-org"), "SUPERVISOR_SELF_REVIEW_FORBIDDEN"); // 申请人 usr_admin
+        refused.forEach((login, code) -> {
+            login.run();
+            assertThatThrownBy(() -> new AccessController(service, authorizationService).reviewGrant(pending.id(), m002Approve("m002-f40-refused-" + code)))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo(code));
+        });
+        assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("pending");
+
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        for (int replay = 0; replay < 2; replay++) {
+            assertThat(m002ChainController().approve(pending.reviewId(), m002ChainDecision("m002-f40-approve", "approved")).data().reviewStatus())
+                    .isEqualTo("approved");
+        }
+        assertThat(new AccessController(service, authorizationService).reviewGrant(pending.id(),
+                new AccessGrantReviewRequest("m002-f40-approve", "M002", List.of(), "approve", "同意")).data().status()).isEqualTo("applied");
+        assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("applied");
+        assertThat(overrideSources(target, M002_CODE, AccessRepository.Effect.GRANT)).containsExactly(AccessRepository.Source.USER_OVERRIDE);
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "access.user_permission_override.set".equals(event.eventName())
+                        && pending.id().equals(event.metadata().get("grant_request_id")))
+                .hasSize(1);
+    }
+
+    // M002-F40：最高权限本人裁决末节点同样受显式拒绝约束——拒绝「审核高危授权申请」后两入口的通过与驳回都 403、末节点与申请不变；解除后经通用入口照常终审落地。
+    @Test
+    void explicitlyDeniedMasterAuthorityCannotFinalizeAGrantRequestUntilTheDenyIsLifted() {
+        String target = "usr_m002_f40_top";
+        m002HighRiskFixture(target, null, "lvl_m1_lower");
+        accessRepository.markRequiresApproval(M002_CODE, "critical");
+        m002F40Reviewers();
+        AccessGrantRequestRecord pending = service.applyGrant(m002Apply(
+                "m002-f40-top-apply", "user_permission_grant", target, List.of(M002_CODE)));
+        authenticateAsOrgUser("usr_boss", "boss", "seed-org");
+        assertThat(service.reviewGrant(pending.id(), m002Approve("m002-f40-top-boss")).status()).isEqualTo("pending");
+        accessRepository.saveUserPermissionOverrides(SessionIssuer.MASTER_USER_ID, List.of(GRANT_REVIEW), AccessRepository.Effect.DENY,
+                "停审批授权申请", "usr_admin");
+        List<com.complex.platform.governance.chain.ApprovalChainNode> nodesBefore = m002Reviews.listChainNodes(pending.reviewId());
+        assertThat(nodesBefore).extracting(node -> node.approverKind() + "/" + node.status()).containsExactly("user/approved", "master/pending");
+
+        authenticateAsMasterAuthority();
+        m002F40Refused(pending, "m002-f40-top-denied");
+        assertThat(m002Reviews.listChainNodes(pending.reviewId())).isEqualTo(nodesBefore);
+        assertThat(overrideSources(target, M002_CODE, AccessRepository.Effect.GRANT)).isEmpty();
+        assertThat(overrideSources(SessionIssuer.MASTER_USER_ID, GRANT_REVIEW, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+
+        accessRepository.deleteExplicitDenies(SessionIssuer.MASTER_USER_ID, List.of(GRANT_REVIEW));
+        assertThat(m002ChainController().approve(pending.reviewId(), m002ChainDecision("m002-f40-top-master", "approved")).data().reviewStatus())
+                .isEqualTo("approved");
+        assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("applied");
+        assertThat(overrideSources(target, M002_CODE, AccessRepository.Effect.GRANT)).containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    // M002-F40：字典登记「审核高危授权申请」（与真库 V170 同档），审批人经角色持该码与「主管复核审批」（两入口一次核验这两码）。
+    private void m002F40Reviewers(String... userIds) {
+        accessRepository.addPermission(GRANT_REVIEW, "critical", true);
+        accessRepository.roles.put(GRANT_REVIEWER_ROLE, new RoleRecord(GRANT_REVIEWER_ROLE, "Grant reviewer", null, "global", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of(GRANT_REVIEW, "governance.supervisor_review.approve"), null));
+        for (String userId : userIds) {
+            accessRepository.assignUserRole(userId, GRANT_REVIEWER_ROLE);
+        }
+    }
+
+    private com.complex.platform.governance.review.SupervisorReviewController m002ChainController() {
+        return new com.complex.platform.governance.review.SupervisorReviewController(m002ReviewService, authorizationService, service);
+    }
+
+    private com.complex.platform.governance.review.SupervisorReviewApprovalRequest m002ChainDecision(String key, String decision) {
+        return new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(key, "M002", List.of(), null, decision, "同意");
+    }
+
+    // M002-F40：当前会话经授权申请页与通用主管复核入口的通过、驳回都 403 PERMISSION_DENIED（中文提示），不进审批，申请仍待审。
+    private void m002F40Refused(AccessGrantRequestRecord pending, String key) {
+        AccessController grantEntry = new AccessController(service, authorizationService);
+        List<org.assertj.core.api.ThrowableAssert.ThrowingCallable> attempts = List.of(
+                () -> grantEntry.reviewGrant(pending.id(), m002Approve(key + "-own-approve")),
+                () -> grantEntry.reviewGrant(pending.id(), m002Reject(key + "-own-reject")),
+                () -> m002ChainController().approve(pending.reviewId(), m002ChainDecision(key + "-chain-approve", "approved")),
+                () -> m002ChainController().approve(pending.reviewId(), m002ChainDecision(key + "-chain-reject", "rejected")));
+        for (org.assertj.core.api.ThrowableAssert.ThrowingCallable attempt : attempts) {
+            assertThatThrownBy(attempt).isInstanceOfSatisfying(ApiException.class, e -> {
+                assertThat(e.status().value()).isEqualTo(403);
+                assertThat(e.code()).isEqualTo("PERMISSION_DENIED");
+                assertThat(e.getMessage()).contains("没有操作权限");
+            });
+        }
+        assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("pending");
     }
 
     // M002-F01（「显式拒绝优先级最高」）：同码已有员工显式拒绝时，获批的单独授予照写但不生效。
@@ -2583,13 +2757,15 @@ class AccessServiceTests {
     // M002：共用装配——check 标为须审批高危；usr_admin（平台管理员、申请人）的直接上级为 usr_boss；
     // 高危岗位映射 ops_manager / highRiskLevel → role_ops_check + tpl_ops_check（沿用上方高危定岗用例的装配）。
     private InMemorySupervisorReviewRepository m002Reviews; // M002-F20：夹具的复核单仓储（断言作废时复核单已关闭）
+    private SupervisorReviewService m002ReviewService;
 
     private PositionRoleTemplate m002HighRiskFixture(String userId, String merchantId, String highRiskLevel) {
         accessRepository.markRequiresApproval(M002_CODE, "high");
         InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
         m002Reviews = reviewRepository;
         reviewRepository.superiors.put("usr_admin", "usr_boss");
-        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        m002ReviewService = supervisorReviewService(reviewRepository); // M002-F40：通用主管复核入口与 reviewGrant 共用同一复核服务（同一幂等存储）
+        service = newAccessService(true, m002ReviewService);
         accessRepository.users.put(userId, new AccessUser(
                 userId, userId, "staff", "seed-org", merchantId, "active", Instant.parse("2026-06-14T00:00:00Z")));
         accessRepository.roles.put("role_ops_check", new RoleRecord(
@@ -3606,6 +3782,8 @@ class AccessServiceTests {
                 () -> service.unassignUserRole(new RoleAssignmentRequest("unassign-lock", "u", "usr_ghost", "role_any")), // M002-F10
                 () -> service.assignUserPosition(new UserPositionAssignmentRequest(
                         "position-lock", "p", "usr_ghost", "ops_clerk", "lvl_m1_lower", null, null, null)),
+                () -> service.assignStaffLevel(new StaffLevelAssignmentRequest(
+                        "level-lock", "l", "usr_ghost", "lvl_m1_lower", null, null, null)), // M002-F41
                 () -> service.createTemporaryGrant(new TemporaryGrantRequest("temporary-lock", "t", List.of(), "usr_ghost",
                         List.of("ops.production_readiness.check"), null, Instant.parse("2099-01-01T00:00:00Z"), false, "lock")),
                 () -> service.setUserPermissionOverrides("usr_ghost", new UserPermissionOverrideRequest(
@@ -4739,6 +4917,12 @@ class AccessServiceTests {
         public Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId) {
             return Optional.ofNullable(reviews.get(reviewId))
                     .filter(review -> "pending_review".equals(review.reviewStatus()));
+        }
+
+        // M002-F40：与 JDBC 同语义——任意状态的复核单（通用主管复核入口落地后回读终态）。
+        @Override
+        public Optional<SupervisorReviewDecisionRecord> findSupervisorReviewById(String reviewId) {
+            return Optional.ofNullable(reviews.get(reviewId));
         }
     }
 }

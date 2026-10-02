@@ -1217,6 +1217,8 @@ class AccessJdbcIntegrationTests {
         return f;
     }
 
+    private static final String GRANT_REVIEW = "access.grant_request.review";
+
     private record M002Fixture(String suffix, String code, String admin, String boss, String target) {
     }
 
@@ -2766,6 +2768,333 @@ class AccessJdbcIntegrationTests {
             assertThat(m002AssignedRole(landed[1])).as(landed[1]).isEqualTo(m.role());
         }
         m002ActAs(f.target(), "staff", () -> authorizationService.requirePermission(f.code()));
+    }
+
+    // ── M002 第 12 轮（M002-F40、M002-F41）真库与真实接口回归 ─────────────────────────────────
+
+    // M002-F40（治理地图第 655 行「显式拒绝优先级最高」，R-001「显式拒绝仍优先」）：真库＋真实接口——链上合法当前节点持主管复核与审批授权申请两码，
+    // 但被员工显式拒绝「审核高危授权申请」：授权申请专用入口与通用主管复核入口的通过、驳回都 403 PERMISSION_DENIED（中文提示）；申请、复核单与节点、
+    // 目标员工授权事实不变，拒绝行仍在。解除拒绝后：非当前节点、申请人、受益人经通用入口仍被拒；当前节点经通用入口批准落地；同一幂等键经两入口重放
+    // 都 200，不重复审批、不重复落地。
+    @Test
+    void explicitlyDeniedGrantReviewerIsRefusedThroughBothReviewEndpointsOnTheRealSchema() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String requestId = m002ApplyOverride(f, "user_permission_grant", "m002-j44");
+        String reviewId = m002ReviewIdOf(requestId);
+        AccessActor boss = m002ChainReviewer(f, f.boss(), "staff");
+        repository.saveUserPermissionOverrides(f.boss(), List.of(GRANT_REVIEW), AccessRepository.Effect.DENY, "停审批授权申请", f.admin());
+        String facts = m002F40Facts(requestId, f.target());
+        assertThat(facts).startsWith("pending||pending_review|").contains("|1/user/pending/|");
+
+        m002F40RefusedThroughBothEndpoints(boss, requestId, reviewId, "m002-j44-denied-" + f.suffix());
+        assertThat(m002F40Facts(requestId, f.target())).isEqualTo(facts);
+        assertThat(denyOrigins(f.boss(), GRANT_REVIEW)).containsExactly("explicit");
+
+        repository.deleteExplicitDenies(f.boss(), List.of(GRANT_REVIEW));
+        String outsider = "usr_m002_j44_out_" + f.suffix();
+        repository.createUser(new AccessUser(outsider, outsider, "staff", "org", null, "active", Instant.now()));
+        List<String[]> refused = List.of(new String[] {outsider, "staff", "SUPERVISOR_NOT_CURRENT_APPROVER"},
+                new String[] {f.admin(), "platform_admin", "SUPERVISOR_SELF_REVIEW_FORBIDDEN"},
+                new String[] {f.target(), "staff", "BENEFICIARY_SELF_REVIEW_FORBIDDEN"});
+        List<AccessActor> sessions = refused.stream().map(row -> m002ChainReviewer(f, row[0], row[1])).toList();
+        String beforeRefused = m002F40Facts(requestId, f.target()); // 受益人也已持两码（审批人角色记入目标事实）
+        for (int i = 0; i < refused.size(); i++) {
+            String code = refused.get(i)[2];
+            m002ChainDecision(sessions.get(i), reviewId, "m002-j44-" + code.toLowerCase() + "-" + f.suffix(), "approved")
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value(code));
+        }
+        assertThat(m002F40Facts(requestId, f.target())).isEqualTo(beforeRefused);
+
+        String key = "m002-j44-approve-" + f.suffix();
+        m002ChainDecision(boss, reviewId, key, "approved").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        String landed = m002F40Facts(requestId, f.target());
+        assertThat(landed).startsWith("applied|" + f.boss() + "|approved|")
+                .contains("|1/user/approved/" + f.boss() + "|", "override/" + f.code() + "/grant/explicit");
+        m002ChainDecision(boss, reviewId, key, "approved").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        mockMvc.perform(post("/api/v1/access/grant-requests/" + requestId + "/review").with(m002Session(boss))
+                        .contentType(MediaType.APPLICATION_JSON).content(m002F40DecisionJson(key, "approve")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("applied"));
+        assertThat(m002F40Facts(requestId, f.target())).isEqualTo(landed);
+    }
+
+    // M002-F40：真库＋真实接口——最高权限本人裁决末节点（critical 码，链 user→master）：最高权限账号被显式拒绝「审核高危授权申请」时，两入口的通过、驳回
+    // 都 403，末节点、申请与目标授权事实不变，拒绝行仍在；解除拒绝后经通用入口终审落地。
+    @Test
+    void explicitlyDeniedMasterAuthorityIsRefusedAtTheFinalNodeThroughBothReviewEndpointsOnTheRealSchema() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String master = m002MasterAccount();
+        jdbcTemplate.update("UPDATE permissions SET risk_level = 'critical' WHERE permission_code = ?", f.code());
+        String requestId = m002ApplyOverride(f, "user_permission_grant", "m002-j45");
+        String reviewId = m002ReviewIdOf(requestId);
+        m002ActAs(f.boss(), "staff", () -> accessService.reviewGrant(requestId, m002Approve("m002-j45-boss-" + f.suffix())));
+        repository.saveUserPermissionOverrides(master, List.of(GRANT_REVIEW), AccessRepository.Effect.DENY, "停审批授权申请", f.admin());
+        String facts = m002F40Facts(requestId, f.target());
+        assertThat(facts).startsWith("pending||pending_review|").contains("|1/user/approved/" + f.boss() + ",2/master/pending/|");
+        AccessActor masterSession = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+
+        m002F40RefusedThroughBothEndpoints(masterSession, requestId, reviewId, "m002-j45-denied-" + f.suffix());
+        assertThat(m002F40Facts(requestId, f.target())).isEqualTo(facts);
+        assertThat(denyOrigins(master, GRANT_REVIEW)).containsExactly("explicit");
+
+        repository.deleteExplicitDenies(master, List.of(GRANT_REVIEW));
+        m002ChainDecision(masterSession, reviewId, "m002-j45-master-" + f.suffix(), "approved").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        assertThat(m002F40Facts(requestId, f.target())).startsWith("applied|" + master + "|approved|")
+                .contains(",2/master/approved/" + master + "|", "override/" + f.code() + "/grant/explicit");
+    }
+
+    // M002-F40（M006-014「两码先整体核验、同一来源只消耗一次」）：真库＋真实接口——审批人的「审核高危授权申请」只来自两条单次模板套用，「主管复核审批」
+    // 来自角色：经授权申请页审批一笔、经通用主管复核入口审批另一笔，两笔都落地；每次审批恰好消耗一条单次来源、各留一条消耗日志，没有二次消耗、
+    // 也没有不消耗。修复前通用入口不核验该码，第二笔落地后第二条单次来源仍未消耗。
+    @Test
+    void singleUseGrantReviewSourceIsConsumedOnceThroughEitherReviewEndpointOnTheRealSchema() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String second = "m002.override_test.high2_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 测试高危权限二', 'ops', 'high', TRUE, 'active')
+                """, second);
+        String viaOwn = m002ApplyOverride(f, "user_permission_grant", "m002-j46");
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.applyGrant(new AccessGrantApplyRequest(
+                "m002-j46-apply2-" + f.suffix(), "M002", List.of(), "user_permission_grant", f.target(), null, null, null, null, null, null,
+                List.of(second), null, null, null, "员工覆盖授权申请")));
+        String viaChain = jdbcTemplate.queryForObject("""
+                SELECT id FROM access_grant_requests
+                 WHERE target_user_id = ? AND request_type = 'user_permission_grant' AND status = 'pending' AND id <> ?
+                """, String.class, f.target(), viaOwn);
+        String approveRole = "role_m002_apv_" + f.suffix();
+        repository.createRole(new RoleRecord(approveRole, "M002 主管复核审批 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("governance.supervisor_review.approve"), null));
+        repository.assignUserRole(f.boss(), approveRole);
+        List<String> sources = new java.util.ArrayList<>();
+        for (String n : List.of("a", "b")) {
+            String template = "tpl_m002_once_" + n + "_" + f.suffix();
+            repository.createTemplate(m002SingleUseTemplate(template), grants(template, GRANT_REVIEW));
+            sources.add(repository.applyTemplate(template, List.of(f.boss()), null, null, true, f.admin()).get(0).id());
+        }
+        AccessActor boss = new AccessActor(f.boss(), f.boss(), "staff", "org", null, "active");
+        assertThat(m002SourceUse(sources)).containsExactly("false/0", "false/0");
+
+        mockMvc.perform(post("/api/v1/access/grant-requests/" + viaOwn + "/review").with(m002Session(boss))
+                        .contentType(MediaType.APPLICATION_JSON).content(m002F40DecisionJson("m002-j46-own-" + f.suffix(), "approve")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("applied"));
+        assertThat(m002SourceUse(sources)).containsExactly("false/0", "true/1");
+
+        m002ChainDecision(boss, m002ReviewIdOf(viaChain), "m002-j46-chain-" + f.suffix(), "approved").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        assertThat(m002SourceUse(sources)).containsExactly("true/1", "true/1");
+        assertThat(List.of(m002Status(viaOwn), m002Status(viaChain))).containsExactly("applied", "applied");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code FROM user_permission_overrides
+                 WHERE user_id = ? AND effect = 'grant' AND origin = 'explicit' ORDER BY permission_code
+                """, String.class, f.target())).containsExactlyInAnyOrder(f.code(), second);
+    }
+
+    // M002-F40（保持原有拒绝顺序）：真库＋真实接口——不持主管复核审批权限的人（只经单次模板套用持「审核高危授权申请」、属另一项目、不在审批链上）对范围外的
+    // 授权申请类待审复核单调通用入口：403 PERMISSION_DENIED，与基线相同，不是 SUPERVISOR_REVIEW_SCOPE_FORBIDDEN（不暴露范围外复核单是否存在）；
+    // 单次来源未被消耗，申请、复核单与目标授权事实不变。
+    @Test
+    void callerWithoutSupervisorApproveIsRefusedBeforeTheReviewIsReadOnTheRealSchema() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String requestId = m002ApplyOverride(f, "user_permission_grant", "m002-j47");
+        String reviewId = m002ReviewIdOf(requestId);
+        String outsider = "usr_m002_j47_far_" + f.suffix();
+        repository.createUser(new AccessUser(outsider, outsider, "staff", "org_m002_j47_far", null, "active", Instant.now()));
+        String template = "tpl_m002_once_j47_" + f.suffix();
+        repository.createTemplate(m002SingleUseTemplate(template), grants(template, GRANT_REVIEW));
+        List<String> sources = List.of(repository.applyTemplate(template, List.of(outsider), null, null, true, f.admin()).get(0).id());
+        String facts = m002F40Facts(requestId, f.target());
+
+        m002ChainDecision(new AccessActor(outsider, outsider, "staff", "org_m002_j47_far", null, "active"), reviewId,
+                "m002-j47-chain-" + f.suffix(), "approved")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertThat(m002SourceUse(sources)).containsExactly("false/0");
+        assertThat(m002F40Facts(requestId, f.target())).isEqualTo(facts);
+    }
+
+    // M002-F40：各单次来源的「是否已消耗 / 消耗日志条数」，排序后比较（不依赖先消耗哪一条）。
+    private List<String> m002SourceUse(List<String> sources) {
+        return sources.stream().map(id -> jdbcTemplate.queryForObject("""
+                SELECT a.consumed::text || '/' || (SELECT count(*) FROM permission_template_usage_logs l
+                                                     WHERE l.application_id = a.id AND l.result = 'consumed')::text
+                  FROM permission_template_applications a WHERE a.id = ?
+                """, String.class, id)).sorted().toList();
+    }
+
+    // M002-F40：给 userId 授「审核高危授权申请」与「主管复核审批」（通用入口控制器查后者），返回其会话主体。
+    private AccessActor m002ChainReviewer(M002Fixture f, String userId, String accountType) {
+        String role = "role_m002_rva_" + f.suffix();
+        if (repository.findRoleById(role).isEmpty()) {
+            repository.createRole(new RoleRecord(role, "M002 审批链审批人 " + f.suffix(), null, "project", "active", Instant.now(),
+                    List.of(GRANT_REVIEW, "governance.supervisor_review.approve"), null));
+        }
+        repository.assignUserRole(userId, role);
+        return new AccessActor(userId, userId, accountType, "org", null, "active");
+    }
+
+    // M002-F40：两入口的通过、驳回都 403 PERMISSION_DENIED，提示为中文「没有操作权限」。
+    private void m002F40RefusedThroughBothEndpoints(AccessActor actor, String requestId, String reviewId, String key) throws Exception {
+        for (String[] decision : List.of(new String[] {"approve", "approved"}, new String[] {"reject", "rejected"})) {
+            mockMvc.perform(post("/api/v1/access/grant-requests/" + requestId + "/review").with(m002Session(actor))
+                            .contentType(MediaType.APPLICATION_JSON).content(m002F40DecisionJson(key + "-own-" + decision[0], decision[0])))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("没有操作权限")));
+            m002ChainDecision(actor, reviewId, key + "-chain-" + decision[0], decision[1])
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("没有操作权限")));
+        }
+    }
+
+    // M002-F40：通用主管复核入口 POST /api/v1/platform/supervisor-review/{review_id}/approve（审批链页、主管复核页）。
+    private org.springframework.test.web.servlet.ResultActions m002ChainDecision(AccessActor actor, String reviewId, String key, String decision)
+            throws Exception {
+        return mockMvc.perform(post("/api/v1/platform/supervisor-review/" + reviewId + "/approve").with(m002Session(actor))
+                .contentType(MediaType.APPLICATION_JSON).content(m002F40DecisionJson(key, decision)));
+    }
+
+    private String m002F40DecisionJson(String key, String decision) {
+        return """
+                {"idempotency_key": "%s", "operator_note": "M002", "evidence_attachment_ids": [], "decision": "%s", "comment": "同意"}
+                """.formatted(key, decision);
+    }
+
+    private String m002ReviewIdOf(String requestId) {
+        return jdbcTemplate.queryForObject("SELECT review_id FROM access_grant_requests WHERE id = ?", String.class, requestId);
+    }
+
+    // M002-F40：申请（状态、决定人）、复核单（状态、结论）、各节点（序号/类型/状态/决定人）与目标员工授权事实拼成一段文本，比对前后。
+    private String m002F40Facts(String requestId, String targetUserId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT r.status || '|' || coalesce(r.decided_by, '') || '|' || d.review_status || '|' || coalesce(d.decision, '') || '|'
+                       || (SELECT string_agg(n.seq::text || '/' || n.approver_kind || '/' || n.status || '/' || coalesce(n.decided_by, ''), ','
+                                             ORDER BY n.seq)
+                             FROM supervisor_review_nodes n WHERE n.review_id = r.review_id) || '|'
+                  FROM access_grant_requests r JOIN supervisor_review_decisions d ON d.review_id = r.review_id
+                 WHERE r.id = ?
+                """, String.class, requestId) + m002TargetFacts(targetUserId);
+    }
+
+    // M002-F41（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」，R-002）：真库真实并发（数据真实提交，结束后清理）——
+    // 换岗事务锁住员工行、改岗未提交时另一事务改职级：改职级在员工行锁上等待，换岗提交后按锁内读到的新岗位重算——岗位编码不被写回旧值，两表职级一致，
+    // 派生角色与模板对应新岗位与新职级。修复前改职级先无锁读到旧岗位并据此分支，换岗提交后把岗位写回旧编码。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void staffLevelChangeWaitsForAConcurrentMoveAndKeepsTheNewPositionOnTheRealSchema() throws Exception {
+        M002F41 w = m002F41Fixture();
+        try {
+            m002F41Seat(w, w.oldPosition(), "f41-seat-");
+            m002F41Race(w);
+            m002F41ExpectSeated(w);
+        } finally {
+            m002F41Cleanup(w);
+        }
+    }
+
+    // M002-F41：真库真实并发——员工原本无岗位，定岗事务锁住员工行、未提交时另一事务改职级：改职级在员工行锁上等待，定岗提交后在锁内读到新岗位、
+    // 走定岗同路径改到新职级——两表职级一致，派生角色与模板对应新岗位与新职级。修复前改职级无锁读到「无岗位」、只写职级表，两表职级分叉。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void staffLevelChangeOfAnUnseatedEmployeeWaitsForAConcurrentSeatOnTheRealSchema() throws Exception {
+        M002F41 w = m002F41Fixture();
+        try {
+            m002F41Race(w);
+            m002F41ExpectSeated(w);
+        } finally {
+            m002F41Cleanup(w);
+        }
+    }
+
+    private record M002F41(String suffix, String admin, String user, String oldPosition, String newPosition) {
+    }
+
+    private static final List<String> M002_F41_LEVELS = List.of("lvl_m1_lower", "lvl_m10_upper");
+
+    // M002-F41：两个岗位 × 两档职级各一张全局映射（空角色、空模板，每张映射各自的角色与模板，派生结果即可看出员工挂在哪张映射上）。
+    private M002F41 m002F41Fixture() {
+        String s = UUID.randomUUID().toString().substring(0, 8);
+        M002F41 w = new M002F41(s, "usr_m002_f41_admin_" + s, "usr_m002_f41_" + s, "f41o_" + s, "f41n_" + s);
+        repository.createUser(new AccessUser(w.admin(), w.admin(), "platform_admin", "org", null, "active", Instant.now()));
+        repository.createUser(new AccessUser(w.user(), w.user(), "staff", "org", null, "active", Instant.now()));
+        for (String position : List.of(w.oldPosition(), w.newPosition())) {
+            for (String level : M002_F41_LEVELS) {
+                String id = m002F41Id(position, level);
+                repository.createRole(new RoleRecord("role_" + id, "M002 F41 " + id, null, "project", "active", Instant.now(), List.of(), null));
+                repository.createTemplate(baseTemplate("tpl_" + id), List.of());
+                repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_" + id, position, level, "role_" + id, "tpl_" + id,
+                        null, "active", w.admin(), Instant.now(), Instant.now()));
+            }
+        }
+        return w;
+    }
+
+    private static String m002F41Id(String position, String level) {
+        return position + "_" + level.substring(4, level.indexOf('_', 4));
+    }
+
+    private void m002F41Seat(M002F41 w, String position, String key) {
+        m002ActAs(w.admin(), "platform_admin", () -> accessService.assignUserPosition(new UserPositionAssignmentRequest(
+                key + w.suffix(), "M002", w.user(), position, "lvl_m1_lower", null, null, null)));
+    }
+
+    // 主线程事务内把员工定岗 / 换岗到新岗位 m1（持员工行锁、未提交），另一线程同时把该员工改到 m10；等它在锁上等待（或已结束）后提交主事务。
+    private void m002F41Race(M002F41 w) throws Exception {
+        ExecutorService other = Executors.newSingleThreadExecutor();
+        try {
+            Future<Throwable> level = new TransactionTemplate(transactionManager).execute(status -> {
+                m002F41Seat(w, w.newPosition(), "f41-race-");
+                Future<Throwable> pending = other.submit(() -> {
+                    try {
+                        m002ActAs(w.admin(), "platform_admin", () -> accessService.assignStaffLevel(new StaffLevelAssignmentRequest(
+                                "f41-level-" + w.suffix(), "M002", w.user(), "lvl_m10_upper", null, null, null)));
+                        return null;
+                    } catch (Throwable e) {
+                        return e;
+                    }
+                });
+                awaitWaiterOrDone(pending);
+                return pending;
+            });
+            assertThat(level.get(30, TimeUnit.SECONDS)).isNull();
+        } finally {
+            other.shutdownNow();
+        }
+    }
+
+    private void m002F41ExpectSeated(M002F41 w) {
+        String id = m002F41Id(w.newPosition(), "lvl_m10_upper");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT p.position_code || '/' || p.staff_level_id || '/' || p.assigned_role_id || '/' || p.assigned_position_template_id
+                       || '/' || s.staff_level_id
+                  FROM user_position_assignments p JOIN staff_level_assignments s ON s.user_id = p.user_id
+                 WHERE p.user_id = ?
+                """, String.class, w.user()))
+                .isEqualTo(w.newPosition() + "/lvl_m10_upper/role_" + id + "/prt_" + id + "/lvl_m10_upper");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT template_id FROM permission_template_applications WHERE target_id = ? AND status = 'active'", String.class, w.user()))
+                .containsExactly("tpl_" + id);
+    }
+
+    private void m002F41Cleanup(M002F41 w) {
+        jdbcTemplate.update("DELETE FROM user_position_assignments WHERE user_id = ?", w.user());
+        jdbcTemplate.update("DELETE FROM permission_template_applications WHERE target_id = ?", w.user());
+        for (String position : List.of(w.oldPosition(), w.newPosition())) {
+            for (String level : M002_F41_LEVELS) {
+                String id = m002F41Id(position, level);
+                jdbcTemplate.update("DELETE FROM position_role_templates WHERE id = ?", "prt_" + id);
+                jdbcTemplate.update("DELETE FROM roles WHERE id = ?", "role_" + id);
+                jdbcTemplate.update("DELETE FROM permission_templates WHERE id = ?", "tpl_" + id);
+            }
+        }
+        jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", w.user(), w.admin());
     }
 
     // M002-F38：目标员工的岗位行（岗位、职级、派生角色、所挂映射）、职级与薪资行、直接角色、模板套用与覆盖行（含挂起），逐行拼成文本整体比较。
