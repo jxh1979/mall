@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -471,6 +471,7 @@ class AuthorizationServiceTests {
     private void afRow(String id, String accountType, String organizationId, String merchantId, String status) {
         repository.users.put(id, new AccessUser(id, id, accountType, organizationId, merchantId, status,
                 Instant.parse("2026-06-14T00:00:00Z")));
+        repository.rowVersions.merge(id, 1, Integer::sum); // M722-F05：一次 afRow = 账号行被改写一次
     }
 
     private void afSingleUseGrant(String userId) {
@@ -627,6 +628,208 @@ class AuthorizationServiceTests {
 
         assertThat(service.holdsPermissionViaRole("usr_o", AF_CODE)).isFalse();
         assertThat(repository.positionRoles).doesNotContainKey("usr_o");
+    }
+
+    // ── M722-F05（治理地图第 653、658 行；技术推导）：一次判定内账号归属改走又改回——末尾四项与会话相同，但账号行被改写过，
+    //    按不具备处理。验收①「服务层覆盖上述各入口的往返时序（中间范围的授予确被读到、改回后四项与会话相同）」。
+    //    时序：判定开始读账号行（原范围）→ 读能力事实之前改走、中间范围事实落地 → 能力事实被读到 → 中间范围事实撤销、改回 → 判定末尾。
+    //    中间范围：项目往返 = (org_b, merchant)，商户往返 = (org, merchant_b)。修复前每条都红（放行／true／职级原值）。 ──
+
+    private static final String F05_SUPERVISOR = "governance.supervisor_review.approve";
+
+    private static AccessRepository.PermissionEffect f05RoleGrant(String code) {
+        return new AccessRepository.PermissionEffect("usr_o", code, AccessRepository.Effect.GRANT,
+                AccessRepository.Source.ROLE, "role_pos_b", null, null, false, false);
+    }
+
+    private static AccessRepository.PermissionEffect f05SingleUseGrant() {
+        return new AccessRepository.PermissionEffect("usr_o", AF_CODE, AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPLATE_APPLICATION, "application_f05_once", null, null, true, false);
+    }
+
+    // 会话与账号行都在原范围；钩子挂在「按操作人读权限效果」这一次读取的前后。
+    private void f05ArmRoundTripAroundEffectsRead(String middleOrganization, String middleMerchant,
+                                                  AccessRepository.PermissionEffect grantedInMiddleScope) {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        repository.beforeEffectsRead = () -> {
+            afRow("usr_o", "staff", middleOrganization, middleMerchant, "active");
+            repository.addEffect(grantedInMiddleScope);
+        };
+        repository.afterEffectsRead = () -> {
+            repository.effects.remove(grantedInMiddleScope);
+            afRow("usr_o", "staff", "org", "merchant", "active");
+        };
+    }
+
+    // 中间范围的授予确被读到；判定后该授予已撤销；改回后四项与会话相同、账号行确被改写过两次。
+    private void f05AssertRoundTripHappened(AccessRepository.PermissionEffect grantedInMiddleScope) {
+        assertThat(repository.lastEffectsRead).contains(grantedInMiddleScope);
+        assertThat(repository.effects).doesNotContain(grantedInMiddleScope);
+        f05AssertRowBackToSession();
+    }
+
+    private void f05AssertRowBackToSession() {
+        AccessUser row = repository.users.get("usr_o");
+        assertThat(List.of(row.organizationId(), row.merchantId(), row.accountType(), row.status()))
+                .containsExactly("org", "merchant", "staff", "active");
+        assertThat(repository.rowVersions.get("usr_o")).isEqualTo(3);
+    }
+
+    // requirePermissions：拒绝（403 PERMISSION_DENIED），单次来源不被消耗。
+    @Test
+    void requirePermissionRejectsScopeRoundTripAndKeepsSingleUseGrant() {
+        AccessRepository.PermissionEffect grant = f05SingleUseGrant();
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+
+        afAssertStaleSessionDenied();
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // requirePermissions：中间范围的岗位角色授予（非单次，审计席复现的形态）；项目往返。
+    @Test
+    void requirePermissionRejectsProjectRoundTripWithRoleGrant() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+
+        afAssertStaleSessionDenied();
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // requirePermissions：同上，商户往返。
+    @Test
+    void requirePermissionRejectsMerchantRoundTripWithRoleGrant() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org", "merchant_b", grant);
+
+        afAssertStaleSessionDenied();
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // effectivePermissions：拒绝（403 PERMISSION_DENIED）。
+    @Test
+    void effectivePermissionsRejectsScopeRoundTrip() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+
+        assertThatThrownBy(() -> service.effectivePermissions())
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                });
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // currentActorHasPermission：返回 false。
+    @Test
+    void currentActorHasPermissionIsFalseForScopeRoundTrip() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+
+        assertThat(service.currentActorHasPermission(AF_CODE)).isFalse();
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // holdsPermissionViaRole 查本人：返回 false；查他人不核对当前操作人身份，行为不变。
+    @Test
+    void holdsPermissionViaRoleIsFalseForSelfScopeRoundTrip() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+        repository.addEffect(effect("usr_t", AF_CODE, AccessRepository.Effect.GRANT));
+
+        assertThat(service.holdsPermissionViaRole("usr_o", AF_CODE)).isFalse();
+        f05AssertRoundTripHappened(grant);
+        assertThat(service.holdsPermissionViaRole("usr_t", AF_CODE)).isTrue();
+    }
+
+    // currentActorLevelRank：返回 0。往返发生在读职级的前后；中间范围落下的职级确被读到（范围变更不撤职级行，改回后仍在）。
+    @Test
+    void currentActorLevelRankIsZeroForScopeRoundTrip() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        repository.beforeLevelRead = () -> {
+            afRow("usr_o", "staff", "org_b", "merchant", "active");
+            repository.staffLevels.put("usr_o", 12);
+        };
+        repository.afterLevelRead = () -> afRow("usr_o", "staff", "org", "merchant", "active");
+
+        assertThat(service.currentActorLevelRank()).isZero();
+        assertThat(repository.lastLevelRead).isEqualTo(12);
+        f05AssertRowBackToSession();
+    }
+
+    // currentSupervisorLevel：返回 0。往返发生在读角色事实的前后（职级稳定为 12，身份未变时本应得 2）。
+    @Test
+    void currentSupervisorLevelIsZeroForScopeRoundTripWhileRoleFactsAreRead() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(F05_SUPERVISOR);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+        repository.staffLevels.put("usr_o", 12);
+
+        assertThat(service.currentSupervisorLevel()).isZero();
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // currentSupervisorLevel：返回 0。角色稳定持有，往返发生在读职级的前后。
+    @Test
+    void currentSupervisorLevelIsZeroForScopeRoundTripWhileLevelIsRead() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        repository.addEffect(effect("usr_o", F05_SUPERVISOR, AccessRepository.Effect.GRANT));
+        repository.beforeLevelRead = () -> {
+            afRow("usr_o", "staff", "org_b", "merchant", "active");
+            repository.staffLevels.put("usr_o", 12);
+        };
+        repository.afterLevelRead = () -> afRow("usr_o", "staff", "org", "merchant", "active");
+
+        assertThat(service.currentSupervisorLevel()).isZero();
+        assertThat(repository.lastLevelRead).isEqualTo(12);
+        f05AssertRowBackToSession();
+    }
+
+    // 验收「判定开始时账号行与会话不一致即拒绝、不再读能力」。
+    @Test
+    void requirePermissionRejectsAtStartWithoutReadingCapabilities() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org_b", "merchant", "active");
+        afSingleUseGrant("usr_o");
+
+        afAssertStaleSessionDenied();
+        assertThat(repository.effectsReads).isZero();
+    }
+
+    // 同一句验收在其余入口：开始时账号行与会话不一致即按不具备处理，权限效果与职级都没有被读。
+    @Test
+    void otherEntriesRejectAtStartWithoutReadingCapabilities() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org_b", "merchant", "active");
+        repository.addEffect(effect("usr_o", AF_CODE, AccessRepository.Effect.GRANT));
+        repository.addEffect(effect("usr_o", F05_SUPERVISOR, AccessRepository.Effect.GRANT));
+        repository.staffLevels.put("usr_o", 12);
+
+        assertThatThrownBy(() -> service.effectivePermissions())
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                });
+        assertThat(service.currentActorHasPermission(AF_CODE)).isFalse();
+        assertThat(service.holdsPermissionViaRole("usr_o", AF_CODE)).isFalse();
+        assertThat(service.currentActorLevelRank()).isZero();
+        assertThat(service.currentSupervisorLevel()).isZero();
+        assertThat(repository.effectsReads).isZero();
+        assertThat(repository.lastLevelRead).isNull();
+    }
+
+    // 验收「身份全程未变时行为不变」（修复前后都绿）：角色＋职级 12 → 第 2 级。
+    @Test
+    void currentSupervisorLevelIsUnchangedWhenIdentityIsStable() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        repository.addEffect(effect("usr_o", F05_SUPERVISOR, AccessRepository.Effect.GRANT));
+        repository.staffLevels.put("usr_o", 12);
+
+        assertThat(service.currentSupervisorLevel()).isEqualTo(2);
+        // 角色事实与职级合在一个判定窗口内：账号行只在开始、末尾各读一次（两段各自开始、末尾都读会是四次，两段之间的改写会漏掉）
+        assertThat(repository.accountRowReads).isEqualTo(2);
     }
 
     // 对照（修复前后都绿）：客人与系统调度主体不在员工账号表内，不核对，行为不变。
@@ -897,15 +1100,51 @@ class AuthorizationServiceTests {
         // XM-M001-AF：员工职级（userId → level_rank）
         final java.util.Map<String, Integer> staffLevels = new java.util.LinkedHashMap<>();
 
+        int accountRowReads; // M722-F05：账号行被读了几次（按号读员工、读身份都经这里）
+
         @Override
         public List<AccessUser> listUsers() {
+            accountRowReads++;
             return List.copyOf(users.values());
+        }
+
+        // M722-F05：账号行版本（每改写一次加一）；四项由默认实现从 findUserById 派生。
+        final java.util.Map<String, Integer> rowVersions = new java.util.LinkedHashMap<>();
+
+        @Override
+        public java.util.Optional<UserIdentity> findUserIdentity(String userId) {
+            return AccessRepository.super.findUserIdentity(userId).map(identity -> new UserIdentity(
+                    identity.organizationId(), identity.merchantId(), identity.accountType(), identity.status(),
+                    String.valueOf(rowVersions.get(userId))));
+        }
+
+        // M722-F05：按操作人读权限效果、读职级这两处读取的前后各一个一次性钩子（模拟此刻别人提交了变更），以及读到了什么。
+        Runnable beforeEffectsRead;
+        Runnable afterEffectsRead;
+        Runnable beforeLevelRead;
+        Runnable afterLevelRead;
+        List<PermissionEffect> lastEffectsRead = List.of();
+        int effectsReads;
+        Integer lastLevelRead;
+
+        private void runOnce(Runnable hook) {
+            if (hook != null) {
+                hook.run();
+            }
         }
 
         @Override
         public java.util.Optional<StaffLevelAssignment> findStaffLevelAssignment(String userId) {
-            return java.util.Optional.ofNullable(staffLevels.get(userId)).map(rank -> new StaffLevelAssignment(
+            Runnable before = beforeLevelRead;
+            beforeLevelRead = null;
+            runOnce(before);
+            lastLevelRead = staffLevels.get(userId);
+            java.util.Optional<StaffLevelAssignment> result = java.util.Optional.ofNullable(lastLevelRead).map(rank -> new StaffLevelAssignment(
                     userId, "lvl_" + rank, null, "CNY", null, null, null, "seed", Instant.parse("2026-06-14T00:00:00Z")));
+            Runnable after = afterLevelRead;
+            afterLevelRead = null;
+            runOnce(after);
+            return result;
         }
 
         @Override
@@ -979,6 +1218,18 @@ class AuthorizationServiceTests {
 
         @Override
         public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
+            Runnable before = beforeEffectsRead;
+            beforeEffectsRead = null;
+            runOnce(before);
+            lastEffectsRead = readEffects(userId);
+            effectsReads++;
+            Runnable after = afterEffectsRead;
+            afterEffectsRead = null;
+            runOnce(after);
+            return lastEffectsRead;
+        }
+
+        private List<PermissionEffect> readEffects(String userId) {
             return effects.stream()
                     .filter(effect -> effect.userId().equals(userId))
                     .map(effect -> consumedSourceIds.contains(effect.sourceId())

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -42,6 +42,7 @@ public class AuthorizationService implements CallerScopeResolver {
     @Transactional
     public void requirePermissions(String... permissionCodes) {
         AccessActor actor = currentActor();
+        Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
         Instant checkedAt = Instant.now();
         List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
                 .filter(effect -> isActive(effect, checkedAt)).toList();
@@ -56,7 +57,7 @@ public class AuthorizationService implements CallerScopeResolver {
             }
         }
         // 岗位派生事实在上面的循环里才按操作人 id 读取：核对放在最后一次读取之后、单次来源消费之前。
-        requireIdentityUnchanged(actor);
+        requireIdentityUnchanged(actor, identity);
         for (AccessRepository.PermissionEffect grant : consume.values()) {
             if (!accessRepository.markSingleUsePermissionConsumed(
                     grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt)) {
@@ -199,8 +200,9 @@ public class AuthorizationService implements CallerScopeResolver {
      */
     public EffectivePermissions effectivePermissions() {
         AccessActor actor = currentActor();
+        Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
         EffectivePermissions result = computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor));
-        requireIdentityUnchanged(actor);
+        requireIdentityUnchanged(actor, identity);
         return result;
     }
 
@@ -285,45 +287,67 @@ public class AuthorizationService implements CallerScopeResolver {
         throw ApiException.unauthorized("UNAUTHENTICATED", "无法识别的认证主体");
     }
 
-    // XM-M001-AF（治理地图第 653 行项目与商户隔离、第 658 行跨项目或换商户后旧范围派生权限立即失效；技术推导）：
-    // 先按 id 读能力事实（有效权限、职级）、后核身份——会话身份与员工表当前行不一致（在途调岗、换商户、停用）即按不具备处理。
-    // 新范围权限与职级必在换项目提交之后才落地，故读到新能力时必能读到新归属；不加锁、不需同一快照。
-    private void requireIdentityUnchanged(AccessActor actor) {
+    // XM-M001-AF、M722-F05（治理地图第 653 行项目与商户隔离、第 658 行跨项目或换商户后旧范围派生权限立即失效；技术推导）：
+    // 一次判定在按操作人读取能力事实之前、最后一次读取之后各读一次账号行——项目、商户、账号类型、状态两次都须与会话一致，
+    // 行版本须前后相同；否则（在途调岗、换商户、停用，含改走又改回）按不具备处理。不加锁、不需同一快照；
+    // 仓储不给行版本时只比四项。
+
+    // 读账号行四项＋行版本。无仓储（与 canResolveRoles() 同口径）、仓储不支持按号读员工（与 directRoleIds 同口径）→ 空，不核对。
+    private Optional<AccessRepository.UserIdentity> readIdentity(String userId) {
         if (accessRepository == null) {
-            return; // 与 canResolveRoles() 同口径：无仓储的轻量上下文
+            return Optional.empty();
         }
-        Optional<AccessUser> row;
         try {
-            row = accessRepository.findUserById(actor.id());
+            return accessRepository.findUserIdentity(userId);
         } catch (UnsupportedOperationException unsupported) {
-            return; // 与 directRoleIds 同口径：不支持按号读员工的仓储
-        }
-        if (row.isEmpty()) {
-            return; // 主体不来自员工表（客人、调度主体）：没有可被换项目/停用改写的员工事实
-        }
-        AccessUser user = row.get();
-        if (!java.util.Objects.equals(actor.organizationId(), user.organizationId())
-                || !java.util.Objects.equals(actor.merchantId(), user.merchantId())
-                || !java.util.Objects.equals(actor.accountType(), user.accountType())
-                || !java.util.Objects.equals(actor.status(), user.status())) {
-            throw ApiException.forbidden("PERMISSION_DENIED", "账号归属或状态已变更，本次操作未执行");
+            return Optional.empty();
         }
     }
 
-    private void requireIdentityUnchangedIfSelf(String userId) {
+    /** 判定开始：任何按操作人读取能力事实之前调用。账号行与会话不一致即拒绝；返回值原样交给 requireIdentityUnchanged。 */
+    private Optional<AccessRepository.UserIdentity> identityAtStart(AccessActor actor) {
+        Optional<AccessRepository.UserIdentity> row = readIdentity(actor.id());
+        // 空 = 主体不来自员工表（客人、调度主体）：没有可被换项目/停用改写的员工事实
+        row.ifPresent(identity -> requireMatchesSession(actor, identity));
+        return row;
+    }
+
+    /** 判定末尾：最后一次按操作人读取之后、单次来源消费之前调用。四项仍须与会话一致，行版本须与开始时相同。 */
+    private void requireIdentityUnchanged(AccessActor actor, Optional<AccessRepository.UserIdentity> start) {
+        Optional<AccessRepository.UserIdentity> end = readIdentity(actor.id());
+        end.ifPresent(identity -> requireMatchesSession(actor, identity));
+        if (!java.util.Objects.equals(start.map(AccessRepository.UserIdentity::rowVersion),
+                end.map(AccessRepository.UserIdentity::rowVersion))) {
+            throw identityChanged();
+        }
+    }
+
+    private void requireMatchesSession(AccessActor actor, AccessRepository.UserIdentity identity) {
+        if (!java.util.Objects.equals(actor.organizationId(), identity.organizationId())
+                || !java.util.Objects.equals(actor.merchantId(), identity.merchantId())
+                || !java.util.Objects.equals(actor.accountType(), identity.accountType())
+                || !java.util.Objects.equals(actor.status(), identity.status())) {
+            throw identityChanged();
+        }
+    }
+
+    private ApiException identityChanged() {
+        return ApiException.forbidden("PERMISSION_DENIED", "账号归属或状态已变更，本次操作未执行");
+    }
+
+    // 当前主体且编号等于 userId 时返回它；无认证、非员工主体（如 MockMvc user()）、查他人 → null（不核对，保持原行为）。
+    private AccessActor selfOrNull(String userId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
-            return;
+            return null;
         }
         AccessActor self;
         try {
             self = currentActor();
         } catch (ApiException unrecognized) {
-            return; // 非员工主体（如 MockMvc user()），保持原行为
+            return null;
         }
-        if (userId.equals(self.id())) {
-            requireIdentityUnchanged(self);
-        }
+        return userId.equals(self.id()) ? self : null;
     }
 
     /** 已登录请求按操作人与组织隔离，带商户归属的再加商户；安全上下文无认证时沿用原范围（空）。 */
@@ -370,10 +394,11 @@ public class AuthorizationService implements CallerScopeResolver {
         try {
             Instant checkedAt = Instant.now();
             AccessActor actor = currentActor();
+            Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
             List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
                     .filter(effect -> isActive(effect, checkedAt)).toList();
             permissionGrant(actor, permissionCode, effects);
-            requireIdentityUnchanged(actor); // 在最后一次按操作人 id 读取（岗位派生事实）之后
+            requireIdentityUnchanged(actor, identity); // 在最后一次按操作人 id 读取（岗位派生事实）之后
             return true;
         } catch (RuntimeException exception) {
             return false;
@@ -414,11 +439,21 @@ public class AuthorizationService implements CallerScopeResolver {
         if (isMasterAuthority(actor)) {
             return 3;
         }
-        if (!"active".equals(actor.status())
-                || !holdsPermissionViaRole(actor.id(), "governance.supervisor_review.approve")) {
+        if (!"active".equals(actor.status()) || accessRepository == null) {
             return 0;
         }
-        int rank = currentActorLevelRank();
+        int rank;
+        try {
+            // M722-F05：角色事实与职级在同一个判定窗口内读取
+            Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor);
+            if (!holdsViaRoleFacts(actor.id(), "governance.supervisor_review.approve")) {
+                return 0;
+            }
+            rank = levelRankOf(actor.id());
+            requireIdentityUnchanged(actor, identity);
+        } catch (RuntimeException exception) {
+            return 0;
+        }
         int derived = rank > 0 ? (rank + 2) / 3 : 0;
         // 最高权限（第 3 级）只给持密钥主体；职级只映射到上一级/上两级。
         return Math.min(derived, 2);
@@ -431,8 +466,9 @@ public class AuthorizationService implements CallerScopeResolver {
     public int currentActorLevelRank() {
         try {
             AccessActor actor = currentActor();
+            Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读职级之前
             int rank = isMasterAuthority(actor) ? 30 : levelRankOf(actor.id());
-            requireIdentityUnchanged(actor);
+            requireIdentityUnchanged(actor, identity);
             return rank;
         } catch (RuntimeException exception) {
             return 0;
@@ -475,28 +511,37 @@ public class AuthorizationService implements CallerScopeResolver {
             return false;
         }
         try {
-            Instant checkedAt = Instant.now();
-            List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
-                    .filter(effect -> permissionCode.equals(effect.permissionCode()))
-                    .filter(effect -> isActive(effect, checkedAt))
-                    .toList();
-            if (active.stream().anyMatch(AuthorizationService::isExplicitDeny)) {
-                return false;
+            AccessActor self = selfOrNull(userId);
+            Optional<AccessRepository.UserIdentity> identity = self == null ? Optional.empty() : identityAtStart(self);
+            boolean holds = holdsViaRoleFacts(userId, permissionCode);
+            if (self != null) {
+                requireIdentityUnchanged(self, identity); // 在最后一次按该员工 id 读取（岗位派生事实）之后
             }
-            boolean held = active.stream().anyMatch(AuthorizationService::isPositionHold);
-            java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
-                    positionDerivedSources(userId);
-            java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
-            boolean holds = active.stream()
-                    .anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT
-                            && effect.source() == AccessRepository.Source.ROLE
-                            && isExplicitOrDailyGrant(effect, daily)
-                            && (!held || !positionDerived.get().test(effect)));
-            requireIdentityUnchangedIfSelf(userId); // 在最后一次按该员工 id 读取（岗位派生事实）之后
             return holds;
         } catch (RuntimeException exception) {
             return false;
         }
+    }
+
+    // holdsPermissionViaRole 的判定体（不含身份核对）；currentSupervisorLevel 与它共用，各自包一个判定窗口。
+    private boolean holdsViaRoleFacts(String userId, String permissionCode) {
+        Instant checkedAt = Instant.now();
+        List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
+                .filter(effect -> permissionCode.equals(effect.permissionCode()))
+                .filter(effect -> isActive(effect, checkedAt))
+                .toList();
+        if (active.stream().anyMatch(AuthorizationService::isExplicitDeny)) {
+            return false;
+        }
+        boolean held = active.stream().anyMatch(AuthorizationService::isPositionHold);
+        java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
+                positionDerivedSources(userId);
+        java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
+        return active.stream()
+                .anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT
+                        && effect.source() == AccessRepository.Source.ROLE
+                        && isExplicitOrDailyGrant(effect, daily)
+                        && (!held || !positionDerived.get().test(effect)));
     }
 
     /**

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import java.time.Instant;
 import java.util.List;
@@ -60,6 +60,15 @@ public interface AccessRepository {
 
     default Optional<AccessUser> findUserById(String userId) {
         return listUsers().stream().filter(u -> u.id().equals(userId)).findFirst();
+    }
+
+    /**
+     * M722-F05：按号读账号行的项目、商户、账号类型、状态与行版本（账号行每次被改写都会变）。
+     * 默认由 findUserById 派生、行版本为空（不支持行版本的仓储只做四项比较）；JdbcAccessRepository 覆写。
+     */
+    default Optional<UserIdentity> findUserIdentity(String userId) {
+        return findUserById(userId).map(user -> new UserIdentity(
+                user.organizationId(), user.merchantId(), user.accountType(), user.status(), null));
     }
 
     /**
@@ -380,6 +389,10 @@ public interface AccessRepository {
     }
 
     record ExplicitDenyRow(String permissionCode, String reason, String createdBy, Instant createdAt) {
+    }
+
+    /** M722-F05：账号行的项目、商户、账号类型、状态与行版本（仓储不支持行版本时为空）。 */
+    record UserIdentity(String organizationId, String merchantId, String accountType, String status, String rowVersion) {
     }
 
     enum Effect {

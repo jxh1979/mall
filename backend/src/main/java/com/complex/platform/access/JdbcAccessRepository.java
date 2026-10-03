@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.19
+// 文件版本：V0.20
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -333,6 +333,20 @@ class JdbcAccessRepository implements AccessRepository {
                   FROM access_users
                  WHERE id = :id
                 """, Map.of("id", userId), this::mapUser);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    // M722-F05：四项与行版本出自同一条语句；行版本取行自带的 xmin，账号行每次被改写都会变。
+    @Override
+    public Optional<UserIdentity> findUserIdentity(String userId) {
+        List<UserIdentity> result = jdbcTemplate.query("""
+                SELECT organization_id, merchant_id, account_type, status, xmin::text AS row_version
+                  FROM access_users
+                 WHERE id = :id
+                """, Map.of("id", userId), (resultSet, rowNumber) -> new UserIdentity(
+                        resultSet.getString("organization_id"), resultSet.getString("merchant_id"),
+                        resultSet.getString("account_type"), resultSet.getString("status"),
+                        resultSet.getString("row_version")));
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 

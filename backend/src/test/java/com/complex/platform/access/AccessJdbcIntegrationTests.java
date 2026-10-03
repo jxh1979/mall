@@ -4746,6 +4746,65 @@ class AccessJdbcIntegrationTests {
         }
     }
 
+    // ── M722-F05（治理地图第 653、658 行；技术推导）真库回归：一次判定进行中账号归属改走又改回 ──────────────────────────────────
+    //    验收②：两次范围变更与中间范围岗位角色的落地都由另一事务真实提交（走 changeUserScope 与审批落地所用的同一组仓储写入），
+    //    断言中间范围的岗位角色授予已被读到、改回已提交、中间范围派生已清、原范围的新授权申请仍待审且没有已生效的新授权，requirePermission 拒绝。
+    //    交错与断言的助手在 IdentityRoundTripJdbcIntegrationTests（与真实接口回归共用）。修复前两条都红（判定放行）。
+
+    // 验收②「项目往返」：项目 A → 项目 B → 项目 A（都不带商户）。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void staleSessionIsRejectedWhenProjectMovesAwayAndBackWhileCapabilitiesAreRead() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        f05AssertScopeRoundTripDenied("p", suffix, "org_f05_pa_" + suffix, null, "org_f05_pb_" + suffix, null);
+    }
+
+    // 验收②「商户往返」：同一项目内商户 A → 商户 B → 商户 A。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void staleSessionIsRejectedWhenMerchantMovesAwayAndBackWhileCapabilitiesAreRead() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String project = "org_f05_m_" + suffix;
+        f05AssertScopeRoundTripDenied("m", suffix, project, "mch_f05_ma_" + suffix, project, "mch_f05_mb_" + suffix);
+    }
+
+    // 操作人在原范围（岗位角色不含被判权限码）；判定在单独一个事务里走真实服务类＋真实仓储，只在读能力事实处插入另一事务的提交。
+    private void f05AssertScopeRoundTripDenied(String tag, String suffix, String projectA, String merchantA,
+                                               String projectB, String merchantB) {
+        String operator = "usr_f05_" + tag + "_" + suffix;
+        String roleA = "role_f05_" + tag + "a_" + suffix;
+        String roleB = "role_f05_" + tag + "b_" + suffix;
+        String code = "access.permission_template.apply";
+        try {
+            IdentityRoundTripJdbcIntegrationTests.seedRole(repository, roleA, List.of());
+            IdentityRoundTripJdbcIntegrationTests.seedRole(repository, roleB, List.of(code));
+            IdentityRoundTripJdbcIntegrationTests.seedStaff(repository, operator, projectA, merchantA, roleA, suffix);
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                    new AccessActor(operator, operator, "staff", projectA, merchantA, "active"), null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+            // 对照：没有在途变更时，原范围装配本就不含该码——拒绝来自无权，不是身份核对
+            assertThatThrownBy(() -> authorizationService.requirePermission(code))
+                    .isInstanceOfSatisfying(ApiException.class, exception -> {
+                        assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                        assertThat(exception.getMessage()).doesNotContain(IdentityRoundTripJdbcIntegrationTests.IDENTITY_CHANGED);
+                    });
+
+            AccessRepository hooked = org.mockito.Mockito.mock(AccessRepository.class,
+                    org.mockito.AdditionalAnswers.delegatesTo(repository));
+            IdentityRoundTripJdbcIntegrationTests.RoundTrip trip = IdentityRoundTripJdbcIntegrationTests.armScopeRoundTrip(
+                    hooked, repository, jdbcTemplate, transactionManager, operator, projectA, merchantA, projectB, merchantB,
+                    roleB, suffix);
+            AuthorizationService judging = new AuthorizationService(hooked);
+
+            afAssertIdentityChangedDenied(() -> new TransactionTemplate(transactionManager)
+                    .executeWithoutResult(status -> judging.requirePermission(code)));
+            IdentityRoundTripJdbcIntegrationTests.assertRoundTripCommitted(repository, trip, operator, projectA, merchantA, roleB, code);
+        } finally {
+            SecurityContextHolder.clearContext();
+            IdentityRoundTripJdbcIntegrationTests.cleanup(jdbcTemplate, List.of(operator), List.of(roleA, roleB), suffix);
+        }
+    }
+
     // ── XM-M002-BH（治理地图第 303、528、653 行；技术推导）真库＋真实接口回归 ─────────────────────────────────────────────
 
     // J1：同商户、另一组织的员工用他人的请求编号同体提交员工覆盖，不再拿到他人首次结果，而是按本人范围被 CROSS_ORG_FORBIDDEN 拒绝；
