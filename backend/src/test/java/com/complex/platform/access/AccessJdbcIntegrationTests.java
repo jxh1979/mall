@@ -4805,6 +4805,90 @@ class AccessJdbcIntegrationTests {
         }
     }
 
+    // ── M722-F06：最高权限的审批身份判定同样核对账号（真库）────────────────────────────────────────────────────────
+
+    // 与 ProductionAuthService.issueMasterSession 每次 U 盘登录对最高权限账号行执行的 upsert 相同的列与冲突更新子句
+    // （该服务只在生产配置下装配，这里用位置参数与 now() 重现）：四项不变也会把账号行改写一遍，行版本随之变化。
+    private void f06MasterUsbLoginUpsert() {
+        jdbcTemplate.update("""
+                INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)
+                VALUES (?, ?, ?, 'platform-company', NULL, 'active', now())
+                ON CONFLICT (id) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    account_type = EXCLUDED.account_type,
+                    organization_id = COALESCE(access_users.organization_id, 'platform-company'),
+                    status = 'active'
+                """, SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE);
+    }
+
+    // 账号行稳定时最高权限的审批级别是 3；判定开始与末尾两次读账号行之间，本人再次 U 盘登录由另一事务把账号行改写了一遍
+    // （四项不变、行版本变）→ 这次判定返回 0。数据真实提交，结束后清理。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void masterSupervisorLevelIsZeroWhenAnotherUsbLoginRewritesTheAccountRowDuringTheJudgment() {
+        String master = SessionIssuer.MASTER_USER_ID;
+        boolean existed = repository.findUserById(master).isPresent();
+        try {
+            f06MasterUsbLoginUpsert();
+            f06AuthenticateMaster();
+            // 对照：改写发生之前稳定为 3（走注入的真实服务；单列的守护见下一条用例）
+            assertThat(authorizationService.currentSupervisorLevel()).isEqualTo(3);
+
+            java.util.concurrent.atomic.AtomicInteger identityReads = new java.util.concurrent.atomic.AtomicInteger();
+            TransactionTemplate otherTransaction = new TransactionTemplate(transactionManager);
+            otherTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            AccessRepository hooked = org.mockito.Mockito.mock(AccessRepository.class,
+                    org.mockito.AdditionalAnswers.delegatesTo(repository));
+            org.mockito.Mockito.doAnswer(invocation -> {
+                java.util.Optional<AccessRepository.UserIdentity> read = repository.findUserIdentity(master);
+                if (identityReads.getAndIncrement() == 0) {
+                    otherTransaction.executeWithoutResult(status -> f06MasterUsbLoginUpsert());
+                }
+                return read;
+            }).when(hooked).findUserIdentity(master);
+            AuthorizationService judging = new AuthorizationService(hooked);
+
+            Integer level = new TransactionTemplate(transactionManager).execute(status -> judging.currentSupervisorLevel());
+            assertThat(level).isZero();
+            assertThat(identityReads.get()).isEqualTo(2); // 开始、末尾各读一次；改写落在两次之间
+            AccessUser row = repository.findUserById(master).orElseThrow(); // 四项仍与会话相同
+            assertThat(List.of(row.accountType(), row.organizationId(), row.status()))
+                    .containsExactly(SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", "active");
+            assertThat(row.merchantId()).isNull();
+        } finally {
+            SecurityContextHolder.clearContext();
+            if (!existed) {
+                jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", master);
+            }
+        }
+    }
+
+    // 守护（修复前后都绿）：最高权限账号行稳定时，真库上的审批级别是 3。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void masterSupervisorLevelIsThreeOnTheRealTableWhenTheAccountRowIsStable() {
+        String master = SessionIssuer.MASTER_USER_ID;
+        boolean existed = repository.findUserById(master).isPresent();
+        try {
+            f06MasterUsbLoginUpsert();
+            f06AuthenticateMaster();
+
+            assertThat(authorizationService.currentSupervisorLevel()).isEqualTo(3);
+        } finally {
+            SecurityContextHolder.clearContext();
+            if (!existed) {
+                jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", master);
+            }
+        }
+    }
+
+    // U 盘最高权限会话（与 ProductionAuthService 签发的主体同一组身份字段）。
+    private void f06AuthenticateMaster() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                        "platform-company", null, "active"), null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+    }
+
     // ── XM-M002-BH（治理地图第 303、528、653 行；技术推导）真库＋真实接口回归 ─────────────────────────────────────────────
 
     // J1：同商户、另一组织的员工用他人的请求编号同体提交员工覆盖，不再拿到他人首次结果，而是按本人范围被 CROSS_ORG_FORBIDDEN 拒绝；

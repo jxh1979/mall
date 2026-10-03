@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -832,6 +832,62 @@ class AuthorizationServiceTests {
         assertThat(repository.accountRowReads).isEqualTo(2);
     }
 
+    // ── M722-F06：currentSupervisorLevel 的最高权限分支同样走判定窗口（没有账号行时仍是 3，见 currentSupervisorLevelIsThreeOnlyForMasterAuthority）──
+
+    private void f06MasterSession() {
+        authenticateActor(new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active"));
+    }
+
+    // 最高权限账号行被写一次（再次 U 盘登录的 upsert 即使四项不变也会改写该行）。
+    private void f06MasterRow(String organizationId) {
+        repository.users.put(SessionIssuer.MASTER_USER_ID, new AccessUser(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, organizationId, null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        repository.rowVersions.merge(SessionIssuer.MASTER_USER_ID, 1, Integer::sum);
+    }
+
+    // 有账号行、四项与行版本全程未变：仍是 3（修复前后都绿）。
+    @Test
+    void currentSupervisorLevelIsThreeForMasterAuthorityWithAStableAccountRow() {
+        f06MasterSession();
+        f06MasterRow("platform-company");
+
+        assertThat(service.currentSupervisorLevel()).isEqualTo(3);
+    }
+
+    // 无仓储的轻量上下文：不核对，仍是 3（修复前后都绿）。
+    @Test
+    void currentSupervisorLevelIsThreeForMasterAuthorityWithoutARepository() {
+        f06MasterSession();
+
+        assertThat(new AuthorizationService(null).currentSupervisorLevel()).isEqualTo(3);
+    }
+
+    // 开始时账号行与会话不一致：0，且不读权限效果、不读职级。
+    @Test
+    void currentSupervisorLevelIsZeroForMasterAuthorityWhenTheAccountRowDiffersAtStart() {
+        f06MasterSession();
+        f06MasterRow("org_b");
+        repository.staffLevels.put(SessionIssuer.MASTER_USER_ID, 12);
+
+        assertThat(service.currentSupervisorLevel()).isZero();
+        assertThat(repository.effectsReads).isZero();
+        assertThat(repository.lastLevelRead).isNull();
+    }
+
+    // 开始与末尾两次读账号行之间该行被改写、四项不变（本人再次 U 盘登录）：0。
+    @Test
+    void currentSupervisorLevelIsZeroForMasterAuthorityWhenTheAccountRowIsRewrittenDuringTheJudgment() {
+        f06MasterSession();
+        f06MasterRow("platform-company");
+        repository.afterIdentityRead = () -> f06MasterRow("platform-company");
+
+        assertThat(service.currentSupervisorLevel()).isZero();
+        assertThat(repository.rowVersions.get(SessionIssuer.MASTER_USER_ID)).isEqualTo(2); // 改写确在判定内发生
+        assertThat(repository.users.get(SessionIssuer.MASTER_USER_ID).organizationId()).isEqualTo("platform-company"); // 四项仍与会话相同
+        assertThat(repository.afterIdentityRead).isNull();
+    }
+
     // 对照（修复前后都绿）：客人与系统调度主体不在员工账号表内，不核对，行为不变。
     @Test
     void principalsWithoutAnAccountRowAreNotCheckedAgainstTheAccountTable() {
@@ -1111,11 +1167,19 @@ class AuthorizationServiceTests {
         // M722-F05：账号行版本（每改写一次加一）；四项由默认实现从 findUserById 派生。
         final java.util.Map<String, Integer> rowVersions = new java.util.LinkedHashMap<>();
 
+        Runnable afterIdentityRead; // M722-F06：读账号行之后的一次性钩子（模拟此刻别人把账号行改写了一遍）
+
         @Override
         public java.util.Optional<UserIdentity> findUserIdentity(String userId) {
-            return AccessRepository.super.findUserIdentity(userId).map(identity -> new UserIdentity(
+            java.util.Optional<UserIdentity> result = AccessRepository.super.findUserIdentity(userId).map(identity -> new UserIdentity(
                     identity.organizationId(), identity.merchantId(), identity.accountType(), identity.status(),
                     String.valueOf(rowVersions.get(userId))));
+            Runnable after = afterIdentityRead;
+            afterIdentityRead = null;
+            if (after != null) {
+                after.run();
+            }
+            return result;
         }
 
         // M722-F05：按操作人读权限效果、读职级这两处读取的前后各一个一次性钩子（模拟此刻别人提交了变更），以及读到了什么。

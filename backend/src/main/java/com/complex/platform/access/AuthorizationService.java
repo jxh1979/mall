@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -437,6 +437,12 @@ public class AuthorizationService implements CallerScopeResolver {
     public int currentSupervisorLevel() {
         AccessActor actor = currentActor();
         if (isMasterAuthority(actor)) {
+            // M722-F06：最高权限分支同样走判定窗口——开始时账号行须与会话一致，返回之前行版本须未变；没有账号行或无仓储时不核对。
+            try {
+                requireIdentityUnchanged(actor, identityAtStart(actor));
+            } catch (RuntimeException exception) {
+                return 0;
+            }
             return 3;
         }
         if (!"active".equals(actor.status()) || accessRepository == null) {
