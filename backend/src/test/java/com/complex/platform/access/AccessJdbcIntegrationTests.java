@@ -13,6 +13,8 @@ import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.access.dto.PositionRoleTemplateRequest;
+import com.complex.platform.access.dto.RoleAssignmentRequest;
+import com.complex.platform.access.dto.RoleRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.UserPermissionOverrideRequest;
@@ -876,6 +878,41 @@ class AccessJdbcIntegrationTests {
                 """))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
                 .hasMessageContaining("chk_user_permission_overrides_origin");
+    }
+
+    // M002-F47（治理地图 #audit 第 893、899 行：权限变更留痕要能查到「为什么」）：真库回归——建角色、直接分配、撤销的成功事件
+    // audit_events.metadata 记请求提交的 operator_note 原文；同键同请求回放分配不新增事件、不重新写入已撤销的角色。
+    @Test
+    void roleSuccessEventsKeepTheSubmittedOperatorNoteOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String daily = "m002.note_test.daily_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 留痕测试日常权限', 'ops', 'medium', FALSE, 'active')
+                """, daily);
+        String[] keys = {"m002-f47-role-" + f.suffix(), "m002-f47-assign-" + f.suffix(), "m002-f47-unassign-" + f.suffix()};
+        String[] roleId = new String[1];
+        m002ActAs(f.admin(), "platform_admin", () -> roleId[0] = accessService.createRole(new RoleRequest(
+                keys[0], "为临时代班建立职责角色", List.of(), "M002 代班角色 " + f.suffix(), null, List.of(daily), "project")).id());
+        RoleAssignmentRequest assign = new RoleAssignmentRequest(keys[1], "代替休假员工值班", f.target(), roleId[0]);
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserRole(assign));
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.unassignUserRole(
+                new RoleAssignmentRequest(keys[2], "代班结束收回权限", f.target(), roleId[0])));
+        List<String> expected = List.of("role.changed/为临时代班建立职责角色", "access.role.assigned/代替休假员工值班",
+                "access.role.unassigned/代班结束收回权限");
+        assertThat(m002NoteEvents(keys)).containsExactlyInAnyOrderElementsOf(expected);
+
+        m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserRole(assign));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_roles WHERE user_id = ? AND role_id = ?",
+                Long.class, f.target(), roleId[0])).isZero();
+        assertThat(m002NoteEvents(keys)).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    private List<String> m002NoteEvents(String[] keys) {
+        return jdbcTemplate.queryForList("""
+                SELECT event_name || '/' || coalesce(metadata ->> 'operator_note', '<无>') FROM audit_events
+                 WHERE event_result = 'success' AND idempotency_key IN (?, ?, ?)
+                """, String.class, (Object[]) keys);
     }
 
     // M002-F02：服务级真库回归——定岗挂起 → 员工显式拒绝 → 批准释放单：显式拒绝行仍在，有效权限来源里该码仍是拒绝。

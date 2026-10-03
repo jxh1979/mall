@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -487,6 +487,51 @@ class AccessServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("access.role.assigned", "access.role.unassigned");
+    }
+
+    // M002-F47（治理地图 #audit 第 893、899 行：权限变更留痕要能查到「为什么」）：建角色、直接分配、撤销、员工覆盖设置与解除的成功事件
+    // metadata 记请求提交的 operator_note 原文，未填记空串；同键同请求回放不新增业务写入与成功事件。
+    @Test
+    void roleAndOverrideSuccessEventsRecordTheSubmittedOperatorNote() {
+        accessRepository.users.put("usr_m002_note", new AccessUser(
+                "usr_m002_note", "usr_m002_note", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        RoleRequest create = new RoleRequest("m002-note-role", "为临时代班建立职责角色", List.of(), "代班角色", null, List.of(M002_VIEW), "project");
+        String roleId = service.createRole(create).id();
+        RoleAssignmentRequest assign = new RoleAssignmentRequest("m002-note-assign", "代替休假员工值班", "usr_m002_note", roleId);
+        RoleAssignmentRequest unassign = new RoleAssignmentRequest("m002-note-unassign", "代班结束收回权限", "usr_m002_note", roleId);
+        UserPermissionOverrideRequest deny = new UserPermissionOverrideRequest(
+                "m002-note-deny", "离岗期间暂停查看", List.of(M002_VIEW), "deny", null);
+        UserPermissionOverrideRequest undeny = new UserPermissionOverrideRequest(
+                "m002-note-undeny", null, List.of(M002_VIEW), "deny", "返岗恢复");
+        service.assignUserRole(assign);
+        service.unassignUserRole(unassign);
+        service.setUserPermissionOverrides("usr_m002_note", deny);
+        service.removeUserPermissionOverrides("usr_m002_note", undeny);
+        Map<String, String> expected = Map.of(
+                "m002-note-role", "role.changed/为临时代班建立职责角色",
+                "m002-note-assign", "access.role.assigned/代替休假员工值班",
+                "m002-note-unassign", "access.role.unassigned/代班结束收回权限",
+                "m002-note-deny", "access.user_permission_override.set/离岗期间暂停查看",
+                "m002-note-undeny", "access.user_permission_override.remove/");
+        assertThat(m002NoteEvents(expected.keySet())).containsExactlyInAnyOrderElementsOf(expected.values());
+
+        int roles = accessRepository.roles.size();
+        service.createRole(create);
+        service.assignUserRole(assign);
+        service.unassignUserRole(unassign);
+        service.setUserPermissionOverrides("usr_m002_note", deny);
+        service.removeUserPermissionOverrides("usr_m002_note", undeny);
+        assertThat(accessRepository.roles).hasSize(roles);
+        assertThat(accessRepository.userRoles.getOrDefault("usr_m002_note", Set.of())).doesNotContain(roleId);
+        assertThat(accessRepository.overrides).noneMatch(o -> "usr_m002_note".equals(o.userId()));
+        assertThat(m002NoteEvents(expected.keySet())).containsExactlyInAnyOrderElementsOf(expected.values());
+    }
+
+    private List<String> m002NoteEvents(Set<String> keys) {
+        return auditEventRepository.events.stream()
+                .filter(event -> "success".equals(event.eventResult()) && keys.contains(event.idempotencyKey()))
+                .map(event -> event.eventName() + "/" + event.metadata().get("operator_note"))
+                .toList();
     }
 
     // M002-F11（操作员 2026-09-25 裁决，治理地图「权限规则」）：撤销角色只减权，不要求操作人持有该角色里的权限码——
