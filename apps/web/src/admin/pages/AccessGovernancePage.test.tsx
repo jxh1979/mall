@@ -463,6 +463,73 @@ describe("M002-F34 最高权限本人自设拒绝后界面不卡死", () => {
     expect(await screen.findByTestId("access-governance-page", {}, { timeout: 3000 })).toBeTruthy();
   });
 
+  // M002-F49（操作员裁决 M002-F34「界面上始终能进访问治理工作台、选中自己、点『移除』解除」）：从正常权限开始，同页给本人设拒绝，
+  // 后端有效集随写入改变、同码副资源 403——页面不整页报错，本人选择器与「移除」仍在；移除后有效集恢复、副资源重新读取，全程不刷新页面。
+  function stubLiveBackend() {
+    const denied = new Set<string>();
+    const writes: Write[] = [];
+    let templateReads = 0;
+    const current = (): EffectivePermissions => ({ grants: GRANTS.filter((code) => !denied.has(code)), denies: [...denied], wildcard: false });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET").toUpperCase() !== "GET") {
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        writes.push({ url, body });
+        if (url.includes("/users/usr_master_authority/permission-overrides") && body.effect === "deny") {
+          for (const code of body.permission_codes as string[]) {
+            if (url.endsWith("/remove")) denied.delete(code);
+            else denied.add(code);
+          }
+        }
+        return Promise.resolve(raw(current()));
+      }
+      if (url.includes("effective-permissions")) return Promise.resolve(raw(current()));
+      if (url.includes("capability-switches")) return Promise.resolve(raw([]));
+      for (const [fragment, code] of READ_CODES) {
+        if (url.includes(fragment) && denied.has(code)) {
+          return Promise.resolve(new Response(JSON.stringify({ success: false, code: "PERMISSION_DENIED", message: "权限不足" }), { status: 403, headers: { "content-type": "application/json" } }));
+        }
+      }
+      if (url.includes("grant-requests/summary")) return Promise.resolve(raw(SUMMARY));
+      if (url.includes("grant-requests")) return Promise.resolve(envelope([]));
+      if (url.includes("position-role-templates")) {
+        templateReads += 1;
+        return Promise.resolve(envelope(TEMPLATES));
+      }
+      if (url.includes("access/roles")) return Promise.resolve(envelope(ROLES));
+      if (url.includes("access/users")) return Promise.resolve(envelope(F34_USERS));
+      return Promise.resolve(envelope([]));
+    }));
+    return { writes, templateReads: () => templateReads };
+  }
+
+  it.each(DENY_CASES)("最高权限从正常权限同页给自己设 %s 等拒绝：不整页报错，能选中本人点「移除」，移除后恢复且不刷新页面", async (...codes: string[]) => {
+    const live = stubLiveBackend();
+    window.localStorage.setItem("admin.session.v1", JSON.stringify({ user: MASTER, sessionId: "s-f49" }));
+    window.history.pushState({}, "", "/admin/access/governance");
+    render(<AdminApp />);
+    expect(await screen.findByTestId("access-user-override-form", {}, { timeout: 3000 })).toBeTruthy();
+    await waitFor(() => expect(live.templateReads()).toBeGreaterThan(0));
+    await waitFor(() => expect(button("access-user-override-set").disabled).toBe(false));
+    fireEvent.change(screen.getByLabelText("覆盖用户"), { target: { value: "usr_master_authority" } });
+    fireEvent.change(screen.getByLabelText("覆盖权限码"), { target: { value: codes.join(",") } });
+    fireEvent.change(screen.getByLabelText("覆盖效果"), { target: { value: "deny" } });
+    fireEvent.click(button("access-user-override-set"));
+    await waitFor(() => expect(live.writes).toHaveLength(1));
+    await waitFor(() => expect(button("access-user-override-set").disabled).toBe(true)); // 有效集已刷新：设置按分配角色权限禁用
+    expect(screen.queryByTestId("admin-error")).toBeNull();
+    expect((screen.getByLabelText("覆盖用户") as HTMLSelectElement).value).toBe("usr_master_authority");
+    expect(button("access-user-override-remove").disabled).toBe(false);
+    const readsWhileDenied = live.templateReads();
+    fireEvent.click(button("access-user-override-remove"));
+    await waitFor(() => expect(live.writes).toHaveLength(2));
+    expect(live.writes[1]!.url).toContain("/api/v1/access/users/usr_master_authority/permission-overrides/remove");
+    expect(live.writes[1]!.body.permission_codes).toEqual(codes);
+    await waitFor(() => expect(button("access-user-override-set").disabled).toBe(false));
+    await waitFor(() => expect(live.templateReads()).toBeGreaterThan(readsWhileDenied));
+    expect(screen.queryByTestId("admin-error")).toBeNull();
+  });
+
   it.each([PLATFORM_ADMIN, STAFF])("$username（$accountType）拒绝了分配角色权限：工作台直链与导航仍不可用", async (user: AdminUser) => {
     renderAppAs(user, perms(["access.role.assign"]), "/admin/access/governance");
     expect(await screen.findByTestId("admin-permission-denied")).toBeTruthy();

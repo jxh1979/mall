@@ -462,6 +462,14 @@ export default function AdminApp() {
     };
   }, [api, user]);
 
+  // M002-F49（M002-F34／F08 裁决「本人可以直接解除，不会卡死」）：页面改了本人权限后重读有效集，
+  // 页面才不会按旧有效集去请求已被拒绝的副资源。
+  const refreshEffectivePermissions = React.useCallback(async () => {
+    const value = await api.get<EffectivePermissions>("/api/v1/access/effective-permissions");
+    setEffectivePermissions({ status: "ready", value });
+    return value;
+  }, [api]);
+
   // 3.19 二期：终端开关菜单 gating——[]=无关闭项/加载中(不闪隐藏)，null=拉取失败→兜底关(留自救组)。
   const [disabledSwitchRows, setDisabledSwitchRows] = React.useState<DisabledSwitchRow[] | null>([]);
 
@@ -734,7 +742,7 @@ export default function AdminApp() {
                 不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
                 chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}
             <React.Suspense fallback={<div className="admin-page-loading" role="status" aria-live="polite">页面加载中…</div>}>
-              {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId })}
+              {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions, refreshEffectivePermissions, navigateTo, focusObjectId })}
             </React.Suspense>
           </PermissionGate>
           )}

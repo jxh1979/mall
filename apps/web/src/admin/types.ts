@@ -78,6 +78,8 @@ export type AdminPageProps = {
    * HighRiskConfirm 的 permissionsState）。AdminApp 注入；缺省视为 loading（fail-safe）。
    */
   effectivePermissions: EffectivePermissionsState;
+  /** M002-F49：重新读取当前账号的有效权限并更新 effectivePermissions，返回新值；页面改了本人权限后调用。AdminApp 注入。 */
+  refreshEffectivePermissions?: () => Promise<EffectivePermissions>;
   /** 全链下钻：跳到承载某对象的后台页并定位（TraceLink 用）。AdminApp 注入。 */
   navigateTo?: (pageId: string, objectId?: string) => void;
   /** 下钻进入本页时携带的对象 id（URL ?focus=），供本页定位/高亮/过滤。 */
