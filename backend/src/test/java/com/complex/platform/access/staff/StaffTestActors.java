@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.*;
 import com.complex.platform.auth.SessionIssuer;
@@ -21,6 +21,20 @@ final class StaffTestActors {
     static void actor(String id, String type, String project, String merchant) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(id,id,type,project,merchant,"active"),"test",List.of()));
+    }
+    /**
+     * XM-M001-AF：判权限时会核对会话身份与账号行。写入会话后调用——把当前会话账号自己的行对齐到本次会话的账号类型、项目与商户
+     * （库里没有该账号行则不动；不动其他账号的行）。
+     */
+    static void alignRowToSession(JdbcTemplate jdbc) {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof com.complex.platform.auth.AuthService.UserRecord user) {
+            principal = new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(), user.merchantId(), user.status());
+        }
+        if (principal instanceof AccessActor actor) {
+            jdbc.update("UPDATE access_users SET account_type=?, organization_id=?, merchant_id=? WHERE id=?",
+                    actor.accountType(), actor.organizationId(), actor.merchantId(), actor.id());
+        }
     }
     static void master() {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
