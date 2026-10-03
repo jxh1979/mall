@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -350,7 +350,7 @@ public class AuthorizationService implements CallerScopeResolver {
         return userId.equals(self.id()) ? self : null;
     }
 
-    /** 已登录请求按操作人与组织隔离，带商户归属的再加商户；安全上下文无认证时沿用原范围（空）。 */
+    /** 已登录请求：不带商户归属的按操作人与组织隔离，带商户归属的按所属项目与所属商户隔离；安全上下文无认证时沿用原范围（空）。 */
     @Override
     public String resolve() {
         String legacy = legacyScope();
@@ -366,8 +366,9 @@ public class AuthorizationService implements CallerScopeResolver {
         if ("p".equals(legacy)) {
             return "u:" + id.length() + ":" + id + ":" + org; // 非商户主体：与 #415 形态逐字节相同
         }
-        // XM-M002-BH（治理地图第 303、528、653 行；技术推导）：带商户归属的主体同样按人隔离，不再与同商户他人共用幂等记录。
-        return "um:" + id.length() + ":" + id + ":" + org.length() + ":" + org + ":" + actor.merchantId();
+        // XM-M002-BH、M722-F07（治理地图第 303、528、653 行；操作员 2026-10-03 裁决「同项目同商户内认一次」）：
+        // 带商户归属的主体按所属项目＋所属商户隔离——同项目同商户的员工用同一请求编号只认一次，不同项目各算各的。
+        return "mo:" + org.length() + ":" + org + ":" + actor.merchantId();
     }
 
     @Override

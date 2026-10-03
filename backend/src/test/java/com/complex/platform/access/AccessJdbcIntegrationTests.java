@@ -4933,7 +4933,7 @@ class AccessJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM audit_events WHERE idempotency_key = ? AND event_result = 'success'", Long.class, key)).isEqualTo(1L);
 
-        // 4) 该编号下的幂等记录都是按人隔离的定长形态（A 一条成功；B 被拒的那次各占自己的一条），没有 m:<商户号> 形态
+        // 4) 该编号下的幂等记录都是按项目＋商户隔离的定长形态（A 所在项目一条成功；B 在另一项目，被拒的那次占自己项目的一条），没有 m:<商户号> 形态
         List<String> operationIds = jdbcTemplate.queryForList(
                 "SELECT operation_id FROM idempotency_records WHERE idempotency_key = ?", String.class, key);
         assertThat(operationIds).isNotEmpty().allSatisfy(id -> assertThat(id).startsWith("caller:").hasSize(71));
@@ -5052,6 +5052,33 @@ class AccessJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForList(
                 "SELECT operation_id || '/' || response_code FROM idempotency_records WHERE idempotency_key = ?", String.class, key))
                 .hasSize(2).doesNotHaveDuplicates().allSatisfy(row -> assertThat(row).endsWith("/OK")); // 该键恰两条，各占自己的一条
+    }
+
+    // M722-F07（操作员 2026-10-03 裁决「同项目同商户内认一次」）：同一项目、同一商户的两名在职员工用相同操作号、幂等键、请求体——
+    // 第二人不再执行、拿到第一次的结果；第一人重试同样；库内该键恰一条记录。
+    @Test
+    void sameProjectSameMerchantStaffAreCountedOnceAndTheSecondGetsTheFirstResultOnTheRealTable() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String project = "org_bh_s_" + suffix;
+        String merchant = "mch_bh_s_" + suffix;
+        AccessActor first = new AccessActor("usr_bh_sa_" + suffix, "usr_bh_sa_" + suffix, "staff", project, merchant, "active");
+        AccessActor second = new AccessActor("usr_bh_sb_" + suffix, "usr_bh_sb_" + suffix, "staff", project, merchant, "active");
+        for (AccessActor caller : List.of(first, second)) {
+            repository.createUser(new AccessUser(caller.id(), caller.username(), caller.accountType(), caller.organizationId(),
+                    caller.merchantId(), caller.status(), Instant.now()));
+        }
+        String operationId = "m722F07:" + suffix;
+        String key = "bh-s-" + suffix;
+        List<String> executed = new java.util.ArrayList<>();
+
+        assertThat(bhExecuteAs(first, operationId, key, executed)).isEqualTo(first.id());
+        assertThat(bhExecuteAs(second, operationId, key, executed)).isEqualTo(first.id());
+        assertThat(bhExecuteAs(first, operationId, key, executed)).isEqualTo(first.id());
+
+        assertThat(executed).containsExactly(first.id());
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT operation_id || '/' || response_code FROM idempotency_records WHERE idempotency_key = ?", String.class, key))
+                .singleElement().satisfies(row -> assertThat(row).startsWith("caller:").endsWith("/OK").hasSize(74));
     }
 
     // 以该主体身份提交一次；动作把本人编号记进 executed 并作为结果返回。

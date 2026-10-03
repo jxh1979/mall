@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -901,11 +901,12 @@ class AuthorizationServiceTests {
         service.requirePermission("ops.production_readiness.view");
     }
 
-    // ── XM-M002-BH（治理地图第 303、528、653 行；技术推导）：带商户归属的登录主体，幂等作用域同样按操作人与组织隔离。 ──
+    // ── XM-M002-BH、M722-F07（治理地图第 303、528、653 行；操作员 2026-10-03 裁决「同项目同商户内认一次」）：
+    //    带商户归属的登录主体，幂等作用域按所属项目＋所属商户隔离。 ──
 
-    // S1：非商户主体的作用域逐字节不变；商户主体按人、按组织分开，不再是共用的 m:<商户号>。
+    // S1：非商户主体的作用域逐字节不变；商户主体按所属项目＋所属商户分开（同项目同商户的两人同一个作用域），不再是共用的 m:<商户号>。
     @Test
-    void resolveKeepsNonMerchantScopesAndSeparatesMerchantCallersByPerson() {
+    void resolveKeepsNonMerchantScopesAndSeparatesMerchantCallersByProjectAndMerchant() {
         authenticateActor(new AccessActor("usr_a", "usr_a", "platform_admin", "org", null, "active"));
         assertThat(service.resolve()).isEqualTo("u:5:usr_a:org");
         assertThat(service.legacyScope()).isEqualTo("p");
@@ -928,16 +929,23 @@ class AuthorizationServiceTests {
                 new AccessActor("usr_a", "usr_a", "staff", "O1", "mch_1", "active"),
                 new AccessActor("usr_b", "usr_b", "staff", "O2", "mch_1", "active"),
                 new AccessActor("usr_c", "usr_c", "staff", "O1", "mch_1", "active"),
-                new AccessActor("usr_a", "usr_a", "staff", "O2", "mch_1", "active"));
-        Set<String> scopes = new LinkedHashSet<>();
+                new AccessActor("usr_a", "usr_a", "staff", "O2", "mch_1", "active"),
+                new AccessActor("usr_d", "usr_d", "staff", "O1", "mch_2", "active"));
+        List<String> scopes = new java.util.ArrayList<>();
         for (AccessActor caller : merchantCallers) {
             authenticateActor(caller);
             String scope = service.resolve();
-            assertThat(scope).isNotEqualTo("m:mch_1").doesNotStartWith("u:");
-            assertThat(service.legacyScope()).isEqualTo("m:mch_1");
+            assertThat(scope).isNotEqualTo("m:mch_1").isNotEqualTo("m:mch_2").doesNotStartWith("u:");
+            assertThat(service.legacyScope()).isEqualTo("m:" + caller.merchantId());
             scopes.add(scope);
         }
-        assertThat(scopes).hasSize(merchantCallers.size());
+        // 同项目同商户的两人同一个作用域；项目不同或商户不同即分开。形态：mo:<项目长度>:<项目>:<商户>，不含账号编号
+        assertThat(scopes.get(0)).isEqualTo("mo:2:O1:mch_1");
+        assertThat(scopes.get(1)).isEqualTo("mo:2:O2:mch_1");
+        assertThat(scopes.get(4)).isEqualTo("mo:2:O1:mch_2");
+        assertThat(scopes.get(2)).isEqualTo(scopes.get(0));
+        assertThat(scopes.get(3)).isEqualTo(scopes.get(1));
+        assertThat(new LinkedHashSet<>(scopes)).hasSize(3);
 
         SecurityContextHolder.clearContext();
         assertThat(service.resolve()).isEmpty();
@@ -951,7 +959,7 @@ class AuthorizationServiceTests {
                 });
     }
 
-    // S2：同商户不同组织、同商户同组织的他人用同一请求编号同体提交都各自执行；同一人重试只认一次；
+    // S2：同商户不同项目的人用同一请求编号同体提交各自执行；同项目同商户的他人只认一次、拿到第一次的结果；同一人重试只认一次；
     // 修复前留下的 m:<商户号> 旧记录由既有守卫拦下（不回放、不执行、不改旧行）。
     @Test
     void sameMerchantDifferentOrganizationCannotReplayAndOldMerchantRecordsAreBlocked() {
@@ -980,8 +988,9 @@ class AuthorizationServiceTests {
         authenticateActor(a);
         assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(2);
         assertThat(count[0]).isEqualTo(3);
-        authenticateActor(a2);
-        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(4);
+        authenticateActor(a2); // 与 a 同项目同商户：不再执行，拿到 a 第一次的结果
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(2);
+        assertThat(count[0]).isEqualTo(3);
 
         authenticateActor(a);
         assertThatThrownBy(() -> idempotency.execute(operationId, "k-old", body, action, Integer.class))
@@ -989,12 +998,12 @@ class AuthorizationServiceTests {
                     assertThat(exception.code()).isEqualTo("IDEMPOTENCY_CONFLICT");
                     assertThat(exception.getMessage()).contains("该请求编号存在旧处理记录");
                 });
-        assertThat(count[0]).isEqualTo(4);
+        assertThat(count[0]).isEqualTo(3);
         assertThat(records.records.get(legacyOperationId + ":k-old")).isEqualTo(oldRecord);
 
         List<String> operationIds = records.records.values().stream().map(IdempotencyRecord::operationId).toList();
         assertThat(operationIds).filteredOn(legacyOperationId::equals).hasSize(1);
-        assertThat(operationIds).filteredOn(id -> !legacyOperationId.equals(id)).hasSize(3)
+        assertThat(operationIds).filteredOn(id -> !legacyOperationId.equals(id)).hasSize(2)
                 .allSatisfy(id -> assertThat(id).startsWith("caller:").hasSize(71));
     }
 
