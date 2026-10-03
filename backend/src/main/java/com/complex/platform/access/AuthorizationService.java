@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -55,6 +55,8 @@ public class AuthorizationService implements CallerScopeResolver {
                 consume.putIfAbsent(grant.source() + ":" + grant.sourceId(), grant);
             }
         }
+        // 岗位派生事实在上面的循环里才按操作人 id 读取：核对放在最后一次读取之后、单次来源消费之前。
+        requireIdentityUnchanged(actor);
         for (AccessRepository.PermissionEffect grant : consume.values()) {
             if (!accessRepository.markSingleUsePermissionConsumed(
                     grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt)) {
@@ -197,7 +199,9 @@ public class AuthorizationService implements CallerScopeResolver {
      */
     public EffectivePermissions effectivePermissions() {
         AccessActor actor = currentActor();
-        return computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor));
+        EffectivePermissions result = computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor));
+        requireIdentityUnchanged(actor);
+        return result;
     }
 
     /** 指定用户的有效权限集（平台管理用；调用方须先校验 {@code access.user.view}）。 */
@@ -281,19 +285,65 @@ public class AuthorizationService implements CallerScopeResolver {
         throw ApiException.unauthorized("UNAUTHENTICATED", "无法识别的认证主体");
     }
 
-    /** 非商户请求按已有主体及组织隔离；商户与系统请求沿用原范围。 */
+    // XM-M001-AF（治理地图第 653 行项目与商户隔离、第 658 行跨项目或换商户后旧范围派生权限立即失效；技术推导）：
+    // 先按 id 读能力事实（有效权限、职级）、后核身份——会话身份与员工表当前行不一致（在途调岗、换商户、停用）即按不具备处理。
+    // 新范围权限与职级必在换项目提交之后才落地，故读到新能力时必能读到新归属；不加锁、不需同一快照。
+    private void requireIdentityUnchanged(AccessActor actor) {
+        if (accessRepository == null) {
+            return; // 与 canResolveRoles() 同口径：无仓储的轻量上下文
+        }
+        Optional<AccessUser> row;
+        try {
+            row = accessRepository.findUserById(actor.id());
+        } catch (UnsupportedOperationException unsupported) {
+            return; // 与 directRoleIds 同口径：不支持按号读员工的仓储
+        }
+        if (row.isEmpty()) {
+            return; // 主体不来自员工表（客人、调度主体）：没有可被换项目/停用改写的员工事实
+        }
+        AccessUser user = row.get();
+        if (!java.util.Objects.equals(actor.organizationId(), user.organizationId())
+                || !java.util.Objects.equals(actor.merchantId(), user.merchantId())
+                || !java.util.Objects.equals(actor.accountType(), user.accountType())
+                || !java.util.Objects.equals(actor.status(), user.status())) {
+            throw ApiException.forbidden("PERMISSION_DENIED", "账号归属或状态已变更，本次操作未执行");
+        }
+    }
+
+    private void requireIdentityUnchangedIfSelf(String userId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return;
+        }
+        AccessActor self;
+        try {
+            self = currentActor();
+        } catch (ApiException unrecognized) {
+            return; // 非员工主体（如 MockMvc user()），保持原行为
+        }
+        if (userId.equals(self.id())) {
+            requireIdentityUnchanged(self);
+        }
+    }
+
+    /** 已登录请求按操作人与组织隔离，带商户归属的再加商户；安全上下文无认证时沿用原范围（空）。 */
     @Override
     public String resolve() {
         String legacy = legacyScope();
-        if (!"p".equals(legacy)) {
-            return legacy;
+        if (legacy.isEmpty()) {
+            return legacy; // 无认证：原样 ""
         }
         AccessActor actor = currentActor();
         if (actor.id() == null || actor.id().isBlank()) {
             throw ApiException.unauthorized("UNAUTHENTICATED", "无法识别的认证主体");
         }
-        return "u:" + actor.id().length() + ":" + actor.id() + ":"
-                + java.util.Objects.toString(actor.organizationId(), "");
+        String id = actor.id();
+        String org = java.util.Objects.toString(actor.organizationId(), "");
+        if ("p".equals(legacy)) {
+            return "u:" + id.length() + ":" + id + ":" + org; // 非商户主体：与 #415 形态逐字节相同
+        }
+        // XM-M002-BH（治理地图第 303、528、653 行；技术推导）：带商户归属的主体同样按人隔离，不再与同商户他人共用幂等记录。
+        return "um:" + id.length() + ":" + id + ":" + org.length() + ":" + org + ":" + actor.merchantId();
     }
 
     @Override
@@ -323,6 +373,7 @@ public class AuthorizationService implements CallerScopeResolver {
             List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
                     .filter(effect -> isActive(effect, checkedAt)).toList();
             permissionGrant(actor, permissionCode, effects);
+            requireIdentityUnchanged(actor); // 在最后一次按操作人 id 读取（岗位派生事实）之后
             return true;
         } catch (RuntimeException exception) {
             return false;
@@ -380,7 +431,9 @@ public class AuthorizationService implements CallerScopeResolver {
     public int currentActorLevelRank() {
         try {
             AccessActor actor = currentActor();
-            return isMasterAuthority(actor) ? 30 : levelRankOf(actor.id());
+            int rank = isMasterAuthority(actor) ? 30 : levelRankOf(actor.id());
+            requireIdentityUnchanged(actor);
+            return rank;
         } catch (RuntimeException exception) {
             return 0;
         }
@@ -434,11 +487,13 @@ public class AuthorizationService implements CallerScopeResolver {
             java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
                     positionDerivedSources(userId);
             java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
-            return active.stream()
+            boolean holds = active.stream()
                     .anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT
                             && effect.source() == AccessRepository.Source.ROLE
                             && isExplicitOrDailyGrant(effect, daily)
                             && (!held || !positionDerived.get().test(effect)));
+            requireIdentityUnchangedIfSelf(userId); // 在最后一次按该员工 id 读取（岗位派生事实）之后
+            return holds;
         } catch (RuntimeException exception) {
             return false;
         }

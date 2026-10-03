@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -8,6 +8,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.idempotency.IdempotencyRecord;
+import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.support.InMemoryIdempotencyRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -458,6 +462,283 @@ class AuthorizationServiceTests {
         });
     }
 
+    // ── XM-M001-AF（治理地图第 653 行项目与商户隔离、第 658 行跨项目或换商户后旧范围派生权限立即失效；技术推导）：
+    //    按操作人读权限或职级之后核对其账号当前的项目、商户、账号类型与状态；与会话不一致即按不具备处理。
+    //    「会话」= authenticate(...) 写入的主体（组织 org、商户 merchant、active）；「库」= repository.users 里的行。 ──
+
+    private static final String AF_CODE = "ops.production_readiness.manage";
+
+    private void afRow(String id, String accountType, String organizationId, String merchantId, String status) {
+        repository.users.put(id, new AccessUser(id, id, accountType, organizationId, merchantId, status,
+                Instant.parse("2026-06-14T00:00:00Z")));
+    }
+
+    private void afSingleUseGrant(String userId) {
+        repository.addEffect(new AccessRepository.PermissionEffect(userId, AF_CODE, AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPLATE_APPLICATION, "application_af_once", null, null, true, false));
+    }
+
+    private void afAssertStaleSessionDenied() {
+        assertThatThrownBy(() -> service.requirePermission(AF_CODE))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                });
+        assertThat(repository.consumedSourceIds).isEmpty();
+    }
+
+    @Test
+    void requirePermissionRejectsWhenSessionProjectIsStaleAfterScopeChange() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org_b", "merchant", "active");
+        afSingleUseGrant("usr_o");
+
+        afAssertStaleSessionDenied();
+    }
+
+    @Test
+    void requirePermissionConsumesSingleUseOnceWhenIdentityMatches() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        afSingleUseGrant("usr_o");
+
+        service.requirePermission(AF_CODE);
+
+        assertThat(repository.consumedSourceIds).containsExactly("application_af_once");
+    }
+
+    @Test
+    void requirePermissionRejectsWhenOnlyMerchantChanged() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant_b", "active");
+        afSingleUseGrant("usr_o");
+
+        afAssertStaleSessionDenied();
+    }
+
+    @Test
+    void requirePermissionRejectsWhenOnlyAccountTypeChanged() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "merchant_admin", "org", "merchant", "active");
+        afSingleUseGrant("usr_o");
+
+        afAssertStaleSessionDenied();
+    }
+
+    @Test
+    void requirePermissionRejectsWhenAccountDisabledMidRequest() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant", "disabled");
+        afSingleUseGrant("usr_o");
+
+        afAssertStaleSessionDenied();
+    }
+
+    @Test
+    void effectivePermissionsRejectsStaleSession() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org_b", "merchant", "active");
+        afSingleUseGrant("usr_o");
+
+        assertThatThrownBy(() -> service.effectivePermissions())
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                });
+
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        assertThat(service.effectivePermissions().grants()).contains(AF_CODE);
+    }
+
+    @Test
+    void currentActorHasPermissionIsFalseForStaleSession() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org_b", "merchant", "active");
+        afSingleUseGrant("usr_o");
+
+        assertThat(service.currentActorHasPermission(AF_CODE)).isFalse();
+
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        assertThat(service.currentActorHasPermission(AF_CODE)).isTrue();
+    }
+
+    @Test
+    void currentActorLevelRankIsZeroForStaleSession() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org_b", "merchant", "active");
+        repository.staffLevels.put("usr_o", 12);
+
+        assertThat(service.currentActorLevelRank()).isZero();
+
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        assertThat(service.currentActorLevelRank()).isEqualTo(12);
+    }
+
+    @Test
+    void holdsPermissionViaRoleIsFalseForStaleSelf() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org_b", "merchant", "active");
+        repository.addEffect(effect("usr_o", AF_CODE, AccessRepository.Effect.GRANT));
+        repository.addEffect(effect("usr_t", AF_CODE, AccessRepository.Effect.GRANT));
+
+        assertThat(service.holdsPermissionViaRole("usr_o", AF_CODE)).isFalse();
+        // 查他人不核对当前操作人身份，行为不变
+        assertThat(service.holdsPermissionViaRole("usr_t", AF_CODE)).isTrue();
+
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        assertThat(service.holdsPermissionViaRole("usr_o", AF_CODE)).isTrue();
+    }
+
+    // 岗位派生事实是判定过程中才按操作人 id 读取的：换项目恰在这次读取时提交（旧岗位派生被清空、归属改到新项目），
+    // 旧会话不得凭「挂起不再压得住」的旧岗位角色授予过判定——核对必须落在最后一次按操作人读取之后。
+    private void afArmScopeChangeDuringPositionRead() {
+        authenticate("usr_o", "usr_o", "staff");
+        afRow("usr_o", "staff", "org", "merchant", "active");
+        repository.addEffect(new AccessRepository.PermissionEffect("usr_o", AF_CODE, AccessRepository.Effect.DENY,
+                AccessRepository.Source.POSITION_HOLD, "hold_af", null, null, false, false));
+        repository.addEffect(new AccessRepository.PermissionEffect("usr_o", AF_CODE, AccessRepository.Effect.GRANT,
+                AccessRepository.Source.ROLE, "role_pos", null, null, false, false));
+        repository.positionRoles.put("usr_o", "role_pos");
+        repository.onPositionRead = () -> {
+            repository.positionRoles.remove("usr_o");
+            afRow("usr_o", "staff", "org_b", "merchant", "active");
+        };
+    }
+
+    @Test
+    void requirePermissionRejectsWhenScopeChangesWhilePositionFactsAreRead() {
+        afArmScopeChangeDuringPositionRead();
+
+        afAssertStaleSessionDenied();
+        assertThat(repository.positionRoles).doesNotContainKey("usr_o"); // 岗位派生事实确实被读过（读取时换项目已提交）
+    }
+
+    @Test
+    void currentActorHasPermissionIsFalseWhenScopeChangesWhilePositionFactsAreRead() {
+        afArmScopeChangeDuringPositionRead();
+
+        assertThat(service.currentActorHasPermission(AF_CODE)).isFalse();
+        assertThat(repository.positionRoles).doesNotContainKey("usr_o");
+    }
+
+    @Test
+    void holdsPermissionViaRoleIsFalseWhenScopeChangesWhilePositionFactsAreRead() {
+        afArmScopeChangeDuringPositionRead();
+
+        assertThat(service.holdsPermissionViaRole("usr_o", AF_CODE)).isFalse();
+        assertThat(repository.positionRoles).doesNotContainKey("usr_o");
+    }
+
+    // 对照（修复前后都绿）：客人与系统调度主体不在员工账号表内，不核对，行为不变。
+    @Test
+    void principalsWithoutAnAccountRowAreNotCheckedAgainstTheAccountTable() {
+        repository.addKnownPermission("customer.stored_value.topup");
+        afRow("usr_other", "staff", "org_b", null, "active");
+
+        authenticateActor(new AccessActor("cust_x", "cust_x", "customer", null, null, "active"));
+        service.requirePermission("customer.stored_value.topup");
+
+        authenticateActor(new AccessActor("system_scheduler", "system_scheduler", "platform_admin", null, null, "active"));
+        service.requirePermission("ops.production_readiness.view");
+    }
+
+    // ── XM-M002-BH（治理地图第 303、528、653 行；技术推导）：带商户归属的登录主体，幂等作用域同样按操作人与组织隔离。 ──
+
+    // S1：非商户主体的作用域逐字节不变；商户主体按人、按组织分开，不再是共用的 m:<商户号>。
+    @Test
+    void resolveKeepsNonMerchantScopesAndSeparatesMerchantCallersByPerson() {
+        authenticateActor(new AccessActor("usr_a", "usr_a", "platform_admin", "org", null, "active"));
+        assertThat(service.resolve()).isEqualTo("u:5:usr_a:org");
+        assertThat(service.legacyScope()).isEqualTo("p");
+
+        String master = SessionIssuer.MASTER_USER_ID;
+        authenticateActor(new AccessActor(master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, "active"));
+        assertThat(service.resolve()).isEqualTo("u:" + master.length() + ":" + master + ":platform-company");
+        assertThat(service.legacyScope()).isEqualTo("p");
+
+        authenticateActor(new AccessActor("cust_x", "cust_x", "customer", null, null, "active"));
+        assertThat(service.resolve()).isEqualTo("u:6:cust_x:");
+        assertThat(service.legacyScope()).isEqualTo("p");
+
+        authenticateActor(new AccessActor("system_scheduler", "system_scheduler", "platform_admin", null, null, "active"));
+        assertThat(service.resolve()).isEqualTo("u:16:system_scheduler:");
+        assertThat(service.legacyScope()).isEqualTo("p");
+
+        List<AccessActor> merchantCallers = List.of(
+                new AccessActor("usr_a", "usr_a", "staff", "O1", "mch_1", "active"),
+                new AccessActor("usr_b", "usr_b", "staff", "O2", "mch_1", "active"),
+                new AccessActor("usr_c", "usr_c", "staff", "O1", "mch_1", "active"),
+                new AccessActor("usr_a", "usr_a", "staff", "O2", "mch_1", "active"));
+        Set<String> scopes = new LinkedHashSet<>();
+        for (AccessActor caller : merchantCallers) {
+            authenticateActor(caller);
+            String scope = service.resolve();
+            assertThat(scope).isNotEqualTo("m:mch_1").doesNotStartWith("u:");
+            assertThat(service.legacyScope()).isEqualTo("m:mch_1");
+            scopes.add(scope);
+        }
+        assertThat(scopes).hasSize(merchantCallers.size());
+
+        SecurityContextHolder.clearContext();
+        assertThat(service.resolve()).isEmpty();
+        assertThat(service.legacyScope()).isEmpty();
+
+        authenticateActor(new AccessActor(" ", "blank", "staff", "O1", "mch_1", "active"));
+        assertThatThrownBy(() -> service.resolve())
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(401);
+                    assertThat(exception.code()).isEqualTo("UNAUTHENTICATED");
+                });
+    }
+
+    // S2：同商户不同组织、同商户同组织的他人用同一请求编号同体提交都各自执行；同一人重试只认一次；
+    // 修复前留下的 m:<商户号> 旧记录由既有守卫拦下（不回放、不执行、不改旧行）。
+    @Test
+    void sameMerchantDifferentOrganizationCannotReplayAndOldMerchantRecordsAreBlocked() {
+        InMemoryIdempotencyRepository records = new InMemoryIdempotencyRepository();
+        IdempotencyService idempotency = new IdempotencyService(records, new ObjectMapper());
+        String operationId = "userPermissionOverride:set:usr_t";
+        String legacyOperationId = "m:mch_1:" + operationId;
+        java.util.Map<String, String> body = java.util.Map.of("effect", "deny");
+        int[] count = {0};
+        java.util.function.Supplier<Integer> action = () -> ++count[0];
+        AccessActor a = new AccessActor("usr_a", "usr_a", "staff", "O1", "mch_1", "active");
+        AccessActor b = new AccessActor("usr_b", "usr_b", "staff", "O2", "mch_1", "active");
+        AccessActor a2 = new AccessActor("usr_c", "usr_c", "staff", "O1", "mch_1", "active");
+
+        // 第 0 步：用修复前的口径（resolve 与 legacyScope 都是 m:mch_1）自然写出一条旧记录
+        idempotency.setCallerScopeResolver(() -> "m:mch_1");
+        assertThat(idempotency.execute(operationId, "k-old", body, action, Integer.class)).isEqualTo(1);
+        IdempotencyRecord oldRecord = records.records.get(legacyOperationId + ":k-old");
+        assertThat(oldRecord).isNotNull();
+        idempotency.setCallerScopeResolver(service);
+
+        authenticateActor(a);
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(2);
+        authenticateActor(b);
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(3);
+        authenticateActor(a);
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(2);
+        assertThat(count[0]).isEqualTo(3);
+        authenticateActor(a2);
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(4);
+
+        authenticateActor(a);
+        assertThatThrownBy(() -> idempotency.execute(operationId, "k-old", body, action, Integer.class))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("IDEMPOTENCY_CONFLICT");
+                    assertThat(exception.getMessage()).contains("该请求编号存在旧处理记录");
+                });
+        assertThat(count[0]).isEqualTo(4);
+        assertThat(records.records.get(legacyOperationId + ":k-old")).isEqualTo(oldRecord);
+
+        List<String> operationIds = records.records.values().stream().map(IdempotencyRecord::operationId).toList();
+        assertThat(operationIds).filteredOn(legacyOperationId::equals).hasSize(1);
+        assertThat(operationIds).filteredOn(id -> !legacyOperationId.equals(id)).hasSize(3)
+                .allSatisfy(id -> assertThat(id).startsWith("caller:").hasSize(71));
+    }
+
     private AccessRepository.PermissionEffect effect(
             String userId,
             String permissionCode,
@@ -542,8 +823,16 @@ class AuthorizationServiceTests {
         final java.util.Map<String, List<String>> positionApplications = new java.util.LinkedHashMap<>();
         final java.util.Map<String, List<String>> directRoles = new java.util.LinkedHashMap<>();
 
+        // XM-M001-AF：读岗位派生事实那一刻触发（模拟此刻别人提交了换项目）
+        Runnable onPositionRead;
+
         @Override
         public java.util.Optional<String> findAssignedPositionRoleId(String userId) {
+            if (onPositionRead != null) {
+                Runnable hook = onPositionRead;
+                onPositionRead = null;
+                hook.run();
+            }
             return java.util.Optional.ofNullable(positionRoles.get(userId));
         }
 
@@ -603,9 +892,27 @@ class AuthorizationServiceTests {
             return user;
         }
 
+        // XM-M001-AF：员工账号行（默认空 = 主体不在员工表内，不核对）；findUserById 默认按 listUsers 查。
+        final java.util.Map<String, AccessUser> users = new java.util.LinkedHashMap<>();
+        // XM-M001-AF：员工职级（userId → level_rank）
+        final java.util.Map<String, Integer> staffLevels = new java.util.LinkedHashMap<>();
+
         @Override
         public List<AccessUser> listUsers() {
-            return List.of();
+            return List.copyOf(users.values());
+        }
+
+        @Override
+        public java.util.Optional<StaffLevelAssignment> findStaffLevelAssignment(String userId) {
+            return java.util.Optional.ofNullable(staffLevels.get(userId)).map(rank -> new StaffLevelAssignment(
+                    userId, "lvl_" + rank, null, "CNY", null, null, null, "seed", Instant.parse("2026-06-14T00:00:00Z")));
+        }
+
+        @Override
+        public java.util.Optional<StaffLevelRecord> findStaffLevelById(String staffLevelId) {
+            return staffLevels.values().stream().filter(rank -> ("lvl_" + rank).equals(staffLevelId)).findFirst()
+                    .map(rank -> new StaffLevelRecord(staffLevelId, "M4", "lower", rank, null, "active",
+                            Instant.parse("2026-06-14T00:00:00Z")));
         }
 
         @Override

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,6 +55,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     @Test
     void archiveThenApproveDeleteSucceedsWhenNoReferences() {
         TestSecurityActors.asPlatformAdmin();
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
         seed("staff_del", "user_del_1");
         service.archiveProfile("staff_del", true, "测试存档理由");
         service.requestDeleteProfile("staff_del", new StaffProfileDeleteRequest("离职"));
@@ -72,6 +73,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     @Test
     void requestDeleteRequiresArchiveFirst() {
         TestSecurityActors.asPlatformAdmin();
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
         seed("staff_noarch", "user_noarch");
         assertThatThrownBy(() -> service.requestDeleteProfile("staff_noarch", new StaffProfileDeleteRequest("x")))
                 .isInstanceOf(ApiException.class)
@@ -81,6 +83,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     @Test
     void approveDeleteRejectedWhenReferencedByAttendance() {
         TestSecurityActors.asPlatformAdmin();
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
         seed("staff_use", "user_use_1");
         service.archiveProfile("staff_use", true, "测试存档理由");
         service.requestDeleteProfile("staff_use", new StaffProfileDeleteRequest("试删"));
@@ -99,6 +102,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     @Test
     void ordinaryApplicantCannotApproveMasterOnlyDeletion() {
         TestSecurityActors.asPlatformAdmin("usr_same");
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
         seed("staff_self", "user_self_1");
         service.archiveProfile("staff_self", true, "测试存档理由");
         service.requestDeleteProfile("staff_self", new StaffProfileDeleteRequest("x"));
@@ -111,6 +115,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     @Test
     void masterRequestedDeletionTakesEffectDirectly() {
         TestSecurityActors.asPlatformAdmin();
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
         seed("staff_master", "user_master_1");
         service.archiveProfile("staff_master", true, "测试存档理由");
         StaffTestActors.master();

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -62,6 +62,15 @@ class M010RegressionTests {
     void actor(String id, String type, String merchant) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(id, id, type, "m010_p", merchant, "active"), "test", List.of()));
+    }
+
+    // XM-M001-AF：判权限时会核对会话身份与账号行。需要另一种账号类型或商户的用例各用独立账号（行与会话一致、持同一回归角色），
+    // 不改 setup 里 manager 那一行的取值。
+    void actorAs(String type, String merchant) {
+        String id = "u_" + key();
+        access.createUser(new AccessUser(id, id, type, "m010_p", merchant, "active", Instant.now()));
+        access.assignUserRole(id, role);
+        actor(id, type, merchant);
     }
 
     StaffProfileRecord profile(String merchant) {
@@ -158,7 +167,7 @@ class M010RegressionTests {
         }
         assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "active", "无效")))
                 .isInstanceOf(ApiException.class);
-        actor(manager, "merchant_admin", "m_other");
+        actorAs("merchant_admin", "m_other");
         assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "employed", "越户")))
                 .isInstanceOf(ApiException.class);
     }
@@ -234,14 +243,14 @@ class M010RegressionTests {
     }
 
     @Test void shiftVisibilityRequiresBoundsAndOnlyChangesCurrentEmployer() {
-        actor(manager, "merchant_admin", "setting_" + key());
+        actorAs("merchant_admin", "setting_" + key());
         assertThatThrownBy(() -> service.setShiftVisibility(new StaffNumericSettingRequest(key(), 3, null, null, "调整")))
                 .isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> service.setShiftVisibility(new StaffNumericSettingRequest(key(), 8, 1, 7, "调整")))
                 .isInstanceOf(ApiException.class);
         service.setShiftVisibility(new StaffNumericSettingRequest(key(), 3, 1, 14, "调整"));
         assertThat(service.getShiftVisibility().value()).isEqualTo(3);
-        actor(manager, "merchant_admin", "another_" + key());
+        actorAs("merchant_admin", "another_" + key());
         // U11-005/U05-005：另一雇主无自有行 → 读到 V413 全局出厂行（7，上下限 1..31），不是 Java 默认值。
         var factory = service.getShiftVisibility();
         assertThat(factory.value()).isEqualTo(7);
@@ -560,7 +569,7 @@ class M010RegressionTests {
 
     @Test void merchantManagerCannotChangeOtherMerchantSalary() {
         var other = profile("m010_other");
-        actor(manager, "staff", "m010_m");
+        actorAs("staff", "m010_m");
         assertThatThrownBy(() -> service.setBaseSalary(new StaffPayrollBaseRequest(key(), other.userId(), 12345L)))
                 .isInstanceOf(ApiException.class);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_base_salaries WHERE user_id=?", Long.class,
@@ -569,7 +578,7 @@ class M010RegressionTests {
 
     @Test void failedBatchDoesNotLeaveFirstShiftWritten() {
         var profile = profile(null);
-        actor(manager, "staff", null);
+        actorAs("staff", null);
         var day = LocalDate.of(2099, 8, 3);
         assertThatThrownBy(() -> service.batchUpsertShifts(new StaffShiftBatchRequest(key(),
                 List.of(profile.userId(), "missing-" + key()), day, 1, List.of(), "09:00", "18:00", List.of(), "回归")))
@@ -643,7 +652,7 @@ class M010RegressionTests {
         var b = profile("m010_b");
         service.setBaseSalary(new StaffPayrollBaseRequest(key(), a.userId(), 10000L));
         service.setBaseSalary(new StaffPayrollBaseRequest(key(), b.userId(), 10000L));
-        actor(manager, "staff", "m010_a");
+        actorAs("staff", "m010_a");
         service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-08"));
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
                 Long.class, a.userId())).isEqualTo(1L);
@@ -665,7 +674,7 @@ class M010RegressionTests {
             service.setBaseSalary(new StaffPayrollBaseRequest(key(), profile.userId(), 10000L));
         }
         service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-08"));
-        actor(manager, "staff", "m010_a");
+        actorAs("staff", "m010_a");
         assertThat(service.listShifts(date, null).items()).extracting(StaffShiftRecord::userId).containsExactly(a.userId());
         assertThat(service.listShifts(date, null).total()).isEqualTo(1);
         assertThat(service.listAttendance(date).items()).extracting(StaffAttendanceRecord::userId).containsExactly(a.userId());

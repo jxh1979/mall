@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -236,6 +236,7 @@ class StaffJdbcIntegrationTests {
         // 切换为 merchant_a 调用者：跨商户凭证归属校验应拒绝。
         StaffTestActors.grant(jdbcTemplate,accessRepository,"usr_merchant_a","project_main");
         StaffTestActors.actor("usr_merchant_a","staff","project_main","merchant_a");
+        StaffTestActors.alignRowToSession(jdbcTemplate);
         assertThatThrownBy(() -> service.reportIntegrity(cred.id(),
                 new StaffDeviceIntegrityReportRequest(key(), null, "root_detected")))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -329,6 +330,7 @@ class StaffJdbcIntegrationTests {
             submitted=service.submitRegistration(new StaffRegistrationRequest(key(),null,"project_main",merchantId,"员工"+key(),"13800138000","110101199001010000",null));
         }
         StaffTestActors.actor("usr_m010_reviewer","platform_admin","project_main",null);
+        StaffTestActors.alignRowToSession(jdbcTemplate);
         return submitted;
     }
 
@@ -708,6 +710,7 @@ class StaffJdbcIntegrationTests {
                 Instant.parse("2026-06-14T00:00:00Z"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 user, "token", List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))));
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
     }
 
     private String regclass(String tableName) {
@@ -886,6 +889,7 @@ class StaffJdbcIntegrationTests {
                 Instant.parse("2026-07-19T00:00:00Z"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 user, "token", List.of(new SimpleGrantedAuthority("ROLE_STAFF"))));
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
     }
 
     @org.junit.jupiter.api.Test

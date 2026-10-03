@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -203,5 +203,6 @@ class PayrollSafetyJdbcIntegrationTests {
                 Instant.parse("2026-06-14T00:00:00Z"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 user, "token", List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))));
+        StaffTestActors.alignRowToSession(jdbcTemplate); // XM-M001-AF：账号行与会话一致
     }
 }
