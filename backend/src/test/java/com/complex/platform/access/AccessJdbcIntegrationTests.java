@@ -77,6 +77,9 @@ class AccessJdbcIntegrationTests {
     @Autowired
     private org.springframework.transaction.interceptor.TransactionAttributeSource transactionAttributeSource;
 
+    @Autowired
+    private com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
+
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
@@ -4630,6 +4633,119 @@ class AccessJdbcIntegrationTests {
         }
     }
 
+    // M722-F03（M722-F01 验收证据补齐，不改实现）：只改所属商户——项目、账号类型、状态都不变——旧会话同样过不了判定，单次临时授权不被消耗。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void staleSessionAfterMerchantOnlyChangeIsRejectedAndSingleUseGrantIsKept() {
+        afAssertStaleSessionKeepsSingleUseGrant("m", (operator, project) ->
+                repository.updateUserScope(operator, project, "mch_af_moved", "seed-admin", Instant.now()));
+    }
+
+    // M722-F03：只改账号类型。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void staleSessionAfterAccountTypeOnlyChangeIsRejectedAndSingleUseGrantIsKept() {
+        afAssertStaleSessionKeepsSingleUseGrant("t", (operator, project) ->
+                jdbcTemplate.update("UPDATE access_users SET account_type = 'merchant_admin' WHERE id = ?", operator));
+    }
+
+    // 操作人持一份单次临时授权；会话建立后提交一项身份变更（入参：操作人、项目）。数据真实提交，结束后清理。
+    private void afAssertStaleSessionKeepsSingleUseGrant(String tag, java.util.function.BiConsumer<String, String> committedChange) {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String operator = "usr_af_" + tag + "_" + suffix;
+        String project = "org_af_" + tag + "_" + suffix;
+        String merchant = "mch_af_" + tag + "_" + suffix;
+        String code = "access.permission_template.apply";
+        Instant now = Instant.now();
+        try {
+            repository.createUser(new AccessUser(operator, operator, "staff", project, merchant, "active", now));
+            repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), operator, List.of(code),
+                    now.minusSeconds(60), now.plusSeconds(3600), true, false, "active", "single use", "seed-admin", now, null, null));
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                    new AccessActor(operator, operator, "staff", project, merchant, "active"), null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+            // 对照：变更前账号行与会话一致、装配足够（布尔判定不消耗单次来源）
+            assertThat(authorizationService.currentActorHasPermission(code)).isTrue();
+
+            committedChange.accept(operator, project);
+
+            afAssertIdentityChangedDenied(() -> authorizationService.requirePermission(code));
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM temporary_permission_grants WHERE subject_id = ? AND status = 'active' AND NOT consumed",
+                    Long.class, operator)).isEqualTo(1L);
+        } finally {
+            SecurityContextHolder.clearContext();
+            jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id = ?", operator);
+            jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", operator);
+        }
+    }
+
+    private void afAssertIdentityChangedDenied(org.assertj.core.api.ThrowableAssert.ThrowingCallable judgment) {
+        assertThatThrownBy(judgment).isInstanceOfSatisfying(ApiException.class, exception -> {
+            assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+            assertThat(exception.getMessage()).contains("账号归属或状态已变更");
+        });
+    }
+
+    // M722-F03：岗位派生事实是判定过程中才按操作人读取的——跨项目变更恰在这次读取时由另一事务提交（旧岗位派生清空、挂起行作废、
+    // 归属改到新项目，与 changeUserScope 同一组仓储写入），旧会话不得凭读取前拿到的旧岗位角色授予过判定。
+    // 判定在单独一个事务里走真实仓储，只在读岗位角色处插入「另一事务提交」。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void staleSessionIsRejectedWhenCrossProjectMoveCommitsWhilePositionFactsAreRead() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String operator = "usr_af_p_" + suffix;
+        String role = "role_af_p_" + suffix;
+        String oldProject = "org_af_p_old_" + suffix;
+        String newProject = "org_af_p_new_" + suffix;
+        String code = "access.permission_template.apply";
+        try {
+            repository.createUser(new AccessUser(operator, operator, "staff", oldProject, null, "active", Instant.now()));
+            repository.createRole(new RoleRecord(role, "AF 岗位角色 " + suffix, null, "project", "active", Instant.now(), List.of(code), null));
+            jdbcTemplate.update("""
+                    INSERT INTO user_position_assignments (user_id, position_code, staff_level_id, organization_id, assigned_by, assigned_at,
+                                                           assigned_role_id)
+                    VALUES (?, ?, 'lvl_m1_lower', ?, 'seed-admin', now(), ?)
+                    """, operator, "pos_af_" + suffix, oldProject, role);
+            repository.saveHighRiskHolds(operator, List.of(code), "岗位高危挂起", "seed-admin");
+            authenticate(operator, operator, "staff", oldProject);
+            // 对照：没有在途变更时，岗位角色授予被挂起压住——拒绝来自无权，不是身份核对
+            assertThatThrownBy(() -> authorizationService.requirePermission(code))
+                    .isInstanceOfSatisfying(ApiException.class, exception -> {
+                        assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                        assertThat(exception.getMessage()).doesNotContain("账号归属或状态已变更");
+                    });
+
+            java.util.concurrent.atomic.AtomicInteger positionReads = new java.util.concurrent.atomic.AtomicInteger();
+            TransactionTemplate otherTransaction = new TransactionTemplate(transactionManager);
+            otherTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            AccessRepository hooked = org.mockito.Mockito.mock(AccessRepository.class,
+                    org.mockito.AdditionalAnswers.delegatesTo(repository));
+            org.mockito.Mockito.doAnswer(invocation -> {
+                if (positionReads.getAndIncrement() == 0) {
+                    otherTransaction.executeWithoutResult(status -> {
+                        Instant at = Instant.now();
+                        repository.replacePositionGrants(operator, null, null, List.of(), "seed-admin", at);
+                        repository.deleteHighRiskHolds(operator, List.of(code));
+                        repository.updateUserScope(operator, newProject, null, "seed-admin", at);
+                    });
+                }
+                return repository.findAssignedPositionRoleId(operator);
+            }).when(hooked).findAssignedPositionRoleId(operator);
+            AuthorizationService judging = new AuthorizationService(hooked);
+
+            afAssertIdentityChangedDenied(() -> new TransactionTemplate(transactionManager)
+                    .executeWithoutResult(status -> judging.requirePermission(code)));
+            assertThat(positionReads.get()).isEqualTo(1); // 岗位派生事实确在判定过程中被读取，变更就在那一刻提交
+            assertThat(repository.findUserById(operator).orElseThrow().organizationId()).isEqualTo(newProject);
+        } finally {
+            SecurityContextHolder.clearContext();
+            jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", operator); // 岗位行、挂起行随账号级联删除
+            jdbcTemplate.update("DELETE FROM role_permissions WHERE role_id = ?", role);
+            jdbcTemplate.update("DELETE FROM roles WHERE id = ?", role);
+        }
+    }
+
     // ── XM-M002-BH（治理地图第 303、528、653 行；技术推导）真库＋真实接口回归 ─────────────────────────────────────────────
 
     // J1：同商户、另一组织的员工用他人的请求编号同体提交员工覆盖，不再拿到他人首次结果，而是按本人范围被 CROSS_ORG_FORBIDDEN 拒绝；
@@ -4752,5 +4868,78 @@ class AccessJdbcIntegrationTests {
         assertThat(m002UserRoles(longTarget)).doesNotContain(longRole);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT length(operation_id) FROM idempotency_records WHERE idempotency_key = ?", Integer.class, longKey)).isEqualTo(71);
+    }
+
+    // ── M722-F04（M722-F02 验收证据补齐，不改实现）：经生产装配的幂等服务（真实幂等表，作用域由 AuthorizationService 解析）──────────
+
+    // 同一商户、两个项目、两名在职员工，相同操作号、幂等键、请求体：各自的动作恰好执行一次、各得本人的结果；各自重试只回放本人首次结果。
+    @Test
+    void sameMerchantStaffInTwoProjectsEachExecuteOnceAndReplayOnlyTheirOwnResultOnTheRealTable() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String merchant = "mch_bh_k_" + suffix;
+        bhAssertEachCallerExecutesOnceAndReplaysOwnResult(suffix,
+                new AccessActor("usr_bh_ka_" + suffix, "usr_bh_ka_" + suffix, "staff", "org_bh_k1_" + suffix, merchant, "active"),
+                new AccessActor("usr_bh_kb_" + suffix, "usr_bh_kb_" + suffix, "staff", "org_bh_k2_" + suffix, merchant, "active"));
+    }
+
+    // 守护（修复前后都绿）：两个不同商户的员工互不撞键。
+    @Test
+    void staffOfDifferentMerchantsDoNotCollideOnTheSameOperationKeyAndBodyOnTheRealTable() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        bhAssertEachCallerExecutesOnceAndReplaysOwnResult(suffix,
+                new AccessActor("usr_bh_ma_" + suffix, "usr_bh_ma_" + suffix, "staff", "org_bh_m_" + suffix, "mch_bh_m1_" + suffix, "active"),
+                new AccessActor("usr_bh_mb_" + suffix, "usr_bh_mb_" + suffix, "staff", "org_bh_m_" + suffix, "mch_bh_m2_" + suffix, "active"));
+    }
+
+    private void bhAssertEachCallerExecutesOnceAndReplaysOwnResult(String suffix, AccessActor first, AccessActor second) {
+        for (AccessActor caller : List.of(first, second)) {
+            repository.createUser(new AccessUser(caller.id(), caller.username(), caller.accountType(), caller.organizationId(),
+                    caller.merchantId(), caller.status(), Instant.now()));
+        }
+        String operationId = "m722F04:" + suffix;
+        String key = "bh-k-" + suffix;
+        List<String> executed = new java.util.ArrayList<>();
+
+        assertThat(bhExecuteAs(first, operationId, key, executed)).isEqualTo(first.id());
+        assertThat(bhExecuteAs(second, operationId, key, executed)).isEqualTo(second.id());
+        assertThat(bhExecuteAs(first, operationId, key, executed)).isEqualTo(first.id());
+        assertThat(bhExecuteAs(second, operationId, key, executed)).isEqualTo(second.id());
+
+        assertThat(executed).containsExactly(first.id(), second.id());
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT operation_id || '/' || response_code FROM idempotency_records WHERE idempotency_key = ?", String.class, key))
+                .hasSize(2).doesNotHaveDuplicates().allSatisfy(row -> assertThat(row).endsWith("/OK")); // 该键恰两条，各占自己的一条
+    }
+
+    // 以该主体身份提交一次；动作把本人编号记进 executed 并作为结果返回。
+    private String bhExecuteAs(AccessActor caller, String operationId, String key, List<String> executed) {
+        String[] result = new String[1];
+        m002ActAs(caller, () -> result[0] = idempotencyService.execute(operationId, key, java.util.Map.of("effect", "deny"), () -> {
+            executed.add(caller.id());
+            return caller.id();
+        }, String.class));
+        return result[0];
+    }
+
+    // 守护（修复前后都绿）：不带商户归属的员工，库内记录的操作编号仍是按基线形态 u:<编号长度>:<编号>:<组织> 算出的值；本人重试只认一次。
+    @Test
+    void nonMerchantCallerKeepsTheBaselineIdempotencyScopeOnTheRealTable() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        AccessActor caller = new AccessActor("usr_bh_n_" + suffix, "usr_bh_n_" + suffix, "staff", "org_bh_n_" + suffix, null, "active");
+        repository.createUser(new AccessUser(caller.id(), caller.username(), "staff", caller.organizationId(), null, "active", Instant.now()));
+        String operationId = "m722F04:" + suffix;
+        String key = "bh-n-" + suffix;
+        List<String> executed = new java.util.ArrayList<>();
+
+        assertThat(bhExecuteAs(caller, operationId, key, executed)).isEqualTo(caller.id());
+        assertThat(bhExecuteAs(caller, operationId, key, executed)).isEqualTo(caller.id());
+
+        assertThat(executed).containsExactly(caller.id());
+        String baselineScope = "u:" + caller.id().length() + ":" + caller.id() + ":" + caller.organizationId();
+        String expected = "caller:" + java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(
+                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(List.of(baselineScope, operationId))
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT operation_id FROM idempotency_records WHERE idempotency_key = ?", String.class, key)).containsExactly(expected);
     }
 }
