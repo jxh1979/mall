@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -116,7 +116,7 @@ function statusBadge(status?: string | null, label: (code: string) => string = f
   return <span className={`admin-badge ${kind}`}>{value ? label(value) : "—"}</span>;
 }
 
-export function AccessGovernancePage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function AccessGovernancePage({ api, user, setActionResult, setGlobalError, effectivePermissions, refreshEffectivePermissions }: AdminPageProps) {
   // M038-005：页内写动作统一走 runWrite——提交中置忙（防双击发两笔）、失败把后端中文消息报到页面。
   const [writeBusy, setWriteBusy] = React.useState(false);
   const writeBusyRef = React.useRef(false);
@@ -201,6 +201,14 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
     },
     { onError: setGlobalError, fallbackMessage: "访问治理数据读取失败", onStart: () => setGlobalError(null) },
   );
+  // M002-F49（M002-F34／F08 裁决「本人可以直接解除，不会卡死」）：本人改了自身权限后，等刷新后的有效集渲染进来再重读，
+  // 副资源门控按新有效集计算——按旧有效集请求已被拒绝的副资源会 403、盖住整页连同本人的解除入口。
+  const [reloadAfterOwnChange, setReloadAfterOwnChange] = React.useState(false);
+  React.useEffect(() => {
+    if (!reloadAfterOwnChange) return;
+    setReloadAfterOwnChange(false);
+    void reload();
+  }, [reloadAfterOwnChange, reload]);
 
   React.useEffect(() => {
     const firstUser = users[0]?.id ?? "";
@@ -389,7 +397,12 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       operatorNote: overrideForm.reason.trim() || "后台员工级覆盖",
     });
     setActionResult(`已${kind === "set" ? "设置" : "移除"}用户 ${overrideForm.userId.trim()} 的${overrideForm.effect === "deny" ? "显式拒绝" : "单独授予"}：${codes.join("、")}`);
-    await reload();
+    if (overrideForm.userId.trim() === user.id && refreshEffectivePermissions) {
+      await refreshEffectivePermissions(); // M002-F49
+      setReloadAfterOwnChange(true);
+    } else {
+      await reload();
+    }
   }
 
   const GRANT_USER_REQUIRED = "授权申请需填写目标用户";

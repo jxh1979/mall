@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -525,6 +525,31 @@ class AccessServiceTests {
         assertThat(accessRepository.userRoles.getOrDefault("usr_m002_note", Set.of())).doesNotContain(roleId);
         assertThat(accessRepository.overrides).noneMatch(o -> "usr_m002_note".equals(o.userId()));
         assertThat(m002NoteEvents(expected.keySet())).containsExactlyInAnyOrderElementsOf(expected.values());
+    }
+
+    // M002-F48（F47 验收「各自精确等于请求原文」）：五类成功事件的 operator_note 不去首尾空格与换行、纯空白不变空串，null 记空串。
+    @Test
+    void roleAndOverrideSuccessEventsKeepTheOperatorNoteVerbatim() {
+        accessRepository.users.put("usr_m002_raw", new AccessUser(
+                "usr_m002_raw", "usr_m002_raw", "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        List<String> notes = java.util.Arrays.asList("  首尾空格  ", "换行结尾\n", "\r\n前后换行\r\n", "   ", "普通中文说明", null);
+        for (int i = 0; i < notes.size(); i++) {
+            String note = notes.get(i);
+            String roleId = service.createRole(new RoleRequest(
+                    "m002-raw-role-" + i, note, List.of(), "原文角色" + i, null, List.of(M002_VIEW), "project")).id();
+            service.assignUserRole(new RoleAssignmentRequest("m002-raw-assign-" + i, note, "usr_m002_raw", roleId));
+            service.unassignUserRole(new RoleAssignmentRequest("m002-raw-unassign-" + i, note, "usr_m002_raw", roleId));
+            service.setUserPermissionOverrides("usr_m002_raw", new UserPermissionOverrideRequest(
+                    "m002-raw-deny-" + i, note, List.of(M002_VIEW), "deny", "暂停查看"));
+            service.removeUserPermissionOverrides("usr_m002_raw", new UserPermissionOverrideRequest(
+                    "m002-raw-undeny-" + i, note, List.of(M002_VIEW), "deny", "恢复查看"));
+            String expected = note == null ? "" : note;
+            Set<String> keys = Set.of("m002-raw-role-" + i, "m002-raw-assign-" + i, "m002-raw-unassign-" + i,
+                    "m002-raw-deny-" + i, "m002-raw-undeny-" + i);
+            assertThat(m002NoteEvents(keys)).as("operator_note=%s", note).containsExactlyInAnyOrder(
+                    "role.changed/" + expected, "access.role.assigned/" + expected, "access.role.unassigned/" + expected,
+                    "access.user_permission_override.set/" + expected, "access.user_permission_override.remove/" + expected);
+        }
     }
 
     private List<String> m002NoteEvents(Set<String> keys) {

@@ -908,6 +908,34 @@ class AccessJdbcIntegrationTests {
         assertThat(m002NoteEvents(keys)).containsExactlyInAnyOrderElementsOf(expected);
     }
 
+    // M002-F48（F47 验收「各自精确等于请求原文」）：真库回归——建角色、直接分配、撤销的 audit_events.metadata.operator_note
+    // 对首尾空格、换行、纯空白均原样保存。
+    @Test
+    void roleSuccessEventsKeepTheOperatorNoteVerbatimOnTheRealSchema() {
+        M002Fixture f = m002ApprovalFixture();
+        String daily = "m002.raw_note_test.daily_" + f.suffix();
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M002 原文留痕测试日常权限', 'ops', 'medium', FALSE, 'active')
+                """, daily);
+        List<String> notes = List.of("  首尾空格  ", "换行结尾\n", "\r\n前后换行\r\n", "   ");
+        for (int i = 0; i < notes.size(); i++) {
+            String note = notes.get(i);
+            String[] keys = {"m002-f48-role-" + i + "-" + f.suffix(), "m002-f48-assign-" + i + "-" + f.suffix(),
+                    "m002-f48-unassign-" + i + "-" + f.suffix()};
+            String roleName = "M002 原文角色 " + i + " " + f.suffix();
+            String[] roleId = new String[1];
+            m002ActAs(f.admin(), "platform_admin", () -> roleId[0] = accessService.createRole(new RoleRequest(
+                    keys[0], note, List.of(), roleName, null, List.of(daily), "project")).id());
+            m002ActAs(f.admin(), "platform_admin", () -> accessService.assignUserRole(
+                    new RoleAssignmentRequest(keys[1], note, f.target(), roleId[0])));
+            m002ActAs(f.admin(), "platform_admin", () -> accessService.unassignUserRole(
+                    new RoleAssignmentRequest(keys[2], note, f.target(), roleId[0])));
+            assertThat(m002NoteEvents(keys)).as("operator_note=%s", note).containsExactlyInAnyOrder(
+                    "role.changed/" + note, "access.role.assigned/" + note, "access.role.unassigned/" + note);
+        }
+    }
+
     private List<String> m002NoteEvents(String[] keys) {
         return jdbcTemplate.queryForList("""
                 SELECT event_name || '/' || coalesce(metadata ->> 'operator_note', '<无>') FROM audit_events

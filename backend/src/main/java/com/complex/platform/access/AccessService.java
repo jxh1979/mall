@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.36
+// 文件版本：V0.37
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -500,9 +500,9 @@ public class AccessService {
                                 orgId
                         );
                         RoleRecord saved = repository.createRole(role);
-                        // M002-F47（治理地图 #audit 第 893、899 行「为什么……都要能查到」「权限变更」必须留痕）：成功事件记请求提交的操作说明
+                        // M002-F47（治理地图 #audit 第 893、899 行「为什么……都要能查到」「权限变更」必须留痕）：成功事件记请求提交的操作说明原文（M002-F48：null 记空串，其余不去首尾空白）
                         auditEventService.recordSuccess("role.changed", "access.role.manage", "role", saved.id(), null, request.idempotencyKey(),
-                                Map.of("operator_note", trimToDefault(request.operatorNote(), "")));
+                                Map.of("operator_note", nz(request.operatorNote())));
                         return saved;
                     },
                     RoleRecord.class
@@ -564,7 +564,7 @@ public class AccessService {
                                 targetUser.id() + ":" + role.id(),
                                 null,
                                 r.idempotencyKey(),
-                                Map.of("role_id", role.id(), "operator_note", trimToDefault(r.operatorNote(), "")) // M002-F47
+                                Map.of("role_id", role.id(), "operator_note", nz(r.operatorNote())) // M002-F47、F48：原文
                         );
                         return new RoleAssignmentRecord(targetUser.id(), role.id());
                     },
@@ -1683,7 +1683,7 @@ public class AccessService {
                 context.targetUser().id() + ":" + context.role().id(),
                 null,
                 request.idempotencyKey(),
-                Map.of("role_id", context.role().id(), "operator_note", trimToDefault(request.operatorNote(), "")) // M002-F47
+                Map.of("role_id", context.role().id(), "operator_note", nz(request.operatorNote())) // M002-F47、F48：原文
         );
         return saved;
     }
@@ -1808,7 +1808,7 @@ public class AccessService {
                                         "effect", effect.name().toLowerCase(Locale.ROOT),
                                         "permission_codes", String.join(",", permissionCodes),
                                         "reason", trimToDefault(r.reason(), ""),
-                                        "operator_note", trimToDefault(r.operatorNote(), "") // M002-F47
+                                        "operator_note", nz(r.operatorNote()) // M002-F47、F48：原文
                                 )
                         );
                         return authorizationService.effectivePermissionsForUser(targetUser.id());
