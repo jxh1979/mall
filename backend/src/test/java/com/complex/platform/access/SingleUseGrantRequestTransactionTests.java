@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -75,6 +75,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 另补 F03「结果保存失败不算用掉」的真库接口回归。
  * M723 第 11 轮（F16）：持未消耗单次来源的请求带了多个不同或读不出来的提交编号时，在执行前按 400 拒绝、不执行、不消耗。
  * M723 第 12 轮（F17、F18）：Map 请求体里的提交编号同样计入（终端设备签名公钥登记）；该接口的公钥计入请求摘要，同编号换公钥 409。
+ * M723 第 13 轮（F19、F20）：同名请求头的每个值都算提交编号；查询串里的提交编号不计入请求摘要。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -1372,6 +1373,130 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(data(replayed)).isEqualTo(data(first));
         assertThat(signingKeyRegisteredEvents(device)).isEqualTo(1);
         assertConsumedOnce();
+    }
+
+    // M723-F19（治理地图第 656 行同一确认句；M723-F16、F17 验收；操作员 2026-10-06「修这两条，同类以后转 M724」）：同名请求头写了两遍、
+    // 两个编号不一样（第一个与请求体相同）。只持单次「角色管理」的员工这样建角色——Idempotency-Key 写 A、B，或 X-Idempotency-Key 写 A、B：
+    // 都 400，没有建出角色、来源未消耗、两个编号都没有留下幂等记录。对照：同名请求头两遍都写 A，请求体与查询串也是 A：200、建出一个角色、
+    // 恰好消耗一次；同样写法重复提交 → 第一次的结果、提示已完成。修复前只取同名请求头的第一个值、认不出不一致（第一处 400 即红）。
+    @Test
+    void aRequestRepeatingARequestNumberHeaderWithDifferentValuesIsRejectedBeforeAnythingIsWrittenOrSpent() throws Exception {
+        staffWithSingleUseGrant(null, ROLE_MANAGE);
+        String key = "xmj-role-dup-" + suffix;
+        String other = "xmj-role-dup-other-" + suffix;
+        String body = roleJson(key, roleName("重复头"), "[]");
+        for (String header : List.of("Idempotency-Key", "X-Idempotency-Key")) {
+            mockMvc.perform(post("/api/v1/access/roles").with(session(null)).header(header, key, other)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            assertThat(rolesCreated()).isZero();
+            assertUnconsumed();
+            assertThat(idempotencyRecords(key)).isZero();
+            assertThat(idempotencyRecords(other)).isZero();
+        }
+
+        String first = mockMvc.perform(post("/api/v1/access/roles").queryParam("idempotency_key", key).with(session(null))
+                        .header("Idempotency-Key", key, key).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertConsumedOnce();
+        assertThat(rolesCreated()).isEqualTo(1);
+        String replayed = mockMvc.perform(post("/api/v1/access/roles").queryParam("idempotency_key", key).with(session(null))
+                        .header("Idempotency-Key", key, key).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(replayed)).isEqualTo(data(first));
+        assertConsumedOnce();
+        assertThat(rolesCreated()).isEqualTo(1);
+    }
+
+    // M723-F19（Map 请求体）：终端设备签名公钥登记成功（编号 A）并补授第二份来源后，请求体仍是 A、同名请求头写 A、B
+    // （Idempotency-Key 与 X-Idempotency-Key 各一遍）：都 400，第二份来源未消耗，登记成功事件仍只有一条，库里的公钥不变。
+    // 修复前只取第一个值 A，当成重复提交返回 200（第一处 400 即红）。
+    @Test
+    void aSigningKeyRegistrationRepeatingARequestNumberHeaderWithDifferentValuesIsRejected() throws Exception {
+        String device = boundTerminalDevice();
+        String url = "/api/v1/terminals/devices/" + device + "/signing-key";
+        staffWithSingleUseGrant(null, "terminal.device.bind");
+        String key = "xmj-sign-dup-" + suffix;
+        String other = "xmj-sign-dup-other-" + suffix;
+        String body = signingKeyJson(key, "PK1-" + suffix);
+        mockMvc.perform(post(url).with(session(null)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("registered"));
+        assertConsumedOnce();
+        Instant now = Instant.now();
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of("terminal.device.bind"),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F19 补授的第二份单次来源",
+                "seed-admin", now, null, null));
+
+        for (String header : List.of("Idempotency-Key", "X-Idempotency-Key")) {
+            mockMvc.perform(post(url).with(session(null)).header(header, key, other)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            assertThat(consumedFlags()).containsExactlyInAnyOrder(true, false);
+            assertThat(consumptionLogs()).isEqualTo(1);
+            assertThat(signingKeyRegisteredEvents(device)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject("SELECT public_key FROM terminal_device_signing_keys WHERE device_id = ?",
+                    String.class, device)).isEqualTo("PK1-" + suffix);
+        }
+    }
+
+    // M723-F20（治理地图第 656 行同一确认句；M723-F04 验收「本人唯一的单次来源重放不再 403」）：提交编号写在查询串里不改变「是不是同一次
+    // 操作」。只持一份单次「角色管理」的员工：第一次把编号同时写进查询串、请求体与请求头，成功并消耗；随后只在请求体带同一编号重复提交
+    // → 第一次的结果、提示已完成、仍只消耗一次；多带一个别的查询参数再提交 → 不是同一次操作，403。补授第二份来源后反过来：第一次只在
+    // 请求体带编号，成功；重复提交时才把同一编号写进查询串 → 第一次的结果、提示已完成、不再消耗。修复前查询串里的编号被算进请求
+    // 摘要，两种写法对不上、唯一来源的重复提交 403（第一处「提示已完成」即红）。
+    @Test
+    void aRequestNumberWrittenInTheQueryStringDoesNotChangeWhichOperationItIs() throws Exception {
+        staffWithSingleUseGrant(null, ROLE_MANAGE);
+        String key = "xmj-role-query-" + suffix;
+        String body = roleJson(key, roleName("查询串"), "[]");
+        String first = mockMvc.perform(post("/api/v1/access/roles").queryParam("idempotency_key", key).with(session(null))
+                        .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertConsumedOnce();
+        String replayed = mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(replayed)).isEqualTo(data(first));
+        assertConsumedOnce();
+        assertThat(rolesCreated()).isEqualTo(1);
+        mockMvc.perform(post("/api/v1/access/roles").queryParam("view", "other").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertConsumedOnce();
+
+        Instant now = Instant.now();
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(ROLE_MANAGE),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F20 补授的第二份单次来源",
+                "seed-admin", now, null, null));
+        String reverseKey = "xmj-role-query2-" + suffix;
+        String reverseBody = roleJson(reverseKey, roleName("查询串二"), "[]");
+        String reverseFirst = mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).content(reverseBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertConsumed(2);
+        String reverseReplayed = mockMvc.perform(post("/api/v1/access/roles").queryParam("idempotency_key", reverseKey)
+                        .with(session(null)).contentType(MediaType.APPLICATION_JSON).content(reverseBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(reverseReplayed)).isEqualTo(data(reverseFirst));
+        assertConsumed(2);
+        assertThat(rolesCreated()).isEqualTo(2);
     }
 
     // M723-F17、F18 夹具：一台已绑定的终端设备；返回设备号（接口路径里的 id）。

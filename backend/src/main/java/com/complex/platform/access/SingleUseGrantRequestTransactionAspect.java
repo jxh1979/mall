@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -193,8 +193,13 @@ public class SingleUseGrantRequestTransactionAspect {
             }
         }
         if (request != null) {
-            addKey(keys, request.getHeader("Idempotency-Key"));
-            addKey(keys, request.getHeader("X-Idempotency-Key"));
+            // M723-F19：同名请求头写了多遍的，每一个值都是请求带的编号（getHeader 只给第一个）
+            for (String header : List.of("Idempotency-Key", "X-Idempotency-Key")) {
+                java.util.Enumeration<String> values = request.getHeaders(header);
+                while (values != null && values.hasMoreElements()) {
+                    addKey(keys, values.nextElement());
+                }
+            }
             // 只读查询串，不调 getParameter：表单请求体可能要留给控制器自己读原文（如回调验签）
             String query = request.getQueryString();
             for (String pair : query == null ? new String[0] : query.split("&")) {
@@ -216,13 +221,22 @@ public class SingleUseGrantRequestTransactionAspect {
         }
     }
 
-    /** 请求摘要：方法、路径与查询串的 SHA-256（十六进制 64 位），同一幂等键换接口、换对象、换查询条件都对不上。 */
+    /**
+     * 请求摘要：方法、路径与查询串的 SHA-256（十六进制 64 位），同一幂等键换接口、换对象、换查询条件都对不上。
+     * M723-F20：查询串里的 {@code idempotency_key} 参数是提交编号的又一个位置，不是请求内容，算摘要前去掉（其余查询参数原样保留）——
+     * 编号这次写在查询串、下次只写在请求体或请求头，仍是同一次操作。
+     */
     static String requestDigestOf(HttpServletRequest request) {
         if (request == null) {
             return null;
         }
         String query = request.getQueryString();
-        String target = request.getMethod() + " " + request.getRequestURI() + (query == null ? "" : "?" + query);
+        if (query != null) {
+            query = java.util.Arrays.stream(query.split("&", -1)).filter(pair -> !pair.startsWith("idempotency_key="))
+                    .collect(java.util.stream.Collectors.joining("&"));
+        }
+        String target = request.getMethod() + " " + request.getRequestURI()
+                + (query == null || query.isEmpty() ? "" : "?" + query);
         try {
             return HexFormat.of().formatHex(
                     MessageDigest.getInstance("SHA-256").digest(target.getBytes(StandardCharsets.UTF_8)));
