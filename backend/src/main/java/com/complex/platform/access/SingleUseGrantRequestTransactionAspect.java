@@ -1,9 +1,11 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
+import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
 import java.net.URLDecoder;
@@ -12,6 +14,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Set;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -19,6 +22,9 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -112,6 +118,14 @@ public class SingleUseGrantRequestTransactionAspect {
                 }
                 return handler.proceed();
             }
+            // M723-F15（治理地图第 656 行「只有这次操作成功完成、返回结果后才算用掉」）：响应转换发生在本切面返回之后，那时请求事务
+            // 已经提交。统一信封只能以 JSON 返回——请求头 Accept 不接受 JSON（或写错）时响应必然发不出去，所以在开请求事务之前
+            // 就拒绝：置 406、不带响应体直接返回，不执行业务、不消耗。（本切面抛不了受检的 HttpMediaTypeNotAcceptableException——
+            // 处理方法没有声明它，代理会包成 UndeclaredThrowableException；带统一信封的错误响应也同样发不出去。）
+            if (!envelopeAcceptable(request, handlerMethod)) {
+                currentResponse().setStatus(HttpServletResponse.SC_NOT_ACCEPTABLE);
+                return null;
+            }
             Throwable[] failure = new Throwable[1];
             Object result = transactionTemplate.execute(status -> {
                 try {
@@ -201,6 +215,28 @@ public class SingleUseGrantRequestTransactionAspect {
         } catch (NoSuchAlgorithmException unavailable) {
             throw new IllegalStateException("SHA-256 unavailable", unavailable);
         }
+    }
+
+    // 统一信封 ApiResponse 由 JSON 转换器写出；判断与响应转换同口径：解析请求头 Accept，没有该头即都接受。
+    private static final List<MediaType> ENVELOPE_MEDIA_TYPES =
+            List.of(MediaType.APPLICATION_JSON, new MediaType("application", "*+json"));
+
+    private static boolean envelopeAcceptable(HttpServletRequest request, Method handlerMethod) {
+        if (request == null || !ApiResponse.class.isAssignableFrom(handlerMethod.getReturnType())) {
+            return true;
+        }
+        List<MediaType> acceptable;
+        try {
+            acceptable = MediaType.parseMediaTypes(java.util.Collections.list(request.getHeaders(HttpHeaders.ACCEPT)));
+        } catch (InvalidMediaTypeException exception) {
+            return false;
+        }
+        return acceptable.isEmpty() || acceptable.stream().anyMatch(
+                type -> ENVELOPE_MEDIA_TYPES.stream().anyMatch(type::isCompatibleWith));
+    }
+
+    private static HttpServletResponse currentResponse() {
+        return ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getResponse();
     }
 
     private static HttpServletRequest currentRequest() {

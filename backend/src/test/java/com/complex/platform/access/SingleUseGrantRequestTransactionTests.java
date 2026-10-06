@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -12,6 +12,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
+import com.complex.platform.common.idempotency.IdempotencyRecord;
+import com.complex.platform.common.idempotency.IdempotencyRepository;
+import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,8 +30,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.AdditionalAnswers;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -38,6 +44,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.AopTestUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -63,6 +71,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 第一次已成功完成的请求，不经幂等层的入口（招商线索创建、月报导出）落败的一笔照旧 403、业务只执行一次。
  * M723 第 9 轮（F14；治理地图第 653 行项目隔离）：企微会话调阅（脱敏与原文）只能看本人项目的会话，平台管理员不受此限；
  * 调阅其他项目的会话 403、不返回消息、单次来源不算用掉。
+ * M723 第 10 轮（F15）：请求头 Accept 不接受 JSON 时，持未消耗单次来源的请求在执行前按 406 拒绝、不执行、不消耗；
+ * 另补 F03「结果保存失败不算用掉」的真库接口回归。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -94,6 +104,9 @@ class SingleUseGrantRequestTransactionTests {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private IdempotencyService idempotencyService;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String userId = "usr_xmj_" + suffix;
@@ -1081,6 +1094,111 @@ class SingleUseGrantRequestTransactionTests {
             assertThat(denied).doesNotContain("raw-ref-").doesNotContain("raw_content");
         }
         assertUnconsumed();
+    }
+
+    // M723-F15（治理地图第 656 行「只有这次操作成功完成、返回结果后才算用掉；操作被拒绝或失败的不算用掉」；操作员 2026-10-06
+    // 「两条都修再审」）：请求头 Accept 不接受 JSON（application/pdf、写错的值）时统一信封发不出去。只持单次「企微原文调阅」的员工
+    // 这样调阅本项目会话的原文：406，响应不含原文，来源未消耗、无消耗日志、无调阅留痕与原文查看成功事件；同一来源随后按 JSON
+    // 请求 200 含原文、恰好消耗一次，再调阅 403。修复前业务已执行、来源已消耗才 406（「未消耗」的断言红）。
+    @Test
+    void aRawWecomViewWhoseResponseCannotBeProducedIsRejectedBeforeTheSingleUseGrantIsSpent() throws Exception {
+        String own = wecomConversation("wconv_xmj_" + suffix, "org", "raw-ref-own-" + suffix);
+        staffWithSingleUseGrant(null, "wecom.view_raw");
+
+        for (String accept : List.of("application/pdf", "not-a-media-type")) {
+            String rejected = mockMvc.perform(get(wecomMessagesUrl(own)).param("mode", "raw").param("approval_ref", "approval-m723")
+                            .header("Accept", accept).with(session(null)))
+                    .andExpect(status().isNotAcceptable())
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertThat(rejected).doesNotContain("raw-ref-own-" + suffix);
+            assertUnconsumed();
+            assertThat(wecomAccessAudits(own, userId)).isZero();
+            assertThat(wecomAuditEvents("wecom.raw_viewed", "success", own)).isZero();
+        }
+
+        mockMvc.perform(get(wecomMessagesUrl(own)).param("mode", "raw").param("approval_ref", "approval-m723")
+                        .accept(MediaType.APPLICATION_JSON).with(session(null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].raw_content").value("raw-ref-own-" + suffix));
+        assertConsumedOnce();
+        assertThat(wecomAccessAudits(own, userId)).isEqualTo(1);
+        mockMvc.perform(get(wecomMessagesUrl(own)).param("mode", "raw").param("approval_ref", "approval-m723")
+                        .accept(MediaType.APPLICATION_JSON).with(session(null)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertConsumedOnce();
+    }
+
+    // M723-F15 同根（写接口）：只持单次「角色管理」的员工带 Accept: application/pdf 建角色：406，没有建出角色、来源未消耗、
+    // 没有留下幂等记录；同一请求编号与正文随后按 JSON 再发，按首次处理：200、建出一个角色、恰好消耗一次。
+    // 修复前角色已建出、来源已消耗才 406（「没有建出角色」的断言红）。
+    @Test
+    void aWriteWhoseResponseCannotBeProducedIsRejectedBeforeAnythingIsWrittenOrSpent() throws Exception {
+        staffWithSingleUseGrant(null, ROLE_MANAGE);
+        String key = "xmj-role-accept-" + suffix;
+        String body = roleJson(key, roleName("格式"), "[]");
+
+        mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_PDF).content(body))
+                .andExpect(status().isNotAcceptable());
+        assertThat(rolesCreated()).isZero();
+        assertUnconsumed();
+        assertThat(idempotencyRecords(key)).isZero();
+
+        mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"));
+        assertThat(rolesCreated()).isEqualTo(1);
+        assertConsumedOnce();
+    }
+
+    // M723-F03 覆盖补证（CODEX-M723-10-02；验收条件「业务写入或结果保存失败时，单次来源仍为未消耗、没有消耗日志」）：
+    // 只持单次「角色管理」的员工建角色，业务动作执行完（同一事务里已能查到新角色）之后，幂等层保存成功结果这一步失败
+    // （把幂等服务的仓储换成「保存本请求的成功结果时抛错、其余原样转给真仓储」的替身，请求结束即换回）：500，来源未消耗、
+    // 无消耗日志、没有建出角色、没有留下幂等记录；故障移除后同一请求编号与正文再发，按首次处理：200、建出一个角色、恰好消耗一次。
+    // 本类不开测试事务，以上都是请求结束后的真实库状态。M723 之前核验即扣（「未消耗」的断言红）。
+    @Test
+    void aResultThatCannotBeSavedAfterTheActionRanLeavesTheSingleUseGrantUnconsumed() throws Exception {
+        staffWithSingleUseGrant(null, ROLE_MANAGE);
+        String key = "xmj-role-save-" + suffix;
+        String name = roleName("存");
+        String body = roleJson(key, name, "[]");
+        Object service = AopTestUtils.getUltimateTargetObject(idempotencyService);
+        IdempotencyRepository real = (IdempotencyRepository) ReflectionTestUtils.getField(service, "repository");
+        IdempotencyRepository failingOnSave = Mockito.mock(IdempotencyRepository.class, AdditionalAnswers.delegatesTo(real));
+        AtomicInteger rolesWrittenWhenSaving = new AtomicInteger(-1);
+        Mockito.doAnswer(invocation -> {
+            rolesWrittenWhenSaving.set(jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM roles WHERE role_name = ?", Integer.class, name));
+            throw new IllegalStateException("M723-F03 回归：幂等成功结果保存失败（测试注入）");
+        }).when(failingOnSave).complete(Mockito.argThat((IdempotencyRecord record) ->
+                record != null && key.equals(record.idempotencyKey()) && "OK".equals(record.responseCode())));
+        ReflectionTestUtils.setField(service, "repository", failingOnSave);
+        try {
+            mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isInternalServerError());
+        } finally {
+            ReflectionTestUtils.setField(service, "repository", real);
+        }
+        // 失败确实发生在保存结果这一步：那时业务动作已经写出了这个角色
+        assertThat(rolesWrittenWhenSaving).hasValue(1);
+        assertUnconsumed();
+        assertThat(rolesCreated()).isZero();
+        assertThat(idempotencyRecords(key)).isZero();
+
+        mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"));
+        assertThat(rolesCreated()).isEqualTo(1);
+        assertConsumedOnce();
+    }
+
+    private Integer idempotencyRecords(String idempotencyKey) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM idempotency_records WHERE idempotency_key = ?", Integer.class, idempotencyKey);
     }
 
     // M723-F14 夹具：某项目下的一条企微会话，带一条消息（脱敏文本 ***、原文引用 rawRef）；返回会话 id。
