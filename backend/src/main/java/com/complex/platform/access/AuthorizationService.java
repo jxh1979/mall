@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -72,8 +72,9 @@ public class AuthorizationService implements CallerScopeResolver {
      * 不在控制器请求里（没有请求上下文）时一律照旧消耗。
      * M723-F09（第 656 行「操作被拒绝或失败的不算用掉」）：控制器请求里本次要消耗单次来源（写请求，或带 {@link ConsumesSingleUseGrant}
      * 的查看请求）而本请求没有请求事务（请求进入时不持有、判定期间才被授出；切面记了「无请求事务」，或当前没有实际事务）时
-     * 不消耗、按不具备处理。M723-F10（同行「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：抢不到来源时若正是本人以本请求
-     * 编号、本请求摘要刚用掉的、且那次请求已经幂等层成功完成（与 SingleUseReplay 第③项同口径），转为只能重放；不经幂等层的接口没有
+     * 不消耗、按不具备处理。M723-F10、F11（同行「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：抢不到来源时若本次调用还没有
+     * 新消耗任何来源、本次要消耗的每一份来源都正是本人以本请求编号、本请求摘要刚用掉的、且那次请求已经幂等层成功完成（与 SingleUseReplay
+     * 第③项同口径），转为只能重放（不分一份还是多份来源）；不经幂等层的接口没有
      * 可返回的第一次结果，照旧拒绝。M723-F08：消耗记到请求名下时连来源号与权限码一起记，供 {@link #releaseRequestConsumption} 撤回。
      */
     public void requirePermissions(String... permissionCodes) {
@@ -127,6 +128,7 @@ public class AuthorizationService implements CallerScopeResolver {
         }
         boolean recordRequest = request != null && request.identified();
         boolean[] replayedAtConsumption = new boolean[1];
+        int[] newlyConsumed = new int[1];
         Runnable consumeAll = () -> {
             for (AccessRepository.PermissionEffect grant : consume.values()) {
                 // 取不到本次请求的幂等键时沿用四参写法（不记请求信息，其重放照旧拒绝）；内存仓与桩只实现了它
@@ -136,16 +138,19 @@ public class AuthorizationService implements CallerScopeResolver {
                         : accessRepository.markSingleUsePermissionConsumed(
                                 grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt);
                 if (consumed) {
+                    newlyConsumed[0]++;
                     continue;
                 }
                 // M723-F10：抢不到时重读消耗记录——正是本人以本请求编号、本请求摘要用掉的（同号并发提交的另一笔刚提交），
                 // 且那次请求的幂等记录已成功完成（SingleUseReplay 第③项同口径：消耗与幂等记录同一事务提交，读到消耗行时记录必已 OK；
                 // 不经幂等层的接口没有这条记录、也没有可返回的第一次结果，照旧拒绝——replayOnly 只有幂等层尊重），
-                // 转为只能重放，由幂等层返回第一次的结果（走到这里记录必已 OK；首笔尚未完成时的 409 出在幂等占位处的既有逻辑，不在本分支）；只在本次只消耗这一个来源时才转
-                // （同一次调用不能既按重放放行、又消耗别的单次来源），否则照旧拒绝。
-                if (recordRequest && consume.size() == 1 && idempotencyRepository != null
-                        && accessRepository.singleUseSourceConsumedByRequest(
-                                grant.sourceId(), grant.permissionCode(), actor.id(), request.idempotencyKey(), request.requestDigest())
+                // 转为只能重放，由幂等层返回第一次的结果（走到这里记录必已 OK；首笔尚未完成时的 409 出在幂等占位处的既有逻辑，不在本分支）；
+                // M723-F11（同行，不分来源个数）：一次要消耗多份单次来源时同样转——条件是本次调用还没有新消耗任何来源（落败在第一份上），
+                // 且本次要消耗的每一份来源都正是本请求编号、本请求摘要用掉的（同号的另一笔把它们一起用掉并提交了）；
+                // 已经新消耗过一份、或有一份是被别的请求用掉的，照旧拒绝并让整笔回滚（同一次调用不能既按重放放行、又消耗别的单次来源）。
+                if (recordRequest && newlyConsumed[0] == 0 && idempotencyRepository != null
+                        && consume.values().stream().allMatch(each -> accessRepository.singleUseSourceConsumedByRequest(
+                                each.sourceId(), each.permissionCode(), actor.id(), request.idempotencyKey(), request.requestDigest()))
                         && idempotencyRepository.hasCompletedSingleUseRequest(
                                 actor.id(), request.idempotencyKey(), request.requestDigest())) {
                     replayedAtConsumption[0] = true;

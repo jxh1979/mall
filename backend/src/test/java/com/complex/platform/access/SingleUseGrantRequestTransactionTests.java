@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -393,23 +393,66 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(rolesCreated()).isEqualTo(1);
     }
 
-    // 等到 expected 条会话被行锁挡在 temporary_permission_grants 的更新上（最多 30 秒；等不到也放行，用例仍按结果断言）
+    // 同步屏障（M723-F09／F10 覆盖缺口，CODEX-M723-5-02）：在本用例持锁的事务里调用，等到 expected 个会话排在本连接所持的来源行锁后面——
+    // 只认排在本用例这把锁后面的会话，不认库里别的阻塞。同一行的第二个等待者排在第一个等待者后面（pg_blocking_pids 只给出它前面那个会话），
+    // 所以沿等待关系从本连接的后端进程号往下数。时限内等不到或等待被中断即判失败：屏障没命中的并发用例不算数，不能退化成先后执行还照样通过。
     private void awaitBlockedOnGrantRow(int expected) {
-        for (int i = 0; i < 300; i++) {
+        awaitBlockedOnGrantRow(expected, 30_000);
+    }
+
+    private void awaitBlockedOnGrantRow(int expected, long timeoutMillis) {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        while (true) {
+            // 本事务里第一次读会话视图后 PostgreSQL 会缓存会话列表；不清掉的话，之后连接池才新开的连接在本事务里一直看不见
+            jdbcTemplate.execute("SELECT pg_stat_clear_snapshot()");
             Integer blocked = jdbcTemplate.queryForObject("""
-                    SELECT count(*) FROM pg_stat_activity
-                     WHERE cardinality(pg_blocking_pids(pid)) > 0 AND query LIKE '%temporary_permission_grants%'
+                    WITH RECURSIVE queued(pid) AS (
+                        SELECT a.pid FROM pg_stat_activity a WHERE pg_backend_pid() = ANY(pg_blocking_pids(a.pid))
+                        UNION
+                        SELECT a.pid FROM pg_stat_activity a JOIN queued q ON q.pid = ANY(pg_blocking_pids(a.pid))
+                    )
+                    SELECT count(*) FROM queued
                     """, Integer.class);
             if (blocked != null && blocked >= expected) {
                 return;
+            }
+            if (System.nanoTime() > deadline) {
+                List<String> sessions = jdbcTemplate.queryForList("""
+                        SELECT pid || ' ' || coalesce(state, '-') || ' ' || coalesce(wait_event_type, '-') || '/' || coalesce(wait_event, '-')
+                               || ' blockers=' || pg_blocking_pids(pid)::text || ' ' || left(regexp_replace(query, '[[:space:]]+', ' ', 'g'), 100)
+                          FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()
+                        """, String.class);
+                StringBuilder stacks = new StringBuilder();
+                Thread.getAllStackTraces().forEach((thread, frames) -> {
+                    if (thread.getName().startsWith("pool-") && frames.length > 0) {
+                        stacks.append(" || ").append(thread.getName()).append(' ').append(thread.getState());
+                        java.util.Arrays.stream(frames).filter(frame -> frame.getClassName().startsWith("com.complex.")
+                                        || frame.getClassName().startsWith("com.zaxxer.") || frame.getClassName().startsWith("org.postgresql.core.v3.QueryExecutorImpl"))
+                                .limit(14).forEach(frame -> stacks.append(" < ").append(frame.getClassName().substring(frame.getClassName().lastIndexOf('.') + 1))
+                                        .append('.').append(frame.getMethodName()).append(':').append(frame.getLineNumber()));
+                    }
+                });
+                throw new AssertionError("同步屏障未命中：" + timeoutMillis + " 毫秒内排在本用例所持来源行锁后面的会话 " + blocked
+                        + " 个，需要 " + expected + " 个；本库其它会话：" + sessions + "；在途请求线程：" + stacks);
             }
             try {
                 Thread.sleep(100);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
-                return;
+                throw new AssertionError("同步屏障等待被中断", interrupted);
             }
         }
+    }
+
+    // 屏障辅助方法自测：本用例持锁的事务没有挡住任何会话时，短时限内必抛断言错误（用它的并发用例因此不会在屏障没命中时照样通过）。
+    @Test
+    void theSynchronisationBarrierFailsWhenNoRequestReachesTheLock() {
+        staffWithSingleUseGrant(null, ROLE_MANAGE);
+        assertThatThrownBy(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            jdbcTemplate.queryForList("SELECT id FROM temporary_permission_grants WHERE subject_id = ? FOR UPDATE", userId);
+            awaitBlockedOnGrantRow(1, 500);
+        })).isInstanceOf(AssertionError.class).hasMessageContaining("同步屏障未命中");
+        assertUnconsumed();
     }
 
     private String message(String body) throws Exception {
@@ -420,8 +463,8 @@ class SingleUseGrantRequestTransactionTests {
         return new ObjectMapper().readTree(body).get("detail_code").asText();
     }
 
-    // 同号并发的同步屏障：主线程先锁住本人的来源行再放两笔进来——两笔都读到未消耗来源，都停在消耗行的 UPDATE 上（等到 pg_stat_activity 里
-    // 两条被阻塞）；放开后先拿到锁的一笔消耗、执行、提交，另一笔的条件更新才返回 0 行。
+    // 同号并发的同步屏障：主线程先锁住本人的来源行再放两笔进来——两笔都读到未消耗来源，都停在消耗行的 UPDATE 上（等到两个会话排在本连接
+    // 所持的行锁后面，等不到即失败）；放开后先拿到锁的一笔消耗、执行、提交，另一笔的条件更新才返回 0 行。
     private List<MockHttpServletResponse> raceTwoOnTheGrantRow(Callable<MockHttpServletResponse> request) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2);
         List<MockHttpServletResponse> responses = new ArrayList<>();
