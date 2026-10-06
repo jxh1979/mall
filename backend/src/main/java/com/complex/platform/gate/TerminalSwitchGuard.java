@@ -155,7 +155,8 @@ public class TerminalSwitchGuard {
         putIfPresent(payload, "module_code", GateRequestContext.moduleCode());
         putIfPresent(payload, "device", GateRequestContext.deviceId());
         try {
-            auditEventService.recordSuccess(
+            // XM-M002-J：独立事务写入，随后的拒绝让调用方事务或单次授权请求事务回滚时，拒绝留痕仍在。
+            auditEventService.recordSuccessIndependently(
                     EVENT,
                     "terminal.switch.manage",
                     "terminal_capability_switch",

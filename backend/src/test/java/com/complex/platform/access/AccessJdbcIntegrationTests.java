@@ -2964,6 +2964,34 @@ class AccessJdbcIntegrationTests {
                 """, String.class, f.target())).containsExactlyInAnyOrder(f.code(), second);
     }
 
+    // M723（治理地图第 656 行 J 句「同一次操作重复提交时，直接返回第一次的结果」）与 M002-F40 入口：审批人只经一条单次模板套用持有
+    // 「审核高危授权申请」与「主管复核审批」两码，经通用主管复核入口通过末节点——来源消耗一次（一条消耗日志）、申请落地；同一请求编号、同一正文重放：
+    // 复核单已不待审，入口改走通用分支，按重放放行，由节点裁决的幂等记录返回第一次的结果，不再消耗、不再执行。
+    // 修复前重放在入口即 403（来源已消耗）。
+    @Test
+    void replayingAChainApprovalMadeWithASingleUseGrantReturnsTheFirstResultOnTheRealSchema() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String requestId = m002ApplyOverride(f, "user_permission_grant", "m723-replay");
+        String reviewId = m002ReviewIdOf(requestId);
+        String template = "tpl_m723_once_" + f.suffix();
+        repository.createTemplate(m002SingleUseTemplate(template), grants(template, GRANT_REVIEW, "governance.supervisor_review.approve"));
+        List<String> sources = List.of(repository.applyTemplate(template, List.of(f.boss()), null, null, true, f.admin()).get(0).id());
+        AccessActor boss = new AccessActor(f.boss(), f.boss(), "staff", "org", null, "active");
+        String key = "m723-replay-chain-" + f.suffix();
+
+        m002ChainDecision(boss, reviewId, key, "approved").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        assertThat(m002SourceUse(sources)).containsExactly("true/1");
+        String facts = m002F40Facts(requestId, f.target());
+        assertThat(facts).startsWith("applied|");
+
+        m002ChainDecision(boss, reviewId, key, "approved").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_id").value(reviewId))
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        assertThat(m002SourceUse(sources)).containsExactly("true/1");
+        assertThat(m002F40Facts(requestId, f.target())).isEqualTo(facts);
+    }
+
     // M002-F40（保持原有拒绝顺序）：真库＋真实接口——不持主管复核审批权限的人（只经单次模板套用持「审核高危授权申请」、属另一项目、不在审批链上）对范围外的
     // 授权申请类待审复核单调通用入口：403 PERMISSION_DENIED，与基线相同，不是 SUPERVISOR_REVIEW_SCOPE_FORBIDDEN（不暴露范围外复核单是否存在）；
     // 单次来源未被消耗，申请、复核单与目标授权事实不变。
@@ -5111,5 +5139,220 @@ class AccessJdbcIntegrationTests {
                         .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         assertThat(jdbcTemplate.queryForList(
                 "SELECT operation_id FROM idempotency_records WHERE idempotency_key = ?", String.class, key)).containsExactly(expected);
+    }
+
+    // XM-M002-I（操作员 2026-09-25 裁定口径 B「一律只认长期来源」）：真实接口回归——只凭临时授权或单次模板套用持有测试码的员工，经员工单独授予、
+    // 解除员工显式拒绝、建角色、配角色、定岗（岗位临时模板）、修改临时模板内容、套用临时模板、临时授权（授给别人或自己、单次或多次）各接口
+    // 都被 GRANT_EXCEEDS_OWN_PERMISSIONS 拒绝，换幂等键重试同样；平台管理员只凭临时授权持有非日常码时保存岗位映射同样被拒；
+    // 改由角色长期持有后各接口照常成功。
+    @Test
+    void temporaryOrSingleUseHolderCannotGrantThroughTheEndpoints() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String daily = "xm002i.grant_test.daily_" + suffix;
+        String high = "xm002i.grant_test.high_" + suffix; // 非日常码：平台管理员不随身份持有
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'XM-M002-I 测试日常权限', 'ops', 'medium', FALSE, 'active'),
+                       (?, 'XM-M002-I 测试非日常权限', 'ops', 'high', FALSE, 'active')
+                """, daily, high);
+        String gateRole = "role_xm002i_gate_" + suffix;
+        String dailyRole = "role_xm002i_daily_" + suffix;
+        String highRole = "role_xm002i_high_" + suffix;
+        String blankRole = "role_xm002i_blank_" + suffix;
+        repository.createRole(new RoleRecord(gateRole, "XM-M002-I 门禁角色 " + suffix, null, "project", "active", Instant.now(),
+                List.of("access.role.assign", "access.role.manage", "access.temporary_grant.create",
+                        "access.permission_template.apply", "access.permission_template.manage"), null));
+        repository.createRole(new RoleRecord(dailyRole, "XM-M002-I 日常角色 " + suffix, null, "project", "active", Instant.now(),
+                List.of(daily), null));
+        repository.createRole(new RoleRecord(highRole, "XM-M002-I 非日常角色 " + suffix, null, "project", "active", Instant.now(),
+                List.of(high), null));
+        repository.createRole(new RoleRecord(blankRole, "XM-M002-I 空角色 " + suffix, null, "project", "active", Instant.now(),
+                List.of(), null));
+        String tempHolder = "usr_xm002i_temp_" + suffix;
+        String onceHolder = "usr_xm002i_once_" + suffix;
+        String target = "usr_xm002i_target_" + suffix;
+        String denyTarget = "usr_xm002i_deny_" + suffix;
+        String admin = "usr_xm002i_admin_" + suffix;
+        for (String user : List.of(tempHolder, onceHolder, target, denyTarget)) {
+            repository.createUser(new AccessUser(user, user, "staff", "org", null, "active", Instant.now()));
+        }
+        repository.createUser(new AccessUser(admin, admin, "platform_admin", "org", null, "active", Instant.now()));
+        for (String user : List.of(tempHolder, onceHolder, admin)) {
+            repository.assignUserRole(user, gateRole);
+        }
+        repository.assignUserRole(denyTarget, dailyRole);
+        repository.saveUserPermissionOverrides(denyTarget, List.of(daily), AccessRepository.Effect.DENY, "停权", "seed-admin");
+        Instant until = Instant.parse("2099-01-01T00:00:00Z");
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), tempHolder, List.of(daily),
+                Instant.now().minusSeconds(3600), until, false, false, "active", "临时授权", "seed-admin", Instant.now(), null, null));
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), admin, List.of(high),
+                Instant.now().minusSeconds(3600), until, false, false, "active", "临时授权", "seed-admin", Instant.now(), null, null));
+        String onceTemplate = "tpl_xm002i_once_" + suffix;
+        String tempTemplate = "tpl_xm002i_temp_" + suffix;
+        String editTemplate = "tpl_xm002i_edit_" + suffix;
+        String blankTemplate = "tpl_xm002i_blank_" + suffix;
+        repository.createTemplate(baseTemplate(onceTemplate), grants(onceTemplate, daily));
+        repository.createTemplate(xm002iOrgTemporaryTemplate(tempTemplate, until), grants(tempTemplate, daily));
+        repository.createTemplate(xm002iOrgTemporaryTemplate(editTemplate, until), List.of());
+        repository.createTemplate(baseTemplate(blankTemplate), List.of());
+        repository.applyTemplate(onceTemplate, List.of(onceHolder), null, null, true, "seed-admin");
+        String position = "xm002i_pos_" + suffix;
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_xm002i_" + suffix, position, "lvl_m1_lower", blankRole,
+                tempTemplate, "org", "active", "seed-admin", Instant.now(), Instant.now()));
+
+        for (String holder : List.of(tempHolder, onceHolder)) {
+            var session = m002Session(new AccessActor(holder, holder, "staff", "org", null, "active"));
+            for (String attempt : List.of("a", "b")) { // 换幂等键重试
+                String key = "xm002i-" + suffix + "-" + holder.substring(11, 15) + "-" + attempt; // temp / once
+                xm002iExpectGrantExceeds(post("/api/v1/access/users/" + target + "/permission-overrides").with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content(xm002iOverrideJson(key + "-override", daily)));
+                xm002iExpectGrantExceeds(post("/api/v1/access/users/" + denyTarget + "/permission-overrides/remove").with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson(key + "-undeny", daily)));
+                xm002iExpectGrantExceeds(post("/api/v1/access/roles").with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content(xm002iRoleJson(key + "-role", "临时依据角色 " + key, daily)));
+                xm002iExpectGrantExceeds(post("/api/v1/access/role-assignments").with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content(m002UnassignJson(key + "-assign", target, dailyRole)));
+                xm002iExpectGrantExceeds(put("/api/v1/access/users/" + target + "/position").with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content(xm002iPositionJson(key + "-position", position)));
+                xm002iExpectGrantExceeds(put("/api/v1/access/permission-templates/" + editTemplate).with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content(xm002iEditJson(key + "-edit", daily, until)));
+                for (String grantee : List.of(target, holder)) { // 含授给自己
+                    xm002iExpectGrantExceeds(post("/api/v1/access/permission-templates/" + tempTemplate + "/apply").with(session)
+                            .contentType(MediaType.APPLICATION_JSON).content(xm002iApplyJson(key + "-apply-" + grantee, grantee)));
+                    for (boolean singleUse : List.of(true, false)) {
+                        xm002iExpectGrantExceeds(post("/api/v1/access/temporary-grants").with(session).contentType(MediaType.APPLICATION_JSON)
+                                .content(xm002iTemporaryJson(key + "-temporary-" + singleUse + "-" + grantee, grantee, daily,
+                                        until.minusSeconds(3600), singleUse)));
+                    }
+                }
+            }
+        }
+        var adminSession = m002Session(new AccessActor(admin, admin, "platform_admin", "org", null, "active"));
+        for (String attempt : List.of("a", "b")) {
+            xm002iExpectGrantExceeds(post("/api/v1/access/position-role-templates").with(adminSession).contentType(MediaType.APPLICATION_JSON)
+                    .content(xm002iMappingJson("xm002i-" + suffix + "-map-" + attempt, position + "_admin", highRole, blankTemplate)));
+        }
+        assertThat(jdbcTemplate.queryForList("SELECT permission_code FROM user_permission_overrides WHERE user_id = ?", String.class, target))
+                .isEmpty();
+        assertThat(denyOrigins(denyTarget, daily)).containsExactly("explicit");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM roles WHERE role_name LIKE ?", Integer.class,
+                "临时依据角色 xm002i-" + suffix + "%")).isZero();
+        assertThat(m002UserRoles(target)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_position_assignments WHERE user_id = ?", Integer.class,
+                target)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM permission_template_items WHERE template_id = ?", Integer.class,
+                editTemplate)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM permission_template_applications WHERE template_id = ?",
+                Integer.class, tempTemplate)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM temporary_permission_grants WHERE reason = 'XM-M002-I' AND subject_id IN (?, ?, ?)",
+                Integer.class, target, tempHolder, onceHolder)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM position_role_templates WHERE position_code = ?", Integer.class,
+                position + "_admin")).isZero();
+
+        repository.assignUserRole(tempHolder, dailyRole); // 角色＝长期来源
+        repository.assignUserRole(admin, highRole);
+        var tempSession = m002Session(new AccessActor(tempHolder, tempHolder, "staff", "org", null, "active"));
+        String ok = "xm002i-" + suffix + "-ok";
+        xm002iExpectOk(post("/api/v1/access/users/" + target + "/permission-overrides").with(tempSession)
+                .contentType(MediaType.APPLICATION_JSON).content(xm002iOverrideJson(ok + "-override", daily)));
+        xm002iExpectOk(post("/api/v1/access/users/" + denyTarget + "/permission-overrides/remove").with(tempSession)
+                .contentType(MediaType.APPLICATION_JSON).content(m002DenyJson(ok + "-undeny", daily)));
+        xm002iExpectOk(post("/api/v1/access/roles").with(tempSession).contentType(MediaType.APPLICATION_JSON)
+                .content(xm002iRoleJson(ok + "-role", "长期依据角色 " + suffix, daily)));
+        xm002iExpectOk(post("/api/v1/access/role-assignments").with(tempSession).contentType(MediaType.APPLICATION_JSON)
+                .content(m002UnassignJson(ok + "-assign", target, dailyRole)));
+        xm002iExpectOk(put("/api/v1/access/users/" + target + "/position").with(tempSession).contentType(MediaType.APPLICATION_JSON)
+                .content(xm002iPositionJson(ok + "-position", position)));
+        xm002iExpectOk(put("/api/v1/access/permission-templates/" + editTemplate).with(tempSession).contentType(MediaType.APPLICATION_JSON)
+                .content(xm002iEditJson(ok + "-edit", daily, until)));
+        xm002iExpectOk(post("/api/v1/access/permission-templates/" + tempTemplate + "/apply").with(tempSession)
+                .contentType(MediaType.APPLICATION_JSON).content(xm002iApplyJson(ok + "-apply", target)));
+        xm002iExpectOk(post("/api/v1/access/temporary-grants").with(tempSession).contentType(MediaType.APPLICATION_JSON)
+                .content(xm002iTemporaryJson(ok + "-temporary", target, daily, until.minusSeconds(3600), false)));
+        xm002iExpectOk(post("/api/v1/access/position-role-templates").with(adminSession).contentType(MediaType.APPLICATION_JSON)
+                .content(xm002iMappingJson(ok + "-map", position + "_admin", highRole, blankTemplate)));
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT effect || '/' || origin FROM user_permission_overrides WHERE user_id = ? AND permission_code = ?",
+                String.class, target, daily)).containsExactly("grant/explicit");
+        assertThat(denyOrigins(denyTarget, daily)).isEmpty();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT rp.permission_code FROM roles r JOIN role_permissions rp ON rp.role_id = r.id
+                 WHERE r.role_name = ? AND r.organization_id = 'org'
+                """, String.class, "长期依据角色 " + suffix)).containsExactly(daily);
+        assertThat(m002UserRoles(target)).containsExactly(dailyRole);
+        assertThat(jdbcTemplate.queryForList("SELECT position_code FROM user_position_assignments WHERE user_id = ?", String.class, target))
+                .containsExactly(position);
+        assertThat(jdbcTemplate.queryForList("SELECT permission_code FROM permission_template_items WHERE template_id = ?", String.class,
+                editTemplate)).containsExactly(daily);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM permission_template_applications WHERE template_id = ? AND target_id = ? AND status = 'active'",
+                Integer.class, tempTemplate, target)).isEqualTo(2); // 定岗派生 + 直接套用
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT permission_code FROM temporary_permission_grants WHERE reason = 'XM-M002-I' AND subject_id = ?", String.class, target))
+                .containsExactly(daily);
+        assertThat(jdbcTemplate.queryForList("SELECT role_id FROM position_role_templates WHERE position_code = ?", String.class,
+                position + "_admin")).containsExactly(highRole);
+    }
+
+    // 本项目（org）自有、到期为 validUntil 的临时模板。
+    private PermissionTemplate xm002iOrgTemporaryTemplate(String id, Instant validUntil) {
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        return new PermissionTemplate(id, id, id, "XM-M002-I test template", "temporary", null, "organization", "org", "merge",
+                null, validUntil, false, "active", "integration test", "seed-admin", at, at, at);
+    }
+
+    private void xm002iExpectGrantExceeds(org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        mockMvc.perform(request).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+    }
+
+    private void xm002iExpectOk(org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        mockMvc.perform(request).andExpect(status().isOk());
+    }
+
+    private String xm002iOverrideJson(String key, String code) {
+        return """
+                {"idempotency_key": "%s", "permission_codes": ["%s"], "effect": "grant", "reason": "XM-M002-I"}
+                """.formatted(key, code);
+    }
+
+    private String xm002iRoleJson(String key, String roleName, String code) {
+        return """
+                {"idempotency_key": "%s", "role_name": "%s", "permission_codes": ["%s"], "data_scope": "project"}
+                """.formatted(key, roleName, code);
+    }
+
+    private String xm002iTemporaryJson(String key, String target, String code, Instant validUntil, boolean singleUse) {
+        return """
+                {"idempotency_key": "%s", "target_user_id": "%s", "permission_codes": ["%s"], "valid_until": "%s",
+                 "single_use": %s, "reason": "XM-M002-I"}
+                """.formatted(key, target, code, validUntil, singleUse);
+    }
+
+    private String xm002iPositionJson(String key, String position) {
+        return """
+                {"idempotency_key": "%s", "position_code": "%s", "staff_level_id": "lvl_m1_lower"}
+                """.formatted(key, position);
+    }
+
+    private String xm002iEditJson(String key, String code, Instant validUntil) {
+        return """
+                {"idempotency_key": "%s", "template_type": "temporary", "permission_codes": ["%s"], "data_scope": "project",
+                 "valid_until": "%s", "single_use": false}
+                """.formatted(key, code, validUntil);
+    }
+
+    private String xm002iApplyJson(String key, String target) {
+        return """
+                {"idempotency_key": "%s", "target_user_ids": ["%s"], "mode": "merge"}
+                """.formatted(key, target);
+    }
+
+    private String xm002iMappingJson(String key, String position, String roleId, String templateId) {
+        return """
+                {"idempotency_key": "%s", "position_code": "%s", "staff_level_id": "lvl_m1_lower", "role_id": "%s",
+                 "template_id": "%s", "status": "active"}
+                """.formatted(key, position, roleId, templateId);
     }
 }

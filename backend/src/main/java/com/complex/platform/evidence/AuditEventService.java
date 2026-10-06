@@ -38,6 +38,25 @@ public class AuditEventService {
     }
 
     /**
+     * XM-M002-J：闸口留痕（终端能力停用拒绝、设备违规拒绝、准入闸拦截/警示/求值失败即拦截）在独立事务里写入。
+     * 闸口链按设计在业务事务之外执行，留痕本就独立落库；调用方事务或单次授权请求事务（SingleUseGrantRequestTransactionAspect）
+     * 因随后的拒绝而回滚时，留痕仍须留住。写法与 {@link #recordSuccess} 相同，只改事务边界。
+     */
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public AuditEvent recordSuccessIndependently(
+            String eventName,
+            String permissionCode,
+            String businessType,
+            String businessId,
+            String requestId,
+            String idempotencyKey,
+            Map<String, Object> metadata
+    ) {
+        return recordSuccess(eventName, permissionCode, businessType, businessId, requestId, idempotencyKey, metadata);
+    }
+
+    /**
      * P0 清单#2 重载：在原 recordSuccess 基础上多 eventCategory（事件类目）/ subjectType（事件主体类型），
      * 写入 audit_events 新列（V101）。供积分入账等事件按类目 / 主体检索。旧重载等价于此处两参传 null。
      */

@@ -1,6 +1,6 @@
 package com.complex.platform.common.idempotency;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -83,6 +83,15 @@ public class IdempotencyService {
             throw ApiException.conflict("IDEMPOTENCY_CONFLICT", "该请求编号存在旧处理记录，请先核实原操作结果");
         }
         String requestHash = hashJson(request);
+        IdempotentReplayContext replayContext = IdempotentReplayContext.current();
+        if (replayContext != null && replayContext.replayOnly()) {
+            // XM-M002-J：权限核验只凭「用掉单次授权的那次成功请求」的重放通过——只能返回第一次的结果，不占位、不执行；
+            // 记录不在或未成功完成（例如第一次失败）即拒绝，正文不同照常 409。
+            IdempotencyRecord completed = repository.findByOperationIdAndIdempotencyKey(scopedId, idempotencyKey)
+                    .filter(record -> RESPONSE_CODE_OK.equals(record.responseCode()))
+                    .orElseThrow(IdempotentReplayContext::replayWithoutResult);
+            return replay(completed, requestHash, responseType);
+        }
         Instant now = Instant.now();
         IdempotencyRecord reservation = new IdempotencyRecord(
                 UUID.randomUUID(),
@@ -136,11 +145,16 @@ public class IdempotencyService {
         if (RESPONSE_CODE_IN_PROGRESS.equals(existing.responseCode()) || existing.responseBody() == null) {
             throw ApiException.conflict("IDEMPOTENCY_IN_PROGRESS", "请求正在处理中，请稍后刷新查看结果");
         }
+        T first;
         try {
-            return objectMapper.readValue(existing.responseBody(), responseType);
+            first = objectMapper.readValue(existing.responseBody(), responseType);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("stored idempotency response is unreadable", exception);
         }
+        // M723-F04（操作员 2026-09-25 确认句「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：
+        // 确实读出第一次的结果、即将返回时才记为已重放，响应据此提示已完成。
+        IdempotentReplayContext.markReplayed(existing.idempotencyKey());
+        return first;
     }
 
     private IdempotencyRecord inProgressReservation(IdempotencyRecord record) {
@@ -197,6 +211,14 @@ public class IdempotencyService {
                 reservation.createdAt(),
                 reservation.expiresAt()
         ));
+        // XM-M002-J：本请求消耗过单次授权时，把消耗人与请求摘要记到这条成功记录上（与消耗同一事务），
+        // 权限核验据此确认重放的那次请求确已成功完成、有结果可返回。
+        IdempotentReplayContext replayContext = IdempotentReplayContext.current();
+        if (replayContext != null && replayContext.identified() && replayContext.consumedBy() != null) {
+            repository.bindSingleUseRequest(reservation.id(), replayContext.consumedBy(), replayContext.requestDigest());
+        }
+        // M723-F04：本请求真的执行了动作，不算重复提交（见 IdempotentReplayContext#replayed）
+        IdempotentReplayContext.markExecuted();
         return response;
     }
 

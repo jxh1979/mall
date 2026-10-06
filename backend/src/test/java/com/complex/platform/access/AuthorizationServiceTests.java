@@ -546,9 +546,14 @@ class AuthorizationServiceTests {
                     assertThat(exception.status().value()).isEqualTo(403);
                     assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
                 });
+        // M723：授出依据集同样在读权限前后核身份
+        assertThatThrownBy(() -> service.grantablePermissions())
+                .isInstanceOfSatisfying(ApiException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
 
         afRow("usr_o", "staff", "org", "merchant", "active");
         assertThat(service.effectivePermissions().grants()).contains(AF_CODE);
+        assertThat(service.grantablePermissions().grants()).doesNotContain(AF_CODE); // 单次来源不作授出依据
     }
 
     @Test
@@ -713,6 +718,20 @@ class AuthorizationServiceTests {
         f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
 
         assertThatThrownBy(() -> service.effectivePermissions())
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                });
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // grantablePermissions（M723 新增入口）：拒绝（403 PERMISSION_DENIED）。中间范围的授予用角色来源——单次来源本就不作授出依据。
+    @Test
+    void grantablePermissionsRejectsScopeRoundTrip() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+
+        assertThatThrownBy(() -> service.grantablePermissions())
                 .isInstanceOfSatisfying(ApiException.class, exception -> {
                     assertThat(exception.status().value()).isEqualTo(403);
                     assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");

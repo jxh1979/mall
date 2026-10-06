@@ -103,6 +103,7 @@ public class ComplianceController {
     }
 
     @GetMapping("/wecom/conversations/{id}/messages")
+    @com.complex.platform.access.ConsumesSingleUseGrant("wecom.view_raw") // M723：原文调阅看一次扣一次（操作员 2026-10-03）；脱敏调阅核的是 wecom.view，不扣
     public ApiResponse<PageResponse<WecomMessageView>> viewWecomMessages(
             @PathVariable String id,
             @RequestParam(value = "mode", required = false, defaultValue = "redacted") String mode,

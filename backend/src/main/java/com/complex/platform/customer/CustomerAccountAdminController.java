@@ -33,6 +33,7 @@ public class CustomerAccountAdminController {
      * AUD-020：手机号属 PII，改用 POST body 传参，避免明文手机号进入 URL query string 落入 access log / 代理日志。
      */
     @PostMapping("/lookup")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant // M723：按手机号查客人账号是查询（只留查看痕迹）；查询不扣单次授权（操作员 2026-10-03）
     public ApiResponse<java.util.List<CustomerAccountView>> lookup(
             @RequestBody @jakarta.validation.Valid CustomerAccountLookupRequest request) {
         authorizationService.requirePermission(MANAGE);

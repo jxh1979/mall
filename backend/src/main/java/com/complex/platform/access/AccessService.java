@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.37
+// 文件版本：V0.38
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -221,6 +221,7 @@ public class AccessService {
                             .map(PermissionTemplateItem::permissionCode).collect(java.util.stream.Collectors.toSet());
                     List<String> added = safeList(request.permissionCodes()).stream()
                             .filter(code -> !previousGrants.contains(code)).toList();
+                    // XM-M002-I：新增码即时作用于各仍生效套用，临时、单次模板同样只认授权人的长期来源。
                     requireActorCanGrant(added);
                     requireGrantApprovalIfNeeded(added);
                     PermissionTemplate template = templateFromRequest(id, request, existing.sourceTemplateId(), existing.ownerScopeId());
@@ -381,6 +382,7 @@ public class AccessService {
                         List<String> templatePermissionCodes = templateItems.stream()
                                 .map(PermissionTemplateItem::permissionCode)
                                 .toList();
+                        // XM-M002-I：临时模板、单次模板与以单次方式套用同样只认授权人的长期来源。
                         requireActorCanGrant(templatePermissionCodes);
                         // AUD-011：模板应用复用唯一授权政策引擎——含高风险(requiresApproval)权限的模板不得经模板入口
                         // 批量直发绕过职责分离/主管复核，与角色/岗位/临时授权同口径 fail-closed(GRANT_REQUIRES_APPROVAL)。
@@ -1102,9 +1104,10 @@ public class AccessService {
     /**
      * P0-1 提权防护：发证/授权动作不得授予超出「授权人自身有效权限」的权限码。
      * USB 最高权限独立识别；日常管理员及其他主体所授权限码必须 ⊆ 自身有效授予集（denies 已扣减）。
+     * XM-M002-I（口径 B）：一切授出（含临时授权、临时模板与单次模板）只认授权人的长期来源，见 {@link AuthorizationService#grantablePermissions}。
      */
     private void requireActorCanGrant(List<String> permissionCodes) {
-        EffectivePermissions self = authorizationService.effectivePermissions();
+        EffectivePermissions self = authorizationService.grantablePermissions();
         if (self.wildcard()) {
             return;
         }
@@ -1112,7 +1115,7 @@ public class AccessService {
         for (String code : safeList(permissionCodes)) {
             if (code != null && !own.contains(code)) {
                 throw ApiException.forbidden("GRANT_EXCEEDS_OWN_PERMISSIONS",
-                        "不能授予自己不持有的权限：" + code);
+                        "不能授予自己不持有或只临时、单次持有的权限：" + code);
             }
         }
     }
@@ -1964,6 +1967,7 @@ public class AccessService {
             throw ApiException.badRequest("VALIDATION_FAILED", "授权失效时间必须晚于生效时间");
         }
         // P0-1：临时授权不得授予超出授权人自身有效权限的权限码（提权防护）。
+        // XM-M002-I（口径 B）：临时授出同样只认授权人的长期来源，只临时或单次持有的码不能再临时授给任何人（含自己）。
         if (enforceApproval) { // M087：审批落地不按落地人自身权限限制
             requireActorCanGrant(request.permissionCodes());
         }

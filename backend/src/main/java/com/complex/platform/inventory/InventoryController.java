@@ -358,7 +358,7 @@ public class InventoryController {
     // I-2(V296)：无 inventory.cost.view 权限的调用方，库存流水响应成本列脱敏置 null（店员端/终端不可见）。
     // ── P0-A/GAP-07 供应商联系人手机号展示脱敏（V339）。同上 cost 脱敏范式，放 controller 层。 ──
     private InventorySupplierRecord maskSupplierPhoneForUnauthorized(InventorySupplierRecord record) {
-        if (record == null || authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+        if (record == null || viewPhonePlaintext(java.util.stream.Stream.of(record.contactPhone()))) {
             return record;
         }
         return record.withMaskedPhone();
@@ -366,11 +366,23 @@ public class InventoryController {
 
     private PageResponse<InventorySupplierRecord> maskSupplierPhonesForUnauthorized(
             PageResponse<InventorySupplierRecord> page) {
-        if (authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+        if (viewPhonePlaintext(page.items().stream().map(InventorySupplierRecord::contactPhone))) {
             return page;
         }
         return new PageResponse<>(page.items().stream().map(InventorySupplierRecord::withMaskedPhone).toList(),
                 page.page(), page.pageSize(), page.total());
+    }
+
+    // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：持有明文码、且这次响应里确有非空电话，才核验明文码并返回明文
+    // ——单次来源在这里消耗，长期来源不产生消耗；否则返回掩码、不碰明文码。一次响应只核一次（列表按整页判断）。
+    private boolean viewPhonePlaintext(java.util.stream.Stream<String> phones) {
+        if (phones.noneMatch(phone -> phone != null && !phone.isBlank())
+                || !authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return false;
+        }
+        authorizationService.requirePermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        // 本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时不给明文
+        return !com.complex.platform.common.idempotency.IdempotentReplayContext.replayDiscardsConsumption();
     }
 
     private StockMovementRecord maskCostForUnauthorized(StockMovementRecord record) {
@@ -400,6 +412,8 @@ public class InventoryController {
     }
 
     @GetMapping("/suppliers")
+    // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
+    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<PageResponse<InventorySupplierRecord>> listInventorySuppliers() {
         authorizationService.requirePermission("inventory.supplier.view");
         return ApiResponse.ok(maskSupplierPhonesForUnauthorized(service.listInventorySuppliers()));

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 import static org.assertj.core.api.Assertions.*;
 
 import java.sql.Connection;
@@ -61,7 +61,8 @@ class M006JdbcRegressionTests {
         jdbc.execute("""
                 CREATE TEMP TABLE permission_template_usage_logs (
                     id uuid PRIMARY KEY, application_id varchar REFERENCES pg_temp.permission_template_applications(id),
-                    user_id varchar, permission_code varchar, result varchar, reason varchar, occurred_at timestamptz)
+                    user_id varchar, permission_code varchar, result varchar, reason varchar, occurred_at timestamptz,
+                    idempotency_key text, request_digest varchar)
                 """);
         jdbc.execute("CREATE TEMP TABLE access_grant_requests (LIKE public.access_grant_requests INCLUDING DEFAULTS INCLUDING CONSTRAINTS)");
         jdbc.execute("ALTER TABLE pg_temp.access_grant_requests ADD COLUMN IF NOT EXISTS authorization_fingerprint varchar(64)");

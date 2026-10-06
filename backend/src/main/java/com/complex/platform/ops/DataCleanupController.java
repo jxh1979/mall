@@ -35,6 +35,7 @@ public class DataCleanupController {
     }
 
     @PostMapping("/preview")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant // M723：清理预览只统计与取样、不删数据（落一条试运行台账），提交申请才扣；预览不扣单次授权（操作员 2026-10-03）
     public ApiResponse<DataCleanupJobRecord> preview(
             @RequestBody(required = false) DataCleanupPreviewRequest request) {
         authorizationService.requirePermission("data.cleanup.request");

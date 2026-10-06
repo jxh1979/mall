@@ -155,6 +155,7 @@ public class AnalyticsController {
     }
 
     @GetMapping("/reports/monthly-export")
+    @com.complex.platform.access.ConsumesSingleUseGrant("analytics.report.export") // M723：导出导一次扣一次（操作员 2026-10-03）
     public ApiResponse<AnalyticsRecords.MonthlyComparisonResponse> exportMonthlyReport(
             @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
         // 治理口径(V196 范式):导出与查看分权——看板 view 可看,导出须独立高危权限,不直授审计角色。

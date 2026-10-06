@@ -350,6 +350,29 @@ public interface AccessRepository {
      */
     boolean markSingleUsePermissionConsumed(String sourceId, String permissionCode, String userId, Instant consumedAt);
 
+    /**
+     * XM-M002-J：同上，并在消耗日志里记下用掉它的那次请求（幂等键、请求摘要），供同一请求的重放认出。
+     * 默认不记请求信息（内存仓 / 桩），其重放照旧拒绝。
+     */
+    default boolean markSingleUsePermissionConsumed(String sourceId, String permissionCode, String userId, Instant consumedAt,
+                                                    String idempotencyKey, String requestDigest) {
+        return markSingleUsePermissionConsumed(sourceId, permissionCode, userId, consumedAt);
+    }
+
+    /** XM-M002-J：该员工以该幂等键发起的这次请求（请求摘要）用掉的单次来源编号（临时授权组号 / 模板套用号）。 */
+    default List<String> singleUseSourcesConsumedBy(String userId, String idempotencyKey, String requestDigest) {
+        return List.of();
+    }
+
+    /**
+     * XM-M002-J：是否持有尚未用掉的单次授权（临时授权或模板套用，状态有效即算，不看生效时段——只许多报、不许漏报）。
+     * 请求事务切面据此决定是否把整个请求包进一个事务，使单次消耗随业务一起提交或回滚。
+     */
+    default boolean hasUnconsumedSingleUseGrant(String userId) {
+        return findPermissionEffects(userId, Instant.now()).stream()
+                .anyMatch(effect -> effect.effect() == Effect.GRANT && effect.singleUse() && !effect.consumed());
+    }
+
     /** M087-A-04（PGM-1.10.1 所属商户/跨项目变更）：账号归属改为新范围（同步员工档案的综合体/商户归属）。 */
     default void updateUserScope(String userId, String organizationId, String merchantId, String actorId, Instant changedAt) {
         throw new UnsupportedOperationException("updateUserScope");

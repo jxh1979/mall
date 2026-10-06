@@ -1,0 +1,171 @@
+package com.complex.platform.common.idempotency;
+
+// 文件版本：V0.01
+
+import com.complex.platform.common.api.ApiException;
+
+/**
+ * XM-M002-J（操作员 2026-09-25 答复：「单次权限使用过后。不应该是返回结果吗然后权限才被用掉嘛，没有返回结果，不会被用掉，
+ * 返回结果会提示这个完成啊。」）：本次控制器调用的幂等键与请求摘要（方法、路径与查询串的 SHA-256），
+ * 由请求事务切面在控制器方法外层放入、返回后还原。
+ *
+ * <p>权限核验据此把单次消耗记到这次请求名下（{@link #markConsumed}），并认出「用掉该单次来源的那次成功请求」的重放
+ * （{@link #markReplayOnly}）；幂等层据此把消耗过单次来源的成功记录记到这次请求名下，并让重放只能返回第一次的结果、不得执行。
+ * 不在控制器调用里（定时作业等）时没有本上下文，一律按旧行为。
+ *
+ * <p>M723：另记两件事。① {@link #readOnly}——本次请求是查看（GET / HEAD）或以提交方式实现的预览、查询：权限核验照常，但不消耗
+ * 单次授权（操作员 2026-10-02：「只有真正执行的写操作（分配、审批等）才扣单次授权，打开页面、看列表不扣。」2026-10-03：
+ * 「预览、查询不扣一次性授权，只有真正核销、真正执行的那一次才扣。」）；
+ * 例外是接口声明「仍然扣」的权限码（{@link #consumesSingleUse}：导出、敏感明文查看，操作员 2026-10-03：导一次扣一次、看一次扣一次）。
+ * ② 本请求已消耗的单次来源（{@link #markConsumed} / {@link #consumedInThisRequest}）：同一请求里分层再核验同一来源时
+ * 仍视为有效、不再消耗（一次操作只算一次使用；账本 XM-M001-W、XM-M002-AU）。
+ *
+ * <p>M723-F04（操作员 2026-09-25 确认句「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：
+ * 幂等层返回的是本请求自己请求编号第一次的结果、本请求没有经幂等层执行过动作时记为已重放（{@link #markReplayed} / {@link #replayed}）：
+ * {@code ApiResponse.ok} 据此提示已完成；请求事务切面据此把本请求新用掉的单次来源随请求事务回滚（不算用掉）。
+ */
+public final class IdempotentReplayContext {
+
+    private static final ThreadLocal<IdempotentReplayContext> CURRENT = new ThreadLocal<>();
+
+    private final String idempotencyKey;
+    private final String requestDigest;
+    private final boolean readOnly;
+    private final java.util.Set<String> consumedOnRead;
+    private final java.util.Set<String> consumedSources = new java.util.HashSet<>();
+    private String consumedBy;
+    private boolean replayOnly;
+    private boolean replayed;
+    private boolean executed;
+
+    private IdempotentReplayContext(String idempotencyKey, String requestDigest, boolean readOnly,
+                                    java.util.Set<String> consumedOnRead) {
+        this.idempotencyKey = idempotencyKey;
+        this.requestDigest = requestDigest;
+        this.readOnly = readOnly;
+        this.consumedOnRead = java.util.Set.copyOf(consumedOnRead);
+    }
+
+    /** 放入本次控制器调用的上下文，返回外层原有的（控制器方法互相调用时由 {@link #restore} 还原）。 */
+    public static IdempotentReplayContext enter(String idempotencyKey, String requestDigest) {
+        return enter(idempotencyKey, requestDigest, false, java.util.Set.of());
+    }
+
+    /**
+     * 同上；{@code readOnly} 为真表示本次请求是查看（GET / HEAD）或预览、查询，不消耗单次授权——{@code consumedOnRead} 里的权限码除外
+     * （该接口声明仍然扣的码）。
+     */
+    public static IdempotentReplayContext enter(String idempotencyKey, String requestDigest, boolean readOnly,
+                                                java.util.Set<String> consumedOnRead) {
+        IdempotentReplayContext previous = CURRENT.get();
+        CURRENT.set(new IdempotentReplayContext(idempotencyKey, requestDigest, readOnly, consumedOnRead));
+        return previous;
+    }
+
+    public static void restore(IdempotentReplayContext previous) {
+        if (previous == null) {
+            CURRENT.remove();
+        } else {
+            CURRENT.set(previous);
+        }
+    }
+
+    public static IdempotentReplayContext current() {
+        return CURRENT.get();
+    }
+
+    public String idempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public String requestDigest() {
+        return requestDigest;
+    }
+
+    /** 幂等键与请求摘要都取到了，才把消耗记到这次请求名下、才认重放；取不到（或取到多个不同的幂等键）按旧行为。 */
+    public boolean identified() {
+        return idempotencyKey != null && requestDigest != null;
+    }
+
+    /** 本请求消耗了单次来源的操作人；未消耗为 null。 */
+    public String consumedBy() {
+        return consumedBy;
+    }
+
+    /** M723：本次请求是查看（GET / HEAD）或预览、查询，权限核验通过后不消耗单次授权。 */
+    public boolean readOnly() {
+        return readOnly;
+    }
+
+    /** M723：本请求里核验这个权限码要不要消耗单次授权——写请求都要；查看、预览、查询请求只有接口声明「仍然扣」的码要。 */
+    public boolean consumesSingleUse(String permissionCode) {
+        return !readOnly || consumedOnRead.contains(permissionCode);
+    }
+
+    /** M723：记下本请求里该操作人已消耗的单次来源（来源类型:来源号）。 */
+    public void markConsumed(String actorId, String source) {
+        this.consumedBy = actorId;
+        this.consumedSources.add(source);
+    }
+
+    /** M723：该单次来源是否正是本请求里这名操作人刚消耗的——是则本请求内再核验时仍视为有效、不再消耗。 */
+    public boolean consumedInThisRequest(String actorId, String source) {
+        return actorId != null && actorId.equals(consumedBy) && consumedSources.contains(source);
+    }
+
+    /** 本请求的权限核验是凭「用掉单次来源的那次成功请求」的重放通过的：只能返回第一次的结果，不得再执行、不得再消耗。 */
+    public boolean replayOnly() {
+        return replayOnly;
+    }
+
+    public void markReplayOnly() {
+        this.replayOnly = true;
+    }
+
+    /**
+     * M723-F04：本请求是重复提交——幂等层返回的是自己请求编号第一次的结果，且本请求没有经幂等层执行过动作。
+     * 响应须提示已完成；本请求新用掉的单次来源不算用掉。
+     */
+    public boolean replayed() {
+        return replayed && !executed;
+    }
+
+    /**
+     * M723-F04 / F06：本请求是重复提交、且在权限核验处新用掉了单次来源——请求事务切面会把这次消耗回滚（不算用掉）。
+     * 既然不扣，响应里凭这次消耗才给的敏感明文（联系电话）也不得给出，一律按掩码返回（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）。
+     * 不在控制器调用里时为假。
+     * ponytail: 只看「本请求有没有新消耗」，不分是哪个权限码的来源——长期持有明文码、但凭单次业务码重复提交的人这次也看掩码；
+     * 要分清需按权限码记录本请求的消耗。
+     */
+    public static boolean replayDiscardsConsumption() {
+        IdempotentReplayContext request = CURRENT.get();
+        return request != null && request.replayed() && request.consumedBy != null;
+    }
+
+    /**
+     * M723-F04：幂等层返回第一次的结果时调用。回放的正是本请求自己的请求编号才记为已重放；业务内部按别的键去重的回放、
+     * 取不到本请求的请求编号、不在控制器调用里（没有请求上下文）时都不记（响应照旧，不提示已完成）。
+     */
+    public static void markReplayed(String replayedKey) {
+        IdempotentReplayContext request = CURRENT.get();
+        if (request != null && replayedKey != null && replayedKey.equals(request.idempotencyKey)) {
+            request.replayed = true;
+        }
+    }
+
+    /**
+     * M723-F04：幂等层在本请求里真的执行了动作并保存了结果时调用。此后本请求不算重复提交
+     * （同一请求里一步返回第一次的结果、另一步新执行时，新执行的写入不得被当成重放回滚）。
+     */
+    public static void markExecuted() {
+        IdempotentReplayContext request = CURRENT.get();
+        if (request != null) {
+            request.executed = true;
+        }
+    }
+
+    /** 凭重放过了权限核验、却找不到第一次的成功结果时的拒绝，与权限核验拒绝同码。 */
+    static ApiException replayWithoutResult() {
+        return ApiException.forbidden("PERMISSION_DENIED", "没有操作权限：单次授权已用掉，且没有第一次的成功结果可返回");
+    }
+}

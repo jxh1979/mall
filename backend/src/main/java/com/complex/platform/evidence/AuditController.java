@@ -41,6 +41,7 @@ public class AuditController {
     }
 
     @GetMapping("/operation-events/export")
+    @com.complex.platform.access.ConsumesSingleUseGrant("audit.operation_log.export") // M723：导出导一次扣一次（操作员 2026-10-03）
     public ApiResponse<List<AuditEvent>> exportOperationEvents(
             @RequestParam(name = "business_type", required = false) String businessType,
             @RequestParam(name = "business_id", required = false) String businessId,

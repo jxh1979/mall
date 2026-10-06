@@ -1277,12 +1277,28 @@ class JdbcAccessRepository implements AccessRepository {
             String userId,
             Instant consumedAt
     ) {
+        return markSingleUsePermissionConsumed(sourceId, permissionCode, userId, consumedAt, null, null);
+    }
+
+    // XM-M002-J（V437）：消耗日志同时记下用掉它的那次请求（幂等键、请求摘要）；不在控制器请求里时两列为空。
+    @Override
+    @Transactional
+    public boolean markSingleUsePermissionConsumed(
+            String sourceId,
+            String permissionCode,
+            String userId,
+            Instant consumedAt,
+            String idempotencyKey,
+            String requestDigest
+    ) {
         MapSqlParameterSource parameters = new MapSqlParameterSource()
                 .addValue("source_id", sourceId)
                 .addValue("permission_code", permissionCode)
                 .addValue("user_id", userId)
                 .addValue("consumed_at", timestampWithTimeZone(consumedAt))
-                .addValue("usage_log_id", UUID.randomUUID());
+                .addValue("usage_log_id", UUID.randomUUID())
+                .addValue("idempotency_key", idempotencyKey)
+                .addValue("request_digest", requestDigest);
         // AND consumed = FALSE is the atomic guard against TOCTOU races.
         // If another concurrent request already consumed this grant, UPDATE returns 0 rows.
         int templateRows = jdbcTemplate.update("""
@@ -1318,10 +1334,12 @@ class JdbcAccessRepository implements AccessRepository {
             for (String loggedCode : loggedCodes) {
                 jdbcTemplate.update("""
                         INSERT INTO permission_template_usage_logs (
-                            id, application_id, user_id, permission_code, result, reason, occurred_at
+                            id, application_id, user_id, permission_code, result, reason, occurred_at,
+                            idempotency_key, request_digest
                         )
                         VALUES (
-                            :usage_log_id, :application_id, :user_id, :permission_code, 'consumed', :reason, :consumed_at
+                            :usage_log_id, :application_id, :user_id, :permission_code, 'consumed', :reason, :consumed_at,
+                            :idempotency_key, :request_digest
                         )
                         """, new MapSqlParameterSource(parameters.getValues())
                         .addValue("usage_log_id", UUID.randomUUID())
@@ -1329,6 +1347,48 @@ class JdbcAccessRepository implements AccessRepository {
             }
         }
         return consumed;
+    }
+
+    // XM-M002-J：模板套用记在 application_id，临时授权组号记在 reason 的 single_use:temporary_grant: 之后（见上方消耗写入）。
+    @Override
+    public List<String> singleUseSourcesConsumedBy(String userId, String idempotencyKey, String requestDigest) {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT COALESCE(application_id, substring(reason FROM '^single_use:temporary_grant:(.+)$')) AS source_id
+                  FROM permission_template_usage_logs
+                 WHERE user_id = :user_id
+                   AND idempotency_key = :idempotency_key
+                   AND request_digest = :request_digest
+                   AND result = 'consumed'
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("idempotency_key", idempotencyKey)
+                .addValue("request_digest", requestDigest), String.class);
+    }
+
+    // XM-M002-J：每个不在事务里的写请求进控制器前都要问一次，只查两张来源表的「有效、单次、未消耗」行，不走 findPermissionEffects 的整套读取与到期清理。
+    @Override
+    public boolean hasUnconsumedSingleUseGrant(String userId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                           SELECT 1
+                             FROM temporary_permission_grants
+                            WHERE subject_type = 'user'
+                              AND subject_id = :user_id
+                              AND status = 'active'
+                              AND single_use = TRUE
+                              AND consumed = FALSE
+                       )
+                    OR EXISTS (
+                           SELECT 1
+                             FROM permission_template_applications AS application
+                             JOIN permission_templates AS template ON template.id = application.template_id
+                            WHERE application.target_type = 'user'
+                              AND application.target_id = :user_id
+                              AND application.status = 'active'
+                              AND application.consumed = FALSE
+                              AND (application.single_use OR template.single_use)
+                       )
+                """, new MapSqlParameterSource("user_id", userId), Boolean.class));
     }
 
     private void insertTemplateItems(List<PermissionTemplateItem> items) {
