@@ -5302,6 +5302,77 @@ class AccessJdbcIntegrationTests {
                 null, validUntil, false, "active", "integration test", "seed-admin", at, at, at);
     }
 
+    // M723-F12（治理地图第 656 行「临时或单次得到的权限只供本人在有效期内或单次使用，不能再授给他人」；M723-F02 验收「一律 403
+    // GRANT_EXCEEDS_OWN_PERMISSIONS」）：须审批的权限码也一样。只凭临时授权、单次临时授权、带失效时间的模板套用持有该码的三名员工，
+    // 经员工单独授予接口直接授给同范围的他人——403 GRANT_EXCEEDS_OWN_PERMISSIONS（不是 GRANT_REQUIRES_APPROVAL），换请求编号重试同样；
+    // 目标没有任何单独授予，单次来源未消耗、没有消耗留痕。对照：另有长期来源（角色）后改为 GRANT_REQUIRES_APPROVAL（引导去走授权申请）；
+    // 从未持有该码的员工照旧 GRANT_REQUIRES_APPROVAL。修复前三类持有人都先被「须审批」拦下，返回 GRANT_REQUIRES_APPROVAL。
+    @Test
+    void aHolderThroughTemporaryOrSingleUseSourcesCannotDirectlyGrantACodeThatNeedsApproval() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String code = "m723f12.needs_approval_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+                VALUES (?, 'M723-F12 须审批测试权限', 'ops', 'high', TRUE, 'active')
+                """, code);
+        String gateRole = "role_m723f12_gate_" + suffix;
+        String codeRole = "role_m723f12_code_" + suffix;
+        repository.createRole(new RoleRecord(gateRole, "M723-F12 门禁角色 " + suffix, null, "project", "active", Instant.now(),
+                List.of("access.role.assign"), null));
+        repository.createRole(new RoleRecord(codeRole, "M723-F12 持码角色 " + suffix, null, "project", "active", Instant.now(),
+                List.of(code), null));
+        String tempHolder = "usr_m723f12_temp_" + suffix;
+        String onceHolder = "usr_m723f12_once_" + suffix;
+        String deadlineHolder = "usr_m723f12_dead_" + suffix;
+        String nonHolder = "usr_m723f12_none_" + suffix;
+        String target = "usr_m723f12_target_" + suffix;
+        for (String user : List.of(tempHolder, onceHolder, deadlineHolder, nonHolder, target)) {
+            repository.createUser(new AccessUser(user, user, "staff", "org", null, "active", Instant.now()));
+        }
+        for (String user : List.of(tempHolder, onceHolder, deadlineHolder, nonHolder)) {
+            repository.assignUserRole(user, gateRole);
+        }
+        Instant until = Instant.parse("2099-01-01T00:00:00Z");
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), tempHolder, List.of(code),
+                Instant.now().minusSeconds(3600), until, false, false, "active", "临时授权", "seed-admin", Instant.now(), null, null));
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), onceHolder, List.of(code),
+                Instant.now().minusSeconds(3600), until, true, false, "active", "单次临时授权", "seed-admin", Instant.now(), null, null));
+        String deadlineTemplate = "tpl_m723f12_" + suffix;
+        repository.createTemplate(xm002iOrgTemporaryTemplate(deadlineTemplate, until), grants(deadlineTemplate, code));
+        repository.applyTemplate(deadlineTemplate, List.of(deadlineHolder), null, null, false, "seed-admin");
+        String url = "/api/v1/access/users/" + target + "/permission-overrides";
+
+        int n = 0;
+        for (String holder : List.of(tempHolder, onceHolder, deadlineHolder)) {
+            var session = m002Session(new AccessActor(holder, holder, "staff", "org", null, "active"));
+            for (String attempt : List.of("a", "b")) { // 换请求编号重试
+                xm002iExpectGrantExceeds(post(url).with(session).contentType(MediaType.APPLICATION_JSON)
+                        .content(xm002iOverrideJson("m723f12-" + suffix + "-" + (n++) + "-" + attempt, code)));
+            }
+        }
+        assertThat(jdbcTemplate.queryForList("SELECT permission_code FROM user_permission_overrides WHERE user_id = ?", String.class, target))
+                .isEmpty();
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?", Boolean.class,
+                onceHolder)).containsExactly(false);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM permission_template_usage_logs WHERE user_id IN (?, ?, ?) AND result = 'consumed'", Integer.class,
+                tempHolder, onceHolder, deadlineHolder)).isZero();
+
+        // 对照一：另有长期来源（角色）——照旧按「须审批」拒绝，引导去走授权申请
+        repository.assignUserRole(tempHolder, codeRole);
+        mockMvc.perform(post(url).with(m002Session(new AccessActor(tempHolder, tempHolder, "staff", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON).content(xm002iOverrideJson("m723f12-" + suffix + "-long", code)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("GRANT_REQUIRES_APPROVAL"));
+        // 对照二：从未持有该码——照旧按「须审批」拒绝
+        mockMvc.perform(post(url).with(m002Session(new AccessActor(nonHolder, nonHolder, "staff", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON).content(xm002iOverrideJson("m723f12-" + suffix + "-none", code)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("GRANT_REQUIRES_APPROVAL"));
+        assertThat(jdbcTemplate.queryForList("SELECT permission_code FROM user_permission_overrides WHERE user_id = ?", String.class, target))
+                .isEmpty();
+    }
+
     private void xm002iExpectGrantExceeds(org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
         mockMvc.perform(request).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("GRANT_EXCEEDS_OWN_PERMISSIONS"));

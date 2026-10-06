@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.38
+// 文件版本：V0.39
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -1739,6 +1739,7 @@ public class AccessService {
                         }
                         requireKnownPermissions(permissionCodes);
                         if (set && effect == AccessRepository.Effect.GRANT) {
+                            requireNotHeldOnlyTemporarily(permissionCodes); // M723-F12：先于「须审批」
                             requireGrantApprovalIfNeeded(permissionCodes);
                             requireActorCanGrant(permissionCodes);
                         }
@@ -2453,6 +2454,27 @@ public class AccessService {
                 currency,
                 grantPermissionCodes(role.permissionCodes(), templatePermissionCodes)
         );
+    }
+
+    /**
+     * M723-F12（治理地图第 656 行「临时或单次得到的权限只供本人在有效期内或单次使用，不能再授给他人」）：授予人对某码只有临时授权、单次或
+     * 带失效时间的模板套用来源（在有效权限集里、不在授出依据集里）时，不得直接授给他人。放在「须审批」判断之前：否则须审批码会先返回
+     * GRANT_REQUIRES_APPROVAL，盖住真正的拒绝原因。授予人长期持有或根本不持有该码的不在此拦，照旧由后面的判断处理
+     * （须审批码引导去走授权申请）。
+     */
+    private void requireNotHeldOnlyTemporarily(List<String> permissionCodes) {
+        EffectivePermissions grantable = authorizationService.grantablePermissions();
+        if (grantable.wildcard()) {
+            return;
+        }
+        java.util.Set<String> heldOnlyTemporarily = new java.util.HashSet<>(authorizationService.effectivePermissions().grants());
+        heldOnlyTemporarily.removeAll(grantable.grants());
+        for (String code : safeList(permissionCodes)) {
+            if (code != null && heldOnlyTemporarily.contains(code)) {
+                throw ApiException.forbidden("GRANT_EXCEEDS_OWN_PERMISSIONS",
+                        "不能授予自己不持有或只临时、单次持有的权限：" + code);
+            }
+        }
     }
 
     private void requireGrantApprovalIfNeeded(List<String> permissionCodes) {
