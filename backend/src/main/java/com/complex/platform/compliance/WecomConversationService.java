@@ -1,5 +1,6 @@
 package com.complex.platform.compliance;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PiiTextRedactor;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -25,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -99,6 +101,8 @@ public class WecomConversationService {
     // 再接入统一 risk_alerts（source_domain='wecom'），让 V103 死表真实承载企微命中数据。
     // 可为 null（向后兼容/单测无 SecurityContext 环境）；接入为 fail-safe，不阻塞同步主链。
     private final RiskAlertService riskAlertService;
+    // M723-F14：调阅人的项目范围取自登录主体（平台管理员全量，D-032）。
+    private final AuthorizationService authorizationService;
     private final Clock clock;
 
     @Autowired
@@ -109,10 +113,11 @@ public class WecomConversationService {
             TerminalSwitchGuard terminalSwitchGuard,
             WecomQcPort wecomQcPort,
             ObjectMapper objectMapper,
-            RiskAlertService riskAlertService
+            RiskAlertService riskAlertService,
+            AuthorizationService authorizationService
     ) {
         this(repository, idempotencyService, auditEventService, terminalSwitchGuard,
-                wecomQcPort, objectMapper, riskAlertService, Clock.systemUTC());
+                wecomQcPort, objectMapper, riskAlertService, authorizationService, Clock.systemUTC());
     }
 
     WecomConversationService(
@@ -123,6 +128,7 @@ public class WecomConversationService {
             WecomQcPort wecomQcPort,
             ObjectMapper objectMapper,
             RiskAlertService riskAlertService,
+            AuthorizationService authorizationService,
             Clock clock
     ) {
         this.repository = repository;
@@ -133,6 +139,7 @@ public class WecomConversationService {
         this.wecomQcPort = wecomQcPort == null ? WecomQcRouter.alwaysDisabled() : wecomQcPort;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper.copy().findAndRegisterModules();
         this.riskAlertService = riskAlertService;
+        this.authorizationService = authorizationService;
         this.clock = clock;
     }
 
@@ -310,6 +317,24 @@ public class WecomConversationService {
 
         WecomConversationRecord conversation = repository.findConversationById(resolvedConversationId)
                 .orElseThrow(() -> ApiException.notFound("WECOM_CONVERSATION_NOT_FOUND", "会话记录不存在或已被删除"));
+        // M723-F14（治理地图第 653 行「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」）：脱敏与原文调阅都只能看
+        // 本人项目的会话，平台管理员全量（D-032）；先于读消息与写调阅留痕，拒绝时请求事务回滚、单次来源不算用掉。
+        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+        if (projectScope.isPresent() && !projectScope.get().equals(conversation.projectId())) {
+            ApiException denied = ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "企微会话属于其他综合体项目");
+            if (raw) {
+                auditEventService.recordFailure(
+                        "wecom.raw_view_failed",
+                        "wecom.view_raw",
+                        "wecom_conversation",
+                        resolvedConversationId,
+                        requestId(),
+                        null,
+                        denied.code()
+                );
+            }
+            throw denied;
+        }
         List<WecomMessageRecord> messages = repository.findMessagesByConversation(conversation.id());
 
         Instant now = clock.instant();

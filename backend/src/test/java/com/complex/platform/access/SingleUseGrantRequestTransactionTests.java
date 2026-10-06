@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,6 +61,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * M723 第 4 轮（F07、F09、F10）：企微原文模式按规范化后的取值核权；写请求上下文里没有实际事务时命中单次来源不消耗、按不具备处理
  * （真实接口按「请求进入—判定期间授出—核权—拒绝」的顺序复现）；本人同编号并发提交落败的一笔转为返回第一次的结果——只对经幂等层、
  * 第一次已成功完成的请求，不经幂等层的入口（招商线索创建、月报导出）落败的一笔照旧 403、业务只执行一次。
+ * M723 第 9 轮（F14；治理地图第 653 行项目隔离）：企微会话调阅（脱敏与原文）只能看本人项目的会话，平台管理员不受此限；
+ * 调阅其他项目的会话 403、不返回消息、单次来源不算用掉。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -107,7 +109,7 @@ class SingleUseGrantRequestTransactionTests {
         jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM terminal_capability_switches WHERE scope_type = 'merchant' AND scope_id = ?", merchantId);
         jdbcTemplate.update("DELETE FROM data_cleanup_jobs WHERE requested_by = ?", userId);
-        jdbcTemplate.update("DELETE FROM wecom_conversations WHERE id = ?", "wconv_xmj_" + suffix);
+        jdbcTemplate.update("DELETE FROM wecom_conversations WHERE id IN (?, ?)", "wconv_xmj_" + suffix, "wconv_xmjb_" + suffix);
         jdbcTemplate.update("DELETE FROM leasing_leads WHERE contact_name = ?", roleName("线索"));
         jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "xmj-%" + suffix);
@@ -976,6 +978,136 @@ class SingleUseGrantRequestTransactionTests {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(deniedAgain).doesNotContain(rawRef);
         assertConsumedOnce();
+    }
+
+    // M723-F14（治理地图第 653 行「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」；操作员 2026-10-06「就在 M723 里修」）：
+    // 企微会话调阅只能看本人项目的会话。项目 org 的员工只持单次「企微原文调阅」：调阅另一项目的会话，"raw"、"RAW"、" raw " 都 403
+    // CROSS_PROJECT_FORBIDDEN，响应不含消息与原文引用，来源未消耗、无消耗日志、无调阅留痕与原文查看成功事件，各留一条失败留痕；
+    // 随后同一来源调阅本项目会话 200 含原文、恰好消耗一次，再调阅 403。修复前第一处 403 即红（200 且返回另一项目的原文）。
+    @Test
+    void aSingleUseRawWecomGrantCannotBeSpentOnAnotherProjectsConversation() throws Exception {
+        String own = wecomConversation("wconv_xmj_" + suffix, "org", "raw-ref-own-" + suffix);
+        String foreign = wecomConversation("wconv_xmjb_" + suffix, "org_xmjb_" + suffix, "raw-ref-foreign-" + suffix);
+        staffWithSingleUseGrant(null, "wecom.view_raw");
+
+        for (String mode : List.of("raw", "RAW", " raw ")) {
+            String denied = mockMvc.perform(get(wecomMessagesUrl(foreign)).param("mode", mode)
+                            .param("approval_ref", "approval-m723").with(session(null)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertThat(denied).doesNotContain("raw-ref-foreign-" + suffix).doesNotContain("raw_content").doesNotContain("wmsg_");
+        }
+        assertUnconsumed();
+        assertThat(wecomAccessAudits(foreign, userId)).isZero();
+        assertThat(wecomAuditEvents("wecom.raw_viewed", "success", foreign)).isZero();
+        assertThat(wecomAuditEvents("wecom.raw_view_failed", "failure", foreign)).isEqualTo(3);
+
+        mockMvc.perform(get(wecomMessagesUrl(own)).param("mode", " raw ").param("approval_ref", "approval-m723").with(session(null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].raw_content").value("raw-ref-own-" + suffix));
+        assertConsumedOnce();
+        assertThat(wecomAccessAudits(own, userId)).isEqualTo(1);
+        mockMvc.perform(get(wecomMessagesUrl(own)).param("mode", "raw").param("approval_ref", "approval-m723").with(session(null)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertConsumedOnce();
+    }
+
+    // M723-F14：脱敏调阅同样按项目范围。项目 org 的员工持单次组 {企微会话查看, 企微原文调阅}：脱敏调阅另一项目的会话（缺省模式、
+    // "redacted"、" REDACTED "）都 403 CROSS_PROJECT_FORBIDDEN、不含消息、无调阅留痕，来源未消耗；脱敏调阅本项目会话照旧 200、不消耗。
+    // 修复前第一处 403 即红（200 且返回另一项目的脱敏消息）。
+    @Test
+    void theRedactedWecomViewIsLimitedToTheViewersProjectAndStillConsumesNothing() throws Exception {
+        String own = wecomConversation("wconv_xmj_" + suffix, "org", "raw-ref-own-" + suffix);
+        String foreign = wecomConversation("wconv_xmjb_" + suffix, "org_xmjb_" + suffix, "raw-ref-foreign-" + suffix);
+        staffWithSingleUseGrant(null, "wecom.view", "wecom.view_raw");
+
+        String byDefault = mockMvc.perform(get(wecomMessagesUrl(foreign)).with(session(null)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(byDefault).doesNotContain("wmsg_").doesNotContain("raw-ref-foreign-" + suffix);
+        for (String mode : List.of("redacted", " REDACTED ")) {
+            String denied = mockMvc.perform(get(wecomMessagesUrl(foreign)).param("mode", mode).with(session(null)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertThat(denied).doesNotContain("wmsg_").doesNotContain("raw-ref-foreign-" + suffix);
+        }
+        assertUnconsumed();
+        assertThat(wecomAccessAudits(foreign, userId)).isZero();
+
+        mockMvc.perform(get(wecomMessagesUrl(own)).with(session(null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].content").value("***"));
+        assertUnconsumed();
+    }
+
+    // M723-F14 对照（修复前后都通过）：平台管理员不受项目范围限制（D-032），持单次「企微原文调阅」调阅另一项目会话的原文 200
+    // 含原文、恰好消耗一次、留调阅留痕；项目 org 的员工只持单次「企微会话查看」时，原文调阅本项目与另一项目的会话都 403
+    // PERMISSION_DENIED、不含原文、不消耗。
+    @Test
+    void aPlatformAdminHoldingTheRawCodeStillViewsAnotherProjectsWecomConversation() throws Exception {
+        String own = wecomConversation("wconv_xmj_" + suffix, "org", "raw-ref-own-" + suffix);
+        String foreign = wecomConversation("wconv_xmjb_" + suffix, "org_xmjb_" + suffix, "raw-ref-foreign-" + suffix);
+        Instant now = Instant.now();
+        repository.createUser(new AccessUser(otherUserId, otherUserId, "platform_admin", "org", null, "active", now));
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), otherUserId, List.of("wecom.view_raw"),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F14 平台管理员的单次来源",
+                "seed-admin", now, null, null));
+        RequestPostProcessor admin = request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(
+                    new AccessActor(otherUserId, otherUserId, "platform_admin", "org", null, "active"), null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
+
+        mockMvc.perform(get(wecomMessagesUrl(foreign)).param("mode", "raw").param("approval_ref", "approval-m723").with(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].raw_content").value("raw-ref-foreign-" + suffix));
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                Boolean.class, otherUserId)).containsExactly(true);
+        assertThat(consumptionLogs(otherUserId)).isEqualTo(1);
+        assertThat(wecomAccessAudits(foreign, otherUserId)).isEqualTo(1);
+
+        staffWithSingleUseGrant(null, "wecom.view");
+        for (String conversation : List.of(own, foreign)) {
+            String denied = mockMvc.perform(get(wecomMessagesUrl(conversation)).param("mode", "raw")
+                            .param("approval_ref", "approval-m723").with(session(null)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertThat(denied).doesNotContain("raw-ref-").doesNotContain("raw_content");
+        }
+        assertUnconsumed();
+    }
+
+    // M723-F14 夹具：某项目下的一条企微会话，带一条消息（脱敏文本 ***、原文引用 rawRef）；返回会话 id。
+    private String wecomConversation(String id, String project, String rawRef) {
+        jdbcTemplate.update("INSERT INTO wecom_conversations (id, external_conversation_id, project_id) VALUES (?, ?, ?)",
+                id, "ext-" + id, project);
+        jdbcTemplate.update("""
+                INSERT INTO wecom_messages (id, conversation_id, sender_ref, content_raw_ref, content_redacted)
+                VALUES (?, ?, 'cust', ?, '***')
+                """, "wmsg_" + id, id, rawRef);
+        return id;
+    }
+
+    private String wecomMessagesUrl(String conversation) {
+        return "/api/v1/compliance/wecom/conversations/" + conversation + "/messages";
+    }
+
+    private Integer wecomAccessAudits(String conversation, String viewer) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM wecom_access_audits WHERE conversation_id = ? AND viewer_user_id = ?",
+                Integer.class, conversation, viewer);
+    }
+
+    private Integer wecomAuditEvents(String eventName, String result, String conversation) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = ? AND event_result = ? AND business_id = ?",
+                Integer.class, eventName, result, conversation);
     }
 
     // 操作员 2026-10-03「预览、查询不扣一次性授权，只有真正核销、真正执行的那一次才扣」：按手机号查客人账号是以提交方式做的查询

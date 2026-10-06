@@ -1,5 +1,6 @@
 package com.complex.platform.compliance;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,6 +67,8 @@ class WecomConversationServiceTests {
                 qcPort,
                 new ObjectMapper(),
                 riskAlertService,
+                // M723-F14：项目范围取自登录主体；这里的桩返回空范围＝全量（平台管理员口径），项目校验的回归在真库接口用例里
+                Mockito.mock(AuthorizationService.class),
                 FIXED
         );
     }
