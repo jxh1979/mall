@@ -1,7 +1,8 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import jakarta.servlet.http.HttpServletRequest;
@@ -105,8 +106,10 @@ public class SingleUseGrantRequestTransactionAspect {
         boolean readOnly = request != null && ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())
                 || handlerMethod.isAnnotationPresent(DoesNotConsumeSingleUseGrant.class));
         ConsumesSingleUseGrant stillConsumed = !readOnly ? null : handlerMethod.getAnnotation(ConsumesSingleUseGrant.class);
+        Set<String> requestKeys = idempotencyKeysOf(handler.getArgs(), request);
         IdempotentReplayContext previous = IdempotentReplayContext.enter(
-                idempotencyKeyOf(handler.getArgs(), request), requestDigestOf(request), readOnly,
+                requestKeys != null && requestKeys.size() == 1 ? requestKeys.iterator().next() : null,
+                requestDigestOf(request), readOnly,
                 stillConsumed == null ? Set.of() : Set.copyOf(java.util.Arrays.asList(stillConsumed.value())));
         try {
             if ((readOnly && stillConsumed == null) || TransactionSynchronizationManager.isActualTransactionActive()
@@ -125,6 +128,12 @@ public class SingleUseGrantRequestTransactionAspect {
             if (!envelopeAcceptable(request, handlerMethod)) {
                 currentResponse().setStatus(HttpServletResponse.SC_NOT_ACCEPTABLE);
                 return null;
+            }
+            // M723-F16（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：
+            // 提交编号取到多个不同的值或读不出来时，本切面定不出这次请求的编号，业务层却可能照其中一个认出重复提交、返回第一次的
+            // 结果——那样本请求新用掉的单次来源不会回滚。所以在开请求事务之前就拒绝（400）：不执行业务、不消耗。
+            if (requestKeys == null || requestKeys.size() > 1) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求里带了多个不同或无法识别的提交编号，请只带一个提交编号后重试");
             }
             Throwable[] failure = new Throwable[1];
             Object result = transactionTemplate.execute(status -> {
@@ -157,10 +166,11 @@ public class SingleUseGrantRequestTransactionAspect {
 
     /**
      * 本次请求的幂等键：请求记录的 {@code idempotencyKey} 组件（请求体记录统一这样写）、{@code Idempotency-Key} /
-     * {@code X-Idempotency-Key} 请求头、查询串里的 {@code idempotency_key}。取到多个不同的值或读取失败时视为取不到
-     * （返回 null：消耗不记请求信息，重放照旧拒绝）。
+     * {@code X-Idempotency-Key} 请求头、查询串里的 {@code idempotency_key}。返回取到的全部不同取值（各处写同一个值只算一个）；
+     * 读取失败返回 null。恰好一个值才是本次请求的幂等键；一个都没有时消耗不记请求信息、重放照旧拒绝；
+     * 多个不同的值或读取失败，要开请求事务的请求直接拒绝（M723-F16）。
      */
-    static String idempotencyKeyOf(Object[] args, HttpServletRequest request) {
+    static Set<String> idempotencyKeysOf(Object[] args, HttpServletRequest request) {
         Set<String> keys = new HashSet<>();
         for (Object arg : args) {
             if (arg == null || !arg.getClass().isRecord()) {
@@ -193,7 +203,7 @@ public class SingleUseGrantRequestTransactionAspect {
                 }
             }
         }
-        return keys.size() == 1 ? keys.iterator().next() : null;
+        return keys;
     }
 
     private static void addKey(Set<String> keys, String key) {

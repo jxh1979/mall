@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -73,6 +73,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 调阅其他项目的会话 403、不返回消息、单次来源不算用掉。
  * M723 第 10 轮（F15）：请求头 Accept 不接受 JSON 时，持未消耗单次来源的请求在执行前按 406 拒绝、不执行、不消耗；
  * 另补 F03「结果保存失败不算用掉」的真库接口回归。
+ * M723 第 11 轮（F16）：持未消耗单次来源的请求带了多个不同或读不出来的提交编号时，在执行前按 400 拒绝、不执行、不消耗。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -1194,6 +1195,82 @@ class SingleUseGrantRequestTransactionTests {
                 .andExpect(jsonPath("$.message").value("success"));
         assertThat(rolesCreated()).isEqualTo(1);
         assertConsumedOnce();
+    }
+
+    // M723-F16（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」；操作员
+    // 2026-10-06「修好再审」）：只持单次「角色管理」的员工建角色，请求体里的提交编号之外又带了一个不同的编号（Idempotency-Key 请求头、
+    // X-Idempotency-Key 请求头、查询串 idempotency_key），或查询串里的编号编码坏了读不出来：都 400，没有建出角色、来源未消耗、
+    // 两个编号都没有留下幂等记录。各处写同一个编号只算一个：200、建出一个角色、恰好消耗一次。之后补授第二份来源：带不同编号重复
+    // 提交 400、第二份未消耗；只带原编号重复提交 → 第一次的结果、提示已完成、第二份仍未消耗、角色仍只有一个。
+    // 修复前带不同编号的请求照常执行（第一处 400 即红），重复提交时第二份来源被多扣一次。
+    @Test
+    void aRequestCarryingDifferentRequestNumbersIsRejectedBeforeAnythingIsWrittenOrSpent() throws Exception {
+        staffWithSingleUseGrant(null, ROLE_MANAGE);
+        String key = "xmj-role-keys-" + suffix;
+        String other = "xmj-role-keys-other-" + suffix;
+        String body = roleJson(key, roleName("编号"), "[]");
+        List<RequestPostProcessor> conflicts = List.of(
+                request -> {
+                    request.addHeader("Idempotency-Key", other);
+                    return request;
+                },
+                request -> {
+                    request.addHeader("X-Idempotency-Key", other);
+                    return request;
+                },
+                request -> {
+                    request.setQueryString("idempotency_key=" + other);
+                    return request;
+                },
+                request -> {
+                    request.setQueryString("idempotency_key=%zz");
+                    return request;
+                });
+        for (RequestPostProcessor conflict : conflicts) {
+            mockMvc.perform(post("/api/v1/access/roles").with(session(null)).with(conflict)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            assertThat(rolesCreated()).isZero();
+            assertUnconsumed();
+            assertThat(idempotencyRecords(key)).isZero();
+            assertThat(idempotencyRecords(other)).isZero();
+        }
+
+        // 对照：请求体、请求头、查询串写的是同一个编号
+        RequestPostProcessor sameEverywhere = request -> {
+            request.addHeader("Idempotency-Key", key);
+            request.setQueryString("idempotency_key=" + key);
+            return request;
+        };
+        String first = mockMvc.perform(post("/api/v1/access/roles").with(session(null)).with(sameEverywhere)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertConsumedOnce();
+        assertThat(rolesCreated()).isEqualTo(1);
+
+        // 补授第二份来源后重复提交
+        Instant now = Instant.now();
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(ROLE_MANAGE),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F16 补授的第二份单次来源",
+                "seed-admin", now, null, null));
+        mockMvc.perform(post("/api/v1/access/roles").with(session(null)).with(conflicts.get(0))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(consumedFlags()).containsExactlyInAnyOrder(true, false);
+        assertThat(consumptionLogs()).isEqualTo(1);
+        String replayed = mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(replayed)).isEqualTo(data(first));
+        assertThat(consumedFlags()).containsExactlyInAnyOrder(true, false);
+        assertThat(consumptionLogs()).isEqualTo(1);
+        assertThat(rolesCreated()).isEqualTo(1);
     }
 
     private Integer idempotencyRecords(String idempotencyKey) {
