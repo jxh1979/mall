@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -165,7 +165,8 @@ public class SingleUseGrantRequestTransactionAspect {
     }
 
     /**
-     * 本次请求的幂等键：请求记录的 {@code idempotencyKey} 组件（请求体记录统一这样写）、{@code Idempotency-Key} /
+     * 本次请求的幂等键：请求记录的 {@code idempotencyKey} 组件（请求体记录统一这样写）、Map 请求体的 {@code idempotency_key} 键
+     * （M723-F17：终端设备签名公钥登记、开放平台回调这样取）、{@code Idempotency-Key} /
      * {@code X-Idempotency-Key} 请求头、查询串里的 {@code idempotency_key}。返回取到的全部不同取值（各处写同一个值只算一个）；
      * 读取失败返回 null。恰好一个值才是本次请求的幂等键；一个都没有时消耗不记请求信息、重放照旧拒绝；
      * 多个不同的值或读取失败，要开请求事务的请求直接拒绝（M723-F16）。
@@ -173,6 +174,9 @@ public class SingleUseGrantRequestTransactionAspect {
     static Set<String> idempotencyKeysOf(Object[] args, HttpServletRequest request) {
         Set<String> keys = new HashSet<>();
         for (Object arg : args) {
+            if (arg instanceof java.util.Map<?, ?> body && body.get("idempotency_key") instanceof String key) {
+                addKey(keys, key);
+            }
             if (arg == null || !arg.getClass().isRecord()) {
                 continue;
             }

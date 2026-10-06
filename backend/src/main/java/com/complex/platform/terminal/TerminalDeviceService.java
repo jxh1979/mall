@@ -94,7 +94,8 @@ public class TerminalDeviceService {
             return idempotencyService.execute(
                     "registerDeviceSigningKey:" + id,
                     idempotencyKey,
-                    java.util.Map.of("device_id", id),
+                    // M723-F18：公钥决定登记／轮换的内容，计入请求摘要——同一提交编号换了公钥按内容不同拒绝（409），不当成重复提交
+                    java.util.Map.of("device_id", id, "public_key", key),
                     () -> {
                         TerminalDeviceRecord device = repository.findByDeviceId(id)
                                 .orElseThrow(() -> ApiException.notFound(

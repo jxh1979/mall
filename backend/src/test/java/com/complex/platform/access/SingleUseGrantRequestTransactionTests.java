@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -74,6 +74,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * M723 第 10 轮（F15）：请求头 Accept 不接受 JSON 时，持未消耗单次来源的请求在执行前按 406 拒绝、不执行、不消耗；
  * 另补 F03「结果保存失败不算用掉」的真库接口回归。
  * M723 第 11 轮（F16）：持未消耗单次来源的请求带了多个不同或读不出来的提交编号时，在执行前按 400 拒绝、不执行、不消耗。
+ * M723 第 12 轮（F17、F18）：Map 请求体里的提交编号同样计入（终端设备签名公钥登记）；该接口的公钥计入请求摘要，同编号换公钥 409。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -124,6 +125,8 @@ class SingleUseGrantRequestTransactionTests {
         jdbcTemplate.update("DELETE FROM terminal_capability_switches WHERE scope_type = 'merchant' AND scope_id = ?", merchantId);
         jdbcTemplate.update("DELETE FROM data_cleanup_jobs WHERE requested_by = ?", userId);
         jdbcTemplate.update("DELETE FROM wecom_conversations WHERE id IN (?, ?)", "wconv_xmj_" + suffix, "wconv_xmjb_" + suffix);
+        jdbcTemplate.update("DELETE FROM terminal_device_signing_keys WHERE device_id = ?", "dev-xmj-" + suffix);
+        jdbcTemplate.update("DELETE FROM terminal_devices WHERE device_id = ?", "dev-xmj-" + suffix);
         jdbcTemplate.update("DELETE FROM leasing_leads WHERE contact_name = ?", roleName("线索"));
         jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "xmj-%" + suffix);
@@ -1271,6 +1274,128 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(consumedFlags()).containsExactlyInAnyOrder(true, false);
         assertThat(consumptionLogs()).isEqualTo(1);
         assertThat(rolesCreated()).isEqualTo(1);
+    }
+
+    // M723-F17（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」；操作员
+    // 2026-10-06「两条都在 M723 修」）：终端设备签名公钥登记的请求体是 Map，提交编号写在 idempotency_key 键里。只持单次「终端设备绑定」
+    // 的员工登记公钥成功（正文与请求头同一编号），补授第二份来源后：正文原编号之外又带一个不同的编号（Idempotency-Key 请求头、
+    // X-Idempotency-Key 请求头、查询串）都 400、第二份未消耗、消耗日志与登记成功事件仍各一条；只带原编号重复提交 → 第一次的结果、
+    // 提示已完成、第二份仍未消耗。修复前切面读不到 Map 里的编号、认不出不一致（第一处 400 即红），第二份来源被多扣一次。
+    @Test
+    void aSigningKeyRegistrationCarryingDifferentRequestNumbersIsRejectedBeforeAnythingIsSpent() throws Exception {
+        String device = boundTerminalDevice();
+        String url = "/api/v1/terminals/devices/" + device + "/signing-key";
+        staffWithSingleUseGrant(null, "terminal.device.bind");
+        String key = "xmj-sign-" + suffix;
+        String other = "xmj-sign-other-" + suffix;
+        String body = signingKeyJson(key, "PK1-" + suffix);
+
+        String first = mockMvc.perform(post(url).with(session(null)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("registered"))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertConsumedOnce();
+        assertThat(signingKeyRegisteredEvents(device)).isEqualTo(1);
+
+        Instant now = Instant.now();
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of("terminal.device.bind"),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F17 补授的第二份单次来源",
+                "seed-admin", now, null, null));
+        List<RequestPostProcessor> conflicts = List.of(
+                request -> {
+                    request.addHeader("Idempotency-Key", other);
+                    return request;
+                },
+                request -> {
+                    request.addHeader("X-Idempotency-Key", other);
+                    return request;
+                },
+                request -> {
+                    request.setQueryString("idempotency_key=" + other);
+                    return request;
+                });
+        for (RequestPostProcessor conflict : conflicts) {
+            mockMvc.perform(post(url).with(session(null)).with(conflict)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            assertThat(consumedFlags()).containsExactlyInAnyOrder(true, false);
+            assertThat(consumptionLogs()).isEqualTo(1);
+            assertThat(signingKeyRegisteredEvents(device)).isEqualTo(1);
+        }
+
+        String replayed = mockMvc.perform(post(url).with(session(null)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(replayed)).isEqualTo(data(first));
+        assertThat(consumedFlags()).containsExactlyInAnyOrder(true, false);
+        assertThat(consumptionLogs()).isEqualTo(1);
+        assertThat(signingKeyRegisteredEvents(device)).isEqualTo(1);
+    }
+
+    // M723-F18（同一确认句；M723-F04 验收「请求内容不同仍 409」）：只持单次「终端设备绑定」的员工用同一提交编号给同一台设备先登记公钥一、
+    // 再提交公钥二：409 IDEMPOTENCY_CONFLICT，库里仍是公钥一，登记成功事件与消耗都只有一次；同编号重放公钥一 → 第一次的结果、提示已完成。
+    // 三次请求的请求体与请求头都带同一个编号。修复前请求摘要只含设备号，换了公钥也被当成重复提交、返回第一次的成功结果
+    // （409 的断言拿到 200 即红）。
+    @Test
+    void registeringADifferentSigningKeyUnderTheSameRequestNumberIsAConflictNotAReplay() throws Exception {
+        String device = boundTerminalDevice();
+        String url = "/api/v1/terminals/devices/" + device + "/signing-key";
+        staffWithSingleUseGrant(null, "terminal.device.bind");
+        String key = "xmj-sign-pk-" + suffix;
+
+        String first = mockMvc.perform(post(url).with(session(null)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(key, "PK1-" + suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("registered"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertConsumedOnce();
+
+        mockMvc.perform(post(url).with(session(null)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(key, "PK2-" + suffix)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_CONFLICT"));
+        assertThat(jdbcTemplate.queryForObject("SELECT public_key FROM terminal_device_signing_keys WHERE device_id = ?",
+                String.class, device)).isEqualTo("PK1-" + suffix);
+        assertThat(signingKeyRegisteredEvents(device)).isEqualTo(1);
+        assertConsumedOnce();
+
+        String replayed = mockMvc.perform(post(url).with(session(null)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(key, "PK1-" + suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(replayed)).isEqualTo(data(first));
+        assertThat(signingKeyRegisteredEvents(device)).isEqualTo(1);
+        assertConsumedOnce();
+    }
+
+    // M723-F17、F18 夹具：一台已绑定的终端设备；返回设备号（接口路径里的 id）。
+    private String boundTerminalDevice() {
+        String device = "dev-xmj-" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
+                    status, created_at, updated_at)
+                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', now(), now())
+                """, "td_xmj_" + suffix, device, "DC-xmj-" + suffix);
+        return device;
+    }
+
+    private String signingKeyJson(String idempotencyKey, String publicKey) {
+        return """
+                {"idempotency_key": "%s", "public_key": "%s"}
+                """.formatted(idempotencyKey, publicKey);
+    }
+
+    private Integer signingKeyRegisteredEvents(String device) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM audit_events
+                 WHERE event_name = 'terminal.device.signing_key_registered' AND event_result = 'success' AND business_id = ?
+                """, Integer.class, device);
     }
 
     private Integer idempotencyRecords(String idempotencyKey) {
