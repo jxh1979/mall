@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.20
+// 文件版本：V0.21
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1363,6 +1363,89 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("user_id", userId)
                 .addValue("idempotency_key", idempotencyKey)
                 .addValue("request_digest", requestDigest), String.class);
+    }
+
+    // M723-F08：把 markSingleUsePermissionConsumed 做的事反过来——来源改回未消耗、消耗时间清空（按来源类型分别处理，与消耗时一致）。
+    // 消耗日志只追加（V140 触发器禁止 UPDATE / DELETE，第 656 行「单次消耗……全部留痕」），不删本次的「consumed」行，
+    // 而是对本次撤回的每个码各追加一条 result='released' 的留痕（同来源、同操作人、同请求信息）。两处读取口径不同：
+    // singleUseSourceConsumedByRequest 读取时两种行相抵（撤回过的不算本请求用掉）；singleUseSourcesConsumedBy 只认 consumed 行、
+    // 不相抵——已撤回的失败请求在来源被别的请求用掉之后重发，仍按重放返回第一次的失败结果，不消耗、不执行。
+    @Override
+    @Transactional
+    public void releaseSingleUsePermissionConsumption(
+            String sourceId,
+            String permissionCode,
+            String userId,
+            String idempotencyKey,
+            String requestDigest
+    ) {
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("source_id", sourceId)
+                .addValue("user_id", userId)
+                .addValue("idempotency_key", idempotencyKey)
+                .addValue("request_digest", requestDigest)
+                .addValue("released_at", timestampWithTimeZone(Instant.now()));
+        int templateRows = jdbcTemplate.update("""
+                UPDATE permission_template_applications
+                   SET consumed = FALSE,
+                       consumed_at = NULL
+                 WHERE id = :source_id
+                   AND target_id = :user_id
+                   AND consumed = TRUE
+                """, parameters);
+        List<String> releasedGrantCodes = templateRows == 0 ? jdbcTemplate.queryForList("""
+                UPDATE temporary_permission_grants
+                   SET consumed = FALSE,
+                       consumed_at = NULL
+                 WHERE grant_group_id = :source_id
+                   AND subject_id = :user_id
+                   AND consumed = TRUE
+                RETURNING permission_code
+                """, parameters, String.class) : List.of();
+        if (templateRows == 0 && releasedGrantCodes.isEmpty()) {
+            return;
+        }
+        parameters.addValue("application_id", templateRows > 0 ? sourceId : null)
+                .addValue("reason", templateRows > 0 ? "single_use" : "single_use:temporary_grant:" + sourceId);
+        for (String releasedCode : templateRows > 0 ? List.of(permissionCode) : releasedGrantCodes) {
+            jdbcTemplate.update("""
+                    INSERT INTO permission_template_usage_logs (
+                        id, application_id, user_id, permission_code, result, reason, occurred_at,
+                        idempotency_key, request_digest
+                    )
+                    VALUES (
+                        :usage_log_id, :application_id, :user_id, :permission_code, 'released', :reason, :released_at,
+                        :idempotency_key, :request_digest
+                    )
+                    """, new MapSqlParameterSource(parameters.getValues())
+                    .addValue("usage_log_id", UUID.randomUUID())
+                    .addValue("permission_code", releasedCode));
+        }
+    }
+
+    // M723-F10：该来源的这个码是否正是这名操作人以这个幂等键、这个请求摘要用掉的——consumed 行多于 released 行才算（撤回过的不算）。
+    @Override
+    public boolean singleUseSourceConsumedByRequest(
+            String sourceId,
+            String permissionCode,
+            String userId,
+            String idempotencyKey,
+            String requestDigest
+    ) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT count(*) FILTER (WHERE result = 'consumed') > count(*) FILTER (WHERE result = 'released')
+                  FROM permission_template_usage_logs
+                 WHERE user_id = :user_id
+                   AND permission_code = :permission_code
+                   AND idempotency_key = :idempotency_key
+                   AND request_digest = :request_digest
+                   AND (application_id = :source_id OR reason = 'single_use:temporary_grant:' || :source_id)
+                """, new MapSqlParameterSource()
+                .addValue("source_id", sourceId)
+                .addValue("permission_code", permissionCode)
+                .addValue("user_id", userId)
+                .addValue("idempotency_key", idempotencyKey)
+                .addValue("request_digest", requestDigest), Boolean.class));
     }
 
     // XM-M002-J：每个不在事务里的写请求进控制器前都要问一次，只查两张来源表的「有效、单次、未消耗」行，不走 findPermissionEffects 的整套读取与到期清理。

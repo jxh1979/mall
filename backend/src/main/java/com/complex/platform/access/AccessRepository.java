@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import java.time.Instant;
 import java.util.List;
@@ -362,6 +362,23 @@ public interface AccessRepository {
     /** XM-M002-J：该员工以该幂等键发起的这次请求（请求摘要）用掉的单次来源编号（临时授权组号 / 模板套用号）。 */
     default List<String> singleUseSourcesConsumedBy(String userId, String idempotencyKey, String requestDigest) {
         return List.of();
+    }
+
+    /**
+     * M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：撤回该操作人在这次请求（幂等键、请求摘要）里对该来源的单次消耗——
+     * 来源改回未消耗、消耗时间清空，并留下撤回留痕。内存仓 / 桩不做。
+     */
+    default void releaseSingleUsePermissionConsumption(String sourceId, String permissionCode, String actorId,
+                                                       String idempotencyKey, String requestDigest) {
+    }
+
+    /**
+     * M723-F10（第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：该来源的这个权限码是否正是这名操作人
+     * 以这个幂等键、这个请求摘要用掉的（且未被撤回）。内存仓 / 桩一律否（抢不到即拒绝）。
+     */
+    default boolean singleUseSourceConsumedByRequest(String sourceId, String permissionCode, String userId,
+                                                     String idempotencyKey, String requestDigest) {
+        return false;
     }
 
     /**

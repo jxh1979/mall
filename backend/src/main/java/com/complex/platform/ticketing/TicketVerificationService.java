@@ -4,6 +4,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
 import com.complex.platform.amusement.AmusementService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.terminal.MdmService;
 import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
@@ -188,7 +189,15 @@ public class TicketVerificationService {
     }
 
     VerificationResponse createVerification(VerificationRequest request) {
-        return verifyEntitlement(request, "android_terminal_online", null);
+        VerificationResponse response = verifyEntitlement(request, "android_terminal_online", null);
+        if ("failed".equals(response.status())) {
+            // M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：在线核销以正常返回报告失败（过刷新窗口、签名失配，
+            // verifyEntitlement 里落 failed 核销记录的两支），本次请求记为业务失败，请求事务切面据此撤回这次请求新用掉的
+            // 单次核销授权（失败核销记录照常提交，响应形状不变）。只在在线核销入口标记：终端离线同步（createSyncTask）
+            // 同样调 verifyEntitlement，但同步批次受理即这次同步操作成功，其单次授权照常算用掉。
+            IdempotentReplayContext.markBusinessFailed();
+        }
+        return response;
     }
 
     SyncTasksResponse syncTerminalTasks(TerminalSyncTasksRequest request) {

@@ -110,12 +110,15 @@ public class ComplianceController {
             @RequestParam(value = "approval_ref", required = false) String approvalRef
     ) {
         // 原文调阅最小授权：raw 需 wecom.view_raw，脱敏展示需 wecom.view。
-        boolean raw = "raw".equalsIgnoreCase(mode);
+        // M723-F07（治理地图第 660 行原文「必须逐项单独授予并留痕」）：模式按与 WecomConversationService.viewMessages 相同的规范化
+        // （空→redacted；去首尾空白、小写）判定，核权与服务调用用同一个结果；非 redacted／raw 的取值由服务层照旧 400。
+        String resolvedMode = mode == null || mode.isBlank() ? "redacted" : mode.trim().toLowerCase(java.util.Locale.ROOT);
+        boolean raw = "raw".equals(resolvedMode);
         authorizationService.requirePermission(raw ? "wecom.view_raw" : "wecom.view");
         // 平台合规口径 fail-closed：拒绝 merchant-scoped 调用方越权调阅他项目会话（即便权限被误授商户角色）。
         authorizationService.requirePlatformComplianceScope();
         String viewerUserId = authorizationService.currentActor().id();
-        return ApiResponse.ok(wecomConversationService.viewMessages(id, mode, viewerUserId, approvalRef));
+        return ApiResponse.ok(wecomConversationService.viewMessages(id, resolvedMode, viewerUserId, approvalRef));
     }
 
     // ---------------------------------------------------------------- P0#8 企微违规命中查询 / 复核处置

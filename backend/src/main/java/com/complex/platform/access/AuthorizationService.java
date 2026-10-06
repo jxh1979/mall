@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -18,6 +18,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import com.complex.platform.auth.SessionIssuer;
 
@@ -69,6 +70,11 @@ public class AuthorizationService implements CallerScopeResolver {
      * 操作员 2026-10-03「导一次扣一次」「看一次扣一次」）照旧消耗。
      * M723（技术推导，一次操作只算一次使用）：本请求已消耗的单次来源在本请求内再核验时仍视为有效、不再消耗。
      * 不在控制器请求里（没有请求上下文）时一律照旧消耗。
+     * M723-F09（第 656 行「操作被拒绝或失败的不算用掉」）：控制器请求里本次要消耗单次来源（写请求，或带 {@link ConsumesSingleUseGrant}
+     * 的查看请求）而本请求没有请求事务（请求进入时不持有、判定期间才被授出；切面记了「无请求事务」，或当前没有实际事务）时
+     * 不消耗、按不具备处理。M723-F10（同行「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：抢不到来源时若正是本人以本请求
+     * 编号、本请求摘要刚用掉的、且那次请求已经幂等层成功完成（与 SingleUseReplay 第③项同口径），转为只能重放；不经幂等层的接口没有
+     * 可返回的第一次结果，照旧拒绝。M723-F08：消耗记到请求名下时连来源号与权限码一起记，供 {@link #releaseRequestConsumption} 撤回。
      */
     public void requirePermissions(String... permissionCodes) {
         AccessActor actor = currentActor();
@@ -110,7 +116,17 @@ public class AuthorizationService implements CallerScopeResolver {
             // 已按重放放行的请求只能返回第一次的结果，不再消耗新的单次来源
             deny(consume.values().iterator().next().permissionCode());
         }
+        // M723-F09：控制器请求里本次要消耗单次来源（consume 非空：写请求，或带 ConsumesSingleUseGrant 的查看请求如导出、商户列表）
+        // 而本请求没有请求事务——请求进入时不持有单次来源、判定期间才被授出：切面放行时记了「无请求事务」（这时即使核验发生在业务层
+        // 自己的事务里，那个事务的提交也不受切面的重放回滚与失败撤回约束），或当前没有实际事务——消耗无法随请求结果处理，不消耗、
+        // 按不具备处理；用户重试即可（下一次进入时已持有，切面会开请求事务）。不消耗的查看请求（consume 为空）与不在控制器请求里的
+        // 调用不受影响。
+        if (request != null && (request.withoutRequestTransaction()
+                || !TransactionSynchronizationManager.isActualTransactionActive())) {
+            deny(consume.values().iterator().next().permissionCode());
+        }
         boolean recordRequest = request != null && request.identified();
+        boolean[] replayedAtConsumption = new boolean[1];
         Runnable consumeAll = () -> {
             for (AccessRepository.PermissionEffect grant : consume.values()) {
                 // 取不到本次请求的幂等键时沿用四参写法（不记请求信息，其重放照旧拒绝）；内存仓与桩只实现了它
@@ -119,9 +135,23 @@ public class AuthorizationService implements CallerScopeResolver {
                                 actor.id(), checkedAt, request.idempotencyKey(), request.requestDigest())
                         : accessRepository.markSingleUsePermissionConsumed(
                                 grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt);
-                if (!consumed) {
-                    deny(grant.permissionCode());
+                if (consumed) {
+                    continue;
                 }
+                // M723-F10：抢不到时重读消耗记录——正是本人以本请求编号、本请求摘要用掉的（同号并发提交的另一笔刚提交），
+                // 且那次请求的幂等记录已成功完成（SingleUseReplay 第③项同口径：消耗与幂等记录同一事务提交，读到消耗行时记录必已 OK；
+                // 不经幂等层的接口没有这条记录、也没有可返回的第一次结果，照旧拒绝——replayOnly 只有幂等层尊重），
+                // 转为只能重放，由幂等层返回第一次的结果（走到这里记录必已 OK；首笔尚未完成时的 409 出在幂等占位处的既有逻辑，不在本分支）；只在本次只消耗这一个来源时才转
+                // （同一次调用不能既按重放放行、又消耗别的单次来源），否则照旧拒绝。
+                if (recordRequest && consume.size() == 1 && idempotencyRepository != null
+                        && accessRepository.singleUseSourceConsumedByRequest(
+                                grant.sourceId(), grant.permissionCode(), actor.id(), request.idempotencyKey(), request.requestDigest())
+                        && idempotencyRepository.hasCompletedSingleUseRequest(
+                                actor.id(), request.idempotencyKey(), request.requestDigest())) {
+                    replayedAtConsumption[0] = true;
+                    return;
+                }
+                deny(grant.permissionCode());
             }
         };
         if (transactionTemplate == null) {
@@ -129,9 +159,29 @@ public class AuthorizationService implements CallerScopeResolver {
         } else {
             transactionTemplate.executeWithoutResult(status -> consumeAll.run());
         }
-        if (request != null) {
-            consume.keySet().forEach(source -> request.markConsumed(actor.id(), source));
+        if (replayedAtConsumption[0]) {
+            request.markReplayOnly();
+            return;
         }
+        if (request != null) {
+            // M723-F08：连来源号与权限码一起记，业务失败时据此撤回
+            consume.forEach((source, grant) -> request.markConsumed(actor.id(), source, grant.sourceId(), grant.permissionCode()));
+        }
+    }
+
+    /**
+     * M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：业务以正常返回报告失败时，由请求事务切面在同一请求事务里调用——
+     * 把本请求记在名下的每个单次消耗撤回（来源改回未消耗、追加撤回留痕），失败留痕与幂等记录照常提交。
+     * 没有请求上下文、本请求没消耗过时无操作。
+     */
+    public void releaseRequestConsumption() {
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        if (request == null || request.consumedBy() == null) {
+            return;
+        }
+        request.consumedSourceCodes().forEach((sourceId, permissionCode) ->
+                accessRepository.releaseSingleUsePermissionConsumption(sourceId, permissionCode, request.consumedBy(),
+                        request.idempotencyKey(), request.requestDigest()));
     }
 
     private static String sourceKey(AccessRepository.PermissionEffect effect) {

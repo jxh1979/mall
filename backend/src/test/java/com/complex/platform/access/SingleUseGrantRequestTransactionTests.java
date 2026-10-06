@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,6 +34,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -56,6 +58,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * M723-F04（操作员 2026-09-25 确认句「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」；
  * 2026-10-03「同一项目、同一商户的员工用同一个提交编号，只算一次、返回第一次的结果」）：重放的响应消息提示已完成；
  * 同项目同商户的同事用自己的单次来源重复提交、本人持第二份单次来源重复提交，都拿到第一次的结果，新的来源不算用掉。
+ * M723 第 4 轮（F07、F09、F10）：企微原文模式按规范化后的取值核权；写请求上下文里没有实际事务时命中单次来源不消耗、按不具备处理
+ * （真实接口按「请求进入—判定期间授出—核权—拒绝」的顺序复现）；本人同编号并发提交落败的一笔转为返回第一次的结果——只对经幂等层、
+ * 第一次已成功完成的请求，不经幂等层的入口（招商线索创建、月报导出）落败的一笔照旧 403、业务只执行一次。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -103,6 +108,7 @@ class SingleUseGrantRequestTransactionTests {
         jdbcTemplate.update("DELETE FROM terminal_capability_switches WHERE scope_type = 'merchant' AND scope_id = ?", merchantId);
         jdbcTemplate.update("DELETE FROM data_cleanup_jobs WHERE requested_by = ?", userId);
         jdbcTemplate.update("DELETE FROM wecom_conversations WHERE id = ?", "wconv_xmj_" + suffix);
+        jdbcTemplate.update("DELETE FROM leasing_leads WHERE contact_name = ?", roleName("线索"));
         jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "xmj-%" + suffix);
     }
@@ -348,35 +354,267 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(rolesCreated()).isEqualTo(1);
     }
 
-    // M723-F04「并发同号请求业务只执行一次、来源只消耗一次」：同一人、同一请求编号、同一请求体两笔并发建角色。至少一笔 200；
-    // 另一笔要么也拿到第一次的结果（200），要么在消耗行或幂等占位上落败（403 / 409）；角色只建一个、来源只消耗一次。
+    // M723-F04「并发同号请求业务只执行一次、来源只消耗一次」、M723-F10（第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，
+    // 不再重复执行、也不再扣减」）：同一人、唯一单次来源、同一请求编号与请求体两笔并发建角色。同步屏障用来源行的行锁：主线程先锁住来源行
+    // 再放两笔进来——两笔都读到未消耗来源，都停在消耗行的 UPDATE 上（等到 pg_stat_activity 里两条被阻塞）；放开后首笔消耗、执行、提交，
+    // 另一笔的条件更新才返回 0 行。另一笔须 200、业务结果与首笔相同、提示已完成（若在首笔完成前拿到 409 IDEMPOTENCY_IN_PROGRESS，
+    // 再同号重发一次须 200＋已完成）；角色只建一个、来源只消耗一次。修复前另一笔在消耗处直接 403。
     @Test
     void twoConcurrentSubmissionsOfTheSameRequestRunTheActionOnceAndConsumeOnce() throws Exception {
         staffWithSingleUseGrant(null, ROLE_MANAGE);
         String body = roleJson("xmj-role-same-" + suffix, roleName("并发同号"), "[]");
-        CountDownLatch start = new CountDownLatch(1);
+        List<MockHttpServletResponse> responses = raceTwoOnTheGrantRow(() -> mockMvc.perform(post("/api/v1/access/roles")
+                        .with(session(null)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andReturn().getResponse());
+        assertThat(responses.stream().map(MockHttpServletResponse::getStatus).toList()).contains(200).isSubsetOf(200, 409);
+        String first = null;
+        String other = null;
+        for (MockHttpServletResponse response : responses) {
+            String content = response.getContentAsString(StandardCharsets.UTF_8);
+            if (response.getStatus() == 200 && "success".equals(message(content))) {
+                first = content;
+            } else {
+                other = content;
+            }
+        }
+        assertThat(first).as("恰有一笔真正执行").isNotNull();
+        assertThat(other).isNotNull();
+        if (!ApiResponse.REPLAYED_MESSAGE.equals(message(other))) {
+            // 首笔尚未完成时另一笔在幂等占位上拿到 409：再同号重发一次
+            assertThat(new ObjectMapper().readTree(other).get("detail_code").asText()).isEqualTo("IDEMPOTENCY_IN_PROGRESS");
+            other = mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        }
+        assertThat(message(other)).isEqualTo(ApiResponse.REPLAYED_MESSAGE);
+        assertThat(data(other)).isEqualTo(data(first));
+        assertConsumedOnce();
+        assertThat(rolesCreated()).isEqualTo(1);
+    }
+
+    // 等到 expected 条会话被行锁挡在 temporary_permission_grants 的更新上（最多 30 秒；等不到也放行，用例仍按结果断言）
+    private void awaitBlockedOnGrantRow(int expected) {
+        for (int i = 0; i < 300; i++) {
+            Integer blocked = jdbcTemplate.queryForObject("""
+                    SELECT count(*) FROM pg_stat_activity
+                     WHERE cardinality(pg_blocking_pids(pid)) > 0 AND query LIKE '%temporary_permission_grants%'
+                    """, Integer.class);
+            if (blocked != null && blocked >= expected) {
+                return;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private String message(String body) throws Exception {
+        return new ObjectMapper().readTree(body).get("message").asText();
+    }
+
+    private String detailCode(String body) throws Exception {
+        return new ObjectMapper().readTree(body).get("detail_code").asText();
+    }
+
+    // 同号并发的同步屏障：主线程先锁住本人的来源行再放两笔进来——两笔都读到未消耗来源，都停在消耗行的 UPDATE 上（等到 pg_stat_activity 里
+    // 两条被阻塞）；放开后先拿到锁的一笔消耗、执行、提交，另一笔的条件更新才返回 0 行。
+    private List<MockHttpServletResponse> raceTwoOnTheGrantRow(Callable<MockHttpServletResponse> request) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<MockHttpServletResponse> responses = new ArrayList<>();
         try {
-            List<Future<Integer>> results = new ArrayList<>();
-            for (int i = 0; i < 2; i++) {
-                results.add(pool.submit(() -> {
-                    start.await();
-                    return mockMvc.perform(post("/api/v1/access/roles").with(session(null))
-                                    .contentType(MediaType.APPLICATION_JSON).content(body))
-                            .andReturn().getResponse().getStatus();
-                }));
+            List<Future<MockHttpServletResponse>> results = new ArrayList<>();
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                jdbcTemplate.queryForList("SELECT id FROM temporary_permission_grants WHERE subject_id = ? FOR UPDATE", userId);
+                for (int i = 0; i < 2; i++) {
+                    results.add(pool.submit(request));
+                }
+                awaitBlockedOnGrantRow(2);
+            });
+            for (Future<MockHttpServletResponse> result : results) {
+                responses.add(result.get(60, TimeUnit.SECONDS));
             }
-            start.countDown();
-            List<Integer> statuses = new ArrayList<>();
-            for (Future<Integer> result : results) {
-                statuses.add(result.get(60, TimeUnit.SECONDS));
-            }
-            assertThat(statuses).contains(200).isSubsetOf(200, 403, 409);
         } finally {
             pool.shutdownNow();
         }
+        return responses;
+    }
+
+    // 恰一笔 200、另一笔 403 PERMISSION_DENIED
+    private void assertOneSucceededAndTheOtherWasDenied(List<MockHttpServletResponse> responses) throws Exception {
+        assertThat(responses.stream().map(MockHttpServletResponse::getStatus).toList()).containsExactlyInAnyOrder(200, 403);
+        for (MockHttpServletResponse response : responses) {
+            if (response.getStatus() == 403) {
+                assertThat(detailCode(response.getContentAsString(StandardCharsets.UTF_8))).isEqualTo("PERMISSION_DENIED");
+            }
+        }
+    }
+
+    // M723-F10 的边界（第 656 行「不再重复执行、也不再扣减」；转重放与 SingleUseReplay 第③项同口径：只对经幂等层、第一次已成功完成的请求）：
+    // 招商线索创建不经幂等层（LeasingController.createLead 直接调服务层，只能重放的标记无人尊重），本人唯一单次来源、同编号同体两笔并发——
+    // 落败的一笔没有可返回的第一次结果，照旧 403 PERMISSION_DENIED；线索只建一条、来源只消耗一次。只按消耗日志转重放时落败笔
+    // 标成只能重放后控制器照常执行：线索建两条（消耗一次、业务两次）。
+    @Test
+    void aConcurrentResubmissionOutsideTheIdempotencyLayerIsDeniedAndRunsTheActionOnce() throws Exception {
+        staffWithSingleUseGrant(null, "leasing.lead.manage");
+        String body = """
+                {"idempotency_key": "xmj-lead-same-%s", "contact_name": "%s", "source": "referral"}
+                """.formatted(suffix, roleName("线索"));
+        List<MockHttpServletResponse> responses = raceTwoOnTheGrantRow(() -> mockMvc.perform(post("/api/v1/leasing/leads")
+                        .with(session(null)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andReturn().getResponse());
+        assertOneSucceededAndTheOtherWasDenied(responses);
+        assertConsumedOnce();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM leasing_leads WHERE contact_name = ?", Integer.class,
+                roleName("线索"))).isEqualTo(1);
+    }
+
+    // 同上，查看请求里接口声明仍然扣的月报导出（GET，幂等键取自 Idempotency-Key 头，不经幂等层；操作员 2026-10-03「导一次扣一次」）：
+    // 同头同 URL 两笔并发——恰一笔 200、另一笔 403，来源只消耗一次。只按消耗日志转重放时落败笔也 200、导出两次。
+    @Test
+    void aConcurrentExportWithTheSameRequestNumberIsDeniedOnceAndUsesUpTheGrantOnce() throws Exception {
+        staffWithSingleUseGrant(null, "analytics.report.export");
+        List<MockHttpServletResponse> responses = raceTwoOnTheGrantRow(() -> mockMvc.perform(
+                        get("/api/v1/analytics/reports/monthly-export").header("Idempotency-Key", "xmj-export-same-" + suffix)
+                                .with(session(null)))
+                .andReturn().getResponse());
+        assertOneSucceededAndTheOtherWasDenied(responses);
+        assertConsumedOnce();
+    }
+
+    // M723-F09（第 656 行「操作被拒绝或失败的不算用掉」）真实接口复现「请求进入—判定期间授出—核权—拒绝」的顺序：员工起初只有一条已到期、
+    // 非单次的临时授权（切面的持有查询不算它，只用作屏障）。主线程锁住这一行后放请求进来：切面查不到未消耗单次来源、不开请求事务；
+    // 控制器核权时读取权限前的到期清理 UPDATE 停在这一行上（这时主线程才授出单次来源，与放锁同一提交）。请求继续：读到刚授出的单次来源、
+    // 当前没有实际事务 → 403 PERMISSION_DENIED，来源仍未消耗、无消耗日志、角色未建。同一主体再发一次（进入时已持有，切面开请求事务）
+    // → 200、恰好消耗一次。修复前第一笔 200：消耗在授权服务自建事务里提交（「403」与「未消耗」断言红）。
+    @Test
+    void aSingleUseGrantIssuedAfterTheRequestEnteredIsNotConsumedWithoutARequestTransaction() throws Exception {
+        Instant now = Instant.now();
+        repository.createUser(new AccessUser(userId, userId, "staff", "org", null, "active", now));
+        String lapsedGroup = UUID.randomUUID().toString();
+        repository.createTemporaryGrant(new TemporaryGrant(lapsedGroup, userId, List.of(ROLE_MANAGE),
+                now.minusSeconds(7200), now.minusSeconds(3600), false, false, "active", "M723-F09 已到期的屏障行",
+                "seed-admin", now.minusSeconds(7200), null, null));
+        String body = roleJson("xmj-role-f09-" + suffix, roleName("进入后才授出"), "[]");
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        MockHttpServletResponse first;
+        try {
+            List<Future<MockHttpServletResponse>> results = new ArrayList<>();
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                jdbcTemplate.queryForList("SELECT id FROM temporary_permission_grants WHERE subject_id = ? FOR UPDATE", userId);
+                results.add(pool.submit(() -> mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse()));
+                awaitBlockedOnGrantRow(1);
+                // 判定期间授出：请求已过切面的持有查询、停在到期清理上
+                repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(ROLE_MANAGE),
+                        now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F09 判定期间授出",
+                        "seed-admin", now, null, null));
+            });
+            first = results.get(0).get(60, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(first.getStatus()).isEqualTo(403);
+        assertThat(detailCode(first.getContentAsString(StandardCharsets.UTF_8))).isEqualTo("PERMISSION_DENIED");
+        assertThat(rolesCreated()).isZero();
+        // 屏障行已到期、与本项无关，去掉后按整组断言
+        jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE grant_group_id = ?", lapsedGroup);
+        assertUnconsumed();
+
+        mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"));
         assertConsumedOnce();
         assertThat(rolesCreated()).isEqualTo(1);
+    }
+
+    // 同上的服务层直调对照（补充）：手工放入非只读请求上下文（相当于切面没开事务的写请求）后调用 requirePermission → 403、未消耗；
+    // 同一上下文里有实际事务时照常消耗一次。修复前第一处就在授权服务自己的事务里消耗并提交（「未消耗」断言红）。
+    @Test
+    void aSingleUseGrantFoundDuringAWriteRequestWithoutARequestTransactionIsNotConsumed() {
+        staffWithSingleUseGrant(null, ROLE_MANAGE);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actor(null), null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+        IdempotentReplayContext previous = IdempotentReplayContext.enter("xmj-f09-" + suffix, "digest-" + suffix);
+        try {
+            assertThatThrownBy(() -> authorizationService.requirePermission(ROLE_MANAGE))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            exception -> assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
+            assertUnconsumed();
+            // 同根：切面没有给本请求开请求事务（记了「无请求事务」）时，即使核验发生在业务层自己的事务里也不消耗
+            IdempotentReplayContext outer = IdempotentReplayContext.enter("xmj-f09-svc-" + suffix, "digest-svc-" + suffix);
+            try {
+                IdempotentReplayContext.markWithoutRequestTransaction();
+                assertThatThrownBy(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                        authorizationService.requirePermission(ROLE_MANAGE)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                exception -> assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
+            } finally {
+                IdempotentReplayContext.restore(outer);
+            }
+            assertUnconsumed();
+            // 对照：同一请求有实际事务（请求事务，或进入前已有的外层事务）时照常消耗一次
+            new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                    authorizationService.requirePermission(ROLE_MANAGE));
+            assertConsumedOnce();
+        } finally {
+            IdempotentReplayContext.restore(previous);
+        }
+    }
+
+    // M723-F09 同根（真实接口）：权限只在业务层 @Transactional 方法里核验的入口（商户费用冲正：控制器不核权，
+    // MerchantExpenseService.reverse 事务内核 finance.merchant_expense.manage）。顺序同上一条真实接口用例：请求进入时不持有单次来源、
+    // 切面不开请求事务并记下「无请求事务」；业务层事务里核权时读取权限前的到期清理停在屏障行上，这时才授出单次来源。请求继续：
+    // 读到刚授出的来源、当前有业务层事务，但本请求没有请求事务 → 403 PERMISSION_DENIED，来源未消耗、无消耗日志。
+    // 同一主体再发一次（进入时已持有，切面开请求事务）→ 核权通过、走到业务（费用记录不存在 404），消耗随请求事务回滚、仍未消耗。
+    // 修复前第一笔不是 403：消耗并入业务层事务，请求走到业务（404）——那个事务若正常提交，消耗不受切面的重放回滚与失败撤回约束。
+    @Test
+    void aSingleUseGrantIssuedAfterTheRequestEnteredIsNotConsumedInsideAServiceTransactionEither() throws Exception {
+        String manage = "finance.merchant_expense.manage";
+        Instant now = Instant.now();
+        repository.createUser(new AccessUser(userId, userId, "staff", "org", null, "active", now));
+        String lapsedGroup = UUID.randomUUID().toString();
+        repository.createTemporaryGrant(new TemporaryGrant(lapsedGroup, userId, List.of(manage),
+                now.minusSeconds(7200), now.minusSeconds(3600), false, false, "active", "M723-F09 已到期的屏障行",
+                "seed-admin", now.minusSeconds(7200), null, null));
+        String url = "/api/v1/finance/merchant-expenses/mexp_absent_" + suffix + "/reverse";
+        String body = """
+                {"idempotency_key": "xmj-f09-svc-%s", "note": "M723-F09"}
+                """.formatted(suffix);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        MockHttpServletResponse first;
+        try {
+            List<Future<MockHttpServletResponse>> results = new ArrayList<>();
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                jdbcTemplate.queryForList("SELECT id FROM temporary_permission_grants WHERE subject_id = ? FOR UPDATE", userId);
+                results.add(pool.submit(() -> mockMvc.perform(post(url).with(session(null))
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse()));
+                awaitBlockedOnGrantRow(1);
+                // 判定期间授出：请求已过切面的持有查询、在业务层事务里停在到期清理上
+                repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(manage),
+                        now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F09 判定期间授出",
+                        "seed-admin", now, null, null));
+            });
+            first = results.get(0).get(60, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(first.getStatus()).isEqualTo(403);
+        assertThat(detailCode(first.getContentAsString(StandardCharsets.UTF_8))).isEqualTo("PERMISSION_DENIED");
+        // 屏障行已到期、与本项无关，去掉后按整组断言
+        jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE grant_group_id = ?", lapsedGroup);
+        assertUnconsumed();
+
+        mockMvc.perform(post(url).with(session(null)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("EXPENSE_ENTRY_NOT_FOUND"));
+        assertUnconsumed();
     }
 
     // M723-F03「一个请求核验多个权限码时失败不留部分消耗」（多来源）：员工持两份不同来源的单次授权——「管理商户档案」与「明文手机号查看」，
@@ -639,6 +877,62 @@ class SingleUseGrantRequestTransactionTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
         assertConsumed(2);
+    }
+
+    // M723-F07（治理地图第 660 行「查看企业微信会话完整原文……必须逐项单独授予并留痕」；操作员 2026-10-03「看一次扣一次」）：
+    // mode 取 raw 的大小写、首尾空白变体都按原文核权，与服务层同一规范化。只持单次「企微会话查看」的乙："raw"、" raw "、"RAW" 都 403，
+    // 响应不含原文引用；" redacted "、"REDACTED" 200、只核 wecom.view、不消耗；"xx" 400。只持单次「企微原文调阅」的甲：" raw " 首次
+    // 200 含原文、恰好消耗一次、留原文查看留痕；"RAW" 再次 403、不再返回原文。修复前控制器只认精确 "raw"：" raw " 对乙核的是
+    // wecom.view（200 且服务层返回原文——第一处 403 即红），对甲核 wecom.view 则 403。
+    @Test
+    void theRawWecomModeIsRecognisedAfterNormalisationForBothTheCheckAndTheResponse() throws Exception {
+        String conversation = "wconv_xmj_" + suffix;
+        String rawRef = "raw-ref-" + suffix;
+        jdbcTemplate.update("INSERT INTO wecom_conversations (id, external_conversation_id, project_id) VALUES (?, ?, 'org')",
+                conversation, "ext-" + conversation);
+        jdbcTemplate.update("""
+                INSERT INTO wecom_messages (id, conversation_id, sender_ref, content_raw_ref, content_redacted)
+                VALUES (?, ?, 'cust', ?, '***')
+                """, "wmsg_xmj_" + suffix, conversation, rawRef);
+        String url = "/api/v1/compliance/wecom/conversations/" + conversation + "/messages";
+        staffWithSingleUseGrant(null, "wecom.view_raw");
+        singleUseGrant(otherUserId, null, "wecom.view");
+
+        for (String mode : List.of("raw", " raw ", "RAW")) {
+            String denied = mockMvc.perform(get(url).param("mode", mode).param("approval_ref", "approval-m723")
+                            .with(session(otherUserId, null)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertThat(denied).doesNotContain(rawRef).doesNotContain("raw_content");
+        }
+        for (String mode : List.of(" redacted ", "REDACTED")) {
+            String redacted = mockMvc.perform(get(url).param("mode", mode).with(session(otherUserId, null)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.items[0].content").value("***"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertThat(redacted).doesNotContain(rawRef);
+        }
+        mockMvc.perform(get(url).param("mode", "xx").with(session(otherUserId, null)))
+                .andExpect(status().isBadRequest());
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                Boolean.class, otherUserId)).containsExactly(false);
+        assertThat(consumptionLogs(otherUserId)).isZero();
+
+        mockMvc.perform(get(url).param("mode", " raw ").param("approval_ref", "approval-m723").with(session(null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].raw_content").value(rawRef));
+        assertConsumedOnce();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM wecom_access_audits
+                 WHERE conversation_id = ? AND viewer_user_id = ? AND view_type = 'raw'
+                """, Integer.class, conversation, userId)).isEqualTo(1);
+        String deniedAgain = mockMvc.perform(get(url).param("mode", "RAW").param("approval_ref", "approval-m723").with(session(null)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(deniedAgain).doesNotContain(rawRef);
+        assertConsumedOnce();
     }
 
     // 操作员 2026-10-03「预览、查询不扣一次性授权，只有真正核销、真正执行的那一次才扣」：按手机号查客人账号是以提交方式做的查询

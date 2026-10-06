@@ -1,6 +1,6 @@
 package com.complex.platform.common.idempotency;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 
@@ -23,6 +23,13 @@ import com.complex.platform.common.api.ApiException;
  * <p>M723-F04（操作员 2026-09-25 确认句「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：
  * 幂等层返回的是本请求自己请求编号第一次的结果、本请求没有经幂等层执行过动作时记为已重放（{@link #markReplayed} / {@link #replayed}）：
  * {@code ApiResponse.ok} 据此提示已完成；请求事务切面据此把本请求新用掉的单次来源随请求事务回滚（不算用掉）。
+ *
+ * <p>M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：在线核销以正常返回报告失败（过刷新窗口、签名失配；终端离线同步不标记）时由服务层记为
+ * {@link #markBusinessFailed 业务失败}；请求事务切面据此把本请求新用掉的单次来源撤回（失败留痕与幂等记录照常提交）。
+ * 撤回要知道来源号与权限码，{@link #markConsumed(String, String, String, String)} 另记一份（{@link #consumedSourceCodes}）。
+ *
+ * <p>M723-F09（同行）：请求事务切面没有给本请求开请求事务、进入时也没有外层事务时记下（{@link #markWithoutRequestTransaction}）：
+ * 这样的请求里权限核验不消耗单次来源——即使核验发生在业务层自己的事务里，那个事务的提交也不受切面的重放回滚与失败撤回约束。
  */
 public final class IdempotentReplayContext {
 
@@ -33,10 +40,14 @@ public final class IdempotentReplayContext {
     private final boolean readOnly;
     private final java.util.Set<String> consumedOnRead;
     private final java.util.Set<String> consumedSources = new java.util.HashSet<>();
+    // M723-F08：本请求消耗的来源号 → 权限码（撤回时用）
+    private final java.util.Map<String, String> consumedSourceCodes = new java.util.LinkedHashMap<>();
     private String consumedBy;
     private boolean replayOnly;
     private boolean replayed;
     private boolean executed;
+    private boolean businessFailed;
+    private boolean withoutRequestTransaction;
 
     private IdempotentReplayContext(String idempotencyKey, String requestDigest, boolean readOnly,
                                     java.util.Set<String> consumedOnRead) {
@@ -106,6 +117,49 @@ public final class IdempotentReplayContext {
     public void markConsumed(String actorId, String source) {
         this.consumedBy = actorId;
         this.consumedSources.add(source);
+    }
+
+    /** M723-F08：同上，并记下来源号与权限码，业务失败时据此撤回这次消耗。 */
+    public void markConsumed(String actorId, String source, String sourceId, String permissionCode) {
+        markConsumed(actorId, source);
+        this.consumedSourceCodes.put(sourceId, permissionCode);
+    }
+
+    /** M723-F08：本请求消耗的单次来源（来源号 → 权限码），按消耗顺序。 */
+    public java.util.Map<String, String> consumedSourceCodes() {
+        return java.util.Collections.unmodifiableMap(consumedSourceCodes);
+    }
+
+    /**
+     * M723-F08：业务以正常返回报告失败时由服务层调用（现只有在线核销过刷新窗口、签名失配一处调用；终端离线同步不标记）；请求事务切面据此把本请求新用掉的单次来源撤回。
+     * 不在控制器调用里（没有请求上下文）时无操作。
+     */
+    public static void markBusinessFailed() {
+        IdempotentReplayContext request = CURRENT.get();
+        if (request != null) {
+            request.businessFailed = true;
+        }
+    }
+
+    /** M723-F08：本请求的业务以正常返回报告了失败。 */
+    public boolean businessFailed() {
+        return businessFailed;
+    }
+
+    /**
+     * M723-F09：请求事务切面放行本请求时没有开请求事务、当时也没有外层事务（进入时不持有未消耗单次来源，或本请求不消耗）。
+     * 不在控制器调用里（没有请求上下文）时无操作。
+     */
+    public static void markWithoutRequestTransaction() {
+        IdempotentReplayContext request = CURRENT.get();
+        if (request != null) {
+            request.withoutRequestTransaction = true;
+        }
+    }
+
+    /** M723-F09：本请求没有请求事务——判定期间才被授出的单次来源不在本请求里消耗。 */
+    public boolean withoutRequestTransaction() {
+        return withoutRequestTransaction;
     }
 
     /** M723：该单次来源是否正是本请求里这名操作人刚消耗的——是则本请求内再核验时仍视为有效、不再消耗。 */

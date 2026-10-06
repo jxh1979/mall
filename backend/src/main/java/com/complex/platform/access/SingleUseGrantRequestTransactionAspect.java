@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,10 +58,20 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * 走这一支的请求，响应里凭这次消耗才给的明文联系电话由各控制器按同一判断（{@link IdempotentReplayContext#replayDiscardsConsumption}）
  * 改回掩码：消耗不算，明文也不给（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）。
  *
+ * <p>M723-F08（第 656 行「操作被拒绝或失败的不算用掉」；操作员 2026-10-03「只有真正核销、真正执行的那一次才扣」）：在线核销以正常返回
+ * 报告失败（过刷新窗口、签名失配，响应形状不变；终端离线同步不标记）时服务层把本请求记为业务失败（{@link IdempotentReplayContext#businessFailed}）；
+ * 处理方法返回后，若不是上面的重放回滚、而本请求在权限核验处新用掉了单次来源，就在同一请求事务里把这次消耗撤回
+ * （{@link AuthorizationService#releaseRequestConsumption}：来源改回未消耗、追加撤回留痕），结果照常返回、事务正常提交——
+ * 失败核销记录与幂等记录保留，同一请求编号重复提交由幂等层返回第一次的失败结果。
+ *
  * <p>顺序：排在闸口切面（ActionGateAspect，@Order(10)）之外，闸口里的权限核验才落在本切面的请求上下文与请求事务之内。
  *
- * <p>ponytail: 每个已登录写请求多一次存在性查询；判定与消耗之间新授出的单次授权仍按旧行为在自己的事务里消耗（窗口极小），
- * 需要时把判定改成请求内缓存或让消耗在无外层事务时拒绝。
+ * <p>M723-F09（第 656 行「操作被拒绝或失败的不算用掉」）：不包请求事务放行时（进入时不持有未消耗单次来源，且当时没有外层事务）
+ * 在请求上下文里记下「无请求事务」（{@link IdempotentReplayContext#markWithoutRequestTransaction}）；权限核验据此不消耗判定期间才被
+ * 授出的单次来源——不论核验时有没有业务层自己的事务（那个事务的提交不受上面的重放回滚与失败撤回约束）。
+ *
+ * <p>ponytail: 每个已登录写请求多一次存在性查询；判定与消耗之间新授出的单次授权由 AuthorizationService 按不具备拒绝
+ * （M723-F09），用户重试即可，需要时再把判定改成请求内缓存。
  */
 @Aspect
 @Component
@@ -95,15 +105,25 @@ public class SingleUseGrantRequestTransactionAspect {
         try {
             if ((readOnly && stillConsumed == null) || TransactionSynchronizationManager.isActualTransactionActive()
                     || !authorizationService.currentActorHoldsUnconsumedSingleUseGrant()) {
+                if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+                    // M723-F09：本请求没有请求事务（进入时不持有未消耗单次来源，或本请求不消耗）——记下，权限核验据此不消耗
+                    // 判定期间才被授出的单次来源，即使核验发生在业务层自己的事务里
+                    IdempotentReplayContext.markWithoutRequestTransaction();
+                }
                 return handler.proceed();
             }
             Throwable[] failure = new Throwable[1];
             Object result = transactionTemplate.execute(status -> {
                 try {
                     Object returned = handler.proceed();
+                    IdempotentReplayContext context = IdempotentReplayContext.current();
                     if (IdempotentReplayContext.replayDiscardsConsumption()) {
                         // M723-F04：只是返回了第一次的结果、动作没有执行，本请求新用掉的单次来源不算用掉
                         status.setRollbackOnly();
+                    } else if (context != null && context.businessFailed() && context.consumedBy() != null) {
+                        // M723-F08：业务以正常返回报告失败，本请求新用掉的单次来源不算用掉——同一请求事务里撤回消耗，
+                        // 失败留痕与幂等记录照常提交
+                        authorizationService.releaseRequestConsumption();
                     }
                     return returned;
                 } catch (Throwable throwable) {
