@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -418,6 +418,21 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     /**
+     * M723-F13：当前操作人在本请求里持有的权限集（只读）——来源口径与动作核验相同（{@link #usable}）：有效来源，加上本请求里这名操作人
+     * 刚消耗、仍在生效时段内的单次来源。供授出入口判断「只凭临时或单次来源持有」用：入口权限与待授码出自同一份单次来源时，入口核权已把它
+     * 消耗掉，按 {@link #effectivePermissions} 算会把待授码当成从未持有。菜单与前端展示仍用 {@link #effectivePermissions}。
+     */
+    public EffectivePermissions effectivePermissionsWithinRequest() {
+        AccessActor actor = currentActor();
+        Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor);
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        EffectivePermissions result = computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor),
+                effect -> true, (effect, checkedAt) -> usable(effect, checkedAt, actor, request));
+        requireIdentityUnchanged(actor, identity);
+        return result;
+    }
+
+    /**
      * XM-M002-I（操作员 2026-09-25 裁定口径 B「一律只认长期来源」）：当前操作人可作为授出依据的权限集（只读）。一切授出只认长期来源：
      * 角色（含岗位派生角色）、无到期且非单次的模板套用、员工单独授予，以及随账号身份的平台管理员日常码与最高权限全字典；
      * 临时授权、有到期或单次的模板套用（含临时模板、单次模板）不作任何授出的依据。显式拒绝照常扣减。
@@ -453,10 +468,17 @@ public class AuthorizationService implements CallerScopeResolver {
 
     private EffectivePermissions computeEffectivePermissions(String userId, boolean platformAdmin, boolean master,
             java.util.function.Predicate<AccessRepository.PermissionEffect> grantBasis) {
+        return computeEffectivePermissions(userId, platformAdmin, master, grantBasis, this::isActive);
+    }
+
+    // inEffect：哪些来源算数——默认「未消耗且在生效时段内」；M723-F13 的请求内口径另算上本请求刚消耗的单次来源
+    private EffectivePermissions computeEffectivePermissions(String userId, boolean platformAdmin, boolean master,
+            java.util.function.Predicate<AccessRepository.PermissionEffect> grantBasis,
+            java.util.function.BiPredicate<AccessRepository.PermissionEffect, Instant> inEffect) {
         Instant checkedAt = Instant.now();
         java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
         List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
-                .filter(effect -> isActive(effect, checkedAt))
+                .filter(effect -> inEffect.test(effect, checkedAt))
                 .toList();
         // M002-F33：员工显式拒绝压过全部来源；岗位高危挂起只压住岗位派生的那一份授予，与 permissionGrant 同口径。
         java.util.Set<String> explicitDenies = active.stream().filter(AuthorizationService::isExplicitDeny)

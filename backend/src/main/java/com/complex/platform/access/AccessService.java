@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.39
+// 文件版本：V0.40
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -2458,7 +2458,7 @@ public class AccessService {
 
     /**
      * M723-F12（治理地图第 656 行「临时或单次得到的权限只供本人在有效期内或单次使用，不能再授给他人」）：授予人对某码只有临时授权、单次或
-     * 带失效时间的模板套用来源（在有效权限集里、不在授出依据集里）时，不得直接授给他人。放在「须审批」判断之前：否则须审批码会先返回
+     * 带失效时间的模板套用来源（在本请求内的持有集里、不在授出依据集里）时，不得直接授给他人。放在「须审批」判断之前：否则须审批码会先返回
      * GRANT_REQUIRES_APPROVAL，盖住真正的拒绝原因。授予人长期持有或根本不持有该码的不在此拦，照旧由后面的判断处理
      * （须审批码引导去走授权申请）。
      */
@@ -2467,7 +2467,8 @@ public class AccessService {
         if (grantable.wildcard()) {
             return;
         }
-        java.util.Set<String> heldOnlyTemporarily = new java.util.HashSet<>(authorizationService.effectivePermissions().grants());
+        // M723-F13：按本请求内的口径取持有集——入口核权刚消耗的单次来源仍算持有（入口权限与待授码可能出自同一份单次来源）
+        java.util.Set<String> heldOnlyTemporarily = new java.util.HashSet<>(authorizationService.effectivePermissionsWithinRequest().grants());
         heldOnlyTemporarily.removeAll(grantable.grants());
         for (String code : safeList(permissionCodes)) {
             if (code != null && heldOnlyTemporarily.contains(code)) {

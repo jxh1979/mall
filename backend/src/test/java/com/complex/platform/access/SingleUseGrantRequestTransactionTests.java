@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1078,6 +1078,70 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(response.getContentAsString(StandardCharsets.UTF_8))
                 .doesNotContain("BAR_INTERNAL_PRICE_FORBIDDEN").doesNotContain("PERMISSION_DENIED");
         assertUnconsumed();
+    }
+
+    // M723-F13（治理地图第 656 行「临时或单次得到的权限只供本人在有效期内或单次使用，不能再授给他人」；M723-F02、F12 验收「一律 403
+    // GRANT_EXCEEDS_OWN_PERMISSIONS」）：员工单独授予的入口权限 access.role.assign 本身是须审批码。员工只凭一份单次来源持有它，经员工
+    // 单独授予接口直接授给同范围的他人——入口核权先在请求事务里把这份来源消耗掉，「只凭临时或单次来源持有」的判断仍须认出它：
+    // ① 单次临时授权组只含 access.role.assign，待授码就是它；② 单次临时授权组含 {access.role.assign, pii.contact_phone.view}，待授码是后者
+    // （也是须审批码）；③ 单次模板套用来源含 access.role.assign，待授码就是它。三种都 403 GRANT_EXCEEDS_OWN_PERMISSIONS（不是
+    // GRANT_REQUIRES_APPROVAL），换请求编号重试同样；目标没有任何单独授予，来源随请求事务回滚仍未消耗、没有消耗留痕。
+    // 修复前三种都返回 GRANT_REQUIRES_APPROVAL（判断按有效权限集算，不认本请求刚消耗的来源）。
+    @Test
+    void grantingACodeThatNeedsApprovalFromTheSingleUseSourceTheEntryJustUsedIsStillAnOverreach() throws Exception {
+        String assign = "access.role.assign";
+        String phone = "pii.contact_phone.view";
+        Instant now = Instant.now();
+        repository.createUser(new AccessUser(userId, userId, "staff", "org", null, "active", now));
+        repository.createUser(new AccessUser(otherUserId, otherUserId, "staff", "org", null, "active", now));
+
+        // ① 单码单次组
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(assign),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F13 单码单次组", "seed-admin", now, null, null));
+        expectDirectGrantIsAnOverreach("f13-one", assign);
+        assertUnconsumed();
+
+        // ② 两码单次组，待授码是组里的另一个须审批码
+        jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id = ?", userId);
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(assign, phone),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M723-F13 两码单次组", "seed-admin", now, null, null));
+        expectDirectGrantIsAnOverreach("f13-two", phone);
+        assertUnconsumed();
+
+        // ③ 单次模板套用来源
+        jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id = ?", userId);
+        String template = "tpl_xmj_f13_" + suffix;
+        Instant at = Instant.parse("2026-06-14T00:00:00Z");
+        try {
+            repository.createTemplate(new PermissionTemplate(template, template, template, "M723-F13 单次模板套用", "base", null, "platform",
+                            null, "merge", null, null, false, "active", "M723-F13", "seed-admin", at, at, at),
+                    List.of(new PermissionTemplateItem(template, assign, AccessRepository.Effect.GRANT, "project", false)));
+            repository.applyTemplate(template, List.of(userId), null, null, true, "seed-admin");
+            assertThat(jdbcTemplate.queryForList("SELECT consumed FROM permission_template_applications WHERE template_id = ?",
+                    Boolean.class, template)).containsExactly(false);
+            expectDirectGrantIsAnOverreach("f13-tpl", assign);
+            assertThat(jdbcTemplate.queryForList("SELECT consumed FROM permission_template_applications WHERE template_id = ?",
+                    Boolean.class, template)).containsExactly(false);
+            assertThat(consumptionLogs()).isZero();
+        } finally {
+            jdbcTemplate.update("DELETE FROM permission_template_applications WHERE template_id = ?", template);
+            jdbcTemplate.update("DELETE FROM permission_template_items WHERE template_id = ?", template);
+            jdbcTemplate.update("DELETE FROM permission_templates WHERE id = ?", template);
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM user_permission_overrides WHERE user_id = ?", Integer.class,
+                otherUserId)).isZero();
+    }
+
+    // 经员工单独授予接口把 code 直接授给另一名员工：换请求编号两次都 403 GRANT_EXCEEDS_OWN_PERMISSIONS
+    private void expectDirectGrantIsAnOverreach(String keyPrefix, String code) throws Exception {
+        for (String attempt : List.of("a", "b")) {
+            mockMvc.perform(post("/api/v1/access/users/" + otherUserId + "/permission-overrides").with(session(null))
+                            .contentType(MediaType.APPLICATION_JSON).content("""
+                                    {"idempotency_key": "xmj-%s-%s-%s", "permission_codes": ["%s"], "effect": "grant", "reason": "M723-F13"}
+                                    """.formatted(keyPrefix, attempt, suffix, code)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+        }
     }
 
     // M002 账本第 75 行：员工只经一个单次组持有 {分配角色, 管理角色, 查看角色}。把「查看角色」经员工单独授予、配角色、建角色授出，
