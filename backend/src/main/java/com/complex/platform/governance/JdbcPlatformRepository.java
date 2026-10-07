@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.10
+// 文件版本：V0.11
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -862,9 +862,11 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 Map.of("review_id", reviewId), (rs, rowNumber) -> rs.getString("review_id"));
     }
 
+    // M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉，内容不同的另一笔照常拦截送审」）：
+    // 多一个摘要等值条件；blocked_content_digest 为空的复核单在等值条件下永远不命中，不能用于放行。
     @Override
     public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
-            String actionType, String objectType, String objectId, String initiatedBy) {
+            String actionType, String objectType, String objectId, String initiatedBy, String blockedContentDigest) {
         return jdbcTemplate.query("""
                 SELECT review_id, policy_code, action_type, object_type, object_id,
                        blocked, review_status, required_level, reviewer_level, decision,
@@ -875,6 +877,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                    AND object_type = :object_type
                    AND object_id = :object_id
                    AND initiated_by = :initiated_by
+                   AND blocked_content_digest = :blocked_content_digest
                    AND review_status = 'approved'
                    AND released_at IS NULL
                  ORDER BY evaluated_at DESC
@@ -883,7 +886,20 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("action_type", actionType)
                 .addValue("object_type", objectType)
                 .addValue("object_id", objectId)
-                .addValue("initiated_by", initiatedBy), this::mapSupervisorReview).stream().findFirst();
+                .addValue("initiated_by", initiatedBy)
+                .addValue("blocked_content_digest", blockedContentDigest), this::mapSupervisorReview).stream().findFirst();
+    }
+
+    // M724-F16（V440）：准入闸建复核单后记下被拦下那次提交的请求内容摘要（与建单同事务）
+    @Override
+    public void bindSupervisorReviewToBlockedContent(String reviewId, String contentDigest) {
+        jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions
+                   SET blocked_content_digest = :blocked_content_digest
+                 WHERE review_id = :review_id
+                """, new MapSqlParameterSource()
+                .addValue("review_id", reviewId)
+                .addValue("blocked_content_digest", contentDigest));
     }
 
     @Override

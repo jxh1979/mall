@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -52,6 +52,9 @@ import org.springframework.test.web.servlet.ResultActions;
  * {@code ticketing_dyn_pricing_over_scope} 对无生效合同的商户员工命中拦截；本类的商户按随机后缀新建、没有合同，恒命中。
  * 放行单用真实拦截生成的待审复核单，再把它置为已批准。
  *
+ * <p>M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉，内容不同的另一笔照常拦截送审」）：
+ * 被拦下的那次提交与之后用掉这张批准的那次提交内容（这里是发布原因）须相同，{@code blocked}/{@code blockedThenApproved} 带上被拦那次的原因。
+ *
  * <p>本类不开测试事务：放行消费、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 复核单与审计事件只追加不删（V148 / V140），按后缀隔离留在库里。写请求带 {@code X-Terminal-Type: web}。
  */
@@ -85,6 +88,9 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
     // M724-F03：另一个商户的员工（同项目、不同商户——另一个提交范围），用到的用例里才建
     private final String outsiderId = "usr_b01x_" + suffix;
     private final String outsiderMerchantId = "mch_b01x_" + suffix;
+    // M724-F03 ⑥后半：同商户、另一个项目的员工（另一个提交范围），用到的用例里才建
+    private final String strangerId = "usr_b01p_" + suffix;
+    private final String strangerProjectId = "org_b01p_" + suffix;
     private final String ticketTypeId = "tt_b01_" + suffix;
     private final String ruleId = "tdpr_b01_" + suffix;
     private final String contractId = "ctr_b01_" + suffix;
@@ -110,14 +116,15 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM ticket_dynamic_pricing_rules WHERE id = ?", ruleId);
         jdbcTemplate.update("DELETE FROM ticket_types WHERE id = ?", ticketTypeId);
         jdbcTemplate.update("DELETE FROM contracts WHERE id = ?", contractId);
-        jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id IN (?, ?, ?)", userId, otherUserId, outsiderId);
-        jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?, ?)", userId, otherUserId, outsiderId);
+        jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id IN (?, ?, ?, ?)",
+                userId, otherUserId, outsiderId, strangerId);
+        jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?, ?, ?)", userId, otherUserId, outsiderId, strangerId);
     }
 
     // 【返回前已判已用／先扣后败】放行后业务失败：放行单随业务回滚，仍未用掉；同一请求再发按首次处理，恰好用掉一次；用掉后换请求编号须重新审批
     @Test
     void aFailedPublishLeavesTheApprovedReleaseUnusedAndTheSameRequestRetriedUsesItExactlyOnce() throws Exception {
-        String reviewId = blockedThenApproved("b01-block-" + suffix);
+        String reviewId = blockedThenApproved("b01-block-" + suffix, "放行回归发布");
         String key = "b01-publish-" + suffix;
         String body = publishJson(key, "放行回归发布");
 
@@ -137,9 +144,9 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         assertThat(published(key)).isEqualTo(1);
         assertThat(pendingReviews(userId)).isZero();
 
-        // 用掉之后换请求编号再做：须重新审批（新的待审复核单，409），不执行
+        // 用掉之后换请求编号再做同样内容：须重新审批（新的待审复核单，409），不执行
         String againKey = "b01-publish-again-" + suffix;
-        publish(userId, publishJson(againKey, "放行回归再发布"))
+        publish(userId, publishJson(againKey, "放行回归发布"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("ADMISSION_BLOCKED"));
         assertThat(pendingReviews(userId)).isEqualTo(1);
@@ -147,11 +154,44 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         assertReleasedOnce(reviewId);
     }
 
+    // M724-F02 末句「长期权限的人与只持单次授权的人各有用例」之①前半：只持单次授权的人——闸口并入请求事务（长期权限的人是闸口自己开
+    // 事务），回滚路径不同。放行后业务失败：放行单与单次授权都随请求事务回滚，都不算用掉、没有放行留痕；同一请求再发按首次处理，
+    // 两者各用掉恰好一次。
+    @Test
+    void aFailedPublishByAHolderOfOnlyASingleUseGrantLeavesTheReleaseAndTheGrantUnusedAndTheRetrySpendsEachOnce()
+            throws Exception {
+        regrant(true);
+        String reason = "放行回归单次授权发布";
+        // 拦截那次 409 整笔回滚，单次授权仍未用掉
+        String reviewId = blockedThenApproved("b01-block-" + suffix, reason);
+        assertSingleUseGrantConsumed(false, 0);
+        String key = "b01-publish-" + suffix;
+        String body = publishJson(key, reason);
+
+        // 规则尚不存在：权限核验用掉单次授权、闸口用掉放行单，业务 404，请求事务整笔回滚
+        publish(userId, body)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("DYNAMIC_PRICING_RULE_NOT_FOUND"));
+        assertReleaseUnused(reviewId);
+        assertSingleUseGrantConsumed(false, 0);
+        assertThat(published(key)).isZero();
+
+        // 第二次还能过：规则就绪后同键同正文再发，放行单与单次授权各用掉恰好一次
+        draftRule();
+        publish(userId, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("published"));
+        assertReleasedOnce(reviewId);
+        assertSingleUseGrantConsumed(true, 1);
+        assertThat(published(key)).isEqualTo(1);
+        assertThat(pendingReviews(userId)).isZero();
+    }
+
     // 【重复提交不返回首次结果】放行单用掉后同一请求重放：返回第一次的结果，不建复核单、不再执行、不去用同对象的另一张放行单
     @Test
     void theSameRequestResubmittedAfterItsReleaseWasUsedReturnsTheFirstResultWithoutANewReview() throws Exception {
         draftRule();
-        String reviewId = blockedThenApproved("b01-block-" + suffix);
+        String reviewId = blockedThenApproved("b01-block-" + suffix, "放行回归发布");
         String key = "b01-publish-" + suffix;
         String body = publishJson(key, "放行回归发布");
         String first = body(publish(userId, body).andExpect(status().isOk()));
@@ -196,13 +236,23 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         assertThat(published(key)).isEqualTo(1);
         assertReleasedOnce(reviewId);
 
-        // 同对象另有一张已批准未用的放行单：重放仍返回第一次的结果，不去用这张新单
-        String secondReviewId = blockedThenApproved("b01-block-second-" + suffix);
+        // M724-F03 ⑥后半「其他项目或其他商户的人」的另一类：同商户、另一个项目的员工（同样的常规授权）拿同键同正文——同样 409
+        // 「该提交编号已被使用」，其名下没有待审复核单、不再执行
+        staff(strangerId, strangerProjectId, merchantId);
+        publish(strangerId, strangerProjectId, merchantId, body)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_KEY_USED"));
+        assertThat(pendingReviews(strangerId)).isZero();
+        assertThat(published(key)).isEqualTo(1);
+        assertReleasedOnce(reviewId);
+
+        // 同对象另有一张已批准未用、内容相同的放行单：重放仍返回第一次的结果，不去用这张新单
+        String secondReviewId = blockedThenApproved("b01-block-second-" + suffix, "放行回归发布");
         assertThat(data(body(publish(userId, body).andExpect(status().isOk())))).isEqualTo(data(first));
         assertReleaseUnused(secondReviewId);
-        // 第二次还能过：新请求编号才用它，且只用一次
+        // 第二次还能过：新请求编号、同样内容才用它，且只用一次
         String nextKey = "b01-publish-next-" + suffix;
-        publish(userId, publishJson(nextKey, "放行回归再发布")).andExpect(status().isOk());
+        publish(userId, publishJson(nextKey, "放行回归发布")).andExpect(status().isOk());
         assertReleasedOnce(secondReviewId);
         assertThat(published(nextKey)).isEqualTo(1);
 
@@ -218,7 +268,7 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
     @Test
     void twoConcurrentSubmissionsOfTheSameRequestExecuteOnceAndBothReturnTheFirstResult() throws Exception {
         draftRule();
-        String reviewId = blockedThenApproved("b01-block-" + suffix);
+        String reviewId = blockedThenApproved("b01-block-" + suffix, "放行回归并发");
         String key = "b01-race-" + suffix;
         String body = publishJson(key, "放行回归并发");
 
@@ -232,15 +282,15 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         assertThat(pendingReviews(userId)).isZero();
     }
 
-    // 同一放行单被两个不同请求同时使用：最多一笔成功，后一笔等前一笔提交后拿不到，照常拦截进复核
+    // 同一放行单被两个不同请求（内容相同、只差提交编号）同时使用：最多一笔成功，后一笔等前一笔提交后拿不到，照常拦截进复核
     @Test
     void twoConcurrentDifferentRequestsOnOneReleaseSucceedAtMostOnce() throws Exception {
         draftRule();
-        String reviewId = blockedThenApproved("b01-block-" + suffix);
+        String reviewId = blockedThenApproved("b01-block-" + suffix, "放行回归并发");
         String firstKey = "b01-race-a-" + suffix;
         String secondKey = "b01-race-b-" + suffix;
 
-        List<MvcResult> results = raceOnTheRelease(publishJson(firstKey, "放行回归并发甲"), publishJson(secondKey, "放行回归并发乙"),
+        List<MvcResult> results = raceOnTheRelease(publishJson(firstKey, "放行回归并发"), publishJson(secondKey, "放行回归并发"),
                 () -> { }, "UPDATE supervisor_review_decisions");
 
         assertThat(results).extracting(result -> result.getResponse().getStatus()).containsExactly(200, 409);
@@ -256,7 +306,7 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
     @Test
     void aReplayThatSpendsAFreshSingleUseGrantReturnsTheFirstResultAndTheGrantStaysUnused() throws Exception {
         draftRule();
-        String reviewId = blockedThenApproved("b01-block-" + suffix);
+        String reviewId = blockedThenApproved("b01-block-" + suffix, "放行回归发布");
         String key = "b01-publish-" + suffix;
         String body = publishJson(key, "放行回归发布");
         String firstResult = body(publish(userId, body).andExpect(status().isOk()));
@@ -275,7 +325,7 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         assertThat(pendingReviews(userId)).isZero();
 
         // 第二次还能过：再批一张放行单（拦截那次 409 整笔回滚，单次授权仍未用掉），换新请求编号凭这张单次授权，恰好用掉一次
-        String secondReviewId = blockedThenApproved("b01-block-second-" + suffix);
+        String secondReviewId = blockedThenApproved("b01-block-second-" + suffix, "放行回归再发布");
         assertSingleUseGrantConsumed(false, 0);
         String nextKey = "b01-publish-next-" + suffix;
         String nextBody = publishJson(nextKey, "放行回归再发布");
@@ -333,8 +383,8 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
     void aDuplicateSubmissionRacingTheFirstDoesNotSpendAnotherApprovedRelease() throws Exception {
         draftRule();
         // 两张待审单先后建好（新单的 evaluated_at 较晚），只批准旧单
-        String oldReviewId = blocked("b01-block-" + suffix);
-        String newReviewId = blocked("b01-block-second-" + suffix);
+        String oldReviewId = blocked("b01-block-" + suffix, "放行回归并发重复");
+        String newReviewId = blocked("b01-block-second-" + suffix, "放行回归并发重复");
         assertThat(newReviewId).isNotEqualTo(oldReviewId);
         approve(oldReviewId);
         String key = "b01-race-dup-" + suffix;
@@ -356,9 +406,9 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         String first = results.get(0).getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(data(body(publish(userId, body).andExpect(status().isOk())))).isEqualTo(data(first));
         assertReleaseUnused(newReviewId);
-        // 第二次还能过：换新请求编号才用新单，恰好用掉一次
+        // 第二次还能过：换新请求编号、同样内容才用新单，恰好用掉一次
         String nextKey = "b01-race-dup-next-" + suffix;
-        publish(userId, publishJson(nextKey, "放行回归再发布")).andExpect(status().isOk());
+        publish(userId, publishJson(nextKey, "放行回归并发重复")).andExpect(status().isOk());
         assertReleasedOnce(newReviewId);
         assertThat(published(nextKey)).isEqualTo(1);
     }
@@ -393,16 +443,16 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         // 放行单：恢复常规授权、合同撤掉后准入闸命中，本人另有一张已批准未用的放行单，同键同正文重放第一次的请求
         regrant(false);
         jdbcTemplate.update("DELETE FROM contracts WHERE id = ?", contractId);
-        String reviewId = blockedThenApproved("b01-block-" + suffix);
+        String reviewId = blockedThenApproved("b01-block-" + suffix, "放行回归未拦截");
         assertThat(data(body(publish(userId, body)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("该操作已完成（重复提交，返回首次结果）"))))).isEqualTo(data(firstResult));
         assertReleaseUnused(reviewId);
         assertThat(published(key)).isEqualTo(1);
         assertThat(pendingReviews(userId)).isZero();
-        // 第二次还能过：换新请求编号凭这张放行单，恰好用掉一次
+        // 第二次还能过：换新请求编号、同样内容凭这张放行单，恰好用掉一次
         String releaseKey = "b01-open-release-" + suffix;
-        publish(userId, publishJson(releaseKey, "放行回归放行单发布")).andExpect(status().isOk());
+        publish(userId, publishJson(releaseKey, "放行回归未拦截")).andExpect(status().isOk());
         assertReleasedOnce(reviewId);
         assertThat(published(releaseKey)).isEqualTo(1);
     }
@@ -451,16 +501,16 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         }
     }
 
-    /** 本人发起一次被拦截的发布（409 生成待审复核单），再把这张复核单置为已批准，返回其单号。 */
-    private String blockedThenApproved(String key) throws Exception {
-        String reviewId = blocked(key);
+    /** 本人以给定原因发起一次被拦截的发布（409 生成待审复核单），再把这张复核单置为已批准，返回其单号。 */
+    private String blockedThenApproved(String key, String reason) throws Exception {
+        String reviewId = blocked(key, reason);
         approve(reviewId);
         return reviewId;
     }
 
-    /** 本人发起一次被拦截的发布（409 生成待审复核单），返回提示里的复核单号（须是本人名下的一张待审复核单）。 */
-    private String blocked(String key) throws Exception {
-        String response = body(publish(userId, publishJson(key, "放行回归拦截"))
+    /** 本人以给定原因发起一次被拦截的发布（409 生成待审复核单），返回提示里的复核单号（须是本人名下的一张待审复核单）。 */
+    private String blocked(String key, String reason) throws Exception {
+        String response = body(publish(userId, publishJson(key, reason))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("ADMISSION_BLOCKED")));
         List<String> pending = jdbcTemplate.queryForList("""
@@ -494,7 +544,11 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
     }
 
     private void staff(String user, String merchant) {
-        accessRepository.createUser(new AccessUser(user, user, "staff", "org", merchant, "active", Instant.now()));
+        staff(user, "org", merchant);
+    }
+
+    private void staff(String user, String project, String merchant) {
+        accessRepository.createUser(new AccessUser(user, user, "staff", project, merchant, "active", Instant.now()));
         grant(user, false);
     }
 
@@ -543,11 +597,15 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
     }
 
     private ResultActions publish(String user, String merchant, String body) throws Exception {
+        return publish(user, "org", merchant, body);
+    }
+
+    private ResultActions publish(String user, String project, String merchant, String body) throws Exception {
         return mockMvc.perform(post("/api/v1/ticketing/dynamic-pricing-rules/" + ruleId + "/publish")
                 .with(request -> {
                     request.addHeader("X-Terminal-Type", "web");
                     return authentication(new UsernamePasswordAuthenticationToken(
-                            new AccessActor(user, user, "staff", "org", merchant, "active"), null,
+                            new AccessActor(user, user, "staff", project, merchant, "active"), null,
                             List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
                 })
                 .contentType(MediaType.APPLICATION_JSON)

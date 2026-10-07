@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -640,12 +640,20 @@ class SupervisorReviewServiceTests {
     }
 
     // M007-A-01（PGM-1.2 第 5 步「放行结果都要记录」）：批准后同动作同对象同发起人可消费一次并留痕 admission.release_executed，再次消费为空。
+    // M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉，内容不同的另一笔照常拦截送审」）：复核单在准入闸
+    // 过闸期间建（记下被拦下那次提交的内容摘要）；内容不同、或没有本次提交的内容摘要，消费为空；内容相同才消费，恰好一次。
     @Test
     void approvedReviewIsConsumedForReleaseExactlyOnce() {
         reviewRepository.superiors.put("usr_waiver_init", "usr_reviewer_c"); // R-003：角色审批事项也走组织链
         TestSecurityActors.asSupervisor("usr_waiver_init", 1);
-        var pending = service.evaluate(evaluate("review-release-eval", "waiver", List.of("att"), "bill_waiver", "bill", "bill_release", 0L, null, "usr_payee"));
-        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
+        SupervisorReviewDecisionRecord pending;
+        String outer = SupervisorReviewService.bindGatedRequestContent("content-a");
+        try {
+            pending = service.blockForAdmission("bill_waiver_l3", "bill_waiver", "bill", "bill_release", "specific_role", 3, "usr_payee");
+        } finally {
+            SupervisorReviewService.bindGatedRequestContent(outer);
+        }
+        assertThat(consumeBillRelease("content-a", "usr_waiver_init")).isEmpty(); // 未批准
 
         TestSecurityActors.asSupervisor("usr_reviewer_c", 3);
         service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
@@ -653,11 +661,24 @@ class SupervisorReviewServiceTests {
         service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
                 "review-release-approve-role", "note", List.of("att"), 3, "approved", "role node")); // R-003：链尾角色节点
 
-        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init"))
+        assertThat(consumeBillRelease("content-b", "usr_waiver_init")).isEmpty(); // 内容不同的另一笔：不能用
+        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty(); // 没有本次提交的内容摘要：不能用
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("admission.release_executed");
+        assertThat(consumeBillRelease("content-a", "usr_waiver_init"))
                 .map(SupervisorReviewDecisionRecord::reviewId).contains(pending.reviewId());
-        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_waiver_init")).isEmpty();
-        assertThat(service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", "usr_other")).isEmpty();
+        assertThat(consumeBillRelease("content-a", "usr_waiver_init")).isEmpty();
+        assertThat(consumeBillRelease("content-a", "usr_other")).isEmpty();
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("admission.release_executed");
+    }
+
+    /** 以给定的本次提交内容摘要消费 bill_release 的放行单；用完还原线程上的绑定，不漏给后面的用例。 */
+    private Optional<SupervisorReviewDecisionRecord> consumeBillRelease(String contentDigest, String actorId) {
+        String outer = SupervisorReviewService.bindGatedRequestContent(contentDigest);
+        try {
+            return service.consumeApprovedRelease("bill_waiver", "bill", "bill_release", actorId);
+        } finally {
+            SupervisorReviewService.bindGatedRequestContent(outer);
+        }
     }
 
     // M007-A-02（PGM-1.7.1「不得转发给申请人本人，也不得转发给直接受益人」「可为任意人选」）：
@@ -1115,14 +1136,22 @@ class SupervisorReviewServiceTests {
         }
 
         final Map<String, String> released = new LinkedHashMap<>();
+        // M724-F16：复核单上记的被拦下那次提交的请求内容摘要
+        final Map<String, String> blockedContent = new LinkedHashMap<>();
+
+        @Override
+        public void bindSupervisorReviewToBlockedContent(String reviewId, String contentDigest) {
+            blockedContent.put(reviewId, contentDigest);
+        }
 
         @Override
         public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
-                String actionType, String objectType, String objectId, String initiatedBy) {
+                String actionType, String objectType, String objectId, String initiatedBy, String blockedContentDigest) {
             return reviews.values().stream()
                     .filter(r -> "approved".equals(r.reviewStatus()) && !released.containsKey(r.reviewId()))
                     .filter(r -> actionType.equals(r.actionType()) && objectType.equals(r.objectType())
                             && objectId.equals(r.objectId()) && java.util.Objects.equals(initiatedBy, r.initiatedBy()))
+                    .filter(r -> blockedContentDigest.equals(blockedContent.get(r.reviewId())))
                     .findFirst();
         }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -91,6 +91,20 @@ public class SupervisorReviewService {
     @Autowired(required = false)
     public void setIdempotencyRepository(IdempotencyRepository idempotencyRepository) {
         this.idempotencyRepository = idempotencyRepository;
+    }
+
+    // M724-F16：准入闸切面过闸期间绑在本线程上的「本次受闸调用的请求内容摘要」
+    private static final ThreadLocal<String> GATED_REQUEST_CONTENT = new ThreadLocal<>();
+
+    /** 绑定（null 即清除）并返回原值；切面在 finally 里用返回值还原。 */
+    public static String bindGatedRequestContent(String contentDigest) {
+        String outer = GATED_REQUEST_CONTENT.get();
+        if (contentDigest == null) {
+            GATED_REQUEST_CONTENT.remove();
+        } else {
+            GATED_REQUEST_CONTENT.set(contentDigest);
+        }
+        return outer;
     }
 
     public PageResponse<SupervisorReviewPolicyRecord> listPolicies() {
@@ -452,6 +466,10 @@ public class SupervisorReviewService {
     /**
      * M087（PGM-1.7.1「发起单据时只需指定该事项的最终审批人」）：带起草人指定的主线最终审批人的阻断；为空时按档位下限沿发起人
      * 直接上级链生成主线。
+     *
+     * <p>M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉，内容不同的另一笔照常拦截送审」）：
+     * 准入闸过闸期间建的复核单，建单后记下被拦下那次提交的请求内容摘要（不含提交编号），与建单同事务提交；不在过闸期间建的
+     * （授权申请等）没有摘要。
      */
     @Transactional
     public SupervisorReviewDecisionRecord blockForAdmission(
@@ -501,6 +519,10 @@ public class SupervisorReviewService {
                 requiredApproverRank
         );
         supervisorReviewRepository.saveSupervisorReview(decision);
+        String blockedContent = GATED_REQUEST_CONTENT.get();
+        if (blockedContent != null) {
+            supervisorReviewRepository.bindSupervisorReviewToBlockedContent(decision.reviewId(), blockedContent);
+        }
         scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policyCode);
         generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, finalApproverId, List.of(), requiredLevel);
         auditEventService.recordSuccess(
@@ -1004,15 +1026,23 @@ public class SupervisorReviewService {
      * 消费并入调用方事务（准入闸切面把闸口与业务方法包进同一事务），业务失败回滚时放行单与留痕一起回滚、仍可再放行一次。
      * 取得到本次请求的幂等键与请求摘要时一并记到复核单上，并把本请求记为用掉了单次来源（幂等层据此把成功记录记到这次请求名下），
      * 供 {@link #admitReplayOfReleasingRequest} 认出重放。
+     *
+     * <p>M724-F16（治理地图第 528 行「每次只能对当前这一笔放行、不得整类关闭校验」；操作员 2026-10-07 裁决「批准只能被『被拦下的
+     * 那次提交的同样内容』用掉，内容不同的另一笔照常拦截送审」）：除同动作、同对象、同发起人外，还须本次提交的请求内容摘要与复核单上
+     * 记的被拦下那次提交的摘要相同才消费；没有本次提交的内容摘要、或复核单上没有摘要的，一律不消费。
      */
     public Optional<SupervisorReviewDecisionRecord> consumeApprovedRelease(
             String actionType, String objectType, String objectId, String actorId) {
+        String content = GATED_REQUEST_CONTENT.get();
+        if (content == null) {
+            return Optional.empty(); // 没有本次提交的内容摘要：不能用掉任何放行单
+        }
         String type = objectType == null || objectType.isBlank() ? actionType : objectType;
         String id = objectId == null || objectId.isBlank() ? actionType : objectId;
         IdempotentReplayContext request = IdempotentReplayContext.current();
         boolean recordRequest = request != null && request.identified();
         Optional<SupervisorReviewDecisionRecord> released = supervisorReviewRepository
-                .findApprovedUnreleasedSupervisorReview(actionType, type, id, actorId)
+                .findApprovedUnreleasedSupervisorReview(actionType, type, id, actorId, content)
                 .filter(record -> supervisorReviewRepository.markSupervisorReviewReleased(record.reviewId(), actorId, Instant.now(),
                         recordRequest ? request.idempotencyKey() : null, recordRequest ? request.requestDigest() : null));
         released.ifPresent(record -> auditEventService.recordSuccess(

@@ -17,10 +17,18 @@ public interface SupervisorReviewRepository {
         return findPendingSupervisorReviewById(reviewId);
     }
 
-    /** M007-A-01：同动作、同对象、同发起人且已批准未放行的复核单（供准入闸消费）。 */
+    /**
+     * M007-A-01：同动作、同对象、同发起人且已批准未放行的复核单（供准入闸消费）。
+     * M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉」）：还须复核单上记的被拦下那次提交的请求内容摘要
+     * 与本次相同；没有摘要的复核单不命中。
+     */
     default Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
-            String actionType, String objectType, String objectId, String initiatedBy) {
+            String actionType, String objectType, String objectId, String initiatedBy, String blockedContentDigest) {
         return Optional.empty();
+    }
+
+    /** M724-F16：在准入闸建的复核单上记下被拦下那次提交的请求内容摘要（SHA-256 十六进制 64 位，不含提交编号）。默认不记。 */
+    default void bindSupervisorReviewToBlockedContent(String reviewId, String contentDigest) {
     }
 
     /** M007-A-01：把已批准复核单标记为已放行；只在尚未放行时成功（一次批准只放行一次）。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -443,9 +443,13 @@ public class StoredValueService {
             // M724-F10（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」；枚举速查第 86 行「商户员工只能管理本商户发行的储值卡」）：
             // 返回第一次的结果之前，先核对当前主体能不能管这笔流水所在的那张卡——按流水实际所属的卡判，不信请求里传的商户字段。
             // 不在范围内即拒绝（与首次退款同一错误码），不比对请求内容、不返回流水、不标记重放；线上退款与柜台退款共用本方法。
-            requireMerchantScopeForCard(repository.listStoredValueAccountsByCustomer(existing.customerId()).stream()
+            // M724-F15（同一条红线④「看不到别的商户和别的项目的数据」；治理地图第 653 行「数据的项目与商户隔离不提供关闭开关」）：
+            // 商户之外还核项目——同商户另一个项目的员工用原提交编号、原请求内容重提，同样在这里拒绝，不返回流水、不标记重放。
+            CustomerStoredValueAccountRecord firstCard = repository.listStoredValueAccountsByCustomer(existing.customerId()).stream()
                     .filter(card -> card.id().equals(existing.accountId())).findFirst()
-                    .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除")));
+                    .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除"));
+            requireMerchantScopeForCard(firstCard);
+            requireProjectScopeForCard(firstCard);
             // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
             // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
             CustomerStoredValueTransactionRecord first = verifyIdempotentReplay(existing, customerId, projectId, merchantId,
@@ -880,6 +884,21 @@ public class StoredValueService {
             if (!scope.equals(account.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                         "该储值卡不在当前商户权限范围内");
+            }
+        });
+    }
+
+    // M724-F15（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」）：退款重复提交返回第一次的流水之前，按流水所属的卡核当前操作人的项目。
+    // 卡带项目才比（商户卡可以不带项目，V175「商户卡可无独立 project」，卡上没有项目可比）；平台管理员（scope 空）放行，口径同
+    // requireMerchantScopeForCard；authorizationService 为 null 不强制。只用在退款的重放分支。
+    private void requireProjectScopeForCard(CustomerStoredValueAccountRecord account) {
+        if (authorizationService == null || account.projectId() == null) {
+            return;
+        }
+        authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
+            if (!scope.equals(account.projectId())) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
+                        "该储值卡不在当前项目权限范围内");
             }
         });
     }

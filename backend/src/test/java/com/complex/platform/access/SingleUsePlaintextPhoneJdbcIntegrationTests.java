@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -210,6 +210,39 @@ class SingleUsePlaintextPhoneJdbcIntegrationTests {
         assertThat(deniedCode(userId, leadPhoneUrl())).isEqualTo("PERMISSION_DENIED");
         assertConsumedOnce();
         assertThat(leadPhoneEvents("leasing.lead.contact_phone_viewed", userId)).isEqualTo(1);
+    }
+
+    // M724-F07 ⑦末句「页面打开不再因两个列表并发而报错」：只持一份单次明文码的人同时读两个线索列表（页面打开时的两笔并发）——
+    // 都 200、都是掩码、来源未消耗、没有消耗日志。修复前两个列表都核验并消耗同一份明文码：先到的一笔给明文并用掉来源，掩码断言即红。
+    @Test
+    void openingBothLeadListsAtOnceWithOnlyASingleUseGrantShowsMaskedPhonesAndUsesNothing() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.now());
+        seedLead(dueLeadId, PLAIN, "org", Instant.parse("2000-01-01T00:00:00Z"));
+        staff(userId, null, "leasing.lead.manage");
+        singleUsePhoneGrant();
+        List<String> urls = List.of("/api/v1/leasing/leads", "/api/v1/leasing/leads/follow-up-due");
+        List<String> rows = List.of(leadId, dueLeadId);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<MockHttpServletResponse>> results = new ArrayList<>();
+            for (String url : urls) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mockMvc.perform(get(url).with(session(userId, null))).andReturn().getResponse();
+                }));
+            }
+            start.countDown();
+            for (int i = 0; i < urls.size(); i++) {
+                MockHttpServletResponse response = results.get(i).get(60, TimeUnit.SECONDS);
+                assertThat(response.getStatus()).isEqualTo(200);
+                assertThat(phone(response.getContentAsString(StandardCharsets.UTF_8), rows.get(i), "contact_phone"))
+                        .isEqualTo(MASKED);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        assertUnconsumed();
     }
 
     // M724 ②：长期持有明文码的人点两次都给完整号码、没有消耗日志、查看留痕两条（每点一次算查看一次并留痕）。

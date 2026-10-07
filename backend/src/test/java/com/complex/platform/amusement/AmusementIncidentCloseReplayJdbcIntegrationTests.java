@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -43,6 +43,8 @@ import org.springframework.test.web.servlet.ResultActions;
  * <p>V099 种子策略 {@code amusement_incident_close_over_space} 对带商户归属的员工按事故所在空间判定；本类的事故挂在不存在的
  * 游乐项目上、解析不到空间，恒按 fail-closed 拦截。放行单用真实拦截生成的待审复核单，再把它置为已批准
  * （同 {@code AdmissionReleaseOneShotJdbcIntegrationTests}）。
+ * M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉，内容不同的另一笔照常拦截送审」）：
+ * 被拦下的那次提交与之后用掉这张批准的那次提交用同一个处置结论。
  *
  * <p>本类不开测试事务：放行消费、幂等记录都要真实提交，重提才看得见。夹具按随机后缀隔离、结束时删除；
  * 复核单与审计事件只追加不删（V148 / V140），按后缀隔离留在库里。写请求带 {@code X-Terminal-Type: web}。
@@ -125,7 +127,7 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
     @Test
     void closingAnIncidentAgainWithTheSameRequestReturnsTheFirstResultAndANewRequestOnTheClosedIncidentIsStillRejected()
             throws Exception {
-        blockedThenApproved("f11-block-" + suffix);
+        blockedThenApproved("f11-block-" + suffix, "已处置并回访");
         String key = "f11-close-" + suffix;
         String body = closeJson(key, "已处置并回访");
 
@@ -161,7 +163,7 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
 
         // 换新编号再关已关闭的事故：第一张放行单已用掉，先再批一张（新的待审复核单置为已批准），凭它过准入闸后
         // 由幂等层之内的首次执行校验拒绝——INCIDENT_CLOSED
-        blockedThenApproved("f11-block-again-" + suffix);
+        blockedThenApproved("f11-block-again-" + suffix, "已处置并回访");
         close(closeJson("f11-close-again-" + suffix, "已处置并回访"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("INCIDENT_CLOSED"))
@@ -170,9 +172,9 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
         assertThat(closedEvents()).isEqualTo(1);
     }
 
-    /** 本人发起一次被拦截的关闭（409 生成待审复核单），再把这张复核单置为已批准，返回其单号。 */
-    private String blockedThenApproved(String key) throws Exception {
-        String response = body(close(closeJson(key, "M724-F11 拦截"))
+    /** 本人以给定处置结论发起一次被拦截的关闭（409 生成待审复核单），再把这张复核单置为已批准，返回其单号。 */
+    private String blockedThenApproved(String key, String resolution) throws Exception {
+        String response = body(close(closeJson(key, resolution))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("ADMISSION_BLOCKED")));
         List<String> pending = jdbcTemplate.queryForList("""
