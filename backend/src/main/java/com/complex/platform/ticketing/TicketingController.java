@@ -200,6 +200,7 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/dynamic-pricing/simulations")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant // M723：价格仿真不扣单次授权（操作员 2026-10-04：价格仿真不算用掉）
     public ApiResponse<TicketDynamicPricingSimulationResponse> simulateDynamicPricing(
             @RequestBody @jakarta.validation.Valid TicketDynamicPricingSimulationRequest request
     ) {
@@ -454,6 +455,7 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/verifications/preview")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant // M723：核销预览只看权益能否核销，真正核销才扣；预览不扣单次授权（操作员 2026-10-03）
     public ApiResponse<VerificationPreviewResponse> previewVerification(@RequestBody @jakarta.validation.Valid VerificationRequest request) {
         authorizationService.requirePermission("verification.execute");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -476,6 +478,7 @@ public class TicketingController {
     // 批3-6(用户2026-07-04)：核销页取某权益的人脸照(解密返回 base64)。授权限核销/运营(verification.view)+每次查看写审计,
     //   均在 facePhotoService.getForVerification 内。核销主链不改,照片仅核销页附带展示。
     @GetMapping("/ticketing/issued-entitlements/{entitlement_id}/face-photo")
+    // M723：核销预检附带显示的人脸照不消耗单次授权（操作员 2026-10-04）
     public ApiResponse<TicketFacePhotoService.FacePhotoView> getEntitlementFacePhoto(
             @PathVariable("entitlement_id") String entitlementId) {
         return ApiResponse.ok(facePhotoService.getForVerification(entitlementId));

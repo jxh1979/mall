@@ -92,6 +92,40 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
         return record;
     }
 
+    // XM-M002-J（V437）：消耗了单次授权的成功记录记下消耗人与请求摘要，重放核验按「幂等键 + 消耗人 + 请求摘要」查找。
+    @Override
+    public void bindSingleUseRequest(java.util.UUID recordId, String actorId, String requestDigest) {
+        int updated = jdbcTemplate.update("""
+                UPDATE idempotency_records
+                   SET single_use_actor_id = :actor_id,
+                       single_use_request_digest = :request_digest
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", recordId)
+                .addValue("actor_id", actorId)
+                .addValue("request_digest", requestDigest));
+        if (updated != 1) {
+            throw new IllegalStateException("idempotency record was not found for single-use binding");
+        }
+    }
+
+    @Override
+    public boolean hasCompletedSingleUseRequest(String actorId, String idempotencyKey, String requestDigest) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                           SELECT 1
+                             FROM idempotency_records
+                            WHERE idempotency_key = :idempotency_key
+                              AND single_use_actor_id = :actor_id
+                              AND single_use_request_digest = :request_digest
+                              AND response_code = 'OK'
+                       )
+                """, new MapSqlParameterSource()
+                .addValue("idempotency_key", idempotencyKey)
+                .addValue("actor_id", actorId)
+                .addValue("request_digest", requestDigest), Boolean.class));
+    }
+
     private MapSqlParameterSource parameters(IdempotencyRecord record) {
         return new MapSqlParameterSource()
                 .addValue("id", record.id())

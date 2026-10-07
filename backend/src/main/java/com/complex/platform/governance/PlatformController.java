@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -7,6 +7,7 @@ import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
@@ -57,6 +58,8 @@ public class PlatformController {
     }
 
     @GetMapping("/merchants")
+    // M723：看商户列表（脱敏）不扣单次授权；明文手机号查看看一次扣一次（M009-058；操作员 2026-10-03）
+    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<PageResponse<MerchantRecord>> listMerchants(
             @org.springframework.web.bind.annotation.RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived,
             // V348+V384 按业态查询：merchantType=bar|catering|retail|amusement|media|other，缺省＝全部业态。
@@ -288,12 +291,15 @@ public class PlatformController {
         return viewPhonePlaintext;
     }
 
+    // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时，
+    // 即使核验过明文码也按掩码返回——不扣就不给明文。
     private MerchantRecord maskPhonesForUnauthorized(MerchantRecord merchant, boolean viewPhonePlaintext) {
-        return viewPhonePlaintext || merchant == null ? merchant : merchant.withMaskedPhones();
+        return (viewPhonePlaintext && !IdempotentReplayContext.replayDiscardsConsumption()) || merchant == null
+                ? merchant : merchant.withMaskedPhones();
     }
 
     private PageResponse<MerchantRecord> maskPhonesForUnauthorized(PageResponse<MerchantRecord> page, boolean viewPhonePlaintext) {
-        if (viewPhonePlaintext) {
+        if (viewPhonePlaintext && !IdempotentReplayContext.replayDiscardsConsumption()) {
             return page;
         }
         return new PageResponse<>(page.items().stream().map(MerchantRecord::withMaskedPhones).toList(),

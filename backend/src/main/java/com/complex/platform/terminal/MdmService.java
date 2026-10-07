@@ -232,7 +232,7 @@ public class MdmService {
 
         if (hardBlocked) {
             try {
-                auditEventService.recordSuccess(
+                auditEventService.recordSuccessIndependently( // XM-M002-J：独立事务，随后的拒绝回滚外层事务时留痕仍在
                         "device.policy_violation", DEVICE_MANAGE, "terminal_device", id, null, null, payload);
             } catch (RuntimeException ignored) {
                 // 留痕失败不得掩盖拒绝结果
@@ -243,7 +243,7 @@ public class MdmService {
 
         if (enabled && !managed) {
             try {
-                auditEventService.recordSuccess(
+                auditEventService.recordSuccessIndependently( // XM-M002-J：独立事务，随后的拒绝回滚外层事务时留痕仍在
                         "device.policy_violation", DEVICE_MANAGE, "terminal_device", id, null, null, payload);
             } catch (RuntimeException ignored) {
                 // 留痕失败不得掩盖拒绝结果

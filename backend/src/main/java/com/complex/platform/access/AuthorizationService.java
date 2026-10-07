@@ -1,20 +1,25 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.18
+// 文件版本：V0.21
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.CallerScopeResolver;
+import com.complex.platform.common.idempotency.IdempotencyRepository;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import com.complex.platform.auth.SessionIssuer;
 
 @Service
@@ -28,53 +33,189 @@ public class AuthorizationService implements CallerScopeResolver {
             "customer.stored_value.consume");
 
     private final AccessRepository accessRepository;
+    // XM-M002-J：单次消耗走的事务模板（REQUIRED：有业务/请求事务就并入，没有就自建）。经 setter 可选注入（同 IdempotencyService），
+    // 单测 new 构造不传则直接消耗。
+    private TransactionTemplate transactionTemplate;
+    // XM-M002-J：重放核验要确认「用掉单次授权的那次请求」已成功完成（幂等记录）。可选注入，单测 new 构造不传则不认重放（照旧拒绝）。
+    private IdempotencyRepository idempotencyRepository;
 
     public AuthorizationService(AccessRepository accessRepository) {
         this.accessRepository = accessRepository;
     }
 
-    @Transactional
+    @Autowired(required = false)
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionTemplate = transactionManager == null ? null : new TransactionTemplate(transactionManager);
+    }
+
+    @Autowired(required = false)
+    public void setIdempotencyRepository(IdempotencyRepository idempotencyRepository) {
+        this.idempotencyRepository = idempotencyRepository;
+    }
+
     public void requirePermission(String permissionCode) {
         requirePermissions(permissionCode);
     }
 
-    /** 同一动作先核验所有权限，再按来源消费一次；任何失败由事务回滚。 */
-    @Transactional
+    /**
+     * 同一动作先核验所有权限，再按来源消费一次。
+     * XM-M002-J：核验不过直接拒绝、不经事务边界，调用方捕获拒绝后改走别的权限时不会把外层事务标成只能回滚；
+     * 单次消耗并入外层事务（请求事务切面 {@link SingleUseGrantRequestTransactionAspect} 或业务事务），随业务一起提交或回滚，
+     * 同一次调用内多个来源要么全消耗、要么全不消耗；抢不到（已被并发请求用掉）即拒绝并让整笔回滚。
+     * XM-M002-J（操作员 2026-09-25 答复）：同一操作人以同一幂等键重放「用掉该单次来源的那次成功请求」时按重放放行、不再消耗，
+     * 由幂等层返回第一次的结果（见下方 SingleUseReplay）；同一请求不能既按重放放行、又消耗新的单次来源。
+     * M723（操作员 2026-10-02「只有真正执行的写操作（分配、审批等）才扣单次授权，打开页面、看列表不扣」；2026-10-03「预览、查询不扣
+     * 一次性授权，只有真正核销、真正执行的那一次才扣」）：查看请求（GET / HEAD）与标了 {@link DoesNotConsumeSingleUseGrant} 的预览、
+     * 查询接口核验照常、不消耗；查看请求里接口声明「仍然扣」的码（{@link ConsumesSingleUseGrant}：导出、敏感明文查看，
+     * 操作员 2026-10-03「导一次扣一次」「看一次扣一次」）照旧消耗。
+     * M723（技术推导，一次操作只算一次使用）：本请求已消耗的单次来源在本请求内再核验时仍视为有效、不再消耗。
+     * 不在控制器请求里（没有请求上下文）时一律照旧消耗。
+     * M723-F09（第 656 行「操作被拒绝或失败的不算用掉」）：控制器请求里本次要消耗单次来源（写请求，或带 {@link ConsumesSingleUseGrant}
+     * 的查看请求）而本请求没有请求事务（请求进入时不持有、判定期间才被授出；切面记了「无请求事务」，或当前没有实际事务）时
+     * 不消耗、按不具备处理。M723-F10、F11（同行「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：抢不到来源时若本次调用还没有
+     * 新消耗任何来源、本次要消耗的每一份来源都正是本人以本请求编号、本请求摘要刚用掉的、且那次请求已经幂等层成功完成（与 SingleUseReplay
+     * 第③项同口径），转为只能重放（不分一份还是多份来源）；不经幂等层的接口没有
+     * 可返回的第一次结果，照旧拒绝。M723-F08：消耗记到请求名下时连来源号与权限码一起记，供 {@link #releaseRequestConsumption} 撤回。
+     */
     public void requirePermissions(String... permissionCodes) {
         AccessActor actor = currentActor();
         Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
         Instant checkedAt = Instant.now();
-        List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
-                .filter(effect -> isActive(effect, checkedAt)).toList();
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        List<AccessRepository.PermissionEffect> all = accessRepository.findPermissionEffects(actor.id(), checkedAt);
+        List<AccessRepository.PermissionEffect> effects = all.stream()
+                .filter(effect -> usable(effect, checkedAt, actor, request)).toList();
+        SingleUseReplay replay = new SingleUseReplay(actor, all, checkedAt);
         java.util.Map<String, AccessRepository.PermissionEffect> consume = new java.util.LinkedHashMap<>();
         java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
         java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
                 positionDerivedSources(actor.id());
         for (String code : new java.util.LinkedHashSet<>(java.util.Arrays.asList(permissionCodes))) {
-            AccessRepository.PermissionEffect grant = permissionGrant(actor, code, effects, daily, positionDerived);
-            if (grant != null && grant.singleUse()) {
-                consume.putIfAbsent(grant.source() + ":" + grant.sourceId(), grant);
+            AccessRepository.PermissionEffect grant = permissionGrant(actor, code, effects, daily, positionDerived, replay);
+            // M723：查看、预览、查询不算一次使用——这类请求里只有接口声明「仍然扣」的码（ConsumesSingleUseGrant）才消耗
+            if (grant != null && grant.singleUse() && (request == null || request.consumesSingleUse(code))) {
+                consume.putIfAbsent(sourceKey(grant), grant);
             }
         }
-        // 岗位派生事实在上面的循环里才按操作人 id 读取：核对放在最后一次读取之后、单次来源消费之前。
+        // 岗位派生事实在上面的循环里才按操作人 id 读取：核对放在最后一次读取之后、重放判断与单次来源消费之前
+        // （查看、预览、查询请求不消耗，同样先核身份）。
         requireIdentityUnchanged(actor, identity);
-        for (AccessRepository.PermissionEffect grant : consume.values()) {
-            if (!accessRepository.markSingleUsePermissionConsumed(
-                    grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt)) {
+        if (replay.matched()) {
+            if (!consume.isEmpty()) {
+                deny(consume.values().iterator().next().permissionCode());
+            }
+            replay.request().markReplayOnly();
+        }
+        if (request != null) {
+            // M723：本请求已消耗的来源不再消耗
+            consume.keySet().removeIf(source -> request.consumedInThisRequest(actor.id(), source));
+        }
+        if (consume.isEmpty()) {
+            return;
+        }
+        if (request != null && request.replayOnly()) {
+            // 已按重放放行的请求只能返回第一次的结果，不再消耗新的单次来源
+            deny(consume.values().iterator().next().permissionCode());
+        }
+        // M723-F09：控制器请求里本次要消耗单次来源（consume 非空：写请求，或带 ConsumesSingleUseGrant 的查看请求如导出、商户列表）
+        // 而本请求没有请求事务——请求进入时不持有单次来源、判定期间才被授出：切面放行时记了「无请求事务」（这时即使核验发生在业务层
+        // 自己的事务里，那个事务的提交也不受切面的重放回滚与失败撤回约束），或当前没有实际事务——消耗无法随请求结果处理，不消耗、
+        // 按不具备处理；用户重试即可（下一次进入时已持有，切面会开请求事务）。不消耗的查看请求（consume 为空）与不在控制器请求里的
+        // 调用不受影响。
+        if (request != null && (request.withoutRequestTransaction()
+                || !TransactionSynchronizationManager.isActualTransactionActive())) {
+            deny(consume.values().iterator().next().permissionCode());
+        }
+        boolean recordRequest = request != null && request.identified();
+        boolean[] replayedAtConsumption = new boolean[1];
+        int[] newlyConsumed = new int[1];
+        Runnable consumeAll = () -> {
+            for (AccessRepository.PermissionEffect grant : consume.values()) {
+                // 取不到本次请求的幂等键时沿用四参写法（不记请求信息，其重放照旧拒绝）；内存仓与桩只实现了它
+                boolean consumed = recordRequest
+                        ? accessRepository.markSingleUsePermissionConsumed(grant.sourceId(), grant.permissionCode(),
+                                actor.id(), checkedAt, request.idempotencyKey(), request.requestDigest())
+                        : accessRepository.markSingleUsePermissionConsumed(
+                                grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt);
+                if (consumed) {
+                    newlyConsumed[0]++;
+                    continue;
+                }
+                // M723-F10：抢不到时重读消耗记录——正是本人以本请求编号、本请求摘要用掉的（同号并发提交的另一笔刚提交），
+                // 且那次请求的幂等记录已成功完成（SingleUseReplay 第③项同口径：消耗与幂等记录同一事务提交，读到消耗行时记录必已 OK；
+                // 不经幂等层的接口没有这条记录、也没有可返回的第一次结果，照旧拒绝——replayOnly 只有幂等层尊重），
+                // 转为只能重放，由幂等层返回第一次的结果（走到这里记录必已 OK；首笔尚未完成时的 409 出在幂等占位处的既有逻辑，不在本分支）；
+                // M723-F11（同行，不分来源个数）：一次要消耗多份单次来源时同样转——条件是本次调用还没有新消耗任何来源（落败在第一份上），
+                // 且本次要消耗的每一份来源都正是本请求编号、本请求摘要用掉的（同号的另一笔把它们一起用掉并提交了）；
+                // 已经新消耗过一份、或有一份是被别的请求用掉的，照旧拒绝并让整笔回滚（同一次调用不能既按重放放行、又消耗别的单次来源）。
+                if (recordRequest && newlyConsumed[0] == 0 && idempotencyRepository != null
+                        && consume.values().stream().allMatch(each -> accessRepository.singleUseSourceConsumedByRequest(
+                                each.sourceId(), each.permissionCode(), actor.id(), request.idempotencyKey(), request.requestDigest()))
+                        && idempotencyRepository.hasCompletedSingleUseRequest(
+                                actor.id(), request.idempotencyKey(), request.requestDigest())) {
+                    replayedAtConsumption[0] = true;
+                    return;
+                }
                 deny(grant.permissionCode());
             }
+        };
+        if (transactionTemplate == null) {
+            consumeAll.run();
+        } else {
+            transactionTemplate.executeWithoutResult(status -> consumeAll.run());
+        }
+        if (replayedAtConsumption[0]) {
+            request.markReplayOnly();
+            return;
+        }
+        if (request != null) {
+            // M723-F08：连来源号与权限码一起记，业务失败时据此撤回
+            consume.forEach((source, grant) -> request.markConsumed(actor.id(), source, grant.sourceId(), grant.permissionCode()));
         }
     }
 
-    private AccessRepository.PermissionEffect permissionGrant(
-            AccessActor actor, String code, List<AccessRepository.PermissionEffect> effects) {
-        return permissionGrant(actor, code, effects, dailyPermissions(), positionDerivedSources(actor.id()));
+    /**
+     * M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：业务以正常返回报告失败时，由请求事务切面在同一请求事务里调用——
+     * 把本请求记在名下的每个单次消耗撤回（来源改回未消耗、追加撤回留痕），失败留痕与幂等记录照常提交。
+     * 没有请求上下文、本请求没消耗过时无操作。
+     */
+    public void releaseRequestConsumption() {
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        if (request == null || request.consumedBy() == null) {
+            return;
+        }
+        request.consumedSourceCodes().forEach((sourceId, permissionCode) ->
+                accessRepository.releaseSingleUsePermissionConsumption(sourceId, permissionCode, request.consumedBy(),
+                        request.idempotencyKey(), request.requestDigest()));
     }
 
+    private static String sourceKey(AccessRepository.PermissionEffect effect) {
+        return effect.source() + ":" + effect.sourceId();
+    }
+
+    /**
+     * XM-M002-J：当前主体是否持有尚未用掉的单次授权（只读）。未登录或无法识别的主体没有可消耗的来源，返回 false。
+     * 供 {@link SingleUseGrantRequestTransactionAspect} 判断是否要把整个请求包进一个事务。
+     */
+    public boolean currentActorHoldsUnconsumedSingleUseGrant() {
+        AccessActor actor;
+        try {
+            actor = currentActor();
+        } catch (ApiException unauthenticated) {
+            return false;
+        }
+        return actor.id() != null && accessRepository.hasUnconsumedSingleUseGrant(actor.id());
+    }
+
+    /**
+     * 返回 null：身份放行（最高权限等）或按重放放行，均不消耗；否则返回授出来源（单次来源须消耗）。拒绝时抛 403。
+     * 主体停用、未知权限码、显式拒绝一律先于重放判定。
+     */
     private AccessRepository.PermissionEffect permissionGrant(
             AccessActor actor, String code, List<AccessRepository.PermissionEffect> effects,
             java.util.function.Supplier<java.util.Set<String>> daily,
-            java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived) {
+            java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived,
+            SingleUseReplay replay) {
         if (!"active".equals(actor.status()) || !knownPermission(code)) {
             deny(code);
         }
@@ -96,10 +237,79 @@ public class AuthorizationService implements CallerScopeResolver {
                 .filter(effect -> !held || !positionDerived.get().test(effect))
                 .min(Comparator.comparing(AccessRepository.PermissionEffect::sourceId,
                         Comparator.nullsLast(String::compareTo))).orElse(null);
+        // XM-M002-J：取到的是单次来源（或已无来源），而本请求正是用掉它的那次成功请求的重放 → 按重放放行、不再消耗
+        if ((grant == null || grant.singleUse()) && replay.test(code)) {
+            return null;
+        }
         if (grant == null) {
             deny(code);
         }
         return grant;
+    }
+
+    /**
+     * XM-M002-J（操作员 2026-09-25 答复：单次授权只在业务成功并返回结果时才算用掉；同一请求编号重放应返回第一次的成功结果、
+     * 不重复扣减、不重复执行）：本请求是否正是「用掉某单次来源的那次成功请求」的重放。四项同时成立才认：
+     * ① 同一操作人、同一幂等键、同一请求（方法 + 路径 + 查询串摘要，见 {@link SingleUseGrantRequestTransactionAspect}）；
+     * ② 该来源仍有效（未收回、未到期、在生效时段内），只是已消耗，且消耗日志记着正是这次请求用掉的；
+     * ③ 那次请求的幂等记录已成功完成且记着这次消耗（{@link IdempotencyRepository#hasCompletedSingleUseRequest}）——
+     *    第一次失败时消耗与幂等记录一起回滚，没有可认的记录；不经幂等层的接口没有这条记录，重放照旧拒绝；
+     * ④ 当前在控制器请求里，本请求尚未消耗过别的单次来源。
+     * 认出后本请求记为「只能重放」，幂等层只返回第一次的结果、不再执行（{@link IdempotentReplayContext#replayOnly}）。
+     */
+    private final class SingleUseReplay implements java.util.function.Predicate<String> {
+
+        private final IdempotentReplayContext request;
+        private final String actorId;
+        private final List<AccessRepository.PermissionEffect> consumedInForce;
+        private java.util.Set<String> consumedSources;
+        private Boolean completed;
+        private boolean matched;
+
+        private SingleUseReplay(AccessActor actor, List<AccessRepository.PermissionEffect> all, Instant checkedAt) {
+            IdempotentReplayContext current = IdempotentReplayContext.current();
+            this.request = current != null && current.identified() && current.consumedBy() == null ? current : null;
+            this.actorId = actor.id();
+            this.consumedInForce = all.stream()
+                    .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT
+                            && effect.singleUse() && effect.consumed() && inForce(effect, checkedAt))
+                    .toList();
+        }
+
+        @Override
+        public boolean test(String code) {
+            if (request == null || actorId == null || idempotencyRepository == null) {
+                return false;
+            }
+            List<String> sources = consumedInForce.stream()
+                    .filter(effect -> code.equals(effect.permissionCode()))
+                    .map(AccessRepository.PermissionEffect::sourceId)
+                    .toList();
+            if (sources.isEmpty()) {
+                return false;
+            }
+            if (consumedSources == null) {
+                consumedSources = new java.util.HashSet<>(accessRepository.singleUseSourcesConsumedBy(
+                        actorId, request.idempotencyKey(), request.requestDigest()));
+            }
+            if (sources.stream().noneMatch(consumedSources::contains)) {
+                return false;
+            }
+            if (completed == null) {
+                completed = idempotencyRepository.hasCompletedSingleUseRequest(
+                        actorId, request.idempotencyKey(), request.requestDigest());
+            }
+            matched |= completed;
+            return completed;
+        }
+
+        private boolean matched() {
+            return matched;
+        }
+
+        private IdempotentReplayContext request() {
+            return request;
+        }
     }
 
     /**
@@ -201,8 +411,38 @@ public class AuthorizationService implements CallerScopeResolver {
     public EffectivePermissions effectivePermissions() {
         AccessActor actor = currentActor();
         Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
-        EffectivePermissions result = computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor));
+        EffectivePermissions result = computeEffectivePermissions(
+                actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor), effect -> true);
         requireIdentityUnchanged(actor, identity);
+        return result;
+    }
+
+    /**
+     * M723-F13：当前操作人在本请求里持有的权限集（只读）——来源口径与动作核验相同（{@link #usable}）：有效来源，加上本请求里这名操作人
+     * 刚消耗、仍在生效时段内的单次来源。供授出入口判断「只凭临时或单次来源持有」用：入口权限与待授码出自同一份单次来源时，入口核权已把它
+     * 消耗掉，按 {@link #effectivePermissions} 算会把待授码当成从未持有。菜单与前端展示仍用 {@link #effectivePermissions}。
+     */
+    public EffectivePermissions effectivePermissionsWithinRequest() {
+        AccessActor actor = currentActor();
+        Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor);
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        EffectivePermissions result = computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor),
+                effect -> true, (effect, checkedAt) -> usable(effect, checkedAt, actor, request));
+        requireIdentityUnchanged(actor, identity);
+        return result;
+    }
+
+    /**
+     * XM-M002-I（操作员 2026-09-25 裁定口径 B「一律只认长期来源」）：当前操作人可作为授出依据的权限集（只读）。一切授出只认长期来源：
+     * 角色（含岗位派生角色）、无到期且非单次的模板套用、员工单独授予，以及随账号身份的平台管理员日常码与最高权限全字典；
+     * 临时授权、有到期或单次的模板套用（含临时模板、单次模板）不作任何授出的依据。显式拒绝照常扣减。
+     */
+    public EffectivePermissions grantablePermissions() {
+        AccessActor actor = currentActor();
+        Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
+        EffectivePermissions result = computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor),
+                effect -> effect.source() != AccessRepository.Source.TEMPORARY_GRANT && effect.validUntil() == null && !effect.singleUse());
+        requireIdentityUnchanged(actor, identity); // 同 effectivePermissions：按操作人读完权限后核身份
         return result;
     }
 
@@ -223,14 +463,22 @@ public class AuthorizationService implements CallerScopeResolver {
         }
         AccessActor subject = new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(),
                 user.merchantId(), user.status());
-        return computeEffectivePermissions(userId, isPlatformAdminBridge(subject), isMasterAuthority(subject));
+        return computeEffectivePermissions(userId, isPlatformAdminBridge(subject), isMasterAuthority(subject), effect -> true);
     }
 
-    private EffectivePermissions computeEffectivePermissions(String userId, boolean platformAdmin, boolean master) {
+    private EffectivePermissions computeEffectivePermissions(String userId, boolean platformAdmin, boolean master,
+            java.util.function.Predicate<AccessRepository.PermissionEffect> grantBasis) {
+        return computeEffectivePermissions(userId, platformAdmin, master, grantBasis, this::isActive);
+    }
+
+    // inEffect：哪些来源算数——默认「未消耗且在生效时段内」；M723-F13 的请求内口径另算上本请求刚消耗的单次来源
+    private EffectivePermissions computeEffectivePermissions(String userId, boolean platformAdmin, boolean master,
+            java.util.function.Predicate<AccessRepository.PermissionEffect> grantBasis,
+            java.util.function.BiPredicate<AccessRepository.PermissionEffect, Instant> inEffect) {
         Instant checkedAt = Instant.now();
         java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
         List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
-                .filter(effect -> isActive(effect, checkedAt))
+                .filter(effect -> inEffect.test(effect, checkedAt))
                 .toList();
         // M002-F33：员工显式拒绝压过全部来源；岗位高危挂起只压住岗位派生的那一份授予，与 permissionGrant 同口径。
         java.util.Set<String> explicitDenies = active.stream().filter(AuthorizationService::isExplicitDeny)
@@ -243,6 +491,7 @@ public class AuthorizationService implements CallerScopeResolver {
         List<String> grants = active.stream()
                 .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
                 .filter(effect -> isExplicitOrDailyGrant(effect, daily))
+                .filter(grantBasis)
                 .filter(effect -> !held.contains(effect.permissionCode()) || !positionDerived.get().test(effect))
                 .map(AccessRepository.PermissionEffect::permissionCode)
                 .filter(code -> !explicitDenies.contains(code))
@@ -390,16 +639,26 @@ public class AuthorizationService implements CallerScopeResolver {
         }
     }
 
-    /** 当前主体是否持有某权限(布尔·不抛错):用于按权限脱敏字段(如内部结算价)。 */
+    /**
+     * 当前主体是否持有某权限(布尔·不抛错):用于按权限脱敏字段(如内部结算价)。
+     * XM-M002-J：对重放的判定与 {@link #requirePermissions} 一致——按重放认出时同样把本请求记为「只能重放」。
+     * M723：本请求已消耗的单次来源在本请求内仍视为有效（同 {@link #requirePermissions}）。
+     */
     public boolean currentActorHasPermission(String permissionCode) {
         try {
             Instant checkedAt = Instant.now();
             AccessActor actor = currentActor();
             Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
-            List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
-                    .filter(effect -> isActive(effect, checkedAt)).toList();
-            permissionGrant(actor, permissionCode, effects);
-            requireIdentityUnchanged(actor, identity); // 在最后一次按操作人 id 读取（岗位派生事实）之后
+            IdempotentReplayContext request = IdempotentReplayContext.current();
+            List<AccessRepository.PermissionEffect> all = accessRepository.findPermissionEffects(actor.id(), checkedAt);
+            List<AccessRepository.PermissionEffect> effects = all.stream()
+                    .filter(effect -> usable(effect, checkedAt, actor, request)).toList();
+            SingleUseReplay replay = new SingleUseReplay(actor, all, checkedAt);
+            permissionGrant(actor, permissionCode, effects, dailyPermissions(), positionDerivedSources(actor.id()), replay);
+            requireIdentityUnchanged(actor, identity); // 在最后一次按操作人 id 读取（岗位派生事实）之后；核对不过不留重放标记
+            if (replay.matched()) {
+                replay.request().markReplayOnly();
+            }
             return true;
         } catch (RuntimeException exception) {
             return false;
@@ -690,9 +949,23 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     private boolean isActive(AccessRepository.PermissionEffect effect, Instant checkedAt) {
-        if (effect.consumed()) {
-            return false;
-        }
+        return !effect.consumed() && inForce(effect, checkedAt);
+    }
+
+    /**
+     * M723（技术推导，一次操作只算一次使用）：动作核验可用的来源＝有效来源，加上「已消耗、仍在生效时段内、且正是本请求里
+     * 这名操作人刚消耗的」单次来源。没有请求上下文时与 {@link #isActive} 相同。
+     */
+    private boolean usable(AccessRepository.PermissionEffect effect, Instant checkedAt, AccessActor actor,
+                           IdempotentReplayContext request) {
+        return isActive(effect, checkedAt)
+                || (request != null && effect.consumed() && effect.singleUse()
+                        && effect.effect() == AccessRepository.Effect.GRANT && inForce(effect, checkedAt)
+                        && request.consumedInThisRequest(actor.id(), sourceKey(effect)));
+    }
+
+    /** 在生效时段内（不看是否已消耗）。 */
+    private boolean inForce(AccessRepository.PermissionEffect effect, Instant checkedAt) {
         if (effect.validFrom() != null && checkedAt.isBefore(effect.validFrom())) {
             return false;
         }

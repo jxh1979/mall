@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,6 +10,7 @@ import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -154,6 +155,98 @@ class AuthorizationServiceTests {
         assertThatThrownBy(() -> service.requirePermission("ops.production_readiness.manage"))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
+    }
+
+    // M723-F09（治理地图第 656 行「操作被拒绝或失败的不算用掉」）：控制器请求上下文里本次要消耗单次来源（写请求，或带仍扣码的查看请求
+    // 如导出、商户列表——同根）、当前没有实际事务时——请求进入时不持有、判定期间才被授出，消耗无法随请求结果回滚——不消耗、按不具备处理：
+    // 403 PERMISSION_DENIED，来源仍未消耗。对照：没有请求上下文（服务层直调、测试）照常消耗。修复前第一处就消耗了（consumedSourceIds 非空、不抛 403）。
+    @Test
+    void aSingleUseGrantFoundDuringAWriteRequestWithoutATransactionIsNotConsumed() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(new AccessRepository.PermissionEffect(
+                "usr_staff",
+                "ops.production_readiness.manage",
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPLATE_APPLICATION,
+                "application_granted_mid_request",
+                null,
+                null,
+                true,
+                false
+        ));
+        IdempotentReplayContext previous = IdempotentReplayContext.enter("key-f09", "digest-f09");
+        try {
+            assertThatThrownBy(() -> service.requirePermission("ops.production_readiness.manage"))
+                    .isInstanceOfSatisfying(ApiException.class, exception -> {
+                        assertThat(exception.status().value()).isEqualTo(403);
+                        assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                    });
+        } finally {
+            IdempotentReplayContext.restore(previous);
+        }
+        assertThat(repository.consumedSourceIds).isEmpty();
+
+        // 同根：带仍扣码的查看请求（导出一类，上下文只读但该码在 consumedOnRead 内）无事务时同样不消耗
+        IdempotentReplayContext previousRead = IdempotentReplayContext.enter(
+                "key-f09-read", "digest-f09-read", true, java.util.Set.of("ops.production_readiness.manage"));
+        try {
+            assertThatThrownBy(() -> service.requirePermission("ops.production_readiness.manage"))
+                    .isInstanceOfSatisfying(ApiException.class, exception -> {
+                        assertThat(exception.status().value()).isEqualTo(403);
+                        assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                    });
+        } finally {
+            IdempotentReplayContext.restore(previousRead);
+        }
+        assertThat(repository.consumedSourceIds).isEmpty();
+
+        service.requirePermission("ops.production_readiness.manage");
+        assertThat(repository.consumedSourceIds).containsExactly("application_granted_mid_request");
+    }
+
+    // M723-F09 同根：请求事务切面没有给本请求开请求事务（进入时不持有单次来源，上下文记了「无请求事务」）时，即使核验发生在业务层
+    // 自己的事务里（当前有实际事务），判定期间才被授出的单次来源同样不消耗、按不具备处理——那个事务的提交不受切面的重放回滚与失败撤回
+    // 约束。对照：同样有实际事务、上下文没有记「无请求事务」（切面的请求事务，或进入前已有的外层事务）照常消耗。
+    // 修复前第一处就消耗了（闸只看有没有实际事务）。
+    @Test
+    void aSingleUseGrantFoundInsideAServiceTransactionOfARequestWithoutARequestTransactionIsNotConsumed() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(new AccessRepository.PermissionEffect(
+                "usr_staff",
+                "ops.production_readiness.manage",
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPLATE_APPLICATION,
+                "application_granted_mid_service_tx",
+                null,
+                null,
+                true,
+                false
+        ));
+        org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            IdempotentReplayContext previous = IdempotentReplayContext.enter("key-f09-svc", "digest-f09-svc");
+            try {
+                IdempotentReplayContext.markWithoutRequestTransaction();
+                assertThatThrownBy(() -> service.requirePermission("ops.production_readiness.manage"))
+                        .isInstanceOfSatisfying(ApiException.class, exception -> {
+                            assertThat(exception.status().value()).isEqualTo(403);
+                            assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                        });
+            } finally {
+                IdempotentReplayContext.restore(previous);
+            }
+            assertThat(repository.consumedSourceIds).isEmpty();
+
+            IdempotentReplayContext previousInTransaction = IdempotentReplayContext.enter("key-f09-svc-2", "digest-f09-svc-2");
+            try {
+                service.requirePermission("ops.production_readiness.manage");
+            } finally {
+                IdempotentReplayContext.restore(previousInTransaction);
+            }
+            assertThat(repository.consumedSourceIds).containsExactly("application_granted_mid_service_tx");
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
     }
 
     @Test
@@ -546,9 +639,14 @@ class AuthorizationServiceTests {
                     assertThat(exception.status().value()).isEqualTo(403);
                     assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
                 });
+        // M723：授出依据集同样在读权限前后核身份
+        assertThatThrownBy(() -> service.grantablePermissions())
+                .isInstanceOfSatisfying(ApiException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
 
         afRow("usr_o", "staff", "org", "merchant", "active");
         assertThat(service.effectivePermissions().grants()).contains(AF_CODE);
+        assertThat(service.grantablePermissions().grants()).doesNotContain(AF_CODE); // 单次来源不作授出依据
     }
 
     @Test
@@ -713,6 +811,20 @@ class AuthorizationServiceTests {
         f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
 
         assertThatThrownBy(() -> service.effectivePermissions())
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                });
+        f05AssertRoundTripHappened(grant);
+    }
+
+    // grantablePermissions（M723 新增入口）：拒绝（403 PERMISSION_DENIED）。中间范围的授予用角色来源——单次来源本就不作授出依据。
+    @Test
+    void grantablePermissionsRejectsScopeRoundTrip() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+
+        assertThatThrownBy(() -> service.grantablePermissions())
                 .isInstanceOfSatisfying(ApiException.class, exception -> {
                     assertThat(exception.status().value()).isEqualTo(403);
                     assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");

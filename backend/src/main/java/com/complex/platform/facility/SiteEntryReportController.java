@@ -37,12 +37,16 @@ public class SiteEntryReportController {
     }
 
     @GetMapping
+    // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
+    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<PageResponse<SiteEntryReportRecord>> list() {
         requireReadPermission();
         return ApiResponse.ok(maskPhonesForUnauthorized(service.list()));
     }
 
     @GetMapping("/{report_id}")
+    // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
+    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<SiteEntryReportRecord> get(@PathVariable("report_id") String reportId) {
         requireReadPermission();
         return ApiResponse.ok(maskPhoneForUnauthorized(service.findById(reportId)));
@@ -90,18 +94,30 @@ public class SiteEntryReportController {
     // ── P0-A/GAP-07 进场报备联系人手机号展示脱敏（V339）。无 pii.contact_phone.view 的读端看掩码；
     // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。 ──
     private SiteEntryReportRecord maskPhoneForUnauthorized(SiteEntryReportRecord record) {
-        if (record == null || authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+        if (record == null || viewPhonePlaintext(java.util.stream.Stream.of(record.contactPhone()))) {
             return record;
         }
         return record.withMaskedPhone();
     }
 
     private PageResponse<SiteEntryReportRecord> maskPhonesForUnauthorized(PageResponse<SiteEntryReportRecord> page) {
-        if (authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+        if (viewPhonePlaintext(page.items().stream().map(SiteEntryReportRecord::contactPhone))) {
             return page;
         }
         return new PageResponse<>(page.items().stream().map(SiteEntryReportRecord::withMaskedPhone).toList(),
                 page.page(), page.pageSize(), page.total());
+    }
+
+    // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：持有明文码、且这次响应里确有非空电话，才核验明文码并返回明文
+    // ——单次来源在这里消耗，长期来源不产生消耗；否则返回掩码、不碰明文码。一次响应只核一次（列表按整页判断）。
+    private boolean viewPhonePlaintext(java.util.stream.Stream<String> phones) {
+        if (phones.noneMatch(phone -> phone != null && !phone.isBlank())
+                || !authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return false;
+        }
+        authorizationService.requirePermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        // 本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时不给明文
+        return !com.complex.platform.common.idempotency.IdempotentReplayContext.replayDiscardsConsumption();
     }
 
     private void requireReadPermission() {

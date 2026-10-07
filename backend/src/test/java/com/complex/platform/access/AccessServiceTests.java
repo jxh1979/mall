@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -5520,5 +5520,189 @@ class AccessServiceTests {
         public Optional<SupervisorReviewDecisionRecord> findSupervisorReviewById(String reviewId) {
             return Optional.ofNullable(reviews.get(reviewId));
         }
+    }
+
+    // XM-M002-I（操作员 2026-09-25 裁定口径 B「一律只认长期来源」）：操作人只凭临时授权、单次临时授权、单次模板套用或有到期的模板套用
+    // 持有某码时，经员工单独授予、解除员工显式拒绝、建角色、配角色、定岗（岗位角色与岗位模板两部分）、修改模板内容、套用长期 / 临时 / 单次模板
+    // （含以单次方式套用、套给自己）、临时授权（授给别人或自己、单次或多次）都被 GRANT_EXCEEDS_OWN_PERMISSIONS 拒绝，换幂等键重试也一样；
+    // 改由角色长期持有后各入口照常成功。
+    @Test
+    void temporaryOrSingleUseHolderCannotGrantTheCodeThroughAnyEntry() {
+        String actor = "usr_xm_i_actor";
+        String target = "usr_xm_i_target";
+        String denyTarget = "usr_xm_i_deny_target";
+        for (String userId : List.of(actor, target)) {
+            accessRepository.users.put(userId, new AccessUser(
+                    userId, userId, "staff", "seed-org", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        }
+        m002ViewDenyFixture(denyTarget); // 目标经 role_view 持有 view 并有员工显式拒绝；role_view 也用作下方配角色、岗位角色
+        Instant until = Instant.parse("2099-01-01T00:00:00Z");
+        accessRepository.roles.put("role_xm_i_blank", new RoleRecord(
+                "role_xm_i_blank", "xm_i_blank", "Blank", "project", "active", Instant.parse("2026-06-14T00:00:00Z"), List.of(), null));
+        xmITemplate("tpl_xm_i_base", "base", null, false, M002_VIEW);
+        xmITemplate("tpl_xm_i_temp", "temporary", until, false, M002_VIEW);
+        xmITemplate("tpl_xm_i_once", "temporary", null, true, M002_VIEW);
+        xmITemplate("tpl_xm_i_edit", "temporary", until, false);
+        xmITemplate("tpl_xm_i_blank", "base", null, false);
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest( // 平台管理员随身份持有日常码 view
+                "xm-i-map-role", null, "ops_manager", "lvl_m1_lower", "role_view", "tpl_xm_i_blank", "active"));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xm-i-map-temp", null, "ops_supervisor", "lvl_m1_lower", "role_xm_i_blank", "tpl_xm_i_temp", "active"));
+        authenticateAsOrgUser(actor, actor, "seed-org");
+
+        int attempt = 0;
+        for (Runnable source : xmITemporarySources(actor, M002_VIEW)) {
+            accessRepository.temporaryGrants.clear();
+            accessRepository.templateApplications.clear();
+            source.run();
+            assertThat(authorizationService.effectivePermissions().grants()).contains(M002_VIEW); // 修复前即凭此放行
+            for (int retry = 0; retry < 2; retry++) { // 换幂等键重试也绕不过
+                String key = "xm-i-" + attempt++;
+                assertGrantExceeds(() -> service.setUserPermissionOverrides(target, new UserPermissionOverrideRequest(
+                        key + "-override", null, List.of(M002_VIEW), "grant", "单独授予")));
+                assertGrantExceeds(() -> service.removeUserPermissionOverrides(denyTarget, m002RemoveDeny(key + "-undeny", M002_VIEW)));
+                assertGrantExceeds(() -> service.createRole(new RoleRequest(
+                        key + "-role", null, List.of(), "临时依据角色" + key, null, List.of(M002_VIEW), "project")));
+                assertGrantExceeds(() -> service.assignUserRole(new RoleAssignmentRequest(key + "-assign", null, target, "role_view")));
+                for (String position : List.of("ops_manager", "ops_supervisor")) { // 岗位角色 / 岗位临时模板
+                    assertGrantExceeds(() -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                            key + "-" + position, null, target, position, "lvl_m1_lower", null, null, null)));
+                }
+                assertGrantExceeds(() -> service.updatePermissionTemplate("tpl_xm_i_edit", xmIEditRequest(key + "-edit", until)));
+                for (String grantee : List.of(target, actor)) { // 含授给自己
+                    for (String templateId : List.of("tpl_xm_i_base", "tpl_xm_i_temp", "tpl_xm_i_once")) {
+                        for (String mode : List.of("merge", "single_use")) {
+                            assertGrantExceeds(() -> service.applyPermissionTemplate(templateId, new PermissionTemplateApplyRequest(
+                                    key + "-apply-" + templateId + "-" + mode + "-" + grantee, "apply", List.of(), templateId,
+                                    List.of(grantee), mode)));
+                        }
+                    }
+                    for (boolean singleUse : List.of(true, false)) {
+                        assertGrantExceeds(() -> service.createTemporaryGrant(new TemporaryGrantRequest(
+                                key + "-temporary-" + singleUse + "-" + grantee, null, List.of(), grantee, List.of(M002_VIEW), null,
+                                until.minusSeconds(3600), singleUse, "临时授出")));
+                    }
+                }
+            }
+            assertThat(accessRepository.temporaryGrants.keySet()).allMatch("tg_xm_i"::equals);
+            assertThat(accessRepository.templateApplications).allMatch(application -> "tpl_xm_i_src".equals(application.templateId()));
+        }
+        assertThat(overrideSources(target, M002_VIEW, AccessRepository.Effect.GRANT)).isEmpty();
+        assertThat(overrideSources(denyTarget, M002_VIEW, AccessRepository.Effect.DENY)).containsExactly(AccessRepository.Source.USER_OVERRIDE);
+        assertThat(accessRepository.roles.values()).noneMatch(role -> role.roleName().startsWith("临时依据角色"));
+        assertThat(accessRepository.userRoles.getOrDefault(target, Set.of())).isEmpty();
+        assertThat(accessRepository.userPositionAssignments).doesNotContainKey(target);
+        assertThat(accessRepository.items.get("tpl_xm_i_edit")).isEmpty();
+
+        accessRepository.temporaryGrants.clear();
+        accessRepository.templateApplications.clear();
+        accessRepository.userRoles.put(actor, new LinkedHashSet<>(Set.of("role_view"))); // 角色＝长期来源
+        service.setUserPermissionOverrides(target, new UserPermissionOverrideRequest(
+                "xm-i-ok-override", null, List.of(M002_VIEW), "grant", "单独授予"));
+        service.removeUserPermissionOverrides(denyTarget, m002RemoveDeny("xm-i-ok-undeny", M002_VIEW));
+        RoleRecord created = service.createRole(new RoleRequest(
+                "xm-i-ok-role", null, List.of(), "长期依据角色", null, List.of(M002_VIEW), "project"));
+        service.assignUserRole(new RoleAssignmentRequest("xm-i-ok-assign", null, target, "role_view"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xm-i-ok-ops_manager", null, target, "ops_manager", "lvl_m1_lower", null, null, null));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xm-i-ok-ops_supervisor", null, target, "ops_supervisor", "lvl_m1_lower", null, null, null));
+        service.updatePermissionTemplate("tpl_xm_i_edit", xmIEditRequest("xm-i-ok-edit", until));
+        for (String templateId : List.of("tpl_xm_i_base", "tpl_xm_i_temp", "tpl_xm_i_once")) {
+            service.applyPermissionTemplate(templateId, new PermissionTemplateApplyRequest(
+                    "xm-i-ok-apply-" + templateId, "apply", List.of(), templateId, List.of(target), "merge"));
+        }
+        service.createTemporaryGrant(new TemporaryGrantRequest("xm-i-ok-temporary", null, List.of(), target, List.of(M002_VIEW), null,
+                until.minusSeconds(3600), false, "临时授出"));
+        assertThat(overrideSources(target, M002_VIEW, AccessRepository.Effect.GRANT)).containsExactly(AccessRepository.Source.USER_OVERRIDE);
+        assertThat(overrideSources(denyTarget, M002_VIEW, AccessRepository.Effect.DENY)).isEmpty();
+        assertThat(accessRepository.roles.get(created.id()).permissionCodes()).containsExactly(M002_VIEW);
+        assertThat(accessRepository.userRoles.get(target)).contains("role_view");
+        assertThat(accessRepository.positionRoles.get(target)).isEqualTo("role_xm_i_blank");
+        assertThat(accessRepository.items.get("tpl_xm_i_edit")).extracting(PermissionTemplateItem::permissionCode).containsExactly(M002_VIEW);
+        assertThat(accessRepository.templateApplications).filteredOn(application -> "active".equals(application.status()))
+                .extracting(PermissionTemplateApplication::templateId)
+                .containsExactlyInAnyOrder("tpl_xm_i_temp", "tpl_xm_i_base", "tpl_xm_i_temp", "tpl_xm_i_once");
+        assertThat(accessRepository.temporaryGrants.values()).extracting(TemporaryGrant::targetUserId).containsExactly(target);
+
+        // M723-F02「显式拒绝仍优先」：操作人经角色长期持有该码，但本人该码有员工显式拒绝 → 仍不能授出
+        accessRepository.saveUserPermissionOverrides(actor, List.of(M002_VIEW), AccessRepository.Effect.DENY, "停权", "usr_admin");
+        assertGrantExceeds(() -> service.createRole(new RoleRequest(
+                "xm-i-denied-role", null, List.of(), "被拒依据角色", null, List.of(M002_VIEW), "project")));
+        assertThat(accessRepository.roles.values()).noneMatch(role -> role.roleName().startsWith("被拒依据角色"));
+    }
+
+    // XM-M002-I（口径 B）：岗位映射保存（只许平台管理员）同样只认长期来源——平台管理员只凭上述四种临时或单次来源持有非日常码时，
+    // 保存含该码的岗位角色或岗位临时模板都被拒，换幂等键重试也一样；改由角色长期持有后照常保存。
+    @Test
+    void positionMappingSaveOnlyCountsThePlatformAdminsLongTermSources() {
+        String check = "ops.production_readiness.check"; // 高风险、非日常码：平台管理员不随身份持有
+        Instant until = Instant.parse("2099-01-01T00:00:00Z");
+        accessRepository.userRoles.remove("usr_admin"); // 去掉夹具给的长期来源 explicit_admin_grants
+        accessRepository.roles.put("role_xm_i_check", new RoleRecord(
+                "role_xm_i_check", "xm_i_check", "Check", "project", "active", Instant.parse("2026-06-14T00:00:00Z"), List.of(check), null));
+        accessRepository.roles.put("role_xm_i_blank", new RoleRecord(
+                "role_xm_i_blank", "xm_i_blank", "Blank", "project", "active", Instant.parse("2026-06-14T00:00:00Z"), List.of(), null));
+        xmITemplate("tpl_xm_i_temp", "temporary", until, false, check);
+        xmITemplate("tpl_xm_i_blank", "base", null, false);
+
+        int attempt = 0;
+        for (Runnable source : xmITemporarySources("usr_admin", check)) {
+            accessRepository.temporaryGrants.clear();
+            accessRepository.templateApplications.clear();
+            source.run();
+            assertThat(authorizationService.effectivePermissions().grants()).contains(check); // 修复前即凭此放行
+            for (int retry = 0; retry < 2; retry++) {
+                String key = "xm-i-map-" + attempt++;
+                assertGrantExceeds(() -> service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                        key + "-role", null, "ops_manager", "lvl_m1_lower", "role_xm_i_check", "tpl_xm_i_blank", "active")));
+                assertGrantExceeds(() -> service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                        key + "-temp", null, "ops_supervisor", "lvl_m1_lower", "role_xm_i_blank", "tpl_xm_i_temp", "active")));
+            }
+        }
+        assertThat(accessRepository.positionRoleTemplates).isEmpty();
+
+        accessRepository.userRoles.put("usr_admin", new LinkedHashSet<>(Set.of("role_xm_i_check"))); // 角色＝长期来源
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xm-i-map-ok-role", null, "ops_manager", "lvl_m1_lower", "role_xm_i_check", "tpl_xm_i_blank", "active"));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xm-i-map-ok-temp", null, "ops_supervisor", "lvl_m1_lower", "role_xm_i_blank", "tpl_xm_i_temp", "active"));
+        assertThat(accessRepository.positionRoleTemplates.values()).extracting(PositionRoleTemplate::templateId)
+                .containsExactlyInAnyOrder("tpl_xm_i_blank", "tpl_xm_i_temp");
+    }
+
+    // XM-M002-I：只临时或单次持有 code 的四种来源——临时授权、单次临时授权、单次模板套用、有到期的模板套用（调用方每次先清掉上一种）。
+    private List<Runnable> xmITemporarySources(String userId, String code) {
+        Instant until = Instant.parse("2099-01-01T00:00:00Z");
+        xmITemplate("tpl_xm_i_src", "base", null, false, code);
+        return List.of(
+                () -> accessRepository.temporaryGrants.put("tg_xm_i", xmITemporaryGrant(userId, code, false, until)),
+                () -> accessRepository.temporaryGrants.put("tg_xm_i", xmITemporaryGrant(userId, code, true, until)),
+                () -> accessRepository.applyTemplate("tpl_xm_i_src", List.of(userId), null, null, true, "usr_admin"),
+                () -> accessRepository.applyTemplate("tpl_xm_i_src", List.of(userId), null, until, false, "usr_admin"));
+    }
+
+    private static TemporaryGrant xmITemporaryGrant(String userId, String code, boolean singleUse, Instant until) {
+        return new TemporaryGrant("tg_xm_i", userId, List.of(code), Instant.parse("2026-06-14T00:00:00Z"), until, singleUse, false,
+                "active", "临时授权", "usr_admin", Instant.parse("2026-06-14T00:00:00Z"), null, null);
+    }
+
+    // 本项目（seed-org）自有模板。
+    private void xmITemplate(String id, String type, Instant validUntil, boolean singleUse, String... codes) {
+        accessRepository.saveTemplate(new PermissionTemplate(
+                id, id, id, null, type, null, "organization", "seed-org", "merge", null, validUntil, singleUse, "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                java.util.Arrays.stream(codes)
+                        .map(code -> new PermissionTemplateItem(id, code, AccessRepository.Effect.GRANT, "project", false)).toList());
+    }
+
+    private static PermissionTemplateRequest xmIEditRequest(String key, Instant validUntil) {
+        return new PermissionTemplateRequest(key, null, List.of(), "tpl_xm_i_edit", "temporary", null, List.of(M002_VIEW), "project",
+                null, validUntil, false);
+    }
+
+    private static void assertGrantExceeds(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
     }
 }

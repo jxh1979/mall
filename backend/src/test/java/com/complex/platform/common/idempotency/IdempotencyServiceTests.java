@@ -1,6 +1,6 @@
 package com.complex.platform.common.idempotency;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -190,6 +190,92 @@ class IdempotencyServiceTests {
 
         assertThat(replay).isEqualTo(new TestResponse(null));
         assertThat(actionRan).isFalse();
+    }
+
+    // XM-M002-J：只凭「用掉单次授权的那次成功请求」的重放过了权限核验的请求，只能返回第一次的成功结果：
+    // 记录不在或第一次失败（可重试）即 403，不占位、不执行；正文不同照常 409。
+    @Test
+    void aReplayOnlyRequestReturnsTheCompletedResultAndNeverRunsTheAction() {
+        TestRequest request = new TestRequest("same-payload");
+        AtomicInteger runs = new AtomicInteger();
+        java.util.function.Supplier<TestResponse> action = () -> {
+            runs.incrementAndGet();
+            return new TestResponse("should-not-run");
+        };
+        IdempotentReplayContext previous = IdempotentReplayContext.enter("key", "digest");
+        try {
+            IdempotentReplayContext.current().markReplayOnly();
+
+            assertThatThrownBy(() -> service.execute("operation", "key", request, action, TestResponse.class))
+                    .isInstanceOfSatisfying(ApiException.class, exception ->
+                            assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
+            assertThat(repository.findByOperationIdAndIdempotencyKey("operation", "key")).isEmpty();
+
+            repository.put(new IdempotencyRecord(UUID.randomUUID(), "operation", "key", hashJson(request),
+                    "FAILED_RETRYABLE", null, 500,
+                    Instant.parse("2026-06-13T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
+            assertThatThrownBy(() -> service.execute("operation", "key", request, action, TestResponse.class))
+                    .isInstanceOfSatisfying(ApiException.class, exception ->
+                            assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
+
+            repository.put(new IdempotencyRecord(UUID.randomUUID(), "operation", "key", hashJson(request),
+                    "OK", "{\"value\":\"created\"}", 200,
+                    Instant.parse("2026-06-13T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
+            assertThat(service.execute("operation", "key", request, action, TestResponse.class))
+                    .isEqualTo(new TestResponse("created"));
+            assertThatThrownBy(() -> service.execute("operation", "key", new TestRequest("other-payload"), action,
+                    TestResponse.class))
+                    .isInstanceOfSatisfying(ApiException.class, exception ->
+                            assertThat(exception.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+            assertThat(runs).hasValue(0);
+        } finally {
+            IdempotentReplayContext.restore(previous);
+        }
+    }
+
+    // M723-F04（操作员 2026-09-25 确认句「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：幂等层返回第一次的结果时，
+    // 被重放的请求编号正是本请求自己的才记为已重放；首次执行不记；业务内部按别的键去重的回放不记；
+    // 同一请求里另有一步新执行了动作的不算重复提交。
+    @Test
+    void aReplayIsMarkedOnlyWhenItReturnsTheFirstResultOfTheRequestsOwnKey() {
+        TestRequest request = new TestRequest("same-payload");
+        java.util.function.Supplier<TestResponse> action = () -> new TestResponse("created");
+
+        IdempotentReplayContext previous = IdempotentReplayContext.enter("key", "digest");
+        try {
+            assertThat(service.execute("operation", "key", request, action, TestResponse.class))
+                    .isEqualTo(new TestResponse("created"));
+            assertThat(IdempotentReplayContext.current().replayed()).isFalse();
+        } finally {
+            IdempotentReplayContext.restore(previous);
+        }
+
+        previous = IdempotentReplayContext.enter("other-key", "digest");
+        try {
+            assertThat(service.execute("operation", "key", request, action, TestResponse.class))
+                    .isEqualTo(new TestResponse("created"));
+            assertThat(IdempotentReplayContext.current().replayed()).isFalse();
+        } finally {
+            IdempotentReplayContext.restore(previous);
+        }
+
+        previous = IdempotentReplayContext.enter("key", "digest");
+        try {
+            assertThat(service.execute("operation", "key", request, action, TestResponse.class))
+                    .isEqualTo(new TestResponse("created"));
+            assertThat(IdempotentReplayContext.current().replayed()).isTrue();
+        } finally {
+            IdempotentReplayContext.restore(previous);
+        }
+
+        previous = IdempotentReplayContext.enter("key", "digest");
+        try {
+            service.execute("operation", "key", request, action, TestResponse.class);
+            service.execute("another-operation", "key", request, action, TestResponse.class);
+            assertThat(IdempotentReplayContext.current().replayed()).isFalse();
+        } finally {
+            IdempotentReplayContext.restore(previous);
+        }
     }
 
     @Test

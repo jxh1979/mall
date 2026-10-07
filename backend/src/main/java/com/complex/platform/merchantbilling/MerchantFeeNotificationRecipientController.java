@@ -41,6 +41,8 @@ public class MerchantFeeNotificationRecipientController {
     }
 
     @GetMapping
+    // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
+    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<PageResponse<MerchantFeeNotificationRecipientRecord>> list(
             @RequestParam(value = "merchant_id", required = false) String merchantId
     ) {
@@ -49,6 +51,8 @@ public class MerchantFeeNotificationRecipientController {
     }
 
     @GetMapping("/{id}")
+    // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
+    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<MerchantFeeNotificationRecipientRecord> get(@PathVariable String id) {
         Optional<String> selfScope = selfServiceScopeOrPlatform();
         MerchantFeeNotificationRecipientRecord record = service.get(id);
@@ -96,7 +100,7 @@ public class MerchantFeeNotificationRecipientController {
     // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。短信触达链路走 service/resolver，仍拿明文。 ──
     private MerchantFeeNotificationRecipientRecord maskPhoneForUnauthorized(
             MerchantFeeNotificationRecipientRecord record) {
-        if (record == null || authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+        if (record == null || viewPhonePlaintext(java.util.stream.Stream.of(record.recipientPhone()))) {
             return record;
         }
         return record.withMaskedPhone();
@@ -104,12 +108,24 @@ public class MerchantFeeNotificationRecipientController {
 
     private PageResponse<MerchantFeeNotificationRecipientRecord> maskPhonesForUnauthorized(
             PageResponse<MerchantFeeNotificationRecipientRecord> page) {
-        if (authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+        if (viewPhonePlaintext(page.items().stream().map(MerchantFeeNotificationRecipientRecord::recipientPhone))) {
             return page;
         }
         return new PageResponse<>(
                 page.items().stream().map(MerchantFeeNotificationRecipientRecord::withMaskedPhone).toList(),
                 page.page(), page.pageSize(), page.total());
+    }
+
+    // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：持有明文码、且这次响应里确有非空电话，才核验明文码并返回明文
+    // ——单次来源在这里消耗，长期来源不产生消耗；否则返回掩码、不碰明文码。一次响应只核一次（列表按整页判断）。
+    private boolean viewPhonePlaintext(java.util.stream.Stream<String> phones) {
+        if (phones.noneMatch(phone -> phone != null && !phone.isBlank())
+                || !authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return false;
+        }
+        authorizationService.requirePermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        // 本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时不给明文
+        return !com.complex.platform.common.idempotency.IdempotentReplayContext.replayDiscardsConsumption();
     }
 
     private static void requireOwnMerchant(Optional<String> selfScope, MerchantFeeNotificationRecipientRecord record) {

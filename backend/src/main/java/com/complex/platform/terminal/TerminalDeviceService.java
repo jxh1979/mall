@@ -1,7 +1,8 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.02
+// 文件版本：V0.05
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -23,6 +24,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -62,6 +64,8 @@ public class TerminalDeviceService {
     private final MdmService mdmService;
     private final DeviceSigningKeyStore deviceSigningKeyStore;
     private final TerminalMerchantDirectory merchantDirectory;
+    // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：操作人的商户、项目范围取自登录主体（平台管理员全量）。
+    private final AuthorizationService authorizationService;
 
     public TerminalDeviceService(
             TerminalDeviceRepository repository,
@@ -69,7 +73,8 @@ public class TerminalDeviceService {
             AuditEventService auditEventService,
             MdmService mdmService,
             DeviceSigningKeyStore deviceSigningKeyStore,
-            TerminalMerchantDirectory merchantDirectory
+            TerminalMerchantDirectory merchantDirectory,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
@@ -77,6 +82,7 @@ public class TerminalDeviceService {
         this.mdmService = mdmService;
         this.deviceSigningKeyStore = deviceSigningKeyStore;
         this.merchantDirectory = merchantDirectory;
+        this.authorizationService = authorizationService;
     }
 
     /**
@@ -91,10 +97,14 @@ public class TerminalDeviceService {
             throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
         }
         try {
+            // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：先核设备归属范围，再进幂等层——越范围的请求
+            // 不占位、不执行，也拿不到别人那次登记的结果；设备不存在留给下面照旧报 404。
+            repository.findByDeviceId(id).ifPresent(this::requireDeviceInScope);
             return idempotencyService.execute(
                     "registerDeviceSigningKey:" + id,
                     idempotencyKey,
-                    java.util.Map.of("device_id", id),
+                    // M723-F18：公钥决定登记／轮换的内容，计入请求摘要——同一提交编号换了公钥按内容不同拒绝（409），不当成重复提交
+                    java.util.Map.of("device_id", id, "public_key", key),
                     () -> {
                         TerminalDeviceRecord device = repository.findByDeviceId(id)
                                 .orElseThrow(() -> ApiException.notFound(
@@ -140,6 +150,8 @@ public class TerminalDeviceService {
                 "terminal.device.bound",
                 "terminal.device.bind_failed",
                 BIND_PERMISSION,
+                // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：同号旧设备与绑定后的归属都要在本人能管的范围内
+                () -> requireBindInScope(request),
                 () -> bind(request),
                 this::withoutDeviceToken
         );
@@ -155,6 +167,8 @@ public class TerminalDeviceService {
                 "terminal.device.returned",
                 "terminal.device.returned_failed",
                 BIND_PERMISSION,
+                // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：按设备码取到的设备要在本人能管的范围内
+                () -> requireReturnInScope(request),
                 () -> returnBoundDevice(request)
         );
     }
@@ -169,6 +183,8 @@ public class TerminalDeviceService {
                 "terminal.device.unbound",
                 "terminal.device.unbind_failed",
                 UNBIND_PERMISSION,
+                // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：按 id 取到的设备要在本人能管的范围内
+                () -> repository.findById(id).ifPresent(this::requireDeviceInScope),
                 () -> unbind(id, request)
         );
     }
@@ -219,6 +235,10 @@ public class TerminalDeviceService {
                 successEvent,
                 failureEvent,
                 LIFECYCLE_PERMISSION,
+                // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：送修、挂失、找回、报废共用——
+                // 按 id 取到的设备要在本人能管的范围内；顺带改写持有员工的，改完后也要仍在范围内
+                () -> repository.findById(id).ifPresent(
+                        device -> requireHolderChangeInScope(device, request == null ? null : request.staffId())),
                 () -> applyLifecycle(id, request, targetStatus, allowedFrom, successEvent)
         );
     }
@@ -295,12 +315,19 @@ public class TerminalDeviceService {
     }
 
     /**
-     * 平台后台设备台账（K16 改绑工作台数据源）：全量设备 + 商户归属列。
+     * 平台后台设备台账（K16 改绑工作台数据源）：本人能管的全部设备 + 商户归属列。
      * 读权限沿用终端模块视图权限 terminal.switch.view（与 ADM-TER-001 同闸）。
+     * M723-F21、F24：只列本人能管的设备（平台管理员仍是全量），完整列出、不截断。
      */
     public PageResponse<TerminalDeviceRecord> listDevices() {
         try {
-            List<TerminalDeviceRecord> records = repository.listDevices();
+            // M723-F21、F24（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备列表只显示本人能管的设备，按范围在库里查、
+            // 完整列出——不再先取全平台最近更新的 200 台再过滤（范围外的设备占满名额时，范围内的设备会列不全）。范围口径与写入口的
+            // attributionInScope 相同：带商户归属 → 本商户；否则项目范围空＝平台管理员全量，非空 → 认定为本项目的设备。
+            Optional<String> actorMerchant = authorizationService.currentMerchantIdQuietly();
+            List<TerminalDeviceRecord> records = repository.listDevicesInScope(
+                    actorMerchant.orElse(null),
+                    actorMerchant.isPresent() ? null : authorizationService.currentProjectScopeQuietly().orElse(null));
             auditEventService.recordSuccess(
                     "terminal.device.viewed",
                     "terminal.switch.view",
@@ -342,6 +369,13 @@ public class TerminalDeviceService {
         }
         try {
             String reason = requireText(actual.reason(), "reason");
+            // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：先核范围，再进幂等层——原设备要在本人能管的
+            // 范围内，改完后的归属（目标商户＋原绑定空间＋原持有员工）也要仍在范围内：带商户归属的员工只能改到本商户，
+            // 项目员工改完后仍须认定为本项目。设备不存在留给下面照旧报 404。
+            repository.findById(deviceRecordId).ifPresent(device -> {
+                TerminalDeviceRecord locked = requireDeviceInScope(device);
+                requireAttributionInScope(trimToNull(actual.merchantId()), locked.boundSpaceId(), locked.staffId());
+            });
             return idempotencyService.execute(
                     "updateTerminalDeviceMerchant:" + deviceRecordId,
                     idempotencyKey,
@@ -437,6 +471,108 @@ public class TerminalDeviceService {
             throw ApiException.conflict("MERCHANT_ARCHIVED", "商户已归档：" + merchantId);
         }
         return merchant.id();
+    }
+
+    // ── M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）设备归属范围 ─────────────
+    // 平台管理员全部设备都能管；带商户归属的员工只能管本商户的设备；不带商户归属的项目员工能管本项目内的全部设备
+    // （含本项目内各商户的设备和不挂商户的设备）。认不出项目的设备只有平台管理员能管。
+
+    // 先锁住这台设备的行，再按锁后的归属判定：各写入口都在事务里，本次写入结束之前别人改不了它的归属
+    // （判定与写入用同一份事实）。返回锁后的那一行。
+    private TerminalDeviceRecord requireDeviceInScope(TerminalDeviceRecord device) {
+        repository.lockDevice(device.id());
+        TerminalDeviceRecord locked = repository.findById(device.id()).orElse(device);
+        requireAttributionInScope(locked.merchantId(), locked.boundSpaceId(), locked.staffId());
+        return locked;
+    }
+
+    // 归还、送修、挂失、找回、报废可以顺带改写持有员工：原设备要在本人能管的范围内，改完后的归属也要仍在范围内
+    // （不挂商户、不绑空间的设备按持有员工认定项目——不能借改持有员工把设备挪到别的项目）。
+    private void requireHolderChangeInScope(TerminalDeviceRecord device, String requestedStaffId) {
+        TerminalDeviceRecord locked = requireDeviceInScope(device);
+        if (trimToNull(requestedStaffId) != null) {
+            requireAttributionInScope(locked.merchantId(), locked.boundSpaceId(), requestedStaffId);
+            requireNewHolderInScope(requestedStaffId, locked.staffId());
+        }
+    }
+
+    // M723-F22（治理地图第 653 行「所有业务数据默认按项目隔离」；操作员 2026-10-06 裁决）：项目员工改写持有员工时，新的持有员工
+    // 也须是本项目的人——设备按所属商户或绑定空间认定为本项目时，只核设备的项目拦不住把另一项目的员工写成持有人。
+    // 带商户归属的员工仍只按商户判断（裁决第二点）；平台管理员不受限；没有换人（与原持有员工相同）不核。
+    private void requireNewHolderInScope(String requestedStaffId, String currentStaffId) {
+        String staff = trimToNull(requestedStaffId);
+        if (staff == null || staff.equals(trimToNull(currentStaffId))
+                || authorizationService.currentMerchantIdQuietly().isPresent()) {
+            return;
+        }
+        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+        if (projectScope.isPresent() && !projectScope.get().equals(repository.findStaffProjectId(staff).orElse(null))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "持有员工不在当前综合体项目范围内");
+        }
+    }
+
+    // 归属三项（所属商户、绑定空间、持有员工）既可以是库里现有的，也可以是绑定、改归属之后将要写入的。
+    // 拒绝码沿用同域范式（FloorPlanService.checkMerchantOwnership / checkProjectOwnership）。
+    private void requireAttributionInScope(String merchantId, String boundSpaceId, String staffId) {
+        if (attributionInScope(merchantId, boundSpaceId, staffId)) {
+            return;
+        }
+        throw authorizationService.currentMerchantIdQuietly().isPresent()
+                ? ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "设备归属不在当前商户范围内")
+                : ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "设备归属不在当前综合体项目范围内");
+    }
+
+    // 判定顺序：操作人带商户归属 → 设备所属商户必须等于本人商户；否则取项目范围，空＝平台管理员放行；
+    // 非空 → 设备认定出的项目必须等于它，认不出也拒绝。非平台管理员没有项目归属时 currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED。
+    private boolean attributionInScope(String merchantId, String boundSpaceId, String staffId) {
+        Optional<String> actorMerchant = authorizationService.currentMerchantIdQuietly();
+        if (actorMerchant.isPresent()) {
+            return actorMerchant.get().equals(merchantId);
+        }
+        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+        return projectScope.isEmpty()
+                || projectScope.get().equals(deviceProjectId(merchantId, boundSpaceId, staffId).orElse(null));
+    }
+
+    // 设备属于哪个项目：先看所属商户的项目，没有商户的看绑定空间的项目，再没有的看持有员工的项目；
+    // 三样都没填、或填了的那一样查不出项目，都是认不出（返回空）。
+    private Optional<String> deviceProjectId(String merchantId, String boundSpaceId, String staffId) {
+        String merchant = trimToNull(merchantId);
+        if (merchant != null) {
+            return merchantDirectory.findMerchant(merchant).map(MerchantRecord::projectId);
+        }
+        String space = trimToNull(boundSpaceId);
+        if (space != null) {
+            return repository.findSpaceProjectId(space);
+        }
+        String staff = trimToNull(staffId);
+        return staff == null ? Optional.empty() : repository.findStaffProjectId(staff);
+    }
+
+    // 登记设备：已存在的同号设备要在本人能管的范围内；绑定后的归属（请求里的商户或沿用原商户、请求里的绑定空间、
+    // 请求里的持有员工或沿用原持有员工，取值与 bind() 一致）也要在范围内。请求缺设备号时不在这里拦，留给 bind() 照旧报必填。
+    private void requireBindInScope(DeviceBindRequest request) {
+        String deviceId = request == null ? null : trimToNull(request.deviceId());
+        if (deviceId == null) {
+            return;
+        }
+        TerminalDeviceRecord existing = repository.findByDeviceId(deviceId).orElse(null);
+        if (existing != null) {
+            existing = requireDeviceInScope(existing);
+        }
+        requireAttributionInScope(
+                firstNonBlank(request.merchantId(), existing == null ? null : existing.merchantId()),
+                trimToNull(request.boundSpaceId()),
+                firstNonBlank(request.staffId(), existing == null ? null : existing.staffId()));
+        requireNewHolderInScope(request.staffId(), existing == null ? null : existing.staffId());
+    }
+
+    // 归还按设备码定位；请求缺设备码、设备不存在都不在这里拦，留给 returnBoundDevice() 照旧报必填／404。
+    private void requireReturnInScope(DeviceReturnRequest request) {
+        String deviceCode = request == null ? null : trimToNull(request.deviceCode());
+        if (deviceCode != null) {
+            repository.findByDeviceCode(deviceCode).ifPresent(device -> requireHolderChangeInScope(device, request.staffId()));
+        }
     }
 
     public PageResponse<TerminalCapabilitySwitchRecord> listCapabilitySwitches() {
@@ -823,6 +959,7 @@ public class TerminalDeviceService {
             String successEvent,
             String failureEvent,
             String permissionCode,
+            Runnable scopeCheck,
             Supplier<T> action
     ) {
         return executeWrite(
@@ -833,6 +970,7 @@ public class TerminalDeviceService {
                 successEvent,
                 failureEvent,
                 permissionCode,
+                scopeCheck,
                 action,
                 Function.identity()
         );
@@ -846,6 +984,7 @@ public class TerminalDeviceService {
             String successEvent,
             String failureEvent,
             String permissionCode,
+            Runnable scopeCheck,
             Supplier<T> action,
             Function<T, T> storedResponseTransformer
     ) {
@@ -858,6 +997,7 @@ public class TerminalDeviceService {
                 failureEvent,
                 permissionCode,
                 "terminal_device",
+                scopeCheck,
                 action,
                 storedResponseTransformer
         );
@@ -883,6 +1023,8 @@ public class TerminalDeviceService {
                 failureEvent,
                 permissionCode,
                 businessType,
+                // 能力开关不是设备，没有设备归属范围可核（平台口径由控制器 requirePlatformScope 把关）
+                () -> { },
                 action,
                 Function.identity()
         );
@@ -897,10 +1039,14 @@ public class TerminalDeviceService {
             String failureEvent,
             String permissionCode,
             String businessType,
+            Runnable scopeCheck,
             Supplier<T> action,
             Function<T, T> storedResponseTransformer
     ) {
         try {
+            // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备归属范围校验先于幂等层——越范围的请求
+            // 不占位、不执行，也拿不到别人那次操作的结果；拒绝与其他失败一样留失败痕。
+            scopeCheck.run();
             return idempotencyService.execute(
                     operationId,
                     idempotencyKey,

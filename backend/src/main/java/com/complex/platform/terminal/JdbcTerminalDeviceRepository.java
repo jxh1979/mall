@@ -137,15 +137,59 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
 
     @Override
     public List<TerminalDeviceRecord> listDevices() {
+        return listDevicesInScope(null, null);
+    }
+
+    // M723-F24（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：范围过滤在库里做、不截断——先取全平台最近更新的 200 台
+    // 再过滤时，范围外的设备占满名额，范围内的设备会列不全。项目的认定与 TerminalDeviceService.deviceProjectId 同口径。
+    @Override
+    public List<TerminalDeviceRecord> listDevicesInScope(String merchantId, String projectId) {
+        String scope = "";
+        Map<String, Object> parameters = Map.of();
+        if (merchantId != null) {
+            scope = " WHERE d.merchant_id = :merchant";
+            parameters = Map.of("merchant", merchantId);
+        } else if (projectId != null) {
+            scope = """
+                      LEFT JOIN merchants m ON m.id = NULLIF(btrim(d.merchant_id), '')
+                      LEFT JOIN spaces s ON s.id = NULLIF(btrim(d.bound_space_id), '')
+                      LEFT JOIN staff_profiles p ON p.id = NULLIF(btrim(d.staff_id), '')
+                     WHERE CASE WHEN NULLIF(btrim(d.merchant_id), '') IS NOT NULL THEN m.project_id
+                                WHEN NULLIF(btrim(d.bound_space_id), '') IS NOT NULL THEN s.project_id
+                                ELSE p.project_id END = :project
+                    """;
+            parameters = Map.of("project", projectId);
+        }
         return jdbcTemplate.query("""
-                SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
-                       mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
-                       staff_id, status, bound_at, returned_at, unbound_at, return_reason,
-                       unbind_reason, created_at, updated_at
-                  FROM terminal_devices
-                 ORDER BY updated_at DESC, id
-                 LIMIT 200
-                """, Map.of(), this::mapDevice);
+                SELECT d.id, d.device_id, d.device_code, d.terminal_type, d.binding_scope, d.bound_space_id,
+                       d.mdm_device_ref, d.kiosk_mode, d.merchant_id, d.venue_id, d.area_id, d.location_point_id,
+                       d.staff_id, d.status, d.bound_at, d.returned_at, d.unbound_at, d.return_reason,
+                       d.unbind_reason, d.created_at, d.updated_at
+                  FROM terminal_devices d
+                """ + scope + " ORDER BY d.updated_at DESC, d.id", parameters, this::mapDevice);
+    }
+
+    // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：绑定空间所属项目，按主键只读一列。
+    @Override
+    public Optional<String> findSpaceProjectId(String spaceId) {
+        return jdbcTemplate.queryForList(
+                "SELECT project_id FROM spaces WHERE id = :id", Map.of("id", spaceId), String.class)
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：持有员工（员工档案）所属项目，按主键只读一列。
+    @Override
+    public Optional<String> findStaffProjectId(String staffProfileId) {
+        return jdbcTemplate.queryForList(
+                "SELECT project_id FROM staff_profiles WHERE id = :id", Map.of("id", staffProfileId), String.class)
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：行锁，随调用方的事务释放。
+    @Override
+    public void lockDevice(String recordId) {
+        jdbcTemplate.queryForList(
+                "SELECT id FROM terminal_devices WHERE id = :id FOR UPDATE", Map.of("id", recordId), String.class);
     }
 
     @Override

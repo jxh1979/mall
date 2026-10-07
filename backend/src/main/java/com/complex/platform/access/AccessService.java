@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.37
+// 文件版本：V0.40
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
@@ -221,6 +221,7 @@ public class AccessService {
                             .map(PermissionTemplateItem::permissionCode).collect(java.util.stream.Collectors.toSet());
                     List<String> added = safeList(request.permissionCodes()).stream()
                             .filter(code -> !previousGrants.contains(code)).toList();
+                    // XM-M002-I：新增码即时作用于各仍生效套用，临时、单次模板同样只认授权人的长期来源。
                     requireActorCanGrant(added);
                     requireGrantApprovalIfNeeded(added);
                     PermissionTemplate template = templateFromRequest(id, request, existing.sourceTemplateId(), existing.ownerScopeId());
@@ -381,6 +382,7 @@ public class AccessService {
                         List<String> templatePermissionCodes = templateItems.stream()
                                 .map(PermissionTemplateItem::permissionCode)
                                 .toList();
+                        // XM-M002-I：临时模板、单次模板与以单次方式套用同样只认授权人的长期来源。
                         requireActorCanGrant(templatePermissionCodes);
                         // AUD-011：模板应用复用唯一授权政策引擎——含高风险(requiresApproval)权限的模板不得经模板入口
                         // 批量直发绕过职责分离/主管复核，与角色/岗位/临时授权同口径 fail-closed(GRANT_REQUIRES_APPROVAL)。
@@ -1102,9 +1104,10 @@ public class AccessService {
     /**
      * P0-1 提权防护：发证/授权动作不得授予超出「授权人自身有效权限」的权限码。
      * USB 最高权限独立识别；日常管理员及其他主体所授权限码必须 ⊆ 自身有效授予集（denies 已扣减）。
+     * XM-M002-I（口径 B）：一切授出（含临时授权、临时模板与单次模板）只认授权人的长期来源，见 {@link AuthorizationService#grantablePermissions}。
      */
     private void requireActorCanGrant(List<String> permissionCodes) {
-        EffectivePermissions self = authorizationService.effectivePermissions();
+        EffectivePermissions self = authorizationService.grantablePermissions();
         if (self.wildcard()) {
             return;
         }
@@ -1112,7 +1115,7 @@ public class AccessService {
         for (String code : safeList(permissionCodes)) {
             if (code != null && !own.contains(code)) {
                 throw ApiException.forbidden("GRANT_EXCEEDS_OWN_PERMISSIONS",
-                        "不能授予自己不持有的权限：" + code);
+                        "不能授予自己不持有或只临时、单次持有的权限：" + code);
             }
         }
     }
@@ -1736,6 +1739,7 @@ public class AccessService {
                         }
                         requireKnownPermissions(permissionCodes);
                         if (set && effect == AccessRepository.Effect.GRANT) {
+                            requireNotHeldOnlyTemporarily(permissionCodes); // M723-F12：先于「须审批」
                             requireGrantApprovalIfNeeded(permissionCodes);
                             requireActorCanGrant(permissionCodes);
                         }
@@ -1964,6 +1968,7 @@ public class AccessService {
             throw ApiException.badRequest("VALIDATION_FAILED", "授权失效时间必须晚于生效时间");
         }
         // P0-1：临时授权不得授予超出授权人自身有效权限的权限码（提权防护）。
+        // XM-M002-I（口径 B）：临时授出同样只认授权人的长期来源，只临时或单次持有的码不能再临时授给任何人（含自己）。
         if (enforceApproval) { // M087：审批落地不按落地人自身权限限制
             requireActorCanGrant(request.permissionCodes());
         }
@@ -2449,6 +2454,28 @@ public class AccessService {
                 currency,
                 grantPermissionCodes(role.permissionCodes(), templatePermissionCodes)
         );
+    }
+
+    /**
+     * M723-F12（治理地图第 656 行「临时或单次得到的权限只供本人在有效期内或单次使用，不能再授给他人」）：授予人对某码只有临时授权、单次或
+     * 带失效时间的模板套用来源（在本请求内的持有集里、不在授出依据集里）时，不得直接授给他人。放在「须审批」判断之前：否则须审批码会先返回
+     * GRANT_REQUIRES_APPROVAL，盖住真正的拒绝原因。授予人长期持有或根本不持有该码的不在此拦，照旧由后面的判断处理
+     * （须审批码引导去走授权申请）。
+     */
+    private void requireNotHeldOnlyTemporarily(List<String> permissionCodes) {
+        EffectivePermissions grantable = authorizationService.grantablePermissions();
+        if (grantable.wildcard()) {
+            return;
+        }
+        // M723-F13：按本请求内的口径取持有集——入口核权刚消耗的单次来源仍算持有（入口权限与待授码可能出自同一份单次来源）
+        java.util.Set<String> heldOnlyTemporarily = new java.util.HashSet<>(authorizationService.effectivePermissionsWithinRequest().grants());
+        heldOnlyTemporarily.removeAll(grantable.grants());
+        for (String code : safeList(permissionCodes)) {
+            if (code != null && heldOnlyTemporarily.contains(code)) {
+                throw ApiException.forbidden("GRANT_EXCEEDS_OWN_PERMISSIONS",
+                        "不能授予自己不持有或只临时、单次持有的权限：" + code);
+            }
+        }
     }
 
     private void requireGrantApprovalIfNeeded(List<String> permissionCodes) {

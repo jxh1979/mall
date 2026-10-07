@@ -7,7 +7,12 @@ import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
 import com.complex.platform.governance.review.SupervisorReviewService;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * R5 T3 合同/基础定义准入闸：动作执行前查 supervisor_review_policies（启用）判定 allow/warn/block。
@@ -59,6 +64,8 @@ public class AdmissionGuard {
     private final AuditEventService auditEventService;
     private final JdbcAdmissionFactRepository factRepository;
     private final AuthorizationService authorizationService;
+    // XM-M002-J：拦截复核单走的独立事务（REQUIRES_NEW）。经 setter 可选注入（同 IdempotencyService），单测 new 构造不传则直接调用。
+    private TransactionTemplate independentTransaction;
 
     public AdmissionGuard(
             JdbcAdmissionPolicyRepository policyRepository,
@@ -72,6 +79,17 @@ public class AdmissionGuard {
         this.auditEventService = auditEventService;
         this.factRepository = factRepository;
         this.authorizationService = authorizationService;
+    }
+
+    @Autowired(required = false)
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        if (transactionManager == null) {
+            this.independentTransaction = null;
+            return;
+        }
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.independentTransaction = template;
     }
 
     public void check(String actionType, String objectType, String objectId) {
@@ -100,7 +118,7 @@ public class AdmissionGuard {
                 // 放行，无留痕（与无策略一致的轻量路径）。
             }
             case "warn" -> {
-                auditEventService.recordSuccess(
+                auditEventService.recordSuccessIndependently(
                         "admission.warned",
                         "admission.review",
                         "supervisor_review",
@@ -121,9 +139,12 @@ public class AdmissionGuard {
     /**
      * block 处置：建 pending supervisor 复核并抛 ADMISSION_BLOCKED。over_* fail-closed（求值异常 /
      * over_space 不可解析）亦经此进复核，由上一级/上两级/最高权限放行。
+     *
+     * <p>XM-M002-J：复核单（含 admission.blocked 事件）在独立事务里建立并提交。随后抛出的 409 让调用方事务或
+     * 单次授权请求事务回滚时，提示语里的复核单号在库里仍然存在，主管能看到并逐笔放行（PGM-1.2 第 5 步、PGM-1.7.1）。
      */
     private void blockToReview(AdmissionPolicyRecord policy, String actionType, String objectType, String objectId) {
-        SupervisorReviewDecisionRecord pending = supervisorReviewService.blockForAdmission(
+        Supplier<SupervisorReviewDecisionRecord> block = () -> supervisorReviewService.blockForAdmission(
                 policy.policyCode(),
                 actionType,
                 objectType,
@@ -131,6 +152,9 @@ public class AdmissionGuard {
                 policy.approvalLevel(),
                 policy.requiredLevel()
         );
+        SupervisorReviewDecisionRecord pending = independentTransaction == null
+                ? block.get()
+                : independentTransaction.execute(status -> block.get());
         throw new ApiException(
                 org.springframework.http.HttpStatus.CONFLICT,
                 "ADMISSION_BLOCKED",
@@ -168,7 +192,7 @@ public class AdmissionGuard {
                     if (spaceId.isEmpty()) {
                         // P0 fail-closed：配置了 over_space 却解析不到 space（对象无空间映射 / 行缺失 /
                         // space 为空）→ 无法确认"在租赁内"，保守命中进复核，消除原 silent pass。
-                        auditEventService.recordSuccess(
+                        auditEventService.recordSuccessIndependently(
                                 "admission.space_unresolved_closed",
                                 "admission.review",
                                 "supervisor_review",
@@ -190,7 +214,7 @@ public class AdmissionGuard {
             // C3（用户裁决：统一 fail-closed）：任何 trigger 的求值异常（DB 故障等）一律保守进复核、不放行，
             // 与终端开关/人脸闸 fail-closed 口径一致；非越界类（合同过期/资质异常/权限不足/职责分离等）亦不再
             // fail-open 放行。代价：DB 抖动期相关受控动作被暂时拦截（可用性略降，安全优先），由审批层级放行。
-            auditEventService.recordSuccess(
+            auditEventService.recordSuccessIndependently(
                     "admission.eval_failed_closed",
                     "admission.review",
                     "supervisor_review",
