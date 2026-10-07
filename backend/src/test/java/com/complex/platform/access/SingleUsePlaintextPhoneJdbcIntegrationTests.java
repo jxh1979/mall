@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.02
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -51,10 +51,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次……普通的商户列表（脱敏）仍然不扣。」）：真实库、真实接口回归。
- * 进场报备、招商线索、费用通知接收人、库存供应商四个读接口按 pii.contact_phone.view 返回明文联系电话时按次消耗：
+ * 进场报备、费用通知接收人、库存供应商三个读接口按 pii.contact_phone.view 返回明文联系电话时按次消耗：
  * 明文码只有单次来源、业务读权限有长期来源（角色）的员工，第一次读返回明文、来源已消耗、消耗日志一条，第二次读返回掩码；
  * 从未持有明文码的员工始终看掩码、没有消耗日志；长期持有明文码（角色）的员工照常看明文、没有消耗日志。
  * 同一单次来源的两个并发读，返回明文的至多一个。商户列表（M723 已有位点）同样断言第一次明文、第二次掩码。
+ * M724（治理地图第 871 行，操作员 2026-10-07 确认：「招商线索联系人的手机号另按本句处理：线索列表和操作结果一律只显示脱敏号码；
+ * 经单独授权且查看权限有效的人员，可以在某一条线索上点“查看完整号码”，只显示这一条的完整号码，每点一次算查看一次并留痕，
+ * 单次授权看一次即用掉。」）：招商线索两个列表与三个写接口的返回一律掩码、不消耗明文码（不论是否持有）；
+ * 完整号码只经 GET /leasing/leads/{lead_id}/contact-phone 按条给出——单次来源看一次即用掉、再点 403；长期持有的每点一次留痕一条、
+ * 没有消耗日志；没有明文码的 403 并留失败痕；项目员工点其他项目的线索 403 CROSS_PROJECT_FORBIDDEN、来源不算用掉；线索没有电话时
+ * 返回空号码、不碰明文码。
  * 重复提交（M723-F04 与 F06 叠加）：商户写接口只是返回第一次的结果、本请求新用掉的单次明文来源被回滚时，响应按掩码返回——
  * 不扣就不给明文，否则一张单次明文授权可以靠重复提交旧请求反复看到明文。
  * 修复前（main c40b57dc）四个控制器只做 currentActorHasPermission 的布尔判定、从不消耗：各用例第一次读之后的
@@ -115,6 +121,9 @@ class SingleUsePlaintextPhoneJdbcIntegrationTests {
     private final String merchantId = "mch_m723ph_" + suffix;
     private final String reportId = "ser_m723ph_" + suffix;
     private final String leadId = "lead_m723ph_" + suffix;
+    // M724：待跟进列表用的第二条线索（建于 2000 年）；写接口用例新建线索的联系人名（按它清理）
+    private final String dueLeadId = "lead_m724ph_due_" + suffix;
+    private final String createdLeadName = "M724 写接口 " + suffix;
     private final String recipientId = "mfnr_m723ph_" + suffix;
     private final String supplierId = "supplier_m723ph_" + suffix;
     private final String merchantProjectId = "prj_m723ph_" + suffix;
@@ -126,7 +135,7 @@ class SingleUsePlaintextPhoneJdbcIntegrationTests {
     void cleanUp() {
         SecurityContextHolder.clearContext();
         jdbcTemplate.update("DELETE FROM site_entry_reports WHERE id = ?", reportId);
-        jdbcTemplate.update("DELETE FROM leasing_leads WHERE id = ?", leadId);
+        jdbcTemplate.update("DELETE FROM leasing_leads WHERE id IN (?, ?) OR contact_name = ?", leadId, dueLeadId, createdLeadName);
         jdbcTemplate.update("DELETE FROM merchant_fee_notification_recipient WHERE id = ?", recipientId);
         jdbcTemplate.update("DELETE FROM inventory_suppliers WHERE id = ?", supplierId);
         jdbcTemplate.update("DELETE FROM user_roles WHERE user_id IN (?, ?, ?)", userId, noPhoneUserId, longTermUserId);
@@ -157,22 +166,191 @@ class SingleUsePlaintextPhoneJdbcIntegrationTests {
                 reportId, "contact_phone");
     }
 
-    // 招商线索列表（GET /leasing/leads，按整页判断有没有非空电话）。修复前红在第一处 assertConsumedOnce()。
+    // M724 招商线索列表（GET /leasing/leads）：一律掩码，不论是否持有明文码；只持单次明文码的人读完来源未消耗。
+    // 修复前（main 40453d37）列表给持码人明文并消耗：第一处「掩码」断言即红。
     @Test
-    void theLeasingLeadListShowsThePlaintextPhoneOncePerSingleUseGrant() throws Exception {
-        seedLead(Instant.now());
+    void theLeasingLeadListAlwaysShowsTheMaskedPhone() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.now());
 
-        assertPlaintextIsUsedUpByOneView(null, "leasing.lead.manage", "/api/v1/leasing/leads", leadId, "contact_phone");
+        assertTheLeadListAlwaysShowsTheMask("/api/v1/leasing/leads", leadId);
     }
 
-    // 待跟进线索列表（GET /leasing/leads/follow-up-due）：夹具线索建于 2000 年、从未跟进，落在待跟进条件内且按时间升序排在页首。
-    // 去掉 LeasingController.listLeadsNeedingFollowUp 上的标记则第一处 assertConsumedOnce() 红。
+    // M724 待跟进线索列表（GET /leasing/leads/follow-up-due）：夹具线索建于 2000 年、从未跟进，落在待跟进条件内且按时间升序排在页首。
+    // 同样一律掩码、不消耗。修复前第一处「掩码」断言即红。
     @Test
-    void theFollowUpDueLeadListShowsThePlaintextPhoneOncePerSingleUseGrant() throws Exception {
-        seedLead(Instant.parse("2000-01-01T00:00:00Z"));
+    void theFollowUpDueLeadListAlwaysShowsTheMaskedPhone() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.parse("2000-01-01T00:00:00Z"));
 
-        assertPlaintextIsUsedUpByOneView(null, "leasing.lead.manage", "/api/v1/leasing/leads/follow-up-due", leadId,
-                "contact_phone");
+        assertTheLeadListAlwaysShowsTheMask("/api/v1/leasing/leads/follow-up-due", leadId);
+    }
+
+    // M724 ①：只持一份单次明文码的人——两个列表各读一次都是掩码、来源未消耗；点开某条的查看接口 → 完整号码、来源恰好消耗一次、
+    // 查看留痕一条（元数据不含号码）；再点一次 → 403 PERMISSION_DENIED、来源仍只消耗一次、查看留痕仍一条。
+    // 修复前（main 40453d37）第一次读列表就给明文并消耗：第一处「掩码」断言即红。
+    @Test
+    void viewingOneLeadsFullPhoneUsesUpTheSingleUseGrantWhileTheListsStayMasked() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.now());
+        seedLead(dueLeadId, PLAIN, "org", Instant.parse("2000-01-01T00:00:00Z"));
+        staff(userId, null, "leasing.lead.manage");
+        singleUsePhoneGrant();
+
+        assertThat(phone(read(userId, null, "/api/v1/leasing/leads"), leadId, "contact_phone")).isEqualTo(MASKED);
+        assertThat(phone(read(userId, null, "/api/v1/leasing/leads/follow-up-due"), dueLeadId, "contact_phone")).isEqualTo(MASKED);
+        assertUnconsumed();
+
+        String viewed = read(userId, null, leadPhoneUrl());
+        assertThat(new ObjectMapper().readTree(viewed).path("data").path("lead_id").asText()).isEqualTo(leadId);
+        assertThat(phone(viewed, leadId, "contact_phone")).isEqualTo(PLAIN);
+        assertConsumedOnce();
+        assertThat(leadPhoneEvents("leasing.lead.contact_phone_viewed", userId)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE business_id = ? AND metadata::text LIKE ?", Integer.class,
+                leadId, "%" + PLAIN + "%")).isZero();
+
+        assertThat(deniedCode(userId, leadPhoneUrl())).isEqualTo("PERMISSION_DENIED");
+        assertConsumedOnce();
+        assertThat(leadPhoneEvents("leasing.lead.contact_phone_viewed", userId)).isEqualTo(1);
+    }
+
+    // M724-F07 ⑦末句「页面打开不再因两个列表并发而报错」：只持一份单次明文码的人同时读两个线索列表（页面打开时的两笔并发）——
+    // 都 200、都是掩码、来源未消耗、没有消耗日志。修复前两个列表都核验并消耗同一份明文码：先到的一笔给明文并用掉来源，掩码断言即红。
+    @Test
+    void openingBothLeadListsAtOnceWithOnlyASingleUseGrantShowsMaskedPhonesAndUsesNothing() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.now());
+        seedLead(dueLeadId, PLAIN, "org", Instant.parse("2000-01-01T00:00:00Z"));
+        staff(userId, null, "leasing.lead.manage");
+        singleUsePhoneGrant();
+        List<String> urls = List.of("/api/v1/leasing/leads", "/api/v1/leasing/leads/follow-up-due");
+        List<String> rows = List.of(leadId, dueLeadId);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<MockHttpServletResponse>> results = new ArrayList<>();
+            for (String url : urls) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mockMvc.perform(get(url).with(session(userId, null))).andReturn().getResponse();
+                }));
+            }
+            start.countDown();
+            for (int i = 0; i < urls.size(); i++) {
+                MockHttpServletResponse response = results.get(i).get(60, TimeUnit.SECONDS);
+                assertThat(response.getStatus()).isEqualTo(200);
+                assertThat(phone(response.getContentAsString(StandardCharsets.UTF_8), rows.get(i), "contact_phone"))
+                        .isEqualTo(MASKED);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        assertUnconsumed();
+    }
+
+    // M724 ②：长期持有明文码的人点两次都给完整号码、没有消耗日志、查看留痕两条（每点一次算查看一次并留痕）。
+    @Test
+    void aLongTermHolderViewsTheFullLeadPhoneEveryTimeAndEachViewIsRecorded() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.now());
+        staff(longTermUserId, null, "leasing.lead.manage", PHONE_PLAINTEXT);
+
+        for (int i = 0; i < 2; i++) {
+            assertThat(phone(read(longTermUserId, null, leadPhoneUrl()), leadId, "contact_phone")).isEqualTo(PLAIN);
+        }
+        assertThat(consumptionLogs(longTermUserId)).isZero();
+        assertThat(leadPhoneEvents("leasing.lead.contact_phone_viewed", longTermUserId)).isEqualTo(2);
+    }
+
+    // M724 ③：没有明文码的人 403 PERMISSION_DENIED（不退回掩码），留一条失败痕、没有查看留痕。
+    @Test
+    void viewingTheFullLeadPhoneWithoutThePlaintextCodeIsDeniedAndRecorded() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.now());
+        staff(noPhoneUserId, null, "leasing.lead.manage");
+
+        assertThat(deniedCode(noPhoneUserId, leadPhoneUrl())).isEqualTo("PERMISSION_DENIED");
+        assertThat(leadPhoneEvents("leasing.lead.contact_phone_view_failed", noPhoneUserId)).isEqualTo(1);
+        assertThat(leadPhoneEvents("leasing.lead.contact_phone_viewed", noPhoneUserId)).isZero();
+    }
+
+    // M724 ④：项目员工（org 项目）点其他项目的线索 → 403 CROSS_PROJECT_FORBIDDEN，单次明文来源未消耗，留一条失败痕。
+    @Test
+    void viewingTheFullPhoneOfAnotherProjectsLeadIsDeniedWithoutUsingUpTheGrant() throws Exception {
+        seedLead(leadId, PLAIN, "prj_m724ph_other_" + suffix, Instant.now());
+        staff(userId, null, "leasing.lead.manage");
+        singleUsePhoneGrant();
+
+        assertThat(deniedCode(userId, leadPhoneUrl())).isEqualTo("CROSS_PROJECT_FORBIDDEN");
+        assertUnconsumed();
+        assertThat(leadPhoneEvents("leasing.lead.contact_phone_view_failed", userId)).isEqualTo(1);
+    }
+
+    // M724 ⑤：三个写接口（新建、指派、状态流转）的返回里手机号是掩码；持单次明文码的人做完写操作，明文码来源未消耗。
+    // 修复前（main 40453d37）写接口给持码人明文并消耗：第一处「掩码」断言即红。
+    @Test
+    void theLeadWriteResultsShowTheMaskedPhoneAndDoNotUseUpTheGrant() throws Exception {
+        seedLead(leadId, PLAIN, "org", Instant.now());
+        staff(userId, null, "leasing.lead.manage");
+        singleUsePhoneGrant();
+
+        assertThat(phone(write("/api/v1/leasing/leads", """
+                {"idempotency_key": "m724ph-create-%s", "contact_name": "%s", "contact_phone": "%s", "source": "referral"}
+                """.formatted(suffix, createdLeadName, PLAIN)), null, "contact_phone")).isEqualTo(MASKED);
+        assertThat(phone(write("/api/v1/leasing/leads/" + leadId + "/assign", """
+                {"idempotency_key": "m724ph-assign-%s", "owner_user_id": "%s"}
+                """.formatted(suffix, userId)), leadId, "contact_phone")).isEqualTo(MASKED);
+        assertThat(phone(write("/api/v1/leasing/leads/" + leadId + "/status", """
+                {"idempotency_key": "m724ph-status-%s", "status": "following_up"}
+                """.formatted(suffix)), leadId, "contact_phone")).isEqualTo(MASKED);
+        assertUnconsumed();
+    }
+
+    // M724 ⑥：线索没有电话——返回这条线索的编号与空号码，单次明文来源未消耗，没有查看留痕。
+    @Test
+    void viewingALeadWithoutAPhoneReturnsAnEmptyPhoneWithoutUsingUpTheGrant() throws Exception {
+        seedLead(leadId, null, "org", Instant.now());
+        staff(userId, null, "leasing.lead.manage");
+        singleUsePhoneGrant();
+
+        JsonNode data = new ObjectMapper().readTree(read(userId, null, leadPhoneUrl())).get("data");
+        assertThat(data.path("lead_id").asText()).isEqualTo(leadId);
+        assertThat(data.path("contact_phone").isNull() || data.path("contact_phone").isMissingNode()).isTrue();
+        assertUnconsumed();
+        assertThat(leadPhoneEvents("leasing.lead.contact_phone_viewed", userId)).isZero();
+    }
+
+    private String leadPhoneUrl() {
+        return "/api/v1/leasing/leads/" + leadId + "/contact-phone";
+    }
+
+    // 只持单次明文码、从未持有、长期持有三种人读同一个线索列表：都是掩码；单次来源未消耗，长期持有的没有消耗日志。
+    private void assertTheLeadListAlwaysShowsTheMask(String url, String rowId) throws Exception {
+        staff(userId, null, "leasing.lead.manage");
+        singleUsePhoneGrant();
+        staff(noPhoneUserId, null, "leasing.lead.manage");
+        staff(longTermUserId, null, "leasing.lead.manage", PHONE_PLAINTEXT);
+
+        for (String user : List.of(userId, noPhoneUserId, longTermUserId)) {
+            assertThat(phone(read(user, null, url), rowId, "contact_phone")).as(user).isEqualTo(MASKED);
+        }
+        assertUnconsumed();
+        assertThat(consumptionLogs(longTermUserId)).isZero();
+    }
+
+    // 查看接口被拒：断言 403，返回细分错误码
+    private String deniedCode(String user, String url) throws Exception {
+        String body = mockMvc.perform(get(url).with(session(user, null))).andExpect(status().isForbidden())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return new ObjectMapper().readTree(body).path("detail_code").asText();
+    }
+
+    // 某人在夹具线索 leadId 上留下的查看（或查看被拒）留痕条数
+    private Integer leadPhoneEvents(String eventName, String user) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = ? AND actor_id = ? AND business_id = ?",
+                Integer.class, eventName, user, leadId);
+    }
+
+    private String write(String url, String body) throws Exception {
+        return mockMvc.perform(post(url).with(session(userId, null)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
     }
 
     // 费用通知接收人详情（GET /merchant-billing/fee-notification-recipients/{id}，平台口径）。修复前红在第一处 assertConsumedOnce()。
@@ -545,9 +723,9 @@ class SingleUsePlaintextPhoneJdbcIntegrationTests {
                 userId, now, now, List.of(), null, null, null));
     }
 
-    private void seedLead(Instant createdAt) {
-        leasingRepository.saveLead(new LeasingLeadRecord(leadId, "联系人", PLAIN, "outbound", null, null, null, null, null,
-                "pending_follow_up", null, null, "org", createdAt, createdAt));
+    private void seedLead(String id, String contactPhone, String projectId, Instant createdAt) {
+        leasingRepository.saveLead(new LeasingLeadRecord(id, "联系人", contactPhone, "outbound", null, null, null, null, null,
+                "pending_follow_up", null, null, projectId, createdAt, createdAt));
     }
 
     // 商户夹具：专门建一个项目，商户归到该项目下，本用例的员工也改归该项目（商户列表、存档按真实项目校验）。

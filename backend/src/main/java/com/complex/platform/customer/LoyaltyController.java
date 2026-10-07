@@ -42,6 +42,7 @@ public class LoyaltyController {
 
     /** 积分虚拟券核销领取(店员端):库存足则扣库存领实物,缺货则退回积分。 */
     @PostMapping("/points-redemptions/{redemption_id}/fulfill")
+    @com.complex.platform.access.IdempotencyKeyFromPath("redemption_id") // M724-F06：没有请求体，服务层把兑换单号当提交编号；重复提交返回第一次的结果并提示已完成
     public ApiResponse<CustomerPointsRedemptionRecord> fulfillRedemption(
             @PathVariable("redemption_id") String redemptionId
     ) {

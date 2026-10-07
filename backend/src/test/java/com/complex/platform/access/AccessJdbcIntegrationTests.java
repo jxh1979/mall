@@ -4919,8 +4919,10 @@ class AccessJdbcIntegrationTests {
 
     // ── XM-M002-BH（治理地图第 303、528、653 行；技术推导）真库＋真实接口回归 ─────────────────────────────────────────────
 
-    // J1：同商户、另一组织的员工用他人的请求编号同体提交员工覆盖，不再拿到他人首次结果，而是按本人范围被 CROSS_ORG_FORBIDDEN 拒绝；
-    // 本人重试仍只认一次。旧记录守卫单列在下一条用例。
+    // J1：同商户、另一组织的员工用他人的请求编号同体提交员工覆盖，不拿到他人首次结果，也不再按本人范围去执行——
+    // M724（操作员 2026-10-04 裁决「同一提交编号只能提交一次不允许多次提交」）：该编号已有一次成功，其他范围再用即 409
+    // IDEMPOTENCY_KEY_USED，进不到动作（修复前进入动作后被 CROSS_ORG_FORBIDDEN 拒绝，且多占一行）；本人重试仍只认一次。
+    // 旧记录守卫单列在下一条用例。
     @Test
     void sameMerchantStaffInAnotherOrganizationCannotReplayAPermissionOverrideThroughTheEndpoint() throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -4947,10 +4949,11 @@ class AccessJdbcIntegrationTests {
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         assertThat(jdbcTemplate.queryForObject(overridesOfTarget, Long.class, target)).isEqualTo(1L);
 
-        // 2) B 用同一编号、同一请求体：按本人范围执行并被拒
+        // 2) B 用同一编号、同一请求体：该编号已被用掉，被拒且没进入动作（进入动作会是 403 CROSS_ORG_FORBIDDEN）
         m002IdCall("set", target, null, key, sessionB)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_KEY_USED"))
+                .andExpect(jsonPath("$.message").value("该提交编号已被使用，本次操作未执行"));
 
         // 3) A 重试：返回首次结果，不重复生效
         String replay = m002IdCall("set", target, null, key, sessionA).andExpect(status().isOk())
@@ -4961,12 +4964,13 @@ class AccessJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM audit_events WHERE idempotency_key = ? AND event_result = 'success'", Long.class, key)).isEqualTo(1L);
 
-        // 4) 该编号下的幂等记录都是按项目＋商户隔离的定长形态（A 所在项目一条成功；B 在另一项目，被拒的那次占自己项目的一条），没有 m:<商户号> 形态
-        List<String> operationIds = jdbcTemplate.queryForList(
-                "SELECT operation_id FROM idempotency_records WHERE idempotency_key = ?", String.class, key);
-        assertThat(operationIds).isNotEmpty().allSatisfy(id -> assertThat(id).startsWith("caller:").hasSize(71));
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM idempotency_records WHERE idempotency_key = ? AND response_code = 'OK'", Long.class, key)).isEqualTo(1L);
+        // 4) 该编号下恰一条幂等记录：A 的那条成功行，行键是不含范围的定长形态（once:＋操作号散列，长 69），B 被拒的那次不占行
+        String storedId = com.complex.platform.common.idempotency.IdempotencyService.storedOperationId(
+                "userPermissionOverride:set:" + target);
+        assertThat(storedId).hasSize(69);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT operation_id || '/' || response_code || '/' || length(request_hash) FROM idempotency_records WHERE idempotency_key = ?",
+                String.class, key)).containsExactly(storedId + "/OK/128");
     }
 
     // J1 旧记录守卫（单列，修复前自己会红在文案断言上）：修复前留下的 m:<商户号> 旧记录由既有守卫拦下——不回放、不执行、不改旧行。
@@ -5004,7 +5008,8 @@ class AccessJdbcIntegrationTests {
                 "SELECT count(*) FROM audit_events WHERE idempotency_key = ? AND event_result = 'success'", Long.class, oldKey)).isZero();
     }
 
-    // J2：商户主体的长编号（与生产编号形态一致）拼出的幂等操作编号原先超过列宽 VARCHAR(128)、预留即报错；修复后为定长 71。
+    // J2：商户主体的长编号（与生产编号形态一致）拼出的幂等操作编号原先超过列宽 VARCHAR(128)、预留即报错；修复后为定长
+    // （M724 起行键不含范围：once:＋操作号散列，长 69）。
     // 第 1 步用同一套装配的短编号证明装配是足的（修复前后都成功），第 2 步的失败只可能来自列宽。
     @Test
     void merchantCallerLongOperationIdNoLongerOverflowsTheColumn() throws Exception {
@@ -5038,31 +5043,36 @@ class AccessJdbcIntegrationTests {
         m002IdCall("unassign", longTarget, longRole, longKey, sessionA).andExpect(status().isOk());
         assertThat(m002UserRoles(longTarget)).doesNotContain(longRole);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT length(operation_id) FROM idempotency_records WHERE idempotency_key = ?", Integer.class, longKey)).isEqualTo(71);
+                "SELECT operation_id FROM idempotency_records WHERE idempotency_key = ?", String.class, longKey))
+                .isEqualTo(com.complex.platform.common.idempotency.IdempotencyService.storedOperationId(
+                        "unassignUserRole:" + longTarget + ":" + longRole))
+                .hasSize(69);
     }
 
     // ── M722-F04（M722-F02 验收证据补齐，不改实现）：经生产装配的幂等服务（真实幂等表，作用域由 AuthorizationService 解析）──────────
 
-    // 同一商户、两个项目、两名在职员工，相同操作号、幂等键、请求体：各自的动作恰好执行一次、各得本人的结果；各自重试只回放本人首次结果。
+    // M724（操作员 2026-10-04 裁决「同一商户、不同项目的两名员工用同一个提交编号，现在各执行一次？？？同一提交编号只能提交一次不允许多次提交」）：
+    // 同一商户、两个项目、两名在职员工，相同操作号、幂等键、请求体：只有第一人执行；第二人两次提交都 409 IDEMPOTENCY_KEY_USED、
+    // 不执行、拿不到第一人的结果；第一人重试返回第一次的结果；该键恰一条成功行。修复前两人各执行一次、该键两条成功行。
     @Test
-    void sameMerchantStaffInTwoProjectsEachExecuteOnceAndReplayOnlyTheirOwnResultOnTheRealTable() {
+    void sameMerchantStaffInTwoProjectsOnlyTheFirstCallerExecutesAndTheSecondIsRejectedOnTheRealTable() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         String merchant = "mch_bh_k_" + suffix;
-        bhAssertEachCallerExecutesOnceAndReplaysOwnResult(suffix,
+        bhAssertOnlyTheFirstCallerExecutesAndTheSecondIsRejected(suffix,
                 new AccessActor("usr_bh_ka_" + suffix, "usr_bh_ka_" + suffix, "staff", "org_bh_k1_" + suffix, merchant, "active"),
                 new AccessActor("usr_bh_kb_" + suffix, "usr_bh_kb_" + suffix, "staff", "org_bh_k2_" + suffix, merchant, "active"));
     }
 
-    // 守护（修复前后都绿）：两个不同商户的员工互不撞键。
+    // 同上，另一组：同一项目、两个不同商户的员工，同样只有第一人执行、第二人被拒（修复前两人各执行一次）。
     @Test
-    void staffOfDifferentMerchantsDoNotCollideOnTheSameOperationKeyAndBodyOnTheRealTable() {
+    void staffOfDifferentMerchantsOnlyTheFirstCallerExecutesAndTheSecondIsRejectedOnTheRealTable() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        bhAssertEachCallerExecutesOnceAndReplaysOwnResult(suffix,
+        bhAssertOnlyTheFirstCallerExecutesAndTheSecondIsRejected(suffix,
                 new AccessActor("usr_bh_ma_" + suffix, "usr_bh_ma_" + suffix, "staff", "org_bh_m_" + suffix, "mch_bh_m1_" + suffix, "active"),
                 new AccessActor("usr_bh_mb_" + suffix, "usr_bh_mb_" + suffix, "staff", "org_bh_m_" + suffix, "mch_bh_m2_" + suffix, "active"));
     }
 
-    private void bhAssertEachCallerExecutesOnceAndReplaysOwnResult(String suffix, AccessActor first, AccessActor second) {
+    private void bhAssertOnlyTheFirstCallerExecutesAndTheSecondIsRejected(String suffix, AccessActor first, AccessActor second) {
         for (AccessActor caller : List.of(first, second)) {
             repository.createUser(new AccessUser(caller.id(), caller.username(), caller.accountType(), caller.organizationId(),
                     caller.merchantId(), caller.status(), Instant.now()));
@@ -5072,14 +5082,21 @@ class AccessJdbcIntegrationTests {
         List<String> executed = new java.util.ArrayList<>();
 
         assertThat(bhExecuteAs(first, operationId, key, executed)).isEqualTo(first.id());
-        assertThat(bhExecuteAs(second, operationId, key, executed)).isEqualTo(second.id());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            assertThatThrownBy(() -> bhExecuteAs(second, operationId, key, executed))
+                    .isInstanceOfSatisfying(ApiException.class, exception -> {
+                        assertThat(exception.status().value()).isEqualTo(409);
+                        assertThat(exception.code()).isEqualTo("IDEMPOTENCY_KEY_USED");
+                        assertThat(exception.getMessage()).isEqualTo("该提交编号已被使用，本次操作未执行");
+                    });
+        }
         assertThat(bhExecuteAs(first, operationId, key, executed)).isEqualTo(first.id());
-        assertThat(bhExecuteAs(second, operationId, key, executed)).isEqualTo(second.id());
 
-        assertThat(executed).containsExactly(first.id(), second.id());
+        assertThat(executed).containsExactly(first.id());
         assertThat(jdbcTemplate.queryForList(
                 "SELECT operation_id || '/' || response_code FROM idempotency_records WHERE idempotency_key = ?", String.class, key))
-                .hasSize(2).doesNotHaveDuplicates().allSatisfy(row -> assertThat(row).endsWith("/OK")); // 该键恰两条，各占自己的一条
+                .containsExactly(com.complex.platform.common.idempotency.IdempotencyService.storedOperationId(operationId)
+                        + "/OK"); // 该键恰一条：第一人的成功行
     }
 
     // M722-F07（操作员 2026-10-03 裁决「同项目同商户内认一次」）：同一项目、同一商户的两名在职员工用相同操作号、幂等键、请求体——
@@ -5106,7 +5123,8 @@ class AccessJdbcIntegrationTests {
         assertThat(executed).containsExactly(first.id());
         assertThat(jdbcTemplate.queryForList(
                 "SELECT operation_id || '/' || response_code FROM idempotency_records WHERE idempotency_key = ?", String.class, key))
-                .singleElement().satisfies(row -> assertThat(row).startsWith("caller:").endsWith("/OK").hasSize(74));
+                .containsExactly(com.complex.platform.common.idempotency.IdempotencyService.storedOperationId(operationId)
+                        + "/OK"); // M724：行键不含范围（once:＋操作号散列，长 69）
     }
 
     // 以该主体身份提交一次；动作把本人编号记进 executed 并作为结果返回。
@@ -5119,7 +5137,8 @@ class AccessJdbcIntegrationTests {
         return result[0];
     }
 
-    // 守护（修复前后都绿）：不带商户归属的员工，库内记录的操作编号仍是按基线形态 u:<编号长度>:<编号>:<组织> 算出的值；本人重试只认一次。
+    // 不带商户归属的员工，提交范围仍是基线形态 u:<编号长度>:<编号>:<组织>；本人重试只认一次。
+    // M724 起行键不含范围（once:＋操作号散列，长 69），范围的 SHA-256 记在请求散列的前 64 位（请求散列共 128 位）。
     @Test
     void nonMerchantCallerKeepsTheBaselineIdempotencyScopeOnTheRealTable() throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -5134,11 +5153,15 @@ class AccessJdbcIntegrationTests {
 
         assertThat(executed).containsExactly(caller.id());
         String baselineScope = "u:" + caller.id().length() + ":" + caller.id() + ":" + caller.organizationId();
-        String expected = "caller:" + java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(
-                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(List.of(baselineScope, operationId))
-                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        String expected = com.complex.platform.common.idempotency.IdempotencyService.storedOperationId(operationId);
+        assertThat(expected).hasSize(69);
         assertThat(jdbcTemplate.queryForList(
                 "SELECT operation_id FROM idempotency_records WHERE idempotency_key = ?", String.class, key)).containsExactly(expected);
+        String scopeHash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(
+                baselineScope.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT request_hash FROM idempotency_records WHERE idempotency_key = ?", String.class, key))
+                .startsWith(scopeHash).hasSize(128);
     }
 
     // XM-M002-I（操作员 2026-09-25 裁定口径 B「一律只认长期来源」）：真实接口回归——只凭临时授权或单次模板套用持有测试码的员工，经员工单独授予、

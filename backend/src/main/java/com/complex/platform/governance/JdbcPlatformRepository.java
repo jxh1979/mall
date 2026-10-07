@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.09
+// 文件版本：V0.11
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -862,9 +862,11 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 Map.of("review_id", reviewId), (rs, rowNumber) -> rs.getString("review_id"));
     }
 
+    // M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉，内容不同的另一笔照常拦截送审」）：
+    // 多一个摘要等值条件；blocked_content_digest 为空的复核单在等值条件下永远不命中，不能用于放行。
     @Override
     public Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
-            String actionType, String objectType, String objectId, String initiatedBy) {
+            String actionType, String objectType, String objectId, String initiatedBy, String blockedContentDigest) {
         return jdbcTemplate.query("""
                 SELECT review_id, policy_code, action_type, object_type, object_id,
                        blocked, review_status, required_level, reviewer_level, decision,
@@ -875,6 +877,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                    AND object_type = :object_type
                    AND object_id = :object_id
                    AND initiated_by = :initiated_by
+                   AND blocked_content_digest = :blocked_content_digest
                    AND review_status = 'approved'
                    AND released_at IS NULL
                  ORDER BY evaluated_at DESC
@@ -883,21 +886,70 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("action_type", actionType)
                 .addValue("object_type", objectType)
                 .addValue("object_id", objectId)
-                .addValue("initiated_by", initiatedBy), this::mapSupervisorReview).stream().findFirst();
+                .addValue("initiated_by", initiatedBy)
+                .addValue("blocked_content_digest", blockedContentDigest), this::mapSupervisorReview).stream().findFirst();
+    }
+
+    // M724-F16（V440）：准入闸建复核单后记下被拦下那次提交的请求内容摘要（与建单同事务）
+    @Override
+    public void bindSupervisorReviewToBlockedContent(String reviewId, String contentDigest) {
+        jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions
+                   SET blocked_content_digest = :blocked_content_digest
+                 WHERE review_id = :review_id
+                """, new MapSqlParameterSource()
+                .addValue("review_id", reviewId)
+                .addValue("blocked_content_digest", contentDigest));
     }
 
     @Override
     public boolean markSupervisorReviewReleased(String reviewId, String releasedBy, java.time.Instant releasedAt) {
+        return markSupervisorReviewReleased(reviewId, releasedBy, releasedAt, null, null);
+    }
+
+    // XM-ONESHOT-RETURN B01（V440）：放行时记下用掉它的那次请求，重放核验按「动作 + 对象 + 幂等键 + 请求摘要」查出放行人（M724-F03）。
+    // 条件 UPDATE 在调用方事务里持行锁到事务结束：并发的第二笔等第一笔提交或回滚后重查条件，最多一笔抢到。
+    @Override
+    public boolean markSupervisorReviewReleased(String reviewId, String releasedBy, java.time.Instant releasedAt,
+            String idempotencyKey, String requestDigest) {
         return jdbcTemplate.update("""
                 UPDATE supervisor_review_decisions
-                   SET released_at = :released_at, released_by = :released_by
+                   SET released_at = :released_at, released_by = :released_by,
+                       released_idempotency_key = :idempotency_key, released_request_digest = :request_digest
                  WHERE review_id = :review_id
                    AND review_status = 'approved'
                    AND released_at IS NULL
                 """, new MapSqlParameterSource()
                 .addValue("review_id", reviewId)
                 .addValue("released_by", releasedBy)
-                .addValue("released_at", timestampWithTimeZone(releasedAt))) == 1;
+                .addValue("released_at", timestampWithTimeZone(releasedAt))
+                .addValue("idempotency_key", idempotencyKey)
+                .addValue("request_digest", requestDigest)) == 1;
+    }
+
+    // M724-F03（操作员裁决「同一项目、同一商户的员工用同一个提交编号，只算一次、返回第一次的结果」）：按「动作、对象、幂等键、请求摘要」
+    // 查放行人，不限定当前操作人；放行只经逐笔放行消费写入，放行人就是该复核单的发起人（沿用原查询的同发起人条件）。
+    @Override
+    public Optional<String> findReleaserOfSupervisorReviewReleasedToRequest(String actionType, String objectType, String objectId,
+            String idempotencyKey, String requestDigest) {
+        return jdbcTemplate.query("""
+                SELECT released_by
+                  FROM supervisor_review_decisions
+                 WHERE action_type = :action_type
+                   AND object_type = :object_type
+                   AND object_id = :object_id
+                   AND released_idempotency_key = :idempotency_key
+                   AND released_request_digest = :request_digest
+                   AND released_by = initiated_by
+                   AND review_status = 'approved'
+                 ORDER BY released_at DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("idempotency_key", idempotencyKey)
+                .addValue("request_digest", requestDigest)
+                .addValue("action_type", actionType)
+                .addValue("object_type", objectType)
+                .addValue("object_id", objectId), (rs, rowNumber) -> rs.getString("released_by")).stream().findFirst();
     }
 
     private static final String PENDING_REVIEW_COLUMNS = """

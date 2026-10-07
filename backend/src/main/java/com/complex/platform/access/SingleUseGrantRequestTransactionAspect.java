@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -30,6 +30,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -77,6 +78,15 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * 在请求上下文里记下「无请求事务」（{@link IdempotentReplayContext#markWithoutRequestTransaction}）；权限核验据此不消耗判定期间才被
  * 授出的单次来源——不论核验时有没有业务层自己的事务（那个事务的提交不受上面的重放回滚与失败撤回约束）。
  *
+ * <p>M724-F06（第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：处理方法标了
+ * {@link IdempotencyKeyFromPath} 的接口（没有请求体，服务层把路径里的单号当提交编号：调拨单发货、积分兑换领取），本次请求的提交编号
+ * 只取所列路径变量的值（{@link #pathKeyOf}），不读请求体、请求头、查询串；其余流程不变。修复前切面读不到这个编号：重复点同一张单时
+ * 幂等层返回第一次的结果，但响应不提示已完成、这次新用掉的单次来源不回滚，本人唯一那份来源用掉后再点是 403。
+ *
+ * <p>M724-F08（同一句）：提交编号取到多个不同的值或读不出来的请求，只要有登录主体、且不是不消耗的查看（预览、查询）请求，
+ * 不论持不持单次来源都在执行之前按 400 拒绝（M723-F16 原先只拦持未消耗单次来源的请求；长期权限的人带两个不同编号的请求照常执行，
+ * 随后按请求体编号重复提交时响应不提示已完成）。没有登录主体的请求（按签名验身份的回调等）照旧。
+ *
  * <p>ponytail: 每个已登录写请求多一次存在性查询；判定与消耗之间新授出的单次授权由 AuthorizationService 按不具备拒绝
  * （M723-F09），用户重试即可，需要时再把判定改成请求内缓存。
  */
@@ -106,12 +116,22 @@ public class SingleUseGrantRequestTransactionAspect {
         boolean readOnly = request != null && ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())
                 || handlerMethod.isAnnotationPresent(DoesNotConsumeSingleUseGrant.class));
         ConsumesSingleUseGrant stillConsumed = !readOnly ? null : handlerMethod.getAnnotation(ConsumesSingleUseGrant.class);
-        Set<String> requestKeys = idempotencyKeysOf(handler.getArgs(), request);
+        // M724-F06：处理方法声明提交编号取自路径变量（服务层把路径里的单号当提交编号）时只取它，不读请求体、请求头、查询串
+        IdempotencyKeyFromPath keyFromPath = handlerMethod.getAnnotation(IdempotencyKeyFromPath.class);
+        Set<String> requestKeys = keyFromPath == null ? idempotencyKeysOf(handler.getArgs(), request)
+                : pathKeyOf(handlerMethod, handler.getArgs(), keyFromPath.value());
         IdempotentReplayContext previous = IdempotentReplayContext.enter(
                 requestKeys != null && requestKeys.size() == 1 ? requestKeys.iterator().next() : null,
                 requestDigestOf(request), readOnly,
                 stillConsumed == null ? Set.of() : Set.copyOf(java.util.Arrays.asList(stillConsumed.value())));
         try {
+            // M724-F08（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：
+            // 提交编号取到多个不同的值或读不出来时，本切面定不出这次请求的编号，业务层却可能照其中一个认出重复提交、返回第一次的
+            // 结果——那样响应不提示已完成。不只是持单次来源的请求（M723-F16，见下）：凡有登录主体、且不是不消耗的查看（预览、查询）
+            // 请求，都在执行之前拒绝（400）。没有登录主体的请求（按签名验身份的回调等）不在此列，照旧。
+            if (!(readOnly && stillConsumed == null) && (requestKeys == null || requestKeys.size() > 1) && hasCurrentActor()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求里带了多个不同或无法识别的提交编号，请只带一个提交编号后重试");
+            }
             if ((readOnly && stillConsumed == null) || TransactionSynchronizationManager.isActualTransactionActive()
                     || !authorizationService.currentActorHoldsUnconsumedSingleUseGrant()) {
                 if (!TransactionSynchronizationManager.isActualTransactionActive()) {
@@ -169,7 +189,8 @@ public class SingleUseGrantRequestTransactionAspect {
      * （M723-F17：终端设备签名公钥登记、开放平台回调这样取）、{@code Idempotency-Key} /
      * {@code X-Idempotency-Key} 请求头、查询串里的 {@code idempotency_key}。返回取到的全部不同取值（各处写同一个值只算一个）；
      * 读取失败返回 null。恰好一个值才是本次请求的幂等键；一个都没有时消耗不记请求信息、重放照旧拒绝；
-     * 多个不同的值或读取失败，要开请求事务的请求直接拒绝（M723-F16）。
+     * 多个不同的值或读取失败，有登录主体的非查看请求直接拒绝（M723-F16、M724-F08）。
+     * 处理方法标了 {@link IdempotencyKeyFromPath} 的不走这里，见 {@link #pathKeyOf}。
      */
     static Set<String> idempotencyKeysOf(Object[] args, HttpServletRequest request) {
         Set<String> keys = new HashSet<>();
@@ -218,6 +239,35 @@ public class SingleUseGrantRequestTransactionAspect {
     private static void addKey(Set<String> keys, String key) {
         if (key != null && !key.isBlank()) {
             keys.add(key);
+        }
+    }
+
+    /**
+     * M724-F06（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：
+     * 处理方法标了 {@link IdempotencyKeyFromPath} 时本次请求的提交编号——参数上 {@code @PathVariable} 的名字与标注所列一致的那个实参，
+     * 去掉首尾空白（服务层交给幂等层的单号同样去过首尾空白）。只此一处来源；取不到或为空返回空集合，按没有编号处理。
+     */
+    static Set<String> pathKeyOf(Method handlerMethod, Object[] args, String variable) {
+        Set<String> keys = new HashSet<>();
+        java.lang.reflect.Parameter[] parameters = handlerMethod.getParameters();
+        for (int i = 0; i < parameters.length && i < args.length; i++) {
+            PathVariable pathVariable = parameters[i].getAnnotation(PathVariable.class);
+            // 直接读注解时 value 与 name 不互为别名，两种写法都认
+            if (pathVariable != null && (variable.equals(pathVariable.value()) || variable.equals(pathVariable.name()))
+                    && args[i] instanceof String value) {
+                addKey(keys, value.trim());
+            }
+        }
+        return keys;
+    }
+
+    // M724-F08：有登录主体——AuthorizationService#currentActor 不抛未登录（没有认证、无法识别的主体都不算）
+    private boolean hasCurrentActor() {
+        try {
+            authorizationService.currentActor();
+            return true;
+        } catch (ApiException unauthenticated) {
+            return false;
         }
     }
 

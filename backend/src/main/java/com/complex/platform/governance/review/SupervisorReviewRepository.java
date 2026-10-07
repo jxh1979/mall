@@ -17,15 +17,41 @@ public interface SupervisorReviewRepository {
         return findPendingSupervisorReviewById(reviewId);
     }
 
-    /** M007-A-01：同动作、同对象、同发起人且已批准未放行的复核单（供准入闸消费）。 */
+    /**
+     * M007-A-01：同动作、同对象、同发起人且已批准未放行的复核单（供准入闸消费）。
+     * M724-F16（操作员 2026-10-07 裁决「批准只能被『被拦下的那次提交的同样内容』用掉」）：还须复核单上记的被拦下那次提交的请求内容摘要
+     * 与本次相同；没有摘要的复核单不命中。
+     */
     default Optional<SupervisorReviewDecisionRecord> findApprovedUnreleasedSupervisorReview(
-            String actionType, String objectType, String objectId, String initiatedBy) {
+            String actionType, String objectType, String objectId, String initiatedBy, String blockedContentDigest) {
         return Optional.empty();
+    }
+
+    /** M724-F16：在准入闸建的复核单上记下被拦下那次提交的请求内容摘要（SHA-256 十六进制 64 位，不含提交编号）。默认不记。 */
+    default void bindSupervisorReviewToBlockedContent(String reviewId, String contentDigest) {
     }
 
     /** M007-A-01：把已批准复核单标记为已放行；只在尚未放行时成功（一次批准只放行一次）。 */
     default boolean markSupervisorReviewReleased(String reviewId, String releasedBy, Instant releasedAt) {
         return false;
+    }
+
+    /**
+     * XM-ONESHOT-RETURN B01：放行时一并记下用掉它的那次请求（幂等键、请求摘要，取不到为空）。
+     * 默认退回不记请求信息的写法（内存仓只实现了它，其重放照旧拦截）。
+     */
+    default boolean markSupervisorReviewReleased(
+            String reviewId, String releasedBy, Instant releasedAt, String idempotencyKey, String requestDigest) {
+        return markSupervisorReviewReleased(reviewId, releasedBy, releasedAt);
+    }
+
+    /**
+     * XM-ONESHOT-RETURN B01、M724-F03：同动作、同对象的已批准复核单里，正是被这次请求（同幂等键、同请求摘要）放行用掉的那一张的放行人；
+     * 没有这样的复核单为空。不限定当前操作人（同项目同商户的同事重复提交同样要认出）。默认为空（内存仓不记请求信息，其重放照旧拦截）。
+     */
+    default Optional<String> findReleaserOfSupervisorReviewReleasedToRequest(String actionType, String objectType, String objectId,
+            String idempotencyKey, String requestDigest) {
+        return Optional.empty();
     }
 
     /** M007-A-02（PGM-1.7.1 审批时限）：复核单排期——直接受益人、到期时刻、升级次数/时刻、转发人。 */

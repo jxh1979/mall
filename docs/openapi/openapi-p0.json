@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.14",
+    "version": "V0.15",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -23040,6 +23040,51 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/leads/{lead_id}/contact-phone": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "getLeasingLeadContactPhone",
+        "summary": "查看某一条招商线索的完整联系人手机号",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.lead.contact_phone_viewed",
+        "x-audit-event-failure": "leasing.lead.contact_phone_view_failed",
+        "x-auth-context": "staff-token",
+        "description": "M724（治理地图第 871 行）。线索列表和操作结果一律只返回脱敏号码，完整号码只经本接口按条给出，返回 data 只含 lead_id 与 contact_phone 两个字段。除 x-permission 所列 leasing.lead.manage 外，另需 pii.contact_phone.view（没有该码 403 PERMISSION_DENIED，不退回掩码）；每调用一次算查看一次并留痕，单次授权看一次即用掉，长期持有不产生消耗。项目员工只能查看本项目的线索（其他项目 403 CROSS_PROJECT_FORBIDDEN，单次授权不算用掉）；线索没有电话时返回空号码，不核验也不消耗 pii.contact_phone.view。留痕不含号码。",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "description": "线索 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "500": {

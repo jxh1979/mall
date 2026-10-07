@@ -54,19 +54,27 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
                 )
                 ON CONFLICT (operation_id, idempotency_key) DO NOTHING
                 """;
-        return jdbcTemplate.update(sql, parameters(record)) == 1;
+        // M724（治理地图第 303 行「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：同一键上有别的事务未提交的占位时，
+        // 这条 INSERT 等对方事务结束（对方提交 → 0 行，对方回滚 → 插入成功）。等待设上限，超时数据库报 SQLSTATE 55P03，
+        // 由 IdempotencyService 转成「请求正在处理中」；上限只管这一条语句，之后恢复默认。不在事务里时 SET LOCAL 不起作用。
+        // ponytail: 5 秒是写死的常量，取值小于连接池取连接超时；出现正常动作超过 5 秒且重复提交频繁的入口时再改成配置项。
+        jdbcTemplate.getJdbcTemplate().execute("SET LOCAL lock_timeout = '5s'");
+        boolean reserved = jdbcTemplate.update(sql, parameters(record)) == 1;
+        jdbcTemplate.getJdbcTemplate().execute("SET LOCAL lock_timeout TO DEFAULT");
+        return reserved;
     }
 
+    // M724：失败的提交不占编号——接管失败可重试的行不再要求请求散列相同，行上的散列（提交范围＋请求体）换成接管者的。
     @Override
     public boolean tryUpdateWhenResponseCode(IdempotencyRecord record, String expectedResponseCode) {
         String sql = """
                 UPDATE idempotency_records
-                   SET response_code = :response_code,
+                   SET request_hash = :request_hash,
+                       response_code = :response_code,
                        response_body = :response_body,
                        http_status = :http_status
                  WHERE operation_id = :operation_id
                    AND idempotency_key = :idempotency_key
-                   AND request_hash = :request_hash
                    AND response_code = :expected_response_code
                 """;
         MapSqlParameterSource parameters = parameters(record)

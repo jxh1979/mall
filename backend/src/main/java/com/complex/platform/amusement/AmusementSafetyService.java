@@ -179,7 +179,11 @@ public class AmusementSafetyService {
                 id,
                 () -> {
                     validateIncidentCloseRequest(request);
-                    rejectClosed(findIncident(id));
+                    // M724-F11（治理地图第 303 行「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：这里只核对事故存在，
+                    // 不再核对「已关闭」——关闭成功后同一提交编号、同一正文重提要由幂等层返回第一次的结果，排在幂等层之前的
+                    // 「已关闭」校验会先把它拒掉（409 INCIDENT_CLOSED）。首次执行的「已关闭」校验在幂等层之内（closeIncidentOnce）：
+                    // 换新编号再关已关闭的事故照旧被拒。
+                    findIncident(id);
                 },
                 () -> closeIncidentOnce(id, request)
         );

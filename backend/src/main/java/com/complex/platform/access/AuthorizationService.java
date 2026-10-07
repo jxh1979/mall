@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -616,7 +616,8 @@ public class AuthorizationService implements CallerScopeResolver {
             return "u:" + id.length() + ":" + id + ":" + org; // 非商户主体：与 #415 形态逐字节相同
         }
         // XM-M002-BH、M722-F07（治理地图第 303、528、653 行；操作员 2026-10-03 裁决「同项目同商户内认一次」）：
-        // 带商户归属的主体按所属项目＋所属商户隔离——同项目同商户的员工用同一请求编号只认一次，不同项目各算各的。
+        // 带商户归属的主体按所属项目＋所属商户算提交范围——同项目同商户的员工用同一请求编号只认一次，其他范围再用同一编号即拒绝
+        // （M724；操作员 2026-10-04 裁决「同一提交编号只能提交一次不允许多次提交」）。
         return "mo:" + org.length() + ":" + org + ":" + actor.merchantId();
     }
 

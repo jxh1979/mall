@@ -399,7 +399,9 @@ class AnalyticsServiceTests {
                 .extracting(RiskAlertRecord::riskLevel, RiskAlertRecord::status, RiskAlertRecord::idempotencyKey)
                 .containsExactly("high", "open", "create-once");
         assertThat(analyticsRepository.riskAlertSaveCount).isEqualTo(1);
-        assertThat(idempotencyRepository.records).containsKey("analytics.create-risk-alert:create-once");
+        // M724：行键不含提交范围——IdempotencyService.storedOperationId(操作号)
+        assertThat(idempotencyRepository.records)
+                .containsKey(IdempotencyService.storedOperationId("analytics.create-risk-alert") + ":create-once");
         assertThat(auditEventRepository.events)
                 .filteredOn(event -> "risk_alert.created".equals(event.eventName()))
                 .hasSize(1);
@@ -537,7 +539,8 @@ class AnalyticsServiceTests {
         assertThat(first.operatorNote()).isEqualTo("handled by operator");
         assertThat(first.resolvedAt()).isEqualTo(Instant.now(FIXED_CLOCK));
         assertThat(analyticsRepository.riskAlertUpdateCount).isEqualTo(1);
-        assertThat(idempotencyRepository.records).containsKey("analytics.resolve-risk-alert:resolve-once");
+        assertThat(idempotencyRepository.records)
+                .containsKey(IdempotencyService.storedOperationId("analytics.resolve-risk-alert") + ":resolve-once");
         assertThat(auditEventRepository.events)
                 .filteredOn(event -> "analytics.risk_alert.resolved".equals(event.eventName()))
                 .hasSize(1);

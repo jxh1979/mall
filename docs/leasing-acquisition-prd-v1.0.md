@@ -1,4 +1,4 @@
-# 招商获客业务域 PRD（V1.03·据需求重建）
+# 招商获客业务域 PRD（V1.04·据需求重建）
 
 > 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径；最终业务解释仍以三份业务 HTML 为准。
 >
@@ -83,7 +83,7 @@
 ## 8. 数据模型（迁移 V161，对齐 §1 枚举落 CHECK）
 - `leasing_leads`(id, source CHECK 4 值, contact_name, contact_phone, intended_business_type, intended_space_id, intended_area, owner_user_id, status CHECK 7 值, lost_reason, project_id, last_follow_up_at, created/updated_at)
 
-> **联系人手机号 PII 加密（P0-A / ★SEC-04，迁移 V339，2026-07-27）**：`leasing_leads.contact_phone` 落库为 AES-GCM 信封密文（`enc:v1:`），仓库层写时加密、读时解密，业务层拿到的仍是明文；数据库 `CHECK` 约束（`NOT VALID`）卡死任何明文新写入，仓库以外的手写 SQL / 批量导入绕不过；存量明文由启动期 `MultiPartyContactPhonePiiBackfill` 幂等回填就地加密（三层防二次加密）。读端按权限脱敏：持 `pii.contact_phone.view`（高危，默认仅平台管理员）才见明文，其余见掩码（前 3 后 4）。本域无按手机号的后端检索路径，加密不影响任何既有查询，也未建盲索引。统一口径见 `compliance-and-personal-information-protection-requirements-v0.1.md` §6.1。
+> **联系人手机号 PII 加密（P0-A / ★SEC-04，迁移 V339，2026-07-27）**：`leasing_leads.contact_phone` 落库为 AES-GCM 信封密文（`enc:v1:`），仓库层写时加密、读时解密，业务层拿到的仍是明文；数据库 `CHECK` 约束（`NOT VALID`）卡死任何明文新写入，仓库以外的手写 SQL / 批量导入绕不过；存量明文由启动期 `MultiPartyContactPhonePiiBackfill` 幂等回填就地加密（三层防二次加密）。读端展示（治理地图第 871 行，操作员 2026-10-07 确认，M724）：线索列表和操作结果（新建、指派、状态流转的返回）一律只显示掩码（前 3 后 4），不论是否持有 `pii.contact_phone.view`；经单独授权且查看权限有效的人员（持 `pii.contact_phone.view`，高危，默认仅平台管理员），可以在某一条线索上点「查看完整号码」（`GET /api/v1/leasing/leads/{lead_id}/contact-phone`），只显示这一条的完整号码，每点一次算查看一次并留痕（`leasing.lead.contact_phone_viewed`），单次授权看一次即用掉。本域无按手机号的后端检索路径，加密不影响任何既有查询，也未建盲索引。统一口径见 `compliance-and-personal-information-protection-requirements-v0.1.md` §6.1。
 
 - `leasing_intents`(id, lead_id FK, stage CHECK 5 值, intended_space_id, intended_area, rent_terms JSONB, last_stage_change_at, project_id, created/updated_at)
 - `leasing_brands`(id, brand_name UNIQUE-ish, brand_type CHECK 4 值, blacklist_reason, project_id, created/updated_at)

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1071,8 +1071,9 @@ class AuthorizationServiceTests {
                 });
     }
 
-    // S2：同商户不同项目的人用同一请求编号同体提交各自执行；同项目同商户的他人只认一次、拿到第一次的结果；同一人重试只认一次；
-    // 修复前留下的 m:<商户号> 旧记录由既有守卫拦下（不回放、不执行、不改旧行）。
+    // S2：同商户不同项目的人用同一请求编号同体提交——M724（操作员 2026-10-04 裁决「同一提交编号只能提交一次不允许多次提交」）：
+    // 被拒（409 IDEMPOTENCY_KEY_USED），不执行、拿不到别人的结果（修复前各自执行）；同项目同商户的他人只认一次、拿到第一次的结果；
+    // 同一人重试只认一次；修复前留下的 m:<商户号> 旧记录由既有守卫拦下（不回放、不执行、不改旧行）。
     @Test
     void sameMerchantDifferentOrganizationCannotReplayAndOldMerchantRecordsAreBlocked() {
         InMemoryIdempotencyRepository records = new InMemoryIdempotencyRepository();
@@ -1086,23 +1087,26 @@ class AuthorizationServiceTests {
         AccessActor b = new AccessActor("usr_b", "usr_b", "staff", "O2", "mch_1", "active");
         AccessActor a2 = new AccessActor("usr_c", "usr_c", "staff", "O1", "mch_1", "active");
 
-        // 第 0 步：用修复前的口径（resolve 与 legacyScope 都是 m:mch_1）自然写出一条旧记录
-        idempotency.setCallerScopeResolver(() -> "m:mch_1");
-        assertThat(idempotency.execute(operationId, "k-old", body, action, Integer.class)).isEqualTo(1);
-        IdempotencyRecord oldRecord = records.records.get(legacyOperationId + ":k-old");
-        assertThat(oldRecord).isNotNull();
+        // 第 0 步：直接预置一条修复前形态（m:<商户号>:<操作号>）的旧记录——M724 起行键不含范围，解析器已写不出这种形态
+        IdempotencyRecord oldRecord = new IdempotencyRecord(java.util.UUID.randomUUID(), legacyOperationId, "k-old", "x",
+                "OK", "1", 200, Instant.now(), Instant.now().plusSeconds(86_400));
+        records.records.put(legacyOperationId + ":k-old", oldRecord);
         idempotency.setCallerScopeResolver(service);
 
         authenticateActor(a);
-        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(2);
-        authenticateActor(b);
-        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(3);
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(1);
+        authenticateActor(b); // 同商户、另一项目：该编号已被用掉，被拒、不执行
+        assertThatThrownBy(() -> idempotency.execute(operationId, "k", body, action, Integer.class))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(409);
+                    assertThat(exception.code()).isEqualTo("IDEMPOTENCY_KEY_USED");
+                });
         authenticateActor(a);
-        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(2);
-        assertThat(count[0]).isEqualTo(3);
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(1);
+        assertThat(count[0]).isEqualTo(1);
         authenticateActor(a2); // 与 a 同项目同商户：不再执行，拿到 a 第一次的结果
-        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(2);
-        assertThat(count[0]).isEqualTo(3);
+        assertThat(idempotency.execute(operationId, "k", body, action, Integer.class)).isEqualTo(1);
+        assertThat(count[0]).isEqualTo(1);
 
         authenticateActor(a);
         assertThatThrownBy(() -> idempotency.execute(operationId, "k-old", body, action, Integer.class))
@@ -1110,13 +1114,16 @@ class AuthorizationServiceTests {
                     assertThat(exception.code()).isEqualTo("IDEMPOTENCY_CONFLICT");
                     assertThat(exception.getMessage()).contains("该请求编号存在旧处理记录");
                 });
-        assertThat(count[0]).isEqualTo(3);
+        assertThat(count[0]).isEqualTo(1);
         assertThat(records.records.get(legacyOperationId + ":k-old")).isEqualTo(oldRecord);
 
+        // 该编号（k）恰一行：行键不含范围（once:＋操作号散列，长 69），请求散列 128 位（范围散列＋请求体散列）
         List<String> operationIds = records.records.values().stream().map(IdempotencyRecord::operationId).toList();
         assertThat(operationIds).filteredOn(legacyOperationId::equals).hasSize(1);
-        assertThat(operationIds).filteredOn(id -> !legacyOperationId.equals(id)).hasSize(2)
-                .allSatisfy(id -> assertThat(id).startsWith("caller:").hasSize(71));
+        assertThat(operationIds).filteredOn(id -> !legacyOperationId.equals(id))
+                .containsExactly(IdempotencyService.storedOperationId(operationId))
+                .allSatisfy(id -> assertThat(id).hasSize(69));
+        assertThat(records.records.get(IdempotencyService.storedOperationId(operationId) + ":k").requestHash()).hasSize(128);
     }
 
     private AccessRepository.PermissionEffect effect(

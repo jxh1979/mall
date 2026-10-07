@@ -38,31 +38,39 @@ public class LeasingController {
     }
 
     // ---- 线索 ----
+    // M724（治理地图第 871 行，操作员 2026-10-07 确认：「招商线索联系人的手机号另按本句处理：线索列表和操作结果一律只显示脱敏号码；
+    // 经单独授权且查看权限有效的人员，可以在某一条线索上点“查看完整号码”，只显示这一条的完整号码，每点一次算查看一次并留痕，
+    // 单次授权看一次即用掉。」）：两个列表与三个写接口返回的线索一律脱敏，不核验、不消耗明文码；完整号码只走下面的 viewLeadContactPhone。
     @GetMapping("/leads")
-    // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
-    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<PageResponse<LeasingLeadRecord>> listLeads(
             @RequestParam(name = "page", defaultValue = "1") int page,
             @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
-        return ApiResponse.ok(maskLeadPhonesForUnauthorized(service.listLeads(page, size)));
+        return ApiResponse.ok(maskLeadPhones(service.listLeads(page, size)));
     }
 
     @GetMapping("/leads/follow-up-due")
-    // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
-    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<PageResponse<LeasingLeadRecord>> listLeadsNeedingFollowUp(
             @RequestParam(name = "page", defaultValue = "1") int page,
             @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
-        return ApiResponse.ok(maskLeadPhonesForUnauthorized(service.listLeadsNeedingFollowUp(page, size)));
+        return ApiResponse.ok(maskLeadPhones(service.listLeadsNeedingFollowUp(page, size)));
+    }
+
+    // M724：查看某一条线索的完整联系人手机号。先核线索业务权限（不扣）；明文码在服务层核验——排在范围与线索存在的判断之后，
+    // 看一次扣一次（查看请求默认不消耗单次授权，标了本注解才对明文码消耗）。
+    @GetMapping("/leads/{lead_id}/contact-phone")
+    @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
+    public ApiResponse<LeasingLeadContactPhoneRecord> viewLeadContactPhone(@PathVariable("lead_id") String leadId) {
+        authorizationService.requirePermission("leasing.lead.manage");
+        return ApiResponse.ok(service.viewLeadContactPhone(leadId));
     }
 
     @PostMapping("/leads")
     public ApiResponse<LeasingLeadRecord> createLead(@RequestBody @jakarta.validation.Valid LeasingLeadRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskLeadPhoneForUnauthorized(service.createLead(request)));
+        return ApiResponse.ok(service.createLead(request).withMaskedPhone());
     }
 
     @PostMapping("/leads/{lead_id}/assign")
@@ -70,7 +78,7 @@ public class LeasingController {
             @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadAssignRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskLeadPhoneForUnauthorized(service.assignLead(leadId, request)));
+        return ApiResponse.ok(service.assignLead(leadId, request).withMaskedPhone());
     }
 
     @PostMapping("/leads/{lead_id}/status")
@@ -78,7 +86,7 @@ public class LeasingController {
             @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadStatusRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskLeadPhoneForUnauthorized(service.updateLeadStatus(leadId, request)));
+        return ApiResponse.ok(service.updateLeadStatus(leadId, request).withMaskedPhone());
     }
 
     // ---- 意向 ----
@@ -155,32 +163,10 @@ public class LeasingController {
         return ApiResponse.ok(service.createFollowUp(request));
     }
 
-    // ── P0-A/GAP-07 招商线索联系人手机号展示脱敏（V339）。无 pii.contact_phone.view 的读端看掩码；
+    // ── P0-A/GAP-07 招商线索联系人手机号展示脱敏（V339）；M724 起列表一律脱敏（见「线索」段注释），不再按 pii.contact_phone.view 分支。
     // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。 ──
-    private LeasingLeadRecord maskLeadPhoneForUnauthorized(LeasingLeadRecord record) {
-        if (record == null || viewPhonePlaintext(java.util.stream.Stream.of(record.contactPhone()))) {
-            return record;
-        }
-        return record.withMaskedPhone();
-    }
-
-    private PageResponse<LeasingLeadRecord> maskLeadPhonesForUnauthorized(PageResponse<LeasingLeadRecord> page) {
-        if (viewPhonePlaintext(page.items().stream().map(LeasingLeadRecord::contactPhone))) {
-            return page;
-        }
+    private PageResponse<LeasingLeadRecord> maskLeadPhones(PageResponse<LeasingLeadRecord> page) {
         return new PageResponse<>(page.items().stream().map(LeasingLeadRecord::withMaskedPhone).toList(),
                 page.page(), page.pageSize(), page.total());
-    }
-
-    // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：持有明文码、且这次响应里确有非空电话，才核验明文码并返回明文
-    // ——单次来源在这里消耗，长期来源不产生消耗；否则返回掩码、不碰明文码。一次响应只核一次（列表按整页判断）。
-    private boolean viewPhonePlaintext(java.util.stream.Stream<String> phones) {
-        if (phones.noneMatch(phone -> phone != null && !phone.isBlank())
-                || !authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
-            return false;
-        }
-        authorizationService.requirePermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
-        // 本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时不给明文
-        return !com.complex.platform.common.idempotency.IdempotentReplayContext.replayDiscardsConsumption();
     }
 }

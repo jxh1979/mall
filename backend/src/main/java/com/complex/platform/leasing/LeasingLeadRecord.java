@@ -27,7 +27,8 @@ public record LeasingLeadRecord(
 ) {
 
     /**
-     * P0-A/GAP-07 展示脱敏：无 {@code pii.contact_phone.view} 权限的读端返回掩码手机号。
+     * P0-A/GAP-07 展示脱敏：返回掩码手机号。M724（治理地图第 871 行，操作员 2026-10-07 确认）起线索列表和操作结果一律走这里，
+     * 不论是否持有 {@code pii.contact_phone.view}；完整号码只经「查看完整号码」接口按条给出。
      * 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。
      */
     public LeasingLeadRecord withMaskedPhone() {
