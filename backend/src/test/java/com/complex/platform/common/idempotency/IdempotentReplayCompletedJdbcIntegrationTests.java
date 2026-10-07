@@ -1,6 +1,6 @@
 package com.complex.platform.common.idempotency;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -40,6 +40,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -51,7 +52,11 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code AuditedOperationExecutor} → 幂等层的票务写（主#51、#8），经 {@code AuditedOperationExecutor} → 幂等层的券核销（主#16），
  * 储值退款自带的按键重放（线上退款与柜台退款）；同键改了请求内容（是否销户、柜台兑付凭证号）不是同一次操作，409、不带标记。
  *
+ * <p>M724-F10（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」；枚举速查第 86 行「商户员工只能管理本商户发行的储值卡」）：
+ * 储值退款按键重放之前先核对当前操作人能不能管这张卡——别的商户持退款权限的员工拿原提交编号、原请求内容提交被拒，拿不到第一次的流水。
+ *
  * <p>本类开测试事务、结束回滚；MockMvc 与测试同线程，请求并入测试事务。写请求带 {@code X-Terminal-Type: web}。
+ * 例外：M724-F10 的单次授权用例不开测试事务（单次消耗随请求事务回滚要真实提交才看得见），夹具清理见该用例。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
@@ -82,6 +87,9 @@ class IdempotentReplayCompletedJdbcIntegrationTests {
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String userId = "usr_b02_" + suffix;
     private final String merchantId = "mch_b02_" + suffix;
+    // M724-F10：另一个商户的员工，用到的用例里才建
+    private final String otherUserId = "usr_b02o_" + suffix;
+    private final String otherMerchantId = "mch_b02o_" + suffix;
 
     @BeforeEach
     void seed() {
@@ -294,6 +302,99 @@ class IdempotentReplayCompletedJdbcIntegrationTests {
                 """, Integer.class, "svcr_" + counterKey)).isEqualTo(1);
     }
 
+    // M724-F10（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」；枚举速查第 86 行「商户员工只能管理本商户发行的储值卡」）：
+    // 商户甲的员工退款成功之后，商户乙持退款权限的员工拿同一客户、同一张卡、原提交编号、原请求内容提交 → 403 CROSS_MERCHANT_FORBIDDEN
+    // （与首次退款的范围校验同一错误码），响应里没有那笔退款的流水号、金额、余额，不提示已完成、不带 replayed；乙同号改请求内容、
+    // 乙换新编号同样被拒，退款流水条数与余额不变；甲本人同号同内容重复提交仍返回第一次的流水并提示已完成。线上退款与柜台退款各走一遍。
+    // 修复前乙的同号同内容提交 200：拿到甲那笔退款的流水、金额与余额，并提示已完成；乙同号改内容 409 IDEMPOTENCY_KEY_CONFLICT。
+    @Test
+    void anotherMerchantsStaffResubmittingAStoredValueRefundIsRejectedBeforeAnyFirstResultIsReturned() throws Exception {
+        otherMerchantStaff(false);
+        String onlineCustomer = customer("onf10");
+        card(onlineCustomer, 9000L, "platform_collect");
+        String onlinePath = "/api/v1/loyalty/stored-value/" + onlineCustomer + "/refund";
+        String onlineKey = "b02-f10-refund-" + suffix;
+        String onlineBody = refundJson(onlineKey, 3000L, null);
+        String onlineFirst = body(write(onlinePath, onlineBody)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.replayed").doesNotExist()));
+        String counterCustomer = customer("ctf10");
+        card(counterCustomer, 8000L, "merchant_prepaid");
+        String counterPath = "/api/v1/loyalty/stored-value/" + counterCustomer + "/counter-refund";
+        String counterKey = "b02-f10-counter-" + suffix;
+        String counterVoucher = "VOUCHER-F10-" + suffix;
+        String counterBody = refundJson(counterKey, 2000L, counterVoucher);
+        String counterFirst = body(write(counterPath, counterBody)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.replayed").doesNotExist()));
+
+        // ③ 甲本人同号同内容重复提交：仍返回第一次的流水并提示已完成（新增的范围核对不误伤本人）
+        assertCompletedStoredValueReplay(write(onlinePath, onlineBody), onlineFirst);
+        assertCompletedStoredValueReplay(write(counterPath, counterBody), counterFirst);
+
+        // 被拒的请求放在最后：失败的请求把测试事务标成只能回滚（生产每个请求各自一个事务，不受影响）
+        // ① 乙同号同内容：按范围被拒，拿不到第一次的流水
+        assertRejectedAsOutOfScope(write(otherUserId, otherMerchantId, onlinePath, onlineBody), onlineFirst);
+        assertRejectedAsOutOfScope(write(otherUserId, otherMerchantId, counterPath, counterBody), counterFirst);
+        // ② 乙同号改请求内容（金额）、乙换新编号：同样被拒
+        assertRejectedAsOutOfScope(write(otherUserId, otherMerchantId, onlinePath, refundJson(onlineKey, 1000L, null)), onlineFirst);
+        assertRejectedAsOutOfScope(write(otherUserId, otherMerchantId, onlinePath,
+                refundJson("b02-f10-refund-new-" + suffix, 3000L, null)), onlineFirst);
+        assertRejectedAsOutOfScope(write(otherUserId, otherMerchantId, counterPath,
+                refundJson(counterKey, 1000L, counterVoucher)), counterFirst);
+        assertRejectedAsOutOfScope(write(otherUserId, otherMerchantId, counterPath,
+                refundJson("b02-f10-counter-new-" + suffix, 2000L, counterVoucher)), counterFirst);
+        assertThat(refunds(onlineCustomer)).isEqualTo(1);
+        assertThat(balance(onlineCustomer)).isEqualTo(6000L);
+        assertThat(refunds(counterCustomer)).isEqualTo(1);
+        assertThat(balance(counterCustomer)).isEqualTo(6000L);
+    }
+
+    // M724-F10（治理地图第 656 行「操作被拒绝或失败的不算用掉」）：乙持的是单次退款授权时，被拒的那一次不算用掉——来源仍未消耗、没有消耗日志。
+    // 本用例不开测试事务：单次消耗随请求事务回滚，要真实提交才看得见（开着测试事务时消耗并入测试事务、不随请求回滚）。
+    // 储值流水只追加不删（V140），客人、卡与流水按后缀隔离留在库里；两名员工及其授权（含 seed 建的）结束时删除。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void anotherMerchantsStaffHoldingASingleUseRefundGrantIsRejectedAndKeepsTheGrant() throws Exception {
+        try {
+            otherMerchantStaff(true);
+            String counterCustomer = customer("suf10");
+            card(counterCustomer, 8000L, "merchant_prepaid");
+            String path = "/api/v1/loyalty/stored-value/" + counterCustomer + "/counter-refund";
+            String body = refundJson("b02-f10-single-" + suffix, 2000L, "VOUCHER-F10S-" + suffix);
+            String first = body(write(path, body)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("success")));
+
+            assertRejectedAsOutOfScope(write(otherUserId, otherMerchantId, path, body), first);
+            assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                    Boolean.class, otherUserId)).containsExactly(false);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM permission_template_usage_logs WHERE user_id = ? AND result = 'consumed'",
+                    Integer.class, otherUserId)).isZero();
+            assertThat(refunds(counterCustomer)).isEqualTo(1);
+            assertThat(balance(counterCustomer)).isEqualTo(6000L);
+        } finally {
+            jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id IN (?, ?)", userId, otherUserId);
+            jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", userId, otherUserId);
+        }
+    }
+
+    // M724-F10：按范围被拒——403 CROSS_MERCHANT_FORBIDDEN，响应里没有第一次那笔退款的流水号、金额、余额，不提示已完成、不带 replayed
+    private void assertRejectedAsOutOfScope(ResultActions rejected, String first) throws Exception {
+        String response = body(rejected
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"))
+                .andExpect(jsonPath("$.replayed").doesNotExist()));
+        JsonNode envelope = new ObjectMapper().readTree(response);
+        assertThat(envelope.get("message").asText()).isNotEqualTo(COMPLETED);
+        assertThat(envelope.get("data") == null || envelope.get("data").isNull()).as("被拒的响应不带业务结果").isTrue();
+        assertThat(response).doesNotContain(data(first).get("id").asText())
+                .doesNotContain("amount_cent").doesNotContain("balance_after_cent");
+    }
+
     private void assertCompletedReplay(ResultActions replay, String first) throws Exception {
         String replayed = body(replay
                 .andExpect(status().isOk())
@@ -317,15 +418,34 @@ class IdempotentReplayCompletedJdbcIntegrationTests {
     }
 
     private ResultActions write(String path, String body) throws Exception {
+        return write(userId, merchantId, path, body);
+    }
+
+    private ResultActions write(String user, String merchant, String path, String body) throws Exception {
         return mockMvc.perform(post(path)
                 .with(request -> {
                     request.addHeader("X-Terminal-Type", "web");
                     return authentication(new UsernamePasswordAuthenticationToken(
-                            new AccessActor(userId, userId, "staff", "org", merchantId, "active"), null,
+                            new AccessActor(user, user, "staff", "org", merchant, "active"), null,
                             List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
                 })
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
+    }
+
+    // M724-F10：商户乙的员工（同项目、另一个商户），持储值退款权限——常规授权或单次授权
+    private void otherMerchantStaff(boolean singleUse) {
+        Instant now = Instant.now();
+        accessRepository.createUser(new AccessUser(otherUserId, otherUserId, "staff", "org", otherMerchantId, "active", now));
+        accessRepository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), otherUserId,
+                List.of("customer.stored_value.refund"), now.minusSeconds(3600), now.plusSeconds(86_400), singleUse, false,
+                "active", "M724-F10 另一商户的退款权限", "seed-admin", now, null, null));
+    }
+
+    private Integer refunds(String customerId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM customer_stored_value_transactions WHERE customer_id = ? AND txn_type = 'refund'",
+                Integer.class, customerId);
     }
 
     private String customer(String tag) {

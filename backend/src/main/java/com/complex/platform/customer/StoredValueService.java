@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -440,6 +440,12 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
         if (existing != null) {
+            // M724-F10（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」；枚举速查第 86 行「商户员工只能管理本商户发行的储值卡」）：
+            // 返回第一次的结果之前，先核对当前主体能不能管这笔流水所在的那张卡——按流水实际所属的卡判，不信请求里传的商户字段。
+            // 不在范围内即拒绝（与首次退款同一错误码），不比对请求内容、不返回流水、不标记重放；线上退款与柜台退款共用本方法。
+            requireMerchantScopeForCard(repository.listStoredValueAccountsByCustomer(existing.customerId()).stream()
+                    .filter(card -> card.id().equals(existing.accountId())).findFirst()
+                    .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除")));
             // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
             // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
             CustomerStoredValueTransactionRecord first = verifyIdempotentReplay(existing, customerId, projectId, merchantId,

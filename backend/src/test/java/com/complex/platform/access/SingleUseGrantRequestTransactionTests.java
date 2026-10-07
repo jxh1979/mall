@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -81,6 +81,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * M724（F06、F08；治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：
  * 调拨单发货没有请求体、路径里的单号就是提交编号——重复点同一张单返回第一次的结果并提示已完成，重复提交时新用掉的单次来源不算用掉，
  * 本人唯一那份来源用掉后再点不再是 403；带了多个不同提交编号的请求，不持单次授权的登录人也在执行之前按 400 拒绝。
+ * M724-F04 补覆盖：同商户两个项目的员工同一提交编号并发建角色，只建一个、后到的一笔 409 且来源不算用掉；第一次提交失败后
+ * 另一个项目的员工用同一编号提交照常执行。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -352,6 +354,117 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(consumptionLogs(otherUserId)).isZero();
         assertConsumedOnce();
         assertThat(idempotencyRecords("xmj-role-cross-" + suffix)).isEqualTo(1);
+    }
+
+    // M724-F04 补覆盖（治理地图第 303 行「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」；操作员 2026-10-04 裁决
+    // 「同一提交编号只能提交一次不允许多次提交」）：同商户、两个项目的两名员工各持一份未用掉的单次 access.role.manage，同一提交编号、
+    // 同一正文并发提交。同步屏障用两人来源行的行锁：主线程先锁住两行再放两笔进来——两笔都读到未消耗来源、各自停在消耗行的 UPDATE 上
+    // （等到两个会话排在本连接所持的行锁后面，等不到即失败）；放开后两笔各自消耗、同时走到幂等占位，先占到的一笔执行并提交，
+    // 后到的一笔在占位上等它提交后被拒：409 IDEMPOTENCY_KEY_USED、不含第一次的结果，请求事务回滚——其来源仍未消耗、没有他的消耗日志。
+    // 角色只建一个，幂等记录只有一行。
+    @Test
+    void twoScopesSubmittingTheSameRequestNumberConcurrentlyCreateOneRoleAndTheLaterOneKeepsItsGrant() throws Exception {
+        staffWithSingleUseGrant(merchantId, ROLE_MANAGE);
+        RequestPostProcessor otherSession = otherProjectStaffWithSingleUseGrant();
+        String key = "xmj-role-cross-race-" + suffix;
+        String body = roleJson(key, roleName("跨项目并发同号"), "[]");
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<MockHttpServletResponse> responses = new ArrayList<>();
+        try {
+            List<Future<MockHttpServletResponse>> results = new ArrayList<>();
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                jdbcTemplate.queryForList("SELECT id FROM temporary_permission_grants WHERE subject_id IN (?, ?) FOR UPDATE",
+                        userId, otherUserId);
+                for (RequestPostProcessor submitter : List.of(session(userId, merchantId), otherSession)) {
+                    results.add(pool.submit(() -> mockMvc.perform(post("/api/v1/access/roles").with(submitter)
+                                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                            .andReturn().getResponse()));
+                }
+                awaitBlockedOnGrantRow(2);
+            });
+            for (Future<MockHttpServletResponse> result : results) {
+                responses.add(result.get(60, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        // responses 与提交顺序一致：第 0 笔是甲（userId），第 1 笔是乙（otherUserId）
+        assertThat(responses.stream().map(MockHttpServletResponse::getStatus).toList()).containsExactlyInAnyOrder(200, 409);
+        int executed = responses.get(0).getStatus() == 200 ? 0 : 1;
+        List<String> submitters = List.of(userId, otherUserId);
+        String first = responses.get(executed).getContentAsString(StandardCharsets.UTF_8);
+        String later = responses.get(1 - executed).getContentAsString(StandardCharsets.UTF_8);
+        assertThat(message(first)).isEqualTo("success");
+        assertThat(detailCode(later)).isEqualTo("IDEMPOTENCY_KEY_USED");
+        assertThat(later).doesNotContain(data(first).get("id").asText());
+        assertThat(rolesCreated()).isEqualTo(1);
+        assertThat(idempotencyRecords(key)).isEqualTo(1);
+        // 后到的一笔：单次来源未消耗、没有他的消耗日志；执行的一笔：恰好消耗一次
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                Boolean.class, submitters.get(1 - executed))).containsExactly(false);
+        assertThat(consumptionLogs(submitters.get(1 - executed))).isZero();
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                Boolean.class, submitters.get(executed))).containsExactly(true);
+        assertThat(consumptionLogs(submitters.get(executed))).isEqualTo(1);
+    }
+
+    // M724-F04 补覆盖（治理地图第 656 行「操作被拒绝或失败的不算用掉」；失败的提交不占编号）：甲第一次提交正文校验不过（未知权限码，
+    // 服务层抛错），整笔回滚——不留幂等记录、甲的来源未消耗。之后另一个项目的乙用同一提交编号提交合法正文：正常执行（不是 409）、
+    // 建出角色、乙的来源恰好消耗一次；甲的来源仍未消耗。
+    @Test
+    void afterAFailedFirstSubmissionAnotherScopeUsingTheSameRequestNumberRunsNormallyAndSpendsItsGrantOnce() throws Exception {
+        staffWithSingleUseGrant(merchantId, ROLE_MANAGE);
+        RequestPostProcessor otherSession = otherProjectStaffWithSingleUseGrant();
+        String key = "xmj-role-cross-retry-" + suffix;
+
+        mockMvc.perform(post("/api/v1/access/roles").with(session(userId, merchantId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(roleJson(key, roleName("失败后同号"), "[\"xm_m724_f04.unknown_" + suffix + "\"]")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("UNKNOWN_PERMISSION"));
+        assertUnconsumed();
+        assertThat(rolesCreated()).isZero();
+        assertThat(idempotencyRecords(key)).isZero();
+
+        mockMvc.perform(post("/api/v1/access/roles").with(otherSession)
+                        .contentType(MediaType.APPLICATION_JSON).content(roleJson(key, roleName("失败后同号"), "[]")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.replayed").doesNotExist());
+        assertThat(rolesCreated()).isEqualTo(1);
+        assertThat(idempotencyRecords(key)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                Boolean.class, otherUserId)).containsExactly(true);
+        assertThat(consumptionLogs(otherUserId)).isEqualTo(1);
+        assertUnconsumed();
+
+        // 这个编号现在归接管成功的乙：原先失败的甲再用同一编号提交合法正文，按「已被使用」拒绝——不执行、不建第二个角色、
+        // 甲的来源仍未消耗（修复前各范围各占一行，甲会再建出一个角色）
+        mockMvc.perform(post("/api/v1/access/roles").with(session(userId, merchantId))
+                        .contentType(MediaType.APPLICATION_JSON).content(roleJson(key, roleName("失败后同号"), "[]")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_KEY_USED"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+        assertThat(rolesCreated()).isEqualTo(1);
+        assertThat(idempotencyRecords(key)).isEqualTo(1);
+        assertUnconsumed();
+    }
+
+    // M724-F04 补覆盖夹具（同 anotherScopeHoldingItsOwnSingleUseGrantIsRejectedAndKeepsTheGrant）：同商户、另一个项目的员工乙，
+    // 自己持一份未用掉的单次 access.role.manage；返回乙的会话。
+    private RequestPostProcessor otherProjectStaffWithSingleUseGrant() {
+        String otherProject = "org_xmj_" + suffix;
+        Instant now = Instant.now();
+        repository.createUser(new AccessUser(otherUserId, otherUserId, "staff", otherProject, merchantId, "active", now));
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), otherUserId, List.of(ROLE_MANAGE),
+                now.minusSeconds(3600), now.plusSeconds(86_400), true, false, "active", "M724-F04 另一项目的单次来源",
+                "seed-admin", now, null, null));
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(
+                    new AccessActor(otherUserId, otherUserId, "staff", otherProject, merchantId, "active"), null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     // M724-F06（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：调拨单发货没有
