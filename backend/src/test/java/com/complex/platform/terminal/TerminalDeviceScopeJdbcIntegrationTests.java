@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -258,6 +258,44 @@ class TerminalDeviceScopeJdbcIntegrationTests {
 
     // 别的项目的设备一律不能碰：绑在项目乙空间上的、属于项目乙商户丙的、由项目乙员工持有的——送修、归还、报废各 403
     // CROSS_PROJECT_FORBIDDEN，设备行原样。修复前：三处都 200（第一处 403 的断言即红）。
+    // M723-F24（CODEX-M723-16-01；M723-F21 验收③「项目员工看到本项目内的全部设备」）：设备列表按本人能管的范围在库里查，不先截断。
+    // 项目乙新登记 205 台、项目甲的商户乙也新登记 205 台之后：商户甲员工仍能列出本商户那台更早的设备、别的都看不到；项目员工列出
+    // 本项目全部 206 台（超过原来的 200 台名额）、看不到项目乙的，返回的总数是 206；平台管理员两批都能看到。
+    // 修复前仓储先取全平台最近更新的 200 台再过滤，商户甲那台更早的设备列不出来（第一处断言即红）。
+    @Test
+    void theDeviceListIsNotCutShortByDevicesOutsideTheViewersScope() throws Exception {
+        String own = device("o1", "bound", merchantA, null, null);
+        bulkDevices("bb", merchantC, 205);
+        bulkDevices("ba", merchantB, 205);
+
+        assertThat(listedDeviceIds(merchantStaff)).containsExactly(own);
+        List<String> forProject = listedDeviceIds(projectStaff);
+        assertThat(forProject).hasSize(206).contains(own).noneMatch(id -> id.startsWith("td_m723s_bb"));
+        assertThat(listedTotal(projectStaff)).isEqualTo(206);
+        List<String> forAdmin = listedDeviceIds(admin);
+        assertThat(forAdmin).contains(own);
+        assertThat(forAdmin.stream().filter(id -> id.startsWith("td_m723s_bb") && id.endsWith(suffix)).count()).isEqualTo(205);
+        assertThat(forAdmin.stream().filter(id -> id.startsWith("td_m723s_ba") && id.endsWith(suffix)).count()).isEqualTo(205);
+    }
+
+    // 一次建一批挂在某商户名下的已绑定设备，更新时间比单台夹具晚（排在「最近更新」的前面）。
+    private void bulkDevices(String tag, String merchant, int count) {
+        jdbcTemplate.update("""
+                INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
+                    merchant_id, status, created_at, updated_at)
+                SELECT 'td_m723s_' || ? || g || '_' || ?, 'dev-m723s-' || ? || g || '-' || ?, 'DC-m723s-' || ? || g || '-' || ?,
+                       'tablet', 'space', ?, 'bound', now(), now() + interval '1 second'
+                  FROM generate_series(1, ?) g
+                """, tag, suffix, tag, suffix, tag, suffix, merchant, count);
+    }
+
+    private long listedTotal(String user) throws Exception {
+        String body = mockMvc.perform(get(DEVICES).with(session(user)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return new ObjectMapper().readTree(body).get("data").get("total").asLong();
+    }
+
     @Test
     void aProjectEmployeeCannotManageAnotherProjectsDevices() throws Exception {
         String bySpace = device("fs", "bound", null, spaceB, null);

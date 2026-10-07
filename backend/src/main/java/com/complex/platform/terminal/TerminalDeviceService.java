@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -315,18 +315,19 @@ public class TerminalDeviceService {
     }
 
     /**
-     * 平台后台设备台账（K16 改绑工作台数据源）：全量设备 + 商户归属列。
+     * 平台后台设备台账（K16 改绑工作台数据源）：本人能管的全部设备 + 商户归属列。
      * 读权限沿用终端模块视图权限 terminal.switch.view（与 ADM-TER-001 同闸）。
-     * M723-F21：只列本人能管的设备（平台管理员仍是全量）。
+     * M723-F21、F24：只列本人能管的设备（平台管理员仍是全量），完整列出、不截断。
      */
     public PageResponse<TerminalDeviceRecord> listDevices() {
         try {
-            // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备列表只显示本人能管的设备，判定与写入口同一个。
-            // ponytail: 仓储先取最近更新的 200 台再逐台判定，项目员工每台多查一次所属项目；设备总量超过 200 台时
-            //           范围内的设备可能列不全，届时改成按商户、项目联表过滤并分页。
-            List<TerminalDeviceRecord> records = repository.listDevices().stream()
-                    .filter(device -> attributionInScope(device.merchantId(), device.boundSpaceId(), device.staffId()))
-                    .toList();
+            // M723-F21、F24（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备列表只显示本人能管的设备，按范围在库里查、
+            // 完整列出——不再先取全平台最近更新的 200 台再过滤（范围外的设备占满名额时，范围内的设备会列不全）。范围口径与写入口的
+            // attributionInScope 相同：带商户归属 → 本商户；否则项目范围空＝平台管理员全量，非空 → 认定为本项目的设备。
+            Optional<String> actorMerchant = authorizationService.currentMerchantIdQuietly();
+            List<TerminalDeviceRecord> records = repository.listDevicesInScope(
+                    actorMerchant.orElse(null),
+                    actorMerchant.isPresent() ? null : authorizationService.currentProjectScopeQuietly().orElse(null));
             auditEventService.recordSuccess(
                     "terminal.device.viewed",
                     "terminal.switch.view",

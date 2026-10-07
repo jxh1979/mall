@@ -26,10 +26,20 @@ public interface TerminalDeviceRepository {
 
     /**
      * 平台后台设备台账：全量列出终端设备（含商户归属列，K16 改绑工作台数据源）。
-     * ponytail: LIMIT 200 平铺无分页，设备量到数百台再补分页。
+     * ponytail: 平铺无分页（设备是实物台账，量级有限），到上千台再补分页。
      */
     default List<TerminalDeviceRecord> listDevices() {
         return List.of();
+    }
+
+    /**
+     * M723-F24（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决「设备列表只显示自己能管的设备」）：按操作人的范围列出设备，
+     * 范围过滤在库里做、不截断。merchantId 非空＝只列该商户的设备；否则 projectId 非空＝只列认定为该项目的设备（认定口径同
+     * TerminalDeviceService.deviceProjectId：填了商户看商户的项目，没填商户、填了绑定空间看空间的项目，两样都没填看持有员工的项目）；
+     * 两者都空＝全部。内存实现没有归属数据可联，默认全部列出。
+     */
+    default List<TerminalDeviceRecord> listDevicesInScope(String merchantId, String projectId) {
+        return listDevices();
     }
 
     /**
