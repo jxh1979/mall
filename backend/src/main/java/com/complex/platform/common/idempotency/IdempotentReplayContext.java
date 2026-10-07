@@ -30,6 +30,12 @@ import com.complex.platform.common.api.ApiException;
  *
  * <p>M723-F09（同行）：请求事务切面没有给本请求开请求事务、进入时也没有外层事务时记下（{@link #markWithoutRequestTransaction}）：
  * 这样的请求里权限核验不消耗单次来源——即使核验发生在业务层自己的事务里，那个事务的提交也不受切面的重放回滚与失败撤回约束。
+ *
+ * <p>M724（XM-ONESHOT-RETURN B01）：准入闸逐笔放行的放行单同样是只能用一次的来源——消费时记到这次请求名下（{@link #markConsumed}），
+ * 重放时由主管复核服务认出并记为「只能重放」（{@link #markReplayOnly}），准入闸据此放行、不再消费、不建复核单。
+ *
+ * <p>M724（XM-ONESHOT-RETURN B02）：本请求请求编号的派生键经 {@link #registerDerivedKey} 登记后，其回放同样算本请求的重复提交；
+ * 按业务对象认出重复提交的模块自带重放用 {@link #markCurrentReplayed}。
  */
 public final class IdempotentReplayContext {
 
@@ -48,6 +54,7 @@ public final class IdempotentReplayContext {
     private boolean executed;
     private boolean businessFailed;
     private boolean withoutRequestTransaction;
+    private final java.util.Set<String> derivedKeys = new java.util.HashSet<>();
 
     private IdempotentReplayContext(String idempotencyKey, String requestDigest, boolean readOnly,
                                     java.util.Set<String> consumedOnRead) {
@@ -98,7 +105,7 @@ public final class IdempotentReplayContext {
         return idempotencyKey != null && requestDigest != null;
     }
 
-    /** 本请求消耗了单次来源的操作人；未消耗为 null。 */
+    /** 本请求消耗了单次来源（单次授权或准入放行单）的操作人；未消耗为 null。 */
     public String consumedBy() {
         return consumedBy;
     }
@@ -197,13 +204,25 @@ public final class IdempotentReplayContext {
     }
 
     /**
-     * M723-F04：幂等层返回第一次的结果时调用。回放的正是本请求自己的请求编号才记为已重放；业务内部按别的键去重的回放、
-     * 取不到本请求的请求编号、不在控制器调用里（没有请求上下文）时都不记（响应照旧，不提示已完成）。
+     * M723-F04：幂等层返回第一次的结果时调用。回放的正是本请求自己的请求编号（M724 B02：或经 {@link #registerDerivedKey} 登记的它的派生键）
+     * 才记为已重放；业务内部按别的键去重的回放、取不到本请求的请求编号、不在控制器调用里（没有请求上下文）时都不记（响应照旧，不提示已完成）。
      */
     public static void markReplayed(String replayedKey) {
         IdempotentReplayContext request = CURRENT.get();
-        if (request != null && replayedKey != null && replayedKey.equals(request.idempotencyKey)) {
+        if (request != null && replayedKey != null
+                && (replayedKey.equals(request.idempotencyKey) || request.derivedKeys.contains(replayedKey))) {
             request.replayed = true;
+        }
+    }
+
+    /**
+     * M724（XM-ONESHOT-RETURN B02）：业务把本请求的请求编号派生成内部键再交给幂等层时（如储值充值的 svtop_ 键）登记；
+     * 派生前的键正是本请求自己的请求编号才登记，其回放才算本请求的重复提交。
+     */
+    public static void registerDerivedKey(String requestKey, String derivedKey) {
+        IdempotentReplayContext request = CURRENT.get();
+        if (request != null && requestKey != null && derivedKey != null && requestKey.equals(request.idempotencyKey)) {
+            request.derivedKeys.add(derivedKey);
         }
     }
 
@@ -218,8 +237,19 @@ public final class IdempotentReplayContext {
         }
     }
 
+    /**
+     * M724（XM-ONESHOT-RETURN B02）：模块按业务对象（不按请求编号）认出本次控制器调用是同一次操作的重复提交、
+     * 返回第一次的结果时调用（如储值充值入账按支付意向认出「已入账」）。只对本次控制器调用生效，调用方须排在各项拒绝之后。
+     */
+    public static void markCurrentReplayed() {
+        IdempotentReplayContext request = CURRENT.get();
+        if (request != null) {
+            request.replayed = true;
+        }
+    }
+
     /** 凭重放过了权限核验、却找不到第一次的成功结果时的拒绝，与权限核验拒绝同码。 */
     static ApiException replayWithoutResult() {
-        return ApiException.forbidden("PERMISSION_DENIED", "没有操作权限：单次授权已用掉，且没有第一次的成功结果可返回");
+        return ApiException.forbidden("PERMISSION_DENIED", "没有操作权限：单次授权或放行单已用掉，且没有第一次的成功结果可返回");
     }
 }

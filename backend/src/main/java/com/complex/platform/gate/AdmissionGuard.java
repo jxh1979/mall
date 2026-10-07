@@ -7,11 +7,13 @@ import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
 import com.complex.platform.governance.review.SupervisorReviewService;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -66,6 +68,9 @@ public class AdmissionGuard {
     private final AuthorizationService authorizationService;
     // XM-M002-J：拦截复核单走的独立事务（REQUIRES_NEW）。经 setter 可选注入（同 IdempotencyService），单测 new 构造不传则直接调用。
     private TransactionTemplate independentTransaction;
+    // XM-ONESHOT-RETURN B01 审查修正（C3「任何 trigger 求值异常 → 统一 fail-closed、按策略建 pending 复核」）：已在事务里时求值走保存点（NESTED），
+    // 求值 SQL 报错只回滚到保存点，外层事务仍可继续认重放、消费放行单、建复核单或带警示放行。
+    private TransactionTemplate savepoint;
 
     public AdmissionGuard(
             JdbcAdmissionPolicyRepository policyRepository,
@@ -90,6 +95,9 @@ public class AdmissionGuard {
         TransactionTemplate template = new TransactionTemplate(transactionManager);
         template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.independentTransaction = template;
+        TransactionTemplate nested = new TransactionTemplate(transactionManager);
+        nested.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
+        this.savepoint = nested;
     }
 
     public void check(String actionType, String objectType, String objectId) {
@@ -107,9 +115,14 @@ public class AdmissionGuard {
         }
         if ("block".equals(policy.outcome())) {
             // M007-A-01（PGM-1.2 第 5 步、PGM-1.7.1 逐笔放行）：同对象已批准且未放行的复核单 → 消费一次并放行本次动作。
+            // XM-ONESHOT-RETURN B01（治理地图第 303 行「同一个操作被重复提交，系统只认一次」）：本请求正是用掉放行单的那次成功请求的重放
+            // → 按「只能重放」放行（幂等层返回第一次的结果），不再消费别的放行单、不建复核单；消费落空后再认一次——同键并发的后一笔
+            // 在放行单行锁上等前一笔提交，提交后才看得到那次放行。
             var actor = authorizationService.currentActor();
             String actorId = actor == null ? null : actor.id();
-            if (supervisorReviewService.consumeApprovedRelease(actionType, objectType, objectId, actorId).isPresent()) {
+            if (supervisorReviewService.admitReplayOfReleasingRequest(actionType, objectType, objectId, actorId)
+                    || supervisorReviewService.consumeApprovedRelease(actionType, objectType, objectId, actorId).isPresent()
+                    || supervisorReviewService.admitReplayOfReleasingRequest(actionType, objectType, objectId, actorId)) {
                 return;
             }
         }
@@ -170,7 +183,7 @@ public class AdmissionGuard {
     private boolean isTriggered(AdmissionPolicyRecord policy, String actionType, String objectType, String objectId) {
         String triggerMode = policy.triggerMode() == null ? "" : policy.triggerMode();
         try {
-            return switch (triggerMode) {
+            BooleanSupplier evaluate = () -> switch (triggerMode) {
                 case "always" -> true;
                 case "expired" -> authorizationService.currentMerchantIdQuietly()
                         .map(factRepository::isContractExpiredForMerchant)
@@ -210,6 +223,9 @@ public class AdmissionGuard {
                 }
                 default -> false; // 未知 trigger_mode（DB CHECK 约束兜底）→ 放行
             };
+            return savepoint == null || !TransactionSynchronizationManager.isActualTransactionActive()
+                    ? evaluate.getAsBoolean()
+                    : Boolean.TRUE.equals(savepoint.execute(status -> evaluate.getAsBoolean()));
         } catch (RuntimeException exception) {
             // C3（用户裁决：统一 fail-closed）：任何 trigger 的求值异常（DB 故障等）一律保守进复核、不放行，
             // 与终端开关/人脸闸 fail-closed 口径一致；非越界类（合同过期/资质异常/权限不足/职责分离等）亦不再

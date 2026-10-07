@@ -1,12 +1,14 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.chain.ApprovalChainNode;
 import com.complex.platform.governance.chain.ApprovalChainService;
@@ -19,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
@@ -79,6 +82,15 @@ public class SupervisorReviewService {
         this.auditEventService = auditEventService;
         this.eventPublisher = java.util.Objects.requireNonNull(eventPublisher, "eventPublisher");
         this.chainService = new ApprovalChainService(supervisorReviewRepository, authorizationService);
+    }
+
+    // XM-ONESHOT-RETURN B01：重放核验要确认用掉放行单的那次请求已成功完成（幂等记录）。经 setter 可选注入（同 AuthorizationService），
+    // 单测 new 构造不传则不认重放（照旧拦截）。
+    private IdempotencyRepository idempotencyRepository;
+
+    @Autowired(required = false)
+    public void setIdempotencyRepository(IdempotencyRepository idempotencyRepository) {
+        this.idempotencyRepository = idempotencyRepository;
     }
 
     public PageResponse<SupervisorReviewPolicyRecord> listPolicies() {
@@ -987,14 +999,22 @@ public class SupervisorReviewService {
      * M007-A-01（PGM-1.2 第 5 步「放行结果都要记录」、PGM-1.7.1「审批通过才生效」「逐笔放行」）：
      * 准入闸在拦截前调用——同动作、同对象、同发起人且已批准未放行的复核单被消费一次并放行本次动作，
      * 留痕 admission.release_executed；批准消费后再次执行须重新审批。
+     *
+     * <p>XM-ONESHOT-RETURN B01（治理地图第 303 行及操作员 2026-09-25 确认的追加句「只有这次操作成功完成、返回结果确认后才算用掉」）：
+     * 消费并入调用方事务（准入闸切面把闸口与业务方法包进同一事务），业务失败回滚时放行单与留痕一起回滚、仍可再放行一次。
+     * 取得到本次请求的幂等键与请求摘要时一并记到复核单上，并把本请求记为用掉了单次来源（幂等层据此把成功记录记到这次请求名下），
+     * 供 {@link #admitReplayOfReleasingRequest} 认出重放。
      */
     public Optional<SupervisorReviewDecisionRecord> consumeApprovedRelease(
             String actionType, String objectType, String objectId, String actorId) {
         String type = objectType == null || objectType.isBlank() ? actionType : objectType;
         String id = objectId == null || objectId.isBlank() ? actionType : objectId;
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        boolean recordRequest = request != null && request.identified();
         Optional<SupervisorReviewDecisionRecord> released = supervisorReviewRepository
                 .findApprovedUnreleasedSupervisorReview(actionType, type, id, actorId)
-                .filter(record -> supervisorReviewRepository.markSupervisorReviewReleased(record.reviewId(), actorId, Instant.now()));
+                .filter(record -> supervisorReviewRepository.markSupervisorReviewReleased(record.reviewId(), actorId, Instant.now(),
+                        recordRequest ? request.idempotencyKey() : null, recordRequest ? request.requestDigest() : null));
         released.ifPresent(record -> auditEventService.recordSuccess(
                 "admission.release_executed",
                 MANAGE_PERMISSION,
@@ -1005,7 +1025,45 @@ public class SupervisorReviewService {
                 Map.of("action_type", actionType, "object_type", type, "object_id", id,
                         "released_by", actorId == null ? "" : actorId)
         ));
+        if (released.isPresent() && request != null) {
+            // M723 起上下文按来源记消耗；放行单的来源键与权限来源键（来源类型:来源号）不同名，不会被权限核验当成已消耗的授权
+            request.markConsumed(actorId, "admission_release:" + released.get().reviewId());
+        }
         return released;
+    }
+
+    /**
+     * XM-ONESHOT-RETURN B01（治理地图第 303 行「同一个操作被重复提交，系统只认一次」及操作员 2026-09-25 确认的追加句
+     * 「同一次操作重复提交时，返回第一次的结果」）：本请求是否正是「用掉这张放行单的那次成功请求」的重放。三项同时成立才认：
+     * ① 同一幂等键、同一请求摘要（方法 + 路径 + 查询串）；② 同动作、同对象的已批准复核单记着正是这次请求放行用掉的；
+     * ③ 放行人那次请求的幂等记录已成功完成且记在放行人名下（第一次失败时放行与幂等记录一起回滚，没有可认的记录）。
+     * 认出后本请求记为「只能重放」：幂等层只返回第一次的结果、不再执行；准入闸据此放行，不再用掉别的放行单、不新建待审复核单。
+     * 取不到幂等键或请求摘要、不在控制器调用里、未注入幂等仓（单测）时一律不认，按原口径拦截。
+     * 认出前本请求已新用掉一张单次授权的，结果照常返回并提示已完成，请求事务切面把这次消耗整笔回滚、那张单次授权不算用掉
+     * （M723-F04；第 303 行追加句「不扣减」）。
+     *
+     * <p>M724-F03（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」；操作员裁决
+     * 「同一项目、同一商户的员工用同一个提交编号，只算一次、返回第一次的结果」）：认重放不限定操作人——同项目同商户的同事用同一提交编号
+     * 重提同一请求，同样在闸口放行、拿到第一次的结果，不再被拦下另建一张待审复核单。
+     * 安全性：「只能重放」意味着幂等层只返回第一次的结果、绝不执行；能不能读到第一次的结果由幂等层按提交范围判——同范围返回第一次的
+     * 结果，其他范围 409 {@code IDEMPOTENCY_KEY_USED}、不给结果（见 {@code common.idempotency.IdempotencyService} 的重放分支）；
+     * 闸口之后的权限核验照常。
+     */
+    public boolean admitReplayOfReleasingRequest(String actionType, String objectType, String objectId, String actorId) {
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        if (request == null || !request.identified() || actorId == null || idempotencyRepository == null) {
+            return false;
+        }
+        String type = objectType == null || objectType.isBlank() ? actionType : objectType;
+        String id = objectId == null || objectId.isBlank() ? actionType : objectId;
+        Optional<String> releasedBy = supervisorReviewRepository.findReleaserOfSupervisorReviewReleasedToRequest(
+                actionType, type, id, request.idempotencyKey(), request.requestDigest());
+        if (releasedBy.isEmpty() || !idempotencyRepository.hasCompletedSingleUseRequest(
+                releasedBy.get(), request.idempotencyKey(), request.requestDigest())) {
+            return false;
+        }
+        request.markReplayOnly();
+        return true;
     }
 
     /**

@@ -28,6 +28,24 @@ public interface SupervisorReviewRepository {
         return false;
     }
 
+    /**
+     * XM-ONESHOT-RETURN B01：放行时一并记下用掉它的那次请求（幂等键、请求摘要，取不到为空）。
+     * 默认退回不记请求信息的写法（内存仓只实现了它，其重放照旧拦截）。
+     */
+    default boolean markSupervisorReviewReleased(
+            String reviewId, String releasedBy, Instant releasedAt, String idempotencyKey, String requestDigest) {
+        return markSupervisorReviewReleased(reviewId, releasedBy, releasedAt);
+    }
+
+    /**
+     * XM-ONESHOT-RETURN B01、M724-F03：同动作、同对象的已批准复核单里，正是被这次请求（同幂等键、同请求摘要）放行用掉的那一张的放行人；
+     * 没有这样的复核单为空。不限定当前操作人（同项目同商户的同事重复提交同样要认出）。默认为空（内存仓不记请求信息，其重放照旧拦截）。
+     */
+    default Optional<String> findReleaserOfSupervisorReviewReleasedToRequest(String actionType, String objectType, String objectId,
+            String idempotencyKey, String requestDigest) {
+        return Optional.empty();
+    }
+
     /** M007-A-02（PGM-1.7.1 审批时限）：复核单排期——直接受益人、到期时刻、升级次数/时刻、转发人。 */
     record ReviewSchedule(String reviewId, String beneficiaryId, Instant dueAt, int escalationCount,
                           Instant escalatedAt, String forwardedTo) {

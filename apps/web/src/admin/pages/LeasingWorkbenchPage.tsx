@@ -14,6 +14,7 @@ import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { hasPermissions } from "../security/PermissionGate";
 import { shortId } from "../format/ids";
 import type { GovernanceSpaceRow, BusinessEntityRow, AccessUserRow } from "../types";
 
@@ -66,6 +67,8 @@ const TEXT = {
   leadRequired: "创建意向必须先选中一条线索。",
   brandNameRequired: "录入品牌必须填写品牌名称。",
   focusClear: "清除筛选，返回全部",
+  phoneReveal: "查看完整号码",
+  phoneRevealFailed: "查看完整号码失败，请稍后重试",
 };
 
 // 招商域内枚举中文（全局状态表未含，页内映射；表单下拉 option 已是中文，此处补表格展示列）。
@@ -111,7 +114,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
-export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, navigateTo }: AdminPageProps) {
+export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, navigateTo, effectivePermissions, refreshEffectivePermissions }: AdminPageProps) {
   const [leads, setLeads] = React.useState<LeasingLeadRow[]>([]);
   const [intents, setIntents] = React.useState<LeasingIntentRow[]>([]);
   const [brands, setBrands] = React.useState<LeasingBrandRow[]>([]);
@@ -119,7 +122,14 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   // 到期待跟进线索（V219 提醒窗天数后台可配，判定在后端 /leads/follow-up-due，前端只展示）。
   const [dueLeads, setDueLeads] = React.useState<LeasingLeadRow[]>([]);
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。
-  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 线索明细带 lead：字段在渲染时现算（「电话」字段要跟着下面的 phoneReveal 变）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[]; lead?: LeasingLeadRow } | null>(null);
+  // M724（治理地图第 871 行，操作员 2026-10-07 确认：「招商线索联系人的手机号另按本句处理：线索列表和操作结果一律只显示脱敏号码；
+  // 经单独授权且查看权限有效的人员，可以在某一条线索上点“查看完整号码”，只显示这一条的完整号码，每点一次算查看一次并留痕，
+  // 单次授权看一次即用掉。」）：点出来的完整号码只放这里（按线索 id），不并进 leads／dueLeads（搜索框对整行做匹配）、
+  // 不进页面底部操作结果区；关抽屉或重新拉数即清。
+  const [phoneReveal, setPhoneReveal] = React.useState<{ leadId: string; busy?: boolean; phone?: string; error?: string } | null>(null);
+  const canViewFullPhone = hasPermissions(effectivePermissions, ["pii.contact_phone.view"]);
 
   const lead = useSelectedRow(leads);
   const intent = useSelectedRow(intents);
@@ -209,7 +219,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
         setSpaces(sp ?? []); setMerchantList(mc ?? []); setEntities(en ?? []); setSalesUsers(us ?? []);
       } catch { /* 无权限→保持空字典 */ }
     },
-    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
+    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => { setGlobalError(null); setPhoneReveal(null); } },
   );
 
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
@@ -239,21 +249,58 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const followingCount = leads.filter(isFollowing).length;
 
   function openLeadDetail(row: LeasingLeadRow) {
-    setDetail({
-      title: `线索明细 · ${row.contactName || row.id}`,
-      fields: [
-        { label: "线索号", value: row.id },
-        { label: "联系人", value: row.contactName ?? "-" },
-        { label: "电话", value: row.contactPhone ?? "-" },
-        { label: "来源", value: label(SOURCE_LABELS, row.source) },
-        { label: "意向业态", value: label(BUSINESS_TYPE_LABELS, row.intendedBusinessType) },
-        { label: "意向空间", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.intendedSpaceId}>{row.intendedSpaceId ?? "-"}</TraceLink> },
-        { label: "关联品牌", value: row.brandId ?? "-" },
-        { label: "负责人", value: row.ownerUserId ?? "-" },
-        { label: "状态", value: label(LEAD_STATUS_LABELS, row.status) },
-        { label: "最近跟进", value: cnDate(row.lastFollowUpAt) },
-      ],
-    });
+    setPhoneReveal(null);
+    setDetail({ title: `线索明细 · ${row.contactName || row.id}`, fields: [], lead: row });
+  }
+
+  // 引用保持不变：抽屉按 onClose 重挂键盘监听并把焦点移到关闭按钮，点「查看完整号码」引起的重渲染不应触发它。
+  const closeDetail = React.useCallback(() => {
+    setDetail(null);
+    setPhoneReveal(null);
+  }, []);
+
+  // M724：查看这一条线索的完整号码。每点一次后端算查看一次并留痕；请求在途时按钮禁用（连点第二下若被拒会盖掉已取回的号码）；
+  // 抽屉已关或已重新拉数（phoneReveal 被清）时丢弃迟到的结果。失败只在抽屉里报错，不走整页报错。
+  async function revealLeadPhone(leadId: string) {
+    const settle = (next: { phone?: string; error?: string }) =>
+      setPhoneReveal((current) => (current?.leadId === leadId && current?.busy ? { leadId, ...next } : current));
+    setPhoneReveal({ leadId, busy: true });
+    try {
+      const result = await api.get<{ contactPhone?: string | null }>(`/api/v1/leasing/leads/${leadId}/contact-phone`);
+      settle({ phone: result?.contactPhone ?? "" });
+    } catch (revealError) {
+      settle({ error: revealError instanceof Error ? revealError.message : TEXT.phoneRevealFailed });
+      return;
+    }
+    // 单次授权看一次即用掉：重读本人有效权限，按钮随之收起（先例 AccessGovernancePage M002-F49）。重读失败不影响已显示的号码。
+    if (refreshEffectivePermissions) await refreshEffectivePermissions().catch(() => undefined);
+  }
+
+  function leadDetailFields(row: LeasingLeadRow): RowDetailField[] {
+    const reveal = phoneReveal?.leadId === row.id ? phoneReveal : null;
+    return [
+      { label: "线索号", value: row.id },
+      { label: "联系人", value: row.contactName ?? "-" },
+      {
+        label: "电话",
+        value: (
+          <>
+            <span data-testid="leasing-lead-phone-value">{reveal?.phone || row.contactPhone || "-"}</span>
+            {canViewFullPhone && !reveal?.phone ? (
+              <button type="button" data-testid="leasing-lead-phone-reveal" disabled={reveal?.busy === true} onClick={() => void revealLeadPhone(row.id)}>{TEXT.phoneReveal}</button>
+            ) : null}
+            {reveal?.error ? <div data-testid="leasing-lead-phone-error" className="admin-inline-error">{reveal.error}</div> : null}
+          </>
+        ),
+      },
+      { label: "来源", value: label(SOURCE_LABELS, row.source) },
+      { label: "意向业态", value: label(BUSINESS_TYPE_LABELS, row.intendedBusinessType) },
+      { label: "意向空间", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.intendedSpaceId}>{row.intendedSpaceId ?? "-"}</TraceLink> },
+      { label: "关联品牌", value: row.brandId ?? "-" },
+      { label: "负责人", value: row.ownerUserId ?? "-" },
+      { label: "状态", value: label(LEAD_STATUS_LABELS, row.status) },
+      { label: "最近跟进", value: cnDate(row.lastFollowUpAt) },
+    ];
   }
 
   function openIntentDetail(row: LeasingIntentRow) {
@@ -673,7 +720,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
           { label: "业态", value: brandBusinessType.trim() || "未填写" },
         ]}
       />
-      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.lead ? leadDetailFields(detail.lead) : detail?.fields ?? []} onClose={closeDetail} />
     </section>
   );
 }

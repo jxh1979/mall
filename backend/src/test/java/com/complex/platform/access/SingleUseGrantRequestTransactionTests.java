@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -78,6 +78,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * M723 第 13 轮（F19、F20）：同名请求头的每个值都算提交编号；查询串里的提交编号不计入请求摘要。
  * M723 第 14 轮（F21；治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：终端设备签名公钥登记按设备归属范围放行——
  * 带商户归属的员工只能给本商户的设备登记，项目员工只能给本项目的设备登记；越范围 403、不写入、不留幂等记录、单次来源不算用掉。
+ * M724（F06、F08；治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：
+ * 调拨单发货没有请求体、路径里的单号就是提交编号——重复点同一张单返回第一次的结果并提示已完成，重复提交时新用掉的单次来源不算用掉，
+ * 本人唯一那份来源用掉后再点不再是 403；带了多个不同提交编号的请求，不持单次授权的登录人也在执行之前按 400 拒绝。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -133,6 +136,8 @@ class SingleUseGrantRequestTransactionTests {
         jdbcTemplate.update("DELETE FROM terminal_devices WHERE device_id LIKE ?", "dev-xmj-%" + suffix);
         jdbcTemplate.update("DELETE FROM spaces WHERE id LIKE ?", "spc_xmj_%" + suffix);
         jdbcTemplate.update("DELETE FROM leasing_leads WHERE contact_name = ?", roleName("线索"));
+        // M724-F06：调拨单夹具按「xmj-trf-〔标记〕〔后缀〕」命名（单号也是提交编号，其幂等记录由下面的 xmj-% 一并清掉）
+        jdbcTemplate.update("DELETE FROM inventory_transfer_orders WHERE id LIKE ?", "xmj-trf-%" + suffix);
         jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "xmj-%" + suffix);
     }
@@ -186,6 +191,7 @@ class SingleUseGrantRequestTransactionTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(roleId))
                 .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.replayed").value(true))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(data(replayed)).isEqualTo(data(first));
         assertConsumedOnce();
@@ -307,10 +313,12 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(rolesCreated()).isEqualTo(1);
     }
 
-    // M723-F04「不同项目或不同商户不串用结果」：另一个项目的员工乙（自己持一份未用掉的同码单次来源）用甲的请求编号与相同请求体提交 →
-    // 幂等范围按所属项目＋所属商户隔离，不认甲的结果，按首次执行：200、消息 success、建出第二个角色（角色名按项目唯一），乙的来源消耗一次。
+    // M724（操作员 2026-10-04 裁决「同一商户、不同项目的两名员工用同一个提交编号，现在各执行一次？？？同一提交编号只能提交一次不允许多次提交」；
+    // 2026-10-03 裁决：同商户跨项目不得拿到别人的结果）：另一个项目的员工乙（自己持一份未用掉的同码单次来源）用甲的请求编号与相同
+    // 请求体提交 → 409 IDEMPOTENCY_KEY_USED，不执行、不返回甲的结果；角色仍只有甲建的一个；乙的来源在权限核验处先被用掉，
+    // 幂等层拒绝后随请求事务回滚——仍未消耗、没有乙的消耗日志。修复前乙按首次执行：建出第二个角色，乙的来源被用掉。
     @Test
-    void aSubmissionFromAnotherProjectWithTheSameRequestNumberIsExecutedOnItsOwn() throws Exception {
+    void anotherScopeHoldingItsOwnSingleUseGrantIsRejectedAndKeepsTheGrant() throws Exception {
         staffWithSingleUseGrant(merchantId, ROLE_MANAGE);
         String otherProject = "org_xmj_" + suffix;
         Instant now = Instant.now();
@@ -333,15 +341,89 @@ class SingleUseGrantRequestTransactionTests {
 
         String second = mockMvc.perform(post("/api/v1/access/roles").with(otherSession)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_KEY_USED"))
+                .andExpect(jsonPath("$.message").value("该提交编号已被使用，本次操作未执行"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(second).doesNotContain(data(first).get("id").asText());
+        assertThat(rolesCreated()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                Boolean.class, otherUserId)).containsExactly(false);
+        assertThat(consumptionLogs(otherUserId)).isZero();
+        assertConsumedOnce();
+        assertThat(idempotencyRecords("xmj-role-cross-" + suffix)).isEqualTo(1);
+    }
+
+    // M724-F06（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：调拨单发货没有
+    // 请求体，服务层把路径里的单号当提交编号交给幂等层；切面按 IdempotencyKeyFromPath 取同一个单号作本次请求的提交编号。甲凭单次
+    // 「调拨单管理」对一张新建的调拨单发货：200、来源消耗一次。同项目同商户的同事乙（自己持一份未用掉的同码单次来源）对同一张单再发货
+    // → 200、甲那次的结果、提示已完成、replayed=true；调拨单只发货一次（发货成功事件一条）；乙的来源未消耗、没有乙的消耗日志。
+    // 甲本人（唯一那份来源已用掉）再点一次 → 200、第一次的结果、提示已完成，消耗日志仍只有一条。
+    // 对照：另一张新建的调拨单由乙发货 → 正常执行、乙的来源消耗一次。
+    // 修复前切面读不到这个编号：乙那次的消息是 success、乙的来源被用掉且不回滚（第一处「提示已完成」即红），甲本人再点 403。
+    @Test
+    void shippingATransferOrderAgainReturnsTheFirstResultAndASecondSingleUseGrantIsNotUsedUp() throws Exception {
+        String manage = "inventory.transfer_order.manage";
+        staffWithSingleUseGrant(merchantId, manage);
+        singleUseGrant(otherUserId, merchantId, manage);
+        String order = createdTransferOrder("a-");
+        String url = "/api/v1/inventory/transfer-orders/" + order + "/ship";
+
+        String first = mockMvc.perform(post(url).with(session(userId, merchantId)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("shipped"))
                 .andExpect(jsonPath("$.message").value("success"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        assertThat(data(second).get("id").asText()).isNotEqualTo(data(first).get("id").asText());
-        assertThat(rolesCreated()).isEqualTo(2);
+        assertConsumedOnce();
+        assertThat(successEvents("inventory.transfer_order_shipped", order)).isEqualTo(1);
+
+        // 同事乙对同一张单再发货：返回甲那次的结果并提示已完成，乙的来源不算用掉
+        String byColleague = mockMvc.perform(post(url).with(session(otherUserId, merchantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(byColleague)).isEqualTo(data(first));
+        assertThat(successEvents("inventory.transfer_order_shipped", order)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
+                Boolean.class, otherUserId)).containsExactly(false);
+        assertThat(consumptionLogs(otherUserId)).isZero();
+        assertConsumedOnce();
+
+        // 甲本人再点一次：唯一那份来源已用掉，返回第一次的结果并提示已完成（不再是 403）
+        String byOwner = mockMvc.perform(post(url).with(session(userId, merchantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(byOwner)).isEqualTo(data(first));
+        assertConsumedOnce();
+        assertThat(successEvents("inventory.transfer_order_shipped", order)).isEqualTo(1);
+
+        // 对照：另一张新建的调拨单，乙发货——正常执行，乙的来源消耗一次
+        String another = createdTransferOrder("b-");
+        mockMvc.perform(post("/api/v1/inventory/transfer-orders/" + another + "/ship").with(session(otherUserId, merchantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("shipped"))
+                .andExpect(jsonPath("$.message").value("success"));
         assertThat(jdbcTemplate.queryForList("SELECT consumed FROM temporary_permission_grants WHERE subject_id = ?",
                 Boolean.class, otherUserId)).containsExactly(true);
         assertThat(consumptionLogs(otherUserId)).isEqualTo(1);
-        assertConsumedOnce();
+        assertThat(successEvents("inventory.transfer_order_shipped", another)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList("SELECT status FROM inventory_transfer_orders WHERE id IN (?, ?)",
+                String.class, order, another)).containsExactly("shipped", "shipped");
+    }
+
+    // M724-F06 夹具：一张新建状态的借调单（借用型，发货不记结算，不需要明细行）；标记区分同一用例里的多张单。
+    // 返回单号——接口路径里的 order_id，也是服务层交给幂等层的提交编号。
+    private String createdTransferOrder(String tag) {
+        String order = "xmj-trf-" + tag + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO inventory_transfer_orders (id, transfer_type, lending_mode, from_owner_type, from_owner_id,
+                    to_owner_type, to_owner_id, status, created_at, updated_at)
+                VALUES (?, 'lending', 'borrow', 'merchant', ?, 'merchant', ?, 'created', now(), now())
+                """, order, merchantId, "mch_xmjb_" + suffix);
+        return order;
     }
 
     private List<Boolean> consumedFlags() {
@@ -1449,6 +1531,79 @@ class SingleUseGrantRequestTransactionTests {
             assertThat(jdbcTemplate.queryForObject("SELECT public_key FROM terminal_device_signing_keys WHERE device_id = ?",
                     String.class, device)).isEqualTo("PK1-" + suffix);
         }
+    }
+
+    // M724-F08（治理地图第 656 行「同一次操作重复提交时，直接返回第一次的结果并提示已完成，不再重复执行、也不再扣减」）：带了多个不同
+    // 提交编号的请求，不持单次授权的登录人也在执行之前拒绝。员工只持长期（非单次）「角色管理」授权、没有任何单次授权，建角色时请求体里的
+    // 提交编号之外又带了一个不同的编号——Idempotency-Key 请求头、X-Idempotency-Key 请求头、查询串 idempotency_key，或同名请求头写两遍
+    // 且值不同（第一个与请求体相同）：都 400 VALIDATION_FAILED，没有建出角色、两个编号都没有留下幂等记录。对照：请求体、请求头、
+    // 查询串写同一个编号：200、建出一个角色；随后只带原编号重复提交 → 第一次的结果、提示已完成、角色仍只有一个。
+    // 修复前这条拒绝只对持未消耗单次来源的请求生效：长期权限的人带两个不同编号的请求照常执行、建出角色（第一处 400 即红）。
+    @Test
+    void aRequestCarryingDifferentRequestNumbersIsRejectedForAnOperatorWithoutAnySingleUseGrantToo() throws Exception {
+        Instant now = Instant.now();
+        repository.createUser(new AccessUser(userId, userId, "staff", "org", null, "active", now));
+        repository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(ROLE_MANAGE),
+                now.minusSeconds(3600), now.plusSeconds(86_400), false, false, "active", "M724-F08 长期授权（非单次）",
+                "seed-admin", now, null, null));
+        String key = "xmj-role-plain-" + suffix;
+        String other = "xmj-role-plain-other-" + suffix;
+        String body = roleJson(key, roleName("长期编号"), "[]");
+        List<RequestPostProcessor> conflicts = List.of(
+                request -> {
+                    request.addHeader("Idempotency-Key", other);
+                    return request;
+                },
+                request -> {
+                    request.addHeader("X-Idempotency-Key", other);
+                    return request;
+                },
+                request -> {
+                    request.setQueryString("idempotency_key=" + other);
+                    return request;
+                });
+        for (RequestPostProcessor conflict : conflicts) {
+            mockMvc.perform(post("/api/v1/access/roles").with(session(null)).with(conflict)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            assertThat(rolesCreated()).isZero();
+            assertThat(idempotencyRecords(key)).isZero();
+            assertThat(idempotencyRecords(other)).isZero();
+        }
+        // 同名请求头写两遍、值不同（第一个与请求体相同）
+        for (String header : List.of("Idempotency-Key", "X-Idempotency-Key")) {
+            mockMvc.perform(post("/api/v1/access/roles").with(session(null)).header(header, key, other)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+            assertThat(rolesCreated()).isZero();
+            assertThat(idempotencyRecords(key)).isZero();
+            assertThat(idempotencyRecords(other)).isZero();
+        }
+
+        // 对照：请求体、请求头、查询串写的是同一个编号
+        RequestPostProcessor sameEverywhere = request -> {
+            request.addHeader("Idempotency-Key", key);
+            request.setQueryString("idempotency_key=" + key);
+            return request;
+        };
+        String first = mockMvc.perform(post("/api/v1/access/roles").with(session(null)).with(sameEverywhere)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(rolesCreated()).isEqualTo(1);
+
+        // 只带原编号重复提交：返回第一次的结果并提示已完成，角色仍只有一个
+        String replayed = mockMvc.perform(post("/api/v1/access/roles").with(session(null))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(replayed)).isEqualTo(data(first));
+        assertThat(rolesCreated()).isEqualTo(1);
     }
 
     // M723-F20（治理地图第 656 行同一确认句；M723-F04 验收「本人唯一的单次来源重放不再 403」）：提交编号写在查询串里不改变「是不是同一次

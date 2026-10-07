@@ -1,9 +1,11 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.contract.ContractRecord;
 import com.complex.platform.contract.ContractService;
 import com.complex.platform.contract.dto.ContractDraftRequest;
@@ -162,6 +164,46 @@ public class LeasingService {
         auditEventService.recordSuccess("leasing.lead.status_changed", "leasing.lead.manage", "leasing_lead", ex.id(),
                 null, actual.idempotencyKey(), Map.of("status", status));
         return saved;
+    }
+
+    /**
+     * M724（治理地图第 871 行，操作员 2026-10-07 确认：「招商线索联系人的手机号另按本句处理：线索列表和操作结果一律只显示脱敏号码；
+     * 经单独授权且查看权限有效的人员，可以在某一条线索上点“查看完整号码”，只显示这一条的完整号码，每点一次算查看一次并留痕，
+     * 单次授权看一次即用掉。」）：查看某一条线索的完整联系人手机号。
+     * 顺序：平台口径 → 线索须存在 → 项目员工只能看本项目的线索（与线索列表同一口径，平台管理员全量）→ 线索确有电话才核验明文码
+     * （单次来源在这里消耗，长期来源不产生消耗；没有电话返回空号码、不碰明文码）→ 留痕。范围与存在性都排在消耗之前，被拒不扣。
+     * 没有明文码的人 403、不退回掩码；被拒（越项目、无明文码）留失败痕（独立事务，不随请求事务回滚）。留痕元数据不含号码。
+     */
+    public LeasingLeadContactPhoneRecord viewLeadContactPhone(String leadId) {
+        authorizationService.requirePlatformScope();
+        LeasingLeadRecord lead = requireLead(leadId);
+        String projectScope = currentProjectScope();
+        if (projectScope != null && !projectScope.equals(lead.projectId())) {
+            throw contactPhoneViewDenied(lead.id(),
+                    ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "招商线索属于其他综合体项目"));
+        }
+        if (lead.contactPhone() == null || lead.contactPhone().isBlank()) {
+            return new LeasingLeadContactPhoneRecord(lead.id(), lead.contactPhone());
+        }
+        try {
+            authorizationService.requirePermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        } catch (ApiException denied) {
+            throw contactPhoneViewDenied(lead.id(), denied);
+        }
+        // 本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时不给明文
+        if (IdempotentReplayContext.replayDiscardsConsumption()) {
+            return new LeasingLeadContactPhoneRecord(lead.id(), PhoneMask.mask(lead.contactPhone()));
+        }
+        auditEventService.recordSuccess("leasing.lead.contact_phone_viewed", PhoneMask.VIEW_PLAINTEXT_PERMISSION,
+                "leasing_lead", lead.id(), null, null, Map.of());
+        return new LeasingLeadContactPhoneRecord(lead.id(), lead.contactPhone());
+    }
+
+    // M724：「查看完整号码」被拒的失败留痕（AuditEventService.recordFailure 走独立事务），返回原异常供调用处抛出
+    private ApiException contactPhoneViewDenied(String leadId, ApiException denied) {
+        auditEventService.recordFailure("leasing.lead.contact_phone_view_failed", PhoneMask.VIEW_PLAINTEXT_PERMISSION,
+                "leasing_lead", leadId, null, null, denied.code());
+        return denied;
     }
 
     // ============ 意向 ============

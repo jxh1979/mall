@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -682,9 +682,11 @@ class M006SecurityRegressionTests {
                 e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
     }
 
-    // M006-031：实际控制器须按组织和操作人区分首次请求。
+    // M006-031：实际控制器须按组织和操作人区分提交范围。M724（操作员 2026-10-04 裁决「同一提交编号只能提交一次不允许多次提交」）：
+    // 两名不带商户归属的管理员用同一请求编号建角色——只有第一人执行；第二人 409 IDEMPOTENCY_KEY_USED、不建角色、拿不到第一人的结果；
+    // 第一人重试返回第一次的结果。修复前两人各建一个角色。
 
-    @Test void companyRequestsHaveIndependentResultsAndRetryOnlyOnce() {
+    @Test void companyRequestsOnlyTheFirstCallerExecutesAndTheSecondIsRejected() {
         var idem = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         idem.setCallerScopeResolver(authorization);
         service = new AccessService(repository, idem, new AuditEventService(new InMemoryAuditEventRepository()),
@@ -701,13 +703,16 @@ class M006SecurityRegressionTests {
         actor("manager-a", "staff", "org-a", null);
         var first = controller.createRole(request).data();
         actor("manager-b", "staff", "org-b", null);
-        var result = controller.createRole(request);
-        assertThat(roles.values()).extracting(RoleRecord::organizationId).containsExactlyInAnyOrder("org-a", "org-b");
-        assertThat(result.data().id()).isNotEqualTo(first.id());
-        assertThat(controller.createRole(request).data().id()).isEqualTo(result.data().id());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            assertThatThrownBy(() -> controller.createRole(request)).isInstanceOfSatisfying(ApiException.class, e -> {
+                assertThat(e.status().value()).isEqualTo(409);
+                assertThat(e.code()).isEqualTo("IDEMPOTENCY_KEY_USED");
+            });
+        }
+        assertThat(roles.values()).extracting(RoleRecord::organizationId).containsExactly("org-a");
         actor("manager-a", "staff", "org-a", null);
         assertThat(controller.createRole(request).data().id()).isEqualTo(first.id());
-        assertThat(roles).hasSize(2);
+        assertThat(roles).hasSize(1);
     }
 
     // M006-032：实际错误响应须保持中文。

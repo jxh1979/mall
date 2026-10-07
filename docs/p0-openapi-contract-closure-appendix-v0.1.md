@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.14
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.15
 
 ## 1. 文档定位
 
@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 730 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 731 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 328 | 人工权限矩阵正文未覆盖 227 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1460 | 人工事件矩阵正文未覆盖 1419 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 730 | 人工任务映射正文未逐项覆盖 724 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1462 | 人工事件矩阵正文未覆盖 1421 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 731 | 人工任务映射正文未逐项覆盖 725 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 440 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -257,7 +257,7 @@
 | `leasing.brand.manage` | staff-token | platform | 2 | listLeasingBrands, createLeasingBrand | OpenAPI 补充，以本附录为准 |
 | `leasing.convert` | staff-token | platform | 1 | signLeasingIntent | OpenAPI 补充，以本附录为准 |
 | `leasing.intent.manage` | staff-token | platform | 3 | listLeasingIntents, createLeasingIntent, advanceLeasingIntent | OpenAPI 补充，以本附录为准 |
-| `leasing.lead.manage` | staff-token | platform | 7 | listLeasingLeads, createLeasingLead, listLeasingLeadsFollowUpDue, assignLeasingLead, updateLeasingLeadStatus, listLeasingFollowUps, createLeasingFollowUp | OpenAPI 补充，以本附录为准 |
+| `leasing.lead.manage` | staff-token | platform | 8 | listLeasingLeads, createLeasingLead, listLeasingLeadsFollowUpDue, assignLeasingLead, updateLeasingLeadStatus, getLeasingLeadContactPhone, listLeasingFollowUps, createLeasingFollowUp | OpenAPI 补充，以本附录为准 |
 | `mdm.device.manage` | staff-token | -, project-device | 3 | enrollMdmDevice, reportMdmPolicyViolation, detectMdmViolations | OpenAPI 补充，以本附录为准 |
 | `mdm.policy.manage` | staff-token | project-device | 4 | listMdmAppWhitelist, upsertMdmAppWhitelist, listMdmSiteWhitelist, upsertMdmSiteWhitelist | OpenAPI 补充，以本附录为准 |
 | `mdm.violation.handle` | staff-token | - | 1 | handleMdmViolation | OpenAPI 补充，以本附录为准 |
@@ -1308,6 +1308,8 @@
 | `leasing.intent.viewed` | success | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
 | `leasing.lead.assign_failed` | failure | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `leasing.lead.assigned` | success | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.contact_phone_view_failed` | failure | `getLeasingLeadContactPhone` | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.contact_phone_viewed` | success | `getLeasingLeadContactPhone` | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `leasing.lead.create_failed` | failure | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `leasing.lead.created` | success | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `leasing.lead.status_change_failed` | failure | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
@@ -2337,6 +2339,7 @@
 | P0-待归类 | `getFacilityInspectionTask` | `GET` | `/api/v1/facility/inspections/tasks/{task_id}` | 巡检任务详情 | `facility.inspection.manage` | `facility.inspection_task.viewed` / `facility.inspection_task.view_failed` | web | operation 级补充 |
 | P0-待归类 | `getFacilityWorkOrder` | `GET` | `/api/v1/facility/work-orders/{work_order_id}` | 工单详情 | `facility.work_order.manage` | `facility.work_order.viewed` / `facility.work_order.view_failed` | web | operation 级补充 |
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
+| P0-待归类 | `getLeasingLeadContactPhone` | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | 查看某一条招商线索的完整联系人手机号 | `leasing.lead.manage` | `leasing.lead.contact_phone_viewed` / `leasing.lead.contact_phone_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | 公司统一收款码(下单出示用) | `service.order.create` | `service.pay_config.viewed` / `service.pay_config.view_failed` | staff_private_phone, web, tablet | operation 级补充 |
 | P0-待归类 | `getSiteEntryReport` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}` | 查看单个进场报备单 | `facility.site_entry.view_assigned` | `facility.site_entry.viewed` / `facility.site_entry.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | 查询合规到期项列表 | `compliance.expiry_item.view` | `compliance.expiry_item.list` / `compliance.expiry_item.list_failed` | web | operation 级补充 |

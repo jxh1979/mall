@@ -1,8 +1,9 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.FinanceService;
@@ -50,6 +51,7 @@ public class StoredValueService {
     private static final String EVENT_TOPUP = "stored_value.topup";
     private static final String EVENT_CONSUME = "stored_value.consume";
     private static final String EVENT_REFUND = "stored_value.refund";
+    private static final String EVENT_COUNTER_REFUND = "stored_value.counter_refund";
     private static final String NOTIFICATION_DOMAIN = "stored_value";
     private static final String NOTIFICATION_EVENT_TOPUP = "topup";
     private static final String NOTIFICATION_EVENT_CONSUME = "consume";
@@ -66,6 +68,7 @@ public class StoredValueService {
     // 错当柜台退款成功返回——不落柜台审计/凭证还可能引发双重兑付）。
     private static final String[] RESERVED_IDEMPOTENCY_PREFIXES = {
             "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_", "svcr_", "ticketsv_"};
+    private static final String COUNTER_REFUND_KEY_PREFIX = "svcr_";
 
     private final CustomerRepository repository;
     private final FinanceService financeService;
@@ -141,6 +144,9 @@ public class StoredValueService {
         // 故把卡范围折进 finance 幂等键并 SHA-256 压成定长（避免 slug 40 字截断致 ON CONFLICT 覆盖旧意图）；相同 (key, 卡范围) 仍得同一意图，正常重试幂等不受影响。
         String scopedTopupKey = "svtop_" + sha256Hex(key + "|" + customerId + "|"
                 + (projectId == null ? "" : projectId) + "|" + (merchantId == null ? "" : merchantId));
+        // XM-ONESHOT-RETURN B02 审查修正（操作员 2026-09-25 确认的追加句「同一次操作重复提交时，返回第一次的结果并提示已完成」）：
+        // svtop_ 键由本请求的幂等键派生，幂等层回放它＝本请求重复提交，响应提示已完成。
+        IdempotentReplayContext.registerDerivedKey(idempotencyKey, scopedTopupKey);
         // AUD-013 资金归属契约：支付意图/网关请求显式携带收款商户与定格资金模式（merchant_prepaid=直达商户，
         // platform_collect=平台代收），真实支付适配器据此路由收款主体，杜绝「支付进平台、账务认商户预收」错配。
         PaymentIntentRecord intent = financeService.createPaymentIntent(new PaymentIntentRequest(
@@ -180,7 +186,7 @@ public class StoredValueService {
                 .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值卡不存在"));
         financeService.confirmOnlinePaymentIntent(paymentIntentId, merchantId,
                 merchantId == null ? null : effectiveFundOwnership(card));
-        return settleTopupInternal(customerId, projectId, merchantId, paymentIntentId);
+        return settleTopupInternal(customerId, projectId, merchantId, paymentIntentId, true);
     }
 
     /**
@@ -195,13 +201,17 @@ public class StoredValueService {
         StoredValueTopupIntentScope bound = repository.findStoredValueTopupIntent(paymentId)
                 .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
                         "该支付意向不属于储值充值"));
-        settleTopupInternal(bound.customerId(), bound.projectId(), bound.merchantId(), paymentId);
+        settleTopupInternal(bound.customerId(), bound.projectId(), bound.merchantId(), paymentId, false);
         return confirmation;
     }
 
-    /** 入账内核（不带客户充值权限闸）：仅供 {@link #settleTopup} 与柜台确认链两个带闸入口复用，不对外开放。 */
+    /**
+     * 入账内核（不带客户充值权限闸）：仅供 {@link #settleTopup} 与柜台确认链两个带闸入口复用，不对外开放。
+     * customerSettle=true 仅限客人入账入口：命中「已入账」时返回的就是本次响应，据此提示已完成；柜台确认链返回的是确认单，不在此置位。
+     */
     private CustomerStoredValueTransactionRecord settleTopupInternal(String customerId, String projectId,
-                                                                     String merchantId, String paymentIntentId) {
+                                                                     String merchantId, String paymentIntentId,
+                                                                     boolean customerSettle) {
         Instant now = now();
         requireCustomer(customerId);
         PaymentIntentRecord intent = financeService.findPaymentIntentForUpdate(paymentIntentId)
@@ -223,9 +233,17 @@ public class StoredValueService {
                     "结算卡范围与充值卡范围不一致");
         }
         if (repository.storedValueTransactionExistsForPaymentIntent(paymentIntentId)) {
-            return repository.findStoredValueTransactionByIdempotencyKey("sv_settle_" + paymentIntentId)
+            CustomerStoredValueTransactionRecord first = repository.findStoredValueTransactionByIdempotencyKey(
+                            "sv_settle_" + paymentIntentId)
                     .orElseThrow(() -> ApiException.conflict("STORED_VALUE_ALREADY_SETTLED",
                             "该支付意向对应的充值已入账，请勿重复操作"));
+            // XM-ONESHOT-RETURN B02 审查修正（操作员 2026-09-25 确认的追加句「同一次操作重复提交时，返回第一次的结果并提示已完成」）：
+            // 同一支付意向再次入账＝同一次操作重复提交，排在范围、支付状态各项拒绝之后返回第一次的充值流水并提示已完成。
+            // 客人端每次写请求换新的请求编号，故按支付意向认、不按请求编号认。
+            if (customerSettle) {
+                IdempotentReplayContext.markCurrentReplayed();
+            }
+            return first;
         }
         CustomerStoredValueAccountRecord account = loadOrCreateAccountForUpdate(customerId, projectId, merchantId);
         if ("closed".equals(account.status())) {
@@ -404,7 +422,7 @@ public class StoredValueService {
         }
         // 柜台退款独立幂等命名空间：同一客户端键在线上/柜台两条路径各自幂等，互不重放（复核 Important 项）。
         String namespacedKey = idempotencyKey == null || idempotencyKey.isBlank()
-                ? idempotencyKey : "svcr_" + idempotencyKey;
+                ? idempotencyKey : COUNTER_REFUND_KEY_PREFIX + idempotencyKey;
         return doRefund(customerId, projectId, merchantId, amountCent, reason, closeAccount,
                 namespacedKey, true, voucher);
     }
@@ -424,8 +442,14 @@ public class StoredValueService {
         if (existing != null) {
             // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
             // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
-            return verifyIdempotentReplay(existing, customerId, projectId, merchantId,
+            CustomerStoredValueTransactionRecord first = verifyIdempotentReplay(existing, customerId, projectId, merchantId,
                     "refund", -amountCent, reason);
+            verifyRefundReplayRequest(existing, counterMode, closeAccount, redemptionVoucherNo);
+            // XM-ONESHOT-RETURN B02（操作员 2026-09-25 确认的追加句「同一次操作重复提交时，返回第一次的结果并提示已完成」）：
+            // 返回第一次的退款流水＝本请求重复提交，响应提示已完成；柜台退款按去掉 svcr_ 命名空间前缀的原键认。
+            IdempotentReplayContext.markReplayed(counterMode
+                    ? idempotencyKey.substring(COUNTER_REFUND_KEY_PREFIX.length()) : idempotencyKey);
+            return first;
         }
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         requireMerchantScopeForCard(account);
@@ -471,7 +495,8 @@ public class StoredValueService {
             counterDetail.put("payout_cent", payoutCent);
             counterDetail.put("payout_status", "counter_settled");
             counterDetail.put("redemption_voucher_no", redemptionVoucherNo);
-            auditEventService.recordSuccess("stored_value.counter_refund", "customer.stored_value.refund",
+            counterDetail.put("close_account", closeAccount);
+            auditEventService.recordSuccess(EVENT_COUNTER_REFUND, "customer.stored_value.refund",
                     "customer_stored_value", account.id(), null, idempotencyKey, counterDetail);
             return txn;
         }
@@ -501,8 +526,10 @@ public class StoredValueService {
         if (payoutRefundId != null) {
             detail.put("payout_refund_id", payoutRefundId);
         }
+        detail.put("close_account", closeAccount);
+        // 审计幂等键＝流水幂等键：同键重放据此找回第一次请求的 close_account（见 verifyRefundReplayRequest）
         auditEventService.recordSuccess(EVENT_REFUND, "customer.stored_value.refund",
-                "customer_stored_value", account.id(), null, null, detail);
+                "customer_stored_value", account.id(), null, idempotencyKey, detail);
         return txn;
     }
 
@@ -779,6 +806,30 @@ public class StoredValueService {
                     "该幂等键已被其他操作使用");
         }
         return existing;
+    }
+
+    /**
+     * XM-ONESHOT-RETURN B02 审查修正（操作员 2026-09-25 确认的追加句「同一次操作重复提交时，返回第一次的结果并提示已完成」）：
+     * 退款重放除 AUD-002 指纹外，还核对流水上没有的两项请求内容——是否销户（close_account）、柜台兑付凭证号。
+     * 两项记在第一次的审计明细里（与流水同事务写入，审计幂等键＝流水幂等键）。任一不同＝改过的请求，不是同一次操作，
+     * 与统一幂等层「同键改正文」一样报 409，不返回第一次的流水、不提示已完成。
+     */
+    private void verifyRefundReplayRequest(CustomerStoredValueTransactionRecord existing, boolean counterMode,
+                                           boolean closeAccount, String redemptionVoucherNo) {
+        // 上限：只翻该卡最近 1000 条同名审计（重放紧跟首单，够用）；要查更远再给审计仓储加按幂等键精确查的方法
+        Map<String, Object> first = auditEventService.searchOperationEvents("customer_stored_value",
+                        existing.accountId(), null, counterMode ? EVENT_COUNTER_REFUND : EVENT_REFUND,
+                        null, null, 1000, null).stream()
+                .filter(e -> "success".equals(e.eventResult())
+                        && existing.idempotencyKey().equals(e.idempotencyKey()))
+                .map(com.complex.platform.evidence.AuditEvent::metadata)
+                .findFirst().orElse(null);
+        boolean same = first != null
+                && Boolean.valueOf(closeAccount).equals(first.get("close_account"))
+                && (!counterMode || java.util.Objects.equals(redemptionVoucherNo, first.get("redemption_voucher_no")));
+        if (!same) {
+            throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "该幂等键已被其他操作使用");
+        }
     }
 
     /** AUD-002 命名空间隔离：客户端/后台传入的幂等键不得使用内部派生键的保留前缀。 */

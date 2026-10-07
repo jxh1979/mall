@@ -120,7 +120,9 @@ class TerminalDeviceServiceTests {
                 .ignoringFields("deviceToken")
                 .isEqualTo(first);
         assertThat(deviceRepository.deviceSaveCount).isEqualTo(1);
-        assertThat(idempotencyRepository.findByOperationIdAndIdempotencyKey("bindTerminalDevice", "bind-kiosk-token-once"))
+        // M724：行键不含提交范围——IdempotencyService.storedOperationId(操作号)
+        assertThat(idempotencyRepository.findByOperationIdAndIdempotencyKey(
+                IdempotencyService.storedOperationId("bindTerminalDevice"), "bind-kiosk-token-once"))
                 .hasValueSatisfying(record -> {
                     assertThat(record.responseBody()).doesNotContain(first.deviceToken());
                     assertThat(record.responseBody()).contains("\"deviceToken\":null");

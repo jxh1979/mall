@@ -457,6 +457,7 @@ public class InventoryController {
     }
 
     @PostMapping("/transfer-orders/{order_id}/ship")
+    @com.complex.platform.access.IdempotencyKeyFromPath("order_id") // M724-F06：没有请求体，服务层把单号当提交编号；重复提交返回第一次的结果并提示已完成
     public ApiResponse<InventoryTransferOrderRecord> shipTransferOrder(@PathVariable("order_id") String orderId) {
         authorizationService.requirePermission("inventory.transfer_order.manage");
         return ApiResponse.ok(service.shipTransferOrder(orderId));

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.14
+# P0 OpenAPI Operation 验收矩阵 V0.15
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 730 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 731 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -491,6 +491,7 @@
 | leasing | `GET` | `/api/v1/leasing/leads/follow-up-due` | `listLeasingLeadsFollowUpDue` | 待跟进线索(3 天未跟进) | `-` | `leasing.lead.manage` | `staff-token` | `platform` | web | 否 | `leasing.lead.viewed` | `leasing.lead.view_failed` |
 | leasing | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | `assignLeasingLead` | 招商线索派单(主管手动指派) | `LeasingLeadAssignRequest` | `leasing.lead.manage` | `staff-token` | `platform` | web | 是 | `leasing.lead.assigned` | `leasing.lead.assign_failed` |
 | leasing | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | `updateLeasingLeadStatus` | 招商线索状态流转(7 态) | `LeasingLeadStatusRequest` | `leasing.lead.manage` | `staff-token` | `platform` | web | 是 | `leasing.lead.status_changed` | `leasing.lead.status_change_failed` |
+| leasing | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | `getLeasingLeadContactPhone` | 查看某一条招商线索的完整联系人手机号 | `-` | `leasing.lead.manage` | `staff-token` | `platform` | web | 否 | `leasing.lead.contact_phone_viewed` | `leasing.lead.contact_phone_view_failed` |
 | leasing | `GET` | `/api/v1/leasing/intents` | `listLeasingIntents` | 招商意向清单 | `-` | `leasing.intent.manage` | `staff-token` | `platform` | web | 否 | `leasing.intent.viewed` | `leasing.intent.view_failed` |
 | leasing | `POST` | `/api/v1/leasing/intents` | `createLeasingIntent` | 线索转意向(stage 起始 initial_contact) | `LeasingIntentRequest` | `leasing.intent.manage` | `staff-token` | `platform` | web | 是 | `leasing.intent.created` | `leasing.intent.create_failed` |
 | leasing | `POST` | `/api/v1/leasing/intents/{intent_id}/advance` | `advanceLeasingIntent` | 意向阶段推进(5 阶段) | `LeasingIntentAdvanceRequest` | `leasing.intent.manage` | `staff-token` | `platform` | web | 是 | `leasing.intent.advanced` | `leasing.intent.advance_failed` |

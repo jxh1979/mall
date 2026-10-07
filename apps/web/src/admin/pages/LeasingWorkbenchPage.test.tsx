@@ -5,9 +5,10 @@ import { LeasingWorkbenchPage } from "./LeasingWorkbenchPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
+// M724：后端线索列表一律返回脱敏号码（治理地图第 871 行），桩数据照此。
 const LEADS = [
-  { id: "l-1", contact_name: "张经理", contact_phone: "13800000001", source: "exhibition", intended_business_type: "retail", intended_space_id: "space-1", owner_user_id: "staff_sales", status: "following_up", last_follow_up_at: "2026-06-20T09:15:00Z" },
-  { id: "l-2", contact_name: "李经理", contact_phone: "13800000002", source: "referral", intended_business_type: "catering", owner_user_id: "staff_sales", status: "signed" },
+  { id: "l-1", contact_name: "张经理", contact_phone: "138****0001", source: "exhibition", intended_business_type: "retail", intended_space_id: "space-1", owner_user_id: "staff_sales", status: "following_up", last_follow_up_at: "2026-06-20T09:15:00Z" },
+  { id: "l-2", contact_name: "李经理", contact_phone: "138****0002", source: "referral", intended_business_type: "catering", owner_user_id: "staff_sales", status: "signed" },
 ];
 const INTENTS = [
   { id: "in-1", lead_id: "l-1", stage: "negotiation", intended_space_id: "space-1", last_stage_change_at: "2026-06-25T10:00:00Z" },
@@ -28,11 +29,21 @@ function envelope(items: unknown[]): Response {
   );
 }
 
-function makeApi(): AdminApi {
+// M724 查看完整号码接口的默认应答：只含这一条线索的编号与完整号码。
+function fullPhone(): Response {
+  return new Response(
+    JSON.stringify({ success: true, code: "OK", message: "success", data: { lead_id: "l-1", contact_phone: "13800000001" } }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+function makeApi(contactPhone: () => Response = fullPhone): AdminApi {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
+      // M724 查看完整号码：路径以 /leasing/leads 开头，先于线索列表分支匹配。
+      if (url.includes("/contact-phone")) return Promise.resolve(contactPhone());
       // 到期待跟进：后端独立端点，先于 /leasing/leads 匹配（前者是后者的前缀）。
       if (url.includes("/leasing/leads/follow-up-due")) return Promise.resolve(envelope(DUE_LEADS));
       if (url.includes("/leasing/leads")) return Promise.resolve(envelope(LEADS));
@@ -47,13 +58,14 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(overrides: Partial<AdminPageProps> = {}, contactPhone?: () => Response) {
   const fullProps: AdminPageProps = {
-    api: makeApi(),
+    api: makeApi(contactPhone),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
     effectivePermissions: ADMIN_PERMS,
+    ...overrides,
   };
   render(<LeasingWorkbenchPage {...fullProps} />);
 }
@@ -193,5 +205,71 @@ describe("LeasingWorkbenchPage 行明细抽屉 + 零英文", () => {
     expect(drawer.textContent).toContain("线索"); // refType lead
     expect(drawer.textContent).toContain("2026年7月10日"); // nextPlanAt → 中文
     expect(drawer.textContent).not.toContain("phone");
+  });
+});
+
+// M724（治理地图第 871 行，操作员 2026-10-07 确认）：线索列表只显示脱敏号码；持明文手机号查看权限的人在某一条线索的
+// 详情抽屉里点「查看完整号码」，只显示这一条的完整号码。
+describe("LeasingWorkbenchPage 查看完整号码", () => {
+  const PHONE_PERMS: EffectivePermissionsState = {
+    status: "ready",
+    value: { grants: ["leasing.lead.manage", "pii.contact_phone.view"], denies: [], wildcard: false },
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/leasing/workbench");
+  });
+
+  async function openLeadDrawer() {
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-row-l-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-row-l-1"));
+  }
+
+  function contactPhoneCalls(): string[] {
+    return vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/contact-phone"));
+  }
+
+  it("没有明文手机号查看权限的人：抽屉里是脱敏号码，看不到「查看完整号码」按钮", async () => {
+    renderPage({ effectivePermissions: { status: "ready", value: { grants: ["leasing.lead.manage"], denies: [], wildcard: false } } });
+    await openLeadDrawer();
+    expect(screen.getByTestId("leasing-lead-phone-value").textContent).toBe("138****0001");
+    expect(screen.queryByTestId("leasing-lead-phone-reveal")).toBeNull();
+    expect(contactPhoneCalls()).toHaveLength(0);
+  });
+
+  it("有权限的人点「查看完整号码」→ 抽屉显示这一条的完整号码，表格行仍是脱敏号码，只调一次查看接口并重读本人权限；关抽屉即清", async () => {
+    const refreshEffectivePermissions = vi.fn().mockResolvedValue({ grants: ["leasing.lead.manage"], denies: [], wildcard: false });
+    renderPage({ effectivePermissions: PHONE_PERMS, refreshEffectivePermissions });
+    await openLeadDrawer();
+    expect(screen.getByTestId("leasing-lead-phone-value").textContent).toBe("138****0001");
+    expect(screen.getByTestId("leasing-lead-phone-reveal").textContent).toBe("查看完整号码");
+
+    fireEvent.click(screen.getByTestId("leasing-lead-phone-reveal"));
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-phone-value").textContent).toBe("13800000001"));
+    expect(screen.getByTestId("leasing-lead-row-l-1").textContent).toContain("138****0001");
+    expect(screen.getByTestId("leasing-lead-row-l-1").textContent).not.toContain("13800000001");
+    expect(contactPhoneCalls()).toHaveLength(1);
+    expect(contactPhoneCalls()[0]).toContain("/api/v1/leasing/leads/l-1/contact-phone");
+    await waitFor(() => expect(refreshEffectivePermissions).toHaveBeenCalledTimes(1));
+
+    // 关抽屉再打开：完整号码已清，回到脱敏号码。
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+    fireEvent.click(screen.getByTestId("leasing-lead-row-l-1"));
+    expect(screen.getByTestId("leasing-lead-phone-value").textContent).toBe("138****0001");
+  });
+
+  it("查看接口报 403 → 抽屉里显示中文报错，号码仍是脱敏，整页不报错", async () => {
+    const setGlobalError = vi.fn();
+    renderPage({ effectivePermissions: PHONE_PERMS, setGlobalError }, () => new Response(
+      JSON.stringify({ success: false, code: "FORBIDDEN", detail_code: "PERMISSION_DENIED", message: "没有操作权限：pii.contact_phone.view" }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    ));
+    await openLeadDrawer();
+    fireEvent.click(screen.getByTestId("leasing-lead-phone-reveal"));
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-phone-error").textContent).toBe("当前账号无权进行此操作"));
+    expect(screen.getByTestId("leasing-lead-phone-value").textContent).toBe("138****0001");
+    expect(setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
   });
 });

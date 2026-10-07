@@ -33,7 +33,9 @@ class NotificationServiceTest {
     @BeforeEach
     void reset() {
         jdbcTemplate.execute("TRUNCATE notification_send_log");
-        jdbcTemplate.update("DELETE FROM idempotency_records WHERE operation_id = 'notification.sms.notify'");
+        // M724：行键不含提交范围——IdempotencyService.storedOperationId(操作号)
+        jdbcTemplate.update("DELETE FROM idempotency_records WHERE operation_id = ?",
+                com.complex.platform.common.idempotency.IdempotencyService.storedOperationId("notification.sms.notify"));
         smsSender.reset();
         setSwitch("sms_notification", false);
         setSwitch("sms.notify.stored_wine", true);
