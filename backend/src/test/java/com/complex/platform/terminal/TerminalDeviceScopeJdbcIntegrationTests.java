@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -288,6 +288,46 @@ class TerminalDeviceScopeJdbcIntegrationTests {
                 handOver, "CROSS_PROJECT_FORBIDDEN", byHolder);
         send(projectStaff, "POST", DEVICES + "/" + byHolder + "/repair", reasonJson(key("hh2")))
                 .andExpect(status().isOk());
+    }
+
+    // M723-F22（GROK-M723-15-1；治理地图第 653 行「所有业务数据默认按项目隔离」）：项目员工改写持有员工时，新的持有员工也须是本项目的人。
+    // 设备挂着本项目的商户、绑着本项目的空间、或两样都有时，项目员工在送修、归还里把持有员工改成另一项目的员工 → 403
+    // CROSS_PROJECT_FORBIDDEN、设备行原样、没有状态流水；登记设备时持有员工填另一项目的员工 → 403、库里没有这台设备；
+    // 改成本项目的员工 → 200。修复前设备按商户或空间认定为本项目、校验通过，另一项目的员工被写成持有人（第一处 403 即红）。
+    @Test
+    void aProjectEmployeeCannotMakeAnotherProjectsEmployeeTheHolderOfTheirProjectsDevice() throws Exception {
+        String byMerchant = device("hm", "bound", merchantB, null, null);
+        expectRejectedWithoutWrite(projectStaff, "POST", DEVICES + "/" + byMerchant + "/repair", key("hm"),
+                holderJson(key("hm"), holderB), "CROSS_PROJECT_FORBIDDEN", byMerchant);
+
+        String bySpace = device("hs", "bound", null, spaceA, null);
+        String returnToOther = """
+                {"idempotency_key": "%s", "device_code": "%s", "has_pending_tasks": false, "reason": "M723-F22 回归", "staff_id": "%s"}
+                """.formatted(key("hs"), deviceCode("hs"), holderB);
+        expectRejectedWithoutWrite(projectStaff, "POST", DEVICES + "/return", key("hs"),
+                returnToOther, "CROSS_PROJECT_FORBIDDEN", bySpace);
+
+        String byBoth = device("hb", "bound", merchantB, spaceA, holderA);
+        expectRejectedWithoutWrite(projectStaff, "POST", DEVICES + "/" + byBoth + "/lost", key("hb"),
+                holderJson(key("hb"), holderB), "CROSS_PROJECT_FORBIDDEN", byBoth);
+
+        String bindWithOther = """
+                {"idempotency_key": "%s", "device_id": "%s", "terminal_type": "tablet", "binding_scope": "space",
+                 "bound_space_id": "%s", "staff_id": "%s"}
+                """.formatted(key("hn"), deviceId("hn"), spaceA, holderB);
+        expectBindRejected(projectStaff, key("hn"), bindWithOther, "CROSS_PROJECT_FORBIDDEN", "hn");
+
+        send(projectStaff, "POST", DEVICES + "/" + byMerchant + "/repair", holderJson(key("hm2"), holderA))
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForObject("SELECT staff_id FROM terminal_devices WHERE id = ?", String.class, byMerchant))
+                .isEqualTo(holderA);
+    }
+
+    // 送修、挂失等生命周期入口的请求体：提交编号＋原因＋新的持有员工。
+    private String holderJson(String key, String holder) {
+        return """
+                {"idempotency_key": "%s", "reason": "M723-F22 回归", "staff_id": "%s"}
+                """.formatted(key, holder);
     }
 
     @Test

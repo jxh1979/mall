@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -491,6 +491,22 @@ public class TerminalDeviceService {
         TerminalDeviceRecord locked = requireDeviceInScope(device);
         if (trimToNull(requestedStaffId) != null) {
             requireAttributionInScope(locked.merchantId(), locked.boundSpaceId(), requestedStaffId);
+            requireNewHolderInScope(requestedStaffId, locked.staffId());
+        }
+    }
+
+    // M723-F22（治理地图第 653 行「所有业务数据默认按项目隔离」；操作员 2026-10-06 裁决）：项目员工改写持有员工时，新的持有员工
+    // 也须是本项目的人——设备按所属商户或绑定空间认定为本项目时，只核设备的项目拦不住把另一项目的员工写成持有人。
+    // 带商户归属的员工仍只按商户判断（裁决第二点）；平台管理员不受限；没有换人（与原持有员工相同）不核。
+    private void requireNewHolderInScope(String requestedStaffId, String currentStaffId) {
+        String staff = trimToNull(requestedStaffId);
+        if (staff == null || staff.equals(trimToNull(currentStaffId))
+                || authorizationService.currentMerchantIdQuietly().isPresent()) {
+            return;
+        }
+        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+        if (projectScope.isPresent() && !projectScope.get().equals(repository.findStaffProjectId(staff).orElse(null))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "持有员工不在当前综合体项目范围内");
         }
     }
 
@@ -547,6 +563,7 @@ public class TerminalDeviceService {
                 firstNonBlank(request.merchantId(), existing == null ? null : existing.merchantId()),
                 trimToNull(request.boundSpaceId()),
                 firstNonBlank(request.staffId(), existing == null ? null : existing.staffId()));
+        requireNewHolderInScope(request.staffId(), existing == null ? null : existing.staffId());
     }
 
     // 归还按设备码定位；请求缺设备码、设备不存在都不在这里拦，留给 returnBoundDevice() 照旧报必填／404。
