@@ -148,6 +148,29 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 """, Map.of(), this::mapDevice);
     }
 
+    // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：绑定空间所属项目，按主键只读一列。
+    @Override
+    public Optional<String> findSpaceProjectId(String spaceId) {
+        return jdbcTemplate.queryForList(
+                "SELECT project_id FROM spaces WHERE id = :id", Map.of("id", spaceId), String.class)
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：持有员工（员工档案）所属项目，按主键只读一列。
+    @Override
+    public Optional<String> findStaffProjectId(String staffProfileId) {
+        return jdbcTemplate.queryForList(
+                "SELECT project_id FROM staff_profiles WHERE id = :id", Map.of("id", staffProfileId), String.class)
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：行锁，随调用方的事务释放。
+    @Override
+    public void lockDevice(String recordId) {
+        jdbcTemplate.queryForList(
+                "SELECT id FROM terminal_devices WHERE id = :id FOR UPDATE", Map.of("id", recordId), String.class);
+    }
+
     @Override
     public Optional<DeviceCredentialRecord> findDeviceCredentialByDeviceId(String deviceId) {
         return jdbcTemplate.query("""

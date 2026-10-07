@@ -32,6 +32,29 @@ public interface TerminalDeviceRepository {
         return List.of();
     }
 
+    /**
+     * M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备绑定空间所属的项目
+     * （spaces.project_id）。空间不存在或没填项目返回空——调用方按「认不出项目」处理。
+     */
+    default Optional<String> findSpaceProjectId(String spaceId) {
+        return Optional.empty();
+    }
+
+    /**
+     * M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备持有员工所属的项目
+     * （staff_profiles.project_id；设备的 staff_id 存的是员工档案 id）。档案不存在返回空——调用方按「认不出项目」处理。
+     */
+    default Optional<String> findStaffProjectId(String staffProfileId) {
+        return Optional.empty();
+    }
+
+    /**
+     * M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：锁住这台设备的行，直到调用方的事务结束——
+     * 范围判定与随后的写入用同一份归属。内存实现不需要锁，默认什么都不做。
+     */
+    default void lockDevice(String recordId) {
+    }
+
     Optional<DeviceCredentialRecord> findDeviceCredentialByDeviceId(String deviceId);
 
     DeviceCredentialRecord saveDeviceCredential(DeviceCredentialRecord record);

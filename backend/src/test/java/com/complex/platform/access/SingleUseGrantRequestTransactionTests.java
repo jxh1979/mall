@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -76,6 +76,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * M723 第 11 轮（F16）：持未消耗单次来源的请求带了多个不同或读不出来的提交编号时，在执行前按 400 拒绝、不执行、不消耗。
  * M723 第 12 轮（F17、F18）：Map 请求体里的提交编号同样计入（终端设备签名公钥登记）；该接口的公钥计入请求摘要，同编号换公钥 409。
  * M723 第 13 轮（F19、F20）：同名请求头的每个值都算提交编号；查询串里的提交编号不计入请求摘要。
+ * M723 第 14 轮（F21；治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：终端设备签名公钥登记按设备归属范围放行——
+ * 带商户归属的员工只能给本商户的设备登记，项目员工只能给本项目的设备登记；越范围 403、不写入、不留幂等记录、单次来源不算用掉。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -126,8 +128,10 @@ class SingleUseGrantRequestTransactionTests {
         jdbcTemplate.update("DELETE FROM terminal_capability_switches WHERE scope_type = 'merchant' AND scope_id = ?", merchantId);
         jdbcTemplate.update("DELETE FROM data_cleanup_jobs WHERE requested_by = ?", userId);
         jdbcTemplate.update("DELETE FROM wecom_conversations WHERE id IN (?, ?)", "wconv_xmj_" + suffix, "wconv_xmjb_" + suffix);
-        jdbcTemplate.update("DELETE FROM terminal_device_signing_keys WHERE device_id = ?", "dev-xmj-" + suffix);
-        jdbcTemplate.update("DELETE FROM terminal_devices WHERE device_id = ?", "dev-xmj-" + suffix);
+        // M723-F21：终端夹具按「dev-xmj-〔标记〕〔后缀〕」命名（标记可为空），绑定空间按「spc_xmj_〔标记〕〔后缀〕」命名
+        jdbcTemplate.update("DELETE FROM terminal_device_signing_keys WHERE device_id LIKE ?", "dev-xmj-%" + suffix);
+        jdbcTemplate.update("DELETE FROM terminal_devices WHERE device_id LIKE ?", "dev-xmj-%" + suffix);
+        jdbcTemplate.update("DELETE FROM spaces WHERE id LIKE ?", "spc_xmj_%" + suffix);
         jdbcTemplate.update("DELETE FROM leasing_leads WHERE contact_name = ?", roleName("线索"));
         jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "xmj-%" + suffix);
@@ -1499,15 +1503,108 @@ class SingleUseGrantRequestTransactionTests {
         assertThat(rolesCreated()).isEqualTo(2);
     }
 
+    // M723-F21（治理地图第 653 行「数据的项目与商户隔离不提供关闭开关」；操作员 2026-10-06 裁决「带商户归属的员工：只能管本商户的
+    // 设备」；Codex 验收）：只持单次「终端设备绑定」的商户甲员工给商户乙的已绑定设备登记公钥 → 403 CROSS_MERCHANT_FORBIDDEN，
+    // 乙的设备仍没有公钥、没有登记成功事件、该提交编号没有幂等记录、来源未消耗、没有消耗日志；随后给本商户的设备登记 → 200、
+    // 公钥只写一次、恰好消耗一次；同编号同内容重放 → 第一次的结果、提示已完成、不再消耗；同编号换公钥 → 409、库里仍是第一把公钥。
+    // 修复前服务层不核设备归属：第一处 403 即红（返回 200，公钥写到了商户乙的设备上，来源已消耗）。
+    @Test
+    void aMerchantEmployeeCannotRegisterASigningKeyOnAnotherMerchantsDevice() throws Exception {
+        String foreign = boundTerminalDevice("b-", "mch_xmjb_" + suffix, null);
+        String own = boundTerminalDevice("a-", merchantId, null);
+        staffWithSingleUseGrant(merchantId, "terminal.device.bind");
+        String deniedKey = "xmj-sign-foreign-" + suffix;
+
+        mockMvc.perform(post("/api/v1/terminals/devices/" + foreign + "/signing-key").with(session(merchantId))
+                        .header("Idempotency-Key", deniedKey)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(deniedKey, "PK1-" + suffix)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(signingKeys(foreign)).isEmpty();
+        assertThat(signingKeyRegisteredEvents(foreign)).isZero();
+        assertThat(idempotencyRecords(deniedKey)).isZero();
+        assertUnconsumed();
+
+        String url = "/api/v1/terminals/devices/" + own + "/signing-key";
+        String key = "xmj-sign-own-" + suffix;
+        String first = mockMvc.perform(post(url).with(session(merchantId)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(key, "PK1-" + suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("registered"))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertConsumedOnce();
+        assertThat(signingKeys(own)).containsExactly("PK1-" + suffix);
+        assertThat(signingKeyRegisteredEvents(own)).isEqualTo(1);
+
+        String replayed = mockMvc.perform(post(url).with(session(merchantId)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(key, "PK1-" + suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(data(replayed)).isEqualTo(data(first));
+        assertConsumedOnce();
+        assertThat(signingKeyRegisteredEvents(own)).isEqualTo(1);
+
+        mockMvc.perform(post(url).with(session(merchantId)).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(key, "PK2-" + suffix)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_CONFLICT"));
+        assertThat(signingKeys(own)).containsExactly("PK1-" + suffix);
+        assertThat(signingKeyRegisteredEvents(own)).isEqualTo(1);
+        assertConsumedOnce();
+        assertThat(signingKeys(foreign)).isEmpty();
+    }
+
+    // M723-F21（同一裁决：不带商户归属的项目员工能管「本项目内的全部设备」，「别的项目的设备一律不能碰」）：项目 org 的项目员工
+    // 只持单次「终端设备绑定」，给另一项目的设备（不挂商户，绑在另一项目的空间上）登记公钥 → 403 CROSS_PROJECT_FORBIDDEN，设备没有
+    // 公钥、没有登记成功事件、该提交编号没有幂等记录、来源未消耗、没有消耗日志。修复前返回 200 且公钥已写入（403 的断言即红）。
+    @Test
+    void aProjectEmployeeCannotRegisterASigningKeyOnAnotherProjectsDevice() throws Exception {
+        String foreign = boundTerminalDevice("p-", null, spaceInProject("p-", "org_xmjb_" + suffix));
+        staffWithSingleUseGrant(null, "terminal.device.bind");
+        String key = "xmj-sign-project-" + suffix;
+
+        mockMvc.perform(post("/api/v1/terminals/devices/" + foreign + "/signing-key").with(session(null))
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(signingKeyJson(key, "PK1-" + suffix)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(signingKeys(foreign)).isEmpty();
+        assertThat(signingKeyRegisteredEvents(foreign)).isZero();
+        assertThat(idempotencyRecords(key)).isZero();
+        assertUnconsumed();
+    }
+
     // M723-F17、F18 夹具：一台已绑定的终端设备；返回设备号（接口路径里的 id）。
+    // M723-F21：设备不挂商户、没有持有员工，绑在项目 org 的一个空间上——按「没有商户的看绑定空间的项目」认定为项目 org，
+    // 项目 org 的项目员工能管（修复前这台设备三样都没填，新规则下只有平台管理员能管）。
     private String boundTerminalDevice() {
-        String device = "dev-xmj-" + suffix;
+        return boundTerminalDevice("", null, spaceInProject("", "org"));
+    }
+
+    // M723-F21 夹具：一台已绑定的终端设备，可带所属商户、绑定空间（都可为空）；标记区分同一用例里的多台设备。返回设备号。
+    private String boundTerminalDevice(String tag, String merchant, String space) {
+        String device = "dev-xmj-" + tag + suffix;
         jdbcTemplate.update("""
                 INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
-                    status, created_at, updated_at)
-                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', now(), now())
-                """, "td_xmj_" + suffix, device, "DC-xmj-" + suffix);
+                    bound_space_id, merchant_id, status, created_at, updated_at)
+                VALUES (?, ?, ?, 'kiosk', 'venue', ?, ?, 'bound', now(), now())
+                """, "td_xmj_" + tag + suffix, device, "DC-xmj-" + tag + suffix, space, merchant);
         return device;
+    }
+
+    // M723-F21 夹具：某项目下的一个空间（spaces.project_id 是软引用，不要求项目行存在）；返回空间 id。
+    private String spaceInProject(String tag, String project) {
+        String space = "spc_xmj_" + tag + suffix;
+        jdbcTemplate.update("INSERT INTO spaces (id, project_id, space_name, space_type, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, 'shop', 'active', now(), now())", space, project, "M723-F21 " + space);
+        return space;
+    }
+
+    private List<String> signingKeys(String device) {
+        return jdbcTemplate.queryForList(
+                "SELECT public_key FROM terminal_device_signing_keys WHERE device_id = ?", String.class, device);
     }
 
     private String signingKeyJson(String idempotencyKey, String publicKey) {
