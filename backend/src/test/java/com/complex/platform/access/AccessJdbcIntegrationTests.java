@@ -3,6 +3,7 @@ package com.complex.platform.access;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -5448,5 +5449,888 @@ class AccessJdbcIntegrationTests {
                 {"idempotency_key": "%s", "position_code": "%s", "staff_level_id": "lvl_m1_lower", "role_id": "%s",
                  "template_id": "%s", "status": "active"}
                 """.formatted(key, position, roleId, templateId);
+    }
+
+    // ── M736（XM-M001-D 可跨项目角色·批 1 权限治理；操作员 2026-10-01 确认的治理地图第 653 行追加句：「被分配了可跨项目角色的员工
+    //    （含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」）真库与真实接口回归 ───────────────────────────────
+    //    夹具随测试事务回滚：项目表里三个真实项目（甲、乙、丙）各带一名员工，一名持 role_platform_admin 的平台管理员。
+    //    可跨项目角色一律经 POST /api/v1/access/roles 建立（两项勾选走请求体），不直写 roles 表的新列；分配、撤销角色的请求体同形，
+    //    沿用 m002UnassignJson。
+
+    private record M736Fixture(String suffix, String admin, String projectA, String projectB, String projectC,
+                               String staffA, String staffB, String staffC) {
+    }
+
+    private M736Fixture m736Fixture() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        M736Fixture f = new M736Fixture(suffix, "usr_m736_admin_" + suffix, "prj_m736_a_" + suffix, "prj_m736_b_" + suffix,
+                "prj_m736_c_" + suffix, "usr_m736_a_" + suffix, "usr_m736_b_" + suffix, "usr_m736_c_" + suffix);
+        repository.createUser(new AccessUser(f.admin(), f.admin(), "platform_admin", "org", null, "active", Instant.now()));
+        repository.assignUserRole(f.admin(), "role_platform_admin");
+        // 建角色、分配角色两个入口码另给一个明确的角色（同 createRoleRejectsContractViolationsWith400ThroughTheEndpoint 的做法）
+        String adminRole = "role_m736_admin_" + suffix;
+        repository.createRole(new RoleRecord(adminRole, "M736 平台管理员治理 " + suffix, null, "project", "active", Instant.now(),
+                List.of("access.role.manage", "access.role.assign"), null));
+        repository.assignUserRole(f.admin(), adminRole);
+        m736Project(f.projectA(), f.staffA());
+        m736Project(f.projectB(), f.staffB());
+        m736Project(f.projectC(), f.staffC());
+        return f;
+    }
+
+    // 项目表里的一个项目，带一名归属该项目的员工。
+    private void m736Project(String projectId, String staffId) {
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) "
+                + "VALUES (?, 'complex', ?, 'active', now(), now())", projectId, "M736 " + projectId);
+        repository.createUser(new AccessUser(staffId, staffId, "staff", projectId, null, "active", Instant.now()));
+    }
+
+    // 主体表里的一个主体（城市项目公司、域主管公司或顶层平台主体），带一名归属该主体的员工；返回员工编号。
+    private String m736EntityStaff(M736Fixture f, String tag, String entityRole, String status) {
+        String entity = "be_m736_" + tag + "_" + f.suffix();
+        String staff = "usr_m736_" + tag + "_" + f.suffix();
+        jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, now(), now())", entity, "M736 " + tag + " " + f.suffix(), entityRole, status);
+        repository.createUser(new AccessUser(staff, staff, "staff", entity, null, "active", Instant.now()));
+        return staff;
+    }
+
+    private void m736Superior(String userId, String superiorId, String updatedBy) {
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                userId, superiorId, updatedBy);
+    }
+
+    private org.springframework.test.web.servlet.request.RequestPostProcessor m736Admin(M736Fixture f) {
+        return m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active"));
+    }
+
+    private org.springframework.test.web.servlet.request.RequestPostProcessor m736Staff(String userId, String projectId) {
+        return m002Session(new AccessActor(userId, userId, "staff", projectId, null, "active"));
+    }
+
+    // 经建角色接口建角色并返回编号。viewAll＝勾「可以查看全部项目」；ticked＝展开后逐个勾选的可查看项目。
+    private String m736CreateRole(org.springframework.test.web.servlet.request.RequestPostProcessor session, String key,
+                                  List<String> codes, boolean viewAll, List<String> ticked) throws Exception {
+        return com.jayway.jsonpath.JsonPath.read(mockMvc.perform(post("/api/v1/access/roles").with(session)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "%s", "operator_note": "M736", "role_name": "M736 %s", "permission_codes": %s,
+                                 "data_scope": "project", "view_all_projects": %s, "viewable_project_ids": %s}
+                                """.formatted(key, key, jsonArray(codes), viewAll, jsonArray(ticked))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+    }
+
+    // 平台岗位映射：m736_<标记>_<后缀> 岗位 / lvl_m1_lower → 给定角色 + 空模板；返回岗位编码。
+    private String m736Mapping(M736Fixture f, String tag, String roleId) {
+        String position = "m736_" + tag + "_" + f.suffix();
+        String template = "tpl_m736_" + tag + "_" + f.suffix();
+        repository.createTemplate(baseTemplate(template), List.of());
+        repository.savePositionRoleTemplate(new PositionRoleTemplate("prt_m736_" + tag + "_" + f.suffix(), position, "lvl_m1_lower",
+                roleId, template, null, "active", f.admin(), Instant.now(), Instant.now()));
+        return position;
+    }
+
+    private org.springframework.test.web.servlet.ResultActions m736Unassign(
+            org.springframework.test.web.servlet.request.RequestPostProcessor session, String key, String userId, String roleId)
+            throws Exception {
+        return mockMvc.perform(post("/api/v1/access/role-assignments/unassign").with(session).contentType(MediaType.APPLICATION_JSON)
+                .content(m002UnassignJson(key, userId, roleId)));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions m736EffectivePermissionsOf(
+            org.springframework.test.web.servlet.request.RequestPostProcessor session, String userId) throws Exception {
+        return mockMvc.perform(get("/api/v1/access/users/" + userId + "/effective-permissions").with(session));
+    }
+
+    // 授权申请单的审批链节点（按顺序）：节点类型/审批人。
+    private List<String> m736ChainNodes(String requestId) {
+        return jdbcTemplate.queryForList("""
+                SELECT n.approver_kind || '/' || coalesce(n.approver_id, '')
+                  FROM supervisor_review_nodes n
+                  JOIN access_grant_requests g ON g.review_id = n.review_id
+                 WHERE g.id = ?
+                 ORDER BY n.seq
+                """, String.class, requestId);
+    }
+
+    private String m736Organization(String userId) {
+        return jdbcTemplate.queryForObject("SELECT organization_id FROM access_users WHERE id = ?", String.class, userId);
+    }
+
+    private List<String> m736Constraints(String table, String type) {
+        return jdbcTemplate.queryForList("""
+                SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                 WHERE conrelid = CAST(? AS regclass) AND CAST(contype AS text) = ?
+                 ORDER BY 1
+                """, String.class, "public." + table, type);
+    }
+
+    // M736-J1（操作员 2026-09-25「如果有一个员工被分配了可跨项目的角色，那么在他分配的权限内，他是可以看到。全部的项目数据的。」「平台管理员
+    // 可直接分配」；2026-10-01 所选选项原文「「全部项目」始终指所有项目，含以后新建的；只有展开后逐个勾选的，才只管勾中的那几个。」）：
+    // 真库＋真实接口——平台管理员建含查看账号权限、勾了「可以查看全部项目」的角色并直接分配给甲项目员工；该员工列账号，看得到甲、乙、丙
+    // 三个项目的员工，看不到平台管理员账号；之后新建一个项目，不改角色，再列就含新项目的员工。对照：只经普通角色持同一权限的甲项目员工
+    // 只列得到本项目。
+    @Test
+    void viewAllRoleHolderListsUsersOfEveryProjectIncludingLaterOnesThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        String role = m736CreateRole(m736Admin(f), "m736-j1-role-" + f.suffix(), List.of("access.user.view"), true, List.of());
+        mockMvc.perform(post("/api/v1/access/role-assignments").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content(m002UnassignJson("m736-j1-assign-" + f.suffix(), f.staffA(), role)))
+                .andExpect(status().isOk());
+        String plainRole = "role_m736_plain_" + f.suffix();
+        String plainStaff = "usr_m736_plain_" + f.suffix();
+        repository.createRole(new RoleRecord(plainRole, "M736 本项目查看 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.user.view"), null));
+        repository.createUser(new AccessUser(plainStaff, plainStaff, "staff", f.projectA(), null, "active", Instant.now()));
+        repository.assignUserRole(plainStaff, plainRole);
+        var holder = m736Staff(f.staffA(), f.projectA());
+
+        mockMvc.perform(get("/api/v1/access/users").with(holder))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.hasItems(f.staffA(), f.staffB(), f.staffC())))
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(f.admin()))));
+        mockMvc.perform(get("/api/v1/access/users").with(m736Staff(plainStaff, f.projectA())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.hasItems(plainStaff, f.staffA())))
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(f.staffB()))));
+
+        String laterProject = "prj_m736_n_" + f.suffix();
+        String laterStaff = "usr_m736_n_" + f.suffix();
+        m736Project(laterProject, laterStaff);
+        mockMvc.perform(get("/api/v1/access/users").with(holder))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.hasItems(f.staffB(), laterStaff)));
+    }
+
+    // M736-J2（操作员 2026-10-01 所选选项原文「项目管理员给本项目建的角色也能勾其他项目；分配这类角色仍按之前的答复先审批。」；2026-09-25
+    // 所选选项原文「按授权政策「高」一档走（按现行政策不到最高权限）」；治理地图第 703 行「跨商户、跨项目权限每次均须先审批，审批通过后
+    // 方可生效」）：真库＋真实接口——甲项目的角色管理人建一个只含日常权限、只勾了乙项目的角色（200：建角色时勾项目不审批，他自己看不到
+    // 乙项目也能建）；他直接分配 → 403 GRANT_REQUIRES_APPROVAL、不落行；改提角色授权申请 → 受理，上两级档、两个上级节点、没有最高权限
+    // 节点；第一级批完仍待审、持有人还不能跨，两级批完才落地；持有人能查看乙项目员工的有效权限、给乙项目员工提临时权限申请，对丙项目
+    // 都是 403 CROSS_ORG_FORBIDDEN；撤销后再申请，仍要两级审批（第二次）。
+    @Test
+    void tickedRoleBuiltByAProjectManagerIsGrantedOnlyThroughATwoLevelApprovalThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        String manager = "usr_m736_mgr_" + f.suffix();
+        String boss = "usr_m736_boss_" + f.suffix();
+        String topBoss = "usr_m736_top_" + f.suffix();
+        for (String user : List.of(manager, boss, topBoss)) {
+            repository.createUser(new AccessUser(user, user, "staff", f.projectA(), null, "active", Instant.now()));
+        }
+        String managerRole = "role_m736_mgr_" + f.suffix();
+        repository.createRole(new RoleRecord(managerRole, "M736 角色管理人 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.manage", "access.role.assign", "access.grant_request.apply", "access.user.view"), null));
+        repository.assignUserRole(manager, managerRole);
+        m736Superior(manager, boss, f.admin());
+        m736Superior(boss, topBoss, f.admin());
+        m736Superior(f.staffA(), boss, f.admin());
+        var managerSession = m736Staff(manager, f.projectA());
+        var holder = m736Staff(f.staffA(), f.projectA());
+        String applyBody = "{\"idempotency_key\": \"%s\", \"request_type\": \"user_role\", \"target_user_id\": \"%s\", \"role_id\": \"%s\", "
+                + "\"reason\": \"申请分配可跨项目角色\"}";
+        String temporaryBody = "{\"idempotency_key\": \"%s\", \"request_type\": \"temporary_permission\", \"target_user_id\": \"%s\", "
+                + "\"permission_codes\": [\"" + DAILY_A + "\"], \"expires_at\": \"2099-01-01T00:00:00Z\", \"reason\": \"临时顶班\"}";
+
+        String role = m736CreateRole(managerSession, "m736-j2-role-" + f.suffix(),
+                List.of("access.user.view", "access.grant_request.apply"), false, List.of(f.projectB()));
+        mockMvc.perform(post("/api/v1/access/role-assignments").with(managerSession).contentType(MediaType.APPLICATION_JSON)
+                        .content(m002UnassignJson("m736-j2-direct-" + f.suffix(), f.staffA(), role)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("GRANT_REQUIRES_APPROVAL"));
+        assertThat(m002UserRoles(f.staffA())).doesNotContain(role);
+
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(managerSession).contentType(MediaType.APPLICATION_JSON)
+                        .content(applyBody.formatted("m736-j2-apply-" + f.suffix(), f.staffA(), role)))
+                .andExpect(status().isOk());
+        String first = m002PendingRequestId(f.staffA(), "user_role");
+        assertThat(jdbcTemplate.queryForObject("SELECT policy_code FROM supervisor_review_decisions WHERE review_id = ?", String.class,
+                m002ReviewId(first))).isEqualTo("permission_grant_l2");
+        assertThat(m736ChainNodes(first)).containsExactly("user/" + boss, "user/" + topBoss);
+
+        m002ActAs(boss, "staff", f.projectA(), () -> accessService.reviewGrant(first, m002Approve("m736-j2-first-" + f.suffix())));
+        assertThat(m002Status(first)).isEqualTo("pending");
+        assertThat(m002UserRoles(f.staffA())).doesNotContain(role);
+        m736EffectivePermissionsOf(holder, f.staffB()).andExpect(status().isForbidden());
+        m002ActAs(topBoss, "staff", f.projectA(), () -> accessService.reviewGrant(first, m002Approve("m736-j2-final-" + f.suffix())));
+        assertThat(m002Status(first)).isEqualTo("applied");
+        assertThat(m002UserRoles(f.staffA())).contains(role);
+
+        m736EffectivePermissionsOf(holder, f.staffB()).andExpect(status().isOk());
+        m736EffectivePermissionsOf(holder, f.staffC())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(holder).contentType(MediaType.APPLICATION_JSON)
+                        .content(temporaryBody.formatted("m736-j2-temp-b-" + f.suffix(), f.staffB())))
+                .andExpect(status().isOk());
+        assertThat(m002PendingRequestId(f.staffB(), "temporary_permission")).isNotNull();
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(holder).contentType(MediaType.APPLICATION_JSON)
+                        .content(temporaryBody.formatted("m736-j2-temp-c-" + f.suffix(), f.staffC())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?", Long.class,
+                f.staffC())).isZero();
+
+        m736Unassign(managerSession, "m736-j2-unassign-" + f.suffix(), f.staffA(), role).andExpect(status().isOk());
+        m736EffectivePermissionsOf(holder, f.staffB()).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(managerSession).contentType(MediaType.APPLICATION_JSON)
+                        .content(applyBody.formatted("m736-j2-apply-again-" + f.suffix(), f.staffA(), role)))
+                .andExpect(status().isOk());
+        String second = m002PendingRequestId(f.staffA(), "user_role");
+        assertThat(second).isNotEqualTo(first);
+        assertThat(m736ChainNodes(second)).containsExactly("user/" + boss, "user/" + topBoss);
+        assertThat(m002UserRoles(f.staffA())).doesNotContain(role);
+    }
+
+    // M736-J3（操作员 2026-10-01 说明：可跨项目按角色在权限配置里的勾选认定——「只要有这个选项被勾选，那么对应的角色就可以看全部项目了」；
+    // AGENTS.md 第 8 条不为存量数据回填）：真库＋真实接口——迁移后种子角色两项都未勾，没有哪个数据范围为全局的存量角色被勾上；数据范围为
+    // 全局的平台角色分给甲项目员工，他仍只列得到本项目的账号；同样权限码、勾了「可以查看全部项目」的新角色分给他以后才跨。
+    @Test
+    void globalDataScopeDoesNotMakeARoleCrossProjectAndSeedRolesStayUntickedOnTheRealSchema() throws Exception {
+        M736Fixture f = m736Fixture();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT view_all_projects FROM roles WHERE id IN ('role_platform_admin', 'role_staff_self') ORDER BY id", Boolean.class))
+                .containsExactly(false, false);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM role_viewable_projects WHERE role_id IN ('role_platform_admin', 'role_staff_self')", Long.class))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM roles r
+                 WHERE r.data_scope = 'global'
+                   AND (r.view_all_projects OR EXISTS (SELECT 1 FROM role_viewable_projects v WHERE v.role_id = r.id))
+                """, Long.class)).isZero();
+
+        String global = "role_m736_global_" + f.suffix();
+        repository.createRole(new RoleRecord(global, "M736 全局数据范围 " + f.suffix(), null, "global", "active", Instant.now(),
+                List.of("access.user.view"), null));
+        repository.assignUserRole(f.staffA(), global);
+        var holder = m736Staff(f.staffA(), f.projectA());
+        mockMvc.perform(get("/api/v1/access/users").with(holder))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.hasItem(f.staffA())))
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(f.staffB()))));
+
+        String ticked = m736CreateRole(m736Admin(f), "m736-j3-role-" + f.suffix(), List.of("access.user.view"), true, List.of());
+        mockMvc.perform(post("/api/v1/access/role-assignments").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content(m002UnassignJson("m736-j3-assign-" + f.suffix(), f.staffA(), ticked)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/access/users").with(holder))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", org.hamcrest.Matchers.hasItems(f.staffA(), f.staffB(), f.staffC())));
+    }
+
+    // M736-J4（操作员 2026-09-25 所选选项原文「持有者只能触及归属在项目表或项目公司下的账号与数据；平台公司员工、平台管理员、最高权限、
+    // 外部机构账号一律碰不到」；2026-10-01 所选选项原文「域主管公司也按「项目」对待，持有者可以跨项目处理它们的员工与数据（只算在用的）。」）：
+    // 真库＋真实接口——经勾了「可以查看全部项目」的角色持分配角色权限的甲项目员工：乙项目、城市项目公司（在用的、停用的各一）、在用的域主管
+    // 公司下的员工，角色撤得掉；停用的域主管公司、顶层平台主体下的员工 403 CROSS_ORG_FORBIDDEN；归属在乙项目的平台管理员账号、外部机构
+    // 账号、最高权限账号同样 403，再来一次仍是 403（第二次），角色都还在。
+    @Test
+    void viewAllRoleHolderReachesProjectsAndProjectCompaniesButNotPlatformStaffOrExcludedAccountsThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        String role = m736CreateRole(m736Admin(f), "m736-j4-role-" + f.suffix(), List.of("access.role.assign"), true, List.of());
+        repository.assignUserRole(f.staffA(), role); // 夹具直接落行：角色含须审批码，走接口须经授权申请审批（见 J2），不是本用例要看的
+        String kept = "role_m736_kept_" + f.suffix();
+        repository.createRole(new RoleRecord(kept, "M736 待撤角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        java.util.Map<String, String> reachable = new java.util.LinkedHashMap<>();
+        reachable.put(f.staffB(), "乙项目员工");
+        reachable.put(m736EntityStaff(f, "city", "project_company", "active"), "城市项目公司员工");
+        reachable.put(m736EntityStaff(f, "cityoff", "project_company", "inactive"), "停用的城市项目公司员工");
+        reachable.put(m736EntityStaff(f, "dom", "management_company", "active"), "在用的域主管公司员工");
+        java.util.Map<String, String> unreachable = new java.util.LinkedHashMap<>();
+        unreachable.put(m736EntityStaff(f, "domoff", "management_company", "inactive"), "停用的域主管公司员工");
+        unreachable.put(m736EntityStaff(f, "top", "platform", "active"), "顶层平台主体员工");
+        String adminInB = "usr_m736_pa_b_" + f.suffix();
+        String vendorInB = "usr_m736_vendor_b_" + f.suffix();
+        repository.createUser(new AccessUser(adminInB, adminInB, "platform_admin", f.projectB(), null, "active", Instant.now()));
+        repository.createUser(new AccessUser(vendorInB, vendorInB, "outsourced_vendor", f.projectB(), null, "active", Instant.now()));
+        String master = m002MasterAccount();
+        jdbcTemplate.update("UPDATE access_users SET organization_id = ? WHERE id = ?", f.projectB(), master);
+        unreachable.put(adminInB, "归属在乙项目的平台管理员账号");
+        unreachable.put(vendorInB, "归属在乙项目的外部机构账号");
+        unreachable.put(master, "归属在乙项目的最高权限账号");
+        java.util.stream.Stream.concat(reachable.keySet().stream(), unreachable.keySet().stream())
+                .forEach(user -> repository.assignUserRole(user, kept));
+        var holder = m736Staff(f.staffA(), f.projectA());
+
+        for (var target : reachable.entrySet()) {
+            m736Unassign(holder, "m736-j4-" + f.suffix() + "-" + target.getKey(), target.getKey(), kept).andExpect(status().isOk());
+            assertThat(m002UserRoles(target.getKey())).as(target.getValue()).doesNotContain(kept);
+        }
+        for (int round = 1; round <= 2; round++) {
+            for (var target : unreachable.entrySet()) {
+                m736Unassign(holder, "m736-j4-" + f.suffix() + "-" + round + "-" + target.getKey(), target.getKey(), kept)
+                        .andExpect(status().isForbidden())
+                        .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+                assertThat(m002UserRoles(target.getKey())).as(target.getValue()).contains(kept);
+            }
+        }
+    }
+
+    // M736-J5（操作员 2026-09-25 答「也算」；确认句「（含经岗位得到）」）：真库＋真实接口——岗位映射挂一个只含日常权限、只勾了乙项目的角色，
+    // 平台管理员给甲项目员工定岗（不拦）；该员工没有直接分配的角色，经岗位派生的角色看得到乙项目员工的有效权限，丙项目 403 CROSS_ORG_FORBIDDEN。
+    @Test
+    void positionDerivedTickedRoleReachesTheTickedProjectThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        String role = m736CreateRole(m736Admin(f), "m736-j5-role-" + f.suffix(), List.of("access.user.view"), false, List.of(f.projectB()));
+        String position = m736Mapping(f, "j5", role);
+        mockMvc.perform(put("/api/v1/access/users/" + f.staffA() + "/position").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content(xm002iPositionJson("m736-j5-seat-" + f.suffix(), position)))
+                .andExpect(status().isOk());
+        assertThat(m002AssignedRole(f.staffA())).isEqualTo(role);
+        assertThat(m002UserRoles(f.staffA())).isEmpty();
+        var holder = m736Staff(f.staffA(), f.projectA());
+
+        m736EffectivePermissionsOf(holder, f.staffB()).andExpect(status().isOk());
+        m736EffectivePermissionsOf(holder, f.staffC())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+    }
+
+    // M736-J5（同上；治理地图第 703 行「属于既有高危权限的，不得因处于岗位模板内而免除授出前审批」）：岗位派生的可跨项目角色带须审批码时
+    // 先挂起——挂起期间该员工撤不了乙项目员工的角色（码未生效）；释放单获批后才跨到乙项目，丙项目仍 403 CROSS_ORG_FORBIDDEN。
+    @Test
+    void positionDerivedTickedRoleWithACodeNeedingApprovalReachesOnlyAfterTheReleaseIsApprovedThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        String boss = "usr_m736_boss_" + f.suffix();
+        repository.createUser(new AccessUser(boss, boss, "staff", "org", null, "active", Instant.now()));
+        m736Superior(f.admin(), boss, f.admin());
+        String role = m736CreateRole(m736Admin(f), "m736-j5h-role-" + f.suffix(), List.of("access.role.assign"), false, List.of(f.projectB()));
+        String position = m736Mapping(f, "j5h", role);
+        String kept = "role_m736_kept_" + f.suffix();
+        repository.createRole(new RoleRecord(kept, "M736 待撤角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        repository.assignUserRole(f.staffB(), kept);
+        repository.assignUserRole(f.staffC(), kept);
+        mockMvc.perform(put("/api/v1/access/users/" + f.staffA() + "/position").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content(xm002iPositionJson("m736-j5h-seat-" + f.suffix(), position)))
+                .andExpect(status().isOk());
+        String release = m002PendingRequestId(f.staffA(), "position_high_risk_release");
+        var holder = m736Staff(f.staffA(), f.projectA());
+
+        m736Unassign(holder, "m736-j5h-held-" + f.suffix(), f.staffB(), kept)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertThat(m002UserRoles(f.staffB())).contains(kept);
+
+        m002ActAs(boss, "staff", () -> accessService.reviewGrant(release, m002Approve("m736-j5h-release-" + f.suffix())));
+        assertThat(m002Status(release)).isEqualTo("applied");
+        m736Unassign(holder, "m736-j5h-b-" + f.suffix(), f.staffB(), kept).andExpect(status().isOk());
+        assertThat(m002UserRoles(f.staffB())).doesNotContain(kept);
+        m736Unassign(holder, "m736-j5h-c-" + f.suffix(), f.staffC(), kept)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        assertThat(m002UserRoles(f.staffC())).contains(kept);
+    }
+
+    // M736-J6（操作员 2026-10-03 所选选项原文：「角色能看哪些项目，就能在哪些项目新建记录、把员工改挂过去。」）：真库＋真实接口——分配角色
+    // 权限既来自只勾了乙项目的角色、又有本项目来源的甲项目员工，把甲项目员工改挂到乙项目：受理，账号归属改到乙项目，新范围岗位进审批
+    // （待审）；改挂到丙项目 403 CROSS_ORG_FORBIDDEN、归属不变、不建单，再来一次仍拒（第二次）；只有本项目来源的甲项目员工改挂到乙项目同样 403。
+    @Test
+    void holderMovesAnEmployeeIntoATickedProjectButNotIntoAnUntickedOneThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        String boss = "usr_m736_boss_" + f.suffix();
+        String plain = "usr_m736_plain_" + f.suffix();
+        String moverB = "usr_m736_mover_b_" + f.suffix();
+        String moverC = "usr_m736_mover_c_" + f.suffix();
+        for (String user : List.of(boss, plain, moverB, moverC)) {
+            repository.createUser(new AccessUser(user, user, "staff", f.projectA(), null, "active", Instant.now()));
+        }
+        m736Superior(f.staffA(), boss, f.admin());
+        String local = "role_m736_local_" + f.suffix();
+        String empty = "role_m736_empty_" + f.suffix();
+        repository.createRole(new RoleRecord(local, "M736 本项目分配角色 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.assign"), null));
+        repository.createRole(new RoleRecord(empty, "M736 空岗位角色 " + f.suffix(), null, "project", "active", Instant.now(), List.of(), null));
+        String cross = m736CreateRole(m736Admin(f), "m736-j6-role-" + f.suffix(), List.of("access.role.assign"), false, List.of(f.projectB()));
+        repository.assignUserRole(f.staffA(), local);
+        repository.assignUserRole(f.staffA(), cross); // 夹具直接落行，同 J4
+        repository.assignUserRole(plain, local);
+        String position = m736Mapping(f, "j6", empty);
+        var holder = m736Staff(f.staffA(), f.projectA());
+        String scopeBody = "{\"idempotency_key\": \"%s\", \"organization_id\": \"%s\", \"position_code\": \"" + position + "\", "
+                + "\"staff_level_id\": \"lvl_m1_lower\", \"reason\": \"调往其他项目\"}";
+
+        mockMvc.perform(put("/api/v1/access/users/" + moverB + "/scope").with(holder).contentType(MediaType.APPLICATION_JSON)
+                        .content(scopeBody.formatted("m736-j6-b-" + f.suffix(), f.projectB())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.request_type").value("user_scope_change"))
+                .andExpect(jsonPath("$.data.status").value("pending"));
+        assertThat(m736Organization(moverB)).isEqualTo(f.projectB());
+
+        for (int round = 1; round <= 2; round++) {
+            mockMvc.perform(put("/api/v1/access/users/" + moverC + "/scope").with(holder).contentType(MediaType.APPLICATION_JSON)
+                            .content(scopeBody.formatted("m736-j6-c-" + round + "-" + f.suffix(), f.projectC())))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        }
+        mockMvc.perform(put("/api/v1/access/users/" + moverC + "/scope").with(m736Staff(plain, f.projectA()))
+                        .contentType(MediaType.APPLICATION_JSON).content(scopeBody.formatted("m736-j6-plain-" + f.suffix(), f.projectB())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        assertThat(m736Organization(moverC)).isEqualTo(f.projectA());
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_grant_requests WHERE target_user_id = ?", Long.class, moverC))
+                .isZero();
+    }
+
+    // M736-J7（任务书 3.1；操作员 2026-10-01 所选选项原文「……并支持一个商户对应多个项目（新增建模）。」；AGENTS.md 第 8 条不回填）：真库——
+    // V441 之后 merchant_projects 表在、没有行，主键（商户、项目）、项目索引与两个外键在，外键不带级联；roles.view_all_projects 非空、
+    // 默认未勾选；role_viewable_projects 主键（角色、可查看目标），勾选行随角色删除。
+    @Test
+    void v441CreatesTheEmptyMerchantProjectsTableAndRoleTicksThatGoWithTheRoleOnTheRealSchema() {
+        assertThat(regclass("merchant_projects")).isEqualTo("merchant_projects");
+        assertThat(regclass("role_viewable_projects")).isEqualTo("role_viewable_projects");
+        assertThat(regclass("idx_merchant_projects_project_id")).isEqualTo("idx_merchant_projects_project_id");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_projects", Long.class)).isZero();
+        assertThat(m736Constraints("merchant_projects", "p")).containsExactly("PRIMARY KEY (merchant_id, project_id)");
+        assertThat(m736Constraints("merchant_projects", "f")).containsExactly(
+                "FOREIGN KEY (merchant_id) REFERENCES merchants(id)", "FOREIGN KEY (project_id) REFERENCES projects(id)");
+        assertThat(m736Constraints("role_viewable_projects", "p")).containsExactly("PRIMARY KEY (role_id, viewable_id)");
+        assertThat(m736Constraints("role_viewable_projects", "f")).containsExactly(
+                "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT column_default || '/' || is_nullable FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'roles' AND column_name = 'view_all_projects'
+                """, String.class)).isEqualTo("false/NO");
+
+        String role = "role_m736_cascade_" + UUID.randomUUID().toString().substring(0, 8);
+        repository.createRole(new RoleRecord(role, "M736 级联 " + role, null, "project", "active", Instant.now(), List.of(), null));
+        jdbcTemplate.update("INSERT INTO role_viewable_projects (role_id, viewable_id) VALUES (?, 'm736_any_project')", role);
+        jdbcTemplate.update("DELETE FROM roles WHERE id = ?", role);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM role_viewable_projects WHERE role_id = ?", Long.class, role))
+                .isZero();
+    }
+
+    // ── M736 第二步（操作员 2026-10-08 确认的治理地图第 703 行追加句：「可跨项目角色分配出去以后，可以直接在原角色上增加或减少可查看的
+    //    项目：增加的，所有持有人要各自重新审批通过，才能查看新增的项目；减少的，也要审批通过后才生效，审批期间持有人仍能查看。」）
+    //    真库与真实接口回归 ──────────────────────────────────────────────────────────────────────────────────────────────
+    //    本组只走接口、既有的服务方法与 SQL，不引用第二步新增的 Java 类型：对只有第一步的主源码也能编译，换上本文件即可红跑——
+    //    增减接口不存在（404）、待批表不存在、或指纹不含勾选，各条红在注释写明的那一步。
+
+    // 增减角色可查看项目的接口；fields＝请求体里除提交编号、操作说明以外的蛇形字段（JSON 片段）。
+    private org.springframework.test.web.servlet.ResultActions m736ChangeTicks(
+            org.springframework.test.web.servlet.request.RequestPostProcessor session, String roleId, String key, String fields)
+            throws Exception {
+        return mockMvc.perform(put("/api/v1/access/roles/" + roleId + "/viewable-projects").with(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\": \"" + key + "\", \"operator_note\": \"M736\", " + fields + "}"));
+    }
+
+    private void m736Assign(M736Fixture f, String key, String userId, String roleId) throws Exception {
+        mockMvc.perform(post("/api/v1/access/role-assignments").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content(m002UnassignJson(key, userId, roleId)))
+                .andExpect(status().isOk());
+    }
+
+    // 平台管理员的上两级（授权政策「高」一档＝上两级），都在甲项目、都经角色持主管复核审批权限（通用主管复核入口的门禁）。
+    // 平台管理员本人也挂这个角色：他去批自己发起的单要走到「发起人不能复核」那道闸；角色另带申请授权权限（他发起重新审批的入口码）。
+    // 返回 [第一级, 第二级] 的会话主体。
+    private List<AccessActor> m736Approvers(M736Fixture f) {
+        String role = "role_m736_rva_" + f.suffix();
+        repository.createRole(new RoleRecord(role, "M736 主管复核 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("governance.supervisor_review.approve", "access.grant_request.apply"), null));
+        repository.assignUserRole(f.admin(), role);
+        String boss = "usr_m736_boss_" + f.suffix();
+        String topBoss = "usr_m736_top_" + f.suffix();
+        for (String user : List.of(boss, topBoss)) {
+            repository.createUser(new AccessUser(user, user, "staff", f.projectA(), null, "active", Instant.now()));
+            repository.assignUserRole(user, role);
+        }
+        m736Superior(f.admin(), boss, f.admin());
+        m736Superior(boss, topBoss, f.admin());
+        return List.of(new AccessActor(boss, boss, "staff", f.projectA(), null, "active"),
+                new AccessActor(topBoss, topBoss, "staff", f.projectA(), null, "active"));
+    }
+
+    // 角色当前逐个勾选的条目（按编号）。
+    private List<String> m736Ticks(String roleId) {
+        return jdbcTemplate.queryForList("SELECT viewable_id FROM role_viewable_projects WHERE role_id = ? ORDER BY viewable_id",
+                String.class, roleId);
+    }
+
+    // 角色的待批条目：员工/条目。
+    private List<String> m736Holds(String roleId) {
+        return jdbcTemplate.queryForList(
+                "SELECT user_id || '/' || viewable_id FROM role_viewable_project_holds WHERE role_id = ? ORDER BY user_id, viewable_id",
+                String.class, roleId);
+    }
+
+    // 某条目上记着的减少复核单号；没有待审的减少为空。
+    private String m736RemovalReview(String roleId, String viewableId) {
+        return jdbcTemplate.queryForObject("SELECT removal_review_id FROM role_viewable_projects WHERE role_id = ? AND viewable_id = ?",
+                String.class, roleId, viewableId);
+    }
+
+    // 主管复核单的审批链节点（按顺序）：节点类型/审批人。
+    private List<String> m736ReviewNodes(String reviewId) {
+        return jdbcTemplate.queryForList(
+                "SELECT approver_kind || '/' || coalesce(approver_id, '') FROM supervisor_review_nodes WHERE review_id = ? ORDER BY seq",
+                String.class, reviewId);
+    }
+
+    // M736-J8（同上追加句「增加的，所有持有人要各自重新审批通过，才能查看新增的项目」；操作员 2026-10-03 所选选项原文「直接在原角色上勾 C；
+    // 但张三等所有持有人要各自重新审批通过，才能看 C。」）：真库＋真实接口——角色勾了乙，平台管理员直接分给甲项目的张三、经岗位给李四。
+    // 增减接口加丙（200）：两人各一行待批；张三看丙项目员工的有效权限 403、乙项目的照常 200；改之后才分配的王五对丙 200，不多写待批。
+    // 平台管理员替张三发起重新审批（角色只含日常权限也受理，「高」一档、两个上级节点），第一级批完待批还在，两级批完——张三对丙 200、
+    // 李四仍 403，库里只剩李四那一行；张三直接分配的角色没有多行。修复前红在增减接口那一步（404）；判定不减待批时红在张三对丙的 403。
+    @Test
+    void addedProjectStaysHiddenFromExistingHoldersUntilEachIsReapprovedThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        List<AccessActor> approvers = m736Approvers(f);
+        String lisi = "usr_m736_li_" + f.suffix();
+        String wangwu = "usr_m736_wang_" + f.suffix();
+        for (String user : List.of(lisi, wangwu)) {
+            repository.createUser(new AccessUser(user, user, "staff", f.projectA(), null, "active", Instant.now()));
+        }
+        String role = m736CreateRole(m736Admin(f), "m736-j8-role-" + f.suffix(), List.of("access.user.view"), false, List.of(f.projectB()));
+        m736Assign(f, "m736-j8-assign-" + f.suffix(), f.staffA(), role);
+        String position = m736Mapping(f, "j8", role);
+        mockMvc.perform(put("/api/v1/access/users/" + lisi + "/position").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content(xm002iPositionJson("m736-j8-seat-" + f.suffix(), position)))
+                .andExpect(status().isOk());
+        var zhangsan = m736Staff(f.staffA(), f.projectA());
+        var lisiSession = m736Staff(lisi, f.projectA());
+
+        m736ChangeTicks(m736Admin(f), role, "m736-j8-add-" + f.suffix(), "\"add_viewable_project_ids\": [\"" + f.projectC() + "\"]")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.view_all_projects").value(false))
+                .andExpect(jsonPath("$.data.viewable_project_ids", org.hamcrest.Matchers.containsInAnyOrder(f.projectB(), f.projectC())))
+                .andExpect(jsonPath("$.data.pending_removal_ids").isEmpty())
+                .andExpect(jsonPath("$.data.pending_reapprovals[*].user_id", org.hamcrest.Matchers.containsInAnyOrder(f.staffA(), lisi)));
+        assertThat(m736Ticks(role)).containsExactly(f.projectB(), f.projectC());
+        assertThat(m736Holds(role)).containsExactlyInAnyOrder(f.staffA() + "/" + f.projectC(), lisi + "/" + f.projectC());
+        m736EffectivePermissionsOf(zhangsan, f.staffC())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        m736EffectivePermissionsOf(zhangsan, f.staffB()).andExpect(status().isOk());
+
+        m736Assign(f, "m736-j8-assign-later-" + f.suffix(), wangwu, role);
+        m736EffectivePermissionsOf(m736Staff(wangwu, f.projectA()), f.staffC()).andExpect(status().isOk());
+        assertThat(m736Holds(role)).hasSize(2);
+
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "%s", "request_type": "role_project_reapproval", "target_user_id": "%s", "role_id": "%s",
+                                 "reason": "补审新增项目"}
+                                """.formatted("m736-j8-apply-" + f.suffix(), f.staffA(), role)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.request_type").value("role_project_reapproval"))
+                .andExpect(jsonPath("$.data.status").value("pending"));
+        String request = m002PendingRequestId(f.staffA(), "role_project_reapproval");
+        assertThat(jdbcTemplate.queryForObject("SELECT policy_code FROM supervisor_review_decisions WHERE review_id = ?", String.class,
+                m002ReviewId(request))).isEqualTo("permission_grant_l2");
+        assertThat(m736ChainNodes(request)).containsExactly("user/" + approvers.get(0).id(), "user/" + approvers.get(1).id());
+
+        m002ActAs(approvers.get(0), () -> accessService.reviewGrant(request, m002Approve("m736-j8-first-" + f.suffix())));
+        assertThat(m002Status(request)).isEqualTo("pending");
+        assertThat(m736Holds(role)).hasSize(2);
+        m736EffectivePermissionsOf(zhangsan, f.staffC()).andExpect(status().isForbidden());
+        m002ActAs(approvers.get(1), () -> accessService.reviewGrant(request, m002Approve("m736-j8-final-" + f.suffix())));
+        assertThat(m002Status(request)).isEqualTo("applied");
+
+        assertThat(m736Holds(role)).containsExactly(lisi + "/" + f.projectC());
+        m736EffectivePermissionsOf(zhangsan, f.staffC()).andExpect(status().isOk());
+        m736EffectivePermissionsOf(lisiSession, f.staffC())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        m736EffectivePermissionsOf(lisiSession, f.staffB()).andExpect(status().isOk());
+        assertThat(m002UserRoles(f.staffA())).containsExactly(role);
+    }
+
+    // M736-J9（同一追加句「减少的，也要审批通过后才生效，审批期间持有人仍能查看」；操作员 2026-10-03 所选选项原文「减少也要审批通过后
+    // 才生效；审批期间持有人仍能看 C。」）：真库＋真实接口——增减接口减丙（200）：读回仍有丙、丙列为减少待审，持有人对丙仍 200；
+    // 建的是一张主管复核单（动作名、对象类型、对象编号＝角色、「高」一档、两个上级节点）。在通用主管复核入口：发起人自己去批 403；
+    // 第一级通过后角色不变、持有人对丙仍 200；末级通过的同一请求里丙从角色上去掉、持有人对丙 403、待减标记清空。驳回的变体（减乙）：
+    // 角色不变、标记清空、持有人照常看得到乙，同样的减少可以再提。修复前红在增减接口那一步（404）；监听没接上时红在末级通过后的勾选。
+    @Test
+    void removalTakesEffectOnlyAfterApprovalOnTheGenericReviewEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        List<AccessActor> approvers = m736Approvers(f);
+        AccessActor admin = new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active");
+        String role = m736CreateRole(m736Admin(f), "m736-j9-role-" + f.suffix(), List.of("access.user.view"), false,
+                List.of(f.projectB(), f.projectC()));
+        m736Assign(f, "m736-j9-assign-" + f.suffix(), f.staffA(), role);
+        var holder = m736Staff(f.staffA(), f.projectA());
+        String removeC = "\"remove_viewable_project_ids\": [\"" + f.projectC() + "\"]";
+        String removeB = "\"remove_viewable_project_ids\": [\"" + f.projectB() + "\"]";
+
+        m736ChangeTicks(m736Admin(f), role, "m736-j9-remove-" + f.suffix(), removeC)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.viewable_project_ids", org.hamcrest.Matchers.containsInAnyOrder(f.projectB(), f.projectC())))
+                .andExpect(jsonPath("$.data.pending_removal_ids", org.hamcrest.Matchers.contains(f.projectC())));
+        mockMvc.perform(get("/api/v1/access/roles/" + role + "/viewable-projects").with(m736Admin(f)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.viewable_project_ids", org.hamcrest.Matchers.containsInAnyOrder(f.projectB(), f.projectC())))
+                .andExpect(jsonPath("$.data.pending_removal_ids", org.hamcrest.Matchers.contains(f.projectC())));
+        String review = m736RemovalReview(role, f.projectC());
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT action_type || '|' || object_type || '|' || object_id || '|' || policy_code || '|' || review_status
+                  FROM supervisor_review_decisions WHERE review_id = ?
+                """, String.class, review))
+                .isEqualTo("access.role_viewable_projects.reduce|role_viewable_projects|" + role + "|permission_grant_l2|pending_review");
+        assertThat(m736ReviewNodes(review)).containsExactly("user/" + approvers.get(0).id(), "user/" + approvers.get(1).id());
+        assertThat(m736Holds(role)).isEmpty();
+        m736EffectivePermissionsOf(holder, f.staffC()).andExpect(status().isOk());
+
+        m002ChainDecision(admin, review, "m736-j9-self-" + f.suffix(), "approved")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
+        m002ChainDecision(approvers.get(0), review, "m736-j9-first-" + f.suffix(), "approved")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("pending_review"));
+        assertThat(m736Ticks(role)).containsExactly(f.projectB(), f.projectC());
+        assertThat(m736RemovalReview(role, f.projectC())).isEqualTo(review);
+        m736EffectivePermissionsOf(holder, f.staffC()).andExpect(status().isOk());
+
+        m002ChainDecision(approvers.get(1), review, "m736-j9-last-" + f.suffix(), "approved")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        assertThat(m736Ticks(role)).containsExactly(f.projectB());
+        assertThat(m736RemovalReview(role, f.projectB())).isNull();
+        m736EffectivePermissionsOf(holder, f.staffC())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        m736EffectivePermissionsOf(holder, f.staffB()).andExpect(status().isOk());
+
+        m736ChangeTicks(m736Admin(f), role, "m736-j9-remove-b-" + f.suffix(), removeB).andExpect(status().isOk());
+        String rejected = m736RemovalReview(role, f.projectB());
+        assertThat(rejected).isNotNull();
+        m002ChainDecision(approvers.get(0), rejected, "m736-j9-reject-" + f.suffix(), "rejected")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("rejected"));
+        assertThat(m736Ticks(role)).containsExactly(f.projectB());
+        assertThat(m736RemovalReview(role, f.projectB())).isNull();
+        m736EffectivePermissionsOf(holder, f.staffB()).andExpect(status().isOk());
+        m736ChangeTicks(m736Admin(f), role, "m736-j9-remove-b-again-" + f.suffix(), removeB)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pending_removal_ids", org.hamcrest.Matchers.contains(f.projectB())));
+    }
+
+    // M736-J10（技术推导，依据同一追加句「增加或减少可查看的项目」：把「可以查看全部项目」勾上按增加办、去掉按减少办，逐个勾选的清单
+    // 始终保留）：真库＋真实接口——清单只有乙的角色勾上全部：清单仍是乙，老持有人一行「全部」的待批、仍只到乙；之后才得到角色的人
+    // 到全部（含用 SQL 新插的项目）。去掉全部：待审时角色仍勾着全部、新持有人仍到全部；两级批完——角色不再勾全部、清单仍是乙，
+    // 新持有人只到乙，「全部」的待批行没了。修复前红在增减接口那一步（404）。
+    @Test
+    void viewAllAndBackThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        List<AccessActor> approvers = m736Approvers(f);
+        String later = "usr_m736_wang_" + f.suffix();
+        repository.createUser(new AccessUser(later, later, "staff", f.projectA(), null, "active", Instant.now()));
+        String role = m736CreateRole(m736Admin(f), "m736-j10-role-" + f.suffix(), List.of("access.user.view"), false, List.of(f.projectB()));
+        m736Assign(f, "m736-j10-assign-" + f.suffix(), f.staffA(), role);
+        var oldHolder = m736Staff(f.staffA(), f.projectA());
+        var newHolder = m736Staff(later, f.projectA());
+
+        m736ChangeTicks(m736Admin(f), role, "m736-j10-all-" + f.suffix(), "\"add_view_all_projects\": true")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.view_all_projects").value(true))
+                .andExpect(jsonPath("$.data.viewable_project_ids", org.hamcrest.Matchers.contains(f.projectB())));
+        assertThat(m736Ticks(role)).containsExactly(f.projectB());
+        assertThat(m736Holds(role)).containsExactly(f.staffA() + "/*");
+        m736Assign(f, "m736-j10-assign-later-" + f.suffix(), later, role);
+        assertThat(m736Holds(role)).containsExactly(f.staffA() + "/*");
+        String laterProject = "prj_m736_n_" + f.suffix();
+        String laterStaff = "usr_m736_n_" + f.suffix();
+        m736Project(laterProject, laterStaff);
+        m736EffectivePermissionsOf(oldHolder, f.staffB()).andExpect(status().isOk());
+        m736EffectivePermissionsOf(oldHolder, f.staffC())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        m736EffectivePermissionsOf(newHolder, f.staffC()).andExpect(status().isOk());
+        m736EffectivePermissionsOf(newHolder, laterStaff).andExpect(status().isOk());
+
+        m736ChangeTicks(m736Admin(f), role, "m736-j10-back-" + f.suffix(), "\"remove_view_all_projects\": true")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.view_all_projects").value(true))
+                .andExpect(jsonPath("$.data.pending_removal_ids", org.hamcrest.Matchers.contains("*")));
+        String review = jdbcTemplate.queryForObject("SELECT view_all_removal_review_id FROM roles WHERE id = ?", String.class, role);
+        assertThat(review).isNotNull();
+        m736EffectivePermissionsOf(newHolder, f.staffC()).andExpect(status().isOk());
+        m002ChainDecision(approvers.get(0), review, "m736-j10-first-" + f.suffix(), "approved")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("pending_review"));
+        m736EffectivePermissionsOf(newHolder, f.staffC()).andExpect(status().isOk());
+        m002ChainDecision(approvers.get(1), review, "m736-j10-last-" + f.suffix(), "approved")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT CAST(view_all_projects AS text) || '/' || coalesce(view_all_removal_review_id, '') FROM roles WHERE id = ?",
+                String.class, role)).isEqualTo("false/");
+        assertThat(m736Ticks(role)).containsExactly(f.projectB());
+        assertThat(m736Holds(role)).isEmpty();
+        m736EffectivePermissionsOf(newHolder, f.staffB()).andExpect(status().isOk());
+        m736EffectivePermissionsOf(newHolder, f.staffC())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        m736EffectivePermissionsOf(oldHolder, f.staffB()).andExpect(status().isOk());
+    }
+
+    // M736-J11（技术推导：减少落地只认自己的动作名，并按复核单号匹配待减标记）：真库＋真实接口——角色的减少在待审。另一人（持主管复核
+    // 发起权限）经通用评估入口建单：填本模块的动作名 400 UNKNOWN_REVIEW_ACTION（它不在可评估的清单里）；改用清单里的排班发布动作名，
+    // 对象类型、对象编号照抄该角色，建出一张复核单并由他的上级批到通过——角色不变、待减标记还是原来那张单的号、真复核单仍待审、
+    // 持有人照常看得到丙。修复前红在增减接口那一步（404）；监听不核动作名并按对象编号删时红在勾选那条。
+    @Test
+    void forgedReviewOnTheSameObjectDoesNotLandARemoval() throws Exception {
+        M736Fixture f = m736Fixture();
+        m736Approvers(f);
+        String forger = "usr_m736_forger_" + f.suffix();
+        String forgerBoss = "usr_m736_fboss_" + f.suffix();
+        for (String user : List.of(forger, forgerBoss)) {
+            repository.createUser(new AccessUser(user, user, "staff", f.projectA(), null, "active", Instant.now()));
+        }
+        String reviewRole = "role_m736_review_" + f.suffix();
+        repository.createRole(new RoleRecord(reviewRole, "M736 主管复核发起与审批 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("governance.supervisor_review.manage", "governance.supervisor_review.approve"), null));
+        repository.assignUserRole(forger, reviewRole);
+        repository.assignUserRole(forgerBoss, reviewRole);
+        m736Superior(forger, forgerBoss, f.admin());
+        AccessActor forgerActor = new AccessActor(forger, forger, "staff", f.projectA(), null, "active");
+        AccessActor forgerBossActor = new AccessActor(forgerBoss, forgerBoss, "staff", f.projectA(), null, "active");
+        String role = m736CreateRole(m736Admin(f), "m736-j11-role-" + f.suffix(), List.of("access.user.view"), false,
+                List.of(f.projectB(), f.projectC()));
+        m736Assign(f, "m736-j11-assign-" + f.suffix(), f.staffA(), role);
+        m736ChangeTicks(m736Admin(f), role, "m736-j11-remove-" + f.suffix(), "\"remove_viewable_project_ids\": [\"" + f.projectC() + "\"]")
+                .andExpect(status().isOk());
+        String real = m736RemovalReview(role, f.projectC());
+        assertThat(real).isNotNull();
+        String evaluateBody = """
+                {"idempotency_key": "%s", "operator_note": "M736", "evidence_attachment_ids": [], "action_type": "%s",
+                 "object_type": "role_viewable_projects", "object_id": "%s", "amount_cent": 0}
+                """;
+
+        mockMvc.perform(post("/api/v1/platform/supervisor-review/evaluate").with(m002Session(forgerActor))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(evaluateBody.formatted("m736-j11-own-action-" + f.suffix(), "access.role_viewable_projects.reduce", role)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("UNKNOWN_REVIEW_ACTION"));
+        String forged = com.jayway.jsonpath.JsonPath.read(mockMvc.perform(post("/api/v1/platform/supervisor-review/evaluate")
+                        .with(m002Session(forgerActor)).contentType(MediaType.APPLICATION_JSON)
+                        .content(evaluateBody.formatted("m736-j11-forged-" + f.suffix(), "staff.shift.publish", role)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("pending_review"))
+                .andExpect(jsonPath("$.data.object_type").value("role_viewable_projects"))
+                .andExpect(jsonPath("$.data.object_id").value(role))
+                .andReturn().getResponse().getContentAsString(), "$.data.review_id");
+        m002ChainDecision(forgerBossActor, forged, "m736-j11-forged-approve-" + f.suffix(), "approved")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+
+        assertThat(m736Ticks(role)).containsExactly(f.projectB(), f.projectC());
+        assertThat(m736RemovalReview(role, f.projectC())).isEqualTo(real);
+        assertThat(m002ReviewStatus(real)).isEqualTo("pending_review");
+        m736EffectivePermissionsOf(m736Staff(f.staffA(), f.projectA()), f.staffC()).andExpect(status().isOk());
+    }
+
+    // M736-J12（技术推导：直接分配与岗位派生两条路都不再持有这个角色时，待重新审批的记录随之清除）：真库＋真实接口——张三直接持有，
+    // 李四直接分配与岗位派生两条路都持有，加丙后两人各一行待批。经接口取消张三的分配——他这个角色的待批 0 行；取消李四的直接分配——
+    // 岗位派生还在，待批还在。另一个角色用 SQL 删掉——它的勾选行与待批行随角色级联删除。修复前红在增减接口那一步（404）；
+    // 仓储不清待批时红在取消张三之后那条。
+    @Test
+    void losingTheRoleDropsTheHoldsOnTheRealSchema() throws Exception {
+        M736Fixture f = m736Fixture();
+        String lisi = "usr_m736_li_" + f.suffix();
+        repository.createUser(new AccessUser(lisi, lisi, "staff", f.projectA(), null, "active", Instant.now()));
+        String role = m736CreateRole(m736Admin(f), "m736-j12-role-" + f.suffix(), List.of("access.user.view"), false, List.of(f.projectB()));
+        m736Assign(f, "m736-j12-assign-" + f.suffix(), f.staffA(), role);
+        m736Assign(f, "m736-j12-assign-li-" + f.suffix(), lisi, role);
+        String position = m736Mapping(f, "j12", role);
+        mockMvc.perform(put("/api/v1/access/users/" + lisi + "/position").with(m736Admin(f)).contentType(MediaType.APPLICATION_JSON)
+                        .content(xm002iPositionJson("m736-j12-seat-" + f.suffix(), position)))
+                .andExpect(status().isOk());
+        m736ChangeTicks(m736Admin(f), role, "m736-j12-add-" + f.suffix(), "\"add_viewable_project_ids\": [\"" + f.projectC() + "\"]")
+                .andExpect(status().isOk());
+        assertThat(m736Holds(role)).containsExactlyInAnyOrder(f.staffA() + "/" + f.projectC(), lisi + "/" + f.projectC());
+
+        m736Unassign(m736Admin(f), "m736-j12-unassign-" + f.suffix(), f.staffA(), role).andExpect(status().isOk());
+        assertThat(m736Holds(role)).containsExactly(lisi + "/" + f.projectC());
+        m736Unassign(m736Admin(f), "m736-j12-unassign-li-" + f.suffix(), lisi, role).andExpect(status().isOk());
+        assertThat(m002UserRoles(lisi)).doesNotContain(role);
+        assertThat(m002AssignedRole(lisi)).isEqualTo(role);
+        assertThat(m736Holds(role)).as("两条路都持有、只取消直接分配").containsExactly(lisi + "/" + f.projectC());
+
+        String cascade = "role_m736_gone_" + f.suffix();
+        repository.createRole(new RoleRecord(cascade, "M736 级联 " + cascade, null, "project", "active", Instant.now(), List.of(), null));
+        jdbcTemplate.update("INSERT INTO role_viewable_projects (role_id, viewable_id) VALUES (?, ?)", cascade, f.projectB());
+        jdbcTemplate.update("INSERT INTO role_viewable_project_holds (user_id, role_id, viewable_id) VALUES (?, ?, ?)",
+                f.staffB(), cascade, f.projectB());
+        assertThat(m736Holds(cascade)).hasSize(1);
+        jdbcTemplate.update("DELETE FROM roles WHERE id = ?", cascade);
+        assertThat(m736Ticks(cascade)).isEmpty();
+        assertThat(m736Holds(cascade)).isEmpty();
+    }
+
+    // M736-J13（任务书第 3 节；AGENTS.md 第 8 条不回填）：真库——V441 之后待批表在，主键（员工、角色、条目），员工、角色两个外键都随删
+    // 级联；roles 与 role_viewable_projects 上两个待减标记列在、可空、没有默认值；授权申请类型的检查约束收「重新审批可查看项目」、
+    // 仍拒未知类型。修复前（库按只有第一步的 V441 迁移）红在第一条：没有待批表。
+    @Test
+    void migrationAddsHoldsTableRemovalMarkersAndTheReapprovalType() {
+        assertThat(regclass("role_viewable_project_holds")).isEqualTo("role_viewable_project_holds");
+        assertThat(m736Constraints("role_viewable_project_holds", "p")).containsExactly("PRIMARY KEY (user_id, role_id, viewable_id)");
+        assertThat(m736Constraints("role_viewable_project_holds", "f")).containsExactly(
+                "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE",
+                "FOREIGN KEY (user_id) REFERENCES access_users(id) ON DELETE CASCADE");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT table_name || '.' || column_name || '/' || coalesce(column_default, '') || '/' || is_nullable
+                  FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND ((table_name = 'roles' AND column_name = 'view_all_removal_review_id')
+                     OR (table_name = 'role_viewable_projects' AND column_name = 'removal_review_id'))
+                """, String.class)).containsExactlyInAnyOrder(
+                "roles.view_all_removal_review_id//YES", "role_viewable_projects.removal_review_id//YES");
+
+        jdbcTemplate.update("""
+                INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
+                VALUES ('agr_m736_reapproval', 'role_project_reapproval', 'usr_m736_target', 'pending', 'M736 schema check', 'usr_m736_admin', now(), now())
+                """);
+        assertThat(jdbcTemplate.queryForObject("SELECT request_type FROM access_grant_requests WHERE id = 'agr_m736_reapproval'", String.class))
+                .isEqualTo("role_project_reapproval");
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO access_grant_requests (id, request_type, target_user_id, status, reason, requested_by, created_at, updated_at)
+                VALUES ('agr_m736_unknown', 'm736_unknown_type', 'usr_m736_target', 'pending', 'x', 'usr_m736_admin', now(), now())
+                """))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                .hasMessageContaining("chk_access_grant_requests_type");
+    }
+
+    // M736-J14（技术推导：角色、岗位、范围变更三类申请所指角色勾了项目的，授权事实指纹含两项勾选——否则按旧勾选批的单会按新勾选落地）：
+    // 真库——甲项目的角色管理人对勾了乙的角色提角色申请（待审）；随后用 SQL 给该角色多插一行丙。上两级去点通过——都是 409
+    // GRANT_SNAPSHOT_CHANGED，申请仍待审，目标员工没有得到角色。本条在只有第一步的主源码上按断言变红：那时指纹不含勾选，
+    // 第一级点通过不抛错（两级批完照旧落地）。
+    @Test
+    void pendingRoleRequestIsRefusedAfterATickIsAddedOnTheRealSchema() throws Exception {
+        M736Fixture f = m736Fixture();
+        String manager = "usr_m736_mgr_" + f.suffix();
+        String boss = "usr_m736_boss_" + f.suffix();
+        String topBoss = "usr_m736_top_" + f.suffix();
+        for (String user : List.of(manager, boss, topBoss)) {
+            repository.createUser(new AccessUser(user, user, "staff", f.projectA(), null, "active", Instant.now()));
+        }
+        String managerRole = "role_m736_mgr_" + f.suffix();
+        repository.createRole(new RoleRecord(managerRole, "M736 角色管理人 " + f.suffix(), null, "project", "active", Instant.now(),
+                List.of("access.role.manage", "access.role.assign", "access.grant_request.apply", "access.user.view"), null));
+        repository.assignUserRole(manager, managerRole);
+        m736Superior(manager, boss, f.admin());
+        m736Superior(boss, topBoss, f.admin());
+        var managerSession = m736Staff(manager, f.projectA());
+        String role = m736CreateRole(managerSession, "m736-j14-role-" + f.suffix(), List.of("access.user.view"), false, List.of(f.projectB()));
+        mockMvc.perform(post("/api/v1/access/grant-requests").with(managerSession).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "%s", "request_type": "user_role", "target_user_id": "%s", "role_id": "%s",
+                                 "reason": "申请分配可跨项目角色"}
+                                """.formatted("m736-j14-apply-" + f.suffix(), f.staffA(), role)))
+                .andExpect(status().isOk());
+        String request = m002PendingRequestId(f.staffA(), "user_role");
+        assertThat(m736ChainNodes(request)).containsExactly("user/" + boss, "user/" + topBoss);
+
+        jdbcTemplate.update("INSERT INTO role_viewable_projects (role_id, viewable_id) VALUES (?, ?)", role, f.projectC());
+
+        for (String approver : List.of(boss, topBoss)) {
+            assertThatThrownBy(() -> m002ActAs(approver, "staff", f.projectA(),
+                    () -> accessService.reviewGrant(request, m002Approve("m736-j14-review-" + approver))))
+                    .as(approver).isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.status().value()).isEqualTo(409);
+                        assertThat(e.code()).isEqualTo("GRANT_SNAPSHOT_CHANGED");
+                    });
+        }
+        assertThat(m002Status(request)).isEqualTo("pending");
+        assertThat(m002UserRoles(f.staffA())).doesNotContain(role);
     }
 }

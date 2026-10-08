@@ -1,6 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
-import { adminRoutes } from "../adminRoutes";
+import { groupPermissionsByMenuModule, permissionCode } from "../adminRoutes";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton } from "../security/Can";
@@ -27,10 +27,6 @@ function validityLabel(row: PermissionTemplateRow) {
 }
 
 type Mode = "existing" | "new";
-
-function permissionCode(row: PermissionDefinitionRow) {
-  return row.permissionCode ?? row.code ?? "";
-}
 
 function templatePermissionCodes(row: PermissionTemplateRow | undefined) {
   return row?.permissionCodes ?? row?.permissions ?? [];
@@ -152,28 +148,8 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
     }
   }, [targetUsersText, users]);
 
-  const groupedPermissions = React.useMemo(() => {
-    // 权限分组与左侧菜单对应:从 adminRoutes 派生「权限域→菜单模块」,并按菜单模块出现顺序排列,
-    // 使管理员按左侧目录的思路勾选权限。未匹配任何菜单的域归入「其他」置末。
-    const domainToModule = new Map<string, string>();
-    const moduleOrder: string[] = [];
-    for (const route of adminRoutes) {
-      if (!moduleOrder.includes(route.module)) moduleOrder.push(route.module);
-      for (const code of route.requiredPermissions ?? []) {
-        const dom = code.split(".")[0];
-        if (dom && !domainToModule.has(dom)) domainToModule.set(dom, route.module);
-      }
-    }
-    const groups = new Map<string, PermissionDefinitionRow[]>();
-    for (const row of permissions) {
-      const domain = row.domain ?? permissionCode(row).split(".")[0] ?? "other";
-      const moduleName = domainToModule.get(domain) ?? "其他";
-      groups.set(moduleName, [...(groups.get(moduleName) ?? []), row]);
-    }
-    return [...moduleOrder, "其他"]
-      .filter((m) => groups.has(m))
-      .map((m) => [m, groups.get(m)!] as [string, PermissionDefinitionRow[]]);
-  }, [permissions]);
+  // 权限分组与左侧菜单对应（分组逻辑与访问治理工作台新建角色共用，见 adminRoutes）。
+  const groupedPermissions = React.useMemo(() => groupPermissionsByMenuModule(permissions), [permissions]);
 
   // 引导式「新建权限模板」入口：重置独立新建 state 并打开弹窗（不触碰内联编辑表单/选中态）。
   function openCreateTemplate() {

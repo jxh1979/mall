@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.security.core.Authentication;
@@ -31,6 +32,13 @@ public class AuthorizationService implements CallerScopeResolver {
     private static final java.util.Set<String> CUSTOMER_SELF_SERVICE_PERMISSIONS = java.util.Set.of(
             "customer.stored_value.topup",
             "customer.stored_value.consume");
+
+    // M736 第二步：待批条目（role_viewable_project_holds.viewable_id）里代表「可以查看全部项目」这一勾的取值。
+    public static final String ALL_PROJECTS = "*";
+    // M736 第二步（技术推导）：待批条目里的保留标记，不是可查看项目——角色原来一条勾选都没有、第一次勾上项目时已持有它的人各记一条：
+    // 重新审批通过之前，这个角色对他仍按没勾选的角色算（只到本人项目，见 projectReach）。随重新审批落地、失去角色整人整角色一起删。
+    // 取值不会与勾选条目相撞：勾选条目只有 "*" 与过了项目集合校验的编号（编号由系统生成）。
+    public static final String HELD_SINCE_UNTICKED = "-";
 
     private final AccessRepository accessRepository;
     // XM-M002-J：单次消耗走的事务模板（REQUIRED：有业务/请求事务就并入，没有就自建）。经 setter 可选注入（同 IdempotencyService），
@@ -446,14 +454,31 @@ public class AuthorizationService implements CallerScopeResolver {
         return result;
     }
 
-    /** 指定用户的有效权限集（平台管理用；调用方须先校验 {@code access.user.view}）。 */
+    /** 指定用户的有效权限集（平台管理用；调用方须先校验 {@code access.user.view}）。M736：可触及项目按该码算。 */
     public EffectivePermissions effectivePermissionsForUser(String userId) {
+        return effectivePermissionsForUser(userId, "access.user.view");
+    }
+
+    /**
+     * M736：同上，可触及项目按给定的入口权限码现算。现算要按操作人读能力事实（其中有到期处理的写入），
+     * 已持有员工行锁的调用方改用传入 reach 的重载。
+     */
+    public EffectivePermissions effectivePermissionsForUser(String userId, String permissionCode) {
+        return effectivePermissionsForUser(userId, () -> projectReach(currentActor(), permissionCode));
+    }
+
+    /** M736：同上，可触及项目用调用方在取锁前算好的 reach（{@link #projectReach}）。 */
+    public EffectivePermissions effectivePermissionsForUser(String userId, ProjectReach reach) {
+        return effectivePermissionsForUser(userId, () -> reach);
+    }
+
+    // 判定体。项目半边按可触及项目判；平台管理员与最高权限照旧放行，不取 reach。商户半边不变。
+    private EffectivePermissions effectivePermissionsForUser(String userId, java.util.function.Supplier<ProjectReach> reach) {
         AccessActor actor = currentActor();
         AccessUser user = accessRepository.findUserById(userId)
                 .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "账号不存在"));
         if (!isPlatformAdmin(actor) && !isMasterAuthority(actor)) {
-            String organizationId = requireProjectScope(actor);
-            if (!organizationId.equals(user.organizationId())) {
+            if (!canReachUser(reach.get(), user)) {
                 throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权查询其他组织的用户");
             }
             if (actor.merchantId() != null && !actor.merchantId().isBlank()
@@ -684,6 +709,217 @@ public class AuthorizationService implements CallerScopeResolver {
         return projectId;
     }
 
+    /**
+     * M736（XM-M001-D 可跨项目角色；操作员 2026-10-01 确认的治理地图第 653 行追加句：「被分配了可跨项目角色的员工（含经岗位得到），
+     * 在所分配的权限内可以查看、处理该角色可查看项目的数据。」）：一次判定算出的可触及项目范围。
+     * platformAdmin＝平台管理员（一切，D-032）；allProjects＝经勾了「可以查看全部项目」的角色持有入口权限码；ownProject＝本人项目；
+     * ownBySource＝入口权限码另有不是可跨项目角色的来源（普通角色、员工单独授予、模板、临时授权；M736 第二步：带保留标记的老持有人
+     * 所持的、对他有效的勾选一条不剩的角色也算，见 {@link #projectReach}）；
+     * projects＝可跨项目角色勾中、且在当时项目集合内的归属。
+     * 本人项目只在 ownBySource 或被勾中时才算——权限码只来自「只勾了别的项目」的角色时，本人项目也碰不到
+     * （同一追加句：「逐个勾选的只能查看被选中的项目」）。
+     */
+    public record ProjectReach(boolean platformAdmin, boolean allProjects, String ownProject,
+                               boolean ownBySource, Set<String> projects) {
+        public ProjectReach {
+            projects = projects == null ? Set.of() : Set.copyOf(projects);
+        }
+
+        /** 只到本人项目：没有经可跨项目角色持有入口权限码的人，以及停用、带商户归属、外包账号。 */
+        public static ProjectReach ownOnly(String ownProject) {
+            return new ProjectReach(false, false, ownProject, true, Set.of());
+        }
+
+        public boolean ownIncluded() {
+            return ownBySource || (ownProject != null && projects.contains(ownProject));
+        }
+
+        public boolean covers(String organizationId) {
+            return platformAdmin || (organizationId != null
+                    && ((ownIncluded() && organizationId.equals(ownProject)) || projects.contains(organizationId)));
+        }
+
+        /** 恰好只能触及本人项目时返回它（各列表据此走原来的单项目查询），否则空。 */
+        public Optional<String> onlyOwnProject() {
+            return !platformAdmin && ownProject != null && organizationIds().equals(Set.of(ownProject))
+                    ? Optional.of(ownProject) : Optional.empty();
+        }
+
+        /** 非平台管理员的全部可触及归属（可能为空）。平台管理员不看这个集合。 */
+        public Set<String> organizationIds() {
+            if (platformAdmin || !ownBySource || ownProject == null) {
+                return projects;
+            }
+            Set<String> ids = new java.util.HashSet<>(projects);
+            ids.add(ownProject);
+            return ids;
+        }
+
+        /** 入口要求多个权限码时，各码的范围取交集。 */
+        public ProjectReach intersect(ProjectReach other) {
+            if (platformAdmin) {
+                return other;
+            }
+            if (other.platformAdmin) {
+                return this;
+            }
+            Set<String> both = new java.util.HashSet<>(projects);
+            both.retainAll(other.projects);
+            // 本人项目：一边凭其他来源、另一边凭勾选时，仍在交集里
+            if (ownProject != null && ((ownBySource && other.projects.contains(ownProject))
+                    || (other.ownBySource && projects.contains(ownProject)))) {
+                both.add(ownProject);
+            }
+            return new ProjectReach(false, allProjects && other.allProjects, ownProject,
+                    ownBySource && other.ownBySource, both);
+        }
+    }
+
+    /**
+     * M736：操作人按入口权限码可触及的项目范围。按顺序判：平台管理员 → 一切；本人没有项目归属 → 照旧 403；
+     * 账号停用、带商户归属、外包账号 → 只到本人项目（操作员 2026-09-25「商户账号。是不能跨项目的。」；治理地图第 675 行「也不能跨出本综合体」）；
+     * 其余逐码取有效授予（{@link #validGrants}，来源是否在效与入口核权同一口径 {@link #usable}）——来源是可跨项目角色的
+     * （直接分配与岗位派生都算，操作员 2026-09-25「也算」）累计「勾了全部」与勾选清单，其余来源记本人项目；
+     * 勾了全部的取当时的项目集合，否则取勾选清单与项目集合的交集（操作员 2026-10-01 所选选项原文：「「全部项目」始终指所有项目，
+     * 含以后新建的；只有展开后逐个勾选的，才只管勾中的那几个。」）。同一个码有多个可跨项目角色取并集，多个码取交集；
+     * 一个码都不给按只到本人项目。
+     * M736 第二步：每个可跨项目角色累计的是「对这个持有人有效的勾选」——减掉他对该角色的待批条目；减完一条不剩的，
+     * 这个角色的权限对他哪个项目都不给，只有带保留标记的人仍只到本人项目（见循环内注释）。
+     * 按操作人读能力事实，包在 M722-F05 的判定窗口里。读取会触发到期处理的写入（findPermissionEffects），
+     * 调用方须在取员工行锁之前算好，把结果传给后面的闸。
+     */
+    public ProjectReach projectReach(AccessActor actor, String... permissionCodes) {
+        if (isPlatformAdminBridge(actor)) {
+            return new ProjectReach(true, true, actor.organizationId(), true, Set.of());
+        }
+        String ownProject = requireProjectScope(actor);
+        ProjectReach ownOnly = ProjectReach.ownOnly(ownProject);
+        String merchantId = actor.merchantId();
+        if (!"active".equals(actor.status()) || (merchantId != null && !merchantId.isBlank()) || isOutsourcedVendor(actor)) {
+            return ownOnly;
+        }
+        Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor); // M722-F05：读能力之前
+        Instant checkedAt = Instant.now();
+        IdempotentReplayContext request = IdempotentReplayContext.current();
+        List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt);
+        java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
+        java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
+                positionDerivedSources(actor.id());
+        // 本次判定内按编号读过的角色。ponytail: 含入口权限码的角色逐个按编号读；一人挂的角色多到成为负担时改成一次批量取勾选。
+        java.util.Map<String, Optional<RoleRecord>> roles = new java.util.HashMap<>();
+        java.util.Map<String, Set<String>> holds = null;
+        ProjectReach reach = null;
+        for (String code : new java.util.LinkedHashSet<>(java.util.Arrays.asList(permissionCodes))) {
+            boolean ownBySource = false;
+            boolean allProjects = false;
+            boolean nothingBySource = false; // 有可跨项目角色含该码，但对他有效的勾选一条不剩、他又不带保留标记
+            Set<String> ticked = new java.util.HashSet<>();
+            for (AccessRepository.PermissionEffect grant : validGrants(effects, code,
+                    effect -> usable(effect, checkedAt, actor, request), daily, positionDerived).toList()) {
+                RoleRecord role = grant.source() == AccessRepository.Source.ROLE && grant.sourceId() != null
+                        ? roles.computeIfAbsent(grant.sourceId(), accessRepository::findRoleById).orElse(null) : null;
+                if (isCrossProjectRole(role)) {
+                    // M736 第二步（操作员 2026-10-03 所选选项原文「直接在原角色上勾 C；但张三等所有持有人要各自重新审批通过，才能看 C。」）：
+                    // 改之前已持有该角色的人，对后来加上的条目在重新审批通过之前不算；有「全部」那一条待批的，按角色上留着的清单算。
+                    // 以下为技术推导：对他有效的勾选一条不剩时，这个角色的权限对他哪个项目都不给——原来生效的勾选被减掉（同日所选选项原文
+                    // 「减少也要审批通过后才生效；审批期间持有人仍能看 C。」，通过后即生效）、新加的还没重新审批的人，不能反而到了
+                    // 从没被勾过的本人项目。只有带保留标记的人（角色原来一条勾选都没有、第一次勾上项目时已持有它，HELD_SINCE_UNTICKED）
+                    // 仍按没勾选的角色算：否则第一次勾上项目的角色会让老持有人丢掉本人项目。
+                    if (holds == null) {
+                        holds = accessRepository.findRoleViewableProjectHolds(actor.id()); // 本次判定最多读一次；没有可跨项目角色的人不读
+                    }
+                    Set<String> held = holds.getOrDefault(role.id(), Set.of());
+                    boolean all = role.viewAllProjects() && !held.contains(ALL_PROJECTS);
+                    List<String> list = role.viewableProjectIds().stream().filter(id -> !held.contains(id)).toList();
+                    if (all || !list.isEmpty()) {
+                        allProjects |= all;
+                        ticked.addAll(list);
+                    } else if (held.contains(HELD_SINCE_UNTICKED)) {
+                        ownBySource = true;
+                    } else {
+                        nothingBySource = true;
+                    }
+                } else {
+                    ownBySource = true;
+                }
+            }
+            // 没有有效授予，或没有任何可跨项目角色含该码：只到本人项目，与原先一致（不查项目集合）
+            ProjectReach each = ownOnly;
+            if (allProjects || !ticked.isEmpty()) {
+                Set<String> projectSet = projectOrganizationIds();
+                ticked.retainAll(projectSet);
+                each = new ProjectReach(false, allProjects, ownProject, ownBySource, allProjects ? projectSet : ticked);
+            } else if (nothingBySource && !ownBySource) {
+                // M736 第二步：该码只来自对他有效的勾选一条不剩的可跨项目角色——哪个项目都不到，本人项目也不到
+                each = new ProjectReach(false, false, ownProject, false, Set.of());
+            }
+            reach = reach == null ? each : reach.intersect(each);
+        }
+        // 岗位派生事实在上面的循环里才按操作人 id 读取：核对放在最后一次读取之后
+        requireIdentityUnchanged(actor, identity);
+        return reach == null ? ownOnly : reach;
+    }
+
+    /** M736：某归属（项目，或城市项目公司、域主管公司）是否在操作人按入口权限码可触及的范围内。 */
+    public boolean canReachProject(AccessActor actor, String organizationId, String... permissionCodes) {
+        return projectReach(actor, permissionCodes).covers(organizationId);
+    }
+
+    /**
+     * M736：目标账号是否在可触及范围内（reach 由调用方在取锁前算好）。目标就在本人项目的，与原先一致（含本项目的外包账号），
+     * 只看本人项目算不算。跨出本人项目只到项目为止（操作员 2026-10-01 确认的治理地图第 653 行追加句：「只能触及归属在项目或项目公司下
+     * （含在用的域主管公司）的账号与数据，平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到。」）：平台管理员账号、
+     * 外部机构账号、最高权限账号一律不可触及，其余看归属是否被勾中——平台公司员工的归属不在项目集合里，自然不可触及。
+     */
+    public boolean canReachUser(ProjectReach reach, AccessUser target) {
+        if (reach.platformAdmin()) {
+            return true;
+        }
+        String organizationId = target.organizationId();
+        if (organizationId != null && organizationId.equals(reach.ownProject())) {
+            return reach.ownIncluded();
+        }
+        String accountType = normalize(target.accountType());
+        // 最高权限账号按账号身份字段识别，不看当前状态
+        if ("platform_admin".equals(accountType) || "outsourced_vendor".equals(accountType)
+                || isMasterAuthority(new AccessActor(target.id(), target.username(), target.accountType(),
+                        target.organizationId(), target.merchantId(), "active"))) {
+            return false;
+        }
+        return organizationId != null && reach.projects().contains(organizationId);
+    }
+
+    /** M736：同上，reach 按入口权限码现算（不得在持有员工行锁的区段里调用，见 {@link #projectReach}）。 */
+    public boolean canReachUser(AccessActor actor, AccessUser target, String... permissionCodes) {
+        return canReachUser(projectReach(actor, permissionCodes), target);
+    }
+
+    /**
+     * M736：能不能看全平台合计（操作员 2026-10-03 所选选项原文：「全平台合计只给平台管理员和勾了「全部项目」的人看。
+     * 李四只能分别看 A、B 各自的数据。」）——平台管理员，或经勾了「可以查看全部项目」的角色持有该权限码；只逐个勾选了项目的为否。
+     */
+    public boolean allowsPlatformScope(AccessActor actor, String permissionCode) {
+        return isPlatformAdminBridge(actor) || projectReach(actor, permissionCode).allProjects();
+    }
+
+    /**
+     * M736：可跨项目角色＝启用中，且勾了「可以查看全部项目」或展开后逐个勾选了项目（操作员 2026-10-01 确认的治理地图第 653 行追加句：
+     * 「可跨项目角色是在权限配置中勾选了「可以查看全部项目」、或展开后逐个勾选了项目的角色」）。不看 data_scope。
+     */
+    public static boolean isCrossProjectRole(RoleRecord role) {
+        return role != null && "active".equals(role.status())
+                && (role.viewAllProjects() || !role.viewableProjectIds().isEmpty());
+    }
+
+    /** 当时的项目集合（{@link AccessRepository#findProjectOrganizationIds}）；查询异常按空集处理——谁也跨不出本人项目。 */
+    private Set<String> projectOrganizationIds() {
+        try {
+            return accessRepository.findProjectOrganizationIds();
+        } catch (RuntimeException exception) {
+            return Set.of();
+        }
+    }
+
     public void enforceOutsourcedAssigneeScope(AccessActor actor, String assigneeId, String projectId) {
         if (!isOutsourcedVendor(actor)) {
             return;
@@ -793,22 +1029,30 @@ public class AuthorizationService implements CallerScopeResolver {
     // holdsPermissionViaRole 的判定体（不含身份核对）；currentSupervisorLevel 与它共用，各自包一个判定窗口。
     private boolean holdsViaRoleFacts(String userId, String permissionCode) {
         Instant checkedAt = Instant.now();
-        List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
+        return validGrants(accessRepository.findPermissionEffects(userId, checkedAt), permissionCode,
+                effect -> isActive(effect, checkedAt), dailyPermissions(), positionDerivedSources(userId))
+                .anyMatch(effect -> effect.source() == AccessRepository.Source.ROLE);
+    }
+
+    // 某权限码的有效授予（各种来源），holdsViaRoleFacts 与 projectReach（M736）共用：显式拒绝优先——有即空；岗位高危挂起只压岗位派生的
+    // 那一份（M002-F33）；默认管理员角色的高危条目不算逐项授权。inEffect＝哪些来源算在效。
+    private java.util.stream.Stream<AccessRepository.PermissionEffect> validGrants(
+            List<AccessRepository.PermissionEffect> effects, String permissionCode,
+            java.util.function.Predicate<AccessRepository.PermissionEffect> inEffect,
+            java.util.function.Supplier<java.util.Set<String>> daily,
+            java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived) {
+        List<AccessRepository.PermissionEffect> active = effects.stream()
                 .filter(effect -> permissionCode.equals(effect.permissionCode()))
-                .filter(effect -> isActive(effect, checkedAt))
+                .filter(inEffect)
                 .toList();
         if (active.stream().anyMatch(AuthorizationService::isExplicitDeny)) {
-            return false;
+            return java.util.stream.Stream.empty();
         }
         boolean held = active.stream().anyMatch(AuthorizationService::isPositionHold);
-        java.util.function.Supplier<java.util.function.Predicate<AccessRepository.PermissionEffect>> positionDerived =
-                positionDerivedSources(userId);
-        java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
         return active.stream()
-                .anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT
-                        && effect.source() == AccessRepository.Source.ROLE
-                        && isExplicitOrDailyGrant(effect, daily)
-                        && (!held || !positionDerived.get().test(effect)));
+                .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
+                .filter(effect -> isExplicitOrDailyGrant(effect, daily))
+                .filter(effect -> !held || !positionDerived.get().test(effect));
     }
 
     /**

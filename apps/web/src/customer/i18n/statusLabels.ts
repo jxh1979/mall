@@ -164,6 +164,9 @@ const STATUS_LABELS: Record<string, string> = {
   base_definition_violation: "基础定义违规",
   billing_discount: "账单折扣",
   manual_release: "人工放行",
+  // M736 第二步：减少角色可查看项目的主管复核单（动作名、对象类型）
+  "access.role_viewable_projects.reduce": "减少角色可查看项目",
+  role_viewable_projects: "角色可查看项目",
   // 审计结果
   success: "成功",
   failure: "失败",

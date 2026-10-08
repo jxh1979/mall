@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.16
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.17
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 731 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 734 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 328 | 人工权限矩阵正文未覆盖 227 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1462 | 人工事件矩阵正文未覆盖 1421 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 731 | 人工任务映射正文未逐项覆盖 725 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 440 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1468 | 人工事件矩阵正文未覆盖 1427 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 734 | 人工任务映射正文未逐项覆盖 728 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 441 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -34,7 +34,7 @@
 | `access.permission_template.view` | staff-token | project | 1 | listPermissionTemplates | 已在权限矩阵正文出现 |
 | `access.permission.view` | staff-token | project | 1 | listPermissions | 已在权限矩阵正文出现 |
 | `access.role.assign` | staff-token | project | 7 | assignUserRole, unassignUserRole, listPositionRoleTemplates, createPositionRoleTemplate, updatePositionRoleTemplate, deletePositionRoleTemplate, assignUserPosition | OpenAPI 补充，以本附录为准 |
-| `access.role.manage` | staff-token | project | 1 | createRole | 已在权限矩阵正文出现 |
+| `access.role.manage` | staff-token | project | 4 | createRole, listRoleProjectOptions, getRoleViewableProjects, updateRoleViewableProjects | 已在权限矩阵正文出现 |
 | `access.role.view` | staff-token | project | 1 | listRoles | 已在权限矩阵正文出现 |
 | `access.staff_level.manage` | staff-token | project | 1 | assignStaffLevel | OpenAPI 补充，以本附录为准 |
 | `access.staff_level.view` | staff-token | project | 1 | listStaffLevels | OpenAPI 补充，以本附录为准 |
@@ -381,6 +381,8 @@
 | `access.position_role_template.saved` | success | `updatePositionRoleTemplate` | `PUT` | `/api/v1/access/position-role-templates/{id}` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.position_role_template.view_failed` | failure | `listPositionRoleTemplates` | `GET` | `/api/v1/access/position-role-templates` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.position_role_template.viewed` | success | `listPositionRoleTemplates` | `GET` | `/api/v1/access/position-role-templates` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.role_project_options.view_failed` | failure | `listRoleProjectOptions` | `GET` | `/api/v1/access/role-project-options` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
+| `access.role_project_options.viewed` | success | `listRoleProjectOptions` | `GET` | `/api/v1/access/role-project-options` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `access.role.assign_failed` | failure | `assignUserRole` | `POST` | `/api/v1/access/role-assignments` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.role.assigned` | success | `assignUserRole` | `POST` | `/api/v1/access/role-assignments` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.role.unassign_failed` | failure | `unassignUserRole` | `POST` | `/api/v1/access/role-assignments/unassign` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
@@ -1454,6 +1456,10 @@
 | `role.change_failed` | failure | `createRole` | `POST` | `/api/v1/access/roles` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `role.changed` | success | `createRole` | `POST` | `/api/v1/access/roles` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `role.view_failed` | failure | `listRoles` | `GET` | `/api/v1/access/roles` | AUTH-账号权限 | `access.role.view` | 接口级事件，以本附录为准 |
+| `role.viewable_projects.change_failed` | failure | `updateRoleViewableProjects` | `PUT` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
+| `role.viewable_projects.changed` | success | `updateRoleViewableProjects` | `PUT` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
+| `role.viewable_projects.view_failed` | failure | `getRoleViewableProjects` | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
+| `role.viewable_projects.viewed` | success | `getRoleViewableProjects` | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `role.viewed` | success | `listRoles` | `GET` | `/api/v1/access/roles` | AUTH-账号权限 | `access.role.view` | 接口级事件，以本附录为准 |
 | `service.catalog.save_failed` | failure | `upsertServiceCatalogItem` | `POST` | `/api/v1/services/catalog` | P0-待归类 | `service.catalog.manage` | 接口级事件，以本附录为准 |
 | `service.catalog.saved` | success | `upsertServiceCatalogItem` | `POST` | `/api/v1/services/catalog` | P0-待归类 | `service.catalog.manage` | 接口级事件，以本附录为准 |
@@ -1959,6 +1965,7 @@
 | AUTH-账号权限 | `deletePositionRoleTemplate` | `DELETE` | `/api/v1/access/position-role-templates/{id}` | 删除岗位角色模板 | `access.role.assign` | `access.position_role_template.deleted` / `access.position_role_template.delete_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `getAccessGrantSummary` | `GET` | `/api/v1/access/grant-requests/summary` | 授权申请治理汇总 | `access.grant_request.view` | `access.grant_request.summary_viewed` / `access.grant_request.summary_view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `getEffectivePermissions` | `GET` | `/api/v1/access/effective-permissions` | 查询当前账号有效权限集 | `authenticated` | `access.effective_permission.viewed` / `access.effective_permission.viewed_failed` | web, mobile_admin | operation 级补充 |
+| AUTH-账号权限 | `getRoleViewableProjects` | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | 角色可查看项目现状 | `access.role.manage` | `role.viewable_projects.viewed` / `role.viewable_projects.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | 查询指定账号有效权限集 | `access.user.view` | `access.effective_permission.viewed` / `access.effective_permission.viewed_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | 授权申请列表 | `access.grant_request.view` | `access.grant_request.viewed` / `access.grant_request.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listAccessUsers` | `GET` | `/api/v1/access/users` | 查询权限用户 | `access.user.view` | `access.user.viewed` / `access.user.viewed_failed` | web | operation 级补充 |
@@ -1966,6 +1973,7 @@
 | AUTH-账号权限 | `listPermissions` | `GET` | `/api/v1/access/permissions` | 权限点列表 | `access.permission.view` | `permission.viewed` / `permission.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listPermissionTemplates` | `GET` | `/api/v1/access/permission-templates` | 权限模板列表 | `access.permission_template.view` | `permission_template.viewed` / `permission_template.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listPositionRoleTemplates` | `GET` | `/api/v1/access/position-role-templates` | 岗位角色模板列表 | `access.role.assign` | `access.position_role_template.viewed` / `access.position_role_template.view_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `listRoleProjectOptions` | `GET` | `/api/v1/access/role-project-options` | 角色可查看项目候选清单 | `access.role.manage` | `access.role_project_options.viewed` / `access.role_project_options.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listRoles` | `GET` | `/api/v1/access/roles` | 角色列表 | `access.role.view` | `role.viewed` / `role.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listStaffLevels` | `GET` | `/api/v1/access/staff-levels` | 查询职级目录 | `access.staff_level.view` | `access.staff_level.viewed` / `access.staff_level.viewed_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | 查询员工档案 | `staff.profile.view` | `staff.profile.viewed` / `staff.profile.view_failed` | web, mobile_admin | operation 级补充 |
@@ -1979,6 +1987,7 @@
 | AUTH-账号权限 | `unassignUserRole` | `POST` | `/api/v1/access/role-assignments/unassign` | 取消用户角色 | `access.role.assign` | `access.role.unassigned` / `access.role.unassign_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `updatePermissionTemplate` | `PUT` | `/api/v1/access/permission-templates/{id}` | 修改权限模板 | `access.permission_template.manage` | `permission_template.changed` / `permission_template.change_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `updatePositionRoleTemplate` | `PUT` | `/api/v1/access/position-role-templates/{id}` | 更新岗位角色模板 | `access.role.assign` | `access.position_role_template.saved` / `access.position_role_template.save_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `updateRoleViewableProjects` | `PUT` | `/api/v1/access/roles/{id}/viewable-projects` | 增减角色可查看项目 | `access.role.manage` | `role.viewable_projects.changed` / `role.viewable_projects.change_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `addBarBillTip` | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | 账单加小费 | `bar.bill.tip` | `bar.bill_tip_added` / `bar.bill_tip_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | 新增酒吧订单物品 | `bar.order.create` | `bar.order_item.created` / `bar.order_item.created_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `adjustBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/adjustments` | 对酒水账单应用调整 | `bar.bill.adjust` | `bar.bill.adjust` / `bar.bill.adjust_failed` | tablet, web | operation 级补充 |

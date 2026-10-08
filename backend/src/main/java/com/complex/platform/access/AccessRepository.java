@@ -1,10 +1,12 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public interface AccessRepository {
 
@@ -101,6 +103,85 @@ public interface AccessRepository {
     }
 
     RoleRecord createRole(RoleRecord role);
+
+    /**
+     * M736：可跨项目角色能触及的归属全集——项目表全部，加城市项目公司，加在用的域主管公司；顶层平台主体与库里查不到的归属不在其中。
+     * 操作员 2026-09-25 所选选项原文：「持有者只能触及归属在项目表或项目公司下的账号与数据；平台公司员工、平台管理员、最高权限、
+     * 外部机构账号一律碰不到」；2026-10-01 所选选项原文：「域主管公司也按「项目」对待，持有者可以跨项目处理它们的员工与数据（只算在用的）。」
+     * 默认空集：查不到就谁也跨不出本人项目；JdbcAccessRepository 覆写。
+     */
+    default Set<String> findProjectOrganizationIds() {
+        return Set.of();
+    }
+
+    /** M736：建角色时逐个勾选「可查看项目」的候选清单，与 {@link #findProjectOrganizationIds} 同一集合，三类各自成条。默认空表。 */
+    default List<RoleProjectOption> listRoleProjectOptions() {
+        return List.of();
+    }
+
+    /** M736 第二步：改勾选、减少落地先取 roles 表 ROW EXCLUSIVE，与授权事实锁对 roles 的 SHARE 先到先得；必须先于任何员工行。 */
+    default void lockRolesForEdit() {
+    }
+
+    /** M736 第二步：角色行 NO KEY UPDATE：两个人同时改同一角色在这里排队；与下面的共享锁互斥。 */
+    default void lockRoleForEdit(String roleId) {
+    }
+
+    /** M736 第二步：分配、定岗、申请建单读角色之前取角色行共享锁（员工行之后），与改勾选的行锁互斥。 */
+    default void lockRoleForGrant(String roleId) {
+    }
+
+    /** M736 第二步：当前持有该角色的员工编号（直接分配的并上岗位派生的），按编号排序。 */
+    default List<String> listRoleHolderIds(String roleId) {
+        return List.of();
+    }
+
+    /** M736 第二步：某员工的全部待批条目：角色编号 → 条目集合（原样返回，可能含保留标记 AuthorizationService.HELD_SINCE_UNTICKED）。 */
+    default Map<String, Set<String>> findRoleViewableProjectHolds(String userId) {
+        return Map.of();
+    }
+
+    /** M736 第二步：某角色的全部待批条目：员工编号 → 条目集合，按员工编号排序（原样返回，可能含保留标记，同上）。 */
+    default Map<String, Set<String>> listRoleViewableProjectHolds(String roleId) {
+        return Map.of();
+    }
+
+    /** M736 第二步：给某员工对某角色写待批条目（已有的跳过）。 */
+    default void addRoleViewableProjectHolds(String userId, String roleId, List<String> viewableIds) {
+        throw new UnsupportedOperationException("addRoleViewableProjectHolds");
+    }
+
+    /** M736 第二步：删掉某员工对某角色的全部待批条目，返回删掉的行数。 */
+    default int deleteRoleViewableProjectHolds(String userId, String roleId) {
+        throw new UnsupportedOperationException("deleteRoleViewableProjectHolds");
+    }
+
+    /** M736 第二步：往角色上加勾选：viewAllProjects 为真则把「可以查看全部项目」置真；viewableIds 逐条插入（已有的跳过）。清单行不删。 */
+    default void addRoleViewableProjects(String roleId, boolean viewAllProjects, List<String> viewableIds) {
+        throw new UnsupportedOperationException("addRoleViewableProjects");
+    }
+
+    /** M736 第二步：该角色带待减标记的条目；「可以查看全部项目」带标记时含 "*"。 */
+    default Set<String> findRoleViewableProjectRemovals(String roleId) {
+        return Set.of();
+    }
+
+    /** M736 第二步：把复核单号记到被减的条目上（已带标记的不改）；viewAllProjects 为真则记到「可以查看全部项目」上。角色的勾选不变。 */
+    default void markRoleViewableProjectRemoval(String roleId, boolean viewAllProjects, List<String> viewableIds, String reviewId) {
+        throw new UnsupportedOperationException("markRoleViewableProjectRemoval");
+    }
+
+    /**
+     * M736 第二步：按复核单号落地减少：删带该单号的勾选行；roles 上带该单号的把「全部」置假并清标记；删这些条目上所有人的待批。
+     * 返回去掉的条目（含 "*"）。
+     */
+    default List<String> applyRoleViewableProjectRemoval(String roleId, String reviewId) {
+        return List.of();
+    }
+
+    /** M736 第二步：驳回：把该复核单号的待减标记清空，别的不动。 */
+    default void clearRoleViewableProjectRemoval(String roleId, String reviewId) {
+    }
 
     default RoleAssignmentRecord assignUserRole(String userId, String roleId) {
         throw new UnsupportedOperationException("assignUserRole not supported by this repository");

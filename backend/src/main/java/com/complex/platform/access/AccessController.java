@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -10,6 +10,7 @@ import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.access.dto.PositionRoleTemplateRequest;
 import com.complex.platform.access.dto.RoleAssignmentRequest;
 import com.complex.platform.access.dto.RoleRequest;
+import com.complex.platform.access.dto.RoleViewableProjectsRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
@@ -100,6 +101,30 @@ public class AccessController {
         authorizationService.requirePermission("access.role.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createRole(request));
+    }
+
+    // M736：建角色时逐个勾选「可查看项目」的候选清单；能建角色的人都能读（与建角色同一门禁）。
+    @GetMapping("/role-project-options")
+    public ApiResponse<PageResponse<RoleProjectOption>> listRoleProjectOptions() {
+        authorizationService.requirePermission("access.role.manage");
+        return ApiResponse.ok(service.listRoleProjectOptions());
+    }
+
+    // M736 第二步：角色分出去以后增减可查看项目；与建角色同一入口码。
+    @GetMapping("/roles/{id}/viewable-projects")
+    public ApiResponse<RoleViewableProjectsView> getRoleViewableProjects(@PathVariable String id) {
+        authorizationService.requirePermission("access.role.manage");
+        return ApiResponse.ok(service.getRoleViewableProjects(id));
+    }
+
+    @PutMapping("/roles/{id}/viewable-projects")
+    public ApiResponse<RoleViewableProjectsView> updateRoleViewableProjects(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid RoleViewableProjectsRequest request
+    ) {
+        authorizationService.requirePermission("access.role.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updateRoleViewableProjects(id, request));
     }
 
     @PostMapping("/role-assignments")

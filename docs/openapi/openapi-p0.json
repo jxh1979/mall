@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.16",
+    "version": "V0.17",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -502,6 +502,133 @@
         "x-failure-codes": [
           "GRANT_EXCEEDS_OWN_PERMISSIONS"
         ]
+      }
+    },
+    "/api/v1/access/role-project-options": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "listRoleProjectOptions",
+        "summary": "角色可查看项目候选清单",
+        "x-permission": "access.role.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "access.role_project_options.viewed",
+        "x-audit-event-failure": "access.role_project_options.view_failed",
+        "x-auth-context": "staff-token",
+        "description": "M736。建角色时逐个勾选可查看项目用的候选清单：项目、城市项目公司、在用的域主管公司三类各自成条，每条含 id（编号）、name（名称）、kind（类别，取 project、project_company、management_company）。具备 access.role.manage 的人看到全部候选，不按本人所属项目收窄（能配置角色的人都可以设置这一项）。",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/roles/{id}/viewable-projects": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "getRoleViewableProjects",
+        "summary": "角色可查看项目现状",
+        "x-permission": "access.role.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "role.viewable_projects.viewed",
+        "x-audit-event-failure": "role.viewable_projects.view_failed",
+        "x-auth-context": "staff-token",
+        "description": "M736。返回 role_id、view_all_projects、viewable_project_ids、pending_removal_ids（减少在待审的条目，\"*\" 指可以查看全部项目）、pending_reapprovals（还没重新审批的持有人：user_id、username、viewable_ids、reapproval_pending）。项目角色须在操作人可触及的项目内，平台角色只有平台管理员可读，否则 403（CROSS_ORG_FORBIDDEN）；持有人只列操作人可触及的。带商户归属的操作人（平台管理员除外）只列本商户的持有人。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "角色 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "updateRoleViewableProjects",
+        "summary": "增减角色可查看项目",
+        "x-permission": "access.role.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "role.viewable_projects.changed",
+        "x-audit-event-failure": "role.viewable_projects.change_failed",
+        "x-auth-context": "staff-token",
+        "description": "M736。角色分配出去以后增减可查看项目，请求体是这次的增减、不是改后的整份清单。增加的当场写进角色，改之前已持有该角色的人各自重新审批（授权申请类型 role_project_reapproval）通过前看不到新增的；减少的只建一张主管复核单（动作名 access.role_viewable_projects.reduce），角色不变，复核单整单通过后才去掉，被驳回的不减。提交的增减与角色当前状态对不上、或条目的减少已在待审：409（INVALID_STATE）。项目角色须在操作人可触及的项目内，平台角色只有平台管理员可改，否则 403（CROSS_ORG_FORBIDDEN）。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "角色 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RoleViewableProjectsRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/access/temporary-grants": {
@@ -26872,7 +26999,7 @@
         "x-audit-event-success": "access.grant_request.applied",
         "x-audit-event-failure": "access.grant_request.apply_failed",
         "x-auth-context": "staff-token",
-        "description": "request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign 一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人所属项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。",
+        "description": "request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign 一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人可触及的项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。可触及的项目按入口核验的权限判（M736）：发起人经可跨项目角色持有该权限的，按该角色可查看的项目判，上述三类申请取 access.grant_request.apply 与 access.role.assign 各自可触及项目的交集；其余发起人仍是本人所属项目（细则见平台治理 PRD §12 M736 补记）。request_type 为 role_project_reapproval（M736）时须带 role_id，只收对该角色有待重新审批的可查看项目的员工，否则 400（VALIDATION_FAILED）；不论发起人是谁、角色是否含须审批的权限都受理。",
         "requestBody": {
           "$ref": "#/components/requestBodies/AccessGrantApplyRequest"
         },
@@ -37681,6 +37808,16 @@
           }
         }
       },
+      "RoleViewableProjectsRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RoleViewableProjectsRequest"
+            }
+          }
+        }
+      },
       "PermissionTemplateRequest": {
         "required": true,
         "content": {
@@ -41139,6 +41276,70 @@
               "self"
             ],
             "maxLength": 255
+          },
+          "view_all_projects": {
+            "type": "boolean",
+            "description": "可以查看全部项目（含以后新建的项目）；不给按未勾选。勾选后不能再给 viewable_project_ids。"
+          },
+          "viewable_project_ids": {
+            "type": "array",
+            "description": "逐个勾选的可查看项目；填候选清单（GET /api/v1/access/role-project-options）里的编号，项目、城市项目公司、在用的域主管公司各自成条，勾哪条只管哪条。与 view_all_projects 为 true 不能同时给；两项都不给就是普通角色。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 500
+          }
+        }
+      },
+      "RoleViewableProjectsRequest": {
+        "type": "object",
+        "description": "请求载荷 `RoleViewableProjectsRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "maxLength": 1000
+          },
+          "add_view_all_projects": {
+            "type": "boolean",
+            "description": "这次勾上可以查看全部项目。"
+          },
+          "add_viewable_project_ids": {
+            "type": "array",
+            "description": "这次增加的可查看项目；填候选清单里的编号，须不在角色现有的清单里。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 500
+          },
+          "remove_view_all_projects": {
+            "type": "boolean",
+            "description": "这次去掉可以查看全部项目；审批通过后才生效。"
+          },
+          "remove_viewable_project_ids": {
+            "type": "array",
+            "description": "这次减少的可查看项目；须在角色现有的清单里、且没有待审批的减少；审批通过后才生效。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 500
+          },
+          "final_approver_id": {
+            "type": "string",
+            "description": "主线最终审批人；只在本次含减少时使用，可空。",
+            "maxLength": 64
           }
         }
       },
@@ -50324,7 +50525,8 @@
               "temporary_permission",
               "user_permission_grant",
               "user_permission_deny_removal",
-              "position_high_risk_release"
+              "position_high_risk_release",
+              "role_project_reapproval"
             ]
           },
           "target_user_id": {
@@ -50334,7 +50536,7 @@
           },
           "role_id": {
             "type": "string",
-            "description": "角色 id；user_role 类型必填。",
+            "description": "角色 id；user_role、role_project_reapproval 类型必填。",
             "maxLength": 64
           },
           "position_code": {

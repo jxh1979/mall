@@ -1,7 +1,8 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.40
+// 文件版本：V0.41
 
+import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
@@ -10,6 +11,7 @@ import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.access.dto.PositionRoleTemplateRequest;
 import com.complex.platform.access.dto.RoleAssignmentRequest;
 import com.complex.platform.access.dto.RoleRequest;
+import com.complex.platform.access.dto.RoleViewableProjectsRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
@@ -39,6 +41,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -59,6 +62,13 @@ public class AccessService {
     // M002-F01（PGM「支持员工级完全自定义配置」「授出前须先审批才生效」）：员工单独授予、解除员工显式拒绝的授权申请，只收须审批权限码。
     static final String REQUEST_USER_PERMISSION_GRANT = "user_permission_grant";
     static final String REQUEST_USER_PERMISSION_DENY_REMOVAL = "user_permission_deny_removal";
+    // M736 第二步：可跨项目角色增加可查看项目后，原持有人对新增项目的重新审批；只删该持有人该角色的待批条目。
+    static final String REQUEST_ROLE_PROJECT_REAPPROVAL = "role_project_reapproval";
+    // 减少可查看项目的主管复核单。动作名不能含 grant、authorization（会被要求登记受益人）、dividend（会被抬到最高权限档）。
+    static final String ACTION_ROLE_VIEWABLE_REDUCE = "access.role_viewable_projects.reduce";
+    private static final String OBJECT_ROLE_VIEWABLE_PROJECTS = "role_viewable_projects";
+    // 指纹里追加角色两项勾选的申请类型（岗位高危释放单不追加：它获批只删挂起行、不授出角色）。
+    private static final Set<String> TICK_PINNED_REQUESTS = Set.of(REQUEST_USER_ROLE, REQUEST_USER_POSITION, REQUEST_USER_SCOPE_CHANGE);
     // M002-F37（操作员 2026-09-30 裁决「只让有分配角色权限的人发起这三类申请」，治理地图第 651 行）：只能由持 access.role.assign 者发起的申请类型。
     private static final Set<String> ROLE_ASSIGN_INITIATED_REQUESTS = Set.of(
             REQUEST_USER_PERMISSION_GRANT, REQUEST_USER_PERMISSION_DENY_REMOVAL, REQUEST_POSITION_HIGH_RISK_RELEASE);
@@ -122,8 +132,10 @@ public class AccessService {
 
     public PageResponse<PermissionTemplate> listPermissionTemplates() {
         AccessActor actor = authorizationService.currentActor();
-        String orgId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
-        List<PermissionTemplate> templates = repository.listTemplates(orgId);
+        // M736：按可触及项目列项目自有模板；平台模板照旧只有平台管理员看得到
+        List<PermissionTemplate> templates = listWithinReach(
+                authorizationService.projectReach(actor, "access.permission_template.view"),
+                repository::listTemplates, PermissionTemplate::ownerScopeId, false);
         auditEventService.recordSuccess(
                 "permission_template.viewed",
                 "access.permission_template.view",
@@ -164,6 +176,8 @@ public class AccessService {
                 request,
                 () -> {
                     requireTemplateType(request.templateType()); // M001-F20：类型闭集在取锁、查库之前
+                    // M736：可触及项目在取任何锁之前算好（按操作人读能力事实时会做到期处理的写入，不能放到持锁区段里），传给下面两道闸
+                    ProjectReach reach = authorizationService.projectReach(actor, "access.permission_template.manage");
                     // M002-F20（[10]）锁序：模板表意向锁 → 在岗员工行与在用员工行（按编号）→ 模板行。表锁在前，与审批落地「持模板表 SHARE → 等员工行」
                     // 不成环（M001-F13）；员工行在模板行之前，与套用、定岗「员工行 → 模板行」同序。
                     repository.lockPermissionTemplatesForEdit();
@@ -172,8 +186,8 @@ public class AccessService {
                     repository.lockTemplateForEdit(id); // M001-F13：锁内读前态，并发编辑按实际前态判闸、记增减
                     PermissionTemplate existing = repository.findTemplateById(id)
                             .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
-                    if (!authorizationService.isPlatformAdmin(actor)
-                            && !authorizationService.requireProjectScope(actor).equals(existing.ownerScopeId())) {
+                    // M736：项目自有模板按可触及项目判；平台模板（归属为空）仍只归平台管理员（M001-F09）
+                    if (!reach.covers(existing.ownerScopeId())) {
                         throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能修改其他组织的模板");
                     }
                     // M001-F16（PGM 权限规则「数据的项目与商户隔离不提供关闭开关」、第 703 行「跨商户……权限每次均须先审批」；
@@ -183,7 +197,7 @@ public class AccessService {
                     if (!isBlank(actor.merchantId())) {
                         repository.lockAccessUsers(holders.stream().map(PermissionTemplateApplication::targetId)
                                 .filter(userId -> !lockedUsers.contains(userId)).distinct().sorted().toList());
-                        holders.forEach(application -> requireSameOrganization(actor, requireTargetUser(application.targetId())));
+                        holders.forEach(application -> requireSameOrganization(actor, requireTargetUser(application.targetId()), reach));
                     }
                     requireKnownPermissions(request.permissionCodes());
                     requireTemporaryTimeOrder(request);  // M001-F07：倒置窗口先于「延长有效期须重新授权」判定，按 400 拒绝
@@ -281,12 +295,16 @@ public class AccessService {
                 () -> {
                     // M006-036：先取项目范围（无组织主体在此得到 PROJECT_SCOPE_REQUIRED），再比较归属，不再对 null 调用 equals。
                     String ownerScopeId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
+                    // M736：可触及项目在取源模板锁之前算好
+                    ProjectReach reach = authorizationService.projectReach(actor, "access.permission_template.manage");
                     // M001-F19：所有操作人（含平台管理员）都先读真实源模板，不存在一律 404、不建行。先取源模板共享锁（与修改入口的
                     // NO KEY UPDATE 互斥），窗口、类型与条目取自同一个已提交版本。
                     repository.lockTemplateForApply(id);
                     PermissionTemplate source = repository.findTemplateById(id)
                             .orElseThrow(() -> ApiException.notFound("TEMPLATE_NOT_FOUND", "模板不存在：" + id));
-                    if (ownerScopeId != null && source.ownerScopeId() != null && !ownerScopeId.equals(source.ownerScopeId())) {
+                    // M736（操作员 2026-09-24 裁决 M001-F01「所有可以跨项目的角色都可以跨项目处理」）：源模板是项目自有模板的，
+                    // 归属在可触及项目内即可复制；平台模板照旧谁都可以复制，复制件归属不变（上方 ownerScopeId）。
+                    if (source.ownerScopeId() != null && !reach.covers(source.ownerScopeId())) {
                         throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能复制其他组织的模板");
                     }
                     // M001-F19（操作员确认句 1「复制出来的是一个新模板，权限、有效期、单次使用限制等都可以重新设定，按新建模板的规则校验」；
@@ -354,25 +372,24 @@ public class AccessService {
                             throw ApiException.badRequest("VALIDATION_FAILED",
                                     "同一次套用中员工重复：" + String.join("、", duplicates));
                         }
+                        // M736：可触及项目在锁员工行之前算好，传给目标员工与模板归属两道闸
+                        ProjectReach reach = authorizationService.projectReach(actor, "access.permission_template.apply");
                         // M001-F10：先按编号顺序锁目标员工行再读归属，与换项目串行。
                         repository.lockAccessUsers(targetUserIds.stream().sorted().toList());
                         List<AccessUser> targets = new ArrayList<>();
                         for (String userId : targetUserIds) {
                             AccessUser target = requireTargetUser(userId);
-                            requireSameOrganization(actor, target);
+                            requireSameOrganization(actor, target, reach);
                             targets.add(target);
                         }
                         repository.lockTemplateForApply(id); // M001-F13：等进行中的模板编辑提交后再读条目，快照即生效码
                         PermissionTemplate template = repository.findTemplateById(id)
                                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND", "权限模板不存在：" + id));
-                        // A1-05：apply 必须校验模板归属——非平台管理员只能套用本组织拥有的模板，
-                        // 禁止借平台模板/他组织模板把高权限项下发给本组织用户（与 update/copy 同范式）。
-                        if (!authorizationService.isPlatformAdmin(actor)) {
-                            if (template.ownerScopeId() == null
-                                    || !template.ownerScopeId().equals(actor.organizationId())) {
-                                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                        "不能应用其他范围的模板：" + id);
-                            }
+                        // A1-05：apply 必须校验模板归属——非平台管理员只能套用项目自有模板，禁止借平台模板把高权限项下发给项目员工
+                        // （与 update 同范式）。M736：归属按可触及项目判；平台模板（归属为空）仍只归平台管理员。
+                        if (!reach.covers(template.ownerScopeId())) {
+                            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                                    "不能应用其他范围的模板：" + id);
                         }
                         // M001-F09（PGM 权限规则，2026-09-24 操作员裁决）：项目自有模板只能套给本项目员工，平台管理员同样；
                         // 跨项目使用须先复制为平台模板再套用。
@@ -449,8 +466,9 @@ public class AccessService {
 
     public PageResponse<RoleRecord> listRoles() {
         AccessActor actor = authorizationService.currentActor();
-        String orgId = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
-        List<RoleRecord> roles = repository.listRoles(orgId);
+        // M736：可触及项目的角色，加平台角色（照旧可见）
+        List<RoleRecord> roles = listWithinReach(authorizationService.projectReach(actor, "access.role.view"),
+                repository::listRoles, RoleRecord::organizationId, true);
         auditEventService.recordSuccess(
                 "role.viewed",
                 "access.role.view",
@@ -461,6 +479,25 @@ public class AccessService {
                 Map.of("count", roles.size())
         );
         return page(roles);
+    }
+
+    /**
+     * M736：建角色时逐个勾选「可查看项目」的候选清单（操作员 2026-10-03 所选选项原文：「项目、城市项目公司、在用的域主管公司各列为
+     * 独立条目，勾哪条只管哪条，互不连带。」）。能建角色的人看到全部候选，不按本人项目收窄（操作员 2026-10-01 所选选项原文：
+     * 「项目管理员给本项目建的角色也能勾其他项目；分配这类角色仍按之前的答复先审批。」）。
+     */
+    public PageResponse<RoleProjectOption> listRoleProjectOptions() {
+        List<RoleProjectOption> options = repository.listRoleProjectOptions();
+        auditEventService.recordSuccess(
+                "access.role_project_options.viewed",
+                "access.role.manage",
+                "role_project_option",
+                "all",
+                null,
+                null,
+                Map.of("count", options.size())
+        );
+        return page(options);
     }
 
     public RoleRecord createRole(RoleRequest request) {
@@ -489,6 +526,8 @@ public class AccessService {
                             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
                         }
                         requireKnownPermissions(request.permissionCodes());
+                        boolean viewAllProjects = Boolean.TRUE.equals(request.viewAllProjects());
+                        List<String> viewableProjectIds = requireViewableProjects(viewAllProjects, request.viewableProjectIds());
                         // P0-1：角色不得包含超出创建人自身有效权限的权限码（提权防护）。
                         requireActorCanGrant(request.permissionCodes());
                         RoleRecord role = new RoleRecord(
@@ -499,12 +538,16 @@ public class AccessService {
                                 "active",
                                 Instant.now(),
                                 safeList(request.permissionCodes()),
-                                orgId
+                                orgId,
+                                viewAllProjects,
+                                viewableProjectIds
                         );
                         RoleRecord saved = repository.createRole(role);
                         // M002-F47（治理地图 #audit 第 893、899 行「为什么……都要能查到」「权限变更」必须留痕）：成功事件记请求提交的操作说明原文（M002-F48：null 记空串，其余不去首尾空白）
+                        // M736：连同「可以查看全部项目」与逐个勾选的可查看项目一起记
                         auditEventService.recordSuccess("role.changed", "access.role.manage", "role", saved.id(), null, request.idempotencyKey(),
-                                Map.of("operator_note", nz(request.operatorNote())));
+                                Map.of("operator_note", nz(request.operatorNote()),
+                                        "view_all_projects", viewAllProjects, "viewable_project_ids", viewableProjectIds));
                         return saved;
                     },
                     RoleRecord.class
@@ -513,6 +556,203 @@ public class AccessService {
             auditEventService.recordFailure("role.change_failed", "access.role.manage", "role", null, null, request == null ? null : request.idempotencyKey(), codeOf(exception));
             throw exception;
         }
+    }
+
+    /**
+     * M736（操作员 2026-10-01 说明「权限配置表格当中有一个可以查看全部项目选项」「可以逐个独立的项目去选」；同日所选选项原文：
+     * 「项目管理员给本项目建的角色也能勾其他项目；分配这类角色仍按之前的答复先审批。」）：建角色时的两项勾选在写库前校验，全部 400——
+     * 两项同时给；清单有空白条目；去重后超过 500 条；有不在当时项目集合里的条目（顶层平台主体、停用的域主管公司、查不到的编号，
+     * 见 {@link AccessRepository#findProjectOrganizationIds}）。不要求建角色的人自己看得到所勾的项目，勾项目不审批。
+     * 返回去重后的逐项清单。M736 第二步：增减可查看项目时只把这次新增的条目交给本方法（见 updateRoleViewableProjects）。
+     */
+    private List<String> requireViewableProjects(boolean viewAllProjects, List<String> viewableProjectIds) {
+        List<String> requested = safeList(viewableProjectIds);
+        if (viewAllProjects && !requested.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "勾了“可以查看全部项目”就不能再逐个勾选项目");
+        }
+        if (requested.stream().anyMatch(id -> id == null || id.isBlank())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "可查看项目清单里有空白条目");
+        }
+        List<String> ids = requested.stream().distinct().toList();
+        if (ids.size() > 500) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "逐个勾选的可查看项目不能超过 500 条");
+        }
+        if (ids.isEmpty()) {
+            return ids;
+        }
+        Set<String> projectSet = repository.findProjectOrganizationIds();
+        List<String> unknown = ids.stream().filter(id -> !projectSet.contains(id)).toList();
+        if (!unknown.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "可查看项目清单里有无法识别或已停用的条目：" + String.join("、", unknown));
+        }
+        return ids;
+    }
+
+    /**
+     * M736 第二步（操作员 2026-10-08 确认的治理地图第 703 行追加句：「可跨项目角色分配出去以后，可以直接在原角色上增加或减少可查看的项目：
+     * 增加的，所有持有人要各自重新审批通过，才能查看新增的项目；减少的，也要审批通过后才生效，审批期间持有人仍能查看。」）。
+     * 增加当场写进角色，并给当时的每个持有人写待批条目；减少只建一张主管复核单、把单号记在被减的条目上，角色不变，
+     * 整单通过时由 onSupervisorReviewDecided 落地。谁来改都一样，没有按平台管理员、最高权限的分支。
+     * 以下为技术推导：请求体是差量，锁内与角色当前状态核对；谁能改按可触及项目判；减少的档位取授权政策「高」一档；
+     * 改之前角色一条勾选都没有的，给当时的持有人另记一条保留标记（AuthorizationService.HELD_SINCE_UNTICKED）——重新审批通过之前
+     * 这个角色对他仍只到本人项目；改之前已有勾选的不记，对他有效的勾选一条不剩时这个角色什么都不给（见 projectReach）。
+     */
+    @Transactional
+    public RoleViewableProjectsView updateRoleViewableProjects(String roleId, RoleViewableProjectsRequest request) {
+        RoleViewableProjectsRequest r = requireRequest(request);
+        requireIdWithinContract(roleId, "角色编号");
+        String id = requireText(roleId, "role_id");
+        try {
+            return idempotencyService.execute("updateRoleViewableProjects:" + id, r.idempotencyKey(), r, () -> {
+                AccessActor actor = authorizationService.currentActor();
+                boolean addAll = Boolean.TRUE.equals(r.addViewAllProjects());
+                boolean removeAll = Boolean.TRUE.equals(r.removeViewAllProjects());
+                // 新增条目过建角色的四种校验；只核这次新增的——角色上原有的条目可能已不在项目集合里，整份去核的话这种角色谁也改不了
+                List<String> add = requireViewableProjects(addAll, r.addViewableProjectIds());
+                List<String> remove = safeList(r.removeViewableProjectIds()).stream().distinct().toList();
+                if (remove.stream().anyMatch(v -> v == null || v.isBlank())) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "可查看项目清单里有空白条目");
+                }
+                if (remove.stream().anyMatch(add::contains)) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "同一个可查看项目不能既增加又减少");
+                }
+                if (!addAll && !removeAll && add.isEmpty() && remove.isEmpty()) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "可查看项目没有变化");
+                }
+                ProjectReach reach = authorizationService.projectReach(actor, "access.role.manage"); // 取任何锁之前
+                // 锁序：roles 表锁 → 持有人员工行（按编号）→ 角色行。
+                // ponytail: 预锁之后、角色行锁之前才拿到角色的人到重列时才补锁（窗口极短，PostgreSQL 检出死锁回滚一方、可同键重试）。
+                repository.lockRolesForEdit();
+                List<String> locked = repository.listRoleHolderIds(id);
+                repository.lockAccessUsers(locked);
+                repository.lockRoleForEdit(id);
+                RoleRecord role = requireRole(id);
+                if (!reach.covers(role.organizationId())) {
+                    throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能修改其他组织的角色");
+                }
+                List<String> holders = repository.listRoleHolderIds(id);
+                repository.lockAccessUsers(holders.stream().filter(holder -> !locked.contains(holder)).toList());
+                Set<String> pendingRemoval = repository.findRoleViewableProjectRemovals(id);
+                String all = AuthorizationService.ALL_PROJECTS;
+                boolean stale = (addAll && role.viewAllProjects())
+                        || add.stream().anyMatch(role.viewableProjectIds()::contains)
+                        || (removeAll && (!role.viewAllProjects() || pendingRemoval.contains(all)))
+                        || remove.stream().anyMatch(v -> !role.viewableProjectIds().contains(v) || pendingRemoval.contains(v));
+                if (stale) {
+                    throw ApiException.conflict("INVALID_STATE", "角色的可查看项目或待审批的减少已变化，请刷新后重试");
+                }
+                if (role.viewableProjectIds().size() + add.size() > 500) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "逐个勾选的可查看项目不能超过 500 条");
+                }
+                List<String> heldUsers = new ArrayList<>();
+                if (addAll || !add.isEmpty()) {
+                    Map<String, Set<String>> heldByUser = repository.listRoleViewableProjectHolds(id);
+                    boolean unticked = !role.viewAllProjects() && role.viewableProjectIds().isEmpty(); // 改之前一条勾选都没有
+                    repository.addRoleViewableProjects(id, addAll, add);
+                    for (String holder : holders) {
+                        List<String> toHold = new ArrayList<>();
+                        if (addAll) {
+                            toHold.add(all);
+                        }
+                        // 角色勾着全部、这个人又没有「全部」待批的，本来就看得到全部，新条目不用他再审批
+                        if (!role.viewAllProjects() || heldByUser.getOrDefault(holder, Set.of()).contains(all)) {
+                            toHold.addAll(add);
+                        }
+                        if (!toHold.isEmpty()) {
+                            if (unticked) {
+                                toHold.add(AuthorizationService.HELD_SINCE_UNTICKED);
+                            }
+                            repository.addRoleViewableProjectHolds(holder, id, toHold);
+                            heldUsers.add(holder);
+                        }
+                    }
+                }
+                String reviewId = "";
+                if (removeAll || !remove.isEmpty()) {
+                    // 建不建单写死在这里：不查准入策略表、不看 grantApprovalEnabled；授权政策缺失是 409、不是放行
+                    GrantReviewPolicy policy = grantReviewPolicy(List.of(), true);
+                    reviewId = requireSupervisorReviewService().blockForAdmission(policy.policyCode(), ACTION_ROLE_VIEWABLE_REDUCE,
+                            OBJECT_ROLE_VIEWABLE_PROJECTS, id, policy.approvalLevel(), policy.requiredLevel(), null,
+                            trimToNull(r.finalApproverId())).reviewId();
+                    repository.markRoleViewableProjectRemoval(id, removeAll, remove, reviewId);
+                }
+                auditEventService.recordSuccess("role.viewable_projects.changed", "access.role.manage", "role", id, null, r.idempotencyKey(),
+                        Map.of("operator_note", nz(r.operatorNote()),
+                                "added_view_all_projects", addAll, "added_viewable_ids", add,
+                                "removal_view_all_projects", removeAll, "removal_viewable_ids", remove, "removal_review_id", reviewId,
+                                "held_user_ids", String.join(",", heldUsers)));
+                return roleViewableProjectsView(requireRole(id), actor, reach);
+            }, RoleViewableProjectsView.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("role.viewable_projects.change_failed", "access.role.manage", "role", id, null,
+                    r.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    public RoleViewableProjectsView getRoleViewableProjects(String roleId) {
+        requireIdWithinContract(roleId, "角色编号");
+        AccessActor actor = authorizationService.currentActor();
+        ProjectReach reach = authorizationService.projectReach(actor, "access.role.manage");
+        RoleRecord role = requireRole(requireText(roleId, "role_id"));
+        if (!reach.covers(role.organizationId())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能查看其他组织的角色");
+        }
+        RoleViewableProjectsView view = roleViewableProjectsView(role, actor, reach);
+        auditEventService.recordSuccess("role.viewable_projects.viewed", "access.role.manage", "role", role.id(), null, null,
+                Map.of("pending_reapproval_count", view.pendingReapprovals().size()));
+        return view;
+    }
+
+    // 待批条目里去掉保留标记（AuthorizationService.HELD_SINCE_UNTICKED 不是可查看项目），按编号排序。
+    private static List<String> pendingViewableIds(Set<String> held) {
+        return held.stream().filter(id -> !AuthorizationService.HELD_SINCE_UNTICKED.equals(id)).sorted().toList();
+    }
+
+    // 持有人只列操作人可触及的（治理地图第 653 行追加句：「平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到。」）；
+    // 只剩保留标记、没有待重新审批项目的人不列。
+    // 商户半边（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」；与 requireSameOrganization、canViewGrantRequest 同一判断）：
+    // 带商户归属的操作人只列本商户的持有人，平台管理员不设限；不符的不列、不报错。
+    private RoleViewableProjectsView roleViewableProjectsView(RoleRecord role, AccessActor actor, ProjectReach reach) {
+        boolean merchantBound = !authorizationService.isPlatformAdmin(actor) && !isBlank(actor.merchantId());
+        List<RoleViewableProjectsView.PendingReapproval> pending = new ArrayList<>();
+        repository.listRoleViewableProjectHolds(role.id()).forEach((userId, ids) -> repository.findUserById(userId)
+                .filter(user -> !pendingViewableIds(ids).isEmpty() && authorizationService.canReachUser(reach, user)
+                        && (!merchantBound || actor.merchantId().equals(user.merchantId())))
+                .ifPresent(user -> pending.add(new RoleViewableProjectsView.PendingReapproval(user.id(), user.username(),
+                        pendingViewableIds(ids),
+                        repository.listPendingGrantRequests(user.id(), REQUEST_ROLE_PROJECT_REAPPROVAL).stream()
+                                .anyMatch(open -> role.id().equals(open.targetRoleId()) && grantSnapshotStillMatches(open))))));
+        return new RoleViewableProjectsView(role.id(), role.viewAllProjects(), role.viewableProjectIds(),
+                repository.findRoleViewableProjectRemovals(role.id()).stream().sorted().toList(), pending);
+    }
+
+    /**
+     * M736 第二步（操作员 2026-10-03 所选选项原文「减少也要审批通过后才生效；审批期间持有人仍能看 C。」）：减少可查看项目的主管复核单
+     * 到终态时，SupervisorReviewService.approve 在同一事务里同步发布本事件（通过、驳回都发；先例 StaffApprovalService.afterDecision）。
+     * 只认自己的动作名，并且按「复核单号」去匹配待减标记——标记里记的是 updateRoleViewableProjects 自己建的那张单的号，
+     * 别人另建一张对象类型、对象编号相同的复核单批下来匹配不到任何行。通过：删带该单号的条目及其上的待批；驳回：只清标记。
+     */
+    @EventListener
+    @Transactional
+    public void onSupervisorReviewDecided(SupervisorReviewDecisionRecord decision) {
+        if (!ACTION_ROLE_VIEWABLE_REDUCE.equals(decision.actionType()) || isBlank(decision.objectId())) {
+            return;
+        }
+        String roleId = decision.objectId();
+        repository.lockRolesForEdit(); // 与授权申请的审批落地串行（它持 roles 表 SHARE）
+        repository.lockRoleForEdit(roleId);
+        if (!"approved".equals(decision.reviewStatus())) {
+            repository.clearRoleViewableProjectRemoval(roleId, decision.reviewId());
+            return;
+        }
+        List<String> removed = repository.applyRoleViewableProjectRemoval(roleId, decision.reviewId());
+        if (removed.isEmpty()) {
+            return;
+        }
+        auditEventService.recordSuccess("role.viewable_projects.reduced", "governance.supervisor_review.approve", "role", roleId, null, null,
+                Map.of("review_id", decision.reviewId(), "removed_viewable_ids", removed));
     }
 
     public RoleAssignmentRecord assignUserRole(RoleAssignmentRequest request) {
@@ -524,7 +764,9 @@ public class AccessService {
                     "assignUserRole:" + trimToDefault(r.userId(), "") + ":" + trimToDefault(r.roleId(), ""),
                     r.idempotencyKey(),
                     r,
-                    () -> assignUserRoleDirect(r, true),
+                    // M736：可触及项目先于方法体算好（实参先求值），其后才锁员工行
+                    () -> assignUserRoleDirect(r,
+                            authorizationService.projectReach(authorizationService.currentActor(), "access.role.assign")),
                     RoleAssignmentRecord.class
             );
         } catch (RuntimeException exception) {
@@ -552,10 +794,11 @@ public class AccessService {
                     r,
                     () -> {
                         AccessActor actor = authorizationService.currentActor();
+                        ProjectReach reach = authorizationService.projectReach(actor, "access.role.assign"); // M736：锁员工行之前算好
                         // M002-F10：与其余授权写入入口同一锁序，读员工归属与范围检查前先锁目标员工行（M001-F10）。
                         AccessUser targetUser = lockTargetUser(requireText(r.userId(), "user_id"));
                         RoleRecord role = requireRole(requireText(r.roleId(), "role_id"));
-                        requireSameOrganization(actor, targetUser);
+                        requireSameOrganization(actor, targetUser, reach);
                         requireRoleAssignableToTarget(role, targetUser);
                         // M002-F11（操作员 2026-09-25 裁决，治理地图「权限规则」）：撤销只减权，不要求操作人持有该角色里的权限码。
                         repository.unassignUserRole(targetUser.id(), role.id());
@@ -592,8 +835,10 @@ public class AccessService {
 
     public PageResponse<PositionRoleTemplate> listPositionRoleTemplates(boolean includeArchived) {
         AccessActor actor = authorizationService.currentActor();
-        List<PositionRoleTemplate> mappings = repository.listPositionRoleTemplates(
-                authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor)).stream()
+        // M736：可触及项目的岗位映射，加平台映射（照旧可见）
+        List<PositionRoleTemplate> visible = listWithinReach(authorizationService.projectReach(actor, "access.role.assign"),
+                repository::listPositionRoleTemplates, PositionRoleTemplate::organizationId, true);
+        List<PositionRoleTemplate> mappings = visible.stream()
                 .filter(mapping -> includeArchived || (mapping.archivedAt() == null && mapping.deletedAt() == null)).toList();
         auditEventService.recordSuccess(
                 "access.position_role_template.viewed",
@@ -765,7 +1010,9 @@ public class AccessService {
                     "assignUserPosition:" + trimToDefault(r.userId(), ""),
                     r.idempotencyKey(),
                     r,
-                    () -> assignUserPositionDirect(r, true),
+                    // M736：可触及项目先于方法体算好（实参先求值），其后才锁员工行
+                    () -> assignUserPositionDirect(r,
+                            authorizationService.projectReach(authorizationService.currentActor(), "access.role.assign")),
                     UserPositionAssignmentResult.class
             );
         } catch (RuntimeException exception) {
@@ -798,14 +1045,16 @@ public class AccessService {
                     r.idempotencyKey(),
                     r,
                     () -> {
-                        repository.lockGrantAuthorizationFacts();
                         AccessActor actor = authorizationService.currentActor();
+                        // M736：可触及项目在取授权事实锁与员工行锁之前算好，原归属、新归属两道闸共用
+                        ProjectReach reach = authorizationService.projectReach(actor, "access.role.assign");
+                        repository.lockGrantAuthorizationFacts();
                         AccessUser target = lockTargetUser(id);
                         requireNotMasterAuthorityAccount(target); // M002-F19：最高权限账号不设岗位，范围变更（含新岗位）一律拒绝
-                        requireSameOrganization(actor, target);
+                        requireSameOrganization(actor, target, reach);
                         String newOrganization = trimToDefault(r.organizationId(), target.organizationId());
                         String newMerchant = isBlank(r.merchantId()) ? null : r.merchantId().trim();
-                        requireActorCanAssignToScope(actor, newOrganization, newMerchant);
+                        requireActorCanAssignToScope(actor, newOrganization, newMerchant, reach);
                         if (java.util.Objects.equals(newOrganization, target.organizationId())
                                 && java.util.Objects.equals(newMerchant, target.merchantId())) {
                             throw ApiException.badRequest("SCOPE_UNCHANGED", "所属商户与项目均未变化；同范围换岗请使用定岗入口");
@@ -868,8 +1117,9 @@ public class AccessService {
                         repository.updateUserScope(id, newOrganization, newMerchant, actor.id(), now);
                         PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(
                                 r.idempotencyKey(), r.operatorNote(), id, positionCode, staffLevelId,
-                                r.baseSalaryAmountCent(), r.salaryCurrency(), r.salaryDetail()), false, false); // 操作人已按旧、新范围校验
-                        GrantReviewPolicy policy = scopeChangeReviewPolicy(context.permissionCodes());
+                                r.baseSalaryAmountCent(), r.salaryCurrency(), r.salaryDetail()), null, false); // 操作人已按旧、新范围校验
+                        GrantReviewPolicy policy = scopeChangeReviewPolicy(context.permissionCodes(),
+                                crossProjectByNonAdmin(reach, context.role()));
                         boolean moneyRelated = permissionDefinitions(context.permissionCodes()).stream().anyMatch(AccessService::isMoneyPermission);
                         String draftId = "agr_" + UUID.randomUUID();
                         SupervisorReviewDecisionRecord review = blockGrantRequest(policy,
@@ -912,13 +1162,18 @@ public class AccessService {
         }
     }
 
-    /** 新范围权限每次均须先审批：按模板权限最高风险取档位；模板无需审批权限时也以一级主管为下限。 */
-    private GrantReviewPolicy scopeChangeReviewPolicy(List<String> permissionCodes) {
+    /**
+     * 新范围权限每次均须先审批：按模板权限最高风险取档位；模板无需审批权限时也以一级主管为下限。
+     * M736（技术推导，非操作员原话；依据：操作员 2026-09-25 答「也算」——经岗位得到的同样是可跨项目角色，以及角色、岗位申请的
+     * 同一档位下限，见 grantReviewPolicy）：新岗位派生的角色是可跨项目角色、且发起人不是平台管理员时（crossProjectFloor），
+     * 下限提到「高」一档。
+     */
+    private GrantReviewPolicy scopeChangeReviewPolicy(List<String> permissionCodes, boolean crossProjectFloor) {
         List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(permissionCodes);
-        if (approvalRequired.isEmpty()) {
+        if (approvalRequired.isEmpty() && !crossProjectFloor) {
             return new GrantReviewPolicy("permission_grant_l1", "one_level_up", 1);
         }
-        return grantReviewPolicy(approvalRequired.stream().map(PermissionDefinition::permissionCode).toList());
+        return grantReviewPolicy(approvalRequired.stream().map(PermissionDefinition::permissionCode).toList(), crossProjectFloor);
     }
 
     /** M087（PGM-1.7.1）：授权申请进主管链；起草人可指定主线最终审批人，未指定时按档位下限沿直接上级链生成。 */
@@ -999,7 +1254,7 @@ public class AccessService {
             return voided;
         }
         repository.saveHighRiskHolds(userId, codes, "岗位模板内高危权限待审批（PGM-1.10.1）", actorId); // M002-F02：挂起行与员工显式拒绝分行
-        GrantReviewPolicy policy = grantReviewPolicy(codes);
+        GrantReviewPolicy policy = grantReviewPolicy(codes, false);
         boolean moneyRelated = highRisk.stream().anyMatch(AccessService::isMoneyPermission);
         String draftId = "agr_" + UUID.randomUUID();
         SupervisorReviewDecisionRecord review = blockGrantRequest(policy,
@@ -1139,7 +1394,8 @@ public class AccessService {
                     "createTemporaryGrant",
                     request.idempotencyKey(),
                     request,
-                    () -> createTemporaryGrantDirect(request, true),
+                    // M736：可触及项目先于方法体算好（实参先求值），其后才锁员工行
+                    () -> createTemporaryGrantDirect(request, authorizationService.projectReach(actor, "access.temporary_grant.create")),
                     TemporaryGrant.class
             );
         } catch (RuntimeException exception) {
@@ -1164,9 +1420,10 @@ public class AccessService {
                     request.idempotencyKey(),
                     request,
                     () -> {
+                        ProjectReach reach = authorizationService.projectReach(actor, "access.temporary_grant.revoke"); // M736
                         TemporaryGrant grant = repository.findTemporaryGrantById(id)
                                 .orElseThrow(() -> ApiException.notFound("TEMPORARY_GRANT_NOT_FOUND", "临时授权不存在"));
-                        requireSameOrganization(actor, requireTargetUser(grant.targetUserId()));
+                        requireSameOrganization(actor, requireTargetUser(grant.targetUserId()), reach);
                         TemporaryGrant revoked = repository.revokeTemporaryGrant(id, "access-api", Instant.now());
                         auditEventService.recordSuccess(
                                 "permission_template.revoked",
@@ -1206,13 +1463,30 @@ public class AccessService {
                     () -> {
                         // M002-F37 / M002-F42：三类申请的发起资格（access.role.assign）在入口 AccessController.applyGrant 与申请权限一次核验，
                         // 此处不再按有效集复查（入口已消耗的单次来源会被当成不持有而误拒）；本方法唯一的生产调用方是该入口。
+                        // M736：可触及项目在取授权事实锁与员工行锁之前算好，按入口核验的权限码——三类申请是两码一起核的，取两码的交集
+                        // （治理地图第 651 行；否则等于把只在本项目有效的分配角色权限用到别的项目）。
+                        AccessActor actor = authorizationService.currentActor();
+                        ProjectReach reach = isRoleAssignInitiatedRequest(r.requestType())
+                                ? authorizationService.projectReach(actor, "access.grant_request.apply", "access.role.assign")
+                                : authorizationService.projectReach(actor, "access.grant_request.apply");
                         repository.lockGrantAuthorizationFacts();
-                        AccessGrantRequestRecord draft = buildGrantRequest(r);
+                        AccessGrantRequestRecord draft = buildGrantRequest(r, reach);
                         List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(draft.permissionCodes());
                         // M007-F-04（PGM-1.10.1「员工可申请临时权限，按层级对应主管审批」）：临时权限申请不论日常/高危都走主管链；
                         // 日常权限按一级主管（permission_grant_l1）审批。角色/岗位申请仍只接受含需审批权限的申请。
                         boolean dailyTemporary = approvalRequired.isEmpty() && REQUEST_TEMPORARY_PERMISSION.equals(draft.requestType());
-                        if (approvalRequired.isEmpty() && !dailyTemporary) {
+                        // M736（治理地图第 703 行「跨商户、跨项目权限每次均须先审批，审批通过后方可生效」；操作员 2026-10-01 所选选项原文
+                        // 「项目管理员给本项目建的角色也能勾其他项目；分配这类角色仍按之前的答复先审批。」）：角色、岗位申请所指角色是可跨项目角色、
+                        // 且发起人不是平台管理员的，只含日常权限也受理；档位取各码档位与「高」一档的较高者（操作员 2026-09-25 所选选项原文
+                        // 「按授权政策「高」一档走（按现行政策不到最高权限）」；含极高档码时到最高权限，那一级来自码本身）。
+                        boolean crossProjectRole = (REQUEST_USER_ROLE.equals(draft.requestType())
+                                || REQUEST_USER_POSITION.equals(draft.requestType()))
+                                && crossProjectByNonAdmin(reach, requireRole(draft.targetRoleId()));
+                        // M736 第二步（技术推导，非操作员原话）：重新审批可查看项目谁发起都受理、都以「高」一档为下限——操作员 2026-10-03
+                        // 所选选项原文「直接在原角色上勾 C；但张三等所有持有人要各自重新审批通过，才能看 C。」没有按操作人留例外；档位是借用
+                        // 上面可跨项目角色那条档位答复（它问的是非平台管理员申请分配）。
+                        boolean reapproval = REQUEST_ROLE_PROJECT_REAPPROVAL.equals(draft.requestType());
+                        if (approvalRequired.isEmpty() && !dailyTemporary && !crossProjectRole && !reapproval) {
                             throw ApiException.badRequest("GRANT_APPROVAL_NOT_REQUIRED",
                                     "该授权不含需审批的权限，请直接分配");
                         }
@@ -1220,7 +1494,7 @@ public class AccessService {
                                 ? new GrantReviewPolicy("permission_grant_l1", "one_level_up", 1)
                                 : grantReviewPolicy(approvalRequired.stream()
                                         .map(PermissionDefinition::permissionCode)
-                                        .toList());
+                                        .toList(), crossProjectRole || reapproval);
                         // M007-A-02：被授权对象是直接受益人，不得审批也不得被转发。
                         // M007-I3-F02（PGM-1.7.1 涉钱审批 1 个工作日）：含资金/分红/退款/调账类权限的申请以涉钱动作名进链。
                         boolean moneyRelated = permissionDefinitions(draft.permissionCodes()).stream().anyMatch(AccessService::isMoneyPermission);
@@ -1336,10 +1610,15 @@ public class AccessService {
         AccessGrantPolicy policy = grantPolicy();
         int days = windowDays == null ? policy.windowDays().value() : policy.windowDays().checked(windowDays);
         AccessActor actor = authorizationService.currentActor();
-        String org = authorizationService.isPlatformAdmin(actor) ? null : authorizationService.requireProjectScope(actor);
-        String merchant = authorizationService.isPlatformAdmin(actor) ? null : trimToNull(actor.merchantId());
-        PageResponse<AccessGrantRequestRecord> result = repository.pageGrantRequests(
-                Instant.now().minus(Duration.ofDays(days)), org, merchant, pageNumber, 50);
+        ProjectReach reach = authorizationService.projectReach(actor, "access.grant_request.view");
+        Instant cutoff = Instant.now().minus(Duration.ofDays(days));
+        // M736：平台管理员与只到本人项目的（含商户账号）照旧由 SQL 按项目、商户下推；经可跨项目角色持有查看权限的，
+        // 按可触及项目筛出后在内存里分页。
+        // ponytail: 持有者走全量后内存分页，逐张单读一次目标员工；申请量大到成为负担时改成仓储按 organizationIds() 下推（空集提前返回）。
+        PageResponse<AccessGrantRequestRecord> result = reach.platformAdmin() || reach.onlyOwnProject().isPresent()
+                ? repository.pageGrantRequests(cutoff, reach.platformAdmin() ? null : reach.ownProject(),
+                        reach.platformAdmin() ? null : trimToNull(actor.merchantId()), pageNumber, 50)
+                : PageResponse.of(visibleGrantRequests(cutoff, actor, reach), pageNumber, 50);
         auditEventService.recordSuccess("access.grant_request.viewed", "access.grant_request.view",
                 "access_grant_request", "all", null, null, Map.of("count", result.items().size(), "page", pageNumber));
         return result;
@@ -1419,29 +1698,35 @@ public class AccessService {
 
     private List<AccessGrantRequestRecord> visibleGrantRequests(Instant cutoff) {
         AccessActor actor = authorizationService.currentActor();
+        // M736：商户账号按申请行商户看、用不到可触及项目（商户分支不变），不为它按操作人读能力事实
+        ProjectReach reach = isBlank(actor.merchantId()) ? authorizationService.projectReach(actor, "access.grant_request.view")
+                : ProjectReach.ownOnly(actor.organizationId());
+        return visibleGrantRequests(cutoff, actor, reach);
+    }
+
+    private List<AccessGrantRequestRecord> visibleGrantRequests(Instant cutoff, AccessActor actor, ProjectReach reach) {
         return repository.listGrantRequests(cutoff).stream()
-                .filter(request -> canViewGrantRequest(actor, request))
+                .filter(request -> canViewGrantRequest(actor, request, reach))
                 .toList();
     }
 
-    private boolean canViewGrantRequest(AccessActor actor, AccessGrantRequestRecord request) {
+    private boolean canViewGrantRequest(AccessActor actor, AccessGrantRequestRecord request, ProjectReach reach) {
         if (authorizationService.isPlatformAdmin(actor)) {
             return true;
         }
         if (!isBlank(actor.merchantId())) {
             return actor.merchantId().equals(request.merchantId());
         }
-        // 2026-07-18 收尾（多综合体前置）：项目员工按本项目 scope 强制过滤——申请行带 project_id 时必须与
-        // actor 项目一致（沿用 currentProjectScopeQuietly 谓词范式）；行无 project_id 时仍走目标账号同组织判定。
-        String projectScope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        if (projectScope != null && !isBlank(request.projectId()) && !projectScope.equals(request.projectId())) {
+        // 2026-07-18 收尾（多综合体前置）：项目员工按项目 scope 强制过滤——申请行带 project_id 时必须在可触及项目内；
+        // 行无 project_id 时仍走目标账号判定。M736：两处都按可触及项目判（目标账号另受「只到项目为止」约束）。
+        if (!isBlank(request.projectId()) && !reach.covers(request.projectId())) {
             return false;
         }
-        if (isBlank(actor.organizationId()) || isBlank(request.targetUserId())) {
+        if (isBlank(request.targetUserId())) {
             return false;
         }
         return repository.findUserById(request.targetUserId())
-                .map(user -> actor.organizationId().equals(user.organizationId()))
+                .map(user -> authorizationService.canReachUser(reach, user))
                 .orElse(false);
     }
 
@@ -1453,7 +1738,11 @@ public class AccessService {
         } else if (!isBlank(actor.merchantId())) {
             users = repository.listUsersByMerchant(actor.merchantId());
         } else {
-            users = repository.listUsers(authorizationService.requireProjectScope(actor));
+            // M736：只到本人项目的照旧按项目查；经可跨项目角色持有查看权限的，全量取出后按可触及范围筛（含「只到项目为止」的身份排除）。
+            // ponytail: 持有者走全量后内存筛；账号到上万行时改成仓储按 organizationIds() 下推，再在内存里做身份排除。
+            ProjectReach reach = authorizationService.projectReach(actor, "access.user.view");
+            users = reach.onlyOwnProject().isPresent() ? repository.listUsers(reach.onlyOwnProject().get())
+                    : repository.listUsers().stream().filter(user -> authorizationService.canReachUser(reach, user)).toList();
         }
         auditEventService.recordSuccess(
                 "access.user.viewed",
@@ -1610,8 +1899,10 @@ public class AccessService {
                         }
                         // M002-F41（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」，R-002）：与其他定岗写入口
                         // 同一把员工行锁，先锁后读——下方岗位读取、分支与两种写入都在锁内，并发换岗或定岗提交后按锁内读到的当前岗位重算。
+                        // M736：可触及项目在锁员工行之前算好；已定岗改职级转定岗时沿用同一个结果。
+                        ProjectReach reach = authorizationService.projectReach(actor, "access.staff_level.manage");
                         AccessUser targetUser = lockTargetUser(userId);
-                        requireSameOrganization(actor, targetUser);
+                        requireSameOrganization(actor, targetUser, reach);
                         if (repository.findStaffLevelById(request.staffLevelId()).isEmpty()) {
                             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
                                     "无法识别的员工职级：" + request.staffLevelId());
@@ -1631,7 +1922,7 @@ public class AccessService {
                         if (position != null && !request.staffLevelId().equals(position.staffLevelId())) {
                             saved = assignUserPositionDirect(new UserPositionAssignmentRequest(
                                     request.idempotencyKey(), request.operatorNote(), userId, position.positionCode(),
-                                    request.staffLevelId(), request.baseSalaryAmountCent(), currency, request.salaryDetail()), true)
+                                    request.staffLevelId(), request.baseSalaryAmountCent(), currency, request.salaryDetail()), reach)
                                     .staffLevelAssignment();
                         } else {
                             saved = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
@@ -1673,9 +1964,18 @@ public class AccessService {
         }
     }
 
-    private RoleAssignmentRecord assignUserRoleDirect(RoleAssignmentRequest request, boolean enforceApproval) {
-        RoleGrantContext context = resolveRoleGrant(request, enforceApproval, enforceApproval); // M087/M002-F04：审批落地不按落地人自身权限与组织限制
+    // reach：操作人按入口权限码可触及的项目（调用方在锁员工行之前算好）；审批落地不传（null）——不按落地人的范围、自身权限与审批闸。
+    private RoleAssignmentRecord assignUserRoleDirect(RoleAssignmentRequest request, ProjectReach reach) {
+        boolean enforceApproval = reach != null;
+        RoleGrantContext context = resolveRoleGrant(request, reach, enforceApproval); // M087/M002-F04：审批落地不按落地人自身权限与组织限制
         if (enforceApproval) {
+            // M736（治理地图第 703 行「跨商户、跨项目权限每次均须先审批，审批通过后方可生效」；操作员 2026-10-01 所选选项原文「项目管理员
+            // 给本项目建的角色也能勾其他项目；分配这类角色仍按之前的答复先审批。」；2026-09-25「平台管理员可直接分配」，2026-10-01 确认句的
+            // 选项原文「只免「跨项目」这一项审批，角色里的高危码照旧先审批。」）：非平台管理员直接分配可跨项目角色一律先走授权申请，不落行；
+            // 平台管理员只免这一项，角色里的须审批码照旧由下一道闸拦。只勾了与目标员工同一个项目的角色同样按这类角色处理。
+            if (grantApprovalEnabled && crossProjectByNonAdmin(reach, context.role())) {
+                throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL", "可跨项目角色须提交授权申请");
+            }
             requireGrantApprovalIfNeeded(context.role().permissionCodes());
         }
         RoleAssignmentRecord saved = repository.assignUserRole(context.targetUser().id(), context.role().id());
@@ -1720,8 +2020,10 @@ public class AccessService {
                         if (trimToDefault(userId, "").isEmpty()) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "必须指定用户");
                         }
+                        // M736：可触及项目在锁员工行之前算好；范围闸与末尾返回目标有效权限都用它，不在锁内再算一次。
+                        ProjectReach reach = authorizationService.projectReach(actor, "access.role.assign");
                         AccessUser targetUser = lockTargetUser(userId.trim());
-                        requireSameOrganization(actor, targetUser);
+                        requireSameOrganization(actor, targetUser, reach);
                         AccessRepository.Effect effect = switch (trimToDefault(r.effect(), "").toLowerCase(Locale.ROOT)) {
                             case "grant" -> AccessRepository.Effect.GRANT;
                             case "deny" -> AccessRepository.Effect.DENY;
@@ -1815,7 +2117,7 @@ public class AccessService {
                                         "operator_note", nz(r.operatorNote()) // M002-F47、F48：原文
                                 )
                         );
-                        return authorizationService.effectivePermissionsForUser(targetUser.id());
+                        return authorizationService.effectivePermissionsForUser(targetUser.id(), reach);
                     },
                     EffectivePermissions.class
             );
@@ -1833,20 +2135,31 @@ public class AccessService {
         }
     }
 
-    private UserPositionAssignmentResult assignUserPositionDirect(UserPositionAssignmentRequest request, boolean enforceApproval) {
-        return assignUserPositionDirect(request, enforceApproval, Map.of());
+    private UserPositionAssignmentResult assignUserPositionDirect(UserPositionAssignmentRequest request, ProjectReach reach) {
+        return assignUserPositionDirect(request, reach, Map.of());
     }
 
     /**
+     * reach：操作人按入口权限码可触及的项目（调用方在锁员工行之前算好）；审批落地不传（null）——不按落地人的范围、自身权限与审批闸。
      * previousApprovalCodes：刚被改存的映射 id → 改存前该映射的须审批码集合，按员工派生前所挂的映射取用（含映射改了岗位职级、
      * 员工被重新派生到别的映射）。员工挂的映射不在其中而仍是本次派生到的映射（同岗重定、同岗同职级另一张映射被改存），取当前集合。
      */
     private UserPositionAssignmentResult assignUserPositionDirect(
             UserPositionAssignmentRequest request,
-            boolean enforceApproval,
+            ProjectReach reach,
             Map<String, Set<String>> previousApprovalCodes
     ) {
-        PositionGrantContext context = resolvePositionGrant(request, enforceApproval, enforceApproval); // M087/M002-F04：审批落地不按落地人自身权限与组织限制
+        boolean enforceApproval = reach != null;
+        PositionGrantContext context = resolvePositionGrant(request, reach, enforceApproval); // M087/M002-F04：审批落地不按落地人自身权限与组织限制
+        // M736（技术推导，非操作员原话；依据：操作员 2026-09-25 答「也算」——经岗位得到的同样是可跨项目角色，治理地图第 703 行
+        // 「跨商户、跨项目权限每次均须先审批，审批通过后方可生效；属于既有高危权限的，不得因处于岗位模板内而免除授出前审批」，
+        // 以及直接分配的同一道闸，见 assignUserRoleDirect）：非平台管理员直接定岗，本次派生出的角色是可跨项目角色、且不是该员工当前
+        // 岗位派生的角色时，须先走岗位申请——在任何写库之前拒绝，不写岗位行、不套模板。同映射重定岗、改职级后仍落到挂同一角色的映射
+        // 不是新授出（同 M002-F32 口径），不拦；平台管理员直接定岗、改岗位映射触发的重派生不拦。
+        if (enforceApproval && grantApprovalEnabled && crossProjectByNonAdmin(reach, context.role())
+                && !context.role().id().equals(repository.findAssignedPositionRoleId(context.targetUser().id()).orElse(null))) {
+            throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL", "可跨项目角色须提交授权申请");
+        }
         requireBoundedTemporaryTemplate(context.template().templateType(), context.template().validUntil(), context.template().singleUse());
         // M087-F-06（PGM-1.10.1「同一商户、同一项目范围内的普通模板权限随保存立即生效」「既有高危不得因处于岗位模板内而免除授出前审批」）：
         // 岗位模板混有高危权限时不再整单拒绝——普通部分随保存生效，高危部分先写挂起行（M002-F02）、进审批链，审批通过后解除。
@@ -1950,7 +2263,9 @@ public class AccessService {
         );
     }
 
-    private TemporaryGrant createTemporaryGrantDirect(TemporaryGrantRequest request, boolean enforceApproval) {
+    // reach：操作人按入口权限码可触及的项目（调用方在锁员工行之前算好）；审批落地不传（null）。
+    private TemporaryGrant createTemporaryGrantDirect(TemporaryGrantRequest request, ProjectReach reach) {
+        boolean enforceApproval = reach != null;
         AccessActor actor = authorizationService.currentActor();
         requireKnownPermissions(request.permissionCodes());
         if (request.validUntil() == null) {
@@ -1958,7 +2273,7 @@ public class AccessService {
         }
         AccessUser target = lockTargetUser(requireText(request.targetUserId(), "target_user_id"));
         if (enforceApproval) { // M002-F04：审批落地不按终审人组织判定（与角色、员工单独授予落地同口径）
-            requireSameOrganization(actor, target);
+            requireSameOrganization(actor, target, reach);
         }
         if (safeList(request.permissionCodes()).isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
@@ -2011,14 +2326,16 @@ public class AccessService {
         return requestType != null && ROLE_ASSIGN_INITIATED_REQUESTS.contains(requestType.trim().toLowerCase(Locale.ROOT));
     }
 
-    private AccessGrantRequestRecord buildGrantRequest(AccessGrantApplyRequest request) {
+    // reach：申请人按入口核验的权限码可触及的项目（applyGrant 在取锁之前算好），各类建单的范围闸共用。
+    private AccessGrantRequestRecord buildGrantRequest(AccessGrantApplyRequest request, ProjectReach reach) {
         String type = normalizeGrantRequestType(request.requestType());
         return switch (type) {
-            case REQUEST_USER_ROLE -> buildUserRoleGrantRequest(request);
-            case REQUEST_USER_POSITION -> buildUserPositionGrantRequest(request);
-            case REQUEST_TEMPORARY_PERMISSION -> buildTemporaryPermissionGrantRequest(request);
-            case REQUEST_USER_PERMISSION_GRANT, REQUEST_USER_PERMISSION_DENY_REMOVAL -> buildUserPermissionOverrideRequest(request, type);
-            case REQUEST_POSITION_HIGH_RISK_RELEASE -> buildPositionHighRiskReleaseRequest(request);
+            case REQUEST_USER_ROLE -> buildUserRoleGrantRequest(request, reach);
+            case REQUEST_USER_POSITION -> buildUserPositionGrantRequest(request, reach);
+            case REQUEST_TEMPORARY_PERMISSION -> buildTemporaryPermissionGrantRequest(request, reach);
+            case REQUEST_USER_PERMISSION_GRANT, REQUEST_USER_PERMISSION_DENY_REMOVAL -> buildUserPermissionOverrideRequest(request, type, reach);
+            case REQUEST_POSITION_HIGH_RISK_RELEASE -> buildPositionHighRiskReleaseRequest(request, reach);
+            case REQUEST_ROLE_PROJECT_REAPPROVAL -> buildRoleProjectReapprovalRequest(request, reach);
             default -> throw ApiException.badRequest("VALIDATION_FAILED", "不支持的申请类型：" + request.requestType());
         };
     }
@@ -2028,10 +2345,10 @@ public class AccessService {
      * 可以再次发起申请」；以下为技术细化）：对员工现有的岗位高危挂起再次发起释放申请。只收该员工现有挂起行里、且没有待审释放单覆盖、仍在当前岗位模板高危集合内的码；
      * 申请快照钉当前岗位映射（岗位、职级、角色、模板）与授权事实指纹，获批后只删这些挂起行（与首次释放单同一落地）。
      */
-    private AccessGrantRequestRecord buildPositionHighRiskReleaseRequest(AccessGrantApplyRequest request) {
+    private AccessGrantRequestRecord buildPositionHighRiskReleaseRequest(AccessGrantApplyRequest request, ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
         AccessUser target = lockTargetUser(requireText(request.targetUserId(), "target_user_id"));
-        requireSameOrganization(actor, target);
+        requireSameOrganization(actor, target, reach);
         List<String> requested = safeList(request.permissionCodes());
         if (requested.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
@@ -2050,7 +2367,7 @@ public class AccessService {
         UserPositionAssignment position = repository.findUserPositionAssignment(target.id())
                 .orElseThrow(() -> ApiException.conflict("POSITION_NOT_ASSIGNED", "该员工没有岗位，挂起须随岗位变更重新判断"));
         PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(request.idempotencyKey(), request.operatorNote(),
-                target.id(), position.positionCode(), position.staffLevelId(), null, null, null), false, false); // 范围闸已在上方
+                target.id(), position.positionCode(), position.staffLevelId(), null, null, null), null, false); // 范围闸已在上方
         Set<String> derived = approvalRequiredPermissions(context.permissionCodes()).stream()
                 .map(PermissionDefinition::permissionCode).collect(java.util.stream.Collectors.toSet());
         List<String> notDerived = codes.stream().filter(code -> !derived.contains(code)).toList();
@@ -2065,14 +2382,44 @@ public class AccessService {
     }
 
     /**
+     * M736 第二步（操作员 2026-10-03 所选选项原文「直接在原角色上勾 C；但张三等所有持有人要各自重新审批通过，才能看 C。」；以下为技术推导）：
+     * 一张申请一个持有人，只收对这个角色有待批条目的员工；获批后只删他这个角色的待批条目。发起只要申请权限（治理地图第 651 行收紧的
+     * 三类申请不含角色申请、岗位申请，本类是对已持有人就同一角色再审批一遍）。申请原因开头由系统写上这次要放行的条目，审批人据此知道批的是什么；
+     * 指纹钉住这些条目，待审期间有变化即 GRANT_SNAPSHOT_CHANGED。不查重：与角色申请、岗位申请同口径。
+     */
+    private AccessGrantRequestRecord buildRoleProjectReapprovalRequest(AccessGrantApplyRequest request, ProjectReach reach) {
+        AccessActor actor = authorizationService.currentActor();
+        AccessUser target = lockTargetUser(requireText(request.targetUserId(), "target_user_id"));
+        requireSameOrganization(actor, target, reach);
+        RoleRecord role = requireRole(requireText(request.roleId(), "role_id"));
+        List<String> held = pendingViewableIds(repository.findRoleViewableProjectHolds(target.id()).getOrDefault(role.id(), Set.of()));
+        if (held.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "该员工对这个角色没有待重新审批的可查看项目");
+        }
+        // 候选清单的名称在库里非空（projects.name、business_entities.entity_name 都是 NOT NULL）；已不在候选清单里的条目用编号
+        Map<String, String> names = repository.listRoleProjectOptions().stream()
+                .collect(java.util.stream.Collectors.toMap(RoleProjectOption::id, RoleProjectOption::name, (first, second) -> first));
+        String reason = "重新审批可查看项目（共 " + held.size() + " 项）：" + held.stream()
+                .map(id -> AuthorizationService.ALL_PROJECTS.equals(id) ? "全部项目" : names.getOrDefault(id, id))
+                .collect(java.util.stream.Collectors.joining("、")) + "。" + nz(trimToDefault(request.reason(), request.operatorNote()));
+        if (reason.codePointCount(0, reason.length()) > 1000) { // access_grant_requests.reason 是 VARCHAR(1000)
+            reason = reason.substring(0, reason.offsetByCodePoints(0, 1000));
+        }
+        Instant now = Instant.now();
+        return new AccessGrantRequestRecord("agr_" + UUID.randomUUID(), REQUEST_ROLE_PROJECT_REAPPROVAL, target.id(), role.id(),
+                null, null, null, null, null, null, safeList(role.permissionCodes()), null, null, false, "pending", null, reason, actor.id(),
+                null, null, null, target.merchantId(), now, now);
+    }
+
+    /**
      * M002-F01（PGM「支持员工级完全自定义配置」「显式拒绝优先级最高」「授出前须先审批才生效」）：员工单独授予 / 解除员工显式拒绝的授权申请。
      * 只收须审批权限码（日常码仍走员工覆盖直接操作，受授权人自身有效集校验）；申请人须持 access.role.assign（M002-F37；M002-F42：在入口 AccessController.applyGrant 与申请权限一次核验），
      * 建单校验申请人与目标同组织，授权依据为主管链与授权事实指纹。
      */
-    private AccessGrantRequestRecord buildUserPermissionOverrideRequest(AccessGrantApplyRequest request, String type) {
+    private AccessGrantRequestRecord buildUserPermissionOverrideRequest(AccessGrantApplyRequest request, String type, ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
         AccessUser target = requireTargetUser(requireText(request.targetUserId(), "target_user_id"));
-        requireSameOrganization(actor, target);
+        requireSameOrganization(actor, target, reach);
         List<String> requested = safeList(request.permissionCodes());
         if (requested.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
@@ -2102,13 +2449,13 @@ public class AccessService {
                 null, null, null, target.merchantId(), now, now);
     }
 
-    private AccessGrantRequestRecord buildUserRoleGrantRequest(AccessGrantApplyRequest request) {
+    private AccessGrantRequestRecord buildUserRoleGrantRequest(AccessGrantApplyRequest request, ProjectReach reach) {
         RoleGrantContext context = resolveRoleGrant(new RoleAssignmentRequest(
                 request.idempotencyKey(),
                 request.operatorNote(),
                 request.targetUserId(),
                 request.roleId()
-        ), true, false);
+        ), reach, false);
         Instant now = Instant.now();
         return new AccessGrantRequestRecord(
                 "agr_" + UUID.randomUUID(),
@@ -2138,7 +2485,7 @@ public class AccessService {
         );
     }
 
-    private AccessGrantRequestRecord buildUserPositionGrantRequest(AccessGrantApplyRequest request) {
+    private AccessGrantRequestRecord buildUserPositionGrantRequest(AccessGrantApplyRequest request, ProjectReach reach) {
         PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(
                 request.idempotencyKey(),
                 request.operatorNote(),
@@ -2148,7 +2495,7 @@ public class AccessService {
                 request.baseSalaryAmountCent(),
                 request.salaryCurrency(),
                 request.salaryDetail()
-        ), true, false); // M002-F38：建单按申请人范围（与角色申请建单同口径），不要求申请人持码
+        ), reach, false); // M002-F38：建单按申请人范围（与角色申请建单同口径），不要求申请人持码
         Instant now = Instant.now();
         return new AccessGrantRequestRecord(
                 "agr_" + UUID.randomUUID(),
@@ -2178,10 +2525,10 @@ public class AccessService {
         );
     }
 
-    private AccessGrantRequestRecord buildTemporaryPermissionGrantRequest(AccessGrantApplyRequest request) {
+    private AccessGrantRequestRecord buildTemporaryPermissionGrantRequest(AccessGrantApplyRequest request, ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
         AccessUser targetUser = requireTargetUser(requireText(request.targetUserId(), "target_user_id"));
-        requireSameOrganization(actor, targetUser);
+        requireSameOrganization(actor, targetUser, reach);
         List<String> permissionCodes = safeList(request.permissionCodes());
         if (permissionCodes.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
@@ -2256,6 +2603,12 @@ public class AccessService {
             RoleRecord role = requireRole(request.targetRoleId());
             facts.add(java.util.Arrays.asList(role.id(), role.organizationId(), role.status(),
                     role.dataScope(), role.permissionCodes().stream().sorted().toList()));
+            // M736 第二步（技术推导）：角色勾了项目时才追加（没勾选的角色指纹与原来逐字节相同，升级不作废在途申请）。勾选一变，
+            // 指向它的待审角色、岗位、范围变更申请即 GRANT_SNAPSHOT_CHANGED——否则按旧勾选批的单会按新勾选落地。
+            if (TICK_PINNED_REQUESTS.contains(request.requestType()) && (role.viewAllProjects() || !role.viewableProjectIds().isEmpty())) {
+                facts.add(java.util.Arrays.asList("viewable_projects", role.viewAllProjects(),
+                        role.viewableProjectIds().stream().sorted().toList()));
+            }
         }
         if (request.templateId() != null) {
             PermissionTemplate template = repository.findTemplateById(request.templateId())
@@ -2290,6 +2643,11 @@ public class AccessService {
                             String.valueOf(row.createdAt())))
                     .toList());
         }
+        if (REQUEST_ROLE_PROJECT_REAPPROVAL.equals(request.requestType())) {
+            // M736 第二步：钉住这个人对这个角色当时的待批条目：批的是这几条，落地删的也只能是这几条（保留标记不是条目，不钉）
+            facts.add(java.util.Arrays.asList("viewable_project_holds", pendingViewableIds(repository.findRoleViewableProjectHolds(target.id())
+                    .getOrDefault(request.targetRoleId(), Set.of()))));
+        }
         facts.add(permissionDefinitions(request.permissionCodes()).stream()
                 .sorted(Comparator.comparing(PermissionDefinition::permissionCode))
                 .map(p -> java.util.Arrays.asList(p.permissionCode(), p.riskLevel(), p.requiresApproval(), p.status())).toList());
@@ -2301,6 +2659,7 @@ public class AccessService {
         }
     }
 
+    // 审批落地：各 …Direct 的 reach 传 null——不按落地人的范围、自身权限与审批闸（M087、M002-F04）。
     private void applyApprovedGrant(AccessGrantRequestRecord request, String idempotencyKey) {
         switch (request.requestType()) {
             case REQUEST_USER_ROLE -> assignUserRoleDirect(new RoleAssignmentRequest(
@@ -2308,7 +2667,7 @@ public class AccessService {
                     request.reason(),
                     request.targetUserId(),
                     request.targetRoleId()
-            ), false);
+            ), null);
             case REQUEST_USER_POSITION -> assignUserPositionDirect(new UserPositionAssignmentRequest(
                     idempotencyKey,
                     request.reason(),
@@ -2318,7 +2677,7 @@ public class AccessService {
                     request.baseSalaryAmountCent(),
                     request.salaryCurrency(),
                     request.salaryDetail()
-            ), false);
+            ), null);
             case REQUEST_USER_SCOPE_CHANGE -> assignUserPositionDirect(new UserPositionAssignmentRequest(
                     idempotencyKey,
                     request.reason(),
@@ -2328,7 +2687,7 @@ public class AccessService {
                     request.baseSalaryAmountCent(),
                     request.salaryCurrency(),
                     request.salaryDetail()
-            ), false);
+            ), null);
             case REQUEST_POSITION_HIGH_RISK_RELEASE -> releaseHeldPositionPermissions(request, idempotencyKey);
             case REQUEST_TEMPORARY_PERMISSION -> createTemporaryGrantDirect(new TemporaryGrantRequest(
                     idempotencyKey,
@@ -2340,11 +2699,25 @@ public class AccessService {
                     request.expiresAt(),
                     request.singleUse(),
                     request.reason()
-            ), false);
+            ), null);
             case REQUEST_USER_PERMISSION_GRANT, REQUEST_USER_PERMISSION_DENY_REMOVAL -> landUserPermissionOverride(request, idempotencyKey);
+            case REQUEST_ROLE_PROJECT_REAPPROVAL -> landRoleProjectReapproval(request, idempotencyKey);
             default -> throw ApiException.badRequest("VALIDATION_FAILED",
                     "不支持的申请类型：" + request.requestType());
         }
+    }
+
+    // M736 第二步：重新审批可查看项目获批落地。只删待批条目：不写 user_roles，不碰岗位行、工资、模板套用、岗位高危挂起。
+    private void landRoleProjectReapproval(AccessGrantRequestRecord request, String idempotencyKey) {
+        AccessUser target = lockTargetUser(request.targetUserId());
+        requireGrantSnapshotUnchanged(request); // 取消分配、换岗只锁员工行、不取授权事实锁：在员工行锁下复核所钉的待批条目（写法同 landUserPermissionOverride）
+        // 留痕记的是放行了几个条目：保留标记随这一删一起删，但不计入条数
+        int removed = pendingViewableIds(repository.findRoleViewableProjectHolds(target.id())
+                .getOrDefault(request.targetRoleId(), Set.of())).size();
+        repository.deleteRoleViewableProjectHolds(target.id(), request.targetRoleId());
+        auditEventService.recordSuccess("role.viewable_projects.reapproved", "access.grant_request.review", "role",
+                request.targetRoleId(), null, idempotencyKey,
+                Map.of("user_id", target.id(), "grant_request_id", request.id(), "removed_holds", removed));
     }
 
     /**
@@ -2376,13 +2749,19 @@ public class AccessService {
         );
     }
 
-    private RoleGrantContext resolveRoleGrant(RoleAssignmentRequest request, boolean requireActorScope, boolean requireGrantorCanGrant) {
+    // reach：操作人按入口权限码可触及的项目，调用方在锁员工行之前算好（M736）；null＝审批落地，不校验操作人范围。
+    private RoleGrantContext resolveRoleGrant(RoleAssignmentRequest request, ProjectReach reach, boolean requireGrantorCanGrant) {
         AccessActor actor = authorizationService.currentActor();
         AccessUser targetUser = lockTargetUser(requireText(request.userId(), "user_id"));
-        RoleRecord role = requireRole(requireText(request.roleId(), "role_id"));
-        if (requireActorScope) {
+        // M736 第二步（技术推导）：员工行之后、读角色之前取角色行共享锁，与改可查看项目的角色行锁互斥——分配先到，改勾选等它提交后
+        // 重列持有人给他补待批；改勾选先到，分配读到新勾选、非平台管理员被可跨项目角色的闸拦去走申请。不加这把锁，同时持分配与管理
+        // 两码的人可以让同伙既没审批也没待批地看到新勾的项目。
+        String roleId = requireText(request.roleId(), "role_id");
+        repository.lockRoleForGrant(roleId);
+        RoleRecord role = requireRole(roleId);
+        if (reach != null) {
             // M002-F04（PGM 审批链「逐级审批」「转发不限层级」）：直接写与建单按操作人范围；审批落地以指纹钉住的目标事实与完整审批链为准
-            requireSameOrganization(actor, targetUser);
+            requireSameOrganization(actor, targetUser, reach);
         }
         requireRoleAssignableToTarget(role, targetUser);
         if (requireGrantorCanGrant) {
@@ -2391,9 +2770,10 @@ public class AccessService {
         return new RoleGrantContext(actor, targetUser, role);
     }
 
+    // reach：同 resolveRoleGrant；null＝审批落地、范围变更发起与对同一挂起再次发起释放申请（范围闸已由调用方判过或不适用）。
     private PositionGrantContext resolvePositionGrant(
             UserPositionAssignmentRequest request,
-            boolean requireActorScope,
+            ProjectReach reach,
             boolean requireGrantorCanGrant
     ) {
         AccessActor actor = authorizationService.currentActor();
@@ -2405,11 +2785,11 @@ public class AccessService {
         // M002-F19（操作员 2026-09-25 裁决原句「最高权限账号不能被定岗」，治理地图第 703 行「最高权限账号不设岗位、不套用岗位模板」）。
         // 经此处的入口（技术推导）：定岗、有岗位时改职级、岗位申请建单、定岗与范围变更审批落地、模板重算，目标为最高权限账号一律拒绝。
         requireNotMasterAuthorityAccount(targetUser);
-        if (requireActorScope) {
+        if (reach != null) {
             // M002-F38（治理地图第 653 行「所有业务数据默认按项目隔离」、七类红线④；技术推导）：直接定岗与岗位申请建单按操作人 / 申请人的
             // 项目与商户范围，在读目标项目的岗位映射之前拒绝范围外目标。M087-I5-02（PGM-1.10.1 跨项目变更审批通过后方可生效）：审批落地
             // 与范围变更发起不按当前操作人的组织闸——授权来自审批链与申请时校验并钉入指纹的目标范围；范围变更发起已先按旧、新范围校验操作人。
-            requireSameOrganization(actor, targetUser);
+            requireSameOrganization(actor, targetUser, reach);
         }
         if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
@@ -2419,6 +2799,7 @@ public class AccessService {
                         targetUser.organizationId(), positionCode, staffLevelId)
                 .orElseThrow(() -> ApiException.notFound("POSITION_ROLE_TEMPLATE_NOT_FOUND",
                         "未找到岗位角色模板：" + positionCode + "/" + staffLevelId));
+        repository.lockRoleForGrant(mapping.roleId()); // M736 第二步：员工行之后、读角色之前取角色行共享锁，道理同 resolveRoleGrant
         RoleRecord role = requireRole(mapping.roleId());
         PermissionTemplate template = repository.findTemplateById(mapping.templateId())
                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND",
@@ -2500,9 +2881,14 @@ public class AccessService {
                 .toList();
     }
 
-    private GrantReviewPolicy grantReviewPolicy(List<String> permissionCodes) {
+    /**
+     * 取各码风险档里审批级别最高的一档。M736（操作员 2026-09-25 所选选项原文「按授权政策「高」一档走（按现行政策不到最高权限）」）：
+     * crossProjectFloor 为真（非平台管理员申请授出可跨项目角色）时再与「高」一档取较高者；没有须审批码时就取「高」一档。
+     * M736 第二步（技术推导，借用上面这条答复）：重新审批可查看项目、减少可查看项目也传真，谁发起都一样。
+     */
+    private GrantReviewPolicy grantReviewPolicy(List<String> permissionCodes, boolean crossProjectFloor) {
         AccessGrantPolicy policy = grantPolicy();
-        AccessGrantPolicy.ReviewRule rule = permissionDefinitions(permissionCodes).stream()
+        java.util.stream.Stream<AccessGrantPolicy.ReviewRule> rules = permissionDefinitions(permissionCodes).stream()
                 .map(permission -> {
                     AccessGrantPolicy.ReviewRule configured = permission.riskLevel() == null ? null
                             : policy.riskReviews().get(permission.riskLevel().toLowerCase(Locale.ROOT));
@@ -2510,7 +2896,11 @@ public class AccessService {
                         throw ApiException.badRequest("INVALID_GRANT_POLICY", "权限风险等级未配置审批策略：" + permission.permissionCode());
                     }
                     return configured;
-                })
+                });
+        if (crossProjectFloor) {
+            rules = java.util.stream.Stream.concat(rules, java.util.stream.Stream.of(policy.riskReviews().get("high")));
+        }
+        AccessGrantPolicy.ReviewRule rule = rules
                 .max(Comparator.comparingInt(AccessGrantPolicy.ReviewRule::requiredLevel)
                         .thenComparingInt(value -> switch (value.approvalLevel()) {
                             case "top_authority" -> 3; case "two_levels_up" -> 2; default -> 1;
@@ -2671,7 +3061,8 @@ public class AccessService {
         String normalized = trimToDefault(requestType, "").toLowerCase(Locale.ROOT);
         if (List.of(REQUEST_USER_ROLE, REQUEST_USER_POSITION, REQUEST_TEMPORARY_PERMISSION,
                 REQUEST_USER_PERMISSION_GRANT, REQUEST_USER_PERMISSION_DENY_REMOVAL,
-                REQUEST_POSITION_HIGH_RISK_RELEASE).contains(normalized)) { // M002-F01；M002-F20：对同一挂起再次发起释放申请
+                REQUEST_POSITION_HIGH_RISK_RELEASE, // M002-F01；M002-F20：对同一挂起再次发起释放申请
+                REQUEST_ROLE_PROJECT_REAPPROVAL).contains(normalized)) { // M736 第二步：重新审批可查看项目
             return normalized;
         }
         throw ApiException.badRequest("VALIDATION_FAILED", "不支持的申请类型");
@@ -2747,8 +3138,11 @@ public class AccessService {
 
     public EffectivePermissions effectivePermissionsForUser(String userId) {
         AccessActor actor = authorizationService.currentActor();
-        requireSameOrganization(actor, requireTargetUser(userId));
-        return authorizationService.effectivePermissionsForUser(userId);
+        AccessUser target = requireTargetUser(userId);
+        // M736：可触及项目按入口权限码算一次，本方法的范围闸与 AuthorizationService 里的同一道闸共用
+        ProjectReach reach = authorizationService.projectReach(actor, "access.user.view");
+        requireSameOrganization(actor, target, reach);
+        return authorizationService.effectivePermissionsForUser(userId, reach);
     }
 
     /**
@@ -2813,6 +3207,8 @@ public class AccessService {
     private void rederivePosition(String userId, String positionCode, String staffLevelId, String idempotencyKey, String operatorNote,
                                   Map<String, Set<String>> previousApprovalCodes) {
         StaffLevelAssignment salary = repository.findStaffLevelAssignment(userId).orElse(null);
+        // M736：重派生只从保存岗位映射进来，操作人是平台管理员（savePositionRoleTemplate 开头已要求）——对平台管理员不读能力事实，
+        // 可以在已持员工行锁的这里取。
         assignUserPositionDirect(new UserPositionAssignmentRequest(
                 idempotencyKey,
                 operatorNote,
@@ -2821,7 +3217,8 @@ public class AccessService {
                 staffLevelId,
                 salary == null ? null : salary.baseSalaryAmountCent(),
                 salary == null ? "CNY" : salary.salaryCurrency(),
-                salary == null ? null : salary.salaryDetail()), true, previousApprovalCodes);
+                salary == null ? null : salary.salaryDetail()),
+                authorizationService.projectReach(authorizationService.currentActor(), "access.role.assign"), previousApprovalCodes);
     }
 
     /**
@@ -2919,11 +3316,17 @@ public class AccessService {
                 .orElseThrow(() -> ApiException.notFound("ROLE_NOT_FOUND", "角色不存在：" + roleId));
     }
 
-    private void requireSameOrganization(AccessActor actor, AccessUser targetUser) {
+    /**
+     * M736（操作员 2026-10-01 确认的治理地图第 653 行追加句：「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、
+     * 处理该角色可查看项目的数据。」）：项目半边按可触及项目判——reach 由各入口按自己的入口权限码在取锁之前算好传入
+     * （{@link AuthorizationService#projectReach}），目标账号是否可触及见 {@link AuthorizationService#canReachUser}；
+     * 没有经可跨项目角色持有入口权限码的人仍只到本人项目。商户半边不变。
+     */
+    private void requireSameOrganization(AccessActor actor, AccessUser targetUser, ProjectReach reach) {
         if (authorizationService.isPlatformAdmin(actor)) {
             return;
         }
-        if (!authorizationService.requireProjectScope(actor).equals(targetUser.organizationId())) {
+        if (!authorizationService.canReachUser(reach, targetUser)) {
             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
                     "不能为其他组织的用户分配权限：" + targetUser.id());
         }
@@ -2932,16 +3335,40 @@ public class AccessService {
         }
     }
 
-    private void requireActorCanAssignToScope(AccessActor actor, String organizationId, String merchantId) {
+    // M736（操作员 2026-10-03 所选选项原文：「角色能看哪些项目，就能在哪些项目新建记录、把员工改挂过去。」）：新归属在操作人按
+    // access.role.assign 可触及的项目内即可（本人项目，或可跨项目角色勾中的项目）；商户半边不变。
+    private void requireActorCanAssignToScope(AccessActor actor, String organizationId, String merchantId, ProjectReach reach) {
         if (authorizationService.isPlatformAdmin(actor)) {
             return;
         }
-        if (!authorizationService.requireProjectScope(actor).equals(organizationId)) {
-            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能把人员改挂到其他项目");
+        if (!reach.covers(organizationId)) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能把人员改挂到本人无权处理的项目");
         }
         if (!isBlank(actor.merchantId()) && !actor.merchantId().equals(merchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能把人员改挂到其他商户");
         }
+    }
+
+    // M736：非平台管理员授出可跨项目角色（直接分配、直接定岗、角色或岗位申请、范围变更的新岗位）——几处审批闸与档位下限共用这一判断。
+    private static boolean crossProjectByNonAdmin(ProjectReach reach, RoleRecord role) {
+        return !reach.platformAdmin() && AuthorizationService.isCrossProjectRole(role);
+    }
+
+    /**
+     * M736：模板、角色、岗位映射列表按可触及项目取数——平台管理员全量；恰好只到本人项目的走原来的单项目查询（没有经可跨项目角色
+     * 持有入口权限码的人都在这一支，结果与原先一致）；其余全量取出后按归属筛，归属为空的平台行是否保留由 platformOwned 定。
+     * ponytail: 持有者走全量后内存筛；这几张表到上千行时改成仓储按 organizationIds() 下推（IN 列表，空集提前返回）。
+     */
+    private <T> List<T> listWithinReach(ProjectReach reach, java.util.function.Function<String, List<T>> byOrganization,
+                                        java.util.function.Function<T, String> owner, boolean platformOwned) {
+        if (reach.platformAdmin()) {
+            return byOrganization.apply(null);
+        }
+        if (reach.onlyOwnProject().isPresent()) {
+            return byOrganization.apply(reach.onlyOwnProject().get());
+        }
+        return byOrganization.apply(null).stream()
+                .filter(row -> owner.apply(row) == null ? platformOwned : reach.covers(owner.apply(row))).toList();
     }
 
     private void requirePlatformAdmin(AccessActor actor) {

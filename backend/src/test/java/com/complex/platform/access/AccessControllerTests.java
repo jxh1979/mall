@@ -465,6 +465,180 @@ class AccessControllerTests {
         org.assertj.core.api.Assertions.assertThat(position.getValue().userId()).isEqualTo("usr_path");
     }
 
+    // M736-C1（操作员 2026-10-03 所选选项原文：「项目、城市项目公司、在用的域主管公司各列为独立条目，勾哪条只管哪条，互不连带。」）：
+    // 建角色时逐个勾选项目的候选清单接口，与建角色同一门禁（access.role.manage）；三类条目各自成条；没有该权限 403、不进服务层。
+    @Test
+    void roleProjectOptionsGateOnRoleManageAndListTheThreeKindsAsSeparateEntries() throws Exception {
+        when(service.listRoleProjectOptions()).thenReturn(new PageResponse<>(
+                List.of(new RoleProjectOption("prj_a", "甲项目", "project"),
+                        new RoleProjectOption("be_city", "城市项目公司", "project_company"),
+                        new RoleProjectOption("be_domain", "域主管公司", "management_company")),
+                1, 50, 3));
+
+        mockMvc.perform(get("/api/v1/access/role-project-options")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.total").value(3))
+                .andExpect(jsonPath("$.data.items[0].id").value("prj_a"))
+                .andExpect(jsonPath("$.data.items[0].name").value("甲项目"))
+                .andExpect(jsonPath("$.data.items[0].kind").value("project"))
+                .andExpect(jsonPath("$.data.items[1].kind").value("project_company"))
+                .andExpect(jsonPath("$.data.items[2].kind").value("management_company"));
+        Mockito.verify(authorizationService).requirePermission("access.role.manage");
+
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("access.role.manage");
+        mockMvc.perform(get("/api/v1/access/role-project-options")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        Mockito.verify(service, Mockito.times(1)).listRoleProjectOptions();
+    }
+
+    // M736-C1（操作员 2026-10-01 说明「权限配置表格当中有一个可以查看全部项目选项……可以逐个独立的项目去选」）：建角色接口的两项勾选以
+    // 蛇形字段进出——请求体的 view_all_projects、viewable_project_ids 原样到服务层，返回体带回同名字段；角色列表每行同样带两项。
+    @Test
+    void createRoleAndRoleListCarryTheViewableProjectTicksInSnakeCase() throws Exception {
+        when(service.createRole(any())).thenReturn(new RoleRecord("role_ticked", "跨项目巡检", null, "project", "active",
+                java.time.Instant.parse("2026-10-07T00:00:00Z"), List.of("ops.production_readiness.view"), "prj_a",
+                false, List.of("prj_b", "be_city")));
+
+        mockMvc.perform(post("/api/v1/access/roles")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "role-ticked",
+                                  "role_name": "跨项目巡检",
+                                  "permission_codes": ["ops.production_readiness.view"],
+                                  "view_all_projects": false,
+                                  "viewable_project_ids": ["prj_b", "be_city"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.view_all_projects").value(false))
+                .andExpect(jsonPath("$.data.viewable_project_ids[0]").value("prj_b"))
+                .andExpect(jsonPath("$.data.viewable_project_ids[1]").value("be_city"));
+        Mockito.verify(authorizationService).requirePermission("access.role.manage");
+        var request = org.mockito.ArgumentCaptor.forClass(com.complex.platform.access.dto.RoleRequest.class);
+        Mockito.verify(service).createRole(request.capture());
+        org.assertj.core.api.Assertions.assertThat(request.getValue().viewAllProjects()).isFalse();
+        org.assertj.core.api.Assertions.assertThat(request.getValue().viewableProjectIds()).containsExactly("prj_b", "be_city");
+
+        when(service.listRoles()).thenReturn(new PageResponse<>(
+                List.of(new RoleRecord("role_all", "集团巡检", null, "project", "active",
+                        java.time.Instant.parse("2026-10-07T00:00:00Z"), List.of(), null, true, List.of())),
+                1, 50, 1));
+        mockMvc.perform(get("/api/v1/access/roles")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].view_all_projects").value(true))
+                .andExpect(jsonPath("$.data.items[0].viewable_project_ids").isEmpty());
+    }
+
+    // M736-C2（M736 第二步；操作员 2026-10-08 确认的治理地图第 703 行追加句：「可跨项目角色分配出去以后，可以直接在原角色上增加或减少
+    // 可查看的项目」）：读现状、增减两个接口与建角色同一门禁（access.role.manage），增减须带提交编号；请求体的四个增减字段与最终审批人
+    // 以蛇形字段原样到服务层，返回体的现状（两项勾选、减少在待审的条目、还没重新审批的持有人）以蛇形字段带回；缺提交编号 400、
+    // 没有该权限 403，都不进服务层。
+    @Test
+    void viewableProjectsEndpointsRequireRoleManageAndIdempotencyKey() throws Exception {
+        RoleViewableProjectsView view = new RoleViewableProjectsView("role_ticked", false, List.of("prj_b", "prj_c"), List.of("prj_b"),
+                List.of(new RoleViewableProjectsView.PendingReapproval("usr_zhang", "张三", List.of("prj_c"), true)));
+        when(service.getRoleViewableProjects("role_ticked")).thenReturn(view);
+        when(service.updateRoleViewableProjects(Mockito.eq("role_ticked"), any())).thenReturn(view);
+
+        mockMvc.perform(get("/api/v1/access/roles/role_ticked/viewable-projects")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.role_id").value("role_ticked"))
+                .andExpect(jsonPath("$.data.view_all_projects").value(false))
+                .andExpect(jsonPath("$.data.viewable_project_ids[0]").value("prj_b"))
+                .andExpect(jsonPath("$.data.viewable_project_ids[1]").value("prj_c"))
+                .andExpect(jsonPath("$.data.pending_removal_ids[0]").value("prj_b"))
+                .andExpect(jsonPath("$.data.pending_reapprovals[0].user_id").value("usr_zhang"))
+                .andExpect(jsonPath("$.data.pending_reapprovals[0].username").value("张三"))
+                .andExpect(jsonPath("$.data.pending_reapprovals[0].viewable_ids[0]").value("prj_c"))
+                .andExpect(jsonPath("$.data.pending_reapprovals[0].reapproval_pending").value(true));
+        mockMvc.perform(put("/api/v1/access/roles/role_ticked/viewable-projects")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "ticks-change",
+                                  "operator_note": "后台改可查看项目",
+                                  "add_view_all_projects": false,
+                                  "add_viewable_project_ids": ["prj_c"],
+                                  "remove_view_all_projects": true,
+                                  "remove_viewable_project_ids": ["prj_b"],
+                                  "final_approver_id": "usr_boss"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.role_id").value("role_ticked"))
+                .andExpect(jsonPath("$.data.pending_removal_ids[0]").value("prj_b"));
+        Mockito.verify(authorizationService, Mockito.times(2)).requirePermission("access.role.manage");
+        var request = org.mockito.ArgumentCaptor.forClass(com.complex.platform.access.dto.RoleViewableProjectsRequest.class);
+        Mockito.verify(service).updateRoleViewableProjects(Mockito.eq("role_ticked"), request.capture());
+        org.assertj.core.api.Assertions.assertThat(request.getValue().idempotencyKey()).isEqualTo("ticks-change");
+        org.assertj.core.api.Assertions.assertThat(request.getValue().addViewAllProjects()).isFalse();
+        org.assertj.core.api.Assertions.assertThat(request.getValue().addViewableProjectIds()).containsExactly("prj_c");
+        org.assertj.core.api.Assertions.assertThat(request.getValue().removeViewAllProjects()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(request.getValue().removeViewableProjectIds()).containsExactly("prj_b");
+        org.assertj.core.api.Assertions.assertThat(request.getValue().finalApproverId()).isEqualTo("usr_boss");
+
+        mockMvc.perform(put("/api/v1/access/roles/role_ticked/viewable-projects")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"add_viewable_project_ids": ["prj_c"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("access.role.manage");
+        mockMvc.perform(get("/api/v1/access/roles/role_ticked/viewable-projects")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        mockMvc.perform(put("/api/v1/access/roles/role_ticked/viewable-projects")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "ticks-denied", "add_viewable_project_ids": ["prj_c"]}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        Mockito.verify(service, Mockito.times(1)).getRoleViewableProjects(Mockito.anyString());
+        Mockito.verify(service, Mockito.times(1)).updateRoleViewableProjects(Mockito.anyString(), any());
+    }
+
+    // M736-C3（M736 第二步；治理地图第 651 行收紧的是「员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请」，不含本类）：
+    // 重新审批可查看项目（role_project_reapproval）在入口只核申请权限——不判分配角色权限、不走三类申请的两码核验，随后进服务层，
+    // 目标员工与角色编号原样到服务层。入口本批没有改（守护）：若把本类并进三类申请，红在 never 两条。
+    @Test
+    void grantApplyAcceptsTheReapprovalTypeWithApplyPermissionOnly() throws Exception {
+        mockMvc.perform(post("/api/v1/access/grant-requests")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "reapproval-apply", "request_type": "role_project_reapproval", "target_user_id": "usr_zhang", "role_id": "role_ticked"}
+                                """))
+                .andExpect(status().isOk());
+        Mockito.verify(authorizationService).requirePermission("access.grant_request.apply");
+        Mockito.verify(authorizationService, Mockito.never()).currentActorHasPermission(Mockito.anyString());
+        Mockito.verify(authorizationService, Mockito.never()).requirePermissions("access.grant_request.apply", "access.role.assign");
+        var request = org.mockito.ArgumentCaptor.forClass(com.complex.platform.access.dto.AccessGrantApplyRequest.class);
+        Mockito.verify(service).applyGrant(request.capture());
+        org.assertj.core.api.Assertions.assertThat(request.getValue().requestType()).isEqualTo("role_project_reapproval");
+        org.assertj.core.api.Assertions.assertThat(request.getValue().targetUserId()).isEqualTo("usr_zhang");
+        org.assertj.core.api.Assertions.assertThat(request.getValue().roleId()).isEqualTo("role_ticked");
+    }
+
     @TestConfiguration
     static class TestBeans {
         @Bean

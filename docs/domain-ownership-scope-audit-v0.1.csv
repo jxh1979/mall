@@ -198,6 +198,7 @@ merchant_bill_lines,inherited,bill_id,bill_id -> merchant_bills -> merchant_id,m
 merchant_bills,direct,merchant_id,merchant_id column on merchant_bills,ready for project/merchant scoped query enforcement,V0.02,covered
 merchant_expense_entries,direct,merchant_id,merchant_id column on merchant_expense_entries,ready for project/merchant scoped query enforcement,V0.02,covered
 merchant_fee_notification_recipient,direct,merchant_id,merchant_id column on merchant_fee_notification_recipient,ready for project/merchant scoped query enforcement,V0.02,covered
+merchant_projects,direct,project_id,project_id column on merchant_projects,ready for project/merchant scoped query enforcement,V0.02,covered
 merchant_revenue_attribution_rules,direct,merchant_id,merchant_id column on merchant_revenue_attribution_rules,ready for project/merchant scoped query enforcement,V0.02,covered
 merchant_service_work_order_actions,inherited,work_order_id,work_order_id -> merchant_service_work_orders -> merchant_id/space_id,must join through scope path before multi-complex rollout,V0.02,covered
 merchant_service_work_orders,direct,merchant_id,merchant_id column on merchant_service_work_orders,ready for project/merchant scoped query enforcement,V0.02,covered
@@ -237,6 +238,8 @@ revenue_stream_attribution,direct,project_id,project_id column on revenue_stream
 risk_alert_actions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered
 risk_alerts,direct,project_id,project_id column on risk_alerts,ready for project/merchant scoped query enforcement,V0.02,covered
 role_permissions,inherited,role_id/permission_id,role_id/permission_id -> roles/permissions,must join through scope path before multi-complex rollout,V0.02,covered
+role_viewable_project_holds,inherited,user_id/role_id,user_id/role_id -> access_users/roles -> organization scope; viewable_id 是待重新审批的可查看目标，不是行归属,must join through scope path before multi-complex rollout,V0.02,covered
+role_viewable_projects,inherited,role_id,role_id -> roles -> organization scope; viewable_id 是勾选的可查看目标，不是行归属,must join through scope path before multi-complex rollout,V0.02,covered
 roles,direct,organization_id,organization_id column on roles,ready for project/merchant scoped query enforcement,V0.02,covered
 saved_bottle_claims,inherited,saved_bottle_id,saved_bottle_id -> saved_bottles -> merchant/customer scope,must join through scope path before multi-complex rollout,V0.02,covered
 saved_bottle_transfers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered

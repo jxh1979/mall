@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.16
+# P0 OpenAPI Operation 验收矩阵 V0.17
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 731 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 734 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -31,6 +31,9 @@
 | access | `GET` | `/api/v1/access/permissions` | `listPermissions` | 权限点列表 | `-` | `access.permission.view` | `staff-token` | `project` | web | 否 | `permission.viewed` | `permission.view_failed` |
 | access | `GET` | `/api/v1/access/roles` | `listRoles` | 角色列表 | `-` | `access.role.view` | `staff-token` | `project` | web | 否 | `role.viewed` | `role.view_failed` |
 | access | `POST` | `/api/v1/access/roles` | `createRole` | 创建角色 | `RoleRequest` | `access.role.manage` | `staff-token` | `project` | web | 是 | `role.changed` | `role.change_failed` |
+| access | `GET` | `/api/v1/access/role-project-options` | `listRoleProjectOptions` | 角色可查看项目候选清单 | `-` | `access.role.manage` | `staff-token` | `project` | web | 否 | `access.role_project_options.viewed` | `access.role_project_options.view_failed` |
+| access | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | `getRoleViewableProjects` | 角色可查看项目现状 | `-` | `access.role.manage` | `staff-token` | `project` | web | 否 | `role.viewable_projects.viewed` | `role.viewable_projects.view_failed` |
+| access | `PUT` | `/api/v1/access/roles/{id}/viewable-projects` | `updateRoleViewableProjects` | 增减角色可查看项目 | `RoleViewableProjectsRequest` | `access.role.manage` | `staff-token` | `project` | web | 是 | `role.viewable_projects.changed` | `role.viewable_projects.change_failed` |
 | access | `POST` | `/api/v1/access/temporary-grants` | `createTemporaryGrant` | 临时授权 | `TemporaryGrantRequest` | `access.temporary_grant.create` | `staff-token` | `project` | web | 是 | `permission_template.applied` | `temporary_grant.create_failed` |
 | access | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | `revokeTemporaryGrant` | 撤销临时授权 | `StatusChangeRequest` | `access.temporary_grant.revoke` | `staff-token` | `project` | web | 是 | `permission_template.revoked` | `temporary_grant.revoke_failed` |
 | access | `GET` | `/api/v1/access/users` | `listAccessUsers` | 查询权限用户 | `-` | `access.user.view` | `staff-token` | `project` | web | 否 | `access.user.viewed` | `access.user.viewed_failed` |
