@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.15",
+    "version": "V0.16",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -39978,6 +39978,10 @@
             "type": "string",
             "format": "date-time",
             "description": "服务端响应时间，ISO 8601 格式。"
+          },
+          "replayed": {
+            "type": "boolean",
+            "description": "已完成（重复提交）标记。只在重复提交、返回的是第一次的结果时出现且为 true，此时 message 为「该操作已完成（重复提交，返回首次结果）」、data 仍是第一次的结果；第一次执行的响应不带该字段。"
           }
         },
         "description": "successresponse请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"

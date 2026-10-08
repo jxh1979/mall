@@ -254,13 +254,13 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
     await waitFor(() => expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByTestId("permission-template-apply"));
     await waitFor(() => expect(bodies).toHaveLength(1));
-    expect(JSON.parse(bodies[0]).mode).toBe("append");
+    expect(JSON.parse(bodies[0]!).mode).toBe("append");
     ok();
     await waitFor(() => expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByTestId("permission-template-edit-single-use"));
     fireEvent.click(screen.getByTestId("permission-template-apply"));
     await waitFor(() => expect(bodies).toHaveLength(2));
-    expect(JSON.parse(bodies[1]).mode).toBe("single_use");
+    expect(JSON.parse(bodies[1]!).mode).toBe("single_use");
     expect(bodies.map((body) => JSON.parse(body).mode).every((mode: string) => ["append", "merge", "single_use"].includes(mode))).toBe(true);
     ok();
   });

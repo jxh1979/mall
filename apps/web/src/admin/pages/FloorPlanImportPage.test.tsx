@@ -211,7 +211,7 @@ describe("FloorPlanImportPage 闭集与导入格式", () => {
   });
 
   // M018-007/005/006：来源名称必填（后端 source_name NOT NULL）；POST 体与幂等键
-  it("创建导入：来源名称留空被步内拦截；填齐后 POST 带格式/名称/内容且幂等键为页面键", async () => {
+  it("创建导入：来源名称留空被步内拦截；填齐后 POST 带格式/名称/内容且带请求编号", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("floor-plan-select-fp-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("floor-plan-select-fp-1"));
@@ -229,7 +229,7 @@ describe("FloorPlanImportPage 闭集与导入格式", () => {
     await waitFor(() => expect(lastPost).toBeTruthy());
     expect(lastPost?.url).toContain("/floor-plans/fp-1/imports");
     expect(lastPost?.body).toMatchObject({ source_format: "svg", source_name: "cad导出2", source_payload: "<svg viewBox=\"0 0 10 10\"></svg>" });
-    expect(String(lastPost?.body.idempotency_key)).toMatch(/^fpi-/);
+    expect(String(lastPost?.body.idempotency_key)).toMatch(/^admin-web-/);
   });
 });
 
@@ -239,7 +239,7 @@ describe("FloorPlanImportPage 发布、权限与下钻错误（M018-003/004/005/
     lastPost = null;
   });
 
-  it("未勾选候选时发布被拦截（不弹确认、不请求）；勾选后确认 POST 只带勾选的候选且幂等键为页面键", async () => {
+  it("未勾选候选时发布被拦截（不弹确认、不请求）；勾选后确认 POST 只带勾选的候选且带请求编号", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const { setGlobalError } = await openDetails();
     fireEvent.click(screen.getByTestId("floor-plan-publish"));
@@ -253,7 +253,7 @@ describe("FloorPlanImportPage 发布、权限与下钻错误（M018-003/004/005/
     await waitFor(() => expect(lastPost).toBeTruthy());
     expect(lastPost?.url).toContain("/floor-plans/fp-1/imports/imp-1/publish");
     expect(lastPost?.body).toMatchObject({ candidate_ids: ["cd-1"] });
-    expect(String(lastPost?.body.idempotency_key)).toMatch(/^fpp-/);
+    expect(String(lastPost?.body.idempotency_key)).toMatch(/^admin-web-/);
   });
 
   it("无 floor_plan.import.manage 时创建导入与发布按钮禁用（新增平面图仍可用）", async () => {

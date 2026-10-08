@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuditEventsPage } from "./AuditEventsPage";
+import { AdminApi } from "../client/adminClient";
 import type { AdminApiClient, AdminPageProps, AuditEventRow, EffectivePermissionsState } from "../types";
 
 const ROWS: AuditEventRow[] = [
@@ -198,5 +199,116 @@ describe("AuditEventsPage 操作日志反查（audit_events）", () => {
     await waitFor(() =>
       expect(api.get).toHaveBeenCalledWith(expect.stringContaining("/api/v1/audit/operation-events")),
     );
+  });
+});
+
+// M725-F02（治理地图第 303 行「同一个操作被重复提交，系统只认一次」）：导出留痕第一次提交服务端可能已登记、响应却丢了，
+// 操作员再点导出——这是同一次导出，不是新的一次：发生时间沿用第一次点击时取的，请求内容逐字不变，带首发的提交编号。
+// 真实页面经真实客户端，只桩网络层。
+describe("AuditEventsPage 导出留痕没拿到结果再点", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  it("第二次请求的内容与提交编号都与第一次相同", async () => {
+    // 页面按点击取当前时刻、用「前缀-毫秒」现生成编号；让每次取到的时刻与毫秒必然不同。
+    const realToISOString = Date.prototype.toISOString;
+    let now = 1_760_000_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => (now += 1000));
+    vi.spyOn(Date.prototype, "toISOString").mockImplementation(() => realToISOString.call(new Date((now += 1000))));
+    const posts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "POST") {
+          posts.push(String(init?.body));
+          // 第一次：响应丢在路上。
+          if (posts.length === 1) return Promise.reject(new TypeError("Failed to fetch"));
+          return Promise.resolve(new Response(
+            JSON.stringify({ success: true, code: "OK", message: "success", data: { accepted_count: 1 } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ));
+        }
+        return Promise.resolve(new Response(
+          JSON.stringify({ success: true, code: "OK", message: "success", data: { items: [{ id: "e1", event_type: "login", event_category: "auth", result: "success", trace_id: "t-1", summary: "登录成功" }], page: 1, page_size: 10, total: 1 } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ));
+      }),
+    );
+    const fullProps: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<AuditEventsPage {...fullProps} />);
+
+    await waitFor(() => expect(screen.getByTestId("audit-events-export")).toBeTruthy(), { timeout: 5000 });
+    fireEvent.click(screen.getByTestId("audit-events-export"));
+    await waitFor(() => expect(screen.getByTestId("audit-events-form-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
+    expect(posts).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("audit-events-export"));
+    await waitFor(() => expect(posts).toHaveLength(2), { timeout: 5000 });
+    expect(JSON.parse(posts[1]!).events[0].occurred_at).toBe(JSON.parse(posts[0]!).events[0].occurred_at);
+    expect(JSON.parse(posts[1]!).idempotency_key).toBe(JSON.parse(posts[0]!).idempotency_key);
+    expect(posts[1]).toBe(posts[0]);
+  });
+
+  // 记住的发生时间跟着「这次导出」走，不跟着页面组件走：第一次没拿到结果后切到别的菜单再回来（页面重新挂载、列表重读后
+  // 没有变化），同样的内容再导出——仍是同一次导出。
+  it("切页回来再导出：请求内容与提交编号仍与第一次相同", async () => {
+    // 页面按点击取当前时刻、用「前缀-毫秒」现生成编号；让每次取到的时刻与毫秒必然不同。
+    const realToISOString = Date.prototype.toISOString;
+    let now = 1_760_000_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => (now += 1000));
+    vi.spyOn(Date.prototype, "toISOString").mockImplementation(() => realToISOString.call(new Date((now += 1000))));
+    const posts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "POST") {
+          posts.push(String(init?.body));
+          // 第一次：响应丢在路上。
+          if (posts.length === 1) return Promise.reject(new TypeError("Failed to fetch"));
+          return Promise.resolve(new Response(
+            JSON.stringify({ success: true, code: "OK", message: "success", data: { accepted_count: 1 } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ));
+        }
+        return Promise.resolve(new Response(
+          JSON.stringify({ success: true, code: "OK", message: "success", data: { items: [{ id: "e1", event_type: "login", event_category: "auth", result: "success", trace_id: "t-1", summary: "登录成功" }], page: 1, page_size: 10, total: 1 } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ));
+      }),
+    );
+    const fullProps: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    // 等列表读完、填导出原因、点导出。
+    async function submitExport() {
+      await waitFor(() => expect(screen.getByTestId("audit-events-export")).toBeTruthy(), { timeout: 5000 });
+      fireEvent.change(screen.getByTestId("audit-events-export-reason"), { target: { value: "切页回来再导出" } });
+      fireEvent.click(screen.getByTestId("audit-events-export"));
+    }
+    const firstVisit = render(<AuditEventsPage {...fullProps} />);
+    await submitExport();
+    await waitFor(() => expect(screen.getByTestId("audit-events-form-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
+    expect(posts).toHaveLength(1);
+
+    // 切到别的菜单再回来：页面重新挂载。
+    firstVisit.unmount();
+    render(<AuditEventsPage {...fullProps} />);
+    await submitExport();
+    await waitFor(() => expect(posts).toHaveLength(2), { timeout: 5000 });
+    expect(JSON.parse(posts[1]!).events[0].occurred_at).toBe(JSON.parse(posts[0]!).events[0].occurred_at);
+    expect(JSON.parse(posts[1]!).idempotency_key).toBe(JSON.parse(posts[0]!).idempotency_key);
+    expect(posts[1]).toBe(posts[0]);
   });
 });

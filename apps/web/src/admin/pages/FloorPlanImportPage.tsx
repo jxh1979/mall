@@ -97,9 +97,6 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   const [planForm, setPlanForm] = React.useState(EMPTY_PLAN_FORM);
   const [projects, setProjects] = React.useState<{ id: string; name?: string }[]>([]);
   const [projectsNotice, setProjectsNotice] = React.useState<string | null>(null);
-  const planKeyRef = React.useRef("");
-  const importKeyRef = React.useRef("");
-  const publishKeyRef = React.useRef("");
   // 引导式「新增平面图」弹窗状态（范式：字段留页面持有，弹窗只编排）。
   const [planOpen, setPlanOpen] = React.useState(false);
   const [planError, setPlanError] = React.useState("");
@@ -137,8 +134,6 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setSelectedPlanId(floorPlanId);
     setSelectedImportId("");
     setFloorPlanImportDetails(null);
-    importKeyRef.current = "";
-    publishKeyRef.current = "";
     try {
       const res = await api.get<{ items?: ImportTask[] } | ImportTask[]>(`/api/v1/floor-plans/${floorPlanId}/imports`);
       setImports(Array.isArray(res) ? res : (res?.items ?? []));
@@ -147,7 +142,6 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
 
   const loadCandidates = async (floorPlanId: string, importId: string) => {
     setSelectedImportId(importId);
-    publishKeyRef.current = "";
     setPublishCandidateIds([]);
     try {
       const details = await api.get<FloorPlanImportDetails>(`/api/v1/floor-plans/${floorPlanId}/imports/${importId}/candidates`);
@@ -172,10 +166,10 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setPlanSaving(true);
     setPlanError("");
     try {
-      if (!planKeyRef.current) planKeyRef.current = `fp-${Math.random().toString(36).slice(2)}`;
-      // M018-005：幂等键以 camel 键交给 AdminApi（normalizeRequestBody 只认 idempotencyKey，snake 键会被生成键覆盖，失败重试不再同键）。
+      // M725-F02：请求编号交给 AdminApi 按「一次操作」管理——结果未明时再提交同一内容沿用原编号，
+      // 拿到明确结果（成功或业务错误）后改了再提交是新的一次操作（页面自己保存编号时业务错误后不清，改了内容再提交会撞「请勿重复提交」）。
       await api.post("/api/v1/floor-plans", {
-        idempotencyKey: planKeyRef.current, plan_name: planForm.planName, project_id: planForm.projectId,
+        plan_name: planForm.planName, project_id: planForm.projectId,
         building_code: planForm.buildingCode, floor_no: planForm.floorNo, image_url: planForm.imageUrl,
         image_width: Number(planForm.imageWidth), image_height: Number(planForm.imageHeight), version_no: planForm.versionNo, status: "active",
       });
@@ -197,13 +191,11 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setImportSaving(true);
     setImportError("");
     try {
-      if (!importKeyRef.current) importKeyRef.current = `fpi-${selectedPlanId}-${Math.random().toString(36).slice(2)}`;
       const res = await api.post<ImportTask>(`/api/v1/floor-plans/${selectedPlanId}/imports`, {
-        idempotencyKey: importKeyRef.current, source_format: importForm.sourceFormat,
+        source_format: importForm.sourceFormat,
         source_name: importForm.sourceName, source_payload: importForm.sourcePayload,
       });
       setActionResult({ action: "floor_plan_import_created", importId: res?.id });
-      importKeyRef.current = "";
       setImportOpen(false);
       await loadImports(selectedPlanId);
     } catch (e) { setImportError((e as Error).message); } finally { setImportSaving(false); }
@@ -218,9 +210,8 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     try {
       if (!requireSelectedCandidates()) return;
       const ids = publishCandidateIds;
-      if (!publishKeyRef.current) publishKeyRef.current = `fpp-${selectedImportId}-${Math.random().toString(36).slice(2)}`;
       const result = await api.post(`/api/v1/floor-plans/${selectedPlanId}/imports/${selectedImportId}/publish`, {
-        idempotencyKey: publishKeyRef.current, candidate_ids: ids,
+        candidate_ids: ids,
       });
       setActionResult({ action: "floor_plan_import_published", candidateIds: ids, result });
       await loadCandidates(selectedPlanId, selectedImportId);
@@ -266,7 +257,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             permissionsState={effectivePermissions}
             permissions={MANAGE}
             data-testid="floor-plan-create-open"
-            onClick={() => { setPlanForm(EMPTY_PLAN_FORM); planKeyRef.current = ""; setPlanError(""); setPlanOpen(true); }}
+            onClick={() => { setPlanForm(EMPTY_PLAN_FORM); setPlanError(""); setPlanOpen(true); }}
           >＋ 新增平面图</PermissionButton>
         </div>
         <table className="admin-table" data-testid="floor-plans-table">
@@ -285,7 +276,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
           <>
             <h3>导入任务</h3>
             <div className="admin-form-row" data-testid="floor-plan-import-form">
-              <PermissionButton permissionsState={effectivePermissions} permissions={IMPORT_MANAGE} data-testid="floor-plan-import-open" onClick={() => { setImportForm({ sourceFormat: "svg", sourceName: "", sourcePayload: "" }); importKeyRef.current = ""; setImportError(""); setImportOpen(true); }}>＋ 创建导入</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={IMPORT_MANAGE} data-testid="floor-plan-import-open" onClick={() => { setImportForm({ sourceFormat: "svg", sourceName: "", sourcePayload: "" }); setImportError(""); setImportOpen(true); }}>＋ 创建导入</PermissionButton>
             </div>
             <table className="admin-table" data-testid="floor-plan-imports-table">
               <thead><tr><th>来源</th><th>状态</th><th>候选数</th><th>错误数</th><th>操作</th></tr></thead>

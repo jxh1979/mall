@@ -11,6 +11,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { firstSubmitTime, forgetSubmitTime } from "../../shared/operationKey";
 
 const EVIDENCE_CREATE = ["evidence.event.create"];
 
@@ -125,6 +126,15 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
     setFormError("");
     setGlobalError(null);
     const evidenceAttachmentIds = ["att-admission-audit-export"];
+    const eventPayload = {
+      merchantCount: merchants.length,
+      bindingCount: bindings.length,
+      contractCount: contracts.length,
+      closedLoopCount,
+    };
+    // M725-F02：导出发生时间在这次登记第一次提交时取一次，登记成功之前同样的导出内容都沿用（切页回来、中间登记过别的也一样）——
+    // 没拿到结果再点时请求内容逐字不变，客户端才认得出是同一次操作、沿用首发的提交编号，不会再登记一条。
+    const operation = ["admission-audit-export", exportReason, eventPayload];
     const payload = {
       idempotencyKey: `admission-audit-export-${Date.now()}`,
       operatorNote: exportReason,
@@ -136,19 +146,15 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         eventCategory: "governance",
         result: "success",
         summary: exportReason,
-        payload: {
-          merchantCount: merchants.length,
-          bindingCount: bindings.length,
-          contractCount: contracts.length,
-          closedLoopCount,
-        },
-        occurredAt: new Date().toISOString(),
+        payload: eventPayload,
+        occurredAt: firstSubmitTime(operation),
       }],
     };
     // 提交失败留弹窗内显错（formError），成功才关闭弹窗（照 phase-8 范式）。
     setExporting(true);
     try {
       const result = await api.post<unknown>("/api/v1/evidence/events", payload);
+      forgetSubmitTime(operation);
       setActionResult({
         action: "admission_audit_exported",
         audit: "merchant_admission_trace_ready",

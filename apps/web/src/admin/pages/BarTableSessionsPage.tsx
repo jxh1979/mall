@@ -10,6 +10,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { firstSubmitTime, forgetSubmitTime } from "../../shared/operationKey";
 import type { AdminPageProps, BarReservationRow, BarTableRow, BarTableSessionRow } from "../types";
 
 const BAR_CHECKIN_PERMISSION = "bar.table.guest_checkin";
@@ -269,13 +270,17 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     setSubmitting(true);
     setGlobalError(null);
     try {
-      const result = await api.post("/api/v1/bar/reservations", {
+      const request = {
         barId: newReservation.barId.trim(),
         tableId: newReservation.tableId.trim(),
-        reservationTime: new Date().toISOString(),
         guestCount: Number(newReservation.guestCount),
         salespersonUserId: newReservation.salespersonUserId.trim() || undefined,
-      });
+      };
+      // M725-F02：订台时间在这次订台第一次提交时取一次，订成功之前同样的内容都沿用（切页回来、中间订过别的卡座也一样）——
+      // 没拿到结果再点时请求内容逐字不变，客户端才认得出是同一次操作、沿用首发的提交编号，不会再订一笔。
+      const operation = ["bar-reservation", request];
+      const result = await api.post("/api/v1/bar/reservations", { ...request, reservationTime: firstSubmitTime(operation) });
+      forgetSubmitTime(operation);
       setActionResult({ action: "bar_reservation_create", status: "created", result });
       setBarError("");
       setNewReservation((prev) => ({ ...prev, tableId: "" }));

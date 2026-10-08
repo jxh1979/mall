@@ -7,7 +7,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 // 引导式流程 phase-10：新增平面图改分步引导弹窗（入口→步进→提交带正确 body + 步内校验拦截不提交）。
 // M018-001/005：请求体按后端 FloorPlanService.validateCreateRequest / V023 契约（楼层、底图地址、底图宽高、版本号必填，status active），
-// 幂等键须是页面 KeyRef（经真实 AdminApi.normalizeRequestBody 后仍为 fp- 前缀）。
+// 请求编号由 AdminApi 按「一次操作」管理（M725-F02：页面不再自己保存编号，发出的是 admin-web- 前缀）。
 const PLANS = [
   { id: "fp-1", plan_name: "一层平面图", building_code: "B1", floor_no: "1F", version_no: "v1", status: "active" },
 ];
@@ -93,7 +93,7 @@ describe("FloorPlanImportPage 引导式新增平面图(phase-10)", () => {
     expect(screen.queryByTestId("floor-plan-create-guided")).toBeNull();
   });
 
-  // M018-001/005：POST 体 = 后端必填契约（楼层/底图/宽高/版本号 + status active），幂等键为页面键
+  // M018-001/005：POST 体 = 后端必填契约（楼层/底图/宽高/版本号 + status active），请求编号由 AdminApi 生成
   it("入口→步进→提交：POST 新建平面图带后端必填字段与 active 状态，成功后关闭弹窗", async () => {
     const { setActionResult } = renderPage();
     await openCreate();
@@ -117,7 +117,7 @@ describe("FloorPlanImportPage 引导式新增平面图(phase-10)", () => {
       version_no: "v1",
       status: "active",
     });
-    expect(String(lastPostBody?.idempotency_key)).toMatch(/^fp-/);
+    expect(String(lastPostBody?.idempotency_key)).toMatch(/^admin-web-/);
     await waitFor(() => expect(screen.queryByTestId("floor-plan-create-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "floor_plan_created" }));
   });

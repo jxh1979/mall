@@ -10,6 +10,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { PagedResult } from "../client/adminClient";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { firstSubmitTime, forgetSubmitTime } from "../../shared/operationKey";
 
 const PAGE_SIZE = 10;
 const OPERATION_LIMIT = 200;
@@ -102,10 +103,6 @@ function matches(row: AuditEventRow, keyword: string) {
 
 function eventKey(row: AuditEventRow, index: number) {
   return `${row.id ?? eventTrace(row)}-${index}`;
-}
-
-function nowIso() {
-  return new Date().toISOString();
 }
 
 // 下钻定位：focus 可能是 `对象类型:对象id` 或纯 id；取 id 段作为页内筛选关键词（matches 的 haystack 含 `类型:id`）。
@@ -246,6 +243,17 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
       setFormError("导出原因不能为空。");
       return;
     }
+    const payload = {
+      // 导出留痕记录当前页快照与全量总数（后端未提供全量导出接口，保持诚实语义）。
+      page: events.page,
+      page_count: events.pageCount,
+      total: events.total,
+      page_exported_count: filteredRows.length,
+      trace_ids: filteredRows.map(eventTrace).filter((trace) => trace !== "-"),
+    };
+    // M725-F02：导出发生时间在这次导出第一次点击时取一次，导出成功之前同样的导出内容都沿用（切页回来、中间导出过别的也一样）——
+    // 没拿到结果再点时请求内容逐字不变，客户端才认得出是同一次操作、沿用首发的提交编号，不会再登记一条。
+    const operation = ["audit-events-export", exportReason, payload];
     const request = {
       idempotency_key: `audit-export-${Date.now()}`,
       operator_note: exportReason,
@@ -257,15 +265,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
         event_category: "audit",
         result: "success",
         summary: exportReason,
-        occurred_at: nowIso(),
-        payload: {
-          // 导出留痕记录当前页快照与全量总数（后端未提供全量导出接口，保持诚实语义）。
-          page: events.page,
-          page_count: events.pageCount,
-          total: events.total,
-          page_exported_count: filteredRows.length,
-          trace_ids: filteredRows.map(eventTrace).filter((trace) => trace !== "-"),
-        },
+        occurred_at: firstSubmitTime(operation),
+        payload,
       }],
     };
     setBusyAction("audit_events_exported");
@@ -273,6 +274,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     setGlobalError(null);
     try {
       const result = await api.post("/api/v1/evidence/events", request);
+      forgetSubmitTime(operation);
       setActionResult({ action: "audit_events_exported", audit: "evidence.events_reported", request, result });
       events.reload();
     } catch (exportError) {
