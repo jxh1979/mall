@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.41
+// 文件版本：V0.42
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -193,8 +193,10 @@ public class AccessService {
                     // M001-F16（PGM 权限规则「数据的项目与商户隔离不提供关闭开关」、第 703 行「跨商户……权限每次均须先审批」；
                     // 操作员 2026-09-26 更正段）：修改在用模板等同给在用员工增减权限，带商户归属的操作人与套用入口过同一道商户闸——
                     // 模板行锁内重读在用员工（含非岗位套用），预锁之后才套上的员工补锁后再读归属，任一不属本商户即 403、不写库。
+                    // M736（治理地图第 653 行「……平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到。」）：不带商户归属的非平台管理员
+                    // 同样逐人过这道闸——在用员工里有操作人跨项目触及不到的账号即 403 CROSS_ORG_FORBIDDEN、不写库；平台管理员的行为不变。
                     List<PermissionTemplateApplication> holders = repository.findActiveTemplateApplications(id);
-                    if (!isBlank(actor.merchantId())) {
+                    if (!isBlank(actor.merchantId()) || !reach.platformAdmin()) {
                         repository.lockAccessUsers(holders.stream().map(PermissionTemplateApplication::targetId)
                                 .filter(userId -> !lockedUsers.contains(userId)).distinct().sorted().toList());
                         holders.forEach(application -> requireSameOrganization(actor, requireTargetUser(application.targetId()), reach));

@@ -5765,6 +5765,32 @@ class AccessJdbcIntegrationTests {
         }
     }
 
+    // M736-F07（同上所选选项原文「……外部机构账号一律碰不到」；M001-F16 更正段「修改在用模板等同给在用员工增减权限」）：真库＋真实接口——
+    // 乙项目的项目自有模板套给归属在乙项目的外部机构账号；经只勾了乙项目的角色持模板维护权限的甲项目员工修改该模板，403 CROSS_ORG_FORBIDDEN，
+    // 模板条目不变。
+    @Test
+    void crossProjectHolderEditOfATemplateHeldByAnExternalAccountIsRejectedThroughTheEndpoint() throws Exception {
+        M736Fixture f = m736Fixture();
+        String role = m736CreateRole(m736Admin(f), "m736-f07-role-" + f.suffix(), List.of("access.permission_template.manage"), false,
+                List.of(f.projectB()));
+        repository.assignUserRole(f.staffA(), role); // 夹具直接落行：角色含须审批码（同 J4）
+        String vendorInB = "usr_m736_vendor_b_" + f.suffix();
+        repository.createUser(new AccessUser(vendorInB, vendorInB, "outsourced_vendor", f.projectB(), null, "active", Instant.now()));
+        String templateId = "tpl_m736_f07_" + f.suffix();
+        repository.createTemplate(new PermissionTemplate(templateId, templateId, templateId, "M001 test template", "base", null,
+                "organization", f.projectB(), "merge", null, null, false, "active", "integration test", "seed-admin",
+                Instant.now(), Instant.now(), Instant.now()), grants(templateId, DAILY_A));
+        repository.applyTemplate(templateId, List.of(vendorInB), null, null, false, "seed-admin");
+
+        mockMvc.perform(put("/api/v1/access/permission-templates/" + templateId).with(m736Staff(f.staffA(), f.projectA()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(templateJson("m736-f07-edit-" + f.suffix(), "M736 改名 " + f.suffix(), "base", "project")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(vendorInB)));
+        assertThat(templateCodes(templateId)).containsExactly(DAILY_A);
+    }
+
     // M736-J5（操作员 2026-09-25 答「也算」；确认句「（含经岗位得到）」）：真库＋真实接口——岗位映射挂一个只含日常权限、只勾了乙项目的角色，
     // 平台管理员给甲项目员工定岗（不拦）；该员工没有直接分配的角色，经岗位派生的角色看得到乙项目员工的有效权限，丙项目 403 CROSS_ORG_FORBIDDEN。
     @Test

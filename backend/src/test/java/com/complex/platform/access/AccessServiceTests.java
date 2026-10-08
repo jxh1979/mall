@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -6234,6 +6234,43 @@ class AccessServiceTests {
         assertThat(accessRepository.users.values()).noneMatch(user -> "xp_vendor_b".equals(user.username()));
         assertThat(service.createAccessUser(new AccessUserRequest("xp-u9-a", null, List.of(), "xp_vendor_a", "password", null,
                 "outsourced_vendor", "org_a", null, "active")).organizationId()).isEqualTo("org_a");
+    }
+
+    // M736-F07（同一追加句的下一句：「……平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到。」；M001-F16 更正段「修改在用模板
+    // 等同给在用员工增减权限」）：乙项目的项目自有模板套给乙项目的外部机构账号；经勾了乙项目的角色持模板维护权限的甲项目员工修改该模板——
+    // 拒（403 CROSS_ORG_FORBIDDEN），换幂等键再来仍拒，模板条目、该账号的有效权限都不变，不写逐人留痕。对照：只被乙项目普通员工在用的
+    // 模板，他照常能改并逐人留痕；乙项目自己的人改这张外部机构账号在用的本项目模板照常成功。
+    @Test
+    void crossProjectHolderCannotEditATemplateHeldByAnExternalAccountOfTheTickedProject() {
+        xpProjects("org_a", "org_b");
+        xpRole("role_xp_tpl", List.of("access.permission_template.manage", M002_VIEW), false, "org_b");
+        xpUser("usr_xp_b", "org_b");
+        accessRepository.users.put("usr_xp_vendor_b", new AccessUser("usr_xp_vendor_b", "usr_xp_vendor_b", "outsourced_vendor", "org_b",
+                null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        xpTemplate("tpl_xp_vendor", "org_b");
+        xpTemplate("tpl_xp_staff", "org_b");
+        accessRepository.applyTemplate("tpl_xp_vendor", List.of("usr_xp_vendor_b"), null, null, false, "usr_admin");
+        accessRepository.applyTemplate("tpl_xp_staff", List.of("usr_xp_b"), null, null, false, "usr_admin");
+        xpActAs("usr_xp_holder", "role_xp_tpl");
+
+        for (int round = 1; round <= 2; round++) {
+            String key = "xp-f07-vendor-" + round;
+            xpExpect(() -> service.updatePermissionTemplate("tpl_xp_vendor", namedRequest(key, "跨项目模板", "base")),
+                    403, "CROSS_ORG_FORBIDDEN", "不能为其他组织的用户分配权限：usr_xp_vendor_b");
+        }
+        assertThat(accessRepository.items.get("tpl_xp_vendor")).extracting(PermissionTemplateItem::permissionCode).containsExactly(M002_VIEW);
+        assertThat(accessRepository.findPermissionEffects("usr_xp_vendor_b", Instant.now()))
+                .extracting(AccessRepository.PermissionEffect::permissionCode).containsExactly(M002_VIEW);
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("permission_template.effect_changed");
+
+        service.updatePermissionTemplate("tpl_xp_staff", namedRequest("xp-f07-staff", "跨项目模板", "base"));
+        assertThat(accessRepository.items.get("tpl_xp_staff")).isEmpty();
+        assertThat(effectChanged("xp-f07-staff")).extracting(AuditEvent::businessId).containsExactly("usr_xp_b");
+
+        authenticateAsOrgUser("usr_xp_b", "usr_xp_b", "org_b");
+        service.updatePermissionTemplate("tpl_xp_vendor", namedRequest("xp-f07-local", "跨项目模板", "base"));
+        assertThat(accessRepository.items.get("tpl_xp_vendor")).isEmpty();
+        assertThat(effectChanged("xp-f07-local")).extracting(AuditEvent::businessId).containsExactly("usr_xp_vendor_b");
     }
 
     // M736-U10（D-032：平台管理员不受项目隔离约束）：库里有可跨项目角色、项目集合不为空时，平台管理员各入口照旧——全量列角色、模板

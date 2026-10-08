@@ -532,7 +532,10 @@ export default function AdminApp() {
   // 导航与直链仍能进访问治理工作台去解除；页内只放行「移除本人显式拒绝」，其余路由门禁不变。
   const isMasterSession = user?.id === "usr_master_authority" && user?.username === "master-authority";
   function routePermissions(target: AdminRoute) {
-    return isMasterSession && target.pageId === "ADM-ACC-003" ? [] : target.requiredPermissions;
+    if (target.pageId !== "ADM-ACC-003") return target.requiredPermissions;
+    if (isMasterSession) return [];
+    // M736-F08（治理地图第 653 行「能配置角色的人都可以设置这一项。」）：有 access.role.manage 的人没有分配角色权限也能进本页配角色；页内各动作照旧各自判权限。
+    return hasPermissions(effectivePermissions, ["access.role.manage"]) ? ["access.role.manage"] : target.requiredPermissions;
   }
 
   function navigate(nextRoute: AdminRoute) {

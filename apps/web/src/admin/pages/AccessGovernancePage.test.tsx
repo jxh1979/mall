@@ -536,4 +536,15 @@ describe("M002-F34 最高权限本人自设拒绝后界面不卡死", () => {
     expect(screen.queryByTestId("access-governance-page")).toBeNull();
     expect(button("admin-nav-ADM-ACC-003").disabled).toBe(true);
   });
+
+  // M736-F08（治理地图第 653 行「能配置角色的人都可以设置这一项。」）：有角色配置权限、没有分配角色权限的人也能进访问治理工作台配角色；
+  // 页内装配角色仍按分配角色权限禁用。
+  it("张三有角色配置权限、没有分配角色权限：直链进访问治理工作台，导航项可点，新建角色入口在，装配角色不可用", async () => {
+    renderAppAs(STAFF, { status: "ready", value: { grants: ["access.role.manage", "access.role.view", "access.permission.view"], denies: [], wildcard: false } }, "/admin/access/governance");
+    await waitFor(() => expect(screen.queryByTestId("access-governance-page")).not.toBeNull(), { timeout: 3000 });
+    expect(screen.queryByTestId("admin-permission-denied")).toBeNull();
+    expect(button("admin-nav-ADM-ACC-003").disabled).toBe(false);
+    expect(await screen.findByTestId("access-role-create-open")).toBeTruthy();
+    expect(button("access-role-assign").disabled).toBe(true);
+  });
 });

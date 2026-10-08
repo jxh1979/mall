@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -258,8 +258,8 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
   const groupedRolePermissions = React.useMemo(() => groupPermissionsByMenuModule(rolePermissions), [rolePermissions]);
 
   // 无权限副资源不请求（根因修）：授权列表/概要卡需 access.grant_request.view、用户清单需 access.user.view、角色清单需 access.role.view，
-  // 本页 gate 仅 access.role.assign 不含这三码——缺权限裸 await 会 403 reject 整个 Promise.all 致整页报错，故一并门控
-  //（position-role-templates 与页面同码 access.role.assign，按 canRoleAssign 门控，见下方 M002-F34 说明）。
+  // 本页 gate 为 access.role.assign 或 access.role.manage 其一（M736-F08），不含这三码——缺权限裸 await 会 403 reject 整个 Promise.all 致整页报错，故一并门控
+  //（position-role-templates 需 access.role.assign，按 canRoleAssign 门控，见下方 M002-F34 说明）。
   const canGrantView = hasPermissions(effectivePermissions, ["access.grant_request.view"]);
   const canUserView = hasPermissions(effectivePermissions, ["access.user.view"]);
   const canRoleView = hasPermissions(effectivePermissions, ["access.role.view"]);
