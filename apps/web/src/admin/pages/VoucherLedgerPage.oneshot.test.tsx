@@ -84,6 +84,7 @@ describe("VoucherLedgerPage 同一次核销／发放没拿到结果再提交", (
     await waitFor(() => expect(screen.getByTestId("voucher-redeem-guided-error")).toBeTruthy(), { timeout: 5000 });
     expect(posts).toHaveLength(1);
 
+    await waitFor(() => expect(screen.getByTestId("voucher-redeem-save").className).not.toContain("ant-btn-loading"), { timeout: 5000 });
     fireEvent.click(screen.getByTestId("voucher-redeem-save"));
     await waitFor(() => expect(screen.queryByTestId("voucher-redeem-guided")).toBeNull(), { timeout: 5000 });
     expect(posts).toHaveLength(2);
@@ -105,6 +106,7 @@ describe("VoucherLedgerPage 同一次核销／发放没拿到结果再提交", (
     await waitFor(() => expect(screen.getByTestId("voucher-issue-guided-error")).toBeTruthy(), { timeout: 5000 });
     expect(posts).toHaveLength(1);
 
+    await waitFor(() => expect(screen.getByTestId("voucher-issue-save").className).not.toContain("ant-btn-loading"), { timeout: 5000 });
     fireEvent.click(screen.getByTestId("voucher-issue-save"));
     await waitFor(() => expect(screen.queryByTestId("voucher-issue-guided")).toBeNull(), { timeout: 5000 });
     expect(posts).toHaveLength(2);

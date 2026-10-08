@@ -177,6 +177,7 @@ describe("AdmissionAuditsPage 登记导出留痕没拿到结果再点", () => {
     await waitFor(() => expect(screen.getByTestId("admission-audits-guided-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
     expect(posts).toHaveLength(1);
 
+    await waitFor(() => expect(screen.getByTestId("admission-audits-export").className).not.toContain("ant-btn-loading"), { timeout: 5000 });
     fireEvent.click(screen.getByTestId("admission-audits-export"));
     await waitFor(() => expect(posts).toHaveLength(2), { timeout: 5000 });
     expect(JSON.parse(posts[1]!).events[0].occurred_at).toBe(JSON.parse(posts[0]!).events[0].occurred_at);

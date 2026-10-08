@@ -86,6 +86,7 @@ describe("FloorPlanImportPage 创建导入的请求编号跟着一次操作走",
     await waitFor(() => expect(screen.getByTestId("floor-plan-import-guided-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
     expect(posts).toHaveLength(1);
 
+    await waitFor(() => expect(screen.getByTestId("floor-plan-import-create").className).not.toContain("ant-btn-loading"), { timeout: 5000 });
     fireEvent.click(screen.getByTestId("floor-plan-import-create"));
     await waitFor(() => expect(screen.queryByTestId("floor-plan-import-guided")).toBeNull(), { timeout: 5000 });
     expect(posts).toHaveLength(2);
