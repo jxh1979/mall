@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.21
+// 文件版本：V0.22
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -95,6 +96,27 @@ class JdbcAccessRepository implements AccessRepository {
         // M001-F13：FOR SHARE 与编辑的 NO KEY UPDATE 互斥（KEY SHARE 不互斥，拦不住编辑）。
         jdbcTemplate.queryForList("SELECT id FROM permission_templates WHERE id = :id FOR SHARE",
                 Map.of("id", templateId), String.class);
+    }
+
+    @Override
+    public void lockRolesForEdit() {
+        // M736 第二步：授权申请的建单、审批、范围变更持 roles 表 SHARE（lockGrantAuthorizationFacts），改勾选与减少落地取 ROW EXCLUSIVE，
+        // 两边先到先得——审批比完指纹到落地之间角色不会被改。必须在任何员工行之前取（道理同 lockPermissionTemplatesForEdit）。
+        jdbcTemplate.getJdbcTemplate().execute("LOCK TABLE roles IN ROW EXCLUSIVE MODE");
+    }
+
+    @Override
+    public void lockRoleForEdit(String roleId) {
+        // M736 第二步：行锁取 NO KEY UPDATE（同 lockTemplateForEdit），两个人同时改同一角色在这里排队。
+        jdbcTemplate.queryForList("SELECT id FROM roles WHERE id = :id FOR NO KEY UPDATE",
+                Map.of("id", roleId), String.class);
+    }
+
+    @Override
+    public void lockRoleForGrant(String roleId) {
+        // M736 第二步：FOR SHARE 与改勾选的 NO KEY UPDATE 互斥（外键那种 KEY SHARE 不互斥，拦不住）。
+        jdbcTemplate.queryForList("SELECT id FROM roles WHERE id = :id FOR SHARE",
+                Map.of("id", roleId), String.class);
     }
 
     @Override
@@ -416,7 +438,7 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     public List<RoleRecord> listRoles() {
         return attachPermissionCodes(jdbcTemplate.query("""
-                SELECT id, role_name, description, data_scope, status, created_at, organization_id
+                SELECT id, role_name, description, data_scope, status, created_at, organization_id, view_all_projects
                   FROM roles
                  ORDER BY role_name
                 """, this::mapRoleShallow));
@@ -426,14 +448,17 @@ class JdbcAccessRepository implements AccessRepository {
     public List<RoleRecord> listRoles(String organizationId) {
         if (organizationId == null) return listRoles();
         return attachPermissionCodes(jdbcTemplate.query("""
-                SELECT id, role_name, description, data_scope, status, created_at, organization_id
+                SELECT id, role_name, description, data_scope, status, created_at, organization_id, view_all_projects
                   FROM roles
                  WHERE organization_id IS NULL OR organization_id = :organization_id
                  ORDER BY role_name
                 """, Map.of("organization_id", organizationId), this::mapRoleShallow));
     }
 
-    /** 4.4：列表路径不逐角色查权限（消除 1+N）——先取角色，再一次批量取全部 role_permissions 挂回。 */
+    /**
+     * 4.4：列表路径不逐角色查权限（消除 1+N）——先取角色，再一次批量取全部 role_permissions 挂回。
+     * M736：逐个勾选的可查看项目（role_viewable_projects）同样一次批量挂回。
+     */
     private List<RoleRecord> attachPermissionCodes(List<RoleRecord> roles) {
         if (roles.isEmpty()) {
             return roles;
@@ -449,9 +474,20 @@ class JdbcAccessRepository implements AccessRepository {
                 (org.springframework.jdbc.core.RowCallbackHandler) rs ->
                         byRole.computeIfAbsent(rs.getString("role_id"), k -> new ArrayList<>())
                                 .add(rs.getString("permission_code")));
+        java.util.Map<String, List<String>> viewableByRole = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT role_id, viewable_id
+                  FROM role_viewable_projects
+                 WHERE role_id IN (:ids)
+                 ORDER BY role_id, viewable_id
+                """, new MapSqlParameterSource("ids", ids),
+                (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                        viewableByRole.computeIfAbsent(rs.getString("role_id"), k -> new ArrayList<>())
+                                .add(rs.getString("viewable_id")));
         return roles.stream().map(r -> new RoleRecord(
                 r.id(), r.roleName(), r.description(), r.dataScope(), r.status(), r.createdAt(),
-                byRole.getOrDefault(r.id(), List.of()), r.organizationId())).toList();
+                byRole.getOrDefault(r.id(), List.of()), r.organizationId(),
+                r.viewAllProjects(), viewableByRole.getOrDefault(r.id(), List.of()))).toList();
     }
 
     private RoleRecord mapRoleShallow(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -463,7 +499,9 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
                 List.of(),
-                resultSet.getString("organization_id"));
+                resultSet.getString("organization_id"),
+                resultSet.getBoolean("view_all_projects"),
+                List.of());
     }
 
     @Override
@@ -471,10 +509,10 @@ class JdbcAccessRepository implements AccessRepository {
     public RoleRecord createRole(RoleRecord role) {
         jdbcTemplate.update("""
                 INSERT INTO roles (
-                    id, role_name, description, data_scope, status, created_at, organization_id
+                    id, role_name, description, data_scope, status, created_at, organization_id, view_all_projects
                 )
                 VALUES (
-                    :id, :role_name, :description, :data_scope, :status, :created_at, :organization_id
+                    :id, :role_name, :description, :data_scope, :status, :created_at, :organization_id, :view_all_projects
                 )
                 """, new MapSqlParameterSource()
                 .addValue("id", role.id())
@@ -483,7 +521,8 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("data_scope", role.dataScope())
                 .addValue("status", role.status())
                 .addValue("created_at", timestampWithTimeZone(role.createdAt()))
-                .addValue("organization_id", role.organizationId()));
+                .addValue("organization_id", role.organizationId())
+                .addValue("view_all_projects", role.viewAllProjects()));
         jdbcTemplate.update("""
                 DELETE FROM role_permissions
                  WHERE role_id = :role_id
@@ -499,17 +538,217 @@ class JdbcAccessRepository implements AccessRepository {
                             .addValue("permission_code", permissionCode))
                     .toArray(MapSqlParameterSource[]::new));
         }
+        // M736：逐个勾选的可查看项目，一行一条
+        if (!role.viewableProjectIds().isEmpty()) {
+            jdbcTemplate.batchUpdate("""
+                    INSERT INTO role_viewable_projects (role_id, viewable_id)
+                    VALUES (:role_id, :viewable_id)
+                    ON CONFLICT (role_id, viewable_id) DO NOTHING
+                    """, role.viewableProjectIds().stream()
+                    .map(viewableId -> new MapSqlParameterSource()
+                            .addValue("role_id", role.id())
+                            .addValue("viewable_id", viewableId))
+                    .toArray(MapSqlParameterSource[]::new));
+        }
         return role;
     }
 
     @Override
     public Optional<RoleRecord> findRoleById(String roleId) {
         List<RoleRecord> result = jdbcTemplate.query("""
-                SELECT id, role_name, description, data_scope, status, created_at, organization_id
+                SELECT id, role_name, description, data_scope, status, created_at, organization_id, view_all_projects
                   FROM roles
                  WHERE id = :id
                 """, Map.of("id", roleId), this::mapRole);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public java.util.Set<String> findProjectOrganizationIds() {
+        // 与候选清单同一集合。ponytail: 每次判定取全集（几十行）；上千行时改按编号查。
+        return listRoleProjectOptions().stream().map(RoleProjectOption::id).collect(java.util.stream.Collectors.toSet());
+    }
+
+    // M736：项目表与城市项目公司不加状态条件，只有域主管公司取在用的（操作员 2026-10-01 所选选项原文「（只算在用的）」说的是域主管公司）。
+    // 顶层平台主体不在其中。三类各自成条，按项目、城市项目公司、域主管公司的次序，同类按名称。
+    @Override
+    public List<RoleProjectOption> listRoleProjectOptions() {
+        return jdbcTemplate.query("""
+                SELECT id, name, 'project' AS kind, 1 AS kind_order
+                  FROM projects
+                UNION ALL
+                SELECT id, entity_name AS name, entity_role AS kind,
+                       CASE entity_role WHEN 'project_company' THEN 2 ELSE 3 END AS kind_order
+                  FROM business_entities
+                 WHERE entity_role = 'project_company'
+                    OR (entity_role = 'management_company' AND status = 'active')
+                 ORDER BY kind_order, name, id
+                """, (resultSet, rowNumber) -> new RoleProjectOption(
+                resultSet.getString("id"), resultSet.getString("name"), resultSet.getString("kind")));
+    }
+
+    // M736 第二步：持有人＝直接分配的（user_roles）并上岗位派生的（user_position_assignments.assigned_role_id）。
+    @Override
+    public List<String> listRoleHolderIds(String roleId) {
+        return jdbcTemplate.queryForList("""
+                SELECT user_id FROM user_roles WHERE role_id = :role_id
+                UNION
+                SELECT user_id FROM user_position_assignments WHERE assigned_role_id = :role_id
+                 ORDER BY user_id
+                """, Map.of("role_id", roleId), String.class);
+    }
+
+    @Override
+    public Map<String, Set<String>> findRoleViewableProjectHolds(String userId) {
+        Map<String, Set<String>> holds = new java.util.HashMap<>();
+        jdbcTemplate.query("""
+                SELECT role_id, viewable_id
+                  FROM role_viewable_project_holds
+                 WHERE user_id = :user_id
+                """, new MapSqlParameterSource("user_id", userId),
+                (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                        holds.computeIfAbsent(rs.getString("role_id"), k -> new java.util.HashSet<>())
+                                .add(rs.getString("viewable_id")));
+        return holds;
+    }
+
+    @Override
+    public Map<String, Set<String>> listRoleViewableProjectHolds(String roleId) {
+        Map<String, Set<String>> holds = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT user_id, viewable_id
+                  FROM role_viewable_project_holds
+                 WHERE role_id = :role_id
+                 ORDER BY user_id, viewable_id
+                """, new MapSqlParameterSource("role_id", roleId),
+                (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                        holds.computeIfAbsent(rs.getString("user_id"), k -> new java.util.LinkedHashSet<>())
+                                .add(rs.getString("viewable_id")));
+        return holds;
+    }
+
+    @Override
+    public void addRoleViewableProjectHolds(String userId, String roleId, List<String> viewableIds) {
+        if (viewableIds.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.batchUpdate("""
+                INSERT INTO role_viewable_project_holds (user_id, role_id, viewable_id)
+                VALUES (:user_id, :role_id, :viewable_id)
+                ON CONFLICT (user_id, role_id, viewable_id) DO NOTHING
+                """, viewableIds.stream()
+                .map(viewableId -> new MapSqlParameterSource()
+                        .addValue("user_id", userId)
+                        .addValue("role_id", roleId)
+                        .addValue("viewable_id", viewableId))
+                .toArray(MapSqlParameterSource[]::new));
+    }
+
+    @Override
+    public int deleteRoleViewableProjectHolds(String userId, String roleId) {
+        return jdbcTemplate.update("""
+                DELETE FROM role_viewable_project_holds
+                 WHERE user_id = :user_id AND role_id = :role_id
+                """, Map.of("user_id", userId, "role_id", roleId));
+    }
+
+    @Override
+    @Transactional
+    public void addRoleViewableProjects(String roleId, boolean viewAllProjects, List<String> viewableIds) {
+        if (viewAllProjects) {
+            jdbcTemplate.update("UPDATE roles SET view_all_projects = TRUE WHERE id = :role_id", Map.of("role_id", roleId));
+        }
+        if (!viewableIds.isEmpty()) {
+            jdbcTemplate.batchUpdate("""
+                    INSERT INTO role_viewable_projects (role_id, viewable_id)
+                    VALUES (:role_id, :viewable_id)
+                    ON CONFLICT (role_id, viewable_id) DO NOTHING
+                    """, viewableIds.stream()
+                    .map(viewableId -> new MapSqlParameterSource()
+                            .addValue("role_id", roleId)
+                            .addValue("viewable_id", viewableId))
+                    .toArray(MapSqlParameterSource[]::new));
+        }
+    }
+
+    @Override
+    public Set<String> findRoleViewableProjectRemovals(String roleId) {
+        return Set.copyOf(jdbcTemplate.queryForList("""
+                SELECT viewable_id FROM role_viewable_projects
+                 WHERE role_id = :role_id AND removal_review_id IS NOT NULL
+                UNION ALL
+                SELECT '*' FROM roles
+                 WHERE id = :role_id AND view_all_removal_review_id IS NOT NULL
+                """, Map.of("role_id", roleId), String.class));
+    }
+
+    // M736 第二步（操作员 2026-10-03 所选选项原文「减少也要审批通过后才生效；审批期间持有人仍能看 C。」）：提交减少时只记复核单号，
+    // 勾选行与 view_all_projects 都不动。以下为技术推导：已带标记的不改（同一条目的减少不重复送审，由服务层在锁内先核）。
+    @Override
+    @Transactional
+    public void markRoleViewableProjectRemoval(String roleId, boolean viewAllProjects, List<String> viewableIds, String reviewId) {
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("role_id", roleId).addValue("review_id", reviewId).addValue("viewable_ids", viewableIds);
+        if (!viewableIds.isEmpty()) { // 空 IN () 是语法错误
+            jdbcTemplate.update("""
+                    UPDATE role_viewable_projects SET removal_review_id = :review_id
+                     WHERE role_id = :role_id AND viewable_id IN (:viewable_ids) AND removal_review_id IS NULL
+                    """, parameters);
+        }
+        if (viewAllProjects) {
+            jdbcTemplate.update("""
+                    UPDATE roles SET view_all_removal_review_id = :review_id
+                     WHERE id = :role_id AND view_all_removal_review_id IS NULL
+                    """, parameters);
+        }
+    }
+
+    // M736 第二步：复核单整单通过时落地减少。按复核单号匹配——标记里记的是提交减少时建的那张单的号。
+    @Override
+    @Transactional
+    public List<String> applyRoleViewableProjectRemoval(String roleId, String reviewId) {
+        Map<String, String> parameters = Map.of("role_id", roleId, "review_id", reviewId);
+        List<String> removed = new ArrayList<>(jdbcTemplate.queryForList("""
+                DELETE FROM role_viewable_projects
+                 WHERE role_id = :role_id AND removal_review_id = :review_id
+                RETURNING viewable_id
+                """, parameters, String.class));
+        if (jdbcTemplate.update("""
+                UPDATE roles SET view_all_projects = FALSE, view_all_removal_review_id = NULL
+                 WHERE id = :role_id AND view_all_removal_review_id = :review_id
+                """, parameters) > 0) {
+            removed.add("*");
+        }
+        if (!removed.isEmpty()) { // 空 IN () 是语法错误
+            jdbcTemplate.update("DELETE FROM role_viewable_project_holds WHERE role_id = :role_id AND viewable_id IN (:viewable_ids)",
+                    new MapSqlParameterSource().addValue("role_id", roleId).addValue("viewable_ids", removed));
+        }
+        return removed;
+    }
+
+    @Override
+    @Transactional
+    public void clearRoleViewableProjectRemoval(String roleId, String reviewId) {
+        Map<String, String> parameters = Map.of("role_id", roleId, "review_id", reviewId);
+        jdbcTemplate.update("""
+                UPDATE role_viewable_projects SET removal_review_id = NULL
+                 WHERE role_id = :role_id AND removal_review_id = :review_id
+                """, parameters);
+        jdbcTemplate.update("""
+                UPDATE roles SET view_all_removal_review_id = NULL
+                 WHERE id = :role_id AND view_all_removal_review_id = :review_id
+                """, parameters);
+    }
+
+    // M736 第二步：两条路（直接分配、岗位派生）都不再持有的角色，待批条目随之删除；以后重新得到角色的人按当时的勾选。
+    // 两条路都持有、只去掉一条的不删；派生角色没变的重派生不删。
+    private void dropHoldsOfRolesNoLongerHeld(String userId) {
+        jdbcTemplate.update("""
+                DELETE FROM role_viewable_project_holds h
+                 WHERE h.user_id = :user_id
+                   AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = h.user_id AND ur.role_id = h.role_id)
+                   AND NOT EXISTS (SELECT 1 FROM user_position_assignments p WHERE p.user_id = h.user_id AND p.assigned_role_id = h.role_id)
+                """, Map.of("user_id", userId));
     }
 
     @Override
@@ -529,6 +768,7 @@ class JdbcAccessRepository implements AccessRepository {
                  WHERE user_id = :user_id
                    AND role_id = :role_id
                 """, Map.of("user_id", userId, "role_id", roleId));
+        dropHoldsOfRolesNoLongerHeld(userId);
     }
 
     @Override
@@ -1032,6 +1272,7 @@ class JdbcAccessRepository implements AccessRepository {
         if (changed != 1) {
             throw new IllegalStateException("岗位派生授权未能保存");
         }
+        dropHoldsOfRolesNoLongerHeld(userId);
     }
 
     @Override
@@ -1753,7 +1994,9 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
                 findRolePermissionCodes(roleId),
-                resultSet.getString("organization_id")
+                resultSet.getString("organization_id"),
+                resultSet.getBoolean("view_all_projects"),
+                findRoleViewableProjectIds(roleId)
         );
     }
 
@@ -1873,6 +2116,15 @@ class JdbcAccessRepository implements AccessRepository {
                  WHERE role_id = :role_id
                  ORDER BY permission_code
                 """, Map.of("role_id", roleId), (resultSet, rowNumber) -> resultSet.getString("permission_code"));
+    }
+
+    private List<String> findRoleViewableProjectIds(String roleId) {
+        return jdbcTemplate.query("""
+                SELECT viewable_id
+                  FROM role_viewable_projects
+                 WHERE role_id = :role_id
+                 ORDER BY viewable_id
+                """, Map.of("role_id", roleId), (resultSet, rowNumber) -> resultSet.getString("viewable_id"));
     }
 
     private AccessRepository.Effect effect(String effect) {

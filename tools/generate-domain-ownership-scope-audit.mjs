@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -50,6 +50,8 @@ const inheritedRules = [
   { pattern: /^inventory_trace_handovers$/, source: "movement/batch linkage", path: "movement/batch linkage -> inventory_stock_movements/batches" },
   { pattern: /^permission_template_/, source: "template_id", path: "template_id -> permission_templates -> organization/global scope" },
   { pattern: /^role_permissions$/, source: "role_id/permission_id", path: "role_id/permission_id -> roles/permissions" },
+  { pattern: /^role_viewable_projects$/, source: "role_id", path: "role_id -> roles -> organization scope; viewable_id 是勾选的可查看目标，不是行归属" },
+  { pattern: /^role_viewable_project_holds$/, source: "user_id/role_id", path: "user_id/role_id -> access_users/roles -> organization scope; viewable_id 是待重新审批的可查看目标，不是行归属" },
   { pattern: /^user_roles$/, source: "user_id/role_id", path: "user_id/role_id -> access_users/roles -> organization scope" },
   { pattern: /^user_permission_overrides$/, source: "user_id", path: "user_id -> access_users -> organization scope" },
   { pattern: /^terminal_/, source: "terminal/device id", path: "terminal/device id -> venue/project deployment scope" },

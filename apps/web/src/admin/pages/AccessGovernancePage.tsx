@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.10
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -10,12 +10,19 @@ import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
-import type { AccessUserRow, AdminPageProps } from "../types";
+import { groupPermissionsByMenuModule, permissionCode } from "../adminRoutes";
+import type { AccessUserRow, AdminPageProps, PermissionDefinitionRow } from "../types";
 
 type BoundedInt = { value: number; min: number; max: number };
 type GrantPolicy = { windowDays: BoundedInt; positionThreshold: BoundedInt; userThreshold: BoundedInt;
   riskReviews: Record<"low" | "medium" | "high" | "critical", { approvalLevel: string; requiredLevel: number }> };
-type RoleRow = { id: string; roleName?: string | null; roleCode?: string | null; status?: string | null; permissionCodes?: string[] };
+type RoleRow = { id: string; roleName?: string | null; roleCode?: string | null; status?: string | null; permissionCodes?: string[];
+  viewAllProjects?: boolean; viewableProjectIds?: string[] };
+type RoleProjectOption = { id: string; name: string; kind: string };
+// M736 第二步：角色可查看项目的现状。pendingRemovalIds＝减少在待审的条目；pendingReapprovals＝还没重新审批的持有人。
+type RoleViewableProjectsView = { roleId: string; viewAllProjects?: boolean; viewableProjectIds?: string[]; pendingRemovalIds?: string[];
+  pendingReapprovals?: Array<{ userId: string; username?: string | null; viewableIds?: string[]; reapprovalPending?: boolean }> };
+type RoleEdit = { role: RoleRow; base: RoleViewableProjectsView; viewAll: boolean; ids: string[]; open: boolean; finalApproverId: string };
 type PositionRoleTemplateRow = {
   id: string; positionCode: string; staffLevelId: string; roleId?: string | null; templateId?: string | null;
   organizationId?: string | null; status?: string | null; createdBy?: string | null;
@@ -66,6 +73,7 @@ const GRANT_TYPE_LABELS: Record<string, string> = {
   user_role: "用户角色", user_position: "用户职位", temporary_permission: "临时权限",
   role_permission: "角色权限", user_scope_change: "人员范围变更", position_high_risk_release: "岗位高危权限释放",
   user_permission_grant: "员工单独授予", user_permission_deny_removal: "解除员工显式拒绝",
+  role_project_reapproval: "重新审批可查看项目",
 };
 // M002-F01：员工单独授予 / 解除员工显式拒绝两类申请只填权限码（不填过期时间、不带单次有效）。
 // M002-F20：岗位高危权限释放（释放单被驳回后对同一挂起再次发起）同样只填权限码。
@@ -88,6 +96,14 @@ function zhLevel(code?: string | null): string {
 const GRANT_APPLY = ["access.grant_request.apply"];
 const GRANT_VIEW = ["access.grant_request.view"];
 const GRANT_REVIEW = ["access.grant_request.review", "governance.supervisor_review.approve"];
+// M736：新建角色要按菜单模块勾权限点，除建角色权限外还要能读权限字典。
+const ROLE_CREATE = ["access.role.manage", "access.permission.view"];
+// M736（操作员 2026-10-03 裁决「三类各自单列」）：逐个勾选的清单里项目、城市项目公司、在用的域主管公司各列为独立条目，勾哪条只管哪条。
+const ROLE_PROJECT_KINDS: Array<[string, string]> = [["project", "项目"], ["project_company", "城市项目公司"], ["management_company", "域主管公司"]];
+const NEW_ROLE = { roleName: "", description: "", permissionCodes: [] as string[], viewAllProjects: false, viewableProjectIds: [] as string[] };
+const ROLE_NAME_REQUIRED = "角色名称必填，去掉首尾空白后不能超过 120 个字";
+// M736 第二步：待审减少、待重新审批的条目里代表「可以查看全部项目」这一勾（与后端 AuthorizationService.ALL_PROJECTS 同值）。
+const ALL_PROJECTS = "*";
 
 function splitTokens(value: string) {
   return value.split(/[\n,，;；\s]+/).map((item) => item.trim()).filter(Boolean);
@@ -109,11 +125,67 @@ function roleLabel(row: RoleRow | undefined) {
   return row ? `${row.roleName ?? row.roleCode ?? row.id} (${row.id})` : "-";
 }
 
+function viewableProjectsLabel(row: RoleRow) {
+  if (row.viewAllProjects) return "全部项目";
+  return row.viewableProjectIds?.length ? `已选 ${row.viewableProjectIds.length} 个` : "—";
+}
+
+function toggled(list: string[], value: string, checked: boolean) {
+  const set = new Set(list);
+  if (checked) set.add(value);
+  else set.delete(value);
+  return [...set].sort();
+}
+
 function statusBadge(status?: string | null, label: (code: string) => string = formatBusinessStatus) {
   const value = status || "";
   const kind = value === "approved" || value === "active" ? "is-ok" : value === "rejected" ? "is-danger" : value === "pending" ? "is-warn" : "is-info";
   // 徽标文字中文化（业务HTML零英文规则）；颜色仍按原始码判定。
   return <span className={`admin-badge ${kind}`}>{value ? label(value) : "—"}</span>;
+}
+
+// M736 第二步：「改可查看项目」弹窗这次的增减（页面拿编辑后的状态与打开时读到的现状算，后端在锁内再核）。
+// 勾着全部时只看「全部」这一勾；逐个勾选的清单始终保留，所以去掉全部时清单里没动的条目不算减少。
+function viewableProjectsDelta(base: RoleViewableProjectsView, viewAll: boolean, ids: string[]) {
+  const baseIds = base.viewableProjectIds ?? [];
+  if (viewAll) return { addAll: !base.viewAllProjects, add: [] as string[], removeAll: false, remove: [] as string[] };
+  return {
+    addAll: false,
+    add: ids.filter((id) => !baseIds.includes(id)),
+    removeAll: Boolean(base.viewAllProjects),
+    remove: baseIds.filter((id) => !ids.includes(id)),
+  };
+}
+
+// M736 第二步：「可以查看全部项目」一行与三组逐项勾选行（放在 <tbody> 里），新建角色引导与「改可查看项目」弹窗共用。
+// viewAllLocked、lockedIds＝减少在待审的条目：勾选框禁用，后面标「（减少待审批）」。
+function ViewableProjectRows({ prefix, viewAll, ids, open, options, lockedIds = [], viewAllLocked = false, onViewAll, onIds, onOpen }: {
+  prefix: string; viewAll: boolean; ids: string[]; open: boolean; options: RoleProjectOption[];
+  lockedIds?: string[]; viewAllLocked?: boolean;
+  onViewAll: (checked: boolean) => void; onIds: (ids: string[]) => void; onOpen: (open: boolean) => void;
+}) {
+  return (
+    <>
+      <tr>
+        <th scope="row">可以查看全部项目</th>
+        <td>
+          <input type="checkbox" data-testid={`${prefix}-view-all`} aria-label="可以查看全部项目" checked={viewAll} disabled={viewAllLocked} onChange={(event) => onViewAll(event.target.checked)} />
+          {viewAllLocked ? "（减少待审批）" : null}
+          <button type="button" data-testid={`${prefix}-projects-toggle`} aria-label="展开逐个勾选项目" aria-expanded={open} disabled={viewAll} onClick={() => onOpen(!open)}>{open ? "－" : "＋"}</button>
+        </td>
+      </tr>
+      {open ? ROLE_PROJECT_KINDS.map(([kind, label]) => (
+        <tr key={kind} data-testid={`${prefix}-projects-${kind}`}>
+          <th scope="row">{label}</th>
+          <td>{options.filter((option) => option.kind === kind).map((option) => (
+            <label key={option.id} className="admin-checkbox">
+              <input type="checkbox" data-testid={`${prefix}-project-${option.id}`} checked={ids.includes(option.id)} disabled={lockedIds.includes(option.id)} onChange={(event) => onIds(toggled(ids, option.id, event.target.checked))} />{option.name}{lockedIds.includes(option.id) ? "（减少待审批）" : null}
+            </label>
+          ))}</td>
+        </tr>
+      )) : null}
+    </>
+  );
 }
 
 export function AccessGovernancePage({ api, user, setActionResult, setGlobalError, effectivePermissions, refreshEffectivePermissions }: AdminPageProps) {
@@ -158,7 +230,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
     permissionCodes: "access.role.assign", expiresAt: "", singleUse: true, reason: "",
   });
   const [reviewForm, setReviewForm] = React.useState({ comment: "", evidenceAttachmentIds: "" });
-  // 行明细抽屉：三张业务表（岗位模板/授权申请/智能总结）整行可点 → 该行完整字段（枚举中文·时间中文）。
+  // 行明细抽屉：四张业务表（岗位模板/授权申请/智能总结/角色）整行可点 → 该行完整字段（枚举中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-9：岗位角色模板收起为主按钮 + 分步引导弹窗（其余授权申请/审批工作流原样不动）。
   const [templateOpen, setTemplateOpen] = React.useState(false);
@@ -168,13 +240,35 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
   const [grantOpen, setGrantOpen] = React.useState(false);
   const [grantError, setGrantError] = React.useState("");
   const [grantSaving, setGrantSaving] = React.useState(false);
+  // M736（操作员 2026-10-01 说明「权限配置表格当中有一个可以查看全部项目选项……这个可以查看项目的选项，可以点击+打开」）：
+  // 「④ 角色」标签的角色表与「＋ 新建角色」两步引导（名称与说明、权限配置）。
+  const [roleCreateOpen, setRoleCreateOpen] = React.useState(false);
+  const [roleCreateError, setRoleCreateError] = React.useState("");
+  const [newRole, setNewRole] = React.useState(NEW_ROLE);
+  const [newRoleProjectsOpen, setNewRoleProjectsOpen] = React.useState(false);
+  const [rolePermissions, setRolePermissions] = React.useState<PermissionDefinitionRow[]>([]);
+  // 可查看项目的候选条目：null＝还没读过。
+  const [roleProjectOptions, setRoleProjectOptions] = React.useState<RoleProjectOption[] | null>(null);
+  const [expandedRoleId, setExpandedRoleId] = React.useState("");
+  // M736 第二步（操作员 2026-10-08 确认的治理地图追加句「可跨项目角色分配出去以后，可以直接在原角色上增加或减少可查看的项目」）：
+  // 角色行「改可查看项目」弹窗。null＝没打开；base＝打开时读到的现状，viewAll、ids＝正在编辑的勾选。
+  const [roleEdit, setRoleEdit] = React.useState<RoleEdit | null>(null);
+  const [roleEditError, setRoleEditError] = React.useState("");
+  const roleEditDelta = roleEdit ? viewableProjectsDelta(roleEdit.base, roleEdit.viewAll, roleEdit.ids) : null;
+  const groupedRolePermissions = React.useMemo(() => groupPermissionsByMenuModule(rolePermissions), [rolePermissions]);
 
   // 无权限副资源不请求（根因修）：授权列表/概要卡需 access.grant_request.view、用户清单需 access.user.view、角色清单需 access.role.view，
-  // 本页 gate 仅 access.role.assign 不含这三码——缺权限裸 await 会 403 reject 整个 Promise.all 致整页报错，故一并门控
-  //（position-role-templates 与页面同码 access.role.assign，按 canRoleAssign 门控，见下方 M002-F34 说明）。
+  // 本页 gate 为 access.role.assign 或 access.role.manage 其一（M736-F08），不含这三码——缺权限裸 await 会 403 reject 整个 Promise.all 致整页报错，故一并门控
+  //（position-role-templates 需 access.role.assign，按 canRoleAssign 门控，见下方 M002-F34 说明）。
   const canGrantView = hasPermissions(effectivePermissions, ["access.grant_request.view"]);
   const canUserView = hasPermissions(effectivePermissions, ["access.user.view"]);
   const canRoleView = hasPermissions(effectivePermissions, ["access.role.view"]);
+  // M736：权限字典与可查看项目候选不随页面加载请求——打开「＋ 新建角色」时各读一次；角色表展开「＋」要显示条目名称而候选还没读过时也读。
+  // 候选清单接口按 access.role.manage 门控，没有这个码的人不发请求（会 403），角色表只显示个数。
+  const canRoleManage = hasPermissions(effectivePermissions, ["access.role.manage"]);
+  const canRoleCreate = hasPermissions(effectivePermissions, ROLE_CREATE);
+  // M736 第二步：「改可查看项目」弹窗里「发起重新审批」按钮按申请权限显隐。
+  const canGrantApply = hasPermissions(effectivePermissions, GRANT_APPLY);
   // M002-F37（治理地图第 651 行）：员工单独授予、解除员工显式拒绝、岗位模板高危权限释放三类申请只能由具备分配/取消分配角色权限的人发起。
   const canRoleAssign = hasPermissions(effectivePermissions, ASSIGN);
   // M002-F34（依据 M002-F08 裁决「本人可以直接解除，不会卡死」）：最高权限本人拒绝了自己的 access.role.assign 时仍能进本页，
@@ -466,6 +560,129 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
     await reload();
   }
 
+  function projectNames(ids: string[]) {
+    return ids.map((id) => id === ALL_PROJECTS ? "全部项目" : roleProjectOptions?.find((option) => option.id === id)?.name ?? id).join("、");
+  }
+
+  async function openRoleCreate() {
+    setNewRole(NEW_ROLE);
+    setNewRoleProjectsOpen(false);
+    setRoleCreateError("");
+    setRoleCreateOpen(true);
+    try {
+      const [permissionRows, optionRows] = await Promise.all([
+        api.get<PermissionDefinitionRow[]>("/api/v1/access/permissions"),
+        api.get<RoleProjectOption[]>("/api/v1/access/role-project-options"),
+      ]);
+      setRolePermissions((permissionRows ?? []).filter((item) => permissionCode(item)));
+      setRoleProjectOptions(optionRows ?? []);
+    } catch (loadError) {
+      setRoleCreateError(loadError instanceof Error ? loadError.message : "权限点或可查看项目读取失败");
+    }
+  }
+
+  async function toggleRoleProjects(roleId: string) {
+    const opening = expandedRoleId !== roleId;
+    setExpandedRoleId(opening ? roleId : "");
+    if (!opening || roleProjectOptions !== null) return;
+    try {
+      setRoleProjectOptions((await api.get<RoleProjectOption[]>("/api/v1/access/role-project-options")) ?? []);
+    } catch (loadError) { setGlobalError(loadError instanceof Error ? loadError.message : "可查看项目读取失败"); }
+  }
+
+  // 提交在确认步触发，经 runWrite：失败时弹窗留开并在弹窗内显错（roleCreateError），再抛给 runWrite 报到页面；成功才关。
+  // 请求编号由 adminClient 按「一次操作」带（shared/operationKey），页面不另存。
+  async function createRole() {
+    setRoleCreateError("");
+    try {
+      const saved = await api.post<RoleRow>("/api/v1/access/roles", {
+        roleName: newRole.roleName.trim(),
+        description: newRole.description.trim() || undefined,
+        permissionCodes: newRole.permissionCodes,
+        viewAllProjects: newRole.viewAllProjects,
+        viewableProjectIds: newRole.viewAllProjects ? undefined : newRole.viewableProjectIds,
+        operatorNote: "后台新建角色",
+      });
+      setActionResult(`角色已创建：${saved.id}`);
+      setRoleCreateOpen(false);
+      await reload();
+    } catch (actionError) {
+      setRoleCreateError(actionError instanceof Error ? actionError.message : "新建角色失败");
+      throw actionError;
+    }
+  }
+
+  const roleViewableProjectsPath = (roleId: string) => `/api/v1/access/roles/${encodeURIComponent(roleId)}/viewable-projects`;
+
+  // M736 第二步：打开「改可查看项目」——读现状；候选清单还没读过时读一次。
+  // 预填按返回的编号原样放进状态，不按候选清单过滤：候选里已经没有的旧条目不能在提交时被当成减少。
+  async function openRoleEdit(row: RoleRow) {
+    setRoleEditError("");
+    try {
+      const [base, optionRows] = await Promise.all([
+        api.get<RoleViewableProjectsView>(roleViewableProjectsPath(row.id)),
+        roleProjectOptions === null ? api.get<RoleProjectOption[]>("/api/v1/access/role-project-options") : Promise.resolve(roleProjectOptions),
+      ]);
+      setRoleProjectOptions(optionRows ?? []);
+      const viewAll = Boolean(base.viewAllProjects);
+      const ids = base.viewableProjectIds ?? [];
+      setRoleEdit({ role: row, base, viewAll, ids, open: !viewAll && ids.length > 0, finalApproverId: "" });
+    } catch (loadError) { setGlobalError(loadError instanceof Error ? loadError.message : "可查看项目读取失败"); }
+  }
+
+  // 提交这次的增减（不是改后的整份清单），经 runWrite：失败时弹窗留开并在弹窗内显错（roleEditError），再抛给 runWrite 报到页面；成功才关。
+  // 结果提示用同一句追加句里的说法（「增加的，所有持有人要各自重新审批通过，才能查看新增的项目；减少的，也要审批通过后才生效，审批期间持有人仍能查看。」）。
+  async function saveRoleViewableProjects() {
+    if (!roleEdit || !roleEditDelta) return;
+    const delta = roleEditDelta;
+    const reduces = delta.removeAll || delta.remove.length > 0;
+    setRoleEditError("");
+    try {
+      await api.put<RoleViewableProjectsView>(roleViewableProjectsPath(roleEdit.role.id), {
+        addViewAllProjects: delta.addAll || undefined,
+        addViewableProjectIds: delta.add.length ? delta.add : undefined,
+        removeViewAllProjects: delta.removeAll || undefined,
+        removeViewableProjectIds: delta.remove.length ? delta.remove : undefined,
+        finalApproverId: reduces ? roleEdit.finalApproverId.trim() || undefined : undefined,
+        operatorNote: "后台改可查看项目",
+      });
+      setActionResult([
+        delta.add.length ? `已增加 ${delta.add.length} 个可查看项目：所有持有人要各自重新审批通过，才能查看新增的项目。` : "",
+        delta.addAll ? "已勾选“可以查看全部项目”：所有持有人要各自重新审批通过，才能查看新增的项目。" : "",
+        delta.remove.length ? `减少的 ${delta.remove.length} 个可查看项目已提交审批：审批通过后才生效，审批期间持有人仍能查看。` : "",
+        delta.removeAll ? "去掉“可以查看全部项目”已提交审批：审批通过后才生效，审批期间持有人仍能查看。" : "",
+      ].join(""));
+      setRoleEdit(null);
+      await reload();
+    } catch (actionError) {
+      setRoleEditError(actionError instanceof Error ? actionError.message : "改可查看项目失败");
+      throw actionError;
+    }
+  }
+
+  // 对一个持有人发起重新审批（授权申请类型 role_project_reapproval，一张申请一个持有人）；成功后重读现状，只刷新「待重新审批的持有人」这一节，
+  // 正在编辑的勾选与打开时读到的角色现状不动（角色在这期间被别人改了的，提交时由后端按 409 让他刷新）。
+  async function requestRoleProjectReapproval(userId: string) {
+    if (!roleEdit) return;
+    const roleId = roleEdit.role.id;
+    setRoleEditError("");
+    try {
+      const result = await api.post<AccessGrantRequestRow>("/api/v1/access/grant-requests", {
+        requestType: "role_project_reapproval",
+        targetUserId: userId,
+        roleId,
+        reason: "后台发起重新审批可查看项目",
+        operatorNote: "后台发起重新审批可查看项目",
+      });
+      setActionResult(`重新审批申请已提交：${result.id}（${grantStatusLabel(result.status)}）`);
+      const fresh = await api.get<RoleViewableProjectsView>(roleViewableProjectsPath(roleId));
+      setRoleEdit((current) => current && current.role.id === roleId ? { ...current, base: { ...current.base, pendingReapprovals: fresh.pendingReapprovals } } : current);
+    } catch (actionError) {
+      setRoleEditError(actionError instanceof Error ? actionError.message : "发起重新审批失败");
+      throw actionError;
+    }
+  }
+
   function openTemplateDetail(row: PositionRoleTemplateRow) {
     const role = roles.find((item) => item.id === row.roleId);
     setDetail({
@@ -478,6 +695,20 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
         { label: "组织", value: row.organizationId ?? "—" },
         { label: "状态", value: formatBusinessStatus(row.status ?? "active") },
         { label: "模板编号", value: row.id },
+      ],
+    });
+  }
+
+  function openRoleDetail(row: RoleRow) {
+    setDetail({
+      title: `角色 · ${row.roleName ?? row.roleCode ?? row.id}`,
+      fields: [
+        { label: "角色名称", value: row.roleName ?? row.roleCode ?? "—" },
+        { label: "状态", value: row.status ? formatBusinessStatus(row.status) : "—" },
+        { label: "权限点", value: row.permissionCodes?.length ? row.permissionCodes.join("、") : "—" },
+        { label: "可以查看全部项目", value: row.viewAllProjects ? "是" : "—" },
+        { label: "可查看项目", value: viewableProjectsLabel(row) },
+        { label: "角色编号", value: row.id },
       ],
     });
   }
@@ -534,7 +765,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
       <AdminPageHeader title="访问治理工作台" description="岗位角色模板、用户定岗自动适配、直接角色装配和高危授权审批；审批总结用于发现频繁临时授权。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-preview" data-testid="access-governance-guide">
-          <strong>这一页做什么：</strong>访问治理三块——① 角色装配（职位↔模板映射、给用户定职位自动适配、直接装配角色）② 高危授权审批 ③ 智能总结（发现频繁临时授权）。切换标签操作。
+          <strong>这一页做什么：</strong>访问治理{canRoleView ? "四" : "三"}块——① 角色装配（职位↔模板映射、给用户定职位自动适配、直接装配角色）② 高危授权审批 ③ 智能总结（发现频繁临时授权）{canRoleView ? " ④ 角色（角色清单、新建角色）" : ""}。切换标签操作。
         </div>
         <Tabs
           data-testid="access-governance-tabs"
@@ -699,6 +930,34 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           </table>
         </div>
           </>) },
+          ...(canRoleView ? [{ key: "roles", label: "④ 角色", forceRender: true, children: (<>
+        <h3>角色</h3>
+        {canRoleCreate ? <div className="admin-form-row" data-testid="access-role-create-row">
+          <PermissionButton permissionsState={effectivePermissions} permissions={ROLE_CREATE} data-testid="access-role-create-open" onClick={() => void openRoleCreate()}>＋ 新建角色</PermissionButton>
+        </div> : null}
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="access-roles-table">
+            <thead><tr><th>角色名称</th><th>状态</th><th>权限点</th><th>可以查看全部项目</th><th>可查看项目</th><th>详情</th></tr></thead>
+            <tbody>{roles.map((row) => {
+              const viewableIds = row.viewAllProjects ? [] : row.viewableProjectIds ?? [];
+              const expanded = expandedRoleId === row.id;
+              return (
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-role-row-${row.id}`} onClick={() => openRoleDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRoleDetail(row); } }}>
+                <td>{row.roleName ?? row.roleCode ?? row.id}</td><td>{statusBadge(row.status)}</td><td>{row.permissionCodes?.length ? `${row.permissionCodes.length} 个` : "—"}</td><td>{row.viewAllProjects ? "是" : "—"}</td>
+                {/* 逐个勾选的带「＋」展开列出各条名称；名称来自候选清单接口，没有 access.role.manage 的人只显示个数。 */}
+                <td>{viewableProjectsLabel(row)}
+                  {viewableIds.length > 0 && canRoleManage ? <button type="button" data-testid={`access-role-projects-toggle-${row.id}`} aria-label="展开可查看项目" aria-expanded={expanded} onClick={(event) => { event.stopPropagation(); void toggleRoleProjects(row.id); }} onKeyDown={(event) => event.stopPropagation()}>{expanded ? "－" : "＋"}</button> : null}
+                  {viewableIds.length > 0 && expanded && roleProjectOptions ? <div data-testid={`access-role-projects-${row.id}`}>{projectNames(viewableIds)}</div> : null}
+                </td>
+              <td className="admin-row-detail-cell">
+                <button type="button" className="admin-row-detail-btn" aria-label="查看角色详情" onClick={(event) => { event.stopPropagation(); openRoleDetail(row); }}>查看详情</button>
+                {canRoleManage ? <button type="button" data-testid={`access-role-projects-edit-${row.id}`} onClick={(event) => { event.stopPropagation(); void openRoleEdit(row); }} onKeyDown={(event) => event.stopPropagation()}>改可查看项目</button> : null}
+              </td></tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+          </>) }] : []),
         ]}
       />
       </AdminDataState>
@@ -809,6 +1068,129 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           { label: "申请原因", value: grantForm.reason.trim() || "后台高危授权申请" },
         ]}
       />
+      <GuidedFlowModal
+        open={roleCreateOpen}
+        title="新建角色"
+        testId="access-role-create-guided"
+        submitTestId="access-role-create-save"
+        submitLabel="创建角色"
+        submitting={writeBusy}
+        error={roleCreateError || undefined}
+        onClose={() => setRoleCreateOpen(false)}
+        onSubmit={() => void runWrite(createRole, "新建角色失败")}
+        steps={[
+          {
+            title: "名称与说明",
+            validate: () => {
+              const name = newRole.roleName.trim();
+              if (!name || [...name].length > 120) return ROLE_NAME_REQUIRED;
+              if ([...newRole.description.trim()].length > 1000) return "角色说明不能超过 1000 个字";
+              return null;
+            },
+            content: (
+              <>
+                <label>角色名称<input data-testid="access-role-create-name" aria-label="角色名称" value={newRole.roleName} onChange={(event) => setNewRole({ ...newRole, roleName: event.target.value })} /></label>
+                <label>说明<input data-testid="access-role-create-description" aria-label="说明" value={newRole.description} onChange={(event) => setNewRole({ ...newRole, description: event.target.value })} /></label>
+              </>
+            ),
+          },
+          {
+            title: "权限配置",
+            content: (
+              <table className="admin-table" data-testid="access-role-create-permission-table">
+                <tbody>
+                  {groupedRolePermissions.map(([moduleName, items]) => (
+                    <tr key={moduleName}>
+                      <th scope="row">{moduleName}</th>
+                      <td>{items.map((item) => {
+                        const code = permissionCode(item);
+                        return (
+                          <label key={code} className="admin-permission-option">
+                            <input data-testid={`access-role-create-code-${code}`} type="checkbox" checked={newRole.permissionCodes.includes(code)} onChange={(event) => setNewRole({ ...newRole, permissionCodes: toggled(newRole.permissionCodes, code, event.target.checked) })} />
+                            <span>{code}</span>
+                            <small>{item.permissionName ?? item.name ?? item.riskLevel ?? "权限点"}</small>
+                          </label>
+                        );
+                      })}</td>
+                    </tr>
+                  ))}
+                  {/* 勾上「可以查看全部项目」：收起并禁用逐项清单、清空已勾条目；不勾时点「＋」展开逐个勾选；两者都不勾就是普通角色。 */}
+                  <ViewableProjectRows prefix="access-role-create" viewAll={newRole.viewAllProjects} ids={newRole.viewableProjectIds} open={newRoleProjectsOpen} options={roleProjectOptions ?? []}
+                    onViewAll={(checked) => { setNewRole({ ...newRole, viewAllProjects: checked, viewableProjectIds: [] }); setNewRoleProjectsOpen(false); }}
+                    onIds={(ids) => setNewRole({ ...newRole, viewableProjectIds: ids })}
+                    onOpen={setNewRoleProjectsOpen} />
+                </tbody>
+              </table>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "角色名称", value: newRole.roleName.trim() || "未填写" },
+          { label: "说明", value: newRole.description.trim() || "—" },
+          { label: "已选权限", value: newRole.permissionCodes.length ? `${newRole.permissionCodes.length} 个：${newRole.permissionCodes.join("、")}` : "未选择" },
+          { label: "可以查看全部项目", value: newRole.viewAllProjects ? "是" : "—" },
+          { label: "可查看项目", value: newRole.viewAllProjects ? "全部项目" : newRole.viewableProjectIds.length ? projectNames(newRole.viewableProjectIds) : "—" },
+        ]}
+      />
+      {roleEdit && roleEditDelta ? (() => {
+        const delta = roleEditDelta;
+        const reduces = delta.removeAll || delta.remove.length > 0;
+        const pendingRemovalIds = roleEdit.base.pendingRemovalIds ?? [];
+        const holders = roleEdit.base.pendingReapprovals ?? [];
+        return (
+          <GuidedFlowModal
+            open
+            title="改可查看项目"
+            testId="access-role-edit-guided"
+            submitTestId="access-role-edit-save"
+            submitLabel="保存"
+            submitting={writeBusy}
+            error={roleEditError || undefined}
+            onClose={() => setRoleEdit(null)}
+            onSubmit={() => void runWrite(saveRoleViewableProjects, "改可查看项目失败")}
+            steps={[
+              {
+                title: "权限配置",
+                validate: () => (delta.addAll || delta.add.length > 0 || reduces ? null : "可查看项目没有变化"),
+                content: (
+                  <>
+                    <table className="admin-table">
+                      <tbody>
+                        {/* 勾上「可以查看全部项目」：清单收起，已勾条目不清空；去掉时按原样展开。减少在待审的条目照常显示为勾选、禁用。 */}
+                        <ViewableProjectRows prefix="access-role-edit" viewAll={roleEdit.viewAll} ids={roleEdit.ids} open={roleEdit.open} options={roleProjectOptions ?? []}
+                          lockedIds={pendingRemovalIds.filter((id) => id !== ALL_PROJECTS)} viewAllLocked={pendingRemovalIds.includes(ALL_PROJECTS)}
+                          onViewAll={(checked) => setRoleEdit({ ...roleEdit, viewAll: checked, open: !checked })}
+                          onIds={(ids) => setRoleEdit({ ...roleEdit, ids })}
+                          onOpen={(open) => setRoleEdit({ ...roleEdit, open })} />
+                      </tbody>
+                    </table>
+                    {reduces ? <input aria-label="主线最终审批人" data-testid="access-role-edit-final-approver" placeholder="主线最终审批人账号（可空）" value={roleEdit.finalApproverId} onChange={(event) => setRoleEdit({ ...roleEdit, finalApproverId: event.target.value })} /> : null}
+                  </>
+                ),
+              },
+              ...(holders.length ? [{
+                title: "待重新审批的持有人",
+                content: (
+                  <table className="admin-table" data-testid="access-role-edit-holders">
+                    <thead><tr><th>账号</th><th>待重新审批的项目</th><th>操作</th></tr></thead>
+                    <tbody>{holders.map((holder) => (
+                      <tr key={holder.userId}>
+                        <td>{holder.username ?? holder.userId}</td><td>{projectNames(holder.viewableIds ?? [])}</td>
+                        <td>{holder.reapprovalPending ? "已发起，待审批" : canGrantApply ? <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_APPLY} data-testid={`access-role-edit-reapprove-${holder.userId}`} disabled={writeBusy} onClick={() => void runWrite(() => requestRoleProjectReapproval(holder.userId), "发起重新审批失败")}>发起重新审批</PermissionButton> : null}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                ),
+              }] : []),
+            ]}
+            summary={[
+              { label: "增加", value: projectNames([...(delta.addAll ? [ALL_PROJECTS] : []), ...delta.add]) || "—" },
+              { label: "减少（须审批）", value: projectNames([...(delta.removeAll ? [ALL_PROJECTS] : []), ...delta.remove]) || "—" },
+              { label: "主线最终审批人", value: (reduces && roleEdit.finalApproverId.trim()) || "—" },
+            ]}
+          />
+        );
+      })() : null}
     </section>
   );
 }

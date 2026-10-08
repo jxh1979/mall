@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1126,6 +1126,407 @@ class AuthorizationServiceTests {
         assertThat(records.records.get(IdempotencyService.storedOperationId(operationId) + ":k").requestHash()).hasSize(128);
     }
 
+    // ── M736（XM-M001-D 可跨项目角色·批 1 权限治理；操作员 2026-10-01 确认的治理地图第 653 行追加句：「被分配了可跨项目角色的员工
+    //    （含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」）：统一判定 projectReach 及其派生判断。
+    //    真实判定＋内存仓，不给判定打桩。操作人＝xpActor(...) 写入的主体（staff、本人项目 org_a、无商户、active）；角色按编号放在
+    //    repository.roles，「持有」用 ROLE 来源、来源号＝角色编号的授予表示；当时的项目集合＝repository.projectIds。 ──
+
+    private static final String XP_ASSIGN = "access.role.assign";
+    private static final String XP_APPLY = "access.grant_request.apply";
+
+    private AccessActor xpActor(String id) {
+        AccessActor actor = new AccessActor(id, id, "staff", "org_a", null, "active");
+        authenticateActor(actor);
+        return actor;
+    }
+
+    // viewAll＝勾了「可以查看全部项目」；ticked＝展开后逐个勾选的项目；两项都没有的是普通角色。
+    private void xpRole(String roleId, String status, boolean viewAll, String... ticked) {
+        repository.roles.put(roleId, new RoleRecord(roleId, roleId, null, "project", status,
+                Instant.parse("2026-06-14T00:00:00Z"), List.of(XP_ASSIGN), null, viewAll, List.of(ticked)));
+    }
+
+    private AccessRepository.PermissionEffect xpGrant(String userId, String code, AccessRepository.Source source, String sourceId) {
+        AccessRepository.PermissionEffect grant = new AccessRepository.PermissionEffect(userId, code, AccessRepository.Effect.GRANT,
+                source, sourceId, null, null, false, false);
+        repository.addEffect(grant);
+        return grant;
+    }
+
+    private static AccessRepository.PermissionEffect xpDeny(AccessRepository.Source source) {
+        return new AccessRepository.PermissionEffect("usr_xp", XP_ASSIGN, AccessRepository.Effect.DENY, source, "deny_" + source,
+                null, null, false, false);
+    }
+
+    // M736-U2（同一追加句：「逐个勾选的只能查看被选中的项目」；操作员 2026-10-01 说明「没被选中的对应的角色不能看」）：权限码只来自
+    // 只勾了乙项目的角色——乙项目可、丙项目拒，本人项目没被勾中也拒；再经普通角色持该码，本人项目与乙项目都可；撤掉普通角色，
+    // 本人项目又拒（第二次）；角色同时勾本人项目与乙项目，两个都可；之后新建的项目没被勾中，拒。
+    @Test
+    void tickedRoleReachesOnlyTheTickedProjectsAndTheOwnProjectOnlyWithAnotherSource() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_cross", "active", false, "org_b");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_cross");
+
+        AuthorizationService.ProjectReach ticked = service.projectReach(actor, XP_ASSIGN);
+        assertThat(ticked.covers("org_b")).isTrue();
+        assertThat(ticked.covers("org_c")).isFalse();
+        assertThat(ticked.covers("org_a")).as("本人项目没被勾中，又没有别的来源").isFalse();
+        assertThat(ticked.onlyOwnProject()).isEmpty();
+        assertThat(service.canReachProject(actor, "org_b", XP_ASSIGN)).isTrue();
+        assertThat(service.canReachProject(actor, "org_c", XP_ASSIGN)).isFalse();
+
+        xpRole("role_xp_plain", "active", false);
+        AccessRepository.PermissionEffect plain = xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_plain");
+        AuthorizationService.ProjectReach withPlain = service.projectReach(actor, XP_ASSIGN);
+        assertThat(List.of(withPlain.covers("org_a"), withPlain.covers("org_b"), withPlain.covers("org_c")))
+                .containsExactly(true, true, false);
+
+        repository.effects.remove(plain);
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_a")).isFalse();
+
+        xpRole("role_xp_cross", "active", false, "org_a", "org_b");
+        repository.projectIds.add("org_n");
+        AuthorizationService.ProjectReach both = service.projectReach(actor, XP_ASSIGN);
+        assertThat(List.of(both.covers("org_a"), both.covers("org_b"), both.covers("org_n"))).containsExactly(true, true, false);
+    }
+
+    // M736-U3（操作员 2026-09-25「在他分配的权限内」；治理地图第 528 行追加句「在该角色所含权限内」）：范围按权限码判——可跨项目角色
+    // 只带分配角色权限，按申请权限判时不跨；同一个人经员工单独授予、模板套用、临时授权持有的码也只到本人项目。
+    @Test
+    void reachIsJudgedPerPermissionCodeAndOnlyThroughCrossProjectRoles() {
+        repository.projectIds.addAll(List.of("org_a", "org_b"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_all", "active", true);
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_all");
+        AccessUser inB = new AccessUser("usr_b", "usr_b", "staff", "org_b", null, "active", Instant.parse("2026-06-14T00:00:00Z"));
+
+        assertThat(service.canReachUser(actor, inB, XP_ASSIGN)).isTrue();
+        assertThat(service.projectReach(actor, XP_APPLY).onlyOwnProject()).contains("org_a");
+        assertThat(service.canReachUser(actor, inB, XP_APPLY)).as("角色里没有的码").isFalse();
+
+        for (AccessRepository.Source source : List.of(AccessRepository.Source.USER_OVERRIDE,
+                AccessRepository.Source.TEMPLATE_APPLICATION, AccessRepository.Source.TEMPORARY_GRANT)) {
+            AccessRepository.PermissionEffect own = xpGrant("usr_xp", XP_APPLY, source, "src_" + source);
+            assertThat(service.projectReach(actor, XP_APPLY).onlyOwnProject()).as(source.name()).contains("org_a");
+            assertThat(service.canReachUser(actor, inB, XP_APPLY)).as(source.name()).isFalse();
+            repository.effects.remove(own);
+        }
+    }
+
+    // M736-U4（治理地图第 655 行「显式拒绝优先级最高」；M002-F33 岗位高危挂起只压岗位派生的那一份）：该码被员工显式拒绝——不跨，解除后
+    // 恢复（第二次）；角色停用——不跨；岗位高危挂起中，岗位派生的可跨项目角色不计，另行直接分配的同一角色照常计，挂起解除后恢复。
+    @Test
+    void explicitDenyDisabledRoleAndPositionHoldDoNotCountTowardsTheReach() {
+        repository.projectIds.addAll(List.of("org_a", "org_b"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_cross", "active", false, "org_b");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_cross");
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).isTrue();
+
+        AccessRepository.PermissionEffect deny = xpDeny(AccessRepository.Source.USER_OVERRIDE);
+        repository.addEffect(deny);
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).as("显式拒绝").isFalse();
+        repository.effects.remove(deny);
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).isTrue();
+
+        xpRole("role_xp_cross", "inactive", false, "org_b");
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).as("角色停用").isFalse();
+        xpRole("role_xp_cross", "active", false, "org_b");
+
+        AccessRepository.PermissionEffect hold = xpDeny(AccessRepository.Source.POSITION_HOLD);
+        repository.addEffect(hold);
+        repository.positionRoles.put("usr_xp", "role_xp_cross");
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).as("挂起中的岗位派生来源").isFalse();
+        repository.directRoles.put("usr_xp", List.of("role_xp_cross"));
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).as("另行直接分配的同一角色").isTrue();
+        repository.directRoles.remove("usr_xp");
+        repository.effects.remove(hold);
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).as("挂起解除后").isTrue();
+    }
+
+    // M736-U5（操作员 2026-09-25「商户账号。是不能跨项目的。」；治理地图第 675 行外包账号「也不能跨出本综合体」）：带商户归属的账号、
+    // 外包账号持勾了「可以查看全部项目」的角色仍只到本人项目，也不算看得到全平台合计；同一角色分给同项目的普通员工则跨。
+    @Test
+    void merchantAndOutsourcedAccountsStayInTheirOwnProject() {
+        repository.projectIds.addAll(List.of("org_a", "org_b"));
+        xpRole("role_xp_all", "active", true);
+        AccessUser inB = new AccessUser("usr_b", "usr_b", "staff", "org_b", null, "active", Instant.parse("2026-06-14T00:00:00Z"));
+        java.util.Map<String, AccessActor> holders = new java.util.LinkedHashMap<>();
+        holders.put("商户账号", new AccessActor("usr_xp_merchant", "usr_xp_merchant", "merchant_admin", "org_a", "merchant_a", "active"));
+        holders.put("带商户归属的员工", new AccessActor("usr_xp_mstaff", "usr_xp_mstaff", "staff", "org_a", "merchant_a", "active"));
+        holders.put("外包账号", new AccessActor("usr_xp_vendor", "usr_xp_vendor", "outsourced_vendor", "org_a", null, "active"));
+        holders.forEach((label, holder) -> {
+            xpGrant(holder.id(), XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_all");
+            authenticateActor(holder);
+            AuthorizationService.ProjectReach reach = service.projectReach(holder, XP_ASSIGN);
+            assertThat(reach.onlyOwnProject()).as(label).contains("org_a");
+            assertThat(service.canReachUser(reach, inB)).as(label).isFalse();
+            assertThat(service.allowsPlatformScope(holder, XP_ASSIGN)).as(label).isFalse();
+        });
+
+        AccessActor staff = xpActor("usr_xp");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_all");
+        assertThat(service.canReachUser(staff, inB, XP_ASSIGN)).isTrue();
+    }
+
+    // M736-U11（复核 I-1；治理地图第 651 行三类申请「只能由具备分配/取消分配角色权限的人发起」，入口两码一起核）：入口要求多个码时
+    // 取各码范围的交集——申请权限来自勾了全部项目的角色、分配角色权限只来自本项目的普通角色，两码一起只到本人项目；两码都来自
+    // 可跨项目角色时取勾选的交集。
+    @Test
+    void reachForSeveralCodesIsTheIntersectionOfEachCodesReach() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_all", "active", true);
+        xpRole("role_xp_plain", "active", false);
+        xpGrant("usr_xp", XP_APPLY, AccessRepository.Source.ROLE, "role_xp_all");
+        AccessRepository.PermissionEffect plain = xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_plain");
+
+        assertThat(service.projectReach(actor, XP_APPLY).covers("org_b")).isTrue();
+        AuthorizationService.ProjectReach both = service.projectReach(actor, XP_APPLY, XP_ASSIGN);
+        assertThat(List.of(both.covers("org_a"), both.covers("org_b"), both.covers("org_c"))).containsExactly(true, false, false);
+        assertThat(both.onlyOwnProject()).contains("org_a");
+        assertThat(both.allProjects()).isFalse();
+
+        repository.effects.remove(plain);
+        xpRole("role_xp_b", "active", false, "org_b");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_b");
+        AuthorizationService.ProjectReach ticked = service.projectReach(actor, XP_APPLY, XP_ASSIGN);
+        assertThat(List.of(ticked.covers("org_a"), ticked.covers("org_b"), ticked.covers("org_c"))).containsExactly(false, true, false);
+    }
+
+    // M736-U15（操作员 2026-10-03 所选选项原文：「全平台合计只给平台管理员和勾了「全部项目」的人看。李四只能分别看 A、B 各自的数据。」；
+    // 2026-10-01 所选选项原文：「「全部项目」始终指所有项目，含以后新建的；只有展开后逐个勾选的，才只管勾中的那几个。」）：
+    // 平台管理员——真，且不读能力事实；经勾了全部的角色持该码——真，之后新建的项目自动在范围内，角色里没有的码——假；
+    // 只逐个勾选的——假（哪怕把现有项目全勾上），新建的项目不在范围内；普通员工——假。
+    @Test
+    void platformScopeIsOnlyForPlatformAdminsAndViewAllHolders() {
+        repository.projectIds.addAll(List.of("org_a", "org_b"));
+        xpRole("role_xp_all", "active", true);
+        xpRole("role_xp_ticked", "active", false, "org_a", "org_b");
+
+        AccessActor admin = new AccessActor("usr_admin", "usr_admin", "platform_admin", "org", null, "active");
+        authenticateActor(admin);
+        assertThat(service.allowsPlatformScope(admin, XP_ASSIGN)).isTrue();
+        assertThat(service.projectReach(admin, XP_ASSIGN).covers("platform-company")).isTrue();
+        assertThat(repository.effectsReads).as("平台管理员不读能力事实").isZero();
+
+        AccessActor all = xpActor("usr_xp_all");
+        xpGrant("usr_xp_all", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_all");
+        assertThat(service.allowsPlatformScope(all, XP_ASSIGN)).isTrue();
+        assertThat(service.allowsPlatformScope(all, XP_APPLY)).as("角色里没有的码").isFalse();
+        repository.projectIds.add("org_n");
+        assertThat(service.projectReach(all, XP_ASSIGN).covers("org_n")).as("以后新建的项目").isTrue();
+
+        AccessActor ticked = xpActor("usr_xp_ticked");
+        xpGrant("usr_xp_ticked", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_ticked");
+        assertThat(service.allowsPlatformScope(ticked, XP_ASSIGN)).isFalse();
+        assertThat(service.projectReach(ticked, XP_ASSIGN).covers("org_b")).isTrue();
+        assertThat(service.projectReach(ticked, XP_ASSIGN).covers("org_n")).isFalse();
+
+        assertThat(service.allowsPlatformScope(xpActor("usr_xp_plain"), XP_ASSIGN)).isFalse();
+    }
+
+    // M736-U16（M722-F05）：算可触及项目要按操作人读能力事实，同样走判定窗口——读取期间操作人的项目被改走又改回（账号行被改写），
+    // 403 PERMISSION_DENIED「账号归属或状态已变更，本次操作未执行」；开始时账号行就与会话不一致的，不读能力事实即拒绝。
+    // 对照：身份全程未变时照常算出范围。
+    @Test
+    void projectReachRejectsWhenTheActorsAccountRowChangesDuringTheJudgment() {
+        repository.projectIds.addAll(List.of("org_a", "org_b"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_cross", "active", false, "org_b");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_cross");
+        afRow("usr_xp", "staff", "org_a", null, "active");
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_b")).isTrue();
+
+        repository.beforeEffectsRead = () -> afRow("usr_xp", "staff", "org_b", null, "active");
+        repository.afterEffectsRead = () -> afRow("usr_xp", "staff", "org_a", null, "active");
+        assertThatThrownBy(() -> service.projectReach(actor, XP_ASSIGN))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("PERMISSION_DENIED");
+                    assertThat(exception.getMessage()).contains("账号归属或状态已变更，本次操作未执行");
+                });
+        assertThat(repository.users.get("usr_xp").organizationId()).isEqualTo("org_a"); // 改回后四项与会话相同，只是账号行被改写过
+        assertThat(repository.rowVersions.get("usr_xp")).isEqualTo(3);
+
+        afRow("usr_xp", "staff", "org_b", null, "active");
+        int reads = repository.effectsReads;
+        assertThatThrownBy(() -> service.projectReach(actor, XP_ASSIGN))
+                .isInstanceOfSatisfying(ApiException.class, exception -> assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
+        assertThat(repository.effectsReads).isEqualTo(reads);
+    }
+
+    // ── M736 第二步（操作员 2026-10-03 所选选项原文：「直接在原角色上勾 C；但张三等所有持有人要各自重新审批通过，才能看 C。」）：
+    //    角色分出去以后又加上的可查看项目，改之前已持有该角色的人在重新审批通过之前不算——判定按（员工，角色）减掉他的待批条目
+    //    （以下各条里「减掉以后一条不剩时这个角色什么都不给、只有带保留标记的人按没勾选的角色算」「全部那一勾待批时按留着的清单算」
+    //    是技术推导）。
+    //    待批条目放在 repository.viewableHolds（员工 → 角色 → 条目），「可以查看全部项目」那一勾的待批记作 XP_ALL。
+    //    本组只用既有接口与本文件内存仓自己的字段，对只有第一步的主源码也能编译：换上本文件即可红跑，红在各条注明的断言上。 ──
+
+    private static final String XP_ALL = "*"; // ＝AuthorizationService.ALL_PROJECTS；写字面量是为了对只有第一步的主源码也能编译
+    // ＝AuthorizationService.HELD_SINCE_UNTICKED：保留标记（角色原来一条勾选都没有、第一次勾上项目时已持有它的人各记一条），同样写字面量
+    private static final String XP_SINCE_UNTICKED = "-";
+
+    private void xpHold(String userId, String roleId, String... viewableIds) {
+        repository.viewableHolds.computeIfAbsent(userId, ignored -> new java.util.LinkedHashMap<>()).put(roleId, Set.of(viewableIds));
+    }
+
+    // M736-Z1（同上选项原文）：角色勾了乙、丙，某人对丙有待批——乙照常可达、丙不可达；同一角色的另一位持有人（没有待批）丙可达；
+    // 待批删掉（重新审批通过）以后丙可达。修复前判定不看待批，红在「待重新审批的项目」那条。
+    @Test
+    void heldProjectIsOutOfReachUntilReapprovedWhileOtherTicksStay() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        xpRole("role_xp_cross", "active", false, "org_b", "org_c");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_cross");
+        xpGrant("usr_xp_other", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_cross");
+        xpHold("usr_xp", "role_xp_cross", "org_c");
+
+        AuthorizationService.ProjectReach held = service.projectReach(xpActor("usr_xp"), XP_ASSIGN);
+        assertThat(held.covers("org_b")).isTrue();
+        assertThat(held.covers("org_c")).as("待重新审批的项目").isFalse();
+        assertThat(service.canReachProject(xpActor("usr_xp"), "org_c", XP_ASSIGN)).isFalse();
+        assertThat(service.projectReach(xpActor("usr_xp_other"), XP_ASSIGN).covers("org_c")).as("同一角色的另一位持有人").isTrue();
+
+        repository.viewableHolds.remove("usr_xp");
+        assertThat(service.projectReach(xpActor("usr_xp"), XP_ASSIGN).covers("org_c")).as("重新审批通过后").isTrue();
+    }
+
+    // M736-Z2（技术推导，依据同上选项原文与 2026-10-08 确认句「增加的，所有持有人要各自重新审批通过，才能查看新增的项目」）：
+    // 角色勾了「可以查看全部项目」、清单里留着乙，某人对「全部」那一勾有待批——只到乙，本人项目没被勾中也不到，不算看得到全平台合计；
+    // 待批去掉后看全部（含之后才加进项目集合的），算看得到全平台合计。修复前红在第一条 containsExactly（丙可达）。
+    @Test
+    void heldAllEntryFallsBackToTheTickedList() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        xpRole("role_xp_all", "active", true, "org_b");
+        AccessActor actor = xpActor("usr_xp");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_all");
+        xpHold("usr_xp", "role_xp_all", XP_ALL);
+
+        AuthorizationService.ProjectReach held = service.projectReach(actor, XP_ASSIGN);
+        assertThat(List.of(held.covers("org_a"), held.covers("org_b"), held.covers("org_c"))).containsExactly(false, true, false);
+        assertThat(held.allProjects()).isFalse();
+        assertThat(service.allowsPlatformScope(actor, XP_ASSIGN)).isFalse();
+
+        repository.viewableHolds.remove("usr_xp");
+        repository.projectIds.add("org_n");
+        AuthorizationService.ProjectReach all = service.projectReach(actor, XP_ASSIGN);
+        assertThat(List.of(all.covers("org_c"), all.covers("org_n"))).containsExactly(true, true);
+        assertThat(service.allowsPlatformScope(actor, XP_ASSIGN)).isTrue();
+    }
+
+    // M736-Z3（技术推导：否则第一次勾上项目的角色会让老持有人丢掉本人项目）：原来没勾选的角色第一次勾上丙，老持有人对丙有待批、
+    // 并带着那一次记下的保留标记——这个角色对他仍按没勾选的角色算：只到本人项目、到不了丙；他同一权限码另有勾了乙的可跨项目角色时，
+    // 本人项目与乙都可达、丙仍不可达。修复前红在 onlyOwnProject 那条（本人项目丢了、丙可达）。
+    @Test
+    void roleWhoseOnlyTicksAreHeldCountsAsOrdinaryForThatHolder() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_first", "active", false, "org_c");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_first");
+        xpHold("usr_xp", "role_xp_first", "org_c", XP_SINCE_UNTICKED);
+
+        AuthorizationService.ProjectReach own = service.projectReach(actor, XP_ASSIGN);
+        assertThat(own.onlyOwnProject()).contains("org_a");
+        assertThat(own.covers("org_c")).isFalse();
+
+        xpRole("role_xp_b", "active", false, "org_b");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_b");
+        AuthorizationService.ProjectReach both = service.projectReach(actor, XP_ASSIGN);
+        assertThat(List.of(both.covers("org_a"), both.covers("org_b"), both.covers("org_c"))).containsExactly(true, true, false);
+    }
+
+    // M736-Z4（操作员 2026-10-01 确认的治理地图第 653 行追加句「被分配了可跨项目角色的员工（含经岗位得到）」）：直接分配的与经岗位
+    // 得到的，同样的待批得到同样的范围。修复前红在第一条 containsExactly（丙可达）。
+    @Test
+    void holdsApplyAlikeToDirectAndPositionDerivedHolders() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        xpRole("role_xp_cross", "active", false, "org_b", "org_c");
+        xpGrant("usr_xp_direct", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_cross");
+        repository.directRoles.put("usr_xp_direct", List.of("role_xp_cross"));
+        xpGrant("usr_xp_seat", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_cross");
+        repository.positionRoles.put("usr_xp_seat", "role_xp_cross");
+        xpHold("usr_xp_direct", "role_xp_cross", "org_c");
+        xpHold("usr_xp_seat", "role_xp_cross", "org_c");
+
+        AuthorizationService.ProjectReach direct = service.projectReach(xpActor("usr_xp_direct"), XP_ASSIGN);
+        AuthorizationService.ProjectReach seat = service.projectReach(xpActor("usr_xp_seat"), XP_ASSIGN);
+        assertThat(List.of(direct.covers("org_b"), direct.covers("org_c"))).containsExactly(true, false);
+        assertThat(seat).as("经岗位得到的与直接分配的同样").isEqualTo(direct);
+    }
+
+    // M736-Z5（待批按「员工，角色」记，不按员工记）：两个角色都勾了丙，只对其中一个有待批——只持那一个时丙不可达，再持另一个时丙可达。
+    // 修复前红在第一条（丙当场可达）；实现成按员工减时红在第二条。
+    @Test
+    void holdOnOneRoleDoesNotMaskTheSameProjectTickedByAnotherRole() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_held", "active", false, "org_c");
+        xpRole("role_xp_free", "active", false, "org_c");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_held");
+        xpHold("usr_xp", "role_xp_held", "org_c");
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_c")).isFalse();
+
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_free");
+        assertThat(service.projectReach(actor, XP_ASSIGN).covers("org_c")).as("另一个角色勾中的同一项目").isTrue();
+    }
+
+    // M736-Z6（待批只在碰到可跨项目角色时读、一次判定最多读一次）：只持普通角色的员工、平台管理员、带商户归属的账号各判一次——
+    // 读 0 次；持两个可跨项目角色、入口核两个权限码的人判一次——读 1 次。修复前红在最后一条（读 0 次）。
+    @Test
+    void holdsAreReadAtMostOnceAndOnlyForCrossProjectRoles() {
+        repository.projectIds.addAll(List.of("org_a", "org_b"));
+        xpRole("role_xp_plain", "active", false);
+        xpRole("role_xp_one", "active", false, "org_b");
+        xpRole("role_xp_two", "active", true);
+
+        xpGrant("usr_xp_plain", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_plain");
+        service.projectReach(xpActor("usr_xp_plain"), XP_ASSIGN, XP_APPLY);
+        AccessActor admin = new AccessActor("usr_admin", "usr_admin", "platform_admin", "org", null, "active");
+        authenticateActor(admin);
+        service.projectReach(admin, XP_ASSIGN, XP_APPLY);
+        AccessActor merchant = new AccessActor("usr_xp_merchant", "usr_xp_merchant", "merchant_admin", "org_a", "merchant_a", "active");
+        xpGrant("usr_xp_merchant", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_two");
+        authenticateActor(merchant);
+        service.projectReach(merchant, XP_ASSIGN, XP_APPLY);
+        assertThat(repository.holdsReads).as("普通员工、平台管理员、商户账号").isZero();
+
+        for (String role : List.of("role_xp_one", "role_xp_two")) {
+            xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, role);
+            xpGrant("usr_xp", XP_APPLY, AccessRepository.Source.ROLE, role);
+        }
+        AuthorizationService.ProjectReach reach = service.projectReach(xpActor("usr_xp"), XP_ASSIGN, XP_APPLY);
+        assertThat(reach.allProjects()).isTrue();
+        assertThat(repository.holdsReads).as("两个可跨项目角色、两个入口权限码").isEqualTo(1);
+    }
+
+    // M736-Z7（技术推导，依据操作员 2026-10-03 所选选项原文「减少也要审批通过后才生效；审批期间持有人仍能看 C。」与 2026-10-01 确认的
+    // 追加句「逐个勾选的只能查看被选中的项目」）：角色原来勾着别的项目、后来换成只勾丙（原来那条的减少已审批通过），老持有人对丙有待批、
+    // 不带保留标记——这个角色的权限对他哪个项目都不到：丙不到，从没被勾过的本人项目也不到；同一权限码另有普通角色时只到本人项目；
+    // 待批删掉（重新审批通过）以后只到丙。与 Z3 只差那条保留标记。一条不剩就退回「按没勾选的角色算」时红在第一条（本人项目可达）。
+    @Test
+    void roleWhoseTicksWereAllReplacedGivesNothingUntilReapproved() {
+        repository.projectIds.addAll(List.of("org_a", "org_b", "org_c"));
+        AccessActor actor = xpActor("usr_xp");
+        xpRole("role_xp_swapped", "active", false, "org_c");
+        xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_swapped");
+        xpHold("usr_xp", "role_xp_swapped", "org_c");
+
+        AuthorizationService.ProjectReach none = service.projectReach(actor, XP_ASSIGN);
+        assertThat(List.of(none.covers("org_a"), none.covers("org_b"), none.covers("org_c"))).containsExactly(false, false, false);
+        assertThat(none.onlyOwnProject()).isEmpty();
+        assertThat(service.canReachProject(actor, "org_a", XP_ASSIGN)).as("从没被勾过的本人项目").isFalse();
+
+        xpRole("role_xp_plain", "active", false);
+        AccessRepository.PermissionEffect plain = xpGrant("usr_xp", XP_ASSIGN, AccessRepository.Source.ROLE, "role_xp_plain");
+        assertThat(service.projectReach(actor, XP_ASSIGN).onlyOwnProject()).as("另有普通角色").contains("org_a");
+        repository.effects.remove(plain);
+
+        repository.viewableHolds.remove("usr_xp");
+        AuthorizationService.ProjectReach approved = service.projectReach(actor, XP_ASSIGN);
+        assertThat(List.of(approved.covers("org_a"), approved.covers("org_c"))).as("重新审批通过后").containsExactly(false, true);
+    }
+
     private AccessRepository.PermissionEffect effect(
             String userId,
             String permissionCode,
@@ -1349,6 +1750,30 @@ class AuthorizationServiceTests {
         @Override
         public List<RoleRecord> listRoles() {
             return List.of();
+        }
+
+        // M736：按编号取角色（带「可以查看全部项目」与逐个勾选的项目）与当时的项目集合；都为空时与原先一样查不到角色、谁也跨不出本人项目。
+        final java.util.Map<String, RoleRecord> roles = new java.util.LinkedHashMap<>();
+        final Set<String> projectIds = new LinkedHashSet<>();
+
+        @Override
+        public java.util.Optional<RoleRecord> findRoleById(String roleId) {
+            return java.util.Optional.ofNullable(roles.get(roleId));
+        }
+
+        @Override
+        public Set<String> findProjectOrganizationIds() {
+            return Set.copyOf(projectIds);
+        }
+
+        // M736 第二步：待批条目（员工 → 角色 → 条目）与读了几次；与 JdbcAccessRepository 同语义——按员工取他的全部待批，没有则空。
+        // （不标 @Override：红版只换测试文件、主代码为只有第一步的基线，接口里还没有这个方法。）
+        final java.util.Map<String, java.util.Map<String, Set<String>>> viewableHolds = new java.util.LinkedHashMap<>();
+        int holdsReads;
+
+        public java.util.Map<String, Set<String>> findRoleViewableProjectHolds(String userId) {
+            holdsReads++;
+            return viewableHolds.getOrDefault(userId, java.util.Map.of());
         }
 
         @Override

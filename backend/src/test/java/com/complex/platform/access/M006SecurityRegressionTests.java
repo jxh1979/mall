@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.33
+// 文件版本：V0.34
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -839,6 +839,39 @@ class M006SecurityRegressionTests {
         service.assignStaffLevel(new StaffLevelAssignmentRequest("lvl", "晋升", "worker", "l2", 0L, "CNY", null));
         assertThat(repository.findPermissionEffects("worker", Instant.now())).extracting(AccessRepository.PermissionEffect::permissionCode).containsExactly(other);
         assertThat(positions.get("worker").staffLevelId()).isEqualTo("l2");
+    }
+
+    // M736-U14（M001-F10 锁序；按操作人读能力事实时会做到期处理的写入，不得放进持锁区段）：各入口算操作人的可触及项目——即按操作人读
+    // 能力事实——先于授权事实锁与员工行锁。撤销角色：先读后锁员工行；范围变更：先读，再取授权事实锁，再锁员工行；设显式拒绝：
+    // 先读后锁，且全程只按操作人读一次（末尾返回目标员工有效权限时沿用入口算好的范围，不在锁内再读）。
+
+    @Test void operatorCapabilitiesAreReadBeforeTheAuthorizationFactLockAndTheUserRowLock() {
+        users.put("target", user("target", "org", null));
+        roles.put("daily", new RoleRecord("daily", "日常", null, "project", "active", Instant.now(), List.of(LOW), "org"));
+        doAnswer(a -> null).when(repository).unassignUserRole(anyString(), anyString());
+        doAnswer(a -> null).when(repository).saveUserPermissionOverrides(any(), any(), any(), any(), any());
+        actor("operator", "staff", "org", null);
+
+        service.unassignUserRole(new RoleAssignmentRequest("order-unassign", null, "target", "daily"));
+        var unassign = inOrder(repository);
+        unassign.verify(repository, calls(1)).findPermissionEffects(eq("operator"), any());
+        unassign.verify(repository, calls(1)).lockAccessUsers(List.of("target"));
+
+        clearInvocations(repository);
+        assertThatThrownBy(() -> service.changeUserScope("target", new UserScopeChangeRequest(
+                "order-scope", null, "org", null, null, null, null, null, null, "范围未变", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SCOPE_UNCHANGED"));
+        var scope = inOrder(repository);
+        scope.verify(repository, calls(1)).findPermissionEffects(eq("operator"), any());
+        scope.verify(repository, calls(1)).lockGrantAuthorizationFacts();
+        scope.verify(repository, calls(1)).lockAccessUsers(List.of("target"));
+
+        clearInvocations(repository);
+        service.setUserPermissionOverrides("target", new UserPermissionOverrideRequest("order-deny", null, List.of(LOW), "deny", "停权"));
+        var deny = inOrder(repository);
+        deny.verify(repository, calls(1)).findPermissionEffects(eq("operator"), any());
+        deny.verify(repository, calls(1)).lockAccessUsers(List.of("target"));
+        verify(repository, times(1)).findPermissionEffects(eq("operator"), any());
     }
 
 }

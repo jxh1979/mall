@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.27
+// 文件版本：V0.29
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -24,6 +24,7 @@ import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.access.dto.PositionRoleTemplateRequest;
 import com.complex.platform.access.dto.RoleAssignmentRequest;
 import com.complex.platform.access.dto.RoleRequest;
+import com.complex.platform.access.dto.RoleViewableProjectsRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
@@ -4892,6 +4893,7 @@ class AccessServiceTests {
             positionRoles.put(userId, roleId);
             positionMappings.put(userId, mappingId);
             positionApplicationIds.put(userId, List.copyOf(applicationIds));
+            dropHoldsOfRolesNoLongerHeld(userId); // M736 第二步：与 Jdbc 同语义
         }
         @Override public Optional<String> findAssignedPositionTemplateId(String userId) {
             return Optional.ofNullable(positionMappings.get(userId));
@@ -5061,6 +5063,7 @@ class AccessServiceTests {
             if (hook != null) {
                 hook.run();
             }
+            trace("lockAccessUsers:" + userIds);
             lockedUsers.addAll(userIds);
             userIds.forEach(userId -> lockOrder.add("user:" + userId));
         }
@@ -5191,6 +5194,7 @@ class AccessServiceTests {
 
         @Override
         public Optional<RoleRecord> findRoleById(String roleId) {
+            trace("findRoleById:" + roleId);
             return Optional.ofNullable(roles.get(roleId));
         }
 
@@ -5198,6 +5202,176 @@ class AccessServiceTests {
         public RoleRecord createRole(RoleRecord role) {
             roles.put(role.id(), role);
             return role;
+        }
+
+        // M736：当时的项目集合（项目表的项目、城市项目公司、在用的域主管公司的编号）；默认空集＝谁也跨不出本人项目。
+        final Set<String> projectIds = new LinkedHashSet<>();
+
+        @Override
+        public Set<String> findProjectOrganizationIds() {
+            return Set.copyOf(projectIds);
+        }
+
+        // M736 第二步：逐个勾选的候选清单，与项目集合同一批编号；名称＝「项目 」＋编号（重新审批申请的原因里写条目名称用）。
+        @Override
+        public List<RoleProjectOption> listRoleProjectOptions() {
+            return projectIds.stream().map(id -> new RoleProjectOption(id, "项目 " + id, "project")).toList();
+        }
+
+        // ── M736 第二步：以下与 JdbcAccessRepository 同语义 ──
+        // 待批条目（员工 → 角色 → 条目，"*"＝「可以查看全部项目」那一勾）；待减标记（角色 → 条目 → 主管复核单号，"*" 同上）。
+        final Map<String, Map<String, Set<String>>> viewableHolds = new LinkedHashMap<>();
+        final Map<String, Map<String, String>> viewableRemovals = new LinkedHashMap<>();
+        // 非空时按先后记下取锁与读操作人能力、读角色、写待批、删勾选行的调用（手写的仓储 spy，只给 M736-S22、S29～S31 用；不并进
+        // lockOrder，既有的锁序断言不受影响）。
+        List<String> callTrace;
+
+        private void trace(String call) {
+            if (callTrace != null) {
+                callTrace.add(call);
+            }
+        }
+
+        @Override
+        public void lockRolesForEdit() {
+            trace("lockRolesForEdit");
+        }
+
+        @Override
+        public void lockRoleForEdit(String roleId) {
+            trace("lockRoleForEdit:" + roleId);
+        }
+
+        @Override
+        public void lockRoleForGrant(String roleId) {
+            trace("lockRoleForGrant:" + roleId);
+        }
+
+        // 直接分配的并上岗位派生的，按编号排序。
+        @Override
+        public List<String> listRoleHolderIds(String roleId) {
+            trace("listRoleHolderIds:" + roleId);
+            Set<String> holders = new java.util.TreeSet<>();
+            userRoles.forEach((userId, roleIds) -> {
+                if (roleIds.contains(roleId)) {
+                    holders.add(userId);
+                }
+            });
+            positionRoles.forEach((userId, derived) -> {
+                if (roleId.equals(derived)) {
+                    holders.add(userId);
+                }
+            });
+            return List.copyOf(holders);
+        }
+
+        @Override
+        public Map<String, Set<String>> findRoleViewableProjectHolds(String userId) {
+            Map<String, Set<String>> byRole = new LinkedHashMap<>();
+            viewableHolds.getOrDefault(userId, Map.of()).forEach((roleId, ids) -> {
+                if (!ids.isEmpty()) {
+                    byRole.put(roleId, new LinkedHashSet<>(ids));
+                }
+            });
+            return byRole;
+        }
+
+        @Override
+        public Map<String, Set<String>> listRoleViewableProjectHolds(String roleId) {
+            Map<String, Set<String>> byUser = new java.util.TreeMap<>();
+            viewableHolds.forEach((userId, byRole) -> {
+                Set<String> ids = byRole.getOrDefault(roleId, Set.of());
+                if (!ids.isEmpty()) {
+                    byUser.put(userId, new java.util.TreeSet<>(ids));
+                }
+            });
+            return byUser;
+        }
+
+        @Override
+        public void addRoleViewableProjectHolds(String userId, String roleId, List<String> viewableIds) {
+            trace("addRoleViewableProjectHolds:" + userId);
+            if (!viewableIds.isEmpty()) {
+                viewableHolds.computeIfAbsent(userId, ignored -> new LinkedHashMap<>())
+                        .computeIfAbsent(roleId, ignored -> new LinkedHashSet<>()).addAll(viewableIds);
+            }
+        }
+
+        @Override
+        public int deleteRoleViewableProjectHolds(String userId, String roleId) {
+            Set<String> removed = viewableHolds.getOrDefault(userId, new LinkedHashMap<>()).remove(roleId);
+            return removed == null ? 0 : removed.size();
+        }
+
+        // 只加不删：viewAllProjects 为真才把「可以查看全部项目」置真，清单逐条追加（已有的跳过）。
+        @Override
+        public void addRoleViewableProjects(String roleId, boolean viewAllProjects, List<String> viewableIds) {
+            RoleRecord role = roles.get(roleId);
+            List<String> ids = new ArrayList<>(role.viewableProjectIds());
+            viewableIds.stream().filter(id -> !ids.contains(id)).forEach(ids::add);
+            roles.put(roleId, withTicks(role, role.viewAllProjects() || viewAllProjects, ids));
+        }
+
+        private static RoleRecord withTicks(RoleRecord role, boolean viewAllProjects, List<String> viewableProjectIds) {
+            return new RoleRecord(role.id(), role.roleName(), role.description(), role.dataScope(), role.status(), role.createdAt(),
+                    role.permissionCodes(), role.organizationId(), viewAllProjects, viewableProjectIds);
+        }
+
+        @Override
+        public Set<String> findRoleViewableProjectRemovals(String roleId) {
+            return Set.copyOf(viewableRemovals.getOrDefault(roleId, Map.of()).keySet());
+        }
+
+        // 只给还没有标记的条目记单号；清单里不在角色上的条目跳过。角色的勾选不变。
+        @Override
+        public void markRoleViewableProjectRemoval(String roleId, boolean viewAllProjects, List<String> viewableIds, String reviewId) {
+            Map<String, String> marks = viewableRemovals.computeIfAbsent(roleId, ignored -> new LinkedHashMap<>());
+            List<String> ticked = roles.get(roleId).viewableProjectIds();
+            viewableIds.stream().filter(ticked::contains).forEach(id -> marks.putIfAbsent(id, reviewId));
+            if (viewAllProjects) {
+                marks.putIfAbsent("*", reviewId);
+            }
+        }
+
+        // 按复核单号落地：去掉带该单号的条目（清单条目在前，"*" 在最后）与这些条目上所有人的待批；单号对不上的什么都不改。
+        @Override
+        public List<String> applyRoleViewableProjectRemoval(String roleId, String reviewId) {
+            trace("applyRoleViewableProjectRemoval:" + roleId);
+            Map<String, String> marks = viewableRemovals.getOrDefault(roleId, new LinkedHashMap<>());
+            List<String> removed = new ArrayList<>();
+            marks.forEach((id, markedBy) -> {
+                if (reviewId.equals(markedBy) && !"*".equals(id)) {
+                    removed.add(id);
+                }
+            });
+            boolean all = reviewId.equals(marks.get("*"));
+            if (all) {
+                removed.add("*");
+            }
+            if (removed.isEmpty()) {
+                return removed;
+            }
+            RoleRecord role = roles.get(roleId);
+            roles.put(roleId, withTicks(role, role.viewAllProjects() && !all,
+                    role.viewableProjectIds().stream().filter(id -> !removed.contains(id)).toList()));
+            removed.forEach(marks::remove);
+            viewableHolds.values().forEach(byRole -> byRole.getOrDefault(roleId, new LinkedHashSet<>()).removeAll(removed));
+            return removed;
+        }
+
+        @Override
+        public void clearRoleViewableProjectRemoval(String roleId, String reviewId) {
+            viewableRemovals.getOrDefault(roleId, new LinkedHashMap<>()).values().removeIf(reviewId::equals);
+        }
+
+        // 两条路（直接分配、岗位派生）都不再持有的角色，待批条目随之删除；只去掉一条路的不删（Jdbc 在 unassignUserRole、
+        // replacePositionGrants 里做同一件事）。
+        private void dropHoldsOfRolesNoLongerHeld(String userId) {
+            Map<String, Set<String>> byRole = viewableHolds.get(userId);
+            if (byRole != null) {
+                byRole.keySet().removeIf(roleId -> !userRoles.getOrDefault(userId, Set.of()).contains(roleId)
+                        && !roleId.equals(positionRoles.get(userId)));
+            }
         }
 
         @Override
@@ -5209,6 +5383,7 @@ class AccessServiceTests {
         @Override
         public void unassignUserRole(String userId, String roleId) {
             userRoles.computeIfAbsent(userId, ignored -> new LinkedHashSet<>()).remove(roleId);
+            dropHoldsOfRolesNoLongerHeld(userId); // M736 第二步：与 Jdbc 同语义
         }
 
         @Override
@@ -5375,6 +5550,7 @@ class AccessServiceTests {
 
         @Override
         public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
+            trace("findPermissionEffects:" + userId);
             List<PermissionEffect> effects = new ArrayList<>();
             for (PermissionEffect override : overrides) {
                 if (override.userId().equals(userId)) {
@@ -5704,5 +5880,1682 @@ class AccessServiceTests {
     private static void assertGrantExceeds(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
         assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class,
                 e -> assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS"));
+    }
+
+    // ── M736（XM-M001-D 可跨项目角色·批 1 权限治理；操作员 2026-10-01 确认的治理地图第 653 行追加句：「被分配了可跨项目角色的员工
+    //    （含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」）────────────────────────────────────────
+    //    夹具：当时的项目集合＝accessRepository.projectIds；可跨项目角色按 10 参构造直接放进 accessRepository.roles；
+    //    判定用真实的 AuthorizationService，不打桩。甲、乙、丙项目＝org_a、org_b、org_c。
+
+    private static final String XP_ASSIGN = "access.role.assign";
+    private static final String XP_APPLY = "access.grant_request.apply";
+
+    private void xpProjects(String... projectIds) {
+        accessRepository.projectIds.addAll(List.of(projectIds));
+    }
+
+    // 平台角色（归属为空）。viewAll＝勾了「可以查看全部项目」；ticked＝展开后逐个勾选的项目；两项都没有的是普通角色。
+    private void xpRole(String roleId, List<String> codes, boolean viewAll, String... ticked) {
+        accessRepository.roles.put(roleId, new RoleRecord(roleId, roleId, null, "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), codes, null, viewAll, List.of(ticked)));
+    }
+
+    private void xpUser(String userId, String organizationId) {
+        accessRepository.users.put(userId, new AccessUser(userId, userId, "staff", organizationId, null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+    }
+
+    // 甲项目的普通员工，直接持有给定角色，并以其身份登录（会话与账号行一致）。
+    private void xpActAs(String userId, String... roleIds) {
+        xpUser(userId, "org_a");
+        accessRepository.userRoles.put(userId, new LinkedHashSet<>(List.of(roleIds)));
+        authenticateAsOrgUser(userId, userId, "org_a");
+    }
+
+    // 归属给定项目的模板（ownerScopeId 为空＝平台模板），带一个日常码。
+    private void xpTemplate(String id, String ownerScopeId) {
+        accessRepository.saveTemplate(new PermissionTemplate(
+                id, id, id, null, "base", null, ownerScopeId == null ? "platform" : "organization", ownerScopeId, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(id, M002_VIEW, AccessRepository.Effect.GRANT, "project", false)));
+    }
+
+    private static PermissionTemplateRequest xpTemplateRequest(String key) {
+        return new PermissionTemplateRequest(key, "M736", List.of(), "跨项目模板", "base", null, List.of(M002_VIEW), "project",
+                null, null, false);
+    }
+
+    private static RoleRequest xpRoleRequest(String key, Boolean viewAll, List<String> ticked) {
+        return new RoleRequest(key, "M736", List.of(), "角色" + key, null, List.of(M002_VIEW), "project", viewAll, ticked);
+    }
+
+    private static AccessGrantApplyRequest xpRoleApplication(String key, String roleId) {
+        return new AccessGrantApplyRequest(key, "M736", List.of(), "user_role", "usr_xp_target", roleId, null, null, null, null, null,
+                null, null, null, false, "角色授予申请");
+    }
+
+    private static void xpExpect(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, int status, String code, String message) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status().value()).isEqualTo(status);
+            assertThat(e.code()).isEqualTo(code);
+            assertThat(e.getMessage()).contains(message);
+        });
+    }
+
+    // M736-U1（操作员 2026-10-01 说明「权限配置表格当中有一个可以查看全部项目选项……可以点击+打开……逐个独立的项目去选」；同日所选选项原文
+    // 「项目管理员给本项目建的角色也能勾其他项目；分配这类角色仍按之前的答复先审批。」；2026-10-03 所选选项原文「项目、城市项目公司、
+    // 在用的域主管公司各列为独立条目，勾哪条只管哪条，互不连带。」）：建角色收两项勾选。四种 400 都不建角色、各留一条失败留痕——
+    // 两项同时给；清单有空白条目；去重后超过 500 条；有不在项目集合里的条目（顶层平台主体、停用的域主管公司、查不到的编号各一例）。
+    // 停用的城市项目公司在项目集合里，可以勾；重复条目去重，恰好 500 条可以；成功留痕带两项。四种校验排在「不持角色里的码」之前；
+    // 建角色的人自己看不到所勾项目也能建，角色仍归他本人项目。
+    @Test
+    void createRoleValidatesAndStoresTheViewableProjectTicks() {
+        xpProjects("org_a", "org_b", "be_city_inactive"); // 项目集合：项目表的项目、城市项目公司（含停用的）、在用的域主管公司
+        List<String> bulk = java.util.stream.IntStream.range(0, 500).mapToObj(i -> "bulk_" + i).toList();
+        accessRepository.projectIds.addAll(bulk);
+        int roles = accessRepository.roles.size();
+
+        xpExpect(() -> service.createRole(xpRoleRequest("xp-u1-both", true, List.of("org_b"))),
+                400, "VALIDATION_FAILED", "勾了“可以查看全部项目”就不能再逐个勾选项目");
+        List<List<String>> blanks = List.of(java.util.Arrays.asList("org_b", " "), java.util.Arrays.asList("org_b", null));
+        for (int i = 0; i < blanks.size(); i++) {
+            RoleRequest blank = xpRoleRequest("xp-u1-blank-" + i, null, blanks.get(i));
+            xpExpect(() -> service.createRole(blank), 400, "VALIDATION_FAILED", "可查看项目清单里有空白条目");
+        }
+        List<String> tooMany = new ArrayList<>(bulk);
+        tooMany.add("org_b");
+        xpExpect(() -> service.createRole(xpRoleRequest("xp-u1-501", false, tooMany)),
+                400, "VALIDATION_FAILED", "逐个勾选的可查看项目不能超过 500 条");
+        for (String outside : List.of("be_platform", "be_domain_inactive", "no_such_id")) {
+            assertThatThrownBy(() -> service.createRole(xpRoleRequest("xp-u1-" + outside, false, List.of("org_b", outside))))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.status().value()).isEqualTo(400);
+                        assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+                        assertThat(e.getMessage()).isEqualTo("可查看项目清单里有无法识别或已停用的条目：" + outside);
+                    });
+        }
+        assertThat(accessRepository.roles).hasSize(roles);
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("role.changed");
+        assertThat(auditEventRepository.events).filteredOn(event -> "role.change_failed".equals(event.eventName()))
+                .extracting(event -> event.metadata().get("error_code")).hasSize(7).containsOnly("VALIDATION_FAILED");
+
+        RoleRecord inactiveCity = service.createRole(xpRoleRequest("xp-u1-city", false, List.of("be_city_inactive")));
+        assertThat(accessRepository.roles.get(inactiveCity.id()).viewableProjectIds()).containsExactly("be_city_inactive");
+        RoleRecord deduplicated = service.createRole(xpRoleRequest("xp-u1-dedupe", null, List.of("org_b", "org_a", "org_b")));
+        assertThat(accessRepository.roles.get(deduplicated.id()).viewableProjectIds()).containsExactly("org_b", "org_a");
+        assertThat(accessRepository.roles.get(deduplicated.id()).viewAllProjects()).isFalse();
+        List<String> fiveHundred = new ArrayList<>(bulk);
+        fiveHundred.add("bulk_0");
+        assertThat(service.createRole(xpRoleRequest("xp-u1-500", false, fiveHundred)).viewableProjectIds()).hasSize(500);
+        RoleRecord all = service.createRole(xpRoleRequest("xp-u1-all", true, null));
+        assertThat(accessRepository.roles.get(all.id()).viewAllProjects()).isTrue();
+        assertThat(accessRepository.roles.get(all.id()).viewableProjectIds()).isEmpty();
+        RoleRecord plain = service.createRole(xpRoleRequest("xp-u1-plain", null, null));
+        assertThat(AuthorizationService.isCrossProjectRole(accessRepository.roles.get(all.id()))).isTrue();
+        assertThat(AuthorizationService.isCrossProjectRole(accessRepository.roles.get(deduplicated.id()))).isTrue();
+        assertThat(AuthorizationService.isCrossProjectRole(accessRepository.roles.get(plain.id()))).isFalse();
+        assertThat(auditEventRepository.events).filteredOn(event -> "xp-u1-dedupe".equals(event.idempotencyKey()))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.eventName()).isEqualTo("role.changed");
+                    assertThat(event.metadata().get("view_all_projects")).isEqualTo(false);
+                    assertThat(event.metadata().get("viewable_project_ids")).isEqualTo(List.of("org_b", "org_a"));
+                });
+
+        xpActAs("usr_xp_creator");
+        xpExpect(() -> service.createRole(xpRoleRequest("xp-u1-creator-invalid", false, List.of("no_such_id"))),
+                400, "VALIDATION_FAILED", "可查看项目清单里有无法识别或已停用的条目");
+        xpExpect(() -> service.createRole(xpRoleRequest("xp-u1-creator-unheld", false, List.of("org_b"))),
+                403, "GRANT_EXCEEDS_OWN_PERMISSIONS", M002_VIEW);
+        xpRole("role_xp_view", List.of(M002_VIEW), false);
+        xpActAs("usr_xp_creator", "role_xp_view");
+        assertThat(authorizationService.projectReach(authorizationService.currentActor(), "access.role.manage").covers("org_b"))
+                .as("建角色的人自己看不到乙项目").isFalse();
+        RoleRecord byCreator = service.createRole(xpRoleRequest("xp-u1-creator", false, List.of("org_b")));
+        assertThat(accessRepository.roles.get(byCreator.id()).organizationId()).isEqualTo("org_a");
+        assertThat(accessRepository.roles.get(byCreator.id()).viewableProjectIds()).containsExactly("org_b");
+    }
+
+    // M736-U3（操作员 2026-09-25「在他分配的权限内」）：分配角色权限只经员工单独授予得到的人，不是经可跨项目角色持有——撤不了乙项目员工的
+    // 角色；同一个人再经只勾了乙项目的角色持有就可以，丙项目仍不行；收回这个角色后又不行（第二次）。
+    @Test
+    void roleAssignHeldOutsideACrossProjectRoleDoesNotReachOtherProjects() {
+        xpProjects("org_a", "org_b", "org_c");
+        xpRole("role_xp_keep", List.of(M002_VIEW), false);
+        xpRole("role_xp_cross", List.of(XP_ASSIGN), false, "org_b");
+        for (String target : List.of("usr_xp_b", "usr_xp_c")) {
+            xpUser(target, "usr_xp_b".equals(target) ? "org_b" : "org_c");
+            accessRepository.userRoles.put(target, new LinkedHashSet<>(Set.of("role_xp_keep")));
+        }
+        xpActAs("usr_xp_holder");
+        accessRepository.saveUserPermissionOverrides("usr_xp_holder", List.of(XP_ASSIGN), AccessRepository.Effect.GRANT, "单独授予", "usr_admin");
+
+        xpExpect(() -> service.unassignUserRole(new RoleAssignmentRequest("xp-u3-override", null, "usr_xp_b", "role_xp_keep")),
+                403, "CROSS_ORG_FORBIDDEN", "usr_xp_b");
+        assertThat(accessRepository.userRoles.get("usr_xp_b")).contains("role_xp_keep");
+
+        xpActAs("usr_xp_holder", "role_xp_cross");
+        service.unassignUserRole(new RoleAssignmentRequest("xp-u3-cross", null, "usr_xp_b", "role_xp_keep"));
+        assertThat(accessRepository.userRoles.get("usr_xp_b")).doesNotContain("role_xp_keep");
+        xpExpect(() -> service.unassignUserRole(new RoleAssignmentRequest("xp-u3-cross-c", null, "usr_xp_c", "role_xp_keep")),
+                403, "CROSS_ORG_FORBIDDEN", "usr_xp_c");
+        assertThat(accessRepository.userRoles.get("usr_xp_c")).contains("role_xp_keep");
+
+        accessRepository.userRoles.put("usr_xp_b", new LinkedHashSet<>(Set.of("role_xp_keep")));
+        xpActAs("usr_xp_holder");
+        xpExpect(() -> service.unassignUserRole(new RoleAssignmentRequest("xp-u3-again", null, "usr_xp_b", "role_xp_keep")),
+                403, "CROSS_ORG_FORBIDDEN", "usr_xp_b");
+        assertThat(accessRepository.userRoles.get("usr_xp_b")).contains("role_xp_keep");
+    }
+
+    // M736-U6（治理地图第 703 行「跨商户、跨项目权限每次均须先审批，审批通过后方可生效」；操作员 2026-10-01 所选选项原文「项目管理员给本项目
+    // 建的角色也能勾其他项目；分配这类角色仍按之前的答复先审批。」；2026-09-25「平台管理员可直接分配」，2026-10-01 确认句的选项原文
+    // 「只免「跨项目」这一项审批，角色里的高危码照旧先审批。」；定岗一半是技术推导，依据操作员 2026-09-25 答「也算」）：
+    // 直接分配——非平台管理员分配可跨项目角色（含只勾了目标员工所在项目的）403 GRANT_REQUIRES_APPROVAL、不落行，换幂等键再来仍 403；
+    // 不持角色里的码先得「超出本人权限」；普通角色照旧直接分配；平台管理员分配只含日常权限的这类角色成功，含须审批码的仍被原有的审批闸拦下。
+    // 直接定岗——非平台管理员定岗、新派生出这类角色 403，不写岗位行、不套模板；员工已挂在这张映射上时重定不拦；平台管理员定岗不拦；
+    // 平台管理员改岗位映射触发的重派生不拦。
+    @Test
+    void directAssignmentAndPositioningOfACrossProjectRoleNeedApprovalUnlessByThePlatformAdmin() {
+        accessRepository.markRequiresApproval(M002_CODE, "high");
+        service = newAccessService(true, supervisorReviewService(new InMemorySupervisorReviewRepository()));
+        xpProjects("org_a", "org_b");
+        xpRole("role_xp_view", List.of(M002_VIEW), false);
+        xpRole("role_xp_cross", List.of(M002_VIEW), false, "org_b");
+        xpRole("role_xp_same_project", List.of(M002_VIEW), false, "org_a");
+        xpRole("role_xp_cross_unheld", List.of("governance.supervisor_review.view"), false, "org_b");
+        xpRole("role_xp_cross_high", List.of(M002_CODE), true);
+        xpUser("usr_xp_target", "org_a");
+        xpUser("usr_xp_seat", "org_a");
+
+        xpActAs("usr_xp_mgr", "role_xp_view");
+        for (int round = 1; round <= 2; round++) {
+            for (String role : List.of("role_xp_cross", "role_xp_same_project")) {
+                String key = "xp-u6-assign-" + role + "-" + round;
+                xpExpect(() -> service.assignUserRole(new RoleAssignmentRequest(key, null, "usr_xp_target", role)),
+                        403, "GRANT_REQUIRES_APPROVAL", "可跨项目角色须提交授权申请");
+            }
+        }
+        xpExpect(() -> service.assignUserRole(new RoleAssignmentRequest("xp-u6-assign-unheld", null, "usr_xp_target", "role_xp_cross_unheld")),
+                403, "GRANT_EXCEEDS_OWN_PERMISSIONS", "governance.supervisor_review.view");
+        assertThat(accessRepository.userRoles.getOrDefault("usr_xp_target", Set.of())).isEmpty();
+        service.assignUserRole(new RoleAssignmentRequest("xp-u6-assign-plain", null, "usr_xp_target", "role_xp_view"));
+        assertThat(accessRepository.userRoles.get("usr_xp_target")).containsExactly("role_xp_view");
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.assignUserRole(new RoleAssignmentRequest("xp-u6-admin-assign", null, "usr_xp_target", "role_xp_cross"));
+        assertThat(accessRepository.userRoles.get("usr_xp_target")).contains("role_xp_cross");
+        xpExpect(() -> service.assignUserRole(new RoleAssignmentRequest("xp-u6-admin-high", null, "usr_xp_target", "role_xp_cross_high")),
+                403, "GRANT_REQUIRES_APPROVAL", "以下权限的授予需要审批");
+        assertThat(accessRepository.userRoles.get("usr_xp_target")).doesNotContain("role_xp_cross_high");
+
+        xpTemplate("tpl_xp_pos", null);
+        PositionRoleTemplate mapping = service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp-u6-map", null, "xp_patrol", "lvl_m1_lower", "role_xp_cross", "tpl_xp_pos", "active"));
+        xpActAs("usr_xp_mgr", "role_xp_view");
+        xpExpect(() -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                        "xp-u6-seat-mgr", null, "usr_xp_seat", "xp_patrol", "lvl_m1_lower", null, null, null)),
+                403, "GRANT_REQUIRES_APPROVAL", "可跨项目角色须提交授权申请");
+        assertThat(accessRepository.userPositionAssignments).doesNotContainKey("usr_xp_seat");
+        assertThat(accessRepository.positionRoles).doesNotContainKey("usr_xp_seat");
+        assertThat(accessRepository.templateApplications).noneMatch(application -> "usr_xp_seat".equals(application.targetId()));
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp-u6-seat-admin", null, "usr_xp_seat", "xp_patrol", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.positionRoles.get("usr_xp_seat")).isEqualTo("role_xp_cross");
+
+        xpActAs("usr_xp_mgr", "role_xp_view");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp-u6-reseat-mgr", null, "usr_xp_seat", "xp_patrol", "lvl_m1_lower", null, null, null)); // 同映射重定，不是新授出
+        assertThat(accessRepository.positionRoles.get("usr_xp_seat")).isEqualTo("role_xp_cross");
+
+        authenticateAsPlatformAdmin("seed-org");
+        xpRole("role_xp_cross_two", List.of(M002_VIEW), true);
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "xp-u6-map-change", null, "xp_patrol", "lvl_m1_lower", "role_xp_cross_two", "tpl_xp_pos", "active"));
+        assertThat(accessRepository.positionRoles.get("usr_xp_seat")).isEqualTo("role_xp_cross_two");
+    }
+
+    // M736-U7（操作员 2026-09-25 所选选项原文「按授权政策「高」一档走（按现行政策不到最高权限）」；2026-10-01「分配这类角色仍按之前的答复
+    // 先审批」）：非平台管理员申请把可跨项目角色分给员工——只含日常权限也受理，档位取各码档位与「高」一档的较高者：只含日常码、含中档
+    // 须审批码都走上两级，含极高档码走最高权限（那一级来自码本身）。对照：没勾项目的角色只含中档须审批码仍走上一级、只含日常码仍是
+    // 「请直接分配」；平台管理员申请只含日常权限的这类角色仍是「请直接分配」。岗位申请同一口径。审批通过后落地，不再过直接分配的审批闸。
+    // 范围变更到挂这类角色的岗位（技术推导）下限同为「高」一档，平台管理员发起的维持上一级。
+    @Test
+    void crossProjectRoleRequestsByNonAdminsAreAcceptedWithTheHighTierAsTheFloor() {
+        accessRepository.markRequiresApproval("governance.supervisor_review.view", "medium");
+        accessRepository.markRequiresApproval(M002_CODE, "critical");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                "usr_admin", "lvl_m10_upper", null, "CNY", null, "seed-org", null, "test", Instant.parse("2026-06-14T00:00:00Z")));
+        xpProjects("org_a", "org_b");
+        xpUser("usr_xp_target", "org_a");
+        xpRole("role_xp_daily", List.of(M002_VIEW), false, "org_b");
+        xpRole("role_xp_medium", List.of("governance.supervisor_review.view"), false, "org_b");
+        xpRole("role_xp_critical", List.of(M002_CODE), true);
+        xpRole("role_plain_medium", List.of("governance.supervisor_review.view"), false);
+        xpRole("role_plain_daily", List.of(M002_VIEW), false);
+        Map<String, String> expected = new LinkedHashMap<>();
+        expected.put("role_xp_daily", "permission_grant_l2");
+        expected.put("role_xp_medium", "permission_grant_l2");
+        expected.put("role_xp_critical", "permission_grant_l3");
+        expected.put("role_plain_medium", "permission_grant_l1");
+
+        xpActAs("usr_requester");
+        Map<String, AccessGrantRequestRecord> pending = new LinkedHashMap<>();
+        expected.forEach((role, policy) -> {
+            AccessGrantRequestRecord request = service.applyGrant(xpRoleApplication("xp-u7-" + role, role));
+            assertThat(request.status()).as(role).isEqualTo("pending");
+            assertThat(reviewRepository.reviews.get(request.reviewId()).policyCode()).as(role).isEqualTo(policy);
+            pending.put(role, request);
+        });
+        xpExpect(() -> service.applyGrant(xpRoleApplication("xp-u7-plain-daily", "role_plain_daily")),
+                400, "GRANT_APPROVAL_NOT_REQUIRED", "请直接分配");
+
+        authenticateAsPlatformAdmin("seed-org");
+        xpExpect(() -> service.applyGrant(xpRoleApplication("xp-u7-admin-daily", "role_xp_daily")),
+                400, "GRANT_APPROVAL_NOT_REQUIRED", "请直接分配");
+        AccessGrantRequestRecord applied = service.reviewGrant(pending.get("role_xp_daily").id(), m002Approve("xp-u7-review-daily"));
+        assertThat(applied.status()).isEqualTo("applied");
+        assertThat(accessRepository.userRoles.get("usr_xp_target")).contains("role_xp_daily");
+
+        xpTemplate("tpl_xp_pos", null);
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp-u7-map", null, "xp_patrol", "lvl_m1_lower", "role_xp_daily", "tpl_xp_pos", "active"));
+        for (String mover : List.of("usr_xp_seat", "usr_xp_move_staff", "usr_xp_move_admin")) {
+            xpUser(mover, "org_a");
+        }
+        authenticateAsOrgUser("usr_requester", "usr_requester", "org_a");
+        AccessGrantRequestRecord position = service.applyGrant(new AccessGrantApplyRequest(
+                "xp-u7-position", "M736", List.of(), "user_position", "usr_xp_seat", null, "xp_patrol", "lvl_m1_lower",
+                null, null, null, null, null, null, false, "岗位申请"));
+        assertThat(reviewRepository.reviews.get(position.reviewId()).policyCode()).isEqualTo("permission_grant_l2");
+
+        AccessGrantRequestRecord byStaff = service.changeUserScope("usr_xp_move_staff", new UserScopeChangeRequest(
+                "xp-u7-scope-staff", null, "org_a", "merchant_x", "xp_patrol", "lvl_m1_lower", null, null, null, "调到商户", null));
+        assertThat(reviewRepository.reviews.get(byStaff.reviewId()).policyCode()).isEqualTo("permission_grant_l2");
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord byAdmin = service.changeUserScope("usr_xp_move_admin", new UserScopeChangeRequest(
+                "xp-u7-scope-admin", null, "org_a", "merchant_x", "xp_patrol", "lvl_m1_lower", null, null, null, "调到商户", null));
+        assertThat(reviewRepository.reviews.get(byAdmin.reviewId()).policyCode()).isEqualTo("permission_grant_l1");
+    }
+
+    // M736-U8（操作员 2026-09-24 裁决 M001-F01「所有可以跨项目的角色都可以跨项目处理」；M001-F09「项目自己的模板只能套给本项目员工；
+    // 平台管理员要跨项目用，先复制一份（复制件归平台，只有平台管理员能改）再套」）：经可跨项目角色持模板维护、套用权限的人复制乙项目的
+    // 模板——成功，复制件归他本人项目，再复制一次同样（第二次）；丙项目没被勾中，复制——拒；把复制件套给乙项目员工——拒（项目模板只套本项目员工），套给本项目
+    // 员工——成功；改平台模板——拒。
+    @Test
+    void crossProjectHolderCopiesATemplateOfAReachableProjectAndTheCopyStaysWithHisOwnProject() {
+        xpProjects("org_a", "org_b", "org_c");
+        xpRole("role_xp_tpl", List.of("access.permission_template.manage", "access.permission_template.apply", M002_VIEW),
+                false, "org_a", "org_b");
+        xpUser("usr_xp_a", "org_a");
+        xpUser("usr_xp_b", "org_b");
+        xpTemplate("tpl_xp_b", "org_b");
+        xpTemplate("tpl_xp_c", "org_c");
+        xpTemplate("tpl_xp_platform", null);
+        xpActAs("usr_xp_holder", "role_xp_tpl");
+
+        PermissionTemplate copy = service.copyPermissionTemplate("tpl_xp_b", xpTemplateRequest("xp-u8-copy"));
+        assertThat(accessRepository.templates.get(copy.id()).ownerScopeId()).isEqualTo("org_a");
+        assertThat(accessRepository.templates.get(copy.id()).sourceTemplateId()).isEqualTo("tpl_xp_b");
+        PermissionTemplate again = service.copyPermissionTemplate("tpl_xp_b", xpTemplateRequest("xp-u8-copy-again")); // 第二次
+        assertThat(again.id()).isNotEqualTo(copy.id());
+        assertThat(accessRepository.templates.get(again.id()).ownerScopeId()).isEqualTo("org_a");
+        xpExpect(() -> service.copyPermissionTemplate("tpl_xp_c", xpTemplateRequest("xp-u8-copy-c")),
+                403, "CROSS_ORG_FORBIDDEN", "不能复制其他组织的模板");
+
+        xpExpect(() -> service.applyPermissionTemplate(copy.id(), new PermissionTemplateApplyRequest(
+                        "xp-u8-apply-b", "apply", List.of(), copy.id(), List.of("usr_xp_b"), "merge")),
+                403, "CROSS_ORG_FORBIDDEN", "不能应用其他组织的模板");
+        assertThat(service.applyPermissionTemplate(copy.id(), new PermissionTemplateApplyRequest(
+                "xp-u8-apply-a", "apply", List.of(), copy.id(), List.of("usr_xp_a"), "merge")).applications()).hasSize(1);
+        assertThat(accessRepository.templateApplications).extracting(PermissionTemplateApplication::targetId).containsExactly("usr_xp_a");
+
+        xpExpect(() -> service.updatePermissionTemplate("tpl_xp_platform", xpTemplateRequest("xp-u8-edit-platform")),
+                403, "CROSS_ORG_FORBIDDEN", "不能修改其他组织的模板");
+    }
+
+    // M736-U9（同一追加句的下一句：「……平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到。」；建账号入口只能建外部机构账号）：
+    // 持勾了「可以查看全部项目」的角色的人在乙项目下建外部机构账号——仍拒、不建账号，换幂等键再来仍拒；在本人项目建照旧成功。
+    @Test
+    void crossProjectHolderStillCannotCreateAnExternalAccountInAnotherProject() {
+        xpProjects("org_a", "org_b");
+        xpRole("role_xp_all", List.of("access.user.manage", XP_ASSIGN), true);
+        xpActAs("usr_xp_holder", "role_xp_all");
+
+        for (int round = 1; round <= 2; round++) {
+            String key = "xp-u9-b-" + round;
+            xpExpect(() -> service.createAccessUser(new AccessUserRequest(key, null, List.of(), "xp_vendor_b", "password", null,
+                            "outsourced_vendor", "org_b", null, "active")),
+                    403, "CROSS_ORG_FORBIDDEN", "不能在其他组织下创建用户");
+        }
+        assertThat(accessRepository.users.values()).noneMatch(user -> "xp_vendor_b".equals(user.username()));
+        assertThat(service.createAccessUser(new AccessUserRequest("xp-u9-a", null, List.of(), "xp_vendor_a", "password", null,
+                "outsourced_vendor", "org_a", null, "active")).organizationId()).isEqualTo("org_a");
+    }
+
+    // M736-F07（同一追加句的下一句：「……平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到。」；M001-F16 更正段「修改在用模板
+    // 等同给在用员工增减权限」）：乙项目的项目自有模板套给乙项目的外部机构账号；经勾了乙项目的角色持模板维护权限的甲项目员工修改该模板——
+    // 拒（403 CROSS_ORG_FORBIDDEN），换幂等键再来仍拒，模板条目、该账号的有效权限都不变，不写逐人留痕。对照：只被乙项目普通员工在用的
+    // 模板，他照常能改并逐人留痕；乙项目自己的人改这张外部机构账号在用的本项目模板照常成功。
+    @Test
+    void crossProjectHolderCannotEditATemplateHeldByAnExternalAccountOfTheTickedProject() {
+        xpProjects("org_a", "org_b");
+        xpRole("role_xp_tpl", List.of("access.permission_template.manage", M002_VIEW), false, "org_b");
+        xpUser("usr_xp_b", "org_b");
+        accessRepository.users.put("usr_xp_vendor_b", new AccessUser("usr_xp_vendor_b", "usr_xp_vendor_b", "outsourced_vendor", "org_b",
+                null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        xpTemplate("tpl_xp_vendor", "org_b");
+        xpTemplate("tpl_xp_staff", "org_b");
+        accessRepository.applyTemplate("tpl_xp_vendor", List.of("usr_xp_vendor_b"), null, null, false, "usr_admin");
+        accessRepository.applyTemplate("tpl_xp_staff", List.of("usr_xp_b"), null, null, false, "usr_admin");
+        xpActAs("usr_xp_holder", "role_xp_tpl");
+
+        for (int round = 1; round <= 2; round++) {
+            String key = "xp-f07-vendor-" + round;
+            xpExpect(() -> service.updatePermissionTemplate("tpl_xp_vendor", namedRequest(key, "跨项目模板", "base")),
+                    403, "CROSS_ORG_FORBIDDEN", "不能为其他组织的用户分配权限：usr_xp_vendor_b");
+        }
+        assertThat(accessRepository.items.get("tpl_xp_vendor")).extracting(PermissionTemplateItem::permissionCode).containsExactly(M002_VIEW);
+        assertThat(accessRepository.findPermissionEffects("usr_xp_vendor_b", Instant.now()))
+                .extracting(AccessRepository.PermissionEffect::permissionCode).containsExactly(M002_VIEW);
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).doesNotContain("permission_template.effect_changed");
+
+        service.updatePermissionTemplate("tpl_xp_staff", namedRequest("xp-f07-staff", "跨项目模板", "base"));
+        assertThat(accessRepository.items.get("tpl_xp_staff")).isEmpty();
+        assertThat(effectChanged("xp-f07-staff")).extracting(AuditEvent::businessId).containsExactly("usr_xp_b");
+
+        authenticateAsOrgUser("usr_xp_b", "usr_xp_b", "org_b");
+        service.updatePermissionTemplate("tpl_xp_vendor", namedRequest("xp-f07-local", "跨项目模板", "base"));
+        assertThat(accessRepository.items.get("tpl_xp_vendor")).isEmpty();
+        assertThat(effectChanged("xp-f07-local")).extracting(AuditEvent::businessId).containsExactly("usr_xp_vendor_b");
+    }
+
+    // M736-U10（D-032：平台管理员不受项目隔离约束）：库里有可跨项目角色、项目集合不为空时，平台管理员各入口照旧——全量列角色、模板
+    // （含平台模板）与账号，处理任何归属的员工（含不在项目集合里的平台公司员工），改平台模板；算可触及项目时不看项目集合。
+    @Test
+    void platformAdminEntriesAreUnchangedByCrossProjectRoles() {
+        xpProjects("org_a", "org_b");
+        xpRole("role_xp_cross", List.of(M002_VIEW), false, "org_b");
+        accessRepository.roles.put("role_xp_org_b", new RoleRecord("role_xp_org_b", "role_xp_org_b", null, "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), List.of(M002_VIEW), "org_b"));
+        xpTemplate("tpl_xp_b", "org_b");
+        xpTemplate("tpl_xp_platform", null);
+        xpUser("usr_xp_b", "org_b");
+        xpUser("usr_xp_hq", "platform-company");
+        for (String target : List.of("usr_xp_b", "usr_xp_hq")) {
+            accessRepository.userRoles.put(target, new LinkedHashSet<>(Set.of("role_xp_cross")));
+        }
+
+        AuthorizationService.ProjectReach reach = authorizationService.projectReach(authorizationService.currentActor(), XP_ASSIGN);
+        assertThat(reach.platformAdmin()).isTrue();
+        assertThat(reach.covers("platform-company")).isTrue();
+        assertThat(service.listRoles().items()).extracting(RoleRecord::id)
+                .contains("role_xp_cross", "role_xp_org_b", "explicit_admin_grants");
+        assertThat(service.listPermissionTemplates().items()).extracting(PermissionTemplate::id).contains("tpl_xp_b", "tpl_xp_platform");
+        assertThat(service.listAccessUsers().items()).extracting(AccessUser::id).contains("usr_xp_b", "usr_xp_hq");
+        for (String target : List.of("usr_xp_b", "usr_xp_hq")) {
+            service.unassignUserRole(new RoleAssignmentRequest("xp-u10-unassign-" + target, null, target, "role_xp_cross"));
+            assertThat(accessRepository.userRoles.get(target)).as(target).isEmpty();
+            assertThat(service.effectivePermissionsForUser(target).userId()).isEqualTo(target);
+        }
+        assertThat(service.updatePermissionTemplate("tpl_xp_platform", xpTemplateRequest("xp-u10-edit")).ownerScopeId()).isNull();
+    }
+
+    // M736-U11（复核 I-1；治理地图第 651 行「员工单独授予、解除员工显式拒绝、岗位模板高危权限释放这三类授权申请，只能由具备分配/取消分配
+    // 角色权限的人发起」，入口对申请权限与分配角色权限一起核验）：三类申请的可触及项目取两码的交集——申请权限来自勾了全部项目的角色、
+    // 分配角色权限只来自本项目的普通角色时，对乙项目员工发起三类申请 403 CROSS_ORG_FORBIDDEN，不建单、不开复核单，第二轮仍被拒；同一个人的临时权限
+    // 申请只核申请权限，照常受理；分配角色权限也改由勾了乙项目的角色持有后，三类申请过范围闸（员工单独授予建单成功）。
+    @Test
+    void theThreeRoleAssignInitiatedRequestsNeedBothCodesToReachTheTargetProject() {
+        accessRepository.markRequiresApproval(M002_CODE, "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        xpProjects("org_a", "org_b");
+        xpUser("usr_xp_b", "org_b");
+        xpRole("role_xp_apply_all", List.of(XP_APPLY), true);
+        xpRole("role_xp_assign_local", List.of(XP_ASSIGN), false);
+        xpRole("role_xp_assign_b", List.of(XP_ASSIGN), false, "org_b");
+        xpActAs("usr_xp_applicant", "role_xp_apply_all", "role_xp_assign_local");
+
+        for (int round = 1; round <= 2; round++) {
+            for (String type : List.of("user_permission_grant", "user_permission_deny_removal", "position_high_risk_release")) {
+                String key = "xp-u11-" + type + "-" + round;
+                xpExpect(() -> service.applyGrant(m002Apply(key, type, "usr_xp_b", List.of(M002_CODE))),
+                        403, "CROSS_ORG_FORBIDDEN", "usr_xp_b");
+            }
+        }
+        assertThat(accessRepository.grantRequests).isEmpty();
+        assertThat(reviewRepository.reviews).isEmpty();
+
+        AccessGrantRequestRecord temporary = service.applyGrant(new AccessGrantApplyRequest(
+                "xp-u11-temporary", "M736", List.of(), "temporary_permission", "usr_xp_b", null, null, null, null, null, null,
+                List.of(M002_VIEW), Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false, "临时顶班"));
+        assertThat(temporary.status()).isEqualTo("pending");
+
+        xpActAs("usr_xp_applicant", "role_xp_apply_all", "role_xp_assign_b");
+        AccessGrantRequestRecord grant = service.applyGrant(
+                m002Apply("xp-u11-both-grant", "user_permission_grant", "usr_xp_b", List.of(M002_CODE)));
+        assertThat(grant.status()).isEqualTo("pending");
+        assertThat(grant.targetUserId()).isEqualTo("usr_xp_b");
+    }
+
+    // M736-U13（M002-F34「其他人不能给最高权限账号设置显式拒绝」；同一追加句的下一句「……最高权限……一律碰不到」）：最高权限账号归属
+    // 就在操作人本人项目时，过了范围闸后得 MASTER_AUTHORITY_DENY_FORBIDDEN（两道闸的先后不变）；归属在别的项目时，勾了「可以查看全部
+    // 项目」的持有者先被范围闸拒（CROSS_ORG_FORBIDDEN）、不写拒绝行，换幂等键再来仍拒——可跨项目角色碰不到最高权限账号；同项目的普通员工照常能设拒绝。
+    @Test
+    void crossProjectHolderIsStoppedByTheScopeGateBeforeTheMasterAuthorityDenyRule() {
+        accessRepository.addPermission(XP_ASSIGN, "high", true);
+        xpProjects("org_a", "org_b");
+        xpUser("usr_xp_b", "org_b");
+        xpRole("role_xp_all", List.of(XP_ASSIGN), true);
+        xpActAs("usr_xp_holder", "role_xp_all");
+        String master = SessionIssuer.MASTER_USER_ID;
+
+        accessRepository.users.put(master, new AccessUser(master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "org_a", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        xpExpect(() -> service.setUserPermissionOverrides(master, new UserPermissionOverrideRequest(
+                        "xp-u13-own-project", null, List.of(XP_ASSIGN), "deny", "给最高权限账号设拒绝")),
+                403, "MASTER_AUTHORITY_DENY_FORBIDDEN", "其他人不能给最高权限账号设置显式拒绝");
+
+        accessRepository.users.put(master, new AccessUser(master, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "org_b", null, "active", Instant.parse("2026-06-14T00:00:00Z")));
+        for (int round = 1; round <= 2; round++) {
+            String key = "xp-u13-other-project-" + round;
+            xpExpect(() -> service.setUserPermissionOverrides(master, new UserPermissionOverrideRequest(
+                            key, null, List.of(XP_ASSIGN), "deny", "给最高权限账号设拒绝")),
+                    403, "CROSS_ORG_FORBIDDEN", master);
+        }
+        assertThat(overrideSources(master, XP_ASSIGN, AccessRepository.Effect.DENY)).isEmpty();
+
+        service.setUserPermissionOverrides("usr_xp_b", new UserPermissionOverrideRequest(
+                "xp-u13-plain", null, List.of(XP_ASSIGN), "deny", "停权"));
+        assertThat(overrideSources("usr_xp_b", XP_ASSIGN, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.USER_OVERRIDE);
+    }
+
+    // ── M736 第二步（操作员 2026-10-08 确认的治理地图第 703 行追加句：「可跨项目角色分配出去以后，可以直接在原角色上增加或减少可查看的
+    //    项目：增加的，所有持有人要各自重新审批通过，才能查看新增的项目；减少的，也要审批通过后才生效，审批期间持有人仍能查看。」）──
+    //    夹具 xp2Fixture：授出审批开启；真实判定＋内存仓＋真实主管复核服务，复核单到终态的事件同步转给被测服务的监听（生产里由 Spring
+    //    同步送达）。甲、乙、丙、丁项目＝org_a、org_b、org_c、org_d。角色管理人 usr_xp2_mgr 在甲项目，经没勾选的普通角色持建角色、
+    //    申请授权、分配角色三码；他与平台管理员 usr_admin 的上两级都是 usr_xp2_sup1、usr_xp2_sup2（授权政策「高」一档＝上两级）。
+    //    夹具返回时登录的是角色管理人。各条注释里的「拿掉某处即红」是任务书给的变异点。
+
+    private static final String XP_MANAGE = "access.role.manage";
+    private InMemorySupervisorReviewRepository xp2Reviews;
+    private SupervisorReviewService xp2ReviewService;
+
+    private void xp2Fixture() {
+        xp2Reviews = new InMemorySupervisorReviewRepository();
+        xp2Reviews.superiors.put("usr_xp2_mgr", "usr_xp2_sup1");
+        xp2Reviews.superiors.put("usr_admin", "usr_xp2_sup1");
+        xp2Reviews.superiors.put("usr_xp2_sup1", "usr_xp2_sup2");
+        xp2ReviewService = new SupervisorReviewService(authorizationService,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), xp2Reviews,
+                new AuditEventService(auditEventRepository), event -> {
+                    if (event instanceof SupervisorReviewDecisionRecord decision) {
+                        service.onSupervisorReviewDecided(decision);
+                    }
+                });
+        service = newAccessService(true, xp2ReviewService);
+        xpProjects("org_a", "org_b", "org_c", "org_d");
+        xpUser("usr_xp2_sup1", "org_a");
+        xpUser("usr_xp2_sup2", "org_a");
+        xpRole("role_xp2_mgr", List.of(XP_MANAGE, XP_APPLY, XP_ASSIGN, M002_VIEW), false);
+        xpActAs("usr_xp2_mgr", "role_xp2_mgr");
+    }
+
+    // 归属给定项目的角色（平台角色用 xpRole）。
+    private void xp2Role(String roleId, String organizationId, List<String> codes, boolean viewAll, String... ticked) {
+        accessRepository.roles.put(roleId, new RoleRecord(roleId, roleId, null, "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), codes, organizationId, viewAll, List.of(ticked)));
+    }
+
+    // 给定项目的员工，直接持有给定角色（夹具直接落行，不换登录人）。
+    private void xp2Holder(String userId, String organizationId, String roleId) {
+        xpUser(userId, organizationId);
+        accessRepository.assignUserRole(userId, roleId);
+    }
+
+    // 甲项目的商户账号（带商户归属）。
+    private void xp2MerchantUser(String userId, String merchantId) {
+        accessRepository.users.put(userId, new AccessUser(userId, userId, "merchant", "org_a", merchantId, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+    }
+
+    // 平台模板，只带一个须审批的高危码：挂它的岗位定岗时先挂起、开岗位高危释放单。
+    private void xp2HighTemplate(String id) {
+        accessRepository.saveTemplate(new PermissionTemplate(
+                id, id, id, null, "base", null, "platform", null, "merge", null, null, false,
+                "active", null, null, null, Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(id, M002_CODE, AccessRepository.Effect.GRANT, "project", false)));
+    }
+
+    // 以账号行里的归属登录（会话与账号行一致），不动他的角色。
+    private void xp2Login(String userId) {
+        authenticateAsOrgUser(userId, userId, accessRepository.users.get(userId).organizationId());
+    }
+
+    private static RoleViewableProjectsRequest xp2Delta(String key, Boolean addAll, List<String> add, Boolean removeAll, List<String> remove) {
+        return new RoleViewableProjectsRequest(key, "M736", addAll, add, removeAll, remove, null);
+    }
+
+    private static RoleViewableProjectsRequest xp2Add(String key, String... ids) {
+        return xp2Delta(key, null, List.of(ids), null, null);
+    }
+
+    private static RoleViewableProjectsRequest xp2Remove(String key, String... ids) {
+        return xp2Delta(key, null, null, null, List.of(ids));
+    }
+
+    private static AccessGrantApplyRequest xp2Reapproval(String key, String userId, String roleId) {
+        return new AccessGrantApplyRequest(key, "M736", List.of(), "role_project_reapproval", userId, roleId, null, null, null, null, null,
+                null, null, null, false, "补审新增项目");
+    }
+
+    private Set<String> xp2Holds(String userId, String roleId) {
+        return accessRepository.findRoleViewableProjectHolds(userId).getOrDefault(roleId, Set.of());
+    }
+
+    // 某条目的减少在待审时记着的主管复核单号；没有待审的减少为空。
+    private String xp2RemovalReview(String roleId, String viewableId) {
+        return accessRepository.viewableRemovals.getOrDefault(roleId, Map.of()).get(viewableId);
+    }
+
+    private List<AuditEvent> xp2Events(String eventName) {
+        return auditEventRepository.events.stream().filter(event -> eventName.equals(event.eventName())).toList();
+    }
+
+    // 以该员工身份登录，按给定权限码取他的可触及项目（真实判定）。
+    private AuthorizationService.ProjectReach xp2ReachOf(String userId, String code) {
+        xp2Login(userId);
+        return authorizationService.projectReach(authorizationService.currentActor(), code);
+    }
+
+    // 以审批链上某一级的身份裁决主管复核单（通用主管复核入口调的同一个服务方法）。
+    private SupervisorReviewDecisionRecord xp2Decide(String approver, String reviewId, String key, String decision) {
+        xp2Login(approver);
+        return xp2ReviewService.approve(reviewId, m002ChainDecision(key, decision));
+    }
+
+    // 上两级依次批准一张授权申请：第一级批完仍待审；返回末级批完后的申请。
+    private AccessGrantRequestRecord xp2ApproveBoth(String requestId, String key) {
+        xp2Login("usr_xp2_sup1");
+        assertThat(service.reviewGrant(requestId, m002Approve(key + "-1")).status()).isEqualTo("pending");
+        xp2Login("usr_xp2_sup2");
+        return service.reviewGrant(requestId, m002Approve(key + "-2"));
+    }
+
+    // 角色管理人对三名新员工各提一张指向 role_xp2_cross 的待审申请：角色申请、岗位申请、范围变更（新范围的岗位 xp2_patrol 挂该角色）。
+    private Map<String, AccessGrantRequestRecord> xp2ThreeRequests(String tag) {
+        xp2Login("usr_xp2_mgr");
+        Map<String, AccessGrantRequestRecord> requests = new LinkedHashMap<>();
+        for (String type : List.of("user_role", "user_position", "user_scope_change")) {
+            String target = "usr_" + tag.replace('-', '_') + "_" + type;
+            xpUser(target, "org_a");
+            requests.put(type, switch (type) {
+                case "user_role" -> service.applyGrant(new AccessGrantApplyRequest(tag + "-role", "M736", List.of(), "user_role", target,
+                        "role_xp2_cross", null, null, null, null, null, null, null, null, false, "角色申请"));
+                case "user_position" -> service.applyGrant(new AccessGrantApplyRequest(tag + "-position", "M736", List.of(), "user_position",
+                        target, null, "xp2_patrol", "lvl_m1_lower", null, null, null, null, null, null, false, "岗位申请"));
+                default -> service.changeUserScope(target, new UserScopeChangeRequest(tag + "-scope", null, "org_a", "merchant_x",
+                        "xp2_patrol", "lvl_m1_lower", null, null, null, "调到商户", null));
+            });
+        }
+        requests.forEach((type, request) -> {
+            assertThat(request.status()).as(type).isEqualTo("pending");
+            assertThat(request.requestType()).isEqualTo(type);
+            assertThat(request.targetRoleId()).as(type).isEqualTo("role_xp2_cross");
+        });
+        return requests;
+    }
+
+    // M736-S1（同上追加句「增加的，所有持有人要各自重新审批通过，才能查看新增的项目」；操作员 2026-10-03 所选选项原文「直接在原角色上勾 C；
+    // 但张三等所有持有人要各自重新审批通过，才能看 C。」）：项目角色勾着甲、乙，持有人三个——直接分配的、经岗位得到的、操作人自己。
+    // 加丙：角色当场是甲、乙、丙；三人各一条对丙的待批；不建任何主管复核单与授权申请；现状里三人都列为待重新审批；留痕带增加的条目与
+    // 三人编号。拿掉写待批的循环即红（待批为空）。
+    @Test
+    void addingViewableProjectsWritesTheRoleAndHoldsThemForEveryExistingHolder() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        xpUser("usr_xp2_seat", "org_a");
+        accessRepository.positionRoles.put("usr_xp2_seat", "role_xp2");
+        accessRepository.assignUserRole("usr_xp2_mgr", "role_xp2");
+        List<String> holders = List.of("usr_xp2_direct", "usr_xp2_mgr", "usr_xp2_seat");
+
+        RoleViewableProjectsView view = service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s1-add", "org_c"));
+
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b", "org_c");
+        assertThat(accessRepository.roles.get("role_xp2").viewAllProjects()).isFalse();
+        assertThat(view.viewableProjectIds()).containsExactly("org_a", "org_b", "org_c");
+        assertThat(view.pendingRemovalIds()).isEmpty();
+        for (String holder : holders) {
+            assertThat(accessRepository.findRoleViewableProjectHolds(holder)).as(holder).isEqualTo(Map.of("role_xp2", Set.of("org_c")));
+        }
+        assertThat(accessRepository.listRoleViewableProjectHolds("role_xp2").keySet()).containsExactlyElementsOf(holders);
+        assertThat(view.pendingReapprovals()).extracting(RoleViewableProjectsView.PendingReapproval::userId)
+                .containsExactlyElementsOf(holders);
+        assertThat(view.pendingReapprovals()).allSatisfy(pending -> {
+            assertThat(pending.viewableIds()).containsExactly("org_c");
+            assertThat(pending.reapprovalPending()).isFalse();
+        });
+        assertThat(xp2Reviews.reviews).isEmpty();
+        assertThat(accessRepository.grantRequests).isEmpty();
+        assertThat(auditEventRepository.events).filteredOn(event -> "xp2-s1-add".equals(event.idempotencyKey()))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.eventName()).isEqualTo("role.viewable_projects.changed");
+                    assertThat(event.businessId()).isEqualTo("role_xp2");
+                    assertThat(event.metadata().get("added_view_all_projects")).isEqualTo(false);
+                    assertThat(event.metadata().get("added_viewable_ids")).isEqualTo(List.of("org_c"));
+                    assertThat(event.metadata().get("removal_review_id")).isEqualTo("");
+                    assertThat(event.metadata().get("held_user_ids")).isEqualTo("usr_xp2_direct,usr_xp2_mgr,usr_xp2_seat");
+                });
+    }
+
+    // M736-S2（技术推导：待批只记改之前已持有的人；改之后才得到角色的人按当时的勾选）：加丙以后平台管理员把角色直接分给第四人——
+    // 他没有待批条目，判定看得到丙；改之前已持有的那位仍看不到。在分配时写待批即红。
+    @Test
+    void holderWhoGetsTheRoleAfterTheChangeHasNoHold() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s2-add", "org_c"));
+        xpUser("usr_xp2_later", "org_a");
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.assignUserRole(new RoleAssignmentRequest("xp2-s2-assign", null, "usr_xp2_later", "role_xp2"));
+
+        assertThat(accessRepository.userRoles.get("usr_xp2_later")).containsExactly("role_xp2");
+        assertThat(xp2Holds("usr_xp2_later", "role_xp2")).isEmpty();
+        assertThat(accessRepository.listRoleViewableProjectHolds("role_xp2").keySet()).containsExactly("usr_xp2_direct");
+        assertThat(xp2ReachOf("usr_xp2_later", M002_VIEW).covers("org_c")).as("改之后才得到角色的人按当时的勾选").isTrue();
+        assertThat(xp2ReachOf("usr_xp2_direct", M002_VIEW).covers("org_c")).as("改之前已持有的人").isFalse();
+    }
+
+    // M736-S3（技术推导，依据同一追加句「增加或减少可查看的项目」：把「可以查看全部项目」勾上按增加办，逐个勾选的清单始终保留）：
+    // 清单是甲、乙，有持有人。勾上全部的同时又带增加清单——400、角色不变、不写待批；只勾上全部——角色「全部」为真、清单仍是甲、乙，
+    // 原持有人一条「全部」的待批，他仍只到清单里的项目，不建复核单。勾全部时清空清单即红。
+    @Test
+    void addingViewAllKeepsTheListAndHoldsTheAllEntry() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Delta("xp2-s3-both", true, List.of("org_c"), null, null)),
+                400, "VALIDATION_FAILED", "勾了“可以查看全部项目”就不能再逐个勾选项目");
+        assertThat(accessRepository.roles.get("role_xp2").viewAllProjects()).isFalse();
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b");
+        assertThat(accessRepository.viewableHolds).isEmpty();
+
+        RoleViewableProjectsView view = service.updateRoleViewableProjects("role_xp2", xp2Delta("xp2-s3-all", true, null, null, null));
+
+        assertThat(view.viewAllProjects()).isTrue();
+        assertThat(view.viewableProjectIds()).containsExactly("org_a", "org_b");
+        assertThat(accessRepository.roles.get("role_xp2").viewAllProjects()).isTrue();
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b");
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).containsExactly(AuthorizationService.ALL_PROJECTS);
+        assertThat(xp2Reviews.reviews).isEmpty();
+        AuthorizationService.ProjectReach reach = xp2ReachOf("usr_xp2_direct", M002_VIEW);
+        assertThat(List.of(reach.covers("org_b"), reach.covers("org_c"), reach.allProjects())).containsExactly(true, false, false);
+    }
+
+    // M736-S4（技术推导：角色勾着全部、这个人又没有「全部」待批的，本来就看得到全部，新条目不用他再审批）：接 S3 的状态，再有一人
+    // 在勾上全部以后才得到角色。一次提交去掉全部并加丙：丙当场在清单里；有「全部」待批的人多一条对丙的待批，后来的那人没有；
+    // 「全部」仍为真（去掉全部在待审），建了一张复核单。去掉「没有全部待批就不写」的判断即红（后来的人多出待批）。
+    @Test
+    void addingUnderViewAllHoldsOnlyHoldersStillWaitingForTheAllEntry() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        service.updateRoleViewableProjects("role_xp2", xp2Delta("xp2-s4-all", true, null, null, null));
+        xp2Holder("usr_xp2_later", "org_a", "role_xp2");
+
+        RoleViewableProjectsView view = service.updateRoleViewableProjects("role_xp2",
+                xp2Delta("xp2-s4-mixed", null, List.of("org_c"), true, null));
+
+        RoleRecord role = accessRepository.roles.get("role_xp2");
+        assertThat(role.viewableProjectIds()).containsExactly("org_a", "org_b", "org_c");
+        assertThat(role.viewAllProjects()).as("去掉全部还在待审").isTrue();
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).containsExactlyInAnyOrder(AuthorizationService.ALL_PROJECTS, "org_c");
+        assertThat(xp2Holds("usr_xp2_later", "role_xp2")).isEmpty();
+        assertThat(view.viewAllProjects()).isTrue();
+        assertThat(view.pendingRemovalIds()).containsExactly(AuthorizationService.ALL_PROJECTS);
+        assertThat(xp2Reviews.reviews).hasSize(1);
+    }
+
+    // M736-S5（同一追加句「减少的，也要审批通过后才生效，审批期间持有人仍能查看」；操作员 2026-10-03 所选选项原文「减少也要审批通过后
+    // 才生效；审批期间持有人仍能看 C。」；审批一次、档位取「高」一档为技术推导）：角色勾着甲、乙、丙，有持有人，操作人有两级上级。
+    // 减丙：读回角色仍是甲、乙、丙，持有人照常看得到丙；只多一张待审的主管复核单——动作名、对象类型、对象编号＝角色、「高」一档、
+    // 两个上级节点、没有受益人；现状里丙列为减少待审；不写待批、不建授权申请。提交时就删行即红。
+    @Test
+    void removingOnlyMarksAndOpensOneReviewAndTheRoleStaysUntouched() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b", "org_c");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+
+        RoleViewableProjectsView view = service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s5-remove", "org_c"));
+
+        assertThat(accessRepository.findRoleById("role_xp2").orElseThrow().viewableProjectIds()).containsExactly("org_a", "org_b", "org_c");
+        assertThat(view.viewableProjectIds()).containsExactly("org_a", "org_b", "org_c");
+        assertThat(view.pendingRemovalIds()).containsExactly("org_c");
+        assertThat(view.pendingReapprovals()).isEmpty();
+        assertThat(xp2Reviews.reviews).hasSize(1);
+        SupervisorReviewDecisionRecord review = xp2Reviews.reviews.values().iterator().next();
+        assertThat(review.actionType()).isEqualTo("access.role_viewable_projects.reduce");
+        assertThat(review.objectType()).isEqualTo("role_viewable_projects");
+        assertThat(review.objectId()).isEqualTo("role_xp2");
+        assertThat(review.policyCode()).isEqualTo("permission_grant_l2");
+        assertThat(review.reviewStatus()).isEqualTo("pending_review");
+        assertThat(review.initiatedBy()).isEqualTo("usr_xp2_mgr");
+        assertThat(xp2Reviews.listChainNodes(review.reviewId())).extracting(node -> node.approverKind() + "/" + node.approverId())
+                .containsExactly("user/usr_xp2_sup1", "user/usr_xp2_sup2");
+        assertThat(xp2Reviews.schedules.get(review.reviewId()).beneficiaryId()).isNull();
+        assertThat(xp2RemovalReview("role_xp2", "org_c")).isEqualTo(review.reviewId());
+        assertThat(accessRepository.viewableHolds).isEmpty();
+        assertThat(accessRepository.grantRequests).isEmpty();
+        assertThat(auditEventRepository.events).filteredOn(event -> "xp2-s5-remove".equals(event.idempotencyKey()))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.eventName()).isEqualTo("role.viewable_projects.changed");
+                    assertThat(event.metadata().get("removal_viewable_ids")).isEqualTo(List.of("org_c"));
+                    assertThat(event.metadata().get("removal_review_id")).isEqualTo(review.reviewId());
+                });
+        assertThat(xp2ReachOf("usr_xp2_direct", M002_VIEW).covers("org_c")).as("审批期间持有人仍能查看").isTrue();
+    }
+
+    // M736-S6（同上两句原文）：减少的复核单第一级通过——角色不变、之后才得到角色的人照常看得到丙；末级通过的那一下——丙从角色上去掉、
+    // 老持有人对丙的待批随之清掉、谁都看不到丙、留痕带复核单号与去掉的条目。另起一笔减乙：第一级驳回——角色仍有乙、待减标记清空、
+    // 不再多留减少的痕；同样的减少可以再提。监听里不判通过与否即红（驳回也删）。
+    @Test
+    void removalLandsOnlyWhenTheWholeChainApprovesAndRejectionClearsTheMark() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s6-add", "org_c"));
+        xp2Holder("usr_xp2_later", "org_a", "role_xp2");
+        service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s6-remove", "org_c"));
+        String reviewId = xp2RemovalReview("role_xp2", "org_c");
+
+        assertThat(xp2Decide("usr_xp2_sup1", reviewId, "xp2-s6-first", "approved").reviewStatus()).isEqualTo("pending_review");
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b", "org_c");
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).containsExactly("org_c");
+        assertThat(xp2ReachOf("usr_xp2_later", M002_VIEW).covers("org_c")).as("链上还有节点待审").isTrue();
+
+        assertThat(xp2Decide("usr_xp2_sup2", reviewId, "xp2-s6-last", "approved").reviewStatus()).isEqualTo("approved");
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b");
+        assertThat(accessRepository.findRoleViewableProjectRemovals("role_xp2")).isEmpty();
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).isEmpty();
+        assertThat(xp2ReachOf("usr_xp2_later", M002_VIEW).covers("org_c")).isFalse();
+        assertThat(xp2Events("role.viewable_projects.reduced")).singleElement().satisfies(event -> {
+            assertThat(event.businessId()).isEqualTo("role_xp2");
+            assertThat(event.metadata().get("review_id")).isEqualTo(reviewId);
+            assertThat(event.metadata().get("removed_viewable_ids")).isEqualTo(List.of("org_c"));
+        });
+
+        xp2Login("usr_xp2_mgr");
+        service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s6-remove-b", "org_b"));
+        String rejected = xp2RemovalReview("role_xp2", "org_b");
+        assertThat(xp2Decide("usr_xp2_sup1", rejected, "xp2-s6-reject", "rejected").reviewStatus()).isEqualTo("rejected");
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b");
+        assertThat(accessRepository.findRoleViewableProjectRemovals("role_xp2")).isEmpty();
+        assertThat(xp2Events("role.viewable_projects.reduced")).hasSize(1);
+        xp2Login("usr_xp2_mgr");
+        RoleViewableProjectsView again = service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s6-remove-b-again", "org_b"));
+        assertThat(again.pendingRemovalIds()).containsExactly("org_b");
+        assertThat(xp2RemovalReview("role_xp2", "org_b")).isNotNull().isNotEqualTo(rejected);
+    }
+
+    // M736-S7（技术推导：请求体是差量，锁内与角色当前状态核对）：角色勾着甲、乙、丙，丙的减少在待审。再减丙、加已在角色上的甲、
+    // 减不在角色上的条目——都是 409 INVALID_STATE，角色、复核单、待批都不变，各留一条失败痕；同一请求里加丁、减乙（都合法）受理。
+    // 去掉差量核对即红（不报错）。
+    @Test
+    void staleOrRepeatedDeltaIsRefused() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b", "org_c");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s7-remove", "org_c"));
+        String message = "角色的可查看项目或待审批的减少已变化，请刷新后重试";
+
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s7-again", "org_c")), 409, "INVALID_STATE", message);
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s7-present", "org_a")), 409, "INVALID_STATE", message);
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s7-absent", "org_z")), 409, "INVALID_STATE", message);
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b", "org_c");
+        assertThat(accessRepository.findRoleViewableProjectRemovals("role_xp2")).containsExactly("org_c");
+        assertThat(xp2Reviews.reviews).hasSize(1);
+        assertThat(accessRepository.viewableHolds).isEmpty();
+        assertThat(xp2Events("role.viewable_projects.change_failed")).extracting(event -> event.metadata().get("error_code"))
+                .containsExactly("INVALID_STATE", "INVALID_STATE", "INVALID_STATE");
+
+        RoleViewableProjectsView accepted = service.updateRoleViewableProjects("role_xp2",
+                xp2Delta("xp2-s7-valid", null, List.of("org_d"), null, List.of("org_b")));
+        assertThat(accepted.viewableProjectIds()).containsExactly("org_a", "org_b", "org_c", "org_d");
+        assertThat(accepted.pendingRemovalIds()).containsExactly("org_b", "org_c");
+    }
+
+    // M736-S8（同一追加句：增加、减少各按各的规则）：角色勾着甲、乙、丙。一次提交加丁、减丙——角色此刻是甲、乙、丙、丁；持有人
+    // 对丁有待批、对丙照常看得到；只有丙带待减标记；只建一张复核单；留痕一条，带增加、减少的条目、复核单号与写了待批的人。
+    @Test
+    void mixedChangeAddsAtOnceAndSendsTheReductionForApproval() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b", "org_c");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+
+        RoleViewableProjectsView view = service.updateRoleViewableProjects("role_xp2",
+                xp2Delta("xp2-s8-mixed", null, List.of("org_d"), null, List.of("org_c")));
+
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b", "org_c", "org_d");
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).containsExactly("org_d");
+        assertThat(accessRepository.findRoleViewableProjectRemovals("role_xp2")).containsExactly("org_c");
+        assertThat(view.pendingRemovalIds()).containsExactly("org_c");
+        assertThat(xp2Reviews.reviews).hasSize(1);
+        String reviewId = xp2RemovalReview("role_xp2", "org_c");
+        assertThat(xp2Reviews.reviews.get(reviewId).actionType()).isEqualTo("access.role_viewable_projects.reduce");
+        assertThat(auditEventRepository.events).filteredOn(event -> "xp2-s8-mixed".equals(event.idempotencyKey()))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.eventName()).isEqualTo("role.viewable_projects.changed");
+                    assertThat(event.metadata().get("added_viewable_ids")).isEqualTo(List.of("org_d"));
+                    assertThat(event.metadata().get("removal_viewable_ids")).isEqualTo(List.of("org_c"));
+                    assertThat(event.metadata().get("removal_review_id")).isEqualTo(reviewId);
+                    assertThat(event.metadata().get("held_user_ids")).isEqualTo("usr_xp2_direct");
+                });
+        AuthorizationService.ProjectReach reach = xp2ReachOf("usr_xp2_direct", M002_VIEW);
+        assertThat(List.of(reach.covers("org_c"), reach.covers("org_d"))).containsExactly(true, false);
+    }
+
+    // M736-S9（同一追加句与两条选项原文都没有按操作人区分）：平台管理员改平台角色、最高权限会话改本人项目的角色，各做一遍——
+    // 加丙：原持有人照写待批；减乙：照样建一张待审的复核单、角色不变（没有「本人发起即生效」）。加一个平台管理员或最高权限直接删行的
+    // 分支即红。
+    @Test
+    void platformAdminAndMasterSessionAreTreatedLikeAnyoneElse() {
+        xp2Fixture();
+        xpRole("role_xp2_platform", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2_platform");
+        xp2Role("role_xp2_hq", "platform-company", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_hq", "platform-company", "role_xp2_hq");
+        Map<String, String> holderOf = Map.of("role_xp2_platform", "usr_xp2_direct", "role_xp2_hq", "usr_xp2_hq");
+        Map<String, Runnable> sessions = new LinkedHashMap<>();
+        sessions.put("role_xp2_platform", () -> authenticateAsPlatformAdmin("seed-org"));
+        sessions.put("role_xp2_hq", this::authenticateAsMasterAuthority);
+
+        sessions.forEach((role, login) -> {
+            login.run();
+            service.updateRoleViewableProjects(role, xp2Add("xp2-s9-add-" + role, "org_c"));
+            assertThat(xp2Holds(holderOf.get(role), role)).as(role).containsExactly("org_c");
+
+            int reviews = xp2Reviews.reviews.size();
+            RoleViewableProjectsView view = service.updateRoleViewableProjects(role, xp2Remove("xp2-s9-remove-" + role, "org_b"));
+            assertThat(accessRepository.roles.get(role).viewableProjectIds()).as(role).containsExactly("org_a", "org_b", "org_c");
+            assertThat(view.pendingRemovalIds()).as(role).containsExactly("org_b");
+            assertThat(xp2Reviews.reviews).as(role).hasSize(reviews + 1);
+            assertThat(xp2Reviews.reviews.get(xp2RemovalReview(role, "org_b")).reviewStatus()).as(role).isEqualTo("pending_review");
+        });
+    }
+
+    // M736-S10（技术推导，依据操作员 2026-10-01 确认的治理地图第 653 行追加句末句「能配置角色的人都可以设置这一项。」，与权限模板
+    // 同口径）：只到甲项目的角色管理人——
+    // 本项目的角色可改可读；乙项目的角色、平台角色，改与读都是 403 CROSS_ORG_FORBIDDEN，角色不变。经勾了乙的可跨项目角色持建角色权限的
+    // 人——可改可读乙项目的角色，平台角色仍 403；平台角色只有平台管理员能改。去掉范围判断即红（不拦）。
+    @Test
+    void onlyRolesWithinReachCanBeChangedOrRead() {
+        xp2Fixture();
+        xp2Role("role_xp2_a", "org_a", List.of(M002_VIEW), false, "org_a");
+        xp2Role("role_xp2_b", "org_b", List.of(M002_VIEW), false, "org_b");
+        xpRole("role_xp2_platform", List.of(M002_VIEW), false, "org_b");
+        xpRole("role_xp2_manage_b", List.of(XP_MANAGE), false, "org_b");
+
+        assertThat(service.updateRoleViewableProjects("role_xp2_a", xp2Add("xp2-s10-own", "org_c")).viewableProjectIds())
+                .containsExactly("org_a", "org_c");
+        assertThat(service.getRoleViewableProjects("role_xp2_a").viewableProjectIds()).containsExactly("org_a", "org_c");
+        for (String outside : List.of("role_xp2_b", "role_xp2_platform")) {
+            xpExpect(() -> service.updateRoleViewableProjects(outside, xp2Add("xp2-s10-" + outside, "org_c")),
+                    403, "CROSS_ORG_FORBIDDEN", "不能修改其他组织的角色");
+            xpExpect(() -> service.getRoleViewableProjects(outside), 403, "CROSS_ORG_FORBIDDEN", "不能查看其他组织的角色");
+            assertThat(accessRepository.roles.get(outside).viewableProjectIds()).as(outside).containsExactly("org_b");
+        }
+
+        xpActAs("usr_xp2_cross", "role_xp2_manage_b");
+        assertThat(service.updateRoleViewableProjects("role_xp2_b", xp2Add("xp2-s10-cross", "org_c")).viewableProjectIds())
+                .containsExactly("org_b", "org_c");
+        assertThat(service.getRoleViewableProjects("role_xp2_b").viewableProjectIds()).containsExactly("org_b", "org_c");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2_platform", xp2Add("xp2-s10-cross-platform", "org_c")),
+                403, "CROSS_ORG_FORBIDDEN", "不能修改其他组织的角色");
+
+        authenticateAsPlatformAdmin("seed-org");
+        assertThat(service.updateRoleViewableProjects("role_xp2_platform", xp2Add("xp2-s10-admin", "org_c")).viewableProjectIds())
+                .containsExactly("org_b", "org_c");
+    }
+
+    // M736-S11（技术推导：只核这次新增的条目，沿用建角色的校验）：四项都空（或都是空表）——400「可查看项目没有变化」；增加或减少
+    // 清单里有空白、空值——400；同一条既加又减——400；新增条目不在项目集合里——400；加完超过 500 条——400；角色不存在——改与读都是 404。
+    // 以上都不改角色，改的各留一条失败痕。角色上原有的条目已不在项目集合里、这次没动它——不报错，原条目照留。
+    @Test
+    void viewableProjectDeltaValidation() {
+        xp2Fixture();
+        List<String> bulk = java.util.stream.IntStream.range(0, 499).mapToObj(i -> "bulk_" + i).toList();
+        accessRepository.projectIds.addAll(bulk);
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "gone_project");
+
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Delta("xp2-s11-empty", null, null, null, null)),
+                400, "VALIDATION_FAILED", "可查看项目没有变化");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Delta("xp2-s11-empty-lists", false, List.of(), false, List.of())),
+                400, "VALIDATION_FAILED", "可查看项目没有变化");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2",
+                        xp2Delta("xp2-s11-blank-add", null, java.util.Arrays.asList("org_b", " "), null, null)),
+                400, "VALIDATION_FAILED", "可查看项目清单里有空白条目");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2",
+                        xp2Delta("xp2-s11-blank-remove", null, null, null, java.util.Arrays.asList("org_a", null))),
+                400, "VALIDATION_FAILED", "可查看项目清单里有空白条目");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2",
+                        xp2Delta("xp2-s11-both", null, List.of("org_b"), null, List.of("org_b"))),
+                400, "VALIDATION_FAILED", "同一个可查看项目不能既增加又减少");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s11-unknown", "org_b", "no_such_id")),
+                400, "VALIDATION_FAILED", "可查看项目清单里有无法识别或已停用的条目：no_such_id");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Delta("xp2-s11-501", null, bulk, null, null)),
+                400, "VALIDATION_FAILED", "逐个勾选的可查看项目不能超过 500 条");
+        xpExpect(() -> service.updateRoleViewableProjects("role_missing", xp2Add("xp2-s11-missing", "org_b")),
+                404, "ROLE_NOT_FOUND", "role_missing");
+        xpExpect(() -> service.getRoleViewableProjects("role_missing"), 404, "ROLE_NOT_FOUND", "role_missing");
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "gone_project");
+        assertThat(xp2Events("role.viewable_projects.changed")).isEmpty();
+        List<Object> failures = xp2Events("role.viewable_projects.change_failed").stream()
+                .map(event -> event.metadata().get("error_code")).toList();
+        assertThat(failures).hasSize(8).endsWith("ROLE_NOT_FOUND");
+        assertThat(failures.subList(0, 7)).containsOnly("VALIDATION_FAILED");
+
+        RoleViewableProjectsView kept = service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s11-ok", "org_b"));
+        assertThat(kept.viewableProjectIds()).containsExactly("org_a", "gone_project", "org_b");
+    }
+
+    // M736-S12（技术推导，非操作员原话：答 13 选项原文没有按操作人留例外；档位借用操作员 2026-09-25 所选选项原文「按授权政策「高」一档走
+    // （按现行政策不到最高权限）」）：角色只含日常权限，持有人对丙有待批。角色管理人发起、平台管理员发起重新审批——都受理（不出
+    // 「请直接分配」），都是「高」一档、两个上级节点，复核单受益人＝该持有人，申请原因以系统写的那句开头并带条目名称；角色含极高档码——
+    // 到最高权限一档。档位下限只在「非平台管理员申请可跨项目角色」时才给即红。
+    @Test
+    void reapprovalIsAcceptedAtTheHighTierWhoeverInitiates() {
+        xp2Fixture();
+        accessRepository.markRequiresApproval(M002_CODE, "critical");
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Role("role_xp2_critical", "org_a", List.of(M002_CODE), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        accessRepository.assignUserRole("usr_xp2_direct", "role_xp2_critical");
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s12-add", "org_c"));
+        service.updateRoleViewableProjects("role_xp2_critical", xp2Add("xp2-s12-add-critical", "org_c"));
+
+        AccessGrantRequestRecord byManager = service.applyGrant(xp2Reapproval("xp2-s12-manager", "usr_xp2_direct", "role_xp2"));
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord byAdmin = service.applyGrant(xp2Reapproval("xp2-s12-admin", "usr_xp2_direct", "role_xp2"));
+
+        for (AccessGrantRequestRecord request : List.of(byManager, byAdmin)) {
+            assertThat(request.status()).as(request.requestedBy()).isEqualTo("pending");
+            assertThat(request.requestType()).isEqualTo("role_project_reapproval");
+            assertThat(request.targetUserId()).isEqualTo("usr_xp2_direct");
+            assertThat(request.targetRoleId()).isEqualTo("role_xp2");
+            assertThat(request.reason()).startsWith("重新审批可查看项目（共 1 项）：").contains("项目 org_c").endsWith("补审新增项目");
+            assertThat(xp2Reviews.reviews.get(request.reviewId()).policyCode()).as(request.requestedBy()).isEqualTo("permission_grant_l2");
+            assertThat(xp2Reviews.schedules.get(request.reviewId()).beneficiaryId()).isEqualTo("usr_xp2_direct");
+            assertThat(xp2Reviews.listChainNodes(request.reviewId())).extracting(node -> node.approverKind() + "/" + node.approverId())
+                    .containsExactly("user/usr_xp2_sup1", "user/usr_xp2_sup2");
+        }
+        assertThat(List.of(byManager.requestedBy(), byAdmin.requestedBy())).containsExactly("usr_xp2_mgr", "usr_admin");
+
+        AccessGrantRequestRecord critical = service.applyGrant(xp2Reapproval("xp2-s12-critical", "usr_xp2_direct", "role_xp2_critical"));
+        assertThat(xp2Reviews.reviews.get(critical.reviewId()).policyCode()).isEqualTo("permission_grant_l3");
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).as("建单不解除待批").containsExactly("org_c");
+    }
+
+    // M736-S13（技术推导：一张申请一个持有人，只收对这个角色有待批条目的员工；范围照授权申请的现行口径）：改之后才得到角色、没有待批的
+    // 员工——400；乙项目的持有人确有待批，只到甲项目的角色管理人替他发起——403 CROSS_ORG_FORBIDDEN。两次都不建申请、不开复核单，
+    // 待批不动；平台管理员替乙项目那位发起则受理。
+    @Test
+    void reapprovalNeedsAHold() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xpRole("role_xp2_platform", List.of(M002_VIEW), false, "org_a");
+        xp2Holder("usr_xp2_b", "org_b", "role_xp2_platform");
+        authenticateAsPlatformAdmin("seed-org");
+        service.updateRoleViewableProjects("role_xp2_platform", xp2Add("xp2-s13-add", "org_c"));
+        xp2Holder("usr_xp2_later", "org_a", "role_xp2");
+
+        xp2Login("usr_xp2_mgr");
+        xpExpect(() -> service.applyGrant(xp2Reapproval("xp2-s13-none", "usr_xp2_later", "role_xp2")),
+                400, "VALIDATION_FAILED", "该员工对这个角色没有待重新审批的可查看项目");
+        xpExpect(() -> service.applyGrant(xp2Reapproval("xp2-s13-outside", "usr_xp2_b", "role_xp2_platform")),
+                403, "CROSS_ORG_FORBIDDEN", "usr_xp2_b");
+        assertThat(accessRepository.grantRequests).isEmpty();
+        assertThat(xp2Reviews.reviews).isEmpty();
+        assertThat(xp2Holds("usr_xp2_b", "role_xp2_platform")).containsExactly("org_c");
+
+        authenticateAsPlatformAdmin("seed-org");
+        assertThat(service.applyGrant(xp2Reapproval("xp2-s13-admin", "usr_xp2_b", "role_xp2_platform")).status()).isEqualTo("pending");
+    }
+
+    // M736-S14（答 13 选项原文「各自重新审批通过」；落地只解除待批为技术推导）：张三经岗位、李四经直接分配持同一角色，都对丙有待批；
+    // 张三的岗位模板里有须审批码（有工资、岗位派生套用、岗位高危挂起与待审释放单）。对张三的重新审批第一级通过——待批还在；末级通过——
+    // 张三的待批清空、看得到丙，李四的还在、看不到；直接分配的角色一行不多；张三的岗位行、工资、岗位派生角色与映射、模板套用、
+    // 覆盖行（含挂起）、待审释放单与批前逐项相同；留痕带员工、申请单号与删掉的行数。落地改走定岗即红（工资被改）。
+    @Test
+    void approvedReapprovalClearsOnlyThatHoldersHoldsAndTouchesNothingElse() {
+        xp2Fixture();
+        accessRepository.markRequiresApproval(M002_CODE, "high");
+        xpRole("role_xp2_cross", List.of(M002_VIEW), false, "org_b");
+        xp2HighTemplate("tpl_xp2_high");
+        xpUser("usr_xp2_zhang", "org_a");
+        xpUser("usr_xp2_li", "org_a");
+        authenticateAsPlatformAdmin("seed-org");
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s14-map", null, "xp2_patrol", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_high", "active"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp2-s14-seat", null, "usr_xp2_zhang", "xp2_patrol", "lvl_m1_lower", 500000L, "CNY", null));
+        service.assignUserRole(new RoleAssignmentRequest("xp2-s14-assign", null, "usr_xp2_li", "role_xp2_cross"));
+        service.updateRoleViewableProjects("role_xp2_cross", xp2Add("xp2-s14-add", "org_c"));
+        assertThat(overrideSources("usr_xp2_zhang", M002_CODE, AccessRepository.Effect.DENY))
+                .containsExactly(AccessRepository.Source.POSITION_HOLD);
+        List<Object> facts = m002TargetFacts("usr_xp2_zhang");
+        List<AccessGrantRequestRecord> releases = m002PendingReleases("usr_xp2_zhang");
+        String directRoles = accessRepository.userRoles.toString();
+
+        xp2Login("usr_xp2_mgr");
+        AccessGrantRequestRecord pending = service.applyGrant(xp2Reapproval("xp2-s14-apply", "usr_xp2_zhang", "role_xp2_cross"));
+        xp2Login("usr_xp2_sup1");
+        assertThat(service.reviewGrant(pending.id(), m002Approve("xp2-s14-first")).status()).isEqualTo("pending");
+        assertThat(xp2Holds("usr_xp2_zhang", "role_xp2_cross")).as("第一级通过时待批还在").containsExactly("org_c");
+        xp2Login("usr_xp2_sup2");
+        assertThat(service.reviewGrant(pending.id(), m002Approve("xp2-s14-last")).status()).isEqualTo("applied");
+
+        assertThat(xp2Holds("usr_xp2_zhang", "role_xp2_cross")).isEmpty();
+        assertThat(xp2Holds("usr_xp2_li", "role_xp2_cross")).containsExactly("org_c");
+        assertThat(accessRepository.userRoles.toString()).isEqualTo(directRoles);
+        assertThat(m002TargetFacts("usr_xp2_zhang")).isEqualTo(facts);
+        assertThat(m002PendingReleases("usr_xp2_zhang")).hasSize(1).isEqualTo(releases);
+        assertThat(accessRepository.staffLevelAssignments.get("usr_xp2_zhang").baseSalaryAmountCent()).isEqualTo(500000L);
+        assertThat(xp2ReachOf("usr_xp2_zhang", M002_VIEW).covers("org_c")).isTrue();
+        assertThat(xp2ReachOf("usr_xp2_li", M002_VIEW).covers("org_c")).isFalse();
+        assertThat(xp2Events("role.viewable_projects.reapproved")).singleElement().satisfies(event -> {
+            assertThat(event.businessId()).isEqualTo("role_xp2_cross");
+            assertThat(event.metadata().get("user_id")).isEqualTo("usr_xp2_zhang");
+            assertThat(event.metadata().get("grant_request_id")).isEqualTo(pending.id());
+            assertThat(event.metadata().get("removed_holds")).isEqualTo(1);
+        });
+    }
+
+    // M736-S15（技术推导：被驳回的仍看不到新增项目，可以再发起；治理地图第 529 行「申请人与直接受益人不得审批」）：目标本人去批——
+    // BENEFICIARY_SELF_REVIEW_FORBIDDEN；发起人去批——SUPERVISOR_SELF_REVIEW_FORBIDDEN；上级驳回后待批还在、判定仍看不到丙；
+    // 再发起一张，受理。
+    @Test
+    void rejectedReapprovalKeepsTheHoldAndCanBeRaisedAgain() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s15-add", "org_c"));
+        AccessGrantRequestRecord pending = service.applyGrant(xp2Reapproval("xp2-s15-apply", "usr_xp2_direct", "role_xp2"));
+
+        xp2Login("usr_xp2_direct");
+        xpExpect(() -> service.reviewGrant(pending.id(), m002Approve("xp2-s15-beneficiary")),
+                403, "BENEFICIARY_SELF_REVIEW_FORBIDDEN", "授权受益人不能审批自己的授权");
+        xp2Login("usr_xp2_mgr");
+        xpExpect(() -> service.reviewGrant(pending.id(), m002Approve("xp2-s15-requester")),
+                403, "SUPERVISOR_SELF_REVIEW_FORBIDDEN", "申请人不能审批自己的授权");
+        assertThat(accessRepository.grantRequests.get(pending.id()).status()).isEqualTo("pending");
+
+        xp2Login("usr_xp2_sup1");
+        assertThat(service.reviewGrant(pending.id(), m002Reject("xp2-s15-reject")).status()).isEqualTo("rejected");
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).containsExactly("org_c");
+        assertThat(xp2ReachOf("usr_xp2_direct", M002_VIEW).covers("org_c")).isFalse();
+
+        xp2Login("usr_xp2_mgr");
+        AccessGrantRequestRecord again = service.applyGrant(xp2Reapproval("xp2-s15-again", "usr_xp2_direct", "role_xp2"));
+        assertThat(again.status()).isEqualTo("pending");
+        assertThat(again.id()).isNotEqualTo(pending.id());
+    }
+
+    // M736-S16（技术推导：指纹钉住这个人对这个角色当时的待批条目，批的是这几条、落地删的也只能是这几条）：张三待批 {丙}，申请待审；
+    // 再加丁——点通过 409 GRANT_SNAPSHOT_CHANGED，丙、丁两条待批都在。同一人两张待审单（都钉 {丙、丁}）：第一张两级批完、待批清空，
+    // 第二张点通过 409。再加一条后提单，张三被取消角色（待批随之清掉）——点通过 409。指纹里不钉待批即红（旧单把丁一起放行）。
+    @Test
+    void reapprovalCannotBeApprovedAfterTheHoldsChange() {
+        xp2Fixture();
+        xpProjects("org_e");
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_zhang", "org_a", "role_xp2");
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s16-add-c", "org_c"));
+        AccessGrantRequestRecord stale = service.applyGrant(xp2Reapproval("xp2-s16-stale", "usr_xp2_zhang", "role_xp2"));
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s16-add-d", "org_d"));
+
+        xp2Login("usr_xp2_sup1");
+        xpExpect(() -> service.reviewGrant(stale.id(), m002Approve("xp2-s16-stale-review")), 409, "GRANT_SNAPSHOT_CHANGED", "请重新申请");
+        assertThat(xp2Holds("usr_xp2_zhang", "role_xp2")).containsExactlyInAnyOrder("org_c", "org_d");
+        assertThat(accessRepository.grantRequests.get(stale.id()).status()).isEqualTo("pending");
+
+        xp2Login("usr_xp2_mgr");
+        AccessGrantRequestRecord first = service.applyGrant(xp2Reapproval("xp2-s16-first", "usr_xp2_zhang", "role_xp2"));
+        AccessGrantRequestRecord second = service.applyGrant(xp2Reapproval("xp2-s16-second", "usr_xp2_zhang", "role_xp2"));
+        assertThat(xp2ApproveBoth(first.id(), "xp2-s16-first-review").status()).isEqualTo("applied");
+        assertThat(xp2Holds("usr_xp2_zhang", "role_xp2")).isEmpty();
+        xp2Login("usr_xp2_sup1");
+        xpExpect(() -> service.reviewGrant(second.id(), m002Approve("xp2-s16-second-review")), 409, "GRANT_SNAPSHOT_CHANGED", "请重新申请");
+
+        xp2Login("usr_xp2_mgr");
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s16-add-e", "org_e"));
+        AccessGrantRequestRecord orphan = service.applyGrant(xp2Reapproval("xp2-s16-orphan", "usr_xp2_zhang", "role_xp2"));
+        service.unassignUserRole(new RoleAssignmentRequest("xp2-s16-unassign", null, "usr_xp2_zhang", "role_xp2"));
+        assertThat(xp2Holds("usr_xp2_zhang", "role_xp2")).isEmpty();
+        xp2Login("usr_xp2_sup1");
+        xpExpect(() -> service.reviewGrant(orphan.id(), m002Approve("xp2-s16-orphan-review")), 409, "GRANT_SNAPSHOT_CHANGED", "请重新申请");
+        assertThat(accessRepository.grantRequests.get(orphan.id()).status()).isEqualTo("pending");
+    }
+
+    // M736-S17（技术推导：只有重新审批这一类申请通过才算重新审批通过；得到角色时一律不清待批）：直接持有、经岗位持有的两人都对丙有待批。
+    // 以下各做一遍，两人的待批都还在、都仍看不到丙：①对直接持有的再提角色申请并两级批完；②平台管理员对他再直接分配；③经岗位持有的
+    // 被平台管理员直接分配同一角色；④直接持有的被平台管理员定到派生同一角色的岗位；⑤角色管理人对经岗位持有的同岗重定；⑥平台管理员
+    // 原样重存岗位映射触发重派生。在分配或定岗写入之后清待批即红。
+    @Test
+    void onlyTheDedicatedReapprovalClearsHolds() {
+        xp2Fixture();
+        xpRole("role_xp2_cross", List.of(M002_VIEW), false, "org_b");
+        xpTemplate("tpl_xp2_pos", null);
+        xpUser("usr_xp2_direct", "org_a");
+        xpUser("usr_xp2_seat", "org_a");
+        authenticateAsPlatformAdmin("seed-org");
+        PositionRoleTemplate mapping = service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s17-map", null, "xp2_patrol", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_pos", "active"));
+        service.assignUserRole(new RoleAssignmentRequest("xp2-s17-assign", null, "usr_xp2_direct", "role_xp2_cross"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp2-s17-seat", null, "usr_xp2_seat", "xp2_patrol", "lvl_m1_lower", null, null, null));
+        service.updateRoleViewableProjects("role_xp2_cross", xp2Add("xp2-s17-add", "org_c"));
+        java.util.function.Consumer<String> stillHeld = step -> {
+            for (String holder : List.of("usr_xp2_direct", "usr_xp2_seat")) {
+                assertThat(xp2Holds(holder, "role_xp2_cross")).as(step + " " + holder).containsExactly("org_c");
+                assertThat(xp2ReachOf(holder, M002_VIEW).covers("org_c")).as(step + " " + holder).isFalse();
+            }
+        };
+        stillHeld.accept("改勾选之后");
+
+        xp2Login("usr_xp2_mgr");
+        AccessGrantRequestRecord roleRequest = service.applyGrant(new AccessGrantApplyRequest("xp2-s17-role", "M736", List.of(), "user_role",
+                "usr_xp2_direct", "role_xp2_cross", null, null, null, null, null, null, null, null, false, "再提角色申请"));
+        assertThat(xp2ApproveBoth(roleRequest.id(), "xp2-s17-role-review").status()).isEqualTo("applied");
+        stillHeld.accept("①再提角色申请并批完");
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.assignUserRole(new RoleAssignmentRequest("xp2-s17-assign-again", null, "usr_xp2_direct", "role_xp2_cross"));
+        stillHeld.accept("②平台管理员再直接分配");
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.assignUserRole(new RoleAssignmentRequest("xp2-s17-assign-seat", null, "usr_xp2_seat", "role_xp2_cross"));
+        stillHeld.accept("③经岗位持有的被直接分配");
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp2-s17-seat-direct", null, "usr_xp2_direct", "xp2_patrol", "lvl_m1_lower", null, null, null));
+        assertThat(accessRepository.positionRoles.get("usr_xp2_direct")).isEqualTo("role_xp2_cross");
+        stillHeld.accept("④直接持有的被定到派生同一角色的岗位");
+
+        xp2Login("usr_xp2_mgr");
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp2-s17-reseat", null, "usr_xp2_seat", "xp2_patrol", "lvl_m1_lower", null, null, null));
+        stillHeld.accept("⑤同岗重定");
+
+        authenticateAsPlatformAdmin("seed-org");
+        service.updatePositionRoleTemplate(mapping.id(), new PositionRoleTemplateRequest(
+                "xp2-s17-resave", null, "xp2_patrol", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_pos", "active"));
+        assertThat(accessRepository.positionRoles.get("usr_xp2_seat")).isEqualTo("role_xp2_cross");
+        stillHeld.accept("⑥原样重存映射");
+    }
+
+    // M736-S18（技术推导：直接分配与岗位派生两条路都不再持有这个角色时，待重新审批的记录随之清除，以后重新得到角色的按当时的勾选）：
+    // 五名持有人都对丙有待批。取消分配、范围变更、所挂映射停用、换到派生别的角色的岗位——这四人的待批没了；两条路都持有、只取消直接
+    // 分配的那位——还在。平台管理员对被取消的那位再直接分配——没有待批，判定看得到丙；仍带待批的那位看不到。去掉仓储里的清除即红
+    // （重新得到后仍带旧待批）。
+    @Test
+    void losingTheRoleDropsTheHoldsAndRegainingItStartsClean() {
+        xp2Fixture();
+        xpRole("role_xp2_cross", List.of(M002_VIEW), false, "org_b");
+        xpRole("role_xp2_plain", List.of(M002_VIEW), false);
+        xpTemplate("tpl_xp2_pos", null);
+        authenticateAsPlatformAdmin("seed-org");
+        PositionRoleTemplate off = service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s18-map-off", null, "xp2_off", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_pos", "active"));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s18-map-keep", null, "xp2_keep", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_pos", "active"));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s18-map-plain", null, "xp2_plain", "lvl_m1_lower", "role_xp2_plain", "tpl_xp2_pos", "active"));
+        for (String direct : List.of("usr_xp2_unassign", "usr_xp2_scope", "usr_xp2_both")) {
+            xpUser(direct, "org_a");
+            service.assignUserRole(new RoleAssignmentRequest("xp2-s18-assign-" + direct, null, direct, "role_xp2_cross"));
+        }
+        Map<String, String> seats = new LinkedHashMap<>();
+        seats.put("usr_xp2_off", "xp2_off");
+        seats.put("usr_xp2_move", "xp2_keep");
+        seats.put("usr_xp2_both", "xp2_keep");
+        seats.forEach((user, position) -> {
+            xpUser(user, "org_a");
+            service.assignUserPosition(new UserPositionAssignmentRequest(
+                    "xp2-s18-seat-" + user, null, user, position, "lvl_m1_lower", null, null, null));
+        });
+        service.updateRoleViewableProjects("role_xp2_cross", xp2Add("xp2-s18-add", "org_c"));
+        assertThat(accessRepository.listRoleViewableProjectHolds("role_xp2_cross").keySet())
+                .containsExactly("usr_xp2_both", "usr_xp2_move", "usr_xp2_off", "usr_xp2_scope", "usr_xp2_unassign");
+
+        service.unassignUserRole(new RoleAssignmentRequest("xp2-s18-unassign", null, "usr_xp2_unassign", "role_xp2_cross"));
+        service.changeUserScope("usr_xp2_scope", new UserScopeChangeRequest(
+                "xp2-s18-scope", null, "org_a", "merchant_x", "xp2_plain", "lvl_m1_lower", null, null, null, "调到商户", null));
+        service.updatePositionRoleTemplate(off.id(), new PositionRoleTemplateRequest(
+                "xp2-s18-map-off-stop", null, "xp2_off", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_pos", "inactive"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp2-s18-move", null, "usr_xp2_move", "xp2_plain", "lvl_m1_lower", null, null, null));
+        service.unassignUserRole(new RoleAssignmentRequest("xp2-s18-unassign-both", null, "usr_xp2_both", "role_xp2_cross"));
+
+        assertThat(accessRepository.positionRoles.get("usr_xp2_both")).isEqualTo("role_xp2_cross");
+        assertThat(accessRepository.listRoleViewableProjectHolds("role_xp2_cross")).isEqualTo(Map.of("usr_xp2_both", Set.of("org_c")));
+
+        service.assignUserRole(new RoleAssignmentRequest("xp2-s18-reassign", null, "usr_xp2_unassign", "role_xp2_cross"));
+        assertThat(xp2Holds("usr_xp2_unassign", "role_xp2_cross")).isEmpty();
+        assertThat(xp2ReachOf("usr_xp2_unassign", M002_VIEW).covers("org_c")).as("重新得到角色的人按当时的勾选").isTrue();
+        assertThat(xp2ReachOf("usr_xp2_both", M002_VIEW).covers("org_c")).as("仍带待批的人").isFalse();
+    }
+
+    // M736-S19（技术推导：角色、岗位、范围变更三类申请所指角色勾了项目的，指纹含两项勾选——否则按旧勾选批的单会按新勾选落地）：
+    // 指向该角色的待审角色申请、岗位申请、范围变更申请各一张。加丁以后三张点通过都是 409 GRANT_SNAPSHOT_CHANGED，申请仍待审、
+    // 角色与岗位都没落到目标身上。另提一组三张：减乙在待审期间角色申请两级批完照常落地；减少整单通过（角色没了乙）以后，
+    // 余下两张点通过 409。指纹不追加勾选即红（照旧落地）。
+    @Test
+    void pendingGrantRequestsCannotBeApprovedAfterTheTicksChange() {
+        xp2Fixture();
+        xpRole("role_xp2_cross", List.of(M002_VIEW), false, "org_b", "org_c");
+        xpTemplate("tpl_xp2_pos", null);
+        authenticateAsPlatformAdmin("seed-org");
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s19-map", null, "xp2_patrol", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_pos", "active"));
+
+        Map<String, AccessGrantRequestRecord> beforeAdd = xp2ThreeRequests("xp2-s19-a");
+        authenticateAsPlatformAdmin("seed-org");
+        service.updateRoleViewableProjects("role_xp2_cross", xp2Add("xp2-s19-add", "org_d"));
+        xp2Login("usr_xp2_sup1");
+        beforeAdd.forEach((type, request) -> {
+            xpExpect(() -> service.reviewGrant(request.id(), m002Approve("xp2-s19-a-review-" + type)),
+                    409, "GRANT_SNAPSHOT_CHANGED", "请重新申请");
+            assertThat(accessRepository.grantRequests.get(request.id()).status()).as(type).isEqualTo("pending");
+            assertThat(accessRepository.userRoles.getOrDefault(request.targetUserId(), Set.of())).as(type).doesNotContain("role_xp2_cross");
+            assertThat(accessRepository.positionRoles.get(request.targetUserId())).as(type).isNull();
+        });
+
+        Map<String, AccessGrantRequestRecord> beforeRemoval = xp2ThreeRequests("xp2-s19-b");
+        authenticateAsPlatformAdmin("seed-org");
+        service.updateRoleViewableProjects("role_xp2_cross", xp2Remove("xp2-s19-remove", "org_b"));
+        String reviewId = xp2RemovalReview("role_xp2_cross", "org_b");
+        AccessGrantRequestRecord landed = xp2ApproveBoth(beforeRemoval.get("user_role").id(), "xp2-s19-b-role");
+        assertThat(landed.status()).as("减少待审期间仍可批准").isEqualTo("applied");
+        assertThat(accessRepository.userRoles.get(landed.targetUserId())).contains("role_xp2_cross");
+
+        assertThat(xp2Decide("usr_xp2_sup1", reviewId, "xp2-s19-remove-first", "approved").reviewStatus()).isEqualTo("pending_review");
+        assertThat(xp2Decide("usr_xp2_sup2", reviewId, "xp2-s19-remove-last", "approved").reviewStatus()).isEqualTo("approved");
+        assertThat(accessRepository.roles.get("role_xp2_cross").viewableProjectIds()).containsExactly("org_c", "org_d");
+        xp2Login("usr_xp2_sup1");
+        for (String type : List.of("user_position", "user_scope_change")) {
+            AccessGrantRequestRecord request = beforeRemoval.get(type);
+            xpExpect(() -> service.reviewGrant(request.id(), m002Approve("xp2-s19-b-review-" + type)),
+                    409, "GRANT_SNAPSHOT_CHANGED", "请重新申请");
+            assertThat(accessRepository.grantRequests.get(request.id()).status()).as(type).isEqualTo("pending");
+            assertThat(accessRepository.positionRoles.get(request.targetUserId())).as(type).isNull();
+        }
+    }
+
+    // M736-S20（技术推导：岗位高危释放单获批只删挂起行、不授出角色，指纹不钉勾选；没勾选的角色指纹与原来相同）：挂该角色的在岗员工
+    // 有一张待审的岗位高危释放单，另一个没勾选的角色上有一张待审的角色申请。给该角色加丙以后（在岗员工照写待批），两张单都仍可
+    // 两级批完落地。把释放单也钉上勾选即红。
+    @Test
+    void tickChangeDoesNotTouchReleaseRequestsOrRolesWithoutTicks() {
+        xp2Fixture();
+        accessRepository.markRequiresApproval(M002_CODE, "high");
+        xpRole("role_xp2_cross", List.of(M002_VIEW), false, "org_b");
+        xpRole("role_xp2_plain_high", List.of(M002_CODE), false);
+        xp2HighTemplate("tpl_xp2_high");
+        xpUser("usr_xp2_seat", "org_a");
+        xpUser("usr_xp2_target", "org_a");
+        authenticateAsPlatformAdmin("seed-org");
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s20-map", null, "xp2_patrol", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_high", "active"));
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp2-s20-seat", null, "usr_xp2_seat", "xp2_patrol", "lvl_m1_lower", null, null, null));
+        assertThat(m002PendingReleases("usr_xp2_seat")).hasSize(1);
+        AccessGrantRequestRecord release = m002PendingReleases("usr_xp2_seat").get(0);
+        assertThat(release.targetRoleId()).isEqualTo("role_xp2_cross");
+        AccessGrantRequestRecord plain = service.applyGrant(new AccessGrantApplyRequest("xp2-s20-plain", "M736", List.of(), "user_role",
+                "usr_xp2_target", "role_xp2_plain_high", null, null, null, null, null, null, null, null, false, "角色申请"));
+
+        service.updateRoleViewableProjects("role_xp2_cross", xp2Add("xp2-s20-add", "org_c"));
+        assertThat(xp2Holds("usr_xp2_seat", "role_xp2_cross")).containsExactly("org_c");
+
+        assertThat(xp2ApproveBoth(release.id(), "xp2-s20-release").status()).isEqualTo("applied");
+        assertThat(overrideSources("usr_xp2_seat", M002_CODE, AccessRepository.Effect.DENY)).isEmpty();
+        assertThat(xp2ApproveBoth(plain.id(), "xp2-s20-plain-review").status()).isEqualTo("applied");
+        assertThat(accessRepository.userRoles.get("usr_xp2_target")).contains("role_xp2_plain_high");
+    }
+
+    // M736-S21（技术推导：监听只认自己的动作名，并按复核单号匹配待减标记）：角色有一笔待审的减少。直接把事件交给监听——别的动作名、
+    // 对象同为该角色的已通过事件；本动作名、同一角色、另一个复核单号的已通过事件——角色、待减标记、真复核单都不动，不留减少的痕。
+    // 监听改按对象编号删即红。
+    @Test
+    void reviewDecisionsOfOtherActionsOrOtherReviewsDoNotTouchTheRole() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b", "org_c");
+        service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s21-remove", "org_c"));
+        String reviewId = xp2RemovalReview("role_xp2", "org_c");
+        Map<String, String> forged = new LinkedHashMap<>();
+        forged.put("review_xp2_other_action", "staff.shift.publish");
+        forged.put("review_xp2_other_review", "access.role_viewable_projects.reduce");
+
+        forged.forEach((otherReviewId, actionType) -> {
+            service.onSupervisorReviewDecided(new SupervisorReviewDecisionRecord(otherReviewId, "permission_grant_l2", actionType,
+                    "role_viewable_projects", "role_xp2", false, "approved", 2, 2, "approved", null, List.of(), Instant.now(),
+                    "usr_xp2_mgr", "two_levels_up", null));
+            assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).as(actionType).containsExactly("org_a", "org_b", "org_c");
+            assertThat(xp2RemovalReview("role_xp2", "org_c")).as(actionType).isEqualTo(reviewId);
+        });
+        assertThat(xp2Events("role.viewable_projects.reduced")).isEmpty();
+        assertThat(xp2Reviews.reviews.get(reviewId).reviewStatus()).isEqualTo("pending_review");
+    }
+
+    // M736-S22（M001-F10 锁序；技术推导：角色表锁 → 持有人员工行 → 角色行，分配一侧员工行 → 角色行共享锁 → 读角色）：仓储按先后记下
+    // 调用。改勾选——按操作人读能力事实全部在第一把锁之前；角色表锁先于任何员工行锁，员工行锁先于角色行锁，读角色在角色行锁之后。
+    // 直接分配——员工行锁先于角色行共享锁，读角色在共享锁之后。调换次序即红。
+    @Test
+    void reachIsComputedBeforeAnyLockAndLocksAreTakenInOrder() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        xpUser("usr_xp2_new", "org_a");
+
+        accessRepository.callTrace = new ArrayList<>();
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s22-add", "org_c"));
+        List<String> change = List.copyOf(accessRepository.callTrace);
+        assertThat(change).containsSubsequence("findPermissionEffects:usr_xp2_mgr", "lockRolesForEdit", "listRoleHolderIds:role_xp2",
+                "lockAccessUsers:[usr_xp2_direct]", "lockRoleForEdit:role_xp2", "findRoleById:role_xp2");
+        assertThat(change.lastIndexOf("findPermissionEffects:usr_xp2_mgr")).as("按操作人读能力事实都在第一把锁之前")
+                .isLessThan(change.indexOf("lockRolesForEdit"));
+        int firstUserLock = change.indexOf(change.stream().filter(call -> call.startsWith("lockAccessUsers:")).findFirst().orElseThrow());
+        assertThat(change.indexOf("lockRolesForEdit")).as("角色表锁先于任何员工行锁").isLessThan(firstUserLock);
+        assertThat(firstUserLock).as("员工行锁先于角色行锁").isLessThan(change.indexOf("lockRoleForEdit:role_xp2"));
+        assertThat(change.indexOf("findRoleById:role_xp2")).as("读角色在角色行锁之后").isGreaterThan(change.indexOf("lockRoleForEdit:role_xp2"));
+
+        authenticateAsPlatformAdmin("seed-org");
+        accessRepository.callTrace = new ArrayList<>();
+        service.assignUserRole(new RoleAssignmentRequest("xp2-s22-assign", null, "usr_xp2_new", "role_xp2"));
+        List<String> assign = List.copyOf(accessRepository.callTrace);
+        assertThat(assign).containsSubsequence("lockAccessUsers:[usr_xp2_new]", "lockRoleForGrant:role_xp2", "findRoleById:role_xp2");
+        assertThat(assign.indexOf("lockAccessUsers:[usr_xp2_new]")).as("员工行锁先于角色行共享锁")
+                .isLessThan(assign.indexOf("lockRoleForGrant:role_xp2"));
+        assertThat(assign.indexOf("findRoleById:role_xp2")).as("读角色在角色行共享锁之后")
+                .isGreaterThan(assign.indexOf("lockRoleForGrant:role_xp2"));
+    }
+
+    // M736-S23（操作员 2026-09-25 确认句「同一次操作重复提交时，直接返回第一次的结果并提示已完成」）：同一提交编号、同样内容再提交
+    // 一次（加丁、减丙）——返回与第一次相同的结果，角色、待批、复核单、留痕都只有一份；同一提交编号换了内容——409，仍只有一份。
+    @Test
+    void changingViewableProjectsReplaysByIdempotencyKey() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b", "org_c");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        RoleViewableProjectsRequest request = xp2Delta("xp2-s23", null, List.of("org_d"), null, List.of("org_c"));
+
+        RoleViewableProjectsView first = service.updateRoleViewableProjects("role_xp2", request);
+        RoleViewableProjectsView replayed = service.updateRoleViewableProjects("role_xp2", request);
+
+        assertThat(replayed).isEqualTo(first);
+        assertThat(first.pendingRemovalIds()).containsExactly("org_c");
+        xpExpect(() -> service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s23", "org_d")),
+                409, "IDEMPOTENCY_CONFLICT", "该幂等键已被不同的请求使用");
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_a", "org_b", "org_c", "org_d");
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2")).containsExactly("org_d");
+        assertThat(accessRepository.findRoleViewableProjectRemovals("role_xp2")).containsExactly("org_c");
+        assertThat(xp2Reviews.reviews).hasSize(1);
+        assertThat(xp2Events("role.viewable_projects.changed")).hasSize(1);
+    }
+
+    // M736-S24（操作员 2026-10-01 确认的治理地图第 653 行追加句：「……平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到。」）：
+    // 乙项目的角色，带待批的持有人里有乙项目的两名普通员工和一个归属乙项目的平台管理员账号；一人的待审重新审批单还批得动，
+    // 另一人的因为又加了项目已批不动；乙的减少在待审。平台管理员读——三人都列，前者「已发起」为真、后者为假，减少待审的条目与库里一致；
+    // 经勾了乙的可跨项目角色持建角色权限的甲项目员工读——只列两名普通员工；只到甲项目的角色管理人读——403 CROSS_ORG_FORBIDDEN。
+    // 去掉持有人的可触及过滤即红（多出那个平台管理员账号）。
+    @Test
+    void viewListsPendingRemovalsAndHoldersWithinReach() {
+        xp2Fixture();
+        xp2Role("role_xp2_b", "org_b", List.of(M002_VIEW), false, "org_b");
+        xp2Holder("usr_xp2_b1", "org_b", "role_xp2_b");
+        xp2Holder("usr_xp2_b2", "org_b", "role_xp2_b");
+        accessRepository.users.put("usr_xp2_pa_b", new AccessUser("usr_xp2_pa_b", "usr_xp2_pa_b", "platform_admin", "org_b", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.assignUserRole("usr_xp2_pa_b", "role_xp2_b");
+        xpRole("role_xp2_manage_b", List.of(XP_MANAGE), false, "org_b");
+        authenticateAsPlatformAdmin("seed-org");
+        service.updateRoleViewableProjects("role_xp2_b", xp2Add("xp2-s24-add-c", "org_c"));
+        service.applyGrant(xp2Reapproval("xp2-s24-stale", "usr_xp2_b2", "role_xp2_b"));
+        service.updateRoleViewableProjects("role_xp2_b", xp2Add("xp2-s24-add-d", "org_d"));
+        service.applyGrant(xp2Reapproval("xp2-s24-live", "usr_xp2_b1", "role_xp2_b"));
+        service.updateRoleViewableProjects("role_xp2_b", xp2Remove("xp2-s24-remove", "org_b"));
+
+        RoleViewableProjectsView byAdmin = service.getRoleViewableProjects("role_xp2_b");
+        assertThat(byAdmin.viewAllProjects()).isFalse();
+        assertThat(byAdmin.viewableProjectIds()).containsExactly("org_b", "org_c", "org_d");
+        assertThat(byAdmin.pendingRemovalIds()).containsExactly("org_b")
+                .containsExactlyInAnyOrderElementsOf(accessRepository.findRoleViewableProjectRemovals("role_xp2_b"));
+        assertThat(byAdmin.pendingReapprovals()).extracting(RoleViewableProjectsView.PendingReapproval::userId)
+                .containsExactly("usr_xp2_b1", "usr_xp2_b2", "usr_xp2_pa_b");
+        assertThat(byAdmin.pendingReapprovals()).extracting(RoleViewableProjectsView.PendingReapproval::reapprovalPending)
+                .containsExactly(true, false, false);
+        assertThat(byAdmin.pendingReapprovals()).allSatisfy(pending -> assertThat(pending.viewableIds()).containsExactly("org_c", "org_d"));
+
+        xpActAs("usr_xp2_cross", "role_xp2_manage_b");
+        RoleViewableProjectsView byHolder = service.getRoleViewableProjects("role_xp2_b");
+        assertThat(byHolder.pendingReapprovals()).extracting(RoleViewableProjectsView.PendingReapproval::userId)
+                .containsExactly("usr_xp2_b1", "usr_xp2_b2");
+        assertThat(byHolder.pendingReapprovals()).extracting(RoleViewableProjectsView.PendingReapproval::reapprovalPending)
+                .containsExactly(true, false);
+        assertThat(byHolder.pendingRemovalIds()).containsExactly("org_b");
+
+        xp2Login("usr_xp2_mgr");
+        xpExpect(() -> service.getRoleViewableProjects("role_xp2_b"), 403, "CROSS_ORG_FORBIDDEN", "不能查看其他组织的角色");
+    }
+
+    // M736-S25（技术推导：角色原来一条勾选都没有、第一次勾上项目时已持有它的人，重新审批通过之前这个角色对他仍只到本人项目）：
+    // 没勾选的角色第一次勾上丙——老持有人除了对丙的待批另记一条保留标记：他仍到本人项目、到不了丙；现状、申请原因、留痕的条数都不含
+    // 这条标记；改之后才得到角色的人没有标记、只到丙；老持有人重新审批通过后标记随待批一起删，他也只到丙（2026-10-01 确认的追加句
+    // 「逐个勾选的只能查看被选中的项目」）。不记保留标记即红（老持有人当场丢掉本人项目）。
+    @Test
+    void firstTickOnAnUntickedRoleKeepsExistingHoldersOnTheirOwnProjectUntilReapproved() {
+        xp2Fixture();
+        xp2Role("role_xp2_plain", "org_a", List.of(M002_VIEW), false);
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2_plain");
+
+        RoleViewableProjectsView view = service.updateRoleViewableProjects("role_xp2_plain", xp2Add("xp2-s25-add", "org_c"));
+
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2_plain"))
+                .containsExactlyInAnyOrder("org_c", AuthorizationService.HELD_SINCE_UNTICKED);
+        assertThat(view.pendingReapprovals()).singleElement()
+                .satisfies(row -> assertThat(row.viewableIds()).containsExactly("org_c"));
+        AuthorizationService.ProjectReach before = xp2ReachOf("usr_xp2_direct", M002_VIEW);
+        assertThat(List.of(before.covers("org_a"), before.covers("org_c"))).as("重新审批通过之前").containsExactly(true, false);
+        xp2Holder("usr_xp2_later", "org_a", "role_xp2_plain");
+        assertThat(xp2Holds("usr_xp2_later", "role_xp2_plain")).isEmpty();
+        AuthorizationService.ProjectReach later = xp2ReachOf("usr_xp2_later", M002_VIEW);
+        assertThat(List.of(later.covers("org_a"), later.covers("org_c"))).as("改之后才得到角色的人").containsExactly(false, true);
+
+        xp2Login("usr_xp2_mgr");
+        AccessGrantRequestRecord pending = service.applyGrant(xp2Reapproval("xp2-s25-apply", "usr_xp2_direct", "role_xp2_plain"));
+        assertThat(pending.reason()).startsWith("重新审批可查看项目（共 1 项）：项目 org_c。");
+        assertThat(xp2ApproveBoth(pending.id(), "xp2-s25-approve").status()).isEqualTo("applied");
+
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2_plain")).isEmpty();
+        assertThat(xp2Events("role.viewable_projects.reapproved")).singleElement()
+                .satisfies(event -> assertThat(event.metadata().get("removed_holds")).isEqualTo(1));
+        AuthorizationService.ProjectReach after = xp2ReachOf("usr_xp2_direct", M002_VIEW);
+        assertThat(List.of(after.covers("org_a"), after.covers("org_c"))).as("重新审批通过之后").containsExactly(false, true);
+    }
+
+    // M736-S26（操作员 2026-10-03 所选选项原文「减少也要审批通过后才生效；审批期间持有人仍能看 C。」；2026-10-01 确认的追加句「逐个勾选的
+    // 只能查看被选中的项目」；一条不剩时什么都不给为技术推导）：角色只勾着乙，张三（本人在甲项目）持有它。一次保存去掉乙、勾上丙：
+    // 审批期间张三仍到乙、到不了丙；减少整单通过后角色只剩丙——张三对丙还没重新审批，这个角色对他哪个项目都不给：乙、丙不到，
+    // 从没被勾过的本人项目也不到（改之前角色已有勾选，不记保留标记）；改之后才得到角色的人只到丙；张三重新审批通过后同样只到丙。
+    // 一条不剩就退回「按没勾选的角色算」即红（张三到了本人项目）。
+    @Test
+    void replacingEveryTickLeavesAnExistingHolderWithNothingUntilReapproved() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_b");
+        xp2Holder("usr_xp2_zhang", "org_a", "role_xp2");
+
+        service.updateRoleViewableProjects("role_xp2", xp2Delta("xp2-s26-swap", null, List.of("org_c"), null, List.of("org_b")));
+        assertThat(xp2Holds("usr_xp2_zhang", "role_xp2")).as("改之前角色已有勾选，不记保留标记").containsExactly("org_c");
+        AuthorizationService.ProjectReach waiting = xp2ReachOf("usr_xp2_zhang", M002_VIEW);
+        assertThat(List.of(waiting.covers("org_a"), waiting.covers("org_b"), waiting.covers("org_c")))
+                .as("减少待审期间").containsExactly(false, true, false);
+
+        String reviewId = xp2RemovalReview("role_xp2", "org_b");
+        xp2Decide("usr_xp2_sup1", reviewId, "xp2-s26-first", "approved");
+        assertThat(xp2Decide("usr_xp2_sup2", reviewId, "xp2-s26-last", "approved").reviewStatus()).isEqualTo("approved");
+        assertThat(accessRepository.roles.get("role_xp2").viewableProjectIds()).containsExactly("org_c");
+        xp2Holder("usr_xp2_later", "org_a", "role_xp2");
+
+        AuthorizationService.ProjectReach none = xp2ReachOf("usr_xp2_zhang", M002_VIEW);
+        assertThat(List.of(none.covers("org_a"), none.covers("org_b"), none.covers("org_c")))
+                .as("减少已生效、新增的还没重新审批").containsExactly(false, false, false);
+        AuthorizationService.ProjectReach later = xp2ReachOf("usr_xp2_later", M002_VIEW);
+        assertThat(List.of(later.covers("org_a"), later.covers("org_c"))).as("改之后才得到角色的人").containsExactly(false, true);
+
+        xp2Login("usr_xp2_mgr");
+        AccessGrantRequestRecord pending = service.applyGrant(xp2Reapproval("xp2-s26-apply", "usr_xp2_zhang", "role_xp2"));
+        assertThat(xp2ApproveBoth(pending.id(), "xp2-s26-approve").status()).isEqualTo("applied");
+        AuthorizationService.ProjectReach approved = xp2ReachOf("usr_xp2_zhang", M002_VIEW);
+        assertThat(List.of(approved.covers("org_a"), approved.covers("org_c"))).as("重新审批通过之后").containsExactly(false, true);
+    }
+
+    // M736-S27（技术推导：保留标记不是可查看项目）：没勾选的角色第一次勾上丙以后又把丙减掉（审批通过）——角色回到没勾选，老持有人
+    // 身上只剩保留标记：现状里不列他，替他发起重新审批 400，他照旧只到本人项目。滤掉保留标记的地方漏一处即红。
+    @Test
+    void retentionMarkerAloneIsNotAPendingReapproval() {
+        xp2Fixture();
+        xp2Role("role_xp2_plain", "org_a", List.of(M002_VIEW), false);
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2_plain");
+        service.updateRoleViewableProjects("role_xp2_plain", xp2Add("xp2-s27-add", "org_c"));
+        service.updateRoleViewableProjects("role_xp2_plain", xp2Remove("xp2-s27-remove", "org_c"));
+        String reviewId = xp2RemovalReview("role_xp2_plain", "org_c");
+        xp2Decide("usr_xp2_sup1", reviewId, "xp2-s27-first", "approved");
+        assertThat(xp2Decide("usr_xp2_sup2", reviewId, "xp2-s27-last", "approved").reviewStatus()).isEqualTo("approved");
+        assertThat(accessRepository.roles.get("role_xp2_plain").viewableProjectIds()).isEmpty();
+        assertThat(xp2Holds("usr_xp2_direct", "role_xp2_plain")).containsExactly(AuthorizationService.HELD_SINCE_UNTICKED);
+
+        xp2Login("usr_xp2_mgr");
+        assertThat(service.getRoleViewableProjects("role_xp2_plain").pendingReapprovals()).isEmpty();
+        xpExpect(() -> service.applyGrant(xp2Reapproval("xp2-s27-apply", "usr_xp2_direct", "role_xp2_plain")),
+                400, "VALIDATION_FAILED", "该员工对这个角色没有待重新审批的可查看项目");
+        assertThat(xp2ReachOf("usr_xp2_direct", M002_VIEW).onlyOwnProject()).contains("org_a");
+    }
+
+    // M736-S28（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」；本包读路径的商户半边，同 requireSameOrganization、
+    // canViewGrantRequest）：甲项目的角色，带待批的持有人三个——不带商户归属的员工、商户 X 的账号、商户 Y 的账号。不带商户归属的
+    // 角色管理人改勾选的返回体与读现状都列出三人；带商户 X 归属、持建角色权限的操作人读现状、改勾选的返回体都只列商户 X 的那一个，
+    // 另两人的待批照写、只是不列。去掉名单过滤里的商户半边即红（多出另两人）。
+    @Test
+    void merchantBoundActorSeesOnlyPendingHoldersOfTheirOwnMerchant() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a");
+        xp2Holder("usr_xp2_plain", "org_a", "role_xp2");
+        xp2MerchantUser("usr_xp2_merchant_x", "merchant_x");
+        xp2MerchantUser("usr_xp2_merchant_y", "merchant_y");
+        accessRepository.assignUserRole("usr_xp2_merchant_x", "role_xp2");
+        accessRepository.assignUserRole("usr_xp2_merchant_y", "role_xp2");
+        List<String> everyone = List.of("usr_xp2_merchant_x", "usr_xp2_merchant_y", "usr_xp2_plain");
+
+        RoleViewableProjectsView changedByStaff = service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s28-add-c", "org_c"));
+        assertThat(changedByStaff.pendingReapprovals()).extracting(RoleViewableProjectsView.PendingReapproval::userId)
+                .as("不带商户归属的项目内操作人：改勾选的返回体").containsExactlyElementsOf(everyone);
+        assertThat(service.getRoleViewableProjects("role_xp2").pendingReapprovals())
+                .extracting(RoleViewableProjectsView.PendingReapproval::userId)
+                .as("不带商户归属的项目内操作人：读现状").containsExactlyElementsOf(everyone);
+
+        xp2MerchantUser("usr_xp2_mx_mgr", "merchant_x");
+        accessRepository.userRoles.put("usr_xp2_mx_mgr", new LinkedHashSet<>(List.of("role_xp2_mgr")));
+        authenticateAsMerchantUser("usr_xp2_mx_mgr", "usr_xp2_mx_mgr", "org_a", "merchant_x");
+        assertThat(service.getRoleViewableProjects("role_xp2").pendingReapprovals())
+                .extracting(RoleViewableProjectsView.PendingReapproval::userId)
+                .as("带商户归属的操作人：读现状").containsExactly("usr_xp2_merchant_x");
+        RoleViewableProjectsView changedByMerchant = service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s28-add-d", "org_d"));
+        assertThat(changedByMerchant.pendingReapprovals()).as("带商户归属的操作人：改勾选的返回体").singleElement().satisfies(row -> {
+            assertThat(row.userId()).isEqualTo("usr_xp2_merchant_x");
+            assertThat(row.viewableIds()).containsExactly("org_c", "org_d");
+        });
+        for (String unlisted : List.of("usr_xp2_merchant_y", "usr_xp2_plain")) {
+            assertThat(xp2Holds(unlisted, "role_xp2")).as("不列的人待批照写 " + unlisted).containsExactlyInAnyOrder("org_c", "org_d");
+        }
+    }
+
+    // M736-S29（技术推导：改勾选取到角色行锁之后重列持有人、给新出现的人补锁员工行——并发的直接分配先到时给新持有人补上待批）：
+    // 预列持有人之后、取角色行锁之前多出一个持有人（用仓储的锁前钩子落一行直接分配，不起线程）。只看调用先后：角色行锁之后有一次重列，
+    // 重列之后补锁的正是新出现的那个人，补锁先于给他写待批。拿掉重列（holders 改用预列的 locked）或拿掉补锁那一行即红。
+    @Test
+    void holdersAreRelistedAndTheNewcomerIsLockedAfterTheRoleRowLock() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b");
+        xp2Holder("usr_xp2_direct", "org_a", "role_xp2");
+        xpUser("usr_xp2_late", "org_a");
+        accessRepository.beforeNextUserLock = () -> accessRepository.assignUserRole("usr_xp2_late", "role_xp2");
+
+        accessRepository.callTrace = new ArrayList<>();
+        service.updateRoleViewableProjects("role_xp2", xp2Add("xp2-s29-add", "org_c"));
+        List<String> change = List.copyOf(accessRepository.callTrace);
+
+        assertThat(change).containsSubsequence("listRoleHolderIds:role_xp2", "lockAccessUsers:[usr_xp2_direct]", "lockRoleForEdit:role_xp2",
+                "listRoleHolderIds:role_xp2", "lockAccessUsers:[usr_xp2_late]", "addRoleViewableProjectHolds:usr_xp2_late");
+        int relist = change.lastIndexOf("listRoleHolderIds:role_xp2");
+        int lateLock = change.indexOf("lockAccessUsers:[usr_xp2_late]");
+        assertThat(relist).as("角色行锁之后重列持有人").isGreaterThan(change.indexOf("lockRoleForEdit:role_xp2"));
+        assertThat(lateLock).as("重列之后补锁新出现的持有人").isGreaterThan(relist);
+        assertThat(lateLock).as("补锁先于给他写待批").isLessThan(change.indexOf("addRoleViewableProjectHolds:usr_xp2_late"));
+    }
+
+    // M736-S30（技术推导：直接定岗一侧同样在员工行之后、读角色之前取角色行共享锁，与改勾选的角色行锁互斥）：平台管理员把员工定到
+    // 派生可跨项目角色的岗位。只看调用先后：员工行锁先于角色行共享锁，读该角色在共享锁之后。拿掉 resolvePositionGrant 里的
+    // lockRoleForGrant 即红。
+    @Test
+    void positionAssignmentTakesTheRoleRowShareLockBeforeReadingTheRole() {
+        xp2Fixture();
+        xpRole("role_xp2_cross", List.of(M002_VIEW), false, "org_b");
+        xpTemplate("tpl_xp2_pos", null);
+        xpUser("usr_xp2_seat", "org_a");
+        authenticateAsPlatformAdmin("seed-org");
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "xp2-s30-map", null, "xp2_patrol", "lvl_m1_lower", "role_xp2_cross", "tpl_xp2_pos", "active"));
+
+        accessRepository.callTrace = new ArrayList<>();
+        service.assignUserPosition(new UserPositionAssignmentRequest(
+                "xp2-s30-seat", null, "usr_xp2_seat", "xp2_patrol", "lvl_m1_lower", null, null, null));
+        List<String> seat = List.copyOf(accessRepository.callTrace);
+
+        assertThat(seat).containsSubsequence("lockAccessUsers:[usr_xp2_seat]", "lockRoleForGrant:role_xp2_cross", "findRoleById:role_xp2_cross");
+        assertThat(seat.indexOf("lockAccessUsers:[usr_xp2_seat]")).as("员工行锁先于角色行共享锁")
+                .isLessThan(seat.indexOf("lockRoleForGrant:role_xp2_cross"));
+        assertThat(seat.indexOf("findRoleById:role_xp2_cross")).as("读角色在角色行共享锁之后")
+                .isGreaterThan(seat.indexOf("lockRoleForGrant:role_xp2_cross"));
+    }
+
+    // M736-S31（技术推导：减少落地先取角色表锁、再取角色行锁，然后才删勾选行——与授权申请的审批落地、与改勾选串行）：减丙的复核单
+    // 末级通过时监听同步落地。只看调用先后：角色表锁 → 角色行锁 → 删带该单号的勾选行。拿掉监听里两把锁的任何一把即红。
+    @Test
+    void removalLandingLocksTheRolesTableThenTheRoleRowBeforeDeletingTicks() {
+        xp2Fixture();
+        xp2Role("role_xp2", "org_a", List.of(M002_VIEW), false, "org_a", "org_b", "org_c");
+        service.updateRoleViewableProjects("role_xp2", xp2Remove("xp2-s31-remove", "org_c"));
+        String reviewId = xp2RemovalReview("role_xp2", "org_c");
+        xp2Decide("usr_xp2_sup1", reviewId, "xp2-s31-first", "approved");
+
+        accessRepository.callTrace = new ArrayList<>();
+        xp2Decide("usr_xp2_sup2", reviewId, "xp2-s31-last", "approved");
+        List<String> landing = List.copyOf(accessRepository.callTrace);
+
+        assertThat(landing).containsSubsequence("lockRolesForEdit", "lockRoleForEdit:role_xp2", "applyRoleViewableProjectRemoval:role_xp2");
+        assertThat(landing.indexOf("lockRolesForEdit")).as("角色表锁先于角色行锁").isLessThan(landing.indexOf("lockRoleForEdit:role_xp2"));
+        assertThat(landing.indexOf("lockRoleForEdit:role_xp2")).as("角色行锁先于删勾选行")
+                .isLessThan(landing.indexOf("applyRoleViewableProjectRemoval:role_xp2"));
     }
 }

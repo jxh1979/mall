@@ -1,4 +1,4 @@
-import type { AdminAccountForm, AdminNavGroup, AdminRoute } from "./types";
+import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-OV-001", label: "总控驾驶舱", module: "总控", group: "overview", route: "/admin/overview", requiredPermissions: ["analytics.dashboard.view"] },
@@ -159,6 +159,35 @@ export function groupedAdminRoutes(): AdminNavGroupView[] {
 
 export function findAdminRoute(pathname: string) {
   return adminRoutes.find((route) => route.route === pathname) ?? adminRoutes[0]!;
+}
+
+export function permissionCode(row: PermissionDefinitionRow) {
+  return row.permissionCode ?? row.code ?? "";
+}
+
+/**
+ * 权限点按左侧菜单模块分组（权限模板页、访问治理工作台新建角色共用）：从 adminRoutes 派生「权限域→菜单模块」，
+ * 并按菜单模块出现顺序排列，使管理员按左侧目录的思路勾选权限。未匹配任何菜单的域归入「其他」置末。
+ */
+export function groupPermissionsByMenuModule(permissions: PermissionDefinitionRow[]): [string, PermissionDefinitionRow[]][] {
+  const domainToModule = new Map<string, string>();
+  const moduleOrder: string[] = [];
+  for (const route of adminRoutes) {
+    if (!moduleOrder.includes(route.module)) moduleOrder.push(route.module);
+    for (const code of route.requiredPermissions ?? []) {
+      const dom = code.split(".")[0];
+      if (dom && !domainToModule.has(dom)) domainToModule.set(dom, route.module);
+    }
+  }
+  const groups = new Map<string, PermissionDefinitionRow[]>();
+  for (const row of permissions) {
+    const domain = row.domain ?? permissionCode(row).split(".")[0] ?? "other";
+    const moduleName = domainToModule.get(domain) ?? "其他";
+    groups.set(moduleName, [...(groups.get(moduleName) ?? []), row]);
+  }
+  return [...moduleOrder, "其他"]
+    .filter((m) => groups.has(m))
+    .map((m) => [m, groups.get(m)!] as [string, PermissionDefinitionRow[]]);
 }
 
 /**
