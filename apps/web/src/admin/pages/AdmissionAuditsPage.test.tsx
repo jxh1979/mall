@@ -124,3 +124,123 @@ describe("AdmissionAuditsPage 行明细抽屉", () => {
     expect(screen.getByTestId("row-detail-drawer").textContent).toContain("运营甲");
   });
 });
+
+// M725-F02（治理地图第 303 行「同一个操作被重复提交，系统只认一次」）：登记导出留痕第一次提交服务端可能已登记、响应却丢了，
+// 弹窗留着，操作员再点——这是同一次登记，不是新的一次：发生时间沿用第一次提交时取的，请求内容逐字不变，带首发的提交编号。
+describe("AdmissionAuditsPage 登记导出留痕没拿到结果再点", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/admission-audits");
+  });
+
+  it("第二次请求的内容与提交编号都与第一次相同", async () => {
+    // 页面按点击取当前时刻、用「前缀-毫秒」现生成编号；让每次取到的时刻与毫秒必然不同。
+    const realToISOString = Date.prototype.toISOString;
+    let now = 1_760_000_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => (now += 1000));
+    vi.spyOn(Date.prototype, "toISOString").mockImplementation(() => realToISOString.call(new Date((now += 1000))));
+    const posts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if ((init?.method ?? "GET").toUpperCase() === "POST") {
+          posts.push(String(init?.body));
+          // 第一次：响应丢在路上。
+          if (posts.length === 1) return Promise.reject(new TypeError("Failed to fetch"));
+          return Promise.resolve(new Response(
+            JSON.stringify({ success: true, code: "OK", message: "success", data: { accepted_count: 1 } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ));
+        }
+        if (url.includes("business-entity-bindings")) return Promise.resolve(envelope(BINDINGS));
+        if (url.includes("merchants")) return Promise.resolve(envelope(MERCHANTS));
+        if (url.includes("contracts")) return Promise.resolve(envelope(CONTRACTS));
+        return Promise.resolve(envelope([]));
+      }),
+    );
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<AdmissionAuditsPage {...props} />);
+
+    await waitFor(() => expect(screen.getByTestId("admission-audits-create-open")).toBeTruthy(), { timeout: 5000 });
+    fireEvent.click(screen.getByTestId("admission-audits-create-open"));
+    fireEvent.click(screen.getByTestId("admission-audits-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("admission-audits-guided-summary")).toBeTruthy(), { timeout: 5000 });
+
+    fireEvent.click(screen.getByTestId("admission-audits-export"));
+    await waitFor(() => expect(screen.getByTestId("admission-audits-guided-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
+    expect(posts).toHaveLength(1);
+
+    await waitFor(() => expect(screen.getByTestId("admission-audits-export").className).not.toContain("ant-btn-loading"), { timeout: 5000 });
+    fireEvent.click(screen.getByTestId("admission-audits-export"));
+    await waitFor(() => expect(posts).toHaveLength(2), { timeout: 5000 });
+    expect(JSON.parse(posts[1]!).events[0].occurred_at).toBe(JSON.parse(posts[0]!).events[0].occurred_at);
+    expect(JSON.parse(posts[1]!).idempotency_key).toBe(JSON.parse(posts[0]!).idempotency_key);
+    expect(posts[1]).toBe(posts[0]);
+  });
+
+  // 记住的发生时间跟着「这次登记」走，不跟着页面组件走：第一次没拿到结果后切到别的菜单再回来（页面重新挂载），
+  // 同样的内容再登记——仍是同一次登记。
+  it("切页回来再登记：请求内容与提交编号仍与第一次相同", async () => {
+    // 页面按点击取当前时刻、用「前缀-毫秒」现生成编号；让每次取到的时刻与毫秒必然不同。
+    const realToISOString = Date.prototype.toISOString;
+    let now = 1_760_000_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => (now += 1000));
+    vi.spyOn(Date.prototype, "toISOString").mockImplementation(() => realToISOString.call(new Date((now += 1000))));
+    const posts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if ((init?.method ?? "GET").toUpperCase() === "POST") {
+          posts.push(String(init?.body));
+          // 第一次：响应丢在路上。
+          if (posts.length === 1) return Promise.reject(new TypeError("Failed to fetch"));
+          return Promise.resolve(new Response(
+            JSON.stringify({ success: true, code: "OK", message: "success", data: { accepted_count: 1 } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ));
+        }
+        if (url.includes("business-entity-bindings")) return Promise.resolve(envelope(BINDINGS));
+        if (url.includes("merchants")) return Promise.resolve(envelope(MERCHANTS));
+        if (url.includes("contracts")) return Promise.resolve(envelope(CONTRACTS));
+        return Promise.resolve(envelope([]));
+      }),
+    );
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    // 打开引导弹窗、填导出原因、核对、提交。
+    async function submitExport() {
+      await waitFor(() => expect(screen.getByTestId("admission-audits-create-open")).toBeTruthy(), { timeout: 5000 });
+      fireEvent.click(screen.getByTestId("admission-audits-create-open"));
+      fireEvent.change(screen.getByTestId("admission-audits-export-reason"), { target: { value: "切页回来再登记" } });
+      fireEvent.click(screen.getByTestId("admission-audits-guided-next"));
+      await waitFor(() => expect(screen.getByTestId("admission-audits-guided-summary")).toBeTruthy(), { timeout: 5000 });
+      fireEvent.click(screen.getByTestId("admission-audits-export"));
+    }
+    const firstVisit = render(<AdmissionAuditsPage {...props} />);
+    await submitExport();
+    await waitFor(() => expect(screen.getByTestId("admission-audits-guided-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
+    expect(posts).toHaveLength(1);
+
+    // 切到别的菜单再回来：页面重新挂载。
+    firstVisit.unmount();
+    render(<AdmissionAuditsPage {...props} />);
+    await submitExport();
+    await waitFor(() => expect(posts).toHaveLength(2), { timeout: 5000 });
+    expect(JSON.parse(posts[1]!).events[0].occurred_at).toBe(JSON.parse(posts[0]!).events[0].occurred_at);
+    expect(JSON.parse(posts[1]!).idempotency_key).toBe(JSON.parse(posts[0]!).idempotency_key);
+    expect(posts[1]).toBe(posts[0]);
+  });
+});

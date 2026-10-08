@@ -1251,7 +1251,7 @@ PGM-0265,支持角色级权限模板,docs/platform-governance-prd-v0.1.md,§12 �
 PGM-0266,支持角色级权限模板,docs/platform-governance-prd-v0.1.md,§12 第 13、14 条 2026-10-01 全量审计 M001 第 4 轮补记,FULL,,,,,,03-governance-and-common
 PGM-0267,临时授权可设有效期或单次使用；权限的授予、收回、到期,docs/platform-governance-prd-v0.1.md,§12 第 13、14 条 2026-10-03 M723 补记,FULL,,,,,,03-governance-and-common
 PGM-0268,临时授权可设有效期或单次使用；权限的授予、收回、到期,docs/platform-governance-prd-v0.1.md,§12 第 13、14 条 2026-10-03 M723 补记,PARTIAL,,,在线核销以外以正常返回报告失败的入口（平面图导入解析失败、通知发送失败、本地模型质检建议任务失败）仍随请求正常返回而用掉单次授权，本次未纳入；终端离线同步批次里的离线核销失败时同步操作本身成功、照常用掉（与 M723 之前一致）,,,03-governance-and-common
-PGM-0269,临时授权可设有效期或单次使用；权限的授予、收回、到期,docs/platform-governance-prd-v0.1.md,§12 第 13、14 条 2026-10-03 M723 补记,PARTIAL,,,成功结果不经统一幂等层保存的接口、取不到请求编号的请求重复提交时不返回第一次的结果；储值等自带重放的入口的已完成提示由 M724 实现,,,03-governance-and-common
+PGM-0269,临时授权可设有效期或单次使用；权限的授予、收回、到期,docs/platform-governance-prd-v0.1.md,§12 第 13、14 条 2026-10-03 M723 补记,PARTIAL,,,成功结果不经统一幂等层保存的接口、取不到请求编号的请求重复提交时不返回第一次的结果；储值充值（发起与入账）与储值退款重复提交时返回第一次的结果并提示已完成，已由 M724 实现,,,03-governance-and-common
 PGM-0270,全局原则 · 同时操作以先成功为准,docs/platform-governance-prd-v0.1.md,§12 第 8、9 条 2026-10-03 M724 补记,PARTIAL,,,M724 只落到准入闸逐笔放行与共用幂等层；单次授权由 M723 落；门票核销、券核销等各业务域的一次性动作随专项后续模块 M725～M735 逐项落,,,03-governance-and-common
-PGM-0271,全局原则 · 同时操作以先成功为准,docs/platform-governance-prd-v0.1.md,§2A.3 2026-10-03 M724 补记,PARTIAL,,,M724 落到后端响应的已完成提示与机读标记；后台与客人端页面显示该提示由 M725 落；不经统一幂等层、模块自带重放的入口随专项后续模块逐项落,,,03-governance-and-common
+PGM-0271,全局原则 · 同时操作以先成功为准,docs/platform-governance-prd-v0.1.md,§2A.3 2026-10-03 M724 补记,PARTIAL,,,M724 落到后端响应的已完成提示与机读标记；后台与客人端页面显示该提示已由 M725 落；不经统一幂等层、模块自带重放的入口仍随专项后续模块逐项落,,,03-governance-and-common
 PGM-0272,员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关,docs/leasing-acquisition-prd-v1.0.md,§8 数据模型 联系人手机号一段 2026-10-07 M724 补记,FULL,,,,,,03-governance-and-common

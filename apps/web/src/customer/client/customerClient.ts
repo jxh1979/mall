@@ -2,9 +2,10 @@
 // - Bearer 客人 Token（同时写 X-Customer-Token，对齐后端双读口径）
 // - 请求体 camelCase -> snake_case；响应 snake_case -> camelCase
 // - 统一信封 { code, message, data } 解包，data.items 列表拆箱
-// - 写操作自动补幂等键（Idempotency-Key 头 + body.idempotency_key）
+// - 写操作自动补幂等键（Idempotency-Key 头 + body.idempotency_key，二者同值；同一次操作结果未明时再提交沿用原键）
 
 import { apiErrorFromResponse } from "../../shared/apiError";
+import { announceReplayed, beginWriteOperation, forgetWriteOperations } from "../../shared/operationKey";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -58,8 +59,9 @@ export function nextIdempotencyKey(): string {
   return `customer-web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+// 请求体里的请求编号一律取传入的这一个，与 Idempotency-Key 头同值（M725-F02）。
 export function normalizeRequestBody(body: JsonBody, idempotencyKey: string): JsonValue {
-  return mapKeys({ ...body, idempotencyKey: body.idempotencyKey ?? idempotencyKey }, toSnakeCaseKey);
+  return mapKeys({ ...body, idempotencyKey }, toSnakeCaseKey);
 }
 
 // 会话过期全局回登录：CustomerApp 注册回调（清会话+回登录页），任何页面任何请求 401 都走这里。
@@ -113,19 +115,38 @@ export class CustomerApi {
     // 3.19 二期：客人 web 端声明终端类型，接受 terminal.enabled 总开关逐请求强制。
     headers.set("x-terminal-type", "web");
     const init: RequestInit = { method, headers, credentials: "include" };
-    if (body) {
-      const idempotencyKey = nextIdempotencyKey();
+    // M725-F02：请求编号跟着「一次操作」走（见 shared/operationKey）——上一次没拿到明确结果时，
+    // 再提交同一内容沿用原编号，服务端据此返回第一次的结果，不会再扣一次、再发一次。
+    const operation = body ? beginWriteOperation(method, path, body, nextIdempotencyKey) : null;
+    if (body && operation) {
+      const idempotencyKey = operation.key;
       headers.set("content-type", "application/json");
       headers.set("idempotency-key", idempotencyKey);
       init.body = JSON.stringify(normalizeRequestBody(body, idempotencyKey));
     }
-    const response = await fetch(`${this.apiBaseUrl}${path}`, init);
-    const text = await response.text();
+    let response: Response;
+    let text: string;
+    try {
+      response = await fetch(`${this.apiBaseUrl}${path}`, init);
+      text = await response.text();
+    } catch (networkError) {
+      // 网络中断、超时：这次提交是否已生效不知道，结果未明，请求编号留给再次提交。
+      operation?.settle(null);
+      throw networkError;
+    }
     // 会话失效（401）全局回登录页；真权限不足（403）不登出，仍走下方错误翻译提示。
     if (response.status === 401 && !isSessionProbeOrAuthPath(path)) notifySessionExpired();
     // 错误翻译层：客人只看中文业务话术（err.message），技术信息收进 err.detail 供「详情」折叠展示。
-    if (!response.ok) throw apiErrorFromResponse(path, response.status, text, method);
-    return (text ? unwrap(JSON.parse(text)) : null) as T;
+    if (!response.ok) {
+      const error = apiErrorFromResponse(path, response.status, text, method);
+      operation?.settle(response.status, error.detailCode);
+      throw error;
+    }
+    operation?.settle(response.status);
+    const parsed: unknown = text ? JSON.parse(text) : null;
+    // 重复提交返回第一次的结果（replayed=true）：照常按成功返回，并提示已完成。
+    if (operation && isPlainObject(parsed) && parsed.replayed === true) announceReplayed(true);
+    return (text ? unwrap(parsed) : null) as T;
   }
 }
 
@@ -136,7 +157,11 @@ export async function customerPhoneLogin(payload: {
   scene?: string;
 }): Promise<CustomerLoginResponse> {
   const api = new CustomerApi("");
-  return api.post<CustomerLoginResponse>("/api/v1/customer/auth/phone-login", payload);
+  const result = await api.post<CustomerLoginResponse>("/api/v1/customer/auth/phone-login", payload);
+  // M725-F02：上一位客人没拿到结果的请求编号不沿用到这位客人身上（共用设备登出不刷新页面）；
+  // 同一位客人重新登录照常沿用。
+  forgetWriteOperations(result.customerId);
+  return result;
 }
 
 export type CustomerLoginResponse = {
@@ -155,7 +180,10 @@ export type CustomerSessionInfo = {
 // 3.3 免登录：刷新后凭 httpOnly cookie 恢复会话；无有效 cookie 返回 null（回登录页）。
 export async function customerRestoreSession(): Promise<CustomerSessionInfo | null> {
   try {
-    return await new CustomerApi("").get<CustomerSessionInfo>("/api/v1/customer/session");
+    const info = await new CustomerApi("").get<CustomerSessionInfo>("/api/v1/customer/session");
+    // M725-F02：恢复会话也记下是谁，同一位客人会话失效后重新登录照常沿用没拿到结果的请求编号。
+    if (info) forgetWriteOperations(info.customerId);
+    return info;
   } catch {
     return null;
   }

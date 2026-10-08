@@ -24,6 +24,7 @@ import {
   setCustomerSessionExpiredHandler,
 } from "./client/customerClient";
 import { formatApiErrorDetail } from "../shared/apiError";
+import { ReplayedNotice } from "../shared/ReplayedNotice";
 import { BarInvitationPage } from "./pages/BarInvitationPage";
 import { BarReservationPage } from "./pages/BarReservationPage";
 import { BarScanOrderPage } from "./pages/BarScanOrderPage";
@@ -210,6 +211,8 @@ export default function CustomerApp(): React.ReactElement {
           <Content id="main-content" tabIndex={-1} style={{ padding: 16 }}>
             {/* 每页 h1 语义地标（此前全站无 h1）；标题与侧栏菜单同源。 */}
             <h1 className="customer-page-title">{PAGE_TITLES[page]}</h1>
+            {/* M725-F03：重复提交返回第一次的结果时提示已完成。 */}
+            <ReplayedNotice />
             {page === "home" ? <HomePage service={service} /> : null}
             {page === "buy" ? <BuyTicketPage service={service} /> : null}
             {page === "reserve" ? <BarReservationPage service={service} /> : null}

@@ -7,6 +7,8 @@ import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
 import { accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
 import { stripBase, withBase } from "../basePath";
+import { forgetWriteOperations } from "../shared/operationKey";
+import { ReplayedNotice } from "../shared/ReplayedNotice";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
@@ -396,7 +398,12 @@ export default function AdminApp() {
     () => new URLSearchParams(window.location.search).get("focus") ?? undefined,
   );
   // 启动时从 localStorage 恢复展示身份（F5 不掉登录）；鉴权靠 HttpOnly Cookie，令牌失效时请求层 401→Cookie 刷新兜底。
-  const storedSession = React.useRef(loadStoredSession()).current;
+  const [storedSession] = React.useState(() => {
+    const stored = loadStoredSession();
+    // M725-F02：恢复会话也记下是谁，同一个人会话失效后重新登录照常沿用没拿到结果的请求编号。
+    if (stored) forgetWriteOperations(stored.user.id);
+    return stored;
+  });
   const [user, setUser] = React.useState<AdminUser | null>(storedSession?.user ?? null);
   const [sessionId, setSessionId] = React.useState<string | null>(storedSession?.sessionId ?? null);
   const [effectivePermissions, setEffectivePermissions] = React.useState<EffectivePermissionsState>({ status: "loading" });
@@ -585,6 +592,8 @@ export default function AdminApp() {
       const loginApi = new AdminApi();
       // 令牌由服务端以 HttpOnly Cookie 下发（响应体令牌前端不再读取/落盘）；仅取展示身份 + 登出用 sessionId。
       const response = await loginApi.post<LoginResponse>("/api/v1/auth/login", { login_name: username, password });
+      // M725-F02：上一个人没拿到结果的请求编号不沿用到这个人身上；同一个人重新登录照常沿用。
+      forgetWriteOperations(response.user.id);
       setUser(response.user);
       setSessionId(response.sessionId ?? null);
       saveStoredSession({ user: response.user, sessionId: response.sessionId ?? null });
@@ -733,6 +742,8 @@ export default function AdminApp() {
         </header>
         <main className="admin-content" id="main-content" tabIndex={-1}>
           {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
+          {/* M725-F03：重复提交返回第一次的结果时提示已完成。 */}
+          <ReplayedNotice />
           {!routeAllowsAccountForm(route, accountForm) ? (
             // 形态不匹配（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
             <div className="admin-denied" data-testid="admin-account-form-mismatch">{accountFormHint(route)}</div>

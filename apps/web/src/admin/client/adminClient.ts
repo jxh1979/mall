@@ -1,4 +1,5 @@
 import { apiErrorFromResponse } from "../../shared/apiError";
+import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -203,21 +204,39 @@ export class AdminApi {
   }
 
   private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
-    // 幂等键在首发时生成一次，401 刷新后的重放沿用同一键（服务端按幂等键去重）。
-    const stableBody = body ? { ...body, idempotencyKey: body.idempotencyKey ?? nextIdempotencyKey() } : undefined;
+    // M725-F02：请求编号跟着「一次操作」走（见 shared/operationKey）——上一次没拿到明确结果时，
+    // 再提交同一内容沿用原编号；401 刷新后的重放也沿用同一编号（服务端按请求编号去重）。
+    const operation = body ? beginWriteOperation(method, path, body, nextIdempotencyKey) : null;
+    const stableBody = body && operation ? { ...body, idempotencyKey: operation.key } : undefined;
     // 认证域自身（登录/刷新/登出）失败不再走刷新，避免自递归。
     const isAuthEndpoint = path.includes("/auth/");
-    let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
-    if (response.status === 401 && !isAuthEndpoint) {
-      // 先静默续期重放一次；刷新失败 / 重放仍 401 → 会话失效回登录页。
-      if (await this.tryRefresh()) {
-        response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
+    let response: Response;
+    let text: string;
+    try {
+      response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
+      if (response.status === 401 && !isAuthEndpoint) {
+        // 先静默续期重放一次；刷新失败 / 重放仍 401 → 会话失效回登录页。
+        if (await this.tryRefresh()) {
+          response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
+        }
+        if (response.status === 401) this.notifySessionExpired();
       }
-      if (response.status === 401) this.notifySessionExpired();
+      text = await response.text();
+    } catch (networkError) {
+      // 网络中断、超时：这次提交是否已生效不知道，结果未明，请求编号留给再次提交。
+      operation?.settle(null);
+      throw networkError;
     }
-    const text = await response.text();
-    if (!response.ok) throw apiErrorFromResponse(path, response.status, text, method);
-    return (text ? unwrap(JSON.parse(text)) : null) as T;
+    if (!response.ok) {
+      const error = apiErrorFromResponse(path, response.status, text, method);
+      operation?.settle(response.status, error.detailCode);
+      throw error;
+    }
+    operation?.settle(response.status);
+    const parsed: unknown = text ? JSON.parse(text) : null;
+    // 重复提交返回第一次的结果（replayed=true）：照常按成功返回，并提示已完成。
+    if (operation && isPlainObject(parsed) && parsed.replayed === true) announceReplayed(true);
+    return (text ? unwrap(parsed) : null) as T;
   }
 
   private notifySessionExpired(): void {

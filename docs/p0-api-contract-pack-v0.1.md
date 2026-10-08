@@ -126,6 +126,8 @@
 }
 ```
 
+重复提交返回第一次处理结果时（见 4.2），成功响应在顶层另带 `replayed: true`，`message` 为「该操作已完成（重复提交，返回首次结果）」，`data` 仍是第一次的结果；第一次执行的响应、失败响应和查看类请求的响应不带该字段（OpenAPI `SuccessResponse.replayed`，可选布尔字段）。
+
 ### 5.2 分页响应
 
 ```json
@@ -538,3 +540,4 @@ P0 不要求在尚未进入编码的 operation 上一次性补满全部业务样
 | 2026-06-13 | V0.1 示例闸口补强 | 新增 `docs:openapi-examples` 和 `verify:openapi-examples`；OpenAPI 首批覆盖 9 个高风险请求体示例与 3 个通用响应示例，供应商 mock、接口测试和前后端联调不得再只靠口头样例 |
 | 2026-06-13 | V0.1 OpenAPI 权限/事件/任务追溯收口 | 新增 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure`；接口级权限、事件、任务簇、终端和样例准入以 OpenAPI 反向生成附录收口 |
 | 2026-06-13 | V0.1 生产前置台账接口收口 | 新增 `ops` 接口组，补齐生产前置责任状态查询、更新和准入检查三个 operation |
+| 2026-10-07 | V0.1 重复提交已完成标记 | 5.1 成功响应补记可选布尔字段 `replayed`：重复提交返回第一次处理结果时为 `true`，第一次执行、失败和查看类请求的响应不带；OpenAPI `SuccessResponse` 同步登记（M725-F03） |
