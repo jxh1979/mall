@@ -33,7 +33,7 @@
 6. **拔出 U 盘离线保管**——运行态此后只读本地普通业务密钥，断电重启无需插盘。
 
 ## 破窗登录（应急直接登录）
-管理员账号全部无法登录时：插入授权 U 盘 → `POST /api/v1/auth/master/challenge` 取一次性挑战（2 分钟，签名校验的工程参数，不是经营拒绝条件）→ `bash ops/keyvault/sign-challenge.sh /media/usb <challenge>` 用 U 盘私钥签名 → `POST /api/v1/auth/master/login {challenge, signature}`。成功即签发 `master-authority` 会话，身份是持授权 U 盘的最高权限，不是平台管理员。后台 Web 走 HttpOnly Cookie + CSRF；响应体令牌只给当场签名用，不另立终端。限速按来源（60 秒 5 次）同样只是工程参数。错签 / 过期 / 重放 / 未配置一律拒绝并留痕；破窗一旦使用即全程留痕，事后必须复盘（PGM-1.15.1）。操作完拔盘。拔盘后，必须插盘才能做的最高权限动作仍然要插盘，这枚会话不代替钥匙。
+管理员账号全部无法登录时：插入授权 U 盘 → `POST /api/v1/auth/master/challenge` 取一次性挑战（2 分钟，签名校验的工程参数，不是经营拒绝条件）→ `bash ops/keyvault/sign-challenge.sh /media/usb <challenge>` 用 U 盘私钥签名 → `POST /api/v1/auth/master/login {challenge, signature}`。成功即签发 `master-authority` 会话，身份是持授权 U 盘的最高权限，不是平台管理员。后台 Web 走 HttpOnly Cookie + CSRF。限速按来源（60 秒 5 次）同样只是工程参数。错签 / 过期 / 重放 / 未配置一律拒绝并留痕；破窗一旦使用即全程留痕，事后必须复盘（PGM-1.15.1）。操作完拔盘。拔盘后，必须插盘才能做的最高权限动作仍然要插盘，这枚会话不代替钥匙。
 
 ## 迁移到新机
 新机 = 插 U 盘 → `provision-from-usb.sh` → DBA 追加外部凭证 → 配 systemd → 拔盘。母本即 U 盘。
