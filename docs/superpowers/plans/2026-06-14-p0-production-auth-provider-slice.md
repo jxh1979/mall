@@ -25,7 +25,7 @@ Close the code-owned part of `SEC-P0-AUTH-PROD-001` by adding a formal productio
 ## Data changes
 
 - Add `auth_credentials`:
-  - `user_id`, `password_hash`, `password_algo`, `failed_attempt_count`, `locked_until`, `last_login_at`, `password_changed_at`, `status`, timestamps.
+  - `user_id`, `password_hash`, `password_algo`, `last_login_at`, `password_changed_at`, `status`, timestamps. 不设登录失败锁定，不设锁定截止时间。
 - Add `auth_sessions`:
   - `id`, `user_id`, hashed access/refresh token columns, device/terminal, expiry, revocation, status, timestamps.
 - Reuse `access_users`, `roles`, and `user_roles` for staff identity and permission bridging.
@@ -41,7 +41,7 @@ Close the code-owned part of `SEC-P0-AUTH-PROD-001` by adding a formal productio
 
 ## TDD steps
 
-1. Add failing `ProductionAuthJdbcIntegrationTests` for prod-profile login, hashed token storage, authenticated request, refresh rotation, refresh reuse rejection, logout revocation, and failed-login lockout.
+1. Add failing `ProductionAuthJdbcIntegrationTests` for prod-profile login, hashed token storage, authenticated request, refresh rotation, refresh reuse rejection, and logout revocation. 输错密码只拒绝这一次，不锁一段时间。
 2. Add Flyway migration.
 3. Add production service/controller/filter.
 4. Wire production filter into `SecurityConfig`.
