@@ -1,4 +1,4 @@
-# 集团治理重建 PRD（V1.07·补断点）
+# 集团治理重建 PRD（V1.08·补断点）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -13,7 +13,7 @@
 - 不重写 RBAC：继续复用 `permissions`、`roles`、`role_permissions`、`user_roles`、`permission_templates`、`permission_template_items`、`permission_template_applications`、`temporary_permission_grants`。
 - 不重写主管复核：高危授权审批复用 `SupervisorReviewService` 与 `supervisor_review_decisions`。敏感动作可要求上一级、上两级或最高权限，这是敏感度要求，不是发起人可选档位，也不等于指定角色档或合同单级。发起单据时只需指定最终审批人，系统按组织层级自动补全。当前实现代码值 `one_level_up` / `two_levels_up` / `top_authority` 仅为实现证据，不取得业务效力。
 - 本轮新增的是治理闭环，不是新权限模型：平台管理员配置岗位模板，HR/平台按用户职位定岗，系统自动授予角色并套模板；高危权限授出前可被审批闸拦住。
-- 集团下钻的业务边界：只有项目之上的获授权岗位可跨项目汇总，项目公司管理员限本项目，商户用户不得查看集团总览。**当前实现待对齐**：`GET /api/v1/analytics/group-overview` 校验 `analytics.group.view` 和 `requirePlatformScope()`；后者拦截商户及外包范围，但未按项目级调用者过滤汇总。不得把通过该守卫等同于已认定的平台/集团级角色；项目范围隔离尚未闭环，见 §4。
+- 集团下钻的业务边界：只有项目之上的获授权岗位可跨项目汇总，项目公司管理员限本项目，商户用户不得查看集团总览。**当前实现（M737）**：`GET /api/v1/analytics/group-overview` 校验 `analytics.group.view` 和 `requirePlatformScope()`；后者拦截商户及外包范围，其余调用者按是否持有可跨项目角色判定可看的项目——PGM「集团下钻细则（已确认）」条：「集团视图的跨综合体查看按是否持有可跨项目角色判定（见「权限规则」），集团高层经其职位模板挂这类角色。」不得把通过该守卫等同于已认定的平台/集团级角色；按可触及项目出行的现行行为见 §4。
 - 不做：多套审批流引擎、按业务线重造授权模型、把职位等同于权限。职位只驱动默认角色/模板，最终有效权限仍由 RBAC + 临时授权 + 显式拒绝计算。
 
 ## 1. 业务对象与状态枚举（当前实现证据；锚点为枚举 HTML §九平台治理，不是 ENUM §十地产运营）
@@ -94,11 +94,11 @@
 
 ## 4. 集团下钻对标
 **业务规则**（可见范围与平台/集团级角色以 GOV 为准。本节 `groupBy`、缺主体归并与快照回退值为当前实现证据，三份业务 HTML 零命中，不取得效力。）
-- 集团视图的业务可见范围仍按治理 HTML 的项目隔离与岗位授权执行。**当前实现**只校验 `analytics.group.view` 和 `requirePlatformScope()`，再按 `groupBy` 汇总全部项目快照；无商户归属的项目级调用者通过守卫后，结果没有按其项目收敛。该范围缺口待后台实现模块处理，不能据本 PRD 判为已经隔离。
+- 集团视图的业务可见范围仍按治理 HTML 的项目隔离与岗位授权执行。**当前实现（M737）**校验 `analytics.group.view` 和 `requirePlatformScope()` 之后，按 `analytics.group.view` 算调用者可触及的项目（判定办法见平台治理 PRD §12 第 13、14、14B 条 M736 补记⑤），再按 `groupBy` 汇总：平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部项目行；只逐个勾选了项目的人只出被勾中项目的行（该权限另有其他来源或本人所属项目被勾中时含本人所属项目）；该权限不来自可跨项目角色的人只出本人所属项目的行。`groupBy=entity` 只合并可见的项目，平均值与低于基准标记只按出现的行计算；没有可见行时返回成功、项目列表为空。汇总作业目前只往项目口径写一个编号 `project_1`（其值即全平台合计），所以在现有数据上后两类人看到的是空列表；汇总按真实项目分行已由操作员 2026-10-08 裁决转 M287。完整口径见平台治理 PRD §12 第 15 条 M737 补记②。
 - 【实现证据/不取得效力】端点 `GET /api/v1/analytics/group-overview` 接受 `groupBy=project|entity`。`project` 按综合体项目聚合；`entity` 通过 `projects` 关联 `merchants.business_entity_id` 派生，缺主体归 `entity_unassigned`——三份业务 HTML 零命中 `groupBy` 与 `entity_unassigned`，不得立法。
-- Controller 同时校验 `analytics.group.view` 和 `requirePlatformScope()`；即使某商户用户误拿到权限，也会因 merchant scope 被拒绝。
+- Controller 同时校验 `analytics.group.view` 和 `requirePlatformScope()`；即使某商户用户误拿到权限，也会因 merchant scope 被拒绝。外包账号同样被拒；其余调用者再按上一条的可触及项目出行（M737）。
 - 指标目录来自真实 ETL 快照：`revenue.net`、`revenue.ticket`、`revenue.bar`、`traffic.amusement`、`verify.done`、`risk.pending_review`；商户数由当日 merchant ETL 快照去重统计。
-- 【实现证据/不取得效力】优先读取 `analytics_business_metric_snapshots(segment_type='project')`；没有 project 口径快照时回退平台口径单行 `project_1/综合体（默认）`——三份业务 HTML 零命中该回退值，不得立法。
+- 【实现证据/不取得效力】优先读取 `analytics_business_metric_snapshots(segment_type='project')`；没有 project 口径快照时回退平台口径单行 `project_1/综合体（默认）`——三份业务 HTML 零命中该回退值，不得立法。回退行只给平台管理员和勾选了「可以查看全部项目」的人（M737；PGM「KPI 可见性分层」条：「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看」），其余人此时项目列表为空。
 - 【**DEC-R7-P4**】2026-08-05 用户裁决：**提案已否决：阈值不写入 HTML，PRD 数值已删除**（DIFF-B-046②；PGM「集团下钻细则（已确认）」条 与「KPI 可见性分层」条 只写分层、未给对标偏离阈值）。
 - 【待决】对标是否标红及如何比较：三份业务 HTML 未写入阈值或公式。本 PRD 不定义业务参数、不给出比较公式。未入 HTML 不得先取得效力；实现不得按已删除公式或任何未入 HTML 的数值编码。现实现残留数值不得作为业务口径。
 
@@ -109,8 +109,8 @@
 **迁移 / 表 / 权限**
 - 迁移：权限来自 `V115__analytics_group_overview_permission.sql`；职位授权闭环来自 V169；高危授权审批来自 V170
 - 表：`analytics_business_metric_snapshots`、`projects`、`merchants.business_entity_id`
-- 权限：`analytics.group.view`（`domain=analytics`、`risk_level=high`、`requires_approval=true`，V394 已置）。**审批属性缺口（2026-08-04 F1 登记）已闭合（2026-09-11 M013 核对）**：跨项目汇总下钻属 §3 强制闸门第 2 类「提权或跨商户跨项目（综合体）」，按该强制闸门 `requires_approval` **应为 `true`**；V115 初始种子为 `false`，V394 已更新为 `true`，与 §3「不得把 HTML 明确的强制项降级为无需审批」一致；该结论只涉及审批属性；`requirePlatformScope()` 不替代授权审批，也尚未完成本节所述项目级结果过滤。
-- UI：`ADM-ANA-002` 集团总览；可通过 `ADM-ACC-003` 的职位模板授出或收回 `analytics.group.view`
+- 权限：`analytics.group.view`（`domain=analytics`、`risk_level=high`、`requires_approval=true`，V394 已置）。**审批属性缺口（2026-08-04 F1 登记）已闭合（2026-09-11 M013 核对）**：跨项目汇总下钻属 §3 强制闸门第 2 类「提权或跨商户跨项目（综合体）」，按该强制闸门 `requires_approval` **应为 `true`**；V115 初始种子为 `false`，V394 已更新为 `true`，与 §3「不得把 HTML 明确的强制项降级为无需审批」一致；该结论只涉及审批属性；`requirePlatformScope()` 不替代授权审批；本节所述项目级结果过滤已由 M737 落（见本节业务规则第一条）。
+- UI：`ADM-ANA-002` 集团总览；可通过 `ADM-ACC-003` 的职位模板授出或收回 `analytics.group.view`；能看哪些综合体由所挂角色勾选的可查看项目决定（PGM「集团下钻细则（已确认）」条：「集团视图的跨综合体查看按是否持有可跨项目角色判定（见「权限规则」），集团高层经其职位模板挂这类角色。」）
 
 > 变更记录（2026-09-11，V1.01，160 全量审计 M013-002/005/006）：§1 `risk_level` CHECK 与 §4 `analytics.group.view` 审批属性按 V394 更新为已闭合；§2 关键端点补 lifecycle 并标注 DELETE 恒拒绝；§3 税费权限码登记句按 V217 / SupervisorReview 现状改写。
 
@@ -125,3 +125,5 @@
 > 变更记录（2026-09-25，V1.06，全量审计 M002 第 7 轮 M002-F24/F19/F20/F22）：§2 撤销角色口径按治理地图 V0.16 与操作员裁决 M002-F11 改为不要求操作人持有该角色的权限码（原句写撤销也校验操作人持有，与裁决相反）；补岗位高危挂起驳回后对同一挂起再次申请（申请入口增 `position_high_risk_release`，§1、§3 类型表同步为六类）、换岗与模板停用或修改时作废重判并关闭复核单、已批准的按（员工、映射、码）判定，以及最高权限账号不设岗位（治理地图 V0.17）。
 
 > 变更记录（2026-10-08，V1.07，M736 可跨项目角色·批 1 权限治理）：§2 跨组织闸与直接分配、撤销角色两条，§3 授权申请受理与审批档位两条，补记可跨项目角色的口径——按该角色可查看的项目判；非平台管理员直接分配、直接定岗新派生这类角色须先审批；这类角色的申请只含日常权限也受理，审批档位下限为「高」。§0、§4 的集团视图与分析随 M737，本次未改。角色分出去以后增减可查看项目见平台治理 PRD §12 M736 补记⑫，§1 授权申请类型表与 §3 申请类型、受理与档位三条随之补记。
+
+> 变更记录（2026-10-13，V1.08，M737 可跨项目角色·批 3 集团视图与分析）：§0 集团下钻一条去掉「当前实现待对齐」，§4 业务规则、回退行、权限与 UI 各条改写为现行行为——集团总览按 `analytics.group.view` 可触及的项目出行，回退的平台口径行只给平台管理员和勾选了「可以查看全部项目」的人，商户与外包账号照旧被拒；汇总按真实项目分行转 M287（操作员 2026-10-08 裁决）。完整口径见平台治理 PRD §12 第 15 条 M737 补记。

@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -426,6 +426,172 @@ class AnalyticsJdbcIntegrationTests {
                     put("abnormal_reason", abnormalReason); put("read_at", readAt);
                     put("period", period);
                 }});
+    }
+
+    // ===== M737：六个钻取明细方法按可触及项目下推 =====
+    // 造数说明：合同、设施工单、应收行的 project_id 是用例手工带上的——现行写入口（合同起草、设施工单创建、合同类出账）不带这一列；
+    // 这几条钉的是过滤谓词，不代表页面建出来的数据。
+
+    private static final String M737_PROJECT_A = "prj_m737_a";
+    private static final String M737_PROJECT_B = "prj_m737_b";
+
+    @Test
+    void vacantSpacesFilterByReachableProjects() {
+        java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
+        insertSpace("sp_m737_a", "shop", "60");
+        insertSpace("sp_m737_b", "shop", "50");
+        insertSpace("sp_m737_none", "booth", "40");
+        setProject("spaces", "sp_m737_a", M737_PROJECT_A);
+        setProject("spaces", "sp_m737_b", M737_PROJECT_B);
+
+        assertFiltersByProject(
+                projectIds -> repository.listVacantSpaces(asOf, 200, 0, projectIds).stream()
+                        .map(AnalyticsRecords.VacantSpaceRow::spaceId).toList(),
+                () -> repository.listVacantSpaces(asOf, 200, 0).stream()
+                        .map(AnalyticsRecords.VacantSpaceRow::spaceId).toList(),
+                "sp_m737_a", "sp_m737_b", "sp_m737_none");
+    }
+
+    @Test
+    void expiringContractsFilterByReachableProjects() {
+        java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
+        for (String suffix : List.of("a", "b", "none")) {
+            insertSpace("sp_m737_ct_" + suffix, "shop", "10");
+            insertContractWithSpace("ct_m737_" + suffix, "sp_m737_ct_" + suffix, "effective",
+                    asOf.minusDays(30), asOf.plusDays(20));
+        }
+        setProject("contracts", "ct_m737_a", M737_PROJECT_A);
+        setProject("contracts", "ct_m737_b", M737_PROJECT_B);
+
+        assertFiltersByProject(
+                projectIds -> repository.listExpiringContracts(asOf, 90, 200, 0, projectIds).stream()
+                        .map(AnalyticsRecords.ExpiringContractRow::contractId).toList(),
+                () -> repository.listExpiringContracts(asOf, 90, 200, 0).stream()
+                        .map(AnalyticsRecords.ExpiringContractRow::contractId).toList(),
+                "ct_m737_a", "ct_m737_b", "ct_m737_none");
+    }
+
+    @Test
+    void overdueDebtorsFilterByReachableProjects() {
+        // 欠费商户按应收行的项目列过滤后再按商户汇总：三个商户各一笔，分属项目 A、项目 B、项目列为空。
+        java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
+        insertArItem("ar_m737_a", "mch_m737_ar_a", 10000L, 10000L, asOf.minusDays(10));
+        insertArItem("ar_m737_b", "mch_m737_ar_b", 20000L, 20000L, asOf.minusDays(10));
+        insertArItem("ar_m737_none", "mch_m737_ar_none", 30000L, 30000L, asOf.minusDays(10));
+        setProject("ar_ap_items", "ar_m737_a", M737_PROJECT_A);
+        setProject("ar_ap_items", "ar_m737_b", M737_PROJECT_B);
+
+        assertFiltersByProject(
+                projectIds -> repository.listOverdueDebtors(asOf, null, 200, 0, projectIds).stream()
+                        .map(AnalyticsRecords.ArDebtorRow::merchantId).toList(),
+                () -> repository.listOverdueDebtors(asOf, null, 200, 0).stream()
+                        .map(AnalyticsRecords.ArDebtorRow::merchantId).toList(),
+                "mch_m737_ar_a", "mch_m737_ar_b", "mch_m737_ar_none");
+    }
+
+    @Test
+    void overdueWorkOrdersFilterByReachableProjects() {
+        java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");
+        java.time.Instant end = java.time.Instant.parse("2099-01-02T04:00:00Z");
+        java.time.Instant asOf = java.time.Instant.parse("2099-01-02T00:00:00Z");
+        for (String suffix : List.of("a", "b", "none")) {
+            // 时限已过仍未完成
+            insertWorkOrder("wo_m737_" + suffix, "2099-01-01T05:00:00Z", null, null,
+                    "2099-01-01T07:00:00Z", null, "processing");
+        }
+        setProject("facility_work_orders", "wo_m737_a", M737_PROJECT_A);
+        setProject("facility_work_orders", "wo_m737_b", M737_PROJECT_B);
+
+        assertFiltersByProject(
+                projectIds -> repository.listOverdueWorkOrders(start, end, asOf, 200, 0, projectIds).stream()
+                        .map(AnalyticsRecords.OverdueWorkOrderRow::workOrderId).toList(),
+                () -> repository.listOverdueWorkOrders(start, end, asOf, 200, 0).stream()
+                        .map(AnalyticsRecords.OverdueWorkOrderRow::workOrderId).toList(),
+                "wo_m737_a", "wo_m737_b", "wo_m737_none");
+    }
+
+    @Test
+    void overdueMerchantWorkOrdersFilterByMerchantOperatingProjects() {
+        // 商户工单表没有项目列：按商户的经营项目过滤（主项目加 merchant_projects 追加的项目）。
+        java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");
+        java.time.Instant end = java.time.Instant.parse("2099-01-02T04:00:00Z");
+        java.time.Instant asOf = java.time.Instant.parse("2099-01-02T00:00:00Z");
+        for (String projectId : List.of(M737_PROJECT_A, M737_PROJECT_B)) {
+            jdbcTemplate.update("""
+                    INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)
+                    VALUES (:id, 'complex', :id, 'active', now(), now()) ON CONFLICT (id) DO NOTHING
+                    """, Map.of("id", projectId));
+        }
+        for (String suffix : List.of("a", "b", "none", "extra")) {
+            p1cMerchant("mch_m737_" + suffix, "catering");
+            // 时限已过仍在办
+            insertMerchantWorkOrder("mwo_m737_" + suffix, "2099-01-01T05:00:00Z", "2099-01-01T07:00:00Z",
+                    null, "processing", false);
+            jdbcTemplate.update("UPDATE merchant_service_work_orders SET merchant_id = :merchant_id WHERE id = :id",
+                    Map.of("merchant_id", "mch_m737_" + suffix, "id", "mwo_m737_" + suffix));
+        }
+        setProject("merchants", "mch_m737_a", M737_PROJECT_A);
+        setProject("merchants", "mch_m737_b", M737_PROJECT_B);
+        // mch_m737_extra 主项目为空，只在 merchant_projects 里追加了项目 A
+        jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id, project_id) VALUES ('mch_m737_extra', :project_id)",
+                Map.of("project_id", M737_PROJECT_A));
+
+        java.util.function.Function<java.util.Collection<String>, List<String>> ids = projectIds ->
+                repository.listOverdueMerchantWorkOrders(start, end, asOf, 200, 0, projectIds).stream()
+                        .map(AnalyticsRecords.OverdueWorkOrderRow::workOrderId).toList();
+        assertFiltersByProject(ids,
+                () -> repository.listOverdueMerchantWorkOrders(start, end, asOf, 200, 0).stream()
+                        .map(AnalyticsRecords.OverdueWorkOrderRow::workOrderId).toList(),
+                "mwo_m737_a", "mwo_m737_b", "mwo_m737_none");
+        assertThat(ids.apply(List.of(M737_PROJECT_A))).contains("mwo_m737_extra");
+        assertThat(ids.apply(List.of(M737_PROJECT_B))).doesNotContain("mwo_m737_extra");
+    }
+
+    @Test
+    void abnormalReadingsFilterByReachableProjects() {
+        // 异常读数按所属表计的项目列过滤。
+        for (String suffix : List.of("a", "b", "none")) {
+            insertMeter("mt_m737_" + suffix, "M737电表" + suffix, "electricity");
+            insertReading("rd_m737_" + suffix, "mt_m737_" + suffix, "2099-01-01T08:00:00Z", "40", "surge", "2099-01");
+        }
+        setProject("energy_meters", "mt_m737_a", M737_PROJECT_A);
+        setProject("energy_meters", "mt_m737_b", M737_PROJECT_B);
+        java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");
+        java.time.Instant end = java.time.Instant.parse("2099-01-02T04:00:00Z");
+
+        assertFiltersByProject(
+                projectIds -> repository.listAbnormalReadings(start, end, 200, 0, projectIds).stream()
+                        .map(AnalyticsRecords.AbnormalReadingRow::readingId).toList(),
+                () -> repository.listAbnormalReadings(start, end, 200, 0).stream()
+                        .map(AnalyticsRecords.AbnormalReadingRow::readingId).toList(),
+                "rd_m737_a", "rd_m737_b", "rd_m737_none");
+    }
+
+    /**
+     * M737：a、b 两行的项目列分别是项目 A、项目 B，none 行的项目列为空。
+     * ids 按传入的项目集合返回各行编号；original 是原签名（平台全量便捷重载）的结果。
+     */
+    private void assertFiltersByProject(
+            java.util.function.Function<java.util.Collection<String>, List<String>> ids,
+            java.util.function.Supplier<List<String>> original, String a, String b, String none) {
+        // 共享库里可能有别的行：项目过滤的断言只看本用例造的三行。
+        java.util.function.Function<java.util.Collection<String>, List<String>> mine = projectIds ->
+                ids.apply(projectIds).stream().filter(java.util.Arrays.asList(a, b, none)::contains).toList();
+        // 传一个项目只出该项目
+        assertThat(mine.apply(List.of(M737_PROJECT_A))).containsExactly(a);
+        // 传两个项目两个都出；非 null 时项目列为空的行不出
+        assertThat(mine.apply(List.of(M737_PROJECT_A, M737_PROJECT_B))).containsExactlyInAnyOrder(a, b);
+        // 空集合一行不出
+        assertThat(ids.apply(List.of())).isEmpty();
+        // null 不过滤，含项目列为空的行；与原签名的结果相同
+        assertThat(mine.apply(null)).containsExactlyInAnyOrder(a, b, none);
+        assertThat(ids.apply(null)).isEqualTo(original.get());
+    }
+
+    /** M737：给夹具行手工带上项目列。 */
+    private void setProject(String table, String id, String projectId) {
+        jdbcTemplate.update("UPDATE " + table + " SET project_id = :project_id WHERE id = :id",
+                Map.of("project_id", projectId, "id", id));
     }
 
     @Test

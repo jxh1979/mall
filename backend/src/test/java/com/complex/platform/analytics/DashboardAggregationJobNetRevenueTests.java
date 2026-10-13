@@ -492,7 +492,8 @@ class DashboardAggregationJobNetRevenueTests {
             return arReceivableMtd;
         }
 
-        public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset) {
+        public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
@@ -508,11 +509,13 @@ class DashboardAggregationJobNetRevenueTests {
             return expiringContracts;
         }
 
-        public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset) {
+        public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
-        public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
+        public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
@@ -547,12 +550,14 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
-                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
         public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
-                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
@@ -565,7 +570,8 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
-                java.time.Instant start, java.time.Instant end, int limit, int offset) {
+                java.time.Instant start, java.time.Instant end, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 

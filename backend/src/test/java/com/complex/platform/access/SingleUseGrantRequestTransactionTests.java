@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -86,6 +86,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * M724 第三批补覆盖（只加用例，不改生产代码）：F04 ①末句——另一个提交范围的人同号改了正文仍是同一个码、同一句提示；F04 ②——同项目、
  * 不同商户的两名员工同号（先后、并发各一条）；F04 ⑤——两名不带商户归属、各持长期授权的员工同号；F04 ⑥与 F05 ④——后到的一笔在占位上
  * 等待超过上限按处理中拒绝、不执行、不带 replayed；F08 末句——不带登录主体的回调带两个不同提交编号不受提交编号校验影响。
+ * M737（操作员 2026-10-08 所选选项原文：「范围按他「能不能看全平台合计」判，导出授权只管「能不能导」。不扩大能看到合计的人；
+ * 单次授权照常用一次扣一次。看不了全平台合计的人，有导出授权也导不了（被拒、不扣次数）。」）：月报导出的两条现有用例给员工补挂
+ * 勾了「可以查看全部项目」、含查看经营分析看板权限的角色（导出成功扣一次）；另一条钉没有这个角色的人被拒、单次来源不算用掉。
  *
  * <p>本类不开测试事务：消耗、回滚、并发都要真实提交才看得见。夹具按随机后缀隔离、结束时删除；
  * 消耗日志、审计事件、风险预警及其流水只追加不删（V140 触发器），按后缀隔离留在库里。
@@ -900,9 +903,11 @@ class SingleUseGrantRequestTransactionTests {
 
     // 同上，查看请求里接口声明仍然扣的月报导出（GET，幂等键取自 Idempotency-Key 头，不经幂等层；操作员 2026-10-03「导一次扣一次」）：
     // 同头同 URL 两笔并发——恰一笔 200、另一笔 403，来源只消耗一次。只按消耗日志转重放时落败笔也 200、导出两次。
+    // M737：月报是全平台合计，员工另挂勾了「可以查看全部项目」的看板角色才导得出。
     @Test
     void aConcurrentExportWithTheSameRequestNumberIsDeniedOnceAndUsesUpTheGrantOnce() throws Exception {
         staffWithSingleUseGrant(null, "analytics.report.export");
+        holdAllProjectsDashboardRole();
         List<MockHttpServletResponse> responses = raceTwoOnTheGrantRow(() -> mockMvc.perform(
                         get("/api/v1/analytics/reports/monthly-export").header("Idempotency-Key", "xmj-export-same-" + suffix)
                                 .with(session(null)))
@@ -1267,9 +1272,39 @@ class SingleUseGrantRequestTransactionTests {
         assertExportUsesUpTheGrant(merchantId, "finance.ar_ap.export", "/api/v1/finance/ar-ap-items/export");
     }
 
+    // M737（2026-10-08 月报导出裁决的说明（二）：「满足②而导出权限来自单次授权的，导出成功扣一次」；②＝「能看全平台合计（平台管理员，
+    // 或经勾了「可以查看全部项目」的角色持有查看经营分析看板的权限）」）：不经共用助手——建好员工与单次导出授权之后、发请求之前补挂角色，其余同助手。
     @Test
     void aMonthlyReportExportStillUsesUpItsSingleUseGrant() throws Exception {
-        assertExportUsesUpTheGrant(null, "analytics.report.export", "/api/v1/analytics/reports/monthly-export");
+        String url = "/api/v1/analytics/reports/monthly-export";
+        staffWithSingleUseGrant(null, "analytics.report.export");
+        holdAllProjectsDashboardRole();
+        mockMvc.perform(get(url).with(session(null))).andExpect(status().isOk());
+        assertConsumedOnce();
+        mockMvc.perform(get(url).with(session(null)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertConsumedOnce();
+    }
+
+    // M737（同一条说明：「不满足②的被拒、不扣次数」）：没有勾了「可以查看全部项目」的看板角色的普通员工，凭单次导出授权导月报
+    // → 403 PLATFORM_SCOPE_REQUIRED，来源未消耗、没有消耗日志（消耗随请求事务回滚）。修复前 200 且已消耗。
+    @Test
+    void aMonthlyReportExportByStaffWhoCannotSeePlatformTotalsIsDeniedAndKeepsTheSingleUseGrant() throws Exception {
+        staffWithSingleUseGrant(null, "analytics.report.export");
+        mockMvc.perform(get("/api/v1/analytics/reports/monthly-export").with(session(null)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"))
+                .andExpect(jsonPath("$.message").value("该数据为全平台口径，只有平台管理员和勾选了「可以查看全部项目」的人可以查看、处理"));
+        assertUnconsumed();
+    }
+
+    // M737：给本人补挂一个勾了「可以查看全部项目」、含查看经营分析看板权限的角色（能看全平台合计）；不含导出权限，导出仍只凭单次授权。
+    private void holdAllProjectsDashboardRole() {
+        String roleId = "role_xmj_all_" + suffix;
+        repository.createRole(new RoleRecord(roleId, roleName("看全平台"), "M737 能看全平台合计", "project", "active",
+                Instant.now(), List.of("analytics.dashboard.view"), "org", true, List.of()));
+        repository.assignUserRole(userId, roleId);
     }
 
     private void assertExportUsesUpTheGrant(String merchant, String permissionCode, String url) throws Exception {

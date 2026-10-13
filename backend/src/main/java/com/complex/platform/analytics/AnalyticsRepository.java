@@ -75,6 +75,14 @@ public interface AnalyticsRepository {
                 .toList();
     }
 
+    /**
+     * M737：在这些项目经营的商户编号（V441 表注释：「商户经营项目＝merchants.project_id（主项目）加本表；本表只放主项目以外追加的项目」）。
+     * 空集合返回空。默认空（供无需此能力的内存测试替身）；真实实现见 JdbcAnalyticsRepository。
+     */
+    default java.util.Set<String> listMerchantIdsOperatingIn(java.util.Collection<String> projectIds) {
+        return java.util.Set.of();
+    }
+
     List<MetricAnomalyRecord> listMetricAnomalies();
 
     java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id);
@@ -147,8 +155,15 @@ public interface AnalyticsRepository {
     /** S3:90 天内到期的生效合同数(到期预警 KPI)。 */
     long countExpiringContracts(LocalDate asOf, int windowDays);
 
-    /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。 */
-    java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset);
+    // M737：以下 6 个钻取明细方法带末参 projectIds（可触及项目）——null=不过滤（平台管理员、勾了全部项目的人，含项目列为空的行），
+    //   非 null 只出项目列落在集合内的行（项目列为空的行不出），空集合一行不出。原签名保留为「平台全量便捷重载」（传 null）。
+    /** S3 钻取:未出租的铺位明细(平台全量便捷重载=不按项目过滤)。 */
+    default java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset) {
+        return listVacantSpaces(asOf, limit, offset, null);
+    }
+    /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。projectIds 非 null 按 spaces.project_id 过滤。 */
+    java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset,
+            java.util.Collection<String> projectIds);
 
     /** H1:列节假日区间(按年份过滤;year=null 全部,按年份+起始日排序)。 */
     java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year);
@@ -252,9 +267,15 @@ public interface AnalyticsRepository {
      * 超时分母=handle_due_at 落窗、分子=其中完成晚于时限或未完成且时限已过、积压=asOf 时点未完成存量。 */
     AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf);
 
-    /** S4 钻取:超时工单明细(与 wo.overdue_rate 分子同过滤同口径)。 */
+    /** S4 钻取:超时工单明细(平台全量便捷重载=不按项目过滤)。 */
+    default java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+        return listOverdueWorkOrders(start, end, asOf, limit, offset, null);
+    }
+    /** S4 钻取:超时工单明细(与 wo.overdue_rate 分子同过滤同口径)。projectIds 非 null 按 facility_work_orders.project_id 过滤。 */
     java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
-            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset);
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset,
+            java.util.Collection<String> projectIds);
 
     /** 清单#13 商户服务工单时效(同 facility 窗):流转无响应节点故 responseP50 恒为 null;
      * 处理P50=closed_at 落窗(提交→关单);超时分母=due_at 落窗且非 cancelled、
@@ -262,9 +283,16 @@ public interface AnalyticsRepository {
      * 积压=asOf 时点未完成存量(不含 resolved/closed/cancelled)。 */
     AnalyticsRecords.WorkOrderSla merchantWorkOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf);
 
-    /** 清单#13 钻取:商户服务工单超时明细(与 mwo.overdue_rate 分子同过滤同口径;表无 code 列,code 为 null)。 */
+    /** 清单#13 钻取:商户服务工单超时明细(平台全量便捷重载=不按项目过滤)。 */
+    default java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+        return listOverdueMerchantWorkOrders(start, end, asOf, limit, offset, null);
+    }
+    /** 清单#13 钻取:商户服务工单超时明细(与 mwo.overdue_rate 分子同过滤同口径;表无 code 列,code 为 null)。
+     * projectIds 非 null 只出在这些项目经营的商户的工单（经营项目的定义同 {@link #listMerchantIdsOperatingIn}）。 */
     java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
-            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset);
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset,
+            java.util.Collection<String> projectIds);
 
     /** S5 能耗:窗内按表计类型合计 consumption(电/水/气/冷热单位不同,不跨类合计)。 */
     Map<String, BigDecimal> energyConsumptionByType(java.time.Instant start, java.time.Instant end);
@@ -272,12 +300,23 @@ public interface AnalyticsRepository {
     /** S5:窗内异常读数计数(abnormal_reason 非空)。 */
     long countAbnormalReadings(java.time.Instant start, java.time.Instant end);
 
-    /** S5 钻取:异常读数明细(与 energy.abnormal_count 同过滤同口径)。 */
+    /** S5 钻取:异常读数明细(平台全量便捷重载=不按项目过滤)。 */
+    default java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
+            java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return listAbnormalReadings(start, end, limit, offset, null);
+    }
+    /** S5 钻取:异常读数明细(与 energy.abnormal_count 同过滤同口径)。projectIds 非 null 按 energy_meters.project_id 过滤。 */
     java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
-            java.time.Instant start, java.time.Instant end, int limit, int offset);
+            java.time.Instant start, java.time.Instant end, int limit, int offset,
+            java.util.Collection<String> projectIds);
 
-    /** S3 钻取:到期预警合同明细(生效合同按到期日升序,含绑定面积)。 */
-    java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset);
+    /** S3 钻取:到期预警合同明细(平台全量便捷重载=不按项目过滤)。 */
+    default java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
+        return listExpiringContracts(asOf, windowDays, limit, offset, null);
+    }
+    /** S3 钻取:到期预警合同明细(生效合同按到期日升序,含绑定面积)。projectIds 非 null 按 contracts.project_id 过滤。 */
+    java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset,
+            java.util.Collection<String> projectIds);
 
     /**
      * S2:应收账龄桶(as-of 时点存量,direction=receivable、未结清、已过应收日)。
@@ -291,8 +330,13 @@ public interface AnalyticsRepository {
     /** S2:月窗应收(due_date 落 [monthStart, endExclusive),receivable 全额,不含未来月)。 */
     BigDecimal arReceivableDueCentsBetween(LocalDate monthStart, LocalDate endExclusive);
 
-    /** S2 钻取:欠费商户明细排行(实时,按未清金额降序;bucket 可空=全部)。 */
-    java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset);
+    /** S2 钻取:欠费商户明细排行(平台全量便捷重载=不按项目过滤)。 */
+    default java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset) {
+        return listOverdueDebtors(asOf, bucket, limit, offset, null);
+    }
+    /** S2 钻取:欠费商户明细排行(实时,按未清金额降序;bucket 可空=全部)。projectIds 非 null 按 ar_ap_items.project_id 过滤。 */
+    java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset,
+            java.util.Collection<String> projectIds);
 
     /** S0:经营日切分配置(V201)——九域清单读取(经营参数页数据源)。 */
     java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs();
@@ -447,16 +491,16 @@ public interface AnalyticsRepository {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
-    // 项目作用域收紧（2026-07-19）：以下带 String projectScope 的明细方法在 scope 非空时加
-    //   (:project_scope::text IS NULL OR <scope_col> = :project_scope) 谓词（明细+合计同谓词），
-    //   空 scope=平台全量（行为不变）。scope 列见 MetricRegistry.PROJECT_SCOPE_COLUMNS。
+    // 项目作用域收紧（2026-07-19；M737 起为可触及项目的集合）：以下带 Collection<String> projectScope 的明细方法加
+    //   (:all_projects OR <scope_col> IN (:project_ids)) 谓词（明细+总行数+合计同谓词）——
+    //   null scope=平台全量（行为不变）；非 null 只出 scope 列落在集合内的行；空集合 0 行、合计 0。scope 列见 MetricRegistry.PROJECT_SCOPE_COLUMNS。
     //   各方法配「平台口径便捷重载」（无 projectScope=传 null），供既有平台级调用/一致性测试原样调用。
     /** finance.ar_balance 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset) {
         return arOpenReceivableDetail(asOf, limit, offset, null);
     }
-    /** finance.ar_balance 明细：逾期未清应收（as-of=截至日），合计=Σunpaid_amount_cent（与 arOverdueAgingByMerchant 同谓词）。projectScope 非空按 project_id 过滤。 */
-    default AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+    /** finance.ar_balance 明细：逾期未清应收（as-of=截至日），合计=Σunpaid_amount_cent（与 arOverdueAgingByMerchant 同谓词）。projectScope 非 null 按 project_id 落在集合内过滤。 */
+    default AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -534,7 +578,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset) {
         return apOpenPayableDetail(asOf, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -543,7 +587,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset) {
         return arOverdueAging90pDetail(asOf, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -552,7 +596,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows settlementTransactionDetail(java.time.Instant start, java.time.Instant end, String summaryMode, int limit, int offset) {
         return settlementTransactionDetail(start, end, summaryMode, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows settlementTransactionDetail(java.time.Instant start, java.time.Instant end, String summaryMode, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows settlementTransactionDetail(java.time.Instant start, java.time.Instant end, String summaryMode, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -563,7 +607,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset) {
         return staffShiftDetail(from, to, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -572,7 +616,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset) {
         return staffAttendanceDetail(from, to, lateOnly, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -581,7 +625,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset) {
         return staffPayrollDetail(from, to, sumTotal, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -590,7 +634,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset) {
         return staffPendingLeaveDetail(asOf, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -599,7 +643,7 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset) {
         return staffActiveHeadcountDetail(asOf, limit, offset, null);
     }
-    default AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+    default AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset, java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 

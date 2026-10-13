@@ -815,7 +815,7 @@ BSM-0450,运营看今日运行、核销、异常和第三方回流,docs/data-ana
 BSM-0451,财务看退款、差异、日结和结算依据,docs/data-analysis-layer-spec-v0.2.md,§3.3 角色·财务行,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0452,票务、酒吧、游乐负责人看各自业务表现,docs/data-analysis-layer-spec-v0.2.md,§3.3 角色·票务运营与酒吧运营与游乐运营三行,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0453,采购、库管和酒吧店长看采购周期、库存消耗、存酒和盘点差异,docs/business-dashboard-metrics-product-prd-v0.1.md,3. 谁会看（按权限与数据范围）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0454,KPI 按管理层级分口径,docs/business-dashboard-metrics-product-prd-v0.1.md,8.2 KPI 可见性分层（建设中，待上线定稿）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0454,KPI 按管理层级分口径,docs/business-dashboard-metrics-product-prd-v0.1.md,8.2 KPI 可见性分层（现行）,FULL,,,,,,06-amusement-terminal-thirdparty-data
 PGM-0070,设备包括工作手机、平板、一体机、扫码设备,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,§2.4 订单、服务和异常的责任链·设备责任链行(设备清单见 §2.1 总原则),FULL,,,,,,06-amusement-terminal-thirdparty-data
 PGM-0071,建设备台账，记录编号、型号、点位、责任人和状态,docs/platform-governance-prd-v0.1.md,§7.7 企业设备管理·关键字段与验收标准,FULL,,,,,,06-amusement-terminal-thirdparty-data
 PGM-0072,记录设备领用、归还、维修、挂失和报废,docs/terminal-page-product-prd-v0.1.md,15A.1 设备生命周期状态机（权威：spec §10，V107）,FULL,,,,,,06-amusement-terminal-thirdparty-data
@@ -1255,21 +1255,21 @@ PGM-0269,临时授权可设有效期或单次使用；权限的授予、收回�
 PGM-0270,全局原则 · 同时操作以先成功为准,docs/platform-governance-prd-v0.1.md,§12 第 8、9 条 2026-10-03 M724 补记,PARTIAL,,,M724 只落到准入闸逐笔放行与共用幂等层；单次授权由 M723 落；门票核销、券核销等各业务域的一次性动作随专项后续模块 M725～M735 逐项落,,,03-governance-and-common
 PGM-0271,全局原则 · 同时操作以先成功为准,docs/platform-governance-prd-v0.1.md,§2A.3 2026-10-03 M724 补记,PARTIAL,,,M724 落到后端响应的已完成提示与机读标记；后台与客人端页面显示该提示已由 M725 落；不经统一幂等层、模块自带重放的入口仍随专项后续模块逐项落,,,03-governance-and-common
 PGM-0272,员工日常界面只显示脱敏号码，不见明文；界面脱敏不提供关闭开关,docs/leasing-acquisition-prd-v1.0.md,§8 数据模型 联系人手机号一段 2026-10-07 M724 补记,FULL,,,,,,03-governance-and-common
-PGM-0273,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析随 M737，平台治理随 M739,,,03-governance-and-common
-PGM-0274,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析随 M737，平台治理随 M739,,,03-governance-and-common
+PGM-0273,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析已由 M737 落，平台治理随 M739,,,03-governance-and-common
+PGM-0274,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析已由 M737 落，平台治理随 M739,,,03-governance-and-common
 PGM-0275,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,FULL,,,,,,03-governance-and-common
-PGM-0276,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析随 M737，平台治理随 M739,,,03-governance-and-common
-PGM-0277,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 落商户账号不跨项目；一个商户在多个项目经营随 M739，读路径随 M737、M738,,,03-governance-and-common
+PGM-0276,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析已由 M737 落，平台治理随 M739,,,03-governance-and-common
+PGM-0277,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 落商户账号不跨项目；一个商户在多个项目经营的写入口随 M739，分析的读路径已由 M737 落，其余读路径随 M738,,,03-governance-and-common
 PGM-0278,跨商户、跨项目权限每次均须先审批,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,FULL,,,,,,03-governance-and-common
-PGM-0279,集团下钻细则（已确认）,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,句子随 M736 落；集团视图与平台口径 KPI 的判定随 M737,,,03-governance-and-common
+PGM-0279,集团下钻细则（已确认）,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记；§12 第 15 条 2026-10-13 M737 补记,FULL,,,,,,03-governance-and-common
 PGM-0280,集团下钻细则（已确认）,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,FULL,,,,,,03-governance-and-common
-PGM-0281,KPI 可见性分层,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,句子随 M736 落；集团视图与平台口径 KPI 的判定随 M737,,,03-governance-and-common
-PGM-0282,审批链不由发起人选择档位,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析随 M737，平台治理随 M739,,,03-governance-and-common
-BSM-0800,把合同和基础定义变成准入规则,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析随 M737，平台治理随 M739,,,03-governance-and-common
-BSM-0801,KPI 按管理层级分口径,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,句子随 M736 落；集团视图与平台口径 KPI 的判定随 M737,,,03-governance-and-common
+PGM-0281,KPI 可见性分层,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记；§12 第 15 条 2026-10-13 M737 补记,FULL,,,,,,03-governance-and-common
+PGM-0282,审批链不由发起人选择档位,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析已由 M737 落，平台治理随 M739,,,03-governance-and-common
+BSM-0800,把合同和基础定义变成准入规则,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 只落到权限治理域；人事、审批可见性与业务单据随 M738，集团视图与分析已由 M737 落，平台治理随 M739,,,03-governance-and-common
+BSM-0801,KPI 按管理层级分口径,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记；§12 第 15 条 2026-10-13 M737 补记,FULL,,,,,,03-governance-and-common
 BEQ-0177,项目与敏感数据权限,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,FULL,,,,,,03-governance-and-common
 PGM-0283,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,M736 落把员工改挂到可触及的项目；新建记录在人事与业务单据上的入口随 M738、M739；建外部机构账号的入口不放开,,,03-governance-and-common
 PGM-0284,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,句子随 M736 落；商户加经营项目与多项目商户主档案的修改、存档、删除随 M739,,,03-governance-and-common
 PGM-0285,所有业务数据默认按项目隔离，普通岗位没有跨项目查看权,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,句子随 M736 落；商户加经营项目与多项目商户主档案的修改、存档、删除随 M739,,,03-governance-and-common
 PGM-0286,跨商户、跨项目权限每次均须先审批,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,FULL,,,,,,03-governance-and-common
-PGM-0287,KPI 可见性分层,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记,PARTIAL,,,句子与判定办法随 M736 落；集团视图与分析端点接入随 M737,,,03-governance-and-common
+PGM-0287,KPI 可见性分层,docs/platform-governance-prd-v0.1.md,§6.10 第 2 条；§12 第 13、14、14B 条 2026-10-08 M736 补记；§12 第 15 条 2026-10-13 M737 补记,PARTIAL,,,句子与判定办法随 M736 落，集团视图与分析端点已由 M737 接入；只逐个勾选了项目的人与项目员工在总览看板、分域看板、分时客流上看各自项目的数据随 M287、M289、M375,,,03-governance-and-common

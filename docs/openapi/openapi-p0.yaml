@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.17
+  version: V0.18
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -337,7 +337,8 @@ paths:
       x-audit-event-success: access.role_project_options.viewed
       x-audit-event-failure: access.role_project_options.view_failed
       x-auth-context: staff-token
-      description: M736。建角色时逐个勾选可查看项目用的候选清单：项目、城市项目公司、在用的域主管公司三类各自成条，每条含 id（编号）、name（名称）、kind（类别，取 project、project_company、management_company）。具备 access.role.manage 的人看到全部候选，不按本人所属项目收窄（能配置角色的人都可以设置这一项）。
+      description: M736。建角色时逐个勾选可查看项目用的候选清单：项目、城市项目公司、在用的域主管公司三类各自成条，每条含 id（编号）、name（名称）、kind（类别，取
+        project、project_company、management_company）。具备 access.role.manage 的人看到全部候选，不按本人所属项目收窄（能配置角色的人都可以设置这一项）。
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -359,7 +360,9 @@ paths:
       x-audit-event-success: role.viewable_projects.viewed
       x-audit-event-failure: role.viewable_projects.view_failed
       x-auth-context: staff-token
-      description: M736。返回 role_id、view_all_projects、viewable_project_ids、pending_removal_ids（减少在待审的条目，"*" 指可以查看全部项目）、pending_reapprovals（还没重新审批的持有人：user_id、username、viewable_ids、reapproval_pending）。项目角色须在操作人可触及的项目内，平台角色只有平台管理员可读，否则 403（CROSS_ORG_FORBIDDEN）；持有人只列操作人可触及的。带商户归属的操作人（平台管理员除外）只列本商户的持有人。
+      description: M736。返回 role_id、view_all_projects、viewable_project_ids、pending_removal_ids（减少在待审的条目，"*"
+        指可以查看全部项目）、pending_reapprovals（还没重新审批的持有人：user_id、username、viewable_ids、reapproval_pending）。项目角色须在操作人可触及的项目内，平台角色只有平台管理员可读，否则
+        403（CROSS_ORG_FORBIDDEN）；持有人只列操作人可触及的。带商户归属的操作人（平台管理员除外）只列本商户的持有人。
       parameters:
         - name: id
           in: path
@@ -390,7 +393,10 @@ paths:
       x-audit-event-success: role.viewable_projects.changed
       x-audit-event-failure: role.viewable_projects.change_failed
       x-auth-context: staff-token
-      description: M736。角色分配出去以后增减可查看项目，请求体是这次的增减、不是改后的整份清单。增加的当场写进角色，改之前已持有该角色的人各自重新审批（授权申请类型 role_project_reapproval）通过前看不到新增的；减少的只建一张主管复核单（动作名 access.role_viewable_projects.reduce），角色不变，复核单整单通过后才去掉，被驳回的不减。提交的增减与角色当前状态对不上、或条目的减少已在待审：409（INVALID_STATE）。项目角色须在操作人可触及的项目内，平台角色只有平台管理员可改，否则 403（CROSS_ORG_FORBIDDEN）。
+      description: M736。角色分配出去以后增减可查看项目，请求体是这次的增减、不是改后的整份清单。增加的当场写进角色，改之前已持有该角色的人各自重新审批（授权申请类型
+        role_project_reapproval）通过前看不到新增的；减少的只建一张主管复核单（动作名
+        access.role_viewable_projects.reduce），角色不变，复核单整单通过后才去掉，被驳回的不减。提交的增减与角色当前状态对不上、或条目的减少已在待审：409（INVALID_STATE）。项目角色须在操作人可触及的项目内，平台角色只有平台管理员可改，否则
+        403（CROSS_ORG_FORBIDDEN）。
       parameters:
         - name: id
           in: path
@@ -1370,7 +1376,8 @@ paths:
       summary: Generate local LLM AI quality suggestion
       description: T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result
         writes only AI quality task and result records and never changes payment, verification, refund, punishment,
-        commission, contract, inventory, or device state.
+        commission, contract, inventory, or device state. M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有
+        analytics.risk_alert.manage 的人，否则 403（PLATFORM_SCOPE_REQUIRED）、不落库。
       x-permission: analytics.risk_alert.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -1399,6 +1406,7 @@ paths:
       operationId: listAiQualityResults
       summary: 查询ai质检结果
       description: 用于查询ai质检结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1421,6 +1429,7 @@ paths:
       operationId: listAiQualityTasks
       summary: 查询ai质检任务
       description: 用于查询ai质检任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1443,7 +1452,9 @@ paths:
       operationId: listBusinessMetricSnapshots
       summary: List P2 business metric snapshots for operational analytics
       description: List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission,
-        data scope, idempotency and audit event requirements.
+        data scope, idempotency and audit event requirements. M737：平台管理员看全表；其余人按 analytics.dashboard.view
+        可触及的项目逐行留——平台段只给经勾选了「可以查看全部项目」的角色持有该权限的人，项目段只出可触及项目的，商户段只出在可触及项目内经营的商户的，其他分段不出。商户账号、外包账号
+        403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1466,6 +1477,7 @@ paths:
       operationId: listCustomerIntents
       summary: 查询客户意向
       description: 用于查询客户意向。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1502,13 +1514,15 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+      description: M737。平台管理员与经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。
   /api/v1/analytics/dashboards/{domain}:
     get:
       tags:
         - analytics
       operationId: getAnalyticsDomainDashboard
       summary: P0 经营看板下钻（按域）
-      description: 按业务域下钻经营看板指标（metric_code map），经 currentMerchantScope 行级隔离。
+      description: 按业务域下钻经营看板指标（metric_code map），经 currentMerchantScope 行级隔离。 M737：平台管理员与经勾选了「可以查看全部项目」的角色持有
+        analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。
       parameters:
         - name: domain
           in: path
@@ -1539,6 +1553,8 @@ paths:
       operationId: listMerchantHealthScores
       summary: 查询商户健康度scores
       description: 用于查询商户健康度scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：平台管理员看全部商户；带商户归属的账号只看本商户；其余员工只出在其按 analytics.dashboard.view 可触及的项目内经营的商户（经营项目＝商户主项目加 merchant_projects
+        追加的项目）；不带商户归属的外包账号 403（MERCHANT_SCOPE_REQUIRED）。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1561,6 +1577,8 @@ paths:
       operationId: listAnalyticsMerchants
       summary: 查询经营分析商户
       description: 用于查询经营分析商户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：平台管理员看全部商户；带商户归属的账号只看本商户；其余员工只出在其按 analytics.dashboard.view 可触及的项目内经营的商户（经营项目＝商户主项目加 merchant_projects
+        追加的项目）；不带商户归属的外包账号 403（MERCHANT_SCOPE_REQUIRED）。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1583,6 +1601,7 @@ paths:
       operationId: listMetricAnomalies
       summary: 查询指标异常
       description: 用于查询指标异常。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1605,6 +1624,8 @@ paths:
       operationId: disposeMetricAnomaly
       summary: 处置指标异常
       description: 用于处置指标异常(已阅/已处置/误报/转告警),形成发现到闭环的处置流转。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.metric_anomaly.manage 的人，否则
+        403（PLATFORM_SCOPE_REQUIRED）、不落库。
       x-permission: analytics.metric_anomaly.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -1644,6 +1665,7 @@ paths:
       summary: 查询指标异常处置历史时间线
       description: 用于查询某指标异常的完整处置历史时间线(append-only:谁/何时/从什么状态到什么状态/处置说明/转告警时生成的告警号),供处置闭环回溯。历史只增不改(读 audit_events 的
         disposition_recorded 事件)。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1695,7 +1717,9 @@ paths:
         revenue.ticket=analytics.dashboard.view; finance.recon_diff_count=finance.reconciliation.view;
         energy.total_electricity 与 energy.electricity_per_sqm=energy.reading.manage;
         finance.ar_balance=finance.ar_ap.view)。project_id/merchant_id 为预留维度参数, 首批平台口径指标不支持, 传入即 VALIDATION_FAILED。未登记
-        metric 亦为 VALIDATION_FAILED(fail-closed)。"
+        metric 亦为 VALIDATION_FAILED(fail-closed)。 M737：可触及项目取 analytics.dashboard.view
+        与登记项权限码两项的交集。登记了项目列的指标：平台管理员看全量，其余人只出可触及项目内的行与合计。没有项目列的指标：平台管理员与两项权限都经勾选了「可以查看全部项目」的角色持有的人看平台全量，其余人
+        403（PLATFORM_METRIC_PROJECT_FORBIDDEN）。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。"
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -1782,6 +1806,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+      description: M737。这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
     post:
       tags:
         - analytics
@@ -1807,6 +1832,7 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       description: 用于创建风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.manage 的人，否则 403（PLATFORM_SCOPE_REQUIRED）、不落库。
   /api/v1/analytics/risk-alerts/{id}/resolve:
     post:
       tags:
@@ -1814,6 +1840,7 @@ paths:
       operationId: resolveRiskAlert
       summary: 处理风险alert
       description: 用于处理风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.manage 的人，否则 403（PLATFORM_SCOPE_REQUIRED）、不落库。
       x-permission: analytics.risk_alert.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -1845,6 +1872,7 @@ paths:
       operationId: listReviewLocks
       summary: 经营复盘锁定记录
       description: 用于查询经营复盘锁定记录（刷新/换人/审计追责可查回）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：平台管理员看全部；其余人只出按 analytics.review.lock 可触及的项目的锁，项目为空的锁不出。
       x-permission: analytics.review.lock
       x-data-scope: project
       x-terminal-allowed:
@@ -1866,7 +1894,7 @@ paths:
       operationId: createReviewLock
       summary: 锁定经营复盘快照
       description: 用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+        深度能力不得反向扩大 P0 范围。 M737：锁建在本人所属项目；本人所属项目不在 analytics.review.lock 可触及的项目内的 403（CROSS_ORG_FORBIDDEN）。
       x-permission: analytics.review.lock
       x-data-scope: project
       x-terminal-allowed:
@@ -1917,6 +1945,7 @@ paths:
       operationId: getRobotAnalytics
       summary: 获取机器人经营分析
       description: 用于获取机器人经营分析。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1939,6 +1968,7 @@ paths:
       operationId: listStaffServiceScores
       summary: 查询员工服务scores
       description: 用于查询员工服务scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+        M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -8089,7 +8119,9 @@ paths:
         - platform
       operationId: approveSupervisorReview
       summary: 主管审批或驳回复核记录
-      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。
+      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与
+        reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve
+        一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。
       x-permission: governance.supervisor_review.approve
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -14825,6 +14857,9 @@ paths:
               - project
               - entity
           description: 汇总维度：project(默认)按项目 / entity 按法律主体下钻。
+      description: M737。按 analytics.group.view
+        可触及的项目出行：平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部项目行，没有分项目快照时回退的平台口径一行也只给这两类人；其余人只出可触及项目的行（groupBy=entity
+        只合并这些项目，平均值与低于基准标记只按出现的行算），没有可见行时项目列表为空。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。
   /api/v1/ticketing/refunds/{refund_id}/lines:
     get:
       tags:
@@ -16143,7 +16178,8 @@ paths:
         - analytics
       operationId: getAnalyticsTrafficHourly
       summary: 分时段客流分布
-      description: T4.3：按经营日窗口对成功核销 created_at 小时分桶（0~23 共 24 桶）；date 为空退回最新经营日，按 scope 隔离。
+      description: T4.3：按经营日窗口对成功核销 created_at 小时分桶（0~23 共 24 桶）；date 为空退回最新经营日，按 scope 隔离。 M737：平台管理员与经勾选了「可以查看全部项目」的角色持有
+        analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。
       parameters:
         - name: date
           in: query
@@ -16641,7 +16677,10 @@ paths:
       x-audit-event-success: leasing.lead.contact_phone_viewed
       x-audit-event-failure: leasing.lead.contact_phone_view_failed
       x-auth-context: staff-token
-      description: M724（治理地图第 871 行）。线索列表和操作结果一律只返回脱敏号码，完整号码只经本接口按条给出，返回 data 只含 lead_id 与 contact_phone 两个字段。除 x-permission 所列 leasing.lead.manage 外，另需 pii.contact_phone.view（没有该码 403 PERMISSION_DENIED，不退回掩码）；每调用一次算查看一次并留痕，单次授权看一次即用掉，长期持有不产生消耗。项目员工只能查看本项目的线索（其他项目 403 CROSS_PROJECT_FORBIDDEN，单次授权不算用掉）；线索没有电话时返回空号码，不核验也不消耗 pii.contact_phone.view。留痕不含号码。
+      description: M724（治理地图第 871 行）。线索列表和操作结果一律只返回脱敏号码，完整号码只经本接口按条给出，返回 data 只含 lead_id 与 contact_phone 两个字段。除 x-permission
+        所列 leasing.lead.manage 外，另需 pii.contact_phone.view（没有该码 403
+        PERMISSION_DENIED，不退回掩码）；每调用一次算查看一次并留痕，单次授权看一次即用掉，长期持有不产生消耗。项目员工只能查看本项目的线索（其他项目 403
+        CROSS_PROJECT_FORBIDDEN，单次授权不算用掉）；线索没有电话时返回空号码，不核验也不消耗 pii.contact_phone.view。留痕不含号码。
       parameters:
         - name: lead_id
           in: path
@@ -19331,7 +19370,12 @@ paths:
       x-audit-event-success: access.grant_request.applied
       x-audit-event-failure: access.grant_request.apply_failed
       x-auth-context: staff-token
-      description: request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign 一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人可触及的项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。可触及的项目按入口核验的权限判（M736）：发起人经可跨项目角色持有该权限的，按该角色可查看的项目判，上述三类申请取 access.grant_request.apply 与 access.role.assign 各自可触及项目的交集；其余发起人仍是本人所属项目（细则见平台治理 PRD §12 M736 补记）。request_type 为 role_project_reapproval（M736）时须带 role_id，只收对该角色有待重新审批的可查看项目的员工，否则 400（VALIDATION_FAILED）；不论发起人是谁、角色是否含须审批的权限都受理。
+      description: request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备
+        access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign
+        一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人可触及的项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN /
+        CROSS_MERCHANT_FORBIDDEN），不建单。可触及的项目按入口核验的权限判（M736）：发起人经可跨项目角色持有该权限的，按该角色可查看的项目判，上述三类申请取
+        access.grant_request.apply 与 access.role.assign 各自可触及项目的交集；其余发起人仍是本人所属项目（细则见平台治理 PRD §12 M736 补记）。request_type 为
+        role_project_reapproval（M736）时须带 role_id，只收对该角色有待重新审批的可查看项目的员工，否则 400（VALIDATION_FAILED）；不论发起人是谁、角色是否含须审批的权限都受理。
       requestBody:
         $ref: "#/components/requestBodies/AccessGrantApplyRequest"
       responses:
@@ -20634,7 +20678,9 @@ paths:
       operationId: listArOverdueDebtors
       summary: 欠费商户明细排行(账龄钻取)
       description: BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤
-        a0_30/a31_60/a61_90/a90p。
+        a0_30/a31_60/a61_90/a90p。 M737：按 finance.ar_ap.view
+        可触及的项目过滤——平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部行；其余人只出应收行项目落在可触及项目内的行（先过滤再按商户汇总），项目为空的行不出。商户账号、外包账号
+        403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: finance.ar_ap.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -20680,7 +20726,9 @@ paths:
         - analytics
       operationId: listVacantSpaces
       summary: 空置铺位明细(出租率钻取)
-      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。
+      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。 M737：按
+        contract.view 可触及的项目过滤——平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部行；其余人只出铺位项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号
+        403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: contract.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -20714,7 +20762,9 @@ paths:
         - analytics
       operationId: listExpiringContracts
       summary: 到期预警合同明细
-      description: 90 天(可配 1-365)内到期的生效合同,按到期日升序,含商户与绑定面积。
+      description: 90 天(可配 1-365)内到期的生效合同,按到期日升序,含商户与绑定面积。 M737：按 contract.view
+        可触及的项目过滤——平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部行；其余人只出合同项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号
+        403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: contract.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -20755,7 +20805,9 @@ paths:
       operationId: listOverdueWorkOrders
       summary: 超时工单明细(时效钻取)
       description: BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单
-        (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。
+        (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。 M737：按 facility.work_order.manage
+        可触及的项目过滤——平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部行；其余人设施工单只出工单项目落在可触及项目内的行（项目为空的不出），source=merchant
+        时只出在可触及项目内经营的商户的工单。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -20797,7 +20849,9 @@ paths:
         - analytics
       operationId: listAbnormalReadings
       summary: 异常读数明细(能耗钻取)
-      description: BI S5:当日经营窗内异常读数(突增/突降/零读数/倒走)实时明细, 与 energy.abnormal_count 同过滤同口径,含表计名称与类型。
+      description: BI S5:当日经营窗内异常读数(突增/突降/零读数/倒走)实时明细, 与 energy.abnormal_count 同过滤同口径,含表计名称与类型。 M737：按 energy.reading.manage
+        可触及的项目过滤——平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部行；其余人只出电表项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号
+        403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: energy.reading.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -20832,6 +20886,7 @@ paths:
       operationId: getMonthlyComparison
       summary: 月度对比(环比/同比)
       description: BI M1(2026-07-02 拍板④混合口径):流量类=月累计、存量/比率类=期末时点; 环比=上月 monthly 快照、同比=去年同月;缺月返回 null(前端标「积累中」,不伪造)。
+        M737：全平台口径，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -20864,7 +20919,9 @@ paths:
       operationId: exportMonthlyReport
       summary: 月度经营报表导出(分权)
       description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批);
-        数据与月度对比同一份组装(图表=导出,单一口径)。
+        数据与月度对比同一份组装(图表=导出,单一口径)。 M737：除持有
+        analytics.report.export（任何有效来源，含临时、单次授权）外，还须能看全平台合计——平台管理员，或经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view；否则
+        403（PLATFORM_SCOPE_REQUIRED），被拒不消耗单次授权。
       x-permission: analytics.report.export
       x-data-scope: platform
       x-terminal-allowed:
@@ -20896,7 +20953,8 @@ paths:
         - analytics
       operationId: getAbandonedEntitlementRevenue
       summary: 放弃权益额外收入报表(票种×权益类型)
-      description: 已过期未使用权益归项目公司的额外收入，按 通票/单独门票 × 酒水/入场/游乐/演出/其他 交叉列金额与笔数；数据源=SettlementExpiryJob 写的 unverified_expired 归项目流水，只读。
+      description: 已过期未使用权益归项目公司的额外收入，按 通票/单独门票 × 酒水/入场/游乐/演出/其他 交叉列金额与笔数；数据源=SettlementExpiryJob 写的 unverified_expired
+        归项目流水，只读。 M737：全平台口径，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -20937,7 +20995,8 @@ paths:
       summary: 店级/业态级/平台级租售比
       description: P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以
         第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用
-        merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。
+        merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。 M737：平台管理员与经勾选了「可以查看全部项目」的角色持有
+        contract.view 的人看全量；其余人只出在其可触及项目内经营的商户行与由这些行合并出的业态行，不出平台合计，未归属营业额记 0。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: contract.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -21174,6 +21233,7 @@ paths:
       operationId: getHolidayComparison
       summary: 节假日对比(今年 vs 去年同名)
       description: H1(2026-07-02 拍板):流量=区间累计+日均双列(天数不同看日均才公平,同比按日均); 存量=假期末时点;去年无同名假期→上年侧空(积累中,不伪造)。
+        M737：全平台口径，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -29417,7 +29477,8 @@ components:
           description: 可以查看全部项目（含以后新建的项目）；不给按未勾选。勾选后不能再给 viewable_project_ids。
         viewable_project_ids:
           type: array
-          description: 逐个勾选的可查看项目；填候选清单（GET /api/v1/access/role-project-options）里的编号，项目、城市项目公司、在用的域主管公司各自成条，勾哪条只管哪条。与 view_all_projects 为 true 不能同时给；两项都不给就是普通角色。
+          description: 逐个勾选的可查看项目；填候选清单（GET /api/v1/access/role-project-options）里的编号，项目、城市项目公司、在用的域主管公司各自成条，勾哪条只管哪条。与
+            view_all_projects 为 true 不能同时给；两项都不给就是普通角色。
           items:
             type: string
             maxLength: 64
@@ -29490,7 +29551,8 @@ components:
           maxLength: 120
         template_type:
           type: string
-          description: 模板类型；模板只有两种：base 表示基础模板（角色级），temporary 表示临时模板，其他取值返回 400 VALIDATION_FAILED。复制模板时复制出的是新模板：本请求里填了的字段按填写，未填的（模板名称、类型、权限码、数据范围、生效时间、到期时间、单次；名称与类型为空白同未填）沿用源模板，校验与新建相同；复制请求无法清空生效或到期时间，需要时复制后修改复制件（复制件无人在用，可以放宽）。
+          description: 模板类型；模板只有两种：base 表示基础模板（角色级），temporary 表示临时模板，其他取值返回 400
+            VALIDATION_FAILED。复制模板时复制出的是新模板：本请求里填了的字段按填写，未填的（模板名称、类型、权限码、数据范围、生效时间、到期时间、单次；名称与类型为空白同未填）沿用源模板，校验与新建相同；复制请求无法清空生效或到期时间，需要时复制后修改复制件（复制件无人在用，可以放宽）。
           enum:
             - base
             - temporary
@@ -29508,7 +29570,8 @@ components:
           maxItems: 200
         data_scope:
           type: string
-          description: 数据范围；限制可访问项目、商户、酒吧、仓库、设备或客户数据。复制模板时填写即按填写，不填时与源模板相同的权限码沿用源条目的数据范围、其余记 project。修改模板时同口径：不填则保留下来的权限码沿用原条目的数据范围、新增的记 project；填写且与任一保留条目不同返回 409。
+          description: 数据范围；限制可访问项目、商户、酒吧、仓库、设备或客户数据。复制模板时填写即按填写，不填时与源模板相同的权限码沿用源条目的数据范围、其余记
+            project。修改模板时同口径：不填则保留下来的权限码沿用原条目的数据范围、新增的记 project；填写且与任一保留条目不同返回 409。
           enum:
             - global
             - project

@@ -53,13 +53,13 @@ class MetricDetailProjectScopeJdbcIntegrationTests {
         insertShift(proj("sh_b1"), day, projB);
 
         // 隔离铁证：projA 操作者只见自己 2 行（唯一 project id → baseline 0 → 合计恰 2，绝不含 B 的 1 行）。
-        assertThat(repository.staffShiftDetail(day, day, 200, 0, projA).summaryValue()).isEqualByComparingTo("2");
-        assertThat(repository.staffShiftDetail(day, day, 200, 0, projB).summaryValue()).isEqualByComparingTo("1");
+        assertThat(repository.staffShiftDetail(day, day, 200, 0, java.util.List.of(projA)).summaryValue()).isEqualByComparingTo("2");
+        assertThat(repository.staffShiftDetail(day, day, 200, 0, java.util.List.of(projB)).summaryValue()).isEqualByComparingTo("1");
         // 平台管理员（null scope）看全量：净增 3。
         assertThat(repository.staffShiftDetail(day, day, 200, 0, null).summaryValue().subtract(baseAll))
                 .isEqualByComparingTo("3");
         // 明细行数与合计同源（数字=明细合计），且 projA 明细翻页恰 2 行。
-        assertThat(repository.staffShiftDetail(day, day, 200, 0, projA).rows()).hasSize(2);
+        assertThat(repository.staffShiftDetail(day, day, 200, 0, java.util.List.of(projA)).rows()).hasSize(2);
     }
 
     @Test
@@ -74,12 +74,12 @@ class MetricDetailProjectScopeJdbcIntegrationTests {
         insertReceivable(proj("ar_b1"), 9999, due, projB);
 
         // projA 只见自己两笔合计 8000；绝不含 B 的 9999（否则合计会变 17999 → 炸）。
-        assertThat(repository.arOpenReceivableDetail(asOf, 200, 0, projA).summaryValue()).isEqualByComparingTo("8000");
-        assertThat(repository.arOpenReceivableDetail(asOf, 200, 0, projB).summaryValue()).isEqualByComparingTo("9999");
+        assertThat(repository.arOpenReceivableDetail(asOf, 200, 0, java.util.List.of(projA)).summaryValue()).isEqualByComparingTo("8000");
+        assertThat(repository.arOpenReceivableDetail(asOf, 200, 0, java.util.List.of(projB)).summaryValue()).isEqualByComparingTo("9999");
         // 平台看全量：净增 5000+3000+9999。
         assertThat(repository.arOpenReceivableDetail(asOf, 200, 0, null).summaryValue().subtract(baseAll))
                 .isEqualByComparingTo("17999");
-        assertThat(repository.arOpenReceivableDetail(asOf, 200, 0, projA).rows()).hasSize(2);
+        assertThat(repository.arOpenReceivableDetail(asOf, 200, 0, java.util.List.of(projA)).rows()).hasSize(2);
     }
 
     @Test
@@ -92,9 +92,9 @@ class MetricDetailProjectScopeJdbcIntegrationTests {
         insertSettlement(proj("set_b1"), projB);
 
         // projA 只见自己 2 笔；平台看全量净增 3。
-        assertThat(repository.settlementTransactionDetail(null, null, "count", 200, 0, projA).summaryValue())
+        assertThat(repository.settlementTransactionDetail(null, null, "count", 200, 0, java.util.List.of(projA)).summaryValue())
                 .isEqualByComparingTo("2");
-        assertThat(repository.settlementTransactionDetail(null, null, "count", 200, 0, projB).summaryValue())
+        assertThat(repository.settlementTransactionDetail(null, null, "count", 200, 0, java.util.List.of(projB)).summaryValue())
                 .isEqualByComparingTo("1");
         assertThat(repository.settlementTransactionDetail(null, null, "count", 200, 0, null).summaryValue().subtract(baseAll))
                 .isEqualByComparingTo("3");
@@ -111,10 +111,32 @@ class MetricDetailProjectScopeJdbcIntegrationTests {
         insertActiveStaff(proj("hc_a2"), orgA);
         insertActiveStaff(proj("hc_b1"), orgB);
 
-        assertThat(repository.staffActiveHeadcountDetail(asOf, 200, 0, orgA).summaryValue()).isEqualByComparingTo("2");
-        assertThat(repository.staffActiveHeadcountDetail(asOf, 200, 0, orgB).summaryValue()).isEqualByComparingTo("1");
+        assertThat(repository.staffActiveHeadcountDetail(asOf, 200, 0, java.util.List.of(orgA)).summaryValue()).isEqualByComparingTo("2");
+        assertThat(repository.staffActiveHeadcountDetail(asOf, 200, 0, java.util.List.of(orgB)).summaryValue()).isEqualByComparingTo("1");
         assertThat(repository.staffActiveHeadcountDetail(asOf, 200, 0, null).summaryValue().subtract(baseAll))
                 .isEqualByComparingTo("3");
+    }
+
+    @Test
+    void projectSetOfTwoShowsBothProjectsAndEmptySetShowsNothing() {
+        // M737：作用域是可触及项目的集合——两个项目两边的行都出、合计相加；空集合（一个可触及项目都没有）0 行、合计 0，不是平台全量。
+        LocalDate asOf = LocalDate.parse("2026-06-20");
+        LocalDate due = asOf.minusDays(10);
+        String projA = proj("setArA");
+        String projB = proj("setArB");
+        insertReceivable(proj("ar_set_a1"), 5000, due, projA);
+        insertReceivable(proj("ar_set_a2"), 3000, due, projA);
+        insertReceivable(proj("ar_set_b1"), 9999, due, projB);
+
+        MetricDetailRows both = repository.arOpenReceivableDetail(asOf, 200, 0, java.util.List.of(projA, projB));
+        assertThat(both.rows()).hasSize(3);
+        assertThat(both.totalRows()).isEqualTo(3);
+        assertThat(both.summaryValue()).isEqualByComparingTo("17999");
+
+        MetricDetailRows none = repository.arOpenReceivableDetail(asOf, 200, 0, java.util.List.of());
+        assertThat(none.rows()).isEmpty();
+        assertThat(none.totalRows()).isZero();
+        assertThat(none.summaryValue()).isEqualByComparingTo("0");
     }
 
     // ---- 种子（均显式落 project_id / organization_id）----
