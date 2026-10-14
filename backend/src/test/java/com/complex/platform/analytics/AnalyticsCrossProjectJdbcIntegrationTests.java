@@ -171,6 +171,12 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         String merchantB = merchant("b", projectB);
         String merchantNone = merchant("none", null);
         String code = "analytics.dashboard.view";
+        // M737-F05：甲签了一份项目为空的合同（合同工作台起草不提交「所属综合体」，正常录入的合同都是这样），照常按经营项目出
+        jdbcTemplate.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
+                        lifecycle_status, created_at, updated_at)
+                VALUES (?, ?, 'subj_m737', 'subj_m737', DATE '2099-01-01', DATE '2099-12-31', 'drafting', now(), now())
+                """, "ctr_m737_a_" + suffix, merchantA);
 
         // A 的普通员工：只有在 A 经营的商户
         RequestPostProcessor plain = staffOfA("plain", plainRole("plain", code));
@@ -187,13 +193,10 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         assertThat(merchantHealth(all)).containsExactlyInAnyOrder(merchantA, merchantB);
         assertThat(merchantSummaries(all)).containsExactlyInAnyOrder(merchantA, merchantB);
 
-        // M737-F04：商户甲追加经营项目 B 后，健康分与经营汇总按商户算、拆不到项目——只能看 A 的、只勾 B 的都不再看到甲
+        // 商户甲追加经营项目 B 后，只勾 B 的人也看得到它
         jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id, project_id) VALUES (?, ?)", merchantA, projectB);
-        assertThat(merchantHealth(plain)).isEmpty();
-        assertThat(merchantSummaries(plain)).isEmpty();
-        assertThat(merchantHealth(ticked)).containsExactly(merchantB);
-        assertThat(merchantSummaries(ticked)).containsExactly(merchantB);
-        assertThat(merchantHealth(all)).containsExactlyInAnyOrder(merchantA, merchantB);
+        assertThat(merchantHealth(ticked)).containsExactlyInAnyOrder(merchantA, merchantB);
+        assertThat(merchantSummaries(ticked)).containsExactlyInAnyOrder(merchantA, merchantB);
 
         // 带商户归属的账号：照旧只看本商户（守护）——归属 A、商户是丙，按项目出的话会是甲
         RequestPostProcessor merchantAccount = account("mch", "staff", projectA, merchantNone, plainRole("mch", code));
@@ -226,73 +229,7 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
                 .containsExactlyInAnyOrder(platform, ofProjectA, ofProjectB, ofMerchantA, ofMerchantB);
     }
 
-    // J5（M737-F04 同一商户跨项目）：商户「双」主项目 A，另在 B 有一份合同；商户「单」只在 A 有合同。同一账期「双」在 A、B 各有一笔合同租金
-    // （100 分、900 分）。合同的项目由请求给出、不校验与商户主项目一致（ContractService 起草）；操作员 2026-10-01 答复认可同一商户跨项目经营。
-    // 租金、营业额、健康分、经营汇总、商户服务工单都按商户算、拆不到项目：只能看 A 的人整行都不该出。
-    // 修复前 A 的普通员工租售比拿到「双」一行、租金 1000（第一处断言即红）。
-    @Test
-    void merchantAlsoContractedInAnotherProjectIsHiddenFromProjectScopedStaff() throws Exception {
-        String both = merchant("both", projectA);
-        String single = merchant("single", projectA);
-        contract("both_a", both, projectA);
-        contract("both_b", both, projectB);
-        contract("single", single, projectA);
-        rent("both_a", both, 100);
-        rent("both_b", both, 900);
-        rent("single", single, 50);
-        String snapBoth = snapshot("mboth", "merchant", both);
-        String snapSingle = snapshot("msingle", "merchant", single);
-        overdueMerchantWorkOrder("both", both);
-        String woSingle = overdueMerchantWorkOrder("single", single);
-        String[] codes = {"contract.view", "analytics.dashboard.view", "facility.work_order.manage"};
-
-        RequestPostProcessor plain = staffOfA("plain", plainRole("plain", codes));
-        assertThat(rentToSalesMerchants(plain)).containsExactly(single);
-        assertThat(merchantHealth(plain)).containsExactly(single);
-        assertThat(merchantSummaries(plain)).containsExactly(single);
-        assertThat(snapshots(plain)).containsExactly(snapSingle);
-        assertThat(overdueMerchantWorkOrders(plain)).containsExactly(woSingle);
-
-        // 勾全部：两户都出，「双」的租金是 A、B 两笔之和
-        RequestPostProcessor all = staffOfA("all", allProjectsRole("all", codes));
-        assertThat(rentToSalesMerchants(all)).containsExactlyInAnyOrder(both, single);
-        assertThat(rentCentOf(all, both)).isEqualTo(1000L);
-        assertThat(snapshots(all)).contains(snapBoth, snapSingle);
-    }
-
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
-
-    /** 一份起草中的合同（只用到商户与项目两列）。 */
-    private void contract(String tag, String merchantId, String projectId) {
-        String id = "ctr_m737_" + tag + "_" + suffix;
-        jdbcTemplate.update("""
-                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
-                        lifecycle_status, created_at, updated_at, project_id)
-                VALUES (?, ?, 'subj_m737', 'subj_m737', DATE '2099-01-01', DATE '2099-12-31', 'drafting', now(), now(), ?)
-                """, id, merchantId, projectId);
-    }
-
-    /** 2099-11 账期的一笔合同租金应收（租售比分子），租金账期远在未来，不与库里的行同期。 */
-    private void rent(String tag, String merchantId, long cent) {
-        String id = "ar_m737_rent_" + tag + "_" + suffix;
-        jdbcTemplate.update("""
-                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,
-                        unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at, merchant_id)
-                VALUES (?, ?, 'receivable', ?, 'contract_rent', ?, ?, 0, ?, 'CNY', DATE '2099-11-30', '2099-11', 'pending_collection',
-                        now(), now(), ?)
-                """, id, id, merchantId, id, cent, cent, merchantId);
-    }
-
-    /** 一张今天到期、已标超时的商户服务工单（超时明细取当日窗口）。 */
-    private String overdueMerchantWorkOrder(String tag, String merchantId) {
-        String id = "mwo_m737_" + tag + "_" + suffix;
-        jdbcTemplate.update("""
-                INSERT INTO merchant_service_work_orders (id, merchant_id, work_order_type, priority, status, title, description,
-                        reported_by_user_id, reported_channel, due_at, created_at, updated_at, sla_breached)
-                VALUES (?, ?, 'repair', 'high', 'created', ?, 'M737', 'usr_m737', 'web', now(), now(), now(), TRUE)
-                """, id, merchantId, id);
-        return id;
-    }
 
     private String userId(String tag) {
         return "usr_m737_" + tag + "_" + suffix;
@@ -431,22 +368,5 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     private List<String> snapshots(RequestPostProcessor session) throws Exception {
         return mine(session, "/api/v1/analytics/business-metric-snapshots", "$.data.items[*].snapshot_id");
-    }
-
-    private List<String> rentToSalesMerchants(RequestPostProcessor session) throws Exception {
-        return mine(session, "/api/v1/analytics/rent-to-sales?month=2099-11", "$.data.by_merchant[*].key");
-    }
-
-    private long rentCentOf(RequestPostProcessor session, String merchantId) throws Exception {
-        List<Number> cents = JsonPath.read(mockMvc.perform(get("/api/v1/analytics/rent-to-sales?month=2099-11").with(session))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8),
-                "$.data.by_merchant[?(@.key == '" + merchantId + "')].rent_cent");
-        assertThat(cents).hasSize(1);
-        return cents.get(0).longValue();
-    }
-
-    private List<String> overdueMerchantWorkOrders(RequestPostProcessor session) throws Exception {
-        return mine(session, "/api/v1/analytics/work-order-sla/overdue-orders?source=merchant", "$.data.items[*].work_order_id");
     }
 }

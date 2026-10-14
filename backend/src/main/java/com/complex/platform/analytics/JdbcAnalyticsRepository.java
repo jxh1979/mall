@@ -51,17 +51,12 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
             SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
               FROM saved_bottles
             """;
-    // M737「只在这些项目经营的商户」只有这一个定义，各处共用（V441 表注释：「商户经营项目＝merchants.project_id（主项目）加本表；
+    // M737「在这些项目经营的商户」只有这一个定义，各处共用（V441 表注释：「商户经营项目＝merchants.project_id（主项目）加本表；
     // 本表只放主项目以外追加的项目」）。参数 :project_ids 非空集合。
-    // M737-F04：用到它的都是按商户的数（租金、营业额、健康分、经营摘要、商户服务工单），拆不到项目；同一商户在别的项目也有经营或合同时，
-    // 整行会带出别的项目的金额，所以要求主项目、追加的经营项目和该商户全部合同（不论状态）的项目都在集合内，合同项目为空的按不在内。
     private static final String MERCHANTS_OPERATING_IN_PROJECTS = """
             SELECT m.id FROM merchants m
              WHERE m.project_id IN (:project_ids)
-               AND NOT EXISTS (SELECT 1 FROM merchant_projects mp
-                                WHERE mp.merchant_id = m.id AND mp.project_id NOT IN (:project_ids))
-               AND NOT EXISTS (SELECT 1 FROM contracts c
-                                WHERE c.merchant_id = m.id AND (c.project_id IS NULL OR c.project_id NOT IN (:project_ids)))
+                OR m.id IN (SELECT mp.merchant_id FROM merchant_projects mp WHERE mp.project_id IN (:project_ids))
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;

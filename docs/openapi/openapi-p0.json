@@ -2048,7 +2048,7 @@
         ],
         "operationId": "listBusinessMetricSnapshots",
         "summary": "List P2 business metric snapshots for operational analytics",
-        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements. M737：平台管理员看全表；其余人按 analytics.dashboard.view 可触及的项目逐行留——平台段只给经勾选了「可以查看全部项目」的角色持有该权限的人，项目段只出可触及项目的，商户段只出只在可触及项目内经营的商户的，其他分段不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
+        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements. M737：平台管理员看全表；其余人按 analytics.dashboard.view 可触及的项目逐行留——平台段只给经勾选了「可以查看全部项目」的角色持有该权限的人，项目段只出可触及项目的，商户段只出在可触及项目内经营的商户的，其他分段不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -29029,7 +29029,7 @@
         ],
         "operationId": "listOverdueWorkOrders",
         "summary": "超时工单明细(时效钻取)",
-        "description": "BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单 (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。 M737：按 facility.work_order.manage 可触及的项目过滤——平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部行；其余人设施工单只出工单项目落在可触及项目内的行（项目为空的不出），source=merchant 时只出只在可触及项目内经营的商户的工单。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
+        "description": "BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单 (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。 M737：按 facility.work_order.manage 可触及的项目过滤——平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部行；其余人设施工单只出工单项目落在可触及项目内的行（项目为空的不出），source=merchant 时只出在可触及项目内经营的商户的工单。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29284,7 +29284,7 @@
         ],
         "operationId": "getRentToSales",
         "summary": "店级/业态级/平台级租售比",
-        "description": "P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。 M737：平台管理员与经勾选了「可以查看全部项目」的角色持有 contract.view 的人看全量；其余人只出只在其可触及项目内经营的商户行与由这些行合并出的业态行，不出平台合计，未归属营业额记 0。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
+        "description": "P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。 M737：平台管理员与经勾选了「可以查看全部项目」的角色持有 contract.view 的人看全量；其余人只出在其可触及项目内经营的商户行与由这些行合并出的业态行，不出平台合计，未归属营业额记 0。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "contract.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [

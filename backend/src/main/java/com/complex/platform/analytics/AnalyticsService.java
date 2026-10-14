@@ -462,8 +462,7 @@ public class AnalyticsService {
     /**
      * M737（业务地图「谁会看」：「项目级操作人员只看自己所在项目范围内的 KPI 和明细，看不到别的项目。」治理地图「KPI 可见性分层」：
      * 「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看」）：reach 由控制器按 contract.view 算好——平台管理员与勾了全部项目的人
-     * 照旧看全部商户行、平台合计与未归属营业额；其余只出只在可触及项目内经营的商户行与由这些行并出的业态行，不出平台合计与未归属营业额
-     * （M737-F04：租金与营业额按商户算、拆不到项目，在别的项目也有经营或合同的商户不出，见 listMerchantIdsOperatingIn）。
+     * 照旧看全部商户行、平台合计与未归属营业额；其余只出在可触及项目内经营的商户行与由这些行并出的业态行，不出平台合计与未归属营业额。
      */
     public AnalyticsRecords.RentToSalesResponse rentToSales(
             String month, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
@@ -480,7 +479,7 @@ public class AnalyticsService {
             String period, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         AnalyticsRecords.RentToSalesAggregate agg = repository.rentToSales(period);
         boolean whole = reach.platformAdmin() || reach.allProjects();
-        // M737：非全平台口径的人只留只在可触及项目内经营的商户（M737-F04），店级、业态级都只用留下的行。
+        // M737：非全平台口径的人只留在可触及项目内经营的商户，店级、业态级都只用留下的行。
         Set<String> operating = whole ? Set.of() : repository.listMerchantIdsOperatingIn(reach.organizationIds());
         java.util.List<AnalyticsRecords.RentToSalesMerchantRow> merchants = whole ? agg.merchants()
                 : agg.merchants().stream().filter(m -> operating.contains(m.merchantId())).toList();
