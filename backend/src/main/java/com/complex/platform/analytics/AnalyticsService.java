@@ -462,7 +462,8 @@ public class AnalyticsService {
     /**
      * M737（业务地图「谁会看」：「项目级操作人员只看自己所在项目范围内的 KPI 和明细，看不到别的项目。」治理地图「KPI 可见性分层」：
      * 「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看」）：reach 由控制器按 contract.view 算好——平台管理员与勾了全部项目的人
-     * 照旧看全部商户行、平台合计与未归属营业额；其余只出在可触及项目内经营的商户行与由这些行并出的业态行，不出平台合计与未归属营业额。
+     * 看平台合计与未归属营业额；逐商户行只有平台管理员看全部，其余（含勾了全部项目的人，M737-F06）只出在可触及项目内经营的商户行与由这些行
+     * 并出的业态行；不能看全平台的人不出平台合计与未归属营业额。
      */
     public AnalyticsRecords.RentToSalesResponse rentToSales(
             String month, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
@@ -479,9 +480,10 @@ public class AnalyticsService {
             String period, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         AnalyticsRecords.RentToSalesAggregate agg = repository.rentToSales(period);
         boolean whole = reach.platformAdmin() || reach.allProjects();
-        // M737：非全平台口径的人只留在可触及项目内经营的商户，店级、业态级都只用留下的行。
-        Set<String> operating = whole ? Set.of() : repository.listMerchantIdsOperatingIn(reach.organizationIds());
-        java.util.List<AnalyticsRecords.RentToSalesMerchantRow> merchants = whole ? agg.merchants()
+        // M737：逐商户行只有平台管理员不过滤；其余（含勾了全部项目的人，M737-F06：治理地图「只能触及归属在项目或项目公司下……的账号与数据」）
+        // 只留在可触及项目内经营的商户，店级、业态级都只用留下的行。平台合计仍按全部商户算。
+        Set<String> operating = reach.platformAdmin() ? Set.of() : repository.listMerchantIdsOperatingIn(reach.organizationIds());
+        java.util.List<AnalyticsRecords.RentToSalesMerchantRow> merchants = reach.platformAdmin() ? agg.merchants()
                 : agg.merchants().stream().filter(m -> operating.contains(m.merchantId())).toList();
         // 店级（口径⑦ 商户即店）：每商户一行；无第三方营业额归属→比率 null 诚实标（NULL 分母只进平台级）。
         java.util.List<AnalyticsRecords.RentToSalesRow> byMerchant = merchants.stream()

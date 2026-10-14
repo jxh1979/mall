@@ -229,7 +229,35 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
                 .containsExactlyInAnyOrder(platform, ofProjectA, ofProjectB, ofMerchantA, ofMerchantB);
     }
 
+    // J5（M737-F06 租售比逐商户行）：商户甲（主项目 A）与「无」（主项目为空——V432 不回填历史商户的项目）同一账期各有一笔合同租金（100 分、900 分）。
+    // 逐商户行只有平台管理员不过滤；勾了全部项目的人也只出有经营项目的商户，平台合计仍含全部商户。修复前勾全部的人拿到「无」一行（第一处断言即红）。
+    @Test
+    void rentToSalesRowsForAllProjectsHoldersOnlyShowMerchantsOperatingInProjects() throws Exception {
+        String merchantA = merchant("a", projectA);
+        String merchantNone = merchant("none", null);
+        rent("a", merchantA, 100);
+        rent("none", merchantNone, 900);
+
+        RequestPostProcessor all = staffOfA("all", allProjectsRole("all", "contract.view"));
+        assertThat(rentToSalesMerchants(all)).containsExactly(merchantA);
+        assertThat(platformRentCent(all)).isEqualTo(1000L);
+
+        RequestPostProcessor admin = platformAdmin("contract.view");
+        assertThat(rentToSalesMerchants(admin)).containsExactlyInAnyOrder(merchantA, merchantNone);
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
+
+    /** 2098-07 账期的一笔合同租金应收（租售比分子）；账期远在未来，库里没有同期的行。 */
+    private void rent(String tag, String merchantId, long cent) {
+        String id = "ar_m737_rent_" + tag + "_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at, merchant_id)
+                VALUES (?, ?, 'receivable', ?, 'contract_rent', ?, ?, 0, ?, 'CNY', DATE '2098-07-31', '2098-07', 'pending_collection',
+                        now(), now(), ?)
+                """, id, id, merchantId, id, cent, cent, merchantId);
+    }
 
     private String userId(String tag) {
         return "usr_m737_" + tag + "_" + suffix;
@@ -368,5 +396,16 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     private List<String> snapshots(RequestPostProcessor session) throws Exception {
         return mine(session, "/api/v1/analytics/business-metric-snapshots", "$.data.items[*].snapshot_id");
+    }
+
+    private List<String> rentToSalesMerchants(RequestPostProcessor session) throws Exception {
+        return mine(session, "/api/v1/analytics/rent-to-sales?month=2098-07", "$.data.by_merchant[*].key");
+    }
+
+    private long platformRentCent(RequestPostProcessor session) throws Exception {
+        Number cent = JsonPath.read(mockMvc.perform(get("/api/v1/analytics/rent-to-sales?month=2098-07").with(session))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.platform.rent_cent");
+        return cent.longValue();
     }
 }
