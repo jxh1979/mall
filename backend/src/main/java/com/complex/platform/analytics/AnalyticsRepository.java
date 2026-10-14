@@ -76,7 +76,8 @@ public interface AnalyticsRepository {
     }
 
     /**
-     * M737：在这些项目经营的商户编号（V441 表注释：「商户经营项目＝merchants.project_id（主项目）加本表；本表只放主项目以外追加的项目」）。
+     * M737：只在这些项目经营的商户编号（V441 表注释：「商户经营项目＝merchants.project_id（主项目）加本表；本表只放主项目以外追加的项目」）。
+     * M737-F04：主项目、追加的经营项目与该商户全部合同的项目都须在集合内（合同项目为空的按不在内）——调用方拿它筛的都是拆不到项目的商户级数字。
      * 空集合返回空。默认空（供无需此能力的内存测试替身）；真实实现见 JdbcAnalyticsRepository。
      */
     default java.util.Set<String> listMerchantIdsOperatingIn(java.util.Collection<String> projectIds) {

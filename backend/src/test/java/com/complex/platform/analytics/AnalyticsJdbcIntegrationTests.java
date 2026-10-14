@@ -532,7 +532,7 @@ class AnalyticsJdbcIntegrationTests {
         }
         setProject("merchants", "mch_m737_a", M737_PROJECT_A);
         setProject("merchants", "mch_m737_b", M737_PROJECT_B);
-        // mch_m737_extra 主项目为空，只在 merchant_projects 里追加了项目 A
+        // mch_m737_extra 主项目为空，只在 merchant_projects 里追加了项目 A——M737-F04：主项目须在集合内，主项目为空的不算在任何项目内
         jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id, project_id) VALUES ('mch_m737_extra', :project_id)",
                 Map.of("project_id", M737_PROJECT_A));
 
@@ -543,7 +543,7 @@ class AnalyticsJdbcIntegrationTests {
                 () -> repository.listOverdueMerchantWorkOrders(start, end, asOf, 200, 0).stream()
                         .map(AnalyticsRecords.OverdueWorkOrderRow::workOrderId).toList(),
                 "mwo_m737_a", "mwo_m737_b", "mwo_m737_none");
-        assertThat(ids.apply(List.of(M737_PROJECT_A))).contains("mwo_m737_extra");
+        assertThat(ids.apply(List.of(M737_PROJECT_A))).doesNotContain("mwo_m737_extra");
         assertThat(ids.apply(List.of(M737_PROJECT_B))).doesNotContain("mwo_m737_extra");
     }
 
