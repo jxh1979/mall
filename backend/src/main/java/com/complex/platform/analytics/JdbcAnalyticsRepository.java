@@ -2783,7 +2783,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return row;
     }
 
-    /** M737：null＝不过滤（平台管理员、勾了全部项目的）；调用前空集合已提前返回。谓词写作 (:all_projects OR <列> IN (:project_ids))。 */
+    /** M737：null＝不过滤（钻取明细只对平台管理员传 null，M737-F07；指标明细里没有项目列的指标对勾了全部项目的人也传 null）；
+     *  调用前空集合已提前返回。谓词写作 (:all_projects OR <列> IN (:project_ids))。 */
     private static MapSqlParameterSource withProjects(MapSqlParameterSource params, java.util.Collection<String> projectIds) {
         return params.addValue("all_projects", projectIds == null)
                 .addValue("project_ids", projectIds == null ? List.of("") : projectIds);

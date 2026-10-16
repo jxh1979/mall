@@ -155,7 +155,7 @@ public interface AnalyticsRepository {
     /** S3:90 天内到期的生效合同数(到期预警 KPI)。 */
     long countExpiringContracts(LocalDate asOf, int windowDays);
 
-    // M737：以下 6 个钻取明细方法带末参 projectIds（可触及项目）——null=不过滤（平台管理员、勾了全部项目的人，含项目列为空的行），
+    // M737：以下 6 个钻取明细方法带末参 projectIds（可触及项目）——null=不过滤（只有平台管理员，含项目列为空的行；M737-F07），
     //   非 null 只出项目列落在集合内的行（项目列为空的行不出），空集合一行不出。原签名保留为「平台全量便捷重载」（传 null）。
     /** S3 钻取:未出租的铺位明细(平台全量便捷重载=不按项目过滤)。 */
     default java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset) {

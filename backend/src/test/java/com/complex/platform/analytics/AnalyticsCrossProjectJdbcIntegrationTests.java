@@ -3,6 +3,7 @@ package com.complex.platform.analytics;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -264,6 +266,35 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         assertThat(overdueMerchantWorkOrders(admin)).containsExactlyInAnyOrder(woA, woNone);
     }
 
+    // J7（M737-F08 复盘锁重试）：A 的员工只经角色「可查看 A、B」持有 analytics.review.lock，用提交编号 K 建锁（建在 A），
+    // 同一编号立刻重试返回同一把锁。角色的可查看项目减掉 A（减少审批生效后的状态：直接删 role_viewable_projects 那一行）后，
+    // 同一编号、同一内容重试被拒，不返回 A 的锁、不新增锁。修复前减掉 A 后的重试拿到 A 的锁（减掉 A 之后第一处断言即红）。
+    @Test
+    void reviewLockRetryAfterOwnProjectLeavesReachIsDenied() throws Exception {
+        String reduced = role("reduced", false, List.of(projectA, projectB), "analytics.review.lock");
+        RequestPostProcessor staff = staffOfA("lock", reduced);
+        String key = "m737-lock-" + suffix;
+        String body = """
+                {"idempotency_key": "%s", "domain": "all", "operator_note": "月度复盘", "metric_count": 3}
+                """.formatted(key);
+        String lockId = JsonPath.read(createReviewLock(staff, body).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        assertThat(reviewLockProject(key)).isEqualTo(projectA);
+
+        // 仍可触及 A：同一编号重试照旧返回第一次的锁，不新增
+        String again = JsonPath.read(createReviewLock(staff, body).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        assertThat(again).isEqualTo(lockId);
+        assertThat(reviewLockCount(key)).isEqualTo(1);
+
+        // 角色的可查看项目减掉 A 并生效：同一编号重试被拒，不返回 A 的锁，锁数量不变
+        jdbcTemplate.update("DELETE FROM role_viewable_projects WHERE role_id = ? AND viewable_id = ?", reduced, projectA);
+        createReviewLock(staff, body)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_ORG_FORBIDDEN"));
+        assertThat(reviewLockCount(key)).isEqualTo(1);
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     /** 一张今天到期、已标超时的商户服务工单（超时明细取当日窗口）。 */
@@ -425,6 +456,20 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     private List<String> snapshots(RequestPostProcessor session) throws Exception {
         return mine(session, "/api/v1/analytics/business-metric-snapshots", "$.data.items[*].snapshot_id");
+    }
+
+    private org.springframework.test.web.servlet.ResultActions createReviewLock(RequestPostProcessor session, String body) throws Exception {
+        return mockMvc.perform(post("/api/v1/analytics/review-locks").with(session)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    private String reviewLockProject(String key) {
+        return jdbcTemplate.queryForObject("SELECT project_id FROM business_review_locks WHERE idempotency_key = ?", String.class, key);
+    }
+
+    private int reviewLockCount(String key) {
+        Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM business_review_locks WHERE idempotency_key = ?", Integer.class, key);
+        return n == null ? 0 : n;
     }
 
     private List<String> overdueMerchantWorkOrders(RequestPostProcessor session) throws Exception {

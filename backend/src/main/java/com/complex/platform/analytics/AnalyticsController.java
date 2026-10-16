@@ -167,7 +167,7 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
             @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
         authorizationService.requirePermission("contract.view");
-        // M737：商户、外包照旧被拒；其余只出项目列落在 contract.view 可触及项目内的行（平台管理员、勾了全部项目的不过滤）。
+        // M737：商户、外包照旧被拒；其余只出项目列落在 contract.view 可触及项目内的行（只有平台管理员不过滤，M737-F07）。
         java.util.List<AnalyticsRecords.VacantSpaceRow> items =
                 service.listVacantSpaces(limit, offset, projectIds(reach("contract.view")));
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));

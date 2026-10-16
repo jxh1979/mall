@@ -342,7 +342,7 @@ public class AnalyticsService {
     private static final java.util.Set<String> AR_BUCKETS =
             java.util.Set.of("a0_30", "a31_60", "a61_90", "a90p");
 
-    // M737：以下钻取明细方法带末参 projectIds（控制器按入口权限码算出的可触及项目）——null=不过滤（平台管理员、勾了全部项目的人），
+    // M737：以下钻取明细方法带末参 projectIds（控制器按入口权限码算出的可触及项目）——null=不过滤（只有平台管理员；勾了全部项目的人自 M737-F07 起传可触及项目），
     //   非 null 只出项目列落在集合内的行，空集合一行不出。原签名保留为「平台全量便捷重载」（传 null）。
     /** S2 钻取:欠费商户明细排行(平台全量便捷重载=不按项目过滤)。 */
     public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(String bucket, int limit, int offset) {
@@ -1405,8 +1405,12 @@ public class AnalyticsService {
 
     @Transactional
     public AnalyticsRecords.BusinessReviewLockRecord createReviewLock(BusinessReviewLockRequest request) {
-        // M737：可触及范围在进入写操作之前算好，传给里面的闸。
+        // M737：可触及范围在进入写操作之前算好。M737-F08：本人所属项目不在可触及范围内的，在进入幂等与写操作之前就拒绝——
+        // 用原提交编号重试（角色的可查看项目已减掉本人项目且审批生效）也不返回第一次的结果、不建锁；仍可触及的照旧返回第一次的结果。
         var reach = reviewLockReach();
+        if (!reach.platformAdmin() && !reach.covers(reach.ownProject())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "本人所属项目不在该权限可查看的项目内，不能锁定经营复盘");
+        }
         return executeWrite(
                 "analytics.lock-business-review",
                 request == null ? null : request.idempotencyKey(),
@@ -1426,11 +1430,8 @@ public class AnalyticsService {
         String domain = requireText(actual.domain(), "domain");
         String operatorNote = requireText(actual.operatorNote(), "operator_note");
         int metricCount = actual.metricCount() == null ? 0 : Math.max(0, actual.metricCount());
-        // project_id 与 locked_by 由 token 派生，绝不取请求体（AC-ISO-2）。锁仍建在本人项目（平台管理员落 NULL）。
-        // M737：该权限只来自没勾中本人项目的可跨项目角色时，本人项目不在可触及范围内，不能建。
-        if (!reach.platformAdmin() && !reach.covers(reach.ownProject())) {
-            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "本人所属项目不在该权限可查看的项目内，不能锁定经营复盘");
-        }
+        // project_id 与 locked_by 由 token 派生，绝不取请求体（AC-ISO-2）。锁仍建在本人项目（平台管理员落 NULL）；
+        // 本人项目可触及与否已在 createReviewLock 进入写操作之前判过（M737-F08）。
         String projectScope = reach.platformAdmin() ? null : reach.ownProject();
         String lockedBy = reviewLockActorId();
         return repository.saveReviewLock(new AnalyticsRecords.BusinessReviewLockRecord(
