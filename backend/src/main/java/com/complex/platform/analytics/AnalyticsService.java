@@ -203,6 +203,10 @@ public class AnalyticsService {
     // setter 注入保持既有 4 个构造器族不变（现有单测用旧构造器，authorizationService=null 时按平台全量兜底）。
     private com.complex.platform.access.AuthorizationService authorizationService;
 
+    // M737：平台管理员的可触及范围（一切）。各「平台全量便捷重载」与未注入判定服务时的兜底共用。
+    private static final com.complex.platform.access.AuthorizationService.ProjectReach PLATFORM_ADMIN_REACH =
+            new com.complex.platform.access.AuthorizationService.ProjectReach(true, true, null, true, Set.of());
+
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setAuthorizationService(com.complex.platform.access.AuthorizationService authorizationService) {
         this.authorizationService = authorizationService;
@@ -338,8 +342,16 @@ public class AnalyticsService {
     private static final java.util.Set<String> AR_BUCKETS =
             java.util.Set.of("a0_30", "a31_60", "a61_90", "a90p");
 
-    /** S2 钻取:欠费商户明细排行(实时,与账龄快照同过滤同口径;bucket 可空=全部)。 */
+    // M737：以下钻取明细方法带末参 projectIds（控制器按入口权限码算出的可触及项目）——null=不过滤（只有平台管理员；勾了全部项目的人自 M737-F07 起传可触及项目），
+    //   非 null 只出项目列落在集合内的行，空集合一行不出。原签名保留为「平台全量便捷重载」（传 null）。
+    /** S2 钻取:欠费商户明细排行(平台全量便捷重载=不按项目过滤)。 */
     public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(String bucket, int limit, int offset) {
+        return listOverdueDebtors(bucket, limit, offset, null);
+    }
+
+    /** S2 钻取:欠费商户明细排行(实时,与账龄快照同过滤同口径;bucket 可空=全部)。 */
+    public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(String bucket, int limit, int offset,
+            java.util.Collection<String> projectIds) {
         String normalized = bucket == null || bucket.isBlank() ? null : bucket;
         if (normalized != null && !AR_BUCKETS.contains(normalized)) {
             throw com.complex.platform.common.api.ApiException.badRequest(
@@ -352,24 +364,36 @@ public class AnalyticsService {
                 "finance.ar_ap.view",
                 "ar_ap_items",
                 () -> repository.listOverdueDebtors(
-                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), finalBucket, limit, offset)
+                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), finalBucket, limit, offset, projectIds)
         );
     }
 
-    /** S3 钻取:未出租铺位明细(实时,与出租率快照同过滤同口径)。 */
+    /** S3 钻取:未出租铺位明细(平台全量便捷重载=不按项目过滤)。 */
     public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(int limit, int offset) {
+        return listVacantSpaces(limit, offset, null);
+    }
+
+    /** S3 钻取:未出租铺位明细(实时,与出租率快照同过滤同口径)。 */
+    public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(int limit, int offset,
+            java.util.Collection<String> projectIds) {
         return readSingle(
                 "analytics.vacant_spaces.viewed",
                 "analytics.vacant_spaces.view_failed",
                 "contract.view",
                 "spaces",
                 () -> repository.listVacantSpaces(
-                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), limit, offset)
+                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), limit, offset, projectIds)
         );
     }
 
-    /** S3 钻取:到期预警合同明细(窗口天数 1-365)。 */
+    /** S3 钻取:到期预警合同明细(平台全量便捷重载=不按项目过滤)。 */
     public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(int windowDays, int limit, int offset) {
+        return listExpiringContracts(windowDays, limit, offset, null);
+    }
+
+    /** S3 钻取:到期预警合同明细(窗口天数 1-365)。 */
+    public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(int windowDays, int limit, int offset,
+            java.util.Collection<String> projectIds) {
         int days = Math.min(Math.max(windowDays, 1), 365);
         return readSingle(
                 "analytics.expiring_contracts.viewed",
@@ -377,7 +401,7 @@ public class AnalyticsService {
                 "contract.view",
                 "contracts",
                 () -> repository.listExpiringContracts(
-                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), days, limit, offset)
+                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), days, limit, offset, projectIds)
         );
     }
 
@@ -429,26 +453,45 @@ public class AnalyticsService {
     }
 
     /** P1c 店级/业态级租售比（2026-07-21 拍板）：租金(月租+营业额抽成)/第三方回流营业额；三档+未归属标注。
-     *  权限 contract.view（与出租看板同口径受众）；平台级跨商户汇总在控制器 requirePlatformScope。 */
+     *  权限 contract.view（与出租看板同口径受众）；平台级跨商户汇总在控制器 requirePlatformScope。
+     *  平台全量便捷重载（按平台管理员的可触及范围），只给现有单测用。控制器走带 reach 的版本。 */
     public AnalyticsRecords.RentToSalesResponse rentToSales(String month) {
+        return rentToSales(month, PLATFORM_ADMIN_REACH);
+    }
+
+    /**
+     * M737（业务地图「谁会看」：「项目级操作人员只看自己所在项目范围内的 KPI 和明细，看不到别的项目。」治理地图「KPI 可见性分层」：
+     * 「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看」）：reach 由控制器按 contract.view 算好——平台管理员与勾了全部项目的人
+     * 看平台合计与未归属营业额；逐商户行只有平台管理员看全部，其余（含勾了全部项目的人，M737-F06）只出在可触及项目内经营的商户行与由这些行
+     * 并出的业态行；不能看全平台的人不出平台合计与未归属营业额。
+     */
+    public AnalyticsRecords.RentToSalesResponse rentToSales(
+            String month, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         String period = parseMonth(month).toString();
         return readSingle(
                 "analytics.rent_to_sales.viewed",
                 "analytics.rent_to_sales.view_failed",
                 "contract.view",
                 "ar_ap_items",
-                () -> buildRentToSales(period));
+                () -> buildRentToSales(period, reach));
     }
 
-    private AnalyticsRecords.RentToSalesResponse buildRentToSales(String period) {
+    private AnalyticsRecords.RentToSalesResponse buildRentToSales(
+            String period, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         AnalyticsRecords.RentToSalesAggregate agg = repository.rentToSales(period);
+        boolean whole = reach.platformAdmin() || reach.allProjects();
+        // M737：逐商户行只有平台管理员不过滤；其余（含勾了全部项目的人，M737-F06：治理地图「只能触及归属在项目或项目公司下……的账号与数据」）
+        // 只留在可触及项目内经营的商户，店级、业态级都只用留下的行。平台合计仍按全部商户算。
+        Set<String> operating = reach.platformAdmin() ? Set.of() : repository.listMerchantIdsOperatingIn(reach.organizationIds());
+        java.util.List<AnalyticsRecords.RentToSalesMerchantRow> merchants = reach.platformAdmin() ? agg.merchants()
+                : agg.merchants().stream().filter(m -> operating.contains(m.merchantId())).toList();
         // 店级（口径⑦ 商户即店）：每商户一行；无第三方营业额归属→比率 null 诚实标（NULL 分母只进平台级）。
-        java.util.List<AnalyticsRecords.RentToSalesRow> byMerchant = agg.merchants().stream()
+        java.util.List<AnalyticsRecords.RentToSalesRow> byMerchant = merchants.stream()
                 .map(m -> rentToSalesRow(m.merchantId(), m.merchantName(), m.rentCent(), m.salesCent()))
                 .toList();
         // 业态级（口径⑥ 复用 merchant_type，不新增维度）：按 merchant_type 合并租金/营业额。
         Map<String, long[]> byType = new LinkedHashMap<>();
-        for (AnalyticsRecords.RentToSalesMerchantRow m : agg.merchants()) {
+        for (AnalyticsRecords.RentToSalesMerchantRow m : merchants) {
             long[] acc = byType.computeIfAbsent(m.merchantType() == null ? "" : m.merchantType(), k -> new long[2]);
             acc[0] += m.rentCent();
             acc[1] += m.salesCent();
@@ -457,6 +500,11 @@ public class AnalyticsService {
                 .map(e -> rentToSalesRow(e.getKey(), e.getKey(), e.getValue()[0], e.getValue()[1]))
                 .sorted((a, b) -> Long.compare(b.rentCent(), a.rentCent()))
                 .toList();
+        if (!whole) {
+            // M737：平台合计与未归属营业额是全平台口径，不给没勾全部项目的人。
+            return new AnalyticsRecords.RentToSalesResponse(period, byMerchant, byMerchantType, null, 0L,
+                    "仅含您可查看项目内经营的商户，不含平台合计与未归属营业额");
+        }
         // 平台级（口径③⑧）：分子=全部已归属租金；分母=全部已归属营业额 + 未归属营业额。
         long totalRent = agg.merchants().stream().mapToLong(AnalyticsRecords.RentToSalesMerchantRow::rentCent).sum();
         long attributedSales = agg.merchants().stream().mapToLong(AnalyticsRecords.RentToSalesMerchantRow::salesCent).sum();
@@ -637,9 +685,16 @@ public class AnalyticsService {
         return current.subtract(base).divide(base.abs(), 4, java.math.RoundingMode.HALF_UP);
     }
 
-    /** S4 钻取:超时工单明细(实时,与超时率分子同过滤:时限落当日 facility 窗且超时;
-     * 清单#13:source=merchant 查商户服务工单,同窗同口径)。 */
+    /** S4 钻取:超时工单明细(平台全量便捷重载=不按项目过滤)。 */
     public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(String source, int limit, int offset) {
+        return listOverdueWorkOrders(source, limit, offset, null);
+    }
+
+    /** S4 钻取:超时工单明细(实时,与超时率分子同过滤:时限落当日 facility 窗且超时;
+     * 清单#13:source=merchant 查商户服务工单,同窗同口径)。
+     * M737：projectIds 非 null 时设施工单按工单的项目列、商户工单按商户的经营项目过滤。 */
+    public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(String source, int limit, int offset,
+            java.util.Collection<String> projectIds) {
         boolean merchant = "merchant".equals(source);
         if (!merchant && !"facility".equals(source)) {
             throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "来源必须为设施（facility）或商户（merchant）");
@@ -655,14 +710,20 @@ public class AnalyticsService {
                     java.time.Instant windowStart = businessDayResolver.startInstant("facility", businessDate);
                     java.time.Instant windowEnd = businessDayResolver.endInstant("facility", businessDate);
                     return merchant
-                            ? repository.listOverdueMerchantWorkOrders(windowStart, windowEnd, now, limit, offset)
-                            : repository.listOverdueWorkOrders(windowStart, windowEnd, now, limit, offset);
+                            ? repository.listOverdueMerchantWorkOrders(windowStart, windowEnd, now, limit, offset, projectIds)
+                            : repository.listOverdueWorkOrders(windowStart, windowEnd, now, limit, offset, projectIds);
                 }
         );
     }
 
-    /** S5 钻取:异常读数明细(实时,与 energy.abnormal_count 同过滤:读数落当日 energy 窗)。 */
+    /** S5 钻取:异常读数明细(平台全量便捷重载=不按项目过滤)。 */
     public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(int limit, int offset) {
+        return listAbnormalReadings(limit, offset, null);
+    }
+
+    /** S5 钻取:异常读数明细(实时,与 energy.abnormal_count 同过滤:读数落当日 energy 窗)。 */
+    public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(int limit, int offset,
+            java.util.Collection<String> projectIds) {
         return readSingle(
                 "analytics.abnormal_readings.viewed",
                 "analytics.abnormal_readings.view_failed",
@@ -673,7 +734,7 @@ public class AnalyticsService {
                     LocalDate businessDate = businessDayResolver.businessDate("energy", now);
                     return repository.listAbnormalReadings(
                             businessDayResolver.startInstant("energy", businessDate),
-                            businessDayResolver.endInstant("energy", businessDate), limit, offset);
+                            businessDayResolver.endInstant("energy", businessDate), limit, offset, projectIds);
                 }
         );
     }
@@ -760,27 +821,43 @@ public class AnalyticsService {
         return groupOverview(null);
     }
 
+    /** 平台全量便捷重载（按平台管理员的可触及范围），只给现有单测用。控制器走带 reach 的版本。 */
     public GroupOverviewResponse groupOverview(String groupBy) {
+        return groupOverview(groupBy, PLATFORM_ADMIN_REACH);
+    }
+
+    /**
+     * M737（治理地图「集团下钻细则（已确认）」：「集团视图的跨综合体查看按是否持有可跨项目角色判定（见「权限规则」）」；
+     * 「KPI 可见性分层」：「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看；只逐个勾选了项目的人，
+     * 只能分别查看被选中项目各自的数据。」）：reach 由控制器按 analytics.group.view 算好——平台管理员与勾了全部项目的人
+     * 看全部项目行与平台口径回退行；其余只出可触及项目的行，没有可见行时 projects 为空、不出回退行。
+     */
+    public GroupOverviewResponse groupOverview(
+            String groupBy, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         String normalizedGroupBy = normalizeGroupBy(groupBy);
         return readSingle(
                 "analytics.group_overview.viewed",
                 "analytics.group_overview.view_failed",
                 "analytics.group.view",
                 "analytics_business_metric_snapshot",
-                () -> buildGroupOverview(normalizedGroupBy)
+                () -> buildGroupOverview(normalizedGroupBy, reach)
         );
     }
 
-    private GroupOverviewResponse buildGroupOverview(String groupBy) {
+    private GroupOverviewResponse buildGroupOverview(
+            String groupBy, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         Instant now = Instant.now(clock);
         Optional<LocalDate> etlDate = repository.latestEtlBusinessDate(null);
         LocalDate businessDate = etlDate.orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
         boolean byEntity = "entity".equals(groupBy);
+        boolean whole = reach.platformAdmin() || reach.allProjects();
 
         // ⑤ 集团多项目 ETL：优先读 segment_type='project' 维度，按 project_id 产出 per-project rollup（多综合体→多行）。
         // 无 project 口径快照时回退到平台口径单行（向后兼容旧 ETL 与"无快照诚实空态"），不伪造多 project。
+        // M737：非全平台口径的人只留可触及项目的行，后面的合并、平均、低于基准标记都只按留下的行算。
         List<String> projectIds = etlDate.isPresent()
-                ? repository.listProjectIdsWithEtlSnapshot(businessDate)
+                ? repository.listProjectIdsWithEtlSnapshot(businessDate).stream()
+                        .filter(projectId -> whole || reach.covers(projectId)).toList()
                 : List.of();
 
         LinkedHashMap<String, RawGroupUnit> units = new LinkedHashMap<>();
@@ -799,6 +876,10 @@ public class AnalyticsService {
         }
 
         if (units.isEmpty()) {
+            if (!whole) {
+                // M737：回退行是全平台合计，不给没勾全部项目的人。
+                return new GroupOverviewResponse(now, businessDate, groupBy, Map.of(), List.of());
+            }
             // 回退：平台口径单 project rollup（单综合体合成 project 标识，口径与现状一致）。
             Map<String, BigDecimal> snapshots = etlDate.isPresent()
                     ? repository.readMetricSnapshots(businessDate, null)
@@ -927,13 +1008,42 @@ public class AnalyticsService {
         }
     }
 
+    /** 平台全量便捷重载（按平台管理员的可触及范围），只给现有单测用。控制器走带 reach 的版本。 */
     public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {
+        return listBusinessMetricSnapshots(PLATFORM_ADMIN_REACH);
+    }
+
+    /**
+     * M737（治理地图「KPI 可见性分层」：「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看；只逐个勾选了项目的人，
+     * 只能分别查看被选中项目各自的数据。」）：reach 由控制器按 analytics.dashboard.view 算好——平台管理员看全表；其余按段类型逐行留：
+     * 平台段只给勾了全部项目的人，项目段按可触及项目，商户段按在可触及项目经营的商户，别的段不出。
+     */
+    public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots(
+            com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         return readPage(
                 "analytics.business_metric_snapshot.viewed",
                 "analytics.business_metric_snapshot.view_failed",
                 "analytics.dashboard.view",
                 "analytics_business_metric_snapshot",
-                repository::listBusinessMetricSnapshots
+                () -> {
+                    List<BusinessMetricSnapshotRecord> snapshots = repository.listBusinessMetricSnapshots();
+                    if (reach.platformAdmin()) {
+                        return snapshots;
+                    }
+                    Set<String> merchantIds = repository.listMerchantIdsOperatingIn(reach.organizationIds());
+                    // ponytail: 全表取出后在内存里筛（本来就不分页）；表大了改成按段类型下推到 SQL。
+                    return snapshots.stream().filter(snapshot -> {
+                        String segmentType = snapshot.segmentType();
+                        if (DashboardAggregationJob.SEGMENT_PLATFORM.equals(segmentType)) {
+                            return reach.allProjects();
+                        }
+                        if (DashboardAggregationJob.SEGMENT_PROJECT.equals(segmentType)) {
+                            return reach.allProjects() || reach.covers(snapshot.segmentId());
+                        }
+                        return DashboardAggregationJob.SEGMENT_MERCHANT.equals(segmentType)
+                                && snapshot.segmentId() != null && merchantIds.contains(snapshot.segmentId());
+                    }).toList();
+                }
         );
     }
 
@@ -958,6 +1068,41 @@ public class AnalyticsService {
                 "analytics_merchant_summary",
                 () -> scope.map(repository::listAnalyticsMerchantsByMerchant)
                         .orElseGet(repository::listAnalyticsMerchants)
+        );
+    }
+
+    /**
+     * M737（业务地图「谁会看」：「项目级操作人员只看自己所在项目范围内的 KPI 和明细，看不到别的项目。」）：
+     * 不带商户归属的员工按可触及项目看商户健康分——只出在这些项目经营的商户。
+     */
+    public PageResponse<MerchantHealthScoreRecord> listMerchantHealthScoresInProjects(java.util.Collection<String> projectIds) {
+        return readPage(
+                "analytics.merchant_health.viewed",
+                "analytics.merchant_health.viewed_failed",
+                "analytics.dashboard.view",
+                "analytics_merchant_health_score",
+                () -> {
+                    Set<String> merchantIds = repository.listMerchantIdsOperatingIn(projectIds);
+                    // ponytail: 全量取出后在内存里按商户筛；商户多到成为负担时改成 SQL 里按经营商户子查询下推。
+                    return repository.listMerchantHealthScores().stream()
+                            .filter(score -> merchantIds.contains(score.merchantId())).toList();
+                }
+        );
+    }
+
+    /** M737：同上，商户经营摘要。 */
+    public PageResponse<MerchantSummaryRecord> listAnalyticsMerchantsInProjects(java.util.Collection<String> projectIds) {
+        return readPage(
+                "analytics.merchant_summary.viewed",
+                "analytics.merchant_summary.viewed_failed",
+                "analytics.dashboard.view",
+                "analytics_merchant_summary",
+                () -> {
+                    Set<String> merchantIds = repository.listMerchantIdsOperatingIn(projectIds);
+                    // ponytail: 同上，全量取出后在内存里筛。
+                    return repository.listAnalyticsMerchants().stream()
+                            .filter(summary -> merchantIds.contains(summary.merchantId())).toList();
+                }
         );
     }
 
@@ -1241,12 +1386,31 @@ public class AnalyticsService {
                 "analytics.review_lock.viewed_failed",
                 "analytics.review.lock",
                 "analytics_business_review_lock",
-                () -> repository.listReviewLocks(reviewLockProjectScope())
+                () -> {
+                    var reach = reviewLockReach();
+                    if (reach.platformAdmin()) {
+                        return repository.listReviewLocks(null);
+                    }
+                    Optional<String> ownProject = reach.onlyOwnProject();
+                    if (ownProject.isPresent()) {
+                        return repository.listReviewLocks(ownProject.get());
+                    }
+                    // M737：持有可跨项目角色的人看可触及项目的锁；项目为空的锁不出。
+                    // ponytail: 全量取出后在内存里筛；锁多到成为负担时改成 SQL 里 project_id IN (...) 下推。
+                    return repository.listReviewLocks(null).stream()
+                            .filter(lock -> reach.covers(lock.projectId())).toList();
+                }
         );
     }
 
     @Transactional
     public AnalyticsRecords.BusinessReviewLockRecord createReviewLock(BusinessReviewLockRequest request) {
+        // M737：可触及范围在进入写操作之前算好。M737-F08：本人所属项目不在可触及范围内的，在进入幂等与写操作之前就拒绝——
+        // 用原提交编号重试（角色的可查看项目已减掉本人项目且审批生效）也不返回第一次的结果、不建锁；仍可触及的照旧返回第一次的结果。
+        var reach = reviewLockReach();
+        if (!reach.platformAdmin() && !reach.covers(reach.ownProject())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "本人所属项目不在该权限可查看的项目内，不能锁定经营复盘");
+        }
         return executeWrite(
                 "analytics.lock-business-review",
                 request == null ? null : request.idempotencyKey(),
@@ -1256,17 +1420,19 @@ public class AnalyticsService {
                 "analytics.review.lock_failed",
                 "analytics.review.lock",
                 "analytics_business_review_lock",
-                () -> createReviewLockInternal(request)
+                () -> createReviewLockInternal(request, reach)
         );
     }
 
-    private AnalyticsRecords.BusinessReviewLockRecord createReviewLockInternal(BusinessReviewLockRequest request) {
+    private AnalyticsRecords.BusinessReviewLockRecord createReviewLockInternal(
+            BusinessReviewLockRequest request, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         BusinessReviewLockRequest actual = requireRequest(request);
         String domain = requireText(actual.domain(), "domain");
         String operatorNote = requireText(actual.operatorNote(), "operator_note");
         int metricCount = actual.metricCount() == null ? 0 : Math.max(0, actual.metricCount());
-        // project_id 与 locked_by 由 token 派生，绝不取请求体（AC-ISO-2）。
-        String projectScope = reviewLockProjectScope();
+        // project_id 与 locked_by 由 token 派生，绝不取请求体（AC-ISO-2）。锁仍建在本人项目（平台管理员落 NULL）；
+        // 本人项目可触及与否已在 createReviewLock 进入写操作之前判过（M737-F08）。
+        String projectScope = reach.platformAdmin() ? null : reach.ownProject();
         String lockedBy = reviewLockActorId();
         return repository.saveReviewLock(new AnalyticsRecords.BusinessReviewLockRecord(
                 UUID.randomUUID().toString(),
@@ -1280,11 +1446,14 @@ public class AnalyticsService {
         ));
     }
 
-    /** token 派生项目 scope：平台管理员/无组织归属=null 见全量并落 NULL；项目员工=其项目（V214 范式）。 */
-    private String reviewLockProjectScope() {
+    /**
+     * token 派生可触及项目（M737：按 analytics.review.lock 算，持有可跨项目角色的人看得到角色可查看项目的锁）：
+     * 平台管理员见全量并落 NULL；其余按可触及项目看，锁建在本人项目（V214 范式）。未注入判定服务（现有单测）按平台管理员兜底。
+     */
+    private com.complex.platform.access.AuthorizationService.ProjectReach reviewLockReach() {
         return authorizationService == null
-                ? null
-                : authorizationService.currentProjectScopeQuietly().orElse(null);
+                ? PLATFORM_ADMIN_REACH
+                : authorizationService.projectReach(authorizationService.currentActor(), "analytics.review.lock");
     }
 
     private String reviewLockActorId() {
@@ -1563,7 +1732,7 @@ public class AnalyticsService {
      * 口径铁律：可加=区间求和；比率=分子/分母（part 两页签）；余额=区间末值（取 to，from 不参与）。
      * 权限：控制器已做「契约宽权限 + 登记项权限」双重 fail-closed 校验；审计事件按登记项权限落账。
      */
-    /** 平台口径（空项目作用域=平台管理员看全量）便捷重载。项目级调用须走带 projectScope 的 7 参版本。 */
+    /** 平台口径（null 项目作用域=平台管理员看全量）便捷重载。项目级调用须走带 projectScope 的 7 参版本。 */
     public AnalyticsRecords.MetricDetailResponse metricDetail(
             String metricKey, String part, LocalDate from, LocalDate to, int page, int size) {
         return metricDetail(metricKey, part, from, to, page, size, null);
@@ -1571,12 +1740,13 @@ public class AnalyticsService {
 
     /**
      * KPI 统一明细（项目作用域收紧，2026-07-19 用户拍板）。
-     * projectScope：调用方所属综合体（controller 由 currentProjectScopeQuietly 派生，绝不取请求体）；
-     *   null=平台管理员/无组织归属=看全量（行为不变）；非空=项目员工→按登记项 scope 列过滤只见本项目。
-     * platform_only 指标（登记簿未声明 scope 列）遇非空 projectScope → fail-closed 403（服务层纵深防御，与 controller 一致）。
+     * projectScope：调用方可查看的项目（M737：controller 按两个权限码可触及项目的交集派生，绝不取请求体）；
+     *   null=看全量（平台管理员；勾了全部项目的人看没有项目列的指标）；非 null=按登记项 scope 列过滤只见集合内的项目（空集合一行不出）。
+     * platform_only 指标（登记簿未声明 scope 列）遇非 null projectScope → fail-closed 403（服务层纵深防御）。
      */
     public AnalyticsRecords.MetricDetailResponse metricDetail(
-            String metricKey, String part, LocalDate from, LocalDate to, int page, int size, String projectScope) {
+            String metricKey, String part, LocalDate from, LocalDate to, int page, int size,
+            java.util.Collection<String> projectScope) {
         MetricRegistry.MetricDefinition definition = MetricRegistry.require(metricKey);
         return readSingle(
                 "analytics.metric_detail.viewed",
@@ -1588,7 +1758,7 @@ public class AnalyticsService {
 
     private AnalyticsRecords.MetricDetailResponse buildMetricDetail(
             MetricRegistry.MetricDefinition definition, String part, LocalDate from, LocalDate to, int page, int size,
-            String projectScope) {
+            java.util.Collection<String> projectScope) {
         // 项目作用域收紧（fail-closed 纵深防御）：平台口径指标（无综合体维度）拒绝项目级下钻——
         // 只有平台管理者能看平台口径聚合；项目级操作者只能看本项目内容（controller 已同判，此处防绕过服务层直调）。
         if (projectScope != null && !MetricRegistry.isProjectScoped(definition)) {
@@ -1596,7 +1766,7 @@ public class AnalyticsService {
                     "该指标为平台口径，项目级不可下钻（仅平台管理者可见平台聚合）");
         }
         // 平台口径指标（非项目作用域）不注入项目谓词：传 null 给带 scope 的仓储方法保持平台全量。
-        String scope = MetricRegistry.isProjectScoped(definition) ? projectScope : null;
+        java.util.Collection<String> scope = MetricRegistry.isProjectScoped(definition) ? projectScope : null;
         if (from != null && to != null && from.isAfter(to)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "起始日期不能晚于结束日期");
         }
@@ -1715,12 +1885,12 @@ public class AnalyticsService {
                 null, null, appendProjectScopeNote(null, scope), definition.columns(), detail, safePage, safeSize, true);
     }
 
-    /** 项目级作用域口径说明（全中文）：非空 scope 时在明细页顶部标注数字已限定为调用方所属综合体。 */
-    private static String appendProjectScopeNote(String base, String scope) {
+    /** 项目级作用域口径说明（全中文）：非 null scope 时在明细页顶部标注数字已限定为调用方可查看的项目。 */
+    private static String appendProjectScopeNote(String base, java.util.Collection<String> scope) {
         if (scope == null) {
             return base;
         }
-        String scoped = "本明细已限定为您所属综合体（项目级作用域），非平台全量";
+        String scoped = "本明细已限定为您可查看的项目，非平台全量";
         return base == null || base.isBlank() ? scoped : base + "；" + scoped;
     }
 

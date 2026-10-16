@@ -44,17 +44,54 @@ public class AnalyticsController {
         this.operatingParamsService = operatingParamsService;
     }
 
+    /** M737 全平台口径：商户、外包照旧由 requirePlatformScope 拒绝；其余须是平台管理员或经勾了「可以查看全部项目」的角色持有该码。 */
+    private void requireWholePlatform(String permissionCode) {
+        authorizationService.requirePlatformScope();
+        if (!authorizationService.allowsPlatformScope(authorizationService.currentActor(), permissionCode)) {
+            throw ApiException.forbidden("PLATFORM_SCOPE_REQUIRED",
+                    "该数据为全平台口径，只有平台管理员和勾选了「可以查看全部项目」的人可以查看、处理");
+        }
+    }
+
+    /** M737 平台口径看板的范围：不带商户归属且能看全平台合计 → 空（平台口径）；否则照旧 currentMerchantScope()。 */
+    private java.util.Optional<String> dashboardScope() {
+        var actor = authorizationService.currentActor();
+        boolean merchantScoped = actor.merchantId() != null && !actor.merchantId().isBlank();
+        if (!merchantScoped && authorizationService.allowsPlatformScope(actor, "analytics.dashboard.view")) {
+            return java.util.Optional.empty();
+        }
+        return authorizationService.currentMerchantScope();
+    }
+
+    /** M737 按可触及项目取数：先 requirePlatformScope()（商户、外包照旧拒绝），再按入口权限码算可触及项目（多个码取交集）。 */
+    private AuthorizationService.ProjectReach reach(String... permissionCodes) {
+        authorizationService.requirePlatformScope();
+        return authorizationService.projectReach(authorizationService.currentActor(), permissionCodes);
+    }
+
+    /** M737 传给服务层的项目集合：平台管理员 → null（不过滤）；其余（含勾了全部项目的人，M737-F07：操作员 2026-10-16「统一按『只到项目为止』」，
+     *  治理地图「只能触及归属在项目或项目公司下……的账号与数据」）→ 可触及项目（可能为空集＝一行不出；项目为空的行不出）。 */
+    private static java.util.Set<String> projectIds(AuthorizationService.ProjectReach reach) {
+        return reach.platformAdmin() ? null : reach.organizationIds();
+    }
+
+    /** M737 商户类分析：不是平台管理员、不带商户归属、不是外包账号的员工按可触及项目出在其中经营的商户；其余三种人照旧走 currentMerchantScope()。 */
+    private boolean projectStaff(com.complex.platform.access.AccessActor actor) {
+        boolean merchantScoped = actor.merchantId() != null && !actor.merchantId().isBlank();
+        return !authorizationService.isPlatformAdmin(actor) && !merchantScoped && !authorizationService.isOutsourcedVendor(actor);
+    }
+
     @GetMapping("/ai-quality/results")
     public ApiResponse<PageResponse<AiQualityResultRecord>> listAiQualityResults() {
         authorizationService.requirePermission("analytics.risk_alert.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.view");
         return ApiResponse.ok(service.listAiQualityResults());
     }
 
     @GetMapping("/ai-quality/tasks")
     public ApiResponse<PageResponse<AiQualityTaskRecord>> listAiQualityTasks() {
         authorizationService.requirePermission("analytics.risk_alert.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.view");
         return ApiResponse.ok(service.listAiQualityTasks());
     }
 
@@ -64,14 +101,14 @@ public class AnalyticsController {
     ) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.manage");
         return ApiResponse.ok(service.generateLocalLlmAiQualitySuggestion(request));
     }
 
     @GetMapping("/customer-intents")
     public ApiResponse<PageResponse<CustomerIntentRecord>> listCustomerIntents() {
         authorizationService.requirePermission("analytics.risk_alert.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.view");
         return ApiResponse.ok(service.listCustomerIntents());
     }
 
@@ -86,7 +123,7 @@ public class AnalyticsController {
         if (asOf == null) {
             asOf = parseOverviewDate(from);
         }
-        return ApiResponse.ok(service.overview(authorizationService.currentMerchantScope(), asOf));
+        return ApiResponse.ok(service.overview(dashboardScope(), asOf));
     }
 
     private static java.time.LocalDate parseOverviewDate(String value) {
@@ -103,7 +140,7 @@ public class AnalyticsController {
     @GetMapping("/dashboards/{domain}")
     public ApiResponse<OverviewResponse> getDomainDashboard(@PathVariable String domain) {
         authorizationService.requirePermission("analytics.dashboard.view");
-        return ApiResponse.ok(service.dashboardDomain(domain, authorizationService.currentMerchantScope()));
+        return ApiResponse.ok(service.dashboardDomain(domain, dashboardScope()));
     }
 
 
@@ -113,16 +150,16 @@ public class AnalyticsController {
         authorizationService.requirePermission("analytics.dashboard.view");
         // T4.3 分时段客流：date 为空 → 退回最新经营日（与总览日期口径一致）；scope 隔离（商户仅自身票务核销）。
         return ApiResponse.ok(service.trafficHourly(
-                authorizationService.currentMerchantScope(), parseOverviewDate(date)));
+                dashboardScope(), parseOverviewDate(date)));
     }
 
     @GetMapping("/group-overview")
     public ApiResponse<GroupOverviewResponse> getGroupOverview(
             @org.springframework.web.bind.annotation.RequestParam(value = "groupBy", required = false) String groupBy) {
         authorizationService.requirePermission("analytics.group.view");
-        // 集团总览为平台级跨商户汇总：fail-closed 拒绝 merchant-scoped 调用方（与其它平台级分析端点纵深防御一致）。
-        authorizationService.requirePlatformScope();
-        return ApiResponse.ok(service.groupOverview(groupBy));
+        // 集团总览为平台级跨商户汇总：fail-closed 拒绝 merchant-scoped 调用方（与其它平台级分析端点纵深防御一致）；
+        // M737：其余按 analytics.group.view 可触及的项目出行。
+        return ApiResponse.ok(service.groupOverview(groupBy, reach("analytics.group.view")));
     }
 
     @GetMapping("/occupancy/vacant-spaces")
@@ -130,8 +167,9 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
             @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
         authorizationService.requirePermission("contract.view");
-        authorizationService.requirePlatformScope();
-        java.util.List<AnalyticsRecords.VacantSpaceRow> items = service.listVacantSpaces(limit, offset);
+        // M737：商户、外包照旧被拒；其余只出项目列落在 contract.view 可触及项目内的行（只有平台管理员不过滤，M737-F07）。
+        java.util.List<AnalyticsRecords.VacantSpaceRow> items =
+                service.listVacantSpaces(limit, offset, projectIds(reach("contract.view")));
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 
@@ -141,8 +179,8 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
             @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
         authorizationService.requirePermission("contract.view");
-        authorizationService.requirePlatformScope();
-        java.util.List<AnalyticsRecords.ExpiringContractRow> items = service.listExpiringContracts(windowDays, limit, offset);
+        java.util.List<AnalyticsRecords.ExpiringContractRow> items =
+                service.listExpiringContracts(windowDays, limit, offset, projectIds(reach("contract.view")));
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 
@@ -150,7 +188,7 @@ public class AnalyticsController {
     public ApiResponse<AnalyticsRecords.MonthlyComparisonResponse> monthlyComparison(
             @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
         authorizationService.requirePermission("analytics.dashboard.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.dashboard.view");
         return ApiResponse.ok(service.monthlyComparison(month));
     }
 
@@ -160,7 +198,9 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
         // 治理口径(V196 范式):导出与查看分权——看板 view 可看,导出须独立高危权限,不直授审计角色。
         authorizationService.requirePermission("analytics.report.export");
-        authorizationService.requirePlatformScope();
+        // M737（操作员 2026-10-08 所选选项原文：「范围按他「能不能看全平台合计」判，导出授权只管「能不能导」。」「看不了全平台合计的人，
+        // 有导出授权也导不了（被拒、不扣次数）。」）：范围按查看经营分析看板的权限判；被拒时单次消耗随请求事务回滚。
+        requireWholePlatform("analytics.dashboard.view");
         return ApiResponse.ok(service.exportMonthlyReport(month));
     }
 
@@ -168,10 +208,10 @@ public class AnalyticsController {
     public ApiResponse<AnalyticsRecords.RentToSalesResponse> rentToSales(
             @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
         // P1c 店级/业态级租售比：租金(月租+营业额抽成) / 第三方回流营业额；店级/业态级/平台级三档，
-        // 平台级分母含未归属营业额（诚实标注）。跨商户平台级聚合→ fail-closed 拒绝商户级调用方。
+        // 平台级分母含未归属营业额（诚实标注）。跨商户平台级聚合→ fail-closed 拒绝商户级调用方；
+        // M737：其余按 contract.view 可触及的项目出在其中经营的商户，平台合计只给能看全平台的人。
         authorizationService.requirePermission("contract.view");
-        authorizationService.requirePlatformScope();
-        return ApiResponse.ok(service.rentToSales(month));
+        return ApiResponse.ok(service.rentToSales(month, reach("contract.view")));
     }
 
     @GetMapping("/abandoned-entitlement-revenue")
@@ -181,7 +221,7 @@ public class AnalyticsController {
         // 结算B2 放弃权益额外收入交叉表（票种×权益类型）：只读、复用分析只读权限（不新造权限点）；
         // 数据源为归项目流水（project_id 恒 NULL）→ 平台级跨商户聚合，fail-closed 拒绝商户级调用方。
         authorizationService.requirePermission("analytics.dashboard.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.dashboard.view");
         java.time.LocalDate startDate = parseOverviewDate(start);
         java.time.LocalDate endDate = parseOverviewDate(end);
         if (startDate == null || endDate == null) {
@@ -199,8 +239,8 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
             @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
         authorizationService.requirePermission("facility.work_order.manage");
-        authorizationService.requirePlatformScope();
-        java.util.List<AnalyticsRecords.OverdueWorkOrderRow> items = service.listOverdueWorkOrders(source, limit, offset);
+        java.util.List<AnalyticsRecords.OverdueWorkOrderRow> items =
+                service.listOverdueWorkOrders(source, limit, offset, projectIds(reach("facility.work_order.manage")));
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 
@@ -209,8 +249,8 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
             @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
         authorizationService.requirePermission("energy.reading.manage");
-        authorizationService.requirePlatformScope();
-        java.util.List<AnalyticsRecords.AbnormalReadingRow> items = service.listAbnormalReadings(limit, offset);
+        java.util.List<AnalyticsRecords.AbnormalReadingRow> items =
+                service.listAbnormalReadings(limit, offset, projectIds(reach("energy.reading.manage")));
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 
@@ -220,8 +260,8 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
             @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
         authorizationService.requirePermission("finance.ar_ap.view");
-        authorizationService.requirePlatformScope();
-        java.util.List<AnalyticsRecords.ArDebtorRow> items = service.listOverdueDebtors(bucket, limit, offset);
+        java.util.List<AnalyticsRecords.ArDebtorRow> items =
+                service.listOverdueDebtors(bucket, limit, offset, projectIds(reach("finance.ar_ap.view")));
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 
@@ -274,7 +314,7 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam("holiday") String holiday,
             @org.springframework.web.bind.annotation.RequestParam("year") int year) {
         authorizationService.requirePermission("analytics.dashboard.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.dashboard.view");
         return ApiResponse.ok(service.holidayComparison(holiday, year));
     }
 
@@ -363,19 +403,29 @@ public class AnalyticsController {
     @GetMapping("/business-metric-snapshots")
     public ApiResponse<PageResponse<BusinessMetricSnapshotRecord>> listBusinessMetricSnapshots() {
         authorizationService.requirePermission("analytics.dashboard.view");
-        authorizationService.requirePlatformScope();
-        return ApiResponse.ok(service.listBusinessMetricSnapshots());
+        // M737：商户、外包照旧被拒；其余按 analytics.dashboard.view 可触及的项目逐行留（平台段只给能看全平台的人）。
+        return ApiResponse.ok(service.listBusinessMetricSnapshots(reach("analytics.dashboard.view")));
     }
 
     @GetMapping("/merchant-health")
     public ApiResponse<PageResponse<MerchantHealthScoreRecord>> listMerchantHealthScores() {
         authorizationService.requirePermission("analytics.dashboard.view");
+        var actor = authorizationService.currentActor();
+        if (projectStaff(actor)) {
+            return ApiResponse.ok(service.listMerchantHealthScoresInProjects(
+                    authorizationService.projectReach(actor, "analytics.dashboard.view").organizationIds()));
+        }
         return ApiResponse.ok(service.listMerchantHealthScores(authorizationService.currentMerchantScope()));
     }
 
     @GetMapping("/merchants")
     public ApiResponse<PageResponse<MerchantSummaryRecord>> listAnalyticsMerchants() {
         authorizationService.requirePermission("analytics.dashboard.view");
+        var actor = authorizationService.currentActor();
+        if (projectStaff(actor)) {
+            return ApiResponse.ok(service.listAnalyticsMerchantsInProjects(
+                    authorizationService.projectReach(actor, "analytics.dashboard.view").organizationIds()));
+        }
         return ApiResponse.ok(service.listAnalyticsMerchants(authorizationService.currentMerchantScope()));
     }
 
@@ -394,25 +444,30 @@ public class AnalyticsController {
         authorizationService.requirePermission("analytics.dashboard.view");
         MetricRegistry.MetricDefinition definition = MetricRegistry.require(metric);
         authorizationService.requirePermission(definition.permission());
-        // requirePlatformScope 拦商户级/外包供应商（放行项目级）；项目级作用域收紧在下方由 currentProjectScopeQuietly 派生。
-        authorizationService.requirePlatformScope();
+        // requirePlatformScope 拦商户级/外包供应商（放行项目级）；M737：可触及项目按两个权限码取交集，项目作用域在下方由它派生。
+        AuthorizationService.ProjectReach reach = reach("analytics.dashboard.view", definition.permission());
         if (merchantId != null && !merchantId.isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "登记指标不支持商户维度（merchant_id）过滤");
         }
         if (projectId != null && !projectId.isBlank()) {
-            // 作用域由 token 派生（防越权：不接受客户端指定项目），项目级只能看自己所属综合体。
+            // 作用域由 token 派生（防越权：不接受客户端指定项目），项目级只能看自己可查看的项目。
             throw ApiException.badRequest("VALIDATION_FAILED", "作用域由登录身份派生，不接受客户端指定项目维度（project_id）过滤");
         }
-        // 项目作用域收紧（2026-07-19 用户拍板）：平台管理员/无组织归属→空=看平台全量（不变）；
-        // 项目级操作者→其所属综合体 organizationId=只看本项目；platform_only 指标遇项目级 → 服务层 fail-closed 403。
-        String projectScope = authorizationService.currentProjectScopeQuietly().orElse(null);
+        // 项目作用域收紧（2026-07-19 用户拍板；M737 改按可跨项目角色判定）：平台管理员→null=看平台全量（不变）；
+        // 勾了全部项目的人看没有项目列的指标→null=平台全量（治理地图「KPI 可见性分层」：「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看」）；
+        // 其余一律传可触及项目的集合：登记了项目列的指标按它过滤——勾了全部项目的人也过滤（治理地图「权限规则」：
+        // 「平台公司员工、平台管理员、最高权限、外部机构账号一律碰不到」，人事类指标的来源表里有这些账号）；
+        // platform_only 指标遇非 null → 服务层 fail-closed 403。
+        java.util.Set<String> projectScope =
+                reach.platformAdmin() || (reach.allProjects() && !MetricRegistry.isProjectScoped(definition))
+                        ? null : reach.organizationIds();
         return ApiResponse.ok(service.metricDetail(metric, part, parseOverviewDate(from), parseOverviewDate(to), page, size, projectScope));
     }
 
     @GetMapping("/metric-anomalies")
     public ApiResponse<PageResponse<MetricAnomalyRecord>> listMetricAnomalies() {
         authorizationService.requirePermission("analytics.risk_alert.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.view");
         return ApiResponse.ok(service.listMetricAnomalies());
     }
 
@@ -423,7 +478,7 @@ public class AnalyticsController {
     ) {
         authorizationService.requirePermission("analytics.metric_anomaly.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.metric_anomaly.manage");
         return ApiResponse.ok(service.disposeMetricAnomaly(id, request));
     }
 
@@ -431,7 +486,7 @@ public class AnalyticsController {
     public ApiResponse<List<AuditEvent>> metricAnomalyTimeline(@PathVariable String id) {
         // 处置历史时间线(append-only,不可改):与列表同权限(analytics.risk_alert.view)、平台作用域。
         authorizationService.requirePermission("analytics.risk_alert.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.view");
         return ApiResponse.ok(service.listMetricAnomalyTimeline(id));
     }
 
@@ -445,7 +500,7 @@ public class AnalyticsController {
     @GetMapping("/risk-alerts")
     public ApiResponse<PageResponse<RiskAlertRecord>> listRiskAlerts() {
         authorizationService.requirePermission("analytics.risk_alert.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.view");
         return ApiResponse.ok(service.listRiskAlerts());
     }
 
@@ -453,7 +508,7 @@ public class AnalyticsController {
     public ApiResponse<RiskAlertRecord> createRiskAlert(@RequestBody(required = false) @jakarta.validation.Valid RiskAlertRequest request) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.manage");
         return ApiResponse.ok(service.createRiskAlert(request));
     }
 
@@ -464,15 +519,16 @@ public class AnalyticsController {
     ) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.manage");
         return ApiResponse.ok(service.resolveRiskAlert(id, request));
     }
 
     @GetMapping("/review-locks")
     public ApiResponse<PageResponse<AnalyticsRecords.BusinessReviewLockRecord>> listReviewLocks() {
-        // 复盘锁定=项目级隔离：仅校验写权限，scope 由 token 派生（service 层过滤）；
-        // 不加 requirePlatformScope（那会拒绝合法的项目主管只看/只锁本综合体）。
+        // 复盘锁定=项目级隔离：scope 由 token 派生（service 层按可触及项目过滤）。M737-F10：商户、外包账号与经营分析其他入口一样
+        // 由 requirePlatformScope 拒绝（它只拒商户与外包，不拒不带商户归属的项目员工）。
         authorizationService.requirePermission("analytics.review.lock");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listReviewLocks());
     }
 
@@ -481,6 +537,7 @@ public class AnalyticsController {
             @RequestBody(required = false) @jakarta.validation.Valid BusinessReviewLockRequest request) {
         authorizationService.requirePermission("analytics.review.lock");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        authorizationService.requirePlatformScope(); // M737-F10：商户、外包账号在进入幂等之前拒绝，原提交编号重试也一样
         return ApiResponse.ok(service.createReviewLock(request));
     }
 
@@ -494,14 +551,14 @@ public class AnalyticsController {
     @GetMapping("/robot")
     public ApiResponse<PageResponse<RobotMetricRecord>> getRobotAnalytics() {
         authorizationService.requirePermission("analytics.dashboard.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.dashboard.view");
         return ApiResponse.ok(service.getRobotAnalytics());
     }
 
     @GetMapping("/staff-service-score")
     public ApiResponse<PageResponse<StaffServiceScoreRecord>> listStaffServiceScores() {
         authorizationService.requirePermission("analytics.risk_alert.view");
-        authorizationService.requirePlatformScope();
+        requireWholePlatform("analytics.risk_alert.view");
         return ApiResponse.ok(service.listStaffServiceScores());
     }
 }

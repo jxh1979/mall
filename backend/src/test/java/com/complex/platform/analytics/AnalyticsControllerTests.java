@@ -89,12 +89,16 @@ class AnalyticsControllerTests {
         when(service.listCustomerIntents()).thenReturn(new PageResponse<>(List.of(customerIntent()), 1, 50, 1));
         when(service.getP0OverviewDashboard()).thenReturn(dashboard());
         when(authorizationService.currentMerchantScope()).thenReturn(java.util.Optional.empty());
-        // 默认平台管理员：项目作用域空（metric-detail 端点由此派生 projectScope）。
-        when(authorizationService.currentProjectScopeQuietly()).thenReturn(java.util.Optional.empty());
+        // M737：默认平台管理员——全平台口径放行，可触及范围＝平台管理员的 reach（metric-detail 端点由此派生 projectScope）。
+        when(authorizationService.currentActor()).thenReturn(
+                new com.complex.platform.access.AccessActor("usr_admin", "admin", "platform_admin", null, null, "active"));
+        when(authorizationService.isPlatformAdmin(any())).thenReturn(true);
+        when(authorizationService.allowsPlatformScope(any(), anyString())).thenReturn(true);
+        when(authorizationService.projectReach(any(), any(String[].class))).thenReturn(platformAdminReach());
         when(service.overview(any())).thenReturn(overviewResponse());
         when(service.dashboardDomain(anyString(), any())).thenReturn(overviewResponse());
-        when(service.groupOverview(any())).thenReturn(groupOverviewResponse());
-        when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
+        when(service.groupOverview(any(), any())).thenReturn(groupOverviewResponse());
+        when(service.listBusinessMetricSnapshots(any())).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
         when(service.listMerchantHealthScores(any())).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
         when(service.listAnalyticsMerchants(any())).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
         when(service.listMetricAnomalies()).thenReturn(new PageResponse<>(List.of(metricAnomaly()), 1, 50, 1));
@@ -158,7 +162,8 @@ class AnalyticsControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("OK"));
 
-        verify(service).groupOverview("entity");
+        // M737：可触及范围由控制器按 token 算好后原样传给服务层。
+        verify(service).groupOverview("entity", platformAdminReach());
     }
 
     @Test
@@ -171,7 +176,7 @@ class AnalyticsControllerTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"));
 
-        verify(service, never()).groupOverview(any());
+        verify(service, never()).groupOverview(any(), any());
     }
 
     @Test
@@ -190,14 +195,17 @@ class AnalyticsControllerTests {
         verify(authorizationService).requirePermission("analytics.dashboard.view");
         verify(authorizationService).requirePermission("finance.reconciliation.view");
         verify(authorizationService).requirePlatformScope();
-        // 平台管理员=空项目作用域 → service 收到 null projectScope（看全量）。
+        // M737：可触及项目按契约宽权限与登记项权限两个码取交集。
+        verify(authorizationService).projectReach(any(), eq("analytics.dashboard.view"), eq("finance.reconciliation.view"));
+        // 平台管理员 → service 收到 null projectScope（看全量）。
         verify(service).metricDetail(eq("finance.recon_diff_count"), any(), any(), any(), anyInt(), anyInt(), org.mockito.ArgumentMatchers.isNull());
     }
 
     @Test
     void metricDetailDerivesProjectScopeFromTokenNotRequestBody() throws Exception {
-        // 项目作用域收紧(2026-07-19): 端点由 currentProjectScopeQuietly 派生调用方综合体, 透传 service(绝不取客户端)。
-        when(authorizationService.currentProjectScopeQuietly()).thenReturn(java.util.Optional.of("proj-A"));
+        // 项目作用域收紧(2026-07-19; M737 改按可触及项目): 端点由 token 派生调用方可查看的项目, 透传 service(绝不取客户端)。
+        when(authorizationService.projectReach(any(), any(String[].class)))
+                .thenReturn(AuthorizationService.ProjectReach.ownOnly("proj-A"));
         when(service.metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt(), any())).thenReturn(metricDetailResponse());
 
         mockMvc.perform(get("/api/v1/analytics/metric-detail")
@@ -205,7 +213,7 @@ class AnalyticsControllerTests {
                         .with(user("analytics").roles("P0_SMOKE")))
                 .andExpect(status().isOk());
 
-        verify(service).metricDetail(eq("finance.ar_balance"), any(), any(), any(), anyInt(), anyInt(), eq("proj-A"));
+        verify(service).metricDetail(eq("finance.ar_balance"), any(), any(), any(), anyInt(), anyInt(), eq(java.util.Set.of("proj-A")));
     }
 
     @Test
@@ -302,6 +310,10 @@ class AnalyticsControllerTests {
                 LocalDate.parse("2026-06-14"),
                 Map.of("revenue.ticket", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent"))
         );
+    }
+
+    private AuthorizationService.ProjectReach platformAdminReach() {
+        return new AuthorizationService.ProjectReach(true, true, null, true, java.util.Set.of());
     }
 
     private AnalyticsRecords.GroupOverviewResponse groupOverviewResponse() {

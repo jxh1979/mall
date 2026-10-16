@@ -540,7 +540,7 @@ class MetricDetailServiceTests {
                 "ticket.order_count", "amusement.session_count", "amusement.entry_count",
                 "energy.total_electricity", "verify.done", "member.new", "risk.pending_review",
                 "finance.recon_diff_count")) {
-            assertThatThrownBy(() -> service.metricDetail(platformOnly, null, null, null, 1, 20, "proj-A"))
+            assertThatThrownBy(() -> service.metricDetail(platformOnly, null, null, null, 1, 20, List.of("proj-A")))
                     .as("platform_only 指标 %s 项目级应拒", platformOnly)
                     .isInstanceOf(ApiException.class)
                     .hasMessageContaining("平台口径");
@@ -558,13 +558,13 @@ class MetricDetailServiceTests {
                 .thenReturn(new MetricDetailRows(
                         List.of(row("id", "arA", "unpaidAmountCent", 5000L)), 1, new BigDecimal("5000")));
 
-        MetricDetailResponse response = service.metricDetail("finance.ar_balance", null, null, null, 1, 20, "proj-A");
+        MetricDetailResponse response = service.metricDetail("finance.ar_balance", null, null, null, 1, 20, List.of("proj-A"));
 
         // 项目级：scope 透传仓储（按 project_id 过滤）；明细与合计同一仓储调用同谓词 → 数字=明细合计。
-        verify(repository).arOpenReceivableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq("proj-A"));
+        verify(repository).arOpenReceivableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq(List.of("proj-A")));
         assertThat(response.summaryValue()).isEqualByComparingTo("5000");
         assertThat(response.rows()).hasSize(1);
-        assertThat(response.summaryNote()).contains("综合体");
+        assertThat(response.summaryNote()).contains("您可查看的项目");
     }
 
     @Test
@@ -572,10 +572,10 @@ class MetricDetailServiceTests {
         when(repository.staffShiftDetail(any(), any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "shA")), 1, new BigDecimal("1")));
 
-        MetricDetailResponse response = service.metricDetail("staff.shift_count", null, null, null, 1, 20, "proj-A");
+        MetricDetailResponse response = service.metricDetail("staff.shift_count", null, null, null, 1, 20, List.of("proj-A"));
 
-        verify(repository).staffShiftDetail(eq(CURRENT_BUSINESS_DAY), eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq("proj-A"));
-        assertThat(response.summaryNote()).contains("项目级作用域");
+        verify(repository).staffShiftDetail(eq(CURRENT_BUSINESS_DAY), eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq(List.of("proj-A")));
+        assertThat(response.summaryNote()).contains("您可查看的项目");
     }
 
     @Test
@@ -583,9 +583,9 @@ class MetricDetailServiceTests {
         when(repository.settlementTransactionDetail(any(), any(), org.mockito.ArgumentMatchers.anyString(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "s1")), 2, new BigDecimal("2")));
 
-        service.metricDetail("settlement.transaction_count", null, null, null, 1, 20, "proj-A");
+        service.metricDetail("settlement.transaction_count", null, null, null, 1, 20, List.of("proj-A"));
 
-        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("count"), eq(20), eq(0), eq("proj-A"));
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("count"), eq(20), eq(0), eq(List.of("proj-A")));
     }
 
     @Test
@@ -593,10 +593,10 @@ class MetricDetailServiceTests {
         when(repository.staffActiveHeadcountDetail(any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "u1")), 3, new BigDecimal("3")));
 
-        service.metricDetail("staff.active_headcount", null, null, null, 1, 20, "proj-A");
+        service.metricDetail("staff.active_headcount", null, null, null, 1, 20, List.of("proj-A"));
 
         // access_users 用 organization_id 作综合体列；scope 透传仓储（仓储层用 organization_id 谓词）。
-        verify(repository).staffActiveHeadcountDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq("proj-A"));
+        verify(repository).staffActiveHeadcountDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq(List.of("proj-A")));
     }
 
     @Test

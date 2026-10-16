@@ -6,11 +6,18 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.access.RoleRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
@@ -43,8 +50,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 class AnalyticsServiceTests {
 
@@ -55,6 +67,14 @@ class AnalyticsServiceTests {
     private InMemoryAuditEventRepository auditEventRepository;
     private CapturingLocalLlmClient localLlmClient;
     private AnalyticsService service;
+    // M737：可跨项目用例用真实判定＋桩权限仓（见文件后部「M737」一段）；其余用例不登录、不经它。
+    private final AccessRepository accessRepository = mock(AccessRepository.class);
+    private final AuthorizationService authorizationService = new AuthorizationService(accessRepository);
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @BeforeEach
     void setUp() {
@@ -1135,6 +1155,322 @@ class AnalyticsServiceTests {
                 .contains("analytics.rent_to_sales.viewed");
     }
 
+    // ===== M737：可跨项目角色接入分析端点 =====
+    // 真实 AuthorizationService＋桩 AccessRepository，直接调控制器方法。判定本身（勾全部、逐个勾选、多码交集）AuthorizationServiceTests 已测，
+    // 这里只证各端点接到了哪个码、被拒时的码与提示、按范围筛出来的数据。项目集合 org_a、org_b、org_c，操作人归属 org_a。
+
+    private static final String WHOLE_PLATFORM_MESSAGE = "该数据为全平台口径，只有平台管理员和勾选了「可以查看全部项目」的人可以查看、处理";
+
+    @Test
+    void wholePlatformSummariesAreOnlyForPlatformAdminAndAllProjectsHolders() {
+        // 月度对比、节假日对比、放弃权益收入、月报导出是全平台合计：只给平台管理员和勾了全部项目的人。
+        AnalyticsController controller = controller();
+        analyticsRepository.holidayPeriods = List.of(new AnalyticsRecords.HolidayPeriod("春节", 2026,
+                LocalDate.parse("2026-02-15"), LocalDate.parse("2026-02-22"), "manual", null));
+        List<ThrowingCallable> summaries = List.of(
+                () -> controller.monthlyComparison("2026-07"),
+                () -> controller.holidayComparison("春节", 2026),
+                () -> controller.abandonedEntitlementRevenue("2026-06-01", "2026-06-08"),
+                () -> controller.exportMonthlyReport("2026-07"));
+
+        // 普通角色持码的员工：四个入口都被拒
+        actAsStaff(plainRole("analytics.dashboard.view", "analytics.report.export"));
+        summaries.forEach(call -> assertDenied(call, "PLATFORM_SCOPE_REQUIRED", WHOLE_PLATFORM_MESSAGE));
+        // 只逐个勾了 org_b 的持有人：同样被拒
+        actAsStaff(tickedRole("org_b", "analytics.dashboard.view", "analytics.report.export"));
+        summaries.forEach(call -> assertDenied(call, "PLATFORM_SCOPE_REQUIRED", WHOLE_PLATFORM_MESSAGE));
+
+        // 经勾全部的角色持有 analytics.dashboard.view：都能看；导出权限只放在普通角色里，照样能导（导出权限任何有效来源都认）
+        actAsStaff(allProjectsRole("analytics.dashboard.view"), plainRole("analytics.report.export"));
+        summaries.forEach(call -> assertThatCode(call).doesNotThrowAnyException());
+        // 勾全部的角色停用后不再算
+        actAsStaff(role("role_all", "inactive", true, List.of(), "analytics.dashboard.view"),
+                plainRole("analytics.report.export"));
+        summaries.forEach(call -> assertDenied(call, "PLATFORM_SCOPE_REQUIRED", WHOLE_PLATFORM_MESSAGE));
+
+        // 导出权限经勾全部的角色持有、看板权限只来自普通角色：范围按看板权限判，导不了
+        actAsStaff(allProjectsRole("analytics.report.export"), plainRole("analytics.dashboard.view"));
+        assertDenied(() -> controller.exportMonthlyReport("2026-07"), "PLATFORM_SCOPE_REQUIRED", WHOLE_PLATFORM_MESSAGE);
+    }
+
+    @Test
+    void platformDashboardsOpenToAllProjectsHoldersAndStayClosedToProjectStaff() {
+        AnalyticsController controller = controller();
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "platform", null), new BigDecimal("68800"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        // 勾全部的持有人：总控、分域看板、分时客流都是平台口径
+        actAsStaff(allProjectsRole("analytics.dashboard.view"));
+        var overview = controller.getP0OverviewDashboard(null, null).data();
+        assertThat(overview.scope()).isNull();
+        assertThat(overview.metrics().get("revenue.bar").value()).isEqualByComparingTo("68800");
+        assertThat(controller.getDomainDashboard("bar").data().scope()).isNull();
+        assertThat(controller.getTrafficHourly(null).data().buckets()).hasSize(24);
+        assertThat(analyticsRepository.hourlyTrafficScope).isEmpty();
+
+        // 逐个勾选的持有人、普通员工：照旧被拒（还没有分项目的数据）
+        for (RoleRecord role : List.of(tickedRole("org_b", "analytics.dashboard.view"), plainRole("analytics.dashboard.view"))) {
+            actAsStaff(role);
+            assertDenied(() -> controller.getP0OverviewDashboard(null, null), "MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
+            assertDenied(() -> controller.getDomainDashboard("bar"), "MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
+            assertDenied(() -> controller.getTrafficHourly(null), "MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
+        }
+
+        // 带商户归属的账号：仍只看本商户，挂了勾全部的角色也不升到平台口径
+        actAs("staff", "merchant_a", allProjectsRole("analytics.dashboard.view"));
+        var merchantOverview = controller.getP0OverviewDashboard(null, null).data();
+        assertThat(merchantOverview.scope()).isEqualTo("merchant_a");
+        assertThat(merchantOverview.metrics().get("revenue.bar").value()).isEqualByComparingTo("5000");
+        assertThat(controller.getDomainDashboard("bar").data().scope()).isEqualTo("merchant_a");
+        controller.getTrafficHourly(null);
+        assertThat(analyticsRepository.hourlyTrafficScope).contains("merchant_a");
+    }
+
+    @Test
+    void groupOverviewOnlyShowsReachableProjects() {
+        AnalyticsController controller = controller();
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "org_a"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "org_b"), new BigDecimal("60000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "org_c"), new BigDecimal("30000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.projectEntityMap.put("org_a", "entity_a");
+        analyticsRepository.projectEntityMap.put("org_b", "entity_a");
+        analyticsRepository.projectEntityMap.put("org_c", "entity_b");
+
+        // 普通员工：只有本人项目一行；按主体分组也只并本人项目
+        actAsStaff(plainRole("analytics.group.view"));
+        assertThat(controller.getGroupOverview(null).data().projects())
+                .extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("org_a");
+        var ownByEntity = controller.getGroupOverview("entity").data();
+        assertThat(ownByEntity.projects()).extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("entity_a");
+        assertThat(ownByEntity.projects().get(0).metrics().get("revenue.net").value()).isEqualByComparingTo("120000");
+
+        // 勾了 org_b 且另有普通来源：org_a、org_b 两行；平均值与低于基准标记只按这两行算（均值 90000，org_b 低于 72000）
+        actAsStaff(tickedRole("org_b", "analytics.group.view"), plainRole("analytics.group.view"));
+        var ownAndTicked = controller.getGroupOverview(null).data();
+        assertThat(ownAndTicked.projects()).extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("org_a", "org_b");
+        assertThat(ownAndTicked.groupAverages().get("revenue.net").value()).isEqualByComparingTo("90000");
+        assertThat(ownAndTicked.projects().get(1).belowBenchmarkMetrics()).containsExactly("revenue.net");
+
+        // 只勾了 org_b、没有其他来源：只有 org_b，本人项目也不出
+        actAsStaff(tickedRole("org_b", "analytics.group.view"));
+        assertThat(controller.getGroupOverview(null).data().projects())
+                .extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("org_b");
+
+        // 勾全部的持有人、平台管理员：三行；org_b 按三行的均值（70000）不低于基准
+        actAsStaff(allProjectsRole("analytics.group.view"));
+        var all = controller.getGroupOverview(null).data();
+        assertThat(all.projects()).extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("org_a", "org_b", "org_c");
+        assertThat(all.groupAverages().get("revenue.net").value()).isEqualByComparingTo("70000");
+        assertThat(all.projects().get(1).belowBenchmarkMetrics()).isEmpty();
+        actAs("platform_admin", null, plainRole("analytics.group.view"));
+        assertThat(controller.getGroupOverview(null).data().projects())
+                .extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("org_a", "org_b", "org_c");
+    }
+
+    @Test
+    void groupOverviewPlatformTotalsAreOnlyForWholePlatformViewers() {
+        AnalyticsController controller = controller();
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "platform", null), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        // 没有项目段快照：回退的平台口径一行（全平台合计）只给平台管理员和勾全部的人，其余人拿到空列表
+        actAs("platform_admin", null, plainRole("analytics.group.view"));
+        assertThat(controller.getGroupOverview(null).data().projects())
+                .extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("project_1");
+        actAsStaff(allProjectsRole("analytics.group.view"));
+        var fallback = controller.getGroupOverview(null).data();
+        assertThat(fallback.projects()).extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("project_1");
+        assertThat(fallback.projects().get(0).metrics().get("revenue.net").value()).isEqualByComparingTo("120000");
+        for (RoleRecord role : List.of(tickedRole("org_b", "analytics.group.view"), plainRole("analytics.group.view"))) {
+            actAsStaff(role);
+            var none = controller.getGroupOverview(null).data();
+            assertThat(none.projects()).isEmpty();
+            assertThat(none.groupAverages()).isEmpty();
+        }
+
+        // 项目段只有定时汇总写的 project_1 一行（值即全平台合计）：勾全部的人看得到，普通员工仍是空列表
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        actAsStaff(allProjectsRole("analytics.group.view"));
+        assertThat(controller.getGroupOverview(null).data().projects())
+                .extracting(AnalyticsRecords.GroupProjectRollup::projectId).containsExactly("project_1");
+        actAsStaff(plainRole("analytics.group.view"));
+        assertThat(controller.getGroupOverview(null).data().projects()).isEmpty();
+    }
+
+    @Test
+    void ledgerEntrancesAreOnlyForPlatformAdminAndAllProjectsHolders() {
+        // 12 个没有项目归属的台账入口（读 8、写 4）：只给平台管理员和经勾了全部项目的角色持有该入口权限的人。
+        AnalyticsController controller = controller();
+        String[] codes = {"analytics.risk_alert.view", "analytics.dashboard.view",
+                "analytics.risk_alert.manage", "analytics.metric_anomaly.manage"};
+        List<ThrowingCallable> reads = List.of(
+                controller::listAiQualityResults,
+                controller::listAiQualityTasks,
+                controller::listCustomerIntents,
+                controller::listMetricAnomalies,
+                () -> controller.metricAnomalyTimeline("anomaly_1"),
+                controller::listRiskAlerts,
+                controller::listStaffServiceScores,
+                controller::getRobotAnalytics);
+        List<ThrowingCallable> writes = List.of(
+                () -> controller.generateLocalLlmAiQualitySuggestion(new AiQualitySuggestionRequest(
+                        "m737-llm", "ticket_call", "call_737", "guest asks for refund after failed service", "staff_1")),
+                () -> controller.createRiskAlert(riskAlertRequest("m737-create", "metric_anomaly", "high", "merchant", "Revenue dropped")),
+                () -> controller.resolveRiskAlert("alert_1", resolveRequest("m737-resolve")),
+                () -> controller.disposeMetricAnomaly("anomaly_1", new AnomalyDispositionRequest("m737-dispose", "acknowledge", null)));
+
+        // 普通员工、逐个勾选者：读写都被拒，写入口不落库
+        for (RoleRecord role : List.of(plainRole(codes), tickedRole("org_b", codes))) {
+            actAsStaff(role);
+            reads.forEach(call -> assertDenied(call, "PLATFORM_SCOPE_REQUIRED", WHOLE_PLATFORM_MESSAGE));
+            writes.forEach(call -> assertDenied(call, "PLATFORM_SCOPE_REQUIRED", WHOLE_PLATFORM_MESSAGE));
+        }
+        assertThat(analyticsRepository.aiQualityTaskSaveCount).isZero();
+        assertThat(analyticsRepository.riskAlertSaveCount).isZero();
+        assertThat(analyticsRepository.riskAlertUpdateCount).isZero();
+        assertThat(analyticsRepository.metricAnomalies.get(0).status()).isEqualTo("open");
+
+        // 经勾全部的角色持有各入口的码：读写都成功
+        actAsStaff(allProjectsRole(codes));
+        reads.forEach(call -> assertThatCode(call).doesNotThrowAnyException());
+        writes.forEach(call -> assertThatCode(call).doesNotThrowAnyException());
+        assertThat(analyticsRepository.aiQualityTaskSaveCount).isEqualTo(1);
+        assertThat(analyticsRepository.riskAlertSaveCount).isEqualTo(1);
+        assertThat(analyticsRepository.riskAlertUpdateCount).isEqualTo(1);
+        assertThat(analyticsRepository.metricAnomalies.get(0).status()).isEqualTo("acknowledged");
+    }
+
+    @Test
+    void rentToSalesOnlyShowsMerchantsOperatingInReachableProjects() {
+        // 租售比：项目上的人只看在可触及项目内经营的商户；平台合计与未归属营业额只给能看全平台的人。
+        AnalyticsController controller = controller();
+        analyticsRepository.rentToSalesStub = new AnalyticsRecords.RentToSalesAggregate(List.of(
+                new AnalyticsRecords.RentToSalesMerchantRow("m_a", "餐饮A", "catering", 120000L, 500000L),
+                new AnalyticsRecords.RentToSalesMerchantRow("m_b", "餐饮B", "catering", 50000L, 200000L)),
+                250000L);
+        analyticsRepository.merchantsOperatingIn.put("org_a", Set.of("m_a"));
+        analyticsRepository.merchantsOperatingIn.put("org_b", Set.of("m_b"));
+
+        // 普通员工（本人项目 org_a）：只有 m_a，业态行只由 m_a 并出；没有平台合计，未归属营业额为 0
+        actAsStaff(plainRole("contract.view"));
+        var own = controller.rentToSales("2099-09").data();
+        assertThat(own.byMerchant()).extracting(AnalyticsRecords.RentToSalesRow::key).containsExactly("m_a");
+        assertThat(own.byMerchantType())
+                .extracting(AnalyticsRecords.RentToSalesRow::key, AnalyticsRecords.RentToSalesRow::rentCent, AnalyticsRecords.RentToSalesRow::salesCent)
+                .containsExactly(tuple("catering", 120000L, 500000L));
+        assertThat(own.platform()).isNull();
+        assertThat(own.unattributedSalesCent()).isZero();
+        assertThat(own.note()).isEqualTo("仅含您可查看项目内经营的商户，不含平台合计与未归属营业额");
+
+        // 只勾了 org_b、没有其他来源：只有 m_b
+        actAsStaff(tickedRole("org_b", "contract.view"));
+        var ticked = controller.rentToSales("2099-09").data();
+        assertThat(ticked.byMerchant()).extracting(AnalyticsRecords.RentToSalesRow::key).containsExactly("m_b");
+        assertThat(ticked.platform()).isNull();
+        assertThat(ticked.unattributedSalesCent()).isZero();
+
+        // 勾全部的持有人：照旧两行、平台合计（分母含未归属营业额）与未归属营业额原值
+        actAsStaff(allProjectsRole("contract.view"));
+        var all = controller.rentToSales("2099-09").data();
+        assertThat(all.byMerchant()).extracting(AnalyticsRecords.RentToSalesRow::key).containsExactly("m_a", "m_b");
+        assertThat(all.platform().rentCent()).isEqualTo(170000L);
+        assertThat(all.platform().salesCent()).isEqualTo(950000L);
+        assertThat(all.unattributedSalesCent()).isEqualTo(250000L);
+    }
+
+    @Test
+    void reviewLocksFollowReachableProjects() {
+        AnalyticsController controller = controller();
+        analyticsRepository.reviewLocks.add(reviewLock("lock_a", "org_a"));
+        analyticsRepository.reviewLocks.add(reviewLock("lock_b", "org_b"));
+        analyticsRepository.reviewLocks.add(reviewLock("lock_none", null));
+
+        // 普通员工：只见本人项目的锁
+        actAsStaff(plainRole("analytics.review.lock"));
+        assertThat(controller.listReviewLocks().data().items())
+                .extracting(AnalyticsRecords.BusinessReviewLockRecord::id).containsExactly("lock_a");
+        // 只勾了 org_b：见 org_b 的锁，本人项目的不出；另有普通来源时加上本人项目
+        actAsStaff(tickedRole("org_b", "analytics.review.lock"));
+        assertThat(controller.listReviewLocks().data().items())
+                .extracting(AnalyticsRecords.BusinessReviewLockRecord::id).containsExactly("lock_b");
+        actAsStaff(tickedRole("org_b", "analytics.review.lock"), plainRole("analytics.review.lock"));
+        assertThat(controller.listReviewLocks().data().items())
+                .extracting(AnalyticsRecords.BusinessReviewLockRecord::id).containsExactly("lock_a", "lock_b");
+        // 平台管理员：三把（含项目为空的）
+        actAs("platform_admin", null, plainRole("analytics.review.lock"));
+        assertThat(controller.listReviewLocks().data().items())
+                .extracting(AnalyticsRecords.BusinessReviewLockRecord::id).containsExactly("lock_a", "lock_b", "lock_none");
+
+        // 新建：只勾了 org_b、没有其他来源的人，本人项目不在可触及范围内——被拒、不落库
+        actAsStaff(tickedRole("org_b", "analytics.review.lock"));
+        assertDenied(() -> controller.createReviewLock(new BusinessReviewLockRequest("m737-lock-denied", "all", "月度复盘", 3)),
+                "CROSS_ORG_FORBIDDEN", "本人所属项目不在该权限可查看的项目内，不能锁定经营复盘");
+        assertThat(analyticsRepository.reviewLocks).hasSize(3);
+        // 普通员工新建：锁建在本人项目
+        actAsStaff(plainRole("analytics.review.lock"));
+        assertThat(controller.createReviewLock(new BusinessReviewLockRequest("m737-lock-own", "all", "月度复盘", 3)).data().projectId())
+                .isEqualTo("org_a");
+        assertThat(analyticsRepository.reviewLocks).hasSize(4);
+    }
+
+    private static AnalyticsRecords.BusinessReviewLockRecord reviewLock(String id, String projectId) {
+        return new AnalyticsRecords.BusinessReviewLockRecord(
+                id, projectId, "all", "月度复盘", 3, "usr_other", Instant.now(FIXED_CLOCK), id);
+    }
+
+    private AnalyticsController controller() {
+        service.setAuthorizationService(authorizationService);
+        return new AnalyticsController(service, authorizationService, mock(OperatingParamsService.class));
+    }
+
+    /** 归属 org_a 的账号经给定角色持有各角色所列的权限码，并以其身份登录。 */
+    private void actAs(String accountType, String merchantId, RoleRecord... roles) {
+        when(accessRepository.permissionExists(anyString())).thenReturn(true);
+        when(accessRepository.findProjectOrganizationIds()).thenReturn(Set.of("org_a", "org_b", "org_c"));
+        List<AccessRepository.PermissionEffect> effects = new ArrayList<>();
+        for (RoleRecord role : roles) {
+            when(accessRepository.findRoleById(role.id())).thenReturn(Optional.of(role));
+            for (String code : role.permissionCodes()) {
+                effects.add(new AccessRepository.PermissionEffect("usr_m737", code, AccessRepository.Effect.GRANT,
+                        AccessRepository.Source.ROLE, role.id(), null, null, false, false));
+            }
+        }
+        when(accessRepository.findPermissionEffects(eq("usr_m737"), any())).thenReturn(effects);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor("usr_m737", "usr_m737", accountType, "org_a", merchantId, "active"), "token", List.of()));
+    }
+
+    private void actAsStaff(RoleRecord... roles) {
+        actAs("staff", null, roles);
+    }
+
+    /** 普通角色：两项勾选都没有，权限只到本人项目。 */
+    private static RoleRecord plainRole(String... codes) {
+        return role("role_plain", "active", false, List.of(), codes);
+    }
+
+    /** 勾了「可以查看全部项目」的角色。 */
+    private static RoleRecord allProjectsRole(String... codes) {
+        return role("role_all", "active", true, List.of(), codes);
+    }
+
+    /** 只逐个勾选了一个项目的角色。 */
+    private static RoleRecord tickedRole(String projectId, String... codes) {
+        return role("role_ticked", "active", false, List.of(projectId), codes);
+    }
+
+    private static RoleRecord role(String id, String status, boolean viewAll, List<String> ticked, String... codes) {
+        return new RoleRecord(id, id, null, "project", status, Instant.parse("2026-06-14T00:00:00Z"),
+                List.of(codes), null, viewAll, ticked);
+    }
+
+    private static void assertDenied(ThrowingCallable call, String code, String message) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status()).isEqualTo(org.springframework.http.HttpStatus.FORBIDDEN);
+            assertThat(e.code()).isEqualTo(code);
+            assertThat(e.getMessage()).isEqualTo(message);
+        });
+    }
+
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
         // V220 招商漏斗 fake:默认空漏斗 + 零营业额(比率分母 0 → ETL 不产出比率行)。
 
@@ -1181,7 +1517,8 @@ class AnalyticsServiceTests {
             return arReceivableMtd;
         }
 
-        public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset) {
+        public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
@@ -1197,11 +1534,13 @@ class AnalyticsServiceTests {
             return expiringContracts;
         }
 
-        public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset) {
+        public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
-        public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
+        public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
@@ -1284,12 +1623,14 @@ class AnalyticsServiceTests {
         }
 
         public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
-                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
         public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
-                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
@@ -1302,7 +1643,8 @@ class AnalyticsServiceTests {
         }
 
         public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
-                java.time.Instant start, java.time.Instant end, int limit, int offset) {
+                java.time.Instant start, java.time.Instant end, int limit, int offset,
+                java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
 
@@ -1436,14 +1778,28 @@ class AnalyticsServiceTests {
             return new ArrayList<>(riskAlerts.values());
         }
 
+        // M737：复盘锁存进内存，读回与 Jdbc 同谓词（projectScope 为空见全量，否则只出该项目）。
+        final List<AnalyticsRecords.BusinessReviewLockRecord> reviewLocks = new ArrayList<>();
+
         @Override
         public AnalyticsRecords.BusinessReviewLockRecord saveReviewLock(AnalyticsRecords.BusinessReviewLockRecord lock) {
+            reviewLocks.add(lock);
             return lock;
         }
 
         @Override
         public List<AnalyticsRecords.BusinessReviewLockRecord> listReviewLocks(String projectScope) {
-            return List.of();
+            return reviewLocks.stream()
+                    .filter(lock -> projectScope == null || projectScope.equals(lock.projectId())).toList();
+        }
+
+        // M737：项目 → 在该项目经营的商户（测试注入）。
+        final Map<String, Set<String>> merchantsOperatingIn = new LinkedHashMap<>();
+
+        public Set<String> listMerchantIdsOperatingIn(java.util.Collection<String> projectIds) {
+            Set<String> ids = new java.util.HashSet<>();
+            projectIds.forEach(projectId -> ids.addAll(merchantsOperatingIn.getOrDefault(projectId, Set.of())));
+            return ids;
         }
 
         @Override
@@ -1590,9 +1946,12 @@ class AnalyticsServiceTests {
         }
 
         final Map<Integer, Long> hourlyTraffic = new LinkedHashMap<>();
+        // M737：记下最近一次分时客流取数用的商户范围（空＝平台口径）。
+        Optional<String> hourlyTrafficScope;
 
         @Override
         public Map<Integer, Long> hourlyTrafficCounts(LocalDate businessDate, Optional<String> merchantScope) {
+            hourlyTrafficScope = merchantScope;
             return hourlyTraffic;
         }
 

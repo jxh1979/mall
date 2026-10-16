@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.17",
+    "version": "V0.18",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -1949,7 +1949,7 @@
         ],
         "operationId": "generateLocalLlmAiQualitySuggestion",
         "summary": "Generate local LLM AI quality suggestion",
-        "description": "T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result writes only AI quality task and result records and never changes payment, verification, refund, punishment, commission, contract, inventory, or device state.",
+        "description": "T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result writes only AI quality task and result records and never changes payment, verification, refund, punishment, commission, contract, inventory, or device state. M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.manage 的人，否则 403（PLATFORM_SCOPE_REQUIRED）、不落库。",
         "x-permission": "analytics.risk_alert.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -1988,7 +1988,7 @@
         ],
         "operationId": "listAiQualityResults",
         "summary": "查询ai质检结果",
-        "description": "用于查询ai质检结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询ai质检结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.risk_alert.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2018,7 +2018,7 @@
         ],
         "operationId": "listAiQualityTasks",
         "summary": "查询ai质检任务",
-        "description": "用于查询ai质检任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询ai质检任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.risk_alert.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2048,7 +2048,7 @@
         ],
         "operationId": "listBusinessMetricSnapshots",
         "summary": "List P2 business metric snapshots for operational analytics",
-        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements. M737：平台管理员看全表；其余人按 analytics.dashboard.view 可触及的项目逐行留——平台段只给经勾选了「可以查看全部项目」的角色持有该权限的人，项目段只出可触及项目的，商户段只出在可触及项目内经营的商户的，其他分段不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2078,7 +2078,7 @@
         ],
         "operationId": "listCustomerIntents",
         "summary": "查询客户意向",
-        "description": "用于查询客户意向。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询客户意向。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.risk_alert.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2127,7 +2127,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "M737。平台管理员与经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。"
       }
     },
     "/api/v1/analytics/dashboards/{domain}": {
@@ -2137,7 +2138,7 @@
         ],
         "operationId": "getAnalyticsDomainDashboard",
         "summary": "P0 经营看板下钻（按域）",
-        "description": "按业务域下钻经营看板指标（metric_code map），经 currentMerchantScope 行级隔离。",
+        "description": "按业务域下钻经营看板指标（metric_code map），经 currentMerchantScope 行级隔离。 M737：平台管理员与经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。",
         "parameters": [
           {
             "name": "domain",
@@ -2179,7 +2180,7 @@
         ],
         "operationId": "listMerchantHealthScores",
         "summary": "查询商户健康度scores",
-        "description": "用于查询商户健康度scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询商户健康度scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：平台管理员看全部商户；带商户归属的账号只看本商户；其余员工只出在其按 analytics.dashboard.view 可触及的项目内经营的商户（经营项目＝商户主项目加 merchant_projects 追加的项目）；不带商户归属的外包账号 403（MERCHANT_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2209,7 +2210,7 @@
         ],
         "operationId": "listAnalyticsMerchants",
         "summary": "查询经营分析商户",
-        "description": "用于查询经营分析商户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询经营分析商户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：平台管理员看全部商户；带商户归属的账号只看本商户；其余员工只出在其按 analytics.dashboard.view 可触及的项目内经营的商户（经营项目＝商户主项目加 merchant_projects 追加的项目）；不带商户归属的外包账号 403（MERCHANT_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2239,7 +2240,7 @@
         ],
         "operationId": "listMetricAnomalies",
         "summary": "查询指标异常",
-        "description": "用于查询指标异常。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询指标异常。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.risk_alert.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2269,7 +2270,7 @@
         ],
         "operationId": "disposeMetricAnomaly",
         "summary": "处置指标异常",
-        "description": "用于处置指标异常(已阅/已处置/误报/转告警),形成发现到闭环的处置流转。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于处置指标异常(已阅/已处置/误报/转告警),形成发现到闭环的处置流转。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.metric_anomaly.manage 的人，否则 403（PLATFORM_SCOPE_REQUIRED）、不落库。",
         "x-permission": "analytics.metric_anomaly.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2323,7 +2324,7 @@
         ],
         "operationId": "listMetricAnomalyTimeline",
         "summary": "查询指标异常处置历史时间线",
-        "description": "用于查询某指标异常的完整处置历史时间线(append-only:谁/何时/从什么状态到什么状态/处置说明/转告警时生成的告警号),供处置闭环回溯。历史只增不改(读 audit_events 的 disposition_recorded 事件)。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询某指标异常的完整处置历史时间线(append-only:谁/何时/从什么状态到什么状态/处置说明/转告警时生成的告警号),供处置闭环回溯。历史只增不改(读 audit_events 的 disposition_recorded 事件)。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.risk_alert.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2389,7 +2390,7 @@
         ],
         "operationId": "getMetricDetail",
         "summary": "KPI统一指标明细(指标登记簿)",
-        "description": "统一明细端点(2026-07-18 拍板方案A): 按代码内指标登记簿(MetricRegistry)返回分页明细行+合计校验值+口径说明+数据截至时间, 保证「页面数字=明细合计」同源。口径铁律: 可加=区间求和; 比率=分子/分母(part 两页签); 余额=区间末值(取 to, from 不参与)。除本操作 x-permission 外, 服务端按登记项权限码二次校验(首批: revenue.ticket=analytics.dashboard.view; finance.recon_diff_count=finance.reconciliation.view; energy.total_electricity 与 energy.electricity_per_sqm=energy.reading.manage; finance.ar_balance=finance.ar_ap.view)。project_id/merchant_id 为预留维度参数, 首批平台口径指标不支持, 传入即 VALIDATION_FAILED。未登记 metric 亦为 VALIDATION_FAILED(fail-closed)。",
+        "description": "统一明细端点(2026-07-18 拍板方案A): 按代码内指标登记簿(MetricRegistry)返回分页明细行+合计校验值+口径说明+数据截至时间, 保证「页面数字=明细合计」同源。口径铁律: 可加=区间求和; 比率=分子/分母(part 两页签); 余额=区间末值(取 to, from 不参与)。除本操作 x-permission 外, 服务端按登记项权限码二次校验(首批: revenue.ticket=analytics.dashboard.view; finance.recon_diff_count=finance.reconciliation.view; energy.total_electricity 与 energy.electricity_per_sqm=energy.reading.manage; finance.ar_balance=finance.ar_ap.view)。project_id/merchant_id 为预留维度参数, 首批平台口径指标不支持, 传入即 VALIDATION_FAILED。未登记 metric 亦为 VALIDATION_FAILED(fail-closed)。 M737：可触及项目取 analytics.dashboard.view 与登记项权限码两项的交集。登记了项目列的指标：平台管理员看全量，其余人只出可触及项目内的行与合计。没有项目列的指标：平台管理员与两项权限都经勾选了「可以查看全部项目」的角色持有的人看平台全量，其余人 403（PLATFORM_METRIC_PROJECT_FORBIDDEN）。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -2515,7 +2516,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "M737。这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。"
       },
       "post": {
         "tags": [
@@ -2549,7 +2551,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于创建风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+        "description": "用于创建风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.manage 的人，否则 403（PLATFORM_SCOPE_REQUIRED）、不落库。"
       }
     },
     "/api/v1/analytics/risk-alerts/{id}/resolve": {
@@ -2559,7 +2561,7 @@
         ],
         "operationId": "resolveRiskAlert",
         "summary": "处理风险alert",
-        "description": "用于处理风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于处理风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.manage 的人，否则 403（PLATFORM_SCOPE_REQUIRED）、不落库。",
         "x-permission": "analytics.risk_alert.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2604,7 +2606,7 @@
         ],
         "operationId": "listReviewLocks",
         "summary": "经营复盘锁定记录",
-        "description": "用于查询经营复盘锁定记录（刷新/换人/审计追责可查回）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询经营复盘锁定记录（刷新/换人/审计追责可查回）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：平台管理员看全部；商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED，M737-F10）；其余人只出按 analytics.review.lock 可触及的项目的锁，项目为空的锁不出。",
         "x-permission": "analytics.review.lock",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2632,7 +2634,7 @@
         ],
         "operationId": "createReviewLock",
         "summary": "锁定经营复盘快照",
-        "description": "用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED，在进入幂等之前，M737-F10）；锁建在本人所属项目；本人所属项目不在 analytics.review.lock 可触及的项目内的 403（CROSS_ORG_FORBIDDEN）。",
         "x-permission": "analytics.review.lock",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2701,7 +2703,7 @@
         ],
         "operationId": "getRobotAnalytics",
         "summary": "获取机器人经营分析",
-        "description": "用于获取机器人经营分析。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于获取机器人经营分析。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2731,7 +2733,7 @@
         ],
         "operationId": "listStaffServiceScores",
         "summary": "查询员工服务scores",
-        "description": "用于查询员工服务scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询员工服务scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 M737：这类数据没有项目归属，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.risk_alert.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.risk_alert.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -20621,7 +20623,8 @@
             },
             "description": "汇总维度：project(默认)按项目 / entity 按法律主体下钻。"
           }
-        ]
+        ],
+        "description": "M737。按 analytics.group.view 可触及的项目出行：平台管理员与经勾选了「可以查看全部项目」的角色持有该权限的人看全部项目行，没有分项目快照时回退的平台口径一行也只给这两类人；其余人只出可触及项目的行（groupBy=entity 只合并这些项目，平均值与低于基准标记只按出现的行算），没有可见行时项目列表为空。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。"
       }
     },
     "/api/v1/ticketing/refunds/{refund_id}/lines": {
@@ -22488,7 +22491,7 @@
         ],
         "operationId": "getAnalyticsTrafficHourly",
         "summary": "分时段客流分布",
-        "description": "T4.3：按经营日窗口对成功核销 created_at 小时分桶（0~23 共 24 桶）；date 为空退回最新经营日，按 scope 隔离。",
+        "description": "T4.3：按经营日窗口对成功核销 created_at 小时分桶（0~23 共 24 桶）；date 为空退回最新经营日，按 scope 隔离。 M737：平台管理员与经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。",
         "parameters": [
           {
             "name": "date",
@@ -28853,7 +28856,7 @@
         ],
         "operationId": "listArOverdueDebtors",
         "summary": "欠费商户明细排行(账龄钻取)",
-        "description": "BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤 a0_30/a31_60/a61_90/a90p。",
+        "description": "BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤 a0_30/a31_60/a61_90/a90p。 M737：按 finance.ar_ap.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出应收行项目落在可触及项目内的行（先过滤再按商户汇总），项目为空的行不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "finance.ar_ap.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -28919,7 +28922,7 @@
         ],
         "operationId": "listVacantSpaces",
         "summary": "空置铺位明细(出租率钻取)",
-        "description": "BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。",
+        "description": "BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。 M737：按 contract.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出铺位项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "contract.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -28968,7 +28971,7 @@
         ],
         "operationId": "listExpiringContracts",
         "summary": "到期预警合同明细",
-        "description": "90 天(可配 1-365)内到期的生效合同,按到期日升序,含商户与绑定面积。",
+        "description": "90 天(可配 1-365)内到期的生效合同,按到期日升序,含商户与绑定面积。 M737：按 contract.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出合同项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "contract.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29026,7 +29029,7 @@
         ],
         "operationId": "listOverdueWorkOrders",
         "summary": "超时工单明细(时效钻取)",
-        "description": "BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单 (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。",
+        "description": "BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单 (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。 M737：按 facility.work_order.manage 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）设施工单只出工单项目落在可触及项目内的行（项目为空的不出），source=merchant 时只出在可触及项目内经营的商户的工单。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29087,7 +29090,7 @@
         ],
         "operationId": "listAbnormalReadings",
         "summary": "异常读数明细(能耗钻取)",
-        "description": "BI S5:当日经营窗内异常读数(突增/突降/零读数/倒走)实时明细, 与 energy.abnormal_count 同过滤同口径,含表计名称与类型。",
+        "description": "BI S5:当日经营窗内异常读数(突增/突降/零读数/倒走)实时明细, 与 energy.abnormal_count 同过滤同口径,含表计名称与类型。 M737：按 energy.reading.manage 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出电表项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "energy.reading.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29136,7 +29139,7 @@
         ],
         "operationId": "getMonthlyComparison",
         "summary": "月度对比(环比/同比)",
-        "description": "BI M1(2026-07-02 拍板④混合口径):流量类=月累计、存量/比率类=期末时点; 环比=上月 monthly 快照、同比=去年同月;缺月返回 null(前端标「积累中」,不伪造)。",
+        "description": "BI M1(2026-07-02 拍板④混合口径):流量类=月累计、存量/比率类=期末时点; 环比=上月 monthly 快照、同比=去年同月;缺月返回 null(前端标「积累中」,不伪造)。 M737：全平台口径，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29181,7 +29184,7 @@
         ],
         "operationId": "exportMonthlyReport",
         "summary": "月度经营报表导出(分权)",
-        "description": "BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批); 数据与月度对比同一份组装(图表=导出,单一口径)。",
+        "description": "BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批); 数据与月度对比同一份组装(图表=导出,单一口径)。 M737：除持有 analytics.report.export（任何有效来源，含临时、单次授权）外，还须能看全平台合计——平台管理员，或经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view；否则 403（PLATFORM_SCOPE_REQUIRED），被拒不消耗单次授权。",
         "x-permission": "analytics.report.export",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29226,7 +29229,7 @@
         ],
         "operationId": "getAbandonedEntitlementRevenue",
         "summary": "放弃权益额外收入报表(票种×权益类型)",
-        "description": "已过期未使用权益归项目公司的额外收入，按 通票/单独门票 × 酒水/入场/游乐/演出/其他 交叉列金额与笔数；数据源=SettlementExpiryJob 写的 unverified_expired 归项目流水，只读。",
+        "description": "已过期未使用权益归项目公司的额外收入，按 通票/单独门票 × 酒水/入场/游乐/演出/其他 交叉列金额与笔数；数据源=SettlementExpiryJob 写的 unverified_expired 归项目流水，只读。 M737：全平台口径，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29281,7 +29284,7 @@
         ],
         "operationId": "getRentToSales",
         "summary": "店级/业态级/平台级租售比",
-        "description": "P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。",
+        "description": "P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。 M737：平台管理员看全量；经勾选了「可以查看全部项目」的角色持有 contract.view 的人看平台合计与未归属营业额，商户行与业态行只出在其可触及项目内经营的商户（M737-F06）；其余人只出在其可触及项目内经营的商户行与由这些行合并出的业态行，不出平台合计，未归属营业额记 0。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "contract.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29603,7 +29606,7 @@
         ],
         "operationId": "getHolidayComparison",
         "summary": "节假日对比(今年 vs 去年同名)",
-        "description": "H1(2026-07-02 拍板):流量=区间累计+日均双列(天数不同看日均才公平,同比按日均); 存量=假期末时点;去年无同名假期→上年侧空(积累中,不伪造)。",
+        "description": "H1(2026-07-02 拍板):流量=区间累计+日均双列(天数不同看日均才公平,同比按日均); 存量=假期末时点;去年无同名假期→上年侧空(积累中,不伪造)。 M737：全平台口径，只给平台管理员和经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人，否则 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
