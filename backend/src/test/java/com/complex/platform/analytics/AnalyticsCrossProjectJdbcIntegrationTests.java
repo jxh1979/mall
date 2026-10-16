@@ -101,11 +101,13 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         assertThat(vacantSpaces(ticked)).containsExactly(spaceB);
         assertThat(debtors(ticked)).containsExactly(debtorB);
 
-        // 以上三种人都看不到项目列为空的那一行；勾全部的人与平台管理员不按项目列过滤，A、B 和项目列为空的那一行都出
-        for (RequestPostProcessor whole : List.of(staffOfA("all", allProjectsRole("all", codes)), platformAdmin(codes))) {
-            assertThat(vacantSpaces(whole)).containsExactlyInAnyOrder(spaceA, spaceB);
-            assertThat(debtors(whole)).containsExactlyInAnyOrder(debtorA, debtorB, debtorNone);
-        }
+        // 以上三种人都看不到项目列为空的那一行；M737-F07：勾了全部项目的人也一样（只到项目为止），只有平台管理员不按项目列过滤
+        RequestPostProcessor all = staffOfA("all", allProjectsRole("all", codes));
+        assertThat(vacantSpaces(all)).containsExactlyInAnyOrder(spaceA, spaceB);
+        assertThat(debtors(all)).containsExactlyInAnyOrder(debtorA, debtorB);
+        RequestPostProcessor admin = platformAdmin(codes);
+        assertThat(vacantSpaces(admin)).containsExactlyInAnyOrder(spaceA, spaceB);
+        assertThat(debtors(admin)).containsExactlyInAnyOrder(debtorA, debtorB, debtorNone);
     }
 
     // J2（2.8 指标明细，登记了项目列的指标）：在职员工数——夹具里的员工账号就是数据。A 的在职员工是下面四名操作人，B 一名，
@@ -246,7 +248,34 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         assertThat(rentToSalesMerchants(admin)).containsExactlyInAnyOrder(merchantA, merchantNone);
     }
 
+    // J6（M737-F07 商户服务工单超时明细）：商户甲（主项目 A）与「无」（主项目为空——V432 不回填历史商户的项目）各有一张今天到期、已标超时的服务工单。
+    // 勾了全部项目的人只看到有经营项目的商户的工单；平台管理员两张都看到。修复前勾全部的人拿到「无」那张（第一处断言即红）。
+    @Test
+    void overdueMerchantWorkOrdersForAllProjectsHoldersOnlyShowMerchantsOperatingInProjects() throws Exception {
+        String merchantA = merchant("a", projectA);
+        String merchantNone = merchant("none", null);
+        String woA = overdueMerchantWorkOrder("a", merchantA);
+        String woNone = overdueMerchantWorkOrder("none", merchantNone);
+
+        RequestPostProcessor all = staffOfA("all", allProjectsRole("all", "facility.work_order.manage"));
+        assertThat(overdueMerchantWorkOrders(all)).containsExactly(woA);
+
+        RequestPostProcessor admin = platformAdmin("facility.work_order.manage");
+        assertThat(overdueMerchantWorkOrders(admin)).containsExactlyInAnyOrder(woA, woNone);
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
+
+    /** 一张今天到期、已标超时的商户服务工单（超时明细取当日窗口）。 */
+    private String overdueMerchantWorkOrder(String tag, String merchantId) {
+        String id = "mwo_m737_" + tag + "_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO merchant_service_work_orders (id, merchant_id, work_order_type, priority, status, title, description,
+                        reported_by_user_id, reported_channel, due_at, created_at, updated_at, sla_breached)
+                VALUES (?, ?, 'repair', 'high', 'created', ?, 'M737', 'usr_m737', 'web', now(), now(), now(), TRUE)
+                """, id, merchantId, id);
+        return id;
+    }
 
     /** 2098-07 账期的一笔合同租金应收（租售比分子）；账期远在未来，库里没有同期的行。 */
     private void rent(String tag, String merchantId, long cent) {
@@ -396,6 +425,10 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     private List<String> snapshots(RequestPostProcessor session) throws Exception {
         return mine(session, "/api/v1/analytics/business-metric-snapshots", "$.data.items[*].snapshot_id");
+    }
+
+    private List<String> overdueMerchantWorkOrders(RequestPostProcessor session) throws Exception {
+        return mine(session, "/api/v1/analytics/work-order-sla/overdue-orders?source=merchant", "$.data.items[*].work_order_id");
     }
 
     private List<String> rentToSalesMerchants(RequestPostProcessor session) throws Exception {

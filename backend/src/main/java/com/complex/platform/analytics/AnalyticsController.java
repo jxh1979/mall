@@ -69,9 +69,10 @@ public class AnalyticsController {
         return authorizationService.projectReach(authorizationService.currentActor(), permissionCodes);
     }
 
-    /** M737 传给服务层的项目集合：平台管理员、勾了全部项目的 → null（不过滤）；其余 → 可触及项目（可能为空集＝一行不出）。 */
+    /** M737 传给服务层的项目集合：平台管理员 → null（不过滤）；其余（含勾了全部项目的人，M737-F07：操作员 2026-10-16「统一按『只到项目为止』」，
+     *  治理地图「只能触及归属在项目或项目公司下……的账号与数据」）→ 可触及项目（可能为空集＝一行不出；项目为空的行不出）。 */
     private static java.util.Set<String> projectIds(AuthorizationService.ProjectReach reach) {
-        return reach.platformAdmin() || reach.allProjects() ? null : reach.organizationIds();
+        return reach.platformAdmin() ? null : reach.organizationIds();
     }
 
     /** M737 商户类分析：不是平台管理员、不带商户归属、不是外包账号的员工按可触及项目出在其中经营的商户；其余三种人照旧走 currentMerchantScope()。 */
