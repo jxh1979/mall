@@ -525,9 +525,10 @@ public class AnalyticsController {
 
     @GetMapping("/review-locks")
     public ApiResponse<PageResponse<AnalyticsRecords.BusinessReviewLockRecord>> listReviewLocks() {
-        // 复盘锁定=项目级隔离：仅校验写权限，scope 由 token 派生（service 层过滤）；
-        // 不加 requirePlatformScope（那会拒绝合法的项目主管只看/只锁本综合体）。
+        // 复盘锁定=项目级隔离：scope 由 token 派生（service 层按可触及项目过滤）。M737-F10：商户、外包账号与经营分析其他入口一样
+        // 由 requirePlatformScope 拒绝（它只拒商户与外包，不拒不带商户归属的项目员工）。
         authorizationService.requirePermission("analytics.review.lock");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listReviewLocks());
     }
 
@@ -536,6 +537,7 @@ public class AnalyticsController {
             @RequestBody(required = false) @jakarta.validation.Valid BusinessReviewLockRequest request) {
         authorizationService.requirePermission("analytics.review.lock");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        authorizationService.requirePlatformScope(); // M737-F10：商户、外包账号在进入幂等之前拒绝，原提交编号重试也一样
         return ApiResponse.ok(service.createReviewLock(request));
     }
 

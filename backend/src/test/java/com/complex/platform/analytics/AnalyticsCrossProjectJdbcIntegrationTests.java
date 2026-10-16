@@ -295,6 +295,17 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         assertThat(reviewLockCount(key)).isEqualTo(1);
     }
 
+    // J8（M737-F10 复盘锁的商户、外包账号）：A 的员工先建一把锁；归属 A 的商户账号与外包账号只经「员工单独授予」（不挂角色）持有
+    // analytics.review.lock，列表与新建都 403 PLATFORM_SCOPE_REQUIRED、原提示，不建锁。修复前商户账号的列表拿到 200（第一处断言即红）。
+    @Test
+    void reviewLocksDenyMerchantAndOutsourcedAccountsGrantedThePermission() throws Exception {
+        RequestPostProcessor staff = staffOfA("owner", plainRole("owner", "analytics.review.lock"));
+        createReviewLock(staff, reviewLockBody("m737-lock-owner-" + suffix)).andExpect(status().isOk());
+
+        assertReviewLocksDenied("mch", grantedReviewLock("mch", "merchant", merchant("lock", projectA)), "商户账号无权查看平台级经营分析");
+        assertReviewLocksDenied("vendor", grantedReviewLock("vendor", "outsourced_vendor", null), "外包供应商无权查看平台级数据");
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     /** 一张今天到期、已标超时的商户服务工单（超时明细取当日窗口）。 */
@@ -470,6 +481,34 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
     private int reviewLockCount(String key) {
         Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM business_review_locks WHERE idempotency_key = ?", Integer.class, key);
         return n == null ? 0 : n;
+    }
+
+    private static String reviewLockBody(String key) {
+        return """
+                {"idempotency_key": "%s", "domain": "all", "operator_note": "月度复盘", "metric_count": 3}
+                """.formatted(key);
+    }
+
+    /** 归属 A 的账号，只经「员工单独授予」持有 analytics.review.lock（不挂角色）。 */
+    private RequestPostProcessor grantedReviewLock(String tag, String accountType, String merchantId) {
+        RequestPostProcessor session = account(tag, accountType, projectA, merchantId);
+        accessRepository.saveUserPermissionOverrides(userId(tag), List.of("analytics.review.lock"), AccessRepository.Effect.GRANT,
+                "M737-F10", userId("owner"));
+        return session;
+    }
+
+    /** 复盘锁列表与新建都 403 PLATFORM_SCOPE_REQUIRED、原提示，不建锁。 */
+    private void assertReviewLocksDenied(String tag, RequestPostProcessor session, String message) throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/review-locks").with(session))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"))
+                .andExpect(jsonPath("$.message").value(message));
+        String key = "m737-lock-" + tag + "-" + suffix;
+        createReviewLock(session, reviewLockBody(key))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"))
+                .andExpect(jsonPath("$.message").value(message));
+        assertThat(reviewLockCount(key)).isZero();
     }
 
     private List<String> overdueMerchantWorkOrders(RequestPostProcessor session) throws Exception {

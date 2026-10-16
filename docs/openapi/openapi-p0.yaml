@@ -1872,7 +1872,7 @@ paths:
       operationId: listReviewLocks
       summary: 经营复盘锁定记录
       description: 用于查询经营复盘锁定记录（刷新/换人/审计追责可查回）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-        M737：平台管理员看全部；其余人只出按 analytics.review.lock 可触及的项目的锁，项目为空的锁不出。
+        M737：平台管理员看全部；商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED，M737-F10）；其余人只出按 analytics.review.lock 可触及的项目的锁，项目为空的锁不出。
       x-permission: analytics.review.lock
       x-data-scope: project
       x-terminal-allowed:
@@ -1894,7 +1894,8 @@ paths:
       operationId: createReviewLock
       summary: 锁定经营复盘快照
       description: 用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。 M737：锁建在本人所属项目；本人所属项目不在 analytics.review.lock 可触及的项目内的 403（CROSS_ORG_FORBIDDEN）。
+        深度能力不得反向扩大 P0 范围。 M737：商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED，在进入幂等之前，M737-F10）；锁建在本人所属项目；本人所属项目不在
+        analytics.review.lock 可触及的项目内的 403（CROSS_ORG_FORBIDDEN）。
       x-permission: analytics.review.lock
       x-data-scope: project
       x-terminal-allowed:
