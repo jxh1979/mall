@@ -43,7 +43,7 @@ class ServiceOrderScopeTests {
     @Test
     void createRejectsCrossProjectPerformer() {
         ServiceOrderService svc = build();
-        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
+        when(authz.projectReach(any(), any(String[].class))).thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_A"));
         when(staffRepo.findUserProjectId("usr_b")).thenReturn(Optional.of("prj_B"));
         assertThatThrownBy(() -> svc.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
                 "k1", "svc1", "usr_b", null, null, null)))
@@ -53,7 +53,7 @@ class ServiceOrderScopeTests {
     @Test
     void markPaidRejectsCrossProjectOrder() {
         ServiceOrderService svc = build();
-        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
+        when(authz.projectReach(any(), any(String[].class))).thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_A"));
         when(repo.findOrder("svo_x")).thenReturn(Optional.of(orderFor("usr_b", "created")));
         when(staffRepo.findUserProjectId("usr_b")).thenReturn(Optional.of("prj_B"));
         assertThatThrownBy(() -> svc.markPaid("svo_x",
@@ -64,7 +64,8 @@ class ServiceOrderScopeTests {
     @Test
     void platformAdminEmptyScopeBypassesProjectGuard() {
         ServiceOrderService svc = build();
-        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.empty());
+        when(authz.projectReach(any(), any(String[].class)))
+                .thenReturn(new AuthorizationService.ProjectReach(true, true, null, true, java.util.Set.of()));
         when(repo.findCatalogItem(any())).thenReturn(Optional.empty());
         // 空 scope 不触发跨项目拒;继续走目录查找 → 目录不存在(证明守卫已放行,非 CROSS_PROJECT)。
         assertThatThrownBy(() -> svc.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(

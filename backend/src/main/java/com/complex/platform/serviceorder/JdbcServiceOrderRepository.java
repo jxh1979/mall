@@ -227,6 +227,20 @@ class JdbcServiceOrderRepository {
                 .addValue("project_scope", projectScope), this::mapOrder);
     }
 
+    /** M738：按项目集合取后台服务单；null＝全量（平台管理员），空集合＝一行不出（空 IN () 是语法错误，null 时用占位）。 */
+    public List<ServiceOrderRecord> listOrdersInProjects(LocalDate date, String status, java.util.Collection<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) return List.of();
+        return jdbcTemplate.query(SELECT_ORDER + """
+                 WHERE (:date::date IS NULL OR created_at::date = :date)
+                   AND (:status::text IS NULL OR status = :status)
+                   AND (:all_projects OR project_id IN (:project_ids))
+                 ORDER BY created_at DESC
+                 LIMIT 500
+                """, new MapSqlParameterSource().addValue("date", date).addValue("status", status)
+                .addValue("all_projects", projectIds == null)
+                .addValue("project_ids", projectIds == null ? List.of("") : projectIds), this::mapOrder);
+    }
+
     public long[] performerMonthlyStats(String performerUserId, String month) {
         return jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) AS cnt, COALESCE(SUM(dancer_share_cent), 0) AS total

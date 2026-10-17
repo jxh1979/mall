@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -140,11 +140,14 @@ public class JdbcStaffRepository {
 
     public int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope,
             String merchantScope) {
-        return closePayrollMonth(month, closedBy, now, projectScope, merchantScope, null);
+        return closePayrollMonth(month, closedBy, now, projectScope, merchantScope, null, null);
     }
 
     public int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope,
-            String merchantScope, String companyScope) {
+            String merchantScope, String companyScope, java.util.Collection<String> projectIds) {
+        if (companyScope == null && projectIds != null && projectIds.isEmpty()) {
+            return 0;
+        }
         // 月结重算:固定档案 + 台账提成 + 酒吧提成(bar_commission_calculations 按月/非作废) + 奖 - 罚;
         // 有任一薪资要素的员工都出单;未发放月幂等覆盖(uq user+month)。
         // 资金安全①:已发放(status='paid')的行既不重算 INSERT(WHERE NOT EXISTS 排除),
@@ -237,7 +240,7 @@ public class JdbcStaffRepository {
                  -- 绝不 INSERT/覆盖其他项目的薪资单。无档案员工(sp.project_id 为 NULL)只在平台口径纳入。
                  WHERE (:project_scope::text IS NULL OR sp.project_id = :project_scope)
                    AND (:merchant_scope::text IS NULL OR sp.merchant_id = :merchant_scope)
-                   AND (:company_scope::text IS NULL OR sp.company_id = :company_scope)
+                   AND (:all_staff OR sp.company_id = :company_scope::text OR sp.project_id IN (:project_ids))
                    -- 资金安全①:已发放的员工月份不参与重算(不 INSERT 冲突、不覆盖)。
                    AND NOT EXISTS (SELECT 1 FROM staff_payroll_statements paid
                                     WHERE paid.user_id = u.user_id AND paid.month = :month
@@ -254,13 +257,13 @@ public class JdbcStaffRepository {
                     closed_by = EXCLUDED.closed_by,
                     closed_at = EXCLUDED.closed_at
                   WHERE staff_payroll_statements.status <> 'paid'
-                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                """, withStaffScope(new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("month", month).addValue("closed_by", closedBy)
                 .addValue("now", java.sql.Timestamp.from(now))
                 .addValue("first", java.sql.Date.valueOf(java.time.YearMonth.parse(month).atDay(1)))
                 .addValue("last", java.sql.Date.valueOf(java.time.YearMonth.parse(month).atEndOfMonth()))
                 .addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope)
-                .addValue("company_scope", companyScope).addValue("local_zone", LocalZone.ID.getId()));
+                .addValue("local_zone", LocalZone.ID.getId()), companyScope, projectIds));
     }
 
     public int markPayrollPaid(String payoutId, String userId, String month, String payMethod,
@@ -315,6 +318,16 @@ public class JdbcStaffRepository {
             + " (SELECT user_id FROM staff_profiles WHERE merchant_id = :merchant_scope"
             + " AND delete_status <> 'approved'))";
 
+    /** M738：人事列表与月结按「本公司 OR 登记项目 IN 集合」过滤（写法同 JdbcAnalyticsRepository 的 withProjects）。两者都 null＝不按公司、
+     *  登记项目过滤（平台管理员、商户账号）；登记项目集合为空时用占位（空 IN () 是语法错误，project_id 不收空串），
+     *  「无公司且空集合」调用前已提前返回。谓词写作 (:all_staff OR 公司条件 OR 登记项目 IN (:project_ids))。 */
+    private static MapSqlParameterSource withStaffScope(MapSqlParameterSource params, String companyScope,
+            java.util.Collection<String> projectIds) {
+        return params.addValue("all_staff", companyScope == null && projectIds == null)
+                .addValue("company_scope", companyScope)
+                .addValue("project_ids", projectIds == null || projectIds.isEmpty() ? List.of("") : projectIds);
+    }
+
     public com.complex.platform.common.api.PageResponse<StaffLeaveRequestRecord> listLeavesPaged(
             String status, String userId, String projectScope, int page, int size) {
         return listLeavesPaged(status, userId, projectScope, null, page, size);
@@ -323,21 +336,25 @@ public class JdbcStaffRepository {
     // ---------- AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, 真实 total, 稳定排序(id 收敛), 同 scope 谓词 ----------
     public com.complex.platform.common.api.PageResponse<StaffShiftRecord> listShiftsPaged(
             java.time.LocalDate workDate, String userId, String projectScope, String merchantScope, int page, int size) {
-        return listShiftsPaged(workDate, userId, projectScope, merchantScope, null, page, size);
+        return listShiftsPaged(workDate, userId, projectScope, merchantScope, null, null, page, size);
     }
 
     public com.complex.platform.common.api.PageResponse<StaffShiftRecord> listShiftsPaged(
-            java.time.LocalDate workDate, String userId, String projectScope, String merchantScope, String companyScope, int page, int size) {
+            java.time.LocalDate workDate, String userId, String projectScope, String merchantScope, String companyScope,
+            java.util.Collection<String> projectIds, int page, int size) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        if (companyScope == null && projectIds != null && projectIds.isEmpty()) {
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        }
         String where = "WHERE (:work_date::date IS NULL OR work_date = :work_date)"
                 + "   AND (:user_id::text IS NULL OR user_id = :user_id)"
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)"
                 + STAFF_MERCHANT_FILTER
-                + " AND (:company_scope::text IS NULL OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id=:company_scope))";
-        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                + " AND (:all_staff OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id = :company_scope::text OR p.project_id IN (:project_ids)))";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params = withStaffScope(
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                        .addValue("work_date", workDate).addValue("user_id", userId).addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope).addValue("company_scope", companyScope);
+                        .addValue("work_date", workDate).addValue("user_id", userId).addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope), companyScope, projectIds);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_shift_schedules " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         java.util.List<StaffShiftRecord> items = jdbcTemplate.query(
@@ -350,22 +367,26 @@ public class JdbcStaffRepository {
 
     public com.complex.platform.common.api.PageResponse<StaffAttendanceRecord> listAttendanceOnPaged(
             java.time.LocalDate date, String projectScope, String merchantScope, int page, int size) {
-        return listAttendanceOnPaged(date, projectScope, merchantScope, null, page, size);
+        return listAttendanceOnPaged(date, projectScope, merchantScope, null, null, page, size);
     }
 
     public com.complex.platform.common.api.PageResponse<StaffAttendanceRecord> listAttendanceOnPaged(
-            java.time.LocalDate date, String projectScope, String merchantScope, String companyScope, int page, int size) {
+            java.time.LocalDate date, String projectScope, String merchantScope, String companyScope,
+            java.util.Collection<String> projectIds, int page, int size) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 1000 : Math.min(size, 1000);
+        if (companyScope == null && projectIds != null && projectIds.isEmpty()) {
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        }
         String where = "WHERE punched_at >= :day_start AND punched_at < :day_end"
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)"
                 + STAFF_MERCHANT_FILTER
-                + " AND (:company_scope::text IS NULL OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id=:company_scope))";
-        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                + " AND (:all_staff OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id = :company_scope::text OR p.project_id IN (:project_ids)))";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params = withStaffScope(
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                         .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay(LocalZone.ID).toInstant()))
                         .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay(LocalZone.ID).toInstant()))
-                        .addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope).addValue("company_scope", companyScope);
+                        .addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope), companyScope, projectIds);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_attendance_records " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         java.util.List<StaffAttendanceRecord> items = jdbcTemplate.query(
@@ -378,20 +399,24 @@ public class JdbcStaffRepository {
 
     public com.complex.platform.common.api.PageResponse<StaffPayrollStatementRecord> listPayrollStatementsPaged(
             String month, String userId, String projectScope, String merchantScope, int page, int size) {
-        return listPayrollStatementsPaged(month, userId, projectScope, merchantScope, null, page, size);
+        return listPayrollStatementsPaged(month, userId, projectScope, merchantScope, null, null, page, size);
     }
 
     public com.complex.platform.common.api.PageResponse<StaffPayrollStatementRecord> listPayrollStatementsPaged(
-            String month, String userId, String projectScope, String merchantScope, String companyScope, int page, int size) {
+            String month, String userId, String projectScope, String merchantScope, String companyScope,
+            java.util.Collection<String> projectIds, int page, int size) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 1000 : Math.min(size, 1000);
+        if (companyScope == null && projectIds != null && projectIds.isEmpty()) {
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        }
         String where = "WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)"
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)"
                 + STAFF_MERCHANT_FILTER
-                + " AND (:company_scope::text IS NULL OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id=:company_scope))";
-        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                + " AND (:all_staff OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id = :company_scope::text OR p.project_id IN (:project_ids)))";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params = withStaffScope(
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                        .addValue("month", month).addValue("user_id", userId).addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope).addValue("company_scope", companyScope);
+                        .addValue("month", month).addValue("user_id", userId).addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope), companyScope, projectIds);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         java.util.List<StaffPayrollStatementRecord> items = jdbcTemplate.query(
@@ -404,21 +429,25 @@ public class JdbcStaffRepository {
 
     public com.complex.platform.common.api.PageResponse<StaffLeaveRequestRecord> listLeavesPaged(
             String status, String userId, String projectScope, String merchantScope, int page, int size) {
-        return listLeavesPaged(status, userId, projectScope, merchantScope, null, page, size);
+        return listLeavesPaged(status, userId, projectScope, merchantScope, null, null, page, size);
     }
 
     public com.complex.platform.common.api.PageResponse<StaffLeaveRequestRecord> listLeavesPaged(
-            String status, String userId, String projectScope, String merchantScope, String companyScope, int page, int size) {
+            String status, String userId, String projectScope, String merchantScope, String companyScope,
+            java.util.Collection<String> projectIds, int page, int size) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        if (companyScope == null && projectIds != null && projectIds.isEmpty()) {
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        }
         String where = "WHERE (:status::text IS NULL OR status = :status)"
                 + "   AND (:user_id::text IS NULL OR user_id = :user_id)"
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)"
                 + STAFF_MERCHANT_FILTER
-                + " AND (:company_scope::text IS NULL OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id=:company_scope))";
-        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                + " AND (:all_staff OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id = :company_scope::text OR p.project_id IN (:project_ids)))";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params = withStaffScope(
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                        .addValue("status", status).addValue("user_id", userId).addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope).addValue("company_scope", companyScope);
+                        .addValue("status", status).addValue("user_id", userId).addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope), companyScope, projectIds);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_leave_requests " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         java.util.List<StaffLeaveRequestRecord> items = jdbcTemplate.query(

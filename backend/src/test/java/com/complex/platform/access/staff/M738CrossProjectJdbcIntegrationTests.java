@@ -1,0 +1,637 @@
+package com.complex.platform.access.staff;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AccessUser;
+import com.complex.platform.access.RoleRecord;
+import com.jayway.jsonpath.JsonPath;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * M738（可跨项目角色·批 2 人事与审批可见性＋批 5 业务单据）真库＋真实接口回归：真实角色勾选 → 真实判定 → 真实接口 → 真实 SQL。
+ * 依据：治理地图「权限规则」「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」
+ * 「逐个勾选的只能查看被选中的项目」「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」；
+ * 2026-10-16 裁决所选选项原文一「角色勾了哪个项目，就看、管登记在该项目或改挂到该项目的员工。」、原文二「两个接口先核原班次的员工在不在范围内」。
+ *
+ * <p>判定口径：持有人凭可跨项目角色的部分按员工档案的登记项目（staff_profiles.project_id）；本人那一份（该码另有非可跨项目来源）
+ * 与非持有人照旧按所属公司（company_id）。所以改挂到 B 的 mB 必须出现在只勾 B 的持有人视图里、不出现在只勾 A 的持有人视图里，
+ * A 公司的非持有人照旧看得到 mB。
+ *
+ * <p>夹具随测试事务回滚：主体表里三家城市项目公司 A、B、C（在项目集合内）与一家平台公司 P（不在项目集合内），编号带每次运行的随机后缀；
+ * 公司自有员工按登记项目建（登记项目＝所属公司＝该主体），mB 是从 A 改挂到 B 之后的样子（登记项目 B、所属公司仍是 A）。
+ * 操作人默认是归属 A、不建档案的员工；角色直接经权限仓储建立并分配（勾全部、只勾 A、只勾 B、两项都没勾的普通角色）。
+ * 会话主体的归属、商户、账号类型、状态与账号行一致。共享库里有别的数据：断言只看本次夹具建的行（编号都以随机后缀结尾）。
+ * 被拒绝的请求留下的失败留痕是独立事务，按随机后缀隔离留在库里。
+ */
+@SpringBootTest(properties = {
+        "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
+        "spring.datasource.username=complex",
+        "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
+})
+@AutoConfigureMockMvc
+@Transactional
+class M738CrossProjectJdbcIntegrationTests {
+
+    @Autowired
+    private AccessRepository accessRepository;
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private final String suffix = UUID.randomUUID().toString().substring(0, 8);
+    private final String entityA = "be_m738_a_" + suffix;
+    private final String entityB = "be_m738_b_" + suffix;
+    private final String entityC = "be_m738_c_" + suffix;
+    private final String entityP = "be_m738_p_" + suffix;
+    // J4 的四个人事列表：2099-03-17 的排班与考勤、2099-03 的薪资单、待批请假
+    private static final List<String> STAFF_LISTS = List.of(
+            "/api/v1/staff/shifts?date=2099-03-17", "/api/v1/staff/attendance?date=2099-03-17",
+            "/api/v1/staff/payroll?month=2099-03", "/api/v1/staff/leaves?status=pending");
+
+    @BeforeEach
+    void createEntities() {
+        for (String[] row : List.of(new String[] {entityA, "project_company"}, new String[] {entityB, "project_company"},
+                new String[] {entityC, "project_company"}, new String[] {entityP, "platform"})) {
+            jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at) "
+                    + "VALUES (?, ?, ?, 'active', now(), now())", row[0], "M738 " + row[0], row[1]);
+        }
+    }
+
+    // J1（2.2 列表）：码 staff.profile.view。修复前只勾 B 的人拿到的是本公司 A 的 eA、mB（第一处断言即红）。
+    @Test
+    void profileListFollowsRegisteredProjectForCrossProjectRoles() throws Exception {
+        String code = "staff.profile.view";
+        employee("ea", entityA);
+        employee("eb", entityB);
+        employee("ec", entityC);
+        employee("ep", entityP);
+        RequestPostProcessor moved = movedToB("mb", tickedBRole("mb", code));
+        String eA = profileId("ea");
+        String eB = profileId("eb");
+        String eC = profileId("ec");
+        String mB = profileId("mb");
+
+        // 修复前红：只勾 B 的人拿到 eA、mB（按本公司 A）
+        assertThat(profiles(staffOfA("ticked", tickedBRole("ticked", code)))).containsExactlyInAnyOrder(eB, mB);
+        // 非持有人（普通角色）：照旧按所属公司 A，含改挂到 B 的 mB（守护，基线同）
+        assertThat(profiles(staffOfA("plain", plainRole("plain", code)))).containsExactlyInAnyOrder(eA, mB);
+        // 只勾 A：改挂到 B 的 mB 不出（修复前有 mB）
+        assertThat(profiles(staffOfA("tickeda", tickedARole("tickeda", code)))).containsExactly(eA);
+        // 勾 B 且权限另有普通来源：本公司照旧，加上登记在 B 的
+        assertThat(profiles(staffOfA("both", tickedBRole("both_t", code), plainRole("both_p", code))))
+                .containsExactlyInAnyOrder(eA, mB, eB);
+        // 勾全部：登记项目在项目集合内的；登记在平台公司 P 的 eP 不出
+        assertThat(profiles(staffOfA("all", allProjectsRole("all", code)))).containsExactlyInAnyOrder(eA, eB, eC, mB);
+
+        // 带商户归属的账号挂勾 B 的角色：照旧只看本商户的档案（守护）
+        String merchant = merchant("m", entityA);
+        profile("em", entityA, entityA, merchant);
+        assertThat(profiles(account("mch", "staff", entityA, merchant, tickedBRole("mch", code))))
+                .containsExactly(profileId("em"));
+
+        // mB 本人作操作人、只勾 B：本人档案所属公司 A 不因此带进来（守护本人那一份按 ownBySource）——修复前有 eA
+        assertThat(profiles(moved)).containsExactlyInAnyOrder(eB, mB);
+    }
+
+    // J2（2.2 写）：码 staff.profile.submit、staff.profile.review。修复前只勾 A 的人按本公司 A 存档了改挂到 B 的 mB（第一处断言即红）。
+    @Test
+    void profileWritesAndRegistrationReviewFollowRegisteredProject() throws Exception {
+        String[] codes = {"staff.profile.submit", "staff.profile.review"};
+        employee("ea", entityA);
+        employee("eb", entityB);
+        employee("ep", entityP);
+        RequestPostProcessor moved = movedToB("mb", tickedBRole("mb", codes));
+        String eA = profileId("ea");
+        String eB = profileId("eb");
+        String mB = profileId("mb");
+        RequestPostProcessor ticked = staffOfA("ticked", tickedBRole("ticked", codes));
+
+        // 修复前红：只勾 A 的人存档 mB 得到 200
+        denied(archive(staffOfA("tickeda", tickedARole("tickeda", codes)), mB), "CROSS_ORG_FORBIDDEN");
+        assertThat(archivedAt(mB)).isNull();
+        archive(ticked, mB).andExpect(status().isOk());
+        archive(ticked, eB).andExpect(status().isOk());
+        assertThat(archivedAt(eB)).isNotNull();
+        denied(archive(ticked, eA), "CROSS_ORG_FORBIDDEN");
+        assertThat(archivedAt(eA)).isNull();
+        postJson(ticked, "/api/v1/staff/profiles/" + eB + "/employment-status", """
+                {"idempotency_key": "%s", "employment_status": "employed", "reason": "M738 入职"}
+                """.formatted(key())).andExpect(status().isOk());
+        // 勾全部：平台公司 P 不在项目集合里
+        denied(archive(staffOfA("all", allProjectsRole("all", codes)), profileId("ep")), "CROSS_ORG_FORBIDDEN");
+        // mB 本人作操作人、只勾 B：本人档案所属公司 A 不带进来——修复前 200
+        denied(archive(moved, eA), "CROSS_ORG_FORBIDDEN");
+        assertThat(archivedAt(eA)).isNull();
+
+        // 注册审批：两条「已提交」注册，登记项目＝所属公司＝A／B；用驳回（不依赖登录凭证服务，闸与批准相同）
+        String rgA = registration("rga", entityA);
+        String rgB = registration("rgb", entityB);
+        // 非持有人照旧只批本公司（守护）
+        denied(reject(staffOfA("plain", plainRole("plain", "staff.profile.review")), rgB), "CROSS_ORG_FORBIDDEN");
+        // 修复前 403 CROSS_ORG_FORBIDDEN
+        reject(ticked, rgB).andExpect(status().isOk());
+        assertThat(registrationStatus(rgB)).isEqualTo("rejected");
+        denied(reject(ticked, rgA), "CROSS_ORG_FORBIDDEN");
+        assertThat(registrationStatus(rgA)).isEqualTo("submitted");
+    }
+
+    // J3（2.3 员工登记）：码 staff.profile.submit，商户 mchB 的经营主体公司是 B。修复前只勾 B 的人登记到 B 被拒（第一处断言即红）。
+    @Test
+    void registrationMayTargetReachableProjects() throws Exception {
+        String code = "staff.profile.submit";
+        String merchantB = merchant("b", entityB);
+        RequestPostProcessor ticked = staffOfA("ticked", tickedBRole("ticked", code));
+
+        // 修复前红：403 CROSS_ORG_FORBIDDEN（只认本人项目 A）
+        String created = JsonPath.read(register(ticked, entityB, merchantB).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        assertThat(jdbcTemplate.queryForMap("SELECT project_id, company_id FROM staff_profiles WHERE id = ?", created))
+                .containsEntry("project_id", entityB).containsEntry("company_id", entityB);
+        // 没勾的 C：拒绝，不落行
+        denied(register(ticked, entityC, merchantB), "CROSS_ORG_FORBIDDEN");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_profiles WHERE project_id = ?", Integer.class, entityC))
+                .isZero();
+        // 非持有人照旧只能登记到本人项目（守护）
+        denied(register(staffOfA("plain", plainRole("plain", code)), entityB, merchantB), "CROSS_ORG_FORBIDDEN");
+        // 勾全部：平台公司 P 不在项目集合里
+        denied(register(staffOfA("all", allProjectsRole("all", code)), entityP, merchantB), "CROSS_ORG_FORBIDDEN");
+    }
+
+    // J4（2.4 列表）：eA、eB、eP、mB 各有一行排班、考勤、薪资单、待批请假；mB 这几行各表自己的 project_id 是改挂前写入的 A。
+    // 修复前只勾 B 的人四个列表拿到的都是本公司 A 的 eA、mB（第一处断言即红）。
+    @Test
+    void staffListsFollowRegisteredProject() throws Exception {
+        String[] codes = {"staff.shift.manage", "staff.attendance.view", "staff.payroll.manage"};
+        String eA = employee("ea", entityA);
+        String eB = employee("eb", entityB);
+        String eP = employee("ep", entityP);
+        movedToB("mb");
+        String mB = userId("mb");
+        staffRows(eA, entityA);
+        staffRows(eB, entityB);
+        staffRows(eP, entityP);
+        staffRows(mB, entityA);
+
+        // 修复前红：只勾 B 的人拿到 eA、mB
+        assertStaffLists(staffOfA("ticked", tickedBRole("ticked", codes)), eB, mB);
+        // 只勾 A：改挂到 B 的 mB 不出（修复前有 mB；各表自己的 project_id 不算）
+        assertStaffLists(staffOfA("tickeda", tickedARole("tickeda", codes)), eA);
+        // 非持有人：照旧按所属公司（守护）
+        assertStaffLists(staffOfA("plain", plainRole("plain", codes)), eA, mB);
+        // 勾全部：登记在平台公司 P 的 eP 不出
+        assertStaffLists(staffOfA("all", allProjectsRole("all", codes)), eA, eB, mB);
+    }
+
+    // J5（2.4 月结）：eA、eB、eP、mB 各有一行固定工资，三种调用人各结 2098 年的不同月份。
+    // 修复前只勾 B 的人重算的是本公司 A 的 eA、mB（第一处断言即红）。
+    @Test
+    void payrollCloseRecomputesStaffOfReachableProjects() throws Exception {
+        String code = "staff.payroll.manage";
+        String eA = employee("ea", entityA);
+        String eB = employee("eb", entityB);
+        String eP = employee("ep", entityP);
+        movedToB("mb");
+        String mB = userId("mb");
+        for (String user : List.of(eA, eB, eP, mB)) {
+            jdbcTemplate.update("INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_at) VALUES (?, 100000, now())", user);
+        }
+
+        closePayroll(staffOfA("ticked", tickedBRole("ticked", code)), "2098-01");
+        // 修复前红：eA、mB 有薪资单，eB 没有
+        assertThat(statementUsers("2098-01")).containsExactlyInAnyOrder(eB, mB);
+        closePayroll(staffOfA("all", allProjectsRole("all", code)), "2098-02");
+        assertThat(statementUsers("2098-02")).containsExactlyInAnyOrder(eA, eB, mB);
+        // 非持有人：照旧按所属公司（守护）
+        closePayroll(staffOfA("plain", plainRole("plain", code)), "2098-03");
+        assertThat(statementUsers("2098-03")).containsExactlyInAnyOrder(eA, mB);
+    }
+
+    // J6（2.5 指向单个员工的写）：码 staff.payroll.manage、staff.shift.manage。修复前只勾 B 的人给 eB 设固定工资被拒（第一处断言即红）。
+    @Test
+    void staffWritesFollowTargetProfilesRegisteredProject() throws Exception {
+        String eA = employee("ea", entityA);
+        String eB = employee("eb", entityB);
+        movedToB("mb");
+        String leaveB = leave(eB, entityB);
+        RequestPostProcessor ticked = staffOfA("ticked", tickedBRole("ticked", "staff.payroll.manage", "staff.shift.manage"));
+
+        // 修复前红：403 CROSS_ORG_FORBIDDEN
+        setBaseSalary(ticked, eB).andExpect(status().isOk());
+        setBaseSalary(ticked, userId("mb")).andExpect(status().isOk());
+        denied(setBaseSalary(ticked, eA), "CROSS_ORG_FORBIDDEN");
+        postJson(ticked, "/api/v1/staff/leaves/" + leaveB + "/review", """
+                {"idempotency_key": "%s", "decision": "approve", "review_note": "M738 同意"}
+                """.formatted(key())).andExpect(status().isOk());
+
+        // 勾全部：没有员工档案的平台管理员账号一律碰不到，不落行
+        String admin = userId("padm");
+        account("padm", "platform_admin", "org", null);
+        denied(setBaseSalary(staffOfA("all", allProjectsRole("all", "staff.payroll.manage")), admin), "CROSS_PROJECT_FORBIDDEN");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_base_salaries WHERE user_id = ?", Integer.class, admin))
+                .isZero();
+        // 带商户归属的账号挂勾 B 的角色：照旧只到本人项目（守护）
+        String merchant = merchant("m", entityA);
+        denied(setBaseSalary(account("mch", "staff", entityA, merchant, tickedBRole("mch", "staff.payroll.manage")), eB),
+                "CROSS_ORG_FORBIDDEN");
+    }
+
+    // J7（2.0 重试先核范围）：A 的员工只经角色「可查看 B、C」持有 staff.payroll.manage，用提交编号 K 给 eB 录奖惩，同一编号立刻重试照旧；
+    // 角色的可查看项目减掉 B（减少审批生效后的状态：直接删 role_viewable_projects 那一行）后，同一编号重试被拒、不返回第一次的结果。
+    // 修复前第一次录入即 403（第一处断言即红）。
+    @Test
+    void payrollAdjustmentRetryAfterTargetProjectLeavesReachIsDenied() throws Exception {
+        String reduced = role("bc", false, List.of(entityB, entityC), "staff.payroll.manage");
+        RequestPostProcessor staff = staffOfA("adj", reduced);
+        String eB = employee("eb", entityB);
+        String body = """
+                {"idempotency_key": "%s", "user_id": "%s", "month": "2098-06", "adj_type": "bonus", "amount_cent": 100, "reason": "M738 奖励"}
+                """.formatted("m738-adj-" + suffix, eB);
+
+        // 修复前红：403 CROSS_ORG_FORBIDDEN
+        postJson(staff, "/api/v1/staff/payroll/adjustments", body).andExpect(status().isOk());
+        // 仍可触及 B：同一编号重试照旧，不新增
+        postJson(staff, "/api/v1/staff/payroll/adjustments", body).andExpect(status().isOk());
+        assertThat(adjustmentCount(eB)).isEqualTo(1);
+
+        // 角色的可查看项目减掉 B 并生效：同一编号重试被拒，不新增
+        jdbcTemplate.update("DELETE FROM role_viewable_projects WHERE role_id = ? AND viewable_id = ?", reduced, entityB);
+        denied(postJson(staff, "/api/v1/staff/payroll/adjustments", body), "CROSS_ORG_FORBIDDEN");
+        assertThat(adjustmentCount(eB)).isEqualTo(1);
+    }
+
+    // J8（2.6 主管复核）：三张待审复核单，发起人分别是 A、B、P 的普通账号。码 governance.supervisor_review.view、.approve。
+    // 修复前只勾 B 的人待审清单里是本人项目 A 发起的 rvA（第一处断言即红）。
+    @Test
+    void pendingReviewsFollowInitiatorProjectWithinReach() throws Exception {
+        String[] codes = {"governance.supervisor_review.view", "governance.supervisor_review.approve"};
+        String rvA = pendingReview("a", entityA);
+        String rvB = pendingReview("b", entityB);
+        pendingReview("p", entityP);
+        RequestPostProcessor ticked = staffOfA("ticked", tickedBRole("ticked", codes));
+
+        // 修复前红：只有 rvA
+        assertThat(pendingReviews(ticked)).containsExactly(rvB);
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + rvB + "/chain").with(ticked)).andExpect(status().isOk());
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + rvA + "/chain").with(ticked)),
+                "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        denied(postJson(ticked, "/api/v1/platform/supervisor-review/" + rvA + "/approve", """
+                {"idempotency_key": "%s", "decision": "approved", "comment": "M738 同意"}
+                """.formatted(key())), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        assertThat(jdbcTemplate.queryForObject("SELECT review_status FROM supervisor_review_decisions WHERE review_id = ?",
+                String.class, rvA)).isEqualTo("pending_review");
+
+        // 非持有人：照旧只到本人项目（守护）
+        assertThat(pendingReviews(staffOfA("plain", plainRole("plain", codes)))).containsExactly(rvA);
+        // 勾全部：平台公司 P 的普通账号发起的单不出
+        assertThat(pendingReviews(staffOfA("all", allProjectsRole("all", codes)))).containsExactlyInAnyOrder(rvA, rvB);
+    }
+
+    // J9（2.7 服务单）：履约人 eA、eB，服务单 oA、oB（项目分别 A、B）。码 service.catalog.manage、service.order.create。
+    // 修复前只勾 B 的人后台列表里是本人项目 A 的 oA（第一处断言即红）。
+    @Test
+    void serviceOrdersFollowPerformerProjectWithinReach() throws Exception {
+        String[] codes = {"service.catalog.manage", "service.order.create"};
+        String eA = employee("ea", entityA);
+        String eB = employee("eb", entityB);
+        String catalogItem = "svc_m738_" + suffix;
+        postJson(platformAdmin("service.catalog.manage"), "/api/v1/services/catalog", """
+                {"idempotency_key": "%s", "id": "%s", "name": "M738 点舞", "price_cent": 10000, "duration_minutes": 10,
+                 "active": true, "mgmt_fee_mode": "none", "mgmt_fee_value": 0}
+                """.formatted(key(), catalogItem)).andExpect(status().isOk());
+        String oA = serviceOrder("a", eA, entityA, catalogItem);
+        String oB = serviceOrder("b", eB, entityB, catalogItem);
+        RequestPostProcessor ticked = staffOfA("ticked", tickedBRole("ticked", codes));
+
+        // 修复前红：只有 oA
+        assertThat(serviceOrders(ticked)).containsExactly(oB);
+        cancel(ticked, oB).andExpect(status().isOk());
+        assertThat(orderStatus(oB)).isEqualTo("cancelled");
+        denied(cancel(ticked, oA), "CROSS_PROJECT_FORBIDDEN");
+        assertThat(orderStatus(oA)).isEqualTo("created");
+        // 可为 B 的履约人在 B 下单：新单的项目照旧取履约人档案项目
+        String created = JsonPath.read(postJson(ticked, "/api/v1/services/orders", """
+                {"idempotency_key": "%s", "catalog_item_id": "%s", "performer_user_id": "%s"}
+                """.formatted(key(), catalogItem, eB)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM service_orders WHERE id = ?", String.class, created))
+                .isEqualTo(entityB);
+
+        // 非持有人：照旧只到本人项目（守护）
+        assertThat(serviceOrders(staffOfA("plain", plainRole("plain", codes)))).containsExactly(oA);
+        assertThat(serviceOrders(staffOfA("all", allProjectsRole("all", codes)))).containsExactlyInAnyOrder(oA, oB);
+    }
+
+    // J10①（2.5 顶班，2026-10-16 所选选项原文二）：A 的普通员工（非持有人，码 staff.shift.manage）查看 eB 班次 shB 的顶班记录。
+    // eB 登记项目、所属公司都是 B，不在其范围内。修复前 200（第一处断言即红）。
+    @Test
+    void shiftCoversOfOutOfScopeOriginalShiftAreDenied() throws Exception {
+        String shiftB = shift(employee("eb", entityB), entityB);
+
+        // 修复前红：200
+        denied(mockMvc.perform(get("/api/v1/staff/shifts/" + shiftB + "/covers")
+                .with(staffOfA("plain", plainRole("plain", "staff.shift.manage")))), "CROSS_ORG_FORBIDDEN");
+    }
+
+    // J10②（同上）：同一人给 shB 安排顶班，顶班员工是在其范围内的 eA。修复前 200 且落一条顶班记录（第一处断言即红）。
+    @Test
+    void coverForOutOfScopeOriginalShiftIsDeniedAndNotRecorded() throws Exception {
+        String shiftB = shift(employee("eb", entityB), entityB);
+        String eA = employee("ea", entityA);
+
+        // 修复前红：200
+        denied(postJson(staffOfA("plain", plainRole("plain", "staff.shift.manage")), "/api/v1/staff/shifts/" + shiftB + "/cover", """
+                {"idempotency_key": "%s", "cover_user_id": "%s", "reason": "M738 临时顶班"}
+                """.formatted(key(), eA)), "CROSS_ORG_FORBIDDEN");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_shift_covers WHERE shift_id = ?", Integer.class, shiftB))
+                .isZero();
+    }
+
+    // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
+
+    private String userId(String tag) {
+        return "usr_m738_" + tag + "_" + suffix;
+    }
+
+    private String profileId(String tag) {
+        return "stf_m738_" + tag + "_" + suffix;
+    }
+
+    private static String key() {
+        return "m738-" + UUID.randomUUID();
+    }
+
+    /** 建一名账号、挂上给定角色，返回以其身份登录的会话（后台 Web 终端＋生产过滤器放入的 AccessActor 主体，四项与账号行一致）。 */
+    private RequestPostProcessor account(String tag, String accountType, String organizationId, String merchantId,
+                                         String... roleIds) {
+        String userId = userId(tag);
+        accessRepository.createUser(new AccessUser(userId, userId, accountType, organizationId, merchantId, "active", Instant.now()));
+        for (String roleId : roleIds) {
+            accessRepository.assignUserRole(userId, roleId);
+        }
+        AccessActor actor = new AccessActor(userId, userId, accountType, organizationId, merchantId, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
+    }
+
+    /** 归属 A、不带商户归属、不建员工档案的员工（本人公司回落到归属 A）。 */
+    private RequestPostProcessor staffOfA(String tag, String... roleIds) {
+        return account(tag, "staff", entityA, null, roleIds);
+    }
+
+    /** 平台管理员；入口权限码另给一个明确的角色。 */
+    private RequestPostProcessor platformAdmin(String... codes) {
+        return account("admin", "platform_admin", "org", null, plainRole("admin", codes));
+    }
+
+    /** 普通角色：两项勾选都没有。 */
+    private String plainRole(String tag, String... codes) {
+        return role(tag, false, List.of(), codes);
+    }
+
+    /** 勾了「可以查看全部项目」的角色。 */
+    private String allProjectsRole(String tag, String... codes) {
+        return role(tag, true, List.of(), codes);
+    }
+
+    /** 只逐个勾选了 B 的角色。 */
+    private String tickedBRole(String tag, String... codes) {
+        return role(tag, false, List.of(entityB), codes);
+    }
+
+    /** 只逐个勾选了 A 的角色。 */
+    private String tickedARole(String tag, String... codes) {
+        return role(tag, false, List.of(entityA), codes);
+    }
+
+    private String role(String tag, boolean viewAll, List<String> ticked, String... codes) {
+        String roleId = "role_m738_" + tag + "_" + suffix;
+        accessRepository.createRole(new RoleRecord(roleId, "M738 " + tag + " " + suffix, null, "project", "active", Instant.now(),
+                List.of(codes), null, viewAll, ticked));
+        return roleId;
+    }
+
+    /** 公司自有员工（自助注册的样子）：staff 账号归属＝该主体，一行已批准的档案，登记项目＝所属公司＝该主体。返回账号编号。 */
+    private String employee(String tag, String entity) {
+        account(tag, "staff", entity, null);
+        profile(tag, entity, entity, null);
+        return userId(tag);
+    }
+
+    /** 从 A 改挂到 B 之后的员工（updateUserScope 只改 project_id）：账号归属 B，档案登记项目 B、所属公司仍是 A。返回以其身份登录的会话。 */
+    private RequestPostProcessor movedToB(String tag, String... roleIds) {
+        RequestPostProcessor session = account(tag, "staff", entityB, null, roleIds);
+        profile(tag, entityB, entityA, null);
+        return session;
+    }
+
+    private void profile(String tag, String projectId, String companyId, String merchantId) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name, company_id,
+                        registration_status, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'M738', ?, 'approved', 'active', now(), now())
+                """, profileId(tag), projectId, merchantId, userId(tag), companyId);
+    }
+
+    /** 一条「已提交」的员工注册：还没有账号，登记项目＝所属公司＝该主体，发起人为空。 */
+    private String registration(String tag, String entity) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_profiles (id, project_id, user_id, name, company_id, registration_status, status, created_at, updated_at)
+                VALUES (?, ?, NULL, 'M738', ?, 'submitted', 'active', now(), now())
+                """, profileId(tag), entity, entity);
+        return profileId(tag);
+    }
+
+    /** 一个在用商户，经营主体公司＝该主体。 */
+    private String merchant(String tag, String entity) {
+        String id = "mch_m738_" + tag + "_" + suffix;
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, business_entity_id, status, created_at, updated_at) "
+                + "VALUES (?, ?, 'retail', ?, 'active', now(), now())", id, id, entity);
+        return id;
+    }
+
+    /** 2099-03-17 的一个班次（各表自己的 project_id 填 rowProject），返回班次编号。 */
+    private String shift(String userId, String rowProject) {
+        String id = "shf_" + userId;
+        jdbcTemplate.update("""
+                INSERT INTO staff_shift_schedules (id, user_id, work_date, start_at, end_at, created_by, created_at, updated_at, project_id)
+                VALUES (?, ?, DATE '2099-03-17', TIMESTAMPTZ '2099-03-17 09:00:00+08', TIMESTAMPTZ '2099-03-17 17:00:00+08',
+                        'usr_m738', now(), now(), ?)
+                """, id, userId, rowProject);
+        return id;
+    }
+
+    // 一条待批请假。建单时间取很靠后——请假列表按建单时间倒序、最多 500 行，不过滤的人（勾全部）也要看得到夹具行。
+    private String leave(String userId, String rowProject) {
+        String id = "lv_" + userId;
+        jdbcTemplate.update("""
+                INSERT INTO staff_leave_requests (id, user_id, leave_type, start_date, end_date, reason, status, created_at, updated_at, project_id)
+                VALUES (?, ?, 'annual', DATE '2099-03-18', DATE '2099-03-18', 'M738', 'pending', TIMESTAMPTZ '2099-03-17 00:00:00+00',
+                        now(), ?)
+                """, id, userId, rowProject);
+        return id;
+    }
+
+    /** J4：一个班次、一次打卡（2099-03-17）、一张 2099-03 的薪资单、一条待批请假，各表自己的 project_id 都填 rowProject。 */
+    private void staffRows(String userId, String rowProject) {
+        shift(userId, rowProject);
+        jdbcTemplate.update("""
+                INSERT INTO staff_attendance_records (id, user_id, punch_type, punched_at, method, judgement, created_at, project_id)
+                VALUES (?, ?, 'check_in', TIMESTAMPTZ '2099-03-17 12:00:00+08', 'qr', 'normal', now(), ?)
+                """, "att_" + userId, userId, rowProject);
+        jdbcTemplate.update("""
+                INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, total_cent, status, closed_at, project_id)
+                VALUES (?, ?, '2099-03', 100, 100, 'closed', now(), ?)
+                """, "pay_" + userId, userId, rowProject);
+        leave(userId, rowProject);
+    }
+
+    // 一张待审复核单，发起人是归属该主体的普通账号（不挂角色）。到期时刻取很早——待审清单按到期时刻排序、最多 200 张，夹具行排在前面。
+    private String pendingReview(String tag, String entity) {
+        String initiator = "init_" + tag;
+        account(initiator, "staff", entity, null);
+        String id = "rv_m738_" + tag + "_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO supervisor_review_decisions (review_id, policy_code, action_type, object_type, object_id, blocked, review_status,
+                                                         required_level, evaluated_at, initiated_by, due_at)
+                VALUES (?, 'm738_cross_project', 'm738.cross_project', 'm738_cross_project', ?, TRUE, 'pending_review', 2, now(), ?,
+                        TIMESTAMPTZ '2000-01-01 00:00:00+00')
+                """, id, id, userId(initiator));
+        return id;
+    }
+
+    /** 一张新建状态的服务单（项目按用例给定），建单时间取当前。 */
+    private String serviceOrder(String tag, String performer, String projectId, String catalogItem) {
+        String id = "svo_m738_" + tag + "_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO service_orders (id, catalog_item_id, item_name, price_cent, performer_user_id, status, created_at, updated_at,
+                                            project_id)
+                VALUES (?, ?, 'M738 点舞', 10000, ?, 'created', now(), now(), ?)
+                """, id, catalogItem, performer, projectId);
+        return id;
+    }
+
+    // ── 取数与请求 ───────────────────────────────────────────────────────────────────────────────
+
+    /** 以给定身份 GET（须 200），取出该 JSON 路径下属于本次夹具的编号（都以随机后缀结尾）；共享库里别的行不看。 */
+    private List<String> mine(RequestPostProcessor session, String url, String path) throws Exception {
+        List<String> ids = JsonPath.read(mockMvc.perform(get(url).with(session))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), path);
+        return ids.stream().filter(id -> id != null && id.endsWith(suffix)).toList();
+    }
+
+    private List<String> profiles(RequestPostProcessor session) throws Exception {
+        return mine(session, "/api/v1/staff/profiles", "$.data.items[*].id");
+    }
+
+    /** J4：四个人事列表都只出给定员工的行。 */
+    private void assertStaffLists(RequestPostProcessor session, String... userIds) throws Exception {
+        for (String url : STAFF_LISTS) {
+            assertThat(mine(session, url, "$.data.items[*].user_id")).as(url).containsExactlyInAnyOrder(userIds);
+        }
+    }
+
+    private List<String> pendingReviews(RequestPostProcessor session) throws Exception {
+        return mine(session, "/api/v1/platform/supervisor-review/pending", "$.data.items[*].decision.review_id");
+    }
+
+    private List<String> serviceOrders(RequestPostProcessor session) throws Exception {
+        return mine(session, "/api/v1/services/orders", "$.data.items[*].id");
+    }
+
+    private ResultActions postJson(RequestPostProcessor session, String url, String body) throws Exception {
+        return mockMvc.perform(post(url).with(session).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    /** 403，错误码沿用各闸现有的。 */
+    private static void denied(ResultActions result, String detailCode) throws Exception {
+        result.andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value(detailCode));
+    }
+
+    private ResultActions archive(RequestPostProcessor session, String profileId) throws Exception {
+        return postJson(session, "/api/v1/staff/profiles/" + profileId + "/archive", """
+                {"reason": "M738 存档"}
+                """);
+    }
+
+    private ResultActions reject(RequestPostProcessor session, String registrationId) throws Exception {
+        return postJson(session, "/api/v1/staff/registrations/" + registrationId + "/review", """
+                {"idempotency_key": "%s", "decision": "reject", "reject_reason": "M738 驳回"}
+                """.formatted(key()));
+    }
+
+    private ResultActions register(RequestPostProcessor session, String projectId, String merchantId) throws Exception {
+        return postJson(session, "/api/v1/staff/registrations", """
+                {"idempotency_key": "%s", "project_id": "%s", "merchant_id": "%s", "name": "M738 新员工"}
+                """.formatted(key(), projectId, merchantId));
+    }
+
+    private void closePayroll(RequestPostProcessor session, String month) throws Exception {
+        postJson(session, "/api/v1/staff/payroll/close", """
+                {"idempotency_key": "%s", "month": "%s"}
+                """.formatted(key(), month)).andExpect(status().isOk());
+    }
+
+    private ResultActions setBaseSalary(RequestPostProcessor session, String userId) throws Exception {
+        return postJson(session, "/api/v1/staff/payroll/base", """
+                {"idempotency_key": "%s", "user_id": "%s", "monthly_salary_cent": 500000}
+                """.formatted(key(), userId));
+    }
+
+    private ResultActions cancel(RequestPostProcessor session, String orderId) throws Exception {
+        return postJson(session, "/api/v1/services/orders/" + orderId + "/cancel", """
+                {"idempotency_key": "%s", "reason": "M738 取消"}
+                """.formatted(key()));
+    }
+
+    private java.sql.Timestamp archivedAt(String profileId) {
+        return jdbcTemplate.queryForObject("SELECT archived_at FROM staff_profiles WHERE id = ?", java.sql.Timestamp.class, profileId);
+    }
+
+    private String registrationStatus(String profileId) {
+        return jdbcTemplate.queryForObject("SELECT registration_status FROM staff_profiles WHERE id = ?", String.class, profileId);
+    }
+
+    private List<String> statementUsers(String month) {
+        return jdbcTemplate.queryForList("SELECT user_id FROM staff_payroll_statements WHERE month = ? AND user_id LIKE ?",
+                String.class, month, "%" + suffix);
+    }
+
+    private int adjustmentCount(String userId) {
+        Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_payroll_adjustments WHERE user_id = ?", Integer.class, userId);
+        return n == null ? 0 : n;
+    }
+
+    private String orderStatus(String orderId) {
+        return jdbcTemplate.queryForObject("SELECT status FROM service_orders WHERE id = ?", String.class, orderId);
+    }
+}
