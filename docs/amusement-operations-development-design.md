@@ -1,4 +1,4 @@
-# 游乐设施运营系统开发设计文档 V0.05
+# 游乐设施运营系统开发设计文档 V0.06
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
@@ -1180,6 +1180,15 @@ com.complex.amusement
 - dto
 - mapper
 
+## 15A. 在玩人数系统自动清零（CG-03，迁移 V448，依据 BSM「出场自动扣减」「在玩人数不允许人工调整」）
+
+- **留痕表** `amusement_concurrent_reset_log`（project_id、scope business_day_end|session_end、business_date、session_id、cleared_rows、cleared_people、boundary_at、reset_at）；部分唯一索引 `(project_id, business_date) WHERE scope='business_day_end'`、`(session_id) WHERE scope='session_end'`。
+- **作业** `AmusementConcurrentCountResetJob`（`@Scheduled` 薄包装，`amusement.concurrent-reset.scheduled.enabled` 默认 false，`fixed-delay-ms` 默认 60000）→ `AmusementService.closeEndedSessionsAndClearCounts(now)` + `resetConcurrentCountsAtBusinessDayEnd(now)`。
+- **场次结束**：`listEndedUnclosedSessions`（status IN scheduled/open AND end_time ≤ now）→ `closeSessionIfEnded`（置 closed）→ `zeroSessionConcurrentSnapshots`（该场次维 + 该项目 project/point_device 维 occupied_count=0）→ 留痕（session_end）+ 审计 `amusement.concurrent_count.session_end_cleared`。
+- **营业日结束**：`BusinessDayResolver`（amusement 域日切）算上一营业日结束时刻 dayEnd → `zeroStaleConcurrentSnapshots(project, dayEnd)`（只清 updated_at < dayEnd 且 occupied_count>0 的 project/point_device 维行，新营业日的计数不动）→ 留痕（business_day_end，含清零行数与人数）+ 审计 `amusement.concurrent_count.business_day_reset`；留痕先插（ON CONFLICT DO NOTHING）再清，重复调度不重复清、不重复记。
+- **无人工入口**：不新增端点；计数只由入场核销、出场自动扣减与本作业产生。
+- **未含**：场次型 / 非场次型显式字段（待裁决）；`amusement_sessions.used_capacity`（历史场次席位维）不在本作业清零范围。
+
 ## 16. 验收标准
 
 P0 完成时必须满足：
@@ -1223,6 +1232,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 增 | 抬头、§15A | V0.06：CG-03 在玩人数系统自动清零作业、留痕表、两条清零规则与审计事件 | BSM「出场自动扣减」「在玩人数不允许人工调整」条；迁移 V448 |
 | 2026-09-01 | 改 | 文首、§18 | V0.05 门禁同步：把 BSM 经营看板引用补全为唯一条目名；业务正文与范围不变 | `verify:entry-anchors` 唯一锚点要求 |
 | 2026-09-01 | 改 | §9 | V0.04 Grok 只读复审返修：游乐报表改回现行 P0 经营看板，不再把现行客流、核销、容量和异常看板误标为 P2 | M07 同一 Grok 会话第二次复审阻断项 1；BSM「连接经营看板，管理层看项目客流、容量和异常」及 A §8 |
 | 2026-09-01 | 改 | §2.1、§8、§9、§12.2、§14、§17 | V0.03 Grok 只读复审返修：P1 增强只保留动态容量；事故/故障/投诉记录、设备状态和现场核验留痕改回现行业务；删除未获 HTML 批准的电子免责与深度工单增强；准确登记 `approveReopen` 只联动 `maintenance/closed → open`、不强翻 `paused` 的代码缺口 | M07 同一 Grok 会话复审阻断项 1-2；ENUM「游乐增强阶段」、BSM「后续增强能力」及 `AmusementInspectionService.reopenProjectIfBlocked` |

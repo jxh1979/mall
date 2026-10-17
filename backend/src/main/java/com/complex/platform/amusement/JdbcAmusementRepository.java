@@ -1106,6 +1106,88 @@ class JdbcAmusementRepository implements AmusementRepository {
         return true;
     }
 
+    // ---- CG-03 在玩人数系统自动清零（系统主体写口，无人工入口）----
+
+    @Override
+    public int[] countStaleConcurrentSnapshots(String projectId, Instant before) {
+        return jdbcTemplate.query("""
+                SELECT COUNT(*) AS rows, COALESCE(SUM(occupied_count), 0) AS people
+                  FROM amusement_capacity_snapshot
+                 WHERE project_id = :project_id AND dimension IN ('project', 'point_device')
+                   AND occupied_count > 0 AND updated_at < :before
+                """, new MapSqlParameterSource().addValue("project_id", projectId)
+                .addValue("before", timestampWithTimeZone(before)),
+                (rs, n) -> new int[] {rs.getInt("rows"), rs.getInt("people")}).stream().findFirst().orElse(new int[] {0, 0});
+    }
+
+    @Override
+    public int zeroStaleConcurrentSnapshots(String projectId, Instant before, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_capacity_snapshot
+                   SET occupied_count = 0, updated_at = :updated_at
+                 WHERE project_id = :project_id AND dimension IN ('project', 'point_device')
+                   AND occupied_count > 0 AND updated_at < :before
+                """, new MapSqlParameterSource().addValue("project_id", projectId)
+                .addValue("before", timestampWithTimeZone(before)).addValue("updated_at", timestampWithTimeZone(now)));
+    }
+
+    @Override
+    public int[] countSessionConcurrentSnapshots(String projectId, String sessionId) {
+        return jdbcTemplate.query("""
+                SELECT COUNT(*) AS rows, COALESCE(SUM(occupied_count), 0) AS people
+                  FROM amusement_capacity_snapshot
+                 WHERE project_id = :project_id AND occupied_count > 0
+                   AND ((dimension = 'session' AND session_id = :session_id) OR dimension IN ('project', 'point_device'))
+                """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("session_id", sessionId),
+                (rs, n) -> new int[] {rs.getInt("rows"), rs.getInt("people")}).stream().findFirst().orElse(new int[] {0, 0});
+    }
+
+    @Override
+    public int zeroSessionConcurrentSnapshots(String projectId, String sessionId, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_capacity_snapshot
+                   SET occupied_count = 0, updated_at = :updated_at
+                 WHERE project_id = :project_id AND occupied_count > 0
+                   AND ((dimension = 'session' AND session_id = :session_id) OR dimension IN ('project', 'point_device'))
+                """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("session_id", sessionId)
+                .addValue("updated_at", timestampWithTimeZone(now)));
+    }
+
+    @Override
+    public List<AmusementSessionRecord> listEndedUnclosedSessions(Instant now) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity, locked_capacity, status,
+                       evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_sessions
+                 WHERE status IN ('scheduled', 'open') AND end_time <= :now
+                 ORDER BY end_time, id
+                """, new MapSqlParameterSource().addValue("now", timestampWithTimeZone(now)), rowMapper::mapSession);
+    }
+
+    @Override
+    public boolean closeSessionIfEnded(String sessionId, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_sessions
+                   SET status = 'closed', updated_at = :updated_at
+                 WHERE id = :id AND status IN ('scheduled', 'open') AND end_time <= :now
+                """, new MapSqlParameterSource().addValue("id", sessionId).addValue("now", timestampWithTimeZone(now))
+                .addValue("updated_at", timestampWithTimeZone(now))) > 0;
+    }
+
+    @Override
+    public boolean insertConcurrentResetLogIfAbsent(AmusementConcurrentResetLogRecord r) {
+        return jdbcTemplate.update("""
+                INSERT INTO amusement_concurrent_reset_log (id, project_id, scope, business_date, session_id, cleared_rows,
+                        cleared_people, boundary_at, reset_at)
+                VALUES (:id, :project_id, :scope, :business_date, :session_id, :cleared_rows, :cleared_people, :boundary_at, :reset_at)
+                ON CONFLICT DO NOTHING
+                """, new MapSqlParameterSource().addValue("id", r.id()).addValue("project_id", r.projectId())
+                .addValue("scope", r.scope()).addValue("business_date", java.sql.Date.valueOf(r.businessDate()))
+                .addValue("session_id", r.sessionId()).addValue("cleared_rows", r.clearedRows())
+                .addValue("cleared_people", r.clearedPeople()).addValue("boundary_at", timestampWithTimeZone(r.boundaryAt()))
+                .addValue("reset_at", timestampWithTimeZone(r.resetAt()))) > 0;
+    }
+
     @Override
     public boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock) {
         int updated = jdbcTemplate.update("""

@@ -3,6 +3,7 @@ access_grant_requests,direct,project_id,project_id column on access_grant_reques
 access_users,direct,merchant_id,merchant_id column on access_users,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_capacity_config,direct,project_id,project_id column on amusement_capacity_config,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_capacity_snapshot,direct,project_id,project_id column on amusement_capacity_snapshot,ready for project/merchant scoped query enforcement,V0.02,covered
+amusement_concurrent_reset_log,direct,project_id,project_id column on amusement_concurrent_reset_log,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_device_statuses,direct,project_id,project_id column on amusement_device_statuses,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_devices,direct,project_id,project_id column on amusement_devices,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_group_bookings,direct,project_id,project_id column on amusement_group_bookings,ready for project/merchant scoped query enforcement,V0.02,covered
