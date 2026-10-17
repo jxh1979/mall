@@ -7378,6 +7378,7 @@ paths:
       operationId: createTicketOrder
       x-failure-codes:
         - CONTRACT_SCOPE_VIOLATION
+        - PARK_WIDE_FAULT_SALES_SUSPENDED
       summary: 创建票务订单（含一体机辅助售票）
       x-permission: ticket.order.create
       x-data-scope: project-channel
@@ -7401,10 +7402,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date,
-        sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted.
-        Draft rules only participate in simulation. 当 sales_channel=kiosk
-        时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。
+      description: "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。"
   /api/v1/ticketing/orders/{order_id}/issue:
     post:
       tags:
@@ -13187,6 +13185,332 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/amusement/park-wide-faults:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementParkWideFaults
+      summary: 查询全园故障状态记录
+      description: CG-08a（ENUM「全园故障与补偿通票」）：按综合体项目列出全园故障状态记录（待第二岗位确认生效 / 生效中 / 待第二岗位确认解除 / 已解除），含发起人、确认人、岗位与时点；有项目范围的账号只见本综合体。
+      x-permission: amusement.park_fault.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: amusement.park_fault.viewed
+      x-audit-event-failure: amusement.park_fault.view_failed
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending_activation
+              - active
+              - pending_lift
+              - lifted
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+    post:
+      tags:
+        - amusement
+      operationId: initiateAmusementParkWideFault
+      summary: 发起全园故障状态（第一岗位）
+      description: CG-08a（ENUM「全园故障与补偿通票」：「全园故障状态由游乐公司负责人和工程或安全岗位共同确认后生效」）：游乐公司负责人或工程/安全岗位任一方发起，记录为「待第二岗位确认生效」，须另一岗位、另一人确认后才生效。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验（x-permission 只能登记一个码，另一岗位权限码见 role 字段说明）。同综合体已有未解除记录 → 409 PARK_WIDE_FAULT_ALREADY_OPEN；无项目范围的账号必须传 project_id。全程留痕（amusement_park_wide_fault_actions）。
+      x-permission: amusement.park_fault.confirm_as_head
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: amusement.park_fault.initiated
+      x-audit-event-failure: amusement.park_fault.initiate_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - role
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                project_id:
+                  type: string
+                  description: 综合体项目编号；有项目范围的账号可省略（取当前范围，传入须一致）。
+                  maxLength: 64
+                role:
+                  type: string
+                  enum:
+                    - amusement_head
+                    - engineering_safety
+                  description: 本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。
+                reason:
+                  type: string
+                  description: 全园故障情形：全部游乐项目均不可运行，或供电、消防、入口系统等公共关键设施故障导致游乐园必须整体关闭。
+                  maxLength: 2000
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+  /api/v1/amusement/park-wide-faults/{fault_id}/confirm-activation:
+    post:
+      tags:
+        - amusement
+      operationId: confirmAmusementParkWideFaultActivation
+      summary: 第二岗位确认全园故障状态生效
+      description: CG-08a：第二岗位确认后立即生效——自此停止所有纯游乐门票和所有包含游乐权益的通票的新销售（createTicketOrder 返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED；酒吧票、演出票不受影响）。确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN，同一人换岗位亦拒），且岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认生效阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_ACTIVATION。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      x-permission: amusement.park_fault.confirm_as_engineering_safety
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: amusement.park_fault.activated
+      x-audit-event-failure: amusement.park_fault.activate_failed
+      parameters:
+        - name: fault_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 全园故障状态记录编号
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - role
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                role:
+                  type: string
+                  enum:
+                    - amusement_head
+                    - engineering_safety
+                  description: 本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。
+                note:
+                  type: string
+                  description: 确认说明。
+                  maxLength: 1000
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+  /api/v1/amusement/park-wide-faults/{fault_id}/initiate-lift:
+    post:
+      tags:
+        - amusement
+      operationId: initiateAmusementParkWideFaultLift
+      summary: 发起解除全园故障状态（第一岗位）
+      description: CG-08a（「全园故障状态的解除同样由游乐公司负责人和工程或安全岗位共同确认」）：仅生效中的记录可发起解除（否则 409 PARK_WIDE_FAULT_NOT_ACTIVE）；发起后进入「待第二岗位确认解除」，此阶段仍停售，直至另一岗位确认。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      x-permission: amusement.park_fault.confirm_as_head
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: amusement.park_fault.lift_initiated
+      x-audit-event-failure: amusement.park_fault.lift_initiate_failed
+      parameters:
+        - name: fault_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 全园故障状态记录编号
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - role
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                role:
+                  type: string
+                  enum:
+                    - amusement_head
+                    - engineering_safety
+                  description: 本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。
+                reason:
+                  type: string
+                  description: 解除依据：公共关键设施或游乐项目恢复情况。
+                  maxLength: 2000
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+  /api/v1/amusement/park-wide-faults/{fault_id}/confirm-lift:
+    post:
+      tags:
+        - amusement
+      operationId: confirmAmusementParkWideFaultLift
+      summary: 第二岗位确认解除全园故障状态
+      description: CG-08a：第二岗位确认后解除，恢复纯游乐门票与含游乐权益通票的新销售。确认人须与解除发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN），岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认解除阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_LIFT。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      x-permission: amusement.park_fault.confirm_as_engineering_safety
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: amusement.park_fault.lifted
+      x-audit-event-failure: amusement.park_fault.lift_failed
+      parameters:
+        - name: fault_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 全园故障状态记录编号
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - role
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                role:
+                  type: string
+                  enum:
+                    - amusement_head
+                    - engineering_safety
+                  description: 本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。
+                note:
+                  type: string
+                  description: 确认说明。
+                  maxLength: 1000
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+  /api/v1/amusement/park-wide-faults/{fault_id}/actions:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementParkWideFaultActions
+      summary: 查询全园故障状态留痕
+      description: CG-08a：该记录的发起 / 确认生效 / 发起解除 / 确认解除逐条留痕（谁、以哪个岗位、何时、说明）。
+      x-permission: amusement.park_fault.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: amusement.park_fault.viewed
+      x-audit-event-failure: amusement.park_fault.view_failed
+      parameters:
+        - name: fault_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 全园故障状态记录编号
+            maxLength: 64
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
   /api/v1/inventory/risk-alerts:
     get:
       tags:

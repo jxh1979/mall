@@ -12,6 +12,8 @@ amusement_inspection_tasks,direct,project_id,project_id column on amusement_insp
 amusement_maintenance_record,direct,project_id,project_id column on amusement_maintenance_record,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_manual_overrides,direct,project_id,project_id column on amusement_manual_overrides,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_over_capacity_policy,direct,project_id,project_id column on amusement_over_capacity_policy,ready for project/merchant scoped query enforcement,V0.02,covered
+amusement_park_wide_fault_actions,direct,project_id,project_id column on amusement_park_wide_fault_actions,ready for project/merchant scoped query enforcement,V0.02,covered
+amusement_park_wide_faults,direct,project_id,project_id column on amusement_park_wide_faults,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_project_entitlements,direct,project_id,project_id column on amusement_project_entitlements,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_project_rules,direct,project_id,project_id column on amusement_project_rules,ready for project/merchant scoped query enforcement,V0.02,covered
 amusement_projects,direct,merchant_id,merchant_id column on amusement_projects,ready for project/merchant scoped query enforcement,V0.02,covered
