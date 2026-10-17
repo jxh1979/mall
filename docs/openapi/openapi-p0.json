@@ -23141,6 +23141,7 @@
         "x-audit-event-success": "leasing.lead.status_changed",
         "x-audit-event-failure": "leasing.lead.status_change_failed",
         "x-auth-context": "staff-token",
+        "description": "已签约线索改任何其他状态一律 409 LEASING_LEAD_ALREADY_SIGNED（PGM「招商运营细则」：已签约后不得回退至未签约状态）；lost/on_hold 须填 reason。",
         "parameters": [
           {
             "name": "lead_id",
@@ -23361,7 +23362,7 @@
         "x-audit-event-success": "leasing.intent.signed",
         "x-audit-event-failure": "leasing.intent.sign_failed",
         "x-auth-context": "staff-token",
-        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。",
+        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。",
         "parameters": [
           {
             "name": "intent_id",
@@ -23847,7 +23848,7 @@
         "x-audit-event-success": "contract.activated",
         "x-audit-event-failure": "contract.activate_failed",
         "x-auth-context": "staff-token",
-        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。",
+        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。",
         "parameters": [
           {
             "name": "contract_id",
