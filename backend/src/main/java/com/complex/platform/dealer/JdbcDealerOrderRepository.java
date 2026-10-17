@@ -107,7 +107,21 @@ public class JdbcDealerOrderRepository {
                 rs.getString("ar_ap_item_id"), rs.getString("reviewed_by"), nullableInstant(rs, "reviewed_at"), nullableInstant(rs, "payment_notified_at"),
                 rs.getString("shipped_by"), nullableInstant(rs, "shipped_at"), nullableInstant(rs, "signed_at"), nullableInstant(rs, "completed_at"),
                 rs.getString("cancel_requested_by"), rs.getString("cancel_reason"), nullableInstant(rs, "cancelled_at"), rs.getString("note"),
-                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getLong("returned_amount_cent"));
+    }
+
+    /** CG-11c：退货验收确认后回写订单累计已退金额与状态（不经 saveOrder，避免覆盖）。 */
+    public void applyReturn(String orderId, long acceptedAmountCent, String status) {
+        jdbc.update("UPDATE dealer_orders SET returned_amount_cent = returned_amount_cent + :amt, status = :status, updated_at = now() WHERE id = :id",
+                new MapSqlParameterSource().addValue("amt", acceptedAmountCent).addValue("status", status).addValue("id", orderId));
+    }
+
+    public void updateOrderStatus(String orderId, String status) {
+        jdbc.update("UPDATE dealer_orders SET status = :status, updated_at = now() WHERE id = :id", Map.of("status", status, "id", orderId));
+    }
+
+    public void addReturnedQuantity(String lineId, int quantity) {
+        jdbc.update("UPDATE dealer_order_lines SET returned_quantity = returned_quantity + :q WHERE id = :id", Map.of("q", quantity, "id", lineId));
     }
 
     // ── 明细 ──
@@ -126,7 +140,8 @@ public class JdbcDealerOrderRepository {
     public List<DealerOrderLineRecord> listLines(String orderId) {
         return jdbc.query("SELECT * FROM dealer_order_lines WHERE order_id = :o ORDER BY id", Map.of("o", orderId), (rs, i) -> new DealerOrderLineRecord(
                 rs.getString("id"), rs.getString("order_id"), rs.getString("item_id"), rs.getString("spec"), rs.getInt("quantity"), rs.getLong("unit_price_cent"),
-                JdbcDealerRepository.intOrNull(rs, "tax_rate_bps"), rs.getString("price_source"), rs.getString("inquiry_id"), rs.getLong("line_amount_cent")));
+                JdbcDealerRepository.intOrNull(rs, "tax_rate_bps"), rs.getString("price_source"), rs.getString("inquiry_id"), rs.getLong("line_amount_cent"),
+                rs.getInt("returned_quantity")));
     }
 
     // ── 到账 ──

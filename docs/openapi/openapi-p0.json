@@ -35394,6 +35394,1018 @@
         }
       }
     },
+    "/api/v1/dealers/orders/{id}/returns": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerReturns",
+        "summary": "经销订单退货单列表",
+        "description": "退货单十态（ENUM:174）：pending_approval / rejected / pending_receipt / inspecting / pending_reversal / pending_refund / refunding / refund_failed / partially_completed / completed；reason_type unopened_resalable / quality_issue；return_freight_bearer dealer / sales_entity / pending_confirmation。",
+        "x-permission": "dealer.return.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.return.viewed",
+        "x-audit-event-failure": "dealer.return.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "requestDealerReturn",
+        "summary": "申请经销退货",
+        "description": "BSM:1240：合同期限内（DEALER_CONTRACT_EXPIRED）仅未拆封可复售 / 质量问题商品可申请退货（RETURN_REASON_NOT_ALLOWED）；订单签收后才可退（DEALER_ORDER_STATUS_INVALID）；数量不得超过已出库未退数量（RETURN_QUANTITY_EXCEEDS）；退回运费承担方：质量问题＝销售主体，否则按合同约定，未约定＝待双方确认。",
+        "x-permission": "dealer.return.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.return.requested",
+        "x-audit-event-failure": "dealer.return.request_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "reason_type": {
+                    "type": "string",
+                    "enum": [
+                      "unopened_resalable",
+                      "quality_issue"
+                    ],
+                    "description": "退货原因（闭集）"
+                  },
+                  "lines": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "description": "商品编号",
+                          "maxLength": 80
+                        },
+                        "spec": {
+                          "type": "string",
+                          "description": "规格",
+                          "maxLength": 80
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "退货数量"
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "quantity"
+                      ]
+                    }
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "说明",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "reason_type",
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "getDealerReturn",
+        "summary": "经销退货单详情",
+        "description": "含验收数量、退货金额、冲减未收货款金额、待退款 / 已退款金额、退款复核单、运费承担方、各环节操作人。",
+        "x-permission": "dealer.return.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.return.viewed",
+        "x-audit-event-failure": "dealer.return.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}/lines": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerReturnLines",
+        "summary": "经销退货单明细",
+        "description": "申请数量、验收数量、可复售（回可用库存）数量、隔离禁售数量、原成交价与退货金额（BSM:1240）。",
+        "x-permission": "dealer.return.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.return.viewed",
+        "x-audit-event-failure": "dealer.return.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}/decision": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "decideDealerReturn",
+        "summary": "审批经销退货",
+        "description": "申请人不得审批自己的退货（DEALER_SOD_SAME_PERSON）；通过 → 待收货且订单转退货中；驳回 → 已驳回。",
+        "x-permission": "dealer.return.review",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.return.decided",
+        "x-audit-event-failure": "dealer.return.decide_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ],
+                    "description": "审批结论"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}/receive": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "receiveDealerReturn",
+        "summary": "退货收货",
+        "description": "待收货 → 验收中，记录收货人。",
+        "x-permission": "dealer.return.inspect",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.return.received",
+        "x-audit-event-failure": "dealer.return.receive_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}/inspection": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "inspectDealerReturn",
+        "summary": "退货验收",
+        "description": "BSM:1240：按实际验收数量 × 原成交价确认退货金额，支持部分退货；可复售回中心仓可用库存（流水 dealer_return_restock），质量问题隔离禁售（流水 dealer_return_quarantine，不回可用库存）；退货金额先冲减原订单未收货款（应收台账同步冲减），超出部分进待退款并开既有退款审批；已开票 → 待红冲；可复售 + 隔离 = 验收数量。",
+        "x-permission": "dealer.return.inspect",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.return.inspected",
+        "x-audit-event-failure": "dealer.return.inspect_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "lines": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "description": "商品编号",
+                          "maxLength": 80
+                        },
+                        "spec": {
+                          "type": "string",
+                          "description": "规格",
+                          "maxLength": 80
+                        },
+                        "accepted_quantity": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "验收数量"
+                        },
+                        "resalable_quantity": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "可复售数量（回可用库存）"
+                        },
+                        "quarantined_quantity": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "隔离禁售数量"
+                        },
+                        "note": {
+                          "type": "string",
+                          "description": "验收备注",
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "accepted_quantity"
+                      ]
+                    }
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "说明",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}/invoice-reversal": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "reverseDealerInvoice",
+        "summary": "红冲原发票并按最新未退金额重开",
+        "description": "BSM:1242：已开票的退货先全额红冲原发票（reversed，记录红冲退货单），再按最新未退金额重开（填发票号即已开具，留空为待开票）；全部退货红冲后不重开。随后待退款金额 > 0 进待退款（开既有退款审批），否则结清。",
+        "x-permission": "dealer.invoice.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.invoice.reversed",
+        "x-audit-event-failure": "dealer.invoice.reverse_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "invoice_no": {
+                    "type": "string",
+                    "description": "重开发票号（可留空）",
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}/freight-confirmation": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "confirmDealerReturnFreight",
+        "summary": "确认退回运费承担方",
+        "description": "BSM:1240：非质量退货合同未约定时由双方确认退回运费承担方与首程运费是否退还；质量问题固定为销售主体承担（RETURN_FREIGHT_RULE_FIXED）。",
+        "x-permission": "dealer.return.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.return.freight_confirmed",
+        "x-audit-event-failure": "dealer.return.freight_confirm_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "return_freight_bearer": {
+                    "type": "string",
+                    "enum": [
+                      "dealer",
+                      "sales_entity"
+                    ],
+                    "description": "退回运费承担方"
+                  },
+                  "first_leg_freight_refundable": {
+                    "type": "boolean",
+                    "description": "首程运费是否退还"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "说明",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "return_freight_bearer"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/returns/{id}/refund-result": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "recordDealerReturnRefundResult",
+        "summary": "登记退货退款执行结果",
+        "description": "须既有退款审批通过（DEALER_REFUND_NOT_APPROVED）；执行人≠验收人（DEALER_SOD_SAME_PERSON，ENUM:178）；成功 → 计入已退金额并结清（验收数量＝申请数量为已完成，否则部分完成；订单转部分退货 / 已退货）；失败 → 退款失败可重试。",
+        "x-permission": "dealer.return.refund.execute",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.return.refund_executed",
+        "x-audit-event-failure": "dealer.return.refund_execute_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退货单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "result": {
+                    "type": "string",
+                    "enum": [
+                      "success",
+                      "failed"
+                    ],
+                    "description": "退款结果"
+                  },
+                  "reference_no": {
+                    "type": "string",
+                    "description": "退款流水号",
+                    "maxLength": 128
+                  },
+                  "failure_reason": {
+                    "type": "string",
+                    "description": "失败原因",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "result"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/invoices": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerInvoices",
+        "summary": "经销订单电子发票列表",
+        "description": "发票状态 pending / issuing / issued / failed / reversed / voided；开票主体为订单固化的合同销售主体（ENUM:182）。",
+        "x-permission": "dealer.return.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.invoice.viewed",
+        "x-audit-event-failure": "dealer.invoice.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "requestDealerInvoice",
+        "summary": "申请电子发票",
+        "description": "BSM:1242：订单签收后才可申请（DEALER_ORDER_STATUS_INVALID），金额＝最终未退金额，不以已收款封顶；同一订单同时只有一张有效发票（DEALER_INVOICE_EXISTS）。",
+        "x-permission": "dealer.invoice.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.invoice.requested",
+        "x-audit-event-failure": "dealer.invoice.request_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "说明",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/invoices/{id}/issue": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "issueDealerInvoice",
+        "summary": "登记发票开具",
+        "description": "第三方开票平台开具后回填发票号；待开票 / 开票中 / 开票失败 → 已开具。",
+        "x-permission": "dealer.invoice.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.invoice.issued",
+        "x-audit-event-failure": "dealer.invoice.issue_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "发票编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "invoice_no": {
+                    "type": "string",
+                    "description": "发票号",
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "invoice_no"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/inventory/cost-ledger": {
       "get": {
         "tags": [

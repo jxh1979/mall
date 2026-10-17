@@ -27,12 +27,25 @@ public record DealerContractRecord(
         Long freightCent,
         Long freeShippingThresholdCent,
         String freightBearer,
-        int freightTemplateVersion
+        int freightTemplateVersion,
+        /** CG-11c：非质量退货的退回运费承担方（dealer / sales_entity；null＝未约定，先由双方确认）。 */
+        String returnFreightBearer,
+        /** CG-11c：已收首程运费退不退（null＝未约定，先由双方确认）。 */
+        Boolean firstLegFreightRefundable
 ) {
     /** CG-11a 兼容构造：未约定条款。 */
     public DealerContractRecord(String id, String dealerId, String contractNo, String salesEntityId, String centralWarehouseId,
             LocalDate validFrom, LocalDate validTo, String status, String createdBy, Instant createdAt) {
         this(id, dealerId, contractNo, salesEntityId, centralWarehouseId, validFrom, validTo, status, createdBy, createdAt,
-                false, null, null, null, null, null, null, "dealer", 0);
+                false, null, null, null, null, null, null, "dealer", 0, null, null);
+    }
+
+    /** CG-11b 兼容构造：退货运费约定留空。 */
+    public DealerContractRecord(String id, String dealerId, String contractNo, String salesEntityId, String centralWarehouseId,
+            LocalDate validFrom, LocalDate validTo, String status, String createdBy, Instant createdAt, boolean creditTerm, Integer firstPaymentRatioBps,
+            Long firstPaymentAmountCent, Integer firstPaymentDeadlineDays, Integer balanceDueDays, Long freightCent, Long freeShippingThresholdCent,
+            String freightBearer, int freightTemplateVersion) {
+        this(id, dealerId, contractNo, salesEntityId, centralWarehouseId, validFrom, validTo, status, createdBy, createdAt, creditTerm, firstPaymentRatioBps,
+                firstPaymentAmountCent, firstPaymentDeadlineDays, balanceDueDays, freightCent, freeShippingThresholdCent, freightBearer, freightTemplateVersion, null, null);
     }
 }

@@ -277,6 +277,12 @@ public final class FieldLabels {
         p("inquiry_id", "询价单");
         p("overpayment_id", "超收记录");
         p("target_order_id", "抵扣订单");
+        p("return_id", "退货单");
+        p("invoice_id", "发票");
+        p("invoice_no", "发票号");
+        p("reason_type", "退货原因");
+        p("result", "结果");
+        p("return_freight_bearer", "退回运费承担方");
         p("method", "支付方式");
         p("usage", "用途");
         p("parent_contract_id", "主合同");
