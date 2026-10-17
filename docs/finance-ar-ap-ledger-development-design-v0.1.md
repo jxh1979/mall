@@ -71,7 +71,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `due_date` | date | 是 | 到期日 |
 | `aging_days` | int | 是 | 按未收/未付余额计算 |
 | `status` | enum | 是 | 见 §5 |
-| `source_type` | enum | 是 | `contract_fee`、`order`、`verification`、`refund`、`purchase`、`inventory_difference`、`employee_commission`、`manual_adjustment`、`third_party_reconciliation`、`pass_drink_settlement`（通票免费酒水平台↔酒吧结算，F-TXN-03 piece③b；权威集合见 `FinanceService.SOURCE_TYPES`） |
+| `source_type` | enum | 是 | `contract_fee`、`order`、`verification`、`refund`、`purchase`、`inventory_difference`、`employee_commission`、`manual_adjustment`、`third_party_reconciliation`、`pass_drink_settlement`（通票免费酒水平台↔酒吧结算，F-TXN-03 piece③b）、`dealer_order`（经销订单应收，CG-11b：审核通过通知付款时建、到账核验回写、尾款逾期置 overdue、取消置 cancelled；权威集合见 `FinanceService.SOURCE_TYPES`） |
 | `source_id` | uuid/varchar | 否 | 来源对象 |
 | `contract_id` | uuid | 否 | 关联合同 |
 | `space_id` | uuid | 否 | 关联铺位/点位/区域 |

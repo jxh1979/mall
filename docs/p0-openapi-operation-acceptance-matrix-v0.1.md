@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 752 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 771 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -697,6 +697,25 @@
 | dealer | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | `quoteDealerInquiry` | 对询价报价 | `object` | `dealer.inquiry.quote` | `staff-token` | `project` | web | 是 | `dealer.inquiry.quoted` | `dealer.inquiry.quote_failed` |
 | dealer | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | `decideDealerInquiryQuote` | 审批报价 | `object` | `dealer.inquiry.approve` | `staff-token` | `project` | web | 是 | `dealer.inquiry.decided` | `dealer.inquiry.decide_failed` |
 | dealer | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | `expireDealerInquiry` | 报价置为已失效 | `object` | `dealer.inquiry.quote` | `staff-token` | `project` | web | 是 | `dealer.inquiry.expired` | `dealer.inquiry.expire_failed` |
+| dealer | `POST` | `/api/v1/dealers/contracts/{id}/terms` | `updateDealerContractTerms` | 合同付款条款与运费模板 | `object` | `dealer.manage` | `staff-token` | `project` | web | 是 | `dealer.contract_terms_updated` | `dealer.contract_terms_update_failed` |
+| dealer | `GET` | `/api/v1/dealers/{id}/orders` | `listDealerOrders` | 经销订单清单 | `-` | `dealer.order.view` | `staff-token` | `project` | web | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/{id}/orders` | `createDealerOrderDraft` | 经销订单建单（草稿） | `object` | `dealer.order.manage` | `staff-token` | `project` | web | 是 | `dealer.order.drafted` | `dealer.order.draft_failed` |
+| dealer | `GET` | `/api/v1/dealers/{id}/overpayments` | `listDealerOverpayments` | 经销超收记录 | `-` | `dealer.order.view` | `staff-token` | `project` | web | 否 | `dealer.order.overpayment_viewed` | `dealer.order.overpayment_view_failed` |
+| dealer | `GET` | `/api/v1/dealers/orders/{id}` | `getDealerOrder` | 经销订单详情 | `-` | `dealer.order.view` | `staff-token` | `project` | web | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `GET` | `/api/v1/dealers/orders/{id}/lines` | `listDealerOrderLines` | 经销订单明细 | `-` | `dealer.order.view` | `staff-token` | `project` | web | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/submit` | `submitDealerOrder` | 提交经销订单审核 | `object` | `dealer.order.manage` | `staff-token` | `project` | web | 是 | `dealer.order.submitted` | `dealer.order.submit_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/review` | `reviewDealerOrder` | 经销订单审核（通过即预留库存并通知付款） | `object` | `dealer.order.review` | `staff-token` | `project` | web | 是 | `dealer.order.reviewed` | `dealer.order.review_failed` |
+| dealer | `GET` | `/api/v1/dealers/orders/{id}/payments` | `listDealerOrderPayments` | 经销订单到账记录 | `-` | `dealer.order.view` | `staff-token` | `project` | web | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/payments` | `registerDealerOrderPayment` | 登记经销订单到账 | `object` | `dealer.order.manage` | `staff-token` | `project` | web | 是 | `dealer.order.payment_registered` | `dealer.order.payment_register_failed` |
+| dealer | `POST` | `/api/v1/dealers/payments/{id}/verify` | `verifyDealerOrderPayment` | 财务核验到账 | `object` | `dealer.order.payment.verify` | `staff-token` | `project` | web | 是 | `dealer.order.payment_verified` | `dealer.order.payment_verify_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/ship` | `shipDealerOrder` | 仓库出库 | `object` | `dealer.order.ship` | `staff-token` | `project` | web | 是 | `dealer.order.shipped` | `dealer.order.ship_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/sign` | `signDealerOrder` | 登记签收 | `object` | `dealer.order.manage` | `staff-token` | `project` | web | 是 | `dealer.order.signed` | `dealer.order.sign_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/cancel-request` | `requestDealerOrderCancel` | 申请取消经销订单（出库前） | `object` | `dealer.order.manage` | `staff-token` | `project` | web | 是 | `dealer.order.cancel_requested` | `dealer.order.cancel_request_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/cancel-decision` | `decideDealerOrderCancel` | 取消审批 | `object` | `dealer.order.review` | `staff-token` | `project` | web | 是 | `dealer.order.cancel_decided` | `dealer.order.cancel_decide_failed` |
+| dealer | `GET` | `/api/v1/dealers/orders/{id}/refunds` | `listDealerOrderRefunds` | 经销订单退款记录 | `-` | `dealer.order.view` | `staff-token` | `project` | web | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/refunds/{id}/approval` | `openDealerOrderRefundApproval` | 开启经销退款审批 | `object` | `dealer.order.payment.verify` | `staff-token` | `project` | web | 是 | `dealer.order.refund_requested` | `dealer.order.refund_request_failed` |
+| dealer | `POST` | `/api/v1/dealers/refunds/{id}/execute` | `executeDealerOrderRefund` | 执行经销退款（原路退回） | `object` | `dealer.order.refund.execute` | `staff-token` | `project` | web | 是 | `dealer.order.refund_executed` | `dealer.order.refund_execute_failed` |
+| dealer | `POST` | `/api/v1/dealers/overpayments/{id}/use` | `confirmDealerOverpaymentUse` | 确认超收用途 | `object` | `dealer.order.payment.verify` | `staff-token` | `project` | web | 是 | `dealer.order.overpayment_use_confirmed` | `dealer.order.overpayment_use_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-ledger` | `listInventoryCostLedger` | 查询库存成本流水（移动加权） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_ledger.viewed` | `inventory.cost_ledger.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-summary` | `getInventoryCostSummary` | 期间出库成本汇总（分红成本侧取数点） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_summary.viewed` | `inventory.cost_summary.view_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/plans` | `listDividendPlans` | 分红方案列表（商户 scope 账号只见本商户） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `dividend.plans_listed` | `dividend.plans_list_failed` |

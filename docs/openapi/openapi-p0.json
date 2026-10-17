@@ -33956,6 +33956,1444 @@
         }
       }
     },
+    "/api/v1/dealers/contracts/{id}/terms": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "updateDealerContractTerms",
+        "summary": "合同付款条款与运费模板",
+        "description": "BSM:1227「每份经销合同约定首付款金额或比例、首付款截止时间及尾款到期规则」、BSM:1229「每份合同指定中心仓、运费模板、包邮门槛和承担方」：运费模板变更版本 +1，只影响新订单。",
+        "x-permission": "dealer.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.contract_terms_updated",
+        "x-audit-event-failure": "dealer.contract_terms_update_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销合同编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "credit_term": {
+                    "type": "boolean",
+                    "description": "是否约定账期（未约定＝全款到账后出库）"
+                  },
+                  "first_payment_ratio_bps": {
+                    "type": "integer",
+                    "description": "首付款比例（万分比）",
+                    "minimum": 1,
+                    "maximum": 10000
+                  },
+                  "first_payment_amount_cent": {
+                    "type": "integer",
+                    "description": "首付款固定金额（分）",
+                    "minimum": 1
+                  },
+                  "first_payment_deadline_days": {
+                    "type": "integer",
+                    "description": "首付款截止：通知付款后天数",
+                    "minimum": 1
+                  },
+                  "balance_due_days": {
+                    "type": "integer",
+                    "description": "尾款到期：出库后天数（账期合同必填）",
+                    "minimum": 1
+                  },
+                  "freight_cent": {
+                    "type": "integer",
+                    "description": "运费（分）",
+                    "minimum": 0
+                  },
+                  "free_shipping_threshold_cent": {
+                    "type": "integer",
+                    "description": "包邮门槛（分）",
+                    "minimum": 0
+                  },
+                  "freight_bearer": {
+                    "type": "string",
+                    "description": "运费承担方",
+                    "enum": [
+                      "dealer",
+                      "sales_entity"
+                    ]
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "first_payment_deadline_days"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/orders": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerOrders",
+        "summary": "经销订单清单",
+        "description": "ENUM:173 十五态：draft 草稿 / pending_review 待审核 / rejected 已驳回 / pending_payment 待付款 / payment_verifying 付款核验中 / pending_shipment 待出库 / shipping 配送中 / signed 已签收 / completed 已完成 / cancelling 取消中 / cancelled 已取消 / pending_refund 待退款 / returning 退货中 / partially_returned 部分退货 / returned 已退货。",
+        "x-permission": "dealer.order.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.order.viewed",
+        "x-audit-event-failure": "dealer.order.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "createDealerOrderDraft",
+        "summary": "经销订单建单（草稿）",
+        "description": "按现行生效目录（或已报价询价单，BSM:1220）定价；运费按合同模板与包邮门槛（BSM:1229）。经销商须已通过且未停用。",
+        "x-permission": "dealer.order.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.drafted",
+        "x-audit-event-failure": "dealer.order.draft_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "dealer_contract_id": {
+                    "type": "string",
+                    "description": "经销合同编号",
+                    "maxLength": 64
+                  },
+                  "lines": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "description": "库存商品 id",
+                          "maxLength": 64
+                        },
+                        "spec": {
+                          "type": "string",
+                          "description": "规格",
+                          "maxLength": 100
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "description": "数量",
+                          "minimum": 1
+                        },
+                        "inquiry_id": {
+                          "type": "string",
+                          "description": "已报价询价单（未定价商品）",
+                          "maxLength": 64
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "quantity"
+                      ]
+                    }
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "dealer_contract_id",
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/overpayments": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerOverpayments",
+        "summary": "经销超收记录",
+        "description": "BSM:1228：超过订单应收的到账单独记录，用途未确认前不自动抵账。status：unconfirmed / prepayment / offset_applied。",
+        "x-permission": "dealer.order.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.order.overpayment_viewed",
+        "x-audit-event-failure": "dealer.order.overpayment_view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "getDealerOrder",
+        "summary": "经销订单详情",
+        "description": "含固化的价格目录版本、销售主体、中心仓、运费模板版本、首付款门槛与截止、尾款到期、已收、逾期标记。",
+        "x-permission": "dealer.order.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.order.viewed",
+        "x-audit-event-failure": "dealer.order.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/lines": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerOrderLines",
+        "summary": "经销订单明细",
+        "description": "通知付款时固化的单价、税率快照（ENUM:180）与价格来源（catalog / inquiry）。",
+        "x-permission": "dealer.order.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.order.viewed",
+        "x-audit-event-failure": "dealer.order.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/submit": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "submitDealerOrder",
+        "summary": "提交经销订单审核",
+        "description": "草稿 / 已驳回 → 待审核。BSM:1231：逾期暂停期间账期订单不得提交（DEALER_CREDIT_SUSPENDED），全款订单仍允许。",
+        "x-permission": "dealer.order.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.submitted",
+        "x-audit-event-failure": "dealer.order.submit_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/review": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "reviewDealerOrder",
+        "summary": "经销订单审核（通过即预留库存并通知付款）",
+        "description": "BSM:1227「订单先审核合同、价格、库存和交期，通过后才通知付款」：通过 → 按中心仓、商品和规格预留（ENUM:177）、固化价格目录版本与询价单（ENUM:180）、建订单应收、按合同算首付款门槛与截止 → 待付款；驳回 → 已驳回。失败码：DEALER_STOCK_INSUFFICIENT、DEALER_LINE_UNPRICED、DEALER_CATALOG_NOT_EFFECTIVE、DEALER_CONTRACT_TERMS_INCOMPLETE。",
+        "x-permission": "dealer.order.review",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.reviewed",
+        "x-audit-event-failure": "dealer.order.review_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "结论：approve 通过 / reject 驳回",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/payments": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerOrderPayments",
+        "summary": "经销订单到账记录",
+        "description": "status：pending_verification / verified / rejected / late（取消后迟到，进待退款）。",
+        "x-permission": "dealer.order.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.order.viewed",
+        "x-audit-event-failure": "dealer.order.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "registerDealerOrderPayment",
+        "summary": "登记经销订单到账",
+        "description": "ENUM:176：只接受 bank_transfer 对公转账 / platform_online 平台线上支付，现金与个人账户 400 PAYMENT_METHOD_FORBIDDEN。订单已取消 / 待退款时的到账按迟到款记录并进入待退款（E-13）。",
+        "x-permission": "dealer.order.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.payment_registered",
+        "x-audit-event-failure": "dealer.order.payment_register_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "method": {
+                    "type": "string",
+                    "description": "支付方式",
+                    "enum": [
+                      "bank_transfer",
+                      "platform_online"
+                    ]
+                  },
+                  "amount_cent": {
+                    "type": "integer",
+                    "description": "到账金额（分）",
+                    "minimum": 1
+                  },
+                  "received_at": {
+                    "type": "string",
+                    "description": "到账时间",
+                    "format": "date-time"
+                  },
+                  "reference_no": {
+                    "type": "string",
+                    "description": "流水号",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "method",
+                  "amount_cent"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/payments/{id}/verify": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "verifyDealerOrderPayment",
+        "summary": "财务核验到账",
+        "description": "核验人≠订单审核人（ENUM:178）；取消中不得核验（ENUM:179，DEALER_CANCEL_IN_PROGRESS）；通过后累计已收并回写应收：首付款达门槛 → 待出库；超过应收部分单独记超收（BSM:1228）；已签收且全款到账 → 已完成；逾期结清解除账期暂停。",
+        "x-permission": "dealer.order.payment.verify",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.payment_verified",
+        "x-audit-event-failure": "dealer.order.payment_verify_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "到账记录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "结论：approve 通过 / reject 驳回",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/ship": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "shipDealerOrder",
+        "summary": "仓库出库",
+        "description": "首付款经财务核验达门槛后才能出库（DEALER_FIRST_PAYMENT_NOT_MET）；出库人≠审核人且≠到账核验人（ENUM:178）；取消中 / 取消后不得出库（ENUM:179）；预留转实扣并落库存流水；账期单起算尾款到期。",
+        "x-permission": "dealer.order.ship",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.shipped",
+        "x-audit-event-failure": "dealer.order.ship_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/sign": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "signDealerOrder",
+        "summary": "登记签收",
+        "description": "配送中 → 已签收；签收不表示货款已结清（BSM:1227），全款到账才完成。",
+        "x-permission": "dealer.order.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.signed",
+        "x-audit-event-failure": "dealer.order.sign_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/cancel-request": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "requestDealerOrderCancel",
+        "summary": "申请取消经销订单（出库前）",
+        "description": "ENUM:179：有到账正在核验时不得发起（DEALER_PAYMENT_VERIFYING）；→ 取消中。",
+        "x-permission": "dealer.order.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.cancel_requested",
+        "x-audit-event-failure": "dealer.order.cancel_request_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "取消原因（必填）",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/cancel-decision": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "decideDealerOrderCancel",
+        "summary": "取消审批",
+        "description": "审批人≠申请人；通过 → 释放未出库预留，已到账走既有退款审批（待退款），无到账直接已取消，取消生效后不得出库；驳回 → 回到取消前状态。",
+        "x-permission": "dealer.order.review",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.cancel_decided",
+        "x-audit-event-failure": "dealer.order.cancel_decide_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "结论：approve 通过 / reject 驳回",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/refunds": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerOrderRefunds",
+        "summary": "经销订单退款记录",
+        "description": "E-13：status pending_request / pending_approval / approved / rejected / refunded；review_id 为既有退款审批复核单。",
+        "x-permission": "dealer.order.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.order.viewed",
+        "x-audit-event-failure": "dealer.order.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/refunds/{id}/approval": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "openDealerOrderRefundApproval",
+        "summary": "开启经销退款审批",
+        "description": "系统取消（首付款截止）产生的待发起退款，由财务按既有退款审批（refund 策略、发起人直接上级链）开启；final_approver_id 可空。",
+        "x-permission": "dealer.order.payment.verify",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.refund_requested",
+        "x-audit-event-failure": "dealer.order.refund_request_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退款记录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "final_approver_id": {
+                    "type": "string",
+                    "description": "主线最终审批人（可空）",
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/refunds/{id}/execute": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "executeDealerOrderRefund",
+        "summary": "执行经销退款（原路退回）",
+        "description": "须既有退款审批通过；执行人≠该到账的核验人（BSM:1232）；全部退款完成后订单回到已取消。",
+        "x-permission": "dealer.order.refund.execute",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.refund_executed",
+        "x-audit-event-failure": "dealer.order.refund_execute_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "退款记录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "reference_no": {
+                    "type": "string",
+                    "description": "退款流水号",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/overpayments/{id}/use": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "confirmDealerOverpaymentUse",
+        "summary": "确认超收用途",
+        "description": "BSM:1228：转为同一销售主体下预付款（prepayment）或抵扣该经销商向同一销售法律主体采购的指定订单（offset_order）；同一金额不得重复抵用（OVERPAYMENT_ALREADY_CONFIRMED）。",
+        "x-permission": "dealer.order.payment.verify",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.order.overpayment_use_confirmed",
+        "x-audit-event-failure": "dealer.order.overpayment_use_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "超收记录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "usage": {
+                    "type": "string",
+                    "description": "用途",
+                    "enum": [
+                      "prepayment",
+                      "offset_order"
+                    ]
+                  },
+                  "target_order_id": {
+                    "type": "string",
+                    "description": "抵扣的订单编号（offset_order 必填）",
+                    "maxLength": 64
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "usage"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/inventory/cost-ledger": {
       "get": {
         "tags": [
