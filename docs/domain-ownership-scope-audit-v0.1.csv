@@ -264,12 +264,15 @@ staff_attendance_records,direct,project_id,project_id column on staff_attendance
 staff_base_salaries,direct,project_id,project_id column on staff_base_salaries,ready for project/merchant scoped query enforcement,V0.02,covered
 staff_commission_ledger,direct,project_id,project_id column on staff_commission_ledger,ready for project/merchant scoped query enforcement,V0.02,covered
 staff_device_credentials,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered
+staff_employment_status_revisions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered
 staff_leave_requests,direct,project_id,project_id column on staff_leave_requests,ready for project/merchant scoped query enforcement,V0.02,covered
 staff_level_assignments,direct,merchant_id,merchant_id column on staff_level_assignments,ready for project/merchant scoped query enforcement,V0.02,covered
 staff_levels,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered
 staff_locker_records,inherited,staff_profile_id,staff_profile_id -> staff_profiles -> current authenticated employee; cabinet and slot identify storage location,must join through scope path before multi-complex rollout,V0.02,covered
 staff_locker_scan_tokens,inherited,staff_profile_id,staff_profile_id -> staff_profiles -> employee company/merchant scope; one-time scan token presented to the kiosk (U05-006),must join through scope path before multi-complex rollout,V0.02,covered
 staff_payment_codes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered
+staff_payroll_adjustment_appeals,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered
+staff_payroll_adjustment_requests,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered
 staff_payroll_adjustments,direct,project_id,project_id column on staff_payroll_adjustments,ready for project/merchant scoped query enforcement,V0.02,covered
 staff_payroll_payouts,direct,project_id,project_id column on staff_payroll_payouts,ready for project/merchant scoped query enforcement,V0.02,covered
 staff_payroll_statements,direct,project_id,project_id column on staff_payroll_statements,ready for project/merchant scoped query enforcement,V0.02,covered

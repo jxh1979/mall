@@ -334,9 +334,14 @@ public class StaffService {
      * <p>只改档案标识，<b>不回算任何既有账单/提成</b>：账单在开单时已把角色档快照进 bar_bills.sales_role_type，
      * 今天改岗位只影响此后新开的账单——否则改一次岗位就悄悄改写历史提成，谁都对不上账。
      */
+    /**
+     * CG-12（BSM:1478「辞退与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效，生效即转「离职」」）：
+     * 任一目标状态（待入职 / 在职 / 试岗 / 停岗 / 离职）都只发起复核，不直接写入；全部通过后由
+     * {@link StaffApprovalService#afterDecision} 写入。注册审批时系统置的初始状态不算「变更」，仍走注册流程。
+     */
     @GuardedAction(permission = "staff.profile.review")
     @org.springframework.transaction.annotation.Transactional
-    public StaffProfileRecord setEmploymentStatus(String id,
+    public com.complex.platform.governance.review.SupervisorReviewDecisionRecord setEmploymentStatus(String id,
             com.complex.platform.access.staff.dto.StaffEmploymentStatusRequest request) {
         try {
         StaffProfileRecord profile = requireProfileInScope(id);
@@ -348,12 +353,13 @@ public class StaffService {
         String reason = requireReason(request.reason());
         // U05-011：与其它员工写口相同，按操作命名空间幂等去重。
         return idempotencyService.execute("staffEmploymentStatus:" + id, request.idempotencyKey(), request, () -> {
-            StaffProfileRecord saved = repository.saveProfile(profile.withEmploymentStatus(request.employmentStatus(), clock.instant()));
-            auditEventService.recordSuccess("staff.profile.employment_status_changed", "staff.profile.review",
-                    "staff_profile", id, null, null,
-                    Map.of("before", profile.employmentStatus(), "after", saved.employmentStatus(), "reason", reason));
-            return saved;
-        }, StaffProfileRecord.class);
+            var review = staffApprovals.submitEmploymentStatus(profile, request, reason);
+            auditEventService.recordSuccess("staff.profile.employment_status_change_requested", "staff.profile.review",
+                    "staff_profile", id, null, request.idempotencyKey(),
+                    Map.of("before", String.valueOf(profile.employmentStatus()), "after", request.employmentStatus(), "reason", reason,
+                            "review_id", review.reviewId(), "hr_approver_id", request.hrApproverId().trim()));
+            return review;
+        }, com.complex.platform.governance.review.SupervisorReviewDecisionRecord.class);
         } catch (RuntimeException exception) {
             // U14-008：失败路径按契约声明的 *_failed 事件留痕。
             auditEventService.recordFailure("staff.profile.employment_status_change_failed", "staff.profile.review", "staff_profile", id, null, idempotencyKeyOf(request), codeOf(exception));
@@ -1296,13 +1302,17 @@ public class StaffService {
     }
 
     /** F批:奖金/处罚手录——必须带事由,审计留痕。
-     * P0 真幂等(2026-07-03):幂等键唯一占位+命中重放,重复提交不再重复入账。 */
-    public void addPayrollAdjustment(com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
+     * P0 真幂等(2026-07-03):幂等键唯一占位+命中重放,重复提交不再重复入账。
+     * CG-12（BSM:1487 / ENUM:283「绩效扣分与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效」）：
+     * bonus / penalty 都只发起复核，全部通过后由 {@link StaffApprovalService#afterDecision} 入账。 */
+    @org.springframework.transaction.annotation.Transactional
+    public com.complex.platform.governance.review.SupervisorReviewDecisionRecord addPayrollAdjustment(
+            com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
         try {
             authorizationService.requirePermission("staff.payroll.manage");
-            idempotencyService.execute("addStaffPayrollAdjustment",
+            return idempotencyService.execute("addStaffPayrollAdjustment",
                     request == null ? null : request.idempotencyKey(), request,
-                    () -> doAddPayrollAdjustment(request), String.class);
+                    () -> doAddPayrollAdjustment(request), com.complex.platform.governance.review.SupervisorReviewDecisionRecord.class);
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("staff.payroll.adjustment_add_failed", "staff.payroll.manage",
                     "staff_payroll_adjustment", request == null ? null : request.userId(), null,
@@ -1311,7 +1321,8 @@ public class StaffService {
         }
     }
 
-    private String doAddPayrollAdjustment(com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
+    private com.complex.platform.governance.review.SupervisorReviewDecisionRecord doAddPayrollAdjustment(
+            com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.adjType() == null || !java.util.Set.of("bonus", "penalty").contains(request.adjType())
@@ -1321,16 +1332,65 @@ public class StaffService {
                     "必须填写用户、月份（YYYY-MM）、调整类型（奖励/扣罚）、大于 0 的金额与理由");
         }
         requireUserInScope(request.userId().trim());
-        var actor = authorizationService.currentActor();
-        String id = "adj_" + UUID.randomUUID();
-        repository.insertPayrollAdjustment(id, request.userId().trim(), request.month(), request.adjType(),
-                request.amountCent(), request.reason().trim(), actor == null ? null : actor.id(), Instant.now());
-        auditEventService.recordSuccess("staff.payroll.adjustment_added", "staff.payroll.manage",
-                "staff_payroll_adjustment", id, null, request.idempotencyKey(),
+        var review = staffApprovals.submitPayrollAdjustment(request);
+        auditEventService.recordSuccess("staff.payroll.adjustment_requested", "staff.payroll.manage",
+                "staff_payroll_adjustment", review.objectId(), null, request.idempotencyKey(),
                 java.util.Map.of("user_id", request.userId().trim(), "month", request.month(),
                         "adj_type", request.adjType(), "amount_cent", request.amountCent(),
-                        "reason", request.reason().trim()));
-        return id;
+                        "reason", request.reason().trim(), "review_id", review.reviewId(), "hr_approver_id", request.hrApproverId().trim()));
+        return review;
+    }
+
+    /**
+     * CG-12（BSM:1487「员工可对扣分提出申诉，申诉同样报至 HR 与直属领导向上三级裁定，过程与结论均留痕」）：
+     * 只能由被扣罚员工本人对已生效的扣罚（penalty）提出，事由必填；同一扣罚只能有一笔裁定中的申诉，已撤销的不得再诉。
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public StaffAdjustmentAppealRecord submitAdjustmentAppeal(String adjustmentId,
+            com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest request) {
+        try {
+            authorizationService.requirePermission("staff.payroll.view_mine");
+            var adjustment = repository.findAdjustment(requireText(adjustmentId, "adjustment_id"))
+                    .orElseThrow(() -> ApiException.notFound("ADJUSTMENT_NOT_FOUND", "奖惩记录不存在"));
+            var actor = authorizationService.currentActor();
+            if (actor == null || !actor.id().equals(adjustment.userId())) {
+                throw ApiException.forbidden("APPEAL_SELF_ONLY", "只能由被扣罚员工本人提出申诉");
+            }
+            if (!"penalty".equals(adjustment.adjType())) {
+                throw ApiException.badRequest("APPEAL_ONLY_FOR_PENALTY", "只能对扣分 / 处罚扣款提出申诉");
+            }
+            if (request == null || request.reason() == null || request.reason().isBlank()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "申诉事由必填");
+            }
+            if (repository.hasAppealInStatus(adjustmentId, "pending")) {
+                throw ApiException.conflict("APPEAL_PENDING", "该扣罚已有申诉在裁定中");
+            }
+            if (repository.hasAppealInStatus(adjustmentId, "revoked")) {
+                throw ApiException.conflict("APPEAL_ALREADY_REVOKED", "该扣罚已被撤销，无需再申诉");
+            }
+            return idempotencyService.execute("staffAdjustmentAppeal:" + adjustmentId, request.idempotencyKey(), request,
+                    () -> staffApprovals.submitAdjustmentAppeal(adjustment, request, actor.id()), StaffAdjustmentAppealRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.payroll.adjustment_appeal_submit_failed", "staff.payroll.view_mine",
+                    "staff_payroll_adjustment", adjustmentId, null, request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /** CG-12：申诉清单——本人看自己的（staff.payroll.view_mine）；人事按员工查看须 staff.payroll.manage 且员工在范围内。 */
+    public PageResponse<StaffAdjustmentAppealRecord> listAdjustmentAppeals(String userId) {
+        var actor = authorizationService.currentActor();
+        String target = userId == null || userId.isBlank() ? (actor == null ? null : actor.id()) : userId.trim();
+        if (actor != null && actor.id().equals(target)) {
+            authorizationService.requirePermission("staff.payroll.view_mine");
+        } else {
+            authorizationService.requirePermission("staff.payroll.manage");
+            requireUserInScope(requireText(target, "user_id"));
+        }
+        List<StaffAdjustmentAppealRecord> items = repository.listAppeals(target);
+        auditEventService.recordSuccess("staff.payroll.adjustment_appeals_viewed", "staff.payroll.view_mine",
+                "staff_payroll_adjustment_appeal", target, null, null, Map.of("count", items.size()));
+        return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
     }
 
     /** F批:提成入台账(手录/系统写入口;服务点单等业务后续自动写)。

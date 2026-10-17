@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 734 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 736 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 328 | 人工权限矩阵正文未覆盖 227 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1468 | 人工事件矩阵正文未覆盖 1427 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 734 | 人工任务映射正文未逐项覆盖 728 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 441 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1472 | 人工事件矩阵正文未覆盖 1431 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 736 | 人工任务映射正文未逐项覆盖 730 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 442 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -312,7 +312,7 @@
 | `staff.leave.submit` | staff-token | platform | 2 | submitStaffLeave, listMyStaffLeaves | OpenAPI 补充，以本附录为准 |
 | `staff.notice.view` | staff-token | project | 2 | listEmployeeNotices, acknowledgeEmployeeNotice | OpenAPI 补充，以本附录为准 |
 | `staff.payroll.manage` | staff-token | platform, project | 8 | listPayrollTaxBrackets, setStaffBaseSalary, addStaffPayrollAdjustment, addStaffCommission, closeStaffPayrollMonth, listStaffPayroll, getStaffPenaltyCap, requestStaffPenaltyCap | OpenAPI 补充，以本附录为准 |
-| `staff.payroll.view_mine` | staff-token | platform | 1 | listMyStaffPayroll | OpenAPI 补充，以本附录为准 |
+| `staff.payroll.view_mine` | staff-token | platform, self | 3 | listStaffAdjustmentAppeals, submitStaffAdjustmentAppeal, listMyStaffPayroll | OpenAPI 补充，以本附录为准 |
 | `staff.profile.review` | staff-token | project | 3 | reviewStaffRegistration, setStaffSalesPosition, setStaffEmploymentStatus | OpenAPI 补充，以本附录为准 |
 | `staff.profile.self` | staff-token | self | 1 | issueStaffLockerScanToken | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 1 | submitStaffRegistration | OpenAPI 补充，以本附录为准 |
@@ -1587,7 +1587,11 @@
 | `staff.payroll_mine.view_failed` | failure | `listMyStaffPayroll` | `GET` | `/api/v1/staff/payroll/mine` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
 | `staff.payroll_mine.viewed` | success | `listMyStaffPayroll` | `GET` | `/api/v1/staff/payroll/mine` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
 | `staff.payroll.adjustment_add_failed` | failure | `addStaffPayrollAdjustment` | `POST` | `/api/v1/staff/payroll/adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
-| `staff.payroll.adjustment_added` | success | `addStaffPayrollAdjustment` | `POST` | `/api/v1/staff/payroll/adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.adjustment_appeal_submit_failed` | failure | `submitStaffAdjustmentAppeal` | `POST` | `/api/v1/staff/payroll/adjustments/{id}/appeals` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.adjustment_appeal_submitted` | success | `submitStaffAdjustmentAppeal` | `POST` | `/api/v1/staff/payroll/adjustments/{id}/appeals` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.adjustment_appeals_view_failed` | failure | `listStaffAdjustmentAppeals` | `GET` | `/api/v1/staff/payroll/adjustments/appeals` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.adjustment_appeals_viewed` | success | `listStaffAdjustmentAppeals` | `GET` | `/api/v1/staff/payroll/adjustments/appeals` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.adjustment_requested` | success | `addStaffPayrollAdjustment` | `POST` | `/api/v1/staff/payroll/adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.base_save_failed` | failure | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.base_saved` | success | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.commission_add_failed` | failure | `addStaffCommission` | `POST` | `/api/v1/staff/payroll/commissions` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
@@ -1605,7 +1609,7 @@
 | `staff.payroll.view_failed` | failure | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.viewed` | success | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.profile.employment_status_change_failed` | failure | `setStaffEmploymentStatus` | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | STAFF-员工 | `staff.profile.review` | 接口级事件，以本附录为准 |
-| `staff.profile.employment_status_changed` | success | `setStaffEmploymentStatus` | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | STAFF-员工 | `staff.profile.review` | 接口级事件，以本附录为准 |
+| `staff.profile.employment_status_change_requested` | success | `setStaffEmploymentStatus` | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | STAFF-员工 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `staff.profile.sales_position_change_failed` | failure | `setStaffSalesPosition` | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `staff.profile.sales_position_changed` | success | `setStaffSalesPosition` | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `staff.profile.view_failed` | failure | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | AUTH-账号权限 | `staff.profile.view` | 接口级事件，以本附录为准 |
@@ -2467,7 +2471,7 @@
 | P0-待归类 | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | 配置企微留存策略（默认180天） **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径** | `wecom.retention.manage` | `wecom.retention_policy_set` / `wecom.retention_policy_failed` | web | operation 级补充 |
 | P0-待归类 | `viewWecomConversationMessages` | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | 分级查看企微会话消息（脱敏/原文，原文需审批+审计） | `wecom.view_raw` | `wecom.raw_viewed` / `wecom.raw_view_failed` | web, mobile_admin | operation 级补充 |
 | STAFF-员工 | `addStaffCommission` | `POST` | `/api/v1/staff/payroll/commissions` | 提成入台账(手录/系统写入口) | `staff.payroll.manage` | `staff.payroll.commission_added` / `staff.payroll.commission_add_failed` | web | operation 级补充 |
-| STAFF-员工 | `addStaffPayrollAdjustment` | `POST` | `/api/v1/staff/payroll/adjustments` | 奖金/处罚手录(必须带事由) | `staff.payroll.manage` | `staff.payroll.adjustment_added` / `staff.payroll.adjustment_add_failed` | web | operation 级补充 |
+| STAFF-员工 | `addStaffPayrollAdjustment` | `POST` | `/api/v1/staff/payroll/adjustments` | 发起奖金/处罚复核(必须带事由；HR 会签＋直属领导向上三级通过后入账) | `staff.payroll.manage` | `staff.payroll.adjustment_requested` / `staff.payroll.adjustment_add_failed` | web | operation 级补充 |
 | STAFF-员工 | `batchUpsertStaffShifts` | `POST` | `/api/v1/staff/shifts/batch` | 按周批量排班(一次排一周) | `staff.shift.manage` | `staff.shift.submitted` / `staff.shift.save_failed` | web, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | 月结(定格全员薪资单) | `staff.payroll.manage` | `staff.payroll.month_closed` / `staff.payroll.month_close_failed` | web | operation 级补充 |
 | STAFF-员工 | `coverStaffShift` | `POST` | `/api/v1/staff/shifts/{id}/cover` | 记录临时顶班 | `staff.shift.manage` | `staff.shift.covered` / `staff.shift.cover_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
@@ -2479,6 +2483,7 @@
 | STAFF-员工 | `listMyStaffPayroll` | `GET` | `/api/v1/staff/payroll/mine` | 我的薪资(员工手机;仅已月结月份) | `staff.payroll.view_mine` | `staff.payroll_mine.viewed` / `staff.payroll_mine.view_failed` | staff_private_phone, web | operation 级补充 |
 | STAFF-员工 | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | 我的班次与点位(员工手机) | `staff.shift.view` | `staff.shift_mine.viewed` / `staff.shift_mine.view_failed` | staff_private_phone, web | operation 级补充 |
 | STAFF-员工 | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | 个税税表档位清单 | `staff.payroll.manage` | `staff.payroll.tax_bracket_viewed` / `staff.payroll.tax_bracket_view_failed` | web | operation 级补充 |
+| STAFF-员工 | `listStaffAdjustmentAppeals` | `GET` | `/api/v1/staff/payroll/adjustments/appeals` | 扣罚申诉清单(本人/人事按员工) | `staff.payroll.view_mine` | `staff.payroll.adjustment_appeals_viewed` / `staff.payroll.adjustment_appeals_view_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffAttendance` | `GET` | `/api/v1/staff/attendance` | 按日查考勤(后台/主管) | `staff.attendance.view` | `staff.attendance.viewed` / `staff.attendance.view_failed` | web, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffLeaves` | `GET` | `/api/v1/staff/leaves` | 查请假(主管/后台,按状态) | `staff.shift.manage` | `staff.leave.viewed` / `staff.leave.view_failed` | web, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | 全员薪资单(人事,按月) | `staff.payroll.manage` | `staff.payroll.viewed` / `staff.payroll.view_failed` | web | operation 级补充 |
@@ -2492,8 +2497,9 @@
 | STAFF-员工 | `requestStaffPenaltyCap` | `POST` | `/api/v1/staff/settings/payroll-penalty-cap` | 申请调整普通扣除上限 | `staff.payroll.manage` | `staff.payroll.penalty_cap_requested` / `staff.payroll.penalty_cap_request_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `reviewStaffLeave` | `POST` | `/api/v1/staff/leaves/{id}/review` | 请假审批(排班主管) | `staff.shift.manage` | `staff.leave.reviewed` / `staff.leave.review_failed` | web, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | 固定工资设定(人事) | `staff.payroll.manage` | `staff.payroll.base_saved` / `staff.payroll.base_save_failed` | web | operation 级补充 |
-| STAFF-员工 | `setStaffEmploymentStatus` | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | 更新员工任职状态 | `staff.profile.review` | `staff.profile.employment_status_changed` / `staff.profile.employment_status_change_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
+| STAFF-员工 | `setStaffEmploymentStatus` | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | 发起员工任职状态变更复核 | `staff.profile.review` | `staff.profile.employment_status_change_requested` / `staff.profile.employment_status_change_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `setStaffShiftVisibility` | `POST` | `/api/v1/staff/settings/shift-visible-days` | 设置排班可见天数 | `staff.shift.manage` | `staff.shift.visibility_changed` / `staff.shift.visibility_change_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
+| STAFF-员工 | `submitStaffAdjustmentAppeal` | `POST` | `/api/v1/staff/payroll/adjustments/{id}/appeals` | 员工对已生效扣罚提出申诉 | `staff.payroll.view_mine` | `staff.payroll.adjustment_appeal_submitted` / `staff.payroll.adjustment_appeal_submit_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `submitStaffLeave` | `POST` | `/api/v1/staff/leaves` | 提交请假(员工手机) | `staff.leave.submit` | `staff.leave.submitted` / `staff.leave.submit_failed` | staff_private_phone, web | operation 级补充 |
 | STAFF-员工 | `submitStaffSelfRegistration` | `POST` | `/api/v1/staff/self-registrations` | 公司员工本人注册 | `public` | `staff.self_registered` / `staff.self_register_failed` | staff_private_phone | operation 级补充 |
 | STAFF-员工 | `upsertPayrollTaxBracket` | `POST` | `/api/v1/staff/payroll/tax-brackets` | 维护个税税表档位 | `staff.tax_bracket.manage` | `staff.payroll.tax_bracket_changed` / `staff.payroll.tax_bracket_change_failed` | web | operation 级补充 |

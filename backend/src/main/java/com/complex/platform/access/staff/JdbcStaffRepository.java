@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -99,16 +100,116 @@ public class JdbcStaffRepository {
 
     public void insertPayrollAdjustment(String id, String userId, String month, String adjType,
             long amountCent, String reason, String createdBy, java.time.Instant now) {
+        insertPayrollAdjustment(id, userId, month, adjType, amountCent, reason, createdBy, now, null);
+    }
+
+    /** CG-12：reversalOf 非空即「申诉撤销冲回」记录（adj_type = penalty_reversal，负向计入处罚合计；原记录保留）。 */
+    public void insertPayrollAdjustment(String id, String userId, String month, String adjType,
+            long amountCent, String reason, String createdBy, java.time.Instant now, String reversalOf) {
         jdbcTemplate.update("""
-                INSERT INTO staff_payroll_adjustments (id, user_id, month, adj_type, amount_cent, reason, created_by, created_at, project_id)
+                INSERT INTO staff_payroll_adjustments (id, user_id, month, adj_type, amount_cent, reason, created_by, created_at, project_id, reversal_of)
                 VALUES (:id, :user_id, :month, :adj_type, :amount, :reason, :created_by, :now, """
                 + STAFF_PROJECT_SUBSELECT + """
-                )
+                , :reversal_of)
                 ON CONFLICT DO NOTHING
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("user_id", userId).addValue("month", month)
                 .addValue("adj_type", adjType).addValue("amount", amountCent).addValue("reason", reason)
-                .addValue("created_by", createdBy).addValue("now", java.sql.Timestamp.from(now)));
+                .addValue("created_by", createdBy).addValue("now", java.sql.Timestamp.from(now)).addValue("reversal_of", reversalOf));
+    }
+
+    // ── CG-12 人力操作复核链（BSM:1478 / BSM:1487）：员工状态变更、奖惩、申诉 ──
+
+    /** 已入账奖惩记录（申诉对象）。 */
+    public record AdjustmentRow(String id, String userId, String month, String adjType, long amountCent, String reason) {
+    }
+
+    public Optional<AdjustmentRow> findAdjustment(String id) {
+        return jdbcTemplate.query("SELECT id, user_id, month, adj_type, amount_cent, reason FROM staff_payroll_adjustments WHERE id = :id",
+                Map.of("id", id), (rs, i) -> new AdjustmentRow(rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
+                        rs.getString("adj_type"), rs.getLong("amount_cent"), rs.getString("reason"))).stream().findFirst();
+    }
+
+    public void saveEmploymentStatusRevision(String reviewId, String profileId, String userId, String before, String after,
+            String reason, String actor) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_employment_status_revisions (review_id, profile_id, user_id, before_status, after_status, reason, initiated_by)
+                VALUES (:review, :profile, :user_id, :before, :after, :reason, :actor)
+                """, new MapSqlParameterSource().addValue("review", reviewId).addValue("profile", profileId).addValue("user_id", userId)
+                .addValue("before", before).addValue("after", after).addValue("reason", reason).addValue("actor", actor));
+    }
+
+    public Optional<Map<String, Object>> lockPendingEmploymentStatusRevision(String reviewId) {
+        return jdbcTemplate.queryForList("SELECT * FROM staff_employment_status_revisions WHERE review_id = :review AND applied_at IS NULL FOR UPDATE",
+                Map.of("review", reviewId)).stream().findFirst();
+    }
+
+    public void markEmploymentStatusRevisionApplied(String reviewId) {
+        jdbcTemplate.update("UPDATE staff_employment_status_revisions SET applied_at = now() WHERE review_id = :review", Map.of("review", reviewId));
+    }
+
+    public void saveAdjustmentRequest(String id, String reviewId, String userId, String month, String adjType, long amountCent,
+            String reason, String actor) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_payroll_adjustment_requests (id, review_id, user_id, month, adj_type, amount_cent, reason, initiated_by)
+                VALUES (:id, :review, :user_id, :month, :adj_type, :amount, :reason, :actor)
+                """, new MapSqlParameterSource().addValue("id", id).addValue("review", reviewId).addValue("user_id", userId)
+                .addValue("month", month).addValue("adj_type", adjType).addValue("amount", amountCent).addValue("reason", reason).addValue("actor", actor));
+    }
+
+    public Optional<Map<String, Object>> lockPendingAdjustmentRequest(String reviewId) {
+        return jdbcTemplate.queryForList("SELECT * FROM staff_payroll_adjustment_requests WHERE review_id = :review AND applied_at IS NULL FOR UPDATE",
+                Map.of("review", reviewId)).stream().findFirst();
+    }
+
+    public void markAdjustmentRequestApplied(String reviewId) {
+        jdbcTemplate.update("UPDATE staff_payroll_adjustment_requests SET applied_at = now() WHERE review_id = :review", Map.of("review", reviewId));
+    }
+
+    public void saveAppeal(StaffAdjustmentAppealRecord appeal) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_payroll_adjustment_appeals (id, adjustment_id, user_id, reason, review_id, status, initiated_by, created_at)
+                VALUES (:id, :adjustment, :user_id, :reason, :review, :status, :actor, :now)
+                """, new MapSqlParameterSource().addValue("id", appeal.id()).addValue("adjustment", appeal.adjustmentId())
+                .addValue("user_id", appeal.userId()).addValue("reason", appeal.reason()).addValue("review", appeal.reviewId())
+                .addValue("status", appeal.status()).addValue("actor", appeal.initiatedBy())
+                .addValue("now", java.sql.Timestamp.from(appeal.createdAt())));
+    }
+
+    public boolean hasAppealInStatus(String adjustmentId, String status) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_payroll_adjustment_appeals WHERE adjustment_id = :adjustment AND status = :status",
+                Map.of("adjustment", adjustmentId, "status", status), Integer.class);
+        return count != null && count > 0;
+    }
+
+    public Optional<StaffAdjustmentAppealRecord> lockPendingAppealByReview(String reviewId) {
+        return jdbcTemplate.query(APPEAL_SELECT + " WHERE a.review_id = :review AND a.status = 'pending' FOR UPDATE OF a",
+                Map.of("review", reviewId), this::mapAppeal).stream().findFirst();
+    }
+
+    public void decideAppeal(String id, String status, String reversalAdjustmentId, java.time.Instant at) {
+        jdbcTemplate.update("UPDATE staff_payroll_adjustment_appeals SET status = :status, reversal_adjustment_id = :reversal, decided_at = :at WHERE id = :id",
+                new MapSqlParameterSource().addValue("status", status).addValue("reversal", reversalAdjustmentId)
+                        .addValue("at", java.sql.Timestamp.from(at)).addValue("id", id));
+    }
+
+    public List<StaffAdjustmentAppealRecord> listAppeals(String userId) {
+        return jdbcTemplate.query(APPEAL_SELECT + " WHERE a.user_id = :user_id ORDER BY a.created_at DESC", Map.of("user_id", userId), this::mapAppeal);
+    }
+
+    private static final String APPEAL_SELECT = """
+            SELECT a.id, a.adjustment_id, a.user_id, j.month, j.adj_type, j.amount_cent, a.reason, a.review_id, a.status,
+                   a.reversal_adjustment_id, a.initiated_by, a.created_at, a.decided_at
+              FROM staff_payroll_adjustment_appeals a
+              JOIN staff_payroll_adjustments j ON j.id = a.adjustment_id
+            """;
+
+    private StaffAdjustmentAppealRecord mapAppeal(ResultSet rs, int rowNumber) throws SQLException {
+        return new StaffAdjustmentAppealRecord(rs.getString("id"), rs.getString("adjustment_id"), rs.getString("user_id"),
+                rs.getString("month"), rs.getString("adj_type"), rs.getLong("amount_cent"), rs.getString("reason"), rs.getString("review_id"),
+                rs.getString("status"), rs.getString("reversal_adjustment_id"), rs.getString("initiated_by"),
+                nullableInstant(rs, "created_at"), nullableInstant(rs, "decided_at"));
     }
 
     public void insertCommission(String id, String userId, String month, String sourceType,
@@ -178,7 +279,9 @@ public class JdbcStaffRepository {
                               GROUP BY sales_staff_id) bc ON bc.sales_staff_id = u.user_id
                   LEFT JOIN (SELECT user_id,
                                     SUM(CASE WHEN adj_type = 'bonus' THEN amount_cent ELSE 0 END) AS bonus,
-                                    SUM(CASE WHEN adj_type = 'penalty' THEN amount_cent ELSE 0 END) AS penalty
+                                    -- CG-12：申诉撤销的冲回记录（penalty_reversal）负向计入处罚合计，原扣罚记录保留
+                                    SUM(CASE WHEN adj_type = 'penalty' THEN amount_cent
+                                             WHEN adj_type = 'penalty_reversal' THEN -amount_cent ELSE 0 END) AS penalty
                                FROM staff_payroll_adjustments WHERE month = :month GROUP BY user_id) adj
                          ON adj.user_id = u.user_id
                   -- 个税可配置化(V217):劳务报酬预扣税表落 payroll_tax_brackets,按毛收入(svc,分)落档,
@@ -207,7 +310,7 @@ public class JdbcStaffRepository {
                                        WHERE policy_key='payroll_penalty_cap_bps' AND scope_id='global'),2000) AS value
                   ) cap
                   CROSS JOIN LATERAL (
-                      SELECT LEAST(COALESCE(adj.penalty, 0),
+                      SELECT LEAST(GREATEST(COALESCE(adj.penalty, 0), 0),
                           ROUND((COALESCE(b.monthly_salary_cent, 0)::numeric + COALESCE(adj.bonus, 0))
                               * cap.value
                               / 10000)) AS penalty
