@@ -30468,6 +30468,339 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/staff/dispatches": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "createStaffDispatch",
+        "summary": "登记派驻记录（员工 → 派驻酒吧）",
+        "description": "CG-07（BSM「派驻人员的成本与报酬」「营销人员的归属与报酬」）：登记一名员工派驻到某家酒吧的起始日期；所属主体取自员工档案的所属公司，派驻酒吧为商户编号。同一员工在同一酒吧只允许一条进行中的派驻（重复登记 409 STAFF_DISPATCH_ALREADY_ACTIVE）；档案无所属公司 409 STAFF_COMPANY_REQUIRED。派驻期间该员工在该酒吧促成订单的提成，由该酒吧按月拨付给所属主体（见 closeStaffCommissionSettlement）。",
+        "x-permission": "staff.profile.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.dispatch.created",
+        "x-audit-event-failure": "staff.dispatch.create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "user_id",
+                  "merchant_id",
+                  "start_date"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "员工账号（access_users.id），须已有员工档案。",
+                    "maxLength": 64
+                  },
+                  "merchant_id": {
+                    "type": "string",
+                    "description": "派驻酒吧（商户编号）。",
+                    "maxLength": 64
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "派驻开始日期（YYYY-MM-DD）。"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "备注。",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffDispatches",
+        "summary": "查询派驻记录",
+        "description": "CG-07：按员工账号 / 派驻酒吧筛选派驻记录（所属主体、派驻酒吧、派驻起止时间分别记录）；商户角色只见本商户的派驻记录。",
+        "x-permission": "staff.profile.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.dispatch.viewed",
+        "x-audit-event-failure": "staff.dispatch.view_failed",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/dispatches/{dispatch_id}/end": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "endStaffDispatch",
+        "summary": "结束派驻记录",
+        "description": "CG-07：填写派驻结束日期（缺省为当日）并留痕事由；已结束的记录再次结束 409 STAFF_DISPATCH_ALREADY_ENDED。结束后该员工此后在该酒吧的提成不再进入该酒吧向其所属主体的月结拨付。",
+        "x-permission": "staff.profile.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.dispatch.ended",
+        "x-audit-event-failure": "staff.dispatch.end_failed",
+        "parameters": [
+          {
+            "name": "dispatch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "派驻记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "派驻结束日期（YYYY-MM-DD），缺省为当日；不得早于开始日期。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "结束事由。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/commission-settlements/close": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "closeStaffCommissionSettlement",
+        "summary": "提成月结拨付（酒吧 → 人员所属主体）",
+        "description": "CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」「平台内部各主体之间的应收应付，每月有三个付账日」）：按（酒吧商户 → 人员所属主体 → 月）汇总派驻记录覆盖计提日的员工在该酒吧的提成（作废/取消的计提不计），每组生成一条内部结算应付（ar_ap_items：direction=payable、source_type=dispatch_commission_transfer、counterparty=所属主体、merchant=酒吧、会计期间=该月），金额为总额、收支两条线不轧差；到期日＝该月月末之后的第一个付账日（三个付账日取结算配置出厂行）。同（月, 酒吧, 主体）已月结的组不重复挂账（重复执行返回 settlements=0）。提成计提本身不再按单对员工本人挂应付。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.commission_settlement.closed",
+        "x-audit-event-failure": "staff.commission_settlement.close_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "month"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "month": {
+                    "type": "string",
+                    "description": "月份(YYYY-MM)。",
+                    "pattern": "^\\d{4}-\\d{2}$",
+                    "maxLength": 7
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/commission-settlements": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffCommissionSettlements",
+        "summary": "查询提成月结拨付记录（按月）",
+        "description": "CG-07：返回该月各（酒吧 → 所属主体）的拨付金额、计提笔数、人数、到期付账日与对应应付台账项编号；项目口径只见本综合体。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.commission_settlement.viewed",
+        "x-audit-event-failure": "staff.commission_settlement.view_failed",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$",
+              "maxLength": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/staff/payroll": {
       "get": {
         "tags": [

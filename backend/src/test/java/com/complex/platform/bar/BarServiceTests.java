@@ -978,25 +978,26 @@ class BarServiceTests {
     }
 
     @Test
-    void salesCommissionGeneratesFinancePayableLedger() {
+    void salesCommissionNoLongerPostsPerOrderEmployeePayable() {
+        // CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」）：提成按月由酒吧拨付人员所属主体（内部结算应付），
+        // 计提时不再按单对员工本人挂 finance 应付；提成金额仍留在 bar_commission_calculations 供工资单与月结汇总。
         BarBillRecord bill = billForOrder("commission-payable", "staff_sales");
-        service.calculateCommission(bill.id(),
+        BarCommissionCalculationRecord saved = service.calculateCommission(bill.id(),
                 new CommissionCalculateRequest("commission-payable-1", bill.id(), true, false));
-        // A5(REQ-26b 增强)：销售提成贯通 finance 应付台账
-        assertThat(receivableLedgerService.commissionPayables).isNotEmpty();
+        assertThat(saved.commissionAmountCent()).isPositive();
+        assertThat(receivableLedgerService.ledgerPostings).isEmpty();
     }
 
     @Test
-    void calculateCommissionIsIdempotentPerBillAndDoesNotDoublePostPayable() {
-        // 2c-2 提成防重：同一账单不同幂等键重复计提 → 返回首次结果，不重复建提成、不重复过账 finance 应付。
+    void calculateCommissionIsIdempotentPerBill() {
+        // 2c-2 提成防重：同一账单不同幂等键重复计提 → 返回首次结果，不重复建提成；计提全程不向 finance 台账过账（CG-07）。
         BarBillRecord bill = billForOrder("commission-dup", "staff_sales");
         BarCommissionCalculationRecord first = service.calculateCommission(bill.id(),
                 new CommissionCalculateRequest("commission-dup-1", bill.id(), true, false));
-        int payablesAfterFirst = receivableLedgerService.commissionPayables.size();
         BarCommissionCalculationRecord second = service.calculateCommission(bill.id(),
                 new CommissionCalculateRequest("commission-dup-2", bill.id(), true, false));
         assertThat(second.id()).isEqualTo(first.id());
-        assertThat(receivableLedgerService.commissionPayables).hasSize(payablesAfterFirst);
+        assertThat(receivableLedgerService.ledgerPostings).isEmpty();
     }
 
     @Test
@@ -4475,6 +4476,7 @@ class BarServiceTests {
                 String operatorNote,
                 List<String> evidenceAttachmentIds
         ) {
+            ledgerPostings.add("createReceivableForOnAccountBill");
             requests.add(new CapturedReceivableRequest(
                     bill.id(),
                     order.id(),
@@ -4486,13 +4488,8 @@ class BarServiceTests {
             return "arap_for_" + bill.id();
         }
 
-        private final List<String> commissionPayables = new ArrayList<>();
-
-        @Override
-        public String createPayableForCommission(BarCommissionCalculationRecord commission) {
-            commissionPayables.add(commission.id());
-            return "arap_commission_" + commission.id();
-        }
+        /** 每一次向 finance 台账过账的调用名（CG-07：提成计提须一条都不过账）。 */
+        private final List<String> ledgerPostings = new ArrayList<>();
 
         private final List<CapturedRefundPayable> refundPayables = new ArrayList<>();
 
@@ -4506,6 +4503,7 @@ class BarServiceTests {
                 String reason,
                 List<String> evidenceAttachmentIds
         ) {
+            ledgerPostings.add("createRefundPayable");
             refundPayables.add(new CapturedRefundPayable(
                     bill.id(),
                     order.id(),
@@ -4530,6 +4528,7 @@ class BarServiceTests {
                 String reason,
                 List<String> evidenceAttachmentIds
         ) {
+            ledgerPostings.add("reverseRefundPayable");
             refundReversals.add(new CapturedRefundPayable(
                     bill.id(),
                     order.id(),
@@ -4544,11 +4543,13 @@ class BarServiceTests {
 
         @Override
         public String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent) {
+            ledgerPostings.add("createPayableForGiftSettlement");
             return "arap_gift_settle_" + verificationId;
         }
 
         @Override
         public String reverseGiftSettlementPayable(String verificationId, String merchantId, long internalPriceCent) {
+            ledgerPostings.add("reverseGiftSettlementPayable");
             return "arap_gift_settle_reverse_" + verificationId;
         }
     }

@@ -47,24 +47,6 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
     }
 
     @Override
-    public String createPayableForCommission(BarCommissionCalculationRecord commission) {
-        LocalDate today = LocalDate.now();
-        ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
-                "bar-commission-" + commission.id(),
-                "bar table commission payable: " + commission.id(),
-                List.of(),
-                "payable",
-                commission.salesStaffId(),
-                "employee_commission",
-                commission.id(),
-                commission.commissionAmountCent(),
-                today.plusDays(30),
-                YearMonth.from(today).toString()
-        ));
-        return item.id();
-    }
-
-    @Override
     public String createRefundPayable(
             BarBillRecord bill,
             BarOrderRecord order,
