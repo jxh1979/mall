@@ -1,4 +1,4 @@
-# 游乐设施运营系统开发设计文档 V0.06
+# 游乐设施运营系统开发设计文档 V0.07
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
@@ -1189,6 +1189,16 @@ com.complex.amusement
 - **后台页** ADM-AMU-006「全园故障状态」（`/admin/amusement/park-wide-faults`）：当前状态卡、发起 / 第二岗位确认生效 / 发起解除 / 第二岗位确认解除、留痕表、历史表。
 - **未含**：核销侧停止、补偿通票发放（CG-08b 另批）；局部设备/单个项目故障的付款前提示沿用既有项目/设备状态口径。
 
+## 15B. 全园故障补偿通票（CG-08b，迁移 V447，依据 ENUM「全园故障与补偿通票」）
+
+- **表**：`amusement_compensation_policies`（project_id PK、validity_days、min_days、max_days；出厂行 `__global__` 365 天；CHECK 1 ≤ min ≤ value ≤ max）；`amusement_fault_compensation_batches`（fault_id、status pending_confirmation|issued、reason、bearer_company_id＝决定发放补偿的域主管公司法律主体、validity_days、window_from/to＝故障生效→解除（未解除取发起时点）、valid_until、发起/确认的人与岗位、计数；部分唯一索引同故障只一个待确认批次）；`amusement_fault_compensation_items`（entitlement_id＝原票受影响游乐权益行即一个人份、order/ticket_type/parent_ticket/slot/customer、kind extend|full_reissue、share_count、original_session_id、original_entry_verification_id、original_valid_to、status pending|issued|used、new_valid_to、compensation_entitlement_ids、fulfilled_verification_id/at/settlement_price_cent；唯一键 (fault_id, entitlement_id)）；`issued_entitlements.compensation_item_id`。
+- **快照（发起时）**：① 已入场核销受影响：`amusement_verifications`（entry、success）所在场次与故障时间窗相交、故障前未出场，取游乐类权益行 → full_reissue；② 未核销有效期内：游乐类权益 active、剩余次数>0、故障生效时点在 [valid_from, valid_to] → extend。两者均排除补偿补发行与同故障已补偿人份；综合体口径：场次所属游乐项目/票种归属商户的 `merchants.project_id` 为空或等于故障项目。
+- **发放（确认时）**：extend → `valid_to = GREATEST(valid_to, 发放日 + validity_days)`，次数不变；full_reissue → 按票种绑定逐模板补发权益行（各 1 次、allocated_revenue 0、同订单/父票/座次、`compensation_item_id`）。
+- **核销挂钩**（`TicketVerificationService`）：补偿行成功核销 → 不发 `PointsConfirmRequestedEvent`、`sumOrderUnits` 排除补偿行；经 `ticketing.CompensationFulfillmentPort`（amusement 实现 `AmusementCompensationFulfillmentAdapter`）把核销记录、时点、结算价锁定到补偿记录（issued → used，一次）。
+- **双岗位**：发起/确认沿用 V446 两个岗位权限码与 `requireSecondPerson`（同一人 403、同岗位 409）。
+- **端点**：`GET/POST /api/v1/amusement/compensation-policies/{project_id}`、`GET/POST /api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches`、`POST /api/v1/amusement/compensation-batches/{batch_id}/confirm`、`GET /api/v1/amusement/compensation-batches/{batch_id}/items`。后台页 ADM-AMU-007。
+- **未含**：补偿履约的结算承担（bearer_company_id 已记录，结算域按承担主体出账另批）；客人端展示补偿行（沿用「我的票」按订单列出）。
+
 ## 16. 验收标准
 
 P0 完成时必须满足：
@@ -1232,6 +1242,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 增 | 抬头、§15B | V0.07：CG-08b 补偿通票数据模型、快照与发放规则、核销挂钩、端点与后台页 | ENUM「全园故障与补偿通票」条；迁移 V447 |
 | 2026-10-17 | 增 | 抬头、§15A | V0.06：CG-08a 全园故障状态表、岗位→权限码、服务与错误码、票务售票闸、后台页 | ENUM「全园故障与补偿通票」条；迁移 V446 |
 | 2026-09-01 | 改 | 文首、§18 | V0.05 门禁同步：把 BSM 经营看板引用补全为唯一条目名；业务正文与范围不变 | `verify:entry-anchors` 唯一锚点要求 |
 | 2026-09-01 | 改 | §9 | V0.04 Grok 只读复审返修：游乐报表改回现行 P0 经营看板，不再把现行客流、核销、容量和异常看板误标为 P2 | M07 同一 Grok 会话第二次复审阻断项 1；BSM「连接经营看板，管理层看项目客流、容量和异常」及 A §8 |

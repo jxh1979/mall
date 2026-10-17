@@ -211,7 +211,7 @@ public class AmusementParkWideFaultService {
      * 「由游乐公司负责人和工程或安全岗位共同确认」：第二次确认须为另一人（不得同一人换岗位两次确认）、且为另一岗位
      * （两个不同人但同一岗位不构成共同确认）。
      */
-    private static void requireSecondPerson(String firstActorId, String firstRole, AccessActor actor, String role) {
+    static void requireSecondPerson(String firstActorId, String firstRole, AccessActor actor, String role) {
         if (actor.id().equals(firstActorId)) {
             throw ApiException.forbidden("PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN",
                     "全园故障状态须由游乐公司负责人与工程或安全岗位两人共同确认，发起人不得自行确认");
@@ -232,7 +232,7 @@ public class AmusementParkWideFaultService {
                 trimToNull(note), at));
     }
 
-    private String requireRoleWithPermission(String role) {
+    String requireRoleWithPermission(String role) {
         String r = trimToNull(role);
         if (!ROLE_HEAD.equals(r) && !ROLE_ENGINEERING_SAFETY.equals(r)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "岗位只能是游乐公司负责人（amusement_head）或工程或安全岗位（engineering_safety）");

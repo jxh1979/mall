@@ -13511,6 +13511,303 @@ paths:
         '500':
           $ref: '#/components/responses/Error'
       x-auth-context: staff-token
+  /api/v1/amusement/compensation-policies/{project_id}:
+    get:
+      tags:
+        - amusement
+      operationId: getAmusementCompensationPolicy
+      summary: 查询全园故障补偿有效期参数
+      description: CG-08b（ENUM「全园故障与补偿通票」：「自发放之日起在后台配置的补偿有效期内有效（业务参数，按项目可配，出厂默认一年，须同时配置上下限）」）：返回该综合体项目生效的补偿有效期（天）与上下限；项目未单独配置时回落出厂行（__global__：365 天）。
+      x-permission: amusement.park_fault.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: amusement.fault_compensation.viewed
+      x-audit-event-failure: amusement.fault_compensation.view_failed
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 综合体项目编号；__global__ 为出厂回落行
+            maxLength: 64
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+    post:
+      tags:
+        - amusement
+      operationId: configureAmusementCompensationPolicy
+      summary: 配置全园故障补偿有效期参数（含上下限）
+      description: CG-08b：按综合体项目配置补偿有效期天数，须同时填写下限与上限，缺任一或不满足 1 ≤ 下限 ≤ 天数 ≤ 上限 → 400 VALIDATION_FAILED。幂等键必填，审计留痕。
+      x-permission: amusement.compensation_policy.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.fault_compensation.policy_configured
+      x-audit-event-failure: amusement.fault_compensation.policy_config_failed
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 综合体项目编号；__global__ 为出厂回落行
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - validity_days
+                - min_days
+                - max_days
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                validity_days:
+                  type: integer
+                  minimum: 1
+                  description: 补偿有效期（天），自发放之日起算。
+                min_days:
+                  type: integer
+                  minimum: 1
+                  description: 下限（天）。
+                max_days:
+                  type: integer
+                  minimum: 1
+                  description: 上限（天）。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+  /api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementFaultCompensationBatches
+      summary: 查询某次全园故障的补偿批次
+      description: CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、延长与补发数量、补偿有效期截止。
+      x-permission: amusement.park_fault.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: amusement.fault_compensation.viewed
+      x-audit-event-failure: amusement.fault_compensation.view_failed
+      parameters:
+        - name: fault_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 全园故障状态记录编号
+            maxLength: 64
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+    post:
+      tags:
+        - amusement
+      operationId: initiateAmusementFaultCompensationBatch
+      summary: 发起全园故障补偿批次（第一岗位：快照受影响人份）
+      description: CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；尚未核销但游乐权益仍在有效期内的人份/次份 → extend（只延长原核销权，不增加次数；多次票只补受影响的 1 次份）。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      x-permission: amusement.park_fault.confirm_as_head
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.fault_compensation.batch_initiated
+      x-audit-event-failure: amusement.fault_compensation.batch_initiate_failed
+      parameters:
+        - name: fault_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 全园故障状态记录编号
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - role
+                - reason
+                - bearer_company_id
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                role:
+                  type: string
+                  enum:
+                    - amusement_head
+                    - engineering_safety
+                  description: 本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。
+                reason:
+                  type: string
+                  description: 发放原因。
+                  maxLength: 2000
+                bearer_company_id:
+                  type: string
+                  description: 决定发放补偿的域主管公司的具体法律主体（承担本次完整补偿新增的实际履约）。
+                  maxLength: 64
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+  /api/v1/amusement/compensation-batches/{batch_id}/confirm:
+    post:
+      tags:
+        - amusement
+      operationId: confirmAmusementFaultCompensationBatch
+      summary: 第二岗位确认并发放补偿
+      description: CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：extend 人份的原权益 valid_to 延长到发放日 + 补偿有效期（取较晚者）；full_reissue 人份在原票下按票种完整票面补发各权益各一次（标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。
+      x-permission: amusement.park_fault.confirm_as_engineering_safety
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.fault_compensation.batch_issued
+      x-audit-event-failure: amusement.fault_compensation.batch_issue_failed
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 补偿批次编号
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - role
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                role:
+                  type: string
+                  enum:
+                    - amusement_head
+                    - engineering_safety
+                  description: 本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。
+                note:
+                  type: string
+                  description: 确认说明。
+                  maxLength: 1000
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+  /api/v1/amusement/compensation-batches/{batch_id}/items:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementFaultCompensationItems
+      summary: 查询补偿批次的补偿记录
+      description: CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（延长 / 完整补发）、状态（待确认 / 已发放 / 已使用）、延长后截止、补发权益行、履约核销与锁定结算价。
+      x-permission: amusement.park_fault.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: amusement.fault_compensation.viewed
+      x-audit-event-failure: amusement.fault_compensation.view_failed
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 补偿批次编号
+            maxLength: 64
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
   /api/v1/inventory/risk-alerts:
     get:
       tags:

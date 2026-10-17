@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 740 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 746 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -409,6 +409,12 @@
 | amusement | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/initiate-lift` | `initiateAmusementParkWideFaultLift` | 发起解除全园故障状态（第一岗位） | `object` | `amusement.park_fault.confirm_as_head` | `staff-token` | `project` | web, staff_work_phone | 是 | `amusement.park_fault.lift_initiated` | `amusement.park_fault.lift_initiate_failed` |
 | amusement | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/confirm-lift` | `confirmAmusementParkWideFaultLift` | 第二岗位确认解除全园故障状态 | `object` | `amusement.park_fault.confirm_as_engineering_safety` | `staff-token` | `project` | web, staff_work_phone | 是 | `amusement.park_fault.lifted` | `amusement.park_fault.lift_failed` |
 | amusement | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/actions` | `listAmusementParkWideFaultActions` | 查询全园故障状态留痕 | `-` | `amusement.park_fault.view` | `staff-token` | `project` | web | 否 | `amusement.park_fault.viewed` | `amusement.park_fault.view_failed` |
+| amusement | `GET` | `/api/v1/amusement/compensation-policies/{project_id}` | `getAmusementCompensationPolicy` | 查询全园故障补偿有效期参数 | `-` | `amusement.park_fault.view` | `staff-token` | `project` | web | 否 | `amusement.fault_compensation.viewed` | `amusement.fault_compensation.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/compensation-policies/{project_id}` | `configureAmusementCompensationPolicy` | 配置全园故障补偿有效期参数（含上下限） | `object` | `amusement.compensation_policy.manage` | `staff-token` | `project` | web | 是 | `amusement.fault_compensation.policy_configured` | `amusement.fault_compensation.policy_config_failed` |
+| amusement | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | `listAmusementFaultCompensationBatches` | 查询某次全园故障的补偿批次 | `-` | `amusement.park_fault.view` | `staff-token` | `project` | web | 否 | `amusement.fault_compensation.viewed` | `amusement.fault_compensation.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | `initiateAmusementFaultCompensationBatch` | 发起全园故障补偿批次（第一岗位：快照受影响人份） | `object` | `amusement.park_fault.confirm_as_head` | `staff-token` | `project` | web | 是 | `amusement.fault_compensation.batch_initiated` | `amusement.fault_compensation.batch_initiate_failed` |
+| amusement | `POST` | `/api/v1/amusement/compensation-batches/{batch_id}/confirm` | `confirmAmusementFaultCompensationBatch` | 第二岗位确认并发放补偿 | `object` | `amusement.park_fault.confirm_as_engineering_safety` | `staff-token` | `project` | web | 是 | `amusement.fault_compensation.batch_issued` | `amusement.fault_compensation.batch_issue_failed` |
+| amusement | `GET` | `/api/v1/amusement/compensation-batches/{batch_id}/items` | `listAmusementFaultCompensationItems` | 查询补偿批次的补偿记录 | `-` | `amusement.park_fault.view` | `staff-token` | `project` | web | 否 | `amusement.fault_compensation.viewed` | `amusement.fault_compensation.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/risk-alerts` | `listInventoryRiskAlerts` | 查询库存风险预警列表 | `-` | `inventory.risk_alert.view` | `staff-token` | `warehouse` | web, mobile_admin | 否 | `inventory.risk_alert.list` | `inventory.risk_alert.list_failed` |
 | inventory | `POST` | `/api/v1/inventory/risk-alerts/scan` | `scanInventoryRiskAlerts` | 触发库存风险扫描 | `object` | `inventory.risk.scan` | `staff-token` | `warehouse` | web, mobile_admin | 是 | `inventory.risk.scan` | `inventory.risk.scan_failed` |
 | inventory | `GET` | `/api/v1/inventory/stock-batches` | `listInventoryStockBatches` | 查询库存批次列表 | `-` | `inventory.stock.view` | `staff-token` | `warehouse` | web, mobile_admin | 否 | `inventory.stock_batch.list` | `inventory.stock_batch.list_failed` |

@@ -56,15 +56,18 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V446**，发现 **175** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V447**，发现 **178** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
 | `access_users` | `merchant_id` + `organization_id` | direct | V003 | `V003__p0_access_permission_authz_slice.sql` |
 | `amusement_capacity_config` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
 | `amusement_capacity_snapshot` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
+| `amusement_compensation_policies` | `project_id` | direct | V447 | `V447__amusement_fault_compensation.sql` |
 | `amusement_device_statuses` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
 | `amusement_devices` | `merchant_id` + `project_id` | direct | V143 | `V143__amusement_device_safety_cycle.sql` |
+| `amusement_fault_compensation_batches` | `project_id` | direct | V447 | `V447__amusement_fault_compensation.sql` |
+| `amusement_fault_compensation_items` | `project_id` | direct | V447 | `V447__amusement_fault_compensation.sql` |
 | `amusement_group_bookings` | `project_id` | direct | V035 | `V035__p2_amusement_group_private_bookings.sql` |
 | `amusement_incidents` | `merchant_id` + `project_id` | direct | V024, V049 | `V024__p1_amusement_safety_waiver_incident.sql`<br>`V049__amusement_security_fixes.sql` |
 | `amusement_inspection_tasks` | `merchant_id` + `project_id` | direct | V143 | `V143__amusement_device_safety_cycle.sql` |
