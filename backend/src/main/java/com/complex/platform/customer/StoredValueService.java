@@ -517,7 +517,7 @@ public class StoredValueService {
             payoutCent = MoneyRounding.bpsOf(amountCent, rule.refundRatioBps());
         }
         long principalAfter = account.principalCent() - amountCent;
-        // CG-06a（ENUM「储值卡类型与收款主体」：「销户时……再退剩余本金，赠送金清零」；BSM「储值预付卡 / 余额」：
+        // CG-06a（ENUM「储值卡类型与收款主体」：「销户时……再退剩余本金，赠送金清零」；BSM「储值」：
         // 「赠送金不退现、未使用部分按活动规则作废或收回」）：销户（本金退清）时未使用赠送金作废，单独留一条 adjust 流水。
         boolean closing = closeAccount && principalAfter == 0;
         long bonusVoidCent = closing ? account.bonusCent() : 0L;
@@ -585,6 +585,79 @@ public class StoredValueService {
         auditEventService.recordSuccess(EVENT_REFUND, "customer.stored_value.refund",
                 "customer_stored_value", account.id(), null, idempotencyKey, detail);
         return txn;
+    }
+
+    // ============================================================
+    // CG-06b 关闭客人账户（列入黑名单）：通用卡未消费本金退还本人、赠送金作废、卡置 closed；商户级卡不动
+    // ============================================================
+
+    /**
+     * CG-06b（BSM「核销单位」：「关闭该客人账户、该账号作废，并将其列入黑名单不允许再进入；关闭后该账户名下的储值本金退还本人」；
+     * BSM「储值」：「账户关闭的，储值本金退还本人」「综合体通用卡的未消费本金默认全额可退，赠送金不退现、未使用部分按活动规则作废或收回」；
+     * ENUM「储值卡类型与收款主体」：「商户级卡是否可退、退多少比例由发卡商户自设规则」）。
+     *
+     * <p>系统路径：由账户关闭动作（已过 customer.account.manage 闸）在同一事务内触发，不再过 customer.stored_value.refund 权限闸，
+     * 也不受客人黑名单闸拦截（该闸只拦客人本人动作）。只处理综合体通用卡（merchant_id 为空）且未销户的卡：
+     * 未消费本金全额沿既有线上退款出账路径退还（退款打款登记到 finance_refunds，退款执行主体＝长沙项目公司），
+     * 未使用赠送金作废留 adjust 流水，卡置 closed。商户级卡不动，由发卡商户按自设退卡规则到店办理（柜台退卡路径保持可用）。
+     * 重复关闭：已销户的卡跳过，不重复退。
+     */
+    @Transactional
+    public void closeGeneralCardsOnAccountClosure(String customerId, String reason) {
+        Instant now = now();
+        for (CustomerStoredValueAccountRecord card : repository.listStoredValueAccountsByCustomer(customerId)) {
+            if (card.merchantId() != null || "closed".equals(card.status())) {
+                continue;
+            }
+            CustomerStoredValueAccountRecord account = repository
+                    .findStoredValueAccountForUpdate(customerId, card.projectId(), null).orElse(null);
+            if (account == null || "closed".equals(account.status())) {
+                continue;
+            }
+            long principal = account.principalCent();
+            long bonus = account.bonusCent();
+            String key = "svclose_" + account.id();
+            repository.saveStoredValueAccount(withSplit(account, 0L, 0L, "closed", now));
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("reason", reason == null ? "" : reason);
+            detail.put("principal_refund_cent", principal);
+            detail.put("bonus_voided_cent", bonus);
+            if (principal > 0) {
+                repository.saveStoredValueTransaction(new CustomerStoredValueTransactionRecord(
+                        "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
+                        account.id(), customerId, "refund", -principal, bonus,
+                        null, "账户关闭：未消费本金退还本人", key, now, null, -principal, 0L));
+                // 与线上退卡同一出账路径：渠道明确失败整单回滚；未真正兑付则登记一笔 requested 的退款台账待打款。
+                com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway == null
+                        ? com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled().refund(
+                                com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
+                                        "stored_value_refund", account.id(), principal, null))
+                        : paymentGateway.refund(com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
+                                "stored_value_refund", account.id(), principal, null));
+                if (gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED) {
+                    throw ApiException.conflict("STORED_VALUE_REFUND_FAILED", "退款打款在支付网关失败，请稍后重试");
+                }
+                boolean payoutSettled = gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.SUCCEEDED;
+                String payoutRefundId = payoutSettled ? null
+                        : financeService.recordStoredValuePayoutRefund(account.id(), principal,
+                                "账户关闭：储值本金退还本人", gw.requiresInternalFallback() ? "manual" : gw.gatewayProvider(), key);
+                detail.put("payout_gateway_status", gw.status().name());
+                detail.put("payout_status", payoutSettled ? "settled" : "requested");
+                if (payoutRefundId != null) {
+                    detail.put("payout_refund_id", payoutRefundId);
+                }
+            }
+            if (bonus > 0) {
+                repository.saveStoredValueTransaction(new CustomerStoredValueTransactionRecord(
+                        "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
+                        account.id(), customerId, "adjust", -bonus, 0L,
+                        null, "账户关闭：未使用赠送金作废（不退现）", key + "|bonus_void", now, null, 0L, -bonus));
+            }
+            detail.put("card_scope", account.cardScope());
+            detail.put("closed", true);
+            auditEventService.recordSuccess("stored_value.closed_on_account_closure", "customer.account.manage",
+                    "customer_stored_value", account.id(), null, key, detail);
+        }
     }
 
     // ============================================================
