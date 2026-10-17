@@ -10,6 +10,8 @@ import jakarta.validation.constraints.NotBlank;
 public record StoredValueMerchantCardConfigRequest(
         @NotBlank String merchantId,
         Boolean cardIssuanceEnabled,
-        String fundOwnership
+        String fundOwnership,
+        // CG-06a：商户级卡消费扣款顺序（principal_first / bonus_first），由平台运营代录；为空保留现值。
+        String consumeOrder
 ) {
 }
