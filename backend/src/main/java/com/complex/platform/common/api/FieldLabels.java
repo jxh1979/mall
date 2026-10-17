@@ -267,6 +267,14 @@ public final class FieldLabels {
         p("period_label", "期间名称");
         p("period_type", "期间类型");
         p("contract_id", "合同");
+        // CG-11a 经销
+        p("dealer_id", "经销商");
+        p("dealer_contract_id", "经销合同");
+        p("contract_no", "合同编号");
+        p("sales_entity_id", "销售主体");
+        p("central_warehouse_id", "中心仓");
+        p("catalog_id", "价格目录");
+        p("inquiry_id", "询价单");
         p("parent_contract_id", "主合同");
         p("contract_entity_id", "合同主体");
         p("contract_subject_id", "合同签约主体");
