@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.42
+// 文件版本：V0.43
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -1888,6 +1888,16 @@ public class AccessService {
      */
     @Transactional
     public StaffLevelAssignment assignStaffLevel(StaffLevelAssignmentRequest request) {
+        return assignStaffLevel(request, null);
+    }
+
+    /**
+     * M738-F06（2026-10-16 所选选项原文「审批落地职级时沿用已经核过的注册审批范围」）：员工注册审批通过时落地职级，
+     * 新账号的范围按该次审批已核过的 staff.profile.review 可触及范围（reviewReach）判，不再按 access.staff_level.manage 另核；
+     * 只有 StaffService.reviewRegistration 传 reviewReach。为 null 时（独立职级分配入口）照旧按 access.staff_level.manage 现算。其余校验不变。
+     */
+    @Transactional
+    public StaffLevelAssignment assignStaffLevel(StaffLevelAssignmentRequest request, ProjectReach reviewReach) {
         AccessActor actor = authorizationService.currentActor();
         try {
             return idempotencyService.execute(
@@ -1902,7 +1912,8 @@ public class AccessService {
                         // M002-F41（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」，R-002）：与其他定岗写入口
                         // 同一把员工行锁，先锁后读——下方岗位读取、分支与两种写入都在锁内，并发换岗或定岗提交后按锁内读到的当前岗位重算。
                         // M736：可触及项目在锁员工行之前算好；已定岗改职级转定岗时沿用同一个结果。
-                        ProjectReach reach = authorizationService.projectReach(actor, "access.staff_level.manage");
+                        ProjectReach reach = reviewReach != null ? reviewReach
+                                : authorizationService.projectReach(actor, "access.staff_level.manage");
                         AccessUser targetUser = lockTargetUser(userId);
                         requireSameOrganization(actor, targetUser, reach);
                         if (repository.findStaffLevelById(request.staffLevelId()).isEmpty()) {

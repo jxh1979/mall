@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -231,9 +231,10 @@ public class StaffService {
                             // 班次/考勤/请假/通知/打卡)对其一律 403;此前仅 platform_admin 桥可用。幂等(ON CONFLICT DO NOTHING)。
                             accessRepository.assignUserRole(created.id(), "role_staff_self");
                             if (profile.staffLevelId() != null) {
+                                // M738-F06：职级随审批落地，新账号范围按本次审批已核过的 staff.profile.review 可触及范围判（reach），不另按职级管理权限核
                                 accessService.assignStaffLevel(new com.complex.platform.access.dto.StaffLevelAssignmentRequest(
                                         request.idempotencyKey() + ":level", request.operatorNote(), created.id(),
-                                        profile.staffLevelId(), null, "CNY", null));
+                                        profile.staffLevelId(), null, "CNY", null), reach);
                             }
                             StaffProfileRecord approved = profile.withRegistrationReview(
                                     created.id(), "approved", actor.id(), now, null);

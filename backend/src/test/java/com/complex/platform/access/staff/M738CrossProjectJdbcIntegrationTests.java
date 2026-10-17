@@ -161,6 +161,29 @@ class M738CrossProjectJdbcIntegrationTests {
         assertThat(registrationStatus(rgA)).isEqualTo("submitted");
     }
 
+    // M738-F06（2026-10-16 所选选项原文「审批落地职级时沿用已经核过的注册审批范围」）：只凭只勾 B 的角色持有 staff.profile.review、
+    // 不持有 access.staff_level.manage 的人，批准一条登记在 B、带职级（种子职级 lvl_m1_lower）的「已提交」注册。
+    // 修复前落地职级按 access.staff_level.manage 另核新账号（只到本人项目 A）→ 403 CROSS_ORG_FORBIDDEN、整笔回滚（第一处断言即红）。
+    @Test
+    void approvingRegistrationLandsStaffLevelWithinTheReviewReach() throws Exception {
+        String rgB = registration("rgb", entityB);
+        jdbcTemplate.update("UPDATE staff_profiles SET staff_level_id = 'lvl_m1_lower' WHERE id = ?", rgB);
+        RequestPostProcessor ticked = staffOfA("ticked", tickedBRole("ticked", "staff.profile.review"));
+
+        // 修复前红：403 CROSS_ORG_FORBIDDEN
+        postJson(ticked, "/api/v1/staff/registrations/" + rgB + "/review", """
+                {"idempotency_key": "%s", "decision": "approve", "initial_password": "m738-test-init"}
+                """.formatted(key())).andExpect(status().isOk());
+        assertThat(registrationStatus(rgB)).isEqualTo("approved");
+        String created = jdbcTemplate.queryForObject("SELECT user_id FROM staff_profiles WHERE id = ?", String.class, rgB);
+        assertThat(jdbcTemplate.queryForObject("SELECT organization_id FROM access_users WHERE id = ?", String.class, created))
+                .isEqualTo(entityB);
+        assertThat(jdbcTemplate.queryForList("SELECT role_id FROM user_roles WHERE user_id = ?", String.class, created))
+                .contains("role_staff_self");
+        assertThat(jdbcTemplate.queryForObject("SELECT staff_level_id FROM staff_level_assignments WHERE user_id = ?", String.class,
+                created)).isEqualTo("lvl_m1_lower");
+    }
+
     // J3（2.3 员工登记）：码 staff.profile.submit，商户 mchB 的经营主体公司是 B。修复前只勾 B 的人登记到 B 被拒（第一处断言即红）。
     @Test
     void registrationMayTargetReachableProjects() throws Exception {
@@ -312,6 +335,17 @@ class M738CrossProjectJdbcIntegrationTests {
         assertThat(pendingReviews(staffOfA("all", allProjectsRole("all", codes)))).containsExactlyInAnyOrder(rvA, rvB);
     }
 
+    // J8 补（M738-F02 验收④，iter2 覆盖缺口）：只勾 B、普通角色、勾全部三种人各一组复核单——发起人分别在其范围内、范围外，
+    // 单上只有一个待裁决的角色节点（按角色解析、不指定审批人，所以看不看得到、能不能通过只取决于范围）。码同 J8。
+    @Test
+    void eachKindOfHolderReadsAndApprovesOnlyReviewsWithinReach() throws Exception {
+        String[] codes = {"governance.supervisor_review.view", "governance.supervisor_review.approve"};
+        approvesWithinReach("ticked", tickedBRole("ticked", codes), entityB, entityA);
+        approvesWithinReach("plain", plainRole("plain", codes), entityA, entityB);
+        // 勾全部：平台公司 P 不在项目集合里
+        approvesWithinReach("all", allProjectsRole("all", codes), entityB, entityP);
+    }
+
     // J9（2.7 服务单）：履约人 eA、eB，服务单 oA、oB（项目分别 A、B）。码 service.catalog.manage、service.order.create。
     // 修复前只勾 B 的人后台列表里是本人项目 A 的 oA（第一处断言即红）。
     @Test
@@ -345,6 +379,25 @@ class M738CrossProjectJdbcIntegrationTests {
         // 非持有人：照旧只到本人项目（守护）
         assertThat(serviceOrders(staffOfA("plain", plainRole("plain", codes)))).containsExactly(oA);
         assertThat(serviceOrders(staffOfA("all", allProjectsRole("all", codes)))).containsExactlyInAnyOrder(oA, oB);
+    }
+
+    // J9 补（M738-F03 验收④，iter2 覆盖缺口）：只勾 B、普通角色、勾全部三种人各一组服务单——履约人分别在其范围内、范围外。码同 J9。
+    @Test
+    void eachKindOfHolderListsCancelsAndOrdersOnlyWithinReach() throws Exception {
+        String[] codes = {"service.catalog.manage", "service.order.create"};
+        String eA = employee("ea", entityA);
+        String eB = employee("eb", entityB);
+        String eP = employee("ep", entityP);
+        String catalogItem = "svc_m738_" + suffix;
+        postJson(platformAdmin("service.catalog.manage"), "/api/v1/services/catalog", """
+                {"idempotency_key": "%s", "id": "%s", "name": "M738 点舞", "price_cent": 10000, "duration_minutes": 10,
+                 "active": true, "mgmt_fee_mode": "none", "mgmt_fee_value": 0}
+                """.formatted(key(), catalogItem)).andExpect(status().isOk());
+
+        ordersWithinReach(staffOfA("ticked", tickedBRole("ticked", codes)), "t", catalogItem, eB, entityB, eA, entityA);
+        ordersWithinReach(staffOfA("plain", plainRole("plain", codes)), "n", catalogItem, eA, entityA, eB, entityB);
+        // 勾全部：登记在平台公司 P 的履约人不在项目集合里
+        ordersWithinReach(staffOfA("all", allProjectsRole("all", codes)), "w", catalogItem, eB, entityB, eP, entityP);
     }
 
     // J10①（2.5 顶班，2026-10-16 所选选项原文二）：A 的普通员工（非持有人，码 staff.shift.manage）查看 eB 班次 shB 的顶班记录。
@@ -528,6 +581,12 @@ class M738CrossProjectJdbcIntegrationTests {
         return id;
     }
 
+    /** J8 补：给复核单挂一个待裁决的主线角色节点（按角色解析、不指定审批人，同审批链生成的角色节点）。 */
+    private void roleNode(String reviewId) {
+        jdbcTemplate.update("INSERT INTO supervisor_review_nodes (node_id, review_id, line_code, seq, approver_kind, status) "
+                + "VALUES (?, ?, 'main', 1, 'role', 'pending')", "nd_" + reviewId, reviewId);
+    }
+
     /** 一张新建状态的服务单（项目按用例给定），建单时间取当前。 */
     private String serviceOrder(String tag, String performer, String projectId, String catalogItem) {
         String id = "svo_m738_" + tag + "_" + suffix;
@@ -613,6 +672,68 @@ class M738CrossProjectJdbcIntegrationTests {
                 """.formatted(key()));
     }
 
+    private ResultActions createOrder(RequestPostProcessor session, String catalogItem, String performer) throws Exception {
+        return postJson(session, "/api/v1/services/orders", """
+                {"idempotency_key": "%s", "catalog_item_id": "%s", "performer_user_id": "%s"}
+                """.formatted(key(), catalogItem, performer));
+    }
+
+    private ResultActions approve(RequestPostProcessor session, String reviewId) throws Exception {
+        return postJson(session, "/api/v1/platform/supervisor-review/" + reviewId + "/approve", """
+                {"idempotency_key": "%s", "decision": "approved", "comment": "M738 同意"}
+                """.formatted(key()));
+    }
+
+    /**
+     * J8 补：以 tag 建归属 A、挂 roleId 的员工，给一个 M2 职级（level_rank 4 → 主管级别 2，够得上 required_level 2 的角色节点）。
+     * 范围内的单：清单里有、读审批链 200、通过后节点与复核单都推进为已通过；范围外的单：清单里没有、读链与通过 403、节点与复核单不变。
+     */
+    private void approvesWithinReach(String tag, String roleId, String inEntity, String outEntity) throws Exception {
+        RequestPostProcessor session = staffOfA(tag, roleId);
+        jdbcTemplate.update("INSERT INTO staff_level_assignments (user_id, staff_level_id) VALUES (?, 'lvl_m2_lower')", userId(tag));
+        String in = pendingReview(tag + "_in", inEntity);
+        String out = pendingReview(tag + "_out", outEntity);
+        roleNode(in);
+        roleNode(out);
+
+        assertThat(pendingReviews(session)).contains(in).doesNotContain(out);
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + in + "/chain").with(session))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].node_id").value("nd_" + in));
+        approve(session, in).andExpect(status().isOk()).andExpect(jsonPath("$.data.review_status").value("approved"));
+        assertThat(nodeState(in)).isEqualTo("approved/" + userId(tag));
+        assertThat(reviewStatus(in)).isEqualTo("approved");
+
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + out + "/chain").with(session)),
+                "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        denied(approve(session, out), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        assertThat(nodeState(out)).isEqualTo("pending/");
+        assertThat(reviewStatus(out)).isEqualTo("pending_review");
+    }
+
+    /**
+     * J9 补：以给定身份——列表里有范围内的单、没有范围外的单；取消范围内的成功、库里已取消，取消范围外的 403、不变；
+     * 为范围内的履约人下单成功、新单项目＝其档案项目，为范围外的下单 403、没有新单。
+     */
+    private void ordersWithinReach(RequestPostProcessor session, String tag, String catalogItem, String inPerformer, String inProject,
+                                   String outPerformer, String outProject) throws Exception {
+        String in = serviceOrder(tag + "_in", inPerformer, inProject, catalogItem);
+        String out = serviceOrder(tag + "_out", outPerformer, outProject, catalogItem);
+
+        assertThat(serviceOrders(session)).contains(in).doesNotContain(out);
+        cancel(session, in).andExpect(status().isOk());
+        assertThat(orderStatus(in)).isEqualTo("cancelled");
+        denied(cancel(session, out), "CROSS_PROJECT_FORBIDDEN");
+        assertThat(orderStatus(out)).isEqualTo("created");
+
+        String created = JsonPath.read(createOrder(session, catalogItem, inPerformer).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM service_orders WHERE id = ?", String.class, created))
+                .isEqualTo(inProject);
+        int before = ordersOf(outPerformer);
+        denied(createOrder(session, catalogItem, outPerformer), "CROSS_PROJECT_FORBIDDEN");
+        assertThat(ordersOf(outPerformer)).isEqualTo(before);
+    }
+
     private java.sql.Timestamp archivedAt(String profileId) {
         return jdbcTemplate.queryForObject("SELECT archived_at FROM staff_profiles WHERE id = ?", java.sql.Timestamp.class, profileId);
     }
@@ -633,5 +754,20 @@ class M738CrossProjectJdbcIntegrationTests {
 
     private String orderStatus(String orderId) {
         return jdbcTemplate.queryForObject("SELECT status FROM service_orders WHERE id = ?", String.class, orderId);
+    }
+
+    private int ordersOf(String performer) {
+        Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM service_orders WHERE performer_user_id = ?", Integer.class, performer);
+        return n == null ? 0 : n;
+    }
+
+    private String reviewStatus(String reviewId) {
+        return jdbcTemplate.queryForObject("SELECT review_status FROM supervisor_review_decisions WHERE review_id = ?", String.class, reviewId);
+    }
+
+    /** 节点状态／裁决人（未裁决为空）。 */
+    private String nodeState(String reviewId) {
+        return jdbcTemplate.queryForObject("SELECT status || '/' || coalesce(decided_by, '') FROM supervisor_review_nodes WHERE node_id = ?",
+                String.class, "nd_" + reviewId);
     }
 }
