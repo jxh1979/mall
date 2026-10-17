@@ -18,6 +18,7 @@ describe("DealerAdmissionCatalogPage 经销商准入与价格目录（ADM-DLR-00
       get: vi.fn(async (url: string) => {
         if (url === "/api/v1/dealers") return dealers;
         if (url.endsWith("/contracts")) return [{ id: "dct_1", contractNo: "DC-2026-001", salesEntityId: "be_1", centralWarehouseId: "wh_main", validFrom: "2026-01-01", validTo: "2026-12-31", status: "active" }];
+        if (url.endsWith("/portal-accounts")) return [{ userId: "usr_dlr_1", username: "dealer_north", status: "active", createdAt: "2026-10-17T00:00:00Z" }, { userId: "usr_dlr_2", username: "dealer_old", status: "revoked", createdAt: "2026-10-01T00:00:00Z", revokedAt: "2026-10-10T00:00:00Z" }];
         if (url.endsWith("/inquiries")) return [{ id: "dqi_1", itemId: "item_x", spec: "箱", quantity: 5, status: "quote_approval", quotedPriceCent: 8800, quotedBy: "usr_a", quoteValidUntil: "2026-11-01" }];
         if (url.endsWith("/price-catalogs")) return [{ id: "dpc_1", version: 1, status: "pending_approval", editedBy: "usr_a", submittedBy: "usr_a" }];
         if (url.endsWith("/external-stock")) return [
@@ -86,5 +87,19 @@ describe("DealerAdmissionCatalogPage 经销商准入与价格目录（ADM-DLR-00
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/contracts/dct_1/price-catalogs", expect.objectContaining({
       lines: [{ itemId: "item_z", spec: "箱", unitPriceCent: 120000, taxRateBps: 1300, expectedRestockDate: "2026-12-01" }],
     })));
+  });
+
+  it("门户账号（第十一端）区块：状态全中文，开通调用门户账号端点", async () => {
+    const api = makeApi();
+    renderPage(api);
+    await screen.findByTestId("dealer-table");
+    fireEvent.click(screen.getAllByTestId(/^dealer-select-/)[0]!);
+    await screen.findByTestId("dealer-portal-account-table");
+    expect(screen.getByTestId("portal-account-status-usr_dlr_1").textContent).toBe("有效");
+    expect(screen.getByTestId("portal-account-status-usr_dlr_2").textContent).toBe("已撤权");
+    fireEvent.change(screen.getByTestId("portal-username-input"), { target: { value: "dealer_new" } });
+    fireEvent.change(screen.getByTestId("portal-password-input"), { target: { value: "Portal#2026" } });
+    fireEvent.click(screen.getByTestId("portal-account-create"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/dealers\/.+\/portal-accounts$/), expect.objectContaining({ username: "dealer_new", password: "Portal#2026" })));
   });
 });

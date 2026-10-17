@@ -28,9 +28,11 @@ export function withBase(path: string): string {
 
 /**
  * 入口壳选择（纯逻辑，便于单测）。入参为已 stripBase 剥掉部署前缀的 App 内路径。
- * "/admin*" → 后台；根路径与客人入口 → 客人端；其余兜底客人端。
+ * "/admin*" → 后台；"/dealer*" → 独立经销商门户；根路径与客人入口 → 客人端；其余兜底客人端。
  */
-export function selectShell(path: string): "admin" | "customer" {
+export function selectShell(path: string): "admin" | "customer" | "dealer" {
   if (path.startsWith("/admin")) return "admin";
+  // CG-11d：独立经销商 Web 门户（受控第十一端 dealer_portal）单独成壳，与后台、客人端隔离。
+  if (path.startsWith("/dealer")) return "dealer";
   return "customer";
 }

@@ -278,6 +278,7 @@ public final class FieldLabels {
         p("overpayment_id", "超收记录");
         p("target_order_id", "抵扣订单");
         p("return_id", "退货单");
+        p("legal_representative", "法定代表人");
         p("invoice_id", "发票");
         p("invoice_no", "发票号");
         p("reason_type", "退货原因");

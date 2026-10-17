@@ -652,7 +652,7 @@ flowchart TD
 | id | 开关 ID |
 | scope_type | global、project、merchant、business_system、module、device、version |
 | scope_id | 作用范围 ID |
-| terminal_type | **D5 10 端权威码（唯一取值集）**：`app`、`miniapp`、`web`、`tablet`、`staff_work_phone`、`staff_private_phone`、`merchant_portal`、`merchant_app`、`kiosk`、`mobile_admin` |
+| terminal_type | **D5 10 端权威码 + 受控第十一端（唯一取值集）**：`app`、`miniapp`、`web`、`tablet`、`staff_work_phone`、`staff_private_phone`、`merchant_portal`、`merchant_app`、`kiosk`、`mobile_admin`、`dealer_portal`（独立经销商 Web 门户，ENUM:233，CG-11d V454 加入 CHECK 与总开关行 `tcs_term_dealer_portal`） |
 | kiosk_mode | 仅 `terminal_type=kiosk` 时可填：`ticketing`（售票型一体机）、`service`（非售票型服务一体机）；其他终端为空，不作为第 11 种终端 |
 | business_system | ticket、bar、amusement、supply_chain、member、finance、risk、third_party、governance |
 | module_code | 模块编码 |
@@ -837,6 +837,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 增 | §6.3 终端能力开关 | terminal_type 取值集加受控第十一端 `dealer_portal`（独立经销商 Web 门户）：V454 重建 `chk_tcs_terminal_type` / `chk_tccr_terminal_type` 并插入总开关行，门户按统一终端开关逐请求强制、拒绝留痕 `terminal.access_rejected`、识别不出终端的写请求兜底关闭 | CG-11d；ENUM:233；BSM:1218 |
 | 2026-08-19 | 增 | §2.2 / §2.4 | DEC-R8-98 下游同步（本文为多端登录规则的主落点）：补同一账号允许多设备多端同时登录、不设同端挤下线；现场动作按执行设备绑定与该次登录会话定位到操作人并留痕；长短款补足、小费归属、提成归属按动作发生时的会话记录判定，不因账号同时在别处登录而转移；§2.4 责任链操作人字段取值口径同步 | BSM“同一账号允许在多台设备、多个端同时登录”条现文（DEC-R8-97-19）；RUN 20260819-002 |
 | 2026-08-11 | 增 | §1A / §2.3 / §8 / §9 | 增加拆单、合单、转台、并台、拆台、撤销转台的完整留痕覆盖，要求操作前后可邀请人数、最低消费额、邀请与成员归属、消费分配、完整前后快照及成功或阻断结果；不新增事件名、API 或字段 | OPS-MISS-005；DEC-R8-95；BSM“拆单 / 合单”；ENUM“账单操作” |
 | 2026-08-11 | 改 | 顶部收口 / §1A / §4.1 / §4.1.6 / §8 | 本 finding 的活动字典统一保留六个真实 `admission.*` 与六个真实 `exception.*` 现行名，只删除 `contract.blocked`、`contract.released`、`exception.first_handled`、`exception.reviewed` 双轨；`admission.review` 明确为权限码，`admission.eval_skipped` 保持废止；§6.4 不在修改白名单 | OPS-016；现行代码发布名；DEC-R8-95 |

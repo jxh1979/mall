@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 784 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 348 | 人工权限矩阵正文未覆盖 247 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1568 | 人工事件矩阵正文未覆盖 1527 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 784 | 人工任务映射正文未逐项覆盖 778 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 475 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 802 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 356 | 人工权限矩阵正文未覆盖 255 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1604 | 人工事件矩阵正文未覆盖 1563 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 802 | 人工任务映射正文未逐项覆盖 796 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 483 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -159,6 +159,13 @@
 | `customer.voucher.manage` | staff-token | merchant | 3 | createVoucherDefinition, issueVouchers, revokeVoucher | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.redeem` | staff-token | merchant | 1 | redeemVoucher | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.view` | customer-token, staff-token | customer, merchant | 5 | customerVoucherWallet, listVoucherDefinitions, listVoucherInstances, listVoucherRedemptions, listVoucherOverview | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.inquiry.manage` | staff-token | dealer | 2 | dealerPortalListInquiries, dealerPortalCreateInquiry | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.order.manage` | staff-token | dealer | 6 | dealerPortalListOrders, dealerPortalCreateOrder, dealerPortalGetOrder, dealerPortalListOrderLines, dealerPortalSubmitOrder, dealerPortalSignOrder | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.order.pay` | staff-token | dealer | 2 | dealerPortalListPayments, dealerPortalRegisterPayment | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.profile.submit` | staff-token | dealer | 1 | dealerPortalSubmitProfile | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.profile.view` | staff-token | dealer | 2 | dealerPortalMe, dealerPortalListContracts | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.return.request` | staff-token | dealer | 2 | dealerPortalListReturns, dealerPortalRequestReturn | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.stock.view` | staff-token | dealer | 1 | dealerPortalExternalStock | OpenAPI 补充，以本附录为准 |
 | `dealer.inquiry.approve` | staff-token | project | 1 | decideDealerInquiryQuote | OpenAPI 补充，以本附录为准 |
 | `dealer.inquiry.manage` | staff-token | project | 1 | createDealerInquiry | OpenAPI 补充，以本附录为准 |
 | `dealer.inquiry.quote` | staff-token | project | 2 | quoteDealerInquiry, expireDealerInquiry | OpenAPI 补充，以本附录为准 |
@@ -170,6 +177,7 @@
 | `dealer.order.review` | staff-token | project | 2 | reviewDealerOrder, decideDealerOrderCancel | OpenAPI 补充，以本附录为准 |
 | `dealer.order.ship` | staff-token | project | 1 | shipDealerOrder | OpenAPI 补充，以本附录为准 |
 | `dealer.order.view` | staff-token | project | 6 | listDealerOrders, listDealerOverpayments, getDealerOrder, listDealerOrderLines, listDealerOrderPayments, listDealerOrderRefunds | OpenAPI 补充，以本附录为准 |
+| `dealer.portal_account.manage` | staff-token | project | 2 | listDealerPortalAccounts, createDealerPortalAccount | OpenAPI 补充，以本附录为准 |
 | `dealer.price_catalog.approve` | staff-token | project | 1 | decideDealerPriceCatalog | OpenAPI 补充，以本附录为准 |
 | `dealer.price_catalog.edit` | staff-token | project | 2 | createDealerPriceCatalogDraft, submitDealerPriceCatalog | OpenAPI 补充，以本附录为准 |
 | `dealer.return.inspect` | staff-token | project | 2 | receiveDealerReturn, inspectDealerReturn | OpenAPI 补充，以本附录为准 |
@@ -928,22 +936,30 @@
 | `dealer.contract_terms_updated` | success | `updateDealerContractTerms` | `POST` | `/api/v1/dealers/contracts/{id}/terms` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.contract_view_failed` | failure | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.contract_viewed` | success | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.contract.view_failed` | failure | `dealerPortalListContracts` | `GET` | `/api/v1/dealer-portal/contracts` | P0-待归类 | `dealer_portal.profile.view` | 接口级事件，以本附录为准 |
+| `dealer.contract.viewed` | success | `dealerPortalListContracts` | `GET` | `/api/v1/dealer-portal/contracts` | P0-待归类 | `dealer_portal.profile.view` | 接口级事件，以本附录为准 |
 | `dealer.create_failed` | failure | `createDealer` | `POST` | `/api/v1/dealers` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.created` | success | `createDealer` | `POST` | `/api/v1/dealers` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.deactivate_failed` | failure | `deactivateDealer` | `POST` | `/api/v1/dealers/{id}/deactivate` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.deactivated` | success | `deactivateDealer` | `POST` | `/api/v1/dealers/{id}/deactivate` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.external_stock.view_failed` | failure | `dealerPortalExternalStock` | `GET` | `/api/v1/dealer-portal/contracts/{id}/external-stock` | P0-待归类 | `dealer_portal.stock.view` | 接口级事件，以本附录为准 |
 | `dealer.external_stock.view_failed` | failure | `listDealerExternalStock` | `GET` | `/api/v1/dealers/contracts/{id}/external-stock` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.external_stock.viewed` | success | `dealerPortalExternalStock` | `GET` | `/api/v1/dealer-portal/contracts/{id}/external-stock` | P0-待归类 | `dealer_portal.stock.view` | 接口级事件，以本附录为准 |
 | `dealer.external_stock.viewed` | success | `listDealerExternalStock` | `GET` | `/api/v1/dealers/contracts/{id}/external-stock` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.inquiry_view_failed` | failure | `listDealerInquiries` | `GET` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.inquiry_viewed` | success | `listDealerInquiries` | `GET` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.create_failed` | failure | `createDealerInquiry` | `POST` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.inquiry.manage` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.create_failed` | failure | `dealerPortalCreateInquiry` | `POST` | `/api/v1/dealer-portal/inquiries` | P0-待归类 | `dealer_portal.inquiry.manage` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.created` | success | `createDealerInquiry` | `POST` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.inquiry.manage` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.created` | success | `dealerPortalCreateInquiry` | `POST` | `/api/v1/dealer-portal/inquiries` | P0-待归类 | `dealer_portal.inquiry.manage` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.decide_failed` | failure | `decideDealerInquiryQuote` | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | P0-待归类 | `dealer.inquiry.approve` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.decided` | success | `decideDealerInquiryQuote` | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | P0-待归类 | `dealer.inquiry.approve` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.expire_failed` | failure | `expireDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.expired` | success | `expireDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.quote_failed` | failure | `quoteDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
 | `dealer.inquiry.quoted` | success | `quoteDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.view_failed` | failure | `dealerPortalListInquiries` | `GET` | `/api/v1/dealer-portal/inquiries` | P0-待归类 | `dealer_portal.inquiry.manage` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.viewed` | success | `dealerPortalListInquiries` | `GET` | `/api/v1/dealer-portal/inquiries` | P0-待归类 | `dealer_portal.inquiry.manage` | 接口级事件，以本附录为准 |
 | `dealer.invoice.issue_failed` | failure | `issueDealerInvoice` | `POST` | `/api/v1/dealers/invoices/{id}/issue` | P0-待归类 | `dealer.invoice.manage` | 接口级事件，以本附录为准 |
 | `dealer.invoice.issued` | success | `issueDealerInvoice` | `POST` | `/api/v1/dealers/invoices/{id}/issue` | P0-待归类 | `dealer.invoice.manage` | 接口级事件，以本附录为准 |
 | `dealer.invoice.request_failed` | failure | `requestDealerInvoice` | `POST` | `/api/v1/dealers/orders/{id}/invoices` | P0-待归类 | `dealer.invoice.manage` | 接口级事件，以本附录为准 |
@@ -957,12 +973,16 @@
 | `dealer.order.cancel_request_failed` | failure | `requestDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-request` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.cancel_requested` | success | `requestDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-request` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.draft_failed` | failure | `createDealerOrderDraft` | `POST` | `/api/v1/dealers/{id}/orders` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.draft_failed` | failure | `dealerPortalCreateOrder` | `POST` | `/api/v1/dealer-portal/orders` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.drafted` | success | `createDealerOrderDraft` | `POST` | `/api/v1/dealers/{id}/orders` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.drafted` | success | `dealerPortalCreateOrder` | `POST` | `/api/v1/dealer-portal/orders` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.overpayment_use_confirmed` | success | `confirmDealerOverpaymentUse` | `POST` | `/api/v1/dealers/overpayments/{id}/use` | P0-待归类 | `dealer.order.payment.verify` | 接口级事件，以本附录为准 |
 | `dealer.order.overpayment_use_failed` | failure | `confirmDealerOverpaymentUse` | `POST` | `/api/v1/dealers/overpayments/{id}/use` | P0-待归类 | `dealer.order.payment.verify` | 接口级事件，以本附录为准 |
 | `dealer.order.overpayment_view_failed` | failure | `listDealerOverpayments` | `GET` | `/api/v1/dealers/{id}/overpayments` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.overpayment_viewed` | success | `listDealerOverpayments` | `GET` | `/api/v1/dealers/{id}/overpayments` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
+| `dealer.order.payment_register_failed` | failure | `dealerPortalRegisterPayment` | `POST` | `/api/v1/dealer-portal/orders/{id}/payments` | P0-待归类 | `dealer_portal.order.pay` | 接口级事件，以本附录为准 |
 | `dealer.order.payment_register_failed` | failure | `registerDealerOrderPayment` | `POST` | `/api/v1/dealers/orders/{id}/payments` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.payment_registered` | success | `dealerPortalRegisterPayment` | `POST` | `/api/v1/dealer-portal/orders/{id}/payments` | P0-待归类 | `dealer_portal.order.pay` | 接口级事件，以本附录为准 |
 | `dealer.order.payment_registered` | success | `registerDealerOrderPayment` | `POST` | `/api/v1/dealers/orders/{id}/payments` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.payment_verified` | success | `verifyDealerOrderPayment` | `POST` | `/api/v1/dealers/payments/{id}/verify` | P0-待归类 | `dealer.order.payment.verify` | 接口级事件，以本附录为准 |
 | `dealer.order.payment_verify_failed` | failure | `verifyDealerOrderPayment` | `POST` | `/api/v1/dealers/payments/{id}/verify` | P0-待归类 | `dealer.order.payment.verify` | 接口级事件，以本附录为准 |
@@ -974,20 +994,38 @@
 | `dealer.order.reviewed` | success | `reviewDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/review` | P0-待归类 | `dealer.order.review` | 接口级事件，以本附录为准 |
 | `dealer.order.ship_failed` | failure | `shipDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/ship` | P0-待归类 | `dealer.order.ship` | 接口级事件，以本附录为准 |
 | `dealer.order.shipped` | success | `shipDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/ship` | P0-待归类 | `dealer.order.ship` | 接口级事件，以本附录为准 |
+| `dealer.order.sign_failed` | failure | `dealerPortalSignOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/sign` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.sign_failed` | failure | `signDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/sign` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.signed` | success | `dealerPortalSignOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/sign` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.signed` | success | `signDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/sign` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.submit_failed` | failure | `dealerPortalSubmitOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/submit` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.submit_failed` | failure | `submitDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/submit` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.submitted` | success | `dealerPortalSubmitOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/submit` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.submitted` | success | `submitDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/submit` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.view_failed` | failure | `dealerPortalGetOrder` | `GET` | `/api/v1/dealer-portal/orders/{id}` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.view_failed` | failure | `dealerPortalListOrderLines` | `GET` | `/api/v1/dealer-portal/orders/{id}/lines` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.view_failed` | failure | `dealerPortalListOrders` | `GET` | `/api/v1/dealer-portal/orders` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.view_failed` | failure | `dealerPortalListPayments` | `GET` | `/api/v1/dealer-portal/orders/{id}/payments` | P0-待归类 | `dealer_portal.order.pay` | 接口级事件，以本附录为准 |
 | `dealer.order.view_failed` | failure | `getDealerOrder` | `GET` | `/api/v1/dealers/orders/{id}` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.view_failed` | failure | `listDealerOrderLines` | `GET` | `/api/v1/dealers/orders/{id}/lines` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.view_failed` | failure | `listDealerOrderPayments` | `GET` | `/api/v1/dealers/orders/{id}/payments` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.view_failed` | failure | `listDealerOrderRefunds` | `GET` | `/api/v1/dealers/orders/{id}/refunds` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.view_failed` | failure | `listDealerOrders` | `GET` | `/api/v1/dealers/{id}/orders` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
+| `dealer.order.viewed` | success | `dealerPortalGetOrder` | `GET` | `/api/v1/dealer-portal/orders/{id}` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.viewed` | success | `dealerPortalListOrderLines` | `GET` | `/api/v1/dealer-portal/orders/{id}/lines` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.viewed` | success | `dealerPortalListOrders` | `GET` | `/api/v1/dealer-portal/orders` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.viewed` | success | `dealerPortalListPayments` | `GET` | `/api/v1/dealer-portal/orders/{id}/payments` | P0-待归类 | `dealer_portal.order.pay` | 接口级事件，以本附录为准 |
 | `dealer.order.viewed` | success | `getDealerOrder` | `GET` | `/api/v1/dealers/orders/{id}` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.viewed` | success | `listDealerOrderLines` | `GET` | `/api/v1/dealers/orders/{id}/lines` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.viewed` | success | `listDealerOrderPayments` | `GET` | `/api/v1/dealers/orders/{id}/payments` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.viewed` | success | `listDealerOrderRefunds` | `GET` | `/api/v1/dealers/orders/{id}/refunds` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.order.viewed` | success | `listDealerOrders` | `GET` | `/api/v1/dealers/{id}/orders` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
+| `dealer.portal_account.create_failed` | failure | `createDealerPortalAccount` | `POST` | `/api/v1/dealers/{id}/portal-accounts` | P0-待归类 | `dealer.portal_account.manage` | 接口级事件，以本附录为准 |
+| `dealer.portal_account.created` | success | `createDealerPortalAccount` | `POST` | `/api/v1/dealers/{id}/portal-accounts` | P0-待归类 | `dealer.portal_account.manage` | 接口级事件，以本附录为准 |
+| `dealer.portal_account.view_failed` | failure | `listDealerPortalAccounts` | `GET` | `/api/v1/dealers/{id}/portal-accounts` | P0-待归类 | `dealer.portal_account.manage` | 接口级事件，以本附录为准 |
+| `dealer.portal_account.viewed` | success | `listDealerPortalAccounts` | `GET` | `/api/v1/dealers/{id}/portal-accounts` | P0-待归类 | `dealer.portal_account.manage` | 接口级事件，以本附录为准 |
+| `dealer.portal.access_rejected` | failure | `dealerPortalMe` | `GET` | `/api/v1/dealer-portal/me` | P0-待归类 | `dealer_portal.profile.view` | 接口级事件，以本附录为准 |
+| `dealer.portal.viewed` | success | `dealerPortalMe` | `GET` | `/api/v1/dealer-portal/me` | P0-待归类 | `dealer_portal.profile.view` | 接口级事件，以本附录为准 |
 | `dealer.price_catalog_line_view_failed` | failure | `listDealerPriceCatalogLines` | `GET` | `/api/v1/dealers/price-catalogs/{id}/lines` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.price_catalog_line_viewed` | success | `listDealerPriceCatalogLines` | `GET` | `/api/v1/dealers/price-catalogs/{id}/lines` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.price_catalog_view_failed` | failure | `listDealerPriceCatalogs` | `GET` | `/api/v1/dealers/contracts/{id}/price-catalogs` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
@@ -1008,17 +1046,23 @@
 | `dealer.return.received` | success | `receiveDealerReturn` | `POST` | `/api/v1/dealers/returns/{id}/receive` | P0-待归类 | `dealer.return.inspect` | 接口级事件，以本附录为准 |
 | `dealer.return.refund_execute_failed` | failure | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | P0-待归类 | `dealer.return.refund.execute` | 接口级事件，以本附录为准 |
 | `dealer.return.refund_executed` | success | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | P0-待归类 | `dealer.return.refund.execute` | 接口级事件，以本附录为准 |
+| `dealer.return.request_failed` | failure | `dealerPortalRequestReturn` | `POST` | `/api/v1/dealer-portal/orders/{id}/returns` | P0-待归类 | `dealer_portal.return.request` | 接口级事件，以本附录为准 |
 | `dealer.return.request_failed` | failure | `requestDealerReturn` | `POST` | `/api/v1/dealers/orders/{id}/returns` | P0-待归类 | `dealer.return.manage` | 接口级事件，以本附录为准 |
+| `dealer.return.requested` | success | `dealerPortalRequestReturn` | `POST` | `/api/v1/dealer-portal/orders/{id}/returns` | P0-待归类 | `dealer_portal.return.request` | 接口级事件，以本附录为准 |
 | `dealer.return.requested` | success | `requestDealerReturn` | `POST` | `/api/v1/dealers/orders/{id}/returns` | P0-待归类 | `dealer.return.manage` | 接口级事件，以本附录为准 |
+| `dealer.return.view_failed` | failure | `dealerPortalListReturns` | `GET` | `/api/v1/dealer-portal/orders/{id}/returns` | P0-待归类 | `dealer_portal.return.request` | 接口级事件，以本附录为准 |
 | `dealer.return.view_failed` | failure | `getDealerReturn` | `GET` | `/api/v1/dealers/returns/{id}` | P0-待归类 | `dealer.return.view` | 接口级事件，以本附录为准 |
 | `dealer.return.view_failed` | failure | `listDealerReturnLines` | `GET` | `/api/v1/dealers/returns/{id}/lines` | P0-待归类 | `dealer.return.view` | 接口级事件，以本附录为准 |
 | `dealer.return.view_failed` | failure | `listDealerReturns` | `GET` | `/api/v1/dealers/orders/{id}/returns` | P0-待归类 | `dealer.return.view` | 接口级事件，以本附录为准 |
+| `dealer.return.viewed` | success | `dealerPortalListReturns` | `GET` | `/api/v1/dealer-portal/orders/{id}/returns` | P0-待归类 | `dealer_portal.return.request` | 接口级事件，以本附录为准 |
 | `dealer.return.viewed` | success | `getDealerReturn` | `GET` | `/api/v1/dealers/returns/{id}` | P0-待归类 | `dealer.return.view` | 接口级事件，以本附录为准 |
 | `dealer.return.viewed` | success | `listDealerReturnLines` | `GET` | `/api/v1/dealers/returns/{id}/lines` | P0-待归类 | `dealer.return.view` | 接口级事件，以本附录为准 |
 | `dealer.return.viewed` | success | `listDealerReturns` | `GET` | `/api/v1/dealers/orders/{id}/returns` | P0-待归类 | `dealer.return.view` | 接口级事件，以本附录为准 |
 | `dealer.review_failed` | failure | `reviewDealer` | `POST` | `/api/v1/dealers/{id}/review` | P0-待归类 | `dealer.review` | 接口级事件，以本附录为准 |
 | `dealer.reviewed` | success | `reviewDealer` | `POST` | `/api/v1/dealers/{id}/review` | P0-待归类 | `dealer.review` | 接口级事件，以本附录为准 |
+| `dealer.submit_failed` | failure | `dealerPortalSubmitProfile` | `POST` | `/api/v1/dealer-portal/me/submission` | P0-待归类 | `dealer_portal.profile.submit` | 接口级事件，以本附录为准 |
 | `dealer.submit_failed` | failure | `submitDealer` | `POST` | `/api/v1/dealers/{id}/submit` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.submitted` | success | `dealerPortalSubmitProfile` | `POST` | `/api/v1/dealer-portal/me/submission` | P0-待归类 | `dealer_portal.profile.submit` | 接口级事件，以本附录为准 |
 | `dealer.submitted` | success | `submitDealer` | `POST` | `/api/v1/dealers/{id}/submit` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.view_failed` | failure | `listDealers` | `GET` | `/api/v1/dealers` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.viewed` | success | `listDealers` | `GET` | `/api/v1/dealers` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
@@ -2448,6 +2492,7 @@
 | P0-待归类 | `createDealerContract` | `POST` | `/api/v1/dealers/{id}/contracts` | 登记经销合同 | `dealer.manage` | `dealer.contract_created` / `dealer.contract_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createDealerInquiry` | `POST` | `/api/v1/dealers/{id}/inquiries` | 登记询价（未定价商品） | `dealer.inquiry.manage` | `dealer.inquiry.created` / `dealer.inquiry.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createDealerOrderDraft` | `POST` | `/api/v1/dealers/{id}/orders` | 经销订单建单（草稿） | `dealer.order.manage` | `dealer.order.drafted` / `dealer.order.draft_failed` | web | operation 级补充 |
+| P0-待归类 | `createDealerPortalAccount` | `POST` | `/api/v1/dealers/{id}/portal-accounts` | 开通经销商门户账号 | `dealer.portal_account.manage` | `dealer.portal_account.created` / `dealer.portal_account.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createDealerPriceCatalogDraft` | `POST` | `/api/v1/dealers/contracts/{id}/price-catalogs` | 新建价格目录草稿版本 | `dealer.price_catalog.edit` | `dealer.price_catalog.drafted` / `dealer.price_catalog.draft_failed` | web | operation 级补充 |
 | P0-待归类 | `createEnergyMeter` | `POST` | `/api/v1/energy/meters` | 创建能源表计 | `energy.meter.manage` | `energy.meter_saved` / `energy.meter_save_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | 创建设备台账 | `facility.equipment.manage` | `facility.equipment_created` / `facility.equipment_create_failed` | web | operation 级补充 |
@@ -2467,6 +2512,22 @@
 | P0-待归类 | `createServiceOrder` | `POST` | `/api/v1/services/orders` | 代客下单(指定履约人) | `service.order.create` | `service.order.created` / `service.order.create_failed` | staff_work_phone, web, tablet, app | operation 级补充 |
 | P0-待归类 | `createSiteEntryReport` | `POST` | `/api/v1/facility/site-entry-reports` | 外包创建进场报备单（施工/装修进场前报备） | `facility.site_entry.create_assigned` | `facility.site_entry.create_assigned` / `facility.site_entry.create_failed` | web | operation 级补充 |
 | P0-待归类 | `deactivateDealer` | `POST` | `/api/v1/dealers/{id}/deactivate` | 停用经销商 | `dealer.manage` | `dealer.deactivated` / `dealer.deactivate_failed` | web | operation 级补充 |
+| P0-待归类 | `dealerPortalCreateInquiry` | `POST` | `/api/v1/dealer-portal/inquiries` | 门户：未定价商品询价 | `dealer_portal.inquiry.manage` | `dealer.inquiry.created` / `dealer.inquiry.create_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalCreateOrder` | `POST` | `/api/v1/dealer-portal/orders` | 门户：建单（草稿） | `dealer_portal.order.manage` | `dealer.order.drafted` / `dealer.order.draft_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalExternalStock` | `GET` | `/api/v1/dealer-portal/contracts/{id}/external-stock` | 门户：库存外显 | `dealer_portal.stock.view` | `dealer.external_stock.viewed` / `dealer.external_stock.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalGetOrder` | `GET` | `/api/v1/dealer-portal/orders/{id}` | 门户：订单详情 | `dealer_portal.order.manage` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalListContracts` | `GET` | `/api/v1/dealer-portal/contracts` | 门户：本企业经销合同 | `dealer_portal.profile.view` | `dealer.contract.viewed` / `dealer.contract.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalListInquiries` | `GET` | `/api/v1/dealer-portal/inquiries` | 门户：本企业询价单 | `dealer_portal.inquiry.manage` | `dealer.inquiry.viewed` / `dealer.inquiry.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalListOrderLines` | `GET` | `/api/v1/dealer-portal/orders/{id}/lines` | 门户：订单明细 | `dealer_portal.order.manage` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalListOrders` | `GET` | `/api/v1/dealer-portal/orders` | 门户：本企业经销订单 | `dealer_portal.order.manage` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalListPayments` | `GET` | `/api/v1/dealer-portal/orders/{id}/payments` | 门户：付款记录 | `dealer_portal.order.pay` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalListReturns` | `GET` | `/api/v1/dealer-portal/orders/{id}/returns` | 门户：退货单 | `dealer_portal.return.request` | `dealer.return.viewed` / `dealer.return.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalMe` | `GET` | `/api/v1/dealer-portal/me` | 门户：本企业资料与准入状态 | `dealer_portal.profile.view` | `dealer.portal.viewed` / `dealer.portal.access_rejected` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalRegisterPayment` | `POST` | `/api/v1/dealer-portal/orders/{id}/payments` | 门户：登记付款 | `dealer_portal.order.pay` | `dealer.order.payment_registered` / `dealer.order.payment_register_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalRequestReturn` | `POST` | `/api/v1/dealer-portal/orders/{id}/returns` | 门户：申请退货 | `dealer_portal.return.request` | `dealer.return.requested` / `dealer.return.request_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalSignOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/sign` | 门户：确认签收 | `dealer_portal.order.manage` | `dealer.order.signed` / `dealer.order.sign_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalSubmitOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/submit` | 门户：提交订单 | `dealer_portal.order.manage` | `dealer.order.submitted` / `dealer.order.submit_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalSubmitProfile` | `POST` | `/api/v1/dealer-portal/me/submission` | 门户：提交注册资料送审 | `dealer_portal.profile.submit` | `dealer.submitted` / `dealer.submit_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `decideDealerInquiryQuote` | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | 审批报价 | `dealer.inquiry.approve` | `dealer.inquiry.decided` / `dealer.inquiry.decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-decision` | 取消审批 | `dealer.order.review` | `dealer.order.cancel_decided` / `dealer.order.cancel_decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | 审批价格目录 | `dealer.price_catalog.approve` | `dealer.price_catalog.decided` / `dealer.price_catalog.decide_failed` | web | operation 级补充 |
@@ -2507,6 +2568,7 @@
 | P0-待归类 | `listDealerOrderRefunds` | `GET` | `/api/v1/dealers/orders/{id}/refunds` | 经销订单退款记录 | `dealer.order.view` | `dealer.order.viewed` / `dealer.order.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerOrders` | `GET` | `/api/v1/dealers/{id}/orders` | 经销订单清单 | `dealer.order.view` | `dealer.order.viewed` / `dealer.order.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerOverpayments` | `GET` | `/api/v1/dealers/{id}/overpayments` | 经销超收记录 | `dealer.order.view` | `dealer.order.overpayment_viewed` / `dealer.order.overpayment_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealerPortalAccounts` | `GET` | `/api/v1/dealers/{id}/portal-accounts` | 经销商门户账号列表 | `dealer.portal_account.manage` | `dealer.portal_account.viewed` / `dealer.portal_account.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerPriceCatalogLines` | `GET` | `/api/v1/dealers/price-catalogs/{id}/lines` | 价格目录明细 | `dealer.view` | `dealer.price_catalog_line_viewed` / `dealer.price_catalog_line_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerPriceCatalogs` | `GET` | `/api/v1/dealers/contracts/{id}/price-catalogs` | 合同价格目录版本清单 | `dealer.view` | `dealer.price_catalog_viewed` / `dealer.price_catalog_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerReturnLines` | `GET` | `/api/v1/dealers/returns/{id}/lines` | 经销退货单明细 | `dealer.return.view` | `dealer.return.viewed` / `dealer.return.view_failed` | web | operation 级补充 |

@@ -303,6 +303,26 @@ public class AuthService implements SessionIssuer {
     }
 
     @Override
+    public int revokeUserSessions(String userId) {
+        if (isBlank(userId)) {
+            return 0;
+        }
+        Instant now = Instant.now();
+        int revoked = 0;
+        for (SessionRecord session : java.util.List.copyOf(sessionsById.values())) {
+            if (!userId.equals(session.userId()) || !"active".equals(session.status())) {
+                continue;
+            }
+            accessTokensToSessionId.remove(session.accessToken());
+            refreshTokensToSessionId.remove(session.refreshToken());
+            sessionsById.put(session.id(), new SessionRecord(session.id(), session.userId(), session.accessToken(), session.refreshToken(),
+                    session.deviceId(), session.terminalType(), "revoked", session.createdAt(), now, session.accessExpiresAt()));
+            revoked++;
+        }
+        return revoked;
+    }
+
+    @Override
     public void revokeOutstandingMasterSessions() {
         Instant now = Instant.now();
         int revoked = 0;

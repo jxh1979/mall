@@ -19,4 +19,12 @@ public interface SessionIssuer {
     /** 验签公钥加载或更换时作废已签发的最高权限登录，旧盘换到的票不能继续用。 */
     default void revokeOutstandingMasterSessions() {
     }
+
+    /**
+     * CG-11d（ENUM:181 / BSM:1246「停用生效时立即终止全部门户登录会话」）：作废某账号全部有效会话，返回作废数。
+     * dev 内存与 prod auth_sessions 各自实现；停用撤权不等下一次请求复核用户状态。
+     */
+    default int revokeUserSessions(String userId) {
+        return 0;
+    }
 }

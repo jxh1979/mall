@@ -37,7 +37,7 @@ public class TerminalCanaryService {
             "customer_app", "customer_miniapp", "web_admin", "mobile_admin",
             "staff_tablet", "staff_work_phone", "staff_personal_app",
             "merchant_web", "merchant_app", "kiosk", "tablet", "*",
-            "app", "miniapp", "web", "staff_private_phone", "merchant_portal");
+            "app", "miniapp", "web", "staff_private_phone", "merchant_portal", "dealer_portal");
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;

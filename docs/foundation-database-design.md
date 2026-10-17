@@ -1160,7 +1160,7 @@
 | id | 开关ID |
 | scope_type | global、project、merchant、business_system、module、device、version |
 | scope_id | 作用范围ID nullable |
-| terminal_type | app、miniapp、web、tablet、staff_work_phone、staff_private_phone、merchant_portal、merchant_app、kiosk、mobile_admin（D5 十端权威码） |
+| terminal_type | app、miniapp、web、tablet、staff_work_phone、staff_private_phone、merchant_portal、merchant_app、kiosk、mobile_admin、dealer_portal（D5 十端权威码 + 受控第十一端独立经销商 Web 门户，V454） |
 | kiosk_mode | nullable；仅 `terminal_type=kiosk` 时可填：ticketing（售票型）、service（非售票型服务一体机）；不得因此新增终端类型 |
 | business_system | ticket、bar、amusement、supply_chain、member、finance、risk、third_party、governance |
 | module_code | 模块编码 nullable |
