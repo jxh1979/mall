@@ -17609,6 +17609,7 @@ paths:
         - contract
       operationId: listSpaceRentalStatus
       summary: 铺位平面图着色数据源(可租/已租/即将到期)
+      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在未结清的退租结算单——结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已结清结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已结清或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。
       x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -20727,7 +20728,7 @@ paths:
         - analytics
       operationId: listVacantSpaces
       summary: 空置铺位明细(出租率钻取)
-      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。 M737：按
+      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(已退租/洽谈中/空置,按此优先级)。CG-09：与铺位看板 listSpaceRentalStatus 共用同一推导——最近一份合同存在未结清退租结算单(结算单开立起、含合同仍 effective)或租期已结束而未结清即「已退租」且不计入已租面积,结算完成(settled)即转空置;只有已签约未生效合同的铺位不算已退租。 M737：按
         contract.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出铺位项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号
         403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: contract.view
