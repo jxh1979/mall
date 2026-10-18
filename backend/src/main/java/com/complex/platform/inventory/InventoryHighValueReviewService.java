@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -58,7 +60,7 @@ public class InventoryHighValueReviewService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     /**
-     * 附件存在性/类型校验器（双证据闭环）。null = 未注入（旧构造器/单测）时退回旧行为「只校非空」。
+     * 附件文件/类型校验器；未注入时不能提交或批准高价值复核。
      * 生产由 InventoryService 构造时透传 Spring bean。
      */
     private final com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator;
@@ -121,10 +123,7 @@ public class InventoryHighValueReviewService {
         List<String> videos = requireNonEmptyList(videoAttachmentIds, "video_attachment_ids");
         // 双证据闭环：附件必须**真实存在**且类型对得上（照片栏必须是照片、视频栏必须是视频）。
         // 改造前只校两栏各自非空 —— 同一个随手编的假 id 填两栏就算「照片+视频双证据」。
-        if (evidenceAttachmentValidator != null) {
-            evidenceAttachmentValidator.requirePhotos(photos, "photo_attachment_ids");
-            evidenceAttachmentValidator.requireVideos(videos, "video_attachment_ids");
-        }
+        requireEvidence(photos, videos);
         Instant now = Instant.now();
         // C3：建单即落归属商户（当前 scope），供 reviewInternal 拒绝跨商户翻转。平台/项目管理员空 scope → null（放行）。
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
@@ -198,6 +197,9 @@ public class InventoryHighValueReviewService {
                         throw ApiException.conflict(
                                 "HIGH_VALUE_REVIEW_NOT_PENDING", "该高值复核不在待处理状态");
                     }
+                    if ("approved".equals(decision)) {
+                        requireEvidence(current.photoAttachmentIds(), current.videoAttachmentIds());
+                    }
                     String reviewer = authorizationService.currentActor().id();
                     Instant now = Instant.now();
                     InventoryHighValueReviewRecord resolved = new InventoryHighValueReviewRecord(
@@ -213,6 +215,14 @@ public class InventoryHighValueReviewService {
                     }
                     return repository.saveHighValueReview(resolved);
                 });
+    }
+
+    private void requireEvidence(List<String> photos, List<String> videos) {
+        if (evidenceAttachmentValidator == null) {
+            throw ApiException.conflict("EVIDENCE_STORAGE_UNAVAILABLE", "无法核实高价值业务证据文件");
+        }
+        evidenceAttachmentValidator.requirePhotos(requireNonEmptyList(photos, "photo_attachment_ids"), "photo_attachment_ids");
+        evidenceAttachmentValidator.requireVideos(requireNonEmptyList(videos, "video_attachment_ids"), "video_attachment_ids");
     }
 
     /**

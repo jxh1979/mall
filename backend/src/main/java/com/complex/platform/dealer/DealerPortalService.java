@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -189,7 +189,7 @@ public class DealerPortalService {
 
     /**
      * 解析当前门户经销商：账号类型 → 终端 → 归属 → 停用 → 门户资格。
-     * @param requirePortalEnabled 资料提交与查看本企业资料以外的能力须 portal_enabled（四项审核通过）。
+     * @param requirePortalEnabled 所有门户能力均须四项审核通过；保留调用签名不放宽资料页。
      */
     DealerRecord currentDealer(boolean requirePortalEnabled) {
         AccessActor actor = authorization.currentActor();
@@ -208,11 +208,11 @@ public class DealerPortalService {
             throw ApiException.forbidden("DEALER_PORTAL_ACCOUNT_REQUIRED", "该账号未归属任何经销商");
         }
         DealerRecord dealer = dealers.findDealer(account.dealerId()).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        if (DealerService.DEACTIVATED.equals(dealer.status()) || !"active".equals(account.status())) {
+        if (DealerService.DEACTIVATED.equals(dealer.status()) || "revoked".equals(account.status())) {
             rejectAccount(actor, "dealer_deactivated");
             throw ApiException.forbidden("DEALER_DEACTIVATED", "经销商已停用，门户及接口权限已撤销");
         }
-        if (requirePortalEnabled && !dealer.portalEnabled()) {
+        if (!"active".equals(account.status()) || !DealerService.APPROVED.equals(dealer.status()) || !dealer.portalEnabled()) {
             throw ApiException.forbidden("DEALER_PORTAL_NOT_ENABLED", "企业资料、合同、开票和银行资料审核通过后才启用门户功能");
         }
         return dealer;

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -60,6 +60,19 @@ class JdbcAccessCredentialProvisioner implements AccessCredentialProvisioner {
                 .addValue("now", timestampWithTimeZone(now)));
         if (affected != 1) {
             throw ApiException.conflict("CREDENTIAL_PROVISION_FAILED", "登录凭证未能保存");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void changeStatus(String userId, String status, Instant now) {
+        if (isBlank(userId) || !java.util.Set.of("active", "disabled").contains(status == null ? "" : status)) {
+            throw ApiException.badRequest("INVALID_ACCOUNT_STATUS", "账号状态须为启用或禁用");
+        }
+        int affected = jdbcTemplate.update("UPDATE auth_credentials SET status = :status, updated_at = :now WHERE user_id = :id",
+                new MapSqlParameterSource().addValue("id", userId).addValue("status", status).addValue("now", timestampWithTimeZone(now)));
+        if (affected != 1) {
+            throw ApiException.conflict("CREDENTIAL_STATUS_CHANGE_FAILED", "登录凭证状态未能同步");
         }
     }
 

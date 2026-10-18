@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -83,12 +84,14 @@ describe("OrgHierarchyPage 组织层级与审批线维护", () => {
     fireEvent.change(screen.getByTestId("approval-line-code"), { target: { value: "legal_review" } });
     fireEvent.change(screen.getByTestId("approval-line-name"), { target: { value: "法务审核线" } });
     fireEvent.change(screen.getByTestId("approval-line-rank"), { target: { value: "3" } });
+    fireEvent.change(screen.getByTestId("approval-line-hr"), { target: { value: "usr_hr" } });
     fireEvent.click(screen.getByTestId("approval-line-save"));
     const fetchMock = vi.mocked(globalThis.fetch);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/approval-lines/legal_review"))).toBe(true));
     const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/approval-lines/legal_review"));
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.min_start_rank).toBe(3);
+    expect(body.hr_final_approver_id).toBe("usr_hr");
     expect(body.status).toBe("active");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^已保存平行审批线 legal_review/)));
 

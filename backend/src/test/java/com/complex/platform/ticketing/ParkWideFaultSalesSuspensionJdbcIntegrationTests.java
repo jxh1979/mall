@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -180,6 +182,174 @@ class ParkWideFaultSalesSuspensionJdbcIntegrationTests {
                 .extracting(e -> ((ApiException) e).code()).isEqualTo("PARK_WIDE_FAULT_SALES_SUSPENDED");
     }
 
+    @Test
+    void faultStopsOldUnpaidIntentAndKeepsAlreadyPaidReplay() {
+        TicketOrderRecord oldOrder = orderService.createOrder(order(amusementTicketTypeId, null));
+        TicketOrderRecord paid = orderService.createOrder(order(passTicketTypeId, null));
+        TicketPaymentIntentRecord intent = orderService.createPaymentIntent(paid.id(), payment(paid, "before"));
+        orderService.confirmPayment(paid.id(), new com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest(
+                "confirmed-" + suffix, intent.id(), null));
+        activate();
+        assertThatThrownBy(() -> orderService.createPaymentIntent(oldOrder.id(), payment(oldOrder, "after")))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code()).isEqualTo("PARK_WIDE_FAULT_SALES_SUSPENDED");
+        assertThat(orderService.confirmPayment(paid.id(),
+                new com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest("replay-" + suffix, intent.id(), null))
+                .payStatus()).isEqualTo("paid");
+        assertThat(repository.findTicketOrderById(oldOrder.id()).orElseThrow().payStatus()).isEqualTo("unpaid");
+    }
+
+    @Test
+    void lateConfirmedPaymentCancelsUnacceptedOrderAndCreatesOneOpenOriginalRouteRefund() {
+        String type = ticketType("barpass", barId, List.of("amusement", "bar_drink"));
+        TicketOrderRecord oldOrder = orderService.createOrder(order(type, barId));
+        TicketPaymentIntentRecord intent = orderService.createPaymentIntent(oldOrder.id(), payment(oldOrder, "late"));
+        activate();
+        var confirm = new com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest(
+                "late-confirm-" + suffix, intent.id(), "gateway-original-" + suffix);
+        TicketOrderRecord rejected = orderService.confirmPayment(oldOrder.id(), confirm);
+        assertThat(rejected.status()).isEqualTo("cancelled");
+        assertThat(rejected.payStatus()).isEqualTo("paid");
+        assertThat(rejected.issueStatus()).isEqualTo("not_issued");
+        assertThat(repository.findTicketPaymentIntentById(intent.id()).orElseThrow().status()).isEqualTo("succeeded");
+        Map<String, Object> refund = jdbcTemplate.queryForMap("SELECT * FROM finance_refunds"
+                + " WHERE source_type='ticket_payment_rejection' AND target_id=?", intent.id());
+        assertThat(refund).containsEntry("status", "requested").containsEntry("refund_amount_cent", oldOrder.amountCent())
+                .containsEntry("refund_channel", "wechat").containsEntry("refund_direction", "original")
+                .containsEntry("original_payment_ref", "gateway-original-" + suffix).containsEntry("project_id", projectId);
+        assertThat(refund.get("succeeded_at")).isNull();
+        assertThat(repository.listIssuedEntitlementsByOrderId(oldOrder.id())).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id=?", Integer.class,
+                type)).isZero();
+        assertThat(orderService.confirmPayment(oldOrder.id(), confirm).status()).isEqualTo("cancelled");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM finance_refunds"
+                + " WHERE source_type='ticket_payment_rejection' AND target_id=?", Integer.class, intent.id())).isEqualTo(1);
+        assertThatThrownBy(() -> orderService.issueOrder(oldOrder.id(),
+                new com.complex.platform.ticketing.dto.StatusChangeRequest("no-issue-" + suffix, null, "拒收单不得出票", List.of())))
+                .isInstanceOf(ApiException.class).extracting(e -> ((ApiException)e).code()).isEqualTo("ORDER_CANCELLED");
+    }
+
+    @Test
+    void cancelledUnpaidOrderStillRecordsLateMoneyDuringFaultWithoutReleasingStockTwice() {
+        String type = ticketType("cancelled-late", barId, List.of("amusement"));
+        TicketOrderRecord order = orderService.createOrder(order(type, barId));
+        TicketPaymentIntentRecord intent = orderService.createPaymentIntent(order.id(), payment(order, "cancelled-late"));
+        orderService.cancelOrder(order.id());
+        activate();
+        TicketOrderRecord result = orderService.confirmPayment(order.id(),
+                new com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest(
+                        "cancelled-late-confirm-" + suffix, intent.id(), "gateway-cancelled-" + suffix));
+        assertThat(result.status()).isEqualTo("cancelled");
+        assertThat(result.payStatus()).isEqualTo("paid");
+        assertThat(repository.listIssuedEntitlementsByOrderId(order.id())).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM finance_refunds WHERE source_type='ticket_payment_rejection' AND target_id=?",
+                Integer.class, intent.id())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id=?", Integer.class, type)).isZero();
+    }
+
+    @Test
+    void everyLatePaymentOnRejectedOrderKeepsItsOwnRefundAfterFaultLift() {
+        String type = ticketType("two-late-payments", barId, List.of("amusement"));
+        TicketOrderRecord order = orderService.createOrder(order(type, barId));
+        TicketPaymentIntentRecord first = orderService.createPaymentIntent(order.id(), payment(order, "first-late"));
+        TicketPaymentIntentRecord second = orderService.createPaymentIntent(order.id(), payment(order, "second-late"));
+        AmusementParkWideFaultRecord fault = activate();
+        var firstConfirmation = new com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest(
+                "first-late-confirm-" + suffix, first.id(), "gateway-first-" + suffix);
+        assertThat(orderService.confirmPayment(order.id(), firstConfirmation).status()).isEqualTo("cancelled");
+
+        actAs(engineeringUser);
+        faultService.initiateLift(fault.id(), new ParkWideFaultLiftRequest(
+                "two-pay-lift-" + suffix, ENG, "故障解除"));
+        actAs(headUser);
+        faultService.confirmLift(fault.id(), new ParkWideFaultConfirmRequest(
+                "two-pay-lift-ok-" + suffix, HEAD, "确认解除"));
+        var secondConfirmation = new com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest(
+                "second-late-confirm-" + suffix, second.id(), "gateway-second-" + suffix);
+        for (int n = 0; n < 2; n++) {
+            assertThat(orderService.confirmPayment(order.id(), secondConfirmation).status()).isEqualTo("cancelled");
+            assertThat(orderService.confirmPayment(order.id(), firstConfirmation).status()).isEqualTo("cancelled");
+        }
+        var refunds = jdbcTemplate.queryForList("SELECT target_id, original_payment_ref, refund_amount_cent, status"
+                + " FROM finance_refunds WHERE source_type='ticket_payment_rejection' AND target_id IN (?,?)",
+                first.id(), second.id());
+        assertThat(refunds).hasSize(2);
+        assertThat(refunds).extracting(row -> row.get("target_id")).containsExactlyInAnyOrder(first.id(), second.id());
+        assertThat(refunds).extracting(row -> row.get("original_payment_ref"))
+                .containsExactlyInAnyOrder("gateway-first-" + suffix, "gateway-second-" + suffix);
+        assertThat(refunds).allSatisfy(row -> assertThat(row)
+                .containsEntry("refund_amount_cent", order.amountCent()).containsEntry("status", "requested"));
+        assertThat(repository.findTicketPaymentIntentById(second.id()).orElseThrow().status()).isEqualTo("succeeded");
+        assertThat(repository.listIssuedEntitlementsByOrderId(order.id())).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id=?",
+                Integer.class, type)).isZero();
+    }
+
+    @Test
+    void amusementSaleWithoutTrustedProjectStopsBeforeStockOrPayment() {
+        String type = ticketType("unresolved-project", null, List.of("amusement"));
+        jdbcTemplate.update("UPDATE entitlement_templates SET merchant_id=NULL, point_id=NULL WHERE id IN"
+                + " (SELECT entitlement_template_id FROM ticket_type_entitlements WHERE ticket_type_id=?)", type);
+        assertThatThrownBy(() -> orderService.createOrder(order(type, null)))
+                .isInstanceOf(ApiException.class).extracting(e -> ((ApiException)e).code()).isEqualTo("TICKET_PROJECT_UNRESOLVED");
+        assertThat(jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id=?", Integer.class, type)).isZero();
+    }
+
+    @Test
+    void saleProjectSnapshotSurvivesMerchantMoveAndControlsLatePaymentRefund() {
+        String type = ticketType("project-snapshot", null, List.of("amusement"));
+        jdbcTemplate.update("UPDATE entitlement_templates SET merchant_id=? WHERE id IN"
+                + " (SELECT entitlement_template_id FROM ticket_type_entitlements WHERE ticket_type_id=?)", barId, type);
+        TicketOrderRecord order = orderService.createOrder(order(type, null));
+        assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM ticket_orders WHERE id=?", String.class, order.id()))
+                .isEqualTo(projectId);
+        TicketPaymentIntentRecord intent = orderService.createPaymentIntent(order.id(), payment(order, "project-snapshot"));
+        String other = "prj_moved_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects (id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '迁往综合体', 'active', now(), now())", other);
+        jdbcTemplate.update("UPDATE merchants SET project_id=? WHERE id=?", other, barId);
+        activate();
+        TicketOrderRecord rejected = orderService.confirmPayment(order.id(),
+                new com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest(
+                        "snapshot-confirm-" + suffix, intent.id(), "gateway-snapshot-" + suffix));
+        assertThat(rejected.status()).isEqualTo("cancelled");
+        assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM ticket_orders WHERE id=?", String.class, order.id()))
+                .isEqualTo(projectId);
+        assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM finance_refunds WHERE source_type='ticket_payment_rejection' AND target_id=?",
+                String.class, intent.id())).isEqualTo(projectId);
+    }
+
+    @Test
+    void amusementSaleWithConflictingProjectCandidatesIsRejected() {
+        String type = ticketType("conflicting-project", null, List.of("amusement"));
+        String other = "prj_conflict_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects (id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '冲突综合体', 'active', now(), now())", other);
+        jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id,project_id) VALUES (?,?)", barId, other);
+        assertThat(repository.listTicketTypeProjectIds(type)).containsExactlyInAnyOrder(projectId, other);
+        assertThatThrownBy(() -> orderService.createOrder(order(type, null)))
+                .isInstanceOf(ApiException.class).extracting(e -> ((ApiException)e).code()).isEqualTo("TICKET_PROJECT_UNRESOLVED");
+        assertThat(jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id=?", Integer.class, type)).isZero();
+    }
+
+    @Test
+    void amusementSaleCanResolveProjectThroughItsConfiguredPoint() {
+        String type = ticketType("point-project", null, List.of("amusement"));
+        String point = "point_sale_" + suffix;
+        jdbcTemplate.update("INSERT INTO amusement_projects (id,project_name,capacity,open_status,eligibility_rule_json,"
+                + "location_point_id,created_at,updated_at,merchant_id) VALUES (?, '售票点位归属', 20, 'open', '{}'::jsonb, ?, now(), now(), ?)",
+                "amu_sale_" + suffix, point, barId);
+        jdbcTemplate.update("UPDATE entitlement_templates SET merchant_id=NULL, point_id=? WHERE id IN"
+                + " (SELECT entitlement_template_id FROM ticket_type_entitlements WHERE ticket_type_id=?)", point, type);
+        TicketOrderRecord order = orderService.createOrder(order(type, null));
+        assertThat(order.projectId()).isEqualTo(projectId);
+        assertThat(order.withMaskedPhone().projectId()).isEqualTo(projectId);
+        assertThat(repository.findTicketOrderById(order.id()).orElseThrow().projectId()).isEqualTo(projectId);
+    }
+
+    private com.complex.platform.finance.dto.PaymentIntentRequest payment(TicketOrderRecord order, String key) {
+        return new com.complex.platform.finance.dto.PaymentIntentRequest("pay-" + key + "-" + suffix, null, List.of(),
+                "ticket_order", order.id(), order.amountCent(), "CNY", "wechat");
+    }
+
     // ---------- helpers ----------
 
     private AmusementParkWideFaultRecord activate() {
@@ -204,7 +374,7 @@ class ParkWideFaultSalesSuspensionJdbcIntegrationTests {
         for (String type : entitlementTypes) {
             String templateId = "tpl_cg08_" + key + "_" + (i++) + "_" + suffix;
             repository.saveEntitlementTemplate(new EntitlementTemplateRecord(templateId, "权益-" + type, type, 1, 5000L, "active",
-                    ticketBarId, null, null, null, now, now, "virtual", null, "per_use", null, false));
+                    ticketBarId != null ? ticketBarId : barId, null, null, null, now, now, "virtual", null, "per_use", null, false));
             repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord("bind_" + templateId, id, templateId, 1, 1,
                     5000L, "default", 1, 5000L, now, now));
         }

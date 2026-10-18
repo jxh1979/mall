@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -22,8 +22,10 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
         }
         if (url === "/api/v1/dealer-portal/contracts") return [{ id: "dct_1", contractNo: "DC-1", validFrom: "2026-01-01", validTo: "2026-12-31", creditTerm: false }];
         if (url === "/api/v1/dealer-portal/inquiries") return [{ id: "dqi_1", itemId: "item_b", spec: "箱", quantity: 5, status: "quote_approval" }];
+        if (url === "/api/v1/dealer-portal/orders" && overrides.order) return [overrides.order];
         if (url === "/api/v1/dealer-portal/orders") return [{ id: "dord_1", orderNo: "DO-1", status: "shipping", totalAmountCent: 5000, paidAmountCent: 5000 }];
         if (url === "/api/v1/dealer-portal/contracts/dct_1/external-stock") return [{ itemId: "item_a", itemName: "威士忌", spec: "箱", unitPriceCent: 1000, availability: "low" }, { itemId: "item_c", itemName: "红酒", spec: "瓶", unitPriceCent: 500, availability: "expected_restock", expectedRestockDate: "2026-11-01" }];
+        if (url === "/api/v1/dealer-portal/orders/dord_1" && overrides.order) return overrides.order;
         if (url === "/api/v1/dealer-portal/orders/dord_1") return { id: "dord_1", orderNo: "DO-1", status: "shipping", totalAmountCent: 5000, paidAmountCent: 5000 };
         if (url.endsWith("/payments")) return [{ id: "dpay_1", method: "bank_transfer", amountCent: 5000, status: "verified", referenceNo: "TX-1" }];
         if (url.endsWith("/returns")) return [];
@@ -85,16 +87,39 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/sign", expect.anything()));
   });
 
-  it("门户未启用时只开放注册资料提交；停用（DEALER_DEACTIVATED）即退出并提示", async () => {
+  it("四类资料审核前不能进入门户，也不开放自助提交入口", async () => {
     const api = makeApi({ me: { ...dealer, status: "pending_submission", portalEnabled: false } });
+    render(<DealerPortalApp api={api} />);
+    await screen.findByTestId("dealer-portal-login");
+    fireEvent.change(screen.getByTestId("dealer-login-name"), { target: { value: "dealer_1" } });
+    fireEvent.change(screen.getByTestId("dealer-login-password"), { target: { value: "Portal#2026" } });
+    fireEvent.click(screen.getByTestId("dealer-login-submit"));
+    await screen.findByText("四类资料审核通过后才可登录经销商门户");
+    expect(screen.queryByTestId("dealer-portal-home")).toBeNull();
+    expect(screen.queryByTestId("profile-submit")).toBeNull();
+    expect(api.get).not.toHaveBeenCalledWith("/api/v1/dealer-portal/orders");
+  });
+
+  it("部分退货后按净未付登记尾款，待合同事件的日期明确展示", async () => {
+    const api = makeApi({ order: { id: "dord_1", orderNo: "DO-1", status: "partially_returned", totalAmountCent: 10000, paidAmountCent: 3000, returnedAmountCent: 2000, creditTerm: true } });
     await loginAs(api);
-    expect(screen.getByTestId("dealer-portal-locked")).toBeTruthy();
-    expect(screen.queryByTestId("dealer-order-section")).toBeNull();
-    fireEvent.change(screen.getByTestId("profile-contact-name"), { target: { value: "新联系人" } });
-    fireEvent.click(screen.getByTestId("profile-submit"));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/me/submission", expect.objectContaining({ contactName: "新联系人" })));
+    expect(screen.getByTestId("order-unpaid-dord_1").textContent).toBe("¥50");
+    expect(screen.getByText("待合同约定事件确定")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("order-select-dord_1"));
+    await screen.findByTestId("order-detail");
+    fireEvent.change(screen.getByTestId("pay-amount"), { target: { value: "50" } });
+    fireEvent.click(screen.getByTestId("pay-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/payments", expect.objectContaining({ amountCent: 5000 })));
+  });
+
+  it("停用后的业务请求返回登录并提示撤权", async () => {
+    const api = makeApi();
+    await loginAs(api);
+    fireEvent.click(screen.getByTestId("order-select-dord_1"));
+    await screen.findByTestId("order-detail");
     api.post.mockRejectedValueOnce(new DealerPortalApiError("经销商已停用，门户权限已撤销", 403, "DEALER_DEACTIVATED"));
-    fireEvent.click(screen.getByTestId("profile-submit"));
+    fireEvent.change(screen.getByTestId("pay-amount"), { target: { value: "50" } });
+    fireEvent.click(screen.getByTestId("pay-submit"));
     await screen.findByTestId("dealer-portal-login");
     expect(screen.getByTestId("dealer-portal-error").textContent).toBe("经销商已停用，门户权限已撤销");
   });

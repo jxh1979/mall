@@ -1,5 +1,7 @@
 package com.complex.platform.dealer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -68,6 +70,8 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
     @Autowired private DealerReturnService returns;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    @Autowired private com.complex.platform.evidence.EvidenceEventService admissionFiles;
     @Autowired private AccessRepository access;
     @Autowired private PlatformTransactionManager transactionManager;
 
@@ -113,7 +117,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
 
         actAs(sales);
         DealerRecord dealer = dealerService.createDealer(new DealerCreateRequest(key(), "退货经销商" + suffix, "9131" + System.nanoTime(), "法人", "联系人", "13900000000"));
-        dealerService.submitDealer(dealer.id(), key());
+        DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
         actAs(reviewer);
         dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
         dealerId = dealer.id();
@@ -122,7 +126,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
                 LocalDate.now().minusDays(1), LocalDate.now().plusYears(1)));
         contractId = contract.id();
         // 账期合同：首付 30%、截止 3 天、尾款 30 天；运费 10 元、包邮 500 元、承担方经销商；退货运费与首程运费约定留空（待双方确认）
-        orders.updateContractTerms(contractId, new DealerContractTermsRequest(key(), true, 3000, null, 3, 30, 1_000L, 50_000L, "dealer"));
+        orders.updateContractTerms(contractId, new DealerContractTermsRequest(key(), true, 3000, null, 3, 30, 1_000L, 50_000L, "dealer", null, null, null, "payment_notified", null, "shipped", null));
         DealerPriceCatalogRecord v1 = dealerService.createCatalogDraft(contractId, new DealerCatalogDraftRequest(key(), "目录",
                 List.of(new DealerCatalogLineRequest(itemA, "箱", 1_000L, 1300, null))));
         dealerService.submitCatalog(v1.id(), key());
@@ -172,6 +176,19 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         assertThat(jdbc.queryForMap("SELECT amount_cent, unpaid_amount_cent, paid_amount_cent FROM ar_ap_items WHERE id = ?", order.arApItemId()))
                 .as("应收冲减 2000：6000 → 4000，未收 0").containsEntry("amount_cent", 4_000L).containsEntry("unpaid_amount_cent", 0L).containsEntry("paid_amount_cent", 4_000L);
 
+        actAs(sales);
+        DealerOrderPaymentRecord extra = orders.registerPayment(order.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", 1_000L, Instant.now(), "EXCESS-" + suffix));
+        actAs(finance);
+        DealerOrderPaymentRecord extraVerified = orders.verifyPayment(extra.id(),
+                new DealerPaymentVerifyRequest(key(), "approve", "退货后多收款"));
+        assertThat(extraVerified.appliedCent()).isZero();
+        assertThat(jdbc.queryForMap("SELECT amount_cent, unpaid_amount_cent, paid_amount_cent FROM ar_ap_items WHERE id = ?", order.arApItemId()))
+                .as("全额属于超收的到账不得重写退货后已经结清的应收")
+                .containsEntry("amount_cent", 4_000L).containsEntry("unpaid_amount_cent", 0L).containsEntry("paid_amount_cent", 4_000L);
+        assertThat(jdbc.queryForObject("SELECT amount_cent FROM dealer_order_overpayments WHERE payment_id = ?", Long.class, extra.id()))
+                .isEqualTo(1_000L);
+
         // 既有退款审批通过
         actAs(refundApprover);
         for (int i = 0; i < 4 && "pending_review".equals(reviews.findReview(inspected.refundReviewId()).orElseThrow().reviewStatus()); i++) {
@@ -187,6 +204,10 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         DealerReturnRecord done = returns.recordRefundResult(request.id(), new DealerReturnRefundResultRequest(key(), "success", "RF-2", null));
         assertThat(done.status()).as("验收 3 < 申请 4 → 部分完成").isEqualTo("partially_completed");
         assertThat(done.refundedCent()).isEqualTo(1_000L);
+        assertThat(orders.listOverpayments(dealerId).items()).singleElement()
+                .satisfies(over -> assertThat(over.amountCent()).isEqualTo(1_000L));
+        assertThat(jdbc.queryForMap("SELECT amount_cent, unpaid_amount_cent, paid_amount_cent FROM ar_ap_items WHERE id = ?", order.arApItemId()))
+                .containsEntry("amount_cent", 4_000L).containsEntry("unpaid_amount_cent", 0L).containsEntry("paid_amount_cent", 4_000L);
         assertThat(orders.getOrder(order.id()).status()).isEqualTo("partially_returned");
         assertThat(orders.getOrder(order.id()).returnedAmountCent()).isEqualTo(3_000L);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name = 'dealer.return.refund_executed' AND business_id = ?", Integer.class, request.id())).isEqualTo(1);
@@ -262,9 +283,21 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         assertThat(balance("quantity")).isEqualTo(100);
     }
 
+    @Test
+    void returnFreightUsesTheOrderContractSnapshotAfterTermsChange() {
+        DealerOrderRecord order = signedOrder(2, 3000L);
+        actAs(sales);
+        orders.updateContractTerms(contractId, new DealerContractTermsRequest(key(), true, 3000, null, 3, 90, 1000L, 50000L,
+                "dealer", "sales_entity", true, null, "payment_notified", null, "signed", null));
+        DealerReturnRecord request = returns.requestReturn(order.id(), new DealerReturnRequest(key(), "unopened_resalable",
+                List.of(new DealerReturnLineRequest(itemA, "箱", 1)), "沿原订单合同"));
+        assertThat(request.returnFreightBearer()).isEqualTo("pending_confirmation");
+        assertThat(request.firstLegFreightRefundable()).isNull();
+    }
+
     /** 合同期限内、仅未拆封可复售 / 质量问题两类、数量不得超过已出库未退数量、签收前不得退货；退货单十态与退货原因 CHECK 闭集。 */
     @Test
-    void returnEligibilityAndClosedSets() {
+    void returnEligibilityAndClosedSets() throws Exception {
         DealerOrderRecord order = signedOrder(2, 3_000L);
         actAs(sales);
         assertThatThrownBy(() -> returns.requestReturn(order.id(), new DealerReturnRequest(key(), "changed_mind", List.of(new DealerReturnLineRequest(itemA, "箱", 1)), "不想要")))
@@ -273,7 +306,13 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("RETURN_QUANTITY_EXCEEDS"));
         assertThatThrownBy(() -> returns.requestReturn(pendingOrder().id(), new DealerReturnRequest(key(), "unopened_resalable", List.of(new DealerReturnLineRequest(itemA, "箱", 1)), "未签收")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_ORDER_STATUS_INVALID"));
-        jdbc.update("UPDATE dealer_contracts SET valid_to = ? WHERE id = ?", java.sql.Date.valueOf(LocalDate.now().minusDays(1)), contractId);
+        DealerContractRecord c = orders.getOrder(order.id()).contractSnapshot();
+        DealerContractRecord expiredSnapshot = new DealerContractRecord(c.id(), c.dealerId(), c.contractNo(), c.salesEntityId(), c.centralWarehouseId(),
+                c.validFrom(), LocalDate.now().minusDays(1), c.status(), c.createdBy(), c.createdAt(), c.creditTerm(), c.firstPaymentRatioBps(),
+                c.firstPaymentAmountCent(), c.firstPaymentDeadlineDays(), c.balanceDueDays(), c.freightCent(), c.freeShippingThresholdCent(),
+                c.freightBearer(), c.freightTemplateVersion(), c.returnFreightBearer(), c.firstLegFreightRefundable(), c.termsVersion(), c.contractSignedAt(),
+                c.firstPaymentAnchor(), c.firstPaymentFixedAt(), c.balanceDueAnchor(), c.balanceDueFixedAt());
+        jdbc.update("UPDATE dealer_orders SET contract_snapshot = CAST(? AS jsonb) WHERE id = ?", objectMapper.writeValueAsString(expiredSnapshot), order.id());
         assertThatThrownBy(() -> returns.requestReturn(order.id(), new DealerReturnRequest(key(), "unopened_resalable", List.of(new DealerReturnLineRequest(itemA, "箱", 1)), "过期")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_CONTRACT_EXPIRED"));
     }
@@ -297,6 +336,66 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
     }
 
     // ── helpers ──
+
+    @Test
+    void partialReturnRemainingBalanceCanBeCollectedAndClearsOverdueCreditHold() {
+        DealerOrderRecord order = signedOrder(9, 3_000L);
+        inspectAcceptedReturn(order.id(), 2);
+        assertThat(orders.getOrder(order.id()).status()).isEqualTo("partially_returned");
+        assertThat(orders.markOverdue(Instant.now().plusSeconds(60L * 86400))).isEqualTo(1);
+        assertThat(dealerService.getDealer(dealerId).creditSuspended()).isTrue();
+        actAs(sales);
+        DealerOrderPaymentRecord payment = orders.registerPayment(order.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", 5_000L, Instant.now(), "NET-BALANCE"));
+        actAs(finance);
+        assertThat(orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "尾款到账")).appliedCent()).isEqualTo(5_000L);
+        DealerOrderRecord after = orders.getOrder(order.id());
+        assertThat(after.status()).as("付款结清不抹掉部分退货履约事实").isEqualTo("partially_returned");
+        assertThat(after.returnedAmountCent()).isEqualTo(2_000L);
+        assertThat(after.paidAmountCent()).isEqualTo(8_000L);
+        assertThat(after.overdue()).isFalse();
+        assertThat(dealerService.getDealer(dealerId).creditSuspended()).isFalse();
+        assertThat(jdbc.queryForMap("SELECT amount_cent, unpaid_amount_cent, paid_amount_cent, status FROM ar_ap_items WHERE id = ?", order.arApItemId()))
+                .containsEntry("amount_cent", 8_000L).containsEntry("unpaid_amount_cent", 0L).containsEntry("paid_amount_cent", 8_000L).containsEntry("status", "settled");
+    }
+
+    @Test
+    void paymentAfterPartialReturnAppliesOnlyNetReceivableAndSeparatesExcess() {
+        DealerOrderRecord order = signedOrder(9, 3_000L);
+        inspectAcceptedReturn(order.id(), 2);
+        actAs(sales);
+        DealerOrderPaymentRecord payment = orders.registerPayment(order.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", 6_000L, Instant.now(), "NET-EXCESS"));
+        actAs(finance);
+        assertThat(orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "核验到账")).appliedCent()).isEqualTo(5_000L);
+        assertThat(orders.listOverpayments(dealerId).items()).singleElement().satisfies(over -> assertThat(over.amountCent()).isEqualTo(1_000L));
+        assertThat(orders.markOverdue(Instant.now().plusSeconds(60L * 86400))).isZero();
+    }
+
+    @Test
+    void approvedReturnClearsItsOverdueBalanceButKeepsOtherOverdueOrdersSuspended() {
+        DealerOrderRecord first = signedOrder(4, 3_000L);
+        DealerOrderRecord second = signedOrder(4, 3_000L);
+        assertThat(orders.markOverdue(Instant.now().plusSeconds(60L * 86400))).isEqualTo(2);
+        inspectAcceptedReturn(first.id(), 2);
+        assertThat(orders.getOrder(first.id()).overdue()).isFalse();
+        assertThat(dealerService.getDealer(dealerId).creditSuspended()).isTrue();
+        inspectAcceptedReturn(second.id(), 2);
+        assertThat(orders.getOrder(second.id()).overdue()).isFalse();
+        assertThat(dealerService.getDealer(dealerId).creditSuspended()).isFalse();
+    }
+
+    private void inspectAcceptedReturn(String orderId, int quantity) {
+        actAs(sales);
+        DealerReturnRecord request = returns.requestReturn(orderId, new DealerReturnRequest(key(), "quality_issue",
+                List.of(new DealerReturnLineRequest(itemA, "箱", quantity)), "质量退货"));
+        actAs(reviewer);
+        returns.decideReturn(request.id(), new DealerReturnDecisionRequest(key(), "approve", "确认"));
+        actAs(warehouse);
+        returns.receiveReturn(request.id(), key());
+        returns.inspectReturn(request.id(), new DealerReturnInspectionRequest(key(),
+                List.of(new DealerReturnInspectionLineRequest(itemA, "箱", quantity, 0, quantity, "质量问题隔离")), "核验数量"));
+    }
 
     /** 建单 → 审核（预留、通知付款）→ 到账核验 paid 分 → 出库 → 签收。 */
     private DealerOrderRecord signedOrder(int quantity, long paidCent) {

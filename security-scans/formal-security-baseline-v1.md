@@ -1,10 +1,10 @@
-# 正式安全基线 V1.01
+# 正式安全基线 V1.02
 
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 830
-- OpenAPI SHA-256: `63913321bdb2c5d4eea95417fad50c35ac71f30ba579bb585ae7994d4a10ecd3`
+- OpenAPI operation count: 833
+- OpenAPI SHA-256: `dda8af70c0c1fa1af6e19434ccde2056cd5db2c337bbfd614382f6d8c3d3d261`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
@@ -42,7 +42,7 @@
 | `device-credential` | 4 |
 | `open-app-credential` | 1 |
 | `public` | 7 |
-| `staff-token` | 775 |
+| `staff-token` | 778 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,8 +57,8 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 830 |
-| 写 operation | 499 |
+| 全部 operation | 833 |
+| 写 operation | 500 |
 | public operation | 7 |
 | open-app/webhook operation | 5 |
 
@@ -76,7 +76,7 @@
 | `staff_private_phone` | 41 |
 | `staff_work_phone` | 86 |
 | `tablet` | 102 |
-| `web` | 777 |
+| `web` | 780 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 
@@ -157,7 +157,7 @@
 
 | Gate | 目的 | 命令 |
 |---|---|---|
-| 安全基线生成 | 生成 V1.01 报告和 findings register | `npm run docs:security-baseline` |
+| 安全基线生成 | 生成 V1.02 报告和 findings register | `npm run docs:security-baseline` |
 | 安全基线验证 | 检查章节、计数、发现状态、密钥泄漏 | `npm run verify:security-baseline` |
 | P0 契约验证 | 检查 OpenAPI、追溯附录、客户端契约 | `npm run verify:p0-contract` |
 | P0 全量验证 | 检查后端、Web、Android、APK | `/opt/complex/scripts/complex-verify-p0.sh` |

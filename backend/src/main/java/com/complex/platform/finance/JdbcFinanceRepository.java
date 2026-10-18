@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -426,6 +426,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                     status = EXCLUDED.status
                 """, offlineConfirmationParameters(confirmation));
         return confirmation;
+    }
+
+    @Override
+    public void lockRefundSource(String refundId) {
+        jdbcTemplate.queryForObject("SELECT pg_advisory_xact_lock(hashtextextended(:id, 0))",
+                Map.of("id", refundId), Object.class);
     }
 
     @Override

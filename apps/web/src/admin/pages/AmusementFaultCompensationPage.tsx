@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -125,6 +125,10 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
   function savePolicy() {
     if (!currentFault?.projectId) { setFormError("请先选择全园故障事件以确定综合体项目。"); return; }
     if (!policyDays.trim() || !policyMin.trim() || !policyMax.trim()) { setFormError("补偿有效期须同时填写天数、下限与上限。"); return; }
+    const days = Number(policyDays), min = Number(policyMin), max = Number(policyMax);
+    if (![days, min, max].every(Number.isInteger) || min < 1 || min > days || days > max || max > 3650) {
+      setFormError("补偿有效期须为整数，且满足：1 ≤ 下限 ≤ 天数 ≤ 上限 ≤ 3650。"); return;
+    }
     void run("补偿有效期参数已保存",
       () => api.post(`/api/v1/amusement/compensation-policies/${encodeURIComponent(currentFault.projectId ?? "")}`, { validityDays: Number(policyDays), minDays: Number(policyMin), maxDays: Number(policyMax) }),
       { 综合体项目: currentFault.projectId ?? "", 有效期天数: policyDays });
@@ -178,9 +182,9 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
           <span data-testid="compensation-policy-current">当前生效：{policy ? `${policy.validityDays ?? "—"} 天（下限 ${policy.minDays ?? "—"} 天，上限 ${policy.maxDays ?? "—"} 天${policy.projectId === "__global__" ? "，出厂回落行" : ""}）` : "—"}</span>
           {canPolicy ? (
             <>
-              <label>天数<input aria-label="补偿有效期天数" data-testid="compensation-policy-days" value={policyDays} onChange={(event) => setPolicyDays(event.target.value)} /></label>
-              <label>下限<input aria-label="补偿有效期下限" data-testid="compensation-policy-min" value={policyMin} onChange={(event) => setPolicyMin(event.target.value)} /></label>
-              <label>上限<input aria-label="补偿有效期上限" data-testid="compensation-policy-max" value={policyMax} onChange={(event) => setPolicyMax(event.target.value)} /></label>
+              <label>天数<input type="number" min={1} max={3650} step={1} aria-label="补偿有效期天数" data-testid="compensation-policy-days" value={policyDays} onChange={(event) => setPolicyDays(event.target.value)} /></label>
+              <label>下限<input type="number" min={1} max={3650} step={1} aria-label="补偿有效期下限" data-testid="compensation-policy-min" value={policyMin} onChange={(event) => setPolicyMin(event.target.value)} /></label>
+              <label>上限<input type="number" min={1} max={3650} step={1} aria-label="补偿有效期上限" data-testid="compensation-policy-max" value={policyMax} onChange={(event) => setPolicyMax(event.target.value)} /></label>
               <button type="button" data-testid="compensation-policy-save" disabled={submitting} onClick={savePolicy}>保存参数</button>
             </>
           ) : null}

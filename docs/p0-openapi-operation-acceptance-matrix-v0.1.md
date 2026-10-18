@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.20
+# P0 OpenAPI Operation 验收矩阵 V0.21
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 830 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 833 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -851,6 +851,9 @@
 | finance | `POST` | `/api/v1/finance/refunds/{refund_id}/retry` | `retryFinanceRefund` | 明确失败或尚未发起的退款在原单重试 | `RefundOperationRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.retried` | `finance_refund.retry_failed` |
 | finance | `POST` | `/api/v1/finance/refunds/{refund_id}/execution` | `recordFinanceRefundExecution` | 实际支付经办人本人登记原路执行凭证 | `RefundExecutionRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.execution_recorded` | `finance_refund.execution_failed` |
 | finance | `POST` | `/api/v1/finance/refunds/{refund_id}/confirm` | `confirmFinanceRefundResult` | 另一人核实已有执行记录的实际退款结果 | `RefundResultConfirmRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.confirmed` | `finance_refund.confirm_failed` |
+| access | `GET` | `/api/v1/access/approval-lines` | `listApprovalLines` | 查询部门和平行审批线配置 | `-` | `access.role.assign` | `staff-token` | `project` | web | 否 | `access.approval_line.listed` | `access.approval_line.list_failed` |
+| access | `PUT` | `/api/v1/access/approval-lines/{line_code}` | `upsertApprovalLine` | 维护部门和平行审批线配置 | `object` | `access.role.assign` | `staff-token` | `project` | web | 是 | `access.approval_line.saved` | `access.approval_line.save_failed` |
+| dealer | `GET` | `/api/v1/dealers/{id}/admission` | `getDealerAdmission` | 查看经销商本次准入材料 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.admission_viewed` | `dealer.admission_view_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 

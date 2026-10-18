@@ -1,4 +1,4 @@
-# 服务点单产品 PRD V0.3
+# 服务点单产品 PRD V0.04
 
 > 权限边界：本 PRD 只提供产品细化；三份业务 HTML 拥有最终业务解释权。其他文档、配置、代码和数据结构均不得覆盖 HTML；HTML 未记载的新规则须经用户批准并写入 HTML 后方可生效。**三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**（依据 PGM「解释权声明」条；DIFF-A-051）。
 
@@ -201,7 +201,7 @@
 5. **派驻期间的现场管理**：**排班、现场考勤和履约调度由所在酒吧负责**。
 6. **记录颗粒度**：营销人员的所属主体、挂靠酒吧、由娱乐平台公司支付的常规报酬与由酒吧承担并拨付的提成**须分别记录、可分别统计**。
 7. **实现现状（CG-07，迁移 V445）**：
-   - 派驻记录表 `staff_dispatch_records`（员工、所属主体、派驻酒吧、起止日期、状态），后台「员工档案 → 派驻记录」登记/结束（`POST /api/v1/staff/dispatches`、`POST /api/v1/staff/dispatches/{dispatch_id}/end`、`GET /api/v1/staff/dispatches`）；所属主体登记时取自员工档案的所属公司。
+   - 派驻记录表 `staff_dispatch_records`（员工、所属主体、派驻酒吧、起止日期、状态），后台「员工档案 → 派驻记录」登记/结束（`POST /api/v1/staff/dispatches`、`POST /api/v1/staff/dispatches/{dispatch_id}/end`、`GET /api/v1/staff/dispatches`）；所属主体登记时取自员工档案的所属公司，项目固化为目标酒吧的项目。登记与结束均须平台侧显式持有 `staff.profile.review`，并在当前员工、商户及项目授权范围内；商户账号不得办理派驻。
    - 提成计提（`bar_commission_calculations`）**不再按单对员工本人挂应付**（原 `employee_commission` 逐单应付链路已删除）。
    - 「人事薪资 → 提成月结拨付」（`POST /api/v1/staff/commission-settlements/close`）按（酒吧 → 人员所属主体 → 月）汇总派驻记录覆盖计提日的提成（作废/取消不计），每组写 `bar_commission_settlements` 一行并生成一条应付台账项（`source_type=dispatch_commission_transfer`、counterparty=所属主体、merchant=酒吧、会计期间=该月、到期＝该月月末之后的第一个付账日），总额收付、不轧差；同组重复执行不重复挂账。
    - 工资单提成栏仍按月汇总本人在各酒吧的提成；`staff_payroll_statements.payer_company_id` 记发放主体＝人员所属主体（由其统一发放并代扣个人所得税）。

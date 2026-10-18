@@ -1,9 +1,11 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -22,9 +24,11 @@ import org.springframework.stereotype.Repository;
 public class JdbcDealerRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final ObjectMapper mapper;
 
-    public JdbcDealerRepository(NamedParameterJdbcTemplate jdbc) {
+    public JdbcDealerRepository(NamedParameterJdbcTemplate jdbc, ObjectMapper mapper) {
         this.jdbc = jdbc;
+        this.mapper = mapper;
     }
 
     // ── 经销商 ──
@@ -59,6 +63,41 @@ public class JdbcDealerRepository {
         return jdbc.query("SELECT * FROM dealers WHERE id = :id", Map.of("id", id), this::mapDealer).stream().findFirst();
     }
 
+    public Optional<DealerRecord> lockDealer(String id) {
+        return jdbc.query("SELECT * FROM dealers WHERE id = :id FOR UPDATE", Map.of("id", id), this::mapDealer).stream().findFirst();
+    }
+
+    public void saveAdmission(DealerAdmissionRecord a) {
+        jdbc.update("""
+                INSERT INTO dealer_admission_submissions(dealer_id, company_attachment_ids, contract_attachment_ids,
+                    invoice_attachment_ids, bank_attachment_ids, submitted_by, submitted_at)
+                VALUES (:dealer, CAST(:company AS jsonb), CAST(:contract AS jsonb), CAST(:invoice AS jsonb), CAST(:bank AS jsonb), :by, :at)
+                ON CONFLICT(dealer_id) DO UPDATE SET company_attachment_ids = EXCLUDED.company_attachment_ids,
+                    contract_attachment_ids = EXCLUDED.contract_attachment_ids, invoice_attachment_ids = EXCLUDED.invoice_attachment_ids,
+                    bank_attachment_ids = EXCLUDED.bank_attachment_ids, submitted_by = EXCLUDED.submitted_by, submitted_at = EXCLUDED.submitted_at
+                """, new MapSqlParameterSource().addValue("dealer", a.dealerId()).addValue("company", json(a.companyAttachmentIds()))
+                .addValue("contract", json(a.contractAttachmentIds())).addValue("invoice", json(a.invoiceAttachmentIds()))
+                .addValue("bank", json(a.bankAttachmentIds())).addValue("by", a.submittedBy()).addValue("at", ts(a.submittedAt())));
+    }
+
+    public Optional<DealerAdmissionRecord> findAdmission(String dealerId) {
+        return jdbc.query("SELECT * FROM dealer_admission_submissions WHERE dealer_id = :id", Map.of("id", dealerId), (rs, i) ->
+                new DealerAdmissionRecord(rs.getString("dealer_id"), stringList(rs.getString("company_attachment_ids")),
+                        stringList(rs.getString("contract_attachment_ids")), stringList(rs.getString("invoice_attachment_ids")),
+                        stringList(rs.getString("bank_attachment_ids")), rs.getString("submitted_by"), nullableInstant(rs, "submitted_at")))
+                .stream().findFirst();
+    }
+
+    private String json(Object value) {
+        try { return mapper.writeValueAsString(value); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalStateException("经销资料序列化失败", e); }
+    }
+
+    private List<String> stringList(String value) {
+        try { return mapper.readValue(value, new TypeReference<List<String>>() {}); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalStateException("经销资料反序列化失败", e); }
+    }
+
     public List<DealerRecord> listDealers(String projectScope) {
         if (projectScope == null) {
             return jdbc.query("SELECT * FROM dealers ORDER BY created_at DESC", Map.of(), this::mapDealer);
@@ -86,26 +125,37 @@ public class JdbcDealerRepository {
         jdbc.update("""
                 INSERT INTO dealer_contracts (id, dealer_id, contract_no, sales_entity_id, central_warehouse_id, valid_from, valid_to, status, created_by, created_at,
                     credit_term, first_payment_ratio_bps, first_payment_amount_cent, first_payment_deadline_days, balance_due_days,
-                    freight_cent, free_shipping_threshold_cent, freight_bearer, freight_template_version, return_freight_bearer, first_leg_freight_refundable)
+                    freight_cent, free_shipping_threshold_cent, freight_bearer, freight_template_version, return_freight_bearer, first_leg_freight_refundable, terms_version, contract_signed_at,
+                    first_payment_anchor, first_payment_fixed_at, balance_due_anchor, balance_due_fixed_at)
                 VALUES (:id, :dealer, :no, :entity, :wh, :from, :to, :status, :by, :at,
-                    :credit, :ratio, :amount, :deadline_days, :balance_days, :freight, :free_threshold, :bearer, :ft_version, :return_bearer, :first_leg)
+                    :credit, :ratio, :amount, :deadline_days, :balance_days, :freight, :free_threshold, :bearer, :ft_version, :return_bearer, :first_leg, :terms_version, :signed_at, :first_anchor, :first_fixed, :balance_anchor, :balance_fixed)
                 ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, credit_term = EXCLUDED.credit_term,
                     return_freight_bearer = EXCLUDED.return_freight_bearer, first_leg_freight_refundable = EXCLUDED.first_leg_freight_refundable,
                     first_payment_ratio_bps = EXCLUDED.first_payment_ratio_bps, first_payment_amount_cent = EXCLUDED.first_payment_amount_cent,
                     first_payment_deadline_days = EXCLUDED.first_payment_deadline_days, balance_due_days = EXCLUDED.balance_due_days,
                     freight_cent = EXCLUDED.freight_cent, free_shipping_threshold_cent = EXCLUDED.free_shipping_threshold_cent,
-                    freight_bearer = EXCLUDED.freight_bearer, freight_template_version = EXCLUDED.freight_template_version
+                    freight_bearer = EXCLUDED.freight_bearer, freight_template_version = EXCLUDED.freight_template_version,
+                    terms_version = EXCLUDED.terms_version, contract_signed_at = EXCLUDED.contract_signed_at,
+                    first_payment_anchor = EXCLUDED.first_payment_anchor, first_payment_fixed_at = EXCLUDED.first_payment_fixed_at,
+                    balance_due_anchor = EXCLUDED.balance_due_anchor, balance_due_fixed_at = EXCLUDED.balance_due_fixed_at
                 """, new MapSqlParameterSource().addValue("id", c.id()).addValue("dealer", c.dealerId()).addValue("no", c.contractNo())
                 .addValue("entity", c.salesEntityId()).addValue("wh", c.centralWarehouseId()).addValue("from", Date.valueOf(c.validFrom()))
                 .addValue("to", Date.valueOf(c.validTo())).addValue("status", c.status()).addValue("by", c.createdBy()).addValue("at", ts(c.createdAt()))
                 .addValue("credit", c.creditTerm()).addValue("ratio", c.firstPaymentRatioBps()).addValue("amount", c.firstPaymentAmountCent())
                 .addValue("deadline_days", c.firstPaymentDeadlineDays()).addValue("balance_days", c.balanceDueDays()).addValue("freight", c.freightCent())
                 .addValue("free_threshold", c.freeShippingThresholdCent()).addValue("bearer", c.freightBearer()).addValue("ft_version", c.freightTemplateVersion())
-                .addValue("return_bearer", c.returnFreightBearer()).addValue("first_leg", c.firstLegFreightRefundable()));
+                .addValue("return_bearer", c.returnFreightBearer()).addValue("first_leg", c.firstLegFreightRefundable())
+                .addValue("terms_version", c.termsVersion()).addValue("signed_at", ts(c.contractSignedAt()))
+                .addValue("first_anchor", c.firstPaymentAnchor()).addValue("first_fixed", ts(c.firstPaymentFixedAt()))
+                .addValue("balance_anchor", c.balanceDueAnchor()).addValue("balance_fixed", ts(c.balanceDueFixedAt())));
     }
 
     public Optional<DealerContractRecord> findContract(String id) {
         return jdbc.query("SELECT * FROM dealer_contracts WHERE id = :id", Map.of("id", id), this::mapContract).stream().findFirst();
+    }
+
+    public Optional<DealerContractRecord> lockContract(String id) {
+        return jdbc.query("SELECT * FROM dealer_contracts WHERE id = :id FOR UPDATE", Map.of("id", id), this::mapContract).stream().findFirst();
     }
 
     public List<DealerContractRecord> listContracts(String dealerId) {
@@ -118,7 +168,9 @@ public class JdbcDealerRepository {
                 rs.getString("created_by"), nullableInstant(rs, "created_at"), rs.getBoolean("credit_term"), intOrNull(rs, "first_payment_ratio_bps"),
                 longOrNull(rs, "first_payment_amount_cent"), intOrNull(rs, "first_payment_deadline_days"), intOrNull(rs, "balance_due_days"),
                 longOrNull(rs, "freight_cent"), longOrNull(rs, "free_shipping_threshold_cent"), rs.getString("freight_bearer"), rs.getInt("freight_template_version"),
-                rs.getString("return_freight_bearer"), (Boolean) rs.getObject("first_leg_freight_refundable"));
+                rs.getString("return_freight_bearer"), (Boolean) rs.getObject("first_leg_freight_refundable"), rs.getInt("terms_version"),
+                nullableInstant(rs, "contract_signed_at"), rs.getString("first_payment_anchor"), nullableInstant(rs, "first_payment_fixed_at"),
+                rs.getString("balance_due_anchor"), nullableInstant(rs, "balance_due_fixed_at"));
     }
 
     static Integer intOrNull(ResultSet rs, String column) throws SQLException {

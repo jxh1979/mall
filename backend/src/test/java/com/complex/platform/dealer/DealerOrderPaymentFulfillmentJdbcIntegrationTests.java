@@ -1,5 +1,7 @@
 package com.complex.platform.dealer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -63,6 +65,7 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
     @Autowired private DealerOrderService orders;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private com.complex.platform.evidence.EvidenceEventService admissionFiles;
     @Autowired private AccessRepository access;
     @Autowired private PlatformTransactionManager transactionManager;
 
@@ -109,7 +112,7 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
 
         actAs(sales);
         DealerRecord dealer = dealerService.createDealer(new DealerCreateRequest(key(), "订单经销商" + suffix, "9131" + System.nanoTime(), "法人", "联系人", "13900000000"));
-        dealerService.submitDealer(dealer.id(), key());
+        DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
         actAs(reviewer);
         dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
         dealerId = dealer.id();
@@ -422,12 +425,97 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("OVERPAYMENT_ALREADY_CONFIRMED"));
     }
 
+    @Test
+    void contractEditsAfterOrderApprovalCannotChangeItsBalanceDeadline() {
+        actAs(sales);
+        DealerOrderRecord draft = orders.createOrderDraft(dealerId, new DealerOrderDraftRequest(key(), creditContract,
+                List.of(new DealerOrderLineRequest(itemA, "箱", 3, null)), "合同锁版"));
+        orders.submitOrder(draft.id(), key());
+        actAs(reviewer);
+        DealerOrderRecord approved = orders.reviewOrder(draft.id(), new DealerOrderDecisionRequest(key(), "approve", "通过"));
+        actAs(sales);
+        orders.updateContractTerms(creditContract, new DealerContractTermsRequest(key(), true, 5000, null, 7, 90, 2_000L, 50_000L, "dealer", null, null, null, "payment_notified", null, "shipped", null));
+        DealerOrderPaymentRecord payment = orders.registerPayment(draft.id(), new DealerPaymentRequest(key(), "bank_transfer",
+                approved.firstPaymentRequiredCent(), Instant.now(), "LOCKED-TERMS"));
+        actAs(finance);
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "核实"));
+        actAs(warehouse);
+        DealerOrderRecord shipped = orders.shipOrder(draft.id(), new DealerShipRequest(key(), "出库"));
+        assertThat(shipped.balanceDueAt()).isEqualTo(shipped.shippedAt().plusSeconds(30L * 86400));
+        assertThat(shipped.firstPaymentDeadlineAt()).isEqualTo(approved.firstPaymentDeadlineAt());
+        assertThat(shipped.freightCent()).isEqualTo(1_000L);
+    }
+
+    @Test
+    void contractSigningAndReceiptAnchorsUseTheirFactsAndLockedDays() {
+        actAs(sales);
+        Instant signing = Instant.now().minusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        DealerContractRecord terms = orders.updateContractTerms(creditContract, new DealerContractTermsRequest(key(), true, 3000, null,
+                3, 30, 1_000L, 50_000L, "dealer", null, null, signing, "contract_signed", null, "signed", null));
+        DealerOrderRecord draft = orders.createOrderDraft(dealerId, new DealerOrderDraftRequest(key(), creditContract,
+                List.of(new DealerOrderLineRequest(itemA, "箱", 3, null)), "按合同签约与签收起算"));
+        orders.submitOrder(draft.id(), key());
+        actAs(reviewer);
+        DealerOrderRecord approved = orders.reviewOrder(draft.id(), new DealerOrderDecisionRequest(key(), "approve", "核对合同"));
+        assertThat(approved.firstPaymentDeadlineAt()).isEqualTo(signing.plusSeconds(3L * 86400));
+        assertThat(approved.contractSnapshot().termsVersion()).isEqualTo(terms.termsVersion());
+        assertThat(approved.balanceDueAt()).isNull();
+        actAs(sales);
+        DealerOrderPaymentRecord payment = orders.registerPayment(draft.id(), new DealerPaymentRequest(key(), "bank_transfer", approved.firstPaymentRequiredCent(), Instant.now(), "SIGNED-TERMS"));
+        actAs(finance);
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "到账"));
+        assertThat(jdbc.queryForObject("SELECT due_date FROM ar_ap_items WHERE id = ?", java.sql.Date.class, approved.arApItemId())).isNull();
+        actAs(sales);
+        orders.updateContractTerms(creditContract, new DealerContractTermsRequest(key(), true, 5000, null,
+                7, 90, 2_000L, 50_000L, "dealer", null, null, signing, "contract_signed", null, "shipped", null));
+        actAs(warehouse);
+        assertThat(orders.shipOrder(draft.id(), new DealerShipRequest(key(), "出库")).balanceDueAt()).isNull();
+        actAs(sales);
+        DealerOrderRecord signed = orders.signOrder(draft.id(), key());
+        assertThat(signed.balanceDueAt()).isEqualTo(signed.signedAt().plusSeconds(30L * 86400));
+        assertThat(signed.contractSnapshot().termsVersion()).isEqualTo(terms.termsVersion());
+        assertThat(jdbc.queryForObject("SELECT due_date FROM ar_ap_items WHERE id = ?", java.sql.Date.class, approved.arApItemId()))
+                .isEqualTo(java.sql.Date.valueOf(signed.balanceDueAt().atZone(java.time.ZoneOffset.UTC).toLocalDate()));
+    }
+
+    @Test
+    void explicitFixedContractDeadlinesRemainUnchangedAfterShipping() {
+        actAs(sales);
+        Instant first = Instant.now().plusSeconds(3L * 86400).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        Instant balance = first.plusSeconds(30L * 86400);
+        orders.updateContractTerms(creditContract, new DealerContractTermsRequest(key(), true, null, 1_000L,
+                null, null, 1_000L, 50_000L, "dealer", null, null, null, "fixed_date", first, "fixed_date", balance));
+        DealerOrderRecord draft = orders.createOrderDraft(dealerId, new DealerOrderDraftRequest(key(), creditContract,
+                List.of(new DealerOrderLineRequest(itemA, "箱", 3, null)), "固定日期"));
+        orders.submitOrder(draft.id(), key());
+        actAs(reviewer);
+        DealerOrderRecord approved = orders.reviewOrder(draft.id(), new DealerOrderDecisionRequest(key(), "approve", "核对"));
+        assertThat(approved.firstPaymentDeadlineAt()).isEqualTo(first);
+        assertThat(approved.balanceDueAt()).isEqualTo(balance);
+        actAs(sales);
+        DealerOrderPaymentRecord payment = orders.registerPayment(draft.id(), new DealerPaymentRequest(key(), "bank_transfer", 1_000L, Instant.now(), "FIXED-TERMS"));
+        actAs(finance);
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "到账"));
+        actAs(warehouse);
+        assertThat(orders.shipOrder(draft.id(), new DealerShipRequest(key(), "出库")).balanceDueAt()).isEqualTo(balance);
+    }
+
+    @Test
+    void paymentTermsRejectMissingOriginsAndAmbiguousFirstPayment() {
+        assertThatThrownBy(() -> orders.updateContractTerms(creditContract, new DealerContractTermsRequest(key(), true, 3000, null,
+                3, 30, 1_000L, 50_000L, "dealer", null, null, null, null, null, "shipped", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> orders.updateContractTerms(creditContract, new DealerContractTermsRequest(key(), true, 3000, 1_000L,
+                3, 30, 1_000L, 50_000L, "dealer", null, null, null, "payment_notified", null, "shipped", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
     // ── helpers ──
 
     private String contractWithTerms(String no, boolean creditTerm) {
         DealerContractRecord contract = dealerService.createContract(dealerId, new DealerContractRequest(key(), no, salesEntity, centralWarehouse,
                 LocalDate.now().minusDays(1), LocalDate.now().plusYears(1)));
-        orders.updateContractTerms(contract.id(), new DealerContractTermsRequest(key(), creditTerm, 3000, null, 3, 30, 1_000L, 50_000L, "dealer"));
+        orders.updateContractTerms(contract.id(), new DealerContractTermsRequest(key(), creditTerm, 3000, null, 3, 30, 1_000L, 50_000L, "dealer", null, null, null, "payment_notified", null, "shipped", null));
         DealerPriceCatalogRecord v1 = dealerService.createCatalogDraft(contract.id(), new DealerCatalogDraftRequest(key(), "目录",
                 List.of(new DealerCatalogLineRequest(itemA, "箱", 1_000L, 1300, null))));
         dealerService.submitCatalog(v1.id(), key());

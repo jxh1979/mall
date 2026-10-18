@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.12
+// 文件版本：V0.14
 // M006-027：现场储值扣款必须先核验报出的手机号和短信验证码。
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -47,6 +47,7 @@ class M006StoredValuePaymentTests {
         when(bars.saveBill(any())).thenAnswer(i -> {bill.set(i.getArgument(0));return bill.get();});
         var audit = mock(AuditEventService.class);
         storedValue = new StoredValueService(customers, mock(FinanceService.class), audit, null, auth, null);
+        ReflectionTestUtils.setField(storedValue, "ticketOrderService", mock(com.complex.platform.ticketing.TicketOrderService.class));
         customerService = new CustomerService(customers, new FixedCustomerOtpVerifier("123456"),
                 null, null, audit, null, null, bars, null, null,
                 Clock.fixed(now, ZoneOffset.UTC), null, null);
@@ -92,6 +93,72 @@ class M006StoredValuePaymentTests {
         assertThat(order.get().paidAt()).isNotNull();
     }
 
+
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource(value = {"project_1,true", "project_2,false", "NULL,false"}, nullValues = "NULL")
+    void projectStoredValueCardUsesTheOriginalOrderProjectOnly(String orderProject, boolean payable) {
+        var tickets = mock(com.complex.platform.ticketing.TicketingRepository.class);
+        var order = new AtomicReference<>(new com.complex.platform.ticketing.TicketOrderRecord(
+                "ticket_order_1","T1","customer_1","type_1",null,1,null,"app","13800138000",
+                2500L,null,2500L,0L,"CNY","unpaid","unissued","created",now,now,null,null,null,orderProject));
+        balance.set(new CustomerStoredValueAccountRecord("card_1", "customer_1", "project_1", null,
+                10000L, "active", now, now, "platform_collect"));
+        when(tickets.findTicketOrderByIdForUpdate(order.get().id())).thenAnswer(i -> Optional.of(order.get()));
+        when(tickets.updateTicketOrder(any())).thenAnswer(i -> { order.set(i.getArgument(0)); return order.get(); });
+        when(customers.listStoredValueAccountsByCustomer("customer_1")).thenAnswer(i -> List.of(balance.get()));
+        when(customers.findStoredValueAccountForUpdate("customer_1", "project_1", null))
+                .thenAnswer(i -> Optional.of(balance.get()));
+        when(auth.currentActor()).thenReturn(new com.complex.platform.access.AccessActor(
+                "customer_1","customer_1","customer",null,null,"active"));
+        // 当前操作者范围不能替代订单的原始归属。
+        when(auth.currentProjectScopeQuietly()).thenReturn(Optional.of("project_1"));
+        ReflectionTestUtils.setField(storedValue, "ticketingRepository", tickets);
+        ReflectionTestUtils.setField(storedValue, "customerService", customerService);
+        if (payable) {
+            storedValue.payTicketOrder("customer_1", order.get().id(), "card_1", "13800138000", "123456");
+            storedValue.payTicketOrder("customer_1", order.get().id(), "card_1", "13800138000", "123456");
+            assertThat(balance.get().balanceCent()).isEqualTo(7500L);
+            assertThat(order.get().payStatus()).isEqualTo("paid");
+            assertThat(order.get().projectId()).isEqualTo("project_1");
+            verify(customers, times(1)).saveStoredValueTransaction(any());
+            verify(tickets, times(1)).saveTicketPaymentIntent(any());
+        } else {
+            assertThatThrownBy(() -> storedValue.payTicketOrder(
+                    "customer_1", order.get().id(), "card_1", "13800138000", "123456"))
+                    .isInstanceOf(ApiException.class)
+                    .extracting(e -> ((ApiException) e).code()).isEqualTo("STORED_VALUE_SCOPE_MISMATCH");
+            assertThat(balance.get().balanceCent()).isEqualTo(10000L);
+            verify(customers, never()).saveStoredValueTransaction(any());
+            verify(tickets, never()).saveTicketPaymentIntent(any());
+            verify(tickets, never()).updateTicketOrder(any());
+        }
+    }
+
+    @Test void suspendedOldTicketCannotDebitStoredValue() {
+        var tickets = mock(com.complex.platform.ticketing.TicketingRepository.class);
+        var order = new com.complex.platform.ticketing.TicketOrderRecord(
+                "ticket_order_1","T1","customer_1","type_1",null,1,null,"app","13800138000",
+                2500L,null,2500L,0L,"CNY","unpaid","unissued","created",now,now,null,null,"merchant_1","project_1");
+        balance.set(new CustomerStoredValueAccountRecord("card_1", "customer_1", "project_1", null,
+                10000L, "active", now, now, "platform_collect"));
+        when(tickets.findTicketOrderByIdForUpdate(order.id())).thenReturn(Optional.of(order));
+        when(auth.currentActor()).thenReturn(new com.complex.platform.access.AccessActor(
+                "customer_1","customer_1","customer",null,null,"active"));
+        var gate = mock(com.complex.platform.ticketing.TicketOrderService.class);
+        doThrow(ApiException.conflict("PARK_WIDE_FAULT_SALES_SUSPENDED", "全园故障停售"))
+                .when(gate).requirePaymentOpen(order);
+        ReflectionTestUtils.setField(storedValue, "ticketingRepository", tickets);
+        ReflectionTestUtils.setField(storedValue, "customerService", customerService);
+        ReflectionTestUtils.setField(storedValue, "ticketOrderService", gate);
+        assertThatThrownBy(() -> storedValue.payTicketOrder("customer_1", order.id(), "card_1", "13800138000", "123456"))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code()).isEqualTo("PARK_WIDE_FAULT_SALES_SUSPENDED");
+        assertThat(balance.get().balanceCent()).isEqualTo(10000L);
+        verify(customers, never()).saveStoredValueTransaction(any());
+        verify(tickets, never()).saveTicketPaymentIntent(any());
+        verify(tickets, never()).updateTicketOrder(any());
+    }
 
     @Test void appOrderRejectsForeignOwnershipWrongSmsFrozenBalanceAndWrongCardScope() {
         var tickets = mock(com.complex.platform.ticketing.TicketingRepository.class);

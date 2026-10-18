@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -79,4 +79,39 @@ describe("DealerOrderFulfillmentPage 经销订单与履约（ADM-DLR-002）", ()
     })));
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "dealer_order_drafted", 订单: "DO-NEW" })));
   });
+  it("合同起点须显式选择，可登记签约后首付和签收后尾款", async () => {
+    const api = makeApi(); renderPage(api);
+    fireEvent.click(await screen.findByTestId("dealer-orders-select-dlr_1"));
+    await screen.findByTestId("terms-contract-select");
+    fireEvent.change(screen.getByTestId("terms-contract-select"), { target: { value: "dct_1" } });
+    fireEvent.click(screen.getByTestId("terms-save"));
+    await screen.findByText("首尾款起点须按合同明确选择");
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("terms-first-anchor"), { target: { value: "contract_signed" } });
+    fireEvent.change(screen.getByTestId("terms-balance-anchor"), { target: { value: "signed" } });
+    fireEvent.change(screen.getByTestId("terms-signed-at"), { target: { value: "2026-10-17T10:00" } });
+    fireEvent.change(screen.getByTestId("terms-ratio"), { target: { value: "30" } });
+    fireEvent.change(screen.getByTestId("terms-deadline-days"), { target: { value: "3" } });
+    fireEvent.change(screen.getByTestId("terms-balance-days"), { target: { value: "30" } });
+    fireEvent.click(screen.getByTestId("terms-save"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/contracts/dct_1/terms", expect.objectContaining({
+      firstPaymentAnchor: "contract_signed", balanceDueAnchor: "signed", firstPaymentDeadlineDays: 3, balanceDueDays: 30,
+      contractSignedAt: new Date("2026-10-17T10:00").toISOString(), firstPaymentRatioBps: 3000,
+    })));
+  });
+
+  it("部分退货显示净应收并保留尾款登记", async () => {
+    const api = makeApi(); const oldGet = api.get;
+    const returned = { ...orderRow, status: "partially_returned", totalAmountCent: 10000, paidAmountCent: 3000, returnedAmountCent: 2000 };
+    api.get = vi.fn(async (url: string) => url.endsWith("/orders") ? [returned] : url === "/api/v1/dealers/orders/dord_1" ? returned : oldGet(url)) as AdminApiClient["get"];
+    renderPage(api);
+    fireEvent.click(await screen.findByTestId("dealer-orders-select-dlr_1"));
+    await waitFor(() => expect(screen.getByTestId("order-unpaid-dord_1").textContent).toBe("¥50"));
+    fireEvent.click(screen.getByTestId("order-select-dord_1"));
+    await screen.findByTestId("pay-register");
+    fireEvent.change(screen.getByTestId("pay-amount"), { target: { value: "50" } });
+    fireEvent.click(screen.getByTestId("pay-register"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/orders/dord_1/payments", expect.objectContaining({ amountCent: 5000 })));
+  });
+
 });

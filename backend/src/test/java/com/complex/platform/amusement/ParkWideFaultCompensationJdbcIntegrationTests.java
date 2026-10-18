@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
@@ -56,6 +58,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
 
     @Autowired private AmusementFaultCompensationService compensationService;
     @Autowired private AmusementParkWideFaultService faultService;
+    @Autowired private AmusementService amusementService;
     @Autowired private TicketingRepository ticketingRepository;
     @Autowired private TicketingService ticketingService;
     @Autowired private JdbcTemplate jdbcTemplate;
@@ -271,6 +274,54 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 "cg08b-ver2-" + suffix, "qr", drinkCode, deviceCode, "point_cg08b_" + suffix, Map.of())))
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).code()).isEqualTo("ENTITLEMENT_USED_UP");
+    }
+
+    @Test
+    void activeFaultRejectsOnlyAmusementVerificationAndDoesNotConsume() {
+        activateFault();
+        TestSecurityActors.asPlatformAdmin();
+        seedDevice();
+        String amusementCode = ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().entitlementCode();
+        assertThatThrownBy(() -> ticketingService.createVerification(new VerificationRequest(
+                "blocked-entry-" + suffix, "qr", amusementCode, deviceCode, "point_cg08b_" + suffix, Map.of())))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code()).isEqualTo("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED");
+        assertThat(ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().usedTimes()).isZero();
+        String drinkCode = ticketingRepository.findIssuedEntitlementById(drinkEntitlementId).orElseThrow().entitlementCode();
+        assertThat(ticketingService.createVerification(new VerificationRequest(
+                "normal-drink-" + suffix, "qr", drinkCode, deviceCode, "point_cg08b_" + suffix, Map.of())).status())
+                .isEqualTo("success");
+    }
+
+    @Test
+    void directAmusementEntryAlsoStopsWithoutChangingCapacityOrEntitlement() {
+        activateFault();
+        TestSecurityActors.asPlatformAdmin();
+        String code = ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().entitlementCode();
+        assertThatThrownBy(() -> amusementService.createVerification(new VerificationRequest(
+                "direct-blocked-" + suffix, "qr", code, "dev", "point", Map.of("project_id", amusementProjectId, "session_id", sessionId))))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code()).isEqualTo("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED");
+        assertThat(ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().usedTimes()).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT used_capacity FROM amusement_sessions WHERE id=?", Integer.class, sessionId)).isEqualTo(1);
+    }
+
+    @Test
+    void compensationPolicyAcceptsInclusiveBusinessBoundsAndRejectsLargerLimit() {
+        actAs(headUser);
+        assertThat(compensationService.configurePolicy(projectId,
+                new CompensationPolicyRequest("bound-low-" + suffix, 1, 1, 3650)).validityDays()).isEqualTo(1);
+        assertThat(compensationService.configurePolicy(projectId,
+                new CompensationPolicyRequest("bound-high-" + suffix, 3650, 1, 3650)).validityDays()).isEqualTo(3650);
+        assertThatThrownBy(() -> compensationService.configurePolicy(projectId,
+                new CompensationPolicyRequest("bound-over-" + suffix, 3651, 1, 3651)))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code()).isEqualTo("VALIDATION_FAILED");
+        assertThatThrownBy(() -> compensationService.configurePolicy(projectId,
+                new CompensationPolicyRequest("bound-hidden-over-" + suffix, 365, 1, 3651)))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(compensationService.resolvePolicy(projectId).validityDays()).isEqualTo(3650);
     }
 
     // ---------- helpers ----------

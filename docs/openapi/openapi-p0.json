@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.20",
+    "version": "V0.21",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -4114,7 +4114,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。"
+        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。 订单保存 project_id 项目快照，含游乐权益的票必须先确定唯一项目；储值付款仅允许平台通用卡或与原订单项目一致的项目通用卡。"
       }
     },
     "/api/v1/customer/ticket-products": {
@@ -4236,7 +4236,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。"
       }
     },
     "/api/v1/evidence/attachments/{attachment_id}/bind": {
@@ -4279,7 +4280,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。"
       }
     },
     "/api/v1/evidence/attachments/{attachment_id}/complete": {
@@ -4322,7 +4324,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。"
       }
     },
     "/api/v1/evidence/events": {
@@ -4422,7 +4425,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "dealer_admission 准入资料复核须同时具备 dealer.review 与 evidence.review.create，按两者授权项目交集核验，并保持附件与业务对象一致。"
       }
     },
     "/api/v1/evidence/timelines/{object_type}/{object_id}": {
@@ -4464,7 +4468,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。"
       }
     },
     "/api/v1/finance/ar-ap-items": {
@@ -10311,7 +10316,7 @@
         ],
         "operationId": "listTicketOrders",
         "summary": "查询票务订单",
-        "description": "用于查询票务订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询票务订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 响应订单含可空 project_id 项目快照；未知项目不能借操作人范围猜定。",
         "x-permission": "ticket.order.read",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -10372,7 +10377,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。"
+        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。 订单保存 project_id 项目快照，按原票种商户和权益点位确定，冲突时不能用操作人项目覆盖；含游乐权益而项目不明时拒绝售票。普通订单更新不改变原项目。"
       }
     },
     "/api/v1/ticketing/orders/{order_id}/issue": {
@@ -10460,7 +10465,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "原订单项目处于全园故障时，含游乐权益的旧未付单也停止付款。"
       }
     },
     "/api/v1/ticketing/price-rules": {
@@ -18940,7 +18946,7 @@
         ],
         "operationId": "configureAmusementCompensationPolicy",
         "summary": "配置全园故障补偿有效期参数（含上下限）",
-        "description": "CG-08b：按综合体项目配置补偿有效期天数，须同时填写下限与上限，缺任一或不满足 1 ≤ 下限 ≤ 天数 ≤ 上限 → 400 VALIDATION_FAILED。幂等键必填，审计留痕。",
+        "description": "CG-08b：按综合体项目配置补偿有效期天数，须同时填写下限与上限，缺任一或不满足 1 ≤ 下限 ≤ 天数 ≤ 上限 ≤ 3650 → 400 VALIDATION_FAILED。幂等键必填，审计留痕。",
         "x-permission": "amusement.compensation_policy.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -18983,17 +18989,20 @@
                   "validity_days": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "补偿有效期（天），自发放之日起算。"
+                    "description": "补偿有效期（天），自发放之日起算。",
+                    "maximum": 3650
                   },
                   "min_days": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "下限（天）。"
+                    "description": "下限（天）。",
+                    "maximum": 3650
                   },
                   "max_days": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "上限（天）。"
+                    "description": "上限（天）。",
+                    "maximum": 3650
                   }
                 }
               }
@@ -22601,7 +22610,8 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "description": "故障停售后才确认的未受理付款保留真实已收款事实，取消且不出票，每笔收款创建唯一原路待退款；故障前已受理成功单的重复通知保持原结果。已拒收订单的另一笔迟到款即使在故障解除后到达，也分别登记待退，不重复释放库存。"
       }
     },
     "/api/v1/ticketing/orders/{order_id}/cancel": {
@@ -31318,7 +31328,7 @@
         ],
         "operationId": "addStaffPayrollAdjustment",
         "summary": "发起奖金/处罚复核(必须带事由；HR 会签＋直属领导向上三级通过后入账)",
-        "description": "F批:奖惩手工录入,事由必填,审计留痕。CG-12（BSM:1487 / ENUM:283「绩效扣分与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效」）：bonus / penalty 都只发起复核，返回复核单（object_id 为通过后入账的奖惩记录 id）；全部通过后才计入当月薪资（月结时聚合）。失败码：HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE、APPROVAL_LINE_EMPTY。",
+        "description": "F批:奖惩手工录入,事由必填,审计留痕。CG-12（BSM:1487 / ENUM:283「绩效扣分与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效」）：bonus / penalty 都只发起复核，返回复核单（object_id 为通过后入账的奖惩记录 id）；全部通过后才计入当月薪资（月结时聚合）。失败码：APPROVAL_LINE_EMPTY。 HR 不由申请人指定；直属领导计第一级，共取三层组织上级后再回避发起人或受益人，不额外上移补第四层。部门 HR 配置或可用链缺失时保持待处理，补齐后重新生成审批链。",
         "x-permission": "staff.payroll.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -31340,8 +31350,7 @@
                   "month",
                   "adj_type",
                   "amount_cent",
-                  "reason",
-                  "hr_approver_id"
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -31377,11 +31386,6 @@
                     "type": "string",
                     "description": "事由(必填,钱路留痕硬约束)。",
                     "maxLength": 255
-                  },
-                  "hr_approver_id": {
-                    "type": "string",
-                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
-                    "maxLength": 80
                   }
                 }
               }
@@ -31455,7 +31459,7 @@
         ],
         "operationId": "submitStaffAdjustmentAppeal",
         "summary": "员工对已生效扣罚提出申诉",
-        "description": "CG-12（BSM:1487「员工可对扣分提出申诉，申诉同样报至 HR 与直属领导向上三级裁定，过程与结论均留痕」）：只能由被扣罚员工本人对已生效的扣罚（adj_type=penalty）提出，事由必填；申诉走同一「HR 会签＋直属领导向上三级」链，链全部通过＝撤销（以 penalty_reversal 记录冲回原调整，原记录保留），任一节点驳回＝维持。失败码：ADJUSTMENT_NOT_FOUND、APPEAL_SELF_ONLY、APPEAL_ONLY_FOR_PENALTY、APPEAL_PENDING、APPEAL_ALREADY_REVOKED、HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE。",
+        "description": "CG-12（BSM:1487「员工可对扣分提出申诉，申诉同样报至 HR 与直属领导向上三级裁定，过程与结论均留痕」）：只能由被扣罚员工本人对已生效的扣罚（adj_type=penalty）提出，事由必填；申诉走同一「HR 会签＋直属领导向上三级」链，链全部通过＝撤销（以 penalty_reversal 记录冲回原调整，原记录保留），任一节点驳回＝维持。失败码：ADJUSTMENT_NOT_FOUND、APPEAL_SELF_ONLY、APPEAL_ONLY_FOR_PENALTY、APPEAL_PENDING、APPEAL_ALREADY_REVOKED。 HR 不由申请人指定；直属领导计第一级，共取三层组织上级后再回避发起人或受益人，不额外上移补第四层。部门 HR 配置或可用链缺失时保持待处理，补齐后重新生成审批链。",
         "x-permission": "staff.payroll.view_mine",
         "x-data-scope": "self",
         "x-auth-context": "staff-token",
@@ -31496,17 +31500,11 @@
                     "type": "string",
                     "description": "申诉事由（必填，留痕）",
                     "maxLength": 1000
-                  },
-                  "hr_approver_id": {
-                    "type": "string",
-                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
-                    "maxLength": 80
                   }
                 },
                 "required": [
                   "idempotency_key",
-                  "reason",
-                  "hr_approver_id"
+                  "reason"
                 ]
               }
             }
@@ -34282,7 +34280,7 @@
         ],
         "operationId": "submitDealer",
         "summary": "提交经销商准入审核",
-        "description": "待提交 / 已驳回 → 审核中。失败码：DEALER_STATUS_INVALID。",
+        "description": "待提交 / 已驳回 → 审核中。失败码：DEALER_STATUS_INVALID。 四类真实附件缺一不可，保存提交人；审核人不得为建档人或提交人，四审未完成的预建门户账号保持禁用。",
         "x-permission": "dealer.manage",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -34316,10 +34314,50 @@
                     "type": "string",
                     "description": "同一请求重试必须复用幂等键",
                     "maxLength": 128
+                  },
+                  "company_attachment_ids": {
+                    "type": "array",
+                    "description": "企业真实扫描件附件，绑定 dealer_admission、本经销商及对应类别；提交和审核均核实实际文件。",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  },
+                  "contract_attachment_ids": {
+                    "type": "array",
+                    "description": "合同真实扫描件附件，绑定 dealer_admission、本经销商及对应类别；提交和审核均核实实际文件。",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  },
+                  "invoice_attachment_ids": {
+                    "type": "array",
+                    "description": "开票真实扫描件附件，绑定 dealer_admission、本经销商及对应类别；提交和审核均核实实际文件。",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  },
+                  "bank_attachment_ids": {
+                    "type": "array",
+                    "description": "银行真实扫描件附件，绑定 dealer_admission、本经销商及对应类别；提交和审核均核实实际文件。",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   }
                 },
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "company_attachment_ids",
+                  "contract_attachment_ids",
+                  "invoice_attachment_ids",
+                  "bank_attachment_ids"
                 ]
               }
             }
@@ -34357,7 +34395,7 @@
         ],
         "operationId": "reviewDealer",
         "summary": "经销商准入审核",
-        "description": "审核中 → 已通过 / 已驳回。BSM:1217「企业资料、合同、开票和银行资料审核通过后，才可启用独立经销商 Web 门户」：approve 须四项 *_reviewed 全为 true，通过即 portal_enabled=true；否则 409 DEALER_REVIEW_INCOMPLETE。reject 须填原因。",
+        "description": "审核中 → 已通过 / 已驳回。BSM:1217「企业资料、合同、开票和银行资料审核通过后，才可启用独立经销商 Web 门户」：approve 须四项 *_reviewed 全为 true，通过即 portal_enabled=true；否则 409 DEALER_REVIEW_INCOMPLETE。reject 须填原因。 审核前再次检查四类提交文件真实可读；不得由建档人或提交人自审。通过后仅激活仍为 disabled 的预建账号，不恢复已撤销账号。",
         "x-permission": "dealer.review",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -35511,7 +35549,7 @@
         ],
         "operationId": "updateDealerContractTerms",
         "summary": "合同付款条款与运费模板",
-        "description": "BSM:1227「每份经销合同约定首付款金额或比例、首付款截止时间及尾款到期规则」、BSM:1229「每份合同指定中心仓、运费模板、包邮门槛和承担方」：运费模板变更版本 +1，只影响新订单。",
+        "description": "BSM:1227「每份经销合同约定首付款金额或比例、首付款截止时间及尾款到期规则」、BSM:1229「每份合同指定中心仓、运费模板、包邮门槛和承担方」：运费模板变更版本 +1，只影响新订单。 合同条款版本随更新递增；订单审核锁定完整合同条款快照，后续更新不得影响原订单到期规则或退货运费约定。",
         "x-permission": "dealer.manage",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -35563,12 +35601,12 @@
                   },
                   "first_payment_deadline_days": {
                     "type": "integer",
-                    "description": "首付款截止：通知付款后天数",
+                    "description": "按合同首付起算事件计算的天数；固定日期不使用此项。",
                     "minimum": 1
                   },
                   "balance_due_days": {
                     "type": "integer",
-                    "description": "尾款到期：出库后天数（账期合同必填）",
+                    "description": "按合同尾款起算事件计算的天数；账期且非固定日期时必填。",
                     "minimum": 1
                   },
                   "freight_cent": {
@@ -35588,11 +35626,61 @@
                       "dealer",
                       "sales_entity"
                     ]
+                  },
+                  "contract_signed_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time",
+                    "description": "经核实的合同签约时间，签约起算时必填。"
+                  },
+                  "first_payment_anchor": {
+                    "type": "string",
+                    "enum": [
+                      "contract_signed",
+                      "order_created",
+                      "payment_notified",
+                      "fixed_date"
+                    ],
+                    "description": "首付款按锁定合同约定的起算事件，不能用代码默认值替代。"
+                  },
+                  "first_payment_fixed_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time",
+                    "description": "合同约定的固定首付截止时间；fixed_date 时必填。"
+                  },
+                  "balance_due_anchor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "contract_signed",
+                      "order_created",
+                      "payment_notified",
+                      "fixed_date",
+                      "shipped",
+                      "signed",
+                      null
+                    ],
+                    "description": "账期合同尾款起算事件；发货或签收尚未发生时到期时间待确定。"
+                  },
+                  "balance_due_fixed_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time",
+                    "description": "合同约定的固定尾款截止时间；fixed_date 时必填。"
                   }
                 },
                 "required": [
                   "idempotency_key",
-                  "first_payment_deadline_days"
+                  "first_payment_anchor"
                 ]
               }
             }
@@ -36136,7 +36224,7 @@
         ],
         "operationId": "registerDealerOrderPayment",
         "summary": "登记经销订单到账",
-        "description": "ENUM:176：只接受 bank_transfer 对公转账 / platform_online 平台线上支付，现金与个人账户 400 PAYMENT_METHOD_FORBIDDEN。订单已取消 / 待退款时的到账按迟到款记录并进入待退款（E-13）。",
+        "description": "ENUM:176：只接受 bank_transfer 对公转账 / platform_online 平台线上支付，现金与个人账户 400 PAYMENT_METHOD_FORBIDDEN。订单已取消 / 待退款时的到账按迟到款记录并进入待退款（E-13）。 已部分退货订单仍可收取剩余尾款；以原订单金额减已确认退货金额后的净应收判断足额、多收及逾期。",
         "x-permission": "dealer.order.manage",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -42153,7 +42241,7 @@
         ],
         "operationId": "uploadEvidenceAttachment",
         "summary": "上传证据照片/视频",
-        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。",
         "x-permission": "evidence.attachment.create",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -42236,7 +42324,7 @@
         ],
         "operationId": "readEvidenceAttachmentFile",
         "summary": "回读证据文件",
-        "description": "主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。",
         "x-permission": "evidence.timeline.view",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -43102,7 +43190,7 @@
         ],
         "operationId": "setStaffEmploymentStatus",
         "summary": "发起员工任职状态变更复核",
-        "description": "CG-12（BSM:1478「辞退与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效，生效即转「离职」」）：任一目标状态（待入职 / 在职 / 试岗 / 停岗 / 离职）都只发起「HR 会签（hr_review 平行线，hr_approver_id 须经角色持有 staff.hr.review）＋该员工直属领导向上三级」复核，返回复核单（review_status=pending_review）；全部节点通过后才写入，通过前档案状态不变。注册审批时系统置的初始状态不算「变更」。失败码：HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE、APPROVAL_LINE_EMPTY（员工本人不得充当 HR 节点）、EMPLOYMENT_STATUS_CHANGED（通过落地时状态已被其他已生效复核变更）。",
+        "description": "CG-12（BSM:1478「辞退与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效，生效即转「离职」」）：任一目标状态（待入职 / 在职 / 试岗 / 停岗 / 离职）都只发起「HR 会签（hr_review 平行线，按员工所属部门配置自动解析具备 staff.hr.review 的负责人）＋该员工直属领导向上三级」复核，返回复核单（review_status=pending_review）；全部节点通过后才写入，通过前档案状态不变。注册审批时系统置的初始状态不算「变更」。失败码：APPROVAL_LINE_EMPTY（员工本人不得充当 HR 节点）、EMPLOYMENT_STATUS_CHANGED（通过落地时状态已被其他已生效复核变更）。 HR 不由申请人指定；直属领导计第一级，共取三层组织上级后再回避发起人或受益人，不额外上移补第四层。部门 HR 配置或可用链缺失时保持待处理，补齐后重新生成审批链。 独立状态变更须由有权限且在范围内的直属领导发起；本人请假和注册审批不套用此发起限制。",
         "x-permission": "staff.profile.review",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -43164,18 +43252,12 @@
                     "type": "string",
                     "description": "填写改动缘由",
                     "maxLength": 1000
-                  },
-                  "hr_approver_id": {
-                    "type": "string",
-                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
-                    "maxLength": 80
                   }
                 },
                 "required": [
                   "idempotency_key",
                   "employment_status",
-                  "reason",
-                  "hr_approver_id"
+                  "reason"
                 ]
               }
             }
@@ -44108,6 +44190,212 @@
           "finance.refund.create",
           "finance.payment.register"
         ]
+      }
+    },
+    "/api/v1/access/approval-lines": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "listApprovalLines",
+        "summary": "查询部门和平行审批线配置",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "access.approval_line.listed",
+        "x-audit-event-failure": "access.approval_line.list_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "返回部门配置，hr_final_approver_id 为该部门人事最终会签负责人；不是业务申请人随单指定。 仅返回当前管理人有权管理其原 HR、入口及全部绑定员工的审批线。"
+      }
+    },
+    "/api/v1/access/approval-lines/{line_code}": {
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "upsertApprovalLine",
+        "summary": "维护部门和平行审批线配置",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.approval_line.saved",
+        "x-audit-event-failure": "access.approval_line.save_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "line_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "部门或平行审批线编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "description": "人力负责人须有效、经角色持有人力会签权限且在配置人的授权范围内。缺部门人力配置时，人事业务保持待处理，不能由申请人绕过指定。 管理权限及范围在幂等重放前检查；原 HR、入口、全部绑定员工和新引用人员均须可达，空线须有覆盖全项目的合法授权，不能由新 HR 反向取得原线管理权。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "line_name"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "operator_note": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "操作说明",
+                    "maxLength": 1000
+                  },
+                  "line_name": {
+                    "type": "string",
+                    "description": "审批线名称",
+                    "maxLength": 100
+                  },
+                  "min_start_rank": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30,
+                    "description": "平行审批最低起点层级，省略时为1。"
+                  },
+                  "entry_user_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "平行线起点人；空值表示未配置",
+                    "maxLength": 64
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ],
+                    "description": "启用或停用；省略时启用。"
+                  },
+                  "hr_final_approver_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "所属部门人事最终会签负责人；空值表示待配置",
+                    "maxLength": 64
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/admission": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "getDealerAdmission",
+        "summary": "查看经销商本次准入材料",
+        "x-permission": "dealer.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.admission_viewed",
+        "x-audit-event-failure": "dealer.admission_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "description": "按授权范围返回四类实际文件的附件编号、提交人和时间；尚未提交时返回空数据，不能当作准入已通过。"
       }
     }
   },
@@ -58807,7 +59095,7 @@
       },
       "FinanceRefundRecord": {
         "type": "object",
-        "description": "通用退款事实；成功和所有未结状态均占用原收款可退额度，尝试追加留痕。",
+        "description": "通用退款事实；成功和所有未结状态均占用原收款可退额度，尝试追加留痕。 故障拒收来源进入原路待退，不将登记待办视为退款成功；无可信项目或原支付资料时不能执行。",
         "additionalProperties": false,
         "required": [
           "id",
@@ -58836,7 +59124,7 @@
           },
           "target_id": {
             "type": "string",
-            "description": "原收款流水或储值账户编号，由 source_type 区分。",
+            "description": "原收款、储值账户或故障拒收的订单/渠道单编号，由 source_type 区分。",
             "maxLength": 64
           },
           "refund_amount_cent": {
@@ -58879,7 +59167,9 @@
             "type": "string",
             "enum": [
               "ar_ap_payment",
-              "stored_value_account"
+              "stored_value_account",
+              "ticket_payment_rejection",
+              "channel_ticket_rejection"
             ],
             "description": "退款源单类型。"
           },

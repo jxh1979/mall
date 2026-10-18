@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -69,6 +70,7 @@ function sourceLabelOf(source: string): string {
 type Endpoint = typeof ENDPOINTS[number];
 
 type LoadedEventRow = IntegrationEventRow & {
+  providerPayload?: { refundId?: string; rejectionCode?: string; refund_id?: string; rejection_code?: string };
   source: string;
   sourceLabel: string;
   endpoint: string;
@@ -237,6 +239,13 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
         { label: TEXT.provider, value: row.providerCode ?? row.channelCode ?? "-" },
         { label: TEXT.eventType, value: row.eventType ?? row.syncType ?? row.verificationType ?? "-" },
         { label: TEXT.status, value: formatBusinessStatus(row.status) },
+        ...((row.providerPayload?.rejectionCode ?? row.providerPayload?.rejection_code) === "PARK_WIDE_FAULT_SALES_SUSPENDED" ? [
+          { label: "受理结论", value: "全园故障停售，订单未受理且不出票" },
+        ] : []),
+        ...(row.providerPayload?.refundId || row.providerPayload?.refund_id ? [
+          { label: "原路待退款", value: String(row.providerPayload.refundId ?? row.providerPayload.refund_id) },
+          { label: "退款办理", value: <button type="button" onClick={() => navigateTo?.("ADM-FIN-001")}>前往财务台账查看退款实际状态</button> },
+        ] : []),
         { label: TEXT.retryCount, value: row.retryCount ?? "-" },
         { label: "错误码", value: row.errorCode ?? "-" },
         { label: "发生时间", value: cnDate(row.occurredAt) },

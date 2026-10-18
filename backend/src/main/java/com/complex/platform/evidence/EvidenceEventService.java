@@ -1,5 +1,7 @@
 package com.complex.platform.evidence;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -40,6 +42,9 @@ public class EvidenceEventService {
     /** 证据文件本地存储。字段注入免改既有构造点；单测未注入=null（上传端点报存储不可用）。 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     EvidenceFileStorage fileStorage;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.dealer.JdbcDealerRepository dealerRepository;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -96,8 +101,8 @@ public class EvidenceEventService {
             throw ApiException.badRequest("EVIDENCE_FILE_STORAGE_UNAVAILABLE", "证据文件存储不可用");
         }
         String type = requireText(businessType, "business_type");
+        String merchantId = evidenceScope(type, businessId, "dealer.manage", "evidence.attachment.create").orElse(null);
         EvidenceFileStorage.StoredFile stored = fileStorage.store(file);
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         String id = "att_" + slug(stored.objectKey());
         EvidenceAttachmentRecord saved = repository.saveAttachment(new EvidenceAttachmentRecord(
@@ -132,7 +137,7 @@ public class EvidenceEventService {
     public java.nio.file.Path resolveAttachmentFile(String attachmentId) {
         EvidenceAttachmentRecord attachment = repository.findAttachmentById(requireText(attachmentId, "attachment_id"))
                 .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "证据附件不存在"));
-        authorizationService.currentMerchantScope().ifPresent(scope -> {
+        evidenceScope(attachment.businessType(), attachment.businessId(), "dealer.view", "evidence.timeline.view").ifPresent(scope -> {
             if (!scope.equals(attachment.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "证据附件不属于本商户");
             }
@@ -152,6 +157,8 @@ public class EvidenceEventService {
 
     @Transactional
     public EvidenceAttachmentRecord createAttachmentUploadIntent(EvidenceAttachmentUploadIntentRequest request) {
+        EvidenceAttachmentUploadIntentRequest input = requireRequest(request);
+        Optional<String> scope = evidenceScope(input.businessType(), input.businessId(), "dealer.manage", "evidence.attachment.create");
         return executeEvidenceWrite(
                 "createEvidenceAttachmentUploadIntent",
                 request == null ? null : request.idempotencyKey(),
@@ -167,9 +174,10 @@ public class EvidenceEventService {
                     String fileName = requireText(actual.fileName(), "file_name");
                     String contentType = requireText(actual.contentType(), "content_type");
                     String businessType = requireText(actual.businessType(), "business_type");
-                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    String merchantId = scope.orElse(null);
                     Instant now = Instant.now();
-                    String id = "att_" + slug(actual.idempotencyKey());
+                    String id = "att_" + ("dealer_admission".equals(businessType)
+                            ? UUID.randomUUID().toString().replace("-", "") : slug(actual.idempotencyKey()));
                     // F-CROSS-05 跨租户覆盖修复：object key 必须纳入 merchant scope 前缀，
                     // 否则商户 A/B 用相同 idempotency_key + file_name 会算出同一 object key，互相覆盖证据对象。
                     // 商户用户 → 其 merchantId 命名空间；平台管理员（无 scope）→ _platform 占位（避免字面 "null" 前缀）。
@@ -198,6 +206,11 @@ public class EvidenceEventService {
     @Transactional
     public EvidenceAttachmentRecord bindAttachment(String attachmentId, EvidenceAttachmentBindRequest request) {
         String id = requireText(attachmentId, "attachment_id");
+        EvidenceAttachmentBindRequest input = requireRequest(request);
+        EvidenceAttachmentRecord source = repository.findAttachmentById(id)
+                .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "附件不存在或已被删除"));
+        Optional<String> scope = evidenceScope(source.businessType(), source.businessId(), "dealer.manage", "evidence.attachment.create");
+        evidenceScope(input.businessType(), input.businessId(), "dealer.manage", "evidence.attachment.create");
         return executeEvidenceWrite(
                 "bindEvidenceAttachment:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -220,7 +233,6 @@ public class EvidenceEventService {
                     }
 
                     // P0: ownership check — merchant users can only bind their own attachments
-                    Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(existing.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                                 "附件不属于当前商户");
@@ -249,6 +261,9 @@ public class EvidenceEventService {
     @Transactional
     public EvidenceAttachmentRecord completeAttachment(String attachmentId, EvidenceAttachmentCompleteRequest request) {
         String id = requireText(attachmentId, "attachment_id");
+        EvidenceAttachmentRecord source = repository.findAttachmentById(id)
+                .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "附件不存在或已被删除"));
+        Optional<String> scope = evidenceScope(source.businessType(), source.businessId(), "dealer.manage", "evidence.attachment.create");
         return executeEvidenceWrite(
                 "completeEvidenceAttachmentUpload:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -271,7 +286,6 @@ public class EvidenceEventService {
                     }
 
                     // P0: ownership check — merchant users can only complete their own attachments
-                    Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(existing.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                                 "附件不属于当前商户");
@@ -302,6 +316,8 @@ public class EvidenceEventService {
 
     @Transactional
     public EvidenceReviewRecord createEvidenceReview(EvidenceReviewRequest request) {
+        EvidenceReviewRequest input = requireRequest(request);
+        Optional<String> scope = evidenceScope(input.businessType(), input.businessId(), "dealer.review", "evidence.review.create");
         return executeEvidenceWrite(
                 "createEvidenceReview",
                 request == null ? null : request.idempotencyKey(),
@@ -316,7 +332,7 @@ public class EvidenceEventService {
                     EvidenceReviewRequest actual = requireRequest(request);
                     String reqBusinessType = requireText(actual.businessType(), "business_type");
                     String reqBusinessId = requireText(actual.businessId(), "business_id");
-                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    String merchantId = scope.orElse(null);
                     Instant now = Instant.now();
 
                     // P1: validate each attachment ID exists, belongs to the correct business object,
@@ -330,7 +346,7 @@ public class EvidenceEventService {
                                         "附件不存在：" + attachmentId));
                         // P1 越权修复：评审引用附件此前不校验附件归属（bindAttachment/completeAttachment 均有），
                         // 可把他商户 attachment_id 写入自己 review，跨租户引用/泄露证据。
-                        Optional<String> attScope = authorizationService.currentMerchantScope();
+                        Optional<String> attScope = scope;
                         if (attScope.isPresent() && !attScope.get().equals(att.merchantId())) {
                             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                                     "附件属于其他商户：" + attachmentId);
@@ -365,8 +381,8 @@ public class EvidenceEventService {
     public List<EvidenceTimelineItem> getTimeline(String objectType, String objectId) {
         String type = requireText(objectType, "object_type");
         String id = requireText(objectId, "object_id");
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         try {
+            String merchantId = evidenceScope(type, id, "dealer.view", "evidence.timeline.view").orElse(null);
             List<EvidenceTimelineItem> timeline = repository.listTimeline(type, id, merchantId);
             auditEventService.recordSuccess(
                     "evidence.timeline_viewed",
@@ -390,6 +406,23 @@ public class EvidenceEventService {
             );
             throw exception;
         }
+    }
+
+    private Optional<String> evidenceScope(String businessType, String businessId, String dealerPermission, String evidencePermission) {
+        if (!"dealer_admission".equals(trimToNull(businessType))) {
+            return authorizationService.currentMerchantScope();
+        }
+        authorizationService.requirePermissions(dealerPermission, evidencePermission);
+        if (dealerRepository == null) {
+            throw ApiException.badRequest("DEALER_EVIDENCE_UNAVAILABLE", "经销准入资料范围暂不可核验");
+        }
+        var dealer = dealerRepository.findDealer(requireText(businessId, "business_id"))
+                .orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), dealer.projectId(),
+                dealerPermission, evidencePermission)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销准入资料不在授权项目范围内");
+        }
+        return authorizationService.currentMerchantIdQuietly();
     }
 
     private EventBatchResponse create(EventBatchRequest request) {

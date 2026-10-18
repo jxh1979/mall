@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -23,6 +23,11 @@ class DevAccessCredentialProvisioner implements AccessCredentialProvisioner {
     DevAccessCredentialProvisioner(AuthService authService, AccessRepository accessRepository) {
         this.authService = authService;
         this.accessRepository = accessRepository;
+    }
+
+    @Override
+    public void changeStatus(String userId, String status, Instant now) {
+        authService.changeUserStatus(userId, status);
     }
 
     @Override

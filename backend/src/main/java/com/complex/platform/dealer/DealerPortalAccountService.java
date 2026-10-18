@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -64,12 +64,13 @@ public class DealerPortalAccountService {
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
     }
 
-    /** 开通门户账号：经销商未停用即可（待提交阶段用于注册资料提交；其余门户能力待审核通过启用门户后开放）。 */
+    /** 未四审的账号仅预建为禁用；准入批准后才启用。 */
     @Transactional
     public DealerPortalAccountRecord createPortalAccount(String dealerId, DealerPortalAccountRequest request) {
         authorization.requirePermission(MANAGE);
         try {
-            DealerRecord dealer = requireDealer(dealerId);
+            requireDealer(dealerId);
+            DealerRecord dealer = dealers.lockDealer(dealerId).orElseThrow();
             if (DealerService.DEACTIVATED.equals(dealer.status())) {
                 throw ApiException.conflict("DEALER_DEACTIVATED", "经销商已停用，不恢复旧账号也不开新门户账号");
             }
@@ -81,10 +82,11 @@ public class DealerPortalAccountService {
             return idempotency.execute("dealerPortalAccount:" + dealerId, request.idempotencyKey(), Map.of("username", username, "dealer", dealerId), () -> {
                 Instant now = Instant.now();
                 String userId = "usr_dlr_" + UUID.randomUUID();
-                access.createUser(new AccessUser(userId, username, ACCOUNT_TYPE, dealer.projectId(), null, "active", now));
-                credentials.provisionCredential(userId, password, "active", now);
+                String status = DealerService.APPROVED.equals(dealer.status()) && dealer.portalEnabled() ? "active" : "disabled";
+                access.createUser(new AccessUser(userId, username, ACCOUNT_TYPE, dealer.projectId(), null, status, now));
+                credentials.provisionCredential(userId, password, status, now);
                 access.assignUserRole(userId, ROLE);
-                DealerPortalAccountRecord account = new DealerPortalAccountRecord(userId, dealerId, username, "active", actorId(), now, null);
+                DealerPortalAccountRecord account = new DealerPortalAccountRecord(userId, dealerId, username, status, actorId(), now, null);
                 portalAccounts.saveAccount(account);
                 audit.recordSuccess("dealer.portal_account.created", MANAGE, "dealer_portal_account", userId, null, request.idempotencyKey(),
                         Map.of("dealer_id", dealerId, "username", username, "contact_name", request.contactName() == null ? "" : request.contactName()));
@@ -97,12 +99,25 @@ public class DealerPortalAccountService {
         }
     }
 
+    void activateApprovedDealer(String dealerId) {
+        DealerRecord dealer = dealers.findDealer(dealerId).orElseThrow();
+        if (!DealerService.APPROVED.equals(dealer.status()) || !dealer.portalEnabled()) {
+            throw ApiException.conflict("DEALER_PORTAL_NOT_ENABLED", "四项准入审核通过后才能启用账号");
+        }
+        Instant now = Instant.now();
+        for (DealerPortalAccountRecord account : portalAccounts.listByDealer(dealerId)) {
+            if ("disabled".equals(account.status())) credentials.changeStatus(account.userId(), "active", now);
+        }
+        portalAccounts.activateByDealer(dealerId);
+    }
+
     /** 停用撤权（由 DealerService.deactivateDealer 在同一事务内调用）：门户账号停用 + 全部会话立即作废 + 留痕。 */
     void revokeDealerPortal(String dealerId, String reason) {
         Instant now = Instant.now();
         List<DealerPortalAccountRecord> accounts = portalAccounts.listByDealer(dealerId);
         int sessionsRevoked = 0;
         for (DealerPortalAccountRecord account : accounts) {
+            if (!"revoked".equals(account.status())) credentials.changeStatus(account.userId(), "disabled", now);
             sessionsRevoked += sessions.revokeUserSessions(account.userId());
         }
         int accountsRevoked = portalAccounts.revokeByDealer(dealerId, now);

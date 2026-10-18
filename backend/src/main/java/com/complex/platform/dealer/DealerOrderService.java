@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -97,7 +97,8 @@ public class DealerOrderService {
     public DealerContractRecord updateContractTerms(String contractId, DealerContractTermsRequest request) {
         authorization.requirePermission(DealerService.MANAGE);
         try {
-            DealerContractRecord c = requireContract(contractId);
+            requireContract(contractId);
+            DealerContractRecord c = dealers.lockContract(contractId).orElseThrow();
             if (request == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "条款必填");
             }
@@ -105,11 +106,14 @@ public class DealerOrderService {
             if (credit && request.firstPaymentRatioBps() == null && request.firstPaymentAmountCent() == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "约定账期的合同须约定首付款比例或金额");
             }
-            if (request.firstPaymentDeadlineDays() == null || request.firstPaymentDeadlineDays() <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "须约定首付款截止时间（通知付款后天数）");
+            validateDueRule(request.firstPaymentAnchor(), request.firstPaymentDeadlineDays(), request.firstPaymentFixedAt(), request.contractSignedAt(), false);
+            if (credit) {
+                validateDueRule(request.balanceDueAnchor(), request.balanceDueDays(), request.balanceDueFixedAt(), request.contractSignedAt(), true);
             }
-            if (credit && (request.balanceDueDays() == null || request.balanceDueDays() <= 0)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "约定账期的合同须约定尾款到期规则（出库后天数）");
+            if (request.firstPaymentRatioBps() != null && (request.firstPaymentRatioBps() <= 0 || request.firstPaymentRatioBps() > 10000)
+                    || request.firstPaymentAmountCent() != null && request.firstPaymentAmountCent() <= 0
+                    || request.firstPaymentRatioBps() != null && request.firstPaymentAmountCent() != null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "首付款须按有效比例或正金额择一约定");
             }
             String bearer = request.freightBearer() == null ? "dealer" : request.freightBearer().trim();
             if (!Set.of("dealer", "sales_entity").contains(bearer)) {
@@ -123,10 +127,12 @@ public class DealerOrderService {
                         request.firstPaymentAmountCent(), request.firstPaymentDeadlineDays(), request.balanceDueDays(), request.freightCent(),
                         request.freeShippingThresholdCent(), bearer, c.freightTemplateVersion() + (freightChanged ? 1 : 0),
                         request.returnFreightBearer() == null ? c.returnFreightBearer() : trim(request.returnFreightBearer()),
-                        request.firstLegFreightRefundable() == null ? c.firstLegFreightRefundable() : request.firstLegFreightRefundable());
+                        request.firstLegFreightRefundable() == null ? c.firstLegFreightRefundable() : request.firstLegFreightRefundable(),
+                        c.termsVersion() + 1, request.contractSignedAt(), request.firstPaymentAnchor(), request.firstPaymentFixedAt(),
+                        credit ? request.balanceDueAnchor() : null, credit ? request.balanceDueFixedAt() : null);
                 dealers.saveContract(saved);
                 audit.recordSuccess("dealer.contract_terms_updated", DealerService.MANAGE, "dealer_contract", contractId, null, request.idempotencyKey(),
-                        meta("credit_term", credit, "freight_template_version", saved.freightTemplateVersion()));
+                        meta("credit_term", credit, "freight_template_version", saved.freightTemplateVersion(), "terms_version", saved.termsVersion()));
                 return saved;
             }, DealerContractRecord.class);
         } catch (RuntimeException e) {
@@ -285,7 +291,8 @@ public class DealerOrderService {
     public DealerOrderRecord reviewOrder(String orderId, DealerOrderDecisionRequest request) {
         authorization.requirePermission(REVIEW);
         try {
-            DealerOrderRecord order = requireOrder(orderId);
+            requireOrder(orderId);
+            DealerOrderRecord order = orders.lockOrder(orderId).orElseThrow();
             requireStatus(order, "pending_review");
             String decision = requireDecision(request == null ? null : request.decision());
             if (Objects.equals(actorId(), order.createdBy())) {
@@ -300,13 +307,13 @@ public class DealerOrderService {
                             meta("decision", "reject", "note", nz(request.note())));
                     return saved;
                 }
-                DealerContractRecord contract = requireContract(order.dealerContractId());
+                DealerContractRecord contract = dealers.lockContract(order.dealerContractId()).orElseThrow();
                 requireActiveDealer(order.dealerId());
                 if (contract.validTo().isBefore(LocalDate.now()) || !"active".equals(contract.status())) {
                     throw ApiException.conflict("DEALER_CONTRACT_INVALID", "经销合同已到期或不可用");
                 }
-                if (contract.firstPaymentDeadlineDays() == null) {
-                    throw ApiException.conflict("DEALER_CONTRACT_TERMS_INCOMPLETE", "合同未约定首付款截止时间，无法通知付款");
+                if (contract.termsVersion() <= 0 || contract.firstPaymentAnchor() == null) {
+                    throw ApiException.conflict("DEALER_CONTRACT_TERMS_INCOMPLETE", "合同尚未登记完整付款起点与期限，无法通知付款");
                 }
                 DealerPriceCatalogRecord catalog = dealers.findEffectiveCatalog(contract.id())
                         .orElseThrow(() -> ApiException.conflict("DEALER_CATALOG_NOT_EFFECTIVE", "合同尚无生效的价格目录"));
@@ -329,7 +336,13 @@ public class DealerOrderService {
                 }
                 Amounts amounts = amounts(contract, lines);
                 long firstRequired = firstPaymentRequired(contract, amounts.total());
-                Instant deadline = now.plus(contract.firstPaymentDeadlineDays(), ChronoUnit.DAYS);
+                Instant deadline = resolveDue(contract.firstPaymentAnchor(), contract.firstPaymentFixedAt(), contract.firstPaymentDeadlineDays(),
+                        contract.contractSignedAt(), order.createdAt(), now, null, null);
+                if (deadline == null || !deadline.isAfter(now)) {
+                    throw ApiException.conflict("DEALER_FIRST_PAYMENT_DEADLINE_PASSED", "按合同计算的首付款截止已过，须核实合同后再审核");
+                }
+                Instant balanceDue = contract.creditTerm() ? resolveDue(contract.balanceDueAnchor(), contract.balanceDueFixedAt(), contract.balanceDueDays(),
+                        contract.contractSignedAt(), order.createdAt(), now, null, null) : null;
                 String arApId = "arap_do_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
                 DealerRecord dealer = dealers.findDealer(order.dealerId()).orElseThrow();
                 finance.saveArApItem(new ArApItemRecord(arApId, "ARAP-DO-" + now.toEpochMilli(), "receivable", order.dealerId(), "dealer_order", orderId,
@@ -337,15 +350,16 @@ public class DealerOrderService {
                         dealer.projectId()));
                 DealerOrderRecord saved = new DealerOrderRecord(order.id(), order.orderNo(), order.dealerId(), order.dealerContractId(), contract.salesEntityId(),
                         contract.centralWarehouseId(), "pending_payment", null, catalog.id(), contract.creditTerm(), amounts.goods(), amounts.freight(),
-                        contract.freightBearer(), contract.freightTemplateVersion(), amounts.total(), firstRequired, deadline, null, 0L, false, arApId,
+                        contract.freightBearer(), contract.freightTemplateVersion(), amounts.total(), firstRequired, deadline, balanceDue, 0L, false, arApId,
                         actorId(), now, now, null, null, null, null, null, null, null, order.note(), order.createdBy(), order.createdAt(), now);
                 orders.saveOrder(saved);
+                orders.lockContractSnapshot(orderId, contract);
                 audit.recordSuccess("dealer.order.reviewed", REVIEW, "dealer_order", orderId, null, request.idempotencyKey(),
                         meta("decision", "approve", "price_catalog_id", catalog.id(), "total_amount_cent", amounts.total(),
                                 "first_payment_required_cent", firstRequired, "first_payment_deadline_at", deadline.toString(), "ar_ap_item_id", arApId));
                 audit.recordSuccess("dealer.order.payment_notified", REVIEW, "dealer_order", orderId, null, null,
                         meta("total_amount_cent", amounts.total(), "first_payment_required_cent", firstRequired));
-                return saved;
+                return orders.findOrder(orderId).orElseThrow();
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
             audit.recordFailure("dealer.order.review_failed", REVIEW, "dealer_order", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
@@ -375,7 +389,7 @@ public class DealerOrderService {
             }
             boolean late = Set.of("cancelled", "pending_refund").contains(order.status());
             if (!late) {
-                requireStatus(order, "pending_payment", "payment_verifying", "pending_shipment", "shipping", "signed", "cancelling");
+                requireStatus(order, "pending_payment", "payment_verifying", "pending_shipment", "shipping", "signed", "returning", "partially_returned", "returned", "cancelling");
             }
             return idempotency.execute("dealerOrderPayment:" + orderId, request.idempotencyKey(), request, () -> {
                 Instant now = Instant.now();
@@ -434,7 +448,7 @@ public class DealerOrderService {
                             meta("decision", "reject", "note", nz(request.note())));
                     return orders.findPayment(paymentId).orElseThrow();
                 }
-                long receivable = Math.max(0, order.totalAmountCent() - order.paidAmountCent());
+                long receivable = Math.max(0, order.netReceivableCent() - order.paidAmountCent());
                 long applied = Math.min(payment.amountCent(), receivable);
                 long excess = payment.amountCent() - applied;
                 DealerOrderPaymentRecord verified = withPaymentStatus(payment, "verified", applied, actor, now, trim(request.note()));
@@ -465,11 +479,11 @@ public class DealerOrderService {
         if (Set.of("pending_payment", "payment_verifying").contains(status)) {
             status = paid >= order.firstPaymentRequiredCent() ? "pending_shipment" : "pending_payment";
         }
-        if ("signed".equals(status) && paid >= order.totalAmountCent()) {
+        if ("signed".equals(status) && paid >= order.netReceivableCent()) {
             status = "completed";
             completedAt = now;
         }
-        if (overdue && paid >= order.totalAmountCent()) {
+        if (overdue && paid >= order.netReceivableCent()) {
             overdue = false;
         }
         DealerOrderRecord saved = new DealerOrderRecord(order.id(), order.orderNo(), order.dealerId(), order.dealerContractId(), order.salesEntityId(),
@@ -479,15 +493,18 @@ public class DealerOrderService {
                 order.shippedAt(), order.signedAt(), completedAt, order.cancelRequestedBy(), order.cancelReason(), order.cancelledAt(), order.note(),
                 order.createdBy(), order.createdAt(), now);
         orders.saveOrder(saved);
-        if (order.arApItemId() != null) {
-            long unpaid = Math.max(0, order.totalAmountCent() - paid);
-            orders.updateArApItem(order.arApItemId(), Math.min(paid, order.totalAmountCent()), unpaid, unpaid == 0 ? "settled" : (overdue ? "overdue" : "partial_paid"));
+        if (order.arApItemId() != null && applied > 0) {
+            long unpaid = Math.max(0, order.netReceivableCent() - paid);
+            orders.updateArApItem(order.arApItemId(), Math.min(paid, order.netReceivableCent()), unpaid, unpaid == 0 ? "settled" : (overdue ? "overdue" : "partial_paid"));
+            if (order.creditTerm() && paid >= order.firstPaymentRequiredCent()) {
+                orders.updateArApDueDate(order.arApItemId(), order.balanceDueAt());
+            }
         }
         if (order.overdue() && !overdue && !orders.dealerHasOverdueOrders(order.dealerId())) {
             dealers.setCreditSuspended(order.dealerId(), false);
             audit.recordSuccess("dealer.credit_resumed", PAYMENT_VERIFY, "dealer", order.dealerId(), null, null, meta("order_id", order.id()));
         }
-        return saved;
+        return orders.findOrder(saved.id()).orElseThrow();
     }
 
     // ── 出库 / 签收 ──
@@ -520,17 +537,19 @@ public class DealerOrderService {
                         throw ApiException.conflict("DEALER_STOCK_INSUFFICIENT", "中心仓预留不足，无法出库：" + line.itemId());
                     }
                 }
-                DealerContractRecord contract = requireContract(order.dealerContractId());
-                Instant balanceDue = order.creditTerm() && contract.balanceDueDays() != null ? now.plus(contract.balanceDueDays(), ChronoUnit.DAYS) : null;
+                DealerContractRecord contract = requireSnapshot(order);
+                Instant balanceDue = order.creditTerm() ? resolveDue(contract.balanceDueAnchor(), contract.balanceDueFixedAt(), contract.balanceDueDays(),
+                        contract.contractSignedAt(), order.createdAt(), order.paymentNotifiedAt(), now, null) : null;
                 DealerOrderRecord saved = new DealerOrderRecord(order.id(), order.orderNo(), order.dealerId(), order.dealerContractId(), order.salesEntityId(),
                         order.centralWarehouseId(), "shipping", null, order.priceCatalogId(), order.creditTerm(), order.goodsAmountCent(), order.freightCent(),
                         order.freightBearer(), order.freightTemplateVersion(), order.totalAmountCent(), order.firstPaymentRequiredCent(), order.firstPaymentDeadlineAt(),
                         balanceDue, order.paidAmountCent(), false, order.arApItemId(), order.reviewedBy(), order.reviewedAt(), order.paymentNotifiedAt(), actor, now,
                         null, null, order.cancelRequestedBy(), order.cancelReason(), order.cancelledAt(), order.note(), order.createdBy(), order.createdAt(), now);
                 orders.saveOrder(saved);
+                if (order.creditTerm()) orders.updateArApDueDate(order.arApItemId(), balanceDue);
                 audit.recordSuccess("dealer.order.shipped", SHIP, "dealer_order", orderId, null, request == null ? null : request.idempotencyKey(),
                         meta("balance_due_at", balanceDue == null ? "" : balanceDue.toString(), "note", request == null ? "" : nz(request.note())));
-                return saved;
+                return orders.findOrder(orderId).orElseThrow();
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
             audit.recordFailure("dealer.order.ship_failed", SHIP, "dealer_order", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
@@ -548,20 +567,25 @@ public class DealerOrderService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerOrderRecord signOrder(String orderId, String idempotencyKey, String permission) {
         try {
-            DealerOrderRecord order = requireOrder(orderId);
+            requireOrder(orderId);
+            DealerOrderRecord order = orders.lockOrder(orderId).orElseThrow();
             requireStatus(order, "shipping");
             return idempotency.execute("dealerOrderSign:" + orderId, idempotencyKey, Map.of("id", orderId), () -> {
                 Instant now = Instant.now();
-                boolean settled = order.paidAmountCent() >= order.totalAmountCent();
+                DealerContractRecord contract = requireSnapshot(order);
+                Instant balanceDue = order.creditTerm() ? resolveDue(contract.balanceDueAnchor(), contract.balanceDueFixedAt(), contract.balanceDueDays(),
+                        contract.contractSignedAt(), order.createdAt(), order.paymentNotifiedAt(), order.shippedAt(), now) : null;
+                boolean settled = order.paidAmountCent() >= order.netReceivableCent();
                 DealerOrderRecord saved = new DealerOrderRecord(order.id(), order.orderNo(), order.dealerId(), order.dealerContractId(), order.salesEntityId(),
                         order.centralWarehouseId(), settled ? "completed" : "signed", null, order.priceCatalogId(), order.creditTerm(), order.goodsAmountCent(),
                         order.freightCent(), order.freightBearer(), order.freightTemplateVersion(), order.totalAmountCent(), order.firstPaymentRequiredCent(),
-                        order.firstPaymentDeadlineAt(), order.balanceDueAt(), order.paidAmountCent(), order.overdue(), order.arApItemId(), order.reviewedBy(),
+                        order.firstPaymentDeadlineAt(), balanceDue, order.paidAmountCent(), order.overdue(), order.arApItemId(), order.reviewedBy(),
                         order.reviewedAt(), order.paymentNotifiedAt(), order.shippedBy(), order.shippedAt(), now, settled ? now : null, order.cancelRequestedBy(),
                         order.cancelReason(), order.cancelledAt(), order.note(), order.createdBy(), order.createdAt(), now);
                 orders.saveOrder(saved);
+                if (order.creditTerm()) orders.updateArApDueDate(order.arApItemId(), balanceDue);
                 audit.recordSuccess("dealer.order.signed", permission, "dealer_order", orderId, null, idempotencyKey, meta("status", saved.status()));
-                return saved;
+                return orders.findOrder(orderId).orElseThrow();
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
             audit.recordFailure("dealer.order.sign_failed", permission, "dealer_order", orderId, null, idempotencyKey, codeOf(e));
@@ -667,8 +691,8 @@ public class DealerOrderService {
         }
         if (order.arApItemId() != null) {
             // 应收作废：保持 paid + unpaid = amount（chk_ar_ap_items_amount_balance），状态记作 cancelled（技术决定）
-            long paid = Math.min(order.paidAmountCent(), order.totalAmountCent());
-            orders.updateArApItem(order.arApItemId(), paid, order.totalAmountCent() - paid, "cancelled");
+            long paid = Math.min(order.paidAmountCent(), order.netReceivableCent());
+            orders.updateArApItem(order.arApItemId(), paid, order.netReceivableCent() - paid, "cancelled");
         }
         DealerOrderRecord saved = new DealerOrderRecord(order.id(), order.orderNo(), order.dealerId(), order.dealerContractId(), order.salesEntityId(),
                 order.centralWarehouseId(), refunds ? "pending_refund" : "cancelled", null, order.priceCatalogId(), order.creditTerm(), order.goodsAmountCent(),
@@ -788,7 +812,12 @@ public class DealerOrderService {
     @Transactional
     public int markOverdue(Instant now) {
         int count = 0;
-        for (DealerOrderRecord order : orders.listBalanceOverdue(now)) {
+        for (DealerOrderRecord candidate : orders.listBalanceOverdue(now)) {
+            DealerOrderRecord order = orders.lockOrder(candidate.id()).orElseThrow();
+            if (order.overdue() || order.paidAmountCent() >= order.netReceivableCent()
+                    || order.balanceDueAt() == null || !order.balanceDueAt().isBefore(now)) {
+                continue;
+            }
             DealerOrderRecord saved = new DealerOrderRecord(order.id(), order.orderNo(), order.dealerId(), order.dealerContractId(), order.salesEntityId(),
                     order.centralWarehouseId(), order.status(), order.statusBeforeCancel(), order.priceCatalogId(), order.creditTerm(), order.goodsAmountCent(),
                     order.freightCent(), order.freightBearer(), order.freightTemplateVersion(), order.totalAmountCent(), order.firstPaymentRequiredCent(),
@@ -797,12 +826,12 @@ public class DealerOrderService {
                     order.cancelReason(), order.cancelledAt(), order.note(), order.createdBy(), order.createdAt(), Instant.now());
             orders.saveOrder(saved);
             if (order.arApItemId() != null) {
-                orders.updateArApItem(order.arApItemId(), Math.min(order.paidAmountCent(), order.totalAmountCent()),
-                        Math.max(0, order.totalAmountCent() - order.paidAmountCent()), "overdue");
+                orders.updateArApItem(order.arApItemId(), Math.min(order.paidAmountCent(), order.netReceivableCent()),
+                        Math.max(0, order.netReceivableCent() - order.paidAmountCent()), "overdue");
             }
             dealers.setCreditSuspended(order.dealerId(), true);
             audit.recordSuccess("dealer.order.balance_overdue", null, "dealer_order", order.id(), null, null,
-                    meta("balance_due_at", String.valueOf(order.balanceDueAt()), "unpaid_cent", order.totalAmountCent() - order.paidAmountCent()));
+                    meta("balance_due_at", String.valueOf(order.balanceDueAt()), "unpaid_cent", order.netReceivableCent() - order.paidAmountCent()));
             count++;
         }
         return count;
@@ -832,10 +861,10 @@ public class DealerOrderService {
                     if (!targetOrder.dealerId().equals(over.dealerId()) || !targetOrder.salesEntityId().equals(over.salesEntityId())) {
                         throw ApiException.conflict("OVERPAYMENT_TARGET_MISMATCH", "只能抵扣该经销商向同一销售法律主体采购的订单");
                     }
-                    if (!Set.of("pending_payment", "payment_verifying", "pending_shipment", "shipping", "signed").contains(targetOrder.status())) {
+                    if (!Set.of("pending_payment", "payment_verifying", "pending_shipment", "shipping", "signed", "returning", "partially_returned", "returned").contains(targetOrder.status())) {
                         throw ApiException.conflict("DEALER_ORDER_STATUS_INVALID", "指定订单当前不可抵扣");
                     }
-                    long applied = Math.min(over.amountCent(), Math.max(0, targetOrder.totalAmountCent() - targetOrder.paidAmountCent()));
+                    long applied = Math.min(over.amountCent(), Math.max(0, targetOrder.netReceivableCent() - targetOrder.paidAmountCent()));
                     if (applied <= 0) {
                         throw ApiException.conflict("OVERPAYMENT_TARGET_SETTLED", "指定订单已无应收可抵扣");
                     }
@@ -980,6 +1009,43 @@ public class DealerOrderService {
     private static DealerOrderPaymentRecord withPaymentStatus(DealerOrderPaymentRecord p, String status, long applied, String verifiedBy, Instant verifiedAt, String note) {
         return new DealerOrderPaymentRecord(p.id(), p.orderId(), p.method(), p.amountCent(), p.receivedAt(), p.referenceNo(), status, applied, p.registeredBy(),
                 verifiedBy, verifiedAt, note == null ? p.note() : note, p.createdAt(), Instant.now());
+    }
+
+    private static void validateDueRule(String anchor, Integer days, Instant fixedAt, Instant signedAt, boolean balance) {
+        Set<String> allowed = balance ? Set.of("contract_signed", "order_created", "payment_notified", "shipped", "signed", "fixed_date")
+                : Set.of("contract_signed", "order_created", "payment_notified", "fixed_date");
+        if (anchor == null || !allowed.contains(anchor)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "付款起点须按合同明确选择");
+        }
+        if ("fixed_date".equals(anchor)) {
+            if (fixedAt == null || days != null) throw ApiException.badRequest("VALIDATION_FAILED", "固定截止须填写具体时间，不同时填写事件后天数");
+        } else if (days == null || days <= 0 || fixedAt != null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "事件起点须填写正天数，不同时填写固定截止");
+        }
+        if ("contract_signed".equals(anchor) && signedAt == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "以签约为起点须登记合同实际签署时间");
+        }
+    }
+
+    private static Instant resolveDue(String anchor, Instant fixedAt, Integer days, Instant contractSigned, Instant created,
+            Instant notified, Instant shipped, Instant signed) {
+        if ("fixed_date".equals(anchor)) return fixedAt;
+        Instant origin = switch (anchor) {
+            case "contract_signed" -> contractSigned;
+            case "order_created" -> created;
+            case "payment_notified" -> notified;
+            case "shipped" -> shipped;
+            case "signed" -> signed;
+            default -> throw ApiException.conflict("DEALER_CONTRACT_TERMS_INCOMPLETE", "合同未锁定有效付款起点");
+        };
+        return origin == null ? null : origin.plus(days, ChronoUnit.DAYS);
+    }
+
+    private static DealerContractRecord requireSnapshot(DealerOrderRecord order) {
+        if (order.contractSnapshot() == null) {
+            throw ApiException.conflict("DEALER_CONTRACT_SNAPSHOT_MISSING", "订单缺少已锁定合同，须核实原合同");
+        }
+        return order.contractSnapshot();
     }
 
     private static String requireDecision(String decision) {

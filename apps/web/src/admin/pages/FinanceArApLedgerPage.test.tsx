@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -78,5 +79,16 @@ describe("FinanceArApLedgerPage 来源类型（退租相关可辨识）", () => 
     fireEvent.click(screen.getByTestId("finance-ledger-row-ar-dr"));
     await waitFor(() => expect(screen.getByText("来源类型")).toBeTruthy());
     expect(screen.getByText("退租押金退还")).toBeTruthy();
+  });
+});
+
+
+describe("经销应收待合同事件", () => {
+  it("未发生起算事件仍展示未收货款和明确的待日期说明", async () => {
+    const rows = [{ id: "ar-dealer", itemNo: "AR-DEALER", sourceType: "dealer_order", direction: "receivable", status: "open", amountCent: 10000, unpaidAmountCent: 7000 }];
+    renderPage(makeApi(vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 })));
+    await screen.findByTestId("finance-ledger-row-ar-dealer");
+    expect(screen.getByText("待合同约定事件确定")).toBeTruthy();
+    expect(screen.getByTestId("finance-ledger-row-ar-dealer").textContent).toContain("70.00");
   });
 });

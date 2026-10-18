@@ -1,6 +1,9 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.integration.IntegrationValidation.*;
+import static com.complex.platform.common.Strings.trimToNull;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -613,16 +616,37 @@ final class IntegrationOrderSyncService {
                 request.externalBusinessId()
         );
         String recordStatus = request.status();
+        String recordId = existing.map(IntegrationOrderSyncRecord::id).orElseGet(() -> "order_sync_"
+                + ("ticket".equals(request.businessType()) && "order".equals(request.syncType())
+                        ? ticketIdempotencyBase(request, channel) : UUID.randomUUID().toString()));
         // ── 批6 ticket 分支：第三方渠道售出的通票回流 → 本地出票（走既有出票主链）────────────
         if ("ticket".equals(request.businessType())) {
             // 幂等（同渠道订单号只出一次票）：既有行已出过票 → 原样返回，不再触发出票链。
-            if (existing.isPresent() && existing.get().providerPayload().containsKey("local_ticket_order_id")) {
+            if (existing.isPresent() && (existing.get().providerPayload().containsKey("local_ticket_order_id")
+                    || "PARK_WIDE_FAULT_SALES_SUSPENDED".equals(existing.get().providerPayload().get("rejection_code")))) {
                 return existing.get();
             }
             // 能力开关闸（默认关，设计性 gating）：开关关 → 拒收，不落库不出票。
             requireTicketChannelEnabled();
             if ("order".equals(request.syncType())) {
-                ChannelTicketIssuePort.IssueResult issued = issueLocalTicket(request, channel, providerPayload);
+                ChannelTicketIssuePort.IssueCommand command = ticketIssueCommand(request, channel, providerPayload);
+                Optional<ChannelTicketIssuePort.RejectionResult> rejected = ticketIssuePort.rejectSuspendedPayment(command, recordId,
+                        nonNegative(request.amountCent(), "amount_cent"), trimToNull(request.externalChannelOrderId()),
+                        resolveMerchantId(request, providerPayload, channel));
+                if (rejected.isPresent()) {
+                    providerPayload.remove("refund_id");
+                    providerPayload.remove("refundId");
+                    providerPayload.remove("local_ticket_order_id");
+                    String refundId = rejected.get().refundId();
+                    if (refundId != null) providerPayload.put("refund_id", refundId);
+                    providerPayload.put("rejection_code", "PARK_WIDE_FAULT_SALES_SUSPENDED");
+                    return repository.saveOrderSync(new IntegrationOrderSyncRecord(recordId, request.providerCode(),
+                            request.businessType(), request.syncType(), request.externalBusinessId(), "failed",
+                            nonNegative(request.amountCent(), "amount_cent"), currency(request.currency()), channel,
+                            request.externalChannelOrderId(), resolveMerchantId(request, providerPayload, channel),
+                            Map.copyOf(providerPayload), now, now));
+                }
+                ChannelTicketIssuePort.IssueResult issued = ticketIssuePort.issue(command);
                 providerPayload.put("local_ticket_order_id", issued.ticketOrderId());
                 providerPayload.put("local_order_no", issued.orderNo());
                 providerPayload.put("local_amount_cent", issued.amountCent());
@@ -637,7 +661,7 @@ final class IntegrationOrderSyncService {
             // 退款审批链（先审后行），绝不因渠道回流一条退款记录就自动退票退钱。
         }
         IntegrationOrderSyncRecord record = new IntegrationOrderSyncRecord(
-                existing.map(IntegrationOrderSyncRecord::id).orElse("order_sync_" + UUID.randomUUID()),
+                recordId,
                 request.providerCode(),
                 request.businessType(),
                 request.syncType(),
@@ -674,7 +698,7 @@ final class IntegrationOrderSyncService {
     }
 
     /** 渠道商品 → 本地票种映射解析 + 走既有出票主链出票。映射缺失 fail-closed 拒收（不落半截数据）。 */
-    private ChannelTicketIssuePort.IssueResult issueLocalTicket(
+    private ChannelTicketIssuePort.IssueCommand ticketIssueCommand(
             IntegrationOrderSyncRequest request, String channel, Map<String, Object> payload) {
         Object externalProductId = payload.get("external_product_id");
         if (externalProductId == null || externalProductId.toString().isBlank()) {
@@ -689,7 +713,7 @@ final class IntegrationOrderSyncService {
         int quantity = ticketQuantity(payload.get("quantity"));
         java.time.LocalDate visitDate = ticketVisitDate(payload.get("visit_date"));
         Object buyerPhone = payload.get("buyer_phone");
-        return ticketIssuePort.issue(new ChannelTicketIssuePort.IssueCommand(
+        return new ChannelTicketIssuePort.IssueCommand(
                 ticketIdempotencyBase(request, channel),
                 map.ticketTypeId(),
                 map.priceRuleId(),
@@ -698,7 +722,7 @@ final class IntegrationOrderSyncService {
                 channel,
                 buyerPhone == null || buyerPhone.toString().isBlank() ? null : buyerPhone.toString(),
                 "第三方渠道回流出票：" + channel + " " + request.externalBusinessId()
-        ));
+        );
     }
 
     /**

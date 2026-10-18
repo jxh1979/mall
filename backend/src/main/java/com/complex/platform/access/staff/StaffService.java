@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -73,7 +73,11 @@ public class StaffService {
     @org.springframework.beans.factory.annotation.Autowired
     private StaffApprovalService staffApprovals;
     @org.springframework.beans.factory.annotation.Autowired
+    private StaffHrRoutingService staffHrRouting;
+    @org.springframework.beans.factory.annotation.Autowired
     private StaffRegistrationService registrations;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.governance.PlatformRepository platformRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public StaffService(
@@ -351,13 +355,14 @@ public class StaffService {
             throw ApiException.badRequest("VALIDATION_FAILED", "员工状态须为待入职、在职、试岗、停岗或离职");
         }
         String reason = requireReason(request.reason());
+        staffHrRouting.requireDirectSupervisor(profile.userId());
         // U05-011：与其它员工写口相同，按操作命名空间幂等去重。
         return idempotencyService.execute("staffEmploymentStatus:" + id, request.idempotencyKey(), request, () -> {
             var review = staffApprovals.submitEmploymentStatus(profile, request, reason);
             auditEventService.recordSuccess("staff.profile.employment_status_change_requested", "staff.profile.review",
                     "staff_profile", id, null, request.idempotencyKey(),
                     Map.of("before", String.valueOf(profile.employmentStatus()), "after", request.employmentStatus(), "reason", reason,
-                            "review_id", review.reviewId(), "hr_approver_id", request.hrApproverId().trim()));
+                            "review_id", review.reviewId()));
             return review;
         }, com.complex.platform.governance.review.SupervisorReviewDecisionRecord.class);
         } catch (RuntimeException exception) {
@@ -1247,10 +1252,15 @@ public class StaffService {
     /** 登记派驻：所属主体取自员工档案 company_id；同一员工在同一酒吧只能有一条进行中的派驻。需 staff.profile.review。 */
     public StaffDispatchRecord createDispatch(com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request) {
         try {
-            authorizationService.requirePermission("staff.profile.review");
+            requireDispatchOperator();
+            if (request == null || trimToNull(request.userId()) == null || trimToNull(request.merchantId()) == null
+                    || trimToNull(request.startDate()) == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "必须填写员工、派驻酒吧与起始日期");
+            }
+            var destination = requireDispatchScope(request.userId().trim(), request.merchantId().trim());
             return idempotencyService.execute("createStaffDispatch",
-                    request == null ? null : request.idempotencyKey(), request,
-                    () -> doCreateDispatch(request), StaffDispatchRecord.class);
+                    request.idempotencyKey(), request,
+                    () -> doCreateDispatch(request, destination), StaffDispatchRecord.class);
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("staff.dispatch.create_failed", "staff.profile.review",
                     "staff_dispatch_record", request == null ? null : request.userId(), null,
@@ -1259,15 +1269,36 @@ public class StaffService {
         }
     }
 
-    private StaffDispatchRecord doCreateDispatch(com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request) {
-        if (request == null || trimToNull(request.userId()) == null || trimToNull(request.merchantId()) == null
-                || trimToNull(request.startDate()) == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写员工、派驻酒吧与起始日期");
+    private void requireDispatchOperator() {
+        authorizationService.requirePermission("staff.profile.review");
+        var actor = authorizationService.currentActor();
+        if (trimToNull(actor.merchantId()) != null || java.util.Set.of("merchant", "merchant_admin", "outsourced_vendor")
+                .contains(actor.accountType())) {
+            throw ApiException.forbidden("STAFF_DISPATCH_PLATFORM_REQUIRED", "派驻登记及结束只允许平台侧获授权人员办理");
         }
+    }
+
+    private com.complex.platform.governance.MerchantRecord requireDispatchScope(String userId, String merchantId) {
+        var actor = authorizationService.currentActor();
+        var employee = accessRepository.findUserById(userId)
+                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工账号不存在"));
+        if (!authorizationService.canReachUser(actor, employee, "staff.profile.review")) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "该员工不在当前授权组织范围内");
+        }
+        var merchant = platformRepository.findMerchantById(merchantId)
+                .orElseThrow(() -> ApiException.notFound("MERCHANT_NOT_FOUND", "派驻商户不存在"));
+        if (trimToNull(merchant.projectId()) == null
+                || !authorizationService.canReachProject(actor, merchant.projectId(), "staff.profile.review")) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "派驻商户不在当前授权项目范围内");
+        }
+        return merchant;
+    }
+
+    private StaffDispatchRecord doCreateDispatch(com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request,
+            com.complex.platform.governance.MerchantRecord destination) {
         java.time.LocalDate start = parseDate(request.startDate(), "起始日期");
         String userId = request.userId().trim();
         String merchantId = request.merchantId().trim();
-        requireUserInScope(userId);
         StaffProfileRecord profile = repository.findProfileByUserId(userId)
                 .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在"));
         if (trimToNull(profile.companyId()) == null) {
@@ -1278,7 +1309,7 @@ public class StaffService {
         }
         Instant now = Instant.now();
         StaffDispatchRecord saved = repository.saveDispatch(new StaffDispatchRecord(
-                "dsp_" + UUID.randomUUID(), userId, profile.companyId(), merchantId, profile.projectId(),
+                "dsp_" + UUID.randomUUID(), userId, profile.companyId(), merchantId, destination.projectId(),
                 start, null, "active", trimToNull(request.note()), actorIdOrSystem(authorizationService.currentActor()), now, null, null));
         auditEventService.recordSuccess("staff.dispatch.created", "staff.profile.review", "staff_dispatch_record",
                 saved.id(), null, request.idempotencyKey(), Map.of("user_id", userId, "merchant_id", merchantId,
@@ -1289,7 +1320,13 @@ public class StaffService {
     /** 结束派驻：结束日期默认当日，不得早于起始日期。需 staff.profile.review。 */
     public StaffDispatchRecord endDispatch(String dispatchId, com.complex.platform.access.staff.dto.StaffDispatchEndRequest request) {
         try {
-            authorizationService.requirePermission("staff.profile.review");
+            requireDispatchOperator();
+            StaffDispatchRecord scoped = repository.findDispatchById(requireText(dispatchId, "dispatch_id"))
+                    .orElseThrow(() -> ApiException.notFound("STAFF_DISPATCH_NOT_FOUND", "派驻记录不存在"));
+            requireDispatchScope(scoped.userId(), scoped.merchantId());
+            if (!authorizationService.canReachProject(authorizationService.currentActor(), scoped.projectId(), "staff.profile.review")) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "派驻记录不在当前授权项目范围内");
+            }
             return idempotencyService.execute("endStaffDispatch",
                     request == null ? null : request.idempotencyKey(), request,
                     () -> doEndDispatch(dispatchId, request), StaffDispatchRecord.class);
@@ -1304,7 +1341,6 @@ public class StaffService {
     private StaffDispatchRecord doEndDispatch(String dispatchId, com.complex.platform.access.staff.dto.StaffDispatchEndRequest request) {
         StaffDispatchRecord current = repository.findDispatchById(requireText(dispatchId, "dispatch_id"))
                 .orElseThrow(() -> ApiException.notFound("STAFF_DISPATCH_NOT_FOUND", "派驻记录不存在"));
-        requireUserInScope(current.userId());
         if (!"active".equals(current.status())) {
             throw ApiException.conflict("STAFF_DISPATCH_ALREADY_ENDED", "该派驻记录已结束");
         }
@@ -1329,7 +1365,14 @@ public class StaffService {
         authorizationService.requirePermission("staff.profile.view");
         String merchantScope = staffMerchantScope();
         String effectiveMerchant = merchantScope != null ? merchantScope : trimToNull(merchantId);
-        java.util.List<StaffDispatchRecord> items = repository.listDispatches(trimToNull(userId), effectiveMerchant, projectScope());
+        var actor = authorizationService.currentActor();
+        var reach = authorizationService.projectReach(actor, "staff.profile.view");
+        java.util.List<StaffDispatchRecord> items = repository.listDispatches(trimToNull(userId), effectiveMerchant,
+                reach.onlyOwnProject().orElse(null)).stream()
+                .filter(row -> reach.covers(row.projectId()))
+                .filter(row -> merchantScope != null || accessRepository.findUserById(row.userId())
+                        .filter(employee -> authorizationService.canReachUser(reach, employee)).isPresent())
+                .toList();
         auditEventService.recordSuccess("staff.dispatch.viewed", "staff.profile.view", "staff_dispatch", "list",
                 effectiveMerchant, null, Map.of("count", items.size()));
         return page(items);
@@ -1543,7 +1586,7 @@ public class StaffService {
                 "staff_payroll_adjustment", review.objectId(), null, request.idempotencyKey(),
                 java.util.Map.of("user_id", request.userId().trim(), "month", request.month(),
                         "adj_type", request.adjType(), "amount_cent", request.amountCent(),
-                        "reason", request.reason().trim(), "review_id", review.reviewId(), "hr_approver_id", request.hrApproverId().trim()));
+                        "reason", request.reason().trim(), "review_id", review.reviewId()));
         return review;
     }
 

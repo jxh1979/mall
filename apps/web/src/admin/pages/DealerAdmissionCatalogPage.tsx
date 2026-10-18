@@ -1,10 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
-import { PermissionButton } from "../security/Can";
+import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
 /**
@@ -12,7 +12,11 @@ import type { AdminPageProps } from "../types";
  * BSM:1216-1222：经销商五态准入（企业资料、合同、开票、银行资料四项审核通过才启用门户）；每份合同独立、可版本化的合同销售价格目录
  * （编辑与审批不得同人）；未定价商品只能询价（报价审批通过后才能订购）；库存外显只给 有货 / 紧张 / 缺货 / 预计交期。
  */
-type DealerRow = { id: string; dealerName?: string; status?: string; portalEnabled?: boolean; contactName?: string; contactPhone?: string; reviewNote?: string; unifiedSocialCreditCode?: string };
+type DealerRow = { id: string; dealerName?: string; status?: string; portalEnabled?: boolean; contactName?: string; contactPhone?: string; reviewNote?: string; unifiedSocialCreditCode?: string; createdBy?: string };
+type Admission = { dealerId: string; companyAttachmentIds: string[]; contractAttachmentIds: string[]; invoiceAttachmentIds: string[]; bankAttachmentIds: string[]; submittedBy?: string };
+const DOCUMENTS = [["companyAttachmentIds", "company", "企业资料"], ["contractAttachmentIds", "contract", "合同"], ["invoiceAttachmentIds", "invoice", "开票资料"], ["bankAttachmentIds", "bank", "银行资料"]] as const;
+type Documents = Pick<Admission, "companyAttachmentIds" | "contractAttachmentIds" | "invoiceAttachmentIds" | "bankAttachmentIds">;
+const emptyDocuments = (): Documents => ({ companyAttachmentIds: [], contractAttachmentIds: [], invoiceAttachmentIds: [], bankAttachmentIds: [] });
 type ContractRow = { id: string; contractNo?: string; salesEntityId?: string; centralWarehouseId?: string; validFrom?: string; validTo?: string; status?: string };
 type CatalogRow = { id: string; version?: number; status?: string; editedBy?: string; submittedBy?: string; approvedBy?: string; note?: string };
 type CatalogLine = { id: string; itemId?: string; spec?: string; unitPriceCent?: number; taxRateBps?: number | null; expectedRestockDate?: string | null };
@@ -38,7 +42,9 @@ function cnDate(value?: string | null) {
   return m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日` : value;
 }
 
-export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
+export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
+  const canUpload = useCan(effectivePermissions, ["dealer.manage", "evidence.attachment.create"]);
+  const canReadEvidence = useCan(effectivePermissions, ["evidence.timeline.view"]);
   const [dealers, setDealers] = React.useState<DealerRow[]>([]);
   const [selected, setSelected] = React.useState<DealerRow | null>(null);
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
@@ -48,6 +54,10 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
   const [inquiries, setInquiries] = React.useState<InquiryRow[]>([]);
   const [stock, setStock] = React.useState<StockRow[]>([]);
   const [portalAccounts, setPortalAccounts] = React.useState<PortalAccountRow[]>([]);
+  const [admission, setAdmission] = React.useState<Admission | null>(null);
+  const [documents, setDocuments] = React.useState<Documents>(emptyDocuments);
+  const [uploading, setUploading] = React.useState(false);
+  const selectedId = React.useRef<string | null>(null);
   const [formError, setFormError] = React.useState("");
   // 门户账号（CG-11d）
   const [portalUsername, setPortalUsername] = React.useState("");
@@ -103,6 +113,10 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
 
   async function selectDealer(row: DealerRow) {
     setSelected(row);
+    selectedId.current = row.id;
+    setAdmission(null); setDocuments(emptyDocuments());
+    setReviewFlags({ companyProfileReviewed: false, contractReviewed: false, invoiceReviewed: false, bankReviewed: false });
+    setReviewNote("");
     setContractId("");
     setCatalogs([]); setLines(null); setStock([]);
     await loadDealerData(row);
@@ -111,11 +125,15 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
   // 刷新当前经销商的合同与询价，不清空已选合同（询价 / 报价 / 审批后目录与外显区块保持可见）。
   async function loadDealerData(row: DealerRow) {
     try {
-      const [cs, qs, pa] = await Promise.all([
+      const [cs, qs, pa, submitted] = await Promise.all([
         api.get<ContractRow[]>(`/api/v1/dealers/${encodeURIComponent(row.id)}/contracts`),
         api.get<InquiryRow[]>(`/api/v1/dealers/${encodeURIComponent(row.id)}/inquiries`),
         api.get<PortalAccountRow[]>(`/api/v1/dealers/${encodeURIComponent(row.id)}/portal-accounts`),
+        api.get<Admission | null>(`/api/v1/dealers/${encodeURIComponent(row.id)}/admission`),
       ]);
+      if (selectedId.current !== row.id) return;
+      setAdmission(submitted);
+      setDocuments(submitted ?? emptyDocuments());
       setContracts(cs ?? []);
       setInquiries(qs ?? []);
       setPortalAccounts(pa ?? []);
@@ -158,12 +176,16 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
   });
 
   const submitDealer = (row: DealerRow) => run("dealer_submitted", async () => {
-    await api.post(`/api/v1/dealers/${encodeURIComponent(row.id)}/submit`, { idempotencyKey: key() });
+    if (selected?.id !== row.id || DOCUMENTS.some(([field]) => !documents[field]?.length)) throw new Error("请选中该经销商并上传企业、合同、开票、银行四类资料后提交");
+    if (uploading) throw new Error("资料仍在上传，请等待完成");
+    await api.post(`/api/v1/dealers/${encodeURIComponent(row.id)}/submit`, { idempotencyKey: key(), ...documents });
     await refreshSelected();
     return { 经销商: row.id, 状态: "审核中" };
   });
 
   const reviewDealer = (row: DealerRow, decision: "approve" | "reject") => run("dealer_reviewed", async () => {
+    if (row.createdBy === user.id || admission?.submittedBy === user.id) throw new Error("准入建档人和提交人不得自审");
+    if (decision === "approve" && (DOCUMENTS.some(([field]) => !admission?.[field]?.length) || Object.values(reviewFlags).some((flag) => !flag))) throw new Error("须查看四类提交资料并逐项核实通过");
     if (decision === "reject" && !reviewNote.trim()) throw new Error("驳回须填写原因");
     const d = await api.post<DealerRow>(`/api/v1/dealers/${encodeURIComponent(row.id)}/review`, { idempotencyKey: key(), decision, ...reviewFlags, note: reviewNote.trim() || undefined });
     await refreshSelected();
@@ -185,8 +207,24 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
     });
     setPortalUsername(""); setPortalPassword(""); setPortalContact("");
     await loadDealerData(selected);
-    return { 门户账号: account?.username ?? portalUsername, 经销商: selected.dealerName, 状态: "已开通（审核通过启用门户后开放全部功能）" };
+    return { 门户账号: account?.username ?? portalUsername, 经销商: selected.dealerName, 状态: account?.status === "active" ? "已启用" : "预建禁用，四项审核通过后才可登录" };
   });
+
+  async function uploadDocuments(field: keyof Documents, role: string, files: FileList | null) {
+    if (!selected || !files?.length || uploading || !canUpload) return;
+    const dealerId = selected.id;
+    setUploading(true); setFormError("");
+    try {
+      if (!api.postForm) throw new Error("当前客户端不支持资料上传");
+      for (const file of Array.from(files)) {
+        const form = new FormData(); form.append("file", file); form.append("business_type", "dealer_admission");
+        form.append("business_id", dealerId); form.append("attachment_role", role);
+        const attachment = await api.postForm<{ id: string }>("/api/v1/evidence/attachments/upload", form);
+        if (selectedId.current === dealerId) setDocuments((previous) => ({ ...previous, [field]: [...previous[field], attachment.id] }));
+      }
+    } catch (error) { setFormError(error instanceof Error ? error.message : "资料上传失败"); }
+    finally { setUploading(false); }
+  }
 
   const createContract = () => run("dealer_contract_created", async () => {
     if (!selected) throw new Error("请先选择经销商");
@@ -273,6 +311,7 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
       {formError ? <div data-testid="dealer-error" className="admin-inline-error">{formError}</div> : null}
 
       <h3>经销商建档</h3>
+      <p className="admin-muted-action">请通过角色管理为指定销售经办配置建档、提交和资料上传权限，为运营复核人配置准入审核和资料查看权限；建档人及本次提交人不能审核本人申请。</p>
       <div className="admin-form-grid" data-testid="dealer-create-form">
         <label>经销商名称<input data-testid="dealer-name-input" value={dealerName} onChange={(e) => setDealerName(e.target.value)} /></label>
         <label>统一社会信用代码<input data-testid="dealer-uscc-input" value={uscc} onChange={(e) => setUscc(e.target.value)} /></label>
@@ -312,6 +351,20 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
 
       {selected ? (
         <>
+          <div className="admin-form-grid" data-testid="dealer-admission-documents">
+            <h3>四类准入资料：{selected.dealerName}</h3>
+            {DOCUMENTS.map(([field, role, title]) => <div key={field}>
+              <label>{title}扫描件{["pending_submission", "rejected"].includes(selected.status ?? "") ?
+                <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic" disabled={uploading || !canUpload} data-testid={`admission-upload-${role}`}
+                  onChange={(event) => { void uploadDocuments(field, role, event.target.files); event.target.value = ""; }} /> : null}</label>
+              {(documents[field] ?? []).map((id, index) => <span key={id}>
+                {canReadEvidence ? <a href={`/api/v1/evidence/attachments/${encodeURIComponent(id)}/file`} target="_blank" rel="noreferrer">查看{title} {index + 1}</a> : <span>{title}附件 {index + 1}</span>}
+                {["pending_submission", "rejected"].includes(selected.status ?? "") ? <button type="button" disabled={uploading} onClick={() => setDocuments((previous) => ({ ...previous, [field]: previous[field].filter((value) => value !== id) }))}>移出本次提交</button> : null}
+              </span>)}
+              {!documents[field]?.length ? <span>尚未提交</span> : null}
+            </div>)}
+            <p>附件须真实核验，上传和勾选不能代替核验；建档人、提交人不得自审。</p>
+          </div>
           {selected.status === "under_review" ? (
             <div className="admin-form-grid" data-testid="dealer-review-form">
               <h3>准入审核：{selected.dealerName}</h3>
@@ -319,8 +372,8 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
                 <label key={k}><input type="checkbox" data-testid={`dealer-review-${k}`} checked={reviewFlags[k]} onChange={(e) => setReviewFlags({ ...reviewFlags, [k]: e.target.checked })} />{text}</label>
               ))}
               <label>审核意见<input data-testid="dealer-review-note" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} /></label>
-              <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.review"]} data-testid="dealer-review-approve" onClick={() => void reviewDealer(selected, "approve")}>通过并启用门户</PermissionButton>
-              <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.review"]} data-testid="dealer-review-reject" onClick={() => void reviewDealer(selected, "reject")}>驳回</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.review"]} data-testid="dealer-review-approve" disabled={uploading || selected.createdBy === user.id || admission?.submittedBy === user.id} onClick={() => void reviewDealer(selected, "approve")}>通过并启用门户</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.review"]} data-testid="dealer-review-reject" disabled={selected.createdBy === user.id || admission?.submittedBy === user.id} onClick={() => void reviewDealer(selected, "reject")}>驳回</PermissionButton>
               <span className="admin-muted-action">四项资料全部审核通过后才能通过准入并启用独立经销商门户。</span>
             </div>
           ) : null}
@@ -330,15 +383,15 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
             <label>登录名<input data-testid="portal-username-input" value={portalUsername} onChange={(e) => setPortalUsername(e.target.value)} /></label>
             <label>初始密码<input data-testid="portal-password-input" type="password" value={portalPassword} onChange={(e) => setPortalPassword(e.target.value)} /></label>
             <label>企业联系人<input data-testid="portal-contact-input" value={portalContact} onChange={(e) => setPortalContact(e.target.value)} /></label>
-            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.portal_account.manage"]} data-testid="portal-account-create" onClick={() => void createPortalAccount()}>开通门户账号</PermissionButton>
-            <span className="admin-muted-action">门户账号与员工端、商户门户隔离，只见本企业数据；停用经销商时立即终止其全部门户会话。</span>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.portal_account.manage"]} data-testid="portal-account-create" onClick={() => void createPortalAccount()}>预建或开通门户账号</PermissionButton>
+            <span className="admin-muted-action">未审核通过的账号保持禁用、不能登录；门户账号与员工端、商户门户隔离，只见本企业数据；停用经销商时立即终止其全部门户会话。</span>
           </div>
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="dealer-portal-account-table">
               <thead><tr><th>登录名</th><th>状态</th><th>开通时间</th><th>撤权时间</th></tr></thead>
               <tbody>
                 {portalAccounts.map((a) => (
-                  <tr key={a.userId}><td>{a.username ?? a.userId}</td><td data-testid={`portal-account-status-${a.userId}`}>{a.status === "revoked" ? "已撤权" : "有效"}</td><td>{cnDate(a.createdAt)}</td><td>{cnDate(a.revokedAt)}</td></tr>
+                  <tr key={a.userId}><td>{a.username ?? a.userId}</td><td data-testid={`portal-account-status-${a.userId}`}>{a.status === "revoked" ? "已撤权" : a.status === "disabled" ? "禁用待准入" : "有效"}</td><td>{cnDate(a.createdAt)}</td><td>{cnDate(a.revokedAt)}</td></tr>
                 ))}
               </tbody>
             </table>

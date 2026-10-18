@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -39,6 +39,8 @@ public class SupervisorReviewService {
     private final AuditEventService auditEventService;
     // M087：审批链引擎（组织层级逐级节点链）。纯领域对象，随服务构造，不单独注入。
     private final ApprovalChainService chainService;
+    @Autowired
+    private com.complex.platform.access.staff.StaffHrRoutingService staffHrRouting;
     // U09-005：事件发布器必填注入——批准后的员工落地（U05 StaffApprovalService.afterDecision）依赖该事件，不得静默不发。
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
@@ -204,6 +206,7 @@ public class SupervisorReviewService {
 
     /** 策略固定要求的平行线（如税费三审）必须由起草人逐线指定最终审批人，否则拒绝发起（fail-closed）。 */
     private static void requireDefaultLines(SupervisorReviewPolicyRecord policy, List<ApprovalChainService.ParallelLine> lines) {
+        if (ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(policy.approvalLevel())) return;
         for (String code : policy.parallelLineCodes()) {
             boolean given = lines.stream().anyMatch(line -> code.equals(line.lineCode()) && line.finalApproverId() != null
                     && !line.finalApproverId().isBlank());
@@ -254,9 +257,15 @@ public class SupervisorReviewService {
                     List<ApprovalChainNode> nodes = supervisorReviewRepository.listChainNodes(id);
                     if (nodes.isEmpty()) {
                         throw ApiException.forbidden("APPROVAL_CHAIN_UNRESOLVED",
-                                "组织层级未维护，审批链未生成；请平台管理员维护发起人的直接上级后重新生成审批链");
+                                "审批链未生成；请补齐组织层级、人事会签配置及有效授权后重新生成审批链");
                     }
                     ApprovalChainNode node = resolveDecidableNode(pending, nodes, reviewerId, reviewerLevel);
+                    if (ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(pending.approvalLevel())
+                            && (staffHrRouting == null || !staffHrRouting.canReviewEmployee(reviewerId,
+                                    schedule.map(SupervisorReviewRepository.ReviewSchedule::beneficiaryId).orElse(null),
+                                    HR_LINE.equals(node.lineCode()) ? "staff.hr.review" : APPROVE_PERMISSION))) {
+                        throw ApiException.forbidden("HR_APPROVER_SCOPE_INVALID", "人事审批人的有效角色或员工管理范围已不满足要求");
+                    }
                     if (ApprovalChainNode.KIND_MASTER.equals(node.approverKind())
                             && nodes.stream().anyMatch(n -> !ApprovalChainNode.MAIN_LINE.equals(n.lineCode())
                                     && !ApprovalChainNode.APPROVED.equals(n.status()))) {
@@ -593,12 +602,13 @@ public class SupervisorReviewService {
     }
 
     /**
-     * M087：组织层级补齐后为「链未生成」的待审单重新生成主线（fail-closed 的恢复路径；平行线须重新发起）。
+     * M087：组织层级补齐后为「链未生成」的待审单重新生成主线；人事自动会签一并重解析，其余平行线须重新发起。
      * 已有节点的单据不重生成（返回现有节点）。
      */
     @Transactional
     public List<ApprovalChainNode> regenerateChain(String reviewId) {
         String id = requireText(reviewId, "review_id");
+        supervisorReviewRepository.lockSupervisorReview(id);
         SupervisorReviewDecisionRecord pending = supervisorReviewRepository
                 .findPendingSupervisorReviewById(id)
                 .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
@@ -608,7 +618,8 @@ public class SupervisorReviewService {
             return existing;
         }
         SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
-        if (policy != null && !policy.parallelLineCodes().isEmpty()) {
+        if (policy != null && !policy.parallelLineCodes().isEmpty()
+                && !ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(policy.approvalLevel())) {
             throw ApiException.conflict("APPROVAL_LINE_FINAL_APPROVER_REQUIRED",
                     "本事项含平行审批线，组织层级补齐后须重新发起并指定各线最终审批人");
         }
@@ -617,7 +628,7 @@ public class SupervisorReviewService {
         List<ApprovalChainNode> nodes = generateChain(id, pending.initiatedBy(), beneficiaryId,
                 ApprovalLevel.fromCode(pending.approvalLevel()), null, List.of(), pending.requiredLevel());
         if (nodes.isEmpty()) {
-            throw ApiException.conflict("APPROVAL_CHAIN_UNRESOLVED", "发起人的直接上级仍未维护，审批链无法生成");
+            throw ApiException.conflict("APPROVAL_CHAIN_UNRESOLVED", "组织层级、人事会签配置或有效授权尚未补齐，审批链无法生成");
         }
         auditEventService.recordSuccess(
                 "governance.supervisor_review.chain_regenerated",
@@ -633,7 +644,28 @@ public class SupervisorReviewService {
 
     private List<ApprovalChainNode> generateChain(String reviewId, String initiatedBy, String beneficiaryId, ApprovalLevel level,
                                                   String finalApproverId, List<ApprovalChainService.ParallelLine> lines, int requiredLevel) {
-        List<ApprovalChainNode> nodes = chainService.generate(reviewId, initiatedBy, beneficiaryId, level, finalApproverId, lines, requiredLevel);
+        List<ApprovalChainNode> nodes;
+        if (level == ApprovalLevel.HR_THREE_LEVELS_UP) {
+            var hr = staffHrRouting == null ? Optional.<String>empty() : staffHrRouting.resolve(beneficiaryId, initiatedBy);
+            nodes = List.of();
+            if (hr.isPresent()) {
+                try {
+                    nodes = chainService.generate(reviewId, initiatedBy, beneficiaryId, level, null,
+                            List.of(new ApprovalChainService.ParallelLine(HR_LINE, hr.get())), requiredLevel);
+                    if (nodes.stream().anyMatch(n -> HR_LINE.equals(n.lineCode())
+                            ? !staffHrRouting.eligible(n.approverId(), beneficiaryId, initiatedBy)
+                            : !staffHrRouting.canReviewEmployee(n.approverId(), beneficiaryId, APPROVE_PERMISSION))) {
+                        nodes = List.of();
+                    }
+                } catch (ApiException exception) {
+                    if (!java.util.Set.of("APPROVAL_LINE_NOT_CONFIGURED", "APPROVAL_LINE_EMPTY", "FINAL_APPROVER_NOT_IN_CHAIN")
+                            .contains(exception.code())) throw exception;
+                    nodes = List.of();
+                }
+            }
+        } else {
+            nodes = chainService.generate(reviewId, initiatedBy, beneficiaryId, level, finalApproverId, lines, requiredLevel);
+        }
         if (nodes.isEmpty()) {
             // fail-closed：组织层级未维护，链无法生成；单据留痕待审，无人可裁决，层级补齐后重生成。
             auditEventService.recordSuccess(
@@ -820,6 +852,13 @@ public class SupervisorReviewService {
                 Optional<String> superior = !finalNode && ApprovalChainNode.KIND_USER.equals(node.approverKind()) && node.approverId() != null
                         ? supervisorReviewRepository.findDirectSuperior(node.approverId())
                         : Optional.empty();
+                if (ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(d.approvalLevel())) {
+                    // 人事链边界按生成时已确定的三个组织层级保留，重复超时也不能引入第四级。
+                    superior = superior.filter(candidate -> chain.stream().anyMatch(n ->
+                            n.lineCode().equals(node.lineCode()) && n.seq() > node.seq() && candidate.equals(n.approverId())))
+                            .filter(candidate -> staffHrRouting != null && staffHrRouting.canReviewEmployee(candidate, beneficiaryId,
+                                    HR_LINE.equals(node.lineCode()) ? "staff.hr.review" : APPROVE_PERMISSION));
+                }
                 if (superior.isPresent() && !superior.get().equals(d.initiatedBy()) && !superior.get().equals(beneficiaryId)) {
                     supervisorReviewRepository.updateChainNode(
                             node.withApprover(superior.get(), node.escalationCount() + 1).withForward(null, null));
@@ -882,6 +921,12 @@ public class SupervisorReviewService {
                     if (target.equals(pending.initiatedBy())
                             || schedule.map(s -> target.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_FORWARD_TARGET_FORBIDDEN", "不得转发给申请人本人或直接受益人");
+                    }
+                    if (ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(pending.approvalLevel())
+                            && (staffHrRouting == null || !staffHrRouting.canReviewEmployee(target,
+                                    schedule.map(SupervisorReviewRepository.ReviewSchedule::beneficiaryId).orElse(null),
+                                    HR_LINE.equals(node.lineCode()) ? "staff.hr.review" : APPROVE_PERMISSION))) {
+                        throw ApiException.forbidden("HR_APPROVER_SCOPE_INVALID", "被转交人须具备对应审批角色及员工组织、商户和项目范围");
                     }
                     if (ApprovalChainNode.KIND_ROLE.equals(node.approverKind())
                             && node.approverId() != null && !node.approverId().isBlank()

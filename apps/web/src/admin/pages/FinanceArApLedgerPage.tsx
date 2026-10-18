@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
@@ -163,7 +163,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         { label: "总额", value: `¥${centToYuan(row.amountCent)}` },
         { label: "已收/已付", value: `¥${centToYuan(row.paidAmountCent)}` },
         { label: "未收/未付", value: `¥${centToYuan(row.unpaidAmountCent)}` },
-        { label: "到期日", value: cnDate(row.dueDate) },
+        { label: "到期日", value: !row.dueDate && row.sourceType === "dealer_order" ? "待合同约定事件确定" : cnDate(row.dueDate) },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "单据号", value: row.id },
       ],
@@ -222,7 +222,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
                 <td>{voucherNo(row)}</td>
                 <td>{formatBusinessStatus(row.direction ?? "receivable")}</td>
                 <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.unpaidAmountCent)} / {centToYuan(row.amountCent)}</td>
-                <td>{row.dueDate ?? "—"}</td>
+                <td>{row.dueDate ?? (row.sourceType === "dealer_order" ? "待合同约定事件确定" : "—")}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看台账单据详情" onClick={(event) => { event.stopPropagation(); openLedgerDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>

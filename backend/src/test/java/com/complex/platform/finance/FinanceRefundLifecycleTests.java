@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -322,6 +322,44 @@ class FinanceRefundLifecycleTests {
                         businessType, "same".equals(businessId) ? refund.id() : businessId, "proof", stored.objectKey(),
                         "/upload", status, null, now, now, merchant)));
         service.refundEvidenceValidator = new EvidenceAttachmentValidator(evidenceRepository, storage);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"ticket_payment_rejection", "channel_ticket_rejection"})
+    void rejectedTicketMoneyRequiresRealExecutionAndDifferentVerifier(String sourceType) {
+        when(repository.listMerchantOperatingProjectIds("merchant")).thenReturn(List.of("project"));
+        String id = service.recordRejectedTicketPaymentRefund(sourceType, "rejected-money", 3000,
+                "wechat", "original-payment", "merchant", null, "全园故障拒收原路待退");
+        FinanceRefundRecord refund = refunds.get(id);
+        assertThat(refund.status()).isEqualTo("requested");
+        assertThat(refund.succeededAt()).isNull();
+        assertThatThrownBy(() -> service.retryFinanceRefund(id, operation("no-auto-route")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_ROUTE_UNAVAILABLE");
+        useActualEvidenceValidator(refund, "uploaded", "finance_refund", "same", "merchant");
+        assertThat(service.recordFinanceRefundExecution(id, execution("rejected-execution")).status()).isEqualTo("processing");
+        assertThatThrownBy(() -> service.confirmFinanceRefundResult(id, confirmation("rejected-self", "finance")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_SELF_CONFIRM_FORBIDDEN");
+        actor("reviewer");
+        assertThat(service.confirmFinanceRefundResult(id, confirmation("rejected-verified", "finance")).status()).isEqualTo("success");
+        assertThat(refunds.get(id).succeededAt()).isNotNull();
+        assertThat(service.recordRejectedTicketPaymentRefund(sourceType, "rejected-money", 3000,
+                "wechat", "original-payment", "merchant", null, "重复回调")).isEqualTo(id);
+        assertThat(refunds.get(id).status()).isEqualTo("success");
+        verifyNoInteractions(gateway);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"ticket_payment_rejection", "channel_ticket_rejection"})
+    void rejectedTicketMoneyWithUnknownProjectCannotPayOut(String sourceType) {
+        String id = service.recordRejectedTicketPaymentRefund(sourceType, "unknown-project", 3000,
+                "wechat", "original-payment", null, null, "原归属待核实");
+        assertThat(refunds.get(id).projectId()).isNull();
+        assertThatThrownBy(() -> service.recordFinanceRefundExecution(id, execution("unknown-execute")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_PROJECT_UNRESOLVED");
+        assertThatThrownBy(() -> service.confirmFinanceRefundResult(id, confirmation("unknown-confirm", "finance")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_PROJECT_UNRESOLVED");
+        assertThat(refunds.get(id).status()).isEqualTo("requested");
+        verifyNoInteractions(gateway);
     }
 
     @Test

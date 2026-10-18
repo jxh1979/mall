@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 // 客人端响应类型（对齐后端 customer 域 record，camelCase 化后口径）
 
 export type TicketProduct = {
@@ -82,6 +83,8 @@ export type TicketOrder = {
   updatedAt: string;
   // AUD-076 单店票挂酒吧：订单快照的酒吧 id（null=通票）。
   barId?: string | null;
+  // 售票时确认的综合体范围，缺失时不能用限定综合体的储值卡。
+  projectId?: string | null;
 };
 
 export type TicketCredential = {

@@ -30,7 +30,33 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 // M087-A-01 / A-03（PGM-1.7.1 组织层级「直接上级」与平行审批线「最低起点层级」）：维护入口规则。
+// 文件版本：V0.01
 class OrgHierarchyServiceTests {
+
+    @Test
+    void departmentHrConfigurationRequiresActiveRoleAndAuthorizedScope() {
+        var access = Mockito.mock(AccessRepository.class);
+        var auth = Mockito.mock(AuthorizationService.class);
+        var actor = new com.complex.platform.access.AccessActor("manager", "manager", "staff", "project", null, "active");
+        var hr = new AccessUser("hr", "hr", "staff", "project", null, "active", Instant.EPOCH);
+        Mockito.when(auth.currentActor()).thenReturn(actor);
+        var reach = AuthorizationService.ProjectReach.ownOnly("project");
+        Mockito.when(auth.projectReach(actor, OrgHierarchyService.MANAGE_PERMISSION)).thenReturn(reach);
+        Mockito.when(access.findUserById("hr")).thenReturn(Optional.of(hr));
+        var target = new OrgHierarchyService(repository, access, auth,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), new AuditEventService(audits));
+        assertThatThrownBy(() -> target.upsertApprovalLine("department",
+                new ApprovalLineRequest("hr-1", "分配人力负责人", "部门", 1, null, "active", "hr")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("HR_APPROVER_LACKS_ROLE"));
+        Mockito.when(auth.holdsPermissionViaRole("hr", "staff.hr.review")).thenReturn(true);
+        assertThatThrownBy(() -> target.upsertApprovalLine("department",
+                new ApprovalLineRequest("hr-2", "分配人力负责人", "部门", 1, null, "active", "hr")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+        Mockito.when(auth.canReachUser(reach, hr)).thenReturn(true);
+        assertThat(target.upsertApprovalLine("department",
+                new ApprovalLineRequest("hr-3", "分配人力负责人", "部门", 1, null, "active", "hr")).hrFinalApproverId()).isEqualTo("hr");
+    }
+
 
     private final HierarchyRepository repository = new HierarchyRepository();
     private final InMemoryAuditEventRepository audits = new InMemoryAuditEventRepository();
@@ -46,7 +72,14 @@ class OrgHierarchyServiceTests {
                     ? Optional.of(new AccessUser(id, id, "staff", "org_1", null, "active", Instant.parse("2026-06-14T00:00:00Z")))
                     : Optional.empty();
         });
-        service = new OrgHierarchyService(repository, accessRepository, new AuthorizationService(accessRepository),
+        var auth = Mockito.mock(AuthorizationService.class);
+        var actor = new com.complex.platform.access.AccessActor("manager", "manager", "staff", "org_1", null, "active");
+        var reach = AuthorizationService.ProjectReach.ownOnly("org_1");
+        Mockito.when(auth.currentActor()).thenReturn(actor);
+        Mockito.when(auth.projectReach(actor, OrgHierarchyService.MANAGE_PERMISSION)).thenReturn(reach);
+        Mockito.when(auth.canReachUser(ArgumentMatchers.eq(reach), ArgumentMatchers.any(AccessUser.class)))
+                .thenAnswer(invocation -> "org_1".equals(((AccessUser) invocation.getArgument(1)).organizationId()));
+        service = new OrgHierarchyService(repository, accessRepository, auth,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), new AuditEventService(audits));
         TestSecurityActors.asSupervisorLevel(3);
     }
@@ -92,7 +125,19 @@ class OrgHierarchyServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("USER_NOT_FOUND"));
         assertThatThrownBy(() -> service.setDirectSuperior("usr_a", new OrgSuperiorRequest("h-line", null, "usr_b", "no_such_line")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_LINE_NOT_CONFIGURED"));
-        assertThat(audits.events).extracting(AuditEvent::eventName).contains("access.approval_line.saved");
+        assertThat(audits.events).extracting(AuditEvent::eventName).contains(
+                "access.approval_line.saved", "access.approval_line.listed", "access.approval_line.save_failed");
+    }
+
+    @Test
+    void approvalLineReadFailureIsAuditedAndPreservesOriginalFailure() {
+        var failingRepository = Mockito.mock(SupervisorReviewRepository.class);
+        var failure = new IllegalStateException("storage unavailable");
+        Mockito.when(failingRepository.listApprovalLines()).thenThrow(failure);
+        var target = new OrgHierarchyService(failingRepository, Mockito.mock(AccessRepository.class),
+                Mockito.mock(AuthorizationService.class), Mockito.mock(IdempotencyService.class), new AuditEventService(audits));
+        assertThatThrownBy(target::listApprovalLines).isSameAs(failure);
+        assertThat(audits.events).extracting(AuditEvent::eventName).contains("access.approval_line.list_failed");
     }
 
     static final class HierarchyRepository implements SupervisorReviewRepository {

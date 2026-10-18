@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
 import com.complex.platform.amusement.AmusementService;
@@ -66,6 +68,9 @@ public class TicketVerificationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     CompensationFulfillmentPort compensationFulfillmentPort;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    ParkWideFaultSalesGate parkWideFaultSalesGate;
+
     // CG-05 核销记录状态闭集（ENUM「核销记录状态」：成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常）。
     // 落记录的非成功结果按 result_reason 归类：规则不允许 → rejected；设备 / 网络 / 凭证技术原因 → failed。
     // 「异常」（anomaly）的进入条件待 HTML 补句后另开 PR：本类不写 anomaly。manual_overridden 历史保留、不再写入。
@@ -78,7 +83,7 @@ public class TicketVerificationService {
             "ENTITLEMENT_NOT_ACTIVE", "ENTITLEMENT_NOT_YET_VALID", "ENTITLEMENT_EXPIRED", "ENTITLEMENT_USED_UP", "ENTITLEMENT_USED",
             "TICKET_INSTANCE_REFUND_IN_PROGRESS", "TICKET_TRANSFER_PENDING", "MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
             "ENTITLEMENT_PROVIDER_MISMATCH", "ENTITLEMENT_NOT_AMUSEMENT", "ENTITLEMENT_NOT_FOR_PROJECT",
-            "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH");
+            "PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH");
     /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed。 */
     static final Set<String> TECHNICAL_FAILURE_CODES = Set.of(
             "CREDENTIAL_NOT_FOUND", "CREDENTIAL_EXPIRED", "ENTITLEMENT_NOT_FOUND", "DEVICE_NOT_REGISTERED", "DEVICE_NOT_MANAGED",
@@ -554,6 +559,18 @@ public class TicketVerificationService {
         // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
         // 同场次内不同人可不同时间分别入场，但不能跨场次/日期。单人票/无父票不约束。
         enforceMultiPersonSameSession(entitlement, now);
+        if (isAmusementEntitlement(entitlement) && parkWideFaultSalesGate != null) {
+            String project = entitlement.orderId() == null ? null : repository.findTicketOrderById(entitlement.orderId())
+                    .map(TicketOrderRecord::projectId).orElse(null);
+            if (project == null && entitlement.merchantId() != null) {
+                List<String> projects = repository.listMerchantProjectIds(entitlement.merchantId());
+                if (projects.size() == 1) project = projects.getFirst();
+            }
+            if (project == null && authorizationService != null)
+                project = authorizationService.currentProjectScopeQuietly().orElse(null);
+            if (parkWideFaultSalesGate.salesSuspended(project))
+                throw ApiException.conflict("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "全园故障期间暂停游乐权益核销，正常酒吧权益仍可使用");
+        }
         // 阶段1（2026-07-05 用户拍板）游乐核销走正路：检出游乐类权益（entitlement_type 以 "amusement" 开头，参考
         // 赠饮 gift_drink 的分流范式）→ 分流进游乐正路（定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，
         // 并在同事务内消费本权益）。成功即在本方法内落一条带交叉引用的 ticket_verifications success 记录并短路返回，

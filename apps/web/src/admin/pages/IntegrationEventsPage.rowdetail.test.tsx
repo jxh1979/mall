@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -43,6 +44,27 @@ function renderPage(extra: Partial<AdminPageProps> = {}) {
 }
 
 describe("IntegrationEventsPage 行明细抽屉", () => {
+  it("停售拒收回流显示原路待退编号并能前往财务核实", async () => {
+    const api = makeApi();
+    vi.mocked(api.get).mockImplementation(async (url) => url.includes("order-syncs")
+      ? [{ id: "blocked-sync", status: "failed", providerPayload: { refundId: "refund-blocked", rejectionCode: "PARK_WIDE_FAULT_SALES_SUSPENDED" } }] : []);
+    const navigateTo = vi.fn();
+    renderPage({ api, navigateTo });
+    fireEvent.click(await screen.findByTestId("integration-event-row-blocked-sync"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("订单未受理且不出票");
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("refund-blocked");
+    fireEvent.click(screen.getByRole("button", { name: "前往财务台账查看退款实际状态" }));
+    expect(navigateTo).toHaveBeenCalledWith("ADM-FIN-001");
+  });
+  it("零金额停售拒收只显示拒收结果，不造退款待办", async () => {
+    const api = makeApi();
+    vi.mocked(api.get).mockImplementation(async (url) => url.includes("order-syncs")
+      ? [{ id: "zero-blocked", status: "failed", providerPayload: { rejectionCode: "PARK_WIDE_FAULT_SALES_SUSPENDED" } }] : []);
+    renderPage({ api });
+    fireEvent.click(await screen.findByTestId("integration-event-row-zero-blocked"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("订单未受理且不出票");
+    expect(screen.queryByRole("button", { name: "前往财务台账查看退款实际状态" })).toBeNull();
+  });
   afterEach(() => {
     window.history.replaceState({}, "", "/admin/integrations/events");
   });

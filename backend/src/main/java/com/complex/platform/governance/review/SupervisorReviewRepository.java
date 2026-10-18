@@ -1,5 +1,7 @@
 package com.complex.platform.governance.review;
 
+// 文件版本：V0.01
+
 import com.complex.platform.governance.chain.ApprovalChainNode;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -100,7 +102,15 @@ public interface SupervisorReviewRepository {
     // ── M087 审批链引擎（PGM-1.7.1 / PGM-1.10.1）：组织层级、平行线设置、复核单节点 ──
 
     /** M087-A-03：平行审批线设置——该线最低起点层级（level_rank）与起点人（approval_lines）。 */
-    record ApprovalLine(String lineCode, String lineName, int minStartRank, String entryUserId, String status) {
+    record ApprovalLine(String lineCode, String lineName, int minStartRank, String entryUserId, String status, String hrFinalApproverId) {
+        public ApprovalLine(String lineCode, String lineName, int minStartRank, String entryUserId, String status) {
+            this(lineCode, lineName, minStartRank, entryUserId, status, null);
+        }
+    }
+
+    /** 员工所属部门的 HR 负责人配置；未配置时不产生审批节点。 */
+    default Optional<String> findDepartmentHrApprover(String userId) {
+        return Optional.empty();
     }
 
     /** M087-A-01：直接上级（org_hierarchy）；未维护为空。 */
@@ -110,6 +120,12 @@ public interface SupervisorReviewRepository {
 
     default Optional<ApprovalLine> findApprovalLine(String lineCode) {
         return Optional.empty();
+    }
+
+    /** 审批线的全部绑定员工，用于核对整条线的影响范围，不受页面条数限制。 */
+    default List<String> findApprovalLineUserIds(String lineCode) {
+        return listOrgHierarchy(Integer.MAX_VALUE).stream().filter(row -> lineCode.equals(row.lineCode()))
+                .map(OrgSuperior::userId).toList();
     }
 
     /** M087-A-02：复核单生成时一次性写入全部节点。 */

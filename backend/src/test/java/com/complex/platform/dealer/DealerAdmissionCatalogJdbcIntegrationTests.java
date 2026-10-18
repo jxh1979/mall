@@ -1,5 +1,7 @@
 package com.complex.platform.dealer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -50,6 +52,7 @@ class DealerAdmissionCatalogJdbcIntegrationTests {
 
     @Autowired private DealerService service;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private com.complex.platform.evidence.EvidenceEventService admissionFiles;
     @Autowired private AccessRepository access;
     @Autowired private PlatformTransactionManager transactionManager;
 
@@ -82,9 +85,102 @@ class DealerAdmissionCatalogJdbcIntegrationTests {
         actAs(editor);
     }
 
+    @Test
+    void admissionFilesCannotBeReadUploadedOrReboundAcrossProjects() {
+        DealerRecord dealer = service.createDealer(new DealerCreateRequest(key(), "B项目经销商", "SCOPE-" + suffix, "法人", "联系人", "13900000000"));
+        jdbc.update("UPDATE dealers SET project_id = 'project_b' WHERE id = ?", dealer.id());
+        var documents = DealerTestDocuments.documents(admissionFiles, dealer.id(), key());
+        String attachment = documents.bankAttachmentIds().getFirst();
+        DealerRecord ownDealer = service.createDealer(new DealerCreateRequest(key(), "A项目经销商", "OWN-" + suffix, "法人", "联系人", "13900000000"));
+        jdbc.update("UPDATE dealers SET project_id = 'project_a' WHERE id = ?", ownDealer.id());
+        String pending = admissionFiles.createAttachmentUploadIntent(new com.complex.platform.evidence.dto.EvidenceAttachmentUploadIntentRequest(
+                key(), "bank.png", "image/png", 1L, "dealer_admission", ownDealer.id())).id();
+        String scopedUser = "usr_evidence_a_" + suffix;
+        String role = "role_evidence_a_" + suffix;
+        jdbc.update("INSERT INTO roles(id, role_name, data_scope, status, created_at) VALUES (?, ?, 'project', 'active', now())", role, role);
+        jdbc.update("INSERT INTO role_permissions(role_id, permission_code) SELECT ?, permission_code FROM permissions WHERE permission_code LIKE 'dealer.%' OR permission_code LIKE 'evidence.%'", role);
+        access.createUser(new AccessUser(scopedUser, scopedUser, "staff", "project_a", null, "active", Instant.now()));
+        access.assignUserRole(scopedUser, role);
+        SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                new AccessActor(scopedUser, scopedUser, "staff", "project_a", null, "active"), null, List.of()));
+        var ownDocuments = DealerTestDocuments.documents(admissionFiles, ownDealer.id(), key());
+        assertThat(admissionFiles.resolveAttachmentFile(ownDocuments.bankAttachmentIds().getFirst())).exists();
+        assertThat(admissionFiles.getTimeline("dealer_admission", ownDealer.id())).isNotEmpty();
+        assertThat(admissionFiles.createEvidenceReview(new com.complex.platform.evidence.dto.EvidenceReviewRequest(
+                key(), "核查", ownDocuments.bankAttachmentIds(), "dealer_admission", ownDealer.id(), "approved", "已核验")).businessId()).isEqualTo(ownDealer.id());
+        org.junit.jupiter.api.Assertions.assertAll(
+                () -> assertThatThrownBy(() -> admissionFiles.getTimeline("dealer_admission", dealer.id())).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN")),
+                () -> assertThatThrownBy(() -> admissionFiles.resolveAttachmentFile(attachment)).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN")),
+                () -> assertThatThrownBy(() -> DealerTestDocuments.documents(admissionFiles, dealer.id(), key())).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN")),
+                () -> assertThatThrownBy(() -> admissionFiles.bindAttachment(pending,
+                        new com.complex.platform.evidence.dto.EvidenceAttachmentBindRequest(key(), " dealer_admission ", dealer.id(), "bank"))).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN")),
+                () -> assertThatThrownBy(() -> admissionFiles.completeAttachment(attachment,
+                        new com.complex.platform.evidence.dto.EvidenceAttachmentCompleteRequest(key(), "unused", "sha256:test", 1L))).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN")),
+                () -> assertThatThrownBy(() -> admissionFiles.createEvidenceReview(new com.complex.platform.evidence.dto.EvidenceReviewRequest(
+                        key(), "核查", documents.bankAttachmentIds(), "dealer_admission", dealer.id(), "approved", "不可跨项目"))).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN")));
+        actAs(editor);
+        assertThat(admissionFiles.resolveAttachmentFile(attachment)).exists();
+        assertThat(admissionFiles.getTimeline("dealer_admission", dealer.id())).isNotEmpty();
+    }
+
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void admissionSubmissionReplayDoesNotRevalidateLaterStateOrDocuments() {
+        DealerRecord dealer = service.createDealer(new DealerCreateRequest(key(), "重放准入", "USCC-" + suffix, "法人", "联系人", "13900000000"));
+        var request = DealerTestDocuments.documents(admissionFiles, dealer.id(), key());
+        DealerRecord submitted = service.submitDealer(dealer.id(), request);
+        actAs(approver);
+        service.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
+        jdbc.update("UPDATE evidence_attachments SET business_id = 'changed' WHERE id = ?", request.companyAttachmentIds().get(0));
+        actAs(editor);
+        assertThat(service.submitDealer(dealer.id(), request)).isEqualTo(submitted);
+        assertThat(service.getDealer(dealer.id()).status()).isEqualTo("approved");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name = 'dealer.submitted' AND business_id = ?", Integer.class, dealer.id())).isEqualTo(1);
+    }
+
+    @Test
+    void admissionApplicantCannotReviewOwnSubmission() {
+        DealerRecord dealer = service.createDealer(new DealerCreateRequest(key(), "自审测试", "USCC-" + suffix, "法人", "联系人", "13900000000"));
+        DealerTestDocuments.submit(service, admissionFiles, dealer.id(), key());
+        assertThatThrownBy(() -> service.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "同人")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_SOD_SAME_PERSON"));
+    }
+
+    @Test
+    void admissionApprovalNeedsFourActualDocumentsNotJustCheckboxes() {
+        DealerRecord dealer = service.createDealer(new DealerCreateRequest(key(), "缺资料测试", "USCC-" + suffix, "法人", "联系人", "13900000000"));
+        jdbc.update("UPDATE dealers SET status = 'under_review' WHERE id = ?", dealer.id());
+        actAs(approver);
+        assertThatThrownBy(() -> service.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "勾选")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_ADMISSION_EVIDENCE_REQUIRED"));
+    }
+
+    @Test
+    void admissionRejectsCrossDealerDocumentsAndSubmitterReview() {
+        DealerRecord first = service.createDealer(new DealerCreateRequest(key(), "甲经销", "USCC-A-" + suffix, "法人", "联系人", "13900000000"));
+        DealerRecord second = service.createDealer(new DealerCreateRequest(key(), "乙经销", "USCC-B-" + suffix, "法人", "联系人", "13900000000"));
+        var documents = DealerTestDocuments.documents(admissionFiles, first.id(), key());
+        assertThatThrownBy(() -> service.submitDealer(second.id(), documents))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_ADMISSION_EVIDENCE_BINDING_MISMATCH"));
+        actAs(approver);
+        service.submitDealer(first.id(), documents);
+        assertThatThrownBy(() -> service.reviewDealer(first.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "提交人自审")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_SOD_SAME_PERSON"));
+    }
+
+    @Test
+    void submittedEvidenceMustStillBeValidAtApproval() {
+        DealerRecord dealer = service.createDealer(new DealerCreateRequest(key(), "附件复核", "USCC-" + suffix, "法人", "联系人", "13900000000"));
+        DealerTestDocuments.submit(service, admissionFiles, dealer.id(), key());
+        var admission = service.getAdmission(dealer.id());
+        jdbc.update("UPDATE evidence_attachments SET business_id = 'other-dealer' WHERE id = ?", admission.companyAttachmentIds().get(0));
+        actAs(approver);
+        assertThatThrownBy(() -> service.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "核验")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_ADMISSION_EVIDENCE_BINDING_MISMATCH"));
     }
 
     /** ENUM:170 五态闭集 + BSM:1217「企业资料、合同、开票和银行资料审核通过后，才可启用独立经销商 Web 门户」+ 停用后禁止新询价。 */
@@ -93,7 +189,7 @@ class DealerAdmissionCatalogJdbcIntegrationTests {
         DealerRecord created = service.createDealer(new DealerCreateRequest(key(), "测试经销商" + suffix, "91310000MA1DLR" + suffix.substring(0, 4), "张三", "李四", "13800000000"));
         assertThat(created.status()).isEqualTo("pending_submission");
         assertThat(created.portalEnabled()).isFalse();
-        DealerRecord submitted = service.submitDealer(created.id(), key());
+        DealerRecord submitted = DealerTestDocuments.submit(service, admissionFiles, created.id(), key());
         assertThat(submitted.status()).isEqualTo("under_review");
 
         actAs(approver);
@@ -264,7 +360,7 @@ class DealerAdmissionCatalogJdbcIntegrationTests {
 
     private DealerRecord approvedDealer() {
         DealerRecord created = service.createDealer(new DealerCreateRequest(key(), "经销商" + suffix + System.nanoTime(), "9131" + System.nanoTime(), "法人", "联系人", "13900000000"));
-        service.submitDealer(created.id(), key());
+        DealerTestDocuments.submit(service, admissionFiles, created.id(), key());
         actAs(approver);
         service.reviewDealer(created.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
         actAs(editor);

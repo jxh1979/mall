@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,6 +65,7 @@ class DealerPortalJdbcIntegrationTests {
     @Autowired private TerminalSwitchGuard terminalSwitchGuard;
     @Autowired private AuthService authService;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private com.complex.platform.evidence.EvidenceEventService admissionFiles;
     @Autowired private AccessRepository access;
 
     private String suffix;
@@ -110,6 +111,42 @@ class DealerPortalJdbcIntegrationTests {
         RequestContextHolder.resetRequestAttributes();
     }
 
+    @Test
+    void precreatedPortalCredentialsRemainDisabledBeforeAdmission() {
+        actAs(staff);
+        DealerRecord dealer = dealerService.createDealer(new DealerCreateRequest(key(), "未审账号", "USCC-" + suffix, "法人", "联系人", "13900000000"));
+        DealerPortalAccountRecord account = portalAccounts.createPortalAccount(dealer.id(), new DealerPortalAccountRequest(key(), "dealer_disabled_" + suffix, "Portal#2026", "联系人"));
+        assertThat(account.status()).isEqualTo("disabled");
+        assertThat(jdbc.queryForObject("SELECT status FROM access_users WHERE id = ?", String.class, account.userId())).isEqualTo("disabled");
+        var loginRequest = new AuthService.LoginRequest(account.username(), "Portal#2026", null, null, "dealer_portal");
+        assertThatThrownBy(() -> authService.login(loginRequest)).isInstanceOf(ApiException.class);
+        actAsDealer(account.userId(), dealer.projectId());
+        assertThatThrownBy(() -> portal.me()).isInstanceOf(ApiException.class);
+        actAs(staff);
+        DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
+        actAs(reviewer);
+        dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "核验四项资料"));
+        assertThat(authService.login(loginRequest).accessToken()).isNotBlank();
+        assertThat(jdbc.queryForObject("SELECT status FROM access_users WHERE id = ?", String.class, account.userId())).isEqualTo("active");
+        actAsDealer(account.userId(), dealer.projectId());
+        assertThat(portal.me().id()).isEqualTo(dealer.id());
+    }
+
+    @Test
+    void admissionApprovalDoesNotReactivateRevokedPortalAccounts() {
+        actAs(staff);
+        DealerRecord dealer = dealerService.createDealer(new DealerCreateRequest(key(), "旧账号", "USCC-" + suffix, "法人", "联系人", "13900000000"));
+        DealerPortalAccountRecord account = portalAccounts.createPortalAccount(dealer.id(), new DealerPortalAccountRequest(key(), "dealer_revoked_" + suffix, "Portal#2026", "联系人"));
+        jdbc.update("UPDATE dealer_portal_accounts SET status = 'revoked', revoked_at = now() WHERE user_id = ?", account.userId());
+        DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
+        actAs(reviewer);
+        dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "四项通过"));
+        assertThat(jdbc.queryForObject("SELECT status FROM dealer_portal_accounts WHERE user_id = ?", String.class, account.userId())).isEqualTo("revoked");
+        assertThat(jdbc.queryForObject("SELECT status FROM access_users WHERE id = ?", String.class, account.userId())).isEqualTo("disabled");
+        assertThatThrownBy(() -> authService.login(new AuthService.LoginRequest(account.username(), "Portal#2026", null, null, "dealer_portal")))
+                .isInstanceOf(ApiException.class);
+    }
+
     /** 隔离账号 / 权限 / 终端：内部账号进不了门户、门户账号进不了内部后台、非 dealer_portal 终端拒绝并留痕、总开关关闭兜底拒绝并留痕。 */
     @Test
     void portalIsIsolatedByAccountPermissionAndTerminalWithRejectionTrail() {
@@ -121,6 +158,11 @@ class DealerPortalJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM user_roles WHERE user_id = ? AND role_id = 'role_dealer_portal'", Integer.class, account.userId())).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role_dealer_portal' AND permission_code LIKE 'dealer.%'", Integer.class))
                 .as("门户角色不含任何内部 dealer.* 权限").isZero();
+
+        DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
+        actAs(reviewer);
+        dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
+        actAs(staff);
 
         // 内部员工账号（即使持全部 dealer.* 权限）不得进入门户
         assertThatThrownBy(() -> portal.me()).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_PORTAL_ACCOUNT_REQUIRED"));
@@ -152,8 +194,6 @@ class DealerPortalJdbcIntegrationTests {
 
         // 已停用经销商不得再开门户账号
         actAs(reviewer);
-        dealerService.submitDealer(dealer.id(), key());
-        dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
         dealerService.deactivateDealer(dealer.id(), new DealerDeactivateRequest(key(), "合作终止"));
         assertThatThrownBy(() -> portalAccounts.createPortalAccount(dealer.id(), new DealerPortalAccountRequest(key(), "dealer2_" + suffix, "Portal#2026", "联系人")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_DEACTIVATED"));
@@ -168,20 +208,21 @@ class DealerPortalJdbcIntegrationTests {
         DealerRecord other = dealerService.createDealer(new DealerCreateRequest(key(), "别家经销商" + suffix, "9132" + System.nanoTime(), "法人", "联系人", "13900000002"));
         DealerPortalAccountRecord otherAccount = portalAccounts.createPortalAccount(other.id(), new DealerPortalAccountRequest(key(), "dealer_o_" + suffix, "Portal#2026", "联系人"));
 
-        // 注册资料提交（门户账号自助）：待提交 → 审核中；审核通过启用门户前，其余门户能力不可用
+        // 未四审账号不能登录，资料由内部销售提交，运营审核后激活。
         actAsDealer(account.userId(), dealer.projectId());
-        DealerRecord submitted = portal.submitProfile(new DealerPortalProfileRequest(key(), "新法人", "新联系人", "13911112222"));
+        assertThatThrownBy(() -> portal.submitProfile(new DealerPortalProfileRequest(key(), "新法人", "新联系人", "13911112222")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_PORTAL_NOT_ENABLED"));
+        actAs(staff);
+        DealerRecord submitted = DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
         assertThat(submitted.status()).isEqualTo("under_review");
-        assertThat(submitted.contactName()).isEqualTo("新联系人");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name = 'dealer.submitted' AND business_id = ?", Integer.class, dealer.id())).isEqualTo(1);
-        assertThatThrownBy(() -> portal.listContracts()).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_PORTAL_NOT_ENABLED"));
 
         actAs(reviewer);
         dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
         actAs(staff);
         DealerContractRecord contract = dealerService.createContract(dealer.id(), new DealerContractRequest(key(), "DC-DP-" + suffix, salesEntity, centralWarehouse,
                 LocalDate.now().minusDays(1), LocalDate.now().plusYears(1)));
-        orders.updateContractTerms(contract.id(), new DealerContractTermsRequest(key(), false, null, null, 3, 30, 1_000L, 50_000L, "dealer"));
+        orders.updateContractTerms(contract.id(), new DealerContractTermsRequest(key(), false, null, null, 3, 30, 1_000L, 50_000L, "dealer", null, null, null, "payment_notified", null, "shipped", null));
         DealerPriceCatalogRecord v1 = dealerService.createCatalogDraft(contract.id(), new DealerCatalogDraftRequest(key(), "目录",
                 List.of(new DealerCatalogLineRequest(itemA, "箱", 1_000L, 1300, null))));
         dealerService.submitCatalog(v1.id(), key());
@@ -237,8 +278,9 @@ class DealerPortalJdbcIntegrationTests {
         // 数据隔离：别家门户账号看不到本企业订单（404 不泄露存在性）
         actAsDealer(otherAccount.userId(), other.projectId());
         assertThatThrownBy(() -> portal.getOrder(draft.id())).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_PORTAL_NOT_ENABLED"));
+        actAs(staff);
+        DealerTestDocuments.submit(dealerService, admissionFiles, other.id(), key());
         actAs(reviewer);
-        dealerService.submitDealer(other.id(), key());
         dealerService.reviewDealer(other.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
         actAsDealer(otherAccount.userId(), other.projectId());
         assertThatThrownBy(() -> portal.getOrder(draft.id())).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_ORDER_NOT_FOUND"));
@@ -251,18 +293,19 @@ class DealerPortalJdbcIntegrationTests {
         actAs(staff);
         DealerRecord dealer = dealerService.createDealer(new DealerCreateRequest(key(), "门户经销商" + suffix, "9131" + System.nanoTime(), "法人", "联系人", "13900000000"));
         DealerPortalAccountRecord account = portalAccounts.createPortalAccount(dealer.id(), new DealerPortalAccountRequest(key(), "dealer_" + suffix, "Portal#2026", "企业联系人"));
-        dealerService.submitDealer(dealer.id(), key());
+        DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
         actAs(reviewer);
         dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
 
         // 门户账号登录（test profile 为内存会话，与生产 auth_sessions 同一撤销接口）
-        authService.provisionUser(account.userId(), "dealer_" + suffix, "Portal#2026", "dealer", dealer.projectId(), null, "active");
         AuthService.LoginResponse login = authService.login(new AuthService.LoginRequest("dealer_" + suffix, "Portal#2026", null, null, "dealer_portal"));
         assertThat(authService.authenticateToken(login.accessToken())).isPresent();
 
         actAs(reviewer);
         dealerService.deactivateDealer(dealer.id(), new DealerDeactivateRequest(key(), "合作终止"));
         assertThat(authService.authenticateToken(login.accessToken())).as("停用生效时立即终止全部门户会话").isEmpty();
+        assertThatThrownBy(() -> authService.login(new AuthService.LoginRequest(account.username(), "Portal#2026", null, null, "dealer_portal")))
+                .isInstanceOf(ApiException.class);
         assertThat(jdbc.queryForObject("SELECT status FROM access_users WHERE id = ?", String.class, account.userId())).isEqualTo("disabled");
         assertThat(jdbc.queryForObject("SELECT status FROM dealer_portal_accounts WHERE user_id = ?", String.class, account.userId())).isEqualTo("revoked");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name = 'dealer.portal.revoked' AND business_id = ?", Integer.class, dealer.id())).isEqualTo(1);

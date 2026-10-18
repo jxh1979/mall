@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1414,13 +1416,16 @@ class TicketingServiceTests {
         TicketOrderRecord order1 = service.createTicketOrder(new TicketOrderRequest(
                 "cancel-o1", "create", List.of(), ticketType.id(), null, 1,
                 LocalDate.parse("2026-06-20"), "web", "13800138000", "c1"));
+        TicketPaymentIntentRecord intent1 = service.createTicketOrderPayIntent(order1.id(), new PaymentIntentRequest(
+                "cancel-o1-pay", "pay", List.of(), "ticket_order", order1.id(), order1.amountCent(), "CNY", "aggregate_pay"));
         TicketOrderRecord cancelled = service.cancelTicketOrder(order1.id(), new StatusChangeRequest(
                 "cancel-o1-do", "cancel", "user cancel", List.of()));
         assertThat(cancelled.status()).isEqualTo("cancelled");
         assertThat(service.cancelTicketOrder(order1.id(), new StatusChangeRequest(
                 "cancel-o1-do2", "cancel", "again", List.of())).status()).isEqualTo("cancelled");
-        TicketPaymentIntentRecord intent1 = service.createTicketOrderPayIntent(order1.id(), new PaymentIntentRequest(
-                "cancel-o1-pay", "pay", List.of(), "ticket_order", order1.id(), order1.amountCent(), "CNY", "aggregate_pay"));
+        assertThatThrownBy(() -> service.createTicketOrderPayIntent(order1.id(), new PaymentIntentRequest(
+                "cancel-o1-new-pay", "pay", List.of(), "ticket_order", order1.id(), order1.amountCent(), "CNY", "aggregate_pay")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("ORDER_CANCELLED"));
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirmTicketOrderPayment(order1.id(),
                         new ConfirmTicketOrderPaymentRequest("cancel-o1-confirm", intent1.id(), null)))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class);
@@ -3963,6 +3968,10 @@ class TicketingServiceTests {
     }
 
     private static final class InMemoryTicketingRepository implements TicketingRepository {
+        final Map<String, List<String>> ticketProjects = new LinkedHashMap<>();
+        @Override public List<String> listTicketTypeProjectIds(String ticketTypeId) {
+            return ticketProjects.getOrDefault(ticketTypeId, List.of());
+        }
         @Override public void setEntitlementTemplateArchiveReason(String id, String reason) { }
         @Override public void setTicketTypeArchiveReason(String id, String reason) { }
         @Override public void setPriceRuleArchiveReason(String id, String reason) { }
@@ -4795,6 +4804,7 @@ class TicketingServiceTests {
         //   由结算配置中心那条 combo_discount_bearer 决定谁承担——凑整多出/少收的那点钱自然走同一条路。
         catalogService.comboPriceToleranceConfigPort = toleranceStub;
         TicketTypeRecord pass = seedComboPass("v369-discount", 17800L, new java.math.BigDecimal("85"));
+        ticketingRepository.ticketProjects.put(pass.id(), List.of("project_rounding"));
         publish(pass.id(), "v369-discount-pub");
 
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(

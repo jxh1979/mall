@@ -1,5 +1,7 @@
 package com.complex.platform.auth;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.Strings.requireText;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
@@ -113,6 +115,20 @@ public class AuthService implements SessionIssuer {
         );
         usersById.put(id, user);
         usersByUsername.put(username, user);
+    }
+
+    /** 准入启停只改变凭证状态，原密码散列和账号归属保持。 */
+    public void changeUserStatus(String id, String status) {
+        if (!java.util.Set.of("active", "disabled").contains(status == null ? "" : status)) {
+            throw ApiException.badRequest("INVALID_ACCOUNT_STATUS", "账号状态须为启用或禁用");
+        }
+        usersById.compute(id, (key, current) -> {
+            if (current == null) throw ApiException.notFound("USER_NOT_FOUND", "登录凭证不存在");
+            UserRecord changed = new UserRecord(current.id(), current.username(), current.passwordHash(), current.accountType(),
+                    current.organizationId(), current.merchantId(), status, current.createdAt());
+            usersByUsername.put(changed.username(), changed);
+            return changed;
+        });
     }
 
     public LoginResponse login(LoginRequest request) {

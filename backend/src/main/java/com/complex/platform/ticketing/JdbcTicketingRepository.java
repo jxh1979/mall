@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -900,21 +900,54 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public List<String> listMerchantProjectIds(String merchantId) {
+        if (merchantId == null) return List.of();
+        return jdbcTemplate.queryForList("""
+                SELECT project_id FROM merchants WHERE id=:merchant AND project_id IS NOT NULL
+                UNION SELECT project_id FROM merchant_projects WHERE merchant_id=:merchant
+                """, Map.of("merchant", merchantId), String.class);
+    }
+
+    @Override
+    public List<String> listTicketTypeProjectIds(String ticketTypeId) {
+        return jdbcTemplate.queryForList("""
+                WITH locations AS (
+                    SELECT t.merchant_id, t.point_id
+                      FROM ticket_type_entitlements b
+                      JOIN entitlement_templates t ON t.id=b.entitlement_template_id
+                     WHERE b.ticket_type_id=:ticket
+                ), scope_merchants AS (
+                    SELECT bar_id AS merchant_id FROM ticket_types WHERE id=:ticket
+                    UNION SELECT merchant_id FROM locations
+                    UNION SELECT p.merchant_id FROM locations l JOIN amusement_projects p
+                        ON l.point_id IS NOT NULL AND p.location_point_id=l.point_id
+                    UNION SELECT p.merchant_id FROM locations l JOIN amusement_devices d
+                        ON l.point_id IS NOT NULL AND (d.location_point_id=l.point_id OR d.device_code=l.point_id)
+                        JOIN amusement_projects p ON p.id=d.project_id
+                ), candidates AS (
+                    SELECT m.project_id FROM merchants m JOIN scope_merchants s ON s.merchant_id=m.id
+                    UNION SELECT mp.project_id FROM merchant_projects mp JOIN scope_merchants s ON s.merchant_id=mp.merchant_id
+                )
+                SELECT DISTINCT p.id FROM projects p JOIN candidates c ON c.project_id=p.id ORDER BY p.id
+                """, Map.of("ticket", ticketTypeId), String.class);
+    }
+
+    @Override
     public TicketOrderRecord saveTicketOrder(TicketOrderRecord order) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_orders (
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
                     sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
                     dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at,
-                    merchant_id, paid_at, bar_id
+                    merchant_id, paid_at, bar_id, project_id
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
                     :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
                     :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at,
-                    :merchant_id, :paid_at, :bar_id
+                    :merchant_id, :paid_at, :bar_id, :project_id
                 )
-                -- merchant_id（下单受理商户）与 bar_id（酒吧归属快照）下单时定，后续 update（出票/置 paid）不覆盖。
+                -- merchant_id、bar_id 与 project_id 为下单快照，后续 update（出票/置 paid）不覆盖。
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
                     ticket_type_id = EXCLUDED.ticket_type_id,

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -899,6 +899,52 @@ public class FinanceService implements TerminationSettlementPort {
         return saved.id();
     }
 
+    /** 停售后已收款只登记原路待退，未知渠道结果仍由财务凭证双人核实。内部调用与拒单同事务。 */
+    @Transactional
+    public String recordRejectedTicketPaymentRefund(String sourceType, String sourceId, long amountCent,
+            String channel, String originalPaymentRef, String merchantId, String originalBarId, String reason) {
+        return recordRejectedTicketPaymentRefund(sourceType, sourceId, amountCent, channel,
+                originalPaymentRef, merchantId, originalBarId, null, reason);
+    }
+
+    /** originalProjectId 只能来自原订单售票快照或本次渠道票种的受信项目解析。 */
+    @Transactional
+    public String recordRejectedTicketPaymentRefund(String sourceType, String sourceId, long amountCent,
+            String channel, String originalPaymentRef, String merchantId, String originalBarId,
+            String originalProjectId, String reason) {
+        String source = requireEnum(sourceType, Set.of("ticket_payment_rejection", "channel_ticket_rejection"), "退款来源");
+        String target = requireText(sourceId, "原付款记录");
+        long amount = requirePositive(amountCent, "原收款金额");
+        String route = requireText(channel, "原收款渠道");
+        String reference = trimToNull(originalPaymentRef);
+        String project = trimToNull(originalProjectId);
+        checkMerchantOwnership(merchantId);
+        String id = "refund_rejected_" + stableToken(source, target);
+        repository.lockRefundSource(id);
+        Optional<FinanceRefundRecord> existing = repository.findRefundById(id, true);
+        if (existing.isPresent()) {
+            FinanceRefundRecord original = existing.get();
+            if (!source.equals(original.sourceType()) || !target.equals(original.targetId())
+                    || amount != original.refundAmountCent() || !route.equals(original.refundChannel())
+                    || !java.util.Objects.equals(merchantId, original.merchantId())
+                    || !java.util.Objects.equals(reference, original.originalPaymentRef())) {
+                throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "同一原付款的退款来源或金额不一致");
+            }
+            checkProjectScope(original.projectId());
+            return original.id();
+        }
+        String originalScopeMerchant = trimToNull(originalBarId) != null ? originalBarId : merchantId;
+        if (project == null && trimToNull(originalScopeMerchant) != null) {
+            List<String> projects = repository.listMerchantOperatingProjectIds(originalScopeMerchant);
+            if (projects.size() == 1) project = projects.getFirst();
+        }
+        checkProjectScope(project);
+        Instant now = Instant.now();
+        return repository.saveRefund(new FinanceRefundRecord(id, target, amount, requireText(reason, "退款原因"),
+                route, "original", "requested", now, source, merchantId, project,
+                authorizationService.currentActor().id(), reference, null, null, now, null)).id();
+    }
+
     /**
      * AUD-059 平台代收商户卡消费逐笔结算：platform_collect 模式商户卡消费时，生成一条「平台应付商户」台账（逐笔可追溯）。
      * 复用 ar_ap_items（direction=payable、counterparty=merchantId、source_type=stored_value_consume、source_id=消费流水id）；
@@ -1728,8 +1774,8 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     private void requireRefundExecutionAuthority(FinanceRefundRecord refund, String deviceId) {
-        if ("stored_value_account".equals(refund.sourceType()) && trimToNull(refund.projectId()) == null) {
-            throw ApiException.conflict("REFUND_PROJECT_UNRESOLVED", "储值待退款尚未确认唯一项目归属，不得执行或核实出款");
+        if (!"ar_ap_payment".equals(refund.sourceType()) && trimToNull(refund.projectId()) == null) {
+            throw ApiException.conflict("REFUND_PROJECT_UNRESOLVED", "待退款尚未确认唯一项目归属，不得执行或核实出款");
         }
         requireDeviceContextForOnsiteChannel(refund.refundChannel(), deviceId);
         requireManagedDeviceForFinanceAction(deviceId, "finance.refund");

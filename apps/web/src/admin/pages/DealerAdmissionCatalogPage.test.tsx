@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,8 +17,9 @@ describe("DealerAdmissionCatalogPage 经销商准入与价格目录（ADM-DLR-00
     return {
       get: vi.fn(async (url: string) => {
         if (url === "/api/v1/dealers") return dealers;
+        if (url.endsWith("/admission")) return { dealerId: "dlr_1", companyAttachmentIds: ["company-1"], contractAttachmentIds: ["contract-1"], invoiceAttachmentIds: ["invoice-1"], bankAttachmentIds: ["bank-1"], submittedBy: "other-user" };
         if (url.endsWith("/contracts")) return [{ id: "dct_1", contractNo: "DC-2026-001", salesEntityId: "be_1", centralWarehouseId: "wh_main", validFrom: "2026-01-01", validTo: "2026-12-31", status: "active" }];
-        if (url.endsWith("/portal-accounts")) return [{ userId: "usr_dlr_1", username: "dealer_north", status: "active", createdAt: "2026-10-17T00:00:00Z" }, { userId: "usr_dlr_2", username: "dealer_old", status: "revoked", createdAt: "2026-10-01T00:00:00Z", revokedAt: "2026-10-10T00:00:00Z" }];
+        if (url.endsWith("/portal-accounts")) return [{ userId: "usr_dlr_1", username: "dealer_north", status: "active", createdAt: "2026-10-17T00:00:00Z" }, { userId: "usr_dlr_disabled", username: "dealer_prebuilt", status: "disabled" }, { userId: "usr_dlr_2", username: "dealer_old", status: "revoked", createdAt: "2026-10-01T00:00:00Z", revokedAt: "2026-10-10T00:00:00Z" }];
         if (url.endsWith("/inquiries")) return [{ id: "dqi_1", itemId: "item_x", spec: "箱", quantity: 5, status: "quote_approval", quotedPriceCent: 8800, quotedBy: "usr_a", quoteValidUntil: "2026-11-01" }];
         if (url.endsWith("/price-catalogs")) return [{ id: "dpc_1", version: 1, status: "pending_approval", editedBy: "usr_a", submittedBy: "usr_a" }];
         if (url.endsWith("/external-stock")) return [
@@ -97,9 +98,48 @@ describe("DealerAdmissionCatalogPage 经销商准入与价格目录（ADM-DLR-00
     await screen.findByTestId("dealer-portal-account-table");
     expect(screen.getByTestId("portal-account-status-usr_dlr_1").textContent).toBe("有效");
     expect(screen.getByTestId("portal-account-status-usr_dlr_2").textContent).toBe("已撤权");
+    expect(screen.getByTestId("portal-account-status-usr_dlr_disabled").textContent).toBe("禁用待准入");
     fireEvent.change(screen.getByTestId("portal-username-input"), { target: { value: "dealer_new" } });
     fireEvent.change(screen.getByTestId("portal-password-input"), { target: { value: "Portal#2026" } });
     fireEvent.click(screen.getByTestId("portal-account-create"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/dealers\/.+\/portal-accounts$/), expect.objectContaining({ username: "dealer_new", password: "Portal#2026" })));
   });
+  it("四类真实上传资料绑定当前经销商，缺任一类不能送审", async () => {
+    const api = makeApi();
+    const oldGet = api.get;
+    api.get = vi.fn(async (url: string) => {
+      if (url === "/api/v1/dealers") return [{ id: "dlr_new", dealerName: "待审经销", status: "pending_submission", createdBy: "u1" }];
+      if (url.endsWith("/admission")) return null;
+      return oldGet(url);
+    }) as AdminApiClient["get"];
+    api.postForm = vi.fn(async (_url: string, form: FormData) => ({ id: `file-${form.get("attachment_role")}` })) as AdminApiClient["postForm"];
+    renderPage(api);
+    fireEvent.click(await screen.findByTestId("dealer-select-dlr_new"));
+    await screen.findByTestId("admission-upload-company");
+    fireEvent.click(screen.getByTestId("dealer-submit-dlr_new"));
+    await screen.findByText("请选中该经销商并上传企业、合同、开票、银行四类资料后提交");
+    expect(api.post).not.toHaveBeenCalled();
+    for (const role of ["company", "contract", "invoice", "bank"]) {
+      fireEvent.change(screen.getByTestId(`admission-upload-${role}`), { target: { files: [new File(["scan"], `${role}.png`, { type: "image/png" })] } });
+      await waitFor(() => expect(screen.getByTestId(`admission-upload-${role}`)).not.toBeDisabled());
+    }
+    fireEvent.click(screen.getByTestId("dealer-submit-dlr_new"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/dlr_new/submit", expect.objectContaining({
+      companyAttachmentIds: ["file-company"], contractAttachmentIds: ["file-contract"], invoiceAttachmentIds: ["file-invoice"], bankAttachmentIds: ["file-bank"],
+    })));
+    const firstUpload = vi.mocked(api.postForm!).mock.calls[0]![1];
+    expect(firstUpload.get("business_type")).toBe("dealer_admission");
+    expect(firstUpload.get("business_id")).toBe("dlr_new");
+  });
+
+  it("提交人即使有审核权限也不能在界面批准本人申请", async () => {
+    const api = makeApi(); const oldGet = api.get;
+    api.get = vi.fn(async (url: string) => url.endsWith("/admission") ? { dealerId: "dlr_1", companyAttachmentIds: ["c"], contractAttachmentIds: ["t"], invoiceAttachmentIds: ["i"], bankAttachmentIds: ["b"], submittedBy: "u1" } : oldGet(url)) as AdminApiClient["get"];
+    renderPage(api);
+    fireEvent.click(await screen.findByTestId("dealer-select-dlr_1"));
+    await waitFor(() => expect(screen.getByTestId("dealer-review-approve")).toBeDisabled());
+    expect(screen.getByTestId("dealer-review-reject")).toBeDisabled();
+    expect(screen.getByRole("link", { name: "查看企业资料 1" })).toHaveAttribute("href", "/api/v1/evidence/attachments/c/file");
+  });
+
 });

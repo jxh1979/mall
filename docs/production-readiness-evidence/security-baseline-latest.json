@@ -1,17 +1,17 @@
 {
   "status": "passed",
   "evidence_type": "formal_security_baseline_v1",
-  "verified_at": "2026-10-18T05:53:19.023039+00:00",
+  "verified_at": "2026-10-18T06:37:11Z",
   "verified_on_host": "192.168.88.160",
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 830,
-  "security_baseline_version": "V1.01",
+  "openapi_operation_count": 833,
+  "security_baseline_version": "V1.02",
   "plaintext_secret_present": false,
-  "notes": "本次租金变更次月1日生效的接口语义更新后，已在160执行 npm run verify:security-baseline 通过，核验830项正式接口及派生安全基线。此证据仅覆盖该命令的静态检查，不代表真实支付渠道联调、完整渗透测试或生产准入；原有未解决生产阻断继续保留。",
-  "version": "V0.05",
-  "source_base_commit": "af023621de09ab21453279e340eec934afb60ac0",
+  "notes": "本次部门审批配置、经销准入、票务故障及真实证据校验接口同步后，已在160执行 npm run verify:security-baseline 通过，核验833项正式接口及派生安全基线。此证据仅覆盖该命令的静态检查，不代表真实支付渠道联调、完整渗透测试或生产准入；原有未解决生产阻断继续保留。",
+  "version": "V0.06",
+  "source_base_commit": "bff432df4ec5fe9d3d329dfaba553fabd1bfd0d5",
   "source_worktree_modified": true,
-  "openapi_sha256": "a244160fba0e0fb165dec16a52bd5127bd6ff683bb953ddea26ec983f4638fc0"
+  "openapi_sha256": "dda8af70c0c1fa1af6e19434ccde2056cd5db2c337bbfd614382f6d8c3d3d261"
 }

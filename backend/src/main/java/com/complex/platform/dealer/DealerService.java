@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -19,6 +19,7 @@ import com.complex.platform.dealer.dto.DealerInquiryRequest;
 import com.complex.platform.dealer.dto.DealerQuoteDecisionRequest;
 import com.complex.platform.dealer.dto.DealerQuoteRequest;
 import com.complex.platform.dealer.dto.DealerReviewRequest;
+import com.complex.platform.dealer.dto.DealerAdmissionSubmitRequest;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -65,14 +66,16 @@ public class DealerService {
     private final IdempotencyService idempotency;
     private final AuditEventService audit;
     private final DealerPortalAccountService portalAccounts;
+    private final DealerAdmissionEvidenceValidator admissionEvidence;
 
     public DealerService(JdbcDealerRepository repository, AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit,
-            DealerPortalAccountService portalAccounts) {
+            DealerPortalAccountService portalAccounts, DealerAdmissionEvidenceValidator admissionEvidence) {
         this.repository = repository;
         this.authorization = authorization;
         this.idempotency = idempotency;
         this.audit = audit;
         this.portalAccounts = portalAccounts;
+        this.admissionEvidence = admissionEvidence;
     }
 
     // ── 经销商准入 ──
@@ -112,28 +115,43 @@ public class DealerService {
         }
     }
 
-    /** 待提交 / 已驳回 → 审核中。 */
-    @Transactional
-    public DealerRecord submitDealer(String id, String idempotencyKey) {
-        authorization.requirePermission(MANAGE);
-        return submitDealer(id, idempotencyKey, MANAGE);
+    public DealerAdmissionRecord getAdmission(String id) {
+        authorization.requirePermission(VIEW);
+        try {
+            requireDealer(id);
+            DealerAdmissionRecord submission = repository.findAdmission(id).orElse(null);
+            audit.recordSuccess("dealer.admission_viewed", VIEW, "dealer", id, null, null, Map.of("has_submission", submission != null));
+            return submission;
+        } catch (RuntimeException e) {
+            audit.recordFailure("dealer.admission_view_failed", VIEW, "dealer", id, null, null, codeOf(e));
+            throw e;
+        }
     }
 
-    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
-    DealerRecord submitDealer(String id, String idempotencyKey, String permission) {
+    /** 四类实际资料先提交，审核只引用本次提交快照。 */
+    @Transactional
+    public DealerRecord submitDealer(String id, DealerAdmissionSubmitRequest request) {
+        authorization.requirePermission(MANAGE);
         try {
-            DealerRecord dealer = requireDealer(id);
-            if (!PENDING_SUBMISSION.equals(dealer.status()) && !REJECTED.equals(dealer.status())) {
-                throw ApiException.conflict("DEALER_STATUS_INVALID", "只有待提交或已驳回的经销商可以提交审核");
-            }
-            return idempotency.execute("dealerSubmit:" + id, idempotencyKey, Map.of("id", id), () -> {
+            requireDealer(id);
+            if (request == null) throw ApiException.badRequest("VALIDATION_FAILED", "准入资料必填");
+            return idempotency.execute("dealerSubmit:" + id, request.idempotencyKey(), request, () -> {
+                DealerRecord dealer = repository.lockDealer(id).orElseThrow();
+                if (!PENDING_SUBMISSION.equals(dealer.status()) && !REJECTED.equals(dealer.status())) {
+                    throw ApiException.conflict("DEALER_STATUS_INVALID", "只有待提交或已驳回的经销商可以提交审核");
+                }
+                DealerAdmissionRecord submission = new DealerAdmissionRecord(id, request.companyAttachmentIds(), request.contractAttachmentIds(),
+                        request.invoiceAttachmentIds(), request.bankAttachmentIds(), actorId(), Instant.now());
+                admissionEvidence.requireDocuments(submission);
+                repository.saveAdmission(submission);
                 DealerRecord saved = withStatus(dealer, UNDER_REVIEW, false, false, false, false, false, null, null, null);
                 repository.saveDealer(saved);
-                audit.recordSuccess("dealer.submitted", permission, "dealer", id, null, idempotencyKey, Map.of("from", dealer.status(), "to", UNDER_REVIEW));
+                audit.recordSuccess("dealer.submitted", MANAGE, "dealer", id, null, request.idempotencyKey(),
+                        Map.of("from", dealer.status(), "to", UNDER_REVIEW, "submission", submission));
                 return saved;
             }, DealerRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.submit_failed", permission, "dealer", id, null, idempotencyKey, codeOf(e));
+            audit.recordFailure("dealer.submit_failed", MANAGE, "dealer", id, null, request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }
@@ -169,7 +187,12 @@ public class DealerService {
     public DealerRecord reviewDealer(String id, DealerReviewRequest request) {
         authorization.requirePermission(REVIEW);
         try {
-            DealerRecord dealer = requireDealer(id);
+            requireDealer(id);
+            DealerRecord dealer = repository.lockDealer(id).orElseThrow();
+            DealerAdmissionRecord submission = repository.findAdmission(id).orElse(null);
+            if (Objects.equals(actorId(), dealer.createdBy()) || (submission != null && Objects.equals(actorId(), submission.submittedBy()))) {
+                throw ApiException.forbidden("DEALER_SOD_SAME_PERSON", "准入建档人和提交人不得审核本人申请");
+            }
             if (!UNDER_REVIEW.equals(dealer.status())) {
                 throw ApiException.conflict("DEALER_STATUS_INVALID", "只有审核中的经销商可以审核");
             }
@@ -184,6 +207,9 @@ public class DealerService {
             if ("approve".equals(decision) && !(cp && ct && inv && bank)) {
                 throw ApiException.conflict("DEALER_REVIEW_INCOMPLETE", "企业资料、合同、开票和银行资料须全部审核通过后才能通过准入并启用门户");
             }
+            if ("approve".equals(decision)) {
+                admissionEvidence.requireDocuments(submission);
+            }
             if ("reject".equals(decision) && (request.note() == null || request.note().isBlank())) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "驳回须填写原因");
             }
@@ -191,6 +217,9 @@ public class DealerService {
                 boolean approve = "approve".equals(decision);
                 DealerRecord saved = withStatus(dealer, approve ? APPROVED : REJECTED, cp, ct, inv, bank, approve, trim(request.note()), actorId(), Instant.now());
                 repository.saveDealer(saved);
+                if (approve) {
+                    portalAccounts.activateApprovedDealer(id);
+                }
                 audit.recordSuccess("dealer.reviewed", REVIEW, "dealer", id, null, request.idempotencyKey(),
                         Map.of("decision", decision, "status", saved.status(), "portal_enabled", saved.portalEnabled(), "note", nz(request.note())));
                 return saved;

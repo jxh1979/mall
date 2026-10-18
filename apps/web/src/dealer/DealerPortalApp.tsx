@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { DealerPortalApi, DealerPortalApiError } from "./dealerPortalClient";
 
@@ -11,7 +11,7 @@ type Dealer = { id: string; dealerName?: string; status?: string; portalEnabled?
 type Contract = { id: string; contractNo?: string; validFrom?: string; validTo?: string; creditTerm?: boolean };
 type Stock = { itemId: string; itemName?: string; spec?: string; unitPriceCent?: number; availability?: string; expectedRestockDate?: string | null };
 type Inquiry = { id: string; itemId?: string; spec?: string; quantity?: number; status?: string; quotedUnitPriceCent?: number | null };
-type Order = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null };
+type Order = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; returnedAmountCent?: number; balanceDueAt?: string | null; creditTerm?: boolean; overdue?: boolean };
 type Payment = { id: string; method?: string; amountCent?: number; status?: string; referenceNo?: string | null };
 type Return = { id: string; returnNo?: string; status?: string; reasonType?: string; requestedQuantity?: number; refundCent?: number; refundedCent?: number };
 
@@ -62,9 +62,6 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [returns, setReturns] = React.useState<Return[]>([]);
   // 资料
-  const [legal, setLegal] = React.useState("");
-  const [contactName, setContactName] = React.useState("");
-  const [contactPhone, setContactPhone] = React.useState("");
   // 询价 / 下单 / 付款 / 退货
   const [inqItem, setInqItem] = React.useState("");
   const [inqSpec, setInqSpec] = React.useState("");
@@ -87,7 +84,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
     (async () => {
       try {
         const dealer = await api.get<Dealer>("/api/v1/dealer-portal/me");
-        if (!cancelled && dealer) { setUser({ id: dealer.id, username: dealer.dealerName ?? "" }); setMe(dealer); }
+        if (!cancelled && dealer?.status === "approved" && dealer.portalEnabled) { setUser({ id: dealer.id, username: dealer.dealerName ?? "" }); setMe(dealer); }
       } catch {
         // 未登录：显示登录页
       } finally {
@@ -103,7 +100,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
       const message = await fn();
       if (message) setNotice(message);
     } catch (e) {
-      if (e instanceof DealerPortalApiError && (e.code === "DEALER_DEACTIVATED" || e.code === "TERMINAL_DISABLED")) {
+      if (e instanceof DealerPortalApiError && (e.code === "DEALER_DEACTIVATED" || e.code === "DEALER_PORTAL_NOT_ENABLED" || e.code === "TERMINAL_DISABLED")) {
         signOut(e.message);
         return;
       }
@@ -113,8 +110,10 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
 
   async function loadDealer() {
     const dealer = await api.get<Dealer>("/api/v1/dealer-portal/me");
+    if (dealer.status !== "approved" || !dealer.portalEnabled) {
+      throw new DealerPortalApiError("四类资料审核通过后才可登录经销商门户", 403, "DEALER_PORTAL_NOT_ENABLED");
+    }
     setMe(dealer);
-    setLegal(dealer.legalRepresentative ?? ""); setContactName(dealer.contactName ?? ""); setContactPhone(dealer.contactPhone ?? "");
     if (dealer.portalEnabled) {
       const [cs, qs, os] = await Promise.all([
         api.get<Contract[]>("/api/v1/dealer-portal/contracts"),
@@ -145,11 +144,6 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
   });
   const onLogout = () => run(async () => { await api.logout(); signOut(); });
 
-  const submitProfile = () => run(async () => {
-    await api.post("/api/v1/dealer-portal/me/submission", { idempotencyKey: key(), legalRepresentative: legal, contactName, contactPhone });
-    await loadDealer();
-    return "注册资料已提交，等待平台审核";
-  });
   const createInquiry = () => run(async () => {
     if (!contractId) throw new Error("请先选择合同");
     await api.post("/api/v1/dealer-portal/inquiries", { idempotencyKey: key(), dealerContractId: contractId, itemId: inqItem.trim(), spec: inqSpec.trim(), quantity: Number(inqQty) });
@@ -204,7 +198,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
     return (
       <main className="dealer-portal" data-testid="dealer-portal-login">
         <h1>经销商门户</h1>
-        <p className="admin-muted-action">独立经销商 Web 门户，仅限平台开通的经销商门户账号登录。</p>
+        <p className="admin-muted-action">独立经销商 Web 门户，企业、合同、开票和银行四类资料审核通过后，已启用的经销商门户账号才可登录。</p>
         {error ? <div className="admin-inline-error" data-testid="dealer-portal-error">{error}</div> : null}
         <form onSubmit={(e) => { e.preventDefault(); void onLogin(); }} className="admin-form-grid">
           <label>登录名<input data-testid="dealer-login-name" value={loginName} onChange={(e) => setLoginName(e.target.value)} autoComplete="username" /></label>
@@ -226,15 +220,11 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
       {notice ? <div className="admin-notice" data-testid="dealer-portal-notice">{notice}</div> : null}
 
       <section data-testid="dealer-profile-section">
-        <h2>注册资料</h2>
-        {me.status === "rejected" && me.reviewNote ? <p className="admin-inline-error">驳回原因：{me.reviewNote}</p> : null}
+        <h2>企业资料</h2>
         <div className="admin-form-grid">
-          <label>法定代表人<input data-testid="profile-legal" value={legal} onChange={(e) => setLegal(e.target.value)} /></label>
-          <label>联系人<input data-testid="profile-contact-name" value={contactName} onChange={(e) => setContactName(e.target.value)} /></label>
-          <label>联系电话<input data-testid="profile-contact-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></label>
-          {me.status === "pending_submission" || me.status === "rejected"
-            ? <button type="button" data-testid="profile-submit" onClick={() => void submitProfile()}>提交注册资料送审</button>
-            : <span className="admin-muted-action">资料已提交，{label(DEALER_STATUS, me.status)}</span>}
+          <span>法定代表人：{me.legalRepresentative || "—"}</span>
+          <span>联系人：{me.contactName || "—"}</span>
+          <span>联系电话：{me.contactPhone || "—"}</span>
         </div>
       </section>
 
@@ -281,12 +271,12 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
               <button type="button" data-testid="order-submit" onClick={() => void createOrder()}>提交订单</button>
             </div>
             <table className="admin-table" data-testid="order-table">
-              <thead><tr><th>订单号</th><th>状态</th><th>合计</th><th>已付</th><th>首付款门槛</th><th>首付款截止</th><th>操作</th></tr></thead>
+              <thead><tr><th>订单号</th><th>状态</th><th>原合计</th><th>退货后未付</th><th>已付</th><th>首付款门槛</th><th>首付款截止</th><th>尾款到期</th><th>操作</th></tr></thead>
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td>{o.orderNo ?? o.id}</td><td data-testid={`order-status-${o.id}`}>{label(ORDER_STATUS, o.status)}</td><td>{money(o.totalAmountCent)}</td><td>{money(o.paidAmountCent)}</td>
-                    <td>{money(o.firstPaymentRequiredCent)}</td><td>{cnDate(o.firstPaymentDeadlineAt)}</td>
+                    <td>{o.orderNo ?? o.id}</td><td data-testid={`order-status-${o.id}`}>{label(ORDER_STATUS, o.status)}</td><td>{money(o.totalAmountCent)}</td><td data-testid={`order-unpaid-${o.id}`}>{money(Math.max(0, (o.totalAmountCent ?? 0) - (o.returnedAmountCent ?? 0) - (o.paidAmountCent ?? 0)))}</td><td>{money(o.paidAmountCent)}</td>
+                    <td>{money(o.firstPaymentRequiredCent)}</td><td>{cnDate(o.firstPaymentDeadlineAt)}</td><td>{o.balanceDueAt ? cnDate(o.balanceDueAt) : o.creditTerm ? "待合同约定事件确定" : "—"}</td>
                     <td><button type="button" data-testid={`order-select-${o.id}`} onClick={() => void run(() => selectOrder(o))}>查看</button></td>
                   </tr>
                 ))}
@@ -295,7 +285,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
             {order ? (
               <div data-testid="order-detail">
                 <h3>订单 {order.orderNo}：{label(ORDER_STATUS, order.status)}</h3>
-                {["pending_payment", "payment_verifying", "pending_shipment", "shipping", "signed"].includes(order.status ?? "") ? (
+                {["pending_payment", "payment_verifying", "pending_shipment", "shipping", "signed", "returning", "partially_returned", "returned"].includes(order.status ?? "") ? (
                   <div className="admin-form-grid" data-testid="payment-form">
                     <label>付款方式<select data-testid="pay-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}><option value="bank_transfer">对公转账</option><option value="platform_online">平台线上支付</option></select></label>
                     <label>金额（元）<input data-testid="pay-amount" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} /></label>

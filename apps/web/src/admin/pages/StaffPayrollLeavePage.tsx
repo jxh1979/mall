@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -23,7 +23,7 @@ const APPEAL_STATUS: Record<string, string> = { pending: "裁定中", upheld: "�
 
 const TEXT = {
   title: "薪酬与请假",
-  description: "薪资四块:固定工资(员工档案)+提成(业务自动归集)+奖金/处罚(手录必须带事由,审计留痕;奖惩与其他涉及员工的人力操作一样,须经 人力会签与该员工直属领导向上三级复核后才入账);人事「月结」后员工才可见,补录后可重结覆盖。员工可对已生效扣罚提出申诉,申诉同样报至人力部门与直属领导向上三级裁定,撤销即冲回原调整、原记录保留。请假由排班主管审批,通过区间考勤记「请假」;事假按请假占实际排班的工时比例扣薪，扣后不低于零,病假/年假/调休不扣。",
+  description: "薪资四块:固定工资(员工档案)+提成(业务自动归集)+奖金/处罚(手录必须带事由,审计留痕;奖惩与其他涉及员工的人力操作一样,须经 人力会签与该员工直属起共三个组织层级复核后才入账);人事「月结」后员工才可见,补录后可重结覆盖。员工可对已生效扣罚提出申诉,申诉同样报至人力部门与直属起共三个组织层级裁定,撤销即冲回原调整、原记录保留。请假由排班主管审批,通过区间考勤记「请假」;事假按请假占实际排班的工时比例扣薪，扣后不低于零,病假/年假/调休不扣。",
   loadFailed: "薪酬请假读取失败",
 };
 
@@ -66,10 +66,8 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
   const [adjType, setAdjType] = React.useState("bonus");
   const [adjAmount, setAdjAmount] = React.useState("");
   const [adjReason, setAdjReason] = React.useState("");
-  const [adjHr, setAdjHr] = React.useState("");
   const [appealAdjId, setAppealAdjId] = React.useState("");
   const [appealReason, setAppealReason] = React.useState("");
-  const [appealHr, setAppealHr] = React.useState("");
   const [appealUser, setAppealUser] = React.useState("");
   const [appeals, setAppeals] = React.useState<AppealRow[]>([]);
   const [appealNotice, setAppealNotice] = React.useState("");
@@ -138,14 +136,10 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
       setGlobalError("奖惩必须填 员工id/正金额(元)/事由(留痕硬要求)");
       return;
     }
-    if (!adjHr.trim()) {
-      setGlobalError("奖惩须指定 人力会签人：经 人力会签与直属领导向上三级复核通过后才入账");
-      return;
-    }
     const review = await api.post<{ reviewId?: string }>("/api/v1/staff/payroll/adjustments", {
-      userId: adjUser.trim(), month, adjType, amountCent: cent, reason: adjReason.trim(), hrApproverId: adjHr.trim(),
+      userId: adjUser.trim(), month, adjType, amountCent: cent, reason: adjReason.trim(),
     });
-    setActionResult({ action: "payroll_adjustment_requested", adjType, reviewId: review?.reviewId, note: "已发起复核，人力会签与直属领导向上三级全部通过后入账" });
+    setActionResult({ action: "payroll_adjustment_requested", adjType, reviewId: review?.reviewId, note: "已发起复核，人力会签与直属起共三个组织层级全部通过后入账" });
     setAdjUser(""); setAdjAmount(""); setAdjReason("");
   };
 
@@ -162,14 +156,14 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
   };
 
   const submitAppeal = async () => {
-    if (!appealAdjId.trim() || !appealReason.trim() || !appealHr.trim()) {
-      setGlobalError("申诉必须填 扣罚记录编号/申诉事由/人力会签人");
+    if (!appealAdjId.trim() || !appealReason.trim()) {
+      setGlobalError("申诉必须填 扣罚记录编号/申诉事由");
       return;
     }
     const appeal = await api.post<{ id?: string; reviewId?: string }>(`/api/v1/staff/payroll/adjustments/${encodeURIComponent(appealAdjId.trim())}/appeals`, {
-      reason: appealReason.trim(), hrApproverId: appealHr.trim(),
+      reason: appealReason.trim(),
     });
-    setActionResult({ action: "payroll_adjustment_appeal_submitted", appealId: appeal?.id, reviewId: appeal?.reviewId, note: "申诉已报至人力部门与直属领导向上三级裁定" });
+    setActionResult({ action: "payroll_adjustment_appeal_submitted", appealId: appeal?.id, reviewId: appeal?.reviewId, note: "申诉已报至人力部门与直属起共三个组织层级裁定" });
     setAppealAdjId(""); setAppealReason("");
     await loadAppeals();
   };
@@ -315,20 +309,20 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
           { label: "月薪(元)", value: baseSalary.trim() || "未填写" },
         ]}
       />
-      <h3>奖金 / 处罚手录(必须带事由；人力会签＋直属领导向上三级复核通过后入账)</h3>
+      <h3>奖金 / 处罚手录(必须带事由；人力会签＋直属起共三个组织层级复核通过后入账)</h3>
       <div className="admin-form-grid" data-testid="payroll-adj-editor">
         <label>员工 user_id<input data-testid="adj-user-input" value={adjUser} onChange={(event) => setAdjUser(event.target.value)} /></label>
         <label>类型<select data-testid="adj-type-select" value={adjType} onChange={(event) => setAdjType(event.target.value)}><option value="bonus">激励奖金</option><option value="penalty">处罚扣款</option></select></label>
         <label>金额(元)<input data-testid="adj-amount-input" value={adjAmount} onChange={(event) => setAdjAmount(event.target.value)} /></label>
         <label>事由<input data-testid="adj-reason-input" value={adjReason} onChange={(event) => setAdjReason(event.target.value)} /></label>
-        <label>人力会签人账号<input data-testid="adj-hr-input" value={adjHr} onChange={(event) => setAdjHr(event.target.value)} /></label>
+        <p>人力会签按员工部门自动确定，直属起共三级；配置缺失时保持待处理，补齐后重新生成审批链。</p>
         <button type="button" data-testid="adj-save" onClick={() => void saveAdjustment()}>发起复核</button>
       </div>
       <h3>扣罚申诉(员工本人对已生效扣罚提出；同链裁定，撤销即冲回、原记录保留)</h3>
       <div className="admin-form-grid" data-testid="payroll-appeal-editor">
         <label>扣罚记录编号<input data-testid="appeal-adj-input" value={appealAdjId} onChange={(event) => setAppealAdjId(event.target.value)} /></label>
         <label>申诉事由<input data-testid="appeal-reason-input" value={appealReason} onChange={(event) => setAppealReason(event.target.value)} /></label>
-        <label>人力会签人账号<input data-testid="appeal-hr-input" value={appealHr} onChange={(event) => setAppealHr(event.target.value)} /></label>
+        <p>申诉沿员工所属部门自动确定人力会签人，不由申诉人指定。</p>
         <button type="button" data-testid="appeal-submit" onClick={() => void submitAppeal()}>提出申诉</button>
         <label>按员工查看申诉<input data-testid="appeal-user-input" placeholder="留空＝本人" value={appealUser} onChange={(event) => setAppealUser(event.target.value)} /></label>
         <button type="button" data-testid="appeal-load" onClick={() => void loadAppeals()}>查看申诉清单</button>

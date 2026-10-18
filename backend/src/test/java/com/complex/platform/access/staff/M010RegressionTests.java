@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -166,10 +166,10 @@ class M010RegressionTests {
             service.setSalesPosition(profile.id(), new StaffSalesPositionRequest(true, "岗位变更"));
             assertThat(repository.findProfileById(profile.id()).orElseThrow().employmentStatus()).isEqualTo(state);
         }
-        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "active", "无效", null)))
+        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "active", "无效")))
                 .isInstanceOf(ApiException.class);
         actorAs("merchant_admin", "m_other");
-        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "employed", "越户", null)))
+        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "employed", "越户")))
                 .isInstanceOf(ApiException.class);
     }
 
@@ -642,7 +642,7 @@ class M010RegressionTests {
         assertThat(service.listAttendance(date).items()).extracting(StaffAttendanceRecord::userId).containsExactly(a.userId());
         assertThat(service.listLeaves(null).items()).extracting(StaffLeaveRequestRecord::userId).containsExactly(a.userId());
         assertThatThrownBy(() -> service.setBaseSalary(new StaffPayrollBaseRequest(key(),b.userId(),9999L))).isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> service.setEmploymentStatus(b.id(),new StaffEmploymentStatusRequest(key(), "employed","变更", null))).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.setEmploymentStatus(b.id(),new StaffEmploymentStatusRequest(key(), "employed","变更"))).isInstanceOf(ApiException.class);
         service.closePayroll(new StaffPayrollCloseRequest(key(),"2099-08"));
         assertThat(service.listPayroll("2099-08").items()).extracting(StaffPayrollStatementRecord::userId).containsExactly(a.userId());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",Long.class,b.userId())).isZero();

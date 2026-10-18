@@ -1,9 +1,10 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -20,9 +21,11 @@ import org.springframework.stereotype.Repository;
 public class JdbcDealerOrderRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final ObjectMapper mapper;
 
-    public JdbcDealerOrderRepository(NamedParameterJdbcTemplate jdbc) {
+    public JdbcDealerOrderRepository(NamedParameterJdbcTemplate jdbc, ObjectMapper mapper) {
         this.jdbc = jdbc;
+        this.mapper = mapper;
     }
 
     // ── 订单 ──
@@ -88,8 +91,8 @@ public class JdbcDealerOrderRepository {
     public List<DealerOrderRecord> listBalanceOverdue(Instant now) {
         return jdbc.query("""
                 SELECT * FROM dealer_orders
-                 WHERE status IN ('shipping', 'signed') AND overdue = FALSE AND balance_due_at IS NOT NULL AND balance_due_at < :now
-                   AND paid_amount_cent < total_amount_cent
+                 WHERE status IN ('shipping', 'signed', 'returning', 'partially_returned', 'returned') AND overdue = FALSE AND balance_due_at IS NOT NULL AND balance_due_at < :now
+                   AND paid_amount_cent < total_amount_cent - returned_amount_cent
                 """, Map.of("now", Timestamp.from(now)), this::mapOrder);
     }
 
@@ -107,13 +110,38 @@ public class JdbcDealerOrderRepository {
                 rs.getString("ar_ap_item_id"), rs.getString("reviewed_by"), nullableInstant(rs, "reviewed_at"), nullableInstant(rs, "payment_notified_at"),
                 rs.getString("shipped_by"), nullableInstant(rs, "shipped_at"), nullableInstant(rs, "signed_at"), nullableInstant(rs, "completed_at"),
                 rs.getString("cancel_requested_by"), rs.getString("cancel_reason"), nullableInstant(rs, "cancelled_at"), rs.getString("note"),
-                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getLong("returned_amount_cent"));
+                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getLong("returned_amount_cent"), readContractSnapshot(rs.getString("contract_snapshot")));
+    }
+
+    public void lockContractSnapshot(String orderId, DealerContractRecord contract) {
+        try {
+            int changed = jdbc.update("UPDATE dealer_orders SET contract_snapshot = CAST(:snapshot AS jsonb) WHERE id = :id AND contract_snapshot IS NULL",
+                    Map.of("snapshot", mapper.writeValueAsString(contract), "id", orderId));
+            if (changed != 1) throw new IllegalStateException("订单合同快照已锁定，不可覆盖");
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("订单合同快照写入失败", e);
+        }
+    }
+
+    private DealerContractRecord readContractSnapshot(String json) {
+        if (json == null) return null;
+        try { return mapper.readValue(json, DealerContractRecord.class); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalStateException("订单合同快照读取失败", e); }
+    }
+
+    public void updateArApDueDate(String arApId, Instant deadline) {
+        if (arApId == null) return;
+        jdbc.update("UPDATE ar_ap_items SET due_date = :due, updated_at = now() WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", arApId).addValue("due", deadline == null ? null : java.sql.Date.valueOf(deadline.atZone(java.time.ZoneOffset.UTC).toLocalDate())));
     }
 
     /** CG-11c：退货验收确认后回写订单累计已退金额与状态（不经 saveOrder，避免覆盖）。 */
     public void applyReturn(String orderId, long acceptedAmountCent, String status) {
-        jdbc.update("UPDATE dealer_orders SET returned_amount_cent = returned_amount_cent + :amt, status = :status, updated_at = now() WHERE id = :id",
-                new MapSqlParameterSource().addValue("amt", acceptedAmountCent).addValue("status", status).addValue("id", orderId));
+        jdbc.update("""
+                UPDATE dealer_orders SET returned_amount_cent = returned_amount_cent + :amt, status = :status,
+                    overdue = CASE WHEN paid_amount_cent >= total_amount_cent - returned_amount_cent - :amt THEN FALSE ELSE overdue END,
+                    updated_at = now() WHERE id = :id
+                """, new MapSqlParameterSource().addValue("amt", acceptedAmountCent).addValue("status", status).addValue("id", orderId));
     }
 
     public void updateOrderStatus(String orderId, String status) {

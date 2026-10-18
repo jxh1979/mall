@@ -1,5 +1,7 @@
 package com.complex.platform.governance.review;
 
+// 文件版本：V0.01
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -17,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.complex.platform.access.AccessService;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.dto.AccessGrantReviewRequest;
+import com.complex.platform.access.staff.StaffHrRoutingService;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -347,6 +350,11 @@ class SupervisorReviewControllerTests {
         @Bean
         SupervisorReviewService supervisorReviewService() {
             return Mockito.mock(SupervisorReviewService.class);
+        }
+
+        @Bean
+        StaffHrRoutingService staffHrRoutingService() {
+            return Mockito.mock(StaffHrRoutingService.class);
         }
 
         @Bean
