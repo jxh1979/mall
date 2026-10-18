@@ -1,5 +1,7 @@
 package com.complex.platform.finance.gateway;
 
+// 文件版本：V0.01
+
 /**
  * 支付渠道端口（端口/适配器模式，用户口径：第三方/支付一律"预留接口 + 能力开关默认关"）。
  *
@@ -22,6 +24,11 @@ public interface PaymentGatewayPort {
 
     /** 查询渠道侧支付状态。 */
     PaymentGatewayResult queryStatus(String gatewayRef);
+
+    /** 退款查询与收款查询分离；适配器未实现时不得把原收款成功当成退款成功。 */
+    default PaymentGatewayResult queryRefund(PaymentGatewayRequest refundRequest, String refundGatewayRef) {
+        return PaymentGatewayResult.notConfigured("退款查询渠道未配置");
+    }
 
     /** 退款打款（储值退款 / finance 退款）。 */
     PaymentGatewayResult refund(PaymentGatewayRequest request);

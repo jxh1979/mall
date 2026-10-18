@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -37,6 +37,12 @@ public interface FinanceRepository {
     /** 按合同查其生效(active)提成规则,取最新生效。default 空兼容测试双子。 */
     default Optional<TurnoverRentRuleRecord> findActiveTurnoverRentRuleByContract(String contractId) {
         return Optional.empty();
+    }
+
+    /** 按合同、商户和完整账期查已复核规则；被新版本替换的历史规则仍参与期间选择。 */
+    default List<TurnoverRentRuleRecord> findTurnoverRentRulesForPeriod(
+            String contractId, String merchantId, LocalDate periodStart, LocalDate periodEnd) {
+        return List.of();
     }
 
     /** 保存提成租金规则。default no-op 兼容测试双子。 */
@@ -251,6 +257,10 @@ public interface FinanceRepository {
 
     long sumRefundedAmountByTargetId(String targetId);
 
+    default long sumSucceededRefundAmountByTargetId(String targetId) {
+        throw new UnsupportedOperationException("退款仓储未实现成功金额汇总");
+    }
+
     DailyCloseRecord saveDailyClose(DailyCloseRecord dailyClose);
 
     boolean dailyCloseExists(LocalDate businessDate, String scopeType, String scopeId);
@@ -269,6 +279,39 @@ public interface FinanceRepository {
     OfflinePaymentConfirmationRecord saveOfflinePaymentConfirmation(OfflinePaymentConfirmationRecord confirmation);
 
     FinanceRefundRecord saveRefund(FinanceRefundRecord refund);
+
+    /** 商户经营项目取主项目与追加项目的去重集合；退款不得用当前登录项目代替真实归属。 */
+    default List<String> listMerchantOperatingProjectIds(String merchantId) {
+        throw new UnsupportedOperationException("退款仓储未实现商户项目查询");
+    }
+
+    default Optional<FinanceRefundRecord> findRefundById(String id, boolean forUpdate) {
+        throw new UnsupportedOperationException("退款仓储未实现读取");
+    }
+
+    default List<FinanceRefundRecord> listRefunds(String merchantId, String projectId) {
+        throw new UnsupportedOperationException("退款仓储未实现列表");
+    }
+
+    default void appendRefundAttempt(FinanceRefundAttemptRecord attempt) {
+        throw new UnsupportedOperationException("退款仓储未实现尝试留痕");
+    }
+
+    default boolean claimRefundAttempt(String attemptId) {
+        throw new UnsupportedOperationException("退款仓储未实现派发认领");
+    }
+
+    default Optional<FinanceRefundAttemptRecord> findReadyRefundAttempt(String refundId) {
+        throw new UnsupportedOperationException("退款仓储未实现待派发读取");
+    }
+
+    default List<FinanceRefundAttemptRecord> listRefundAttempts(String refundId) {
+        throw new UnsupportedOperationException("退款仓储未实现尝试读取");
+    }
+
+    default List<ArApPaymentRecord> listArApPayments(String itemId) {
+        throw new UnsupportedOperationException("财务仓储未实现原收款读取");
+    }
 
     List<ReconciliationBatchRecord> listReconciliationBatches();
 

@@ -1,4 +1,5 @@
 package com.complex.platform.analytics;
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -863,23 +864,26 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         // CG-09：已租口径与铺位看板共用 SpaceRentalDerivationSql（开立中退租结算单的铺位＝已退租，不计入已租面积）。
         String sql = """
                 SELECT
-                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')), 0) AS rentable,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')), 0) AS total,
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')
-                      AND __IS_LET__), 0) AS leased,
-                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth') AND EXISTS (
+                      AND s.status <> 'unavailable'), 0) AS rentable,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')
+                      AND s.status <> 'unavailable' AND __IS_LET__), 0) AS leased,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')
+                      AND s.status <> 'unavailable' AND EXISTS (
                       SELECT 1 FROM contract_spaces cs2 JOIN contracts c2 ON c2.id = cs2.contract_id
                        WHERE cs2.space_id = s.id AND c2.lifecycle_status = 'pending_effective')), 0) AS signed_pending,
-                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'), 0) AS parking_rentable,
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'
-                      AND __IS_LET__), 0) AS parking_leased
+                      AND s.status <> 'unavailable'), 0) AS parking_rentable,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'
+                      AND s.status <> 'unavailable' AND __IS_LET__), 0) AS parking_leased
                   FROM spaces s
                   LEFT JOIN LATERAL (__LATEST__) l ON true
-                 WHERE s.status <> 'unavailable'
                 """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
                 .replace("__IS_LET__", SpaceRentalDerivationSql.IS_LET);
         return jdbcTemplate.queryForObject(sql, params, (rs, n) -> new AnalyticsRecords.OccupancyAreas(
                 rs.getBigDecimal("rentable"), rs.getBigDecimal("leased"), rs.getBigDecimal("signed_pending"),
-                rs.getBigDecimal("parking_rentable"), rs.getBigDecimal("parking_leased")));
+                rs.getBigDecimal("parking_rentable"), rs.getBigDecimal("parking_leased"), rs.getBigDecimal("total")));
     }
 
     @Override
@@ -2208,7 +2212,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public AnalyticsRecords.MetricDetailRows rentableSpaceDetail(int limit, int offset) {
-        // 分母与出租率同分母（occupancyAreas.rentable）：shop/booth 且非 unavailable。
+        // 能耗沿用可租面积：shop/booth 且非 unavailable；出租率另用含不可租的总面积。
         MapSqlParameterSource params = pagedParams(limit, offset);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, space_name, space_type, floor_no, area_square_meter

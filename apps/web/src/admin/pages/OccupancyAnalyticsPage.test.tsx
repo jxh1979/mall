@@ -1,3 +1,5 @@
+// 文件版本：V0.01
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,8 +10,9 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 const DASHBOARD = {
   business_date: "2026-07-04",
   metrics: {
-    "occupancy.rate": { value: 0.82 },
+    "occupancy.rate": { value: 0.6833 },
     "occupancy.rentable_area": { value: 10000 },
+    "occupancy.total_area": { value: 12000 },
     "occupancy.leased_area": { value: 8200 },
     "occupancy.signed_pending_area": { value: 300 },
     "occupancy.parking_rate": { value: 0.65 },
@@ -65,6 +68,13 @@ describe("OccupancyAnalyticsPage KPI 聚焦视图", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/admin/analytics/occupancy");
+  });
+
+  it("出租率显示含不可租的总面积，空置面积仍只统计可租部分", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("occupancy-rate")).toBeTruthy());
+    expect(screen.getByTestId("occupancy-rate").parentElement?.textContent).toContain("铺位总面积 12,000");
+    expect(screen.getByTestId("occupancy-kpi-vacant").textContent).toContain("1,800");
   });
 
   it("点“空置面积”→ URL 带 ?kpi=vacant，聚焦只剩空置铺位表", async () => {

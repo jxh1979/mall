@@ -1,4 +1,4 @@
-# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.04
+# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.05
 
 > 创建日期：2026-06-18
 > 状态：权威安全规格（补齐此前缺口——隔离模型此前仅存在于各迁移 .sql 注释中，无单一权威文档）。
@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V454**，发现 **183** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V458**，发现 **184** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -149,6 +149,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `facility_inspection_tasks` | `project_id` + `space_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_inspection_templates` | `project_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_work_orders` | `merchant_id` + `project_id` + `space_id` | direct | V166 | `V166__facility_work_orders.sql` |
+| `finance_refunds` | `merchant_id` + `project_id` | direct | V456 | `V456__finance_refund_lifecycle.sql` |
 | `giveaway_cost_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `high_value_thresholds` | `merchant_id` + `project_id` | direct | V350 | `V350__high_value_threshold_unify.sql` |
 | `integration_channel_store_map` | `merchant_id` | direct | V334 | `V334__integration_order_sync_merchant_attribution.sql` |

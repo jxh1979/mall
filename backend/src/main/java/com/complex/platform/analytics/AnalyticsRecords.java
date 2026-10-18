@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,7 +18,8 @@ public final class AnalyticsRecords {
             java.math.BigDecimal leasedArea,
             java.math.BigDecimal signedPendingArea,
             java.math.BigDecimal parkingRentableArea,
-            java.math.BigDecimal parkingLeasedArea
+            java.math.BigDecimal parkingLeasedArea,
+            java.math.BigDecimal totalArea
     ) {
     }
 

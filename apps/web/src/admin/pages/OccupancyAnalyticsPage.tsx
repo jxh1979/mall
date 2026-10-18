@@ -1,3 +1,5 @@
+// 文件版本：V0.01
+
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -18,7 +20,7 @@ type RentToSales = { period?: string; byMerchant?: RentToSalesRow[]; byMerchantT
 
 const TEXT = {
   title: "出租与到期",
-  description: "铺位租没租出去、空在哪、哪些合同快到期——分母=商铺+摊位且排除人工不可租(车位单列),已签未生效单列「已签待交」不算已租。",
+  description: "铺位出租率按已租面积除以全部商铺和摊位面积，包含不可租；车位单列，已签未生效单列「已签待交」，不算已租。",
   loadFailed: "出租分析读取失败",
   focusClear: "清除筛选，返回全部",
 };
@@ -119,6 +121,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
   const metrics = dashboard?.metrics ?? {};
   const rate = num(metrics["occupancy.rate"]);
   const rentable = num(metrics["occupancy.rentable_area"]);
+  const totalArea = num(metrics["occupancy.total_area"]);
   const leased = num(metrics["occupancy.leased_area"]);
   const signedPending = num(metrics["occupancy.signed_pending_area"]);
   const parkingRate = num(metrics["occupancy.parking_rate"]);
@@ -287,7 +290,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
           <>
             <div className="admin-muted-action" data-testid="occupancy-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(期末时点口径,明细为实时同口径)</div>
             <div className="admin-kpi-grid" data-testid="occupancy-summary">
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(rate)}</button><small>已租 {sqm(leased)} / 可租 {sqm(rentable)}，查看租赁状态看板</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(rate)}</button><small>已租 {sqm(leased)} / 铺位总面积 {sqm(totalArea)}，查看租赁状态看板</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>空置面积</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-vacant" onClick={() => enterKpiFocus("vacant")}>{sqm(vacantArea)}</button><small>可招商,查看空置铺位</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已签待交</span><button type="button" className="admin-kpi-value" data-testid="occupancy-signed-pending" onClick={() => navigateTo?.("ADM-LEASE-002")}>{sqm(signedPending)}</button><small>签约未生效,不计已租，查看租赁状态看板</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>90 天内到期</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-expiring" onClick={() => enterKpiFocus("expiring")}>{expiring90 === null ? "—" : expiring90}</button><small>生效合同,查看到期预警</small></div>

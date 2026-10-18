@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 // fix/ui-pages 经营指标码 → 业务指标名（展示层翻译，接口仍用原码）。
 // 未知码原样返回，新增指标逐步补此表。
 const METRIC_LABELS: Record<string, string> = {
@@ -27,6 +28,7 @@ const METRIC_LABELS: Record<string, string> = {
   "occupancy.rate": "出租率",
   "occupancy.leased_area": "已租面积",
   "occupancy.rentable_area": "可租面积",
+  "occupancy.total_area": "铺位总面积",
   "occupancy.signed_pending_area": "已签待入驻面积",
   "occupancy.parking_rate": "车位使用率",
   // 招商漏斗 / 租售比(V220)

@@ -1,4 +1,5 @@
 package com.complex.platform.analytics;
+// 文件版本：V0.01
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
@@ -56,9 +57,10 @@ public class DashboardAggregationJob {
     static final String AR_COLLECTED_MTD = "ar.collected_mtd";       // 本月实收(月初至当日)
     static final String AR_RECEIVABLE_MTD = "ar.receivable_mtd";     // 本月应收(不含未来月)
     static final String AR_COLLECTION_RATE_MTD = "ar.collection_rate_mtd"; // 回款率(分母0不产出,不伪造)
-    // S3 出租率/去化(2026-07-02 拍板):分母=商铺+摊位且非不可租;车位单列;已签待交单列(期末时点)。
+    // 出租率分母含全部商铺/摊位，不随不可租状态变化；车位、已签待交单列。
     static final String OCC_RATE = "occupancy.rate";
     static final String OCC_RENTABLE_AREA = "occupancy.rentable_area";
+    static final String OCC_TOTAL_AREA = "occupancy.total_area";
     static final String OCC_LEASED_AREA = "occupancy.leased_area";
     static final String OCC_SIGNED_PENDING_AREA = "occupancy.signed_pending_area";
     static final String OCC_PARKING_RATE = "occupancy.parking_rate";
@@ -80,7 +82,7 @@ public class DashboardAggregationJob {
     static final String MWO_BACKLOG = "mwo.backlog";                      // 商户单时点积压(不含已处理待关闭/已关闭/已取消)
     // S5 能耗(energy 窗):按表计类型分列(电/水/气/冷热单位不同,不跨类合计)。
     static final String ENERGY_TOTAL_PREFIX = "energy.total_";
-    static final String ENERGY_ELECTRICITY_PER_SQM = "energy.electricity_per_sqm"; // 分母=可租面积(与出租率同分母,0不产出)
+    static final String ENERGY_ELECTRICITY_PER_SQM = "energy.electricity_per_sqm"; // 分母=可租面积，独立于出租率总面积；0不产出
     static final String ENERGY_ABNORMAL_COUNT = "energy.abnormal_count";
 
     // M1 月度滚动白名单(混合口径,2026-07-02 拍板④):流量类=月累计 SUM;存量/比率类=期末时点 LAST。
@@ -273,11 +275,12 @@ public class DashboardAggregationJob {
         // S3 出租率/去化(as-of 期末时点;比率分母 0 不产出,不伪造)。
         AnalyticsRecords.OccupancyAreas areas = repository.occupancyAreas(businessDate);
         upsertPlatform(OCC_RENTABLE_AREA, "leasing", businessDate, areas.rentableArea(), now, platformTotals);
+        upsertPlatform(OCC_TOTAL_AREA, "leasing", businessDate, areas.totalArea(), now, platformTotals);
         upsertPlatform(OCC_LEASED_AREA, "leasing", businessDate, areas.leasedArea(), now, platformTotals);
         upsertPlatform(OCC_SIGNED_PENDING_AREA, "leasing", businessDate, areas.signedPendingArea(), now, platformTotals);
-        if (areas.rentableArea() != null && areas.rentableArea().signum() > 0) {
+        if (areas.totalArea() != null && areas.totalArea().signum() > 0) {
             upsertPlatform(OCC_RATE, "leasing", businessDate,
-                    areas.leasedArea().divide(areas.rentableArea(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
+                    areas.leasedArea().divide(areas.totalArea(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
         }
         if (areas.parkingRentableArea() != null && areas.parkingRentableArea().signum() > 0) {
             upsertPlatform(OCC_PARKING_RATE, "leasing", businessDate,
@@ -319,7 +322,7 @@ public class DashboardAggregationJob {
         }
         upsertPlatform(MWO_BACKLOG, "facility", businessDate, BigDecimal.valueOf(merchantWoSla.backlog()), now, platformTotals);
 
-        // S5 能耗:按表计类型分列合计(不跨类合计);电耗/㎡分母=可租面积(与出租率同分母,0不产出);异常读数计数。
+        // 能耗按表计类型分列；电耗/㎡仍用可租面积（不含不可租，0不产出）。
         java.time.Instant energyStart = businessDayResolver.startInstant("energy", businessDate);
         java.time.Instant energyEnd = businessDayResolver.endInstant("energy", businessDate);
         Map<String, BigDecimal> energyByType = repository.energyConsumptionByType(energyStart, energyEnd);

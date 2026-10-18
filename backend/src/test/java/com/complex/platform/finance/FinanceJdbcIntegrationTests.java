@@ -1,5 +1,7 @@
 package com.complex.platform.finance;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 
@@ -30,8 +32,15 @@ class FinanceJdbcIntegrationTests {
     void dailyCloseLockChecksAcceptNullMerchantScope() {
         // 2026-07-02 现网500根因:平台口径(merchant scope=null)时 :merchant_id 参数无 SQL 类型,
         // PG 报 could not determine data type of parameter → 平台管理员创建 AR/AP 台账全量 500。
-        assertThat(repository.lockedDailyCloseExistsForDate(LocalDate.of(2099, 1, 1), null)).isFalse();
-        assertThat(repository.lockArApItemsForDailyClose("dc_mz_none", LocalDate.of(2099, 1, 1), null)).isZero();
+        LocalDate date = LocalDate.of(2099, 1, 1);
+        assertThat(repository.lockedDailyCloseExistsForDate(date, null)).isFalse();
+        int pendingItems = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ar_ap_items WHERE due_date = ? AND locked_day_close_id IS NULL",
+                Integer.class, date);
+        // 使用真实日结外键，允许其他提交型集成测试已在同日留下收款记录。
+        repository.saveDailyClose(new DailyCloseRecord("dc_mz_null_scope", date, "project",
+                "project_jdbc", false, "locked", Instant.now(), Instant.now()));
+        assertThat(repository.lockArApItemsForDailyClose("dc_mz_null_scope", date, null)).isEqualTo(pendingItems);
     }
 
     @Test
@@ -322,6 +331,42 @@ class FinanceJdbcIntegrationTests {
     }
 
     @Test
+    void officialAndChannelTicketsAndRefundsAreDisjointAtPlatformScope() {
+        LocalDate date = LocalDate.parse("2026-06-22");
+        Instant from = Instant.parse("2026-06-21T20:00:00Z");
+        Instant to = Instant.parse("2026-06-22T20:00:00Z");
+        String type = seedTicketType();
+        insertTicketOrder("direct_split", type, "merchant_split", 10000L, date, "admin");
+        insertTicketOrder("channel_split", type, "merchant_split", 20000L, date, "channel");
+        insertTicketRefundForOrder("direct_refund", "direct_split", "merchant_split", 1000L, from, "success");
+        insertTicketRefundForOrder("channel_refund", "channel_split", "merchant_split", 4000L, from, "success");
+
+        assertThat(repository.aggregateOfficialTicket(date, from, to))
+                .isEqualTo(new FinanceRepository.DailyCloseSourceTotals(10000L, 1000L, 1));
+        assertThat(repository.aggregateChannelTicket(date, from, to))
+                .isEqualTo(new FinanceRepository.DailyCloseSourceTotals(20000L, 4000L, 1));
+    }
+
+    @Test
+    void officialAndChannelTicketsAndRefundsStayDisjointWithinMerchantScope() {
+        LocalDate date = LocalDate.parse("2026-06-23");
+        Instant from = Instant.parse("2026-06-22T20:00:00Z");
+        Instant to = Instant.parse("2026-06-23T20:00:00Z");
+        String type = seedTicketType();
+        insertTicketOrder("direct_scope", type, "merchant_split", 10000L, date, "miniapp");
+        insertTicketOrder("channel_scope", type, "merchant_split", 20000L, date, "channel");
+        insertTicketOrder("other_scope", type, "merchant_other", 90000L, date, "admin");
+        insertTicketRefundForOrder("direct_scope_refund", "direct_scope", "merchant_split", 1000L, from, "success");
+        insertTicketRefundForOrder("channel_scope_refund", "channel_scope", "merchant_split", 4000L, from, "success");
+        insertTicketRefundForOrder("other_scope_refund", "other_scope", "merchant_other", 8000L, from, "success");
+
+        assertThat(repository.aggregateOfficialTicket(date, from, to, "merchant", "merchant_split"))
+                .isEqualTo(new FinanceRepository.DailyCloseSourceTotals(10000L, 1000L, 1));
+        assertThat(repository.aggregateChannelTicket(date, from, to, "merchant", "merchant_split"))
+                .isEqualTo(new FinanceRepository.DailyCloseSourceTotals(20000L, 4000L, 1));
+    }
+
+    @Test
     void aggregateThirdpartyReflowByMerchantScopeIsZeroNotPlatformTotal() {
         // 第三方回流源无 merchant 维度:商户锁定日结时该源应归零(不属于任何单一商户),而非渗入全平台金额。
         LocalDate businessDate = LocalDate.parse("2026-06-18");
@@ -383,13 +428,21 @@ class FinanceJdbcIntegrationTests {
     }
 
     private void insertTicketRefund(String id, long amountCent, Instant effectiveAt, String status) {
+        String orderId = "order_" + id;
+        insertTicketOrder(orderId, seedTicketType(), "merchant_refund", amountCent,
+                effectiveAt.atZone(java.time.ZoneOffset.UTC).toLocalDate(), "admin");
+        insertTicketRefundForOrder(id, orderId, "merchant_refund", amountCent, effectiveAt, status);
+    }
+
+    private void insertTicketRefundForOrder(String id, String orderId, String merchantId,
+                                            long amountCent, Instant effectiveAt, String status) {
         java.sql.Timestamp ts = java.sql.Timestamp.from(effectiveAt);
         java.sql.Timestamp succeeded = "success".equals(status) ? ts : null;
         jdbcTemplate.update("""
-                INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel,
+                INSERT INTO ticket_refunds (id, target_id, merchant_id, refund_amount_cent, reason, refund_channel,
                                             status, created_at, updated_at, succeeded_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, id, "order_" + id, amountCent, "test refund", "manual", status,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, orderId, merchantId, amountCent, "test refund", "manual", status,
                 ts, ts, succeeded);
     }
 

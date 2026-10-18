@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.List;
@@ -480,6 +482,28 @@ public class JdbcSettlementConfigWriteRepository {
      */
     @Transactional
     public int activateSingleRowDraft(SingleRowConfig cfg, String id, String updatedBy, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("id", id)
+                .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now));
+        String activationSequenceUpdate = "";
+        if (cfg == SingleRowConfig.TURNOVER_RENT_RULE) {
+            // 同合同、商户的转正串行；锁后重读，重复批准不能停用已转正的规则。
+            jdbcTemplate.query("""
+                    SELECT pg_advisory_xact_lock(hashtextextended(
+                        'turnover_rent_rule:' || jsonb_build_array(contract_id, merchant_id)::text, 0))
+                      FROM turnover_rent_rules WHERE id = :id
+                    """, params, rs -> { });
+            List<String> draftIds = jdbcTemplate.queryForList("""
+                    SELECT id FROM turnover_rent_rules
+                     WHERE id = :id AND is_draft = TRUE AND status = 'active'
+                     FOR UPDATE
+                    """, params, String.class);
+            if (draftIds.isEmpty()) {
+                return 0;
+            }
+            params.addValue("activation_sequence", jdbcTemplate.queryForObject(
+                    "SELECT nextval('turnover_rent_rule_activation_seq')", params, Long.class));
+            activationSequenceUpdate = ", activation_sequence = :activation_sequence";
+        }
         StringBuilder scopeEq = new StringBuilder();
         for (String col : cfg.scopeColumns) {
             scopeEq.append(" AND l.").append(col).append(" IS NOT DISTINCT FROM d.").append(col);
@@ -489,15 +513,11 @@ public class JdbcSettlementConfigWriteRepository {
                 + " SET status = 'inactive', updated_by = :updated_by, updated_at = :now"
                 + " FROM " + cfg.table + " d"
                 + " WHERE d.id = :id AND d.is_draft = TRUE AND d.status = 'active'"
-                + " AND l.is_draft = FALSE AND l.status = 'active' AND l.id <> d.id" + scopeEq,
-                new MapSqlParameterSource().addValue("id", id)
-                        .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
-        // ② 翻草案为生效
+                + " AND l.is_draft = FALSE AND l.status = 'active' AND l.id <> d.id" + scopeEq, params);
+        // ② 翻草案为生效；抽成规则同时固化审批先后，之后替换和归档均不修改该序号。
         return jdbcTemplate.update("UPDATE " + cfg.table
-                + " SET is_draft = FALSE, updated_by = :updated_by, updated_at = :now"
-                + " WHERE id = :id AND is_draft = TRUE AND status = 'active'",
-                new MapSqlParameterSource().addValue("id", id)
-                        .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
+                + " SET is_draft = FALSE, updated_by = :updated_by, updated_at = :now" + activationSequenceUpdate
+                + " WHERE id = :id AND is_draft = TRUE AND status = 'active'", params);
     }
 
     /**

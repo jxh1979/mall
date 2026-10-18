@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -552,30 +552,17 @@ public class StoredValueService {
                     "customer_stored_value", account.id(), null, idempotencyKey, counterDetail);
             return txn;
         }
-        // 退款打款：系统内余额已退回（上方）。实际打款金额=payoutCent（商户卡按比例）。打款路径由支付渠道开关决定——
-        //   关（默认）→ 不调外部渠道，标 reserved（人工/内部确认打款，不阻塞）。
-        //   开 → 路由到 PaymentGatewayPort.refund（无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
-        com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.refund(
-                com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
-                        "stored_value_refund", account.id(), payoutCent, null));
-        // AUD-060：退款打款状态如实反映，不得一律记成功。
-        //   FAILED（渠道明确失败）→ 整单回滚（@Transactional）：余额不扣、不写流水，避免"扣了余额没退钱还显示成功"。
-        if (gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED) {
-            throw ApiException.conflict("STORED_VALUE_REFUND_FAILED", "退款打款在支付网关失败，请稍后重试");
-        }
-        //   非 SUCCEEDED（RESERVED/NOT_CONFIGURED/PENDING=未真正兑付）→ 复用财务退款状态机登记一笔 requested 的
-        //   退款台账（内部/手工确认打款），让实际打款成为可追踪待办而非仅留审计面包屑；SUCCEEDED（渠道已兑付）→ settled。
-        //   payoutCent=0（商户规则退款比例 0%）无需打款，不登记。
-        boolean payoutSettled = gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.SUCCEEDED;
-        String payoutRefundId = payoutSettled || payoutCent <= 0 ? null
+        // 账户不是原支付流水；未落实充值分笔路线前只登记应退，不向网关发送聚合账户退款。
+        boolean payoutSettled = payoutCent <= 0;
+        String payoutRefundId = payoutSettled ? null
                 : financeService.recordStoredValuePayoutRefund(account.id(), payoutCent, reason,
-                        gw.requiresInternalFallback() ? "manual" : gw.gatewayProvider(), idempotencyKey);
+                        account.merchantId(), account.projectId(), idempotencyKey);
         Map<String, Object> detail = consumeRefundDetail(account, amountCent, balanceAfter);
         detail.put("principal_cent", amountCent);
         detail.put("bonus_voided_cent", bonusVoidCent);
         detail.put("closed", newStatus.equals("closed"));
         detail.put("payout_cent", payoutCent);
-        detail.put("payout_gateway_status", gw.status().name());
+        detail.put("payout_gateway_status", "NOT_DISPATCHED");
         detail.put("payout_status", payoutSettled ? "settled" : "requested");
         if (payoutRefundId != null) {
             detail.put("payout_refund_id", payoutRefundId);
@@ -627,21 +614,10 @@ public class StoredValueService {
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
                         account.id(), customerId, "refund", -principal, bonus,
                         null, "账户关闭：未消费本金退还本人", key, now, null, -principal, 0L));
-                // 与线上退卡同一出账路径：渠道明确失败整单回滚；未真正兑付则登记一笔 requested 的退款台账待打款。
-                com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway == null
-                        ? com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled().refund(
-                                com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
-                                        "stored_value_refund", account.id(), principal, null))
-                        : paymentGateway.refund(com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
-                                "stored_value_refund", account.id(), principal, null));
-                if (gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED) {
-                    throw ApiException.conflict("STORED_VALUE_REFUND_FAILED", "退款打款在支付网关失败，请稍后重试");
-                }
-                boolean payoutSettled = gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.SUCCEEDED;
-                String payoutRefundId = payoutSettled ? null
-                        : financeService.recordStoredValuePayoutRefund(account.id(), principal,
-                                "账户关闭：储值本金退还本人", gw.requiresInternalFallback() ? "manual" : gw.gatewayProvider(), key);
-                detail.put("payout_gateway_status", gw.status().name());
+                boolean payoutSettled = false;
+                String payoutRefundId = financeService.recordStoredValuePayoutRefund(account.id(), principal,
+                        "账户关闭：储值本金退还本人", account.merchantId(), account.projectId(), key);
+                detail.put("payout_gateway_status", "NOT_DISPATCHED");
                 detail.put("payout_status", payoutSettled ? "settled" : "requested");
                 if (payoutRefundId != null) {
                     detail.put("payout_refund_id", payoutRefundId);

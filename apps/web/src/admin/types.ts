@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 export type AdminUser = {
   id: string;
   username: string;
@@ -1299,3 +1300,19 @@ export type VoucherOverviewRow = {
   remainingTimes?: number | null;
   expiresAt?: string | null;
 };
+
+// 财务退款：请求成功不等于实际退款成功。
+export type ArApPaymentRow = { id: string; arApItemId: string; amountCent: number; paymentMethod: string; paymentTime: string; bankFlowRef?: string | null; createdAt: string };
+export type FinanceRefundRow = {
+  id: string; targetId: string; refundAmountCent: number; reason: string; refundChannel: string; refundDirection: string;
+  status: "requested" | "processing" | "failed" | "success"; createdAt: string; sourceType: "ar_ap_payment" | "stored_value_account";
+  merchantId?: string | null; projectId?: string | null; requestedBy: string; originalPaymentRef?: string | null;
+  gatewayProvider?: string | null; gatewayRef?: string | null; updatedAt: string; succeededAt?: string | null;
+};
+export type FinanceRefundDetail = { refund: FinanceRefundRow; attempts: {
+  id: string; refundId: string; operation: "submit" | "retry" | "query" | "execution" | "confirm"; status: string;
+  gatewayProvider?: string | null; gatewayRef?: string | null; message?: string | null;
+  paymentReference?: string | null; paymentOperatorId?: string | null; verifiedBy?: string | null;
+  evidenceAttachmentIds: string[]; createdAt: string;
+}[] };
+export type ContractRentBillRow = { id: string; contractId: string; merchantId: string; projectId: string; period: string; feeType: string; amountCent: number; arApItemId: string; createdAt: string; turnoverRuleId: string | null };
