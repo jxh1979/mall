@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import com.complex.platform.common.NotificationWindowConfig;
@@ -41,7 +42,7 @@ import static com.complex.platform.common.Strings.requireText;
  * 纠正旧版：线索 7 态、意向 5 阶段独立流转、品牌库 4 类+黑名单拦截、跟进+3 天提醒、签约转合同四类主体默认同公司。
  */
 @Service
-public class LeasingService {
+public class LeasingService implements com.complex.platform.contract.ContractEffectiveLeadPort {
 
     private static final Set<String> LEAD_SOURCES = Set.of("outbound", "online_inquiry", "referral", "exhibition");
     private static final Set<String> LEAD_STATUSES = Set.of("pending_follow_up", "following_up",
@@ -157,6 +158,10 @@ public class LeasingService {
             throw ApiException.badRequest("VALIDATION_FAILED", "流转到该状态必须填写理由：" + status);
         }
         LeasingLeadRecord ex = requireLead(leadId);
+        // CG-01（PGM「招商运营细则」）：「已签约后不得回退至未签约状态」——已签约线索改任何其他状态一律拒绝。
+        if ("signed".equals(ex.status()) && !"signed".equals(status)) {
+            throw ApiException.conflict("LEASING_LEAD_ALREADY_SIGNED", "已签约的线索不得回退至未签约状态");
+        }
         LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(ex.id(), ex.contactName(),
                 ex.contactPhone(), ex.source(), ex.intendedBusinessType(), ex.intendedSpaceId(), ex.intendedAreaSqm(),
                 ex.brandId(), ex.ownerUserId(), status, reason, ex.lastFollowUpAt(), ex.projectId(),
@@ -262,10 +267,13 @@ public class LeasingService {
     }
 
     /**
-     * 签约：pending_signing 意向 → 喂入合同 draft（V162 合同域 ContractService），lead → signed。
+     * 签约：pending_signing 意向 → 喂入合同 draft（V162 合同域 ContractService），并把合同绑到来源意向。
+     * <b>线索状态不在此变更</b>（CG-01，PGM「招商运营细则」：「合同审批全部通过、生效后转为已签约」）——
+     * 已签约由合同生效 {@code ContractService.activate} 经 {@link #markSourceLeadSigned} 置入。
      * 四类主体默认同一公司：operation/settlement 缺省指向 contractSubjectId，后续可拆。
      * 合同后续在合同域走 提交→分组并行审批→生效固化；本入口只把意向条款喂入 draft（带 projectId 隔离）。
-     * AUD-002：整入口开事务——商户/四主体绑定/合同/线索/审计一次业务转换，任一步失败全回滚，无半成品。
+     * AUD-002：整入口开事务——商户/四主体绑定/合同/意向绑定/审计一次业务转换，任一步失败全回滚，无半成品。
+     * 审计事件 {@code leasing.intent.signed} 语义 = 「签约动作已执行：合同草稿已起草」（事件名沿用，不表示线索已签约）。
      */
     @Transactional
     public ContractRecord signIntent(String intentId, LeasingSignRequest request) {
@@ -298,13 +306,33 @@ public class LeasingService {
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
                 actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(),
                 null, null, null, null, null, List.of(), intent.projectId(), null, intendedSpaces));
-        repository.findLeadById(intent.leadId()).ifPresent(lead -> repository.saveLead(new LeasingLeadRecord(
-                lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
-                lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(), "signed",
-                lead.lostOrHoldReason(), lead.lastFollowUpAt(), lead.projectId(), lead.createdAt(), Instant.now())));
+        // CG-01：把起草的合同绑到来源意向（V442 leasing_intents.contract_id），合同生效后据此反查线索置已签约；
+        // 线索状态此处不动（合同未经审批、未生效，不是已签约）。
+        repository.bindIntentContract(intent.id(), contract.id());
         auditEventService.recordSuccess("leasing.intent.signed", "leasing.convert", "leasing_intent", intent.id(),
-                null, actual.idempotencyKey(), Map.of("contract_id", contract.id()));
+                null, actual.idempotencyKey(), Map.of("contract_id", contract.id(), "lead_id", intent.leadId(),
+                        "contract_status", contract.lifecycleStatus()));
         return contract;
+    }
+
+    /**
+     * CG-01（PGM「招商运营细则」：「合同审批全部通过、生效后转为已签约」）：合同生效后由合同域经端口调用，
+     * 按合同反查签约起草时绑定的来源意向 → 线索，CAS 置 {@code signed} 并留痕 {@code leasing.lead.signed}。
+     * 合同不是招商签约起草的（无绑定意向）或线索已是已签约时无事发生（幂等、不重复留痕）。
+     * 在合同生效事务内执行（调用方 {@code ContractService.activate} 为 @Transactional），生效失败则线索不动。
+     */
+    @Override
+    public void markSourceLeadSigned(String contractId, String idempotencyKey) {
+        Optional<LeasingIntentRecord> intent = repository.findIntentByContractId(contractId);
+        if (intent.isEmpty()) {
+            return;
+        }
+        String leadId = intent.get().leadId();
+        if (!repository.markLeadSignedIfNotSigned(leadId, Instant.now())) {
+            return;
+        }
+        auditEventService.recordSuccess("leasing.lead.signed", "contract.lifecycle.activate", "leasing_lead", leadId,
+                null, idempotencyKey, Map.of("contract_id", contractId, "intent_id", intent.get().id()));
     }
 
     /**
