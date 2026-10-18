@@ -273,7 +273,7 @@ class SupplyChainT6ServiceTests {
 
         purchaseRequestService.receive("pr_flow",
                 new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest(
-                        "a4", "loc_1", "wh_1", List.of("photo_1"), null, null));
+                        "a4", "loc_1", "wh_1", List.of("photo_1"), null, 1_000L));
         PurchaseRequestRecord received = repo.purchaseRequests.get("pr_flow");
         assertThat(received.status()).isEqualTo("received");
         assertThat(received.receivedBy()).isEqualTo("usr_admin");
@@ -298,7 +298,7 @@ class SupplyChainT6ServiceTests {
                 new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("r3", null));
         purchaseRequestService.receive("pr_recv",
                 new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest(
-                        "r4", "loc_main", "wh_main", List.of(), null, null));
+                        "r4", "loc_main", "wh_main", List.of(), null, 1_000L));
 
         // 入库流水 inbound，关联采购单，落库位 + 数量。
         assertThat(repo.stockMovements)
@@ -325,7 +325,7 @@ class SupplyChainT6ServiceTests {
                 .hasMessageContaining("不能流转");
         // created → receive 非法。
         assertThatThrownBy(() -> purchaseRequestService.receive("pr_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest("b2", "loc", null, List.of(), null, null)))
+                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest("b2", "loc", null, List.of(), null, 1_000L)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("不能流转");
         // rejected 后不能 order。

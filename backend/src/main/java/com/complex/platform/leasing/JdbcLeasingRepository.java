@@ -149,6 +149,36 @@ class JdbcLeasingRepository implements LeasingRepository {
                 """, Map.of("id", id), this::mapIntent).stream().findFirst();
     }
 
+    // ---------- CG-01：合同 ↔ 意向 ↔ 线索（合同生效后置已签约） ----------
+    @Override
+    public void bindIntentContract(String intentId, String contractId) {
+        jdbcTemplate.update("""
+                UPDATE leasing_intents SET contract_id = :contract_id, updated_at = now() WHERE id = :id
+                """, Map.of("id", intentId, "contract_id", contractId));
+    }
+
+    @Override
+    public Optional<LeasingIntentRecord> findIntentByContractId(String contractId) {
+        return jdbcTemplate.query("""
+                SELECT id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms,
+                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at
+                  FROM leasing_intents WHERE contract_id = :contract_id
+                 ORDER BY updated_at DESC, id
+                 LIMIT 1
+                """, Map.of("contract_id", contractId), this::mapIntent).stream().findFirst();
+    }
+
+    /** CAS：status <> 'signed' 才改写；已签约的不动（幂等，也守住「已签约后不得回退」不被本路径绕过）。 */
+    @Override
+    public boolean markLeadSignedIfNotSigned(String leadId, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE leasing_leads SET status = 'signed', updated_at = :updated_at
+                 WHERE id = :id AND status <> 'signed'
+                """, new MapSqlParameterSource()
+                .addValue("id", leadId)
+                .addValue("updated_at", timestampWithTimeZone(now))) == 1;
+    }
+
     // ---------- brands ----------
     @Override
     public LeasingBrandRecord saveBrand(LeasingBrandRecord brand) {
