@@ -16,9 +16,6 @@ interface BarReceivableLedgerService {
             List<String> evidenceAttachmentIds
     );
 
-    /** A5(REQ-26b 增强)：卡座销售提成生成 finance 应付台账（source_type=employee_commission）。 */
-    String createPayableForCommission(BarCommissionCalculationRecord commission);
-
     /**
      * RC1①：酒吧结账后退款（adjustment_type='refund'）过账到 finance ar_ap 台账。
      * 生成一条 direction='payable'、source_type='refund' 的应付项（"应退/已退"语义），

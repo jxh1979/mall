@@ -225,8 +225,9 @@ erDiagram
 | `rejected` | 拒绝（规则不允许） | 业务规则不允许，未放行 |
 | `failed` | 失败（设备或网络原因） | 设备或网络原因导致核销未完成 |
 | `reversed` | 已冲正 | 已撤销原核销 |
-| `pending_review` | 待复核 | 核销结果待主管处置，不构成人工放行 |
-| `exception` | 异常 | 设备、网络、规则或凭证异常 |
+| `anomaly` | 异常 | 进入「异常」后按 ENUM「异常状态的统一出口」由主管处置（更正后恢复 / 作废并冲正）；进入条件待 HTML 补句后另开 PR（CG-05） |
+
+> **CG-05（2026-10-17，迁移 V449）已落地**：`ticket_verifications.status` CHECK 收口为 `success / rejected / failed / reversed / anomaly`（`manual_overridden` 仅历史行保留）。`TicketVerificationService` 以 `RULE_REJECTION_CODES`（规则不允许 → rejected）与 `TECHNICAL_FAILURE_CODES`（设备/网络/凭证 → failed）归类错误码；终端离线同步中的核销尝试据此落记录并把任务结果置同态，同批其他任务照常处理；在线核销的过窗口 / 签名失配落 failed，规则拒绝仍抛错不落记录。ENUM 现文为五态，上表 `pending_review`（待复核）已不在 HTML 中，去留待裁决。
 
 `pending_review` 必须在按项目配置且同时配置上下限的复核时限内处置，出厂默认沿用异常首响时限：特急 15 分钟、紧急 30 分钟、其余 60 分钟；超时自动逐级升级并保留原记录、原时间、原责任人与每次升级留痕，升级不改变核销结论。逐级升级到最高一级仍超时的，转 `exception` 并进入票务异常队列，不得自动通过、不得自动作废。
 

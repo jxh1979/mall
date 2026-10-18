@@ -51,6 +51,13 @@ public class SupervisorReviewService {
     // 税费调整固定三条平行线 + 主线到最高权限（老板最终确认）；发起时须为每条线指定最终审批人。
     static final String TAX_RULE_ADJUST_ACTION = "finance.tax_rule.adjust";
 
+    // CG-12（BSM:1478 / BSM:1487 / ENUM:283 / PRD:757、779）：涉及员工的人力操作——员工状态变更、奖惩、员工申诉——
+    // 固定走「HR 会签（平行线 hr_review）＋该员工直属领导向上三级（主线）」档，全部通过才生效。
+    public static final String STAFF_EMPLOYMENT_STATUS_ACTION = "staff.profile.employment_status.change";
+    public static final String STAFF_ADJUSTMENT_ACTION = "staff.payroll.adjustment.add";
+    public static final String STAFF_ADJUSTMENT_APPEAL_ACTION = "staff.payroll.adjustment.appeal";
+    public static final String HR_LINE = "hr_review";
+
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
             new SupervisorReviewPolicyRecord("staff_shift_publish", "staff.shift.publish", 0, 1, true, List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("staff_penalty_cap_adjust", "staff.payroll.penalty_cap.adjust", 0, 3, true,
@@ -66,7 +73,13 @@ public class SupervisorReviewService {
             new SupervisorReviewPolicyRecord("permission_grant_l2", "permission_grant_l2", 0, 2, true, List.of("reason"), "active", "two_levels_up"),
             new SupervisorReviewPolicyRecord("permission_grant_l3", "permission_grant_l3", 0, 3, true, List.of("reason"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("tax_rule_adjustment_l3", TAX_RULE_ADJUST_ACTION, 0, 3, true, List.of("reason", "before_after"), "active", "top_authority",
-                    null, List.of("finance_review", "tax_review", "legal_review"))
+                    null, List.of("finance_review", "tax_review", "legal_review")),
+            new SupervisorReviewPolicyRecord("staff_employment_status_hr3", STAFF_EMPLOYMENT_STATUS_ACTION, 0, 3, true, List.of("reason"), "active",
+                    ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE)),
+            new SupervisorReviewPolicyRecord("staff_payroll_adjustment_hr3", STAFF_ADJUSTMENT_ACTION, 0, 3, true, List.of("reason"), "active",
+                    ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE)),
+            new SupervisorReviewPolicyRecord("staff_payroll_adjustment_appeal_hr3", STAFF_ADJUSTMENT_APPEAL_ACTION, 0, 3, true, List.of("reason"), "active",
+                    ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE))
     );
 
     public SupervisorReviewService(

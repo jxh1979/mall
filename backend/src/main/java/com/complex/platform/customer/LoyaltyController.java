@@ -156,7 +156,25 @@ public class LoyaltyController {
         return ApiResponse.ok(storedValueService.configureMerchantCard(
                 request.merchantId(),
                 Boolean.TRUE.equals(request.cardIssuanceEnabled()),
-                request.fundOwnership()));
+                request.fundOwnership(),
+                request.consumeOrder()));
+    }
+
+    // ---- CG-06a：通用卡充值赠送比例（业务参数，按项目可配，须同时配置上下限；仅平台可改）----
+
+    @PostMapping("/stored-value/bonus-policies")
+    public ApiResponse<StoredValueBonusPolicyRecord> configureBonusPolicy(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.customer.dto.StoredValueBonusPolicyRequest request
+    ) {
+        return ApiResponse.ok(storedValueService.configureBonusPolicy(
+                request.projectId(), request.bonusBps(), request.minBps(), request.maxBps(), request.reason()));
+    }
+
+    @GetMapping("/stored-value/bonus-policies/{project_id}")
+    public ApiResponse<StoredValueBonusPolicyRecord> getBonusPolicy(
+            @PathVariable("project_id") String projectId
+    ) {
+        return ApiResponse.ok(storedValueService.getBonusPolicy(projectId));
     }
 
     // 积分转赠风控配置已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。

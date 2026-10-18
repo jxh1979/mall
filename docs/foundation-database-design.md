@@ -419,6 +419,7 @@
 | two_levels_up | 上两级 | 路由给 level_rank 第二个 > R 的职级；不足两级时回退 top_authority |
 | specified_level | 指定职级 | 由配置显式指定目标 level_rank/main_level+sub_level |
 | top_authority | 最高权限 | 路由给当前组织/项目内 level_rank 最大者；无更高级时即由其本人或平台最高权限审批 |
+| hr_three_levels_up | HR 会签＋直属领导向上三级 | CG-12（V450，BSM:1478 / BSM:1487）：主线＝该员工（直接受益人）直属上级链前三级，链不足三级到顶为止；平行线 hr_review＝HR 会签人（须持 staff.hr.review）；申请人与该员工不成为节点 |
 
 **3) 步进与回退规则：**
 - 「上一级」「上两级」均以 level_rank 连续步进，**同主级不同子级（如 M3-中 → M3-上）也算一级**，因为 rank 在 30 级序列上连续。
