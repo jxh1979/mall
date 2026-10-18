@@ -6,7 +6,7 @@
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 802,
+  "openapi_operation_count": 823,
   "security_baseline_version": "V1.03",
   "plaintext_secret_present": false,
   "notes": "U-FIX B3（U13-001/U13-010/U14-001）：OpenAPI 定稿后由 main 生成器重生三件并同步 732 项接口（删除 setMerchantSelfOperated；新增 issueStaffLockerScanToken / recordStaffLockerScan（柜机单端）/ coverStaffShift / listStaffShiftCovers）；U13-010 已修（生成器 reminder_days 判据读取面扩到 canonical 规则文档），verify:security-baseline --strict 绿。生产前置阻断仍以原台账为准。",

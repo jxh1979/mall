@@ -23,6 +23,8 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", route: "/admin/leasing/rental-status" },
   { pageId: "ADM-FIN-005", label: "通票结算审阅", route: "/admin/finance/settlement-review" },
   { pageId: "ADM-AMU-005", label: "游乐核销记录", route: "/admin/amusement/verification-records" },
+  { pageId: "ADM-AMU-006", label: "全园故障状态", route: "/admin/amusement/park-wide-faults" },
+  { pageId: "ADM-AMU-007", label: "全园故障补偿", route: "/admin/amusement/fault-compensation" },
   { pageId: "ADM-FIN-004", label: "物业费管理", route: "/admin/finance/property-fee" },
   { pageId: "ADM-FIN-006", label: "商户费用台账", route: "/admin/finance/merchant-expenses" },
   { pageId: "ADM-FIN-007", label: "持股分红", route: "/admin/finance/dividends" },
@@ -212,6 +214,12 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("amusement-safety-page")).toBeVisible();
   } else if (spec.pageId === "ADM-AMU-004") {
     await expect(page.getByTestId("amusement-inspection-tasks-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-AMU-006") {
+    await expect(page.getByTestId("amusement-park-wide-fault-page")).toBeVisible();
+    await expect(page.getByTestId("park-fault-history-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-AMU-007") {
+    await expect(page.getByTestId("amusement-fault-compensation-page")).toBeVisible();
+    await expect(page.getByTestId("compensation-batch-table")).toBeVisible();
   } else if (spec.pageId === "ADM-GOV-006") {
     await expect(page.getByTestId("supervisor-review-page")).toBeVisible();
   } else if (spec.pageId === "ADM-CONT-001") {

@@ -78,6 +78,12 @@ public class CustomerService {
     private final com.complex.platform.common.ratelimit.RateLimiter rateLimiter;
     private final com.complex.platform.common.ratelimit.RateLimitProperties rateLimitProperties;
 
+    // CG-06b（BSM「核销单位」「储值预付卡 / 余额」：账户关闭的，储值本金退还本人）：关闭账户时同事务处理通用卡。
+    // 字段注入 + @Lazy 断开 StoredValueService ↔ CustomerService 环；无容器的单测为 null 则不处理。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private StoredValueService storedValueService;
+
     @org.springframework.beans.factory.annotation.Autowired
     public CustomerService(
             CustomerRepository repository,
@@ -1123,10 +1129,19 @@ public class CustomerService {
         return changeAccountStatus(customerId, "suspended", suspendedUntil, reason, "customer.account.suspended", "customer.account.suspend_failed");
     }
 
-    /** 平台拉黑客人账号（永久）。需 customer.account.manage。 */
+    /**
+     * 平台拉黑客人账号（永久）。需 customer.account.manage。
+     * CG-06b：拉黑即关闭账户——同事务内把该客人名下综合体通用卡的未消费本金退还本人、赠送金作废、卡置 closed；
+     * 商户级卡不动（由发卡商户按自设规则到店办理）。重复拉黑不重复退。
+     */
     @Transactional
     public CustomerRecord blacklistCustomer(String customerId, String reason) {
-        return changeAccountStatus(customerId, "blacklisted", null, reason, "customer.account.blacklisted", "customer.account.blacklist_failed");
+        CustomerRecord closed = changeAccountStatus(customerId, "blacklisted", null, reason,
+                "customer.account.blacklisted", "customer.account.blacklist_failed");
+        if (storedValueService != null) {
+            storedValueService.closeGeneralCardsOnAccountClosure(closed.id(), reason);
+        }
+        return closed;
     }
 
     /** 平台恢复客人账号为正常（解封/解黑/复活）。需 customer.account.manage。 */

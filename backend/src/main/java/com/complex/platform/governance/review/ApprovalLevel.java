@@ -8,7 +8,12 @@ public enum ApprovalLevel {
     ONE_LEVEL_UP("one_level_up"),
     TWO_LEVELS_UP("two_levels_up"),
     TOP_AUTHORITY("top_authority"),
-    SPECIFIC_ROLE("specific_role");
+    SPECIFIC_ROLE("specific_role"),
+    /**
+     * CG-12（BSM:1478 / BSM:1487「须经 HR 与该员工直属领导、向上三级复核后生效」）：主线＝该员工（直接受益人）直属上级链前三级
+     * （链不足三级到顶为止），平行线＝人力审核线（HR 会签）。
+     */
+    HR_THREE_LEVELS_UP("hr_three_levels_up");
 
     /** 一个主职级 = 上/中/下 3 个子级，故"上一级"= level_rank + 3。 */
     static final int LEVEL_STEP = 3;
@@ -46,6 +51,7 @@ public enum ApprovalLevel {
         return switch (this) {
             case ONE_LEVEL_UP -> Math.min(initiatorRank + LEVEL_STEP, MAX_RANK);
             case TWO_LEVELS_UP -> Math.min(initiatorRank + 2 * LEVEL_STEP, MAX_RANK);
+            case HR_THREE_LEVELS_UP -> Math.min(initiatorRank + 3 * LEVEL_STEP, MAX_RANK);
             case TOP_AUTHORITY -> MAX_RANK;
             case SPECIFIC_ROLE -> 0;
         };
@@ -68,6 +74,7 @@ public enum ApprovalLevel {
         return switch (this) {
             case ONE_LEVEL_UP -> Math.min(floorRank + LEVEL_STEP, MAX_RANK);
             case TWO_LEVELS_UP -> Math.min(floorRank + 2 * LEVEL_STEP, MAX_RANK);
+            case HR_THREE_LEVELS_UP -> Math.min(floorRank + 3 * LEVEL_STEP, MAX_RANK);
             case TOP_AUTHORITY -> MAX_RANK;
             case SPECIFIC_ROLE -> 0;
         };

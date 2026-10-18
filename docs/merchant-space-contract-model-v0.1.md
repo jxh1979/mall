@@ -1,6 +1,6 @@
-# 商户、铺位与合同数据模型 V0.18
+# 商户、铺位与合同数据模型 V0.19
 
-> 版本：V0.18 ｜ 最后更新：2026-08-31 ｜ 状态：现行开发模型
+> 版本：V0.19 ｜ 最后更新：2026-10-17 ｜ 状态：现行开发模型
 > 业务最终解释权：三份业务 HTML。本文只把 HTML 业务关系映射到当前迁移和代码；HTML 与代码不一致时，业务按 HTML，代码列为实现差距。
 
 采集范围：V002、V005、V010、V080、V110、V162、V163、V164、V171、V184、V203、V281、V307、V314、V318、V346、V348、V354、V384，以及当前治理、合同、合规、财务和商户专区实现。
@@ -85,6 +85,7 @@ V318/V354 的 `parent_entity_id` 和角色白名单反映当前代码结构，�
 - `space_type` 由字典校验；铺位代码值为 `shop`。
 - `spaces.status` 经 V203 仅允许 `active/unavailable`。
 - HTML 铺位租赁状态为：空置、洽谈中、已租、即将到期、已退租、不可租。该六态须随意向与合同联动并在平面图着色，其中不可租由人工标注；分类、颜色和提前天数按综合体后台可配，但六个状态分类属于业务定义，不允许后台增删。当前 DB 两态不能冒充六态已完成。
+  - **推导现状（2026-10-17 CG-09，PGM「合同运营细则（已确认）」「退租结算完成即转空置」）**：六态由 `SpaceRentalDerivationSql` 按铺位最近一份已进入租期的合同（`contract_spaces` 绑定，排除起草/待确认/待生效及生效日在当日之后的合同）推导，铺位看板 `listSpaceRentalRaw` 与经营看板出租率 `occupancyAreas`、空置明细 `listVacantSpaces` 共用：不可租（人工 `spaces.status=unavailable`）> 已退租（该合同存在 `contract_settlements.status ∉ settled/voided` 的退租结算单——结算单开立起、不论合同是否仍 `effective`、含 move_out/expiry/early_termination；或合同已 expired/terminated/过期而无已结清结算单）> 已租/即将到期（`effective` 且在租期内且无开立中结算单）> 洽谈中（`leasing_intents` 占用）> 空置（结算单 settled 或从未绑约）。已退租铺位不计入已租面积。
 - `contract_spaces` 以 `(contract_id, space_id)` 表达合同与铺位多对多。
 
 ### 3.5 `contracts`
@@ -186,4 +187,4 @@ merchants（一个业态）1 ── N contracts
 - BSM「商户管理」「招商租赁与合同履约」「合同变更」「变更与退租」
 - `platform-governance-map-for-operations-v0.1.html` 的物理项目与运营公司、商户档案、合同生命周期和合同运营细则
 - ENUM「经营主体关系」「四类主体」「合作模式」「合同状态」「合同变更类型」「退租结算状态」「营业额抽成模式」「铺位租赁状态」「公区能源费」
-- 当前实现：V002/V005/V010/V080/V110/V162/V163/V164/V171/V184/V203/V281/V307/V314/V318/V346/V348/V354/V384
+- 当前实现：V002/V005/V010/V080/V110/V162/V163/V164/V171/V184/V203/V281/V307/V314/V318/V346/V348/V354/V384；铺位六态推导 `contract/SpaceRentalDerivationSql.java`（CG-09，2026-10-17）

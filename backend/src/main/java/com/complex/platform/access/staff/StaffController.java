@@ -93,11 +93,12 @@ public class StaffController {
     }
 
     // ── V349 销售岗标识（卡座提成按员工岗位判档的唯一依据）────────────────
+    /** CG-12：员工状态变更只发起「HR 会签＋直属领导向上三级」复核，返回复核单；全部通过后才写入。 */
     @PostMapping("/profiles/{id}/employment-status")
-    public ApiResponse<StaffProfileRecord> setEmploymentStatus(@PathVariable String id,
+    public ApiResponse<com.complex.platform.governance.review.SupervisorReviewDecisionRecord> setEmploymentStatus(@PathVariable String id,
             @RequestBody com.complex.platform.access.staff.dto.StaffEmploymentStatusRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.setEmploymentStatus(id, request).maskedPersonalInfo());
+        return ApiResponse.ok(service.setEmploymentStatus(id, request));
     }
 
     @PostMapping("/profiles/{id}/sales-position")
@@ -247,6 +248,45 @@ public class StaffController {
         return ApiResponse.ok(service.listAttendance(java.time.LocalDate.parse(date), page, size));
     }
 
+    // ---- CG-07 派驻记录（BSM「派驻人员的成本与报酬」）----
+
+    @PostMapping("/dispatches")
+    public ApiResponse<StaffDispatchRecord> createDispatch(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createDispatch(request));
+    }
+
+    @PostMapping("/dispatches/{dispatch_id}/end")
+    public ApiResponse<StaffDispatchRecord> endDispatch(
+            @PathVariable("dispatch_id") String dispatchId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffDispatchEndRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.endDispatch(dispatchId, request));
+    }
+
+    @GetMapping("/dispatches")
+    public ApiResponse<PageResponse<StaffDispatchRecord>> listDispatches(
+            @org.springframework.web.bind.annotation.RequestParam(name = "user_id", required = false) String userId,
+            @org.springframework.web.bind.annotation.RequestParam(name = "merchant_id", required = false) String merchantId) {
+        return ApiResponse.ok(service.listDispatches(userId, merchantId));
+    }
+
+    // ---- CG-07 提成月结内部结算（酒吧 → 人员所属主体，按三个付账日结清）----
+
+    @PostMapping("/commission-settlements/close")
+    public ApiResponse<java.util.Map<String, Object>> closeCommissionSettlement(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffCommissionSettlementCloseRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.closeCommissionSettlement(request));
+    }
+
+    @GetMapping("/commission-settlements")
+    public ApiResponse<PageResponse<BarCommissionSettlementRecord>> listCommissionSettlements(
+            @org.springframework.web.bind.annotation.RequestParam("month") String month) {
+        return ApiResponse.ok(service.listCommissionSettlements(month));
+    }
+
     @PostMapping("/payroll/base")
     public ApiResponse<java.util.Map<String, String>> setBaseSalary(
             @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffPayrollBaseRequest request) {
@@ -255,12 +295,27 @@ public class StaffController {
         return ApiResponse.ok(java.util.Map.of("status", "saved"));
     }
 
+    /** CG-12：奖惩只发起复核，返回复核单（objectId 为通过后入账的奖惩记录 id）。 */
     @PostMapping("/payroll/adjustments")
-    public ApiResponse<java.util.Map<String, String>> addPayrollAdjustment(
+    public ApiResponse<com.complex.platform.governance.review.SupervisorReviewDecisionRecord> addPayrollAdjustment(
             @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        service.addPayrollAdjustment(request);
-        return ApiResponse.ok(java.util.Map.of("status", "saved"));
+        return ApiResponse.ok(service.addPayrollAdjustment(request));
+    }
+
+    /** CG-12：员工对已生效扣罚提出申诉（同链裁定）。 */
+    @PostMapping("/payroll/adjustments/{id}/appeals")
+    public ApiResponse<StaffAdjustmentAppealRecord> submitAdjustmentAppeal(@PathVariable String id,
+            @RequestBody com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.submitAdjustmentAppeal(id, request));
+    }
+
+    /** CG-12：申诉清单（本人 / 人事按员工）。 */
+    @GetMapping("/payroll/adjustments/appeals")
+    public ApiResponse<PageResponse<StaffAdjustmentAppealRecord>> listAdjustmentAppeals(
+            @org.springframework.web.bind.annotation.RequestParam(name = "user_id", required = false) String userId) {
+        return ApiResponse.ok(service.listAdjustmentAppeals(userId));
     }
 
     @PostMapping("/payroll/commissions")
