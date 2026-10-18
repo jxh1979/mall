@@ -25322,7 +25322,7 @@ paths:
       operationId: settlementConfigUpsertHighValueThreshold
       summary: 维护高价值判定阈值(草案)
       description: 结算配置中心 V350：按 项目公司 × 商户
-        配置全平台唯一的「高价值判定阈值(分)」——物品进货价高于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。
+        配置全平台唯一的「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
