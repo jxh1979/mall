@@ -49,3 +49,8 @@ access.permission-expiry.scheduled.enabled: true
 # AUD-010: web 通道翻 enforce——拒「Authorization: Bearer 自报 web」走资金端点旁路
 # (合法后台走 Cookie 会话·无客户端依赖·可独立翻;设备绑定型/app 仍 grace 待 BYOD二期客户端签名)
 access.device_credential.enforcement.web: enforce
+
+# 2026-10-18 CG-03 / CG-11b 批量发布配套(BSM「营业日结束时由系统自动清零在玩人数」「到首付款截止时仍未达到合同门槛的订单取消」为系统自动动作,
+# 同 AUD-033 先例 prod 开启;两作业均为薄 @Scheduled 包装,业务规则在服务层,默认间隔 60s / 300s):
+amusement.concurrent-reset.scheduled.enabled: true           # 场次结束自动清空该场次与项目并发维、营业日结束自动清零在玩人数(留痕 amusement_concurrent_reset_log)
+dealer.order.deadline.scheduled.enabled: true                # E-13 首付款截止未达门槛自动取消并释放预留、已收款进既有退款审批;尾款逾期标记与暂停账期订单
