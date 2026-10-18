@@ -6964,7 +6964,7 @@ paths:
         - terminals
       operationId: syncTerminalTasks
       summary: 同步终端任务
-      description: 用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: "用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 离线同步的核销尝试：规则不允许的结果落 rejected 记录、设备/网络/凭证技术原因落 failed，任务结果同态（status/reason），同批其他任务照常处理。"
       x-permission: terminal.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -7852,6 +7852,7 @@ paths:
         - ticketing
       operationId: createTicketVerification
       summary: 正式核销
+      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回、不落记录。"
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -7898,7 +7899,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。"
   /api/v1/ticketing/verifications/{id}/reverse:
     post:
       tags:

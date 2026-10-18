@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -64,6 +65,39 @@ public class TicketVerificationService {
     // 字段注入免改构造点；旧构造/未注入的单测为 null（不回写）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     CompensationFulfillmentPort compensationFulfillmentPort;
+
+    // CG-05 核销记录状态闭集（ENUM「核销记录状态」：成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常）。
+    // 落记录的非成功结果按 result_reason 归类：规则不允许 → rejected；设备 / 网络 / 凭证技术原因 → failed。
+    // 「异常」（anomaly）的进入条件待 HTML 补句后另开 PR：本类不写 anomaly。manual_overridden 历史保留、不再写入。
+    static final String STATUS_SUCCESS = "success";
+    static final String STATUS_REJECTED = "rejected";
+    static final String STATUS_FAILED = "failed";
+    static final String STATUS_ANOMALY = "anomaly";
+    /** 规则不允许（票不可用、次数用尽、场次/时段不符、归属不符、项目/场次状态、安全阻断等业务规则）→ rejected。 */
+    static final Set<String> RULE_REJECTION_CODES = Set.of(
+            "ENTITLEMENT_NOT_ACTIVE", "ENTITLEMENT_NOT_YET_VALID", "ENTITLEMENT_EXPIRED", "ENTITLEMENT_USED_UP", "ENTITLEMENT_USED",
+            "TICKET_INSTANCE_REFUND_IN_PROGRESS", "TICKET_TRANSFER_PENDING", "MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
+            "ENTITLEMENT_PROVIDER_MISMATCH", "ENTITLEMENT_NOT_AMUSEMENT", "ENTITLEMENT_NOT_FOR_PROJECT",
+            "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH");
+    /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed。 */
+    static final Set<String> TECHNICAL_FAILURE_CODES = Set.of(
+            "CREDENTIAL_NOT_FOUND", "CREDENTIAL_EXPIRED", "ENTITLEMENT_NOT_FOUND", "DEVICE_NOT_REGISTERED", "DEVICE_NOT_MANAGED",
+            "DEVICE_BLOCKED", "DEVICE_NOT_FOUND", "VERIFY_DEVICE_MERCHANT_UNRESOLVED", "ENTITLEMENT_PROVIDER_UNRESOLVED",
+            "PROJECT_NOT_FOUND", "TICKET_NOT_FOUND");
+
+    /** 错误码 → 记录状态；未归类（如越权、参数错误）返回 null，调用方维持原异常（PR 待裁决单列）。 */
+    static String outcomeStatusForCode(String code) {
+        if (code == null) {
+            return null;
+        }
+        if (RULE_REJECTION_CODES.contains(code)) {
+            return STATUS_REJECTED;
+        }
+        if (TECHNICAL_FAILURE_CODES.contains(code)) {
+            return STATUS_FAILED;
+        }
+        return null;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketVerificationService(
@@ -1070,6 +1104,8 @@ public class TicketVerificationService {
         Map<String, String> payload = task.payload() == null ? Map.of() : task.payload();
         String verificationId = null;
         String verificationNo = null;
+        String taskStatus = "accepted";
+        String taskReason = null;
 
         if ("offline_verification".equals(taskType)) {
             String entitlementCode = firstPayload(payload, "entitlementCode", "entitlement_code", "credentialPayload", "credential_payload");
@@ -1079,20 +1115,33 @@ public class TicketVerificationService {
             String resolvedDeviceId = repository.resolveTerminalDeviceId(deviceCode)
                     .orElseThrow(() -> ApiException.badRequest(
                             "DEVICE_NOT_REGISTERED", "设备未登记：" + deviceCode));
-            VerificationResponse verification = verifyEntitlement(
-                    new VerificationRequest(
-                            "sync-task-" + clientTaskId,
-                            "qr",
-                            entitlementCode,
-                            resolvedDeviceId,
-                            pointId == null ? resolvedDeviceId : pointId,
-                            Map.of("source", "terminal_sync_task")
-                    ),
-                    "android_terminal_offline",
-                    clientTaskId
+            VerificationRequest verifyRequest = new VerificationRequest(
+                    "sync-task-" + clientTaskId,
+                    "qr",
+                    entitlementCode,
+                    resolvedDeviceId,
+                    pointId == null ? resolvedDeviceId : pointId,
+                    Map.of("source", "terminal_sync_task")
             );
-            verificationId = verification.id();
-            verificationNo = verification.verificationNo();
+            try {
+                VerificationResponse verification = verifyEntitlement(verifyRequest, "android_terminal_offline", clientTaskId);
+                verificationId = verification.id();
+                verificationNo = verification.verificationNo();
+            } catch (ApiException outcome) {
+                // CG-05：终端离线已发生的核销尝试，其结果按闭集落记录——规则不允许 → rejected，技术原因 → failed；
+                // 本任务结果同态，同批其他任务照常处理（不再整批抛错）。未归类的错误码维持原异常。
+                String status = outcomeStatusForCode(outcome.code());
+                if (status == null) {
+                    throw outcome;
+                }
+                taskStatus = status;
+                taskReason = outcome.code().toLowerCase(Locale.ROOT);
+                VerificationRecord recorded = recordOfflineOutcome(verifyRequest, status, taskReason, staffId, clientTaskId);
+                if (recorded != null) {
+                    verificationId = recorded.id();
+                    verificationNo = recorded.verificationNo();
+                }
+            }
         }
 
         TerminalSyncTaskRecord saved = repository.saveTerminalSyncTask(new TerminalSyncTaskRecord(
@@ -1101,8 +1150,8 @@ public class TicketVerificationService {
                 staffId,
                 clientTaskId,
                 taskType,
-                "accepted",
-                null,
+                taskStatus,
+                taskReason,
                 verificationId,
                 verificationNo,
                 occurredAt,
@@ -1110,6 +1159,45 @@ public class TicketVerificationService {
                 Instant.now()
         ));
         return toSyncTaskResult(saved);
+    }
+
+    /**
+     * CG-05：离线同步中被拒绝 / 失败的核销尝试落一条非成功核销记录（不消费权益、不落结算价）；
+     * 权益无法定位（凭证不存在等）时无记录可落，返回 null（任务结果仍带状态与原因）。
+     */
+    private VerificationRecord recordOfflineOutcome(VerificationRequest request, String status, String reason,
+            String staffId, String clientTaskId) {
+        IssuedEntitlementRecord entitlement;
+        try {
+            entitlement = entitlementByCredential(request);
+        } catch (ApiException unresolved) {
+            return null;
+        }
+        return repository.saveVerification(new VerificationRecord(
+                "ver_" + UUID.randomUUID().toString().replace("-", ""),
+                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
+                entitlement.id(),
+                entitlement.entitlementCode(),
+                "qr",
+                verificationPayload(request.credentialPayload(), null),
+                request.deviceId(),
+                request.pointId(),
+                status,
+                reason,
+                "android_terminal_offline",
+                clientTaskId,
+                Instant.now(),
+                null,
+                staffId,
+                entitlement.merchantId(),
+                null,
+                null,
+                entitlement.numPeople(),
+                null,
+                null,
+                null,
+                null
+        ));
     }
 
     private SyncTaskResult toSyncTaskResult(TerminalSyncTaskRecord task) {
