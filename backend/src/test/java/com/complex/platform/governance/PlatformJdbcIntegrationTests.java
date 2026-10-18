@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -278,12 +278,15 @@ class PlatformJdbcIntegrationTests {
                 createdAt
         ));
 
-        assertThat(repository.listProjects())
+        // 按本夹具项目读取，避免全库前 500 条截断固定历史日期的记录。
+        assertThat(repository.listProjectsPaged("prj_jdbc_formal", 1, 500).items())
                 .extracting(ProjectRecord::id, ProjectRecord::merchantId, ProjectRecord::venueType, ProjectRecord::name)
-                .contains(tuple("prj_jdbc_formal", "mch_jdbc_formal", "complex", "P0 Complex"));
-        assertThat(repository.listSpaces())
+                .containsExactly(tuple("prj_jdbc_formal", "mch_jdbc_formal", "complex", "P0 Complex"));
+        assertThat(repository.listSpacesPaged("prj_jdbc_formal", 1, 500).items())
                 .extracting(SpaceRecord::id, SpaceRecord::projectId, SpaceRecord::merchantId, SpaceRecord::parentSpaceId, SpaceRecord::spaceName, SpaceRecord::spaceType)
-                .contains(tuple("sp_jdbc_child", "prj_jdbc_formal", "mch_jdbc_formal", "sp_jdbc_parent", "P0 Shop", "shop"));
+                .containsExactlyInAnyOrder(
+                        tuple("sp_jdbc_parent", "prj_jdbc_formal", "mch_jdbc_formal", null, "P0 Floor", "floor"),
+                        tuple("sp_jdbc_child", "prj_jdbc_formal", "mch_jdbc_formal", "sp_jdbc_parent", "P0 Shop", "shop"));
     }
 
     @Test

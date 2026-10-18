@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -26,7 +27,7 @@ const TEXT = {
 };
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=<merchants|bindings|contracts>；点 KPI 数字=带参重进本页只渲染对应表。
-// 准入闭环（closedLoopCount）是跨档案/绑定/合同交叉计数，无独立承载表，其 KPI 数字保持纯文本不可点。
+// 三类资料关联只表示同一商户存在档案、绑定和合同记录，不代表审批通过。
 type KpiTarget = "merchants" | "bindings" | "contracts";
 type KpiFocus = { table: KpiTarget };
 
@@ -113,9 +114,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
   );
 
   const merchantIds = new Set(merchants.map((row) => row.id).filter(Boolean));
-  const bindingMerchantIds = new Set(bindings.map((row) => row.businessObjectId).filter(Boolean));
+  const bindingMerchantIds = new Set(bindings.map((row) => row.merchantId).filter(Boolean));
   const contractMerchantIds = new Set(contracts.map((row) => row.merchantId).filter(Boolean));
-  const closedLoopCount = [...merchantIds].filter((id) => bindingMerchantIds.has(id) && contractMerchantIds.has(id)).length;
+  const linkedMaterialsCount = [...merchantIds].filter((id) => bindingMerchantIds.has(id) && contractMerchantIds.has(id)).length;
   const draftCount = contracts.filter((row) => ["draft", "pending", "returned"].includes(row.lifecycleStatus ?? row.status ?? "")).length;
 
   async function exportAdmissionAudit() {
@@ -130,7 +131,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       merchantCount: merchants.length,
       bindingCount: bindings.length,
       contractCount: contracts.length,
-      closedLoopCount,
+      linkedMaterialsCount,
     };
     // M725-F02：导出发生时间在这次登记第一次提交时取一次，登记成功之前同样的导出内容都沿用（切页回来、中间登记过别的也一样）——
     // 没拿到结果再点时请求内容逐字不变，客户端才认得出是同一次操作、沿用首发的提交编号，不会再登记一条。
@@ -191,14 +192,17 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
 
   function openBindingDetail(row: SubjectBindingRow) {
     setDetail({
-      title: `主体绑定明细 · ${display(row.businessObjectId)}`,
+      title: `主体绑定明细 · ${display(row.merchantId)}`,
       fields: [
-        { label: "业务对象", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink> },
-        { label: "运营主体", value: display(row.operatorSubject) },
-        { label: "合同主体", value: display(row.contractSubject) },
-        { label: "结算主体", value: display(row.settlementSubject) },
+        { label: "商户编号", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> },
+        { label: "运营主体编号", value: display(row.operationEntityId) },
+        { label: "合同主体编号", value: display(row.contractEntityId) },
+        { label: "结算主体编号", value: display(row.settlementEntityId) },
         { label: "状态", value: formatBusinessStatus(row.status) },
-        { label: "留痕证据", value: display(row.auditEvidenceRef) },
+        { label: "生效起", value: cnDate(row.effectiveFrom) },
+        { label: "生效止", value: cnDate(row.effectiveTo) },
+        { label: "变更原因", value: display(row.changeReason) },
+        { label: "绑定编号", value: display(row.id) },
       ],
     });
   }
@@ -239,9 +243,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-section-title">主体绑定</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="admission-audits-bindings-table">
-          <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th><th>详情</th></tr></thead>
+          <thead><tr><th>商户编号</th><th>运营主体编号</th><th>合同主体编号</th><th>结算主体编号</th><th>状态</th><th>生效起</th><th>生效止</th><th>变更原因</th><th>绑定编号</th><th>详情</th></tr></thead>
           <tbody>{bindings.map((row) => (
-            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-binding-row-${row.id}`} onClick={() => openBindingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看主体绑定详情" onClick={(event) => { event.stopPropagation(); openBindingDetail(row); }}>查看详情</button></td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-binding-row-${row.id}`} onClick={() => openBindingDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openBindingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.operationEntityId)}</td><td>{display(row.contractEntityId)}</td><td>{display(row.settlementEntityId)}</td><td>{formatBusinessStatus(row.status)}</td><td>{cnDate(row.effectiveFrom)}</td><td>{cnDate(row.effectiveTo)}</td><td>{display(row.changeReason)}</td><td>{display(row.id)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看主体绑定详情" onClick={(event) => { event.stopPropagation(); openBindingDetail(row); }}>查看详情</button></td></tr>
           ))}</tbody>
         </table>
       </div>
@@ -287,7 +291,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户档案</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchants.length}</button><small>档案证据</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>主体绑定</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-bindings" onClick={() => enterKpiFocus("bindings")}>{bindings.length}</button><small>四类主体</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>合同审批</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-contracts" onClick={() => enterKpiFocus("contracts")}>{contracts.length}</button><small>{draftCount} 个草稿</small></div>
-              <div className="admin-kpi-card"><span>准入闭环</span><strong>{closedLoopCount}</strong><small>档案+绑定+合同</small></div>
+              <div className="admin-kpi-card"><span>三类资料关联</span><strong>{linkedMaterialsCount}</strong><small>档案+绑定+合同，不代表审批通过</small></div>
             </div>
 
             <div className="admin-form-row">
@@ -300,7 +304,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
             {contractsSection}
 
             <div className="admin-muted-action" data-testid="admission-audits-cross-check">
-              已核验商户 {merchants.map((row) => `${row.id}:${byMerchant(contracts, row.id).length} 份合同`).join("；") || "-"}
+              已关联商户 {merchants.map((row) => `${row.id}:${byMerchant(contracts, row.id).length} 份合同`).join("；") || "-"}
             </div>
           </>
         )}
@@ -319,7 +323,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         steps={[
           {
             title: "导出原因",
-            description: `将当前商户档案（${merchants.length}）、主体绑定（${bindings.length}）、合同审批（${contracts.length}）与准入闭环（${closedLoopCount}）打包登记为一条证据事件。请填写导出原因，作为审计留痕。`,
+            description: `将当前商户档案（${merchants.length}）、主体绑定（${bindings.length}）、合同审批（${contracts.length}）与三类资料关联（${linkedMaterialsCount}）打包登记为一条证据事件。请填写导出原因，作为审计留痕。`,
             validate: () => (exportReason.trim() ? null : TEXT.exportReasonRequired),
             content: (
               <label>导出原因<input data-testid="admission-audits-export-reason" value={exportReason} onChange={(event) => setExportReason(event.target.value)} /></label>
@@ -331,7 +335,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
           { label: "商户档案", value: `${merchants.length} 户` },
           { label: "主体绑定", value: `${bindings.length} 条` },
           { label: "合同审批", value: `${contracts.length} 份` },
-          { label: "准入闭环", value: `${closedLoopCount} 户` },
+          { label: "三类资料关联", value: `${linkedMaterialsCount} 户` },
         ]}
       />
     </section>

@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -19,6 +21,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,8 +47,17 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
 
     @Autowired private AmusementService amusementService;
+    @Autowired private AmusementController controller;
+    @Autowired private AmusementSessionLifecycleController lifecycleController;
+    @Autowired private AmusementCountReleaseController releaseController;
     @Autowired private AmusementSafetyService safetyService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private AmusementBusinessDayService businessDays;
+    @Autowired private AmusementSessionLifecycleService lifecycle;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    private AmusementRepository repository;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
+    @Autowired private com.complex.platform.governance.review.SupervisorReviewService reviews;
 
     private String suffix;
     private String projectId;
@@ -51,6 +65,7 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
     private String templateId;
     private String userId;
     private String roleId;
+    private final List<String> extraReadProjects = new java.util.ArrayList<>();
 
     @AfterEach
     void tearDown() {
@@ -58,11 +73,17 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
         if (suffix == null) {
             return;
         }
+        // 清场原件不可删除，相关随机测试交易保留为测试证据。
+        if (jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE project_id=?", Integer.class, projectId)>0) return;
         // amusement_sessions / verifications / capacity_snapshot / inspections / incidents 均 ON DELETE CASCADE 到项目；
         // risk_alerts/risk_alert_actions 为 append-only（V140），随机 id 留痕不清。
+        for (String extra : extraReadProjects) jdbcTemplate.update("DELETE FROM amusement_projects WHERE id = ?", extra);
+        extraReadProjects.clear();
         jdbcTemplate.update("DELETE FROM amusement_projects WHERE id = ?", projectId);
         jdbcTemplate.update("DELETE FROM amusement_safety_templates WHERE id = ?", templateId);
+        jdbcTemplate.update("DELETE FROM ticket_verifications WHERE entitlement_id IN (SELECT id FROM issued_entitlements WHERE order_id = ?)", "order_cg02_" + suffix);
         jdbcTemplate.update("DELETE FROM issued_entitlements WHERE order_id = ?", "order_cg02_" + suffix);
+        jdbcTemplate.update("DELETE FROM ticket_instances WHERE order_id = ?", "order_cg02_" + suffix);
         jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_cg02_" + suffix);
         jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = ?", "et_cg02_" + suffix);
         jdbcTemplate.update("DELETE FROM ticket_types WHERE id = ?", "tt_cg02_" + suffix);
@@ -172,6 +193,593 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
         assertThat(autoReopenEvents()).isEqualTo(1);
     }
 
+    @Test
+    void sessionDisplayCapacityDoesNotDuplicateProjectHardLimit() {
+        seed(5, 2);
+        jdbcTemplate.update("UPDATE amusement_sessions SET capacity = 1 WHERE id = ?", sessionId);
+
+        enter(1);
+        enter(2);
+
+        assertThat(inPlayCount()).isEqualTo(2);
+        assertThat(projectRow()).containsEntry("open_status", "open");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM amusement_verifications WHERE session_id = ? AND direction = 'entry'",
+                Integer.class, sessionId)).isEqualTo(2);
+    }
+
+    @Test
+    void pointDisplayCapacityDoesNotDuplicateProjectHardLimit() {
+        seed(5, 2);
+        jdbcTemplate.update("""
+                INSERT INTO amusement_capacity_config (id, project_id, location_point_id, max_concurrent,
+                    enabled, created_at, updated_at)
+                VALUES (?, ?, ?, 1, true, now(), now())
+                """, "cap_" + suffix, projectId, "point_" + suffix);
+        for (int n : List.of(1, 2)) {
+            amusementService.createVerification(new VerificationRequest(
+                    "point_in_" + n + "_" + suffix, "entitlement_code", code(n), null, null,
+                    Map.of("project_id", projectId, "session_id", sessionId,
+                            "location_point_id", "point_" + suffix, "staff_id", "usr_gate")));
+        }
+
+        assertThat(inPlayCount()).isEqualTo(2);
+        assertThat(projectRow()).containsEntry("open_status", "open");
+    }
+
+    @Test
+    void directAdmissionKeepsRealAssetCodeWithoutUsingItAsTicketTerminalId() {
+        seed(5, 1);
+        String deviceCode = "asset_code_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO amusement_devices (id, project_id, device_code, status,
+                    safety_check_interval_hours, last_pass_inspection_at, created_at, updated_at)
+                VALUES (?, ?, ?, 'active', 1, now(), now(), now())
+                """, "asset_" + suffix, projectId, deviceCode);
+
+        AmusementVerificationRecord admission = amusementService.createVerification(new VerificationRequest(
+                "asset_entry_" + suffix, "entitlement_code", code(1), deviceCode, null,
+                Map.of("project_id", projectId, "session_id", sessionId, "staff_id", "usr_gate")));
+
+        assertThat(admission.deviceId()).isEqualTo(deviceCode);
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT device_id, amusement_verification_id FROM ticket_verifications
+                 WHERE amusement_verification_id = ?
+                """, admission.id())).containsEntry("device_id", null)
+                .containsEntry("amusement_verification_id", admission.id());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT used_times FROM issued_entitlements WHERE entitlement_code = ?", Integer.class, code(1)))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void directAdmissionRejectsUnknownNonemptyDeviceWithoutConsumingAnything() {
+        seed(5, 1);
+
+        assertThatThrownBy(() -> amusementService.createVerification(new VerificationRequest(
+                "unknown_device_" + suffix, "entitlement_code", code(1), "unknown_asset_" + suffix, null,
+                Map.of("project_id", projectId, "session_id", sessionId, "staff_id", "usr_gate"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        error -> assertThat(error.code()).isEqualTo("DEVICE_NOT_REGISTERED"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT used_times FROM issued_entitlements WHERE entitlement_code = ?", Integer.class, code(1)))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COALESCE(sum(occupied_count),0) FROM amusement_capacity_snapshot
+                 WHERE project_id = ? AND dimension = 'project'
+                """, Integer.class, projectId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM amusement_verifications WHERE project_id = ?", Integer.class, projectId)).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM ticket_verifications
+                 WHERE entitlement_id IN (SELECT id FROM issued_entitlements WHERE order_id = ?)
+                """, Integer.class, "order_cg02_" + suffix)).isZero();
+    }
+
+    @Test
+    void hardCapacityRecoveryDoesNotReopenWithExpiredActiveDeviceInspection() {
+        seed(1, 2);
+        jdbcTemplate.update("""
+                INSERT INTO amusement_devices (id, project_id, device_code, status,
+                    safety_check_interval_hours, last_pass_inspection_at, created_at, updated_at)
+                VALUES (?, ?, ?, 'active', 1, now(), now(), now())
+                """, "dev_" + suffix, projectId, "device_" + suffix);
+        enter(1);
+        assertThatThrownBy(() -> enter(2)).isInstanceOf(ApiException.class);
+        jdbcTemplate.update("UPDATE amusement_devices SET last_pass_inspection_at = now() - interval '2 hours' WHERE project_id = ?", projectId);
+
+        exit(1);
+
+        assertThat(inPlayCount()).isZero();
+        assertThat(projectRow()).containsEntry("open_status", "paused")
+                .containsEntry("auto_paused_reason", "hard_capacity");
+        assertThat(autoReopenEvents()).isZero();
+    }
+
+    @Test
+    void hardCapacityRecoveryDoesNotReopenWhenLatestInspectionIsUnsubmitted() {
+        seed(1, 2);
+        enter(1);
+        assertThatThrownBy(() -> enter(2)).isInstanceOf(ApiException.class);
+        jdbcTemplate.update("UPDATE amusement_safety_inspections SET inspection_status = 'draft' WHERE project_id = ?", projectId);
+
+        exit(1);
+
+        assertThat(inPlayCount()).isZero();
+        assertThat(projectRow()).containsEntry("open_status", "paused");
+        assertThat(autoReopenEvents()).isZero();
+    }
+
+    @Test
+    void endingOldSessionMustNotClearVisitorsInAnotherSession() {
+        seed(5, 2);
+        enter(1);
+        String originalSession = sessionId;
+        sessionId = "next_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO amusement_sessions (id, project_id, start_time, end_time, capacity, used_capacity,
+                    status, created_at, updated_at)
+                VALUES (?, ?, now() - interval '1 hour', now() + interval '1 hour', 100, 0, 'open', now(), now())
+                """, sessionId, projectId);
+        lifecycle.lockSessionWindow(repository.findSessionById(sessionId).orElseThrow());
+        enter(2);
+        jdbcTemplate.update("UPDATE amusement_sessions SET end_time = now() - interval '1 minute' WHERE id = ?",
+                originalSession);
+
+        amusementService.closeEndedSessionsAndClearCounts(Instant.now());
+
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT released_at IS NOT NULL FROM amusement_verifications WHERE session_id = ? AND direction = 'entry'",
+                Boolean.class, originalSession)).isTrue();
+    }
+
+    @Test
+    void oldEntryExitAfterSessionEndMustNotDeductNewSessionVisitor() {
+        seed(5, 2);
+        enter(1);
+        jdbcTemplate.update("UPDATE amusement_sessions SET end_time = now() - interval '1 minute' WHERE id = ?", sessionId);
+        amusementService.closeEndedSessionsAndClearCounts(Instant.now());
+        sessionId = "next_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO amusement_sessions (id, project_id, start_time, end_time, capacity, used_capacity,
+                    status, created_at, updated_at)
+                VALUES (?, ?, now() - interval '1 hour', now() + interval '1 hour', 100, 0, 'open', now(), now())
+                """, sessionId, projectId);
+        lifecycle.lockSessionWindow(repository.findSessionById(sessionId).orElseThrow());
+        enter(2);
+
+        try {
+            exit(1);
+        } catch (ApiException failure) {
+            assertThat(failure.code()).isEqualTo("ENTITLEMENT_NO_ACTIVE_ENTRY");
+        }
+
+        assertThat(inPlayCount()).isEqualTo(1);
+    }
+
+
+    @Test
+    void earlyEndRequiresActualClearanceAndKeepsTicketFacts() {
+        seed(5, 1);
+        enter(1);
+        Instant cleared=Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        assertThatThrownBy(()->lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest(
+                "early-no-"+suffix,false,cleared,"尚未清场",List.of())))
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(inPlayCount()).isEqualTo(1);
+        var request=new AmusementSessionLifecycleService.EndRequest("early-yes-"+suffix,true,cleared,"负责人现场清场完成",List.of());
+        var ending=lifecycle.endEarly(sessionId,request);
+        assertThat(lifecycle.endEarly(sessionId,request).id()).isEqualTo(ending.id());
+        assertThat(inPlayCount()).isZero();
+        assertThat(ending.clearedPeople()).isEqualTo(1);
+        assertThat(ending.actualEndAt()).isEqualTo(cleared);
+        assertThat(ending.plannedEndAt()).isAfter(cleared);
+        assertThat(jdbcTemplate.queryForObject("SELECT release_source FROM amusement_verifications WHERE project_id=? AND direction='entry'",String.class,projectId))
+                .isEqualTo("session_end");
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,"ie_cg02_"+suffix+"_1")).isEqualTo(1);
+        assertThat(lifecycle.followups(sessionId)).hasSize(1);
+        assertThat(lifecycle.followups(sessionId).getFirst()).containsEntry("status","pending");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",Integer.class,sessionId)).isEqualTo(1);
+    }
+
+    @Test
+    void earlyEndRejectsClearanceBeforeLaterAdmission() {
+        seed(5, 1);
+        Instant statedClearance=Instant.now().minusSeconds(60);
+        enter(1);
+        assertThatThrownBy(()->lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest(
+                "early-stale-"+suffix,true,statedClearance,"旧时刻已清场",List.of())))
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("SESSION_CLEARANCE_CONFLICT"));
+        assertThat(inPlayCount()).isEqualTo(1);
+    }
+
+    @Test
+    void earlyEndReplayStillChecksCurrentProjectScope() {
+        seed(5, 1);
+        enter(1);
+        var request=new AmusementSessionLifecycleService.EndRequest("early-scope-"+suffix,true,Instant.now(),"现场清场完成",List.of());
+        lifecycle.endEarly(sessionId,request);
+        String other=AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        String outsider=AmusementBusinessDayTestFixture.actor(jdbcTemplate,other,List.of("amusement.session.end","amusement.session.view"));
+        AmusementBusinessDayTestFixture.authenticate(outsider,other);
+        assertThatThrownBy(()->lifecycle.endEarly(sessionId,request)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(()->lifecycle.endings(sessionId)).isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",Integer.class,sessionId)).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentEarlyEndCreatesOnlyOneEndingAndOneRelease() throws Exception {
+        seed(5, 1);
+        enter(1);
+        String actor=userId;
+        Instant cleared=Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        runBoth(()->{
+            authenticate(actor);
+            try { lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest("early-a-"+suffix,true,cleared,"完成清场",List.of())); }
+            catch(ApiException ex){assertThat(ex.code()).isEqualTo("SESSION_NOT_OPEN");}
+            return null;
+        },()->{
+            authenticate(actor);
+            try { lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest("early-b-"+suffix,true,cleared,"完成清场",List.of())); }
+            catch(ApiException ex){assertThat(ex.code()).isEqualTo("SESSION_NOT_OPEN");}
+            return null;
+        });
+        assertThat(inPlayCount()).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",Integer.class,sessionId)).isEqualTo(1);
+    }
+
+    @Test
+    void sameAdmissionReplayedAcrossEntryPathsKeepsOneOriginalFact() {
+        seed(5,1);
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?","shared_gate_"+suffix,projectId);
+        replayEntry(true,1,"shared_"+suffix);
+        replayEntry(false,1,"shared_"+suffix);
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_verifications WHERE project_id=?",
+            Integer.class,projectId)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,
+            "ie_cg02_"+suffix+"_1")).isEqualTo(1);
+    }
+
+    @Test
+    void sameAdmissionCrossEntryReplaySurvivesClosedSessionWithoutReadmitting() {
+        seed(5, 1);
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?", "shared_gate_" + suffix, projectId);
+        var first = replayEntry(true, 1, "closed_replay_" + suffix);
+        lifecycle.endEarly(sessionId, new AmusementSessionLifecycleService.EndRequest(
+                "closed_end_" + suffix, true, Instant.now(), "负责人实际清场完成", List.of()));
+
+        var replay = replayEntry(false, 1, "closed_replay_" + suffix);
+
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(replay.createdAt()).isEqualTo(first.createdAt());
+        assertThat(inPlayCount()).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT used_times FROM issued_entitlements WHERE id=?", Integer.class, "ie_cg02_" + suffix + "_1")).isEqualTo(1);
+        assertThatThrownBy(() -> replayEntry(false, 1, "closed_new_request_" + suffix))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("AMUSEMENT_NO_OPEN_SESSION"));
+    }
+
+    @Test
+    void sameAdmissionCrossEntryReplaySurvivesProjectPauseWithoutReadmitting() {
+        seed(5, 1);
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?", "shared_gate_" + suffix, projectId);
+        var first = replayEntry(false, 1, "paused_replay_" + suffix);
+        jdbcTemplate.update("UPDATE amusement_projects SET open_status='paused',auto_paused_reason=NULL WHERE id=?", projectId);
+
+        var replay = replayEntry(true, 1, "paused_replay_" + suffix);
+
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(replay.createdAt()).isEqualTo(first.createdAt());
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThatThrownBy(() -> replayEntry(true, 1, "paused_new_request_" + suffix))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("PROJECT_NOT_OPEN"));
+    }
+
+    @Test
+    void successfulCrossEntryReplayStillRejectsRevokedPermissionAfterClosure() {
+        seed(5, 1);
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?", "shared_gate_" + suffix, projectId);
+        replayEntry(true, 1, "revoked_replay_" + suffix);
+        lifecycle.endEarly(sessionId, new AmusementSessionLifecycleService.EndRequest(
+                "revoked_end_" + suffix, true, Instant.now(), "负责人实际清场完成", List.of()));
+        jdbcTemplate.update("DELETE FROM role_permissions WHERE role_id=? AND permission_code='verification.execute'", roleId);
+
+        assertThatThrownBy(() -> replayEntry(false, 1, "revoked_replay_" + suffix))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("PERMISSION_DENIED"));
+        assertThat(inPlayCount()).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM amusement_verifications WHERE project_id=? AND direction='entry'", Integer.class, projectId)).isEqualTo(1);
+    }
+
+    @Test
+    void sameAdmissionKeyCannotChangeExplicitSessionAcrossEntryPaths() {
+        seed(5, 1);
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?", "shared_gate_" + suffix, projectId);
+        replayEntry(false, 1, "session_replay_" + suffix);
+        String otherSession = "other_session_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO amusement_sessions(id,project_id,start_time,end_time,capacity,used_capacity,status,created_at,updated_at)
+                VALUES(?,?,now()-interval '1 minute',now()+interval '30 minutes',0,0,'open',now(),now())
+                """, otherSession, projectId);
+        lifecycle.lockSessionWindow(repository.findSessionById(otherSession).orElseThrow());
+
+        assertThatThrownBy(() -> amusementService.createVerification(new VerificationRequest(
+                "session_replay_" + suffix, "entitlement_code", code(1), null, null,
+                Map.of("project_id", projectId, "session_id", otherSession,
+                        "location_point_id", "shared_gate_" + suffix, "staff_id", "usr_gate"))))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM amusement_verifications WHERE session_id=?", Integer.class, otherSession)).isZero();
+    }
+
+    @Test
+    void sameAdmissionKeyWithDifferentEntitlementConflictsWithoutExtraConsumption() {
+        seed(5,2);
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?","shared_gate_"+suffix,projectId);
+        replayEntry(true,1,"shared_"+suffix);
+        assertThatThrownBy(()->replayEntry(false,2,"shared_"+suffix)).isInstanceOfSatisfying(ApiException.class,
+            failure->assertThat(failure.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,
+            "ie_cg02_"+suffix+"_2")).isZero();
+    }
+
+    @Test
+    void concurrentSameAdmissionAcrossEntryPathsOccupiesCapacityOnce() throws Exception {
+        seed(5,1);
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?","shared_gate_"+suffix,projectId);
+        String actor=userId;
+        runBoth(()->{authenticate(actor);replayEntry(true,1,"shared_"+suffix);return null;},
+            ()->{authenticate(actor);replayEntry(false,1,"shared_"+suffix);return null;});
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_verifications WHERE project_id=?",
+            Integer.class,projectId)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,
+            "ie_cg02_"+suffix+"_1")).isEqualTo(1);
+    }
+
+    private AmusementVerificationRecord replayEntry(boolean direct,int n,String key) {
+        String point="shared_gate_"+suffix;
+        if(direct) {
+            return amusementService.createVerification(new VerificationRequest(key,"entitlement_code",code(n),null,null,
+                Map.of("project_id",projectId,"session_id",sessionId,"location_point_id",point,"staff_id","usr_gate")));
+        }
+        return new org.springframework.transaction.support.TransactionTemplate(transactionManager).execute(status->
+                amusementService.verifyAmusementEntry(new AmusementEntryRequest(
+                    code(n),point,null,"usr_gate",key,Instant.now())).orElseThrow());
+    }
+
+    @Test
+    void authorizedPlatformStaffCanUseDirectAmusementEntry() {
+        seed(5,1);
+        String complex=businessDays.complexId(projectId);
+        String staff=AmusementBusinessDayTestFixture.actor(jdbcTemplate,complex,List.of("amusement.verification.execute"));
+        AmusementBusinessDayTestFixture.authenticate(staff,complex);
+        enter(1);
+        assertThat(inPlayCount()).isEqualTo(1);
+    }
+
+    @Test
+    void authorizedPlatformStaffCanUseTicketAmusementEntry() {
+        seed(5,1);
+        String complex=businessDays.complexId(projectId);
+        String staff=AmusementBusinessDayTestFixture.actor(jdbcTemplate,complex,List.of("verification.execute"));
+        AmusementBusinessDayTestFixture.authenticate(staff,complex);
+        ticketEnter(1);
+        assertThat(inPlayCount()).isEqualTo(1);
+    }
+
+    @Test
+    void bothEntryPathsRejectAnotherComplexDespitePermission() {
+        seed(5,1);
+        String other=AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        String staff=AmusementBusinessDayTestFixture.actor(jdbcTemplate,other,
+            List.of("amusement.verification.execute","verification.execute"));
+        AmusementBusinessDayTestFixture.authenticate(staff,other);
+        assertThatThrownBy(()->enter(1)).isInstanceOfSatisfying(ApiException.class,
+            failure->assertThat(failure.code()).isEqualTo("FORBIDDEN"));
+        assertThatThrownBy(()->ticketEnter(1)).isInstanceOfSatisfying(ApiException.class,
+            failure->assertThat(failure.code()).isEqualTo("FORBIDDEN"));
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,
+            "ie_cg02_"+suffix+"_1")).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_verifications WHERE project_id=?",
+            Integer.class,projectId)).isZero();
+    }
+
+    @Test
+    void permissionRevokedWhileAdmissionWaitsForProjectLockPreventsEntry() throws Exception {
+        seed(5,1);
+        String complex=businessDays.complexId(projectId);
+        String staff=AmusementBusinessDayTestFixture.actor(jdbcTemplate,complex,List.of("amusement.verification.execute"));
+        raceUnderProjectLock(()->repository.lockProjectForSafety(projectId),()->{
+            AmusementBusinessDayTestFixture.authenticate(staff,complex);
+            assertThatThrownBy(()->enter(1)).isInstanceOf(ApiException.class);
+        },new java.util.concurrent.atomic.AtomicReference<>(),()->jdbcTemplate.update("""
+            DELETE FROM role_permissions WHERE role_id IN (SELECT role_id FROM user_roles WHERE user_id=?)
+                AND permission_code='amusement.verification.execute'
+            """,staff));
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,
+            "ie_cg02_"+suffix+"_1")).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_verifications WHERE project_id=?",
+            Integer.class,projectId)).isZero();
+    }
+
+    private void ticketEnter(int n) {
+        String point="gate_"+suffix;
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?",point,projectId);
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager).executeWithoutResult(status->
+            assertThat(amusementService.verifyAmusementEntry(new AmusementEntryRequest(
+                code(n),point,null,"usr_gate","ticket_in_"+n+"_"+suffix,Instant.now()))).isPresent());
+    }
+
+    @Test
+    void missingSessionWindowDoesNotInferItFromCurrentConfiguration() {
+        seed(5,1);
+        jdbcTemplate.update("""
+            UPDATE amusement_sessions SET complex_id=NULL,business_day_version_id=NULL,business_date=NULL,
+                business_start_at=NULL,business_end_at=NULL WHERE id=?
+            """,sessionId);
+        assertThatThrownBy(()->enter(1)).isInstanceOfSatisfying(ApiException.class,
+            failure->assertThat(failure.code()).isEqualTo("AMUSEMENT_SESSION_DAY_PENDING"));
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,
+            "ie_cg02_"+suffix+"_1")).isZero();
+    }
+
+    @Test
+    void exitWithMissingEntryWindowDoesNotDeductCurrentVisitors() {
+        seed(5,1);
+        enter(1);
+        jdbcTemplate.update("""
+            UPDATE amusement_verifications SET complex_id=NULL,business_day_version_id=NULL,business_date=NULL,
+                business_start_at=NULL,business_end_at=NULL WHERE project_id=? AND direction='entry'
+            """,projectId);
+        assertThatThrownBy(()->exit(1)).isInstanceOfSatisfying(ApiException.class,
+            failure->assertThat(failure.code()).isEqualTo("AMUSEMENT_ENTRY_DAY_PENDING"));
+        assertThat(inPlayCount()).isEqualTo(1);
+    }
+
+    @Test
+    void earlyEndCommitsBeforeWaitingAdmissionAndLeavesItsEntitlementUnused() throws Exception {
+        seed(5,2);
+        enter(1);
+        Instant cleared=Instant.now();
+        raceUnderProjectLock(
+            ()->lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest(
+                "end-first-"+suffix,true,cleared,"现场清场完成",List.of())),
+            ()->assertThatThrownBy(()->enter(2)).isInstanceOfSatisfying(ApiException.class,
+                failure->assertThat(failure.code()).isEqualTo("SESSION_NOT_OPEN")));
+        assertThat(inPlayCount()).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,
+            "ie_cg02_"+suffix+"_2")).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",
+            Integer.class,sessionId)).isEqualTo(1);
+    }
+
+    @Test
+    void admissionCommitsBeforeWaitingEndAndInvalidatesEarlierClearance() throws Exception {
+        seed(5,1);
+        Instant statedClearance=Instant.now().minusSeconds(60);
+        raceUnderProjectLock(
+            ()->enter(1),
+            ()->assertThatThrownBy(()->lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest(
+                "entry-first-"+suffix,true,statedClearance,"此前已清场",List.of())))
+                    .isInstanceOfSatisfying(ApiException.class,
+                        failure->assertThat(failure.code()).isEqualTo("SESSION_CLEARANCE_CONFLICT")));
+        assertThat(inPlayCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",
+            Integer.class,sessionId)).isZero();
+    }
+
+    @Test
+    void waitingAdmissionLocksItsActualPostLockTime() throws Exception {
+        seed(5,1);
+        var releasedAt=new java.util.concurrent.atomic.AtomicReference<Instant>();
+        raceUnderProjectLock(()->repository.lockProjectForSafety(projectId),()->{
+            enter(1);
+            Instant recorded=jdbcTemplate.queryForObject(
+                "SELECT created_at FROM amusement_verifications WHERE project_id=? AND direction='entry'",
+                java.sql.Timestamp.class,projectId).toInstant();
+            assertThat(recorded).isAfterOrEqualTo(releasedAt.get());
+        },releasedAt);
+    }
+
+    @Test
+    void releaseHistoryRequiresPermissionAndRealComplexIntersection() {
+        seed(5,1);
+        enter(1);
+        var ending=lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest(
+            "history-"+suffix,true,Instant.now(),"现场清场完成",List.of()));
+        assertThat(lifecycle.releases(projectId)).anySatisfy(row->
+            assertThat(row).containsEntry("source_id",ending.id()).containsEntry("cleared_people",1));
+        String other=AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        String outsider=AmusementBusinessDayTestFixture.actor(jdbcTemplate,other,List.of("amusement.verification.view"));
+        AmusementBusinessDayTestFixture.authenticate(outsider,other);
+        assertThatThrownBy(() -> lifecycle.releases(projectId)).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.code()).isEqualTo("FORBIDDEN"));
+        assertThat(lifecycle.releases(null)).isEmpty();
+    }
+
+    /** 两个真实事务；查询数据库阻塞链确认第二路已等候第一路的项目锁后，才提交第一路。 */
+    private void raceUnderProjectLock(Runnable first,Runnable second) throws Exception {
+        raceUnderProjectLock(first,second,new java.util.concurrent.atomic.AtomicReference<>());
+    }
+
+    private void raceUnderProjectLock(Runnable first,Runnable second,
+            java.util.concurrent.atomic.AtomicReference<Instant> releasedAt) throws Exception {
+        raceUnderProjectLock(first,second,releasedAt,()->{});
+    }
+
+    private void raceUnderProjectLock(Runnable first,Runnable second,
+            java.util.concurrent.atomic.AtomicReference<Instant> releasedAt,Runnable beforeRelease) throws Exception {
+        var ready=new java.util.concurrent.CountDownLatch(1);
+        var commit=new java.util.concurrent.CountDownLatch(1);
+        var firstPid=new java.util.concurrent.CompletableFuture<Integer>();
+        var secondPid=new java.util.concurrent.CompletableFuture<Integer>();
+        var tx=new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        ExecutorService pool=Executors.newFixedThreadPool(2);
+        String actor=userId;
+        try {
+            Future<?> a=pool.submit(()->{
+                authenticate(actor);
+                try { tx.executeWithoutResult(status->{
+                    firstPid.complete(jdbcTemplate.queryForObject("SELECT pg_backend_pid()",Integer.class));
+                    first.run();
+                    ready.countDown();
+                    awaitLatch(commit);
+                }); } finally { TestSecurityActors.clear(); }
+            });
+            assertThat(ready.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            Future<?> b=pool.submit(()->{
+                authenticate(actor);
+                try { tx.executeWithoutResult(status->{
+                    secondPid.complete(jdbcTemplate.queryForObject("SELECT pg_backend_pid()",Integer.class));
+                    second.run();
+                    status.setRollbackOnly();
+                }); } finally { TestSecurityActors.clear(); }
+            });
+            int blocker=firstPid.get(10,java.util.concurrent.TimeUnit.SECONDS);
+            int waiter=secondPid.get(10,java.util.concurrent.TimeUnit.SECONDS);
+            long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+            boolean blocked=false;
+            while(System.nanoTime()<deadline) {
+                blocked=Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                    SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+                     WHERE pid=? AND ?=ANY(pg_blocking_pids(pid)) AND query ILIKE '%amusement_projects%')
+                    """,Boolean.class,waiter,blocker));
+                if(blocked)break;
+                java.util.concurrent.locks.LockSupport.parkNanos(java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(10));
+            }
+            assertThat(blocked).as("第二路确实等待同一项目的事务行锁").isTrue();
+            beforeRelease.run();
+            releasedAt.set(Instant.now());
+            commit.countDown();
+            a.get(20,java.util.concurrent.TimeUnit.SECONDS);
+            b.get(20,java.util.concurrent.TimeUnit.SECONDS);
+        } finally { commit.countDown(); pool.shutdownNow(); }
+    }
+
+    private static void awaitLatch(java.util.concurrent.CountDownLatch latch) {
+        try {
+            if(!latch.await(15,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("等待事务交接超时");
+        } catch(InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+        }
+    }
+
+    private void approveBusinessDay() {
+        String complex=AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        AmusementBusinessDayTestFixture.bind(jdbcTemplate,projectId,complex);
+        jdbcTemplate.update("UPDATE ticket_orders SET project_id=? WHERE id=?", complex, "order_cg02_" + suffix);
+        AmusementBusinessDayTestFixture.approve(jdbcTemplate,businessDays,reviews,complex,"Asia/Shanghai",4,
+                Instant.now().minusSeconds(7*86400));
+    }
+
     // ---- 正路驱动 ----
 
     private void enter(int n) {
@@ -224,6 +832,221 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
         }
     }
 
+
+    @ParameterizedTest
+    @CsvSource({
+        "projects,platform", "sessions,platform", "verifications,platform", "raw-verifications,platform", "capacity,platform",
+        "projects,merchant", "sessions,merchant", "verifications,merchant", "raw-verifications,merchant", "capacity,merchant",
+        "projects,merchant_admin", "sessions,merchant_admin", "verifications,merchant_admin", "raw-verifications,merchant_admin", "capacity,merchant_admin"
+    })
+    void readSurfacesUseRealComplexAndOptionalMerchantIntersection(String surface, String mode) {
+        seed(5, 1);
+        String complex = businessDays.complexId(projectId);
+        String merchant = createReadMerchant(complex);
+        jdbcTemplate.update("UPDATE amusement_projects SET merchant_id=? WHERE id=?", merchant, projectId);
+        jdbcTemplate.update("UPDATE spaces SET merchant_id=? WHERE id=(SELECT space_id FROM amusement_projects WHERE id=?)", merchant, projectId);
+        enter(1);
+        String otherComplex = AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        AmusementBusinessDayTestFixture.approve(jdbcTemplate, businessDays, reviews, otherComplex,
+                "Asia/Shanghai", 4, Instant.now().minusSeconds(7 * 86400));
+        String outside = seedReadProject(otherComplex, merchant);
+        String sameComplexOtherMerchant = seedReadProject(complex, createReadMerchant(complex));
+        String actor = AmusementBusinessDayTestFixture.actor(jdbcTemplate, complex,
+                List.of("amusement.session.view", "amusement.verification.view"));
+        if ("platform".equals(mode)) {
+            AmusementBusinessDayTestFixture.authenticate(actor, complex);
+        } else {
+            String account = "merchant_admin".equals(mode) ? "merchant_admin" : "staff";
+            jdbcTemplate.update("UPDATE access_users SET merchant_id=?,account_type=? WHERE id=?", merchant, account, actor);
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                    new AccessActor(actor, actor, account, complex, merchant, "active"), "token", List.of()));
+        }
+
+        List<String> projects = switch (surface) {
+            case "projects" -> controller.listProjects().data().items().stream().map(AmusementProjectRecord::id).toList();
+            case "sessions" -> controller.listSessions().data().items().stream().map(AmusementSessionRecord::projectId).toList();
+            case "verifications" -> controller.listVerifications(null, null, null, null, null).data().items().stream()
+                    .map(AmusementVerificationListItem::projectId).toList();
+            case "raw-verifications" -> amusementService.listVerifications().items().stream().map(AmusementVerificationRecord::projectId).toList();
+            case "capacity" -> controller.listCapacitySnapshots().data().items().stream().map(AmusementCapacitySnapshotRecord::projectId).toList();
+            default -> throw new AssertionError(surface);
+        };
+        assertThat(projects).doesNotContain(outside);
+        assertThat(projects).containsExactlyInAnyOrderElementsOf("platform".equals(mode)
+                ? List.of(projectId, sameComplexOtherMerchant) : List.of(projectId));
+    }
+
+    @Test
+    void ordinaryPlatformStaffHardLimitPersistsIncidentUnderActualMerchant() {
+        seed(1, 2);
+        String complex = businessDays.complexId(projectId);
+        String merchant = createReadMerchant(complex);
+        jdbcTemplate.update("UPDATE amusement_projects SET merchant_id=? WHERE id=?", merchant, projectId);
+        jdbcTemplate.update("UPDATE spaces SET merchant_id=? WHERE id=(SELECT space_id FROM amusement_projects WHERE id=?)", merchant, projectId);
+        String actor = AmusementBusinessDayTestFixture.actor(jdbcTemplate, complex,
+                List.of("amusement.verification.execute"));
+        AmusementBusinessDayTestFixture.authenticate(actor, complex);
+        enter(1);
+
+        assertThatThrownBy(() -> enter(2)).isInstanceOfSatisfying(ApiException.class,
+                ex -> assertThat(ex.code()).isEqualTo("SESSION_CAPACITY_EXHAUSTED"));
+
+        assertThat(projectRow()).containsEntry("open_status", "paused").containsEntry("auto_paused_reason", "hard_capacity");
+        assertThat(jdbcTemplate.queryForList("SELECT merchant_id FROM amusement_incidents WHERE project_id=?", String.class, projectId))
+                .containsExactly(merchant);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='amusement.incident.over_capacity' AND actor_id=?",
+                Integer.class, actor)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='amusement.risk.unified_alert_failed' AND actor_id=?",
+                Integer.class, actor)).isEqualTo(1);
+    }
+
+    @Test
+    void lifecycleEndRecordsPromisedSuccessAuditWithSessionAndActor() {
+        seed(5, 1);
+        enter(1);
+        endThroughController();
+        assertThat(auditCount("amusement.session.end_completed", "success", sessionId, userId)).isEqualTo(1);
+    }
+
+    @Test
+    void lifecycleEndRecordsPromisedFailureAuditWhenClearanceIsUnconfirmed() {
+        seed(5, 1);
+        enter(1);
+        assertThatThrownBy(() -> lifecycleController.end(sessionId, new AmusementSessionLifecycleService.EndRequest(
+                "audit-denied-" + suffix, false, Instant.now(), "尚未清场", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(auditCount("amusement.session.end_failed", "failure", sessionId, userId)).isEqualTo(1);
+        assertThat(inPlayCount()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"endings", "followups", "releases"})
+    void lifecycleReadsRecordPromisedAuditWithRequestedObject(String surface) {
+        seed(5, 1);
+        enter(1);
+        endThroughController();
+        String object = "releases".equals(surface) ? projectId : sessionId;
+        int before = auditCount("amusement.session.viewed", "success", object, userId);
+        assertThat(readLifecycle(surface)).isNotEmpty();
+        assertThat(auditCount("amusement.session.viewed", "success", object, userId)).isEqualTo(before + 1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"endings", "followups", "releases"})
+    void lifecycleReadsRejectAnotherComplexAndRecordPromisedFailureAudit(String surface) {
+        seed(5, 1);
+        enter(1);
+        endThroughController();
+        String other = AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        String actor = AmusementBusinessDayTestFixture.actor(jdbcTemplate, other,
+                List.of("amusement.session.view", "amusement.verification.view"));
+        AmusementBusinessDayTestFixture.authenticate(actor, other);
+        assertThatThrownBy(() -> readLifecycle(surface)).isInstanceOf(ApiException.class);
+        String object = "releases".equals(surface) ? projectId : sessionId;
+        assertThat(auditCount("amusement.session.view_failed", "failure", object, actor)).isEqualTo(1);
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(strings = {"own_platform", "own_merchant", "multiple_projects", "no_projects", "platform_global_merchant"})
+    void sessionRepositoryFiltersLockedComplexAndMerchantBeforeReturningRows(String scope) {
+        seed(5, 1);
+        String complex = businessDays.complexId(projectId);
+        String merchant = createReadMerchant(complex);
+        jdbcTemplate.update("UPDATE amusement_projects SET merchant_id=? WHERE id=?", merchant, projectId);
+        jdbcTemplate.update("UPDATE spaces SET merchant_id=? WHERE id=(SELECT space_id FROM amusement_projects WHERE id=?)", merchant, projectId);
+        String otherComplex = AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        AmusementBusinessDayTestFixture.approve(jdbcTemplate, businessDays, reviews, otherComplex,
+                "Asia/Shanghai", 4, Instant.now().minusSeconds(7 * 86400));
+        String outside = seedReadProject(otherComplex, merchant);
+        String otherMerchant = seedReadProject(complex, createReadMerchant(complex));
+        boolean unrestricted = "platform_global_merchant".equals(scope);
+        java.util.Set<String> complexes = switch (scope) {
+            case "multiple_projects" -> java.util.Set.of(complex, otherComplex);
+            case "no_projects", "platform_global_merchant" -> java.util.Set.of();
+            default -> java.util.Set.of(complex);
+        };
+        String merchantScope = scope.endsWith("merchant") ? merchant : null;
+
+        List<String> result = repository.listSessionsScoped(unrestricted, complexes, merchantScope).stream()
+                .map(AmusementSessionRecord::projectId).toList();
+
+        List<String> expected = switch (scope) {
+            case "own_platform" -> List.of(projectId, otherMerchant);
+            case "own_merchant" -> List.of(projectId);
+            case "multiple_projects" -> List.of(projectId, outside, otherMerchant);
+            case "platform_global_merchant" -> List.of(projectId, outside);
+            case "no_projects" -> List.of();
+            default -> throw new AssertionError(scope);
+        };
+        assertThat(result).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
+    void sessionControllerPassesActualReachToRepositoryWithoutUnscopedRead() {
+        seed(5, 1);
+        String complex = businessDays.complexId(projectId);
+        String actor = AmusementBusinessDayTestFixture.actor(jdbcTemplate, complex, List.of("amusement.session.view"));
+        AmusementBusinessDayTestFixture.authenticate(actor, complex);
+        org.mockito.Mockito.clearInvocations(repository);
+
+        assertThat(controller.listSessions().data().items()).extracting(AmusementSessionRecord::id).containsExactly(sessionId);
+
+        org.mockito.Mockito.verify(repository).listSessionsScoped(false, java.util.Set.of(complex), null);
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).listSessions();
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).listSessionsByMerchant(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    private String createReadMerchant(String complex) {
+        String merchant = "read_m_" + UUID.randomUUID().toString().replace("-", "");
+        jdbcTemplate.update("""
+                INSERT INTO merchants(id,merchant_name,merchant_type,project_id,status,created_at,updated_at)
+                VALUES(?,'范围复核游乐商户','amusement',?,'active',now(),now())
+                """, merchant, complex);
+        return merchant;
+    }
+
+    /** 只读范围夹具：另一真实综合体、商户、场次及锁版核销原件，不能靠全局管理员掩盖读权限。 */
+    private String seedReadProject(String complex, String merchant) {
+        String ride = "read_p_" + UUID.randomUUID().toString().replace("-", "");
+        String session = "read_s_" + UUID.randomUUID().toString().replace("-", "");
+        Instant now = Instant.now();
+        repository.saveProject(new AmusementProjectRecord(ride, "读取范围测试项目", 5, "open", templateId,
+                Map.of(), null, now, now, merchant));
+        extraReadProjects.add(ride);
+        AmusementBusinessDayTestFixture.bind(jdbcTemplate, ride, complex);
+        AmusementSessionRecord source = repository.saveSession(new AmusementSessionRecord(session, ride,
+                now.minusSeconds(60), now.plusSeconds(3600), 0, 0, 0, "open", List.of(), now, now));
+        lifecycle.lockSessionWindow(source);
+        repository.claimCapacityAcrossDimensions(new CapacityClaimContext(ride, session, null, null, 5, 1));
+        String entry = "read_v_" + UUID.randomUUID().toString().replace("-", "");
+        repository.saveVerification(AmusementVerificationRecord.entry(entry, ride, session, "范围夹具凭据",
+                null, userId, "success", null, List.of(), now, 1, null, null));
+        lifecycle.recordEntryWindow(entry, businessDays.requireWindow(ride, now));
+        return ride;
+    }
+
+    private void endThroughController() {
+        lifecycleController.end(sessionId, new AmusementSessionLifecycleService.EndRequest(
+                "audit-end-" + suffix, true, Instant.now(), "负责人确认实际清场完成", List.of()));
+    }
+
+    private List<?> readLifecycle(String surface) {
+        return switch (surface) {
+            case "endings" -> lifecycleController.endings(sessionId).data();
+            case "followups" -> lifecycleController.followups(sessionId).data();
+            case "releases" -> releaseController.releases(projectId).data();
+            default -> throw new AssertionError(surface);
+        };
+    }
+
+    private int auditCount(String event, String result, String object, String actor) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM audit_events
+                 WHERE event_name=? AND event_result=? AND business_id=? AND actor_id=?
+                """, Integer.class, event, result, object, actor);
+    }
+
     // ---- 种子 ----
 
     /**
@@ -259,10 +1082,17 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
                 + "issue_status, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'web', 0, 'paid', 'issued', 'created', now(), now())",
                 "order_cg02_" + suffix, "ONO_CG02_" + suffix, "tt_cg02_" + suffix, entitlements);
         for (int i = 1; i <= entitlements; i++) {
+            String parent="parent_cg02_"+suffix+"_"+i;
+            jdbcTemplate.update("""
+                INSERT INTO ticket_instances(id,ticket_no,order_id,ticket_type_id,seq_in_order,num_people,total_times,
+                    status,created_at,updated_at) VALUES(?,?,?,?,?,1,1,'active',now(),now())
+                """,parent,"TNO_CG02_"+suffix+"_"+i,"order_cg02_"+suffix,"tt_cg02_"+suffix,i);
             jdbcTemplate.update("INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id, entitlement_code, "
                     + "entitlement_type, total_times, used_times, status, valid_from, valid_to, created_at, updated_at) "
                     + "VALUES (?, ?, ?, ?, ?, 'amusement_pass', 1, 0, 'active', now() - interval '1 day', now() + interval '1 day', now(), now())",
                     "ie_cg02_" + suffix + "_" + i, "tt_cg02_" + suffix, "order_cg02_" + suffix, "et_cg02_" + suffix, code(i));
+            jdbcTemplate.update("UPDATE issued_entitlements SET parent_ticket_id=?,slot_index=1 WHERE id=?",
+                parent,"ie_cg02_"+suffix+"_"+i);
         }
         // 核销/出场/事故上报都走 requirePermission：amusement.verification.execute 为高危码，须给操作人显式角色来源。
         userId = "usr_cg02_" + suffix;
@@ -272,11 +1102,13 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
         // 角色名全中文+数字：治理页上屏名称不得含拉丁字母（AccessJdbcIntegrationTests.seededDisplayNamesAreChinese 全库核查）。
         jdbcTemplate.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", roleId,
                 "硬超容测试角色" + System.nanoTime());
-        for (String code : List.of("amusement.verification.execute", "amusement.incident.create")) {
+        for (String code : List.of("amusement.verification.execute", "amusement.incident.create", "amusement.session.end", "amusement.session.view", "amusement.verification.view", "verification.execute")) {
             jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", roleId, code);
         }
         jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, roleId);
         authenticate(userId);
+        approveBusinessDay();
+        lifecycle.lockSessionWindow(repository.findSessionById(sessionId).orElseThrow());
     }
 
     private void authenticate(String user) {

@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -27,9 +27,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class DealerReturnController {
 
     private final DealerReturnService service;
+    private final DealerReturnFinancialService financial;
 
-    public DealerReturnController(DealerReturnService service) {
-        this.service = service;
+    public DealerReturnController(DealerReturnService service,DealerReturnFinancialService financial) {
+        this.service = service;this.financial=financial;
     }
 
     @GetMapping("/orders/{id}/returns")
@@ -105,4 +106,22 @@ public class DealerReturnController {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.issueInvoice(id, request));
     }
+    @GetMapping("/orders/{id}/return-sources")
+    public ApiResponse<java.util.List<JdbcDealerReturnRepository.ReturnSource>> returnSources(@PathVariable String id) {
+        return ApiResponse.ok(financial.returnSources(id));
+    }
+
+    @GetMapping("/returns/{id}/financial")
+    public ApiResponse<DealerReturnFinancialRecord> financial(@PathVariable String id) {return ApiResponse.ok(financial.get(id));}
+
+    @PostMapping("/returns/{id}/refunds/execute")
+    public ApiResponse<DealerReturnFinancialRecord> executeRefunds(@PathVariable String id,@RequestBody DealerIdempotentRequest request) {
+        requireIdempotencyKey(request==null?null:request.idempotencyKey());return ApiResponse.ok(financial.executeRefunds(id,request));
+    }
+
+    @PostMapping("/invoices/{id}/reversal-result")
+    public ApiResponse<DealerInvoiceRecord> reversalResult(@PathVariable String id,@RequestBody com.complex.platform.dealer.dto.DealerInvoiceReversalResultRequest request) {
+        requireIdempotencyKey(request==null?null:request.idempotencyKey());return ApiResponse.ok(financial.recordReversal(id,request));
+    }
+
 }

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -166,6 +167,7 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
         title="经营参数"
         description="维护综合体可经营面积（㎡）。坪效 = 净收入 / 可经营面积 据此派生；面积未配置时坪效卡显示「未配置」。仅平台管理员可改（决定坪效口径分母）。"
       />
+      <p>游乐营业日按综合体独立配置，经最高权限审批后未来生效。<PermissionButton permissionsState={effectivePermissions} permissions={["amusement.business_day.view"]} onClick={() => navigateTo?.("ADM-AMU-008")}>打开游乐营业日配置</PermissionButton></p>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="operating-params-table">

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.governance.chain.ApprovalChainNode;
 import java.time.Instant;
@@ -11,6 +11,10 @@ import java.util.Optional;
 public interface SupervisorReviewRepository {
 
     SupervisorReviewDecisionRecord saveSupervisorReview(SupervisorReviewDecisionRecord record);
+
+    default Optional<String> findOriginalApplicant(String objectType, String objectId) {
+        return Optional.empty();
+    }
 
     Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId);
 

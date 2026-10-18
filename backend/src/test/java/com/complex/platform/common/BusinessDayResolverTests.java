@@ -13,7 +13,16 @@ import org.junit.jupiter.api.Test;
  * <p>2026-08-02 口径:日切小时按<b>所在地(北京)</b>时间读(LocalZone),此前锚 UTC。下面的时刻特意挑在
  * 两种口径会给出不同答案的那 8 小时里,把 LocalZone.ID 改回 UTC 这些断言必红。
  */
+// 文件版本：V0.01
 class BusinessDayResolverTests {
+
+    @Test
+    void amusementRequiresAComplexAndCannotUseGlobalFallback() {
+        assertThatThrownBy(() -> new BusinessDayResolver(4).businessDate("amusement", Instant.parse("2026-10-18T02:00:00Z")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("综合体");
+    }
+
 
     private final BusinessDayResolver resolver = new BusinessDayResolver(4);
 

@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -323,61 +325,24 @@ class MetricDetailServiceTests {
     }
 
     @Test
-    void amusementSessionCountAndCapacityDispatchBySumFlag() {
-        when(repository.amusementSessionDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
-                .thenReturn(new MetricDetailRows(List.of(row("id", "s1", "capacity", 100)), 3, new BigDecimal("3")));
-
-        MetricDetailResponse count = service.metricDetail("amusement.session_count", null, null, null, 1, 20);
-        assertThat(count.summaryValue()).isEqualByComparingTo("3");
-        assertThat(count.unit()).isEqualTo("场");
-        verify(repository).amusementSessionDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
-
-        service.metricDetail("amusement.session_capacity", null, null, null, 1, 20);
-        verify(repository).amusementSessionDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
-    }
-
-    @Test
-    void amusementGroupBookingCountAndReservedDispatchBySumFlag() {
-        when(repository.amusementGroupBookingDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
-                .thenReturn(new MetricDetailRows(List.of(row("id", "g1", "reservedCapacity", 20)), 4, new BigDecimal("4")));
-
-        service.metricDetail("amusement.group_booking_count", null, null, null, 1, 20);
-        verify(repository).amusementGroupBookingDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
-
-        service.metricDetail("amusement.group_reserved_capacity", null, null, null, 1, 20);
-        verify(repository).amusementGroupBookingDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
-    }
-
-    @Test
-    void amusementEntryExitDispatchByDirectionFlag() {
-        when(repository.amusementVerificationDirectionDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
-                .thenReturn(new MetricDetailRows(List.of(row("id", "v1")), 7, new BigDecimal("7")));
-
-        MetricDetailResponse entry = service.metricDetail("amusement.entry_count", null, null, null, 1, 20);
-        assertThat(entry.unit()).isEqualTo("次");
-        verify(repository).amusementVerificationDirectionDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
-
-        service.metricDetail("amusement.exit_count", null, null, null, 1, 20);
-        verify(repository).amusementVerificationDirectionDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
-    }
-
-    @Test
-    void amusementInspectionCountAdditiveAndPendingRectificationBalance() {
-        when(repository.amusementInspectionDetail(any(), any(), anyInt(), anyInt()))
-                .thenReturn(new MetricDetailRows(List.of(row("id", "i1")), 6, new BigDecimal("6")));
-        when(repository.amusementInspectionPendingRectificationDetail(any(), anyInt(), anyInt()))
-                .thenReturn(new MetricDetailRows(List.of(row("id", "i2")), 2, new BigDecimal("2")));
-
-        MetricDetailResponse count = service.metricDetail("amusement.inspection_count", null, null, null, 1, 20);
-        assertThat(count.summaryValue()).isEqualByComparingTo("6");
-        verify(repository).amusementInspectionDetail(eq(null), eq(null), eq(20), eq(0));
-
-        // 余额类缺省 as-of=当前经营日（07-18）→ 窗末 = 北京 07-19 04:00 = 07-18T20:00Z（单测回落全局日切）。
-        MetricDetailResponse pending = service.metricDetail("amusement.inspection_pending_rectification", null, null, null, 1, 20);
-        assertThat(pending.summaryValue()).isEqualByComparingTo("2");
-        assertThat(pending.to()).isEqualTo(CURRENT_BUSINESS_DAY);
+    void amusementMetricsUseComplexVersionDatesAndProjectScope() {
+        when(repository.amusementComplexDetail(any(),any(),any(),any(),org.mockito.ArgumentMatchers.anyBoolean(),anyInt(),anyInt(),any()))
+                .thenReturn(new MetricDetailRows(List.of(row("id","v1","complexId","complex-a")),3,new BigDecimal("3")));
+        for(String key:List.of("amusement.session_count","amusement.group_booking_count","amusement.group_reserved_capacity",
+                "amusement.entry_count","amusement.exit_count","amusement.inspection_count")) {
+            MetricDetailResponse response=service.metricDetail(key,null,null,null,1,20,List.of("complex-a"));
+            assertThat(response.summaryValue()).isEqualByComparingTo("3");
+            verify(repository).amusementComplexDetail(eq(key),eq(null),eq(null),any(),eq(true),eq(20),eq(0),eq(List.of("complex-a")));
+        }
+        MetricDetailResponse capacity=service.metricDetail("amusement.session_capacity",null,null,null,1,20,List.of("complex-a"));
+        assertThat(capacity.valueType()).isEqualTo("balance");
+        assertThat(capacity.unit()).isEqualTo("人");
+        verify(repository).amusementComplexDetail(eq("amusement.session_capacity"),eq(null),eq(null),any(),eq(false),eq(20),eq(0),eq(List.of("complex-a")));
+        MetricDetailResponse pending=service.metricDetail("amusement.inspection_pending_rectification",null,null,null,1,20,List.of("complex-a"));
+        assertThat(pending.to()).isNull();
         assertThat(pending.valueType()).isEqualTo("balance");
-        verify(repository).amusementInspectionPendingRectificationDetail(eq(CURRENT_WINDOW_END), eq(20), eq(0));
+        verify(repository).amusementComplexDetail(eq("amusement.inspection_pending_rectification"),eq(null),eq(null),any(),eq(false),eq(20),eq(0),eq(List.of("complex-a")));
+        verify(repository,org.mockito.Mockito.never()).amusementSessionDetail(any(),any(),org.mockito.ArgumentMatchers.anyBoolean(),anyInt(),anyInt());
     }
 
     @Test
@@ -537,7 +502,7 @@ class MetricDetailServiceTests {
     void platformOnlyMetricsRejectProjectScopedCallerFailClosed() {
         // 平台口径指标（来源表无综合体维度）遇非空项目 scope → 403（服务层纵深防御，防绕过 controller 直调）。
         for (String platformOnly : List.of("revenue.ticket", "revenue.bar", "bar.order_count",
-                "ticket.order_count", "amusement.session_count", "amusement.entry_count",
+                "ticket.order_count",
                 "energy.total_electricity", "verify.done", "member.new", "risk.pending_review",
                 "finance.recon_diff_count")) {
             assertThatThrownBy(() -> service.metricDetail(platformOnly, null, null, null, 1, 20, List.of("proj-A")))
@@ -614,7 +579,7 @@ class MetricDetailServiceTests {
 
     @Test
     void registryClassifiesEveryMetricProjectScopeFailClosed() {
-        // 13 项目作用域指标（value=scope 列）；其余全部 platform_only（projectScopeColumn 为空）。fail-closed 分类守卫。
+        // 项目作用域指标逐项固定 scope 列；其余全部 platform_only，防止新增指标意外扩大范围。
         Map<String, String> expectedScoped = new LinkedHashMap<>();
         for (String k : List.of("finance.ar_balance", "finance.ap_balance", "finance.ar_balance_aging90p",
                 "settlement.transaction_count", "settlement.verified_amount", "settlement.verified_count",
@@ -623,6 +588,12 @@ class MetricDetailServiceTests {
             expectedScoped.put(k, "project_id");
         }
         expectedScoped.put("staff.active_headcount", "organization_id");
+        for (String k : List.of("amusement.session_count", "amusement.session_capacity",
+                "amusement.group_booking_count", "amusement.group_reserved_capacity",
+                "amusement.entry_count", "amusement.exit_count", "amusement.inspection_count",
+                "amusement.inspection_pending_rectification", "traffic.amusement")) {
+            expectedScoped.put(k, "complex_id");
+        }
 
         for (MetricRegistry.MetricDefinition def : MetricRegistry.all()) {
             Optional<String> col = MetricRegistry.projectScopeColumn(def.metricKey());
@@ -635,7 +606,7 @@ class MetricDetailServiceTests {
                 assertThat(MetricRegistry.isProjectScoped(def)).isFalse();
             }
         }
-        assertThat(expectedScoped).hasSize(13);
+        assertThat(expectedScoped).hasSize(22);
     }
 
     private static Map<String, Object> row(Object... kv) {

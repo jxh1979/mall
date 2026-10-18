@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -93,7 +93,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [draft, setDraft] = React.useState({
     merchantId: "", contractSubjectId: "", settlementSubjectId: "", effectiveDate: "", expiryDate: "",
     baseRentYuan: "", perSqmYuan: "", rentMode: "monthly_fixed", rentBillingMode: "fixed_only",
-    commissionMode: "fixed_ratio", energyFeeBasis: "by_area",
+    commissionMode: "fixed_ratio", energyFeeBasis: "none",
     businessScope: "", allowedCategories: [] as string[],
   });
   const [spaceId, setSpaceId] = React.useState("");
@@ -594,7 +594,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             },
             {
               title: "结算方式",
-              description: "选择抽成模式与能源费分摊口径。",
+              description: "选择抽成模式；公区及水电损包含物业费，独表按实际费用代收。",
               content: (
                 <>
                   <label>抽成模式<select aria-label="抽成模式" value={draft.commissionMode} onChange={(e) => setDraft({ ...draft, commissionMode: e.target.value })}>
@@ -604,9 +604,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                     <option value="guarantee_plus_commission">保底+抽成叠加</option>
                   </select></label>
                   <label>能源费分摊<select aria-label="能源费分摊" value={draft.energyFeeBasis} onChange={(e) => setDraft({ ...draft, energyFeeBasis: e.target.value })}>
-                    <option value="by_area">按面积</option>
-                    <option value="by_usage">按用量</option>
-                    <option value="by_contract">按合同约定</option>
+                    <option value="by_contract">独表实际费用代收</option>
                     <option value="none">不分摊</option>
                   </select></label>
                 </>

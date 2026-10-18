@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { DealerDeliveryPanel } from "./DealerDeliveryPanel";
 import { DealerPortalApi, DealerPortalApiError } from "./dealerPortalClient";
@@ -12,7 +12,7 @@ type Dealer = { id: string; dealerName?: string; status?: string; portalEnabled?
 type Contract = { id: string; contractNo?: string; validFrom?: string; validTo?: string; creditTerm?: boolean };
 type Stock = { itemId: string; itemName?: string; spec?: string; unitPriceCent?: number; availability?: string; expectedRestockDate?: string | null };
 type Inquiry = { id: string; itemId?: string; spec?: string; quantity?: number; status?: string; quotedUnitPriceCent?: number | null };
-type Order = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; balanceDueAt?: string | null; creditTerm?: boolean; overdue?: boolean };
+type Order = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; firstLegAdjustmentCent?: number; balanceDueAt?: string | null; creditTerm?: boolean; overdue?: boolean };
 type Payment = { id: string; method?: string; amountCent?: number; status?: string; referenceNo?: string | null };
 type Return = { id: string; returnNo?: string; status?: string; reasonType?: string; requestedQuantity?: number; refundCent?: number; refundedCent?: number };
 
@@ -62,6 +62,9 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
   const [order, setOrder] = React.useState<Order | null>(null);
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [returns, setReturns] = React.useState<Return[]>([]);
+  const [returnSources,setReturnSources] = React.useState<{receiptLineId:string;orderLineId:string;batchId:string;availableQuantity:number}[]>([]);
+  const [actualLines,setActualLines] = React.useState<{id:string;itemId:string;spec:string}[]>([]);
+  const [returnFinancials,setReturnFinancials] = React.useState<{returnId:string;firstLegRefundCent:number;firstLegRefundedCent:number;firstLegOffsetCent:number}[]>([]);
   // 资料
   // 询价 / 下单 / 付款 / 退货
   const [inqItem, setInqItem] = React.useState("");
@@ -129,12 +132,15 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
     setStock(id ? (await api.get<Stock[]>(`/api/v1/dealer-portal/contracts/${encodeURIComponent(id)}/external-stock`)) ?? [] : []);
   }
   async function selectOrder(row: Order) {
-    const [o, ps, rs] = await Promise.all([
+    const [o, ps, rs, ss, ls, fs] = await Promise.all([
       api.get<Order>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}`),
       api.get<Payment[]>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/payments`),
       api.get<Return[]>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/returns`),
+      api.get<typeof returnSources>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/return-sources`),
+      api.get<typeof actualLines>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/lines`),
+      api.get<typeof returnFinancials>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/return-financials`),
     ]);
-    setOrder(o); setPayments(ps ?? []); setReturns(rs ?? []);
+    setOrder(o); setPayments(ps ?? []); setReturns(rs ?? []);setReturnSources(ss??[]);setActualLines(ls??[]);setReturnFinancials(fs??[]);
   }
 
   const onLogin = () => run(async () => {
@@ -177,8 +183,8 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
   const requestReturn = () => run(async () => {
     if (!order) throw new Error("请先选择订单");
     const lines = retLines.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-      const [itemId, spec, qty] = l.split(",").map((s) => s.trim());
-      return { itemId, spec: spec || "", quantity: Number(qty) };
+      const [itemId, spec, qty, sourceReceiptLineId] = l.split(",").map((s) => s.trim());
+      return { itemId, spec: spec || "", quantity: Number(qty), ...(sourceReceiptLineId ? {sourceReceiptLineId} : {}) };
     });
     if (lines.length === 0) throw new Error("请填写退货明细");
     await api.post(`/api/v1/dealer-portal/orders/${encodeURIComponent(order.id)}/returns`, { idempotencyKey: key(), reasonType: retReason, lines });
@@ -270,7 +276,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td>{o.orderNo ?? o.id}</td><td data-testid={`order-status-${o.id}`}>{label(ORDER_STATUS, o.status)}</td><td>{money(o.totalAmountCent)}</td><td data-testid={`order-unpaid-${o.id}`}>{money(Math.max(0, (o.totalAmountCent ?? 0) - (o.returnedAmountCent ?? 0) - (o.deliveryAdjustmentCent ?? 0) - (o.paidAmountCent ?? 0)))}</td><td>{money(o.paidAmountCent)}</td>
+                    <td>{o.orderNo ?? o.id}</td><td data-testid={`order-status-${o.id}`}>{label(ORDER_STATUS, o.status)}</td><td>{money(o.totalAmountCent)}</td><td data-testid={`order-unpaid-${o.id}`}>{money(Math.max(0, (o.totalAmountCent ?? 0) - (o.returnedAmountCent ?? 0) - (o.deliveryAdjustmentCent ?? 0) - (o.firstLegAdjustmentCent ?? 0) - (o.paidAmountCent ?? 0)))}</td><td>{money(o.paidAmountCent)}</td>
                     <td>{money(o.firstPaymentRequiredCent)}</td><td>{cnDate(o.firstPaymentDeadlineAt)}</td><td>{o.balanceDueAt ? cnDate(o.balanceDueAt) : o.creditTerm ? "待合同约定事件确定" : "—"}</td>
                     <td><button type="button" data-testid={`order-select-${o.id}`} onClick={() => void run(() => selectOrder(o))}>查看</button></td>
                   </tr>
@@ -297,13 +303,17 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
                 {["signed", "completed", "returning", "partially_returned"].includes(order.status ?? "") ? (
                   <div className="admin-form-grid" data-testid="return-form">
                     <label>退货原因<select data-testid="return-reason" value={retReason} onChange={(e) => setRetReason(e.target.value)}><option value="unopened_resalable">未拆封可复售</option><option value="quality_issue">质量问题</option></select></label>
-                    <label>退货明细（每行：商品编号,规格,数量）<textarea data-testid="return-lines" rows={2} value={retLines} onChange={(e) => setRetLines(e.target.value)} /></label>
+                    <div>选择实际签收批次：{returnSources.filter(source => source.availableQuantity > 0).map(source => {
+                      const line = actualLines.find(item => item.id === source.orderLineId);
+                      return line ? <button type="button" key={source.receiptLineId} onClick={() => setRetLines(previous => `${previous}${previous ? "\n" : ""}${line.itemId},${line.spec},${source.availableQuantity},${source.receiptLineId}`)}>{line.itemId} {line.spec}，批次 {source.batchId}，可退 {source.availableQuantity}</button> : null;
+                    })}</div>
+                    <label>退货明细（每行：商品编号,规格,数量,签收来源）<textarea data-testid="return-lines" rows={2} value={retLines} onChange={(e) => setRetLines(e.target.value)} /></label>
                     <button type="button" data-testid="return-submit" onClick={() => void requestReturn()}>申请退货</button>
                   </div>
                 ) : null}
                 <table className="admin-table" data-testid="return-table">
-                  <thead><tr><th>退货单</th><th>状态</th><th>原因</th><th>数量</th><th>待退款</th><th>已退款</th></tr></thead>
-                  <tbody>{returns.map((r) => <tr key={r.id}><td>{r.returnNo ?? r.id}</td><td data-testid={`return-status-${r.id}`}>{label(RETURN_STATUS, r.status)}</td><td>{label(REASON, r.reasonType)}</td><td>{r.requestedQuantity}</td><td>{money(r.refundCent)}</td><td>{money(r.refundedCent)}</td></tr>)}</tbody>
+                  <thead><tr><th>退货单</th><th>货款办理状态</th><th>原因</th><th>数量</th><th>货款应退</th><th>货款已退</th><th>首程运费冲减未收</th><th>首程运费应退</th><th>首程运费已退</th></tr></thead>
+                  <tbody>{returns.map((r) => <tr key={r.id}><td>{r.returnNo ?? r.id}</td><td data-testid={`return-status-${r.id}`}>{label(RETURN_STATUS, r.status)}</td><td>{label(REASON, r.reasonType)}</td><td>{r.requestedQuantity}</td><td>{money(r.refundCent)}</td><td>{money(r.refundedCent)}</td><td>{money(returnFinancials.find(f=>f.returnId===r.id)?.firstLegOffsetCent)}</td><td>{money(returnFinancials.find(f=>f.returnId===r.id)?.firstLegRefundCent)}</td><td>{money(returnFinancials.find(f=>f.returnId===r.id)?.firstLegRefundedCent)}</td></tr>)}</tbody>
                 </table>
               </div>
             ) : null}

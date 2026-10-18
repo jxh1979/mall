@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -5896,15 +5898,44 @@ class AccessJdbcIntegrationTests {
                 .isZero();
     }
 
+    @Test
+    void v441MigrationDoesNotBackfillExistingMerchantPrimaryProject() {
+        String schema = "v441_test_" + UUID.randomUUID().toString().replace("-", "");
+        jdbcTemplate.execute("CREATE SCHEMA " + schema);
+        jdbcTemplate.execute("SET LOCAL search_path TO " + schema);
+        try {
+            jdbcTemplate.execute("CREATE TABLE projects(id VARCHAR(64) PRIMARY KEY)");
+            jdbcTemplate.execute("CREATE TABLE merchants(id VARCHAR(64) PRIMARY KEY, project_id VARCHAR(64))");
+            jdbcTemplate.execute("CREATE TABLE roles(id VARCHAR(64) PRIMARY KEY)");
+            jdbcTemplate.execute("CREATE TABLE access_users(id VARCHAR(64) PRIMARY KEY)");
+            jdbcTemplate.execute("CREATE TABLE access_grant_requests(request_type VARCHAR(64))");
+            jdbcTemplate.update("INSERT INTO projects VALUES ('原综合体')");
+            jdbcTemplate.update("INSERT INTO merchants VALUES ('原商户','原综合体')");
+            jdbcTemplate.update("INSERT INTO roles VALUES ('原角色')");
+            jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+                org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,
+                        new org.springframework.core.io.ClassPathResource(
+                                "db/migration/V441__m736_role_viewable_projects_and_merchant_projects.sql"));
+                return null;
+            });
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_projects", Long.class)).isZero();
+            assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM merchants WHERE id='原商户'", String.class)).isEqualTo("原综合体");
+            assertThat(jdbcTemplate.queryForObject("SELECT view_all_projects FROM roles WHERE id='原角色'", Boolean.class)).isFalse();
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM role_viewable_projects", Long.class)).isZero();
+        } finally {
+            jdbcTemplate.execute("SET LOCAL search_path TO public");
+        }
+    }
+
     // M736-J7（任务书 3.1；操作员 2026-10-01 所选选项原文「……并支持一个商户对应多个项目（新增建模）。」；AGENTS.md 第 8 条不回填）：真库——
     // V441 之后 merchant_projects 表在、没有行，主键（商户、项目）、项目索引与两个外键在，外键不带级联；roles.view_all_projects 非空、
     // 默认未勾选；role_viewable_projects 主键（角色、可查看目标），勾选行随角色删除。
     @Test
-    void v441CreatesTheEmptyMerchantProjectsTableAndRoleTicksThatGoWithTheRoleOnTheRealSchema() {
+    void v441DefinesMerchantProjectsAndRoleTicksThatGoWithTheRoleOnTheRealSchema() {
         assertThat(regclass("merchant_projects")).isEqualTo("merchant_projects");
         assertThat(regclass("role_viewable_projects")).isEqualTo("role_viewable_projects");
         assertThat(regclass("idx_merchant_projects_project_id")).isEqualTo("idx_merchant_projects_project_id");
-        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_projects", Long.class)).isZero();
+        // 不回填在隔离模式执行原迁移验证；运行中的业务表允许已有真实跨项目绑定。
         assertThat(m736Constraints("merchant_projects", "p")).containsExactly("PRIMARY KEY (merchant_id, project_id)");
         assertThat(m736Constraints("merchant_projects", "f")).containsExactly(
                 "FOREIGN KEY (merchant_id) REFERENCES merchants(id)", "FOREIGN KEY (project_id) REFERENCES projects(id)");

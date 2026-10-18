@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 export type AdminUser = {
   id: string;
   username: string;
@@ -467,6 +467,8 @@ export type AmusementSessionRow = {
   sessionName?: string;
   startsAt?: string;
   endsAt?: string;
+  startTime?: string;
+  endTime?: string;
   capacity?: number | string;
   usedCapacity?: number | string;
   lockedCapacity?: number | string;
@@ -1150,15 +1152,14 @@ export type MerchantAdmissionRow = {
 
 export type SubjectBindingRow = {
   id: string;
-  admissionStep?: string;
-  businessObjectId?: string;
-  operatorSubject?: string;
-  contractSubject?: string;
-  contractSubjectId?: string;
-  settlementSubject?: string;
-  settlementSubjectId?: string;
+  merchantId?: string;
+  operationEntityId?: string;
+  contractEntityId?: string;
+  settlementEntityId?: string;
   status?: string;
-  auditEvidenceRef?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  changeReason?: string;
 };
 
 export type ReadinessItemRow = {

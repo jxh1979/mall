@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -22,7 +23,7 @@ const ENTITLEMENT_APPROVE = ["amusement.project_entitlement.approve"];
 
 const TEXT = {
   title: "项目与场次",
-  description: "管理游乐项目与场次容量，后续串联预约、核销和安全规则。",
+  description: "管理项目安全容量、场次时间及实际清场结束。",
   evidence: "接口证据：读取 /api/v1/amusement/projects、/api/v1/amusement/sessions、/api/v1/amusement/projects/{id}/entitlements；新建项目调用 /api/v1/amusement/projects；新增场次调用 /api/v1/amusement/sessions；权益绑定停用/恢复/申请删除/审批删除调用 /api/v1/amusement/projects/{id}/entitlements/{权益类型}/archive|unarchive|delete-request|delete-approve。",
   boundary: "项目与场次是预约、核销和安全规则的基础资源；本页只维护项目/场次资源，不替代安全巡检和事故闭环。",
   loadFailed: "游乐项目与场次读取失败",
@@ -64,14 +65,55 @@ function readKpiFocusFromUrl(): KpiTarget | null {
   return table === "projects" || table === "sessions" ? table : null;
 }
 
+
+const followupSourceLabels: Record<string, string> = { entry: "入场权益", reservation: "个人预约", group_booking: "团体预约" };
+type SessionEnding = { id: string; mode: string; actualEndAt: string; plannedEndAt: string; clearedPeople: number; confirmedBy?: string; reason: string; businessDate: string; configVersionId: string };
+type SessionFollowup = { id: string; sourceType: string; sourceId: string; status: string; orderId?: string; entitlementId?: string; resolutionType?: string; resolutionId?: string };
+function SessionEndingHistory({ api, sessionId }: { api: AdminPageProps["api"]; sessionId: string }) {
+  const [records, setRecords] = React.useState<SessionEnding[]>([]);
+  const [tasks, setTasks] = React.useState<SessionFollowup[]>([]);
+  const [notice, setNotice] = React.useState("正在读取清场记录…");
+  React.useEffect(() => {
+    let current = true;
+    Promise.all([
+      api.get<SessionEnding[]>(`/api/v1/amusement/sessions/${sessionId}/endings`),
+      api.get<SessionFollowup[]>(`/api/v1/amusement/sessions/${sessionId}/followups`),
+    ]).then(([ends, pending]) => {
+      if (current) { setRecords(ends); setTasks(pending); setNotice(ends.length ? "" : "暂无清场记录"); }
+    }).catch(error => { if (current) setNotice(error instanceof Error ? error.message : "清场记录读取失败"); });
+    return () => { current = false; };
+  }, [api, sessionId]);
+  return <div data-testid="amusement-session-ending-history">
+    {notice && <p>{notice}</p>}
+    {records.map(row => <div key={row.id}>
+      <p>{row.mode === "early" ? "负责人确认提前结束" : "计划场次结束"} · 实际结束：{cnDate(row.actualEndAt)} · 原计划：{cnDate(row.plannedEndAt)}</p>
+      <p>释放本场在场人数：{row.clearedPeople}；确认人：{row.confirmedBy ?? "系统"}；原因：{row.reason}</p>
+      <p>营业日：{row.businessDate}；配置版本：{row.configVersionId}</p>
+    </div>)}
+    {tasks.length > 0 && <table><thead><tr><th>待办来源</th><th>原记录</th><th>订单／权益</th><th>处理状态</th><th>实际结果</th></tr></thead><tbody>
+      {tasks.map(row => <tr key={row.id}><td>{followupSourceLabels[row.sourceType] ?? row.sourceType}</td>
+        <td>{row.sourceId}</td><td>{row.orderId ?? "—"}／{row.entitlementId ?? "—"}</td><td>{row.status === "completed" ? "已完成" : "待按原规则处理"}</td>
+        <td>{row.resolutionId ?? "尚无实际结果"}</td></tr>)}
+    </tbody></table>}
+  </div>;
+}
+
 export function AmusementSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   const [sessions, setSessions] = React.useState<AmusementSessionRow[]>([]);
   const [verifications, setVerifications] = React.useState<AmusementVerificationRow[]>([]);
   const [sessionName, setSessionName] = React.useState("验收场次");
-  const [capacity, setCapacity] = React.useState("12");
+  const [sessionProjectId, setSessionProjectId] = React.useState("");
+  const [startsAt, setStartsAt] = React.useState("");
+  const [endsAt, setEndsAt] = React.useState("");
+  const [ending, setEnding] = React.useState<AmusementSessionRow | null>(null);
+  const [clearanceConfirmed, setClearanceConfirmed] = React.useState(false);
+  const [clearedAt, setClearedAt] = React.useState("");
+  const [endReason, setEndReason] = React.useState("");
+  const [endKey, setEndKey] = React.useState("");
+  const [endEvidence, setEndEvidence] = React.useState<Array<{id: string; name: string}>>([]);
   const [projectName, setProjectName] = React.useState("新游乐项目");
-  const [projectCapacity, setProjectCapacity] = React.useState("30");
+  const [projectCapacity, setProjectCapacity] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [projectSubmitting, setProjectSubmitting] = React.useState(false);
@@ -210,14 +252,17 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
       setFormError(TEXT.projectNameRequired);
       return;
     }
-    const numericCapacity = Math.max(0, Number(projectCapacity) || 0);
+    const numericCapacity = Number(projectCapacity);
+    if (!Number.isInteger(numericCapacity) || numericCapacity <= 0) {
+      setFormError("须填写经确认的大于零的项目硬安全容量。"); return;
+    }
     setFormError("");
     setGlobalError(null);
     setProjectSubmitting(true);
     const request = {
       idempotencyKey: `amusement-project-create-${Date.now()}`,
       operatorNote: "完整后台新建游乐项目",
-      evidenceAttachmentIds: ["att-amusement-project-create"],
+      evidenceAttachmentIds: [],
       projectName,
       capacity: numericCapacity,
       openStatus: "open",
@@ -242,19 +287,19 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
       setFormError(TEXT.nameRequired);
       return;
     }
-    const numericCapacity = Math.max(1, Number(capacity) || 1);
+    if (!sessionProjectId || !startsAt || !endsAt || new Date(endsAt) <= new Date(startsAt)) {
+      setFormError("须选择游乐项目，并填写开始及晚于开始的结束时间。"); return;
+    }
     setFormError("");
     setGlobalError(null);
     setSubmitting(true);
     const request = {
       idempotencyKey: `amusement-session-create-${Date.now()}`,
-      operatorNote: "完整后台项目与场次验收新增",
-      evidenceAttachmentIds: ["att-amusement-session-create"],
-      projectId: projects[0]?.id ?? "amuse-1",
+      evidenceAttachmentIds: [],
+      projectId: sessionProjectId,
       sessionName,
-      startsAt: "2026-06-20T10:00:00Z",
-      endsAt: "2026-06-20T11:00:00Z",
-      capacity: numericCapacity,
+      startTime: new Date(startsAt).toISOString(),
+      endTime: new Date(endsAt).toISOString(),
     };
     try {
       const result = await api.post<unknown>("/api/v1/amusement/sessions", request);
@@ -271,7 +316,36 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     }
   }
 
-  const totalCapacity = sessions.reduce((sum, row) => sum + Number(row.capacity ?? 0), 0);
+  async function uploadEndEvidence(files: FileList | null) {
+    if (!ending || !files?.length || !api.postForm) return;
+    setSubmitting(true);
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file); form.append("business_type", "amusement_session");
+        form.append("business_id", ending.id); form.append("attachment_role", "other");
+        const saved = await api.postForm<{id: string}>("/api/v1/evidence/attachments/upload", form);
+        setEndEvidence(previous => [...previous, {id: saved.id, name: file.name}]);
+      }
+    } catch (e) { setFormError(e instanceof Error ? e.message : "清场凭据上传失败"); }
+    finally { setSubmitting(false); }
+  }
+
+  async function endSession() {
+    if (!ending || !clearanceConfirmed || !clearedAt || !endReason.trim() || submitting) return;
+    setSubmitting(true); setFormError("");
+    try {
+      const result = await api.post(`/api/v1/amusement/sessions/${encodeURIComponent(ending.id)}/end`, {
+        idempotencyKey: endKey, clearanceConfirmed, clearedAt: new Date(clearedAt).toISOString(),
+        reason: endReason.trim(), evidenceAttachmentIds: endEvidence.map(f => f.id),
+      });
+      setActionResult({action: "amusement_session_ended", result});
+      setEnding(null); await reload();
+    } catch (e) { setFormError(e instanceof Error ? e.message : "场次结束未完成"); }
+    finally { setSubmitting(false); }
+  }
+
+  const totalCapacity = projects.reduce((sum, row) => sum + Number(row.capacity ?? 0), 0);
   // KPI 改走统一明细端点（数字=明细合计同源）；失败/无权限回退本地列表值并隐藏入口，体验不降级。
   const sessionCountKpi = useMetricKpiValue(api, "amusement.session_count", {});
   const capacityKpi = useMetricKpiValue(api, "amusement.session_capacity", {});
@@ -302,13 +376,12 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
           label: "项目",
           value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink>,
         },
-        { label: "开始", value: cnDate(row.startsAt) },
-        { label: "结束", value: cnDate(row.endsAt) },
-        { label: "容量", value: display(row.capacity) },
-        { label: "已用", value: display(row.usedCapacity) },
-        { label: "锁定", value: display(row.lockedCapacity) },
+        { label: "开始", value: cnDate(row.startTime ?? row.startsAt) },
+        { label: "结束", value: cnDate(row.endTime ?? row.endsAt) },
+
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "场次编号", value: row.id },
+        { label: "清场及后续处理", value: <SessionEndingHistory api={api} sessionId={row.id} /> },
       ],
     });
   }
@@ -401,7 +474,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const sessionsSection = (
     <>
       <div className="admin-section-title">场次</div>
-      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>容量</th><th>已用</th><th>锁定</th><th>状态</th><th>详情</th></tr></thead><tbody>{pagedSessions.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-session-row-${row.id}`} onClick={() => openSessionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSessionDetail(row); } }}><td>{display(row.sessionName)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{cnDate(row.startsAt)}</td><td>{cnDate(row.endsAt)}</td><td>{display(row.capacity)}</td><td>{display(row.usedCapacity)}</td><td>{display(row.lockedCapacity)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看场次详情" onClick={(event) => { event.stopPropagation(); openSessionDetail(row); }}>查看详情</button></td></tr>)}</tbody></table><TablePager testid="amusement-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} /></div>
+      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>状态</th><th>详情</th></tr></thead><tbody>{pagedSessions.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-session-row-${row.id}`} onClick={() => openSessionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSessionDetail(row); } }}><td>{display(row.sessionName)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{cnDate(row.startTime ?? row.startsAt)}</td><td>{cnDate(row.endTime ?? row.endsAt)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell" onClick={event => event.stopPropagation()}><button type="button" className="admin-row-detail-btn" aria-label="查看场次详情" onClick={() => openSessionDetail(row)}>查看详情</button>{row.status === "open" && <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.session.end"]} data-testid={`amusement-session-end-${row.id}`} onClick={() => { setEnding(row); setClearanceConfirmed(false); setClearedAt(""); setEndReason(""); setEndEvidence([]); setEndKey(crypto.randomUUID()); setFormError(""); }}>确认清场并提前结束</PermissionButton>}</td></tr>)}</tbody></table><TablePager testid="amusement-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} /></div>
     </>
   );
 
@@ -427,8 +500,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
             <div className="admin-kpi-grid" data-testid="amusement-sessions-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>项目</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-projects" onClick={() => enterKpiFocus("projects")}>{projects.length}</button><small>项目数</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>场次</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-sessions" onClick={() => enterKpiFocus("sessions")}>{sessionCountDisplay}</button><small>场次数{sessionCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.session_count" testid="amusement-sessions-metric-detail-sessions" /></> : null}</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>总容量</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-capacity" onClick={() => enterKpiFocus("sessions")}>{capacityDisplay}</button><small>容量合计{capacityKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.session_capacity" testid="amusement-sessions-metric-detail-capacity" /></> : null}</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>已锁定</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-locked" onClick={() => enterKpiFocus("sessions")}>{sessions.reduce((sum, row) => sum + Number(row.lockedCapacity ?? 0), 0)}</button><small>已锁定容量</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>项目硬安全容量</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-capacity" onClick={() => enterKpiFocus("projects")}>{capacityDisplay}</button><small>按唯一项目合计{capacityKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.session_capacity" testid="amusement-sessions-metric-detail-capacity" /></> : null}</small></div>
             </div>
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-project-create-open" disabled={projectSubmitting} onClick={() => { setFormError(""); setProjectOpen(true); }}>＋ 新建项目</PermissionButton></div>
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create-open" disabled={submitting} onClick={() => { setFormError(""); setSessionOpen(true); }}>＋ 新增场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
@@ -440,6 +512,18 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
         )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      {ending && <section role="dialog" aria-modal="true" aria-label="确认实际清场" className="admin-panel">
+        <h3>提前结束：{ending.sessionName ?? ending.id}</h3>
+        <p>只处理此场次。尚未履行的订单和权益须继续按原流程办理。</p>
+        <label>实际清场时刻<input type="datetime-local" value={clearedAt} onChange={e => setClearedAt(e.target.value)} /></label>
+        <label>提前结束原因<input value={endReason} onChange={e => setEndReason(e.target.value)} /></label>
+        <label>清场凭据<input type="file" multiple disabled={submitting} onChange={e => void uploadEndEvidence(e.target.files)} /></label>
+        <ul>{endEvidence.map(f => <li key={f.id}>{f.name}</li>)}</ul>
+        <label><input type="checkbox" checked={clearanceConfirmed} onChange={e => setClearanceConfirmed(e.target.checked)} />确认现场全部客人已离场</label>
+        {formError && <p role="alert">{formError}</p>}
+        <button type="button" disabled={submitting} onClick={() => setEnding(null)}>取消</button>
+        <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.session.end"]} data-testid="amusement-session-end-submit" disabled={submitting || !clearanceConfirmed || !clearedAt || !endReason.trim()} onClick={() => void endSession()}>按实际清场事实结束场次</PermissionButton>
+      </section>}
       <GuidedFlowModal
         open={projectOpen}
         title="新建项目"
@@ -458,7 +542,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
             content: (
               <>
                 <label>项目名称<input data-testid="amusement-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /></label>
-                <label>项目容量<input data-testid="amusement-project-capacity" value={projectCapacity} onChange={(event) => setProjectCapacity(event.target.value)} /></label>
+                <label>项目硬安全容量<input data-testid="amusement-project-capacity" value={projectCapacity} onChange={(event) => setProjectCapacity(event.target.value)} /></label>
               </>
             ),
           },
@@ -481,19 +565,23 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
         steps={[
           {
             title: "场次信息",
-            description: "填写场次名称与容量，容量至少 1；场次归属首个项目。",
+            description: "选择项目并填写场次时间。容量统一由项目实时在玩人数控制。",
             validate: () => (!sessionName.trim() ? TEXT.nameRequired : null),
             content: (
               <>
                 <label>场次名称<input data-testid="amusement-session-name" value={sessionName} onChange={(event) => setSessionName(event.target.value)} /></label>
-                <label>容量<input data-testid="amusement-session-capacity" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label>
+                <label>游乐项目<select data-testid="amusement-session-project" value={sessionProjectId} onChange={e => setSessionProjectId(e.target.value)}><option value="">请选择</option>{projects.map(p => <option key={p.id} value={p.id}>{p.projectName ?? p.id}</option>)}</select></label>
+                <label>开始时间<input data-testid="amusement-session-start" type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} /></label>
+                <label>结束时间<input data-testid="amusement-session-end" type="datetime-local" value={endsAt} onChange={e => setEndsAt(e.target.value)} /></label>
               </>
             ),
           },
         ]}
         summary={[
           { label: "场次名称", value: sessionName.trim() || "未填写" },
-          { label: "容量", value: String(Math.max(1, Number(capacity) || 1)) },
+          { label: "项目", value: projects.find(p => p.id === sessionProjectId)?.projectName ?? "未选择" },
+          { label: "开始时间", value: startsAt || "未填写" },
+          { label: "结束时间", value: endsAt || "未填写" },
           { label: "归属项目", value: projects[0]?.projectName ?? projects[0]?.id ?? "amuse-1" },
         ]}
       />

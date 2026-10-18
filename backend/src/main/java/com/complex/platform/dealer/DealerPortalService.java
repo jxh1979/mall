@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -52,6 +52,7 @@ public class DealerPortalService {
     private final DealerService dealerService;
     private final DealerOrderService orderService;
     private final DealerReturnService returnService;
+    private final DealerReturnFinancialService returnFinancial;
     private final AuthorizationService authorization;
     private final AuditEventService audit;
     private final DealerDeliveryService delivery;
@@ -61,13 +62,13 @@ public class DealerPortalService {
     public DealerPortalService(JdbcDealerPortalRepository portalAccounts, JdbcDealerRepository dealers, JdbcDealerOrderRepository orderRepository,
             DealerService dealerService, DealerOrderService orderService, DealerReturnService returnService, AuthorizationService authorization,
             AuditEventService audit, DealerDeliveryService delivery,
-            com.complex.platform.evidence.EvidenceEventService attachmentService, com.complex.platform.evidence.EvidenceEventRepository attachmentRepository) {
+            com.complex.platform.evidence.EvidenceEventService attachmentService, com.complex.platform.evidence.EvidenceEventRepository attachmentRepository, DealerReturnFinancialService returnFinancial) {
         this.portalAccounts = portalAccounts;
         this.dealers = dealers;
         this.orderRepository = orderRepository;
         this.dealerService = dealerService;
         this.orderService = orderService;
-        this.returnService = returnService;
+        this.returnService = returnService;this.returnFinancial=returnFinancial;
         this.authorization = authorization;
         this.audit = audit;
         this.delivery = delivery;
@@ -250,6 +251,22 @@ public class DealerPortalService {
         DealerRecord dealer = currentDealer(true);
         authorization.requirePermission(RETURN_REQUEST);
         return returnService.requestReturn(requireOwnOrder(dealer, orderId).id(), request, RETURN_REQUEST);
+    }
+
+    public java.util.List<JdbcDealerReturnRepository.ReturnSource> returnSources(String orderId) {
+        return readReturnData(orderId,"dealer.portal.return_sources_viewed","dealer.portal.return_sources_view_failed",()->returnFinancial.ownedReturnSources(orderId));
+    }
+    public java.util.List<DealerReturnFinancialRecord> returnFinancials(String orderId) {
+        return readReturnData(orderId,"dealer.portal.return_financials_viewed","dealer.portal.return_financials_view_failed",()->returnFinancial.ownedReturnFinancials(orderId));
+    }
+    private <T>T readReturnData(String orderId,String event,String failure,java.util.function.Supplier<T> query) {
+        try {
+            DealerRecord dealer=currentDealer(true);authorization.requirePermission(RETURN_REQUEST);requireOwnOrder(dealer,orderId);
+            T result=query.get();audit.recordSuccess(event,RETURN_REQUEST,"dealer_order",orderId,null,null,Map.of());return result;
+        } catch(RuntimeException error) {
+            try {audit.recordFailure(failure,RETURN_REQUEST,"dealer_order",orderId,null,null,error instanceof ApiException api?api.code():error.getClass().getSimpleName());}
+            catch(RuntimeException auditError){error.addSuppressed(auditError);}throw error;
+        }
     }
 
     // ── 隔离闸 ──

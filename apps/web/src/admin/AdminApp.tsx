@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -62,6 +62,7 @@ const VendorSiteEntriesPage = React.lazy(() => import("./pages/VendorSiteEntries
 const AmusementSafetyPage = React.lazy(() => import("./pages/AmusementSafetyPage").then((m) => ({ default: m.AmusementSafetyPage })));
 const AmusementInspectionTasksPage = React.lazy(() => import("./pages/AmusementInspectionTasksPage").then((m) => ({ default: m.AmusementInspectionTasksPage })));
 const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessionsPage").then((m) => ({ default: m.AmusementSessionsPage })));
+const AmusementBusinessDayPage = React.lazy(() => import("./pages/AmusementBusinessDayPage").then((m) => ({ default: m.AmusementBusinessDayPage })));
 const AmusementFaultCompensationPage = React.lazy(() => import("./pages/AmusementFaultCompensationPage").then((m) => ({ default: m.AmusementFaultCompensationPage })));
 const AmusementParkWideFaultPage = React.lazy(() => import("./pages/AmusementParkWideFaultPage").then((m) => ({ default: m.AmusementParkWideFaultPage })));
 const AmusementVerificationRecordsPage = React.lazy(() => import("./pages/AmusementVerificationRecordsPage").then((m) => ({ default: m.AmusementVerificationRecordsPage })));
@@ -71,6 +72,7 @@ const ApprovalChainPage = React.lazy(() => import("./pages/ApprovalChainPage").t
 const OrgHierarchyPage = React.lazy(() => import("./pages/OrgHierarchyPage").then((m) => ({ default: m.OrgHierarchyPage })));
 const ContractWorkbenchPage = React.lazy(() => import("./pages/ContractWorkbenchPage").then((m) => ({ default: m.ContractWorkbenchPage })));
 const LeasingWorkbenchPage = React.lazy(() => import("./pages/LeasingWorkbenchPage").then((m) => ({ default: m.LeasingWorkbenchPage })));
+const PointsRecoveryWaiverPage = React.lazy(() => import("./pages/PointsRecoveryWaiverPage").then((m) => ({ default: m.PointsRecoveryWaiverPage })));
 const TicketRewardConfigPage = React.lazy(() => import("./pages/TicketRewardConfigPage").then((m) => ({ default: m.TicketRewardConfigPage })));
 const TicketPointsBillingPage = React.lazy(() => import("./pages/TicketPointsBillingPage").then((m) => ({ default: m.TicketPointsBillingPage })));
 const SiteEntryPropertyPage = React.lazy(() => import("./pages/SiteEntryPropertyPage").then((m) => ({ default: m.SiteEntryPropertyPage })));
@@ -85,6 +87,7 @@ const IntegrationEventsPage = React.lazy(() => import("./pages/IntegrationEvents
 const AuditEventsPage = React.lazy(() => import("./pages/AuditEventsPage").then((m) => ({ default: m.AuditEventsPage })));
 const BusinessAnalyticsPage = React.lazy(() => import("./pages/BusinessAnalyticsPage").then((m) => ({ default: m.BusinessAnalyticsPage })));
 const GroupOverviewPage = React.lazy(() => import("./pages/GroupOverviewPage").then((m) => ({ default: m.GroupOverviewPage })));
+const PurchaseWorkbenchPage = React.lazy(() => import("./pages/PurchaseWorkbenchPage").then((m) => ({ default: m.PurchaseWorkbenchPage })));
 const InventoryLedgerPage = React.lazy(() => import("./pages/InventoryLedgerPage").then((m) => ({ default: m.InventoryLedgerPage })));
 const InventoryTransferWorkbenchPage = React.lazy(() => import("./pages/InventoryTransferWorkbenchPage").then((m) => ({ default: m.InventoryTransferWorkbenchPage })));
 const BarOrdersPage = React.lazy(() => import("./pages/BarOrdersPage").then((m) => ({ default: m.BarOrdersPage })));
@@ -225,6 +228,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <DynamicPricingPage {...props} />;
     case "ADM-TKT-003":
       return <TicketOrdersPage {...props} />;
+    case "ADM-FIN-009":
+      return <PointsRecoveryWaiverPage {...props} />;
     case "ADM-TKT-004":
       return <TicketRewardConfigPage {...props} />;
     case "ADM-BAR-001":
@@ -243,6 +248,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <InventoryLedgerPage {...props} />;
     case "ADM-INV-002":
       return <InventoryTransferWorkbenchPage {...props} />;
+    case "ADM-INV-003":
+      return <PurchaseWorkbenchPage {...props} />;
     case "ADM-FIN-002":
       return <ReconciliationPage {...props} />;
     case "ADM-TER-001":
@@ -303,6 +310,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AmusementParkWideFaultPage {...props} />;
     case "ADM-AMU-007":
       return <AmusementFaultCompensationPage {...props} />;
+    case "ADM-AMU-008":
+      return <AmusementBusinessDayPage {...props} />;
     case "ADM-GOV-006":
       return <SupervisorReviewPage {...props} />;
     case "ADM-GOV-009":
@@ -559,6 +568,7 @@ export default function AdminApp() {
   // 导航与直链仍能进访问治理工作台去解除；页内只放行「移除本人显式拒绝」，其余路由门禁不变。
   const isMasterSession = user?.id === "usr_master_authority" && user?.username === "master-authority";
   function routePermissions(target: AdminRoute) {
+    if (target.pageId === "ADM-INV-003" && hasPermissions(effectivePermissions, ["inventory.supply_contract.manage"])) return ["inventory.supply_contract.manage"];
     if (target.pageId !== "ADM-ACC-003") return target.requiredPermissions;
     if (isMasterSession) return [];
     // M736-F08（治理地图第 653 行「能配置角色的人都可以设置这一项。」）：有 access.role.manage 的人没有分配角色权限也能进本页配角色；页内各动作照旧各自判权限。

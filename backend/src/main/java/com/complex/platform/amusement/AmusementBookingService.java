@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -268,9 +270,6 @@ final class AmusementBookingService {
         checkProjectOwnership(session.projectId());
         int partySize = positiveInteger(actual.partySize(), "party_size");
         int reservedCapacity = positiveInteger(actual.reservedCapacity(), "reserved_capacity");
-        if (reservedCapacity > session.capacity()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "预留容量不能超过场次容量");
-        }
         Instant now = Instant.now();
         return repository.saveGroupBooking(new AmusementGroupBookingRecord(
                 "group_booking_" + slug(actual.idempotencyKey()),
@@ -309,7 +308,7 @@ final class AmusementBookingService {
                         evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                         now
                 )
-                .orElseThrow(() -> ApiException.conflict("SESSION_CAPACITY_LOCK_FAILED", "场次剩余容量不足"));
+                .orElseThrow(() -> ApiException.conflict("SESSION_NOT_ACCEPTING_GROUP_BOOKING", "场次已结束或当前状态不接受预约"));
     }
 
     private AmusementGroupBookingRecord releaseGroupBookingInternal(String bookingId, AmusementGroupBookingReleaseRequest request) {

@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,17 +41,30 @@ class ContractJdbcIntegrationTests {
     @Autowired
     private ContractService contractService;
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"by_area","by_usage"})
+    void databaseRejectsPublicEnergyAllocation(String basis) {
+        Instant now=Instant.now();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> repository.saveContract(new ContractRecord(
+                "ctr_forbidden_energy", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(),
+                "fixed_ratio", basis, 0L, Map.of(), List.of(), null, null, List.of(),
+                "drafting", "proj_1", null, null, null, now, now)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                .hasMessageContaining("chk_contracts_energy_fee_basis");
+    }
+
     @Test
     void listContractsPagedReturnsRealTotalAndReachesNextPage() {
         // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET——total 取真值, 第二页可达首页之后的合同。
         java.time.Instant now = java.time.Instant.now();
         repository.saveContract(new ContractRecord("ctr_pg_1", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2026-08-15"), Map.of("propertyFeeCent", 88800),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
                 null, null, null, now, now));
         repository.saveContract(new ContractRecord("ctr_pg_2", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-02"), LocalDate.parse("2026-08-16"), Map.of("propertyFeeCent", 88800),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
                 null, null, null, now.plusSeconds(1), now.plusSeconds(1)));
         var page1 = repository.listContractsPaged(1, 1);
         var page2 = repository.listContractsPaged(2, 1);
@@ -70,7 +83,7 @@ class ContractJdbcIntegrationTests {
         Instant now = Instant.parse("2026-07-02T00:00:00Z");
         repository.saveContract(new ContractRecord(contractId, "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2026-08-15"), Map.of("propertyFeeCent", 88800),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
                 null, null, null, now, now));
         ContractRentBillRecord bill = repository.insertRentBill(new ContractRentBillRecord(
                 "crb_v205_test", contractId, "mch_1", "proj_1", "2026-07", "property_fee", 88800L,
@@ -127,13 +140,13 @@ class ContractJdbcIntegrationTests {
         Instant now = Instant.parse("2026-06-25T00:00:00Z");
         repository.saveContract(new ContractRecord("ctr_jdbc", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, Map.of("breach", "2x"),
+                "fixed_ratio", "by_contract", 500000L, Map.of("breach", "2x"),
                 List.of(Map.of("item", "deposit_offset")), null, null, List.of(), "drafting", "proj_1",
                 null, null, null, now, now));
         assertThat(repository.findContractById("ctr_jdbc")).isPresent().get()
                 .extracting(ContractRecord::lifecycleStatus, ContractRecord::commissionMode,
                         ContractRecord::energyFeeBasis, c -> c.settlementRules().size())
-                .containsExactly("drafting", "fixed_ratio", "by_area", 1);
+                .containsExactly("drafting", "fixed_ratio", "by_contract", 1);
 
         // 审批留痕（FK contracts）。
         repository.saveApproval(new ContractApprovalRecord("capr_jdbc", "ctr_jdbc", null, 1,
@@ -163,7 +176,7 @@ class ContractJdbcIntegrationTests {
         String cid = "ctr_term_jdbc";
         repository.saveContract(new ContractRecord(cid, "mch_term", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, Map.of("amountCent", 200000), List.of(), null, null, List.of(),
+                "fixed_ratio", "by_contract", 500000L, Map.of("amountCent", 200000), List.of(), null, null, List.of(),
                 "effective", "proj_1", null, null, null, now, now));
         repository.insertRentBill(new ContractRentBillRecord(
                 "crb_term_jdbc", cid, "mch_term", "proj_1", "2026-07", "rent", 300000L,
@@ -192,7 +205,7 @@ class ContractJdbcIntegrationTests {
         String cid = "ctr_void_jdbc";
         repository.saveContract(new ContractRecord(cid, "mch_void", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, null, List.of(), null, null, List.of(),
+                "fixed_ratio", "by_contract", 500000L, null, List.of(), null, null, List.of(),
                 "terminated", "proj_1", null, null, null, now, now));
         repository.saveSettlement(new ContractSettlementRecord("cst_void_jdbc", cid, "move_out", "pending_settlement",
                 List.of(Map.of("item", "deposit_disposal", "netRefundCent", 500000L)),
@@ -211,7 +224,7 @@ class ContractJdbcIntegrationTests {
         String cid = "ctr_manual_snap_jdbc";
         repository.saveContract(new ContractRecord(cid, "mch_manual", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, null, List.of(), null, null, List.of(),
+                "fixed_ratio", "by_contract", 500000L, null, List.of(), null, null, List.of(),
                 "effective", "proj_1", null, null, null, now, now));
         repository.saveSettlement(new ContractSettlementRecord("cst_manual_snap_jdbc", cid, "expiry", "pending_settlement",
                 List.of(
@@ -232,11 +245,11 @@ class ContractJdbcIntegrationTests {
         Instant now = Instant.parse("2026-08-01T00:00:00Z");
         repository.saveContract(new ContractRecord("ctr_expjob_past", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-01-01"), LocalDate.parse("2026-06-30"), Map.of("propertyFeeCent", 88800),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
                 null, null, null, now, now));
         repository.saveContract(new ContractRecord("ctr_expjob_today", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-01-01"), LocalDate.parse("2026-08-02"), Map.of("propertyFeeCent", 88800),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
                 null, null, null, now, now));
         int count = expiryJob.runOnce(LocalDate.parse("2026-08-02"));
         assertThat(count).isGreaterThanOrEqualTo(1);
@@ -258,11 +271,11 @@ class ContractJdbcIntegrationTests {
         Instant now = Instant.parse("2026-08-01T00:00:00Z");
         repository.saveContract(new ContractRecord("ctr_tz_0802", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-01-01"), LocalDate.parse("2026-08-02"), Map.of("propertyFeeCent", 88800),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
                 null, null, null, now, now));
         repository.saveContract(new ContractRecord("ctr_tz_0803", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-01-01"), LocalDate.parse("2026-08-03"), Map.of("propertyFeeCent", 88800),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
                 null, null, null, now, now));
         new ContractExpiryJob(contractService,
                 Clock.fixed(Instant.parse("2026-08-02T18:00:00Z"), ZoneOffset.UTC), true)

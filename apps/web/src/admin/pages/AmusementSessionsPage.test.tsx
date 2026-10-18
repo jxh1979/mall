@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -108,7 +109,8 @@ describe("AmusementSessionsPage KPI 聚焦视图", () => {
     expect(text).not.toContain("capacity");
     expect(text).not.toContain("locked");
     expect(text).toContain("项目数");
-    expect(text).toContain("已锁定容量");
+    expect(text).toContain("按唯一项目合计");
+    expect(text).not.toContain("已锁定容量");
   });
 
   it("V232：核销记录展示核销时间 + 对应场次（场次以名称呈现）", async () => {

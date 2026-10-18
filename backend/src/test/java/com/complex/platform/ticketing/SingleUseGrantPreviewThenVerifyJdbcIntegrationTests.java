@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -47,7 +47,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * 来源仍未消耗，同一请求编号重复提交返回第一次的失败结果，随后有效票码核销成功恰好消耗一次。
  * 边界守护：终端离线同步批次里有失败的离线核销时，同步操作本身成功，单次「终端设备绑定」授权照常算用掉。
  *
- * <p>不开测试事务（消耗要真实提交才看得见）。权益夹具照 UnlimitedInDayJdbcIntegrationTests（游乐当天无限、单人票）。
+ * <p>不开测试事务（消耗要真实提交才看得见）。权益使用普通单次酒水，专门验证一次性授权；游乐营业日由专用真实库用例覆盖。
  * 消耗日志与审计事件只追加不删，按后缀隔离留在库里。
  */
 @SpringBootTest(properties = {
@@ -399,7 +399,7 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
                 """, deviceCode, "dev-" + deviceCode, "DC-" + deviceCode, ts, ts);
     }
 
-    // 游乐当天无限、单人票（total_times=1）、虚拟权益签约价 5500 分，归属 MERCHANT；有效期前后各 10 天。
+    // 普通单次酒水权益，归属 MERCHANT；有效期前后各 10 天。
     private void seedEntitlement() {
         Instant now = Instant.now();
         java.sql.Timestamp ts = java.sql.Timestamp.from(now);
@@ -415,15 +415,15 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
                     default_value_cent, status, venue_id, entitlement_kind, agreement_price_cent,
                     consumption_window, created_at, updated_at)
-                VALUES (?, 'Amuse', 'amusement', 1, 0, 'active', ?, 'virtual', 5500, 'unlimited_in_day', ?, ?)
+                VALUES (?, '单次酒水', 'bar_drink', 1, 0, 'active', ?, 'virtual', 5500, 'per_use', ?, ?)
                 """, templateId, venueId, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
                 LocalDate.now(), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
-                "ent_" + code, code, typeId, "order_" + code, templateId, "amusement",
+                "ent_" + code, code, typeId, "order_" + code, templateId, "bar_drink",
                 MERCHANT, venueId, "point_" + suffix, 1, 0, 9999L, "active",
                 now.minusSeconds(864000), now.plusSeconds(864000), now, now, 1, null,
-                "virtual", 5500L, "unlimited_in_day", null, null, 0, null, null));
+                "virtual", 5500L, "per_use", null, null, 0, null, null));
     }
 }

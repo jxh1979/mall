@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -22,7 +22,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FAC-001", label: "楼宇运营工作台", module: "物业/楼宇", group: "ops", route: "/admin/facility/workbench", requiredPermissions: ["facility.equipment.manage"] },
   { pageId: "ADM-FAC-002", label: "进场审批", module: "物业/楼宇", group: "ops", route: "/admin/facility/site-entry-review", requiredPermissions: ["facility.site_entry.review"], accountForms: ["platform"] },
   { pageId: "ADM-FAC-003", label: "施工验收", module: "物业/楼宇", group: "ops", route: "/admin/facility/site-entry-acceptance", requiredPermissions: ["facility.site_entry.accept"], accountForms: ["platform"] },
-  { pageId: "ADM-ENE-001", label: "能源工作台", module: "物业/楼宇", group: "ops", route: "/admin/energy/workbench", requiredPermissions: ["energy.reading.manage"] },
+  { pageId: "ADM-ENE-001", label: "能源工作台", module: "物业/楼宇", group: "ops", route: "/admin/energy/workbench", requiredPermissions: ["energy.reading.manage", "energy.meter.manage", "energy.reading.approve"] },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", module: "治理", group: "governance", route: "/admin/governance/admission-audits", requiredPermissions: ["merchant.profile.view", "entity.binding.view", "contract.view"] },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", module: "治理", group: "governance", route: "/admin/governance/supervisor-review", requiredPermissions: ["governance.supervisor_review.view"] },
   { pageId: "ADM-TKT-002", label: "动态定价", module: "票务", group: "ticketing", route: "/admin/ticketing/dynamic-pricing", requiredPermissions: ["ticket.dynamic_pricing.view"] },
@@ -40,8 +40,10 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-AMU-005", label: "游乐核销记录", module: "游乐", group: "amusement", route: "/admin/amusement/verification-records", requiredPermissions: ["amusement.verification.view"] },
   { pageId: "ADM-AMU-006", label: "全园故障状态", module: "游乐", group: "amusement", route: "/admin/amusement/park-wide-faults", requiredPermissions: ["amusement.park_fault.view"] },
   { pageId: "ADM-AMU-007", label: "全园故障补偿", module: "游乐", group: "amusement", route: "/admin/amusement/fault-compensation", requiredPermissions: ["amusement.park_fault.view"] },
+  { pageId: "ADM-AMU-008", label: "游乐营业日", module: "游乐", group: "amusement", route: "/admin/amusement/business-day-configs", requiredPermissions: ["amusement.business_day.view"] },
   { pageId: "ADM-INV-001", label: "库存台账", module: "库存", group: "inventory", route: "/admin/inventory/ledger", requiredPermissions: ["inventory.stock.view"] },
   { pageId: "ADM-INV-002", label: "跨主体调拨与借调", module: "库存", group: "inventory", route: "/admin/inventory/transfers", requiredPermissions: ["inventory.transfer_order.view"] },
+  { pageId: "ADM-INV-003", label: "采购与退供", module: "库存", group: "inventory", route: "/admin/inventory/purchases", requiredPermissions: ["inventory.purchase_request.view"] },
   { pageId: "ADM-DLR-001", label: "经销商准入与价格目录", module: "经销", group: "inventory", route: "/admin/dealers/admission", requiredPermissions: ["dealer.view"] },
   { pageId: "ADM-DLR-002", label: "经销订单与履约", module: "经销", group: "inventory", route: "/admin/dealers/orders", requiredPermissions: ["dealer.order.view"] },
   { pageId: "ADM-DLR-003", label: "经销退货与开票", module: "经销", group: "inventory", route: "/admin/dealers/returns", requiredPermissions: ["dealer.return.view"] },
@@ -50,6 +52,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FIN-004", label: "物业费管理", module: "财务", group: "finance", route: "/admin/finance/property-fee", requiredPermissions: ["finance.property_fee.manage"] },
   { pageId: "ADM-FIN-006", label: "商户费用台账", module: "财务", group: "finance", route: "/admin/finance/merchant-expenses", requiredPermissions: ["finance.merchant_expense.view"] },
   { pageId: "ADM-FIN-007", label: "持股分红", module: "财务", group: "finance", route: "/admin/finance/dividends", requiredPermissions: ["finance.dividend.view"] },
+  { pageId: "ADM-FIN-009", label: "积分追回与豁免", module: "财务", group: "finance", route: "/admin/finance/points-recoveries", requiredPermissions: ["finance.points_recovery.view"] },
   { pageId: "ADM-FIN-008", label: "门票积分月结", module: "财务", group: "finance", route: "/admin/finance/ticket-points-bills", requiredPermissions: ["ticket.points.billing.view"] },
   { pageId: "ADM-STL-001", label: "结算配置中心", module: "结算", group: "settlement", route: "/admin/settlement/config", requiredPermissions: ["settlement.config.view"] },
   { pageId: "ADM-STL-002", label: "开票清单", module: "结算", group: "settlement", route: "/admin/settlement/invoice-items", requiredPermissions: ["settlement.invoice.view"] },
@@ -90,7 +93,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-ANA-013", label: "放弃权益额外收入", module: "分析", group: "overview", route: "/admin/analytics/abandoned-entitlement-revenue", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-STF-001", label: "排班与考勤", module: "人事", group: "ops", route: "/admin/staff/shifts", requiredPermissions: ["staff.shift.manage"] },
   { pageId: "ADM-STF-002", label: "薪酬与请假", module: "人事", group: "ops", route: "/admin/staff/payroll", requiredPermissions: ["staff.payroll.manage"] },
-  { pageId: "ADM-STF-003", label: "个税税表", module: "人事", group: "ops", route: "/admin/staff/tax-brackets", requiredPermissions: ["staff.payroll.manage"] },
+  { pageId: "ADM-STF-003", label: "税表与专业认定", module: "人事", group: "ops", route: "/admin/staff/tax-brackets", requiredPermissions: ["staff.payroll.manage", "staff.tax_bracket.manage"] },
   { pageId: "ADM-STF-004", label: "员工档案", module: "人事", group: "ops", route: "/admin/staff/profiles", requiredPermissions: ["staff.profile.view"] },
   { pageId: "ADM-SVC-001", label: "服务点单", module: "服务", group: "ops", route: "/admin/services/orders", requiredPermissions: ["service.catalog.manage"] },
   { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },

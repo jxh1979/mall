@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -185,11 +185,17 @@ public interface FinanceRepository {
      */
     default PageResponse<ArApItemRecord> listArApItemsPaged(
             String merchantId, String projectId, String keyword, int page, int size) {
+        return listArApItemsForProjects(merchantId,projectId==null ? null : java.util.Set.of(projectId),keyword,page,size);
+    }
+
+    /** 项目集合与商户范围取交集；null 仅供平台全量，空集合没有可见记录。JDBC 下推相同筛选和总数。 */
+    default PageResponse<ArApItemRecord> listArApItemsForProjects(
+            String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size) {
         java.util.List<ArApItemRecord> all = merchantId == null
                 ? listArApItems() : listArApItemsByMerchant(merchantId);
         String kw = keyword == null ? "" : keyword.trim().toLowerCase();
         java.util.List<ArApItemRecord> filtered = all.stream()
-                .filter(it -> projectId == null || projectId.equals(it.projectId()))
+                .filter(it -> projectIds == null || (it.projectId()!=null && projectIds.contains(it.projectId())))
                 .filter(it -> kw.isEmpty()
                         || (it.itemNo() != null && it.itemNo().toLowerCase().contains(kw))
                         || (it.direction() != null && it.direction().toLowerCase().contains(kw))
@@ -208,6 +214,22 @@ public interface FinanceRepository {
     Optional<ArApItemRecord> findArApItemByIdForUpdate(String id);
 
     ArApItemRecord updateArApItemLedger(ArApItemRecord item);
+
+    default Optional<ArApItemRecord> findCurrentPurchasePayable(String sourceType, String sourceId) {
+        List<ArApItemRecord> current = listArApItems().stream()
+                .filter(item -> "payable".equals(item.direction()) && sourceType.equals(item.sourceType())
+                        && sourceId.equals(item.sourceId()) && item.amountCent() > 0
+                        && !"reversed".equals(item.status()) && !isPurchasePayableReplaced(item.id()))
+                .toList();
+        if (current.size() > 1) throw com.complex.platform.common.api.ApiException.conflict(
+                "PURCHASE_PAYABLE_AMBIGUOUS", "采购来源存在多张有效应付，请核实更正链");
+        return current.stream().findFirst();
+    }
+
+    default boolean isPurchasePayableReplaced(String itemId) {
+        return listArApItems().stream().anyMatch(item -> itemId.equals(item.originItemId())
+                && item.amountCent() < 0 && "reversed".equals(item.status()));
+    }
 
     /**
      * V304 分红留存释放：某计算单的待释放留存应付（direction=payable, source_type='dividend_reserve_withheld',

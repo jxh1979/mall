@@ -29,6 +29,7 @@ import org.springframework.stereotype.Component;
  * 配置表缺席（单测、未迁移库）或读取异常时按域回落全局值（fail-safe，不阻塞日结）。
  */
 @Component
+// 文件版本：V0.01
 public class BusinessDayResolver {
 
     static final long CACHE_TTL_MS = 60_000;
@@ -64,6 +65,10 @@ public class BusinessDayResolver {
 
     /** 某业务域的日切小时；未配置/不可读回落全局。domain 为空视同全局。 */
     public int cutoffHourFor(String domain) {
+        if ("amusement".equals(domain)) {
+            throw com.complex.platform.common.api.ApiException.conflict("AMUSEMENT_COMPLEX_REQUIRED",
+                    "游乐营业日须按真实综合体及已批准版本解析");
+        }
         if (domain == null || domain.isBlank()) {
             return cutoffHour;
         }

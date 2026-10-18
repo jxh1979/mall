@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import java.time.Clock;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +54,7 @@ public class AmusementConcurrentCountResetJob {
     public int[] runAt(Instant now) {
         int sessions = service.closeEndedSessionsAndClearCounts(now);
         int projects = service.resetConcurrentCountsAtBusinessDayEnd(now);
+        service.reassessHardCapacityRecovery(now);
         return new int[] {sessions, projects};
     }
 }

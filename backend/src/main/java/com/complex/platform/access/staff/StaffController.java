@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -355,7 +355,7 @@ public class StaffController {
         return ApiResponse.ok(service.listMyPayroll(month));
     }
 
-    /** 个税税表(V217):查劳务报酬预扣税表(默认 labor_remuneration)。 */
+    /** 原逐档税表历史只读；现行版本与审批见 payroll/tax-versions。 */
     @GetMapping("/payroll/tax-brackets")
     public ApiResponse<java.util.List<PayrollTaxBracketRecord>> listTaxBrackets(
             @org.springframework.web.bind.annotation.RequestParam(value = "category", required = false)
@@ -363,7 +363,7 @@ public class StaffController {
         return ApiResponse.ok(service.listTaxBrackets(category));
     }
 
-    /** 个税税表(V217):维护一档(税法参数变更改配置不改代码;高敏权限 staff.tax_bracket.manage)。 */
+    /** 旧逐档写入明确拒绝，防止绕过完整版本审批。 */
     @PostMapping("/payroll/tax-brackets")
     public ApiResponse<PayrollTaxBracketRecord> upsertTaxBracket(
             @RequestBody @jakarta.validation.Valid

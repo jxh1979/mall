@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.function.Function;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -121,13 +122,12 @@ public class AmusementService {
     }
 
     public PageResponse<AmusementProjectRecord> listProjects() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
         return readPage(
                 "amusement.session.viewed",
                 "amusement.session.view_failed",
                 "amusement.session.view",
                 "amusement_project",
-                scope.isPresent() ? () -> repository.listProjectsByMerchant(scope.get()) : repository::listProjects
+                () -> visibleProjectRows(repository.listProjects(), AmusementProjectRecord::id, "amusement.session.view")
         );
     }
 
@@ -509,6 +509,7 @@ public class AmusementService {
     @Transactional
     public AmusementCapacityConfigRecord createCapacityConfig(String projectId, AmusementCapacityConfigRequest request) {
         String id = requireText(projectId, "project_id");
+        if (sessionLifecycle != null) sessionLifecycle.requireProjectScope(id, "amusement.capacity_config.manage");
         return executeWrite(
                 "createAmusementCapacityConfig:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -925,19 +926,27 @@ public class AmusementService {
     }
 
     public PageResponse<AmusementSessionRecord> listSessions() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
         return readPage(
                 "amusement.session.viewed",
                 "amusement.session.view_failed",
                 "amusement.session.view",
                 "amusement_session",
-                scope.isPresent() ? () -> repository.listSessionsByMerchant(scope.get()) : repository::listSessions
+                () -> {
+                    authorizationService.requirePermission("amusement.session.view");
+                    var actor = authorizationService.currentActor();
+                    var reach = authorizationService.projectReach(actor, "amusement.session.view");
+                    String merchant = trimToNull(actor.merchantId());
+                    return visibleProjectRows(repository.listSessionsScoped(reach.platformAdmin(),
+                                    reach.organizationIds(), merchant),
+                            AmusementSessionRecord::projectId, reach, merchant);
+                }
         );
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "amusement.session.manage")
     @Transactional
     public AmusementSessionRecord createSession(AmusementSessionRequest request) {
+        if (sessionLifecycle != null) sessionLifecycle.requireProjectScope(requireRequest(request).projectId(), "amusement.session.manage");
         return executeWrite(
                 "createAmusementSession",
                 request == null ? null : request.idempotencyKey(),
@@ -952,43 +961,71 @@ public class AmusementService {
     }
 
     public PageResponse<AmusementVerificationRecord> listVerifications() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
         return readPage(
                 "amusement.verification.viewed",
                 "amusement.verification.view_failed",
                 "amusement.verification.view",
                 "amusement_verification",
-                scope.isPresent() ? () -> repository.listVerificationsByMerchant(scope.get()) : repository::listVerifications
+                () -> visibleProjectRows(repository.listVerifications(), AmusementVerificationRecord::projectId, "amusement.verification.view")
         );
     }
 
-    /** 阶段3 只读：按 项目/场次/方向/日期 筛选核销记录（含关联通票号）。走同域 merchant scope 隔离范式。 */
+    /** 按项目/场次/方向/日期筛选核销记录，并取综合体权限与商户身份范围的交集。 */
     public PageResponse<AmusementVerificationListItem> listVerificationItems(AmusementVerificationQuery query) {
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         return readPage(
                 "amusement.verification.viewed",
                 "amusement.verification.view_failed",
                 "amusement.verification.view",
                 "amusement_verification",
-                () -> repository.listVerificationItems(query, merchantId)
+                () -> visibleProjectRows(repository.listVerificationItems(query, authorizationService.currentActor().merchantId()),
+                        AmusementVerificationListItem::projectId, "amusement.verification.view")
         );
     }
 
-    /** 阶段3 只读：并发在场容量快照。走同域 merchant scope 隔离范式。 */
+    /** 项目实时在玩人数快照，仅返回当前操作人有权查看的综合体和商户。 */
     public PageResponse<AmusementCapacitySnapshotRecord> listCapacitySnapshots() {
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         return readPage(
                 "amusement.verification.viewed",
                 "amusement.verification.view_failed",
                 "amusement.verification.view",
                 "amusement_capacity_snapshot",
-                () -> repository.listCapacitySnapshots(merchantId)
+                () -> visibleProjectRows(repository.listCapacitySnapshots(authorizationService.currentActor().merchantId()).stream()
+                        .filter(row -> "project".equals(row.dimension())).toList(),
+                        AmusementCapacitySnapshotRecord::projectId, "amusement.verification.view")
         );
+    }
+
+    private <T> List<T> visibleProjectRows(List<T> rows, Function<T, String> projectId, String permission) {
+        authorizationService.requirePermission(permission);
+        var actor = authorizationService.currentActor();
+        var reach = authorizationService.projectReach(actor, permission);
+        return visibleProjectRows(rows, projectId, reach, trimToNull(actor.merchantId()));
+    }
+
+    private <T> List<T> visibleProjectRows(List<T> rows, Function<T, String> projectId,
+            AuthorizationService.ProjectReach reach, String merchant) {
+        Map<String, Boolean> visible = new java.util.HashMap<>();
+        return rows.stream().filter(row -> visible.computeIfAbsent(projectId.apply(row), id -> {
+            var project = repository.findProjectById(id).orElse(null);
+            if (project == null || (merchant != null && !merchant.equals(project.merchantId()))) return false;
+            try {
+                return reach.covers(amusementBusinessDayService.complexId(id));
+            } catch (ApiException unresolved) {
+                if ("AMUSEMENT_BUSINESS_DAY_CONFIGURATION_REQUIRED".equals(unresolved.code())
+                        || "AMUSEMENT_PROJECT_NOT_FOUND".equals(unresolved.code())) return false;
+                throw unresolved;
+            }
+        })).toList();
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.execute")
     @Transactional
     public AmusementVerificationRecord createVerification(VerificationRequest request) {
+        if (sessionLifecycle != null) {
+            VerificationRequest actual = requireRequest(request);
+            sessionLifecycle.requireVerificationScope(requireText(textFromMap(actual.businessContext(),
+                    "session_id", "sessionId"), "session_id"), "amusement.verification.execute");
+        }
         return executeWrite(
                 "createAmusementVerification",
                 request == null ? null : request.idempotencyKey(),
@@ -1032,7 +1069,7 @@ public class AmusementService {
         return repository.saveProject(new AmusementProjectRecord(
                 "project_" + slug(actual.idempotencyKey()),
                 requireText(actual.projectName(), "project_name"),
-                nonNegativeOrDefault(actual.capacity(), 0, "capacity"),
+                positiveInteger(actual.capacity(), "capacity"),
                 enumOrDefault(actual.openStatus(), "open", PROJECT_STATUSES, "open_status"),
                 templateId,
                 actual.eligibilityRule() == null ? Map.of() : Map.copyOf(actual.eligibilityRule()),
@@ -1049,18 +1086,20 @@ public class AmusementService {
         repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
-        Instant start = actual.startTime() == null ? Instant.now() : actual.startTime();
-        Instant end = actual.endTime() == null ? start.plusSeconds(3600) : actual.endTime();
+        Instant start = actual.startTime(), end = actual.endTime();
+        if (start == null || end == null) throw ApiException.badRequest("VALIDATION_FAILED", "场次开始和结束时间必填");
+        if (actual.capacity() != null && actual.capacity() != 0)
+            throw ApiException.badRequest("SESSION_CAPACITY_RETIRED", "场次不再设置独立硬容量，请维护项目硬安全容量");
         if (!end.isAfter(start)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "结束时间必须晚于开始时间");
         }
         Instant now = Instant.now();
-        return repository.saveSession(new AmusementSessionRecord(
+        AmusementSessionRecord saved = repository.saveSession(new AmusementSessionRecord(
                 "session_" + slug(actual.idempotencyKey()),
                 projectId,
                 start,
                 end,
-                nonNegativeOrDefault(actual.capacity(), 0, "capacity"),
+                0,
                 0,
                 0,
                 enumOrDefault(actual.status(), "scheduled", SESSION_STATUSES, "status"),
@@ -1068,6 +1107,8 @@ public class AmusementService {
                 now,
                 now
         ));
+        if (sessionLifecycle != null) sessionLifecycle.lockSessionWindow(saved);
+        return saved;
     }
 
     private AmusementProjectRuleRecord createProjectRuleInternal(String projectId, AmusementProjectRuleRequest request) {
@@ -1115,27 +1156,7 @@ public class AmusementService {
         repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
-        String pointId = trimToNull(actual.locationPointId());
-        String deviceId = trimToNull(actual.deviceId());
-        if (pointId == null && deviceId == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定点位或设备");
-        }
-        int maxConcurrent = nonNegativeOrDefault(actual.maxConcurrent(), -1, "max_concurrent");
-        if (actual.maxConcurrent() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "max_concurrent is required");
-        }
-        Instant now = Instant.now();
-        return repository.saveCapacityConfig(new AmusementCapacityConfigRecord(
-                "amcap_" + slug(actual.idempotencyKey()),
-                projectId,
-                pointId,
-                deviceId,
-                maxConcurrent,
-                trimToDefault(actual.effectiveSessionPattern(), ""),
-                actual.enabled() == null || actual.enabled(),
-                now,
-                now
-        ));
+        throw ApiException.conflict("POINT_CAPACITY_RETIRED", "点位或设备不再设置重复硬容量，请维护项目硬安全容量");
     }
 
     private AmusementDeviceRecord createDeviceInternal(String projectId, AmusementDeviceRequest request) {
@@ -1188,24 +1209,30 @@ public class AmusementService {
         String staffId = trimToDefault(textFromMap(actual.businessContext(), "staff_id", "staffId"), "staff");
         AmusementProjectRecord project = repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
-        checkProjectOwnership(projectId);
-        if (!"open".equals(project.openStatus())) {
-            throw ApiException.conflict("PROJECT_NOT_OPEN", "该游乐项目未开放");
-        }
+        if (sessionLifecycle != null) sessionLifecycle.requireProjectScope(projectId, "amusement.verification.execute");
+        else checkProjectOwnership(projectId);
         AmusementSessionRecord session = repository.findSessionById(sessionId)
                 .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
         if (!project.id().equals(session.projectId())) {
             throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "场次不属于该游乐项目");
         }
-        if (!"open".equals(session.status())) {
-            throw ApiException.conflict("SESSION_NOT_OPEN", "该场次未开放");
-        }
+        // 开放状态和时段只限制新的入场；已完成请求仍须经共用幂等及实时权限核验。
         // F-OPS-04：核销针对具体设备时传 deviceId，准入闸校验该设备巡检有效期（过期则 SAFETY_INSPECTION_EXPIRED）。
         String deviceId = trimToNull(actual.deviceId());
         String pointId = trimToNull(textFromMap(actual.businessContext(),
                 "location_point_id", "locationPointId", "point_id", "pointId"));
         return runAmusementVerification(
-                project, session, credential, pointId, deviceId, staffId, actual.idempotencyKey(), Instant.now());
+                project, session, credential, pointId, deviceId, staffId, actual.idempotencyKey(), Instant.now(),
+                "amusement.verification.execute");
+    }
+
+    /** 票务预览只读定位真实项目及生效营业日，不能激活或消费权益。 */
+    public AmusementBusinessDayService.Window requireEntryWindow(String pointId, String deviceId, Instant at) {
+        String projectId = repository.findProjectIdByPointOrDevice(trimToNull(pointId), trimToNull(deviceId))
+                .orElseThrow(() -> ApiException.conflict("AMUSEMENT_PROJECT_UNRESOLVED",
+                        "游乐核销须先明确所属项目的点位或设备"));
+        sessionLifecycle.requireProjectScope(projectId, "verification.execute");
+        return amusementBusinessDayService.requireWindow(projectId, at == null ? Instant.now() : at);
     }
 
     /**
@@ -1217,15 +1244,12 @@ public class AmusementService {
      *
      * <p>与 controller 直连路径（{@link #createVerificationInternal} 从 businessContext 取 project/session）不同，
      * 本路径【从 point/device + now 自动定位项目与当前 open 场次】——ticketing 侧检出游乐类权益后调本方法，
-     * 复用同一份准入+三维容量+消费权益+写 amusement_verifications 的正路核心（{@link #runAmusementVerification}）。
+     * 复用同一份准入+项目硬容量+消费权益+写 amusement_verifications 的正路核心（{@link #runAmusementVerification}）。
      *
      * <p>返回语义：
      * <ul>
-     *   <li>{@code Optional.empty()}：本核销点/设备【不属于任何游乐项目】——即本核销并非在游乐入场闸发起，
-     *       不应走游乐正路。调用方据此【回退】通用核销旧路（保持 unlimited_in_day 等既有 amusement_type 消耗语义、
-     *       向后兼容）。此为「点位非游乐闸」而非「配置缺失」，故不报错。</li>
-     *   <li>{@code Optional.of(id)}：定位到游乐项目并成功核销，返回落库的 amusement_verifications.id
-     *       供 ticketing 侧写交叉引用（ticket_verifications.amusement_verification_id）。</li>
+     *   <li>{@code Optional.empty()}：无法从点位或设备定位游乐项目，调用方应要求补齐真实归属，不能退回自然日核销。</li>
+     *   <li>{@code Optional.of(record)}：已成功入场，返回原始事实及真实时间；票务侧读取同事务生成的关联核销记录。</li>
      * </ul>
      *
      * <p>【调用方事务内】执行（不加 @Transactional/@GuardedAction：核销权限已在 ticketing verify 端点授权，
@@ -1235,13 +1259,13 @@ public class AmusementService {
      *
      * @param request 核销上下文（凭证 payload、point/device、staff、幂等键、now）
      */
-    public Optional<String> verifyAmusementEntry(AmusementEntryRequest request) {
+    public Optional<AmusementVerificationRecord> verifyAmusementEntry(AmusementEntryRequest request) {
         AmusementEntryRequest actual = requireRequest(request);
         String credential = requireText(actual.credentialPayload(), "credential_payload");
         String pointId = trimToNull(actual.pointId());
         String deviceId = trimToNull(actual.deviceId());
         Instant now = actual.now() == null ? Instant.now() : actual.now();
-        // point/device → 项目定位：定位不到=本核销点非游乐闸 → 返回 empty，调用方回退通用旧路（不硬造关联、不报错）。
+        // 点位或设备必须能定位真实游乐项目；无法定位时返回空，由票务明确拒绝，不能推定日切。
         Optional<String> resolved = repository.findProjectIdByPointOrDevice(pointId, deviceId);
         if (resolved.isEmpty()) {
             return Optional.empty();
@@ -1249,24 +1273,19 @@ public class AmusementService {
         String projectId = resolved.get();
         AmusementProjectRecord project = repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
-        checkProjectOwnership(projectId);
-        // 已确认为游乐闸：以下任一失败即报错（committed，不再回退）。
-        if (!"open".equals(project.openStatus())) {
-            throw ApiException.conflict("PROJECT_NOT_OPEN", "该游乐项目未开放");
-        }
-        // 当前场次定位（项目 + now，start_time≤now≤end_time 且 status=open）；无可入场次即报错。
-        AmusementSessionRecord session = repository.resolveOpenSessionForProject(projectId, now)
-                .orElseThrow(() -> ApiException.conflict(
-                        "AMUSEMENT_NO_OPEN_SESSION", "当前时间没有开放中的游乐场次"));
+        if (sessionLifecycle != null) sessionLifecycle.requireProjectScope(projectId, "verification.execute");
+        else checkProjectOwnership(projectId);
+        // 当前场次属于新入场的处理结果，放在幂等首执行内解析，闭场后重试仍返回原件。
         String staffId = trimToDefault(actual.staffId(), "staff");
         AmusementVerificationRecord record = runAmusementVerification(
-                project, session, credential, pointId, deviceId, staffId, actual.idempotencyKey(), now);
-        return Optional.of(record.id());
+                project, null, credential, pointId, deviceId, staffId, actual.idempotencyKey(), now,
+                "verification.execute");
+        return Optional.of(record);
     }
 
     /**
      * 游乐核销正路核心（controller 直连 & ticketing 分流共用）：项目 open+巡检准入 → 识别/校验权益 →
-     * 先消费票务权益（used_times+1）→ 三维容量原子扣减（任一维度失败补偿回补权益）→ 写 amusement_verifications。
+     * 按锁定营业日激活或消费权益 → 项目实时硬容量占用 → 写游乐与票务首刷事实；重复入场不重复扣次。
      */
     private AmusementVerificationRecord runAmusementVerification(
             AmusementProjectRecord project,
@@ -1276,7 +1295,53 @@ public class AmusementService {
             String deviceId,
             String staffId,
             String idempotencyKey,
-            Instant now) {
+            Instant now,
+            String verificationPermission) {
+        if (sessionLifecycle != null && session != null)
+            sessionLifecycle.requireVerificationScope(session.id(), verificationPermission);
+        AmusementVerificationRecord result = idempotencyService.execute(
+                "admitAmusementEntry", idempotencyKey,
+                java.util.Arrays.asList(project.id(), credential, pointId, deviceId, staffId),
+                () -> {
+                    AmusementSessionRecord admissionSession = session == null
+                            ? repository.resolveOpenSessionForProject(project.id(), now)
+                                .orElseThrow(() -> ApiException.conflict(
+                                        "AMUSEMENT_NO_OPEN_SESSION", "当前时间没有开放中的游乐场次"))
+                            : session;
+                    return performAmusementVerification(project, admissionSession, credential, pointId, deviceId, staffId,
+                            idempotencyKey, now, verificationPermission);
+                },
+                AmusementVerificationRecord.class);
+        if (sessionLifecycle != null) sessionLifecycle.requireVerificationScope(result.sessionId(), verificationPermission);
+        // 直连入口显式指定场次；自动定位入口不把当前场次误当成重试请求的输入。
+        if (session != null && !session.id().equals(result.sessionId()))
+            throw ApiException.conflict("IDEMPOTENCY_CONFLICT", "该请求编号已用于其他场次，本次操作未执行");
+        return result;
+    }
+
+    private AmusementVerificationRecord performAmusementVerification(
+            AmusementProjectRecord project,
+            AmusementSessionRecord session,
+            String credential,
+            String pointId,
+            String deviceId,
+            String staffId,
+            String idempotencyKey,
+            Instant now,
+            String verificationPermission) {
+        AmusementBusinessDayService.Window businessWindow = null;
+        if (sessionLifecycle != null) {
+            var admission = sessionLifecycle.prepareEntry(project.id(), session.id(), verificationPermission);
+            now = admission.occurredAt();
+            businessWindow = admission.window();
+            project = repository.findProjectById(project.id()).orElseThrow(() ->
+                    ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在"));
+            session = repository.findSessionById(session.id()).orElseThrow(() ->
+                    ApiException.notFound("SESSION_NOT_FOUND", "游乐场次不存在"));
+        }
+        if (!"open".equals(project.openStatus())) {
+            throw ApiException.conflict("PROJECT_NOT_OPEN", "该游乐项目未开放");
+        }
         if (!project.id().equals(session.projectId())) {
             throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "场次不属于该游乐项目");
         }
@@ -1284,11 +1349,7 @@ public class AmusementService {
             throw ApiException.conflict("SESSION_NOT_OPEN", "该场次未开放");
         }
         if (parkWideFaultSalesGate != null) {
-            String complexId = merchantDirectory == null || project.merchantId() == null ? null
-                    : merchantDirectory.findMerchant(project.merchantId())
-                            .map(com.complex.platform.governance.MerchantRecord::projectId).orElse(null);
-            if (complexId == null && authorizationService != null)
-                complexId = authorizationService.currentProjectScopeQuietly().orElse(null);
+            String complexId = businessWindow == null ? null : businessWindow.complexId();
             if (parkWideFaultSalesGate.salesSuspended(complexId))
                 throw ApiException.conflict("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "全园故障期间暂停游乐入场核销");
         }
@@ -1310,9 +1371,6 @@ public class AmusementService {
                 || (entitlement.validTo() != null && now.isAfter(entitlement.validTo()))) {
             throw ApiException.conflict("ENTITLEMENT_EXPIRED", "该权益不在有效期内");
         }
-        if (entitlement.remainingTimes() <= 0) {
-            throw ApiException.conflict("ENTITLEMENT_USED", "该权益剩余次数已用完");
-        }
         if (!isAmusementEntitlementType(entitlement.entitlementType())) {
             throw ApiException.conflict("ENTITLEMENT_NOT_AMUSEMENT", "该权益不是游乐类权益");
         }
@@ -1324,18 +1382,18 @@ public class AmusementService {
         }
 
         int peopleCount = Math.max(entitlement.numPeople(), 1);
-        // §6.4 步骤 4/6：先消费票务权益（原子扣 used_times），再按三维度扣容量。
+        // §6.4 步骤 4/6：先消费票务权益（原子扣 used_times），再按项目硬上限增加在场人数。
         // 顺序与回滚：权益扣减失败不扣容量；容量任一维度扣减失败则回补权益（补偿），保证两者一致。
-        if (!entitlementGateway.consumeEntitlement(entitlement.id())) {
-            throw ApiException.conflict("ENTITLEMENT_USED", "该权益剩余次数已用完");
+        AmusementEntitlementGateway.Consumption consumption =
+                entitlementGateway.consumeEntitlement(entitlement.id(), businessWindow, now);
+        if (consumption == AmusementEntitlementGateway.Consumption.UNAVAILABLE) {
+            throw ApiException.conflict("ENTITLEMENT_USED", "该权益剩余次数已用完且当前营业日没有有效激活");
         }
         // 清单#6 超容处置策略（§6.4/§7.18 + R6-D10）：硬上限阻断+软上限告警放行，均落
         // amusement.incident.over_capacity 事件；处置模式后台可切换（block_hard 默认/warn_only 仅告警留痕不阻断）。
         AmusementOverCapacityPolicy policy = repository.findOverCapacityPolicy(project.id());
         try {
-            // §6.4 三维度取最小可放行余量：对已配置的受控维度（场次 / 点位·设备 / 项目安全上限）
-            // 原子 check+increment，任一维度余量为 0 即拒绝（session_full / SESSION_CAPACITY_EXHAUSTED）；
-            // 未配置维度跳过（无 capacity_config 退化为场次单维，向后兼容）。
+            // 单项目实时在玩人数原子占用，场次、点位和团体预约不形成重复硬上限。
             CapacityClaimResult claim = repository.claimCapacityAcrossDimensions(new CapacityClaimContext(
                     project.id(),
                     session.id(),
@@ -1351,24 +1409,27 @@ public class AmusementService {
                 // 留痕与失败审计同语义（与既有 recordFailure 一致，同事务内尽力写入）。
                 recordHardOverCapacityDurably(project, session, deviceId, claim.exhaustedDimension(), policy);
                 throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED",
-                        "场次容量已满（受限维度：" + claim.exhaustedDimension() + "）");
+                        "项目在场人数已达硬安全容量");
             }
         } catch (RuntimeException exception) {
             // 容量扣减失败：回补已消费的权益，避免权益被白扣。
-            entitlementGateway.reverseEntitlement(entitlement.id());
+            if (consumption == AmusementEntitlementGateway.Consumption.CONSUMED) {
+                try {
+                    entitlementGateway.reverseEntitlement(entitlement.id(), businessWindow, now);
+                } catch (RuntimeException reversalFailure) {
+                    exception.addSuppressed(reversalFailure);
+                }
+            }
             throw exception;
         }
-        // 软上限（运营容量）告警：放行后若场次在场达到运营容量，落 over_capacity incident + 发事件（不阻断）。
-        if (policy.hasOperatingCapacity()) {
-            repository.findSessionById(session.id()).ifPresent(after -> {
-                if (after.usedCapacity() + after.lockedCapacity() >= policy.operatingCapacity()) {
-                    recordOverCapacity(project, session, deviceId, "soft", "operating_capacity", policy);
-                }
-            });
+        // 软上限（运营容量）告警：放行后项目在场人数达到运营容量时留痕，不阻断。
+        if (policy.hasOperatingCapacity()
+                && repository.findProjectInPlayCount(project.id()).orElse(0) >= policy.operatingCapacity()) {
+            recordOverCapacity(project, session, deviceId, "soft", "operating_capacity", policy);
         }
-        // 阶段2：入场记录留痕 entitlementId + locationPointId（出场释放并发容量按同一 point/device 维度键 -N；
-        // entitlementId 参与「同一权益同一场次至多一条未释放入场」并发唯一约束）。direction=entry、未释放。
-        return repository.saveVerification(AmusementVerificationRecord.entry(
+        // 入场保留权益、点位和设备事实；出场只释放该入场对应的项目人数。
+        // entitlementId 参与「同一权益同一场次至多一条未释放入场」并发唯一约束。
+        AmusementVerificationRecord saved = repository.saveVerification(AmusementVerificationRecord.entry(
                 "verification_" + slug(idempotencyKey),
                 project.id(),
                 session.id(),
@@ -1376,23 +1437,23 @@ public class AmusementService {
                 deviceId,
                 staffId,
                 "success",
-                null,
+                consumption == AmusementEntitlementGateway.Consumption.DAY_REPLAY ? "day_replay" : null,
                 List.of(),
                 now,
                 peopleCount,
                 entitlement.id(),
                 pointId));
+        if (businessWindow != null) sessionLifecycle.recordEntryWindow(saved.id(), businessWindow);
+        entitlementGateway.recordAdmission(saved, businessWindow, consumption);
+        return saved;
     }
 
     /**
      * 阶段2（2026-07-05 用户拍板）出场核销：自由进出型（并发容量）客人/闸机出场扫码 → 并发容量 -N 释放。
      *
-     * <p>据凭证定位其【未释放的成功入场】记录 → 按入场留痕的 point/device 维度键把
-     * amusement_capacity_snapshot.occupied_count -N（N=入场放行人数，下限 0）→ 标记入场 released_at、落 direction=exit 记录。
-     * 幂等：同一入场重复出场只释放一次（条件 UPDATE 赢家判定 + 唯一约束兜底）。
-     *
-     * <p>场次/批次型（仅场次维、无并发快照）出场无并发容量可释放 → decrement 命中 0 行、天然幂等跳过
-     * （不误减 amusement_sessions.used_capacity）。无未释放入场（未曾入场/已出场）→ ENTITLEMENT_NO_ACTIVE_ENTRY。
+     * <p>据凭证定位未释放的成功入场，按该入场人数释放项目在场人数，保存出场记录及释放来源。
+     * 同一入场由出场、场次结束或营业日结束仅释放一次；后续出场不能误减新入场人数。
+     * 无进行中入场且无既有出场记录时返回 ENTITLEMENT_NO_ACTIVE_ENTRY。
      */
     @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.execute")
     @Transactional
@@ -1409,11 +1470,20 @@ public class AmusementService {
         java.util.Optional<AmusementVerificationRecord> active = repository.findActiveEntryByEntitlement(entId);
         if (active.isEmpty()) {
             // 无未释放入场：要么已出场（幂等：返回既有 exit，不重复减容量），要么从未入场（报错）。
-            return repository.findLatestExitByEntitlement(entId)
+            AmusementVerificationRecord previous = repository.findLatestExitByEntitlement(entId)
                     .orElseThrow(() -> ApiException.conflict(
                             "ENTITLEMENT_NO_ACTIVE_ENTRY", "该权益没有进行中的游乐入场可释放"));
+            if (sessionLifecycle != null) sessionLifecycle.requireVerificationScope(previous.sessionId(), "amusement.verification.execute");
+            return previous;
         }
         AmusementVerificationRecord entry = active.get();
+        if (sessionLifecycle != null) sessionLifecycle.requireVerificationScope(entry.sessionId(), "amusement.verification.execute");
+        repository.lockProjectForSafety(entry.projectId());
+        if (sessionLifecycle != null) {
+            sessionLifecycle.requireVerificationScope(entry.sessionId(), "amusement.verification.execute");
+            sessionLifecycle.requireEntryFacts(entry.id());
+        }
+        now = Instant.now();
         AmusementVerificationRecord exitRecord = new AmusementVerificationRecord(
                 "verification_exit_" + slug(idempotencyKey),
                 entry.projectId(),
@@ -1435,7 +1505,8 @@ public class AmusementService {
         boolean released = repository.releaseEntryConcurrentCapacity(entry, exitRecord, now);
         if (!released) {
             // 入场已被并发/前次出场释放：幂等返回既有 exit 记录，不重复减容量。
-            return repository.findExitByEntry(entry.id()).orElse(exitRecord);
+            return repository.findExitByEntry(entry.id()).orElseThrow(() -> ApiException.conflict(
+                    "ENTITLEMENT_NO_ACTIVE_ENTRY", "该入场已由清场或营业日结束释放"));
         }
         // CG-02（BSM「因达到硬安全容量而自动停运的项目，在玩人数回落到硬安全容量以下后由系统自动恢复开放」）：
         // 本次真实释放后，若项目仍处硬超容自动停运且项目维在玩人数已 < 硬安全容量，由系统 CAS paused→open 并留痕。
@@ -1451,7 +1522,7 @@ public class AmusementService {
      */
     private void autoReopenIfHardCapacityRecovered(
             AmusementVerificationRecord entry, AmusementVerificationRecord exitRecord, String idempotencyKey, Instant now) {
-        if (!repository.reopenProjectIfHardCapacityRecovered(entry.projectId(), now)) {
+        if (!reopenAfterSafetyCheck(entry.projectId(), now)) {
             return;
         }
         int inPlay = repository.findProjectInPlayCount(entry.projectId()).orElse(-1);
@@ -1492,7 +1563,14 @@ public class AmusementService {
                 new org.springframework.transaction.support.TransactionTemplate(transactionManager);
         durable.setPropagationBehavior(
                 org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        durable.executeWithoutResult(status -> recordOverCapacity(project, session, deviceId, "hard", dimension, policy));
+        Runnable persist = () -> durable.executeWithoutResult(status ->
+                recordOverCapacity(project, session, deviceId, "hard", dimension, policy));
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCompletion(int status) { persist.run(); }
+                    });
+        } else persist.run();
     }
 
     /**
@@ -1500,7 +1578,7 @@ public class AmusementService {
      * 发 amusement.incident.over_capacity 事件（复用既有 AuditEventService）。
      *
      * @param overType 超容类型：hard=安全容量（硬上限）/ soft=运营容量（软上限）
-     * @param dimension 触发维度（session / point_device / project_safety / operating_capacity）
+     * @param dimension 触发依据（project_safety / operating_capacity）
      */
     private void recordOverCapacity(
             AmusementProjectRecord project,
@@ -1537,7 +1615,7 @@ public class AmusementService {
                 List.of(),
                 now,
                 now,
-                authorizationService.currentMerchantScope().orElse(null)
+                project.merchantId()
         ));
         // 双写统一责任链（fail-safe，不阻塞核销主链；孤岛 amusement_incidents 仍权威）。
         reportToUnifiedRiskAlerts(
@@ -1588,28 +1666,31 @@ public class AmusementService {
         if (riskAlertService == null) {
             return;
         }
-        try {
-            riskAlertService.report(new RiskAlertReportRequest(
-                    incidentId + ":unified",
-                    "amusement",
-                    incidentId,
-                    alertType,
-                    mapRiskLevel(severity),
-                    summary,
-                    projectId,
-                    reason,
-                    List.of()));
-        } catch (RuntimeException exception) {
-            // 统一表上报失败不影响核销主链（incident 已落孤岛表 amusement_incidents）。
-            auditEventService.recordFailure(
-                    "amusement.risk.unified_alert_failed",
-                    "amusement.verification.execute",
-                    "risk_alert",
-                    incidentId,
-                    null,
-                    incidentId + ":unified",
-                    exception instanceof ApiException api ? api.code() : exception.getClass().getSimpleName());
-        }
+        Runnable report = () -> {
+            try {
+                Runnable write = () -> riskAlertService.report(new RiskAlertReportRequest(
+                        incidentId + ":unified", "amusement", incidentId, alertType, mapRiskLevel(severity),
+                        summary, projectId, reason, List.of()));
+                if (transactionManager == null) write.run();
+                else {
+                    var independent = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+                    independent.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                    independent.executeWithoutResult(status -> write.run());
+                }
+            } catch (RuntimeException exception) {
+                auditEventService.recordFailure(
+                        "amusement.risk.unified_alert_failed", "amusement.verification.execute", "risk_alert",
+                        incidentId, null, incidentId + ":unified",
+                        exception instanceof ApiException api ? api.code() : exception.getClass().getSimpleName());
+            }
+        };
+        // 统一风险镜像失败不得回滚已确认的事故和停运；仅在原事实提交后单独尝试。
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { report.run(); }
+                    });
+        } else report.run();
     }
 
     /**
@@ -1655,9 +1736,12 @@ public class AmusementService {
     // 两个写口只由调度作业（系统主体）调用，不暴露端点、不接受人工参数。
     // ============================================================
 
-    // 营业日起止沿用现有营业日配置（business_day_cutoff_config 的 amusement 域日切），不另立。
+    // 按实际综合体已批准配置锁定场次及核销营业日，旧全域配置不再用于游乐。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    com.complex.platform.common.BusinessDayResolver businessDayResolver;
+    AmusementBusinessDayService amusementBusinessDayService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    AmusementSessionLifecycleService sessionLifecycle;
 
     /**
      * 营业日结束自动清零（非场次型）：对每个项目，把上一营业日结束时刻之前最后变动的并发快照（项目维 / 点位设备维）清零；
@@ -1666,61 +1750,13 @@ public class AmusementService {
      */
     @org.springframework.transaction.annotation.Transactional
     public int resetConcurrentCountsAtBusinessDayEnd(Instant now) {
-        if (businessDayResolver == null) {
-            throw new IllegalStateException("营业日配置不可用，不得执行在玩人数自动清零");
-        }
-        LocalDate current = businessDayResolver.businessDate("amusement", now);
-        LocalDate ended = current.minusDays(1);
-        Instant dayEnd = businessDayResolver.endInstant("amusement", ended);
-        int resets = 0;
-        for (AmusementProjectRecord project : repository.listProjects()) {
-            int[] stale = repository.countStaleConcurrentSnapshots(project.id(), dayEnd);
-            boolean fresh = repository.insertConcurrentResetLogIfAbsent(new AmusementConcurrentResetLogRecord(
-                    "acrl_" + UUID.randomUUID().toString().replace("-", ""), project.id(),
-                    AmusementConcurrentResetLogRecord.SCOPE_BUSINESS_DAY_END, ended, null, stale[0], stale[1], dayEnd, now));
-            if (!fresh) {
-                continue; // 该项目该营业日已清零（幂等：不重复清、不重复记）。
-            }
-            int cleared = repository.zeroStaleConcurrentSnapshots(project.id(), dayEnd, now);
-            if (cleared == 0) {
-                continue; // 该营业日无在玩人数需清零：留痕作幂等标记，不产生审计噪音。
-            }
-            auditEventService.recordSuccess("amusement.concurrent_count.business_day_reset", null, "amusement_project",
-                    project.id(), project.merchantId(), null, Map.of("trigger", "system_business_day_end",
-                            "business_date", ended.toString(), "boundary_at", dayEnd.toString(),
-                            "cleared_rows", cleared, "cleared_people", stale[1]));
-            resets++;
-        }
-        return resets;
+        return sessionLifecycle.resetExpiredBusinessDays(now);
     }
 
-    /**
-     * 场次结束自动清空（场次型）：end_time 已过、仍为 scheduled/open 的场次由系统置 closed，并把该场次维与该项目并发维的在玩人数清空；
-     * 每场次只执行一次；留系统审计事件。返回本次置 closed 并清空的场次数。
-     */
+    /** 按结束原件仅释放本场未出场记录，不改其他场次或新营业日记录。 */
     @org.springframework.transaction.annotation.Transactional
     public int closeEndedSessionsAndClearCounts(Instant now) {
-        int closed = 0;
-        for (AmusementSessionRecord session : repository.listEndedUnclosedSessions(now)) {
-            if (!repository.closeSessionIfEnded(session.id(), now)) {
-                continue; // 并发下已被另一轮置 closed。
-            }
-            int[] pending = repository.countSessionConcurrentSnapshots(session.projectId(), session.id());
-            int cleared = repository.zeroSessionConcurrentSnapshots(session.projectId(), session.id(), now);
-            LocalDate businessDate = businessDayResolver != null
-                    ? businessDayResolver.businessDate("amusement", session.endTime())
-                    : session.endTime().atZone(com.complex.platform.common.LocalZone.ID).toLocalDate();
-            repository.insertConcurrentResetLogIfAbsent(new AmusementConcurrentResetLogRecord(
-                    "acrl_" + UUID.randomUUID().toString().replace("-", ""), session.projectId(),
-                    AmusementConcurrentResetLogRecord.SCOPE_SESSION_END, businessDate, session.id(), cleared, pending[1],
-                    session.endTime(), now));
-            String merchantId = repository.findProjectById(session.projectId()).map(AmusementProjectRecord::merchantId).orElse(null);
-            auditEventService.recordSuccess("amusement.concurrent_count.session_end_cleared", null, "amusement_session",
-                    session.id(), merchantId, null, Map.of("trigger", "system_session_end", "project_id", session.projectId(),
-                            "session_end_time", session.endTime().toString(), "cleared_rows", cleared, "cleared_people", pending[1]));
-            closed++;
-        }
-        return closed;
+        return sessionLifecycle.closeEndedSessions(now);
     }
 
     public int generateDueInspectionTasks(Instant now) {
@@ -1747,11 +1783,42 @@ public class AmusementService {
         return upserted;
     }
 
+    private boolean reopenAfterSafetyCheck(String projectId, Instant now) {
+        repository.lockProjectForSafety(projectId);
+        if (!repository.isHardCapacityPaused(projectId)) return false;
+        AmusementOpenEligibilityResponse safety = evaluateOpenEligibility(projectId, null, null, true);
+        if (!safety.allowed()) {
+            auditEventService.recordSuccess("amusement.project.auto_reopen_blocked", null,
+                    "amusement_project", projectId, null, null, Map.of("reasons", safety.blockedReasons()));
+            return false;
+        }
+        return repository.reopenProjectIfHardCapacityRecovered(projectId, now);
+    }
+
+    @Transactional
+    public int reassessHardCapacityRecovery(Instant now) {
+        int reopened = 0;
+        for (AmusementProjectRecord project : repository.listProjects()) {
+            if (reopenAfterSafetyCheck(project.id(), now)) {
+                auditEventService.recordSuccess("amusement.project.auto_reopened", null,
+                        "amusement_project", project.id(), null, null,
+                        Map.of("reason", "hard_capacity_recovered", "triggered_by", "system"));
+                reopened++;
+            }
+        }
+        return reopened;
+    }
+
     private AmusementOpenEligibilityResponse evaluateOpenEligibility(String projectId, String sessionId, String deviceId) {
+        return evaluateOpenEligibility(projectId, sessionId, deviceId, false);
+    }
+
+    private AmusementOpenEligibilityResponse evaluateOpenEligibility(
+            String projectId, String sessionId, String deviceId, boolean hardCapacityRecovery) {
         AmusementProjectRecord project = repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         List<String> reasons = new ArrayList<>();
-        if (!"open".equals(project.openStatus())) {
+        if (!"open".equals(project.openStatus()) && !hardCapacityRecovery) {
             reasons.add("PROJECT_NOT_OPEN");
         }
         repository.latestSafetyInspectionForProject(projectId)
@@ -1814,9 +1881,6 @@ public class AmusementService {
                     .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
             if (!"open".equals(session.status())) {
                 reasons.add("SESSION_NOT_OPEN");
-            }
-            if (session.usedCapacity() + session.lockedCapacity() >= session.capacity()) {
-                reasons.add("SESSION_CAPACITY_EXHAUSTED");
             }
         }
         return new AmusementOpenEligibilityResponse(projectId, sessionId, reasons.isEmpty(), List.copyOf(reasons));

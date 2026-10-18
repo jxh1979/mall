@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
@@ -32,7 +32,8 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   contract_rent: "合同租金", contract_property_fee: "物业费", energy_fee: "能源费",
   turnover_rent: "营业额抽成租金", dividend_payout: "持股分红发放", bar_bill: "酒吧账单",
   dispatch_commission_transfer: "派驻提成月结拨付",
-  purchase_inbound: "采购入库",
+  purchase_inbound: "采购入库", purchase_prepayment: "采购预付款", purchase_consignment: "寄售结算",
+  purchase_return_refund: "供应商退货退款", purchase_prepayment_refund: "采购未用预付款退款",
 };
 function sourceTypeLabel(v?: string): string {
   return v ? (SOURCE_TYPE_LABELS[v] ?? v) : "—";

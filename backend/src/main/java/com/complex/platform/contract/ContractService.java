@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -61,7 +61,7 @@ public class ContractService {
     private static final String MERCHANT_FEE_RENEWAL_TEMPLATE = "sms.merchant_fee.renewal";
     private static final Set<String> COMMISSION_MODES = Set.of(
             "guarantee_or_commission_higher", "fixed_ratio", "tiered_ratio", "guarantee_plus_commission");
-    private static final Set<String> ENERGY_BASES = Set.of("none", "by_contract", "by_area", "by_usage");
+    private static final Set<String> ENERGY_BASES = Set.of("none", "by_contract");
     private static final Set<String> CHANGE_TYPES = Set.of(
             "renewal", "move_out", "area_change", "rent_change", "business_scope_change", "early_termination",
             "scope_grant", "location_change");
@@ -160,12 +160,8 @@ public class ContractService {
         if (!ENERGY_BASES.contains(energyBasis)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "energy_fee_basis is invalid");
         }
-        // 清单 P1-3:固定能源费金额仅 by_contract 包干允许;按面积/按用量(需抄表)或无能源费的合同填固定额=脏数据,下单即拒。
-        if (numLong((actual.rentTerms() == null ? Map.of() : actual.rentTerms()).get("energyFeeCent")) > 0
-                && !"by_contract".equals(energyBasis)) {
-            throw ApiException.badRequest("VALIDATION_FAILED",
-                    "只有按合同计收能耗费（by_contract）时才能填写能耗费金额");
-        }
+        // 公区水电损已包含物业费；独表仅凭能源域核实的实际账单代收。
+        rejectFixedEnergyCharge(actual.rentTerms());
         // 1.5 幂等：带 idempotencyKey 时合同 id 由其确定性派生；重复提交/招商重签命中既有草稿直接返回，不重复建。
         // 校验已前置于此，故重放亦已过校验；失败草稿在 @Transactional 下整体回滚，重试将重走完整校验，无半成品可复用。
         String idempotencyKey = trimToNull(actual.idempotencyKey());
@@ -434,6 +430,7 @@ public class ContractService {
         // 经营范围变更载荷规范化：web 客户端会把嵌套键蛇形化（allowed_categories），统一归一到
         // rent_terms 既有的 camel 键 allowedCategories 并做词表校验，approveChange→applyChange putAll 后即生效。
         Map<String, Object> payload = new HashMap<>(actual.payload() == null ? Map.of() : actual.payload());
+        rejectFixedEnergyCharge(payload);
         Object rawCategories = payload.remove("allowed_categories");
         if (rawCategories == null) {
             rawCategories = payload.get(ContractScopeGuard.RENT_TERMS_KEY);
@@ -882,9 +879,8 @@ public class ContractService {
     }
 
     /**
-     * 生成某期全部应收：租金 + 物业费(rent_terms.propertyFeeCent) + 能源费(基非 none 取 rent_terms.energyFeeCent)。
+     * 生成当期租金和物业费；独表实际能源费由能源域核实账单后挂账。
      * 各费目幂等(合同,期,费目)；免租/0 金额跳过。
-     * ponytail: 能源费按面积/按用量的金额由能耗域/上游派生后落 rent_terms.energyFeeCent，本处只挂账；不分摊则 0。
      */
     @Transactional
     public List<ContractRentBillRecord> generatePeriodBills(String contractId, ContractRentBillRequest request) {
@@ -998,6 +994,20 @@ public class ContractService {
         }
         String s = o.toString().trim();
         return s.isEmpty() ? null : s;
+    }
+
+    private void rejectFixedEnergyCharge(Map<String, Object> terms) {
+        if (terms == null) return;
+        for (String key : List.of("energyFeeCent", "energy_fee_cent")) {
+            Object value = terms.get(key);
+            if (value == null) continue;
+            try {
+                if (new java.math.BigDecimal(value.toString()).signum() == 0) continue;
+            } catch (NumberFormatException ignored) {
+                // 未知或无效金额也不能写成合同固定收费。
+            }
+            throw ApiException.badRequest("VALIDATION_FAILED", "合同不可预设固定能源费，独表须核实实际费用后代收");
+        }
     }
 
     private long numLong(Object o) {

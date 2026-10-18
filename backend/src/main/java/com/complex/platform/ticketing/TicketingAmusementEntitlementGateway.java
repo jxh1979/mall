@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.amusement.AmusementEntitlementGateway;
 import com.complex.platform.amusement.AmusementEntitlementView;
@@ -12,15 +12,17 @@ import org.springframework.stereotype.Component;
  * 票务域对游乐核销端口 {@link AmusementEntitlementGateway} 的实现（ticketing → amusement 单向依赖，防循环）。
  *
  * <p>复用票务既有 {@link TicketingRepository} 的凭证/权益查询与原子消费/回补能力，
- * 不改动票务既有核销逻辑（{@link TicketVerificationService}）。游乐核销据此识别票/权益实例并消费游乐权益（设计 §6.4/§12.1）。
+ * 游乐实际入场统一关联票务核销事实，按真实综合体营业日消费或重入。
  */
 @Component
 public class TicketingAmusementEntitlementGateway implements AmusementEntitlementGateway {
 
     private final TicketingRepository repository;
+    private final TicketAmusementAdmissionService admissions;
 
-    public TicketingAmusementEntitlementGateway(TicketingRepository repository) {
+    public TicketingAmusementEntitlementGateway(TicketingRepository repository, TicketAmusementAdmissionService admissions) {
         this.repository = repository;
+        this.admissions = admissions;
     }
 
     @Override
@@ -47,13 +49,35 @@ public class TicketingAmusementEntitlementGateway implements AmusementEntitlemen
 
     @Override
     public boolean consumeEntitlement(String entitlementId) {
-        return repository.atomicUseEntitlement(requireText(entitlementId), Instant.now()).isPresent();
+        String id=requireText(entitlementId);
+        if(repository.findIssuedEntitlementById(id).map(e->"unlimited_in_day".equals(e.consumptionWindow())).orElse(false))
+            throw com.complex.platform.common.api.ApiException.conflict("AMUSEMENT_BUSINESS_DAY_REQUIRED",
+                    "当天无限权益必须使用真实综合体营业日消费入口");
+        return repository.atomicUseEntitlement(id, Instant.now()).isPresent();
     }
 
     @Override
     public void reverseEntitlement(String entitlementId) {
         // 补偿回滚：权益已扣但容量扣减失败时回补一次（used_times-1，下限 0）。
         repository.atomicReverseEntitlement(requireText(entitlementId), Instant.now());
+    }
+
+    @Override
+    public Consumption consumeEntitlement(String entitlementId,
+            com.complex.platform.amusement.AmusementBusinessDayService.Window window, Instant occurredAt) {
+        return admissions.consume(requireText(entitlementId),window,occurredAt);
+    }
+
+    @Override
+    public void reverseEntitlement(String entitlementId,
+            com.complex.platform.amusement.AmusementBusinessDayService.Window window, Instant occurredAt) {
+        admissions.reverseNewConsumption(requireText(entitlementId),window,occurredAt);
+    }
+
+    @Override
+    public void recordAdmission(com.complex.platform.amusement.AmusementVerificationRecord admission,
+            com.complex.platform.amusement.AmusementBusinessDayService.Window window, Consumption consumption) {
+        admissions.recordAdmission(admission,window,consumption);
     }
 
     private AmusementEntitlementView toView(IssuedEntitlementRecord entitlement) {

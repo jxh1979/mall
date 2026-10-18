@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -72,7 +73,7 @@ function createState(empty = false) {
   const tickets = empty ? [] : [ticketProduct("ticket-1", "Weekend Pass", 9900)];
   const providerAdapters = empty ? [] : [providerAdapter("adapter-1", "mock-video", "video")];
   const amusementSessions = empty ? [] : [{ id: "session-1", projectId: "amuse-1", sessionName: "Morning Session", startsAt: now, endsAt: now, capacity: 20, usedCapacity: 3, lockedCapacity: 2, status: "scheduled" }];
-  const businessBindings = empty ? [] : [{ id: "binding-1", admissionStep: "主体绑定", businessObjectId: "merchant-1", operatorSubject: "Main Operator Co", contractSubject: "Main Contract Co", contractSubjectId: "contract-subject-1", settlementSubject: "Main Settlement Co", settlementSubjectId: "settlement-subject-1", status: "active", auditEvidenceRef: "audit://admission/binding-1" }];
+  const businessBindings = empty ? [] : [{ id: "binding-1", merchant_id: "merchant-1", operation_entity_id: "operator-entity-1", contract_entity_id: "contract-entity-1", settlement_entity_id: "settlement-entity-1", status: "active", effective_from: "2026-06-01", effective_to: "2027-05-31", change_reason: "合同主体确认", created_at: now, updated_at: now }];
   const contracts = empty ? [] : [{ id: "contract-1", admissionStep: "合同草稿/审批", merchantId: "merchant-1", contractSubjectId: "contract-subject-1", operationSubjectId: "operator-subject-1", settlementSubjectId: "settlement-subject-1", effectiveDate: "2026-06-01", expiryDate: "2027-05-31", rentTerms: { billingCycle: "monthly", baseRent: 12000 }, shareholderRatioForReport: 0.25, attachmentIds: ["att-contract-1"], lifecycleStatus: "draft", status: "draft", auditEvidenceRef: "audit://admission/contract-1" }];
   const ticketOrders = empty ? [] : [
     { id: "ticket-order-1", orderNo: "TO-MOCK-1", ticketTypeId: "ticket-1", quantity: 1, visitDate: "2026-06-20", salesChannel: "web", amountCent: 9900, payStatus: "paid", issueStatus: "not_issued", status: "created" },
@@ -198,12 +199,16 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
   const empty: Record<string, unknown>[] = [];
   const routes: Record<string, ApiData> = {
     "/api/v1/system/health": { ok: true, service: "mock-api", time: now },
+    "/api/v1/amusement/business-day-configs": { projects: [{ id: "venue-1", name: "本综合体" }], versions: [] },
+    "/api/v1/inventory/purchase-workbench-options": { projects: [], entities: [], merchants: [], suppliers: [], inventory_items: [], warehouses: [], contracts: [] },
+    "/api/v1/inventory/purchase-requests": [],
+
     "/api/v1/analytics/dashboards/p0-overview": { merchants: 1, ticketProducts: state.tickets.length, issuedTickets: state.issuedEntitlements.length, verifications: state.verifications.length, barOrders: 1, amusementSessions: state.amusementSessions.length, openRiskAlerts: 1, auditEvents: 2 },
     "/api/v1/platform/business-entities": [{ id: "org-1", entityName: "Platform Org", entityRole: "operating", unifiedSocialCreditCode: "91310000MA1FL000XQ", name: "Platform Org", code: "ORG", orgType: "platform", status: "active", createdAt: now }],
     "/api/v1/platform/business-entity-bindings": state.businessBindings,
     "/api/v1/contracts": { items: state.contracts, page: 1, pageSize: 500, total: state.contracts.length },
     "/api/v1/platform/supervisor-review-policies": state.supervisorReviewPolicies,
-    "/api/v1/platform/merchants": [{ id: "bar-main", merchantName: "主酒吧", merchantType: "bar", status: "active" }, { id: "merchant-1", merchantName: "Main Merchant", businessEntityId: "org-1", contactName: "Jack", admissionStep: "商户档案", organizationId: "org-1", displayName: "Main Merchant", companyName: "Main Company", mallBlockCode: "1F-A", areaSquareMeter: 128.5, leasedAreaSquareMeter: 120, secondaryContactName: "Jack", rentPerSquareMeter: 12.3, cooperationForm: "fixed_rent_plus_commission", status: "active", riskLevel: "normal", auditEvidenceRef: "audit://admission/merchant-1" }],
+    "/api/v1/platform/merchants": [{ id: "bar-main", merchantName: "主酒吧", merchantType: "bar", status: "active" }, { id: "merchant-1", merchantName: "Main Merchant", projectId: "venue-1", businessEntityId: "org-1", contactName: "Jack", admissionStep: "商户档案", organizationId: "org-1", displayName: "Main Merchant", companyName: "Main Company", mallBlockCode: "1F-A", areaSquareMeter: 128.5, leasedAreaSquareMeter: 120, secondaryContactName: "Jack", rentPerSquareMeter: 12.3, cooperationForm: "fixed_rent_plus_commission", status: "active", riskLevel: "normal", auditEvidenceRef: "audit://admission/merchant-1" }],
     "/api/v1/platform/projects": [{ id: "venue-1", merchantId: "merchant-1", name: "Main Venue", code: "VENUE", venueType: "complex", status: "active" }],
     "/api/v1/platform/spaces": [{ id: "area-1", spaceName: "Gate A", projectId: "venue-1", spaceType: "gate", floorNo: "1F", areaSquareMeter: 20, venueId: "venue-1", areaId: "area-1", name: "Gate A", code: "GATE-A", areaType: "operation", pointType: "gate", status: "active" }],
     "/api/v1/platform/space-types": [{ id: "sptype_building", typeCode: "building", typeName: "楼栋", sortOrder: 10, status: "active" }, { id: "sptype_shop", typeCode: "shop", typeName: "商铺/铺位", sortOrder: 40, status: "active" }],
@@ -308,6 +313,16 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
       { window_key: "contract.renewal", days: 30, description: "商户合同续约提醒提前天数" },
       { window_key: "inventory.saved_bottle", days: 7, description: "存酒临期提醒提前天数" },
       { window_key: "leasing.lead_follow_up", days: 3, description: "招商线索未跟进提醒天数" },
+    ],
+    "/api/v1/settlement/invoice-items/summary": { subjects: [], rules: [], over_issued: [] },
+    "/api/v1/settlement/invoice-items": { items: [], page: 1, page_size: 200, total: 0 },
+    "/api/v1/staff/payroll/tax-versions": [
+      { id: "tax-version-navigation", category: "测试税目", version: "V0.01", effective_from: "2026-06-01",
+        applicability_basis: "仅用于导航回归的专业依据样例", calculation_basis: "导航样例，不作为实际计税依据",
+        rounding_rule: "truncate_cent_each_step", reason: "验证完整版本展示", status: "draft", review_id: null,
+        evidence_attachment_ids: [], created_by: "user-1", created_at: now, decided_at: null,
+        brackets: [{ seq: 1, income_floor_cent: 0, income_ceiling_cent: null, income_base_bps: 10000,
+          flat_deduction_cent: 0, rate_bps: 2000, quick_deduction_cent: 0 }] },
     ],
     "/api/v1/staff/payroll/tax-brackets": [
       { id: "ptb_labor_1", category: "labor_remuneration", seq: 1, income_floor_cent: 1, income_ceiling_cent: 400000, income_base_bps: 10000, flat_deduction_cent: 80000, rate_bps: 2000, quick_deduction_cent: 0 },

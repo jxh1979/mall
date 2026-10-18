@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -62,6 +62,11 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     @Autowired private TicketingRepository ticketingRepository;
     @Autowired private TicketingService ticketingService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private AmusementBusinessDayService businessDays;
+    @Autowired private AmusementSessionLifecycleService lifecycle;
+    @Autowired private AmusementRepository amusementRepository;
+    @Autowired private JdbcAmusementFaultCompensationRepository compensationRepository;
+    @Autowired private com.complex.platform.governance.review.SupervisorReviewService reviews;
 
     private String suffix;
     private String projectId;
@@ -89,11 +94,16 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         amusementProjectId = "amp_cg08b_" + suffix;
         jdbcTemplate.update("INSERT INTO amusement_projects (id, project_name, capacity, open_status, created_at, updated_at)"
                 + " VALUES (?, '补偿测试项目', 100, 'open', ?, ?)", amusementProjectId, Timestamp.from(now), Timestamp.from(now));
+        AmusementBusinessDayTestFixture.bind(jdbcTemplate, amusementProjectId, projectId);
+        AmusementBusinessDayTestFixture.approve(jdbcTemplate, businessDays, reviews, projectId,
+                "Asia/Shanghai", 10, now.minus(3, ChronoUnit.DAYS));
+        jdbcTemplate.update("UPDATE amusement_projects SET location_point_id=? WHERE id=?", "point_cg08b_" + suffix, amusementProjectId);
         sessionId = "ses_cg08b_" + suffix;
         jdbcTemplate.update("INSERT INTO amusement_sessions (id, project_id, start_time, end_time, capacity, used_capacity, status,"
                 + " created_at, updated_at) VALUES (?, ?, ?, ?, 100, 1, 'open', ?, ?)", sessionId, amusementProjectId,
                 Timestamp.from(now.minus(30, ChronoUnit.MINUTES)), Timestamp.from(now.plus(60, ChronoUnit.MINUTES)),
                 Timestamp.from(now), Timestamp.from(now));
+        lifecycle.lockSessionWindow(amusementRepository.findSessionById(sessionId).orElseThrow());
         ticketTypeId = "tt_cg08b_" + suffix;
         ticketingRepository.saveTicketType(new TicketTypeRecord(ticketTypeId, "补偿测试通票", "flat", 8800L, 8800L, 8800L, false,
                 "published", 1, 60, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
@@ -102,6 +112,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         orderId = "ord_cg08b_" + suffix;
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(orderId, "ON-" + suffix, "cus_cg08b_" + suffix, ticketTypeId, null, 1,
                 LocalDate.now(), "web", null, 8800L, null, 8800L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
+        jdbcTemplate.update("UPDATE ticket_orders SET project_id=? WHERE id=?", projectId, orderId);
         String parentTicket = "tkt_cg08b_" + suffix;
         ticketingRepository.saveTicketInstance(new com.complex.platform.ticketing.TicketInstanceRecord(parentTicket, "T-" + suffix, orderId,
                 ticketTypeId, 1, 3, 1, "cus_cg08b_" + suffix, "cus_cg08b_" + suffix, "active", null, null, now, now, null));
@@ -118,6 +129,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 + " verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people, direction, entitlement_id)"
                 + " VALUES (?, ?, ?, 'payload', 'dev', NULL, 'success', NULL, '[]'::jsonb, ?, 1, 'entry', ?)",
                 entryVerificationId, amusementProjectId, sessionId, Timestamp.from(now.minus(20, ChronoUnit.MINUTES)), verifiedEntitlementId);
+        lifecycle.recordEntryWindow(entryVerificationId, businessDays.requireWindow(amusementProjectId, now.minus(20, ChronoUnit.MINUTES)));
         headUser = user("head", List.of("amusement.park_fault.confirm_as_head", "amusement.park_fault.view",
                 "amusement.compensation_policy.manage"));
         engineeringUser = user("eng", List.of("amusement.park_fault.confirm_as_engineering_safety", "amusement.park_fault.view"));
@@ -279,7 +291,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     @Test
     void activeFaultRejectsOnlyAmusementVerificationAndDoesNotConsume() {
         activateFault();
-        TestSecurityActors.asPlatformAdmin();
+        actAsVerifier();
         seedDevice();
         String amusementCode = ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().entitlementCode();
         assertThatThrownBy(() -> ticketingService.createVerification(new VerificationRequest(
@@ -287,6 +299,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).code()).isEqualTo("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED");
         assertThat(ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().usedTimes()).isZero();
+        TestSecurityActors.asPlatformAdmin();
         String drinkCode = ticketingRepository.findIssuedEntitlementById(drinkEntitlementId).orElseThrow().entitlementCode();
         assertThat(ticketingService.createVerification(new VerificationRequest(
                 "normal-drink-" + suffix, "qr", drinkCode, deviceCode, "point_cg08b_" + suffix, Map.of())).status())
@@ -296,7 +309,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     @Test
     void directAmusementEntryAlsoStopsWithoutChangingCapacityOrEntitlement() {
         activateFault();
-        TestSecurityActors.asPlatformAdmin();
+        actAsVerifier();
         String code = ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().entitlementCode();
         assertThatThrownBy(() -> amusementService.createVerification(new VerificationRequest(
                 "direct-blocked-" + suffix, "qr", code, "dev", "point", Map.of("project_id", amusementProjectId, "session_id", sessionId))))
@@ -324,7 +337,43 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         assertThat(compensationService.resolvePolicy(projectId).validityDays()).isEqualTo(3650);
     }
 
+    @Test
+    void missingSourceComplexIsNeverIncludedInFaultCompensation() {
+        jdbcTemplate.update("UPDATE ticket_orders SET project_id=NULL WHERE id=?", orderId);
+        Instant now = Instant.now();
+        assertThat(compensationRepository.listVerifiedAffectedShares("missing-" + suffix, projectId, now.minusSeconds(60), now))
+                .noneMatch(row -> verifiedEntitlementId.equals(row.get("entitlement_id")));
+        assertThat(compensationRepository.listUnverifiedAffectedShares("missing-" + suffix, projectId, now))
+                .noneMatch(row -> unverifiedEntitlementId.equals(row.get("entitlement_id")));
+    }
+
+    @Test
+    void compensationUsesLockedEntryComplexAfterTheConfiguredSpaceChanges() {
+        String other = AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        jdbcTemplate.update("UPDATE spaces SET project_id=? WHERE id=(SELECT space_id FROM amusement_projects WHERE id=?)",
+                other, amusementProjectId);
+        Instant now = Instant.now();
+        assertThat(compensationRepository.listVerifiedAffectedShares("moved-" + suffix, projectId, now.minusSeconds(60), now))
+                .anyMatch(row -> verifiedEntitlementId.equals(row.get("entitlement_id")));
+    }
+
+    @Test
+    void anotherComplexCannotClaimThisOrdersCompensationShares() {
+        String other = AmusementBusinessDayTestFixture.complex(jdbcTemplate);
+        Instant now = Instant.now();
+        assertThat(compensationRepository.listVerifiedAffectedShares("other-" + suffix, other, now.minusSeconds(60), now))
+                .noneMatch(row -> verifiedEntitlementId.equals(row.get("entitlement_id")));
+        assertThat(compensationRepository.listUnverifiedAffectedShares("other-" + suffix, other, now))
+                .noneMatch(row -> unverifiedEntitlementId.equals(row.get("entitlement_id")));
+    }
+
     // ---------- helpers ----------
+
+    private void actAsVerifier() {
+        String verifier = AmusementBusinessDayTestFixture.actor(jdbcTemplate, projectId,
+                List.of("verification.execute", "amusement.verification.execute"));
+        AmusementBusinessDayTestFixture.authenticate(verifier, projectId);
+    }
 
     private AmusementParkWideFaultRecord activateFault() {
         actAs(headUser);

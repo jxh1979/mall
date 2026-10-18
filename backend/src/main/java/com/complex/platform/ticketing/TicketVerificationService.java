@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -56,10 +56,12 @@ public class TicketVerificationService {
     // 阶段1（2026-07-05 用户拍板）游乐核销分流：检出游乐类权益 → 直调 AmusementService 走游乐正路
     // （定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，并在同事务内消费本权益）。
     // 原为单实现、单消费者的分流端口，2026-08-02 收编为 @Lazy 直注，语义不变。
-    // 可为 null=旧构造/兼容测试（不分流，游乐权益走通用逐次扣旧路）；生产由 Spring 注入 @Service AmusementService。
+    // 生产由 Spring 注入；游乐必须定位实际项目，无服务或无项目时明确拒绝。
     // @Lazy 破除潜在初始化环（ticketing→amusement→TicketingAmusementEntitlementGateway→TicketingRepository 本无环，
     // @Lazy 仅为稳妥）。
     private final AmusementService amusementService;
+    @org.springframework.beans.factory.annotation.Autowired
+    TicketAmusementAdmissionService amusementAdmissions;
     // S5：赠送权益内部结算价的唯一解析口径（预扣与兑付同源）。由 repository 直接构造——它无状态、无外部依赖，
     // 各兼容构造点无须逐个补参，且永不为 null（免掉一层空判分支）。
     private final InternalSettlementPriceResolver priceResolver;
@@ -83,6 +85,7 @@ public class TicketVerificationService {
             "ENTITLEMENT_NOT_ACTIVE", "ENTITLEMENT_NOT_YET_VALID", "ENTITLEMENT_EXPIRED", "ENTITLEMENT_USED_UP", "ENTITLEMENT_USED",
             "TICKET_INSTANCE_REFUND_IN_PROGRESS", "TICKET_TRANSFER_PENDING", "MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
             "ENTITLEMENT_PROVIDER_MISMATCH", "ENTITLEMENT_NOT_AMUSEMENT", "ENTITLEMENT_NOT_FOR_PROJECT",
+            "AMUSEMENT_ONLINE_REQUIRED", "AMUSEMENT_PROJECT_UNRESOLVED", "AMUSEMENT_BUSINESS_DAY_REQUIRED",
             "PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH");
     /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed。 */
     static final Set<String> TECHNICAL_FAILURE_CODES = Set.of(
@@ -217,6 +220,16 @@ public class TicketVerificationService {
 
     VerificationPreviewResponse previewVerification(VerificationRequest request) {
         IssuedEntitlementRecord entitlement = entitlementByCredential(request);
+        if(isAmusementEntitlement(entitlement)) {
+            requireAmusementActorMerchantScope(entitlement.merchantId());
+            if(amusementService==null)
+                throw ApiException.conflict("AMUSEMENT_PROJECT_UNRESOLVED","游乐项目无法定位");
+            Instant at=Instant.now();
+            var window=amusementService.requireEntryWindow(request.pointId(),request.deviceId(),at);
+            boolean allowed=amusementAdmissions.preview(entitlement.id(),window,at);
+            return new VerificationPreviewResponse(allowed,allowed?"ok":"not_allowed",
+                    TicketEntitlementMapper.toOfflineEntitlementResponse(entitlement));
+        }
         // P0-2 越权修复：预览同样会泄露他商户权益明细（剩余次数/人数/有效期），按调用者商户范围校验归属（平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
         Instant now = Instant.now();
@@ -268,7 +281,11 @@ public class TicketVerificationService {
         VerificationRecord original = repository.findVerificationById(id)
                 .orElseThrow(() -> ApiException.notFound("VERIFICATION_NOT_FOUND", "核销记录不存在或已被删除"));
         // P0 越权修复：此前冲正全程不比对核销记录归属，可冲正他商户核销并回补其赠饮库存（跨租户 IDOR）。
-        enforceMerchantScope(original.merchantId());
+        if ("amusement_online".equals(original.sourceType())) {
+            amusementAdmissions.lockForReversal(original);
+        } else {
+            enforceMerchantScope(original.merchantId());
+        }
         if (!"success".equals(original.status())) {
             throw ApiException.conflict("VERIFICATION_NOT_REVERSIBLE", "只有核销成功的记录才能冲正");
         }
@@ -286,8 +303,12 @@ public class TicketVerificationService {
         }
         // 闸已得手（本路独占该核销的冲正权）→ 回滚权益核销次数（used_times-1，曾用满恢复 active）。
         // 原记录此前核销失败则无可回滚 → 拒绝（事务回滚，状态翻转一并撤销）。
-        repository.atomicReverseEntitlement(original.entitlementId(), now)
-                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_REVERSE_FAILED", "该权益没有已使用次数可冲正"));
+        if (!DAY_REPLAY_REASON.equals(original.resultReason())) {
+            repository.atomicReverseEntitlement(original.entitlementId(), now)
+                    .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_REVERSE_FAILED", "该权益没有已使用次数可冲正"));
+            if ("amusement_online".equals(original.sourceType()))
+                amusementAdmissions.reverseFirstActivation(original,now);
+        }
         // 新建一条 status=reversed 的核销记录，reverses_verification_id 指向原记录，可追溯。
         VerificationRecord reversal = repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
@@ -300,7 +321,7 @@ public class TicketVerificationService {
                 original.pointId(),
                 "reversed",
                 reverseReason,
-                "verification_reverse",
+                "amusement_online".equals(original.sourceType()) ? "amusement_online_reversal" : "verification_reverse",
                 null,
                 now,
                 original.nonce(),
@@ -330,6 +351,7 @@ public class TicketVerificationService {
         //     冲正专用幂等键 (ticket_verification_reversal, verificationId)，不与退款 deduct 冲突）；
         //   - finance 域 VerificationReversedConsumer（P1#19）：落"冲正已通知"审计留痕（无独立财务冲销对象，仅留痕）。
         // 消费者均按各自 source_doc 幂等；下游异常将随同事务回滚本次冲正（与既有 confirm 链同语义）。
+        if (!DAY_REPLAY_REASON.equals(original.resultReason())) {
         eventPublisher.publishEvent(new VerificationReversedEvent(
                 original.id(),
                 reversal.id(),
@@ -339,6 +361,7 @@ public class TicketVerificationService {
                 original.verifiedPeople()
         ));
         eventPublisher.publishEvent(new TicketRewardFacts.Reversed(original.id()));
+        }
         return new VerificationResponse(reversal.id(), reversal.verificationNo(), reversal.status(), reversal.resultReason());
     }
 
@@ -436,16 +459,19 @@ public class TicketVerificationService {
         // P1 清单#19：动态二维码核销取凭证不在此处因过窗口抛异常，改由下方按 window_started_at+refresh_interval
         // 真实判定刷新窗口，过窗口落 status=failed/result_reason=window_expired、window_valid=false（截图重放被拒、可追溯）。
         TicketCredentialRecord credential = credentialForVerification(request == null ? null : request.credentialPayload()).orElse(null);
-        // P1 清单#19 防重放：已成功核销占用（status!=active，如 consumed）的动态凭证重放必须仍被拒（抛异常），
-        // 保持既有「nonce/凭证已用」契约（CREDENTIAL_EXPIRED / "credential is expired"）。此处先于 window 判定拦截，
-        // 避免重放被误并入「过刷新窗口」分支而静默落 failed。过窗口（active 但越窗）才记 failed/window_expired。
-        if (credential != null && !"active".equals(credential.status())) {
-            throw ApiException.conflict("CREDENTIAL_EXPIRED", "核销凭证已过期，请刷新后重试");
-        }
         IssuedEntitlementRecord entitlement = credential == null
                 ? entitlementByCredential(request)
                 : repository.findIssuedEntitlementById(credential.entitlementId())
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
+        // 两入口以同一请求原件幂等；已完成的游乐请求可返回原事实，新入场仍由事务内回调验证动态凭证。
+        if (isAmusementEntitlement(entitlement)) {
+            requireAmusementSourceScope(entitlement);
+            requireManagedDeviceForVerification(request);
+            return verifyAmusementEntitlement(request, sourceType, Instant.now());
+        }
+        if (credential != null && !"active".equals(credential.status())) {
+            throw ApiException.conflict("CREDENTIAL_EXPIRED", "核销凭证已过期，请刷新后重试");
+        }
         // P0-2 越权修复：在线核销主链此前未做商户归属校验，A 商户核销端可凭票号/权益码核销 B 商户客人的票
         // （跨租户烧票 IDOR）。消费权益前按调用者商户范围校验归属（与 refresh/reverse 同范式；平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
@@ -488,7 +514,7 @@ public class TicketVerificationService {
         // 失配=离线截图重放/凭证字段篡改（如延长有效期）→ 不消费权益，落一条 failed/signature_invalid 核销记录（可追溯）。
         // 非动态凭证（credential==null，直接凭权益码）/signer 未注入（兼容测试）→ signature_valid=null，不校验。
         // B2⑦：signer 已注入（生产）下动态凭证无签名（存量未签名码/被剥离签名）→ signature_valid=false 强制拒绝。
-        Boolean signatureValid = credentialSignatureValid(credential);
+        Boolean signatureValid = credentialSignatureValid(credential, request.credentialPayload());
         if (Boolean.FALSE.equals(signatureValid)) {
             VerificationRecord invalid = repository.saveVerification(new VerificationRecord(
                     "ver_" + UUID.randomUUID().toString().replace("-", ""),
@@ -540,31 +566,6 @@ public class TicketVerificationService {
         // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
         // 同场次内不同人可不同时间分别入场，但不能跨场次/日期。单人票/无父票不约束。
         enforceMultiPersonSameSession(entitlement, now);
-        if (isAmusementEntitlement(entitlement) && parkWideFaultSalesGate != null) {
-            String project = entitlement.orderId() == null ? null : repository.findTicketOrderById(entitlement.orderId())
-                    .map(TicketOrderRecord::projectId).orElse(null);
-            if (project == null && entitlement.merchantId() != null) {
-                List<String> projects = repository.listMerchantProjectIds(entitlement.merchantId());
-                if (projects.size() == 1) project = projects.getFirst();
-            }
-            if (project == null && authorizationService != null)
-                project = authorizationService.currentProjectScopeQuietly().orElse(null);
-            if (parkWideFaultSalesGate.salesSuspended(project))
-                throw ApiException.conflict("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "全园故障期间暂停游乐权益核销，正常酒吧权益仍可使用");
-        }
-        // 阶段1（2026-07-05 用户拍板）游乐核销走正路：检出游乐类权益（entitlement_type 以 "amusement" 开头，参考
-        // 赠饮 gift_drink 的分流范式）→ 分流进游乐正路（定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，
-        // 并在同事务内消费本权益）。成功即在本方法内落一条带交叉引用的 ticket_verifications success 记录并短路返回，
-        // 不再走下方通用逐次扣（避免双扣通票）。端口未注入（旧构造/兼容测试）时不分流，游乐权益退回通用旧路（向后兼容）。
-        if (amusementService != null && isAmusementEntitlement(entitlement)) {
-            VerificationResponse amusementResponse = verifyAmusementEntitlement(entitlement, request, sourceType,
-                    clientTaskId, windowValid, signatureValid, now);
-            if (amusementResponse != null) {
-                return amusementResponse; // 已分流进游乐正路并落记录 → 短路返回。
-            }
-            // 本核销点非游乐闸（point/device 未定位到游乐项目）→ fall-through 走下方通用逐次扣旧路
-            // （保持 unlimited_in_day 等既有 amusement_type 消耗语义、向后兼容）。
-        }
         // 结算重构批3-2(PRD §6.2)：入场资格「场次规则」——仅 consumption_window=per_session 的权益走场次判定；
         // 其余(NULL/per_use/per_day/unlimited_in_day)零改动、走下方现状逐次扣。若返回非 null 即已在本方法内落 success 记录并返回。
         if (SESSION_WINDOW.equals(entitlement.consumptionWindow())) {
@@ -574,7 +575,7 @@ public class TicketVerificationService {
                 return sessionResponse; // 放行不消耗(本场次二次入场) → 直接返回；首入场则 fall-through 走下方正常消耗。
             }
         }
-        // 结算重构批3-3(PRD §6.3)：游乐「当天无限」——仅 consumption_window=unlimited_in_day 走按自然日激活判定；
+        // 非游乐既有 unlimited_in_day 口径保留；游乐已在上方按真实综合体营业日分流。
         // 其余零改动。返回非 null=当天已激活放行不消耗(短路)；null=当天首刷/剩余为 0 fall-through 走下方正常消耗
         // (剩余为 0 时 atomicUseEntitlement 失败 → ENTITLEMENT_USED_UP,即单人票跨日作废/多次票天天各扣尽后作废)。
         if (DAY_WINDOW.equals(entitlement.consumptionWindow())) {
@@ -701,117 +702,145 @@ public class TicketVerificationService {
         return type != null && type.trim().toLowerCase(Locale.ROOT).startsWith(AMUSEMENT_ENTITLEMENT_TYPE_PREFIX);
     }
 
-    /**
-     * 阶段1（2026-07-05 用户拍板）游乐核销分流主体：
-     * <ol>
-     *   <li>调 {@link AmusementService#verifyAmusementEntry} 走游乐正路——【同事务内】完成
-     *       point/device→项目定位、当前 open 场次定位、项目 open+巡检准入、三维容量原子扣减、
-     *       消费本票务权益（used_times+1，容量失败补偿回补）、写 amusement_verifications；返回其 id。
-     *       任一步失败（定位不到项目/场次、项目未开、本场满等）即抛 ApiException，本方法原样上抛——
-     *       【通票权益不净扣】（容量失败游乐侧已补偿回补），满足「先游乐成功再扣通票」的顺序铁律。</li>
-     *   <li>成功后重读已消费的权益，落一条带交叉引用（amusement_verification_id）的 ticket_verifications
-     *       success 记录，结算价沿用通票权益 value_amount_cent（D6）；并发既有 PointsConfirm/SettlementSettled 事件，
-     *       与通用成功路径同语义（下游积分/结算对齐本次核销）。</li>
-     * </ol>
-     * ponytail：游乐侧已用同一 atomicUseEntitlement 消费权益（复用 TicketingAmusementEntitlementGateway），
-     * 故本方法【不再】调 atomicUseEntitlement，只补记通票核销记录 + 交叉引用 + 下游事件，杜绝双扣。
-     */
     private VerificationResponse verifyAmusementEntitlement(
-            IssuedEntitlementRecord entitlement,
-            VerificationRequest request,
-            String sourceType,
-            String clientTaskId,
-            Boolean windowValid,
-            Boolean signatureValid,
-            Instant now) {
-        String staffId = trimToNull(textFromBusinessContext(request, "staff_id", "staffId"));
-        String credentialPayload = requireText(request.credentialPayload(), "credential_payload");
-        // 幂等键：游乐核销记录 id 用「本权益 + 本核销点 + offline_request_id/clientTaskId」稳定生成，
-        // 同一核销重放命中同一 amusement_verifications.id（saveVerification ON CONFLICT DO NOTHING）→ 不重复扣容量。
-        String amusementIdemKey = "amuse-verify:" + entitlement.id() + ":"
-                + requireText(request.pointId(), "point_id") + ":"
-                + (clientTaskId != null ? clientTaskId : "online");
-        Optional<String> amusementResult = amusementService.verifyAmusementEntry(new AmusementEntryRequest(
-                credentialPayload,
-                request.pointId(),
-                request.deviceId(),
-                staffId,
-                amusementIdemKey,
-                now));
-        if (amusementResult.isEmpty()) {
-            // 本核销点非游乐闸（未定位到游乐项目）→ 返回 null，调用方回退通用旧路（不分流、不扣容量、不消费）。
-            return null;
-        }
-        String amusementVerificationId = amusementResult.get();
-        // 游乐侧已消费权益（used_times+1）；重读拿最新 used_times 用于积分/结算事件。
-        IssuedEntitlementRecord consumed = repository.findIssuedEntitlementById(entitlement.id()).orElse(entitlement);
-        // AUD-018 消费后复检(与通用路径同):发现在途转赠即抛错回滚本次游乐消费(同事务)。
-        requireSlotNotTransferring(consumed);
-        int verifiedPeople = consumed.numPeople();
-        markTicketInstanceFirstUse(consumed, now);
-        // D6：结算价沿用通票权益 value_amount_cent（游乐核销不另判物理/虚拟结算价）。
-        Long settlementPriceCent = consumed.valueAmountCent();
-        VerificationRecord verification = repository.saveVerification(new VerificationRecord(
-                "ver_" + UUID.randomUUID().toString().replace("-", ""),
-                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
-                consumed.id(),
-                consumed.entitlementCode(),
-                requireText(request.credentialType(), "credential_type"),
-                verificationPayload(request.credentialPayload(), null),
-                requireText(request.deviceId(), "device_id"),
-                requireText(request.pointId(), "point_id"),
-                "success",
-                "amusement_verified",
-                sourceType,
-                clientTaskId,
-                now,
-                null,
-                staffId,
-                consumed.merchantId(),
-                windowValid,
-                signatureValid,
-                verifiedPeople,
-                null,
-                null,
-                null,
-                settlementPriceCent,
-                // 阶段1 交叉引用（D3）：指向游乐正路核销记录，便于两侧对账。
-                amusementVerificationId
-        ));
-        // 与通用成功路径同：发积分确认（按核销张数 Σused/Σtotal）+ 结算 settled 事件，令下游对齐本次游乐核销。
-        // CG-08b：补偿补发权益的使用不重复产生积分与成长值，履约锁定到补偿记录。
-        if (consumed.compensationItemId() != null) {
-            recordCompensationFulfillment(consumed, verification, now, settlementPriceCent);
-        } else if (consumed.orderId() != null && !consumed.orderId().isBlank()) {
-            eventPublisher.publishEvent(new TicketRewardFacts.Used(verification.id(),
-                    repository.findTicketCredentialByToken(request.credentialPayload()).map(TicketCredentialRecord::id).orElse(null)));
-        }
-        eventPublisher.publishEvent(new SettlementSettledEvent(
-                verification.id(), // AUD-012：本次游乐核销记录 id → 不可变增量结算幂等键
-                now,               // AUD-012：核销业务时刻
-                consumed.id(),
-                consumed.orderId(),
-                consumed.ticketTypeId(),
-                consumed.entitlementType(),
-                consumed.merchantId(),
-                consumed.totalTimes(),
-                consumed.usedTimes(),
-                consumed.numPeople(),
-                consumed.allocatedRevenueCent(),
-                consumed.validTo(),
-                consumed.exclusiveMerchantId(),
-                // 游乐核销结算价沿用 value_amount(D6)；随事件带下游（游乐当前非专属，消费者仍按 allocated 分摊）。
-                settlementPriceCent,
-                // D6：游乐权益满额份额随事件带下游（游乐通常无分项满额价=null=无折扣）。
-                consumed.componentFullPriceCent(),
-                // S2：项目 scope 同通用成功路径（由核销人 token 派生，不取请求体）。
-                authorizationService == null ? null : authorizationService.currentProjectScopeQuietly().orElse(null),
-                // S3：父票锚点同通用成功路径（游乐核销也属于某一张票，同样只该收一道综合服务费）。
-                consumed.parentTicketId()
-        ));
-        return new VerificationResponse(verification.id(), verification.verificationNo(),
-                verification.status(), verification.resultReason());
+            VerificationRequest request, String sourceType, Instant now) {
+        if(amusementService==null)
+            throw ApiException.conflict("AMUSEMENT_PROJECT_UNRESOLVED","游乐核销服务不可用，不能转用通用核销");
+        if("android_terminal_offline".equals(sourceType))
+            throw ApiException.conflict("AMUSEMENT_ONLINE_REQUIRED","游乐权益必须在线核销，不接受离线补核销");
+        String key=requireText(request.idempotencyKey(),"idempotency_key");
+        var admission=amusementService.verifyAmusementEntry(new AmusementEntryRequest(
+                requireText(request.credentialPayload(),"credential_payload"),
+                request.pointId(),request.deviceId(),trimToNull(textFromBusinessContext(request,"staff_id","staffId")),key,now))
+            .orElseThrow(()->ApiException.conflict("AMUSEMENT_PROJECT_UNRESOLVED",
+                    "核销点或设备未关联真实游乐项目，不能核销游乐权益"));
+        VerificationRecord fact=repository.findVerificationById(ticketIdForAmusement(admission.id()))
+            .orElseThrow(()->ApiException.conflict("AMUSEMENT_ADMISSION_FACT_REQUIRED","游乐入场未生成对应票务核销事实"));
+        return new VerificationResponse(fact.id(),fact.verificationNo(),fact.status(),fact.resultReason());
     }
+
+
+    /** 游乐已经完成的入场原件，两个入口共用；不再次消费权益。 */
+    VerificationRecord recordAmusementAdmission(
+            com.complex.platform.amusement.AmusementVerificationRecord admission,
+            com.complex.platform.amusement.AmusementBusinessDayService.Window window,
+            com.complex.platform.amusement.AmusementEntitlementGateway.Consumption consumption) {
+        String ticketId=ticketIdForAmusement(admission.id());
+        Optional<VerificationRecord> existing=repository.findVerificationById(ticketId);
+        if(existing.isPresent()) {
+            if(!admission.id().equals(existing.get().amusementVerificationId()))
+                throw ApiException.conflict("AMUSEMENT_ADMISSION_FACT_MISMATCH","入场原件与票务事实不一致");
+            return existing.get();
+        }
+        Instant now=admission.createdAt();
+        IssuedEntitlementRecord consumed=repository.findIssuedEntitlementById(admission.entitlementId())
+                .orElseThrow(()->ApiException.notFound("ENTITLEMENT_NOT_FOUND","权益不存在"));
+        requireAmusementConsumption(consumed,now);
+        TicketCredentialRecord credential=credentialForVerification(admission.credentialPayload()).orElse(null);
+        Boolean windowValid=credential==null?null:isCredentialWindowValid(credential,now);
+        Boolean signatureValid=credentialSignatureValid(credential, admission.credentialPayload());
+        if(credential!=null && (!"active".equals(credential.status()) || !consumed.id().equals(credential.entitlementId()) || !Boolean.TRUE.equals(windowValid)
+                || now.isAfter(credential.expiresAt())))
+            throw ApiException.conflict("CREDENTIAL_EXPIRED","核销凭证已过期或不属于本次权益，请刷新后重试");
+        if(Boolean.FALSE.equals(signatureValid))
+            throw ApiException.conflict("CREDENTIAL_SIGNATURE_INVALID","核销凭证签名无效");
+        String terminalDeviceId=amusementAdmissions.terminalDeviceId(admission);
+        requireManagedDeviceForVerification(new VerificationRequest(admission.id(),"qr",admission.credentialPayload(),
+                terminalDeviceId,admission.locationPointId(),Map.of()));
+        if(!DAY_WINDOW.equals(consumed.consumptionWindow())) {
+            markTicketInstanceFirstUse(consumed,now);
+        } else if(consumed.parentTicketId()!=null) {
+            var parent=repository.findTicketInstanceById(consumed.parentTicketId()).orElseThrow();
+            // 已有大楼检票场次不被场内游乐改写；纯游乐首入场使用真实营业日锚点。
+            String key=parent.firstSessionKey()!=null?parent.firstSessionKey():
+                    "amusement:"+window.complexId()+":"+window.businessDate();
+            if(repository.markTicketInstanceFirstUse(parent.id(),key,now)==0)
+                throw ApiException.conflict("MULTI_PERSON_CROSS_SESSION_FORBIDDEN","多人票不允许跨场次使用");
+        }
+        boolean dayReplay=consumption==com.complex.platform.amusement.AmusementEntitlementGateway.Consumption.DAY_REPLAY;
+        Long settlementPriceCent=dayReplay?null:consumed.valueAmountCent();
+        VerificationRecord verification=repository.saveVerification(new VerificationRecord(
+                ticketId,"VA"+hash(admission.id()).substring(0,48),consumed.id(),consumed.entitlementCode(),
+                credential==null?"entitlement_code":"dynamic_qr",verificationPayload(admission.credentialPayload(),credential),
+                terminalDeviceId,admission.locationPointId(),"success",dayReplay?DAY_REPLAY_REASON:"amusement_verified",
+                "amusement_online",null,now,credential==null?null:credential.nonce(),admission.staffId(),
+                consumed.merchantId(),windowValid,signatureValid,admission.verifiedPeople(),null,null,null,
+                settlementPriceCent,admission.id()));
+        if(!dayReplay) {
+            if(consumed.compensationItemId()!=null)
+                recordCompensationFulfillment(consumed,verification,now,settlementPriceCent);
+            else if(consumed.orderId()!=null && !consumed.orderId().isBlank())
+                eventPublisher.publishEvent(new TicketRewardFacts.Used(verification.id(),credential==null?null:credential.id()));
+            eventPublisher.publishEvent(new SettlementSettledEvent(
+                verification.id(),now,consumed.id(),consumed.orderId(),consumed.ticketTypeId(),
+                consumed.entitlementType(),consumed.merchantId(),consumed.totalTimes(),consumed.usedTimes(),
+                consumed.numPeople(),consumed.allocatedRevenueCent(),consumed.validTo(),consumed.exclusiveMerchantId(),
+                settlementPriceCent,consumed.componentFullPriceCent(),window.complexId(),consumed.parentTicketId()));
+        }
+        if(credential!=null && repository.markTicketCredentialConsumed(credential.id(),now)==0)
+            throw ApiException.conflict("CREDENTIAL_EXPIRED","核销凭证已过期，请刷新后重试");
+        return verification;
+    }
+
+    void requireAmusementConsumption(IssuedEntitlementRecord entitlement,Instant now) {
+        if(!isAmusementEntitlement(entitlement))
+            throw ApiException.conflict("ENTITLEMENT_NOT_AMUSEMENT","该权益不是游乐类权益");
+        requireAmusementActorMerchantScope(entitlement.merchantId());
+        if(!"active".equals(entitlement.status()))
+            throw ApiException.conflict("ENTITLEMENT_NOT_ACTIVE","该权益未生效");
+        requireParentTicketActive(entitlement);
+        requireSlotNotTransferring(entitlement);
+        if(!DAY_WINDOW.equals(entitlement.consumptionWindow())) enforceMultiPersonSameSession(entitlement,now);
+        if(entitlement.validFrom()!=null && now.isBefore(entitlement.validFrom()))
+            throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID","该权益尚未到生效时间");
+        if(entitlement.validTo()!=null && now.isAfter(entitlement.validTo()))
+            throw ApiException.conflict("ENTITLEMENT_EXPIRED","该权益已过期");
+    }
+
+    /** 外层幂等也须复核当前来源范围；只读凭证原件，不重做其时效或已消费判定。 */
+    void requireAmusementRequestScope(VerificationRequest request) {
+        String payload=trimToNull(request==null?null:request.credentialPayload());
+        if(payload==null) return;
+        Optional<IssuedEntitlementRecord> entitlement=payload.startsWith("cred_")
+                ? repository.findTicketCredentialByToken(payload)
+                    .flatMap(credential->repository.findIssuedEntitlementById(credential.entitlementId()))
+                : repository.findIssuedEntitlementByCode(payload);
+        entitlement.filter(this::isAmusementEntitlement).ifPresent(this::requireAmusementSourceScope);
+    }
+
+    /** 冲正重放只核原成功入场的实时范围，不要求原件仍处于未冲正状态。 */
+    void requireAmusementReversalScope(String verificationId) {
+        String id=trimToNull(verificationId);
+        if(id==null) return;
+        repository.findVerificationById(id)
+                .filter(original->"amusement_online".equals(original.sourceType()))
+                .ifPresent(original -> amusementAdmissions.requireReversalScope(original));
+    }
+
+    private void requireAmusementSourceScope(IssuedEntitlementRecord entitlement) {
+        String project=entitlement.orderId()==null?null:repository.findTicketOrderById(entitlement.orderId())
+                .map(TicketOrderRecord::projectId).orElse(null);
+        if(project==null || project.isBlank())
+            throw ApiException.conflict("TICKET_PROJECT_REQUIRED","原游乐票订单缺少真实综合体，不能核销或写入核销结果");
+        if(authorizationService!=null) {
+            authorizationService.requirePermission("verification.execute");
+            if(!authorizationService.projectReach(authorizationService.currentActor(),"verification.execute").covers(project))
+                throw ApiException.forbidden("FORBIDDEN","无权核销或写入该综合体门票的核销结果");
+        }
+        requireAmusementActorMerchantScope(entitlement.merchantId());
+    }
+
+    private void requireAmusementActorMerchantScope(String merchantId) {
+        if(authorizationService==null) return;
+        String limitedMerchant=authorizationService.currentActor().merchantId();
+        if(limitedMerchant!=null && !limitedMerchant.equals(merchantId))
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN","无权操作其他商户的权益");
+    }
+
+    private String ticketIdForAmusement(String admissionId) {
+        return "ver_amu_"+hash(admissionId).substring(0,56);
+    }
+
 
     /** 阶段1：从核销请求 businessContext 取文本值（游乐分流需要的 staff_id 等），无则返回 null。 */
     private String textFromBusinessContext(VerificationRequest request, String... keys) {
@@ -1170,6 +1199,7 @@ public class TicketVerificationService {
         } catch (ApiException unresolved) {
             return null;
         }
+        if(isAmusementEntitlement(entitlement)) requireAmusementSourceScope(entitlement);
         return repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
                 "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
@@ -1266,7 +1296,7 @@ public class TicketVerificationService {
      * P0-3/X-01 校验动态凭证 HMAC 签名。返回 null=不适用/不强制（非动态凭证、存量未签名凭证、或 signer 未注入的兼容测试）；
      * 否则按签发时相同的规范串重算并常量时间比对，返回 true/false。返回 false 时核销端落 failed/signature_invalid 拒绝。
      */
-    private Boolean credentialSignatureValid(TicketCredentialRecord credential) {
+    private Boolean credentialSignatureValid(TicketCredentialRecord credential, String presentedToken) {
         if (credential == null || credentialSigner == null) {
             return null;
         }
@@ -1276,8 +1306,9 @@ public class TicketVerificationService {
             // =存量未签名码（早已过秒级窗口）或被剥离签名的伪造码 → 拒绝核销（不再放行向后兼容）。
             return Boolean.FALSE;
         }
+        // 数据库只保存token散列；用已匹配该散列的本次出示原文验签，不恢复持久化明文。
         String canonical = credentialSigner.canonical(
-                credential.credentialToken(),
+                presentedToken,
                 credential.entitlementId(),
                 credential.nonce(),
                 credential.windowStartedAt(),

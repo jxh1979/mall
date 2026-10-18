@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -110,6 +110,8 @@ public class FinanceService implements TerminationSettlementPort {
     private org.springframework.context.ApplicationEventPublisher refundEvents;
     @org.springframework.beans.factory.annotation.Autowired
     private com.complex.platform.dealer.JdbcDealerOrderRepository dealerRefunds;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.dealer.JdbcDealerRepository refundDealers;
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.jdbc.core.JdbcTemplate ticketPointsJdbc;
 
@@ -229,21 +231,27 @@ public class FinanceService implements TerminationSettlementPort {
                         "finance_ar_ap.viewed", "finance_ar_ap.view_failed",
                         "finance.ar_ap.view", "ar_ap_item"),
                 () -> {
-                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
-                    // P1-A 两维并存:merchant scope + project scope 谓词同时下推,平台口径两者皆 null=全量。
-                    String projectId = authorizationService.currentProjectScopeQuietly().orElse(null);
-                    return repository.listArApItemsPaged(merchantId, projectId, keyword, page, size);
+                    authorizationService.requirePermission("finance.ar_ap.view");
+                    var actor = authorizationService.currentActor();
+                    var reach = authorizationService.projectReach(actor, "finance.ar_ap.view");
+                    return repository.listArApItemsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
+                            reach.platformAdmin() ? null : reach.organizationIds(), keyword, page, size);
                 }
         );
     }
 
     public ArApLedgerExportRecord exportArApItems() {
         try {
-            Optional<String> scope = authorizationService.currentMerchantScope();
-            // P1-A：导出与列表同口径,两维(merchant + project)谓词并存,避免仅按 merchant 导出泄露他项目行。
-            Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
-            List<ArApItemRecord> items = repository.listArApItemsPaged(
-                    scope.orElse(null), projectScope.orElse(null), null, 1, Integer.MAX_VALUE).items();
+            authorizationService.requirePermission("finance.ar_ap.export");
+            var actor = authorizationService.currentActor();
+            var reach = authorizationService.projectReach(actor, "finance.ar_ap.export");
+            List<ArApItemRecord> items = new java.util.ArrayList<>();
+            for (int page=1;;page++) {
+                var result = repository.listArApItemsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
+                        reach.platformAdmin() ? null : reach.organizationIds(), null, page, 200);
+                items.addAll(result.items());
+                if (result.items().isEmpty() || items.size() >= result.total()) break;
+            }
             ArApLedgerExportRecord export = new ArApLedgerExportRecord(
                     "arap_export_" + UUID.randomUUID().toString().replace("-", ""),
                     "csv",
@@ -254,7 +262,7 @@ public class FinanceService implements TerminationSettlementPort {
             );
             auditEventService.recordSuccess(
                     "finance_ar_ap.exported",
-                    "finance.ar_ap.view",
+                    "finance.ar_ap.export",
                     "ar_ap_export",
                     export.id(),
                     "req_" + UUID.randomUUID(),
@@ -265,7 +273,7 @@ public class FinanceService implements TerminationSettlementPort {
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     "finance_ar_ap.export_failed",
-                    "finance.ar_ap.view",
+                    "finance.ar_ap.export",
                     "ar_ap_export",
                     "unknown",
                     "req_" + UUID.randomUUID(),
@@ -347,6 +355,8 @@ public class FinanceService implements TerminationSettlementPort {
     @Transactional
     public ArApPaymentResponse registerArApPayment(String arApItemId, ArApPaymentRequest request) {
         String itemId = requireText(arApItemId, "ar_ap_item_id");
+        requireArApBeforeReplay(itemId, "finance.payment.register", "finance_payment.register_failed",
+                request == null ? null : request.idempotencyKey());
         return executeWrite(
                 "createArApPayment:" + itemId,
                 request == null ? null : request.idempotencyKey(),
@@ -562,6 +572,8 @@ public class FinanceService implements TerminationSettlementPort {
             OfflinePaymentConfirmRequest request
     ) {
         String pathPaymentId = requireText(paymentId, "payment_id");
+        if (request != null && trimToNull(request.arApItemId()) != null)
+            requireArApBeforeReplay(request.arApItemId(), "finance.payment.register", "finance_offline_payment.confirm_failed", request.idempotencyKey());
         return executeWrite(
                 "confirmOfflinePayment:" + pathPaymentId,
                 request == null ? null : request.idempotencyKey(),
@@ -938,7 +950,9 @@ public class FinanceService implements TerminationSettlementPort {
             String originalPaymentRef, String projectId, String reason) {
         String target = requireText(dealerRefundId, "经销退款编号");
         String project = requireText(projectId, "经销退款所属项目");
-        if (!authorizationService.canReachProject(authorizationService.currentActor(), project, "dealer.order.refund.execute")) {
+        String sourcePermission = dealerRefundExecutionPermission(target, project, false);
+        authorizationService.requirePermission(sourcePermission);
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), project, sourcePermission)) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销退款不在授权项目范围内");
         }
         long amount = requirePositive(amountCent, "退款金额");
@@ -1113,10 +1127,11 @@ public class FinanceService implements TerminationSettlementPort {
         long amountCent = requireNonZero(actual.adjustmentAmountCent(), "adjustment_amount_cent");
         String reason = requireText(actual.reason(), "reason");
 
-        ArApItemRecord item = repository.findArApItemById(itemId)
+        ArApItemRecord item = repository.findArApItemByIdForUpdate(itemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         checkMerchantOwnership(item.merchantId());
         checkProjectScope(item.projectId());
+        requireCurrentPurchasePayable(item);
 
         // 补录只针对已锁定台账（未锁定应直接改账，不走审批）。
         String lockedDayCloseId = repository.findArApItemLockedDayCloseId(itemId)
@@ -1125,7 +1140,7 @@ public class FinanceService implements TerminationSettlementPort {
 
         Instant now = Instant.now();
         return repository.saveArApAdjustment(new ArApAdjustmentRecord(
-                "arap_adj_" + slug(itemId + "_" + actual.idempotencyKey()),
+                "arap_adj_" + stableToken("ar_ap_adjustment", itemId + ":" + actual.idempotencyKey()),
                 itemId,
                 lockedDayCloseId,
                 amountCent,
@@ -1163,6 +1178,7 @@ public class FinanceService implements TerminationSettlementPort {
         }
 
         if (approve) {
+            requireCurrentPurchasePayable(item);
             // P0-B（V344）红冲：审批通过不再改写原行，改为「原行不动 + 追加一条严格取反的冲正行
             // + 追加一条重述行（原额 + 补录额）」。三行相加恒等于补录后的应有金额（守恒），
             // 且原行的金额与其所属封账经营日永久留痕、事后可逐笔复核。
@@ -1328,7 +1344,7 @@ public class FinanceService implements TerminationSettlementPort {
                 requireText(actual.paymentMethod(), "payment_method"),
                 actual.paymentTime(),
                 trimToNull(actual.bankFlowRef()),
-                actual.idempotencyKey());
+                actual.idempotencyKey(), "finance.payment.register");
     }
 
     /**
@@ -1337,13 +1353,11 @@ public class FinanceService implements TerminationSettlementPort {
      */
     private ArApPaymentResponse settleArApItem(
             String arApItemId, long amountCent, String paymentMethod,
-            Instant paymentTime, String bankFlowRef, String idempotencyKey) {
+            Instant paymentTime, String bankFlowRef, String idempotencyKey, String permission) {
         ArApItemRecord current = repository.findArApItemByIdForUpdate(arApItemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
-        // 跨商户写入拒绝。
-        checkMerchantOwnership(current.merchantId());
-        // P1-A 跨项目写入拒绝(两维并存)。
-        checkProjectScope(current.projectId());
+        requireArApScope(current, permission);
+        requireCurrentPurchasePayable(current);
         // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。
         requireNotLocked(current.id());
         if ("ticket_points_issuance".equals(current.sourceType())) {
@@ -1369,7 +1383,7 @@ public class FinanceService implements TerminationSettlementPort {
         Instant now = Instant.now();
         // 主键纳入 arApItemId，同一幂等键用于不同台账项产生不同 paymentId，避免 ON CONFLICT 覆盖。
         ArApPaymentRecord payment = repository.saveArApPayment(new ArApPaymentRecord(
-                "arap_pay_" + slug(arApItemId + "_" + idempotencyKey),
+                "arap_pay_" + stableToken("ar_ap_payment", arApItemId + ":" + idempotencyKey),
                 current.id(),
                 amountCent,
                 paymentMethod,
@@ -1396,7 +1410,10 @@ public class FinanceService implements TerminationSettlementPort {
                 status,
                 current.createdAt(),
                 now,
-                current.merchantId()
+                current.merchantId(),
+                current.projectId(),
+                current.originItemId(),
+                current.adjustmentId()
         ));
         return new ArApPaymentResponse(payment, updated);
     }
@@ -1455,7 +1472,7 @@ public class FinanceService implements TerminationSettlementPort {
                 default -> FinanceRepository.DailyCloseSourceTotals.empty();
             };
             repository.saveDailyCloseSummary(new DailyCloseSummaryRecord(
-                    "fdcs_" + slug(dailyCloseId + "_" + source),
+                    "fdcs_" + stableToken("daily_close_summary", dailyCloseId + ":" + source),
                     dailyCloseId,
                     source,
                     totals.amountCent(),
@@ -1548,7 +1565,7 @@ public class FinanceService implements TerminationSettlementPort {
         String arApItemId = trimToNull(actual.arApItemId());
         if (arApItemId != null) {
             settleArApItem(arApItemId, confirmedAmount, paymentMethod,
-                    actual.confirmedAt(), null, actual.idempotencyKey());
+                    actual.confirmedAt(), null, actual.idempotencyKey(), "finance.payment.register");
         }
         // AUD-014：柜台确认收款=该笔支付成功——同事务内把支付意图 created→succeeded（CAS，已成功幂等跳过），
         // 否则储值充值等依赖意图状态的入账链永远停留 created/409（生产无其他成功触发器）。
@@ -1703,8 +1720,7 @@ public class FinanceService implements TerminationSettlementPort {
         return readPage("ar_ap_payment.listed", "ar_ap_payment.list_failed", "finance.ar_ap.view", "ar_ap_payment", () -> {
             ArApItemRecord item = repository.findArApItemById(itemId)
                     .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在"));
-            checkMerchantOwnership(item.merchantId());
-            checkProjectScope(item.projectId());
+            requireArApScope(item, "finance.ar_ap.view");
             return repository.listArApPayments(item.id());
         });
     }
@@ -1763,12 +1779,13 @@ public class FinanceService implements TerminationSettlementPort {
     public FinanceRefundRecord recordFinanceRefundExecution(String refundId, RefundExecutionRequest request) {
         authorizationService.requirePermission("finance.refund.create");
         RefundExecutionRequest actual = requireRequest(request);
+        requireDealerRefundBeforeReplay(refundId, true, actual.idempotencyKey());
         return executeWrite("recordFinanceRefundExecution:" + refundId, actual.idempotencyKey(), actual,
                 FinanceRefundRecord.class, "finance_refund.execution_recorded", "finance_refund.execution_failed",
                 "finance.refund.create", "finance_refund", () -> {
                     FinanceRefundRecord refund = scopedRefund(refundId, true);
                     requireRefundOpenForExecution(refund);
-                    requireDealerRefundSource(refund, true);
+                    requireDealerRefundSource(refund, true, false);
                     requireRefundExecutionAuthority(refund, actual.deviceId());
                     requireRefundEvidence(refund, actual.evidenceAttachmentIds());
                     String reference = requireText(actual.paymentReference(), "原路执行流水号");
@@ -1789,14 +1806,12 @@ public class FinanceService implements TerminationSettlementPort {
         authorizationService.requirePermission("finance.refund.create");
         authorizationService.requirePermission("finance.payment.register");
         RefundResultConfirmRequest actual = requireRequest(request);
+        requireDealerRefundBeforeReplay(refundId, false, actual.idempotencyKey());
         return executeWrite("confirmFinanceRefundResult:" + refundId, actual.idempotencyKey(), actual,
                 FinanceRefundRecord.class, "finance_refund.confirmed", "finance_refund.confirm_failed",
                 "finance.payment.register", "finance_refund", () -> {
                     FinanceRefundRecord refund = scopedRefund(refundId, true);
-                    if ("dealer_order_refund".equals(refund.sourceType())
-                            && !authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(), "finance.payment.register")) {
-                        throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销退款结果超出本人的收付款确认项目范围");
-                    }
+                    requireDealerRefundSource(refund, false, true);
                     if ("success".equals(refund.status())) return refund;
                     requireRefundExecutionAuthority(refund, actual.deviceId());
                     String status = requireEnum(actual.status(), Set.of("success", "failed"), "退款结果");
@@ -1837,6 +1852,27 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     private FinanceRefundRecord scopedRefund(String refundId, boolean lock) {
+        if (lock && dealerRefunds != null) {
+            FinanceRefundRecord snapshot = repository.findRefundById(requireText(refundId, "退款编号"), false)
+                    .orElseThrow(() -> ApiException.notFound("REFUND_NOT_FOUND", "退款记录不存在"));
+            if ("dealer_order_refund".equals(snapshot.sourceType())) {
+                var returned = dealerRefunds.findReturnRefundSource(snapshot.targetId());
+                if (returned.isPresent()) {
+                    var source = returned.get();
+                    if (!authorizationService.canReachProject(authorizationService.currentActor(), snapshot.projectId(), "finance.ar_ap.view")) {
+                        throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处理其他项目的经销退款");
+                    }
+                    if (source.projectId() == null || !source.projectId().equals(snapshot.projectId()) || refundDealers == null) {
+                        throw ApiException.conflict("DEALER_REFUND_SOURCE_MISMATCH", "退货退款与原订单项目关联不一致");
+                    }
+                    var order = dealerRefunds.findOrder(source.orderId())
+                            .orElseThrow(() -> ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "退货退款原订单缺失"));
+                    // 与退货准备退款共用客户信用、原订单、退款的锁序。
+                    refundDealers.lockDealerCredit(order.dealerId()).orElseThrow();
+                    dealerRefunds.lockOrder(order.id()).orElseThrow();
+                }
+            }
+        }
         FinanceRefundRecord refund = repository.findRefundById(requireText(refundId, "退款编号"), lock)
                 .orElseThrow(() -> ApiException.notFound("REFUND_NOT_FOUND", "退款记录不存在"));
         if ("dealer_order_refund".equals(refund.sourceType())) {
@@ -1866,24 +1902,42 @@ public class FinanceService implements TerminationSettlementPort {
         requireDeviceContextForOnsiteChannel(refund.refundChannel(), deviceId);
         requireManagedDeviceForFinanceAction(deviceId, "finance.refund");
         if ("dealer_order_refund".equals(refund.sourceType())) {
-            requireDealerRefundSource(refund, false);
+            requireDealerRefundSource(refund, false, false);
         } else {
             requireRefundTierAuthorized("finance", refund.refundAmountCent(), refund.projectId());
         }
     }
 
-    private void requireDealerRefundSource(FinanceRefundRecord refund, boolean execution) {
-        if (!"dealer_order_refund".equals(refund.sourceType())) return;
-        authorizationService.requirePermission("dealer.order.refund.execute");
-        if (!authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(),
-                "dealer.order.refund.execute", "finance.refund.create")) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销退款超出本人的办理项目范围");
+    private void requireDealerRefundBeforeReplay(String refundId, boolean execution, String key) {
+        var snapshot = repository.findRefundById(refundId, false).orElse(null);
+        if (snapshot == null || !"dealer_order_refund".equals(snapshot.sourceType())) return;
+        try {
+            requireDealerRefundSource(scopedRefund(refundId, false), execution, !execution);
+        } catch (RuntimeException error) {
+            auditEventService.recordFailure(execution ? "finance_refund.execution_failed" : "finance_refund.confirm_failed",
+                    execution ? "finance.refund.create" : "finance.payment.register", "finance_refund", refundId, null, key,
+                    error instanceof ApiException api ? api.code() : "INTERNAL_ERROR");
+            throw error;
         }
-        if (dealerRefunds == null) throw ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "经销退款来源不可核验");
+    }
+
+    private void requireDealerRefundSource(FinanceRefundRecord refund, boolean execution, boolean confirmation) {
+        if (!"dealer_order_refund".equals(refund.sourceType())) return;
+        String sourcePermission = dealerRefundExecutionPermission(refund.targetId(), refund.projectId(), execution);
         var source = dealerRefunds.findRefundByFinanceId(refund.id())
                 .orElseThrow(() -> ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "经销退款来源关联缺失"));
         var payment = dealerRefunds.findPayment(source.paymentId()).orElseThrow();
-        if (!Set.of("approved", "processing", "failed", "refunded").contains(source.status())
+        String paymentProject = dealerRefunds.findOrderProjectId(payment.orderId())
+                .orElseThrow(() -> ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "经销原收款项目缺失"));
+        String[] permissions = confirmation
+                ? new String[]{sourcePermission, "finance.refund.create", "finance.payment.register"}
+                : new String[]{sourcePermission, "finance.refund.create"};
+        for (String permission : permissions) authorizationService.requirePermission(permission);
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(), permissions)
+                || !authorizationService.canReachProject(authorizationService.currentActor(), paymentProject, permissions)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销退款须同时具备业务订单和原收款项目的办理权限");
+        }
+        if (!refund.targetId().equals(source.id()) || !Set.of("approved", "processing", "failed", "refunded").contains(source.status())
                 || source.reviewId() == null || !"verified".equals(payment.status()) || source.amountCent() != refund.refundAmountCent()
                 || !java.util.Objects.equals(payment.referenceNo(), refund.originalPaymentRef())
                 || !payment.method().equals(refund.refundChannel())) {
@@ -1892,6 +1946,40 @@ public class FinanceService implements TerminationSettlementPort {
         if (execution && authorizationService.currentActor().id().equals(payment.verifiedBy())) {
             throw ApiException.forbidden("DEALER_SOD_SAME_PERSON", "退款执行人与原到账核验人必须分离");
         }
+        if (confirmation) {
+            var executed = latestRefundExecution(refund.id());
+            if (executed != null && authorizationService.currentActor().id().equals(executed.paymentOperatorId())) {
+                throw ApiException.forbidden("REFUND_SELF_CONFIRM_FORBIDDEN", "退款经办人与结果复核人必须分离");
+            }
+        }
+    }
+
+    private String dealerRefundExecutionPermission(String sourceId, String projectId, boolean execution) {
+        if (dealerRefunds == null) {
+            throw ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "经销退款来源不可核验");
+        }
+        var refund = dealerRefunds.findRefund(sourceId)
+                .orElseThrow(() -> ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "经销退款来源缺失"));
+        String businessProject = dealerRefunds.findOrderProjectId(refund.orderId())
+                .orElseThrow(() -> ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "经销退款业务订单项目缺失"));
+        var payment = dealerRefunds.findPayment(refund.paymentId()).orElseThrow();
+        String paymentProject = dealerRefunds.findOrderProjectId(payment.orderId())
+                .orElseThrow(() -> ApiException.conflict("DEALER_REFUND_SOURCE_MISSING", "经销原收款项目缺失"));
+        var returned = dealerRefunds.findReturnRefundSource(sourceId);
+        if (!businessProject.equals(projectId)
+                || returned.isPresent() && !businessProject.equals(returned.get().projectId())) {
+            throw ApiException.conflict("DEALER_REFUND_SOURCE_MISMATCH", "退款与所属业务订单项目关联不一致");
+        }
+        String permission = returned.isPresent() ? "dealer.return.refund.execute" : "dealer.order.refund.execute";
+        authorizationService.requirePermission(permission);
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), businessProject, permission)
+                || !authorizationService.canReachProject(authorizationService.currentActor(), paymentProject, permission)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销退款须同时具备业务订单和原收款项目的办理权限");
+        }
+        if (execution && returned.isPresent() && authorizationService.currentActor().id().equals(returned.get().inspectedBy())) {
+            throw ApiException.forbidden("DEALER_SOD_SAME_PERSON", "退货验收人与退款执行人必须分离");
+        }
+        return permission;
     }
 
     private boolean canDispatchRefund(FinanceRefundRecord refund) {
@@ -2238,7 +2326,7 @@ public class FinanceService implements TerminationSettlementPort {
             long apply = Math.min(remaining, item.unpaidCent());
             // idempotencyKey 纳入 statementId + 台账项 id：审批一次一结算，重放不重扣（settleArApItem 主键含两者）。
             // ponytail: 先欠先抵到 offsetCent 封顶；预检已确保总额充足，逐笔 FOR UPDATE 仍防单笔并发（罕见单笔被清则抛超额、随本单事务回滚）。
-            settleArApItem(item.arApItemId(), apply, "dividend_offset", now, statementId, statementId);
+            settleArApItem(item.arApItemId(), apply, "dividend_offset", now, statementId, statementId, "finance.dividend.manage");
             remaining -= apply;
             settled += apply;
         }
@@ -2572,6 +2660,38 @@ public class FinanceService implements TerminationSettlementPort {
         return java.util.UUID.nameUUIDFromBytes(
                 (namespace + ":" + naturalKey).getBytes(java.nio.charset.StandardCharsets.UTF_8))
                 .toString().replace("-", "");
+    }
+
+    private void requireArApBeforeReplay(String id, String permission, String failureEvent, String key) {
+        try {
+            authorizationService.requirePermission(permission);
+            var item=repository.findArApItemById(id).orElseThrow(()->ApiException.notFound("AR_AP_ITEM_NOT_FOUND","应收应付款项不存在或已被删除"));
+            requireArApScope(item, permission);
+            requireCurrentPurchasePayable(item);
+        } catch (RuntimeException error) {
+            auditEventService.recordFailure(failureEvent,permission,"ar_ap_item",id,null,key,
+                    error instanceof ApiException api ? api.code() : "INTERNAL_ERROR");
+            throw error;
+        }
+    }
+
+    private void requireCurrentPurchasePayable(ArApItemRecord item) {
+        if (Set.of("purchase_inbound", "purchase_consignment", "purchase_prepayment").contains(item.sourceType())
+                && (item.amountCent() <= 0 || "reversed".equals(item.status()) || repository.isPurchasePayableReplaced(item.id())
+                    || repository.findCurrentPurchasePayable(item.sourceType(), item.sourceId())
+                        .filter(current -> current.id().equals(item.id())).isEmpty())) {
+            throw ApiException.conflict("PURCHASE_PAYABLE_REPLACED", "采购应付已被更正或属于红冲记录，请使用当前有效应付");
+        }
+    }
+
+    private void requireArApScope(ArApItemRecord item, String permission) {
+        authorizationService.requirePermission(permission);
+        var actor=authorizationService.currentActor();
+        var reach=authorizationService.projectReach(actor,permission);
+        if (!reach.platformAdmin() && trimToNull(actor.merchantId())!=null && !actor.merchantId().equals(item.merchantId()))
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN","无权操作其他商户的数据");
+        if (!reach.covers(item.projectId()))
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN","无权操作其他项目或缺少项目归属的财务数据");
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {

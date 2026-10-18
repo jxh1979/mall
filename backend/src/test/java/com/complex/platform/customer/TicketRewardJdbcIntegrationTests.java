@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,6 +24,7 @@ class TicketRewardJdbcIntegrationTests {
     @Autowired TicketRewardService rewards;
     @Autowired TicketRewardConfigService configs;
     @Autowired PointsRecoveryService recoveries;
+    @Autowired PointsRecoveryWaiverService waivers;
     @Autowired CustomerRepository customers;
     @Autowired TicketingRepository tickets;
     @Autowired ObjectMapper json;
@@ -53,6 +54,110 @@ class TicketRewardJdbcIntegrationTests {
         TicketRewardConfig published=configs.publish(pending.id(),new TicketRewardConfig.PublishRequest("publish-"+UUID.randomUUID(),"提前公告"));
         assertThat(published.publishedAt()).isBefore(published.effectiveAt());
         assertThat(configs.effective("national",null,null,future).id()).isEqualTo(pending.id());
+    }
+
+    @Test void recoveryWaiverThresholdUsesApprovedNationalVersion() throws Exception {
+        Fixture f=seed();
+        String requester=actor(f.entity(),List.of("ticket.reward.config.manage","ticket.reward.config.view"));
+        String approver=actor(f.entity(),List.of("ticket.reward.config.manage","ticket.reward.config.view","ticket.reward.national.approve","governance.supervisor_review.approve"));
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)",requester,approver);
+        jdbc.update("INSERT INTO staff_level_assignments(user_id,staff_level_id,organization_id,assigned_by,assigned_at) VALUES(?,'lvl_m1_lower',?,'fixture-hr-approved',now())",approver,f.entity());
+        authenticate(requester,f.entity());
+        Instant future=Instant.now().plusSeconds(7200).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        var limits=new TicketRewardConfig.Values(100L,0L,200L,null,null,null,null,null,null,null,null,null,null,List.of());
+        TicketRewardConfig pending=configs.submit(new TicketRewardConfig.Request("waiver-config-"+UUID.randomUUID(),"recovery_waiver",null,null,limits,future,"全国待追回积分小额豁免线",approver,List.of()));
+        assertThat(pending.status()).isEqualTo("pending_review");
+        assertThatThrownBy(()->configs.effective("recovery_waiver",null,null,future)).hasMessageContaining("缺少已审批");
+        authenticate(approver,f.entity());
+        assertThat(approve(pending.reviewId()).reviewStatus()).isEqualTo("approved");
+        configs.publish(pending.id(),new TicketRewardConfig.PublishRequest("waiver-publish-"+UUID.randomUUID(),"公布已批准的豁免线"));
+        assertThat(configs.effective("recovery_waiver",null,null,future).values().fixedValue()).isEqualTo(100L);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(longs={99,100})
+    void financeWaiverAtOrBelowLimitKeepsOriginalFactsAndBalances(long amount) throws Exception {
+        Fixture f=seed();String config=waiverConfig();seedRecovery(f,1,amount);
+        authenticate(actor(f.entity(),List.of(PointsRecoveryWaiverService.VIEW,PointsRecoveryWaiverService.WAIVE)),f.entity());
+        long fees=jdbc.queryForObject("SELECT sum(amount_cent) FROM ticket_points_issuance_fees WHERE reward_id IN (SELECT id FROM ticket_use_rewards WHERE customer_id=?)",Long.class,f.member());
+        var request=new PointsRecoveryWaiverService.Request("waive-"+UUID.randomUUID(),config,amount,"财务核实小额豁免");
+        var result=waivers.waive(f.member(),request);
+        assertThat(result.waivedPoints()).isEqualTo(amount);
+        assertThat(waivers.waive(f.member(),request).id()).isEqualTo(result.id());
+        assertThat(recoveries.outstanding(f.member())).isZero();
+        assertThat(customers.findPointsByCustomerId(f.member()).orElseThrow().balance()).isZero();
+        var detail=waivers.get(f.member());
+        assertThat(detail.lines()).allSatisfy(line->{assertThat(line.originalPoints()).isEqualTo(amount);assertThat(line.status()).isEqualTo("waived");});
+        assertThat(detail.waivers()).hasSize(1);
+        assertThat(detail.waivers().getFirst().lines().getFirst().remainingPoints()).isEqualTo(amount);
+        assertThat(jdbc.queryForObject("SELECT sum(amount_cent) FROM ticket_points_issuance_fees WHERE reward_id IN (SELECT id FROM ticket_use_rewards WHERE customer_id=?)",Long.class,f.member())).isEqualTo(fees);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"100,1","60,60"})
+    void waiverCannotSplitTotalAboveLimit(long first,long second) throws Exception {
+        Fixture f=seed();String config=waiverConfig();
+        Use firstUse=use(f,1,1,"ticket",f.member(),at.plusSeconds(1));
+        rewards.used(new TicketRewardFacts.Used(firstUse.verification(),firstUse.credential()));
+        rewards.release(only(f).id(),at.plusSeconds(86401));
+        addConfig("points",f.type(),f.project(),values(second,null,null),at.plusSeconds(2),"V0.02");
+        Use secondUse=use(f,1,2,"ticket",f.member(),at.plusSeconds(3));
+        rewards.used(new TicketRewardFacts.Used(secondUse.verification(),secondUse.credential()));
+        rewards.release(only(f).id(),at.plusSeconds(86403));
+        jdbc.update("UPDATE customer_points_accounts SET balance=? WHERE customer_id=?",100-first,f.member());
+        reverseUse(firstUse);reverseUse(secondUse);
+        authenticate(actor(f.entity(),List.of(PointsRecoveryWaiverService.VIEW,PointsRecoveryWaiverService.WAIVE)),f.entity());
+        var request=new PointsRecoveryWaiverService.Request("too-large-"+UUID.randomUUID(),config,first+second,"不得拆分");
+        assertThatThrownBy(()->waivers.waive(f.member(),request)).hasMessageContaining("不得分笔");
+        assertThat(recoveries.outstanding(f.member())).isEqualTo(first+second);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM customer_points_recovery_waivers WHERE customer_id=?",Integer.class,f.member())).isZero();
+    }
+
+    @Test void waiverRequiresExplicitFinancePermissionAndFreshConfirmedAmount() throws Exception {
+        Fixture f=seed();String config=waiverConfig();seedRecovery(f,1,40);
+        authenticate(actor(f.entity(),List.of(PointsRecoveryWaiverService.VIEW)),f.entity());
+        assertThatThrownBy(()->waivers.waive(f.member(),new PointsRecoveryWaiverService.Request("no-grant-"+UUID.randomUUID(),config,40,"未获独立授权")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        authenticate(actor(f.entity(),List.of(PointsRecoveryWaiverService.VIEW,PointsRecoveryWaiverService.WAIVE)),f.entity());
+        loyalty.earnPoints(f.member(),10,"earn","recover-before-waive-"+UUID.randomUUID(),"真实新增积分先抵扣",1);
+        assertThat(recoveries.outstanding(f.member())).isEqualTo(30);
+        assertThatThrownBy(()->waivers.waive(f.member(),new PointsRecoveryWaiverService.Request("stale-"+UUID.randomUUID(),config,40,"旧页面总额")))
+                .hasMessageContaining("总额或豁免配置已变化");
+        assertThat(waivers.waive(f.member(),new PointsRecoveryWaiverService.Request("fresh-"+UUID.randomUUID(),config,30,"确认新总额")).waivedPoints()).isEqualTo(30);
+    }
+
+    @Test void waiverCannotTreatCrossProjectRecoveryAsOnlyVisibleDebt() throws Exception {
+        Fixture f=seed();waiverConfig();seedRecovery(f,1,40);
+        String user=actor(f.project(),List.of(PointsRecoveryWaiverService.VIEW,PointsRecoveryWaiverService.WAIVE));
+        jdbc.update("UPDATE access_users SET account_type='employee',organization_id=? WHERE id=?","another-project",user);
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(user,user,"employee","another-project",null,"active"),"token",List.of()));
+        assertThatThrownBy(()->waivers.get(f.member())).hasMessageContaining("全部积分归属");
+    }
+
+    @Test void successfulWaiverReplayStillRequiresCurrentProjectScope() throws Exception {
+        Fixture f=seed();String config=waiverConfig();seedRecovery(f,1,40);
+        String user=actor(f.entity(),List.of(PointsRecoveryWaiverService.VIEW,PointsRecoveryWaiverService.WAIVE));
+        authenticate(user,f.entity());
+        var request=new PointsRecoveryWaiverService.Request("replay-scope-"+UUID.randomUUID(),config,40,"财务核实");
+        waivers.waive(f.member(),request);
+        jdbc.update("UPDATE access_users SET account_type='employee',organization_id=? WHERE id=?","another-project",user);
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(user,user,"employee","another-project",null,"active"),"token",List.of()));
+        assertThatThrownBy(()->waivers.waive(f.member(),request)).hasMessageContaining("全部积分归属");
+    }
+
+    private String waiverConfig() throws Exception {
+        return addConfig("recovery_waiver",null,null,new TicketRewardConfig.Values(100L,0L,200L,null,null,null,null,null,null,null,null,null,null,List.of()),at.minusSeconds(120),"V0.01");
+    }
+    private void seedRecovery(Fixture f,int index,long amount) {
+        Use u=use(f,1,index,"ticket",f.member(),at.plusSeconds(index));
+        rewards.used(new TicketRewardFacts.Used(u.verification(),u.credential()));
+        rewards.release(only(f).id(),at.plusSeconds(86400+index));
+        jdbc.update("UPDATE customer_points_accounts SET balance=? WHERE customer_id=?",100-amount,f.member());
+        reverseUse(u);
     }
 
     private String actor(String company,List<String> permissions){String user="u_"+UUID.randomUUID().toString().replace("-","");String role="r_"+user;

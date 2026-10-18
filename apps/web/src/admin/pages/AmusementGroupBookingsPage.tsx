@@ -1,3 +1,5 @@
+// 文件版本：V0.01
+
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -18,9 +20,9 @@ const GROUP_BOOKING_MANAGE_PERMISSION = "amusement.group_booking.manage";
 
 const TEXT = {
   title: "团体/包场",
-  description: "查看团体预约和包场资源占用，支持释放容量并保留操作原因。",
+  description: "查看团体及包场预约人数，取消预约时保留操作原因。",
   evidence: "接口证据：读取 /api/v1/amusement/group-bookings；释放调用 /api/v1/amusement/group-bookings/{id}/release。",
-  boundary: "团体/包场属于容量占用增强能力；释放容量必须写明原因，不得静默覆盖预约和核销证据。",
+  boundary: "预约人数不计入实际在场人数；取消预约须写明原因并保留核销证据。",
   loadFailed: "团体/包场读取失败",
   reasonRequired: "释放原因不能为空。",
   select: "选择",
@@ -35,7 +37,7 @@ function display(value: unknown) {
 }
 
 // KPI 聚焦视图（照样板）：单表页，只有一张预约表；?kpi=bookings[&status=approved]。
-// 团体预约/容量占用卡→全部预约，已审批卡→status=approved 客户端过滤。选中预约卡无计数、不可点。
+// 团体预约/预约人数卡→全部预约，已审批卡→status=approved 客户端过滤。选中预约卡无计数、不可点。
 type KpiFocus = { status: string | null };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
@@ -151,7 +153,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
         { label: "类型", value: formatBusinessStatus(row.bookingType) },
         { label: "客户", value: display(row.customerName) },
         { label: "人数", value: display(row.partySize) },
-        { label: "容量占用", value: display(row.reservedCapacity) },
+        { label: "预约人数", value: display(row.reservedCapacity) },
         {
           label: "项目",
           value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink>,
@@ -165,7 +167,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
   }
 
   const bookingsSection = (
-    <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>容量占用</th><th>项目</th><th>场次</th><th>状态</th><th>下单时间</th><th>确认时间</th><th>详情</th></tr></thead><tbody>{pagedBookings.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-group-booking-row-${row.id}`} onClick={() => openBookingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBookingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此团体预订 ${row.id}`} data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{formatBusinessStatus(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{display(row.sessionId)}</td><td>{formatBusinessStatus(row.bookingStatus)}</td><td>{cnDate(row.createdAt)}</td><td data-testid={`amusement-group-booking-paid-at-${row.id}`}>{cnDate(row.paidAt)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看团体/包场预约详情" onClick={(event) => { event.stopPropagation(); openBookingDetail(row); }}>查看详情</button></td></tr>)}</tbody></table><TablePager testid="amusement-group-bookings-pager" page={pagedBookings.page} pageCount={pagedBookings.pageCount} total={pagedBookings.total} onPrev={pagedBookings.prev} onNext={pagedBookings.next} /></div>
+    <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>预约人数</th><th>项目</th><th>场次</th><th>状态</th><th>下单时间</th><th>确认时间</th><th>详情</th></tr></thead><tbody>{pagedBookings.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-group-booking-row-${row.id}`} onClick={() => openBookingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBookingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此团体预订 ${row.id}`} data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{formatBusinessStatus(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{display(row.sessionId)}</td><td>{formatBusinessStatus(row.bookingStatus)}</td><td>{cnDate(row.createdAt)}</td><td data-testid={`amusement-group-booking-paid-at-${row.id}`}>{cnDate(row.paidAt)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看团体/包场预约详情" onClick={(event) => { event.stopPropagation(); openBookingDetail(row); }}>查看详情</button></td></tr>)}</tbody></table><TablePager testid="amusement-group-bookings-pager" page={pagedBookings.page} pageCount={pagedBookings.pageCount} total={pagedBookings.total} onPrev={pagedBookings.prev} onNext={pagedBookings.next} /></div>
   );
 
   return (
@@ -187,7 +189,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
           <>
             <div className="admin-kpi-grid" data-testid="amusement-group-bookings-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>团体预约</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-total" onClick={() => enterKpiFocus()}>{bookingCountDisplay}</button><small>预约数{bookingCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.group_booking_count" testid="amusement-group-bookings-metric-detail-total" /></> : null}</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>容量占用</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-reserved" onClick={() => enterKpiFocus()}>{reservedDisplay}</button><small>占用容量{reservedKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.group_reserved_capacity" testid="amusement-group-bookings-metric-detail-reserved" /></> : null}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>预约人数</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-reserved" onClick={() => enterKpiFocus()}>{reservedDisplay}</button><small>已确认预约人数{reservedKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.group_reserved_capacity" testid="amusement-group-bookings-metric-detail-reserved" /></> : null}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已审批</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-approved" onClick={() => enterKpiFocus("approved")}>{bookings.filter((row) => row.bookingStatus === "approved").length}</button><small>已审批数</small></div>
               <div className="admin-kpi-card"><span>选中预约</span><strong className="admin-kpi-value--text" title={selected?.customerName ?? selected?.id ?? "-"}>{selected?.customerName ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.bookingStatus)}</small></div>
             </div>

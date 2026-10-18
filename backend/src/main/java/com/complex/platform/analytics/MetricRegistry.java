@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -373,12 +375,12 @@ public final class MetricRegistry {
                 null));
         register(registry, new MetricDefinition(
                 "amusement.session_capacity",
-                "游乐场次总容量",
-                TYPE_ADDITIVE,
-                "人次",
-                "Σ场次容量=全部游乐场次 capacity 直加（与项目与场次页「总容量」卡一致）。可加口径=区间求和："
-                        + "按创建时间落游乐经营日窗；不传日期=全部历史。容量为建场即定，随场次集合直加。",
-                "游乐场次台账（amusement_sessions，实时查询）。",
+                "项目硬安全容量",
+                TYPE_BALANCE,
+                "人",
+                "同一游乐项目只计一次，合计当前已配置的项目硬安全容量；不再累加场次、点位或设备容量。"
+                        + "这是当前配置快照，日期筛选不重算过去的容量。",
+                "游乐项目台账（amusement_projects，实时查询）。",
                 "amusement.session.view",
                 "amusement",
                 true,
@@ -386,7 +388,8 @@ public final class MetricRegistry {
                 "ADM-AMU-001",
                 "ADM-AMU-001",
                 "id",
-                sessionColumns(),
+                List.of(new MetricColumn("complexId","综合体"),new MetricColumn("projectName","游乐项目"),
+                        new MetricColumn("capacity","硬安全容量"),new MetricColumn("status","开放状态")),
                 null));
 
         // 团体/包场域（ADM-AMU-002 团体/包场）：数字来自 GET /amusement/group-bookings 平台口径列表。
@@ -410,11 +413,11 @@ public final class MetricRegistry {
                 null));
         register(registry, new MetricDefinition(
                 "amusement.group_reserved_capacity",
-                "团体占用容量",
+                "已确认预约人数",
                 TYPE_ADDITIVE,
                 "人次",
-                "Σ占用容量=全部团体/包场预约 reserved_capacity 直加（与团体/包场页「容量占用」卡一致）。"
-                        + "可加口径=区间求和：按下单时间落游乐经营日窗；不传日期=全部历史。",
+                "合计已批准及之后已解除的团体/包场预约人数；预约不占项目实时在玩人数。"
+                        + "按下单时间所属综合体的游乐营业日分桶；不传日期=全部历史。",
                 "团体/包场预约台账（amusement_group_bookings，实时查询）。",
                 "amusement.group_booking.view",
                 "amusement",
@@ -851,6 +854,8 @@ public final class MetricRegistry {
 
     private static List<MetricColumn> sessionColumns() {
         return List.of(
+                new MetricColumn("complexId","综合体"),
+                new MetricColumn("businessDate","营业日"),
                 new MetricColumn("projectId", "项目"),
                 new MetricColumn("startTime", "开始时间"),
                 new MetricColumn("endTime", "结束时间"),
@@ -862,10 +867,12 @@ public final class MetricRegistry {
 
     private static List<MetricColumn> groupBookingColumns() {
         return List.of(
+                new MetricColumn("complexId","综合体"),
+                new MetricColumn("businessDate","营业日"),
                 new MetricColumn("bookingType", "类型"),
                 new MetricColumn("customerName", "客户"),
                 new MetricColumn("partySize", "人数"),
-                new MetricColumn("reservedCapacity", "占用容量"),
+                new MetricColumn("reservedCapacity", "预约人数"),
                 new MetricColumn("bookingStatus", "状态"),
                 new MetricColumn("createdAt", "下单时间"),
                 new MetricColumn("paidAt", "确认时间"));
@@ -873,6 +880,8 @@ public final class MetricRegistry {
 
     private static List<MetricColumn> verificationColumns() {
         return List.of(
+                new MetricColumn("complexId","综合体"),
+                new MetricColumn("businessDate","营业日"),
                 new MetricColumn("projectId", "项目"),
                 new MetricColumn("sessionId", "场次"),
                 new MetricColumn("direction", "方向"),
@@ -883,6 +892,8 @@ public final class MetricRegistry {
 
     private static List<MetricColumn> safetyInspectionColumns() {
         return List.of(
+                new MetricColumn("complexId","综合体"),
+                new MetricColumn("businessDate","营业日"),
                 new MetricColumn("projectId", "项目"),
                 new MetricColumn("deviceId", "设备"),
                 new MetricColumn("overallResult", "总体结果"),
@@ -1025,11 +1036,20 @@ public final class MetricRegistry {
      *   —— 空 scope（平台管理员）不过滤=看全量；非空 scope（项目员工=其 organizationId）只见本项目行
      *   （NULL 项目行不匹配 → 项目 A 绝不见项目 B/无归属数据，隔离按构造成立）。
      * 未登记于此表的指标 = 平台口径（platform_only）：其来源表无综合体维度 —— 票务/酒吧/能耗/客人/核销/对账/复核台账
-     *   均无 project_id（merchants 亦无 project_id，故酒吧/存酒无法按商户 join 到项目）；amusement_*.project_id 是
-     *   「游乐项目实体」FK（REFERENCES amusement_projects）非综合体，且游乐域按 merchant 隔离 → 对综合体作用域即 platform_only。
+     *   均需各自真实归属接线；游乐通过已锁定 complex_id 或项目空间/唯一商户经营项目解析综合体，
+     *   不把 amusement_*.project_id（游乐项目实体 FK）直接当综合体。
      * fail-closed 安全默认：新增指标若漏登记 → 视为 platform_only → 项目级 403（功能收紧而非越权泄露，安全方向）。
      */
     private static final Map<String, String> PROJECT_SCOPE_COLUMNS = Map.ofEntries(
+            Map.entry("amusement.session_count", "complex_id"),
+            Map.entry("amusement.session_capacity", "complex_id"),
+            Map.entry("amusement.group_booking_count", "complex_id"),
+            Map.entry("amusement.group_reserved_capacity", "complex_id"),
+            Map.entry("amusement.entry_count", "complex_id"),
+            Map.entry("amusement.exit_count", "complex_id"),
+            Map.entry("amusement.inspection_count", "complex_id"),
+            Map.entry("amusement.inspection_pending_rectification", "complex_id"),
+            Map.entry("traffic.amusement", "complex_id"),
             // 财务应收应付台账（ar_ap_items.project_id=综合体，FinanceService 按 currentProjectScopeQuietly 隔离）。
             Map.entry("finance.ar_balance", "project_id"),
             Map.entry("finance.ap_balance", "project_id"),

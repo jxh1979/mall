@@ -1,103 +1,54 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
 import { PayrollTaxBracketsPage } from "./PayrollTaxBracketsPage";
-import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
-
-// 引导式流程 phase-7：新增税率档改分步引导弹窗（入口→两步步进→提交带正确 body + 各步校验拦截）。
-const BRACKETS = [
-  { id: "ptb_labor_1", category: "labor_remuneration", seq: 1, incomeFloorCent: 1, incomeCeilingCent: 400000, incomeBaseBps: 10000, flatDeductionCent: 80000, rateBps: 2000, quickDeductionCent: 0 },
-];
-
-function makeApi(post = vi.fn().mockResolvedValue({})): AdminApiClient {
-  return {
-    get: vi.fn().mockResolvedValue(BRACKETS),
-    getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
-    post,
-    put: vi.fn().mockResolvedValue({}),
-    patch: vi.fn().mockResolvedValue({}),
-    delete: vi.fn().mockResolvedValue({}),
-  };
+import type { AdminApiClient, AdminPageProps } from "../types";
+const draft = { id: "v1", category: "professional_category", version: "V0.01", effectiveFrom: "2099-01-01", status: "draft", reviewId: null, evidenceAttachmentIds: [], applicabilityBasis: "身份", calculationBasis: "计算依据", reason: "测试依据", roundingRule: "truncate_cent_each_step", brackets: [{ seq: 1, incomeFloorCent: 0, incomeCeilingCent: null, incomeBaseBps: 10000, flatDeductionCent: 0, rateBps: 1000, quickDeductionCent: 0 }] };
+function setup(options: { failure?: boolean; files?: string[] } = {}) {
+  const get = vi.fn().mockImplementation(async (path: string) => path.includes("tax-versions") ? [draft] : (options.files ?? []).map(referenceId => ({ itemType: "attachment", result: "uploaded", referenceId })));
+  const post = options.failure ? vi.fn().mockRejectedValue(new Error("真实部门起点尚未配置")) : vi.fn().mockResolvedValue(draft);
+  const postForm = vi.fn().mockResolvedValue({ id: "actual_file" });
+  const api: AdminApiClient = { get, post, postForm, getPaged: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() };
+  const props: AdminPageProps = { api, user: { id: "u1", username: "admin", accountType: "staff" }, setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: { status: "ready", value: { grants: [], denies: [], wildcard: true } } };
+  render(<PayrollTaxBracketsPage {...props} />); return { post, postForm };
 }
-
-const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
-
-function renderPage(api: AdminApiClient) {
-  const setActionResult = vi.fn();
-  const props: AdminPageProps = {
-    api,
-    user: { id: "u1", username: "admin", accountType: "platform_admin" },
-    setActionResult,
-    setGlobalError: vi.fn(),
-    effectivePermissions: ADMIN_PERMS,
-  };
-  render(<PayrollTaxBracketsPage {...props} />);
-  return { setActionResult };
+function fill(label: string, value: string) { fireEvent.change(screen.getByLabelText(label), { target: { value } }); }
+async function openVersion() { fireEvent.click(await screen.findByTestId("payroll-tax-brackets-create-open")); }
+function fillVersion() {
+  fill("税目编码", "professional_category"); fill("生效日期", "2099-01-01"); fill("适用身份及交易依据", "专业身份文件"); fill("计算及舍入专业依据", "专业计算文件"); fill("版本事由", "新完整版本"); fill("舍入口径", "truncate_cent_each_step");
+  fill("第1档收入下界（分）", "0"); fill("第1档基数万分比", "10000"); fill("第1档定额减除（分）", "0"); fill("第1档税率万分比", "1000"); fill("第1档速算扣除（分）", "0");
 }
+function fillReviewers() { fill("财务最终审批人", "finance"); fill("税务最终审批人", "tax"); fill("法务最终审批人", "legal"); }
 
-describe("PayrollTaxBracketsPage 引导式新增税率档(phase-7)", () => {
-  it("默认只留入口按钮，不展示弹窗字段", async () => {
-    renderPage(makeApi());
-    await waitFor(() => expect(screen.getByTestId("payroll-tax-brackets-create-open")).toBeTruthy());
-    expect(screen.queryByTestId("payroll-tax-brackets-guided")).toBeNull();
-  });
-
-  it("入口→两步→提交：带正确 body 且成功后关闭弹窗", async () => {
-    const post = vi.fn().mockResolvedValue({});
-    const api = makeApi(post);
-    const { setActionResult } = renderPage(api);
-    await waitFor(() => expect(screen.getByTestId("payroll-tax-brackets-create-open")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-create-open"));
-
-    // 第一步：档位与收入区间
-    fireEvent.change(screen.getByLabelText("档位 id"), { target: { value: "ptb_labor_2" } });
-    fireEvent.change(screen.getByLabelText("序号"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("毛收入下界(分)"), { target: { value: "400001" } });
-    // 一屏填完所有字段（含税率参数）
-    await waitFor(() => expect(screen.getByLabelText("应税基数万分比")).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("应税基数万分比"), { target: { value: "8000" } });
-    fireEvent.change(screen.getByLabelText("税率万分比"), { target: { value: "3000" } });
+describe("完整税档草案与审批操作", () => {
+  it("完整草案保存不直接写旧单档或发布", async () => {
+    const { post } = setup(); await openVersion(); fillVersion();
     fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next"));
-
-    await waitFor(() => expect(screen.getByTestId("payroll-tax-brackets-guided-summary")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-save"));
-
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(post).toHaveBeenCalledWith("/api/v1/staff/payroll/tax-brackets", expect.objectContaining({
-      id: "ptb_labor_2", category: "labor_remuneration", seq: 2, incomeFloorCent: 400001, incomeBaseBps: 8000, rateBps: 3000,
-    }));
+    expect(screen.getByTestId("payroll-tax-brackets-guided-summary").textContent).toContain("保存不生效");
+    fireEvent.click(screen.getByTestId("payroll-tax-brackets-save")); await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledWith("/api/v1/staff/payroll/tax-versions", expect.objectContaining({ category: "professional_category", effectiveFrom: "2099-01-01", brackets: draft.brackets }));
     await waitFor(() => expect(screen.queryByTestId("payroll-tax-brackets-guided")).toBeNull());
-    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "payroll_tax_bracket_saved" }));
   });
-
-  it("第一步校验拦截：缺 id 不进第二步", async () => {
-    const post = vi.fn().mockResolvedValue({});
-    renderPage(makeApi(post));
-    await waitFor(() => expect(screen.getByTestId("payroll-tax-brackets-create-open")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-create-open"));
-    // id 留空、只填序号/下界
-    fireEvent.change(screen.getByLabelText("序号"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("毛收入下界(分)"), { target: { value: "400001" } });
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next"));
-    expect(screen.getByTestId("payroll-tax-brackets-guided-error").textContent).toContain("档位 id");
-    expect(post).not.toHaveBeenCalled();
+  it("缺显式零值和区间缺口不能进入确认", async () => {
+    const { post } = setup(); await openVersion(); fillVersion(); fill("第1档定额减除（分）", "");
+    fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next")); expect(screen.getByTestId("payroll-tax-brackets-guided-error").textContent).toContain("0也须填写");
+    fill("第1档定额减除（分）", "0"); fill("第1档收入下界（分）", "1"); fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next"));
+    expect(screen.getByTestId("payroll-tax-brackets-guided-error").textContent).toContain("从0分连续覆盖"); expect(post).not.toHaveBeenCalled();
   });
-
-  it("第二步校验拦截：税率超界不到确认页、不提交", async () => {
-    const post = vi.fn().mockResolvedValue({});
-    renderPage(makeApi(post));
-    await waitFor(() => expect(screen.getByTestId("payroll-tax-brackets-create-open")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-create-open"));
-    fireEvent.change(screen.getByLabelText("档位 id"), { target: { value: "ptb_labor_2" } });
-    fireEvent.change(screen.getByLabelText("序号"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("毛收入下界(分)"), { target: { value: "400001" } });
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next"));
-    await waitFor(() => expect(screen.getByLabelText("应税基数万分比")).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("应税基数万分比"), { target: { value: "8000" } });
-    fireEvent.change(screen.getByLabelText("税率万分比"), { target: { value: "99999" } });
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next"));
-    expect(screen.getByTestId("payroll-tax-brackets-guided-error").textContent).toContain("税率万分比");
-    expect(screen.queryByTestId("payroll-tax-brackets-guided-summary")).toBeNull();
-    expect(post).not.toHaveBeenCalled();
+  it("实际上传绑定原草案，三线及文件随提交送出", async () => {
+    const { post, postForm } = setup(); fireEvent.click(await screen.findByRole("button", { name: "准备审批" }));
+    await screen.findByText("已关联 0 份专业凭证");
+    expect(screen.getByLabelText("专业依据原件").getAttribute("accept")).toBe("image/*,video/*");
+    fireEvent.change(screen.getByLabelText("专业依据原件"), { target: { files: [new File(["professional evidence"], "basis.png", { type: "image/png" })] } });
+    await waitFor(() => expect(postForm).toHaveBeenCalledTimes(1)); await screen.findByText("已关联 1 份专业凭证");
+    const data = postForm.mock.calls[0]![1] as FormData; expect(data.get("business_type")).toBe("payroll_tax_version"); expect(data.get("business_id")).toBe("v1"); expect(data.get("file")).toBeInstanceOf(File);
+    fillReviewers(); fireEvent.click(screen.getByTestId("payroll-tax-submit-guided-next")); fireEvent.click(screen.getByTestId("payroll-tax-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/staff/payroll/tax-versions/v1/submit", expect.objectContaining({ evidenceAttachmentIds: ["actual_file"], parallelLines: [{ lineCode: "finance_review", finalApproverId: "finance" }, { lineCode: "tax_review", finalApproverId: "tax" }, { lineCode: "legal_review", finalApproverId: "legal" }] })));
+  });
+  it("刷新后恢复已上传凭证，审批失败保留原件和弹窗", async () => {
+    const { post } = setup({ failure: true, files: ["persisted_file"] }); fireEvent.click(await screen.findByRole("button", { name: "准备审批" }));
+    await screen.findByText("已关联 1 份专业凭证"); fillReviewers(); fireEvent.click(screen.getByTestId("payroll-tax-submit-guided-next")); fireEvent.click(screen.getByTestId("payroll-tax-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); await screen.findByText("真实部门起点尚未配置");
+    expect(screen.getByTestId("payroll-tax-submit-guided")).toBeTruthy(); expect(post.mock.calls[0]![1].evidenceAttachmentIds).toEqual(["persisted_file"]);
   });
 });

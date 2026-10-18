@@ -1,5 +1,7 @@
 package com.complex.platform.energy;
 
+// 文件版本：V0.02
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -158,7 +160,10 @@ class JdbcEnergyRepository implements EnergyRepository {
                        r.reviewed_by, r.reviewed_at, r.created_at, r.updated_at
                   FROM energy_meter_readings r
                   JOIN energy_meters m ON m.id = r.meter_id
-                 WHERE m.parent_meter_id = :parent_meter_id AND r.period = :period
+                 WHERE COALESCE(
+                       (SELECT t.new_parent_id FROM energy_meter_parent_transfers t WHERE t.meter_id=m.id AND t.effective_at<=r.read_at ORDER BY t.effective_at DESC,t.id DESC LIMIT 1),
+                       (SELECT t.old_parent_id FROM energy_meter_parent_transfers t WHERE t.meter_id=m.id AND t.effective_at>r.read_at ORDER BY t.effective_at,t.id LIMIT 1),
+                       m.parent_meter_id) = :parent_meter_id AND r.period = :period
                  ORDER BY m.id
                 """, new MapSqlParameterSource()
                 .addValue("parent_meter_id", parentMeterId).addValue("period", period), this::mapReading);
@@ -227,23 +232,24 @@ class JdbcEnergyRepository implements EnergyRepository {
     @Override
     public EnergyFeeSettlementRecord insertEnergyFeeAr(EnergyFeeSettlementRecord record) {
         String token = record.sourceId().substring("energy_fee_".length());
-        LocalDate dueDate = YearMonth.parse(record.period()).atDay(1);
+        LocalDate dueDate = record.dueDate();
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (
                     id, item_no, direction, counterparty_id, source_type, source_id,
                     amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
-                    status, created_at, updated_at, merchant_id
+                    status, created_at, updated_at, merchant_id, project_id
                 )
                 VALUES (
                     :id, :item_no, 'receivable', :merchant_id, 'energy_fee', :source_id,
                     :amount, 0, :amount, 'CNY', :due_date, :period, 'pending_collection',
-                    :created_at, :created_at, :merchant_id
+                    :created_at, :created_at, :merchant_id, :project_id
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", record.arApItemId())
                 .addValue("item_no", "ENERGY-" + token)
                 .addValue("merchant_id", record.merchantId())
+                .addValue("project_id", record.projectId())
                 .addValue("source_id", record.sourceId())
                 .addValue("amount", record.amountCent())
                 .addValue("due_date", dueDate)

@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -82,6 +84,12 @@ class DividendJdbcIntegrationTests {
     @Autowired
     private DataSource dataSource;
 
+    @Autowired
+    private com.complex.platform.access.AccessRepository accessRepository;
+
+    @Autowired
+    private AuthorizationService realAuthorizationService;
+
     // 欠款抵扣走真实 FinanceService.settleArApItem → checkMerchantOwnership → currentActor() 读 SecurityContextHolder；
     // 用例内以 TestSecurityActors.asPlatformAdmin() 注入平台管理员上下文（生产 approve 必经 requirePlatformScope，恒有认证），
     // @AfterEach 清理防跨用例污染（DividendService 自身鉴权走注入 mock，与此 ThreadLocal 互不干扰）。
@@ -98,6 +106,27 @@ class DividendJdbcIntegrationTests {
                 new AccessActor(actorId, "platform_admin_user", "platform_admin", "org_1", null, "active"));
         return new DividendService(repository, inventoryRepository, businessDayResolver,
                 authorizationService, operations, payoutPort);
+    }
+
+    /** 资金链使用真实账号与逐项授权；平台账号类型不能代替分红审批或付款权限。 */
+    private void authorizePlatformActor(String actorId, String... permissions) {
+        if (accessRepository.findUserById(actorId).isEmpty()) {
+            accessRepository.createUser(new com.complex.platform.access.AccessUser(
+                    actorId, actorId, "platform_admin", "org_1", null, "active", Instant.now()));
+        }
+        if (permissions.length > 0) {
+            String roleId = "dividend_test_" + java.util.UUID.randomUUID().toString().replace("-", "");
+            accessRepository.createRole(new com.complex.platform.access.RoleRecord(roleId, "分红测试逐项授权-" + roleId,
+                    null, "platform", "active", Instant.now(), List.of(permissions), null, false, List.of()));
+            accessRepository.assignUserRole(actorId, roleId);
+        }
+        TestSecurityActors.asPlatformAdmin(actorId);
+    }
+
+    private DividendService serviceWithRealPlatformActor(String actorId) {
+        authorizePlatformActor(actorId, DividendService.MANAGE_PERM);
+        return new DividendService(repository, inventoryRepository, businessDayResolver,
+                realAuthorizationService, operations, payoutPort);
     }
 
     private static DividendPlanRecord plan(String id, String periodType) {
@@ -631,14 +660,13 @@ class DividendJdbcIntegrationTests {
      */
     @Test
     void arrearsOffsetSettlesReceivablesAndPaysNetAtApprove() {
-        TestSecurityActors.asPlatformAdmin();   // 审批真调 settleArApItem 需认证上下文（平台管理员，scope 空）。
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("arr", 1_000_000L, ts);
         seedReceivable("arap_r1_arr", "AR-ARR-001", 60_000L, ts);
         seedReceivable("arap_r2_arr", "AR-ARR-002", 40_000L, ts);
         repository.insertPlan(arrearsPlan("divp_jdbc_arr"));
 
-        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendService service = serviceWithRealPlatformActor("usr_div_real_submitter");
         DividendStatementRecord s = service.compute(
                 new DividendComputeRequest("arr-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
         assertThat(s.principalNetCent()).isEqualTo(160_000L);
@@ -649,7 +677,16 @@ class DividendJdbcIntegrationTests {
                 .filteredOn(l -> l.lineType().equals("arrears_offset")).hasSize(2);
 
         service.submit(s.id(), new DividendActionRequest("arr-jdbc-s1", null));
-        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        authorizePlatformActor("usr_div_real_without_manage");
+        assertThatThrownBy(() -> service.approve(s.id(), new DividendActionRequest("arr-jdbc-denied", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code").isEqualTo("PERMISSION_DENIED");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ar_ap_payments WHERE ar_ap_item_id IN (?,?)",
+                Long.class, "arap_r1_arr", "arap_r2_arr")).isZero();
+        DividendService approver = serviceWithRealPlatformActor("usr_div_real_approver");
+        assertThatThrownBy(() -> realAuthorizationService.requirePermission("finance.payment.register"))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code").isEqualTo("PERMISSION_DENIED");
         DividendStatementRecord approved = approver.approve(s.id(), new DividendActionRequest("arr-jdbc-a1", null));
         assertThat(approved.status()).isEqualTo("approved");
 
@@ -785,12 +822,12 @@ class DividendJdbcIntegrationTests {
         seedTicketRevenue("rel", 1_000_000L, ts);
         repository.insertPlan(floorPlan("divp_jdbc_rel"));
 
-        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendService service = serviceWithRealPlatformActor("usr_div_real_submitter");
         DividendStatementRecord s = service.compute(
                 new DividendComputeRequest("rel-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
         assertThat(s.reserveWithheldCent()).isEqualTo(16_000L);
         service.submit(s.id(), new DividendActionRequest("rel-jdbc-s1", null));
-        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        DividendService approver = serviceWithRealPlatformActor("usr_div_real_approver");
         approver.approve(s.id(), new DividendActionRequest("rel-jdbc-a1", null));
 
         String withheldId = jdbcTemplate.queryForObject(
@@ -810,7 +847,14 @@ class DividendJdbcIntegrationTests {
         assertThat(flipped.get("status")).isEqualTo("pending_payment"); // 仍可付=主理人能真正拿到
 
         // 支付守卫放行方向（活证据）：已释放应付真调 settle → 落账 settled（主理人真正拿到）。
-        TestSecurityActors.asPlatformAdmin();   // registerArApPayment 经 checkMerchantOwnership 需认证上下文。
+        assertThatThrownBy(() -> financeService.registerArApPayment(withheldId, new ArApPaymentRequest(
+                "rel-jdbc-denied-pay", "分红审批权不能代替付款权", List.of(), 16_000L, "bank_transfer",
+                Instant.parse("2026-07-20T01:00:00Z"), "bank_flow_rel_denied")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code").isEqualTo("PERMISSION_DENIED");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ar_ap_payments WHERE ar_ap_item_id=?",
+                Long.class, withheldId)).isZero();
+        authorizePlatformActor("usr_div_real_payer", "finance.payment.register");
         var payResp = financeService.registerArApPayment(withheldId, new ArApPaymentRequest(
                 "rel-jdbc-pay1", "释放后发放", List.of(), 16_000L, "bank_transfer",
                 Instant.parse("2026-07-20T01:00:00Z"), "bank_flow_rel_jdbc"));
@@ -824,7 +868,8 @@ class DividendJdbcIntegrationTests {
         assertThat(((Number) ledger.get("reserve_cent")).longValue()).isEqualTo(16_000L);
         assertThat(ledger.get("trigger_type")).isEqualTo("manual");
         assertThat(ledger.get("ar_ap_item_id")).isEqualTo(withheldId);
-        assertThat(ledger.get("released_by")).isEqualTo("usr_div_jdbc_approver");
+        assertThat(ledger.get("released_by")).isEqualTo("usr_div_real_approver");
+        authorizePlatformActor("usr_div_real_approver", DividendService.VIEW_PERM);
 
         // 待释放台账：释放后该单在 released 视图、不在 pending 视图。
         assertThat(approver.listReserveLedger(MERCHANT, "released", 1, 50).items())
@@ -846,7 +891,7 @@ class DividendJdbcIntegrationTests {
      */
     @Test
     void reserveWithheldPaymentBlockedBeforeReleaseJdbc() {
-        TestSecurityActors.asPlatformAdmin();   // registerArApPayment 经 checkMerchantOwnership 需认证上下文。
+        authorizePlatformActor("usr_div_real_payer", "finance.payment.register");
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-19T12:00:00Z");
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,

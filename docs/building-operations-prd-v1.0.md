@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.06·据需求重建）
+# 楼宇运营业务域 PRD（V1.07·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -41,7 +41,7 @@
 | 能耗表计/读数 | `read_mode` | `remote` / `manual` | 远程自动读 / 人工抄表 |
 | 抄表读数 `energy_meter_readings` | `status` | `pending` / `recorded` / `reviewed` / `abnormal` | 待抄 / 已抄录 / 已审核 / 异常 |
 | 抄表读数 `energy_meter_readings` | `abnormal_reason` | `surge` / `drop` / `zero` / `reverse` | 突增 / 突降 / 零读数 / 读数倒走 |
-| 合同 `contracts` | `energy_fee_basis` | `none` / `by_contract` / `by_area` / `by_usage`（V162 当前 4 值；`EnergyService` 当前仍接受 `by_area`/`by_usage` 并据 `public_area` 用量计算商户应收） | **业务目标**：`public_area` 只作公区成本归集/分析，不向商户分摊；公区不形成商户能源费应收。待实现：写入侧拒绝 `by_area`/`by_usage`、结算侧停止公区应收，并在研发环境直接把 CHECK 收敛为 `none`/`by_contract`；本轮不改迁移或代码。 |
+| 合同 `contracts` | `energy_fee_basis` | 写入与 V480 DB CHECK 仅接受 `none` / `by_contract` | 无代收约定 / 独表实际费用代收；公区及水电损包含在物业费中。详见§5。 |
 
 > **工单分表口径（2026-08-04 第三轮用户裁决 UD-06 / DEC-R6-26 定稿，见 §0）**：上表的 `facility_work_orders`（V166）只是**设施工单**主表；**商户服务工单彻底分表**，主写 `merchant_service_work_orders`（V022），采用 ENUM「商户服务工单状态」条的**独立七态状态链**（已提交/已派单/处理中/待商户确认/已处理待关闭/已关闭/已取消），并按 ENUM「工单时效」在看板上**分行对照**展示。上表 `facility_work_orders.status` 九态**不适用于商户服务工单**。原 F2 批「统一主表、`source=merchant_self` 同表承接」口径已撤销。
 
@@ -145,40 +145,36 @@
 - 表：`facility_inspection_templates`、`facility_inspection_tasks`、`facility_inspection_records`
 - 权限：`facility.inspection.manage`（`domain=platform`、`risk_level=medium`、`requires_approval=false`）
 
-## 5. 能耗抄表（V168）
-**业务规则**
-- 表计 4 类，支持 `parent_meter_id` 总分表层级；`GET /meters/{meter_id}/difference?period=YYYY-MM` 用总表用量减分表用量做抹差核对。
-- 归集对象 3 类：`public_area`、`merchant`、`equipment_circuit`，分别用于**公共区域成本归集/分析**、商户直读、设备/回路分析；`public_area` 不对商户分摊。
-- **抄表主次业务目标**：远程表自动读为主，人工抄表只作异常或补充路径。V168 的 `read_mode` 默认 `remote`，当前 `EnergyService` / `EnergyReadingRecordRequest` 均仍接受 `remote` 与 `manual`；未在服务层限制人工仅作异常/补充，列入 §6 J 待建。
-- 抄表状态落 4 态。当前服务按同表计上一期自动取 `prev_reading_value`，不信任请求体上期值，并把首期上期值设为0；该实现不能直接用于换表。业务目标：换表记录旧表终值、新表初值、换表时点及原计费对象，两段按各自实际计量计算，不跨表作差。新表起点采用经核实初值，不能因首期默认为0多计；无法核实走原异常复核，核实前暂停出账，不引入估抄或新收费。
-- 异常识别：读数倒走为 `reverse`；读数或本期消耗为 0 为 `zero`；上一期消耗大于 0 时，按环比百分比与 `energy_anomaly_thresholds` 比较，超过 `surge_pct` / `drop_pct` 分别记 `surge` / `drop`。
-- `zero`、`reverse`、`surge`、`drop` 均进入 `status=abnormal`，通过 `review` 复核为 `reviewed`；异常不是拒收（读数照收、进复核，不丢数据）。
-- **异常读数处置业务目标（2026-08-04 对齐 BSM「能耗抄表」条／PGM「表计按总表-分表分层、可总分表抹差核对」条）**：**判为异常（突增/突降/零读数/读数倒走）的读数一律不得直接出账**；须由**第二人复抄或到场核表**，核实后**填写原因并经主管确认**才转为 `reviewed`（已审核）。**核实完成之前，该商户当期能源费账单暂缓生成、暂缓催缴**；核实须**在限期内出结果、不得无限期暂缓**（业务参数，按项目可配，出厂默认一周，须同时配置上下限）。**异常读数被更正的，保留原始录入值与更正记录，两者都可查**。**每次抄录必须同时上传表底照片，系统自动与上期读数比对**（上期值由服务按同表计上一期自动取，不信任请求体，见上）。**当前实现缺口**：V168 / `EnergyReadingRecordRequest` 无表底照片、复抄人、到场核表、核实原因、主管确认、复核限期或更正记录字段；`EnergyReadingReviewRequest` 只有 `reviewedBy`，`EnergyService.reviewReading` 可直接将读数写为 `reviewed`；结算未按异常核实状态暂缓，列入 §6 K 待建。
-- 异常阈值表 `energy_anomaly_thresholds` 按 `meter_type` 配置，V168 默认四类各 50%；当前未暴露独立阈值 REST 端点。
+## 5. 能耗抄表与实际费用（HP-E01／E02／E03）
 
-**能源费业务口径（2026-08-04 对齐 PGM「表计按总表-分表分层、可总分表抹差核对」条／BSM「能耗抄表」条／ENUM「能源费与损耗费」条＋ENUM「物业费」条）**
-- **商户能源费＝代收、不得加价**：商户能源费**按其独立表计的实际用量与实际费用代收，一律不得加价**；该笔款项在平台中记为**代收代缴往来，不作为城市项目公司的经营收入**（不计入物业费收入或普通经营收入）。
-- **公区能耗不向商户分摊**：公区能耗**仍按公共区域归集，只做成本分析与能耗管理，但不形成对商户的公区能源费应收**；公区公摊费用**统一含在物业费中**，**不再生成公区能源费账单**。
-- **电损、水损归入物业费**：总表与分表差额仅用于核对和成本分析；电损、水损等费用按已批准物业费合同及规则承接，不另向商户收电损费、水损费或独立服务费，不另开该名目的服务发票。商户能源费仍按独立表计实际用量和实际费用代收，不能通过改名加价，公区能源也不另行分摊。
-- **实现待对齐**：删除“新建独立电损／水损计费”的目标，既有实现事实不作为收费授权；物业费与能源往来分别登记，复核同期间不重复收费。本轮仅改文档，不改代码、迁移或 OpenAPI。
-- **`energy_fee_basis` 口径对齐（当前与目标分列）**：`contracts.energy_fee_basis` 的当前 4 值 CHECK（`none`/`by_contract`/`by_area`/`by_usage`）来自 V162；当前 `EnergyService` 仍允许 `by_area`/`by_usage`，并以 `public_area` 用量计算商户应收。**业务目标**：`none` 不结算；`by_contract` 取合同 `rent_terms.energyFeeCent`；`by_area`（按商户面积分摊公区能耗费）与 `by_usage`（按商户用量比例分摊公区能耗费）均已过期作废，公区能耗只作归集与成本分析、不向商户分摊、不形成商户应收；商户能源费走独立表计实际用量实际费用代收，电损、水损归入物业费，不另形成能源差额收费。**待实现**：研发环境无生产存量数据、测试数据可直接清理，故需将 CHECK 收敛为 `none`/`by_contract` 两值，且同步拒绝新写入与停止结算侧公区应收；不单独立项做历史迁移／回填。本轮不改迁移或代码。
-- 结算写 `ar_ap_items`：`direction=receivable`、`source_type=energy_fee`、`source_id=energy_fee_{merchant|period stable token}`、`status=pending_collection`，并写 `ar_ap_item_sources`；同商户同期间已存在则跳过，保证幂等。
+**计量与换表**
+- 表计保留电、水、燃气、冷热量四类和公区、商户、设备回路三类归集。远程读表为主，真实设备接入仍须单独完成，员工抄表入口不能自行声明为远程；人工补充必须说明原因并上传绑定本表计的真实表底照片。人工抄表人、第二核表人、审核人均取当前登录的真实人员，不能代填他人身份。
+- 表计启用先登记实际初值、时点、说明及照片；缺初值不得默认零。原始读数照录并保持异常、原起点及原用量为空，待第二人核实和主管确认。既有原读数不回填或覆盖。
+- 换表关联旧表终值、新表初值、实际交接时点、原计费对象、凭据和旧段读数；旧表停用，新表按自己的初值计量。总表更换时保留分表交接事实与生效时间，历史总分表查询按当时绑定关系计算。不得跨表相减或恢复旧表继续计量。
+- 永久停用登记真实终值、实际停用时点与照片，沿原读数链审核和处理异常，不强制创建替代表。已投入计量的表不能靠普通启用开关停用；原停用期仍核实全部计量及实际费用，后续期间停止催抄，永久停用表不得重新启用。未启用且没有读数的表仍可维护启用开关。
+- 已审核的前段终值作为下段起点；上一段待核时不能录入下一段。异常阈值仍取既有同类型配置；不配置时不得猜默认价格或计量起点。表计维度允许同月多个真实计量区间。
 
-**关键端点（实际 Controller）**
-- `GET /api/v1/energy/meters`
-- `POST /api/v1/energy/meters`
-- `POST /api/v1/energy/meters/{meter_id}`
-- `GET /api/v1/energy/readings?period=YYYY-MM`
-- `POST /api/v1/energy/readings`
-- `POST /api/v1/energy/readings/{reading_id}/review`
-- `GET /api/v1/energy/meters/{meter_id}/difference?period=YYYY-MM`
-- `POST /api/v1/energy/settlements/energy-fee`
-- `POST /api/v1/energy/settle-energy-fee`（兼容别名）
+**异常核实**
+- 原四种异常原因不变；未知起点以异常状态及缺失原起点表示。正常读数由具备权限的人员审核，不另加必须第二人的条件；普通审核不能放行异常。第二人实际复抄或到场核表，提交核实终值、必要时的缺失起点、原因及真实照片，再沿现有主管复核链确认。
+- 异常确认主管须为本项目在岗且持有异常确认岗位权限；原抄表人和本次核表人不能审批自身事实，审批时再次核验当前项目权限。原件、核实记录、驳回历史、审批单和附件均可查。
+- 核实期限按项目审批，页面预填7天，上下限及真实能耗主管必须填齐。到期未核系统建立指向该主管的超期待办；主管在能源页发现待办并指派原抄表人之外的在岗复抄人。超期、缺配置或已经指派均不解除出账阻断。
+- 同项目同商户当期任何未审核读数、应抄表缺记录或独表实际账单未齐，均阻止整期能源应收，不能只结正常的部分。看板的用量汇总仅纳入已审核的有效用量，异常列表包括缺初值记录。
 
-**迁移 / 表 / 权限**
-- 迁移：`V168__energy_metering.sql`；能源费分摊合同 CHECK 来自 `V162__contract_lifecycle.sql`
-- 表：`energy_meters`、`energy_meter_readings`、`energy_anomaly_thresholds`、`ar_ap_items`、`ar_ap_item_sources`
-- 权限：`energy.meter.manage`（medium、无需审批）、`energy.reading.manage`（high、`requires_approval=true`）
+**收费与往来**
+- 公区及电损、水损只用于成本分析，相关费用包含在已批准的物业费中，不单独创建公摊、水电损或改名服务费应收。
+- 商户独表仅按当期有效合同的实际费用代收。合同写入仅接受 `none` 与 `by_contract`，其中后者表示独表实费代收，不再读取固定 `rent_terms.energyFeeCent`，也不把用量乘默认单价。旧分摊合同不获新的收费授权。
+- 获授权人员核对供能账单号、绑定本表计的真实凭据、已审核各段用量、实际费用与供能单位最后付款日，记录后锁定该表该期计量事实；不增加独立的实际费用审批流程。
+- 齐单后在同商户同项目账期锁内按合同汇总实际费用。应收 `source_type=energy_fee` 并写入实际项目归属，按本项目财务可见、其他项目不得收款；来源键含商户、合同、账期，重试不重复生成。零费用保留核结记录而不造零元应收。实际单据和费用与应收互相可追溯；供能到期日沿用实际凭据。
+- 能源为代收代缴往来，不纳入城市项目公司经营收入。物业费仍按既有独立合同流程生成，不能重收能源公摊。
+
+**入口与存储**
+- 既有表计、抄表、普通审核、总分表差额与能源结算端点保留。
+- 新增 `POST /api/v1/energy/meters/{meter_id}/opening`、`/replacement`、`/retirement`；`GET /meters/{meter_id}/history` 及 `/attachments/{attachment_id}/file`。
+- 新增 `POST /api/v1/energy/readings/{reading_id}/verification`、`/assignment`；`GET /api/v1/energy/escalations`。
+- 新增 `GET/POST /api/v1/energy/actual-charges`、`GET/POST /api/v1/energy/projects/{project_id}/review-settings`。
+- V480 将合同能源依据约束收敛为 `none` / `by_contract`，不自动改判合同。V478 建立启用、换表、父表交接、原始凭据、核实、实际费用、期限和升级指派记录；V482 仅增加永久停用时点及终段读数关联，凭据与人员沿用原读数证据链；原事实只追加，审核状态与首次账务关联仅按合法转换更新。历史读数缺证据不伪造回填。
+- 管理、抄表及主管确认岗位按项目读取；各写入仍使用专用权限。证据上传额外要求附件权限与能源权限同时覆盖本表项目，下载只允许该表及实际换表关联原件。异常确认权限为 `energy.reading.approve`，不得通过自动授予全平台管理员绕过真实岗位。
+- 页面为能源工作台：启用与换表、异常核表、独表实际费用、核实期限、计量原件与处置记录；主管确认沿现有主管复核页办理。代码完成不表示各项目初值、账单或配置已由运营人员确认。
 
 ## 5A. 施工完工、整改与验收（HP-F04）
 
@@ -190,21 +186,21 @@
 
 ## 6. 待建一览（M08 现状登记）
 
-> 口径已按 HTML 写实，落地未做；本表所列待建项本轮不改代码、迁移、OpenAPI；CSV 与业务 HTML 仅限 James V0.06 已批准的 PGM H1–H3 及入口注册表、规则账本、覆盖矩阵机械镜像。
+> 本表保留各项历史归类；能源 A/D/J/K 的本批实现状态已同步，其他项按原登记；CSV 与业务 HTML 仅限 James V0.06 已批准的 PGM H1–H3 及入口注册表、规则账本、覆盖矩阵机械镜像。
 
 | 编号 | 待建/待对齐项 | 现状 | 需要的动作 | 依据 |
 |---|---|---|---|---|
-| A | **电损、水损归入物业费** | 原独立服务费方案已被Q21替代；结算实现须另行核对 | 按批准物业费合同及规则承接，不新建独立电损／水损收费或服务发票；能源代收与物业费分开且不重复收费（见§5） | Q21；现行能源与物业费 HTML 条款 |
+| A | **电损、水损归入物业费** | HP-E01 已停止单列公摊应收 | 保持物业费按原合同处理，独表实费与物业费分开；不补造历史事实（见§5） | Q21；现行能源与物业费 HTML 条款 |
 | B | **复杂类工单「主管验收 + 提单方确认」双闸** | `acceptance_by` 三选一，表达不了与关系 | 枚举扩 `supervisor_and_reporter` 或加独立标志位 `require_reporter_confirm`，并定「复杂类」判定口径（见 §1/§3） | BSM「运营细则（已确认）」条 |
 | C | **商户服务工单分表独立七态**（2026-08-04 裁决改向：原「收敛到 V166」已撤销） | V022 的 7 值 CHECK 已存在；应用可达状态仅六个（`created`/`assigned`/`processing`/`pending_merchant`/`resolved`/`closed`）；`cancelled` 只被识别为终态，无取消入口、当前不可达 | 补齐 `cancelled` 的合法取消入口；对齐 V166 `merchant_self` 当前仍可写入、V166 历史注释称 V022 停止写入，以及设施/商户看板分行对照与商户单不显示首次响应指标（见 §3） | M08-CX-019/020；ENUM「商户服务工单状态」「工单时效」条 |
-| D | **`energy_fee_basis` 收敛迁移** | 当前 DB CHECK 仍 4 值，`EnergyService` 仍允许 `by_area`/`by_usage` 并按 `public_area` 生成商户应收 | 直接收敛 DB CHECK 为 `none`/`by_contract` 两值，并在写入和结算侧禁用公区对商户分摊/应收（研发环境无生产存量数据，测试数据直接清理，不做历史迁移／回填立项） | M08-CX-021/022/023；GROK-M08-033/037/038；第三轮用户裁决 UD-07 / DEC-R6-28 |
+| D | **能源代收依据** | 写入、结算及 V480 DB CHECK 已收敛为 none/by_contract；后者仅独表实费 | 不自动改判历史合同，实际费用仍须真实独表与单据（见§5） | UD-07 / DEC-R6-28；HP-E01 |
 | E | **工单来源补 `customer`** | `facility_work_orders.source` CHECK 现 4 值、无 `customer` | CHECK 扩 `customer`；客人端投诉直接落工单、客人为提单方、关闭须其确认（见 §1 `source` 行） | 第三轮用户裁决 UD-03 / DEC-R6-14；BSM 物业服务章·主要功能 |
 | F | **工单九态分支语义落地** | `acceptance_by` 三选一，表达不了「主管验收 ＋ 提单方确认」双闸；`accepted` 现不可达 | 按 UD-05 / DEC-R6-13 三类分支实现：无争议类完成即结、投诉类提单方确认、复杂类双闸；并定「复杂类」判定口径（与本表 B 项同一改造） | 第三轮用户裁决 UD-05 / DEC-R6-13；ENUM「物业工单状态」条 |
 | G | **设备维保五类及记录承载** | V165 / `FacilityEquipmentRequest` 无 `maintenance_type` 字段、CHECK、维保记录或工单关联 | 按 ENUM 逐字补定期保养、例行巡检、故障维修、安全检测、部件更换的字段、值域与维保记录/工单关联 | GROK-M08-028；ENUM「设备维保类型」条 |
 | H | **设施工单超时通知与升级主管** | `FacilityWorkOrderService.markOverdue` 仅置 `overtime=true`，无设施工单定时触发、通知、主管解析或升级留痕 | 补按响应/处理时限自动通知并升级主管的定时/服务/留痕链路 | GROK-M08-029；BSM「按响应时限和处理时限统计时效，超时自动升级通知主管」条 |
 | I | **设备到期自动生成维保单** | `FacilityEquipmentService` 仅有 `maintenance-due` 查询与 `maintenance-done` 回写，无到期扫描/自动创建设施工单 | 补到期扫描、按设备生成维保单及幂等/留痕链路 | GROK-M08-030；PGM「设备分电梯扶梯、暖通空调、配电供电、给排水消防四组台账」条 |
-| J | **远程抄表主路径与公区归集** | V168 默认 `remote` 但服务仍接受任意 `manual`；`EnergyService` 仍把 `public_area` 用于 `by_area`/`by_usage` 商户应收 | 限人工为异常/补充路径；`public_area` 只作成本归集/分析，停止公区对商户分摊和应收 | GROK-M08-034；M08-CX-021/022/023；PGM「表计按总表-分表分层、可总分表抹差核对」条 |
-| K | **异常抄表复核闸门** | V168 / `EnergyReadingRecordRequest` 无照片、复抄/到场、原因、主管确认、限期、更正记录字段；`EnergyReadingReviewRequest` 仅 `reviewedBy`，服务可直接写 `reviewed`，结算未按核实状态暂缓 | 补表底照片、第二人复抄/到场核表、原因、主管确认、限期复核、更正留痕及异常账单暂缓 | M08-CX-024；GROK-M08-039/040；BSM「能耗抄表」条 |
+| J | **远程抄表与公区归集** | HP-E01/E03 已实现人工原因和真实照片要求；公区不形成应收 | 运营按真实表计和接口接入；无数据不得估抄（见§5） | PGM 能耗条款 |
+| K | **异常核表闸门** | HP-E03 已实现第二人、主管确认、原件留痕、期限审批、超期指派及整期暂缓 | 项目启用前补齐真实配置与岗位，未核异常始终不出账（见§5） | BSM 能耗抄表条款 |
 | L | **设施工单用料与费用闭环** | 工单表、请求与记录无指定库房、出库、当前平均进货价、承担方、争议依据/结果或关联应收；现有挂起/恢复只改工单状态 | 补指定库房出库、当前平均进货价计成本、承担方、争议挂起后判定留痕及应收关联 | M08-CX-025；BSM「派单到具体人员或班组」条 |
 | M | **客诉周报与三人升级** | `FacilityWorkOrderService` 无客户关怀确认、周报、同类投诉候选识别、三人升级或推送逻辑 | 补客户关怀确认、周报生成/投递、按月同类三个不同人识别与向三类负责人升级 | M08-CX-026；BSM「运营细则（已确认）」条 |
 

@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -38,6 +38,16 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class JdbcAnalyticsRepository implements AnalyticsRepository {
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private AmusementBusinessDayAnalytics amusementDays;
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows amusementComplexDetail(String key, LocalDate from, LocalDate to, Instant now,
+            boolean allHistory, int limit, int offset, java.util.Collection<String> scope) {
+        return amusementDays.detail(key,from,to,now,allHistory,limit,offset,scope);
+    }
+
 
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
     };
@@ -671,14 +681,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
-        BigDecimal value = jdbcTemplate.queryForObject("""
-                SELECT COUNT(*)
-                  FROM amusement_verifications
-                 WHERE verification_result = 'success'
-                   AND created_at >= :start
-                   AND created_at < :end
-                """, dayRange("amusement", businessDate), BigDecimal.class);
-        return value == null ? BigDecimal.ZERO : value;
+        return amusementDays.detail("traffic.amusement",businessDate,businessDate,Instant.now(),false,1,0,null).summaryValue();
     }
 
     @Override
@@ -698,7 +701,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         // T4.3：按经营日窗口对成功核销 created_at 分小时桶。
         // ponytail: 按 UTC 小时分桶（确定、与窗口同源）；若要本地时段口径，改 AT TIME ZONE '业务时区'。
         Map<Integer, Long> result = new LinkedHashMap<>();
-        MapSqlParameterSource params = dayRange("amusement", businessDate);
+        MapSqlParameterSource params = dayRange("ticketing", businessDate);
         String sql;
         if (merchantScope.isEmpty()) {
             sql = """
@@ -706,10 +709,6 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                         SELECT date_part('hour', created_at AT TIME ZONE 'UTC')::int AS h
                           FROM ticket_verifications
                          WHERE status = 'success' AND created_at >= :start AND created_at < :end
-                        UNION ALL
-                        SELECT date_part('hour', created_at AT TIME ZONE 'UTC')::int AS h
-                          FROM amusement_verifications
-                         WHERE verification_result = 'success' AND created_at >= :start AND created_at < :end
                     ) t GROUP BY h
                     """;
         } else {
@@ -724,6 +723,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         }
         jdbcTemplate.query(sql, params, (org.springframework.jdbc.core.RowCallbackHandler) rs ->
                 result.put(rs.getInt("h"), rs.getLong("total")));
+        if(merchantScope.isEmpty())amusementDays.hourly(businessDate).forEach((hour,count)->result.merge(hour,count,Long::sum));
         return result;
     }
 
@@ -1616,10 +1616,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .addValue("end", timestampWithTimeZone(end));
         Map<String, BigDecimal> out = new java.util.LinkedHashMap<>();
         jdbcTemplate.query("""
-                SELECT m.meter_type, SUM(r.consumption) AS total
-                  FROM energy_meter_readings r
+                SELECT m.meter_type, SUM(r.effective_consumption) AS total
+                  FROM energy_effective_meter_readings r
                   JOIN energy_meters m ON m.id = r.meter_id
-                 WHERE r.read_at >= :start AND r.read_at < :end
+                 WHERE r.status='reviewed' AND r.read_at >= :start AND r.read_at < :end
                  GROUP BY m.meter_type
                  ORDER BY m.meter_type
                 """, params, rs -> {
@@ -1632,7 +1632,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     public long countAbnormalReadings(java.time.Instant start, java.time.Instant end) {
         Long value = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM energy_meter_readings
-                 WHERE abnormal_reason IS NOT NULL AND read_at >= :start AND read_at < :end
+                 WHERE (abnormal_reason IS NOT NULL OR prev_reading_value IS NULL) AND read_at >= :start AND read_at < :end
                 """, new MapSqlParameterSource()
                 .addValue("start", timestampWithTimeZone(start))
                 .addValue("end", timestampWithTimeZone(end)), Long.class);
@@ -1654,7 +1654,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                        r.consumption, r.abnormal_reason, r.read_at
                   FROM energy_meter_readings r
                   JOIN energy_meters m ON m.id = r.meter_id
-                 WHERE r.abnormal_reason IS NOT NULL AND r.read_at >= :start AND r.read_at < :end
+                 WHERE (r.abnormal_reason IS NOT NULL OR r.prev_reading_value IS NULL) AND r.read_at >= :start AND r.read_at < :end
                    AND (:all_projects OR m.project_id IN (:project_ids))
                  ORDER BY r.read_at DESC, r.id
                  LIMIT :limit OFFSET :offset
@@ -2182,10 +2182,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     public AnalyticsRecords.MetricDetailRows electricityReadingDetail(Instant start, Instant end, int limit, int offset) {
         MapSqlParameterSource params = pagedRangeParams(start, end, limit, offset);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
-                SELECT r.id, m.name AS meter_name, r.period, r.consumption, r.abnormal_reason, r.read_at
-                  FROM energy_meter_readings r
+                SELECT r.id, m.name AS meter_name, r.period, r.effective_consumption AS consumption, r.abnormal_reason, r.read_at
+                  FROM energy_effective_meter_readings r
                   JOIN energy_meters m ON m.id = r.meter_id
-                 WHERE m.meter_type = 'electricity'
+                 WHERE m.meter_type = 'electricity' AND r.status='reviewed'
                    AND r.read_at >= :start
                    AND r.read_at < :end
                  ORDER BY r.read_at DESC, r.id
@@ -2201,10 +2201,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
             return row;
         });
         return metricDetailRows(rows, jdbcTemplate.queryForMap("""
-                SELECT COUNT(*) AS total_rows, COALESCE(SUM(r.consumption), 0) AS summary
-                  FROM energy_meter_readings r
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(r.effective_consumption), 0) AS summary
+                  FROM energy_effective_meter_readings r
                   JOIN energy_meters m ON m.id = r.meter_id
-                 WHERE m.meter_type = 'electricity'
+                 WHERE m.meter_type = 'electricity' AND r.status='reviewed'
                    AND r.read_at >= :start
                    AND r.read_at < :end
                 """, params));

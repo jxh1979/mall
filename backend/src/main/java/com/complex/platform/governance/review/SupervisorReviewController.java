@@ -1,4 +1,5 @@
 package com.complex.platform.governance.review;
+// 文件版本：V0.01
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AccessService;
@@ -85,6 +86,11 @@ public class SupervisorReviewController {
     public ApiResponse<PageResponse<SupervisorReviewRepository.PendingReview>> listPending() {
         authorizationService.requirePermission("governance.supervisor_review.view");
         return ApiResponse.ok(service.listPending(200));
+    }
+
+    @GetMapping("/supervisor-review/{review_id}")
+    public ApiResponse<SupervisorReviewDecisionRecord> readReview(@PathVariable("review_id") String reviewId) {
+        return ApiResponse.ok(service.readReview(reviewId));
     }
 
     @PostMapping("/supervisor-review/{review_id}/forward")

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AdminDataState } from "../components/AdminDataState";
@@ -29,7 +29,7 @@ export function SiteEntryPropertyPage({ api, setActionResult, setGlobalError, ef
   });
   React.useEffect(() => {
     let active = true;
-    setHistory(null); setHistoryError(""); setNote("");
+    setHistory(null); setHistoryError("");
     if (selected?.id) api.get<SiteEntryHistoryRow[]>(`/api/v1/facility/site-entry-reports/${encodeURIComponent(selected.id)}/history`)
       .then(items => { if (active) setHistory(items); })
       .catch(() => { if (active) setHistoryError("材料历史读取失败，请重试"); });
@@ -47,7 +47,7 @@ export function SiteEntryPropertyPage({ api, setActionResult, setGlobalError, ef
       : { idempotencyKey: crypto.randomUUID(), result, acceptanceComment: note.trim(), completionSequence: latest!.sequence };
     const ok = await runAction("site_entry_" + stage, request,
       () => api.post(`/api/v1/facility/site-entry-reports/${encodeURIComponent(selected.id)}/${stage}`, request));
-    if (ok) setEpoch(value => value + 1);
+    if (ok) { setNote(""); setEpoch(value => value + 1); }
   }
 
   return <section data-testid="site-entry-property-page">
@@ -55,7 +55,7 @@ export function SiteEntryPropertyPage({ api, setActionResult, setGlobalError, ef
       description="查看报备范围与每轮实际材料，办理意见保留在原报备。" />
     <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
       <label>进场报备<select aria-label="进场报备" value={selected?.id ?? ""} disabled={busyAction !== ""}
-        onChange={event => setSelectedId(event.target.value)}>
+        onChange={event => { setSelectedId(event.target.value); setNote(""); }}>
         {rows.map(row => <option key={row.id} value={row.id}>{row.workScope} · {formatBusinessStatus(row.status)}</option>)}
       </select></label>
       {selected ? <div aria-label="报备详情">

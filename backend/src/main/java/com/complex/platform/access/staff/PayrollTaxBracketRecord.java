@@ -1,10 +1,9 @@
 package com.complex.platform.access.staff;
 
-/**
- * 个税税表档位（payroll_tax_brackets，V217）：劳务报酬预扣个税税表，按毛收入（分）分档。
- * 税额 = GREATEST(0, (毛收入*incomeBaseBps/10000 - flatDeductionCent)*rateBps/10000 - quickDeductionCent)。
- * 原写死在 closePayrollMonth 的 CASE WHEN，现落配置表；税法参数变更改配置不改代码。
- */
+// 文件版本：V0.01
+
+/** 旧单档税表的历史只读记录（V217）；本记录不再参与新工资计算。
+ * 新税表与认定按 PayrollTaxVersion / PayrollTaxAssessment 的完整审批版本办理。 */
 public record PayrollTaxBracketRecord(
         String id,
         String category,

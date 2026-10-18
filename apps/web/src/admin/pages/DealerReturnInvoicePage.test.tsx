@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -20,11 +20,13 @@ describe("DealerReturnInvoicePage 经销退货与开票（ADM-DLR-003）", () =>
         if (url.endsWith("/invoices")) return [{ id: "dinv_1", amountCent: 5000, status: "reversed", invoiceNo: "INV-1", reversedByReturnId: "dret_1" }, { id: "dinv_2", amountCent: 3000, status: "pending", reissuedFromInvoiceId: "dinv_1" }];
         if (url === "/api/v1/dealers/returns/dret_1") return retRow;
         if (url === "/api/v1/dealers/returns/dret_2") return { ...retRow, id: "dret_2", status: "pending_refund", refundApproved: true, returnFreightBearer: "pending_confirmation", freightConfirmed: false };
+        if (url.endsWith("/financial")) return { goodsAmountCent: 1000, goodsOffsetCent: 0, goodsRefundCent: 1000, goodsRefundedCent: 0, firstLegAdjustmentCent: 0, firstLegOffsetCent: 0, firstLegRefundCent: 0, firstLegRefundedCent: 0, refunds: [] };
         if (url.endsWith("/lines")) return [{ id: "drl_1", itemId: "item_a", spec: "箱", requestedQuantity: 4, acceptedQuantity: 0, resalableQuantity: 0, quarantinedQuantity: 0, unitPriceCent: 1000, acceptedAmountCent: 0 }];
         return [];
       }),
       getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
       post: vi.fn().mockResolvedValue({ id: "x", returnNo: "DR-NEW", status: "pending_refund", acceptedAmountCent: 3000, offsetReceivableCent: 2000, refundCent: 1000 }),
+      postForm: vi.fn().mockResolvedValue({ id: "evidence_actual" }),
       put: vi.fn().mockResolvedValue({}),
       patch: vi.fn().mockResolvedValue({}),
       delete: vi.fn().mockResolvedValue({}),
@@ -57,7 +59,25 @@ describe("DealerReturnInvoicePage 经销退货与开票（ADM-DLR-003）", () =>
     expect(reasons).toEqual(["未拆封可复售", "质量问题"]);
   });
 
-  it("验收、退款结果、运费确认与退货申请调用对应端点", async () => {
+  it("退货办理页读取原订单合同决定运费锁定，不采纳退货记录中的旧方案", async () => {
+    const api=makeApi(); const original=api.get;
+    api.get=vi.fn(async (url:string)=>{
+      if(url==="/api/v1/dealers/orders/dord_1") return {id:"dord_1",status:"partially_returned",contractSnapshot:{returnFreightBearer:"dealer",firstLegFreightRefundable:false}};
+      if(url==="/api/v1/dealers/returns/dret_2") return {...retRow,id:"dret_2",status:"completed",reasonType:"unopened_resalable",returnFreightBearer:"sales_entity",firstLegFreightRefundable:true};
+      return original(url);
+    }) as AdminApiClient["get"];
+    renderPage(api);
+    fireEvent.click(await screen.findByTestId("dealer-returns-select-dlr_1"));
+    fireEvent.click(await screen.findByTestId("return-order-select-dord_1"));
+    fireEvent.click(await screen.findByTestId("return-select-dret_2"));
+    await screen.findByTestId("freight-confirm");
+    const bearer=screen.getByTestId("freight-bearer") as HTMLSelectElement;
+    const refundable=screen.getByTestId("freight-first-leg") as HTMLInputElement;
+    expect(bearer.disabled).toBe(true);expect(bearer.value).toBe("dealer");
+    expect(refundable.disabled).toBe(true);expect(refundable.checked).toBe(false);
+  });
+
+  it("真实凭证验收、财务待办、运费确认与退货申请调用对应端点", async () => {
     const api = makeApi();
     const setActionResult = renderPage(api);
     await screen.findByTestId("dealer-returns-dealer-table");
@@ -68,20 +88,27 @@ describe("DealerReturnInvoicePage 经销退货与开票（ADM-DLR-003）", () =>
     fireEvent.click(screen.getByTestId("return-select-dret_1"));
     await screen.findByTestId("return-inspection-form");
     fireEvent.change(screen.getByTestId("inspection-lines-input"), { target: { value: "item_a,箱,3,2,1,一箱破损" } });
+    fireEvent.change(screen.getByTestId("inspection-evidence"), {target: {files: [new File(["actual"],"receipt.png",{type:"image/png"})]}});
+    await screen.findByText("receipt.png");
     fireEvent.click(screen.getByTestId("return-inspect"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/returns/dret_1/inspection", expect.objectContaining({
-      lines: [{ itemId: "item_a", spec: "箱", acceptedQuantity: 3, resalableQuantity: 2, quarantinedQuantity: 1, note: "一箱破损" }],
+      lines: [{ itemId: "item_a", spec: "箱", acceptedQuantity: 3, resalableQuantity: 2, quarantinedQuantity: 1, note: "一箱破损" }], evidenceAttachmentIds: ["evidence_actual"],
     })));
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "dealer_return_inspected", 冲减未收货款: "¥20", 待退款: "¥10" })));
 
     fireEvent.click(screen.getByTestId("return-select-dret_2"));
-    await screen.findByTestId("return-refund-success");
-    vi.spyOn(window, "prompt").mockReturnValue("RF-7");
-    fireEvent.click(screen.getByTestId("return-refund-success"));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/returns/dret_2/refund-result", expect.objectContaining({ result: "success", referenceNo: "RF-7" })));
+    await screen.findByTestId("return-refund-prepare");
+    expect(screen.queryByTestId("return-refund-success")).toBeNull();
+    expect(screen.queryByTestId("return-refund-failed")).toBeNull();
+    fireEvent.click(screen.getByTestId("return-refund-prepare"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/returns/dret_2/refunds/execute", expect.objectContaining({idempotencyKey:expect.any(String)})));
     fireEvent.change(screen.getByTestId("freight-bearer"), { target: { value: "sales_entity" } });
+    fireEvent.change(screen.getByTestId("freight-amount"), { target: { value: "0" } });
+    fireEvent.change(screen.getByTestId("freight-note"), { target: { value: "双方确认首程不退" } });
+    fireEvent.change(screen.getByTestId("freight-evidence"), {target: {files: [new File(["actual"],"agreement.png",{type:"image/png"})]}});
+    await screen.findByText("agreement.png");
     fireEvent.click(screen.getByTestId("freight-confirm"));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/returns/dret_2/freight-confirmation", expect.objectContaining({ returnFreightBearer: "sales_entity", firstLegFreightRefundable: false })));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/returns/dret_2/freight-confirmation", expect.objectContaining({ returnFreightBearer: "sales_entity", firstLegFreightRefundable: false, firstLegAdjustmentCent:0, evidenceAttachmentIds:["evidence_actual"] })));
 
     fireEvent.change(screen.getByTestId("return-reason"), { target: { value: "unopened_resalable" } });
     fireEvent.change(screen.getByTestId("return-lines-input"), { target: { value: "item_a,箱,2" } });

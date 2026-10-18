@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -280,19 +280,19 @@ public class JdbcStaffRepository {
         return jdbcTemplate.update("""
                 INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
                         bonus_cent, penalty_cent, leave_deduction_cent, tax_cent, total_cent, status, closed_by, closed_at, project_id, penalty_cap_bps,
-                        payer_company_id)
+                        payer_company_id, tax_assessment_id, tax_version_id)
                 SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
                        COALESCE(b.monthly_salary_cent, 0),
                        COALESCE(c.total, 0) + COALESCE(bc.total, 0),
                        COALESCE(adj.bonus, 0),
                        capped.penalty,
                        COALESCE(lv.deduction, 0),
-                       -- H批:对当月服务劳务(service_order 台账)按劳务报酬预扣预缴法定税表代扣个税(单位:分)。
+                       -- HP-H11：只使用专业认定并完成财税法/最高审批的税额，未认定由月结前置校验阻止。
                        COALESCE(tax.tax_cent, 0),
                        GREATEST(0, COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
                            + COALESCE(adj.bonus, 0) - capped.penalty - COALESCE(lv.deduction, 0) - COALESCE(tax.tax_cent, 0)),
                        -- CG-07（BSM「派驻人员的成本与报酬」）：发放主体＝人员所属主体，由其统一发放并代扣个人所得税。
-                       'closed', :closed_by, :now, sp.project_id, cap.value, sp.company_id
+                       'closed', :closed_by, :now, sp.project_id, cap.value, sp.company_id, tax.id, tax.tax_version_id
                   FROM (SELECT user_id FROM staff_base_salaries
                         UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
                         UNION SELECT user_id FROM staff_payroll_adjustments WHERE month = :month
@@ -313,23 +313,12 @@ public class JdbcStaffRepository {
                                              WHEN adj_type = 'penalty_reversal' THEN -amount_cent ELSE 0 END) AS penalty
                                FROM staff_payroll_adjustments WHERE month = :month GROUP BY user_id) adj
                          ON adj.user_id = u.user_id
-                  -- 个税可配置化(V217):劳务报酬预扣税表落 payroll_tax_brackets,按毛收入(svc,分)落档,
-                  -- 每档公式 GREATEST(0,(svc*base_bps/10000 - flat_deduction)*rate_bps/10000 - quick_deduction)。
-                  -- 整除链与原 CASE WHEN 逐分等价;税法参数变更改配置表不改代码。svc<=0 无 service_order 劳务→无档匹配→tax 0。
-                  -- 🔴 R-7:个税整除链【刻意保持截断】(2026-07-28 用户拍板)——与税局申报口径对齐,改四舍五入会使代扣申报对不上;
-                  --    与 DividendMath 的代扣个税同口径。全局「金额四舍五入到分」(D15.1)对本式【不适用】。
-                  LEFT JOIN (SELECT sb.user_id,
-                                    GREATEST(0,
-                                        (sb.svc * br.income_base_bps / 10000 - br.flat_deduction_cent)
-                                            * br.rate_bps / 10000 - br.quick_deduction_cent) AS tax_cent
-                               FROM (SELECT user_id, SUM(amount_cent) AS svc FROM staff_commission_ledger
-                                      WHERE month = :month AND source_type = 'service_order'
-                                      GROUP BY user_id) sb
-                               JOIN payroll_tax_brackets br
-                                 ON br.category = 'labor_remuneration'
-                                AND sb.svc >= br.income_floor_cent
-                                AND (br.income_ceiling_cent IS NULL OR sb.svc <= br.income_ceiling_cent)) tax
-                         ON tax.user_id = u.user_id
+                  LEFT JOIN (SELECT DISTINCT ON (a.user_id) a.user_id,a.id,a.tax_cent,a.tax_version_id
+                               FROM payroll_tax_assessments a
+                               LEFT JOIN staff_payroll_statements locked ON locked.user_id=a.user_id AND locked.month=a.month
+                              WHERE a.month=:month AND a.status='approved'
+                                AND (locked.tax_assessment_id IS NULL OR locked.tax_assessment_id=a.id)
+                              ORDER BY a.user_id,a.created_at DESC,a.id DESC) tax ON tax.user_id=u.user_id
                   -- BSM-1.18.2：普通处罚合计按「总薪资」比例封顶。HTML 总薪资＝基础工资+各项补贴+绩效工资+奖金；
                   -- 现行 schema 只有固定工资与奖金两列，先取全这两项，补贴/绩效列落地后并入分母（U05-004）；提成不入分母，事假另算。
                   CROSS JOIN LATERAL (
@@ -382,6 +371,8 @@ public class JdbcStaffRepository {
                     penalty_cent = EXCLUDED.penalty_cent,
                     leave_deduction_cent = EXCLUDED.leave_deduction_cent,
                     tax_cent = EXCLUDED.tax_cent,
+                    tax_assessment_id = EXCLUDED.tax_assessment_id,
+                    tax_version_id = EXCLUDED.tax_version_id,
                     total_cent = EXCLUDED.total_cent,
                     closed_by = EXCLUDED.closed_by,
                     closed_at = EXCLUDED.closed_at,
@@ -563,7 +554,7 @@ public class JdbcStaffRepository {
             String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent,
-                       leave_deduction_cent, tax_cent, total_cent, closed_by, closed_at, payer_company_id
+                       leave_deduction_cent, tax_cent, total_cent, closed_by, closed_at, payer_company_id, tax_assessment_id, tax_version_id
                   FROM staff_payroll_statements
                  WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)
                    AND (:project_scope::text IS NULL OR project_id = :project_scope)
@@ -579,7 +570,7 @@ public class JdbcStaffRepository {
                 rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
                 rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
                 rs.getLong("penalty_cent"), rs.getLong("leave_deduction_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
-                rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant(), rs.getString("payer_company_id"));
+                rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant(), rs.getString("payer_company_id"), rs.getString("tax_assessment_id"), rs.getString("tax_version_id"));
     }
 
     private static final String STAFF_MERCHANT_FILTER =
@@ -668,7 +659,7 @@ public class JdbcStaffRepository {
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         java.util.List<StaffPayrollStatementRecord> items = jdbcTemplate.query(
                 "SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent, leave_deduction_cent, "
-                        + "tax_cent, total_cent, closed_by, closed_at, payer_company_id FROM staff_payroll_statements " + where
+                        + "tax_cent, total_cent, closed_by, closed_at, payer_company_id, tax_assessment_id, tax_version_id FROM staff_payroll_statements " + where
                         + " ORDER BY user_id, id LIMIT :limit OFFSET :offset",
                 params, this::mapPayrollStatement);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);

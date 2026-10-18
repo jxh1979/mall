@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -1788,6 +1788,15 @@ public class AnalyticsService {
         }
 
         Instant now = Instant.now(clock);
+        if ("amusement".equals(definition.windowDomain())) {
+            AnalyticsRecords.MetricDetailRows detail=repository.amusementComplexDetail(definition.metricKey(),from,to,now,
+                    definition.rangeFilterOptional() && !MetricRegistry.TYPE_BALANCE.equals(definition.valueType()),safeSize,offset,scope);
+            String note="amusement.session_capacity".equals(definition.metricKey())
+                    ? "项目硬安全容量按当前唯一游乐项目合计，日期不改变当前配置值"
+                    : "日期按各综合体所在地已批准的游乐营业日版本分桶；已锁定历史记录保留原归属";
+            return assembleMetricDetail(definition,null,from,to,now,detail.summaryValue(),null,null,
+                    appendProjectScopeNote(note,scope),definition.columns(),detail,safePage,safeSize,true);
+        }
         LocalDate currentBusinessDay = businessDayResolver.businessDate(definition.windowDomain(), now);
 
         if (MetricRegistry.TYPE_BALANCE.equals(definition.valueType())) {

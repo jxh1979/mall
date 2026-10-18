@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -12,7 +12,7 @@ import type { AdminPageProps } from "../types";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
-type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; leaveDeductionCent?: number; taxCent?: number; totalCent?: number; payerCompanyId?: string | null };
+type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; leaveDeductionCent?: number; taxCent?: number; totalCent?: number; payerCompanyId?: string | null; taxAssessmentId?: string | null; taxVersionId?: string | null };
 // CG-07 提成月结拨付（bar_commission_settlements）：酒吧 → 人员所属主体 → 月，一组一条内部结算应付。
 type CommissionSettlementRow = { id: string; month?: string; merchantId?: string | null; companyId?: string | null; amountCent?: number; calculationCount?: number; staffCount?: number; arApItemId?: string | null; dueDate?: string | null };
 const cnDay = (value?: string | null) => (value ? value.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日") : "—");
@@ -201,6 +201,8 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         { label: "处罚", value: money(row.penaltyCent) },
         { label: "请假扣薪", value: money(row.leaveDeductionCent) },
         { label: "代扣个税", value: money(row.taxCent) },
+        { label: "锁定税务认定", value: row.taxAssessmentId ?? "原历史单未关联" },
+        { label: "锁定税表版本", value: row.taxVersionId ?? "原历史单未关联" },
         { label: "实发合计", value: money(row.totalCent) },
         { label: "薪资单号", value: row.id },
       ],

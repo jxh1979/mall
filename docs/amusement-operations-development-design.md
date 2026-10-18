@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.12
+# 游乐设施运营系统开发设计文档 V0.13
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.12 ｜ 最后更新：2026-10-17 ｜ 迁移证据：保留原 V385 基线及正文后续迁移记录，TK-07/12 新增 V461，TK-07 原订单项目快照 V463 ｜ 状态：现行；本批同步 TK-07/08/12 实现
+> 版本：V0.13 ｜ 最后更新：2026-10-18 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -301,7 +301,11 @@ stateDiagram-v2
 
 - 游乐规则中的“当天”“每天”一律按营业日计算，默认当日 10:00 至次日 10:00；每个综合体的游乐业务统一一套营业日，不同综合体分别配置，不按单项游乐设备配置，也不是全平台共用一个 amusement 域取值。起止时点仍为安全阈值，调整须最高权限审批、留痕并配置上下限。
 - 日期、场次归属与巡检有效期必须使用项目所在地时区，禁止使用服务器默认时区；配置变更只影响未来记录，不回改历史。
-- 当前 `TicketVerificationService` 仍以 `ZoneId.systemDefault()` 计算自然日，这是待修代码缺口，不得作为业务口径。
+- **TK-17 配置及统计实现（V483）**：`amusement_business_day_configs` 按真实综合体存所在地时区、日切小时、上下限、未来生效时间、审批原件和版本；审批沿真实组织链及最高权限终审。审批晚于拟生效时点时标记过期并重新提交，不倒填生效。旧全域 amusement 日切写入口拒绝，不生成全局假配置。
+- `AmusementBusinessDayService` 计算各综合体有效窗口，入场与场次保存当时版本和起止边界；指标明细、聚合与小时客流共用 `AmusementBusinessDayAnalytics`，综合体范围按实际归属过滤；缺资料不以服务器时区或其他域窗口替代。
+- 后台入口 `ADM-AMU-008` 提交完整新旧快照并可查看审批原件；证据上传与读取分别核业务权限和证据权限的真实综合体交集。
+- **当天无限票入场实现（V487）**：两种在线核销入口通过 `TicketAmusementAdmissionService` 和现有共享幂等链办理；真实综合体已审批窗口写入 `entitlement_business_day_activations`，首刷扣一次，同一锁定窗口再次入场不重复扣次或发送奖励、结算事件。每次真实入场都保留游乐与票务关联事实；缺真实游乐项目明确拒绝，不再回退服务器自然日。容量失败仅回补本次尚未完成入场的激活，冲正保留原件。真实终端编号与游乐资产码分别核对，不把资产码写进票务终端外键；动态凭证按请求令牌与持久化摘要对应事实验签，不恢复明文存储。
+- **验证边界**：当天无限、真实凭证及24小时奖励链、出场并发、闭场／暂停后的原请求重放和离线拒绝记录的范围隔离已完成定向数据库测试；撤权或改变原请求事实仍拒绝。游乐离线请求不消费权益，不能写入别的综合体票下的拒绝记录。出口自动感应、真实设备与外部供应商联调另列，不能据此宣称完整设备链交付。
 
 > **~~三维度容量校验规则~~（修订说明 2026-06-07，amuse-1 / PRD §11 已确认规则 1）——本规则于 2026-08-06 R10 整块废止**：
 > 依据 BSM「容量控制」条「只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量」
@@ -312,10 +316,10 @@ stateDiagram-v2
 > 1. 判定基准只有一个——该游乐项目的**实时在玩人数**；排队人数不占用容量，排队本身不设人数上限。
 > 2. **安全容量（硬上限）**：物理满员即阻断核销入场并自动让该项目停止运营，任何岗位、任何处置方式都不可绕过。
 > 3. **运营容量（软上限）**：仅经营建议线，超过时告警提示、仍可放行；处置方式后台可配「记录异常事件」（出厂默认）或「仅提示」，两者都不改变硬上限的阻断与自动停运。
-> 4. `amusement_sessions.capacity`/`used_capacity`、`amusement_capacity_config.max_concurrent`、`amusement_device.max_concurrent` 等场次维与点位/设备维字段**不再参与放行判定**，待代码轮下线。
+> 4. `amusement_sessions.capacity`/`used_capacity`、`amusement_capacity_config.max_concurrent`、`amusement_device.max_concurrent` 等场次维与点位/设备维字段**不再参与放行判定**；TK-15 已将核销与软告警改为单项目实时人数，创建场次只接受省略/零容量，旧点位容量新增入口明确拒绝。
 
 > **超容/争议口径对齐（P0）（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)）：**
-> 依据业务HTML #amusement「记录巡检、暂停、关闭、故障、超容和游客争议」列为 P0。当前代码仍通过 `claimCapacityAcrossDimensions` 执行已废止的场次/点位设备/项目三维 claim；任一维度耗尽时会调用 `recordOverCapacity` 落 `over_capacity` incident 和 `amusement.incident.over_capacity` 事件，其中硬超容联动 `open → paused`。三维 claim 本身须改为单项目实时在玩人数，但事件落库与硬上限停运链可复用。本节目标如下：
+> 依据业务HTML #amusement「记录巡检、暂停、关闭、故障、超容和游客争议」列为 P0。TK-15 保留既有方法调用链并将容量原子占用收口为项目实时在场快照，场次与点位不再分别阻断。硬超容仍记录 `over_capacity` 事件并联动 `open → paused`；软告警读取同一项目真实人数，团体批准不占实时人数。本节目标如下：
 > 1. **incident_type 的 `over_capacity` 独立枚举已实现**（见 §7.15），超容不与 fault/risk 混并，可独立筛选与复核。
 > 2. **超容除报警外必须落 incident 事件**：触发项目安全容量硬上限时，除拒绝与自动停运外，必须落一条 `amusement.incident.over_capacity` 事件（见 §11），写入项目、触发时实时在玩人数、容量上限和来源终端，使其成为可后续复核的独立事件，而非仅瞬时告警。
 > 3. **游客争议（complaint）入口与状态机确认为 P0**：投诉/争议作为 `incident_type = complaint` 走 §5.7 事故状态机（reported→acknowledged→processing→…→resolved/closed），P0 必须有上报入口与可复核留痕；其工单深度处理可延后，但"可记录可复核"为 P0 口径（与 §2.1「P0 只记录与核销、安全阻断相关的事件留痕」相比，本次把 over_capacity 与 complaint 的"记录+复核"上提为 P0）。
@@ -327,7 +331,7 @@ stateDiagram-v2
 > **✅ 已实现修复（F-OPS-03，2026-06-22，已在 .160 编译通过）**：上条"处置模式后台可切换为仅告警留痕"的可切换语义**严格限定在软上限（运营容量）一侧**，硬上限（安全容量）不受处置模式影响——收口口径如下：
 > 1. **硬安全容量禁 `warn_only` 旁路**：处置模式 `warn_only` 仅作用于**软上限（运营容量）**告警放行；**硬上限（`amusement_projects.capacity` 传入的项目安全容量）任何处置模式都阻断核销**（当前失败码仍为 `session_full`/`SESSION_CAPACITY_EXHAUSTED`，命名待收口），不存在“切到 warn_only 即可超过安全容量放行”的旁路。
 > 2. **over_capacity 事件 severity 恒 `high` 触发自动停运**：硬上限维超容落 `amusement.incident.over_capacity` 事件时 `severity` **恒为 `high`**，并据此自动把项目 `open → paused`（停运），不依赖人工处置。软上限告警放行落的 over_capacity 事件按告警口径，不强制停运。
-> 3. 与 §5.1 状态机一致：自动停运走 `open → paused`（§5.1 已有 `open --> paused` 流转）。因达到单个项目硬安全容量而自动停运的项目，仅在该项目实时在玩人数回落到硬上限以下，且系统校验现有开放前安全巡检合格、无阻断项后，才自动恢复为 `open`；沿用现有合格巡检，不要求每次超容恢复都重新巡检，不新增主管确认前置。上述恢复条件为本轮批准的目标，本文同步不代表代码已完成。
+> 3. 与 §5.1 状态机一致：自动停运走 `open → paused`（§5.1 已有 `open --> paused` 流转）。因达到单个项目硬安全容量而自动停运的项目，仅在该项目实时在玩人数回落到硬上限以下，且系统校验现有开放前安全巡检合格、无阻断项后，才自动恢复为 `open`；沿用现有合格巡检，不要求每次超容恢复都重新巡检，不新增主管确认前置。TK-16 已在项目人数变化的同一行锁下校验此恢复条件，仅豁免本次硬超容自动暂停本身，事故、人工暂停或巡检阻断仍不得恢复。
 
 > **离线核销下线口径（M07）**：Android 端已有本地权益摘要、待同步流水和恢复联网同步实现，但 HTML 明确游乐权益必须在线核验、不做离线核销。该实现登记为须下线，禁止新增离线核销、待同步或冲突流水。
 
@@ -1180,16 +1184,15 @@ com.complex.amusement
 - dto
 - mapper
 
-## 15C. 在玩人数系统自动清零（CG-03，迁移 V448，依据 BSM「出场自动扣减」「在玩人数不允许人工调整」）
+## 15C. 场次结束与营业日人数释放（TK-17/18，迁移 V483/V484）
 
-以下表、作业及调用顺序为既有实现记录；本轮批准的综合体配置范围、提前结束与展示要求列在后文，尚须实施验证。
+- **原件及数量来源**：`amusement_session_endings` 保存原计划结束、实际结束、自然/提前模式、确认人员与时刻、原因、凭证及锁定的综合体营业日；场次、成功入场和释放记录保存相同来源事实。计划时间和原核销不回改。项目快照只减少本次确实释放的未出场人数，不能以场次结束清空整个项目。
+- **自然结束及营业日结束**：沿原调度入口调用 `AmusementSessionLifecycleService`，按场次或入场锁定的营业日边界逐批释放；新营业日已入场的人不被旧日处理误扣。每条成功入场只能释放一次，结束后的原入场再次出场不扣新人。缺真实来源和生效版本保留待处理，不猜默认边界，不为旧数据补造事实。
+- **实际清场后提前结束**：`POST /amusement/sessions/{id}/end` 需 `amusement.session.end` 权限及实际综合体、商户交集；提交实际清场确认、时刻、原因与真实附件。只允许开放中、原计划区间内、不在未来且清场时刻之后没有新入场的记录；项目行锁与核销共用。此操作不接受手填人数。
+- **未履约事项**：`amusement_session_followups` 关联原入场、个人预约、团体预约及原票；展示真实后续取消/补偿结果。只读待办不能凭备注或勾选结案，不虚构退款、不把局部场次事件假定为全园故障。
+- **读取与页面**：`GET /amusement/sessions/{id}/endings`、`/followups` 需场次查看权限；`GET /amusement/count-releases` 需核销查看权限，按锁定综合体及实际商户过滤。项目场次页提供结束原件和待办，核销记录页展示系统释放来源、边界、执行时间及人数。
+- **验证边界**：新链仍须完成真实竞争事务与全部回归；旧表字段保留并不构成新的场次容量或人工改数入口。后续真实补偿结果的完整承接随 TK-09/10/14 独立验证。
 
-- **留痕表** `amusement_concurrent_reset_log`（project_id、scope business_day_end|session_end、business_date、session_id、cleared_rows、cleared_people、boundary_at、reset_at）；部分唯一索引 `(project_id, business_date) WHERE scope='business_day_end'`、`(session_id) WHERE scope='session_end'`。
-- **作业** `AmusementConcurrentCountResetJob`（`@Scheduled` 薄包装，`amusement.concurrent-reset.scheduled.enabled` 默认 false，`fixed-delay-ms` 默认 60000）→ `AmusementService.closeEndedSessionsAndClearCounts(now)` + `resetConcurrentCountsAtBusinessDayEnd(now)`。
-- **场次结束**：`listEndedUnclosedSessions`（status IN scheduled/open AND end_time ≤ now）→ `closeSessionIfEnded`（置 closed）→ `zeroSessionConcurrentSnapshots`（该场次维 + 该项目 project/point_device 维 occupied_count=0）→ 留痕（session_end）+ 审计 `amusement.concurrent_count.session_end_cleared`。
-- **营业日结束**：`BusinessDayResolver`（amusement 域日切）算上一营业日结束时刻 dayEnd → `zeroStaleConcurrentSnapshots(project, dayEnd)`（只清 updated_at < dayEnd 且 occupied_count>0 的 project/point_device 维行，新营业日的计数不动）→ 留痕（business_day_end，含清零行数与人数）+ 审计 `amusement.concurrent_count.business_day_reset`；留痕先插（ON CONFLICT DO NOTHING）再清，重复调度不重复清、不重复记。 该旧 amusement 域日切必须按 §6.4.2 承接每综合体一套配置，不得用全平台单键代替综合体关联。
-- **批准的提前结束与展示要求**：既有作业未提供人工提前结束入口；后续承接 §5.2/§6.4.1 的「授权现场负责人确认实际清场完成后结束项目场次」，由结束事件触发清零，不提供人工改人数。游乐核销记录页单列系统清零留痕区块，显示来源场次或营业日、系统执行结果并保留原核销记录；本轮未新增接口或修改代码。
-- **未含**：场次型 / 非场次型显式字段（待裁决）；`amusement_sessions.used_capacity`（历史场次席位维）不在本作业清零范围。
 ## 15A. 全园故障状态（CG-08a，迁移 V446，依据 ENUM「全园故障与补偿通票」）
 
 - **表**：`amusement_park_wide_faults`（id、project_id→projects、status pending_activation|active|pending_lift|lifted、reason、initiated_by/role/at、activation_confirmed_by/role、activated_at、lift_initiated_by/role/at、lift_reason、lift_confirmed_by/role、lifted_at；部分唯一索引 `(project_id) WHERE status <> 'lifted'`：同综合体同一时刻只允许一条未解除记录）；`amusement_park_wide_fault_actions`（fault_id、action initiate|confirm_activation|initiate_lift|confirm_lift、actor_id、actor_role、note、created_at）。
@@ -1255,6 +1258,7 @@ P0 完成时必须满足：
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
 | 2026-10-17 | 改 | §16 | V0.10：验收清单明确为故障解除后才原入场者取消补偿，与 §6.8 及 C09 一致，不扩大至故障期间已经原入场并受影响者 | C09 最终裁决及本轮逐句核验 |
+| 2026-10-18 | 改/增 | §6.4、§15C | V0.13：同步项目实时容量、巡检恢复、综合体审批营业日版本、实际清场与按原入场事实释放；两入口真实日窗激活及关联票务、凭证验签和设备来源区分，保留未完成验收范围 | 已批准业务规则；TK-15/16/17/18，V483/V484/V487 |
 | 2026-10-17 | 改/增 | §5.2/5.5、§6.4/6.8、§15A—C、§16 | V0.09：同步核销五态、履约争议复核、每综合体营业日、清场后提前结束及展示、停售晚回流处理、权益级停核销、补偿资格/范围/展示；既有实现与批准目标分别说明 | 本轮已批准 BSM/ENUM 对应条目，C03/C08/C09及附件32/34/35/40/43/45 |
 | 2026-10-17 | 增 | 抬头、§15C | V0.08：CG-03 在玩人数系统自动清零作业、留痕表、两条清零规则与审计事件 | BSM「出场自动扣减」「在玩人数不允许人工调整」条；迁移 V448 |
 | 2026-10-17 | 增 | 抬头、§15B | V0.07：CG-08b 补偿通票数据模型、快照与发放规则、核销挂钩、端点与后台页 | ENUM「全园故障与补偿通票」条；迁移 V447 |

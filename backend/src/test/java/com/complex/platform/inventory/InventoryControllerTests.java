@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -134,7 +134,6 @@ class InventoryControllerTests {
     @CsvSource({
             "GET,/api/v1/inventory/items,inventory.stock.view",
             "POST,/api/v1/inventory/items,inventory.stock.move",
-            "GET,/api/v1/inventory/purchase-requests,inventory.purchase_request.view",
             "POST,/api/v1/inventory/purchase-requests,inventory.purchase_request.manage",
             "GET,/api/v1/inventory/saved-bottles,bar.saved_bottle.manage",
             "POST,/api/v1/inventory/saved-bottles,bar.saved_bottle.manage",
@@ -184,6 +183,15 @@ class InventoryControllerTests {
         }
 
         verify(authorizationService).requirePermission(permission);
+    }
+
+    @org.junit.jupiter.api.Test
+    void purchaseListPreservesAuditedServicePermissionFailure() throws Exception {
+        when(service.listPurchaseRequests()).thenThrow(com.complex.platform.common.api.ApiException.forbidden(
+                "PERMISSION_DENIED", "无权查看采购申请"));
+        mockMvc.perform(get("/api/v1/inventory/purchase-requests").with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden());
+        verify(service).listPurchaseRequests();
     }
 
     @ParameterizedTest
@@ -464,6 +472,11 @@ class InventoryControllerTests {
 
     @TestConfiguration
     static class TestBeans {
+        @Bean
+        PurchaseWorkflowService purchaseWorkflowService() {
+            return Mockito.mock(PurchaseWorkflowService.class);
+        }
+
         @Bean
         InventoryService inventoryService() {
             return Mockito.mock(InventoryService.class);

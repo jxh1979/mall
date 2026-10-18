@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -130,4 +130,13 @@ public class DealerPortalController {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestReturn(id, request));
     }
+    @GetMapping("/orders/{id}/return-sources")
+    public ApiResponse<java.util.List<JdbcDealerReturnRepository.ReturnSource>> returnSources(@PathVariable String id) {
+        return ApiResponse.ok(service.returnSources(id));
+    }
+    @GetMapping("/orders/{id}/return-financials")
+    public ApiResponse<java.util.List<DealerReturnFinancialRecord>> returnFinancials(@PathVariable String id) {
+        return ApiResponse.ok(service.returnFinancials(id));
+    }
+
 }
