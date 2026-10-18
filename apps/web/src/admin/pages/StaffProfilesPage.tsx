@@ -23,7 +23,21 @@ type StaffProfileRow = {
   deleteStatus?: string;
 };
 
+// CG-07 派驻记录（staff_dispatch_records）：员工、所属主体（登记时取自员工档案）、派驻酒吧、派驻起止时间。
+type StaffDispatchRow = {
+  id: string;
+  userId?: string | null;
+  companyId?: string | null;
+  merchantId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  status?: string;
+  note?: string | null;
+};
+
 const EMPLOYMENT = { pending_entry: "待入职", employed: "在职", trial: "试岗", suspended: "停岗", departed: "离职" };
+const DISPATCH_STATUS: Record<string, string> = { active: "进行中", ended: "已结束" };
+const todayIso = () => new Date().toISOString().slice(0, 10);
 const MANAGE = ["staff.profile.review"];
 
 /**
@@ -44,6 +58,13 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
   const [initialPassword, setInitialPassword] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submittingId, setSubmittingId] = React.useState("");
+  // CG-07 派驻记录登记/结束（BSM「派驻人员的成本与报酬」：所属主体、派驻酒吧、派驻起止时间须分别记录）。
+  const [dispatches, setDispatches] = React.useState<StaffDispatchRow[]>([]);
+  const [dispatchUser, setDispatchUser] = React.useState("");
+  const [dispatchMerchant, setDispatchMerchant] = React.useState("");
+  const [dispatchStart, setDispatchStart] = React.useState(todayIso);
+  const [dispatchNote, setDispatchNote] = React.useState("");
+  const [dispatchEndDate, setDispatchEndDate] = React.useState(todayIso);
   // U03-008：默认不把已存档档案（含脱敏手机号）下到浏览器；勾选后才带 include_archived=true 重新拉取，不在客户端过滤。
   const [includeArchived, setIncludeArchived] = React.useState(false);
   const includeArchivedRef = React.useRef(false);
@@ -52,8 +73,12 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const items = await api.get<StaffProfileRow[]>(includeArchivedRef.current ? "/api/v1/staff/profiles?include_archived=true" : "/api/v1/staff/profiles");
+      const [items, dispatchItems] = await Promise.all([
+        api.get<StaffProfileRow[]>(includeArchivedRef.current ? "/api/v1/staff/profiles?include_archived=true" : "/api/v1/staff/profiles"),
+        api.get<StaffDispatchRow[]>("/api/v1/staff/dispatches"),
+      ]);
       setRows(items ?? []);
+      setDispatches(Array.isArray(dispatchItems) ? dispatchItems : []);
     },
     { onError: setGlobalError, fallbackMessage: "员工档案读取失败" },
   );
@@ -134,6 +159,39 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
     } finally {
       setSubmittingId("");
     }
+  }
+
+  async function createDispatch() {
+    if (!dispatchUser.trim() || !dispatchMerchant.trim() || !dispatchStart) {
+      setFormError("登记派驻须填写员工账号、派驻酒吧与开始日期。");
+      return;
+    }
+    setFormError("");
+    setSubmittingId("dispatch-create");
+    try {
+      await api.post("/api/v1/staff/dispatches", {
+        userId: dispatchUser.trim(), merchantId: dispatchMerchant.trim(), startDate: dispatchStart, note: dispatchNote.trim() || undefined,
+      });
+      setActionResult({ 结果: "派驻记录已登记", 员工账号: dispatchUser.trim(), 派驻酒吧: dispatchMerchant.trim(), 开始日期: dispatchStart });
+      setDispatchUser(""); setDispatchMerchant(""); setDispatchNote("");
+      await reload();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "派驻登记失败");
+    } finally { setSubmittingId(""); }
+  }
+
+  async function endDispatch(row: StaffDispatchRow) {
+    if (!reason.trim()) { setFormError("结束派驻须填写改动事由。"); return; }
+    setFormError("");
+    setSubmittingId(row.id);
+    try {
+      await api.post(`/api/v1/staff/dispatches/${encodeURIComponent(row.id)}/end`, { endDate: dispatchEndDate, reason: reason.trim() });
+      setActionResult({ 结果: "派驻记录已结束", 派驻记录: row.id, 结束日期: dispatchEndDate });
+      setReason("");
+      await reload();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "结束派驻失败");
+    } finally { setSubmittingId(""); }
   }
 
   return (
@@ -223,6 +281,45 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
           </table>
         </div>
       </AdminDataState>
+      <h3>派驻记录（所属主体 → 派驻酒吧 · 起止时间）</h3>
+      <p className="admin-muted-action">
+        派驻期间在该酒吧促成订单的提成，由该酒吧按月拨付给人员所属主体，列入本人工资单由所属主体统一发放并代扣个人所得税（拨付走内部结算应付，按三个付账日结清）。
+        所属主体登记时取自员工档案的所属公司；结束派驻须填写上方改动事由。
+      </p>
+      <div className="admin-form-row" data-testid="staff-dispatch-editor">
+        <label>员工账号<input aria-label="派驻员工账号" data-testid="staff-dispatch-user" value={dispatchUser} onChange={(event) => setDispatchUser(event.target.value)} /></label>
+        <label>派驻酒吧（商户编号）<input aria-label="派驻酒吧" data-testid="staff-dispatch-merchant" value={dispatchMerchant} onChange={(event) => setDispatchMerchant(event.target.value)} /></label>
+        <label>开始日期<input type="date" aria-label="派驻开始日期" data-testid="staff-dispatch-start" value={dispatchStart} onChange={(event) => setDispatchStart(event.target.value)} /></label>
+        <label>备注<input aria-label="派驻备注" data-testid="staff-dispatch-note" value={dispatchNote} onChange={(event) => setDispatchNote(event.target.value)} /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="staff-dispatch-create"
+          disabled={submittingId === "dispatch-create"} onClick={() => void createDispatch()}>登记派驻</PermissionButton>
+        <label>结束日期<input type="date" aria-label="派驻结束日期" data-testid="staff-dispatch-end-date" value={dispatchEndDate} onChange={(event) => setDispatchEndDate(event.target.value)} /></label>
+      </div>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="staff-dispatch-table">
+          <thead>
+            <tr><th>员工账号</th><th>所属主体</th><th>派驻酒吧</th><th>开始日期</th><th>结束日期</th><th>状态</th><th>备注</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            {dispatches.length === 0 ? <tr><td colSpan={8}>暂无派驻记录</td></tr> : dispatches.map((row) => (
+              <tr key={row.id} data-testid={`staff-dispatch-row-${row.id}`}>
+                <td className="admin-id-cell" title={row.userId ?? ""}>{row.userId ?? "—"}</td>
+                <td>{row.companyId ?? "—"}</td>
+                <td>{row.merchantId ?? "—"}</td>
+                <td>{row.startDate ?? "—"}</td>
+                <td>{row.endDate ?? "—"}</td>
+                <td data-testid={`staff-dispatch-status-${row.id}`}>{DISPATCH_STATUS[row.status ?? ""] ?? formatBusinessStatus(row.status)}</td>
+                <td>{row.note ?? "—"}</td>
+                <td>
+                  {row.status === "active" ? <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
+                    data-testid={`staff-dispatch-end-${row.id}`} disabled={submittingId === row.id}
+                    onClick={() => void endDispatch(row)}>结束派驻</PermissionButton> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

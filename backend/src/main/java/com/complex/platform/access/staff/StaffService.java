@@ -1236,6 +1236,212 @@ public class StaffService {
         return actor == null || actor.id() == null ? "system" : actor.id();
     }
 
+    // ============================================================
+    // CG-07 派驻记录（BSM「派驻人员的成本与报酬」：所属主体、派驻酒吧、派驻起止时间须分别记录、可分别统计）
+    // ============================================================
+
+    /** CG-07：应收应付台账写入端口（提成月结内部结算应付）。字段注入免改构造点；无容器单测为 null 则不挂账。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.finance.FinanceRepository financeRepository;
+
+    /** 登记派驻：所属主体取自员工档案 company_id；同一员工在同一酒吧只能有一条进行中的派驻。需 staff.profile.review。 */
+    public StaffDispatchRecord createDispatch(com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request) {
+        try {
+            authorizationService.requirePermission("staff.profile.review");
+            return idempotencyService.execute("createStaffDispatch",
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doCreateDispatch(request), StaffDispatchRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.dispatch.create_failed", "staff.profile.review",
+                    "staff_dispatch_record", request == null ? null : request.userId(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private StaffDispatchRecord doCreateDispatch(com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request) {
+        if (request == null || trimToNull(request.userId()) == null || trimToNull(request.merchantId()) == null
+                || trimToNull(request.startDate()) == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写员工、派驻酒吧与起始日期");
+        }
+        java.time.LocalDate start = parseDate(request.startDate(), "起始日期");
+        String userId = request.userId().trim();
+        String merchantId = request.merchantId().trim();
+        requireUserInScope(userId);
+        StaffProfileRecord profile = repository.findProfileByUserId(userId)
+                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在"));
+        if (trimToNull(profile.companyId()) == null) {
+            throw ApiException.conflict("STAFF_COMPANY_REQUIRED", "员工档案未归属主体，不能登记派驻");
+        }
+        if (repository.hasActiveDispatch(userId, merchantId)) {
+            throw ApiException.conflict("STAFF_DISPATCH_ALREADY_ACTIVE", "该员工在该酒吧已有进行中的派驻记录");
+        }
+        Instant now = Instant.now();
+        StaffDispatchRecord saved = repository.saveDispatch(new StaffDispatchRecord(
+                "dsp_" + UUID.randomUUID(), userId, profile.companyId(), merchantId, profile.projectId(),
+                start, null, "active", trimToNull(request.note()), actorIdOrSystem(authorizationService.currentActor()), now, null, null));
+        auditEventService.recordSuccess("staff.dispatch.created", "staff.profile.review", "staff_dispatch_record",
+                saved.id(), null, request.idempotencyKey(), Map.of("user_id", userId, "merchant_id", merchantId,
+                        "company_id", saved.companyId(), "start_date", start.toString()));
+        return saved;
+    }
+
+    /** 结束派驻：结束日期默认当日，不得早于起始日期。需 staff.profile.review。 */
+    public StaffDispatchRecord endDispatch(String dispatchId, com.complex.platform.access.staff.dto.StaffDispatchEndRequest request) {
+        try {
+            authorizationService.requirePermission("staff.profile.review");
+            return idempotencyService.execute("endStaffDispatch",
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doEndDispatch(dispatchId, request), StaffDispatchRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.dispatch.end_failed", "staff.profile.review",
+                    "staff_dispatch_record", dispatchId, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private StaffDispatchRecord doEndDispatch(String dispatchId, com.complex.platform.access.staff.dto.StaffDispatchEndRequest request) {
+        StaffDispatchRecord current = repository.findDispatchById(requireText(dispatchId, "dispatch_id"))
+                .orElseThrow(() -> ApiException.notFound("STAFF_DISPATCH_NOT_FOUND", "派驻记录不存在"));
+        requireUserInScope(current.userId());
+        if (!"active".equals(current.status())) {
+            throw ApiException.conflict("STAFF_DISPATCH_ALREADY_ENDED", "该派驻记录已结束");
+        }
+        java.time.LocalDate end = request == null || trimToNull(request.endDate()) == null
+                ? java.time.LocalDate.ofInstant(clock.instant(), LocalZone.ID) : parseDate(request.endDate(), "结束日期");
+        if (end.isBefore(current.startDate())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "结束日期不得早于起始日期");
+        }
+        Instant now = Instant.now();
+        StaffDispatchRecord saved = repository.saveDispatch(new StaffDispatchRecord(current.id(), current.userId(),
+                current.companyId(), current.merchantId(), current.projectId(), current.startDate(), end, "ended",
+                request == null || trimToNull(request.reason()) == null ? current.note() : request.reason().trim(),
+                current.createdBy(), current.createdAt(), actorIdOrSystem(authorizationService.currentActor()), now));
+        auditEventService.recordSuccess("staff.dispatch.ended", "staff.profile.review", "staff_dispatch_record",
+                saved.id(), null, request == null ? null : request.idempotencyKey(),
+                Map.of("user_id", saved.userId(), "merchant_id", saved.merchantId(), "end_date", end.toString()));
+        return saved;
+    }
+
+    /** 派驻记录列表：按项目 scope 过滤；商户范围调用方只见本商户。需 staff.profile.view。 */
+    public PageResponse<StaffDispatchRecord> listDispatches(String userId, String merchantId) {
+        authorizationService.requirePermission("staff.profile.view");
+        String merchantScope = staffMerchantScope();
+        String effectiveMerchant = merchantScope != null ? merchantScope : trimToNull(merchantId);
+        java.util.List<StaffDispatchRecord> items = repository.listDispatches(trimToNull(userId), effectiveMerchant, projectScope());
+        auditEventService.recordSuccess("staff.dispatch.viewed", "staff.profile.view", "staff_dispatch", "list",
+                effectiveMerchant, null, Map.of("count", items.size()));
+        return page(items);
+    }
+
+    // ============================================================
+    // CG-07 提成月结内部结算（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」：由该酒吧按月拨付给人员所属主体，
+    // 作为平台内部各主体之间的普通内部结算应收应付，按三个付账日结清；总额收付、不轧差）
+    // ============================================================
+
+    /** 按（酒吧商户 → 人员所属主体 → 月）汇总派驻人员提成，生成内部结算应付；重复执行不重复挂账。需 staff.payroll.manage。 */
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String, Object> closeCommissionSettlement(
+            com.complex.platform.access.staff.dto.StaffCommissionSettlementCloseRequest request) {
+        try {
+            authorizationService.requirePermission("staff.payroll.manage");
+            if (request == null || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
+            }
+            int created = doCloseCommissionSettlement(request.month());
+            auditEventService.recordSuccess("staff.commission_settlement.closed", "staff.payroll.manage",
+                    "bar_commission_settlement", request.month(), null, request.idempotencyKey(),
+                    Map.of("month", request.month(), "settlements", created));
+            return Map.of("month", request.month(), "settlements", created);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.commission_settlement.close_failed", "staff.payroll.manage",
+                    "bar_commission_settlement", request == null ? null : request.month(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /**
+     * 每组（酒吧, 所属主体）：先写月结记录（同键已存在则跳过，重复月结不重复挂账），再向台账追加一条
+     * direction=payable、source_type=dispatch_commission_transfer 的应付：counterparty=人员所属主体，merchant=酒吧，
+     * 金额=该月派驻人员提成合计（总额收付、不轧差），到期=月末后的下一个付账日，会计期间=该月。
+     */
+    private int doCloseCommissionSettlement(String month) {
+        if (financeRepository == null) {
+            throw ApiException.conflict("FINANCE_LEDGER_UNAVAILABLE", "应收应付台账未接入，不得月结");
+        }
+        java.time.YearMonth yearMonth = java.time.YearMonth.parse(month);
+        java.time.LocalDate dueDate = nextInternalPayDayAfter(yearMonth.atEndOfMonth());
+        String actor = actorIdOrSystem(authorizationService.currentActor());
+        java.time.Instant now = java.time.Instant.now();
+        int created = 0;
+        for (Map<String, Object> row : repository.aggregateDispatchedCommissions(month)) {
+            String merchantId = (String) row.get("merchant_id");
+            String companyId = (String) row.get("company_id");
+            String projectId = (String) row.get("project_id");
+            long amountCent = ((Number) row.get("amount_cent")).longValue();
+            if (amountCent <= 0L) {
+                continue;
+            }
+            // 结算键：(月, 酒吧, 主体) 的确定性摘要，保证台账 id / 单号 / source_id 落在 64 字符内且重放得到同一键。
+            String key = java.util.UUID.nameUUIDFromBytes((month + "|" + merchantId + "|" + companyId)
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-", "");
+            String settlementId = "bcs_" + month + "_" + key;
+            String itemId = "arap_dct_" + month + "_" + key;
+            boolean inserted = repository.insertCommissionSettlementIfAbsent(new BarCommissionSettlementRecord(
+                    settlementId, month, merchantId, companyId, projectId, amountCent,
+                    ((Number) row.get("calculation_count")).intValue(), ((Number) row.get("staff_count")).intValue(),
+                    itemId, dueDate, actor, now));
+            if (!inserted) {
+                continue;
+            }
+            financeRepository.appendArApItem(new com.complex.platform.finance.ArApItemRecord(
+                    itemId, "ARAP-DCT-" + month + "-" + key, "payable", companyId,
+                    "dispatch_commission_transfer", settlementId, amountCent, 0L, amountCent, "CNY",
+                    dueDate, month, "pending_payment", now, now, merchantId, projectId));
+            financeRepository.saveArApItemSource(new com.complex.platform.finance.ArApItemSourceRecord(
+                    "arap_src_" + itemId, itemId, "dispatch_commission_transfer", settlementId, amountCent, now));
+            created++;
+        }
+        return created;
+    }
+
+    /** 指定日期之后的第一个付账日（三个付账日取现有结算配置；某付账日大于当月天数时以该月月末为准）。 */
+    java.time.LocalDate nextInternalPayDayAfter(java.time.LocalDate date) {
+        int[] days = repository.internalSettlementPayDays();
+        java.time.LocalDate cursor = date.plusDays(1);
+        for (int i = 0; i < 70; i++, cursor = cursor.plusDays(1)) {
+            int dayOfMonth = cursor.getDayOfMonth();
+            int length = cursor.lengthOfMonth();
+            for (int day : days) {
+                if (dayOfMonth == Math.min(day, length)) {
+                    return cursor;
+                }
+            }
+        }
+        throw ApiException.conflict("POLICY_NOT_CONFIGURED", "付账日配置无效，不得结算");
+    }
+
+    public PageResponse<BarCommissionSettlementRecord> listCommissionSettlements(String month) {
+        authorizationService.requirePermission("staff.payroll.manage");
+        if (month == null || !month.matches("\\d{4}-\\d{2}")) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
+        }
+        java.util.List<BarCommissionSettlementRecord> items = repository.listCommissionSettlements(month, projectScope());
+        auditEventService.recordSuccess("staff.commission_settlement.viewed", "staff.payroll.manage",
+                "bar_commission_settlement", month, null, null, Map.of("count", items.size()));
+        return page(items);
+    }
+
+    private static java.time.LocalDate parseDate(String value, String label) {
+        try {
+            return java.time.LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw ApiException.badRequest("VALIDATION_FAILED", label + "格式不正确，应为 YYYY-MM-DD");
+        }
+    }
+
     /** P0 租户隔离(V214):主管/后台列表按调用方项目 scope 过滤;平台管理员/无组织全局员工=null 见全量。 */
     private String staffMerchantScope() {
         AccessActor actor = authorizationService.currentActor();

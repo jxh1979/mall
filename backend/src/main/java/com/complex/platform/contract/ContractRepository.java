@@ -101,7 +101,10 @@ public interface ContractRepository {
     /** 续约提醒扫描：effective 且 expiry_date 落在 (fromExclusive, toInclusive] 的合同。 */
     List<ContractRecord> listEffectiveContractsExpiringBetween(LocalDate fromExclusive, LocalDate toInclusive);
 
-    /** 铺位租赁状态原始数据（每铺当前生效合同 + 距到期天数）；着色由 service 套用着色分类。 */
+    /**
+     * 铺位租赁状态原始数据（每铺最近一份合同 + 退租结算单状态 + 距到期天数）；着色由 service 套用着色分类。
+     * CG-09：推导口径见 {@link SpaceRentalDerivationSql}（退租结算完成即转空置，结算单开立起已退租）。
+     */
     List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf);
 
     /** 该 (合同,期,费目) 是否已挂账（幂等依据）。 */

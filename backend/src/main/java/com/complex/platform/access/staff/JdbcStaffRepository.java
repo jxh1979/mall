@@ -252,7 +252,8 @@ public class JdbcStaffRepository {
         //   也不被 ON CONFLICT 覆盖(DO UPDATE WHERE status <> 'paid' 兜底并发)。重结新单显式置 'closed'。
         return jdbcTemplate.update("""
                 INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
-                        bonus_cent, penalty_cent, leave_deduction_cent, tax_cent, total_cent, status, closed_by, closed_at, project_id, penalty_cap_bps)
+                        bonus_cent, penalty_cent, leave_deduction_cent, tax_cent, total_cent, status, closed_by, closed_at, project_id, penalty_cap_bps,
+                        payer_company_id)
                 SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
                        COALESCE(b.monthly_salary_cent, 0),
                        COALESCE(c.total, 0) + COALESCE(bc.total, 0),
@@ -263,7 +264,8 @@ public class JdbcStaffRepository {
                        COALESCE(tax.tax_cent, 0),
                        GREATEST(0, COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
                            + COALESCE(adj.bonus, 0) - capped.penalty - COALESCE(lv.deduction, 0) - COALESCE(tax.tax_cent, 0)),
-                       'closed', :closed_by, :now, sp.project_id, cap.value
+                       -- CG-07（BSM「派驻人员的成本与报酬」）：发放主体＝人员所属主体，由其统一发放并代扣个人所得税。
+                       'closed', :closed_by, :now, sp.project_id, cap.value, sp.company_id
                   FROM (SELECT user_id FROM staff_base_salaries
                         UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
                         UNION SELECT user_id FROM staff_payroll_adjustments WHERE month = :month
@@ -355,7 +357,8 @@ public class JdbcStaffRepository {
                     tax_cent = EXCLUDED.tax_cent,
                     total_cent = EXCLUDED.total_cent,
                     closed_by = EXCLUDED.closed_by,
-                    closed_at = EXCLUDED.closed_at
+                    closed_at = EXCLUDED.closed_at,
+                    payer_company_id = EXCLUDED.payer_company_id
                   WHERE staff_payroll_statements.status <> 'paid'
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("month", month).addValue("closed_by", closedBy)
@@ -390,11 +393,150 @@ public class JdbcStaffRepository {
         return inserted;
     }
 
+    // ============================================================
+    // CG-07 派驻记录 / 提成月结内部结算 / 三个付账日
+    // ============================================================
+
+    private static final String DISPATCH_SELECT = """
+            SELECT id, user_id, company_id, merchant_id, project_id, start_date, end_date, status, note,
+                   created_by, created_at, ended_by, ended_at
+              FROM staff_dispatch_records
+            """;
+
+    public StaffDispatchRecord saveDispatch(StaffDispatchRecord r) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_dispatch_records (id, user_id, company_id, merchant_id, project_id, start_date, end_date,
+                        status, note, created_by, created_at, ended_by, ended_at)
+                VALUES (:id, :user_id, :company_id, :merchant_id, :project_id, :start_date, :end_date,
+                        :status, :note, :created_by, :created_at, :ended_by, :ended_at)
+                ON CONFLICT (id) DO UPDATE SET end_date = EXCLUDED.end_date, status = EXCLUDED.status,
+                        note = EXCLUDED.note, ended_by = EXCLUDED.ended_by, ended_at = EXCLUDED.ended_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", r.id()).addValue("user_id", r.userId()).addValue("company_id", r.companyId())
+                .addValue("merchant_id", r.merchantId()).addValue("project_id", r.projectId())
+                .addValue("start_date", java.sql.Date.valueOf(r.startDate()))
+                .addValue("end_date", r.endDate() == null ? null : java.sql.Date.valueOf(r.endDate()))
+                .addValue("status", r.status()).addValue("note", r.note()).addValue("created_by", r.createdBy())
+                .addValue("created_at", java.sql.Timestamp.from(r.createdAt() == null ? java.time.Instant.now() : r.createdAt()))
+                .addValue("ended_by", r.endedBy())
+                .addValue("ended_at", r.endedAt() == null ? null : java.sql.Timestamp.from(r.endedAt())));
+        return r;
+    }
+
+    public Optional<StaffDispatchRecord> findDispatchById(String id) {
+        return jdbcTemplate.query(DISPATCH_SELECT + " WHERE id = :id", Map.of("id", id), this::mapDispatch)
+                .stream().findFirst();
+    }
+
+    /** 同一员工在同一酒吧是否已有进行中的派驻。 */
+    public boolean hasActiveDispatch(String userId, String merchantId) {
+        Integer n = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM staff_dispatch_records
+                 WHERE user_id = :user_id AND merchant_id = :merchant_id AND status = 'active'
+                """, Map.of("user_id", userId, "merchant_id", merchantId), Integer.class);
+        return n != null && n > 0;
+    }
+
+    public List<StaffDispatchRecord> listDispatches(String userId, String merchantId, String projectScope) {
+        return jdbcTemplate.query(DISPATCH_SELECT + """
+                 WHERE (:user_id::text IS NULL OR user_id = :user_id)
+                   AND (:merchant_id::text IS NULL OR merchant_id = :merchant_id)
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
+                 ORDER BY start_date DESC, id LIMIT 1000
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("merchant_id", merchantId).addValue("project_scope", projectScope),
+                this::mapDispatch);
+    }
+
+    private StaffDispatchRecord mapDispatch(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        java.sql.Date end = rs.getDate("end_date");
+        java.sql.Timestamp endedAt = rs.getTimestamp("ended_at");
+        return new StaffDispatchRecord(rs.getString("id"), rs.getString("user_id"), rs.getString("company_id"),
+                rs.getString("merchant_id"), rs.getString("project_id"), rs.getDate("start_date").toLocalDate(),
+                end == null ? null : end.toLocalDate(), rs.getString("status"), rs.getString("note"),
+                rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), rs.getString("ended_by"),
+                endedAt == null ? null : endedAt.toInstant());
+    }
+
+    /**
+     * 该月派驻人员在各酒吧促成订单的提成，按（酒吧商户 → 人员所属主体）汇总：
+     * 只计派驻记录覆盖计提日的员工（派驻起止按计提日判定），作废/取消的计提不计。
+     * 行：merchant_id, company_id, project_id, amount_cent, calculation_count, staff_count。
+     */
+    public List<Map<String, Object>> aggregateDispatchedCommissions(String month) {
+        return jdbcTemplate.queryForList("""
+                SELECT COALESCE(b.merchant_id, b.bar_id) AS merchant_id, d.company_id,
+                       MAX(d.project_id) AS project_id,
+                       COALESCE(SUM(c.commission_amount_cent), 0) AS amount_cent,
+                       COUNT(c.id) AS calculation_count,
+                       COUNT(DISTINCT c.sales_staff_id) AS staff_count
+                  FROM bar_commission_calculations c
+                  JOIN bar_bills b ON b.id = c.bill_id
+                  JOIN staff_dispatch_records d
+                    ON d.user_id = c.sales_staff_id
+                   AND d.merchant_id = COALESCE(b.merchant_id, b.bar_id)
+                   AND d.start_date <= (c.created_at AT TIME ZONE :local_zone)::date
+                   AND (d.end_date IS NULL OR d.end_date >= (c.created_at AT TIME ZONE :local_zone)::date)
+                 WHERE to_char(c.created_at AT TIME ZONE :local_zone, 'YYYY-MM') = :month
+                   AND c.sales_staff_id IS NOT NULL
+                   AND c.status NOT IN ('void', 'cancelled')
+                 GROUP BY COALESCE(b.merchant_id, b.bar_id), d.company_id
+                 ORDER BY 1, 2
+                """, Map.of("month", month, "local_zone", com.complex.platform.common.LocalZone.ID.getId()));
+    }
+
+    private static final String SETTLEMENT_SELECT = """
+            SELECT id, month, merchant_id, company_id, project_id, amount_cent, calculation_count, staff_count,
+                   ar_ap_item_id, due_date, created_by, created_at
+              FROM bar_commission_settlements
+            """;
+
+    /** 纯追加：同（月, 酒吧, 主体）已有记录则不覆盖（重复月结不重复挂账）。返回是否新写入。 */
+    public boolean insertCommissionSettlementIfAbsent(BarCommissionSettlementRecord r) {
+        int n = jdbcTemplate.update("""
+                INSERT INTO bar_commission_settlements (id, month, merchant_id, company_id, project_id, amount_cent,
+                        calculation_count, staff_count, ar_ap_item_id, due_date, created_by, created_at)
+                VALUES (:id, :month, :merchant_id, :company_id, :project_id, :amount_cent,
+                        :calculation_count, :staff_count, :ar_ap_item_id, :due_date, :created_by, :created_at)
+                ON CONFLICT (month, merchant_id, company_id) DO NOTHING
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", r.id()).addValue("month", r.month()).addValue("merchant_id", r.merchantId())
+                .addValue("company_id", r.companyId()).addValue("project_id", r.projectId())
+                .addValue("amount_cent", r.amountCent()).addValue("calculation_count", r.calculationCount())
+                .addValue("staff_count", r.staffCount()).addValue("ar_ap_item_id", r.arApItemId())
+                .addValue("due_date", java.sql.Date.valueOf(r.dueDate())).addValue("created_by", r.createdBy())
+                .addValue("created_at", java.sql.Timestamp.from(r.createdAt() == null ? java.time.Instant.now() : r.createdAt())));
+        return n > 0;
+    }
+
+    public List<BarCommissionSettlementRecord> listCommissionSettlements(String month, String projectScope) {
+        return jdbcTemplate.query(SETTLEMENT_SELECT + """
+                 WHERE month = :month AND (:project_scope::text IS NULL OR project_id = :project_scope)
+                 ORDER BY merchant_id, company_id
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("month", month).addValue("project_scope", projectScope), this::mapSettlement);
+    }
+
+    private BarCommissionSettlementRecord mapSettlement(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new BarCommissionSettlementRecord(rs.getString("id"), rs.getString("month"), rs.getString("merchant_id"),
+                rs.getString("company_id"), rs.getString("project_id"), rs.getLong("amount_cent"),
+                rs.getInt("calculation_count"), rs.getInt("staff_count"), rs.getString("ar_ap_item_id"),
+                rs.getDate("due_date").toLocalDate(), rs.getString("created_by"), rs.getTimestamp("created_at").toInstant());
+    }
+
+    /** 全平台统一的三个付账日（升序）；未配置出厂行则 fail-closed。 */
+    public int[] internalSettlementPayDays() {
+        return jdbcTemplate.query("SELECT day_1, day_2, day_3 FROM internal_settlement_pay_days WHERE scope_id = 'global'",
+                        Map.of(), (rs, n) -> new int[] {rs.getInt(1), rs.getInt(2), rs.getInt(3)})
+                .stream().findFirst()
+                .orElseThrow(() -> ApiException.conflict("POLICY_NOT_CONFIGURED", "付账日未配置出厂行，不得结算"));
+    }
+
     public java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId,
             String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent,
-                       leave_deduction_cent, tax_cent, total_cent, closed_by, closed_at
+                       leave_deduction_cent, tax_cent, total_cent, closed_by, closed_at, payer_company_id
                   FROM staff_payroll_statements
                  WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)
                    AND (:project_scope::text IS NULL OR project_id = :project_scope)
@@ -410,7 +552,7 @@ public class JdbcStaffRepository {
                 rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
                 rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
                 rs.getLong("penalty_cent"), rs.getLong("leave_deduction_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
-                rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant());
+                rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant(), rs.getString("payer_company_id"));
     }
 
     private static final String STAFF_MERCHANT_FILTER =
@@ -499,7 +641,7 @@ public class JdbcStaffRepository {
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         java.util.List<StaffPayrollStatementRecord> items = jdbcTemplate.query(
                 "SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent, leave_deduction_cent, "
-                        + "tax_cent, total_cent, closed_by, closed_at FROM staff_payroll_statements " + where
+                        + "tax_cent, total_cent, closed_by, closed_at, payer_company_id FROM staff_payroll_statements " + where
                         + " ORDER BY user_id, id LIMIT :limit OFFSET :offset",
                 params, this::mapPayrollStatement);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);

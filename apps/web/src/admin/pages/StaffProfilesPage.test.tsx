@@ -12,9 +12,14 @@ const PROFILES = [
   { id: "sp-2", name: "李四", merchantId: "mch-1", userId: "usr_2", registrationStatus: "approved", status: "active", salesPosition: true },
 ];
 
+const DISPATCHES = [
+  { id: "dsp-1", userId: "usr_1", companyId: "ent-platform", merchantId: "mch-1", startDate: "2026-09-01", endDate: null, status: "active", note: "派驻到酒吧" },
+  { id: "dsp-2", userId: "usr_2", companyId: "ent-platform", merchantId: "mch-1", startDate: "2026-07-01", endDate: "2026-08-31", status: "ended", note: null },
+];
+
 function makeApi() {
   return {
-    get: vi.fn(async () => PROFILES),
+    get: vi.fn(async (url: string) => (url.startsWith("/api/v1/staff/dispatches") ? DISPATCHES : PROFILES)),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn().mockResolvedValue({}),
     put: vi.fn().mockResolvedValue({}),
@@ -124,8 +129,51 @@ describe("StaffProfilesPage 已存档档案按需拉取（U03-008）", () => {
     const api = makeApi();
     renderPage(api);
     await screen.findByLabelText("员工状态-sp-1");
-    expect((api.get as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => call[0])).toEqual(["/api/v1/staff/profiles"]);
+    expect((api.get as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => call[0]).filter((url) => String(url).startsWith("/api/v1/staff/profiles"))).toEqual(["/api/v1/staff/profiles"]);
     fireEvent.click(screen.getByTestId("staff-profiles-include-archived"));
     await waitFor(() => expect((api.get as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => call[0])).toContain("/api/v1/staff/profiles?include_archived=true"));
+  });
+});
+
+describe("StaffProfilesPage 派驻记录（CG-07，BSM「派驻人员的成本与报酬」）", () => {
+  it("列出派驻记录：所属主体、派驻酒吧、起止时间分别显示，进行中才有结束入口", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("staff-dispatch-row-dsp-1")).toBeTruthy());
+    expect(screen.getByTestId("staff-dispatch-row-dsp-1").textContent).toContain("ent-platform");
+    expect(screen.getByTestId("staff-dispatch-row-dsp-1").textContent).toContain("mch-1");
+    expect(screen.getByTestId("staff-dispatch-row-dsp-1").textContent).toContain("2026-09-01");
+    expect(screen.getByTestId("staff-dispatch-status-dsp-1").textContent).toBe("进行中");
+    expect(screen.getByTestId("staff-dispatch-status-dsp-2").textContent).toBe("已结束");
+    expect(screen.getByTestId("staff-dispatch-end-dsp-1")).toBeTruthy();
+    expect(screen.queryByTestId("staff-dispatch-end-dsp-2")).toBeNull();
+  });
+
+  it("登记派驻：填员工账号、派驻酒吧、开始日期后调后端", async () => {
+    const api = makeApi();
+    renderPage(api);
+    await waitFor(() => expect(screen.getByTestId("staff-dispatch-create")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("staff-dispatch-create"));
+    expect(screen.getByTestId("staff-profiles-error").textContent).toContain("员工账号");
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("staff-dispatch-user"), { target: { value: "usr_3" } });
+    fireEvent.change(screen.getByTestId("staff-dispatch-merchant"), { target: { value: "mch-2" } });
+    fireEvent.change(screen.getByTestId("staff-dispatch-start"), { target: { value: "2026-10-01" } });
+    fireEvent.change(screen.getByTestId("staff-dispatch-note"), { target: { value: "派驻到酒吧" } });
+    fireEvent.click(screen.getByTestId("staff-dispatch-create"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/dispatches",
+      { userId: "usr_3", merchantId: "mch-2", startDate: "2026-10-01", note: "派驻到酒吧" }));
+  });
+
+  it("结束派驻须填事由，带结束日期与事由调后端", async () => {
+    const api = makeApi();
+    renderPage(api);
+    const end = await screen.findByTestId("staff-dispatch-end-dsp-1");
+    fireEvent.click(end);
+    expect(screen.getByTestId("staff-profiles-error").textContent).toContain("改动事由");
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "派驻期满" } });
+    fireEvent.change(screen.getByTestId("staff-dispatch-end-date"), { target: { value: "2026-09-30" } });
+    fireEvent.click(end);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/dispatches/dsp-1/end", { endDate: "2026-09-30", reason: "派驻期满" }));
   });
 });

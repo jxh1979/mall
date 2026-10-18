@@ -248,6 +248,45 @@ public class StaffController {
         return ApiResponse.ok(service.listAttendance(java.time.LocalDate.parse(date), page, size));
     }
 
+    // ---- CG-07 派驻记录（BSM「派驻人员的成本与报酬」）----
+
+    @PostMapping("/dispatches")
+    public ApiResponse<StaffDispatchRecord> createDispatch(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createDispatch(request));
+    }
+
+    @PostMapping("/dispatches/{dispatch_id}/end")
+    public ApiResponse<StaffDispatchRecord> endDispatch(
+            @PathVariable("dispatch_id") String dispatchId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffDispatchEndRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.endDispatch(dispatchId, request));
+    }
+
+    @GetMapping("/dispatches")
+    public ApiResponse<PageResponse<StaffDispatchRecord>> listDispatches(
+            @org.springframework.web.bind.annotation.RequestParam(name = "user_id", required = false) String userId,
+            @org.springframework.web.bind.annotation.RequestParam(name = "merchant_id", required = false) String merchantId) {
+        return ApiResponse.ok(service.listDispatches(userId, merchantId));
+    }
+
+    // ---- CG-07 提成月结内部结算（酒吧 → 人员所属主体，按三个付账日结清）----
+
+    @PostMapping("/commission-settlements/close")
+    public ApiResponse<java.util.Map<String, Object>> closeCommissionSettlement(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffCommissionSettlementCloseRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.closeCommissionSettlement(request));
+    }
+
+    @GetMapping("/commission-settlements")
+    public ApiResponse<PageResponse<BarCommissionSettlementRecord>> listCommissionSettlements(
+            @org.springframework.web.bind.annotation.RequestParam("month") String month) {
+        return ApiResponse.ok(service.listCommissionSettlements(month));
+    }
+
     @PostMapping("/payroll/base")
     public ApiResponse<java.util.Map<String, String>> setBaseSalary(
             @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffPayrollBaseRequest request) {

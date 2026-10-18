@@ -170,6 +170,34 @@ class ContractServiceTests {
         assertThat(afterGm.lifecycleStatus()).isEqualTo("pending_effective");
     }
 
+    /**
+     * CG-01（PGM「招商运营细则」：「合同审批全部通过、生效后转为已签约」）：只有 activate 成功才经端口通知招商域置线索已签约；
+     * 起草、提交、审批驳回都不通知。
+     */
+    @Test
+    void activateNotifiesEffectiveLeadPortWhileDraftSubmitAndRejectDoNot() {
+        List<String> notified = new ArrayList<>();
+        ContractService wired = new ContractService(repo, mock(AuditEventService.class), authz,
+                (contractId, idempotencyKey) -> notified.add(contractId + "|" + idempotencyKey));
+        ContractRecord c = wired.createDraft(new ContractDraftRequest("k_cg01", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
+                "fixed_ratio", "by_area", 500000L, Map.of("breach", "2x"),
+                List.of(Map.of("item", "deposit_offset"), Map.of("item", "unpaid_fee")), List.of(), null, "餐饮"));
+        wired.submit(c.id(), "k_cg01_submit");
+        wired.approve(c.id(), new ContractApproveRequest("k_cg01_r", "contract.approve.finance", "reject", "条款不合规"));
+        assertThat(notified).isEmpty();   // 驳回退回起草：线索不得置已签约
+
+        wired.submit(c.id(), "k_cg01_submit2");
+        for (String code : List.of("contract.approve.business", "contract.approve.finance",
+                "contract.approve.legal", "contract.approve.gm")) {
+            wired.approve(c.id(), new ContractApproveRequest("k_cg01_" + code, code, "approve", "ok"));
+        }
+        assertThat(notified).isEmpty();   // 审批全部通过但尚未生效：仍不通知
+
+        wired.activate(c.id(), new ContractActivateRequest("k_cg01_act", List.of("sp_1")));
+        assertThat(notified).containsExactly(c.id() + "|k_cg01_act");
+    }
+
     @Test
     void rejectAnySlotSendsContractBackToDraftingAndClearsApprovals() {
         ContractRecord c = newDraft();

@@ -1,6 +1,7 @@
 package com.complex.platform.analytics;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.contract.SpaceRentalDerivationSql;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
@@ -859,24 +860,24 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     @Override
     public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("as_of", asOf);
-        return jdbcTemplate.queryForObject("""
+        // CG-09：已租口径与铺位看板共用 SpaceRentalDerivationSql（开立中退租结算单的铺位＝已退租，不计入已租面积）。
+        String sql = """
                 SELECT
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')), 0) AS rentable,
-                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth') AND EXISTS (
-                      SELECT 1 FROM contract_spaces cs JOIN contracts c ON c.id = cs.contract_id
-                       WHERE cs.space_id = s.id AND c.lifecycle_status = 'effective'
-                         AND c.effective_date <= :as_of AND c.expiry_date >= :as_of)), 0) AS leased,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')
+                      AND __IS_LET__), 0) AS leased,
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth') AND EXISTS (
                       SELECT 1 FROM contract_spaces cs2 JOIN contracts c2 ON c2.id = cs2.contract_id
                        WHERE cs2.space_id = s.id AND c2.lifecycle_status = 'pending_effective')), 0) AS signed_pending,
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'), 0) AS parking_rentable,
-                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking' AND EXISTS (
-                      SELECT 1 FROM contract_spaces cs4 JOIN contracts c4 ON c4.id = cs4.contract_id
-                       WHERE cs4.space_id = s.id AND c4.lifecycle_status = 'effective'
-                         AND c4.effective_date <= :as_of AND c4.expiry_date >= :as_of)), 0) AS parking_leased
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'
+                      AND __IS_LET__), 0) AS parking_leased
                   FROM spaces s
+                  LEFT JOIN LATERAL (__LATEST__) l ON true
                  WHERE s.status <> 'unavailable'
-                """, params, (rs, n) -> new AnalyticsRecords.OccupancyAreas(
+                """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
+                .replace("__IS_LET__", SpaceRentalDerivationSql.IS_LET);
+        return jdbcTemplate.queryForObject(sql, params, (rs, n) -> new AnalyticsRecords.OccupancyAreas(
                 rs.getBigDecimal("rentable"), rs.getBigDecimal("leased"), rs.getBigDecimal("signed_pending"),
                 rs.getBigDecimal("parking_rentable"), rs.getBigDecimal("parking_leased")));
     }
@@ -900,22 +901,24 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .addValue("as_of", asOf)
                 .addValue("limit", Math.min(Math.max(limit, 1), 200))
                 .addValue("offset", Math.max(offset, 0)), projectIds);
-        return jdbcTemplate.query("""
+        // CG-09：与铺位看板同口径（SpaceRentalDerivationSql）：已退租 > 洽谈中 > 空置；结算完成即转空置。
+        String sql = """
                 SELECT s.id, s.space_name, s.space_type, s.floor_no, s.area_square_meter,
-                       CASE WHEN EXISTS (SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) THEN 'negotiating'
-                            WHEN EXISTS (SELECT 1 FROM contract_spaces cs3 WHERE cs3.space_id = s.id) THEN 'moved_out'
+                       CASE WHEN COALESCE(__IS_MOVED_OUT__, false) THEN 'moved_out'
+                            WHEN EXISTS (SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) THEN 'negotiating'
                             ELSE 'vacant' END AS rental_status
                   FROM spaces s
+                  LEFT JOIN LATERAL (__LATEST__) l ON true
                  WHERE s.space_type IN ('shop','booth')
                    AND s.status <> 'unavailable'
-                   AND NOT EXISTS (
-                      SELECT 1 FROM contract_spaces cs JOIN contracts c ON c.id = cs.contract_id
-                       WHERE cs.space_id = s.id AND c.lifecycle_status = 'effective'
-                         AND c.effective_date <= :as_of AND c.expiry_date >= :as_of)
+                   AND NOT COALESCE(__IS_LET__, false)
                    AND (:all_projects OR s.project_id IN (:project_ids))
                  ORDER BY s.area_square_meter DESC NULLS LAST, s.id
                  LIMIT :limit OFFSET :offset
-                """, params, (rs, n) -> new AnalyticsRecords.VacantSpaceRow(
+                """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
+                .replace("__IS_LET__", SpaceRentalDerivationSql.IS_LET)
+                .replace("__IS_MOVED_OUT__", SpaceRentalDerivationSql.IS_MOVED_OUT);
+        return jdbcTemplate.query(sql, params, (rs, n) -> new AnalyticsRecords.VacantSpaceRow(
                 rs.getString("id"), rs.getString("space_name"), rs.getString("space_type"),
                 rs.getString("floor_no"), rs.getBigDecimal("area_square_meter"), rs.getString("rental_status")));
     }

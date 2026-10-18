@@ -149,6 +149,11 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | POST | /api/v1/staff/notices/{id}/acknowledge | staff.notice.view | 确认/同意 |
 | POST | /api/v1/staff/shifts | staff.shift.manage | 主管排班（单个班次，同员工同开始时刻幂等覆盖）|
 | POST | /api/v1/staff/shifts/batch | staff.shift.manage | 按周批量排班（一批员工 × 勾中的星期几 × 每日同一时段，一次排完整周）|
+| POST | /api/v1/staff/dispatches | staff.profile.review | CG-07 登记派驻记录（员工 → 派驻酒吧，所属主体取自档案所属公司；同员工同酒吧只允许一条进行中，幂等键必填）|
+| POST | /api/v1/staff/dispatches/{dispatch_id}/end | staff.profile.review | CG-07 结束派驻（结束日期缺省当日，事由必填，幂等键必填）|
+| GET | /api/v1/staff/dispatches | staff.profile.view | CG-07 派驻记录列表（商户角色只见本商户）|
+| POST | /api/v1/staff/commission-settlements/close | staff.payroll.manage | CG-07 提成月结拨付：按（酒吧 → 所属主体 → 月）汇总派驻人员提成，生成 `dispatch_commission_transfer` 应付；同组不重复挂账 |
+| GET | /api/v1/staff/commission-settlements | staff.payroll.manage | CG-07 该月拨付记录（金额、笔数、人数、到期付账日、应付台账项）|
 
 > **排班口径（2026-08-02 用户拍板）：一次排一周，跨零点班只填时段。**
 > 排班员的实际做法是一次性排出一周的班，而不是一人一天点一次，所以批量排班是主入口、单班保留作零星补改：
@@ -201,6 +206,7 @@ CG-12：`staff.profile.employment_status_change_requested`（发起）→ `staff
 ## 10. 变更日志
 | 日期 | 内容 | 依据 |
 |---|---|---|
+| 2026-10-17 | CG-07（V445）：新增派驻记录表 `staff_dispatch_records`（user_id、company_id＝所属主体、merchant_id＝派驻酒吧、start_date/end_date、status active/ended、登记与结束留痕）与提成月结表 `bar_commission_settlements`（month、merchant_id、company_id、amount_cent、calculation_count、staff_count、ar_ap_item_id、due_date，UNIQUE(month, merchant_id, company_id)）；`staff_payroll_statements` 加 `payer_company_id`（发放主体＝人员所属主体，`closePayrollMonth` 取档案 company_id）；付账日出厂行表 `internal_settlement_pay_days`（global：5/15/25）。§4 补五个端点。提成计提不再按单对员工本人挂 `employee_commission` 应付 | BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」「平台内部各主体之间的应收应付，每月有三个付账日」条；分支 fix/CG-07-dispatch-commission-settlement |
 | 2026-06-18 | 新建 T1 员工三表可编码规格（V066 DDL+状态机+Service+API+事件+权限+验收+测试） | R5 backlog T1；裁决⑨；DDL 约定取自 V011/V055 |
 | 2026-07-19 | 补 T1 缺口：审批通过分配"员工自助"角色 `role_staff_self`（V322，授自助权限点），修复真实员工（userType=staff）无 user_roles→BYOD 自助端点一律 403 | 既有缺口（非 Wave1 引入）；feature 分支 fix/byod-staff-self-service-role |
 | 2026-07-19 | 修 authz 缺陷:`listNotices`（GET /notices，待办消息中心列表）实现漏 `@GuardedAction` 守卫（与 §4 API 表「staff.notice.view」承诺不符），且该注解被误扣在 `upsertShift` 上致排班多余要求 notice.view；已将 `staff.notice.view` 守卫归位到 listNotices，代码追平 §4 | 主计划会话审计发现；随 PR#180 一并修 |

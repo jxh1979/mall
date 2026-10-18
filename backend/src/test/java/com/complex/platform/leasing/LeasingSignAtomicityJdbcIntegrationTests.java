@@ -79,7 +79,7 @@ class LeasingSignAtomicityJdbcIntegrationTests {
         assertThat(leadStatus()).isNotEqualTo("signed");
     }
 
-    /** AUD-003：签约成功建立 active 四主体权威绑定，且可查；重复签约幂等——不重复建商户/绑定/合同。 */
+    /** AUD-003：签约成功建立 active 四主体权威绑定，且可查；重复签约幂等——不重复建商户/绑定/合同。线索不在此置已签约（CG-01）。 */
     @Test
     void signIntentCreatesFourPartyBindingAndReplaysIdempotently() {
         String spaceId = "sp_free_" + newSuffix();
@@ -96,7 +96,11 @@ class LeasingSignAtomicityJdbcIntegrationTests {
         assertThat(countActiveBindings()).isEqualTo(1);
         assertThat(bindingSubjects()).containsExactly(subject, subject, subject);   // operation/contract/settlement
         assertThat(countContracts()).isEqualTo(1);
-        assertThat(leadStatus()).isEqualTo("signed");
+        // CG-01（PGM「合同审批全部通过、生效后转为已签约」）：签约只起草合同，线索保持签约前状态（洽谈中）。
+        assertThat(leadStatus()).isEqualTo("negotiating");
+        // 合同绑到来源意向（V442），供生效后反查线索。
+        assertThat(jdbcTemplate.queryForObject("SELECT contract_id FROM leasing_intents WHERE id = ?",
+                String.class, intentId)).isEqualTo(first.id());
 
         // 幂等重放：同意向再次签约 → 同一合同，绑定/商户/合同均不翻倍。
         ContractRecord second = leasingService.signIntent(intentId, request);
