@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
@@ -224,7 +225,12 @@ class FinanceHistoricalRentIntegrationTests {
         TestSecurityActors.asPlatformAdmin();
         rule(id, from, null, "active", true, null, minAmount);
         jdbc.update("UPDATE turnover_rent_rules SET updated_by = 'rent_history_drafter' WHERE id = ?", id);
-        writeService.activateDraft("turnover_rent_rule", id, "rent_history_approver");
+        // 历史版本按目标生效月的上月批准，避免系统当前月份改变该回归场景。
+        Instant approvedAt = LocalDate.parse(from).minusMonths(1).withDayOfMonth(16)
+                .atStartOfDay(LocalZone.ID).toInstant();
+        assertThat(writeRepository.activateSingleRowDraft(
+                JdbcSettlementConfigWriteRepository.SingleRowConfig.TURNOVER_RENT_RULE,
+                id, "rent_history_approver", approvedAt)).isEqualTo(1);
     }
 
     private FinanceService manualService() {

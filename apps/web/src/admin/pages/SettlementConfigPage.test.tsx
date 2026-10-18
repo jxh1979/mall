@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -106,6 +107,23 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
       "/api/v1/settlement/config/merchant_rate/tdmr_d_1/archive",
       expect.objectContaining({ archiveReason: "重复配置", idempotencyKey: expect.any(String) }),
     ));
+  });
+
+  it("仅营业额租金草案提示初始日期与变更次月生效规则", async () => {
+    renderPage(makeApi(vi.fn().mockResolvedValue({
+      ...OVERVIEW_WITH_DRAFTS,
+      pendingDraftCount: 3,
+      pendingDrafts: [
+        ...OVERVIEW_WITH_DRAFTS.pendingDrafts,
+        { id: "turnover_d_1", configGroup: "turnover_rent_rule", summary: "营业额租金草案" },
+      ],
+    })));
+    const rentDraft = await screen.findByTestId("settlement-config-draft-turnover_d_1");
+    expect(rentDraft.textContent).toContain("初始规则按填写日期生效");
+    expect(rentDraft.textContent).toContain("已有规则变更统一按实际批准次月1日生效");
+    expect(rentDraft.textContent).toContain("手填起日不决定变更生效");
+    expect(screen.getByTestId("settlement-config-draft-tdmr_d_1").textContent).not.toContain("次月1日");
+    expect(screen.getByTestId("settlement-config-draft-trt_d_1").textContent).not.toContain("次月1日");
   });
 
   it("草案队列:rank_tiers 转正走 /rank-tiers/activate 并从 summary 解析 project", async () => {
