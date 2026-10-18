@@ -54,6 +54,14 @@ public class AmusementService {
     // 可为 null（向后兼容/单测无 SecurityContext 环境）；接入为 fail-safe，不阻塞核销主链。
     private final RiskAlertService riskAlertService;
 
+    /**
+     * CG-02：硬超容自动停运及其留痕要在独立事务里落库。字段注入免改构造点；生产恒注入，单测（无 Spring）为 null 则就地执行。
+     * 原因：硬超容阻断后核销主事务随 SESSION_CAPACITY_EXHAUSTED 回滚，同事务内写的 over_capacity incident、
+     * open→paused、超容事件会一起被回滚（真库实测只剩失败审计）——「阻断并自动停运」在库里从未生效。
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     // T3.2（A4 根因修，功能标志 amusement.device-registry.enforce.enabled，默认关）：是否强制游乐项目建设备档案。
     // 开启后「零在役设备档案」项目拒核销，从根上消除 fail-open；默认关给存量项目建档过渡期，ops 建档后开启即生效。
     // 用字段注入（非构造）以免改动既有多处构造点；包私有便于单测直接置位。
@@ -1322,8 +1330,7 @@ public class AmusementService {
                 // warn_only 仅作用于软上限（运营容量），对硬上限无效；硬超容一律阻断并由
                 // recordOverCapacity(severity=high) 触发自动停运。catch 块负责回补已消费权益。
                 // 留痕与失败审计同语义（与既有 recordFailure 一致，同事务内尽力写入）。
-                recordOverCapacity(project, session, deviceId, "hard",
-                        claim.exhaustedDimension(), policy);
+                recordHardOverCapacityDurably(project, session, deviceId, claim.exhaustedDimension(), policy);
                 throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED",
                         "场次容量已满（受限维度：" + claim.exhaustedDimension() + "）");
             }
@@ -1411,7 +1418,62 @@ public class AmusementService {
             // 入场已被并发/前次出场释放：幂等返回既有 exit 记录，不重复减容量。
             return repository.findExitByEntry(entry.id()).orElse(exitRecord);
         }
+        // CG-02（BSM「因达到硬安全容量而自动停运的项目，在玩人数回落到硬安全容量以下后由系统自动恢复开放」）：
+        // 本次真实释放后，若项目仍处硬超容自动停运且项目维在玩人数已 < 硬安全容量，由系统 CAS paused→open 并留痕。
+        autoReopenIfHardCapacityRecovered(entry, exitRecord, idempotencyKey, now);
         return exitRecord;
+    }
+
+    /**
+     * CG-02 出场回落自动恢复开放。条件与翻转由仓储单条原子 UPDATE 完成（paused ∧ auto_paused_reason=hard_capacity ∧
+     * 项目维 occupied_count &lt; capacity），并发多路出场只有一路翻转成功、只留一条痕。事故停运（safety_incident）、
+     * 人工 maintenance/closed/paused 不满足条件，不动（恢复仍走巡检/检修复核）。
+     * 留痕 amusement.project.auto_reopened：业务主体=项目，triggered_by=system，关联触发的出场/入场记录与当时在玩人数。
+     */
+    private void autoReopenIfHardCapacityRecovered(
+            AmusementVerificationRecord entry, AmusementVerificationRecord exitRecord, String idempotencyKey, Instant now) {
+        if (!repository.reopenProjectIfHardCapacityRecovered(entry.projectId(), now)) {
+            return;
+        }
+        int inPlay = repository.findProjectInPlayCount(entry.projectId()).orElse(-1);
+        int safetyCapacity = repository.findProjectById(entry.projectId())
+                .map(AmusementProjectRecord::capacity).orElse(-1);
+        auditEventService.recordSuccess(
+                "amusement.project.auto_reopened",
+                "amusement.verification.execute",
+                "amusement_project",
+                entry.projectId(),
+                null,
+                idempotencyKey,
+                Map.of("reason", "hard_capacity_recovered",
+                        "triggered_by", "system",
+                        "trigger_exit_verification_id", exitRecord.id(),
+                        "trigger_entry_verification_id", entry.id(),
+                        "in_play_count", inPlay,
+                        "safety_capacity", safetyCapacity));
+    }
+
+    /**
+     * CG-02：硬超容的停运 + incident + 事件在 REQUIRES_NEW 独立事务里提交，不随即将回滚的核销主事务消失
+     * （BSM「一旦达到…必须阻断核销入场，并自动让该项目停止运营」；停运持久化是「人数回落后自动恢复开放」的前提）。
+     * 无事务管理器（单测、无 Spring 容器）则就地执行，语义同旧。
+     */
+    private void recordHardOverCapacityDurably(
+            AmusementProjectRecord project,
+            AmusementSessionRecord session,
+            String deviceId,
+            String dimension,
+            AmusementOverCapacityPolicy policy
+    ) {
+        if (transactionManager == null) {
+            recordOverCapacity(project, session, deviceId, "hard", dimension, policy);
+            return;
+        }
+        org.springframework.transaction.support.TransactionTemplate durable =
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        durable.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        durable.executeWithoutResult(status -> recordOverCapacity(project, session, deviceId, "hard", dimension, policy));
     }
 
     /**
@@ -1466,10 +1528,11 @@ public class AmusementService {
                 project.id(),
                 "amusement over capacity: type=" + overType + ", dimension=" + dimension,
                 "incident=" + incident.id() + "; over_type=" + overType + "; dimension=" + dimension);
-        // 事故停运联动：硬超容（severity=high）自动停运停售（open→paused，CAS 幂等），与 createIncident 高危事故一致，
-        // 消除"硬超容仍照常核销售票"的安全敞口；恢复营业须走巡检/检修复核（reopen），不自动恢复。
+        // 硬超容（severity=high）自动停运停售（open→paused，CAS 幂等），并记原因 hard_capacity（V443）：
+        // BSM「因达到硬安全容量而自动停运的项目，在玩人数回落到硬安全容量以下后由系统自动恢复开放」——
+        // 恢复在出场释放路径 exitVerification 由系统自动完成（不设人工恢复按钮）；事故停运（safety_incident）不在此列。
         if ("high".equals(incident.severity())) {
-            safetyRepository.updateProjectOpenStatus(project.id(), "open", "paused");
+            safetyRepository.autoPauseProject(project.id(), "hard_capacity");
         }
         auditEventService.recordSuccess(
                 "amusement.incident.over_capacity",

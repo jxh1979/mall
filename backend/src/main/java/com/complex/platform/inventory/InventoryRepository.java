@@ -86,6 +86,17 @@ public interface InventoryRepository {
         return Optional.empty();
     }
 
+    /**
+     * 高价值判定用（BSM「高价值物品」：以该物品<b>最近一次实际到货价</b>，不使用滚动变化的当前平均进货价）：
+     * 取该物品最近一次<b>采购入库</b>流水（{@code movement_type=inbound} 且 {@code business_type=purchase_request}，
+     * 即 {@code PurchaseRequestService.receive} 写入的那条；调拨/盘盈/退货等非采购来源的入库不算到货）的
+     * {@code unit_cost_cent}。无采购入库流水、或该笔流水成本列为空 ⇒ 返回空 = 到货价未知 ⇒ 判定侧按高价值拦下。
+     * 只读旁路，不加锁。default 返回空以不破坏测试替身。
+     */
+    default Optional<Long> findLatestPurchaseArrivalUnitCostCent(String itemId) {
+        return Optional.empty();
+    }
+
     /** 成本流水分页（含成本列；itemId 可空=不过滤）。 */
     default com.complex.platform.common.api.PageResponse<StockMovementRecord> listCostLedgerPaged(
             String merchantId, String projectId, String itemId, int page, int size) {

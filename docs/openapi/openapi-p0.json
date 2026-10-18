@@ -1865,7 +1865,7 @@
         ],
         "operationId": "createAmusementVerification",
         "summary": "游乐权益核销",
-        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。",
+        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。达硬上限（安全容量）阻断并由系统自动停运（项目 paused，记 auto_paused_reason=hard_capacity，停运与 over_capacity 异常在独立事务落库，不随被拒核销回滚）；出场释放使项目实时在玩人数回落到硬上限以下后，由系统自动恢复开放（paused→open，留痕 amusement.project.auto_reopened，triggered_by=system）；高危事故停运与人工状态不自动恢复——BSM「容量分两道」条。",
         "x-permission": "amusement.verification.execute",
         "x-failure-codes": [
           "TICKET_NOT_FOUND",
@@ -23149,6 +23149,7 @@
         "x-audit-event-success": "leasing.lead.status_changed",
         "x-audit-event-failure": "leasing.lead.status_change_failed",
         "x-auth-context": "staff-token",
+        "description": "已签约线索改任何其他状态一律 409 LEASING_LEAD_ALREADY_SIGNED（PGM「招商运营细则」：已签约后不得回退至未签约状态）；lost/on_hold 须填 reason。",
         "parameters": [
           {
             "name": "lead_id",
@@ -23369,7 +23370,7 @@
         "x-audit-event-success": "leasing.intent.signed",
         "x-audit-event-failure": "leasing.intent.sign_failed",
         "x-auth-context": "staff-token",
-        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。",
+        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。",
         "parameters": [
           {
             "name": "intent_id",
@@ -23855,7 +23856,7 @@
         "x-audit-event-success": "contract.activated",
         "x-audit-event-failure": "contract.activate_failed",
         "x-auth-context": "staff-token",
-        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。",
+        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。",
         "parameters": [
           {
             "name": "contract_id",
@@ -35325,7 +35326,7 @@
         ],
         "operationId": "settlementConfigUpsertHighValueThreshold",
         "summary": "维护高价值判定阈值(草案)",
-        "description": "结算配置中心 V350：按 项目公司 × 商户 配置全平台唯一的「高价值判定阈值(分)」——物品进货价高于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。",
+        "description": "结算配置中心 V350：按 项目公司 × 商户 配置全平台唯一的「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
