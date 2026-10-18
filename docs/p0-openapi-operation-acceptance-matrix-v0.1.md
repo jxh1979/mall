@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 753 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 755 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -648,7 +648,9 @@
 | staff | `GET` | `/api/v1/staff/attendance/mine` | `listMyStaffAttendance` | 我的打卡记录(最近30天) | `-` | `staff.shift.view` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.attendance_mine.viewed` | `staff.attendance_mine.view_failed` |
 | staff | `GET` | `/api/v1/staff/attendance` | `listStaffAttendance` | 按日查考勤(后台/主管) | `-` | `staff.attendance.view` | `staff-token` | `platform` | web, staff_private_phone | 否 | `staff.attendance.viewed` | `staff.attendance.view_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/base` | `setStaffBaseSalary` | 固定工资设定(人事) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.base_saved` | `staff.payroll.base_save_failed` |
-| staff | `POST` | `/api/v1/staff/payroll/adjustments` | `addStaffPayrollAdjustment` | 奖金/处罚手录(必须带事由) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.adjustment_added` | `staff.payroll.adjustment_add_failed` |
+| staff | `POST` | `/api/v1/staff/payroll/adjustments` | `addStaffPayrollAdjustment` | 发起奖金/处罚复核(必须带事由；HR 会签＋直属领导向上三级通过后入账) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.adjustment_requested` | `staff.payroll.adjustment_add_failed` |
+| staff | `GET` | `/api/v1/staff/payroll/adjustments/appeals` | `listStaffAdjustmentAppeals` | 扣罚申诉清单(本人/人事按员工) | `-` | `staff.payroll.view_mine` | `staff-token` | `self` | web, staff_work_phone, staff_private_phone | 否 | `staff.payroll.adjustment_appeals_viewed` | `staff.payroll.adjustment_appeals_view_failed` |
+| staff | `POST` | `/api/v1/staff/payroll/adjustments/{id}/appeals` | `submitStaffAdjustmentAppeal` | 员工对已生效扣罚提出申诉 | `object` | `staff.payroll.view_mine` | `staff-token` | `self` | web, staff_work_phone, staff_private_phone | 是 | `staff.payroll.adjustment_appeal_submitted` | `staff.payroll.adjustment_appeal_submit_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/commissions` | `addStaffCommission` | 提成入台账(手录/系统写入口) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.commission_added` | `staff.payroll.commission_add_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/close` | `closeStaffPayrollMonth` | 月结(定格全员薪资单) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.month_closed` | `staff.payroll.month_close_failed` |
 | staff | `GET` | `/api/v1/staff/dispatches` | `listStaffDispatches` | 查询派驻记录 | `-` | `staff.profile.view` | `staff-token` | `project` | web, mobile_admin | 否 | `staff.dispatch.viewed` | `staff.dispatch.view_failed` |
@@ -764,7 +766,7 @@
 | integration | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | `archiveIntegrationChannelTicketTypeMap` | 停用渠道票种映射 | `object` | `integration.channel_store_map.manage` | `staff-token` | `platform` | web | 是 | `integration.channel_ticket_type_map.archived` | `integration.channel_ticket_type_map.archive_failed` |
 | staff | `GET` | `/api/v1/staff/registration-companies` | `listStaffRegistrationCompanies` | 获取可注册公司 | `-` | `public` | `public` | `self` | staff_private_phone | 否 | `staff.registration_companies_viewed` | `staff.registration_companies_view_failed` |
 | staff | `POST` | `/api/v1/staff/self-registrations` | `submitStaffSelfRegistration` | 公司员工本人注册 | `object` | `public` | `public` | `self` | staff_private_phone | 是 | `staff.self_registered` | `staff.self_register_failed` |
-| staff | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | `setStaffEmploymentStatus` | 更新员工任职状态 | `object` | `staff.profile.review` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.profile.employment_status_changed` | `staff.profile.employment_status_change_failed` |
+| staff | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | `setStaffEmploymentStatus` | 发起员工任职状态变更复核 | `object` | `staff.profile.review` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.profile.employment_status_change_requested` | `staff.profile.employment_status_change_failed` |
 | staff | `GET` | `/api/v1/staff/settings/shift-visible-days` | `getStaffShiftVisibility` | 读取排班可见天数 | `-` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.shift.visibility_viewed` | `staff.shift.visibility_view_failed` |
 | staff | `POST` | `/api/v1/staff/settings/shift-visible-days` | `setStaffShiftVisibility` | 设置排班可见天数 | `object` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.shift.visibility_changed` | `staff.shift.visibility_change_failed` |
 | staff | `GET` | `/api/v1/staff/settings/payroll-penalty-cap` | `getStaffPenaltyCap` | 读取普通扣除上限 | `-` | `staff.payroll.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.payroll.penalty_cap_viewed` | `staff.payroll.penalty_cap_view_failed` |

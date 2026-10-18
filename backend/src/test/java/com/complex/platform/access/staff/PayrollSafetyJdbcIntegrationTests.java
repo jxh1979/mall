@@ -77,8 +77,7 @@ class PayrollSafetyJdbcIntegrationTests {
         assertThat(statementStatus(month, user)).isEqualTo("paid");
 
         // 事后补一笔 5,000 元罚款再重结:已发放的这行金额必须原封不动(套现被拒/跳过覆盖)。
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), user, month, "penalty", 500000L, "事后补罚"));
+        bookAdjustment(user, month, "penalty", 500000L, "事后补罚"); // CG-12：奖惩入账改走复核链，此处直接落已生效记录
         service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
 
         assertThat(statementTotal(month, user)).isEqualTo(2000000L);   // 未被静默改写
@@ -100,8 +99,7 @@ class PayrollSafetyJdbcIntegrationTests {
         assertThat(statementTotal(month, user)).isEqualTo(1000000L);
         assertThat(statementStatus(month, user)).isEqualTo("closed");
 
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), user, month, "bonus", 300000L, "补录奖金"));
+        bookAdjustment(user, month, "bonus", 300000L, "补录奖金");
         service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
         assertThat(statementTotal(month, user)).isEqualTo(1300000L);   // 未发放照常重算
     }
@@ -125,10 +123,9 @@ class PayrollSafetyJdbcIntegrationTests {
     @Test
     void manualAdjustmentDedupedByBusinessKeyAcrossDifferentIdempotencyKeys() {
         String month = "2099-10";
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), "usr_admin", month, "bonus", 800000L, "手工奖金去重"));
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), "usr_admin", month, "bonus", 800000L, "手工奖金去重"));
+        // CG-12：入账发生在复核通过时（同一仓储写口），业务键去重仍由 V239 唯一索引保证。
+        bookAdjustment("usr_admin", month, "bonus", 800000L, "手工奖金去重");
+        bookAdjustment("usr_admin", month, "bonus", 800000L, "手工奖金去重");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM staff_payroll_adjustments WHERE user_id='usr_admin' AND month=? "
                         + "AND adj_type='bonus' AND amount_cent=800000 AND reason='手工奖金去重'",
@@ -172,6 +169,15 @@ class PayrollSafetyJdbcIntegrationTests {
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private void bookAdjustment(String userId, String month, String adjType, long amountCent, String reason) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_payroll_adjustments (id, user_id, month, adj_type, amount_cent, reason, created_by, created_at, project_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'usr_admin', now(),
+                        (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = ? ORDER BY p.created_at DESC LIMIT 1))
+                ON CONFLICT DO NOTHING
+                """, "adj_" + key(), userId, month, adjType, amountCent, reason, userId);
+    }
 
     private void seedProfile(String projectId, String userId) {
         jdbcTemplate.update("""

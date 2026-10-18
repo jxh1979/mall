@@ -28,11 +28,11 @@ function makeApi() {
   } as unknown as AdminApiClient;
 }
 
-function renderPage(api: AdminApiClient) {
+function renderPage(api: AdminApiClient, setActionResult: AdminPageProps["setActionResult"] = vi.fn()) {
   const props: AdminPageProps = {
     api,
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
-    setActionResult: vi.fn(),
+    setActionResult,
     setGlobalError: vi.fn(),
     effectivePermissions: ADMIN_PERMS,
   };
@@ -40,16 +40,24 @@ function renderPage(api: AdminApiClient) {
 }
 
 describe("StaffProfilesPage 员工档案销售岗维护（ADM-STF-004）", () => {
-  it("员工状态只提供五种业务状态，变更须填写事由", async () => {
+  it("员工状态只提供五种业务状态，变更须填写事由与 人力会签人，只发起复核不直接写入（CG-12）", async () => {
     const api = makeApi();
-    renderPage(api);
+    (api.post as ReturnType<typeof vi.fn>).mockResolvedValue({ reviewId: "review_hr3", reviewStatus: "pending_review" });
+    const setActionResult = vi.fn();
+    renderPage(api, setActionResult);
     const select = await screen.findByLabelText("员工状态-sp-1");
     expect(Array.from(select.querySelectorAll("option")).map((option) => option.textContent)).toEqual(["待入职", "在职", "试岗", "停岗", "离职"]);
     fireEvent.change(select, { target: { value: "employed" } });
     expect(api.post).not.toHaveBeenCalled();
     fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "已入职" } });
     fireEvent.change(select, { target: { value: "employed" } });
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/employment-status", { employmentStatus: "employed", reason: "已入职" }));
+    expect(api.post).not.toHaveBeenCalled();
+    expect(screen.getByTestId("staff-profiles-error").textContent).toContain("人力会签人");
+    fireEvent.change(screen.getByTestId("staff-profiles-hr-approver"), { target: { value: "usr_hr" } });
+    fireEvent.change(select, { target: { value: "departed" } });
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/employment-status",
+      { employmentStatus: "departed", reason: "已入职", hrApproverId: "usr_hr" }));
+    await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ 结果: "已发起员工状态变更复核", 复核单: "review_hr3", 目标状态: "离职" })));
   });
 
   it("日常存档提交事由，恢复入口只显示在已存档档案上", async () => {

@@ -161,14 +161,15 @@ class M010RegressionTests {
     @Test void employmentStatePersistsAcrossOtherProfileChangesAndIsScoped() {
         var profile = profile("m_own");
         for (String state : List.of("pending_entry", "employed", "trial", "suspended", "departed")) {
-            service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), state, "任职变更"));
+            // CG-12：状态变更改走 HR 会签＋三级复核链（HrApprovalChainJdbcIntegrationTests），此处直接落库只验「其它档案改动不覆盖状态」。
+            repository.saveProfile(repository.findProfileById(profile.id()).orElseThrow().withEmploymentStatus(state, Instant.now()));
             service.setSalesPosition(profile.id(), new StaffSalesPositionRequest(true, "岗位变更"));
             assertThat(repository.findProfileById(profile.id()).orElseThrow().employmentStatus()).isEqualTo(state);
         }
-        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "active", "无效")))
+        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "active", "无效", null)))
                 .isInstanceOf(ApiException.class);
         actorAs("merchant_admin", "m_other");
-        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "employed", "越户")))
+        assertThatThrownBy(() -> service.setEmploymentStatus(profile.id(), new StaffEmploymentStatusRequest(key(), "employed", "越户", null)))
                 .isInstanceOf(ApiException.class);
     }
 
@@ -641,7 +642,7 @@ class M010RegressionTests {
         assertThat(service.listAttendance(date).items()).extracting(StaffAttendanceRecord::userId).containsExactly(a.userId());
         assertThat(service.listLeaves(null).items()).extracting(StaffLeaveRequestRecord::userId).containsExactly(a.userId());
         assertThatThrownBy(() -> service.setBaseSalary(new StaffPayrollBaseRequest(key(),b.userId(),9999L))).isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> service.setEmploymentStatus(b.id(),new StaffEmploymentStatusRequest(key(), "employed","变更"))).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.setEmploymentStatus(b.id(),new StaffEmploymentStatusRequest(key(), "employed","变更", null))).isInstanceOf(ApiException.class);
         service.closePayroll(new StaffPayrollCloseRequest(key(),"2099-08"));
         assertThat(service.listPayroll("2099-08").items()).extracting(StaffPayrollStatementRecord::userId).containsExactly(a.userId());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",Long.class,b.userId())).isZero();
@@ -713,7 +714,7 @@ class M010RegressionTests {
             shift(profile, "2099-08-04T01:00:00Z", "2099-08-04T10:00:00Z");
         }
         // U05-002/U11-003：事假基数＝当期应发（固定+提成+奖金），不是固定工资；partial 另有 2000 奖金 → 应发 12000，请 1/2 班次扣 6000。
-        service.addPayrollAdjustment(new StaffPayrollAdjustmentRequest(key(), partial.userId(), "2099-08", "bonus", 2000L, "奖金"));
+        repository.insertPayrollAdjustment("adj_" + key(), partial.userId(), "2099-08", "bonus", 2000L, "奖金", manager, Instant.now()); // CG-12：奖惩入账改走复核链，薪资算法用例直接落已生效记录
         Instant now = Instant.now();
         repository.saveLeaveRequest(new StaffLeaveRequestRecord("l_" + key(), partial.userId(), "personal",
                 LocalDate.of(2099, 8, 3), LocalDate.of(2099, 8, 3), "回归", "approved", manager, null, now, now));
@@ -729,9 +730,9 @@ class M010RegressionTests {
     @Test void ordinaryPenaltyCapAggregatesEntriesAndExcludesCommissionAndPersonalLeave() {
         var profile = profile(null);
         service.setBaseSalary(new StaffPayrollBaseRequest(key(), profile.userId(), 10000L));
-        service.addPayrollAdjustment(new StaffPayrollAdjustmentRequest(key(), profile.userId(), "2099-08", "bonus", 1000L, "奖金"));
+        repository.insertPayrollAdjustment("adj_" + key(), profile.userId(), "2099-08", "bonus", 1000L, "奖金", manager, Instant.now());
         for (int i = 0; i < 2; i++) {
-            service.addPayrollAdjustment(new StaffPayrollAdjustmentRequest(key(), profile.userId(), "2099-08", "penalty", 3000L, "普通处罚" + i));
+            repository.insertPayrollAdjustment("adj_" + key(), profile.userId(), "2099-08", "penalty", 3000L, "普通处罚" + i, manager, Instant.now());
         }
         repository.insertCommission("c_" + key(), profile.userId(), "2099-08", "manual", key(), 9000L, "提成", Instant.now());
         shift(profile, "2099-08-03T01:00:00Z", "2099-08-03T10:00:00Z");

@@ -31226,15 +31226,15 @@
           "staff"
         ],
         "operationId": "addStaffPayrollAdjustment",
-        "summary": "奖金/处罚手录(必须带事由)",
-        "description": "F批:奖惩手工录入,事由必填,审计留痕;计入当月薪资(月结时聚合)。",
+        "summary": "发起奖金/处罚复核(必须带事由；HR 会签＋直属领导向上三级通过后入账)",
+        "description": "F批:奖惩手工录入,事由必填,审计留痕。CG-12（BSM:1487 / ENUM:283「绩效扣分与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效」）：bonus / penalty 都只发起复核，返回复核单（object_id 为通过后入账的奖惩记录 id）；全部通过后才计入当月薪资（月结时聚合）。失败码：HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE、APPROVAL_LINE_EMPTY。",
         "x-permission": "staff.payroll.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": true,
-        "x-audit-event-success": "staff.payroll.adjustment_added",
+        "x-audit-event-success": "staff.payroll.adjustment_requested",
         "x-audit-event-failure": "staff.payroll.adjustment_add_failed",
         "requestBody": {
           "required": true,
@@ -31249,7 +31249,8 @@
                   "month",
                   "adj_type",
                   "amount_cent",
-                  "reason"
+                  "reason",
+                  "hr_approver_id"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -31285,6 +31286,11 @@
                     "type": "string",
                     "description": "事由(必填,钱路留痕硬约束)。",
                     "maxLength": 255
+                  },
+                  "hr_approver_id": {
+                    "type": "string",
+                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
+                    "maxLength": 80
                   }
                 }
               }
@@ -31306,6 +31312,138 @@
           }
         },
         "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/payroll/adjustments/appeals": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffAdjustmentAppeals",
+        "summary": "扣罚申诉清单(本人/人事按员工)",
+        "description": "CG-12：员工看本人申诉（staff.payroll.view_mine）；人事按 user_id 查看须 staff.payroll.manage 且员工在范围内。status：pending（裁定中）/ upheld（维持）/ revoked（已撤销，reversal_adjustment_id 为冲回记录）。",
+        "x-permission": "staff.payroll.view_mine",
+        "x-data-scope": "self",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.payroll.adjustment_appeals_viewed",
+        "x-audit-event-failure": "staff.payroll.adjustment_appeals_view_failed",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/staff/payroll/adjustments/{id}/appeals": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "submitStaffAdjustmentAppeal",
+        "summary": "员工对已生效扣罚提出申诉",
+        "description": "CG-12（BSM:1487「员工可对扣分提出申诉，申诉同样报至 HR 与直属领导向上三级裁定，过程与结论均留痕」）：只能由被扣罚员工本人对已生效的扣罚（adj_type=penalty）提出，事由必填；申诉走同一「HR 会签＋直属领导向上三级」链，链全部通过＝撤销（以 penalty_reversal 记录冲回原调整，原记录保留），任一节点驳回＝维持。失败码：ADJUSTMENT_NOT_FOUND、APPEAL_SELF_ONLY、APPEAL_ONLY_FOR_PENALTY、APPEAL_PENDING、APPEAL_ALREADY_REVOKED、HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE。",
+        "x-permission": "staff.payroll.view_mine",
+        "x-data-scope": "self",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.payroll.adjustment_appeal_submitted",
+        "x-audit-event-failure": "staff.payroll.adjustment_appeal_submit_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "扣罚记录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "申诉事由（必填，留痕）",
+                    "maxLength": 1000
+                  },
+                  "hr_approver_id": {
+                    "type": "string",
+                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "reason",
+                  "hr_approver_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/staff/payroll/commissions": {
@@ -37912,8 +38050,8 @@
           "staff"
         ],
         "operationId": "setStaffEmploymentStatus",
-        "summary": "更新员工任职状态",
-        "description": "在当前公司或商户范围内调整任职状态，保留注册、存档及其他资料。",
+        "summary": "发起员工任职状态变更复核",
+        "description": "CG-12（BSM:1478「辞退与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效，生效即转「离职」」）：任一目标状态（待入职 / 在职 / 试岗 / 停岗 / 离职）都只发起「HR 会签（hr_review 平行线，hr_approver_id 须经角色持有 staff.hr.review）＋该员工直属领导向上三级」复核，返回复核单（review_status=pending_review）；全部节点通过后才写入，通过前档案状态不变。注册审批时系统置的初始状态不算「变更」。失败码：HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE、APPROVAL_LINE_EMPTY（员工本人不得充当 HR 节点）、EMPLOYMENT_STATUS_CHANGED（通过落地时状态已被其他已生效复核变更）。",
         "x-permission": "staff.profile.review",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -37923,7 +38061,7 @@
           "staff_private_phone"
         ],
         "x-idempotency-required": true,
-        "x-audit-event-success": "staff.profile.employment_status_changed",
+        "x-audit-event-success": "staff.profile.employment_status_change_requested",
         "x-audit-event-failure": "staff.profile.employment_status_change_failed",
         "responses": {
           "200": {
@@ -37975,12 +38113,18 @@
                     "type": "string",
                     "description": "填写改动缘由",
                     "maxLength": 1000
+                  },
+                  "hr_approver_id": {
+                    "type": "string",
+                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
+                    "maxLength": 80
                   }
                 },
                 "required": [
                   "idempotency_key",
                   "employment_status",
-                  "reason"
+                  "reason",
+                  "hr_approver_id"
                 ]
               }
             }

@@ -59,6 +59,7 @@ const TEXT = {
 
 const KIND_ZH: Record<string, string> = { user: "直接上级", master: "最高权限主会话", role: "指定角色" };
 const STATUS_ZH: Record<string, string> = { pending: "待审", approved: "已通过", rejected: "已驳回", cancelled: "已作废" };
+const LINE_LABELS: Record<string, string> = { hr_review: "人力审核线（人力会签）", finance_review: "财务审核线", tax_review: "税务审核线", legal_review: "法务审核线" };
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -212,7 +213,7 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
               <thead><tr><th>{TEXT.line}</th><th>{TEXT.seq}</th><th>{TEXT.kind}</th><th>{TEXT.approver}</th><th>{TEXT.status}</th><th>{TEXT.forwardedTo}</th><th>{TEXT.escalations}</th><th>{TEXT.decidedBy}</th></tr></thead>
               <tbody>{nodes.map((node) => (
                 <tr key={node.nodeId} data-testid={`approval-chain-node-${node.lineCode}-${node.seq}`} className={currentNodeIds.has(node.nodeId) ? "admin-row-selected" : undefined}>
-                  <td>{node.lineCode === "main" ? "主线" : node.lineCode}</td>
+                  <td>{node.lineCode === "main" ? "主线" : (LINE_LABELS[node.lineCode] ?? node.lineCode)}</td>
                   <td>{node.seq}</td>
                   <td>{KIND_ZH[node.approverKind] ?? node.approverKind}</td>
                   <td>{node.approverId ?? (node.approverKind === "master" ? "USB 最高权限" : "按角色解析")}</td>

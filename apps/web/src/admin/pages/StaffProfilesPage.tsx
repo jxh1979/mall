@@ -53,6 +53,8 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
   const canManage = useCan(effectivePermissions, MANAGE);
   const [rows, setRows] = React.useState<StaffProfileRow[]>([]);
   const [reason, setReason] = React.useState("");
+  // CG-12：员工状态变更须经 人力会签＋直属领导向上三级复核，人力会签人账号随单指定。
+  const [hrApprover, setHrApprover] = React.useState("");
   const [initialPassword, setInitialPassword] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submittingId, setSubmittingId] = React.useState("");
@@ -121,14 +123,17 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
 
   async function changeEmployment(row: StaffProfileRow, employmentStatus: string) {
     if (!reason.trim()) { setFormError("请先填写改动事由。"); return; }
+    if (!hrApprover.trim()) { setFormError("请先填写 人力会签人账号：涉及员工的人力操作须经人力部门与直属领导向上三级复核后生效。"); return; }
     setFormError("");
     setSubmittingId(row.id);
     try {
-      await api.post("/api/v1/staff/profiles/" + encodeURIComponent(row.id) + "/employment-status", { employmentStatus, reason: reason.trim() });
-      setActionResult({ 结果: "员工状态已更新", 员工档案: row.id });
+      const review = await api.post<{ reviewId?: string }>("/api/v1/staff/profiles/" + encodeURIComponent(row.id) + "/employment-status",
+        { employmentStatus, reason: reason.trim(), hrApproverId: hrApprover.trim() });
+      setActionResult({ 结果: "已发起员工状态变更复核", 员工档案: row.id, 目标状态: EMPLOYMENT[employmentStatus as keyof typeof EMPLOYMENT] ?? employmentStatus,
+        复核单: review?.reviewId ?? "—", 说明: "须经 人力会签与直属领导向上三级全部通过后生效，通过前档案状态不变" });
       setReason("");
       await reload();
-    } catch (error) { setFormError(error instanceof Error ? error.message : "员工状态更新失败"); }
+    } catch (error) { setFormError(error instanceof Error ? error.message : "员工状态变更复核发起失败"); }
     finally { setSubmittingId(""); }
   }
 
@@ -193,9 +198,9 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
     <section data-testid="staff-profiles-page">
       <AdminPageHeader
         title="员工档案"
-        description="办理员工注册审批、档案存档及删除。销售岗员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率；两档费率在「结算配置中心 → 提成与积分」维护。销售岗改动只影响此后新开的账单，不回算历史提成。"
+        description="办理员工注册审批、档案存档及删除。员工状态（待入职/在职/试岗/停岗/离职）的任何变更都只是发起复核：须经 人力会签与该员工直属领导向上三级全部通过后才生效，辞退通过即转离职。销售岗员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率；两档费率在「结算配置中心 → 提成与积分」维护。销售岗改动只影响此后新开的账单，不回算历史提成。"
       />
-      <AuditTrailHint event="staff.profile.sales_position_changed" />
+      <AuditTrailHint event="staff.profile.employment_status_change_requested / staff.profile.employment_status_changed / staff.profile.sales_position_changed" />
       <label><input type="checkbox" data-testid="staff-profiles-include-archived" checked={includeArchived} onChange={(event) => { includeArchivedRef.current = event.target.checked; setIncludeArchived(event.target.checked); void reload(); }} />显示已存档</label>
       <AdminDataState loading={loading} error={error} empty={visibleRows.length === 0} onRetry={reload}>
         {rows.some((row) => row.registrationStatus === "submitted") ? <label>注册审批初始密码
@@ -211,7 +216,16 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
               onChange={(event) => setReason(event.target.value)}
             />
           </label>
-          <span className="admin-muted-action">销售岗改动直接影响提成计提档，事由必填并留审计。</span>
+          <label>人力会签人账号
+            <input
+              aria-label="人力会签人账号"
+              placeholder="员工状态变更的 人力会签人（须持人力会签权限）"
+              data-testid="staff-profiles-hr-approver"
+              value={hrApprover}
+              onChange={(event) => setHrApprover(event.target.value)}
+            />
+          </label>
+          <span className="admin-muted-action">销售岗改动直接影响提成计提档，事由必填并留审计；员工状态变更另须 人力会签＋直属领导向上三级复核。</span>
         </div>
         {formError ? <div data-testid="staff-profiles-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">
