@@ -1,4 +1,4 @@
-# 地基系统数据库设计第一版
+# 地基系统数据库设计第一版 V0.01
 
 > 2026-07-04 逻辑一致性修订：§2.1 organizations 表头加"已作废"内联标注（四层主体统一落 business_entities.entity_role，见 merchant-space-contract-model-v0.1 §5）；§2.0/2.5/2.7/2.8 空间四级模型表头加"已作废"内联标注（真实为扁平单表 spaces，status 仅 active/unavailable，消防容量落 spaces/venues 非 areas）；admission 两表已有作废标注不再重复。
 
@@ -419,7 +419,9 @@
 | two_levels_up | 上两级 | 路由给 level_rank 第二个 > R 的职级；不足两级时回退 top_authority |
 | specified_level | 指定职级 | 由配置显式指定目标 level_rank/main_level+sub_level |
 | top_authority | 最高权限 | 路由给当前组织/项目内 level_rank 最大者；无更高级时即由其本人或平台最高权限审批 |
-| hr_three_levels_up | HR 会签＋直属领导向上三级 | CG-12（V450，BSM:1478 / BSM:1487）：主线＝该员工（直接受益人）直属上级链前三级，链不足三级到顶为止；平行线 hr_review＝HR 会签人（须持 staff.hr.review）；申请人与该员工不成为节点 |
+| hr_three_levels_up | 直属起三级主线＋HR 平行会签 | 主线以该员工直属领导为第一级，共三个组织层级（如领班、主管、部门经理）；平行线 `hr_review` 由系统按员工所属部门及既有组织/授权配置解析合法 HR 会签人，须具备 `staff.hr.review`，不由发起人或申诉人随单指定。申请人与直接受益人不可自审，但不得因剔除这些人而越出指定组织层级另凑三人；配置缺失或不合法时保持待处理并按既有审批规则补齐，不得绕过会签 |
+
+> **人事专条优先（2026-10-17，PGM V0.41）**：`hr_three_levels_up` 按实际组织直属关系解析，不适用本节旧 `level_rank` 连续步进或回退最高权限的算法；不得将三个组织层级变为任意三个职级或三个可审批人。CG-12（V450）已提供相关复核存储，部门自动解析、回避后不越层及独立状态变更仅直属发起等要求仍须实现和验证；本次仅同步设计，不声称已经迁移或改造代码。
 
 **3) 步进与回退规则：**
 - 「上一级」「上两级」均以 level_rank 连续步进，**同主级不同子级（如 M3-中 → M3-上）也算一级**，因为 rank 在 30 级序列上连续。
