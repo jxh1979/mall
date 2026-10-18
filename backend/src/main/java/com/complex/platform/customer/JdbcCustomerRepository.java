@@ -1112,7 +1112,8 @@ class JdbcCustomerRepository implements CustomerRepository {
     // ---- V090 会员忠诚度 第2部分：储值 / 付费会员 / 积分转赠 ----
 
     private static final String STORED_VALUE_ACCOUNT_SELECT = """
-            SELECT id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership
+            SELECT id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership,
+                   principal_cent, bonus_cent
               FROM customer_stored_value_accounts
             """;
 
@@ -1157,11 +1158,15 @@ class JdbcCustomerRepository implements CustomerRepository {
     public CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         jdbcTemplate.update("""
                 INSERT INTO customer_stored_value_accounts (
-                    id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership
+                    id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership,
+                    principal_cent, bonus_cent
                 )
-                VALUES (:id, :customer_id, :project_id, :merchant_id, :balance_cent, :status, :created_at, :updated_at, :fund_ownership)
+                VALUES (:id, :customer_id, :project_id, :merchant_id, :balance_cent, :status, :created_at, :updated_at, :fund_ownership,
+                        :principal_cent, :bonus_cent)
                 ON CONFLICT (id) DO UPDATE SET
                     balance_cent = EXCLUDED.balance_cent,
+                    principal_cent = EXCLUDED.principal_cent,
+                    bonus_cent = EXCLUDED.bonus_cent,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
@@ -1173,7 +1178,9 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("status", account.status())
                 .addValue("created_at", timestampWithTimeZone(account.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(account.updatedAt()))
-                .addValue("fund_ownership", account.fundOwnership()));
+                .addValue("fund_ownership", account.fundOwnership())
+                .addValue("principal_cent", account.principalCent())
+                .addValue("bonus_cent", account.bonusCent()));
         return account;
     }
 
@@ -1182,13 +1189,15 @@ class JdbcCustomerRepository implements CustomerRepository {
         jdbcTemplate.update("""
                 INSERT INTO customer_stored_value_transactions (
                     id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                    payment_intent_id, reason, idempotency_key, created_at, paid_at
+                    payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
                 )
                 VALUES (
                     :id, :account_id, :customer_id, :txn_type, :amount_cent, :balance_after_cent,
-                    :payment_intent_id, :reason, :idempotency_key, :created_at, :paid_at
+                    :payment_intent_id, :reason, :idempotency_key, :created_at, :paid_at, :principal_cent, :bonus_cent
                 )
                 """, new MapSqlParameterSource()
+                .addValue("principal_cent", txn.principalCent())
+                .addValue("bonus_cent", txn.bonusCent())
                 .addValue("id", txn.id())
                 .addValue("account_id", txn.accountId())
                 .addValue("customer_id", txn.customerId())
@@ -1208,7 +1217,7 @@ class JdbcCustomerRepository implements CustomerRepository {
             String customerId, String accountId, int page, int size) {
         return jdbcTemplate.query("""
                 SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at, paid_at
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
                   FROM customer_stored_value_transactions
                  WHERE customer_id = :customer AND account_id = :account
                  ORDER BY created_at DESC, id DESC LIMIT :size OFFSET :offset
@@ -1223,7 +1232,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         }
         return jdbcTemplate.query("""
                 SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at, paid_at
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
                   FROM customer_stored_value_transactions
                  WHERE idempotency_key = :key
                 """, Map.of("key", key), this::mapStoredValueTransaction).stream().findFirst();
@@ -1284,7 +1293,8 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public Optional<StoredValueMerchantRefundRuleRecord> findStoredValueMerchantRefundRule(String merchantId) {
         return jdbcTemplate.query("""
-                SELECT merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at
+                SELECT merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at,
+                       consume_order
                   FROM stored_value_merchant_refund_rules WHERE merchant_id = :merchant_id
                 """, new MapSqlParameterSource().addValue("merchant_id", merchantId),
                 this::mapMerchantRefundRule).stream().findFirst();
@@ -1293,15 +1303,18 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public StoredValueMerchantRefundRuleRecord saveStoredValueMerchantRefundRule(StoredValueMerchantRefundRuleRecord rule) {
         jdbcTemplate.update("""
-                INSERT INTO stored_value_merchant_refund_rules (merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at)
-                VALUES (:merchant_id, :refund_allowed, :refund_ratio_bps, :card_issuance_enabled, :fund_ownership, :created_at, :updated_at)
+                INSERT INTO stored_value_merchant_refund_rules (merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at, consume_order)
+                VALUES (:merchant_id, :refund_allowed, :refund_ratio_bps, :card_issuance_enabled, :fund_ownership, :created_at, :updated_at, :consume_order)
                 ON CONFLICT (merchant_id) DO UPDATE SET
                     refund_allowed = EXCLUDED.refund_allowed,
                     refund_ratio_bps = EXCLUDED.refund_ratio_bps,
                     card_issuance_enabled = EXCLUDED.card_issuance_enabled,
                     fund_ownership = EXCLUDED.fund_ownership,
+                    consume_order = EXCLUDED.consume_order,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
+                .addValue("consume_order", rule.consumeOrder() == null
+                        ? StoredValueMerchantRefundRuleRecord.CONSUME_PRINCIPAL_FIRST : rule.consumeOrder())
                 .addValue("merchant_id", rule.merchantId())
                 .addValue("refund_allowed", rule.refundAllowed())
                 .addValue("refund_ratio_bps", rule.refundRatioBps())
@@ -1320,7 +1333,41 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getBoolean("card_issuance_enabled"),
                 rs.getString("fund_ownership"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "updated_at"),
+                rs.getString("consume_order"));
+    }
+
+    // CG-06a 通用卡充值赠送比例（按项目，值与上下限同在）。
+    @Override
+    public Optional<StoredValueBonusPolicyRecord> findStoredValueBonusPolicy(String projectScope) {
+        return jdbcTemplate.query("""
+                SELECT project_id, bonus_bps, min_bps, max_bps, updated_by, updated_at
+                  FROM stored_value_bonus_policies WHERE project_id = :project_id
+                """, new MapSqlParameterSource().addValue("project_id", projectScope),
+                (rs, n) -> new StoredValueBonusPolicyRecord(rs.getString("project_id"), rs.getInt("bonus_bps"),
+                        rs.getInt("min_bps"), rs.getInt("max_bps"), rs.getString("updated_by"),
+                        nullableInstant(rs, "updated_at"))).stream().findFirst();
+    }
+
+    @Override
+    public StoredValueBonusPolicyRecord saveStoredValueBonusPolicy(StoredValueBonusPolicyRecord policy) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_bonus_policies (project_id, bonus_bps, min_bps, max_bps, updated_by, updated_at)
+                VALUES (:project_id, :bonus_bps, :min_bps, :max_bps, :updated_by, :updated_at)
+                ON CONFLICT (project_id) DO UPDATE SET
+                    bonus_bps = EXCLUDED.bonus_bps,
+                    min_bps = EXCLUDED.min_bps,
+                    max_bps = EXCLUDED.max_bps,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("project_id", policy.projectId())
+                .addValue("bonus_bps", policy.bonusBps())
+                .addValue("min_bps", policy.minBps())
+                .addValue("max_bps", policy.maxBps())
+                .addValue("updated_by", policy.updatedBy())
+                .addValue("updated_at", timestampWithTimeZone(policy.updatedAt() == null ? java.time.Instant.now() : policy.updatedAt())));
+        return policy;
     }
 
     @Override
@@ -1341,7 +1388,9 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("status"),
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "updated_at"),
-                rs.getString("fund_ownership"));
+                rs.getString("fund_ownership"),
+                rs.getLong("principal_cent"),
+                rs.getLong("bonus_cent"));
     }
 
     private CustomerStoredValueTransactionRecord mapStoredValueTransaction(ResultSet rs, int rowNumber) throws SQLException {
@@ -1356,7 +1405,9 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("reason"),
                 rs.getString("idempotency_key"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "paid_at"));
+                nullableInstant(rs, "paid_at"),
+                rs.getLong("principal_cent"),
+                rs.getLong("bonus_cent"));
     }
 
 }

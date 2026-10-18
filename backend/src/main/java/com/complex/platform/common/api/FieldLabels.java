@@ -156,6 +156,7 @@ public final class FieldLabels {
         p("work_scope", "工作范围");
         p("shift_id", "班次");
         p("fault_id", "全园故障记录");
+        p("dispatch_id", "派驻记录");
         p("station_code", "工位编码");
         p("registration_photo_refs", "登记照片");
         p("consent_type", "授权类型");
