@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -409,7 +409,7 @@ class AnalyticsJdbcIntegrationTests {
         java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");
         java.time.Instant end = java.time.Instant.parse("2099-01-02T04:00:00Z");
         java.util.Map<String, java.math.BigDecimal> byType = repository.energyConsumptionByType(start, end);
-        assertThat(byType.get("electricity")).isEqualByComparingTo("100.5");
+        assertThat(byType.get("electricity")).isEqualByComparingTo("60.5"); // 未核异常不进已审核用量
         assertThat(byType.get("water")).isEqualByComparingTo("8");
         assertThat(byType).doesNotContainKey("gas");
 
@@ -465,10 +465,11 @@ class AnalyticsJdbcIntegrationTests {
                 INSERT INTO energy_meter_readings (id, meter_id, period, reading_value, prev_reading_value,
                         consumption, status, abnormal_reason, read_mode, read_at)
                 VALUES (:id, :meter_id, :period, :consumption::numeric, 0, :consumption::numeric,
-                        'recorded', :abnormal_reason, 'manual', :read_at::timestamptz)
+                        :status, :abnormal_reason, 'manual', :read_at::timestamptz)
                 """, new java.util.HashMap<String, Object>() {{
                     put("id", id); put("meter_id", meterId); put("consumption", consumption);
                     put("abnormal_reason", abnormalReason); put("read_at", readAt);
+                    put("status", abnormalReason==null ? "reviewed" : "abnormal");
                     put("period", period);
                 }});
     }

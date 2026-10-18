@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
@@ -75,6 +75,42 @@ public class InventoryQuarantineService {
                 "dealer_delivery_resolution",resolutionId,null,actor(),attachments,"completed",at,owner),project);
     }
 
+    /** 普通退货验收复用原批次实际出库成本及统一隔离实物台账；原订单已持锁。 */
+    @Transactional
+    public void receiveDealerReturnLine(String returnLineId,Instant at,List<String> attachments) {
+        var facts=jdbc.queryForMap("""
+                SELECT l.accepted_quantity quantity,l.resalable_quantity,l.quarantined_quantity,l.item_id,dr.id return_id,
+                 dr.status,dr.approved_at,o.id order_id,o.central_warehouse_id warehouse_id,w.project_id,w.merchant_id,
+                 r.batch_id,b.resolution_id source_resolution_id
+                FROM dealer_return_lines l JOIN dealer_returns dr ON dr.id=l.return_id JOIN dealer_orders o ON o.id=dr.order_id
+                 JOIN warehouses w ON w.id=o.central_warehouse_id
+                 JOIN dealer_delivery_receipt_lines rl ON rl.id=l.source_receipt_line_id AND rl.order_line_id=l.order_line_id
+                 JOIN dealer_delivery_receipts r ON r.id=rl.receipt_id AND r.order_id=o.id
+                 JOIN dealer_delivery_batches b ON b.id=r.batch_id WHERE l.id=?
+                """,returnLineId);
+        String project=(String)facts.get("project_id");requireProject(project,"dealer.return.inspect");
+        if(!"inspecting".equals(facts.get("status")) || facts.get("approved_at")==null) throw invalid("须按原已批准退货单实际验收");
+        if(jdbc.queryForObject("SELECT count(*) FROM inventory_stock_movements WHERE business_type='dealer_return_line' AND business_id=?",Integer.class,returnLineId)>0) throw invalid("该明细已完成实物回库，不能再次入库");
+        checkEvidence("dealer_return",(String)facts.get("return_id"),attachments);
+        int quantity=((Number)facts.get("quantity")).intValue(),resalable=((Number)facts.get("resalable_quantity")).intValue(),quarantined=((Number)facts.get("quarantined_quantity")).intValue();
+        if(quantity<=0 || resalable<0 || quarantined<0 || quantity!=resalable+quarantined) throw invalid("实际接收数量必须与可售、隔离数量一致");
+        String item=(String)facts.get("item_id"),warehouse=(String)facts.get("warehouse_id");Long cost=sourceReturnCost(facts,item,quantity);
+        var balances=jdbc.query("SELECT id FROM inventory_stock_balances WHERE item_id=? AND warehouse_id=? ORDER BY id LIMIT 1 FOR UPDATE",(r,n)->r.getString(1),item,warehouse);
+        String balance=balances.isEmpty()?"bal_"+UUID.randomUUID():balances.getFirst();
+        if(balances.isEmpty()) jdbc.update("""
+                INSERT INTO inventory_stock_balances(id,item_id,location_id,quantity,reserved_quantity,available_quantity,updated_at,warehouse_id,project_id,quarantined_quantity,merchant_id)
+                VALUES(?,?,?,0,0,0,now(),?,?,0,?)
+                """,balance,item,warehouse,warehouse,project,facts.get("merchant_id"));
+        jdbc.update("UPDATE inventory_stock_balances SET quantity=quantity+?,available_quantity=available_quantity+?,quarantined_quantity=quarantined_quantity+?,updated_at=now() WHERE id=?",quantity,resalable,quarantined,balance);
+        if(quarantined>0) jdbc.update("""
+                INSERT INTO inventory_quarantine_lots(id,stock_balance_id,item_id,warehouse_id,project_id,source_type,source_id,quantity,remaining_quantity,evidence_attachment_ids,received_by,received_at)
+                VALUES(?,?,?,?,?,'dealer_return_line',?,?,?,?::jsonb,?,?)
+                ""","iql_"+returnLineId,balance,item,warehouse,project,returnLineId,quarantined,quarantined,json(attachments),actor(),Timestamp.from(at));
+        var stock=jdbc.queryForMap("SELECT location_id,merchant_id FROM inventory_stock_balances WHERE id=?",balance);
+        inventory.saveSourceReturnMovement(new StockMovementRecord("movement_"+returnLineId,"return",item,null,(String)stock.get("location_id"),quantity,null,cost,
+                "dealer_return_line",returnLineId,null,actor(),attachments,"completed",at,(String)stock.get("merchant_id")),project);
+    }
+
     /** 原订单锁串行化同一来源批次的退回；累计分摊使最后一份精确收回原出库总成本。 */
     private Long sourceReturnCost(Map<String,Object> facts,String item,int quantity) {
         String batch=(String)facts.get("batch_id"), sourceResolution=(String)facts.get("source_resolution_id");
@@ -93,10 +129,13 @@ public class InventoryQuarantineService {
         if(expected==null || shipped!=expected || shipped<=0) throw invalid("实际原出库流水与交付批次数量不一致，须核实后回库");
         var restored=jdbc.queryForMap("""
                 SELECT COALESCE(SUM(m.quantity),0) quantity,COALESCE(SUM(m.total_cost_cent),0) cost,COUNT(*) movement_count,COUNT(m.total_cost_cent) priced_count
-                FROM inventory_stock_movements m JOIN dealer_delivery_resolutions s ON s.id=m.business_id
-                 JOIN dealer_delivery_discrepancies d ON d.id=s.discrepancy_id
-                 JOIN dealer_delivery_receipt_lines rl ON rl.id=d.receipt_line_id JOIN dealer_delivery_receipts r ON r.id=rl.receipt_id
-                WHERE m.business_type='dealer_delivery_resolution' AND m.movement_type='return' AND m.source_location_id IS NULL
+                FROM inventory_stock_movements m
+                LEFT JOIN dealer_delivery_resolutions s ON m.business_type='dealer_delivery_resolution' AND s.id=m.business_id
+                LEFT JOIN dealer_delivery_discrepancies d ON d.id=s.discrepancy_id
+                LEFT JOIN dealer_return_lines l ON m.business_type='dealer_return_line' AND l.id=m.business_id
+                JOIN dealer_delivery_receipt_lines rl ON rl.id=COALESCE(d.receipt_line_id,l.source_receipt_line_id)
+                JOIN dealer_delivery_receipts r ON r.id=rl.receipt_id
+                WHERE m.business_type IN ('dealer_delivery_resolution','dealer_return_line') AND m.movement_type='return' AND m.source_location_id IS NULL
                  AND m.target_location_id IS NOT NULL AND m.status='completed' AND r.batch_id=? AND m.item_id=?
                 """,batch,item);
         long returned=((Number)restored.get("quantity")).longValue();

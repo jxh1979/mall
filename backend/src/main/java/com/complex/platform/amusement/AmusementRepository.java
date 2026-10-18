@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -166,23 +168,19 @@ public interface AmusementRepository {
 
     List<AmusementSessionRecord> listSessionsByMerchant(String merchantId);
 
+    List<AmusementSessionRecord> listSessionsScoped(boolean unrestricted,
+            java.util.Set<String> complexIds, String merchantId);
+
     Optional<AmusementSessionRecord> findSessionById(String id);
+
+    /** Safety writes and automatic reopen serialize on the same project. */
+    default void lockProjectForSafety(String projectId) {}
+
+    default boolean isHardCapacityPaused(String projectId) { return false; }
 
     boolean incrementSessionUsedCapacityIfAvailable(String sessionId);
 
-    /**
-     * §6.4 三维度容量取最小可放行余量：对「项目安全上限 / 场次 / 点位·设备」三维度中
-     * <b>已配置（受控）</b>的每个维度，在同一事务内原子 check+increment（used+1，仅当余量&gt;0）。
-     *
-     * <p>原子防超卖：逐维度执行 {@code UPDATE ... WHERE occupied < limit}（与 session 的
-     * {@code used+locked < capacity} 同模式）；任一维度余量为 0（或并发耗尽）→ 立即回滚（递减）本次
-     * 已成功 +1 的维度，整体判失败返回 {@code claimed=false}，调用方据此落 SESSION_CAPACITY_EXHAUSTED。
-     * 全部受控维度均放行 → 各维度 used+1 已落库（场次维写 amusement_sessions.used_capacity，
-     * 点位/设备维与项目安全上限维写 amusement_capacity_snapshot），返回 {@code claimed=true}。
-     *
-     * <p>向后兼容：未配置 capacity_config 的点位/设备维度跳过；project.capacity&lt;=0 时项目安全上限维跳过；
-     * 三维均未配置时退化为仅场次维（既有单维行为不变）。
-     */
+    /** 项目实时在玩人数唯一硬容量；场次、点位和团体预约不另设入场上限。 */
     CapacityClaimResult claimCapacityAcrossDimensions(CapacityClaimContext context);
 
     boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock);

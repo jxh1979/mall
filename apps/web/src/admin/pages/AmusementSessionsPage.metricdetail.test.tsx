@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -24,6 +25,7 @@ function makeApi(metricDetailFails = false): AdminApiClient {
         return COUNT_DETAIL;
       }
       if (url.includes("/amusement/sessions")) return SESSIONS;
+      if (url === "/api/v1/amusement/projects") return [{ id: "p1", capacity: 70 }, { id: "p2", capacity: 80 }];
       return [];
     }),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),

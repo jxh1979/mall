@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -69,6 +69,8 @@ public class StaffService {
     private StaffWorkPhoneAttendanceService workPhoneAttendance;
     @org.springframework.beans.factory.annotation.Autowired
     private StaffApprovalService staffApprovals;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PayrollTaxService payrollTaxes;
     @org.springframework.beans.factory.annotation.Autowired
     private StaffHrRoutingService staffHrRouting;
     @org.springframework.beans.factory.annotation.Autowired
@@ -1694,6 +1696,7 @@ public class StaffService {
 
     /** F批(2026-07-02 拍板):月结——重算定格全员薪资单(可重复执行=覆盖,补录奖惩后重结);
      * total = 固定 + 提成(台账+酒吧提成) + 奖金 - 处罚;员工只看已定格月份。 */
+    @org.springframework.transaction.annotation.Transactional
     public java.util.Map<String, Object> closePayroll(com.complex.platform.access.staff.dto.StaffPayrollCloseRequest request) {
         try {
             authorizationService.requirePermission("staff.payroll.manage");
@@ -1701,16 +1704,27 @@ public class StaffService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
             }
             var actor = authorizationService.currentActor();
+            payrollTaxes.prepareMonth(request.month(), projectScope(), staffMerchantScope(), staffCompanyScope());
             int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now(), projectScope(), staffMerchantScope(), staffCompanyScope());
             auditEventService.recordSuccess("staff.payroll.month_closed", "staff.payroll.manage",
                     "staff_payroll_statement", request.month(), null, request.idempotencyKey(),
                     java.util.Map.of("month", request.month(), "statements", count));
             return java.util.Map.of("month", request.month(), "statements", count);
         } catch (RuntimeException exception) {
+            RuntimeException failure = exception;
+            if (exception instanceof org.springframework.dao.DataIntegrityViolationException integrity
+                    && integrity.getMostSpecificCause() instanceof java.sql.SQLException sql
+                    && "23514".equals(sql.getSQLState())
+                    && sql.getMessage() != null
+                    && sql.getMessage().contains("PAYROLL_TAX_PAYER_CHANGED:")) {
+                failure = ApiException.conflict("PAYROLL_TAX_PAYER_CHANGED",
+                        "工资落单项目或发放主体已变化，请核实原税务认定后重试");
+                failure.initCause(exception);
+            }
             auditEventService.recordFailure("staff.payroll.month_close_failed", "staff.payroll.manage",
                     "staff_payroll_statement", request == null ? null : request.month(), null,
-                    request == null ? null : request.idempotencyKey(), codeOf(exception));
-            throw exception;
+                    request == null ? null : request.idempotencyKey(), codeOf(failure));
+            throw failure;
         }
     }
 
@@ -1753,47 +1767,34 @@ public class StaffService {
         return java.util.Map.of("user_id", request.userId().trim(), "month", request.month(), "paid", paid);
     }
 
-    /** 个税税表(V217):后台查劳务报酬预扣税表全档位(读复用 payroll.manage)。 */
+    /** 原单档税表仅作历史只读，当前计算改用已批准的完整版本与认定。 */
     public java.util.List<PayrollTaxBracketRecord> listTaxBrackets(String category) {
-        authorizationService.requirePermission("staff.payroll.manage");
-        return repository.listTaxBrackets(category == null || category.isBlank() ? null : category.trim());
+        try {
+            authorizationService.requirePermission("staff.payroll.manage");
+            var rows = repository.listTaxBrackets(category == null || category.isBlank() ? null : category.trim());
+            auditEventService.recordSuccess("staff.payroll.tax_bracket_viewed", "staff.payroll.manage",
+                    "payroll_tax_brackets", "history", null, null,
+                    java.util.Map.of("count", rows.size(), "category", category == null ? "*" : category.trim()));
+            return rows;
+        } catch (RuntimeException error) {
+            auditEventService.recordFailure("staff.payroll.tax_bracket_view_failed", "staff.payroll.manage",
+                    "payroll_tax_brackets", "history", null, null, codeOf(error));
+            throw error;
+        }
     }
 
-    /** 个税税表(V217):维护一档(高敏,决定代扣个税口径);税法参数变更改配置不改代码;审计留痕。 */
+    /** 旧单档写入口关闭：权限授出不能替代每次完整税表的审批。 */
     public PayrollTaxBracketRecord upsertTaxBracket(
             com.complex.platform.access.staff.dto.PayrollTaxBracketRequest request) {
-        authorizationService.requirePermission("staff.tax_bracket.manage");
-        if (request == null || request.id() == null || request.id().isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "id is required");
+        try {
+            authorizationService.requirePermission("staff.tax_bracket.manage");
+            throw ApiException.conflict("TAX_VERSION_REQUIRED", "请创建完整税表版本草案，经财务、税务、法务和最高确认后生效");
+        } catch (RuntimeException error) {
+            auditEventService.recordFailure("staff.payroll.tax.single_bracket_write_rejected", "staff.tax_bracket.manage",
+                    "payroll_tax_brackets", request == null ? null : request.id(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(error));
+            throw error;
         }
-        String category = request.category() == null || request.category().isBlank()
-                ? "labor_remuneration" : request.category().trim();
-        if (request.seq() == null || request.incomeFloorCent() == null || request.incomeBaseBps() == null
-                || request.rateBps() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写序号、收入下限、收入基数比例与费率");
-        }
-        if (request.incomeFloorCent() < 0
-                || request.incomeBaseBps() <= 0 || request.incomeBaseBps() > 10000
-                || request.rateBps() < 0 || request.rateBps() > 10000) {
-            throw ApiException.badRequest("VALIDATION_FAILED",
-                    "收入基数比例须在 (0,10000] 基点、费率须在 [0,10000] 基点、收入下限不能为负");
-        }
-        if (request.incomeCeilingCent() != null && request.incomeCeilingCent() < request.incomeFloorCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "收入上限不能低于收入下限");
-        }
-        Instant now = Instant.now();
-        var actor = authorizationService.currentActor();
-        PayrollTaxBracketRecord saved = repository.upsertTaxBracket(new PayrollTaxBracketRecord(
-                request.id().trim(), category, request.seq(), request.incomeFloorCent(),
-                request.incomeCeilingCent(), request.incomeBaseBps(),
-                request.flatDeductionCent() == null ? 0L : request.flatDeductionCent(), request.rateBps(),
-                request.quickDeductionCent() == null ? 0L : request.quickDeductionCent(),
-                request.effectiveFrom(), actor == null ? null : actor.id(), now));
-        auditEventService.recordSuccess("staff.payroll.tax_bracket_changed", "staff.tax_bracket.manage",
-                "payroll_tax_brackets", saved.id(), null, request.idempotencyKey(),
-                java.util.Map.of("category", category, "seq", request.seq(),
-                        "rate_bps", request.rateBps(), "income_floor_cent", request.incomeFloorCent()));
-        return saved;
     }
 
     /** F批:后台按月查全员薪资单。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -882,7 +882,8 @@ public class DealerOrderService {
                     throw ApiException.forbidden("DEALER_SOD_SAME_PERSON", "退款办理人与到账核验人不得为同一人");
                 }
                 DealerOrderRecord order = requireOrder(refund.orderId());
-                String projectId = requireOrderProject(payment.orderId(), REFUND_EXECUTE);
+                requireOrderProject(payment.orderId(), REFUND_EXECUTE);
+                String projectId = requireOrderProject(order.id(), REFUND_EXECUTE);
                 String financeId = financeService.recordDealerOrderRefund(refund.id(), refund.amountCent(), payment.method(),
                         payment.referenceNo(), projectId, refund.reason());
                 DealerOrderRefundRecord saved = new DealerOrderRefundRecord(refund.id(), refund.orderId(), refund.paymentId(),

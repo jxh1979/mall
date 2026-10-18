@@ -1,4 +1,7 @@
 package com.complex.platform.inventory;
+
+// 文件版本：V0.01
+
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -88,7 +91,6 @@ public class InventoryController {
 
     @GetMapping("/purchase-requests")
     public ApiResponse<PageResponse<PurchaseRequestRecord>> listPurchaseRequests() {
-        authorizationService.requirePermission("inventory.purchase_request.view");
         return ApiResponse.ok(service.listPurchaseRequests());
     }
 
@@ -105,7 +107,7 @@ public class InventoryController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid PurchaseRequestApproveRequest request
     ) {
-        authorizationService.requirePermission("inventory.purchase.approve");
+        authorizationService.requirePermission("inventory.purchase_request.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(purchaseRequestService.approve(id, request));
     }
@@ -115,7 +117,7 @@ public class InventoryController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid PurchaseRequestTransitionRequest request
     ) {
-        authorizationService.requirePermission("inventory.purchase.approve");
+        authorizationService.requirePermission("inventory.purchase_request.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(purchaseRequestService.order(id, request));
     }
@@ -125,7 +127,7 @@ public class InventoryController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid PurchaseRequestTransitionRequest request
     ) {
-        authorizationService.requirePermission("inventory.purchase.approve");
+        authorizationService.requirePermission("inventory.purchase_request.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(purchaseRequestService.arrive(id, request));
     }
@@ -135,7 +137,7 @@ public class InventoryController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid PurchaseRequestReceiveRequest request
     ) {
-        authorizationService.requirePermission("inventory.purchase.approve");
+        authorizationService.requirePermission("inventory.purchase_request.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(purchaseRequestService.receive(id, request));
     }
@@ -568,7 +570,6 @@ public class InventoryController {
     // ── R5 T6：供应合同三模式 ──────────────────────────────────────────────────
     @GetMapping("/supply-contracts")
     public ApiResponse<PageResponse<SupplyContractRecord>> listSupplyContracts() {
-        authorizationService.requirePermission("inventory.supply_contract.manage");
         return ApiResponse.ok(supplyContractService.listSupplyContracts());
     }
 
@@ -584,7 +585,7 @@ public class InventoryController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid SupplyContractApproveRequest request
     ) {
-        authorizationService.requirePermission("inventory.purchase.approve");
+        authorizationService.requirePermission("inventory.supply_contract.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(supplyContractService.approveSupplyContract(id, request));
     }

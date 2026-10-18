@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -39,6 +39,18 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
         this.piiCipher = piiCipher;
+    }
+
+    @Override
+    public Optional<String> findOriginalApplicant(String objectType, String objectId) {
+        String sql = switch (objectType) {
+            case "supply_contract" -> "SELECT requested_by FROM supply_contracts WHERE id=:id";
+            case "inventory_purchase_request" -> "SELECT requested_by FROM inventory_purchase_requests WHERE id=:id";
+            default -> null;
+        };
+        if (sql == null) return Optional.empty();
+        return jdbcTemplate.query(sql, Map.of("id", objectId), (rs, row) -> rs.getString("requested_by"))
+                .stream().filter(value -> value != null && !value.isBlank()).findFirst();
     }
 
     @Override

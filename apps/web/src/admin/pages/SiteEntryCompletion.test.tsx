@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
@@ -68,6 +68,24 @@ describe("施工整改闭环", () => {
     fireEvent.click(screen.getByRole("button", { name: "批准进场" }));
     await waitFor(() => expect(p.api.post).toHaveBeenCalledWith("/api/v1/facility/site-entry-reports/report-a/review",
       expect.objectContaining({ decision: "approve" })));
+  });
+  it("重试读取同一报备的材料历史不清空已填写的办理意见", async () => {
+    const p = props("submitted");
+    let historyCalls = 0;
+    p.api.get = vi.fn(async (path: string) => {
+      if (!path.endsWith("/history")) return [{ id: "report-a", projectId: "project-a", workScope: "围挡整改", vendorUserId: "vendor-a", status: "submitted" }];
+      if (++historyCalls === 1) throw new Error("暂时无法读取材料");
+      return [];
+    }) as AdminPageProps["api"]["get"];
+    render(<SiteEntryPropertyPage {...p} stage="review" />);
+    await screen.findByText("材料历史读取失败，请重试");
+    fireEvent.change(screen.getByLabelText("办理意见"), { target: { value: "已核对现场，可以进场" } });
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(historyCalls).toBe(2));
+    expect((screen.getByLabelText("办理意见") as HTMLTextAreaElement).value).toBe("已核对现场，可以进场");
+    fireEvent.click(screen.getByRole("button", { name: "批准进场" }));
+    await waitFor(() => expect(p.api.post).toHaveBeenCalledWith("/api/v1/facility/site-entry-reports/report-a/review",
+      expect.objectContaining({ reviewComment: "已核对现场，可以进场" })));
   });
   it("验收提交已查看的材料序号并显示受控文件入口", async () => {
     const p = props("in_progress", [submission]);

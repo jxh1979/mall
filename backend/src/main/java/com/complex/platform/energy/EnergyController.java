@@ -1,5 +1,7 @@
 package com.complex.platform.energy;
 
+// 文件版本：V0.02
+
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -36,7 +38,6 @@ public class EnergyController {
 
     @GetMapping("/meters")
     public ApiResponse<PageResponse<EnergyMeterRecord>> listMeters() {
-        authorizationService.requirePermission(METER_PERM);
         return ApiResponse.ok(service.listMeters());
     }
 
@@ -57,7 +58,6 @@ public class EnergyController {
     @GetMapping("/readings")
     public ApiResponse<PageResponse<EnergyMeterReadingRecord>> listReadings(
             @RequestParam(value = "period", required = false) String period) {
-        authorizationService.requirePermission(READING_PERM);
         return ApiResponse.ok(service.listReadings(period));
     }
 

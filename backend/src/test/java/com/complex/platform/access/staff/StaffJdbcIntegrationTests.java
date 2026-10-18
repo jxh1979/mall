@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -446,19 +446,6 @@ class StaffJdbcIntegrationTests {
         assertThat(after).hasSize(1);
         assertThat(after.get(0).totalCent()).isEqualTo(800000L + 120000L + 60000L - 20000L);
 
-        // H批:加入当月服务劳务 3 万元(service_order 台账)→ 重结代扣个税
-        // 劳务报酬预扣:X=3万>4000 → Y=X*80%=2.4万 > 2万 → tax=Y*30%-2000元=5200元=520000分。
-        jdbcTemplate.update("INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, created_at) "
-                + "VALUES ('cml_tax_" + key() + "', 'usr_admin', '" + month + "', 'service_order', 'svo_tax', 3000000, now())");
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
-        com.complex.platform.access.staff.StaffPayrollStatementRecord taxed =
-                service.listMyPayroll(month).items().stream()
-                        .filter(row -> row.userId().equals("usr_admin")).findFirst().orElseThrow();
-        assertThat(taxed.taxCent()).isEqualTo(520000L);
-        assertThat(taxed.commissionCent()).isEqualTo(120000L + 3000000L);
-        assertThat(taxed.totalCent()).isEqualTo(taxed.baseCent() + taxed.commissionCent()
-                + taxed.bonusCent() - taxed.penaltyCent() - taxed.taxCent());
-
         // 请假:提交→主管通过→月视图该日=leave。
         com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
                 new com.complex.platform.access.staff.dto.StaffLeaveRequest(
@@ -507,6 +494,13 @@ class StaffJdbcIntegrationTests {
         assertThat(withLeave.totalCent()).isEqualTo(withLeave.baseCent() + withLeave.commissionCent()
                 + withLeave.bonusCent() - withLeave.penaltyCent() - withLeave.leaveDeductionCent()
                 - withLeave.taxCent());
+
+        // HP-H11：服务台账不再自动推定劳务税目。完整批准链、金额和锁版由 PayrollTaxVersionJdbcIntegrationTests 覆盖。
+        jdbcTemplate.update("INSERT INTO staff_commission_ledger (id,user_id,month,source_type,source_id,amount_cent,created_at) VALUES (?,'usr_admin',?,'service_order','svo_tax',3000000,now())",
+                "cml_tax_"+key(),month);
+        assertThatThrownBy(()->service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(),month)))
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_ASSESSMENT_REQUIRED"));
+        assertThat(service.listMyPayroll(month).items().stream().filter(row->row.userId().equals("usr_admin")).findFirst().orElseThrow()).isEqualTo(withLeave);
     }
 
     @org.junit.jupiter.api.Test

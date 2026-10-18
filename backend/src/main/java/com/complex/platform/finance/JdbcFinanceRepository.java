@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -155,20 +155,26 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsPaged(
             String merchantId, String projectId, String keyword, int page, int size) {
+        return listArApItemsForProjects(merchantId,projectId==null ? null : java.util.Set.of(projectId),keyword,page,size);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsForProjects(
+            String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 20 : Math.min(size, 200);
         String trimmed = keyword == null ? "" : keyword.trim();
-        // P1-A 两维并存:merchant_id(商户维) + project_id(综合体维);非空才加谓词,均空=平台全量。
-        // 参数带 SQL 类型,PG 才能推断 :x IS NULL 分支的类型。
+        if (projectIds != null && projectIds.isEmpty())
+            return new com.complex.platform.common.api.PageResponse<>(List.of(),safePage,safeSize,0L);
+        // 同一个筛选谓词用于行和总数，分页之前取商户与授权项目交集。
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
-                .addValue("project_id", projectId, java.sql.Types.VARCHAR)
+                .addValue("project_ids", projectIds)
                 .addValue("kw", trimmed.isEmpty() ? null : "%" + trimmed + "%", java.sql.Types.VARCHAR);
         String where = """
                  WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
-                   AND (:project_id IS NULL OR project_id = :project_id)
                    AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw OR source_type ILIKE :kw)
-                """;
+                """ + (projectIds == null ? "" : " AND project_id IN (:project_ids)");
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
@@ -193,6 +199,31 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE id = :id
                    FOR UPDATE
                 """, Map.of("id", id), this::mapArApItem).stream().findFirst();
+    }
+
+    @Override
+    public boolean isPurchasePayableReplaced(String itemId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM purchase_payable_adjustments WHERE original_item_id = :id)
+                    OR EXISTS (SELECT 1 FROM purchase_prepayment_resolutions WHERE original_item_id = :id AND status = 'posted')
+                    OR EXISTS (SELECT 1 FROM ar_ap_adjustments WHERE ar_ap_item_id = :id AND approval_status = 'approved')
+                """, Map.of("id", itemId), Boolean.class));
+    }
+
+    @Override
+    public Optional<ArApItemRecord> findCurrentPurchasePayable(String sourceType, String sourceId) {
+        List<ArApItemRecord> current = jdbcTemplate.query(AR_AP_ITEM_SELECT + """
+                 WHERE direction = 'payable' AND source_type = :source_type AND source_id = :source_id
+                   AND amount_cent > 0 AND status <> 'reversed'
+                   AND NOT EXISTS (SELECT 1 FROM purchase_payable_adjustments p WHERE p.original_item_id = ar_ap_items.id)
+                   AND NOT EXISTS (SELECT 1 FROM purchase_prepayment_resolutions p
+                                    WHERE p.original_item_id = ar_ap_items.id AND p.status = 'posted')
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_adjustments a
+                                    WHERE a.ar_ap_item_id = ar_ap_items.id AND a.approval_status = 'approved')
+                """, Map.of("source_type", sourceType, "source_id", sourceId), this::mapArApItem);
+        if (current.size() > 1) throw ApiException.conflict(
+                "PURCHASE_PAYABLE_AMBIGUOUS", "采购来源存在多张有效应付，请核实更正链");
+        return current.stream().findFirst();
     }
 
     @Override

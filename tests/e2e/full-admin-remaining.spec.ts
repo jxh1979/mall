@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -26,12 +26,14 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-AMU-005", label: "游乐核销记录", route: "/admin/amusement/verification-records" },
   { pageId: "ADM-AMU-006", label: "全园故障状态", route: "/admin/amusement/park-wide-faults" },
   { pageId: "ADM-AMU-007", label: "全园故障补偿", route: "/admin/amusement/fault-compensation" },
+  { pageId: "ADM-AMU-008", label: "游乐营业日", route: "/admin/amusement/business-day-configs" },
+  { pageId: "ADM-INV-003", label: "采购与退供", route: "/admin/inventory/purchases" },
   { pageId: "ADM-FIN-004", label: "物业费管理", route: "/admin/finance/property-fee" },
   { pageId: "ADM-FIN-006", label: "商户费用台账", route: "/admin/finance/merchant-expenses" },
   { pageId: "ADM-FIN-007", label: "持股分红", route: "/admin/finance/dividends" },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
-  { pageId: "ADM-GOV-007", label: "空间类型字典", route: "/admin/governance/space-types" },
+  { pageId: "ADM-GOV-007", label: "空间种类", route: "/admin/governance/space-types" },
   { pageId: "ADM-GOV-008", label: "场地营业时间", route: "/admin/governance/venue-business-hours" },
   { pageId: "ADM-GOV-009", label: "审批链与节点裁决", route: "/admin/governance/approval-chain" },
   { pageId: "ADM-ACC-004", label: "组织层级与审批线", route: "/admin/access/org-hierarchy" },
@@ -92,7 +94,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-013", label: "放弃权益额外收入", route: "/admin/analytics/abandoned-entitlement-revenue" },
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
-  { pageId: "ADM-STF-003", label: "个税税表", route: "/admin/staff/tax-brackets" },
+  { pageId: "ADM-STF-003", label: "税表版本与税务认定", route: "/admin/staff/tax-brackets" },
   { pageId: "ADM-STF-004", label: "员工档案", route: "/admin/staff/profiles" },
   { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
   { pageId: "ADM-OPS-002", label: "数据清理工具", route: "/admin/ops/data-cleanup" },
@@ -166,10 +168,11 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-STL-001") {
     await expect(page.getByTestId("settlement-config-page")).toBeVisible();
     await expect(page.getByTestId("settlement-config-defaults-table")).toBeVisible();
-    // 批1：切到「通票分账」栏目，8 配置块之一（留存比例）应可见、可「改」。
+    // 原留存卡片已并入综合服务费，仍核对该收费配置及修改入口。
     await page.getByRole("tab", { name: "通票分账" }).click();
-    await expect(page.getByTestId("settlement-config-block-retention")).toBeVisible();
-    await expect(page.getByTestId("settlement-config-edit-retention")).toBeVisible();
+    await expect(page.getByTestId("settlement-config-block-comprehensive_service_fee")).toBeVisible();
+    await expect(page.getByTestId("settlement-config-block-comprehensive_service_fee")).toContainText("同一项、只扣一次");
+    await expect(page.getByTestId("settlement-config-edit-comprehensive_service_fee")).toBeVisible();
   } else if (spec.pageId === "ADM-STL-003") {
     // 批10/E：内部结算 SKU 目录——三维筛选 + 草案队列 + 生效条目表可见。
     await expect(page.getByTestId("internal-price-catalog-page")).toBeVisible();
@@ -221,6 +224,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-AMU-007") {
     await expect(page.getByTestId("amusement-fault-compensation-page")).toBeVisible();
     await expect(page.getByTestId("compensation-batch-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-AMU-008") {
+    await expect(page.getByTestId("amusement-business-day-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-INV-003") {
+    await expect(page.getByTestId("purchase-workbench-page")).toBeVisible();
   } else if (spec.pageId === "ADM-GOV-006") {
     await expect(page.getByTestId("supervisor-review-page")).toBeVisible();
   } else if (spec.pageId === "ADM-CONT-001") {
@@ -261,8 +268,17 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("payroll-adj-editor")).toBeVisible();
   } else if (spec.pageId === "ADM-STF-003") {
     await expect(page.getByTestId("payroll-tax-brackets-page")).toBeVisible();
-    await expect(page.getByTestId("payroll-tax-brackets-table")).toContainText("20.00%");
-    await expect(page.getByTestId("payroll-tax-brackets-form")).toBeVisible();
+    const taxVersions = page.getByTestId("payroll-tax-brackets-table");
+    await expect(taxVersions).toContainText("测试税目 · V0.01");
+    await expect(taxVersions).toContainText("草案");
+    await taxVersions.getByText("完整税表与依据", { exact: true }).click();
+    await expect(taxVersions.getByRole("cell", { name: "20%", exact: true })).toBeVisible();
+    await expect(taxVersions).toContainText("仅用于导航回归的专业依据样例");
+    await page.getByTestId("payroll-tax-brackets-create-open").click();
+    const taxForm = page.getByTestId("payroll-tax-brackets-guided");
+    await expect(taxForm.getByLabel("税目编码", { exact: true })).toBeVisible();
+    await expect(taxForm.getByLabel("第1档税率万分比", { exact: true })).toBeVisible();
+    await page.getByTestId("payroll-tax-brackets-guided-cancel").click();
   } else if (spec.pageId === "ADM-STF-004") {
     await expect(page.getByTestId("staff-profiles-page")).toBeVisible();
     await expect(page.getByTestId("staff-profiles-table")).toContainText("销售岗");
@@ -344,6 +360,100 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
 const merchantOnlyPages = new Set(["ADM-MER-003", "ADM-MER-004", "ADM-MER-005", "ADM-MER-006", "ADM-MER-007", "ADM-MER-008"]);
 const vendorOnlyPages = new Set(["ADM-VND-001", "ADM-VND-002", "ADM-VND-003", "ADM-VND-004"]);
 
+test.describe("batch05 procurement and business day browser acceptance", () => {
+  test("ADM-STF-003 displays the complete tax version and real draft form", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page);
+    await openAdminRoute(page, remainingRoutes.find(row => row.pageId === "ADM-STF-003")!);
+  });
+
+  test("ADM-AMU-008 submits future business day configuration for approval", async ({ page }) => {
+    await installMockApi(page);
+    const writes: Array<Record<string, unknown>> = [];
+    const versions: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/amusement/business-day-configs**", async route => {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON();
+        writes.push(body);
+        versions.push({ ...body, id: "day-b05", version: "V0.01", status: "pending_review", review_id: "review-day-b05" });
+      }
+      await route.fulfill({ json: { code: "OK", data: route.request().method() === "POST" ? versions[0] : {
+        projects: [{ id: "complex-b05", name: "本综合体" }], versions,
+      } } });
+    });
+    await adminLogin(page);
+    await openAdminRoute(page, remainingRoutes.find(row => row.pageId === "ADM-AMU-008")!);
+    await page.getByLabel("综合体", { exact: true }).selectOption("complex-b05");
+    for (const [label, value] of [
+      ["所在地时区（如 Asia/Shanghai）", "Asia/Shanghai"], ["日切小时", "10"],
+      ["日切下限", "6"], ["日切上限", "12"], ["生效时间（当前设备时区）", "2099-01-01T10:00"],
+      ["变更原因", "统一本综合体营业日"], ["组织链最终审批人账号（可选）", "manager-b05"],
+    ] as const) await page.getByLabel(label, { exact: true }).fill(value);
+    await page.getByRole("button", { name: "提交最高权限审批", exact: true }).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({ project_id: "complex-b05", zone_id: "Asia/Shanghai", cutoff_hour: 10,
+      min_cutoff_hour: 6, max_cutoff_hour: 12, final_approver_id: "manager-b05" });
+    expect(writes[0]).not.toHaveProperty("status");
+    await expect(page.getByRole("button", { name: "查看审批原件", exact: true })).toBeVisible();
+    await expect(page.getByTestId("amusement-business-day-page")).toContainText("待复核");
+  });
+
+  test("ADM-INV-003 separates qualified receipt and rejection with actual upload bytes", async ({ page }) => {
+    await installMockApi(page);
+    const writes: Array<Record<string, unknown>> = [];
+    let uploadBody = "";
+    const purchase = { id: "pur-b05", request_no: "采购浏览器测试", item_id: "item_A_01",
+      supplier_id: "supplier-b05", quantity: 100, status: "arrived", supply_contract_id: "contract-b05" };
+    const detail = { purchase, project_id: "complex-b05", accepted_quantity: 70, terminated_quantity: 0,
+      remaining_quantity: 30, receipts: [] as Array<Record<string, unknown>>, resolutions: [],
+      consignment_sales: [], returns: [], payables: [] };
+    await page.route("**/api/v1/inventory/purchase-workbench-options", route => route.fulfill({ json: { code: "OK", data: {
+      projects: [{ id: "complex-b05", name: "本综合体" }], suppliers: [{ id: "supplier-b05", supplier_name: "供应商" }],
+      inventory_items: [{ id: "item_A_01", item_name: "瓶装饮品", unit: "瓶" }],
+      warehouses: [{ id: "warehouse-b05", name: "本综合体仓库", project_id: "complex-b05", status: "active" }],
+      entities: [], merchants: [], contracts: [],
+    } } }));
+    await page.route("**/api/v1/inventory/purchase-requests**", async route => {
+      const path = new URL(route.request().url()).pathname;
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON();
+        writes.push(body);
+        detail.accepted_quantity += Number(body.accepted_quantity);
+        detail.remaining_quantity -= Number(body.accepted_quantity);
+        detail.receipts.push({ ...body, id: "receipt-b05" });
+      }
+      await route.fulfill({ json: { code: "OK", data: path.endsWith("/purchase-requests") ? [purchase] : detail } });
+    });
+    await page.route("**/api/v1/evidence/attachments/upload", async route => {
+      uploadBody = route.request().postDataBuffer()?.toString("utf8") ?? "";
+      await route.fulfill({ json: { code: "OK", data: { id: "proof-b05" } } });
+    });
+    await adminLogin(page);
+    await openAdminRoute(page, remainingRoutes.find(row => row.pageId === "ADM-INV-003")!);
+    await page.getByRole("button", { name: "查看采购", exact: true }).click();
+    await page.getByRole("button", { name: "登记本次验收", exact: true }).click();
+    for (const [label, value] of [
+      ["本次实到数量", "20"], ["本次合格接收数量", "18"], ["本次拒收数量", "2"],
+      ["实际到货单价（分）", "125"], ["实际库位编号", "location-b05"],
+      ["实际验收时间（当前设备时区）", "2026-01-11T10:00"], ["验收说明", "两瓶破损拒收"],
+    ] as const) await page.getByLabel(label, { exact: true }).fill(value);
+    await page.getByLabel("接收仓库", { exact: true }).selectOption("warehouse-b05");
+    await page.getByLabel("本次真实凭证", { exact: true }).setInputFiles({
+      name: "收货凭证.txt", mimeType: "text/plain", buffer: Buffer.from("实际收货凭证字节", "utf8"),
+    });
+    await expect(page.getByText("收货凭证.txt（已上传）", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "确认登记本次验收", exact: true }).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(uploadBody).toContain("实际收货凭证字节");
+    expect(uploadBody).toContain("inventory_purchase_request");
+    expect(uploadBody).toContain("pur-b05");
+    expect(writes[0]).toMatchObject({ arrived_quantity: 20, accepted_quantity: 18, rejected_quantity: 2,
+      warehouse_id: "warehouse-b05", location_id: "location-b05", unit_cost_cent: 125, evidence_attachment_ids: ["proof-b05"] });
+    await expect(page.getByTestId("purchase-workbench-page")).toContainText("合格接收 88");
+    await expect(page.getByTestId("purchase-workbench-page")).toContainText("尚待处理 12");
+  });
+});
+
 test.describe("batch04 admin browser acceptance", () => {
   test("ADM-FAC-002 ADM-FAC-003 review and acceptance send real material version", async ({ page }) => {
     await installMockApi(page);
@@ -386,6 +496,36 @@ test.describe("batch04 admin browser acceptance", () => {
     expect(writes[1].body).toMatchObject({ result: "rectify", completion_sequence: 1, acceptance_comment: "请补齐防护材料" });
     await expect(page.getByLabel("完工材料与验收历史")).toContainText("请补齐防护材料");
     await expect(page.getByRole("button", { name: "验收通过", exact: true })).toBeDisabled();
+  });
+
+  test("ADM-FIN-009 reviews the whole recovery amount before a finance waiver", async ({ page }) => {
+    await installMockApi(page);
+    const writes: Array<Record<string, unknown>> = [];
+    let waived = false;
+    await page.route("**/api/v1/finance/points-recoveries/**", async route => {
+      const waiver = { id: "waiver-b05", waived_points: 80, actor_id: "finance-b05", reason: "财务核实小额豁免", created_at: "2026-10-18T10:00:00Z", config_version_id: "config-b05" };
+      if (route.request().method() === "POST") {
+        writes.push(route.request().postDataJSON());
+        waived = true;
+        await route.fulfill({ json: { code: "OK", data: waiver } });
+        return;
+      }
+      await route.fulfill({ json: { code: "OK", data: { customer_id: "member-b05", config_version_id: "config-b05",
+        threshold: 100, pending_points: waived ? 0 : 80, lines: [{ reward_id: "reward-b05", project_id: "project-b05",
+          original_points: 80, remaining_points: waived ? 0 : 80, status: waived ? "waived" : "pending" }], waivers: waived ? [waiver] : [] } } });
+    });
+    await adminLogin(page, "/admin/finance/points-recoveries");
+    await page.getByLabel("会员编号", { exact: true }).fill("member-b05");
+    await page.getByRole("button", { name: "查看全部追回记录", exact: true }).click();
+    await expect(page.getByRole("button", { name: "豁免全部 80 积分", exact: true })).toBeDisabled();
+    await page.getByLabel("财务豁免原因", { exact: true }).fill("财务核实小额豁免");
+    await page.getByRole("button", { name: "豁免全部 80 积分", exact: true }).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({ config_version_id: "config-b05", expected_pending_points: 80, reason: "财务核实小额豁免" });
+    expect(writes[0]?.idempotency_key).toEqual(expect.any(String));
+    await expect(page.getByTestId("points-recovery-waiver-page")).toContainText("全部待追回 0 积分");
+    await expect(page.getByRole("button", { name: "豁免全部 0 积分", exact: true })).toBeDisabled();
+    await expect(page.getByTestId("points-recovery-waiver-page")).toContainText("finance-b05");
   });
 
   test("ADM-TKT-004 ADM-FIN-008 config approval and bill objection remain distinct", async ({ page }) => {
@@ -444,6 +584,45 @@ test.describe("batch04 admin browser acceptance", () => {
   });
 });
 
+test.describe("batch05 governance binding fields acceptance", () => {
+  test("NAV-GOV-01 主体绑定页展示真实字段与原绑定明细", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page);
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-003")!);
+    const row = page.getByTestId("subject-bindings-row-binding-1");
+    for (const value of ["merchant-1", "operator-entity-1", "contract-entity-1", "settlement-entity-1", "合同主体确认"]) {
+      await expect(row).toContainText(value);
+    }
+    await row.getByRole("button", { name: "查看主体绑定详情" }).click();
+    const drawer = page.getByTestId("row-detail-drawer");
+    for (const value of ["binding-1", "2026-06-01", "2027-05-31", "合同主体确认"]) {
+      await expect(drawer).toContainText(value);
+    }
+  });
+
+  test("NAV-GOV-01 准入审计关联真实商户，资料齐全不等于审批通过", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page);
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-005")!);
+    const row = page.getByTestId("admission-audits-binding-row-binding-1");
+    for (const value of ["merchant-1", "operator-entity-1", "contract-entity-1", "settlement-entity-1", "binding-1", "合同主体确认"]) {
+      await expect(row).toContainText(value);
+    }
+    const linked = page.getByTestId("admission-audits-summary").locator(".admin-kpi-card").filter({ hasText: "三类资料关联" });
+    await expect(linked.locator("strong")).toHaveText("1");
+    await expect(linked).toContainText("不代表审批通过");
+    await row.getByRole("button", { name: "查看主体绑定详情" }).click();
+    const drawer = page.getByTestId("row-detail-drawer");
+    for (const value of ["binding-1", "2026年6月1日", "2027年5月31日", "合同主体确认"]) {
+      await expect(drawer).toContainText(value);
+    }
+    await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+    await row.getByTestId("trace-link-ADM-GOV-002-merchant-1").press("Enter");
+    await expect(page.getByTestId("organization-merchant-page")).toBeVisible();
+    await expect(page.getByTestId("organization-merchant-row-merchant-1")).toHaveClass(/admin-row-selected/);
+  });
+});
+
 test.describe("full admin remaining pages acceptance", () => {
   test("ADM-REM-01 exposes all non-first admin pages with route, evidence and readable content", async ({ page }) => {
     test.slow(); // visits all remaining pages with detailed assertions; triple the timeout under parallel load
@@ -457,6 +636,10 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toBeVisible();
+      const supervisorPolicyResponse = spec.pageId === "ADM-GOV-006"
+        ? page.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/platform/supervisor-review-policies"
+          && response.request().method() === "GET" && response.status() === 200)
+        : null;
       await openAdminRoute(page, spec);
       if (spec.pageId === "ADM-ANA-009") {
         await expect(page.getByTestId("t3a-readonly-analytics-page")).toBeVisible();
@@ -526,8 +709,8 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("subject-bindings-evidence")).toContainText("/api/v1/platform/business-entity-bindings");
         await expect(page.getByTestId("subject-bindings-summary")).toContainText("唯一绑定");
         await expect(page.getByTestId("subject-bindings-table")).toContainText("merchant-1");
-        await expect(page.getByTestId("subject-bindings-table")).toContainText("Main Contract Co");
-        await expect(page.getByTestId("subject-bindings-table")).toContainText("audit://admission/binding-1");
+        await expect(page.getByTestId("subject-bindings-table")).toContainText("contract-entity-1");
+        await expect(page.getByTestId("subject-bindings-table")).toContainText("合同主体确认");
         await expect(page.getByTestId("subject-bindings-boundary")).toContainText("四类主体");
         continue;
       }
@@ -666,12 +849,16 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-ENE-001") {
-        // 能源工作台（V168）：表计台账 + 抄表抹差 + 能源费结算分标签，逐标签核对表格。
+        // 逐页签核对台账、抄表、换表核实及结算，新增处置页签不替代原结算检查。
         await expect(page.getByTestId("energy-workbench-page")).toBeVisible();
         await expect(page.getByTestId("energy-meters-table")).toBeVisible();
         await page.getByRole("tab", { name: "② 抄表与抹差" }).click();
         await expect(page.getByTestId("energy-readings-table")).toBeVisible();
-        await page.getByRole("tab", { name: "③ 能源费结算" }).click();
+        await page.getByRole("tab", { name: "③ 换表、核表与实费" }).click();
+        await expect(page.getByTestId("energy-workflow-panel")).toBeVisible();
+        await expect(page.getByLabel("能源处理表计", { exact: true })).toBeVisible();
+        await expect(page.getByLabel("能源真实凭据", { exact: true })).toBeDisabled();
+        await page.getByRole("tab", { name: "④ 能源费结算" }).click();
         await expect(page.getByTestId("energy-settlements-table")).toBeVisible();
         continue;
       }
@@ -687,17 +874,20 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/merchants");
         await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/business-entity-bindings");
         await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/contracts");
-        await expect(page.getByTestId("admission-audits-summary")).toContainText("准入闭环");
+        await expect(page.getByTestId("admission-audits-summary")).toContainText("三类资料关联");
+        await expect(page.getByTestId("admission-audits-summary")).toContainText("不代表审批通过");
         await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("Main Merchant");
-        await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("Main Contract Co");
-        await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("audit://admission/binding-1");
+        await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("contract-entity-1");
+        await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("binding-1");
+        await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("合同主体确认");
         await expect(page.getByTestId("admission-audits-contracts-table")).toContainText("contract-subject-1");
         await expect(page.getByTestId("admission-audits-contracts-table")).toContainText("att-contract-1");
         await expect(page.getByTestId("admission-audits-boundary")).toContainText("商户档案、四类主体绑定、合同审批");
         continue;
       }
       if (spec.pageId === "ADM-GOV-006") {
-        await expect(page.getByTestId("supervisor-review-evidence")).toContainText("/api/v1/platform/supervisor-review/evaluate");
+        expect(await supervisorPolicyResponse).not.toBeNull();
+        await expect(page.getByTestId("supervisor-review-evidence")).toContainText("读取主管复核策略、提交评估、提交审批");
         await expect(page.getByTestId("supervisor-review-summary")).toContainText("默认阻断");
         await expect(page.getByTestId("supervisor-review-table")).toContainText("contract_violation");
         await expect(page.getByTestId("supervisor-review-table")).toContainText("base_definition_violation");

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { describe, expect, it } from "vitest";
 
 import { accountFormOf, adminRoutes } from "./adminRoutes";
@@ -7,6 +8,13 @@ const permissionsByPage = Object.fromEntries(
 );
 
 describe("adminRoutes canonical permissions", () => {
+  it("allows either payroll or tax maintenance authorization to enter tax versions", () => {
+    const required = permissionsByPage["ADM-STF-003"] ?? [];
+    for (const permission of ["staff.payroll.manage", "staff.tax_bracket.manage"]) {
+      expect(required.some((item) => item === permission)).toBe(true);
+    }
+    expect(required.some((item) => item === "staff.profile.view")).toBe(false);
+  });
   it("uses backend/OpenAPI canonical permission codes for high-risk admin entries", () => {
     expect(permissionsByPage["ADM-OV-001"]).toContain("analytics.dashboard.view");
     expect(permissionsByPage["ADM-ACC-001"]).toContain("access.user.view");

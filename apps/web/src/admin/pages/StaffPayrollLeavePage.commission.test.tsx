@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -6,7 +6,7 @@ import { StaffPayrollLeavePage } from "./StaffPayrollLeavePage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-const PAYROLL = [{ id: "pay_1", user_id: "u-9", base_cent: 800000, commission_cent: 5000, total_cent: 805000, payer_company_id: "ent-platform" }];
+const PAYROLL = [{ id: "pay_1", user_id: "u-9", base_cent: 800000, commission_cent: 5000, total_cent: 805000, payer_company_id: "ent-platform", tax_assessment_id: "tax_assessment_locked", tax_version_id: "tax_version_locked" }];
 const SETTLEMENTS = [{ id: "bcs_1", month: "2026-09", merchant_id: "mch-bar", company_id: "ent-platform", amount_cent: 5000, calculation_count: 2, staff_count: 1, ar_ap_item_id: "arap_dct_1", due_date: "2026-10-05" }];
 
 function dataEnvelope(data: unknown): Response {
@@ -47,5 +47,8 @@ describe("StaffPayrollLeavePage 提成月结拨付（CG-07，BSM「营销人员�
     const body = JSON.parse(String((closeCall?.[1] as RequestInit | undefined)?.body ?? "{}")) as { month?: string };
     expect(body.month).toMatch(/^\d{4}-\d{2}$/);
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "commission_settlement_closed", settlements: 1 })));
+    fireEvent.click(screen.getByRole("button", { name: "查看薪资单详情" }));
+    expect(await screen.findByText("tax_assessment_locked")).toBeTruthy();
+    expect(screen.getByText("tax_version_locked")).toBeTruthy();
   });
 });

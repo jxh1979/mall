@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -61,6 +61,23 @@ public class SupervisorReviewService {
     public static final String HR_LINE = "hr_review";
 
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
+            new SupervisorReviewPolicyRecord("amusement_business_day", "amusement.business_day.configure", 0, 3, true,
+                    List.of("reason", "before_after"), "active", "top_authority"),
+            new SupervisorReviewPolicyRecord("inventory_purchase_request", "inventory.purchase_request", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "inventory.purchase.approve"),
+            new SupervisorReviewPolicyRecord("inventory_purchase_terminate", "inventory.purchase_terminate", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "inventory.purchase.approve"),
+            new SupervisorReviewPolicyRecord("inventory_supply_contract", "inventory.supply_contract", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "inventory.purchase.approve",
+                    List.of("business_review", "finance_review", "legal_review")),
+            new SupervisorReviewPolicyRecord("inventory_purchase_return", "inventory.purchase_return", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "inventory.purchase.approve", List.of("finance_review")),
+            new SupervisorReviewPolicyRecord("inventory_purchase_prepayment_resolution", "inventory.purchase_prepayment_resolution", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "inventory.purchase.approve", List.of("finance_review")),
+            new SupervisorReviewPolicyRecord("energy_reading_anomaly", "energy.reading_anomaly_confirm", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "energy.reading.approve"),
+            new SupervisorReviewPolicyRecord("energy_review_settings", "energy.review_settings", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("dealer_delivery_resolution", "dealer.delivery_resolution", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "dealer.delivery_resolution.approve", List.of("finance_review")),
             new SupervisorReviewPolicyRecord("inventory_quarantine_disposition", "inventory.quarantine_disposition", 0, 1, true,
@@ -262,7 +279,7 @@ public class SupervisorReviewService {
                     if (schedule.map(s -> reviewerId != null && reviewerId.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "直接受益人不能复核与自己相关的申请");
                     }
-                    if (reviewerId != null && reviewerId.equals(pending.initiatedBy())) {
+                    if (reviewerId != null && (reviewerId.equals(pending.initiatedBy()) || isOriginalApplicant(pending, reviewerId))) {
                         throw ApiException.forbidden(
                                 "SUPERVISOR_SELF_REVIEW_FORBIDDEN", "操作发起人不能复核自己发起的操作");
                     }
@@ -758,6 +775,13 @@ public class SupervisorReviewService {
                 || type.equals("access.grant_request.money") || type.equals("access.scope_change.money");
     }
 
+    private boolean isOriginalApplicant(SupervisorReviewDecisionRecord review, String userId) {
+        if (!"supply_contract".equals(review.objectType()) && !"inventory_purchase_request".equals(review.objectType())) return false;
+        String original = supervisorReviewRepository.findOriginalApplicant(review.objectType(), review.objectId())
+                .orElseThrow(() -> ApiException.conflict("SUPERVISOR_ORIGINAL_APPLICANT_REQUIRED", "须核实原申请人后再办理审批"));
+        return original.equals(userId);
+    }
+
     private void requireBeneficiaryIfNeeded(String actionType, String beneficiaryId) {
         if (requiresBeneficiary(actionType) && !textPresent(beneficiaryId)) {
             throw ApiException.badRequest("BENEFICIARY_REQUIRED", "授权事项必须登记直接受益人（被授权人）");
@@ -917,10 +941,14 @@ public class SupervisorReviewService {
                 request.idempotencyKey(),
                 request,
                 () -> {
+                    supervisorReviewRepository.lockSupervisorReview(id);
                     SupervisorReviewDecisionRecord pending = supervisorReviewRepository
                             .findPendingSupervisorReviewById(id)
                             .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
                     String actorId = authorizationService.currentActor().id();
+                    if (isOriginalApplicant(pending, actorId)) {
+                        throw ApiException.forbidden("SUPERVISOR_SELF_REVIEW_FORBIDDEN", "原申请人不能转交自己申请的审批节点");
+                    }
                     Optional<SupervisorReviewRepository.ReviewSchedule> schedule = supervisorReviewRepository.findSupervisorReviewSchedule(id);
                     if (requiresBeneficiary(pending.actionType()) && schedule.map(s -> !textPresent(s.beneficiaryId())).orElse(true)) {
                         throw ApiException.forbidden("BENEFICIARY_REQUIRED", "授权事项必须登记直接受益人（被授权人）");
@@ -931,7 +959,7 @@ public class SupervisorReviewService {
                     }
                     ApprovalChainNode node = resolveForwardableNode(pending, nodes, actorId);
                     String target = requireText(request.forwardedTo(), "forwarded_to");
-                    if (target.equals(pending.initiatedBy())
+                    if (target.equals(pending.initiatedBy()) || isOriginalApplicant(pending, target)
                             || schedule.map(s -> target.equals(s.beneficiaryId())).orElse(false)) {
                         throw ApiException.forbidden("SUPERVISOR_FORWARD_TARGET_FORBIDDEN", "不得转发给申请人本人或直接受益人");
                     }
@@ -1013,6 +1041,22 @@ public class SupervisorReviewService {
 
     /** M007-A-02：待复核清单（审批人可见卡在哪一节点、到期与升级、转发状态）。 */
     /** M087-I5-01：按编号读取复核单（任意状态），供审批链页把授权申请类复核单的裁决汇入授权申请落地路径。 */
+    public SupervisorReviewDecisionRecord readReview(String reviewId) {
+        try {
+            authorizationService.requirePermission(VIEW_PERMISSION);
+            SupervisorReviewDecisionRecord record = findReview(reviewId)
+                    .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在"));
+            auditEventService.recordSuccess("governance.supervisor_review.original_viewed", VIEW_PERMISSION,
+                    "supervisor_review", record.reviewId(), null, null, Map.of("review_status", record.reviewStatus()));
+            return record;
+        } catch (RuntimeException failure) {
+            auditEventService.recordFailure("governance.supervisor_review.original_view_failed", VIEW_PERMISSION,
+                    "supervisor_review", reviewId, null, null,
+                    failure instanceof ApiException api ? api.code() : failure.getClass().getSimpleName());
+            throw failure;
+        }
+    }
+
     public Optional<SupervisorReviewDecisionRecord> findReview(String reviewId) {
         Optional<SupervisorReviewDecisionRecord> found = supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
         found.ifPresent(this::requireVisibleReview);

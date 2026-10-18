@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -374,7 +374,31 @@ class InventoryServiceTests {
     }
 
     @Test
-    void supplierPurchaseRequestAndTraceHandoverWriteExpectedAuditEvents() {
+    void purchaseMustNotSilentlyDiscardSecondRequestedItem() {
+        InventoryItemRecord first = createItem("purchase-first");
+        InventoryItemRecord second = createItem("purchase-second");
+        assertThatThrownBy(() -> service.createPurchaseRequest(new PurchaseRequestCreate(
+                "purchase-two-lines", null, List.of(), "supplier_1",
+                List.of(Map.of("item_id", first.id(), "quantity", 5),
+                        Map.of("item_id", second.id(), "quantity", 3)), LocalDate.now(), null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        error -> assertThat(error.code()).isEqualTo("PURCHASE_SINGLE_ITEM_REQUIRED"));
+        assertThat(inventoryRepository.listPurchaseRequests()).isEmpty();
+    }
+
+    @Test
+    void purchaseRequiresSupplierBeforeRecordingRequest() {
+        InventoryItemRecord item = createItem("purchase-no-supplier");
+        assertThatThrownBy(() -> service.createPurchaseRequest(new PurchaseRequestCreate(
+                "purchase-no-supplier", null, List.of(), null,
+                List.of(Map.of("item_id", item.id(), "quantity", 5)), LocalDate.now(), null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        error -> assertThat(error.code()).isEqualTo("PURCHASE_SUPPLIER_REQUIRED"));
+        assertThat(inventoryRepository.listPurchaseRequests()).isEmpty();
+    }
+
+    @Test
+    void supplierAndTraceHandoverWriteExpectedAuditEvents() {
         InventoryItemRecord item = createItem("purchase-item");
         InventorySupplierRecord supplier = service.createInventorySupplier(new InventorySupplierRequest(
                 "supplier-create",
@@ -385,15 +409,6 @@ class InventoryServiceTests {
                 "13800138000",
                 "active"
         ));
-        PurchaseRequestRecord purchaseRequest = service.createPurchaseRequest(new PurchaseRequestCreate(
-                "purchase-create",
-                null,
-                List.of("attachment_2"),
-                supplier.id(),
-                List.of(Map.of("item_id", item.id(), "quantity", 5)),
-                LocalDate.parse("2026-06-20"),
-                null
-        ));
         TraceHandoverRecord handover = service.scanTraceCodeHandover(new VerificationRequest(
                 "trace-create",
                 "manual",
@@ -403,13 +418,12 @@ class InventoryServiceTests {
                 Map.of("item_id", item.id(), "from_staff_id", "staff_a", "to_staff_id", "staff_b")
         ));
 
-        assertThat(purchaseRequest.supplierId()).isEqualTo(supplier.id());
+        assertThat(supplier.supplierName()).isEqualTo("Supplier A");
         assertThat(handover.traceCode()).isEqualTo("TRACE-1");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains(
                         "inventory.supplier_changed",
-                        "inventory.purchase_request_changed",
                         "operation_handover.created"
                 );
         // P1#18 三层留痕接线：建交接链即建过程实例（process_type=inventory_delivery），消除孤岛。

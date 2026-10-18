@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -66,13 +67,15 @@ describe("AmusementSessionsPage 引导式新增场次(phase-7)", () => {
     expect(screen.queryByTestId("amusement-session-guided")).toBeNull();
   });
 
-  it("入口→步进→提交：带正确 body（场次名/容量）且成功后关闭弹窗", async () => {
+  it("入口→步进→提交：带正确 body（实际项目/场次时间）且成功后关闭弹窗", async () => {
     const { setActionResult } = renderPage();
     await waitFor(() => expect(screen.getByTestId("amusement-session-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("amusement-session-create-open"));
 
     fireEvent.change(screen.getByTestId("amusement-session-name"), { target: { value: "验收场次" } });
-    fireEvent.change(screen.getByTestId("amusement-session-capacity"), { target: { value: "20" } });
+    fireEvent.change(screen.getByTestId("amusement-session-project"), { target: { value: "amuse-1" } });
+    fireEvent.change(screen.getByTestId("amusement-session-start"), { target: { value: "2026-10-18T10:00" } });
+    fireEvent.change(screen.getByTestId("amusement-session-end"), { target: { value: "2026-10-18T11:00" } });
     fireEvent.click(screen.getByTestId("amusement-session-guided-next"));
     // 确认页出现汇总，点主按钮提交
     await waitFor(() => expect(screen.getByTestId("amusement-session-guided-summary")).toBeTruthy());
@@ -81,7 +84,8 @@ describe("AmusementSessionsPage 引导式新增场次(phase-7)", () => {
     await waitFor(() => expect(lastPostBody).toBeTruthy());
     // 客户端把 body key 转 snake_case 后再发出。
     expect((lastPostBody as { session_name: string }).session_name).toBe("验收场次");
-    expect((lastPostBody as { capacity: number }).capacity).toBe(20);
+    expect(lastPostBody).not.toHaveProperty("capacity");
+    expect(lastPostBody).toMatchObject({ project_id: "amuse-1", start_time: new Date("2026-10-18T10:00").toISOString(), end_time: new Date("2026-10-18T11:00").toISOString(), evidence_attachment_ids: [] });
     await waitFor(() => expect(screen.queryByTestId("amusement-session-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "amusement_session_created" }));
   });

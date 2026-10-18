@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -92,20 +92,20 @@ public class JdbcDealerReturnRepository {
     public void saveLine(DealerReturnLineRecord l) {
         jdbc.update("""
                 INSERT INTO dealer_return_lines (id, return_id, order_line_id, item_id, spec, requested_quantity, accepted_quantity, resalable_quantity,
-                    quarantined_quantity, unit_price_cent, accepted_amount_cent, inspection_note)
-                VALUES (:id, :ret, :order_line, :item, :spec, :req, :acc, :resalable, :quarantined, :price, :amount, :note)
+                    quarantined_quantity, unit_price_cent, accepted_amount_cent, inspection_note, source_receipt_line_id)
+                VALUES (:id, :ret, :order_line, :item, :spec, :req, :acc, :resalable, :quarantined, :price, :amount, :note, :receipt)
                 ON CONFLICT (id) DO UPDATE SET accepted_quantity = EXCLUDED.accepted_quantity, resalable_quantity = EXCLUDED.resalable_quantity,
                     quarantined_quantity = EXCLUDED.quarantined_quantity, accepted_amount_cent = EXCLUDED.accepted_amount_cent, inspection_note = EXCLUDED.inspection_note
                 """, new MapSqlParameterSource().addValue("id", l.id()).addValue("ret", l.returnId()).addValue("order_line", l.orderLineId()).addValue("item", l.itemId())
                 .addValue("spec", l.spec()).addValue("req", l.requestedQuantity()).addValue("acc", l.acceptedQuantity()).addValue("resalable", l.resalableQuantity())
-                .addValue("quarantined", l.quarantinedQuantity()).addValue("price", l.unitPriceCent()).addValue("amount", l.acceptedAmountCent()).addValue("note", l.inspectionNote()));
+                .addValue("quarantined", l.quarantinedQuantity()).addValue("price", l.unitPriceCent()).addValue("amount", l.acceptedAmountCent()).addValue("note", l.inspectionNote()).addValue("receipt",l.sourceReceiptLineId()));
     }
 
     public List<DealerReturnLineRecord> listLines(String returnId) {
         return jdbc.query("SELECT * FROM dealer_return_lines WHERE return_id = :r ORDER BY id", Map.of("r", returnId), (rs, i) -> new DealerReturnLineRecord(
                 rs.getString("id"), rs.getString("return_id"), rs.getString("order_line_id"), rs.getString("item_id"), rs.getString("spec"), rs.getInt("requested_quantity"),
                 rs.getInt("accepted_quantity"), rs.getInt("resalable_quantity"), rs.getInt("quarantined_quantity"), rs.getLong("unit_price_cent"),
-                rs.getLong("accepted_amount_cent"), rs.getString("inspection_note")));
+                rs.getLong("accepted_amount_cent"), rs.getString("inspection_note"),rs.getString("source_receipt_line_id")));
     }
 
     /** 该订单明细上尚在退货流程中的申请数量（未验收完成的退货占用）。 */
@@ -115,6 +115,36 @@ public class JdbcDealerReturnRepository {
                  WHERE l.order_line_id = :ol AND r.status IN ('pending_approval', 'pending_receipt', 'inspecting')
                 """, Map.of("ol", orderLineId), Integer.class);
         return n == null ? 0 : n;
+    }
+
+    public record ReturnSource(String receiptLineId,String orderLineId,String batchId,int availableQuantity) {}
+    public List<ReturnSource> returnSources(String orderId) {
+        return jdbc.query("""
+                WITH received AS (
+                 SELECT rl.id,rl.order_line_id,r.batch_id,r.confirmed_at,rl.accepted_quantity+COALESCE((
+                  SELECT SUM(s.quantity) FROM dealer_delivery_resolutions s JOIN dealer_delivery_discrepancies d ON d.id=s.discrepancy_id
+                  WHERE d.receipt_line_id=rl.id AND s.status='completed'
+                   AND s.resolution_type='price_adjustment' AND s.physical_route='accepted_as_is'),0) accepted_quantity
+                 FROM dealer_delivery_receipt_lines rl JOIN dealer_delivery_receipts r ON r.id=rl.receipt_id
+                 WHERE r.order_id=:order
+                )
+                SELECT rl.id,rl.order_line_id,rl.batch_id,rl.accepted_quantity-COALESCE((
+                 SELECT SUM(CASE WHEN dr.status IN ('pending_approval','pending_receipt','inspecting') THEN l.requested_quantity ELSE l.accepted_quantity END)
+                 FROM dealer_return_lines l JOIN dealer_returns dr ON dr.id=l.return_id
+                 WHERE l.source_receipt_line_id=rl.id AND dr.status<>'rejected'),0) available
+                FROM received rl WHERE rl.accepted_quantity>0 ORDER BY rl.confirmed_at,rl.id
+                """,Map.of("order",orderId),(r,n)->new ReturnSource(r.getString(1),r.getString(2),r.getString(3),r.getInt(4)));
+    }
+
+    public boolean hasDiscountedRetainedGoods(String receiptLineId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                 SELECT 1 FROM dealer_delivery_resolutions s
+                 JOIN dealer_delivery_discrepancies d ON d.id=s.discrepancy_id
+                 WHERE d.receipt_line_id=:receipt AND s.status='completed'
+                  AND s.resolution_type='price_adjustment' AND s.physical_route='accepted_as_is'
+                  AND s.adjustment_cent>0)
+                """,new MapSqlParameterSource("receipt",receiptLineId),Boolean.class));
     }
 
     // ── 发票 ──
@@ -151,7 +181,9 @@ public class JdbcDealerReturnRepository {
         return new DealerInvoiceRecord(rs.getString("id"), rs.getString("order_id"), rs.getString("dealer_id"), rs.getString("sales_entity_id"), rs.getLong("amount_cent"),
                 JdbcDealerRepository.intOrNull(rs, "tax_rate_bps"), rs.getString("status"), rs.getString("invoice_no"), rs.getString("reversed_by_return_id"),
                 rs.getString("reissued_from_invoice_id"), rs.getString("requested_by"), nullableInstant(rs, "requested_at"), rs.getString("issued_by"),
-                nullableInstant(rs, "issued_at"), nullableInstant(rs, "reversed_at"), rs.getString("note"));
+                nullableInstant(rs, "issued_at"), nullableInstant(rs, "reversed_at"), rs.getString("note"),
+                (Long)rs.getObject("retained_goods_cent"),(Long)rs.getObject("retained_freight_cent"),rs.getBoolean("requires_reversal"),
+                rs.getString("reversal_status"),rs.getString("reversal_reference_no"),strings(rs.getString("issue_evidence_attachment_ids")),strings(rs.getString("reversal_evidence_attachment_ids")));
     }
 
     // ── 库存去向（BSM:1240「可复售品验收后回可用库存，确认有质量问题的隔离禁售」） ──
@@ -187,10 +219,17 @@ public class JdbcDealerReturnRepository {
 
     public void offsetReceivable(String arApItemId, long offsetCent) {
         jdbc.update("""
-                UPDATE ar_ap_items SET amount_cent = amount_cent - :offset, unpaid_amount_cent = unpaid_amount_cent - :offset,
-                       status = CASE WHEN unpaid_amount_cent - :offset <= 0 THEN 'settled' ELSE status END, updated_at = now()
-                 WHERE id = :id AND unpaid_amount_cent >= :offset AND amount_cent - :offset > 0
+                UPDATE ar_ap_items SET amount_cent=amount_cent-:offset,
+                       paid_amount_cent=LEAST(paid_amount_cent,amount_cent-:offset),
+                       unpaid_amount_cent=GREATEST(0,unpaid_amount_cent-:offset),
+                       status=CASE WHEN unpaid_amount_cent<=:offset THEN 'settled' ELSE status END,updated_at=now()
+                 WHERE id=:id AND amount_cent>=:offset
                 """, new MapSqlParameterSource().addValue("offset", offsetCent).addValue("id", arApItemId));
+    }
+
+    private static List<String> strings(String value) {
+        try {return new com.fasterxml.jackson.databind.ObjectMapper().readValue(value,new com.fasterxml.jackson.core.type.TypeReference<List<String>>(){});}
+        catch(Exception error){throw new IllegalStateException(error);}
     }
 
     private static Timestamp ts(Instant at) {

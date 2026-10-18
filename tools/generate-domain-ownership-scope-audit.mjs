@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +20,18 @@ const directColumns = [
 ];
 
 const inheritedRules = [
+  { pattern: /^amusement_session_followups$/, source: "ending_id", path: "ending_id -> amusement_session_endings -> actual complex_id; source entitlement/order and merchant scope also retained" },
+  { pattern: /^purchase_quantity_resolutions$/, source: "purchase_id", path: "purchase_id -> inventory_purchase_requests -> project_id/merchant_id" },
+  { pattern: /^purchase_(consignment_sales|returns)$/, source: "receipt_id", path: "receipt_id -> purchase_receipts -> original purchase project_id/merchant_id" },
+  { pattern: /^purchase_prepayment_resolutions$/, source: "purchase_id/source_payment_id/original_item_id", path: "purchase -> project_id/merchant_id; original payment or payable and supplier refund must match the same procurement ownership" },
+  { pattern: /^purchase_prepayment_allocations$/, source: "purchase_id/source_payment_id/target_item_id", path: "purchase -> project_id/merchant_id; original payment and target payable must match supplier, project and ownership" },
+  { pattern: /^purchase_payable_adjustments$/, source: "return_id/original_item_id", path: "return -> receipt -> purchase project_id/merchant_id; reversal and replacement preserve original payable ownership" },
+  { pattern: /^energy_effective_meter_readings$/, source: "meter_id", path: "view preserves energy_meter_readings rows; meter_id -> energy_meters -> project_id/merchant_id; approved verification changes values only" },
+  { pattern: /^dealer_return_freight_adjustments$/, source: "order_id/return_id", path: "original order -> locked contract warehouse -> project_id; return must belong to that order" },
+  { pattern: /^energy_(meter_openings|meter_parent_transfers|meter_retirements)$/, source: "meter_id", path: "meter_id -> energy_meters -> project_id/merchant_id" },
+  { pattern: /^energy_meter_replacements$/, source: "old_meter_id/new_meter_id", path: "old/new meter -> energy_meters -> same project and merchant" },
+  { pattern: /^energy_(reading_evidence|reading_verifications|anomaly_escalations|verifier_assignments)$/, source: "reading_id", path: "reading_id -> energy_meter_readings -> energy_meters -> project_id/merchant_id" },
+  { pattern: /^customer_points_recovery_waivers$/, source: "customer_id/lines", path: "all customer recovery lines -> original reward project_id/merchant_id; actor must hold both finance view and waive scope for every source" },
   { pattern: /^dealer_order_overpayment_allocations$/, source: "overpayment_id/order_id", path: "overpayment_id -> dealer_order_overpayments -> original order contract warehouse -> project_id; target order project and same dealer/sales entity checked separately" },
   { pattern: /^dealer_order_overpayments$/, source: "order_id", path: "order_id -> locked dealer contract warehouse -> project_id; limited dealer project must match; no default project" },
   { pattern: /^dealer_order_refunds$/, source: "payment_id/order_id", path: "original payment order -> locked contract warehouse -> project_id; allocation target order scope also required" },
@@ -79,6 +91,7 @@ const globalTables = new Set([
   // 集中数据清理台账（Tier-D）：平台级操作台账，记谁发起/审批/删了几条；非租户数据边界。
   "data_cleanup_jobs",
   "staff_penalty_cap_revisions",
+  "payroll_tax_versions",
 ]);
 
 function readMigrations() {
@@ -97,6 +110,9 @@ function collectDefinitions(migrations) {
       const table = match[1];
       definitions.set(table, `${definitions.get(table) ?? ""}\n-- ${migration.name}\n${match[2]}`);
     }
+    // 本批核实读数视图继承原抄表行归属，纳入与基础表相同的隔离检查。
+    const effectiveReadingsView = /CREATE VIEW energy_effective_meter_readings AS\s+([\s\S]*?);/i.exec(migration.text);
+    if (effectiveReadingsView) definitions.set("energy_effective_meter_readings", effectiveReadingsView[1]);
     const alterPattern = /ALTER TABLE(?: IF EXISTS)?\s+([a-zA-Z0-9_]+)\s+ADD COLUMN[\s\S]*?;/gi;
     while ((match = alterPattern.exec(migration.text)) !== null) {
       const table = match[1];
@@ -155,6 +171,16 @@ const ANALYTICS_SCOPE_OVERRIDES = new Map([
 ]);
 
 function classify(table, definition) {
+  if (table === "entitlement_business_day_activations") return {
+    scope_type: "direct", scope_source: "complex_id/entitlement_id",
+    scope_path: "actual locked complex_id; entitlement_id -> original issued entitlement and order ownership; first admission and ticket verification must match",
+    multi_complex_note: "original business-day window remains immutable; later configuration cannot move the activation or authorize a different complex",
+  };
+  if (["amusement_sessions", "amusement_verifications", "amusement_concurrent_reset_log", "amusement_session_endings"].includes(table)) return {
+    scope_type: "direct", scope_source: "complex_id",
+    scope_path: "complex_id is the locked actual projects.id; project_id denotes an amusement ride, not a complex; preserve original merchant scope",
+    multi_complex_note: "business-day version and interval locked at the real event; missing ownership is not filled from actor or global defaults",
+  };
   if (table === "wecom_cleanup_previews") return {
     scope_type: "global_reference", scope_source: "current master authority",
     scope_path: "platform cleanup evidence; current master identity required; individual preview actions also require creator match",
@@ -218,7 +244,7 @@ function buildCsv() {
     return {
       table_name: table,
       ...classification,
-      file_version: "V0.06",
+      file_version: "V0.07",
       status: "covered",
     };
   });

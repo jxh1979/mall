@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -149,6 +149,19 @@ describe("DealerOrderFulfillmentPage 经销订单与履约（ADM-DLR-002）", ()
     fireEvent.change(screen.getByTestId("pay-amount"), { target: { value: "50" } });
     fireEvent.click(screen.getByTestId("pay-register"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/orders/dord_1/payments", expect.objectContaining({ amountCent: 5000 })));
+  });
+
+  it("首程运费调减计入净应收，列表和详情不再追收已冲金额", async () => {
+    const api = makeApi(); const oldGet = api.get;
+    const adjusted = { ...orderRow, status: "partially_returned", totalAmountCent: 11000, paidAmountCent: 3000, returnedAmountCent: 2000, deliveryAdjustmentCent: 500, firstLegAdjustmentCent: 1000 };
+    api.get = vi.fn(async (url: string) => url.endsWith("/orders") ? [adjusted] : url === "/api/v1/dealers/orders/dord_1" ? adjusted : oldGet(url)) as AdminApiClient["get"];
+    renderPage(api);
+    fireEvent.click(await screen.findByTestId("dealer-orders-select-dlr_1"));
+    await waitFor(() => expect(screen.getByTestId("order-unpaid-dord_1").textContent).toBe("¥45"));
+    const row = screen.getByTestId("order-unpaid-dord_1").closest("tr")!;
+    expect(row.textContent).toContain("¥75");
+    fireEvent.click(screen.getByTestId("order-select-dord_1"));
+    await waitFor(() => expect(screen.getByTestId("order-contract-snapshot").textContent).toContain("退货后未收 ¥45"));
   });
 
   it("分次签收提交实际六箱及真实凭证，不把十箱整单签完", async () => {

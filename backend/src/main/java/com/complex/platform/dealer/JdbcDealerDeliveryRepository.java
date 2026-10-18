@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import com.complex.platform.dealer.DealerDeliveryRecord.*;
@@ -127,15 +127,15 @@ public class JdbcDealerDeliveryRepository {
     public void completeOrder(DealerOrderRecord order,Instant at,Instant dueAt) {
         jdbc.update("""
                 UPDATE dealer_orders SET delivery_completed_at=?,signed_at=?,balance_due_at=?,
-                status=CASE WHEN paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent AND ?=0 THEN 'completed' ELSE 'signed' END,
-                completed_at=CASE WHEN paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent AND ?=0 THEN ?::timestamptz ELSE NULL END,updated_at=now()
+                status=CASE WHEN paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent-first_leg_adjustment_cent AND ?=0 THEN 'completed' ELSE 'signed' END,
+                completed_at=CASE WHEN paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent-first_leg_adjustment_cent AND ?=0 THEN ?::timestamptz ELSE NULL END,updated_at=now()
                 WHERE id=? AND delivery_completed_at IS NULL AND status='shipping'
                 """,ts(at),ts(at),ts(dueAt),pendingRefundCent(order.id()),pendingRefundCent(order.id()),ts(at),order.id());
     }
     public void applyAdjustment(String orderId,long amount) {
         jdbc.update("""
                 UPDATE dealer_orders SET delivery_adjustment_cent=delivery_adjustment_cent+?,
-                 overdue=CASE WHEN paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent-? THEN FALSE ELSE overdue END,
+                 overdue=CASE WHEN paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent-first_leg_adjustment_cent-? THEN FALSE ELSE overdue END,
                  updated_at=now() WHERE id=?
                 """,amount,amount,orderId);
         jdbc.update("""
@@ -149,8 +149,12 @@ public class JdbcDealerDeliveryRepository {
         if(pendingRefundCent(orderId)==0) jdbc.update("""
                 UPDATE dealer_orders SET status='completed',completed_at=now(),updated_at=now()
                 WHERE id=? AND status='signed' AND delivery_completed_at IS NOT NULL
-                  AND paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent
+                  AND paid_amount_cent>=total_amount_cent-returned_amount_cent-delivery_adjustment_cent-first_leg_adjustment_cent
                 """,orderId);
+    }
+    public boolean allAcceptedGoodsReturned(String orderId,List<DealerOrderLineRecord> lines) {
+        if(jdbc.queryForObject("SELECT COUNT(*) FROM dealer_orders WHERE id=? AND delivery_completed_at IS NOT NULL",Integer.class,orderId)==0) return false;
+        return !lines.isEmpty() && lines.stream().allMatch(line->line.returnedQuantity()>=acceptedQuantity(orderId,line.id()));
     }
     public int acceptedQuantity(String orderId,String lineId) {
         return jdbc.queryForObject("""

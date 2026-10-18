@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -30,7 +30,9 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
         if (url.endsWith("/delivery")) return { netReceivableCent: 5000, receivedCent: 5000, pendingRefundCent: 0, moneyStatus: "settled", batches: [{ id: "dord_1", shippedAt: "2026-10-01T00:00:00Z", lines: [{ orderLineId: "line_1", quantity: 5, recordedQuantity: 0, acceptedQuantity: 0 }] }], receipts: [], discrepancies: [] };
         if (url.endsWith("/lines")) return [{ id: "line_1", itemId: "item_a", spec: "箱" }];
         if (url.endsWith("/payments")) return [{ id: "dpay_1", method: "bank_transfer", amountCent: 5000, status: "verified", referenceNo: "TX-1" }];
-        if (url.endsWith("/returns")) return [];
+        if (url.endsWith("/return-sources")) return overrides.sources ?? [];
+        if (url.endsWith("/return-financials")) return overrides.financials ?? [];
+        if (url.endsWith("/returns")) return overrides.returns ?? [];
         return [];
       }),
       post: vi.fn(async () => ({ id: "dord_new", orderNo: "DO-NEW" })),
@@ -118,6 +120,25 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
     fireEvent.change(screen.getByTestId("pay-amount"), { target: { value: "50" } });
     fireEvent.click(screen.getByTestId("pay-submit"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/payments", expect.objectContaining({ amountCent: 5000 })));
+  });
+
+  it("首程费减款进入净未付，退货按真实签收来源提交并区分运费待退与已退", async () => {
+    const api = makeApi({
+      order: { id: "dord_1", orderNo: "DO-1", status: "partially_returned", totalAmountCent: 10000, paidAmountCent: 3000, returnedAmountCent: 2000, firstLegAdjustmentCent: 1000 },
+      sources: [{receiptLineId:"receipt_2",orderLineId:"line_1",batchId:"batch_2",availableQuantity:2}],
+      returns: [{id:"ret_1",returnNo:"RET-1",status:"completed",reasonType:"quality_issue",requestedQuantity:1,refundCent:1000,refundedCent:1000}],
+      financials: [{returnId:"ret_1",firstLegOffsetCent:0,firstLegRefundCent:1000,firstLegRefundedCent:0}],
+    });
+    await loginAs(api);
+    expect(screen.getByTestId("order-unpaid-dord_1").textContent).toBe("¥40");
+    fireEvent.click(screen.getByTestId("order-select-dord_1"));
+    fireEvent.click(await screen.findByRole("button",{name:"item_a 箱，批次 batch_2，可退 2"}));
+    expect((screen.getByTestId("return-lines") as HTMLTextAreaElement).value).toBe("item_a,箱,2,receipt_2");
+    fireEvent.click(screen.getByTestId("return-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/returns",expect.objectContaining({lines:[{itemId:"item_a",spec:"箱",quantity:2,sourceReceiptLineId:"receipt_2"}]})));
+    const row=screen.getByText("RET-1").closest("tr")!;
+    expect(Array.from(row.querySelectorAll("td")).slice(-3).map(cell=>cell.textContent)).toEqual(["¥0","¥10","¥0"]);
+    expect(screen.getByText("货款办理状态")).toBeTruthy();
   });
 
   it("停用后的业务请求返回登录并提示撤权", async () => {

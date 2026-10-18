@@ -1,3 +1,5 @@
+// 文件版本：V0.01
+
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -38,10 +40,10 @@ function directionLabel(value?: string): string {
   return DIRECTION_LABEL[value] ?? value;
 }
 
-// 容量维度中文（dimension）。point_device=自由进出型（并发在场/上限），project/session=场次批次型（已用/容量）。
+// 在场硬上限只按项目控制；历史点位与场次快照不进入看板。
 const DIMENSION_LABEL: Record<string, string> = {
   point_device: "自由进出（并发在场）",
-  project: "项目容量",
+  project: "项目硬安全容量",
   session: "场次容量",
 };
 function dimensionLabel(value?: string): string {
@@ -61,7 +63,7 @@ function num(value: unknown): number {
 }
 
 // 现场最关心的一问「还能进多少」：上限 - 当前在场，下限 0（超容时显示 0 而非负数）。
-// 未配上限（limit<=0）= 该维度不控容，返回 null → 显示「不限」。
+// 项目硬上限缺失时待配置，不解释为无限准入。
 function remainingSeats(row: AmusementCapacitySnapshotRow): number | null {
   const limit = num(row.capacityLimit);
   if (limit <= 0) return null;
@@ -69,13 +71,15 @@ function remainingSeats(row: AmusementCapacitySnapshotRow): number | null {
 }
 function remainingLabel(row: AmusementCapacitySnapshotRow): string {
   const left = remainingSeats(row);
-  return left === null ? "不限" : String(left);
+  return left === null ? "待配置" : String(left);
 }
 
-type TabKey = "records" | "capacity" | "reconcile";
+type TabKey = "records" | "capacity" | "reconcile" | "releases";
+type CountRelease = { id: string; projectId: string; sessionId?: string; scope: string; businessDate: string; boundaryAt: string; resetAt: string; clearedPeople: number; sourceId: string; configVersionId: string };
 
 export function AmusementVerificationRecordsPage({ api, setGlobalError, navigateTo, effectivePermissions }: AdminPageProps) {
   const [records, setRecords] = React.useState<AmusementVerificationRow[]>([]);
+  const [releases, setReleases] = React.useState<CountRelease[]>([]);
   const [snapshots, setSnapshots] = React.useState<AmusementCapacitySnapshotRow[]>([]);
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   const [sessions, setSessions] = React.useState<AmusementSessionRow[]>([]);
@@ -111,17 +115,19 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
     async () => {
       // 副资源容错（外包页范式）：容量快照/项目/场次为筛选与显名辅助数据，可能因权限/500 单独失败——
       // 各自降级为空并合并一条区块提示，不拖垮核销记录主表。
-      const [nextRecords, snapRes, projRes, sessRes] = await Promise.all([
+      const [nextRecords, snapRes, projRes, sessRes, releaseRes] = await Promise.all([
         api.get<AmusementVerificationRow[]>(`/api/v1/amusement/verifications${query}`),
         loadSecondary(() => api.get<AmusementCapacitySnapshotRow[]>("/api/v1/amusement/capacity-snapshots"), [] as AmusementCapacitySnapshotRow[]),
         loadSecondaryIfPermitted(canAmusementSession, () => api.get<AmusementProjectRow[]>("/api/v1/amusement/projects"), [] as AmusementProjectRow[]),
         loadSecondaryIfPermitted(canAmusementSession, () => api.get<AmusementSessionRow[]>("/api/v1/amusement/sessions"), [] as AmusementSessionRow[]),
+        loadSecondary(() => api.get<CountRelease[]>(`/api/v1/amusement/count-releases${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`), [] as CountRelease[]),
       ]);
+      setReleases(releaseRes.data);
       setRecords(nextRecords);
-      setSnapshots(snapRes.data);
+      setSnapshots(snapRes.data.filter((row) => row.dimension === "project"));
       setProjects(projRes.data);
       setSessions(sessRes.data);
-      setAuxNotice(snapRes.notice ?? projRes.notice ?? sessRes.notice);
+      setAuxNotice(snapRes.notice ?? projRes.notice ?? sessRes.notice ?? releaseRes.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -206,7 +212,7 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
         { label: "场次", value: display(row.sessionId ? (sessionNameById.get(String(row.sessionId)) ?? row.sessionId) : "—") },
         { label: "核销点位", value: display(row.locationPointId) },
         { label: "设备", value: display(row.deviceId) },
-        { label: "当前在场 / 已用", value: display(row.occupiedCount) },
+        { label: "当前在场", value: display(row.occupiedCount) },
         { label: "上限", value: display(row.capacityLimit) },
         { label: "剩余可进", value: remainingLabel(row) },
         { label: "占用率", value: `${rate}%` },
@@ -348,6 +354,7 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
 
       <div className="admin-tabs" data-testid="amu-verif-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "records"} data-testid="amu-verif-tab-records" className={tab === "records" ? "is-active" : ""} onClick={() => setTab("records")}>核销记录</button>
+        <button type="button" role="tab" aria-selected={tab === "releases"} data-testid="amu-verif-tab-releases" onClick={() => setTab("releases")}>系统释放记录</button>
         <button type="button" role="tab" aria-selected={tab === "capacity"} data-testid="amu-verif-tab-capacity" className={tab === "capacity" ? "is-active" : ""} onClick={() => setTab("capacity")}>在场容量</button>
         <button type="button" role="tab" aria-selected={tab === "reconcile"} data-testid="amu-verif-tab-reconcile" className={tab === "reconcile" ? "is-active" : ""} onClick={() => setTab("reconcile")}>交叉对账</button>
       </div>
@@ -363,7 +370,11 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
           <div className="admin-kpi-card"><span>超容点位</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-over">{overCapacityCount}</strong><small>在场超上限</small></div>
         </div>
 
-        {tab === "capacity" ? (
+        {tab === "releases" ? (
+          <table className="admin-table" data-testid="amu-count-releases"><thead><tr><th>来源</th><th>项目／场次</th><th>营业日</th><th>边界时间</th><th>系统执行时间</th><th>释放人数</th><th>原件／版本</th></tr></thead><tbody>
+            {releases.length === 0 ? <tr><td colSpan={7}>暂无可核实归属的系统释放记录</td></tr> : releases.map(row => <tr key={row.id}><td>{row.scope === "session_end" ? "场次结束" : "营业日结束"}</td><td>{projectNameById.get(row.projectId) ?? row.projectId}／{row.sessionId ?? "—"}</td><td>{row.businessDate}</td><td>{cnDate(row.boundaryAt)}</td><td>{cnDate(row.resetAt)}</td><td>{row.clearedPeople}</td><td>{row.sourceId}／{row.configVersionId}</td></tr>)}
+          </tbody></table>
+        ) : tab === "capacity" ? (
           capacityTable
         ) : (
           <>

@@ -1,19 +1,20 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
-type Kind = "points" | "growth" | "national" | "sales_contract";
+type Kind = "points" | "growth" | "national" | "sales_contract" | "recovery_waiver";
 type Row = { id: string; kind: Kind; version: string; status: string; ticketTypeId?: string; effectiveAt: string; publishedAt?: string; reviewId?: string; values: Record<string, unknown> };
 type Option = { id: string; name?: string; entityName?: string; ticketName?: string; barId?: string };
-const kinds: Record<Kind, string> = { points: "门票固定积分", growth: "门票成长值", national: "全国积分等待与发行单价", sales_contract: "合同销售主体" };
+const kinds: Record<Kind, string> = { points: "门票固定积分", growth: "门票成长值", national: "全国积分等待与发行单价", sales_contract: "合同销售主体", recovery_waiver: "全国待追回积分豁免线" };
 const labels: Record<string, string> = { pending_review: "待审批", approved: "已审批", rejected: "已驳回" };
 const numberFields: Record<Kind, Array<[string, string]>> = {
   points: [["fixedValue", "每人份／次份固定积分"], ["minimumValue", "积分下限"], ["maximumValue", "积分上限"]],
   growth: [["fixedValue", "每人份／次份成长值"], ["minimumValue", "成长值下限"], ["maximumValue", "成长值上限"]],
   national: [["waitingHours", "核销后等待小时数"], ["minimumWaitingHours", "等待时长下限"], ["maximumWaitingHours", "等待时长上限"], ["issuancePriceCent", "每积分发行单价（分）"], ["minimumPriceCent", "单价下限（分）"], ["maximumPriceCent", "单价上限（分）"]],
   sales_contract: [],
+  recovery_waiver: [["fixedValue", "会员全部待追回积分豁免线"], ["minimumValue", "豁免线下限"], ["maximumValue", "豁免线上限"]],
 };
 const list = (value: Option[] | { items: Option[] }) => Array.isArray(value) ? value : value.items;
 
@@ -35,12 +36,13 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
   const [error, setError] = React.useState("");
   const [publicationReason, setPublicationReason] = React.useState("");
   const manage = ["ticket.reward.config.manage"];
+  const nationwide = kind === "national" || kind === "recovery_waiver";
 
   const load = React.useCallback(async () => {
-    const qs = kind === "national" ? "" : project ? `?project_id=${encodeURIComponent(project)}` : null;
+    const qs = nationwide ? "" : project ? `?project_id=${encodeURIComponent(project)}` : null;
     if (qs === null) { setRows([]); return; }
     setRows(await api.get<Row[]>(`/api/v1/loyalty/ticket-reward-configs${qs}`));
-  }, [api, project, kind]);
+  }, [api, project, nationwide]);
   React.useEffect(() => { void load().catch(e => setError(e.message)); }, [load]);
   React.useEffect(() => {
     void Promise.all([
@@ -63,12 +65,12 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
       payload[key] = Number(values[key]);
     }
     if (!effective || !reason.trim() || !approver.trim()) throw new Error("请填写未来生效时间、原因和最终审批人");
-    if (kind !== "national" && (!project || !ticket)) throw new Error("请选择综合体和票种");
+    if (!nationwide && (!project || !ticket)) throw new Error("请选择综合体和票种");
     if (kind === "national") payload.receiverEntityId = values.receiverEntityId;
     if (kind === "sales_contract") Object.assign(payload, { sellerEntityId: values.sellerEntityId, sellerMerchantId: tickets.find(t => t.id === ticket)?.barId ?? null, contractNumber: values.contractNumber, attachmentIds: attachments });
     return api.post("/api/v1/loyalty/ticket-reward-configs", {
-      idempotencyKey: crypto.randomUUID(), kind, projectId: kind === "national" ? null : project,
-      ticketTypeId: kind === "national" ? null : ticket, values: payload, effectiveAt: new Date(effective).toISOString(),
+      idempotencyKey: crypto.randomUUID(), kind, projectId: nationwide ? null : project,
+      ticketTypeId: nationwide ? null : ticket, values: payload, effectiveAt: new Date(effective).toISOString(),
       reason, finalApproverId: approver.trim(),
       parallelLines: kind === "sales_contract" ? Object.entries(reviewers).map(([lineCode, finalApproverId]) => ({ lineCode, finalApproverId: finalApproverId.trim() })) : [],
     });
@@ -91,8 +93,8 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
     <AdminPageHeader title="门票积分、成长值与销售责任" description="配置审批通过后须在生效前发布。积分和成长值分别设置；积分归实际使用会员，合同销售方独立承担发行费。" />
     {error && <p role="alert">{error}</p>}
     <div className="admin-form-row">
-      <label>配置类型<select aria-label="配置类型" value={kind} onChange={e => setKind(e.target.value as Kind)}>{Object.entries(kinds).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>
-      {kind !== "national" && <><label>综合体<select aria-label="综合体" value={project} onChange={e => { setProject(e.target.value); setAttachments([]); }}><option value="">请选择</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
+      <label>配置类型<select aria-label="配置类型" value={kind} onChange={e => { const next = e.target.value as Kind; setKind(next); setValues(next === "recovery_waiver" ? { fixedValue: "100" } : next === "national" ? { waitingHours: "24" } : {}); }}>{Object.entries(kinds).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>
+      {!nationwide && <><label>综合体<select aria-label="综合体" value={project} onChange={e => { setProject(e.target.value); setAttachments([]); }}><option value="">请选择</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
         <label>票种<select aria-label="票种" value={ticket} onChange={e => { setTicket(e.target.value); setAttachments([]); }}><option value="">请选择</option>{tickets.map(t => <option key={t.id} value={t.id}>{t.ticketName ?? t.id}</option>)}</select></label></>}
     </div>
     <div className="admin-form-row">

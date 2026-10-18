@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -198,7 +200,12 @@ public class SupplierQualificationService {
      */
     public void requireQualified(String supplierId) {
         String supplier = requireText(supplierId, "supplier_id");
-        List<SupplierQualificationRecord> qualifications = scopedQualifications(supplier).stream()
+        requireQualifiedRecords(scopedQualifications(supplier));
+    }
+
+    // 采购工作流已按真实项目、供应商和货权收窄来源；不通过全局商户辅助方法误拒平台采购员工。
+    void requireQualifiedRecords(List<SupplierQualificationRecord> records) {
+        List<SupplierQualificationRecord> qualifications = records.stream()
                 .filter(q -> "active".equals(q.status()))
                 .toList();
         if (qualifications.isEmpty()) {
@@ -207,6 +214,10 @@ public class SupplierQualificationService {
         }
         // 资质是否过期按所在地(北京)日历日判:证照写的到期日是北京日历日。
         LocalDate today = LocalDate.now(LocalZone.ID);
+        boolean futureEffective = qualifications.stream().anyMatch(q -> q.validFrom() != null && q.validFrom().isAfter(today));
+        if (futureEffective) {
+            throw ApiException.conflict("SUPPLIER_QUALIFICATION_NOT_YET_VALID", "供应商资质尚未生效，进货查验不通过");
+        }
         boolean anyExpired = qualifications.stream()
                 .anyMatch(q -> q.validTo() != null && q.validTo().isBefore(today));
         if (anyExpired) {

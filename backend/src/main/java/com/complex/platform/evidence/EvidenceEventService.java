@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -59,6 +59,18 @@ public class EvidenceEventService {
     com.complex.platform.customer.TicketRewardConfigService ticketRewardConfigs;
     @org.springframework.beans.factory.annotation.Autowired
     com.complex.platform.inventory.InventoryQuarantineService quarantines;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.dealer.DealerReturnFinancialService dealerReturns;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.energy.EnergyService energy;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.access.staff.PayrollTaxService payrollTaxes;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.amusement.AmusementBusinessDayService> amusementBusinessDays;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.inventory.PurchaseWorkflowService> purchaseWorkflows;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.amusement.AmusementSessionLifecycleService> amusementSessions;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -441,6 +453,31 @@ public class EvidenceEventService {
     private Optional<String> evidenceScope(String businessType, String businessId, String dealerPermission, String evidencePermission) {
         String type = trimToNull(businessType);
         boolean reading = "evidence.timeline.view".equals(evidencePermission);
+        if (java.util.Set.of("supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution").contains(type == null ? "" : type)) {
+            return Optional.ofNullable(purchaseWorkflows.getObject().requireEvidenceScope(type, businessId, evidencePermission));
+        }
+        if ("amusement_session".equals(type)) {
+            return Optional.ofNullable(amusementSessions.getObject().requireEvidenceScope(businessId, evidencePermission));
+        }
+        if ("amusement_business_day_config".equals(type)) {
+            amusementBusinessDays.getObject().requireEvidenceScope(businessId, evidencePermission);
+            return Optional.empty();
+        }
+        if ("payroll_tax_version".equals(type) || "payroll_tax_assessment".equals(type)) {
+            return Optional.ofNullable(payrollTaxes.requireEvidenceScope(type, businessId, evidencePermission));
+        }
+        if ("dealer_return".equals(type)) {
+            dealerReturns.requireEvidenceScope(businessId, evidencePermission);
+            return Optional.empty();
+        }
+        if ("dealer_invoice".equals(type)) {
+            dealerReturns.requireInvoiceEvidenceScope(businessId, evidencePermission);
+            return Optional.empty();
+        }
+        if ("energy_meter".equals(type)) {
+            energy.requireEvidenceScope(businessId, evidencePermission);
+            return Optional.empty();
+        }
         if ("inventory_quarantine".equals(type)) {
             quarantines.requireEvidenceScope(businessId, evidencePermission);
             return authorizationService.currentMerchantIdQuietly();
@@ -552,7 +589,7 @@ public class EvidenceEventService {
     }
 
     private void requireDirectUpload(String businessType) {
-        if (java.util.Set.of("dealer_delivery", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract").contains(businessType == null ? "" : businessType.trim())) {
+        if (java.util.Set.of("supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution", "amusement_session", "amusement_business_day_config", "dealer_delivery", "dealer_return", "dealer_invoice", "energy_meter", "payroll_tax_version", "payroll_tax_assessment", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract").contains(businessType == null ? "" : businessType.trim())) {
             throw ApiException.badRequest("REAL_UPLOAD_REQUIRED", "该业务凭证须通过文件上传接口提交实际文件");
         }
     }

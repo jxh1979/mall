@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { readFileSync } from "node:fs";
 
 const matrixPath = "docs/full-admin-page-permission-field-matrix-v0.1.csv";
@@ -7,6 +7,7 @@ const mvpTestPath = "tests/e2e/full-admin-mvp.spec.ts";
 const remainingTestPath = "tests/e2e/full-admin-remaining.spec.ts";
 
 const bespokePages = new Set([
+  "ADM-FIN-009",
   "ADM-FIN-008",
   "ADM-TKT-004",
   "ADM-FAC-003",
@@ -107,6 +108,8 @@ const bespokePages = new Set([
   "ADM-AMU-005",
   "ADM-AMU-006",
   "ADM-AMU-007",
+  "ADM-AMU-008",
+  "ADM-INV-003",
   "ADM-DLR-001",
   "ADM-DLR-002",
   "ADM-DLR-003",

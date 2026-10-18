@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -111,7 +113,7 @@ class ContractServiceTests {
     private ContractRecord newDraft() {
         return service.createDraft(new ContractDraftRequest("k_draft", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, Map.of("breach", "2x"),
+                "fixed_ratio", "none", 500000L, Map.of("breach", "2x"),
                 List.of(Map.of("item", "deposit_offset"), Map.of("item", "unpaid_fee")), List.of(), null, "餐饮"));
     }
 
@@ -133,7 +135,7 @@ class ContractServiceTests {
         ContractRecord a = newDraft();
         ContractRecord b = service.createDraft(new ContractDraftRequest("k_draft_2", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, Map.of("breach", "2x"),
+                "fixed_ratio", "none", 500000L, Map.of("breach", "2x"),
                 List.of(Map.of("item", "deposit_offset")), List.of(), null, "餐饮"));
         assertThat(b.id()).isNotEqualTo(a.id());
         assertThat(repo.listContracts()).hasSize(2);
@@ -181,7 +183,7 @@ class ContractServiceTests {
                 (contractId, idempotencyKey) -> notified.add(contractId + "|" + idempotencyKey));
         ContractRecord c = wired.createDraft(new ContractDraftRequest("k_cg01", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, Map.of("breach", "2x"),
+                "fixed_ratio", "none", 500000L, Map.of("breach", "2x"),
                 List.of(Map.of("item", "deposit_offset"), Map.of("item", "unpaid_fee")), List.of(), null, "餐饮"));
         wired.submit(c.id(), "k_cg01_submit");
         wired.approve(c.id(), new ContractApproveRequest("k_cg01_r", "contract.approve.finance", "reject", "条款不合规"));
@@ -324,11 +326,11 @@ class ContractServiceTests {
 
     @Test
     void activateBooksRentPropertyForEachPeriodAndLeavesEnergyToEnergyDomain() {
-        // 清单 P1-3 方案B:即便 by_contract 包干固定能源费,合同域生效也只排 rent+property(12 期 × 2 = 24 条);
+        // 独表按实际费用代收，合同域只排租金及物业费。
         // 能源费统一由能耗抄表域 settleEnergyFee 出账,消除合同域×能耗域对同一户同期双挂账。
         ContractRecord d = service.createDraft(new ContractDraftRequest("k_pf", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
-                Map.of("baseRentCent", 100000, "propertyFeeCent", 20000, "energyFeeCent", 5000),
+                Map.of("baseRentCent", 100000, "propertyFeeCent", 20000),
                 "fixed_ratio", "by_contract", 500000L, Map.of(), List.of(), List.of(), null, null));
         service.submit(d.id(), "k_sub");
         approve(d, "contract.approve.business");
@@ -344,6 +346,37 @@ class ContractServiceTests {
                 .containsExactlyInAnyOrder("rent", "property_fee");
         assertThat(aug).extracting(ContractRentBillRecord::feeType).doesNotContain("energy_fee");
         assertThat(service.generatePeriodBills(d.id(), new ContractRentBillRequest("k_pb", "2026-08"))).isEmpty();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"none","by_contract","by_area","by_usage"})
+    void contractRejectsFixedEnergyFeeForEveryBasis(String basis) {
+        assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest("k_fixed_"+basis,"mch_1","subj_1",null,"subj_1",
+                LocalDate.parse("2026-07-01"),LocalDate.parse("2027-06-30"),Map.of("energyFeeCent",5000),
+                "fixed_ratio",basis,500000L,Map.of(),List.of(),List.of(),null,null))).isInstanceOf(ApiException.class);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"by_area","by_usage"})
+    void contractRejectsPublicEnergyAllocationEvenWithoutFixedFee(String basis) {
+        assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest("k_allocation_"+basis,"mch_1","subj_1",null,"subj_1",
+                LocalDate.parse("2026-07-01"),LocalDate.parse("2027-06-30"),Map.of(),
+                "fixed_ratio",basis,500000L,Map.of(),List.of(),List.of(),null,null))).isInstanceOf(ApiException.class);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"energyFeeCent","energy_fee_cent"})
+    void fixedEnergyChargeCannotBypassDraftOrChangeValidation(String key) {
+        ContractRecord c = effectiveContract();
+        for (Object value : List.of("5000", 0.5, "invalid")) {
+            assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest("k_fixed_type", "mch_1", "subj_1", null, "subj_1",
+                    LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(key, value),
+                    "fixed_ratio", "by_contract", 500000L, Map.of(), List.of(), List.of(), null, null)))
+                    .hasMessageContaining("不可预设固定能源费");
+            assertThatThrownBy(() -> service.raiseChange(c.id(), new ContractChangeRequest(
+                    "k_fixed_change", "business_scope_change", Map.of(key, value))))
+                    .hasMessageContaining("不可预设固定能源费");
+        }
     }
 
     @Test
@@ -428,7 +461,7 @@ class ContractServiceTests {
         // 变更后生效：走既有 business_scope_change 变更链，终审通过 payload 并入 rent_terms，拦截即读新范围。
         ContractRecord c = service.createDraft(new ContractDraftRequest("k_scope3", "mch_scope", "subj_1", null,
                 "subj_1", LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
-                Map.of("baseRentCent", 100000), "fixed_ratio", "by_area", null, null, null, List.of(), null,
+                Map.of("baseRentCent", 100000), "fixed_ratio", "none", null, null, null, List.of(), null,
                 "酒吧经营", null, List.of("beer")));
         service.submit(c.id(), "k_scope3_submit");
         approve(c, "contract.approve.business");
@@ -500,7 +533,7 @@ class ContractServiceTests {
         Instant now = Instant.now();
         return repo.saveContract(new ContractRecord(id, "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", depositCent, penaltyTerms, List.of(), Map.of(), null, List.of(),
+                "fixed_ratio", "none", depositCent, penaltyTerms, List.of(), Map.of(), null, List.of(),
                 "effective", "proj_1", null, null, null, now, now));
     }
 
@@ -794,7 +827,7 @@ class ContractServiceTests {
         Instant now = Instant.now();
         ContractRecord c = repo.saveContract(new ContractRecord("ctr_u9", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
-                "fixed_ratio", "by_area", 500000L, Map.of(), List.of(), Map.of(), null, List.of(),
+                "fixed_ratio", "none", 500000L, Map.of(), List.of(), Map.of(), null, List.of(),
                 "expired", "proj_1", null, null, null, now, now));
         assertThatThrownBy(() -> service.settle(c.id(), new ContractSettleRequest("k_u9", "move_out", null)))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -830,7 +863,7 @@ class ContractServiceTests {
     private ContractRecord effectiveScopedContract(String key, String merchant, List<String> allowed, String space) {
         ContractRecord c = service.createDraft(new ContractDraftRequest(key, merchant, "subj_1", null, "subj_1",
                 LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
-                Map.of("baseRentCent", 100000), "fixed_ratio", "by_area", 500000L, null, null, List.of(), null,
+                Map.of("baseRentCent", 100000), "fixed_ratio", "none", 500000L, null, null, List.of(), null,
                 "酒吧经营", null, allowed));
         service.submit(c.id(), key + "_submit");
         approve(c, "contract.approve.business");

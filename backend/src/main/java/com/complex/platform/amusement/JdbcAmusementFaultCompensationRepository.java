@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -166,17 +168,17 @@ public class JdbcAmusementFaultCompensationRepository {
                   FROM amusement_verifications av
                   JOIN amusement_sessions s ON s.id = av.session_id
                   JOIN amusement_projects ap ON ap.id = s.project_id
-                  LEFT JOIN merchants m ON m.id = ap.merchant_id
                   JOIN issued_entitlements e ON e.id = av.entitlement_id
                   LEFT JOIN ticket_orders o ON o.id = e.order_id
                   LEFT JOIN ticket_slot_holders h ON h.parent_ticket_id = e.parent_ticket_id AND h.slot_index = e.slot_index
                  WHERE av.direction = 'entry' AND av.verification_result = 'success'
+                   AND av.complex_id = :project_id
                    AND s.start_time < :window_to AND s.end_time > :window_from
                    AND av.created_at <= :window_to
                    AND (av.released_at IS NULL OR av.released_at >= :window_from)
                    AND LOWER(e.entitlement_type) LIKE 'amusement%'
                    AND e.compensation_item_id IS NULL
-                   AND (m.project_id IS NULL OR m.project_id = :project_id)
+                   AND o.project_id = :project_id
                    AND NOT EXISTS (SELECT 1 FROM amusement_fault_compensation_items i
                                     WHERE i.fault_id = :fault_id AND i.entitlement_id = e.id)
                  ORDER BY e.id, av.created_at DESC
@@ -193,14 +195,13 @@ public class JdbcAmusementFaultCompensationRepository {
                 SELECT e.id AS entitlement_id, e.order_id, e.ticket_type_id, e.parent_ticket_id, e.slot_index, e.valid_to,
                        COALESCE(h.holder_customer_id, o.customer_id) AS customer_id
                   FROM issued_entitlements e
-                  LEFT JOIN merchants m ON m.id = COALESCE(e.bar_id, e.merchant_id)
                   LEFT JOIN ticket_orders o ON o.id = e.order_id
                   LEFT JOIN ticket_slot_holders h ON h.parent_ticket_id = e.parent_ticket_id AND h.slot_index = e.slot_index
                  WHERE LOWER(e.entitlement_type) LIKE 'amusement%'
                    AND e.status = 'active' AND e.used_times < e.total_times
                    AND e.valid_from <= :at AND e.valid_to >= :at
                    AND e.compensation_item_id IS NULL
-                   AND (m.project_id IS NULL OR m.project_id = :project_id)
+                   AND o.project_id = :project_id
                    AND NOT EXISTS (SELECT 1 FROM amusement_fault_compensation_items i
                                     WHERE i.fault_id = :fault_id AND i.entitlement_id = e.id)
                  ORDER BY e.created_at, e.id

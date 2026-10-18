@@ -22,6 +22,7 @@ import static com.complex.platform.common.Strings.requireText;
  * {@code operating_params.changed}。幂等：repository 按 project_id ON CONFLICT DO UPDATE。</p>
  */
 @Service
+// 文件版本：V0.01
 public class OperatingParamsService {
 
     private final AnalyticsRepository repository;
@@ -70,7 +71,8 @@ public class OperatingParamsService {
 
     /** S0:经营日切分配置读取(九域,经营参数页数据源)。 */
     public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
-        return repository.listBusinessDayCutoffs();
+        return repository.listBusinessDayCutoffs().stream()
+                .filter(row -> !"amusement".equals(row.domain())).toList();
     }
 
     private static final java.util.Set<String> CUTOFF_DOMAINS = java.util.Set.of(
@@ -84,6 +86,10 @@ public class OperatingParamsService {
     public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(BusinessDayCutoffRequest request) {
         BusinessDayCutoffRequest actual = requireRequest(request);
         String domain = requireText(actual.domain(), "domain");
+        if ("amusement".equals(domain)) {
+            throw ApiException.conflict("AMUSEMENT_COMPLEX_CONFIG_REQUIRED",
+                    "游乐营业日须按综合体提交版本并经最高权限审批");
+        }
         if (!CUTOFF_DOMAINS.contains(domain)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "业务域必须为以下之一：" + CUTOFF_DOMAINS);
         }

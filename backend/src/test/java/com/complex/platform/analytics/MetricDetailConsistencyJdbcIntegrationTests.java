@@ -1,10 +1,13 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricDetailRows;
+import com.complex.platform.amusement.AmusementBusinessDayService;
+import com.complex.platform.amusement.AmusementBusinessDayTestFixture;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -54,6 +57,14 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     @Autowired
     private com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
+    @Autowired
+    private AmusementBusinessDayService amusementBusinessDays;
+
+    @Autowired
+    private SupervisorReviewService supervisorReviews;
+
+    private String amusementComplex;
+
     @Test
     void ticketRevenueSummaryEqualsPagedDetailSumAndEtlAggregate() {
         Instant start = businessDayResolver.startInstant("ticketing", DAY);
@@ -97,9 +108,9 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
         insertMeter("em_mdc_e", "electricity");
         insertMeter("em_mdc_w", "water");
-        insertReading("er_mdc_1", "em_mdc_e", "700.5");
-        insertReading("er_mdc_2", "em_mdc_e", "300");
-        insertReading("er_mdc_w", "em_mdc_w", "88"); // 水表 → 不进电量口径
+        insertReading("er_mdc_1", "em_mdc_e", "700.5", "0", DAY + "T10:00:00Z");
+        insertReading("er_mdc_2", "em_mdc_e", "300", "700.5", DAY + "T11:00:00Z");
+        insertReading("er_mdc_w", "em_mdc_w", "88", "0", DAY + "T10:00:00Z"); // 水表 → 不进电量口径
 
         MetricDetailRows after = repository.electricityReadingDetail(start, end, 200, 0);
         assertThat(after.summaryValue().subtract(baseline)).isEqualByComparingTo("1000.5");
@@ -307,17 +318,16 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     @Test
     void amusementSessionCountAndCapacitySummaryEqualsPagedDetail() {
         insertAmusementProject("proj_sess");
-        BigDecimal baseCount = repository.amusementSessionDetail(null, null, false, 1, 0).summaryValue();
-        BigDecimal baseCap = repository.amusementSessionDetail(null, null, true, 1, 0).summaryValue();
+        BigDecimal baseCount = amusementDetail("amusement.session_count", 1, 0).summaryValue();
         insertAmusementSession("ses_1", "proj_sess", 100, "scheduled");
         insertAmusementSession("ses_2", "proj_sess", 50, "open");
 
-        MetricDetailRows count = repository.amusementSessionDetail(null, null, false, 200, 0);
+        MetricDetailRows count = amusementDetail("amusement.session_count", 200, 0);
         assertThat(count.summaryValue().subtract(baseCount)).isEqualByComparingTo("2");
-        MetricDetailRows cap = repository.amusementSessionDetail(null, null, true, 200, 0);
-        assertThat(cap.summaryValue().subtract(baseCap)).isEqualByComparingTo("150");
+        MetricDetailRows cap = amusementDetail("amusement.session_capacity", 200, 0);
+        assertThat(cap.summaryValue()).isEqualByComparingTo("500");
         // 数字=明细合计：翻完所有页,Σcapacity == summaryValue。
-        assertThat(sumLong(collectAllPages((limit, offset) -> repository.amusementSessionDetail(null, null, true, limit, offset)), "capacity"))
+        assertThat(sumLong(collectAllPages((limit, offset) -> amusementDetail("amusement.session_capacity", limit, offset)), "capacity"))
                 .isEqualByComparingTo(cap.summaryValue());
     }
 
@@ -325,16 +335,16 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     void amusementGroupBookingCountAndReservedSummaryEqualsPagedDetail() {
         insertAmusementProject("proj_grp");
         insertAmusementSession("ses_grp", "proj_grp", 200, "scheduled");
-        BigDecimal baseCount = repository.amusementGroupBookingDetail(null, null, false, 1, 0).summaryValue();
-        BigDecimal baseReserved = repository.amusementGroupBookingDetail(null, null, true, 1, 0).summaryValue();
+        BigDecimal baseCount = amusementDetail("amusement.group_booking_count", 1, 0).summaryValue();
+        BigDecimal baseReserved = amusementDetail("amusement.group_reserved_capacity", 1, 0).summaryValue();
         insertAmusementGroupBooking("gb_1", "proj_grp", "ses_grp", 20, "approved");
         insertAmusementGroupBooking("gb_2", "proj_grp", "ses_grp", 30, "pending_approval");
 
-        MetricDetailRows count = repository.amusementGroupBookingDetail(null, null, false, 200, 0);
+        MetricDetailRows count = amusementDetail("amusement.group_booking_count", 200, 0);
         assertThat(count.summaryValue().subtract(baseCount)).isEqualByComparingTo("2");
-        MetricDetailRows reserved = repository.amusementGroupBookingDetail(null, null, true, 200, 0);
-        assertThat(reserved.summaryValue().subtract(baseReserved)).isEqualByComparingTo("50");
-        assertThat(sumLong(collectAllPages((limit, offset) -> repository.amusementGroupBookingDetail(null, null, true, limit, offset)), "reservedCapacity"))
+        MetricDetailRows reserved = amusementDetail("amusement.group_reserved_capacity", 200, 0);
+        assertThat(reserved.summaryValue().subtract(baseReserved)).isEqualByComparingTo("20");
+        assertThat(sumLong(collectAllPages((limit, offset) -> amusementDetail("amusement.group_reserved_capacity", limit, offset)), "reservedCapacity"))
                 .isEqualByComparingTo(reserved.summaryValue());
     }
 
@@ -342,15 +352,15 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     void amusementEntryExitCountsSplitByDirection() {
         insertAmusementProject("proj_ver");
         insertAmusementSession("ses_ver", "proj_ver", 300, "open");
-        BigDecimal baseEntry = repository.amusementVerificationDirectionDetail(null, null, true, 1, 0).summaryValue();
-        BigDecimal baseExit = repository.amusementVerificationDirectionDetail(null, null, false, 1, 0).summaryValue();
+        BigDecimal baseEntry = amusementDetail("amusement.entry_count", 1, 0).summaryValue();
+        BigDecimal baseExit = amusementDetail("amusement.exit_count", 1, 0).summaryValue();
         insertAmusementVerification("av_e1", "proj_ver", "ses_ver", "entry");
         insertAmusementVerification("av_e2", "proj_ver", "ses_ver", "entry");
         insertAmusementVerification("av_x1", "proj_ver", "ses_ver", "exit");
 
-        MetricDetailRows entry = repository.amusementVerificationDirectionDetail(null, null, true, 200, 0);
+        MetricDetailRows entry = amusementDetail("amusement.entry_count", 200, 0);
         assertThat(entry.summaryValue().subtract(baseEntry)).isEqualByComparingTo("2");
-        MetricDetailRows exit = repository.amusementVerificationDirectionDetail(null, null, false, 200, 0);
+        MetricDetailRows exit = amusementDetail("amusement.exit_count", 200, 0);
         assertThat(exit.summaryValue().subtract(baseExit)).isEqualByComparingTo("1");
     }
 
@@ -358,17 +368,16 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     void amusementInspectionCountAndPendingRectificationSummaryEqualsPagedDetail() {
         insertAmusementProject("proj_insp");
         insertAmusementSafetyTemplate("tpl_insp");
-        Instant asOfEnd = businessDayResolver.endInstant("amusement", businessDayResolver.businessDate("amusement", Instant.now()));
-        BigDecimal baseCount = repository.amusementInspectionDetail(null, null, 1, 0).summaryValue();
-        BigDecimal basePending = repository.amusementInspectionPendingRectificationDetail(asOfEnd, 1, 0).summaryValue();
+        BigDecimal baseCount = amusementDetail("amusement.inspection_count", 1, 0).summaryValue();
+        BigDecimal basePending = amusementDetail("amusement.inspection_pending_rectification", 1, 0).summaryValue();
         insertAmusementSafetyInspection("insp_1", "proj_insp", "tpl_insp", "pass", "pending_rectification");
         insertAmusementSafetyInspection("insp_2", "proj_insp", "tpl_insp", "pass", "resolved"); // 已整改 → 不进待整改口径
 
-        MetricDetailRows count = repository.amusementInspectionDetail(null, null, 200, 0);
+        MetricDetailRows count = amusementDetail("amusement.inspection_count", 200, 0);
         assertThat(count.summaryValue().subtract(baseCount)).isEqualByComparingTo("2");
-        MetricDetailRows pending = repository.amusementInspectionPendingRectificationDetail(asOfEnd, 200, 0);
+        MetricDetailRows pending = amusementDetail("amusement.inspection_pending_rectification", 200, 0);
         assertThat(pending.summaryValue().subtract(basePending)).isEqualByComparingTo("1");
-        assertThat(collectAllPages((limit, offset) -> repository.amusementInspectionPendingRectificationDetail(asOfEnd, limit, offset)))
+        assertThat(collectAllPages((limit, offset) -> amusementDetail("amusement.inspection_pending_rectification", limit, offset)))
                 .hasSize((int) pending.totalRows());
     }
 
@@ -514,19 +523,18 @@ class MetricDetailConsistencyJdbcIntegrationTests {
                 """, Map.of("id", id, "meter_type", meterType));
     }
 
-    private void insertReading(String id, String meterId, String consumption) {
-        // uq(meter_id, period) 且 period VARCHAR(16)：period=「run(8)/序号」——同表计多行（序号不同）、
-        // 跨运行（run 不同）均不撞唯一键；此前同表计两行同 period 首跑即炸。
-        String period = run + "/" + id.substring(id.lastIndexOf('_') + 1);
+    private void insertReading(String id, String meterId, String consumption, String previous, String readAt) {
+        // 同一表按真实计量时点分段，只有已审核用量进入汇总和钻取。
+        String period = java.time.YearMonth.from(DAY).toString();
         id = sid(id);
         jdbcTemplate.update("""
                 INSERT INTO energy_meter_readings (id, meter_id, period, reading_value, prev_reading_value,
                         consumption, status, abnormal_reason, read_mode, read_at)
-                VALUES (:id, :meter_id, :period, :consumption::numeric, 0, :consumption::numeric,
-                        'recorded', NULL, 'manual', :read_at::timestamptz)
+                VALUES (:id, :meter_id, :period, :previous::numeric+:consumption::numeric, :previous::numeric, :consumption::numeric,
+                        'reviewed', NULL, 'manual', :read_at::timestamptz)
                 """, new MapSqlParameterSource().addValue("id", id).addValue("meter_id", sid(meterId))
                 .addValue("consumption", consumption).addValue("period", period)
-                .addValue("read_at", DAY + "T10:00:00Z"));
+                .addValue("previous", previous).addValue("read_at", readAt));
     }
 
     private void insertSpace(String id, String type, String area, String status) {
@@ -619,11 +627,22 @@ class MetricDetailConsistencyJdbcIntegrationTests {
                 .addValue("issue_status", issueStatus).addValue("at", dayTs()));
     }
 
+    private MetricDetailRows amusementDetail(String key, int limit, int offset) {
+        return repository.amusementComplexDetail(key, DAY, DAY, DAY.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
+                false, limit, offset, List.of(amusementComplex));
+    }
+
     private void insertAmusementProject(String id) {
+        if (amusementComplex == null) {
+            amusementComplex = AmusementBusinessDayTestFixture.complex(jdbcTemplate.getJdbcTemplate());
+            AmusementBusinessDayTestFixture.approve(jdbcTemplate.getJdbcTemplate(), amusementBusinessDays, supervisorReviews,
+                    amusementComplex, "Asia/Shanghai", 4, DAY.minusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+        }
         jdbcTemplate.update("""
                 INSERT INTO amusement_projects (id, project_name, capacity, open_status, eligibility_rule_json, created_at, updated_at)
                 VALUES (:id, :id, 500, 'open', '{}'::jsonb, :at, :at)
                 """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("at", dayTs()));
+        AmusementBusinessDayTestFixture.bind(jdbcTemplate.getJdbcTemplate(), sid(id), amusementComplex);
     }
 
     private void insertAmusementSession(String id, String projectId, int capacity, String status) {
@@ -749,22 +768,20 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void amusementVerificationSuccessSummaryEqualsPagedDetailCountAndEtlAggregate() {
-        Instant start = businessDayResolver.startInstant("amusement", DAY);
-        Instant end = businessDayResolver.endInstant("amusement", DAY);
-        BigDecimal baseline = repository.amusementVerificationSuccessDetail(start, end, 1, 0).summaryValue();
         insertAmusementProject("proj_tav");
+        BigDecimal baseline = amusementDetail("traffic.amusement", 1, 0).summaryValue();
+        BigDecimal globalBaseline = repository.countAmusementVerificationSuccess(DAY);
         insertAmusementSession("ses_tav", "proj_tav", 300, "open");
         insertAmusementVerification("tav_e1", "proj_tav", "ses_tav", "entry");
         insertAmusementVerification("tav_e2", "proj_tav", "ses_tav", "entry");
         insertAmusementVerification("tav_x1", "proj_tav", "ses_tav", "exit"); // 出场也计入（两方向成功核销）
 
-        MetricDetailRows rows = repository.amusementVerificationSuccessDetail(start, end, 200, 0);
+        MetricDetailRows rows = amusementDetail("traffic.amusement", 200, 0);
         assertThat(rows.summaryValue().subtract(baseline)).isEqualByComparingTo("3");
-        // 数字=明细合计：翻完所有页，行数==summaryValue。
-        assertThat(collectAllPages((limit, offset) -> repository.amusementVerificationSuccessDetail(start, end, limit, offset)))
+        assertThat(collectAllPages((limit, offset) -> amusementDetail("traffic.amusement", limit, offset)))
                 .hasSize((int) rows.totalRows());
-        // 与总览 ETL 聚合同源同口径。
-        assertThat(repository.countAmusementVerificationSuccess(DAY)).isEqualByComparingTo(rows.summaryValue());
+        assertThat(repository.countAmusementVerificationSuccess(DAY).subtract(globalBaseline))
+                .isEqualByComparingTo(rows.summaryValue().subtract(baseline));
     }
 
     @Test

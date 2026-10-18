@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { DealerDeliveryPanel } from "../../dealer/DealerDeliveryPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -15,13 +15,13 @@ import type { AdminPageProps } from "../types";
  */
 type DealerRow = { id: string; dealerName?: string; status?: string; creditSuspended?: boolean };
 type ContractRow = { id: string; contractNo?: string; creditTerm?: boolean; firstPaymentRatioBps?: number | null; firstPaymentAmountCent?: number | null; firstPaymentDeadlineDays?: number | null; balanceDueDays?: number | null; freightCent?: number | null; freeShippingThresholdCent?: number | null; freightBearer?: string; freightTemplateVersion?: number; termsVersion?: number; contractSignedAt?: string | null; firstPaymentAnchor?: string | null; firstPaymentFixedAt?: string | null; balanceDueAnchor?: string | null; balanceDueFixedAt?: string | null };
-type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; deliveryCompletedAt?: string | null; contractSnapshot?: ContractRow | null };
+type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; firstLegAdjustmentCent?: number; deliveryCompletedAt?: string | null; contractSnapshot?: ContractRow | null };
 type PaymentRow = { id: string; method?: string; amountCent?: number; status?: string; appliedCent?: number; verifiedBy?: string | null; referenceNo?: string | null };
 type RefundRow = { id: string; paymentId?: string; amountCent?: number; status?: string; reviewId?: string | null; executedBy?: string | null; financeRefundId?: string | null };
 type OverpaymentRow = { id: string; orderId?: string; amountCent?: number; status?: string; targetOrderId?: string | null; unconfirmedAmountCent?: number; prepaymentBalanceCent?: number; appliedAmountCent?: number; allocations?: { id: string; usage: string; amountCent: number; targetOrderId?: string | null; refundId?: string | null; confirmationAttachmentIds?: string[] }[] };
 
 const ANCHORS: Record<string, string> = { contract_signed: "合同签署", order_created: "订单创建", payment_notified: "通知付款", shipped: "实际出库", signed: "实际签收", fixed_date: "合同约定固定截止" };
-const netDue = (order: OrderRow) => Math.max(0, (order.totalAmountCent ?? 0) - (order.returnedAmountCent ?? 0) - (order.deliveryAdjustmentCent ?? 0));
+const netDue = (order: OrderRow) => Math.max(0, (order.totalAmountCent ?? 0) - (order.returnedAmountCent ?? 0) - (order.deliveryAdjustmentCent ?? 0) - (order.firstLegAdjustmentCent ?? 0));
 const unpaid = (order: OrderRow) => Math.max(0, netDue(order) - (order.paidAmountCent ?? 0));
 const localTime = (value?: string | null) => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
 const ORDER_STATUS: Record<string, string> = {

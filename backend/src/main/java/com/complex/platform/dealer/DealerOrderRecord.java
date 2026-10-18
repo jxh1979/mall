@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 
@@ -49,10 +49,11 @@ public record DealerOrderRecord(
         long returnedAmountCent,
         DealerContractRecord contractSnapshot,
         long deliveryAdjustmentCent,
-        Instant deliveryCompletedAt
+        Instant deliveryCompletedAt,
+        long firstLegAdjustmentCent
 ) {
     public long netReceivableCent() {
-        return Math.max(0L, totalAmountCent - returnedAmountCent - deliveryAdjustmentCent);
+        return Math.max(0L, totalAmountCent - returnedAmountCent - deliveryAdjustmentCent - firstLegAdjustmentCent);
     }
 
     public DealerOrderRecord(String id, String orderNo, String dealerId, String dealerContractId, String salesEntityId, String centralWarehouseId, String status,
@@ -63,6 +64,6 @@ public record DealerOrderRecord(
         this(id, orderNo, dealerId, dealerContractId, salesEntityId, centralWarehouseId, status, statusBeforeCancel, priceCatalogId, creditTerm, goodsAmountCent,
                 freightCent, freightBearer, freightTemplateVersion, totalAmountCent, firstPaymentRequiredCent, firstPaymentDeadlineAt, balanceDueAt, paidAmountCent,
                 overdue, arApItemId, reviewedBy, reviewedAt, paymentNotifiedAt, shippedBy, shippedAt, signedAt, completedAt, cancelRequestedBy, cancelReason,
-                cancelledAt, note, createdBy, createdAt, updatedAt, 0L, null, 0L, null);
+                cancelledAt, note, createdBy, createdAt, updatedAt, 0L, null, 0L, null, 0L);
     }
 }

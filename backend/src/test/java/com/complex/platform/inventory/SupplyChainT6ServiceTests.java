@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -16,8 +18,6 @@ import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.inventory.dto.SupplierQualificationRequest;
 import com.complex.platform.inventory.dto.SupplierSettlementMethodRequest;
-import com.complex.platform.inventory.dto.SupplyContractApproveRequest;
-import com.complex.platform.inventory.dto.SupplyContractCreateRequest;
 import com.complex.platform.inventory.dto.WarehouseCreateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
@@ -30,7 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * R5 T6 单测：供应合同三模式（建/审批流转/可采购范围卡控/隔离）+ 结构化库房 CRUD。
+ * T6：结构化库房、供应商资质和结算档；合同采购审批与账款由真实 JDBC 集成测试覆盖。
  * 用内存 repository 验证服务层语义；CHECK 拒非法枚举由 JDBC 集成测试覆盖。
  */
 class SupplyChainT6ServiceTests {
@@ -44,11 +44,8 @@ class SupplyChainT6ServiceTests {
 
     private InMemoryRepo repo;
     private AuthorizationService authorizationService;
-    private SupplyContractService contractService;
     private WarehouseService warehouseService;
-    private PurchaseRequestService purchaseRequestService;
     private SupplierQualificationService qualificationService;
-    private InMemoryAudit auditRepo;
 
     @BeforeEach
     void setUp() {
@@ -58,14 +55,11 @@ class SupplyChainT6ServiceTests {
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
         IdempotencyService idem =
                 new IdempotencyService(new InMemoryIdem(), new ObjectMapper());
-        auditRepo = new InMemoryAudit();
+        var auditRepo = new InMemoryAudit();
         AuditEventService audit = new AuditEventService(auditRepo);
-        contractService = new SupplyContractService(repo, idem, audit, authorizationService);
         warehouseService = new WarehouseService(repo, idem, audit, authorizationService);
         qualificationService = new SupplierQualificationService(repo, idem, audit, authorizationService);
-        purchaseRequestService = new PurchaseRequestService(
-                repo, idem, audit, authorizationService, contractService, qualificationService, null);
-        // 默认种子：供应商 supplier_1 + 一条 active 未过期资质（让既有采购审批流转测试不受进货查验卡控影响）。
+        // 默认种子：供应商 supplier_1 + 一条 active 未过期资质（验证资质查验规则）。
         repo.saveInventorySupplier(new InventorySupplierRecord(
                 "supplier_1", "供应商一", "general", null, null, "active",
                 java.time.Instant.now(), java.time.Instant.now(), null));
@@ -73,151 +67,6 @@ class SupplyChainT6ServiceTests {
                 "supplier_qual_seed", "supplier_1", "business_license", "BL-1", null,
                 LocalDate.now().minusYears(1), LocalDate.now().plusYears(1), List.of(), "active",
                 java.time.Instant.now(), java.time.Instant.now(), null));
-    }
-
-    // ── 合同：三模式建合同 ──────────────────────────────────────────────────────
-    @Test
-    void createsContractsForAllThreeModes() {
-        for (String mode : List.of(
-                "platform_self_use", "merchant_self_purchase", "platform_purchase_distribution")) {
-            String merchant = mode.equals("merchant_self_purchase") ? "m_a" : null;
-            SupplyContractRecord contract = contractService.createSupplyContract(new SupplyContractCreateRequest(
-                    "ck-" + mode, "supplier_1", "proj_1", merchant, mode,
-                    "scope", "terms", 30, LocalDate.now(), LocalDate.now().plusYears(1),
-                    "summary", List.of("item_1")));
-            assertThat(contract.contractMode()).isEqualTo(mode);
-            assertThat(contract.approvalStatus()).isEqualTo("draft");
-            assertThat(contract.status()).isEqualTo("active");
-        }
-    }
-
-    @Test
-    void rejectsInvalidContractMode() {
-        assertThatThrownBy(() -> contractService.createSupplyContract(new SupplyContractCreateRequest(
-                "ck-bad", "supplier_1", "proj_1", null, "totally_invalid",
-                null, null, null, null, null, null, List.of())))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("contract_mode");
-    }
-
-    @Test
-    void merchantSelfPurchaseRequiresMerchant() {
-        assertThatThrownBy(() -> contractService.createSupplyContract(new SupplyContractCreateRequest(
-                "ck-nomerchant", "supplier_1", "proj_1", null, "merchant_self_purchase",
-                null, null, null, null, null, null, List.of())))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("商户自采必须指定商户");
-    }
-
-    // ── 合同：审批流转 ──────────────────────────────────────────────────────────
-    @Test
-    void approveTransitionsDraftToApproved() {
-        SupplyContractRecord draft = createDraft("ck-appr", null, List.of("item_1"));
-        SupplyContractRecord approved = contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-1", "approved", "ok"));
-        assertThat(approved.approvalStatus()).isEqualTo("approved");
-    }
-
-    @Test
-    void approveCanReject() {
-        SupplyContractRecord draft = createDraft("ck-rej", null, List.of());
-        SupplyContractRecord rejected = contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-2", "rejected", "no"));
-        assertThat(rejected.approvalStatus()).isEqualTo("rejected");
-    }
-
-    @Test
-    void approveRejectsInvalidDecision() {
-        SupplyContractRecord draft = createDraft("ck-baddec", null, List.of());
-        assertThatThrownBy(() -> contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-3", "maybe", null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("decision");
-    }
-
-    @Test
-    void approveRejectsNonDraftContract() {
-        SupplyContractRecord draft = createDraft("ck-twice", null, List.of());
-        contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-4a", "approved", null));
-        assertThatThrownBy(() -> contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-4b", "approved", null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("草稿");
-    }
-
-    // ── 合同：可采购范围卡控 ────────────────────────────────────────────────────
-    @Test
-    void purchasableScopeAllowsListedItem() {
-        SupplyContractRecord draft = createDraft("ck-scope-ok", null, List.of("item_1", "item_2"));
-        contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-scope-ok", "approved", null));
-        SupplyContractRecord ok = contractService.requirePurchasable(draft.id(), "item_1");
-        assertThat(ok.id()).isEqualTo(draft.id());
-    }
-
-    @Test
-    void purchasableScopeBlocksUnlistedItem() {
-        SupplyContractRecord draft = createDraft("ck-scope-bad", null, List.of("item_1"));
-        contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-scope-bad", "approved", null));
-        assertThatThrownBy(() -> contractService.requirePurchasable(draft.id(), "item_999"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("可采购范围");
-    }
-
-    @Test
-    void purchasableScopeBlocksUnapprovedContract() {
-        SupplyContractRecord draft = createDraft("ck-scope-draft", null, List.of("item_1"));
-        assertThatThrownBy(() -> contractService.requirePurchasable(draft.id(), "item_1"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("尚未审批通过");
-    }
-
-    @Test
-    void purchasableScopeBlocksExpiredContract() {
-        SupplyContractRecord draft = contractService.createSupplyContract(new SupplyContractCreateRequest(
-                "ck-expired", "supplier_1", "proj_1", null, "platform_self_use",
-                null, null, null, LocalDate.now().minusYears(2), LocalDate.now().minusYears(1),
-                null, List.of("item_1")));
-        contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-expired", "approved", null));
-        assertThatThrownBy(() -> contractService.requirePurchasable(draft.id(), "item_1"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("已过期");
-    }
-
-    // ── 合同：商户隔离 ──────────────────────────────────────────────────────────
-    @Test
-    void merchantScopeOnlySeesOwnContracts() {
-        // 商户 A 视角建合同
-        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
-        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
-        contractService.createSupplyContract(new SupplyContractCreateRequest(
-                "ck-iso-a", "supplier_1", "proj_1", null, "merchant_self_purchase",
-                null, null, null, null, null, null, List.of()));
-        assertThat(contractService.listSupplyContracts().items()).hasSize(1);
-
-        // 商户 B 视角看不到 A 的合同
-        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
-        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
-        assertThat(contractService.listSupplyContracts().items()).isEmpty();
-    }
-
-    @Test
-    void merchantScopeCannotApproveOtherMerchantContract() {
-        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
-        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
-        SupplyContractRecord draft = contractService.createSupplyContract(new SupplyContractCreateRequest(
-                "ck-iso-appr", "supplier_1", "proj_1", null, "merchant_self_purchase",
-                null, null, null, null, null, null, List.of()));
-
-        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
-        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
-        assertThatThrownBy(() -> contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ak-iso", "approved", null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("权限范围");
     }
 
     // ── 库房：CRUD ──────────────────────────────────────────────────────────────
@@ -250,121 +99,6 @@ class SupplyChainT6ServiceTests {
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
         assertThat(warehouseService.listWarehouses().items()).isEmpty();
-    }
-
-    // ── 采购周期状态机 ──────────────────────────────────────────────────────────
-    @Test
-    void purchaseFullFlowTransitionsStepByStepAndLeavesEvents() {
-        seedPurchase("pr_flow", "item_1", null, null);
-        purchaseRequestService.approve("pr_flow",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("a1", "approved", null, "ok"));
-        assertThat(repo.purchaseRequests.get("pr_flow").status()).isEqualTo("approved");
-        assertThat(repo.purchaseRequests.get("pr_flow").approvedBy()).isEqualTo("usr_admin");
-
-        purchaseRequestService.order("pr_flow",
-                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("a2", null));
-        assertThat(repo.purchaseRequests.get("pr_flow").status()).isEqualTo("ordered");
-        assertThat(repo.purchaseRequests.get("pr_flow").orderedAt()).isNotNull();
-
-        purchaseRequestService.arrive("pr_flow",
-                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("a3", null));
-        assertThat(repo.purchaseRequests.get("pr_flow").status()).isEqualTo("arrived");
-        assertThat(repo.purchaseRequests.get("pr_flow").actualArrivalDate()).isNotNull();
-
-        purchaseRequestService.receive("pr_flow",
-                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest(
-                        "a4", "loc_1", "wh_1", List.of("photo_1"), null, 1_000L));
-        PurchaseRequestRecord received = repo.purchaseRequests.get("pr_flow");
-        assertThat(received.status()).isEqualTo("received");
-        assertThat(received.receivedBy()).isEqualTo("usr_admin");
-        assertThat(received.receivedAt()).isNotNull();
-
-        // 每步留事件（含 received）。
-        assertThat(repo.purchaseRequestEventsFor("pr_flow"))
-                .extracting(PurchaseRequestEventRecord::toStatus)
-                .containsExactly("approved", "ordered", "arrived", "received");
-        assertThat(auditRepo.events).extracting(AuditEvent::eventName)
-                .contains("inventory.purchase_status_changed", "inventory.received");
-    }
-
-    @Test
-    void receiveGeneratesInboundMovementToWarehouse() {
-        seedPurchase("pr_recv", "item_1", null, null);
-        purchaseRequestService.approve("pr_recv",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("r1", "approved", null, null));
-        purchaseRequestService.order("pr_recv",
-                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("r2", null));
-        purchaseRequestService.arrive("pr_recv",
-                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("r3", null));
-        purchaseRequestService.receive("pr_recv",
-                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest(
-                        "r4", "loc_main", "wh_main", List.of(), null, 1_000L));
-
-        // 入库流水 inbound，关联采购单，落库位 + 数量。
-        assertThat(repo.stockMovements)
-                .anySatisfy(m -> {
-                    assertThat(m.movementType()).isEqualTo("inbound");
-                    assertThat(m.businessId()).isEqualTo("pr_recv");
-                    assertThat(m.targetLocationId()).isEqualTo("loc_main");
-                    assertThat(m.quantity()).isEqualTo(7);
-                });
-        // 余额挂结构化库房 warehouse_id。
-        assertThat(repo.findStockBalance("item_1", "loc_main"))
-                .get()
-                .extracting(StockBalanceRecord::availableQuantity, StockBalanceRecord::warehouseId)
-                .containsExactly(7, "wh_main");
-    }
-
-    @Test
-    void illegalStepTransitionsAreRejected() {
-        seedPurchase("pr_bad", "item_1", null, null);
-        // created → order 非法（须先 approve）。
-        assertThatThrownBy(() -> purchaseRequestService.order("pr_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("b1", null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("不能流转");
-        // created → receive 非法。
-        assertThatThrownBy(() -> purchaseRequestService.receive("pr_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest("b2", "loc", null, List.of(), null, 1_000L)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("不能流转");
-        // rejected 后不能 order。
-        purchaseRequestService.approve("pr_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("b3", "rejected", null, null));
-        assertThatThrownBy(() -> purchaseRequestService.order("pr_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("b4", null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("不能流转");
-    }
-
-    @Test
-    void approveEnforcesContractPurchasableScope() {
-        SupplyContractRecord draft = createDraft("ck-pr-scope", null, List.of("item_1"));
-        contractService.approveSupplyContract(
-                draft.id(), new SupplyContractApproveRequest("ck-pr-scope-appr", "approved", null));
-        // 采购引用合同但物料超出 purchasable_scope → approve 被卡。
-        seedPurchase("pr_scope_bad", "item_999", null, draft.id());
-        assertThatThrownBy(() -> purchaseRequestService.approve("pr_scope_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("s1", "approved", null, null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("可采购范围");
-        // 物料在 scope 内 → 放行。
-        seedPurchase("pr_scope_ok", "item_1", null, draft.id());
-        PurchaseRequestRecord ok = purchaseRequestService.approve("pr_scope_ok",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("s2", "approved", null, null));
-        assertThat(ok.status()).isEqualTo("approved");
-        assertThat(ok.supplyContractId()).isEqualTo(draft.id());
-    }
-
-    @Test
-    void merchantScopeCannotTransitionOtherMerchantPurchase() {
-        seedPurchase("pr_iso", "item_1", "m_a", null);
-        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
-        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
-        assertThatThrownBy(() -> purchaseRequestService.approve("pr_iso",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("i1", "approved", null, null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("权限范围");
     }
 
     // ── P1#18：供应商资质 CRUD + 进货查验过期卡控 ────────────────────────────────
@@ -410,6 +144,19 @@ class SupplyChainT6ServiceTests {
     }
 
     @Test
+    void requireQualifiedBlocksFutureEffectiveQualification() {
+        repo.saveInventorySupplier(new InventorySupplierRecord(
+                "supplier_future", "未生效资质供应商", "general", null, null, "active",
+                java.time.Instant.now(), java.time.Instant.now(), null));
+        qualificationService.createQualification(new SupplierQualificationRequest(
+                "qk-future", "supplier_future", "business_license", "BL-F", null,
+                LocalDate.now().plusDays(1), LocalDate.now().plusYears(1), List.of(), null));
+        assertThatThrownBy(() -> qualificationService.requireQualified("supplier_future"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        error -> assertThat(error.code()).isEqualTo("SUPPLIER_QUALIFICATION_NOT_YET_VALID"));
+    }
+
+    @Test
     void requireQualifiedBlocksWhenQualificationExpired() {
         repo.saveInventorySupplier(new InventorySupplierRecord(
                 "supplier_expired", "过期商", "general", null, null, "active",
@@ -420,28 +167,6 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> qualificationService.requireQualified("supplier_expired"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("已过期");
-    }
-
-    @Test
-    void approveBlocksPurchaseWhenSupplierQualificationExpired() {
-        repo.saveInventorySupplier(new InventorySupplierRecord(
-                "supplier_exp2", "过期商2", "general", null, null, "active",
-                java.time.Instant.now(), java.time.Instant.now(), null));
-        qualificationService.createQualification(new SupplierQualificationRequest(
-                "qk-exp2", "supplier_exp2", "food_business_license", "FB-X", null,
-                LocalDate.now().minusYears(2), LocalDate.now().minusDays(3), List.of(), null));
-        repo.savePurchaseRequest(new PurchaseRequestRecord(
-                "pr_qual_bad", "PR-qual", "supplier_exp2", "item_1", 5, LocalDate.now(),
-                "created", List.of(), java.time.Instant.now(), java.time.Instant.now(), null,
-                null, null, null, null, null, null));
-        assertThatThrownBy(() -> purchaseRequestService.approve("pr_qual_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("q1", "approved", null, null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("已过期");
-        // rejected 决议不触发进货查验卡控（仍可驳回过期供应商采购）。
-        PurchaseRequestRecord rejected = purchaseRequestService.approve("pr_qual_bad",
-                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("q2", "rejected", null, null));
-        assertThat(rejected.status()).isEqualTo("rejected");
     }
 
     // ── P1#18：结算多档/账期 CRUD ─────────────────────────────────────────────────
@@ -475,20 +200,6 @@ class SupplyChainT6ServiceTests {
                 "sk-neg", "supplier_1", "monthly", -5, null, false, null)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("payment_term_days");
-    }
-
-    private void seedPurchase(String id, String itemId, String merchantId, String contractId) {
-        repo.savePurchaseRequest(new PurchaseRequestRecord(
-                id, "PR-" + id, "supplier_1", itemId, 7, LocalDate.now(),
-                "created", List.of(), java.time.Instant.now(), java.time.Instant.now(), merchantId,
-                contractId, null, null, null, null, null));
-    }
-
-    private SupplyContractRecord createDraft(String key, String merchant, List<String> scope) {
-        return contractService.createSupplyContract(new SupplyContractCreateRequest(
-                key, "supplier_1", "proj_1", merchant, "platform_self_use",
-                null, null, null, LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
-                null, scope));
     }
 
     // ── 内存测试替身 ────────────────────────────────────────────────────────────
@@ -529,36 +240,22 @@ class SupplyChainT6ServiceTests {
 
     /** 仅实现 T6 服务用到的方法；其余抛 UnsupportedOperationException。 */
     private static final class InMemoryRepo implements InventoryRepository {
-        private final Map<String, SupplyContractRecord> contracts = new LinkedHashMap<>();
         private final Map<String, WarehouseRecord> warehouses = new LinkedHashMap<>();
-        final Map<String, PurchaseRequestRecord> purchaseRequests = new LinkedHashMap<>();
-        final List<PurchaseRequestEventRecord> purchaseRequestEvents = new ArrayList<>();
-        final Map<String, StockBalanceRecord> balances = new LinkedHashMap<>();
-        final List<StockMovementRecord> stockMovements = new ArrayList<>();
         final Map<String, InventorySupplierRecord> suppliers = new LinkedHashMap<>();
         final Map<String, SupplierQualificationRecord> qualifications = new LinkedHashMap<>();
         final Map<String, SupplierSettlementMethodRecord> settlementMethods = new LinkedHashMap<>();
 
         @Override
-        public SupplyContractRecord saveSupplyContract(SupplyContractRecord contract) {
-            contracts.put(contract.id(), contract);
-            return contract;
-        }
+        public SupplyContractRecord saveSupplyContract(SupplyContractRecord contract) { throw nyi(); }
 
         @Override
-        public Optional<SupplyContractRecord> findSupplyContractByIdForUpdate(String id) {
-            return Optional.ofNullable(contracts.get(id));
-        }
+        public Optional<SupplyContractRecord> findSupplyContractByIdForUpdate(String id) { throw nyi(); }
 
         @Override
-        public List<SupplyContractRecord> listSupplyContracts() {
-            return new ArrayList<>(contracts.values());
-        }
+        public List<SupplyContractRecord> listSupplyContracts() { throw nyi(); }
 
         @Override
-        public List<SupplyContractRecord> listSupplyContractsByMerchant(String merchantId) {
-            return contracts.values().stream().filter(c -> merchantId.equals(c.merchantId())).toList();
-        }
+        public List<SupplyContractRecord> listSupplyContractsByMerchant(String merchantId) { throw nyi(); }
 
         @Override
         public WarehouseRecord saveWarehouse(WarehouseRecord warehouse) {
@@ -587,53 +284,25 @@ class SupplyChainT6ServiceTests {
         @Override public List<InventorySupplierRecord> listInventorySuppliers() {
             return new ArrayList<>(suppliers.values());
         }
-        @Override public PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord r) {
-            purchaseRequests.put(r.id(), r);
-            return r;
-        }
-        @Override public List<PurchaseRequestRecord> listPurchaseRequests() {
-            return new ArrayList<>(purchaseRequests.values());
-        }
-        @Override public Optional<PurchaseRequestRecord> findPurchaseRequestByIdForUpdate(String id) {
-            return Optional.ofNullable(purchaseRequests.get(id));
-        }
-        @Override public PurchaseRequestEventRecord savePurchaseRequestEvent(PurchaseRequestEventRecord e) {
-            purchaseRequestEvents.add(e);
-            return e;
-        }
-        List<PurchaseRequestEventRecord> purchaseRequestEventsFor(String requestId) {
-            return purchaseRequestEvents.stream().filter(e -> requestId.equals(e.requestId())).toList();
-        }
-        @Override public Optional<StockBalanceRecord> findStockBalance(String i, String l) {
-            return Optional.ofNullable(balances.get(i + ":" + l));
-        }
-        @Override public int sumStockBalanceByItemAndWarehouse(String i, String w) {
-            return balances.values().stream()
-                    .filter(b -> i.equals(b.itemId()) && w.equals(b.warehouseId()))
-                    .mapToInt(StockBalanceRecord::quantity).sum();
-        }
-        @Override public StockBalanceRecord saveStockBalance(StockBalanceRecord b) {
-            balances.put(b.itemId() + ":" + b.locationId(), b);
-            return b;
-        }
-        @Override public List<StockBalanceRecord> listStockBalances() {
-            return new ArrayList<>(balances.values());
-        }
-        @Override public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord b, String projectId) { return b; }
-        @Override public List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String i, String l) { return List.of(); }
-        @Override public int atomicDecreaseBatchQuantity(String b, int q) { return 0; }
+        @Override public PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord r) { throw nyi(); }
+        @Override public List<PurchaseRequestRecord> listPurchaseRequests() { throw nyi(); }
+        @Override public Optional<PurchaseRequestRecord> findPurchaseRequestByIdForUpdate(String id) { throw nyi(); }
+        @Override public PurchaseRequestEventRecord savePurchaseRequestEvent(PurchaseRequestEventRecord e) { throw nyi(); }
+
+        @Override public Optional<StockBalanceRecord> findStockBalance(String i, String l) { throw nyi(); }
+        @Override public int sumStockBalanceByItemAndWarehouse(String i, String w) { throw nyi(); }
+        @Override public StockBalanceRecord saveStockBalance(StockBalanceRecord b) { throw nyi(); }
+        @Override public List<StockBalanceRecord> listStockBalances() { throw nyi(); }
+        @Override public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord b, String projectId) { throw nyi(); }
+        @Override public List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String i, String l) { throw nyi(); }
+        @Override public int atomicDecreaseBatchQuantity(String b, int q) { throw nyi(); }
         @Override public List<InventoryStockBatchRecord> listStockBatches() { throw nyi(); }
         @Override public InventoryRiskAlertRecord saveRiskAlert(InventoryRiskAlertRecord a) { throw nyi(); }
         @Override public List<InventoryRiskAlertRecord> listRiskAlerts() { throw nyi(); }
         @Override public SupplierReconciliationRecord saveSupplierReconciliation(SupplierReconciliationRecord r) { throw nyi(); }
         @Override public List<SupplierReconciliationRecord> listSupplierReconciliations() { throw nyi(); }
-        @Override public StockMovementRecord saveStockMovement(StockMovementRecord m, String projectId) {
-            stockMovements.add(m);
-            return m;
-        }
-        @Override public List<StockMovementRecord> listStockMovements() {
-            return new ArrayList<>(stockMovements);
-        }
+        @Override public StockMovementRecord saveStockMovement(StockMovementRecord m, String projectId) { throw nyi(); }
+        @Override public List<StockMovementRecord> listStockMovements() { throw nyi(); }
         @Override public StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord a) { throw nyi(); }
         @Override public Optional<StockAdjustmentRecord> findStockAdjustmentByIdForUpdate(String id) { throw nyi(); }
         @Override public SavedBottleRecord saveSavedBottle(SavedBottleRecord s) { throw nyi(); }
@@ -651,17 +320,7 @@ class SupplyChainT6ServiceTests {
         @Override public int atomicDecreaseStockBalance(String i, String l, int q, String scope) { throw nyi(); }
         @Override public int reserveStockBalance(String i, String l, int q) { throw nyi(); }
         @Override public int releaseStockReservation(String i, String l, int q) { throw nyi(); }
-        @Override public void atomicIncreaseStockBalance(String i, String l, int q, String id, String m, String w, String p) {
-            String key = i + ":" + l;
-            StockBalanceRecord existing = balances.get(key);
-            if (existing == null) {
-                balances.put(key, new StockBalanceRecord(id, i, l, q, 0, q, java.time.Instant.now(), m, w));
-            } else {
-                balances.put(key, new StockBalanceRecord(existing.id(), i, l,
-                        existing.quantity() + q, existing.reservedQuantity(), existing.availableQuantity() + q,
-                        java.time.Instant.now(), existing.merchantId(), w == null ? existing.warehouseId() : w));
-            }
-        }
+        @Override public void atomicIncreaseStockBalance(String i, String l, int q, String id, String m, String w, String p) { throw nyi(); }
         @Override public Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id) { throw nyi(); }
         @Override public List<InventoryItemRecord> listInventoryItemsByMerchant(String m) { throw nyi(); }
         @Override public List<InventorySupplierRecord> listInventorySuppliersByMerchant(String m) {

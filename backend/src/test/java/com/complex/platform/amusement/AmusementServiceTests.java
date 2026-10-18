@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -193,12 +195,19 @@ class AmusementServiceTests {
         AmusementProjectRecord project = createProject("project-session", template.id(), "open", 2);
         AmusementSessionRecord session = createSession("project-session", project.id(), 2, "open");
 
+        when(accessRepository.permissionExists("amusement.session.view")).thenReturn(true);
+        when(accessRepository.findPermissionEffects(org.mockito.ArgumentMatchers.eq("usr_admin"), any(Instant.class)))
+                .thenReturn(List.of(new AccessRepository.PermissionEffect("usr_admin", "amusement.session.view",
+                        AccessRepository.Effect.GRANT, AccessRepository.Source.ROLE, "role_session_reader",
+                        null, null, false, false)));
+        service.amusementBusinessDayService = mock(AmusementBusinessDayService.class);
+        when(service.amusementBusinessDayService.complexId(project.id())).thenReturn("project_list_fixture");
         assertThat(service.listProjects().items())
                 .extracting(AmusementProjectRecord::id, AmusementProjectRecord::projectName)
                 .contains(tuple(project.id(), "Roller Coaster project-session"));
         assertThat(service.listSessions().items())
                 .extracting(AmusementSessionRecord::id, AmusementSessionRecord::projectId, AmusementSessionRecord::capacity)
-                .contains(tuple(session.id(), project.id(), 2));
+                .contains(tuple(session.id(), project.id(), 0));
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains(
@@ -486,7 +495,7 @@ class AmusementServiceTests {
                 .extracting("code")
                 .isEqualTo("SAFETY_BLOCKED");
 
-        AmusementProjectRecord fullProject = projectWithTemplate("full");
+        AmusementProjectRecord fullProject = createProject("full", createTemplate("full-tpl").id(), "open", 1);
         submitPassingInspection(fullProject, "full");
         AmusementSessionRecord fullSession = createSession("full-session", fullProject.id(), 1, "open");
         registerAmusementEntitlement("credential-3", 1);
@@ -637,10 +646,7 @@ class AmusementServiceTests {
 
         // credentialPayload is intentionally excluded from idempotency cache (P1 security fix)
         assertThat(second).usingRecursiveComparison().ignoringFields("credentialPayload").isEqualTo(first);
-        assertThat(amusementRepository.findSessionById(session.id()))
-                .get()
-                .extracting(AmusementSessionRecord::usedCapacity)
-                .isEqualTo(1);
+        assertThat(amusementRepository.findProjectInPlayCount(project.id())).hasValue(1);
         // 权益只消费一次（幂等命中第二次不重复扣 used_times）。
         assertThat(entitlementGateway.usedTimes("credential-success")).isEqualTo(1);
         assertThat(amusementRepository.verifications).hasSize(1);
@@ -651,7 +657,7 @@ class AmusementServiceTests {
 
     @Test
     void multiPersonAmusementEntitlementClaimsCapacityAtomicallyByPeopleCount() {
-        AmusementProjectRecord project = createProject("multi-people", createTemplate("multi-people-tpl").id(), "open", 100);
+        AmusementProjectRecord project = createProject("multi-people", createTemplate("multi-people-tpl").id(), "open", 5);
         submitPassingInspection(project, "multi-people");
         AmusementSessionRecord enoughSession = createSession("multi-people-enough", project.id(), 5, "open");
         registerAmusementEntitlement("credential-multi-4", 1, 4);
@@ -661,8 +667,7 @@ class AmusementServiceTests {
 
         assertThat(record.verificationResult()).isEqualTo("success");
         assertThat(record.verifiedPeople()).isEqualTo(4);
-        assertThat(amusementRepository.findSessionById(enoughSession.id()))
-                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(4);
+        assertThat(amusementRepository.findProjectInPlayCount(project.id())).hasValue(4);
         assertThat(entitlementGateway.usedTimes("credential-multi-4")).isEqualTo(1);
 
         AmusementSessionRecord tightSession = createSession("multi-people-tight", project.id(), 3, "open");
@@ -731,33 +736,21 @@ class AmusementServiceTests {
 
         assertThat(record.verificationResult()).isEqualTo("success");
         assertThat(entitlementGateway.usedTimes("credential-fallback")).isEqualTo(1);
-        assertThat(amusementRepository.findSessionById(session.id()))
-                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(1);
+        assertThat(amusementRepository.findProjectInPlayCount(project.id())).hasValue(1);
     }
 
     @Test
-    void verificationRejectsWhenPointDeviceDimensionFullEvenIfSessionHasRoom() {
-        // §6.4：点位/设备维满即拒绝，即便场次仍有余量（任一受控维度余量 0 即拒）。
-        AmusementProjectRecord project = createProject("pd-full", createTemplate("pd-full-tpl").id(), "open", 100);
-        submitPassingInspection(project, "pd-full");
-        AmusementSessionRecord session = createSession("pd-full-session", project.id(), 100, "open");
-        // 点位/设备维只配 1 个并发名额（设备 gate_1），场次/项目余量充足。
-        amusementRepository.configurePointDeviceCapacity(project.id(), null, "gate_1", 1);
-        registerAmusementEntitlement("credential-pd-1", 1);
-        registerAmusementEntitlement("credential-pd-2", 1);
-
-        AmusementVerificationRecord first = service.createVerification(verification(
-                "verify-pd-1", project.id(), session.id(), "credential-pd-1"));
-        assertThat(first.verificationResult()).isEqualTo("success");
-
-        // 第二次：场次还有 99 余量，但点位/设备维已满 → 拒绝且 SESSION_CAPACITY_EXHAUSTED。
-        assertThatThrownBy(() -> service.createVerification(verification(
-                        "verify-pd-2", project.id(), session.id(), "credential-pd-2")))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
-        // 点位维失败回补权益（未被白扣），场次维已回滚（仍只占用 1）。
-        assertThat(entitlementGateway.usedTimes("credential-pd-2")).isEqualTo(0);
-        assertThat(amusementRepository.findSessionById(session.id()))
-                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(1);
+    void legacyPointCapacityDoesNotRejectProjectAdmission() {
+        AmusementProjectRecord project=createProject("pd-full",createTemplate("pd-full-tpl").id(),"open",100);
+        submitPassingInspection(project,"pd-full");
+        AmusementSessionRecord session=createSession("pd-full-session",project.id(),1,"open");
+        amusementRepository.configurePointDeviceCapacity(project.id(),null,"gate_1",1);
+        registerAmusementEntitlement("credential-pd-1",1);
+        registerAmusementEntitlement("credential-pd-2",1);
+        service.createVerification(verification("verify-pd-1",project.id(),session.id(),"credential-pd-1"));
+        assertThat(service.createVerification(verification("verify-pd-2",project.id(),session.id(),"credential-pd-2")).verificationResult()).isEqualTo("success");
+        assertThat(amusementRepository.findProjectInPlayCount(project.id())).hasValue(2);
+        assertThat(amusementRepository.findSessionById(session.id()).orElseThrow().usedCapacity()).isZero();
     }
 
     @Test
@@ -785,22 +778,9 @@ class AmusementServiceTests {
     }
 
     @Test
-    void verificationDegradesToSessionOnlyWhenNoCapacityConfig() {
-        // 向后兼容：无 capacity_config 且项目安全上限=0 时退化为仅场次维（既有单维行为不变）。
-        AmusementProjectRecord project = createProject("degrade", createTemplate("degrade-tpl").id(), "open", 0);
-        submitPassingInspection(project, "degrade");
-        AmusementSessionRecord session = createSession("degrade-session", project.id(), 1, "open");
-        registerAmusementEntitlement("credential-deg-1", 1);
-        registerAmusementEntitlement("credential-deg-2", 1);
-
-        assertThat(service.createVerification(verification("v-deg-1", project.id(), session.id(), "credential-deg-1"))
-                .verificationResult()).isEqualTo("success");
-        // 场次满(1/1) → 拒绝（仅场次维生效）。
-        assertThatThrownBy(() -> service.createVerification(verification(
-                        "v-deg-2", project.id(), session.id(), "credential-deg-2")))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
-        assertThat(amusementRepository.findSessionById(session.id()))
-                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(1);
+    void missingProjectHardCapacityCannotBeCreated() {
+        assertThatThrownBy(()->createProject("degrade",createTemplate("degrade-tpl").id(),"open",0))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
     }
 
     @Test
@@ -819,26 +799,12 @@ class AmusementServiceTests {
     }
 
     @Test
-    void capacityConfigEndpointEnforcesPointDeviceDimensionAfterCreate() {
-        // 清单#6：通过 capacity-config 端点录入点位/设备并发上限后，核销三维容量按配置立即生效。
-        AmusementProjectRecord project = createProject("cfg-ep", createTemplate("cfg-ep-tpl").id(), "open", 100);
-        submitPassingInspection(project, "cfg-ep");
-        AmusementSessionRecord session = createSession("cfg-ep-session", project.id(), 100, "open");
-        registerAmusementEntitlement("credential-cfg-1", 1);
-        registerAmusementEntitlement("credential-cfg-2", 1);
-
-        AmusementCapacityConfigRecord config = service.createCapacityConfig(project.id(),
-                new AmusementCapacityConfigRequest("cfg-ep-key", "note", List.of(), null, "gate_1", 1, null, null));
-        assertThat(config.maxConcurrent()).isEqualTo(1);
-        assertThat(config.enabled()).isTrue();
-        assertThat(service.listCapacityConfigs(project.id()).items()).hasSize(1);
-
-        assertThat(service.createVerification(verification("v-cfg-1", project.id(), session.id(), "credential-cfg-1"))
-                .verificationResult()).isEqualTo("success");
-        // 点位/设备维已满(1/1)，场次仍有余 → 录入即生效，第二次被拒。
-        assertThatThrownBy(() -> service.createVerification(verification(
-                        "v-cfg-2", project.id(), session.id(), "credential-cfg-2")))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+    void capacityConfigEndpointRejectsRetiredPointConfiguration() {
+        AmusementProjectRecord project=createProject("cfg-ep",createTemplate("cfg-ep-tpl").id(),"open",100);
+        assertThatThrownBy(()->service.createCapacityConfig(project.id(),new AmusementCapacityConfigRequest(
+                "cfg-ep-key","note",List.of(),null,"gate_1",1,null,null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("POINT_CAPACITY_RETIRED");
+        assertThat(service.listCapacityConfigs(project.id()).items()).isEmpty();
     }
 
     @Test
@@ -849,8 +815,8 @@ class AmusementServiceTests {
         registerAmusementEntitlement("credential-dis-1", 1);
         registerAmusementEntitlement("credential-dis-2", 1);
 
-        AmusementCapacityConfigRecord config = service.createCapacityConfig(project.id(),
-                new AmusementCapacityConfigRequest("cfg-dis-key", null, List.of(), null, "gate_1", 1, null, true));
+        AmusementCapacityConfigRecord config = amusementRepository.saveCapacityConfig(new AmusementCapacityConfigRecord(
+                "legacy-cfg-dis",project.id(),null,"gate_1",1,"",true,Instant.now(),Instant.now()));
         assertThat(service.createVerification(verification("v-dis-1", project.id(), session.id(), "credential-dis-1"))
                 .verificationResult()).isEqualTo("success");
 
@@ -1319,10 +1285,10 @@ class AmusementServiceTests {
         AmusementProjectRecord project = createProject("cfg-val", createTemplate("cfg-val-tpl").id(), "open", 5);
         assertThatThrownBy(() -> service.createCapacityConfig(project.id(),
                 new AmusementCapacityConfigRequest("cfg-val-a", null, List.of(), null, null, 3, null, null)))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("POINT_CAPACITY_RETIRED");
         assertThatThrownBy(() -> service.createCapacityConfig(project.id(),
                 new AmusementCapacityConfigRequest("cfg-val-b", null, List.of(), null, "gate_1", null, null, null)))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("POINT_CAPACITY_RETIRED");
     }
 
     @Test
@@ -1711,7 +1677,7 @@ class AmusementServiceTests {
     }
 
     @Test
-    void groupBookingApprovalLocksCapacityAndReleaseRestoresAvailability() {
+    void groupBookingApprovalDoesNotConsumeInPlayCapacity() {
         AmusementProjectRecord project = projectWithTemplate("group-lock");
         submitPassingInspection(project, "group-lock");
         AmusementSessionRecord session = createSession("group-lock-session", project.id(), 2, "open");
@@ -1748,19 +1714,11 @@ class AmusementServiceTests {
         assertThat(amusementRepository.findSessionById(session.id()))
                 .get()
                 .extracting(AmusementSessionRecord::lockedCapacity)
-                .isEqualTo(2);
+                .isEqualTo(0);
         registerAmusementEntitlement("credential-group-locked", 1);
-        assertThatThrownBy(() -> service.createVerification(verification(
-                        "verify-group-locked",
-                        project.id(),
-                        session.id(),
-                        "credential-group-locked"
-                )))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("SESSION_CAPACITY_EXHAUSTED");
-        // 容量耗尽时已消费的权益被回补（补偿回滚），used_times 回到 0。
-        assertThat(entitlementGateway.usedTimes("credential-group-locked")).isEqualTo(0);
+        assertThat(service.createVerification(verification("verify-group-locked",project.id(),session.id(),
+                "credential-group-locked")).verificationResult()).isEqualTo("success");
+        assertThat(entitlementGateway.usedTimes("credential-group-locked")).isEqualTo(1);
 
         AmusementGroupBookingRecord released = service.releaseGroupBooking(
                 booking.id(),
@@ -1821,7 +1779,7 @@ class AmusementServiceTests {
         assertThat(amusementRepository.findSessionById(session.id()))
                 .get()
                 .extracting(AmusementSessionRecord::lockedCapacity)
-                .isEqualTo(2);
+                .isEqualTo(0);
 
         service.releaseGroupBooking(
                 booking.id(),
@@ -1842,7 +1800,7 @@ class AmusementServiceTests {
     }
 
     @Test
-    void groupBookingApprovalRejectsInsufficientRemainingCapacityWithoutMutation() {
+    void groupBookingApprovalDoesNotReserveRemainingInPlayCapacity() {
         AmusementProjectRecord project = projectWithTemplate("group-capacity");
         submitPassingInspection(project, "group-capacity");
         AmusementSessionRecord session = createSession("group-capacity-session", project.id(), 2, "open");
@@ -1862,25 +1820,11 @@ class AmusementServiceTests {
                 2
         ));
 
-        assertThatThrownBy(() -> service.approveGroupBooking(
-                        booking.id(),
-                        new AmusementGroupBookingApprovalRequest("group-capacity-approve", "ops approved", List.of())
-                ))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("SESSION_CAPACITY_LOCK_FAILED");
-
-        assertThat(amusementRepository.findGroupBookingById(booking.id()))
-                .get()
-                .extracting(AmusementGroupBookingRecord::bookingStatus)
-                .isEqualTo("pending_approval");
-        assertThat(amusementRepository.findSessionById(session.id()))
-                .get()
-                .extracting(AmusementSessionRecord::usedCapacity, AmusementSessionRecord::lockedCapacity)
-                .containsExactly(1, 0);
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("amusement.group_booking.approve_failed");
+        assertThat(service.approveGroupBooking(booking.id(),
+                new AmusementGroupBookingApprovalRequest("group-capacity-approve","ops approved",List.of()))
+                .bookingStatus()).isEqualTo("approved");
+        assertThat(amusementRepository.findProjectInPlayCount(project.id())).hasValue(1);
+        assertThat(amusementRepository.findSessionById(session.id()).orElseThrow().lockedCapacity()).isZero();
     }
 
     @Test
@@ -2138,7 +2082,7 @@ class AmusementServiceTests {
                 projectId,
                 Instant.parse("2026-06-14T10:00:00Z"),
                 Instant.parse("2026-06-14T11:00:00Z"),
-                capacity,
+                null,
                 status
         ));
     }
@@ -2711,6 +2655,17 @@ class AmusementServiceTests {
         }
 
         @Override
+        public List<AmusementSessionRecord> listSessionsScoped(boolean unrestricted,
+                java.util.Set<String> complexIds, String merchantId) {
+            // 本内存夹具的读审计用例明确将项目绑定到 project_list_fixture。
+            if (!unrestricted && !complexIds.contains("project_list_fixture")) return List.of();
+            return sessions.values().stream()
+                    .filter(session -> merchantId == null
+                            || merchantId.equals(projects.get(session.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
         public Optional<AmusementSessionRecord> findSessionById(String id) {
             return Optional.ofNullable(sessions.get(id));
         }
@@ -2739,101 +2694,25 @@ class AmusementServiceTests {
         }
 
         @Override
-        public CapacityClaimResult claimCapacityAcrossDimensions(CapacityClaimContext context) {
-            // 与 Jdbc 实现同口径：场次 → 点位/设备 → 项目安全上限逐维原子 +1，任一失败回滚已增维度。
-            List<String> controlled = new ArrayList<>();
-            List<String> incremented = new ArrayList<>();
-
-            int peopleCount = Math.max(context.peopleCount(), 1);
-            controlled.add("session");
-            if (!incrementSessionUsedCapacityIfAvailable(context.sessionId(), peopleCount)) {
-                return new CapacityClaimResult(false, "session", controlled);
-            }
-            incremented.add("session");
-
-            Integer pointDeviceLimit = pointDeviceCapacityConfig.get(
-                    pointDeviceKey(context.projectId(), context.locationPointId(), context.deviceId()));
-            if (pointDeviceLimit != null) {
-                controlled.add("point_device");
-                String key = "pd|" + pointDeviceKey(context.projectId(), context.locationPointId(), context.deviceId());
-                if (snapshotOccupied.getOrDefault(key, 0) + peopleCount > pointDeviceLimit) {
-                    rollback(incremented, context, peopleCount);
-                    return new CapacityClaimResult(false, "point_device", controlled);
-                }
-                snapshotOccupied.merge(key, peopleCount, Integer::sum);
-                incremented.add("point_device");
-            }
-
-            if (context.projectSafetyCapacity() > 0) {
-                controlled.add("project_safety");
-                String key = "proj|" + context.projectId();
-                if (snapshotOccupied.getOrDefault(key, 0) + peopleCount > context.projectSafetyCapacity()) {
-                    rollback(incremented, context, peopleCount);
-                    return new CapacityClaimResult(false, "project_safety", controlled);
-                }
-                snapshotOccupied.merge(key, peopleCount, Integer::sum);
-                incremented.add("project_safety");
-            }
-
-            return new CapacityClaimResult(true, null, controlled);
-        }
-
-        private boolean incrementSessionUsedCapacityIfAvailable(String sessionId, int peopleCount) {
-            AmusementSessionRecord session = sessions.get(sessionId);
-            if (session == null || peopleCount <= 0 || session.usedCapacity() + session.lockedCapacity() + peopleCount > session.capacity()) {
-                return false;
-            }
-            Instant now = Instant.parse("2026-06-14T12:00:00Z");
-            sessions.put(sessionId, new AmusementSessionRecord(
-                    session.id(), session.projectId(), session.startTime(), session.endTime(), session.capacity(),
-                    session.usedCapacity() + peopleCount, session.lockedCapacity(), session.status(),
-                    session.evidenceAttachmentIds(), session.createdAt(), now));
-            return true;
-        }
-
-        private void rollback(List<String> incremented, CapacityClaimContext context, int peopleCount) {
-            for (String dimension : incremented) {
-                switch (dimension) {
-                    case "session" -> {
-                        AmusementSessionRecord s = sessions.get(context.sessionId());
-                        if (s != null) {
-                            sessions.put(s.id(), new AmusementSessionRecord(
-                                    s.id(), s.projectId(), s.startTime(), s.endTime(), s.capacity(),
-                                    Math.max(s.usedCapacity() - 1, 0), s.lockedCapacity(), s.status(),
-                                    s.evidenceAttachmentIds(), s.createdAt(), s.updatedAt()));
-                        }
-                    }
-                    case "point_device" -> snapshotOccupied.computeIfPresent(
-                            "pd|" + pointDeviceKey(context.projectId(), context.locationPointId(), context.deviceId()),
-                            (k, v) -> Math.max(v - 1, 0));
-                    case "project_safety" -> snapshotOccupied.computeIfPresent(
-                            "proj|" + context.projectId(), (k, v) -> Math.max(v - 1, 0));
-                    default -> { }
-                }
-            }
+        public java.util.OptionalInt findProjectInPlayCount(String projectId) {
+            return java.util.OptionalInt.of(snapshotOccupied.getOrDefault("proj|"+projectId,0));
         }
 
         @Override
-        public boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock) {
-            AmusementSessionRecord session = sessions.get(sessionId);
-            if (session == null || capacityToLock <= 0 || session.usedCapacity() + session.lockedCapacity() + capacityToLock > session.capacity()) {
-                return false;
-            }
-            Instant now = Instant.parse("2026-06-14T12:00:00Z");
-            sessions.put(sessionId, new AmusementSessionRecord(
-                    session.id(),
-                    session.projectId(),
-                    session.startTime(),
-                    session.endTime(),
-                    session.capacity(),
-                    session.usedCapacity(),
-                    session.lockedCapacity() + capacityToLock,
-                    session.status(),
-                    session.evidenceAttachmentIds(),
-                    session.createdAt(),
-                    now
-            ));
-            return true;
+        public CapacityClaimResult claimCapacityAcrossDimensions(CapacityClaimContext context) {
+            int people=Math.max(context.peopleCount(),1);
+            if(context.projectSafetyCapacity()<=0)throw ApiException.conflict("AMUSEMENT_SAFETY_CAPACITY_MISSING","缺少项目硬容量");
+            String key="proj|"+context.projectId();
+            if(snapshotOccupied.getOrDefault(key,0)+people>context.projectSafetyCapacity())
+                return new CapacityClaimResult(false,"project_safety",List.of("project_safety"));
+            snapshotOccupied.merge(key,people,Integer::sum);
+            return new CapacityClaimResult(true,null,List.of("project_safety"));
+        }
+
+        @Override
+        public boolean lockSessionCapacityIfAvailable(String sessionId,int capacityToLock) {
+            AmusementSessionRecord session=sessions.get(sessionId);
+            return session!=null && ("open".equals(session.status()) || "scheduled".equals(session.status()));
         }
 
         @Override
@@ -3030,6 +2909,7 @@ class AmusementServiceTests {
                     current.evidenceAttachmentIds(), current.createdAt(), current.verifiedPeople(),
                     current.direction(), now, current.entryVerificationId(),
                     current.entitlementId(), current.locationPointId()));
+            snapshotOccupied.computeIfPresent("proj|"+entry.projectId(),(key,count)->Math.max(count-entry.verifiedPeople(),0));
             saveVerification(exitRecord);
             return true;
         }

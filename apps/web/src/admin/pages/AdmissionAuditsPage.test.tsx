@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.01
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdmissionAuditsPage } from "./AdmissionAuditsPage";
@@ -6,7 +7,7 @@ import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 const MERCHANTS = [{ id: "m-1", display_name: "商户甲", company_name: "甲公司", cooperation_form: "fixed_rent", risk_level: "low", status: "active" }];
-const BINDINGS = [{ id: "b-1", business_object_id: "m-1", operator_subject: "运营甲", contract_subject: "合同甲", settlement_subject: "结算甲", status: "active" }];
+const BINDINGS = [{ id: "b-1", merchant_id: "m-1", operation_entity_id: "operation-1", contract_entity_id: "contract-entity-1", settlement_entity_id: "settlement-1", status: "active", effective_from: "2026-01-01", effective_to: "2026-12-31", change_reason: "合同主体确认" }];
 const CONTRACTS = [{ id: "c-1", merchant_id: "m-1", contract_subject_id: "cs-1", operation_subject_id: "os-1", settlement_subject_id: "ss-1", lifecycle_status: "effective", status: "effective" }];
 
 function envelope(items: unknown[]): Response {
@@ -32,9 +33,10 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(navigateTo = vi.fn()) {
   const fullProps: AdminPageProps = {
     api: makeApi(),
+    navigateTo,
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
@@ -47,6 +49,44 @@ describe("AdmissionAuditsPage KPI 聚焦视图", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/admin/governance/admission-audits");
+  });
+
+  it("真实 snake_case 绑定字段显示三类主体编号并关联真实商户", async () => {
+    const navigateTo = vi.fn();
+    renderPage(navigateTo);
+    const row = await screen.findByTestId("admission-audits-binding-row-b-1");
+    for (const value of ["m-1", "operation-1", "contract-entity-1", "settlement-1", "b-1", "合同主体确认"]) {
+      expect(row.textContent).toContain(value);
+    }
+    const merchantLink = within(row).getByRole("button", { name: "m-1" });
+    fireEvent.keyDown(merchantLink, { key: "Enter" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+    fireEvent.click(merchantLink);
+    expect(navigateTo).toHaveBeenCalledWith("ADM-GOV-002", "m-1");
+  });
+
+  it("三类资料按 merchant_id 关联；有草稿也只说明资料存在", async () => {
+    const api = makeApi();
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("business-entity-bindings")) return Promise.resolve(envelope([
+        ...BINDINGS,
+        { ...BINDINGS[0], id: "m-2", merchant_id: "other-merchant" },
+        { ...BINDINGS[0], id: "b-duplicate" },
+      ]));
+      if (url.includes("merchants")) return Promise.resolve(envelope([...MERCHANTS, { ...MERCHANTS[0], id: "m-2" }]));
+      if (url.includes("contracts")) return Promise.resolve(envelope([
+        { ...CONTRACTS[0], lifecycle_status: "draft", status: "draft" },
+        { ...CONTRACTS[0], id: "c-2", merchant_id: "m-2" },
+      ]));
+      return Promise.resolve(envelope([]));
+    });
+    render(<AdmissionAuditsPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }} setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    const summary = await screen.findByTestId("admission-audits-summary");
+    const card = within(summary).getByText("三类资料关联").closest(".admin-kpi-card");
+    expect(card?.querySelector("strong")?.textContent).toBe("1");
+    expect(card?.textContent).toContain("不代表审批通过");
+    expect(summary.textContent).not.toContain("准入闭环");
   });
 
   it("点“合同审批”数字 → ?kpi=contracts，只剩合同表+横幅", async () => {
@@ -121,7 +161,11 @@ describe("AdmissionAuditsPage 行明细抽屉", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("admission-audits-binding-row-b-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("admission-audits-binding-row-b-1"));
-    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("运营甲");
+    const drawer = screen.getByTestId("row-detail-drawer");
+    for (const value of ["m-1", "operation-1", "contract-entity-1", "settlement-1", "b-1", "合同主体确认", "2026年1月1日", "2026年12月31日"]) {
+      expect(drawer.textContent).toContain(value);
+    }
+    expect(drawer.textContent).not.toContain("留痕证据");
   });
 });
 

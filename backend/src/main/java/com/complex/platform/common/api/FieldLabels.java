@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -60,6 +60,17 @@ public final class FieldLabels {
     }
 
     static {
+        p("applicability_basis", "税目适用依据");
+        p("calculation_basis", "计税依据");
+        p("failure_reason", "失败原因");
+        p("identity_basis", "身份认定依据");
+        p("manual_reason", "人工抄表原因");
+        p("new_meter_name", "新表名称");
+        p("professional_basis", "专业认定依据");
+        p("reference_no", "结果凭证编号");
+        p("supplier_bill_reference", "供能账单编号");
+        p("transaction_basis", "交易认定依据");
+        p("verifier_id", "核实人员");
         // ── 组织 / 主体 ──────────────────────────────────────────────
         p("project_id", "项目");
         p("project_name", "项目名称");
@@ -294,6 +305,15 @@ public final class FieldLabels {
         p("contract_entity_id", "合同主体");
         p("contract_subject_id", "合同签约主体");
         p("supply_contract_id", "供货合同");
+        p("contract_basis", "合同及双方确认依据");
+        p("source_payment_id", "原实际付款");
+        p("is_current", "当前有效账款");
+        p("purchase_id", "采购申请");
+        p("source_reference", "售出依据单号");
+        p("responsibility_terms", "费用与责任约定");
+        p("amusement_project_id", "游乐项目");
+        p("complex_id", "所属综合体");
+        p("zone_id", "所在地时区");
         p("renewed_until", "续约至");
         p("valid_until", "有效期至");
         p("expires_at", "到期时间");

@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -60,6 +62,7 @@ import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class InventoryService {
+    @org.springframework.beans.factory.annotation.Autowired PurchaseWorkflowService purchaseWorkflow;
 
     private static final Logger log = LoggerFactory.getLogger(InventoryService.class);
     private static final int DEFAULT_PAGE = 1;
@@ -200,64 +203,19 @@ public class InventoryService {
     }
 
     public PageResponse<PurchaseRequestRecord> listPurchaseRequests() {
-        return readPage(
-                "inventory.purchase_request_viewed",
-                "inventory.purchase_request_view_failed",
-                "inventory.purchase_request.view",
-                "inventory_purchase_request",
-                () -> {
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    return scope.map(repository::listPurchaseRequestsByMerchant)
-                                .orElseGet(repository::listPurchaseRequests);
-                }
-        );
+        return purchaseWorkflow.list();
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.purchase_request.manage")
     @Transactional
     public PurchaseRequestRecord createPurchaseRequest(PurchaseRequestCreate request) {
-        return executeWrite(
-                "createPurchaseRequest",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                PurchaseRequestRecord.class,
-                "inventory.purchase_request_changed",
-                "inventory.purchase_request_change_failed",
-                "inventory.purchase_request.manage",
-                "inventory_purchase_request",
-                () -> {
-                    PurchaseRequestCreate actual = requireRequest(request);
-                    Map<String, Object> item = firstItem(actual.items(), "items");
-                    String itemId = requireItemText(item, "item_id");
-                    int quantity = requirePositiveItemQuantity(item, "quantity");
-                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
-                    Instant now = Instant.now();
-                    String slug = slug(actual.idempotencyKey());
-                    return repository.savePurchaseRequest(new PurchaseRequestRecord(
-                            "purchase_" + slug,
-                            "PR" + now.toEpochMilli() + slug.substring(0, Math.min(6, slug.length())).toUpperCase(Locale.ROOT),
-                            trimToNull(actual.supplierId()),
-                            itemId,
-                            quantity,
-                            // 预计到货日缺省取「今天」——按所在地(北京)日历日,裸 LocalDate.now() 取服务器时区(洛杉矶)差一天。
-                            actual.expectedArrivalDate() == null
-                                    ? LocalDate.now(LocalZone.ID) : actual.expectedArrivalDate(),
-                            // R5 T6：起点保留 'created'（兼容既有写入/测试），视为 submitted 同义起点；
-                            // 审批流转入口 approve 从 created/submitted 均可进入。
-                            "created",
-                            safeList(actual.evidenceAttachmentIds()),
-                            now,
-                            now,
-                            merchantId,
-                            trimToNull(actual.supplyContractId()),
-                            null,
-                            null,
-                            null,
-                            null,
-                            null
-                    ));
-                }
-        );
+        if (request == null || request.items() == null || request.items().size() != 1) {
+            throw ApiException.badRequest("PURCHASE_SINGLE_ITEM_REQUIRED", "每份采购申请只允许一个商品，请分单提交");
+        }
+        if (request.supplierId() == null || request.supplierId().isBlank()) {
+            throw ApiException.badRequest("PURCHASE_SUPPLIER_REQUIRED", "采购申请须关联供应商");
+        }
+        return purchaseWorkflow.create(request);
     }
 
     public PageResponse<SavedBottleRecord> listSavedBottles() {

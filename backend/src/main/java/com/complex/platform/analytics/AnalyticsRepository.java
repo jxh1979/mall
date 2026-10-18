@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -536,6 +536,12 @@ public interface AnalyticsRepository {
     /** bar.saved_bottle_quantity 明细：全部登记行（存入时间早于截至窗末），合计=Σremaining_quantity（台账当前值）。 */
     default AnalyticsRecords.MetricDetailRows savedBottleQuantityDetail(java.time.Instant asOfEnd, int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** 游乐经营日按各综合体批准版本解析；projectScope为空集合时不返回任何项目。 */
+    default AnalyticsRecords.MetricDetailRows amusementComplexDetail(String key, LocalDate from, LocalDate to, java.time.Instant now,
+            boolean allHistory, int limit, int offset, java.util.Collection<String> projectScope) {
+        throw new UnsupportedOperationException("游乐综合体营业日明细未接线");
     }
 
     // ==== KPI 统一明细·第三批（票务域）：谓词逐字同各页面既有取数 ====

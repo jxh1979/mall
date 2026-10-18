@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TicketRewardConfigPage } from "./TicketRewardConfigPage";
@@ -23,4 +23,9 @@ it("未批准配置不能发布，缺少数值上下限不能提交",async()=>{
   fireEvent.change(screen.getByLabelText("每人份／次份固定积分"),{target:{value:"100"}});
   fireEvent.click(screen.getByText("提交审批"));
   await screen.findByText("请填写积分下限");expect(posts).toHaveLength(0);
+  fireEvent.change(screen.getByLabelText("配置类型"),{target:{value:"recovery_waiver"}});
+  expect(screen.queryByLabelText("综合体")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("会员全部待追回积分豁免线")).toHaveValue(100);
+  fireEvent.click(screen.getByText("提交审批"));
+  await screen.findByText("请填写豁免线下限");expect(posts).toHaveLength(0);
 });

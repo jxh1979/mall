@@ -1,5 +1,6 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
+import { DealerReturnFinancialPanel, DealerInvoiceActions, ReturnEvidenceUpload } from "./DealerReturnFinancialPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -13,14 +14,14 @@ import type { AdminPageProps } from "../types";
  * 签收后才可按最终未退金额申请电子发票；退货验收与退款执行不同人（ENUM:178）。
  */
 type DealerRow = { id: string; dealerName?: string; status?: string };
-type OrderRow = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; returnedAmountCent?: number };
+type OrderRow = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; returnedAmountCent?: number; contractSnapshot?: { returnFreightBearer?: string | null; firstLegFreightRefundable?: boolean | null } | null };
 type ReturnRow = {
   id: string; returnNo?: string; status?: string; reasonType?: string; requestedQuantity?: number; acceptedQuantity?: number; acceptedAmountCent?: number;
   offsetReceivableCent?: number; refundCent?: number; refundedCent?: number; refundReviewId?: string | null; refundApproved?: boolean; returnFreightBearer?: string;
   firstLegFreightRefundable?: boolean | null; freightConfirmed?: boolean; inspectedBy?: string | null; refundExecutedBy?: string | null; failureReason?: string | null;
 };
 type ReturnLineRow = { id: string; itemId?: string; spec?: string; requestedQuantity?: number; acceptedQuantity?: number; resalableQuantity?: number; quarantinedQuantity?: number; unitPriceCent?: number; acceptedAmountCent?: number };
-type InvoiceRow = { id: string; amountCent?: number; status?: string; invoiceNo?: string | null; reversedByReturnId?: string | null; reissuedFromInvoiceId?: string | null; salesEntityId?: string };
+type InvoiceRow = { id: string; amountCent?: number; status?: string; invoiceNo?: string | null; reversedByReturnId?: string | null; reissuedFromInvoiceId?: string | null; salesEntityId?: string; retainedGoodsCent?: number; retainedFreightCent?: number; requiresReversal?: boolean; reversalStatus?: string | null };
 
 const ORDER_STATUS: Record<string, string> = {
   draft: "草稿", pending_review: "待审核", rejected: "已驳回", pending_payment: "待付款", payment_verifying: "付款核验中", pending_shipment: "待出库",
@@ -43,7 +44,8 @@ function label(map: Record<string, string>, value?: string | null) {
   return value ? (map[value] ?? value) : "—";
 }
 
-export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
+export function DealerReturnInvoicePage(props: AdminPageProps) {
+  const { api, setGlobalError, setActionResult, effectivePermissions } = props;
   const [dealers, setDealers] = React.useState<DealerRow[]>([]);
   const [dealer, setDealer] = React.useState<DealerRow | null>(null);
   const [orders, setOrders] = React.useState<OrderRow[]>([]);
@@ -60,8 +62,9 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
   // 验收
   const [inspLines, setInspLines] = React.useState("");
   // 运费确认
-  const [bearer, setBearer] = React.useState("dealer");
-  const [firstLeg, setFirstLeg] = React.useState(false);
+  const [inspectionEvidence, setInspectionEvidence] = React.useState<string[]>([]);
+  const [sources,setSources] = React.useState<{ receiptLineId: string; orderLineId: string; batchId: string; availableQuantity: number }[]>([]);
+  const [orderLines,setOrderLines] = React.useState<{id: string;itemId: string;spec: string}[]>([]);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -98,16 +101,18 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
   }
   async function loadOrder(id: string) {
     try {
-      const [o, rs, vs] = await Promise.all([
+      const [o, rs, vs, ss, ol] = await Promise.all([
         api.get<OrderRow>(`/api/v1/dealers/orders/${encodeURIComponent(id)}`),
         api.get<ReturnRow[]>(`/api/v1/dealers/orders/${encodeURIComponent(id)}/returns`),
         api.get<InvoiceRow[]>(`/api/v1/dealers/orders/${encodeURIComponent(id)}/invoices`),
+        api.get<typeof sources>(`/api/v1/dealers/orders/${encodeURIComponent(id)}/return-sources`),
+        api.get<typeof orderLines>(`/api/v1/dealers/orders/${encodeURIComponent(id)}/lines`),
       ]);
-      setOrder(o); setReturns(rs ?? []); setInvoices(vs ?? []);
+      setOrder(o); setReturns(rs ?? []); setInvoices(vs ?? []); setSources(ss ?? []); setOrderLines(ol ?? []);
     } catch (e) { setFormError(e instanceof Error ? e.message : "订单退货与发票读取失败"); }
   }
   async function selectReturn(row: ReturnRow) {
-    setRet(row);
+    setRet(row); setInspectionEvidence([]);
     await loadReturn(row.id);
   }
   async function loadReturn(id: string) {
@@ -117,6 +122,7 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
         api.get<ReturnLineRow[]>(`/api/v1/dealers/returns/${encodeURIComponent(id)}/lines`),
       ]);
       setRet(r); setLines(ls ?? []);
+      if (r.status === "inspecting") setInspLines((ls ?? []).map(line => `${line.itemId},${line.spec ?? ""},0,0,0,,${line.id}`).join("\n"));
       if (order) await loadOrder(order.id);
     } catch (e) { setFormError(e instanceof Error ? e.message : "退货单读取失败"); }
   }
@@ -129,7 +135,7 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
 
   const requestReturn = () => run("dealer_return_requested", async () => {
     if (!order) throw new Error("请先选择订单");
-    const parsed = parseLines(reqLines, 3, "退货明细").map(([itemId, spec, qty]) => ({ itemId, spec: spec || "", quantity: Number(qty) }));
+    const parsed = parseLines(reqLines, 3, "退货明细").map(([itemId, spec, qty, sourceReceiptLineId]) => ({ itemId, spec: spec || "", quantity: Number(qty), ...(sourceReceiptLineId ? {sourceReceiptLineId} : {}) }));
     if (parsed.length === 0) throw new Error("请填写退货明细");
     const r = await api.post<ReturnRow>(`/api/v1/dealers/orders/${encodeURIComponent(order.id)}/returns`, { idempotencyKey: key(), reasonType: reason, lines: parsed, note: reqNote.trim() || undefined });
     setReqLines(""); setReqNote("");
@@ -146,10 +152,11 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
 
   const inspect = () => run("dealer_return_inspected", async () => {
     if (!ret) throw new Error("请先选择退货单");
-    const parsed = parseLines(inspLines, 5, "验收明细").map(([itemId, spec, accepted, resalable, quarantined, note]) => ({
-      itemId, spec: spec || "", acceptedQuantity: Number(accepted), resalableQuantity: Number(resalable), quarantinedQuantity: Number(quarantined), note: note || undefined,
+    const parsed = parseLines(inspLines, 5, "验收明细").map(([itemId, spec, accepted, resalable, quarantined, note, returnLineId]) => ({
+      itemId, spec: spec || "", acceptedQuantity: Number(accepted), resalableQuantity: Number(resalable), quarantinedQuantity: Number(quarantined), note: note || undefined, ...(returnLineId ? {returnLineId} : {}),
     }));
-    const r = await api.post<ReturnRow>(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/inspection`, { idempotencyKey: key(), lines: parsed });
+    if (!inspectionEvidence.length) throw new Error("请上传实际验收凭证");
+    const r = await api.post<ReturnRow>(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/inspection`, { idempotencyKey: key(), lines: parsed, evidenceAttachmentIds: inspectionEvidence });
     setInspLines("");
     await loadReturn(ret.id);
     return { 退货单: r?.returnNo, 验收金额: money(r?.acceptedAmountCent), 冲减未收货款: money(r?.offsetReceivableCent), 待退款: money(r?.refundCent), 状态: label(RETURN_STATUS, r?.status) };
@@ -163,8 +170,8 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
         title="经销退货与开票"
         description="合同期限内仅未拆封可复售或质量问题商品可申请退货；审批通过后收货验收，按实际验收数量与原成交价确认退货金额；退货金额先冲减原订单未收货款，超出部分经既有退款审批原路退还；可复售品回可用库存、质量问题隔离禁售；已开票退货先全额红冲再按最新未退金额重开，全部退货不重开；订单签收后才可按最终未退金额申请电子发票；退货验收与退款执行不同人。"
       />
-      <AuditTrailHint event="dealer.return.requested / dealer.return.decided / dealer.return.inspected / dealer.invoice.reversed / dealer.return.refund_executed / dealer.invoice.issued" />
-      <p className="admin-muted-action" data-testid="dealer-returns-evidence">接口证据：GET/POST /api/v1/dealers/orders/{"{id}"}/returns；POST /api/v1/dealers/returns/{"{id}"}/decision｜receive｜inspection｜invoice-reversal｜freight-confirmation｜refund-result；GET/POST /api/v1/dealers/orders/{"{id}"}/invoices；POST /api/v1/dealers/invoices/{"{id}"}/issue</p>
+      <AuditTrailHint event="dealer.return.requested / dealer.return.decided / dealer.return.inspected / dealer.invoice.reversal_result_recorded / dealer.return.refund_result_recorded / dealer.invoice.issued" />
+      <p className="admin-muted-action" data-testid="dealer-returns-evidence">接口证据：GET/POST /api/v1/dealers/orders/{"{id}"}/returns；POST /api/v1/dealers/returns/{"{id}"}/decision｜receive｜inspection｜invoice-reversal｜freight-confirmation｜refunds/execute；GET/POST /api/v1/dealers/orders/{"{id}"}/invoices；POST /api/v1/dealers/invoices/{"{id}"}/issue</p>
       {formError ? <div data-testid="dealer-returns-error" className="admin-inline-error">{formError}</div> : null}
 
       <AdminDataState loading={loading} error={error} empty={dealers.length === 0} onRetry={reload}>
@@ -207,7 +214,11 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
             <label>退货原因<select data-testid="return-reason" value={reason} onChange={(e) => setReason(e.target.value)}>
               <option value="unopened_resalable">未拆封可复售</option><option value="quality_issue">质量问题</option>
             </select></label>
-            <label>退货明细（每行：商品id,规格,数量）<textarea data-testid="return-lines-input" rows={3} value={reqLines} onChange={(e) => setReqLines(e.target.value)} /></label>
+            <div>选择实际签收来源：{sources.filter(source => source.availableQuantity > 0).map(source => {
+              const line = orderLines.find(item => item.id === source.orderLineId);
+              return line ? <button type="button" key={source.receiptLineId} onClick={() => setReqLines(previous => `${previous}${previous ? "\n" : ""}${line.itemId},${line.spec},${source.availableQuantity},${source.receiptLineId}`)}>{line.itemId} {line.spec}，批次 {source.batchId}，可退 {source.availableQuantity}</button> : null;
+            })}</div>
+            <label>退货明细（每行：商品id,规格,数量,签收来源）<textarea data-testid="return-lines-input" rows={3} value={reqLines} onChange={(e) => setReqLines(e.target.value)} /></label>
             <label>说明<input data-testid="return-note" value={reqNote} onChange={(e) => setReqNote(e.target.value)} /></label>
             <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.manage"]} data-testid="return-request" onClick={() => void requestReturn()}>提交退货申请</PermissionButton>
           </div>
@@ -239,30 +250,19 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
                   </>
                 ) : null}
                 {ret.status === "pending_receipt" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.inspect"]} data-testid="return-receive" onClick={() => void act(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/receive`, {}, "dealer_return_received", { 状态: "验收中" })}>确认收货</PermissionButton> : null}
-                {ret.status === "pending_reversal" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.invoice.manage"]} data-testid="return-reverse-invoice" onClick={() => void act(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/invoice-reversal`, { invoiceNo: prompt("重开发票号（全部退货或待开票可留空）") || undefined }, "dealer_invoice_reversed", { 动作: "全额红冲原发票，按最新未退金额重开" })}>红冲并重开</PermissionButton> : null}
-                {(ret.status === "pending_refund" || ret.status === "refund_failed") && ret.refundApproved ? (
-                  <>
-                    <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.refund.execute"]} data-testid="return-refund-success" onClick={() => void act(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/refund-result`, { result: "success", referenceNo: prompt("退款流水号") || undefined }, "dealer_return_refund_executed", { 结果: "退款成功" })}>登记退款成功</PermissionButton>
-                    <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.refund.execute"]} data-testid="return-refund-failed" onClick={() => void act(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/refund-result`, { result: "failed", failureReason: prompt("失败原因") || undefined }, "dealer_return_refund_executed", { 结果: "退款失败" })}>登记退款失败</PermissionButton>
-                  </>
-                ) : null}
+                {ret.status === "pending_reversal" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.invoice.manage"]} data-testid="return-reverse-invoice" onClick={() => void act(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/invoice-reversal`, {}, "dealer_invoice_reversal_requested", { 动作: "原发票待红冲，收到实际成功结果后重开" })}>提交原发票红冲</PermissionButton> : null}
                 {(ret.status === "pending_refund" || ret.status === "refund_failed") && !ret.refundApproved ? <span data-testid="return-refund-waiting">退款审批中（复核单 {ret.refundReviewId ?? "未生成"}）</span> : null}
               </div>
 
               {ret.status === "inspecting" ? (
                 <div className="admin-form-grid" data-testid="return-inspection-form">
-                  <label>验收明细（每行：商品id,规格,验收数量,可复售数量,隔离数量,备注）<textarea data-testid="inspection-lines-input" rows={3} value={inspLines} onChange={(e) => setInspLines(e.target.value)} /></label>
+                  <label>验收明细（每行：商品id,规格,验收数量,可复售数量,隔离数量,备注,退货明细）<textarea data-testid="inspection-lines-input" rows={3} value={inspLines} onChange={(e) => setInspLines(e.target.value)} /></label>
+                  <ReturnEvidenceUpload key={ret.id} api={api} effectivePermissions={effectivePermissions} type="dealer_return" id={ret.id} permission="dealer.return.inspect" testId="inspection-evidence" onChanged={setInspectionEvidence} />
                   <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.inspect"]} data-testid="return-inspect" onClick={() => void inspect()}>确认验收（可复售回库，隔离禁售）</PermissionButton>
                 </div>
               ) : null}
 
-              {ret.returnFreightBearer === "pending_confirmation" || !ret.freightConfirmed ? (
-                <div className="admin-form-grid" data-testid="return-freight-form">
-                  <label>退回运费承担方<select data-testid="freight-bearer" value={bearer} onChange={(e) => setBearer(e.target.value)}><option value="dealer">经销商</option><option value="sales_entity">销售主体</option></select></label>
-                  <label><input type="checkbox" data-testid="freight-first-leg" checked={firstLeg} onChange={(e) => setFirstLeg(e.target.checked)} />首程运费退还</label>
-                  <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.manage"]} data-testid="freight-confirm" onClick={() => void act(`/api/v1/dealers/returns/${encodeURIComponent(ret.id)}/freight-confirmation`, { returnFreightBearer: bearer, firstLegFreightRefundable: firstLeg }, "dealer_return_freight_confirmed", { 退回运费承担方: label(FREIGHT_BEARER, bearer) })}>确认运费约定</PermissionButton>
-                </div>
-              ) : null}
+              <DealerReturnFinancialPanel key={`${ret.id}-${ret.status}`} {...props} returnId={ret.id} status={ret.status} refundApproved={ret.refundApproved} bearer={ret.returnFreightBearer} refundable={ret.firstLegFreightRefundable} reasonType={ret.reasonType} contract={order?.contractSnapshot} onChanged={() => {void loadReturn(ret.id);}} />
 
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="return-line-table">
@@ -282,7 +282,7 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
 
           <h3>电子发票（签收后按最终未退金额开具，主体为合同销售主体）</h3>
           <div className="admin-form-grid" data-testid="invoice-form">
-            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.invoice.manage"]} data-testid="invoice-request" onClick={() => void act(`/api/v1/dealers/orders/${encodeURIComponent(order.id)}/invoices`, {}, "dealer_invoice_requested", { 订单: order.orderNo, 开票金额: money((order.totalAmountCent ?? 0) - (order.returnedAmountCent ?? 0)) })}>申请电子发票</PermissionButton>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.invoice.manage"]} data-testid="invoice-request" onClick={() => void act(`/api/v1/dealers/orders/${encodeURIComponent(order.id)}/invoices`, {}, "dealer_invoice_requested", { 订单: order.orderNo, 办理状态: "按实际未退货款及未退运费核定" })}>申请电子发票</PermissionButton>
           </div>
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="invoice-table">
@@ -292,7 +292,7 @@ export function DealerReturnInvoicePage({ api, setGlobalError, setActionResult, 
                   <tr key={v.id}>
                     <td>{v.id}</td><td>{money(v.amountCent)}</td><td data-testid={`invoice-status-${v.id}`}>{label(INVOICE_STATUS, v.status)}</td><td>{v.invoiceNo ?? "—"}</td>
                     <td>{v.reversedByReturnId ?? "—"}</td><td>{v.reissuedFromInvoiceId ?? "—"}</td>
-                    <td>{["pending", "issuing", "failed"].includes(v.status ?? "") ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.invoice.manage"]} data-testid={`invoice-issue-${v.id}`} onClick={() => void act(`/api/v1/dealers/invoices/${encodeURIComponent(v.id)}/issue`, { invoiceNo: prompt("发票号") }, "dealer_invoice_issued", { 发票: v.id })}>登记开具</PermissionButton> : null}</td>
+                    <td><DealerInvoiceActions key={`${v.id}-${v.status}`} {...props} invoice={v} onChanged={() => {void loadOrder(order.id);if(ret) void loadReturn(ret.id);}} />{v.requiresReversal ? <p>须红冲原票后重开</p> : null}</td>
                   </tr>
                 ))}
               </tbody>

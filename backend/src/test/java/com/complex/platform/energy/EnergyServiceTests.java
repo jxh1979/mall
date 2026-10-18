@@ -1,7 +1,8 @@
 package com.complex.platform.energy;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.energy.EnergyRepository.EnergyContractSnapshot;
@@ -16,26 +17,74 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** 能耗抄表 S4 服务测试：异常识别、总分表抹差、公区能源费分摊与 AR 幂等。 */
+/** 能耗服务回归：异常原始事实、缺失起点阻断、公区不挂账、独表实际费用。 */
+// 文件版本：V0.02
 class EnergyServiceTests {
 
-    private final InMemoryEnergyRepository repo = new InMemoryEnergyRepository();
-    private final EnergyService service =
-            new EnergyService(repo, mock(AuditEventService.class), mock(AuthorizationService.class));
+    @Test
+    void approvedRulesDoNotCreatePublicAreaReceivables() {
+        repo.contracts.add(new EnergyContractSnapshot("ct_area", "mch_area", "proj_1",
+                "by_area", 0L, bd("100"), 10L));
+        repo.saveMeter(meter("public", "electricity", null, "public_area", null, "remote"));
+        repo.saveReading(reading("r_public", "public", "2026-06", "100", "0", "100"));
+        assertThat(service.settleEnergyFee("2026-06")).isEmpty();
+        assertThat(repo.arItems).isEmpty();
+    }
 
     @Test
-    void recordReading_flagsSurgeAndKeepsRemoteReadMode() {
+    void unknownOpeningReadingMustNotBecomeZeroBasedBillableConsumption() {
+        repo.saveMeter(meter("new_meter", "electricity", null, "merchant", "mch_1", "remote"));
+        var saved = service.recordReading(new EnergyReadingRecordRequest(
+                "no_baseline", "new_meter", "2026-06", bd("150"), null, "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_new_meter"),"补充核表"));
+        assertThat(saved.status()).isEqualTo("abnormal");
+        assertThat(saved.prevReadingValue()).isNull();
+        assertThat(saved.consumption()).isNull();
+    }
+
+    @Test
+    void abnormalReadingCannotBeConfirmedByArbitraryNamedReviewer() {
+        repo.saveMeter(meter("mtr_bad", "electricity", null, "merchant", "mch_1", "remote"));
+        Instant now = Instant.now();
+        repo.saveReading(new EnergyMeterReadingRecord("bad", "mtr_bad", "2026-06", bd("90"),
+                bd("100"), bd("-10"), "abnormal", "reverse", "remote", "usr_reader", now,
+                null, null, now, now));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.reviewReading("bad",
+                new com.complex.platform.energy.dto.EnergyReadingReviewRequest("review_bad", "any_user")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        assertThat(repo.findReadingById("bad").orElseThrow().status()).isEqualTo("abnormal");
+    }
+
+
+    private final InMemoryEnergyRepository repo = new InMemoryEnergyRepository();
+    private final EnergyWorkflowRepository workflow=mock(EnergyWorkflowRepository.class);
+    private final AuthorizationService authorization=mock(AuthorizationService.class);
+    private final com.complex.platform.common.idempotency.IdempotencyService idempotency=mock(com.complex.platform.common.idempotency.IdempotencyService.class);
+    private final com.complex.platform.evidence.EvidenceEventRepository evidence=mock(com.complex.platform.evidence.EvidenceEventRepository.class);
+    private final com.complex.platform.evidence.EvidenceAttachmentValidator files=mock(com.complex.platform.evidence.EvidenceAttachmentValidator.class);
+    private final com.complex.platform.governance.review.SupervisorReviewService reviews=mock(com.complex.platform.governance.review.SupervisorReviewService.class);
+    private final EnergyService service=new EnergyService(repo,workflow,mock(AuditEventService.class),authorization,idempotency,evidence,files,reviews);
+    @org.junit.jupiter.api.BeforeEach void configure() {
+        when(authorization.currentActor()).thenReturn(new com.complex.platform.access.AccessActor("usr_reader","读数员","staff","proj_1",null,"active"));
+        when(authorization.canReachProject(any(),anyString(),any())).thenReturn(true);
+        when(idempotency.execute(anyString(),anyString(),any(),any(java.util.function.Supplier.class),any(Class.class))).thenAnswer(call->((java.util.function.Supplier<?>)call.getArgument(3)).get());
+        when(workflow.effectiveValue(any())).thenAnswer(call->((EnergyMeterReadingRecord)call.getArgument(0)).readingValue());
+        when(workflow.effectiveConsumption(any())).thenAnswer(call->((EnergyMeterReadingRecord)call.getArgument(0)).consumption());
+        when(evidence.findAttachmentById(startsWith("photo_"))).thenAnswer(call->{String id=call.getArgument(0);return Optional.of(new com.complex.platform.evidence.EvidenceAttachmentRecord(id,"表底.png","image/png",1L,"energy_meter",id.substring(6),"reading","valid","valid","uploaded",null,Instant.now(),Instant.now(),null));});
+    }
+
+    @Test
+    void recordReading_flagsSurgeAndRecordsManualEvidence() {
         repo.saveMeter(meter("mtr_e", "electricity", null, "merchant", "mch_1", "remote"));
         repo.saveReading(reading("old", "mtr_e", "2026-05", "100", "0", "100"));
 
         EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
-                "k_surge", "mtr_e", "2026-06", bd("260"), null, "manual", "usr_reader", null));
+                "k_surge", "mtr_e", "2026-06", bd("260"), null, "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_mtr_e"),"补充核表"));
 
         assertThat(rec.status()).isEqualTo("abnormal");
         assertThat(rec.abnormalReason()).isEqualTo("surge");
         assertThat(rec.prevReadingValue()).isEqualByComparingTo("100");
         assertThat(rec.consumption()).isEqualByComparingTo("160");
-        assertThat(rec.readMode()).isEqualTo("remote");
+        assertThat(rec.readMode()).isEqualTo("manual");
     }
 
     @Test
@@ -45,7 +94,7 @@ class EnergyServiceTests {
         repo.saveReading(reading("zb_prev", "mtr_zb", "2026-05", "100", "100", "0"));
 
         EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
-                "k_zb", "mtr_zb", "2026-06", bd("4200"), null, "manual", "usr_reader", null));
+                "k_zb", "mtr_zb", "2026-06", bd("4200"), null, "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_mtr_zb"),"补充核表"));
 
         assertThat(rec.status()).isEqualTo("abnormal");
         assertThat(rec.abnormalReason()).isEqualTo("surge");
@@ -58,7 +107,7 @@ class EnergyServiceTests {
         repo.saveReading(reading("old", "mtr_w", "2026-05", "100", "0", "100"));
 
         EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
-                "k_drop", "mtr_w", "2026-06", bd("140"), null, "manual", "usr_reader", null));
+                "k_drop", "mtr_w", "2026-06", bd("140"), null, "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_mtr_w"),"补充核表"));
 
         assertThat(rec.status()).isEqualTo("abnormal");
         assertThat(rec.abnormalReason()).isEqualTo("drop");
@@ -71,7 +120,7 @@ class EnergyServiceTests {
         repo.saveReading(reading("old", "mtr_g", "2026-05", "100", "0", "100"));
 
         EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
-                "k_zero", "mtr_g", "2026-06", bd("100"), null, "manual", "usr_reader", null));
+                "k_zero", "mtr_g", "2026-06", bd("100"), null, "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_mtr_g"),"补充核表"));
 
         assertThat(rec.status()).isEqualTo("abnormal");
         assertThat(rec.abnormalReason()).isEqualTo("zero");
@@ -84,7 +133,7 @@ class EnergyServiceTests {
         repo.saveReading(reading("old", "mtr_h", "2026-05", "100", "0", "100"));
 
         EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
-                "k_reverse", "mtr_h", "2026-06", bd("90"), null, "manual", "usr_reader", null));
+                "k_reverse", "mtr_h", "2026-06", bd("90"), null, "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_mtr_h"),"补充核表"));
 
         assertThat(rec.status()).isEqualTo("abnormal");
         assertThat(rec.abnormalReason()).isEqualTo("reverse");
@@ -94,15 +143,15 @@ class EnergyServiceTests {
     }
 
     @Test
-    void recordReading_firstPeriodUsesZeroPreviousAndRecordsNormally() {
+    void recordReading_firstPeriodWithoutOpeningIsKeptForVerification() {
         repo.saveMeter(meter("mtr_first", "electricity", null, "merchant", "mch_1", "remote"));
 
         EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
-                "k_first", "mtr_first", "2026-06", bd("88"), null, "manual", "usr_reader", null));
+                "k_first", "mtr_first", "2026-06", bd("88"), null, "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_mtr_first"),"补充核表"));
 
-        assertThat(rec.status()).isEqualTo("recorded");
-        assertThat(rec.prevReadingValue()).isEqualByComparingTo("0");
-        assertThat(rec.consumption()).isEqualByComparingTo("88");
+        assertThat(rec.status()).isEqualTo("abnormal");
+        assertThat(rec.prevReadingValue()).isNull();
+        assertThat(rec.consumption()).isNull();
     }
 
     @Test
@@ -111,7 +160,7 @@ class EnergyServiceTests {
         repo.saveReading(reading("old", "mtr_reverse_auto", "2026-05", "100", "0", "100"));
 
         EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
-                "k_reverse_auto", "mtr_reverse_auto", "2026-06", bd("90"), bd("0"), "manual", "usr_reader", null));
+                "k_reverse_auto", "mtr_reverse_auto", "2026-06", bd("90"), bd("0"), "manual", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),List.of("photo_mtr_reverse_auto"),"补充核表"));
 
         assertThat(rec.status()).isEqualTo("abnormal");
         assertThat(rec.abnormalReason()).isEqualTo("reverse");
@@ -135,65 +184,9 @@ class EnergyServiceTests {
         assertThat(diff.difference()).isEqualByComparingTo("30");
     }
 
-    @Test
-    void settleEnergyFeeAllocatesByContractAreaAndUsageThenSkipsDuplicates() {
-        repo.contracts.add(new EnergyContractSnapshot("ct_fixed", "mch_fixed", "proj_1",
-                "by_contract", 1000L, bd("10"), 10L));
-        repo.contracts.add(new EnergyContractSnapshot("ct_area_1", "mch_area_1", "proj_1",
-                "by_area", 0L, bd("100"), 10L));
-        repo.contracts.add(new EnergyContractSnapshot("ct_area_2", "mch_area_2", "proj_1",
-                "by_area", 0L, bd("300"), 10L));
-        repo.contracts.add(new EnergyContractSnapshot("ct_usage_1", "mch_usage_1", "proj_1",
-                "by_usage", 0L, bd("10"), 10L));
-        repo.contracts.add(new EnergyContractSnapshot("ct_usage_2", "mch_usage_2", "proj_1",
-                "by_usage", 0L, bd("10"), 10L));
-        repo.contracts.add(new EnergyContractSnapshot("ct_none", "mch_none", "proj_1",
-                "none", 9999L, bd("10"), 10L));
-        repo.saveMeter(meter("public", "electricity", null, "public_area", null, "remote"));
-        repo.saveMeter(meter("usage_1", "electricity", null, "merchant", "mch_usage_1", "remote"));
-        repo.saveMeter(meter("usage_2", "electricity", null, "merchant", "mch_usage_2", "remote"));
-        repo.saveReading(reading("r_public", "public", "2026-06", "100", "0", "100"));
-        repo.saveReading(reading("r_usage_1", "usage_1", "2026-06", "20", "0", "20"));
-        repo.saveReading(reading("r_usage_2", "usage_2", "2026-06", "80", "0", "80"));
 
-        List<EnergyFeeSettlementRecord> first = service.settleEnergyFee("2026-06");
-        List<EnergyFeeSettlementRecord> second = service.settleEnergyFee("2026-06");
 
-        assertThat(first).extracting(EnergyFeeSettlementRecord::merchantId)
-                .containsExactlyInAnyOrder("mch_fixed", "mch_area_1", "mch_area_2", "mch_usage_1", "mch_usage_2");
-        assertThat(amountByMerchant(first)).containsEntry("mch_fixed", 1000L)
-                .containsEntry("mch_area_1", 250L)
-                .containsEntry("mch_area_2", 750L)
-                .containsEntry("mch_usage_1", 200L)
-                .containsEntry("mch_usage_2", 800L);
-        assertThat(second).isEmpty();
-        assertThat(repo.arItems).hasSize(5);
-        assertThat(repo.arItems.values()).allMatch(ar -> "energy_fee".equals(ar.sourceType()))
-                .allMatch(ar -> "receivable".equals(ar.direction()))
-                .allMatch(ar -> "pending_collection".equals(ar.status()));
-    }
 
-    @Test
-    void settleEnergyFee_sameMerchantMultipleContractsEachBilledNotDeduped() {
-        // AUD-005：同一商户两份合同同期,均 by_contract 固定费,应各自计费(2 条),不因 merchant+period 去重漏掉第二份。
-        repo.contracts.add(new EnergyContractSnapshot("ct_multi_a", "mch_multi", "proj_1",
-                "by_contract", 500L, bd("10"), 10L));
-        repo.contracts.add(new EnergyContractSnapshot("ct_multi_b", "mch_multi", "proj_1",
-                "by_contract", 800L, bd("10"), 10L));
-
-        List<EnergyFeeSettlementRecord> out = service.settleEnergyFee("2026-06");
-
-        assertThat(out).hasSize(2);
-        assertThat(out).extracting(EnergyFeeSettlementRecord::contractId)
-                .containsExactlyInAnyOrder("ct_multi_a", "ct_multi_b");
-        assertThat(out).allMatch(r -> "mch_multi".equals(r.merchantId()));
-        assertThat(out).extracting(EnergyFeeSettlementRecord::amountCent)
-                .containsExactlyInAnyOrder(500L, 800L);
-        assertThat(repo.arItems).hasSize(2);
-        // 幂等重跑不新增。
-        assertThat(service.settleEnergyFee("2026-06")).isEmpty();
-        assertThat(repo.arItems).hasSize(2);
-    }
 
     @Test
     void settleEnergyFee_noEffectiveContractsReturnsEmptyList() {
@@ -218,9 +211,9 @@ class EnergyServiceTests {
 
     private static EnergyMeterReadingRecord reading(
             String id, String meterId, String period, String reading, String prev, String consumption) {
-        Instant now = Instant.now();
+        Instant now = java.time.YearMonth.parse(period).atDay(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
         return new EnergyMeterReadingRecord(id, meterId, period, bd(reading), bd(prev), bd(consumption),
-                "recorded", null, "remote", "usr_seed", now, null, null, now, now);
+                "reviewed", null, "remote", "usr_seed", now, null, null, now, now);
     }
 
     private static BigDecimal bd(String value) {

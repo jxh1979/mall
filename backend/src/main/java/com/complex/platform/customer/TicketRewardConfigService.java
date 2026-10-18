@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -61,7 +61,7 @@ public class TicketRewardConfigService {
             throw invalid("须填写规则内容及未来生效时间");
         scope(r.projectId(),MANAGE);
         String kind=requireText(r.kind(),"kind");
-        if(!Set.of("points","growth","national","sales_contract").contains(kind)) throw invalid("不支持的奖励配置类型");
+        if(!Set.of("points","growth","national","sales_contract","recovery_waiver").contains(kind)) throw invalid("不支持的奖励配置类型");
         validate(r);
         requireApproverScope(r);
         return idempotency.execute("ticketRewardConfig",requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
@@ -72,7 +72,7 @@ public class TicketRewardConfigService {
             Instant now=Instant.now();
             jdbc.update("INSERT INTO ticket_reward_config_versions(id,kind,ticket_type_id,project_id,version,payload,effective_at,status,created_by,created_at) VALUES(?,?,?,?,?,?::jsonb,?,'pending_review',?,?)",
                     id,kind,r.ticketTypeId(),r.projectId(),"V"+(seq/100)+"."+String.format("%02d",seq%100),encode(r.values()),Timestamp.from(r.effectiveAt()),auth.currentActor().id(),Timestamp.from(now));
-            String action="ticket.reward."+switch(kind){case "national" -> "national";case "sales_contract" -> "sales_contract";default -> "rule";};
+            String action="ticket.reward."+switch(kind){case "national","recovery_waiver" -> "national";case "sales_contract" -> "sales_contract";default -> "rule";};
             SupervisorReviewDecisionRecord review=reviews.evaluate(new SupervisorReviewEvaluateRequest(
                     r.idempotencyKey()+":review",requireText(r.reason(),"reason"),r.values().attachmentIds(),action,
                     "ticket_reward_config",id,0L,r.reason(),r.finalApproverId(),r.parallelLines()));
@@ -98,7 +98,7 @@ public class TicketRewardConfigService {
     @Transactional
     public TicketRewardConfig publish(String id, TicketRewardConfig.PublishRequest r) {
         TicketRewardConfig original=find(id); scope(original.projectId(),MANAGE);
-        if(!"national".equals(original.kind()))requireEvidenceScope(original.projectId()+":"+original.ticketTypeId(),false);
+        if(!Set.of("national","recovery_waiver").contains(original.kind()))requireEvidenceScope(original.projectId()+":"+original.ticketTypeId(),false);
         if(r==null) throw invalid("请填写发布说明");
         requireText(r.reason(),"reason");
         return idempotency.execute("publishTicketRewardConfig:"+id,requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
@@ -131,6 +131,11 @@ public class TicketRewardConfigService {
 
     private void validate(TicketRewardConfig.Request r) {
         var v=r.values();
+        if("recovery_waiver".equals(r.kind())) {
+            if(r.projectId()!=null || r.ticketTypeId()!=null) throw invalid("豁免线不可限定项目或票种");
+            range(v.fixedValue(),v.minimumValue(),v.maximumValue());
+            return;
+        }
         if("national".equals(r.kind())) {
             if(r.projectId()!=null || r.ticketTypeId()!=null) throw invalid("全国参数不可限定项目或票种");
             range(v.waitingHours()==null?24L:v.waitingHours().longValue(),v.minimumWaitingHours()==null?null:v.minimumWaitingHours().longValue(),v.maximumWaitingHours()==null?null:v.maximumWaitingHours().longValue());
@@ -200,8 +205,9 @@ public class TicketRewardConfigService {
         List<String> companies=jdbc.queryForList("SELECT COALESCE((SELECT company_id FROM staff_profiles WHERE user_id=u.id AND status='active' AND registration_status='approved' ORDER BY updated_at DESC LIMIT 1),(SELECT organization_id FROM user_position_assignments WHERE user_id=u.id AND assigned_at<=now()),u.organization_id) FROM access_users u WHERE u.id=? AND u.status='active' AND NOT EXISTS(SELECT 1 FROM staff_profiles s WHERE s.user_id=u.id AND (s.status<>'active' OR s.registration_status<>'approved'))",String.class,approver);
         if(companies.size()!=1 || companies.getFirst()==null)throw invalid("最终审批人尚无有效的所属公司");
         String company=companies.getFirst();
-        List<String> domains="national".equals(r.kind())?List.of():domainCompanies(r.ticketTypeId(),r.projectId());
-        boolean platform="national".equals(r.kind()) || domains.size()>1;
+        boolean nationwide=Set.of("national","recovery_waiver").contains(r.kind());
+        List<String> domains=nationwide?List.of():domainCompanies(r.ticketTypeId(),r.projectId());
+        boolean platform=nationwide || domains.size()>1;
         if(platform) {
             if(jdbc.queryForObject("SELECT count(*) FROM business_entities WHERE id=? AND entity_role='platform' AND status='active'",Integer.class,company)!=1)throw invalid("全国或跨域奖励须由顶层平台主管审批");
         } else if(!domains.contains(company))throw invalid("最终审批人须属于本票种对应的域主管公司");

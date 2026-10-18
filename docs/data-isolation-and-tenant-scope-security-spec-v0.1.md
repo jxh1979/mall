@@ -1,4 +1,4 @@
-# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.08
+# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.09
 
 > 创建日期：2026-06-18
 > 状态：权威安全规格（补齐此前缺口——隔离模型此前仅存在于各迁移 .sql 注释中，无单一权威文档）。
@@ -56,11 +56,12 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V475**，发现 **191** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V487**，发现 **197** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
 | `access_users` | `merchant_id` + `organization_id` | direct | V003 | `V003__p0_access_permission_authz_slice.sql` |
+| `amusement_business_day_configs` | `project_id` | direct | V483 | `V483__amusement_business_day_versions.sql` |
 | `amusement_capacity_config` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
 | `amusement_capacity_snapshot` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
 | `amusement_compensation_policies` | `project_id` | direct | V447 | `V447__amusement_fault_compensation.sql` |
@@ -85,6 +86,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `amusement_safety_inspections` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
 | `amusement_safety_notices` | `merchant_id` + `project_id` | direct | V024, V049 | `V024__p1_amusement_safety_waiver_incident.sql`<br>`V049__amusement_security_fixes.sql` |
 | `amusement_safety_templates` | `merchant_id` | direct | V049 | `V049__amusement_security_fixes.sql` |
+| `amusement_session_endings` | `project_id` | direct | V484 | `V484__amusement_session_ending_facts.sql` |
 | `amusement_sessions` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
 | `amusement_verifications` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
 | `amusement_waiver_acknowledgements` | `project_id` | direct | V024 | `V024__p1_amusement_safety_waiver_incident.sql` |
@@ -138,7 +140,9 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `dividend_reserve_releases` | `merchant_id` | direct | V304 | `V304__dividend_reserve_release.sql` |
 | `dividend_statement_lines` | `merchant_id` | direct | V299 | `V299__dividend_engine.sql` |
 | `dividend_statements` | `merchant_id` | direct | V299 | `V299__dividend_engine.sql` |
+| `energy_actual_charges` | `project_id` | direct | V478 | `V478__energy_measurement_and_actual_charge_facts.sql` |
 | `energy_meters` | `merchant_id` + `project_id` + `space_id` | direct | V168 | `V168__energy_metering.sql` |
+| `energy_reading_verifications` | `project_id` | direct | V478 | `V478__energy_measurement_and_actual_charge_facts.sql` |
 | `entitlement_sessions` | `merchant_id` + `project_id` | direct | V129 | `V129__entitlement_sessions.sql` |
 | `entitlement_templates` | `merchant_id` + `venue_id` | direct | V075 | `V075__entitlement_merchant_and_ticket_validity.sql` |
 | `evidence_attachments` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
@@ -158,7 +162,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `inventory_high_value_reviews` | `merchant_id` | direct | V237 | `V237__inventory_isolation_fixes.sql` |
 | `inventory_item_cost_state` | `merchant_id` | direct | V296 | `V296__inventory_cost_ledger.sql` |
 | `inventory_items` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
-| `inventory_purchase_requests` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_purchase_requests` | `merchant_id` + `project_id` | direct | V046, V485 | `V046__inventory_security_fixes.sql`<br>`V485__purchase_fulfillment_and_settlement_facts.sql` |
 | `inventory_quarantine_lots` | `project_id` | direct | V470 | `V470__dealer_delivery_discrepancies_and_quarantine.sql` |
 | `inventory_risk_alerts` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_stock_adjustments` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
@@ -187,12 +191,14 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchants` | `project_id` | direct | V432 | `V432__m009_project_profiles_and_associations.sql` |
 | `pass_gift_cost_configs` | `project_id` | direct | V373 | `V373__pass_gift_cost_configs.sql` |
 | `pass_gift_cost_variance_ledger` | `project_id` | direct | V377 | `V377__pass_gift_variance_ledger.sql` |
+| `payroll_tax_assessments` | `merchant_id` + `project_id` | direct | V477 | `V477__payroll_tax_approved_versions.sql` |
 | `platform_retention_rules` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `points_accrual_rate_configs` | `merchant_id` + `project_id` | direct | V340 | `V340__commission_and_points_rate_configs.sql` |
 | `position_role_templates` | `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
 | `projects` | `merchant_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
 | `property_fee_bills` | `merchant_id` + `project_id` | direct | V150 | `V150__property_fee_fixed_billing.sql` |
 | `property_fee_rates` | `project_id` | direct | V150 | `V150__property_fee_fixed_billing.sql` |
+| `purchase_receipts` | `project_id` | direct | V485 | `V485__purchase_fulfillment_and_settlement_facts.sql` |
 | `refund_authority_limits` | `project_id` | direct | V156 | `V156__refund_tiered_authorization.sql` |
 | `refund_auto_rules` | `project_id` | direct | V156 | `V156__refund_tiered_authorization.sql` |
 | `revenue_stream_attribution` | `project_id` | direct | V319 | `V319__revenue_stream_attribution.sql` |

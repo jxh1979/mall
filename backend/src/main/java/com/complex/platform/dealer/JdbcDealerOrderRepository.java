@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -94,7 +94,7 @@ public class JdbcDealerOrderRepository {
         return jdbc.query("""
                 SELECT * FROM dealer_orders
                  WHERE status IN ('shipping', 'signed', 'returning', 'partially_returned', 'returned') AND overdue = FALSE AND balance_due_at IS NOT NULL AND balance_due_at < :now
-                   AND paid_amount_cent < total_amount_cent - returned_amount_cent - delivery_adjustment_cent
+                   AND paid_amount_cent < total_amount_cent - returned_amount_cent - delivery_adjustment_cent - first_leg_adjustment_cent
                 """, Map.of("now", Timestamp.from(now)), this::mapOrder);
     }
 
@@ -112,7 +112,7 @@ public class JdbcDealerOrderRepository {
                 rs.getString("ar_ap_item_id"), rs.getString("reviewed_by"), nullableInstant(rs, "reviewed_at"), nullableInstant(rs, "payment_notified_at"),
                 rs.getString("shipped_by"), nullableInstant(rs, "shipped_at"), nullableInstant(rs, "signed_at"), nullableInstant(rs, "completed_at"),
                 rs.getString("cancel_requested_by"), rs.getString("cancel_reason"), nullableInstant(rs, "cancelled_at"), rs.getString("note"),
-                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getLong("returned_amount_cent"), readContractSnapshot(rs.getString("contract_snapshot")), rs.getLong("delivery_adjustment_cent"), nullableInstant(rs, "delivery_completed_at"));
+                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getLong("returned_amount_cent"), readContractSnapshot(rs.getString("contract_snapshot")), rs.getLong("delivery_adjustment_cent"), nullableInstant(rs, "delivery_completed_at"), rs.getLong("first_leg_adjustment_cent"));
     }
 
     public void lockContractSnapshot(String orderId, DealerContractRecord contract) {
@@ -141,7 +141,7 @@ public class JdbcDealerOrderRepository {
     public void applyReturn(String orderId, long acceptedAmountCent, String status) {
         jdbc.update("""
                 UPDATE dealer_orders SET returned_amount_cent = returned_amount_cent + :amt, status = :status,
-                    overdue = CASE WHEN paid_amount_cent >= total_amount_cent - returned_amount_cent - delivery_adjustment_cent - :amt THEN FALSE ELSE overdue END,
+                    overdue = CASE WHEN paid_amount_cent >= total_amount_cent - returned_amount_cent - delivery_adjustment_cent - first_leg_adjustment_cent - :amt THEN FALSE ELSE overdue END,
                     updated_at = now() WHERE id = :id
                 """, new MapSqlParameterSource().addValue("amt", acceptedAmountCent).addValue("status", status).addValue("id", orderId));
     }
@@ -218,6 +218,19 @@ public class JdbcDealerOrderRepository {
                 .addValue("status", r.status()).addValue("review", r.reviewId()).addValue("requested_by", r.requestedBy()).addValue("executed_by", r.executedBy())
                 .addValue("executed_at", ts(r.executedAt())).addValue("ref", r.referenceNo()).addValue("reason", r.reason())
                 .addValue("created_at", ts(r.createdAt())).addValue("updated_at", ts(r.updatedAt())));
+    }
+
+    public Optional<DealerReturnRefundSourceRecord> findReturnRefundSource(String refundId) {
+        return jdbc.query("""
+                SELECT f.return_id,r.order_id,
+                 CASE WHEN d.project_id IS NULL OR d.project_id=w.project_id THEN w.project_id ELSE NULL END project_id,
+                 r.inspected_by,f.return_component
+                FROM dealer_order_refunds f LEFT JOIN dealer_returns r ON r.id=f.return_id AND r.order_id=f.order_id
+                LEFT JOIN dealer_orders o ON o.id=r.order_id LEFT JOIN warehouses w ON w.id=o.central_warehouse_id
+                LEFT JOIN dealers d ON d.id=o.dealer_id
+                WHERE f.id=:id AND f.return_id IS NOT NULL
+                """, Map.of("id",refundId), (rs,n)->new DealerReturnRefundSourceRecord(rs.getString("return_id"),rs.getString("order_id"),
+                        rs.getString("project_id"),rs.getString("inspected_by"),rs.getString("return_component"))).stream().findFirst();
     }
 
     public Optional<DealerOrderRefundRecord> findRefund(String id) {

@@ -1,14 +1,11 @@
 package com.complex.platform.inventory.dto;
 
-/**
- * R5 T6 采购单审批请求。{@code decision} ∈ {@code approved}/{@code rejected}。
- *
- * <p>可选 {@code supplyContractId}：审批步绑定供应合同；提供时按合同 purchasable_scope 卡控物料是否可采购。
- */
-public record PurchaseRequestApproveRequest(
-        String idempotencyKey,
-        String decision,
-        String supplyContractId,
-        String note
-) {
+// 文件版本：V0.01
+
+import java.util.List;
+import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.ParallelLine;
+
+/** 原审批入口发起完整审批链；节点裁决通过统一审批入口完成。 */
+public record PurchaseRequestApproveRequest(String idempotencyKey,String decision,String supplyContractId,String note,String finalApproverId,List<ParallelLine> parallelLines,String beneficiaryId,List<String> evidenceAttachmentIds) {
+    public PurchaseRequestApproveRequest(String idempotencyKey,String decision,String supplyContractId,String note) {this(idempotencyKey,decision,supplyContractId,note,null,List.of(),null,List.of());}
 }

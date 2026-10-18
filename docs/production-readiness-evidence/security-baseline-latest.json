@@ -1,17 +1,17 @@
 {
   "status": "passed",
   "evidence_type": "formal_security_baseline_v1",
-  "verified_at": "2026-10-18T09:22:50.188493+00:00",
+  "verified_at": "2026-10-18T12:20:14.310545+00:00",
   "verified_on_host": "192.168.88.160",
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 882,
-  "security_baseline_version": "V1.04",
+  "openapi_operation_count": 930,
+  "security_baseline_version": "V1.05",
   "plaintext_secret_present": false,
-  "notes": "第四批接口同步后在160实际执行 npm run verify:security-baseline 通过，核验882项正式接口及派生安全基线。证据仅覆盖该命令的静态检查，不代表真实支付渠道联调、完整运行时审计或生产准入；原有未解决生产阻断保留。",
-  "version": "V0.08",
-  "source_base_commit": "af28fdaa7aba42a6a99893ddfd6cc64c2978eb13",
+  "notes": "第五批接口同步后在160实际执行 npm run verify:security-baseline 通过，核验930项正式接口及派生安全基线。证据仅覆盖该命令的静态检查，不代表真实支付渠道联调、完整运行时审计或生产准入；原有未解决生产阻断保留。",
+  "version": "V0.09",
+  "source_base_commit": "db2ce63cee15a70ed6a6a3040a3c0fb1b2d0feb6",
   "source_worktree_modified": true,
-  "openapi_sha256": "55f947ad3c619a85e4a3ced64c0d48d79cc925acdcd9fb634928d275672c6c99"
+  "openapi_sha256": "9b05432aab15ebf5cb2e475e2bddbfed716076716b9330510495a5867cfd6ccb"
 }

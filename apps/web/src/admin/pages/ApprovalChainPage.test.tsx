@@ -5,6 +5,8 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
+// 文件版本：V0.01
+
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
 }
@@ -17,6 +19,8 @@ const PENDING = [
     schedule: { review_id: "review_c1", beneficiary_id: null, due_at: "2026-09-09T02:00:00Z", escalation_count: 0, escalated_at: null, forwarded_to: null } },
   { decision: { review_id: "review_orphan", policy_code: "permission_grant_l2", action_type: "access.grant_request", object_type: "access_grant_request", object_id: "agr_1", initiated_by: "usr_orphan", approval_level: "two_levels_up", required_level: 2, review_status: "pending_review" },
     schedule: null },
+  { decision: { review_id: "review_tax", action_type: "finance.tax_rule.adjust", object_type: "payroll_tax_version", object_id: "tax-version-1", initiated_by: "tax-editor", review_status: "pending_review", reason: '原版：V0.01；完整新版本：{"category":"经专业确认的税目","version":"V0.02","effectiveFrom":"2099-08-01","applicabilityBasis":"专业适用依据原文","calculationBasis":"经确认的逐档公式","roundingRule":"truncate_cent_each_step","brackets":[{"seq":1,"incomeFloorCent":0,"incomeCeilingCent":null,"incomeBaseBps":10000,"flatDeductionCent":0,"rateBps":1500,"quickDeductionCent":0}],"reason":"专业税务核定后调整"}', evidence_attachment_ids: ["proof tax/1"] }, schedule: null },
+  { decision: { review_id: "review_assessment", action_type: "finance.tax_rule.adjust", object_type: "payroll_tax_assessment", object_id: "assessment-1", initiated_by: "tax-editor", review_status: "pending_review", reason: '既有服务收入专业税务认定（非正式申报）：{"userId":"employee-1","month":"2099-07","payerCompanyId":"payer-1","identityBasis":"专业纳税身份核验","transactionBasis":"服务交易专业结论","professionalBasis":"凭证核验结论","incomeCent":1000000,"taxCent":100000,"taxVersionId":"tax-version-1","sourceLines":[{"sourceId":"service-1","amountCent":1000000}]}', evidence_attachment_ids: [] }, schedule: null },
 ];
 const NODES = [
   { node_id: "n1", review_id: "review_c1", line_code: "main", seq: 1, approver_kind: "user", approver_id: "usr_a", status: "approved", decided_by: "usr_a", decided_at: "2026-09-06T03:00:00Z", forwarded_to: null, forwarded_by: null, escalation_count: 0 },
@@ -32,6 +36,34 @@ function makeApi(): AdminApi {
     if (url.includes("/review_orphan/chain/regenerate")) return Promise.resolve(raw([NODES[1]]));
     if (url.includes("/review_c1/chain")) return Promise.resolve(raw(NODES));
     if (url.includes("/review_orphan/chain")) return Promise.resolve(raw([]));
+    if (url.includes("/review_prepayment/chain")) return Promise.resolve(raw([{ ...NODES[1], line_code: "business_review" }]));
+    if (url.endsWith("/review_prepayment")) return Promise.resolve(raw({
+      review_id: "review_prepayment", review_status: "pending_review", object_type: "purchase_prepayment_resolution",
+      object_id: "prepayment-resolution-1", evidence_attachment_ids: [], reason: JSON.stringify({
+        purchase_id: "purchase-1", resolution_type: "refund_unused", source_payment_id: "payment-1",
+        amount_cent: 30000, refund_due_date: "2099-08-20", contract_basis: "余量取消后按合同退款",
+        contract_snapshot: { contract: { contract_mode: "platform_purchase_distribution" }, approved_at: "2099-07-01" },
+      }),
+    }));
+    if (url.includes("/review_day/chain")) return Promise.resolve(raw(NODES));
+    if (url.endsWith("/review_day")) return Promise.resolve(raw({
+      review_id: "review_day", review_status: "pending_review", object_type: "amusement_business_day_config",
+      object_id: "day-1", evidence_attachment_ids: [], reason: "日切调整\n" + JSON.stringify({
+        projectId: "project-1", previousVersions: [{ version: "V0.01", zoneId: "Asia/Shanghai", cutoffHour: 10, status: "approved" }],
+        proposedConfig: { zone_id: "Asia/Shanghai", cutoff_hour: 9, min_cutoff_hour: 7, max_cutoff_hour: 12, effective_at: "2099-08-01T00:00:00Z" },
+      }),
+    }));
+    if (url.includes("/review_tax/chain")) return Promise.resolve(raw(NODES));
+    if (url.includes("/review_assessment/chain")) return Promise.resolve(raw(NODES));
+    if (url.includes("/review_master/chain")) return Promise.resolve(raw([{ node_id: "n-master", review_id: "review_master", line_code: "main", seq: 1, approver_kind: "master", status: "pending" }]));
+    if (url.includes("/review_final/chain")) return Promise.resolve(raw([]));
+    if (url.endsWith("/review_master") && init?.method !== "POST") return Promise.resolve(raw({ ...PENDING.find(row => row.decision.review_id === "review_tax")?.decision, review_id: "review_master" }));
+    if (url.endsWith("/review_final") && init?.method !== "POST") return Promise.resolve(raw({ ...PENDING.find(row => row.decision.review_id === "review_tax")?.decision, review_id: "review_final", review_status: "approved" }));
+    if (url.endsWith("/review_missing") && init?.method !== "POST") return Promise.resolve(new Response(JSON.stringify({ success: false, code: "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN", message: "无权查看该原件" }), { status: 403, headers: { "content-type": "application/json" } }));
+    if (init?.method !== "POST") {
+      const original = PENDING.find(row => url.endsWith(`/supervisor-review/${row.decision.review_id}`));
+      if (original) return Promise.resolve(raw(original.decision));
+    }
     if (url.includes("/approve")) return Promise.resolve(raw({ review_id: "review_c1", review_status: "pending_review", decision: "blocked" }));
     if (url.includes("/forward")) return Promise.resolve(raw({ review_id: "review_c1", forwarded_to: "usr_y" }));
     return Promise.resolve(raw([]));
@@ -85,6 +117,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.decision).toBe("approved");
     expect(body.comment).toBe("证据齐备，同意");
+    expect(body.evidence_attachment_ids).toEqual([]);
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith("复核单 review_c1 当前节点已通过，等待后续节点审批"));
 
     vi.unstubAllGlobals();
@@ -114,5 +147,74 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_c1/forward"));
     expect(JSON.parse(String((call?.[1] as RequestInit | undefined)?.body)).forwarded_to).toBe("usr_y");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith("复核单 review_c1 当前节点已转交给 usr_y"));
+  });
+
+  it("预付余额原件展示真实付款、合同依据和金额，不暴露未翻译的处理枚举", async () => {
+    renderPage(VIEW_ONLY, "review_prepayment");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-original").textContent).toContain("退回未用预付款"));
+    const text = screen.getByTestId("approval-chain-original").textContent ?? "";
+    for (const expected of ["原实际付款编号payment-1", "金额（分）30000", "退款约定到期日2099-08-20", "合同及双方确认依据", "平台统采分销"]) expect(text).toContain(expected);
+    expect(text).not.toMatch(/refund_unused|source_payment_id|contract_mode/);
+    expect(screen.getByText("业务审核线")).toBeTruthy();
+  });
+
+  it("游乐营业日审批原件同时展示旧版本和拟生效的时区、上下限", async () => {
+    renderPage(VIEW_ONLY, "review_day");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-original").textContent).toContain("变更前适用版本"));
+    const text = screen.getByTestId("approval-chain-original").textContent ?? "";
+    expect(text).toContain("拟变更配置");
+    expect(text).toContain("日切小时下限7");
+    expect(text).toContain("日切小时上限12");
+    expect(text).toContain("Asia/Shanghai");
+    expect(text).toContain("2099-08-01T00:00:00Z");
+    expect(text).not.toMatch(/previousVersions|proposedConfig|cutoffHour|approved/);
+  });
+
+  it("真实审批角色读取完整税档原件和受控附件，不依赖税档维护权限或假证据", async () => {
+    const reviewer: EffectivePermissionsState = { status: "ready", value: { grants: ["governance.supervisor_review.view", "governance.supervisor_review.approve", "evidence.timeline.view"], denies: [], wildcard: false } };
+    renderPage(reviewer, "review_tax");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-original")).toBeTruthy());
+    expect(screen.getByTestId("approval-chain-original").textContent).toContain("专业适用依据原文");
+    expect(screen.getByTestId("approval-chain-original").textContent).toContain("1500");
+    expect(screen.getByRole("link", { name: "查看原始凭证 1" })).toHaveAttribute("href", "/api/v1/evidence/attachments/proof%20tax%2F1/file");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("approval-chain-approve"));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/review_tax/approve"))).toBe(true));
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes("/review_tax/approve"));
+    expect(JSON.parse(String(call?.[1]?.body)).evidence_attachment_ids).toEqual(["proof tax/1"]);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/staff/payroll/tax-"))).toBe(false);
+  });
+
+  it("专业认定原件显示身份、交易、来源金额和发放主体", async () => {
+    renderPage(VIEW_ONLY, "review_assessment");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-original")).toBeTruthy());
+    const text = screen.getByTestId("approval-chain-original").textContent;
+    for (const fact of ["纳税身份依据", "专业纳税身份核验", "服务交易专业结论", "原收入（分）", "1000000", "核定税额（分）", "payer-1", "service-1"]) expect(text).toContain(fact);
+  });
+
+  it("未读到原待审单时不能仅凭编号审批", async () => {
+    renderPage(ADMIN_PERMS, "review_missing");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-pending-review_c1")).toBeTruthy());
+    expect(screen.getByTestId("approval-chain-approve")).toBeDisabled();
+    expect(screen.queryByTestId("approval-chain-original")).toBeNull();
+  });
+
+  it("最高权限逐笔读到跨项目原件后可确认，不要求单据出现在待审列表", async () => {
+    renderPage(ADMIN_PERMS, "review_master");
+    expect(screen.queryByTestId("approval-chain-pending-review_master")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("approval-chain-original")).toBeTruthy());
+    expect(screen.getByTestId("approval-chain-original").textContent).toContain("专业适用依据原文");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-approve")).not.toBeDisabled());
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("approval-chain-approve"));
+    await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url).endsWith("/review_master/approve"))).toBe(true));
+  });
+
+  it("逐笔原件已经终结时仍可查看但不能再次裁决", async () => {
+    renderPage(ADMIN_PERMS, "review_final");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-original")).toBeTruthy());
+    expect(screen.getByTestId("approval-chain-approve")).toBeDisabled();
+    expect(screen.getByTestId("approval-chain-reject")).toBeDisabled();
   });
 });

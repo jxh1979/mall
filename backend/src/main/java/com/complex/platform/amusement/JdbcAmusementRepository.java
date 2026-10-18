@@ -1,4 +1,6 @@
 package com.complex.platform.amusement;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -140,8 +142,8 @@ class JdbcAmusementRepository implements AmusementRepository {
     @Override
     public Optional<String> findProjectIdByPointOrDevice(String pointId, String deviceId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("point_id", pointId)
-                .addValue("device_id", deviceId);
+                .addValue("point_id", pointId, java.sql.Types.VARCHAR)
+                .addValue("device_id", deviceId, java.sql.Types.VARCHAR);
         // 设备优先（更具体）：命中 amusement_devices 的 device_code 或 location_point_id → 其 project_id。
         if (deviceId != null || pointId != null) {
             java.util.List<String> byDevice = jdbcTemplate.query("""
@@ -440,6 +442,7 @@ class JdbcAmusementRepository implements AmusementRepository {
 
     @Override
     public AmusementDeviceRecord saveDevice(AmusementDeviceRecord device) {
+        lockProjectForSafety(device.projectId());
         jdbcTemplate.update("""
                 INSERT INTO amusement_devices (
                     id, project_id, device_code, name, status,
@@ -510,6 +513,7 @@ class JdbcAmusementRepository implements AmusementRepository {
 
     @Override
     public void updateDeviceLastPassInspection(String projectId, String deviceCode, java.time.Instant inspectedAt) {
+        lockProjectForSafety(projectId);
         jdbcTemplate.update("""
                 UPDATE amusement_devices
                    SET last_pass_inspection_at = :t, updated_at = :t
@@ -532,6 +536,7 @@ class JdbcAmusementRepository implements AmusementRepository {
 
     @Override
     public void updateProjectDevicesLastPass(String projectId, java.time.Instant inspectedAt) {
+        lockProjectForSafety(projectId);
         jdbcTemplate.update("""
                 UPDATE amusement_devices
                    SET last_pass_inspection_at = :t, updated_at = :t
@@ -757,6 +762,7 @@ class JdbcAmusementRepository implements AmusementRepository {
 
     @Override
     public AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule) {
+        lockProjectForSafety(rule.projectId());
         jdbcTemplate.update("""
                 INSERT INTO amusement_project_rules (
                     id, project_id, rule_type, rule_value, effective_from, effective_to,
@@ -833,6 +839,24 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public List<AmusementSessionRecord> listSessionsScoped(boolean unrestricted,
+            java.util.Set<String> complexIds, String merchantId) {
+        if (!unrestricted && complexIds.isEmpty()) return List.of();
+        String sql = """
+                SELECT s.id, s.project_id, s.start_time, s.end_time, s.capacity, s.used_capacity, s.locked_capacity,
+                       s.status, s.evidence_attachment_ids, s.created_at, s.updated_at
+                  FROM amusement_sessions s
+                  JOIN amusement_projects p ON p.id = s.project_id
+                 WHERE s.complex_id IS NOT NULL
+                """;
+        if (!unrestricted) sql += " AND s.complex_id IN (:complex_ids)";
+        if (merchantId != null) sql += " AND p.merchant_id = :merchant_id";
+        sql += " ORDER BY s.start_time DESC, s.id";
+        return jdbcTemplate.query(sql, new MapSqlParameterSource()
+                .addValue("complex_ids", complexIds).addValue("merchant_id", merchantId), rowMapper::mapSession);
+    }
+
+    @Override
     public Optional<AmusementSessionRecord> findSessionById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, start_time, end_time, capacity, used_capacity, locked_capacity,
@@ -855,91 +879,23 @@ class JdbcAmusementRepository implements AmusementRepository {
                  WHERE id = :id
                    AND :people_count > 0
                    AND used_capacity + locked_capacity + :people_count <= capacity
+                   AND status = 'open'
                 """, Map.of("id", sessionId, "people_count", peopleCount, "updated_at", timestampWithTimeZone(Instant.now())));
         return updated > 0;
     }
 
     @Override
     public CapacityClaimResult claimCapacityAcrossDimensions(CapacityClaimContext context) {
-        java.util.List<String> controlled = new java.util.ArrayList<>();
-        java.util.List<String> incremented = new java.util.ArrayList<>();
-        Instant now = Instant.now();
+        if (context.projectSafetyCapacity() <= 0) {
+            throw com.complex.platform.common.api.ApiException.conflict(
+                    "AMUSEMENT_SAFETY_CAPACITY_MISSING", "项目尚未配置有效硬安全容量");
+        }
         int peopleCount = Math.max(context.peopleCount(), 1);
-
-        controlled.add("session");
-        if (!incrementSessionUsedCapacityIfAvailable(context.sessionId(), peopleCount)) {
-            return new CapacityClaimResult(false, "session", controlled);
+        if (!incrementSnapshotIfAvailable(context, "project", null, null,
+                context.projectSafetyCapacity(), peopleCount, Instant.now())) {
+            return new CapacityClaimResult(false, "project_safety", List.of("project_safety"));
         }
-        incremented.add("session");
-
-        Integer pointDeviceLimit = findPointDeviceCapacityLimit(context);
-        if (pointDeviceLimit != null) {
-            controlled.add("point_device");
-            if (!incrementSnapshotIfAvailable(context, "point_device",
-                    context.locationPointId(), context.deviceId(), pointDeviceLimit, peopleCount, now)) {
-                rollbackIncremented(incremented, context, peopleCount, now);
-                return new CapacityClaimResult(false, "point_device", controlled);
-            }
-            incremented.add("point_device");
-        }
-
-        if (context.projectSafetyCapacity() > 0) {
-            controlled.add("project_safety");
-            if (!incrementSnapshotIfAvailable(context, "project", null, null,
-                    context.projectSafetyCapacity(), peopleCount, now)) {
-                rollbackIncremented(incremented, context, peopleCount, now);
-                return new CapacityClaimResult(false, "project_safety", controlled);
-            }
-            incremented.add("project_safety");
-        }
-
-        return new CapacityClaimResult(true, null, controlled);
-    }
-
-    private void rollbackIncremented(java.util.List<String> incremented, CapacityClaimContext context, int peopleCount, Instant now) {
-        for (String dimension : incremented) {
-            switch (dimension) {
-                case "session" -> jdbcTemplate.update("""
-                        UPDATE amusement_sessions
-                           SET used_capacity = GREATEST(used_capacity - :people_count, 0),
-                               updated_at = :updated_at
-                         WHERE id = :id
-                        """, Map.of("id", context.sessionId(), "people_count", peopleCount, "updated_at", timestampWithTimeZone(now)));
-                case "point_device" -> decrementSnapshot(context, "point_device",
-                        context.locationPointId(), context.deviceId(), peopleCount, now);
-                case "project_safety" -> decrementSnapshot(context, "project", null, null, peopleCount, now);
-                default -> { /* no-op */ }
-            }
-        }
-    }
-
-    /**
-     * 查询该项目命中点位/设备的启用容量配置上限：优先精确匹配 (point, device)，
-     * 退而匹配仅按设备或仅按点位的配置；无任何配置返回 null（该维度跳过，向后兼容）。
-     */
-    private Integer findPointDeviceCapacityLimit(CapacityClaimContext context) {
-        if (context.locationPointId() == null && context.deviceId() == null) {
-            return null;
-        }
-        // 命中口径：config 的点位/设备范围与本次核销点位/设备兼容（config 该列为空=通配，非空=须等于本次值），
-        // 且 config 至少约束一个本次提供的维度。多条命中时取约束更具体（命中维度更多）的一条。
-        return jdbcTemplate.query("""
-                SELECT max_concurrent
-                  FROM amusement_capacity_config
-                 WHERE project_id = :project_id
-                   AND enabled = TRUE
-                   AND (location_point_id IS NULL OR location_point_id = :point_id)
-                   AND (device_id IS NULL OR device_id = :device_id)
-                   AND ((location_point_id IS NOT NULL AND :point_id IS NOT NULL)
-                     OR (device_id IS NOT NULL AND :device_id IS NOT NULL))
-                 ORDER BY (CASE WHEN location_point_id IS NOT NULL THEN 1 ELSE 0 END
-                         + CASE WHEN device_id IS NOT NULL THEN 1 ELSE 0 END) DESC
-                 LIMIT 1
-                """, new MapSqlParameterSource()
-                .addValue("project_id", context.projectId())
-                .addValue("point_id", context.locationPointId(), java.sql.Types.VARCHAR)
-                .addValue("device_id", context.deviceId(), java.sql.Types.VARCHAR),
-                (rs, n) -> rs.getInt("max_concurrent")).stream().findFirst().orElse(null);
+        return new CapacityClaimResult(true, null, List.of("project_safety"));
     }
 
     /** upsert 维度快照（capacity_limit 刷新，occupied 不变）后原子占用本次人数。 */
@@ -981,27 +937,6 @@ class JdbcAmusementRepository implements AmusementRepository {
                    AND occupied_count + :people_count <= capacity_limit
                 """, params);
         return updated > 0;
-    }
-
-    private void decrementSnapshot(CapacityClaimContext context, String dimension,
-            String pointId, String deviceId, int peopleCount, Instant now) {
-        jdbcTemplate.update("""
-                UPDATE amusement_capacity_snapshot
-                   SET occupied_count = GREATEST(occupied_count - :people_count, 0),
-                       updated_at = :updated_at
-                 WHERE project_id = :project_id
-                   AND dimension = :dimension
-                   AND COALESCE(session_id, '') = COALESCE(:session_id, '')
-                   AND COALESCE(location_point_id, '') = COALESCE(:point_id, '')
-                   AND COALESCE(device_id, '') = COALESCE(:device_id, '')
-                """, new MapSqlParameterSource()
-                .addValue("project_id", context.projectId())
-                .addValue("dimension", dimension)
-                .addValue("session_id", "session".equals(dimension) ? context.sessionId() : null)
-                .addValue("point_id", pointId)
-                .addValue("device_id", deviceId)
-                .addValue("people_count", peopleCount)
-                .addValue("updated_at", timestampWithTimeZone(now)));
     }
 
     /** 阶段2 出场/主管释放：按维度键把并发在场 occupied_count -N（下限 0，never negative）。 */
@@ -1079,7 +1014,7 @@ class JdbcAmusementRepository implements AmusementRepository {
      * 阶段2 出场核销原子释放：
      * <ol>
      *   <li>条件 UPDATE 标记入场 released_at（仅当仍未释放）——此条件即幂等/并发赢家判定，rows=0 表示已被释放。</li>
-     *   <li>赢家把该入场占用的并发快照（point_device + project 维度）-N（下限 0）。</li>
+     *   <li>赢家把该入场占用的项目在场人数 -N（下限 0）。</li>
      *   <li>写 direction=exit 记录（entry_verification_id 唯一约束再兜底防重）。</li>
      * </ol>
      * 返回 true=本次真实释放；false=入场已释放（幂等跳过，不重复减容量、不新增 exit）。
@@ -1088,22 +1023,20 @@ class JdbcAmusementRepository implements AmusementRepository {
     public boolean releaseEntryConcurrentCapacity(AmusementVerificationRecord entry, AmusementVerificationRecord exitRecord, Instant now) {
         int marked = jdbcTemplate.update("""
                 UPDATE amusement_verifications
-                   SET released_at = :released_at
+                   SET released_at = :released_at, release_source = 'exit', release_source_id = :exit_id
                  WHERE id = :id
                    AND direction = 'entry'
                    AND verification_result = 'success'
                    AND released_at IS NULL
                 """, new MapSqlParameterSource()
                 .addValue("id", entry.id())
+                .addValue("exit_id", exitRecord.id())
                 .addValue("released_at", timestampWithTimeZone(now)));
         if (marked == 0) {
             return false;
         }
         int people = Math.max(entry.verifiedPeople(), 1);
-        // 与入场 incrementSnapshotIfAvailable 对称：point_device 维（若入场有 point/device）+ project 维各 -N。
-        // 未配置的维度对应 0 行更新，天然幂等（含场次/批次型：无并发快照 → 全 no-op）。
-        decrementConcurrentSnapshot(entry.projectId(), "point_device",
-                entry.locationPointId(), entry.deviceId(), people, now);
+        // 与入场项目人数占用对称，不更新历史场次或点位容量。
         decrementConcurrentSnapshot(entry.projectId(), "project", null, null, people, now);
         saveVerification(exitRecord);
         return true;
@@ -1225,6 +1158,7 @@ class JdbcAmusementRepository implements AmusementRepository {
 
     @Override
     public AmusementSafetyInspectionRecord saveSafetyInspection(AmusementSafetyInspectionRecord inspection) {
+        lockProjectForSafety(inspection.projectId());
         jdbcTemplate.update("""
                 INSERT INTO amusement_safety_inspections (
                     id, project_id, device_id, template_id, items_json, overall_result, inspection_status,
@@ -1711,6 +1645,20 @@ class JdbcAmusementRepository implements AmusementRepository {
      * 硬安全容量取 amusement_projects.capacity 当前配置（>0 才算配置了硬上限）。
      */
     @Override
+    public void lockProjectForSafety(String projectId) {
+        jdbcTemplate.query("SELECT id FROM amusement_projects WHERE id = :id FOR NO KEY UPDATE",
+                Map.of("id", projectId), (rs, n) -> rs.getString("id"));
+    }
+
+    @Override
+    public boolean isHardCapacityPaused(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id FROM amusement_projects WHERE id = :id
+                  AND open_status = 'paused' AND auto_paused_reason = 'hard_capacity'
+                """, Map.of("id", projectId), (rs, n) -> rs.getString("id")).size() == 1;
+    }
+
+    @Override
     public boolean reopenProjectIfHardCapacityRecovered(String projectId, Instant now) {
         int updated = jdbcTemplate.update("""
                 UPDATE amusement_projects p
@@ -1856,12 +1804,10 @@ class JdbcAmusementRepository implements AmusementRepository {
                      FOR UPDATE
                 ), locked_session AS (
                     UPDATE amusement_sessions session
-                       SET locked_capacity = session.locked_capacity + candidate.reserved_capacity,
-                           updated_at = :updated_at
+                       SET updated_at = :updated_at
                       FROM candidate
                      WHERE session.id = candidate.session_id
                        AND session.status IN ('scheduled', 'open')
-                       AND session.used_capacity + session.locked_capacity + candidate.reserved_capacity <= session.capacity
                      RETURNING session.id
                 ), updated_booking AS (
                     UPDATE amusement_group_bookings booking
@@ -1905,8 +1851,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                      FOR UPDATE
                 ), released_session AS (
                     UPDATE amusement_sessions session
-                       SET locked_capacity = GREATEST(session.locked_capacity - candidate.reserved_capacity, 0),
-                           updated_at = :updated_at
+                       SET updated_at = :updated_at
                       FROM candidate
                      WHERE session.id = candidate.session_id
                      RETURNING session.id

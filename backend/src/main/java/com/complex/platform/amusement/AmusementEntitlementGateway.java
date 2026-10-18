@@ -1,5 +1,8 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -22,6 +25,22 @@ public interface AmusementEntitlementGateway {
      * 成功返回 true；剩余次数耗尽（并发耗尽）返回 false。
      */
     boolean consumeEntitlement(String entitlementId);
+
+    enum Consumption { CONSUMED, DAY_REPLAY, UNAVAILABLE }
+
+    /** 消费与营业日重入在同一权益行锁内判定；生产实现必须校验实际日窗。 */
+    default Consumption consumeEntitlement(String entitlementId, AmusementBusinessDayService.Window window, Instant occurredAt) {
+        return consumeEntitlement(entitlementId) ? Consumption.CONSUMED : Consumption.UNAVAILABLE;
+    }
+
+    /** 实际入场保存后，在原事务内生成对应票务事实；失败使整次入场回滚。 */
+    default void recordAdmission(AmusementVerificationRecord admission, AmusementBusinessDayService.Window window,
+            Consumption consumption) {}
+
+    /** 只撤销本次新消费，既有营业日激活的重入不调用此方法。 */
+    default void reverseEntitlement(String entitlementId, AmusementBusinessDayService.Window window, Instant occurredAt) {
+        reverseEntitlement(entitlementId);
+    }
 
     /**
      * 回补一次已消费权益（used_times-1，下限 0），用于权益已扣但后续容量扣减失败时的补偿回滚。

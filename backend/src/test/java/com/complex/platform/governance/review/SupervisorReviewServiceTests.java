@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -57,13 +57,15 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(21); // 包括交付差异、隔离处置、门票奖励及人工核时审批。
+        assertThat(page.total()).isEqualTo(29); // 包括游乐营业日、采购及原有业务审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
                         "permission_grant_l1", "permission_grant_l2", "permission_grant_l3",
                         "staff.shift.publish", "staff.attendance.receipt.review", "staff.payroll.penalty_cap.adjust",
-                        "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal");
+                        "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal",
+                        "energy.reading_anomaly_confirm", "energy.review_settings", "amusement.business_day.configure",
+                        "inventory.purchase_request", "inventory.purchase_terminate", "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution");
         assertThat(page.items())
                 .filteredOn(policy -> "contract_violation".equals(policy.actionType()))
                 .first()
@@ -78,7 +80,8 @@ class SupervisorReviewServiceTests {
 
     @Test
     void deliveryAndSalesContractCannotSkipRequiredParallelReviewsEvenForZeroAmount() {
-        for (String action : List.of("dealer.delivery_resolution", "inventory.quarantine_disposition", "ticket.reward.sales_contract")) {
+        for (String action : List.of("dealer.delivery_resolution", "inventory.quarantine_disposition", "ticket.reward.sales_contract",
+                "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution")) {
             assertThatThrownBy(() -> service.evaluate(evaluate("required-lines-" + action, "业务申请", List.of(),
                     action, "business", "source-1", 0L, null)))
                     .isInstanceOfSatisfying(ApiException.class,

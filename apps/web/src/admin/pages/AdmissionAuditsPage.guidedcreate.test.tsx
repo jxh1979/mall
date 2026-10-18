@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.01
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdmissionAuditsPage } from "./AdmissionAuditsPage";
@@ -8,7 +9,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 // 引导式流程 phase-9：登记证据事件改分步引导弹窗（入口→步进→提交带正确 body + 步内校验拦截不提交）。
 // 需 ≥1 数据让入口按钮进入非空分支渲染（照“关键坑”：empty 门内入口不渲染）。
 const MERCHANTS = [{ id: "m-1", display_name: "商户甲", company_name: "甲公司", cooperation_form: "fixed_rent", status: "active" }];
-const BINDINGS = [{ id: "b-1", business_object_id: "m-1", operator_subject: "运营甲", contract_subject: "合同甲", settlement_subject: "结算甲", status: "active" }];
+const BINDINGS = [{ id: "b-1", merchant_id: "m-1", operation_entity_id: "operation-1", contract_entity_id: "contract-entity-1", settlement_entity_id: "settlement-1", status: "active", effective_from: "2026-01-01", effective_to: "2026-12-31", change_reason: "合同主体确认" }];
 const CONTRACTS = [{ id: "c-1", merchant_id: "m-1", contract_subject_id: "cs-1", operation_subject_id: "os-1", settlement_subject_id: "ss-1", lifecycle_status: "effective", status: "effective" }];
 
 function envelope(items: unknown[]): Response {
@@ -77,6 +78,8 @@ describe("AdmissionAuditsPage 引导式登记证据事件(phase-9)", () => {
     fireEvent.change(screen.getByTestId("admission-audits-export-reason"), { target: { value: "季度准入审计导出" } });
     fireEvent.click(screen.getByTestId("admission-audits-guided-next"));
     await waitFor(() => expect(screen.getByTestId("admission-audits-guided-summary")).toBeTruthy());
+    expect(within(screen.getByTestId("admission-audits-guided-summary")).getByText("三类资料关联")).toBeTruthy();
+    expect(screen.getByTestId("admission-audits-guided-summary").textContent).not.toContain("准入闭环");
     fireEvent.click(screen.getByTestId("admission-audits-export"));
 
     await waitFor(() => expect(lastPostBody).toBeTruthy());

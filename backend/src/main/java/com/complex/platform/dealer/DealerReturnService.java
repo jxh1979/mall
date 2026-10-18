@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -70,9 +70,11 @@ public class DealerReturnService {
     private final IdempotencyService idempotency;
     private final AuditEventService audit;
     private final SupervisorReviewService reviews;
+    private final DealerReturnFinancialService financial;
+    private final com.complex.platform.inventory.InventoryQuarantineService quarantine;
 
     public DealerReturnService(JdbcDealerReturnRepository returns, JdbcDealerOrderRepository orders, JdbcDealerRepository dealers,
-            AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit, SupervisorReviewService reviews, JdbcDealerDeliveryRepository delivery) {
+            AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit, SupervisorReviewService reviews, JdbcDealerDeliveryRepository delivery, DealerReturnFinancialService financial, com.complex.platform.inventory.InventoryQuarantineService quarantine) {
         this.returns = returns;
         this.orders = orders;
         this.delivery = delivery;
@@ -81,6 +83,7 @@ public class DealerReturnService {
         this.idempotency = idempotency;
         this.audit = audit;
         this.reviews = reviews;
+        this.financial=financial;this.quarantine=quarantine;
     }
 
     // ── 查询 ──
@@ -125,43 +128,58 @@ public class DealerReturnService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerReturnRecord requestReturn(String orderId, DealerReturnRequest request, String permission) {
         try {
-            DealerOrderRecord order = requireOrder(orderId);
-            if (!RETURNABLE_ORDER_STATUSES.contains(order.status())) {
-                throw ApiException.conflict("DEALER_ORDER_STATUS_INVALID", "订单签收后才可申请退货：" + order.status());
+            requireOrder(orderId);
+            if (MANAGE.equals(permission)) {
+                String project=orders.findOrderProjectId(orderId).orElse(null);
+                if(project==null || !authorization.canReachProject(authorization.currentActor(),project,permission))
+                    throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN","退货申请不在授权项目范围内");
             }
-            String reason = requireText(request == null ? null : request.reasonType(), "reason_type").trim().toLowerCase(Locale.ROOT);
-            if (!REASONS.contains(reason)) {
-                throw ApiException.badRequest("RETURN_REASON_NOT_ALLOWED", "合同期限内仅未拆封可复售商品或质量问题商品可以申请退货");
-            }
-            DealerContractRecord contract = order.contractSnapshot();
-            if (contract == null) throw ApiException.conflict("DEALER_CONTRACT_SNAPSHOT_REQUIRED", "原订单缺少锁定合同快照，须先核实原合同事实");
-            if (contract.validTo().isBefore(LocalDate.now())) {
-                throw ApiException.conflict("DEALER_CONTRACT_EXPIRED", "合同期限已过，不得申请退货");
-            }
-            if (request.lines() == null || request.lines().isEmpty()) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "退货至少一条明细");
-            }
-            List<DealerOrderLineRecord> orderLines = orders.listLines(orderId);
-            List<DealerReturnLineRecord> lines = new ArrayList<>();
-            int requested = 0;
-            String returnId = "dret_" + UUID.randomUUID();
-            for (DealerReturnLineRequest line : request.lines()) {
-                if (line == null || line.itemId() == null || line.quantity() == null || line.quantity() <= 0) {
-                    throw ApiException.badRequest("VALIDATION_FAILED", "每条退货明细须填写商品与大于 0 的数量");
+            return idempotency.execute("dealerReturnRequest:" + orderId, request == null ? null : request.idempotencyKey(), request, () -> {
+                DealerOrderRecord order=orders.lockOrder(orderId).orElseThrow();
+                if (!RETURNABLE_ORDER_STATUSES.contains(order.status())) {
+                    throw ApiException.conflict("DEALER_ORDER_STATUS_INVALID", "订单签收后才可申请退货：" + order.status());
                 }
-                String spec = line.spec() == null ? "" : line.spec().trim();
-                DealerOrderLineRecord orderLine = orderLines.stream().filter(l -> l.itemId().equals(line.itemId().trim()) && l.spec().equals(spec)).findFirst()
-                        .orElseThrow(() -> ApiException.badRequest("RETURN_LINE_NOT_IN_ORDER", "退货商品不在原订单内：" + line.itemId()));
-                int returnable = delivery.acceptedQuantity(orderId, orderLine.id()) - orderLine.returnedQuantity() - returns.pendingReturnQuantity(orderLine.id());
-                if (line.quantity() > returnable) {
-                    throw ApiException.conflict("RETURN_QUANTITY_EXCEEDS", "退货数量超过实际合格接收且尚未退回的数量：" + line.itemId());
+                String reason = requireText(request == null ? null : request.reasonType(), "reason_type").trim().toLowerCase(Locale.ROOT);
+                if (!REASONS.contains(reason)) {
+                    throw ApiException.badRequest("RETURN_REASON_NOT_ALLOWED", "合同期限内仅未拆封可复售商品或质量问题商品可以申请退货");
                 }
-                requested += line.quantity();
-                lines.add(new DealerReturnLineRecord("drl_" + UUID.randomUUID(), returnId, orderLine.id(), orderLine.itemId(), spec, line.quantity(), 0, 0, 0,
-                        orderLine.unitPriceCent(), 0L, null));
-            }
-            int total = requested;
-            return idempotency.execute("dealerReturnRequest:" + orderId, request.idempotencyKey(), request, () -> {
+                DealerContractRecord contract = order.contractSnapshot();
+                if (contract == null) throw ApiException.conflict("DEALER_CONTRACT_SNAPSHOT_REQUIRED", "原订单缺少锁定合同快照，须先核实原合同事实");
+                if (contract.validTo().isBefore(LocalDate.now())) {
+                    throw ApiException.conflict("DEALER_CONTRACT_EXPIRED", "合同期限已过，不得申请退货");
+                }
+                if (request.lines() == null || request.lines().isEmpty()) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "退货至少一条明细");
+                }
+                List<DealerOrderLineRecord> orderLines = orders.listLines(orderId);
+                List<DealerReturnLineRecord> lines = new ArrayList<>();
+                int requested = 0;
+                var sourceRemaining=new HashMap<String,Integer>();
+                var sources=returns.returnSources(orderId);
+                sources.forEach(v->sourceRemaining.put(v.receiptLineId(),v.availableQuantity()));
+                String returnId = "dret_" + UUID.randomUUID();
+                for (DealerReturnLineRequest line : request.lines()) {
+                    if (line == null || line.itemId() == null || line.quantity() == null || line.quantity() <= 0) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "每条退货明细须填写商品与大于 0 的数量");
+                    }
+                    String spec = line.spec() == null ? "" : line.spec().trim();
+                    DealerOrderLineRecord orderLine = orderLines.stream().filter(l -> l.itemId().equals(line.itemId().trim()) && l.spec().equals(spec)).findFirst()
+                            .orElseThrow(() -> ApiException.badRequest("RETURN_LINE_NOT_IN_ORDER", "退货商品不在原订单内：" + line.itemId()));
+                    int returnable = delivery.acceptedQuantity(orderId, orderLine.id()) - orderLine.returnedQuantity() - returns.pendingReturnQuantity(orderLine.id());
+                    if (line.quantity() > returnable) {
+                        throw ApiException.conflict("RETURN_QUANTITY_EXCEEDS", "退货数量超过实际合格接收且尚未退回的数量：" + line.itemId());
+                    }
+                    var matching=sources.stream().filter(v->v.orderLineId().equals(orderLine.id()) && sourceRemaining.get(v.receiptLineId())>0
+                            && (line.sourceReceiptLineId()==null || line.sourceReceiptLineId().equals(v.receiptLineId()))).toList();
+                    if(matching.size()!=1) throw ApiException.conflict("DEALER_RETURN_SOURCE_REQUIRED","存在多个实际签收批次，请逐批选择退回来源和数量");
+                    String source=matching.getFirst().receiptLineId();
+                    if(line.quantity()>sourceRemaining.get(source)) throw ApiException.conflict("RETURN_QUANTITY_EXCEEDS","退回数量超过本批实际签收未退数量");
+                    sourceRemaining.put(source,sourceRemaining.get(source)-line.quantity());
+                    requested += line.quantity();
+                    lines.add(new DealerReturnLineRecord("drl_" + UUID.randomUUID(), returnId, orderLine.id(), orderLine.itemId(), spec, line.quantity(), 0, 0, 0,
+                            orderLine.unitPriceCent(), 0L, null,source));
+                }
+                int total = requested;
                 Instant now = Instant.now();
                 // 退回运费承担方：质量问题＝销售主体；非质量＝合同约定，未约定＝待双方确认
                 String bearer = "quality_issue".equals(reason) ? "sales_entity" : (contract.returnFreightBearer() == null ? "pending_confirmation" : contract.returnFreightBearer());
@@ -250,19 +268,28 @@ public class DealerReturnService {
             requireStatus(ret, "inspecting");
             List<DealerReturnLineRecord> lines = returns.listLines(returnId);
             List<DealerReturnLineRecord> inspected = new ArrayList<>();
+            var seen=new java.util.HashSet<String>();
             for (DealerReturnInspectionLineRequest in : request.lines()) {
                 String spec = in.spec() == null ? "" : in.spec().trim();
-                DealerReturnLineRecord line = lines.stream().filter(l -> l.itemId().equals(in.itemId()) && l.spec().equals(spec)).findFirst()
-                        .orElseThrow(() -> ApiException.badRequest("RETURN_LINE_NOT_FOUND", "验收明细不在退货单内：" + in.itemId()));
+                var matching=lines.stream().filter(l->l.itemId().equals(in.itemId()) && l.spec().equals(spec)
+                        && (in.returnLineId()==null || in.returnLineId().equals(l.id()))).toList();
+                if(matching.size()!=1) throw ApiException.badRequest("RETURN_LINE_NOT_FOUND","请选择具体退货明细及原签收来源");
+                DealerReturnLineRecord line=matching.getFirst();
+                if(!seen.add(line.id())) throw ApiException.badRequest("VALIDATION_FAILED","同一退货明细不能重复验收");
                 int accepted = in.acceptedQuantity() == null ? 0 : in.acceptedQuantity();
                 int resalable = in.resalableQuantity() == null ? 0 : in.resalableQuantity();
                 int quarantined = in.quarantinedQuantity() == null ? 0 : in.quarantinedQuantity();
-                if (accepted < 0 || accepted > line.requestedQuantity() || resalable + quarantined != accepted) {
+                if (accepted < 0 || resalable < 0 || quarantined < 0 || accepted > line.requestedQuantity() || resalable + quarantined != accepted) {
                     throw ApiException.badRequest("VALIDATION_FAILED", "验收数量须不超过申请数量，且可复售 + 隔离 = 验收数量");
                 }
+                if (accepted > 0 && returns.hasDiscountedRetainedGoods(line.sourceReceiptLineId())) {
+                    throw ApiException.conflict("DEALER_RETURN_PRICE_BASIS_PENDING",
+                            "原签收来源含已减价留用商品，退货计价口径尚未确认，暂不能办理货款结算");
+                }
                 inspected.add(new DealerReturnLineRecord(line.id(), returnId, line.orderLineId(), line.itemId(), line.spec(), line.requestedQuantity(), accepted,
-                        resalable, quarantined, line.unitPriceCent(), line.unitPriceCent() * accepted, trim(in.note())));
+                        resalable, quarantined, line.unitPriceCent(), line.unitPriceCent() * accepted, trim(in.note()),line.sourceReceiptLineId()));
             }
+            if(seen.size()!=lines.size()) throw ApiException.badRequest("VALIDATION_FAILED","须逐条记录所有退货明细的实际验收结果，未接收明确填零");
             return idempotency.execute("dealerReturnInspect:" + returnId, request.idempotencyKey(), request, () -> {
                 Instant now = Instant.now();
                 String actor = actorId();
@@ -272,12 +299,7 @@ public class DealerReturnService {
                     returns.saveLine(line);
                     acceptedQty += line.acceptedQuantity();
                     acceptedAmount += line.acceptedAmountCent();
-                    if (line.resalableQuantity() > 0) {
-                        returns.restock(line.itemId(), order.centralWarehouseId(), line.resalableQuantity(), returnId, actor);
-                    }
-                    if (line.quarantinedQuantity() > 0) {
-                        returns.quarantine(line.itemId(), order.centralWarehouseId(), line.quarantinedQuantity(), returnId, actor);
-                    }
+                    if(line.acceptedQuantity()>0) quarantine.receiveDealerReturnLine(line.id(),now,request.evidenceAttachmentIds());
                     if (line.acceptedQuantity() > 0) {
                         orders.addReturnedQuantity(line.orderLineId(), line.acceptedQuantity());
                     }
@@ -288,8 +310,8 @@ public class DealerReturnService {
                 long unpaid = Math.max(0, order.netReceivableCent() - order.paidAmountCent());
                 long offset = Math.min(acceptedAmount, unpaid);
                 long refund = acceptedAmount - offset;
-                if (offset > 0 && order.arApItemId() != null) {
-                    returns.offsetReceivable(order.arApItemId(), offset);
+                if (acceptedAmount > 0 && order.arApItemId() != null) {
+                    returns.offsetReceivable(order.arApItemId(), acceptedAmount);
                 }
                 orders.applyReturn(order.id(), acceptedAmount, "returning");
                 if (order.overdue() && !orders.dealerHasOverdueOrders(order.dealerId())) {
@@ -309,6 +331,7 @@ public class DealerReturnService {
                         ret.firstLegFreightRefundable(), ret.freightConfirmed(), ret.approvedBy(), ret.approvedAt(), ret.receivedBy(), ret.receivedAt(), actor, now,
                         null, null, null, null, ret.note(), ret.createdBy(), ret.createdAt(), now);
                 returns.saveReturn(saved);
+                financial.goodsAccepted(order.id());
                 if (!invoiced && refund == 0) {
                     finalizeOrderStatus(order.id());
                 }
@@ -328,48 +351,7 @@ public class DealerReturnService {
     /** BSM:1242：已开票退货先全额红冲原发票，再按最新未退金额重开；全部退货红冲后不重开。随后进入退款或结清。 */
     @Transactional
     public DealerReturnRecord reverseInvoice(String returnId, DealerInvoiceIssueRequest request) {
-        authorization.requirePermission(INVOICE_MANAGE);
-        try {
-            DealerReturnRecord ret = requireReturn(returnId);
-            requireStatus(ret, "pending_reversal");
-            DealerOrderRecord order = requireOrder(ret.orderId());
-            DealerInvoiceRecord original = returns.findActiveInvoice(order.id()).filter(v -> "issued".equals(v.status()))
-                    .orElseThrow(() -> ApiException.conflict("DEALER_INVOICE_NOT_ISSUED", "订单没有已开具的发票可红冲"));
-            return idempotency.execute("dealerReturnReverse:" + returnId, request == null ? null : request.idempotencyKey(), request, () -> {
-                Instant now = Instant.now();
-                String actor = actorId();
-                returns.saveInvoice(new DealerInvoiceRecord(original.id(), original.orderId(), original.dealerId(), original.salesEntityId(), original.amountCent(),
-                        original.taxRateBps(), "reversed", original.invoiceNo(), returnId, original.reissuedFromInvoiceId(), original.requestedBy(), original.requestedAt(),
-                        original.issuedBy(), original.issuedAt(), now, original.note()));
-                long remaining = order.netReceivableCent();
-                boolean allReturned = orders.listLines(order.id()).stream().allMatch(l -> l.returnedQuantity() >= l.quantity());
-                String reissuedId = null;
-                // 全部退货红冲后不重开（BSM:1242）；部分退货按最新未退金额（含已含在发票内的运费）重开
-                if (!allReturned && remaining > 0) {
-                    String invoiceNo = request == null ? null : trim(request.invoiceNo());
-                    reissuedId = "dinv_" + UUID.randomUUID();
-                    returns.saveInvoice(new DealerInvoiceRecord(reissuedId, order.id(), order.dealerId(), order.salesEntityId(), remaining, original.taxRateBps(),
-                            invoiceNo == null ? "pending" : "issued", invoiceNo, null, original.id(), actor, now, invoiceNo == null ? null : actor,
-                            invoiceNo == null ? null : now, null, "红冲后按最新未退金额重开"));
-                }
-                String reviewId = ret.refundCent() > 0 ? openRefundReview(ret, ret.refundCent(), request == null ? returnId : request.idempotencyKey()) : null;
-                String next = ret.refundCent() > 0 ? "pending_refund" : finalStatus(ret.requestedQuantity(), ret.acceptedQuantity());
-                DealerReturnRecord saved = new DealerReturnRecord(ret.id(), ret.returnNo(), ret.orderId(), ret.dealerId(), ret.salesEntityId(), next, ret.reasonType(),
-                        ret.requestedQuantity(), ret.acceptedQuantity(), ret.acceptedAmountCent(), ret.offsetReceivableCent(), ret.refundCent(), ret.refundedCent(),
-                        reviewId, false, ret.returnFreightBearer(), ret.firstLegFreightRefundable(), ret.freightConfirmed(), ret.approvedBy(), ret.approvedAt(),
-                        ret.receivedBy(), ret.receivedAt(), ret.inspectedBy(), ret.inspectedAt(), null, null, null, null, ret.note(), ret.createdBy(), ret.createdAt(), now);
-                returns.saveReturn(saved);
-                if (ret.refundCent() == 0) {
-                    finalizeOrderStatus(order.id());
-                }
-                audit.recordSuccess("dealer.invoice.reversed", INVOICE_MANAGE, "dealer_invoice", original.id(), null, request == null ? null : request.idempotencyKey(),
-                        meta("return_id", returnId, "reissued_invoice_id", nz(reissuedId), "remaining_amount_cent", remaining));
-                return saved;
-            }, DealerReturnRecord.class);
-        } catch (RuntimeException e) {
-            audit.recordFailure("dealer.invoice.reverse_failed", INVOICE_MANAGE, "dealer_return", returnId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
-            throw e;
-        }
+        return financial.requestReturnReversal(returnId,request);
     }
 
     // ── 运费确认 ──
@@ -377,32 +359,7 @@ public class DealerReturnService {
     /** BSM:1240：合同未约定时由双方确认退回运费承担方与首程运费退不退（留痕）。 */
     @Transactional
     public DealerReturnRecord confirmReturnFreight(String returnId, DealerReturnFreightConfirmRequest request) {
-        authorization.requirePermission(MANAGE);
-        try {
-            DealerReturnRecord ret = requireReturn(returnId);
-            String bearer = requireText(request == null ? null : request.returnFreightBearer(), "return_freight_bearer").trim();
-            if (!Set.of("dealer", "sales_entity").contains(bearer)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "退回运费承担方须为经销商（dealer）或销售主体（sales_entity）");
-            }
-            if ("quality_issue".equals(ret.reasonType()) && !"sales_entity".equals(bearer)) {
-                throw ApiException.conflict("RETURN_FREIGHT_RULE_FIXED", "质量问题的退回运费由合同销售主体承担，不得改为经销商");
-            }
-            return idempotency.execute("dealerReturnFreight:" + returnId, request.idempotencyKey(), request, () -> {
-                Instant now = Instant.now();
-                DealerReturnRecord saved = new DealerReturnRecord(ret.id(), ret.returnNo(), ret.orderId(), ret.dealerId(), ret.salesEntityId(), ret.status(), ret.reasonType(),
-                        ret.requestedQuantity(), ret.acceptedQuantity(), ret.acceptedAmountCent(), ret.offsetReceivableCent(), ret.refundCent(), ret.refundedCent(),
-                        ret.refundReviewId(), ret.refundApproved(), bearer, request.firstLegFreightRefundable() == null ? ret.firstLegFreightRefundable() : request.firstLegFreightRefundable(),
-                        true, ret.approvedBy(), ret.approvedAt(), ret.receivedBy(), ret.receivedAt(), ret.inspectedBy(), ret.inspectedAt(), ret.refundExecutedBy(),
-                        ret.refundExecutedAt(), ret.refundReferenceNo(), ret.failureReason(), ret.note(), ret.createdBy(), ret.createdAt(), now);
-                returns.saveReturn(saved);
-                audit.recordSuccess("dealer.return.freight_confirmed", MANAGE, "dealer_return", returnId, null, request.idempotencyKey(),
-                        meta("return_freight_bearer", bearer, "first_leg_freight_refundable", String.valueOf(saved.firstLegFreightRefundable()), "note", nz(request.note())));
-                return saved;
-            }, DealerReturnRecord.class);
-        } catch (RuntimeException e) {
-            audit.recordFailure("dealer.return.freight_confirm_failed", MANAGE, "dealer_return", returnId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
-            throw e;
-        }
+        return financial.confirmFreight(returnId,request);
     }
 
     // ── 退款 ──
@@ -427,49 +384,23 @@ public class DealerReturnService {
         if (ret == null || !"approved".equals(decision.reviewStatus())) {
             return;
         }
+        var order=orders.findOrder(ret.orderId()).orElseThrow();dealers.lockDealerCredit(order.dealerId()).orElseThrow();orders.lockOrder(order.id()).orElseThrow();
+        ret=returns.findReturnByReview(decision.reviewId()).orElseThrow();
+        if(!ret.id().equals(decision.objectId()) || !Set.of("pending_refund","refund_failed").contains(ret.status())) return;
         returns.saveReturn(withRefundApproved(ret));
         audit.recordSuccess("dealer.return.refund_approved", null, "dealer_return", ret.id(), null, null, meta("review_id", decision.reviewId()));
     }
 
-    /** 退款执行结果：执行人≠验收人（ENUM:178）；成功 → 已退金额计入并结清；失败 → 退款失败（可重试）。 */
+    /** 退款执行结果：执行人≠验收人（ENUM:178）；本入口拒绝手填结果，实际退款由统一财务执行与独立结果确认回写。 */
     @Transactional
     public DealerReturnRecord recordRefundResult(String returnId, DealerReturnRefundResultRequest request) {
         authorization.requirePermission(REFUND_EXECUTE);
-        try {
-            DealerReturnRecord ret = requireReturn(returnId);
-            requireStatus(ret, "pending_refund", "refund_failed");
-            if (!ret.refundApproved()) {
-                throw ApiException.conflict("DEALER_REFUND_NOT_APPROVED", "退款须经既有退款审批通过后才能执行");
-            }
-            String actor = actorId();
-            if (Objects.equals(actor, ret.inspectedBy())) {
-                throw ApiException.forbidden("DEALER_SOD_SAME_PERSON", "退货验收人不得执行退款");
-            }
-            String result = requireText(request == null ? null : request.result(), "result").trim().toLowerCase(Locale.ROOT);
-            if (!Set.of("success", "failed").contains(result)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "退款结果须为成功（success）或失败（failed）");
-            }
-            return idempotency.execute("dealerReturnRefund:" + returnId, request.idempotencyKey(), request, () -> {
-                Instant now = Instant.now();
-                boolean ok = "success".equals(result);
-                String next = ok ? finalStatus(ret.requestedQuantity(), ret.acceptedQuantity()) : "refund_failed";
-                DealerReturnRecord saved = new DealerReturnRecord(ret.id(), ret.returnNo(), ret.orderId(), ret.dealerId(), ret.salesEntityId(), next, ret.reasonType(),
-                        ret.requestedQuantity(), ret.acceptedQuantity(), ret.acceptedAmountCent(), ret.offsetReceivableCent(), ret.refundCent(), ok ? ret.refundCent() : 0L,
-                        ret.refundReviewId(), ret.refundApproved(), ret.returnFreightBearer(), ret.firstLegFreightRefundable(), ret.freightConfirmed(), ret.approvedBy(),
-                        ret.approvedAt(), ret.receivedBy(), ret.receivedAt(), ret.inspectedBy(), ret.inspectedAt(), actor, now, ok ? trim(request.referenceNo()) : null,
-                        ok ? null : trim(request.failureReason()), ret.note(), ret.createdBy(), ret.createdAt(), now);
-                returns.saveReturn(saved);
-                if (ok) {
-                    finalizeOrderStatus(ret.orderId());
-                }
-                audit.recordSuccess(ok ? "dealer.return.refund_executed" : "dealer.return.refund_failed", REFUND_EXECUTE, "dealer_return", returnId, null, request.idempotencyKey(),
-                        meta("amount_cent", ret.refundCent(), "status", next, "reference_no", nz(request.referenceNo()), "failure_reason", nz(request.failureReason())));
-                return saved;
-            }, DealerReturnRecord.class);
-        } catch (RuntimeException e) {
-            audit.recordFailure("dealer.return.refund_execute_failed", REFUND_EXECUTE, "dealer_return", returnId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
-            throw e;
-        }
+        var ret=requireReturn(returnId);
+        String project=orders.findOrderProjectId(ret.orderId()).orElse(null);
+        if(project==null || !authorization.canReachProject(authorization.currentActor(),project,REFUND_EXECUTE)) throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN","退款不在授权项目范围内");
+        audit.recordFailure("dealer.return.refund_execute_failed",REFUND_EXECUTE,"dealer_return",returnId,null,
+                request==null?null:request.idempotencyKey(),"DEALER_REFUND_REAL_RESULT_REQUIRED");
+        throw ApiException.conflict("DEALER_REFUND_REAL_RESULT_REQUIRED","请从退货退款待办进入统一财务执行和独立结果确认，不能手填退款成功");
     }
 
     // ── 发票 ──
@@ -477,71 +408,24 @@ public class DealerReturnService {
     /** BSM:1242：订单签收后才可按最终未退金额申请电子发票（不以已收款封顶）；同一订单同时只有一张有效发票。 */
     @Transactional
     public DealerInvoiceRecord requestInvoice(String orderId, DealerInvoiceRequest request) {
-        authorization.requirePermission(INVOICE_MANAGE);
-        try {
-            DealerOrderRecord order = requireOrder(orderId);
-            if (!RETURNABLE_ORDER_STATUSES.contains(order.status()) && !"returned".equals(order.status())) {
-                throw ApiException.conflict("DEALER_ORDER_STATUS_INVALID", "订单签收后才可申请电子发票：" + order.status());
-            }
-            if (returns.findActiveInvoice(orderId).isPresent()) {
-                throw ApiException.conflict("DEALER_INVOICE_EXISTS", "该订单已有有效发票，退货须先红冲");
-            }
-            long amount = order.netReceivableCent();
-            if (amount <= 0) {
-                throw ApiException.conflict("DEALER_INVOICE_AMOUNT_ZERO", "最终未退金额为零，无可开票金额");
-            }
-            return idempotency.execute("dealerInvoiceRequest:" + orderId, request == null ? null : request.idempotencyKey(), request, () -> {
-                Instant now = Instant.now();
-                Integer taxRate = orders.listLines(orderId).stream().map(DealerOrderLineRecord::taxRateBps).filter(Objects::nonNull).findFirst().orElse(null);
-                DealerInvoiceRecord invoice = new DealerInvoiceRecord("dinv_" + UUID.randomUUID(), orderId, order.dealerId(), order.salesEntityId(), amount, taxRate,
-                        "pending", null, null, null, actorId(), now, null, null, null, request == null ? null : trim(request.note()));
-                returns.saveInvoice(invoice);
-                audit.recordSuccess("dealer.invoice.requested", INVOICE_MANAGE, "dealer_invoice", invoice.id(), null, request == null ? null : request.idempotencyKey(),
-                        meta("order_id", orderId, "amount_cent", amount, "sales_entity_id", order.salesEntityId()));
-                return invoice;
-            }, DealerInvoiceRecord.class);
-        } catch (RuntimeException e) {
-            audit.recordFailure("dealer.invoice.request_failed", INVOICE_MANAGE, "dealer_invoice", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
-            throw e;
-        }
+        return financial.requestInvoice(orderId,request);
     }
 
     /** 开具：第三方开票平台回填发票号（本系统不生成）。 */
     @Transactional
     public DealerInvoiceRecord issueInvoice(String invoiceId, DealerInvoiceIssueRequest request) {
-        authorization.requirePermission(INVOICE_MANAGE);
-        try {
-            DealerInvoiceRecord invoice = returns.findInvoice(requireText(invoiceId, "invoice_id"))
-                    .orElseThrow(() -> ApiException.notFound("DEALER_INVOICE_NOT_FOUND", "发票不存在"));
-            requireOrder(invoice.orderId());
-            if (!Set.of("pending", "issuing", "failed").contains(invoice.status())) {
-                throw ApiException.conflict("DEALER_INVOICE_STATUS_INVALID", "只有待开票 / 开票中 / 开票失败的发票可以开具");
-            }
-            String no = requireText(request == null ? null : request.invoiceNo(), "invoice_no");
-            return idempotency.execute("dealerInvoiceIssue:" + invoiceId, request.idempotencyKey(), request, () -> {
-                Instant now = Instant.now();
-                DealerInvoiceRecord saved = new DealerInvoiceRecord(invoice.id(), invoice.orderId(), invoice.dealerId(), invoice.salesEntityId(), invoice.amountCent(),
-                        invoice.taxRateBps(), "issued", no.trim(), null, invoice.reissuedFromInvoiceId(), invoice.requestedBy(), invoice.requestedAt(), actorId(), now, null, invoice.note());
-                returns.saveInvoice(saved);
-                audit.recordSuccess("dealer.invoice.issued", INVOICE_MANAGE, "dealer_invoice", invoiceId, null, request.idempotencyKey(),
-                        meta("invoice_no", no.trim(), "amount_cent", invoice.amountCent()));
-                return saved;
-            }, DealerInvoiceRecord.class);
-        } catch (RuntimeException e) {
-            audit.recordFailure("dealer.invoice.issue_failed", INVOICE_MANAGE, "dealer_invoice", invoiceId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
-            throw e;
-        }
+        return financial.issueInvoice(invoiceId,request);
     }
 
     // ── helpers ──
 
-    /** 退货单结清后订单状态：全部已出库数量退回 → 已退货；否则 → 部分退货（仍有在途退货则保持退货中）。 */
+    /** 交付数量全部处理完且实际合格接收商品全退 → 已退货；仍有在途退货则保持退货中。 */
     private void finalizeOrderStatus(String orderId) {
         if (returns.hasOpenReturn(orderId)) {
             orders.updateOrderStatus(orderId, "returning");
             return;
         }
-        boolean allReturned = orders.listLines(orderId).stream().allMatch(l -> l.returnedQuantity() >= l.quantity());
+        boolean allReturned = delivery.allAcceptedGoodsReturned(orderId, orders.listLines(orderId));
         orders.updateOrderStatus(orderId, allReturned ? "returned" : "partially_returned");
     }
 

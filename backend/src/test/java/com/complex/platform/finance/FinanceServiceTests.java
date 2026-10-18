@@ -1,12 +1,14 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -76,8 +78,17 @@ class FinanceServiceTests {
         // AUD-007 退款额度闸已 fail-closed 常在：默认给宽松引擎 + 操作者，令既有「额度内退款成功」用例仍过；
         // 具体拒绝/额度场景各用例自行覆盖 refundAuthorizationService/currentActor。
         service.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
-        when(authorizationService.currentActor()).thenReturn(
-                new AccessActor("op_default", "op_default", "staff", "org_1", null, "active"));
+        when(authorizationService.currentProjectScopeQuietly()).thenAnswer(call->
+                authorizationService.currentMerchantScope().isPresent() ? Optional.of("org_1") : Optional.empty());
+        when(authorizationService.currentActor()).thenAnswer(call->new AccessActor("op_default","op_default",
+                authorizationService.currentProjectScopeQuietly().isPresent() ? "staff" : "platform_admin",
+                authorizationService.currentProjectScopeQuietly().orElse("org_1"),
+                authorizationService.currentMerchantScope().orElse(null),"active"));
+        when(authorizationService.projectReach(any(),any(String[].class))).thenAnswer(call->{
+            var project=authorizationService.currentProjectScopeQuietly();
+            return project.isPresent() ? AuthorizationService.ProjectReach.ownOnly(project.get())
+                    : new AuthorizationService.ProjectReach(true,true,"org_1",true,java.util.Set.of());
+        });
     }
 
     private static RefundAuthorizationRepository permissiveRefundRepo() {
@@ -542,8 +553,8 @@ class FinanceServiceTests {
     void closeReconciliationDifferenceMarksClosedIdempotentlyWithReason() {
         // 1.6：对账差异正式关闭——落 closed + close_reason + 审计，重复 close 幂等。
         seedReconciliationBatch("recon_batch_close");
-        when(authorizationService.currentActor()).thenReturn(
-                new AccessActor("op_close", "op_close", "staff", "org_1", null, "active"));
+        doReturn(new AccessActor("op_close", "op_close", "staff", "org_1", null, "active"))
+                .when(authorizationService).currentActor();
         financeRepository.platformExpectedByRef.put("payment_close", 50000L);
         ReconciliationDifferenceRecord diff = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
                 "diff-close", "note", List.of(),
@@ -707,21 +718,25 @@ class FinanceServiceTests {
     void crossProjectSettlementIsForbidden() {
         // 项目 A 创建的应收,项目 B 的财务员不得登记收款(project_id 越权)。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
-        when(authorizationService.currentProjectScopeQuietly()).thenReturn(Optional.of("project_A"));
+        doReturn(Optional.of("project_A")).when(authorizationService).currentProjectScopeQuietly();
         ArApItemRecord item = service.createArApItem(itemRequest("arap-cross-proj", "receivable", 50000L));
 
         // 切到项目 B 调用方。
-        when(authorizationService.currentProjectScopeQuietly()).thenReturn(Optional.of("project_B"));
+        doReturn(Optional.of("project_B")).when(authorizationService).currentProjectScopeQuietly();
+        assertThat(authorizationService.currentActor().merchantId()).isNull();
+        assertThat(authorizationService.currentActor().organizationId()).isEqualTo("project_B");
         assertThatThrownBy(() -> service.registerArApPayment(item.id(), paymentRequest("pay-cross-proj", 10000L)))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("CROSS_PROJECT_FORBIDDEN");
+        assertThat(financeRepository.listArApPayments(item.id())).isEmpty();
+        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().paidAmountCent()).isZero();
     }
 
     @Test
     void sameProjectSettlementIsAllowed() {
         // 同项目正常放行(不误伤)。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
-        when(authorizationService.currentProjectScopeQuietly()).thenReturn(Optional.of("project_A"));
+        doReturn(Optional.of("project_A")).when(authorizationService).currentProjectScopeQuietly();
         ArApItemRecord item = service.createArApItem(itemRequest("arap-same-proj", "receivable", 50000L));
 
         ArApPaymentResponse resp = service.registerArApPayment(item.id(), paymentRequest("pay-same-proj", 10000L));
@@ -810,11 +825,16 @@ class FinanceServiceTests {
         };
         service.refundAuthorizationService = new RefundAuthorizationService(refundRepo);
         // 操作者 op1（非平台管理员→闸生效）；isPlatformAdmin 走 mock 默认 false。
-        when(authorizationService.currentActor()).thenReturn(
-                new AccessActor("op1", "op1", "staff", "org_1", null, "active"));
+        doReturn(new AccessActor("op1", "op1", "staff", "org_1", null, "active"))
+                .when(authorizationService).currentActor();
+        doReturn(Optional.of("org_1")).when(authorizationService).currentProjectScopeQuietly();
 
         ArApItemRecord item = service.createArApItem(itemRequest("arap-tier-refund", "receivable", 100000L));
+        assertThat(item.projectId()).isEqualTo("org_1");
+        assertThat(authorizationService.currentActor().organizationId()).isEqualTo(item.projectId());
         ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-tier", 100000L));
+        assertThat(payment.item().projectId()).isEqualTo(item.projectId());
+        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().projectId()).isEqualTo(item.projectId());
 
         // 超额度（30000 > 20000）→ 复核拒，不落退款记录。
         assertThatThrownBy(() -> service.createRefund(new RefundRequest(
@@ -825,6 +845,7 @@ class FinanceServiceTests {
         FinanceRefundRecord ok = service.createRefund(new RefundRequest(
                 "refund-tier-within", "refund", List.of(), payment.payment().id(), 15000L, "within limit", null, "original"));
         assertThat(ok.refundAmountCent()).isEqualTo(15000L);
+        assertThat(ok.projectId()).isEqualTo(item.projectId());
     }
 
     @Test
@@ -1162,7 +1183,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-to-lock", "receivable", 128800L));
 
         DailyCloseRecord close = service.createDailyClose(new DailyCloseRequest(
-                "daily-close-t7",
+                "daily-close-t7-very-long-request-12345678901234567890",
                 "lock",
                 List.of(),
                 LocalDate.parse("2026-06-30"),
@@ -1171,6 +1192,7 @@ class FinanceServiceTests {
                 false));
 
         PageResponse<DailyCloseSummaryRecord> summaries = service.listDailyCloseSummaries(close.id());
+        assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::id).doesNotHaveDuplicates();
         assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::sourceStream)
                 .containsExactlyInAnyOrder(
                         "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow");
@@ -1239,6 +1261,21 @@ class FinanceServiceTests {
     }
 
     @Test
+    void longOriginalItemKeepsDistinctBackfillRequestsAndPersistedAmounts() {
+        ArApItemRecord item = service.createArApItem(itemRequest(
+                "long-original-1234567890123456789012345678901234567890", "receivable", 100000L));
+        service.createDailyClose(new DailyCloseRequest("long-backfill-close", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_bf", false));
+        ArApAdjustmentRecord first = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
+                "first-adjustment", "补录一", List.of(), item.id(), 1000L, "原件一"));
+        ArApAdjustmentRecord second = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
+                "second-adjustment", "补录二", List.of(), item.id(), 2000L, "原件二"));
+        assertThat(second.id()).isNotEqualTo(first.id());
+        assertThat(financeRepository.findArApAdjustmentByIdForUpdate(first.id()).orElseThrow().adjustmentAmountCent()).isEqualTo(1000L);
+        assertThat(financeRepository.findArApAdjustmentByIdForUpdate(second.id()).orElseThrow().adjustmentAmountCent()).isEqualTo(2000L);
+    }
+
+    @Test
     void backfillApprovalAppliesAmountChangeAndRejectDoesNot() {
         stubActor("staff_finance_1");
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill", "receivable", 100000L));
@@ -1285,6 +1322,11 @@ class FinanceServiceTests {
         }
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
                 .contains("finance.locked_backfill_requested", "finance.locked_backfill_approved");
+        ArApPaymentResponse paid = service.registerArApPayment(restated.id(), paymentRequest("pay-restated-origin", 1000L));
+        assertThat(paid.item().originItemId()).isEqualTo(item.id());
+        assertThat(paid.item().adjustmentId()).isEqualTo(requested.id());
+        assertThat(financeRepository.findArApItemById(restated.id()).orElseThrow().originItemId()).isEqualTo(item.id());
+        assertThat(financeRepository.findArApItemById(restated.id()).orElseThrow().adjustmentId()).isEqualTo(requested.id());
     }
 
     @Test
@@ -1342,8 +1384,8 @@ class FinanceServiceTests {
     }
 
     private void stubActor(String id) {
-        when(authorizationService.currentActor())
-                .thenReturn(new AccessActor(id, id, "staff", null, null, "active"));
+        doReturn(new AccessActor(id, id, "staff", null, null, "active"))
+                .when(authorizationService).currentActor();
     }
 
     // ─── P1#13 库存差异 → AR/AP（R6-D08）──────────────────────────────────────

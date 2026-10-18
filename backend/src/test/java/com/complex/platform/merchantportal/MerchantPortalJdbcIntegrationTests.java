@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -36,7 +36,7 @@ class MerchantPortalJdbcIntegrationTests {
     private ContractRecord contract(String id, String merchantId, Instant at) {
         return new ContractRecord(id, merchantId, "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(),
-                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(),
+                "fixed_ratio", "by_contract", 0L, Map.of(), List.of(), null, null, List.of(),
                 "effective", "proj_1", null, null, null, at, at);
     }
 

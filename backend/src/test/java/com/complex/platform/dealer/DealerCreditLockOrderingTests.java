@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -77,7 +77,7 @@ class DealerCreditLockOrderingTests {
         var after=mock(DealerReturnRecord.class);when(after.orderId()).thenReturn("order");when(after.dealerId()).thenReturn("dealer");when(after.status()).thenReturn("completed");
         when(returns.findReturn("return")).thenReturn(Optional.of(before));
         when(dealers.lockDealerCredit("dealer")).thenAnswer(c->{when(returns.findReturn("return")).thenReturn(Optional.of(after));return Optional.of(mock(DealerRecord.class));});
-        var service=new DealerReturnService(returns,orders,dealers,auth,idem,audit,null,delivery);
+        var service=new DealerReturnService(returns,orders,dealers,auth,idem,audit,null,delivery,null,null);
         assertThatThrownBy(()->service.inspectReturn("return",new DealerReturnInspectionRequest("key",List.of(new DealerReturnInspectionLineRequest("item","",1,1,0,"实际验收")),"复核")))
                 .isInstanceOfSatisfying(ApiException.class,e->org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("DEALER_RETURN_STATUS_INVALID"));
         var sequence=inOrder(dealers,orders);sequence.verify(dealers).lockDealerCredit("dealer");sequence.verify(orders).lockOrder("order");

@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 
 import com.complex.platform.access.AuthorizationService;
@@ -908,7 +910,8 @@ public class TicketingService {
 
     @Transactional
     public VerificationPreviewResponse previewVerification(VerificationRequest request) {
-        return operations.executeWrite(
+        verificationService.requireAmusementRequestScope(request);
+        VerificationPreviewResponse result = operations.executeWrite(
                 "previewTicketVerification",
                 request == null ? null : request.idempotencyKey(),
                 request,
@@ -916,12 +919,15 @@ public class TicketingService {
                 TicketingWriteOperation.PREVIEW_VERIFICATION,
                 () -> verificationService.previewVerification(request)
         );
+        verificationService.requireAmusementRequestScope(request);
+        return result;
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "verification.execute")
     @Transactional
     public VerificationResponse createVerification(VerificationRequest request) {
-        return operations.executeWrite(
+        verificationService.requireAmusementRequestScope(request);
+        VerificationResponse result = operations.executeWrite(
                 "createTicketVerification",
                 request == null ? null : request.idempotencyKey(),
                 request,
@@ -929,13 +935,16 @@ public class TicketingService {
                 TicketingWriteOperation.CREATE_VERIFICATION,
                 () -> verificationService.createVerification(request)
         );
+        verificationService.requireAmusementRequestScope(request);
+        return result;
     }
 
     /** R5 T5：核销冲正。幂等键必填、reason 必填、权限 ticket.verify.reverse；成功事件 ticket.verification_reversed。 */
     @com.complex.platform.gate.GuardedAction(capability = "ticket.verify.reverse", admissionAction = "ticketing.verification_reverse", objectType = "verification")
     @Transactional
     public VerificationResponse reverseVerification(String verificationId, VerificationReverseRequest request, String reversedBy) {
-        return operations.executeWrite(
+        verificationService.requireAmusementReversalScope(verificationId);
+        VerificationResponse result = operations.executeWrite(
                 "reverseTicketVerification",
                 request == null ? null : request.idempotencyKey(),
                 request,
@@ -947,6 +956,8 @@ public class TicketingService {
                         reversedBy
                 )
         );
+        verificationService.requireAmusementReversalScope(verificationId);
+        return result;
     }
 
     public PageResponse<VerificationRecord> listVerifications() {
