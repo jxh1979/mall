@@ -19,8 +19,27 @@ public record CustomerStoredValueAccountRecord(
         String status,
         Instant createdAt,
         Instant updatedAt,
-        String fundOwnership
+        String fundOwnership,
+        // CG-06a：本金 / 赠送金两段分列（ENUM「储值卡类型与收款主体」；BSM「我的余额」）；balanceCent = principalCent + bonusCent。
+        long principalCent,
+        long bonusCent
 ) {
+    /** 兼容构造（9 参，无两段）：本金 = 余额、赠送金 = 0——仅供旧替身与读旧行，生产路径一律用全参构造。 */
+    public CustomerStoredValueAccountRecord(
+            String id,
+            String customerId,
+            String projectId,
+            String merchantId,
+            long balanceCent,
+            String status,
+            Instant createdAt,
+            Instant updatedAt,
+            String fundOwnership
+    ) {
+        this(id, customerId, projectId, merchantId, balanceCent, status, createdAt, updatedAt, fundOwnership,
+                balanceCent, 0L);
+    }
+
     /** 卡类型：merchant=商户级卡，project=综合体通用卡。 */
     public String cardScope() {
         return merchantId == null ? "project" : "merchant";

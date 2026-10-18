@@ -13516,6 +13516,7 @@
         ],
         "operationId": "customerStoredValueSettle",
         "summary": "客人储值充值入账（支付成功后）",
+        "description": "CG-06a：入账时按项目赠送比例拆为本金（实付）与赠送金两段分别记账（ENUM「储值卡类型与收款主体」），余额＝本金＋赠送金；topup 流水记录两段拆分；商户级卡赠送金为 0。",
         "x-permission": "customer.stored_value.topup",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13562,6 +13563,7 @@
         ],
         "operationId": "customerStoredValueConsume",
         "summary": "客人储值消费（余额扣减）",
+        "description": "CG-06a：通用卡扣款顺序写死先扣本金、后扣赠送金；商户级卡按发卡商户自定（平台代录）的 consume_order 扣减；consume 流水记录扣减的本金与赠送金各多少（BSM「我的余额」）。",
         "x-permission": "customer.stored_value.consume",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13608,6 +13610,7 @@
         ],
         "operationId": "customerStoredValueAccount",
         "summary": "客人储值账户查询",
+        "description": "CG-06a：返回 principal_cent（未消费本金）与 bonus_cent（未使用赠送金）分列（BSM「我的余额」：含本金与赠送金分列），balance_cent 为两段之和。",
         "x-permission": "customer.stored_value.view",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13659,6 +13662,7 @@
         ],
         "operationId": "customerStoredValueAccounts",
         "summary": "客人储值卡列表（我的全部卡：通用卡 + 各商户卡分别余额）",
+        "description": "CG-06a：每张卡返回 principal_cent / bonus_cent 分列；通用卡与商户级卡分列展示（BSM「我的余额」）。",
         "x-permission": "customer.stored_value.view",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13825,6 +13829,7 @@
         ],
         "operationId": "refundStoredValueAccount",
         "summary": "会员储值退卡/退余额（后台）",
+        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -27276,7 +27281,8 @@
           "customer"
         ],
         "operationId": "configureStoredValueMerchantCard",
-        "summary": "配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）",
+        "summary": "配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序",
+        "description": "CG-06a：consume_order 为商户级卡消费扣款顺序（由发卡商户自定、由平台运营代为录入后台；BSM「支付方式」），principal_first=先本金后赠送金、bonus_first=先赠送金后本金；通用卡写死先本金后赠送金不可配置。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -27288,6 +27294,105 @@
         "requestBody": {
           "$ref": "#/components/requestBodies/StoredValueMerchantCardConfigRequest"
         },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/bonus-policies": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "configureStoredValueBonusPolicy",
+        "summary": "配置综合体通用卡充值赠送比例（仅平台，按项目，须同时配置上下限）",
+        "description": "CG-06a（ENUM「储值卡类型与收款主体」：「每笔充值拆为本金与赠送金两段分别记账，赠送比例可配（业务参数，按项目可配，须同时配置上下限）」）：值与上下限同在、取值须落在闭区间内，否则 400 VALIDATION_FAILED；仅对综合体通用卡充值生效，商户级卡赠送口径待裁决（赠送金 0）。",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.bonus_policy_configured",
+        "x-audit-event-failure": "stored_value.bonus_policy_config_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueBonusPolicyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/bonus-policies/{project_id}": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getStoredValueBonusPolicy",
+        "summary": "查询综合体通用卡充值赠送比例（仅平台）",
+        "description": "CG-06a：返回该项目当前赠送比例及上下限；未配置返回比例 0（不赠送）。project_id 传 __global__ 查询无项目范围的通用卡。",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.bonus_policy_viewed",
+        "x-audit-event-failure": "stored_value.bonus_policy_view_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "综合体项目 id；__global__＝无项目范围的通用卡。"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
@@ -32462,6 +32567,7 @@
         ],
         "operationId": "counterRefundStoredValueAccount",
         "summary": "会员储值到店柜台退款（商户预收卡唯一可达退款路径）",
+        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -39812,6 +39918,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/StoredValueMerchantCardConfigRequest"
+            }
+          }
+        }
+      },
+      "StoredValueBonusPolicyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueBonusPolicyRequest"
             }
           }
         }
@@ -50703,6 +50819,54 @@
               "merchant_prepaid",
               "platform_collect"
             ]
+          },
+          "consume_order": {
+            "type": "string",
+            "description": "CG-06a 商户级卡消费扣款顺序（由发卡商户自定、由平台运营代为录入；BSM「支付方式」）：principal_first=先本金后赠送金（缺省）；bonus_first=先赠送金后本金；空＝保留现值。通用卡写死先本金后赠送金，不在此配置。",
+            "enum": [
+              "principal_first",
+              "bonus_first"
+            ]
+          }
+        }
+      },
+      "StoredValueBonusPolicyRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueBonusPolicyRequest`；CG-06a 综合体通用卡充值赠送比例（业务参数，按项目可配，须同时配置上下限；ENUM「储值卡类型与收款主体」）。赠送金＝实付本金×bonus_bps/10000，仅对综合体通用卡充值生效；未配置的项目不赠送。",
+        "additionalProperties": false,
+        "required": [
+          "bonus_bps",
+          "min_bps",
+          "max_bps"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目 id；空＝无项目范围的通用卡（存为 __global__）。",
+            "maxLength": 64
+          },
+          "bonus_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "赠送比例（万分比）；须落在 [min_bps, max_bps] 闭区间内。"
+          },
+          "min_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "已配置下限（万分比）。"
+          },
+          "max_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "已配置上限（万分比）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "配置缘由（审计留痕）。",
+            "maxLength": 255
           }
         }
       },

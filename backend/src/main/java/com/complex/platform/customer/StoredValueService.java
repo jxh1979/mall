@@ -249,16 +249,29 @@ public class StoredValueService {
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
-        long balanceAfter = account.balanceCent() + intent.amountCent();
-        repository.saveStoredValueAccount(withBalanceAndStatus(account, balanceAfter, account.status(), now));
+        // CG-06a（ENUM「储值卡类型与收款主体」：每笔充值拆为本金与赠送金两段分别记账，赠送比例按项目可配）：
+        // 本金 = 实付；赠送金 = 实付 × 项目赠送比例（仅综合体通用卡；商户级卡赠送口径 HTML 未写，赠送金 0）。
+        long bonusCent = account.merchantId() == null
+                ? repository.findStoredValueBonusPolicy(StoredValueBonusPolicyRecord.scopeOf(account.projectId()))
+                        .map(policy -> MoneyRounding.bpsOf(intent.amountCent(), policy.bonusBps())).orElse(0L)
+                : 0L;
+        long principalAfter = account.principalCent() + intent.amountCent();
+        long bonusAfter = account.bonusCent() + bonusCent;
+        long balanceAfter = principalAfter + bonusAfter;
+        repository.saveStoredValueAccount(withSplit(account, principalAfter, bonusAfter, account.status(), now));
         CustomerStoredValueTransactionRecord txn = repository.saveStoredValueTransaction(
                 new CustomerStoredValueTransactionRecord(
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
-                        account.id(), customerId, "topup", intent.amountCent(), balanceAfter,
+                        account.id(), customerId, "topup", intent.amountCent() + bonusCent, balanceAfter,
                         // V231：充值即支付，paid_at=交易完成时刻 now（与写流水同事务）。
-                        paymentIntentId, "top-up settled", "sv_settle_" + paymentIntentId, now, now));
+                        paymentIntentId, "top-up settled", "sv_settle_" + paymentIntentId, now, now,
+                        intent.amountCent(), bonusCent));
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("amount_cent", intent.amountCent());
+        detail.put("principal_cent", intent.amountCent());
+        detail.put("bonus_cent", bonusCent);
+        detail.put("principal_after_cent", principalAfter);
+        detail.put("bonus_after_cent", bonusAfter);
         detail.put("balance_after_cent", balanceAfter);
         detail.put("payment_intent_id", paymentIntentId);
         detail.put("card_scope", account.cardScope());
@@ -361,19 +374,28 @@ public class StoredValueService {
         // 且在状态检查之前——不向越权者泄露卡状态)。此前缺此行 → merchantId 请求体可控可跨商户扣款。
         if (!verifiedCustomerOrder) requireMerchantScopeForCard(account);
         requireActive(account);
-        if (account.balanceCent() < amountCent) {
+        if (account.principalCent() + account.bonusCent() < amountCent) {
             throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "储值余额不足");
         }
-        long balanceAfter = account.balanceCent() - amountCent;
-        repository.saveStoredValueAccount(withBalanceAndStatus(account, balanceAfter, account.status(), now));
+        // CG-06a（ENUM「储值卡类型与收款主体」/ BSM「支付方式」）：通用卡写死先扣本金、后扣赠送金；
+        // 商户级卡按发卡商户自定、平台运营代录的扣款顺序（stored_value_merchant_refund_rules.consume_order）。
+        long[] parts = splitDeduction(account, amountCent, bonusFirstForCard(account));
+        long principalAfter = account.principalCent() - parts[0];
+        long bonusAfter = account.bonusCent() - parts[1];
+        long balanceAfter = principalAfter + bonusAfter;
+        repository.saveStoredValueAccount(withSplit(account, principalAfter, bonusAfter, account.status(), now));
         CustomerStoredValueTransactionRecord txn = repository.saveStoredValueTransaction(
                 new CustomerStoredValueTransactionRecord(
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
                         account.id(), customerId, "consume", -amountCent, balanceAfter,
-                        null, reason, idempotencyKey, now));
+                        null, reason, idempotencyKey, now, null, -parts[0], -parts[1]));
+        Map<String, Object> consumeDetail = consumeRefundDetail(account, amountCent, balanceAfter);
+        consumeDetail.put("principal_cent", parts[0]);
+        consumeDetail.put("bonus_cent", parts[1]);
+        consumeDetail.put("principal_after_cent", principalAfter);
+        consumeDetail.put("bonus_after_cent", bonusAfter);
         auditEventService.recordSuccess(EVENT_CONSUME, "customer.stored_value.consume",
-                "customer_stored_value", account.id(), null, null,
-                consumeRefundDetail(account, amountCent, balanceAfter));
+                "customer_stored_value", account.id(), null, null, consumeDetail);
         // AUD-059 平台代收(platform_collect)：消费即时逐笔生成一条「平台应付商户」台账（逐笔可追溯，结算给发卡商户）。
         // 仅对开卡定格为 platform_collect 的商户卡；商户预收/通用卡/旧卡(未定格)不挂账（钱已归商户或平台无代收关系）。
         if (FUND_PLATFORM_COLLECT.equals(account.fundOwnership()) && account.merchantId() != null) {
@@ -469,6 +491,11 @@ public class StoredValueService {
         if (account.balanceCent() < amountCent) {
             throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "退款金额超过剩余余额");
         }
+        // CG-06a（ENUM「储值卡类型与收款主体」：「退卡只退未消费的本金，赠送金不退现」）：退款额不得超过未消费本金。
+        if (account.principalCent() < amountCent) {
+            throw ApiException.conflict("STORED_VALUE_PRINCIPAL_INSUFFICIENT",
+                    "退款金额超过未消费本金；赠送金不退现");
+        }
         // B1d⑤ phase3 商户级卡退款规则：仅对商户卡（merchantId 非空）应用发卡商户自设规则。
         //   refund_allowed=false → 拒退；退款比例=实际退回客户的比例，余下为商户留存（手续费/违约金）。
         //   综合体通用卡（merchantId 空）无规则=全额退（payout=amountCent），沿用既有行为。
@@ -489,18 +516,33 @@ public class StoredValueService {
             // R-7:退卡实退额按比例四舍五入到分(旧整除截断,客户恒少退、商户多留且不留痕)。
             payoutCent = MoneyRounding.bpsOf(amountCent, rule.refundRatioBps());
         }
-        long balanceAfter = account.balanceCent() - amountCent;
-        String newStatus = closeAccount && balanceAfter == 0 ? "closed" : account.status();
-        repository.saveStoredValueAccount(withBalanceAndStatus(account, balanceAfter, newStatus, now));
+        long principalAfter = account.principalCent() - amountCent;
+        // CG-06a（ENUM「储值卡类型与收款主体」：「销户时……再退剩余本金，赠送金清零」；BSM「储值预付卡 / 余额」：
+        // 「赠送金不退现、未使用部分按活动规则作废或收回」）：销户（本金退清）时未使用赠送金作废，单独留一条 adjust 流水。
+        boolean closing = closeAccount && principalAfter == 0;
+        long bonusVoidCent = closing ? account.bonusCent() : 0L;
+        long bonusAfter = account.bonusCent() - bonusVoidCent;
+        long balanceAfter = principalAfter + bonusAfter;
+        String newStatus = closing ? "closed" : account.status();
+        repository.saveStoredValueAccount(withSplit(account, principalAfter, bonusAfter, newStatus, now));
         CustomerStoredValueTransactionRecord txn = repository.saveStoredValueTransaction(
                 new CustomerStoredValueTransactionRecord(
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
-                        account.id(), customerId, "refund", -amountCent, balanceAfter,
-                        null, reason, idempotencyKey, now));
+                        account.id(), customerId, "refund", -amountCent, principalAfter + account.bonusCent(),
+                        null, reason, idempotencyKey, now, null, -amountCent, 0L));
+        if (bonusVoidCent > 0) {
+            repository.saveStoredValueTransaction(new CustomerStoredValueTransactionRecord(
+                    "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
+                    account.id(), customerId, "adjust", -bonusVoidCent, balanceAfter,
+                    null, "销户：未使用赠送金作废（不退现）", idempotencyKey + "|bonus_void", now, null,
+                    0L, -bonusVoidCent));
+        }
         if (counterMode) {
             // AUD-003 柜台兑付：款项由发卡商户柜台现场支付给客户（现金/原路人工），不走线上打款网关；
             // 兑付凭证号入审计事件供对账/稽核。
             Map<String, Object> counterDetail = consumeRefundDetail(account, amountCent, balanceAfter);
+            counterDetail.put("principal_cent", amountCent);
+            counterDetail.put("bonus_voided_cent", bonusVoidCent);
             counterDetail.put("closed", newStatus.equals("closed"));
             counterDetail.put("payout_cent", payoutCent);
             counterDetail.put("payout_status", "counter_settled");
@@ -529,6 +571,8 @@ public class StoredValueService {
                 : financeService.recordStoredValuePayoutRefund(account.id(), payoutCent, reason,
                         gw.requiresInternalFallback() ? "manual" : gw.gatewayProvider(), idempotencyKey);
         Map<String, Object> detail = consumeRefundDetail(account, amountCent, balanceAfter);
+        detail.put("principal_cent", amountCent);
+        detail.put("bonus_voided_cent", bonusVoidCent);
         detail.put("closed", newStatus.equals("closed"));
         detail.put("payout_cent", payoutCent);
         detail.put("payout_gateway_status", gw.status().name());
@@ -587,8 +631,25 @@ public class StoredValueService {
     @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
     public StoredValueMerchantRefundRuleRecord configureMerchantCard(String merchantId, boolean cardIssuanceEnabled,
                                                                      String fundOwnership) {
+        return configureMerchantCard(merchantId, cardIssuanceEnabled, fundOwnership, null);
+    }
+
+    /**
+     * CG-06a（BSM「支付方式」：「商户级卡消费扣款顺序由发卡商户自定、由平台运营代为录入后台」）：
+     * consumeOrder=principal_first / bonus_first；为空保留现值（缺省先本金后赠送金）。
+     */
+    @Transactional
+    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
+    public StoredValueMerchantRefundRuleRecord configureMerchantCard(String merchantId, boolean cardIssuanceEnabled,
+                                                                     String fundOwnership, String consumeOrder) {
         if (merchantId == null || merchantId.isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id is required");
+        }
+        String order = consumeOrder == null || consumeOrder.isBlank() ? null : consumeOrder.trim();
+        if (order != null && !StoredValueMerchantRefundRuleRecord.CONSUME_PRINCIPAL_FIRST.equals(order)
+                && !StoredValueMerchantRefundRuleRecord.CONSUME_BONUS_FIRST.equals(order)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "扣款顺序必须为先本金后赠送金（principal_first）或先赠送金后本金（bonus_first）");
         }
         String mode = fundOwnership == null || fundOwnership.isBlank() ? FUND_MERCHANT_PREPAID : fundOwnership.trim();
         if (!FUND_MERCHANT_PREPAID.equals(mode) && !FUND_PLATFORM_COLLECT.equals(mode)) {
@@ -605,7 +666,55 @@ public class StoredValueService {
         return repository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
                 merchantId.trim(), existing.refundAllowed(), existing.refundRatioBps(),
                 cardIssuanceEnabled, mode,
-                existing.createdAt() == null ? now : existing.createdAt(), now));
+                existing.createdAt() == null ? now : existing.createdAt(), now,
+                order == null ? existing.consumeOrder() : order));
+    }
+
+    // ============================================================
+    // CG-06a 通用卡充值赠送比例（业务参数，按项目可配，须同时配置上下限；仅平台可改）
+    // ============================================================
+
+    @Transactional
+    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
+    public StoredValueBonusPolicyRecord configureBonusPolicy(String projectId, Integer bonusBps, Integer minBps,
+                                                             Integer maxBps, String reason) {
+        if (authorizationService != null) {
+            authorizationService.requirePlatformScope();
+        }
+        String scope = StoredValueBonusPolicyRecord.scopeOf(projectId);
+        try {
+            // ENUM「储值卡类型与收款主体」：「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」——值与上下限同在，取值落在闭区间内。
+            if (bonusBps == null || minBps == null || maxBps == null
+                    || minBps < 0 || maxBps > 10_000 || minBps > bonusBps || bonusBps > maxBps) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "须同时填写赠送比例及其上下限（万分比，0-10000），赠送比例须在上下限内");
+            }
+            String actor = authorizationService == null ? null : authorizationService.currentActor().id();
+            StoredValueBonusPolicyRecord saved = repository.saveStoredValueBonusPolicy(new StoredValueBonusPolicyRecord(
+                    scope, bonusBps, minBps, maxBps, actor, now()));
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("project_scope", scope);
+            detail.put("bonus_bps", bonusBps);
+            detail.put("min_bps", minBps);
+            detail.put("max_bps", maxBps);
+            detail.put("reason", reason == null ? "" : reason);
+            auditEventService.recordSuccess("stored_value.bonus_policy_configured", "customer.stored_value.refund",
+                    "stored_value_bonus_policy", scope, null, null, detail);
+            return saved;
+        } catch (ApiException e) {
+            auditEventService.recordFailure("stored_value.bonus_policy_config_failed", "customer.stored_value.refund",
+                    "stored_value_bonus_policy", scope, null, null, e.code());
+            throw e;
+        }
+    }
+
+    public StoredValueBonusPolicyRecord getBonusPolicy(String projectId) {
+        if (authorizationService != null) {
+            authorizationService.requirePlatformScope();
+        }
+        String scope = StoredValueBonusPolicyRecord.scopeOf(projectId);
+        return repository.findStoredValueBonusPolicy(scope)
+                .orElse(new StoredValueBonusPolicyRecord(scope, 0, 0, 0, null, null));
     }
 
     /** 发卡资格门控：商户卡（merchantId 非空）充值前须平台已开通发卡资格，默认关→拒。通用卡不受限。 */
@@ -933,10 +1042,39 @@ public class StoredValueService {
                 });
     }
 
+    /** 仅改状态（冻结/解冻）：余额与两段不变。 */
     private CustomerStoredValueAccountRecord withBalanceAndStatus(CustomerStoredValueAccountRecord account,
                                                                   long balanceCent, String status, Instant now) {
         return new CustomerStoredValueAccountRecord(account.id(), account.customerId(), account.projectId(),
-                account.merchantId(), balanceCent, status, account.createdAt(), now, account.fundOwnership());
+                account.merchantId(), balanceCent, status, account.createdAt(), now, account.fundOwnership(),
+                account.principalCent(), account.bonusCent());
+    }
+
+    /** CG-06a：按两段写回，余额 = 本金 + 赠送金。 */
+    private CustomerStoredValueAccountRecord withSplit(CustomerStoredValueAccountRecord account,
+                                                       long principalCent, long bonusCent, String status, Instant now) {
+        return new CustomerStoredValueAccountRecord(account.id(), account.customerId(), account.projectId(),
+                account.merchantId(), principalCent + bonusCent, status, account.createdAt(), now,
+                account.fundOwnership(), principalCent, bonusCent);
+    }
+
+    /** 扣款两段拆分：[本金部分, 赠送金部分]；bonusFirst=false 先本金后赠送金，true 先赠送金后本金。 */
+    private static long[] splitDeduction(CustomerStoredValueAccountRecord account, long amountCent, boolean bonusFirst) {
+        long first = bonusFirst ? account.bonusCent() : account.principalCent();
+        long takeFirst = Math.min(first, amountCent);
+        long takeSecond = amountCent - takeFirst;
+        return bonusFirst ? new long[] {takeSecond, takeFirst} : new long[] {takeFirst, takeSecond};
+    }
+
+    /** 通用卡写死先本金后赠送金；商户级卡读发卡商户自定（平台代录）的顺序。 */
+    private boolean bonusFirstForCard(CustomerStoredValueAccountRecord account) {
+        if (account.merchantId() == null) {
+            return false;
+        }
+        return repository.findStoredValueMerchantRefundRule(account.merchantId())
+                .map(StoredValueMerchantRefundRuleRecord::consumeOrder)
+                .map(StoredValueMerchantRefundRuleRecord.CONSUME_BONUS_FIRST::equals)
+                .orElse(false);
     }
 
     private CustomerRecord requireCustomer(String customerId) {
