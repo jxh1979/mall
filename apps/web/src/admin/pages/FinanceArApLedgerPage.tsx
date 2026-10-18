@@ -1,4 +1,6 @@
+// 文件版本：V0.01
 import React from "react";
+import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -42,7 +44,8 @@ function centToYuan(cent: number | undefined): string {
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
 }
 
-export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, user }: AdminPageProps) {
+  const [refundsOpen, setRefundsOpen] = React.useState(false);
   const [amount, setAmount] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [formError, setFormError] = React.useState("");
@@ -228,6 +231,8 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         </div>
         )}
       </AdminDataState>
+      <button type="button" aria-expanded={refundsOpen} onClick={() => setRefundsOpen((open) => !open)}>退款办理</button>
+      {refundsOpen ? <FinanceRefundPanel api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} ledgerItem={selected ?? null} onChanged={() => void ledger.reload()} /> : null}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

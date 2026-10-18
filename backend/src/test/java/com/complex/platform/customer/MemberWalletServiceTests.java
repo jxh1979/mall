@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -151,8 +151,8 @@ class MemberWalletServiceTests {
     }
 
     @Test
-    void refundFailedAtGatewayThrowsSoTransactionRollsBack() {
-        // AUD-060：渠道明确 FAILED → 抛异常（生产 @Transactional 整单回滚：余额不扣、不写流水），不得记成功。
+    void refundWithoutRechargeRoutesRecordsPayoutInsteadOfCallingGateway() {
+        // 缺原充值分笔路线时不得拿账户编号向网关退款；余额只扣一次并登记待办。
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
         com.complex.platform.finance.gateway.PaymentGatewayRouter failing =
@@ -162,16 +162,29 @@ class MemberWalletServiceTests {
                 .thenReturn(new com.complex.platform.finance.gateway.PaymentGatewayResult(
                         com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED,
                         "prov", null, "declined"));
-        StoredValueService service = new StoredValueService(repo, finance, audit(), failing, null, null,
-                Clock.fixed(T0, ZoneOffset.UTC));
+        List<com.complex.platform.evidence.AuditEvent> refundEvents = new ArrayList<>();
+        var refundAudit = new com.complex.platform.evidence.AuditEventRepository() {
+            @Override public com.complex.platform.evidence.AuditEvent save(com.complex.platform.evidence.AuditEvent event) {
+                refundEvents.add(event);
+                return event;
+            }
+            @Override public List<com.complex.platform.evidence.AuditEvent> searchOperationEvents(
+                    String type, String id, String actor, String event, Instant from, Instant to, int limit, String merchant) {
+                return refundEvents.stream().filter(e -> type.equals(e.businessType()) && id.equals(e.businessId())
+                        && event.equals(e.eventName())).toList();
+            }
+        };
+        StoredValueService service = new StoredValueService(repo, finance, new AuditEventService(refundAudit),
+                failing, null, null, Clock.fixed(T0, ZoneOffset.UTC));
         PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-gwfail");
         finance.markPaymentIntentSucceeded(intent.id());
         service.settleTopup("c1", null, null, intent.id());
 
-        assertThatThrownBy(() -> service.refund("c1", null, null, 5_000L, "r", true, "rf-fail"))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_REFUND_FAILED"));
-        // FAILED 不登记 requested 待办（余额回滚由生产事务保证，内存 repo 不模拟回滚故不断言余额）。
-        assertThat(finance.payoutRefunds).isEmpty();
+        service.refund("c1", null, null, 5_000L, "r", true, "rf-fail");
+        service.refund("c1", null, null, 5_000L, "r", true, "rf-fail");
+        assertThat(finance.payoutRefunds).hasSize(1);
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
+        org.mockito.Mockito.verify(failing, org.mockito.Mockito.never()).refund(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -516,9 +529,9 @@ class MemberWalletServiceTests {
 
         @Override
         public String recordStoredValuePayoutRefund(String accountId, long payoutCent, String reason,
-                                                    String channel, String idempotencyKey) {
+                                                    String merchantId, String projectId, String idempotencyKey) {
             String id = "refund_sv_" + idempotencyKey;
-            payoutRefunds.add(id + "|" + accountId + "|" + payoutCent + "|" + channel);
+            payoutRefunds.add(id + "|" + accountId + "|" + payoutCent + "|manual");
             return id;
         }
 
@@ -577,6 +590,9 @@ class MemberWalletServiceTests {
         @Override public java.util.List<com.complex.platform.bar.BarDepositRuleRecord> listDepositRules(String barId) { return java.util.List.of(); }
 
         // V090 storedValue（B1d⑤ 卡范围 (customer, project, merchant)）
+        @Override public List<CustomerStoredValueAccountRecord> listStoredValueAccountsByCustomer(String cid) {
+            return storedValue.values().stream().filter(a -> cid.equals(a.customerId())).toList();
+        }
         @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String cid, String pid) {
             return findStoredValueAccount(cid, pid, null);
         }

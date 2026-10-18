@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
@@ -37,17 +39,18 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
-    void occupancyRateDerivesFromAreasAndSkipsWhenRentableZero() {
-        // S3:出租率=已租/可租(分母0不产出);已签待交不并入已租,单列;车位单列。
+    void occupancyRateUsesTotalAreaIncludingUnavailableAndSkipsWhenTotalZero() {
+        // 总面积含不可租；可租面积仍单列供空置和能耗使用。
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
         repository.occupancy = new AnalyticsRecords.OccupancyAreas(
                 new BigDecimal("1000"), new BigDecimal("800"), new BigDecimal("120"),
-                new BigDecimal("200"), new BigDecimal("50"));
+                new BigDecimal("200"), new BigDecimal("50"), new BigDecimal("1250"));
         repository.expiringContracts = 7;
 
         new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
 
-        assertThat(repository.upserts.get(DashboardAggregationJob.OCC_RATE + "|platform")).isEqualByComparingTo("0.8000");
+        assertThat(repository.upserts.get(DashboardAggregationJob.OCC_RATE + "|platform")).isEqualByComparingTo("0.6400");
+        assertThat(repository.upserts.get(DashboardAggregationJob.OCC_TOTAL_AREA + "|platform")).isEqualByComparingTo("1250");
         assertThat(repository.upserts.get(DashboardAggregationJob.OCC_SIGNED_PENDING_AREA + "|platform")).isEqualByComparingTo("120");
         assertThat(repository.upserts.get(DashboardAggregationJob.OCC_PARKING_RATE + "|platform")).isEqualByComparingTo("0.2500");
         assertThat(repository.upserts.get(DashboardAggregationJob.CONTRACT_EXPIRING_90D + "|platform")).isEqualByComparingTo("7");
@@ -146,7 +149,7 @@ class DashboardAggregationJobNetRevenueTests {
         repository.energyByType = Map.of("electricity", new BigDecimal("100.5"), "water", new BigDecimal("8"));
         repository.abnormalReadings = 3;
         repository.occupancy = new AnalyticsRecords.OccupancyAreas(
-                new BigDecimal("201"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+                new BigDecimal("201"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("999"));
 
         new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
 
@@ -498,7 +501,7 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         AnalyticsRecords.OccupancyAreas occupancy = new AnalyticsRecords.OccupancyAreas(
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
         long expiringContracts = 0;
 
         public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {

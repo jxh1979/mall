@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -546,8 +548,9 @@ class JdbcContractRepository implements ContractRepository {
                 .addValue("now", timestampWithTimeZone(now)));
         jdbcTemplate.update("""
                 INSERT INTO contract_rent_bills (id, contract_id, merchant_id, project_id, period, fee_type,
-                        amount_cent, ar_ap_item_id, created_at)
-                VALUES (:id, :contract_id, :merchant_id, :project_id, :period, :fee_type, :amount, :ar_item, :now)
+                        amount_cent, ar_ap_item_id, created_at, turnover_rule_id)
+                VALUES (:id, :contract_id, :merchant_id, :project_id, :period, :fee_type, :amount, :ar_item, :now,
+                        :turnover_rule_id)
                 ON CONFLICT (contract_id, period, fee_type) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", b.id())
@@ -558,6 +561,7 @@ class JdbcContractRepository implements ContractRepository {
                 .addValue("fee_type", b.feeType())
                 .addValue("amount", b.amountCent())
                 .addValue("ar_item", b.arApItemId())
+                .addValue("turnover_rule_id", b.turnoverRuleId())
                 .addValue("now", timestampWithTimeZone(now)));
         return b;
     }

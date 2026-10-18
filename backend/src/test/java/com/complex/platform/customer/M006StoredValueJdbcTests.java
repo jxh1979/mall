@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 // M006-027：连接内临时表验证储值流水分页、支付行锁和真实事务回滚，不写共享业务表。
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -31,8 +31,11 @@ class M006StoredValueJdbcTests {
     final Instant now = Instant.parse("2026-09-05T00:00:00Z");
 
     @BeforeEach void open() throws Exception {
-        String url = System.getenv("COMPLEX_DATABASE_URL");
-        Assumptions.assumeTrue(url != null && url.matches("jdbc:postgresql:.*?/complex_test(?:\\?.*)?"));
+        String url = System.getProperty("spring.datasource.hikari.jdbc-url", System.getenv("COMPLEX_DATABASE_URL"));
+        Assumptions.assumeTrue(url != null, "需要显式的独立测试数据库");
+        if (!url.matches("jdbc:postgresql://[^/]+/[A-Za-z0-9_]+_test(?:\\?.*)?")) {
+            throw new IllegalStateException("仅允许在名称以 _test 结尾的独立测试库运行");
+        }
         connection=DriverManager.getConnection(url,System.getenv("COMPLEX_DATABASE_USERNAME"),System.getenv("COMPLEX_DATABASE_PASSWORD"));
         dataSource=new SingleConnectionDataSource(connection,true);
         jdbc=new JdbcTemplate(dataSource);

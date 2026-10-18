@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.18
+  version: V0.19
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -3286,6 +3286,41 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    get:
+      tags:
+        - finance
+      operationId: listArApPayments
+      summary: 读取所选台账原收付款流水
+      x-permission: finance.ar_ap.view
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: false
+      x-audit-event-success: ar_ap_payment.listed
+      x-audit-event-failure: ar_ap_payment.list_failed
+      description: 读取所选台账原收付款流水
+      responses:
+        "200":
+          $ref: "#/components/responses/ArApPaymentList"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 当前数据范围内的单据编号。
+            maxLength: 64
   /api/v1/finance/daily-closes:
     post:
       tags:
@@ -3560,10 +3595,10 @@ paths:
       x-audit-event-success: finance_refund.created
       x-audit-event-failure: finance_refund.create_failed
       requestBody:
-        $ref: "#/components/requestBodies/RefundRequest"
+        $ref: "#/components/requestBodies/FinanceRefundRequest"
       responses:
         "200":
-          $ref: "#/components/responses/Success"
+          $ref: "#/components/responses/FinanceRefundResult"
         "403":
           description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（退款对象订单/流水不属于当前商户 scope，禁止跨商户发起退款）。
           content:
@@ -3575,6 +3610,34 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+      description: 通用财务退款申请；与票务整票退款使用不同 DTO。混合付款按后收先退逐笔办理，失败及未知退款继续占额。
+    get:
+      tags:
+        - finance
+      operationId: listFinanceRefunds
+      summary: 读取退款台账及未结状态
+      x-permission: finance.ar_ap.view
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: false
+      x-audit-event-success: finance_refund.listed
+      x-audit-event-failure: finance_refund.list_failed
+      description: 读取退款台账及未结状态
+      responses:
+        "200":
+          $ref: "#/components/responses/FinanceRefundList"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/floor-plans:
     get:
       tags:
@@ -18291,7 +18354,8 @@ paths:
       x-audit-event-failure: contract.rent_bill_failed
       x-auth-context: staff-token
       description: 生效合同按 ContractRentMath 算该期租金应收 → 联动
-        ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。
+        ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。 涉及抽成时锁定该账期实际采用的
+        turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。
       parameters:
         - name: contract_id
           in: path
@@ -18304,7 +18368,7 @@ paths:
         $ref: "#/components/requestBodies/ContractRentBillRequest"
       responses:
         "200":
-          $ref: "#/components/responses/Success"
+          $ref: "#/components/responses/ContractRentBillResult"
         "400":
           $ref: "#/components/responses/Error"
         "403":
@@ -18443,7 +18507,8 @@ paths:
       x-audit-event-success: contract.fee_billed
       x-audit-event-failure: contract.period_bill_failed
       x-auth-context: staff-token
-      description: 一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent) 应收;各费目幂等;0/免租跳过。
+      description: 一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent)
+        应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。
       parameters:
         - name: contract_id
           in: path
@@ -18456,7 +18521,7 @@ paths:
         $ref: "#/components/requestBodies/ContractRentBillRequest"
       responses:
         "200":
-          $ref: "#/components/responses/Success"
+          $ref: "#/components/responses/ContractPeriodBillsResult"
         "400":
           $ref: "#/components/responses/Error"
         "403":
@@ -31349,6 +31414,198 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/finance/refunds/{refund_id}:
+    get:
+      tags:
+        - finance
+      operationId: getFinanceRefund
+      summary: 读取退款详情和全部办理记录
+      x-permission: finance.ar_ap.view
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: false
+      x-audit-event-success: finance_refund.viewed
+      x-audit-event-failure: finance_refund.view_failed
+      description: 读取退款详情和全部办理记录
+      responses:
+        "200":
+          $ref: "#/components/responses/FinanceRefundDetail"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: refund_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 当前数据范围内的单据编号。
+            maxLength: 64
+  /api/v1/finance/refunds/{refund_id}/query:
+    post:
+      tags:
+        - finance
+      operationId: queryFinanceRefund
+      summary: 查询原退款单的渠道权威结果
+      x-permission: finance.ar_ap.view
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance_refund.queried
+      x-audit-event-failure: finance_refund.query_failed
+      description: 查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。
+      responses:
+        "200":
+          $ref: "#/components/responses/FinanceRefundResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        $ref: "#/components/requestBodies/RefundOperationRequest"
+      parameters:
+        - name: refund_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 当前数据范围内的单据编号。
+            maxLength: 64
+  /api/v1/finance/refunds/{refund_id}/retry:
+    post:
+      tags:
+        - finance
+      operationId: retryFinanceRefund
+      summary: 明确失败或尚未发起的退款在原单重试
+      x-permission: finance.refund.create
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance_refund.retried
+      x-audit-event-failure: finance_refund.retry_failed
+      description: 查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。
+      responses:
+        "200":
+          $ref: "#/components/responses/FinanceRefundResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        $ref: "#/components/requestBodies/RefundOperationRequest"
+      parameters:
+        - name: refund_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 当前数据范围内的单据编号。
+            maxLength: 64
+  /api/v1/finance/refunds/{refund_id}/execution:
+    post:
+      tags:
+        - finance
+      operationId: recordFinanceRefundExecution
+      summary: 实际支付经办人本人登记原路执行凭证
+      x-permission: finance.refund.create
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance_refund.execution_recorded
+      x-audit-event-failure: finance_refund.execution_failed
+      description: 实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。
+      responses:
+        "200":
+          $ref: "#/components/responses/FinanceRefundResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        $ref: "#/components/requestBodies/RefundExecutionRequest"
+      parameters:
+        - name: refund_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 当前数据范围内的单据编号。
+            maxLength: 64
+  /api/v1/finance/refunds/{refund_id}/confirm:
+    post:
+      tags:
+        - finance
+      operationId: confirmFinanceRefundResult
+      summary: 另一人核实已有执行记录的实际退款结果
+      x-permission: finance.refund.create
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance_refund.confirmed
+      x-audit-event-failure: finance_refund.confirm_failed
+      description: 独立核实本人执行记录；金额、流水号和经办人必须一致，必须提供真实附件。自动渠道未知结果只能查询，不能用本接口绕过。 必须同时具备 finance.refund.create 与
+        finance.payment.register 权限。
+      responses:
+        "200":
+          $ref: "#/components/responses/FinanceRefundResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      requestBody:
+        $ref: "#/components/requestBodies/RefundResultConfirmRequest"
+      parameters:
+        - name: refund_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 当前数据范围内的单据编号。
+            maxLength: 64
+      x-required-permissions:
+        - finance.refund.create
+        - finance.payment.register
 components:
   securitySchemes:
     BearerAuth:
@@ -33067,6 +33324,58 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TicketTypePricingRequest"
+    FinanceRefundRequest:
+      required: true
+      description: 通用财务退款申请；与票务整票退款使用不同 DTO。混合付款按后收先退逐笔办理，失败及未知退款继续占额。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FinanceRefundRequest"
+          example:
+            idempotency_key: refund-create-001
+            target_id: ar_ap_payment_001
+            refund_amount_cent: 2000
+            reason: 核实重复收款后原路退回
+            refund_direction: original
+    RefundOperationRequest:
+      required: true
+      description: 查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RefundOperationRequest"
+          example:
+            idempotency_key: refund-query-001
+            operator_note: 核对原单渠道结果
+    RefundExecutionRequest:
+      required: true
+      description: 实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RefundExecutionRequest"
+          example:
+            idempotency_key: refund-execution-001
+            operator_note: 本人已核对原路径并执行退款
+            evidence_attachment_ids:
+              - att_receipt_001
+            payment_reference: payment_receipt_001
+    RefundResultConfirmRequest:
+      required: true
+      description: 独立核实本人执行记录；金额、流水号和经办人必须一致，必须提供真实附件。自动渠道未知结果只能查询，不能用本接口绕过。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RefundResultConfirmRequest"
+          example:
+            idempotency_key: refund-confirm-001
+            operator_note: 独立核实实际退款到账
+            evidence_attachment_ids:
+              - att_verify_001
+            payment_reference: payment_receipt_001
+            status: success
+            amount_cent: 2000
+            payment_operator_id: staff_payer_001
   responses:
     Success:
       description: 统一成功响应
@@ -33117,6 +33426,138 @@ components:
               compensation_required: false
             meta:
               server_time: 2026-06-12T12:00:00Z
+    FinanceRefundResult:
+      description: 业务结果由 data 内状态判断，HTTP 成功不代表款项已完成。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FinanceRefundResponse"
+          example:
+            success: true
+            code: OK
+            message: success
+            request_id: request_refund_001
+            server_time: 2026-10-18T08:00:00Z
+            data:
+              id: refund_001
+              target_id: ar_ap_payment_001
+              refund_amount_cent: 2000
+              reason: 核实重复收款后原路退回
+              refund_channel: wechat
+              refund_direction: original
+              status: requested
+              created_at: 2026-10-18T08:00:00Z
+              source_type: ar_ap_payment
+              merchant_id: merchant_001
+              project_id: project_001
+              requested_by: staff_001
+              original_payment_ref: bank_001
+              gateway_provider: reserved
+              gateway_ref: null
+              updated_at: 2026-10-18T08:00:00Z
+              succeeded_at: null
+    FinanceRefundDetail:
+      description: 业务结果由 data 内状态判断，HTTP 成功不代表款项已完成。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FinanceRefundDetailResponse"
+          example:
+            success: true
+            code: OK
+            message: success
+            request_id: request_refund_001
+            server_time: 2026-10-18T08:00:00Z
+            data:
+              refund:
+                id: refund_001
+                target_id: ar_ap_payment_001
+                refund_amount_cent: 2000
+                reason: 核实重复收款后原路退回
+                refund_channel: wechat
+                refund_direction: original
+                status: requested
+                created_at: 2026-10-18T08:00:00Z
+                source_type: ar_ap_payment
+                merchant_id: merchant_001
+                project_id: project_001
+                requested_by: staff_001
+                original_payment_ref: bank_001
+                gateway_provider: reserved
+                gateway_ref: null
+                updated_at: 2026-10-18T08:00:00Z
+                succeeded_at: null
+              attempts: []
+    FinanceRefundList:
+      description: 业务结果由 data 内状态判断，HTTP 成功不代表款项已完成。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FinanceRefundListResponse"
+          example:
+            success: true
+            code: OK
+            message: success
+            request_id: request_refund_001
+            server_time: 2026-10-18T08:00:00Z
+            data:
+              items:
+                - id: refund_001
+                  target_id: ar_ap_payment_001
+                  refund_amount_cent: 2000
+                  reason: 核实重复收款后原路退回
+                  refund_channel: wechat
+                  refund_direction: original
+                  status: requested
+                  created_at: 2026-10-18T08:00:00Z
+                  source_type: ar_ap_payment
+                  merchant_id: merchant_001
+                  project_id: project_001
+                  requested_by: staff_001
+                  original_payment_ref: bank_001
+                  gateway_provider: reserved
+                  gateway_ref: null
+                  updated_at: 2026-10-18T08:00:00Z
+                  succeeded_at: null
+              page: 1
+              page_size: 50
+              total: 1
+    ArApPaymentList:
+      description: 业务结果由 data 内状态判断，HTTP 成功不代表款项已完成。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ArApPaymentListResponse"
+          example:
+            success: true
+            code: OK
+            message: success
+            request_id: request_refund_001
+            server_time: 2026-10-18T08:00:00Z
+            data:
+              items:
+                - id: ar_ap_payment_001
+                  ar_ap_item_id: ar_ap_001
+                  amount_cent: 10000
+                  payment_method: wechat
+                  payment_time: 2026-10-18T07:00:00Z
+                  bank_flow_ref: bank_001
+                  created_at: 2026-10-18T07:00:00Z
+              page: 1
+              page_size: 50
+              total: 1
+    ContractRentBillResult:
+      description: 业务结果由 data 内状态判断，HTTP 成功不代表款项已完成。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractRentBillResponse"
+    ContractPeriodBillsResult:
+      description: 业务结果由 data 内状态判断，HTTP 成功不代表款项已完成。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractPeriodBillsResponse"
   schemas:
     SuccessResponse:
       type: object
@@ -42165,6 +42606,568 @@ components:
           minimum: 0
           maximum: 999999999999
           description: 节假日售价（分，可空）；节假日加价按日历规则走，不在误差闸内。
+    FinanceRefundRequest:
+      type: object
+      description: 通用财务退款申请；与票务整票退款使用不同 DTO。混合付款按后收先退逐笔办理，失败及未知退款继续占额。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - target_id
+        - refund_amount_cent
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        device_id:
+          type: string
+          description: 现金或刷卡退款须传真实受管设备编号；后台其他渠道不伪造设备。
+          maxLength: 64
+        target_id:
+          type: string
+          description: 当前范围内应收台账的原收款流水 ar_ap_payments.id，不是台账项或储值账户编号。
+          maxLength: 64
+        refund_amount_cent:
+          type: integer
+          minimum: 1
+          maximum: 999999999999
+          description: 本次实际申请退回金额，单位分；成功及所有未结退款累计不得超过原收款额。
+        reason:
+          type: string
+          description: 退款原因，须符合现行退款资格和授权规则。
+          maxLength: 1000
+        refund_channel:
+          type: string
+          description: 可省略，由原收款权威渠道推导；传入值须与原渠道一致。
+          maxLength: 64
+        refund_direction:
+          type: string
+          enum:
+            - original
+          description: 本入口只办理原路退回；省略时默认 original。
+    RefundOperationRequest:
+      type: object
+      description: 查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        device_id:
+          type: string
+          description: 现金或刷卡退款须传真实受管设备编号；后台其他渠道不伪造设备。
+          maxLength: 64
+    RefundExecutionRequest:
+      type: object
+      description: 实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - operator_note
+        - evidence_attachment_ids
+        - payment_reference
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+          minItems: 1
+        device_id:
+          type: string
+          description: 现金或刷卡退款须传真实受管设备编号；后台其他渠道不伪造设备。
+          maxLength: 64
+        payment_reference:
+          type: string
+          description: 本人实际按原收款路径执行退款的支付流水号。
+          maxLength: 2048
+    RefundResultConfirmRequest:
+      type: object
+      description: 独立核实本人执行记录；金额、流水号和经办人必须一致，必须提供真实附件。自动渠道未知结果只能查询，不能用本接口绕过。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - operator_note
+        - evidence_attachment_ids
+        - payment_reference
+        - status
+        - amount_cent
+        - payment_operator_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+          minItems: 1
+        device_id:
+          type: string
+          description: 现金或刷卡退款须传真实受管设备编号；后台其他渠道不伪造设备。
+          maxLength: 64
+        payment_reference:
+          type: string
+          description: 本人实际按原收款路径执行退款的支付流水号。
+          maxLength: 2048
+        status:
+          type: string
+          enum:
+            - success
+            - failed
+          description: 依据真实结果核实成功或明确失败；失败仍未结，不释放可退额度。
+        amount_cent:
+          type: integer
+          minimum: 1
+          maximum: 999999999999
+          description: 须与该退款单金额完全一致，单位分。
+        payment_operator_id:
+          type: string
+          description: 须等于该单最近一次本人执行记录的可信经办人，并与当前核实人不同；现金还禁止申请人自核实。
+          maxLength: 64
+    FinanceRefundRecord:
+      type: object
+      description: 通用退款事实；成功和所有未结状态均占用原收款可退额度，尝试追加留痕。
+      additionalProperties: false
+      required:
+        - id
+        - target_id
+        - refund_amount_cent
+        - reason
+        - refund_channel
+        - refund_direction
+        - status
+        - created_at
+        - source_type
+        - merchant_id
+        - project_id
+        - requested_by
+        - original_payment_ref
+        - gateway_provider
+        - gateway_ref
+        - updated_at
+        - succeeded_at
+      properties:
+        id:
+          type: string
+          description: 退款单编号。
+          maxLength: 64
+        target_id:
+          type: string
+          description: 原收款流水或储值账户编号，由 source_type 区分。
+          maxLength: 64
+        refund_amount_cent:
+          type: integer
+          minimum: 1
+          maximum: 999999999999
+          description: 退款金额，单位分。
+        reason:
+          type: string
+          description: 退款原因。
+          maxLength: 1000
+        refund_channel:
+          type: string
+          description: 原收款路径编码。
+          maxLength: 64
+        refund_direction:
+          type: string
+          description: 退款方向。
+          maxLength: 64
+        status:
+          type: string
+          enum:
+            - requested
+            - processing
+            - failed
+            - success
+          description: requested 尚未发起；processing 已发起未确定；failed 明确失败仍未结；success 实际成功才结清。
+        created_at:
+          type: string
+          format: date-time
+          description: 申请时间。
+        source_type:
+          type: string
+          enum:
+            - ar_ap_payment
+            - stored_value_account
+          description: 退款源单类型。
+        merchant_id:
+          type:
+            - string
+            - "null"
+          description: 归属商户。
+          maxLength: 64
+        project_id:
+          type:
+            - string
+            - "null"
+          description: 归属综合体项目。
+          maxLength: 64
+        requested_by:
+          type:
+            - string
+            - "null"
+          description: 原申请人。
+          maxLength: 64
+        original_payment_ref:
+          type:
+            - string
+            - "null"
+          description: 原支付流水号；缺失时禁止无依据自动重试。
+          maxLength: 2048
+        gateway_provider:
+          type:
+            - string
+            - "null"
+          description: 实际调用的渠道编码；预留渠道不是实际退款成功。
+          maxLength: 64
+        gateway_ref:
+          type:
+            - string
+            - "null"
+          description: 渠道退款引用。
+          maxLength: 2048
+        updated_at:
+          type: string
+          format: date-time
+          description: 最近状态更新时间。
+        succeeded_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: 实际成功时间；未结为 null。
+    FinanceRefundAttemptRecord:
+      type: object
+      description: 不可覆盖的办理记录；按创建时间和编号升序返回，核实时引用最近一次 execution。
+      additionalProperties: false
+      required:
+        - id
+        - refund_id
+        - operation
+        - status
+        - gateway_provider
+        - gateway_ref
+        - message
+        - payment_reference
+        - payment_operator_id
+        - verified_by
+        - evidence_attachment_ids
+        - created_at
+      properties:
+        id:
+          type: string
+          description: 办理记录编号。
+          maxLength: 64
+        refund_id:
+          type: string
+          description: 原退款单编号。
+          maxLength: 64
+        operation:
+          type: string
+          enum:
+            - submit
+            - query
+            - retry
+            - execution
+            - confirm
+          description: 首次提交、查询、原单重试、本人执行登记或独立核实。
+        status:
+          type: string
+          description: 该次办理后的退款状态。
+          maxLength: 64
+        gateway_provider:
+          type:
+            - string
+            - "null"
+          description: 渠道编码。
+          maxLength: 64
+        gateway_ref:
+          type:
+            - string
+            - "null"
+          description: 渠道引用。
+          maxLength: 2048
+        message:
+          type:
+            - string
+            - "null"
+          description: 该次办理结果说明。
+          maxLength: 2048
+        payment_reference:
+          type:
+            - string
+            - "null"
+          description: 执行或核实的支付流水号。
+          maxLength: 2048
+        payment_operator_id:
+          type:
+            - string
+            - "null"
+          description: 实际执行人，从执行登记会话确定。
+          maxLength: 64
+        verified_by:
+          type:
+            - string
+            - "null"
+          description: 独立核实人。
+          maxLength: 64
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        created_at:
+          type: string
+          format: date-time
+          description: 本次办理时间。
+    FinanceRefundDetailRecord:
+      type: object
+      description: 退款单及其办理记录。
+      additionalProperties: false
+      required:
+        - refund
+        - attempts
+      properties:
+        refund:
+          $ref: "#/components/schemas/FinanceRefundRecord"
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinanceRefundAttemptRecord"
+          description: 按创建时间及编号升序返回。
+    ArApPaymentRecord:
+      type: object
+      description: 应收应付原收付款流水；发起退款仅允许应收方向。
+      additionalProperties: false
+      required:
+        - id
+        - ar_ap_item_id
+        - amount_cent
+        - payment_method
+        - payment_time
+        - bank_flow_ref
+        - created_at
+      properties:
+        id:
+          type: string
+          description: 原收付款流水编号。
+          maxLength: 64
+        ar_ap_item_id:
+          type: string
+          description: 台账项编号。
+          maxLength: 64
+        amount_cent:
+          type: integer
+          minimum: 1
+          maximum: 999999999999
+          description: 原收付款金额，单位分。
+        payment_method:
+          type: string
+          description: 原收款方式编码。
+          maxLength: 64
+        payment_time:
+          type: string
+          format: date-time
+          description: 原收付款时间。
+        bank_flow_ref:
+          type:
+            - string
+            - "null"
+          description: 原银行或渠道流水号。
+          maxLength: 2048
+        created_at:
+          type: string
+          format: date-time
+          description: 登记时间。
+    FinanceRefundResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/FinanceRefundRecord"
+    FinanceRefundDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/FinanceRefundDetailRecord"
+    FinanceRefundListResponse:
+      description: 当前接口返回范围内全部记录，不接受分页参数；page/page_size 沿用服务端列表信封，不能据此截断 items。
+      allOf:
+        - $ref: "#/components/schemas/SuccessResponse"
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - items
+                - page
+                - page_size
+                - total
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/FinanceRefundRecord"
+                page:
+                  type: integer
+                  const: 1
+                page_size:
+                  type: integer
+                  const: 50
+                total:
+                  type: integer
+                  minimum: 0
+    ArApPaymentListResponse:
+      description: 当前接口返回范围内全部记录，不接受分页参数；page/page_size 沿用服务端列表信封，不能据此截断 items。
+      allOf:
+        - $ref: "#/components/schemas/SuccessResponse"
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - items
+                - page
+                - page_size
+                - total
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ArApPaymentRecord"
+                page:
+                  type: integer
+                  const: 1
+                page_size:
+                  type: integer
+                  const: 50
+                total:
+                  type: integer
+                  minimum: 0
+    ContractRentBillRecord:
+      type: object
+      description: 合同分期账单及采用的抽成规则快照。
+      additionalProperties: false
+      required:
+        - id
+        - contract_id
+        - merchant_id
+        - project_id
+        - period
+        - fee_type
+        - amount_cent
+        - ar_ap_item_id
+        - created_at
+        - turnover_rule_id
+      properties:
+        id:
+          type: string
+          description: 合同账单编号。
+          maxLength: 64
+        contract_id:
+          type: string
+          description: 合同编号。
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 商户编号。
+          maxLength: 64
+        project_id:
+          type: string
+          description: 综合体项目编号。
+          maxLength: 64
+        period:
+          type: string
+          description: 账期，格式 YYYY-MM。
+          maxLength: 64
+        fee_type:
+          type: string
+          description: 费目编码。
+          maxLength: 64
+        amount_cent:
+          type: integer
+          minimum: 0
+          description: 应收金额，单位分。
+        ar_ap_item_id:
+          type: string
+          description: 关联应收台账编号。
+          maxLength: 64
+        created_at:
+          type: string
+          format: date-time
+          description: 账单创建时间。
+        turnover_rule_id:
+          type:
+            - string
+            - "null"
+          description: 出账时实际采用且唯一覆盖完整账期的已复核抽成规则编号；固定租金和其他费目为 null，后续规则变更不得覆盖原账快照。
+          maxLength: 64
+    ContractRentBillResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ContractRentBillRecord"
+    ContractPeriodBillsResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ContractRentBillRecord"
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
@@ -42194,7 +43197,15 @@ x-p0-example-coverage:
     - PaymentIntent
     - AmusementSafetyActionRequest
     - ProviderAdapterTestRequest
+    - FinanceRefundRequest
+    - RefundOperationRequest
+    - RefundExecutionRequest
+    - RefundResultConfirmRequest
   responses:
     - Success
     - Page
     - WebhookAccepted
+    - FinanceRefundResult
+    - FinanceRefundDetail
+    - FinanceRefundList
+    - ArApPaymentList

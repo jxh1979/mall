@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.support.MigrationVersions;
@@ -72,7 +74,7 @@ class ContractJdbcIntegrationTests {
                 null, null, null, now, now));
         ContractRentBillRecord bill = repository.insertRentBill(new ContractRentBillRecord(
                 "crb_v205_test", contractId, "mch_1", "proj_1", "2026-07", "property_fee", 88800L,
-                "arap_property_fee_v205_test", now), LocalDate.parse("2026-08-10"));
+                "arap_property_fee_v205_test", now, null), LocalDate.parse("2026-08-10"));
         assertThat(bill).isNotNull();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT item_no FROM ar_ap_items WHERE id='arap_property_fee_v205_test'", String.class))
@@ -165,7 +167,7 @@ class ContractJdbcIntegrationTests {
                 "effective", "proj_1", null, null, null, now, now));
         repository.insertRentBill(new ContractRentBillRecord(
                 "crb_term_jdbc", cid, "mch_term", "proj_1", "2026-07", "rent", 300000L,
-                "arap_rent_term_jdbc", now), LocalDate.parse("2026-07-01"));
+                "arap_rent_term_jdbc", now, null), LocalDate.parse("2026-07-01"));
         assertThat(repository.sumUnpaidArForContract(cid)).isEqualTo(300000L);
         repository.saveSettlement(new ContractSettlementRecord("cst_term_jdbc", cid, "early_termination", "settled",
                 List.of(

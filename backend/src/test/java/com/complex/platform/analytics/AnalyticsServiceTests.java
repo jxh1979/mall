@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -1523,7 +1525,7 @@ class AnalyticsServiceTests {
         }
 
         AnalyticsRecords.OccupancyAreas occupancy = new AnalyticsRecords.OccupancyAreas(
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
         long expiringContracts = 0;
 
         public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {

@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
@@ -486,7 +488,7 @@ public interface AnalyticsRepository {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
-    /** energy.electricity_per_sqm 分母明细：可租空间（商铺/摊位、非停用），合计=Σ面积（与出租率 occupancyAreas.rentable 同谓词）。 */
+    /** energy.electricity_per_sqm 分母明细：可租空间（商铺/摊位、非停用），独立于出租率总面积。 */
     default AnalyticsRecords.MetricDetailRows rentableSpaceDetail(int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }

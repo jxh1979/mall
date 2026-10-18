@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricDetailRows;
@@ -108,7 +110,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     }
 
     @Test
-    void rentableAreaDenominatorEqualsPagedDetailSumAndOccupancyDenominator() {
+    void energyRentableAreaDenominatorEqualsPagedDetailSumAndExcludesUnavailable() {
         BigDecimal baseline = repository.rentableSpaceDetail(1, 0).summaryValue();
 
         insertSpace("sp_mdc_shop", "shop", "120", "active");
@@ -120,7 +122,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
         assertThat(after.summaryValue().subtract(baseline)).isEqualByComparingTo("150");
         assertThat(sumDecimal(collectAllPages((limit, offset) -> repository.rentableSpaceDetail(limit, offset)), "areaSquareMeter"))
                 .isEqualByComparingTo(after.summaryValue());
-        // 与出租率同分母(occupancyAreas.rentable)。
+        // 能源仍用可租面积，不改为出租率使用的总铺位面积。
         assertThat(repository.occupancyAreas(DAY).rentableArea()).isEqualByComparingTo(after.summaryValue());
     }
 

@@ -1,5 +1,7 @@
 package com.complex.platform.finance;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +72,7 @@ class FinanceServiceTests {
                 authorizationService,
                 new com.complex.platform.common.BusinessDayResolver(4)
         );
+        service.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
         // AUD-007 退款额度闸已 fail-closed 常在：默认给宽松引擎 + 操作者，令既有「额度内退款成功」用例仍过；
         // 具体拒绝/额度场景各用例自行覆盖 refundAuthorizationService/currentActor。
         service.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
@@ -359,7 +362,7 @@ class FinanceServiceTests {
                 paymentId,
                 18800L,
                 "guest request",
-                "original_channel",
+                null,
                 "original"
         ));
 
@@ -742,14 +745,14 @@ class FinanceServiceTests {
 
     @Test
     void backOfficeChannelRefundWithoutDeviceIsAllowed() {
-        // 后台渠道(manual)退款无需设备上下文,不误伤后台台账类退款。
+        // 非现金/POS 的原收款渠道退款无需现场设备上下文。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backoffice-refund", "receivable", 30000L));
         ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-backoffice", 30000L));
 
         FinanceRefundRecord refund = service.createRefund(new RefundRequest(
                 "refund-backoffice", "refund", List.of(), payment.payment().id(),
-                10000L, "manual back-office refund", "manual", null, null));
+                10000L, "manual back-office refund", null, null, null));
         assertThat(refund.status()).isEqualTo("requested");
     }
 
@@ -766,13 +769,13 @@ class FinanceServiceTests {
                 15000L,
                 "partial refund",
                 null,
-                "cash"
+                "original"
         ));
 
         assertThat(refund.refundAmountCent()).isEqualTo(15000L);
         assertThat(refund.status()).isEqualTo("requested");
         // P2#④ 显式传入的退款方向被统一落地。
-        assertThat(refund.refundDirection()).isEqualTo("cash");
+        assertThat(refund.refundDirection()).isEqualTo("original");
     }
 
     @Test
@@ -782,7 +785,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-failclosed", "receivable", 30000L));
         ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-failclosed", 30000L));
         assertThatThrownBy(() -> service.createRefund(new RefundRequest(
-                "refund-failclosed", "refund", List.of(), payment.payment().id(), 10000L, "no engine", "manual", null)))
+                "refund-failclosed", "refund", List.of(), payment.payment().id(), 10000L, "no engine", null, null)))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_AUTHORIZATION_UNAVAILABLE");
     }
 
@@ -815,12 +818,12 @@ class FinanceServiceTests {
 
         // 超额度（30000 > 20000）→ 复核拒，不落退款记录。
         assertThatThrownBy(() -> service.createRefund(new RefundRequest(
-                "refund-tier-over", "refund", List.of(), payment.payment().id(), 30000L, "over limit", null, "cash")))
+                "refund-tier-over", "refund", List.of(), payment.payment().id(), 30000L, "over limit", null, "original")))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_REVIEW_REQUIRED");
 
         // 额度内（15000 ≤ 20000）→ 放行。
         FinanceRefundRecord ok = service.createRefund(new RefundRequest(
-                "refund-tier-within", "refund", List.of(), payment.payment().id(), 15000L, "within limit", null, "cash"));
+                "refund-tier-within", "refund", List.of(), payment.payment().id(), 15000L, "within limit", null, "original"));
         assertThat(ok.refundAmountCent()).isEqualTo(15000L);
     }
 
@@ -864,6 +867,7 @@ class FinanceServiceTests {
                 new com.complex.platform.common.BusinessDayResolver(4),
                 com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(),
                 mdmService);
+        svc.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
         svc.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
         return svc;
     }
@@ -1583,7 +1587,7 @@ class FinanceServiceTests {
                 LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-31"), LocalDate.parse("2026-09-10"))))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
-                .isEqualTo("TURNOVER_RENT_RULE_NOT_ACTIVE");
+                .isEqualTo("TURNOVER_RENT_RULE_PERIOD_UNRESOLVED");
     }
 
     // ─── P1#14 保证金四动作台账 ───────────────────────────────────────────────
@@ -1774,6 +1778,7 @@ class FinanceServiceTests {
         FinanceService svc = new FinanceService(financeRepository, ops, auditEventService, authorizationService,
                 new com.complex.platform.common.BusinessDayResolver(4),
                 new com.complex.platform.finance.gateway.PaymentGatewayRouter(terminalRepo));
+        svc.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
         svc.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
         return svc;
     }
@@ -1803,7 +1808,7 @@ class FinanceServiceTests {
         ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-gw-off", 30000L));
         FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
                 "refund-gw-off", "refund", List.of(), payment.payment().id(), 10000L, "refund", null, null));
-        assertThat(refund.refundChannel()).isEqualTo("manual");
+        assertThat(refund.refundChannel()).isEqualTo("bank_transfer");
         assertThat(refund.status()).isEqualTo("requested");
     }
 
@@ -1815,8 +1820,8 @@ class FinanceServiceTests {
         FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
                 "refund-gw-on", "refund", List.of(), payment.payment().id(), 10000L, "refund", null, null));
         assertThat(refund.status()).isEqualTo("requested");
-        // 占位 NOT_CONFIGURED 仍属"未真正经渠道结算"→回退内部手工打款渠道（manual），不崩、不阻塞。
-        assertThat(refund.refundChannel()).isEqualTo("manual");
+        // 占位 NOT_CONFIGURED 未实际兑付：保留原收款渠道和待退状态。
+        assertThat(refund.refundChannel()).isEqualTo("bank_transfer");
     }
 
     private ArApItemRequest itemRequest(String idempotencyKey, String direction, long amountCent) {
@@ -1985,6 +1990,46 @@ class FinanceServiceTests {
         public FinanceRefundRecord saveRefund(FinanceRefundRecord refund) {
             refunds.put(refund.id(), refund);
             return refund;
+        }
+
+        private final List<FinanceRefundAttemptRecord> refundAttempts = new ArrayList<>();
+        private final java.util.Set<String> readyRefunds = new java.util.HashSet<>();
+
+        @Override
+        public Optional<FinanceRefundRecord> findRefundById(String id, boolean lock) {
+            return Optional.ofNullable(refunds.get(id));
+        }
+
+        @Override
+        public void appendRefundAttempt(FinanceRefundAttemptRecord attempt) {
+            refundAttempts.add(attempt);
+            if (java.util.Set.of("submit", "retry").contains(attempt.operation())) readyRefunds.add(attempt.id());
+        }
+
+        @Override
+        public Optional<FinanceRefundAttemptRecord> findReadyRefundAttempt(String id) {
+            return refundAttempts.stream().filter(a -> a.refundId().equals(id) && readyRefunds.contains(a.id())).findFirst();
+        }
+
+        @Override
+        public boolean claimRefundAttempt(String id) { return readyRefunds.remove(id); }
+
+        @Override
+        public List<FinanceRefundAttemptRecord> listRefundAttempts(String id) {
+            return refundAttempts.stream().filter(a -> a.refundId().equals(id)).toList();
+        }
+
+        @Override
+        public List<ArApPaymentRecord> listArApPayments(String itemId) {
+            return arApPayments.values().stream().filter(p -> p.arApItemId().equals(itemId))
+                    .sorted(java.util.Comparator.comparing(ArApPaymentRecord::paymentTime)
+                            .thenComparing(ArApPaymentRecord::id).reversed()).toList();
+        }
+
+        @Override
+        public long sumSucceededRefundAmountByTargetId(String targetId) {
+            return refunds.values().stream().filter(r -> targetId.equals(r.targetId()) && "success".equals(r.status()))
+                    .mapToLong(FinanceRefundRecord::refundAmountCent).sum();
         }
 
         @Override
@@ -2177,6 +2222,18 @@ class FinanceServiceTests {
         @Override
         public Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
             return Optional.ofNullable(turnoverRentRules.get(id));
+        }
+
+        @Override
+        public List<TurnoverRentRuleRecord> findTurnoverRentRulesForPeriod(
+                String contractId, String merchantId, LocalDate periodStart, LocalDate periodEnd) {
+            return turnoverRentRules.values().stream()
+                    .filter(r -> java.util.Objects.equals(contractId, r.contractId()))
+                    .filter(r -> merchantId.equals(r.merchantId()) && "active".equals(r.status()))
+                    .filter(r -> !draftTurnoverRuleIds.contains(r.id()))
+                    .filter(r -> !r.effectiveFrom().isAfter(periodStart))
+                    .filter(r -> r.effectiveTo() == null || !r.effectiveTo().isBefore(periodEnd))
+                    .toList();
         }
 
         @Override

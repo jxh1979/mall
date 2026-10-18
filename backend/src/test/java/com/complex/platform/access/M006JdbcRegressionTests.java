@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 import static org.assertj.core.api.Assertions.*;
 
 import java.sql.Connection;
@@ -24,9 +24,9 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 
 /** M006-014/017：只用 complex_test 中连接内临时表；不修改共享业务表（类开始前只做 Flyway 迁移，与 SpringBootTest 启动时相同）。 */
 class M006JdbcRegressionTests {
-    // M001-F22：与其余库测试同一约定——源码字面量指向 complex_test，控制席一次性验证用 sed 把它改指一次性库；
-    // 不再读 COMPLEX_DATABASE_URL（160 的 complex.env 里它指正式库 complex，验证作业里指一次性库但库名不是 complex_test，原门槛两头都跳过）。
-    private static final String URL = "jdbc:postgresql://127.0.0.1:5432/complex_test";
+    // 与 Spring 集成测试共用显式测试 JVM 参数；不读取可能指向正式库的应用 URL 环境变量。
+    private static final String URL = System.getProperty("spring.datasource.hikari.jdbc-url",
+            "jdbc:postgresql://127.0.0.1:5432/complex_test");
     private static final String PASSWORD = Objects.requireNonNullElse(System.getenv("COMPLEX_DATABASE_PASSWORD"), "complex_dev_pwd");
     private Connection connection;
     private JdbcTemplate jdbc;
@@ -34,7 +34,9 @@ class M006JdbcRegressionTests {
 
     // M001-F22：本类不是 SpringBootTest，单跑时没有别的类替它迁移；LIKE public.xxx 要求库已迁到最新。配置同 application.yml。
     @BeforeAll static void migrateTestDatabase() {
-        if (URL.matches(".*/complex(\\?.*)?")) throw new IllegalStateException("拒绝在正式库 complex 上建表或迁移：" + URL);
+        if (!URL.matches("jdbc:postgresql://[^/]+/[A-Za-z0-9_]+_test(?:\\?.*)?")) {
+            throw new IllegalStateException("仅允许在名称以 _test 结尾的独立测试库运行");
+        }
         Flyway.configure().dataSource(URL, "complex", PASSWORD).locations("classpath:db/migration")
                 .baselineOnMigrate(true).validateOnMigrate(true).load().migrate();
     }

@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -34,7 +34,7 @@ class AnalyticsJdbcIntegrationTests {
 
     @Test
     void occupancyAreasHonorDenominatorRulingAndVacantListMatches() {
-        // S3 分母口径(拍板):shop+booth 且非 unavailable;车位单列;容器/公共区域不进;
+        // 出租率分母含全部 shop+booth；可租面积仍排除 unavailable；车位单列，容器/公共区域不进。
         // pending_effective 算「已签待交」不算已租。
         java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
         AnalyticsRecords.OccupancyAreas baseline = repository.occupancyAreas(asOf);
@@ -52,6 +52,7 @@ class AnalyticsJdbcIntegrationTests {
         AnalyticsRecords.OccupancyAreas areas = repository.occupancyAreas(asOf);
         // 共享 dev 库有真实铺位(活证据数据保留至首次打包),断言用基线差值口径。
         assertThat(areas.rentableArea().subtract(baseline.rentableArea())).isEqualByComparingTo("200");
+        assertThat(areas.totalArea().subtract(baseline.totalArea())).isEqualByComparingTo("700");
         assertThat(areas.leasedArea().subtract(baseline.leasedArea())).isEqualByComparingTo("100");
         assertThat(areas.signedPendingArea().subtract(baseline.signedPendingArea())).isEqualByComparingTo("40");
         assertThat(areas.parkingRentableArea().subtract(baseline.parkingRentableArea())).isEqualByComparingTo("20");
@@ -68,6 +69,50 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(expiring).extracting(AnalyticsRecords.ExpiringContractRow::contractId)
                 .containsExactly("ct_s3_parking", "ct_s3_let");
         assertThat(expiring.get(1).boundArea()).isEqualByComparingTo("100");
+    }
+
+    @Test
+    void occupancySnapshotIncludesUnavailableAreaWithoutChangingEnergyDenominator() {
+        java.time.LocalDate day = java.time.LocalDate.parse("2026-06-20");
+        insertSpace("sp_total_let", "shop", "100");
+        insertSpace("sp_total_vacant", "booth", "100");
+        insertSpace("sp_total_unavailable", "shop", "500");
+        jdbcTemplate.update("UPDATE spaces SET status='unavailable' WHERE id='sp_total_unavailable'", Map.of());
+        insertContractWithSpace("ct_total_let", "sp_total_let", "effective", day.minusDays(1), day.plusDays(30));
+        insertMeter("meter_total_denominator", "分母回归电表", "electricity");
+        insertReading("reading_total_denominator", "meter_total_denominator", "2026-06-20T10:00:00Z",
+                "100", null, "2026-06");
+
+        java.math.BigDecimal total = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(area_square_meter), 0) FROM spaces WHERE space_type IN ('shop','booth')",
+                Map.of(), java.math.BigDecimal.class);
+        AnalyticsRecords.OccupancyAreas areas = repository.occupancyAreas(day);
+        DashboardAggregationJob job = new DashboardAggregationJob(repository, businessDayResolver, false);
+        job.refreshSnapshots(day);
+
+        java.math.BigDecimal expectedRate = areas.leasedArea().divide(total, 4, java.math.RoundingMode.HALF_UP);
+        assertThat(occupancySnapshot("occupancy.rate", day)).isEqualByComparingTo(expectedRate);
+        assertThat(occupancySnapshot("occupancy.total_area", day)).isEqualByComparingTo(total);
+        assertThat(occupancySnapshot("occupancy.rentable_area", day)).isEqualByComparingTo(areas.rentableArea());
+        java.math.BigDecimal electricity = repository.energyConsumptionByType(
+                businessDayResolver.startInstant("energy", day), businessDayResolver.endInstant("energy", day))
+                .get("electricity");
+        assertThat(occupancySnapshot("energy.electricity_per_sqm", day))
+                .isEqualByComparingTo(electricity.divide(areas.rentableArea(), 4, java.math.RoundingMode.HALF_UP));
+
+        jdbcTemplate.update("UPDATE spaces SET status='active' WHERE id='sp_total_unavailable'", Map.of());
+        job.refreshSnapshots(day);
+        assertThat(occupancySnapshot("occupancy.total_area", day)).isEqualByComparingTo(total);
+        assertThat(occupancySnapshot("occupancy.rate", day)).isEqualByComparingTo(expectedRate);
+    }
+
+    private java.math.BigDecimal occupancySnapshot(String metricKey, java.time.LocalDate day) {
+        return jdbcTemplate.queryForObject("""
+                SELECT actual_value FROM analytics_business_metric_snapshots
+                 WHERE metric_key = :key AND business_date = :day
+                   AND period_type = 'daily' AND segment_type = 'platform'
+                """, new MapSqlParameterSource().addValue("key", metricKey).addValue("day", day),
+                java.math.BigDecimal.class);
     }
 
     private void insertSpace(String id, String type, String area) {

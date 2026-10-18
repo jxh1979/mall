@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -129,6 +129,8 @@ class AdmissionReleaseBoundToRequestJdbcIntegrationTests {
     void cleanUp() {
         SecurityContextHolder.clearContext();
         // 财务：退款单 → 收款（禁改删）→ 台账项（禁删）→ 额度。收款对台账项是级联删除，先删台账项会被收款的触发器挡住
+        jdbcTemplate.update("DELETE FROM finance_refund_attempts WHERE refund_id IN "
+                + "(SELECT id FROM finance_refunds WHERE target_id = ?)", paymentId);
         jdbcTemplate.update("DELETE FROM finance_refunds WHERE target_id = ?", paymentId);
         AppendOnlyTestBypass.updateOnTable(jdbcTemplate, "ar_ap_payments", "trg_append_only_ud",
                 "DELETE FROM ar_ap_payments WHERE id = ?", paymentId);

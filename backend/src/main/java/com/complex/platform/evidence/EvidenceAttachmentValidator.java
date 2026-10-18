@@ -1,5 +1,7 @@
 package com.complex.platform.evidence;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -20,14 +22,52 @@ import org.springframework.stereotype.Service;
 public class EvidenceAttachmentValidator {
 
     private final EvidenceEventRepository repository;
+    private final EvidenceFileStorage refundFileStorage;
 
     public EvidenceAttachmentValidator(EvidenceEventRepository repository) {
+        this(repository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public EvidenceAttachmentValidator(EvidenceEventRepository repository, EvidenceFileStorage refundFileStorage) {
         this.repository = repository;
+        this.refundFileStorage = refundFileStorage;
     }
 
     /** 所传附件 id 必须真实存在（空列表放行——「要不要传」由各业务闸自己决定）。 */
     public void requireExisting(List<String> attachmentIds, String fieldName) {
         requireKind(attachmentIds, null, fieldName, null);
+    }
+
+    /** 退款执行/核实凭证须真实上传、绑定本笔退款，并处于调用者可访问的商户范围。 */
+    public void requireRefundEvidence(List<String> attachmentIds, String refundId, String merchantScope) {
+        for (String id : attachmentIds) {
+            EvidenceAttachmentRecord attachment = repository.findAttachmentById(id)
+                    .orElseThrow(() -> ApiException.badRequest("EVIDENCE_ATTACHMENT_NOT_FOUND", "证据附件不存在：" + id));
+            if (merchantScope != null && !merchantScope.equals(attachment.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权引用其他商户的退款凭证");
+            }
+            if (!"finance_refund".equals(attachment.businessType()) || !refundId.equals(attachment.businessId())) {
+                throw ApiException.badRequest("REFUND_EVIDENCE_BINDING_MISMATCH", "凭证必须绑定当前退款");
+            }
+            if (!"uploaded".equals(attachment.status())) {
+                throw ApiException.badRequest("REFUND_EVIDENCE_NOT_UPLOADED", "退款凭证尚未完成上传");
+            }
+            if (refundFileStorage == null) {
+                throw ApiException.conflict("REFUND_EVIDENCE_STORAGE_UNAVAILABLE", "无法核实退款凭证的实际文件");
+            }
+            // uploaded 元数据不足以证明对象已上传；现有本地存储必须能读取实际文件。
+            // 未接入且未提供可信文件读取的直传对象，不能仅凭客户端 complete 结果用于退款。
+            java.nio.file.Path file = refundFileStorage.resolveForRead(attachment.objectKey());
+            try {
+                long actualSize = java.nio.file.Files.size(file);
+                if (actualSize <= 0 || attachment.fileSize() == null || actualSize != attachment.fileSize()) {
+                    throw ApiException.conflict("REFUND_EVIDENCE_FILE_MISMATCH", "退款凭证实际文件与登记大小不符");
+                }
+            } catch (java.io.IOException exception) {
+                throw ApiException.conflict("REFUND_EVIDENCE_FILE_UNREADABLE", "无法读取退款凭证文件");
+            }
+        }
     }
 
     /** 所传附件必须存在且为照片。 */

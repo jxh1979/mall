@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -870,11 +872,13 @@ public class ContractService {
             throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "该账期的租金已生成账单：" + period);
         }
         long baseRent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
-        long amountCent = resolveBillingRent(c, c.rentTerms() == null ? Map.of() : c.rentTerms(), period, baseRent);
-        if (amountCent <= 0) {
+        com.complex.platform.finance.FinanceService.PeriodTurnoverRent rent =
+                resolveBillingRent(c, c.rentTerms() == null ? Map.of() : c.rentTerms(), period, baseRent);
+        if (rent.amountCent() <= 0) {
             return null;   // 免租期 / 生效前 / 收租方式组合后仍为 0：无应收
         }
-        return genFeeBill(c, period, "rent", amountCent, dueDateOf(period), actual.idempotencyKey());
+        return genFeeBill(c, period, "rent", rent.amountCent(), rent.ruleId(),
+                dueDateOf(period), actual.idempotencyKey());
     }
 
     /**
@@ -904,15 +908,18 @@ public class ContractService {
     private List<ContractRentBillRecord> billPeriodFees(ContractRecord c, String period, String idemKey) {
         Map<String, Object> rt = c.rentTerms() == null ? Map.of() : c.rentTerms();
         LocalDate dueDate = dueDateOf(period);
-        long baseRent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
-        long rent = resolveBillingRent(c, rt, period, baseRent);
-        long property = numLong(rt.get("propertyFeeCent"));
         List<ContractRentBillRecord> out = new ArrayList<>();
-        ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent, dueDate, idemKey);
-        if (rb != null) {
-            out.add(rb);
+        if (!rentBillExistsInChain(c, period, "rent")) {
+            long baseRent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
+            com.complex.platform.finance.FinanceService.PeriodTurnoverRent rent =
+                    resolveBillingRent(c, rt, period, baseRent);
+            ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent.amountCent(), rent.ruleId(), dueDate, idemKey);
+            if (rb != null) {
+                out.add(rb);
+            }
         }
-        ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, dueDate, idemKey);
+        long property = numLong(rt.get("propertyFeeCent"));
+        ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, null, dueDate, idemKey);
         if (pb != null) {
             out.add(pb);
         }
@@ -923,13 +930,13 @@ public class ContractService {
 
     /** 单费目挂账：金额≤0 或已挂账则跳过返 null；否则建 ar_ap_items 应收 + contract_rent_bills。 */
     private ContractRentBillRecord genFeeBill(ContractRecord c, String period, String feeType, long amountCent,
-            LocalDate dueDate, String idemKey) {
+            String turnoverRuleId, LocalDate dueDate, String idemKey) {
         if (amountCent <= 0 || rentBillExistsInChain(c, period, feeType)) {
             return null;
         }
         ContractRentBillRecord bill = repository.insertRentBill(new ContractRentBillRecord(
                 "crb_" + UUID.randomUUID(), c.id(), c.merchantId(), c.projectId(), period, feeType, amountCent,
-                "arap_" + feeType + "_" + UUID.randomUUID(), Instant.now()), dueDate);
+                "arap_" + feeType + "_" + UUID.randomUUID(), Instant.now(), turnoverRuleId), dueDate);
         auditEventService.recordSuccess("contract.fee_billed", "finance.ar_ap.manage", "contract_rent_bill",
                 bill.id(), null, idemKey, Map.of("period", period, "fee_type", feeType, "amount_cent", amountCent));
         return bill;
@@ -940,20 +947,25 @@ public class ContractService {
         return LocalDate.of(Integer.parseInt(ym[0]), Integer.parseInt(ym[1]), 1);
     }
 
-    /** 批2b:按合同「收租方式」组合月租(baseRent)与提成。fixed_only/空=纯月租;其余需提成端口(缺则退月租)。 */
-    private long resolveBillingRent(ContractRecord c, Map<String, Object> rt, String period, long baseRent) {
+    /** 按合同收租方式组合月租和提成；使用提成的账单同时锁定本期规则。 */
+    private com.complex.platform.finance.FinanceService.PeriodTurnoverRent resolveBillingRent(
+            ContractRecord c, Map<String, Object> rt, String period, long baseRent) {
         String mode = strVal(rt.get("rentBillingMode"));
         if (mode == null || "fixed_only".equals(mode)) {
-            return baseRent;
+            return new com.complex.platform.finance.FinanceService.PeriodTurnoverRent(null, baseRent);
         }
-        long turnover = turnoverRentPort == null ? 0L
-                : turnoverRentPort.computePeriodTurnoverRent(c.merchantId(), c.id(), period);
-        return switch (mode) {
-            case "turnover_only" -> turnover;
-            case "higher_of" -> Math.max(baseRent, turnover);
-            case "sum" -> baseRent + turnover;
-            default -> baseRent;
+        if (turnoverRentPort == null) {
+            throw ApiException.conflict("TURNOVER_RENT_UNAVAILABLE", "抽成租金计算服务不可用，暂不能出账");
+        }
+        com.complex.platform.finance.FinanceService.PeriodTurnoverRent turnover =
+                turnoverRentPort.computePeriodTurnoverRentSnapshot(c.merchantId(), c.id(), period);
+        long amount = switch (mode) {
+            case "turnover_only" -> turnover.amountCent();
+            case "higher_of" -> Math.max(baseRent, turnover.amountCent());
+            case "sum" -> baseRent + turnover.amountCent();
+            default -> throw ApiException.badRequest("VALIDATION_FAILED", "合同收租方式不正确");
         };
+        return new com.complex.platform.finance.FinanceService.PeriodTurnoverRent(turnover.ruleId(), amount);
     }
 
     /** 每平米生效固化:rentMode=per_sqm 时用绑定铺位登记面积×单价算 baseRentCent,写回 rentTerms 副本;否则原样返回。 */

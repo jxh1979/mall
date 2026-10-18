@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.18
+# P0 OpenAPI Operation 验收矩阵 V0.19
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 823 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 830 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -135,6 +135,7 @@
 | evidence | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | `getEvidenceTimeline` | 业务时间线 | `-` | `evidence.timeline.view` | `staff-token` | `project-object` | web | 否 | `evidence.timeline_viewed` | `evidence.timeline_view_failed` |
 | finance | `GET` | `/api/v1/finance/ar-ap-items` | `listArApItems` | 查询应收应付台账 | `-` | `finance.ar_ap.view` | `staff-token` | `project-entity` | web | 否 | `finance_ar_ap.viewed` | `finance_ar_ap.view_failed` |
 | finance | `POST` | `/api/v1/finance/ar-ap-items` | `createArApItem` | 手工新增应收应付台账项 | `ArApItemRequest` | `finance.ar_ap.manage` | `staff-token` | `project-entity` | web | 是 | `finance_ar_ap.created` | `finance_ar_ap.create_failed` |
+| finance | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | `listArApPayments` | 读取所选台账原收付款流水 | `-` | `finance.ar_ap.view` | `staff-token` | `project-order` | web | 否 | `ar_ap_payment.listed` | `ar_ap_payment.list_failed` |
 | finance | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | `createArApPayment` | 应收应付收付款登记 | `ArApPaymentRequest` | `finance.payment.register` | `staff-token` | `project-entity` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
 | finance | `POST` | `/api/v1/finance/daily-closes` | `createDailyClose` | 日结锁定 | `DailyCloseRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.locked` | `finance_daily_close.lock_failed` |
 | finance | `POST` | `/api/v1/finance/payment-intents` | `createPaymentIntent` | 创建聚合支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-order` | web, tablet, kiosk, miniapp, app | 是 | `payment.intent_created` | `payment.intent_failed` |
@@ -143,7 +144,8 @@
 | finance | `GET` | `/api/v1/finance/reconciliation/differences` | `listReconciliationDifferences` | 对账差异 | `-` | `finance.reconciliation.view` | `staff-token` | `project-entity-channel` | web | 否 | `finance_reconciliation.difference_found` | `finance_reconciliation.view_failed` |
 | finance | `POST` | `/api/v1/finance/reconciliation/differences` | `createFinanceReconciliationDifference` | 创建对账差异 | `object` | `finance.reconciliation.difference.create` | `staff-token` | `platform` | web | 是 | `finance.reconciliation.difference_created` | `finance.reconciliation.difference_create_failed` |
 | finance | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | `closeFinanceReconciliationDifference` | 正式关闭对账差异 | `object` | `finance.reconciliation.resolve` | `staff-token` | `project-entity-channel` | web | 是 | `finance.reconciliation.difference_closed` | `finance.reconciliation.difference_close_failed` |
-| finance | `POST` | `/api/v1/finance/refunds` | `createFinanceRefund` | 创建财务退款记录 | `RefundRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.created` | `finance_refund.create_failed` |
+| finance | `GET` | `/api/v1/finance/refunds` | `listFinanceRefunds` | 读取退款台账及未结状态 | `-` | `finance.ar_ap.view` | `staff-token` | `project-order` | web | 否 | `finance_refund.listed` | `finance_refund.list_failed` |
+| finance | `POST` | `/api/v1/finance/refunds` | `createFinanceRefund` | 创建财务退款记录 | `FinanceRefundRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.created` | `finance_refund.create_failed` |
 | floor-plan | `GET` | `/api/v1/floor-plans` | `listFloorPlans` | 查询 P1/P2 商场平面图 | `-` | `floor_plan.view` | `staff-token` | `project-space` | web | 否 | `floor_plan.viewed` | `floor_plan.view_failed` |
 | floor-plan | `POST` | `/api/v1/floor-plans` | `createFloorPlan` | 创建 P1/P2 商场平面图 | `FloorPlanCreateRequest` | `floor_plan.manage` | `staff-token` | `project-space` | web | 是 | `floor_plan.created` | `floor_plan.create_failed` |
 | floor-plan | `GET` | `/api/v1/floor-plans/{id}/imports` | `listFloorPlanImports` | 查询平面图导入任务 | `-` | `floor_plan.import.view` | `staff-token` | `project-space` | web | 否 | `floor_plan.import_viewed` | `floor_plan.import_view_failed` |
@@ -844,6 +846,11 @@
 | staff | `POST` | `/api/v1/staff/lockers/scan-token` | `issueStaffLockerScanToken` | 申请寄存柜扫码凭证 | `object` | `staff.profile.self` | `staff-token` | `self` | staff_private_phone, staff_work_phone | 是 | `staff.locker.scan_token_issued` | `staff.locker.scan_token_failed` |
 | staff | `POST` | `/api/v1/staff/shifts/{id}/cover` | `coverStaffShift` | 记录临时顶班 | `object` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.shift.covered` | `staff.shift.cover_failed` |
 | staff | `GET` | `/api/v1/staff/shifts/{id}/covers` | `listStaffShiftCovers` | 查看班次顶班记录 | `-` | `staff.shift.manage` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.shift.covers_viewed` | `staff.shift.covers_view_failed` |
+| finance | `GET` | `/api/v1/finance/refunds/{refund_id}` | `getFinanceRefund` | 读取退款详情和全部办理记录 | `-` | `finance.ar_ap.view` | `staff-token` | `project-order` | web | 否 | `finance_refund.viewed` | `finance_refund.view_failed` |
+| finance | `POST` | `/api/v1/finance/refunds/{refund_id}/query` | `queryFinanceRefund` | 查询原退款单的渠道权威结果 | `RefundOperationRequest` | `finance.ar_ap.view` | `staff-token` | `project-order` | web | 是 | `finance_refund.queried` | `finance_refund.query_failed` |
+| finance | `POST` | `/api/v1/finance/refunds/{refund_id}/retry` | `retryFinanceRefund` | 明确失败或尚未发起的退款在原单重试 | `RefundOperationRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.retried` | `finance_refund.retry_failed` |
+| finance | `POST` | `/api/v1/finance/refunds/{refund_id}/execution` | `recordFinanceRefundExecution` | 实际支付经办人本人登记原路执行凭证 | `RefundExecutionRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.execution_recorded` | `finance_refund.execution_failed` |
+| finance | `POST` | `/api/v1/finance/refunds/{refund_id}/confirm` | `confirmFinanceRefundResult` | 另一人核实已有执行记录的实际退款结果 | `RefundResultConfirmRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.confirmed` | `finance_refund.confirm_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 

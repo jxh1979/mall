@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -293,9 +293,17 @@ class JdbcFinanceRepository implements FinanceRepository {
         Long result = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(refund_amount_cent), 0)
                   FROM finance_refunds
-                 WHERE target_id = :target_id
+                 WHERE target_id = :target_id AND source_type = 'ar_ap_payment'
                 """, Map.of("target_id", targetId), Long.class);
         return result == null ? 0L : result;
+    }
+
+    @Override
+    public long sumSucceededRefundAmountByTargetId(String targetId) {
+        Long amount = jdbcTemplate.queryForObject("SELECT COALESCE(SUM(refund_amount_cent), 0) FROM finance_refunds "
+                + "WHERE target_id = :target AND source_type = 'ar_ap_payment' AND status = 'success'",
+                Map.of("target", targetId), Long.class);
+        return amount == null ? 0 : amount;
     }
 
     @Override
@@ -424,20 +432,114 @@ class JdbcFinanceRepository implements FinanceRepository {
     public FinanceRefundRecord saveRefund(FinanceRefundRecord refund) {
         jdbcTemplate.update("""
                 INSERT INTO finance_refunds (
-                    id, target_id, refund_amount_cent, reason, refund_channel, refund_direction, status, created_at
+                    id, target_id, refund_amount_cent, reason, refund_channel, refund_direction, status, created_at,
+                    source_type, merchant_id, project_id, requested_by, original_payment_ref,
+                    gateway_provider, gateway_ref, updated_at, succeeded_at
                 )
                 VALUES (
-                    :id, :target_id, :refund_amount_cent, :reason, :refund_channel, :refund_direction, :status, :created_at
+                    :id, :target_id, :refund_amount_cent, :reason, :refund_channel, :refund_direction, :status, :created_at,
+                    :source_type, :merchant_id, :project_id, :requested_by, :original_payment_ref,
+                    :gateway_provider, :gateway_ref, :updated_at, :succeeded_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
-                    target_id = EXCLUDED.target_id,
-                    refund_amount_cent = EXCLUDED.refund_amount_cent,
-                    reason = EXCLUDED.reason,
-                    refund_channel = EXCLUDED.refund_channel,
-                    refund_direction = EXCLUDED.refund_direction,
-                    status = EXCLUDED.status
+                    status = EXCLUDED.status,
+                    gateway_provider = EXCLUDED.gateway_provider,
+                    gateway_ref = EXCLUDED.gateway_ref,
+                    updated_at = EXCLUDED.updated_at,
+                    succeeded_at = EXCLUDED.succeeded_at
                 """, refundParameters(refund));
         return refund;
+    }
+
+    @Override
+    public List<String> listMerchantOperatingProjectIds(String merchantId) {
+        return jdbcTemplate.queryForList("""
+                SELECT project_id FROM merchants WHERE id = :merchant AND project_id IS NOT NULL
+                UNION
+                SELECT project_id FROM merchant_projects WHERE merchant_id = :merchant
+                """, Map.of("merchant", merchantId), String.class);
+    }
+
+    @Override
+    public Optional<FinanceRefundRecord> findRefundById(String id, boolean forUpdate) {
+        return jdbcTemplate.query("SELECT * FROM finance_refunds WHERE id = :id"
+                + (forUpdate ? " FOR UPDATE" : ""), Map.of("id", id), this::mapRefund).stream().findFirst();
+    }
+
+    @Override
+    public List<FinanceRefundRecord> listRefunds(String merchantId, String projectId) {
+        var params = new MapSqlParameterSource();
+        String scope = "";
+        if (merchantId != null) {
+            scope += " AND merchant_id = :merchant";
+            params.addValue("merchant", merchantId);
+        }
+        if (projectId != null) {
+            scope += " AND project_id = :project";
+            params.addValue("project", projectId);
+        }
+        return jdbcTemplate.query("SELECT * FROM finance_refunds WHERE 1=1" + scope
+                + " ORDER BY created_at DESC, id", params, this::mapRefund);
+    }
+
+    @Override
+    public List<ArApPaymentRecord> listArApPayments(String itemId) {
+        return jdbcTemplate.query("SELECT * FROM ar_ap_payments WHERE ar_ap_item_id = :id ORDER BY payment_time DESC, id DESC",
+                Map.of("id", itemId), this::mapArApPayment);
+    }
+
+    @Override
+    public void appendRefundAttempt(FinanceRefundAttemptRecord attempt) {
+        jdbcTemplate.update("""
+                INSERT INTO finance_refund_attempts
+                    (id, refund_id, operation, status, gateway_provider, gateway_ref, message,
+                     payment_reference, payment_operator_id, verified_by, evidence_attachment_ids, created_at, dispatch_state)
+                VALUES (:id, :refund, :operation, :status, :provider, :reference, :message,
+                        :payment_reference, :operator, :verifier, CAST(:evidence AS jsonb), :created_at,
+                        CASE WHEN :operation IN ('submit', 'retry') THEN 'ready' ELSE NULL END)
+                """, new MapSqlParameterSource()
+                .addValue("id", attempt.id()).addValue("refund", attempt.refundId())
+                .addValue("operation", attempt.operation()).addValue("status", attempt.status())
+                .addValue("provider", attempt.gatewayProvider()).addValue("reference", attempt.gatewayRef())
+                .addValue("message", attempt.message()).addValue("payment_reference", attempt.paymentReference())
+                .addValue("operator", attempt.paymentOperatorId()).addValue("verifier", attempt.verifiedBy())
+                .addValue("evidence", writeJson(attempt.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(attempt.createdAt())));
+    }
+
+    @Override
+    public boolean claimRefundAttempt(String attemptId) {
+        return jdbcTemplate.update("UPDATE finance_refund_attempts SET dispatch_state = 'claimed' "
+                + "WHERE id = :id AND dispatch_state = 'ready'", Map.of("id", attemptId)) == 1;
+    }
+
+    @Override
+    public Optional<FinanceRefundAttemptRecord> findReadyRefundAttempt(String refundId) {
+        var ids = jdbcTemplate.queryForList("SELECT id FROM finance_refund_attempts "
+                + "WHERE refund_id = :id AND dispatch_state = 'ready' ORDER BY created_at, id",
+                Map.of("id", refundId), String.class);
+        return listRefundAttempts(refundId).stream().filter(attempt -> ids.contains(attempt.id())).findFirst();
+    }
+
+    @Override
+    public List<FinanceRefundAttemptRecord> listRefundAttempts(String refundId) {
+        return jdbcTemplate.query("SELECT * FROM finance_refund_attempts WHERE refund_id = :id ORDER BY created_at, id",
+                Map.of("id", refundId), (rs, row) -> new FinanceRefundAttemptRecord(
+                        rs.getString("id"), rs.getString("refund_id"), rs.getString("operation"),
+                        rs.getString("status"), rs.getString("gateway_provider"), rs.getString("gateway_ref"),
+                        rs.getString("message"), rs.getString("payment_reference"),
+                        rs.getString("payment_operator_id"), rs.getString("verified_by"),
+                        readStringList(rs.getString("evidence_attachment_ids")), nullableInstant(rs, "created_at")));
+    }
+
+    private FinanceRefundRecord mapRefund(ResultSet rs, int row) throws SQLException {
+        return new FinanceRefundRecord(rs.getString("id"), rs.getString("target_id"),
+                rs.getLong("refund_amount_cent"), rs.getString("reason"), rs.getString("refund_channel"),
+                rs.getString("refund_direction"), rs.getString("status"), nullableInstant(rs, "created_at"),
+                rs.getString("source_type"), rs.getString("merchant_id"), rs.getString("project_id"),
+                rs.getString("requested_by"), rs.getString("original_payment_ref"),
+                rs.getString("gateway_provider"), rs.getString("gateway_ref"),
+                nullableInstant(rs, "updated_at"), nullableInstant(rs, "succeeded_at"));
     }
 
     @Override
@@ -650,18 +752,21 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
         // 官方售票：ticket_orders 已支付(paid)，以 visit_date 为经营日；金额=实付分，count=单数。
-        // 退款（冲减当日净收入）：ticket_refunds 以 created_at 落在经营日窗口 [from, to) 归集，单列入本源 refund_cent。
+        // 仅归集非渠道售票；成功退款按 succeeded_at 落在经营日窗口 [from, to) 冲减本源收入。
         // 财务确认：revenue.net = 自营售票 + 酒吧 − 退款（不含第三方回流）；退款冲减按经营日发生。
         return aggregateTotals("""
                 SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
-                         WHERE r.status = 'success'
+                          JOIN ticket_orders ro ON ro.id = r.target_id
+                         WHERE ro.sales_channel <> 'channel'
+                           AND r.status = 'success'
                            AND r.succeeded_at >= :from
                            AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
+                   AND o.sales_channel <> 'channel'
                    AND o.visit_date = :business_date
                 """, businessDate, fromInclusive, toExclusive);
     }
@@ -795,13 +900,16 @@ class JdbcFinanceRepository implements FinanceRepository {
                 SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
-                         WHERE r.merchant_id = :merchant_id
+                          JOIN ticket_orders ro ON ro.id = r.target_id
+                         WHERE ro.sales_channel <> 'channel'
+                           AND ro.merchant_id = :merchant_id
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
                            AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
+                   AND o.sales_channel <> 'channel'
                    AND o.visit_date = :business_date
                    AND o.merchant_id = :merchant_id
                 """, businessDate, from, to, scopeId);
@@ -819,7 +927,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
                          WHERE ro.sales_channel = 'channel'
-                           AND r.merchant_id = :merchant_id
+                           AND ro.merchant_id = :merchant_id
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
                            AND r.succeeded_at < :to) AS refund_cent,
@@ -954,6 +1062,36 @@ class JdbcFinanceRepository implements FinanceRepository {
                  ORDER BY effective_from DESC, created_at DESC
                  LIMIT 1
                 """, Map.of("contract_id", contractId), this::mapTurnoverRentRule).stream().findFirst();
+    }
+
+    @Override
+    public List<TurnoverRentRuleRecord> findTurnoverRentRulesForPeriod(
+            String contractId, String merchantId, LocalDate periodStart, LocalDate periodEnd) {
+        return jdbcTemplate.query("""
+                SELECT r.id, r.contract_id, r.merchant_id, r.rule_name, r.rate_bps,
+                       r.min_amount_cent, r.max_amount_cent, r.effective_from, r.effective_to,
+                       r.status, r.created_at
+                  FROM turnover_rent_rules r
+                 WHERE r.contract_id IS NOT DISTINCT FROM :contract_id
+                   AND r.merchant_id = :merchant_id AND r.is_draft = FALSE
+                   AND r.archive_reason IS NULL
+                   AND r.effective_from <= :period_start
+                   AND (r.effective_to IS NULL OR r.effective_to >= :period_end)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM turnover_rent_rules newer
+                        WHERE newer.contract_id IS NOT DISTINCT FROM r.contract_id
+                          AND newer.merchant_id = r.merchant_id AND newer.is_draft = FALSE
+                          AND newer.id <> r.id
+                          AND (newer.effective_from > r.effective_from
+                              OR (newer.effective_from = r.effective_from
+                                  AND (newer.activation_sequence IS NULL OR r.activation_sequence IS NULL
+                                      OR newer.activation_sequence > r.activation_sequence)))
+                          AND newer.effective_from <= :period_end)
+                """, new MapSqlParameterSource()
+                .addValue("contract_id", contractId, java.sql.Types.VARCHAR)
+                .addValue("merchant_id", merchantId)
+                .addValue("period_start", periodStart)
+                .addValue("period_end", periodEnd), this::mapTurnoverRentRule);
     }
 
     /**
@@ -1447,7 +1585,14 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("refund_channel", refund.refundChannel())
                 .addValue("refund_direction", refund.refundDirection())
                 .addValue("status", refund.status())
-                .addValue("created_at", timestampWithTimeZone(refund.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(refund.createdAt()))
+                .addValue("source_type", refund.sourceType())
+                .addValue("merchant_id", refund.merchantId()).addValue("project_id", refund.projectId())
+                .addValue("requested_by", refund.requestedBy())
+                .addValue("original_payment_ref", refund.originalPaymentRef())
+                .addValue("gateway_provider", refund.gatewayProvider()).addValue("gateway_ref", refund.gatewayRef())
+                .addValue("updated_at", timestampWithTimeZone(refund.updatedAt()))
+                .addValue("succeeded_at", timestampWithTimeZone(refund.succeededAt()));
     }
 
     private MapSqlParameterSource reconciliationBatchParameters(ReconciliationBatchRecord batch) {
@@ -1544,6 +1689,14 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
 
+
+    private List<String> readStringList(String json) {
+        try {
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("退款凭证记录无法读取", e);
+        }
+    }
 
     private String writeJson(Object value) {
         try {

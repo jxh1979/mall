@@ -1,4 +1,6 @@
 package com.complex.platform.finance;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -22,6 +24,9 @@ import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
+import com.complex.platform.finance.dto.RefundOperationRequest;
+import com.complex.platform.finance.dto.RefundExecutionRequest;
+import com.complex.platform.finance.dto.RefundResultConfirmRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -173,6 +178,57 @@ public class FinanceController {
         authorizationService.requirePermission("finance.refund.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createRefund(request));
+    }
+
+    @GetMapping("/ar-ap-items/{id}/payments")
+    public ApiResponse<PageResponse<ArApPaymentRecord>> listArApPayments(@PathVariable("id") String id) {
+        authorizationService.requirePermission("finance.ar_ap.view");
+        return ApiResponse.ok(service.listArApPayments(id));
+    }
+
+    @GetMapping("/refunds")
+    public ApiResponse<PageResponse<FinanceRefundRecord>> listFinanceRefunds() {
+        authorizationService.requirePermission("finance.ar_ap.view");
+        return ApiResponse.ok(service.listFinanceRefunds());
+    }
+
+    @GetMapping("/refunds/{refund_id}")
+    public ApiResponse<FinanceRefundDetailRecord> getFinanceRefund(@PathVariable("refund_id") String id) {
+        authorizationService.requirePermission("finance.ar_ap.view");
+        return ApiResponse.ok(service.getFinanceRefund(id));
+    }
+
+    @PostMapping("/refunds/{refund_id}/query")
+    public ApiResponse<FinanceRefundRecord> queryFinanceRefund(@PathVariable("refund_id") String id,
+            @RequestBody @jakarta.validation.Valid RefundOperationRequest request) {
+        authorizationService.requirePermission("finance.ar_ap.view");
+        requireIdempotencyKey(request.idempotencyKey());
+        return ApiResponse.ok(service.queryFinanceRefund(id, request));
+    }
+
+    @PostMapping("/refunds/{refund_id}/retry")
+    public ApiResponse<FinanceRefundRecord> retryFinanceRefund(@PathVariable("refund_id") String id,
+            @RequestBody @jakarta.validation.Valid RefundOperationRequest request) {
+        authorizationService.requirePermission("finance.refund.create");
+        requireIdempotencyKey(request.idempotencyKey());
+        return ApiResponse.ok(service.retryFinanceRefund(id, request));
+    }
+
+    @PostMapping("/refunds/{refund_id}/execution")
+    public ApiResponse<FinanceRefundRecord> recordFinanceRefundExecution(@PathVariable("refund_id") String id,
+            @RequestBody @jakarta.validation.Valid RefundExecutionRequest request) {
+        authorizationService.requirePermission("finance.refund.create");
+        requireIdempotencyKey(request.idempotencyKey());
+        return ApiResponse.ok(service.recordFinanceRefundExecution(id, request));
+    }
+
+    @PostMapping("/refunds/{refund_id}/confirm")
+    public ApiResponse<FinanceRefundRecord> confirmFinanceRefundResult(@PathVariable("refund_id") String id,
+            @RequestBody @jakarta.validation.Valid RefundResultConfirmRequest request) {
+        authorizationService.requirePermission("finance.refund.create");
+        authorizationService.requirePermission("finance.payment.register");
+        requireIdempotencyKey(request.idempotencyKey());
+        return ApiResponse.ok(service.confirmFinanceRefundResult(id, request));
     }
 
     // ── P1#13 库存差异 → AR/AP ──────────────────────────────────────────────────

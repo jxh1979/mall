@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ const directColumns = [
 ];
 
 const inheritedRules = [
+  { pattern: /^finance_refund_attempts$/, source: "refund_id", path: "refund_id -> finance_refunds -> project_id/merchant_id; every read and write inherits the parent refund scope" },
   { pattern: /^staff_shift_revisions$/, source: "review_id/shift_id", path: "review_id -> supervisor_reviews; published shift_id -> staff_shifts -> staff_profiles company/merchant scope" },
   { pattern: /^staff_locker_records$/, source: "staff_profile_id", path: "staff_profile_id -> staff_profiles -> current authenticated employee; cabinet and slot identify storage location" },
   { pattern: /^staff_locker_scan_tokens$/, source: "staff_profile_id", path: "staff_profile_id -> staff_profiles -> employee company/merchant scope; one-time scan token presented to the kiosk (U05-006)" },
@@ -203,7 +204,7 @@ function buildCsv() {
     return {
       table_name: table,
       ...classification,
-      file_version: "V0.02",
+      file_version: "V0.03",
       status: "covered",
     };
   });

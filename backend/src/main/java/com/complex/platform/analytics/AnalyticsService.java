@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
@@ -119,8 +121,9 @@ public class AnalyticsService {
                     "collection rate is platform-scope only (no snapshot when month receivable is zero)"),
             // S3 出租率/去化(平台口径,期末时点):
             new MetricCatalogEntry(DashboardAggregationJob.OCC_RATE, "leasing", "rate", true,
-                    "occupancy is platform-scope only (not emitted when rentable area is zero)"),
+                    "出租率按已租面积除以全部铺位面积，含不可租；总面积为零时不产出"),
             new MetricCatalogEntry(DashboardAggregationJob.OCC_RENTABLE_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.OCC_TOTAL_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.OCC_LEASED_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.OCC_SIGNED_PENDING_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.OCC_PARKING_RATE, "leasing", "rate", true,

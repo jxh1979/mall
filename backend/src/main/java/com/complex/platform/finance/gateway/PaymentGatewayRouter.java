@@ -1,5 +1,7 @@
 package com.complex.platform.finance.gateway;
 
+// 文件版本：V0.01
+
 import com.complex.platform.terminal.TerminalCapabilitySwitchRecord;
 import com.complex.platform.terminal.TerminalDeviceRepository;
 import java.util.LinkedHashMap;
@@ -69,6 +71,11 @@ public class PaymentGatewayRouter implements PaymentGatewayPort {
     @Override
     public PaymentGatewayResult queryStatus(String gatewayRef) {
         return active().queryStatus(gatewayRef);
+    }
+
+    @Override
+    public PaymentGatewayResult queryRefund(PaymentGatewayRequest refundRequest, String refundGatewayRef) {
+        return active().queryRefund(refundRequest, refundGatewayRef);
     }
 
     @Override
