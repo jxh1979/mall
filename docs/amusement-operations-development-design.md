@@ -1,4 +1,4 @@
-# 游乐设施运营系统开发设计文档 V0.07
+# 游乐设施运营系统开发设计文档 V0.08
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
@@ -1180,6 +1180,14 @@ com.complex.amusement
 - dto
 - mapper
 
+## 15C. 在玩人数系统自动清零（CG-03，迁移 V448，依据 BSM「出场自动扣减」「在玩人数不允许人工调整」）
+
+- **留痕表** `amusement_concurrent_reset_log`（project_id、scope business_day_end|session_end、business_date、session_id、cleared_rows、cleared_people、boundary_at、reset_at）；部分唯一索引 `(project_id, business_date) WHERE scope='business_day_end'`、`(session_id) WHERE scope='session_end'`。
+- **作业** `AmusementConcurrentCountResetJob`（`@Scheduled` 薄包装，`amusement.concurrent-reset.scheduled.enabled` 默认 false，`fixed-delay-ms` 默认 60000）→ `AmusementService.closeEndedSessionsAndClearCounts(now)` + `resetConcurrentCountsAtBusinessDayEnd(now)`。
+- **场次结束**：`listEndedUnclosedSessions`（status IN scheduled/open AND end_time ≤ now）→ `closeSessionIfEnded`（置 closed）→ `zeroSessionConcurrentSnapshots`（该场次维 + 该项目 project/point_device 维 occupied_count=0）→ 留痕（session_end）+ 审计 `amusement.concurrent_count.session_end_cleared`。
+- **营业日结束**：`BusinessDayResolver`（amusement 域日切）算上一营业日结束时刻 dayEnd → `zeroStaleConcurrentSnapshots(project, dayEnd)`（只清 updated_at < dayEnd 且 occupied_count>0 的 project/point_device 维行，新营业日的计数不动）→ 留痕（business_day_end，含清零行数与人数）+ 审计 `amusement.concurrent_count.business_day_reset`；留痕先插（ON CONFLICT DO NOTHING）再清，重复调度不重复清、不重复记。
+- **无人工入口**：不新增端点；计数只由入场核销、出场自动扣减与本作业产生。
+- **未含**：场次型 / 非场次型显式字段（待裁决）；`amusement_sessions.used_capacity`（历史场次席位维）不在本作业清零范围。
 ## 15A. 全园故障状态（CG-08a，迁移 V446，依据 ENUM「全园故障与补偿通票」）
 
 - **表**：`amusement_park_wide_faults`（id、project_id→projects、status pending_activation|active|pending_lift|lifted、reason、initiated_by/role/at、activation_confirmed_by/role、activated_at、lift_initiated_by/role/at、lift_reason、lift_confirmed_by/role、lifted_at；部分唯一索引 `(project_id) WHERE status <> 'lifted'`：同综合体同一时刻只允许一条未解除记录）；`amusement_park_wide_fault_actions`（fault_id、action initiate|confirm_activation|initiate_lift|confirm_lift、actor_id、actor_role、note、created_at）。
@@ -1242,6 +1250,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 增 | 抬头、§15C | V0.08：CG-03 在玩人数系统自动清零作业、留痕表、两条清零规则与审计事件 | BSM「出场自动扣减」「在玩人数不允许人工调整」条；迁移 V448 |
 | 2026-10-17 | 增 | 抬头、§15B | V0.07：CG-08b 补偿通票数据模型、快照与发放规则、核销挂钩、端点与后台页 | ENUM「全园故障与补偿通票」条；迁移 V447 |
 | 2026-10-17 | 增 | 抬头、§15A | V0.06：CG-08a 全园故障状态表、岗位→权限码、服务与错误码、票务售票闸、后台页 | ENUM「全园故障与补偿通票」条；迁移 V446 |
 | 2026-09-01 | 改 | 文首、§18 | V0.05 门禁同步：把 BSM 经营看板引用补全为唯一条目名；业务正文与范围不变 | `verify:entry-anchors` 唯一锚点要求 |

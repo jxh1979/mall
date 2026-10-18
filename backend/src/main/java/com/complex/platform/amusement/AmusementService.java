@@ -1630,6 +1630,80 @@ public class AmusementService {
      * 幂等 upsert 一张 pending 待办（同到期点不重复）；再把已到期未完成的待办批量翻 overdue。
      * 由 {@link AmusementInspectionTaskJob} 薄 @Scheduled 包装调用（默认关），亦供单测直调对拍。返回本次遍历产生的 upsert 次数。
      */
+    // ============================================================
+    // CG-03 在玩人数的系统自动清零（BSM「出场自动扣减」：「按场清场的场次型项目，散场时由系统按场次结束自动清空；
+    // 非场次型项目，营业日结束时由系统自动清零在玩人数」；BSM「在玩人数不允许人工调整」）。
+    // 两个写口只由调度作业（系统主体）调用，不暴露端点、不接受人工参数。
+    // ============================================================
+
+    // 营业日起止沿用现有营业日配置（business_day_cutoff_config 的 amusement 域日切），不另立。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDayResolver;
+
+    /**
+     * 营业日结束自动清零（非场次型）：对每个项目，把上一营业日结束时刻之前最后变动的并发快照（项目维 / 点位设备维）清零；
+     * 新营业日已产生的计数不动。每项目每营业日只执行一次（留痕唯一键），重复调度不重复记；留系统审计事件。
+     * 返回本次新清零的项目数。
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public int resetConcurrentCountsAtBusinessDayEnd(Instant now) {
+        if (businessDayResolver == null) {
+            throw new IllegalStateException("营业日配置不可用，不得执行在玩人数自动清零");
+        }
+        LocalDate current = businessDayResolver.businessDate("amusement", now);
+        LocalDate ended = current.minusDays(1);
+        Instant dayEnd = businessDayResolver.endInstant("amusement", ended);
+        int resets = 0;
+        for (AmusementProjectRecord project : repository.listProjects()) {
+            int[] stale = repository.countStaleConcurrentSnapshots(project.id(), dayEnd);
+            boolean fresh = repository.insertConcurrentResetLogIfAbsent(new AmusementConcurrentResetLogRecord(
+                    "acrl_" + UUID.randomUUID().toString().replace("-", ""), project.id(),
+                    AmusementConcurrentResetLogRecord.SCOPE_BUSINESS_DAY_END, ended, null, stale[0], stale[1], dayEnd, now));
+            if (!fresh) {
+                continue; // 该项目该营业日已清零（幂等：不重复清、不重复记）。
+            }
+            int cleared = repository.zeroStaleConcurrentSnapshots(project.id(), dayEnd, now);
+            if (cleared == 0) {
+                continue; // 该营业日无在玩人数需清零：留痕作幂等标记，不产生审计噪音。
+            }
+            auditEventService.recordSuccess("amusement.concurrent_count.business_day_reset", null, "amusement_project",
+                    project.id(), project.merchantId(), null, Map.of("trigger", "system_business_day_end",
+                            "business_date", ended.toString(), "boundary_at", dayEnd.toString(),
+                            "cleared_rows", cleared, "cleared_people", stale[1]));
+            resets++;
+        }
+        return resets;
+    }
+
+    /**
+     * 场次结束自动清空（场次型）：end_time 已过、仍为 scheduled/open 的场次由系统置 closed，并把该场次维与该项目并发维的在玩人数清空；
+     * 每场次只执行一次；留系统审计事件。返回本次置 closed 并清空的场次数。
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public int closeEndedSessionsAndClearCounts(Instant now) {
+        int closed = 0;
+        for (AmusementSessionRecord session : repository.listEndedUnclosedSessions(now)) {
+            if (!repository.closeSessionIfEnded(session.id(), now)) {
+                continue; // 并发下已被另一轮置 closed。
+            }
+            int[] pending = repository.countSessionConcurrentSnapshots(session.projectId(), session.id());
+            int cleared = repository.zeroSessionConcurrentSnapshots(session.projectId(), session.id(), now);
+            LocalDate businessDate = businessDayResolver != null
+                    ? businessDayResolver.businessDate("amusement", session.endTime())
+                    : session.endTime().atZone(com.complex.platform.common.LocalZone.ID).toLocalDate();
+            repository.insertConcurrentResetLogIfAbsent(new AmusementConcurrentResetLogRecord(
+                    "acrl_" + UUID.randomUUID().toString().replace("-", ""), session.projectId(),
+                    AmusementConcurrentResetLogRecord.SCOPE_SESSION_END, businessDate, session.id(), cleared, pending[1],
+                    session.endTime(), now));
+            String merchantId = repository.findProjectById(session.projectId()).map(AmusementProjectRecord::merchantId).orElse(null);
+            auditEventService.recordSuccess("amusement.concurrent_count.session_end_cleared", null, "amusement_session",
+                    session.id(), merchantId, null, Map.of("trigger", "system_session_end", "project_id", session.projectId(),
+                            "session_end_time", session.endTime().toString(), "cleared_rows", cleared, "cleared_people", pending[1]));
+            closed++;
+        }
+        return closed;
+    }
+
     public int generateDueInspectionTasks(Instant now) {
         int upserted = 0;
         for (AmusementProjectRecord project : repository.listProjects()) {

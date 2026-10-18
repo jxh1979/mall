@@ -254,6 +254,43 @@ public interface AmusementRepository {
     /** 阶段3 只读：并发在场容量快照；merchantId=null 为平台视角不加租户谓词。 */
     List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId);
 
+    // ---- CG-03 在玩人数系统自动清零（BSM「出场自动扣减」「在玩人数不允许人工调整」）：以下写口只供系统调度调用，无人工入口。----
+
+    /** 该项目在 before 之前最后变动、且仍有在玩人数的并发快照（项目维/点位设备维）：{行数, 人数合计}。default 0 兼容内存双子。 */
+    default int[] countStaleConcurrentSnapshots(String projectId, Instant before) {
+        return new int[] {0, 0};
+    }
+
+    /** 营业日结束自动清零：只清 before 之前最后变动的并发快照（项目维/点位设备维），新营业日已产生的计数不动。返回行数。 */
+    default int zeroStaleConcurrentSnapshots(String projectId, Instant before, Instant now) {
+        return 0;
+    }
+
+    /** 场次结束前该场次维与该项目并发维仍有在玩人数的快照：{行数, 人数合计}。 */
+    default int[] countSessionConcurrentSnapshots(String projectId, String sessionId) {
+        return new int[] {0, 0};
+    }
+
+    /** 场次结束自动清空：该场次维 + 该项目并发维（项目/点位设备）在玩人数清零。返回行数。 */
+    default int zeroSessionConcurrentSnapshots(String projectId, String sessionId, Instant now) {
+        return 0;
+    }
+
+    /** end_time 已过、仍为 scheduled/open 的场次（待系统按场次结束置 closed）。 */
+    default List<AmusementSessionRecord> listEndedUnclosedSessions(Instant now) {
+        return List.of();
+    }
+
+    /** 系统按场次结束置 closed（仅 scheduled/open 且 end_time ≤ now）。返回是否本次流转。 */
+    default boolean closeSessionIfEnded(String sessionId, Instant now) {
+        return false;
+    }
+
+    /** 清零留痕纯追加；同项目同营业日 / 同场次已记录则不重复（返回 false）。 */
+    default boolean insertConcurrentResetLogIfAbsent(AmusementConcurrentResetLogRecord record) {
+        return false;
+    }
+
     AmusementDeviceStatusRecord saveDeviceStatus(AmusementDeviceStatusRecord status);
 
     List<AmusementDeviceStatusRecord> listDeviceStatuses();
