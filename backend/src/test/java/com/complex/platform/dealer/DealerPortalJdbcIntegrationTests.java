@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,6 +10,7 @@ import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AccessUser;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.dealer.dto.DealerCancelRequest;
 import com.complex.platform.dealer.dto.DealerCatalogDecisionRequest;
 import com.complex.platform.dealer.dto.DealerCatalogDraftRequest;
 import com.complex.platform.dealer.dto.DealerCatalogLineRequest;
@@ -67,6 +68,7 @@ class DealerPortalJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private com.complex.platform.evidence.EvidenceEventService admissionFiles;
     @Autowired private AccessRepository access;
+    @Autowired private JdbcDealerReturnRepository returnRepository;
 
     private String suffix;
     private String staff;
@@ -355,7 +357,100 @@ class DealerPortalJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name = 'dealer.portal.access_rejected' AND business_id = ?", Integer.class, account.userId())).isEqualTo(1);
     }
 
+    /** ENUM:179「门户提供取消申请和查看发票」（裁决 69）：发票只读、只见本企业；他企业 404 不泄露、匿名与停用拒绝并留痕。 */
+    @Test
+    void portalInvoicesVisibleOnlyToOwningEnabledDealer() {
+        Portal own = enabledPortalDealer("dealer_", "9131", "13900000000");
+        Portal other = enabledPortalDealer("dealer_o_", "9132", "13900000002");
+        DealerContractRecord contract = approvedContract(own.dealer().id());
+        actAsDealer(own);
+        DealerOrderRecord order = portal.createOrder(new DealerOrderDraftRequest(key(), contract.id(), List.of(new DealerOrderLineRequest(itemA, "箱", 4, null)), "门户下单"));
+        // 开票事实由内部开票流程落库（全额红冲后按保留货款重开）；门户只读
+        String original = "dinv_" + suffix + "_1";
+        returnRepository.saveInvoice(new DealerInvoiceRecord(original, order.id(), own.dealer().id(), salesEntity, 5_000L, 1300, "reversed", "INV-1", null, null,
+                staff, Instant.now().minusSeconds(60), staff, Instant.now().minusSeconds(60), Instant.now(), null));
+        returnRepository.saveInvoice(new DealerInvoiceRecord("dinv_" + suffix + "_2", order.id(), own.dealer().id(), salesEntity, 4_000L, 1300, "issued", "INV-2", null, original,
+                staff, Instant.now(), staff, Instant.now(), null, null));
+
+        List<DealerInvoiceRecord> invoices = portal.listInvoices(order.id()).items();
+        assertThat(invoices).extracting(DealerInvoiceRecord::invoiceNo).containsExactly("INV-1", "INV-2");
+        assertThat(invoices).extracting(DealerInvoiceRecord::status).containsExactly("reversed", "issued");
+        assertThat(invoices.get(1).reissuedFromInvoiceId()).isEqualTo(original);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.portal.invoices_viewed' AND business_id=? AND event_result='success'", Long.class, order.id())).isEqualTo(1L);
+
+        // 他企业（已启用门户）：404 不泄露存在性
+        actAsDealer(other);
+        assertThatThrownBy(() -> portal.listInvoices(order.id())).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_ORDER_NOT_FOUND"));
+        // 匿名
+        SecurityContextHolder.clearContext();
+        assertThatThrownBy(() -> portal.listInvoices(order.id())).isInstanceOf(ApiException.class);
+        // 停用后立即拒绝
+        actAs(reviewer);
+        dealerService.deactivateDealer(own.dealer().id(), new DealerDeactivateRequest(key(), "合作终止"));
+        actAsDealer(own);
+        assertThatThrownBy(() -> portal.listInvoices(order.id())).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_DEACTIVATED"));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.portal.invoices_view_failed' AND business_id=? AND event_result='failure'", Long.class, order.id())).isEqualTo(3L);
+    }
+
+    /** ENUM:179「取消只是申请，仍由内部经办按既有审批及订单、付款互斥规则办理，不允许经销商自批取消」：门户申请 → 取消中，审批只在内部后台。 */
+    @Test
+    void portalCancelRequestIsOnlyAnApplicationDecidedByInternalReview() {
+        Portal own = enabledPortalDealer("dealer_", "9131", "13900000000");
+        DealerContractRecord contract = approvedContract(own.dealer().id());
+        actAsDealer(own);
+        DealerOrderRecord draft = portal.createOrder(new DealerOrderDraftRequest(key(), contract.id(), List.of(new DealerOrderLineRequest(itemA, "箱", 4, null)), "门户下单"));
+        portal.submitOrder(draft.id(), key());
+        actAs(reviewer);
+        assertThat(orders.reviewOrder(draft.id(), new DealerOrderDecisionRequest(key(), "approve", "通过")).status()).isEqualTo("pending_payment");
+
+        actAsDealer(own);
+        DealerOrderRecord applied = portal.requestCancel(draft.id(), new DealerCancelRequest(key(), "经销商改期"));
+        assertThat(applied.status()).as("取消只是申请").isEqualTo("cancelling");
+        assertThat(applied.statusBeforeCancel()).isEqualTo("pending_payment");
+        assertThat(applied.cancelRequestedBy()).isEqualTo(own.account().userId());
+        assertThat(jdbc.queryForObject("SELECT status FROM dealer_orders WHERE id = ?", String.class, draft.id())).isEqualTo("cancelling");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.order.cancel_requested' AND business_id=? AND permission_code='dealer_portal.order.manage'", Long.class, draft.id())).isEqualTo(1L);
+        // 不允许经销商自批取消：门户无审批入口，内部审批接口拒绝门户账号
+        assertThatThrownBy(() -> orders.decideCancel(draft.id(), new DealerOrderDecisionRequest(key(), "approve", "自批")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+        assertThat(portal.getOrder(draft.id()).status()).isEqualTo("cancelling");
+        // 仍由内部经办按既有审批办理
+        actAs(reviewer);
+        assertThat(orders.decideCancel(draft.id(), new DealerOrderDecisionRequest(key(), "approve", "同意取消")).status()).isEqualTo("cancelled");
+    }
+
     // ── helpers ──
+
+    private record Portal(DealerRecord dealer, DealerPortalAccountRecord account) {}
+
+    /** 建经销商 + 门户账号，内部提交资料并四项审核通过（门户启用）。 */
+    private Portal enabledPortalDealer(String loginPrefix, String usccPrefix, String phone) {
+        actAs(staff);
+        DealerRecord dealer = dealerService.createDealer(new DealerCreateRequest(key(), "门户经销商" + loginPrefix + suffix, usccPrefix + System.nanoTime(), "法人", "联系人", phone));
+        DealerPortalAccountRecord account = portalAccounts.createPortalAccount(dealer.id(), new DealerPortalAccountRequest(key(), loginPrefix + suffix, "Portal#2026", "企业联系人"));
+        DealerTestDocuments.submit(dealerService, admissionFiles, dealer.id(), key());
+        actAs(reviewer);
+        dealerService.reviewDealer(dealer.id(), new DealerReviewRequest(key(), "approve", true, true, true, true, "通过"));
+        return new Portal(dealer, account);
+    }
+
+    private void actAsDealer(Portal portal) {
+        actAsDealer(portal.account().userId(), portal.dealer().projectId());
+    }
+
+    /** 合同 + 付款条款 + 已审批价格目录（itemA 1000 分/箱）。 */
+    private DealerContractRecord approvedContract(String dealerId) {
+        actAs(staff);
+        DealerContractRecord contract = dealerService.createContract(dealerId, new DealerContractRequest(key(), "DC-DP-" + dealerId.substring(dealerId.length() - 6), salesEntity, centralWarehouse,
+                LocalDate.now().minusDays(1), LocalDate.now().plusYears(1)));
+        orders.updateContractTerms(contract.id(), new DealerContractTermsRequest(key(), false, null, null, 3, 30, 1_000L, 50_000L, "dealer", null, null, null, "payment_notified", null, "shipped", null));
+        DealerPriceCatalogRecord v1 = dealerService.createCatalogDraft(contract.id(), new DealerCatalogDraftRequest(key(), "目录",
+                List.of(new DealerCatalogLineRequest(itemA, "箱", 1_000L, 1300, null))));
+        dealerService.submitCatalog(v1.id(), key());
+        actAs(reviewer);
+        dealerService.decideCatalog(v1.id(), new DealerCatalogDecisionRequest(key(), "approve", "通过"));
+        return contract;
+    }
 
     private void terminal(String type) {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/dealer-portal/me");

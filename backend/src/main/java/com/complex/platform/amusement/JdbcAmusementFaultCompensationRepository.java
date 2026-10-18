@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -26,14 +26,14 @@ public class JdbcAmusementFaultCompensationRepository {
     private static final String BATCH_SELECT = """
             SELECT id, fault_id, project_id, status, reason, bearer_company_id, validity_days, window_from, window_to,
                    valid_until, initiated_by, initiated_role, initiated_at, confirmed_by, confirmed_role, confirmed_at,
-                   item_count, extend_count, reissue_count, created_at, updated_at
+                   item_count, extend_count, reissue_count, created_at, updated_at, event_type, ending_id, session_id
               FROM amusement_fault_compensation_batches
             """;
     private static final String ITEM_SELECT = """
             SELECT id, batch_id, fault_id, project_id, entitlement_id, order_id, ticket_type_id, parent_ticket_id, slot_index,
                    customer_id, kind, share_count, original_session_id, original_entry_verification_id, original_valid_to,
                    status, new_valid_to, compensation_entitlement_ids, fulfilled_verification_id, fulfilled_at,
-                   fulfilled_settlement_price_cent, created_at, updated_at
+                   fulfilled_settlement_price_cent, created_at, updated_at, ending_id
               FROM amusement_fault_compensation_items
             """;
 
@@ -74,10 +74,10 @@ public class JdbcAmusementFaultCompensationRepository {
         jdbcTemplate.update("""
                 INSERT INTO amusement_fault_compensation_batches (id, fault_id, project_id, status, reason, bearer_company_id,
                         validity_days, window_from, window_to, valid_until, initiated_by, initiated_role, initiated_at,
-                        item_count, extend_count, reissue_count, created_at, updated_at)
+                        item_count, extend_count, reissue_count, created_at, updated_at, event_type, ending_id, session_id)
                 VALUES (:id, :fault_id, :project_id, :status, :reason, :bearer_company_id, :validity_days, :window_from, :window_to,
                         :valid_until, :initiated_by, :initiated_role, :initiated_at, :item_count, :extend_count, :reissue_count,
-                        :created_at, :updated_at)
+                        :created_at, :updated_at, :event_type, :ending_id, :session_id)
                 """, batchParams(b));
         return b;
     }
@@ -86,7 +86,8 @@ public class JdbcAmusementFaultCompensationRepository {
         jdbcTemplate.update("""
                 UPDATE amusement_fault_compensation_batches
                    SET status = :status, valid_until = :valid_until, confirmed_by = :confirmed_by, confirmed_role = :confirmed_role,
-                       confirmed_at = :confirmed_at, item_count = :item_count, extend_count = :extend_count,
+                       confirmed_at = :confirmed_at, initiated_by = :initiated_by, initiated_role = :initiated_role,
+                       initiated_at = :initiated_at, item_count = :item_count, extend_count = :extend_count,
                        reissue_count = :reissue_count, updated_at = :updated_at
                  WHERE id = :id
                 """, batchParams(b));
@@ -108,6 +109,15 @@ public class JdbcAmusementFaultCompensationRepository {
                 new MapSqlParameterSource("fault_id", faultId), this::mapBatch);
     }
 
+    /** 按事件类型（可空＝全部）与综合体项目（可空＝全部）列出批次，待确认在前。 */
+    public List<AmusementFaultCompensationBatchRecord> listBatchesByEvent(String eventType, String projectId) {
+        return jdbcTemplate.query(BATCH_SELECT + """
+                 WHERE (CAST(:event_type AS text) IS NULL OR event_type = :event_type)
+                   AND (CAST(:project_id AS text) IS NULL OR project_id = :project_id)
+                 ORDER BY CASE status WHEN 'pending_confirmation' THEN 0 ELSE 1 END, created_at DESC
+                """, new MapSqlParameterSource().addValue("event_type", eventType).addValue("project_id", projectId), this::mapBatch);
+    }
+
     // ---------- 补偿记录 ----------
 
     public void insertItem(AmusementFaultCompensationItemRecord i) {
@@ -115,10 +125,11 @@ public class JdbcAmusementFaultCompensationRepository {
                 INSERT INTO amusement_fault_compensation_items (id, batch_id, fault_id, project_id, entitlement_id, order_id,
                         ticket_type_id, parent_ticket_id, slot_index, customer_id, kind, share_count, original_session_id,
                         original_entry_verification_id, original_valid_to, status, new_valid_to, compensation_entitlement_ids,
-                        created_at, updated_at)
+                        created_at, updated_at, ending_id)
                 VALUES (:id, :batch_id, :fault_id, :project_id, :entitlement_id, :order_id, :ticket_type_id, :parent_ticket_id,
                         :slot_index, :customer_id, :kind, :share_count, :original_session_id, :original_entry_verification_id,
-                        :original_valid_to, :status, :new_valid_to, CAST(:compensation_entitlement_ids AS jsonb), :created_at, :updated_at)
+                        :original_valid_to, :status, :new_valid_to, CAST(:compensation_entitlement_ids AS jsonb), :created_at, :updated_at,
+                        :ending_id)
                 """, itemParams(i));
     }
 
@@ -153,7 +164,45 @@ public class JdbcAmusementFaultCompensationRepository {
                 .stream().findFirst();
     }
 
+    /**
+     * TK-18：场次提前结束后发放补偿，把该批次覆盖的入场待办写回实际结果（compensation_issued → 批次编号）；
+     * 未进批次的入场待办（如补偿补发行再次入场）保持待处理。
+     */
+    public int completeSessionEndFollowups(String batchId, String actorId, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_session_followups
+                   SET status = 'completed', resolution_type = 'compensation_issued', resolution_id = :batch_id,
+                       resolved_by = :actor_id, resolved_at = :now
+                 WHERE source_type = 'entry' AND status = 'pending'
+                   AND source_id IN (SELECT i.original_entry_verification_id FROM amusement_fault_compensation_items i
+                                      WHERE i.batch_id = :batch_id)
+                """, new MapSqlParameterSource().addValue("batch_id", batchId).addValue("actor_id", actorId).addValue("now", ts(now)));
+    }
+
     // ---------- 受影响人份快照 ----------
+
+    /**
+     * TK-18 场次提前结束时仍在场（已入场核销、尚未释放）的人份：只取游乐类权益；排除补偿补发行（比照 CG-08b）与本次结束已补偿的人份。
+     * 须在结束事务把入场记录标记 released_at 之前调用。行同 {@link #listVerifiedAffectedShares}。
+     */
+    public List<Map<String, Object>> listSessionEndAffectedShares(String endingId, String sessionId) {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT ON (e.id) e.id AS entitlement_id, e.order_id, e.ticket_type_id, e.parent_ticket_id, e.slot_index,
+                       e.valid_to, COALESCE(h.holder_customer_id, o.customer_id) AS customer_id,
+                       av.session_id, av.id AS entry_verification_id
+                  FROM amusement_verifications av
+                  JOIN issued_entitlements e ON e.id = av.entitlement_id
+                  LEFT JOIN ticket_orders o ON o.id = e.order_id
+                  LEFT JOIN ticket_slot_holders h ON h.parent_ticket_id = e.parent_ticket_id AND h.slot_index = e.slot_index
+                 WHERE av.session_id = :session_id AND av.direction = 'entry' AND av.verification_result = 'success'
+                   AND av.released_at IS NULL
+                   AND LOWER(e.entitlement_type) LIKE 'amusement%'
+                   AND e.compensation_item_id IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM amusement_fault_compensation_items i
+                                    WHERE i.ending_id = :ending_id AND i.entitlement_id = e.id)
+                 ORDER BY e.id, av.created_at DESC
+                """, new MapSqlParameterSource().addValue("ending_id", endingId).addValue("session_id", sessionId));
+    }
 
     /**
      * 故障发生时已完成入场核销、且本场次履约受影响的人份：入场核销（success）所在场次与故障时间窗 [from, to] 相交，
@@ -221,7 +270,8 @@ public class JdbcAmusementFaultCompensationRepository {
                 .addValue("confirmed_by", b.confirmedBy()).addValue("confirmed_role", b.confirmedRole())
                 .addValue("confirmed_at", ts(b.confirmedAt())).addValue("item_count", b.itemCount())
                 .addValue("extend_count", b.extendCount()).addValue("reissue_count", b.reissueCount())
-                .addValue("created_at", ts(b.createdAt())).addValue("updated_at", ts(b.updatedAt()));
+                .addValue("created_at", ts(b.createdAt())).addValue("updated_at", ts(b.updatedAt()))
+                .addValue("event_type", b.eventType()).addValue("ending_id", b.endingId()).addValue("session_id", b.sessionId());
     }
 
     private MapSqlParameterSource itemParams(AmusementFaultCompensationItemRecord i) {
@@ -235,7 +285,8 @@ public class JdbcAmusementFaultCompensationRepository {
                 .addValue("original_valid_to", ts(i.originalValidTo())).addValue("status", i.status())
                 .addValue("new_valid_to", ts(i.newValidTo()))
                 .addValue("compensation_entitlement_ids", json(i.compensationEntitlementIds()))
-                .addValue("created_at", ts(i.createdAt())).addValue("updated_at", ts(i.updatedAt()));
+                .addValue("created_at", ts(i.createdAt())).addValue("updated_at", ts(i.updatedAt()))
+                .addValue("ending_id", i.endingId());
     }
 
     private AmusementFaultCompensationBatchRecord mapBatch(ResultSet rs, int n) throws SQLException {
@@ -244,7 +295,8 @@ public class JdbcAmusementFaultCompensationRepository {
                 instant(rs, "window_from"), instant(rs, "window_to"), instant(rs, "valid_until"), rs.getString("initiated_by"),
                 rs.getString("initiated_role"), instant(rs, "initiated_at"), rs.getString("confirmed_by"),
                 rs.getString("confirmed_role"), instant(rs, "confirmed_at"), rs.getInt("item_count"), rs.getInt("extend_count"),
-                rs.getInt("reissue_count"), instant(rs, "created_at"), instant(rs, "updated_at"));
+                rs.getInt("reissue_count"), instant(rs, "created_at"), instant(rs, "updated_at"), rs.getString("event_type"),
+                rs.getString("ending_id"), rs.getString("session_id"));
     }
 
     private AmusementFaultCompensationItemRecord mapItem(ResultSet rs, int n) throws SQLException {
@@ -256,7 +308,7 @@ public class JdbcAmusementFaultCompensationRepository {
                 rs.getString("original_session_id"), rs.getString("original_entry_verification_id"),
                 instant(rs, "original_valid_to"), rs.getString("status"), instant(rs, "new_valid_to"),
                 readList(rs.getString("compensation_entitlement_ids")), rs.getString("fulfilled_verification_id"),
-                instant(rs, "fulfilled_at"), price, instant(rs, "created_at"), instant(rs, "updated_at"));
+                instant(rs, "fulfilled_at"), price, instant(rs, "created_at"), instant(rs, "updated_at"), rs.getString("ending_id"));
     }
 
     private List<String> readList(String json) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 export type AdminUser = {
   id: string;
   username: string;
@@ -583,6 +583,8 @@ export type FinanceLedgerRow = {
   itemNo?: string;
   billNo?: string;
   sourceDoc?: string;
+  sourceId?: string;
+  counterpartyId?: string;
   sourceType?: string; // ar_ap 来源类型（含退租相关 termination_penalty/deposit_refund）
   counterparty?: string;
   direction?: string;

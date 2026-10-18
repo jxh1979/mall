@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -31,17 +31,20 @@ final class AmusementBookingService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final Supplier<AmusementSessionLifecycleService> sessionLifecycle;
 
     AmusementBookingService(
             AmusementRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            Supplier<AmusementSessionLifecycleService> sessionLifecycle
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.sessionLifecycle = sessionLifecycle;
     }
 
     PageResponse<AmusementQueueEntryRecord> listQueueEntries(int page, int size) {
@@ -207,7 +210,7 @@ final class AmusementBookingService {
         AmusementReservationRecord existing = repository.findReservationById(reservationId)
                 .orElseThrow(() -> ApiException.notFound("RESERVATION_NOT_FOUND", "预约不存在或已被删除"));
         checkProjectOwnership(existing.projectId());
-        return repository.saveReservation(new AmusementReservationRecord(
+        AmusementReservationRecord saved = repository.saveReservation(new AmusementReservationRecord(
                 existing.id(),
                 existing.projectId(),
                 existing.sessionId(),
@@ -216,6 +219,9 @@ final class AmusementBookingService {
                 existing.createdAt(),
                 Instant.now()
         ));
+        // TK-18：预约按既有规则取消即为提前结束待办的实际结果，写回留痕。
+        if ("cancelled".equals(status)) resolveFollowup("reservation", saved.id(), "reservation_cancelled");
+        return saved;
     }
 
     private AmusementQueueEntryRecord createQueueEntryInternal(AmusementQueueEntryRequest request) {
@@ -321,13 +327,22 @@ final class AmusementBookingService {
             throw ApiException.conflict("GROUP_BOOKING_NOT_APPROVED", "只有已批准的团体预约才能释放");
         }
         Instant now = Instant.now();
-        return repository.releaseGroupBookingAndCapacity(
+        AmusementGroupBookingRecord released = repository.releaseGroupBookingAndCapacity(
                         existing.id(),
                         trimToDefault(existing.operatorNote(), reason),
                         evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                         now
                 )
                 .orElseThrow(() -> ApiException.conflict("GROUP_BOOKING_RELEASE_FAILED", "团体预约容量释放失败，请重试"));
+        // TK-18：团体预约按既有规则释放即为提前结束待办的实际结果，写回留痕。
+        resolveFollowup("group_booking", released.id(), "group_booking_released");
+        return released;
+    }
+
+    private void resolveFollowup(String sourceType, String sourceId, String resolutionType) {
+        AmusementSessionLifecycleService lifecycle = sessionLifecycle.get();
+        // 内存装配（单元测试）没有生命周期服务，与 AmusementService 的 required=false 注入一致。
+        if (lifecycle != null) lifecycle.resolveFollowup(sourceType, sourceId, resolutionType, sourceId);
     }
 
     private void checkProjectOwnership(String projectId) {

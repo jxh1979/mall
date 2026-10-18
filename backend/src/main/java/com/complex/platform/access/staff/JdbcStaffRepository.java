@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.17
+// 文件版本：V0.21
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -211,8 +211,15 @@ public class JdbcStaffRepository {
     }
 
     public Optional<StaffAdjustmentAppealRecord> lockPendingAppealByReview(String reviewId) {
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtextextended('staff-payroll:' || user_id,0)) FROM staff_payroll_adjustment_appeals WHERE review_id=:review",
+                Map.of("review",reviewId), rs -> {});
         return jdbcTemplate.query(APPEAL_SELECT + " WHERE a.review_id = :review AND a.status = 'pending' FOR UPDATE OF a",
                 Map.of("review", reviewId), this::mapAppeal).stream().findFirst();
+    }
+
+    /** 与工资定格/补差同一把员工锁（staff-payroll:<user>，事务级咨询锁）：销假判「已定格月份」前先取，并发定格与销假互不漏看。 */
+    public void lockPayrollEmployee(String userId) {
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtextextended('staff-payroll:' || :user,0))", Map.of("user", userId), rs -> {});
     }
 
     public void decideAppeal(String id, String status, String reversalAdjustmentId, java.time.Instant at) {
@@ -273,142 +280,14 @@ public class JdbcStaffRepository {
 
     public int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope,
             String merchantScope, String companyScope) {
-        // 月结重算:固定档案 + 台账提成 + 酒吧提成(bar_commission_calculations 按月/非作废) + 奖 - 罚;
-        // 有任一薪资要素的员工都出单;未发放月幂等覆盖(uq user+month)。
-        // 资金安全①:已发放(status='paid')的行既不重算 INSERT(WHERE NOT EXISTS 排除),
-        //   也不被 ON CONFLICT 覆盖(DO UPDATE WHERE status <> 'paid' 兜底并发)。重结新单显式置 'closed'。
-        return jdbcTemplate.update("""
-                INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
-                        bonus_cent, penalty_cent, leave_deduction_cent, tax_cent, total_cent, status, closed_by, closed_at, project_id, penalty_cap_bps,
-                        payer_company_id, tax_assessment_id, tax_version_id)
-                SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
-                       COALESCE(b.monthly_salary_cent, 0),
-                       COALESCE(c.total, 0) + COALESCE(bc.total, 0),
-                       COALESCE(adj.bonus, 0),
-                       capped.penalty,
-                       COALESCE(lv.deduction, 0),
-                       -- HP-H11：只使用专业认定并完成财税法/最高审批的税额，未认定由月结前置校验阻止。
-                       COALESCE(tax.tax_cent, 0),
-                       GREATEST(0, COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
-                           + COALESCE(adj.bonus, 0) - capped.penalty - COALESCE(lv.deduction, 0) - COALESCE(tax.tax_cent, 0)),
-                       -- CG-07（BSM「派驻人员的成本与报酬」）：发放主体＝人员所属主体，由其统一发放并代扣个人所得税。
-                       'closed', :closed_by, :now, sp.project_id, cap.value, sp.company_id, tax.id, tax.tax_version_id
-                  FROM (SELECT user_id FROM staff_base_salaries
-                        UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
-                        UNION SELECT user_id FROM staff_payroll_adjustments WHERE month = :month
-                        UNION SELECT sales_staff_id FROM bar_commission_calculations
-                               WHERE to_char(created_at, 'YYYY-MM') = :month AND sales_staff_id IS NOT NULL) u
-                  LEFT JOIN staff_base_salaries b ON b.user_id = u.user_id
-                  LEFT JOIN (SELECT user_id, SUM(amount_cent) AS total FROM staff_commission_ledger
-                              WHERE month = :month GROUP BY user_id) c ON c.user_id = u.user_id
-                  LEFT JOIN (SELECT sales_staff_id, SUM(commission_amount_cent) AS total
-                               FROM bar_commission_calculations
-                              WHERE to_char(created_at, 'YYYY-MM') = :month
-                                AND status NOT IN ('void', 'cancelled')
-                              GROUP BY sales_staff_id) bc ON bc.sales_staff_id = u.user_id
-                  LEFT JOIN (SELECT user_id,
-                                    SUM(CASE WHEN adj_type = 'bonus' THEN amount_cent ELSE 0 END) AS bonus,
-                                    -- CG-12：申诉撤销的冲回记录（penalty_reversal）负向计入处罚合计，原扣罚记录保留
-                                    SUM(CASE WHEN adj_type = 'penalty' THEN amount_cent
-                                             WHEN adj_type = 'penalty_reversal' THEN -amount_cent ELSE 0 END) AS penalty
-                               FROM staff_payroll_adjustments WHERE month = :month GROUP BY user_id) adj
-                         ON adj.user_id = u.user_id
-                  LEFT JOIN (SELECT DISTINCT ON (a.user_id) a.user_id,a.id,a.tax_cent,a.tax_version_id
-                               FROM payroll_tax_assessments a
-                               LEFT JOIN staff_payroll_statements locked ON locked.user_id=a.user_id AND locked.month=a.month
-                              WHERE a.month=:month AND a.status='approved'
-                                AND (locked.tax_assessment_id IS NULL OR locked.tax_assessment_id=a.id)
-                              ORDER BY a.user_id,a.created_at DESC,a.id DESC) tax ON tax.user_id=u.user_id
-                  -- BSM-1.18.2：普通处罚合计按「总薪资」比例封顶。HTML 总薪资＝基础工资+各项补贴+绩效工资+奖金；
-                  -- 现行 schema 只有固定工资与奖金两列，先取全这两项，补贴/绩效列落地后并入分母（U05-004）；提成不入分母，事假另算。
-                  CROSS JOIN LATERAL (
-                      SELECT COALESCE((SELECT locked.penalty_cap_bps FROM staff_payroll_statements locked
-                                       WHERE locked.user_id=u.user_id AND locked.month=:month),
-                                      (SELECT numeric_value FROM staff_policy_settings
-                                       WHERE policy_key='payroll_penalty_cap_bps' AND scope_id='global'),2000) AS value
-                  ) cap
-                  CROSS JOIN LATERAL (
-                      SELECT LEAST(GREATEST(COALESCE(adj.penalty, 0), 0),
-                          ROUND((COALESCE(b.monthly_salary_cent, 0)::numeric + COALESCE(adj.bonus, 0))
-                              * cap.value
-                              / 10000)) AS penalty
-                  ) capped
-                  -- 仅批准的事假扣薪；按当月结束的排班工时计算实际请假比例，分钟/小时均不先截断。
-                  -- BSM L1450：从「当期应发薪资」扣减——基数＝固定工资+台账提成+酒吧提成+奖金（个税与处罚另算，U05-002）。
-                  LEFT JOIN LATERAL (
-                      SELECT ROUND((COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
-                              + COALESCE(adj.bonus, 0))::numeric
-                          * SUM(LEAST(EXTRACT(EPOCH FROM (sh.end_at - sh.start_at)), COALESCE(lp.seconds, 0)))
-                          / NULLIF(SUM(EXTRACT(EPOCH FROM (sh.end_at - sh.start_at))), 0)) AS deduction
-                        FROM staff_shift_schedules sh
-                        LEFT JOIN LATERAL (
-                            SELECT SUM(GREATEST(0, EXTRACT(EPOCH FROM (
-                                LEAST(sh.end_at, (lr.end_date + 1)::timestamp AT TIME ZONE :local_zone)
-                                - GREATEST(sh.start_at, lr.start_date::timestamp AT TIME ZONE :local_zone))))) AS seconds
-                              FROM staff_leave_requests lr
-                             WHERE lr.user_id = sh.user_id AND lr.status = 'approved' AND lr.leave_type = 'personal'
-                        ) lp ON true
-                       WHERE sh.user_id = u.user_id
-                         AND (sh.end_at AT TIME ZONE :local_zone)::date BETWEEN :first AND :last
-                  ) lv ON true
-                  LEFT JOIN (SELECT DISTINCT ON (user_id) user_id, project_id, merchant_id, company_id FROM staff_profiles
-                              ORDER BY user_id, created_at DESC) sp
-                         ON sp.user_id = u.user_id
-                 -- P0 项目级月结(V214):平台口径(scope=null)重算全量;项目口径仅本综合体员工,
-                 -- 绝不 INSERT/覆盖其他项目的薪资单。无档案员工(sp.project_id 为 NULL)只在平台口径纳入。
-                 WHERE (:project_scope::text IS NULL OR sp.project_id = :project_scope)
-                   AND (:merchant_scope::text IS NULL OR sp.merchant_id = :merchant_scope)
-                   AND (:company_scope::text IS NULL OR sp.company_id = :company_scope)
-                   -- 资金安全①:已发放的员工月份不参与重算(不 INSERT 冲突、不覆盖)。
-                   AND NOT EXISTS (SELECT 1 FROM staff_payroll_statements paid
-                                    WHERE paid.user_id = u.user_id AND paid.month = :month
-                                      AND paid.status = 'paid')
-                ON CONFLICT (user_id, month) DO UPDATE SET
-                    project_id = EXCLUDED.project_id,
-                    base_cent = EXCLUDED.base_cent,
-                    commission_cent = EXCLUDED.commission_cent,
-                    bonus_cent = EXCLUDED.bonus_cent,
-                    penalty_cent = EXCLUDED.penalty_cent,
-                    leave_deduction_cent = EXCLUDED.leave_deduction_cent,
-                    tax_cent = EXCLUDED.tax_cent,
-                    tax_assessment_id = EXCLUDED.tax_assessment_id,
-                    tax_version_id = EXCLUDED.tax_version_id,
-                    total_cent = EXCLUDED.total_cent,
-                    closed_by = EXCLUDED.closed_by,
-                    closed_at = EXCLUDED.closed_at,
-                    payer_company_id = EXCLUDED.payer_company_id
-                  WHERE staff_payroll_statements.status <> 'paid'
-                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("month", month).addValue("closed_by", closedBy)
-                .addValue("now", java.sql.Timestamp.from(now))
-                .addValue("first", java.sql.Date.valueOf(java.time.YearMonth.parse(month).atDay(1)))
-                .addValue("last", java.sql.Date.valueOf(java.time.YearMonth.parse(month).atEndOfMonth()))
-                .addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope)
-                .addValue("company_scope", companyScope).addValue("local_zone", LocalZone.ID.getId()));
+        throw com.complex.platform.common.api.ApiException.conflict("PAYROLL_CONFIRMED_FACTS_REQUIRED",
+                "工资须先锁定已批准方案、真实计薪事实和完整专业税额原件，再由工资定格服务形成应付");
     }
 
     public int markPayrollPaid(String payoutId, String userId, String month, String payMethod,
             String payRef, String paidBy, java.time.Instant now) {
-        // 资金安全①:发放动作。仅 status='closed' 的已定格单可发放;落发放台账 + 置 paid。
-        // 幂等:staff_payroll_payouts uq(user,month) 防重复发放;状态置换只对 closed 生效。
-        var params = new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("payout_id", payoutId).addValue("user_id", userId).addValue("month", month)
-                .addValue("pay_method", payMethod).addValue("pay_ref", payRef).addValue("paid_by", paidBy)
-                .addValue("now", java.sql.Timestamp.from(now));
-        int inserted = jdbcTemplate.update("""
-                INSERT INTO staff_payroll_payouts (id, statement_id, user_id, month, paid_total_cent,
-                        pay_method, pay_ref, paid_by, paid_at, project_id)
-                SELECT :payout_id, s.id, s.user_id, s.month, s.total_cent,
-                       :pay_method, :pay_ref, :paid_by, :now, s.project_id
-                  FROM staff_payroll_statements s
-                 WHERE s.user_id = :user_id AND s.month = :month AND s.status = 'closed'
-                ON CONFLICT (user_id, month) DO NOTHING
-                """, params);
-        jdbcTemplate.update("""
-                UPDATE staff_payroll_statements SET status = 'paid'
-                 WHERE user_id = :user_id AND month = :month AND status = 'closed'
-                """, params);
-        return inserted;
+        throw com.complex.platform.common.api.ApiException.conflict("PAYROLL_FINANCE_RESULT_REQUIRED",
+                "人事不能标记工资已发；须由财务实际成功付款原件同步");
     }
 
     // ============================================================
@@ -498,6 +377,7 @@ public class JdbcStaffRepository {
                  WHERE to_char(c.created_at AT TIME ZONE :local_zone, 'YYYY-MM') = :month
                    AND c.sales_staff_id IS NOT NULL
                    AND c.status NOT IN ('void', 'cancelled')
+                   AND b.settlement_status = 'settled'
                  GROUP BY COALESCE(b.merchant_id, b.bar_id), d.company_id
                  ORDER BY 1, 2
                 """, Map.of("month", month, "local_zone", com.complex.platform.common.LocalZone.ID.getId()));
@@ -639,6 +519,22 @@ public class JdbcStaffRepository {
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
+    public com.complex.platform.common.api.PageResponse<StaffPayrollStatementRecord> listPayrollStatementsVisible(
+            String month,String userId,java.util.List<String> visibleIds,int page,int size) {
+        int safePage=Math.max(1,page),safeSize=size<1?1000:Math.min(size,1000);
+        var params=new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+            .addValue("month",month).addValue("user_id",userId);
+        String where=" WHERE month=:month AND (:user_id::text IS NULL OR user_id=:user_id)";
+        if(visibleIds!=null) {
+            if(visibleIds.isEmpty())where+=" AND false";
+            else {where+=" AND id IN (:visible_ids)";params.addValue("visible_ids",visibleIds);}
+        }
+        Long total=jdbcTemplate.queryForObject("SELECT count(*) FROM staff_payroll_statements"+where,params,Long.class);
+        params.addValue("limit",safeSize).addValue("offset",(long)(safePage-1)*safeSize);
+        var rows=jdbcTemplate.query("SELECT id,user_id,month,base_cent,commission_cent,bonus_cent,penalty_cent,leave_deduction_cent,tax_cent,total_cent,closed_by,closed_at,payer_company_id,tax_assessment_id,tax_version_id FROM staff_payroll_statements"+where+" ORDER BY user_id,id LIMIT :limit OFFSET :offset",params,this::mapPayrollStatement);
+        return new com.complex.platform.common.api.PageResponse<>(rows,safePage,safeSize,total==null?0:total);
+    }
+
     public com.complex.platform.common.api.PageResponse<StaffPayrollStatementRecord> listPayrollStatementsPaged(
             String month, String userId, String projectScope, String merchantScope, int page, int size) {
         return listPayrollStatementsPaged(month, userId, projectScope, merchantScope, null, page, size);
@@ -686,7 +582,7 @@ public class JdbcStaffRepository {
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         java.util.List<StaffLeaveRequestRecord> items = jdbcTemplate.query(
                 "SELECT id, user_id, leave_type, start_date, end_date, reason, status, reviewed_by, review_note, "
-                        + "created_at, updated_at FROM staff_leave_requests " + where
+                        + "created_at, updated_at, revoke_requested_by, revoke_requested_at, revoke_request_reason, revoked_by, revoked_at, revoke_reason FROM staff_leave_requests " + where
                         + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
                 params, this::mapLeave);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
@@ -771,10 +667,49 @@ public class JdbcStaffRepository {
         return record;
     }
 
+    /** 2026-10-18 操作员裁决：员工本人申请销假——状态转「待销假审批」(revoke_requested)，另记申请人/申请时间/申请理由；原审批留痕不动。 */
+    public StaffLeaveRequestRecord markLeaveRevokeRequested(String id, String requestedBy, String reason, java.time.Instant at) {
+        return jdbcTemplate.query("""
+                UPDATE staff_leave_requests
+                   SET status = 'revoke_requested', revoke_requested_by = :by, revoke_requested_at = :at,
+                       revoke_request_reason = :reason, updated_at = :at
+                 WHERE id = :id
+                RETURNING id, user_id, leave_type, start_date, end_date, reason, status,
+                          reviewed_by, review_note, created_at, updated_at, revoke_requested_by, revoke_requested_at, revoke_request_reason, revoked_by, revoked_at, revoke_reason
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("by", requestedBy).addValue("reason", reason)
+                .addValue("at", java.sql.Timestamp.from(at)), this::mapLeave).getFirst();
+    }
+
+    /** 主管驳回销假申请：回到「已批准」、假仍有效；申请三列保留为留痕。 */
+    public StaffLeaveRequestRecord markLeaveRevokeRejected(String id, java.time.Instant at) {
+        return jdbcTemplate.query("""
+                UPDATE staff_leave_requests
+                   SET status = 'approved', updated_at = :at
+                 WHERE id = :id
+                RETURNING id, user_id, leave_type, start_date, end_date, reason, status,
+                          reviewed_by, review_note, created_at, updated_at, revoke_requested_by, revoke_requested_at, revoke_request_reason, revoked_by, revoked_at, revoke_reason
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("at", java.sql.Timestamp.from(at)), this::mapLeave).getFirst();
+    }
+
+    /** BSM L1481：主管批准销假只改状态并另记批准人/时间/说明；原「主管批准」的 reviewed_by / review_note 与本人申请三列保留。返回更新后的请假单。 */
+    public StaffLeaveRequestRecord markLeaveRevoked(String id, String revokedBy, String reason, java.time.Instant at) {
+        return jdbcTemplate.query("""
+                UPDATE staff_leave_requests
+                   SET status = 'revoked', revoked_by = :by, revoked_at = :at, revoke_reason = :reason, updated_at = :at
+                 WHERE id = :id
+                RETURNING id, user_id, leave_type, start_date, end_date, reason, status,
+                          reviewed_by, review_note, created_at, updated_at, revoke_requested_by, revoke_requested_at, revoke_request_reason, revoked_by, revoked_at, revoke_reason
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("by", revokedBy).addValue("reason", reason)
+                .addValue("at", java.sql.Timestamp.from(at)), this::mapLeave).getFirst();
+    }
+
     public java.util.Optional<StaffLeaveRequestRecord> findLeaveById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, leave_type, start_date, end_date, reason, status,
-                       reviewed_by, review_note, created_at, updated_at
+                       reviewed_by, review_note, created_at, updated_at, revoke_requested_by, revoke_requested_at, revoke_request_reason, revoked_by, revoked_at, revoke_reason
                   FROM staff_leave_requests WHERE id = :id
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", id),
                 this::mapLeave).stream().findFirst();
@@ -783,7 +718,7 @@ public class JdbcStaffRepository {
     public java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId, String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, leave_type, start_date, end_date, reason, status,
-                       reviewed_by, review_note, created_at, updated_at
+                       reviewed_by, review_note, created_at, updated_at, revoke_requested_by, revoke_requested_at, revoke_request_reason, revoked_by, revoked_at, revoke_reason
                   FROM staff_leave_requests
                  WHERE (:status::text IS NULL OR status = :status)
                    AND (:user_id::text IS NULL OR user_id = :user_id)
@@ -796,13 +731,24 @@ public class JdbcStaffRepository {
     }
 
     public boolean hasActiveLeaveOverlap(String userId, java.time.LocalDate start, java.time.LocalDate end) {
-        // 两区间 [s1,e1]/[s2,e2] 重叠 <=> s1<=e2 && s2<=e1;只算未撤销(pending/approved)。
+        // 两区间 [s1,e1]/[s2,e2] 重叠 <=> s1<=e2 && s2<=e1;只算未撤销(pending/approved/revoke_requested——申请销假待主管批准的假仍有效)。
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 SELECT EXISTS(SELECT 1 FROM staff_leave_requests
-                               WHERE user_id = :user_id AND status IN ('pending','approved')
+                               WHERE user_id = :user_id AND status IN ('pending','approved','revoke_requested')
                                  AND start_date <= :end AND end_date >= :start)
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("user_id", userId).addValue("start", start).addValue("end", end), Boolean.class));
+    }
+
+    /** BSM L1481：销假时找出已把该请假计入事假工时的定格工资月份（按锁定快照 worktime.leaveIds）。 */
+    public java.util.List<String> lockedPayrollMonthsUsingLeave(String userId, String leaveId) {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT month FROM staff_payroll_statements
+                 WHERE user_id = :user_id
+                   AND calculation_snapshot -> 'worktime' -> 'leaveIds' @> to_jsonb(:leave_id::text)
+                 ORDER BY month
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("leave_id", leaveId), String.class);
     }
 
     private StaffLeaveRequestRecord mapLeave(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
@@ -812,7 +758,11 @@ public class JdbcStaffRepository {
                 rs.getObject("end_date", java.time.LocalDate.class),
                 rs.getString("reason"), rs.getString("status"), rs.getString("reviewed_by"),
                 rs.getString("review_note"), rs.getTimestamp("created_at").toInstant(),
-                rs.getTimestamp("updated_at").toInstant());
+                rs.getTimestamp("updated_at").toInstant(), rs.getString("revoke_requested_by"),
+                rs.getTimestamp("revoke_requested_at") == null ? null : rs.getTimestamp("revoke_requested_at").toInstant(),
+                rs.getString("revoke_request_reason"), rs.getString("revoked_by"),
+                rs.getTimestamp("revoked_at") == null ? null : rs.getTimestamp("revoked_at").toInstant(),
+                rs.getString("revoke_reason"));
     }
 
     public java.util.Set<java.time.LocalDate> approvedLeaveDates(String userId,
@@ -820,7 +770,7 @@ public class JdbcStaffRepository {
         java.util.Set<java.time.LocalDate> out = new java.util.LinkedHashSet<>();
         jdbcTemplate.query("""
                 SELECT start_date, end_date FROM staff_leave_requests
-                 WHERE user_id = :user_id AND status = 'approved'
+                 WHERE user_id = :user_id AND status IN ('approved', 'revoke_requested')
                    AND start_date <= :to AND end_date >= :from
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("user_id", userId).addValue("from", from).addValue("to", to), rs -> {

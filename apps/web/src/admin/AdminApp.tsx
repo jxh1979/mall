@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -95,6 +95,7 @@ const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m
 const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
 const BarProductsPage = React.lazy(() => import("./pages/BarProductsPage").then((m) => ({ default: m.BarProductsPage })));
 const BarCombosPage = React.lazy(() => import("./pages/BarCombosPage").then((m) => ({ default: m.BarCombosPage })));
+const BarPayrollPage = React.lazy(() => import("./pages/BarPayrollPage").then((m) => ({ default: m.BarPayrollPage })));
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const IntegrationChannelMapsPage = React.lazy(() => import("./pages/IntegrationChannelMapsPage").then((m) => ({ default: m.IntegrationChannelMapsPage })));
@@ -244,6 +245,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <BarProductsPage {...props} />;
     case "ADM-BAR-006":
       return <BarCombosPage {...props} />;
+    case "ADM-BAR-007":
+      return <BarPayrollPage {...props} />;
     case "ADM-INV-001":
       return <InventoryLedgerPage {...props} />;
     case "ADM-INV-002":
@@ -567,7 +570,14 @@ export default function AdminApp() {
   // M002-F34（依据 M002-F08 裁决「本人可以直接解除，不会卡死」）：最高权限本人给自己设了拒绝（含 access.role.assign）后，
   // 导航与直链仍能进访问治理工作台去解除；页内只放行「移除本人显式拒绝」，其余路由门禁不变。
   const isMasterSession = user?.id === "usr_master_authority" && user?.username === "master-authority";
+  // 小费与服务费为敏感工资信息，入口与后端一致要求逐码查看授权。
+  function routePermissionState(target: AdminRoute): EffectivePermissionsState {
+    return target.pageId === "ADM-BAR-007" && effectivePermissions.status === "ready"
+      ? { ...effectivePermissions, value: { ...effectivePermissions.value, wildcard: false } }
+      : effectivePermissions;
+  }
   function routePermissions(target: AdminRoute) {
+    if (target.pageId === "ADM-STF-003") return hasPermissions(effectivePermissions, ["staff.payroll.manage"]) ? ["staff.payroll.manage"] : ["staff.tax_bracket.manage"];
     if (target.pageId === "ADM-INV-003" && hasPermissions(effectivePermissions, ["inventory.supply_contract.manage"])) return ["inventory.supply_contract.manage"];
     if (target.pageId !== "ADM-ACC-003") return target.requiredPermissions;
     if (isMasterSession) return [];
@@ -577,7 +587,7 @@ export default function AdminApp() {
 
   function navigate(nextRoute: AdminRoute) {
     // onClick 级拦截：无权限项不导航（不止 aria-disabled）。
-    if (!hasPermissions(effectivePermissions, routePermissions(nextRoute))) {
+    if (!hasPermissions(routePermissionState(nextRoute), routePermissions(nextRoute))) {
       return;
     }
     if (!routeAllowsAccountForm(nextRoute, accountForm)) {
@@ -606,7 +616,7 @@ export default function AdminApp() {
   // 全链下钻：按 pageId 找目标页，校验权限后带对象 id 跳转并定位（URL ?focus=）。
   function navigateTo(pageId: string, objectId?: string) {
     const target = adminRoutes.find((item) => item.pageId === pageId);
-    if (!target || !hasPermissions(effectivePermissions, routePermissions(target))) {
+    if (!target || !hasPermissions(routePermissionState(target), routePermissions(target))) {
       return;
     }
     if (!routeAllowsAccountForm(target, accountForm)) {
@@ -717,7 +727,7 @@ export default function AdminApp() {
                 {collapsed ? null : (
                   <div className="admin-nav-group-items">
                     {group.routes.map((item) => {
-                      const allowed = hasPermissions(effectivePermissions, routePermissions(item));
+                      const allowed = hasPermissions(routePermissionState(item), routePermissions(item));
                       return (
                         <button
                           type="button"
@@ -788,7 +798,7 @@ export default function AdminApp() {
             // 形态不匹配（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
             <div className="admin-denied" data-testid="admin-account-form-mismatch">{accountFormHint(route)}</div>
           ) : (
-          <PermissionGate permissionsState={effectivePermissions} permissions={routePermissions(route)}>
+          <PermissionGate permissionsState={routePermissionState(route)} permissions={routePermissions(route)}>
             {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，
                 不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
                 chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}

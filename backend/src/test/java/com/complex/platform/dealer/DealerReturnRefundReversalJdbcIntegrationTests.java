@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -592,37 +592,45 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         assertThat(returnMoney.returnSources(order.id())).singleElement().satisfies(source->assertThat(source.availableQuantity()).isZero());
     }
 
+    /** 2026-10-18 操作员裁决补充第 5 条（经销 D03）：减价留用后按签收行净额÷实收件数计价，普通退货按净额冲减货款，减价不重复退。 */
     @Test
-    void discountedAcceptedAsIsWaitsForPriceBasisWithoutUsingOtherGoodsBalance() {
+    void discountedAcceptedAsIsReturnsAtNetUnitPriceWithoutRepeatingDiscount() {
+        var order=discountedRetainedOrder(1,1);
+        var first=inspectAcceptedReturn(order.id(),1);
+        assertThat(first.acceptedAmountCent()).as("2件1000分减200分留用→净额1800分÷2件=900分").isEqualTo(900L);
+        assertThat(jdbc.queryForObject("SELECT unit_price_cent FROM dealer_return_lines WHERE return_id=?",Long.class,first.id())).isEqualTo(900L);
+        var second=inspectAcceptedReturn(order.id(),1);
+        assertThat(second.acceptedAmountCent()).isEqualTo(900L);
+        assertThat(orders.getOrder(order.id()).returnedAmountCent()).as("再退1件累计1800分，减价不重复退").isEqualTo(1_800L);
+    }
+
+    /** 同一裁决：净额÷实收件数的尾差落最后一件。 */
+    @Test
+    void discountedNetTailDifferenceFallsOnLastReturnedPiece() {
+        var order=discountedRetainedOrder(2,1);
+        var first=inspectAcceptedReturn(order.id(),1);
+        assertThat(first.acceptedAmountCent()).as("3件3000分减200分→净额2800分÷3件=933分").isEqualTo(933L);
+        var rest=inspectAcceptedReturn(order.id(),2);
+        assertThat(rest.acceptedAmountCent()).as("最后一件带尾差：2800-933").isEqualTo(1_867L);
+        assertThat(orders.getOrder(order.id()).returnedAmountCent()).isEqualTo(2_800L);
+    }
+
+    /** 签收 accepted 件合格 + damaged 件破损，破损件经双方确认减价 200 分留用并实际完成（单价 1000 分，首付 1000 分）。 */
+    private DealerOrderRecord discountedRetainedOrder(int accepted,int damaged) {
         actAs(sales);
         orders.updateContractTerms(contractId,new DealerContractTermsRequest(key(),true,null,1_000L,3,30,1_000L,50_000L,"dealer",null,null,null,"payment_notified",null,"shipped",null));
-        var order=shippedOrder(3,1_000L);
+        var order=shippedOrder(accepted+damaged,1_000L);
         actAs(sales);
         var line=orders.listLines(order.id()).items().getFirst();
         var evidence=List.of(DealerTestDeliveries.proof(admissionFiles,order.id()));
         delivery.receive(order.id(),new com.complex.platform.dealer.dto.DealerDeliveryReceiptRequest(key(),order.id(),Instant.now(),"合同联系人",evidence,
-                List.of(new com.complex.platform.dealer.dto.DealerDeliveryReceiptRequest.Line(line.id(),2,0,1,0)),"合格2件，1件破损后协商留用"));
+                List.of(new com.complex.platform.dealer.dto.DealerDeliveryReceiptRequest.Line(line.id(),accepted,0,damaged,0)),"合格"+accepted+"件，"+damaged+"件破损后协商留用"));
         var difference=delivery.get(order.id()).discrepancies().getFirst();
-        var plan=delivery.propose(difference.id(),new com.complex.platform.dealer.dto.DealerDeliveryResolutionRequest(key(),1,"price_adjustment","accepted_as_is",200L,
-                "合同销售主体","双方确认该1件减价200分留用",evidence,refundApprover,List.of(new com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.ParallelLine("finance_review",finance))));
+        var plan=delivery.propose(difference.id(),new com.complex.platform.dealer.dto.DealerDeliveryResolutionRequest(key(),damaged,"price_adjustment","accepted_as_is",200L,
+                "合同销售主体","双方确认破损件合计减价200分留用",evidence,refundApprover,List.of(new com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.ParallelLine("finance_review",finance))));
         approveDeliveryPlan(plan.reviewId());actAs(warehouse);
         delivery.completePhysical(plan.id(),new com.complex.platform.dealer.dto.DealerDeliveryPhysicalRequest(key(),Instant.now(),evidence));
-        actAs(sales);
-        var requested=returns.requestReturn(order.id(),new DealerReturnRequest(key(),"quality_issue",
-                List.of(new DealerReturnLineRequest(itemA,"箱",1,difference.receiptLineId())),"减价留用品退货"));
-        actAs(reviewer);returns.decideReturn(requested.id(),new DealerReturnDecisionRequest(key(),"approve","确认实物退回"));
-        actAs(warehouse);returns.receiveReturn(requested.id(),key());
-        var before=orders.getOrder(order.id());
-        var ledger=jdbc.queryForMap("SELECT * FROM ar_ap_items WHERE id=?",before.arApItemId());
-        var inspection=new DealerReturnInspectionRequest(key(),List.of(new DealerReturnInspectionLineRequest(itemA,"箱",1,0,1,"质量退回")),
-                "等待减价后退货金额规则",proof("dealer_return",requested.id()));
-        assertThatThrownBy(()->isolated(()->returns.inspectReturn(requested.id(),inspection)))
-                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEALER_RETURN_PRICE_BASIS_PENDING"));
-        assertThat(returns.getReturn(requested.id()).status()).isEqualTo("inspecting");
-        assertThat(orders.getOrder(order.id()).returnedAmountCent()).isEqualTo(before.returnedAmountCent());
-        assertThat(orders.listLines(order.id()).items().getFirst().returnedQuantity()).isZero();
-        assertThat(jdbc.queryForMap("SELECT * FROM ar_ap_items WHERE id=?",before.arApItemId())).isEqualTo(ledger);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM dealer_order_refunds WHERE return_id=?",Integer.class,requested.id())).isZero();
+        return order;
     }
 
     private DealerOrderRecord sixAcceptedFourResolved(long paid) {
@@ -738,6 +746,52 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         assertThat(jdbc.queryForMap("SELECT amount_cent,paid_amount_cent,unpaid_amount_cent FROM ar_ap_items WHERE id=?",order.arApItemId()))
                 .containsEntry("amount_cent",3_000L).containsEntry("paid_amount_cent",2_000L).containsEntry("unpaid_amount_cent",1_000L);
         actAs(finance);assertThat(returns.requestInvoice(order.id(),new DealerInvoiceRequest(key(),"依法按未退净额开票")).amountCent()).isEqualTo(3_000L);
+    }
+
+    /** BSM:1241「原订单已达包邮条件的，不因部分退货倒追首程运费」：货款 50 000 分≥包邮门槛 500 元，运费为零；部分退货后不补收、不可调减、重开票保留运费为零。 */
+    @Test
+    void freeShippingOrderPartialReturnNeverRechargesFirstLegFreight() {
+        var order=signedOrder(50,15_000L);
+        assertThat(order.freightCent()).as("货款达包邮门槛，原单不收首程运费").isZero();assertThat(order.netReceivableCent()).isEqualTo(50_000L);
+        var ret=inspectAcceptedReturn(order.id(),1);
+        assertThat(orders.getOrder(order.id()).freightCent()).isZero();
+        assertThat(orders.getOrder(order.id()).netReceivableCent()).as("部分退货只减货款，不倒追首程运费").isEqualTo(49_000L);
+        actAs(warehouse);var proof=proof("dealer_return",ret.id());
+        assertThatThrownBy(()->isolated(()->returns.confirmReturnFreight(ret.id(),new DealerReturnFreightConfirmRequest(key(),"sales_entity",true,"包邮单无首程运费可调减",1L,proof))))
+                .as("原单未收运费，首程调减金额不得大于零").isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEALER_RETURN_FINANCIAL_INVALID"));
+        actAs(finance);var invoice=returns.requestInvoice(order.id(),new DealerInvoiceRequest(key(),"包邮单部分退货后按未退金额开票"));
+        assertThat(invoice.amountCent()).isEqualTo(49_000L);assertThat(invoice.retainedFreightCent()).isZero();
+    }
+
+    /** BSM:1241「质量问题的退回运费由合同销售主体承担」：质量退货承担方锁定为销售主体，运费确认不能改成经销商。 */
+    @Test
+    void qualityReturnFreightBearerCannotBeConfirmedAsDealer() {
+        var order=signedOrder(4,2_000L);var ret=inspectAcceptedReturn(order.id(),1);
+        assertThat(ret.returnFreightBearer()).isEqualTo("sales_entity");
+        actAs(warehouse);var proof=proof("dealer_return",ret.id());
+        assertThatThrownBy(()->isolated(()->returns.confirmReturnFreight(ret.id(),new DealerReturnFreightConfirmRequest(key(),"dealer",false,"试图改由经销商承担退回运费",0L,proof))))
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEALER_RETURN_FINANCIAL_INVALID"));
+        var after=returns.getReturn(ret.id());
+        assertThat(after.returnFreightBearer()).isEqualTo("sales_entity");assertThat(after.freightConfirmed()).isFalse();
+    }
+
+    /** 首程运费调减审批驳回后记录置 rejected、原单不调减，可凭新凭证再次确认，不被「已有确认记录」拦住。 */
+    @Test
+    void rejectedFirstLegReviewAllowsReconfirmationWithNewEvidence() {
+        var order=signedOrder(4,2_000L);var ret=inspectAcceptedReturn(order.id(),1);
+        actAs(warehouse);returns.confirmReturnFreight(ret.id(),new DealerReturnFreightConfirmRequest(key(),"sales_entity",true,"首次确认首程退款金额",1_000L,proof("dealer_return",ret.id())));
+        var first=jdbc.queryForMap("SELECT id,review_id,status FROM dealer_return_freight_adjustments WHERE return_id=?",ret.id());
+        assertThat(first.get("status")).isEqualTo("pending_approval");
+        actAs(refundApprover);reviews.approve((String)first.get("review_id"),new SupervisorReviewApprovalRequest(key(),"凭证不足",List.of(),null,"rejected","驳回本次运费调减"));
+        assertThat(reviews.findReview((String)first.get("review_id")).orElseThrow().reviewStatus()).isEqualTo("rejected");
+        assertThat(jdbc.queryForObject("SELECT status FROM dealer_return_freight_adjustments WHERE id=?",String.class,first.get("id"))).isEqualTo("rejected");
+        assertThat(orders.getOrder(order.id()).firstLegAdjustmentCent()).isZero();
+        actAs(warehouse);var again=returns.confirmReturnFreight(ret.id(),new DealerReturnFreightConfirmRequest(key(),"sales_entity",true,"补充凭证后再次确认",1_000L,proof("dealer_return",ret.id())));
+        assertThat(again.freightConfirmed()).isTrue();
+        var rows=jdbc.queryForList("SELECT id,status FROM dealer_return_freight_adjustments WHERE return_id=? ORDER BY confirmed_at",ret.id());
+        assertThat(rows).hasSize(2);
+        assertThat(rows.getFirst().get("id")).isEqualTo(first.get("id"));assertThat(rows.getFirst().get("status")).isEqualTo("rejected");
+        assertThat(rows.getLast().get("id")).isNotEqualTo(first.get("id"));assertThat(rows.getLast().get("status")).isEqualTo("pending_approval");
     }
 
     @Test

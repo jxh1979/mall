@@ -1,4 +1,6 @@
+// 文件版本：V0.01
 import React from "react";
+import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -40,6 +42,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [guestCount, setGuestCount] = React.useState("1");
   // dev 假值预填已去掉：目标卡座/目标会话必须由操作人显式填写，防误转误合。
   const [targetTableId, setTargetTableId] = React.useState("");
+  const [targetServiceStaffId, setTargetServiceStaffId] = React.useState("");
   const [mergedSessionId, setMergedSessionId] = React.useState("");
   const [renewMinutes, setRenewMinutes] = React.useState("60");
   const [actionReason, setActionReason] = React.useState("主管审批通过");
@@ -150,6 +153,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     if (!actionReason.trim()) return fail("转卡、合并、续卡必须填写原因。 ");
     if (kind === "transfer") {
       if (!targetTableId.trim()) return fail("请输入目标卡座 ID。");
+      if (!targetServiceStaffId.trim()) return fail("请明确目标卡座的实际当班接手人，不能默认原人跟随客人。");
       if (targetTableId.trim() === selectedSession.tableId) return fail("目标卡座不能与当前卡座相同。");
     }
     if (kind === "merge") {
@@ -192,7 +196,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     setGlobalError(null);
     try {
       const body = kind === "transfer"
-        ? { targetTableId: targetTableId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 }
+        ? { targetTableId: targetTableId.trim(), targetServiceStaffId: targetServiceStaffId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 }
         : kind === "merge"
           ? { mergedSessionId: mergedSessionId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1, mergedSessionVersion: 1 }
           : { renewedUntil: nextRenewedUntil(Number(renewMinutes)), additionalMinConsumptionCent: 0, additionalDepositAmountCent: 0, additionalServiceFeeCent: 0, reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 };
@@ -387,6 +391,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <div className="admin-state" data-testid="bar-table-sessions-focus">已从下钻定位到桌位：{focusObjectId}</div>
       )}
       <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并、续卡必须受结账与审批约束。" />
+      <BarServiceResponsibilityPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} session={selectedSession} onChanged={reload} />
 
       {/* 从零起单入口：即便零数据也常驻可见（放在空态短路之外），支持新建卡座 / 新建订台（代客）/ 开台。 */}
       <h3>从零起单</h3>
@@ -483,6 +488,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           />
           <label>转/合/续原因<input data-testid="bar-session-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="必填，留痕用" /></label>
           <label>目标卡座<input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="转入的卡座 ID" /></label>
+          <label>目标卡座当班接手人<input data-testid="bar-transfer-target-staff" aria-label="目标卡座当班接手人" value={targetServiceStaffId} onChange={event => setTargetServiceStaffId(event.target.value)} placeholder="真实接手员工账号" /></label>
+          <p>按目标工作点位已发布的排班或真实顶班记录核实接手人；原台服务责任截至实际转台时刻。</p>
           <HighRiskConfirm label="转卡" impact="将把选中开台会话转移到目标卡座，必须确认未结账约束和主管审批。" disabled={submitting} precheck={() => validateSessionAction("transfer")} onConfirm={() => void runSessionAction("transfer")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-submit" />
           <label>合并目标会话<input data-testid="bar-merge-target-session" value={mergedSessionId} onChange={(event) => setMergedSessionId(event.target.value)} placeholder="被并入的会话 ID" /></label>
           <HighRiskConfirm label="合并" impact="将把选中会话与目标会话合并，账单和责任链必须留痕。" disabled={submitting} precheck={() => validateSessionAction("merge")} onConfirm={() => void runSessionAction("merge")} permissionsState={effectivePermissions} permissions={[BAR_MERGE_PERMISSION]} data-testid="bar-merge-submit" />

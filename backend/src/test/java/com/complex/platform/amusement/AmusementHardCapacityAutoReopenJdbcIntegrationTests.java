@@ -1,14 +1,16 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.amusement.dto.AmusementIncidentCreateRequest;
+import com.complex.platform.amusement.dto.CompensationBatchConfirmRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.support.TestSecurityActors;
+import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.time.Instant;
 import java.util.List;
@@ -54,6 +56,7 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private AmusementBusinessDayService businessDays;
     @Autowired private AmusementSessionLifecycleService lifecycle;
+    @Autowired private AmusementFaultCompensationService compensationService;
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
     private AmusementRepository repository;
     @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
@@ -385,6 +388,134 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",Integer.class,sessionId)).isEqualTo(1);
     }
 
+    /** BSM L1263 / ENUM L142「已售但未履行的权益按既有取消、补偿规则处理并留痕」：既有预约取消的结果写回提前结束待办。 */
+    @Test
+    void earlyEndFollowupCompletesWhenReservationCancelledByExistingRule() {
+        seed(5, 1);
+        String reservation=seedReservation();
+        lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest("early-resv-"+suffix,true,Instant.now(),"现场清场完成",List.of()));
+        assertThat(lifecycle.followups(sessionId)).singleElement().satisfies(row->assertThat(row)
+                .containsEntry("source_type","reservation").containsEntry("source_id",reservation).containsEntry("status","pending"));
+        amusementService.changeReservationStatus(reservation,new StatusChangeRequest("cancel-resv-"+suffix,"cancelled","客人取消",List.of()));
+        Map<String,Object> followup=lifecycle.followups(sessionId).getFirst();
+        assertThat((String)followup.get("status")).isEqualTo("completed");
+        assertThat(followup).containsEntry("resolution_type","reservation_cancelled").containsEntry("resolution_id",reservation)
+                .containsEntry("resolved_by",userId);
+        assertThat(followup.get("resolved_at")).isNotNull();
+    }
+
+    @Test
+    void earlyEndFollowupCompletesWhenGroupBookingReleased() {
+        seed(5, 1);
+        String booking="group_booking_cg02_"+suffix;
+        jdbcTemplate.update("""
+            INSERT INTO amusement_group_bookings(id,project_id,session_id,booking_type,customer_name,party_size,reserved_capacity,
+                booking_status,approved_at,paid_at,created_at,updated_at) VALUES(?,?,?,'group','团体客',2,2,'approved',now(),now(),now(),now())
+            """,booking,projectId,sessionId);
+        lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest("early-group-"+suffix,true,Instant.now(),"现场清场完成",List.of()));
+        assertThat(lifecycle.followups(sessionId)).singleElement().satisfies(row->assertThat(row)
+                .containsEntry("source_type","group_booking").containsEntry("source_id",booking).containsEntry("status","pending"));
+        amusementService.releaseGroupBooking(booking,new AmusementGroupBookingReleaseRequest("release-group-"+suffix,"客人取消",List.of()));
+        Map<String,Object> followup=lifecycle.followups(sessionId).getFirst();
+        assertThat((String)followup.get("status")).isEqualTo("completed");
+        assertThat(followup).containsEntry("resolution_type","group_booking_released").containsEntry("resolution_id",booking)
+                .containsEntry("resolved_by",userId);
+        assertThat(jdbcTemplate.queryForObject("SELECT booking_status FROM amusement_group_bookings WHERE id=?",String.class,booking)).isEqualTo("released");
+    }
+
+    /** 未提前结束的预约取消不造待办行（命中 0 行静默）。 */
+    @Test
+    void cancellingReservationWithoutEarlyEndWritesNoFollowup() {
+        seed(5, 1);
+        String reservation=seedReservation();
+        amusementService.changeReservationStatus(reservation,new StatusChangeRequest("cancel-plain-"+suffix,"cancelled","客人取消",List.of()));
+        assertThat(jdbcTemplate.queryForObject("SELECT reservation_status FROM amusement_reservations WHERE id=?",String.class,reservation)).isEqualTo("cancelled");
+        assertThat(lifecycle.followups(sessionId)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_followups WHERE source_id=?",Integer.class,reservation)).isZero();
+    }
+
+    private String seedReservation() {
+        String reservation="reservation_cg02_"+suffix;
+        jdbcTemplate.update("""
+            INSERT INTO amusement_reservations(id,project_id,session_id,customer_id,reservation_status,created_at,updated_at)
+            VALUES(?,?,?,'cust_cg02','reserved',now(),now())
+            """,reservation,projectId,sessionId);
+        return reservation;
+    }
+
+    /**
+     * 2026-10-18 操作员裁决（TK-18，裁决补充第 3 条）：已入场（已扣次）的客人比照 ENUM L148「全园故障与补偿通票」补偿——
+     * 复用 CG-08b 补偿记录（原票、原场次、原入场核销、费用游乐公司承担、补偿有效期），发放前须游乐公司负责人与工程或安全岗位
+     * 共同确认（同一确认入口），发放后原票下恢复本次 1 次；未入场的票不补偿、不建补偿待办（可再次使用）。
+     */
+    @Test
+    void earlyEndCompensatesAdmittedGuestsAfterJointConfirmationAndLeavesUnusedTicketsAlone() {
+        seed(5, 2);
+        enter(1);
+        String entryId=jdbcTemplate.queryForObject("SELECT id FROM amusement_verifications WHERE session_id=? AND direction='entry'",String.class,sessionId);
+        var ending=lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest("early-comp-"+suffix,true,Instant.now(),"设备临时停机，现场清场完成",List.of()));
+        // 已入场人份进补偿待发放记录（事件类型「场次提前结束」，关联场次与结束原件）；未入场的第 2 张票不进。
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_fault_compensation_items WHERE original_entry_verification_id=?",Integer.class,entryId)).isEqualTo(1);
+        Map<String,Object> item=jdbcTemplate.queryForMap("SELECT id,batch_id,kind,status,original_session_id,ending_id,fault_id FROM amusement_fault_compensation_items WHERE original_entry_verification_id=?",entryId);
+        assertThat(item).containsEntry("kind","full_reissue").containsEntry("status","pending").containsEntry("original_session_id",sessionId).containsEntry("ending_id",ending.id());
+        assertThat(item.get("fault_id")).isNull();
+        String batchId=(String)item.get("batch_id");
+        Map<String,Object> batch=jdbcTemplate.queryForMap("SELECT event_type,status,ending_id,session_id,bearer_company_id,reissue_count,extend_count,initiated_role FROM amusement_fault_compensation_batches WHERE id=?",batchId);
+        assertThat(batch).containsEntry("event_type","session_early_end").containsEntry("status","pending_confirmation").containsEntry("ending_id",ending.id())
+                .containsEntry("session_id",sessionId).containsEntry("bearer_company_id","be_amusement").containsEntry("reissue_count",1).containsEntry("extend_count",0);
+        assertThat(batch.get("initiated_role")).isNull();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_fault_compensation_items WHERE entitlement_id=?",Integer.class,"ie_cg02_"+suffix+"_2")).isZero();
+        assertThat(lifecycle.followups(sessionId)).singleElement().satisfies(row->assertThat(row)
+                .containsEntry("source_type","entry").containsEntry("source_id",entryId).containsEntry("status","pending"));
+
+        // 发放前须两岗位共同确认：第一岗位确认后仍待第二岗位且未发放；同一人换岗位不算；另一人以另一岗位确认即发放。
+        String complex=businessDays.complexId(projectId);
+        String head=AmusementBusinessDayTestFixture.actor(jdbcTemplate,complex,List.of("amusement.park_fault.confirm_as_head",
+                "amusement.park_fault.confirm_as_engineering_safety","amusement.park_fault.view"));
+        String engineer=AmusementBusinessDayTestFixture.actor(jdbcTemplate,complex,List.of("amusement.park_fault.confirm_as_engineering_safety","amusement.park_fault.view"));
+        AmusementBusinessDayTestFixture.authenticate(head,complex);
+        var first=compensationService.confirmBatch(batchId,new CompensationBatchConfirmRequest("comp-head-"+suffix,AmusementParkWideFaultService.ROLE_HEAD,"负责人确认"));
+        assertThat(first.status()).isEqualTo("pending_confirmation");
+        assertThat(first.initiatedRole()).isEqualTo(AmusementParkWideFaultService.ROLE_HEAD);
+        assertThat(first.initiatedBy()).isEqualTo(head);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM issued_entitlements WHERE compensation_item_id=?",Integer.class,item.get("id"))).isZero();
+        assertThatThrownBy(()->compensationService.confirmBatch(batchId,new CompensationBatchConfirmRequest("comp-same-"+suffix,
+                AmusementParkWideFaultService.ROLE_ENGINEERING_SAFETY,"本人换岗位")))
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN"));
+        AmusementBusinessDayTestFixture.authenticate(engineer,complex);
+        var issued=compensationService.confirmBatch(batchId,new CompensationBatchConfirmRequest("comp-eng-"+suffix,AmusementParkWideFaultService.ROLE_ENGINEERING_SAFETY,"工程岗确认"));
+        assertThat(issued.status()).isEqualTo("issued");
+        assertThat(issued.confirmedBy()).isEqualTo(engineer);
+        assertThat(issued.validUntil()).isNotNull();
+        // 原票下恢复本次 1 次：原权益不回改（仍已扣 1 次），补发行在原票、原父票下 1 次未用，有效期至补偿有效期截止。
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,"ie_cg02_"+suffix+"_1")).isEqualTo(1);
+        List<Map<String,Object>> restored=jdbcTemplate.queryForList("SELECT entitlement_type,total_times,used_times,order_id,parent_ticket_id,valid_to"
+                +" FROM issued_entitlements WHERE compensation_item_id=?",item.get("id"));
+        assertThat(restored).singleElement().satisfies(row->{
+            assertThat(row).containsEntry("entitlement_type","amusement_pass").containsEntry("total_times",1).containsEntry("used_times",0)
+                    .containsEntry("order_id","order_cg02_"+suffix).containsEntry("parent_ticket_id","parent_cg02_"+suffix+"_1");
+            assertThat(((java.sql.Timestamp)row.get("valid_to")).toInstant()).isEqualTo(issued.validUntil());
+        });
+        // 待办留痕：入场待办写回补偿发放结果；未入场的第 2 张票仍 0 次已用、无任何补偿行。
+        authenticate(userId);
+        Map<String,Object> followup=lifecycle.followups(sessionId).getFirst();
+        assertThat(followup).containsEntry("status","completed").containsEntry("resolution_type","compensation_issued")
+                .containsEntry("resolution_id",batchId).containsEntry("resolved_by",engineer);
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,"ie_cg02_"+suffix+"_2")).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM issued_entitlements WHERE order_id=? AND compensation_item_id IS NOT NULL",Integer.class,"order_cg02_"+suffix)).isEqualTo(1);
+    }
+
+    /** 无已入场客人的提前结束：不建补偿记录、不建入场待办（未入场的票可再次使用）。 */
+    @Test
+    void earlyEndWithoutAdmittedGuestsCreatesNoCompensation() {
+        seed(5, 1);
+        var ending=lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest("early-none-"+suffix,true,Instant.now(),"无人入场，现场清场完成",List.of()));
+        assertThat(ending.clearedPeople()).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_fault_compensation_items WHERE original_session_id=?",Integer.class,sessionId)).isZero();
+        assertThat(lifecycle.followups(sessionId)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,"ie_cg02_"+suffix+"_1")).isZero();
+    }
+
     @Test
     void earlyEndRejectsClearanceBeforeLaterAdmission() {
         seed(5, 1);
@@ -408,6 +539,22 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
         assertThatThrownBy(()->lifecycle.endEarly(sessionId,request)).isInstanceOf(ApiException.class);
         assertThatThrownBy(()->lifecycle.endings(sessionId)).isInstanceOf(ApiException.class);
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",Integer.class,sessionId)).isEqualTo(1);
+    }
+
+    /** TK18-R3（COVERAGE_ONLY）BSM L1263 / ENUM L142「可由获授权的现场负责人…提前结束」：本综合体只持 amusement.session.view 的账号能读、不能结束。 */
+    @Test
+    void earlyEndRejectsViewOnlyActor() {
+        seed(5, 1);
+        enter(1);
+        String complex=businessDays.complexId(projectId);
+        String viewer=AmusementBusinessDayTestFixture.actor(jdbcTemplate,complex,List.of("amusement.session.view"));
+        AmusementBusinessDayTestFixture.authenticate(viewer,complex);
+        assertThat(lifecycle.endings(sessionId)).isEmpty();
+        assertThatThrownBy(()->lifecycle.endEarly(sessionId,new AmusementSessionLifecycleService.EndRequest(
+                "early-viewer-"+suffix,true,Instant.now(),"只读账号尝试结束",List.of())))
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_session_endings WHERE session_id=?",Integer.class,sessionId)).isZero();
+        assertThat(inPlayCount()).isEqualTo(1);
     }
 
     @Test

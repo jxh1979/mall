@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -63,7 +63,7 @@ describe("StaffPayrollLeavePage 奖惩复核链与扣罚申诉（CG-12）", () =
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/payroll/adjustments/adj_1/appeals", { reason: "当日已报备" }));
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "payroll_adjustment_appeal_submitted", appealId: "apl_1" })));
     await screen.findByTestId("appeal-table");
-    expect(screen.getByTestId("appeal-status-apl_1").textContent).toBe("已撤销（已冲回）");
+    expect(screen.getByTestId("appeal-status-apl_1").textContent).toBe("已撤销");
     expect(screen.getByTestId("appeal-status-apl_2").textContent).toBe("维持");
     expect(screen.getByTestId("appeal-status-apl_3").textContent).toBe("裁定中");
 

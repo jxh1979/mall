@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.05
+// 文件版本：V0.07
 
 import java.net.URI
 import java.net.URLEncoder
@@ -9,6 +9,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -178,7 +179,17 @@ class TerminalApiClient(
 
   /** 我的薪资(仅已月结定格月份;未结月为空——拍板:月结后才可见)。 */
   fun listMyPayroll(month: String): List<PayrollStatementRow> =
-    get("/api/v1/staff/payroll/mine?month=$month")
+    get<PayrollPage>("/api/v1/staff/payroll/mine?month=${urlEncode(month)}").items
+
+  fun myPerformanceAdjustments(month: String): List<PayrollScoreAdjustment> =
+    get("/api/v1/staff/payroll/mine/performance-adjustments?month=${urlEncode(month)}")
+
+  fun appealPerformance(adjustmentId: String, reason: String, idempotencyKey: String): PayrollScoreAdjustment =
+    post("/api/v1/staff/payroll/performance-adjustments/${urlEncode(adjustmentId)}/appeals", PayrollAppealRequest(idempotencyKey, reason))
+
+  /** 仅本人已定格工资原件，不接受员工身份参数。 */
+  fun myPayrollDetail(statementId: String): PayrollStatementDetail =
+    get("/api/v1/staff/payroll/mine/statements/${urlEncode(statementId)}")
 
   /** 提交请假(事假/病假/调休/年假;主管审)。 */
   fun submitLeave(request: LeaveSubmitRequest): LeaveRow =
@@ -186,6 +197,10 @@ class TerminalApiClient(
 
   /** 我的请假列表。 */
   fun listMyLeaves(): List<LeaveRow> = get("/api/v1/staff/leaves/mine")
+
+  /** 2026-10-18 裁决：员工本人对自己已批准的假申请销假（理由必填）→ 待销假审批，主管批准后才生效。 */
+  fun requestLeaveRevoke(leaveId: String, reason: String, idempotencyKey: String): LeaveRow =
+    post("/api/v1/staff/leaves/${urlEncode(leaveId)}/revoke-request", LeaveRevokeRequest(idempotencyKey, reason))
 
   /** 考勤月视图(六态逐日)。 */
   fun attendanceMonthView(month: String): List<AttendanceDayRow> =
@@ -370,3 +385,6 @@ class TerminalApiClient(
   private fun toSnakeCase(value: String): String =
     value.replace(Regex("([a-z0-9])([A-Z])"), "$1_$2").lowercase()
 }
+
+@Serializable
+private data class PayrollPage(val items: List<PayrollStatementRow>)

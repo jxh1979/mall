@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,6 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
 class HrApprovalChainJdbcIntegrationTests {
 
     @Autowired private StaffService service;
+    @Autowired private StaffPayrollService payroll;
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper json;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private AccessRepository access;
@@ -85,7 +87,7 @@ class HrApprovalChainJdbcIntegrationTests {
                         registration_status, status, employment_status, created_at, updated_at)
                 VALUES (?, 'project_main', NULL, ?, '链测员工', 'project_main', 'approved', 'active', 'employed', now(), now())
                 """, profileId, employee);
-        // 处罚封顶按「固定工资+奖金」比例计算（BSM-1.18.2），给员工落固定工资以便工资单口径可见扣罚净额。
+        // 普通现金扣除上限只以基础工资计算；原基础表用于兼容其他既有岗位用例。
         jdbc.update("INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_at, project_id) VALUES (?, 1000000, now(), 'project_main')", employee);
         actAs(initiator);
     }
@@ -240,7 +242,8 @@ class HrApprovalChainJdbcIntegrationTests {
         approveAll(penalty.reviewId());
         String adjustmentId = penalty.objectId();
         actAs(initiator);
-        service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-09"));
+        PayrollApprovedCloseFixture.prepare(jdbc,json,employee,"2099-09",1000000);
+        var original=PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,employee,"2099-09","monthly");
         assertThat(statementPenalty("2099-09")).isEqualTo(4000L);
 
         actAs(employee);
@@ -263,8 +266,9 @@ class HrApprovalChainJdbcIntegrationTests {
                 decided.reversalAdjustmentId()))
                 .containsEntry("adj_type", "penalty_reversal").containsEntry("amount_cent", 4000L).containsEntry("reversal_of", adjustmentId);
         actAs(initiator);
-        service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-09"));
-        assertThat(statementPenalty("2099-09")).as("撤销后净额回正").isZero();
+        var supplementary=PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,employee,"2099-09","supplemental");
+        assertThat(supplementary.statement().totalCent()).isEqualTo(4000L);
+        assertThat(jdbc.queryForObject("SELECT penalty_cent FROM staff_payroll_statements WHERE id=?",Long.class,original.statement().id())).as("原扣罚工资保留，补差单独发放").isEqualTo(4000L);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name = 'staff.payroll.adjustment_appeal_decided'"
                 + " AND business_id = ? AND metadata->>'conclusion' = 'revoked'", Integer.class, appeal.id())).isEqualTo(1);
 

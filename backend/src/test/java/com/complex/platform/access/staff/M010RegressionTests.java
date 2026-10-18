@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 class M010RegressionTests {
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;
     @Autowired StaffService service;
+    @Autowired StaffPayrollService payroll;
     @Autowired StaffWorkPhoneAttendanceService phoneAttendance;
     @Autowired StaffAttendanceReceiptReviewService receiptReviews;
     @Autowired StaffLockerService lockers;
@@ -315,11 +316,11 @@ class M010RegressionTests {
 
     @Test void penaltyCapNeedsThreeDepartmentReviewsThenMasterAndDoesNotRewriteClosedMonth() {
         var profile = profile(null);
-        service.setBaseSalary(new StaffPayrollBaseRequest(key(), profile.userId(), 10000L));
         for (String month : List.of("2099-08", "2099-09")) {
+            PayrollApprovedCloseFixture.prepare(jdbc,json,profile.userId(),month,10000);
             repository.insertPayrollAdjustment("adj_"+key(), profile.userId(), month, "penalty", 5000, "回归", manager, Instant.now());
         }
-        service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-08"));
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,profile.userId(),"2099-08","monthly");
         assertThatThrownBy(() -> service.requestPenaltyCap(new StaffPenaltyCapRequest(key(),1000,0,10000,"调整上限",List.of())))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_LINE_FINAL_APPROVER_REQUIRED"));
         var lines = new ArrayList<com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.ParallelLine>();
@@ -349,8 +350,8 @@ class M010RegressionTests {
         reviewService.approve(pending.reviewId(),new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(key(),"最终确认",List.of(),null,"approved","确认"));
         assertThat(service.getPenaltyCap().value()).isEqualTo(1000);
         actor(manager,"platform_admin",null);
-        service.closePayroll(new StaffPayrollCloseRequest(key(),"2099-08"));
-        service.closePayroll(new StaffPayrollCloseRequest(key(),"2099-09"));
+        assertThatThrownBy(()->PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,profile.userId(),"2099-08","monthly")).isInstanceOf(ApiException.class);
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,profile.userId(),"2099-09","monthly");
         assertThat(jdbc.queryForObject("SELECT penalty_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",Long.class,profile.userId())).isEqualTo(2000);
         assertThat(jdbc.queryForObject("SELECT penalty_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-09'",Long.class,profile.userId())).isEqualTo(1000);
     }
@@ -639,7 +640,7 @@ class M010RegressionTests {
             var shift = shift(p, "2099-08-03T01:00:00Z", "2099-08-03T10:00:00Z");
             repository.saveAttendance(new StaffAttendanceRecord("a_"+key(),p.userId(),"check_in",shift.startAt(),"nfc",null,null,null,shift.id(),"normal",Instant.now()));
             repository.saveLeaveRequest(new StaffLeaveRequestRecord("l_"+key(),p.userId(),"personal",date,date,"回归","approved",manager,null,Instant.now(),Instant.now()));
-            service.setBaseSalary(new StaffPayrollBaseRequest(key(),p.userId(),10000L));
+            PayrollApprovedCloseFixture.prepare(jdbc,json,p.userId(),"2099-08",10000);
         }
         owner(a);
         assertThat(service.listShifts(date,null).items()).extracting(StaffShiftRecord::userId).containsExactly(a.userId());
@@ -647,7 +648,9 @@ class M010RegressionTests {
         assertThat(service.listLeaves(null).items()).extracting(StaffLeaveRequestRecord::userId).containsExactly(a.userId());
         assertThatThrownBy(() -> service.setBaseSalary(new StaffPayrollBaseRequest(key(),b.userId(),9999L))).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> service.setEmploymentStatus(b.id(),new StaffEmploymentStatusRequest(key(), "employed","变更"))).isInstanceOf(ApiException.class);
-        service.closePayroll(new StaffPayrollCloseRequest(key(),"2099-08"));
+        jdbc.update("INSERT INTO business_entities(id,entity_name,entity_role,status,created_at,updated_at) VALUES('company_a','测试公司A','project_company','active',now(),now()) ON CONFLICT DO NOTHING");
+        jdbc.update("INSERT INTO role_viewable_projects(role_id,viewable_id) VALUES(?,'m010_p'),(?,'company_a') ON CONFLICT DO NOTHING",role,role);
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,a.userId(),"2099-08","monthly");
         assertThat(service.listPayroll("2099-08").items()).extracting(StaffPayrollStatementRecord::userId).containsExactly(a.userId());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",Long.class,b.userId())).isZero();
     }
@@ -655,10 +658,11 @@ class M010RegressionTests {
     @Test void merchantPayrollCloseDoesNotCreateOtherMerchantsStatement() {
         var a = profile("m010_a");
         var b = profile("m010_b");
-        service.setBaseSalary(new StaffPayrollBaseRequest(key(), a.userId(), 10000L));
-        service.setBaseSalary(new StaffPayrollBaseRequest(key(), b.userId(), 10000L));
+        PayrollApprovedCloseFixture.prepare(jdbc,json,a.userId(),"2099-08",10000);
+        PayrollApprovedCloseFixture.prepare(jdbc,json,b.userId(),"2099-08",10000);
         actorAs("staff", "m010_a");
-        service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-08"));
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,a.userId(),"2099-08","monthly");
+        assertThatThrownBy(()->PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,b.userId(),"2099-08","monthly")).isInstanceOf(ApiException.class);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
                 Long.class, a.userId())).isEqualTo(1L);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
@@ -676,9 +680,9 @@ class M010RegressionTests {
                     shift.startAt(), "nfc", null, null, null, shift.id(), "normal", now));
             repository.saveLeaveRequest(new StaffLeaveRequestRecord("l_" + key(), profile.userId(), "personal",
                     date, date, "回归", "approved", manager, null, now, now));
-            service.setBaseSalary(new StaffPayrollBaseRequest(key(), profile.userId(), 10000L));
+            PayrollApprovedCloseFixture.prepare(jdbc,json,profile.userId(),"2099-08",10000);
         }
-        service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-08"));
+        for(var person:List.of(a,b))PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,person.userId(),"2099-08","monthly");
         actorAs("staff", "m010_a");
         assertThat(service.listShifts(date, null).items()).extracting(StaffShiftRecord::userId).containsExactly(a.userId());
         assertThat(service.listShifts(date, null).total()).isEqualTo(1);
@@ -1474,7 +1478,7 @@ class M010RegressionTests {
         var partial = profile(null);
         var full = profile(null);
         for (var profile : List.of(partial, full)) {
-            service.setBaseSalary(new StaffPayrollBaseRequest(key(), profile.userId(), 10000L));
+            PayrollApprovedCloseFixture.prepare(jdbc,json,profile.userId(),"2099-08",10000);
             shift(profile, "2099-08-03T01:00:00Z", "2099-08-03T10:00:00Z");
             shift(profile, "2099-08-04T01:00:00Z", "2099-08-04T10:00:00Z");
         }
@@ -1485,7 +1489,7 @@ class M010RegressionTests {
                 LocalDate.of(2099, 8, 3), LocalDate.of(2099, 8, 3), "回归", "approved", manager, null, now, now));
         repository.saveLeaveRequest(new StaffLeaveRequestRecord("l_" + key(), full.userId(), "personal",
                 LocalDate.of(2099, 8, 1), LocalDate.of(2099, 8, 31), "回归", "approved", manager, null, now, now));
-        service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-08"));
+        for(var person:List.of(partial,full))PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,person.userId(),"2099-08","monthly");
         assertThat(jdbc.queryForObject("SELECT leave_deduction_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
                 Long.class, partial.userId())).isEqualTo(6000L);
         assertThat(jdbc.queryForObject("SELECT total_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
@@ -1494,7 +1498,7 @@ class M010RegressionTests {
 
     @Test void ordinaryPenaltyCapAggregatesEntriesAndExcludesCommissionAndPersonalLeave() {
         var profile = profile(null);
-        service.setBaseSalary(new StaffPayrollBaseRequest(key(), profile.userId(), 10000L));
+        PayrollApprovedCloseFixture.prepare(jdbc,json,profile.userId(),"2099-08",10000);
         repository.insertPayrollAdjustment("adj_" + key(), profile.userId(), "2099-08", "bonus", 1000L, "奖金", manager, Instant.now());
         for (int i = 0; i < 2; i++) {
             repository.insertPayrollAdjustment("adj_" + key(), profile.userId(), "2099-08", "penalty", 3000L, "普通处罚" + i, manager, Instant.now());
@@ -1505,14 +1509,14 @@ class M010RegressionTests {
         Instant now = Instant.now();
         repository.saveLeaveRequest(new StaffLeaveRequestRecord("l_" + key(), profile.userId(), "personal",
                 LocalDate.of(2099, 8, 3), LocalDate.of(2099, 8, 3), "回归", "approved", manager, null, now, now));
-        service.closePayroll(new StaffPayrollCloseRequest(key(), "2099-08"));
-        // U05-004/U11-004：封顶分母＝HTML 总薪资（基础+补贴+绩效+奖金）；现行列只有固定与奖金 → 20%×(10000+1000)=2200，提成不入分母。
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbc,json,payroll,profile.userId(),"2099-08","monthly");
+        // H01/H01A：现金封顶只按基础工资10000×20%=2000，奖金及提成均不进入分母。
         assertThat(jdbc.queryForObject("SELECT penalty_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
-                Long.class, profile.userId())).isEqualTo(2200L);
-        // U05-002/U11-003：事假按应发（10000+9000+1000=20000）的 1/2 班次扣 10000 → 总额 20000−2200−10000=7800。
+                Long.class, profile.userId())).isEqualTo(2000L);
+        // U05-002/U11-003：事假按应发（10000+9000+1000=20000）的 1/2 班次扣 10000 → 总额 20000−2000−10000=8000。
         assertThat(jdbc.queryForObject("SELECT leave_deduction_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
                 Long.class, profile.userId())).isEqualTo(10000L);
         assertThat(jdbc.queryForObject("SELECT total_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-08'",
-                Long.class, profile.userId())).isEqualTo(7800L);
+                Long.class, profile.userId())).isEqualTo(8000L);
     }
 }

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -11,7 +12,7 @@ import type { AdminPageProps, GroupOverviewPayload, GroupProjectRollup } from ".
 const METRIC_COLUMNS: Array<{ code: string; label: string; hint: string }> = [
   { code: "revenue.net", label: "净收入", hint: "售票+酒吧−退款（分）" },
   { code: "revenue.ticket", label: "票务收入", hint: "已支付订单实付（分）" },
-  { code: "revenue.bar", label: "酒吧收入", hint: "已结算账单实收（分）" },
+  { code: "revenue.bar", label: "酒吧收入", hint: "已确认商品收入＋月结服务费扣留（分）" },
   { code: "traffic.amusement", label: "游乐客流", hint: "成功核销人次" },
   { code: "verify.done", label: "票务核销", hint: "成功核销数" },
   { code: "risk.pending_review", label: "待复核", hint: "复核 + 风险预警" },
@@ -25,9 +26,7 @@ function metricText(project: GroupProjectRollup, code: string): string {
 }
 
 function metricNote(project: GroupProjectRollup, code: string): string | null {
-  const metric = project.metrics?.[code];
-  if (!metric || metric.value !== null) return null;
-  return metric.note ?? null;
+  return project.metrics?.[code]?.note ?? null;
 }
 
 function belowBenchmark(project: GroupProjectRollup, code: string): boolean {
@@ -58,7 +57,7 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
         { label: "商户数", value: project.merchantCount },
         ...METRIC_COLUMNS.map((col) => ({
           label: col.label,
-          value: `${metricText(project, col.code)}${belowBenchmark(project, col.code) ? "（低于集团基准）" : ""}`,
+          value: `${metricText(project, col.code)}${belowBenchmark(project, col.code) ? "（低于集团基准）" : ""}${metricNote(project, col.code) ? ` · ${metricNote(project, col.code)}` : ""}`,
         })),
       ],
     });
@@ -103,6 +102,7 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
                     <td key={col.code} title={note ?? undefined}>
                       {belowBenchmark(project, col.code) ? <span className="admin-badge is-danger" data-testid={`group-overview-below-${project.projectId}-${col.code}`}>●</span> : null}
                       {metricText(project, col.code)}
+                      {note ? <div className="admin-muted-action"><small>{note}</small></div> : null}
                     </td>
                   );
                 })}

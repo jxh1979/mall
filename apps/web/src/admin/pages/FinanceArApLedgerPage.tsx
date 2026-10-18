@@ -1,5 +1,6 @@
-// 文件版本：V0.03
+// 文件版本：V0.05
 import React from "react";
+import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -31,7 +32,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   termination_penalty: "退租违约金", deposit_refund: "退租押金退还", deposit: "押金",
   contract_rent: "合同租金", contract_property_fee: "物业费", energy_fee: "能源费",
   turnover_rent: "营业额抽成租金", dividend_payout: "持股分红发放", bar_bill: "酒吧账单",
-  dispatch_commission_transfer: "派驻提成月结拨付",
+  dispatch_commission_transfer: "派驻提成月结拨付", bar_payroll_transfer: "酒吧报酬月结拨付", staff_payroll: "员工工资",
   purchase_inbound: "采购入库", purchase_prepayment: "采购预付款", purchase_consignment: "寄售结算",
   purchase_return_refund: "供应商退货退款", purchase_prepayment_refund: "采购未用预付款退款",
 };
@@ -95,6 +96,10 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
       setFormError("请先在台账中选择要核销/调账的凭证。");
       return false;
     }
+    if (selected.sourceType === "staff_payroll") {
+      setFormError("工资请使用下方工资银行付款入口。");
+      return false;
+    }
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setFormError("核销金额必须是大于 0 的数字。");
@@ -112,6 +117,10 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
     if (!selected?.id) {
       setFormError("请先在台账中选择要核销/调账的凭证。");
       return;
+    }
+    if (selected.sourceType === "staff_payroll") {
+      setFormError("工资请使用下方工资银行付款入口。");
+      return false;
     }
     const numericAmount = Number(amount);
     setSubmitting(true);
@@ -187,7 +196,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
           <HighRiskConfirm
             label="登记核销"
             impact="将对选中凭证写入部分核销/调账并落库留痕，影响应收应付余额和后续对账。"
-            disabled={submitting}
+            disabled={submitting || selected?.sourceType === "staff_payroll"}
             precheck={validatePayment}
             onConfirm={() => void submitPayment()}
             permissionsState={effectivePermissions}
@@ -196,6 +205,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
           />
           <button type="button" data-testid="finance-export" disabled={exporting} onClick={() => void exportLedger()}>{exporting ? "导出中" : "导出台账"}</button>
         </div>
+        {selected?.sourceType === "staff_payroll" ? <FinancePayrollPaymentPanel key={selected.id} api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} row={selected} onChanged={ledger.reload} /> : null}
         {formError ? <div data-testid="finance-ledger-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-list-toolbar" data-testid="finance-ledger-filter">
           <input

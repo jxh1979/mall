@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { apiErrorFromResponse } from "../../shared/apiError";
 import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
 
@@ -35,8 +35,8 @@ function mapKeys(value: unknown, convertKey: (key: string) => string): JsonValue
       Object.entries(value)
         .filter(([, item]) => item !== undefined)
         .map(([key, item]) => [convertKey(key),
-          // 合同单价以真实商品 ID 为字典键，不能按接口字段名转换。
-          (key === "unitPrices" || key === "unit_prices") && isPlainObject(item)
+          // 商品、绩效等级及扣分规则的字典键是业务标识，不能按接口字段名转换。
+          ["unitPrices", "unit_prices", "gradeCoefficients", "grade_coefficients", "deductionRules", "deduction_rules", "deductions"].includes(key) && isPlainObject(item)
             ? Object.fromEntries(Object.entries(item).map(([id, amount]) => [id, mapKeys(amount, convertKey)]))
             : mapKeys(item, convertKey)]),
     );

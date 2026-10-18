@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -30,6 +30,9 @@ public class BarOrderService {
     // ponytail: 词表三处字面量并存，单一真源(S-4)留档下轮。
     private static final Set<String> PRODUCT_CATEGORY_VOCAB = Set.of(
             "spirit", "wine", "beer", "cocktail", "soft_drink", "mixer", "tea", "snack");
+
+    @Autowired
+    BarServiceResponsibilityService serviceResponsibilities;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -278,6 +281,7 @@ public class BarOrderService {
                 now,
                 now
         ));
+        if (serviceResponsibilities != null) serviceResponsibilities.recordOrder(order);
         orderItems.forEach(repository::saveOrderItem);
         // 出品票据双驱动（业务HTML 983 行口径）：吧台直点即点即取不走流转；独立餐饮出品在第三方系统、
         // 平台只拿回流不建票；卡座点酒/扫码点单/后厨自营小吃走「接单→制作→备好→送达」完整留痕。

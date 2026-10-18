@@ -1,5 +1,6 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
+import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -139,6 +140,9 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [paymentChannel, setPaymentChannel] = React.useState("aggregate_pay");
+  const [paymentAmount, setPaymentAmount] = React.useState("");
+  const [paymentReference, setPaymentReference] = React.useState("");
+  const paymentRetry = React.useRef<{ body: string; key: string } | null>(null);
   const [cashierStaffId, setCashierStaffId] = React.useState("");
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
   const [paymentPhone, setPaymentPhone] = React.useState("");
@@ -279,6 +283,12 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       setFormError(TEXT.billRequired);
       return false;
     }
+    if (paymentChannel !== "stored_value" && !paymentReference.trim()) {
+      setFormError("请填写本次真实付款凭据编号。"); return false;
+    }
+    if (paymentAmount.trim() && (!/^\d+(\.\d{1,2})?$/.test(paymentAmount.trim()) || Number(paymentAmount) <= 0 || !Number.isSafeInteger(Math.round(Number(paymentAmount) * 100)))) {
+      setFormError("本次金额须为正数，最多两位小数；留空按账单剩余应收结清。"); return false;
+    }
     if (paymentChannel === "stored_value" && (!paymentPhone.trim() || !paymentSmsCode.trim())) {
       setFormError("请填写付款手机号和短信验证码。");
       return false;
@@ -318,15 +328,21 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       setFormError(TEXT.billRequired);
       return;
     }
-    await runOrderAction("bar_bill_settled", () => api.post(`/api/v1/bar/bills/${billId}/settle`, {
-      paymentId: "payment-admin-web",
-      ...(paymentChannel === "stored_value" ? { phone: paymentPhone.trim(), smsCode: paymentSmsCode.trim() }
-        : { settlementAmountCent: selectedOrder?.totalAmountCent ?? selectedOrder?.totalAmount ?? 0 }),
+    const body = {
+      paymentId: paymentChannel === "stored_value" ? "stored-value:" + billId : paymentReference.trim(),
+      ...(paymentChannel === "stored_value" ? { phone: paymentPhone.trim(), smsCode: paymentSmsCode.trim() } : {}),
+      ...(paymentAmount.trim() ? { settlementAmountCent: Math.round(Number(paymentAmount) * 100) } : {}),
       paymentChannel,
       cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
-      operatorNote: TEXT.settleNote,
-    }));
+      operatorNote: "按本次真实收款凭据登记，多渠道累计足额后完成账单",
+    };
+    const serialized = JSON.stringify({ billId, ...body });
+    if (paymentRetry.current?.body !== serialized) paymentRetry.current = { body: serialized, key: crypto.randomUUID() };
+    await runOrderAction("bar_bill_settled", async () => {
+      const result = await api.post(`/api/v1/bar/bills/${billId}/settle`, { ...body, idempotencyKey: paymentRetry.current!.key });
+      paymentRetry.current = null; setPaymentAmount(""); setPaymentReference(""); return result;
+    });
   }
 
   // ==== V345（BAR-VOID-A1）退酒申请 / 审批 ====
@@ -478,6 +494,9 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         </div>
 
         <div className="admin-form-grid" data-testid="bar-settle-payment-form">
+          <label>本次收款金额（元，可留空结清）<input aria-label="本次收款金额" inputMode="decimal" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></label>
+          {paymentChannel !== "stored_value" ? <label>本次付款凭据编号<input aria-label="本次付款凭据编号" value={paymentReference} onChange={e => setPaymentReference(e.target.value)} /></label> : null}
+          <p>金额留空由系统按账单真实剩余应收结清，包含服务费及代收小费；可分别登记各渠道实际付款，累计足额后才完成整单。</p>
           <label>结算方式<select data-testid="bar-settle-channel" value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
             <option value="aggregate_pay">聚合支付</option>
             <option value="stored_value">储值余额（手机号验证）</option>
@@ -514,6 +533,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           />
           <span className="admin-muted-action" data-testid="bar-order-pos-boundary">{TEXT.posBoundary}</span>
         </div>
+        <BarRefundBreakdownPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} billId={firstBillId(selectedOrder)} onChanged={reload} />
         {formError ? <div data-testid="bar-orders-error" className="admin-inline-error">{formError}</div> : null}
         </>
         )}

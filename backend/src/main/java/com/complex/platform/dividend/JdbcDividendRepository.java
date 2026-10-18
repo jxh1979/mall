@@ -1,4 +1,5 @@
 package com.complex.platform.dividend;
+// 文件版本：V0.01
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -643,28 +644,41 @@ class JdbcDividendRepository implements DividendRepository {
         return total == null ? 0L : total;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.bar.BarRevenueSourceService barRevenueSources;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDays;
+
     @Override
     public long sumBarRevenueCent(String merchantId, Instant from, Instant to) {
-        // DashboardAggregationJob revenue.net 商户行级同谓词（区间版）：结账实收，冲正行不计。
-        return sumOrZero("""
-                SELECT COALESCE(SUM(settlement_amount_cent), 0)
-                  FROM bar_bill_settlements
-                 WHERE merchant_id = :merchant_id
-                   AND settled_at >= :from AND settled_at < :to
-                   AND reversed = FALSE
-                """, windowParams(merchantId, from, to));
+        long amount = 0L;
+        for (var row : barRevenueSources.completedCollections(merchantId, from, to)) {
+            if (row.goodsRevenueCent() != null) amount = Math.addExact(amount, row.goodsRevenueCent());
+            else if (!"payment_pending".equals(row.status())) {
+                throw com.complex.platform.common.api.ApiException.conflict("BAR_REVENUE_PENDING", "酒吧收入来源尚待核实");
+            }
+        }
+        // 上游窗口由平台期间生成；还原期间日期，再按服务费原经营日归属，不能改用酒吧日切把整月错移一天。
+        for (var row : barRevenueSources.withheldServiceFees(merchantId,
+                businessDays.businessDate(from), businessDays.businessDate(to.minusNanos(1)).plusDays(1))) {
+            if (row.amountCent() == null) {
+                throw com.complex.platform.common.api.ApiException.conflict("BAR_REVENUE_PENDING", "服务费尚未月结或来源已变化，不能确认分红");
+            }
+            amount = Math.addExact(amount, row.amountCent());
+        }
+        return amount;
     }
 
     @Override
     public long sumBarRefundCent(String merchantId, Instant from, Instant to) {
-        return sumOrZero("""
-                SELECT COALESCE(SUM(a.amount_cent), 0)
-                  FROM bar_bill_adjustments a
-                  JOIN bar_bills b ON b.id = a.bill_id
-                 WHERE b.merchant_id = :merchant_id
-                   AND a.adjustment_type = 'refund'
-                   AND a.refunded_at >= :from AND a.refunded_at < :to
-                """, windowParams(merchantId, from, to));
+        long amount = 0L;
+        for (var row : barRevenueSources.completedGoodsRefunds(merchantId, from, to)) {
+            if (row.amountCent() == null) {
+                throw com.complex.platform.common.api.ApiException.conflict("BAR_REVENUE_PENDING", "实际退款分项尚待核实，不能确认分红");
+            }
+            amount = Math.addExact(amount, row.amountCent());
+        }
+        return amount;
     }
 
     @Override

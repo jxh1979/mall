@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V487**，发现 **197** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V493**，发现 **208** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -103,11 +103,17 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_deposit_rules` | `merchant_id` | direct | V073 | `V073__bar_reservation_deposit.sql` |
 | `bar_gift_redemptions` | `merchant_id` | direct | V072 | `V072__bar_gift_redemption.sql` |
 | `bar_order_item_voids` | `merchant_id` | direct | V091 | `V091__bar_pos_depth.sql` |
+| `bar_order_service_sources` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
 | `bar_orders` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
+| `bar_payroll_allocations` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
+| `bar_payroll_bill_components` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
+| `bar_payroll_rules` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
+| `bar_payroll_runs` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
 | `bar_product_categories` | `merchant_id` | direct | V256 | `V256__bar_pos_catalog_category_image.sql` |
 | `bar_production_tickets` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
 | `bar_products` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
 | `bar_reservations` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
+| `bar_service_responsibilities` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
 | `bar_shifts` | `merchant_id` + `project_id` | direct | V095 | `V095__bar_shift_handover.sql` |
 | `bar_table_session_adjustments` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_table_sessions` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
@@ -223,8 +229,13 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `staff_leave_requests` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_level_assignments` | `merchant_id` + `organization_id` | direct | V055 | `V055__access_staff_levels_and_salary.sql` |
 | `staff_payroll_adjustments` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
+| `staff_payroll_calculation_drafts` | `merchant_id` | direct | V488 | `V488__staff_complete_payroll_facts.sql` |
 | `staff_payroll_payouts` | `project_id` | direct | V238 | `V238__payroll_statement_paid_state.sql` |
-| `staff_payroll_statements` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
+| `staff_payroll_period_facts` | `project_id` | direct | V488 | `V488__staff_complete_payroll_facts.sql` |
+| `staff_payroll_scheme_versions` | `project_id` | direct | V488 | `V488__staff_complete_payroll_facts.sql` |
+| `staff_payroll_statements` | `merchant_id` + `project_id` | direct | V214, V488 | `V214__tenant_scope_staff_service_tables.sql`<br>`V488__staff_complete_payroll_facts.sql` |
+| `staff_payroll_worktime_runs` | `project_id` | direct | V488 | `V488__staff_complete_payroll_facts.sql` |
+| `staff_performance_score_adjustments` | `project_id` | direct | V488 | `V488__staff_complete_payroll_facts.sql` |
 | `staff_profiles` | `merchant_id` + `project_id` | direct | V086 | `V086__staff_tables.sql` |
 | `staff_shift_schedules` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_work_phone_events` | `space_id` | direct | V468 | `V468__staff_cover_and_work_phone_attendance.sql` |

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -39,7 +39,9 @@ class StaffHandoverJdbcIntegrationTests {
         review(stop,"approved",manager);
         jdbc.update("INSERT INTO staff_employment_status_revisions(review_id,profile_id,user_id,before_status,after_status,reason,initiated_by,effective_at,applied_at) VALUES(?,?,?,'employed','departed','已批准生效',?,now()-interval '1 hour',now())",stop,profile,oldUser,manager);
         jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at) VALUES(?,'交接门店','bar','active','project_main',now(),now())",merchant);
-        jdbc.update("INSERT INTO bar_tables(id,bar_id,merchant_id,table_code,table_name,table_type,status,created_at,updated_at) VALUES(?,?,?,'T1','交接桌台','booth','available',now(),now())",table,bar,merchant);
+        // 台位须挂真实铺位（spaces.project_id）与商户：酒吧服务责任登记按 BarPayrollSupport.tableScope 取范围。
+        jdbc.update("INSERT INTO spaces(id,project_id,merchant_id,space_name,space_type,status,created_at,updated_at) VALUES(?,'project_main',?,'交接卡座区域','unit','active',now(),now())","space_"+suffix,merchant);
+        jdbc.update("INSERT INTO bar_tables(id,bar_id,merchant_id,table_code,table_name,table_type,status,created_at,updated_at,space_id) VALUES(?,?,?,'T1','交接桌台','booth','available',now(),now(),?)",table,bar,merchant,"space_"+suffix);
         act(manager);
     }
     @AfterEach void cleanup(){SecurityContextHolder.clearContext();}

@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.01
+// 文件版本：V0.02
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
@@ -33,7 +33,7 @@ public class DashboardAggregationJob {
     // 七类 metric_code（与聚合草案 §2 对齐）。
     static final String REVENUE_TICKET = "revenue.ticket";      // 收入
     static final String REVENUE_BAR = "revenue.bar";            // 收入
-    static final String REVENUE_BAR_REFUND = "revenue.bar_refund"; // 收入·酒吧退款（冲减 net，待确认#2）
+    static final String REVENUE_BAR_REFUND = "revenue.bar_refund"; // 收入·酒吧商品退款（冲减 net）
     static final String REVENUE_TICKET_REFUND = "revenue.ticket_refund"; // 收入·自营售票退款（冲减 net）
     static final String REVENUE_CONTRACT_RENT = "revenue.contract_rent"; // 收入·合同租金应收（租金/物业/能源，并入 net）
     static final String REVENUE_NET = "revenue.net";            // 收入·平台净收入（派生：售票+酒吧+合同租金−退款，第三方不计）
@@ -169,29 +169,28 @@ public class DashboardAggregationJob {
         // 收入·售票：ticket_orders 无 merchant_id → 仅平台口径。
         upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate, "ticketing"), now, platformTotals);
 
-        // 收入·酒吧：bar_bill_settlements 有 merchant_id → 平台 + 商户口径。
-        // 硬约束：revenue.bar 仅取现场消费实收（bar_bill_settlements），不含通票售票分摊，保证净收入口径不重复。
+        // 酒吧商品按整单付清时点、服务费扣留按原经营日；代收小费及员工应发不计收入。
+        // 只汇总已确认部分，待结状态在明细列示；不含通票分摊。
         upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate, "bar"), now, platformTotals);
 
-        // 收入·酒吧退款（待确认#2）：bar_bill_adjustments(adjustment_type='refund') 按 refunded_at 落经营日窗口，
-        // 单列 revenue.bar_refund（不改写 revenue.bar 实收口径），net 派生时扣减；免单 waiver 不计入（已在更低结算实收体现）。
+        // 商品退款按真实应付足额付款时点及退款分项；服务费退款另调整原经营日扣留。
         upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate, "bar"), now, platformTotals);
 
         // RC1②：收入·自营售票退款展示行 REVENUE_TICKET_REFUND 取平台退款总额（sumTicketRefundCents，平台口径）；
         //        商户维退款分量见下方 ticketRefundByMerchant(V220 直连) 并入商户行级 net。
-        // S0 双窗：net 全部分量按 platform 窗（对齐基准 04:00）；展示键各按业务域窗。
+        // 商品收退款按 platform 窗对齐；服务费扣留按其原经营日标签，不按月结运行时点。
         BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate, "platform"));
         BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate, "platform"));
         upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate,
                 nonNull(repository.sumTicketRefundCents(businessDate, "ticketing")), now, platformTotals);
 
         // RC1② 统一净收入 revenue.net（派生指标，财务确认口径 2026-06-18）：
-        //   net = 自营售票实付(revenue.ticket) + 酒吧实收(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
+        //   net = 自营售票实付(revenue.ticket) + 酒吧已确认收入(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
         //   第三方回流不计入平台净收入；退款按经营日（BusinessDayResolver）窗口冲减当日。
         //
         // 清单#4：商户行级 net 纳入售票分量（V075 merchant 归属 + V078 allocated_revenue_cent）：
-        //   商户 net = 本商户售票分量(Σ allocated) + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
-        //   平台 net 保持现有口径（售票实付全额 + Σ酒吧实收 − 售票退款 − Σ酒吧退款），不改用 allocated，
+        //   商户 net = 本商户售票分量(Σ allocated) + 本商户已确认商品及服务费扣留 − 本商户售票退款分摊 − 本商户酒吧退款。
+        //   平台 net 保持现有口径（售票实付全额 + Σ酒吧已确认收入 − 售票退款 − Σ酒吧退款），不改用 allocated，
         //   避免 direct 出票/无 allocated 订单造成平台口径漂移。两者一致性：allocateRevenue 保证同一订单
         //   Σallocated==订单实付，故"有发券且有 allocated"的订单其商户分量 Σ 等于平台售票分量的对应部分；
         //   仅 direct 出票/历史无 allocated 的订单不进商户行（保守不归任何商户），是平台≥Σ商户的唯一差额来源——
@@ -210,7 +209,7 @@ public class DashboardAggregationJob {
 
         // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
-        // 按酒吧/游乐业态拆出展示行，与 revenue.bar（消费实收）口径区分，避免重复计净收入。
+        // 按酒吧/游乐业态拆出展示行，与 revenue.bar（商品及服务费扣留）口径区分，避免重复计净收入。
         upsertByMerchant(REVENUE_TICKET_BAR_SHARE, "ticketing", businessDate,
                 repository.sumTicketBarShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
         upsertByMerchant(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
@@ -569,8 +568,8 @@ public class DashboardAggregationJob {
 
     /**
      * RC1② + 清单#4：派生并 upsert 净收入 revenue.net（按 merchant 行级 + 平台口径）。
-     * 商户行：net = 本商户售票分量(Σallocated) + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
-     * 平台行：net = 售票实付 + Σ酒吧实收 − 售票退款 − Σ酒吧退款（保持现有口径，不改用 allocated）。第三方回流不计入。
+     * 商户行：net = 本商户售票分量(Σallocated) + 本商户已确认商品及服务费扣留 − 本商户售票退款分摊 − 本商户酒吧退款。
+     * 平台行：net = 售票实付 + Σ酒吧已确认收入 − 售票退款 − Σ酒吧退款（保持现有口径，不改用 allocated）。第三方回流不计入。
      */
     private void upsertNetRevenue(
             LocalDate businessDate,
@@ -584,7 +583,7 @@ public class DashboardAggregationJob {
             Instant now,
             Map<String, BigDecimal> platformTotals
     ) {
-        // 商户行级 net：本商户售票分量 + 本商户酒吧实收 + 本商户合同租金应收 − 本商户售票退款分摊 − 本商户酒吧退款。
+        // 商户行级 net：本商户售票分量 + 本商户已确认商品及服务费扣留 + 本商户合同租金应收 − 本商户售票退款分摊 − 本商户酒吧退款。
         java.util.Set<String> merchantIds = new java.util.LinkedHashSet<>();
         merchantIds.addAll(barRevenueByMerchant.keySet());
         merchantIds.addAll(barRefundByMerchant.keySet());

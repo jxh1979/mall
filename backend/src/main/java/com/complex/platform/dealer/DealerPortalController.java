@@ -1,11 +1,12 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.dealer.dto.DealerCancelRequest;
 import com.complex.platform.dealer.dto.DealerIdempotentRequest;
 import com.complex.platform.dealer.dto.DealerInquiryRequest;
 import com.complex.platform.dealer.dto.DealerOrderDraftRequest;
@@ -137,6 +138,19 @@ public class DealerPortalController {
     @GetMapping("/orders/{id}/return-financials")
     public ApiResponse<java.util.List<DealerReturnFinancialRecord>> returnFinancials(@PathVariable String id) {
         return ApiResponse.ok(service.returnFinancials(id));
+    }
+
+    /** ENUM:179 / 裁决 69：门户查看发票（只读）。 */
+    @GetMapping("/orders/{id}/invoices")
+    public ApiResponse<PageResponse<DealerInvoiceRecord>> listInvoices(@PathVariable String id) {
+        return ApiResponse.ok(service.listInvoices(id));
+    }
+
+    /** ENUM:179 / 裁决 69：门户取消申请（只是申请，审批在内部后台）。 */
+    @PostMapping("/orders/{id}/cancel-request")
+    public ApiResponse<DealerOrderRecord> requestCancel(@PathVariable String id, @RequestBody DealerCancelRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestCancel(id, request));
     }
 
 }

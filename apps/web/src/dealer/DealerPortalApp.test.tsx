@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -32,6 +32,7 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
         if (url.endsWith("/payments")) return [{ id: "dpay_1", method: "bank_transfer", amountCent: 5000, status: "verified", referenceNo: "TX-1" }];
         if (url.endsWith("/return-sources")) return overrides.sources ?? [];
         if (url.endsWith("/return-financials")) return overrides.financials ?? [];
+        if (url.endsWith("/invoices")) return overrides.invoices ?? [];
         if (url.endsWith("/returns")) return overrides.returns ?? [];
         return [];
       }),
@@ -67,6 +68,25 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
     const methods = Array.from((screen.getByTestId("pay-method") as HTMLSelectElement).querySelectorAll("option")).map((o) => o.textContent);
     expect(methods).toEqual(["对公转账", "平台线上支付"]);
     expect(screen.getByTestId("payment-status-dpay_1").textContent).toBe("已核验");
+    expect(screen.queryByTestId("cancel-form")).toBeNull();
+  });
+
+  it("订单详情显示发票列表（金额 / 状态 / 发票号 / 重开自），出库前可提交取消申请", async () => {
+    const api = makeApi({
+      order: { id: "dord_1", orderNo: "DO-1", status: "pending_payment", totalAmountCent: 5000, paidAmountCent: 0 },
+      invoices: [{ id: "dinv_1", amountCent: 5000, status: "reversed", invoiceNo: "INV-1" }, { id: "dinv_2", amountCent: 4000, status: "issued", invoiceNo: "INV-2", reissuedFromInvoiceId: "dinv_1" }],
+    });
+    await loginAs(api);
+    fireEvent.click(screen.getByTestId("order-select-dord_1"));
+    await screen.findByTestId("order-detail");
+    await waitFor(() => expect(screen.queryByTestId("invoice-table")).not.toBeNull());
+    expect(screen.getByTestId("invoice-status-dinv_1").textContent).toBe("已红冲");
+    const row = screen.getByText("INV-2").closest("tr")!;
+    expect(Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent)).toEqual(["¥40", "已开票", "INV-2", "INV-1"]);
+    fireEvent.change(screen.getByTestId("cancel-reason"), { target: { value: "经销商改期" } });
+    fireEvent.click(screen.getByTestId("cancel-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/cancel-request", expect.objectContaining({ reason: "经销商改期" })));
+    await screen.findByText("取消申请已提交，由平台内部审批后生效");
   });
 
   it("询价、下单（建单+提交）、付款登记、签收、退货申请调用门户端点", async () => {

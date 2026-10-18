@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -8,6 +8,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.dealer.dto.DealerCancelRequest;
 import com.complex.platform.dealer.dto.DealerInquiryRequest;
 import com.complex.platform.dealer.dto.DealerOrderDraftRequest;
 import com.complex.platform.dealer.dto.DealerPaymentRequest;
@@ -30,6 +31,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  *   <li>隔离终端：请求终端必须是 dealer_portal（员工 Web 端、商户门户自报的终端不得进），否则按访问拒绝留痕 terminal.access_rejected。</li>
  *   <li>隔离数据：所有读写只落本经销商；别家对象按不存在处理。</li>
  *   <li>门户资格：企业资料、合同、开票、银行资料审核通过（portal_enabled）前只开放资料提交；停用后立即拒绝（ENUM:181）。</li>
+ *   <li>取消申请与查看发票（ENUM:179、裁决 69）：取消只是申请（→ 取消中），仍由内部按既有审批及订单、付款互斥规则办理，门户无审批入口；发票只读。</li>
  *   <li>统一终端开关、兜底关闭由 TerminalMasterSwitchInterceptor / TerminalSwitchGuard 对 dealer_portal 逐请求强制（V454 总开关行）。</li>
  * </ul>
  */
@@ -254,17 +256,33 @@ public class DealerPortalService {
     }
 
     public java.util.List<JdbcDealerReturnRepository.ReturnSource> returnSources(String orderId) {
-        return readReturnData(orderId,"dealer.portal.return_sources_viewed","dealer.portal.return_sources_view_failed",()->returnFinancial.ownedReturnSources(orderId));
+        return readOrderData(orderId,RETURN_REQUEST,"dealer.portal.return_sources_viewed","dealer.portal.return_sources_view_failed",()->returnFinancial.ownedReturnSources(orderId));
     }
     public java.util.List<DealerReturnFinancialRecord> returnFinancials(String orderId) {
-        return readReturnData(orderId,"dealer.portal.return_financials_viewed","dealer.portal.return_financials_view_failed",()->returnFinancial.ownedReturnFinancials(orderId));
+        return readOrderData(orderId,RETURN_REQUEST,"dealer.portal.return_financials_viewed","dealer.portal.return_financials_view_failed",()->returnFinancial.ownedReturnFinancials(orderId));
     }
-    private <T>T readReturnData(String orderId,String event,String failure,java.util.function.Supplier<T> query) {
+
+    // ── 取消申请 / 发票（ENUM:179、裁决 69）──
+
+    /** 「门户提供……查看发票」：只读本企业订单的发票事实（金额 / 状态 / 发票号 / 重开自）；开票、红冲、重开仍由内部办理。 */
+    public PageResponse<DealerInvoiceRecord> listInvoices(String orderId) {
+        return readOrderData(orderId,ORDER_MANAGE,"dealer.portal.invoices_viewed","dealer.portal.invoices_view_failed",()->returnService.listInvoices(orderId,ORDER_MANAGE));
+    }
+
+    /** 「取消只是申请，仍由内部经办按既有审批及订单、付款互斥规则办理，不允许经销商自批取消」：复用内部取消申请（→ 取消中），审批只在内部后台（dealer.order.review）。 */
+    @Transactional
+    public DealerOrderRecord requestCancel(String orderId, DealerCancelRequest request) {
+        DealerRecord dealer = currentDealer(true);
+        authorization.requirePermission(ORDER_MANAGE);
+        return orderService.requestCancel(requireOwnOrder(dealer, orderId).id(), request, ORDER_MANAGE);
+    }
+
+    private <T>T readOrderData(String orderId,String permission,String event,String failure,java.util.function.Supplier<T> query) {
         try {
-            DealerRecord dealer=currentDealer(true);authorization.requirePermission(RETURN_REQUEST);requireOwnOrder(dealer,orderId);
-            T result=query.get();audit.recordSuccess(event,RETURN_REQUEST,"dealer_order",orderId,null,null,Map.of());return result;
+            DealerRecord dealer=currentDealer(true);authorization.requirePermission(permission);requireOwnOrder(dealer,orderId);
+            T result=query.get();audit.recordSuccess(event,permission,"dealer_order",orderId,null,null,Map.of());return result;
         } catch(RuntimeException error) {
-            try {audit.recordFailure(failure,RETURN_REQUEST,"dealer_order",orderId,null,null,error instanceof ApiException api?api.code():error.getClass().getSimpleName());}
+            try {audit.recordFailure(failure,permission,"dealer_order",orderId,null,null,error instanceof ApiException api?api.code():error.getClass().getSimpleName());}
             catch(RuntimeException auditError){error.addSuppressed(auditError);}throw error;
         }
     }

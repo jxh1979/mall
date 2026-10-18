@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import java.util.Collection;
@@ -175,9 +175,10 @@ public final class MetricRegistry {
                 "酒吧收入",
                 TYPE_ADDITIVE,
                 "分",
-                "已结算账单实收合计（分）。可加口径=区间求和：按结算时间落酒吧经营日窗、剔除已冲正（reversed）流水；"
-                        + "与总控驾驶舱「酒吧收入」卡及看板 ETL（revenue.bar）同一谓词同源；仅现场消费实收，不含通票售票分摊。",
-                "酒吧账单结算流水台账（bar_bill_settlements，实时查询；看板快照为 ETL 跑批时点，可能存在时滞）。",
+                "已确认商品收入与月结服务费扣留合计（分），小费及员工应发服务费不计收入。"
+                        + "商品按剔除已冲正收款后的整单全渠道付清时点归属，扣留按原经营日归属且只取最新有效月结。"
+                        + "待确认金额不计入合计并在明细列示；本指标不是最终结算依据，不含通票售票分摊。",
+                "整单收款事实与服务费月结原件（实时查询；看板快照为跑批时点）。",
                 "analytics.dashboard.view",
                 "bar",
                 false,
@@ -186,11 +187,17 @@ public final class MetricRegistry {
                 "ADM-BAR-002",
                 "billId",
                 List.of(
-                        new MetricColumn("id", "结算流水号"),
+                        new MetricColumn("id", "来源单号"),
                         new MetricColumn("billId", "账单号"),
                         new MetricColumn("merchantId", "商户"),
-                        new MetricColumn("settleChannel", "结算渠道"),
-                        new MetricColumn("settlementAmountCent", "实收金额（分）"),
+                        new MetricColumn("sourceType", "收入来源"),
+                        new MetricColumn("statusLabel", "确认状态"),
+                        new MetricColumn("unresolvedSources", "待办原因"),
+                        new MetricColumn("settlementAmountCent", "已确认收入（分）"),
+                        new MetricColumn("collectedAmountCent", "整单实收（分）"),
+                        new MetricColumn("serviceFeeCent", "代收服务费（分）"),
+                        new MetricColumn("tipCent", "代收小费（分）"),
+                        new MetricColumn("businessDate", "扣留归属经营日"),
                         new MetricColumn("settledAt", "结算时间")),
                 null));
         register(registry, new MetricDefinition(
@@ -511,7 +518,8 @@ public final class MetricRegistry {
                 "分",
                 "逾期未清应付余额=Σ未付金额（分）（应付方向、未关闭、未付金额>0、到期日早于截至日）。"
                         + "余额口径=区间末值：取结束日期（缺省=当前财务经营日）为截至日，起始日期不参与；"
-                        + "与应收欠费余额(finance.ar_balance)同结构、方向取 payable。注意：明细按台账当前未付金额计，历史截至日仅影响到期日截止。",
+                        + "与应收欠费余额(finance.ar_balance)同结构、方向取 payable。工资还须有工资查看权限，明细与合计均按相同可见范围计算。"
+                        + "注意：明细按台账当前未付金额计，历史截至日仅影响到期日截止。",
                 "应收应付台账（ar_ap_items，实时查询）。",
                 "finance.ar_ap.view",
                 "finance",

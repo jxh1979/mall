@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,6 +40,9 @@ class PayrollTaxVersionJdbcIntegrationTests {
     @Autowired JdbcTemplate jdbc;
     @Autowired AccessRepository access;
     @Autowired PayrollTaxService taxes;
+    @Autowired StaffPayrollService payroll;
+    @Autowired com.complex.platform.finance.FinancePayrollService bankPayroll;
+    private PayrollApprovedFactsFixture.Source payrollFacts;
     @Autowired SupervisorReviewService reviews;
     @Autowired EvidenceEventService evidence;
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;
@@ -79,7 +82,7 @@ class PayrollTaxVersionJdbcIntegrationTests {
     @Test void serviceIncomeWithoutProfessionalTaxAssessmentCannotCloseAtAssumedTaxCategory() {
         income("first",1000000);
         assertThatThrownBy(()->staff.closePayroll(new StaffPayrollCloseRequest(UUID.randomUUID().toString(),"2099-07")))
-            .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_ASSESSMENT_REQUIRED"));
+            .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_CONFIRMED_FACTS_REQUIRED"));
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",Integer.class,employee)).isZero();
     }
 
@@ -134,30 +137,29 @@ class PayrollTaxVersionJdbcIntegrationTests {
 
     @Test void approvedAssessmentClosesAndLocksTaxVersionAgainstLaterApprovedVersion() {
         var old=approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);
-        var assessment=approvedAssessment();
-        staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"));
-        assertThat(jdbc.queryForObject("SELECT tax_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",Long.class,employee)).isEqualTo(100000);
+        var calculation=fullCalculation();var assessment=completeAssessment(calculation,100000,true);
+        var original=closeComplete(calculation,assessment);
         approvedVersion(LocalDate.of(2099,7,1),2000);
-        staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"));
-        var statement=staff.listPayroll("2099-07").items().stream().filter(s->s.userId().equals(employee)).findFirst().orElseThrow();
+        assertThatThrownBy(()->closeComplete(calculation,assessment)).isInstanceOf(ApiException.class);
+        var statement=payroll.detail(original.statement().id(),false).statement();
         assertThat(statement.taxVersionId()).isEqualTo(old.id());
         assertThat(statement.taxAssessmentId()).isEqualTo(assessment.id());assertThat(statement.taxCent()).isEqualTo(100000);
     }
 
     @Test void pendingAssessmentCannotCloseAndApprovedIncomeChangesRequireNewAssessment() {
         approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);
-        var draft=draftAssessment();var pending=taxes.submitAssessment(draft.id(),submit(draft.id(),PayrollTaxService.ASSESSMENT));
-        assertThatThrownBy(()->staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"))).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_ASSESSMENT_REQUIRED"));
+        var calculation=fullCalculation();var pending=completeAssessment(calculation,100000,false);
+        assertThatThrownBy(()->closeComplete(calculation,pending)).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_ASSESSMENT_REQUIRED"));
         approveAll(pending.reviewId());income("second",100000);
-        assertThatThrownBy(()->staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"))).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_SOURCE_CHANGED"));
+        assertThatThrownBy(()->closeComplete(calculation,taxes.assessment(pending.id(),false))).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_SOURCE_CHANGED"));
     }
 
     @Test void changedIncomeCannotReplacePayrollLockedAssessmentEvenWithSameTaxVersion() {
-        var original=approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);approvedAssessment();
-        staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"));
+        var original=approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);
+        var calculation=fullCalculation();var assessment=completeAssessment(calculation,100000,true);closeComplete(calculation,assessment);
         approvedVersion(LocalDate.of(2099,7,1),2000);income("second",100000);
         assertThatThrownBy(this::draftAssessment).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_ASSESSMENT_LOCKED"));
-        assertThatThrownBy(()->staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"))).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_SOURCE_CHANGED"));
+        assertThatThrownBy(()->closeComplete(calculation,assessment)).isInstanceOf(ApiException.class);
         assertThat(jdbc.queryForObject("SELECT tax_cent FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",Long.class,employee)).isEqualTo(100000);
         assertThat(jdbc.queryForObject("SELECT tax_version_id FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",String.class,employee)).isEqualTo(original.id());
     }
@@ -165,23 +167,25 @@ class PayrollTaxVersionJdbcIntegrationTests {
     @Test void historicalPayrollPaymentDoesNotRequireTaxBackfill() {
         jdbc.update("INSERT INTO staff_payroll_statements(id,user_id,month,base_cent,commission_cent,bonus_cent,penalty_cent,leave_deduction_cent,tax_cent,total_cent,status,closed_at,project_id,payer_company_id) VALUES(?,?,'2099-07',0,1000000,0,0,0,100000,900000,'closed',now(),?,?)","legacy_"+actor,employee,project,project);
         income("historical",1000000);
-        staff.markPayrollPaid(new com.complex.platform.access.staff.dto.StaffPayrollPayRequest(key(),"2099-07",employee,"bank_transfer","legacy_fixture"));
-        assertThat(jdbc.queryForObject("SELECT status FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",String.class,employee)).isEqualTo("paid");
+        assertThatThrownBy(()->staff.markPayrollPaid(new com.complex.platform.access.staff.dto.StaffPayrollPayRequest(key(),"2099-07",employee,"bank_transfer","legacy_fixture")))
+            .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_FINANCE_RESULT_REQUIRED"));
+        assertThat(jdbc.queryForObject("SELECT status FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",String.class,employee)).isEqualTo("closed");
         assertThat(jdbc.queryForObject("SELECT tax_assessment_id FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",String.class,employee)).isNull();
     }
 
     @Test void databaseDoesNotAllowReplacingLockedAssessment() {
         approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);
-        var first=approvedAssessment();var second=approvedAssessment();
-        staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"));
+        var calculation=fullCalculation();var first=completeAssessment(calculation,100000,true);var second=completeAssessment(calculation,100000,true);
+        closeComplete(calculation,second);
         assertThat(jdbc.queryForObject("SELECT tax_assessment_id FROM staff_payroll_statements WHERE user_id=? AND month='2099-07'",String.class,employee)).isEqualTo(second.id());
         assertThatThrownBy(()->jdbc.update("UPDATE staff_payroll_statements SET tax_assessment_id=? WHERE user_id=? AND month='2099-07'",first.id(),employee)).isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
     @Test void reassessmentCannotRewriteAlreadyPaidPayroll() {
-        approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);approvedAssessment();
-        staff.closePayroll(new StaffPayrollCloseRequest(key(),"2099-07"));
-        staff.markPayrollPaid(new com.complex.platform.access.staff.dto.StaffPayrollPayRequest(key(),"2099-07",employee,"bank_transfer","tax_fixture"));
+        approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);
+        var calculation=fullCalculation();var assessment=completeAssessment(calculation,100000,true);
+        var statement=closeComplete(calculation,assessment);payActually(statement.statement().id());
+        assertThat(jdbc.queryForObject("SELECT status FROM staff_payroll_statements WHERE id=?",String.class,statement.statement().id())).isEqualTo("paid");
         assertThatThrownBy(this::draftAssessment).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_ALREADY_PAID"));
     }
 
@@ -405,23 +409,34 @@ class PayrollTaxVersionJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE actor_id=? AND event_name='staff.payroll.tax_bracket_view_failed' AND event_result='failure'",Integer.class,actor)).isEqualTo(1);
     }
 
-    @Test void monthCloseCannotCombineApprovedTaxWithChangedPayerAfterValidation() {
-        approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);approvedAssessment();
-        taxes.prepareMonth("2099-07",null,null,null);
-        String other=newProject();
-        jdbc.update("UPDATE staff_profiles SET company_id=? WHERE user_id=?",other,employee);
-        assertThatThrownBy(()->staffRepository.closePayrollMonth("2099-07",actor,java.time.Instant.now(),null,null,null))
-                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    @Test void monthCloseKeepsApprovedOriginalPayerAfterEmployeeTransfer() {
+        approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);
+        var calculation=fullCalculation();var assessment=completeAssessment(calculation,100000,true);
+        String other=newProject();jdbc.update("UPDATE staff_profiles SET company_id=? WHERE user_id=?",other,employee);
+        assertOriginalPayrollSubject(closeComplete(calculation,assessment),assessment,other);
     }
 
-    @Test void monthCloseCannotCombineApprovedTaxWithChangedProjectAfterValidation() {
-        approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);approvedAssessment();
-        taxes.prepareMonth("2099-07",null,null,null);
-        String other=newProject();
-        jdbc.update("UPDATE staff_profiles SET project_id=? WHERE user_id=?",other,employee);
+    @Test void monthCloseKeepsApprovedOriginalProjectAfterEmployeeTransfer() {
+        approvedVersion(LocalDate.of(2099,1,1),1000);income("first",1000000);
+        var calculation=fullCalculation();var assessment=completeAssessment(calculation,100000,true);
+        String other=newProject();jdbc.update("UPDATE staff_profiles SET project_id=? WHERE user_id=?",other,employee);
         jdbc.update("UPDATE access_users SET organization_id=? WHERE id=?",other,employee);
-        assertThatThrownBy(()->staffRepository.closePayrollMonth("2099-07",actor,java.time.Instant.now(),null,null,null))
-                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        assertOriginalPayrollSubject(closeComplete(calculation,assessment),assessment,other);
+    }
+
+    private void assertOriginalPayrollSubject(StaffPayrollModels.StatementDetail detail,PayrollTaxAssessment assessment,String other) {
+        // 调岗不把已批准原工资及税务原件迁给新主体；也不能用原税额给新主体定格。
+        var statement=detail.statement();
+        assertThat(statement.payerCompanyId()).isEqualTo(project).isNotEqualTo(other);
+        assertThat(jdbc.queryForObject("SELECT project_id FROM staff_payroll_statements WHERE id=?",String.class,statement.id())).isEqualTo(project);
+        assertThat(statement.taxAssessmentId()).isEqualTo(assessment.id());
+        assertThat(statement.taxVersionId()).isEqualTo(assessment.taxVersionId());
+        assertThat(statement.commissionCent()).isEqualTo(1000000);
+        assertThat(statement.taxCent()).isEqualTo(100000);
+        assertThat(statement.totalCent()).isEqualTo(900000);
+        assertThat(detail.schemeVersionId()).isEqualTo(payrollFacts.scheme());
+        assertThat(detail.factsId()).isEqualTo(payrollFacts.facts());
+        assertThat(jdbc.queryForObject("SELECT amount_cent FROM ar_ap_items WHERE id=?",Long.class,detail.arApItemId())).isEqualTo(900000);
     }
 
     private String newProject() {
@@ -430,6 +445,28 @@ class PayrollTaxVersionJdbcIntegrationTests {
         return id;
     }
 
+    private StaffPayrollModels.CalculationDraft fullCalculation() {
+        if(payrollFacts==null)payrollFacts=PayrollApprovedFactsFixture.create(jdbc,json,employee,project,actor,"2099-07",0,0);
+        return payroll.calculate(new StaffPayrollModels.SettleRequest(key(),employee,"2099-07","monthly",payrollFacts.facts(),null));
+    }
+    private PayrollTaxAssessment completeAssessment(StaffPayrollModels.CalculationDraft c,long amount,boolean approve) {
+        var d=taxes.draftAssessment(new PayrollTaxAssessment.DraftRequest(key(),employee,"2099-07",category(),LocalDate.of(2099,7,31),
+            "测试员工身份与主体","本期完整工资来源","测试完整专业计算书","完整工资认定",c.id(),amount,"完整专业原件:"+c.id()));
+        var pending=taxes.submitAssessment(d.id(),submit(d.id(),PayrollTaxService.ASSESSMENT));
+        if(approve)approveAll(pending.reviewId());return taxes.assessment(d.id(),false);
+    }
+    private StaffPayrollModels.StatementDetail closeComplete(StaffPayrollModels.CalculationDraft c,PayrollTaxAssessment tax) {
+        return payroll.settle(new StaffPayrollModels.SettleRequest(key(),employee,"2099-07","monthly",payrollFacts.facts(),null,c.id(),tax.id()));
+    }
+    private void payActually(String statement) {
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT 'role_m010_fixture',permission_code FROM permissions WHERE permission_code LIKE 'finance.payroll.%' ON CONFLICT DO NOTHING");
+        long total=jdbc.queryForObject("SELECT total_cent FROM staff_payroll_statements WHERE id=?",Long.class,statement);
+        String id=(String)bankPayroll.prepare(statement,new com.complex.platform.finance.FinancePayrollService.PrepareRequest(key(),total)).get("id");
+        String proof=evidence.uploadAttachment(new MockMultipartFile("file","bank.png","image/png",java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jCYQAAAAASUVORK5CYII=")),"staff_payroll_payment",id,"bank_proof").id();
+        var at=java.time.Instant.now().minusSeconds(60);
+        bankPayroll.submit(id,new com.complex.platform.finance.FinancePayrollService.SubmitRequest(key(),"request_"+id,at,employee,List.of(proof)));
+        bankPayroll.result(id,new com.complex.platform.finance.FinancePayrollService.ResultRequest(key(),"succeeded",at.plusSeconds(1),"flow_"+id,"真实成功测试流水",List.of(proof)));
+    }
     private PayrollTaxVersion draftVersion(LocalDate date,int rate) {
         act(actor);return taxes.draft(new PayrollTaxVersion.DraftRequest(key(),category(),date,"仅回归测试人员，非法律税率","测试使用既有分档公式并逐步截断到分",PayrollTaxService.ROUNDING,
                 List.of(new PayrollTaxVersion.Bracket(1,0L,null,10000,0L,rate,0L)),"测试完整税表"));

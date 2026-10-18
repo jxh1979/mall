@@ -1,11 +1,13 @@
-// 文件版本：V0.04
+// 文件版本：V0.08
 import React from "react";
+import { payrollDetailFields } from "./StaffPayrollDetail";
+import type { PayrollStatementDetail } from "./staffPayrollTypes";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
-import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { StaffPayrollBasisPanel } from "./StaffPayrollBasisPanel";
 import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps } from "../types";
@@ -16,19 +18,20 @@ type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: numb
 // CG-07 提成月结拨付（bar_commission_settlements）：酒吧 → 人员所属主体 → 月，一组一条内部结算应付。
 type CommissionSettlementRow = { id: string; month?: string; merchantId?: string | null; companyId?: string | null; amountCent?: number; calculationCount?: number; staffCount?: number; arApItemId?: string | null; dueDate?: string | null };
 const cnDay = (value?: string | null) => (value ? value.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日") : "—");
-type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: string; endDate?: string; reason?: string; status?: string; reviewNote?: string };
+// 2026-10-18 操作员裁决：销假=本人申请（revoke_requested，revokeRequestReason 为员工申请理由）＋主管批准（revoked）。
+type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: string; endDate?: string; reason?: string; status?: string; reviewNote?: string; revokeRequestReason?: string };
 // CG-12：员工对已生效扣罚的申诉（同链裁定：撤销＝冲回原调整、维持）。
 type AppealRow = { id: string; adjustmentId?: string; userId?: string; month?: string; amountCent?: number; reason?: string; reviewId?: string; status?: string; reversalAdjustmentId?: string | null; createdAt?: string; decidedAt?: string | null };
-const APPEAL_STATUS: Record<string, string> = { pending: "裁定中", upheld: "维持", revoked: "已撤销（已冲回）" };
+const APPEAL_STATUS: Record<string, string> = { pending: "裁定中", upheld: "维持", revoked: "已撤销" };
 
 const TEXT = {
   title: "薪酬与请假",
-  description: "薪资四块:固定工资(员工档案)+提成(业务自动归集)+奖金/处罚(手录必须带事由,审计留痕;奖惩与其他涉及员工的人力操作一样,须经 人力会签与该员工直属起共三个组织层级复核后才入账);人事「月结」后员工才可见,补录后可重结覆盖。员工可对已生效扣罚提出申诉,申诉同样报至人力部门与直属起共三个组织层级裁定,撤销即冲回原调整、原记录保留。请假由排班主管审批,通过区间考勤记「请假」;事假按请假占实际排班的工时比例扣薪，扣后不低于零,病假/年假/调休不扣。",
+  description: "依据已批准薪资方案、计薪日历和期间事实逐项核算。普通现金处罚仅按基础工资上限处理，绩效少发不占额度；同一事假影响只扣一次。工资定格后员工可查，银行实际支付另行记录。已发工资撤罚保留原单，真实少发差额并入下一次应发工资；离职依法结清。",
   loadFailed: "薪酬请假读取失败",
 };
 
 const LEAVE_LABELS: Record<string, string> = { personal: "事假", sick: "病假", comp: "调休", annual: "年假" };
-const STATUS_LABELS: Record<string, string> = { pending: "待审", approved: "已通过", rejected: "已驳回" };
+const STATUS_LABELS: Record<string, string> = { pending: "待审", approved: "已通过", rejected: "已驳回", revoke_requested: "待销假审批", revoked: "已销假" };
 
 function money(cent?: number) {
   return cent === undefined || cent === null ? "—" : `¥${(cent / 100).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
@@ -45,7 +48,7 @@ function cnMonth(value?: string) {
   return m ? `${m[1]}年${Number(m[2])}月` : value;
 }
 
-export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, effectivePermissions, navigateTo }: AdminPageProps) {
+export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResult, effectivePermissions, navigateTo }: AdminPageProps) {
   const [cap, setCap] = React.useState<{ value: string; minValue: string; maxValue: string } | null>(null);
   const [capReason, setCapReason] = React.useState("");
   const [capReviewers, setCapReviewers] = React.useState({ hr_review: "", finance_review: "", legal_review: "" });
@@ -56,12 +59,6 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
   const [leaves, setLeaves] = React.useState<LeaveRow[]>([]);
   const [settlements, setSettlements] = React.useState<CommissionSettlementRow[]>([]);
   const [leaveNotice, setLeaveNotice] = React.useState<string | null>(null);
-  const [baseUser, setBaseUser] = React.useState("");
-  const [baseSalary, setBaseSalary] = React.useState("");
-  // 引导式流程 phase-5：薪资基数录入收起为主按钮 + 分步引导弹窗（奖惩/月结/请假审批不动）。
-  const [baseOpen, setBaseOpen] = React.useState(false);
-  const [baseError, setBaseError] = React.useState("");
-  const [baseSubmitting, setBaseSubmitting] = React.useState(false);
   const [adjUser, setAdjUser] = React.useState("");
   const [adjType, setAdjType] = React.useState("bonus");
   const [adjAmount, setAdjAmount] = React.useState("");
@@ -82,7 +79,11 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
       // 不拖垮当月薪资明细主内容。
       const [payRows, leaveRes, settlementRows] = await Promise.all([
         api.get<PayrollRow[]>(`/api/v1/staff/payroll?month=${month}`),
-        loadSecondaryIfPermitted(canShiftManage, () => api.get<LeaveRow[]>("/api/v1/staff/leaves?status=pending"), [] as LeaveRow[]),
+        // 待审请假 + 待销假审批（员工本人已申请销假、等主管批准/驳回）一并列出。
+        loadSecondaryIfPermitted(canShiftManage, async () => [
+          ...(await api.get<LeaveRow[]>("/api/v1/staff/leaves?status=pending")),
+          ...(await api.get<LeaveRow[]>("/api/v1/staff/leaves?status=revoke_requested")),
+        ], [] as LeaveRow[]),
         api.get<CommissionSettlementRow[]>(`/api/v1/staff/commission-settlements?month=${month}`),
       ]);
       setPayroll(payRows ?? []);
@@ -101,34 +102,6 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
     }
     void reload();
   }, [month, reload]);
-
-  // 基数校验（步内 + 提交双保险）：员工 id 非空 + 月薪非负数。
-  function baseInvalid() {
-    const cent = Math.round(Number(baseSalary) * 100);
-    return !baseUser.trim() || !Number.isFinite(cent) || cent < 0;
-  }
-
-  const saveBase = async () => {
-    const cent = Math.round(Number(baseSalary) * 100);
-    if (baseInvalid()) {
-      setBaseError("请填 员工id 与 非负月薪(元)");
-      return;
-    }
-    setBaseSubmitting(true);
-    try {
-      await api.post("/api/v1/staff/payroll/base", { userId: baseUser.trim(), monthlySalaryCent: cent });
-      setActionResult({ action: "payroll_base_saved", userId: baseUser.trim() });
-      setBaseUser(""); setBaseSalary("");
-      setBaseError("");
-      setBaseOpen(false);
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : "薪资基数录入失败";
-      setBaseError(message);
-      setGlobalError(message);
-    } finally {
-      setBaseSubmitting(false);
-    }
-  };
 
   const saveAdjustment = async () => {
     const cent = Math.round(Number(adjAmount) * 100);
@@ -168,12 +141,6 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
     await loadAppeals();
   };
 
-  const closeMonth = async () => {
-    const result = await api.post<{ statements?: number }>("/api/v1/staff/payroll/close", { month });
-    setActionResult({ action: "payroll_month_closed", month, statements: result?.statements });
-    await reload();
-  };
-
   // CG-07：按（酒吧 → 人员所属主体 → 月）汇总派驻人员提成，生成内部结算应付；重复执行不重复挂账。
   const closeCommissionSettlement = async () => {
     const result = await api.post<{ settlements?: number }>("/api/v1/staff/commission-settlements/close", { month });
@@ -187,30 +154,29 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
     await reload();
   };
 
-  // 薪资单行 → 该员工该月全部字段（label 用表头中文，金额带 ¥）。
-  function openPayrollDetail(row: PayrollRow) {
-    setDetail({
-      title: `薪资单明细 · ${row.userId ?? "—"}`,
-      fields: [
-        { label: "员工", value: row.userId ?? "—" },
-        { label: "所属月份", value: cnMonth(row.month ?? month) },
-        { label: "固定工资", value: money(row.baseCent) },
-        { label: "提成", value: money(row.commissionCent) },
-        { label: "发放主体（代扣个税）", value: row.payerCompanyId ?? "—" },
-        { label: "奖金", value: money(row.bonusCent) },
-        { label: "处罚", value: money(row.penaltyCent) },
-        { label: "请假扣薪", value: money(row.leaveDeductionCent) },
-        { label: "代扣个税", value: money(row.taxCent) },
-        { label: "锁定税务认定", value: row.taxAssessmentId ?? "原历史单未关联" },
-        { label: "锁定税表版本", value: row.taxVersionId ?? "原历史单未关联" },
-        { label: "实发合计", value: money(row.totalCent) },
-        { label: "薪资单号", value: row.id },
-      ],
-    });
+  // 2026-10-18 操作员裁决：销假=本人申请＋主管批准。主管在此批准（→ 已销假，BSM L1481 冲正/不扣薪）或驳回（假仍有效）。
+  const reviewRevoke = async (id: string, decision: "approve" | "reject") => {
+    await api.post(`/api/v1/staff/leaves/${id}/revoke`, { decision, reviewNote: decision === "approve" ? "准予销假" : "不予销假" });
+    setActionResult({ action: "leave_revoke_reviewed", id, decision });
+    await reload();
+  };
+
+  const detailRequest = React.useRef(0);
+  React.useEffect(() => { detailRequest.current++; setDetail(null); }, [month]);
+  async function openPayrollDetail(row: PayrollRow) {
+    const request = ++detailRequest.current;
+    setDetail(null); setGlobalError(null);
+    try {
+      const result = await api.get<PayrollStatementDetail>(`/api/v1/staff/payroll/statements/${encodeURIComponent(row.id)}`);
+      if (request === detailRequest.current) setDetail({ title: `薪资单明细 · ${result.statement.userId ?? "—"}`, fields: payrollDetailFields(result) });
+    } catch (error) {
+      if (request === detailRequest.current) setGlobalError(error instanceof Error ? error.message : "工资单详情读取失败");
+    }
   }
 
   // 请假行 → 该申请完整字段（类型/状态枚举中文、起止日期中文）。
   function openLeaveDetail(row: LeaveRow) {
+    detailRequest.current += 1;
     setDetail({
       title: `请假申请明细 · ${row.userId ?? "—"}`,
       fields: [
@@ -221,12 +187,13 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         { label: "事由", value: row.reason ?? "—" },
         { label: "审批状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—" },
         { label: "审批意见", value: row.reviewNote ?? "—" },
+        { label: "销假申请理由", value: row.revokeRequestReason ?? "—" },
         { label: "申请单号", value: row.id },
       ],
     });
   }
 
-  // 第五批（人事域）KPI 接线：实发合计/薪资单数按所选月（from=to=月首日）、待审请假为当前 pending 计数；平台口径同源。
+  // 第五批（人事域）KPI 接线：应发净额合计/薪资单数按所选月（from=to=月首日）、待审请假为当前 pending 计数；平台口径同源。
   const monthDay = `${month}-01`;
   const payrollTotalKpi = useMetricKpiValue(api, "staff.payroll_net_total", { from: monthDay, to: monthDay });
   const payrollCountKpi = useMetricKpiValue(api, "staff.payroll_statement_count", { from: monthDay, to: monthDay });
@@ -244,7 +211,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
           } catch (error) { setCapMessage((error as Error).message); }
         }}>普通扣除上限</button>
         {cap ? <fieldset><legend>全平台普通扣除上限（百分比）</legend>
-          <p>修改须经人力、财务、法务审核，再由顶层平台最终确认；已月结单据沿用原上限。</p>
+          <p>现金处罚仅按基础工资计算上限，绩效减少不占额度。上限修改须经人力、财务、法务审核，再由顶层平台最终确认；已月结单据沿用原上限。</p>
           {([['value', '上限比例（%）'], ['minValue', '允许下限（%）'], ['maxValue', '允许上限（%）']] as const).map(([key, label]) => <label key={key}>{label}
             <input aria-label={label} type="number" min={0} max={100} step="0.01" value={cap[key]} onChange={(event) => setCap({ ...cap, [key]: event.target.value })} />
           </label>)}
@@ -267,50 +234,19 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         </fieldset> : null}
       </> : null}
       {capMessage ? <p role="status">{capMessage}</p> : null}
-      <AuditTrailHint event="staff.payroll.month_closed / staff.payroll.adjustment_added / staff.leave.reviewed" />
+      <AuditTrailHint event="staff.payroll.settle / staff.payroll.adjustment_added / staff.leave.reviewed" />
       <div className="admin-toolbar">
         <label>月份:<CnDatePicker mode="month" data-testid="payroll-month" value={month} onChange={(v) => setMonth(v || currentMonth())} /></label>
-        <button type="button" data-testid="payroll-close" onClick={() => void closeMonth()}>执行月结(重结=覆盖)</button>
+        <a href="#payroll-approved-basis">按批准依据核算工资</a>
         <button type="button" data-testid="payroll-commission-close" onClick={() => void closeCommissionSettlement()}>提成月结拨付(酒吧→所属主体)</button>
       </div>
+      <p>工资须逐员工依据已批准期间事实生成税前原件，完成专业税额审批后定格；未结周期和未分配项在工资详情持续跟进。</p>
       <div className="admin-kpi-grid" data-testid="staff-payroll-summary">
-        <div className="admin-kpi-card"><span>实发合计（元）</span><strong className="admin-kpi-value--text" data-testid="staff-payroll-kpi-total">{payrollTotalKpi.status === "ready" && payrollTotalKpi.value !== null ? money(payrollTotalKpi.value) : "—"}</strong><small>平台口径·{cnMonth(month)}{payrollTotalKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.payroll_net_total" from={monthDay} to={monthDay} testid="staff-payroll-metric-detail-total" /> : null}</small></div>
+        <div className="admin-kpi-card"><span>应发净额合计（元）</span><strong className="admin-kpi-value--text" data-testid="staff-payroll-kpi-total">{payrollTotalKpi.status === "ready" && payrollTotalKpi.value !== null ? money(payrollTotalKpi.value) : "—"}</strong><small>平台口径·{cnMonth(month)}{payrollTotalKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.payroll_net_total" from={monthDay} to={monthDay} testid="staff-payroll-metric-detail-total" /> : null}</small></div>
         <div className="admin-kpi-card"><span>薪资单数</span><strong className="admin-kpi-value--text" data-testid="staff-payroll-kpi-count">{payrollCountKpi.status === "ready" && payrollCountKpi.value !== null ? payrollCountKpi.value : "—"}</strong><small>平台口径·{cnMonth(month)}{payrollCountKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.payroll_statement_count" from={monthDay} to={monthDay} testid="staff-payroll-metric-detail-count" /> : null}</small></div>
         <div className="admin-kpi-card"><span>待审请假数</span><strong className="admin-kpi-value--text" data-testid="staff-leave-kpi-pending">{pendingLeaveKpi.status === "ready" && pendingLeaveKpi.value !== null ? pendingLeaveKpi.value : "—"}</strong><small>平台口径·当前{pendingLeaveKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.pending_leave_count" testid="staff-leave-metric-detail-pending" /> : null}</small></div>
       </div>
-      <h3>固定工资设定(员工档案)</h3>
-      <div className="admin-form-row" data-testid="payroll-base-editor">
-        <button type="button" data-testid="payroll-base-create-open" onClick={() => { setBaseError(""); setBaseOpen(true); }}>＋ 薪资基数录入</button>
-        <span className="admin-muted-action">固定工资录入后进入员工档案，作为月结固定工资项基数。</span>
-      </div>
-      <GuidedFlowModal
-        open={baseOpen}
-        title="薪资基数录入"
-        testId="payroll-base-guided"
-        submitTestId="base-save"
-        submitLabel="保存"
-        submitting={baseSubmitting}
-        error={baseError || undefined}
-        onClose={() => setBaseOpen(false)}
-        onSubmit={() => void saveBase()}
-        steps={[
-          {
-            title: "固定工资",
-            description: "填写员工与月薪(元)。",
-            validate: () => (baseInvalid() ? "请填 员工id 与 非负月薪(元)" : null),
-            content: (
-              <>
-                <label>员工 user_id<input data-testid="base-user-input" value={baseUser} onChange={(event) => setBaseUser(event.target.value)} /></label>
-                <label>月薪(元)<input data-testid="base-salary-input" value={baseSalary} onChange={(event) => setBaseSalary(event.target.value)} /></label>
-              </>
-            ),
-          },
-        ]}
-        summary={[
-          { label: "员工 user_id", value: baseUser.trim() || "未填写" },
-          { label: "月薪(元)", value: baseSalary.trim() || "未填写" },
-        ]}
-      />
+      <div id="payroll-approved-basis"><StaffPayrollBasisPanel api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} month={month} onSettled={result => { detailRequest.current++; setDetail({ title: `薪资单明细 · ${result.statement.userId ?? "—"}`, fields: payrollDetailFields(result) }); void reload(); }} /></div>
       <h3>奖金 / 处罚手录(必须带事由；人力会签＋直属起共三个组织层级复核通过后入账)</h3>
       <div className="admin-form-grid" data-testid="payroll-adj-editor">
         <label>员工 user_id<input data-testid="adj-user-input" value={adjUser} onChange={(event) => setAdjUser(event.target.value)} /></label>
@@ -320,7 +256,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         <p>人力会签按员工部门自动确定，直属起共三级；配置缺失时保持待处理，补齐后重新生成审批链。</p>
         <button type="button" data-testid="adj-save" onClick={() => void saveAdjustment()}>发起复核</button>
       </div>
-      <h3>扣罚申诉(员工本人对已生效扣罚提出；同链裁定，撤销即冲回、原记录保留)</h3>
+      <h3>扣罚申诉(员工本人对已生效扣罚提出；同链裁定，撤销保留原件，已发工资另列实际补差)</h3>
       <div className="admin-form-grid" data-testid="payroll-appeal-editor">
         <label>扣罚记录编号<input data-testid="appeal-adj-input" value={appealAdjId} onChange={(event) => setAppealAdjId(event.target.value)} /></label>
         <label>申诉事由<input data-testid="appeal-reason-input" value={appealReason} onChange={(event) => setAppealReason(event.target.value)} /></label>
@@ -347,10 +283,10 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         </div>
       ) : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
-        <h3>当月薪资单(月结后生成;员工端仅见已定格月份)</h3>
+        <h3>当月薪资单（专业税额批准并定格后生成；员工端仅见已定格单据）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="payroll-table">
-            <thead><tr><th>员工</th><th>发放主体</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>请假扣薪</th><th>代扣个税</th><th>实发合计</th><th>详情</th></tr></thead>
+            <thead><tr><th>员工</th><th>发放主体</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>请假扣薪</th><th>代扣个税</th><th>应发净额</th><th>详情</th></tr></thead>
             <tbody>
               {payroll.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`payroll-row-${row.id}`}
@@ -390,7 +326,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
             </tbody>
           </table>
         </div>
-        <h3>待审请假(排班主管审批)</h3>
+        <h3>待审请假与销假申请(排班主管审批)</h3>
         {leaveNotice ? (
           <div className="admin-state" data-testid="leave-degraded">{leaveNotice}</div>
         ) : (
@@ -405,11 +341,14 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
                   <td>{row.userId ?? "—"}</td>
                   <td>{LEAVE_LABELS[row.leaveType ?? ""] ?? row.leaveType ?? "—"}</td>
                   <td>{cnDate(row.startDate)} ~ {cnDate(row.endDate)}</td>
-                  <td>{row.reason ?? "—"}</td>
+                  <td>{row.reason ?? "—"}{row.revokeRequestReason ? `；销假理由：${row.revokeRequestReason}` : ""}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}</td>
                   <td onClick={(event) => event.stopPropagation()}>
                     {(() => {
-                      const acts: RowAction[] = [
+                      const acts: RowAction[] = row.status === "revoke_requested" ? [
+                        { key: "revoke-approve", label: "批准销假", onClick: () => void reviewRevoke(row.id, "approve"), testId: `leave-revoke-approve-${row.id}` },
+                        { key: "revoke-reject", label: "驳回销假", danger: true, onClick: () => void reviewRevoke(row.id, "reject"), testId: `leave-revoke-reject-${row.id}` },
+                      ] : [
                         { key: "approve", label: "通过", onClick: () => void review(row.id, "approve"), testId: `leave-approve-${row.id}` },
                         { key: "reject", label: "驳回", danger: true, onClick: () => void review(row.id, "reject"), testId: `leave-reject-${row.id}` },
                       ];
@@ -423,7 +362,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         </div>
         )}
       </AdminDataState>
-      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => { detailRequest.current += 1; setDetail(null); }} />
     </section>
   );
 }

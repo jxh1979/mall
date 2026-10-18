@@ -1,5 +1,6 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
+import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
@@ -116,12 +117,6 @@ function toIso(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
-function centFromYuan(value: string) {
-  if (!value.trim()) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.round(parsed * 100) : undefined;
-}
-
 function roleLabel(row: RoleRow | undefined) {
   return row ? `${row.roleName ?? row.roleCode ?? row.id} (${row.id})` : "-";
 }
@@ -221,7 +216,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
   const [summary, setSummary] = React.useState<AccessGrantSummary | null>(null);
   const [summaryNotice, setSummaryNotice] = React.useState<string | null>(null);
   const [templateForm, setTemplateForm] = React.useState({ id: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", roleId: "", templateId: "", status: "active" });
-  const [positionForm, setPositionForm] = React.useState({ userId: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", baseSalaryYuan: "", salaryDetail: "", operatorNote: "" });
+  const [positionForm, setPositionForm] = React.useState({ userId: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", operatorNote: "" });
   // M087-A-04：人员范围变更表单（所属商户 / 跨项目）。
   const [scopeForm, setScopeForm] = React.useState({ userId: "", organizationId: "", merchantId: "", positionCode: "", staffLevelId: "", reason: "", finalApproverId: "" });
   const [roleForm, setRoleForm] = React.useState({ userId: "", roleId: "", operatorNote: "" });
@@ -423,9 +418,6 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
     await api.put(`/api/v1/access/users/${encodeURIComponent(positionForm.userId.trim())}/position`, {
       positionCode: positionForm.positionCode.trim(),
       staffLevelId: positionForm.staffLevelId.trim(),
-      baseSalaryAmountCent: centFromYuan(positionForm.baseSalaryYuan),
-      salaryCurrency: positionForm.baseSalaryYuan.trim() ? "CNY" : undefined,
-      salaryDetail: positionForm.salaryDetail.trim() || undefined,
       operatorNote: positionForm.operatorNote.trim() || "后台定岗并按模板自动装配",
     });
     setActionResult(`已为用户 ${positionForm.userId.trim()} 定岗并按岗位模板自动适配权限`);
@@ -812,8 +804,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
           <p>工作手机故障换机限夜班值班经理；须有生效的岗位模板、对应范围与换机权限。撤销岗位后不能继续换机。</p>
           <input aria-label="岗位编码" placeholder="岗位编码" list="access-position-codes" value={positionForm.positionCode} onChange={(event) => setPositionForm({ ...positionForm, positionCode: event.target.value })} />
           <select aria-label="职级" data-testid="access-user-position-level" value={positionForm.staffLevelId} onChange={(event) => setPositionForm({ ...positionForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select>
-          <input aria-label="基础薪资元" type="number" min="0" placeholder="基础薪资(元)" value={positionForm.baseSalaryYuan} onChange={(event) => setPositionForm({ ...positionForm, baseSalaryYuan: event.target.value })} />
-          <input aria-label="薪资备注" placeholder="薪资备注" value={positionForm.salaryDetail} onChange={(event) => setPositionForm({ ...positionForm, salaryDetail: event.target.value })} />
+          <p>薪资金额及计薪规则须另行建立方案并审批。<a href={withBase("/admin/staff/payroll")}>前往薪酬与请假</a></p>
           <input aria-label="操作备注" placeholder="操作备注" value={positionForm.operatorNote} onChange={(event) => setPositionForm({ ...positionForm, operatorNote: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-user-position-assign" disabled={writeBusy} onClick={() => void runWrite(assignPosition, "定岗失败")}>定职位并适配</PermissionButton>
         </div>

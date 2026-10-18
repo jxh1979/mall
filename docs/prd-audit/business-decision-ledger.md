@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.42
+文档版本：V0.44
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3571,3 +3571,46 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | `docs/platform-governance-map-for-operations-v0.1.html` | V0.41 | `6d6b219ab72cc0bdda4740b00890ad41e50650cfa5a7d6bfe3dcc73e90320185` |
 
 以上为本批修改的字节绑定，不是新增冻结记录。最终提交与 CI 结果以对应 PR 记录为准。
+
+## 2026-10-18 第六批工资：H01／H01A 普通现金扣除上限基数（文档同步，HTML 不改）
+
+### 来源与范围
+
+2026-10-18 Codex 会话（第六批工资代码）就 H01、H01A 向用户弹窗，用户直接答复；记录为 `第六批工资确认记录-V0.02.json`（`htmlChanged=false`），其来源说明原文：「本会话用户对H01及H01A的直接答复，优先于旧文上限分母条款」。本节只登记该答复，三份业务 HTML 保持冻结、一句不改。
+
+### 裁决原文
+
+| 编号 | 弹窗问题 | 用户答复原文 | 记录的确认口径 |
+|---|---|---|---|
+| H01 | 普通扣除上限的计算基数 | 「基于基础工资扣除」 | 普通现金扣除上限仅以基础工资为基数，不含补贴、绩效和奖金。 |
+| H01A | 绩效扣分少发是否占用按基础工资计算的普通扣除上限额度？ | 「不占用：绩效按800元发，现金最多扣1000，税前实发4800元」 | 绩效扣分导致的少发不占普通现金扣除额度，绩效按实际公式结果发放；现金处罚单独按基础工资及批准上限封顶。 |
+
+弹窗题面示例（用户按此作答）：基础 5000、绩效 1000 扣分后 800、现金处罚 1200，上限 20% 即 1000；占额度则现金扣 800、实发 5000，不占则现金扣 1000、实发 4800。用户选「不占」。20% 为既有安全阈值配置（DEC-R8-97-04），示例不把它认作法定比例。
+
+### 实施边界（照记录原文）
+
+「不改变原已发工资与付款记录；不把示例20%认作法定比例；赔偿扣薪法定校验和请假专条保留。后续源码、PRD与决策记录同步，三权威HTML保持冻结。」已同步处：`StaffPayrollCalculator` 以基础工资 × 批准比例封顶现金处罚；PRD V0.63 §12B.5「普通现金处罚扣除上限」条。
+
+定位：BSM「每位员工都有一个结构化的薪资配置」条 L1489「各类扣除合计不得超过该员工当月总薪资的 20%…（总薪资指基础工资、各项补贴、绩效工资与奖金之和）」；BEQ「薪资单构成」L283 同句镜像；赔偿扣薪边界见本台账 §04｜Q06、Q07，请假扣薪例外见 DEC-R8-02。
+
+## 2026-10-18 第六批第二轮操作员裁决（文档同步，HTML 不改）
+
+### 来源与范围
+
+2026-10-18 控制席就第六批（batch06，工作树 `feature/business-code-batch06-20261018`）第一轮复核遗留的六个业务点向操作员弹窗，操作员逐项答复；原文记录于控制席任务书 `B06-BRIEF.md`「2026-10-18 操作员裁决补充（第二轮实现依据，逐字）」（本机 `html-audit-20261017/`，不在仓内）。本节逐字登记该六条并注明落地代码位置；三份业务 HTML 保持冻结、一句不改。本节追加时，原台账除文档版本 V0.43→V0.44 外，其他历史字节保持。
+
+### 裁决原文（逐字）与落地代码位置
+
+| 编号 | 裁决原文（逐字） | 落地代码位置 |
+|---|---|---|
+| 1 | 销假：操作员选「本人申请＋主管批准」。原第一轮做成「主管直接销」要改：员工本人在员工手机端对已批准的假发起销假申请（必填理由），有排班管理权的主管批准后才生效（批准即按 BSM L1481 冲正/不扣薪），驳回则假仍有效；原审批留痕不覆盖（第一轮复核项 3 已做的 revoked_by/revoked_at/revoke_reason 保留）。 | `backend/src/main/java/com/complex/platform/access/staff/StaffController.java`：`POST /api/v1/staff/leaves/{id}/revoke-request`（`requestLeaveRevoke`，本人申请、理由必填 → `revoke_requested`）与 `POST /api/v1/staff/leaves/{id}/revoke`（`revokeLeave`，排班主管批准 → `revoked`／驳回 → 回 `approved`）；`StaffService.requestLeaveRevoke`／`revokeLeave`；`JdbcStaffRepository`（申请、驳回、批准三段写入；`reviewed_by`/`review_note` 不覆盖）；`StaffLeaveRequestRecord`、`dto/StaffLeaveRevokeRequest`；迁移 `V492__staff_leave_revoke.sql`（status 增 `revoke_requested`/`revoked`，申请留痕 `revoke_requested_by`/`revoke_requested_at`/`revoke_request_reason`，批准留痕 `revoked_by`/`revoked_at`/`revoke_reason` 保留）；`StaffPayrollWorktimeService`（`revoke_requested` 的事假仍有效、照常扣薪）。前端 `apps/web/src/admin/pages/StaffPayrollLeavePage.tsx`（待销假审批列表、主管批准/驳回）；员工手机端 `apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt`（revoke-request）。测试：`PayrollWorkflowJdbcIntegrationTests`、`StaffJdbcIntegrationTests`、`StaffPayrollLeavePage.revoke.test.tsx`、`PayrollApiTest.kt`。 |
+| 2 | 小费/服务费跨主体拨付：操作员选「按 HTML，#19 作废」。BT-01 保留；docs/decisions/2026-10-18-cg-pending-decisions.md 第 19 条改为「作废：按 BSM L1143 公司代收小费与服务费同样拨付（2026-10-18 操作员）」。 | BT-01＝第一轮实现项「酒吧报酬跨主体拨付」（`b06-workflow-result.json`），保留不撤：`backend/src/main/java/com/complex/platform/bar/BarPayrollAllocationService.java` `commit`（每条 tip/service_fee 分配单独生成来源 `bar_payroll_transfer` 的应付，负额单列应收、不轧差；发薪主体即酒吧结算主体时不造债务；到期日取月末后第一个付账日 `StaffService.nextInternalPayDayAfter`）；`FinanceService` 来源类型 `bar_payroll_transfer`（「酒吧报酬月结拨付」）；`docs/finance-ar-ap-ledger-development-design-v0.1.md` 来源枚举。测试：`BarPayrollAllocationJdbcIntegrationTests`。文档：`docs/decisions/2026-10-18-cg-pending-decisions.md` 第 19 条「现行确认规则」改为作废（V0.01→V0.02，历史三列与「原始答复留痕」保留）。 |
+| 3 | 游乐场次提前结束（TK-18）：操作员原话「未履行的权益我理解是一次都没有使用过的完整的门票。不需要做任何补偿，因为他可以再次使用。已经入场了但是被提前结束的那是给补偿的。」并选「比照全园故障补偿规则」：已入场（已扣次）的客人按 ENUM L148「全园故障与补偿通票」规则补偿（原票下恢复本次 1 次、补偿有效期、发放前游乐公司负责人与工程或安全岗位共同确认、费用游乐公司承担），复用 CG-08b 的补偿记录与确认流程；未入场的票/权益不补偿、不建补偿待办（可再次使用），本场预约按既有取消规则处理并留痕。HTML 不改，裁决记台账。 | `backend/src/main/java/com/complex/platform/amusement/AmusementSessionLifecycleService.java`（提前结束：须 `clearanceConfirmed` 且场次 `open`；结束事务内 `compensation.createSessionEndBatch` 生成「场次提前结束」补偿批次；既有取消/释放规则的结果写回待办留痕）；`AmusementFaultCompensationService.java`（`event_type=session_early_end` 批次；仅已入场（已入场核销、已扣次）的游乐类人份、一律 `full_reissue`；费用承担方游乐公司；系统生成无发起岗位，游乐公司负责人与工程或安全岗位先后经同一确认入口确认后发放——复用 CG-08b 全园故障补偿记录与确认流程）；`JdbcAmusementFaultCompensationRepository.java`（在场人份取数、发放结果回写）；`AmusementBookingService.java`（预约取消／团体释放写回留痕）；`AmusementFaultCompensationBatchRecord`/`AmusementFaultCompensationItemRecord`；迁移 `V493__amusement_session_early_end_compensation.sql`。前端 `apps/web/src/admin/pages/AmusementSessionsPage.tsx`（提前结束入口）、`AmusementFaultCompensationPage.tsx`（事件类型「全园故障／场次提前结束」与确认）。测试：`AmusementHardCapacityAutoReopenJdbcIntegrationTests`、`AmusementSessionsPage.capacity-and-ending.test.tsx`、`AmusementFaultCompensationPage.test.tsx`、`AmusementVerificationRecordsPage.releases.test.tsx`。 |
+| 4 | 晚补拨付到期日：操作员答「不会出现这种情况。」→ 月结时账单必已整单付清（未结清订单阻止交班和日结）。第一轮复核修复项 2（V493 计提粒度纳入、下一次月结追加拨付）属为不会发生的情形加的复杂度，整体撤回，恢复到修复前（只聚合整单已完成收款账单的实现与原三条月结用例）。 | `backend/src/main/java/com/complex/platform/access/staff/StaffService.java` `doCloseCommissionSettlement`，聚合取 `JdbcStaffRepository.aggregateDispatchedCommissions`（`bar_bills.settlement_status = 'settled'`，即只聚合整单已完成收款账单的计提）；`BarPayrollAllocationService.calculate` 同样只取整单足额已完成收款的账单。原三条月结用例 `DispatchCommissionSettlementJdbcIntegrationTests`（`monthlySettlementCreatesOnePayableFromBarToStaffCompany`、`partialCollectionDoesNotTransferAndSecondChannelCompletionTransfersOnce`、`payrollStatementCarriesPayerCompanyAndKeepsCommissionColumn`）保留。本节写入时工作树内已无「追加拨付／下一次月结」实现与对应迁移；现存 `V493__amusement_session_early_end_compensation.sql` 为第 3 条 TK-18 迁移。 |
+| 5 | 经销 D03：操作员选「按减价后净额」：减价留用后的单价即该批货实际成交价；同一签收行净额÷验收数量分摊到每件（尾差落最后一件），普通退货按该净额冲减货款；去掉 DEALER_RETURN_PRICE_BASIS_PENDING 拦截。 | `backend/src/main/java/com/complex/platform/dealer/DealerReturnService.java`（验收：签收行净额＝实收件数×原成交价－已完成减价留用的减价，÷实收件数分摊到每件、尾差落该行最后一件退回，退货金额按净额单价×验收数量冲减货款）；`JdbcDealerReturnRepository.java`（签收行净额事实查询）；`DealerReturnLineRecord.java`；`DEALER_RETURN_PRICE_BASIS_PENDING` 拦截已从主代码移除（工作树 grep 为 0）。PRD：`docs/supply-chain-inventory-product-prd-v0.1.md` §7.9 与变更记录「2026-10-18 经销 D03 裁决落地（V0.24）」行。测试：`DealerReturnRefundReversalJdbcIntegrationTests`（`discountedAcceptedAsIsReturnsAtNetUnitPriceWithoutRepeatingDiscount`、`discountedNetTailDifferenceFallsOnLastReturnedPiece`）。 |
+| 6 | 经销退货回程运费：操作员选「只记承担方，运费线下付」。现状即可，不入台账。 | 现状不改：`backend/src/main/java/com/complex/platform/dealer/DealerReturnFinancialService.java`（运费确认只在 `dealer_returns.return_freight_bearer` 记录承担方：质量问题锁定 `sales_entity`，否则取合同条款 `return_freight_bearer`；列由 `V476__dealer_return_freight_and_invoice_facts.sql` 建）；该服务不对回程运费调用 `appendArApItem`，不生成应收应付台账项。首程运费退回（Q11/Q11A，`dealer_return_freight_adjustments`）是另一既有流程，不受本条影响。 |
+
+### 同批文档同步与第六批状态句核对
+
+- `docs/decisions/2026-10-18-cg-pending-decisions.md`：第 19 条「现行确认规则」改为「作废：按 BSM L1143 公司代收小费与服务费同样拨付（2026-10-18 操作员裁决）。」，文档版本 V0.01→V0.02；该文件「原始答复留痕」第 19 行「暂不做，只拨提成」与「当前分类与完成边界」表保留为 2026-10-17 核对时的历史，不改。
+- 仓内无实施台账类文档（第六批实施台账 `实施台账-V0.44.json` 在本机 Codex 输出目录，不在仓内）。`docs/` 内 grep「第六批／HP-H05／TK-18」命中的均为 PRD／设计文档的实现衔接句（`platform-governance-prd-v0.1.md` §12B.5.1、`supply-chain-inventory-product-prd-v0.1.md` §7.9、`r5-spec-T1-staff-tables-dev-design-20260618.md` 变更记录、`finance-settlement-product-prd-v0.1.md` CG-07 实现现状、`bar-business-operations-product-prd-v0.1.md` 实现衔接）与 2026-08 第六批 HTML 修订轮的历史记录（`prd-audit/rounds/b6/`、`html-prd-coverage.csv`），无须另改状态句。

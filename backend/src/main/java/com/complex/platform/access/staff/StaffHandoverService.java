@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.access.staff.StaffHandoverRepository.text;
 import static com.complex.platform.common.Strings.requireText;
@@ -31,6 +31,8 @@ public class StaffHandoverService {
     private final StaffHrRoutingService hrRouting;
     private final IdempotencyService idempotency;
     private final AuditEventService audit;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.bar.BarServiceResponsibilityService barResponsibilities;
 
     public StaffHandoverService(JdbcStaffRepository staff,StaffHandoverRepository handovers,AccessRepository access,
             AuthorizationService authorization,StaffHrRoutingService hrRouting,IdempotencyService idempotency,AuditEventService audit) {
@@ -134,6 +136,9 @@ public class StaffHandoverService {
             Instant now=Instant.now();
             var transfer=new StaffHandoverRepository.Transfer("sbh_"+UUID.randomUUID(),kind.name(),source.id(),current.userId(),targetId,
                     reason,actor.id(),now,handovers.responsibilityStart(source),scope.projectId(),scope.merchantId());
+            if (kind == StaffHandoverRepository.Kind.bar_table_session) {
+                barResponsibilities.recordStaffHandover(source.id(), current.userId(), targetId, now, transfer.id(), reason);
+            }
             handovers.transfer(source,targetId,actor.id(),now);
             handovers.save(profileId,reviewId,scope,source,transfer);
             audit.recordSuccess("staff.business_handover.assigned",HR_PERMISSION,kind.name(),source.id(),null,key,

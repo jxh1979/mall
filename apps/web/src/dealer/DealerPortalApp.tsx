@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { DealerDeliveryPanel } from "./DealerDeliveryPanel";
 import { DealerPortalApi, DealerPortalApiError } from "./dealerPortalClient";
@@ -7,6 +7,7 @@ import { DealerPortalApi, DealerPortalApiError } from "./dealerPortalClient";
  * 独立经销商 Web 门户（CG-11d；BSM:1217-1218、1221、1226-1234、1240；ENUM:233 受控第十一端）。
  * 与商户门户及内部员工端隔离账号、权限和数据：只接受经销商门户账号，只见本企业资料、合同、询价、订单与退货；
  * 库存外显只显示有货 / 紧张 / 缺货 / 预计交期；付款只登记对公转账或平台线上支付；停用后立即退出。
+ * ENUM:179 / 裁决 69：门户提供取消申请（只是申请，内部按既有审批办理）和查看发票（只读）。
  */
 type Dealer = { id: string; dealerName?: string; status?: string; portalEnabled?: boolean; legalRepresentative?: string; contactName?: string; contactPhone?: string; reviewNote?: string | null };
 type Contract = { id: string; contractNo?: string; validFrom?: string; validTo?: string; creditTerm?: boolean };
@@ -15,6 +16,7 @@ type Inquiry = { id: string; itemId?: string; spec?: string; quantity?: number; 
 type Order = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; firstLegAdjustmentCent?: number; balanceDueAt?: string | null; creditTerm?: boolean; overdue?: boolean };
 type Payment = { id: string; method?: string; amountCent?: number; status?: string; referenceNo?: string | null };
 type Return = { id: string; returnNo?: string; status?: string; reasonType?: string; requestedQuantity?: number; refundCent?: number; refundedCent?: number };
+type Invoice = { id: string; amountCent?: number; status?: string; invoiceNo?: string | null; reissuedFromInvoiceId?: string | null };
 
 const DEALER_STATUS: Record<string, string> = { pending_submission: "待提交", under_review: "审核中", approved: "已通过", rejected: "已驳回", deactivated: "已停用" };
 const AVAILABILITY: Record<string, string> = { in_stock: "有货", low: "紧张", out_of_stock: "缺货", expected_restock: "预计交期" };
@@ -31,6 +33,9 @@ const RETURN_STATUS: Record<string, string> = {
   refunding: "退款中", refund_failed: "退款失败", partially_completed: "部分完成", completed: "已完成",
 };
 const REASON: Record<string, string> = { unopened_resalable: "未拆封可复售", quality_issue: "质量问题" };
+const INVOICE_STATUS: Record<string, string> = { pending: "待开票", issuing: "开票中", issued: "已开票", reversed: "已红冲", voided: "已作废", failed: "开票失败" };
+/** 出库前才可申请取消（与后端 requestCancel 允许的状态一致）。 */
+const CANCELLABLE = ["pending_payment", "payment_verifying", "pending_shipment"];
 
 function money(cent?: number | null) {
   return cent === undefined || cent === null ? "—" : `¥${(cent / 100).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
@@ -65,6 +70,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
   const [returnSources,setReturnSources] = React.useState<{receiptLineId:string;orderLineId:string;batchId:string;availableQuantity:number}[]>([]);
   const [actualLines,setActualLines] = React.useState<{id:string;itemId:string;spec:string}[]>([]);
   const [returnFinancials,setReturnFinancials] = React.useState<{returnId:string;firstLegRefundCent:number;firstLegRefundedCent:number;firstLegOffsetCent:number}[]>([]);
+  const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   // 资料
   // 询价 / 下单 / 付款 / 退货
   const [inqItem, setInqItem] = React.useState("");
@@ -76,6 +82,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
   const [payRef, setPayRef] = React.useState("");
   const [retReason, setRetReason] = React.useState("unopened_resalable");
   const [retLines, setRetLines] = React.useState("");
+  const [cancelReason, setCancelReason] = React.useState("");
 
   const signOut = React.useCallback((message?: string) => {
     setUser(null); setMe(null); setContracts([]); setOrders([]); setOrder(null);
@@ -132,15 +139,16 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
     setStock(id ? (await api.get<Stock[]>(`/api/v1/dealer-portal/contracts/${encodeURIComponent(id)}/external-stock`)) ?? [] : []);
   }
   async function selectOrder(row: Order) {
-    const [o, ps, rs, ss, ls, fs] = await Promise.all([
+    const [o, ps, rs, ss, ls, fs, is] = await Promise.all([
       api.get<Order>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}`),
       api.get<Payment[]>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/payments`),
       api.get<Return[]>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/returns`),
       api.get<typeof returnSources>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/return-sources`),
       api.get<typeof actualLines>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/lines`),
       api.get<typeof returnFinancials>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/return-financials`),
+      api.get<Invoice[]>(`/api/v1/dealer-portal/orders/${encodeURIComponent(row.id)}/invoices`),
     ]);
-    setOrder(o); setPayments(ps ?? []); setReturns(rs ?? []);setReturnSources(ss??[]);setActualLines(ls??[]);setReturnFinancials(fs??[]);
+    setOrder(o); setPayments(ps ?? []); setReturns(rs ?? []);setReturnSources(ss??[]);setActualLines(ls??[]);setReturnFinancials(fs??[]);setInvoices(is ?? []);
   }
 
   const onLogin = () => run(async () => {
@@ -191,6 +199,15 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
     setRetLines("");
     await selectOrder(order);
     return "退货申请已提交，等待平台审批";
+  });
+  const requestCancel = () => run(async () => {
+    if (!order) throw new Error("请先选择订单");
+    if (!cancelReason.trim()) throw new Error("请填写取消原因");
+    await api.post(`/api/v1/dealer-portal/orders/${encodeURIComponent(order.id)}/cancel-request`, { idempotencyKey: key(), reason: cancelReason.trim() });
+    setCancelReason("");
+    await selectOrder(order);
+    await loadDealer();
+    return "取消申请已提交，由平台内部审批后生效";
   });
 
   if (restoring) return <div className="loading-state" data-testid="dealer-portal-restoring">加载经销商门户...</div>;
@@ -286,6 +303,13 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
             {order ? (
               <div data-testid="order-detail">
                 <h3>订单 {order.orderNo}：{label(ORDER_STATUS, order.status)}</h3>
+                {CANCELLABLE.includes(order.status ?? "") ? (
+                  <div className="admin-form-grid" data-testid="cancel-form">
+                    <label>取消原因<input data-testid="cancel-reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} /></label>
+                    <button type="button" data-testid="cancel-submit" onClick={() => void requestCancel()}>申请取消</button>
+                    <span className="admin-muted-action">取消只是申请，由平台内部按既有审批办理后生效；取消审批与到账核验互斥。</span>
+                  </div>
+                ) : null}
                 {["pending_payment", "payment_verifying", "pending_shipment", "shipping", "signed", "returning", "partially_returned", "returned"].includes(order.status ?? "") ? (
                   <div className="admin-form-grid" data-testid="payment-form">
                     <label>付款方式<select data-testid="pay-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}><option value="bank_transfer">对公转账</option><option value="platform_online">平台线上支付</option></select></label>
@@ -299,6 +323,10 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
                 <table className="admin-table" data-testid="payment-table">
                   <thead><tr><th>方式</th><th>金额</th><th>状态</th><th>流水号</th></tr></thead>
                   <tbody>{payments.map((p) => <tr key={p.id}><td>{label(PAYMENT_METHOD, p.method)}</td><td>{money(p.amountCent)}</td><td data-testid={`payment-status-${p.id}`}>{label(PAYMENT_STATUS, p.status)}</td><td>{p.referenceNo ?? "—"}</td></tr>)}</tbody>
+                </table>
+                <table className="admin-table" data-testid="invoice-table">
+                  <thead><tr><th>发票金额</th><th>开票状态</th><th>发票号</th><th>重开自</th></tr></thead>
+                  <tbody>{invoices.map((i) => <tr key={i.id}><td>{money(i.amountCent)}</td><td data-testid={`invoice-status-${i.id}`}>{label(INVOICE_STATUS, i.status)}</td><td>{i.invoiceNo ?? "—"}</td><td>{i.reissuedFromInvoiceId ? (invoices.find((p) => p.id === i.reissuedFromInvoiceId)?.invoiceNo ?? i.reissuedFromInvoiceId) : "—"}</td></tr>)}</tbody>
                 </table>
                 {["signed", "completed", "returning", "partially_returned"].includes(order.status ?? "") ? (
                   <div className="admin-form-grid" data-testid="return-form">

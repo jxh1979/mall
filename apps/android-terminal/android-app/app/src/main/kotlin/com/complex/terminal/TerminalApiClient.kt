@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.05
+// 文件版本：V0.07
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -144,12 +144,26 @@ class TerminalApiClient(
   fun listMyPayroll(month: String): List<PayrollStatementRow> =
     get<Page<PayrollStatementRow>>("/api/v1/staff/payroll/mine?month=$month").items
 
+  fun myPerformanceAdjustments(month: String): List<PayrollScoreAdjustment> =
+    get("/api/v1/staff/payroll/mine/performance-adjustments?month=${urlEncode(month)}")
+
+  fun appealPerformance(adjustmentId: String, reason: String, idempotencyKey: String): PayrollScoreAdjustment =
+    post("/api/v1/staff/payroll/performance-adjustments/${urlEncode(adjustmentId)}/appeals", PayrollAppealRequest(idempotencyKey, reason))
+
+  /** 仅本人已定格工资原件，不接受员工身份参数。 */
+  fun myPayrollDetail(statementId: String): PayrollStatementDetail =
+    get("/api/v1/staff/payroll/mine/statements/${urlEncode(statementId)}")
+
   /** 提交请假(事假/病假/调休/年假;主管审)。 */
   fun submitLeave(request: LeaveSubmitRequest): LeaveRow =
     post("/api/v1/staff/leaves", request)
 
   /** 我的请假列表。 */
   fun listMyLeaves(): List<LeaveRow> = get<Page<LeaveRow>>("/api/v1/staff/leaves/mine").items
+
+  /** 2026-10-18 裁决：员工本人对自己已批准的假申请销假（理由必填）→ 待销假审批，主管批准后才生效。 */
+  fun requestLeaveRevoke(leaveId: String, reason: String, idempotencyKey: String): LeaveRow =
+    post("/api/v1/staff/leaves/${urlEncode(leaveId)}/revoke-request", LeaveRevokeRequest(idempotencyKey, reason))
 
   /** 考勤月视图(六态逐日)。 */
   fun attendanceMonthView(month: String): List<AttendanceDayRow> =

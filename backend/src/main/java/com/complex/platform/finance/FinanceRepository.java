@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -191,11 +191,18 @@ public interface FinanceRepository {
     /** 项目集合与商户范围取交集；null 仅供平台全量，空集合没有可见记录。JDBC 下推相同筛选和总数。 */
     default PageResponse<ArApItemRecord> listArApItemsForProjects(
             String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size) {
+        return listArApItemsForProjects(merchantId,projectIds,keyword,page,size,null);
+    }
+
+    default PageResponse<ArApItemRecord> listArApItemsForProjects(
+            String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size,
+            java.util.Set<String> payrollItemIds) {
         java.util.List<ArApItemRecord> all = merchantId == null
                 ? listArApItems() : listArApItemsByMerchant(merchantId);
         String kw = keyword == null ? "" : keyword.trim().toLowerCase();
         java.util.List<ArApItemRecord> filtered = all.stream()
                 .filter(it -> projectIds == null || (it.projectId()!=null && projectIds.contains(it.projectId())))
+                .filter(it -> !"staff_payroll".equals(it.sourceType()) || payrollItemIds==null || payrollItemIds.contains(it.id()))
                 .filter(it -> kw.isEmpty()
                         || (it.itemNo() != null && it.itemNo().toLowerCase().contains(kw))
                         || (it.direction() != null && it.direction().toLowerCase().contains(kw))

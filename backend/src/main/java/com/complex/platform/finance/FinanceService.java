@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -65,7 +65,10 @@ public class FinanceService implements TerminationSettlementPort {
             //   platform_incentive_subsidy(L3 娱乐平台公司承担)。DB 层 source_type 自由 VARCHAR 无 CHECK,零迁移。
             "platform_incentive_subsidy",
             // CG-07：派驻/营销人员提成由酒吧按月拨付人员所属主体的内部结算应付（StaffService 提成月结写入）。
-            "dispatch_commission_transfer");
+            "dispatch_commission_transfer",
+            // 第六批：酒吧小费/服务费月结分配跨主体拨付（BSM「派驻人员的成本与报酬」：应付本人的提成、服务费等报酬由该酒吧按月拨付给人员所属主体；
+            //   BarPayrollAllocationService 月结按 allocation 逐条写入，正额应付/负额应收）。
+            "bar_payroll_transfer");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -104,7 +107,9 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
             Map.entry("platform_incentive_subsidy", "平台激励补贴(超池特批)"),
             Map.entry("ticket_points_issuance", "门票积分发行月结"),
-            Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"));
+            Map.entry("staff_payroll", "员工工资"),
+            Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"),
+            Map.entry("bar_payroll_transfer", "酒吧报酬月结拨付"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
@@ -138,6 +143,18 @@ public class FinanceService implements TerminationSettlementPort {
         repository.saveArApItemSource(new ArApItemSourceRecord("src_"+billId,id,"ticket_points_issuance",billId,f.amount(),now));
         auditEventService.recordSuccess("ticket.points.issuance.posted",null,"ar_ap_item",id,f.merchant(),billId,Map.of("seller_entity_id",f.seller(),"receiver_entity_id",f.receiver(),"project_id",f.project(),"amount_cent",f.amount(),"due_date",f.due().toString()));
         return id;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private FinancePayrollService payrollFinance;
+
+    @Transactional
+    public ArApItemRecord ensurePayrollPayable(String statementId) {
+        return payrollFinance.ensurePayrollPayable(statementId);
+    }
+
+    private java.util.Set<String> payrollVisibleItems(String permission) {
+        return payrollFinance == null ? java.util.Set.of() : payrollFinance.visiblePayableIds(permission);
     }
 
     private final FinanceRepository repository;
@@ -235,7 +252,7 @@ public class FinanceService implements TerminationSettlementPort {
                     var actor = authorizationService.currentActor();
                     var reach = authorizationService.projectReach(actor, "finance.ar_ap.view");
                     return repository.listArApItemsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
-                            reach.platformAdmin() ? null : reach.organizationIds(), keyword, page, size);
+                            reach.platformAdmin() ? null : reach.organizationIds(), keyword, page, size, payrollVisibleItems(FinancePayrollService.VIEW));
                 }
         );
     }
@@ -248,7 +265,7 @@ public class FinanceService implements TerminationSettlementPort {
             List<ArApItemRecord> items = new java.util.ArrayList<>();
             for (int page=1;;page++) {
                 var result = repository.listArApItemsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
-                        reach.platformAdmin() ? null : reach.organizationIds(), null, page, 200);
+                        reach.platformAdmin() ? null : reach.organizationIds(), null, page, 200, payrollVisibleItems(FinancePayrollService.EXPORT));
                 items.addAll(result.items());
                 if (result.items().isEmpty() || items.size() >= result.total()) break;
             }
@@ -1129,6 +1146,7 @@ public class FinanceService implements TerminationSettlementPort {
 
         ArApItemRecord item = repository.findArApItemByIdForUpdate(itemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
+        rejectPayrollMutation(item);
         checkMerchantOwnership(item.merchantId());
         checkProjectScope(item.projectId());
         requireCurrentPurchasePayable(item);
@@ -1162,6 +1180,7 @@ public class FinanceService implements TerminationSettlementPort {
 
         ArApItemRecord item = repository.findArApItemByIdForUpdate(adjustment.arApItemId())
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
+        rejectPayrollMutation(item);
         checkMerchantOwnership(item.merchantId());
         checkProjectScope(item.projectId());
 
@@ -1645,6 +1664,7 @@ public class FinanceService implements TerminationSettlementPort {
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         payment = repository.findArApPaymentByIdForUpdate(targetId)
                 .orElseThrow(() -> ApiException.notFound("PAYMENT_NOT_FOUND", "支付记录不存在：" + targetId));
+        rejectPayrollMutation(item);
         checkMerchantOwnership(item.merchantId());
         // P1-A 跨项目退款拒绝(两维并存)。
         checkProjectScope(item.projectId());
@@ -2675,6 +2695,11 @@ public class FinanceService implements TerminationSettlementPort {
         }
     }
 
+    private void rejectPayrollMutation(ArApItemRecord item) {
+        if ("staff_payroll".equals(item.sourceType())) throw ApiException.conflict("PAYROLL_DEDICATED_WORKFLOW_REQUIRED",
+                "工资须由原工资单形成应付并在工资银行付款入口核实，不能用普通收付、退款或调账改写");
+    }
+
     private void requireCurrentPurchasePayable(ArApItemRecord item) {
         if (Set.of("purchase_inbound", "purchase_consignment", "purchase_prepayment").contains(item.sourceType())
                 && (item.amountCent() <= 0 || "reversed".equals(item.status()) || repository.isPurchasePayableReplaced(item.id())
@@ -2686,6 +2711,11 @@ public class FinanceService implements TerminationSettlementPort {
 
     private void requireArApScope(ArApItemRecord item, String permission) {
         authorizationService.requirePermission(permission);
+        if ("staff_payroll".equals(item.sourceType())) {
+            if (!"finance.ar_ap.view".equals(permission)) rejectPayrollMutation(item);
+            if (payrollFinance == null) throw ApiException.forbidden("PAYROLL_FINANCE_PERMISSION_REQUIRED", "工资需单独授权查看");
+            payrollFinance.requireReadScope(item.sourceId(), FinancePayrollService.VIEW);
+        }
         var actor=authorizationService.currentActor();
         var reach=authorizationService.projectReach(actor,permission);
         if (!reach.platformAdmin() && trimToNull(actor.merchantId())!=null && !actor.merchantId().equals(item.merchantId()))

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -34,13 +34,15 @@ public class AmusementSessionLifecycleService {
     private final EvidenceEventRepository evidence;
     private final EvidenceAttachmentValidator attachments;
     private final ObjectMapper json;
+    private final AmusementFaultCompensationService compensation;
 
     public AmusementSessionLifecycleService(JdbcTemplate jdbc, AmusementRepository repository,
             AmusementBusinessDayService businessDays, AuthorizationService auth, IdempotencyService idempotency,
             AuditEventService audit, EvidenceEventRepository evidence, EvidenceAttachmentValidator attachments,
-            ObjectMapper json) {
+            ObjectMapper json, AmusementFaultCompensationService compensation) {
         this.jdbc=jdbc; this.repository=repository; this.businessDays=businessDays; this.auth=auth;
         this.idempotency=idempotency; this.audit=audit; this.evidence=evidence; this.attachments=attachments; this.json=json;
+        this.compensation=compensation;
     }
 
     public record EndRequest(String idempotencyKey, Boolean clearanceConfirmed, Instant clearedAt,
@@ -242,7 +244,7 @@ public class AmusementSessionLifecycleService {
             """,id,session.id(),session.projectId(),window.complexId(),window.versionId(),
                 java.sql.Date.valueOf(window.businessDate()),timestamp(window.startAt()),timestamp(window.endAt()),
                 mode,timestamp(session.endTime()),timestamp(at),actor,timestamp(now),reason,encode(evidenceIds),key,people);
-        if("early".equals(mode))createFollowups(id,session.id(),entries,now);
+        if("early".equals(mode))createFollowups(id,session,entries,now,at,reason,window.complexId());
         jdbc.update("""
             UPDATE amusement_verifications SET released_at=?,release_source='session_end',release_source_id=?
              WHERE session_id=? AND direction='entry' AND verification_result='success' AND released_at IS NULL
@@ -261,19 +263,24 @@ public class AmusementSessionLifecycleService {
         return findEnding(id);
     }
 
-    private void createFollowups(String ending,String session,List<Map<String,Object>> entries,Instant now) {
+    private void createFollowups(String ending,AmusementSessionRecord session,List<Map<String,Object>> entries,Instant now,
+            Instant at,String reason,String complexId) {
         for(var entry:entries) {
             String entitlement=(String)entry.get("entitlement_id");
             List<String> orders=entitlement==null?List.of():jdbc.queryForList(
                     "SELECT order_id FROM issued_entitlements WHERE id=?",String.class,entitlement);
             followup(ending,"entry",(String)entry.get("id"),entitlement,orders.isEmpty()?null:orders.getFirst(),now);
         }
+        // TK-18（2026-10-18 操作员裁决补充第 3 条）：已入场（已扣次）的客人比照 ENUM L148 全园故障补偿规则——复用 CG-08b 补偿记录生成
+        // 「场次提前结束」补偿待发放批次（关联场次与结束原件，影响范围＝实际清场时刻至原计划结束，费用游乐公司承担），发放前须
+        // 游乐公司负责人与工程或安全岗位共同确认；入场待办在发放时写回。未入场的票/预约不建补偿待办，预约与团体预约按既有取消规则处理。
+        compensation.createSessionEndBatch(ending,session.id(),complexId,"场次提前结束："+reason,at,session.endTime(),now);
         for(String reservation:jdbc.queryForList(
                 "SELECT id FROM amusement_reservations WHERE session_id=? AND reservation_status='reserved'",
-                String.class,session))followup(ending,"reservation",reservation,null,null,now);
+                String.class,session.id()))followup(ending,"reservation",reservation,null,null,now);
         for(String booking:jdbc.queryForList(
                 "SELECT id FROM amusement_group_bookings WHERE session_id=? AND booking_status IN ('pending_approval','approved')",
-                String.class,session))followup(ending,"group_booking",booking,null,null,now);
+                String.class,session.id()))followup(ending,"group_booking",booking,null,null,now);
     }
 
     private void followup(String ending,String type,String source,String entitlement,String order,Instant now) {
@@ -281,6 +288,14 @@ public class AmusementSessionLifecycleService {
             INSERT INTO amusement_session_followups(id,ending_id,source_type,source_id,entitlement_id,order_id,created_at)
             VALUES(?,?,?,?,?,?,?)
             ""","asf_"+UUID.randomUUID().toString().replace("-",""),ending,type,source,entitlement,order,timestamp(now));
+    }
+
+    /** 既有取消／释放规则的结果写回提前结束待办（BSM L1263「按既有取消、补偿规则处理并留痕」）；命中 0 行即该来源无待办，静默。 */
+    void resolveFollowup(String sourceType,String sourceId,String resolutionType,String resolutionId) {
+        jdbc.update("""
+            UPDATE amusement_session_followups SET status='completed',resolution_type=?,resolution_id=?,resolved_by=?,resolved_at=?
+             WHERE source_type=? AND source_id=? AND status='pending'
+            """,resolutionType,resolutionId,auth.currentActor().id(),timestamp(Instant.now()),sourceType,sourceId);
     }
 
     public List<Ending> endings(String sessionId) {

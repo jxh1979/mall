@@ -1,7 +1,7 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
-/** 退货明细：验收数量拆为可复售（回可用库存）与质量问题（隔离禁售）；金额按原成交价 × 验收数量。 */
+// 文件版本：V0.02
+/** 退货明细：验收数量拆为可复售（回可用库存）与质量问题（隔离禁售）；金额按单价 × 验收数量，单价为原成交价，原签收行含已完成减价留用的为该行净额÷实收件数（尾差落最后一件）。 */
 public record DealerReturnLineRecord(
         String id,
         String returnId,

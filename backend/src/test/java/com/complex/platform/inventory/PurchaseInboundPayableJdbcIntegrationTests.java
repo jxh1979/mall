@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.access.AccessActor;
@@ -357,7 +357,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThatThrownBy(()->contracts.requirePurchasable(contract,"not-listed")).isInstanceOf(ApiException.class);
   jdbc.update("UPDATE supply_contracts SET purchasable_scope='[]'::jsonb WHERE id=?",contract);
   assertThatThrownBy(()->createPurchase(contract,1)).isInstanceOf(ApiException.class);
-  jdbc.update("UPDATE supply_contracts SET purchasable_scope=jsonb_build_array(?::text),valid_from=current_date+1 WHERE id=?",item,contract);
+  jdbc.update("UPDATE supply_contracts SET purchasable_scope=jsonb_build_array(?::text),valid_from=? WHERE id=?",item,today().plusDays(1),contract);
   assertThatThrownBy(()->createPurchase(contract,1)).isInstanceOf(ApiException.class);
   jdbc.update("UPDATE supply_contracts SET valid_from=current_date-30,valid_to=current_date-1 WHERE id=?",contract);
   assertThatThrownBy(()->createPurchase(contract,1)).isInstanceOf(ApiException.class);

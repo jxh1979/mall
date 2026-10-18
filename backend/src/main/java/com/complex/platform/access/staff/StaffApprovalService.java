@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest;
@@ -33,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class StaffApprovalService {
     static final String HR_PERMISSION = "staff.hr.review";
 
+    @org.springframework.beans.factory.annotation.Autowired private org.springframework.context.ApplicationEventPublisher events;
     private final JdbcStaffRepository repository;
     private final SupervisorReviewService reviews;
     private final AuthorizationService authorization;
@@ -220,6 +221,7 @@ public class StaffApprovalService {
             repository.insertPayrollAdjustment(reversalId, appeal.userId(), appeal.month(), "penalty_reversal", appeal.amountCent(),
                     "申诉撤销冲回：" + appeal.adjustmentId(), decidedBy, now, appeal.adjustmentId());
             repository.decideAppeal(appeal.id(), "revoked", reversalId, now);
+            events.publishEvent(new StaffPayrollService.CorrectionRequested(appeal.userId(),appeal.month(),decision.reviewId(),appeal.adjustmentId()));
             audit.recordSuccess("staff.payroll.adjustment_reversed", "staff.payroll.manage", "staff_payroll_adjustment", reversalId, null, null,
                     Map.of("reversal_of", appeal.adjustmentId(), "appeal_id", appeal.id(), "amount_cent", appeal.amountCent(),
                             "user_id", appeal.userId(), "month", appeal.month()));

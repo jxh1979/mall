@@ -1,4 +1,5 @@
 package com.complex.platform.dividend;
+// 文件版本：V0.01
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -416,9 +417,9 @@ public class DividendService {
             long barRefund = repository.sumBarRefundCent(merchantId, from, to);
             revenue += barGross - barRefund;
             addLine(lines, statementId, merchantId, seq, "revenue_bar", barGross,
-                    "酒吧结账实收（bar_bill_settlements，冲正不计）" + window, now);
+                    "酒吧整单已确认商品收入及原经营日月结服务费扣留" + window, now);
             addLine(lines, statementId, merchantId, seq, "revenue_bar_refund", -barRefund,
-                    "酒吧结账后退款（bar_bill_adjustments refund）" + window, now);
+                    "酒吧已实际退成的商品分项" + window, now);
         }
         if (plan.revenueDomains().contains("ticket")) {
             long ticketGross = repository.sumTicketAllocatedCent(merchantId, from, to);

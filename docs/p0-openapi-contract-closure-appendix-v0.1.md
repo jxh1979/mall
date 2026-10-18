@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.24
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.25
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 930 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 371 | 人工权限矩阵正文未覆盖 270 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1860 | 人工事件矩阵正文未覆盖 1819 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 930 | 人工任务映射正文未逐项覆盖 924 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 550 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 971 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 376 | 人工权限矩阵正文未覆盖 275 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1942 | 人工事件矩阵正文未覆盖 1901 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 971 | 人工任务映射正文未逐项覆盖 965 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 575 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -66,7 +66,7 @@
 | `amusement.over_capacity_policy.view` | staff-token | project-amusement | 1 | getAmusementOverCapacityPolicy | OpenAPI 补充，以本附录为准 |
 | `amusement.park_fault.confirm_as_engineering_safety` | staff-token | project | 3 | confirmAmusementParkWideFaultActivation, confirmAmusementParkWideFaultLift, confirmAmusementFaultCompensationBatch | OpenAPI 补充，以本附录为准 |
 | `amusement.park_fault.confirm_as_head` | staff-token | project | 3 | initiateAmusementParkWideFault, initiateAmusementParkWideFaultLift, initiateAmusementFaultCompensationBatch | OpenAPI 补充，以本附录为准 |
-| `amusement.park_fault.view` | staff-token | project | 5 | listAmusementParkWideFaults, listAmusementParkWideFaultActions, getAmusementCompensationPolicy, listAmusementFaultCompensationBatches, listAmusementFaultCompensationItems | OpenAPI 补充，以本附录为准 |
+| `amusement.park_fault.view` | staff-token | project | 6 | listAmusementParkWideFaults, listAmusementParkWideFaultActions, getAmusementCompensationPolicy, listAmusementFaultCompensationBatches, listAmusementFaultCompensationItems, listAmusementCompensationBatchesByEvent | OpenAPI 补充，以本附录为准 |
 | `amusement.project_entitlement.approve` | staff-token | project-amusement | 1 | approveDeleteAmusementProjectEntitlement | OpenAPI 补充，以本附录为准 |
 | `amusement.project_entitlement.manage` | staff-token | project-amusement | 6 | listAmusementProjectEntitlements, createAmusementProjectEntitlement, removeAmusementProjectEntitlement, archiveAmusementProjectEntitlement, unarchiveAmusementProjectEntitlement, requestDeleteAmusementProjectEntitlement | OpenAPI 补充，以本附录为准 |
 | `amusement.project.manage` | staff-token | project | 1 | createAmusementProjectRule | 已在权限矩阵正文出现 |
@@ -102,6 +102,7 @@
 | `audit.operation_log.view` | staff-token | platform | 1 | queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `authenticated` | staff-token | current-session, self | 3 | logout, refreshToken, getEffectivePermissions | 已在权限矩阵正文出现 |
 | `bar.bill.adjust` | staff-token | project-bar-table | 1 | adjustBarBill | OpenAPI 补充，以本附录为准 |
+| `bar.bill.refund` | staff-token | project-merchant | 1 | getBarBillRefundContext | OpenAPI 补充，以本附录为准 |
 | `bar.bill.reopen` | staff-token | project-bar-table | 1 | reopenBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.split_merge` | staff-token | project-bar-table | 3 | listBarBillOperations, mergeBarBill, splitBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.tip` | staff-token | project-bar-table | 1 | addBarBillTip | OpenAPI 补充，以本附录为准 |
@@ -116,6 +117,8 @@
 | `bar.order_item.void_decide` | staff-token | project | 2 | saveBarVoidReasonCode, archiveBarVoidReasonCode | OpenAPI 补充，以本附录为准 |
 | `bar.order.create` | staff-token | project, project-bar-table | 6 | createBarOrder, createBarOrderBill, deliverBarOrder, addBarOrderItem, listBarProductionTickets, placeBarScanOrder | 已在权限矩阵正文出现 |
 | `bar.order.view` | staff-token | project-bar-table | 1 | listBarOrders | 已在权限矩阵正文出现 |
+| `bar.payroll.manage` | staff-token | project-merchant | 4 | draftBarPayrollRule, confirmBarPayrollRule, submitBarPayrollRule, closeBarPayrollMonth | OpenAPI 补充，以本附录为准 |
+| `bar.payroll.view` | staff-token | project-merchant | 3 | listBarPayrollRules, listBarPayrollRuns, listBarServiceResponsibilities | OpenAPI 补充，以本附录为准 |
 | `bar.product.manage` | staff-token | project | 3 | createBarProduct, assignBarProductCategory, uploadBarCatalogImage | OpenAPI 补充，以本附录为准 |
 | `bar.product.sold_out` | staff-token | project-bar-table | 1 | markBarProductSoldOut | OpenAPI 补充，以本附录为准 |
 | `bar.product.view` | staff-token | project | 2 | listBarProducts, listBarProductsByCategory | OpenAPI 补充，以本附录为准 |
@@ -132,7 +135,7 @@
 | `bar.table_session.create` | staff-token | project-bar-table | 1 | createBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.merge` | staff-token | project-bar-table | 1 | mergeBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.renew` | staff-token | project-bar-table | 1 | renewBarTableSession | OpenAPI 补充，以本附录为准 |
-| `bar.table_session.transfer` | staff-token | project-bar-table | 1 | transferBarTableSession | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.transfer` | staff-token | project-bar-table, project-merchant | 3 | transferBarTableSession, handoverBarServiceResponsibility, closeBarServiceResponsibility | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.view` | staff-token | project-bar-table | 1 | listBarTableSessions | OpenAPI 补充，以本附录为准 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 3 | checkInBarReservationGuest, verifyBarReservationInvitationEntry, verifyBarReservationEntryAllowance | 已在权限矩阵正文出现 |
 | `bar.table.manage` | staff-token | project-bar, project-bar-table | 3 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace | 已在权限矩阵正文出现 |
@@ -167,7 +170,7 @@
 | `customer.voucher.redeem` | staff-token | merchant | 1 | redeemVoucher | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.view` | customer-token, staff-token | customer, merchant | 5 | customerVoucherWallet, listVoucherDefinitions, listVoucherInstances, listVoucherRedemptions, listVoucherOverview | OpenAPI 补充，以本附录为准 |
 | `dealer_portal.inquiry.manage` | staff-token | dealer | 2 | dealerPortalListInquiries, dealerPortalCreateInquiry | OpenAPI 补充，以本附录为准 |
-| `dealer_portal.order.manage` | staff-token | dealer | 9 | dealerPortalListOrders, dealerPortalCreateOrder, dealerPortalGetOrder, dealerPortalListOrderLines, dealerPortalSubmitOrder, dealerPortalSignOrder, getDealerPortalDelivery, uploadDealerDeliveryEvidence, readDealerDeliveryEvidence | OpenAPI 补充，以本附录为准 |
+| `dealer_portal.order.manage` | staff-token | dealer | 11 | dealerPortalListOrders, dealerPortalCreateOrder, dealerPortalGetOrder, dealerPortalListOrderLines, dealerPortalSubmitOrder, dealerPortalSignOrder, getDealerPortalDelivery, uploadDealerDeliveryEvidence, readDealerDeliveryEvidence, dealerPortalListInvoices, dealerPortalRequestOrderCancel | OpenAPI 补充，以本附录为准 |
 | `dealer_portal.order.pay` | staff-token | dealer | 2 | dealerPortalListPayments, dealerPortalRegisterPayment | OpenAPI 补充，以本附录为准 |
 | `dealer_portal.profile.submit` | staff-token | dealer | 1 | dealerPortalSubmitProfile | OpenAPI 补充，以本附录为准 |
 | `dealer_portal.profile.view` | staff-token | dealer | 2 | dealerPortalMe, dealerPortalListContracts | OpenAPI 补充，以本附录为准 |
@@ -230,6 +233,8 @@
 | `finance.merchant_expense.view` | staff-token | merchant | 3 | listMerchantExpenses, summarizeMerchantExpenses, listMerchantExpensePeriodLocks | OpenAPI 补充，以本附录为准 |
 | `finance.payment_intent.create` | staff-token | project-bar-table, project-order | 3 | createBarBillPayIntent, createPaymentIntent, createTicketOrderPayIntent | 已在权限矩阵正文出现 |
 | `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-order | 4 | settleBarBill, createArApPayment, confirmOfflinePayment, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
+| `finance.payroll.payment.register` | staff-token | project-entity | 3 | preparePayrollBankPayment, submitPayrollBankPaymentFact, confirmPayrollBankPaymentResult | OpenAPI 补充，以本附录为准 |
+| `finance.payroll.view` | staff-token | project-entity | 1 | getPayrollBankPaymentContext | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.waive` | staff-token | project-merchant | 1 | waivePointsRecovery | OpenAPI 补充，以本附录为准 |
 | `finance.property_fee.manage` | staff-token | platform | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
@@ -347,15 +352,15 @@
 | `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
 | `staff.device.review` | staff-token | project | 1 | approveStaffDeviceRebind | OpenAPI 补充，以本附录为准 |
 | `staff.device.revoke` | staff-token | project | 1 | revokeStaffDeviceCredential | OpenAPI 补充，以本附录为准 |
-| `staff.leave.submit` | staff-token | platform | 2 | submitStaffLeave, listMyStaffLeaves | OpenAPI 补充，以本附录为准 |
+| `staff.leave.submit` | staff-token | platform | 3 | submitStaffLeave, listMyStaffLeaves, requestStaffLeaveRevoke | OpenAPI 补充，以本附录为准 |
 | `staff.notice.view` | staff-token | project | 2 | listEmployeeNotices, acknowledgeEmployeeNotice | OpenAPI 补充，以本附录为准 |
-| `staff.payroll.manage` | staff-token | platform, project | 12 | listPayrollTaxBrackets, setStaffBaseSalary, addStaffPayrollAdjustment, addStaffCommission, closeStaffPayrollMonth, closeStaffCommissionSettlement, listStaffCommissionSettlements, listStaffPayroll, getStaffPenaltyCap, requestStaffPenaltyCap, listPayrollTaxVersions, listPayrollTaxAssessments | OpenAPI 补充，以本附录为准 |
-| `staff.payroll.view_mine` | staff-token | platform, self | 3 | listStaffAdjustmentAppeals, submitStaffAdjustmentAppeal, listMyStaffPayroll | OpenAPI 补充，以本附录为准 |
+| `staff.payroll.manage` | staff-token | platform, project | 31 | listPayrollTaxBrackets, setStaffBaseSalary, addStaffPayrollAdjustment, addStaffCommission, closeStaffPayrollMonth, closeStaffCommissionSettlement, listStaffCommissionSettlements, listStaffPayroll, getStaffPenaltyCap, requestStaffPenaltyCap, listPayrollTaxVersions, listPayrollTaxAssessments ... | OpenAPI 补充，以本附录为准 |
+| `staff.payroll.view_mine` | staff-token | self | 6 | listStaffAdjustmentAppeals, submitStaffAdjustmentAppeal, listMyStaffPayroll, staffPayrollScoreMine, staffPayrollScoreAppeal, staffPayrollDetailMine | OpenAPI 补充，以本附录为准 |
 | `staff.profile.review` | staff-token | project | 7 | reviewStaffRegistration, setStaffSalesPosition, createStaffDispatch, endStaffDispatch, setStaffEmploymentStatus, getStaffBusinessHandover, assignStaffBusinessHandover | OpenAPI 补充，以本附录为准 |
 | `staff.profile.self` | staff-token | self | 1 | issueStaffLockerScanToken | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 1 | submitStaffRegistration | OpenAPI 补充，以本附录为准 |
 | `staff.profile.view` | staff-token | project | 2 | listStaffProfiles, listStaffDispatches | OpenAPI 补充，以本附录为准 |
-| `staff.shift.manage` | staff-token | platform, project, project-merchant, self-project | 13 | listStaffShifts, upsertStaffShift, batchUpsertStaffShifts, listStaffLeaves, reviewStaffLeave, getStaffShiftVisibility, setStaffShiftVisibility, listStaffShiftHistory, coverStaffShift, listStaffShiftCovers, submitStaffAttendanceReceiptReview, recoverStaffWorkPhoneReceipt ... | OpenAPI 补充，以本附录为准 |
+| `staff.shift.manage` | staff-token | platform, project, project-merchant, self-project | 14 | listStaffShifts, upsertStaffShift, batchUpsertStaffShifts, listStaffLeaves, reviewStaffLeave, revokeStaffLeave, getStaffShiftVisibility, setStaffShiftVisibility, listStaffShiftHistory, coverStaffShift, listStaffShiftCovers, submitStaffAttendanceReceiptReview ... | OpenAPI 补充，以本附录为准 |
 | `staff.shift.view` | staff-token | platform, self-project | 5 | listMyStaffShifts, listMyStaffAttendance, myStaffAttendanceMonthView, listStaffPhoneReceipts, listStaffAttendanceReceiptReviews | OpenAPI 补充，以本附录为准 |
 | `staff.tax_bracket.manage` | staff-token | platform, project | 5 | upsertPayrollTaxBracket, draftPayrollTaxVersion, submitPayrollTaxVersion, draftPayrollTaxAssessment, submitPayrollTaxAssessment | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
@@ -487,9 +492,11 @@
 | `amusement.fault_compensation.policy_config_failed` | failure | `configureAmusementCompensationPolicy` | `POST` | `/api/v1/amusement/compensation-policies/{project_id}` | AMU-游乐安全 | `amusement.compensation_policy.manage` | 接口级事件，以本附录为准 |
 | `amusement.fault_compensation.policy_configured` | success | `configureAmusementCompensationPolicy` | `POST` | `/api/v1/amusement/compensation-policies/{project_id}` | AMU-游乐安全 | `amusement.compensation_policy.manage` | 接口级事件，以本附录为准 |
 | `amusement.fault_compensation.view_failed` | failure | `getAmusementCompensationPolicy` | `GET` | `/api/v1/amusement/compensation-policies/{project_id}` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
+| `amusement.fault_compensation.view_failed` | failure | `listAmusementCompensationBatchesByEvent` | `GET` | `/api/v1/amusement/compensation-batches` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `amusement.fault_compensation.view_failed` | failure | `listAmusementFaultCompensationBatches` | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `amusement.fault_compensation.view_failed` | failure | `listAmusementFaultCompensationItems` | `GET` | `/api/v1/amusement/compensation-batches/{batch_id}/items` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `amusement.fault_compensation.viewed` | success | `getAmusementCompensationPolicy` | `GET` | `/api/v1/amusement/compensation-policies/{project_id}` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
+| `amusement.fault_compensation.viewed` | success | `listAmusementCompensationBatchesByEvent` | `GET` | `/api/v1/amusement/compensation-batches` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `amusement.fault_compensation.viewed` | success | `listAmusementFaultCompensationBatches` | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `amusement.fault_compensation.viewed` | success | `listAmusementFaultCompensationItems` | `GET` | `/api/v1/amusement/compensation-batches/{batch_id}/items` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `amusement.incident.action` | success | `addAmusementIncidentAction` | `POST` | `/api/v1/amusement/incidents/{incidentId}/actions` | AMU-游乐安全 | `amusement.incident.process` | 接口级事件，以本附录为准 |
@@ -758,6 +765,18 @@
 | `bar.order_item.created_failed` | failure | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.order.view_failed` | failure | `listBarOrders` | `GET` | `/api/v1/bar/orders` | BAR-酒吧经营 | `bar.order.view` | 接口级事件，以本附录为准 |
 | `bar.order.viewed` | success | `listBarOrders` | `GET` | `/api/v1/bar/orders` | BAR-酒吧经营 | `bar.order.view` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.confirm_failed` | failure | `confirmBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/confirm` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.confirmed_merchant` | success | `confirmBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/confirm` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.draft_failed` | failure | `draftBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.drafted` | success | `draftBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.read` | success | `listBarPayrollRules` | `GET` | `/api/v1/bar/payroll-rules` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.read_failed` | failure | `listBarPayrollRules` | `GET` | `/api/v1/bar/payroll-rules` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.submit_failed` | failure | `submitBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/submit` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll_rule.submitted` | success | `submitBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/submit` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll.month_processed` | success | `closeBarPayrollMonth` | `POST` | `/api/v1/bar/payroll-runs/close` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll.month_processed_failed` | failure | `closeBarPayrollMonth` | `POST` | `/api/v1/bar/payroll-runs/close` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
+| `bar.payroll.read` | success | `listBarPayrollRuns` | `GET` | `/api/v1/bar/payroll-runs` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
+| `bar.payroll.read_failed` | failure | `listBarPayrollRuns` | `GET` | `/api/v1/bar/payroll-runs` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
 | `bar.product_sold_out` | success | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | BAR-酒吧经营 | `bar.product.sold_out` | 接口级事件，以本附录为准 |
 | `bar.product_sold_out_failed` | failure | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | BAR-酒吧经营 | `bar.product.sold_out` | 接口级事件，以本附录为准 |
 | `bar.product.category_assigned` | success | `assignBarProductCategory` | `POST` | `/api/v1/bar/catalog/products/{product_id}/category` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
@@ -774,6 +793,8 @@
 | `bar.production_ticket.transition_failed` | failure | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | BAR-酒吧经营 | `bar.production_ticket.manage` | 接口级事件，以本附录为准 |
 | `bar.production_ticket.viewed` | success | `listBarProductionTickets` | `GET` | `/api/v1/bar/production-tickets` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.production_ticket.viewed_failed` | failure | `listBarProductionTickets` | `GET` | `/api/v1/bar/production-tickets` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
+| `bar.refund_context.read` | success | `getBarBillRefundContext` | `GET` | `/api/v1/bar/bills/{id}/refund-context` | BAR-酒吧经营 | `bar.bill.refund` | 接口级事件，以本附录为准 |
+| `bar.refund_context.read_failed` | failure | `getBarBillRefundContext` | `GET` | `/api/v1/bar/bills/{id}/refund-context` | BAR-酒吧经营 | `bar.bill.refund` | 接口级事件，以本附录为准 |
 | `bar.reservation_deposit_deduct_failed` | failure | `checkInBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/checkin` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `bar.reservation_deposit_deducted` | success | `checkInBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/checkin` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `bar.reservation_deposit_paid` | success | `payBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
@@ -804,6 +825,12 @@
 | `bar.saved_bottle.viewed` | success | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.scan_order_create_failed` | failure | `placeBarScanOrder` | `POST` | `/api/v1/bar/table-sessions/{session_id}/scan-orders` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.scan_order_created` | success | `placeBarScanOrder` | `POST` | `/api/v1/bar/table-sessions/{session_id}/scan-orders` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
+| `bar.service.closed` | success | `closeBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-close` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
+| `bar.service.closed_failed` | failure | `closeBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-close` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
+| `bar.service.handover` | success | `handoverBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-handover` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
+| `bar.service.handover_failed` | failure | `handoverBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-handover` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
+| `bar.service.read` | success | `listBarServiceResponsibilities` | `GET` | `/api/v1/bar/table-sessions/{id}/service-responsibilities` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
+| `bar.service.read_failed` | failure | `listBarServiceResponsibilities` | `GET` | `/api/v1/bar/table-sessions/{id}/service-responsibilities` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
 | `bar.shift_close_failed` | failure | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | BAR-酒吧经营 | `bar.shift.close` | 接口级事件，以本附录为准 |
 | `bar.shift_closed` | success | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | BAR-酒吧经营 | `bar.shift.close` | 接口级事件，以本附录为准 |
 | `bar.shift_open_failed` | failure | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
@@ -1049,7 +1076,9 @@
 | `dealer.invoice.viewed` | success | `listDealerInvoices` | `GET` | `/api/v1/dealers/orders/{id}/invoices` | P0-待归类 | `dealer.return.view` | 接口级事件，以本附录为准 |
 | `dealer.order.cancel_decide_failed` | failure | `decideDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-decision` | P0-待归类 | `dealer.order.review` | 接口级事件，以本附录为准 |
 | `dealer.order.cancel_decided` | success | `decideDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-decision` | P0-待归类 | `dealer.order.review` | 接口级事件，以本附录为准 |
+| `dealer.order.cancel_request_failed` | failure | `dealerPortalRequestOrderCancel` | `POST` | `/api/v1/dealer-portal/orders/{id}/cancel-request` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.cancel_request_failed` | failure | `requestDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-request` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.order.cancel_requested` | success | `dealerPortalRequestOrderCancel` | `POST` | `/api/v1/dealer-portal/orders/{id}/cancel-request` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.cancel_requested` | success | `requestDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-request` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.draft_failed` | failure | `createDealerOrderDraft` | `POST` | `/api/v1/dealers/{id}/orders` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.order.draft_failed` | failure | `dealerPortalCreateOrder` | `POST` | `/api/v1/dealer-portal/orders` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
@@ -1102,6 +1131,8 @@
 | `dealer.portal.access_rejected` | failure | `dealerPortalMe` | `GET` | `/api/v1/dealer-portal/me` | P0-待归类 | `dealer_portal.profile.view` | 接口级事件，以本附录为准 |
 | `dealer.portal.delivery_evidence_view_failed` | failure | `readDealerDeliveryEvidence` | `GET` | `/api/v1/dealer-portal/orders/{id}/delivery-evidence/{attachmentId}` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.portal.delivery_evidence_viewed` | success | `readDealerDeliveryEvidence` | `GET` | `/api/v1/dealer-portal/orders/{id}/delivery-evidence/{attachmentId}` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.portal.invoices_view_failed` | failure | `dealerPortalListInvoices` | `GET` | `/api/v1/dealer-portal/orders/{id}/invoices` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.portal.invoices_viewed` | success | `dealerPortalListInvoices` | `GET` | `/api/v1/dealer-portal/orders/{id}/invoices` | P0-待归类 | `dealer_portal.order.manage` | 接口级事件，以本附录为准 |
 | `dealer.portal.return_financials_view_failed` | failure | `getDealerPortalReturnFinancials` | `GET` | `/api/v1/dealer-portal/orders/{id}/return-financials` | P0-待归类 | `dealer_portal.return.request` | 接口级事件，以本附录为准 |
 | `dealer.portal.return_financials_viewed` | success | `getDealerPortalReturnFinancials` | `GET` | `/api/v1/dealer-portal/orders/{id}/return-financials` | P0-待归类 | `dealer_portal.return.request` | 接口级事件，以本附录为准 |
 | `dealer.portal.return_sources_view_failed` | failure | `getDealerPortalReturnSources` | `GET` | `/api/v1/dealer-portal/orders/{id}/return-sources` | P0-待归类 | `dealer_portal.return.request` | 接口级事件，以本附录为准 |
@@ -1390,6 +1421,14 @@
 | `finance.locked_backfill_decision_failed` | failure | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | FIN-财务台账 | `finance.locked_backfill.approve` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_request_failed` | failure | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | FIN-财务台账 | `finance.locked_backfill.request` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_requested` | success | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | FIN-财务台账 | `finance.locked_backfill.request` | 接口级事件，以本附录为准 |
+| `finance.payroll.attempts_view_failed` | failure | `getPayrollBankPaymentContext` | `GET` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | FIN-财务台账 | `finance.payroll.view` | 接口级事件，以本附录为准 |
+| `finance.payroll.attempts_viewed` | success | `getPayrollBankPaymentContext` | `GET` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | FIN-财务台账 | `finance.payroll.view` | 接口级事件，以本附录为准 |
+| `finance.payroll.payment_failed` | failure | `confirmPayrollBankPaymentResult` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/result` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payroll.payment_failed` | failure | `preparePayrollBankPayment` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payroll.payment_failed` | failure | `submitPayrollBankPaymentFact` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/submit` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payroll.prepare` | success | `preparePayrollBankPayment` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payroll.result` | success | `confirmPayrollBankPaymentResult` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/result` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payroll.submit` | success | `submitPayrollBankPaymentFact` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/submit` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
 | `finance.reconciliation_batch.viewed` | success | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
 | `finance.reconciliation_batch.viewed_failed` | failure | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
 | `finance.reconciliation.difference_close_failed` | failure | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | FIN-财务台账 | `finance.reconciliation.resolve` | 接口级事件，以本附录为准 |
@@ -1717,7 +1756,10 @@
 | `merchant.updated` | success | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.view_failed` | failure | `listMerchants` | `GET` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `listMerchants` | `GET` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | P0-待归类 | `dealer.return.refund.execute` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `upsertPayrollTaxBracket` | `POST` | `/api/v1/staff/payroll/tax-brackets` | STAFF-员工 | `staff.tax_bracket.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | P0-待归类 | `wecom.retention.manage` | 接口级事件，以本附录为准 |
 | `open_mapping.changed` | success | `updateProviderAdapter` | `PUT` | `/api/v1/integration/provider-adapters/{id}` | INT-第三方集成 | `integration.provider_adapter.update` | 已在事件矩阵正文出现 |
@@ -1945,6 +1987,10 @@
 | `staff.leave_mine.viewed` | success | `listMyStaffLeaves` | `GET` | `/api/v1/staff/leaves/mine` | STAFF-员工 | `staff.leave.submit` | 接口级事件，以本附录为准 |
 | `staff.leave.review_failed` | failure | `reviewStaffLeave` | `POST` | `/api/v1/staff/leaves/{id}/review` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `staff.leave.reviewed` | success | `reviewStaffLeave` | `POST` | `/api/v1/staff/leaves/{id}/review` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `staff.leave.revoke_request_failed` | failure | `requestStaffLeaveRevoke` | `POST` | `/api/v1/staff/leaves/{id}/revoke-request` | STAFF-员工 | `staff.leave.submit` | 接口级事件，以本附录为准 |
+| `staff.leave.revoke_requested` | success | `requestStaffLeaveRevoke` | `POST` | `/api/v1/staff/leaves/{id}/revoke-request` | STAFF-员工 | `staff.leave.submit` | 接口级事件，以本附录为准 |
+| `staff.leave.revoke_review_failed` | failure | `revokeStaffLeave` | `POST` | `/api/v1/staff/leaves/{id}/revoke` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `staff.leave.revoke_reviewed` | success | `revokeStaffLeave` | `POST` | `/api/v1/staff/leaves/{id}/revoke` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `staff.leave.submit_failed` | failure | `submitStaffLeave` | `POST` | `/api/v1/staff/leaves` | STAFF-员工 | `staff.leave.submit` | 接口级事件，以本附录为准 |
 | `staff.leave.submitted` | success | `submitStaffLeave` | `POST` | `/api/v1/staff/leaves` | STAFF-员工 | `staff.leave.submit` | 接口级事件，以本附录为准 |
 | `staff.leave.view_failed` | failure | `listStaffLeaves` | `GET` | `/api/v1/staff/leaves` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
@@ -1966,15 +2012,56 @@
 | `staff.payroll.adjustment_appeals_viewed` | success | `listStaffAdjustmentAppeals` | `GET` | `/api/v1/staff/payroll/adjustments/appeals` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
 | `staff.payroll.adjustment_requested` | success | `addStaffPayrollAdjustment` | `POST` | `/api/v1/staff/payroll/adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.base_save_failed` | failure | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
-| `staff.payroll.base_saved` | success | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calculate` | success | `staffPayrollCalculate` | `POST` | `/api/v1/staff/payroll/calculations` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calculate_failed` | failure | `staffPayrollCalculate` | `POST` | `/api/v1/staff/payroll/calculations` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calculation_list` | success | `staffPayrollCalculationList` | `GET` | `/api/v1/staff/payroll/calculations` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calculation_list_failed` | failure | `staffPayrollCalculationList` | `GET` | `/api/v1/staff/payroll/calculations` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calendar_draft` | success | `staffPayrollCalendarDraft` | `POST` | `/api/v1/staff/payroll/calendars` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calendar_draft_failed` | failure | `staffPayrollCalendarDraft` | `POST` | `/api/v1/staff/payroll/calendars` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calendar_list` | success | `staffPayrollCalendarList` | `GET` | `/api/v1/staff/payroll/calendars` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calendar_list_failed` | failure | `staffPayrollCalendarList` | `GET` | `/api/v1/staff/payroll/calendars` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calendar_submit` | success | `staffPayrollCalendarSubmit` | `POST` | `/api/v1/staff/payroll/calendars/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.calendar_submit_failed` | failure | `staffPayrollCalendarSubmit` | `POST` | `/api/v1/staff/payroll/calendars/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.commission_add_failed` | failure | `addStaffCommission` | `POST` | `/api/v1/staff/payroll/commissions` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.commission_added` | success | `addStaffCommission` | `POST` | `/api/v1/staff/payroll/commissions` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.detail` | success | `staffPayrollDetail` | `GET` | `/api/v1/staff/payroll/statements/{id}` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.detail_failed` | failure | `staffPayrollDetail` | `GET` | `/api/v1/staff/payroll/statements/{id}` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.detail_mine` | success | `staffPayrollDetailMine` | `GET` | `/api/v1/staff/payroll/mine/statements/{id}` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.detail_mine_failed` | failure | `staffPayrollDetailMine` | `GET` | `/api/v1/staff/payroll/mine/statements/{id}` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
 | `staff.payroll.month_close_failed` | failure | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
-| `staff.payroll.month_closed` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.pay_failed` | failure | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.penalty_cap_request_failed` | failure | `requestStaffPenaltyCap` | `POST` | `/api/v1/staff/settings/payroll-penalty-cap` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.penalty_cap_requested` | success | `requestStaffPenaltyCap` | `POST` | `/api/v1/staff/settings/payroll-penalty-cap` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.penalty_cap_view_failed` | failure | `getStaffPenaltyCap` | `GET` | `/api/v1/staff/settings/payroll-penalty-cap` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.penalty_cap_viewed` | success | `getStaffPenaltyCap` | `GET` | `/api/v1/staff/settings/payroll-penalty-cap` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.period_draft` | success | `staffPayrollPeriodDraft` | `POST` | `/api/v1/staff/payroll/period-facts` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.period_draft_failed` | failure | `staffPayrollPeriodDraft` | `POST` | `/api/v1/staff/payroll/period-facts` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.period_list` | success | `staffPayrollPeriodList` | `GET` | `/api/v1/staff/payroll/period-facts` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.period_list_failed` | failure | `staffPayrollPeriodList` | `GET` | `/api/v1/staff/payroll/period-facts` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.period_submit` | success | `staffPayrollPeriodSubmit` | `POST` | `/api/v1/staff/payroll/period-facts/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.period_submit_failed` | failure | `staffPayrollPeriodSubmit` | `POST` | `/api/v1/staff/payroll/period-facts/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.rule_draft` | success | `staffPayrollRuleDraft` | `POST` | `/api/v1/staff/payroll/performance-rules` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.rule_draft_failed` | failure | `staffPayrollRuleDraft` | `POST` | `/api/v1/staff/payroll/performance-rules` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.rule_list` | success | `staffPayrollRuleList` | `GET` | `/api/v1/staff/payroll/performance-rules` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.rule_list_failed` | failure | `staffPayrollRuleList` | `GET` | `/api/v1/staff/payroll/performance-rules` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.rule_submit` | success | `staffPayrollRuleSubmit` | `POST` | `/api/v1/staff/payroll/performance-rules/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.rule_submit_failed` | failure | `staffPayrollRuleSubmit` | `POST` | `/api/v1/staff/payroll/performance-rules/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.scheme_draft` | success | `staffPayrollSchemeDraft` | `POST` | `/api/v1/staff/payroll/schemes` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.scheme_draft_failed` | failure | `staffPayrollSchemeDraft` | `POST` | `/api/v1/staff/payroll/schemes` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.scheme_list` | success | `staffPayrollSchemeList` | `GET` | `/api/v1/staff/payroll/schemes` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.scheme_list_failed` | failure | `staffPayrollSchemeList` | `GET` | `/api/v1/staff/payroll/schemes` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.scheme_submit` | success | `staffPayrollSchemeSubmit` | `POST` | `/api/v1/staff/payroll/schemes/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.scheme_submit_failed` | failure | `staffPayrollSchemeSubmit` | `POST` | `/api/v1/staff/payroll/schemes/{id}/submit` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_appeal` | success | `staffPayrollScoreAppeal` | `POST` | `/api/v1/staff/payroll/performance-adjustments/{id}/appeals` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_appeal_failed` | failure | `staffPayrollScoreAppeal` | `POST` | `/api/v1/staff/payroll/performance-adjustments/{id}/appeals` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_deduct` | success | `staffPayrollScoreDeduct` | `POST` | `/api/v1/staff/payroll/performance-adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_deduct_failed` | failure | `staffPayrollScoreDeduct` | `POST` | `/api/v1/staff/payroll/performance-adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_list` | success | `staffPayrollScoreList` | `GET` | `/api/v1/staff/payroll/performance-adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_list_failed` | failure | `staffPayrollScoreList` | `GET` | `/api/v1/staff/payroll/performance-adjustments` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_mine` | success | `staffPayrollScoreMine` | `GET` | `/api/v1/staff/payroll/mine/performance-adjustments` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.score_mine_failed` | failure | `staffPayrollScoreMine` | `GET` | `/api/v1/staff/payroll/mine/performance-adjustments` | STAFF-员工 | `staff.payroll.view_mine` | 接口级事件，以本附录为准 |
+| `staff.payroll.settle` | success | `staffPayrollSettle` | `POST` | `/api/v1/staff/payroll/settlements` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.settle_failed` | failure | `staffPayrollSettle` | `POST` | `/api/v1/staff/payroll/settlements` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.tax_bracket_view_failed` | failure | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.tax_bracket_viewed` | success | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.tax.assessment_draft_failed` | failure | `draftPayrollTaxAssessment` | `POST` | `/api/v1/staff/payroll/tax-assessments` | STAFF-员工 | `staff.tax_bracket.manage` | 接口级事件，以本附录为准 |
@@ -2317,6 +2404,7 @@
 | AMU-游乐安全 | `listAmusementBusinessDayConfigs` | `GET` | `/api/v1/amusement/business-day-configs` | 查看授权综合体的游乐营业日配置目录与版本 | `amusement.business_day.view` | `amusement.business_day.viewed` / `amusement.business_day.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCapacityConfigs` | `GET` | `/api/v1/amusement/projects/{id}/capacity-config` | 查询游乐点位设备并发容量配置 | `amusement.capacity_config.manage` | `amusement.capacity_config.viewed` / `amusement.capacity_config.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCapacitySnapshots` | `GET` | `/api/v1/amusement/capacity-snapshots` | 查看游乐项目当前在场人数与硬容量 | `amusement.verification.view` | `amusement.verification.viewed` / `amusement.verification.view_failed` | web, tablet | operation 级补充 |
+| AMU-游乐安全 | `listAmusementCompensationBatchesByEvent` | `GET` | `/api/v1/amusement/compensation-batches` | 按事件类型查询补偿批次（含场次提前结束） | `amusement.park_fault.view` | `amusement.fault_compensation.viewed` / `amusement.fault_compensation.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCountReleases` | `GET` | `/api/v1/amusement/count-releases` | 查看场次及日切人数释放记录 | `amusement.verification.view` | `amusement.session.viewed` / `amusement.session.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementDevices` | `GET` | `/api/v1/amusement/projects/{id}/devices` | 查询游乐项目游乐设备 | `amusement.device.view` | `amusement.device.viewed` / `amusement.device.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | 查询游乐设备状态 | `amusement.device_status.view` | `amusement.device_status.viewed` / `amusement.device_status.viewed_failed` | web | operation 级补充 |
@@ -2455,7 +2543,10 @@
 | BAR-酒吧经营 | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | 订台取消/爽约（按时限退定金或没收） | `bar.reservation.manage` | `bar.reservation.cancelled` / `bar.reservation.cancel_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `checkInBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/checkin` | 订台到店核销（定金转抵扣进账单） | `bar.reservation.manage` | `bar.reservation_deposit_deducted` / `bar.reservation_deposit_deduct_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `checkInBarReservationGuest` | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | 卡座免通票入场名额核销 | `bar.table.guest_checkin` | `bar.table_guest.checked_in` / `bar.table_guest.rejected` | staff_work_phone | operation 级补充 |
+| BAR-酒吧经营 | `closeBarPayrollMonth` | `POST` | `/api/v1/bar/payroll-runs/close` | 按实际来源生成不可变月结及差额 | `bar.payroll.manage` | `bar.payroll.month_processed` / `bar.payroll.month_processed_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `closeBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-close` | 实际服务完成后关闭责任区间 | `bar.table_session.transfer` | `bar.service.closed` / `bar.service.closed_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | 班结对账 | `bar.shift.close` | `bar.shift_closed` / `bar.shift_close_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `confirmBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/confirm` | 双方分别本人确认约定 | `bar.payroll.manage` | `bar.payroll_rule.confirmed_merchant` / `bar.payroll_rule.confirm_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `createBarBillPayIntent` | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | 酒吧账单支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `createBarDepositRule` | `POST` | `/api/v1/bar/deposit-rules` | 创建订台定金规则（固定额/按低消比例） | `bar.deposit_rule.manage` | `bar.deposit_rule.created` / `bar.deposit_rule.create_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `createBarOrder` | `POST` | `/api/v1/bar/orders` | 点单 | `bar.order.create` | `bar.order_created` / `bar.order_create_failed` | tablet, web | operation 级补充 |
@@ -2466,19 +2557,25 @@
 | BAR-酒吧经营 | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | 创建酒水台位会话（开台） | `bar.table_session.create` | `bar.table_session.create` / `bar.table_session.create_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | 退菜退酒审批决策（通过/驳回） | `bar.order_item.void` | `bar.order_item_void.decide` / `bar.order_item_void.decide_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `deliverBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | 出酒或送达确认 | `bar.order.create` | `bar.order_delivered` / `bar.order_deliver_failed` | tablet, staff_work_phone | operation 级补充 |
+| BAR-酒吧经营 | `draftBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules` | 保存完整规则草案 | `bar.payroll.manage` | `bar.payroll_rule.drafted` / `bar.payroll_rule.draft_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `getBarBillRefundContext` | `GET` | `/api/v1/bar/bills/{id}/refund-context` | 读取本账单真实退款来源及累计明细 | `bar.bill.refund` | `bar.refund_context.read` / `bar.refund_context.read_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `getBarReservationInvitation` | `GET` | `/api/v1/bar/reservations/{id}/invitation` | 查询订卡邀请函 | `bar.reservation.view` | `bar.reservation_invitation_viewed` / `bar.reservation_invitation_view_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `handoverBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-handover` | 登记真实服务交接 | `bar.table_session.transfer` | `bar.service.handover` / `bar.service.handover_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `issueBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation` | 签发订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_issued` / `bar.reservation_invitation_issue_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | 查询酒水账单拆并操作记录 | `bar.bill.split_merge` | `bar.bill_operation.list` / `bar.bill_operation.list_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarCombos` | `GET` | `/api/v1/bar/catalog/combos` | 查询酒吧套餐 | `bar.combo.view` | `bar.combo.viewed` / `bar.combo.viewed_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarEntitlementRedemptions` | `GET` | `/api/v1/bar/entitlement-redemptions` | 查询酒吧酒水权益兑换台账 | `bar.entitlement.read` | `bar.entitlement_redemption.viewed` / `bar.entitlement_redemption.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarOrderItemVoids` | `GET` | `/api/v1/bar/order-item-voids` | 退酒审批待审队列 | `bar.order_item.void` | `bar.order_item_void.viewed` / `bar.order_item_void.view_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarOrders` | `GET` | `/api/v1/bar/orders` | 查询酒吧订单 | `bar.order.view` | `bar.order.viewed` / `bar.order.view_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `listBarPayrollRules` | `GET` | `/api/v1/bar/payroll-rules` | 读取收费及分配规则原件 | `bar.payroll.view` | `bar.payroll_rule.read` / `bar.payroll_rule.read_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `listBarPayrollRuns` | `GET` | `/api/v1/bar/payroll-runs` | 读取月结及未结事项 | `bar.payroll.view` | `bar.payroll.read` / `bar.payroll.read_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarProductCategories` | `GET` | `/api/v1/bar/catalog/categories` | 查询酒吧商品分类 | `bar.category.view` | `bar.category.viewed` / `bar.category.viewed_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarProductionTicketEvents` | `GET` | `/api/v1/bar/production-tickets/{ticket_id}/events` | 查询出品工单事件流 | `bar.production_ticket.view` | `bar.production_ticket_event.list` / `bar.production_ticket_event.list_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarProductionTickets` | `GET` | `/api/v1/bar/production-tickets` | 查询酒吧出品票据 | `bar.order.create` | `bar.production_ticket.viewed` / `bar.production_ticket.viewed_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarProducts` | `GET` | `/api/v1/bar/products` | 查询酒吧商品 | `bar.product.view` | `bar.product.viewed` / `bar.product.viewed_failed` | web, tablet, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `listBarProductsByCategory` | `GET` | `/api/v1/bar/catalog/products` | 按分类查询酒吧商品 | `bar.product.view` | `bar.product.viewed` / `bar.product.viewed_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarReservations` | `GET` | `/api/v1/bar/reservations` | 查询酒吧预约 | `bar.reservation.view` | `bar.reservation.viewed` / `bar.reservation.view_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `listBarServiceResponsibilities` | `GET` | `/api/v1/bar/table-sessions/{id}/service-responsibilities` | 读取原服务责任时间区间 | `bar.payroll.view` | `bar.service.read` / `bar.service.read_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | 查询收银班次 | `bar.shift.manage` | `bar.shift.viewed` / `bar.shift.view_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTableAvailability` | `GET` | `/api/v1/bar/tables/availability` | 酒吧空位视图(员工代订用) | `bar.reservation.create` | `bar.table_availability.viewed` / `bar.table_availability.view_failed` | staff_private_phone, web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarTables` | `GET` | `/api/v1/bar/tables` | 查询桌台或卡座 | `bar.table.view` | `bar.table.viewed` / `bar.table.view_failed` | web, tablet | operation 级补充 |
@@ -2501,6 +2598,7 @@
 | BAR-酒吧经营 | `saveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes` | 新增或修改退酒原因 | `bar.order_item.void_decide` | `bar.void_reason_code.saved` / `bar.void_reason_code.save_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | 账单结清 | `finance.payment.register` | `bar.bill.settled` / `bar.bill.settle_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | 拆分酒水账单 | `bar.bill.split_merge` | `bar.bill.split` / `bar.bill.split_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `submitBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/submit` | 提交有原件的已配置审批 | `bar.payroll.manage` | `bar.payroll_rule.submitted` / `bar.payroll_rule.submit_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table_session.transfer` / `bar.table_session.transfer_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | 流转出品工单状态 | `bar.production_ticket.manage` | `bar.production_ticket.transition` / `bar.production_ticket.transition_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | 上传酒吧商品/套餐图片 | `bar.product.manage` | `bar.catalog.image_uploaded` / `bar.catalog.image_uploaded_failed` | web, tablet | operation 级补充 |
@@ -2602,6 +2700,7 @@
 | FIN-财务台账 | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `finance.dividend.manage` | `dividend.computed` / `dividend.compute_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmFinanceRefundResult` | `POST` | `/api/v1/finance/refunds/{refund_id}/confirm` | 另一人核实已有执行记录的实际退款结果 | `finance.refund.create` | `finance_refund.confirmed` / `finance_refund.confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | 现金或 POS 线下收款确认 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
+| FIN-财务台账 | `confirmPayrollBankPaymentResult` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/result` | 核实工资银行付款实际结果 | `finance.payroll.payment.register` | `finance.payroll.result` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | FIN-财务台账 | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | 手工新增应收应付台账项 | `finance.ar_ap.manage` | `finance_ar_ap.created` / `finance_ar_ap.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | 应收应付收付款登记 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | 日结锁定 | `finance.daily_close.lock` | `finance_daily_close.locked` / `finance_daily_close.lock_failed` | web | operation 级补充 |
@@ -2614,6 +2713,7 @@
 | FIN-财务台账 | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | 导出应收应付台账快照 | `finance.ar_ap.export` | `finance_ar_ap.exported` / `finance_ar_ap.export_failed` | web | operation 级补充 |
 | FIN-财务台账 | `getDividendStatement` | `GET` | `/api/v1/finance/dividends/statements/{id}` | 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账） | `finance.dividend.view` | `dividend.statement_viewed` / `dividend.statement_view_failed` | web, merchant_portal | operation 级补充 |
 | FIN-财务台账 | `getFinanceRefund` | `GET` | `/api/v1/finance/refunds/{refund_id}` | 读取退款详情和全部办理记录 | `finance.ar_ap.view` | `finance_refund.viewed` / `finance_refund.view_failed` | web | operation 级补充 |
+| FIN-财务台账 | `getPayrollBankPaymentContext` | `GET` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | 读取工资银行记录与同日补差事项 | `finance.payroll.view` | `finance.payroll.attempts_viewed` / `finance.payroll.attempts_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | FIN-财务台账 | `getPointsRecoveryDetail` | `GET` | `/api/v1/finance/points-recoveries/{customerId}` | 查看会员全部积分追回及豁免记录 | `finance.points_recovery.view` | `points.recovery.viewed` / `points.recovery.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApPayments` | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | 读取所选台账原收付款流水 | `finance.ar_ap.view` | `ar_ap_payment.listed` / `ar_ap_payment.list_failed` | web | operation 级补充 |
@@ -2631,6 +2731,7 @@
 | FIN-财务台账 | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | 查询退款自动放行规则配置 | `refund.authority.view` | `refund_auto_rule.viewed` / `refund_auto_rule.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程） | `finance.dividend.manage` | `dividend.paid_marked` / `dividend.mark_paid_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
+| FIN-财务台账 | `preparePayrollBankPayment` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | 准备工资银行付款 | `finance.payroll.payment.register` | `finance.payroll.prepare` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | FIN-财务台账 | `queryFinanceRefund` | `POST` | `/api/v1/finance/refunds/{refund_id}/query` | 查询原退款单的渠道权威结果 | `finance.ar_ap.view` | `finance_refund.queried` / `finance_refund.query_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | 押金台账动作（收取/退还/抵扣/没收） | `finance.deposit.manage` | `finance.deposit.action_recorded` / `finance.deposit.action_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordFinanceRefundExecution` | `POST` | `/api/v1/finance/refunds/{refund_id}/execution` | 实际支付经办人本人登记原路执行凭证 | `finance.refund.create` | `finance_refund.execution_recorded` / `finance_refund.execution_failed` | web | operation 级补充 |
@@ -2640,6 +2741,7 @@
 | FIN-财务台账 | `retryFinanceRefund` | `POST` | `/api/v1/finance/refunds/{refund_id}/retry` | 明确失败或尚未发起的退款在原单重试 | `finance.refund.create` | `finance_refund.retried` / `finance_refund.retry_failed` | web | operation 级补充 |
 | FIN-财务台账 | `reverseMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses/{id}/reverse` | 红字冲销费用台账行（负金额新行，不改历史行，理由必填） | `finance.merchant_expense.manage` | `merchant_expense.reversed` / `merchant_expense.reverse_failed` | web | operation 级补充 |
 | FIN-财务台账 | `submitDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/submit` | 提交审阅：draft → pending_review（预览单不可提交） | `finance.dividend.manage` | `dividend.submitted` / `dividend.submit_failed` | web | operation 级补充 |
+| FIN-财务台账 | `submitPayrollBankPaymentFact` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/submit` | 登记工资银行已发起事实 | `finance.payroll.payment.register` | `finance.payroll.submit` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | FIN-财务台账 | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | 商户费用期间汇总（按商户+月份分类型合计，分红引擎费用侧取数点） | `finance.merchant_expense.view` | `merchant_expense.summary_viewed` / `merchant_expense.summary_view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `syncMerchantExpenseAuto` | `POST` | `/api/v1/finance/merchant-expenses/sync-auto` | 自动挂接能耗费/物业费/租金账单到费用台账（按期幂等可重跑） | `finance.merchant_expense.manage` | `merchant_expense.auto_synced` / `merchant_expense.auto_sync_failed` | web | operation 级补充 |
 | FIN-财务台账 | `updateDividendPlan` | `PUT` | `/api/v1/finance/dividends/plans/{id}` | 修改分红方案（改动审计留痕；历史分红单按单内快照追溯，不受影响） | `finance.dividend.manage` | `dividend.plan_updated` / `dividend.plan_update_failed` | web | operation 级补充 |
@@ -2847,12 +2949,14 @@
 | P0-待归类 | `dealerPortalGetOrder` | `GET` | `/api/v1/dealer-portal/orders/{id}` | 门户：订单详情 | `dealer_portal.order.manage` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalListContracts` | `GET` | `/api/v1/dealer-portal/contracts` | 门户：本企业经销合同 | `dealer_portal.profile.view` | `dealer.contract.viewed` / `dealer.contract.view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalListInquiries` | `GET` | `/api/v1/dealer-portal/inquiries` | 门户：本企业询价单 | `dealer_portal.inquiry.manage` | `dealer.inquiry.viewed` / `dealer.inquiry.view_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalListInvoices` | `GET` | `/api/v1/dealer-portal/orders/{id}/invoices` | 门户：查看本企业订单发票 | `dealer_portal.order.manage` | `dealer.portal.invoices_viewed` / `dealer.portal.invoices_view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalListOrderLines` | `GET` | `/api/v1/dealer-portal/orders/{id}/lines` | 门户：订单明细 | `dealer_portal.order.manage` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalListOrders` | `GET` | `/api/v1/dealer-portal/orders` | 门户：本企业经销订单 | `dealer_portal.order.manage` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalListPayments` | `GET` | `/api/v1/dealer-portal/orders/{id}/payments` | 门户：付款记录 | `dealer_portal.order.pay` | `dealer.order.viewed` / `dealer.order.view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalListReturns` | `GET` | `/api/v1/dealer-portal/orders/{id}/returns` | 门户：退货单 | `dealer_portal.return.request` | `dealer.return.viewed` / `dealer.return.view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalMe` | `GET` | `/api/v1/dealer-portal/me` | 门户：本企业资料与准入状态 | `dealer_portal.profile.view` | `dealer.portal.viewed` / `dealer.portal.access_rejected` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalRegisterPayment` | `POST` | `/api/v1/dealer-portal/orders/{id}/payments` | 门户：登记付款 | `dealer_portal.order.pay` | `dealer.order.payment_registered` / `dealer.order.payment_register_failed` | dealer_portal | operation 级补充 |
+| P0-待归类 | `dealerPortalRequestOrderCancel` | `POST` | `/api/v1/dealer-portal/orders/{id}/cancel-request` | 门户：申请取消订单（出库前） | `dealer_portal.order.manage` | `dealer.order.cancel_requested` / `dealer.order.cancel_request_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalRequestReturn` | `POST` | `/api/v1/dealer-portal/orders/{id}/returns` | 门户：申请退货 | `dealer_portal.return.request` | `dealer.return.requested` / `dealer.return.request_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalSignOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/sign` | 门户：确认签收 | `dealer_portal.order.manage` | `dealer.delivery.received` / `dealer.delivery.receive_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `dealerPortalSubmitOrder` | `POST` | `/api/v1/dealer-portal/orders/{id}/submit` | 门户：提交订单 | `dealer_portal.order.manage` | `dealer.order.submitted` / `dealer.order.submit_failed` | dealer_portal | operation 级补充 |
@@ -3078,7 +3182,7 @@
 | STAFF-员工 | `assignStaffBusinessHandover` | `POST` | `/api/v1/staff/profiles/{id}/handover` | 将一个真实未结事项交给在岗人员 | `staff.profile.review` | `staff.business_handover.assigned` / `staff.business_handover.assign_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `batchUpsertStaffShifts` | `POST` | `/api/v1/staff/shifts/batch` | 按周批量排班(一次排一周) | `staff.shift.manage` | `staff.shift.submitted` / `staff.shift.save_failed` | web, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `closeStaffCommissionSettlement` | `POST` | `/api/v1/staff/commission-settlements/close` | 提成月结拨付（酒吧 → 人员所属主体） | `staff.payroll.manage` | `staff.commission_settlement.closed` / `staff.commission_settlement.close_failed` | web | operation 级补充 |
-| STAFF-员工 | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | 月结(定格全员薪资单) | `staff.payroll.manage` | `staff.payroll.month_closed` / `staff.payroll.month_close_failed` | web | operation 级补充 |
+| STAFF-员工 | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | 旧一键月结入口已关闭 | `staff.payroll.manage` | `not_applicable` / `staff.payroll.month_close_failed` | web | operation 级补充 |
 | STAFF-员工 | `coverStaffShift` | `POST` | `/api/v1/staff/shifts/{id}/cover` | 记录临时顶班 | `staff.shift.manage` | `staff.shift.covered` / `staff.shift.cover_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `createStaffDispatch` | `POST` | `/api/v1/staff/dispatches` | 登记派驻记录（员工 → 派驻酒吧） | `staff.profile.review` | `staff.dispatch.created` / `staff.dispatch.create_failed` | web | operation 级补充 |
 | STAFF-员工 | `draftPayrollTaxAssessment` | `POST` | `/api/v1/staff/payroll/tax-assessments` | 保存专业税务认定草案 | `staff.tax_bracket.manage` | `staff.payroll.tax.assessment_drafted` / `staff.payroll.tax.assessment_draft_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
@@ -3092,7 +3196,7 @@
 | STAFF-员工 | `issueStaffPhoneTimeAnchor` | `POST` | `/api/v1/staff/attendance/time-anchors` | 为本人工作手机签发班次时间锚 | `staff.attendance.punch` | `staff.attendance.anchor_issued` / `staff.attendance.anchor_failed` | staff_work_phone | operation 级补充 |
 | STAFF-员工 | `listMyStaffAttendance` | `GET` | `/api/v1/staff/attendance/mine` | 我的打卡记录(最近30天) | `staff.shift.view` | `staff.attendance_mine.viewed` / `staff.attendance_mine.view_failed` | staff_private_phone, web | operation 级补充 |
 | STAFF-员工 | `listMyStaffLeaves` | `GET` | `/api/v1/staff/leaves/mine` | 我的请假(员工手机) | `staff.leave.submit` | `staff.leave_mine.viewed` / `staff.leave_mine.view_failed` | staff_private_phone, web | operation 级补充 |
-| STAFF-员工 | `listMyStaffPayroll` | `GET` | `/api/v1/staff/payroll/mine` | 我的薪资(员工手机;仅已月结月份) | `staff.payroll.view_mine` | `staff.payroll_mine.viewed` / `staff.payroll_mine.view_failed` | staff_private_phone, web | operation 级补充 |
+| STAFF-员工 | `listMyStaffPayroll` | `GET` | `/api/v1/staff/payroll/mine` | 我的薪资(员工手机;仅已月结月份) | `staff.payroll.view_mine` | `staff.payroll_mine.viewed` / `staff.payroll_mine.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | STAFF-员工 | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | 我的班次与点位(员工手机) | `staff.shift.view` | `staff.shift_mine.viewed` / `staff.shift_mine.view_failed` | staff_private_phone, web | operation 级补充 |
 | STAFF-员工 | `listPayrollTaxAssessments` | `GET` | `/api/v1/staff/payroll/tax-assessments` | 读取员工月份税务认定历史 | `staff.payroll.manage` | `staff.payroll.tax.assessments_viewed` / `staff.payroll.tax.assessments_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | STAFF-员工 | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | 查询旧单档税表历史 | `staff.payroll.manage` | `staff.payroll.tax_bracket_viewed` / `staff.payroll.tax_bracket_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
@@ -3103,23 +3207,47 @@
 | STAFF-员工 | `listStaffCommissionSettlements` | `GET` | `/api/v1/staff/commission-settlements` | 查询提成月结拨付记录（按月） | `staff.payroll.manage` | `staff.commission_settlement.viewed` / `staff.commission_settlement.view_failed` | web | operation 级补充 |
 | STAFF-员工 | `listStaffDispatches` | `GET` | `/api/v1/staff/dispatches` | 查询派驻记录 | `staff.profile.view` | `staff.dispatch.viewed` / `staff.dispatch.view_failed` | web, mobile_admin | operation 级补充 |
 | STAFF-员工 | `listStaffLeaves` | `GET` | `/api/v1/staff/leaves` | 查请假(主管/后台,按状态) | `staff.shift.manage` | `staff.leave.viewed` / `staff.leave.view_failed` | web, staff_private_phone | operation 级补充 |
-| STAFF-员工 | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | 全员薪资单(人事,按月) | `staff.payroll.manage` | `staff.payroll.viewed` / `staff.payroll.view_failed` | web | operation 级补充 |
+| STAFF-员工 | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | 全员薪资单(人事,按月) | `staff.payroll.manage` | `staff.payroll.viewed` / `staff.payroll.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | STAFF-员工 | `listStaffPhoneReceipts` | `GET` | `/api/v1/staff/attendance/receipt-events` | 查询工作手机领取事件和待核事实 | `staff.shift.view` | `staff.attendance.receipts_viewed` / `staff.attendance.receipts_view_failed` | web, staff_private_phone, staff_work_phone | operation 级补充 |
 | STAFF-员工 | `listStaffRegistrationCompanies` | `GET` | `/api/v1/staff/registration-companies` | 获取可注册公司 | `public` | `staff.registration_companies_viewed` / `staff.registration_companies_view_failed` | staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShiftCovers` | `GET` | `/api/v1/staff/shifts/{id}/covers` | 查看班次顶班记录 | `staff.shift.manage` | `staff.shift.covers_viewed` / `staff.shift.covers_view_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShiftHistory` | `GET` | `/api/v1/staff/shifts/{id}/history` | 查看排班修改历史 | `staff.shift.manage` | `staff.shift.history_viewed` / `staff.shift.history_view_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | 查排班(后台/主管) | `staff.shift.manage` | `staff.shift.viewed` / `staff.shift.view_failed` | web, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffWorkPhoneContextsForRecovery` | `GET` | `/api/v1/staff/attendance/work-phone-contexts` | 主管查询本工作手机指定员工的历史领用记录 | `staff.shift.manage` | `staff.attendance.contexts_viewed` / `staff.attendance.contexts_view_failed` | staff_work_phone | operation 级补充 |
+| STAFF-员工 | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | 旧手填已发工资入口已关闭 | `staff.payroll.manage` | `not_applicable` / `staff.payroll.pay_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | STAFF-员工 | `myStaffAttendanceMonthView` | `GET` | `/api/v1/staff/attendance/month-view` | 考勤月视图(员工手机,逐日六态) | `staff.shift.view` | `staff.attendance_month.viewed` / `staff.attendance_month.view_failed` | staff_private_phone, web | operation 级补充 |
 | STAFF-员工 | `punchStaffAttendance` | `POST` | `/api/v1/staff/attendance/punch` | 考勤打卡(NFC/扫码) | `staff.attendance.punch` | `staff.attendance.punched` / `staff.attendance.punch_failed` | staff_work_phone | operation 级补充 |
 | STAFF-员工 | `recordStaffLockerScan` | `POST` | `/api/v1/terminals/kiosks/{device_id}/locker-events` | 柜机上报寄存柜扫码存取 | `not_applicable` | `staff.locker.recorded` / `staff.locker.record_failed` | kiosk | operation 级补充 |
 | STAFF-员工 | `recordStaffPhoneReceipt` | `POST` | `/api/v1/staff/attendance/receipt-events` | 提交持久化工作手机领取事件 | `staff.attendance.punch` | `staff.attendance.receipt_recorded` / `staff.attendance.receipt_failed` | staff_work_phone | operation 级补充 |
 | STAFF-员工 | `recoverStaffWorkPhoneReceipt` | `POST` | `/api/v1/staff/attendance/receipt-events/recover` | 主管代补报原工作手机未传领取事件 | `staff.shift.manage` | `staff.attendance.receipt_recovered` / `staff.attendance.receipt_recover_failed` | staff_work_phone | operation 级补充 |
+| STAFF-员工 | `requestStaffLeaveRevoke` | `POST` | `/api/v1/staff/leaves/{id}/revoke-request` | 申请销假(员工本人,手机端) | `staff.leave.submit` | `staff.leave.revoke_requested` / `staff.leave.revoke_request_failed` | staff_private_phone, web | operation 级补充 |
 | STAFF-员工 | `requestStaffPenaltyCap` | `POST` | `/api/v1/staff/settings/payroll-penalty-cap` | 申请调整普通扣除上限 | `staff.payroll.manage` | `staff.payroll.penalty_cap_requested` / `staff.payroll.penalty_cap_request_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `reviewStaffLeave` | `POST` | `/api/v1/staff/leaves/{id}/review` | 请假审批(排班主管) | `staff.shift.manage` | `staff.leave.reviewed` / `staff.leave.review_failed` | web, staff_private_phone | operation 级补充 |
-| STAFF-员工 | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | 固定工资设定(人事) | `staff.payroll.manage` | `staff.payroll.base_saved` / `staff.payroll.base_save_failed` | web | operation 级补充 |
+| STAFF-员工 | `revokeStaffLeave` | `POST` | `/api/v1/staff/leaves/{id}/revoke` | 销假审批(排班主管):批准或驳回员工本人的销假申请 | `staff.shift.manage` | `staff.leave.revoke_reviewed` / `staff.leave.revoke_review_failed` | web, staff_private_phone | operation 级补充 |
+| STAFF-员工 | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | 旧固定工资直写入口已关闭 | `staff.payroll.manage` | `not_applicable` / `staff.payroll.base_save_failed` | web | operation 级补充 |
 | STAFF-员工 | `setStaffEmploymentStatus` | `POST` | `/api/v1/staff/profiles/{id}/employment-status` | 发起员工任职状态变更复核 | `staff.profile.review` | `staff.profile.employment_status_change_requested` / `staff.profile.employment_status_change_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | STAFF-员工 | `setStaffShiftVisibility` | `POST` | `/api/v1/staff/settings/shift-visible-days` | 设置排班可见天数 | `staff.shift.manage` | `staff.shift.visibility_changed` / `staff.shift.visibility_change_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
+| STAFF-员工 | `staffPayrollCalculate` | `POST` | `/api/v1/staff/payroll/calculations` | 生成完整工资税前原件 | `staff.payroll.manage` | `staff.payroll.calculate` / `staff.payroll.calculate_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollCalculationList` | `GET` | `/api/v1/staff/payroll/calculations` | 读取完整工资税前核算原件 | `staff.payroll.manage` | `staff.payroll.calculation_list` / `staff.payroll.calculation_list_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollCalendarDraft` | `POST` | `/api/v1/staff/payroll/calendars` | 保存工资日历草案 | `staff.payroll.manage` | `staff.payroll.calendar_draft` / `staff.payroll.calendar_draft_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollCalendarList` | `GET` | `/api/v1/staff/payroll/calendars` | 读取工资日历 | `staff.payroll.manage` | `staff.payroll.calendar_list` / `staff.payroll.calendar_list_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollCalendarSubmit` | `POST` | `/api/v1/staff/payroll/calendars/{id}/submit` | 提交工资日历审批 | `staff.payroll.manage` | `staff.payroll.calendar_submit` / `staff.payroll.calendar_submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollDetail` | `GET` | `/api/v1/staff/payroll/statements/{id}` | 读取工资逐项、补差、实际付款及未结事项 | `staff.payroll.manage` | `staff.payroll.detail` / `staff.payroll.detail_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollDetailMine` | `GET` | `/api/v1/staff/payroll/mine/statements/{id}` | 读取本人完整工资详情 | `staff.payroll.view_mine` | `staff.payroll.detail_mine` / `staff.payroll.detail_mine_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollPeriodDraft` | `POST` | `/api/v1/staff/payroll/period-facts` | 保存期间计薪事实草案 | `staff.payroll.manage` | `staff.payroll.period_draft` / `staff.payroll.period_draft_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollPeriodList` | `GET` | `/api/v1/staff/payroll/period-facts` | 读取期间计薪事实 | `staff.payroll.manage` | `staff.payroll.period_list` / `staff.payroll.period_list_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollPeriodSubmit` | `POST` | `/api/v1/staff/payroll/period-facts/{id}/submit` | 提交期间计薪事实审批 | `staff.payroll.manage` | `staff.payroll.period_submit` / `staff.payroll.period_submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollRuleDraft` | `POST` | `/api/v1/staff/payroll/performance-rules` | 保存经营主体扣分分值表草案 | `staff.payroll.manage` | `staff.payroll.rule_draft` / `staff.payroll.rule_draft_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollRuleList` | `GET` | `/api/v1/staff/payroll/performance-rules` | 读取经营主体扣分分值表 | `staff.payroll.manage` | `staff.payroll.rule_list` / `staff.payroll.rule_list_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollRuleSubmit` | `POST` | `/api/v1/staff/payroll/performance-rules/{id}/submit` | 提交经营主体扣分分值表审批 | `staff.payroll.manage` | `staff.payroll.rule_submit` / `staff.payroll.rule_submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollSchemeDraft` | `POST` | `/api/v1/staff/payroll/schemes` | 保存薪资方案草案 | `staff.payroll.manage` | `staff.payroll.scheme_draft` / `staff.payroll.scheme_draft_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollSchemeList` | `GET` | `/api/v1/staff/payroll/schemes` | 读取薪资方案 | `staff.payroll.manage` | `staff.payroll.scheme_list` / `staff.payroll.scheme_list_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollSchemeSubmit` | `POST` | `/api/v1/staff/payroll/schemes/{id}/submit` | 提交薪资方案审批 | `staff.payroll.manage` | `staff.payroll.scheme_submit` / `staff.payroll.scheme_submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollScoreAppeal` | `POST` | `/api/v1/staff/payroll/performance-adjustments/{id}/appeals` | 本人发起绩效扣分申诉 | `staff.payroll.view_mine` | `staff.payroll.score_appeal` / `staff.payroll.score_appeal_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollScoreDeduct` | `POST` | `/api/v1/staff/payroll/performance-adjustments` | 按批准分值表发起绩效扣分 | `staff.payroll.manage` | `staff.payroll.score_deduct` / `staff.payroll.score_deduct_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollScoreList` | `GET` | `/api/v1/staff/payroll/performance-adjustments` | 读取员工绩效扣分及冲回 | `staff.payroll.manage` | `staff.payroll.score_list` / `staff.payroll.score_list_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollScoreMine` | `GET` | `/api/v1/staff/payroll/mine/performance-adjustments` | 读取本人绩效扣分及冲回 | `staff.payroll.view_mine` | `staff.payroll.score_mine` / `staff.payroll.score_mine_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| STAFF-员工 | `staffPayrollSettle` | `POST` | `/api/v1/staff/payroll/settlements` | 引用批准专业税额定格工资 | `staff.payroll.manage` | `staff.payroll.settle` / `staff.payroll.settle_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | STAFF-员工 | `submitPayrollTaxAssessment` | `POST` | `/api/v1/staff/payroll/tax-assessments/{id}/submit` | 提交专业税务认定审批 | `staff.tax_bracket.manage` | `staff.payroll.tax.assessment_submitted` / `staff.payroll.tax.assessment_submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | STAFF-员工 | `submitPayrollTaxVersion` | `POST` | `/api/v1/staff/payroll/tax-versions/{id}/submit` | 提交税表财税法及最高确认 | `staff.tax_bracket.manage` | `staff.payroll.tax.version_submitted` / `staff.payroll.tax.version_submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | STAFF-员工 | `submitStaffAdjustmentAppeal` | `POST` | `/api/v1/staff/payroll/adjustments/{id}/appeals` | 员工对已生效扣罚提出申诉 | `staff.payroll.view_mine` | `staff.payroll.adjustment_appeal_submitted` / `staff.payroll.adjustment_appeal_submit_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |

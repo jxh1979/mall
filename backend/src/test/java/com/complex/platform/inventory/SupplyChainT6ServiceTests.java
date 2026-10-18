@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -150,7 +151,7 @@ class SupplyChainT6ServiceTests {
                 java.time.Instant.now(), java.time.Instant.now(), null));
         qualificationService.createQualification(new SupplierQualificationRequest(
                 "qk-future", "supplier_future", "business_license", "BL-F", null,
-                LocalDate.now().plusDays(1), LocalDate.now().plusYears(1), List.of(), null));
+                LocalDate.now(LocalZone.ID).plusDays(1), LocalDate.now().plusYears(1), List.of(), null));
         assertThatThrownBy(() -> qualificationService.requireQualified("supplier_future"))
                 .isInstanceOfSatisfying(ApiException.class,
                         error -> assertThat(error.code()).isEqualTo("SUPPLIER_QUALIFICATION_NOT_YET_VALID"));
