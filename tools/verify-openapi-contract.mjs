@@ -25,6 +25,8 @@ const allowedTerminalTypes = new Set([
   "merchant_app",
   "kiosk",
   "mobile_admin",
+  // CG-11d：受控第十一端——独立经销商 Web 门户（ENUM:233；V454 终端闭集）。
+  "dealer_portal",
 ]);
 const allowedInvocationChannels = new Set([
   "server-to-server",

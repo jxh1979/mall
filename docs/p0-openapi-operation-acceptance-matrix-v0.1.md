@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 805 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 823 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -750,6 +750,24 @@
 | dealer | `GET` | `/api/v1/dealers/orders/{id}/invoices` | `listDealerInvoices` | 经销订单电子发票列表 | `-` | `dealer.return.view` | `staff-token` | `project` | web | 否 | `dealer.invoice.viewed` | `dealer.invoice.view_failed` |
 | dealer | `POST` | `/api/v1/dealers/orders/{id}/invoices` | `requestDealerInvoice` | 申请电子发票 | `object` | `dealer.invoice.manage` | `staff-token` | `project` | web | 是 | `dealer.invoice.requested` | `dealer.invoice.request_failed` |
 | dealer | `POST` | `/api/v1/dealers/invoices/{id}/issue` | `issueDealerInvoice` | 登记发票开具 | `object` | `dealer.invoice.manage` | `staff-token` | `project` | web | 是 | `dealer.invoice.issued` | `dealer.invoice.issue_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/me` | `dealerPortalMe` | 门户：本企业资料与准入状态 | `-` | `dealer_portal.profile.view` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.portal.viewed` | `dealer.portal.access_rejected` |
+| dealer | `POST` | `/api/v1/dealer-portal/me/submission` | `dealerPortalSubmitProfile` | 门户：提交注册资料送审 | `object` | `dealer_portal.profile.submit` | `staff-token` | `dealer` | dealer_portal | 是 | `dealer.submitted` | `dealer.submit_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/contracts` | `dealerPortalListContracts` | 门户：本企业经销合同 | `-` | `dealer_portal.profile.view` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.contract.viewed` | `dealer.contract.view_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/contracts/{id}/external-stock` | `dealerPortalExternalStock` | 门户：库存外显 | `-` | `dealer_portal.stock.view` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.external_stock.viewed` | `dealer.external_stock.view_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/inquiries` | `dealerPortalListInquiries` | 门户：本企业询价单 | `-` | `dealer_portal.inquiry.manage` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.inquiry.viewed` | `dealer.inquiry.view_failed` |
+| dealer | `POST` | `/api/v1/dealer-portal/inquiries` | `dealerPortalCreateInquiry` | 门户：未定价商品询价 | `object` | `dealer_portal.inquiry.manage` | `staff-token` | `dealer` | dealer_portal | 是 | `dealer.inquiry.created` | `dealer.inquiry.create_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/orders` | `dealerPortalListOrders` | 门户：本企业经销订单 | `-` | `dealer_portal.order.manage` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `POST` | `/api/v1/dealer-portal/orders` | `dealerPortalCreateOrder` | 门户：建单（草稿） | `object` | `dealer_portal.order.manage` | `staff-token` | `dealer` | dealer_portal | 是 | `dealer.order.drafted` | `dealer.order.draft_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/orders/{id}` | `dealerPortalGetOrder` | 门户：订单详情 | `-` | `dealer_portal.order.manage` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/orders/{id}/lines` | `dealerPortalListOrderLines` | 门户：订单明细 | `-` | `dealer_portal.order.manage` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `POST` | `/api/v1/dealer-portal/orders/{id}/submit` | `dealerPortalSubmitOrder` | 门户：提交订单 | `object` | `dealer_portal.order.manage` | `staff-token` | `dealer` | dealer_portal | 是 | `dealer.order.submitted` | `dealer.order.submit_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/orders/{id}/payments` | `dealerPortalListPayments` | 门户：付款记录 | `-` | `dealer_portal.order.pay` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
+| dealer | `POST` | `/api/v1/dealer-portal/orders/{id}/payments` | `dealerPortalRegisterPayment` | 门户：登记付款 | `object` | `dealer_portal.order.pay` | `staff-token` | `dealer` | dealer_portal | 是 | `dealer.order.payment_registered` | `dealer.order.payment_register_failed` |
+| dealer | `POST` | `/api/v1/dealer-portal/orders/{id}/sign` | `dealerPortalSignOrder` | 门户：确认签收 | `object` | `dealer_portal.order.manage` | `staff-token` | `dealer` | dealer_portal | 是 | `dealer.order.signed` | `dealer.order.sign_failed` |
+| dealer | `GET` | `/api/v1/dealer-portal/orders/{id}/returns` | `dealerPortalListReturns` | 门户：退货单 | `-` | `dealer_portal.return.request` | `staff-token` | `dealer` | dealer_portal | 否 | `dealer.return.viewed` | `dealer.return.view_failed` |
+| dealer | `POST` | `/api/v1/dealer-portal/orders/{id}/returns` | `dealerPortalRequestReturn` | 门户：申请退货 | `object` | `dealer_portal.return.request` | `staff-token` | `dealer` | dealer_portal | 是 | `dealer.return.requested` | `dealer.return.request_failed` |
+| dealer | `GET` | `/api/v1/dealers/{id}/portal-accounts` | `listDealerPortalAccounts` | 经销商门户账号列表 | `-` | `dealer.portal_account.manage` | `staff-token` | `project` | web | 否 | `dealer.portal_account.viewed` | `dealer.portal_account.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/{id}/portal-accounts` | `createDealerPortalAccount` | 开通经销商门户账号 | `object` | `dealer.portal_account.manage` | `staff-token` | `project` | web | 是 | `dealer.portal_account.created` | `dealer.portal_account.create_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-ledger` | `listInventoryCostLedger` | 查询库存成本流水（移动加权） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_ledger.viewed` | `inventory.cost_ledger.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-summary` | `getInventoryCostSummary` | 期间出库成本汇总（分红成本侧取数点） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_summary.viewed` | `inventory.cost_summary.view_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/plans` | `listDividendPlans` | 分红方案列表（商户 scope 账号只见本商户） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `dividend.plans_listed` | `dividend.plans_list_failed` |

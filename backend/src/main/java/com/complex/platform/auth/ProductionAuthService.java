@@ -325,6 +325,25 @@ public class ProductionAuthService implements SessionIssuer {
 
     @Override
     @Transactional
+    public int revokeUserSessions(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return 0;
+        }
+        Instant now = Instant.now();
+        return jdbcTemplate.update("""
+                UPDATE auth_sessions
+                   SET status = 'revoked',
+                       revoked_at = :now,
+                       updated_at = :now
+                 WHERE user_id = :user_id
+                   AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("now", timestampWithTimeZone(now)));
+    }
+
+    @Override
+    @Transactional
     public void revokeOutstandingMasterSessions() {
         Instant now = Instant.now();
         int revoked = jdbcTemplate.update("""

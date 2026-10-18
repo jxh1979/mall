@@ -17,6 +17,7 @@ type ContractRow = { id: string; contractNo?: string; salesEntityId?: string; ce
 type CatalogRow = { id: string; version?: number; status?: string; editedBy?: string; submittedBy?: string; approvedBy?: string; note?: string };
 type CatalogLine = { id: string; itemId?: string; spec?: string; unitPriceCent?: number; taxRateBps?: number | null; expectedRestockDate?: string | null };
 type InquiryRow = { id: string; itemId?: string; spec?: string; quantity?: number; status?: string; quotedPriceCent?: number | null; quotedBy?: string | null; quoteValidUntil?: string | null; note?: string };
+type PortalAccountRow = { userId: string; username?: string; status?: string; createdAt?: string | null; revokedAt?: string | null };
 type StockRow = { itemId: string; itemName?: string; spec?: string; unitPriceCent?: number; availability?: string; expectedRestockDate?: string | null };
 
 const DEALER_STATUS: Record<string, string> = { pending_submission: "待提交", under_review: "审核中", approved: "已通过", rejected: "已驳回", deactivated: "已停用" };
@@ -46,7 +47,12 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
   const [lines, setLines] = React.useState<{ catalogId: string; rows: CatalogLine[] } | null>(null);
   const [inquiries, setInquiries] = React.useState<InquiryRow[]>([]);
   const [stock, setStock] = React.useState<StockRow[]>([]);
+  const [portalAccounts, setPortalAccounts] = React.useState<PortalAccountRow[]>([]);
   const [formError, setFormError] = React.useState("");
+  // 门户账号（CG-11d）
+  const [portalUsername, setPortalUsername] = React.useState("");
+  const [portalPassword, setPortalPassword] = React.useState("");
+  const [portalContact, setPortalContact] = React.useState("");
   // 建档
   const [dealerName, setDealerName] = React.useState("");
   const [uscc, setUscc] = React.useState("");
@@ -105,12 +111,14 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
   // 刷新当前经销商的合同与询价，不清空已选合同（询价 / 报价 / 审批后目录与外显区块保持可见）。
   async function loadDealerData(row: DealerRow) {
     try {
-      const [cs, qs] = await Promise.all([
+      const [cs, qs, pa] = await Promise.all([
         api.get<ContractRow[]>(`/api/v1/dealers/${encodeURIComponent(row.id)}/contracts`),
         api.get<InquiryRow[]>(`/api/v1/dealers/${encodeURIComponent(row.id)}/inquiries`),
+        api.get<PortalAccountRow[]>(`/api/v1/dealers/${encodeURIComponent(row.id)}/portal-accounts`),
       ]);
       setContracts(cs ?? []);
       setInquiries(qs ?? []);
+      setPortalAccounts(pa ?? []);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "经销商资料读取失败");
     }
@@ -168,6 +176,16 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
     await api.post(`/api/v1/dealers/${encodeURIComponent(row.id)}/deactivate`, { idempotencyKey: key(), reason: reason.trim() });
     await refreshSelected();
     return { 经销商: row.id, 状态: "已停用", 说明: "门户与接口权限已撤销，已完成记录保留" };
+  });
+
+  const createPortalAccount = () => run("dealer_portal_account_created", async () => {
+    if (!selected) throw new Error("请先选中经销商");
+    const account = await api.post<PortalAccountRow>(`/api/v1/dealers/${encodeURIComponent(selected.id)}/portal-accounts`, {
+      idempotencyKey: `dpa-${Date.now()}`, username: portalUsername.trim(), password: portalPassword, contactName: portalContact.trim() || undefined,
+    });
+    setPortalUsername(""); setPortalPassword(""); setPortalContact("");
+    await loadDealerData(selected);
+    return { 门户账号: account?.username ?? portalUsername, 经销商: selected.dealerName, 状态: "已开通（审核通过启用门户后开放全部功能）" };
   });
 
   const createContract = () => run("dealer_contract_created", async () => {
@@ -306,6 +324,25 @@ export function DealerAdmissionCatalogPage({ api, setGlobalError, setActionResul
               <span className="admin-muted-action">四项资料全部审核通过后才能通过准入并启用独立经销商门户。</span>
             </div>
           ) : null}
+
+          <h3>门户账号（独立经销商 Web 门户，第十一端）：{selected.dealerName}</h3>
+          <div className="admin-form-grid" data-testid="dealer-portal-account-form">
+            <label>登录名<input data-testid="portal-username-input" value={portalUsername} onChange={(e) => setPortalUsername(e.target.value)} /></label>
+            <label>初始密码<input data-testid="portal-password-input" type="password" value={portalPassword} onChange={(e) => setPortalPassword(e.target.value)} /></label>
+            <label>企业联系人<input data-testid="portal-contact-input" value={portalContact} onChange={(e) => setPortalContact(e.target.value)} /></label>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.portal_account.manage"]} data-testid="portal-account-create" onClick={() => void createPortalAccount()}>开通门户账号</PermissionButton>
+            <span className="admin-muted-action">门户账号与员工端、商户门户隔离，只见本企业数据；停用经销商时立即终止其全部门户会话。</span>
+          </div>
+          <div className="admin-table-scroll">
+            <table className="admin-table" data-testid="dealer-portal-account-table">
+              <thead><tr><th>登录名</th><th>状态</th><th>开通时间</th><th>撤权时间</th></tr></thead>
+              <tbody>
+                {portalAccounts.map((a) => (
+                  <tr key={a.userId}><td>{a.username ?? a.userId}</td><td data-testid={`portal-account-status-${a.userId}`}>{a.status === "revoked" ? "已撤权" : "有效"}</td><td>{cnDate(a.createdAt)}</td><td>{cnDate(a.revokedAt)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <h3>经销合同：{selected.dealerName}</h3>
           <div className="admin-form-grid" data-testid="dealer-contract-form">

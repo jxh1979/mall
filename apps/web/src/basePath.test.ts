@@ -15,6 +15,11 @@ describe("selectShell（入口壳选择，入参已 stripBase）", () => {
     expect(selectShell("/admin")).toBe("admin");
     expect(selectShell("/admin/customers")).toBe("admin");
   });
+  it("/dealer* → 独立经销商门户（第十一端）", () => {
+    expect(selectShell("/dealer")).toBe("dealer");
+    expect(selectShell("/dealer/orders")).toBe("dealer");
+    expect(selectShell(stripBase("/complex/dealer"))).toBe("dealer");
+  });
   it("根路径与客人入口 → 客人端", () => {
     expect(selectShell("/")).toBe("customer");
     expect(selectShell("/customer")).toBe("customer");

@@ -64,12 +64,15 @@ public class DealerService {
     private final AuthorizationService authorization;
     private final IdempotencyService idempotency;
     private final AuditEventService audit;
+    private final DealerPortalAccountService portalAccounts;
 
-    public DealerService(JdbcDealerRepository repository, AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit) {
+    public DealerService(JdbcDealerRepository repository, AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit,
+            DealerPortalAccountService portalAccounts) {
         this.repository = repository;
         this.authorization = authorization;
         this.idempotency = idempotency;
         this.audit = audit;
+        this.portalAccounts = portalAccounts;
     }
 
     // ── 经销商准入 ──
@@ -113,6 +116,11 @@ public class DealerService {
     @Transactional
     public DealerRecord submitDealer(String id, String idempotencyKey) {
         authorization.requirePermission(MANAGE);
+        return submitDealer(id, idempotencyKey, MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerRecord submitDealer(String id, String idempotencyKey, String permission) {
         try {
             DealerRecord dealer = requireDealer(id);
             if (!PENDING_SUBMISSION.equals(dealer.status()) && !REJECTED.equals(dealer.status())) {
@@ -121,11 +129,37 @@ public class DealerService {
             return idempotency.execute("dealerSubmit:" + id, idempotencyKey, Map.of("id", id), () -> {
                 DealerRecord saved = withStatus(dealer, UNDER_REVIEW, false, false, false, false, false, null, null, null);
                 repository.saveDealer(saved);
-                audit.recordSuccess("dealer.submitted", MANAGE, "dealer", id, null, idempotencyKey, Map.of("from", dealer.status(), "to", UNDER_REVIEW));
+                audit.recordSuccess("dealer.submitted", permission, "dealer", id, null, idempotencyKey, Map.of("from", dealer.status(), "to", UNDER_REVIEW));
                 return saved;
             }, DealerRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.submit_failed", MANAGE, "dealer", id, null, idempotencyKey, codeOf(e));
+            audit.recordFailure("dealer.submit_failed", permission, "dealer", id, null, idempotencyKey, codeOf(e));
+            throw e;
+        }
+    }
+
+    /** CG-11d 门户自助注册资料提交：更新法人 / 联系人 / 联系电话后送审（待提交或已驳回 → 审核中）。调用方已核验门户权限。 */
+    DealerRecord submitProfile(String id, com.complex.platform.dealer.dto.DealerPortalProfileRequest request, String permission) {
+        try {
+            DealerRecord dealer = requireDealer(id);
+            if (!PENDING_SUBMISSION.equals(dealer.status()) && !REJECTED.equals(dealer.status())) {
+                throw ApiException.conflict("DEALER_STATUS_INVALID", "只有待提交或已驳回的经销商可以提交资料送审");
+            }
+            String legal = requireText(request == null ? null : request.legalRepresentative(), "legal_representative").trim();
+            String contactName = requireText(request.contactName(), "contact_name").trim();
+            String contactPhone = requireText(request.contactPhone(), "contact_phone").trim();
+            return idempotency.execute("dealerSubmit:" + id, request.idempotencyKey(), request, () -> {
+                Instant now = Instant.now();
+                DealerRecord saved = new DealerRecord(dealer.id(), dealer.projectId(), dealer.dealerName(), dealer.unifiedSocialCreditCode(), legal, contactName,
+                        contactPhone, UNDER_REVIEW, false, false, false, false, false, null, null, null, dealer.deactivationReason(), dealer.deactivatedBy(),
+                        dealer.deactivatedAt(), dealer.createdBy(), dealer.createdAt(), now, dealer.creditSuspended());
+                repository.saveDealer(saved);
+                audit.recordSuccess("dealer.submitted", permission, "dealer", id, null, request.idempotencyKey(),
+                        Map.of("from", dealer.status(), "to", UNDER_REVIEW, "channel", "dealer_portal"));
+                return saved;
+            }, DealerRecord.class);
+        } catch (RuntimeException e) {
+            audit.recordFailure("dealer.submit_failed", permission, "dealer", id, null, request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }
@@ -184,6 +218,8 @@ public class DealerService {
                         dealer.contractReviewed(), dealer.invoiceReviewed(), dealer.bankReviewed(), false, dealer.reviewNote(), dealer.reviewedBy(),
                         dealer.reviewedAt(), reason.trim(), actorId(), now, dealer.createdBy(), dealer.createdAt(), now, dealer.creditSuspended());
                 repository.saveDealer(saved);
+                // ENUM:181 / BSM:1246：停用生效时立即终止全部门户登录会话并停用门户账号；已完成订单与审计记录保留。
+                portalAccounts.revokeDealerPortal(id, reason.trim());
                 audit.recordSuccess("dealer.deactivated", MANAGE, "dealer", id, null, request.idempotencyKey(), Map.of("reason", reason.trim()));
                 return saved;
             }, DealerRecord.class);
@@ -197,6 +233,11 @@ public class DealerService {
 
     public PageResponse<DealerContractRecord> listContracts(String dealerId) {
         authorization.requirePermission(VIEW);
+        return listContracts(dealerId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerContractRecord> listContracts(String dealerId, String permission) {
         requireDealer(dealerId);
         List<DealerContractRecord> items = repository.listContracts(dealerId);
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
@@ -358,6 +399,11 @@ public class DealerService {
 
     public PageResponse<DealerInquiryRecord> listInquiries(String dealerId) {
         authorization.requirePermission(VIEW);
+        return listInquiries(dealerId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerInquiryRecord> listInquiries(String dealerId, String permission) {
         requireDealer(dealerId);
         List<DealerInquiryRecord> items = repository.listInquiries(dealerId);
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
@@ -367,6 +413,11 @@ public class DealerService {
     @Transactional
     public DealerInquiryRecord createInquiry(String dealerId, DealerInquiryRequest request) {
         authorization.requirePermission(INQUIRY_MANAGE);
+        return createInquiry(dealerId, request, INQUIRY_MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerInquiryRecord createInquiry(String dealerId, DealerInquiryRequest request, String permission) {
         try {
             requireActiveDealer(dealerId);
             String contractId = requireText(request == null ? null : request.dealerContractId(), "dealer_contract_id");
@@ -390,12 +441,12 @@ public class DealerService {
                 DealerInquiryRecord inquiry = new DealerInquiryRecord("dqi_" + UUID.randomUUID(), dealerId, contractId, itemId, spec, request.quantity(),
                         "pending_quote", null, null, null, null, null, null, trim(request.note()), actorId(), now, now);
                 repository.saveInquiry(inquiry);
-                audit.recordSuccess("dealer.inquiry.created", INQUIRY_MANAGE, "dealer_inquiry", inquiry.id(), null, request.idempotencyKey(),
+                audit.recordSuccess("dealer.inquiry.created", permission, "dealer_inquiry", inquiry.id(), null, request.idempotencyKey(),
                         Map.of("dealer_id", dealerId, "contract_id", contractId, "item_id", itemId, "quantity", request.quantity()));
                 return inquiry;
             }, DealerInquiryRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.inquiry.create_failed", INQUIRY_MANAGE, "dealer_inquiry", dealerId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            audit.recordFailure("dealer.inquiry.create_failed", permission, "dealer_inquiry", dealerId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }
@@ -493,6 +544,11 @@ public class DealerService {
      */
     public PageResponse<DealerExternalStockRecord> externalStock(String contractId) {
         authorization.requirePermission(VIEW);
+        return externalStock(contractId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerExternalStockRecord> externalStock(String contractId, String permission) {
         DealerContractRecord contract = requireContract(contractId);
         List<DealerExternalStockRecord> rows = new ArrayList<>();
         Optional<DealerPriceCatalogRecord> effective = repository.findEffectiveCatalog(contractId);
@@ -512,7 +568,7 @@ public class DealerService {
                         DealerExternalStockRecord.EXPECTED_RESTOCK.equals(availability) ? line.expectedRestockDate() : null));
             }
         }
-        audit.recordSuccess("dealer.external_stock.viewed", VIEW, "dealer_contract", contractId, null, null, Map.of("count", rows.size()));
+        audit.recordSuccess("dealer.external_stock.viewed", permission, "dealer_contract", contractId, null, null, Map.of("count", rows.size()));
         return new PageResponse<>(rows, 1, Math.max(rows.size(), 1), rows.size());
     }
 
@@ -576,7 +632,7 @@ public class DealerService {
     }
 
     private String projectScope() {
-        return authorization.currentProjectScopeQuietly().orElse(null);
+        return DealerPortalAccountService.projectScopeOf(authorization);
     }
 
     private String actorId() {

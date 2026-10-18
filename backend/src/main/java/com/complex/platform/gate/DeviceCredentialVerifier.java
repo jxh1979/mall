@@ -180,12 +180,13 @@ public class DeviceCredentialVerifier {
         // web 只认不可伪造的 Cookie 会话（admin_access_token），自报类型头本身不是证明；app 仍须客人侧证明；
         // 其它自报/缺失类型一律按无证明处理。grace 模式只留痕放行，enforce 模式拒绝。
         if (write) {
-            if ("web".equals(terminalType)) {
+            if ("web".equals(terminalType) || "dealer_portal".equals(terminalType)) {
+                // CG-11d：独立经销商 Web 门户（第十一端）与员工 Web 端同口径——浏览器 Cookie 会话即证明，不要求设备凭证。
                 if (AuthCookies.readAccessToken(request) == null) {
-                    if (modeFor("web") == Mode.ENFORCE) {
-                        reject("web", deviceId, "web_requires_cookie_session");
+                    if (modeFor(terminalType) == Mode.ENFORCE) {
+                        reject(terminalType, deviceId, "web_requires_cookie_session");
                     }
-                    audit("web", deviceId, hasBearer(request) ? "grace_bearer_self_reported_web" : "grace_web_without_session", "success");
+                    audit(terminalType, deviceId, hasBearer(request) ? "grace_bearer_self_reported_web" : "grace_web_without_session", "success");
                 }
             } else if ("app".equals(terminalType)) {
                 if (modeFor("app") == Mode.ENFORCE) {

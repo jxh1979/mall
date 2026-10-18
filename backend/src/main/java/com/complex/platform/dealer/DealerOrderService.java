@@ -140,25 +140,45 @@ public class DealerOrderService {
 
     public PageResponse<DealerOrderRecord> listOrders(String dealerId) {
         authorization.requirePermission(VIEW);
+        return listOrders(dealerId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerOrderRecord> listOrders(String dealerId, String permission) {
         requireDealer(dealerId);
         List<DealerOrderRecord> items = orders.listOrders(dealerId);
-        audit.recordSuccess("dealer.order.viewed", VIEW, "dealer", dealerId, null, null, meta("count", items.size()));
+        audit.recordSuccess("dealer.order.viewed", permission, "dealer", dealerId, null, null, meta("count", items.size()));
         return page(items);
     }
 
     public DealerOrderRecord getOrder(String orderId) {
         authorization.requirePermission(VIEW);
+        return getOrder(orderId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerOrderRecord getOrder(String orderId, String permission) {
         return requireOrder(orderId);
     }
 
     public PageResponse<DealerOrderLineRecord> listLines(String orderId) {
         authorization.requirePermission(VIEW);
+        return listLines(orderId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerOrderLineRecord> listLines(String orderId, String permission) {
         requireOrder(orderId);
         return page(orders.listLines(orderId));
     }
 
     public PageResponse<DealerOrderPaymentRecord> listPayments(String orderId) {
         authorization.requirePermission(VIEW);
+        return listPayments(orderId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerOrderPaymentRecord> listPayments(String orderId, String permission) {
         requireOrder(orderId);
         return page(orders.listPayments(orderId));
     }
@@ -180,6 +200,11 @@ public class DealerOrderService {
     @Transactional
     public DealerOrderRecord createOrderDraft(String dealerId, DealerOrderDraftRequest request) {
         authorization.requirePermission(MANAGE);
+        return createOrderDraft(dealerId, request, MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerOrderRecord createOrderDraft(String dealerId, DealerOrderDraftRequest request, String permission) {
         try {
             DealerRecord dealer = requireActiveDealer(dealerId);
             DealerContractRecord contract = requireContract(requireText(request == null ? null : request.dealerContractId(), "dealer_contract_id"));
@@ -214,12 +239,12 @@ public class DealerOrderService {
                         null, null, null, null, null, null, null, null, null, null, null, trim(request.note()), actorId(), now, now);
                 orders.saveOrder(order);
                 lines.forEach(orders::saveLine);
-                audit.recordSuccess("dealer.order.drafted", MANAGE, "dealer_order", id, null, request.idempotencyKey(),
+                audit.recordSuccess("dealer.order.drafted", permission, "dealer_order", id, null, request.idempotencyKey(),
                         meta("dealer_id", dealerId, "contract_id", contract.id(), "total_amount_cent", amounts.total(), "line_count", lines.size()));
                 return order;
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.order.draft_failed", MANAGE, "dealer_order", dealerId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            audit.recordFailure("dealer.order.draft_failed", permission, "dealer_order", dealerId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }
@@ -228,6 +253,11 @@ public class DealerOrderService {
     @Transactional
     public DealerOrderRecord submitOrder(String orderId, String idempotencyKey) {
         authorization.requirePermission(MANAGE);
+        return submitOrder(orderId, idempotencyKey, MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerOrderRecord submitOrder(String orderId, String idempotencyKey, String permission) {
         try {
             DealerOrderRecord order = requireOrder(orderId);
             requireStatus(order, "draft", "rejected");
@@ -238,11 +268,11 @@ public class DealerOrderService {
             return idempotency.execute("dealerOrderSubmit:" + orderId, idempotencyKey, Map.of("id", orderId), () -> {
                 DealerOrderRecord saved = withStatus(order, "pending_review");
                 orders.saveOrder(saved);
-                audit.recordSuccess("dealer.order.submitted", MANAGE, "dealer_order", orderId, null, idempotencyKey, meta("from", order.status()));
+                audit.recordSuccess("dealer.order.submitted", permission, "dealer_order", orderId, null, idempotencyKey, meta("from", order.status()));
                 return saved;
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.order.submit_failed", MANAGE, "dealer_order", orderId, null, idempotencyKey, codeOf(e));
+            audit.recordFailure("dealer.order.submit_failed", permission, "dealer_order", orderId, null, idempotencyKey, codeOf(e));
             throw e;
         }
     }
@@ -329,6 +359,11 @@ public class DealerOrderService {
     @Transactional
     public DealerOrderPaymentRecord registerPayment(String orderId, DealerPaymentRequest request) {
         authorization.requirePermission(MANAGE);
+        return registerPayment(orderId, request, MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerOrderPaymentRecord registerPayment(String orderId, DealerPaymentRequest request, String permission) {
         try {
             DealerOrderRecord order = requireOrder(orderId);
             String method = requireText(request == null ? null : request.method(), "method").trim().toLowerCase(Locale.ROOT);
@@ -356,12 +391,12 @@ public class DealerOrderService {
                 } else if ("pending_payment".equals(order.status())) {
                     orders.saveOrder(withStatus(order, "payment_verifying"));
                 }
-                audit.recordSuccess("dealer.order.payment_registered", MANAGE, "dealer_order_payment", payment.id(), null, request.idempotencyKey(),
+                audit.recordSuccess("dealer.order.payment_registered", permission, "dealer_order_payment", payment.id(), null, request.idempotencyKey(),
                         meta("order_id", orderId, "method", method, "amount_cent", request.amountCent(), "late", late));
                 return payment;
             }, DealerOrderPaymentRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.order.payment_register_failed", MANAGE, "dealer_order_payment", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            audit.recordFailure("dealer.order.payment_register_failed", permission, "dealer_order_payment", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }
@@ -507,6 +542,11 @@ public class DealerOrderService {
     @Transactional
     public DealerOrderRecord signOrder(String orderId, String idempotencyKey) {
         authorization.requirePermission(MANAGE);
+        return signOrder(orderId, idempotencyKey, MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerOrderRecord signOrder(String orderId, String idempotencyKey, String permission) {
         try {
             DealerOrderRecord order = requireOrder(orderId);
             requireStatus(order, "shipping");
@@ -520,11 +560,11 @@ public class DealerOrderService {
                         order.reviewedAt(), order.paymentNotifiedAt(), order.shippedBy(), order.shippedAt(), now, settled ? now : null, order.cancelRequestedBy(),
                         order.cancelReason(), order.cancelledAt(), order.note(), order.createdBy(), order.createdAt(), now);
                 orders.saveOrder(saved);
-                audit.recordSuccess("dealer.order.signed", MANAGE, "dealer_order", orderId, null, idempotencyKey, meta("status", saved.status()));
+                audit.recordSuccess("dealer.order.signed", permission, "dealer_order", orderId, null, idempotencyKey, meta("status", saved.status()));
                 return saved;
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.order.sign_failed", MANAGE, "dealer_order", orderId, null, idempotencyKey, codeOf(e));
+            audit.recordFailure("dealer.order.sign_failed", permission, "dealer_order", orderId, null, idempotencyKey, codeOf(e));
             throw e;
         }
     }
@@ -876,7 +916,7 @@ public class DealerOrderService {
 
     private DealerRecord requireDealer(String id) {
         DealerRecord dealer = dealers.findDealer(requireText(id, "dealer_id")).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        String scope = authorization.currentProjectScopeQuietly().orElse(null);
+        String scope = DealerPortalAccountService.projectScopeOf(authorization);
         if (scope != null && dealer.projectId() != null && !scope.equals(dealer.projectId())) {
             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权访问其他项目的经销商");
         }

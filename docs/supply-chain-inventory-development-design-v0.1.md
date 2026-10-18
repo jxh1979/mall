@@ -1,6 +1,6 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.18
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.19
 
-> 版本：V0.18 ｜ 最后更新：2026-10-17 ｜ 覆盖迁移基线：V453 ｜ 状态：现行
+> 版本：V0.19 ｜ 最后更新：2026-10-17 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
 > **M09 现行口径（2026-09-03）：** 三份业务 HTML 是业务真源；本文细化但不得新增业务。迁移、Java、OpenAPI、页面和测试只证明当前实现事实，不得反向定义业务规则。下文带“建议”“任务”或未标已落地的结构/API 均为目标设计或缺口，不代表当前实现。R7/R5 横幅仅作历史留痕，现行实现以本轮逐项标注为准。
@@ -105,7 +105,7 @@
 | 兑换扣减聚合 | `RedemptionStockDeduction` | 积分兑换/礼物领取的库存预占与扣减（pass-2） |
 | 主管复核聚合 | 当前技术载体 `InventoryHighValueReview` | HTML 只要求主管复核，不授权绕开治理队列；当前技术载体不得被升级为业务旁路规则 |
 | 门店要货聚合（目标） | `StoreRequisition`, `StoreRequisitionEvent` | 九态、操作者、时间、拣配、配送、签收和差异；当前未实现 |
-| 经销聚合 | `DealerRecord`, `DealerContractRecord`（含付款条款与运费模板版本）, `DealerPriceCatalogRecord`（+`Line`）, `DealerInquiryRecord`, `DealerExternalStockRecord`（CG-11a），`DealerOrderRecord`（+`Line` / `Payment` / `Refund` / `Overpayment`，CG-11b，`DealerOrderService` + `DealerOrderDeadlineJob`），`DealerReturnRecord`（+`Line`）、`DealerInvoiceRecord`（CG-11c，`DealerReturnService` + `JdbcDealerReturnRepository`） | 冻结经销全链；准入 / 合同 / 目录 / 询价 / 外显（V451）、订单 / 付款 / 预留 / 出库 / 取消退款 / 逾期 / 超收（V452）与退货 / 退款 / 红冲 / 开票（V453）已落地，不增加 HTML 外状态 |
+| 经销聚合 | `DealerRecord`, `DealerContractRecord`（含付款条款与运费模板版本）, `DealerPriceCatalogRecord`（+`Line`）, `DealerInquiryRecord`, `DealerExternalStockRecord`（CG-11a），`DealerOrderRecord`（+`Line` / `Payment` / `Refund` / `Overpayment`，CG-11b，`DealerOrderService` + `DealerOrderDeadlineJob`），`DealerReturnRecord`（+`Line`）、`DealerInvoiceRecord`（CG-11c，`DealerReturnService` + `JdbcDealerReturnRepository`），`DealerPortalAccountRecord`（CG-11d，`DealerPortalAccountService` 开通 / 停用撤权，`DealerPortalService` 门户闸：账号类型 → 终端 → 归属 → 停用 → 门户资格，再复用三条服务的共用实现） | 冻结经销全链；准入 / 合同 / 目录 / 询价 / 外显（V451）、订单 / 付款 / 预留 / 出库 / 取消退款 / 逾期 / 超收（V452）、退货 / 退款 / 红冲 / 开票（V453）与独立经销商门户（V454，第十一端 dealer_portal）已落地，不增加 HTML 外状态 |
 | 交接与跨主体流转聚合 | `TraceHandover`, `TransferOrder`, `CustodyHistory` | 五段交接、补录证据、所有权/保管主体、期限和扫码时间；当前仅部分实现 |
 
 ### 3.2 核心对象说明
@@ -695,6 +695,8 @@ HTML 十二类、目标机读 code 与当前实现须分列；目标 code 是技
 
 项目内部结算价按项目使用独立页面和目录，不得跨项目引用；实际提供方提交、对应域主管公司审批，提交人与审批人分离，中央餐饮供应的酒水或小食由中央餐饮公司内部不同人员提交和审批。无获批价格不得开放依赖该价的权益或券；价格变更只影响后续，核销/结算锁定当时版本。本模块只消费获批版本并保留引用，目录审批属于价格治理边界；当前尚未形成完整闭环（依据 ENUM「项目内部结算价」、BSM「内部结算价管理」、PGM「中央餐饮公司」）。
 
+经销商门户账号（CG-11d）与内部员工端、商户门户隔离：`access_users.account_type = dealer` 只能挂 `role_dealer_portal`（权限 `dealer_portal.profile.view / profile.submit / stock.view / inquiry.manage / order.manage / order.pay / return.request`），不持任何 `dealer.*` 内部权限；内部开通门户账号的权限为 `dealer.portal_account.manage`。门户接口在权限核验之前先过门户闸（账号类型、`dealer_portal` 终端、归属经销商、停用、门户资格），拒绝均留痕；项目范围过滤对门户账号不适用，数据隔离按所属经销商硬校验。
+
 采购审批遵循全平台规则：申请人与直接受益人不得审批与自己相关的申请，转发不构成例外；外部经销业务中，合同价格编辑与审批不得同人，订单审核、到账核验和仓库出库不得由同一人完成全链，退货验收与退款执行分离；所有报损、盘点差异和存酒作废不分金额均须照片、视频和主管复核，报损废弃另须财务 BP 确认；酒水只允许平台统一采购后分销。
 
 当前合同审批权限仍错误复用 `inventory.purchase.approve`，应改为已 seed 的 `inventory.supply_contract.approve`。采购申请当前不记录申请人，审批路径无法比对并拒绝自审。`@GuardedAction` capability 只是功能开关，不能代替 RBAC。进货查验、经销职责分离和细粒度价格权限仍须按正式 OpenAPI、权限 seed 与服务校验逐项落地。
@@ -796,6 +798,8 @@ V112 已建立两张子表并提供正式 list/create API；供应商主表没�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 增 | §3 聚合表、§8 | 版本升 V0.19；CG-11d 独立经销商 Web 门户（V454：terminal_capability_switches / 灰度层 CHECK 加 dealer_portal、总开关行 tcs_term_dealer_portal、dealer_portal_accounts、role_dealer_portal 与 dealer_portal.* 权限、dealer.portal_account.manage；`/api/v1/dealer-portal/**` 15 操作 + 门户账号 2 操作 + 内部开通 1；SessionIssuer.revokeUserSessions 停用即作废会话；DeviceCredentialVerifier 对 dealer_portal 与 web 同口径按 Cookie 会话判证明） | BSM:1217-1218、1246；ENUM:181、233 |
+| 2026-10-17 | 增 | §3 聚合表、§8 | 版本升 V0.19；CG-11d 独立经销商 Web 门户（V454：terminal_capability_switches / 灰度层 CHECK 加 dealer_portal、总开关行 tcs_term_dealer_portal、dealer_portal_accounts、role_dealer_portal 与 dealer_portal.* 权限、dealer.portal_account.manage；`/api/v1/dealer-portal/**` 15 操作 + 内部门户账号 2 操作；SessionIssuer.revokeUserSessions 停用即作废会话；DeviceCredentialVerifier 对 dealer_portal 与 web 同口径按 Cookie 会话判证明） | BSM:1217-1218、1246；ENUM:181、233 |
 | 2026-10-17 | 增 | §3 聚合表、§4.5 | 版本升 V0.18；CG-11c 经销退货 / 退款 / 红冲 / 开票落地（V453：dealer_returns、dealer_return_lines、dealer_invoices；dealer_contracts.return_freight_bearer / first_leg_freight_refundable；dealer_orders.returned_amount_cent；dealer_order_lines.returned_quantity；权限 dealer.return.* / dealer.invoice.manage；`/api/v1/dealers/**` 新增 13 操作；可复售回库流水 dealer_return_restock、隔离流水 dealer_return_quarantine；应收冲减走 ar_ap_items 同单冲减） | BSM:1238-1251；ENUM:174、178-179、182 |
 | 2026-10-17 | 增 | §3 聚合表、§4.5 | 版本升 V0.17；CG-11b 经销订单 / 到账 / 退款 / 超收落地（V452：dealer_orders、dealer_order_lines、dealer_order_payments、dealer_order_refunds、dealer_order_overpayments；dealer_contracts 付款条款与运费模板列；dealers.credit_suspended；权限 dealer.order.*；`/api/v1/dealers/**` 新增 19 操作；E-13 与逾期由 DealerOrderDeadlineJob 驱动，默认关闭） | BSM:1226-1234；ENUM:173、176-180 |
 | 2026-10-17 | 增 | §3 聚合表、§4.5 | 版本升 V0.16；CG-11a 经销商 / 经销合同 / 价格目录 / 询价 / 库存外显落地（V451：dealers、dealer_contracts、dealer_price_catalogs(+lines)、dealer_inquiries；权限 dealer.*；`/api/v1/dealers/**` 18 操作）；职责分离在服务层硬校验（DEALER_SOD_SAME_PERSON） | BSM:1216-1222；ENUM:170-172、175、178 |

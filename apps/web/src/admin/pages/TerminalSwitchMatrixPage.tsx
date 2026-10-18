@@ -65,6 +65,7 @@ const TERMINAL_LABELS: Record<string, string> = {
   merchant_app: "商户 App",
   kiosk: "触摸屏一体机",
   mobile_admin: "移动管理端",
+  dealer_portal: "独立经销商门户",
   global: "全局能力",
   integration: "第三方集成",
 };

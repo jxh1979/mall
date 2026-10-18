@@ -90,6 +90,11 @@ public class DealerReturnService {
 
     public PageResponse<DealerReturnRecord> listReturns(String orderId) {
         authorization.requirePermission(VIEW);
+        return listReturns(orderId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerReturnRecord> listReturns(String orderId, String permission) {
         requireOrder(orderId);
         return page(returns.listReturns(orderId));
     }
@@ -112,6 +117,11 @@ public class DealerReturnService {
     @Transactional
     public DealerReturnRecord requestReturn(String orderId, DealerReturnRequest request) {
         authorization.requirePermission(MANAGE);
+        return requestReturn(orderId, request, MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    DealerReturnRecord requestReturn(String orderId, DealerReturnRequest request, String permission) {
         try {
             DealerOrderRecord order = requireOrder(orderId);
             if (!RETURNABLE_ORDER_STATUSES.contains(order.status())) {
@@ -158,12 +168,12 @@ public class DealerReturnService {
                         null, null, null, null, null, null, null, null, null, null, trim(request.note()), actorId(), now, now);
                 returns.saveReturn(record);
                 lines.forEach(returns::saveLine);
-                audit.recordSuccess("dealer.return.requested", MANAGE, "dealer_return", returnId, null, request.idempotencyKey(),
+                audit.recordSuccess("dealer.return.requested", permission, "dealer_return", returnId, null, request.idempotencyKey(),
                         meta("order_id", orderId, "reason_type", reason, "requested_quantity", total, "return_freight_bearer", bearer));
                 return record;
             }, DealerReturnRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.return.request_failed", MANAGE, "dealer_return", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            audit.recordFailure("dealer.return.request_failed", permission, "dealer_return", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }
@@ -533,7 +543,7 @@ public class DealerReturnService {
     private DealerOrderRecord requireOrder(String id) {
         DealerOrderRecord order = orders.findOrder(requireText(id, "order_id")).orElseThrow(() -> ApiException.notFound("DEALER_ORDER_NOT_FOUND", "经销订单不存在"));
         DealerRecord dealer = dealers.findDealer(order.dealerId()).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        String scope = authorization.currentProjectScopeQuietly().orElse(null);
+        String scope = DealerPortalAccountService.projectScopeOf(authorization);
         if (scope != null && dealer.projectId() != null && !scope.equals(dealer.projectId())) {
             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权访问其他项目的经销商");
         }
