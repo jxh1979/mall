@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V447**，发现 **178** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V447**，发现 **181** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -96,6 +96,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_bills` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
 | `bar_combos` | `merchant_id` | direct | V257 | `V257__bar_combo.sql` |
 | `bar_commission_rate_configs` | `merchant_id` + `project_id` | direct | V340 | `V340__commission_and_points_rate_configs.sql` |
+| `bar_commission_settlements` | `merchant_id` + `project_id` | direct | V445 | `V445__staff_dispatch_commission_settlement.sql` |
 | `bar_deposit_rules` | `merchant_id` | direct | V073 | `V073__bar_reservation_deposit.sql` |
 | `bar_gift_redemptions` | `merchant_id` | direct | V072 | `V072__bar_gift_redemption.sql` |
 | `bar_order_item_voids` | `merchant_id` | direct | V091 | `V091__bar_pos_depth.sql` |
@@ -207,6 +208,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `staff_attendance_records` | `project_id` + `space_id` | direct | V210, V214 | `V210__staff_shift_attendance.sql`<br>`V214__tenant_scope_staff_service_tables.sql` |
 | `staff_base_salaries` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_commission_ledger` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
+| `staff_dispatch_records` | `merchant_id` + `project_id` | direct | V445 | `V445__staff_dispatch_commission_settlement.sql` |
 | `staff_leave_requests` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_level_assignments` | `merchant_id` + `organization_id` | direct | V055 | `V055__access_staff_levels_and_salary.sql` |
 | `staff_payroll_adjustments` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
@@ -215,6 +217,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `staff_profiles` | `merchant_id` + `project_id` | direct | V086 | `V086__staff_tables.sql` |
 | `staff_shift_schedules` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `stocktake` | `merchant_id` | direct | V108 | `V108__inventory_variance_to_ap.sql` |
+| `stored_value_bonus_policies` | `project_id` | direct | V444 | `V444__stored_value_principal_bonus_split.sql` |
 | `stored_value_merchant_refund_rules` | `merchant_id` | direct | V176 | `V176__stored_value_merchant_refund_rules.sql` |
 | `stored_value_topup_intents` | `merchant_id` + `project_id` | direct | V284 | `V284__stored_value_topup_intents.sql` |
 | `supplier_qualifications` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |

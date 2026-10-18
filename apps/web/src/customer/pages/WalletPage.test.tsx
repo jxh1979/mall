@@ -13,6 +13,8 @@ const projectCard = {
   cardScope: "project",
   fundOwnership: null,
   balanceCent: 5000,
+  principalCent: 4500,
+  bonusCent: 500,
   status: "active",
   createdAt: "",
   updatedAt: "",
@@ -26,6 +28,8 @@ const merchantCard = {
   cardScope: "merchant",
   fundOwnership: "platform_collect",
   balanceCent: 3000,
+  principalCent: 3000,
+  bonusCent: 0,
   status: "active",
   createdAt: "",
   updatedAt: "",
@@ -48,6 +52,9 @@ describe("WalletPage", () => {
     expect(screen.getByText(/商户卡（m1）/)).toBeInTheDocument();
     expect(screen.getByText("余额 ¥50.00")).toBeInTheDocument();
     expect(screen.getByText("余额 ¥30.00")).toBeInTheDocument();
+    // CG-06a：本金与赠送金分列（BSM「我的余额」）。
+    expect(screen.getByText("本金 ¥45.00 · 赠送金 ¥5.00")).toBeInTheDocument();
+    expect(screen.getByText("本金 ¥30.00 · 赠送金 ¥0.00")).toBeInTheDocument();
     // 商户卡资金模式标签（平台代收）。
     expect(screen.getByText("平台代收")).toBeInTheDocument();
     expect(screen.getByTestId("wallet-topup")).toBeInTheDocument();
@@ -94,6 +101,27 @@ describe("WalletPage", () => {
       .toEqual([{ paymentIntentId: "pending", merchantId: "m1" }]);
     expect(screen.queryByRole("button", { name: "查询充值到账 · paid" })).toBeNull();
     expect(screen.getByRole("button", { name: "查询充值到账 · pending" })).toBeInTheDocument();
+  });
+
+  it("逐笔记录展示本金与赠送金拆分及调整事由", async () => {
+    const service = {
+      getStoredValueAccounts: vi.fn().mockResolvedValue([projectCard]),
+      topupStoredValue: vi.fn(),
+      getStoredValueTransactions: vi.fn().mockResolvedValue([
+        { id: "t1", accountId: "svacc_prj", customerId: "c-1", txnType: "topup", amountCent: 5500, balanceAfterCent: 5500, principalCent: 5000, bonusCent: 500, reason: null, createdAt: "2026-10-17T00:00:00Z" },
+        { id: "t2", accountId: "svacc_prj", customerId: "c-1", txnType: "consume", amountCent: -5200, balanceAfterCent: 300, principalCent: -5000, bonusCent: -200, reason: null, createdAt: "2026-10-17T01:00:00Z" },
+        { id: "t3", accountId: "svacc_prj", customerId: "c-1", txnType: "adjust", amountCent: -300, balanceAfterCent: 0, principalCent: 0, bonusCent: -300, reason: "销户：未使用赠送金作废（不退现）", createdAt: "2026-10-17T02:00:00Z" },
+      ]),
+    } as unknown as CustomerService;
+
+    render(<WalletPage service={service} />);
+    await waitFor(() => expect(screen.getByText("综合体通用卡")).toBeInTheDocument());
+    expect(await screen.findByText("充值 · ¥55.00")).toBeInTheDocument();
+    expect(screen.getByText("本金 ¥50.00 · 赠送金 ¥5.00")).toBeInTheDocument();
+    expect(screen.getByText("消费 · ¥-52.00")).toBeInTheDocument();
+    expect(screen.getByText("本金 ¥-50.00 · 赠送金 ¥-2.00")).toBeInTheDocument();
+    expect(screen.getByText("调整 · ¥-3.00")).toBeInTheDocument();
+    expect(screen.getByText("本金 ¥0.00 · 赠送金 ¥-3.00 · 销户：未使用赠送金作废（不退现）")).toBeInTheDocument();
   });
 
   it("shows empty state when the customer has no stored-value cards", async () => {

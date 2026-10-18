@@ -151,9 +151,15 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 | DEC-SV-CLOSE-001 | 销户：先解除全部占用与冻结，再退剩余本金；**赠送金清零**（非默认值，无可配置项）。依据 ENUM「储值卡类型与收款主体」条 |
 | DEC-SV-NO-MIGRATE-001 | **禁止**余额迁移 |
 
+**已落地（2026-10-17 CG-06a，V444 `stored_value_principal_bonus_split`）**：
+- `customer_stored_value_accounts.principal_cent / bonus_cent`、`customer_stored_value_transactions.principal_cent / bonus_cent` 两段记账，`balance_cent`＝两段之和（服务层维护，不加等式约束，存量行两段为 0 不回填）；
+- `stored_value_bonus_policies(project_id, bonus_bps, min_bps, max_bps)`：通用卡充值赠送比例按项目配置，值与上下限同在（`__global__`＝无项目范围的通用卡），`POST/GET /api/v1/loyalty/stored-value/bonus-policies`（仅平台，`customer.stored_value.refund`）；
+- `StoredValueService.settleTopupInternal` 拆两段入账；`consumeBalance` 通用卡先本金后赠送金、商户级卡按 `stored_value_merchant_refund_rules.consume_order`（`configureMerchantCard` 代录）；`doRefund` 只退本金（409 `STORED_VALUE_PRINCIPAL_INSUFFICIENT`），销户时赠送金作废（`adjust` 流水）；
+- 客人端钱包账户与逐笔记录分列本金/赠送金；后台储值规则页配置扣款顺序与赠送比例。
+
 实现缺口（相对 MAIN，不在本文假装已落地）：
-- 账户/流水需能拆本金与赠送金科目及活动来源；
-- `topup`/`consume`/`refund` 需按双科目与**写死的**扣款/退现顺序改造（先本金后赠送金，退现只退本金）；
+- 活动来源引用与赠送规则版本化、审批记录；
+- 消费退款回冲到卡的路径（先回冲赠送金、后回冲本金）：当前无任何路径把消费退回卡余额，仅流水留存两段扣减额；
 - 每笔充值支付成功时须固化收款主体、发行主体、实际支付通路费率和退款规则版本；合同换期不得改写已充值余额的费率；
 - 移除商户级卡 `platform_collect` 平台代收路径，资金归属只能由发卡商户承担；
 - 补齐客人端本金/赠送金和卡类型分列、充值/扣款/退款明细、不可关闭的储值金额短信、运营端三维储值台账与公共大屏隐私边界；

@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 746 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 753 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -591,7 +591,9 @@
 | access | `GET` | `/api/v1/access/grant-requests/summary` | `getAccessGrantSummary` | 授权申请治理汇总 | `-` | `access.grant_request.view` | `staff-token` | `project` | web | 否 | `access.grant_request.summary_viewed` | `access.grant_request.summary_view_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | `configureStoredValueMerchantRefundRule` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `StoredValueMerchantRefundRuleRequest` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_configured` | `stored_value.merchant_refund_rule_failed` |
 | customer | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | `getStoredValueMerchantRefundRule` | 查询商户级储值卡退款规则 | `-` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_viewed` | `stored_value.merchant_refund_rule_view_failed` |
-| customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收） | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/bonus-policies` | `configureStoredValueBonusPolicy` | 配置综合体通用卡充值赠送比例（仅平台，按项目，须同时配置上下限） | `StoredValueBonusPolicyRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.bonus_policy_configured` | `stored_value.bonus_policy_config_failed` |
+| customer | `GET` | `/api/v1/loyalty/stored-value/bonus-policies/{project_id}` | `getStoredValueBonusPolicy` | 查询综合体通用卡充值赠送比例（仅平台） | `-` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.bonus_policy_viewed` | `stored_value.bonus_policy_view_failed` |
 | audit | `GET` | `/api/v1/audit/operation-events` | `queryAuditOperationEvents` | 跨对象查询操作留痕 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `audit.operation_log.viewed` | `audit.operation_log.view_failed` |
 | audit | `GET` | `/api/v1/audit/operation-events/export` | `exportAuditOperationEvents` | 导出操作留痕（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `platform` | web | 否 | `audit.operation_log.exported` | `audit.operation_log.export_failed` |
 | platform | `GET` | `/api/v1/platform/space-types` | `listSpaceTypes` | 空间类型字典列表 | `-` | `governance.space.view` | `staff-token` | `platform` | web | 否 | `space_type.viewed` | `space_type.view_failed` |
@@ -649,6 +651,11 @@
 | staff | `POST` | `/api/v1/staff/payroll/adjustments` | `addStaffPayrollAdjustment` | 奖金/处罚手录(必须带事由) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.adjustment_added` | `staff.payroll.adjustment_add_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/commissions` | `addStaffCommission` | 提成入台账(手录/系统写入口) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.commission_added` | `staff.payroll.commission_add_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/close` | `closeStaffPayrollMonth` | 月结(定格全员薪资单) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.month_closed` | `staff.payroll.month_close_failed` |
+| staff | `GET` | `/api/v1/staff/dispatches` | `listStaffDispatches` | 查询派驻记录 | `-` | `staff.profile.view` | `staff-token` | `project` | web, mobile_admin | 否 | `staff.dispatch.viewed` | `staff.dispatch.view_failed` |
+| staff | `POST` | `/api/v1/staff/dispatches` | `createStaffDispatch` | 登记派驻记录（员工 → 派驻酒吧） | `object` | `staff.profile.review` | `staff-token` | `project` | web | 是 | `staff.dispatch.created` | `staff.dispatch.create_failed` |
+| staff | `POST` | `/api/v1/staff/dispatches/{dispatch_id}/end` | `endStaffDispatch` | 结束派驻记录 | `object` | `staff.profile.review` | `staff-token` | `project` | web | 是 | `staff.dispatch.ended` | `staff.dispatch.end_failed` |
+| staff | `POST` | `/api/v1/staff/commission-settlements/close` | `closeStaffCommissionSettlement` | 提成月结拨付（酒吧 → 人员所属主体） | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.commission_settlement.closed` | `staff.commission_settlement.close_failed` |
+| staff | `GET` | `/api/v1/staff/commission-settlements` | `listStaffCommissionSettlements` | 查询提成月结拨付记录（按月） | `-` | `staff.payroll.manage` | `staff-token` | `platform` | web | 否 | `staff.commission_settlement.viewed` | `staff.commission_settlement.view_failed` |
 | staff | `GET` | `/api/v1/staff/payroll` | `listStaffPayroll` | 全员薪资单(人事,按月) | `-` | `staff.payroll.manage` | `staff-token` | `platform` | web | 否 | `staff.payroll.viewed` | `staff.payroll.view_failed` |
 | staff | `GET` | `/api/v1/staff/payroll/mine` | `listMyStaffPayroll` | 我的薪资(员工手机;仅已月结月份) | `-` | `staff.payroll.view_mine` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.payroll_mine.viewed` | `staff.payroll_mine.view_failed` |
 | staff | `GET` | `/api/v1/staff/leaves` | `listStaffLeaves` | 查请假(主管/后台,按状态) | `-` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 否 | `staff.leave.viewed` | `staff.leave.view_failed` |
